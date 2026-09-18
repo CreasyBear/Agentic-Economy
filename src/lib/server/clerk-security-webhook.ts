@@ -13,6 +13,7 @@ import {
   recordClerkSecurityObservationThroughSource,
 } from '@/modules/security/account-security.functions'
 import type {
+  ClerkSecurityAction,
   ClerkSecurityObservation,
   ClerkSecurityObservationResult,
 } from '@/modules/security/account-security'
@@ -108,6 +109,14 @@ function redactedObservationFromVerifiedEvent(input: Readonly<{
   }
   if (!isRecord(input.event.data)) return { kind: 'invalid' }
 
+  if (input.event.type === 'user.deleted') {
+    return redactedUserDeletedObservation({
+      event: input.event,
+      deliveryRef: input.deliveryRef,
+      issuer: input.issuer,
+    })
+  }
+
   const data = input.event.data
   const subject = input.event.type === 'user.updated' ? data.id : data.user_id
   const targetRef = data.id
@@ -118,6 +127,36 @@ function redactedObservationFromVerifiedEvent(input: Readonly<{
   }
   const providerIdentifier = clerkUserProviderIdentifier(input.issuer, subject)
   if (providerIdentifier === undefined) return { kind: 'invalid' }
+
+  const observedAtMs = observedAt as number
+  let securityAction: ClerkSecurityAction
+  if (input.event.type === 'session.revoked') {
+    securityAction = 'revoke_interactive_credentials'
+  } else if (input.event.type === 'user.updated') {
+    const passwordLastUpdatedAt = data.password_last_updated_at
+    securityAction = typeof passwordLastUpdatedAt === 'number'
+      && Math.abs(passwordLastUpdatedAt - observedAtMs) <= 1_000
+      ? 'revoke_interactive_credentials'
+      : 'observe_only'
+  } else {
+    securityAction = 'observe_only'
+  }
+
+  let profileDisplayName: string | undefined
+  if (input.event.type === 'user.updated') {
+    const firstName = typeof data.first_name === 'string' ? data.first_name.trim() : ''
+    const lastName = typeof data.last_name === 'string' ? data.last_name.trim() : ''
+    const joined = [firstName, lastName].filter(Boolean).join(' ')
+    const username = typeof data.username === 'string' ? data.username.trim() : ''
+    const candidate = (joined || username).trim()
+    if (
+      candidate.length > 0
+      && candidate.length <= 200
+      && /^[\p{L}\p{N}\p{P}\p{S}\p{Zs}]+$/u.test(candidate)
+    ) {
+      profileDisplayName = candidate
+    }
+  }
 
   return {
     kind: 'accepted',
@@ -134,7 +173,9 @@ function redactedObservationFromVerifiedEvent(input: Readonly<{
         targetKind: input.event.type === 'user.updated' ? 'security_profile' : 'session',
         targetRef,
       }),
-      observedAt: observedAt as number,
+      observedAt: observedAtMs,
+      securityAction,
+      ...(profileDisplayName === undefined ? {} : { profileDisplayName }),
     },
   }
 }
@@ -144,4 +185,43 @@ function supportedEventType(value: string): value is ClerkSecurityObservation['e
     || value === 'session.ended'
     || value === 'session.revoked'
     || value === 'user.updated'
+    || value === 'user.deleted'
+}
+
+function redactedUserDeletedObservation(input: Readonly<{
+  event: Record<string, unknown>
+  deliveryRef: string
+  issuer: string | undefined
+}>): ObservationProjection {
+  if (!isRecord(input.event.data)) return { kind: 'invalid' }
+  const data = input.event.data
+  if (data.deleted !== true || typeof data.id !== 'string' || data.id.length === 0) {
+    return { kind: 'invalid' }
+  }
+  const observedAt = input.event.timestamp
+  if (!Number.isSafeInteger(observedAt) || (observedAt as number) <= 0) {
+    return { kind: 'invalid' }
+  }
+  const providerIdentifier = clerkUserProviderIdentifier(input.issuer, data.id)
+  if (providerIdentifier === undefined) return { kind: 'invalid' }
+
+  return {
+    kind: 'accepted',
+    command: {
+      deliveryRefHash: canonicalDigest({
+        contract: 'ae.clerk-webhook-delivery:v1',
+        deliveryRef: input.deliveryRef,
+      }),
+      providerIdentifier,
+      eventType: 'user.deleted',
+      targetRefHash: canonicalDigest({
+        contract: 'ae.clerk-webhook-target:v1',
+        provider: 'clerk',
+        targetKind: 'user_deletion',
+        targetRef: data.id,
+      }),
+      observedAt: observedAt as number,
+      securityAction: 'retire_personal_account',
+    },
+  }
 }

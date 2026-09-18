@@ -28,6 +28,7 @@ export type RateLimitResult =
 type RateLimitMutationArgs = {
   name: GenericHttpRateLimitName
   key: string
+  serviceAuth: ConvexServerFunctionAssertion
 }
 
 const admitMutation = sourceMutation<RateLimitMutationArgs, RateLimitResult>('rateLimit:admitHttp')
@@ -83,7 +84,12 @@ export async function assertHttpAdmission(
         ? { ok: true }
         : { ok: true, retryAfter: result.retryAfter }
   }
-  return await callPublicSourceMutation(admitMutation, { name, key })
+  const serviceAuth = await createConvexServerFunctionAssertion({
+    operation: 'rateLimit.admitHttp',
+    scope: 'rate_limit:admit_http',
+    command: { name, key },
+  })
+  return await callPublicSourceMutation(admitMutation, { name, key, serviceAuth })
 }
 
 export function createHttpRateLimitAdmission(name: HttpRateLimitName): RateLimitAdmission {
@@ -172,11 +178,7 @@ export function anonymousChatAdmissionKey(request: Request): string {
   return `ip:${canonicalDigest(trustedIngressIp)}:${canonicalDigest('chat-anonymous')}`
 }
 
-function requestIdentity(request: Request): Readonly<{ kind: 'principal' | 'session' | 'ip'; value: string }> {
-  const principal = firstNonEmptyHeader(request, ['x-api-key'])
-    ?? bearerToken(request.headers.get('authorization'))
-  if (principal !== undefined) return { kind: 'principal', value: principal }
-
+function requestIdentity(request: Request): Readonly<{ kind: 'session' | 'ip'; value: string }> {
   const cookieHeader = request.headers.get('cookie')
   const session = firstNonEmptyHeader(request, ['x-ae-session-id', 'x-session-id'])
     ?? readCookie(cookieHeader, 'ae_session')
@@ -195,10 +197,4 @@ function firstNonEmptyHeader(request: Request, names: readonly string[]): string
     if (value !== undefined && value.length > 0) return value
   }
   return undefined
-}
-
-function bearerToken(value: string | null): string | undefined {
-  if (value === null) return undefined
-  const match = /^Bearer\s+(.+)$/iu.exec(value.trim())
-  return match?.[1]?.trim() || undefined
 }

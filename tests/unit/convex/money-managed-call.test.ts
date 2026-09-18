@@ -247,6 +247,73 @@ describe('Formance managed Call evidence', () => {
     })
   })
 
+  it('replays pre-submission release idempotently and rejects conflicting release references', async () => {
+    const backend = convexTest(schema, convexModules)
+    await seedReservationFixture(backend)
+    await expect(backend.mutation(internal.moneyManagedCallLifecycle.finalizeRelease, {
+      callRef,
+      transactionRefs: releaseRefs,
+      now: now + 1,
+    })).resolves.toEqual({ kind: 'accepted', state: 'released', replayed: false })
+    await expect(backend.mutation(internal.moneyManagedCallLifecycle.finalizeRelease, {
+      callRef,
+      transactionRefs: releaseRefs,
+      now: now + 2,
+    })).resolves.toEqual({ kind: 'accepted', state: 'released', replayed: true })
+    await expect(backend.mutation(internal.moneyManagedCallLifecycle.finalizeRelease, {
+      callRef,
+      transactionRefs: ['formance:other-1', 'formance:other-2'],
+      now: now + 3,
+    })).resolves.toEqual({ kind: 'refused', code: 'managed_call_release_conflict' })
+
+    const releaseBooking = await backend.query(internal.moneyManagedCall.readBooking, { callRef })
+    expect(releaseBooking).toMatchObject({
+      kind: 'available',
+      financialState: 'released',
+      reservationRefs,
+      releaseRefs,
+    })
+    expect(releaseBooking).not.toHaveProperty('settlementRefs')
+
+    await expect(backend.run(async (ctx) => ({
+      invocation: await ctx.db.query('capabilityCalls')
+        .withIndex('by_callRef', (query) => query.eq('callRef', callRef)).unique(),
+      obligation: await ctx.db.query('moneyProviderObligations')
+        .withIndex('by_callRef', (query) => query.eq('callRef', callRef)).unique(),
+      obligationCount: (await ctx.db.query('moneyProviderObligations').collect()).length,
+    }))).resolves.toEqual({
+      invocation: expect.objectContaining({
+        state: 'pending',
+        formanceFinancialState: 'released',
+        formanceReservationRefs: reservationRefs,
+        formanceReleaseRefs: releaseRefs,
+        updatedAt: now + 1,
+      }),
+      obligation: {
+        _id: expect.any(String),
+        _creationTime: expect.any(Number),
+        obligationRef: `provider-obligation:${callRef}`,
+        callRef,
+        toolRef,
+        providerRef: operation.identity.businessId,
+        buyerAccountRef: accountRef,
+        buyerAsset: 'AUD',
+        buyerExponent: 6,
+        buyerAmountUnits: '6000000',
+        providerAsset: 'USDC',
+        providerExponent: 6,
+        providerAmountUnits: '5000000',
+        settlementMethod: 'managed_x402',
+        payoutEligibility: 'ineligible_x402',
+        state: 'reversed',
+        evidenceRefs: [quoteRef, ...reservationRefs],
+        createdAt: expect.any(Number),
+        updatedAt: now + 1,
+      },
+      obligationCount: 1,
+    })
+  })
+
   it('blocks only a managed Call whose bound financial scope has an open case', async () => {
     const backend = convexTest(schema, convexModules)
     await backend.run(async (ctx) => {

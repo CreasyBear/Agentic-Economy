@@ -108,6 +108,7 @@ const creditAccountResultValue = v.union(
     accountId: v.string(),
     balance: exactAmount,
     pendingTopup: v.optional(v.object({
+      commandRef: v.string(),
       amount: exactAmount,
       state: v.union(v.literal('pending'), v.literal('outcome_unknown')),
       externalRef: v.optional(v.string()),
@@ -184,6 +185,74 @@ function currentUtcMonthWindow(): { periodStartAt: number; periodEndAt: number }
   }
 }
 
+const creditAccountMoneyFactsValue = v.object({
+  autoRecharge: v.object({
+    enabled: v.boolean(),
+    threshold: exactAmount,
+    rechargeAmount: exactAmount,
+  }),
+  pendingTopup: v.optional(v.object({
+    commandRef: v.string(),
+    amount: exactAmount,
+    state: v.union(v.literal('pending'), v.literal('outcome_unknown')),
+    externalRef: v.optional(v.string()),
+  })),
+})
+
+type CreditAccountMoneyFacts = Infer<typeof creditAccountMoneyFactsValue>
+
+export const readCreditAccountMoneyFacts = internalQuery({
+  args: { accountRef: identifier },
+  returns: creditAccountMoneyFactsValue,
+  handler: async (ctx, args): Promise<CreditAccountMoneyFacts> => {
+    const zero = { currency: 'AUD' as const, units: '0', exponent: 6 as const }
+    const settings = await ctx.db
+      .query('moneyAutoRechargeSettings')
+      .withIndex('by_accountRef', (query) => query.eq('accountRef', args.accountRef))
+      .unique()
+    const autoRecharge = settings === null
+      ? { enabled: false, threshold: zero, rechargeAmount: zero }
+      : {
+          enabled: settings.enabled,
+          threshold: {
+            currency: 'AUD' as const,
+            units: settings.thresholdUnits,
+            exponent: 6 as const,
+          },
+          rechargeAmount: {
+            currency: 'AUD' as const,
+            units: settings.rechargeAmountUnits,
+            exponent: 6 as const,
+          },
+        }
+
+    const fundingCommands = await ctx.db
+      .query('moneyFundingCommands')
+      .withIndex('by_accountRef_and_createdAt', (query) => query.eq('accountRef', args.accountRef))
+      .order('desc')
+      .take(20)
+    const pendingCommand = fundingCommands.find(
+      (row) => row.state === 'pending' || row.state === 'outcome_unknown',
+    )
+    const pendingTopup = pendingCommand === undefined
+      ? undefined
+      : {
+          commandRef: pendingCommand.commandRef,
+          amount: {
+            currency: 'AUD' as const,
+            units: pendingCommand.totalUnits,
+            exponent: 6 as const,
+          },
+          state: pendingCommand.state === 'outcome_unknown' ? 'outcome_unknown' as const : 'pending' as const,
+          ...(pendingCommand.externalRef === undefined
+            ? {}
+            : { externalRef: pendingCommand.externalRef }),
+        }
+
+    return { autoRecharge, ...(pendingTopup === undefined ? {} : { pendingTopup }) }
+  },
+})
+
 export const readCreditAccount = action({
   args: { principalId: identifier, currency: identifier },
   returns: creditAccountResultValue,
@@ -198,16 +267,17 @@ export const readCreditAccount = action({
       subjectRef: actor.canonicalAccountRef,
     })
     if (balance.kind !== 'available') return { kind: 'refused' as const, code: 'source_unavailable' }
-    const zero = { currency: balance.currency, units: '0', exponent: 6 as const }
+    const moneyFacts: CreditAccountMoneyFacts = await ctx.runQuery(
+      internal.moneyLedger.readCreditAccountMoneyFacts,
+      { accountRef: actor.canonicalAccountRef },
+    )
     return {
       kind: 'ok' as const,
       principalId: actor.canonicalAccountRef,
       accountId: actor.canonicalAccountRef,
       balance: { currency: balance.currency, units: balance.units, exponent: balance.exponent },
-      // Auto-recharge is not implemented yet; report the fixed disabled
-      // default used elsewhere for this not-yet-built feature rather than
-      // inventing a value the source cannot back.
-      autoRecharge: { enabled: false, threshold: zero, rechargeAmount: zero },
+      autoRecharge: moneyFacts.autoRecharge,
+      ...(moneyFacts.pendingTopup === undefined ? {} : { pendingTopup: moneyFacts.pendingTopup }),
       evidence: 'source' as const,
     }
   },

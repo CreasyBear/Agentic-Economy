@@ -8,6 +8,7 @@ import type {
   CallUsageSummary,
   PublicReconciliationState,
 } from './call-contracts'
+import type { PurchaseResolutionRecord } from './purchase-resolution'
 
 export const callStatusStateValues = [
   'gathering_information',
@@ -72,6 +73,7 @@ export type CallStatusResult =
       effectGeneration?: number
       result?: CallResult
       receipt?: CallReceipt
+      purchaseResolution?: PurchaseResolutionRecord
     }>
   | Readonly<{
       kind: 'unchanged'

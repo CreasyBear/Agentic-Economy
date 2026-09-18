@@ -88,6 +88,35 @@ const fundingConstraints: AccountFundingConstraints = {
   legalCustomerMaximumAccessibleUnits: '4999999999',
   policyDigest: `sha256:${'f'.repeat(64)}`,
 }
+
+function am09ReturnedCheckout(input: Readonly<{
+  externalRef: string
+  status: CreditPaymentSession['evidence']['status']
+  checkoutStatus: NonNullable<CreditPaymentSession['evidence']['checkoutStatus']>
+}>): CreditPaymentSession {
+  return {
+    kind: 'hosted_redirect',
+    evidence: {
+      provider: 'stripe',
+      externalRef: input.externalRef,
+      amount: { currency: 'AUD', units: '10550000', exponent: 6 },
+      status: input.status,
+      checkoutStatus: input.checkoutStatus,
+      paymentStatus: input.status === 'succeeded' ? 'paid' : 'unpaid',
+      checkoutMode: 'hosted_page',
+      checkoutExpiresAt: 3_600_000,
+      requestDigest: 'digest:request',
+      metadataDigest: 'digest:metadata',
+      checkoutSessionDigest: 'digest:checkout',
+      evidenceDigest: 'digest:evidence',
+      evidenceRef: `stripe:checkout:${input.externalRef}`,
+      observedAt: 1,
+    },
+    checkoutUrl: `https://checkout.stripe.com/c/pay/${input.externalRef}`,
+    expiresAt: 3_600_000,
+  }
+}
+
 const emptyAccountHistory: AccountHistoryResult = {
   kind: 'available',
   entries: [],
@@ -104,6 +133,7 @@ const emptyAccountHistory: AccountHistoryResult = {
 afterEach(() => {
   cleanup()
   window.sessionStorage.clear()
+  window.history.replaceState(null, '', '/')
 })
 
 describe('owner credit target', () => {
@@ -252,6 +282,70 @@ describe('owner credit target', () => {
 
     expect(screen.getByText('Statement link prepared. If no tab opened, try opening it again.')).toBeTruthy()
     expect(screen.getByText('Tax invoice could not be opened. This record remains available.')).toBeTruthy()
+  })
+
+  it('AM-11 does not label a preparing document as issued', async () => {
+    render(<AeOwnerCredit
+      accountBalance={accountBalance}
+      accountHistory={emptyAccountHistory}
+      documents={[{
+        documentRef: 'money-document:funding_receipt:am11-preparing',
+        kind: 'funding_receipt',
+        amountUnits: '5000000',
+        residualUnits: '0',
+        sourceTransactionRefs: ['formance:tx:am11-preparing'],
+        policyRefs: ['commercial-policy:sandbox:v1'],
+        policyDigest: `sha256:${'a'.repeat(64)}`,
+        renderInputDigest: `sha256:${'b'.repeat(64)}`,
+        templateVersion: 'ae.money-document:html:v1',
+        state: 'rendering',
+        sourceCount: 1,
+        rendered: false,
+        createdAt: 1_788_120_000_000,
+      }]}
+      onOpenDocument={vi.fn()}
+    />)
+
+    fireEvent.click(screen.getByText('Accounting records and administration'))
+    expect(screen.getByText('Funding receipt')).toBeTruthy()
+    expect(screen.getByText('money-document:funding_receipt:am11-preparing')).toBeTruthy()
+    expect(screen.getByText('Preparing')).toBeTruthy()
+    expect(screen.getByText('Recorded')).toBeTruthy()
+    expect(screen.queryByText('Issued')).toBeNull()
+    expect(screen.getByRole('button', { name: 'Preparing…' }).hasAttribute('disabled')).toBe(true)
+    expect(screen.queryByRole('button', { name: 'Open document' })).toBeNull()
+  })
+
+  it('AM-11 keeps a failed document listed without offering Open', async () => {
+    render(<AeOwnerCredit
+      accountBalance={accountBalance}
+      accountHistory={emptyAccountHistory}
+      documents={[{
+        documentRef: 'money-document:adjustment:am11-failed',
+        kind: 'adjustment',
+        amountUnits: '5280000',
+        residualUnits: '0',
+        sourceTransactionRefs: ['formance:tx:am11-failed'],
+        policyRefs: ['commercial-policy:sandbox:v1'],
+        policyDigest: `sha256:${'a'.repeat(64)}`,
+        renderInputDigest: `sha256:${'b'.repeat(64)}`,
+        templateVersion: 'ae.money-document:html:v1',
+        state: 'failed',
+        sourceCount: 1,
+        rendered: false,
+        createdAt: 1_788_120_000_000,
+      }]}
+      onOpenDocument={vi.fn()}
+    />)
+
+    fireEvent.click(screen.getByText('Accounting records and administration'))
+    expect(screen.getByText('Adjustment document')).toBeTruthy()
+    expect(screen.getByText('money-document:adjustment:am11-failed')).toBeTruthy()
+    expect(screen.getByText('Needs attention')).toBeTruthy()
+    expect(screen.getByText('Recorded')).toBeTruthy()
+    expect(screen.queryByText('Issued')).toBeNull()
+    expect(screen.getByRole('button', { name: 'Preparing…' }).hasAttribute('disabled')).toBe(true)
+    expect(screen.queryByRole('button', { name: 'Open document' })).toBeNull()
   })
 
   it('deduplicates transaction identity across recoverable pagination', async () => {
@@ -759,6 +853,54 @@ describe('assistant access components', () => {
     await waitFor(() => expect(read).toHaveBeenCalledWith(locator))
   })
 
+  it('AM-09 lets a failed Checkout start another payment with a new command', async () => {
+    window.history.replaceState(null, '', '/owner/credit?funding=cs_am09_failed')
+    const session = am09ReturnedCheckout({
+      externalRef: 'cs_am09_failed',
+      status: 'failed',
+      checkoutStatus: 'complete',
+    })
+    const begin = vi.fn()
+    const read = vi.fn(async () => session)
+    render(<AeAccountFundingPanel port={{ begin, read }} constraints={fundingConstraints} />)
+
+    expect(await screen.findByText(/The provider did not complete this payment/u)).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Continue secure payment' })).toBeNull()
+    expect(begin).not.toHaveBeenCalled()
+    fireEvent.click(await screen.findByRole('button', { name: 'Add more credit' }))
+    expect(window.sessionStorage.getItem('ae.account-funding.recovery.v1')).toBeNull()
+    expect(new URL(window.location.href).searchParams.get('funding')).toBeNull()
+    fireEvent.change(screen.getByLabelText(/other amount/i), { target: { value: '5.00' } })
+    fireEvent.click(screen.getByRole('button', { name: /pay A\$5\.28 and add A\$5\.00/i }))
+    await waitFor(() => expect(begin).toHaveBeenCalledTimes(1))
+    expect(begin.mock.calls[0]?.[0]?.idempotencyKey).toMatch(/^account-funding:/u)
+    expect(begin.mock.calls[0]?.[0]?.amount.units).toBe('5000000')
+  })
+
+  it('AM-09 lets an expired Checkout start another payment with a new command', async () => {
+    window.history.replaceState(null, '', '/owner/credit?funding=cs_am09_expired')
+    const session = am09ReturnedCheckout({
+      externalRef: 'cs_am09_expired',
+      status: 'pending',
+      checkoutStatus: 'expired',
+    })
+    const begin = vi.fn()
+    const read = vi.fn(async () => session)
+    render(<AeAccountFundingPanel port={{ begin, read }} constraints={fundingConstraints} />)
+
+    expect(await screen.findByText(/This checkout expired/u)).toBeTruthy()
+    expect(screen.queryByText(/still processing/i)).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Continue secure payment' })).toBeNull()
+    expect(begin).not.toHaveBeenCalled()
+    fireEvent.click(await screen.findByRole('button', { name: 'Add more credit' }))
+    expect(window.sessionStorage.getItem('ae.account-funding.recovery.v1')).toBeNull()
+    expect(new URL(window.location.href).searchParams.get('funding')).toBeNull()
+    fireEvent.change(screen.getByLabelText(/other amount/i), { target: { value: '5.00' } })
+    fireEvent.click(screen.getByRole('button', { name: /pay A\$5\.28 and add A\$5\.00/i }))
+    await waitFor(() => expect(begin).toHaveBeenCalledTimes(1))
+    expect(begin.mock.calls[0]?.[0]?.idempotencyKey).toMatch(/^account-funding:/u)
+  })
+
   it('keeps unavailable top-up from starting payment or changing credit', async () => {
     const begin = vi.fn(async () => ({ kind: 'refused' as const, code: 'stripe_setup_required' as const, retryable: false }))
     const read = vi.fn(async () => ({ kind: 'refused' as const, code: 'stripe_setup_required' as const, retryable: false }))
@@ -800,7 +942,7 @@ describe('assistant access components', () => {
     expect(screen.getAllByText('Browse only').length).toBeGreaterThan(0)
     expect(screen.getAllByText('Sandbox').length).toBeGreaterThan(0)
     expect(screen.getByText('30/min · 300/hour')).toBeTruthy()
-    expect(screen.getByText('USD 25.00')).toBeTruthy()
+    expect(screen.getAllByText('USD 25.00').length).toBeGreaterThan(0)
     expect(screen.queryByText(/scope:|data:|principal|clerk_api_key/u)).toBeNull()
   })
 

@@ -244,13 +244,13 @@ export async function getCurrentOwnerPublicCatalogHandler(ctx: QueryCtx) {
     return catalogReadNotFound()
   }
 
-  const businesses = await ctx.db
+  const published = await ctx.db
     .query('businesses')
-    .withIndex('by_owningAccountRef_and_updatedAt', (query) => query.eq('owningAccountRef', actor.canonicalAccountRef))
-    .order('desc')
-    .take(20)
-  const published = businesses.find((row) => row.publicStatus === 'published')
-  if (published === undefined) {
+    .withIndex('by_owningAccountRef_and_publicStatus', (query) => (
+      query.eq('owningAccountRef', actor.canonicalAccountRef).eq('publicStatus', 'published')
+    ))
+    .first()
+  if (published === null) {
     return catalogReadNotFound()
   }
   const catalog = await publicCatalogForBusiness(ctx.db, published._id, now)

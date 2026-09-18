@@ -1,4 +1,4 @@
-import type { CapabilityOfferingOrigin } from '@/modules/capability-supply/public'
+import type { CapabilityOfferingOrigin } from '../registration-schema'
 
 import type { GraphCatalogAccessPath } from './ports'
 

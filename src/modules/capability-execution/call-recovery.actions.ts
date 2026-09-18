@@ -17,6 +17,7 @@ import {
   ownerCallContextSchema,
   type OwnerCallStatusResult,
 } from './call-recovery-contracts'
+import { purchaseResolutionRecordSchema } from './purchase-resolution'
 import type { ReconciliationEvidence } from '@/modules/action-execution/runtime'
 import { CALL_ROUTE_CONTRACT } from './call-entry'
 
@@ -36,6 +37,7 @@ const callStatusVariants = [
     effectGeneration: z.number().int().positive().exactOptional(),
     result: callResultSchema.exactOptional(),
     receipt: callReceiptSchema.exactOptional(),
+    purchaseResolution: purchaseResolutionRecordSchema.exactOptional(),
   }),
   z.strictObject({
     kind: z.literal('unchanged'),

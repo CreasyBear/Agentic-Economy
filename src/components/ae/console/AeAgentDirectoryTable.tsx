@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import type { ColumnDef } from '@tanstack/react-table'
 
 import { AeEmptyState } from '@/components/ae/feedback/AeEmptyState'
@@ -10,10 +10,26 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { stagedListPhase, useFirstLoadPending } from '@/components/ui/data-state'
 import { InlineEditField } from '@/components/ui/inline-edit-field'
-import { formatTimestamp } from '@/lib/ui/format-time'
+import { Progress } from '@/components/ui/progress'
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import { formatRelativeTime, formatTimestamp, timestampIso } from '@/lib/ui/format-time'
 import { suggestNextAction } from '@/modules/market/suggested-next-action'
 import type { AgentDirectoryItem } from '@/modules/agent-access/agent-operator-view-model'
-import { agentStatusLabel, environmentLabel, scopeLabel } from './agent-operator-console-model'
+import {
+  agentStatusBadgeVariant,
+  agentStatusLabel,
+  environmentLabel,
+  monthlySpendLabel,
+  monthlyUtilizationPercent,
+  scopeLabel,
+} from './agent-operator-console-model'
 
 export function AeAgentDirectoryTable({
   directoryItems,
@@ -28,6 +44,7 @@ export function AeAgentDirectoryTable({
   getAgentHref?: (principalId: string) => string
   onOpenAgent: (item: AgentDirectoryItem) => void
 }>) {
+  const [statusFilter, setStatusFilter] = useState<'all' | AgentDirectoryItem['status']>('all')
   const firstLoadPending = useFirstLoadPending(loading)
   const agentsPhase = stagedListPhase({ firstLoadPending, rows: directoryItems })
   const missingAgentNextAction = suggestNextAction({
@@ -35,6 +52,12 @@ export function AeAgentDirectoryTable({
     state: 'missing',
     actor: 'buyer',
   })
+
+  const filteredItems = useMemo(() => {
+    if (statusFilter === 'all') return directoryItems
+    return directoryItems.filter((item) => item.status === statusFilter)
+  }, [directoryItems, statusFilter])
+
   const columns = useMemo<ColumnDef<AgentDirectoryItem, unknown>[]>(
     () => [
       {
@@ -73,12 +96,46 @@ export function AeAgentDirectoryTable({
         cell: ({ row }) => scopeLabel(row.original.authorityMode),
       },
       {
+        id: 'monthlySpend',
+        accessorFn: (item) => monthlyUtilizationPercent(item) ?? -1,
+        header: ({ column }) => <AeOperatorSortableHeader label="Monthly spend" column={column} />,
+        cell: ({ row }) => {
+          const spendText = monthlySpendLabel(row.original)
+          const percent = monthlyUtilizationPercent(row.original)
+          if (percent === undefined) {
+            return (
+              <span className="text-xs text-muted-foreground">{spendText}</span>
+            )
+          }
+          return (
+            <div className="grid gap-1.5 min-w-[120px]">
+              <span className="font-mono tabular-nums text-xs">{spendText}</span>
+              <Progress
+                value={percent}
+                className="h-1.5"
+                aria-label={`${percent}% (${spendText})`}
+              />
+            </div>
+          )
+        },
+      },
+      {
         id: 'lastUsed',
         accessorFn: (item) => item.lastSeenAt ?? 0,
         header: ({ column }) => <AeOperatorSortableHeader label="Last used" column={column} />,
-        cell: ({ row }) => row.original.lastSeenAt === undefined
-          ? 'No activity'
-          : <span className="font-mono tabular-nums">{formatTimestamp(row.original.lastSeenAt)}</span>,
+        cell: ({ row }) => {
+          const lastSeenAt = row.original.lastSeenAt
+          if (lastSeenAt === undefined) return 'No activity'
+          return (
+            <time
+              dateTime={timestampIso(lastSeenAt)}
+              title={formatTimestamp(lastSeenAt)}
+              className="font-mono tabular-nums text-xs"
+            >
+              {formatRelativeTime(lastSeenAt)}
+            </time>
+          )
+        },
       },
       {
         id: 'status',
@@ -86,7 +143,8 @@ export function AeAgentDirectoryTable({
         header: ({ column }) => <AeOperatorSortableHeader label="Status" column={column} />,
         cell: ({ row }) => {
           const status = agentStatusLabel(row.original.status)
-          return <Badge variant={status === 'Connected' ? 'default' : 'outline'}>{status}</Badge>
+          const variant = agentStatusBadgeVariant(row.original.status)
+          return <Badge variant={variant}>{status}</Badge>
         },
       },
     ],
@@ -123,11 +181,30 @@ export function AeAgentDirectoryTable({
   return (
     <AeRecordTable
       columns={columns}
-      data={directoryItems}
+      data={filteredItems}
       caption="Agents"
       countLabel="agents"
       filterPlaceholder="Filter agents…"
       hideFilter={directoryItems.length <= 1}
+      action={
+        <Select
+          value={statusFilter}
+          onValueChange={(val) => setStatusFilter(val as typeof statusFilter)}
+        >
+          <SelectTrigger className="w-[160px]" aria-label="Filter by status">
+            <SelectValue placeholder="All statuses" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectGroup>
+              <SelectItem value="all">All statuses</SelectItem>
+              <SelectItem value="connected">Connected</SelectItem>
+              <SelectItem value="attention">Needs attention</SelectItem>
+              <SelectItem value="expired">Expired</SelectItem>
+              <SelectItem value="disconnected">Disconnected</SelectItem>
+            </SelectGroup>
+          </SelectContent>
+        </Select>
+      }
       getRowId={(item) => item.principalRef}
       {...(getAgentHref === undefined
         ? {

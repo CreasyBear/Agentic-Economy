@@ -11,8 +11,6 @@ import {
   agentSpendingLimitsUpdateSchema,
   type AgentSpendingLimitsReadResult,
   type AgentSpendingLimitsResult,
-} from '@/modules/agent-access/spending-policy-update'
-import {
   createAgentAccessGrant,
   normalizeStoredAgentAccessGrant,
   projectAgentAccessGrant,
@@ -170,7 +168,8 @@ async function loadOwnedAgent(
   let grant: ReturnType<typeof normalizeStoredAgentAccessGrant>
   try {
     grant = normalizeStoredAgentAccessGrant(storedGrant)
-  } catch {
+  } catch (cause) {
+    void cause;
     return { kind: 'policy_invalid' }
   }
   const selection = normalizeAgentAccessToolSelection(grant)
@@ -206,7 +205,8 @@ async function loadOwnedAgent(
   let delegation: ReturnType<typeof parsePersistedDelegationGrant>
   try {
     delegation = parsePersistedDelegationGrant(storedDelegation)
-  } catch {
+  } catch (cause) {
+    void cause;
     return { kind: 'authority_unavailable' }
   }
   if (!isCurrentSupportedDelegation(delegation, owner, admission, grant, now)) {
@@ -238,7 +238,8 @@ function validOpaqueCommandRef(value: string, label: 'correlationRef' | 'idempot
   try {
     agentAuditOpaqueRef(value, label)
     return true
-  } catch {
+  } catch (cause) {
+    void cause;
     return false
   }
 }
@@ -318,7 +319,8 @@ export const updateForServer = mutation({
         maximumDailySpend: args.maximumDailySpend,
         maximumMonthlySpend: args.maximumMonthlySpend,
       })
-    } catch {
+    } catch (cause) {
+      void cause;
       return invalidCommand(args.correlationRef)
     }
     if (!validOpaqueCommandRef(parsed.idempotencyKey, 'idempotencyRef')
@@ -333,7 +335,8 @@ export const updateForServer = mutation({
     let owner: OwnerAuthority
     try {
       owner = await resolveInteractiveAuthorityContext(ctx, identity)
-    } catch {
+    } catch (cause) {
+      void cause;
       return { kind: 'refused', code: 'authentication_required', correlationRef: args.correlationRef }
     }
     if (owner.provenance.accessKind !== 'ownership') {
@@ -354,7 +357,8 @@ export const updateForServer = mutation({
       let replayGrant: ReturnType<typeof normalizeStoredAgentAccessGrant>
       try {
         replayGrant = normalizeStoredAgentAccessGrant(existingReplay)
-      } catch {
+      } catch (cause) {
+        void cause;
         return { kind: 'conflict', code: 'idempotency_conflict', correlationRef: args.correlationRef }
       }
       return sameReplayMaterial(replayGrant, parsed, owner)
@@ -510,7 +514,8 @@ export const readCurrent = query({
     let owner: OwnerAuthority
     try {
       owner = await resolveInteractiveAuthorityContext(ctx.db, identity)
-    } catch {
+    } catch (cause) {
+      void cause;
       return { kind: 'refused', code: 'authority_unavailable' }
     }
     if (owner.provenance.accessKind !== 'ownership') {

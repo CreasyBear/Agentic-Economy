@@ -1,7 +1,7 @@
 import {
   capabilityBindingEligibilityHash,
   capabilityOfferingEligibilityHash,
-} from '@/modules/capability-supply/public'
+} from '../registration-schema'
 
 import type { CapabilityBindingRow } from '../binding'
 import type { CapabilityOfferingRow } from '../offering'

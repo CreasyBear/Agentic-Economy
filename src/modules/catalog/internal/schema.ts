@@ -192,6 +192,7 @@ export const catalogTables = {
     .index('by_offeringRef_and_status', ['offeringRef', 'status'])
     .index('by_offeringRef_and_offeringRevision', ['offeringRef', 'offeringRevision'])
     .index('by_businessId_and_status', ['businessId', 'status'])
+    .index('by_businessId_and_offeringRef', ['businessId', 'offeringRef'])
     .index('by_businessId_and_integrationDraftUpdatedAt', [
       'businessId',
       'integrationDraftUpdatedAt',

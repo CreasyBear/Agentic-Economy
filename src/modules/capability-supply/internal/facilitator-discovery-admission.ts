@@ -1,7 +1,8 @@
 import { canonicalDigest } from "@/modules/common/canonical-digest";
 import { isRecord } from "@/modules/common/is-record";
 
-import { importX402Capability, type CapabilityPublicationImport } from "../public";
+import type { CapabilityPublicationImport } from './publication-importer-types'
+import { importX402Capability } from './publication-importer-x402'
 import { admitOfficialBazaarFromPaymentRequired } from "./facilitator-discovery-client";
 import { dereferenceOpenApiSchema } from "./schema-deref";
 import type { BazaarAdmission } from "./publication-importer-x402-bazaar";

@@ -329,33 +329,83 @@ export function validateOfferingAccessPath(input: OfferingAccessPathDescriptor):
   }
 }
 
-function isPublicHttpsUrl(value: string): boolean {
+export function isPublicHttpsUrl(value: string): boolean {
   try {
     const url = new URL(value)
     if (url.protocol !== 'https:' || url.username.length > 0 || url.password.length > 0) return false
     const host = url.hostname.toLowerCase()
     const bareHost = host.replace(/^\[|\]$/g, '').replace(/\.+$/, '')
-    const ipv4 = bareHost.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/)?.slice(1).map(Number)
-    const privateIpv4 = ipv4 !== undefined && (
-      ipv4.some((part) => part > 255)
-      || ipv4[0] === 10
-      || ipv4[0] === 127
-      || (ipv4[0] === 169 && ipv4[1] === 254)
-      || (ipv4[0] === 172 && (ipv4[1] ?? 0) >= 16 && (ipv4[1] ?? 0) <= 31)
-      || (ipv4[0] === 192 && ipv4[1] === 168)
-      || ipv4.every((part) => part === 0)
-    )
-    return bareHost !== 'localhost'
-      && bareHost !== '::1'
-      && !bareHost.startsWith('fc')
-      && !bareHost.startsWith('fd')
-      && !bareHost.startsWith('fe80:')
-      && !bareHost.startsWith('::ffff:')
-      && !bareHost.endsWith('.localhost')
-      && !privateIpv4
+    if (bareHost === 'localhost' || bareHost.endsWith('.localhost')) return false
+    if (bareHost.includes(':')) return isPublicIpv6Host(bareHost)
+    return !isPrivateIpv4Host(bareHost)
   } catch (cause) {
     return degradeBackend(cause, false, { site: 'isPublicHttpsUrl', reason: 'invalid_response' })
   }
+}
+
+function isPublicIpv6Host(bareHost: string): boolean {
+  if (bareHost === '::1' || bareHost.startsWith('fe80:') || bareHost.startsWith('::ffff:')) return false
+  const mappedIpv4 = extractEmbeddedIpv4Address(bareHost)
+  if (mappedIpv4 !== undefined) return !isPrivateIpv4Host(mappedIpv4)
+  const bytes = parseIpv6Bytes(bareHost)
+  if (bytes === undefined || bytes[0] === undefined) return false
+  return (bytes[0] & 0xfe) !== 0xfc
+}
+
+function isPrivateIpv4Host(bareHost: string): boolean {
+  const ipv4 = bareHost.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/)?.slice(1).map(Number)
+  return ipv4 !== undefined && (
+    ipv4.some((part) => part > 255)
+    || ipv4[0] === 10
+    || ipv4[0] === 127
+    || (ipv4[0] === 169 && ipv4[1] === 254)
+    || (ipv4[0] === 172 && (ipv4[1] ?? 0) >= 16 && (ipv4[1] ?? 0) <= 31)
+    || (ipv4[0] === 192 && ipv4[1] === 168)
+    || ipv4.every((part) => part === 0)
+  )
+}
+
+function extractEmbeddedIpv4Address(value: string): string | undefined {
+  const bytes = parseIpv6Bytes(value)
+  if (bytes === undefined) return undefined
+  if (bytes[0] === 0x20 && bytes[1] === 0x02) {
+    return `${bytes[2]}.${bytes[3]}.${bytes[4]}.${bytes[5]}`
+  }
+  if (
+    bytes[0] === 0x00
+    && bytes[1] === 0x64
+    && bytes[2] === 0xff
+    && bytes[3] === 0x9b
+    && bytes[4] === 0
+    && bytes[5] === 0
+    && bytes[6] === 0
+    && bytes[7] === 0
+    && bytes[8] === 0
+    && bytes[9] === 0
+    && bytes[10] === 0
+    && bytes[11] === 0
+  ) {
+    return `${bytes[12]}.${bytes[13]}.${bytes[14]}.${bytes[15]}`
+  }
+  return undefined
+}
+
+function parseIpv6Bytes(value: string): Uint8Array | undefined {
+  const [head, tail] = value.split('::')
+  const headParts = head === undefined || head.length === 0 ? [] : head.split(':')
+  const tailParts = tail === undefined || tail.length === 0 ? [] : tail.split(':')
+  if (tail !== undefined && headParts.length + tailParts.length > 8) return undefined
+  const missing = tail === undefined ? 0 : 8 - headParts.length - tailParts.length
+  const parts = tail === undefined ? headParts : [...headParts, ...Array.from({ length: missing }, () => '0'), ...tailParts]
+  if (parts.length !== 8) return undefined
+  const bytes = new Uint8Array(16)
+  for (let index = 0; index < 8; index += 1) {
+    const n = Number.parseInt(parts[index] ?? '', 16)
+    if (!Number.isInteger(n) || n < 0 || n > 0xffff) return undefined
+    bytes[index * 2] = (n >> 8) & 0xff
+    bytes[index * 2 + 1] = n & 0xff
+  }
+  return bytes
 }
 
 function cleanText(value: string, maximum: number): string {

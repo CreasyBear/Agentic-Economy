@@ -1,11 +1,11 @@
 import type { JsonValue } from '@/modules/capability-contract/public'
 import { isRecord } from '@/modules/common/is-record'
 
-import {
-  residualSchemaReferenceRefusal,
-  type AdmitProviderSchemaRefusal,
-  type SchemaDereferencer,
-} from '../admit-provider-schema'
+import { residualSchemaReferenceRefusal } from '../admit-provider-schema'
+import type {
+  AdmitProviderSchemaRefusal,
+  SchemaDereferencer,
+} from '../admit-provider-schema-types'
 import type { CapabilityPublicationImportRefusal } from '../publication-importer-types'
 
 export type OpenApiRecordResolution =

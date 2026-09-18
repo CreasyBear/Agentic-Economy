@@ -1,6 +1,6 @@
 import type { AeFact } from '@/components/ae/data/AeFactList'
 import { formatTimestamp } from '@/lib/ui/format-time'
-import { formatCurrencyAmount, type ExactAmount } from '@/modules/money/public'
+import { formatCurrencyAmount, formatDisplayAmount, type ExactAmount } from '@/modules/money/public'
 import type {
   AgentDetail,
   AgentDirectoryItem,
@@ -180,6 +180,52 @@ export function agentStatusLabel(status: AgentDirectoryItem['status']): 'Connect
   if (status === 'attention') return 'Needs attention'
   if (status === 'expired') return 'Expired'
   return 'Disconnected'
+}
+
+export function agentStatusBadgeVariant(
+  status: AgentDirectoryItem['status'],
+): 'success' | 'warning' | 'destructive' | 'outline' {
+  switch (status) {
+    case 'connected':
+      return 'success'
+    case 'attention':
+      return 'warning'
+    case 'expired':
+      return 'destructive'
+    case 'disconnected':
+      return 'outline'
+    default: {
+      const exhaustive: never = status
+      return exhaustive
+    }
+  }
+}
+
+export function monthlySpendLabel(item: AgentDirectoryItem): string {
+  if (item.monthlyLimit !== undefined) {
+    if (item.monthlySpendCoverage === 'incomplete' || item.monthlySettledSpend === undefined) {
+      return `Unavailable / ${formatDisplayAmount(item.monthlyLimit)}`
+    }
+    return `${formatDisplayAmount(item.monthlySettledSpend)} / ${formatDisplayAmount(item.monthlyLimit)}`
+  }
+  if (item.monthlySettledSpend !== undefined) {
+    return `${formatDisplayAmount(item.monthlySettledSpend)} / No limit`
+  }
+  return '—'
+}
+
+export function monthlyUtilizationPercent(item: AgentDirectoryItem): number | undefined {
+  if (item.monthlyLimit === undefined || item.monthlySpendCoverage === 'incomplete') return undefined
+  if (item.monthlySettledSpend === undefined) return undefined
+  if (item.monthlyLimit.currency !== item.monthlySettledSpend.currency) return undefined
+
+  const spendUnits = BigInt(item.monthlySettledSpend.units)
+  const ceilingUnits = BigInt(item.monthlyLimit.units)
+  if (ceilingUnits <= 0n) return spendUnits > 0n ? 100 : 0
+  const basisPoints = (spendUnits * 10_000n) / ceilingUnits
+  const wholePercent = Number(basisPoints / 100n)
+  const fraction = Number(basisPoints % 100n)
+  return fraction >= 50 ? Math.min(100, wholePercent + 1) : Math.min(100, wholePercent)
 }
 
 export function agentRecoveryCopy(detail: AgentDetail): string | undefined {

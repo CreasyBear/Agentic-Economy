@@ -58,7 +58,8 @@ function FundingReturnPage() {
       if (result.kind === 'found') dispatch({ type: 'check_found', funding: result.funding })
       else if (result.kind === 'not_found') dispatch({ type: 'check_not_found' })
       else dispatch({ type: 'check_unavailable' })
-    } catch {
+    } catch (cause) {
+      void cause;
       if (signal?.aborted !== true) dispatch({ type: 'check_unavailable' })
     }
   }, [fundingSessionId])

@@ -8,6 +8,11 @@ import { KeyRound } from 'lucide-react'
 import { AeAgentOperatorConsole } from '@/components/ae/console/AeAgentOperatorConsole'
 import { AeAgentSecurityHistory } from '@/components/ae/agent-access/AeAgentSecurityHistory'
 import { AeAssistantInstallFunnel } from '@/components/ae/console/AeAssistantInstallFunnel'
+import {
+  AeConnectAgentWizardDialog,
+  type IssuedAgentAccessReveal,
+} from '@/components/ae/console/AeConnectAgentWizardDialog'
+import { AeKeyRevealDialog } from '@/components/ae/console/AeKeyRevealDialog'
 import { AeCopyReference } from '@/components/ae/data/AeCopyReference'
 import { AeOperatorPage } from '@/components/ae/layout/AeOperatorPage'
 import { AeSection } from '@/components/ae/layout/AeSection'
@@ -17,13 +22,22 @@ import { captureClientExceptionOnClient } from '@/lib/observability/capture-clie
 import { readAgentDirectoryPageServer, readAgentDirectoryServer } from '@/lib/server/agent-access-console.functions'
 import {
   disconnectAgentServer,
+  issueAgentAccessKeyServer,
+  readAgentSpendingLimitsServer,
   renameAgentServer,
   revokeAgentCredentialServer,
   revokeOwnerConnectionServer,
+  updateAgentSpendingLimitsServer,
 } from '@/modules/agent-access/agent-access.functions'
 import type { AgentLifecycleResult } from '@/modules/agent-access/agent-access'
 import type { OwnerConnectionLifecycleResult } from '@/modules/agent-access/public'
 import type { AgentDirectoryProjection } from '@/modules/agent-access/agent-operator-view-model'
+import type {
+  AgentSpendingLimitsReadResult,
+  AgentSpendingLimitsResult,
+} from '@/modules/agent-access/spending-policy-update'
+import type { ExactAmount } from '@/modules/money/public'
+import { createRuntimeId } from '@/modules/common/runtime-id'
 import {
   decideCallApprovalServer,
   listPendingCallApprovalsServer,
@@ -108,9 +122,14 @@ function AgentAccessHome() {
   const disconnectAgent = useServerFn(disconnectAgentServer)
   const disconnectConnection = useServerFn(revokeOwnerConnectionServer)
   const renameAgent = useServerFn(renameAgentServer)
+  const issueAgentAccessKey = useServerFn(issueAgentAccessKeyServer)
+  const updateSpendingLimits = useServerFn(updateAgentSpendingLimitsServer)
+  const readSpendingLimits = useServerFn(readAgentSpendingLimitsServer)
   const [directory, setDirectory] = useState<AgentDirectoryProjection>(initialDirectory)
   const [loading, setLoading] = useState(false)
   const [loadingMore, setLoadingMore] = useState(false)
+  const [wizardOpen, setWizardOpen] = useState(false)
+  const [reveal, setReveal] = useState<IssuedAgentAccessReveal>()
   const [directoryError, setDirectoryError] = useState<string>()
   const [directoryPaginationIssue, setDirectoryPaginationIssue] = useState<DirectoryPaginationIssue>()
   const [lifecycleIssue, setLifecycleIssue] = useState<LifecycleIssue>()
@@ -278,6 +297,40 @@ function AgentAccessHome() {
     }
   }
 
+  async function updateSpendingLimitsHandler(params: {
+    principalRef: string
+    expectedGeneration: number
+    maximumSpendPerCall: ExactAmount
+    maximumDailySpend: ExactAmount
+    maximumMonthlySpend: ExactAmount
+  }): Promise<AgentSpendingLimitsResult> {
+    const idempotencyKey = createRuntimeId('limit')
+    try {
+      const result = await updateSpendingLimits({
+        data: {
+          ...params,
+          idempotencyKey,
+        },
+      })
+      if (result.kind === 'completed' || result.kind === 'replayed') {
+        await load()
+      }
+      return result
+    } catch (cause) {
+      captureClientExceptionOnClient(cause)
+      return { kind: 'refused', code: 'source_unavailable', correlationRef: 'error' }
+    }
+  }
+
+  async function readSpendingLimitsHandler(principalRef: string): Promise<AgentSpendingLimitsReadResult> {
+    try {
+      return await readSpendingLimits({ data: { principalRef } })
+    } catch (cause) {
+      captureClientExceptionOnClient(cause)
+      return { kind: 'refused', code: 'source_unavailable' }
+    }
+  }
+
   async function decidePendingApproval(callRef: string, toolRef: string, decision: 'approve' | 'deny') {
     if (approvalDecision !== undefined) return
     setApprovalDecision({ callRef, decision })
@@ -346,12 +399,23 @@ function AgentAccessHome() {
         </Alert>
       )}
       {directory.items.length === 0 && search.caller === undefined ? (
-        <AeAssistantInstallFunnel
-          canonicalBaseUrl={canonicalBaseUrl}
-          checkingConnection={loading}
-          onCheckConnection={() => void load()}
-          {...(search.resumeTool === undefined ? {} : { resumeToolRef: search.resumeTool })}
-        />
+        <div className="grid gap-4">
+          <div className="flex justify-end">
+            <Button
+              type="button"
+              onClick={() => setWizardOpen(true)}
+              className="w-fit min-h-touch"
+            >
+              + Connect New Agent
+            </Button>
+          </div>
+          <AeAssistantInstallFunnel
+            canonicalBaseUrl={canonicalBaseUrl}
+            checkingConnection={loading}
+            onCheckConnection={() => void load()}
+            {...(search.resumeTool === undefined ? {} : { resumeToolRef: search.resumeTool })}
+          />
+        </div>
       ) : directory.items.length === 0 || search.resumeTool === undefined ? null : (
         <AeSection
           title={hasConnectedAgent ? 'Continue with the selected Tool' : 'Finish the Agent connection'}
@@ -383,6 +447,9 @@ function AgentAccessHome() {
         onDisconnectAgent={(principalRef) => disconnect(principalRef)}
         onDisconnectConnection={(connectionRef, expectedRevision) => disconnectOneConnection(connectionRef, expectedRevision)}
         onRenameAgent={(principalRef, expectedRevision, displayName) => rename(principalRef, expectedRevision, displayName)}
+        onUpdateSpendingLimits={updateSpendingLimitsHandler}
+        onReadSpendingLimits={readSpendingLimitsHandler}
+        onConnectNewAgent={() => setWizardOpen(true)}
         {...(search.caller !== undefined
           && directory.details.some(({ agent }) => agent.principalRef === search.caller)
           ? { agentHistory: <AeAgentSecurityHistory key={search.caller} principalRef={search.caller} /> }
@@ -430,6 +497,23 @@ function AgentAccessHome() {
           ) : null}
         </AeSection>
       )}
+      <AeConnectAgentWizardDialog
+        open={wizardOpen}
+        onOpenChange={setWizardOpen}
+        onIssue={issueAgentAccessKey}
+        onSuccess={(issued) => {
+          setReveal(issued)
+          void load()
+        }}
+      />
+      <AeKeyRevealDialog
+        reveal={reveal}
+        open={reveal !== undefined}
+        onOpenChange={(next) => {
+          if (!next) setReveal(undefined)
+        }}
+        canonicalBaseUrl={canonicalBaseUrl}
+      />
     </AeOperatorPage>
   )
 }

@@ -293,3 +293,27 @@ function accountEvidenceRef(
 ): string {
   return `stripe:account:${account.id}:${accountObjectDigest(account)}`;
 }
+
+export async function createExpressLoginLink(
+  client: Stripe,
+  input: Readonly<{ stripeAccountId: string }>,
+): Promise<Readonly<{ provider: 'stripe'; url: string }> | MoneyRefusal> {
+  if (!validIdentifier(input.stripeAccountId)) {
+    return refusal('payment_binding_invalid', false);
+  }
+  try {
+    const link = await client.accounts.createLoginLink(input.stripeAccountId);
+    if (typeof link.url !== 'string' || link.url.length === 0) {
+      return refusal('stripe_setup_required', true);
+    }
+    return {
+      provider: 'stripe',
+      url: link.url,
+    };
+  } catch (cause) {
+    return degradeBackend(cause, refusal('stripe_setup_required', true), {
+      site: 'createExpressLoginLink',
+      reason: 'source_unavailable',
+    });
+  }
+}

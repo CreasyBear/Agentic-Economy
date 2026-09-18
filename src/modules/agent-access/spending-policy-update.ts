@@ -1,7 +1,11 @@
 import { z } from 'zod'
 import { v, type Infer } from 'convex/values'
-import { compareExactAmounts, exactAmountSchema, type ExactAmount } from '@/modules/money/public'
-import { PACKAGE4_FORMANCE_REQUIREMENTS } from '@/modules/money/internal/commercial-policy'
+import {
+  compareExactAmounts,
+  exactAmountSchema,
+  PACKAGE4_FORMANCE_REQUIREMENTS,
+  type ExactAmount,
+} from '@/modules/money/public'
 import { agentAccessBudgetPolicyValue } from './internal/convex-schema'
 
 const reference = z.string().trim().min(1).max(300)

@@ -16,8 +16,8 @@ import type {
   CapabilityContractMetadata,
   CapabilityPublicationImport,
   CapabilityPublicationSourceSelector,
-  CapabilityTransportAuthority,
-} from './public'
+} from './internal/publication-importer-types'
+import type { CapabilityTransportAuthority } from './internal/transport-terms-schema'
 import {
   previewSupplySource,
   loadPublicOpenApi,

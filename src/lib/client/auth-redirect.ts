@@ -24,7 +24,8 @@ export function sanitizeAuthRedirectTarget(value: unknown): string | undefined {
   let resolved: URL
   try {
     resolved = new URL(trimmed, authRedirectOrigin)
-  } catch {
+  } catch (cause) {
+    void cause;
     return undefined
   }
 

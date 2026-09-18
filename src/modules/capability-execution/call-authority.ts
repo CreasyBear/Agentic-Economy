@@ -322,7 +322,7 @@ async function callReservedTool(input: Readonly<{
   }
 }
 
-function normalizeCallAuthority(input: Readonly<{
+export function normalizeCallAuthority(input: Readonly<{
   authority: CallAuthorityDecision
   principal: AgentAccessPrincipal
   grant: CallGrant
@@ -331,6 +331,8 @@ function normalizeCallAuthority(input: Readonly<{
   if (
     input.authority.kind !== 'approved'
     || input.principal.authorityMode !== 'unrestricted_test_only'
+    || input.principal.environment !== 'sandbox'
+    || input.grant.environment !== 'sandbox'
     || input.authority.basis.kind !== 'approval_required'
   ) return input.authority
   return {

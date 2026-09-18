@@ -4,7 +4,8 @@ import {
   acceptedAuthorityValue,
   type CanonicalClaimAuthority,
 } from '@/modules/action-execution/runtime'
-import { spendingPeriodsValue } from '@/modules/money/internal/spending-period-values'
+import { spendingPeriodsValue } from '@/modules/money/public'
+import { purchaseResolutionRecordValidator } from '@/modules/capability-execution/purchase-resolution'
 
 export type CallPersistedAuthority = CanonicalClaimAuthority & Readonly<{
   format: 'operation-invoke-authority:v1'
@@ -244,6 +245,7 @@ export const statusResultValue = v.union(
     previousInput: v.optional(jsonObject),
     usage: v.optional(usageValue), evidenceHash: v.optional(v.string()), attemptRef: v.optional(v.string()),
     effectGeneration: v.optional(v.number()), result: v.optional(callResultValue), receipt: v.optional(callReceiptValue),
+    purchaseResolution: v.optional(purchaseResolutionRecordValidator),
   }),
   v.object({
     kind: v.literal('unchanged'), callRef: v.string(), version: v.number(), retryAfterMs: v.number(),
@@ -285,6 +287,13 @@ const providerConsequenceJournalStateValue = v.union(
 
 
 export const capabilityCallTables = {
+  purchaseResolutionRecords: defineTable({
+    ...purchaseResolutionRecordValidator.fields,
+    createdAt: v.number(),
+  })
+    .index('by_callRef', ['callRef'])
+    .index('by_accountRef_and_resolvedAt', ['accountRef', 'resolvedAt'])
+    .index('by_customerRef_and_resolvedAt', ['customerRef', 'resolvedAt']),
   capabilityCallProjections: defineTable({
     callRef: v.string(),
     accountRef: v.string(),

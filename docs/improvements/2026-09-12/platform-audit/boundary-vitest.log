@@ -1,0 +1,9 @@
+
+ RUN  v4.1.9 /Users/joelchan/Documents/Coding/App-Dev/live/01. Pre-Implementation/Agentic-Economy
+
+
+ Test Files  12 passed (12)
+      Tests  130 passed (130)
+   Start at  17:25:13
+   Duration  6.92s (transform 1.59s, setup 1.60s, import 3.78s, tests 549ms, environment 1ms)
+

@@ -14,6 +14,8 @@ import { degrade } from '@/lib/observability/degrade'
 import {
   CLERK_SECURITY_OBSERVE_OPERATION,
   CLERK_SECURITY_OBSERVE_SCOPE,
+  PERSONAL_ACCOUNT_RETIRE_OPERATION,
+  PERSONAL_ACCOUNT_RETIRE_SCOPE,
   type AccountSecurityHistoryItem,
   type AccountSecurityHistoryResult,
   type ClerkSecurityObservation,
@@ -32,6 +34,9 @@ type NativeHistoryPage = Readonly<{
 
 const recordObservationMutation = sourceMutation<RecordObservationArgs, ClerkSecurityObservationResult>(
   'securityAccountHistory:recordClerkSecurityEventForServer',
+)
+const retirePersonalAccountMutation = sourceMutation<RecordObservationArgs, ClerkSecurityObservationResult>(
+  'personalAccount:retirePersonalAccountForServer',
 )
 const listHistoryQuery = sourceQuery<
   { paginationOpts: { numItems: number; cursor: string | null } },
@@ -52,6 +57,14 @@ const agentHistoryInput = historyInput.extend({
 export async function recordClerkSecurityObservationThroughSource(
   command: ClerkSecurityObservation,
 ): Promise<ClerkSecurityObservationResult> {
+  if (command.securityAction === 'retire_personal_account') {
+    const serviceAuth = await createConvexServerFunctionAssertion({
+      operation: PERSONAL_ACCOUNT_RETIRE_OPERATION,
+      scope: PERSONAL_ACCOUNT_RETIRE_SCOPE,
+      command,
+    })
+    return await callPublicSourceMutation(retirePersonalAccountMutation, { ...command, serviceAuth })
+  }
   const serviceAuth = await createConvexServerFunctionAssertion({
     operation: CLERK_SECURITY_OBSERVE_OPERATION,
     scope: CLERK_SECURITY_OBSERVE_SCOPE,

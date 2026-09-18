@@ -587,4 +587,92 @@ describe("current supply funnel", () => {
       }),
     );
   });
+
+  it("renders View Stripe Express Dashboard and opens SSO link when account is ready", async () => {
+    const windowOpenSpy = vi.spyOn(window, "open").mockImplementation(() => null);
+    moneyServerMocks.createOwnerExpressLoginLinkServer.mockResolvedValue({
+      kind: "ok",
+      url: "https://connect.stripe.com/express/test_session",
+    });
+
+    const exact = { currency: "USD", units: "500", exponent: 2 };
+    render(
+      <AeSupplyEarningsCard
+        readback={{
+          kind: "available",
+          businessId: "business-1",
+          accountsTruncated: false,
+          accounts: [{
+            currency: "USD",
+            earnings: {
+              kind: "ok",
+              businessId: "business-1",
+              grossAccrual: exact,
+              rake: { ...exact, units: "50" },
+              providerNet: exact,
+              paidOut: { ...exact, units: "0" },
+              held: exact,
+              recoveryDue: { ...exact, units: "0" },
+              truncated: false,
+              evidence: "source",
+            },
+            payout: {
+              kind: "ok",
+              businessId: "business-1",
+              accountState: "ready",
+              payoutState: "held_threshold",
+              payoutRef: "payout-1",
+              providerNet: exact,
+              minimumPayout: { ...exact, units: "1000" },
+              evidence: "source",
+            },
+          }],
+        }}
+        connect={{
+          kind: "available",
+          businessId: "business-1",
+          accountsTruncated: false,
+          accounts: [{
+            currency: "USD",
+            account: {
+              businessId: "business-1",
+              currency: "USD",
+              exponent: 2,
+              stripeAccountId: "acct_ready123",
+              state: "ready",
+              detailsSubmitted: true,
+              recipientCapabilityActive: true,
+              version: 5,
+            },
+            payout: {
+              businessId: "business-1",
+              accountState: "ready",
+              providerNet: exact,
+              minimumPayout: { ...exact, units: "1000" },
+              evidence: "source",
+            },
+          }],
+        }}
+      />,
+    );
+
+    const ssoBtn = screen.getByRole("button", { name: /view stripe express dashboard/i });
+    expect(ssoBtn).toBeDefined();
+    expect(screen.getByText(/bank deposits, tax reports \(1099\), and transfer history are managed securely in the stripe express portal/i)).toBeDefined();
+
+    fireEvent.click(ssoBtn);
+    await waitFor(() => {
+      expect(moneyServerMocks.createOwnerExpressLoginLinkServer).toHaveBeenCalledWith({
+        data: {
+          businessId: "business-1",
+          currency: "USD",
+        },
+      });
+      expect(windowOpenSpy).toHaveBeenCalledWith(
+        "https://connect.stripe.com/express/test_session",
+        "_blank",
+        "noopener,noreferrer",
+      );
+    });
+  });
 });

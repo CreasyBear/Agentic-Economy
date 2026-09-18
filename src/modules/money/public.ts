@@ -15,6 +15,17 @@ export {
   SANDBOX_COMMERCIAL_POLICY_CONTROLS,
   validCommercialPolicyControl,
 } from './internal/commercial-policy'
+export {
+  admitTaxInvoiceIssuance,
+  calculateAudGstSplit,
+  isValidAbn,
+  normalizeAbn,
+} from './internal/tax-invoice-control'
+export type {
+  CustomerTaxFacts,
+  TaxInvoiceIssuanceAdmission,
+  TaxInvoiceIssuanceWithheldReason,
+} from './internal/tax-invoice-control'
 export type {
   CommercialPolicyApproval,
   CommercialPolicyControl,
@@ -344,10 +355,11 @@ export type CreditAccountView = Readonly<{
   accountId: string;
   balance: ExactAmount;
   pendingTopup?: Readonly<{
-    amount: ExactAmount;
-    state: "pending" | "outcome_unknown";
-    externalRef?: string;
-  }>;
+    commandRef: string
+    amount: ExactAmount
+    state: "pending" | "outcome_unknown"
+    externalRef?: string | undefined
+  }> | undefined
   autoRecharge: Readonly<{
     enabled: boolean;
     threshold: ExactAmount;
@@ -434,11 +446,12 @@ export const CreditAccountViewSchema = z.strictObject({
   balance: exactAmountSchema,
   pendingTopup: z
     .strictObject({
+      commandRef: moneyRefSchema,
       amount: exactAmountSchema,
       state: z.enum(["pending", "outcome_unknown"]),
-      externalRef: moneyRefSchema.exactOptional(),
+      externalRef: moneyRefSchema.optional(),
     })
-    .exactOptional(),
+    .optional(),
   autoRecharge: z.strictObject({
     enabled: z.boolean(),
     threshold: exactAmountSchema,
@@ -609,6 +622,7 @@ export {
   FUNDING_CONSTRAINTS_PATH,
   FUNDING_QUOTE_PATH,
   FUNDING_PREFLIGHT_ROUTE_CONTRACTS,
+  commercialPolicyControlsFromFundingProjection,
   fundingConstraintsSchema,
   fundingQuoteInputSchema,
   fundingQuoteSchema,
@@ -640,6 +654,26 @@ export type {
   QualifiedUseWriteDecision,
 } from "./internal/delivery";
 
+export {
+  evaluateAutoRechargeDecision,
+  type AutoRechargeDecisionInput,
+  type AutoRechargeDecisionResult,
+} from './internal/auto-recharge-decision'
+export {
+  evaluateOrganizationMonthlySpendFence,
+  type OrganizationMonthlySpendFenceInput,
+  type OrganizationMonthlySpendFenceResult,
+} from './internal/organization-monthly-spend-fence'
 export { formatDisplayPrice, formatDisplayAmount } from './internal/display-price'
 export { accountHistoryResultSchema } from './internal/account-history'
 export type { AccountHistoryEntry, AccountHistoryResult } from './internal/account-history'
+export {
+  spendingPeriodsValue,
+  spendingPeriodAdjustmentValue,
+  spendingPeriodAdjustmentReference,
+} from './internal/spending-period-values'
+export type {
+  SpendingPeriods,
+  SpendingPeriodAdjustment,
+} from './internal/spending-period-values'
+

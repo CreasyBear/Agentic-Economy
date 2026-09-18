@@ -3,18 +3,14 @@ import { degradeBackend } from '@/lib/observability/degrade-backend'
 import { resolveServiceMode, serviceModeAllowsEnvironment } from '@/lib/deployment/service-mode'
 
 import { internal } from './_generated/api'
-import type { Doc } from './_generated/dataModel'
-import { action, env, internalMutation, internalQuery, type MutationCtx } from './_generated/server'
+import { action, env, internalMutation, internalQuery, type ActionCtx, type MutationCtx } from './_generated/server'
 import { readCurrentPublishedTool, readManagedX402InspectionTarget } from './capabilitySupplyCurrentTool'
 import { readCommercialPolicyGate } from './moneyCommercialPolicy'
 import { principalAndSourceArgs, principalValue } from './lib/callLifecycle/contracts'
 import { resolveCurrentAgentAuthority } from './lib/callLifecycle/authorityHandlers'
 import { inspectLiveX402RequirementRef } from './lib/liveX402RequirementRef'
 import { requireSourceWrite, sourceWriteArgs } from './sourceWriteAdmission'
-import {
-  materializeRuntimePublishedTool,
-  type PublishedTool,
-} from '@/modules/capability-supply/public'
+import { materializeRuntimePublishedTool } from '@/modules/capability-supply/public'
 import {
   cdpX402CustodyBudgetRef,
   cdpX402CustodyConfigurationFromEnvironment,
@@ -22,7 +18,7 @@ import {
 } from '@/modules/capability-supply/convex'
 import type { StringEnvironment } from '@/lib/server/read-trimmed-env'
 import { isBoundedJsonValue, openCapabilityDecisionModel, type JsonValue } from '@/modules/capability-contract/public'
-import { canonicalDigest, isCanonicalDigest } from '@/modules/common/canonical-digest'
+import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { currentToolDigest } from '@/modules/capability-execution/current-tool-quote'
 import {
   TOOL_MARKET_DESCRIBE_PATH,
@@ -37,7 +33,6 @@ import {
   audFundingPolicyFromCommercialControls,
   normalizePricingConfig,
   PACKAGE4_FORMANCE_REQUIREMENTS,
-  quoteManagedX402BuyerAud,
   type CommercialPolicyRefusalReason,
   type ReferenceRate,
   splitInclusiveAudTax,
@@ -49,23 +44,47 @@ import {
 } from '@/modules/money/funding-handoff.actions'
 import { jsonObject } from '@/modules/capability-execution/convex'
 import type { LiveX402Requirement } from '@/modules/capability-execution/live-x402-requirement'
-import {
-  TOOL_QUOTE_PATH,
-  projectToolQuoteRefusal,
-  type ToolQuoteRefusalCode,
-} from '@/modules/capability-execution/quote'
+import { TOOL_QUOTE_PATH, type ToolQuoteRefusalCode } from '@/modules/capability-execution/quote'
 import { resolveAndBindLegalCustomer } from './lib/moneyLegalCustomer'
 import { toolProviderRouteabilityIsFrozen } from './lib/providerOffboardingFreeze'
-import {
-  prepareAgentSpendingPeriods,
-  spendingPeriodsAreCurrent,
-} from './lib/agentSpendingPeriods'
+import { prepareAgentSpendingPeriods } from './lib/agentSpendingPeriods'
 import {
   spendingPeriodAdjustmentValue,
   spendingPeriodsValue,
   type SpendingPeriods,
   type SpendingPeriodAdjustment,
-} from '@/modules/money/internal/spending-period-values'
+} from '@/modules/money/public'
+import {
+  quoteEvidenceMaterial,
+  quoteExpiresAt,
+  quoteFormanceSnapshotIsCurrent,
+  quoteFundingContinuation,
+  quoteLiveX402IsCurrent,
+  quoteOrganizationMonthlySpendAdmission,
+  quotePaidPeriodAdmission,
+  quotePartiesFromPublishedTool,
+  refuse as buildQuoteRefusal,
+  type QuoteRefusalResult,
+  spendingPeriodPreparationIsRetryable,
+  toolPricing,
+  treasurySpendableUnits,
+} from './lib/capabilityQuotes/quoteValuation'
+
+const refuse = (
+  args: Pick<QuoteArgs, 'toolRef' | 'input' | 'correlationId'>,
+  code: ToolQuoteRefusalCode,
+  retryable: boolean,
+  options: Readonly<{
+    reason?: string
+    capabilityId?: string
+    funding?: Readonly<{
+      principalAmount: { currency: 'AUD'; units: string; exponent: 6 }
+      idempotencyKey: string
+    }>
+  }> = {},
+): QuoteResult => buildQuoteRefusal(args, code, retryable, options) as QuoteResult
+
+const quoteRefusal = (refusal: QuoteRefusalResult): QuoteResult => refusal as QuoteResult
 
 const LEGAL_CUSTOMER_REQUIRED: CommercialPolicyRefusalReason = 'legal_customer_required'
 
@@ -134,6 +153,11 @@ const quoteResult = v.union(
     budget: v.object({ principalRef: v.string(), maximumPerCall: exactAud }),
     policyRefs: v.array(v.string()),
     evidenceDigest: v.string(),
+    parties: v.object({
+      seller: v.string(),
+      provider: v.string(),
+      paymentRecipient: v.string(),
+    }),
     continuation: v.object({
       action: v.literal('tool.call'),
       method: v.literal('POST'),
@@ -193,6 +217,11 @@ const formanceFinancialSnapshot = v.object({
     evidenceRef: v.string(),
     evidenceDigest: v.string(),
   })),
+  organizationMonthlySpend: v.optional(v.object({
+    enabled: v.boolean(),
+    ceilingUnits: v.optional(v.string()),
+    monthSpendUnits: v.optional(v.string()),
+  })),
 })
 
 const financialSubjectsResult = v.union(
@@ -222,11 +251,39 @@ const financialSubjectsResult = v.union(
       evidenceRef: v.string(),
       evidenceDigest: v.string(),
     })),
+    organizationMonthlySpendBudget: v.optional(v.object({
+      enabled: v.literal(true),
+      ceilingUnits: v.string(),
+    })),
   }),
   v.object({ kind: v.literal('refused'), code: quoteRefusalCode, reason: v.optional(v.string()) }),
 )
 
 type FinancialSubjectsResult = Infer<typeof financialSubjectsResult>
+
+type PreparedFinancialSubjects = Extract<FinancialSubjectsResult, { kind: 'prepared' }>
+
+async function readOrganizationMonthlySpendSnapshotForQuote(
+  ctx: { runAction: ActionCtx['runAction'] },
+  subjects: PreparedFinancialSubjects,
+): Promise<Infer<typeof formanceFinancialSnapshot>['organizationMonthlySpend']> {
+  if (subjects.organizationMonthlySpendBudget === undefined) return undefined
+  const { periodStartAt, periodEndAt } = currentUtcMonthWindow()
+  const accountSpend = await ctx.runAction(internal.moneyFormance.readPeriodSpend, {
+    accountRef: subjects.accountRef,
+    periodStartAt,
+    periodEndAt,
+  })
+  return {
+    enabled: true,
+    ceilingUnits: subjects.organizationMonthlySpendBudget.ceilingUnits,
+    ...(accountSpend.kind === 'available'
+      ? { monthSpendUnits: accountSpend.spendUnits }
+      : accountSpend.kind === 'empty'
+        ? { monthSpendUnits: '0' }
+        : {}),
+  }
+}
 
 const spendingPeriodPreparationResult = v.union(
   v.object({
@@ -237,15 +294,13 @@ const spendingPeriodPreparationResult = v.union(
   v.object({ kind: v.literal('refused'), reason: v.string() }),
 )
 
-function spendingPeriodPreparationIsRetryable(reason: string | undefined): boolean {
-  if (reason === undefined) return true
-  return reason === 'spending_period_reservation_recovery_pending'
-    || reason === 'spending_period_command_pending'
-    || reason === 'spending_period_adjustment_in_progress'
+function currentUtcMonthWindow(): { periodStartAt: number; periodEndAt: number } {
+  const now = new Date()
+  return {
+    periodStartAt: Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1),
+    periodEndAt: Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1),
+  }
 }
-
-const TREASURY_REF_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,499}$/u
-const TREASURY_UNITS_PATTERN = /^(?:0|[1-9]\d{0,15})$/u
 
 function cdpX402CustodyEnvironment(): StringEnvironment {
   return {
@@ -262,113 +317,6 @@ function cdpX402CustodyEnvironment(): StringEnvironment {
     AE_X402_CUSTODY_MAX_ATOMIC: env.AE_X402_CUSTODY_MAX_ATOMIC,
     AE_X402_CUSTODY_DAILY_MAX_ATOMIC: env.AE_X402_CUSTODY_DAILY_MAX_ATOMIC,
   }
-}
-
-function treasurySpendableUnits(
-  observation: Doc<'moneyTreasuryObservations'>,
-  expected: Readonly<{
-    environment: 'sandbox' | 'production'
-    custodyRef: string
-    custodyGeneration: number
-    network: string
-  }>,
-): string | undefined {
-  if (
-    observation.environment !== expected.environment
-    || observation.custodyRef !== expected.custodyRef
-    || observation.custodyGeneration !== expected.custodyGeneration
-    || observation.network !== expected.network
-    || observation.asset !== 'USDC'
-    || observation.exponent !== 6
-    || !TREASURY_REF_PATTERN.test(observation.custodyRef)
-    || !TREASURY_REF_PATTERN.test(observation.observationRef)
-    || !TREASURY_REF_PATTERN.test(observation.evidenceRef)
-    || !isCanonicalDigest(observation.evidenceDigest)
-    || !TREASURY_UNITS_PATTERN.test(observation.totalUnits)
-    || !TREASURY_UNITS_PATTERN.test(observation.bufferUnits)
-  ) return undefined
-  try {
-    const spendableUnits = BigInt(observation.totalUnits) - BigInt(observation.bufferUnits)
-    return spendableUnits > 0n ? spendableUnits.toString() : undefined
-  } catch (cause) {
-    return degradeBackend(cause, undefined, { site: 'treasurySpendableUnits', reason: 'invalid_response' })
-  }
-}
-
-const refuse = (
-  args: Pick<QuoteArgs, 'toolRef' | 'input' | 'correlationId'>,
-  code: ToolQuoteRefusalCode,
-  retryable: boolean,
-  options: Readonly<{
-    reason?: string
-    capabilityId?: string
-    funding?: Readonly<{
-      principalAmount: { currency: 'AUD'; units: string; exponent: 6 }
-      idempotencyKey: string
-    }>
-  }> = {},
-): QuoteResult => {
-  const { reason, continuation, requiredActions, ...rest } = projectToolQuoteRefusal({
-    toolRef: args.toolRef,
-    input: args.input,
-    code,
-    retryable,
-    correlationRef: args.correlationId,
-    ...options,
-  })
-  const base = {
-    ...rest,
-    ...(reason === undefined ? {} : { reason }),
-    ...(requiredActions === undefined ? {} : { requiredActions }),
-  }
-  if (continuation === undefined) return base
-  if (continuation.action !== 'funding.handoff.create') return { ...base, continuation }
-  const funding = options.funding
-  if (funding === undefined) throw new Error('capability_quote_refusal_funding_continuation_missing_funding')
-  return {
-    ...base,
-    continuation: {
-      action: 'funding.handoff.create',
-      method: 'POST',
-      path: continuation.path,
-      input: { principalAmount: funding.principalAmount, idempotencyKey: funding.idempotencyKey },
-    },
-  }
-}
-
-function toolPricing(tool: PublishedTool, now: number, live?: LiveX402Requirement, referenceRate?: ReferenceRate) {
-  const normalized = normalizePricingConfig(tool.pricingConfig)
-  if (normalized.kind === 'invalid') return undefined
-  if (normalized.config.kind === 'fixed_aud') {
-    return {
-      kind: 'ready' as const,
-      config: normalized.config,
-      price: { currency: 'AUD' as const, exponent: 6 as const, units: normalized.config.amountUnits },
-    }
-  }
-  let sourceUnits: string
-  try { sourceUnits = live === undefined ? normalized.config.sourceRequirement.atomicUnits : JSON.parse(live.requirementJson).requirement.amountUnits } catch (cause) { return degradeBackend(cause, undefined, { site: 'toolPricing', reason: 'invalid_response' }) }
-  if (typeof sourceUnits !== 'string' || !/^[1-9][0-9]{0,77}$/.test(sourceUnits)) return undefined
-  const sourceRequirement = {
-    currency: 'USDC' as const,
-    exponent: 6 as const,
-    units: sourceUnits,
-  }
-  const quoted = quoteManagedX402BuyerAud({
-    environment: tool.runtimeEnvironment,
-    requiredUsdcAtomicUnits: sourceRequirement.units,
-    ...(referenceRate === undefined ? {} : { referenceRate }),
-    observedAt: now,
-  })
-  return quoted.kind === 'refused'
-    ? quoted
-    : {
-        kind: 'ready' as const,
-        config: normalized.config,
-        price: quoted.evidence.sourceAmount,
-        sourceRequirement,
-        rateEvidence: quoted.evidence,
-      }
 }
 
 async function prepareFinancialSubjectsHandler(
@@ -489,6 +437,13 @@ async function prepareFinancialSubjectsHandler(
     spendingPeriods = prepared.spendingPeriods
     spendingPeriodCommands = [...prepared.commands]
   }
+  const monthlySpendBudgetRow = await ctx.db
+    .query('moneyMonthlySpendBudgets')
+    .withIndex('by_accountRef', (query) => query.eq('accountRef', authority.principal.ownerId))
+    .unique()
+  const organizationMonthlySpendBudget = monthlySpendBudgetRow !== null && monthlySpendBudgetRow.enabled
+    ? { enabled: true as const, ceilingUnits: monthlySpendBudgetRow.ceilingUnits }
+    : undefined
   return {
     kind: 'prepared',
     accountRef: authority.principal.ownerId,
@@ -519,6 +474,7 @@ async function prepareFinancialSubjectsHandler(
             evidenceDigest: observation.evidenceDigest,
           },
         }),
+    ...(organizationMonthlySpendBudget === undefined ? {} : { organizationMonthlySpendBudget }),
   }
 }
 
@@ -584,14 +540,13 @@ async function issueQuoteHandler(
   const grantReadback = projectAgentAccessGrant(grant)
   const dailyLimit = grantReadback.budget.maximumDailySpend
   const monthlyLimit = grantReadback.budget.maximumMonthlySpend
-  if (args.formance.accountRef !== authority.principal.ownerId
-    || args.formance.principalRef !== authority.principal.principalId
-    || args.formance.budgetGeneration !== grantReadback.budget.generation
-    || args.formance.policyGeneration !== 1
-    || args.formance.policyDigest !== policyGate.policyDigest
-    || args.formance.formanceSchemaVersion !== PACKAGE4_FORMANCE_REQUIREMENTS.schemaVersion
-    || args.formance.observedAt > now
-    || now - args.formance.observedAt > 15_000) {
+  if (!quoteFormanceSnapshotIsCurrent(
+    args.formance,
+    authority.principal,
+    grantReadback.budget.generation,
+    policyGate.policyDigest,
+    now,
+  )) {
     return refuse(args, 'inspection_unavailable', true)
   }
 
@@ -607,55 +562,26 @@ async function issueQuoteHandler(
     : splitInclusiveAudTax(pricing.price.units, args.formance.buyerTaxBps)
   if (buyerSale === undefined) return refuse(args, 'pricing_setup_required', false)
   const paid = pricing.price.units !== '0'
+  const organizationMonthlyAdmission = quoteOrganizationMonthlySpendAdmission(
+    args,
+    pricing.price.units,
+    args.formance.organizationMonthlySpend,
+  )
+  if (organizationMonthlyAdmission !== undefined) return quoteRefusal(organizationMonthlyAdmission)
   const spendingPeriods = paid ? args.formance.spendingPeriods : undefined
-  if (paid) {
-    // v1.4 is the period-aware booking variant. A paid periodless snapshot is
-    // an old accepted record only; it cannot create a new Quote.
-    if (args.formance.formanceSchemaVersion !== PACKAGE4_FORMANCE_REQUIREMENTS.schemaVersion
-      || spendingPeriods === undefined) {
-      return refuse(args, 'budget_exceeded', false, { reason: 'spending_periods_required' })
-    }
-    if (!await spendingPeriodsAreCurrent(ctx, {
-      principalRef: authority.principal.principalId,
-      dailyLimitUnits: dailyLimit.units,
-      monthlyLimitUnits: monthlyLimit.units,
-      now,
-      spendingPeriods,
-    })) {
-      return refuse(args, 'inspection_unavailable', true, { reason: 'spending_periods_not_current' })
-    }
-    const dailyAvailable = args.formance.dailyPeriodAvailableUnits
-    const monthlyAvailable = args.formance.monthlyPeriodAvailableUnits
-    const dailyObservedAt = args.formance.dailyPeriodObservedAt
-    const monthlyObservedAt = args.formance.monthlyPeriodObservedAt
-    if (dailyAvailable === undefined || monthlyAvailable === undefined
-      || dailyObservedAt === undefined || monthlyObservedAt === undefined
-      || dailyObservedAt > now || monthlyObservedAt > now
-      || now - dailyObservedAt > 15_000 || now - monthlyObservedAt > 15_000) {
-      return refuse(args, 'inspection_unavailable', true)
-    }
-    if (BigInt(dailyAvailable) < BigInt(pricing.price.units)) {
-      return refuse(args, 'budget_exceeded', false, { reason: 'daily_limit_exhausted' })
-    }
-    if (BigInt(monthlyAvailable) < BigInt(pricing.price.units)) {
-      return refuse(args, 'budget_exceeded', false, { reason: 'monthly_limit_exhausted' })
-    }
-  }
-  if ((pricing.sourceRequirement === undefined) !== (args.liveX402Requirement === undefined)) {
-    return refuse(args, 'tool_not_ready', true)
-  }
-  if (args.liveX402Requirement !== undefined) {
-    try {
-      if (args.liveX402Requirement.observedAt > now
-        || now - args.liveX402Requirement.observedAt > 15_000
-        || canonicalDigest(JSON.parse(args.liveX402Requirement.requirementJson) as never)
-          !== args.liveX402Requirement.requirementDigest) {
-        return refuse(args, 'tool_not_ready', true)
-      }
-    } catch (cause) {
-      return degradeBackend(cause, refuse(args, 'tool_not_ready', true), { site: 'issueQuoteHandler', reason: 'invalid_response' })
-    }
-  }
+  const periodAdmission = await quotePaidPeriodAdmission(ctx, args, {
+    paid,
+    formance: args.formance,
+    principalId: authority.principal.principalId,
+    dailyLimitUnits: dailyLimit.units,
+    monthlyLimitUnits: monthlyLimit.units,
+    priceUnits: pricing.price.units,
+    spendingPeriods,
+    now,
+  })
+  if (periodAdmission !== undefined) return quoteRefusal(periodAdmission)
+  const liveX402Admission = quoteLiveX402IsCurrent(args, pricing, args.liveX402Requirement, now)
+  if (liveX402Admission !== undefined) return quoteRefusal(liveX402Admission)
   const maximum = grantReadback.budget.maximumSpendPerCall
   if (maximum.currency !== 'AUD' || maximum.exponent !== 6
     || BigInt(maximum.units) < BigInt(pricing.price.units)) {
@@ -664,28 +590,15 @@ async function issueQuoteHandler(
 
   const balanceUnits = args.formance.accountAvailableUnits
   if (BigInt(balanceUnits) < BigInt(pricing.price.units)) {
-    const fundingPolicy = audFundingPolicyFromCommercialControls(policyGate.controls)
-    const shortfall = BigInt(pricing.price.units) - BigInt(balanceUnits)
-    const rounded = ((shortfall + fundingPolicy.incrementUnits - 1n) / fundingPolicy.incrementUnits)
-      * fundingPolicy.incrementUnits
-    const principalUnits = rounded < fundingPolicy.minimumPrincipalUnits
-      ? fundingPolicy.minimumPrincipalUnits
-      : rounded
-    const funding = principalUnits > fundingPolicy.maximumPrincipalUnits
-      ? undefined
-      : {
-          principalAmount: { currency: 'AUD' as const, units: principalUnits.toString(), exponent: 6 as const },
-          idempotencyKey: `funding:${canonicalDigest({
-            format: 'ae.operation-inspect-funding:v1',
-            principalRef: authority.principal.principalId,
-            operationRef: args.toolRef,
-            inputDigest: canonicalDigest(args.input as never),
-            exactPriceUnits: pricing.price.units,
-            currentBalanceUnits: balanceUnits,
-            budgetGeneration: grantReadback.budget.generation,
-          }).slice(7)}`,
-        }
-    return refuse(args, 'insufficient_balance', false, { ...(funding === undefined ? {} : { funding }) })
+    return quoteRefusal(quoteFundingContinuation(args, {
+      balanceUnits,
+      priceUnits: pricing.price.units,
+      policyControls: policyGate.controls,
+      principalRef: authority.principal.principalId,
+      toolRef: args.toolRef,
+      inputDigest: canonicalDigest(args.input as never),
+      budgetGeneration: grantReadback.budget.generation,
+    }))
   }
   if (BigInt(args.formance.legalExposureAvailableUnits) < BigInt(pricing.price.units)) {
     return refuse(args, 'budget_exceeded', false, { reason: 'account_limit' })
@@ -700,69 +613,34 @@ async function issueQuoteHandler(
 
   const normalizedInput = structuredClone(args.input)
   const inputDigest = canonicalDigest(normalizedInput as never)
-  const expiresAt = Math.min(
-    now + policyGate.controls.operations.commitmentTtlMs,
-    authority.expiresAt,
-    operation.readiness.validUntil,
-    pricing.rateEvidence?.expiresAt ?? Number.MAX_SAFE_INTEGER,
-    spendingPeriods === undefined
-      ? Number.MAX_SAFE_INTEGER
-      : Math.min(spendingPeriods.daily.periodEndAt, spendingPeriods.monthly.periodEndAt),
-  )
+  const expiresAt = quoteExpiresAt(now, {
+    commitmentTtlMs: policyGate.controls.operations.commitmentTtlMs,
+    authorityExpiresAt: authority.expiresAt,
+    toolValidUntil: operation.readiness.validUntil,
+    rateEvidenceExpiresAt: pricing.rateEvidence?.expiresAt,
+    spendingPeriods,
+  })
   if (expiresAt <= now) return refuse(args, 'inspection_unavailable', true, { reason: 'spending_period_expired' })
-  const evidenceMaterial = {
-    format: 'ae.operation-commitment:v1',
-    principalId: authority.principal.principalId,
-    accountRef: authority.principal.ownerId,
-    credentialId: authority.principal.credentialId,
-    grantRef: authority.grantRef,
-    grantGeneration: authority.grantGeneration,
-    grantPolicyDigest: authority.policyDigest,
-    operationRef: args.toolRef,
-    operationRevision: operation.identity.publicationRevision,
-    operationMaterialDigest: operation.materialDigest,
-    currentOperationDigest: currentDigest,
+  const { evidenceDigest, quoteRef } = quoteEvidenceMaterial({
+    now,
+    correlationId: args.correlationId,
+    authority,
+    operation,
+    toolRef: args.toolRef,
+    currentDigest,
+    normalizedInput,
     inputDigest,
-    pricingDigest: operation.priceDigest,
-    decisionAudUnits: pricing.price.units,
-    ...(pricing.sourceRequirement === undefined ? {} : { sourceUsdcUnits: pricing.sourceRequirement.units }),
-    ...(args.liveX402Requirement === undefined ? {} : {
-      x402RequirementDigest: args.liveX402Requirement.requirementDigest,
-      x402RequirementObservedAt: args.liveX402Requirement.observedAt,
-      x402PaymentRequiredJson: args.liveX402Requirement.paymentRequiredJson,
-    }),
-    ...(pricing.rateEvidence === undefined ? {} : { rateEvidenceDigest: pricing.rateEvidence.evidenceDigest }),
-    budgetPolicyRef: grantReadback.budget.budgetPolicyRef,
-    budgetGeneration: grantReadback.budget.generation,
-    maximumSpendPerInvocationUnits: maximum.units,
-    formanceSchemaVersion: args.formance.formanceSchemaVersion,
-    legalCustomerRef: args.formance.legalCustomerRef,
-    legalCustomerGeneration: args.formance.legalCustomerGeneration,
-    buyerRevenueUnits: buyerSale.revenueUnits,
-    buyerTaxUnits: buyerSale.taxUnits,
-    accountAvailableUnits: args.formance.accountAvailableUnits,
-    budgetAvailableUnits: args.formance.budgetAvailableUnits,
-    legalExposureAvailableUnits: args.formance.legalExposureAvailableUnits,
-    ...(spendingPeriods === undefined ? {} : {
-      spendingPeriods,
-      dailyPeriodAvailableUnits: args.formance.dailyPeriodAvailableUnits,
-      monthlyPeriodAvailableUnits: args.formance.monthlyPeriodAvailableUnits,
-    }),
-    ...(treasury === undefined ? {} : {
-      treasuryCustodyRef: treasury.custodyRef,
-      treasuryCustodyGeneration: treasury.custodyGeneration,
-      treasuryEvidenceRef: treasury.evidenceRef,
-      treasurySpendableUnits: treasury.availableUnits,
-    }),
+    pricing,
+    liveX402Requirement: args.liveX402Requirement,
+    grantReadback,
+    maximumPerCallUnits: maximum.units,
+    formance: args.formance,
+    buyerSale,
+    spendingPeriods,
+    treasury,
     commercialPolicyDigest: policyGate.policyDigest,
     expiresAt,
-  }
-  const evidenceDigest = canonicalDigest(evidenceMaterial as never)
-  const quoteRef = `operation-commitment:v1:${canonicalDigest({
-    ...evidenceMaterial,
-    createdAt: now,
-    correlationId: args.correlationId,
-  }).slice(7)}`
+  })
   const existingCommitment = await ctx.db.query('capabilityQuotes')
     .withIndex('by_quoteRef', (query) => query.eq('quoteRef', quoteRef))
     .unique()
@@ -855,6 +733,7 @@ async function issueQuoteHandler(
     budget: { principalRef: authority.principal.principalId, maximumPerCall: maximum as never },
     policyRefs: [...policyGate.policyRefs],
     evidenceDigest,
+    parties: quotePartiesFromPublishedTool(operation),
     continuation: {
       action: 'tool.call',
       method: 'POST',
@@ -924,7 +803,8 @@ export const prepareSpendingPeriods = internalMutation({
     let grant
     try {
       grant = normalizeStoredAgentAccessGrant(grantRow as never)
-    } catch {
+    } catch (cause) {
+      void cause
       return { kind: 'refused' as const, reason: 'spending_period_authority_stale' }
     }
     if (grant === undefined || grant.generation !== authority.grantGeneration) {
@@ -1007,6 +887,7 @@ export const quote = action({
     const referenceRate = live.kind === 'observed' ? await fetchCoinbaseReferenceRate() : undefined
     if (live.kind === 'observed' && referenceRate === undefined) return refuse(args, 'pricing_setup_required', true, { reason: 'AUD reference price temporarily unavailable' })
     if (subjects.financialMode === 'none') {
+      const organizationMonthlySpend = await readOrganizationMonthlySpendSnapshotForQuote(ctx, subjects)
       return await ctx.runMutation(internal.capabilityQuotes.issueQuote, {
         ...args,
         formance: {
@@ -1023,6 +904,7 @@ export const quote = action({
           formanceSchemaVersion: PACKAGE4_FORMANCE_REQUIREMENTS.schemaVersion,
           buyerTaxBps: subjects.buyerTaxBps,
           observedAt: Date.now(),
+          ...(organizationMonthlySpend === undefined ? {} : { organizationMonthlySpend }),
         },
       })
     }
@@ -1102,6 +984,7 @@ export const quote = action({
       exposure.observedAt,
       treasury?.observedAt ?? Number.MAX_SAFE_INTEGER,
     )
+    const organizationMonthlySpend = await readOrganizationMonthlySpendSnapshotForQuote(ctx, subjects)
     return await ctx.runMutation(
       internal.capabilityQuotes.issueQuote,
       {
@@ -1129,6 +1012,7 @@ export const quote = action({
           formanceSchemaVersion: PACKAGE4_FORMANCE_REQUIREMENTS.schemaVersion,
           buyerTaxBps: subjects.buyerTaxBps,
           observedAt,
+          ...(organizationMonthlySpend === undefined ? {} : { organizationMonthlySpend }),
           ...(subjects.treasury === undefined || treasury === undefined
             ? {}
             : {

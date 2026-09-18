@@ -125,6 +125,54 @@ describe('ListingFirstScreen', () => {
 
     expect(fragmentFrom(markup).querySelector('nav a')?.getAttribute('href')).toBe('/t/thread-abc')
   })
+
+  it('emits listing hrefs only for public HTTPS hosts', () => {
+    const publicMarkup = renderListingToStaticMarkup(
+      <AeProviderListingPage
+        catalog={catalogFixture({
+          businessContext: {
+            kind: 'programmable_provider',
+            website: 'https://fc2.com/docs',
+            providerIdentifier: 'provider:fc2',
+          },
+          accessPaths: [{
+            accessPathRef: 'access:demo-plumbing:emergency-plumbing:web',
+            offeringRevision: 1,
+            kind: 'human_request',
+            channel: 'website',
+            disclosure: 'Open the published site.',
+            url: 'https://fdic.gov/tools',
+          }],
+        })}
+        agentJsonUrl="/api/businesses/demo-plumbing"
+      />,
+    )
+    expect(publicMarkup).toContain('href="https://fc2.com/docs"')
+    expect(publicMarkup).toContain('href="https://fdic.gov/tools"')
+
+    const privateMarkup = renderListingToStaticMarkup(
+      <AeProviderListingPage
+        catalog={catalogFixture({
+          businessContext: {
+            kind: 'programmable_provider',
+            website: 'https://[fd12:3456:789a::1]/admin',
+            providerIdentifier: 'provider:ula',
+          },
+          accessPaths: [{
+            accessPathRef: 'access:demo-plumbing:emergency-plumbing:web',
+            offeringRevision: 1,
+            kind: 'human_request',
+            channel: 'website',
+            disclosure: 'Open the published site.',
+            url: 'https://[2002:c0a8:101::1]/admin',
+          }],
+        })}
+        agentJsonUrl="/api/businesses/demo-plumbing"
+      />,
+    )
+    expect(privateMarkup).not.toContain('href="https://[fd12:3456:789a::1]/admin"')
+    expect(privateMarkup).not.toContain('href="https://[2002:c0a8:101::1]/admin"')
+  })
 })
 
 function renderFirstScreen(catalog: PublicBusinessCatalogApiV2Dto): string {
@@ -136,7 +184,12 @@ function renderFirstScreen(catalog: PublicBusinessCatalogApiV2Dto): string {
 }
 
 function catalogFixture(
-  offeringOverrides: Partial<Pick<PublicBusinessCatalogApiV2Dto['offerings'][number], 'availabilitySummary' | 'serviceAreaSummary'>> = {},
+  overrides: Partial<{
+    businessContext: PublicBusinessCatalogApiV2Dto['businessContext']
+    accessPaths: PublicBusinessCatalogApiV2Dto['offerings'][number]['accessPaths']
+    availabilitySummary: string
+    serviceAreaSummary: string
+  }> = {},
   publishedPhone?: string,
 ): PublicBusinessCatalogApiV2Dto {
   const offering: PublicBusinessCatalogApiV2Dto['offerings'][number] = {
@@ -145,9 +198,9 @@ function catalogFixture(
     name: 'Emergency plumbing',
     category: 'Plumber',
     summary: 'Urgent plumbing support.',
-    serviceAreaSummary: 'Parramatta and nearby suburbs',
-    availabilitySummary: 'Mon–Fri, 8am–5pm',
-    accessPaths: [{
+    serviceAreaSummary: overrides.serviceAreaSummary ?? 'Parramatta and nearby suburbs',
+    availabilitySummary: overrides.availabilitySummary ?? 'Mon–Fri, 8am–5pm',
+    accessPaths: overrides.accessPaths ?? [{
       accessPathRef: 'access:demo-plumbing:emergency-plumbing:phone',
       offeringRevision: 1,
       kind: 'human_request',
@@ -155,7 +208,6 @@ function catalogFixture(
       disclosure: 'Call the published number on the listing.',
     }],
     support: { integrated: false, aeSupportedAction: false },
-    ...offeringOverrides,
   }
 
   return {
@@ -164,7 +216,7 @@ function catalogFixture(
     slug: 'demo-plumbing',
     name: 'Demo listed provider',
     category: 'Plumber',
-    businessContext: {
+    businessContext: overrides.businessContext ?? {
       kind: 'local_human',
       suburb: 'Parramatta',
       stateTerritory: 'NSW',

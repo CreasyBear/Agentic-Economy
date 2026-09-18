@@ -424,7 +424,7 @@ describe('/tools/$toolRef', () => {
   })
 
   it('keeps x402 details public without advertising browser execution', () => {
-const x402Tool = projectCapabilityTool({
+    const x402Tool = projectCapabilityTool({
       ...sourceRecord,
       authentication: { kind: 'x402' },
       provenance: { ...sourceRecord.provenance, sourceKind: 'x402' },
@@ -441,6 +441,27 @@ const x402Tool = projectCapabilityTool({
     expect(within(execution).queryByText(/ae call/)).toBeNull()
     expect(within(execution).queryByText(/idempotencyKey=/)).toBeNull()
     expect(within(execution).queryByText(/npm run -s ae -- recover/)).toBeNull()
+  })
+
+  it('shows 0% Call fee on x402 Tool detail and does not show the Account loading fee', () => {
+    const x402Tool = projectCapabilityTool({
+      ...sourceRecord,
+      authentication: { kind: 'x402' },
+      provenance: { ...sourceRecord.provenance, sourceKind: 'x402' },
+    }, 2_000)
+
+    renderWithRouter({
+      kind: 'found',
+      schemaVersion: PublicToolRegistrySchemaVersion,
+      tool: x402Tool,
+    }, true)
+
+    const economics = screen.getByRole('region', { name: 'Price and market evidence' })
+    expect(within(economics).getByText('Call fee')).toBeTruthy()
+    expect(within(economics).getByText('0%')).toBeTruthy()
+    expect(within(economics).queryByText('Top-up fee')).toBeNull()
+    expect(within(economics).queryByText('5% fee + GST on the fee')).toBeNull()
+    expect(within(economics).queryByText('2.5% fee + GST on the fee')).toBeNull()
   })
 
   it('does not infer caller readiness from browser credentials', () => {

@@ -22,3 +22,9 @@ export function sourceFreshnessState(
   if (input.failed === true) return 'failed'
   return now - input.completedAt > staleAfterMs ? 'stale' : 'fresh'
 }
+
+export {
+  currentUtcDayBounds,
+  currentUtcMonthBounds,
+  type UtcCalendarBounds,
+} from './utc-calendar'

@@ -33,6 +33,8 @@ import {
   reserveResult,
   workCompletionArgs,
 } from './lib/callLifecycle/contracts'
+import { purchaseResolutionRecordValidator } from '@/modules/capability-execution/purchase-resolution'
+import { readPurchaseResolutionByCallRef } from './lib/callLifecycle/purchaseResolutionMaterialize'
 import {
   reconciliationCandidateValue,
   reconciliationClaimResult,
@@ -223,6 +225,12 @@ export const readOwnerReceiptContext = internalQuery({
   args: { callRef: v.string(), ownerId: v.string(), toolRef: v.string() },
   returns: v.union(ownerCallContextValue, v.null()),
   handler: readOwnerReceiptContextHandler,
+})
+
+export const readPurchaseResolution = internalQuery({
+  args: { callRef: v.string() },
+  returns: v.union(purchaseResolutionRecordValidator, v.null()),
+  handler: async (ctx, args) => await readPurchaseResolutionByCallRef(ctx, args.callRef),
 })
 
 export const record = internalMutation({

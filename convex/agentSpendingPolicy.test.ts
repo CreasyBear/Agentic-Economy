@@ -13,10 +13,10 @@ import {
   type CustomerRequestServiceAssertion,
 } from '../src/modules/agent-access/service-auth-envelope'
 import {
+  normalizeStoredAgentAccessGrant,
   type AgentSpendingLimitsResult,
   type AgentSpendingLimitsUpdate,
-} from '../src/modules/agent-access/spending-policy-update'
-import { normalizeStoredAgentAccessGrant } from '../src/modules/agent-access/policy'
+} from '../src/modules/agent-access/policy'
 import { issuedAgentGrantRef } from '../src/modules/agent-access/issued-agent-binding'
 import { defaultSandboxAgentAccessPolicy } from '../src/modules/agent-access/sandbox-policy'
 import schema from './schema'

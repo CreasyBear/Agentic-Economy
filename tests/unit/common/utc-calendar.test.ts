@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { currentUtcDayBounds, currentUtcMonthBounds } from '@/modules/common/utc-calendar'
+import { currentUtcDayBounds, currentUtcMonthBounds } from '@/modules/common/freshness'
 
 describe('UTC calendar bounds', () => {
   it('returns UTC day bounds across a leap-day transition', () => {
@@ -22,18 +22,14 @@ describe('UTC calendar bounds', () => {
     })
   })
 
-  it('rejects nonfinite and out-of-Date-range timestamps', () => {
-    const invalidTimestamps = [
-      Number.NaN,
-      Number.POSITIVE_INFINITY,
-      Number.NEGATIVE_INFINITY,
-      8_640_000_000_000_001,
-      -8_640_000_000_000_001,
-    ]
-
-    for (const timestamp of invalidTimestamps) {
-      expect(() => currentUtcDayBounds(timestamp)).toThrow(RangeError)
-      expect(() => currentUtcMonthBounds(timestamp)).toThrow(RangeError)
-    }
+  it.each([
+    { label: 'NaN', timestamp: Number.NaN },
+    { label: 'POSITIVE_INFINITY', timestamp: Number.POSITIVE_INFINITY },
+    { label: 'NEGATIVE_INFINITY', timestamp: Number.NEGATIVE_INFINITY },
+    { label: 'over-range positive', timestamp: 8_640_000_000_000_001 },
+    { label: 'over-range negative', timestamp: -8_640_000_000_000_001 },
+  ])('rejects nonfinite and out-of-Date-range timestamps ($label)', ({ timestamp }) => {
+    expect(() => currentUtcDayBounds(timestamp)).toThrow(RangeError)
+    expect(() => currentUtcMonthBounds(timestamp)).toThrow(RangeError)
   })
 })

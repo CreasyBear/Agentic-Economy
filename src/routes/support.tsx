@@ -12,7 +12,16 @@ import { buildPublicPageHead } from '@/modules/seo/public'
 const ISSUE_URL = 'https://github.com/CreasyBear/Agentic-Economy/issues/new/choose'
 const SUPPORT_EMAIL = 'mailto:support@aecon.ai'
 
+type SupportSearch = {
+  callRef?: string
+}
+
 export const Route = createFileRoute('/support')({
+  validateSearch: (search: Record<string, unknown>): SupportSearch => {
+    const raw = search.callRef
+    const callRef = typeof raw === 'string' && raw.trim().length > 0 ? raw.trim() : undefined
+    return callRef === undefined ? {} : { callRef }
+  },
   staticData: {
     nav: {
       label: 'Help',
@@ -29,8 +38,15 @@ export const Route = createFileRoute('/support')({
   component: SupportRoute,
 })
 
+function supportEmailHref(callRef?: string): string {
+  if (callRef === undefined) return SUPPORT_EMAIL
+  return `mailto:support@aecon.ai?subject=Help%20with%20Call%20${encodeURIComponent(callRef)}&body=I%20need%20help%20with%20Call%20reference%3A%20${encodeURIComponent(callRef)}%0A%0AWhat%20happened%3A%0A`
+}
+
 function SupportRoute() {
   const canonicalBaseUrl = Route.useLoaderData()
+  const search = Route.useSearch()
+  const supportEmail = supportEmailHref(search.callRef)
   return (
     <AePublicPage
       kind="document"
@@ -39,11 +55,16 @@ function SupportRoute() {
       description="Keep the request or Call reference shown with the problem. It helps us find the right record without asking you to share private inputs."
       actions={
         <Button asChild className="min-h-touch">
-          <a href={SUPPORT_EMAIL}>Email support</a>
+          <a href={supportEmail}>Email support</a>
         </Button>
       }
     >
       <div className="ae-rail grid gap-section pb-page">
+        {search.callRef !== undefined ? (
+          <div className="rounded-lg border border-border bg-muted/40 px-related py-related text-sm">
+            Referenced Call: {search.callRef}
+          </div>
+        ) : null}
         <AeSection
           id="message-troubleshooting"
           title="Continue from the current status"

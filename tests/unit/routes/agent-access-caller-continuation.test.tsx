@@ -22,6 +22,9 @@ const routeHarness = vi.hoisted(() => ({
   disconnectRef: Symbol('disconnect'),
   disconnectConnectionRef: Symbol('disconnect-connection'),
   renameRef: Symbol('rename'),
+  issueRef: Symbol('issue'),
+  updateSpendingLimitsRef: Symbol('update-spending-limits'),
+  readSpendingLimitsRef: Symbol('read-spending-limits'),
   readApprovalsRef: Symbol('read-approvals'),
   decideApprovalRef: Symbol('decide-approval'),
 }))
@@ -83,9 +86,12 @@ vi.mock('@/lib/server/agent-access-console.functions', () => ({
 
 vi.mock('@/modules/agent-access/agent-access.functions', () => ({
   disconnectAgentServer: routeHarness.disconnectRef,
+  issueAgentAccessKeyServer: routeHarness.issueRef,
   revokeOwnerConnectionServer: routeHarness.disconnectConnectionRef,
   renameAgentServer: routeHarness.renameRef,
   revokeAgentCredentialServer: routeHarness.revokeRef,
+  updateAgentSpendingLimitsServer: routeHarness.updateSpendingLimitsRef,
+  readAgentSpendingLimitsServer: routeHarness.readSpendingLimitsRef,
 }))
 
 vi.mock('@/modules/capability-execution/call-approval.functions', () => ({

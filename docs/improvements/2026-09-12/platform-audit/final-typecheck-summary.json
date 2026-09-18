@@ -1,0 +1,344 @@
+[
+  {
+    "file": "convex/chatMessages.ts",
+    "line": 222,
+    "code": "TS2719",
+    "message": "Type '(ctx: import(\"/Users/joelchan/Documents/Coding/App-Dev/live/01. Pre-Implementation/Agentic-Economy/node_modules/convex/dist/esm-types/server/registration\").GenericQueryCtx<{ "
+  },
+  {
+    "file": "convex/moneyLedger.ts",
+    "line": 104,
+    "code": "TS2322",
+    "message": "Type 'Promise<{ items: readonly []; kind: \"refused\"; code: \"account_aud_required\"; }>' is not assignable to type 'ValidatorTypeToReturnType<{ code: \"account_aud_required\"; kind: \"r"
+  },
+  {
+    "file": "convex/moneyLedger.ts",
+    "line": 110,
+    "code": "TS2322",
+    "message": "Type 'Promise<{ items: readonly []; kind: \"refused\"; code: \"account_aud_required\"; }>' is not assignable to type 'ValidatorTypeToReturnType<{ code: \"account_aud_required\"; kind: \"r"
+  },
+  {
+    "file": "convex/secretLifecycleHttp.ts",
+    "line": 63,
+    "code": "TS2339",
+    "message": "Property 'AE_SECRET_LIFECYCLE_RPC_TOKEN' does not exist on type 'Env'."
+  },
+  {
+    "file": "src/components/ae/chat/Chat.tsx",
+    "line": 154,
+    "code": "TS2339",
+    "message": "Property 'id' does not exist on type 'UIMessageLike'."
+  },
+  {
+    "file": "src/components/ae/supply/AeSupplySourceNativeStart.tsx",
+    "line": 2,
+    "code": "TS2307",
+    "message": "Cannot find module '@tanstack/react-form' or its corresponding type declarations."
+  },
+  {
+    "file": "src/components/ae/supply/AeSupplySourceNativeStart.tsx",
+    "line": 265,
+    "code": "TS7006",
+    "message": "Parameter 'meta' implicitly has an 'any' type."
+  },
+  {
+    "file": "src/components/ae/supply/AeSupplySourceNativeStart.tsx",
+    "line": 511,
+    "code": "TS7006",
+    "message": "Parameter 'field' implicitly has an 'any' type."
+  },
+  {
+    "file": "src/components/ae/supply/AeSupplySourceNativeStart.tsx",
+    "line": 524,
+    "code": "TS7006",
+    "message": "Parameter 'field' implicitly has an 'any' type."
+  },
+  {
+    "file": "src/components/ae/supply/AeSupplySourceNativeStart.tsx",
+    "line": 537,
+    "code": "TS7006",
+    "message": "Parameter 'field' implicitly has an 'any' type."
+  },
+  {
+    "file": "src/components/ae/supply/AeSupplySourceNativeStart.tsx",
+    "line": 550,
+    "code": "TS7006",
+    "message": "Parameter 'field' implicitly has an 'any' type."
+  },
+  {
+    "file": "src/components/ae/supply/AeSupplySourceNativeStart.tsx",
+    "line": 563,
+    "code": "TS7006",
+    "message": "Parameter 'field' implicitly has an 'any' type."
+  },
+  {
+    "file": "src/modules/capability-execution/call-worker/providerConsequenceBridge.ts",
+    "line": 96,
+    "code": "TS2339",
+    "message": "Property 'AE_PROVIDER_CONSEQUENCE_ORIGIN' does not exist on type 'Env'."
+  },
+  {
+    "file": "src/modules/capability-execution/call-worker/providerConsequenceBridge.ts",
+    "line": 110,
+    "code": "TS2551",
+    "message": "Property 'AE_X402_PAYMENT_SECRET_REF' does not exist on type 'Env'. Did you mean 'AE_X402_PAYMENT_CREDENTIAL_REF'?"
+  },
+  {
+    "file": "src/modules/capability-execution/call-worker/providerConsequenceBridge.ts",
+    "line": 139,
+    "code": "TS2339",
+    "message": "Property 'AE_PROVIDER_TICKET_SIGNING_SECRET_REF' does not exist on type 'Env'."
+  },
+  {
+    "file": "src/modules/capability-execution/call-worker/providerConsequenceBridge.ts",
+    "line": 140,
+    "code": "TS2551",
+    "message": "Property 'AE_X402_PAYMENT_SECRET_REF' does not exist on type 'Env'. Did you mean 'AE_X402_PAYMENT_CREDENTIAL_REF'?"
+  },
+  {
+    "file": "src/modules/model-gateway/public.ts",
+    "line": 53,
+    "code": "TS2339",
+    "message": "Property 'AE_OPENROUTER_API_BASE_URL' does not exist on type 'Env'."
+  },
+  {
+    "file": "src/modules/model-gateway/public.ts",
+    "line": 54,
+    "code": "TS2339",
+    "message": "Property 'SITE_URL' does not exist on type 'Env'."
+  },
+  {
+    "file": "tests/integration/chat-durable-messaging-share.test.ts",
+    "line": 212,
+    "code": "TS7006",
+    "message": "Parameter 'message' implicitly has an 'any' type."
+  },
+  {
+    "file": "tests/integration/chat-durable-messaging-share.test.ts",
+    "line": 213,
+    "code": "TS7006",
+    "message": "Parameter 'message' implicitly has an 'any' type."
+  },
+  {
+    "file": "tests/integration/chat-scheduled-authority.test.ts",
+    "line": 285,
+    "code": "TS7031",
+    "message": "Binding element 'role' implicitly has an 'any' type."
+  },
+  {
+    "file": "tests/integration/chat-scheduled-authority.test.ts",
+    "line": 559,
+    "code": "TS7031",
+    "message": "Binding element 'role' implicitly has an 'any' type."
+  },
+  {
+    "file": "tests/integration/chat-scheduled-authority.test.ts",
+    "line": 560,
+    "code": "TS7031",
+    "message": "Binding element 'role' implicitly has an 'any' type."
+  },
+  {
+    "file": "tests/integration/chat-scheduled-authority.test.ts",
+    "line": 574,
+    "code": "TS7031",
+    "message": "Binding element 'role' implicitly has an 'any' type."
+  },
+  {
+    "file": "tests/unit/convex/provider-connection-changed-coverage-check.ts",
+    "line": 111,
+    "code": "TS2532",
+    "message": "Object is possibly 'undefined'."
+  },
+  {
+    "file": "tests/unit/convex/provider-connection-changed-coverage-check.ts",
+    "line": 119,
+    "code": "TS2532",
+    "message": "Object is possibly 'undefined'."
+  },
+  {
+    "file": "tests/unit/convex/provider-connection-changed-coverage-check.ts",
+    "line": 129,
+    "code": "TS2532",
+    "message": "Object is possibly 'undefined'."
+  },
+  {
+    "file": "tests/unit/convex/provider-connection-changed-coverage-check.ts",
+    "line": 145,
+    "code": "TS2532",
+    "message": "Object is possibly 'undefined'."
+  },
+  {
+    "file": "tests/unit/dev/local-connect.test.ts",
+    "line": 16,
+    "code": "TS5097",
+    "message": "An import path can only end with a '.ts' extension when 'allowImportingTsExtensions' is enabled."
+  },
+  {
+    "file": "tests/unit/dev/local-connect.test.ts",
+    "line": 759,
+    "code": "TS2322",
+    "message": "Type '(options: { secretKey: string; }) => { users: { getUserList: ({ emailAddress }: { emailAddress: readonly string[]; }) => Promise<{ data: { id: string; }[]; }>; }; sessions: {"
+  },
+  {
+    "file": "tests/unit/dev/local-connect.test.ts",
+    "line": 779,
+    "code": "TS2322",
+    "message": "Type '() => { users: { getUserList: () => Promise<{ data: never[]; }>; }; sessions: { createSession: () => Promise<{ id: string; }>; getToken: () => Promise<{ jwt: string; }>; }; }"
+  },
+  {
+    "file": "tests/unit/dev/local-dev.test.ts",
+    "line": 37,
+    "code": "TS5097",
+    "message": "An import path can only end with a '.ts' extension when 'allowImportingTsExtensions' is enabled."
+  },
+  {
+    "file": "tests/unit/dev/local-dev.test.ts",
+    "line": 150,
+    "code": "TS2345",
+    "message": "Argument of type '{ pid: number; kill: (signal: string) => void; }' is not assignable to parameter of type 'LocalDevChild'."
+  },
+  {
+    "file": "tests/unit/dev/local-dev.test.ts",
+    "line": 170,
+    "code": "TS2345",
+    "message": "Argument of type '{ done: Promise<void>; terminate: (...args: readonly unknown[]) => void; }' is not assignable to parameter of type 'ManagedChild'."
+  },
+  {
+    "file": "tests/unit/dev/local-dev.test.ts",
+    "line": 182,
+    "code": "TS2322",
+    "message": "Type 'Promise<void>' is not assignable to type 'Promise<ManagedChildResult>'."
+  },
+  {
+    "file": "tests/unit/dev/local-dev.test.ts",
+    "line": 431,
+    "code": "TS2345",
+    "message": "Argument of type '(url: URL) => Promise<{ status: number; }>' is not assignable to parameter of type '{ (input: URL | RequestInfo, init?: RequestInit | undefined): Promise<Response"
+  },
+  {
+    "file": "tests/unit/dev/local-dev.test.ts",
+    "line": 441,
+    "code": "TS2345",
+    "message": "Argument of type '() => Promise<{ status: number; }>' is not assignable to parameter of type '{ (input: URL | RequestInfo, init?: RequestInit | undefined): Promise<Response>; (inpu"
+  },
+  {
+    "file": "tests/unit/dev/local-dev.test.ts",
+    "line": 445,
+    "code": "TS2345",
+    "message": "Argument of type '() => Promise<{ status: number; }>' is not assignable to parameter of type '{ (input: URL | RequestInfo, init?: RequestInit | undefined): Promise<Response>; (inpu"
+  },
+  {
+    "file": "tests/unit/dev/local-dev.test.ts",
+    "line": 455,
+    "code": "TS2345",
+    "message": "Argument of type '() => Promise<{ status: number; }>' is not assignable to parameter of type '{ (input: URL | RequestInfo, init?: RequestInit | undefined): Promise<Response>; (inpu"
+  },
+  {
+    "file": "tests/unit/dev/local-dev.test.ts",
+    "line": 456,
+    "code": "TS2345",
+    "message": "Argument of type '() => Promise<{ status: number; }>' is not assignable to parameter of type '{ (input: URL | RequestInfo, init?: RequestInit | undefined): Promise<Response>; (inpu"
+  },
+  {
+    "file": "tests/unit/dev/local-source-write-secret.test.ts",
+    "line": 6,
+    "code": "TS5097",
+    "message": "An import path can only end with a '.ts' extension when 'allowImportingTsExtensions' is enabled."
+  },
+  {
+    "file": "tests/unit/dev/local-source-write-secret.test.ts",
+    "line": 18,
+    "code": "TS2322",
+    "message": "Type '() => Uint8Array<ArrayBuffer>' is not assignable to type '(size: number) => Buffer<ArrayBufferLike>'."
+  },
+  {
+    "file": "tests/unit/dev/local-source-write-secret.test.ts",
+    "line": 33,
+    "code": "TS2322",
+    "message": "Type '() => Uint8Array<ArrayBuffer>' is not assignable to type '(size: number) => Buffer<ArrayBufferLike>'."
+  },
+  {
+    "file": "tests/unit/dev/local-source-write-secret.test.ts",
+    "line": 43,
+    "code": "TS2322",
+    "message": "Type '() => Uint8Array<ArrayBuffer>' is not assignable to type '(size: number) => Buffer<ArrayBufferLike>'."
+  },
+  {
+    "file": "tests/unit/dev/local-source-write-secret.test.ts",
+    "line": 64,
+    "code": "TS2322",
+    "message": "Type '() => Uint8Array<ArrayBuffer>' is not assignable to type '(size: number) => Buffer<ArrayBufferLike>'."
+  },
+  {
+    "file": "tools/dev/local-connect.ts",
+    "line": 30,
+    "code": "TS5097",
+    "message": "An import path can only end with a '.ts' extension when 'allowImportingTsExtensions' is enabled."
+  },
+  {
+    "file": "tools/dev/local-connect.ts",
+    "line": 510,
+    "code": "TS2379",
+    "message": "Argument of type '{ secretKey: string | undefined; }' is not assignable to parameter of type '{ secretKey?: string; }' with 'exactOptionalPropertyTypes: true'. Consider adding 'und"
+  },
+  {
+    "file": "tools/dev/local-connect.ts",
+    "line": 577,
+    "code": "TS2379",
+    "message": "Argument of type '{ baseUrl: string; userCode: string; authorityMode: \"read_only\" | \"approval_required\" | \"spending_policy\" | \"unrestricted_test_only\" | undefined; fetchImpl: Fetch"
+  },
+  {
+    "file": "tools/dev/local-dev.ts",
+    "line": 8,
+    "code": "TS5097",
+    "message": "An import path can only end with a '.ts' extension when 'allowImportingTsExtensions' is enabled."
+  },
+  {
+    "file": "tools/dev/local-dev.ts",
+    "line": 825,
+    "code": "TS2379",
+    "message": "Argument of type 'ChildProcessByStdio<null, Readable, Readable>' is not assignable to parameter of type 'LocalDevChild' with 'exactOptionalPropertyTypes: true'. Consider adding 'un"
+  },
+  {
+    "file": "tools/dev/local-dev.ts",
+    "line": 828,
+    "code": "TS2379",
+    "message": "Argument of type 'ChildProcessByStdio<null, Readable, Readable>' is not assignable to parameter of type 'LocalDevChild' with 'exactOptionalPropertyTypes: true'. Consider adding 'un"
+  },
+  {
+    "file": "tools/dev/local-dev.ts",
+    "line": 957,
+    "code": "TS2379",
+    "message": "Argument of type 'ManagedChildResult' is not assignable to parameter of type 'ChildFailureResult' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types "
+  },
+  {
+    "file": "tools/dev/local-dev.ts",
+    "line": 975,
+    "code": "TS2379",
+    "message": "Argument of type 'ManagedChildResult' is not assignable to parameter of type 'ChildFailureResult & { requestedSignal?: Signals | null; }' with 'exactOptionalPropertyTypes: true'. C"
+  },
+  {
+    "file": "tools/dev/local-dev.ts",
+    "line": 990,
+    "code": "TS2379",
+    "message": "Argument of type 'ManagedChildResult' is not assignable to parameter of type 'ChildFailureResult & { requestedSignal?: Signals | null; }' with 'exactOptionalPropertyTypes: true'. C"
+  },
+  {
+    "file": "tools/dev/local-dev.ts",
+    "line": 1004,
+    "code": "TS2379",
+    "message": "Argument of type 'ManagedChildResult' is not assignable to parameter of type 'ChildFailureResult & { requestedSignal?: Signals | null; }' with 'exactOptionalPropertyTypes: true'. C"
+  },
+  {
+    "file": "tools/dev/local-dev.ts",
+    "line": 1019,
+    "code": "TS2379",
+    "message": "Argument of type 'ManagedChildResult' is not assignable to parameter of type 'ChildFailureResult & { requestedSignal?: Signals | null; }' with 'exactOptionalPropertyTypes: true'. C"
+  },
+  {
+    "file": "tools/dev/local-dev.ts",
+    "line": 1138,
+    "code": "TS2379",
+    "message": "Argument of type 'ManagedChildResult' is not assignable to parameter of type 'ChildFailureResult & { requestedSignal?: Signals | null; }' with 'exactOptionalPropertyTypes: true'. C"
+  }
+]

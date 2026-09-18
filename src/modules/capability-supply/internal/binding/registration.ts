@@ -10,7 +10,7 @@ import {
 import {
   defineCapabilityTransportBindingRegistration,
   type CapabilityTransportBindingRegistration,
-} from '@/modules/capability-supply/public'
+} from '../registration-schema'
 
 import { contractRefFromRow } from '../offering/registration'
 

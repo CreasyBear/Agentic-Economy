@@ -14,6 +14,8 @@
 @import "tailwindcss/preflight.css" layer(base);
 @import "tailwindcss/utilities.css" layer(utilities);
 
+@custom-variant dark (&:where(.dark, .dark *));
+
 @source not "../../.planning";
 @source "../../node_modules/@rjsf/shadcn";
 
@@ -249,6 +251,48 @@
   --shadow-inset-hover: inset 0 0 0 1px var(--ae-border-strong);
   --shadow-inset-selected: inset 0 0 0 2px var(--ae-brand);
   --shadow-inset-market-row: inset 0 0 0 1px var(--ae-brand);
+}
+
+.dark {
+  color-scheme: dark;
+  --ae-bg: #141414;
+  --ae-fg: #e8e4da;
+  --ae-muted-fg: #aaa89e;
+  --ae-fg-subtle: #aaa89e;
+  --ae-surface: #1c1c1c;
+  --ae-surface-sunken: #0f0f0f;
+  --ae-surface-raised: #242424;
+  --ae-container: #1c1c1c;
+  --ae-border: #383838;
+  --ae-border-strong: #595854;
+
+  --background: var(--ae-bg);
+  --foreground: var(--ae-fg);
+  --container: var(--ae-container);
+  --card: var(--ae-surface);
+  --card-foreground: var(--ae-fg);
+  --popover: var(--ae-surface);
+  --popover-foreground: var(--ae-fg);
+  --primary: var(--ae-fg);
+  --primary-foreground: var(--ae-bg);
+  --secondary: var(--ae-surface);
+  --secondary-foreground: var(--ae-fg);
+  --muted: var(--ae-surface-sunken);
+  --muted-foreground: var(--ae-muted-fg);
+  --accent: var(--ae-surface-sunken);
+  --accent-foreground: var(--ae-fg);
+  --border: var(--ae-border);
+  --input: var(--ae-border);
+  --ring: var(--ae-brand);
+
+  --sidebar: var(--ae-bg);
+  --sidebar-foreground: var(--ae-fg);
+  --sidebar-primary: var(--ae-fg);
+  --sidebar-primary-foreground: var(--ae-bg);
+  --sidebar-accent: var(--ae-surface);
+  --sidebar-accent-foreground: var(--ae-fg);
+  --sidebar-border: var(--ae-border);
+  --sidebar-ring: var(--ae-ring);
 }
 
 @utility duration-fast {

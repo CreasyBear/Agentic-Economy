@@ -1,10 +1,9 @@
 import {
   capabilityBindingRegistrationHash,
-  capabilityToolId,
   capabilityOfferingRegistrationHash,
-  createPublicToolRef,
   type CapabilityOfferingOrigin,
-} from '@/modules/capability-supply/public'
+} from '../registration-schema'
+import { capabilityToolId, createPublicToolRef } from '../public-tool-ref'
 import { canonicalDigest, isCanonicalDigest } from '@/modules/common/canonical-digest'
 import { degradeBackend } from '@/lib/observability/degrade-backend'
 import { stableStringify, type StableHashValue } from '@/modules/common/stable-hash'

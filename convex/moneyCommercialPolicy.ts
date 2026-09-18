@@ -3,14 +3,16 @@ import type { GenericDatabaseReader } from 'convex/server'
 
 import type { DataModel } from './_generated/dataModel'
 import type { MutationCtx } from './_generated/server'
-import { env, mutation } from './_generated/server'
+import { env, mutation, query } from './_generated/server'
 import { resolveAdminAuthority, resolveBusinessActor } from './authz'
 import { clerkConsequenceProofValue } from './lib/consequenceProof'
 import { admitInteractiveOwnerConsequence } from './lib/ownerConsequence'
 import { requireSourceWrite, sourceWriteArgs } from './sourceWriteAdmission'
 import { commercialPolicyControlValue } from '../src/modules/money/schema'
 import {
+  AUD_EXPONENT,
   COMMERCIAL_POLICY_FAMILIES,
+  audFundingPolicyFromCommercialControls,
   evaluateCommercialPolicyGate,
   validCommercialPolicyControl,
   type CommercialPolicyApproval,
@@ -31,6 +33,34 @@ const commercialPolicyFamilyValue = v.union(
 const commercialPolicyEnvironmentValue = v.union(
   v.literal('sandbox'),
   v.literal('production'),
+)
+const fundingConstraintsRefusalValue = v.object({
+  kind: v.literal('refused'),
+  code: v.string(),
+  retryable: v.boolean(),
+})
+const publicFundingNumbersValue = {
+  kind: v.literal('available'),
+  environment: commercialPolicyEnvironmentValue,
+  currency: v.literal('AUD'),
+  exponent: v.literal(AUD_EXPONENT),
+  minimumPrincipalUnits: v.string(),
+  maximumPrincipalUnits: v.string(),
+  incrementUnits: v.string(),
+  serviceFeeBps: v.number(),
+  taxOnServiceFeeBps: v.number(),
+} as const
+const ownerFundingConstraintsValue = v.union(
+  v.object({
+    ...publicFundingNumbersValue,
+    legalCustomerMaximumAccessibleUnits: v.string(),
+    policyDigest: v.string(),
+  }),
+  fundingConstraintsRefusalValue,
+)
+const platformFundingConstraintsValue = v.union(
+  v.object(publicFundingNumbersValue),
+  fundingConstraintsRefusalValue,
 )
 const commercialPolicyChangeKindValue = v.union(
   v.literal('activate'),
@@ -203,6 +233,93 @@ export async function readCommercialPolicyGate(
     approvals,
   })
 }
+
+async function projectFundingConstraints(
+  db: GenericDatabaseReader<DataModel>,
+  args: Readonly<{ environment: CommercialPolicyEnvironment; now: number }>,
+): Promise<Infer<typeof ownerFundingConstraintsValue>> {
+  const policy = await readCommercialPolicyGate(db, {
+    environment: args.environment,
+    now: args.now,
+    ...(args.environment === 'sandbox'
+      ? { sandboxFixture: 'managed_x402_deterministic_v1' as const }
+      : {}),
+  })
+  if (policy.kind === 'refused') {
+    return { kind: 'refused' as const, code: 'commercial_policy_required', retryable: false }
+  }
+  const funding = audFundingPolicyFromCommercialControls(policy.controls)
+  return {
+    kind: 'available' as const,
+    environment: args.environment,
+    currency: 'AUD' as const,
+    exponent: AUD_EXPONENT,
+    minimumPrincipalUnits: funding.minimumPrincipalUnits.toString(),
+    maximumPrincipalUnits: funding.maximumPrincipalUnits.toString(),
+    incrementUnits: funding.incrementUnits.toString(),
+    serviceFeeBps: funding.serviceFeeBps,
+    taxOnServiceFeeBps: funding.taxOnServiceFeeBps,
+    legalCustomerMaximumAccessibleUnits: funding.legalCustomerMaximumAccessibleUnits.toString(),
+    policyDigest: policy.policyDigest,
+  }
+}
+
+/**
+ * Read-only owner projection of the exact funding controls used by
+ * `moneyAccountFunding:reserve`. It intentionally returns no approval records
+ * or internal policy evidence.
+ */
+export const readOwnerFundingConstraints = query({
+  args: {
+    environment: commercialPolicyEnvironmentValue,
+    now: v.number(),
+  },
+  returns: ownerFundingConstraintsValue,
+  handler: async (ctx, args) => {
+    const actor = await resolveBusinessActor(ctx)
+    if (actor.kind !== 'authenticated_owner') {
+      return { kind: 'refused' as const, code: 'billing_identity_missing', retryable: false }
+    }
+    return await projectFundingConstraints(ctx.db, args)
+  },
+})
+
+async function projectPublicFundingConstraints(
+  db: GenericDatabaseReader<DataModel>,
+  args: Readonly<{ environment: CommercialPolicyEnvironment; now: number }>,
+): Promise<Infer<typeof platformFundingConstraintsValue>> {
+  const projected = await projectFundingConstraints(db, args)
+  if (projected.kind !== 'available') return projected
+  return {
+    kind: 'available' as const,
+    environment: projected.environment,
+    currency: projected.currency,
+    exponent: projected.exponent,
+    minimumPrincipalUnits: projected.minimumPrincipalUnits,
+    maximumPrincipalUnits: projected.maximumPrincipalUnits,
+    incrementUnits: projected.incrementUnits,
+    serviceFeeBps: projected.serviceFeeBps,
+    taxOnServiceFeeBps: projected.taxOnServiceFeeBps,
+  }
+}
+
+/**
+ * Unauthenticated projection of the same funding numbers used by owner
+ * reserve. Public constraints/quote and agent handoff config read this; they
+ * must not call the owner query, and must not receive policyDigest or the
+ * legal customer maximum.
+ */
+export const readPlatformFundingConstraints = query({
+  args: {
+    environment: commercialPolicyEnvironmentValue,
+    now: v.number(),
+  },
+  returns: platformFundingConstraintsValue,
+  handler: async (ctx, { environment }) => await projectPublicFundingConstraints(ctx.db, {
+    environment,
+    now: Date.now(),
+  }),
+})
 
 async function changeCommercialPolicyHandler(
   ctx: MutationCtx,

@@ -172,7 +172,10 @@ export function useSupplyNativeStartState({
           pluginJson, mcpJson, remoteRef: remoteRefOverride, resourceUrl, x402Method,
         })
     if (currentSource === undefined) {
-      setError(sourceInputError(sourceKind, mcpLocator))
+      setError(sourceInputError(sourceKind, mcpLocator, {
+        sourceKind, environment, definitionUrl, mcpLocator, serverUrl, registryName,
+        pluginJson, mcpJson, remoteRef: remoteRefOverride ?? selectedRemoteRef, resourceUrl, x402Method,
+      }))
       return
     }
     if (!beginOperation('preview')) return

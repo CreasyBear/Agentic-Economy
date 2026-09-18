@@ -19,10 +19,7 @@ export const Route = createFileRoute('/fund/cancelled')({
       title="Payment cancelled"
       description="No Account credit or authority changed. Return to the agent if you still want to fund it."
       action={(
-        <div className="flex flex-col gap-3 sm:flex-row">
-          <Button asChild variant="default" className="min-h-touch"><Link to="/owner/credit">Try again</Link></Button>
-          <Button asChild variant="secondary" className="min-h-touch"><Link to="/market">Back to Market</Link></Button>
-        </div>
+        <Button asChild variant="secondary" className="min-h-touch"><Link to="/market">Back to Market</Link></Button>
       )}
     />
   ),

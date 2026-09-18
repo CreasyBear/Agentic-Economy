@@ -243,6 +243,42 @@ describe('public Call receipt projection', () => {
     expect(purchaseStatusLabel({ kind: 'found', version: 1, callRef, toolRef, state: 'terminal' })).toBe('Resolved — failed')
   })
 
+  it('renders helpful friendly diagnostics for rate limit and input invalid refusal codes', () => {
+    const rateLimitView = projectCallReceipt({
+      kind: 'found',
+      version: 1,
+      callRef,
+      toolRef,
+      state: 'terminal',
+      result: {
+        kind: 'refused',
+        code: 'rate_limited',
+        retryable: true,
+      },
+    })
+    expect(rateLimitView.issue).toMatchObject({
+      title: 'Provider rate limit exceeded',
+      whatHappened: expect.stringMatching(/concurrency or volume limits/i),
+    })
+
+    const inputInvalidView = projectCallReceipt({
+      kind: 'found',
+      version: 1,
+      callRef,
+      toolRef,
+      state: 'terminal',
+      result: {
+        kind: 'refused',
+        code: 'input_invalid',
+        retryable: false,
+      },
+    })
+    expect(inputInvalidView.issue).toMatchObject({
+      title: 'Tool argument schema mismatch',
+      whatHappened: expect.stringMatching(/input schema validation/i),
+    })
+  })
+
   it('keeps source-unavailable money and progress unknown', () => {
     const view = projectCallReceipt({ kind: 'source_unavailable', callRef })
 

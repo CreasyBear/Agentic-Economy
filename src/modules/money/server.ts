@@ -29,7 +29,9 @@ export {
   beginAccountFundingThroughSource,
   fundingEvidence,
   fundingPaymentRequest,
+  readAccountFundingConstraintsThroughSource,
   readAccountFundingThroughSource,
+  readPlatformFundingConstraintsThroughSource,
 } from './internal/account-funding-http'
 export {
   paymentBindingSchema,
@@ -42,6 +44,8 @@ export type {
   AccountFundingCommandView,
   AccountFundingBeginInput,
   AccountFundingBalance,
+  AccountFundingConstraints,
+  PlatformFundingConstraints,
   AccountFundingOutcomeUnknownResult,
   AccountFundingReadInput,
   AccountFundingServerRuntime,
@@ -82,6 +86,8 @@ export type { OwnerMoneyServerRuntime } from './internal/payout-http-runtime'
 export {
   createOwnerConnectAccountServer,
   createOwnerConnectAccountThroughSource,
+  createOwnerExpressLoginLinkServer,
+  createOwnerExpressLoginLinkThroughSource,
   createOwnerOnboardingLinkServer,
   createOwnerOnboardingLinkThroughSource,
   readOwnerConnectReadinessThroughSource,
@@ -91,6 +97,8 @@ export type {
   OwnerConnectAccountInput,
   OwnerConnectAccountResult,
   OwnerConnectReadinessReadback,
+  OwnerExpressLoginLinkInput,
+  OwnerExpressLoginLinkResult,
   OwnerOnboardingLinkInput,
   OwnerOnboardingLinkResult,
   OwnerPayoutAuthorityUpdateInput,

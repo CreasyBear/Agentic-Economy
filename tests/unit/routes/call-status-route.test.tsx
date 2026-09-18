@@ -780,4 +780,49 @@ describe('/calls/$callRef', () => {
     await expect(loader({ params: { callRef } })).resolves.toEqual({ kind: 'source_unavailable', callRef })
     expect(readStatusMock).toHaveBeenCalledWith({ data: { callRef } })
   })
+
+  it('renders a cancelled Call honestly without false success indicators or reuse actions', () => {
+    renderWithRouter({
+      kind: 'found',
+      callRef,
+      toolRef,
+      state: 'cancelled',
+      version: 1,
+      ownerContext,
+    })
+
+    expect(screen.getByRole('heading', { level: 1, name: 'Call receipt' })).toBeTruthy()
+    expect(screen.getByRole('heading', { name: 'Call summary' })).toBeTruthy()
+    expect(screen.queryByText('Complete')).toBeNull()
+    expect(screen.getAllByText(/Cancelled/i).length).toBeGreaterThan(0)
+    expect(screen.queryByRole('button', { name: /Reuse/i })).toBeNull()
+    expect(screen.queryByRole('link', { name: 'Review Tool' })).toBeNull()
+    expect(screen.queryByRole('heading', { level: 2, name: 'Output' })).toBeNull()
+  })
+
+  it('renders a refused-before-claim Call honestly with explicit refusal reasons and no fabricated settlement', () => {
+    renderWithRouter({
+      kind: 'found',
+      callRef,
+      toolRef,
+      state: 'terminal',
+      version: 1,
+      result: {
+        kind: 'refused',
+        code: 'authority_denied',
+        retryable: false,
+        nextAction: 'Authorize the Call and retry.',
+      },
+      ownerContext,
+    })
+
+    expect(screen.getByRole('heading', { level: 1, name: 'Call receipt' })).toBeTruthy()
+    expect(screen.getByRole('heading', { name: 'Call summary' })).toBeTruthy()
+    expect(screen.queryByText('Complete')).toBeNull()
+    expect(screen.getAllByText(/Resolved — failed/i).length).toBeGreaterThan(0)
+    expect(screen.getAllByText('Authorize the Call and retry.').length).toBeGreaterThan(0)
+    expect(screen.queryByRole('button', { name: /Reuse/i })).toBeNull()
+    expect(screen.queryByRole('link', { name: 'Review Tool' })).toBeNull()
+    expect(screen.queryByRole('heading', { level: 2, name: 'Output' })).toBeNull()
+  })
 })

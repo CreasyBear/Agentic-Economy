@@ -6,26 +6,17 @@ import { api, internal } from '../../../convex/_generated/api'
 import { stripeWebhookWorkpool } from '../../../convex/stripeWebhookWorkpool'
 import { convexTestWithWorkers } from '../../helpers/convex-fixtures'
 import { withSourceWrite } from '../../helpers/source-write-admission'
+import { createTestCheckoutEvent } from '../../helpers/stripe-events'
 
 const ingest = api.moneyStripeWebhookInbox.ingest
 
 function checkoutEvent(payloadDigest = `sha256:${'a'.repeat(64)}`) {
-  return {
-    kind: 'checkout' as const,
+  return createTestCheckoutEvent({
     stripeEventId: 'evt_inbox_one',
-    eventType: 'checkout.session.completed' as const,
-    externalRef: 'cs_inbox_one',
     sessionId: 'cs_inbox_one',
-    commandRef: `sha256:${'b'.repeat(64)}`,
     paymentId: 'pi_inbox_one',
-    checkoutSessionDigest: `sha256:${'c'.repeat(64)}`,
-    paymentIntentDigest: `sha256:${'d'.repeat(64)}`,
-    status: 'paid' as const,
-    amount: { currency: 'AUD', units: '5280000', exponent: 6 },
-    metadataDigest: `sha256:${'e'.repeat(64)}`,
     payloadDigest,
-    observedAt: 1_800_000_000_000,
-  }
+  })
 }
 
 describe('Stripe webhook durable inbox', () => {

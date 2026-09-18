@@ -4,12 +4,54 @@ import { HTTPClient, SDK } from '@formance/formance-sdk'
 import { createHmac, timingSafeEqual } from 'node:crypto'
 import { accountHistoryCursorSchema, type AccountHistoryEntry, type AccountHistoryResult } from './internal/account-history'
 
-import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { degradeBackend } from '@/lib/observability/degrade-backend'
 import { PACKAGE4_FORMANCE_REQUIREMENTS } from './internal/commercial-policy'
+import {
+  LEGACY_FORMANCE_SCHEMA_VERSION,
+  FORMANCE_SCHEMA_VERSION,
+  PACKAGE4_FORMANCE_TEMPLATE_NAMES,
+  FORMANCE_TEMPLATE_NAMES,
+  LEGACY_FORMANCE_TEMPLATE_NAMES,
+  type FormanceMoneyTemplate,
+  type FormanceLegacyMoneyTemplate,
+  type FormanceSchemaData,
+  type FormanceChartSegment,
+  PACKAGE4_FORMANCE_SCHEMA,
+  FORMANCE_SCHEMA,
+  LEGACY_FORMANCE_SCHEMA_DIGEST,
+  PACKAGE4_FORMANCE_SCHEMA_DIGEST,
+  FORMANCE_SCHEMA_DIGEST,
+  LEGACY_FORMANCE_SCHEMA_READBACK_DIGEST,
+  FORMANCE_SCHEMA_READBACK_DIGEST,
+  schemaReadbackDigest,
+} from './formance-schema'
+import {
+  completed,
+  completedMany,
+  refused,
+  unavailable,
+  unknown,
+  type FormanceMoneyResult,
+} from './formance-result'
 
-type FormanceSchemaData = Parameters<SDK['ledger']['v2']['insertSchema']>[0]['v2SchemaData']
-type FormanceChartSegment = FormanceSchemaData['chart'][string]
+export type { FormanceMoneyResult }
+
+export {
+  LEGACY_FORMANCE_SCHEMA_VERSION,
+  FORMANCE_SCHEMA_VERSION,
+  PACKAGE4_FORMANCE_TEMPLATE_NAMES,
+  FORMANCE_TEMPLATE_NAMES,
+  LEGACY_FORMANCE_TEMPLATE_NAMES,
+  type FormanceMoneyTemplate,
+  type FormanceLegacyMoneyTemplate,
+  type FormanceSchemaData,
+  type FormanceChartSegment,
+  PACKAGE4_FORMANCE_SCHEMA,
+  FORMANCE_SCHEMA,
+  LEGACY_FORMANCE_SCHEMA_DIGEST,
+  PACKAGE4_FORMANCE_SCHEMA_DIGEST,
+  FORMANCE_SCHEMA_DIGEST,
+}
 
 const DIGEST_PATTERN = /^[a-f0-9]{64}$/u
 const COMMAND_REFERENCE_PATTERN = /^ae-p4:[a-f0-9]{64}(?::[a-z0-9_-]{1,32})?$/u
@@ -23,38 +65,6 @@ const MINIMUM_TIMEOUT_MS = 100
 const MAXIMUM_TIMEOUT_MS = 30_000
 const AUD_ASSET = 'AUD/6'
 const USDC_ASSET = 'USDC/6'
-
-/** The schema used by accepted periodless Calls before the alpha cutover. */
-export const LEGACY_FORMANCE_SCHEMA_VERSION = 'v1.3.0' as const
-/** The current schema pin, shared with the commercial policy requirements. */
-export const FORMANCE_SCHEMA_VERSION = PACKAGE4_FORMANCE_REQUIREMENTS.schemaVersion
-
-export const PACKAGE4_FORMANCE_TEMPLATE_NAMES = Object.freeze([
-  'FUNDING_SETTLED',
-  'FUNDING_REVERSED',
-  'CALL_RESERVED_AUD',
-  'CALL_RESERVED_USDC',
-  'CALL_RELEASED_AUD',
-  'CALL_RELEASED_USDC',
-  'BUYER_SALE_SETTLED',
-  'BUYER_ADJUSTED',
-  'TREASURY_CAPACITY_SYNCED',
-  'PROVIDER_OBLIGATION_ACCRUED',
-  'PROVIDER_SETTLED',
-  'PROVIDER_REVERSED',
-] as const)
-
-export const FORMANCE_TEMPLATE_NAMES = Object.freeze([
-  ...PACKAGE4_FORMANCE_TEMPLATE_NAMES,
-  'SPENDING_PERIOD_INCREASED',
-  'SPENDING_PERIOD_DECREASED',
-] as const)
-
-export type FormanceMoneyTemplate = (typeof FORMANCE_TEMPLATE_NAMES)[number]
-
-export const LEGACY_FORMANCE_TEMPLATE_NAMES = PACKAGE4_FORMANCE_TEMPLATE_NAMES
-
-export type FormanceLegacyMoneyTemplate = (typeof LEGACY_FORMANCE_TEMPLATE_NAMES)[number]
 
 const ALLOWED_METADATA_KEYS = new Set([
   'account_digest',
@@ -83,28 +93,6 @@ export type FormanceMoneyCommand = Readonly<{
 export type FormanceMoneyBulkCommand = Readonly<{
   commands: readonly FormanceMoneyCommand[]
 }>
-
-export type FormanceMoneyResult =
-  | Readonly<{
-      kind: 'completed'
-      transactionRefs: readonly string[]
-      replayed: boolean
-    }>
-  | Readonly<{
-      kind: 'refused'
-      code: string
-      retryable: false
-    }>
-  | Readonly<{
-      kind: 'unavailable'
-      code: string
-      submissionProvenAbsent: true
-    }>
-  | Readonly<{
-      kind: 'outcome_unknown'
-      reference: string
-      statusRef: string
-    }>
 
 export type FormanceEnvironment = 'sandbox' | 'production'
 
@@ -226,490 +214,6 @@ export type FormanceStatementPageResult =
     }>
   | Readonly<{ kind: 'setup_required'; code: string }>
   | Readonly<{ kind: 'unavailable'; code: string }>
-
-const leaf: FormanceChartSegment = { dotSelf: {} }
-
-function fixed(children: Record<string, FormanceChartSegment>): FormanceChartSegment {
-  return { additionalProperties: children }
-}
-
-function digestSegment(children: Record<string, FormanceChartSegment>): FormanceChartSegment {
-  return {
-    additionalProperties: {
-      '$digest': {
-        dotPattern: '^[a-f0-9]{64}$',
-        additionalProperties: children,
-      },
-    },
-  }
-}
-
-function transferTemplate(description: string) {
-  return Object.freeze({
-    description,
-    runtime: 'machine' as const,
-    script: `vars {
-  account $source
-  account $destination
-  monetary $amount
-}
-send $amount (
-  source = $source
-  destination = $destination
-)`,
-  })
-}
-
-export const PACKAGE4_FORMANCE_SCHEMA: FormanceSchemaData = Object.freeze({
-  chart: Object.freeze({
-    world: leaf,
-    processor: digestSegment({ settlement: leaf }),
-    accounts: digestSegment({ available: leaf }),
-    calls: digestSegment({ buyer_reserved: leaf }),
-    agents: digestSegment({
-      budget_available: leaf,
-      budget_reserved: leaf,
-      budget_spent: leaf,
-    }),
-    legal_customers: digestSegment({
-      exposure_available: leaf,
-      exposure_reserved: leaf,
-      exposure_settled: leaf,
-    }),
-    provider_obligations: digestSegment({
-      accrued: leaf,
-      settled: leaf,
-      reversed: leaf,
-    }),
-    providers: digestSegment({ settlement: leaf }),
-    adjustments: digestSegment({ buyer: leaf }),
-    treasury: fixed({
-      corporate: digestSegment({ available: leaf, committed: leaf }),
-    }),
-    platform: fixed({
-      expense: fixed({ providers: leaf }),
-      revenue: fixed({ sales: leaf }),
-      tax: fixed({ gst: leaf }),
-    }),
-  }),
-  queries: Object.freeze({}),
-  transactions: Object.freeze({
-    FUNDING_SETTLED: Object.freeze({
-      description: 'Record processor settlement, Account AUD principal, service fee, and GST',
-      runtime: 'machine' as const,
-      script: `vars {
-  account $processor
-  account $account
-  account $revenue
-  account $tax
-  monetary $principal_amount
-  monetary $service_fee_amount
-  monetary $tax_amount
-  monetary $total_amount
-}
-send $total_amount (
-  source = @world
-  destination = $processor
-)
-send $principal_amount (
-  source = $processor
-  destination = $account
-)
-send $service_fee_amount (
-  source = $processor
-  destination = $revenue
-)
-send $tax_amount (
-  source = $processor
-  destination = $tax
-)`,
-    }),
-    FUNDING_REVERSED: Object.freeze({
-      description: 'Append a full processor reversal across principal, fee, and GST',
-      runtime: 'machine' as const,
-      script: `vars {
-  account $processor
-  account $account
-  account $revenue
-  account $tax
-  monetary $principal_amount
-  monetary $service_fee_amount
-  monetary $tax_amount
-  monetary $total_amount
-}
-send $principal_amount (
-  source = $account
-  destination = $processor
-)
-send $service_fee_amount (
-  source = $revenue
-  destination = $processor
-)
-send $tax_amount (
-  source = $tax
-  destination = $processor
-)
-send $total_amount (
-  source = $processor
-  destination = @world
-)`,
-    }),
-    CALL_RESERVED_AUD: Object.freeze({
-      description: 'Atomically reserve Account AUD, Agent budget, and legal-customer exposure',
-      runtime: 'machine' as const,
-      script: `vars {
-  account $account_available
-  account $call_reserved
-  account $agent_available
-  account $agent_reserved
-  account $legal_available
-  account $legal_reserved
-  monetary $buyer_amount
-  monetary $budget_amount
-  monetary $exposure_amount
-}
-send $buyer_amount (
-  source = $account_available
-  destination = $call_reserved
-)
-send $budget_amount (
-  source = $agent_available
-  destination = $agent_reserved
-)
-send $exposure_amount (
-  source = $legal_available
-  destination = $legal_reserved
-)`,
-    }),
-    CALL_RESERVED_USDC: transferTemplate('Reserve corporate USDC capacity'),
-    CALL_RELEASED_AUD: Object.freeze({
-      description: 'Release Account AUD, Agent budget, and legal-customer exposure',
-      runtime: 'machine' as const,
-      script: `vars {
-  account $account_available
-  account $call_reserved
-  account $agent_available
-  account $agent_reserved
-  account $legal_available
-  account $legal_reserved
-  monetary $buyer_amount
-  monetary $budget_amount
-  monetary $exposure_amount
-}
-send $buyer_amount (
-  source = $call_reserved
-  destination = $account_available
-)
-send $budget_amount (
-  source = $agent_reserved
-  destination = $agent_available
-)
-send $exposure_amount (
-  source = $legal_reserved
-  destination = $legal_available
-)`,
-    }),
-    CALL_RELEASED_USDC: Object.freeze({
-      description: 'Release corporate USDC capacity and cancel the pending Provider obligation',
-      runtime: 'machine' as const,
-      script: `vars {
-  account $treasury_committed
-  account $treasury_available
-  account $obligation_accrued
-  account $expense
-  monetary $amount
-}
-send $amount (
-  source = $treasury_committed
-  destination = $treasury_available
-)
-send $amount (
-  source = $obligation_accrued
-  destination = $expense
-)`,
-    }),
-    BUYER_SALE_SETTLED: Object.freeze({
-      description: 'Settle buyer AUD sale, Agent spend, and legal-customer exposure',
-      runtime: 'machine' as const,
-      script: `vars {
-  account $call_reserved
-  account $revenue
-  account $tax
-  account $agent_reserved
-  account $agent_spent
-  account $legal_reserved
-  account $legal_settled
-  monetary $revenue_amount
-  monetary $tax_amount
-  monetary $budget_amount
-  monetary $exposure_amount
-}
-send $revenue_amount (
-  source = $call_reserved
-  destination = $revenue
-)
-send $tax_amount (
-  source = $call_reserved
-  destination = $tax
-)
-send $budget_amount (
-  source = $agent_reserved
-  destination = $agent_spent
-)
-send $exposure_amount (
-  source = $legal_reserved
-  destination = $legal_settled
-)`,
-    }),
-    BUYER_ADJUSTED: Object.freeze({
-      description: 'Append a document-rounding adjustment without changing customer availability',
-      runtime: 'machine' as const,
-      script: `vars {
-  account $source
-  account $destination
-  monetary $amount
-}
-send $amount (
-  source = $source allowing unbounded overdraft
-  destination = $destination
-)`,
-    }),
-    TREASURY_CAPACITY_SYNCED: Object.freeze({
-      description: 'Establish one immutable controlled-capacity generation',
-      runtime: 'machine' as const,
-      script: `vars {
-  account $capacity
-  monetary $amount
-}
-send $amount (
-  source = @world
-  destination = $capacity
-)`,
-    }),
-    PROVIDER_OBLIGATION_ACCRUED: Object.freeze({
-      description: 'Accrue Provider USDC expense separately from the buyer AUD sale',
-      runtime: 'machine' as const,
-      script: `vars {
-  account $expense
-  account $obligation
-  monetary $amount
-}
-send $amount (
-  source = $expense allowing unbounded overdraft
-  destination = $obligation
-)`,
-    }),
-    PROVIDER_SETTLED: Object.freeze({
-      description: 'Settle corporate USDC and mark the linked Provider obligation paid',
-      runtime: 'machine' as const,
-      script: `vars {
-  account $treasury_committed
-  account $provider_settlement
-  account $obligation_accrued
-  account $obligation_settled
-  monetary $amount
-}
-send $amount (
-  source = $treasury_committed
-  destination = $provider_settlement
-)
-send $amount (
-  source = $obligation_accrued
-  destination = $obligation_settled
-)`,
-    }),
-    PROVIDER_REVERSED: Object.freeze({
-      description: 'Append a Provider settlement reversal',
-      runtime: 'machine' as const,
-      script: `vars {
-  account $treasury_available
-  account $provider_settlement
-  account $obligation_settled
-  account $obligation_reversed
-  monetary $amount
-}
-send $amount (
-  source = $provider_settlement
-  destination = $treasury_available
-)
-send $amount (
-  source = $obligation_settled
-  destination = $obligation_reversed
-)`,
-    }),
-  }),
-})
-
-const PERIOD_RESERVATION_AUD_TEMPLATE = Object.freeze({
-  description: 'Atomically reserve buyer AUD, both spending periods, and legal-customer exposure',
-  runtime: 'machine' as const,
-  script: `vars {
-  account $account_available
-  account $call_reserved
-  account $legal_available
-  account $legal_reserved
-  account $daily_available
-  account $daily_reserved
-  account $monthly_available
-  account $monthly_reserved
-  monetary $buyer_amount
-  monetary $exposure_amount
-  monetary $daily_amount
-  monetary $monthly_amount
-}
-send $buyer_amount (
-  source = $account_available
-  destination = $call_reserved
-)
-send $exposure_amount (
-  source = $legal_available
-  destination = $legal_reserved
-)
-send $daily_amount (
-  source = $daily_available
-  destination = $daily_reserved
-)
-send $monthly_amount (
-  source = $monthly_available
-  destination = $monthly_reserved
-)`,
-})
-
-const PERIOD_RELEASE_AUD_TEMPLATE = Object.freeze({
-  description: 'Release buyer AUD, both spending periods, and legal-customer exposure',
-  runtime: 'machine' as const,
-  script: `vars {
-  account $account_available
-  account $call_reserved
-  account $legal_available
-  account $legal_reserved
-  account $daily_available
-  account $daily_reserved
-  account $monthly_available
-  account $monthly_reserved
-  monetary $buyer_amount
-  monetary $exposure_amount
-  monetary $daily_amount
-  monetary $monthly_amount
-}
-send $buyer_amount (
-  source = $call_reserved
-  destination = $account_available
-)
-send $exposure_amount (
-  source = $legal_reserved
-  destination = $legal_available
-)
-send $daily_amount (
-  source = $daily_reserved
-  destination = $daily_available
-)
-send $monthly_amount (
-  source = $monthly_reserved
-  destination = $monthly_available
-)`,
-})
-
-const PERIOD_SETTLEMENT_AUD_TEMPLATE = Object.freeze({
-  description: 'Capture buyer sale and both original spending periods',
-  runtime: 'machine' as const,
-  script: `vars {
-  account $call_reserved
-  account $revenue
-  account $tax
-  account $legal_reserved
-  account $legal_settled
-  account $daily_reserved
-  account $daily_spent
-  account $monthly_reserved
-  account $monthly_spent
-  monetary $revenue_amount
-  monetary $tax_amount
-  monetary $exposure_amount
-  monetary $daily_amount
-  monetary $monthly_amount
-}
-send $revenue_amount (
-  source = $call_reserved
-  destination = $revenue
-)
-send $tax_amount (
-  source = $call_reserved
-  destination = $tax
-)
-send $exposure_amount (
-  source = $legal_reserved
-  destination = $legal_settled
-)
-send $daily_amount (
-  source = $daily_reserved
-  destination = $daily_spent
-)
-send $monthly_amount (
-  source = $monthly_reserved
-  destination = $monthly_spent
-)`,
-})
-
-const SPENDING_PERIOD_INCREASE_TEMPLATE = Object.freeze({
-  description: 'Apply an authorized spending-period limit increase',
-  runtime: 'machine' as const,
-  script: `vars {
-  account $period_available
-  monetary $amount
-}
-send $amount (
-  source = @world
-  destination = $period_available
-)`,
-})
-
-const SPENDING_PERIOD_DECREASE_TEMPLATE = Object.freeze({
-  description: 'Apply an authorized spending-period limit decrease',
-  runtime: 'machine' as const,
-  script: `vars {
-  account $period_available
-  account $retired
-  monetary $amount
-}
-send $amount (
-  source = $period_available allowing unbounded overdraft
-  destination = $retired
-)`,
-})
-
-/** v1.4 adds period accounts while retaining every v1.3 template verbatim. */
-export const FORMANCE_SCHEMA: FormanceSchemaData = Object.freeze({
-  ...PACKAGE4_FORMANCE_SCHEMA,
-  chart: Object.freeze({
-    ...PACKAGE4_FORMANCE_SCHEMA.chart,
-    spending_periods: digestSegment({ available: leaf, reserved: leaf, spent: leaf }),
-  }),
-  transactions: Object.freeze({
-    ...PACKAGE4_FORMANCE_SCHEMA.transactions,
-    CALL_RESERVED_AUD: PERIOD_RESERVATION_AUD_TEMPLATE,
-    CALL_RELEASED_AUD: PERIOD_RELEASE_AUD_TEMPLATE,
-    BUYER_SALE_SETTLED: PERIOD_SETTLEMENT_AUD_TEMPLATE,
-    SPENDING_PERIOD_INCREASED: SPENDING_PERIOD_INCREASE_TEMPLATE,
-    SPENDING_PERIOD_DECREASED: SPENDING_PERIOD_DECREASE_TEMPLATE,
-  }),
-}) as FormanceSchemaData
-
-export const LEGACY_FORMANCE_SCHEMA_DIGEST = canonicalDigest({
-  format: 'ae.package4.formance-schema:v1',
-  schema: PACKAGE4_FORMANCE_SCHEMA,
-})
-
-/** Historical digest export; keep it byte-identical for legacy recovery. */
-export const PACKAGE4_FORMANCE_SCHEMA_DIGEST = LEGACY_FORMANCE_SCHEMA_DIGEST
-
-export const FORMANCE_SCHEMA_DIGEST = canonicalDigest({
-  format: 'ae.package4.formance-schema:v1',
-  schema: FORMANCE_SCHEMA,
-})
-
-const LEGACY_FORMANCE_SCHEMA_READBACK_DIGEST = schemaReadbackDigest(PACKAGE4_FORMANCE_SCHEMA)
-const FORMANCE_SCHEMA_READBACK_DIGEST = schemaReadbackDigest(FORMANCE_SCHEMA)
 
 const NO_RETRY = Object.freeze({ retries: Object.freeze({ strategy: 'none' as const }) })
 
@@ -1324,7 +828,8 @@ function decodeHistoryCursor(token: string, key: string): HistoryCursor | undefi
   try {
     const parsed = accountHistoryCursorSchema.safeParse(JSON.parse(Buffer.from(match[1], 'base64url').toString('utf8')))
     return parsed.success ? parsed.data : undefined
-  } catch {
+  } catch (cause) {
+    void cause;
     return undefined
   }
 }
@@ -1756,23 +1261,6 @@ function safeMetadata(metadata: Readonly<Record<string, string>>): Record<string
   )
 }
 
-function schemaReadbackDigest(schema: FormanceSchemaData): string {
-  return canonicalDigest({
-    format: 'ae.package4.formance-schema-readback:v1',
-    schema: normalizeSchemaReadback(schema),
-  })
-}
-
-function normalizeSchemaReadback(value: unknown): unknown {
-  if (Array.isArray(value)) return value.map(normalizeSchemaReadback)
-  if (typeof value !== 'object' || value === null) return value
-  return Object.fromEntries(
-    Object.entries(value)
-      .filter(([key]) => key !== 'dotSelf')
-      .map(([key, item]) => [key, normalizeSchemaReadback(item)]),
-  )
-}
-
 function nonempty(value: string | undefined): string | undefined {
   const trimmed = value?.trim()
   return trimmed === undefined || trimmed.length === 0 ? undefined : trimmed
@@ -1805,34 +1293,6 @@ function formanceReadFailureCode(error: unknown, operation: 'health'): string {
   if (errorName(error) === 'RequestTimeoutError') return 'formance_request_timeout'
   if (errorName(error) === 'ConnectionError') return 'formance_connection_unavailable'
   return `formance_${operation}_unavailable`
-}
-
-function completed(reference: string, replayed: boolean): FormanceMoneyResult {
-  return Object.freeze({ kind: 'completed', transactionRefs: Object.freeze([reference]), replayed })
-}
-
-function completedMany(references: readonly string[], replayed: boolean): FormanceMoneyResult {
-  return Object.freeze({
-    kind: 'completed',
-    transactionRefs: Object.freeze([...references]),
-    replayed,
-  })
-}
-
-function refused(code: string): FormanceMoneyResult {
-  return Object.freeze({ kind: 'refused', code, retryable: false })
-}
-
-function unavailable(code: string): FormanceMoneyResult {
-  return Object.freeze({ kind: 'unavailable', code, submissionProvenAbsent: true })
-}
-
-function unknown(reference: string): FormanceMoneyResult {
-  return Object.freeze({
-    kind: 'outcome_unknown',
-    reference,
-    statusRef: `formance-transaction:${reference}`,
-  })
 }
 
 function unavailableHealth(code: string, startedAt: number): FormanceHealthResult {

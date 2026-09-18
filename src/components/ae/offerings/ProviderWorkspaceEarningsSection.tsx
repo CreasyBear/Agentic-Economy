@@ -1,4 +1,5 @@
 import { AeSection } from '@/components/ae/layout/AeSection'
+import { ProviderWorkspacePayoutPolicyPanel } from './ProviderWorkspacePayoutPolicyPanel'
 import { AeSupplyEarningsCard } from '@/components/ae/supply/AeSupplyEarningsCard'
 import { Skeleton } from '@/components/ui/skeleton'
 import type { OwnerProviderEarningsReadback } from '@/modules/capability-supply/supply-funnel.functions'
@@ -31,7 +32,15 @@ export function ProviderWorkspaceEarningsSection({
         ) : <SecondarySummary result={result} subject="Payout readiness" notApplicableTitle="Payout readiness not configured" unavailableTitle="Earnings unavailable" />}
       </DeferredSection>
       {earningsOpen ? earningsPending ? <div aria-busy="true"><Skeleton className="h-24 w-full" /></div> : earningsDetail === undefined ? <UnavailableSummary title="Earnings controls unavailable" retryLabel="Try earnings again" onRetry={onRetryEarnings} /> : (
-        <AeSupplyEarningsCard readback={earningsDetail.earnings} connect={earningsDetail.connect} onStatusRefreshed={onStatusRefreshed} />
+        <div className="grid gap-6">
+          <AeSupplyEarningsCard readback={earningsDetail.earnings} connect={earningsDetail.connect} onStatusRefreshed={onStatusRefreshed} />
+          {earningsDetail.earnings.kind === 'available' && earningsDetail.connect.kind === 'available' && earningsDetail.connect.accounts.some((a) => a.account.state === 'ready') && (
+            <ProviderWorkspacePayoutPolicyPanel
+              businessId={earningsDetail.earnings.businessId}
+              currency="AUD"
+            />
+          )}
+        </div>
       ) : null}
     </AeSection>
   )

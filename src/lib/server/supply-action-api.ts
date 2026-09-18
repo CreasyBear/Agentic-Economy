@@ -11,6 +11,7 @@ import {
 import { resolveCanonicalBaseUrl } from '@/lib/server/canonical-url'
 import { response } from '@/lib/server/no-store-response'
 import { problem } from '@/lib/server/problem'
+import { withHttpRateLimit } from '@/lib/server/rate-limit'
 import { package5SupplyActionRolloutDecision } from '@/lib/server/package5-rollout'
 import type { StringEnvironment } from '@/lib/server/read-trimmed-env'
 import {
@@ -95,6 +96,7 @@ export async function handleSupplyActionPost(
   options: SupplyActionHandlerOptions = {},
 ): Promise<Response> {
   return await runWithRequestCorrelation(request, async ({ correlationId }) => {
+    return withRequestCorrelationHeader(await withHttpRateLimit(request, 'public-mutation', async () => {
     const bounded = await readBoundedRequestText(request, MAX_SUPPLY_ACTION_BODY_BYTES)
     if (!bounded.ok) {
       return withRequestCorrelationHeader(problem({
@@ -177,5 +179,6 @@ export async function handleSupplyActionPost(
         detail: 'The Provider Tool source is temporarily unavailable.',
       }), correlationId), { site: 'handleSupplyActionPost', reason: 'source_unavailable' })
     }
+    }), correlationId)
   })
 }

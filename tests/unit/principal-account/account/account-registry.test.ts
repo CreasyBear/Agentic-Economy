@@ -31,242 +31,40 @@ import {
   type AccountActionContext,
   type AccountOwnership,
   type AccountRef,
-  type AccountRegistryCommit,
-  type AccountRegistryStore,
-  type AccountRegistryTransaction,
-  type Membership,
   type MembershipRef,
   type OwnershipRef,
   type RecoveryPolicy,
   type SuccessionAuthorization,
-  type SuccessionAuthorizationParticipant,
   type VerifiedRecoveryParticipantApproval,
 } from '../../../../src/modules/principal-account/account/public'
+import { principalRef, type PrincipalRef } from '../../../../src/modules/principal-account/principal/public'
+
 import {
-  principalRef,
-  type Principal,
-  type PrincipalKind,
-  type PrincipalLifecycle,
-  type PrincipalRef,
-} from '../../../../src/modules/principal-account/principal/public'
-
-class MemoryAccountStore implements AccountRegistryStore {
-  readonly principals = new Map<PrincipalRef, Principal>()
-  readonly accounts = new Map<AccountRef, Account>()
-  readonly ownerships = new Map<OwnershipRef, AccountOwnership>()
-  readonly memberships = new Map<MembershipRef, Membership>()
-  readonly recoveryApprovals = new Map<string, VerifiedRecoveryParticipantApproval>()
-  readonly successionAuthorizations = new Map<string, SuccessionAuthorization>()
-  readonly successionAuthorizationParticipants: SuccessionAuthorizationParticipant[] = []
-  readonly commits: AccountRegistryCommit[] = []
-  #transactionTail: Promise<void> = Promise.resolve()
-
-  async transact<Result>(operation: (transaction: AccountRegistryTransaction) => Promise<Result>): Promise<Result> {
-    const previous = this.#transactionTail
-    let release: (() => void) | undefined
-    this.#transactionTail = new Promise<void>((resolve) => {
-      release = resolve
-    })
-    await previous
-    try {
-      return await operation({
-      getPrincipal: async (ref) => this.principals.get(ref),
-      getAccount: async (ref) => this.accounts.get(ref),
-      getAccountByCreationIdempotency: async (actor, idempotency) => [...this.accounts.values()].find(
-        (account) => account.creationActorPrincipalRef === actor && account.creationIdempotencyRef === idempotency,
-      ),
-      getOwnership: async (ref) => this.ownerships.get(ref),
-      getMembership: async (ref) => this.memberships.get(ref),
-      getActiveMembership: async (account, principal) => [...this.memberships.values()].find(
-        (membership) => membership.accountRef === account
-          && membership.memberPrincipalRef === principal
-          && membership.lifecycle === 'active',
-      ),
-      getVerifiedRecoveryParticipantApproval: async (ref) => this.recoveryApprovals.get(ref),
-      getSuccessionAuthorization: async (ref) => this.successionAuthorizations.get(ref),
-      commit: async (change) => {
-        this.assertCommit(change)
-        this.commits.push(change)
-        if (change.accountInsert !== undefined) this.accounts.set(change.accountInsert.accountRef, change.accountInsert)
-        if (change.accountReplacement !== undefined) {
-          this.accounts.set(change.accountReplacement.value.accountRef, change.accountReplacement.value)
-        }
-        for (const ownership of change.ownershipInserts ?? []) this.ownerships.set(ownership.ownershipRef, ownership)
-        for (const replacement of change.ownershipReplacements ?? []) {
-          this.ownerships.set(replacement.value.ownershipRef, replacement.value)
-        }
-        for (const membership of change.membershipInserts ?? []) this.memberships.set(membership.membershipRef, membership)
-        for (const replacement of change.membershipReplacements ?? []) {
-          this.memberships.set(replacement.value.membershipRef, replacement.value)
-        }
-        for (const participant of change.successionAuthorizationParticipantInserts ?? []) {
-          this.successionAuthorizationParticipants.push(participant)
-        }
-        if (change.successionAuthorizationInsert !== undefined) {
-          this.successionAuthorizations.set(change.successionAuthorizationInsert.authorizationRef, change.successionAuthorizationInsert)
-        }
-        if (change.successionAuthorizationReplacement !== undefined) {
-          this.successionAuthorizations.set(
-            change.successionAuthorizationReplacement.value.authorizationRef,
-            change.successionAuthorizationReplacement.value,
-          )
-        }
-      },
-      })
-    } finally {
-      release?.()
-    }
-  }
-
-  seedPrincipal(
-    suffix: string,
-    kind: PrincipalKind = 'human',
-    lifecycle: PrincipalLifecycle = 'active',
-  ): PrincipalRef {
-    const ref = principalRef(`prn_${suffix.padStart(32, '0')}`)
-    this.principals.set(ref, Object.freeze({
-      principalRef: ref,
-      kind,
-      displayName: `${kind}-${suffix}`,
-      lifecycle,
-      revision: 1,
-      createdAt: 1,
-      updatedAt: 1,
-    }))
-    return ref
-  }
-
-  seedRecoveryApproval(approval: VerifiedRecoveryParticipantApproval): void {
-    this.recoveryApprovals.set(approval.approvalRef, Object.freeze(approval))
-  }
-
-  private assertCommit(change: AccountRegistryCommit): void {
-    if (change.accountInsert !== undefined && this.accounts.has(change.accountInsert.accountRef)) {
-      throw new Error('test_account_insert_conflict')
-    }
-    if (change.accountReplacement !== undefined) {
-      expect(this.accounts.get(change.accountReplacement.value.accountRef)?.revision)
-        .toBe(change.accountReplacement.expectedRevision)
-    }
-    for (const ownership of change.ownershipInserts ?? []) {
-      if (this.ownerships.has(ownership.ownershipRef)) throw new Error('test_ownership_insert_conflict')
-    }
-    for (const replacement of change.ownershipReplacements ?? []) {
-      expect(this.ownerships.get(replacement.value.ownershipRef)?.revision).toBe(replacement.expectedRevision)
-    }
-    for (const membership of change.membershipInserts ?? []) {
-      if (this.memberships.has(membership.membershipRef)) throw new Error('test_membership_insert_conflict')
-    }
-    for (const replacement of change.membershipReplacements ?? []) {
-      expect(this.memberships.get(replacement.value.membershipRef)?.revision).toBe(replacement.expectedRevision)
-    }
-    if (change.successionAuthorizationInsert !== undefined
-      && this.successionAuthorizations.has(change.successionAuthorizationInsert.authorizationRef)) {
-      throw new Error('test_succession_authorization_insert_conflict')
-    }
-    if (change.successionAuthorizationReplacement !== undefined) {
-      expect(this.successionAuthorizations.get(change.successionAuthorizationReplacement.value.authorizationRef)?.revision)
-        .toBe(change.successionAuthorizationReplacement.expectedRevision)
-    }
-  }
-}
-
-const uuid = (suffix: number): string => `00000000-0000-4000-8000-${String(suffix).padStart(12, '0')}`
-
-function setup(options: Readonly<{
-  times?: readonly number[]
-  uuids?: readonly string[]
-}> = {}): Readonly<{
-  registry: AccountRegistry
-  store: MemoryAccountStore
-  nextContext(account: AccountRef, actor: PrincipalRef, suffix?: string): AccountActionContext
-}> {
-  const store = new MemoryAccountStore()
-  const times = [...(options.times ?? [100])]
-  const uuids = [...(options.uuids ?? Array.from({ length: 20 }, (_, index) => uuid(index + 1)))]
-  let timeIndex = 0
-  let uuidIndex = 0
-  return {
-    registry: new AccountRegistry(store, {
-      now: () => times[Math.min(timeIndex++, times.length - 1)] ?? -1,
-      randomUuid: () => uuids[Math.min(uuidIndex++, uuids.length - 1)] ?? '',
-    }),
-    store,
-    nextContext: (account, actor, suffix = '1') => ({
-      actorPrincipalRef: actor,
-      activeAccountRef: account,
-      correlationRef: `correlation:${suffix}`,
-      idempotencyRef: `idempotency:${suffix}`,
-    }),
-  }
-}
-
-async function createAccount(
-  fixture: ReturnType<typeof setup>,
-  ownerKind: PrincipalKind = 'human',
-  recoveryPolicy: RecoveryPolicy = { kind: 'threshold', threshold: 2, participantCount: 3, delayMs: 5, freezeRequired: true, revision: 1 },
-): Promise<Readonly<{ account: Account; ownership: AccountOwnership; owner: PrincipalRef }>> {
-  const owner = fixture.store.seedPrincipal(String(fixture.store.principals.size + 1), ownerKind)
-  const created = await fixture.registry.create({
-    ownerPrincipalRef: owner,
-    displayName: '  Primary tenancy  ',
-    recoveryPolicy,
-    correlationRef: 'correlation:create',
-    idempotencyRef: 'idempotency:create',
-  })
-  return { ...created, owner }
-}
-
-async function activateAccount(
-  fixture: ReturnType<typeof setup>,
-  created: Awaited<ReturnType<typeof createAccount>>,
-): Promise<Account> {
-  return await fixture.registry.activate({
-    accountRef: created.account.accountRef,
-    expectedRevision: created.account.revision,
-    context: fixture.nextContext(created.account.accountRef, created.owner, 'activate'),
-  })
-}
-
-function seedRecoveryApprovals(
-  fixture: ReturnType<typeof setup>,
-  account: Account,
-  incumbentOwnerPrincipalRef: PrincipalRef,
-  successorOwnerPrincipalRef: PrincipalRef,
-  options: Readonly<{
-    count?: number
-    mutate?: (approval: VerifiedRecoveryParticipantApproval, index: number) => VerifiedRecoveryParticipantApproval
-  }> = {},
-): readonly string[] {
-  const approvalRefs: string[] = []
-  for (let index = 0; index < (options.count ?? 2); index += 1) {
-    const participantPrincipalRef = fixture.store.seedPrincipal(String(100 + index))
-    const approval: VerifiedRecoveryParticipantApproval = {
-      approvalRef: `trusted-approval:${index + 1}`,
-      accountRef: account.accountRef,
-      participantPrincipalRef,
-      incumbentOwnerPrincipalRef,
-      successorOwnerPrincipalRef,
-      recoveryPolicyRevision: account.recoveryPolicy.revision,
-      frozenAccountRevision: account.revision,
-      frozenAt: account.updatedAt,
-      verifiedAt: account.updatedAt + 1,
-      expiresAt: account.updatedAt + 100,
-      verificationRef: `trusted-verification:${index + 1}`,
-      lifecycle: 'verified',
-      createdAt: account.updatedAt + 1,
-      createdBy: fixture.nextContext(account.accountRef, participantPrincipalRef, `approve-recovery-${index + 1}`),
-    }
-    const stored = options.mutate?.(approval, index) ?? approval
-    fixture.store.seedRecoveryApproval(stored)
-    approvalRefs.push(stored.approvalRef)
-  }
-  return approvalRefs
-}
-
-async function expectCode(promise: Promise<unknown>, code: string): Promise<void> {
-  await expect(promise).rejects.toMatchObject({ name: 'AccountRegistryError', message: code, code })
-}
+  MemoryAccountStore,
+  NO_TRANSFER_REV1,
+  SuccessionPrep,
+  activateAccount,
+  activateAccountRevision,
+  activeAccountBundle,
+  addMembershipFor,
+  attemptRegisteredSuccession,
+  corr,
+  corruptOwnership,
+  createAccount,
+  createRequest,
+  endMembershipFor,
+  expectCode,
+  expectRegistryCreate,
+  idem,
+  prepareRegisteredSuccession,
+  prepareSuspendedSuccession,
+  primaryCreateRequest,
+  registerSuccession,
+  setup,
+  suspendAccountRevision,
+  suspendedAccountBundle,
+  uuid,
+} from './account-registry.harness'
 
 describe('Account registry contract', () => {
   it('exports canonical constants, Convex validators and table fragments', () => {
@@ -349,51 +147,28 @@ describe('Account registry contract', () => {
     const fixture = setup()
     const created = await createAccount(fixture)
     const commitsBeforeReplay = fixture.store.commits.length
-    const replay = await fixture.registry.create({
-      ownerPrincipalRef: created.owner,
-      displayName: 'Primary tenancy',
-      recoveryPolicy: { kind: 'threshold', threshold: 2, participantCount: 3, delayMs: 5, freezeRequired: true, revision: 1 },
-      correlationRef: 'correlation:retry',
-      idempotencyRef: 'idempotency:create',
-    })
+    const replay = await fixture.registry.create(primaryCreateRequest(created.owner))
     expect(replay).toEqual({ account: created.account, ownership: created.ownership })
     expect(fixture.store.commits).toHaveLength(commitsBeforeReplay)
-    await expectCode(fixture.registry.create({
-      ownerPrincipalRef: created.owner,
-      displayName: 'Different name',
-      recoveryPolicy: created.account.recoveryPolicy,
-      correlationRef: 'correlation:retry',
-      idempotencyRef: 'idempotency:create',
-    }), 'account_idempotency_conflict')
-    await expectCode(fixture.registry.create({
-      ownerPrincipalRef: created.owner,
-      displayName: 'Primary tenancy',
-      recoveryPolicy: { kind: 'no_transfer', revision: 1 },
-      correlationRef: 'correlation:retry',
-      idempotencyRef: 'idempotency:create',
-    }), 'account_idempotency_conflict')
+    await expectCode(fixture.registry.create(primaryCreateRequest(created.owner, { displayName: 'Different name', recoveryPolicy: created.account.recoveryPolicy })), 'account_idempotency_conflict')
+    await expectCode(fixture.registry.create(primaryCreateRequest(created.owner, { recoveryPolicy: NO_TRANSFER_REV1 })), 'account_idempotency_conflict')
 
     const noTransfer = setup()
     const declared = await createAccount(noTransfer, 'human', { kind: 'no_transfer', revision: 4 })
-    await expect(noTransfer.registry.create({
-      ownerPrincipalRef: declared.owner,
-      displayName: 'Primary tenancy',
-      recoveryPolicy: { kind: 'no_transfer', revision: 4 },
-      correlationRef: 'correlation:retry',
-      idempotencyRef: 'idempotency:create',
-    })).resolves.toEqual({ account: declared.account, ownership: declared.ownership })
+    await expect(noTransfer.registry.create(primaryCreateRequest(declared.owner, { recoveryPolicy: { kind: 'no_transfer', revision: 4 } })))
+      .resolves.toEqual({ account: declared.account, ownership: declared.ownership })
   })
 
   it('fails closed when an idempotent creation replay finds corrupt initial ownership', async () => {
-    const missing = setup()
-    const missingCreated = await createAccount(missing)
-    missing.store.ownerships.delete(missingCreated.ownership.ownershipRef)
-    await expectCode(missing.registry.create({ ownerPrincipalRef: missingCreated.owner, displayName: 'Primary tenancy', recoveryPolicy: missingCreated.account.recoveryPolicy, correlationRef: 'correlation:retry', idempotencyRef: 'idempotency:create' }), 'ownership_not_found')
-
-    const mismatched = setup()
-    const mismatchedCreated = await createAccount(mismatched)
-    mismatched.store.ownerships.set(mismatchedCreated.ownership.ownershipRef, Object.freeze({ ...mismatchedCreated.ownership, accountRef: accountRef('acc_ffffffffffffffffffffffffffffffff') }))
-    await expectCode(mismatched.registry.create({ ownerPrincipalRef: mismatchedCreated.owner, displayName: 'Primary tenancy', recoveryPolicy: mismatchedCreated.account.recoveryPolicy, correlationRef: 'correlation:retry', idempotencyRef: 'idempotency:create' }), 'ownership_account_mismatch')
+    for (const [mode, code] of [
+      ['delete', 'ownership_not_found'] as const,
+      ['account-mismatch', 'ownership_account_mismatch'] as const,
+    ]) {
+      const fixture = setup()
+      const created = await createAccount(fixture)
+      corruptOwnership(fixture.store, created.ownership, mode)
+      await expectCode(fixture.registry.create(primaryCreateRequest(created.owner, { recoveryPolicy: created.account.recoveryPolicy })), code)
+    }
   })
 
   it('rejects invalid creation data and non-active or absent owner Principals', async () => {
@@ -411,36 +186,31 @@ describe('Account registry contract', () => {
     ]
     for (const [, policy] of invalidCases) {
       const fixture = setup()
-      const owner = fixture.store.seedPrincipal('1')
-      await expectCode(fixture.registry.create({ ownerPrincipalRef: owner, displayName: 'Account', recoveryPolicy: policy, correlationRef: 'correlation:1', idempotencyRef: 'idempotency:1' }), 'recovery_policy_invalid')
+      await expectRegistryCreate(fixture.registry, fixture.store.seedPrincipal('1'), 'recovery_policy_invalid', { recoveryPolicy: policy })
     }
 
     const invalidName = setup()
     const owner = invalidName.store.seedPrincipal('1')
     for (const displayName of ['', 'a'.repeat(201), 'line\nbreak']) {
-      await expectCode(invalidName.registry.create({ ownerPrincipalRef: owner, displayName, recoveryPolicy: { kind: 'no_transfer', revision: 1 }, correlationRef: 'correlation:1', idempotencyRef: 'idempotency:1' }), 'account_display_name_invalid')
+      await expectRegistryCreate(invalidName.registry, owner, 'account_display_name_invalid', { displayName })
     }
-    const negativeTime = setup({ times: [-1] })
-    const negativeTimeOwner = negativeTime.store.seedPrincipal('1')
-    await expectCode(negativeTime.registry.create({ ownerPrincipalRef: negativeTimeOwner, displayName: 'Account', recoveryPolicy: { kind: 'no_transfer', revision: 1 }, correlationRef: 'correlation:1', idempotencyRef: 'idempotency:1' }), 'account_timestamp_invalid')
-    const invalidTime = setup({ times: [Number.NaN] })
-    const invalidTimeOwner = invalidTime.store.seedPrincipal('1')
-    await expectCode(invalidTime.registry.create({ ownerPrincipalRef: invalidTimeOwner, displayName: 'Account', recoveryPolicy: { kind: 'no_transfer', revision: 1 }, correlationRef: 'correlation:1', idempotencyRef: 'idempotency:1' }), 'account_timestamp_invalid')
+    for (const times of [[-1], [Number.NaN]] as const) {
+      const fixture = setup({ times })
+      await expectRegistryCreate(fixture.registry, fixture.store.seedPrincipal('1'), 'account_timestamp_invalid')
+    }
 
     const absent = setup()
-    await expectCode(absent.registry.create({ ownerPrincipalRef: principalRef('prn_ffffffffffffffffffffffffffffffff'), displayName: 'Account', recoveryPolicy: { kind: 'no_transfer', revision: 1 }, correlationRef: 'correlation:1', idempotencyRef: 'idempotency:1' }), 'principal_not_found')
+    await expectRegistryCreate(absent.registry, principalRef('prn_ffffffffffffffffffffffffffffffff'), 'principal_not_found')
     const inactive = setup()
-    const suspended = inactive.store.seedPrincipal('1', 'human', 'suspended')
-    await expectCode(inactive.registry.create({ ownerPrincipalRef: suspended, displayName: 'Account', recoveryPolicy: { kind: 'no_transfer', revision: 1 }, correlationRef: 'correlation:1', idempotencyRef: 'idempotency:1' }), 'principal_inactive')
+    await expectRegistryCreate(inactive.registry, inactive.store.seedPrincipal('1', 'human', 'suspended'), 'principal_inactive')
   })
 
   it('rejects malformed action attribution before writes', async () => {
     const fixture = setup()
     const owner = fixture.store.seedPrincipal('1')
-    const base = { ownerPrincipalRef: owner, displayName: 'Account', recoveryPolicy: { kind: 'no_transfer', revision: 1 } as const }
-    await expectCode(fixture.registry.create({ ...base, correlationRef: '', idempotencyRef: 'idempotency:1' }), 'correlation_ref_invalid')
-    await expectCode(fixture.registry.create({ ...base, correlationRef: 'correlation:1', idempotencyRef: 'has space' }), 'account_idempotency_ref_invalid')
-    await expectCode(fixture.registry.create({ ...base, correlationRef: 'a'.repeat(201), idempotencyRef: 'idempotency:1' }), 'correlation_ref_invalid')
+    await expectRegistryCreate(fixture.registry, owner, 'correlation_ref_invalid', { correlationRef: '' })
+    await expectRegistryCreate(fixture.registry, owner, 'account_idempotency_ref_invalid', { idempotencyRef: 'has space' })
+    await expectRegistryCreate(fixture.registry, owner, 'correlation_ref_invalid', { correlationRef: 'a'.repeat(201) })
   })
 
   it('rejects generated Account and ownership collisions before an atomic insert', async () => {
@@ -448,13 +218,13 @@ describe('Account registry contract', () => {
     const accountCollision = setup({ uuids: [collisionUuid, uuid(2)] })
     const owner = accountCollision.store.seedPrincipal('1')
     accountCollision.store.accounts.set(accountRef('acc_00000000000040008000000000000001'), {} as Account)
-    await expectCode(accountCollision.registry.create({ ownerPrincipalRef: owner, displayName: 'Account', recoveryPolicy: { kind: 'no_transfer', revision: 1 }, correlationRef: 'correlation:1', idempotencyRef: 'idempotency:1' }), 'account_ref_conflict')
+    await expectRegistryCreate(accountCollision.registry, owner, 'account_ref_conflict')
     expect(accountCollision.store.commits).toHaveLength(0)
 
     const ownershipCollision = setup({ uuids: [uuid(1), uuid(2)] })
     const secondOwner = ownershipCollision.store.seedPrincipal('1')
     ownershipCollision.store.ownerships.set(ownershipRef('own_00000000000040008000000000000002'), {} as AccountOwnership)
-    await expectCode(ownershipCollision.registry.create({ ownerPrincipalRef: secondOwner, displayName: 'Account', recoveryPolicy: { kind: 'no_transfer', revision: 1 }, correlationRef: 'correlation:1', idempotencyRef: 'idempotency:1' }), 'ownership_ref_conflict')
+    await expectRegistryCreate(ownershipCollision.registry, secondOwner, 'ownership_ref_conflict')
     expect(ownershipCollision.store.commits).toHaveLength(0)
   })
 
@@ -462,14 +232,14 @@ describe('Account registry contract', () => {
     const fixture = setup({ times: [10, 20, 30, 40, 50] })
     const created = await createAccount(fixture)
     const activateContext = fixture.nextContext(created.account.accountRef, created.owner, 'activate')
-    const active = await fixture.registry.activate({ accountRef: created.account.accountRef, expectedRevision: 1, context: activateContext })
+    const active = await activateAccountRevision(fixture, created.account, created.owner, 1, 'activate')
     expect(active.lifecycle).toBe('active')
     await expectCode(fixture.registry.activate({ accountRef: active.accountRef, expectedRevision: 2, context: activateContext }), 'account_lifecycle_transition_forbidden')
-    const suspended = await fixture.registry.suspend({ accountRef: active.accountRef, expectedRevision: 2, context: fixture.nextContext(active.accountRef, created.owner, 'suspend') })
-    await expectCode(fixture.registry.suspend({ accountRef: active.accountRef, expectedRevision: 3, context: fixture.nextContext(active.accountRef, created.owner, 'suspend-again') }), 'account_lifecycle_transition_forbidden')
-    const reactivated = await fixture.registry.activate({ accountRef: active.accountRef, expectedRevision: 3, context: fixture.nextContext(active.accountRef, created.owner, 'reactivate') })
+    const suspended = await suspendAccountRevision(fixture, active, created.owner, 2, 'suspend')
+    await expectCode(suspendAccountRevision(fixture, active, created.owner, 3, 'suspend-again'), 'account_lifecycle_transition_forbidden')
+    const reactivated = await activateAccountRevision(fixture, active, created.owner, 3, 'reactivate')
     await expectCode(fixture.registry.close({ accountRef: active.accountRef, expectedAccountRevision: 4, expectedOwnershipRevision: 1, context: fixture.nextContext(active.accountRef, created.owner, 'close-active') }), 'account_lifecycle_transition_forbidden')
-    const suspendedAgain = await fixture.registry.suspend({ accountRef: active.accountRef, expectedRevision: 4, context: fixture.nextContext(active.accountRef, created.owner, 'suspend-again') })
+    const suspendedAgain = await suspendAccountRevision(fixture, active, created.owner, 4, 'suspend-again')
     const closed = await fixture.registry.close({ accountRef: active.accountRef, expectedAccountRevision: 5, expectedOwnershipRevision: 1, context: fixture.nextContext(active.accountRef, created.owner, 'close') })
     expect([suspended.lifecycle, reactivated.lifecycle, suspendedAgain.lifecycle, closed.account.lifecycle]).toEqual(['suspended', 'active', 'suspended', 'closed'])
     expect(closed.ownership).toMatchObject({ lifecycle: 'ended', revision: 2, endedAt: 50 })
@@ -510,27 +280,20 @@ describe('Account registry contract', () => {
 
   it('refuses backwards server time on lifecycle changes and closure', async () => {
     const lifecycleFixture = setup({ times: [20, 10] })
-    const created = await createAccount(lifecycleFixture)
-    await expectCode(lifecycleFixture.registry.activate({ accountRef: created.account.accountRef, expectedRevision: 1, context: lifecycleFixture.nextContext(created.account.accountRef, created.owner) }), 'account_timestamp_invalid')
+    const lifecycleCreated = await createAccount(lifecycleFixture)
+    await expectCode(activateAccountRevision(lifecycleFixture, lifecycleCreated.account, lifecycleCreated.owner, 1, 'activate'), 'account_timestamp_invalid')
 
     const closeFixture = setup({ times: [20, 30, 40, 10] })
-    const closeCreated = await createAccount(closeFixture)
-    const active = await activateAccount(closeFixture, closeCreated)
-    await closeFixture.registry.suspend({ accountRef: active.accountRef, expectedRevision: 2, context: closeFixture.nextContext(active.accountRef, closeCreated.owner, 'suspend') })
-    await expectCode(closeFixture.registry.close({ accountRef: active.accountRef, expectedAccountRevision: 3, expectedOwnershipRevision: 1, context: closeFixture.nextContext(active.accountRef, closeCreated.owner, 'close') }), 'account_timestamp_invalid')
+    const { created: closeCreated, active: closeActive } = await activeAccountBundle(closeFixture)
+    await suspendAccountRevision(closeFixture, closeActive, closeCreated.owner, 2, 'suspend')
+    await expectCode(closeFixture.registry.close({ accountRef: closeActive.accountRef, expectedAccountRevision: 3, expectedOwnershipRevision: 1, context: closeFixture.nextContext(closeActive.accountRef, closeCreated.owner, 'close') }), 'account_timestamp_invalid')
   })
 
   it('creates and ends Membership facts without altering the ownership fact', async () => {
     const fixture = setup({ times: [10, 20, 30, 40] })
-    const created = await createAccount(fixture, 'agent')
-    const active = await activateAccount(fixture, created)
+    const { created, active } = await activeAccountBundle(fixture, 'agent')
     const member = fixture.store.seedPrincipal('2', 'workload')
-    const added = await fixture.registry.addMembership({
-      accountRef: active.accountRef,
-      memberPrincipalRef: member,
-      expectedAccountRevision: 2,
-      context: fixture.nextContext(active.accountRef, created.owner, 'add-member'),
-    })
+    const added = await addMembershipFor(fixture, active, created.owner, member, 2, 'add-member')
     expect(added.membership).toMatchObject({
       accountRef: active.accountRef,
       memberPrincipalRef: member,
@@ -540,13 +303,7 @@ describe('Account registry contract', () => {
     expect(await fixture.registry.getMembership(added.membership.membershipRef)).toBe(added.membership)
     expect(fixture.store.ownerships.get(created.ownership.ownershipRef)).toBe(created.ownership)
     expect(created.owner).not.toBe(member)
-    const ended = await fixture.registry.endMembership({
-      accountRef: active.accountRef,
-      membershipRef: added.membership.membershipRef,
-      expectedAccountRevision: 3,
-      expectedMembershipRevision: 1,
-      context: fixture.nextContext(active.accountRef, created.owner, 'end-member'),
-    })
+    const ended = await endMembershipFor(fixture, active, created.owner, added.membership.membershipRef, 3, 1, 'end-member')
     expect(ended.membership).toMatchObject({ lifecycle: 'ended', revision: 2, endedAt: 40 })
     expect(Object.isFrozen(ended.membership)).toBe(true)
     expect(fixture.store.ownerships.get(created.ownership.ownershipRef)).toBe(created.ownership)
@@ -554,61 +311,52 @@ describe('Account registry contract', () => {
 
   it('rejects duplicate, inactive, missing and colliding Memberships', async () => {
     const fixture = setup({ uuids: [uuid(1), uuid(2), uuid(3), uuid(3)] })
-    const created = await createAccount(fixture)
-    const active = await activateAccount(fixture, created)
+    const { created, active } = await activeAccountBundle(fixture)
     const member = fixture.store.seedPrincipal('2')
-    const first = await fixture.registry.addMembership({ accountRef: active.accountRef, memberPrincipalRef: member, expectedAccountRevision: 2, context: fixture.nextContext(active.accountRef, created.owner, 'add') })
-    await expectCode(fixture.registry.addMembership({ accountRef: active.accountRef, memberPrincipalRef: member, expectedAccountRevision: 3, context: fixture.nextContext(active.accountRef, created.owner, 'duplicate') }), 'membership_ref_conflict')
+    const first = await addMembershipFor(fixture, active, created.owner, member, 2, 'add')
+    await expectCode(addMembershipFor(fixture, active, created.owner, member, 3, 'duplicate'), 'membership_ref_conflict')
 
     const duplicateFixture = setup()
-    const duplicateCreated = await createAccount(duplicateFixture)
-    const duplicateActive = await activateAccount(duplicateFixture, duplicateCreated)
+    const { created: duplicateCreated, active: duplicateActive } = await activeAccountBundle(duplicateFixture)
     const duplicateMember = duplicateFixture.store.seedPrincipal('2')
-    await duplicateFixture.registry.addMembership({ accountRef: duplicateActive.accountRef, memberPrincipalRef: duplicateMember, expectedAccountRevision: 2, context: duplicateFixture.nextContext(duplicateActive.accountRef, duplicateCreated.owner, 'add') })
-    await expectCode(duplicateFixture.registry.addMembership({ accountRef: duplicateActive.accountRef, memberPrincipalRef: duplicateMember, expectedAccountRevision: 3, context: duplicateFixture.nextContext(duplicateActive.accountRef, duplicateCreated.owner, 'duplicate') }), 'membership_active_conflict')
-
-    const missing = principalRef('prn_ffffffffffffffffffffffffffffffff')
-    await expectCode(duplicateFixture.registry.addMembership({ accountRef: duplicateActive.accountRef, memberPrincipalRef: missing, expectedAccountRevision: 3, context: duplicateFixture.nextContext(duplicateActive.accountRef, duplicateCreated.owner, 'missing') }), 'principal_not_found')
-    const inactive = duplicateFixture.store.seedPrincipal('3', 'human', 'retired')
-    await expectCode(duplicateFixture.registry.addMembership({ accountRef: duplicateActive.accountRef, memberPrincipalRef: inactive, expectedAccountRevision: 3, context: duplicateFixture.nextContext(duplicateActive.accountRef, duplicateCreated.owner, 'inactive') }), 'principal_inactive')
+    await addMembershipFor(duplicateFixture, duplicateActive, duplicateCreated.owner, duplicateMember, 2, 'add')
+    await expectCode(addMembershipFor(duplicateFixture, duplicateActive, duplicateCreated.owner, duplicateMember, 3, 'duplicate'), 'membership_active_conflict')
+    await expectCode(addMembershipFor(duplicateFixture, duplicateActive, duplicateCreated.owner, principalRef('prn_ffffffffffffffffffffffffffffffff'), 3, 'missing'), 'principal_not_found')
+    await expectCode(addMembershipFor(duplicateFixture, duplicateActive, duplicateCreated.owner, duplicateFixture.store.seedPrincipal('3', 'human', 'retired'), 3, 'inactive'), 'principal_inactive')
     expect(first.membership.lifecycle).toBe('active')
   })
 
   it('rejects invalid Membership endings and changes while suspended', async () => {
     const fixture = setup({ times: [10, 20, 30, 40] })
-    const created = await createAccount(fixture)
-    const active = await activateAccount(fixture, created)
+    const { created, active } = await activeAccountBundle(fixture)
     const member = fixture.store.seedPrincipal('2')
-    const added = await fixture.registry.addMembership({ accountRef: active.accountRef, memberPrincipalRef: member, expectedAccountRevision: 2, context: fixture.nextContext(active.accountRef, created.owner, 'add') })
+    const added = await addMembershipFor(fixture, active, created.owner, member, 2, 'add')
     const stranger = fixture.store.seedPrincipal('3')
-    await expectCode(fixture.registry.endMembership({ accountRef: active.accountRef, membershipRef: added.membership.membershipRef, expectedAccountRevision: 3, expectedMembershipRevision: 2, context: fixture.nextContext(active.accountRef, created.owner, 'stale-member') }), 'membership_revision_conflict')
-    await expectCode(fixture.registry.endMembership({ accountRef: active.accountRef, membershipRef: added.membership.membershipRef, expectedAccountRevision: 3, expectedMembershipRevision: 1, context: fixture.nextContext(active.accountRef, stranger, 'stranger') }), 'owner_context_required')
-    await expectCode(fixture.registry.endMembership({ accountRef: active.accountRef, membershipRef: membershipRef('mem_ffffffffffffffffffffffffffffffff'), expectedAccountRevision: 3, expectedMembershipRevision: 1, context: fixture.nextContext(active.accountRef, created.owner, 'missing') }), 'membership_not_found')
-    const suspended = await fixture.registry.suspend({ accountRef: active.accountRef, expectedRevision: 3, context: fixture.nextContext(active.accountRef, created.owner, 'suspend') })
-    await expectCode(fixture.registry.addMembership({ accountRef: active.accountRef, memberPrincipalRef: stranger, expectedAccountRevision: suspended.revision, context: fixture.nextContext(active.accountRef, created.owner, 'add-suspended') }), 'account_lifecycle_transition_forbidden')
-    await expectCode(fixture.registry.endMembership({ accountRef: active.accountRef, membershipRef: added.membership.membershipRef, expectedAccountRevision: suspended.revision, expectedMembershipRevision: 1, context: fixture.nextContext(active.accountRef, created.owner, 'end-suspended') }), 'account_lifecycle_transition_forbidden')
+    await expectCode(endMembershipFor(fixture, active, created.owner, added.membership.membershipRef, 3, 2, 'stale-member'), 'membership_revision_conflict')
+    await expectCode(endMembershipFor(fixture, active, stranger, added.membership.membershipRef, 3, 1, 'stranger'), 'owner_context_required')
+    await expectCode(endMembershipFor(fixture, active, created.owner, membershipRef('mem_ffffffffffffffffffffffffffffffff'), 3, 1, 'missing'), 'membership_not_found')
+    const suspended = await suspendAccountRevision(fixture, active, created.owner, 3, 'suspend')
+    await expectCode(addMembershipFor(fixture, active, created.owner, stranger, suspended.revision, 'add-suspended'), 'account_lifecycle_transition_forbidden')
+    await expectCode(endMembershipFor(fixture, active, created.owner, added.membership.membershipRef, suspended.revision, 1, 'end-suspended'), 'account_lifecycle_transition_forbidden')
     await expect(fixture.registry.getMembership(membershipRef('mem_ffffffffffffffffffffffffffffffff'))).resolves.toBeUndefined()
   })
 
   it('rejects a Membership belonging to another Account and a second ending', async () => {
     const fixture = setup({ times: [10, 11, 20, 21, 30, 40] })
-    const first = await createAccount(fixture)
-    const firstActive = await activateAccount(fixture, first)
-    const second = await createAccount(fixture)
-    const secondActive = await activateAccount(fixture, second)
+    const first = await activeAccountBundle(fixture)
+    const second = await activeAccountBundle(fixture)
     const member = fixture.store.seedPrincipal('3')
-    const added = await fixture.registry.addMembership({ accountRef: firstActive.accountRef, memberPrincipalRef: member, expectedAccountRevision: 2, context: fixture.nextContext(firstActive.accountRef, first.owner, 'add') })
-    await expectCode(fixture.registry.endMembership({ accountRef: secondActive.accountRef, membershipRef: added.membership.membershipRef, expectedAccountRevision: 2, expectedMembershipRevision: 1, context: fixture.nextContext(secondActive.accountRef, second.owner, 'wrong-account') }), 'membership_account_mismatch')
-    const ended = await fixture.registry.endMembership({ accountRef: firstActive.accountRef, membershipRef: added.membership.membershipRef, expectedAccountRevision: 3, expectedMembershipRevision: 1, context: fixture.nextContext(firstActive.accountRef, first.owner, 'end') })
-    await expectCode(fixture.registry.endMembership({ accountRef: firstActive.accountRef, membershipRef: ended.membership.membershipRef, expectedAccountRevision: 4, expectedMembershipRevision: 2, context: fixture.nextContext(firstActive.accountRef, first.owner, 'end-again') }), 'membership_lifecycle_transition_forbidden')
+    const added = await addMembershipFor(fixture, first.active, first.created.owner, member, 2, 'add')
+    await expectCode(endMembershipFor(fixture, second.active, second.created.owner, added.membership.membershipRef, 2, 1, 'wrong-account'), 'membership_account_mismatch')
+    const ended = await endMembershipFor(fixture, first.active, first.created.owner, added.membership.membershipRef, 3, 1, 'end')
+    await expectCode(endMembershipFor(fixture, first.active, first.created.owner, ended.membership.membershipRef, 4, 2, 'end-again'), 'membership_lifecycle_transition_forbidden')
   })
 
   it('transfers ownership atomically while preserving Account identity and Membership facts', async () => {
     const fixture = setup({ times: [10, 20, 30, 40] })
-    const created = await createAccount(fixture, 'agent')
-    const active = await activateAccount(fixture, created)
+    const { created, active } = await activeAccountBundle(fixture, 'agent')
     const member = fixture.store.seedPrincipal('2')
-    const added = await fixture.registry.addMembership({ accountRef: active.accountRef, memberPrincipalRef: member, expectedAccountRevision: 2, context: fixture.nextContext(active.accountRef, created.owner, 'member') })
+    const added = await addMembershipFor(fixture, active, created.owner, member, 2, 'member')
     const successor = fixture.store.seedPrincipal('3', 'agent')
     const transferred = await fixture.registry.transferOwnership({
       accountRef: active.accountRef,
@@ -626,42 +374,42 @@ describe('Account registry contract', () => {
       predecessorOwnershipRef: created.ownership.ownershipRef,
     })
     expect(fixture.store.memberships.get(added.membership.membershipRef)).toBe(added.membership)
-    await expectCode(fixture.registry.suspend({ accountRef: active.accountRef, expectedRevision: 4, context: fixture.nextContext(active.accountRef, created.owner, 'old-owner') }), 'owner_context_required')
-    await expect(fixture.registry.suspend({ accountRef: active.accountRef, expectedRevision: 4, context: fixture.nextContext(active.accountRef, successor, 'new-owner') })).resolves.toMatchObject({ lifecycle: 'suspended' })
+    await expectCode(suspendAccountRevision(fixture, active, created.owner, 4, 'old-owner'), 'owner_context_required')
+    await expect(suspendAccountRevision(fixture, active, successor, 4, 'new-owner')).resolves.toMatchObject({ lifecycle: 'suspended' })
   })
 
   it('rejects unsafe transfers and corrupt ownership pointers deterministically', async () => {
     const fixture = setup()
-    const created = await createAccount(fixture)
-    const active = await activateAccount(fixture, created)
+    const { created, active } = await activeAccountBundle(fixture)
     const successor = fixture.store.seedPrincipal('2')
-    await expectCode(fixture.registry.transferOwnership({ accountRef: active.accountRef, successorOwnerPrincipalRef: created.owner, expectedAccountRevision: 2, expectedOwnershipRevision: 1, context: fixture.nextContext(active.accountRef, created.owner, 'same') }), 'successor_same_as_incumbent')
-    await expectCode(fixture.registry.transferOwnership({ accountRef: active.accountRef, successorOwnerPrincipalRef: successor, expectedAccountRevision: 2, expectedOwnershipRevision: 0, context: fixture.nextContext(active.accountRef, created.owner, 'stale') }), 'ownership_revision_conflict')
-    const missing = principalRef('prn_ffffffffffffffffffffffffffffffff')
-    await expectCode(fixture.registry.transferOwnership({ accountRef: active.accountRef, successorOwnerPrincipalRef: missing, expectedAccountRevision: 2, expectedOwnershipRevision: 1, context: fixture.nextContext(active.accountRef, created.owner, 'missing') }), 'principal_not_found')
-    await fixture.registry.suspend({ accountRef: active.accountRef, expectedRevision: 2, context: fixture.nextContext(active.accountRef, created.owner, 'suspend') })
-    await expectCode(fixture.registry.transferOwnership({ accountRef: active.accountRef, successorOwnerPrincipalRef: successor, expectedAccountRevision: 3, expectedOwnershipRevision: 1, context: fixture.nextContext(active.accountRef, created.owner, 'suspended') }), 'account_lifecycle_transition_forbidden')
+    const transfer = (successorRef: PrincipalRef, accountRevision: number, ownershipRevision: number, suffix: string) => fixture.registry.transferOwnership({
+      accountRef: active.accountRef,
+      successorOwnerPrincipalRef: successorRef,
+      expectedAccountRevision: accountRevision,
+      expectedOwnershipRevision: ownershipRevision,
+      context: fixture.nextContext(active.accountRef, created.owner, suffix),
+    })
+    await expectCode(transfer(created.owner, 2, 1, 'same'), 'successor_same_as_incumbent')
+    await expectCode(transfer(successor, 2, 0, 'stale'), 'ownership_revision_conflict')
+    await expectCode(transfer(principalRef('prn_ffffffffffffffffffffffffffffffff'), 2, 1, 'missing'), 'principal_not_found')
+    await suspendAccountRevision(fixture, active, created.owner, 2, 'suspend')
+    await expectCode(transfer(successor, 3, 1, 'suspended'), 'account_lifecycle_transition_forbidden')
 
-    const missingOwnership = setup()
-    const missingCreated = await createAccount(missingOwnership)
-    missingOwnership.store.ownerships.delete(missingCreated.ownership.ownershipRef)
-    await expectCode(missingOwnership.registry.activate({ accountRef: missingCreated.account.accountRef, expectedRevision: 1, context: missingOwnership.nextContext(missingCreated.account.accountRef, missingCreated.owner) }), 'ownership_not_found')
-
-    const mismatched = setup()
-    const mismatchedCreated = await createAccount(mismatched)
-    mismatched.store.ownerships.set(mismatchedCreated.ownership.ownershipRef, Object.freeze({ ...mismatchedCreated.ownership, accountRef: accountRef('acc_ffffffffffffffffffffffffffffffff') }))
-    await expectCode(mismatched.registry.activate({ accountRef: mismatchedCreated.account.accountRef, expectedRevision: 1, context: mismatched.nextContext(mismatchedCreated.account.accountRef, mismatchedCreated.owner) }), 'ownership_account_mismatch')
-
-    const ended = setup()
-    const endedCreated = await createAccount(ended)
-    ended.store.ownerships.set(endedCreated.ownership.ownershipRef, Object.freeze({ ...endedCreated.ownership, lifecycle: 'ended' }))
-    await expectCode(ended.registry.activate({ accountRef: endedCreated.account.accountRef, expectedRevision: 1, context: ended.nextContext(endedCreated.account.accountRef, endedCreated.owner) }), 'ownership_lifecycle_transition_forbidden')
+    for (const [mode, code] of [
+      ['delete', 'ownership_not_found'] as const,
+      ['account-mismatch', 'ownership_account_mismatch'] as const,
+      ['ended', 'ownership_lifecycle_transition_forbidden'] as const,
+    ]) {
+      const corruptFixture = setup()
+      const created = await createAccount(corruptFixture)
+      corruptOwnership(corruptFixture.store, created.ownership, mode)
+      await expectCode(activateAccountRevision(corruptFixture, created.account, created.owner, 1, 'activate'), code)
+    }
   })
 
   it('rejects a generated ownership collision during transfer without partial changes', async () => {
     const fixture = setup({ uuids: [uuid(1), uuid(2), uuid(3)] })
-    const created = await createAccount(fixture)
-    const active = await activateAccount(fixture, created)
+    const { created, active } = await activeAccountBundle(fixture)
     const successor = fixture.store.seedPrincipal('2')
     fixture.store.ownerships.set(ownershipRef('own_00000000000040008000000000000003'), {} as AccountOwnership)
     const commitsBefore = fixture.store.commits.length
@@ -773,9 +521,7 @@ describe('Account registry contract', () => {
 
   it('enforces the declared no-transfer recovery policy', async () => {
     const fixture = setup({ times: [10, 20, 30, 40] })
-    const created = await createAccount(fixture, 'human', { kind: 'no_transfer', revision: 1 })
-    const active = await activateAccount(fixture, created)
-    const suspended = await fixture.registry.suspend({ accountRef: active.accountRef, expectedRevision: 2, context: fixture.nextContext(active.accountRef, created.owner, 'suspend') })
+    const { active, suspended } = await suspendedAccountBundle(fixture, 'human', NO_TRANSFER_REV1)
     const successor = fixture.store.seedPrincipal('2')
     await expectCode(fixture.registry.succeedOwnership({
       accountRef: active.accountRef,
@@ -788,220 +534,109 @@ describe('Account registry contract', () => {
   })
 
   it('rejects an authorization that expires at the registration instant', async () => {
-    const fixture = setup({ times: [10, 20, 30, 40] })
-    const created = await createAccount(fixture)
-    const active = await activateAccount(fixture, created)
-    const suspended = await fixture.registry.suspend({ accountRef: active.accountRef, expectedRevision: 2, context: fixture.nextContext(active.accountRef, created.owner, 'suspend') })
-    const successor = fixture.store.seedPrincipal('2')
-    for (const [index, participantPrincipalRef] of [fixture.store.seedPrincipal('3'), fixture.store.seedPrincipal('4')].entries()) {
-      fixture.store.seedRecoveryApproval({
+    const prep = await prepareSuspendedSuccession({ times: [10, 20, 30, 40], suspendSuffix: 'suspend' })
+    for (const [index, ref] of prep.approvalRefs.entries()) {
+      const approval = prep.fixture.store.recoveryApprovals.get(ref)!
+      prep.fixture.store.seedRecoveryApproval({
+        ...approval,
         approvalRef: `strict-expiry-approval:${index + 1}`,
-        accountRef: active.accountRef,
-        participantPrincipalRef,
-        incumbentOwnerPrincipalRef: created.owner,
-        successorOwnerPrincipalRef: successor,
-        recoveryPolicyRevision: 1,
-        frozenAccountRevision: suspended.revision,
-        frozenAt: suspended.updatedAt,
+        verificationRef: `strict-expiry-verification:${index + 1}`,
         verifiedAt: 35,
         expiresAt: 40,
-        verificationRef: `strict-expiry-verification:${index + 1}`,
-        lifecycle: 'verified',
         createdAt: 35,
-        createdBy: fixture.nextContext(active.accountRef, participantPrincipalRef, `strict-expiry-approval-${index + 1}`),
+        createdBy: prep.fixture.nextContext(prep.active.accountRef, approval.participantPrincipalRef, `strict-expiry-approval-${index + 1}`),
       })
     }
-    await expectCode(fixture.registry.registerSuccessionAuthorization({
-      accountRef: active.accountRef,
-      incumbentOwnerPrincipalRef: created.owner,
-      successorOwnerPrincipalRef: successor,
-      expectedAccountRevision: suspended.revision,
-      expectedOwnershipRevision: 1,
+    await expectCode(registerSuccession(prep, {
       participantApprovalRefs: ['strict-expiry-approval:1', 'strict-expiry-approval:2'],
       expiresAt: 40,
-      context: fixture.nextContext(active.accountRef, successor, 'strict-expiry'),
-    }), 'succession_authorization_invalid')
+    }, 'strict-expiry'), 'succession_authorization_invalid')
   })
 
   it('fails closed while registering untrusted, duplicate, below-threshold, stale or wrongly bound recovery approvals', async () => {
-    const prepare = async (options: Readonly<{
-      policy?: RecoveryPolicy
-      approvalCount?: number
-      mutate?: (approval: VerifiedRecoveryParticipantApproval, index: number) => VerifiedRecoveryParticipantApproval
-      uuids?: readonly string[]
-    }> = {}) => {
-      const fixture = setup({
-        times: [10, 20, 30, 40, 40, 40],
-        ...(options.uuids === undefined ? {} : { uuids: options.uuids }),
-      })
-      const created = await createAccount(fixture, 'human', options.policy)
-      const active = await activateAccount(fixture, created)
-      const suspended = await fixture.registry.suspend({ accountRef: active.accountRef, expectedRevision: 2, context: fixture.nextContext(active.accountRef, created.owner, 'freeze') })
-      const successor = fixture.store.seedPrincipal('2')
-      const approvalRefs = seedRecoveryApprovals(fixture, suspended, created.owner, successor, {
-        ...(options.approvalCount === undefined ? {} : { count: options.approvalCount }),
-        ...(options.mutate === undefined ? {} : { mutate: options.mutate }),
-      })
-      return { fixture, created, active, suspended, successor, approvalRefs }
+    const expectRegisterFails = async (
+      code: string,
+      options: Parameters<typeof prepareSuspendedSuccession>[0] = {},
+      overrides: Readonly<Record<string, unknown>> = {},
+      beforeRegister?: (prep: SuccessionPrep) => void,
+    ) => {
+      const prep = await prepareSuspendedSuccession(options)
+      beforeRegister?.(prep)
+      await expectCode(registerSuccession(prep, overrides), code)
     }
-    const register = async (prepared: Awaited<ReturnType<typeof prepare>>, overrides: Readonly<Record<string, unknown>> = {}) => await prepared.fixture.registry.registerSuccessionAuthorization({
-      accountRef: prepared.active.accountRef,
-      incumbentOwnerPrincipalRef: prepared.created.owner,
-      successorOwnerPrincipalRef: prepared.successor,
-      expectedAccountRevision: prepared.suspended.revision,
-      expectedOwnershipRevision: 1,
-      participantApprovalRefs: prepared.approvalRefs,
-      expiresAt: 100,
-      context: prepared.fixture.nextContext(prepared.active.accountRef, prepared.successor, 'authorize'),
-      ...overrides,
-    })
+    const mutateFirst = (
+      mutate: (approval: VerifiedRecoveryParticipantApproval) => VerifiedRecoveryParticipantApproval,
+    ): NonNullable<Parameters<typeof prepareSuspendedSuccession>[0]>['mutate'] =>
+      (approval: VerifiedRecoveryParticipantApproval, index: number) => (index === 0 ? mutate(approval) : approval)
+    const approvalPair = (prep: SuccessionPrep) => {
+      const first = prep.fixture.store.recoveryApprovals.get(prep.approvalRefs[0]!)!
+      const second = prep.fixture.store.recoveryApprovals.get(prep.approvalRefs[1]!)!
+      return { first, second }
+    }
 
-    const malformedRef = await prepare()
-    await expectCode(register(malformedRef, { participantApprovalRefs: ['bad proof', 'trusted-approval:2'] }), 'recovery_participant_approval_invalid')
-
-    const wrongActor = await prepare()
-    await expectCode(register(wrongActor, { context: wrongActor.fixture.nextContext(wrongActor.active.accountRef, wrongActor.created.owner, 'wrong-actor') }), 'succession_authorization_invalid')
-
-    const noTransfer = await prepare({ policy: { kind: 'no_transfer', revision: 1 } })
-    await expectCode(register(noTransfer), 'succession_forbidden_by_recovery_policy')
-
-    const wrongIncumbent = await prepare()
-    const outsider = wrongIncumbent.fixture.store.seedPrincipal('9')
-    await expectCode(register(wrongIncumbent, { incumbentOwnerPrincipalRef: outsider }), 'succession_authorization_invalid')
-    await expectCode(register(wrongIncumbent, { incumbentOwnerPrincipalRef: wrongIncumbent.successor }), 'succession_authorization_invalid')
-
-    const belowThreshold = await prepare({ approvalCount: 1 })
-    await expectCode(register(belowThreshold), 'recovery_participant_threshold_unmet')
-
-    const aboveParticipantCount = await prepare({ approvalCount: 4 })
-    await expectCode(register(aboveParticipantCount), 'recovery_participant_approval_invalid')
-
-    const missing = await prepare()
-    missing.fixture.store.recoveryApprovals.delete(missing.approvalRefs[0]!)
-    await expectCode(register(missing), 'recovery_participant_approval_invalid')
-
-    const wrongAccount = await prepare({ mutate: (approval, index) => index === 0 ? { ...approval, accountRef: accountRef('acc_ffffffffffffffffffffffffffffffff') } : approval })
-    await expectCode(register(wrongAccount), 'recovery_participant_approval_invalid')
-
-    const wrongCreationAccount = await prepare({ mutate: (approval, index) => index === 0 ? {
+    await expectRegisterFails('recovery_participant_approval_invalid', {}, { participantApprovalRefs: ['bad proof', 'trusted-approval:2'] })
+    const wrongActor = await prepareSuspendedSuccession()
+    await expectCode(registerSuccession(wrongActor, { context: wrongActor.fixture.nextContext(wrongActor.active.accountRef, wrongActor.created.owner, 'wrong-actor') }), 'succession_authorization_invalid')
+    await expectRegisterFails('succession_forbidden_by_recovery_policy', { policy: NO_TRANSFER_REV1 })
+    const wrongIncumbent = await prepareSuspendedSuccession()
+    await expectCode(registerSuccession(wrongIncumbent, { incumbentOwnerPrincipalRef: wrongIncumbent.fixture.store.seedPrincipal('9') }), 'succession_authorization_invalid')
+    await expectCode(registerSuccession(wrongIncumbent, { incumbentOwnerPrincipalRef: wrongIncumbent.successor }), 'succession_authorization_invalid')
+    await expectRegisterFails('recovery_participant_threshold_unmet', { approvalCount: 1 })
+    await expectRegisterFails('recovery_participant_approval_invalid', { approvalCount: 4 })
+    await expectRegisterFails('recovery_participant_approval_invalid', {}, {}, (prep) => { prep.fixture.store.recoveryApprovals.delete(prep.approvalRefs[0]!) })
+    await expectRegisterFails('recovery_participant_approval_invalid', { mutate: mutateFirst((approval) => ({ ...approval, accountRef: accountRef('acc_ffffffffffffffffffffffffffffffff') })) })
+    await expectRegisterFails('recovery_participant_approval_invalid', { mutate: mutateFirst((approval) => ({
       ...approval,
       createdBy: { ...approval.createdBy, activeAccountRef: accountRef('acc_ffffffffffffffffffffffffffffffff') },
-    } : approval })
-    await expectCode(register(wrongCreationAccount), 'recovery_participant_approval_invalid')
-
-    const wrongCreationActor = await prepare({ mutate: (approval, index) => index === 0 ? {
+    })) })
+    await expectRegisterFails('recovery_participant_approval_invalid', { mutate: mutateFirst((approval) => ({
       ...approval,
       createdBy: { ...approval.createdBy, actorPrincipalRef: approval.incumbentOwnerPrincipalRef },
-    } : approval })
-    await expectCode(register(wrongCreationActor), 'recovery_participant_approval_invalid')
-
-    const mismatchedCreationTime = await prepare({ mutate: (approval, index) => index === 0 ? {
-      ...approval,
-      createdAt: approval.verifiedAt + 1,
-    } : approval })
-    await expectCode(register(mismatchedCreationTime), 'recovery_participant_approval_invalid')
-
-    const invalidCreationTime = await prepare({ mutate: (approval, index) => index === 0 ? {
-      ...approval,
-      createdAt: 1.5,
-    } : approval })
-    await expectCode(register(invalidCreationTime), 'recovery_participant_approval_invalid')
-
-    const creationBeforeFreeze = await prepare({ mutate: (approval, index) => index === 0 ? {
-      ...approval,
-      createdAt: approval.frozenAt - 1,
-    } : approval })
-    await expectCode(register(creationBeforeFreeze), 'recovery_participant_approval_invalid')
-
-    const malformedCreationContext = await prepare({ mutate: (approval, index) => index === 0 ? {
+    })) })
+    await expectRegisterFails('recovery_participant_approval_invalid', { mutate: mutateFirst((approval) => ({ ...approval, createdAt: approval.verifiedAt + 1 })) })
+    await expectRegisterFails('recovery_participant_approval_invalid', { mutate: mutateFirst((approval) => ({ ...approval, createdAt: 1.5 })) })
+    await expectRegisterFails('recovery_participant_approval_invalid', { mutate: mutateFirst((approval) => ({ ...approval, createdAt: approval.frozenAt - 1 })) })
+    await expectRegisterFails('recovery_participant_approval_invalid', { mutate: mutateFirst((approval) => ({
       ...approval,
       createdBy: undefined as unknown as AccountActionContext,
-    } : approval })
-    await expectCode(register(malformedCreationContext), 'recovery_participant_approval_invalid')
-
-    const wrongParties = await prepare({ mutate: (approval, index) => index === 0 ? { ...approval, successorOwnerPrincipalRef: approval.incumbentOwnerPrincipalRef } : approval })
-    await expectCode(register(wrongParties), 'recovery_participant_approval_invalid')
-
-    const stalePolicy = await prepare({ mutate: (approval, index) => index === 0 ? { ...approval, recoveryPolicyRevision: 99 } : approval })
-    await expectCode(register(stalePolicy), 'recovery_participant_approval_invalid')
-
-    const missingFreeze = await prepare({ mutate: (approval, index) => index === 0 ? { ...approval, frozenAt: approval.frozenAt - 1 } : approval })
-    await expectCode(register(missingFreeze), 'recovery_participant_approval_invalid')
-
-    const revoked = await prepare({ mutate: (approval, index) => index === 0 ? { ...approval, lifecycle: 'revoked' } : approval })
-    await expectCode(register(revoked), 'recovery_participant_approval_invalid')
-
-    const duplicateParticipant = await prepare()
-    const firstApproval = duplicateParticipant.fixture.store.recoveryApprovals.get(duplicateParticipant.approvalRefs[0]!)!
-    const secondApproval = duplicateParticipant.fixture.store.recoveryApprovals.get(duplicateParticipant.approvalRefs[1]!)!
-    duplicateParticipant.fixture.store.seedRecoveryApproval({
-      ...secondApproval,
-      participantPrincipalRef: firstApproval.participantPrincipalRef,
-      createdBy: { ...secondApproval.createdBy, actorPrincipalRef: firstApproval.participantPrincipalRef },
+    })) })
+    await expectRegisterFails('recovery_participant_approval_invalid', { mutate: mutateFirst((approval) => ({ ...approval, successorOwnerPrincipalRef: approval.incumbentOwnerPrincipalRef })) })
+    await expectRegisterFails('recovery_participant_approval_invalid', { mutate: mutateFirst((approval) => ({ ...approval, recoveryPolicyRevision: 99 })) })
+    await expectRegisterFails('recovery_participant_approval_invalid', { mutate: mutateFirst((approval) => ({ ...approval, frozenAt: approval.frozenAt - 1 })) })
+    await expectRegisterFails('recovery_participant_approval_invalid', { mutate: mutateFirst((approval) => ({ ...approval, lifecycle: 'revoked' })) })
+    await expectRegisterFails('recovery_participant_duplicate', {}, {}, (prep) => {
+      const { first, second } = approvalPair(prep)
+      prep.fixture.store.seedRecoveryApproval({
+        ...second,
+        participantPrincipalRef: first.participantPrincipalRef,
+        createdBy: { ...second.createdBy, actorPrincipalRef: first.participantPrincipalRef },
+      })
     })
-    await expectCode(register(duplicateParticipant), 'recovery_participant_duplicate')
-
-    const duplicateVerification = await prepare()
-    const firstVerification = duplicateVerification.fixture.store.recoveryApprovals.get(duplicateVerification.approvalRefs[0]!)!
-    const secondVerification = duplicateVerification.fixture.store.recoveryApprovals.get(duplicateVerification.approvalRefs[1]!)!
-    duplicateVerification.fixture.store.seedRecoveryApproval({ ...secondVerification, verificationRef: firstVerification.verificationRef })
-    await expectCode(register(duplicateVerification), 'recovery_participant_duplicate')
-
-    const duplicateIdempotency = await prepare()
-    const firstIdempotency = duplicateIdempotency.fixture.store.recoveryApprovals.get(duplicateIdempotency.approvalRefs[0]!)!
-    const secondIdempotency = duplicateIdempotency.fixture.store.recoveryApprovals.get(duplicateIdempotency.approvalRefs[1]!)!
-    duplicateIdempotency.fixture.store.seedRecoveryApproval({
-      ...secondIdempotency,
-      createdBy: { ...secondIdempotency.createdBy, idempotencyRef: firstIdempotency.createdBy.idempotencyRef },
+    await expectRegisterFails('recovery_participant_duplicate', {}, {}, (prep) => {
+      const { first, second } = approvalPair(prep)
+      prep.fixture.store.seedRecoveryApproval({ ...second, verificationRef: first.verificationRef })
     })
-    await expectCode(register(duplicateIdempotency), 'recovery_participant_duplicate')
-
-    const collision = await prepare()
-    collision.fixture.store.successionAuthorizations.set('sau_00000000000040008000000000000003', {} as SuccessionAuthorization)
-    await expectCode(register(collision), 'succession_authorization_ref_conflict')
-
-    const invalidGeneratedRef = await prepare({ uuids: [uuid(1), uuid(2), 'invalid'] })
-    await expectCode(register(invalidGeneratedRef), 'succession_authorization_invalid')
+    await expectRegisterFails('recovery_participant_duplicate', {}, {}, (prep) => {
+      const { first, second } = approvalPair(prep)
+      prep.fixture.store.seedRecoveryApproval({
+        ...second,
+        createdBy: { ...second.createdBy, idempotencyRef: first.createdBy.idempotencyRef },
+      })
+    })
+    await expectRegisterFails('succession_authorization_ref_conflict', {}, {}, (prep) => {
+      prep.fixture.store.successionAuthorizations.set('sau_00000000000040008000000000000003', {} as SuccessionAuthorization)
+    })
+    await expectRegisterFails('succession_authorization_invalid', { uuids: [uuid(1), uuid(2), 'invalid'] })
   })
 
   it('resolves only canonical authorizations and rejects stale, mutated, premature and expired records', async () => {
-    const prepareRegistered = async (options: Readonly<{ delayMs?: number; expiresAt?: number }> = {}) => {
-      const fixture = setup({ times: [10, 20, 30, 40, 45, 60] })
-      const created = await createAccount(fixture, 'human', { kind: 'threshold', threshold: 2, participantCount: 3, delayMs: options.delayMs ?? 5, freezeRequired: true, revision: 1 })
-      const active = await activateAccount(fixture, created)
-      const suspended = await fixture.registry.suspend({ accountRef: active.accountRef, expectedRevision: 2, context: fixture.nextContext(active.accountRef, created.owner, 'freeze') })
-      const successor = fixture.store.seedPrincipal('2')
-      const approvalRefs = seedRecoveryApprovals(fixture, suspended, created.owner, successor, {
-        mutate: (approval) => ({ ...approval, expiresAt: 200 }),
-      })
-      const registered = await fixture.registry.registerSuccessionAuthorization({
-        accountRef: active.accountRef,
-        incumbentOwnerPrincipalRef: created.owner,
-        successorOwnerPrincipalRef: successor,
-        expectedAccountRevision: suspended.revision,
-        expectedOwnershipRevision: 1,
-        participantApprovalRefs: approvalRefs,
-        expiresAt: options.expiresAt ?? 100,
-        context: fixture.nextContext(active.accountRef, successor, 'authorize'),
-      })
-      return { fixture, created, active, suspended, successor, registered }
-    }
-    const attempt = async (prepared: Awaited<ReturnType<typeof prepareRegistered>>, actor = prepared.successor) => await prepared.fixture.registry.succeedOwnership({
-      accountRef: prepared.active.accountRef,
-      successorOwnerPrincipalRef: prepared.successor,
-      expectedAccountRevision: prepared.suspended.revision,
-      expectedOwnershipRevision: 1,
-      authorizationRef: prepared.registered.authorization.authorizationRef,
-      context: prepared.fixture.nextContext(prepared.active.accountRef, actor, 'succeed'),
-    })
-
-    const resolved = await prepareRegistered()
+    const resolved = await prepareRegisteredSuccession()
     await expect(resolved.fixture.registry.getSuccessionAuthorization(resolved.registered.authorization.authorizationRef))
       .resolves.toBe(resolved.registered.authorization)
     await expectCode(resolved.fixture.registry.getSuccessionAuthorization('not-canonical'), 'succession_authorization_invalid')
 
-    const wrongActor = await prepareRegistered()
-    await expectCode(attempt(wrongActor, wrongActor.created.owner), 'succession_authorization_invalid')
+    const wrongActor = await prepareRegisteredSuccession()
+    await expectCode(attemptRegisteredSuccession(wrongActor, wrongActor.created.owner), 'succession_authorization_invalid')
 
     for (const mutate of [
       (authorization: SuccessionAuthorization): SuccessionAuthorization => ({ ...authorization, accountRef: accountRef('acc_ffffffffffffffffffffffffffffffff') }),
@@ -1012,33 +647,31 @@ describe('Account registry contract', () => {
       (authorization: SuccessionAuthorization): SuccessionAuthorization => ({ ...authorization, frozenAt: authorization.frozenAt - 1 }),
       (authorization: SuccessionAuthorization): SuccessionAuthorization => ({ ...authorization, verifiedParticipantCount: 1 }),
     ]) {
-      const corrupted = await prepareRegistered()
+      const corrupted = await prepareRegisteredSuccession()
       corrupted.fixture.store.successionAuthorizations.set(
         corrupted.registered.authorization.authorizationRef,
         Object.freeze(mutate(corrupted.registered.authorization)),
       )
-      await expectCode(attempt(corrupted), 'succession_authorization_invalid')
+      await expectCode(attemptRegisteredSuccession(corrupted), 'succession_authorization_invalid')
     }
 
-    const stalePolicy = await prepareRegistered()
+    const stalePolicy = await prepareRegisteredSuccession()
     stalePolicy.fixture.store.accounts.set(stalePolicy.active.accountRef, Object.freeze({
       ...stalePolicy.suspended,
       recoveryPolicy: { ...stalePolicy.suspended.recoveryPolicy, revision: 2 },
     }))
-    await expectCode(attempt(stalePolicy), 'succession_authorization_invalid')
+    await expectCode(attemptRegisteredSuccession(stalePolicy), 'succession_authorization_invalid')
 
-    const premature = await prepareRegistered({ delayMs: 20 })
-    await expectCode(attempt(premature), 'succession_authorization_invalid')
+    const premature = await prepareRegisteredSuccession({ delayMs: 20 })
+    await expectCode(attemptRegisteredSuccession(premature), 'succession_authorization_invalid')
 
-    const expired = await prepareRegistered({ expiresAt: 45 })
-    await expectCode(attempt(expired), 'succession_authorization_expired')
+    const expired = await prepareRegisteredSuccession({ expiresAt: 45 })
+    await expectCode(attemptRegisteredSuccession(expired), 'succession_authorization_expired')
   })
 
   it('rejects missing, malformed and untrusted succession authorization references', async () => {
     const fixture = setup({ times: [10, 20, 30, 40, 40, 40, 40, 40, 40, 40, 40, 40] })
-    const created = await createAccount(fixture)
-    const active = await activateAccount(fixture, created)
-    const suspended = await fixture.registry.suspend({ accountRef: active.accountRef, expectedRevision: 2, context: fixture.nextContext(active.accountRef, created.owner, 'suspend') })
+    const { active, suspended } = await suspendedAccountBundle(fixture)
     const successor = fixture.store.seedPrincipal('2')
     const attempt = async (authorizationRef: string | undefined): Promise<unknown> => await fixture.registry.succeedOwnership({
       accountRef: active.accountRef,
@@ -1055,56 +688,47 @@ describe('Account registry contract', () => {
 
   it('requires suspension for succession and active state for voluntary transfer', async () => {
     const fixture = setup({ times: [10, 20, 30] })
-    const created = await createAccount(fixture)
-    const active = await activateAccount(fixture, created)
+    const { active } = await activeAccountBundle(fixture)
     const successor = fixture.store.seedPrincipal('2')
     await expectCode(fixture.registry.succeedOwnership({ accountRef: active.accountRef, successorOwnerPrincipalRef: successor, expectedAccountRevision: 2, expectedOwnershipRevision: 1, authorizationRef: 'sau_ffffffffffffffffffffffffffffffff', context: fixture.nextContext(active.accountRef, successor, 'succession') }), 'account_lifecycle_transition_forbidden')
   })
 
   it('proves exactly one active Account context and explicit cross-Account attribution', async () => {
     const fixture = setup({ times: [10, 11, 20, 21, 30] })
-    const first = await createAccount(fixture, 'agent')
-    const firstActive = await activateAccount(fixture, first)
-    const second = await createAccount(fixture, 'organization')
-    const secondActive = await activateAccount(fixture, second)
-    const context = fixture.nextContext(firstActive.accountRef, first.owner, 'cross-account')
+    const first = await activeAccountBundle(fixture, 'agent')
+    const second = await activeAccountBundle(fixture, 'organization')
+    const context = fixture.nextContext(first.active.accountRef, first.created.owner, 'cross-account')
     const activeStranger = fixture.store.seedPrincipal('3')
     await expectCode(
-      fixture.registry.requireActiveContext(fixture.nextContext(firstActive.accountRef, activeStranger, 'stranger')),
+      fixture.registry.requireActiveContext(fixture.nextContext(first.active.accountRef, activeStranger, 'stranger')),
       'account_context_access_denied',
     )
     await expect(fixture.registry.requireActiveContext(context)).resolves.toEqual({
-      accountRef: firstActive.accountRef,
-      actorPrincipalRef: first.owner,
-      accountRevision: firstActive.revision,
+      accountRef: first.active.accountRef,
+      actorPrincipalRef: first.created.owner,
+      accountRevision: first.active.revision,
       correlationRef: 'correlation:cross-account',
       idempotencyRef: 'idempotency:cross-account',
     })
-    await expect(fixture.registry.attributeCrossAccountAction({ context, counterpartyAccountRef: secondActive.accountRef })).resolves.toMatchObject({
-      activeAccountRef: firstActive.accountRef,
-      counterpartyAccountRef: secondActive.accountRef,
-      actorPrincipalRef: first.owner,
-      activeAccountRevision: firstActive.revision,
-      counterpartyAccountRevision: secondActive.revision,
+    await expect(fixture.registry.attributeCrossAccountAction({ context, counterpartyAccountRef: second.active.accountRef })).resolves.toMatchObject({
+      activeAccountRef: first.active.accountRef,
+      counterpartyAccountRef: second.active.accountRef,
+      actorPrincipalRef: first.created.owner,
+      activeAccountRevision: first.active.revision,
+      counterpartyAccountRevision: second.active.revision,
     })
     expect([...fixture.store.memberships.values()].some(
-      (membership) => membership.accountRef === secondActive.accountRef
-        && membership.memberPrincipalRef === first.owner,
+      (membership) => membership.accountRef === second.active.accountRef
+        && membership.memberPrincipalRef === first.created.owner,
     )).toBe(false)
-    await expectCode(fixture.registry.attributeCrossAccountAction({ context, counterpartyAccountRef: firstActive.accountRef }), 'account_cross_account_self_forbidden')
+    await expectCode(fixture.registry.attributeCrossAccountAction({ context, counterpartyAccountRef: first.active.accountRef }), 'account_cross_account_self_forbidden')
   })
 
   it('accepts an active Membership as Account-context access without conflating it with ownership', async () => {
     const fixture = setup({ times: [10, 20, 30] })
-    const created = await createAccount(fixture)
-    const active = await activateAccount(fixture, created)
+    const { created, active } = await activeAccountBundle(fixture)
     const member = fixture.store.seedPrincipal('2', 'agent')
-    const added = await fixture.registry.addMembership({
-      accountRef: active.accountRef,
-      memberPrincipalRef: member,
-      expectedAccountRevision: active.revision,
-      context: fixture.nextContext(active.accountRef, created.owner, 'add-member'),
-    })
+    const added = await addMembershipFor(fixture, active, created.owner, member, active.revision, 'add-member')
 
     await expect(fixture.registry.requireActiveContext(
       fixture.nextContext(active.accountRef, member, 'member-work'),
@@ -1118,14 +742,12 @@ describe('Account registry contract', () => {
 
   it('rejects inactive actors and non-operational counterparties for protected context proofs', async () => {
     const fixture = setup({ times: [10, 11, 20, 21, 30] })
-    const first = await createAccount(fixture)
-    const firstActive = await activateAccount(fixture, first)
-    const second = await createAccount(fixture)
-    const secondActive = await activateAccount(fixture, second)
+    const first = await activeAccountBundle(fixture)
+    const second = await activeAccountBundle(fixture)
     const inactive = fixture.store.seedPrincipal('3', 'human', 'suspended')
-    await expectCode(fixture.registry.requireActiveContext(fixture.nextContext(firstActive.accountRef, inactive, 'inactive')), 'principal_inactive')
-    await fixture.registry.suspend({ accountRef: secondActive.accountRef, expectedRevision: 2, context: fixture.nextContext(secondActive.accountRef, second.owner, 'suspend') })
-    await expectCode(fixture.registry.attributeCrossAccountAction({ context: fixture.nextContext(firstActive.accountRef, first.owner, 'cross'), counterpartyAccountRef: secondActive.accountRef }), 'account_not_operational')
+    await expectCode(fixture.registry.requireActiveContext(fixture.nextContext(first.active.accountRef, inactive, 'inactive')), 'principal_inactive')
+    await suspendAccountRevision(fixture, second.active, second.created.owner, 2, 'suspend')
+    await expectCode(fixture.registry.attributeCrossAccountAction({ context: fixture.nextContext(first.active.accountRef, first.created.owner, 'cross'), counterpartyAccountRef: second.active.accountRef }), 'account_not_operational')
   })
 
   it('reports malformed lookup references', async () => {
@@ -1139,7 +761,7 @@ describe('Account registry contract', () => {
     const store = new MemoryAccountStore()
     const owner = store.seedPrincipal('1', 'agent')
     const registry = new AccountRegistry(store)
-    const created = await registry.create({ ownerPrincipalRef: owner, displayName: 'Default factories', recoveryPolicy: { kind: 'no_transfer', revision: 1 }, correlationRef: 'correlation:default', idempotencyRef: 'idempotency:default' })
+    const created = await registry.create(createRequest(owner, { displayName: 'Default factories', correlationRef: corr('default'), idempotencyRef: idem('default') }))
     expect(created.account.accountRef).toMatch(/^acc_[0-9a-f]{32}$/u)
     expect(created.ownership.ownershipRef).toMatch(/^own_[0-9a-f]{32}$/u)
     expect(created.account.createdAt).toBeGreaterThan(0)

@@ -1,95 +1,63 @@
-import { spawn } from 'node:child_process'
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
-import { createServer, type IncomingMessage, type ServerResponse } from 'node:http'
-import { tmpdir } from 'node:os'
-import { delimiter, join } from 'node:path'
+import { delimiter } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import { listMcpActions, mcpToolName } from '@/modules/actions'
 import { TOOL_MARKET_SEARCH_PATH } from '@/modules/common/market-tool-paths'
 import { TOOL_QUOTE_PATH } from '@/modules/capability-execution/quote'
 import { STRIPE_MONEY_ENV_NAMES } from '@/lib/server/stripe-money-provider-config'
-import {
-  X402_CDP_ACCOUNT_NAME_ENV,
-  X402_CDP_ACCOUNT_POLICY_ID_ENV,
-  X402_CDP_API_KEY_ID_ENV,
-  X402_CDP_API_KEY_SECRET_ENV,
-  X402_CDP_CREDENTIAL_GENERATION_ENV,
-  X402_CDP_EXPECTED_EVM_ADDRESS_ENV,
-  X402_CDP_POLICY_RULES_DIGEST_ENV,
-  X402_CDP_PROJECT_POLICY_ID_ENV,
-  X402_CDP_WALLET_SECRET_ENV,
-  X402_CUSTODY_DAILY_MAX_ATOMIC_ENV,
-  X402_CUSTODY_ENABLED_ENV,
-  X402_CUSTODY_ENV_NAMES,
-  X402_CUSTODY_MAX_ATOMIC_ENV,
-} from '@/modules/capability-supply/server'
+import { X402_CUSTODY_ENV_NAMES } from '@/modules/capability-supply/server'
 import { checkFunding } from '../../../tools/ae/commands/doctor'
-import { CLI_BUNDLE_PATH, spawnCli } from './cli-errors-harness'
+import {
+  assertCliSuccess,
+  balancePassCheck,
+  buyerPassCheck,
+  CLI_BUNDLE_PATH,
+  cleanEnvironment,
+  committedQuote,
+  currentTool,
+  discoveryPassChecks,
+  emptySearchResult,
+  FRESH_CATALOGUE_CHECK,
+  fundingPassCheck,
+  hostedConnectCommand,
+  installAeShim,
+  LOCAL_DEV_COMMAND,
+  SANDBOX_TOOL_REF,
+  SANDBOX_TOOL_SLUG,
+  LOCAL_STRIPE_TEST_MODE_DOC,
+  localConnectCommand,
+  LOOPBACK_DOCTOR_COMMAND,
+  LOOPBACK_NO_SANDBOX_TOOL_REASON,
+  makeConfigDirectory,
+  marketRequestsPassCheck,
+  originPassCheck,
+  parseDoctorJson,
+  providerAccountResponse,
+  readSentinel,
+  readyBuyerDiagnosisChecks,
+  refusedQuote,
+  respondHealthyDeployment,
+  respondJson,
+  runDoctor,
+  runShell,
+  skippedQuoteCheck,
+  startBuyerServer,
+  startQuoteServer,
+  startServer,
+  teardownDoctorHarness,
+  TIER0_MISSING_NAMES,
+  TIER1_RESULT,
+  tier0Environment,
+  TIER1_ENV,
+  unconnectedBuyerChecks,
+  unconnectedQuoteCheck,
+  writeStoredConfig,
+} from './doctor-test-harness'
 
-const SANDBOX_TOOL_SLUG = 'sandbox-aecon-reference'
-const SANDBOX_TOOL_REF = `operation:v1:${'e'.repeat(64)}`
-const LOCAL_DEV_COMMAND = 'npm run dev:local'
-const LOOPBACK_NO_SANDBOX_TOOL_REASON = 'no routeable sandbox Tool on this loopback origin. The readiness probe only reaches public HTTPS endpoints, so the seeded sandbox Tool is listed on hosted origins (preview or production), not on 127.0.0.1. Discover and connect are provable here; Quote is provable on a hosted origin.'
-const LOOPBACK_DOCTOR_COMMAND = 'ae doctor --base-url <hosted origin> --json'
-const FRESH_CATALOGUE_CHECK = { id: 'catalogue', group: 'discovery', state: 'pass', summary: 'Market catalogue coverage is fresh.' }
-
-// A fully configured local environment: Stripe test mode plus the CDP/x402 sandbox
-// bundle, so the default test double proves tier 1 (the full loop) rather than tier 0.
-const TIER1_ENV: NodeJS.ProcessEnv = {
-  STRIPE_SECRET_KEY: 'sk_test_FIXTURE',
-  STRIPE_WEBHOOK_SECRET: 'whsec_FIXTURE',
-  STRIPE_V2_WEBHOOK_SECRET: 'whsec_FIXTURE_V2',
-  STRIPE_AU_INCLUSIVE_GST_TAX_RATE_ID: 'txr_doctor00000000000000000000000',
-  STRIPE_CHECKOUT_HOST: 'checkout.doctor.test',
-  [X402_CUSTODY_ENABLED_ENV]: 'true',
-  [X402_CDP_API_KEY_ID_ENV]: 'key-id',
-  [X402_CDP_API_KEY_SECRET_ENV]: 'key-secret',
-  [X402_CDP_WALLET_SECRET_ENV]: 'wallet-secret',
-  [X402_CDP_ACCOUNT_NAME_ENV]: 'agentic-economy-x402',
-  [X402_CDP_EXPECTED_EVM_ADDRESS_ENV]: '0x0000000000000000000000000000000000000001',
-  [X402_CDP_ACCOUNT_POLICY_ID_ENV]: '11111111-1111-4111-8111-111111111111',
-  [X402_CDP_PROJECT_POLICY_ID_ENV]: '22222222-2222-4222-8222-222222222222',
-  [X402_CDP_POLICY_RULES_DIGEST_ENV]: `sha256:${'a'.repeat(64)}`,
-  [X402_CDP_CREDENTIAL_GENERATION_ENV]: '7',
-  [X402_CUSTODY_MAX_ATOMIC_ENV]: '10000',
-  [X402_CUSTODY_DAILY_MAX_ATOMIC_ENV]: '100000',
-}
-const TIER0_MISSING_NAMES = [...STRIPE_MONEY_ENV_NAMES, ...X402_CUSTODY_ENV_NAMES]
-const TIER1_RESULT = { level: 1, missing: [] }
-const LOCAL_STRIPE_TEST_MODE_DOC = 'docs/operations/local-stripe-test-mode.md'
-
-function tier0Environment(directory: string): NodeJS.ProcessEnv {
-  const blanked = Object.fromEntries(Object.keys(TIER1_ENV).map((name) => [name, '']))
-  return { ...cleanEnvironment(directory), ...blanked }
-}
-
-function skippedQuoteCheck(reason: string, nextCommand?: string, code?: string) {
-  const trimmedReason = reason.endsWith('.') ? reason.slice(0, -1) : reason
-  return {
-    id: 'quote', group: 'quoting', state: 'skipped', reason,
-    summary: `Quote inspection was skipped: ${trimmedReason}.`,
-    ...(nextCommand === undefined ? {} : { nextCommand }),
-    ...(code === undefined ? {} : { code }),
-  }
-}
-
-function unconnectedQuoteCheck(connectCommand: string) {
-  return skippedQuoteCheck('no buyer credential for this origin', connectCommand, 'no_buyer_credential')
-}
-
-// Every case here spawns the real CLI under tsx, which costs roughly a second
-// per process before any assertion runs. Under a loaded parallel suite that
-// exceeds the 5s default, so allow real wall-clock rather than trimming spawns.
 vi.setConfig({ testTimeout: 30_000 })
 
-const temporaryDirectories: string[] = []
-const servers: ReturnType<typeof createServer>[] = []
+afterEach(teardownDoctorHarness)
 
-afterEach(async () => {
-  await Promise.all(servers.splice(0).map(async (server) => await new Promise<void>((resolve) => server.close(() => resolve()))))
-  for (const directory of temporaryDirectories.splice(0)) rmSync(directory, { recursive: true, force: true })
-})
+const loopbackSkippedQuote = () => skippedQuoteCheck(LOOPBACK_NO_SANDBOX_TOOL_REASON, LOOPBACK_DOCTOR_COMMAND, 'loopback_readiness_unprovable')
 
 describe('ae doctor', () => {
   it('routes an unreachable remote origin to configuration truth instead of doctor recursion', async () => {
@@ -97,22 +65,15 @@ describe('ae doctor', () => {
     const configContinuation = `ae config --base-url ${origin} --json`
     const directory = makeConfigDirectory()
 
-    const json = await spawnCli(['doctor', '--base-url', origin, '--json'], {
-      env: cleanEnvironment(directory),
-    })
-
-    expect(json.status).toBe(0)
-    expect(json.stderr).toBe('')
+    const json = await runDoctor(directory, origin)
+    assertCliSuccess(json)
     expect(JSON.parse(json.stdout)).toEqual({
       kind: 'degraded',
       tier: TIER1_RESULT,
       groups: { discovery: 'fail', quoting: 'warn', purchase: 'warn' },
       checks: [
-        { id: 'origin', group: 'discovery', state: 'pass', summary: `Configured origin is ${origin}.` },
-        {
-          id: 'server', group: 'discovery', state: 'fail', summary: 'AE server is not reachable.',
-          nextCommand: configContinuation,
-        },
+        originPassCheck(origin),
+        { id: 'server', group: 'discovery', state: 'fail', summary: 'AE server is not reachable.', nextCommand: configContinuation },
         { id: 'mcp', group: 'discovery', state: 'warn', summary: 'MCP initialization was not checked because server identity is unavailable.' },
         { id: 'buyer', group: 'quoting', state: 'warn', summary: 'Buyer credential was not sent because server identity is unavailable.' },
         { id: 'balance', group: 'purchase', state: 'warn', summary: 'Balance was not checked because server identity is unavailable.' },
@@ -134,16 +95,10 @@ describe('ae doctor', () => {
       AE_TEST_NODE: process.execPath,
       PATH: `${directory}${delimiter}${process.env.PATH ?? ''}`,
     })
-    expect(continued.status).toBe(0)
-    expect(continued.stderr).toBe('')
-    expect(JSON.parse(continued.stdout)).toMatchObject({
-      kind: 'config',
-      baseUrl: { origin },
-    })
+    assertCliSuccess(continued)
+    expect(JSON.parse(continued.stdout)).toMatchObject({ kind: 'config', baseUrl: { origin } })
 
-    const human = await spawnCli(['doctor', '--base-url', origin], {
-      env: cleanEnvironment(directory),
-    })
+    const human = await runDoctor(directory, origin, { json: false })
     expect(human.status).toBe(1)
     expect(human.stderr).toBe('')
     expect(human.stdout).toContain('✗ AE server is not reachable.')
@@ -157,24 +112,15 @@ describe('ae doctor', () => {
     const summary = `AE server is not reachable: nothing is listening at ${origin}; start the local stack or fix --base-url.`
     const directory = makeConfigDirectory()
 
-    const json = await spawnCli(['doctor', '--base-url', origin, '--json'], {
-      env: cleanEnvironment(directory),
-    })
-
-    expect(json.status).toBe(0)
-    expect(json.stderr).toBe('')
+    const json = await runDoctor(directory, origin)
+    assertCliSuccess(json)
     expect(JSON.parse(json.stdout)).toMatchObject({
       kind: 'degraded',
-      checks: expect.arrayContaining([{
-        id: 'server', group: 'discovery', state: 'fail', summary,
-        nextCommand: LOCAL_DEV_COMMAND,
-      }]),
+      checks: expect.arrayContaining([{ id: 'server', group: 'discovery', state: 'fail', summary, nextCommand: LOCAL_DEV_COMMAND }]),
     })
     expect(json.stdout).not.toContain('agentic-economy-phi.vercel.app')
 
-    const human = await spawnCli(['doctor', '--base-url', origin], {
-      env: cleanEnvironment(directory),
-    })
+    const human = await runDoctor(directory, origin, { json: false })
     expect(human.status).toBe(1)
     expect(human.stderr).toBe('')
     expect(human.stdout).toContain(`✗ ${summary}`)
@@ -187,65 +133,42 @@ describe('ae doctor', () => {
     const origin = await startServer((request, response) => {
       if (respondHealthyDeployment(request, response)) return
       requests.push({ method: request.method ?? '', path: request.url ?? '' })
-      respondJson(response, {
-        schemaVersion: 'ae-site-discovery:v2',
-        origin: `http://${request.headers.host}`,
-      })
+      respondJson(response, { schemaVersion: 'ae-site-discovery:v2', origin: `http://${request.headers.host}` })
     })
     const directory = makeConfigDirectory()
-    const before = readFileSync(join(directory, 'sentinel.txt'), 'utf8')
+    const before = readSentinel(directory)
+    const connectCommand = localConnectCommand(origin)
 
-    const result = await spawnCli(['doctor', '--base-url', origin, '--json'], {
-      env: cleanEnvironment(directory),
-    })
-
-    expect(result.status).toBe(0)
-    expect(result.stderr).toBe('')
+    const result = await runDoctor(directory, origin)
+    assertCliSuccess(result)
     expect(JSON.parse(result.stdout)).toEqual({
       kind: 'degraded',
       tier: TIER1_RESULT,
       groups: { discovery: 'pass', quoting: 'skipped', purchase: 'warn' },
-      checks: [
-        { id: 'origin', group: 'discovery', state: 'pass', summary: `Configured origin is ${origin}.` },
-        { id: 'server', group: 'discovery', state: 'pass', summary: 'AE server is reachable and manifest ae-site-discovery:v2 is compatible.' },
-        { id: 'mcp', group: 'discovery', state: 'pass', summary: 'MCP initialization and 4 public tools passed.' },
-        { id: 'readiness', group: 'discovery', state: 'pass', summary: 'Server operational readiness passed.' },
-        { id: 'release', group: 'discovery', state: 'pass', summary: `Release identity is ${'a'.repeat(40)}.` },
-        FRESH_CATALOGUE_CHECK,
-        { id: 'buyer', group: 'quoting', state: 'warn', summary: 'No buyer credential is selected for this origin; anonymous search and describe remain available.', nextCommand: `npm run connect:local -- --base-url ${origin}` },
-        unconnectedQuoteCheck(`npm run connect:local -- --base-url ${origin}`),
-        { id: 'balance', group: 'purchase', state: 'warn', summary: 'Balance is unavailable until a buyer credential is connected.' },
-        { id: 'call', group: 'purchase', state: 'warn', summary: 'Call recovery is unavailable until a buyer credential is connected.' },
-      ],
+      checks: [...discoveryPassChecks(origin), ...unconnectedBuyerChecks(connectCommand)],
     })
     expect(requests).toEqual([{ method: 'GET', path: '/.well-known/ucp' }])
-    expect(readFileSync(join(directory, 'sentinel.txt'), 'utf8')).toBe(before)
+    expect(readSentinel(directory)).toBe(before)
   })
 
   it('keeps ae connect as the buyer-missing and quote-unconnected next command on a hosted origin', async () => {
     const origin = await startServer((request, response) => {
       if (respondHealthyDeployment(request, response)) return
-      respondJson(response, {
-        schemaVersion: 'ae-site-discovery:v2',
-        origin: `http://${request.headers.host}`,
-      })
+      respondJson(response, { schemaVersion: 'ae-site-discovery:v2', origin: `http://${request.headers.host}` })
     }, '0.0.0.0')
     const directory = makeConfigDirectory()
+    const connectCommand = hostedConnectCommand(origin)
 
-    const result = await spawnCli(['doctor', '--base-url', origin, '--json'], {
-      env: cleanEnvironment(directory),
-    })
-
-    expect(result.status).toBe(0)
-    expect(result.stderr).toBe('')
+    const result = await runDoctor(directory, origin)
+    assertCliSuccess(result)
     const diagnosis = JSON.parse(result.stdout) as { checks: readonly { id: string; nextCommand?: string }[] }
     expect(diagnosis.checks).toEqual(expect.arrayContaining([
       {
         id: 'buyer', group: 'quoting', state: 'warn',
         summary: 'No buyer credential is selected for this origin; anonymous search and describe remain available.',
-        nextCommand: `ae connect --base-url ${origin} --json`,
+        nextCommand: connectCommand,
       },
-      unconnectedQuoteCheck(`ae connect --base-url ${origin} --json`),
+      unconnectedQuoteCheck(connectCommand),
     ]))
     expect(result.stdout).not.toContain('connect:local')
   })
@@ -255,86 +178,32 @@ describe('ae doctor', () => {
     const callRef = 'invocation:v1:needs-attention'
     let callState: 'pending' | 'reconciliation_required' = 'reconciliation_required'
     const observed: Array<{ method: string; path: string; authorization?: string; body?: string }> = []
-    const origin = await startServer((request, response) => {
-      if (respondHealthyDeployment(request, response)) return
-      const chunks: Buffer[] = []
-      request.on('data', (chunk: Buffer) => chunks.push(chunk))
-      request.on('end', () => {
-        observed.push({
-          method: request.method ?? '',
-          path: request.url ?? '',
-          ...(request.headers.authorization === undefined ? {} : { authorization: request.headers.authorization }),
-          ...(chunks.length === 0 ? {} : { body: Buffer.concat(chunks).toString('utf8') }),
-        })
-        if (request.url === '/.well-known/ucp') {
-          respondJson(response, { schemaVersion: 'ae-site-discovery:v2', origin })
-          return
-        }
-        if (request.url === '/api/v1/account') {
-          respondJson(response, {
-            kind: 'authenticated', principalRef: 'prn_buyer', accountRef: 'acc_owner',
-            credentialId: 'credential_buyer', applicationRef: 'agentic-economy',
-            environment: 'sandbox', scopes: ['market_tools:call'], authorityMode: 'spending_policy',
-          })
-          return
-        }
-        if (request.url === '/api/v1/account/balance') {
-          respondJson(response, {
-            kind: 'available', principalRef: 'prn_buyer', accountRef: 'acc_owner',
-            balance: { currency: 'AUD', units: '25000000', exponent: 6 },
-            accountState: 'active', version: 1, updatedAt: 10,
-            funding: { kind: 'agent_funding_handoff', configAction: 'funding.handoff.config', createAction: 'funding.handoff.create', statusAction: 'funding.handoff.status' },
-          })
-          return
-        }
-        if (request.url === '/api/v1/calls?limit=100') {
-          respondJson(response, {
-            kind: 'available', hasMore: false,
-            items: [{
-              callRef, toolRef: 'operation:v1:one', state: callState,
-              resultKind: callState, createdAt: 10, updatedAt: 20,
-            }],
-          })
-          return
-        }
-        if (request.url === '/api/v1/market-requests/list') {
-          respondJson(response, { kind: 'available', items: [], hasMore: false })
-          return
-        }
-        respondJson(response, { error: 'unexpected' }, 404)
-      })
+    const origin = await startBuyerServer({
+      calls: () => [{ callRef, toolRef: 'operation:v1:one', state: callState, resultKind: callState, createdAt: 10, updatedAt: 20 }],
+      observed,
     })
     const directory = makeConfigDirectory()
     writeStoredConfig(directory, origin, buyerSecret)
 
-    const json = await spawnCli(['doctor', '--base-url', origin, '--json'], { env: cleanEnvironment(directory) })
-    expect(json.status).toBe(0)
-    expect(json.stderr).toBe('')
+    const json = await runDoctor(directory, origin, { env: cleanEnvironment(directory) })
+    assertCliSuccess(json)
     expect(json.stdout).not.toContain(buyerSecret)
     expect(JSON.parse(json.stdout)).toEqual({
       kind: 'degraded',
       tier: TIER1_RESULT,
       groups: { discovery: 'pass', quoting: 'skipped', purchase: 'warn' },
       checks: [
-        { id: 'origin', group: 'discovery', state: 'pass', summary: `Configured origin is ${origin}.` },
-        { id: 'server', group: 'discovery', state: 'pass', summary: 'AE server is reachable and manifest ae-site-discovery:v2 is compatible.' },
-        { id: 'mcp', group: 'discovery', state: 'pass', summary: 'MCP initialization and 4 public tools passed.' },
-        { id: 'readiness', group: 'discovery', state: 'pass', summary: 'Server operational readiness passed.' },
-        { id: 'release', group: 'discovery', state: 'pass', summary: `Release identity is ${'a'.repeat(40)}.` },
-        FRESH_CATALOGUE_CHECK,
-        { id: 'buyer', group: 'quoting', state: 'pass', summary: 'Buyer credential is origin-bound, authenticated, and has market_tools:call.' },
-        skippedQuoteCheck(LOOPBACK_NO_SANDBOX_TOOL_REASON, LOOPBACK_DOCTOR_COMMAND, 'loopback_readiness_unprovable'),
-        { id: 'balance', group: 'purchase', state: 'pass', summary: 'Buyer balance is available and the account is active.' },
-        {
-          id: 'funding', group: 'purchase', state: 'pass',
-          summary: 'Account funding is available; buyer balance is 25000000 × 10^-6 AUD.',
-        },
+        ...discoveryPassChecks(origin),
+        buyerPassCheck(),
+        loopbackSkippedQuote(),
+        balancePassCheck(),
+        fundingPassCheck('25000000'),
         {
           id: 'call', group: 'purchase', state: 'warn',
           summary: 'A reconciliation-required Call needs attention.',
           nextCommand: `ae status ${callRef} --base-url ${origin} --json`,
         },
-        { id: 'market_requests', group: 'purchase', state: 'pass', summary: 'No private market requests need rechecking.' },
+        marketRequestsPassCheck(),
       ],
     })
     expect(observed).toEqual([
@@ -345,7 +214,7 @@ describe('ae doctor', () => {
       { method: 'POST', path: '/api/v1/market-requests/list', authorization: `Bearer ${buyerSecret}`, body: '{"limit":5}' },
     ])
 
-    const human = await spawnCli(['doctor', '--base-url', origin], { env: cleanEnvironment(directory) })
+    const human = await runDoctor(directory, origin, { json: false, env: cleanEnvironment(directory) })
     expect(human.status).toBe(1)
     expect(human.stderr).toBe('')
     expect(human.stdout).toContain('AE doctor: degraded')
@@ -355,14 +224,12 @@ describe('ae doctor', () => {
     expect(human.stdout).not.toContain(buyerSecret)
 
     callState = 'pending'
-    const pending = await spawnCli(['doctor', '--base-url', origin, '--json'], { env: cleanEnvironment(directory) })
-    expect(pending.status).toBe(0)
+    const pending = await runDoctor(directory, origin, { env: cleanEnvironment(directory) })
+    assertCliSuccess(pending)
     expect(JSON.parse(pending.stdout)).toMatchObject({
       kind: 'degraded',
       checks: expect.arrayContaining([{
-        id: 'call',
-        group: 'purchase',
-        state: 'warn',
+        id: 'call', group: 'purchase', state: 'warn',
         summary: 'A nonterminal Call is still pending.',
         nextCommand: `ae wait ${callRef} --base-url ${origin} --json`,
       }]),
@@ -376,95 +243,47 @@ describe('ae doctor', () => {
     const toolRef = `operation:v1:${'b'.repeat(64)}`
     const priorToolRef = `operation:v1:${'d'.repeat(64)}`
     const statusBodies: unknown[] = []
-    const origin = await startServer((request, response) => {
-      if (respondHealthyDeployment(request, response)) return
-      const chunks: Buffer[] = []
-      request.on('data', (chunk: Buffer) => chunks.push(chunk))
-      request.on('end', () => {
-        if (request.url === '/.well-known/ucp') {
-          respondJson(response, { schemaVersion: 'ae-site-discovery:v2', origin })
-          return
+    const origin = await startBuyerServer({
+      calls: [{ callRef: 'invocation:v1:prior-success', toolRef: priorToolRef, state: 'completed', resultKind: 'completed', createdAt: 1, updatedAt: 2 }],
+      marketRequestItems: [{ requestRef, query: savedQuery, createdAt: 10, updatedAt: 10 }],
+      marketRequestStatus: (body) => {
+        statusBodies.push(body)
+        return {
+          kind: 'matched', requestRef, query: savedQuery, createdAt: 10, matchedCount: 1,
+          tools: [{
+            toolRef, capabilityId: 'document.translate', title: 'Document translation',
+            description: 'Translate one document.', provider: { name: 'Reference Services', slug: 'reference' },
+            priceLabel: 'USD 0.50', healthStatus: 'operational', listingTier: 'reviewed',
+          }],
         }
-        if (request.url === '/api/v1/account') {
-          respondJson(response, {
-            kind: 'authenticated', principalRef: 'prn_buyer', accountRef: 'acc_owner',
-            credentialId: 'credential_buyer', applicationRef: 'agentic-economy', environment: 'sandbox',
-            scopes: ['market_tools:call'], authorityMode: 'spending_policy',
-          })
-          return
-        }
-        if (request.url === '/api/v1/account/balance') {
-          respondJson(response, {
-            kind: 'available', principalRef: 'prn_buyer', accountRef: 'acc_owner',
-            balance: { currency: 'AUD', units: '25000000', exponent: 6 }, accountState: 'active',
-            version: 1, updatedAt: 10,
-            funding: { kind: 'agent_funding_handoff', configAction: 'funding.handoff.config', createAction: 'funding.handoff.create', statusAction: 'funding.handoff.status' },
-          })
-          return
-        }
-        if (request.url === '/api/v1/calls?limit=100') {
-          respondJson(response, {
-            kind: 'available', hasMore: false,
-            items: [{
-              callRef: 'invocation:v1:prior-success', toolRef: priorToolRef,
-              state: 'completed', resultKind: 'completed', createdAt: 1, updatedAt: 2,
-            }],
-          })
-          return
-        }
-        if (request.url === '/api/v1/market-requests/list') {
-          respondJson(response, {
-            kind: 'available', hasMore: false,
-            items: [{ requestRef, query: savedQuery, createdAt: 10, updatedAt: 10 }],
-          })
-          return
-        }
-        if (request.url === '/api/v1/market-requests/status') {
-          statusBodies.push(JSON.parse(Buffer.concat(chunks).toString('utf8')))
-          respondJson(response, {
-            kind: 'matched', requestRef, query: savedQuery, createdAt: 10, matchedCount: 1,
-            tools: [{
-              toolRef, capabilityId: 'document.translate', title: 'Document translation',
-              description: 'Translate one document.', provider: { name: 'Reference Services', slug: 'reference' },
-              priceLabel: 'USD 0.50', healthStatus: 'operational', listingTier: 'reviewed',
-            }],
-          })
-          return
-        }
-        if (request.url === '/api/v1/market-tools/describe') {
-          respondJson(response, {
-            kind: 'found', schemaVersion: 'registry-tools:v3', tool: currentTool(priorToolRef),
-          })
-          return
-        }
-        respondJson(response, { error: 'unexpected' }, 404)
-      })
+      },
+      describeTool: () => ({ kind: 'found', schemaVersion: 'registry-tools:v3', tool: currentTool(priorToolRef) }),
     })
     const directory = makeConfigDirectory()
     writeStoredConfig(directory, origin, buyerSecret)
 
-    const json = await spawnCli(['doctor', '--base-url', origin, '--json'], { env: cleanEnvironment(directory) })
-
-    expect(json.status).toBe(0)
-    expect(json.stderr).toBe('')
+    const json = await runDoctor(directory, origin, { env: cleanEnvironment(directory) })
+    assertCliSuccess(json)
     expect(json.stdout).not.toContain(buyerSecret)
     expect(json.stdout).not.toContain(savedQuery)
     expect(json.stdout).not.toContain(requestRef)
     expect(JSON.parse(json.stdout)).toMatchObject({
       kind: 'ready',
-      checks: expect.arrayContaining([expect.objectContaining({
-        id: 'market_requests', state: 'pass',
-        summary: '1 of 1 recent private market request now has matching Tools.',
-        nextCommand: `ae describe ${toolRef} --base-url ${origin} --json`,
-      }), expect.objectContaining({
-        id: 'repeat_use', state: 'pass',
-        nextCommand: `ae describe ${priorToolRef} --base-url ${origin} --json`,
-      })]),
+      checks: expect.arrayContaining([
+        expect.objectContaining({
+          id: 'market_requests', state: 'pass',
+          summary: '1 of 1 recent private market request now has matching Tools.',
+          nextCommand: `ae describe ${toolRef} --base-url ${origin} --json`,
+        }),
+        expect.objectContaining({
+          id: 'repeat_use', state: 'pass',
+          nextCommand: `ae describe ${priorToolRef} --base-url ${origin} --json`,
+        }),
+      ]),
     })
 
-    const human = await spawnCli(['doctor', '--base-url', origin], { env: cleanEnvironment(directory) })
-    expect(human.status).toBe(0)
-    expect(human.stderr).toBe('')
+    const human = await runDoctor(directory, origin, { json: false, env: cleanEnvironment(directory) })
+    assertCliSuccess(human)
     expect(human.stdout).toContain('AE doctor: ready')
     expect(human.stdout).toContain('✓ 1 of 1 recent private market request now has matching Tools.')
     expect(human.stdout.match(/^Next: /gmu)).toEqual(['Next: '])
@@ -478,57 +297,15 @@ describe('ae doctor', () => {
     const buyerSecret = 'FAKE_UNMATCHED_BUYER_SECRET_3391'
     const requestRef = `market-request:v1:${'e'.repeat(64)}`
     const savedQuery = 'source a rare replacement part'
-    const origin = await startServer((request, response) => {
-      if (respondHealthyDeployment(request, response)) return
-      const chunks: Buffer[] = []
-      request.on('data', (chunk: Buffer) => chunks.push(chunk))
-      request.on('end', () => {
-        if (request.url === '/.well-known/ucp') {
-          respondJson(response, { schemaVersion: 'ae-site-discovery:v2', origin })
-          return
-        }
-        if (request.url === '/api/v1/account') {
-          respondJson(response, {
-            kind: 'authenticated', principalRef: 'prn_buyer', accountRef: 'acc_owner',
-            credentialId: 'credential_buyer', applicationRef: 'agentic-economy', environment: 'sandbox',
-            scopes: ['market_tools:call'], authorityMode: 'spending_policy',
-          })
-          return
-        }
-        if (request.url === '/api/v1/account/balance') {
-          respondJson(response, {
-            kind: 'available', principalRef: 'prn_buyer', accountRef: 'acc_owner',
-            balance: { currency: 'AUD', units: '25000000', exponent: 6 }, accountState: 'active',
-            version: 1, updatedAt: 10,
-            funding: { kind: 'agent_funding_handoff', configAction: 'funding.handoff.config', createAction: 'funding.handoff.create', statusAction: 'funding.handoff.status' },
-          })
-          return
-        }
-        if (request.url === '/api/v1/calls?limit=100') {
-          respondJson(response, { kind: 'available', hasMore: false, items: [] })
-          return
-        }
-        if (request.url === '/api/v1/market-requests/list') {
-          respondJson(response, {
-            kind: 'available', hasMore: false,
-            items: [{ requestRef, query: savedQuery, createdAt: 10, updatedAt: 10 }],
-          })
-          return
-        }
-        if (request.url === '/api/v1/market-requests/status') {
-          respondJson(response, { kind: 'open', requestRef, query: savedQuery, createdAt: 10, matchedCount: 0 })
-          return
-        }
-        respondJson(response, { error: 'unexpected' }, 404)
-      })
+    const origin = await startBuyerServer({
+      marketRequestItems: [{ requestRef, query: savedQuery, createdAt: 10, updatedAt: 10 }],
+      marketRequestStatus: () => ({ kind: 'open', requestRef, query: savedQuery, createdAt: 10, matchedCount: 0 }),
     })
     const directory = makeConfigDirectory()
     writeStoredConfig(directory, origin, buyerSecret)
 
-    const json = await spawnCli(['doctor', '--base-url', origin, '--json'], { env: cleanEnvironment(directory) })
-
-    expect(json.status).toBe(0)
-    expect(json.stderr).toBe('')
+    const json = await runDoctor(directory, origin, { env: cleanEnvironment(directory) })
+    assertCliSuccess(json)
     expect(JSON.parse(json.stdout)).toMatchObject({
       kind: 'degraded',
       groups: expect.objectContaining({ purchase: 'warn' }),
@@ -538,7 +315,7 @@ describe('ae doctor', () => {
       }]),
     })
 
-    const human = await spawnCli(['doctor', '--base-url', origin], { env: cleanEnvironment(directory) })
+    const human = await runDoctor(directory, origin, { json: false, env: cleanEnvironment(directory) })
     expect(human.status).toBe(1)
     expect(human.stderr).toBe('')
     expect(human.stdout).toContain('AE doctor: degraded')
@@ -552,66 +329,26 @@ describe('ae doctor', () => {
     const toolRef = `operation:v1:${'c'.repeat(64)}`
     const detailRequests: Array<{ authorization?: string; body: unknown }> = []
     let current = true
-    const origin = await startServer((request, response) => {
-      if (respondHealthyDeployment(request, response)) return
-      const chunks: Buffer[] = []
-      request.on('data', (chunk: Buffer) => chunks.push(chunk))
-      request.on('end', () => {
-        if (request.url === '/.well-known/ucp') {
-          respondJson(response, { schemaVersion: 'ae-site-discovery:v2', origin })
-          return
-        }
-        if (request.url === '/api/v1/account') {
-          respondJson(response, {
-            kind: 'authenticated', principalRef: 'prn_buyer', accountRef: 'acc_owner',
-            credentialId: 'credential_buyer', applicationRef: 'agentic-economy', environment: 'sandbox',
-            scopes: ['market_tools:call'], authorityMode: 'spending_policy',
-          })
-          return
-        }
-        if (request.url === '/api/v1/account/balance') {
-          respondJson(response, {
-            kind: 'available', principalRef: 'prn_buyer', accountRef: 'acc_owner',
-            balance: { currency: 'AUD', units: '25000000', exponent: 6 }, accountState: 'active',
-            version: 1, updatedAt: 10,
-            funding: { kind: 'agent_funding_handoff', configAction: 'funding.handoff.config', createAction: 'funding.handoff.create', statusAction: 'funding.handoff.status' },
-          })
-          return
-        }
-        if (request.url === '/api/v1/calls?limit=100') {
-          respondJson(response, {
-            kind: 'available', hasMore: false,
-            items: [{
-              callRef, toolRef, state: 'completed', resultKind: 'completed',
-              receiptRef: 'receipt:v1:private-repeat', evidenceHash, createdAt: 10, updatedAt: 20,
-            }],
-          })
-          return
-        }
-        if (request.url === '/api/v1/market-requests/list') {
-          respondJson(response, { kind: 'available', items: [], hasMore: false })
-          return
-        }
-        if (request.url === '/api/v1/market-tools/describe') {
-          detailRequests.push({
-            ...(request.headers.authorization === undefined ? {} : { authorization: request.headers.authorization }),
-            body: JSON.parse(Buffer.concat(chunks).toString('utf8')),
-          })
-          respondJson(response, current
-            ? { kind: 'found', schemaVersion: 'registry-tools:v3', tool: currentTool(toolRef) }
-            : { kind: 'not_found', schemaVersion: 'registry-tools:v3', toolRef })
-          return
-        }
-        respondJson(response, { error: 'unexpected' }, 404)
-      })
+    const origin = await startBuyerServer({
+      calls: [{
+        callRef, toolRef, state: 'completed', resultKind: 'completed',
+        receiptRef: 'receipt:v1:private-repeat', evidenceHash, createdAt: 10, updatedAt: 20,
+      }],
+      describeTool: (body, authorization) => {
+        detailRequests.push({
+          ...(authorization === undefined ? {} : { authorization }),
+          body,
+        })
+        return current
+          ? { kind: 'found', schemaVersion: 'registry-tools:v3', tool: currentTool(toolRef) }
+          : { kind: 'not_found', schemaVersion: 'registry-tools:v3', toolRef }
+      },
     })
     const directory = makeConfigDirectory()
     writeStoredConfig(directory, origin, buyerSecret)
 
-    const json = await spawnCli(['doctor', '--base-url', origin, '--json'], { env: cleanEnvironment(directory) })
-
-    expect(json.status).toBe(0)
-    expect(json.stderr).toBe('')
+    const json = await runDoctor(directory, origin, { env: cleanEnvironment(directory) })
+    assertCliSuccess(json)
     expect(json.stdout).not.toContain(buyerSecret)
     expect(json.stdout).not.toContain(callRef)
     expect(json.stdout).not.toContain(evidenceHash)
@@ -625,9 +362,8 @@ describe('ae doctor', () => {
       }]),
     })
 
-    const human = await spawnCli(['doctor', '--base-url', origin], { env: cleanEnvironment(directory) })
-    expect(human.status).toBe(0)
-    expect(human.stderr).toBe('')
+    const human = await runDoctor(directory, origin, { json: false, env: cleanEnvironment(directory) })
+    assertCliSuccess(human)
     expect(human.stdout).toContain('✓ A previously successful Tool is still in the current catalog.')
     expect(human.stdout.match(/^Next: /gmu)).toEqual(['Next: '])
     expect(human.stdout).toContain(`Next: ae describe ${toolRef} --base-url ${origin} --json`)
@@ -635,95 +371,29 @@ describe('ae doctor', () => {
     expect(human.stdout).not.toContain(evidenceHash)
 
     current = false
-    const retired = await spawnCli(['doctor', '--base-url', origin, '--json'], { env: cleanEnvironment(directory) })
-    expect(retired.status).toBe(0)
+    const retired = await runDoctor(directory, origin, { env: cleanEnvironment(directory) })
+    assertCliSuccess(retired)
     expect(JSON.parse(retired.stdout)).toMatchObject({ kind: 'ready' })
-    expect(JSON.parse(retired.stdout).checks).not.toEqual(expect.arrayContaining([
-      expect.objectContaining({ id: 'repeat_use' }),
-    ]))
-    expect(detailRequests).toEqual([
-      { body: { toolRef } },
-      { body: { toolRef } },
-      { body: { toolRef } },
-    ])
+    expect(JSON.parse(retired.stdout).checks).not.toEqual(expect.arrayContaining([expect.objectContaining({ id: 'repeat_use' })]))
+    expect(detailRequests).toEqual([{ body: { toolRef } }, { body: { toolRef } }, { body: { toolRef } }])
   }, 20_000)
 
   it('summarizes provider Tool and connection readiness for one requested business', async () => {
     const buyerSecret = 'FAKE_BUYER_SECRET_1872'
     const providerSecret = 'FAKE_PROVIDER_SECRET_8431'
     const providerRequests: Array<{ path: string; body: unknown }> = []
-    const origin = await startServer((request, response) => {
-      if (respondHealthyDeployment(request, response)) return
-      const chunks: Buffer[] = []
-      request.on('data', (chunk: Buffer) => chunks.push(chunk))
-      request.on('end', () => {
-        const bodyText = Buffer.concat(chunks).toString('utf8')
-        const authorization = request.headers.authorization
-        if (request.url === '/.well-known/ucp') {
-          respondJson(response, { schemaVersion: 'ae-site-discovery:v2', origin })
-          return
-        }
-        if (request.url === '/api/v1/account') {
-          const provider = authorization === `Bearer ${providerSecret}`
-          respondJson(response, {
-            kind: 'authenticated', principalRef: provider ? 'prn_provider' : 'prn_buyer', accountRef: 'acc_owner',
-            credentialId: provider ? 'credential_provider' : 'credential_buyer', applicationRef: 'agentic-economy',
-            environment: 'sandbox', scopes: [provider ? 'market_supply:manage' : 'market_tools:call'],
-            authorityMode: 'spending_policy',
-          })
-          return
-        }
-        if (request.url === '/api/v1/account/balance') {
-          respondJson(response, {
-            kind: 'available', principalRef: 'prn_buyer', accountRef: 'acc_owner',
-            balance: { currency: 'AUD', units: '25000000', exponent: 6 },
-            accountState: 'active', version: 1, updatedAt: 10,
-            funding: { kind: 'agent_funding_handoff', configAction: 'funding.handoff.config', createAction: 'funding.handoff.create', statusAction: 'funding.handoff.status' },
-          })
-          return
-        }
-        if (request.url === '/api/v1/calls?limit=100') {
-          respondJson(response, { kind: 'available', items: [], hasMore: false })
-          return
-        }
-        if (request.url === '/api/v1/market-requests/list') {
-          respondJson(response, { kind: 'available', items: [], hasMore: false })
-          return
-        }
-        if (request.url === '/api/v1/supply/tools/list') {
-          providerRequests.push({ path: request.url, body: JSON.parse(bodyText) })
-          respondJson(response, {
-            kind: 'available', schemaVersion: 'provider_tools:v1', businessRef: 'business:one', isDone: true, continueCursor: null,
-            page: [
-              supplyOperation('offering:live', true),
-              supplyOperation('offering:unready', false),
-            ],
-          })
-          return
-        }
-        if (request.url === '/api/v1/supply/connections/list') {
-          providerRequests.push({ path: request.url, body: JSON.parse(bodyText) })
-          respondJson(response, {
-            kind: 'available', businessId: 'business:one',
-            connections: [
-              supplyConnection('connection:ready', true, 'active'),
-              supplyConnection('connection:cleanup', false, 'cleanup_required'),
-            ],
-          })
-          return
-        }
-        respondJson(response, { error: 'unexpected' }, 404)
-      })
+    const origin = await startBuyerServer({
+      providerRequests,
+      accountResponse: (authorization) => providerAccountResponse(providerSecret, authorization),
     })
     const directory = makeConfigDirectory()
     writeStoredConfig(directory, origin, buyerSecret, providerSecret)
 
-    const result = await spawnCli(['doctor', 'business:one', '--provider', '--base-url', origin, '--json'], {
+    const result = await runDoctor(directory, origin, {
+      extraArgs: ['business:one', '--provider'],
       env: cleanEnvironment(directory),
     })
-
-    expect(result.status).toBe(0)
-    expect(result.stderr).toBe('')
+    assertCliSuccess(result)
     expect(result.stdout).not.toContain(buyerSecret)
     expect(result.stdout).not.toContain(providerSecret)
     expect(JSON.parse(result.stdout)).toMatchObject({
@@ -737,11 +407,11 @@ describe('ae doctor', () => {
         { id: 'release', group: 'discovery', state: 'pass' },
         FRESH_CATALOGUE_CHECK,
         { id: 'buyer', group: 'quoting', state: 'pass' },
-        skippedQuoteCheck(LOOPBACK_NO_SANDBOX_TOOL_REASON, LOOPBACK_DOCTOR_COMMAND, 'loopback_readiness_unprovable'),
+        loopbackSkippedQuote(),
         { id: 'balance', group: 'purchase', state: 'pass' },
         { id: 'funding', group: 'purchase', state: 'pass' },
         { id: 'call', group: 'purchase', state: 'pass' },
-        { id: 'market_requests', group: 'purchase', state: 'pass', summary: 'No private market requests need rechecking.' },
+        marketRequestsPassCheck(),
         { id: 'provider', group: 'purchase', state: 'pass', summary: 'Provider credential is origin-bound, authenticated, and has market_supply:manage.' },
         {
           id: 'provider.readiness', group: 'purchase', state: 'warn',
@@ -760,53 +430,18 @@ describe('ae doctor', () => {
     const buyerSecret = 'FAKE_BUYER_SECRET_2231'
     const providerSecret = 'FAKE_PROVIDER_SECRET_5567'
     const providerRequests: string[] = []
-    const origin = await startServer((request, response) => {
-      if (respondHealthyDeployment(request, response)) return
-      if (request.url === '/.well-known/ucp') {
-        respondJson(response, { schemaVersion: 'ae-site-discovery:v2', origin })
-        return
-      }
-      if (request.url === '/api/v1/account') {
-        const provider = request.headers.authorization === `Bearer ${providerSecret}`
-        respondJson(response, {
-          kind: 'authenticated', principalRef: provider ? 'prn_provider' : 'prn_buyer', accountRef: 'acc_owner',
-          credentialId: provider ? 'credential_provider' : 'credential_buyer', applicationRef: 'agentic-economy',
-          environment: 'sandbox', scopes: [provider ? 'market_supply:manage' : 'market_tools:call'],
-          authorityMode: 'spending_policy',
-        })
-        return
-      }
-      if (request.url === '/api/v1/account/balance') {
-        respondJson(response, {
-          kind: 'available', principalRef: 'prn_buyer', accountRef: 'acc_owner',
-          balance: { currency: 'AUD', units: '25000000', exponent: 6 },
-          accountState: 'active', version: 1, updatedAt: 10,
-          funding: { kind: 'agent_funding_handoff', configAction: 'funding.handoff.config', createAction: 'funding.handoff.create', statusAction: 'funding.handoff.status' },
-        })
-        return
-      }
-      if (request.url === '/api/v1/calls?limit=100') {
-        respondJson(response, { kind: 'available', items: [], hasMore: false })
-        return
-      }
-      if (request.url === '/api/v1/market-requests/list') {
-        respondJson(response, { kind: 'available', items: [], hasMore: false })
-        return
-      }
-      // No handler for /api/v1/supply/tools/list or /api/v1/supply/connections/list: an
-      // unscoped `--provider` check must never reach them, so any call here is a bug.
-      providerRequests.push(request.url ?? '')
-      respondJson(response, { error: 'unexpected' }, 404)
+    const origin = await startBuyerServer({
+      providerRequestPaths: providerRequests,
+      accountResponse: (authorization) => providerAccountResponse(providerSecret, authorization),
     })
     const directory = makeConfigDirectory()
     writeStoredConfig(directory, origin, buyerSecret, providerSecret)
 
-    const result = await spawnCli(['doctor', '--provider', '--base-url', origin, '--json'], {
+    const result = await runDoctor(directory, origin, {
+      extraArgs: ['--provider'],
       env: cleanEnvironment(directory),
     })
-
-    expect(result.status).toBe(0)
-    expect(result.stderr).toBe('')
+    assertCliSuccess(result)
     expect(providerRequests).toEqual([])
     expect(JSON.parse(result.stdout)).toMatchObject({
       checks: expect.arrayContaining([
@@ -823,9 +458,7 @@ describe('ae doctor', () => {
     const origin = 'https://ae-unreachable.invalid'
     const directory = makeConfigDirectory()
 
-    const json = await spawnCli(['doctor', 'business:one', '--base-url', origin, '--json'], {
-      env: cleanEnvironment(directory),
-    })
+    const json = await runDoctor(directory, origin, { extraArgs: ['business:one'] })
     expect(json.status).toBe(1)
     expect(json.stderr).toBe('')
     expect(JSON.parse(json.stdout)).toMatchObject({
@@ -834,9 +467,7 @@ describe('ae doctor', () => {
       message: 'Usage: ae doctor [--provider [businessId]]',
     })
 
-    const human = await spawnCli(['doctor', 'business:one', '--base-url', origin], {
-      env: cleanEnvironment(directory),
-    })
+    const human = await runDoctor(directory, origin, { json: false, extraArgs: ['business:one'] })
     expect(human.status).toBe(1)
     expect(human.stdout).toBe('')
     expect(human.stderr).toContain('Usage: ae doctor [--provider [businessId]]')
@@ -851,36 +482,27 @@ describe('ae doctor', () => {
       respondJson(response, { schemaVersion: 'ae-site-discovery:v2', origin })
     })
     const directory = makeConfigDirectory()
-    const result = await spawnCli(['doctor', '--base-url', origin, '--json'], {
-      env: {
-        ...cleanEnvironment(directory),
-        AE_API_KEY: secret,
-        AE_API_KEY_ORIGIN: 'https://private.example.test/credential?token=hidden',
-      },
-    })
-
-    expect(result.status).toBe(0)
-    expect(result.stderr).toBe('')
+    const mismatchedEnv = {
+      ...cleanEnvironment(directory),
+      AE_API_KEY: secret,
+      AE_API_KEY_ORIGIN: 'https://private.example.test/credential?token=hidden',
+    }
+    const result = await runDoctor(directory, origin, { env: mismatchedEnv })
+    assertCliSuccess(result)
     expect(result.stdout).not.toContain(secret)
     expect(result.stdout).not.toContain('private.example.test')
-    const diagnosis = JSON.parse(result.stdout) as { kind: string; checks: unknown[] }
+    const diagnosis = parseDoctorJson(result)
     expect(diagnosis.kind).toBe('degraded')
     expect(diagnosis.checks).toEqual(expect.arrayContaining([
       expect.objectContaining({
-          id: 'buyer', state: 'fail',
-          summary: 'Buyer credential is not safely bound to the configured origin.',
-          nextCommand: `ae connect --base-url ${origin} --json`,
+        id: 'buyer', state: 'fail',
+        summary: 'Buyer credential is not safely bound to the configured origin.',
+        nextCommand: hostedConnectCommand(origin),
       }),
     ]))
     expect(requests).toEqual(['/.well-known/ucp'])
 
-    const human = await spawnCli(['doctor', '--base-url', origin], {
-      env: {
-        ...cleanEnvironment(directory),
-        AE_API_KEY: secret,
-        AE_API_KEY_ORIGIN: 'https://private.example.test/credential?token=hidden',
-      },
-    })
+    const human = await runDoctor(directory, origin, { json: false, env: mismatchedEnv })
     expect(human.status).toBe(1)
     expect(human.stderr).toBe('')
     expect(human.stdout).toContain('AE doctor: degraded')
@@ -891,68 +513,21 @@ describe('ae doctor', () => {
 
   it('returns ready when the buyer can safely continue the market loop', async () => {
     const buyerSecret = 'FAKE_READY_BUYER_SECRET_7351'
-    const origin = await startServer((request, response) => {
-      if (respondHealthyDeployment(request, response)) return
-      const chunks: Buffer[] = []
-      request.on('data', (chunk: Buffer) => chunks.push(chunk))
-      request.on('end', () => {
-        if (request.url === '/.well-known/ucp') {
-          respondJson(response, { schemaVersion: 'ae-site-discovery:v2', origin })
-        } else if (request.url === '/api/v1/account') {
-          respondJson(response, {
-            kind: 'authenticated', principalRef: 'prn_buyer', accountRef: 'acc_owner',
-            credentialId: 'credential_buyer', applicationRef: 'agentic-economy', environment: 'sandbox',
-            scopes: ['market_tools:call'], authorityMode: 'spending_policy',
-          })
-        } else if (request.url === '/api/v1/account/balance') {
-          respondJson(response, {
-            kind: 'available', principalRef: 'prn_buyer', accountRef: 'acc_owner',
-            balance: { currency: 'AUD', units: '10000', exponent: 6 }, accountState: 'active',
-            version: 1, updatedAt: 10,
-            funding: { kind: 'agent_funding_handoff', configAction: 'funding.handoff.config', createAction: 'funding.handoff.create', statusAction: 'funding.handoff.status' },
-          })
-        } else if (request.url === '/api/v1/calls?limit=100') {
-          respondJson(response, { kind: 'available', items: [], hasMore: false })
-        } else if (request.url === '/api/v1/market-requests/list') {
-          respondJson(response, { kind: 'available', items: [], hasMore: false })
-        } else {
-          respondJson(response, { error: 'unexpected' }, 404)
-        }
-      })
-    })
+    const origin = await startBuyerServer({ balanceUnits: '10000' })
     const directory = makeConfigDirectory()
     writeStoredConfig(directory, origin, buyerSecret)
 
-    const result = await spawnCli(['doctor', '--base-url', origin, '--json'], { env: cleanEnvironment(directory) })
-
-    expect(result.status).toBe(0)
-    expect(result.stderr).toBe('')
+    const result = await runDoctor(directory, origin, { env: cleanEnvironment(directory) })
+    assertCliSuccess(result)
     expect(JSON.parse(result.stdout)).toEqual({
       kind: 'ready',
       tier: TIER1_RESULT,
       groups: { discovery: 'pass', quoting: 'skipped', purchase: 'pass' },
-      checks: [
-        { id: 'origin', group: 'discovery', state: 'pass', summary: `Configured origin is ${origin}.` },
-        { id: 'server', group: 'discovery', state: 'pass', summary: 'AE server is reachable and manifest ae-site-discovery:v2 is compatible.' },
-        { id: 'mcp', group: 'discovery', state: 'pass', summary: 'MCP initialization and 4 public tools passed.' },
-        { id: 'readiness', group: 'discovery', state: 'pass', summary: 'Server operational readiness passed.' },
-        { id: 'release', group: 'discovery', state: 'pass', summary: `Release identity is ${'a'.repeat(40)}.` },
-        FRESH_CATALOGUE_CHECK,
-        { id: 'buyer', group: 'quoting', state: 'pass', summary: 'Buyer credential is origin-bound, authenticated, and has market_tools:call.' },
-        skippedQuoteCheck(LOOPBACK_NO_SANDBOX_TOOL_REASON, LOOPBACK_DOCTOR_COMMAND, 'loopback_readiness_unprovable'),
-        { id: 'balance', group: 'purchase', state: 'pass', summary: 'Buyer balance is available and the account is active.' },
-        {
-          id: 'funding', group: 'purchase', state: 'pass',
-          summary: 'Account funding is available; buyer balance is 10000 × 10^-6 AUD.',
-        },
-        { id: 'call', group: 'purchase', state: 'pass', summary: 'No pending or reconciliation-required Call needs attention.' },
-        { id: 'market_requests', group: 'purchase', state: 'pass', summary: 'No private market requests need rechecking.' },
-      ],
+      checks: readyBuyerDiagnosisChecks(origin, '10000', loopbackSkippedQuote()),
     })
 
-    const human = await spawnCli(['doctor', '--base-url', origin], { env: cleanEnvironment(directory) })
-    expect(human.status).toBe(0)
-    expect(human.stderr).toBe('')
+    const human = await runDoctor(directory, origin, { json: false, env: cleanEnvironment(directory) })
+    assertCliSuccess(human)
     expect(human.stdout).toContain('AE doctor: ready')
     expect(human.stdout).toContain('✓ No pending or reconciliation-required Call needs attention.')
     expect(human.stdout).not.toContain(buyerSecret)
@@ -967,30 +542,24 @@ describe('ae doctor', () => {
         path: request.url ?? '',
         ...(request.headers.authorization === undefined ? {} : { authorization: request.headers.authorization }),
       })
-      respondJson(response, {
-        schemaVersion: 'ae-site-discovery:v2',
-        origin: 'https://different.example.test',
-      })
+      respondJson(response, { schemaVersion: 'ae-site-discovery:v2', origin: 'https://different.example.test' })
     })
     const directory = makeConfigDirectory()
     writeStoredConfig(directory, origin, secret)
 
-    const result = await spawnCli(['doctor', '--base-url', origin, '--json'], { env: cleanEnvironment(directory) })
-
-    expect(result.status).toBe(0)
+    const result = await runDoctor(directory, origin, { env: cleanEnvironment(directory) })
+    assertCliSuccess(result)
     expect(result.stdout).not.toContain(secret)
     expect(JSON.parse(result.stdout)).toMatchObject({
       kind: 'degraded',
-      checks: expect.arrayContaining([
-        expect.objectContaining({
-          id: 'server', state: 'fail',
-          summary: 'AE server manifest origin does not match the configured origin.',
-        }),
-      ]),
+      checks: expect.arrayContaining([expect.objectContaining({
+        id: 'server', state: 'fail',
+        summary: 'AE server manifest origin does not match the configured origin.',
+      })]),
     })
     expect(requests).toEqual([{ path: '/.well-known/ucp' }])
 
-    const human = await spawnCli(['doctor', '--base-url', origin], { env: cleanEnvironment(directory) })
+    const human = await runDoctor(directory, origin, { json: false, env: cleanEnvironment(directory) })
     expect(human.status).toBe(1)
     expect(human.stderr).toBe('')
     expect(human.stdout).toContain('AE doctor: degraded')
@@ -1025,20 +594,17 @@ describe('ae doctor', () => {
       respondJson(response, { error: 'unexpected', secret }, 404)
     })
     const directory = makeConfigDirectory()
+    const connectCommand = localConnectCommand(origin)
 
-    const result = await spawnCli(['doctor', '--base-url', origin, '--json'], {
-      env: cleanEnvironment(directory),
-    })
-
-    expect(result.status).toBe(0)
-    expect(result.stderr).toBe('')
+    const result = await runDoctor(directory, origin)
+    assertCliSuccess(result)
     expect(result.stdout).not.toContain(secret)
     expect(JSON.parse(result.stdout)).toEqual({
       kind: 'degraded',
       tier: TIER1_RESULT,
       groups: { discovery: 'fail', quoting: 'skipped', purchase: 'warn' },
       checks: [
-        { id: 'origin', group: 'discovery', state: 'pass', summary: `Configured origin is ${origin}.` },
+        originPassCheck(origin),
         { id: 'server', group: 'discovery', state: 'pass', summary: 'AE server is reachable and manifest ae-site-discovery:v2 is compatible.' },
         { id: 'mcp', group: 'discovery', state: 'pass', summary: 'MCP initialization and 4 public tools passed.' },
         {
@@ -1050,20 +616,11 @@ describe('ae doctor', () => {
           summary: 'Release identity is unavailable (source_revision_unconfigured). The service operator must configure a valid release identity before calls proceed; the caller should not continue or retry.',
         },
         { id: 'catalogue', group: 'discovery', state: 'warn', summary: 'Market catalogue coverage could not be read.', code: 'catalogue_unreadable' },
-        {
-          id: 'buyer', group: 'quoting', state: 'warn',
-          summary: 'No buyer credential is selected for this origin; anonymous search and describe remain available.',
-          nextCommand: `npm run connect:local -- --base-url ${origin}`,
-        },
-        unconnectedQuoteCheck(`npm run connect:local -- --base-url ${origin}`),
-        { id: 'balance', group: 'purchase', state: 'warn', summary: 'Balance is unavailable until a buyer credential is connected.' },
-        { id: 'call', group: 'purchase', state: 'warn', summary: 'Call recovery is unavailable until a buyer credential is connected.' },
+        ...unconnectedBuyerChecks(connectCommand),
       ],
     })
 
-    const human = await spawnCli(['doctor', '--base-url', origin], {
-      env: cleanEnvironment(directory),
-    })
+    const human = await runDoctor(directory, origin, { json: false })
     expect(human.status).toBe(1)
     expect(human.stderr).toBe('')
     expect(human.stdout).toContain('✗ Server is reachable but operational readiness failed (deployment_manifest_invalid). The service operator must restore operational readiness before calls proceed; the caller should not continue or retry.')
@@ -1074,17 +631,15 @@ describe('ae doctor', () => {
 
   it('passes quoting when the seeded sandbox Tool returns an admitted Quote', async () => {
     const buyerSecret = 'FAKE_QUOTE_BUYER_SECRET_2210'
-    const observed: ObservedRequest[] = []
+    const observed: Array<{ path: string; authorization?: string; body: unknown }> = []
     const origin = await startQuoteServer({ quote: committedQuote() }, observed)
     const directory = makeConfigDirectory()
     writeStoredConfig(directory, origin, buyerSecret)
 
-    const json = await spawnCli(['doctor', '--base-url', origin, '--json'], { env: cleanEnvironment(directory) })
-
-    expect(json.status).toBe(0)
-    expect(json.stderr).toBe('')
+    const json = await runDoctor(directory, origin, { env: cleanEnvironment(directory) })
+    assertCliSuccess(json)
     expect(json.stdout).not.toContain(buyerSecret)
-    const result = JSON.parse(json.stdout) as { kind: string; groups: unknown; checks: unknown[] }
+    const result = parseDoctorJson(json)
     expect(result.kind).toBe('ready')
     expect(result.groups).toEqual({ discovery: 'pass', quoting: 'pass', purchase: 'pass' })
     expect(result.checks).toEqual(expect.arrayContaining([{
@@ -1099,8 +654,8 @@ describe('ae doctor', () => {
       },
     ])
 
-    const human = await spawnCli(['doctor', '--base-url', origin], { env: cleanEnvironment(directory) })
-    expect(human.status).toBe(0)
+    const human = await runDoctor(directory, origin, { json: false, env: cleanEnvironment(directory) })
+    assertCliSuccess(human)
     expect(human.stdout).toContain('✓ Quote for the sandbox Tool was admitted at 1000000 × 10^-6 AUD.')
     expect(human.stdout).toContain('discovery: pass | quoting: pass | purchase: pass')
     expect(human.stdout).not.toContain(buyerSecret)
@@ -1112,11 +667,10 @@ describe('ae doctor', () => {
     const directory = makeConfigDirectory()
     writeStoredConfig(directory, origin, buyerSecret)
 
-    const json = await spawnCli(['doctor', '--base-url', origin, '--json'], { env: cleanEnvironment(directory) })
-
-    expect(json.status).toBe(0)
+    const json = await runDoctor(directory, origin, { env: cleanEnvironment(directory) })
+    assertCliSuccess(json)
     expect(json.stdout).not.toContain(buyerSecret)
-    const result = JSON.parse(json.stdout) as { kind: string; groups: unknown; checks: unknown[] }
+    const result = parseDoctorJson(json)
     expect(result.kind).toBe('degraded')
     expect(result.groups).toEqual({ discovery: 'pass', quoting: 'fail', purchase: 'pass' })
     expect(result.checks).toEqual(expect.arrayContaining([{
@@ -1125,7 +679,7 @@ describe('ae doctor', () => {
       nextCommand: LOCAL_DEV_COMMAND,
     }]))
 
-    const human = await spawnCli(['doctor', '--base-url', origin], { env: cleanEnvironment(directory) })
+    const human = await runDoctor(directory, origin, { json: false, env: cleanEnvironment(directory) })
     expect(human.status).toBe(1)
     expect(human.stdout).toContain('✗ Quote for the sandbox Tool was refused (grant_not_found).')
     expect(human.stdout).toContain('discovery: pass | quoting: fail | purchase: pass')
@@ -1140,10 +694,9 @@ describe('ae doctor', () => {
     const directory = makeConfigDirectory()
     writeStoredConfig(directory, origin, buyerSecret)
 
-    const json = await spawnCli(['doctor', '--base-url', origin, '--json'], { env: cleanEnvironment(directory) })
-
-    expect(json.status).toBe(0)
-    const result = JSON.parse(json.stdout) as { groups: unknown; checks: unknown[] }
+    const json = await runDoctor(directory, origin, { env: cleanEnvironment(directory) })
+    assertCliSuccess(json)
+    const result = parseDoctorJson(json)
     expect(result.groups).toEqual(expect.objectContaining({ quoting: 'warn' }))
     expect(result.checks).toEqual(expect.arrayContaining([{
       id: 'quote', group: 'quoting', state: 'warn',
@@ -1156,44 +709,35 @@ describe('ae doctor', () => {
     const origin = await startQuoteServer({ quote: committedQuote() }, [])
     const directory = makeConfigDirectory()
 
-    const json = await spawnCli(['doctor', '--base-url', origin, '--json'], { env: cleanEnvironment(directory) })
-
-    expect(json.status).toBe(0)
-    const result = JSON.parse(json.stdout) as { groups: { quoting: string }; checks: unknown[] }
-    expect(result.groups.quoting).toBe('skipped')
+    const json = await runDoctor(directory, origin, { env: cleanEnvironment(directory) })
+    assertCliSuccess(json)
+    const result = parseDoctorJson(json)
+    expect((result.groups as { quoting: string }).quoting).toBe('skipped')
     expect(result.checks).toEqual(expect.arrayContaining([
-      unconnectedQuoteCheck(`npm run connect:local -- --base-url ${origin}`),
+      unconnectedQuoteCheck(localConnectCommand(origin)),
     ]))
 
-    const human = await spawnCli(['doctor', '--base-url', origin], { env: cleanEnvironment(directory) })
+    const human = await runDoctor(directory, origin, { json: false, env: cleanEnvironment(directory) })
     expect(human.stdout).toContain('- Quote inspection was skipped: no buyer credential for this origin.')
     expect(human.stdout).toContain('quoting: skipped')
   }, 20_000)
 
   it('skips quoting when no sandbox Tool is published on a loopback origin and names the hosted alternative', async () => {
     const buyerSecret = 'FAKE_ABSENT_TOOL_SECRET_7724'
-    const observed: ObservedRequest[] = []
+    const observed: Array<{ path: string; authorization?: string; body: unknown }> = []
     const origin = await startQuoteServer({ quote: committedQuote(), search: emptySearchResult() }, observed)
     const directory = makeConfigDirectory()
     writeStoredConfig(directory, origin, buyerSecret)
 
-    const json = await spawnCli(['doctor', '--base-url', origin, '--json'], { env: cleanEnvironment(directory) })
-
-    expect(json.status).toBe(0)
-    const result = JSON.parse(json.stdout) as { groups: { quoting: string }; checks: unknown[] }
-    expect(result.groups.quoting).toBe('skipped')
-    expect(result.checks).toEqual(expect.arrayContaining([
-      skippedQuoteCheck(LOOPBACK_NO_SANDBOX_TOOL_REASON, LOOPBACK_DOCTOR_COMMAND, 'loopback_readiness_unprovable'),
-    ]))
-    // CI gates on this structured code rather than matching the free-text reason.
-    const quoteCheck = result.checks.find((check) => (check as { id: string }).id === 'quote') as {
-      code?: string
-      summary: string
-    }
+    const json = await runDoctor(directory, origin, { env: cleanEnvironment(directory) })
+    assertCliSuccess(json)
+    const result = parseDoctorJson(json)
+    expect((result.groups as { quoting: string }).quoting).toBe('skipped')
+    expect(result.checks).toEqual(expect.arrayContaining([loopbackSkippedQuote()]))
+    const quoteCheck = result.checks.find((check) => (check as { id: string }).id === 'quote') as { code?: string; summary: string }
     expect(quoteCheck.code).toBe('loopback_readiness_unprovable')
     expect(quoteCheck.summary.endsWith('..')).toBe(false)
     expect(quoteCheck.summary.endsWith('.')).toBe(true)
-    // No Tool to quote means no Quote request is sent at all.
     expect(observed.map((request) => request.path)).toEqual([TOOL_MARKET_SEARCH_PATH])
   }, 20_000)
 
@@ -1203,47 +747,49 @@ describe('ae doctor', () => {
     const directory = makeConfigDirectory()
     writeStoredConfig(directory, origin, buyerSecret)
 
-    const json = await spawnCli(['doctor', '--base-url', origin, '--json'], { env: cleanEnvironment(directory) })
-
-    expect(json.status).toBe(0)
-    const result = JSON.parse(json.stdout) as { kind: string; groups: { quoting: string }; checks: unknown[] }
-    // Buyer passes, so only the required skipped Quote keeps quoting off a pass.
+    const json = await runDoctor(directory, origin, { env: cleanEnvironment(directory) })
+    assertCliSuccess(json)
+    const result = parseDoctorJson(json)
     expect(result.checks).toEqual(expect.arrayContaining([
       expect.objectContaining({ id: 'buyer', group: 'quoting', state: 'pass' }),
       skippedQuoteCheck('quote inspection timed out'),
     ]))
-    expect(result.groups.quoting).toBe('skipped')
+    expect((result.groups as { quoting: string }).quoting).toBe('skipped')
     expect(result.kind).toBe('ready')
   }, 20_000)
 
   it('warns discovery on a stale catalogue and fails it on a failed refresh', async () => {
     const buyerSecret = 'FAKE_CATALOGUE_BUYER_SECRET_9948'
-    const scenario: QuoteScenario = { quote: committedQuote(), catalogue: 'stale', balanceUnits: '0' }
+    const scenario: { quote: unknown; catalogue: 'stale' | 'failed' | 'absent' | 'fresh'; balanceUnits: string } = {
+      quote: committedQuote(),
+      catalogue: 'stale',
+      balanceUnits: '0',
+    }
     const origin = await startQuoteServer(scenario, [])
     const directory = makeConfigDirectory()
     writeStoredConfig(directory, origin, buyerSecret)
 
-    const stale = await spawnCli(['doctor', '--base-url', origin, '--json'], { env: cleanEnvironment(directory) })
-    expect(stale.status).toBe(0)
-    const staleResult = JSON.parse(stale.stdout) as { groups: unknown; checks: unknown[] }
+    const stale = await runDoctor(directory, origin, { env: cleanEnvironment(directory) })
+    assertCliSuccess(stale)
+    const staleResult = parseDoctorJson(stale)
     expect(staleResult.groups).toEqual({ discovery: 'warn', quoting: 'pass', purchase: 'warn' })
     expect(staleResult.checks).toEqual(expect.arrayContaining([{
       id: 'catalogue', group: 'discovery', state: 'warn', summary: 'Market catalogue coverage is stale.', code: 'catalogue_stale',
     }]))
 
     scenario.catalogue = 'failed'
-    const failed = await spawnCli(['doctor', '--base-url', origin, '--json'], { env: cleanEnvironment(directory) })
-    expect(failed.status).toBe(0)
-    const failedResult = JSON.parse(failed.stdout) as { groups: { discovery: string }; checks: unknown[] }
-    expect(failedResult.groups.discovery).toBe('fail')
+    const failed = await runDoctor(directory, origin, { env: cleanEnvironment(directory) })
+    assertCliSuccess(failed)
+    const failedResult = parseDoctorJson(failed)
+    expect((failedResult.groups as { discovery: string }).discovery).toBe('fail')
     expect(failedResult.checks).toEqual(expect.arrayContaining([{
       id: 'catalogue', group: 'discovery', state: 'fail', summary: 'Market catalogue refresh failed.', code: 'catalogue_refresh_failed',
     }]))
 
     scenario.catalogue = 'absent'
-    const absent = await spawnCli(['doctor', '--base-url', origin, '--json'], { env: cleanEnvironment(directory) })
-    expect(absent.status).toBe(0)
-    const absentResult = JSON.parse(absent.stdout) as { groups: unknown; checks: unknown[] }
+    const absent = await runDoctor(directory, origin, { env: cleanEnvironment(directory) })
+    assertCliSuccess(absent)
+    const absentResult = parseDoctorJson(absent)
     expect(absentResult.groups).toEqual({ discovery: 'warn', quoting: 'pass', purchase: 'warn' })
     expect(absentResult.checks).toEqual(expect.arrayContaining([{
       id: 'catalogue', group: 'discovery', state: 'warn', summary: 'Market catalogue coverage is absent.', code: 'catalogue_absent',
@@ -1256,9 +802,9 @@ describe('ae doctor', () => {
     const directory = makeConfigDirectory()
     writeStoredConfig(directory, origin, buyerSecret)
 
-    const json = await spawnCli(['doctor', '--base-url', origin, '--json'], { env: tier0Environment(directory) })
-    expect(json.status).toBe(0)
-    const result = JSON.parse(json.stdout) as { tier: unknown; checks: unknown[] }
+    const json = await runDoctor(directory, origin, { env: tier0Environment(directory) })
+    assertCliSuccess(json)
+    const result = parseDoctorJson(json)
     expect(result.tier).toEqual({ level: 0, missing: TIER0_MISSING_NAMES })
     expect(result.checks).toEqual(expect.arrayContaining([{
       id: 'funding', group: 'purchase', state: 'fail',
@@ -1266,7 +812,7 @@ describe('ae doctor', () => {
       nextCommand: LOCAL_STRIPE_TEST_MODE_DOC,
     }]))
 
-    const human = await spawnCli(['doctor', '--base-url', origin], { env: tier0Environment(directory) })
+    const human = await runDoctor(directory, origin, { json: false, env: tier0Environment(directory) })
     expect(human.stdout).toContain(`tier: 0 (missing: ${TIER0_MISSING_NAMES.join(', ')})`)
   }, 20_000)
 
@@ -1276,12 +822,11 @@ describe('ae doctor', () => {
     const directory = makeConfigDirectory()
     writeStoredConfig(directory, origin, buyerSecret)
 
-    const json = await spawnCli(['doctor', '--base-url', origin, '--json'], { env: cleanEnvironment(directory) })
-    expect(json.status).toBe(0)
-    const result = JSON.parse(json.stdout) as { tier: unknown }
-    expect(result.tier).toEqual(TIER1_RESULT)
+    const json = await runDoctor(directory, origin, { env: cleanEnvironment(directory) })
+    assertCliSuccess(json)
+    expect(parseDoctorJson(json).tier).toEqual(TIER1_RESULT)
 
-    const human = await spawnCli(['doctor', '--base-url', origin], { env: cleanEnvironment(directory) })
+    const human = await runDoctor(directory, origin, { json: false, env: cleanEnvironment(directory) })
     expect(human.stdout).toContain('tier: 1')
   }, 20_000)
 
@@ -1291,20 +836,15 @@ describe('ae doctor', () => {
     const directory = makeConfigDirectory()
     writeStoredConfig(directory, origin, buyerSecret)
 
-    const json = await spawnCli(['doctor', '--base-url', origin, '--json'], { env: cleanEnvironment(directory) })
-    expect(json.status).toBe(0)
-    const result = JSON.parse(json.stdout) as { checks: unknown[] }
-    expect(result.checks).toEqual(expect.arrayContaining([{
+    const json = await runDoctor(directory, origin, { env: cleanEnvironment(directory) })
+    assertCliSuccess(json)
+    expect(parseDoctorJson(json).checks).toEqual(expect.arrayContaining([{
       id: 'funding', group: 'purchase', state: 'warn',
       summary: `Buyer balance is empty; fund the Account as the owner at ${origin}/owner/credit (Stripe test mode).`,
       nextCommand: `${origin}/owner/credit`,
     }]))
   }, 20_000)
 
-  // A hosted origin can only carry a bound, authenticated buyer credential over https,
-  // which this suite's plain-http test servers cannot provide (see the loopback-only
-  // `secure` check in doctor.ts's credentialOriginFailure). These two cases exercise the
-  // funding check's loopback-vs-hosted branching directly instead of over the network.
   it('omits a local fix command for a hosted origin missing Stripe test mode', () => {
     for (const name of [...STRIPE_MONEY_ENV_NAMES, ...X402_CUSTODY_ENV_NAMES]) vi.stubEnv(name, '')
     try {
@@ -1344,347 +884,11 @@ describe('ae doctor', () => {
     const directory = makeConfigDirectory()
     writeStoredConfig(directory, origin, buyerSecret)
 
-    const json = await spawnCli(['doctor', '--base-url', origin, '--json'], { env: cleanEnvironment(directory) })
-    expect(json.status).toBe(0)
-    const result = JSON.parse(json.stdout) as { checks: unknown[] }
-    expect(result.checks).toEqual(expect.arrayContaining([{
+    const json = await runDoctor(directory, origin, { env: cleanEnvironment(directory) })
+    assertCliSuccess(json)
+    expect(parseDoctorJson(json).checks).toEqual(expect.arrayContaining([{
       id: 'funding', group: 'purchase', state: 'pass',
       summary: 'Account funding is available; buyer balance is 2000000 × 10^-6 AUD.',
     }]))
   }, 20_000)
 })
-
-type ObservedRequest = Readonly<{ path: string; authorization?: string; body: unknown }>
-
-type QuoteScenario = {
-  quote: unknown
-  search?: unknown
-  catalogue?: 'fresh' | 'stale' | 'failed' | 'absent'
-  balanceUnits?: string
-}
-
-/**
- * One healthy buyer origin that also serves the sandbox search, Quote, and
- * catalogue answers each quoting case varies.
- */
-async function startQuoteServer(scenario: QuoteScenario, observed: ObservedRequest[], host?: string): Promise<string> {
-  return await startServer((request, response) => {
-    const url = request.url ?? ''
-    if (url === TOOL_MARKET_SEARCH_PATH || url === TOOL_QUOTE_PATH) {
-      const chunks: Buffer[] = []
-      request.on('data', (chunk: Buffer) => chunks.push(chunk))
-      request.on('end', () => {
-        observed.push({
-          path: url,
-          ...(request.headers.authorization === undefined ? {} : { authorization: request.headers.authorization }),
-          body: JSON.parse(Buffer.concat(chunks).toString('utf8')),
-        })
-        respondJson(response, url === TOOL_QUOTE_PATH ? scenario.quote : scenario.search ?? sandboxSearchResult())
-      })
-      return
-    }
-    if (url === '/api/v1/catalogue-status') {
-      respondJson(response, catalogueStatus(scenario.catalogue ?? 'fresh'))
-      return
-    }
-    if (respondHealthyDeployment(request, response)) return
-    if (url === '/.well-known/ucp') {
-      respondJson(response, { schemaVersion: 'ae-site-discovery:v2', origin: `http://${request.headers.host}` })
-      return
-    }
-    if (url === '/api/v1/account') {
-      respondJson(response, {
-        kind: 'authenticated', principalRef: 'prn_buyer', accountRef: 'acc_owner',
-        credentialId: 'credential_buyer', applicationRef: 'agentic-economy', environment: 'sandbox',
-        scopes: ['market_tools:call'], authorityMode: 'spending_policy',
-      })
-      return
-    }
-    if (url === '/api/v1/account/balance') {
-      respondJson(response, {
-        kind: 'available', principalRef: 'prn_buyer', accountRef: 'acc_owner',
-        balance: { currency: 'AUD', units: scenario.balanceUnits ?? '25000000', exponent: 6 },
-        accountState: 'active', version: 1, updatedAt: 10,
-        funding: { kind: 'agent_funding_handoff', configAction: 'funding.handoff.config', createAction: 'funding.handoff.create', statusAction: 'funding.handoff.status' },
-      })
-      return
-    }
-    if (url === '/api/v1/calls?limit=100' || url === '/api/v1/market-requests/list') {
-      respondJson(response, { kind: 'available', items: [], hasMore: false })
-      return
-    }
-    respondJson(response, { error: 'unexpected' }, 404)
-  }, host)
-}
-
-async function startServer(
-  handler: (request: IncomingMessage, response: ServerResponse) => void,
-  // '0.0.0.0' resolves to the loopback interface but is not itself a loopback
-  // hostname, so it stands in for a hosted origin without any real network.
-  host = '127.0.0.1',
-): Promise<string> {
-  const server = createServer(handler)
-  servers.push(server)
-  await new Promise<void>((resolve) => server.listen(0, host, resolve))
-  const address = server.address()
-  if (address === null || typeof address === 'string') throw new Error('doctor_test_server_missing')
-  return `http://${host}:${address.port}`
-}
-
-function respondJson(response: ServerResponse, body: unknown, status = 200): void {
-  response.writeHead(status, { 'content-type': 'application/json' })
-  response.end(JSON.stringify(body))
-}
-
-function respondHealthyDeployment(request: IncomingMessage, response: ServerResponse): boolean {
-  if (request.url === '/mcp' && request.method === 'GET') {
-    response.writeHead(405)
-    response.end()
-    return true
-  }
-  if (request.url === '/mcp' && request.method === 'POST') {
-    const chunks: Buffer[] = []
-    request.on('data', (chunk: Buffer) => chunks.push(chunk))
-    request.on('end', () => {
-      const message = JSON.parse(Buffer.concat(chunks).toString('utf8')) as {
-        id?: string | number
-        method?: string
-        params?: { protocolVersion?: string }
-      }
-      if (message.method === 'notifications/initialized') {
-        response.writeHead(202)
-        response.end()
-        return
-      }
-      if (message.method === 'initialize') {
-        respondJson(response, {
-          jsonrpc: '2.0', id: message.id,
-          result: {
-            protocolVersion: message.params?.protocolVersion,
-            capabilities: { tools: {} },
-            serverInfo: { name: 'ae-doctor-test', version: '1.0.0' },
-          },
-        })
-        return
-      }
-      if (message.method === 'tools/list') {
-        respondJson(response, {
-          jsonrpc: '2.0', id: message.id,
-          result: {
-            tools: listMcpActions()
-              .filter((action) => action.readOnly && action.credentialAdmission === undefined)
-              .map((action) => ({
-                name: mcpToolName(action),
-                inputSchema: { type: 'object', additionalProperties: true },
-              })),
-          },
-        })
-        return
-      }
-      respondJson(response, {
-        jsonrpc: '2.0', id: message.id,
-        error: { code: -32601, message: 'Method not found' },
-      })
-    })
-    return true
-  }
-  if (request.url === '/api/ready') {
-    respondJson(response, { status: 'ready', checks: { config: 'ready', convex: 'ready' }, diagnostics: {} })
-    return true
-  }
-  if (request.url === '/api/v1/release') {
-    respondJson(response, { kind: 'ok', sourceRevision: 'a'.repeat(40) })
-    return true
-  }
-  if (request.url === '/api/v1/catalogue-status') {
-    respondJson(response, catalogueStatus('fresh'))
-    return true
-  }
-  // A healthy deployment with an empty market: doctor finds no sandbox Tool to quote.
-  if (request.url === TOOL_MARKET_SEARCH_PATH) {
-    respondJson(response, emptySearchResult())
-    return true
-  }
-  return false
-}
-
-function catalogueStatus(status: 'fresh' | 'stale' | 'failed' | 'absent') {
-  const completedAt = Date.now() - (status === 'stale' ? 40 * 60 * 60 * 1000 : 3_600_000)
-  return {
-    schemaVersion: 'catalogue-status:v1',
-    status,
-    refreshState: status === 'failed' ? 'failed' : 'complete',
-    ...(status === 'absent' ? {} : { generation: 'g1', completedAt, ageHours: status === 'stale' ? 40 : 1 }),
-  }
-}
-
-function emptySearchResult() {
-  return {
-    kind: 'no_candidates', schemaVersion: 'registry-tools:v3', query: SANDBOX_TOOL_SLUG, count: 0,
-    items: [], note: 'No Tools match this search.', pagination: { limit: 10, hasMore: false },
-  }
-}
-
-function sandboxSearchResult() {
-  return {
-    kind: 'ok', schemaVersion: 'registry-tools:v3', query: SANDBOX_TOOL_SLUG, count: 1,
-    items: [{
-      toolRef: SANDBOX_TOOL_REF, capabilityId: 'sandbox.aecon-reference',
-      title: 'AEcon sandbox reference Tool', description: 'Deterministic sandbox Tool.',
-      provider: { name: 'AEcon sandbox reference provider', slug: SANDBOX_TOOL_SLUG },
-      priceLabel: 'AUD 1.00', healthStatus: 'operational', listingTier: 'reviewed',
-    }],
-    pagination: { limit: 10, hasMore: false },
-  }
-}
-
-function committedQuote() {
-  return {
-    kind: 'committed', quoteRef: 'quote:v1:sandbox', toolRef: SANDBOX_TOOL_REF, toolVersion: 1,
-    expiresAt: 1, normalizedInput: { request: 'ae doctor quote inspection' },
-    price: { currency: 'AUD', units: '1000000', exponent: 6 },
-    account: { accountRef: 'acc_owner', available: { currency: 'AUD', units: '25000000', exponent: 6 } },
-    budget: { principalRef: 'prn_buyer', maximumPerCall: { currency: 'AUD', units: '5000000', exponent: 6 } },
-    policyRefs: [], evidenceDigest: 'sha256:sandbox-quote',
-    continuation: {
-      action: 'tool.call', method: 'POST', path: '/api/v1/tools/call',
-      input: { quoteRef: 'quote:v1:sandbox', idempotencyKey: 'idem-sandbox' },
-    },
-  }
-}
-
-function refusedQuote(code: string) {
-  return { kind: 'refused', toolRef: SANDBOX_TOOL_REF, code, retryable: false, correlationRef: 'corr_sandbox' }
-}
-
-function makeConfigDirectory(): string {
-  const directory = mkdtempSync(join(tmpdir(), 'ae-doctor-'))
-  temporaryDirectories.push(directory)
-  writeFileSync(join(directory, 'sentinel.txt'), 'unchanged')
-  return directory
-}
-
-function installAeShim(directory: string): void {
-  writeFileSync(join(directory, 'ae'), '#!/bin/sh\nexec "$AE_TEST_NODE" "$AE_TEST_CLI" "$@"\n', { mode: 0o755 })
-}
-
-async function runShell(command: string, environment: NodeJS.ProcessEnv): Promise<ProcessResult> {
-  const { promise, resolve: resolveResult, reject } = Promise.withResolvers<ProcessResult>()
-  const child = spawn('/bin/sh', ['-c', command], {
-    cwd: process.cwd(),
-    env: environment,
-    stdio: ['ignore', 'pipe', 'pipe'],
-  })
-  const stdout: Buffer[] = []
-  const stderr: Buffer[] = []
-  child.stdout.on('data', (chunk: Buffer) => stdout.push(chunk))
-  child.stderr.on('data', (chunk: Buffer) => stderr.push(chunk))
-  child.once('error', reject)
-  child.once('close', (status) => resolveResult({
-    status,
-    stderr: Buffer.concat(stderr).toString('utf8'),
-    stdout: Buffer.concat(stdout).toString('utf8'),
-  }))
-  return promise
-}
-
-type ProcessResult = Readonly<{
-  status: number | null
-  stderr: string
-  stdout: string
-}>
-
-function writeStoredConfig(directory: string, origin: string, buyerSecret: string, providerSecret?: string): void {
-  writeFileSync(join(directory, 'config.json'), JSON.stringify({
-    version: 1,
-    connections: {
-      [origin]: {
-        accessToken: buyerSecret,
-        tokenType: 'Bearer',
-        profile: 'market',
-        scope: 'market_tools:call',
-        connectedAt: '2026-08-30T00:00:00.000Z',
-      },
-      ...(providerSecret === undefined ? {} : {
-        [`${origin}#provider`]: {
-          accessToken: providerSecret,
-          tokenType: 'Bearer',
-          profile: 'provider',
-          scope: 'market_supply:manage',
-          connectedAt: '2026-08-30T00:00:00.000Z',
-        },
-      }),
-    },
-  }))
-}
-
-function supplyOperation(offeringRef: string, live: boolean) {
-  return {
-    schemaVersion: 'provider_tools:v1',
-    businessRef: 'business:one',
-    providerRef: 'provider:one',
-    toolRef: offeringRef,
-    revision: 1,
-    state: live ? 'Published' : 'Action required',
-    reasonCodes: live ? [] : ['health_unhealthy'],
-    observedAt: 10,
-    source: { kind: 'openapi' },
-    routeability: { available: live, reasonCodes: live ? [] : ['health_unhealthy'] },
-    authority: { kind: 'public' },
-    health: {
-      connection: 'not_required',
-      validation: live ? 'passed' : 'failed',
-      publication: 'published',
-      freshness: live ? 'current' : 'failed',
-      delivery: { kind: 'unobserved', provenance: 'canonical_call_receipts' },
-      usefulOutcome: { kind: 'unobserved', provenance: 'qualified_use_receipts' },
-      operationalConditions: live ? [] : ['health_unhealthy'],
-    },
-  }
-}
-
-function supplyConnection(connectionRef: string, available: boolean, lifecycle: 'active' | 'cleanup_required') {
-  return {
-    connectionRef, businessId: 'business:one', providerRef: 'provider:one', providerAccountRef: 'provider-account:one',
-    adapterId: 'x402:v1', grantedScopes: [], grantedResources: [], authorityGeneration: 1,
-    authorityDigest: 'sha256:authority', lifecycle, available, credentialConfigured: available,
-    observedAt: 10, reasonCode: available ? null : 'cleanup_failed', evidenceRefs: [], createdAt: 1, updatedAt: 10,
-  }
-}
-
-function currentTool(toolRef: string) {
-  return {
-    toolRef,
-    capabilityId: 'reference.lookup',
-    title: 'Reference lookup',
-    description: 'Current reference lookup',
-    provider: { slug: 'reference', name: 'Reference Services' },
-    priceLabel: 'USD 0.00',
-    healthStatus: 'operational',
-    inputJsonSchema: { type: 'object' },
-    outputJsonSchema: { type: 'object' },
-    materialTerms: [],
-    dataUse: [],
-    effects: [],
-    evidence: [],
-    authentication: { kind: 'ae_api_key' },
-    listingTier: 'reviewed',
-  }
-}
-
-function cleanEnvironment(directory: string): NodeJS.ProcessEnv {
-  return {
-    ...process.env,
-    ...TIER1_ENV,
-    AE_CONFIG_DIR: directory,
-    AE_API_KEY: '',
-    AE_API_KEY_ORIGIN: '',
-    AE_CLI_BASE_URL: '',
-    AE_CANONICAL_BASE_URL: '',
-    // The doctor command now loads the Stripe SDK to check test-mode configuration.
-    // Stripe's SDK writes an unrelated agent hint to stderr when it sees these Claude
-    // Code session markers, which would otherwise pollute the CLI's own stderr checks.
-    CLAUDECODE: '',
-    CLAUDE_CODE_CHILD_SESSION: '',
-  }
-}

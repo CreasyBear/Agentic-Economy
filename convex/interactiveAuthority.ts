@@ -34,6 +34,22 @@ import {
 } from './interactiveCredentialLifecycle'
 
 const CLERK_USER_PROVIDER_NAMESPACE = 'clerk/user' as const
+const CLERK_ORGANIZATION_PROVIDER_NAMESPACE = 'clerk/organization' as const
+const ACCESS_FACT_QUERY_LIMIT = 50
+
+export type InteractiveAccountSelectionState =
+  | 'unique'
+  | 'selected'
+  | 'org_bound'
+  | 'selection_required'
+
+export function clerkActiveOrganizationId(identity: UserIdentity): string | null {
+  const record = identity as UserIdentity & Record<string, unknown> & { o?: { id?: unknown } }
+  const candidate = identity.org_id ?? record['o.id'] ?? record.o?.id
+  if (typeof candidate !== 'string') return null
+  const trimmed = candidate.trim()
+  return trimmed.length > 0 ? trimmed : null
+}
 
 // One Clerk session-token lifetime. Convex does not surface the JWT `exp`
 // claim on UserIdentity, so identities without the claim anchor their
@@ -43,6 +59,7 @@ const INTERACTIVE_OWNER_SESSION_WINDOW_MS = 60_000
 
 export type InteractiveAuthorityErrorCode =
   | 'identity_invalid'
+  | 'authority_conflict'
   | 'binding_missing'
   | 'binding_ambiguous'
   | 'binding_inactive'
@@ -59,20 +76,70 @@ export type InteractiveAuthorityErrorCode =
   | 'principal_kind_invalid'
   | 'account_access_missing'
   | 'account_access_ambiguous'
+  | 'active_account_selection_required'
   | 'account_missing'
   | 'account_ambiguous'
   | 'account_inactive'
   | 'ownership_missing'
   | 'ownership_ambiguous'
   | 'ownership_mismatch'
+  | 'correlation_ref_invalid'
+  | 'display_name_invalid'
+  | 'onboarding_already_complete'
+  | 'policy_revision_conflict'
+  | 'preference_revision_conflict'
+  | 'threshold_invalid'
+  | 'event_kind_invalid'
+  | 'payload_invalid'
+  | 'mfa_required'
+  | 'step_up_required'
+  | 'personal_account_retired'
+  | 'customer_abn_invalid'
+  | 'legal_name_invalid'
+  | 'billing_address_invalid'
+  | 'tax_facts_revision_conflict'
+  | 'tax_facts_correlation_mismatch'
+  | 'legal_customer_unavailable'
+  | 'legal_customer_rebinding_blocked'
+  | 'workspace_confirmation_mismatch'
+  | 'workspace_has_unsettled_obligations'
+  | 'successor_not_active_member'
+  | 'successor_same_as_incumbent'
+  | 'successor_principal_inactive'
+  | 'account_revision_conflict'
+  | 'ownership_revision_conflict'
+  | 'account_lifecycle_transition_forbidden'
+  | 'workspace_already_closed'
+  | 'directory_principal_missing'
+  | 'idempotency_conflict'
+  | 'auto_recharge_units_invalid'
+  | 'funding_amount_invalid'
+  | 'payment_mandate_missing'
+  | 'auto_recharge_revision_conflict'
+  | 'auto_recharge_correlation_mismatch'
+  | 'monthly_spend_budget_units_invalid'
+  | 'monthly_spend_budget_revision_conflict'
+  | 'monthly_spend_budget_correlation_mismatch'
+  | 'authority_mismatch'
+  | 'payment_binding_invalid'
+  | 'payment_binding_revision_conflict'
+  | 'funding_command_not_found'
+  | 'funding_command_not_receiptable'
 
 export class InteractiveAuthorityError extends Error {
   readonly code: InteractiveAuthorityErrorCode
+  readonly fences?: readonly string[]
 
-  constructor(code: InteractiveAuthorityErrorCode) {
+  constructor(
+    code: InteractiveAuthorityErrorCode,
+    options?: Readonly<{ fences?: readonly string[] }>,
+  ) {
     super(code)
     this.name = 'InteractiveAuthorityError'
     this.code = code
+    if (options?.fences !== undefined) {
+      this.fences = options.fences
+    }
   }
 }
 
@@ -291,22 +358,47 @@ async function ensureCurrentOwnerCredentialGeneration(
   }
   let current: Doc<'credentials'> | undefined = active[0]
   if (current === undefined) {
-    // Re-issue only a legitimately exhausted generation: an expired session
-    // leaves exactly one stale credential for the current generation. A
-    // revoked credential is a revocation, and an absent one is drift: both
-    // must keep failing closed.
-    const [stale] = await credentialsForOwnerGeneration(ctx, binding, 'stale')
-    if (stale === undefined
-      || (await credentialsForOwnerGeneration(ctx, binding, 'revoked')).length > 0) {
-      logProvisionRefusal(stale === undefined
-        ? 'credential_generation_drift_stale_missing'
-        : 'credential_generation_revoked_present', {
+    const staleCredentials = await credentialsForOwnerGeneration(ctx, binding, 'stale')
+    const [stale] = staleCredentials
+    const revokedCredentials = await credentialsForOwnerGeneration(ctx, binding, 'revoked')
+    if (stale !== undefined) {
+      if (revokedCredentials.length > 0) {
+        logProvisionRefusal('credential_generation_revoked_present', {
+          generation: binding.credentialGeneration,
+          activeCount: active.length,
+        })
+        return null
+      }
+      current = stale
+    } else if (revokedCredentials.length === 0) {
+      logProvisionRefusal('credential_generation_drift_stale_missing', {
         generation: binding.credentialGeneration,
         activeCount: active.length,
       })
       return null
+    } else if (binding.lifecycle !== 'active' || !hasVerifiedTokenWindow) {
+      logProvisionRefusal('credential_generation_revoked_present', {
+        generation: binding.credentialGeneration,
+        activeCount: active.length,
+      })
+      return null
+    } else {
+      const [latestRevoked] = revokedCredentials
+      if (latestRevoked === undefined) {
+        logProvisionRefusal('credential_generation_revoked_present', {
+          generation: binding.credentialGeneration,
+          activeCount: active.length,
+        })
+        return null
+      }
+      return await issueOwnerCredentialGeneration(
+        ctx,
+        binding,
+        tokenIdentifier,
+        expiresAt,
+        latestRevoked.credentialRef,
+      )
     }
-    current = stale
   }
   if (current.type !== 'provider_token' || current.principalRef !== binding.principalRef) {
     logProvisionRefusal('credential_type_or_principal_mismatch', { type: current.type })
@@ -504,6 +596,7 @@ export const materializeCurrentInteractiveAuthority = mutation({
       return true
     } catch (error) {
       if (error instanceof InteractiveAuthorityError) {
+        if (error.code === 'active_account_selection_required') return true
         logProvisionRefusal('materialize_failed', { code: error.code })
         return false
       }
@@ -579,13 +672,49 @@ async function resolveInteractiveAuthorityFacts(
     db,
     tokenIdentifier,
     typeof identity.exp === 'number' ? identity.exp : undefined,
+    identity,
   )
+}
+
+export async function requireAccessFactForAccount(
+  db: AuthorityDb,
+  canonicalPrincipalRef: PrincipalRef,
+  targetAccountRef: AccountRef,
+): Promise<AccessFact> {
+  const ownerships = await db
+    .query('accountOwnerships')
+    .withIndex('by_accountRef_and_ownerPrincipalRef_and_lifecycle', (query) => query
+      .eq('accountRef', targetAccountRef)
+      .eq('ownerPrincipalRef', canonicalPrincipalRef)
+      .eq('lifecycle', 'active'))
+    .take(2)
+  const memberships = await db
+    .query('memberships')
+    .withIndex('by_accountRef_and_memberPrincipalRef_and_lifecycle', (query) => query
+      .eq('accountRef', targetAccountRef)
+      .eq('memberPrincipalRef', canonicalPrincipalRef)
+      .eq('lifecycle', 'active'))
+    .take(2)
+  if (ownerships.length > 1) throw new InteractiveAuthorityError('ownership_ambiguous')
+  if (memberships.length > 1) throw new InteractiveAuthorityError('account_access_ambiguous')
+  if (ownerships.length === 1) {
+    const [row] = ownerships
+    if (row === undefined) throw new InteractiveAuthorityError('account_access_missing')
+    return { kind: 'ownership', row }
+  }
+  if (memberships.length === 1) {
+    const [row] = memberships
+    if (row === undefined) throw new InteractiveAuthorityError('account_access_missing')
+    return { kind: 'membership', row }
+  }
+  throw new InteractiveAuthorityError('account_access_missing')
 }
 
 async function resolveInteractiveAuthorityFactsForToken(
   db: AuthorityDb,
   tokenIdentifier: string,
   verifiedTokenExpirySeconds: number | undefined,
+  identity?: UserIdentity,
 ): Promise<InteractiveAuthorityFacts> {
   const binding = requireExactlyOne(
     await db
@@ -671,19 +800,13 @@ async function resolveInteractiveAuthorityFactsForToken(
     throw new InteractiveAuthorityError('principal_kind_invalid')
   }
 
-  const access = requireSingleAccessFact(
-    await db
-      .query('accountOwnerships')
-      .withIndex('by_ownerPrincipalRef_and_lifecycle', (query) =>
-        query.eq('ownerPrincipalRef', canonicalPrincipalRef).eq('lifecycle', 'active'))
-      .take(2),
-    await db
-      .query('memberships')
-      .withIndex('by_memberPrincipalRef_and_lifecycle', (query) =>
-        query.eq('memberPrincipalRef', canonicalPrincipalRef).eq('lifecycle', 'active'))
-      .take(2),
+  const activeAccountResolution = await resolveActiveAccountRefForPrincipal(
+    db,
+    canonicalPrincipalRef,
+    identity,
+    'require',
   )
-  const canonicalAccountRef = requireCanonicalRef(access.row.accountRef, accountRef)
+  const canonicalAccountRef = requireCanonicalRef(activeAccountResolution.activeAccountRef, accountRef)
   const account = requireExactlyOne(
     await db
       .query('accounts')
@@ -695,6 +818,7 @@ async function resolveInteractiveAuthorityFactsForToken(
   if (account.lifecycle !== 'active') {
     throw new InteractiveAuthorityError('account_inactive')
   }
+  const access = await requireAccessFactForAccount(db, canonicalPrincipalRef, canonicalAccountRef)
 
   const canonicalCurrentOwnershipRef = requireCanonicalRef(
     account.currentOwnershipRef,
@@ -870,15 +994,109 @@ function requireExactlyOne<Value>(
   return row
 }
 
-function requireSingleAccessFact(
-  ownerships: readonly Doc<'accountOwnerships'>[],
-  memberships: readonly Doc<'memberships'>[],
-): AccessFact {
-  const facts: AccessFact[] = [
-    ...ownerships.map((row) => ({ kind: 'ownership' as const, row })),
-    ...memberships.map((row) => ({ kind: 'membership' as const, row })),
-  ]
-  return requireExactlyOne(facts, 'account_access_missing', 'account_access_ambiguous')
+async function resolveClosedWorkspaceActorAccountRef(
+  db: AuthorityDb,
+  canonicalPrincipalRef: PrincipalRef,
+): Promise<string | null> {
+  const closedAccounts = await db
+    .query('accounts')
+    .filter((filter) => filter.and(
+      filter.eq(filter.field('lifecycle'), 'closed'),
+      filter.eq(filter.field('lastAction.actorPrincipalRef'), canonicalPrincipalRef),
+    ))
+    .collect()
+  if (closedAccounts.length !== 1) return null
+  const [account] = closedAccounts
+  return account?.accountRef ?? null
+}
+
+async function collectAccessibleAccountRefs(
+  db: AuthorityDb,
+  canonicalPrincipalRef: PrincipalRef,
+): Promise<string[]> {
+  const ownerships = await db
+    .query('accountOwnerships')
+    .withIndex('by_ownerPrincipalRef_and_lifecycle', (query) =>
+      query.eq('ownerPrincipalRef', canonicalPrincipalRef).eq('lifecycle', 'active'))
+    .take(ACCESS_FACT_QUERY_LIMIT)
+  const memberships = await db
+    .query('memberships')
+    .withIndex('by_memberPrincipalRef_and_lifecycle', (query) =>
+      query.eq('memberPrincipalRef', canonicalPrincipalRef).eq('lifecycle', 'active'))
+    .take(ACCESS_FACT_QUERY_LIMIT)
+  return Array.from(new Set([
+    ...ownerships.map((row) => row.accountRef),
+    ...memberships.map((row) => row.accountRef),
+  ]))
+}
+
+type ActiveAccountResolutionMode = 'require' | 'nullable'
+
+type ActiveAccountResolution<M extends ActiveAccountResolutionMode = ActiveAccountResolutionMode> = Readonly<{
+  activeAccountRef: M extends 'require' ? string : string | null
+  selectionState: InteractiveAccountSelectionState
+}>
+
+export async function resolveActiveAccountRefForPrincipal<M extends ActiveAccountResolutionMode>(
+  db: AuthorityDb,
+  canonicalPrincipalRef: PrincipalRef,
+  identity: UserIdentity | undefined,
+  mode: M,
+): Promise<ActiveAccountResolution<M>> {
+  const accounts = await collectAccessibleAccountRefs(db, canonicalPrincipalRef)
+  if (accounts.length === 0) {
+    const closedAccountRef = await resolveClosedWorkspaceActorAccountRef(db, canonicalPrincipalRef)
+    if (closedAccountRef !== null) {
+      return { activeAccountRef: closedAccountRef, selectionState: 'unique' } as ActiveAccountResolution<M>
+    }
+    throw new InteractiveAuthorityError('account_access_missing')
+  }
+  if (accounts.length === 1) {
+    const firstAccount = accounts[0]
+    if (firstAccount === undefined) {
+      throw new InteractiveAuthorityError('account_access_missing')
+    }
+    return { activeAccountRef: firstAccount, selectionState: 'unique' } as ActiveAccountResolution<M>
+  }
+
+  const selectionRows = await db
+    .query('interactiveSessionSelections')
+    .withIndex('by_principalRef', (query) => query.eq('principalRef', canonicalPrincipalRef))
+    .take(2)
+  if (selectionRows.length > 1) {
+    throw new InteractiveAuthorityError('authority_fact_invalid')
+  }
+  const [selectionRow] = selectionRows
+  if (selectionRow !== undefined) {
+    if (accounts.includes(selectionRow.activeAccountRef)) {
+      return { activeAccountRef: selectionRow.activeAccountRef, selectionState: 'selected' } as ActiveAccountResolution<M>
+    }
+    throw new InteractiveAuthorityError('account_access_missing')
+  }
+
+  const orgId = identity === undefined ? null : clerkActiveOrganizationId(identity)
+  if (orgId !== null) {
+    const orgBindings = await db
+      .query('accountExternalOrganizationBindings')
+      .withIndex('by_providerNamespace_and_providerIdentifier', (query) => query
+        .eq('providerNamespace', CLERK_ORGANIZATION_PROVIDER_NAMESPACE)
+        .eq('providerIdentifier', orgId))
+      .take(2)
+    if (orgBindings.length > 1) {
+      throw new InteractiveAuthorityError('authority_fact_invalid')
+    }
+    const [orgBinding] = orgBindings
+    if (orgBinding !== undefined
+      && orgBinding.lifecycle === 'active'
+      && accounts.includes(orgBinding.accountRef)) {
+      return { activeAccountRef: orgBinding.accountRef, selectionState: 'org_bound' } as ActiveAccountResolution<M>
+    }
+  }
+
+  if (mode === 'nullable') {
+    return { activeAccountRef: null, selectionState: 'selection_required' } as ActiveAccountResolution<M>
+  }
+  throw new InteractiveAuthorityError('active_account_selection_required')
 }
 
 function assertCurrentOwnership(

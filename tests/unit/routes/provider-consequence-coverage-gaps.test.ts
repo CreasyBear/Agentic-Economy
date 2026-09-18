@@ -3,6 +3,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { declarePaymentIdentifierExtension } from '@x402/extensions/payment-identifier'
 
 import type { RouteTransportInvocation } from '@/modules/capability-supply/route-transport-runtime'
+import {
+  createTestProviderInvocation,
+  type ProviderInvocation,
+} from '../../helpers/route-transport-fixtures'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import type { StableHashValue } from '@/modules/common/stable-hash'
 import {
@@ -56,11 +60,6 @@ import {
   handleProviderConsequenceRequest,
   Route,
 } from '@/routes/api.internal.provider-consequence'
-
-type ProviderInvocation = Extract<
-  RouteTransportInvocation,
-  { binding: { authority: { kind: 'provider_connection' } } }
->
 
 const NOW = 2_000_000_000_000
 const DIGEST = (character: string) => `sha256:${character.repeat(64)}`
@@ -202,7 +201,7 @@ describe('provider consequence route coverage gaps', () => {
   })
 
   it('uses the abort journal when admitted invocation configuration fails before provider release', async () => {
-    const invalid = invocation()
+    const invalid = createTestProviderInvocation({ inputJson: '{}', now: NOW })
     const binding = invalid.binding as { configJson: string; configDigest: string }
     binding.configJson = '{'
     binding.configDigest = canonicalDigest('{')
@@ -557,29 +556,6 @@ describe('provider consequence route coverage gaps', () => {
   })
 })
 
-function invocation(): ProviderInvocation {
-  const config = { method: 'POST' as const, requestTimeoutMs: 5_000, credential: { kind: 'bearer' as const } }
-  return {
-    binding: {
-      adapterId: 'http-json:v1',
-      endpointUrl: 'https://provider.example/run',
-      authority: { kind: 'provider_connection', connectionRef: 'connection:test', providerRef: 'provider:test' },
-      configJson: JSON.stringify(config),
-      configDigest: canonicalDigest(config),
-    },
-    authority: {
-      attemptRef: 'attempt:test', effectGeneration: 1, operationKeyDigest: DIGEST('3'), mandateDigest: DIGEST('4'),
-      grantDigest: DIGEST('5'), capabilityContractDigest: DIGEST('6'),
-      maximumSpend: { currency: 'USD', units: '0', exponent: 2 }, expiresAt: NOW + 120_000,
-      callIdentity: { keyId: 'route-calls:test', signature: 'hmac-sha256:test' },
-      authorityGeneration: 7, authorityDigest: DIGEST('7'), leaseRef: 'lease:test', callRef: 'call:test',
-      toolRef: 'tool:test', grantedScopes: ['provider:invoke'], grantedResources: ['tool:test'],
-      readinessValidUntil: NOW + 120_000, readinessDigest: DIGEST('8'),
-    },
-    inputJson: '{}',
-  }
-}
-
 function requestDigest(routeInvocation: RouteTransportInvocation): string {
   return canonicalDigest({
     adapterId: routeInvocation.binding.adapterId,
@@ -594,7 +570,7 @@ function requestDigest(routeInvocation: RouteTransportInvocation): string {
   } as StableHashValue)
 }
 
-function ticket(routeInvocation: ProviderInvocation = invocation()): CanonicalProviderConsequenceTicket {
+function ticket(routeInvocation: ProviderInvocation = createTestProviderInvocation({ inputJson: '{}', now: NOW })): CanonicalProviderConsequenceTicket {
   const invocationDigest = providerConsequenceInvocationDigest(routeInvocation)
   if (invocationDigest === undefined) throw new Error('test_fixture_invalid')
   const readinessValidUntil = routeInvocation.authority.readinessValidUntil
@@ -634,7 +610,7 @@ function consequenceRequest(canonicalTicket = ticket(), overrides: Record<string
     signingSecret: signingPointer(),
     journalToken: JOURNAL_TOKEN,
     signedTicket: signedTicketFor(canonicalTicket),
-    invocation: invocation(),
+    invocation: createTestProviderInvocation({ inputJson: '{}', now: NOW }),
     ...overrides,
   }
   return rawRequest(JSON.stringify(body))
@@ -801,7 +777,7 @@ function x402Challenge() {
 }
 
 function x402Invocation(): ProviderInvocation {
-  const base = invocation()
+  const base = createTestProviderInvocation({ inputJson: '{}', now: NOW })
   const challenge = x402Challenge()
   const requirement = challenge.accepts[0]
   if (requirement === undefined) throw new Error('x402_requirement_missing')

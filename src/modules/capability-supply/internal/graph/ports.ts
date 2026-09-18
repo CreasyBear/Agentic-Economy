@@ -1,4 +1,4 @@
-import type { CapabilityOfferingOrigin } from '@/modules/capability-supply/public'
+import type { CapabilityOfferingOrigin } from '../registration-schema'
 
 import type { CapabilityContractRef } from '@/modules/capability-contract/public'
 import type { ExactCapabilityContractResult } from '@/modules/capability-contract-registry/public'

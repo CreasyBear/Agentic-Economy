@@ -11,6 +11,7 @@ import { AeConfirmDialog } from "@/components/ae/feedback/AeConfirmDialog";
 import type { OwnerProviderEarningsReadback } from "@/modules/capability-supply/supply-funnel.functions";
 import {
   createOwnerConnectAccountServer,
+  createOwnerExpressLoginLinkServer,
   createOwnerOnboardingLinkServer,
   beginOwnerPayoutTransferServer,
   readOwnerPayoutTransferServer,
@@ -101,6 +102,7 @@ function EarningsCurrencyCard({
   const payoutActionRef = useRef<HTMLButtonElement>(null);
   const createConnect = useReverification(useServerFn(createOwnerConnectAccountServer));
   const createOnboarding = useReverification(useServerFn(createOwnerOnboardingLinkServer));
+  const createExpressLoginLink = useServerFn(createOwnerExpressLoginLinkServer);
   const beginPayout = useReverification(useServerFn(beginOwnerPayoutTransferServer));
   const canonical =
     connect?.kind === "available"
@@ -282,6 +284,28 @@ function EarningsCurrencyCard({
     }
   }
 
+  async function openExpressDashboard() {
+    setBusy("express_dashboard");
+    setMessage(undefined);
+    try {
+      const result = await createExpressLoginLink({
+        data: {
+          businessId,
+          currency: account.currency,
+        },
+      });
+      if (result.kind === "ok") {
+        window.open(result.url, "_blank", "noopener,noreferrer");
+      } else {
+        setMessage(actionMessage(result.code));
+      }
+    } catch (cause) {
+      setMessage(degrade(cause, "Could not open Stripe Express dashboard. Try again.", { site: "openExpressDashboard", reason: "source_unavailable" }));
+    } finally {
+      setBusy(undefined);
+    }
+  }
+
   async function refreshRecordedStatus() {
     if (
       !canReadRecordedTransfer ||
@@ -418,6 +442,19 @@ function EarningsCurrencyCard({
             >
               {busy === "transfer" ? "Submitting payout…" : "Review payout"}
             </Button>
+          ) : null}
+          {accountState === "ready" && stripeAccountId !== undefined ? (
+            <Button
+              type="button"
+              variant="outline"
+              className="min-h-touch"
+              disabled={busy !== undefined}
+              onClick={() => void openExpressDashboard()}
+            >
+              {busy === "express_dashboard"
+                ? "Opening Stripe Express…"
+                : "View Stripe Express Dashboard"}
+            </Button>
           ) : accountState === "ready" ? null : stripeAccountId === undefined ? (
             <Button
               ref={payoutActionRef}
@@ -448,6 +485,11 @@ function EarningsCurrencyCard({
             </Button>
           )}
         </div>
+        {accountState === "ready" && (
+          <p className="m-0 text-xs text-muted-foreground">
+            Bank deposits, tax reports (1099), and transfer history are managed securely in the Stripe Express portal.
+          </p>
+        )}
         <AeConfirmDialog
           open={confirmAction !== undefined}
           onOpenChange={(open) => {

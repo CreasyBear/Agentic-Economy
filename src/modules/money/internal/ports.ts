@@ -93,6 +93,7 @@ export type ConnectAccountEvidence = Readonly<{
 export type ConnectAccountPort = Readonly<{
   createOrRecoverConnectAccount: (input: ConnectAccountRequest) => Promise<Readonly<{ provider: 'stripe'; stripeAccountId: string; evidenceRef: string }> | MoneyRefusal>
   createOnboardingLink: (input: OnboardingLinkRequest) => Promise<Readonly<{ provider: 'stripe'; url: string; evidenceRef: string }> | MoneyRefusal>
+  createExpressLoginLink?: (input: Readonly<{ stripeAccountId: string }>) => Promise<Readonly<{ provider: 'stripe'; url: string }> | MoneyRefusal>
   readConnectAccount: (input: Readonly<{ businessId: string; currency: string; stripeAccountId: string }>) => Promise<ConnectAccountEvidence | MoneyRefusal>
 }>
  

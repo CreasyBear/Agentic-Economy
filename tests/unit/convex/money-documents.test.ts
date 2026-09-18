@@ -30,7 +30,7 @@ function page(input: Readonly<{
 }
 
 describe('Formance-sourced money documents', () => {
-  it('advances cursor pages idempotently and freezes exact totals before rendering', async () => {
+  it('AM-11 advances cursor pages idempotently and freezes exact totals before rendering', async () => {
     const backend = convexTestWithWorkers({ pauseWorkpool: true })
     await backend.run(async (ctx) => {
       await ctx.db.insert('moneyDocuments', {
@@ -105,7 +105,7 @@ describe('Formance-sourced money documents', () => {
       })
   })
 
-  it('binds public creation and listing to each owner Account and rejects anonymous access', async () => {
+  it('AM-11 binds public creation and listing to each owner Account and rejects anonymous access', async () => {
     const backend = convexTestWithWorkers({ pauseWorkpool: true })
     const first = await publishedBusinessOwner(backend, 'documents-first')
     const second = await publishedBusinessOwner(backend, 'documents-second')
@@ -197,7 +197,7 @@ describe('Formance-sourced money documents', () => {
     }
   })
 
-  it('keeps daily-close signing and download bound to the owner Account', async () => {
+  it('AM-11 keeps daily-close signing and download bound to the owner Account', async () => {
     const backend = convexTestWithWorkers({ pauseWorkpool: true })
     const first = await publishedBusinessOwner(backend, 'daily-close-first')
     const second = await publishedBusinessOwner(backend, 'daily-close-second')
@@ -332,5 +332,177 @@ describe('Formance-sourced money documents', () => {
     await expect(backend.query(api.moneyDocuments.readOwnerDocumentUrl, {
       documentRef: secondDocumentRef,
     })).resolves.toBeNull()
+  })
+
+  it('AM-11 conceals another Account’s funding receipt and adjustment URLs', async () => {
+    const backend = convexTestWithWorkers({ pauseWorkpool: true })
+    const first = await publishedBusinessOwner(backend, 'am11-docs-first')
+    const second = await publishedBusinessOwner(backend, 'am11-docs-second')
+    const seedIssued = async (input: Readonly<{
+      accountRef: string
+      documentRef: string
+      kind: 'funding_receipt' | 'adjustment'
+    }>) => {
+      const renderInputDigest = canonicalDigest({
+        format: 'test-money-document-render-input:v1',
+        documentRef: input.documentRef,
+      })
+      const files = await backend.run(async (ctx) => ({
+        fileId: await ctx.storage.store(new Blob([`file:${input.documentRef}`], { type: 'text/html' })),
+        csvFileId: await ctx.storage.store(new Blob([`csv:${input.documentRef}`], { type: 'text/csv' })),
+      }))
+      await backend.run(async (ctx) => {
+        await ctx.db.insert('moneyDocuments', {
+          documentRef: input.documentRef,
+          accountRef: input.accountRef,
+          kind: input.kind,
+          sourceTransactionRefs: ['formance:tx:am11-source'],
+          amountUnits: '5280000',
+          residualUnits: '0',
+          policyRefs: ['commercial-policy:sandbox'],
+          policyDigest: `sha256:${'a'.repeat(64)}`,
+          templateVersion: 'ae.money-document:html:v1',
+          renderInputJson: '{}',
+          renderInputDigest,
+          state: 'issued',
+          environment: 'sandbox',
+          sourceCount: 1,
+          snapshotDigest: renderInputDigest,
+          fileId: files.fileId,
+          fileDigest: canonicalDigest({ format: 'test-money-document-file:v1', documentRef: input.documentRef }),
+          csvFileId: files.csvFileId,
+          csvFileDigest: canonicalDigest({ format: 'test-money-document-csv:v1', documentRef: input.documentRef }),
+          createdAt: 1,
+        })
+      })
+    }
+    await seedIssued({
+      accountRef: first.canonicalAccountRef,
+      documentRef: 'money-document:funding_receipt:am11',
+      kind: 'funding_receipt',
+    })
+    await seedIssued({
+      accountRef: first.canonicalAccountRef,
+      documentRef: 'money-document:adjustment:am11',
+      kind: 'adjustment',
+    })
+    await expect(first.owner.query(api.moneyDocuments.readOwnerDocumentUrl, {
+      documentRef: 'money-document:funding_receipt:am11',
+    })).resolves.toEqual(expect.any(String))
+    await expect(first.owner.query(api.moneyDocuments.readOwnerDocumentUrl, {
+      documentRef: 'money-document:adjustment:am11',
+    })).resolves.toEqual(expect.any(String))
+    await expect(second.owner.query(api.moneyDocuments.readOwnerDocumentUrl, {
+      documentRef: 'money-document:funding_receipt:am11',
+    })).resolves.toBeNull()
+    await expect(second.owner.query(api.moneyDocuments.readOwnerDocumentUrl, {
+      documentRef: 'money-document:adjustment:am11',
+    })).resolves.toBeNull()
+    const listed = await first.owner.query(api.moneyDocuments.listOwnerDocuments, {
+      paginationOpts: { numItems: 50, cursor: null },
+    })
+    expect(listed.page.map((document) => document.kind).sort()).toEqual(['adjustment', 'funding_receipt'])
+  })
+
+  it('AM-11 withholds tax_invoice creation until policy and customer tax facts admit issuance', async () => {
+    const backend = convexTestWithWorkers({ pauseWorkpool: true })
+    const owner = await publishedBusinessOwner(backend, 'tax-invoice-gate')
+    const sourceTransactionRef = 'ae-p4:test:tax-invoice-source'
+    const grossUnits = '1100000'
+    const seedTaxFacts = async (input: Readonly<{
+      abn: string
+      gstRegistered: boolean
+    }>) => {
+      await backend.run(async (ctx) => {
+        await ctx.db.insert('moneyCustomerTaxFacts', {
+          accountRef: owner.canonicalAccountRef,
+          abn: input.abn,
+          gstRegistered: input.gstRegistered,
+          legalCustomerRef: owner.canonicalPrincipalRef,
+          effectiveAt: Date.now(),
+          updatedAt: Date.now(),
+        })
+      })
+    }
+
+    await seedTaxFacts({ abn: '51824753556', gstRegistered: true })
+    await expect(owner.owner.mutation(api.moneyDocuments.createOwnerTaxInvoice, {
+      environment: 'sandbox',
+      grossUnits,
+      sourceTransactionRef,
+    })).resolves.toEqual({
+      kind: 'refused',
+      code: 'tax_invoice_withheld',
+      reason: 'policy_disabled',
+    })
+
+    const now = Date.now()
+    await backend.run(async (ctx) => {
+      const { COMMERCIAL_POLICY_FAMILIES } = await import('../../../src/modules/money/public')
+      const { PRODUCTION_COMMERCIAL_POLICY_CONTROLS } = await import('../../helpers/commercial-policy-fixtures')
+      for (const [index, family] of COMMERCIAL_POLICY_FAMILIES.entries()) {
+        const control = family === 'tax'
+          ? { ...PRODUCTION_COMMERCIAL_POLICY_CONTROLS.tax, taxInvoiceIssuance: 'enabled' as const }
+          : PRODUCTION_COMMERCIAL_POLICY_CONTROLS[family]
+        await ctx.db.insert('moneyCommercialPolicies', {
+          policyRef: `commercial-policy:${family}:tax-invoice`,
+          family,
+          environment: 'production',
+          revision: 1,
+          lifecycle: 'active',
+          effectiveAt: now - 1,
+          expiresAt: now + 60_000,
+          evidenceRef: `approval:${family}:tax-invoice`,
+          evidenceDigest: `sha256:${String(index).padStart(64, '0')}`,
+          control,
+          approvedByPrincipalRef: owner.canonicalPrincipalRef,
+          activeAccountRef: owner.canonicalAccountRef,
+          authorityGeneration: 1,
+          correlationRef: `correlation:${family}:tax-invoice`,
+          idempotencyRef: `idempotency:${family}:tax-invoice`,
+          commandDigest: `sha256:${String(index + 1).padStart(64, '0')}`,
+          activatedAt: now - 1,
+          updatedAt: now - 1,
+        })
+      }
+    })
+
+    await expect(owner.owner.mutation(api.moneyDocuments.createOwnerTaxInvoice, {
+      environment: 'production',
+      grossUnits,
+      sourceTransactionRef,
+    })).resolves.toEqual({
+      kind: 'created',
+      documentRef: `money-document:tax_invoice:${sourceTransactionRef}`,
+    })
+    await expect(owner.owner.mutation(api.moneyDocuments.createOwnerTaxInvoice, {
+      environment: 'production',
+      grossUnits,
+      sourceTransactionRef,
+    })).resolves.toEqual({
+      kind: 'replayed',
+      documentRef: `money-document:tax_invoice:${sourceTransactionRef}`,
+    })
+
+    const invalidOwner = await publishedBusinessOwner(backend, 'tax-invoice-invalid-abn')
+    await backend.run(async (ctx) => {
+      await ctx.db.insert('moneyCustomerTaxFacts', {
+        accountRef: invalidOwner.canonicalAccountRef,
+        abn: '12345678901',
+        gstRegistered: true,
+        legalCustomerRef: invalidOwner.canonicalPrincipalRef,
+        effectiveAt: Date.now(),
+        updatedAt: Date.now(),
+      })
+    })
+    await expect(invalidOwner.owner.mutation(api.moneyDocuments.createOwnerTaxInvoice, {
+      environment: 'production',
+      grossUnits,
+      sourceTransactionRef: 'ae-p4:test:tax-invoice-invalid-abn',
+    })).resolves.toEqual({
+      kind: 'refused',
+      code: 'tax_invoice_withheld',
+      reason: 'customer_abn_invalid',
+    })
   })
 })

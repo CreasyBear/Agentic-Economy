@@ -1,44 +1,56 @@
-import { getFunctionName, makeFunctionReference, type FunctionReference } from 'convex/server'
+import { makeFunctionReference, type FunctionReference } from 'convex/server'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { DelegationService } from '@/modules/authority/delegation/public'
 
 import convexCrons from '../../../convex/crons'
-import { readPreClaimRefundHandler } from '../../../convex/lib/callLifecycle/dispatch'
-import { probeFromCron } from '../../../convex/capabilitySupplyReadiness'
 import {
   SYSTEM_WORKLOAD_ACCOUNT_REF,
   SYSTEM_WORKLOAD_PRINCIPAL_REF,
   WORKLOAD_CRON_DECLARATIONS,
-  admitWorkloadCron,
   admitWorkloadCronHandler,
   bindWorkloadCronActionContext,
   parseWorkloadCronSnapshot,
-  reconcileWorkloadCronResourceAccount,
+  reconcileWorkloadCronSnapshotHandler,
   cleanupExpiredAgentAccessOAuthGrantsHandler,
   cleanupExpiredSourceWriteNoncesHandler,
   reconcileDueFacilitatorInvocationsHandler,
-  reconcileWorkloadCronSnapshot,
-  reconcileWorkloadCronSnapshotHandler,
   refreshAgenticEconomyApiRegistryHandler,
   refreshCapabilitySupplyReadinessHandler,
-  refreshCapabilitySupplyReadiness,
   refreshCurrentMarketPresenceHandler,
   refreshFacilitatorDiscoveryHandler,
   observeX402TreasuryHandler,
   reconcileBusinessSupplyProjectionsHandler,
   dispatchWorkloadCronConsequenceHandler,
-  reconcile,
-  type WorkloadCronActionContext,
-  type WorkloadCronMutationContext,
   type WorkloadCronSnapshot,
 } from '../../../convex/workloadCron'
-
-type RegisteredRuntimeHandler = (ctx: unknown, args: Record<string, unknown>) => Promise<unknown>
-const refreshCapabilitySupplyReadinessRuntime = (
-  refreshCapabilitySupplyReadiness as unknown as { _handler: RegisteredRuntimeHandler }
-)._handler
-const reconcileRuntime = (reconcile as unknown as { _handler: RegisteredRuntimeHandler })._handler
-const probeFromCronRuntime = (probeFromCron as unknown as { _handler: RegisteredRuntimeHandler })._handler
+import {
+  CANONICAL_ADMISSION,
+  CANONICAL_WORKLOAD,
+  CRON_FACILITATOR,
+  CRON_FACILITATOR_INVOCATIONS,
+  CRON_MARKET,
+  CRON_OAUTH,
+  CRON_READINESS,
+  FakeDb,
+  FakeRuntimeContext,
+  WORKLOAD_AUTHORITY_QUERY_CHAIN,
+  account,
+  admitCron,
+  assertWorkloadIsolationScenario,
+  canonicalDb,
+  createScheduledProbeHarness,
+  dispatchConsequence,
+  dispatchConsequenceArgs,
+  expectParseSnapshotRejects,
+  expectReconcileSnapshotRejects,
+  expectResourceAccountReconciliation,
+  membership,
+  principal,
+  queryContext,
+  reconcileWorkload,
+  refreshCapabilitySupplyReadinessRuntime,
+  seedInvocationAuthority,
+} from './workload-cron.harness'
 
 const EXPECTED_BINDINGS = {
   'cleanup expired agent access oauth grants': 'workloadCron:cleanupExpiredAgentAccessOAuthGrants',
@@ -74,6 +86,21 @@ const MUTATION_HANDLERS = [
   cleanupExpiredAgentAccessOAuthGrantsHandler,
 ] as const
 
+const PRE_CLAIM_REFUND_OPERATIONS = [
+  'capabilityCalls:claimAutomaticReconciliationCandidate',
+  'capabilityCalls:finishAutomaticReconciliation',
+] as const
+
+const DECLARED_MUTATION_CONSEQUENCES = [
+  'capabilityCalls:cancelBeforeClaim',
+  'capabilityCalls:claimAutomaticReconciliationCandidate',
+  'capabilityCalls:finishAutomaticReconciliation',
+  'capabilityCallX402AuthorizationExpiry:queueExpiredX402Authorization',
+  'capabilitySupply:recordCapabilityProbeResult',
+  'facilitatorDiscovery:reconcile',
+  'moneyX402PaymentAttempts:reconcileX402PaymentAttempt',
+] as const
+
 describe('System workload cron boundary', () => {
   beforeEach(() => {
     vi.useFakeTimers()
@@ -104,12 +131,7 @@ describe('System workload cron boundary', () => {
     const allowed = new FakeRuntimeContext(canonicalDb())
     await expect(refreshCapabilitySupplyReadinessRuntime(allowed.mutation(), {})).resolves.toBeNull()
     expect(allowed.dispatches).toEqual(['capabilitySupply:scheduleDueCapabilityProbes'])
-    expect(allowed.db.queries).toEqual([
-      'principals',
-      'accounts',
-      'accountOwnerships',
-      'memberships',
-    ])
+    expect(allowed.db.queries).toEqual([...WORKLOAD_AUTHORITY_QUERY_CHAIN])
 
     const denied = new FakeRuntimeContext(new FakeDb())
     await expect(refreshCapabilitySupplyReadinessRuntime(denied.mutation(), {}))
@@ -119,46 +141,23 @@ describe('System workload cron boundary', () => {
 
   it('runs the registered workload reconciliation query and denies a lifecycle change at consequence time', async () => {
     const db = canonicalDb()
-    const snapshot = await admitWorkloadCron(queryContext(db), 'refresh capability supply readiness')
+    const snapshot = await admitCron(db, CRON_READINESS)
 
-    await expect(reconcileRuntime(queryContext(db), {
-      name: 'refresh capability supply readiness',
-      snapshot,
-    })).resolves.toMatchObject({
-      actorPrincipalRef: SYSTEM_WORKLOAD_PRINCIPAL_REF,
-      activeAccountRef: SYSTEM_WORKLOAD_ACCOUNT_REF,
-      principalRevision: 7,
-      activeAccountRevision: 11,
+    await expect(reconcileWorkload(db, CRON_READINESS, snapshot)).resolves.toMatchObject({
+      ...CANONICAL_ADMISSION,
     })
 
     const suspended = canonicalDb({ principalLifecycle: 'suspended' })
-    await expect(reconcileRuntime(queryContext(suspended), {
-      name: 'refresh capability supply readiness',
-      snapshot,
-    })).rejects.toMatchObject({ code: 'workload_principal_inactive' })
+    await expect(reconcileWorkload(suspended, CRON_READINESS, snapshot))
+      .rejects.toMatchObject({ code: 'workload_principal_inactive' })
   })
 
   it('runs the registered scheduled probe through reconciliation and the bound action context without widening authority', async () => {
     const db = canonicalDb()
-    const snapshot = await admitWorkloadCron(queryContext(db), 'refresh capability supply readiness')
-    const queryRefs: string[] = []
-    const targetArgs: Record<string, unknown>[] = []
-    const runMutation = vi.fn()
-    const ctx = {
-      runQuery: vi.fn(async (reference: RuntimeReference, args: Record<string, unknown>) => {
-        const name = getFunctionName(reference)
-        queryRefs.push(name)
-        if (name === 'workloadCron:reconcile') return await reconcileRuntime(queryContext(db), args)
-        if (name === 'capabilitySupply:readCapabilityProbeTarget') {
-          targetArgs.push(args)
-          return { kind: 'unavailable', reason: 'publication_missing', evidenceRefs: [] }
-        }
-        throw new Error(`unexpected_runtime_query:${name}`)
-      }),
-      runMutation,
-    }
+    const snapshot = await admitCron(db, CRON_READINESS)
+    const probe = createScheduledProbeHarness(db)
 
-    await expect(probeFromCronRuntime(ctx, {
+    await expect(probe.runProbe({
       publicationRef: 'publication:runtime-sink',
       expectedRevision: 1,
       workload: snapshot,
@@ -167,100 +166,84 @@ describe('System workload cron boundary', () => {
       reason: 'publication_missing',
       evidenceRefs: [],
     })
-    expect(queryRefs).toEqual([
+    expect(probe.queryRefs).toEqual([
       'workloadCron:reconcile',
       'capabilitySupply:readCapabilityProbeTarget',
     ])
-    expect(targetArgs).toEqual([{
+    expect(probe.targetArgs).toEqual([{
       publicationRef: 'publication:runtime-sink',
       expectedRevision: 1,
       now: expect.any(Number),
     }])
-    expect(runMutation).not.toHaveBeenCalled()
+    expect(probe.runMutation).not.toHaveBeenCalled()
 
-    await expect(probeFromCronRuntime(ctx, {
+    await expect(probe.runProbe({
       publicationRef: 'publication:runtime-sink',
       expectedRevision: 1,
       workload: { ...snapshot, activeAccountRef: 'acc_ffffffffffffffffffffffffffffffff' },
     })).rejects.toMatchObject({ code: 'workload_snapshot_invalid' })
-    expect(queryRefs).toEqual([
+    expect(probe.queryRefs).toEqual([
       'workloadCron:reconcile',
       'capabilitySupply:readCapabilityProbeTarget',
     ])
-    expect(runMutation).not.toHaveBeenCalled()
+    expect(probe.runMutation).not.toHaveBeenCalled()
   })
 
   it.each([
-    ['owner', false, () => canonicalDb({ principalKind: 'agent', workloadOwnsAccount: true, includeMembership: false }), (value: WorkloadCronSnapshot) => value],
-    ['member', false, () => canonicalDb({ principalKind: 'agent' }), (value: WorkloadCronSnapshot) => value],
-    ['workload', true, () => canonicalDb(), (value: WorkloadCronSnapshot) => value],
-    ['missing_workload', false, () => new FakeDb(), (value: WorkloadCronSnapshot) => value],
-    ['stranger', false, () => canonicalDb({ includeOwnership: false, includeMembership: false }), (value: WorkloadCronSnapshot) => value],
-    ['wrong_account', false, () => {
-      const db = canonicalDb({ includeMembership: false })
-      db.seed('memberships', membership({ accountRef: 'acc_ffffffffffffffffffffffffffffffff' }))
-      return db
-    }, (value: WorkloadCronSnapshot) => value],
+    {
+      scenario: 'owner',
+      allowed: false,
+      makeDb: () => canonicalDb({ principalKind: 'agent', workloadOwnsAccount: true, includeMembership: false }),
+      present: (value: WorkloadCronSnapshot) => value,
+    },
+    {
+      scenario: 'member',
+      allowed: false,
+      makeDb: () => canonicalDb({ principalKind: 'agent' }),
+      present: (value: WorkloadCronSnapshot) => value,
+    },
+    {
+      scenario: 'workload',
+      allowed: true,
+      makeDb: () => canonicalDb(),
+      present: (value: WorkloadCronSnapshot) => value,
+    },
+    {
+      scenario: 'missing_workload',
+      allowed: false,
+      makeDb: () => new FakeDb(),
+      present: (value: WorkloadCronSnapshot) => value,
+    },
+    {
+      scenario: 'stranger',
+      allowed: false,
+      makeDb: () => canonicalDb({ includeOwnership: false, includeMembership: false }),
+      present: (value: WorkloadCronSnapshot) => value,
+    },
+    {
+      scenario: 'wrong_account',
+      allowed: false,
+      makeDb: () => {
+        const db = canonicalDb({ includeMembership: false })
+        db.seed('memberships', membership({ accountRef: 'acc_ffffffffffffffffffffffffffffffff' }))
+        return db
+      },
+      present: (value: WorkloadCronSnapshot) => value,
+    },
     // Workload snapshots carry revisions, not a grant generation. A stale
     // revision is reconciled to current facts by this registered boundary.
-    ['stale_generation', true, () => canonicalDb(), (value: WorkloadCronSnapshot) => ({
-      ...value,
-      principalRevision: value.principalRevision - 1,
-    })],
-  ] as const)(
-    'evaluates %s through the registered workload reconciliation and scheduled probe before dispatch',
-    async (_caseKind, allowed, makeDb, present) => {
-      const current = canonicalDb()
-      const admitted = await admitWorkloadCron(queryContext(current), 'refresh capability supply readiness')
-      const snapshot = present(admitted)
-      const db = makeDb()
-      const admission = new FakeRuntimeContext(db)
-      const targetReads: string[] = []
-      const runMutation = vi.fn()
-      const action = {
-        runQuery: vi.fn(async (reference: RuntimeReference, args: Record<string, unknown>) => {
-          const name = getFunctionName(reference)
-          if (name === 'workloadCron:reconcile') return await reconcileRuntime(queryContext(db), args)
-          targetReads.push(name)
-          return { kind: 'unavailable', reason: 'publication_missing', evidenceRefs: [] }
-        }),
-        runMutation,
-      }
-
-      if (allowed) {
-        await expect(refreshCapabilitySupplyReadinessRuntime(admission.mutation(), {}))
-          .resolves.toBeNull()
-        expect(admission.dispatches).toEqual(['capabilitySupply:scheduleDueCapabilityProbes'])
-        await expect(reconcileRuntime(queryContext(db), {
-          name: snapshot.name,
-          snapshot,
-        })).resolves.toMatchObject({
-          actorPrincipalRef: SYSTEM_WORKLOAD_PRINCIPAL_REF,
-          activeAccountRef: SYSTEM_WORKLOAD_ACCOUNT_REF,
-        })
-        await expect(probeFromCronRuntime(action, {
-          publicationRef: 'publication:isolation-matrix',
-          expectedRevision: 1,
-          workload: snapshot,
-        })).resolves.toMatchObject({ kind: 'unavailable' })
-        expect(targetReads).toEqual(['capabilitySupply:readCapabilityProbeTarget'])
-      } else {
-        await expect(refreshCapabilitySupplyReadinessRuntime(admission.mutation(), {}))
-          .rejects.toThrow()
-        expect(admission.dispatches).toEqual([])
-        await expect(reconcileRuntime(queryContext(db), {
-          name: snapshot.name,
-          snapshot,
-        })).rejects.toThrow()
-        await expect(probeFromCronRuntime(action, {
-          publicationRef: 'publication:isolation-matrix',
-          expectedRevision: 1,
-          workload: snapshot,
-        })).rejects.toThrow()
-        expect(targetReads).toEqual([])
-      }
-      expect(runMutation).not.toHaveBeenCalled()
+    {
+      scenario: 'stale_generation',
+      allowed: true,
+      makeDb: () => canonicalDb(),
+      present: (value: WorkloadCronSnapshot) => ({
+        ...value,
+        principalRevision: value.principalRevision - 1,
+      }),
     },
+  ])(
+    'evaluates $scenario through the registered workload reconciliation and scheduled probe before dispatch',
+    async (scenario) => assertWorkloadIsolationScenario(scenario),
   )
 
   it('admits every declared job from current canonical membership facts', async () => {
@@ -268,13 +251,10 @@ describe('System workload cron boundary', () => {
     for (const [index, declaration] of WORKLOAD_CRON_DECLARATIONS.entries()) {
       const admission = index === 0
         ? admitWorkloadCronHandler(queryContext(db) as Parameters<typeof admitWorkloadCronHandler>[0], { name: declaration.name })
-        : admitWorkloadCron(queryContext(db), declaration.name)
+        : admitCron(db, declaration.name)
       await expect(admission).resolves.toMatchObject({
         workloadKind: declaration.workloadKind,
-        actorPrincipalRef: SYSTEM_WORKLOAD_PRINCIPAL_REF,
-        activeAccountRef: SYSTEM_WORKLOAD_ACCOUNT_REF,
-        principalRevision: 7,
-        activeAccountRevision: 11,
+        ...CANONICAL_ADMISSION,
         accessVia: 'membership',
         admittedAt: Date.now(),
       })
@@ -283,62 +263,102 @@ describe('System workload cron boundary', () => {
 
   it('admits the same exact Account through current canonical ownership', async () => {
     const db = canonicalDb({ workloadOwnsAccount: true, includeMembership: false })
-    await expect(admitWorkloadCron(queryContext(db), 'refresh current market presence')).resolves.toMatchObject({
+    await expect(admitCron(db, CRON_MARKET)).resolves.toMatchObject({
       accessVia: 'ownership',
-      actorPrincipalRef: SYSTEM_WORKLOAD_PRINCIPAL_REF,
-      activeAccountRef: SYSTEM_WORKLOAD_ACCOUNT_REF,
+      ...CANONICAL_WORKLOAD,
     })
   })
 
-  it('denies missing or ambiguous workload Principal facts', async () => {
-    await expect(admitWorkloadCron(queryContext(new FakeDb()), 'refresh current market presence'))
-      .rejects.toMatchObject({ code: 'workload_principal_missing' })
-
-    const ambiguous = canonicalDb()
-    ambiguous.seed('principals', principal())
-    await expect(admitWorkloadCron(queryContext(ambiguous), 'refresh current market presence'))
-      .rejects.toThrow('unique query returned more than one row')
-  })
-
-  it('denies a non-workload or inactive canonical Principal', async () => {
-    const wrongKind = canonicalDb({ principalKind: 'agent' })
-    await expect(admitWorkloadCron(queryContext(wrongKind), 'refresh facilitator discovery'))
-      .rejects.toMatchObject({ code: 'workload_principal_kind_required' })
-
-    const inactive = canonicalDb({ principalLifecycle: 'suspended' })
-    await expect(admitWorkloadCron(queryContext(inactive), 'refresh facilitator discovery'))
-      .rejects.toMatchObject({ code: 'workload_principal_inactive' })
-  })
-
-  it('denies missing, ambiguous, or inactive Account facts', async () => {
-    const missing = canonicalDb({ includeAccount: false, includeOwnership: false, includeMembership: false })
-    await expect(admitWorkloadCron(queryContext(missing), 'cleanup expired agent access oauth grants'))
-      .rejects.toMatchObject({ code: 'workload_account_missing' })
-
-    const ambiguous = canonicalDb()
-    ambiguous.seed('accounts', account())
-    await expect(admitWorkloadCron(queryContext(ambiguous), 'cleanup expired agent access oauth grants'))
-      .rejects.toThrow('unique query returned more than one row')
-
-    const inactive = canonicalDb({ accountLifecycle: 'suspended' })
-    await expect(admitWorkloadCron(queryContext(inactive), 'cleanup expired agent access oauth grants'))
-      .rejects.toMatchObject({ code: 'workload_account_inactive' })
-  })
-
-  it('denies stale ownership and wrong-Account or ambiguous membership context', async () => {
-    const staleOwnership = canonicalDb({ includeOwnership: false })
-    await expect(admitWorkloadCron(queryContext(staleOwnership), 'refresh capability supply readiness'))
-      .rejects.toMatchObject({ code: 'workload_record_integrity_invalid' })
-
-    const wrongAccount = canonicalDb({ includeMembership: false })
-    wrongAccount.seed('memberships', membership({ accountRef: 'acc_ffffffffffffffffffffffffffffffff' }))
-    await expect(admitWorkloadCron(queryContext(wrongAccount), 'refresh capability supply readiness'))
-      .rejects.toMatchObject({ code: 'workload_account_access_forbidden' })
-
-    const ambiguousMembership = canonicalDb()
-    ambiguousMembership.seed('memberships', membership())
-    await expect(admitWorkloadCron(queryContext(ambiguousMembership), 'refresh capability supply readiness'))
-      .rejects.toThrow('unique query returned more than one row')
+  it.each([
+    {
+      scenario: 'missing_workload_principal',
+      makeDb: () => new FakeDb(),
+      cronName: CRON_MARKET,
+      expected: { code: 'workload_principal_missing' },
+    },
+    {
+      scenario: 'ambiguous_workload_principal',
+      makeDb: () => {
+        const ambiguous = canonicalDb()
+        ambiguous.seed('principals', principal())
+        return ambiguous
+      },
+      cronName: CRON_MARKET,
+      expectedError: 'unique query returned more than one row',
+    },
+    {
+      scenario: 'non_workload_principal_kind',
+      makeDb: () => canonicalDb({ principalKind: 'agent' }),
+      cronName: CRON_FACILITATOR,
+      expected: { code: 'workload_principal_kind_required' },
+    },
+    {
+      scenario: 'inactive_workload_principal',
+      makeDb: () => canonicalDb({ principalLifecycle: 'suspended' }),
+      cronName: CRON_FACILITATOR,
+      expected: { code: 'workload_principal_inactive' },
+    },
+    {
+      scenario: 'missing_workload_account',
+      makeDb: () => canonicalDb({ includeAccount: false, includeOwnership: false, includeMembership: false }),
+      cronName: CRON_OAUTH,
+      expected: { code: 'workload_account_missing' },
+    },
+    {
+      scenario: 'ambiguous_workload_account',
+      makeDb: () => {
+        const ambiguous = canonicalDb()
+        ambiguous.seed('accounts', account())
+        return ambiguous
+      },
+      cronName: CRON_OAUTH,
+      expectedError: 'unique query returned more than one row',
+    },
+    {
+      scenario: 'inactive_workload_account',
+      makeDb: () => canonicalDb({ accountLifecycle: 'suspended' }),
+      cronName: CRON_OAUTH,
+      expected: { code: 'workload_account_inactive' },
+    },
+    {
+      scenario: 'stale_workload_ownership',
+      makeDb: () => canonicalDb({ includeOwnership: false }),
+      cronName: CRON_READINESS,
+      expected: { code: 'workload_record_integrity_invalid' },
+    },
+    {
+      scenario: 'wrong_account_membership',
+      makeDb: () => {
+        const wrongAccount = canonicalDb({ includeMembership: false })
+        wrongAccount.seed('memberships', membership({ accountRef: 'acc_ffffffffffffffffffffffffffffffff' }))
+        return wrongAccount
+      },
+      cronName: CRON_READINESS,
+      expected: { code: 'workload_account_access_forbidden' },
+    },
+    {
+      scenario: 'ambiguous_workload_membership',
+      makeDb: () => {
+        const ambiguousMembership = canonicalDb()
+        ambiguousMembership.seed('memberships', membership())
+        return ambiguousMembership
+      },
+      cronName: CRON_READINESS,
+      expectedError: 'unique query returned more than one row',
+    },
+  ] as const satisfies ReadonlyArray<{
+    scenario: string
+    makeDb: () => FakeDb
+    cronName: typeof WORKLOAD_CRON_DECLARATIONS[number]['name']
+    expected?: { code: string }
+    expectedError?: string
+  }>)('denies workload cron admission when $scenario', async ({ makeDb, cronName, expected, expectedError }) => {
+    const admission = admitCron(makeDb(), cronName)
+    if (expected !== undefined) {
+      await expect(admission).rejects.toMatchObject(expected)
+      return
+    }
+    await expect(admission).rejects.toThrow(expectedError)
   })
 
   it('checks current workload authority before dispatch across every registered wrapper', async () => {
@@ -351,12 +371,7 @@ describe('System workload cron boundary', () => {
     // mutations - rebuildAllBusinessSupplyProjections and (Well 8 Lane C)
     // x402DirectoryIndexStore.reconcileProviderDirectoryRows - under one admission.
     expect(context.dispatches).toHaveLength(10)
-    expect([...context.db.queries].sort()).toEqual(Array.from({ length: 9 }, () => [
-      'principals',
-      'accounts',
-      'accountOwnerships',
-      'memberships',
-    ]).flat().sort())
+    expect([...context.db.queries].sort()).toEqual(Array.from({ length: 9 }, () => [...WORKLOAD_AUTHORITY_QUERY_CHAIN]).flat().sort())
     expect(context.trace.every(([admission, dispatch]) => admission < dispatch)).toBe(true)
   })
 
@@ -376,183 +391,188 @@ describe('System workload cron boundary', () => {
     expect(context.dispatches).toEqual(['facilitatorDiscoveryAction:run'])
   })
 
-  it('rejects forged, malformed, or future workload snapshots before rereading authority', async () => {
-    const db = canonicalDb()
-    const snapshot = await admitWorkloadCron(queryContext(db), 'refresh facilitator discovery')
-    const invalid: WorkloadCronSnapshot[] = [
-      { ...snapshot, name: 'refresh current market presence' },
-      { ...snapshot, workloadKind: 'job' },
-      { ...snapshot, actorPrincipalRef: 'prn_ffffffffffffffffffffffffffffffff' as WorkloadCronSnapshot['actorPrincipalRef'] },
-      { ...snapshot, activeAccountRef: 'acc_ffffffffffffffffffffffffffffffff' as WorkloadCronSnapshot['activeAccountRef'] },
-      { ...snapshot, purpose: 'forged purpose' },
-      { ...snapshot, source: 'forged/source' },
-      { ...snapshot, admittedAt: 1.5 },
-      { ...snapshot, admittedAt: Date.now() + 1 },
-    ]
-    for (const candidate of invalid) {
-      await expect(reconcileWorkloadCronSnapshot(
-        queryContext(db),
-        'refresh facilitator discovery',
-        candidate,
-      )).rejects.toMatchObject({ code: 'workload_snapshot_invalid' })
-    }
-    await expect(reconcileWorkloadCronSnapshotHandler(
-      queryContext(db) as Parameters<typeof reconcileWorkloadCronSnapshotHandler>[0],
-      { name: 'refresh facilitator discovery', snapshot },
-    )).resolves.toMatchObject({ name: 'refresh facilitator discovery' })
+  it.each([
+    {
+      scenario: 'wrong_cron_name',
+      patch: (snapshot: WorkloadCronSnapshot) => ({ ...snapshot, name: CRON_MARKET }),
+    },
+    {
+      scenario: 'wrong_workload_kind',
+      patch: (snapshot: WorkloadCronSnapshot) => ({ ...snapshot, workloadKind: 'job' as const }),
+    },
+    {
+      scenario: 'forged_actor_principal',
+      patch: (snapshot: WorkloadCronSnapshot) => ({
+        ...snapshot,
+        actorPrincipalRef: 'prn_ffffffffffffffffffffffffffffffff' as WorkloadCronSnapshot['actorPrincipalRef'],
+      }),
+    },
+    {
+      scenario: 'forged_active_account',
+      patch: (snapshot: WorkloadCronSnapshot) => ({
+        ...snapshot,
+        activeAccountRef: 'acc_ffffffffffffffffffffffffffffffff' as WorkloadCronSnapshot['activeAccountRef'],
+      }),
+    },
+    {
+      scenario: 'forged_purpose',
+      patch: (snapshot: WorkloadCronSnapshot) => ({ ...snapshot, purpose: 'forged purpose' }),
+    },
+    {
+      scenario: 'forged_source',
+      patch: (snapshot: WorkloadCronSnapshot) => ({ ...snapshot, source: 'forged/source' }),
+    },
+    {
+      scenario: 'non_integer_admitted_at',
+      patch: (snapshot: WorkloadCronSnapshot) => ({ ...snapshot, admittedAt: 1.5 }),
+    },
+    {
+      scenario: 'future_admitted_at',
+      patch: (snapshot: WorkloadCronSnapshot) => ({ ...snapshot, admittedAt: Date.now() + 1 }),
+    },
+  ])('rejects $scenario workload snapshot before rereading authority', async ({ patch }) => {
+    await expectReconcileSnapshotRejects(patch)
   })
 
-  it('parses the hostile validator boundary into branded immutable refs and rejects malformed shapes', async () => {
-    const snapshot = await admitWorkloadCron(queryContext(canonicalDb()), 'refresh facilitator discovery')
+  it('accepts a current workload snapshot through reconcileWorkloadCronSnapshotHandler', async () => {
+    const db = canonicalDb()
+    const snapshot = await admitCron(db, CRON_FACILITATOR)
+    await expect(reconcileWorkloadCronSnapshotHandler(
+      queryContext(db) as Parameters<typeof reconcileWorkloadCronSnapshotHandler>[0],
+      { name: CRON_FACILITATOR, snapshot },
+    )).resolves.toMatchObject({ name: CRON_FACILITATOR })
+  })
+
+  it('parses the hostile validator boundary into branded immutable refs', async () => {
+    const snapshot = await admitCron(canonicalDb(), CRON_FACILITATOR)
     expect(parseWorkloadCronSnapshot({ ...snapshot })).toEqual(snapshot)
     expect(Object.isFrozen(parseWorkloadCronSnapshot({ ...snapshot }))).toBe(true)
-    const invalid: unknown[] = [
-      null,
-      [],
-      { ...snapshot, extra: true },
-      Object.fromEntries(Object.entries(snapshot).filter(([key]) => key !== 'source')),
-      { ...snapshot, name: 'not-declared' },
-      { ...snapshot, principalRevision: 0 },
-      { ...snapshot, correlationRef: 'bad correlation ref' },
-    ]
-    for (const candidate of invalid) {
-      expect(() => parseWorkloadCronSnapshot(candidate)).toThrow('workload_snapshot_invalid')
-    }
+  })
+
+  it.each([
+    {
+      scenario: 'null_snapshot',
+      invalid: (_snapshot: WorkloadCronSnapshot) => null,
+    },
+    {
+      scenario: 'array_snapshot',
+      invalid: () => [],
+    },
+    {
+      scenario: 'extra_field',
+      invalid: (snapshot: WorkloadCronSnapshot) => ({ ...snapshot, extra: true }),
+    },
+    {
+      scenario: 'missing_source',
+      invalid: (snapshot: WorkloadCronSnapshot) => Object.fromEntries(
+        Object.entries(snapshot).filter(([key]) => key !== 'source'),
+      ),
+    },
+    {
+      scenario: 'undeclared_cron_name',
+      invalid: (snapshot: WorkloadCronSnapshot) => ({ ...snapshot, name: 'not-declared' }),
+    },
+    {
+      scenario: 'zero_principal_revision',
+      invalid: (snapshot: WorkloadCronSnapshot) => ({ ...snapshot, principalRevision: 0 }),
+    },
+    {
+      scenario: 'invalid_correlation_ref',
+      invalid: (snapshot: WorkloadCronSnapshot) => ({ ...snapshot, correlationRef: 'bad correlation ref' }),
+    },
+  ])('rejects $scenario at parseWorkloadCronSnapshot', async ({ invalid }) => {
+    await expectParseSnapshotRejects(invalid)
   })
 
   it('reconciles same-Account and explicit cross-Account payout attribution from canonical account facts', async () => {
     const db = canonicalDb()
-    const snapshot = await admitWorkloadCron(queryContext(db), 'cleanup expired agent access oauth grants')
-    await expect(reconcileWorkloadCronResourceAccount(
-      queryContext(db),
-      snapshot.name,
-      snapshot,
-      SYSTEM_WORKLOAD_ACCOUNT_REF,
-    )).resolves.toMatchObject({ activeAccountRef: SYSTEM_WORKLOAD_ACCOUNT_REF })
+    const snapshot = await admitCron(db, CRON_OAUTH)
+    await expectResourceAccountReconciliation(db, snapshot, SYSTEM_WORKLOAD_ACCOUNT_REF)
     const resourceAccountRef = 'acc_dddddddddddddddddddddddddddddddd'
     db.seed('accounts', { ...account(), accountRef: resourceAccountRef })
-    await expect(reconcileWorkloadCronResourceAccount(
-      queryContext(db),
-      snapshot.name,
-      snapshot,
-      resourceAccountRef,
-    )).resolves.toMatchObject({ activeAccountRef: SYSTEM_WORKLOAD_ACCOUNT_REF })
+    await expectResourceAccountReconciliation(db, snapshot, resourceAccountRef)
   })
 
   it('binds reconciliation resources only through a current full-chain grant admission and dual Account attribution', async () => {
     const db = canonicalDb()
-    const snapshot = await admitWorkloadCron(queryContext(db), 'reconcile due facilitator invocations')
+    const snapshot = await admitCron(db, CRON_FACILITATOR_INVOCATIONS)
     const missing = new FakeRuntimeContext(db)
-    await expect(dispatchWorkloadCronConsequenceHandler(missing.mutation() as never, {
-      name: snapshot.name,
-      snapshot,
-      resourceInvocationRef: 'inv_missing',
-      operation: 'facilitatorDiscovery:reconcile',
-      payload: {},
-    })).rejects.toMatchObject({ code: 'workload_resource_authority_invalid' })
+    await expect(dispatchConsequence(missing, snapshot, { resourceInvocationRef: 'inv_missing' }))
+      .rejects.toMatchObject({ code: 'workload_resource_authority_invalid' })
 
     seedInvocationAuthority(db, { grantAccountRef: SYSTEM_WORKLOAD_ACCOUNT_REF })
     const sameAccount = new FakeRuntimeContext(db)
-    await expect(dispatchWorkloadCronConsequenceHandler(sameAccount.mutation() as never, {
-      name: snapshot.name,
-      snapshot,
-      resourceInvocationRef: 'inv_cron',
-      operation: 'facilitatorDiscovery:reconcile',
-      payload: {},
-    })).resolves.toBeNull()
+    await expect(dispatchConsequence(sameAccount, snapshot)).resolves.toBeNull()
 
     const crossDb = canonicalDb()
     seedInvocationAuthority(crossDb, { grantAccountRef: 'acc_dddddddddddddddddddddddddddddddd' })
     const crossAccount = new FakeRuntimeContext(crossDb)
-    await expect(dispatchWorkloadCronConsequenceHandler(crossAccount.mutation() as never, {
-      name: snapshot.name,
-      snapshot,
-      resourceInvocationRef: 'inv_cron',
-      operation: 'facilitatorDiscovery:reconcile',
-      payload: {},
-    })).resolves.toBeNull()
+    await expect(dispatchConsequence(crossAccount, snapshot)).resolves.toBeNull()
   })
 
-  it('denies missing, inactive, stale-generation, expired, revoked-ancestor, and malformed resource chains', async () => {
-    const cases = [
-      { includeGrant: false },
-      { leafLifecycle: 'revoked' as const },
-      { accessGrantGeneration: 8 },
-      { grantExpiresAt: Date.now() },
-      { rootLifecycle: 'revoked' as const },
-      { malformedChain: true },
-      { invocationPrincipalRef: 'prn_ffffffffffffffffffffffffffffffff' },
-      { invocationAccountRef: 'acc_ffffffffffffffffffffffffffffffff' },
-      { invocationGrantExpiresAt: Date.now() + 1 },
-      { invocationOperationRef: 'operation:not-delegated' },
-    ]
-    for (const input of cases) {
-      const db = canonicalDb()
-      seedInvocationAuthority(db, input)
-      const snapshot = await admitWorkloadCron(queryContext(db), 'reconcile due facilitator invocations')
-      const context = new FakeRuntimeContext(db)
-      await expect(dispatchWorkloadCronConsequenceHandler(context.mutation() as never, {
-        name: snapshot.name,
-        snapshot,
-        resourceInvocationRef: 'inv_cron',
-        operation: 'facilitatorDiscovery:reconcile',
-        payload: {},
-      })).rejects.toMatchObject({ code: 'workload_resource_authority_invalid' })
-      expect(context.dispatches).toEqual([])
-    }
+  it.each([
+    { scenario: 'missing_grant', seed: { includeGrant: false } },
+    { scenario: 'revoked_leaf_grant', seed: { leafLifecycle: 'revoked' as const } },
+    { scenario: 'stale_access_grant_generation', seed: { accessGrantGeneration: 8 } },
+    { scenario: 'expired_grant', seed: { grantExpiresAt: Date.now() } },
+    { scenario: 'revoked_root_grant', seed: { rootLifecycle: 'revoked' as const } },
+    { scenario: 'malformed_grant_chain', seed: { malformedChain: true } },
+    { scenario: 'wrong_invocation_principal', seed: { invocationPrincipalRef: 'prn_ffffffffffffffffffffffffffffffff' } },
+    { scenario: 'wrong_invocation_account', seed: { invocationAccountRef: 'acc_ffffffffffffffffffffffffffffffff' } },
+    { scenario: 'future_invocation_grant_expiry', seed: { invocationGrantExpiresAt: Date.now() + 1 } },
+    { scenario: 'undelegated_invocation_operation', seed: { invocationOperationRef: 'operation:not-delegated' } },
+  ])('denies $scenario before workload resource dispatch', async ({ seed }) => {
+    const db = canonicalDb()
+    seedInvocationAuthority(db, seed)
+    const snapshot = await admitCron(db, CRON_FACILITATOR_INVOCATIONS)
+    const context = new FakeRuntimeContext(db)
+    await expect(dispatchConsequence(context, snapshot))
+      .rejects.toMatchObject({ code: 'workload_resource_authority_invalid' })
+    expect(context.dispatches).toEqual([])
   })
 
   it('keeps canonical and access generations distinct and admits canonical wildcard resources', async () => {
     const db = canonicalDb()
     seedInvocationAuthority(db, { grantGeneration: 3, wildcard: true })
-    const snapshot = await admitWorkloadCron(queryContext(db), 'reconcile due facilitator invocations')
+    const snapshot = await admitCron(db, CRON_FACILITATOR_INVOCATIONS)
     const context = new FakeRuntimeContext(db)
-    await expect(dispatchWorkloadCronConsequenceHandler(context.mutation() as never, {
-      name: snapshot.name, snapshot, resourceInvocationRef: 'inv_cron',
-      operation: 'facilitatorDiscovery:reconcile', payload: {},
-    })).resolves.toBeNull()
+    await expect(dispatchConsequence(context, snapshot)).resolves.toBeNull()
     expect(context.dispatches).toEqual(['facilitatorDiscovery:reconcile'])
   })
 
-  it('allows only proven same-Call refund bookkeeping after expiry or revocation', async () => {
-    for (const boundary of [
-      { grantExpiresAt: Date.now() - 1 },
-      { leafLifecycle: 'revoked' as const },
-      { rootLifecycle: 'revoked' as const },
-    ]) {
-      const db = canonicalDb()
-      seedInvocationAuthority(db, { ...boundary, wildcard: true, preClaimRefund: true })
-      const snapshot = await admitWorkloadCron(queryContext(db), 'reconcile due facilitator invocations')
-      const context = new FakeRuntimeContext(db)
-      for (const operation of ['capabilityCalls:claimAutomaticReconciliationCandidate', 'capabilityCalls:finishAutomaticReconciliation'] as const) {
-        await expect(dispatchWorkloadCronConsequenceHandler(context.mutation() as never, {
-          name: snapshot.name, snapshot, resourceInvocationRef: 'inv_cron', operation,
-          payload: { callRef: 'inv_cron' },
-        })).resolves.toBeNull()
-      }
-      await expect(dispatchWorkloadCronConsequenceHandler(context.mutation() as never, {
-        name: snapshot.name, snapshot, resourceInvocationRef: 'inv_cron',
-        operation: 'facilitatorDiscovery:reconcile', payload: {},
-      })).rejects.toMatchObject({ code: 'workload_resource_authority_invalid' })
-      await expect(dispatchWorkloadCronConsequenceHandler(context.mutation() as never, {
-        name: snapshot.name, snapshot, resourceInvocationRef: 'inv_cron',
-        operation: 'capabilityCalls:claimAutomaticReconciliationCandidate', payload: { callRef: 'inv_other' },
-      })).rejects.toMatchObject({ code: 'workload_resource_authority_invalid' })
-      db.seed('actionExecutionAttempts', { executionRef: 'inv_cron', attemptNumber: 1 })
-      await expect(dispatchWorkloadCronConsequenceHandler(context.mutation() as never, {
-        name: snapshot.name, snapshot, resourceInvocationRef: 'inv_cron',
-        operation: 'capabilityCalls:claimAutomaticReconciliationCandidate', payload: { callRef: 'inv_cron' },
-      })).rejects.toMatchObject({ code: 'workload_resource_authority_invalid' })
-      expect(context.dispatches).toEqual([
-        'capabilityCalls:claimAutomaticReconciliationCandidate', 'capabilityCalls:finishAutomaticReconciliation',
-      ])
+  it.each([
+    { scenario: 'expired_grant', boundary: { grantExpiresAt: Date.now() - 1 } },
+    { scenario: 'revoked_leaf_grant', boundary: { leafLifecycle: 'revoked' as const } },
+    { scenario: 'revoked_root_grant', boundary: { rootLifecycle: 'revoked' as const } },
+  ])('allows only proven same-Call refund bookkeeping after $scenario', async ({ boundary }) => {
+    const db = canonicalDb()
+    seedInvocationAuthority(db, { ...boundary, wildcard: true, preClaimRefund: true })
+    const snapshot = await admitCron(db, CRON_FACILITATOR_INVOCATIONS)
+    const context = new FakeRuntimeContext(db)
+    for (const operation of PRE_CLAIM_REFUND_OPERATIONS) {
+      await expect(dispatchConsequence(context, snapshot, {
+        operation,
+        payload: { callRef: 'inv_cron' },
+      })).resolves.toBeNull()
     }
+    await expect(dispatchConsequence(context, snapshot))
+      .rejects.toMatchObject({ code: 'workload_resource_authority_invalid' })
+    await expect(dispatchConsequence(context, snapshot, {
+      operation: 'capabilityCalls:claimAutomaticReconciliationCandidate',
+      payload: { callRef: 'inv_other' },
+    })).rejects.toMatchObject({ code: 'workload_resource_authority_invalid' })
+    db.seed('actionExecutionAttempts', { executionRef: 'inv_cron', attemptNumber: 1 })
+    await expect(dispatchConsequence(context, snapshot, {
+      operation: 'capabilityCalls:claimAutomaticReconciliationCandidate',
+      payload: { callRef: 'inv_cron' },
+    })).rejects.toMatchObject({ code: 'workload_resource_authority_invalid' })
+    expect(context.dispatches).toEqual([...PRE_CLAIM_REFUND_OPERATIONS])
   })
 
   it('fails closed on inconsistent admitted snapshots while preserving unexpected store failures', async () => {
     const db = canonicalDb()
     seedInvocationAuthority(db)
-    const snapshot = await admitWorkloadCron(queryContext(db), 'reconcile due facilitator invocations')
+    const snapshot = await admitCron(db, CRON_FACILITATOR_INVOCATIONS)
     const context = new FakeRuntimeContext(db)
     vi.spyOn(DelegationService.prototype, 'admitConsequence').mockResolvedValueOnce({
       grantRef: 'grt_ffffffffffffffffffffffffffffffff',
@@ -561,56 +581,31 @@ describe('System workload cron boundary', () => {
       actorPrincipalRef: 'prn_cccccccccccccccccccccccccccccccc',
       expiresAt: Date.now() + 1,
     } as never)
-    await expect(dispatchWorkloadCronConsequenceHandler(context.mutation() as never, {
-      name: snapshot.name,
-      snapshot,
-      resourceInvocationRef: 'inv_cron',
-      operation: 'facilitatorDiscovery:reconcile',
-      payload: {},
-    })).rejects.toMatchObject({ code: 'workload_resource_authority_invalid' })
+    await expect(dispatchConsequence(context, snapshot))
+      .rejects.toMatchObject({ code: 'workload_resource_authority_invalid' })
 
     const unexpected = new Error('store_unavailable')
     vi.spyOn(DelegationService.prototype, 'admitConsequence').mockRejectedValueOnce(unexpected)
-    await expect(dispatchWorkloadCronConsequenceHandler(context.mutation() as never, {
-      name: snapshot.name,
-      snapshot,
-      resourceInvocationRef: 'inv_cron',
-      operation: 'facilitatorDiscovery:reconcile',
-      payload: {},
-    })).rejects.toBe(unexpected)
+    await expect(dispatchConsequence(context, snapshot)).rejects.toBe(unexpected)
   })
 
   it('routes every declared mutation consequence through same-transaction current admission', async () => {
-    const operations = [
-      'capabilityCalls:cancelBeforeClaim',
-      'capabilityCalls:claimAutomaticReconciliationCandidate',
-      'capabilityCalls:finishAutomaticReconciliation',
-      'capabilityCallX402AuthorizationExpiry:queueExpiredX402Authorization',
-      'capabilitySupply:recordCapabilityProbeResult',
-      'facilitatorDiscovery:reconcile',
-      'moneyX402PaymentAttempts:reconcileX402PaymentAttempt',
-    ] as const
     const context = new FakeRuntimeContext(canonicalDb())
-    const snapshot = await admitWorkloadCron(queryContext(context.db), 'refresh facilitator discovery')
-    for (const operation of operations) {
+    const snapshot = await admitCron(context.db, CRON_FACILITATOR)
+    for (const operation of DECLARED_MUTATION_CONSEQUENCES) {
       await expect(dispatchWorkloadCronConsequenceHandler(
         context.mutation() as Parameters<typeof dispatchWorkloadCronConsequenceHandler>[0],
-        {
-          name: 'refresh facilitator discovery',
-          snapshot,
-          operation,
-          payload: { marker: operation },
-        },
+        dispatchConsequenceArgs(snapshot, { name: CRON_FACILITATOR, operation, payload: { marker: operation } }) as never,
       )).resolves.toBeNull()
     }
-    expect(context.dispatches).toEqual(operations)
+    expect(context.dispatches).toEqual(DECLARED_MUTATION_CONSEQUENCES)
   })
 
   it('rejects undeclared mutation consequences before the proxy dispatches', async () => {
     const context = new FakeRuntimeContext(canonicalDb())
-    const snapshot = await admitWorkloadCron(queryContext(context.db), 'refresh facilitator discovery')
+    const snapshot = await admitCron(context.db, CRON_FACILITATOR)
     const bound = bindWorkloadCronActionContext(context.action() as never, {
-      name: 'refresh facilitator discovery',
+      name: CRON_FACILITATOR,
       snapshot,
     })
     expect(bound.runQuery).toBeTypeOf('function')
@@ -623,16 +618,16 @@ describe('System workload cron boundary', () => {
 
   it('projects declared action consequences into the admitted dispatcher with optional resource attribution', async () => {
     const context = new FakeRuntimeContext(canonicalDb())
-    const snapshot = await admitWorkloadCron(queryContext(context.db), 'refresh facilitator discovery')
+    const snapshot = await admitCron(context.db, CRON_FACILITATOR)
     const declared = makeFunctionReference<'mutation'>('facilitatorDiscovery:reconcile') as unknown as FunctionReference<'mutation', 'internal'>
     const unscoped = bindWorkloadCronActionContext(context.action() as never, {
-      name: 'refresh facilitator discovery',
+      name: CRON_FACILITATOR,
       snapshot,
     })
     await expect(Reflect.apply(unscoped.runMutation, unscoped, [declared])).resolves.toBeNull()
 
     const scoped = bindWorkloadCronActionContext(context.action() as never, {
-      name: 'refresh facilitator discovery',
+      name: CRON_FACILITATOR,
       snapshot,
       resourceInvocationRef: 'inv_cron',
     })
@@ -643,377 +638,3 @@ describe('System workload cron boundary', () => {
     ])
   })
 })
-
-type Row = Record<string, unknown>
-type Filter = Readonly<{ field: string; value: unknown }>
-
-class FakeIndexBuilder {
-  readonly filters: Filter[] = []
-
-  eq(field: string, value: unknown): this {
-    this.filters.push({ field, value })
-    return this
-  }
-}
-
-class FakeQuery {
-  constructor(
-    private readonly rows: readonly Row[],
-    private readonly filters: readonly Filter[] = [],
-  ) {}
-
-  withIndex(_indexName: string, callback: (query: FakeIndexBuilder) => FakeIndexBuilder): FakeQuery {
-    const builder = callback(new FakeIndexBuilder())
-    return new FakeQuery(this.rows, [...this.filters, ...builder.filters])
-  }
-
-  async unique(): Promise<Row | null> {
-    const matches = this.matches()
-    if (matches.length > 1) throw new Error('unique query returned more than one row')
-    return matches.at(0) ?? null
-  }
-
-  async take(limit: number): Promise<Row[]> {
-    return this.matches().slice(0, limit)
-  }
-
-  async collect(): Promise<Row[]> {
-    return this.matches()
-  }
-
-  private matches(): Row[] {
-    return this.rows.filter((row) => this.filters.every(({ field, value }) => (
-      field.split('.').reduce<unknown>((current, segment) => (
-        typeof current === 'object' && current !== null ? (current as Row)[segment] : undefined
-      ), row) === value
-    )))
-  }
-}
-
-class FakeDb {
-  readonly #tables = new Map<string, Row[]>()
-  readonly queries: string[] = []
-  #nextId = 1
-
-  query(tableName: string): FakeQuery {
-    this.queries.push(tableName)
-    return new FakeQuery(this.#tables.get(tableName) ?? [])
-  }
-
-  seed(tableName: string, row: Row): void {
-    const rows = this.#tables.get(tableName) ?? []
-    rows.push({ _id: `${tableName}:${this.#nextId++}`, _creationTime: Date.now(), ...row })
-    this.#tables.set(tableName, rows)
-  }
-
-  async insert(tableName: string, row: Row): Promise<string> {
-    const id = `${tableName}:${this.#nextId++}`
-    const rows = this.#tables.get(tableName) ?? []
-    rows.push({ _id: id, _creationTime: Date.now(), ...row })
-    this.#tables.set(tableName, rows)
-    return id
-  }
-
-  async replace(id: string, row: Row): Promise<void> {
-    for (const rows of this.#tables.values()) {
-      const index = rows.findIndex((candidate) => candidate._id === id)
-      if (index !== -1) {
-        rows[index] = { _id: id, _creationTime: rows[index]?._creationTime ?? Date.now(), ...row }
-        return
-      }
-    }
-    throw new Error(`missing fake row ${id}`)
-  }
-}
-
-function queryContext(db: FakeDb) {
-  return { db } as unknown as Parameters<typeof admitWorkloadCron>[0]
-}
-
-type CanonicalDbOptions = Readonly<{
-  accountLifecycle?: 'active' | 'suspended'
-  includeAccount?: boolean
-  includeMembership?: boolean
-  includeOwnership?: boolean
-  principalKind?: 'agent' | 'workload'
-  principalLifecycle?: 'active' | 'suspended'
-  workloadOwnsAccount?: boolean
-}>
-
-function canonicalDb(options: CanonicalDbOptions = {}): FakeDb {
-  const db = new FakeDb()
-  db.seed('principals', principal({
-    ...(options.principalKind === undefined ? {} : { kind: options.principalKind }),
-    ...(options.principalLifecycle === undefined ? {} : { lifecycle: options.principalLifecycle }),
-  }))
-  if (options.includeAccount !== false) db.seed('accounts', account(
-    options.accountLifecycle === undefined ? {} : { lifecycle: options.accountLifecycle },
-  ))
-  if (options.includeOwnership !== false) db.seed('accountOwnerships', ownership(
-    options.workloadOwnsAccount === undefined ? {} : { workloadOwnsAccount: options.workloadOwnsAccount },
-  ))
-  if (options.includeMembership !== false) db.seed('memberships', membership())
-  return db
-}
-
-function principal(input: Readonly<{ kind?: string; lifecycle?: string }> = {}): Row {
-  return {
-    principalRef: SYSTEM_WORKLOAD_PRINCIPAL_REF,
-    kind: input.kind ?? 'workload',
-    displayName: 'System scheduled workload',
-    lifecycle: input.lifecycle ?? 'active',
-    revision: 7,
-    createdAt: 1,
-    updatedAt: 2,
-  }
-}
-
-function account(input: Readonly<{ lifecycle?: string }> = {}): Row {
-  return {
-    accountRef: SYSTEM_WORKLOAD_ACCOUNT_REF,
-    displayName: 'System operations',
-    lifecycle: input.lifecycle ?? 'active',
-    recoveryPolicy: { kind: 'no_transfer', revision: 1 },
-    creationActorPrincipalRef: 'prn_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
-    creationIdempotencyRef: 'account:create',
-    initialOwnershipRef: 'own_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
-    currentOwnershipRef: 'own_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
-    revision: 11,
-    createdAt: 1,
-    updatedAt: 2,
-    lastAction: {
-      actorPrincipalRef: 'prn_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
-      activeAccountRef: SYSTEM_WORKLOAD_ACCOUNT_REF,
-      correlationRef: 'account:create',
-      idempotencyRef: 'account:create',
-    },
-  }
-}
-
-function ownership(input: Readonly<{ workloadOwnsAccount?: boolean }> = {}): Row {
-  return {
-    ownershipRef: 'own_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
-    accountRef: SYSTEM_WORKLOAD_ACCOUNT_REF,
-    ownerPrincipalRef: input.workloadOwnsAccount === true
-      ? SYSTEM_WORKLOAD_PRINCIPAL_REF
-      : 'prn_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
-    lifecycle: 'active',
-    changeKind: 'creation',
-    revision: 1,
-    createdAt: 1,
-    createdBy: {
-      actorPrincipalRef: 'prn_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
-      activeAccountRef: SYSTEM_WORKLOAD_ACCOUNT_REF,
-      correlationRef: 'account:create',
-      idempotencyRef: 'account:create',
-    },
-  }
-}
-
-function membership(input: Readonly<{ accountRef?: string }> = {}): Row {
-  return {
-    membershipRef: 'mem_cccccccccccccccccccccccccccccccc',
-    accountRef: input.accountRef ?? SYSTEM_WORKLOAD_ACCOUNT_REF,
-    memberPrincipalRef: SYSTEM_WORKLOAD_PRINCIPAL_REF,
-    lifecycle: 'active',
-    revision: 1,
-    createdAt: 1,
-    createdBy: {
-      actorPrincipalRef: 'prn_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
-      activeAccountRef: input.accountRef ?? SYSTEM_WORKLOAD_ACCOUNT_REF,
-      correlationRef: 'membership:create',
-      idempotencyRef: 'membership:create',
-    },
-  }
-}
-
-function seedInvocationAuthority(
-  db: FakeDb,
-  input: Readonly<{
-    includeGrant?: boolean
-    grantAccountRef?: string
-    grantExpiresAt?: number
-    grantGeneration?: number
-    accessGrantGeneration?: number
-    wildcard?: boolean
-    preClaimRefund?: boolean
-    invocationAccountRef?: string
-    invocationGrantExpiresAt?: number
-    invocationOperationRef?: string
-    invocationPrincipalRef?: string
-    leafLifecycle?: 'active' | 'revoked'
-    malformedChain?: boolean
-    rootLifecycle?: 'active' | 'revoked'
-  }> = {},
-): void {
-  const resourceAccountRef = input.grantAccountRef ?? 'acc_dddddddddddddddddddddddddddddddd'
-  const rootGrantRef = 'grt_eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee'
-  const leafGrantRef = 'grt_dddddddddddddddddddddddddddddddd'
-  const rootActor = 'prn_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
-  const intermediate = 'prn_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb'
-  const leafSubject = 'prn_cccccccccccccccccccccccccccccccc'
-  db.seed('capabilityCalls', {
-    callRef: 'inv_cron',
-    principalId: input.invocationPrincipalRef ?? leafSubject,
-    ownerId: input.invocationAccountRef ?? resourceAccountRef,
-    toolRef: input.invocationOperationRef ?? 'invocation:inv_cron',
-    grantRef: leafGrantRef,
-    grantGeneration: 7,
-    credentialId: 'credential:cron',
-    applicationRef: 'application:cron',
-    environment: 'sandbox',
-    policyDigest: 'sha256:cron-policy',
-    ...(input.preClaimRefund ? {
-      state: 'refused', result: { kind: 'refused', code: 'budget_exceeded' },
-      dispatchState: 'failed', reconciliation: { reason: 'refund_pending' },
-      formanceFinancialState: 'reserved', formanceReservationRefs: ['buyer', 'treasury', 'provider'],
-    } : {}),
-    grantExpiresAt: input.invocationGrantExpiresAt ?? (input.grantExpiresAt ?? Date.now() + 60_000),
-  })
-  db.seed('agentAccessGrants', {
-    grantRef: leafGrantRef, principalId: leafSubject, ownerId: resourceAccountRef,
-    credentialId: 'credential:cron', applicationRef: 'application:cron', environment: 'sandbox',
-    generation: input.accessGrantGeneration ?? 7, spendingPolicyDigest: 'sha256:cron-policy',
-    expiresAt: input.grantExpiresAt ?? Date.now() + 60_000,
-  })
-  if (input.includeGrant !== false) {
-    db.seed('authorityDelegationGrants', {
-      grantRef: rootGrantRef,
-      accountRef: resourceAccountRef,
-      actorPrincipalRef: rootActor,
-      subjectPrincipalRef: intermediate,
-      scopes: ['operation:reconcile'],
-      resourceRefs: input.wildcard ? ['*'] : ['invocation:inv_cron'],
-      budgetLimit: 10,
-      budgetUsed: 0,
-      expiresAt: Date.now() + 120_000,
-      generation: input.rootLifecycle === 'revoked' ? 2 : 1,
-      revision: input.rootLifecycle === 'revoked' ? 2 : 1,
-      lifecycle: input.rootLifecycle ?? 'active',
-      createdAt: 1,
-      createdBy: actionContext(rootActor, resourceAccountRef, 'root'),
-      ...(input.rootLifecycle === 'revoked'
-        ? { revokedAt: 2, revokedBy: actionContext(rootActor, resourceAccountRef, 'revoke-root') }
-        : {}),
-    })
-    db.seed('authorityDelegationGrants', {
-      grantRef: leafGrantRef,
-      accountRef: resourceAccountRef,
-      actorPrincipalRef: input.malformedChain === true ? rootActor : intermediate,
-      subjectPrincipalRef: leafSubject,
-      parentGrantRef: rootGrantRef,
-      parentGeneration: input.rootLifecycle === 'revoked' ? 1 : 1,
-      scopes: ['operation:reconcile'],
-      resourceRefs: input.wildcard ? ['*'] : ['invocation:inv_cron'],
-      budgetLimit: 5,
-      budgetUsed: 0,
-      expiresAt: input.grantExpiresAt ?? Date.now() + 60_000,
-      generation: input.leafLifecycle === 'revoked' ? 8 : (input.grantGeneration ?? 7),
-      revision: input.leafLifecycle === 'revoked' ? 8 : (input.grantGeneration ?? 7),
-      lifecycle: input.leafLifecycle ?? 'active',
-      createdAt: 2,
-      createdBy: actionContext(
-        input.malformedChain === true ? rootActor : intermediate,
-        resourceAccountRef,
-        'leaf',
-      ),
-      ...(input.leafLifecycle === 'revoked'
-        ? { revokedAt: 3, revokedBy: actionContext(leafSubject, resourceAccountRef, 'revoke-leaf') }
-        : {}),
-    })
-  }
-  db.seed('principals', {
-    principalRef: leafSubject,
-    kind: 'agent',
-    displayName: 'Invocation authority subject',
-    lifecycle: 'active',
-    revision: 1,
-    createdAt: 1,
-    updatedAt: 1,
-  })
-  if (resourceAccountRef !== SYSTEM_WORKLOAD_ACCOUNT_REF) {
-    db.seed('accounts', {
-      ...account(),
-      accountRef: resourceAccountRef,
-      initialOwnershipRef: 'own_dddddddddddddddddddddddddddddddd',
-      currentOwnershipRef: 'own_dddddddddddddddddddddddddddddddd',
-    })
-    db.seed('accountOwnerships', {
-      ...ownership(),
-      ownershipRef: 'own_dddddddddddddddddddddddddddddddd',
-      accountRef: resourceAccountRef,
-    })
-  }
-  db.seed('memberships', {
-    ...membership({ accountRef: resourceAccountRef }),
-    membershipRef: 'mem_dddddddddddddddddddddddddddddddd',
-    memberPrincipalRef: leafSubject,
-  })
-}
-
-function actionContext(actorPrincipalRef: string, activeAccountRef: string, suffix: string): Row {
-  return {
-    actorPrincipalRef,
-    activeAccountRef,
-    correlationRef: `cron-test:${suffix}`,
-    idempotencyRef: `cron-test:${suffix}`,
-  }
-}
-
-type RuntimeReference = FunctionReference<'query' | 'mutation' | 'action', 'public' | 'internal'>
-
-class FakeRuntimeContext {
-  readonly admissions: string[] = []
-  readonly dispatches: string[] = []
-  readonly events: string[] = []
-  readonly #tracePairs: Array<[number, number]> = []
-
-  constructor(
-    readonly db: FakeDb,
-    readonly targetError?: Error,
-  ) {}
-
-  get trace(): readonly [number, number][] {
-    return this.#tracePairs
-  }
-
-  action(): WorkloadCronActionContext {
-    return {
-      runQuery: async (_reference, args) => {
-        const admittedAt = this.recordAdmission(args.name)
-        const result = await admitWorkloadCron(queryContext(this.db), args.name)
-        this.#tracePairs.push([admittedAt, -1])
-        return result
-      },
-      runMutation: async (reference: FunctionReference<'mutation', 'public' | 'internal'>) => this.recordDispatch(reference),
-      runAction: async (reference: FunctionReference<'action', 'public' | 'internal'>) => this.recordDispatch(reference),
-    } as WorkloadCronActionContext
-  }
-
-  mutation(): WorkloadCronMutationContext {
-    return {
-      db: this.db,
-      runQuery: async (reference: RuntimeReference, args: { callRef: string }) => {
-        if (getFunctionName(reference) !== 'capabilityCalls:readPreClaimRefund') throw new Error('unexpected_refund_query')
-        return await readPreClaimRefundHandler({ db: this.db } as never, args)
-      },
-      runMutation: async (reference: FunctionReference<'mutation', 'public' | 'internal'>) => this.recordDispatch(reference),
-    } as unknown as WorkloadCronMutationContext
-  }
-
-  recordAdmission(name: string): number {
-    this.admissions.push(name)
-    this.events.push(`admit:${name}`)
-    return this.events.length - 1
-  }
-
-  private async recordDispatch(reference: RuntimeReference): Promise<null> {
-    const name = getFunctionName(reference)
-    this.dispatches.push(name)
-    this.events.push(`dispatch:${name}`)
-    const openPair = this.#tracePairs.find(([, dispatch]) => dispatch === -1)
-    if (openPair !== undefined) openPair[1] = this.events.length - 1
-    if (this.targetError !== undefined) throw this.targetError
-    return null
-  }
-}

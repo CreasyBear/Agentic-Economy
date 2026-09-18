@@ -1,14 +1,33 @@
+import type { GenericDatabaseReader, UserIdentity } from 'convex/server'
 import { v, type Infer } from 'convex/values'
 
-import type { Doc } from './_generated/dataModel'
+import { resolveServiceMode, serviceModeAllowsEnvironment } from '@/lib/deployment/service-mode'
+import { accountRef } from '../src/modules/principal-account/account/public'
+import { principalRef } from '../src/modules/principal-account/principal/public'
+import { admitTaxInvoiceIssuance } from '../src/modules/money/public'
+
+import type { DataModel, Doc } from './_generated/dataModel'
 import type { MutationCtx, QueryCtx } from './_generated/server'
 import { env, internalMutation, internalQuery, mutation, query } from './_generated/server'
 import { resolveBusinessActor } from './authz'
+import {
+  InteractiveAuthorityError,
+  requireAccessFactForAccount,
+  resolveActiveAccountRefForPrincipal,
+} from './interactiveAuthority'
 import { admitInteractiveOwnerConsequence } from './lib/ownerConsequence'
 import { readCommercialPolicyGate } from './moneyCommercialPolicy'
-import { enqueueDocumentRender } from './moneyDocuments'
+import { readCustomerTaxFactsForAccount } from './moneyDocuments'
+import { CLERK_USER_PROVIDER_NAMESPACE } from './workspaceProvisioning'
+import {
+  prepareFundingSettlementEvent,
+  prepareFundingRefundEvent,
+  finalizeFundingEventHandler,
+  finalizeFundingRefundHandler,
+  markFundingBookingUnknownHandler,
+  markFundingReversalUnknownHandler,
+} from './lib/money/fundingStripeEventPipeline'
 import { exactAmount, serverFunctionAuth, stripeMoneyWebhookEventArg } from './moneyLedgerValues'
-import { eventRowFields, eventRowMatches } from './moneyStripeEvents'
 import {
   agentAccessPrincipalValue,
   verifyMarketAgentPrincipal,
@@ -19,7 +38,6 @@ import {
 } from './lib/moneyLegalCustomer'
 import { requireSourceWrite, sourceWriteArgs } from './sourceWriteAdmission'
 import { canonicalDigest } from '../src/modules/common/canonical-digest'
-import { stableStringify, type StableHashValue } from '../src/modules/common/stable-hash'
 import {
   verifyCustomerRequestServiceAssertion,
   type CustomerRequestServiceAssertion,
@@ -90,7 +108,7 @@ const fundingCommandValue = v.object({
   inputDigest: v.string(),
   successReturnRef: v.string(),
   providerRecoveryDeadlineAt: v.number(),
-  initiationKind: v.optional(v.union(v.literal('owner_top_up'), v.literal('agent_handoff'))),
+  initiationKind: v.optional(v.union(v.literal('owner_top_up'), v.literal('agent_handoff'), v.literal('auto_recharge'))),
   checkoutMode: v.optional(v.literal('hosted_page')),
   checkoutExpiresAt: v.optional(v.number()),
   cancelReturnRef: v.optional(v.string()),
@@ -131,6 +149,7 @@ const fundingResultValue = v.union(
 const reserveFundingArgsValue = v.object({
   amountUnits: v.string(),
   environment: environmentValue,
+  expectedPolicyDigest: v.string(),
   commandRef: v.string(),
   idempotencyKey: v.string(),
   inputDigest: v.string(),
@@ -259,9 +278,7 @@ const prepareFundingEventResultValue = v.union(
 type ReserveFundingArgs = Infer<typeof reserveFundingArgsValue>
 type BindFundingArgs = Infer<typeof bindFundingArgsValue>
 type ApplyFundingEventArgs = Infer<typeof applyFundingEventArgsValue>
-type TrustedApplyFundingEventArgs = Infer<typeof trustedApplyFundingEventArgsValue>
 type FundingResult = Infer<typeof fundingResultValue>
-type ApplyFundingEventResult = Infer<typeof applyFundingEventResultValue>
 
 const RECOVERY_WINDOW_MS = 23 * 60 * 60 * 1_000
 const POSITIVE_UNITS = /^[1-9]\d{0,29}$/u
@@ -302,78 +319,6 @@ async function admitAgentHandoff(
   return admission.kind === 'allowed' ? admission : null
 }
 
-async function recordFundingDocuments(
-  ctx: MutationCtx,
-  command: Doc<'moneyFundingCommands'>,
-  transactionRef: string,
-  occurredAt: number,
-): Promise<void> {
-  const definitions: readonly Readonly<{
-    kind: 'funding_receipt' | 'service_fee_document'
-    amountUnits: string
-    detail: Readonly<Record<string, string>>
-  }>[] = [
-    {
-      kind: 'funding_receipt' as const,
-      amountUnits: command.principalUnits,
-      detail: {
-        principalUnits: command.principalUnits,
-        serviceFeeUnits: command.serviceFeeUnits,
-        taxUnits: command.taxUnits,
-        totalUnits: command.totalUnits,
-      },
-    },
-    {
-      kind: 'service_fee_document' as const,
-      amountUnits: (BigInt(command.serviceFeeUnits) + BigInt(command.taxUnits)).toString(),
-      detail: { serviceFeeUnits: command.serviceFeeUnits, taxUnits: command.taxUnits },
-    },
-  ]
-  for (const definition of definitions) {
-    const documentRef = `money-document:${definition.kind}:${transactionRef}`
-    const existing = await ctx.db.query('moneyDocuments')
-      .withIndex('by_documentRef', (query) => query.eq('documentRef', documentRef))
-      .unique()
-    if (existing !== null) continue
-    const renderInput = {
-      format: 'ae.money-document-render-input:v1',
-      documentRef,
-      accountRef: command.accountRef,
-      kind: definition.kind,
-      currency: 'AUD',
-      exponent: AUD_EXPONENT,
-      amountUnits: definition.amountUnits,
-      detail: definition.detail,
-      transactionRef,
-      occurredAt,
-      policyRefs: command.commercialPolicyRefs,
-      policyDigest: command.commercialPolicyDigest,
-    } as const satisfies StableHashValue
-    const renderInputJson = stableStringify(renderInput)
-    const renderInputDigest = canonicalDigest(renderInput)
-    const documentId = await ctx.db.insert('moneyDocuments', {
-      documentRef,
-      accountRef: command.accountRef,
-      kind: definition.kind,
-      sourceTransactionRefs: [transactionRef],
-      amountUnits: definition.amountUnits,
-      residualUnits: '0',
-      policyRefs: [...command.commercialPolicyRefs],
-      policyDigest: command.commercialPolicyDigest,
-      templateVersion: 'ae.money-document:html:v1',
-      renderInputJson,
-      renderInputDigest,
-      state: 'rendering',
-      environment: command.environment,
-      sourceCount: 1,
-      snapshotDigest: renderInputDigest,
-      createdAt: occurredAt,
-    })
-    const workId = await enqueueDocumentRender(ctx, documentRef)
-    await ctx.db.patch(documentId, { workId })
-  }
-}
-
 function fundingCommandView(row: Doc<'moneyFundingCommands'>) {
   const { _id, _creationTime, ...view } = row
   return view
@@ -387,10 +332,14 @@ async function reserveFundingHandler(
   ctx: MutationCtx,
   args: ReserveFundingArgs,
 ): Promise<FundingResult> {
+  if (!serviceModeAllowsEnvironment(resolveServiceMode(env), args.environment)) {
+    return refused('environment_mismatch')
+  }
   const sourceWrite = await requireSourceWrite(ctx, args, 'billing')
   if (sourceWrite.kind === 'rejected') return refused('source_write_denied')
   if (!POSITIVE_UNITS.test(args.amountUnits)
-    || !SHA256.test(args.inputDigest)) return refused('funding_amount_invalid')
+    || !SHA256.test(args.inputDigest)
+    || !SHA256.test(args.expectedPolicyDigest)) return refused('funding_amount_invalid')
   const actor = await resolveBusinessActor(ctx)
   if (actor.kind !== 'authenticated_owner') return refused('billing_identity_missing')
 
@@ -415,6 +364,7 @@ async function reserveFundingHandler(
       : {}),
   })
   if (policy.kind === 'refused') return refused('commercial_policy_required')
+  if (policy.policyDigest !== args.expectedPolicyDigest) return refused('price_changed')
   const fundingPolicy = audFundingPolicyFromCommercialControls(policy.controls)
   const quote = quoteAudAccountFunding(BigInt(args.amountUnits), fundingPolicy)
   if (quote === undefined) return refused('funding_amount_invalid')
@@ -488,6 +438,9 @@ async function reserveAgentHandoffHandler(
   ctx: MutationCtx,
   args: Infer<typeof reserveAgentHandoffArgsValue>,
 ): Promise<FundingResult> {
+  if (!serviceModeAllowsEnvironment(resolveServiceMode(env), args.environment)) {
+    return refused('environment_mismatch')
+  }
   const admission = await admitAgentHandoff(ctx, args)
   const callerKey = args.idempotencyKey.trim()
   if (admission === null) return refused('billing_identity_missing')
@@ -623,7 +576,9 @@ async function readAgentHandoffHandler(
 
 function handoffState(command: Doc<'moneyFundingCommands'>) {
   if (command.state === 'succeeded') return 'ready' as const
-  if (command.terminalReason === 'expired') return 'expired' as const
+  if (command.terminalReason === 'expired' || command.providerCheckoutStatus === 'expired') {
+    return 'expired' as const
+  }
   if (command.terminalReason === 'async_payment_failed' || command.state === 'failed') return 'failed' as const
   if (command.providerCheckoutStatus === 'complete') return 'processing' as const
   return 'awaiting_payment' as const
@@ -843,420 +798,6 @@ async function prepareFundingEventHandler(
   return refused('payment_binding_invalid')
 }
 
-async function prepareFundingSettlementEvent(
-  ctx: MutationCtx,
-  args: TrustedApplyFundingEventArgs,
-): Promise<Infer<typeof prepareFundingEventResultValue>> {
-  if (args.event.kind !== 'checkout' || args.readback === undefined || args.refundReadback !== undefined) {
-    return refused('payment_binding_invalid')
-  }
-  const event = args.event
-  const command = await ctx.db.query('moneyFundingCommands')
-    .withIndex('by_commandRef', (builder) => builder.eq('commandRef', event.commandRef))
-    .unique()
-  if (command === null) return refused('funding_pending', true)
-  const priorEvent = await ctx.db.query('moneyStripeEvents')
-    .withIndex('by_stripeEventId', (builder) => builder.eq('stripeEventId', event.stripeEventId))
-    .unique()
-  if (priorEvent !== null) {
-    if (!eventRowMatches(priorEvent, event)) return refused('payment_binding_invalid')
-    if (priorEvent.status === 'applied' && priorEvent.appliedRef === command.appliedTransactionRef) {
-      return {
-        kind: 'accepted',
-        status: 'replayed',
-        ...(priorEvent.appliedRef === undefined ? {} : { appliedRef: priorEvent.appliedRef }),
-      }
-    }
-    if (priorEvent.status !== 'received') return refused('payment_binding_invalid')
-  }
-  const bound = event.externalRef === args.readback.externalRef
-    && compareExactAmounts(event.amount, {
-      currency: 'AUD', exponent: AUD_EXPONENT, units: command.totalUnits,
-    }) === 0
-    && compareExactAmounts(args.readback.amount, {
-      currency: 'AUD', exponent: AUD_EXPONENT, units: command.totalUnits,
-    }) === 0
-    && event.metadataDigest === command.metadataDigest
-    && args.readback.metadataDigest === command.metadataDigest
-    && event.checkoutSessionDigest === args.readback.checkoutSessionDigest
-    && event.paymentIntentDigest === args.readback.paymentIntentDigest
-    && event.paymentId === args.readback.paymentId
-  if (!bound) return refused('payment_binding_invalid')
-
-  if (event.status !== 'paid') {
-    if (command.state === 'succeeded') {
-      await ctx.db.insert('moneyStripeEvents', {
-        ...eventRowFields(event),
-        status: 'ignored',
-      })
-      return { kind: 'accepted', status: 'ignored' }
-    }
-    if (event.status === 'processing') {
-      await ctx.db.patch(command._id, {
-        providerStatus: 'pending',
-        ...(args.readback.checkoutStatus === undefined ? {} : {
-          providerCheckoutStatus: args.readback.checkoutStatus,
-        }),
-        ...(args.readback.paymentStatus === undefined ? {} : {
-          providerPaymentStatus: args.readback.paymentStatus,
-        }),
-        updatedAt: event.observedAt,
-      })
-    } else {
-      await ctx.db.patch(command._id, {
-        state: 'failed',
-        providerStatus: 'failed',
-        ...(args.readback.checkoutStatus === undefined ? {} : {
-          providerCheckoutStatus: args.readback.checkoutStatus,
-        }),
-        ...(args.readback.paymentStatus === undefined ? {} : {
-          providerPaymentStatus: args.readback.paymentStatus,
-        }),
-        terminalReason: 'async_payment_failed',
-        updatedAt: event.observedAt,
-      })
-    }
-    if (priorEvent === null) await ctx.db.insert('moneyStripeEvents', {
-      ...eventRowFields(event), status: 'ignored',
-    })
-    return { kind: 'accepted', status: 'ignored' }
-  }
-  if (args.readback.status !== 'succeeded') return refused('funding_pending', true)
-  if (command.state === 'failed') return refused('funding_state_conflict')
-  if (priorEvent === null) await ctx.db.insert('moneyStripeEvents', {
-    ...eventRowFields(event), status: 'received',
-  })
-  return {
-    kind: 'prepared',
-    bookingKind: 'settlement',
-    booking: {
-      commandRef: command.commandRef,
-      accountRef: command.accountRef,
-      processorRef: event.externalRef,
-      idempotencyKey: command.idempotencyKey,
-      principalUnits: command.principalUnits,
-      serviceFeeUnits: command.serviceFeeUnits,
-      taxUnits: command.taxUnits,
-      totalUnits: command.totalUnits,
-      policyDigest: command.commercialPolicyDigest,
-      externalEvidenceDigest: args.readback.evidenceDigest,
-    },
-  }
-}
-
-async function prepareFundingRefundEvent(
-  ctx: MutationCtx,
-  args: TrustedApplyFundingEventArgs,
-): Promise<Infer<typeof prepareFundingEventResultValue>> {
-  if (args.event.kind !== 'refund' || args.refundReadback === undefined || args.readback !== undefined) {
-    return refused('payment_binding_invalid')
-  }
-  const event = args.event
-  const readback = args.refundReadback
-  const command = await ctx.db.query('moneyFundingCommands')
-    .withIndex('by_paymentId', (builder) => builder.eq('paymentId', event.paymentId))
-    .unique()
-  if (command === null || command.appliedTransactionRef === undefined) return refused('funding_pending', true)
-  const priorEvent = await ctx.db.query('moneyStripeEvents')
-    .withIndex('by_stripeEventId', (builder) => builder.eq('stripeEventId', event.stripeEventId))
-    .unique()
-  if (priorEvent !== null) {
-    if (!eventRowMatches(priorEvent, event)) return refused('payment_binding_invalid')
-    if (priorEvent.status === 'applied' || priorEvent.status === 'ignored') {
-      return {
-        kind: 'accepted',
-        status: 'replayed',
-        ...(priorEvent.appliedRef === undefined ? {} : { appliedRef: priorEvent.appliedRef }),
-      }
-    }
-    if (priorEvent.status !== 'received') return refused('payment_binding_invalid')
-  }
-  const sameEvidence = event.refundId === readback.refundId
-    && event.paymentId === readback.paymentId
-    && event.chargeId === readback.chargeId
-    && event.refundDigest === readback.refundDigest
-    && event.status === readback.status
-    && compareExactAmounts(event.amount, readback.amount) === 0
-  if (!sameEvidence) return refused('payment_binding_invalid')
-
-  if (event.status !== 'succeeded') {
-    if (priorEvent === null) await ctx.db.insert('moneyStripeEvents', {
-      ...eventRowFields(event), status: 'ignored',
-    })
-    return { kind: 'accepted', status: 'ignored' }
-  }
-  if (command.state === 'reversed') {
-    return command.reversalRefundId === event.refundId
-      && command.reversalTransactionRef !== undefined
-      ? { kind: 'accepted', status: 'replayed', appliedRef: command.reversalTransactionRef }
-      : refused('funding_state_conflict')
-  }
-  if (command.state !== 'succeeded') return refused('funding_state_conflict')
-  const fullRefund = compareExactAmounts(event.amount, {
-    currency: 'AUD', exponent: AUD_EXPONENT, units: command.totalUnits,
-  }) === 0
-  if (!fullRefund) {
-    const caseRef = `money-case:${canonicalDigest({
-      format: 'ae.funding-refund-discrepancy:v1',
-      fundingCommandRef: command.commandRef,
-    })}`
-    const existingCase = await ctx.db.query('moneyReconciliationCases')
-      .withIndex('by_caseRef', (builder) => builder.eq('caseRef', caseRef))
-      .unique()
-    if (existingCase === null) {
-      await ctx.db.insert('moneyReconciliationCases', {
-        caseRef,
-        accountRef: command.accountRef,
-        kind: 'processor_difference',
-        status: 'open',
-        scopeType: 'account',
-        scopeRef: command.accountRef,
-        transactionRef: command.appliedTransactionRef,
-        reasonCode: 'funding_refund_not_full',
-        evidenceRefs: [event.stripeEventId, event.refundId, readback.evidenceRef],
-        createdAt: event.observedAt,
-        updatedAt: event.observedAt,
-      })
-    } else {
-      await ctx.db.patch(existingCase._id, {
-        evidenceRefs: [...new Set([
-          ...existingCase.evidenceRefs,
-          event.stripeEventId,
-          event.refundId,
-          readback.evidenceRef,
-        ])].slice(-32),
-        updatedAt: event.observedAt,
-      })
-    }
-    if (priorEvent === null) await ctx.db.insert('moneyStripeEvents', {
-      ...eventRowFields(event), status: 'ignored', appliedRef: caseRef,
-    })
-    return { kind: 'accepted', status: 'ignored', appliedRef: caseRef }
-  }
-  if (priorEvent === null) await ctx.db.insert('moneyStripeEvents', {
-    ...eventRowFields(event), status: 'received',
-  })
-  await ctx.db.patch(command._id, {
-    reversalState: 'pending',
-    reversalStripeEventId: event.stripeEventId,
-    reversalRefundId: event.refundId,
-    reversalChargeId: event.chargeId,
-    reversalEvidenceDigest: readback.evidenceDigest,
-    updatedAt: event.observedAt,
-  })
-  return {
-    kind: 'prepared',
-    bookingKind: 'reversal',
-    booking: {
-      commandRef: `funding-reversal:${event.refundId}`,
-      accountRef: command.accountRef,
-      processorRef: command.externalRef ?? event.paymentId,
-      idempotencyKey: `funding-reversal:${event.refundId}`,
-      principalUnits: command.principalUnits,
-      serviceFeeUnits: command.serviceFeeUnits,
-      taxUnits: command.taxUnits,
-      totalUnits: command.totalUnits,
-      policyDigest: command.commercialPolicyDigest,
-      externalEvidenceDigest: readback.evidenceDigest,
-    },
-  }
-}
-
-async function finalizeFundingEventHandler(
-  ctx: MutationCtx,
-  args: TrustedApplyFundingEventArgs & Readonly<{ formanceTransactionRef: string }>,
-): Promise<ApplyFundingEventResult> {
-  if (args.event.kind !== 'checkout' || args.event.status !== 'paid' || args.readback === undefined) {
-    return refused('payment_binding_invalid')
-  }
-  const fundingEvent = args.event
-  const command = await ctx.db.query('moneyFundingCommands')
-    .withIndex('by_commandRef', (builder) => builder.eq('commandRef', fundingEvent.commandRef))
-    .unique()
-  const event = await ctx.db.query('moneyStripeEvents')
-    .withIndex('by_stripeEventId', (builder) => builder.eq('stripeEventId', fundingEvent.stripeEventId))
-    .unique()
-  if (command === null || event === null || !eventRowMatches(event, args.event)) {
-    return refused('payment_binding_invalid')
-  }
-  if (command.state === 'succeeded') {
-    return command.appliedTransactionRef === args.formanceTransactionRef
-      ? { kind: 'accepted', status: 'replayed', appliedRef: args.formanceTransactionRef }
-      : refused('funding_idempotency_conflict')
-  }
-  if (event.status !== 'received') return refused('payment_binding_invalid')
-  await recordFundingDocuments(ctx, command, args.formanceTransactionRef, args.event.observedAt)
-  await ctx.db.patch(command._id, {
-    state: 'succeeded',
-    providerStatus: 'succeeded',
-    externalRef: args.event.externalRef,
-    providerEvidenceRef: args.readback.evidenceRef,
-    requestDigest: args.readback.requestDigest,
-    checkoutSessionDigest: args.readback.checkoutSessionDigest,
-    paymentIntentDigest: args.readback.paymentIntentDigest,
-    evidenceDigest: args.readback.evidenceDigest,
-    paymentId: args.readback.paymentId,
-    ...(args.readback.checkoutStatus === undefined ? {} : {
-      providerCheckoutStatus: args.readback.checkoutStatus,
-    }),
-    ...(args.readback.paymentStatus === undefined ? {} : {
-      providerPaymentStatus: args.readback.paymentStatus,
-    }),
-    appliedStripeEventId: args.event.stripeEventId,
-    appliedPayloadDigest: args.event.payloadDigest,
-    appliedTransactionRef: args.formanceTransactionRef,
-    updatedAt: args.event.observedAt,
-  })
-  await ctx.db.patch(event._id, {
-    status: 'applied',
-    appliedRef: args.formanceTransactionRef,
-    appliedAt: args.event.observedAt,
-  })
-  return {
-    kind: 'accepted',
-    status: 'applied',
-    appliedRef: args.formanceTransactionRef,
-  }
-}
-
-async function recordFundingReversalDocument(
-  ctx: MutationCtx,
-  command: Doc<'moneyFundingCommands'>,
-  transactionRef: string,
-  occurredAt: number,
-): Promise<void> {
-  const documentRef = `money-document:adjustment:${transactionRef}`
-  const existing = await ctx.db.query('moneyDocuments')
-    .withIndex('by_documentRef', (query) => query.eq('documentRef', documentRef))
-    .unique()
-  if (existing !== null) return
-  const renderInput = {
-    format: 'ae.money-document-render-input:v1',
-    documentRef,
-    accountRef: command.accountRef,
-    kind: 'adjustment',
-    currency: 'AUD',
-    exponent: AUD_EXPONENT,
-    amountUnits: command.totalUnits,
-    detail: {
-      reason: 'processor_full_refund',
-      principalUnits: command.principalUnits,
-      serviceFeeUnits: command.serviceFeeUnits,
-      taxUnits: command.taxUnits,
-      totalUnits: command.totalUnits,
-    },
-    transactionRef,
-    occurredAt,
-    policyRefs: command.commercialPolicyRefs,
-    policyDigest: command.commercialPolicyDigest,
-  } as const satisfies StableHashValue
-  const renderInputJson = stableStringify(renderInput)
-  const renderInputDigest = canonicalDigest(renderInput)
-  await ctx.db.insert('moneyDocuments', {
-    documentRef,
-    accountRef: command.accountRef,
-    kind: 'adjustment',
-    sourceTransactionRefs: [transactionRef],
-    amountUnits: command.totalUnits,
-    residualUnits: '0',
-    policyRefs: [...command.commercialPolicyRefs],
-    policyDigest: command.commercialPolicyDigest,
-    templateVersion: 'ae.money-document:html:v1',
-    renderInputJson,
-    renderInputDigest,
-    state: 'rendering',
-    environment: command.environment,
-    sourceCount: 1,
-    snapshotDigest: renderInputDigest,
-    createdAt: occurredAt,
-  })
-}
-
-async function finalizeFundingRefundHandler(
-  ctx: MutationCtx,
-  args: TrustedApplyFundingEventArgs & Readonly<{ formanceTransactionRef: string }>,
-): Promise<ApplyFundingEventResult> {
-  if (args.event.kind !== 'refund'
-    || args.event.status !== 'succeeded'
-    || args.refundReadback === undefined) return refused('payment_binding_invalid')
-  const refundEvent = args.event
-  const command = await ctx.db.query('moneyFundingCommands')
-    .withIndex('by_paymentId', (builder) => builder.eq('paymentId', refundEvent.paymentId))
-    .unique()
-  const event = await ctx.db.query('moneyStripeEvents')
-    .withIndex('by_stripeEventId', (builder) => builder.eq('stripeEventId', args.event.stripeEventId))
-    .unique()
-  if (command === null || event === null || !eventRowMatches(event, refundEvent)) {
-    return refused('payment_binding_invalid')
-  }
-  if (command.state === 'reversed') {
-    return command.reversalRefundId === refundEvent.refundId
-      && command.reversalTransactionRef === args.formanceTransactionRef
-      ? { kind: 'accepted', status: 'replayed', appliedRef: args.formanceTransactionRef }
-      : refused('funding_idempotency_conflict')
-  }
-  if (command.state !== 'succeeded'
-    || event.status !== 'received'
-    || command.reversalRefundId !== refundEvent.refundId
-    || command.reversalEvidenceDigest !== args.refundReadback.evidenceDigest) {
-    return refused('funding_state_conflict')
-  }
-  await recordFundingReversalDocument(ctx, command, args.formanceTransactionRef, refundEvent.observedAt)
-  await ctx.db.patch(command._id, {
-    state: 'reversed',
-    providerStatus: 'reversed',
-    reversalState: 'succeeded',
-    reversalTransactionRef: args.formanceTransactionRef,
-    reversedAt: refundEvent.observedAt,
-    updatedAt: refundEvent.observedAt,
-  })
-  await ctx.db.patch(event._id, {
-    status: 'applied',
-    appliedRef: args.formanceTransactionRef,
-    appliedAt: refundEvent.observedAt,
-  })
-  return { kind: 'accepted', status: 'applied', appliedRef: args.formanceTransactionRef }
-}
-
-async function markFundingBookingUnknownHandler(
-  ctx: MutationCtx,
-  args: Readonly<{ commandRef: string; stripeEventId: string; observedAt: number }>,
-): Promise<void> {
-  const command = await ctx.db.query('moneyFundingCommands')
-    .withIndex('by_commandRef', (builder) => builder.eq('commandRef', args.commandRef))
-    .unique()
-  if (command !== null && command.state !== 'succeeded' && command.state !== 'failed') {
-    await ctx.db.patch(command._id, {
-      state: 'outcome_unknown', providerStatus: 'outcome_unknown', updatedAt: args.observedAt,
-    })
-  }
-}
-
-async function markFundingReversalUnknownHandler(
-  ctx: MutationCtx,
-  args: Readonly<{
-    paymentId: string
-    refundId: string
-    stripeEventId: string
-    statusRef: string
-    observedAt: number
-  }>,
-): Promise<void> {
-  const command = await ctx.db.query('moneyFundingCommands')
-    .withIndex('by_paymentId', (builder) => builder.eq('paymentId', args.paymentId))
-    .unique()
-  if (command !== null
-    && command.state === 'succeeded'
-    && command.reversalRefundId === args.refundId
-    && command.reversalStripeEventId === args.stripeEventId) {
-    await ctx.db.patch(command._id, {
-      reversalState: 'outcome_unknown',
-      reversalStatusRef: args.statusRef,
-      updatedAt: args.observedAt,
-    })
-  }
-}
-
 export const reserve = mutation({
   args: reserveFundingArgsValue.fields,
   returns: fundingResultValue,
@@ -1322,6 +863,222 @@ export const readWebhookCommandForWorker = internalQuery({
       || (command.externalRef !== undefined && command.externalRef !== args.externalRef)
       ? refused('funding_pending', true)
       : { kind: 'accepted', command: fundingCommandView(command) }
+  },
+})
+
+const ownerInvoiceHistoryTaxInvoiceValue = v.union(
+  v.object({ kind: v.literal('issued'), documentRef: v.string() }),
+  v.object({
+    kind: v.literal('withheld'),
+    reason: v.union(
+      v.literal('policy_disabled'),
+      v.literal('customer_tax_facts_missing'),
+      v.literal('tax_invoice_not_generated'),
+    ),
+  }),
+)
+const ownerInvoiceHistoryRowValue = v.object({
+  commandRef: v.string(),
+  createdAt: v.number(),
+  description: v.string(),
+  totalUnits: v.string(),
+  status: v.union(v.literal('succeeded'), v.literal('reversed')),
+  appliedTransactionRef: v.union(v.string(), v.null()),
+  hasPaymentReceipt: v.boolean(),
+  taxInvoice: ownerInvoiceHistoryTaxInvoiceValue,
+})
+const listOwnerInvoiceHistoryResultValue = v.object({
+  page: v.array(ownerInvoiceHistoryRowValue),
+})
+const readOwnerFundingCommandForReceiptResultValue = v.object({
+  paymentId: v.string(),
+})
+
+type InvoiceHistoryDb = GenericDatabaseReader<DataModel>
+
+async function requireInteractiveHumanPrincipalForInvoiceHistory(
+  db: InvoiceHistoryDb,
+  identity: UserIdentity,
+): Promise<Doc<'principals'>> {
+  const tokenIdentifier = identity.tokenIdentifier
+  if (typeof tokenIdentifier !== 'string' || tokenIdentifier.trim().length === 0) {
+    throw new InteractiveAuthorityError('identity_invalid')
+  }
+  const bindings = await db
+    .query('externalIdentityBindings')
+    .withIndex('by_providerNamespace_and_providerIdentifier', (query) => query
+      .eq('providerNamespace', CLERK_USER_PROVIDER_NAMESPACE)
+      .eq('providerIdentifier', tokenIdentifier))
+    .take(2)
+  if (bindings.length !== 1) {
+    throw new InteractiveAuthorityError('identity_invalid')
+  }
+  const [binding] = bindings
+  if (binding === undefined || binding.lifecycle !== 'active') {
+    throw new InteractiveAuthorityError('identity_invalid')
+  }
+  const principals = await db
+    .query('principals')
+    .withIndex('by_principalRef', (query) => query.eq('principalRef', binding.principalRef))
+    .take(2)
+  if (principals.length !== 1) {
+    throw new InteractiveAuthorityError('identity_invalid')
+  }
+  const [principal] = principals
+  if (principal === undefined || principal.lifecycle !== 'active') {
+    throw new InteractiveAuthorityError('identity_invalid')
+  }
+  if (principal.kind !== 'human') {
+    throw new InteractiveAuthorityError('principal_kind_invalid')
+  }
+  return principal
+}
+
+async function requireOwnerAccountContextForInvoiceHistory(
+  db: InvoiceHistoryDb,
+  identity: UserIdentity,
+): Promise<{ canonicalAccountRef: ReturnType<typeof accountRef> }> {
+  const principal = await requireInteractiveHumanPrincipalForInvoiceHistory(db, identity)
+  const canonicalPrincipalRef = principalRef(principal.principalRef)
+  const res = await resolveActiveAccountRefForPrincipal(
+    db,
+    canonicalPrincipalRef,
+    identity,
+    'require',
+  )
+  const canonicalAccountRef = accountRef(res.activeAccountRef)
+  const access = await requireAccessFactForAccount(db, canonicalPrincipalRef, canonicalAccountRef)
+  if (access.kind !== 'ownership') {
+    throw new InteractiveAuthorityError('authority_mismatch')
+  }
+  const account = await db
+    .query('accounts')
+    .withIndex('by_accountRef', (query) => query.eq('accountRef', canonicalAccountRef))
+    .unique()
+  if (account === null) throw new InteractiveAuthorityError('account_missing')
+  if (account.lifecycle !== 'active') throw new InteractiveAuthorityError('account_inactive')
+  return { canonicalAccountRef }
+}
+
+function fundingCommandInvoiceDescription(command: Doc<'moneyFundingCommands'>): string {
+  const initiationKind = command.initiationKind as string | undefined
+  return initiationKind === 'auto_recharge' ? 'Auto-recharge' : 'Account top-up'
+}
+
+function isTerminalFundingState(state: Doc<'moneyFundingCommands'>['state']): boolean {
+  return state === 'succeeded' || state === 'reversed'
+}
+
+async function resolveFundingCommandTaxInvoice(
+  ctx: QueryCtx,
+  input: Readonly<{
+    accountRef: string
+    environment: Doc<'moneyFundingCommands'>['environment']
+    appliedTransactionRef: string | undefined
+  }>,
+): Promise<
+  | Readonly<{ kind: 'issued'; documentRef: string }>
+  | Readonly<{ kind: 'withheld'; reason: 'policy_disabled' | 'customer_tax_facts_missing' | 'tax_invoice_not_generated' }>
+> {
+  if (input.appliedTransactionRef !== undefined) {
+    const documentRef = `money-document:tax_invoice:${input.appliedTransactionRef}`
+    const document = await ctx.db.query('moneyDocuments')
+      .withIndex('by_documentRef', (index) => index.eq('documentRef', documentRef))
+      .unique()
+    if (document !== null && document.kind === 'tax_invoice' && document.state === 'issued') {
+      return { kind: 'issued', documentRef: document.documentRef }
+    }
+  }
+
+  const customerTaxFacts = await readCustomerTaxFactsForAccount(ctx, input.accountRef)
+  if (customerTaxFacts === undefined) {
+    return { kind: 'withheld', reason: 'customer_tax_facts_missing' }
+  }
+
+  const policy = await readCommercialPolicyGate(ctx.db, {
+    environment: input.environment,
+    now: Date.now(),
+    ...(input.environment === 'sandbox'
+      ? { sandboxFixture: 'managed_x402_deterministic_v1' as const }
+      : {}),
+  })
+  if (policy.kind === 'refused') {
+    return { kind: 'withheld', reason: 'policy_disabled' }
+  }
+
+  const admission = admitTaxInvoiceIssuance({
+    taxControl: policy.controls.tax,
+    customerTaxFacts,
+  })
+  if (admission.kind === 'withheld') {
+    if (admission.reason === 'policy_disabled') {
+      return { kind: 'withheld', reason: 'policy_disabled' }
+    }
+    return { kind: 'withheld', reason: 'customer_tax_facts_missing' }
+  }
+
+  return { kind: 'withheld', reason: 'tax_invoice_not_generated' }
+}
+
+export const listOwnerInvoiceHistory = query({
+  args: {},
+  returns: listOwnerInvoiceHistoryResultValue,
+  handler: async (ctx: QueryCtx) => {
+    const identity = await ctx.auth.getUserIdentity()
+    if (identity === null) throw new InteractiveAuthorityError('identity_invalid')
+    const { canonicalAccountRef } = await requireOwnerAccountContextForInvoiceHistory(ctx.db, identity)
+
+    const commands = await ctx.db
+      .query('moneyFundingCommands')
+      .withIndex('by_accountRef_and_createdAt', (index) => index.eq('accountRef', canonicalAccountRef))
+      .order('desc')
+      .collect()
+
+    const page = []
+    for (const command of commands) {
+      if (!isTerminalFundingState(command.state)) continue
+      const taxInvoice = await resolveFundingCommandTaxInvoice(ctx, {
+        accountRef: canonicalAccountRef,
+        environment: command.environment,
+        appliedTransactionRef: command.appliedTransactionRef,
+      })
+      page.push({
+        commandRef: command.commandRef,
+        createdAt: command.createdAt,
+        description: fundingCommandInvoiceDescription(command),
+        totalUnits: command.totalUnits,
+        status: (command.state === 'succeeded' ? 'succeeded' : 'reversed') as 'succeeded' | 'reversed',
+        appliedTransactionRef: command.appliedTransactionRef ?? null,
+        hasPaymentReceipt: typeof command.paymentId === 'string' && command.paymentId.length > 0,
+        taxInvoice,
+      })
+    }
+
+    return { page }
+  },
+})
+
+export const readOwnerFundingCommandForReceipt = query({
+  args: { commandRef: v.string() },
+  returns: readOwnerFundingCommandForReceiptResultValue,
+  handler: async (ctx: QueryCtx, args) => {
+    const identity = await ctx.auth.getUserIdentity()
+    if (identity === null) throw new InteractiveAuthorityError('identity_invalid')
+    const { canonicalAccountRef } = await requireOwnerAccountContextForInvoiceHistory(ctx.db, identity)
+
+    const command = await ctx.db.query('moneyFundingCommands')
+      .withIndex('by_commandRef', (index) => index.eq('commandRef', args.commandRef))
+      .unique()
+    if (command === null || command.accountRef !== canonicalAccountRef) {
+      throw new InteractiveAuthorityError('funding_command_not_found')
+    }
+    if (!isTerminalFundingState(command.state)) {
+      throw new InteractiveAuthorityError('funding_command_not_receiptable')
+    }
+    if (typeof command.paymentId !== 'string' || command.paymentId.length === 0) {
+      throw new InteractiveAuthorityError('funding_command_not_receiptable')
+    }
+    return { paymentId: command.paymentId }
   },
 })
 

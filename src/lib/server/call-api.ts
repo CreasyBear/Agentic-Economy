@@ -1,6 +1,5 @@
 import { bearerChallenge } from '@/lib/http/oauth-challenge'
-import { gatewayFailureToProblem } from '@/lib/errors'
-import { degrade } from '@/lib/observability/degrade'
+import { gatewayFailureToProblem, operationInvokeResultToProblem } from '@/lib/errors'
 import { readBoundedRequestText } from '@/lib/server/bounded-request-body'
 import { isJsonContentType } from '@/lib/server/json-content-type'
 import {
@@ -11,7 +10,8 @@ import {
 } from '@/lib/server/agent-access-auth'
 import { resolveCanonicalBaseUrl } from '@/lib/server/canonical-url'
 import { ConvexSourceError, callPublicSourceAction, sourceAction } from '@/lib/server/convex-source'
-import { problem } from '@/lib/server/problem'
+import { problem, duplicateQueryParameterProblem } from '@/lib/server/problem'
+import { withHttpRateLimit } from '@/lib/server/rate-limit'
 import { runWithRequestCorrelation, withRequestCorrelationHeader } from '@/lib/server/request-correlation'
 import { sourceWriteAdmissionFromRequest, sourceWriteRequestFromAdmission } from '@/lib/server/source-write-admission'
 import { response } from '@/lib/server/no-store-response'
@@ -32,6 +32,7 @@ import {
   callStatusResultSchema,
   callReconcileInputSchema,
 } from '@/modules/capability-execution/call-recovery.actions'
+import type { CallRecoveryResult } from '@/modules/capability-execution/call-recovery-contracts'
 import {
   CALL_ACTION_ID,
   CALL_HTTP_PATH,
@@ -45,15 +46,22 @@ import type {
 import {
   callResultSchema,
   projectCallMachineResult,
-  type CallMachineResult,
 } from '@/modules/capability-execution/call-contracts'
 import type { ActionTimingSink } from '@/modules/common/action'
 import {
   recordGatewayTelemetry,
   type GatewayTelemetryEvent,
 } from '@/lib/server/gateway-telemetry'
+import {
+  gatewayDetail,
+  gatewayTelemetryForResult,
+  principalTelemetry,
+  recoveryTelemetryForResult,
+} from './call-route-telemetry'
 
 export { CALL_ACTION_ID, CALL_HTTP_PATH, CALL_SCOPE }
+export type { CallService }
+
 const callJsonResponseHeaders = {
   'Content-Type': CALL_ROUTE_CONTRACT.media.response,
 } as const
@@ -278,117 +286,6 @@ export function createCallService(
   }
   return { callTool, quoteTool, listCalls, readCallStatus, cancelCall, reconcileCall }
 }
-function gatewayTelemetryForResult(
-  result: CallMachineResult,
-): Omit<GatewayTelemetryEvent, 'correlationId' | 'durationMs'> {
-  if (result.kind === 'completed') {
-    return {
-      // Keep the telemetry sink's existing operation field stable while the
-      // paid result envelope uses the target Tool vocabulary.
-      operationRef: result.toolRef,
-      pricing: result.usage.chargeState === 'free_tier'
-        ? 'free'
-        : result.usage.chargeState === 'paid'
-          ? 'paid'
-          : 'unknown',
-      costUnits: result.usage.amount.units,
-      outcome: 'completed',
-      ...(result.usage.chargeState === 'outcome_unknown' ? { unknown: true } : {}),
-    }
-  }
-  if (result.kind === 'pending') {
-    return { operationRef: result.toolRef, outcome: 'pending' }
-  }
-  if (result.kind === 'outcome_unknown') {
-    return { operationRef: result.toolRef, outcome: 'reconciliation_required', unknown: true }
-  }
-  const code = result.code
-  return {
-    ...(result.toolRef === undefined ? {} : { operationRef: result.toolRef }),
-    outcome: 'refused',
-    refusalCode: code,
-    retryable: result.retryable,
-    ...(code === 'outcome_unknown' ? { unknown: true } : {}),
-    ...(code === 'authority_required' ? { approval: 'required' as const } : {}),
-    ...(code === 'rate_limited' ? { rateLimited: true } : {}),
-    ...(code === 'concurrency_limited' ? { concurrencyLimited: true } : {}),
-  }
-}
-
-type GatewayPrincipalRef = AgentAccessPrincipal
-
-function principalTelemetry(principal: GatewayPrincipalRef): Pick<GatewayTelemetryEvent, 'credentialId' | 'principalId' | 'applicationRef'> {
-  return {
-    credentialId: principal.credentialId,
-    principalId: principal.principalId,
-    applicationRef: principal.applicationRef,
-  }
-}
-
-function recoveryTelemetryForResult(
-  result: unknown,
-  callRef: string,
-): Omit<GatewayTelemetryEvent, 'correlationId' | 'durationMs'> {
-  if (!isRecord(result)) return { invocationRef: callRef, outcome: 'failed', refusalCode: 'result_invalid' }
-  const operationRef = typeof result.toolRef === 'string' ? result.toolRef : undefined
-  if (result.kind === 'reconciliation_required') {
-    return {
-      invocationRef: callRef,
-      ...(operationRef === undefined ? {} : { operationRef }),
-      outcome: 'reconciliation_required',
-      unknown: true,
-    }
-  }
-  if (result.kind === 'refused') {
-    const code = typeof result.code === 'string' ? result.code : 'call_failed'
-    return {
-      invocationRef: callRef,
-      ...(operationRef === undefined ? {} : { operationRef }),
-      outcome: 'refused',
-      refusalCode: code,
-      ...(typeof result.retryable === 'boolean' ? { retryable: result.retryable } : {}),
-      ...(code === 'outcome_unknown' ? { unknown: true } : {}),
-    }
-  }
-  if (result.kind === 'found') {
-    const state = result.state
-    return {
-      invocationRef: callRef,
-      ...(operationRef === undefined ? {} : { operationRef }),
-      outcome: state === 'cancelled'
-        ? 'cancelled'
-        : state === 'reconciliation_required'
-          ? 'reconciliation_required'
-          : state === 'terminal'
-            ? 'completed'
-            : 'pending',
-    }
-  }
-  return { invocationRef: callRef, outcome: 'failed', refusalCode: 'result_invalid' }
-}
-
-function gatewayDetail(code: string): string {
-  switch (code) {
-    case 'authentication_required':
-      return 'Authentication required.'
-    case 'authority_denied':
-      return 'The tool was declined by the owner.'
-    case 'scope_required':
-      return 'The provided API key does not carry the required scope.'
-    case 'source_unavailable':
-    case 'call_runtime_unavailable':
-    case 'call_unavailable':
-    case 'tool_quote_unavailable':
-      return 'The Call service is temporarily unavailable.'
-    case 'result_invalid':
-    case 'call_result_invalid':
-      return 'The Call service returned an invalid result.'
-    case 'call_not_found':
-      return 'The Call was not found.'
-    default:
-      return 'The Call request could not be completed.'
-  }
-}
 
 function gatewayErrorCode(
   error: unknown,
@@ -430,12 +327,17 @@ function invalidContentTypeResponse(correlationId: string): Response {
   }), correlationId)
 }
 
+export type AdmittedCallGateway = Readonly<{
+  kind: 'authenticated'
+  principal: AgentAccessPrincipal
+}>
+
 export async function authenticateCallGateway(
   request: Request,
   correlationId: string,
   options: CallHandlerOptions,
   body: string | Uint8Array,
-): Promise<Readonly<{ kind: 'authenticated'; principal: GatewayPrincipalRef }> | Response> {
+): Promise<AdmittedCallGateway | Response> {
   const resolvePrincipal = options.resolvePrincipal
     ?? (options.authenticate === undefined ? resolveAgentAccessPrincipal(request, body, correlationId) : undefined)
   const admitted = await authenticateAgentAccess({
@@ -454,19 +356,48 @@ export async function authenticateCallGateway(
   }, { Vary: 'Authorization', 'WWW-Authenticate': challenge }), correlationId)
 }
 
+const CALL_LIST_QUERY_KEYS = new Set(['limit', 'cursor', 'state'])
+const CALL_STATUS_QUERY_KEYS = new Set(['afterVersion'])
+
+function callQueryParameterProblem(url: URL, allowed: ReadonlySet<string>): Response | undefined {
+  const duplicate = duplicateQueryParameterProblem(url)
+  if (duplicate !== undefined) return duplicate
+  for (const key of url.searchParams.keys()) {
+    if (!allowed.has(key)) {
+      return problem({
+        status: 400,
+        kind: 'INVALID_ARGUMENT',
+        code: 'invalid_query_parameter',
+        detail: `Query parameter '${key}' is not supported.`,
+      })
+    }
+  }
+  return undefined
+}
+
+async function withCallHttpRateLimit(
+  request: Request,
+  correlationId: string,
+  name: 'public-read' | 'public-mutation',
+  operation: () => Promise<Response>,
+): Promise<Response> {
+  const res = await withHttpRateLimit(request, name, operation)
+  return withRequestCorrelationHeader(res, correlationId)
+}
 
 export async function handleToolQuotePost(
   request: Request,
   options: CallHandlerOptions = {},
 ): Promise<Response> {
   return await runWithRequestCorrelation(request, async ({ correlationId }) => {
+    return await withCallHttpRateLimit(request, correlationId, 'public-mutation', async () => {
     const bounded = await readBoundedRequestText(request, MAX_CALL_BODY_BYTES)
     if (!bounded.ok) {
       return withRequestCorrelationHeader(problem({
         status: 413,
         kind: 'PAYLOAD_TOO_LARGE',
         code: bounded.code,
-        detail: 'The Tool inspection body is too large.',
+        detail: 'The Tool quote body is too large.',
       }), correlationId)
     }
     const admitted = await authenticateCallGateway(request, correlationId, options, bounded.text)
@@ -476,14 +407,15 @@ export async function handleToolQuotePost(
     }
     let rawBody: unknown
     try {
-      rawBody = JSON.parse(bounded.text) as unknown
+      rawBody = JSON.parse(bounded.text)
     } catch (cause) {
-      return degrade(cause, withRequestCorrelationHeader(problem({
+      void cause;
+      return withRequestCorrelationHeader(problem({
         status: 400,
         kind: 'INVALID_ARGUMENT',
         code: 'invalid_json',
         detail: 'The request body must be valid JSON.',
-      }), correlationId), { site: 'handleToolQuotePost', reason: 'invalid_response' })
+      }), correlationId)
     }
     const parsed = toolQuoteAction.schema.safeParse(rawBody)
     if (!parsed.success) {
@@ -507,6 +439,7 @@ export async function handleToolQuotePost(
     } catch (error) {
       return gatewayErrorResponse(error, 'tool_quote_unavailable', correlationId)
     }
+    })
   })
 }
 
@@ -515,6 +448,7 @@ export async function handleToolCallPost(
   options: CallHandlerOptions = {},
 ): Promise<Response> {
   return await runWithRequestCorrelation(request, async ({ correlationId }) => {
+    return await withCallHttpRateLimit(request, correlationId, 'public-mutation', async () => {
     const startedAt = Date.now()
     const bounded = await readBoundedRequestText(request, MAX_CALL_BODY_BYTES)
     if (!bounded.ok) {
@@ -541,15 +475,16 @@ export async function handleToolCallPost(
     }
     let rawBody: unknown
     try {
-      rawBody = JSON.parse(bounded.text) as unknown
+      rawBody = JSON.parse(bounded.text)
     } catch (cause) {
+      void cause;
       telemetry({ outcome: 'failed', refusalCode: 'invalid_json' })
-      return degrade(cause, withRequestCorrelationHeader(problem({
+      return withRequestCorrelationHeader(problem({
         status: 400,
         kind: 'INVALID_ARGUMENT',
         code: 'invalid_json',
         detail: 'The request body must be valid JSON.',
-      }), correlationId), { site: 'handleToolCallPost', reason: 'invalid_response' })
+      }), correlationId)
     }
     const parsed = callAction.schema.safeParse(rawBody)
     if (!parsed.success) {
@@ -586,8 +521,10 @@ export async function handleToolCallPost(
       })
       return gatewayErrorResponse(error, 'call_unavailable', correlationId)
     }
+    })
   })
 }
+
 type RecoveryBodyKind = 'cancel' | 'reconcile'
 
 type ParsedRecoveryBody =
@@ -608,70 +545,44 @@ async function parseRecoveryBody(
         status: 413,
         kind: 'PAYLOAD_TOO_LARGE',
         code: bounded.code,
-        detail: 'The tool recovery body is too large.',
+        detail: `The Call ${bodyKind} body is too large.`,
       }), correlationId),
     }
   }
-  let rawBody: unknown = {}
-  if (bounded.text.trim().length > 0) {
-    try {
-      rawBody = JSON.parse(bounded.text) as unknown
-    } catch (cause) {
-      return degrade(cause, {
-        ok: false,
-        response: withRequestCorrelationHeader(problem({
-          status: 400,
-          kind: 'INVALID_ARGUMENT',
-          code: 'invalid_json',
-          detail: 'The recovery request body must be valid JSON.',
-        }), correlationId),
-      }, { site: 'parseRecoveryBody', reason: 'invalid_response' })
+  let rawBody: unknown
+  try {
+    rawBody = JSON.parse(bounded.text)
+  } catch (cause) {
+    void cause;
+    return {
+      ok: false,
+      response: withRequestCorrelationHeader(problem({
+        status: 400,
+        kind: 'INVALID_ARGUMENT',
+        code: 'invalid_json',
+        detail: 'The request body must be valid JSON.',
+      }), correlationId),
     }
   }
-  if (!isRecord(rawBody)) {
+  if (!isRecord(rawBody) || typeof rawBody.idempotencyKey !== 'string') {
     return {
       ok: false,
       response: withRequestCorrelationHeader(problem({
         status: 400,
         kind: 'INVALID_ARGUMENT',
         code: 'invalid_request',
-        detail: 'The recovery request body must be a JSON object.',
+        detail: `The request must include an idempotencyKey to ${bodyKind} a Call.`,
       }), correlationId),
     }
   }
-  const bodyCallRef = rawBody.callRef
-  if (bodyCallRef !== undefined && bodyCallRef !== callRef) {
-    return {
-      ok: false,
-      response: withRequestCorrelationHeader(problem({
-        status: 400,
-        kind: 'INVALID_ARGUMENT',
-        code: 'call_ref_mismatch',
-        detail: 'The Call reference must match the request path.',
-      }), correlationId),
-    }
+  return {
+    ok: true,
+    bodyText: bounded.text,
+    input: {
+      ...rawBody,
+      callRef,
+    },
   }
-  const candidate = {
-    ...rawBody,
-    callRef,
-  }
-  const parsed = bodyKind === 'cancel'
-    ? callCancelInputSchema.safeParse(candidate)
-    : callReconcileInputSchema.safeParse(candidate)
-  if (!parsed.success) {
-    return {
-      ok: false,
-      response: withRequestCorrelationHeader(problem({
-        status: 400,
-        kind: 'INVALID_ARGUMENT',
-        code: 'invalid_request',
-        detail: bodyKind === 'cancel'
-          ? 'The request did not match call.cancel:v1.'
-          : 'The request did not match call.reconcile:v1.',
-      }), correlationId),
-    }
-  }
-  return { ok: true, bodyText: bounded.text, input: parsed.data }
 }
 
 export async function handleCallStatusGet(
@@ -680,6 +591,10 @@ export async function handleCallStatusGet(
   options: CallHandlerOptions = {},
 ): Promise<Response> {
   return await runWithRequestCorrelation(request, async ({ correlationId }) => {
+    const url = new URL(request.url)
+    const queryProblem = callQueryParameterProblem(url, CALL_STATUS_QUERY_KEYS)
+    if (queryProblem !== undefined) return withRequestCorrelationHeader(queryProblem, correlationId)
+    return await withCallHttpRateLimit(request, correlationId, 'public-read', async () => {
     const startedAt = Date.now()
     const admitted = await authenticateCallGateway(request, correlationId, options, '')
     if (admitted instanceof Response) return admitted
@@ -692,7 +607,6 @@ export async function handleCallStatusGet(
         durationMs: Date.now() - startedAt,
       })
     }
-    const url = new URL(request.url)
     const rawAfterVersion = url.searchParams.get('afterVersion')
     const parsed = callStatusInputSchema.safeParse({
       callRef,
@@ -724,7 +638,16 @@ export async function handleCallStatusGet(
           detail: gatewayDetail(failure.code),
         }), correlationId)
       }
+      const refusalProblem = projected.data.kind === 'refused'
+        ? operationInvokeResultToProblem(projected.data)
+        : null
       telemetry(recoveryTelemetryForResult(projected.data, parsed.data.callRef))
+      if (refusalProblem !== null) {
+        return withRequestCorrelationHeader(problem({
+          ...refusalProblem,
+          detail: gatewayDetail(refusalProblem.code),
+        }), correlationId)
+      }
       return withRequestCorrelationHeader(response(projected.data, 200, callJsonResponseHeaders), correlationId)
     } catch (error) {
       const mapped = gatewayErrorCode(error, 'call_runtime_unavailable')
@@ -735,6 +658,7 @@ export async function handleCallStatusGet(
       })
       return gatewayErrorResponse(error, 'call_runtime_unavailable', correlationId)
     }
+    })
   })
 }
 
@@ -743,9 +667,12 @@ export async function handleCallListGet(
   options: CallHandlerOptions = {},
 ): Promise<Response> {
   return await runWithRequestCorrelation(request, async ({ correlationId }) => {
+    const url = new URL(request.url)
+    const queryProblem = callQueryParameterProblem(url, CALL_LIST_QUERY_KEYS)
+    if (queryProblem !== undefined) return withRequestCorrelationHeader(queryProblem, correlationId)
+    return await withCallHttpRateLimit(request, correlationId, 'public-read', async () => {
     const admitted = await authenticateCallGateway(request, correlationId, options, '')
     if (admitted instanceof Response) return admitted
-    const url = new URL(request.url)
     const rawLimit = url.searchParams.get('limit')
     const rawCursor = url.searchParams.get('cursor')
     const rawState = url.searchParams.get('state')
@@ -774,6 +701,61 @@ export async function handleCallListGet(
     } catch (error) {
       return gatewayErrorResponse(error, 'call_runtime_unavailable', correlationId)
     }
+    })
+  })
+}
+
+async function executeRecoveryAction(
+  request: Request,
+  callRef: string,
+  kind: RecoveryBodyKind,
+  options: CallHandlerOptions,
+  action: (service: CallService, admitted: AdmittedCallGateway, parsedInput: unknown, correlationId: string) => Promise<CallRecoveryResult | Response>,
+): Promise<Response> {
+  return await runWithRequestCorrelation(request, async ({ correlationId }) => {
+    return await withCallHttpRateLimit(request, correlationId, 'public-mutation', async () => {
+      const startedAt = Date.now()
+      const parsed = await parseRecoveryBody(request, callRef, kind, correlationId)
+      if (!parsed.ok) return parsed.response
+      const admitted = await authenticateCallGateway(request, correlationId, options, parsed.bodyText)
+      if (admitted instanceof Response) return admitted
+      if (!(await isJsonContentType(request.headers.get('content-type')))) {
+        return invalidContentTypeResponse(correlationId)
+      }
+      const principal = admitted.principal
+      const telemetry = (event: Omit<GatewayTelemetryEvent, 'correlationId' | 'durationMs'>): void => {
+        recordGatewayTelemetry(options.timing, {
+          ...principalTelemetry(principal),
+          ...event,
+          correlationId,
+          durationMs: Date.now() - startedAt,
+        })
+      }
+      try {
+        const service = options.callService ?? createCallService(request, parsed.bodyText)
+        const result = await action(service, admitted, parsed.input, correlationId)
+        if (result instanceof Response) return result
+        const projected = callRecoveryResultSchema.safeParse(result)
+        if (!projected.success) {
+          telemetry({ outcome: 'failed', refusalCode: 'call_result_invalid' })
+          const failure = gatewayFailureToProblem({ kind: 'error', code: 'call_result_invalid' })
+          return withRequestCorrelationHeader(problem({
+            ...failure,
+            detail: gatewayDetail(failure.code),
+          }), correlationId)
+        }
+        telemetry(recoveryTelemetryForResult(projected.data, callRef))
+        return withRequestCorrelationHeader(response(projected.data, 200, callJsonResponseHeaders), correlationId)
+      } catch (error) {
+        const mapped = gatewayErrorCode(error, 'call_runtime_unavailable')
+        telemetry({
+          outcome: 'unknown',
+          refusalCode: mapped.code,
+          unknown: true,
+        })
+        return gatewayErrorResponse(error, 'call_runtime_unavailable', correlationId)
+      }
+    })
   })
 }
 
@@ -782,53 +764,23 @@ export async function handleCallCancelPost(
   callRef: string,
   options: CallHandlerOptions = {},
 ): Promise<Response> {
-  return await runWithRequestCorrelation(request, async ({ correlationId }) => {
-    const startedAt = Date.now()
-    const parsed = await parseRecoveryBody(request, callRef, 'cancel', correlationId)
-    if (!parsed.ok) return parsed.response
-    const admitted = await authenticateCallGateway(request, correlationId, options, parsed.bodyText)
-    if (admitted instanceof Response) return admitted
-    if (!(await isJsonContentType(request.headers.get('content-type')))) {
-      return invalidContentTypeResponse(correlationId)
+  return await executeRecoveryAction(request, callRef, 'cancel', options, async (service, admitted, input, correlationId) => {
+    const parsed = callCancelInputSchema.safeParse(input)
+    if (!parsed.success) {
+      return withRequestCorrelationHeader(problem({
+        status: 400,
+        kind: 'INVALID_ARGUMENT',
+        code: 'invalid_request',
+        detail: 'The cancel request is invalid.',
+      }), correlationId)
     }
-    const principal = admitted.principal
-    const telemetry = (event: Omit<GatewayTelemetryEvent, 'correlationId' | 'durationMs'>): void => {
-      recordGatewayTelemetry(options.timing, {
-        ...principalTelemetry(principal),
-        ...event,
-        correlationId,
-        durationMs: Date.now() - startedAt,
-      })
-    }
-    const command = callCancelInputSchema.parse(parsed.input)
-    try {
-      const service = options.callService ?? createCallService(request, parsed.bodyText)
-      const result = await service.cancelCall({
-        callRef: command.callRef,
-        idempotencyKey: command.idempotencyKey,
-        principal: admitted.principal,
-        correlationId,
-      })
-      const projected = callRecoveryResultSchema.safeParse(result)
-      if (!projected.success) {
-        telemetry({ outcome: 'failed', refusalCode: 'call_result_invalid' })
-        const failure = gatewayFailureToProblem({ kind: 'error', code: 'call_result_invalid' })
-        return withRequestCorrelationHeader(problem({
-          ...failure,
-          detail: gatewayDetail(failure.code),
-        }), correlationId)
-      }
-      telemetry(recoveryTelemetryForResult(projected.data, command.callRef))
-      return withRequestCorrelationHeader(response(projected.data, 200, callJsonResponseHeaders), correlationId)
-    } catch (error) {
-      const mapped = gatewayErrorCode(error, 'call_runtime_unavailable')
-      telemetry({
-        outcome: 'unknown',
-        refusalCode: mapped.code,
-        unknown: true,
-      })
-      return gatewayErrorResponse(error, 'call_runtime_unavailable', correlationId)
-    }
+    const command = parsed.data
+    return await service.cancelCall({
+      callRef: command.callRef,
+      idempotencyKey: command.idempotencyKey,
+      principal: admitted.principal,
+      correlationId,
+    })
   })
 }
 
@@ -837,53 +789,23 @@ export async function handleCallReconcilePost(
   callRef: string,
   options: CallHandlerOptions = {},
 ): Promise<Response> {
-  return await runWithRequestCorrelation(request, async ({ correlationId }) => {
-    const startedAt = Date.now()
-    const parsed = await parseRecoveryBody(request, callRef, 'reconcile', correlationId)
-    if (!parsed.ok) return parsed.response
-    const admitted = await authenticateCallGateway(request, correlationId, options, parsed.bodyText)
-    if (admitted instanceof Response) return admitted
-    if (!(await isJsonContentType(request.headers.get('content-type')))) {
-      return invalidContentTypeResponse(correlationId)
+  return await executeRecoveryAction(request, callRef, 'reconcile', options, async (service, admitted, input, correlationId) => {
+    const parsed = callReconcileInputSchema.safeParse(input)
+    if (!parsed.success) {
+      return withRequestCorrelationHeader(problem({
+        status: 400,
+        kind: 'INVALID_ARGUMENT',
+        code: 'invalid_request',
+        detail: 'The reconcile evidence is invalid.',
+      }), correlationId)
     }
-    const principal = admitted.principal
-    const telemetry = (event: Omit<GatewayTelemetryEvent, 'correlationId' | 'durationMs'>): void => {
-      recordGatewayTelemetry(options.timing, {
-        ...principalTelemetry(principal),
-        ...event,
-        correlationId,
-        durationMs: Date.now() - startedAt,
-      })
-    }
-    const command = callReconcileInputSchema.parse(parsed.input)
-    try {
-      const service = options.callService ?? createCallService(request, parsed.bodyText)
-      const result = await service.reconcileCall({
-        callRef: command.callRef,
-        evidence: command.evidence,
-        idempotencyKey: command.idempotencyKey,
-        principal: admitted.principal,
-        correlationId,
-      })
-      const projected = callRecoveryResultSchema.safeParse(result)
-      if (!projected.success) {
-        telemetry({ outcome: 'failed', refusalCode: 'call_result_invalid' })
-        const failure = gatewayFailureToProblem({ kind: 'error', code: 'call_result_invalid' })
-        return withRequestCorrelationHeader(problem({
-          ...failure,
-          detail: gatewayDetail(failure.code),
-        }), correlationId)
-      }
-      telemetry(recoveryTelemetryForResult(projected.data, command.callRef))
-      return withRequestCorrelationHeader(response(projected.data, 200, callJsonResponseHeaders), correlationId)
-    } catch (error) {
-      const mapped = gatewayErrorCode(error, 'call_runtime_unavailable')
-      telemetry({
-        outcome: 'unknown',
-        refusalCode: mapped.code,
-        unknown: true,
-      })
-      return gatewayErrorResponse(error, 'call_runtime_unavailable', correlationId)
-    }
+    const command = parsed.data
+    return await service.reconcileCall({
+      callRef: command.callRef,
+      evidence: command.evidence,
+      idempotencyKey: command.idempotencyKey,
+      principal: admitted.principal,
+      correlationId,
+    })
   })
 }

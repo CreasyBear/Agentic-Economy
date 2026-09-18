@@ -23,7 +23,7 @@ describe('money schema ownership', () => {
     expect([...byName.keys()].filter((name) => name.startsWith('money'))).toEqual(expect.arrayContaining([
       'moneyCommercialPolicies', 'moneyReconciliationCases', 'moneyDocuments',
       'moneyDocumentSnapshotPages', 'moneyFundingCommands', 'moneyTreasuryObservations',
-      'moneyLegalCustomerBindings', 'moneyProviderObligations', 'moneyX402PaymentAttempts',
+      'moneyLegalCustomerBindings', 'moneyCustomerTaxFacts', 'moneyProviderObligations', 'moneyX402PaymentAttempts',
       'moneyUsageEvents', 'moneyStripeEvents',
       'moneyPayoutAccounts', 'moneyPayouts', 'moneyPayoutAllocations', 'moneyConnectAccountCommands',
     ]))

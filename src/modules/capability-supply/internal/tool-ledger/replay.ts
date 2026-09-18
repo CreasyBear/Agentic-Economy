@@ -4,7 +4,7 @@ import { stableStringify } from '@/modules/common/stable-hash'
 import type {
   CapabilityOfferingRegistration,
   CapabilityTransportBindingRegistration,
-} from '@/modules/capability-supply/public'
+} from '../registration-schema'
 
 import { bindingIntegrityIsValid } from '../binding/integrity'
 import type { CapabilityBindingRow } from '../binding/registration'

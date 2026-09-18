@@ -1,35 +1,22 @@
-import { useCallback, useEffect, useMemo, useReducer, useRef } from 'react'
-
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Spinner } from '@/components/ui/spinner'
+import type { AccountFundingConstraints } from '@/modules/money/server'
 import {
-  AUD_EXPONENT,
-  canonicalAudUnits,
-  formatDisplayAmount,
-  isMoneyRefusal,
-  quoteAudAccountFunding,
-  type AudFundingPolicy,
-  type CreditPaymentSession,
-  type MoneyRefusal,
-} from '@/modules/money/public'
-import type {
-  AccountFundingBeginInput,
-  AccountFundingConstraints,
-  AccountFundingOutcomeUnknownResult,
-  AccountFundingReadInput,
-  AccountFundingStartResult,
-} from '@/modules/money/server'
-import { captureClientExceptionOnClient } from '@/lib/observability/capture-client-exception'
-import { captureRouteException } from '@/lib/observability/capture-route-exception'
-import { degrade } from '@/lib/observability/degrade'
+  audInputTextFromUnits,
+  canStartAnotherPayment,
+  formatAudAmountString,
+  formatAudUnits,
+} from './credit-top-up-format'
+import { defaultCheckoutRedirect } from './credit-top-up-storage'
+import {
+  useAccountFunding,
+  type AccountFundingPort,
+} from './use-account-funding'
 
-export type AccountFundingPort = Readonly<{
-  begin: (input: AccountFundingBeginInput) => Promise<AccountFundingStartResult>
-  read: (input: AccountFundingReadInput) => Promise<CreditPaymentSession | MoneyRefusal>
-}>
+export type { AccountFundingPort }
 
 export type AeAccountFundingPanelProps = Readonly<{
   port?: AccountFundingPort
@@ -39,112 +26,6 @@ export type AeAccountFundingPanelProps = Readonly<{
   redirectToCheckout?: (url: string) => void
 }>
 
-type RecoveryLocator =
-  | Readonly<{ externalRef: string; idempotencyKey?: string }>
-  | Readonly<{ commandRef: string; idempotencyKey: string }>
-
-type CreditPaymentStatus = CreditPaymentSession['evidence']['status']
-
-type FundingUiState = Readonly<{
-  operation: 'idle' | 'starting' | 'checking'
-  amountText: string
-  amountInvalid: boolean
-  amountErrorMessage: string | undefined
-  quoteRefreshRequiredForDigest: string | undefined
-  session: CreditPaymentSession | undefined
-  paymentStatus: CreditPaymentStatus | undefined
-  errorMessage: string | undefined
-  recovery: RecoveryLocator | undefined
-}>
-
-type FundingUiAction =
-  | Readonly<{ type: 'amount_changed'; amountText: string; valid: boolean }>
-  | Readonly<{ type: 'amount_rejected'; errorMessage: string }>
-  | Readonly<{ type: 'quote_refresh_required'; policyDigest: string }>
-  | Readonly<{ type: 'quote_refresh_ready' }>
-  | Readonly<{ type: 'operation_started'; operation: 'starting' | 'checking' }>
-  | Readonly<{ type: 'operation_finished' }>
-  | Readonly<{ type: 'recovery_found'; recovery: RecoveryLocator }>
-  | Readonly<{ type: 'payment_read'; session: CreditPaymentSession; recovery: RecoveryLocator }>
-  | Readonly<{ type: 'payment_refused'; paymentStatus: CreditPaymentStatus | undefined; errorMessage: string | undefined }>
-  | Readonly<{ type: 'payment_outcome_unknown'; recovery?: RecoveryLocator }>
-  | Readonly<{ type: 'payment_started'; session: CreditPaymentSession; recovery: RecoveryLocator }>
-  | Readonly<{ type: 'error_changed'; errorMessage: string }>
-  | Readonly<{ type: 'reset' }>
-
-const initialFundingUiState: FundingUiState = Object.freeze({
-  operation: 'idle',
-  amountText: '',
-  amountInvalid: false,
-  amountErrorMessage: undefined,
-  quoteRefreshRequiredForDigest: undefined,
-  session: undefined,
-  paymentStatus: undefined,
-  errorMessage: undefined,
-  recovery: undefined,
-})
-
-function fundingUiReducer(state: FundingUiState, action: FundingUiAction): FundingUiState {
-  switch (action.type) {
-    case 'amount_changed':
-      return {
-        ...state,
-        amountText: action.amountText,
-        amountInvalid: action.valid ? false : state.amountInvalid,
-        amountErrorMessage: action.valid ? undefined : state.amountErrorMessage,
-      }
-    case 'amount_rejected':
-      return { ...state, amountInvalid: true, amountErrorMessage: action.errorMessage }
-    case 'quote_refresh_required':
-      return { ...state, quoteRefreshRequiredForDigest: action.policyDigest }
-    case 'quote_refresh_ready':
-      return { ...state, quoteRefreshRequiredForDigest: undefined, errorMessage: undefined }
-    case 'operation_started':
-      return { ...state, operation: action.operation, errorMessage: undefined }
-    case 'operation_finished':
-      return { ...state, operation: 'idle' }
-    case 'recovery_found':
-      return { ...state, recovery: action.recovery }
-    case 'payment_read': {
-      const status = action.session.evidence.status
-      return {
-        ...state,
-        session: action.session,
-        paymentStatus: status,
-        recovery: action.recovery,
-        errorMessage: status === 'failed'
-          ? 'The provider did not complete this payment. No Account funds were added.'
-          : status === 'outcome_unknown'
-            ? 'Payment status is still being verified. No Account funds were added by this browser return.'
-            : undefined,
-      }
-    }
-    case 'payment_refused':
-      return { ...state, session: undefined, paymentStatus: action.paymentStatus, errorMessage: action.errorMessage }
-    case 'payment_outcome_unknown':
-      return {
-        ...state,
-        session: undefined,
-        paymentStatus: 'outcome_unknown',
-        errorMessage: undefined,
-        ...(action.recovery === undefined ? {} : { recovery: action.recovery }),
-      }
-    case 'payment_started':
-      return {
-        ...state,
-        session: action.session,
-        paymentStatus: action.session.evidence.status,
-        recovery: action.recovery,
-      }
-    case 'error_changed':
-      return { ...state, errorMessage: action.errorMessage }
-    case 'reset':
-      return initialFundingUiState
-  }
-}
-
-const recoveryStorageKey = 'ae.account-funding.recovery.v1'
-
 export function AeAccountFundingPanel({
   port,
   constraints,
@@ -152,305 +33,117 @@ export function AeAccountFundingPanel({
   onRefresh,
   redirectToCheckout = defaultCheckoutRedirect,
 }: AeAccountFundingPanelProps) {
-  const [state, dispatch] = useReducer(fundingUiReducer, initialFundingUiState)
+  const {
+    state,
+    dispatch,
+    pending,
+    checking,
+    preview,
+    suggestedPrincipalUnits,
+    selectedPrincipalUnits,
+    quoteRefreshRequired,
+    checkoutResumable,
+    handleAmountChange,
+    handleAmountBlur,
+    beginTopUp,
+    startAnotherPayment,
+    refreshPayment,
+    resumeCheckout,
+    refreshFundingQuote,
+  } = useAccountFunding({ port, constraints, onRefresh, redirectToCheckout })
+
   const {
     amountErrorMessage,
     amountInvalid,
     amountText,
     errorMessage,
     paymentStatus,
-    quoteRefreshRequiredForDigest,
     recovery,
     session,
   } = state
-  const pending = state.operation === 'starting'
-  const checking = state.operation === 'checking'
-  const idempotencyKey = useRef<string | undefined>(undefined)
-  const recoveryAttempted = useRef(false)
-  const quoteRefreshInFlight = useRef(false)
-  const policy = useMemo(() => constraints?.kind === 'available'
-    ? {
-        minimumPrincipalUnits: BigInt(constraints.minimumPrincipalUnits),
-        maximumPrincipalUnits: BigInt(constraints.maximumPrincipalUnits),
-        incrementUnits: BigInt(constraints.incrementUnits),
-        serviceFeeBps: constraints.serviceFeeBps,
-        taxOnServiceFeeBps: constraints.taxOnServiceFeeBps,
-        legalCustomerMaximumAccessibleUnits: BigInt(constraints.legalCustomerMaximumAccessibleUnits),
-      }
-    : undefined, [constraints])
-  const preview = useMemo(() => {
-    const units = canonicalAudUnits(amountText)
-    return units === undefined || policy === undefined
-      ? undefined
-      : quoteAudAccountFunding(units, policy)
-  }, [amountText, policy])
-  const suggestedPrincipalUnits = useMemo(
-    () => policy === undefined ? [] : fundingSuggestionUnits(policy),
-    [policy],
-  )
-  const selectedPrincipalUnits = canonicalAudUnits(amountText)
-  const quoteRefreshRequired = quoteRefreshRequiredForDigest !== undefined
-    && (constraints?.kind !== 'available'
-      || constraints.policyDigest === quoteRefreshRequiredForDigest)
-
-  useEffect(() => {
-    if (quoteRefreshRequiredForDigest === undefined
-      || constraints?.kind !== 'available'
-      || constraints.policyDigest === quoteRefreshRequiredForDigest) return
-    dispatch({ type: 'quote_refresh_ready' })
-  }, [constraints, quoteRefreshRequiredForDigest])
-
-  async function refreshFundingQuote() {
-    if (onRefresh === undefined || quoteRefreshInFlight.current) return
-    quoteRefreshInFlight.current = true
-    try {
-      await onRefresh()
-    } catch (cause) {
-      captureClientExceptionOnClient(cause)
-      dispatch({ type: 'error_changed', errorMessage: 'Funding limits changed before payment started. The quote could not be refreshed; try refreshing it again before paying.' })
-    } finally {
-      quoteRefreshInFlight.current = false
-    }
-  }
-
-  const readCanonicalPayment = useCallback(async (locator: RecoveryLocator) => {
-    if (port === undefined) return
-    dispatch({ type: 'operation_started', operation: 'checking' })
-    try {
-      const result = await port.read(locator)
-      if (isMoneyRefusal(result)) {
-        dispatch({
-          type: 'payment_refused',
-          paymentStatus: result.code === 'funding_pending' ? 'pending' : result.code === 'funding_outcome_unknown' ? 'outcome_unknown' : undefined,
-          errorMessage: result.code === 'funding_pending' || result.code === 'funding_outcome_unknown'
-            ? undefined
-            : paymentReadErrorCopy(result),
-        })
-        return
-      }
-      dispatch({ type: 'payment_read', session: result, recovery: locator })
-      persistRecovery(locator)
-      try {
-        await onRefresh?.()
-      } catch (cause) {
-        dispatch({ type: 'error_changed', errorMessage: degrade(cause, 'Payment was read back, but the canonical Account balance is temporarily unavailable.', { site: 'readCanonicalPayment.onRefresh', reason: 'source_unavailable' }) })
-      }
-    } catch (cause) {
-      captureClientExceptionOnClient(cause)
-      dispatch({ type: 'payment_outcome_unknown' })
-      dispatch({ type: 'error_changed', errorMessage: 'Payment status is still being checked. Your Account balance has not been updated by this browser return.' })
-    } finally {
-      dispatch({ type: 'operation_finished' })
-    }
-  }, [onRefresh, port])
-
-  useEffect(() => {
-    if (port === undefined || recoveryAttempted.current) return
-    const stored = readStoredRecovery()
-    const returnedExternalRef = readReturnedExternalRef()
-    const locator = returnedExternalRef === undefined
-      ? stored
-      : { externalRef: returnedExternalRef }
-    if (locator === undefined) return
-    recoveryAttempted.current = true
-    idempotencyKey.current = locator.idempotencyKey
-    dispatch({ type: 'recovery_found', recovery: locator })
-    void readCanonicalPayment(locator)
-  }, [port, readCanonicalPayment])
-
-  async function beginTopUp() {
-    if (pending || quoteRefreshRequired || port === undefined) return
-    const units = canonicalAudUnits(amountText)
-    if (units === undefined || policy === undefined || constraints?.kind !== 'available' || quoteAudAccountFunding(units, policy) === undefined) {
-      dispatch({ type: 'amount_rejected', errorMessage: fundingAmountErrorCopy(amountText, policy, constraints) })
-      return
-    }
-    const nextIdempotencyKey = idempotencyKey.current ?? `account-funding:${randomId()}`
-    idempotencyKey.current = nextIdempotencyKey
-    dispatch({ type: 'operation_started', operation: 'starting' })
-    try {
-      const result = await port.begin({
-        amount: { currency: 'AUD', units: units.toString(), exponent: AUD_EXPONENT },
-        expectedPolicyDigest: constraints.policyDigest,
-        idempotencyKey: nextIdempotencyKey,
-      })
-      if (result.kind === 'outcome_unknown') {
-        const locator = { commandRef: result.commandRef, idempotencyKey: nextIdempotencyKey }
-        dispatch({ type: 'payment_outcome_unknown', recovery: locator })
-        persistRecovery(locator)
-        return
-      }
-      if (result.kind === 'refused') {
-        dispatch({ type: 'error_changed', errorMessage: topUpErrorCopy(result) })
-        if (result.code === 'price_changed') {
-          dispatch({ type: 'quote_refresh_required', policyDigest: constraints.policyDigest })
-          dispatch({
-            type: 'error_changed',
-            errorMessage: onRefresh === undefined
-              ? 'Funding limits changed before payment started. A current quote is unavailable; refresh this page before trying again.'
-              : 'Funding limits changed before payment started. Refresh the quote before trying again.',
-          })
-          await refreshFundingQuote()
-        }
-        return
-      }
-      const locator = { externalRef: result.session.evidence.externalRef, idempotencyKey: nextIdempotencyKey }
-      dispatch({ type: 'payment_started', session: result.session, recovery: locator })
-      persistRecovery(locator)
-      if (result.session.kind === 'hosted_redirect' && result.session.checkoutUrl !== undefined) {
-        try {
-          redirectToCheckout(result.session.checkoutUrl)
-        } catch (cause) {
-          captureClientExceptionOnClient(cause)
-          dispatch({
-            type: 'error_changed',
-            errorMessage: 'Secure checkout could not be opened. This payment attempt is preserved; continue the same payment below.',
-          })
-        }
-      }
-    } catch (cause) {
-      captureClientExceptionOnClient(cause)
-      dispatch({ type: 'error_changed', errorMessage: 'Account funding could not be started. No payment was confirmed; try again.' })
-    } finally {
-      dispatch({ type: 'operation_finished' })
-    }
-  }
-
-  function startAnotherPayment() {
-    if (pending || checking || (paymentStatus !== 'succeeded' && paymentStatus !== 'failed')) return
-    idempotencyKey.current = undefined
-    dispatch({ type: 'reset' })
-    try {
-      window.sessionStorage.removeItem(recoveryStorageKey)
-      const url = new URL(window.location.href)
-      for (const key of ['funding', 'checkout_session_id', 'session_id']) url.searchParams.delete(key)
-      window.history.replaceState(window.history.state, '', url)
-    } catch (cause) {
-      // The current render can start a new payment even when browser storage is unavailable.
-      captureRouteException(cause, { site: 'startAnotherPayment' }, 'warning')
-    }
-  }
-
-  async function refreshPayment() {
-    if (recovery === undefined || pending || checking) return
-    await readCanonicalPayment(recovery)
-  }
-
-  function resumeCheckout() {
-    if (!isCheckoutResumable(session) || pending || checking) return
-    try {
-      redirectToCheckout(session.checkoutUrl)
-    } catch (cause) {
-      captureClientExceptionOnClient(cause)
-      dispatch({
-        type: 'error_changed',
-        errorMessage: 'Secure checkout could not be opened. This payment attempt is preserved; try continuing it again.',
-      })
-    }
-  }
-
-  const checkoutResumable = isCheckoutResumable(session)
 
   return (
     <div className="grid gap-3">
-        {port === undefined || (!constraintsLoading && constraints?.kind !== 'available') ? (
-          <Alert>
-            <AlertTitle>Account funding is unavailable</AlertTitle>
-            <AlertDescription>Funding limits could not be confirmed. No payment was started.</AlertDescription>
-          </Alert>
-        ) : null}
-        {errorMessage !== undefined ? (
-          <Alert variant={paymentStatus === 'failed' ? 'destructive' : 'default'}>
-            <AlertTitle>{paymentStatus === 'failed' ? 'Payment did not complete' : 'Payment status'}</AlertTitle>
-            <AlertDescription>
-              <span>{errorMessage}</span>
-              {quoteRefreshRequired && onRefresh !== undefined ? (
-                <Button type="button" variant="secondary" disabled={pending || checking} onClick={() => void refreshFundingQuote()}>
-                  Refresh funding quote
-                </Button>
-              ) : null}
-            </AlertDescription>
-          </Alert>
-        ) : null}
-        {checking ? <p className="text-sm text-muted-foreground" role="status">Checking payment status…</p> : null}
-        {paymentStatus === 'pending' ? (
-          <p className="text-sm text-muted-foreground" role="status">
-            {checkoutResumable
-              ? 'Secure checkout is ready. Continue this payment, or refresh its status if checkout was already completed.'
-              : 'Payment is still processing. Refresh its status before taking another action.'}
-          </p>
-        ) : null}
-        {paymentStatus === 'outcome_unknown' ? (
-          <Alert>
-            <AlertTitle>Payment is still being verified</AlertTitle>
-            <AlertDescription>Do not start another payment. Refresh this payment’s status; credit appears only after confirmation.</AlertDescription>
-          </Alert>
-        ) : null}
-        {paymentStatus === 'succeeded' ? (
-          <Alert>
-            <AlertTitle>Payment received</AlertTitle>
-            <AlertDescription>Check the Account balance and Balance history below to confirm the credit is available.</AlertDescription>
-          </Alert>
-        ) : null}
-        {session === undefined && recovery === undefined && port !== undefined && constraints?.kind === 'available' ? (
-          <div className="grid gap-2">
-            {suggestedPrincipalUnits.length > 0 ? (
-              <fieldset className="grid gap-2">
-                <legend className="text-sm font-medium">Choose a credit amount</legend>
-                <div className="flex flex-wrap gap-2">
-                  {suggestedPrincipalUnits.map((units) => {
-                    const selected = selectedPrincipalUnits === units
-                    return (
-                      <Button
-                        key={units.toString()}
-                        type="button"
-                        size="sm"
-                        variant={selected ? 'secondary' : 'outline'}
-                        aria-pressed={selected}
-                        disabled={pending || checking}
-                        onClick={() => {
-                          dispatch({
-                            type: 'amount_changed',
-                            amountText: audInputTextFromUnits(units),
-                            valid: true,
-                          })
-                        }}
-                      >
-                        {formatAudUnits(units)}
-                      </Button>
-                    )
-                  })}
-                </div>
-              </fieldset>
+      {port === undefined || (!constraintsLoading && constraints?.kind !== 'available') ? (
+        <Alert>
+          <AlertTitle>Account funding is unavailable</AlertTitle>
+          <AlertDescription>Funding limits could not be confirmed. No payment was started.</AlertDescription>
+        </Alert>
+      ) : null}
+      {errorMessage !== undefined ? (
+        <Alert variant={paymentStatus === 'failed' ? 'destructive' : 'default'}>
+          <AlertTitle>{paymentStatus === 'failed' ? 'Payment did not complete' : 'Payment status'}</AlertTitle>
+          <AlertDescription>
+            <span>{errorMessage}</span>
+            {quoteRefreshRequired && onRefresh !== undefined ? (
+              <Button type="button" variant="secondary" disabled={pending || checking} onClick={() => void refreshFundingQuote()}>
+                Refresh funding quote
+              </Button>
             ) : null}
+          </AlertDescription>
+        </Alert>
+      ) : null}
+      {checking ? <p className="text-sm text-muted-foreground" role="status">Checking payment status…</p> : null}
+      {paymentStatus === 'pending' && session?.evidence.checkoutStatus !== 'expired' ? (
+        <p className="text-sm text-muted-foreground" role="status">
+          {checkoutResumable
+            ? 'Secure checkout is ready. Continue this payment, or refresh its status if checkout was already completed.'
+            : 'Payment is still processing. Refresh its status before taking another action.'}
+        </p>
+      ) : null}
+      {paymentStatus === 'outcome_unknown' ? (
+        <Alert>
+          <AlertTitle>Payment is still being verified</AlertTitle>
+          <AlertDescription>Do not start another payment. Refresh this payment’s status; credit appears only after confirmation.</AlertDescription>
+        </Alert>
+      ) : null}
+      {paymentStatus === 'succeeded' ? (
+        <Alert>
+          <AlertTitle>Payment received</AlertTitle>
+          <AlertDescription>Check the Account balance and Balance history below to confirm the credit is available.</AlertDescription>
+        </Alert>
+      ) : null}
+      {session === undefined && recovery === undefined && port !== undefined && constraints?.kind === 'available' ? (
+        <div className="grid gap-2">
+          {suggestedPrincipalUnits.length > 0 ? (
+            <fieldset className="grid gap-2">
+              <legend className="text-sm font-medium">Choose a credit amount</legend>
+              <div className="flex flex-wrap gap-2">
+                {suggestedPrincipalUnits.map((units) => {
+                  const selected = selectedPrincipalUnits === units
+                  return (
+                    <Button
+                      key={units.toString()}
+                      type="button"
+                      size="sm"
+                      variant={selected ? 'secondary' : 'outline'}
+                      aria-pressed={selected}
+                      disabled={pending || checking}
+                      onClick={() => {
+                        dispatch({
+                          type: 'amount_changed',
+                          amountText: audInputTextFromUnits(units),
+                          valid: true,
+                        })
+                      }}
+                      className="min-h-touch"
+                    >
+                      {formatAudUnits(units)}
+                    </Button>
+                  )
+                })}
+              </div>
+            </fieldset>
+          ) : null}
+          <div className="grid gap-1.5">
             <Label htmlFor="account-funding-amount">Other amount (AUD)</Label>
             <Input
               id="account-funding-amount"
               inputMode="decimal"
               autoComplete="off"
               value={amountText}
-              onChange={(event) => {
-                const units = canonicalAudUnits(event.target.value)
-                dispatch({
-                  type: 'amount_changed',
-                  amountText: event.target.value,
-                  valid: units !== undefined
-                    && policy !== undefined
-                    && constraints?.kind === 'available'
-                    && quoteAudAccountFunding(units, policy) !== undefined,
-                })
-              }}
-              onBlur={() => {
-                if (amountText.trim().length === 0) return
-                const units = canonicalAudUnits(amountText)
-                const valid = units !== undefined
-                  && policy !== undefined
-                  && constraints?.kind === 'available'
-                  && quoteAudAccountFunding(units, policy) !== undefined
-                if (!valid) {
-                  dispatch({ type: 'amount_rejected', errorMessage: fundingAmountErrorCopy(amountText, policy, constraints) })
-                }
-              }}
+              onChange={(event) => handleAmountChange(event.target.value)}
+              onBlur={handleAmountBlur}
               disabled={pending || checking}
               placeholder="10.00"
               aria-invalid={amountInvalid}
@@ -488,13 +181,14 @@ export function AeAccountFundingPanel({
               </div>
             )}
           </div>
-        ) : null}
+        </div>
+      ) : null}
       <div className="flex flex-wrap gap-2">
         {checkoutResumable ? (
           <Button type="button" disabled={checking || pending} onClick={resumeCheckout} className="min-h-touch">
             Continue secure payment
           </Button>
-        ) : paymentStatus === 'succeeded' || paymentStatus === 'failed' ? (
+        ) : canStartAnotherPayment(paymentStatus, session) ? (
           <Button type="button" variant="secondary" disabled={checking || pending} onClick={startAnotherPayment} className="min-h-touch">
             Add more credit
           </Button>
@@ -508,130 +202,4 @@ export function AeAccountFundingPanel({
       </div>
     </div>
   )
-}
-
-function topUpErrorCopy(result: MoneyRefusal | AccountFundingOutcomeUnknownResult): string {
-  if (result.code === 'stripe_setup_required') return 'Account funding is unavailable right now. No payment started and your balance did not change. Try again later.'
-  if (result.code === 'billing_identity_missing' || result.code === 'billing_identity_mismatch') return 'Your authenticated Account is unavailable. No payment started.'
-  if (result.code === 'funding_amount_invalid') return 'That AUD principal is outside the configured limits. No payment started.'
-  if (result.code === 'price_changed') return 'Funding limits changed before payment started. Review the updated quote and try again.'
-  if (result.code === 'commercial_policy_required') return 'Production funding is not enabled because the required commercial approvals are not current. No payment started.'
-  if (result.code === 'funding_pending' || result.code === 'funding_outcome_unknown') return 'Payment is still being verified. Your Account balance will not change until the canonical server readback completes.'
-  return 'Account funding could not be started. No payment was confirmed; try again.'
-}
-
-function fundingAmountErrorCopy(
-  amountText: string,
-  policy: AudFundingPolicy | undefined,
-  constraints: AccountFundingConstraints | undefined,
-): string {
-  const units = canonicalAudUnits(amountText)
-  if (units === undefined) return 'Enter a valid AUD amount with up to 6 decimal places.'
-  if (policy === undefined || constraints?.kind !== 'available') return 'Funding limits could not be confirmed. Refresh and try again.'
-  if (units < policy.minimumPrincipalUnits) return `Enter at least ${formatAudUnits(policy.minimumPrincipalUnits)}.`
-  if (units > policy.maximumPrincipalUnits) return `Enter no more than ${formatAudUnits(policy.maximumPrincipalUnits)}.`
-  if (units % policy.incrementUnits !== 0n) return `Enter an amount in ${formatAudUnits(policy.incrementUnits)} increments.`
-  return 'Enter an amount within the displayed limits and increments.'
-}
-
-function paymentReadErrorCopy(result: MoneyRefusal): string {
-  if (result.code === 'funding_pending' || result.code === 'funding_outcome_unknown') {
-    return 'Payment is still being verified. Your Account balance will not change until the canonical server readback completes.'
-  }
-  return 'This payment attempt could not be read. It remains unresolved; refresh this exact payment before starting another.'
-}
-
-function isCheckoutResumable(session: CreditPaymentSession | undefined): session is CreditPaymentSession & Readonly<{ checkoutUrl: string }> {
-  return session?.kind === 'hosted_redirect'
-    && session.checkoutUrl !== undefined
-    && session.evidence.status === 'pending'
-    && session.evidence.checkoutStatus === 'open'
-    && session.evidence.paymentStatus === 'unpaid'
-}
-
-function formatAudUnits(units: bigint): string {
-  return formatDisplayAmount({ currency: 'AUD', units: units.toString(), exponent: AUD_EXPONENT })
-}
-
-function formatAudAmountString(units: string): string {
-  return formatDisplayAmount({ currency: 'AUD', units, exponent: AUD_EXPONENT })
-}
-
-function fundingSuggestionUnits(policy: AudFundingPolicy): readonly bigint[] {
-  if (policy.minimumPrincipalUnits <= 0n || policy.maximumPrincipalUnits <= 0n || policy.incrementUnits <= 0n) return []
-  const alignUp = (units: bigint) => ((units + policy.incrementUnits - 1n) / policy.incrementUnits) * policy.incrementUnits
-  const alignDown = (units: bigint) => (units / policy.incrementUnits) * policy.incrementUnits
-  const minimum = alignUp(policy.minimumPrincipalUnits)
-  const maximum = alignDown(policy.maximumPrincipalUnits)
-  if (minimum > maximum) return []
-
-  const preferred = [minimum, alignUp(minimum * 2n), alignUp(minimum * 5n)]
-  const fallbacks = [maximum, alignDown(minimum + ((maximum - minimum) / 2n))]
-  const valid: bigint[] = []
-  const seen = new Set<bigint>()
-  for (const units of [...preferred, ...fallbacks]) {
-    if (seen.has(units)) continue
-    seen.add(units)
-    if (quoteAudAccountFunding(units, policy) === undefined) continue
-    valid.push(units)
-    if (valid.length === 3) break
-  }
-
-  return Object.freeze([...valid].sort((left, right) => left < right ? -1 : left > right ? 1 : 0))
-}
-
-function audInputTextFromUnits(units: bigint): string {
-  const scale = 10n ** BigInt(AUD_EXPONENT)
-  const whole = units / scale
-  const fraction = (units % scale).toString().padStart(AUD_EXPONENT, '0').replace(/0+$/u, '')
-  return fraction.length === 0 ? whole.toString() : `${whole}.${fraction}`
-}
-
-function randomId(): string {
-  if (typeof globalThis.crypto?.randomUUID === 'function') return globalThis.crypto.randomUUID()
-  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`
-}
-
-function persistRecovery(locator: RecoveryLocator): void {
-  if (typeof window === 'undefined') return
-  try {
-    window.sessionStorage.setItem(recoveryStorageKey, JSON.stringify(locator))
-  } catch (cause) {
-    // Browser storage is optional; the in-memory locator still protects this render.
-    captureRouteException(cause, { site: 'persistRecovery' }, 'warning')
-  }
-}
-
-function readStoredRecovery(): RecoveryLocator | undefined {
-  if (typeof window === 'undefined') return undefined
-  try {
-    const raw = window.sessionStorage.getItem(recoveryStorageKey)
-    if (raw === null) return undefined
-    const parsed: unknown = JSON.parse(raw)
-    if (!isRecoveryLocator(parsed)) return undefined
-    return parsed
-  } catch (cause) {
-    return degrade(cause, undefined, { site: 'readStoredRecovery', reason: 'invalid_response' })
-  }
-}
-
-function readReturnedExternalRef(): string | undefined {
-  if (typeof window === 'undefined') return undefined
-  const params = new URLSearchParams(window.location.search)
-  const value = params.get('funding') ?? params.get('checkout_session_id') ?? params.get('session_id')
-  return value === null || value.trim().length === 0 ? undefined : value
-}
-
-function isRecoveryLocator(value: unknown): value is RecoveryLocator {
-  if (typeof value !== 'object' || value === null) return false
-  const candidate = value as Record<string, unknown>
-  const hasIdempotencyKey = typeof candidate.idempotencyKey === 'string' && candidate.idempotencyKey.length > 0
-  const hasExternalRef = typeof candidate.externalRef === 'string' && candidate.externalRef.length > 0
-  const hasCommandRef = typeof candidate.commandRef === 'string' && candidate.commandRef.length > 0
-  return (hasExternalRef && !hasCommandRef)
-    || (hasCommandRef && !hasExternalRef && hasIdempotencyKey)
-}
-
-function defaultCheckoutRedirect(url: string): void {
-  window.location.assign(url)
 }

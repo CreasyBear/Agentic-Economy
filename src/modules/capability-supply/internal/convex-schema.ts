@@ -299,6 +299,7 @@ export const capabilitySupplyTables = {
     submittedAt: v.number(),
     reviewStartedAt: v.optional(v.number()),
     completedAt: v.optional(v.number()),
+    workflowId: v.optional(v.string()),
     updatedAt: v.number(),
   })
     .index('by_caseRef', ['caseRef'])

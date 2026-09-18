@@ -562,6 +562,7 @@ describe('capability operation approval Convex handlers', () => {
       inputDigest: nextInputDigest,
       toolJson: JSON.stringify(operation),
       normalizedInputJson: JSON.stringify(nextInput),
+      decisionAudUnits: '0',
     })
     const next = await reserveHandler(ctx, {
       quoteRef,
@@ -581,7 +582,7 @@ describe('capability operation approval Convex handlers', () => {
       grantExpiresAt,
       toolJson: JSON.stringify(operation),
       inputJson: JSON.stringify(nextInput),
-      now: 1_500_000,
+      now: now + 1_000,
     })
     expect(next).toMatchObject({ kind: 'reserved' })
   })
@@ -643,6 +644,8 @@ describe('bounded mandate invocation dispatch', () => {
             return activeGrant
           case 'moneyManagedCall:readBooking':
             return { kind: 'not_required' }
+          case 'moneyMonthlySpendBudget:readOrganizationMonthlySpendBudgetForAccount':
+            return { enabled: false, ceilingUnits: '0' }
           default:
             throw new Error(`unexpected_query:${functionPath(reference)}`)
         }
@@ -736,6 +739,8 @@ describe('invocation admission after an empty pending replay', () => {
             return { toolRef, state: 'pending' }
           case 'moneyManagedCall:readBooking':
             return { kind: 'not_required' }
+          case 'moneyMonthlySpendBudget:readOrganizationMonthlySpendBudgetForAccount':
+            return { enabled: false, ceilingUnits: '0' }
           default:
             throw new Error(`unexpected_query:${functionPath(reference)}`)
         }

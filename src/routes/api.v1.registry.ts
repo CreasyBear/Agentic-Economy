@@ -7,7 +7,7 @@ import {
   ConvexSourceError,
   sourceQuery,
 } from '@/lib/server/convex-source'
-import { methodNotAllowed } from '@/lib/server/method-guard'
+import { defineRouteHandlers } from '@/lib/server/gateway-json-route'
 import { duplicateQueryParameterProblem, problem, zodIssueDetail } from '@/lib/server/problem'
 import { withHttpRateLimit } from '@/lib/server/rate-limit'
 import {
@@ -76,17 +76,10 @@ async function resolveInnerRegistryCursor(cursor: string): Promise<string | unde
 
 export const Route = createFileRoute('/api/v1/registry')({
   server: {
-    handlers: {
+    handlers: defineRouteHandlers({
       GET: ({ request }) => handleApiRegistryRequest(request),
       HEAD: ({ request }) => handleApiRegistryRequest(request, true),
-      POST: () => methodNotAllowed(['GET', 'HEAD']),
-      PUT: () => methodNotAllowed(['GET', 'HEAD']),
-      PATCH: () => methodNotAllowed(['GET', 'HEAD']),
-      DELETE: () => methodNotAllowed(['GET', 'HEAD']),
-      OPTIONS: () => methodNotAllowed(['GET', 'HEAD']),
-      TRACE: () => methodNotAllowed(['GET', 'HEAD']),
-      CONNECT: () => methodNotAllowed(['GET', 'HEAD']),
-    },
+    }),
   },
 })
 

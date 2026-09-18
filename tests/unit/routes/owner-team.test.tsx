@@ -1,0 +1,130 @@
+/**
+ * @vitest-environment jsdom
+ */
+import { createElement } from 'react'
+import { cleanup, render, screen } from '@testing-library/react'
+import type { ComponentType, ReactNode } from 'react'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import '../../setup/jsdom-platform'
+
+const routeState = vi.hoisted(() => ({
+  declaredPath: null as string | null,
+  routeOptions: null as Record<string, unknown> | null,
+  TeamRoute: null as ComponentType | null,
+}))
+
+vi.mock('@tanstack/react-router', () => ({
+  createFileRoute: (path: string) => (options: { component: ComponentType }) => {
+    routeState.declaredPath = path
+    routeState.routeOptions = options as Record<string, unknown>
+    routeState.TeamRoute = options.component
+    return {
+      ...options,
+      options,
+    }
+  },
+  Outlet: () => null,
+}))
+
+vi.mock('@/lib/operator/route-options', () => ({
+  operatorRouteOptions: {},
+}))
+
+vi.mock('@/components/ae/website/clerk-appearance', () => ({
+  clerkAppearance: { cssLayerName: 'clerk' },
+}))
+
+vi.mock('@/components/ae/settings/AeTeamDirectoryTable', () => ({
+  AeTeamDirectoryTable: () => <div data-testid="team-directory-table" />,
+}))
+
+vi.mock('convex/react', () => ({
+  useQuery: () => undefined,
+}))
+
+vi.mock('@clerk/tanstack-react-start', () => {
+  const OrganizationProfilePage = ({ label }: { label: string }) => {
+    return <div data-testid={`organization-profile-page-${label}`} data-label={label} />
+  }
+  const OrganizationProfile = (props: Record<string, unknown>) => {
+    return (
+      <div
+        data-testid="organization-profile"
+        data-routing={String(props.routing ?? '')}
+        data-after-leave={String(props.afterLeaveOrganizationUrl ?? '')}
+      >
+        {props.children as ReactNode}
+      </div>
+    )
+  }
+  OrganizationProfile.Page = OrganizationProfilePage
+  return {
+    OrganizationProfile,
+  }
+})
+
+import { Route } from '@/routes/_operator/owner.team'
+
+function renderTeamRoute() {
+  const Component = routeState.TeamRoute
+  if (Component === null) throw new Error('owner_team_route_missing')
+  return render(createElement(Component))
+}
+
+afterEach(() => {
+  cleanup()
+})
+
+describe('/owner/team route (W-15)', () => {
+  it('U1: route is declared for /_operator/owner/team', () => {
+    expect(routeState.declaredPath).toBe('/_operator/owner/team')
+    expect(Route).toBeDefined()
+  })
+
+  it('U2: staticData.nav uses Team core owner navigation', () => {
+    const nav = (routeState.routeOptions?.staticData as { nav?: Record<string, unknown> } | undefined)?.nav
+    expect(nav).toMatchObject({
+      label: 'Team',
+      operator: {
+        roles: ['owner'],
+        group: 'Workspace',
+        order: 2,
+        tier: 'core',
+      },
+    })
+  })
+
+  it('U3: renders OrganizationProfile with hash routing and afterLeaveOrganizationUrl', () => {
+    renderTeamRoute()
+    const profile = screen.getByTestId('organization-profile')
+    expect(profile.getAttribute('data-routing')).toBe('hash')
+    expect(profile.getAttribute('data-after-leave')).toBe('/owner')
+  })
+
+  it('U4: OrganizationProfile.Page child has label members', () => {
+    renderTeamRoute()
+    const page = screen.getByTestId('organization-profile-page-members')
+    expect(page).toBeTruthy()
+    expect(page.getAttribute('data-label')).toBe('members')
+  })
+
+  it('U5: renders AeTeamDirectoryTable', () => {
+    renderTeamRoute()
+    expect(screen.getByTestId('team-directory-table')).toBeTruthy()
+  })
+
+  it('U6: contains no hand-rolled invite, role, or remove controls', () => {
+    renderTeamRoute()
+    expect(screen.queryByRole('textbox')).toBeNull()
+    expect(screen.queryByRole('button', { name: /invite/i })).toBeNull()
+    expect(screen.queryByRole('combobox')).toBeNull()
+    expect(screen.queryByRole('button', { name: /remove/i })).toBeNull()
+  })
+
+  it('U7: head meta title mentions Team', () => {
+    const head = routeState.routeOptions?.head as (() => { meta: Array<{ title?: string }> }) | undefined
+    expect(head).toBeTypeOf('function')
+    const meta = head?.().meta ?? []
+    expect(meta.some((entry) => (entry.title ?? '').includes('Team'))).toBe(true)
+  })
+})

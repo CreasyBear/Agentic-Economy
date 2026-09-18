@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { rateLimitedResponse, withHttpRateLimit } from '@/lib/server/rate-limit'
+import { rateLimitedResponse, requestAdmissionKey, withHttpRateLimit } from '@/lib/server/rate-limit'
 import {
   HTTP_RATE_LIMIT_NAMES,
   RATE_LIMIT_POLICY,
@@ -41,5 +41,18 @@ describe('shared rate-limit policy', () => {
     expect(response.headers.get('RateLimit-Reset')).toBe(
       String(Math.ceil(httpRateLimitWindowMs('oauth-device-poll') / 1_000)),
     )
+  })
+
+  it('does not mint a finer bucket than IP from an unverified Bearer or X-Api-Key', () => {
+    const ipHeaders = { 'cf-connecting-ip': '203.0.113.9' }
+    const fromIp = requestAdmissionKey(new Request('https://ae.test/x', { headers: ipHeaders }))
+    const fromBearer = requestAdmissionKey(new Request('https://ae.test/x', {
+      headers: { ...ipHeaders, authorization: 'Bearer totally-fake' },
+    }))
+    const fromApiKey = requestAdmissionKey(new Request('https://ae.test/x', {
+      headers: { ...ipHeaders, 'x-api-key': 'spoofed-catalogue-key' },
+    }))
+    expect(fromBearer).toBe(fromIp)
+    expect(fromApiKey).toBe(fromIp)
   })
 })

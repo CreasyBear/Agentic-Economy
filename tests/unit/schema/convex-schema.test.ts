@@ -36,8 +36,12 @@ const durableTables = [
   'principals',
   'accounts',
   'accountOwnerships',
+  'accountExternalOrganizationBindings',
+  'accountSecurityPolicies',
   'memberships',
   'externalIdentityBindings',
+  'interactiveSessionSelections',
+  'interactiveOnboardingCompletions',
   'credentials',
   'consequenceProofUses',
   'authorityDelegationGrants',
@@ -52,12 +56,18 @@ const durableTables = [
   'businessOfferings',
   'businessOfferingRevisions',
   'offeringAccessPaths',
+  'agentSpendingPeriods',
   'moneyCommercialPolicies',
   'moneyReconciliationCases',
   'moneyDocuments',
   'moneyDocumentSnapshotPages',
   'moneyFundingCommands',
   'moneyLegalCustomerBindings',
+  'moneyCustomerTaxFacts',
+  'moneyAutoRechargeSettings',
+  'moneyMonthlySpendBudgets',
+  'moneySupplierPreferences',
+  'moneyStripeCustomerBindings',
   'moneyTreasuryObservations',
   'moneyProviderObligations',
   'moneyConnectAccountCommands',
@@ -72,6 +82,7 @@ const durableTables = [
   'capabilityContractDocuments',
   'capabilityOfferings',
   'capabilityCallProjections',
+  'purchaseResolutionRecords',
   'capabilityQuotes',
   'capabilityCalls',
   'sellerOnboardingCanaryRearmAudits',
@@ -107,6 +118,9 @@ const durableTables = [
   'actionExecutionControls',
   'actionExecutionAttempts',
   'actionExecutionHistory',
+  'notificationDeliveries',
+  'principalNotificationEmails',
+  'userNotificationPreferences',
   'marketActiveTools',
   'marketActiveProviders',
   'marketEvidenceFacts',
@@ -193,13 +207,23 @@ const requiredIndexes = {
   moneyFundingCommands: ['by_commandRef', 'by_idempotencyKey', 'by_externalRef', 'by_paymentId', 'by_accountRef_and_createdAt'],
   moneyTreasuryObservations: ['by_observationRef', 'by_custody_and_observedAt'],
   moneyLegalCustomerBindings: ['by_accountRef', 'by_legalCustomerRef_and_state'],
+  moneyCustomerTaxFacts: ['by_accountRef'],
+  moneyAutoRechargeSettings: ['by_accountRef'],
+  moneyMonthlySpendBudgets: ['by_accountRef'],
+  moneySupplierPreferences: ['by_businessId_and_currency'],
+  moneyStripeCustomerBindings: ['by_accountRef', 'by_stripeCustomerId'],
   moneyProviderObligations: ['by_obligationRef', 'by_callRef', 'by_buyerAccountRef_and_createdAt', 'by_providerRef_and_createdAt'],
   moneyStripeWebhookInbox: ['by_stripeEventId', 'by_state_and_receivedAt'],
   moneyStripeEvents: ['by_stripeEventId'],
   moneyPayoutAccounts: ['by_businessId_and_currency', 'by_stripeAccountId'],
   moneyPayouts: ['by_businessId_and_currency_and_state', 'by_businessId_and_currency_and_state_and_updatedAt', 'by_periodStart_and_state', 'by_stripeTransferId', 'by_payoutRef', 'by_businessId_and_currency_and_updatedAt', 'by_businessId_and_currency_and_cadence_and_updatedAt'],
   moneyPayoutAllocations: ['by_allocationRef', 'by_qualifiedUseRef', 'by_transactionRef', 'by_payoutRef_and_qualifiedAt', 'by_businessId_and_currency_and_qualifiedAt'],
-  businesses: ['by_slug', 'by_owningAccountRef_and_updatedAt', 'by_publicStatus_slug'],
+  businesses: [
+    'by_slug',
+    'by_owningAccountRef_and_updatedAt',
+    'by_owningAccountRef_and_publicStatus',
+    'by_publicStatus_slug',
+  ],
   businessOfferings: ['by_offeringRef', 'by_businessId_and_status', 'by_businessId_and_offeringRef'],
   businessOfferingRevisions: ['by_offeringRef_and_revision', 'by_businessId_and_createdAt'],
   offeringAccessPaths: [
@@ -207,6 +231,7 @@ const requiredIndexes = {
     'by_offeringRef_and_status',
     'by_offeringRef_and_offeringRevision',
     'by_businessId_and_status',
+    'by_businessId_and_offeringRef',
   ],
   operationKeys: ['by_actor_operation_key', 'by_scope_key'],
   adminMemberships: [
@@ -228,6 +253,11 @@ const requiredIndexes = {
     'by_providerRef_and_createdAt',
     'by_toolRef_and_createdAt',
     'by_accountRef_and_applicationRef_and_createdAt',
+  ],
+  purchaseResolutionRecords: [
+    'by_callRef',
+    'by_accountRef_and_resolvedAt',
+    'by_customerRef_and_resolvedAt',
   ],
   capabilityQuotes: ['by_quoteRef', 'by_credentialId_and_createdAt', 'by_state_and_expiresAt'],
   sellerOnboardingCanaryRearmAudits: ['by_auditRef', 'by_callRef', 'by_canaryRef'],
@@ -359,7 +389,7 @@ describe('Convex schema', () => {
   const exported = SchemaExport.parse(JSON.parse(String(exportSchema.call(schema))))
 
   it('contains exactly the source-owned durable tables', () => {
-    expect(durableTables).toHaveLength(86)
+    expect(durableTables).toHaveLength(100)
     expect(exported.tables.map((table) => table.tableName).sort()).toEqual([...durableTables].sort())
   })
 
@@ -397,6 +427,8 @@ describe('Convex schema', () => {
     expectIndexFields('moneyUsageEvents', 'by_callRef', ['callRef'])
     expectIndexFields('qualifiedUseReceipts', 'by_callRef', ['callRef'])
     expectIndexFields('qualifiedUseReceipts', 'by_toolRef_and_qualifiedAt', ['toolRef', 'qualifiedAt'])
+    expectIndexFields('businesses', 'by_owningAccountRef_and_publicStatus', ['owningAccountRef', 'publicStatus'])
+    expectIndexFields('offeringAccessPaths', 'by_businessId_and_offeringRef', ['businessId', 'offeringRef'])
   })
 
   it('activates the backfilled Account audit indexes', () => {

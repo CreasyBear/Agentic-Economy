@@ -2,8 +2,11 @@ import { z } from 'zod'
 
 import { jsonValueSchema } from '@/modules/capability-contract/public'
 import { exactAmountSchema } from '@/modules/money/public'
-import { CURRENT_TOOL_CALL_VIA, PublicToolRegistrySchemaVersion } from './internal/tool-projection-types'
-
+import {
+  CURRENT_TOOL_CALL_VIA,
+  LISTING_TIERS,
+  PublicToolRegistrySchemaVersion,
+} from './internal/tool-projection-types'
 export { PublicToolRegistrySchemaVersion }
 export { decodePublicSchema, projectPublicSchema } from './internal/tool-projection-wire-schema'
 
@@ -12,9 +15,8 @@ import type {
   ToolCompareResult,
   ToolDetailInput,
   ToolDetailResult,
-  ToolSearchInput,
-  ToolSearchResult,
-} from './tool-projection'
+} from './internal/tool-detail-compare'
+import type { ToolSearchInput, ToolSearchResult } from './internal/tool-search'
 
 const toolRef = z.string().regex(/^operation:v1:[0-9a-f]{64}$/)
 const publicSchema = z.record(z.string(), jsonValueSchema)
@@ -123,7 +125,7 @@ export const publicToolDisplayPriceSchema = z.union([
   z.strictObject({ kind: z.literal('unavailable'), reason: z.enum(['upstream_price_missing', 'fx_missing', 'fx_stale', 'unsupported_payment']) }),
 ])
 
-const descriptor = z.strictObject({
+export const publicToolDescriptorSchema = z.strictObject({
   toolRef, toolId: z.string(),
   callVia: z.literal(CURRENT_TOOL_CALL_VIA),
   paymentLane: z.literal('brokered'),
@@ -137,9 +139,11 @@ const descriptor = z.strictObject({
   summary: z.string(),
   commercial: z.strictObject({ displayPrice: publicToolDisplayPriceSchema.optional(), price: publicToolPriceSchema, priceEvidence: priceEvidence.optional(), priceBreakdown: priceBreakdown.optional(), materialTerms: z.array(materialTerm), relationship }),
   dataUse: z.array(dataUse), effects: z.array(effect), evidence: z.array(evidence),
-  cancellation, recovery, authentication: publicToolAuthenticationSchema, payment: publicToolPaymentSchema.optional(), transport, provenance, listingTier: z.enum(['reviewed', 'listed']), canonical: canonical.optional(), availability: publicToolAvailabilitySchema, navigation: z.array(publicToolNavigationSchema),
+  cancellation, recovery, authentication: publicToolAuthenticationSchema, payment: publicToolPaymentSchema.optional(), transport, provenance, listingTier: z.enum(LISTING_TIERS), canonical: canonical.optional(), availability: publicToolAvailabilitySchema, navigation: z.array(publicToolNavigationSchema),
   parameters: z.array(publicToolParameterSchema).optional(), catalogPrice: catalogPrice.optional(),
 })
+
+const descriptor = publicToolDescriptorSchema
 export const toolSearchFiltersSchema = z.strictObject({
   networkId: z.string().max(200).optional(), location: z.string().max(200).optional(),
   effects: z.array(z.enum(['data_release', 'financial_exposure', 'external_state_change'])).max(3).optional(),

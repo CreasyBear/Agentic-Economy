@@ -1,6 +1,6 @@
 import { v } from 'convex/values'
 import { internalMutation } from './_generated/server'
-import { spendingPeriodAdjustmentValue } from '../src/modules/money/internal/spending-period-values'
+import { spendingPeriodAdjustmentValue } from '../src/modules/money/public'
 import { acknowledgeAgentSpendingPeriod } from './lib/agentSpendingPeriods'
 
 export const acknowledge = internalMutation({

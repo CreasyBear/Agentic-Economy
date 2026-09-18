@@ -8,15 +8,12 @@ import {
 } from "@/modules/money/public";
 import { isRecord } from "@/modules/common/is-record";
 import { sanitizeText } from "@/modules/common/sanitize-text";
-import {
-  createPublicToolRef,
-  isPublicToolRef,
-  type PublicToolRef,
-} from "../public";
+import { isPublicToolRef, type PublicToolRef } from '@/modules/common/tool-ref'
+import { createPublicToolRef } from './public-tool-ref'
 import { availability as deriveAvailability } from "./availability";
 import { listingTier } from "./publication/provenance";
 import { paymentLaneAdmission } from "./x402-call-policy";
-import { projectPublicSchema } from "./tool-projection-wire";
+import { projectPublicSchema } from "./tool-projection-wire-schema";
 import { CURRENT_TOOL_CALL_VIA } from "./tool-projection-types";
 import type {
   CapabilityToolSourceRecord,

@@ -34,7 +34,7 @@ import { accountHistoryResultValue } from './moneyLedgerValues'
 import {
   spendingPeriodAdjustmentValue,
   spendingPeriodsValue,
-} from '../src/modules/money/internal/spending-period-values'
+} from '../src/modules/money/public'
 
 export type MoneyFormanceResult = FormanceMoneyResult
 export type MoneyFormanceManagedCallBooking = import('../src/modules/money/formance-workflows').FormanceManagedCallBooking
@@ -209,23 +209,13 @@ const statementPageResult = v.union(
 export const health = internalAction({
   args: {},
   returns: healthResult,
-  handler: async () => {
-    const context = configuredContext()
-    return context.kind === 'setup_required'
-      ? context
-      : await readFormanceHealth(context.context)
-  },
+  handler: async () => await withFormanceContext((context) => readFormanceHealth(context)),
 })
 
 export const installSchema = internalAction({
   args: {},
   returns: installationResult,
-  handler: async () => {
-    const context = configuredContext()
-    return context.kind === 'setup_required'
-      ? context
-      : await installPackage4FormanceSchema(context.context)
-  },
+  handler: async () => await withFormanceContext((context) => installPackage4FormanceSchema(context)),
 })
 
 export const readAccount = internalAction({
@@ -520,6 +510,13 @@ function configuredContext() {
   return result.kind === 'setup_required'
     ? result
     : Object.freeze({ kind: 'configured' as const, context: createFormanceContext(result.configuration) })
+}
+
+async function withFormanceContext<T>(
+  run: (context: ReturnType<typeof createFormanceContext>) => Promise<T>,
+): Promise<T | { kind: 'setup_required'; code: string }> {
+  const context = configuredContext()
+  return context.kind === 'setup_required' ? context : await run(context.context)
 }
 
 function convexMoneyResult(result: FormanceMoneyResult) {

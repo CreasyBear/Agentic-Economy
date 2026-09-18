@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 
 import { handleAgentAccountActionPost, handleAgentAccountGet } from '@/lib/server/agent-account-api'
+import { setHttpRateLimitAdmissionForTests } from '@/lib/server/rate-limit'
 
 const authenticate = async (scopes: readonly string[] = ['market_tools:call']) => ({
   isAuthenticated: true as const,
@@ -11,6 +12,18 @@ const authenticate = async (scopes: readonly string[] = ['market_tools:call']) =
 })
 
 describe('agent account HTTP adapter', () => {
+  it('rate-limits current-account reads before dispatch when admission is denied', async () => {
+    setHttpRateLimitAdmissionForTests(async () => ({ ok: false, retryAfter: 5_000 }))
+    const response = await handleAgentAccountGet(
+      new Request('https://ae.example/api/v1/account', {
+        headers: { Authorization: 'Bearer hidden-secret' },
+      }),
+      { authenticate },
+    )
+
+    expect(response.status).toBe(429)
+  })
+
   it('projects canonical principal and account identity through the shared action', async () => {
     const resources: string[] = []
     const response = await handleAgentAccountGet(

@@ -1,4 +1,4 @@
-import { isPublicToolRef, type PublicToolRef } from "../public";
+import { isPublicToolRef, type PublicToolRef } from '@/modules/common/tool-ref'
 import {
   noToolNavigation,
   normalizeRefs,

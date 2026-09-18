@@ -155,4 +155,40 @@ describe('rebuildAllBusinessSupplyProjections', () => {
     expect(await searchDocuments(backend, legacySuffix)).toStrictEqual(restored)
     expect(await searchDocuments(backend, searchableSuffix)).toStrictEqual(current)
   })
+
+  it('retracts registrySearchDocuments for unpublished businesses during the full sweep', async () => {
+    const slugSuffix = 'rebuildsweepunpub'
+    const backend = convexTest(schema, modules)
+    const businessId = await publishBusiness(backend, slugSuffix)
+    expect(await searchDocuments(backend, slugSuffix)).toHaveLength(1)
+
+    await backend.run(async (ctx) => {
+      await ctx.db.patch(businessId, { publicStatus: 'unpublished', updatedAt: Date.now() })
+    })
+
+    const applied = await backend.mutation(
+      internal.capabilitySupplyProjection.rebuildAllBusinessSupplyProjections,
+      {},
+    )
+    expect(applied).toMatchObject({ isDone: true, continueCursor: null })
+    expect(await searchDocuments(backend, slugSuffix)).toHaveLength(0)
+  })
+
+  it('retracts registrySearchDocuments for suppressed businesses during the full sweep', async () => {
+    const slugSuffix = 'rebuildsweepsuppr'
+    const backend = convexTest(schema, modules)
+    const businessId = await publishBusiness(backend, slugSuffix)
+    expect(await searchDocuments(backend, slugSuffix)).toHaveLength(1)
+
+    await backend.run(async (ctx) => {
+      await ctx.db.patch(businessId, { suppressedAt: Date.now(), updatedAt: Date.now() })
+    })
+
+    const applied = await backend.mutation(
+      internal.capabilitySupplyProjection.rebuildAllBusinessSupplyProjections,
+      {},
+    )
+    expect(applied).toMatchObject({ isDone: true, continueCursor: null })
+    expect(await searchDocuments(backend, slugSuffix)).toHaveLength(0)
+  })
 })

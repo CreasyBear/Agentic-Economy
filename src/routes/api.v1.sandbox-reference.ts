@@ -4,7 +4,7 @@ import { z } from 'zod'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { assertHttpAdmission, rateLimitedResponse } from '@/lib/server/rate-limit'
 import { readBoundedRequestJson } from '@/lib/server/bounded-request-body'
-import { methodNotAllowed } from '@/lib/server/method-guard'
+import { postOnlyRoute } from '@/lib/server/gateway-json-route'
 import { problem } from '@/lib/server/problem'
 import { runWithRequestCorrelation, withRequestCorrelationHeader } from '@/lib/server/request-correlation'
 import type { RequestCorrelation } from '@/lib/server/request-correlation'
@@ -30,17 +30,7 @@ const sandboxReferenceRequestSchema = z.strictObject({
 
 export const Route = createFileRoute('/api/v1/sandbox-reference')({
   server: {
-    handlers: {
-      POST: ({ request }) => handleSandboxReferenceRequest(request),
-      GET: () => methodNotAllowed(['POST']),
-      PUT: () => methodNotAllowed(['POST']),
-      PATCH: () => methodNotAllowed(['POST']),
-      DELETE: () => methodNotAllowed(['POST']),
-      HEAD: () => methodNotAllowed(['POST']),
-      OPTIONS: () => methodNotAllowed(['POST']),
-      TRACE: () => methodNotAllowed(['POST']),
-      CONNECT: () => methodNotAllowed(['POST']),
-    },
+    handlers: postOnlyRoute((request) => handleSandboxReferenceRequest(request)),
   },
 })
 

@@ -1,6 +1,6 @@
 import type { JsonValue } from '@/modules/capability-contract/public'
 
-import type { SchemaDereferencer } from '../admit-provider-schema'
+import type { SchemaDereferencer } from '../admit-provider-schema-types'
 import type { CapabilityPublicationImportRefusal } from '../publication-importer-types'
 import type {
   HttpJsonHeaderParameterMapping,

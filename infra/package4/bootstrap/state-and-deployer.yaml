@@ -189,9 +189,77 @@ Resources:
             Condition:
               Bool:
                 aws:MultiFactorAuthPresent: true
-      ManagedPolicyArns:
-        - !Sub 'arn:${AWS::Partition}:iam::aws:policy/PowerUserAccess'
       Policies:
+        - PolicyName: Package4ReleaseOpenTofuServices
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Sid: Package4NamedStorageAndData
+                Effect: Allow
+                Action:
+                  - kms:*
+                  - logs:*
+                  - rds:*
+                  - s3:*
+                  - secretsmanager:*
+                  - sns:*
+                Resource:
+                  - !Sub 'arn:${AWS::Partition}:s3:::agentic-economy-*'
+                  - !Sub 'arn:${AWS::Partition}:s3:::agentic-economy-*/*'
+                  - !Sub 'arn:${AWS::Partition}:kms:ap-southeast-2:${AWS::AccountId}:alias/agentic-economy-*'
+                  - !Sub 'arn:${AWS::Partition}:kms:ap-southeast-2:${AWS::AccountId}:alias/${DeploymentName}-package4'
+                  - !Sub 'arn:${AWS::Partition}:kms:ap-southeast-2:${AWS::AccountId}:alias/${DeploymentName}-opentofu-state'
+                  - !Sub 'arn:${AWS::Partition}:kms:ap-southeast-2:${AWS::AccountId}:alias/ae-production-package4'
+                  - !Sub 'arn:${AWS::Partition}:kms:ap-southeast-2:${AWS::AccountId}:alias/ae-production-opentofu-state'
+                  - !Sub 'arn:${AWS::Partition}:kms:ap-southeast-4:${AWS::AccountId}:alias/agentic-economy-*'
+                  - !Sub 'arn:${AWS::Partition}:kms:ap-southeast-4:${AWS::AccountId}:alias/${DeploymentName}-package4'
+                  - !Sub 'arn:${AWS::Partition}:kms:ap-southeast-4:${AWS::AccountId}:alias/ae-production-package4'
+                  - !Sub 'arn:${AWS::Partition}:logs:ap-southeast-2:${AWS::AccountId}:log-group:/agentic-economy/*'
+                  - !Sub 'arn:${AWS::Partition}:logs:ap-southeast-2:${AWS::AccountId}:log-group:/agentic-economy/*:*'
+                  - !Sub 'arn:${AWS::Partition}:logs:ap-southeast-2:${AWS::AccountId}:log-group:/aws/rds/instance/${DeploymentName}-*'
+                  - !Sub 'arn:${AWS::Partition}:logs:ap-southeast-2:${AWS::AccountId}:log-group:/aws/rds/instance/${DeploymentName}-*:*'
+                  - !Sub 'arn:${AWS::Partition}:logs:ap-southeast-2:${AWS::AccountId}:log-group:/aws/rds/instance/ae-production-*'
+                  - !Sub 'arn:${AWS::Partition}:logs:ap-southeast-2:${AWS::AccountId}:log-group:/aws/rds/instance/ae-production-*:*'
+                  - !Sub 'arn:${AWS::Partition}:rds:ap-southeast-2:${AWS::AccountId}:db:${DeploymentName}-*'
+                  - !Sub 'arn:${AWS::Partition}:rds:ap-southeast-2:${AWS::AccountId}:db:ae-production-*'
+                  - !Sub 'arn:${AWS::Partition}:rds:ap-southeast-2:${AWS::AccountId}:subgrp:${DeploymentName}*'
+                  - !Sub 'arn:${AWS::Partition}:rds:ap-southeast-2:${AWS::AccountId}:subgrp:ae-production*'
+                  - !Sub 'arn:${AWS::Partition}:rds:ap-southeast-2:${AWS::AccountId}:snapshot:${DeploymentName}-*'
+                  - !Sub 'arn:${AWS::Partition}:rds:ap-southeast-2:${AWS::AccountId}:snapshot:ae-production-*'
+                  - !Sub 'arn:${AWS::Partition}:secretsmanager:ap-southeast-2:${AWS::AccountId}:secret:${DeploymentName}/*'
+                  - !Sub 'arn:${AWS::Partition}:secretsmanager:ap-southeast-2:${AWS::AccountId}:secret:ae-production/*'
+                  - !Sub 'arn:${AWS::Partition}:secretsmanager:ap-southeast-2:${AWS::AccountId}:secret:rds!*'
+                  - !Sub 'arn:${AWS::Partition}:sns:ap-southeast-2:${AWS::AccountId}:${DeploymentName}-package4-*'
+                  - !Sub 'arn:${AWS::Partition}:sns:ap-southeast-2:${AWS::AccountId}:ae-production-package4-*'
+              - Sid: Package4TaggedKmsKeys
+                Effect: Allow
+                Action: kms:*
+                Resource:
+                  - !Sub 'arn:${AWS::Partition}:kms:ap-southeast-2:${AWS::AccountId}:key/*'
+                  - !Sub 'arn:${AWS::Partition}:kms:ap-southeast-4:${AWS::AccountId}:key/*'
+                Condition:
+                  StringEquals:
+                    aws:ResourceTag/Application: agentic-economy
+              - Sid: Package4AccountAndNetworkServices
+                Effect: Allow
+                Action:
+                  - access-analyzer:*
+                  - backup:*
+                  - budgets:*
+                  - cloudtrail:*
+                  - cloudwatch:*
+                  - ec2:*
+                  - events:*
+                  - guardduty:*
+                  - kms:CreateKey
+                  - kms:ListAliases
+                  - kms:ListKeys
+                  - logs:DescribeLogGroups
+                  - rds:Describe*
+                  - s3:ListAllMyBuckets
+                  - ssm:*
+                  - sts:GetCallerIdentity
+                Resource: '*'
         - PolicyName: Package4ReleaseIamBoundary
           PolicyDocument:
             Version: '2012-10-17'

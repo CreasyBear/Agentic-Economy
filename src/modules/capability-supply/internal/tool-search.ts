@@ -5,10 +5,7 @@ import {
 } from "@/modules/money/public";
 import { canonicalDigest } from "@/modules/common/canonical-digest";
 import { SEARCH_STOP_WORDS } from "@/modules/common/normalize-search-text";
-import {
-  isPublicToolRef,
-  type PublicToolRef,
-} from "../public";
+import { isPublicToolRef, type PublicToolRef } from '@/modules/common/tool-ref'
 import {
   noToolNavigation,
   toolNavigation,

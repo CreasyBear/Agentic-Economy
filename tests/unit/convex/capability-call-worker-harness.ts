@@ -1503,6 +1503,7 @@ export function createWorker(kind: WorkerKind, options: WorkerOptions = {}): { c
     }
     try {
       const preparedAuthorization = await runMutation('moneyX402PaymentAttempts:prepareX402PaymentAuthorization', {
+        aeEnvironment: dispatch.environment,
         dispatchRef: dispatch.callRef,
         toolRef: dispatch.toolRef,
         inputDigest: dispatch.inputDigest,

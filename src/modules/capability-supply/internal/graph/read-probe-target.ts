@@ -9,7 +9,7 @@ import {
 import { bindingIntegrityIsValid } from '../binding/integrity'
 import { contractRefFromRow } from '../offering/registration'
 import { offeringIntegrityIsValid } from '../offering/integrity'
-import type { CapabilityTransportBindingRegistration } from '@/modules/capability-supply/public'
+import type { CapabilityTransportBindingRegistration } from '../registration-schema'
 import {
   parseHttpJsonTransportConfiguration,
   parseMcpJsonRpcTransportConfiguration,

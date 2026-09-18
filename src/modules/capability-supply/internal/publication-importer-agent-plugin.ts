@@ -1,6 +1,6 @@
 import { canonicalDigest } from "@/modules/common/canonical-digest";
 
-import type { SchemaDereferencer } from "./admit-provider-schema";
+import type { SchemaDereferencer } from "./admit-provider-schema-types";
 import { validateAgentPluginSource } from "./agent-plugin-source";
 import { publicationMaterialContainsCredential } from "./publication/source";
 import { importMcpCapability } from "./publication-importer-mcp";

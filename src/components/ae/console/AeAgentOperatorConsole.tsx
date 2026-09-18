@@ -19,9 +19,16 @@ import type { PendingCallApproval } from '@/modules/capability-execution/call-ap
 import type { AgentConnectionReadback } from '@/modules/agent-access/public'
 import { AeAgentApprovalsSection } from './AeAgentApprovalsSection'
 import { AeAgentAuthorizedTools } from './AeAgentAuthorizedTools'
+import { AeAgentCallHistoryTable } from './AeAgentCallHistoryTable'
 import { AeAgentConnectionReceipts } from './AeAgentConnectionReceipts'
 import { AeAgentCredentialHistory } from './AeAgentCredentialHistory'
 import { AeAgentDirectoryTable } from './AeAgentDirectoryTable'
+import { AeAgentSpendingLimitsForm } from './AeAgentSpendingLimitsForm'
+import type { ExactAmount } from '@/modules/money/public'
+import type {
+  AgentSpendingLimitsReadResult,
+  AgentSpendingLimitsResult,
+} from '@/modules/agent-access/spending-policy-update'
 import {
   agentAccessFacts,
   agentActivityFacts,
@@ -39,6 +46,14 @@ export type AeAgentOperatorConsoleProps = Readonly<{
   onDisconnectAgent: (principalRef: string) => void | Promise<void>
   onDisconnectConnection?: (connectionRef: string, expectedRevision: number) => void | Promise<void>
   onRenameAgent?: (principalRef: string, expectedRevision: number, displayName: string) => Promise<boolean>
+  onUpdateSpendingLimits?: (params: {
+    principalRef: string
+    expectedGeneration: number
+    maximumSpendPerCall: ExactAmount
+    maximumDailySpend: ExactAmount
+    maximumMonthlySpend: ExactAmount
+  }) => Promise<AgentSpendingLimitsResult>
+  onReadSpendingLimits?: (principalRef: string) => Promise<AgentSpendingLimitsReadResult>
   agentHistory?: ReactNode
   lifecyclePending?: Readonly<{ kind: 'credential' | 'connection' | 'agent'; ref: string }>
   approvals: readonly PendingCallApproval[]
@@ -52,6 +67,7 @@ export type AeAgentOperatorConsoleProps = Readonly<{
   selectedPrincipalId?: string
   getAgentHref?: (principalId: string) => string
   onClearSelectedPrincipal?: () => void
+  onConnectNewAgent?: () => void
 }>
 
 export function AeAgentOperatorConsole({
@@ -61,6 +77,8 @@ export function AeAgentOperatorConsole({
   onDisconnectAgent,
   onDisconnectConnection,
   onRenameAgent,
+  onUpdateSpendingLimits,
+  onReadSpendingLimits,
   agentHistory,
   lifecyclePending,
   approvals,
@@ -74,6 +92,7 @@ export function AeAgentOperatorConsole({
   selectedPrincipalId,
   getAgentHref,
   onClearSelectedPrincipal,
+  onConnectNewAgent,
 }: AeAgentOperatorConsoleProps) {
   const directoryItems = directory.items
   const [localSelected, setLocalSelected] = useState<AgentDirectoryItem>()
@@ -172,6 +191,17 @@ export function AeAgentOperatorConsole({
         title="Agents"
         description="Review each independent agent, its current credential generation, activity, and connection state. Historical credentials stay attached to the same Agent."
       >
+        {onConnectNewAgent !== undefined && (
+          <div className="flex justify-end">
+            <Button
+              type="button"
+              onClick={onConnectNewAgent}
+              className="w-fit min-h-touch"
+            >
+              + Connect New Agent
+            </Button>
+          </div>
+        )}
         <AeAgentDirectoryTable
           directoryItems={directoryItems}
           loading={loading}
@@ -198,8 +228,16 @@ export function AeAgentOperatorConsole({
             )}
             <p className="text-sm text-muted-foreground">Counts and settled charges cover Calls created in the current UTC calendar month. Released or refunded payments are excluded. This is not a net-spend statement.</p>
             {selected.activityTruncated ? <p className="text-sm text-muted-foreground">Recent activity shows only the latest 50 Calls by creation time; monthly counts cover the full period when available.</p> : null}
-            <AgentFactsDisclosure label="Spending policy" facts={agentSpendingPolicyFacts(selected)} />
-            <AgentFactsDisclosure label="Activity" facts={agentActivityFacts(selected)} />
+            <AgentFactsDisclosure label="Spending policy" facts={agentSpendingPolicyFacts(selected)}>
+              <AeAgentSpendingLimitsForm
+                detail={selected}
+                {...(onUpdateSpendingLimits === undefined ? {} : { onUpdateSpendingLimits })}
+                {...(onReadSpendingLimits === undefined ? {} : { onReadSpendingLimits })}
+              />
+            </AgentFactsDisclosure>
+            <AgentFactsDisclosure label="Activity" facts={agentActivityFacts(selected)}>
+              <AeAgentCallHistoryTable activity={selected.activity} />
+            </AgentFactsDisclosure>
             <AgentFactsDisclosure label="Tool access" facts={agentAccessFacts(selected)}>
               <AeAgentAuthorizedTools detail={selected} />
             </AgentFactsDisclosure>

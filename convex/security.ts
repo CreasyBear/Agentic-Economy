@@ -67,7 +67,9 @@ const auditSummaryResult = v.object({
     v.literal('admin.membership_granted'),
     v.literal('admin.membership_revoked'),
     v.literal('admin.action_denied'),
-    v.literal('dispute.closed')
+    v.literal('dispute.closed'),
+    v.literal('business.suppressed'),
+    v.literal('business.unsuppressed'),
   ),
   actorRef: v.string(),
   targetRef: v.string(),

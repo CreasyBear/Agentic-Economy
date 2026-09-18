@@ -25,5 +25,6 @@ export const businessTables = {
   })
     .index('by_slug', ['slug'])
     .index('by_owningAccountRef_and_updatedAt', ['owningAccountRef', 'updatedAt'])
+    .index('by_owningAccountRef_and_publicStatus', ['owningAccountRef', 'publicStatus'])
     .index('by_publicStatus_slug', ['publicStatus', 'slug']),
 } as const

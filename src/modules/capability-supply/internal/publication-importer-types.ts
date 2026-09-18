@@ -15,8 +15,8 @@ import {
 import type {
   CapabilityOfferingRegistration,
   CapabilityTransportBindingRegistration,
-} from "../public";
-import type { AdmitProviderSchemaRefusal } from "./admit-provider-schema";
+} from './registration-schema'
+import type { AdmitProviderSchemaRefusal } from "./admit-provider-schema-types";
 import { validPublicHttpsEndpoint } from "./transport-adapters";
 
 export const MAX_PROTOCOL_VERSION_LENGTH = 64;

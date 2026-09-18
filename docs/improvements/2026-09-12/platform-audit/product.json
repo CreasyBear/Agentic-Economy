@@ -1,0 +1,312 @@
+{
+  "scope": {
+    "repository": "/Users/joelchan/Documents/Coding/App-Dev/live/01. Pre-Implementation/Agentic-Economy",
+    "review": "Read-only product-completion and source-level journey audit against the accepted Australian managed x402 start line.",
+    "target": "Account/team/agent authority; funding/spend; discovery/comparison; Quote/Call and recovery; usage/billing/documents; Provider supply, connections, earnings and offboarding; support/events; operator and agent HTTP/MCP/CLI surfaces.",
+    "working_tree": "Heavily dirty shared checkout; preserved without resets, restores, source edits, tests, browser runs, service calls or deployment.",
+    "head_observed": "06a89ebe3cf4747589a7d98c869cad35e1fa3fe6"
+  },
+  "skills_applied": [
+    {
+      "skill": "iceinvein-design-review",
+      "principles": ["test the product thesis and one economic chain", "separate necessary foundations from later accretion", "prefer a smallest coherent product boundary"]
+    },
+    {
+      "skill": "bounded-context-auditor",
+      "principles": ["trace canonical Tool, Offering, Publication, Provider, Seller, Charge and Purchase meanings", "flag terms whose source contracts disagree with their product definition"]
+    },
+    {
+      "skill": "cognitive-load-auditor",
+      "principles": ["separate delivery, payment and purchase states", "avoid success signals that require a cross-screen mental join", "keep technical detail progressive and decision-relevant"]
+    }
+  ],
+  "coverage": {
+    "documents": [
+      "AGENTS.md",
+      "PRODUCT.md",
+      "START_LINE.md",
+      "CONTEXT.md",
+      "README.md",
+      "docs/glossary.md",
+      "docs/workflow/simple-user-expectations.md"
+    ],
+    "journeys": {
+      "account_team_agent_authority": "Agent connection, approval, scopes, limits, rotation and revoke inspected. Generic membership storage exists; owner team administration is not exposed, and the active start line scopes one Customer/Account and one Agent.",
+      "funding_and_spend": "AUD funding, fee preview, hosted payment readback, account balance, reservations, usage and spend views inspected. Per-Agent remaining capacity is not shown with account spend.",
+      "directory_and_comparison": "Upstream directory discovery, comparison, admitted Tool detail, contract/schema inspection and source admission boundary inspected.",
+      "quote_call_recovery": "Quote schema/action, Convex issue path, Call receipt, uncertainty/recovery actions, reuse path and focused unit tests inspected.",
+      "usage_billing_documents": "Calls/activity, account documents, reconciliation and Provider-obligation views inspected. Invoice/tax maturity remains partial or deferred per product docs.",
+      "provider_supply": "Provider Tool inventory, public status, identity, connections, earnings/payout readiness and offboarding inspected.",
+      "support_events_operator": "Help page, audit/catalog operator pages and Provider attention/offboarding views inspected. Notification/event inbox and joined stuck queue are absent/tracked later gaps.",
+      "agent_api_mcp_cli": "Shared action declarations/manifest, authenticated MCP guidance and CLI source command contract inspected. Hosted and installed-package behaviour was not run."
+    },
+    "source_areas_inspected": [
+      "src/modules/capability-execution/{quote.ts,call-contracts.ts,call-receipt-view.ts}",
+      "convex/{capabilityQuotes.ts,capabilityCallProjection.ts}",
+      "src/routes/{market.tsx,calls.$callRef.tsx,support.tsx,_operator/*}",
+      "src/components/ae/{agent-access,console,market,offerings,status}",
+      "src/modules/{actions,common,principal-account}",
+      "tools/ae/cli.ts",
+      "tests/unit/capability-execution/{current-tool-quote.test.ts,call-receipt-view.test.ts}"
+    ],
+    "remaining_gaps": [
+      "No browser, hosted HTTPS, live x402, package-installation, MCP-client or deployment verification was performed by this audit.",
+      "Concurrent edits in src/components/ae/supply/AeSupplySourceNativeStart.tsx, src/lib/deployment/validate-boot-env.server.ts and src/start.ts were not used as evidence.",
+      "The report does not claim production legal, payment processor or tax readiness beyond the source records described above."
+    ]
+  },
+  "capability_matrix": [
+    {
+      "capability": "Account, Agent authority and credential lifecycle",
+      "status": "partial",
+      "evidence": "START_LINE.md:43-47,169-170; src/components/ae/agent-access/AeAgentAccessAuthorizeForm.tsx:257-272,394-415,485-504; src/modules/principal-account/account/registry.ts:375-445; src/routes/_operator/owner.settings.tsx:10-43",
+      "next_acceptance_proof": "Complete one owner approval, rotation/revoke and least-privilege Agent journey on the target origin; decide and document whether alpha remains single-owner or exposes membership administration."
+    },
+    {
+      "capability": "AUD funding, account credit and spend visibility",
+      "status": "partial",
+      "evidence": "src/components/ae/console/AeCreditTopUpPanel.tsx:118-158,200-271; src/components/ae/console/AeOwnerCredit.tsx:131-168,269-310; src/routes/_operator/activity.tsx:181-203; src/components/ae/console/AeAgentOperatorConsole.tsx:486-511",
+      "next_acceptance_proof": "Verify one funded Account and one Call with exact fee/principal/total, no browser-side credit, durable reconciliation and a clear per-Agent used/remaining view."
+    },
+    {
+      "capability": "Directory, service comparison and admitted Tool detail",
+      "status": "implemented",
+      "evidence": "src/routes/market.tsx:129-163; src/components/ae/market/DirectoryComparison.tsx:9-36; src/components/ae/market/tool-detail/AeToolInspector.tsx:95-145,183-196",
+      "next_acceptance_proof": "On a hosted origin, show upstream discovery as catalogue information, then reach an admitted Tool and obtain a fresh Quote before any paid action."
+    },
+    {
+      "capability": "Caller-bound Quote",
+      "status": "partial",
+      "evidence": "src/modules/capability-execution/quote.ts:114-148; convex/capabilityQuotes.ts:112-143; PRODUCT.md:340-352; START_LINE.md:53-61",
+      "next_acceptance_proof": "A committed Quote must expose or otherwise prove Provider, Seller, terms, data use, effects, unknowns, retry rule and challenge binding for the exact Tool/input."
+    },
+    {
+      "capability": "Paid Call, delivery and uncertainty recovery",
+      "status": "implemented",
+      "evidence": "src/routes/calls.$callRef.tsx:293-345,421-443; src/modules/capability-execution/call-receipt-view.ts:214-265; tests/unit/capability-execution/call-receipt-view.test.ts:181-215",
+      "next_acceptance_proof": "Hosted Call can complete, refuse, release or enter reconciliation once, and status/cancel/reconcile remain tied to that Call reference."
+    },
+    {
+      "capability": "Purchase resolution, remedy and commercial records",
+      "status": "partial",
+      "evidence": "src/modules/capability-execution/call-receipt-view.ts:140-158; src/modules/capability-execution/call-contracts.ts:173-224,291-375; README.md:56-64; convex/capabilityCallProjection.ts:790-808",
+      "next_acceptance_proof": "Persist one Call-linked purchase-resolution record that keeps delivery, payment, Seller, Provider obligation, remedy/refund and tax/document evidence distinct; prove an owner remedy request path."
+    },
+    {
+      "capability": "Usage, billing documents and reconciliation",
+      "status": "partial",
+      "evidence": "src/routes/_operator/activity.tsx:181-203,301-318; src/components/ae/console/AeOwnerCredit.tsx:166-168,269-310; README.md:60-64; START_LINE.md:91-101",
+      "next_acceptance_proof": "One Call appears consistently in activity, usage, spend, reconciliation and an invoice-ready period projection without duplicated adjustments."
+    },
+    {
+      "capability": "Provider publication, connections, earnings, payout and offboarding",
+      "status": "partial",
+      "evidence": "src/components/ae/offerings/AeProviderWorkspace.tsx:242-340,341-367,369-373; src/components/ae/offerings/AeProviderWorkspace.tsx:397-505; docs/workflow/simple-user-expectations.md:22-23",
+      "next_acceptance_proof": "Hosted Provider connects and publishes one Tool, sees a Call/obligation/earning, completes payout readback and finishes the freeze-settle-revoke offboarding journey."
+    },
+    {
+      "capability": "Support, notifications/events and operator workflow",
+      "status": "partial",
+      "evidence": "src/routes/support.tsx:39-85; src/routes/_operator/admin.index-health.tsx:85-100; src/routes/_operator/admin.audit-events.tsx:45-55; docs/workflow/simple-user-expectations.md:15,23,26",
+      "next_acceptance_proof": "For the chosen alpha scope, either verify explicit polling/email support only or add the owned event/inbox and joined stuck-case surfaces before promising them."
+    },
+    {
+      "capability": "Agent HTTP, MCP and CLI surfaces",
+      "status": "partial",
+      "evidence": "src/modules/common/action.ts:4-21,245-269,335-351; src/modules/actions/index.ts:79-113; src/lib/server/mcp-api.ts:56-65; tools/ae/cli.ts:58-115; README.md:50-52,75-76,202-218",
+      "next_acceptance_proof": "Run the same source contract through hosted HTTP, an authenticated MCP client and the installed CLI/package; capture parity for Quote, Call and recovery."
+    }
+  ],
+  "strengths": [
+    {
+      "area": "Short commercial spine",
+      "evidence": "PRODUCT.md:317-350; START_LINE.md:48-66",
+      "keep": "Search, one caller-specific Quote and one controlled Call keep authority, pricing, x402 and treasury behind one AE boundary."
+    },
+    {
+      "area": "Authority separation",
+      "evidence": "src/components/ae/agent-access/AeAgentAccessAuthorizeForm.tsx:326-415,485-504",
+      "keep": "Approval modes, Tool scope, revision checks, separate Provider credentialing and explicit rotation/revoke language make funding and authority distinct."
+    },
+    {
+      "area": "Safe money and uncertain-outcome posture",
+      "evidence": "src/components/ae/console/AeCreditTopUpPanel.tsx:130-155,200-212; src/modules/capability-execution/call-receipt-view.ts:214-265",
+      "keep": "Canonical readback, idempotency, no blind retry and retained Call references are consistently expressed."
+    },
+    {
+      "area": "One action contract across surfaces",
+      "evidence": "src/modules/common/action.ts:4-21,335-351; src/modules/actions/index.ts:79-113",
+      "keep": "Shared schemas, boundaries and output descriptions reduce drift between UI, HTTP, agent JSON, MCP, chat and CLI."
+    },
+    {
+      "area": "Provider lifecycle controls",
+      "evidence": "src/components/ae/offerings/AeProviderWorkspace.tsx:369-373,397-505",
+      "keep": "Freeze-first offboarding with blockers, revisions, idempotency and explicit payout/obligation gates."
+    }
+  ],
+  "findings": [
+    {
+      "id": "P-1",
+      "title": "Committed Quote commercial scope is a known paid-alpha gap",
+      "severity": "high",
+      "class": "missing-capability",
+      "readiness": "before-alpha",
+      "file": "src/modules/capability-execution/quote.ts",
+      "line": 114,
+      "evidence": "The committed result contains Tool/version/input, AUD price, Account/balance, budget, policy refs, evidenceDigest and continuation (114-148). PRODUCT.md:340-352 explicitly documents that the current DTO does not yet establish explicit Provider/Seller fields or complete principal-reseller terms; START_LINE.md:53-61 states those facts are required for the full start-line proof, and docs/glossary.md:19-22 defines them as Quote semantics. The focused current-tool quote test (tests/unit/capability-execution/current-tool-quote.test.ts:82-120) protects readiness/price/effects/provider-authority drift. This is an accepted, documented scope gap, not a newly discovered source defect.",
+      "consequence": "The current source contract cannot prove the complete commercial choice before paid-alpha; a source-level E2E run can still exercise the accepted current Quote/Call path if this limitation is explicit.",
+      "recommendation": "Treat this as a before-paid-alpha acceptance item: extend the persisted and returned Quote with structured Provider/Seller refs plus terms, data-use/effects, unknowns, retry and challenge evidence, and expose the same packet through HTTP/MCP/CLI. Do not make the known gap a blocker to beginning source/preview E2E unless the release contract says those fields are required for that run.",
+      "tradeoff": "Adds contract and fixture migration and some response size, but avoids a second competing decision object and keeps the accepted one-Quote path.",
+      "confidence": "high",
+      "skills_principles": ["iceinvein-design-review: preserve one coherent chain", "bounded-context-auditor: Provider/Seller are distinct roles"]
+    },
+    {
+      "id": "P-2",
+      "title": "Receipt Complete label is ambiguous when payment is unresolved",
+      "severity": "med",
+      "class": "design-debt",
+      "readiness": "before-alpha",
+      "file": "src/modules/capability-execution/call-receipt-view.ts",
+      "line": 121,
+      "evidence": "Any result.kind=completed sets complete=true and maps every progress stage to complete (121-136,173-200), while usage.chargeState=outcome_unknown makes purchaseStatusLabel return Open — outcome uncertain (144-158). issueFromFound returns no warning for completed output (214-228). The route uses complete for the success badge and reuse actions (src/routes/calls.$callRef.tsx:297,318-344). The test explicitly codifies the contradiction at tests/unit/capability-execution/call-receipt-view.test.ts:152-179. Run again is explicitly a fresh purchase with a new idempotency key and terms check (src/routes/calls.$callRef.tsx:500-519), so the source does not prove an unsafe retry.",
+      "consequence": "Complete may intentionally mean output delivery, but the copy does not say so; all stages appear complete while settlement says uncertain. A buyer must reconcile contradictory statuses and may treat the commercial purchase as terminal.",
+      "recommendation": "Choose and label the semantics: use Output available when delivery is complete but payment is unresolved, and Purchase resolved only after the commercial state is resolved. Mark settlement/complete stages as attention for unknown outcomes and add a clear fresh-purchase/reconciliation warning around Run again; do not blanket-disable a new Call without an explicit authority/risk decision.",
+      "tradeoff": "Requires a small projector/copy/test change rather than a new execution object; it preserves useful output and the explicit fresh-purchase path while removing the false-terminal ambiguity.",
+      "confidence": "high",
+      "skills_principles": ["cognitive-load-auditor: avoid contradictory status channels", "bounded-context-auditor: delivery/payment/purchase stay separate"]
+    },
+    {
+      "id": "P-3",
+      "title": "Derived Purchase resolution needs a stable cross-surface acceptance contract",
+      "severity": "med",
+      "class": "verification-gap",
+      "readiness": "before-alpha",
+      "file": "src/modules/capability-execution/call-receipt-view.ts",
+      "line": 140,
+      "evidence": "The source explicitly says purchaseStatusLabel is presentation only (140-143), which is permitted by the product boundary. CallReceipt in src/modules/capability-execution/call-contracts.ts:173-224 carries payment/refund/obligation facts, while README.md:60-64 records the complete Seller/Provider-obligation/tax/business evidence as an open milestone. P-2 supplies the concrete cross-surface example: the same input can project Complete and Open — outcome uncertain.",
+      "consequence": "Without one named derived-resolution contract and its state-combination tests, receipt, activity and agent responses can explain the same Call differently; the existing mixed state is already hard to interpret.",
+      "recommendation": "Specify and test one canonical derived Purchase-resolution projection across receipt, activity and agent responses, keeping Call as the execution identity and leaving storage/identity choice open. Add a durable record only if later evidence shows the derivation cannot remain consistent.",
+      "tradeoff": "Requires contract and acceptance-test work without committing to a new table or second market object.",
+      "confidence": "high",
+      "skills_principles": ["iceinvein-design-review: complete the core chain before accretion"]
+    },
+    {
+      "id": "P-4",
+      "title": "Owner cannot see per-Agent remaining spend with Account spend",
+      "severity": "med",
+      "class": "missing-capability",
+      "readiness": "before-alpha",
+      "file": "src/routes/_operator/activity.tsx",
+      "line": 181,
+      "evidence": "Activity renders Account-wide Calls, reconciliation count and Account spend only (181-203). Agent detail shows per-call/daily/monthly ceilings and settled charges/coverage (src/components/ae/console/AeAgentOperatorConsole.tsx:486-511), while Credit shows only Account balance (src/components/ae/console/AeOwnerCredit.tsx:131-163). The maintained scoreboard marks the expectation absent at docs/workflow/simple-user-expectations.md:14.",
+      "consequence": "The owner must mentally join separate pages to answer whether a particular Agent can still spend; this misses START_LINE.md:91-95's customer-visible spend-by-Agent proof and weakens safe authority management.",
+      "recommendation": "Add a per-Agent used, reserved, remaining and coverage state to the Activity or Agents surface, linked to the exact spending policy and Account balance. Keep unavailable amounts explicit.",
+      "tradeoff": "Needs a read-model/query join and careful reservation semantics, but does not require a new funding or authority concept.",
+      "confidence": "high",
+      "skills_principles": ["cognitive-load-auditor: remove cross-screen joins"]
+    },
+    {
+      "id": "P-5",
+      "title": "Customer remedy request stops at email support",
+      "severity": "med",
+      "class": "missing-capability",
+      "readiness": "before-alpha",
+      "file": "src/routes/support.tsx",
+      "line": 39,
+      "evidence": "Automatic release/refund states are projected in convex/capabilityCallProjection.ts:790-808 and displayed in the receipt, but the inspected customer routes contain no refund/remedy request action; Help offers email, Call lookup and listing correction (39-85). The tracked scoreboard marks “Ask for a refund” absent at docs/workflow/simple-user-expectations.md:17-19.",
+      "consequence": "When delivery is invalid or a paid outcome needs a customer remedy, the owner has no idempotent case tied to the Call and must initiate an unstructured support exchange.",
+      "recommendation": "Add an eligibility-gated Request remedy action on the Call receipt that creates one idempotent case reference, captures the selected reason and evidence pointer, and exposes pending/accepted/declined resolution status without exposing treasury internals.",
+      "tradeoff": "Adds support triage and legal-policy workflow; it can remain narrow to Call-linked refunds/remedies rather than a general dispute system.",
+      "confidence": "high",
+      "skills_principles": ["iceinvein-design-review: close the core delivery-to-remedy chain"]
+    },
+    {
+      "id": "P-6",
+      "title": "Hosted and installed agent proof is a next alpha validation",
+      "severity": "med",
+      "class": "verification-gap",
+      "readiness": "before-alpha",
+      "file": "README.md",
+      "line": 50,
+      "evidence": "README explicitly separates source acceptance from hosted deployment and installed-package compatibility (50-52), says CLI compatibility remains pending (75-76), and says loopback can prove discovery/connect/funding but Quote/Call require a public HTTPS origin with credentials (165-166). The machine quickstart repeats that it is not hosted/package acceptance (202-218). No runtime/browser/package/MCP-client checks were permitted in this audit.",
+      "consequence": "Alpha cannot claim the paid journey across the hosted and distributed agent surfaces until the subsequent validation is run; this is not a blocker to beginning source or preview E2E.",
+      "recommendation": "After the E2E harness exists, run one hosted HTTPS funding/Quote/Call/recovery canary and an installed CLI/authenticated MCP parity check. Record the origin, package revision and exact result references as the next alpha release gate.",
+      "tradeoff": "Needs hosted credentials and external x402/testnet setup, but is the smallest proof that the claimed customer path exists outside source fixtures.",
+      "confidence": "high",
+      "skills_principles": ["iceinvein-design-review: distinguish evidence from aspiration"]
+    },
+    {
+      "id": "P-7",
+      "title": "Team authority scope is a product decision, not a completed journey",
+      "severity": "med",
+      "class": "decision",
+      "readiness": "decision-needed",
+      "file": "src/routes/_operator/owner.settings.tsx",
+      "line": 10,
+      "evidence": "The active start line scopes one Customer/Account and one durable Agent (START_LINE.md:167-170). Generic membership storage and guarded add/end operations exist (src/modules/principal-account/account/registry.ts:375-445), but owner settings expose Profile, sign-out, compromise recovery and security history only (owner.settings.tsx:10-43; OwnerSettingsSections.tsx:14-36).",
+      "consequence": "If alpha implies a business team, no owner can invite, inspect or revoke a member's Account authority; if alpha is intentionally single-owner, continuing to imply team authority will create an avoidable expectation gap.",
+      "recommendation": "Choose and document the alpha principal: either state single-owner Account explicitly, or add a narrow membership page with invite, role/scope, revoke and audit evidence before inviting teams.",
+      "tradeoff": "A single-owner decision preserves the current milestone; membership UI adds identity/recovery and policy complexity that should not be smuggled into E2E.",
+      "confidence": "high",
+      "skills_principles": ["bounded-context-auditor: distinguish generic Membership from Customer/Agent roles"]
+    },
+    {
+      "id": "P-8",
+      "title": "Notification and hosted support inbox surfaces are known later scope",
+      "severity": "low",
+      "class": "missing-capability",
+      "readiness": "later",
+      "file": "docs/workflow/simple-user-expectations.md",
+      "line": 3,
+      "evidence": "The scoreboard marks notifications absent for Buyer and Provider and says Package 7 owns the hosted support inbox. The current Help page provides status links, email and a public developer issue path (src/routes/support.tsx:47-85).",
+      "consequence": "Users must poll Calls or email support for changes; this is a full-platform gap when promised, but it is not an active start-line defect.",
+      "recommendation": "Keep this deferred and state the alpha support/notification promise precisely. If proactive events enter alpha, define event ownership, delivery/retry and an in-product history before adding channel chrome.",
+      "tradeoff": "Deferral keeps the managed Call spine small; adding it early introduces durable event and delivery policy work.",
+      "confidence": "high",
+      "skills_principles": ["iceinvein-design-review: avoid premature second-system accretion"]
+    },
+    {
+      "id": "P-9",
+      "title": "Operator has no joined queue for stuck commercial work",
+      "severity": "low",
+      "class": "missing-capability",
+      "readiness": "later",
+      "file": "docs/workflow/simple-user-expectations.md",
+      "line": 25,
+      "evidence": "The maintained operator scoreboard explicitly marks a joined view of what is stuck absent. Catalog health and audit remain separate panels (src/routes/_operator/admin.index-health.tsx:85-100; src/routes/_operator/admin.audit-events.tsx:45-55), while Provider Tools has only its local attention count (src/components/ae/offerings/AeProviderWorkspace.tsx:269-280).",
+      "consequence": "An operator must correlate Catalog, Call/reconciliation, Provider readiness and payout facts manually when resolving an incident.",
+      "recommendation": "Add a later operator read model joining case type, affected Account/Call/Tool, current owner, next safe action and evidence reference. Keep domain records separate underneath.",
+      "tradeoff": "Improves operations after start-line evidence exists, but adds a cross-domain projection that should follow measured support volume.",
+      "confidence": "high",
+      "skills_principles": ["cognitive-load-auditor: reduce operator cross-surface joins"]
+    }
+  ],
+  "checks": [
+    {
+      "check": "Source and product-document inspection",
+      "result": "completed",
+      "detail": "Read AGENTS.md, PRODUCT.md, START_LINE.md, CONTEXT.md, README.md, glossary, expectation scoreboard and cited source/tests."
+    },
+    {
+      "check": "Focused test evidence",
+      "result": "read, not executed",
+      "detail": "Inspected current Tool Quote drift coverage and Call receipt uncertainty coverage."
+    },
+    {
+      "check": "Runtime/E2E/Playwright/hosted/package/deployment",
+      "result": "not run by scope",
+      "detail": "No browser tests, service calls, deployment, live x402, installed CLI or MCP-client checks."
+    },
+    {
+      "check": "Working tree integrity",
+      "result": "preserved",
+      "detail": "Only the two requested audit reports were written; no source/config mutation, reset or cleanup."
+    }
+  ],
+  "limitations": [
+    "This is a source-level audit of a heavily dirty concurrent checkout; findings are tied to the cited files and lines as inspected.",
+    "P-1 through P-5 are before-paid-alpha contract/completeness items; P-1 is an explicitly documented scope gap and P-6 is subsequent hosted/package validation, so neither is a blocker to beginning source/preview E2E by itself.",
+    "P-3, P-5, P-7, P-8 and P-9 are full-platform completeness or scope decisions; they should not be used to reopen the accepted Australian commercial direction or deferred reseller work.",
+    "No absence claim relies on one grep alone: the relevant routes/components, tracked expectation rows and source records were inspected together."
+  ]
+}

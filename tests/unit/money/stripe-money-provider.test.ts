@@ -478,6 +478,10 @@ describe('Stripe money provider adapter', () => {
   })
 
   it('fails configuration before provider I/O for missing, partial, or mode-mismatched keys', async () => {
+    expect(readStripeMoneyProviderConfig({
+      STRIPE_SECRET_KEY: 'not_a_stripe_secret',
+      STRIPE_WEBHOOK_SECRET: 'whsec_secret',
+    })).toMatchObject({ code: 'stripe_setup_required' })
     expect(readStripeMoneyProviderConfig({ STRIPE_SECRET_KEY: 'sk_test_only' })).toMatchObject({ code: 'stripe_setup_required' })
     expect(readStripeMoneyProviderConfig({
       STRIPE_SECRET_KEY: 'sk_test_secret',

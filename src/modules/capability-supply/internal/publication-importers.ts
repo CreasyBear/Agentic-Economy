@@ -1,4 +1,4 @@
-import type { SchemaDereferencer } from "./admit-provider-schema";
+import type { SchemaDereferencer } from "./admit-provider-schema-types";
 import { importAgentPluginMcpCapability } from "./publication-importer-agent-plugin";
 import { importMcpCapability } from "./publication-importer-mcp";
 import {

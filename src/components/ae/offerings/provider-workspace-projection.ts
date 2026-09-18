@@ -7,10 +7,53 @@ import type {
 import {
   providerToolReasonPresentation,
 } from '@/modules/capability-supply/provider-tool-status'
+import type { ProviderToolStatus } from '@/modules/capability-supply/provider-tool-status'
 import type { OwnerOfferingSummary } from './AeOwnerOfferings'
 import type { OfferingRef } from '@/modules/common/ids'
+import {
+  displayPriceFromPricingConfig,
+  formatDisplayAmount,
+  normalizePricingConfig,
+} from '@/modules/money/public'
 
 export type OwnerToolAvailability = 'available' | 'unavailable' | 'unknown'
+
+export function ownerToolProtocolLabel(source: ProviderToolStatus['source'] | undefined): string | undefined {
+  if (source === undefined || source.kind === 'unavailable') return undefined
+  switch (source.kind) {
+    case 'openapi':
+      return 'OpenAPI'
+    case 'mcp':
+      return 'MCP'
+    case 'agent_plugin':
+      return 'Agent plugin'
+    case 'x402':
+      return 'x402'
+    case 'legacy':
+      return 'Legacy'
+    default: {
+      const _exhaustive: never = source.kind
+      return _exhaustive
+    }
+  }
+}
+
+export function ownerToolPricingLabel(row: Readonly<{
+  pricingConfigJson?: unknown
+  pricingLabel?: string
+}>): string | undefined {
+  if (row.pricingConfigJson !== undefined) {
+    const normalized = normalizePricingConfig(row.pricingConfigJson)
+    if (normalized.kind === 'valid') {
+      const display = displayPriceFromPricingConfig(normalized.config)
+      if (display.kind === 'fixed') {
+        return `${formatDisplayAmount(display.amount)} / call`
+      }
+      if (display.kind === 'on_request') return 'Price on request'
+    }
+  }
+  return row.pricingLabel
+}
 
 export type ProviderWorkspaceProjectionRow = ProviderWorkspaceInventoryRow & Readonly<{
   lifecycleLabel: string
@@ -18,6 +61,7 @@ export type ProviderWorkspaceProjectionRow = ProviderWorkspaceInventoryRow & Rea
   blocker?: string
   continuation: Readonly<{ kind: 'navigate'; label: string; href: string }>
   lifecyclePending?: boolean
+  protocolLabel?: string
 }>
 
 export type ProviderWorkspaceProjection =
@@ -108,12 +152,14 @@ function projectRow(
         label: status.ownerHandoff.ctaLabel,
         href: status.ownerHandoff.cta,
       }
+  const protocolLabel = ownerToolProtocolLabel(status.source)
   return {
     ...definition,
     lifecycleLabel: status.state,
     availability: status.routeability.available ? 'available' : 'unavailable',
     ...(blocker === undefined ? {} : { blocker }),
     continuation,
+    ...(protocolLabel === undefined ? {} : { protocolLabel }),
   }
 }
 
@@ -128,6 +174,7 @@ function hasDuplicate<T>(items: readonly T[], key: (item: T) => string): boolean
 }
 
 export function toOfferingSummary(row: ProviderWorkspaceProjectionRow): OwnerOfferingSummary {
+  const pricingLabel = ownerToolPricingLabel(row)
   return {
     offering: {
       offeringRef: row.offeringRef as OfferingRef,
@@ -143,6 +190,9 @@ export function toOfferingSummary(row: ProviderWorkspaceProjectionRow): OwnerOff
     ...(row.blocker === undefined ? {} : { blocker: row.blocker }),
     continuation: row.continuation,
     ...(row.lifecyclePending === undefined ? {} : { lifecyclePending: row.lifecyclePending }),
+    ...(pricingLabel === undefined ? {} : { pricingLabel }),
+    ...(row.protocolLabel === undefined ? {} : { protocolLabel: row.protocolLabel }),
+    ...(row.callsCount === undefined ? {} : { callsCount: row.callsCount }),
   }
 }
 

@@ -6,7 +6,7 @@ import type {
   CapabilityPublicationImport,
   CapabilityPublicationSourceSelector,
   CanonicalCapabilityPublicationDraft,
-} from '../publication-importers'
+} from '../publication-importer-types'
 
 export function isDirectPublicationSource(
   value: unknown,

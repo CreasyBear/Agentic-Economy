@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import type { PublicCatalogReadState } from '@/modules/catalog/public'
-import { getPublicBusinessCatalog } from '@/modules/registry/public'
+import { getPublicBusinessCatalog, projectBusinessSupplyToPublicApi } from '@/modules/registry/public'
 import { brandNonEmpty } from '@/modules/common/ids'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 
@@ -133,5 +133,42 @@ describe('public catalog DTO', () => {
     expect(JSON.stringify(result)).not.toContain('ownerId')
     expect(JSON.stringify(result)).not.toContain('sourceHash')
     expect(JSON.stringify(result)).not.toContain('sam-owner@example.test')
+  })
+
+  it('drops a stored access path whose descriptor is null instead of failing the business', () => {
+    const catalog = projectBusinessSupplyToPublicApi({
+      business: {
+        businessId,
+        slug,
+        name: 'Demo listed provider',
+        category: 'Listed provider',
+        businessContext: business.businessContext,
+        publicUrl: '/demo-listed-provider',
+        trustTier: 'claimed',
+      },
+      offerings: [{
+        offering: {
+          offeringRef,
+          revision: 1,
+          name: 'Listed offering',
+          category: 'Emergency plumbing',
+          summary: 'Burst pipe triage and repair.',
+        },
+        accessPaths: [{
+          accessPathRef: accessPath.accessPathRef,
+          offeringRevision: 1,
+          offeringSourceHash: revisionSourceHash,
+          sourceHash: canonicalDigest('access-path'),
+          descriptor: null,
+        }],
+        support: { integrated: false, routeable: false, reasons: [] },
+      }],
+      sourceRevision: 1,
+      sourceDigest: canonicalDigest('supply'),
+      observedAt: 3,
+      disposition: 'current',
+    } as never)
+
+    expect(catalog.offerings[0]?.accessPaths).toEqual([])
   })
 })

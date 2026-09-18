@@ -36,6 +36,8 @@ export type ProviderWorkspaceInventoryRow = Readonly<{
   // Tool's current publication, when one has been indexed - undefined until
   // the publish hook / hourly reconcile catches up.
   slug?: string
+  pricingLabel?: string
+  callsCount?: number
 }>
 
 export type ProviderWorkspaceInventoryResult =

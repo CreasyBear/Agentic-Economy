@@ -13,7 +13,7 @@ import { base64Codec, tryDecodeBase64Url } from '@/modules/common/base64-codec'
  * generation that has since rotated, is rejected up front rather than
  * silently reinterpreted (or blindly replayed) by the underlying engine.
  */
-export type OpaqueCursorKind = 'registry' | 'market-tools' | 'businesses'
+export type OpaqueCursorKind = 'registry' | 'market-tools' | 'businesses' | 'market-demand' | 'x402-directory'
 
 // Comfortably larger than any real inner engine cursor this app issues; kept
 // equal to the pre-existing per-route cursor ceilings so wrapping a cursor in
@@ -21,7 +21,7 @@ export type OpaqueCursorKind = 'registry' | 'market-tools' | 'businesses'
 const MAX_OPAQUE_CURSOR_LENGTH = 512
 
 const opaqueCursorPayloadSchema = z.strictObject({
-  kind: z.enum(['registry', 'market-tools', 'businesses']),
+  kind: z.enum(['registry', 'market-tools', 'businesses', 'market-demand', 'x402-directory']),
   scope: z.string(),
   cursor: z.string(),
 })

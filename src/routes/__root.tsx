@@ -8,6 +8,7 @@ import { Toaster } from 'sonner'
 
 
 import { AeAppShell } from '@/components/ae/layout/AeAppShell'
+import { ThemeProvider } from '@/components/ae/theme/ThemeProvider'
 import { RouteProgressBar } from '@/components/ae/layout/AeRouteProgressBar'
 import { AePageState } from '@/components/ae/layout/AePageState'
 import { Button } from '@/components/ui/button'
@@ -42,7 +43,7 @@ export const Route = createRootRoute({
         content: HOME.metaDescription,
       },
       { name: 'theme-color', content: SITE_THEME_COLOR_HEX },
-      { name: 'color-scheme', content: 'light' },
+      { name: 'color-scheme', content: 'light dark' },
     ],
     links: [
       { rel: 'stylesheet', href: appCss },
@@ -56,9 +57,11 @@ export const Route = createRootRoute({
 function RootComponent() {
   return (
     <RootDocument>
-      <AeAppShell>
-        <Outlet />
-      </AeAppShell>
+      <ThemeProvider>
+        <AeAppShell>
+          <Outlet />
+        </AeAppShell>
+      </ThemeProvider>
     </RootDocument>
   )
 }
@@ -73,7 +76,7 @@ function RootDocument({ children }: { children: ReactNode }) {
   )
 
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
       <head>
         <HeadContent />
       </head>
