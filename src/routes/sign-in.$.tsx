@@ -15,7 +15,7 @@ type SignInSearch = {
   redirect?: string
 }
 
-const authMethodClause = 'Use email, Google, GitHub, or a passkey.'
+const methodsBlurb = 'Use email, Google, GitHub, or a passkey.'
 
 export function SignInClerkFallback() {
   return (
@@ -56,10 +56,10 @@ function SignInRoute() {
       ? 'Sign in to manage Tools'
       : 'Sign in'
   const body = isAgentAccessFlow
-    ? `${authMethodClause} After you sign in, you’ll return to the agent connection you started.`
+    ? `${methodsBlurb} After you sign in, you’ll return to the agent connection you started.`
     : isProviderFlow
-      ? `${authMethodClause} After you sign in, you’ll return to your Provider workspace.`
-      : `${authMethodClause} After you sign in, you’ll return to where you left off.`
+      ? `${methodsBlurb} After you sign in, you’ll return to your Provider workspace.`
+      : `${methodsBlurb} After you sign in, you’ll return to where you left off.`
 
   const signInProps: SignInProps & { fallback?: ReactNode } = {
     appearance: clerkSignInSurfaceAppearance,
