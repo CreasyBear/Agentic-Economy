@@ -14,11 +14,11 @@
 
 | Wave | Workflows | Scope | Verified | In Review | Pending | Target Status |
 | :--- | :---: | :--- | :---: | :---: | :---: | :---: |
-| **Wave 1: Buyer Onboarding & Developer Launchpad** | 6 | `W-01`, `W-02`, `W-25`, `W-26`, `W-27`, `W-29` | 3 | 0 | 3 | `IN PROGRESS` |
+| **Wave 1: Buyer Onboarding & Developer Launchpad** | 6 | `W-01`, `W-02`, `W-25`, `W-26`, `W-27`, `W-29` | 4 | 0 | 2 | `IN PROGRESS` |
 | **Wave 2: Financial Peace-of-Mind & Spend Observability** | 8 | `W-20`, `W-21`, `W-22`, `W-23`, `W-24`, `W-38`, `W-39`, `W-40` | 0 | 0 | 8 | `PENDING` |
 | **Wave 3: Supplier Monetization & Testing Playground** | 8 | `W-30`, `W-31`, `W-32`, `W-33`, `W-34`, `W-35`, `W-36`, `W-37` | 0 | 0 | 8 | `PENDING` |
 | **Wave 4: Team Operations, Identity & Tactile Standards** | 22 | `W-03`–`W-09`, `W-10`–`W-19`, `W-28`, `W-41`–`W-44` | 0 | 0 | 22 | `PENDING` |
-| **Total** | **44** | **All 44 Standard Workflows** | **3** | **0** | **41** | `IN PROGRESS` |
+| **Total** | **44** | **All 44 Standard Workflows** | **4** | **0** | **40** | `IN PROGRESS` |
 
 ---
 
@@ -67,12 +67,14 @@
 - **Incumbent Baseline:** Numeric input fields for daily and monthly spend limits with save button.
 - **Ergonomic Gap:** Hard to visualize what a daily/monthly limit represents relative to real agent usage; no feedback on current burn rate or remaining daily quota.
 - **Target Ergonomic Spec:**
-  - Monospace currency formatting with tabular numbers (`tabular-nums font-mono`).
-  - Visual quota bar: "Daily Allowance: A$10.00 • Today's Burn: A$2.40 (24%)".
-  - Quick-preset chips (`A$10/day`, `A$50/day`, `A$250/day`, `Custom`).
-  - Actionable toast upon update: *"Spending limit updated to A$50.00/day. [Undo]"*.
-- **Subagent Assignment:** Grok (Scout) $\rightarrow$ Composer (Craft) $\rightarrow$ Orchestrator (Verify)
-- **Status:** `PENDING`
+  - Tabular monospace numbers everywhere (`tabular-nums font-mono`).
+  - Persistent monthly settled quota gauge with `<Progress />` bar (`Monthly settled: A$12.50 / A$100.00 (12.5%)`).
+  - Tactile preset chips: Conservative (`A$2/A$10/A$50`), Balanced (`A$5/A$25/A$100`), Intensive (`A$20/A$100/A$500`).
+  - Amount-aware toasts on save, pause, and resume.
+  - Reserved diagnostic slot with human-readable Rule 4 triplets (no raw codes).
+  - Zero-CLS consistent layout and commercial pause cues (`A$0.00 new spend authorized`).
+- **Subagent Assignment:** Grok (Scout: `2a907ccb-4bb5-4023-a082-e41b8018d621`) $\rightarrow$ Composer (Craft: `b3d6d27b-02a1-4194-a0bd-fff069dec276`) $\rightarrow$ Orchestrator (Verify)
+- **Status:** `VERIFIED`
 
 ---
 

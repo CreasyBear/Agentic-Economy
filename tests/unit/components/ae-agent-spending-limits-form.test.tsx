@@ -4,6 +4,16 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import '../../setup/jsdom-platform'
 
+vi.mock('@/lib/ui/toast', () => ({
+  toast: {
+    success: vi.fn(),
+    error: vi.fn(),
+    info: vi.fn(),
+    warning: vi.fn(),
+  },
+}))
+
+import { toast } from '@/lib/ui/toast'
 import { AeAgentSpendingLimitsForm } from '@/components/ae/console/AeAgentSpendingLimitsForm'
 import type { AgentDetail } from '@/modules/agent-access/agent-operator-view-model'
 import type {
@@ -11,7 +21,7 @@ import type {
   AgentSpendingLimitsResult,
 } from '@/modules/agent-access/spending-policy-update'
 
-describe('AeAgentSpendingLimitsForm (W-28)', () => {
+describe('AeAgentSpendingLimitsForm (W-26)', () => {
   afterEach(() => {
     cleanup()
     vi.clearAllMocks()
@@ -295,5 +305,135 @@ describe('AeAgentSpendingLimitsForm (W-28)', () => {
         screen.getByText(/spending limits are temporarily unavailable/i),
       ).toBeInTheDocument()
     })
+  })
+
+  it('T8: read view displays monthly settled quota gauge and progress bar', () => {
+    render(
+      <AeAgentSpendingLimitsForm
+        detail={baseDetail}
+        onUpdateSpendingLimits={vi.fn()}
+      />,
+    )
+
+    expect(
+      screen.getByText(/Monthly settled: A\$12\.50 \/ A\$100\.00 \(12\.5%\)/),
+    ).toBeInTheDocument()
+
+    const progress = screen.getByRole('progressbar', {
+      name: /Monthly settled A\$12\.50 of A\$100\.00, 12\.5 percent/i,
+    })
+    expect(progress).toBeInTheDocument()
+  })
+
+  it('T9: preset chips populate per-call, daily, and monthly inputs', () => {
+    render(
+      <AeAgentSpendingLimitsForm
+        detail={baseDetail}
+        onUpdateSpendingLimits={vi.fn()}
+      />,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: /edit limits/i }))
+
+    fireEvent.click(screen.getByRole('button', { name: /^conservative$/i }))
+    expect((screen.getByLabelText(/max spend per call/i) as HTMLInputElement).value).toBe('2')
+    expect((screen.getByLabelText(/daily spend limit/i) as HTMLInputElement).value).toBe('10')
+    expect((screen.getByLabelText(/monthly spend limit/i) as HTMLInputElement).value).toBe('50')
+
+    fireEvent.click(screen.getByRole('button', { name: /^balanced$/i }))
+    expect((screen.getByLabelText(/max spend per call/i) as HTMLInputElement).value).toBe('5')
+    expect((screen.getByLabelText(/daily spend limit/i) as HTMLInputElement).value).toBe('25')
+    expect((screen.getByLabelText(/monthly spend limit/i) as HTMLInputElement).value).toBe('100')
+
+    fireEvent.click(screen.getByRole('button', { name: /^intensive$/i }))
+    expect((screen.getByLabelText(/max spend per call/i) as HTMLInputElement).value).toBe('20')
+    expect((screen.getByLabelText(/daily spend limit/i) as HTMLInputElement).value).toBe('100')
+    expect((screen.getByLabelText(/monthly spend limit/i) as HTMLInputElement).value).toBe('500')
+  })
+
+  it('T10: successful save emits toast.success with formatted limit description', async () => {
+    const onUpdateMock = vi.fn().mockResolvedValue({
+      kind: 'completed',
+      principalRef: baseDetail.agent.principalRef,
+      grantRef: 'grant_123',
+      generation: 2,
+      spendingPolicyDigest: 'digest_123',
+      correlationRef: 'corr_123',
+    } satisfies AgentSpendingLimitsResult)
+
+    const onReadMock = vi.fn().mockResolvedValue(currentSpendingLimitsRead())
+
+    render(
+      <AeAgentSpendingLimitsForm
+        detail={baseDetail}
+        onUpdateSpendingLimits={onUpdateMock}
+        onReadSpendingLimits={onReadMock}
+      />,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: /edit limits/i }))
+    fireEvent.click(screen.getByRole('button', { name: /save limits/i }))
+
+    await waitFor(() => {
+      expect(toast.success).toHaveBeenCalledWith(
+        'Spending limits updated',
+        expect.objectContaining({
+          description: expect.stringMatching(/A\$5\.00.*call.*A\$25\.00.*day.*A\$100\.00.*month/i),
+        }),
+      )
+    })
+  })
+
+  it('T11: revision conflict displays human diagnostic playbook without raw code', async () => {
+    const onUpdateMock = vi.fn().mockResolvedValue({
+      kind: 'conflict',
+      code: 'revision_conflict',
+      correlationRef: 'corr_conflict',
+    } satisfies AgentSpendingLimitsResult)
+
+    const onReadMock = vi.fn().mockResolvedValue(currentSpendingLimitsRead())
+
+    render(
+      <AeAgentSpendingLimitsForm
+        detail={baseDetail}
+        onUpdateSpendingLimits={onUpdateMock}
+        onReadSpendingLimits={onReadMock}
+      />,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: /edit limits/i }))
+    fireEvent.click(screen.getByRole('button', { name: /save limits/i }))
+
+    await waitFor(() => {
+      expect(screen.getByText(/policy changed since you opened it/i)).toBeInTheDocument()
+      expect(screen.getByText(/reload the agent/i)).toBeInTheDocument()
+      expect(screen.queryByText(/revision_conflict/i)).not.toBeInTheDocument()
+    })
+  })
+
+  it('T12: paused agent displays updated banner with zero new spend authorized', () => {
+    const pausedDetail: AgentDetail = {
+      ...baseDetail,
+      grant: {
+        ...baseDetail.grant!,
+        budget: {
+          ...baseDetail.grant!.budget,
+          maximumSpendPerCall: { currency: 'AUD', units: '0', exponent: 6 },
+          maximumDailySpend: { currency: 'AUD', units: '0', exponent: 6 },
+          maximumMonthlySpend: { currency: 'AUD', units: '0', exponent: 6 },
+        },
+      },
+    }
+
+    render(
+      <AeAgentSpendingLimitsForm
+        detail={pausedDetail}
+        onUpdateSpendingLimits={vi.fn()}
+      />,
+    )
+
+    const pauseBanner = screen.getByRole('alert')
+    expect(pauseBanner).toHaveTextContent(/A\$0\.00 new spend authorized/i)
+    expect(pauseBanner).toHaveTextContent(/in-flight calls are not cancelled/i)
   })
 })
