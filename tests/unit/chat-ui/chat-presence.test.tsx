@@ -19,9 +19,9 @@ vi.mock('convex/react', () => ({
 }))
 
 import { ChatTranscript } from '@/components/ae/chat/ChatTranscript'
-import { Chat } from '@/components/ae/chat/Chat'
-import { ChatComposer } from '@/components/ae/chat/ChatComposer'
-import { ChatHistory } from '@/components/ae/chat/ChatHistory'
+import { Chat } from '@/components/ae/chat'
+import { ChatComposer } from '@/components/ae/chat/chat-session/components/ChatComposer'
+import { ChatHistory } from '@/components/ae/chat/chat-session/components/ChatHistory'
 import { SharedChat } from '@/components/ae/chat/SharedChat'
 import { chatHistory } from '@/lib/public/chat-ia'
 import { useQuery } from 'convex/react'

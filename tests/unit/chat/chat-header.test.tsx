@@ -9,7 +9,7 @@ vi.mock('@clerk/tanstack-react-start', () => ({
   SignInButton: ({ children }: { children: ReactNode }) => children,
 }))
 
-import { ChatHeader } from '@/components/ae/chat/ChatHeader'
+import { ChatHeader } from '@/components/ae/chat/chat-session/components/ChatHeader'
 import { AECON_MARK_SRC } from '@/content/brand-assets'
 
 describe('ChatHeader', () => {

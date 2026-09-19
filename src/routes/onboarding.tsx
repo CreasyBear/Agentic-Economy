@@ -11,75 +11,17 @@ import { Label } from '@/components/ui/label'
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 import { sanitizeAuthRedirectTarget } from '@/lib/client/auth-redirect'
 import { toast } from '@/lib/ui/toast'
+import {
+  initialRoleIntentFromRedirect,
+  onboardingCompletionDiagnostic,
+  resolveSuggestedWorkspaceName,
+  type OnboardingRoleIntent,
+  type OnboardingSearch,
+} from '@/modules/principal-account/onboarding.contracts'
 import { api } from '../../convex/_generated/api'
-
-type OnboardingSearch = {
-  redirect?: string
-}
-
-type OnboardingRoleIntent = 'buyer' | 'supplier'
-
-const FINANCIAL_SAFE_SUFFIX = 'No charge was created.'
 
 const roleCardClassName =
   'min-h-touch cursor-pointer rounded-md border border-border bg-container p-4 hover:bg-muted/60 data-[selected=true]:border-foreground data-[selected=true]:bg-muted enabled:active:scale-[0.98] transition-transform duration-100 ease-out motion-reduce:transition-none motion-reduce:active:scale-100'
-
-export function resolveSuggestedWorkspaceName(suggested: string): string {
-  const trimmed = suggested.trim()
-  if (trimmed.length === 0 || trimmed === 'Workspace' || trimmed.startsWith('user_')) {
-    return 'Acme'
-  }
-  return trimmed
-}
-
-function initialRoleIntentFromRedirect(redirect?: string): OnboardingRoleIntent | null {
-  if (redirect?.startsWith('/agent-access') === true) return 'buyer'
-  if (redirect?.startsWith('/owner') === true) return 'supplier'
-  return null
-}
-
-function resolveInteractiveAuthorityCode(error: unknown): string | undefined {
-  if (error !== null && typeof error === 'object' && 'code' in error) {
-    const code = (error as { code: unknown }).code
-    if (typeof code === 'string') return code
-  }
-  if (error instanceof Error) return error.message
-  return undefined
-}
-
-export function onboardingCompletionDiagnostic(error: unknown): { title: string; description: string } {
-  const code = resolveInteractiveAuthorityCode(error)
-  switch (code) {
-    case 'display_name_invalid':
-      return {
-        title: 'Workspace name was not accepted',
-        description: `Use letters, numbers, or common punctuation. ${FINANCIAL_SAFE_SUFFIX}`,
-      }
-    case 'onboarding_already_complete':
-      return {
-        title: 'Workspace setup is already finished',
-        description: `Refresh the page to open your workspace. ${FINANCIAL_SAFE_SUFFIX}`,
-      }
-    case 'identity_invalid':
-    case 'binding_missing':
-    case 'binding_inactive':
-    case 'binding_ambiguous':
-      return {
-        title: 'Sign-in session expired',
-        description: `Sign in again and retry workspace setup. ${FINANCIAL_SAFE_SUFFIX}`,
-      }
-    case 'ownership_mismatch':
-      return {
-        title: 'You do not have permission to finish setup',
-        description: `Use the account owner sign-in, then try again. ${FINANCIAL_SAFE_SUFFIX}`,
-      }
-    default:
-      return {
-        title: 'Workspace setup could not finish',
-        description: `Try again in a moment. ${FINANCIAL_SAFE_SUFFIX}`,
-      }
-  }
-}
 
 function isTypingTarget(target: EventTarget | null): boolean {
   if (target === null || !(target instanceof HTMLElement)) return false

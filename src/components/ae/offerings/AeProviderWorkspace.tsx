@@ -43,7 +43,7 @@ import {
 
 export { ProviderIdentityForm } from './ProviderIdentityForm'
 
-type WorkspaceProps = Readonly<{
+type AeProviderWorkspaceProps = Readonly<{
   inventory: ProviderWorkspaceInventoryResult
   lifecycle?: Promise<ProviderWorkspaceLifecycleResult>
   connections?: Promise<ProviderWorkspaceConnectionsResult>
@@ -52,7 +52,7 @@ type WorkspaceProps = Readonly<{
   offboarding?: Promise<OwnerProviderOffboardingResult>
 }>
 
-export function AeProviderWorkspace(props: WorkspaceProps) {
+export function AeProviderWorkspace(props: AeProviderWorkspaceProps) {
   const router = useRouter()
   const ensureProviderBusiness = useServerFn(ensureProviderBusinessServer)
   const [refreshPending, setRefreshPending] = useState(false)
@@ -136,7 +136,7 @@ function AvailableWorkspace({
   publicStatus,
   offboarding,
   refresh,
-}: WorkspaceProps & Readonly<{
+}: AeProviderWorkspaceProps & Readonly<{
   inventory: Extract<ProviderWorkspaceInventoryResult, { kind: 'available' }>
   refresh: () => void
 }>) {

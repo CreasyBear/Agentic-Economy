@@ -8,29 +8,18 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { toast } from '@/lib/ui/toast'
+import type {
+  CardBrandDisplay,
+  ExpiryBadgeKind,
+  SavedPaymentMethodsSummary,
+} from '@/modules/money/saved-payment-methods.view-model'
 
-export type SavedPaymentMethodsSummary =
-  | Readonly<{ kind: 'missing'; hasPaymentMethod: false }>
-  | Readonly<{
-      kind: 'ready'
-      hasPaymentMethod: true
-      card: Readonly<{
-        brand: string
-        last4: string
-        expMonth: number
-        expYear: number
-        isDefault?: boolean
-      }>
-    }>
-
-export interface AeSavedPaymentMethodsCardProps {
+export type AeSavedPaymentMethodsCardProps = Readonly<{
   summary?: SavedPaymentMethodsSummary
   isLoading?: boolean
   onManage: () => Promise<{ portalUrl?: string } | void> | void
   nowMs?: number
-}
-
-type CardBrandDisplay = Readonly<{ label: string; letters: string }>
+}>
 
 function cardBrandDisplay(brand: string): CardBrandDisplay {
   const normalized = brand.trim().toLowerCase()
@@ -65,8 +54,6 @@ function formatExpiry(expMonth: number, expYear: number): string {
 function expiryEndMs(expMonth: number, expYear: number): number {
   return new Date(expYear, expMonth, 0, 23, 59, 59, 999).getTime()
 }
-
-type ExpiryBadgeKind = 'expired' | 'expires_soon'
 
 function expiryBadgeKind(expMonth: number, expYear: number, nowMs: number): ExpiryBadgeKind | null {
   const endMs = expiryEndMs(expMonth, expYear)

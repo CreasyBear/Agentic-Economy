@@ -10,10 +10,7 @@ import { KeyRound } from 'lucide-react'
 import { AeAgentOperatorConsole } from '@/components/ae/console/AeAgentOperatorConsole'
 import { AeAgentSecurityHistory } from '@/components/ae/agent-access/AeAgentSecurityHistory'
 import { AeAssistantInstallFunnel } from '@/components/ae/console/AeAssistantInstallFunnel'
-import {
-  AeConnectAgentWizardDialog,
-  type IssuedAgentAccessReveal,
-} from '@/components/ae/console/AeConnectAgentWizardDialog'
+import { AeConnectAgentWizardDialog } from '@/components/ae/console/connect-agent-wizard/AeConnectAgentWizardDialog'
 import { AeKeyRevealDialog } from '@/components/ae/console/AeKeyRevealDialog'
 import { AeCopyReference } from '@/components/ae/data/AeCopyReference'
 import { AeOperatorPage } from '@/components/ae/layout/AeOperatorPage'
@@ -32,8 +29,15 @@ import {
   updateAgentSpendingLimitsServer,
 } from '@/modules/agent-access/agent-access.functions'
 import type { AgentLifecycleResult } from '@/modules/agent-access/agent-access'
-import type { OwnerConnectionLifecycleResult } from '@/modules/agent-access/public'
 import type { AgentDirectoryProjection } from '@/modules/agent-access/agent-operator-view-model'
+import type {
+  AgentAccessSearch,
+  DirectoryPaginationIssue,
+  LifecycleCommand,
+  LifecycleIssue,
+} from '@/modules/agent-access/agent-lifecycle.view-model'
+import type { OwnerConnectionLifecycleResult } from '@/modules/agent-access/public'
+import type { IssuedAgentAccessReveal } from '@/modules/agent-access/issue-key.contracts'
 import type {
   AgentSpendingLimitsReadResult,
   AgentSpendingLimitsResult,
@@ -45,24 +49,6 @@ import {
   listPendingCallApprovalsServer,
   type PendingCallApproval,
 } from '@/modules/capability-execution/call-approval.functions'
-
-export type AgentAccessSearch = Readonly<{ caller?: string; resumeTool?: string }>
-
-type LifecycleCommand =
-  | Readonly<{ kind: 'credential' | 'agent'; ref: string }>
-  | Readonly<{ kind: 'connection'; ref: string; expectedRevision: number }>
-
-type LifecycleIssue = Readonly<{
-  title: string
-  message: string
-  correlationRef?: string
-  retry?: LifecycleCommand
-}>
-
-type DirectoryPaginationIssue = Readonly<{
-  source: AgentDirectoryProjection
-  cursor: string
-}>
 
 const canonicalPrincipalIdPattern = /^prn_[0-9a-f]{32}$/u
 const canonicalToolRefPattern = /^operation:v1:[0-9a-f]{64}$/u

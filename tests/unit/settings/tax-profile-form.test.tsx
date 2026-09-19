@@ -17,21 +17,7 @@ vi.mock('@/lib/ui/toast', () => ({
 }))
 
 import { TaxProfileForm } from '@/components/ae/settings/TaxProfileForm'
-
-type TaxProfileInitialData =
-  | Readonly<{ kind: 'missing'; revision: 0 }>
-  | Readonly<{
-      kind: 'available'
-      abn: string
-      legalName: string
-      addressLine1: string
-      addressLine2?: string
-      locality: string
-      region?: string
-      postalCode: string
-      country: 'AU'
-      revision: number
-    }>
+import type { TaxProfileInitialData } from '@/modules/money/tax-profile.view-model'
 
 afterEach(() => {
   cleanup()

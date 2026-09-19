@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import '../../setup/jsdom-platform'
 
 import { AeKeyRevealDialog } from '@/components/ae/console/AeKeyRevealDialog'
-import type { IssuedAgentAccessReveal } from '@/components/ae/console/AeConnectAgentWizardDialog'
+import type { IssuedAgentAccessReveal } from '@/modules/agent-access/issue-key.contracts'
 import {
   AGENT_ACCESS_SNIPPET_COPY_HINTS,
   AGENT_ACCESS_SNIPPET_DESTINATIONS,

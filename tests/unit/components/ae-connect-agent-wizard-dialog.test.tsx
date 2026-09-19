@@ -4,7 +4,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import '../../setup/jsdom-platform'
 
-import { AeConnectAgentWizardDialog } from '@/components/ae/console/AeConnectAgentWizardDialog'
+import { AeConnectAgentWizardDialog } from '@/components/ae/console/connect-agent-wizard/AeConnectAgentWizardDialog'
 
 afterEach(cleanup)
 
@@ -331,10 +331,13 @@ describe('AeConnectAgentWizardDialog (W-26)', () => {
   it('T11: adheres to zero-handroll directive without local secret generation or hashing', async () => {
     const fs = await import('node:fs')
     const path = await import('node:path')
-    const sourceCode = fs.readFileSync(
-      path.resolve(__dirname, '../../../src/components/ae/console/AeConnectAgentWizardDialog.tsx'),
-      'utf8',
-    )
+    const wizardDir = path.resolve(__dirname, '../../../src/components/ae/console/connect-agent-wizard')
+    const sourceCode = [
+      'AeConnectAgentWizardDialog.tsx',
+      'useConnectAgentWizard.ts',
+    ]
+      .map((file) => fs.readFileSync(path.join(wizardDir, file), 'utf8'))
+      .join('\n')
     expect(sourceCode).not.toContain('randomBytes')
     expect(sourceCode).not.toContain('ae_live_')
     expect(sourceCode).not.toContain('createHash')

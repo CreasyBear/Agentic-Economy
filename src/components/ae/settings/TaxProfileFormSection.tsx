@@ -4,31 +4,13 @@ import { useRef } from 'react'
 
 import { Skeleton } from '@/components/ui/skeleton'
 
+import { TaxProfileForm } from '@/components/ae/settings/TaxProfileForm'
 import {
-  TaxProfileForm,
-  type TaxProfileInitialData,
+  toTaxProfileInitialData,
+  type CustomerTaxFactsRead,
+  type CustomerTaxFactsUpsertInput,
   type TaxProfileSubmitPayload,
-} from '@/components/ae/settings/TaxProfileForm'
-
-type CustomerTaxFactsRead =
-  | Readonly<{ kind: 'missing'; accountRef: string; revision: 0 }>
-  | Readonly<{
-      kind: 'available'
-      accountRef: string
-      abn: string
-      gstRegistered: boolean
-      legalName: string
-      addressLine1: string
-      addressLine2?: string
-      locality: string
-      region?: string
-      postalCode: string
-      country: 'AU'
-      legalCustomerRef: string
-      effectiveAt: number
-      updatedAt: number
-      revision: number
-    }>
+} from '@/modules/money/tax-profile.view-model'
 
 const readCustomerTaxFactsRef = makeFunctionReference<
   'query',
@@ -38,41 +20,9 @@ const readCustomerTaxFactsRef = makeFunctionReference<
 
 const upsertCustomerTaxFactsRef = makeFunctionReference<
   'mutation',
-  Readonly<{
-    abn: string
-    legalName: string
-    addressLine1: string
-    addressLine2?: string
-    locality: string
-    region?: string
-    postalCode: string
-    country?: string
-    gstRegistered?: boolean
-    expectedRevision: number
-    correlationRef: string
-    idempotencyRef: string
-  }>,
+  CustomerTaxFactsUpsertInput,
   unknown
 >('moneyCustomerTaxFacts:upsertCustomerTaxFacts')
-
-function toInitialData(facts: CustomerTaxFactsRead): TaxProfileInitialData {
-  if (facts.kind === 'missing') {
-    return { kind: 'missing', revision: 0 }
-  }
-
-  return {
-    kind: 'available',
-    abn: facts.abn,
-    legalName: facts.legalName,
-    addressLine1: facts.addressLine1,
-    ...(facts.addressLine2 !== undefined ? { addressLine2: facts.addressLine2 } : {}),
-    locality: facts.locality,
-    ...(facts.region !== undefined ? { region: facts.region } : {}),
-    postalCode: facts.postalCode,
-    country: 'AU',
-    revision: facts.revision,
-  }
-}
 
 export function TaxProfileFormSection() {
   const facts = useQuery(readCustomerTaxFactsRef)
@@ -100,5 +50,5 @@ export function TaxProfileFormSection() {
     saveIdempotencyRef.current = `idem:tax-profile:${crypto.randomUUID()}`
   }
 
-  return <TaxProfileForm initialData={toInitialData(facts)} onSubmit={handleSubmit} />
+  return <TaxProfileForm initialData={toTaxProfileInitialData(facts)} onSubmit={handleSubmit} />
 }

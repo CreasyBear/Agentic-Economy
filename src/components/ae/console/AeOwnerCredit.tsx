@@ -12,31 +12,31 @@ import {
   formatDisplayAmount,
   type AccountHistoryResult,
 } from '@/modules/money/public'
+import type { AccountFundingPort } from '@/modules/money/account-funding.contracts'
+import type { AccountHistoryPort } from '@/modules/money/account-history.contracts'
+import type { AeInvoiceHistoryRow } from '@/modules/money/invoice-history.view-model'
+import type {
+  DocumentAction,
+  DocumentActionKey,
+  DocumentActionStatus,
+} from '@/modules/money/account-documents.view-model'
+import type { SavedPaymentMethodsSummary } from '@/modules/money/saved-payment-methods.view-model'
 import type { AccountFundingBalance, AccountFundingConstraints } from '@/modules/money/server'
 import type { MoneyDocumentView, MoneyProviderObligationView, MoneyReconciliationCaseView } from '@/lib/server/money-documents.functions'
 import { AeAutoRechargeCard } from './AeAutoRechargeCard'
 import { AeMonthlySpendCeilingCard } from './AeMonthlySpendCeilingCard'
-import {
-  AeSavedPaymentMethodsCard,
-  type SavedPaymentMethodsSummary,
-} from './AeSavedPaymentMethodsCard'
-import { AeAccountFundingPanel, type AccountFundingPort } from './AeCreditTopUpPanel'
+import { AeSavedPaymentMethodsCard } from './AeSavedPaymentMethodsCard'
+import { AeAccountFundingPanel } from './AeCreditTopUpPanel'
 import {
   AccountHistory,
   CreditSectionEmptyState,
-  type AccountHistoryPort,
 } from './AeAccountHistoryTable'
-import {
-  AeInvoiceHistoryTable,
-  type AeInvoiceHistoryRow,
-} from './AeInvoiceHistoryTable'
+import { AeInvoiceHistoryTable } from './AeInvoiceHistoryTable'
 import {
   documentFacts,
   documentKindLabel,
   formatCreditAmount,
 } from './owner-credit-format'
-
-export type { AccountHistoryPort }
 
 export type AeOwnerCreditProps = Readonly<{
   accountBalance?: AccountFundingBalance
@@ -98,15 +98,6 @@ export type AeOwnerCreditProps = Readonly<{
   onDownloadTaxInvoice?: (row: AeInvoiceHistoryRow) => Promise<void> | void
   onViewStripeReceipt?: (row: AeInvoiceHistoryRow) => Promise<void> | void
 }>
-
-type DocumentAction =
-  | Readonly<{ kind: 'create_statement' }>
-  | Readonly<{ kind: 'create_daily_close' }>
-  | Readonly<{ kind: 'open'; documentRef: string }>
-  | Readonly<{ kind: 'sign'; documentRef: string }>
-
-type DocumentActionStatus = 'pending' | 'succeeded' | 'failed'
-type DocumentActionKey = 'create_statement' | 'create_daily_close' | `open:${string}` | `sign:${string}`
 
 function documentActionKey(action: DocumentAction): DocumentActionKey {
   return action.kind === 'create_statement' || action.kind === 'create_daily_close'

@@ -4,10 +4,8 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import '../../setup/jsdom-platform'
 
-import {
-  OwnerNotificationSettings,
-  TACTILE,
-} from '@/components/ae/settings/OwnerNotificationSettings'
+import { OwnerNotificationSettings, TACTILE } from '@/components/ae/settings/OwnerNotificationSettings'
+import type { NotificationPreferencesView } from '@/modules/principal-account/notification-preferences.view-model'
 
 const toastSuccess = vi.fn()
 const toastError = vi.fn()
@@ -18,16 +16,6 @@ vi.mock('@/lib/ui/toast', () => ({
     error: (...args: unknown[]) => toastError(...args),
   },
 }))
-
-type NotificationPreferencesView = Readonly<{
-  lowCreditBalance: boolean
-  lowCreditThresholdCents: number
-  spendCapWarning: boolean
-  callFailureSpike: boolean
-  invoiceReady: boolean
-  teamMembershipChanged: boolean
-  revision: number
-}>
 
 const basePreferences: NotificationPreferencesView = {
   lowCreditBalance: true,

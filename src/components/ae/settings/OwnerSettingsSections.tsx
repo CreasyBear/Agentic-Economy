@@ -4,23 +4,13 @@ import { SignOutButton, UserProfile } from '@clerk/tanstack-react-start'
 import { AeSection } from '@/components/ae/layout/AeSection'
 import { AeAccountSecurityHistory } from '@/components/ae/settings/AeAccountSecurityHistory'
 import { AeCompromiseRecoveryChecklist } from '@/components/ae/settings/AeCompromiseRecoveryChecklist'
-import {
-  OwnerNotificationSettings,
-  type NotificationPreferencePatch,
-  type NotificationPreferencesView,
-} from '@/components/ae/settings/OwnerNotificationSettings'
+import { OwnerNotificationSettings } from '@/components/ae/settings/OwnerNotificationSettings'
 import { AeSiteAuthPanel, AeSiteAuthSubmit } from '@/components/ae/website'
+import {
+  DEFAULT_NOTIFICATION_PREFERENCES,
+  type NotificationPreferencePatch,
+} from '@/modules/principal-account/notification-preferences.view-model'
 import type { AccountSecurityHistoryResult } from '@/modules/security/account-security'
-
-const DEFAULT_NOTIFICATION_PREFERENCES: NotificationPreferencesView = {
-  lowCreditBalance: true,
-  lowCreditThresholdCents: 2500,
-  spendCapWarning: true,
-  callFailureSpike: true,
-  invoiceReady: true,
-  teamMembershipChanged: true,
-  revision: 0,
-}
 
 export function AccountSettingsSection({
   history,

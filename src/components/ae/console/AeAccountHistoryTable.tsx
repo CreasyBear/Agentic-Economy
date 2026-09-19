@@ -16,15 +16,12 @@ import type {
   AccountHistoryEntry,
   AccountHistoryResult,
 } from '@/modules/money/public'
+import type { AccountHistoryPort } from '@/modules/money/account-history.contracts'
 import {
   accountHistoryLabel,
   deduplicateHistory,
   formatSignedAmount,
 } from './owner-credit-format'
-
-export type AccountHistoryPort = Readonly<{
-  read: (input: Readonly<{ cursor?: string }>) => Promise<AccountHistoryResult>
-}>
 
 type AvailableAccountHistory = Extract<AccountHistoryResult, { kind: 'available' }>
 

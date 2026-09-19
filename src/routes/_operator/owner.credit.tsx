@@ -6,8 +6,11 @@ import { Wallet } from 'lucide-react'
 
 import { api } from '../../../convex/_generated/api'
 
-import { AeOwnerCredit, type AccountHistoryPort } from '@/components/ae/console/AeOwnerCredit'
-import type { AccountFundingPort } from '@/components/ae/console/AeCreditTopUpPanel'
+import { AeOwnerCredit } from '@/components/ae/console/AeOwnerCredit'
+import type { AccountFundingPort } from '@/modules/money/account-funding.contracts'
+import type { AccountHistoryPort } from '@/modules/money/account-history.contracts'
+import type { AeInvoiceHistoryRow } from '@/modules/money/invoice-history.view-model'
+import type { SavedPaymentMethodsSummary } from '@/modules/money/saved-payment-methods.view-model'
 import { AeOperatorPage } from '@/components/ae/layout/AeOperatorPage'
 import { AeSettingsStack } from '@/components/ae/layout/AeSection'
 import { operatorRouteOptions } from '@/lib/operator/route-options'
@@ -35,8 +38,6 @@ import {
   readStripeReceiptUrlServer,
   type SavedPaymentMethodSummaryRead,
 } from '@/modules/money/money.functions'
-import type { AeInvoiceHistoryRow } from '@/components/ae/console/AeInvoiceHistoryTable'
-import type { SavedPaymentMethodsSummary } from '@/components/ae/console/AeSavedPaymentMethodsCard'
 import type { AccountHistoryResult } from '@/modules/money/public'
 import type { AccountFundingBalance, AccountFundingConstraints } from '@/modules/money/server'
 

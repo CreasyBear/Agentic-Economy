@@ -2,12 +2,13 @@ import { Await, createFileRoute } from '@tanstack/react-router'
 
 import { AePageSkeleton, AePageState } from '@/components/ae/layout/AePageState'
 import { AePublicPage } from '@/components/ae/layout/AePublicPage'
-import { directoryPrice, directoryPriceContext, directoryTitle } from '@/components/ae/market/directory-presentation'
+import { directoryPrice, directoryPriceContext, directoryTitle } from '@/modules/market/directory-card.view-model'
 import type { X402DirectoryEntry } from '@/modules/market/x402-directory'
 import { readX402DirectoryCatalogueBySlugServer } from '@/modules/market/x402-directory-index.functions'
 import type { X402DirectoryCatalogueResource } from '@/modules/market/x402-directory-catalogue'
 import { buildPublicPageHead } from '@/modules/seo/public'
-import { MarketBackButton, PublicToolDetail, resolveDirectoryToolDetail, type ToolDetailPresentation } from './tools.$toolRef'
+import { MarketBackButton, PublicToolDetail } from './tools.$toolRef'
+import { resolveDirectoryToolDetail, type ToolDetailPresentation } from '@/modules/market/tool-detail-presentation'
 
 const providerHostPattern = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)*$/u
 

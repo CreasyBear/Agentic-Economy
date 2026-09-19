@@ -35,11 +35,8 @@ vi.mock('@/modules/market/x402-directory-index.functions', () => ({
   readX402DirectoryCanonicalUrlForToolServer: readCanonicalMock,
 }))
 
-import {
-  PublicToolDetail,
-  Route,
-  type ToolDetailPresentationResult,
-} from '@/routes/tools.$toolRef'
+import { PublicToolDetail, Route } from '@/routes/tools.$toolRef'
+import type { ToolDetailPresentationResult } from '@/modules/market/tool-detail-presentation'
 
 const sourceRecord = {
   operationId: 'operation:invoice.extract',

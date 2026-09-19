@@ -14,6 +14,7 @@ import {
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import type { Rule4Diagnostic } from '@/lib/ui/diagnostic'
 import { toast } from '@/lib/ui/toast'
 import { cn } from '@/lib/utils'
 import {
@@ -49,12 +50,6 @@ const PERCENT_ADJUSTMENTS = [
 ] as const
 
 const TIER_CHIP_VALUES = ['0.05', '0.10', '0.25', '0.50'] as const
-
-type PriceDiagnostic = Readonly<{
-  whatHappened: string
-  financialImpact: string
-  nextStep: string
-}>
 
 function parseDisplayAudPrice(display?: string): ExactAmount | undefined {
   if (display === undefined || display.trim() === '') return undefined
@@ -123,7 +118,7 @@ export function AePriceUpdateModal({
   onUpdatePrice: (newPriceAud: string) => Promise<{ kind: 'applied' | 'refused'; message: string }>
 }>) {
   const [priceAud, setPriceAud] = useState('')
-  const [diagnostic, setDiagnostic] = useState<PriceDiagnostic>()
+  const [diagnostic, setDiagnostic] = useState<Rule4Diagnostic>()
   const [pending, setPending] = useState(false)
 
   useEffect(() => {

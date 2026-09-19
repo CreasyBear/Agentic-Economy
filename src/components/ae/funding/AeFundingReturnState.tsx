@@ -5,20 +5,12 @@ import { Button } from '@/components/ui/button'
 import { buttonVariants } from '@/components/ui/button-variants'
 import { cn } from '@/lib/utils'
 import { formatDisplayAmount } from '@/modules/money/public'
+import type { FundingReturnViewState } from '@/modules/money/funding-return.view-model'
 
-export type FundingReturnViewState =
-  | Readonly<{ kind: 'checking' }>
-  | Readonly<{ kind: 'not_found' }>
-  | Readonly<{ kind: 'unavailable' }>
-  | Readonly<{
-      kind: 'found'
-      funding: Readonly<{
-        state: 'awaiting_payment' | 'processing' | 'ready' | 'expired' | 'failed'
-        agentName: string
-        creditAmount: Readonly<{ currency: 'AUD'; units: string; exponent: 6 }>
-      }>
-      refresh: 'idle' | 'checking' | 'failed'
-    }>
+export type AeFundingReturnStateProps = Readonly<{
+  pageState: FundingReturnViewState
+  onCheck: () => Promise<void>
+}>
 
 const OPEN_BALANCE_ACTION = (
   <Link to="/owner/credit" className={cn(buttonVariants(), 'min-h-touch')}>
@@ -29,10 +21,7 @@ const OPEN_BALANCE_ACTION = (
 export function AeFundingReturnState({
   pageState,
   onCheck,
-}: Readonly<{
-  pageState: FundingReturnViewState
-  onCheck: () => Promise<void>
-}>) {
+}: AeFundingReturnStateProps) {
   if (pageState.kind === 'checking') {
     return <AePageState tone="neutral" title="Checking funding" description="Confirming the latest status for this payment." />
   }

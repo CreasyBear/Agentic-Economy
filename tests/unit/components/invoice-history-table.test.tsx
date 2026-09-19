@@ -4,10 +4,8 @@ import { cleanup, fireEvent, render, screen, within } from '@testing-library/rea
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import '../../setup/jsdom-platform'
 
-import {
-  AeInvoiceHistoryTable,
-  type AeInvoiceHistoryRow,
-} from '@/components/ae/console/AeInvoiceHistoryTable'
+import { AeInvoiceHistoryTable } from '@/components/ae/console/AeInvoiceHistoryTable'
+import type { AeInvoiceHistoryRow } from '@/modules/money/invoice-history.view-model'
 import { formatAudAmountString } from '@/components/ae/console/credit-top-up-format'
 import { downloadCsv, downloadJson } from '@/lib/export/csv-export'
 import { toast } from '@/lib/ui/toast'

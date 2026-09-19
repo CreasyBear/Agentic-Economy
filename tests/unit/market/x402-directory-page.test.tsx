@@ -4,7 +4,7 @@ import { RouterContextProvider, createMemoryHistory, createRootRoute, createRout
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import '../../setup/jsdom-platform'
 import { AeX402Directory } from '@/components/ae/market/AeX402Directory'
-import { DIRECTORY_SAVED_TOOLS_STORAGE_KEY } from '@/components/ae/market/DirectorySavedTools'
+import { DIRECTORY_SAVED_TOOLS_STORAGE_KEY } from '@/modules/market/saved-tools.contracts'
 import type { ComponentProps } from 'react'
 import type { X402DirectoryEntry } from '@/modules/market/x402-directory'
 

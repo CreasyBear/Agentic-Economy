@@ -17,7 +17,8 @@ vi.mock('@/lib/ui/toast', () => ({
   toast: { success: vi.fn(), error: vi.fn(), info: vi.fn() },
 }))
 
-import { AeSupplierOnboardingWizard, formatAbnDisplay } from '@/components/ae/supply/AeSupplierOnboardingWizard'
+import { AeSupplierOnboardingWizard } from '@/components/ae/supply/AeSupplierOnboardingWizard'
+import { formatAbnDisplay } from '@/modules/money/public'
 import { toast } from '@/lib/ui/toast'
 
 const TACTILE =

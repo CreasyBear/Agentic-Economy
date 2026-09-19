@@ -8,6 +8,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
+import type { Rule4Diagnostic } from "@/lib/ui/diagnostic";
 import { cn } from "@/lib/utils";
 import { useRef, type ReactNode, type RefObject } from "react";
 
@@ -29,11 +30,7 @@ export type AeConfirmDialogProps = {
   returnFocusFallbackRefs?: readonly RefObject<HTMLElement | null>[];
   children?: ReactNode;
   financialImpact?: ReactNode;
-  diagnostic?: {
-    whatHappened: string;
-    financialImpact: string;
-    nextStep: string;
-  } | null;
+  diagnostic?: Rule4Diagnostic | null;
 };
 
 export function AeConfirmDialog({

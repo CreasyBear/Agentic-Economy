@@ -44,7 +44,7 @@ vi.mock('@/modules/money/money.functions', () => ({ readOwnerConnectReadinessSer
 vi.mock('@/components/ae/layout/AeOperatorPage', () => ({ AeOperatorPage: ({ children }: { children: ReactNode }) => <main>{children}</main> }))
 vi.mock('@/components/ae/offerings/AeOwnerOfferings', () => ({ AeOwnerOfferingsList: () => <div data-testid="tools-list" /> }))
 vi.mock('@/components/ae/supply/AeOwnerProviderConnections', () => ({ AeOwnerProviderConnections: (props: unknown) => { rendered.connections(props); return <div data-testid="connection-controls" /> } }))
-vi.mock('@/components/ae/supply/AeSupplyEarningsCard', () => ({ AeSupplyEarningsCard: () => <div data-testid="earnings-controls" /> }))
+vi.mock('@/components/ae/supply/earnings-card/AeSupplyEarningsCard', () => ({ AeSupplyEarningsCard: () => <div data-testid="earnings-controls" /> }))
 vi.mock('@/components/ae/status/AeStatusCard', () => ({ AeStatusCard: (props: unknown) => { rendered.status(props); return <div data-testid="provider-status-card" /> } }))
 vi.mock('@/components/ae/status/AeCapabilityList', () => ({ AeCapabilityList: (props: unknown) => { rendered.capabilities(props); return <div data-testid="provider-capability-list" /> } }))
 vi.mock('@/components/ae/settings/AeWorkspaceGeneral', () => ({ AeWorkspaceGeneral: (props: unknown) => { rendered.identity(props); return <div data-testid="provider-identity-controls" /> } }))

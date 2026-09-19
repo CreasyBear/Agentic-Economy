@@ -1,7 +1,8 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { LayoutDashboardIcon } from 'lucide-react'
 
-import { AeOwnerOverview, type OwnerOverviewSnapshot } from '@/components/ae/console/AeOwnerOverview'
+import { AeOwnerOverview } from '@/components/ae/console/AeOwnerOverview'
+import type { OwnerOverviewSnapshot } from '@/modules/principal-account/owner-overview.view-model'
 import { readProviderWorkspacePublicStatusServer } from '@/components/ae/offerings/provider-workspace.functions'
 import { operatorRouteOptions } from '@/lib/operator/route-options'
 import { readAgentDirectoryServer } from '@/lib/server/agent-access-console.functions'

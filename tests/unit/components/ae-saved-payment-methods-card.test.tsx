@@ -5,25 +5,12 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import '../../setup/jsdom-platform'
 
 import { AeSavedPaymentMethodsCard } from '@/components/ae/console/AeSavedPaymentMethodsCard'
+import type { SavedPaymentMethodsSummary } from '@/modules/money/saved-payment-methods.view-model'
 import { toast } from '@/lib/ui/toast'
 
 vi.mock('@/lib/ui/toast', () => ({
   toast: { success: vi.fn(), error: vi.fn(), info: vi.fn() },
 }))
-
-type SavedPaymentMethodsSummary =
-  | Readonly<{ kind: 'missing'; hasPaymentMethod: false }>
-  | Readonly<{
-      kind: 'ready'
-      hasPaymentMethod: true
-      card: Readonly<{
-        brand: string
-        last4: string
-        expMonth: number
-        expYear: number
-        isDefault?: boolean
-      }>
-    }>
 
 type AeSavedPaymentMethodsCardProps = Readonly<{
   summary?: SavedPaymentMethodsSummary

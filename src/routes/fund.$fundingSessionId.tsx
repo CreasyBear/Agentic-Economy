@@ -2,11 +2,14 @@ import { useCallback, useEffect, useReducer } from 'react'
 import { createFileRoute } from '@tanstack/react-router'
 import { z } from 'zod'
 
-import {
-  AeFundingReturnState,
-  type FundingReturnViewState,
-} from '@/components/ae/funding/AeFundingReturnState'
+import { AeFundingReturnState } from '@/components/ae/funding/AeFundingReturnState'
 import { RouteError, RoutePending } from '@/components/ae/layout/AeRouteStates'
+import type {
+  FundingPageEvent,
+  FundingReadResult,
+  FundingReturnViewState,
+  PublicFunding,
+} from '@/modules/money/funding-return.view-model'
 
 const publicFundingSchema = z.strictObject({
   success: z.literal(true),
@@ -20,19 +23,6 @@ const publicFundingSchema = z.strictObject({
     }),
   }),
 })
-
-type PublicFunding = z.infer<typeof publicFundingSchema>['funding']
-
-type FundingReadResult =
-  | Readonly<{ kind: 'found'; funding: PublicFunding }>
-  | Readonly<{ kind: 'not_found' }>
-  | Readonly<{ kind: 'unavailable' }>
-
-type FundingPageEvent =
-  | Readonly<{ type: 'check_started' }>
-  | Readonly<{ type: 'check_found'; funding: PublicFunding }>
-  | Readonly<{ type: 'check_not_found' }>
-  | Readonly<{ type: 'check_unavailable' }>
 
 export const Route = createFileRoute('/fund/$fundingSessionId')({
   head: () => ({ meta: [
@@ -98,5 +88,7 @@ async function readPublicFunding(fundingSessionId: string, signal?: AbortSignal)
   if (response.status === 404) return { kind: 'not_found' }
   if (!response.ok) return { kind: 'unavailable' }
   const parsed = publicFundingSchema.safeParse(await response.json())
-  return parsed.success ? { kind: 'found', funding: parsed.data.funding } : { kind: 'unavailable' }
+  if (!parsed.success) return { kind: 'unavailable' }
+  const funding: PublicFunding = parsed.data.funding
+  return { kind: 'found', funding }
 }

@@ -4,7 +4,8 @@ import { buttonVariants } from '@/components/ui/button-variants'
 import { cn } from '@/lib/utils'
 import { Carousel, CarouselContent, CarouselItem, CarouselNext, CarouselPrevious } from '@/components/ui/carousel'
 import type { X402MarketplaceHome, X402MarketplaceRail } from '@/modules/market/x402-marketplace-home'
-import type { SavedDirectoryTool } from './DirectorySavedTools'
+import { toDirectoryToolCardModel } from '@/modules/market/directory-card.view-model'
+import type { SavedDirectoryTool } from '@/modules/market/saved-tools.contracts'
 import { DirectoryToolCard } from './DirectoryToolCard'
 import { useMarketPath } from './market-navigation-context'
 
@@ -67,7 +68,7 @@ export function DirectoryHomeDiscovery({ home, onSave, isSaved, onCompare, isCom
               {rail.items.slice(0, 8).map(entry => {
                 const item = { entry, search: rail.search }
                 return <CarouselItem key={entry.resource} className="basis-[85%] pl-4 sm:basis-1/2 lg:basis-1/3 xl:basis-1/4">
-                  <DirectoryToolCard entry={entry} onSave={() => onSave(item)} saved={isSaved(entry.resource)}
+                  <DirectoryToolCard model={toDirectoryToolCardModel(entry)} onSave={() => onSave(item)} saved={isSaved(entry.resource)}
                     onCompare={() => onCompare(item)} comparing={isComparing(entry.resource)} compareDisabled={compareDisabled(entry.resource)} />
                 </CarouselItem>
               })}

@@ -1,3 +1,4 @@
+import type { Rule4Diagnostic } from '@/lib/ui/diagnostic'
 import { parseDecimalExactAmount } from '@/modules/money/public'
 
 export type PayoutScheduleType = 'monthly' | 'weekly' | 'manual'
@@ -46,11 +47,7 @@ export function buildThresholdSummary(thresholdDollars: string): string {
   return `Transfers will trigger when accumulated balance reaches ${formatted}.`
 }
 
-export type PayoutPolicyDiagnostic = Readonly<{
-  whatHappened: string
-  financialImpact: string
-  nextStep: string
-}>
+export type PayoutPolicyDiagnostic = Rule4Diagnostic
 
 export const BELOW_MINIMUM_DIAGNOSTIC: PayoutPolicyDiagnostic = {
   whatHappened: 'Threshold below minimum requirement.',

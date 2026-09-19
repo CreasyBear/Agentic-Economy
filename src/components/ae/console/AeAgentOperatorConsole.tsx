@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 
 import { AeConfirmDialog, TACTILE } from '@/components/ae/feedback/AeConfirmDialog'
+import type { Rule4Diagnostic } from '@/lib/ui/diagnostic'
 import { toast } from '@/lib/ui/toast'
 import { cn } from '@/lib/utils'
 import { AeFactList, type AeFact } from '@/components/ae/data/AeFactList'
@@ -25,7 +26,7 @@ import { AeAgentCallHistoryTable } from './AeAgentCallHistoryTable'
 import { AeAgentConnectionReceipts } from './AeAgentConnectionReceipts'
 import { AeAgentCredentialHistory } from './AeAgentCredentialHistory'
 import { AeAgentDirectoryTable } from './AeAgentDirectoryTable'
-import { AeAgentSpendingLimitsForm } from './AeAgentSpendingLimitsForm'
+import { AeAgentSpendingLimitsForm } from './spending-limits-form/AeAgentSpendingLimitsForm'
 import type { ExactAmount } from '@/modules/money/public'
 import type {
   AgentSpendingLimitsReadResult,
@@ -105,11 +106,7 @@ export function AeAgentOperatorConsole({
   >()
   const [revokePending, setRevokePending] = useState(false)
   const [revocationMode, setRevocationMode] = useState<'drain' | 'freeze'>('drain')
-  const [revokeDiagnostic, setRevokeDiagnostic] = useState<{
-    whatHappened: string
-    financialImpact: string
-    nextStep: string
-  } | null>(null)
+  const [revokeDiagnostic, setRevokeDiagnostic] = useState<Rule4Diagnostic | null>(null)
   const revokeTriggerRef = useRef<HTMLButtonElement>(null)
   const revokeInFlightRef = useRef(false)
   const sheetDismissHandledRef = useRef(false)

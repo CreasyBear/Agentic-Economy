@@ -36,7 +36,7 @@ function SheetBackdrop({
     <SheetPrimitive.Backdrop
       data-slot="sheet-backdrop"
       className={cn(
-        "fixed inset-0 z-50 bg-black/30 backdrop-blur-sm duration-base ease-standard data-closed:pointer-events-none data-closed:animate-out data-closed:fade-out-0 data-open:animate-in data-open:fade-in-0 motion-reduce:animate-none",
+        "fixed inset-0 z-50 bg-[var(--ae-overlay-scrim)] backdrop-blur-sm duration-base ease-standard data-closed:pointer-events-none data-closed:animate-out data-closed:fade-out-0 data-open:animate-in data-open:fade-in-0 motion-reduce:animate-none",
         className
       )}
       {...props}

@@ -1,7 +1,7 @@
 import { Link, createFileRoute } from '@tanstack/react-router'
 import { z } from 'zod'
 
-import { AeAgentAccessAuthorizeForm } from '@/components/ae/agent-access/AeAgentAccessAuthorizeForm'
+import { AeAgentAccessAuthorizeForm } from '@/components/ae/agent-access/authorize-form/AeAgentAccessAuthorizeForm'
 import { AeOperatorPage } from '@/components/ae/layout/AeOperatorPage'
 import {
   OperatorRouteError,
@@ -14,9 +14,8 @@ import { buttonVariants } from '@/components/ui/button-variants'
 import { cn } from '@/lib/utils'
 import { readAgentAccessConsentServer } from '@/lib/server/agent-access-consent.functions'
 import { readAgentConsentDetails } from '@/modules/agent-access/consent-read-model'
+import type { OAuthPermanentProblemCode } from '@/modules/agent-access/consent.contracts'
 import { presentConnectionProblem } from '@/modules/agent-access/public'
-
-type OAuthPermanentProblemCode = 'expired_token' | 'invalid_grant'
 
 function readOAuthPermanentProblemCode(body: string): OAuthPermanentProblemCode | undefined {
   let parsed: unknown

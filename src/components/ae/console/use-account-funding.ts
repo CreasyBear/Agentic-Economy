@@ -6,13 +6,10 @@ import {
   isMoneyRefusal,
   quoteAudAccountFunding,
   type CreditPaymentSession,
-  type MoneyRefusal,
 } from '@/modules/money/public'
+import type { AccountFundingPort } from '@/modules/money/account-funding.contracts'
 import type {
-  AccountFundingBeginInput,
   AccountFundingConstraints,
-  AccountFundingReadInput,
-  AccountFundingStartResult,
 } from '@/modules/money/server'
 import { captureClientExceptionOnClient } from '@/lib/observability/capture-client-exception'
 import { captureRouteException } from '@/lib/observability/capture-route-exception'
@@ -36,11 +33,6 @@ import {
   readStoredRecovery,
   recoveryStorageKey,
 } from './credit-top-up-storage'
-
-export type AccountFundingPort = Readonly<{
-  begin: (input: AccountFundingBeginInput) => Promise<AccountFundingStartResult>
-  read: (input: AccountFundingReadInput) => Promise<CreditPaymentSession | MoneyRefusal>
-}>
 
 export type FundingUiState = Readonly<{
   operation: 'idle' | 'starting' | 'checking'

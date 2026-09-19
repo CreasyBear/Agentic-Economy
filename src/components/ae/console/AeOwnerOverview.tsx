@@ -6,56 +6,17 @@ import { AeSection } from '@/components/ae/layout/AeSection'
 import { buttonVariants } from '@/components/ui/button-variants'
 import { cn } from '@/lib/utils'
 import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { formatDisplayAmount, type ExactAmount } from '@/modules/money/public'
+import { formatDisplayAmount } from '@/modules/money/public'
+import {
+  countLabel,
+  nextActionFor,
+  providerCardFor,
+  type OwnerOverviewSnapshot,
+} from '@/modules/principal-account/owner-overview.view-model'
 
-export type OwnerOverviewSnapshot = Readonly<{
-  balance: Readonly<{ kind: 'available'; amount: ExactAmount; locked: boolean }> | Readonly<{ kind: 'unavailable' }>
-  calls: Readonly<{ kind: 'available'; attention: number; loaded: number; complete: boolean }> | Readonly<{ kind: 'unavailable' }>
-  agents: Readonly<{ kind: 'available'; connected: number; complete: boolean }> | Readonly<{ kind: 'unavailable' }>
-  provider?: Readonly<{ kind: 'available'; name: string; tools: number }> | Readonly<{ kind: 'attention' }> | Readonly<{ kind: 'unavailable' }>
+export type AeOwnerOverviewProps = Readonly<{
+  snapshot: OwnerOverviewSnapshot
 }>
-
-type NextAction = Readonly<{ label: string; description: string; href: string }>
-type ProviderCard = Readonly<{ description: string; value: string }>
-
-function nextActionFor(snapshot: OwnerOverviewSnapshot): NextAction {
-  if (snapshot.calls.kind === 'available' && snapshot.calls.attention > 0) {
-    return { label: snapshot.calls.attention === 1 ? 'Review Call' : 'Review Calls', description: 'Resolve the Call that is waiting for a confirmed outcome.', href: '/activity' }
-  }
-  if (snapshot.calls.kind === 'unavailable' || !snapshot.calls.complete) {
-    return { label: 'Check Calls', description: 'Confirm there is no unresolved Call before starting another purchase.', href: '/activity' }
-  }
-  if (snapshot.agents.kind === 'unavailable') {
-    return { label: 'Check Agents', description: 'Confirm an Agent is connected before starting a purchase.', href: '/agent-access' }
-  }
-  if (!snapshot.agents.complete && snapshot.agents.connected === 0) {
-    return { label: 'Check Agents', description: 'Finish checking the Agent directory before connecting another Agent.', href: '/agent-access' }
-  }
-  if (snapshot.agents.connected === 0) {
-    return { label: 'Connect an Agent', description: 'Connect the Agent that will request Quotes and make Calls under your limits.', href: '/agent-access' }
-  }
-  if (snapshot.balance.kind === 'unavailable' || snapshot.balance.locked) {
-    return { label: 'Check Balance', description: 'Confirm available credit before asking your Agent to make a Call.', href: '/owner/credit' }
-  }
-  if (snapshot.balance.amount.units === '0') {
-    return { label: 'Add credit', description: 'Fund the AUD Balance your connected Agent can use within its spending policy.', href: '/owner/credit#fund' }
-  }
-  return { label: 'Explore Market', description: 'Describe the service you need, inspect a Tool, then continue with your Agent.', href: '/owner/market' }
-}
-
-function countLabel(count: number, singular: string, plural: string, complete: boolean) {
-  return `${complete ? '' : 'At least '}${count.toLocaleString('en-AU')} ${count === 1 ? singular : plural}`
-}
-
-function providerCardFor(provider: OwnerOverviewSnapshot['provider']): ProviderCard | undefined {
-  if (provider === undefined) return undefined
-  if (provider.kind === 'attention') return { description: 'Provider state needs review.', value: 'Needs attention' }
-  if (provider.kind === 'unavailable') return { description: 'Provider status could not be confirmed. Existing Tools remain available to inspect.', value: 'Status unavailable' }
-  return {
-    description: 'Supply status is shown only because this Account has Provider state.',
-    value: `${provider.name} · ${provider.tools.toLocaleString('en-AU')} ${provider.tools === 1 ? 'Tool' : 'Tools'}`,
-  }
-}
 
 function OverviewCard({ title, description, value, action, icon: Icon, dominant = false }: Readonly<{
   title: string
@@ -100,7 +61,7 @@ function ProviderSetupEntry({ provider }: Readonly<{ provider: OwnerOverviewSnap
   )
 }
 
-export function AeOwnerOverview({ snapshot }: Readonly<{ snapshot: OwnerOverviewSnapshot }>) {
+export function AeOwnerOverview({ snapshot }: AeOwnerOverviewProps) {
   const next = nextActionFor(snapshot)
   const providerCard = providerCardFor(snapshot.provider)
   const balanceValue = snapshot.balance.kind === 'available' ? formatDisplayAmount(snapshot.balance.amount) : 'Balance unavailable'

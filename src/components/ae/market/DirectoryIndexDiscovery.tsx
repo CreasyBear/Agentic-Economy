@@ -8,7 +8,8 @@ import { cn } from '@/lib/utils'
 import { Card, CardContent } from '@/components/ui/card'
 import { Carousel, CarouselContent, CarouselItem, CarouselNext, CarouselPrevious } from '@/components/ui/carousel'
 import type { X402DirectoryCatalogueOverview } from '@/modules/market/x402-directory-catalogue'
-import type { SavedDirectoryTool } from './DirectorySavedTools'
+import { toDirectoryToolCardModel } from '@/modules/market/directory-card.view-model'
+import type { SavedDirectoryTool } from '@/modules/market/saved-tools.contracts'
 import { DirectoryToolCard } from './DirectoryToolCard'
 import { directoryDate } from './directory-presentation'
 import { useMarketPath } from './market-navigation-context'
@@ -46,7 +47,7 @@ export function DirectoryIndexDiscovery({ overview, onSave, isSaved, onCompare, 
             const item: SavedDirectoryTool = { entry, search: {} }
             return <CarouselItem key={entry.resource} className="basis-[85%] pl-4 sm:basis-1/2 lg:basis-1/3 xl:basis-1/4">
               <div className="flex h-full flex-col gap-2.5">
-                <DirectoryToolCard entry={entry} onSave={() => onSave(item)} saved={isSaved(entry.resource)}
+                <DirectoryToolCard model={toDirectoryToolCardModel(entry)} onSave={() => onSave(item)} saved={isSaved(entry.resource)}
                   onCompare={() => onCompare(item)} comparing={isComparing(entry.resource)} compareDisabled={compareDisabled(entry.resource)} />
                 {shelf.key === 'updated' && entry.provenance?.updatedAt !== undefined ? <p className="px-1 text-xs text-muted-foreground">Updated {directoryDate(entry.provenance.updatedAt)}</p> : null}
               </div>

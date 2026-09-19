@@ -11,7 +11,7 @@ import { utf8ToHex } from '@/modules/capability-supply/public'
 import { captureClientExceptionOnClient } from '@/lib/observability/capture-client-exception'
 import { degrade } from '@/lib/observability/degrade'
 import type { OwnerToolsX402ConnectionIntent } from '@/lib/operator/supply-compatibility'
-import type { ProviderConnectionInspection } from './AeProviderConnectionForm'
+import type { ProviderConnectionInspection } from '@/modules/capability-supply/provider-connection.contracts'
 import {
   PROVIDER_CONNECTION_UNCONFIRMED_TEXTS,
   reportCommandFailure,

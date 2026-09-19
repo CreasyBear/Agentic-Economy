@@ -16,13 +16,23 @@ import {
   providerToolReasonPresentation,
   type ProviderToolStatus,
 } from '@/modules/capability-supply/provider-tool-status'
+import type {
+  ProviderToolAction,
+  ProviderToolActionOutcome,
+} from '@/modules/capability-supply/provider-tool-actions.contracts'
 
-export type ProviderToolActionOutcome = Readonly<{
-  kind: 'applied' | 'refused'
-  message: string
+export type AeProviderToolDetailProps = Readonly<{
+  name: string
+  status: ProviderToolStatus
+  resumeHref?: string
+  currentPrice?: string
+  onRefresh?: ProviderToolAction
+  onRecheck?: ProviderToolAction
+  onWithdraw?: ProviderToolAction
+  onRepublish?: ProviderToolAction
+  onUpdatePrice?: (newPriceAud: string) => Promise<ProviderToolActionOutcome>
+  showTestPlayground?: boolean
 }>
-
-type ToolAction = () => Promise<ProviderToolActionOutcome>
 
 export function AeProviderToolDetail({
   name,
@@ -35,18 +45,7 @@ export function AeProviderToolDetail({
   onRepublish,
   onUpdatePrice,
   showTestPlayground = false,
-}: Readonly<{
-  name: string
-  status: ProviderToolStatus
-  resumeHref?: string
-  currentPrice?: string
-  onRefresh?: ToolAction
-  onRecheck?: ToolAction
-  onWithdraw?: ToolAction
-  onRepublish?: ToolAction
-  onUpdatePrice?: (newPriceAud: string) => Promise<ProviderToolActionOutcome>
-  showTestPlayground?: boolean
-}>) {
+}: AeProviderToolDetailProps) {
   const [pending, setPending] = useState(false)
   const [confirmation, setConfirmation] = useState<'withdraw' | 'republish' | 'price'>()
   const [feedback, setFeedback] = useState<ProviderToolActionOutcome>()
@@ -54,7 +53,7 @@ export function AeProviderToolDetail({
     ? undefined
     : providerToolReasonPresentation(status.reasonCodes[0])
 
-  async function run(action: ToolAction | undefined) {
+  async function run(action: ProviderToolAction | undefined) {
     if (action === undefined || pending) return
     setPending(true)
     setFeedback(undefined)

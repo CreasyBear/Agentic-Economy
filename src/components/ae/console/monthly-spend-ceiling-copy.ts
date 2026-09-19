@@ -1,3 +1,4 @@
+import type { Rule4Diagnostic } from '@/lib/ui/diagnostic'
 import { AUD_EXPONENT, canonicalAudUnits, formatDisplayAmount } from '@/modules/money/public'
 import { audInputTextFromUnits } from './credit-top-up-format'
 
@@ -16,11 +17,7 @@ export const MONTHLY_SPEND_CEILING_PRESETS: readonly MonthlySpendCeilingPreset[]
   { id: '1000', units: '1000000000', label: 'A$1,000' },
 ])
 
-export type MonthlySpendCeilingDiagnostic = Readonly<{
-  whatHappened: string
-  financialImpact: string
-  nextStep: string
-}>
+export type MonthlySpendCeilingDiagnostic = Rule4Diagnostic
 
 export type UtilizationBand = 'normal' | 'warning' | 'critical' | 'exceeded'
 

@@ -243,7 +243,7 @@
   --ae-ease-out: var(--motion-ease-emphasized);
   --ae-ease-state: var(--motion-ease-standard);
   --ae-focus-ring: 0 0 0 2px var(--ae-brand);
-  --ae-overlay-scrim: rgba(28, 28, 28, 0.16);
+  --ae-overlay-scrim: rgba(0, 0, 0, 0.3);
   --shadow-low: 0 1px 3px 0 rgba(0, 0, 0, 0.06);
   --shadow-med: 0 12px 32px rgba(0, 0, 0, 0.08);
   --shadow-high: 0 12px 32px rgba(0, 0, 0, 0.4);

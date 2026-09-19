@@ -18,12 +18,10 @@ import {
   formatAustralianGstPercentLabel,
 } from './credit-top-up-format'
 import { defaultCheckoutRedirect } from './credit-top-up-storage'
+import type { AccountFundingPort } from '@/modules/money/account-funding.contracts'
 import {
   useAccountFunding,
-  type AccountFundingPort,
 } from './use-account-funding'
-
-export type { AccountFundingPort }
 
 const DENOMINATION_CHIP_CLASS =
   'inline-flex min-h-touch items-center rounded-full border px-3 py-1.5 font-mono text-xs font-medium tabular-nums enabled:active:scale-[0.98] transition-transform duration-100 ease-out motion-reduce:transition-none motion-reduce:active:scale-100'

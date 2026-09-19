@@ -1,3 +1,4 @@
+import type { Rule4Diagnostic } from '@/lib/ui/diagnostic'
 import { canonicalAudUnits } from '@/modules/money/public'
 import { formatAudUnits } from './credit-top-up-format'
 
@@ -31,11 +32,7 @@ export const AUTO_RECHARGE_PRESETS: readonly AutoRechargePreset[] = Object.freez
   },
 ])
 
-export type AutoRechargeDiagnostic = Readonly<{
-  whatHappened: string
-  financialImpact: string
-  nextStep: string
-}>
+export type AutoRechargeDiagnostic = Rule4Diagnostic
 
 const FINANCIAL_IMPACT_UNCHANGED = 'A$0.00 charged — your balance is unchanged.'
 

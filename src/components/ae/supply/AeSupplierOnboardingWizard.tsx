@@ -17,25 +17,22 @@ import { Button } from '@/components/ui/button'
 import { buttonVariants } from '@/components/ui/button-variants'
 import { Field, FieldDescription, FieldGroup, FieldLabel } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
+import type { Rule4Diagnostic } from '@/lib/ui/diagnostic'
 import { toast } from '@/lib/ui/toast'
 import { cn } from '@/lib/utils'
 import { formatAbnDisplay, isValidAbn, normalizeAbn } from '@/modules/money/public'
-
-export { formatAbnDisplay }
-export type SupplierOnboardingStep = 'profile' | 'payouts' | 'first_tool'
+import type {
+  SupplierOnboardingSaveResult,
+  SupplierOnboardingProfile,
+  SupplierOnboardingStep,
+} from '@/modules/capability-supply/supplier-onboarding.contracts'
 
 export type AeSupplierOnboardingWizardProps = Readonly<{
   currentStep?: SupplierOnboardingStep
   providerName?: string
   payoutsConfigured?: boolean
-  onSaveProfile?: (profile: { name: string; website: string; abn: string }) => Promise<{ kind: 'ok' } | { kind: 'error'; message: string }>
+  onSaveProfile?: (profile: SupplierOnboardingProfile) => Promise<SupplierOnboardingSaveResult>
   onConnectPayouts?: () => void | Promise<void>
-}>
-
-type Rule4Diagnostic = Readonly<{
-  whatHappened: string
-  financialImpact: string
-  nextStep: string
 }>
 
 const TACTILE =

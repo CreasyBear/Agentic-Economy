@@ -16,46 +16,23 @@ import { useClipboardCopy } from '@/hooks/use-clipboard-copy'
 import { formatUtcTimestamp } from '@/lib/ui/format-time'
 import { toast } from '@/lib/ui/toast'
 import { cn } from '@/lib/utils'
+import {
+  matchesRole,
+  matchesSearch,
+  roleCounts,
+  toDirectoryRows,
+  type DirectoryRow,
+  type TeamDirectoryData,
+  type TeamDirectoryRoleFilter,
+} from '@/modules/principal-account/team.view-model'
 
 export const TACTILE =
   'enabled:active:scale-[0.98] transition-transform duration-100 ease-out motion-reduce:transition-none motion-reduce:active:scale-100'
-
-export type DirectoryOwner = Readonly<{
-  kind: 'owner'
-  principalRef: string
-  displayName: string
-  email: string | null
-  ownershipRef: string
-  joinedAt: number
-}>
-
-export type DirectoryMember = Readonly<{
-  kind: 'member'
-  principalRef: string
-  displayName: string
-  email: string | null
-  membershipRef: string
-  role: 'admin' | 'member'
-  lifecycle: 'active'
-  joinedAt: number
-}>
-
-export type TeamDirectoryData = Readonly<{
-  accountRef: string
-  owner: DirectoryOwner
-  members: DirectoryMember[]
-}>
 
 export type AeTeamDirectoryTableProps = Readonly<{
   directory?: TeamDirectoryData
   loading?: boolean
 }>
-
-type DirectoryRow =
-  | (DirectoryOwner & { roleLabel: 'Owner'; statusLabel: 'Active' })
-  | (DirectoryMember & { roleLabel: 'Admin' | 'Member'; statusLabel: 'Active' })
-
-type RoleFilter = 'all' | 'owner' | 'admin' | 'member'
 
 const TABLE_HEADER_CLASS =
   'px-4 py-3 font-sans text-xs font-medium normal-case tracking-wider'
@@ -104,55 +81,15 @@ function DirectoryEmailCell({ email }: Readonly<{ email: string | null }>): Reac
   )
 }
 
-function matchesSearch(row: DirectoryRow, normalizedFilter: string): boolean {
-  if (normalizedFilter.length === 0) return true
-  if (row.displayName.toLowerCase().includes(normalizedFilter)) return true
-  if (row.email !== null && row.email.toLowerCase().includes(normalizedFilter)) return true
-  return false
-}
-
-function matchesRole(row: DirectoryRow, roleFilter: RoleFilter): boolean {
-  if (roleFilter === 'all') return true
-  if (roleFilter === 'owner') return row.kind === 'owner'
-  if (roleFilter === 'admin') return row.kind === 'member' && row.role === 'admin'
-  return row.kind === 'member' && row.role === 'member'
-}
-
-function roleCounts(directory: TeamDirectoryData | undefined): Readonly<{
-  all: number
-  owner: number
-  admin: number
-  member: number
-}> {
-  if (directory === undefined) {
-    return { all: 0, owner: 0, admin: 0, member: 0 }
-  }
-  const admin = directory.members.filter((member) => member.role === 'admin').length
-  const member = directory.members.filter((member) => member.role === 'member').length
-  return {
-    all: 1 + directory.members.length,
-    owner: 1,
-    admin,
-    member,
-  }
-}
-
 export function AeTeamDirectoryTable({ directory, loading }: AeTeamDirectoryTableProps): ReactElement {
   const [searchTerm, setSearchTerm] = useState('')
-  const [roleFilter, setRoleFilter] = useState<RoleFilter>('all')
+  const [roleFilter, setRoleFilter] = useState<TeamDirectoryRoleFilter>('all')
 
   const isLoading = directory === undefined || loading === true
 
   const allRows: DirectoryRow[] = useMemo(() => {
     if (directory === undefined) return []
-    return [
-      { ...directory.owner, roleLabel: 'Owner', statusLabel: 'Active' },
-      ...directory.members.map((member) => ({
-        ...member,
-        roleLabel: member.role === 'admin' ? 'Admin' as const : 'Member' as const,
-        statusLabel: 'Active' as const,
-      })),
-    ]
+    return toDirectoryRows(directory)
   }, [directory])
 
   const counts = roleCounts(directory)
@@ -175,7 +112,7 @@ export function AeTeamDirectoryTable({ directory, loading }: AeTeamDirectoryTabl
     setRoleFilter('all')
   }
 
-  const roleChips: ReadonlyArray<{ id: RoleFilter; label: string; count: number }> = [
+  const roleChips: ReadonlyArray<{ id: TeamDirectoryRoleFilter; label: string; count: number }> = [
     { id: 'all', label: 'All', count: counts.all },
     { id: 'owner', label: 'Owner', count: counts.owner },
     { id: 'admin', label: 'Admin', count: counts.admin },

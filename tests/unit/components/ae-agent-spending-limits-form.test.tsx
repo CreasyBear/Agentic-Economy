@@ -14,7 +14,7 @@ vi.mock('@/lib/ui/toast', () => ({
 }))
 
 import { toast } from '@/lib/ui/toast'
-import { AeAgentSpendingLimitsForm } from '@/components/ae/console/AeAgentSpendingLimitsForm'
+import { AeAgentSpendingLimitsForm } from '@/components/ae/console/spending-limits-form/AeAgentSpendingLimitsForm'
 import type { AgentDetail } from '@/modules/agent-access/agent-operator-view-model'
 import type {
   AgentSpendingLimitsReadResult,

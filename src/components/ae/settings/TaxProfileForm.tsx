@@ -8,51 +8,18 @@ import { TACTILE } from '@/components/ae/settings/OwnerNotificationSettings'
 import { toast } from '@/lib/ui/toast'
 import { cn } from '@/lib/utils'
 import { formatAbnDisplay, isValidAbn, normalizeAbn } from '@/modules/money/public'
-
-export type TaxProfileInitialData =
-  | Readonly<{ kind: 'missing'; revision: 0 }>
-  | Readonly<{
-      kind: 'available'
-      abn: string
-      legalName: string
-      addressLine1: string
-      addressLine2?: string
-      locality: string
-      region?: string
-      postalCode: string
-      country: 'AU'
-      revision: number
-    }>
-
-export type TaxProfileSubmitPayload = Readonly<{
-  abn: string
-  legalName: string
-  addressLine1: string
-  addressLine2?: string
-  locality: string
-  region?: string
-  postalCode: string
-  country: 'AU'
-  expectedRevision: number
-}>
+import {
+  TAX_PROFILE_SUBMIT_FAILURE_DIAGNOSTIC,
+  TAX_PROFILE_VALIDATION_DIAGNOSTIC,
+  type TaxProfileInitialData,
+  type TaxProfileSubmitPayload,
+} from '@/modules/money/tax-profile.view-model'
 
 export type TaxProfileFormProps = Readonly<{
   initialData: TaxProfileInitialData
   onSubmit: (payload: TaxProfileSubmitPayload) => void | Promise<void>
   isSubmitting?: boolean
 }>
-
-const VALIDATION_DIAGNOSTIC = {
-  whatHappened: 'Invalid ABN or incomplete billing address.',
-  financialImpact: 'A$0.00 affected — tax profile not saved.',
-  nextStep: 'Enter an 11-digit Australian Business Number and valid address.',
-} as const
-
-const SUBMIT_FAILURE_DIAGNOSTIC = {
-  whatHappened: 'Billing and tax profile could not be saved.',
-  financialImpact: 'A$0.00 affected — tax profile not saved.',
-  nextStep: 'Check your connection and try again. Your previous tax facts remain unchanged.',
-} as const
 
 export function TaxProfileForm({
   initialData,
@@ -69,7 +36,7 @@ export function TaxProfileForm({
   const [region, setRegion] = useState(isAvailable ? (initialData.region ?? '') : '')
   const [postalCode, setPostalCode] = useState(isAvailable ? initialData.postalCode : '')
   const [internalSubmitting, setInternalSubmitting] = useState(false)
-  const [submitDiagnostic, setSubmitDiagnostic] = useState<typeof SUBMIT_FAILURE_DIAGNOSTIC | null>(null)
+  const [submitDiagnostic, setSubmitDiagnostic] = useState<typeof TAX_PROFILE_SUBMIT_FAILURE_DIAGNOSTIC | null>(null)
 
   const normalizedAbn = normalizeAbn(abn)
   const isAbnDirty = abn.trim().length > 0
@@ -127,7 +94,7 @@ export function TaxProfileForm({
         toast.success('Billing & tax profile updated')
       })
       .catch(() => {
-        setSubmitDiagnostic(SUBMIT_FAILURE_DIAGNOSTIC)
+        setSubmitDiagnostic(TAX_PROFILE_SUBMIT_FAILURE_DIAGNOSTIC)
         toast.error('Billing & tax profile was not saved')
       })
       .finally(() => {
@@ -135,7 +102,7 @@ export function TaxProfileForm({
       })
   }
 
-  const activeDiagnostic = submitDiagnostic ?? (showValidationDiagnostic ? VALIDATION_DIAGNOSTIC : null)
+  const activeDiagnostic = submitDiagnostic ?? (showValidationDiagnostic ? TAX_PROFILE_VALIDATION_DIAGNOSTIC : null)
 
   return (
     <form onSubmit={handleSubmit} className="grid gap-4 max-w-lg">

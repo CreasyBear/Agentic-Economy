@@ -20,7 +20,7 @@ import {
 } from '@/components/ui/dialog'
 
 import { useCommandPanel } from './CommandPanelProvider'
-import { ToolsSearchPage } from './pages/ToolsSearchPage'
+import { ToolsSearchPage } from './tools-search-page/ToolsSearchPage'
 import { ToolDetailPage } from './pages/ToolDetailPage'
 import { useCommandPanelHotKeys } from './useCommandPanelHotKeys'
 

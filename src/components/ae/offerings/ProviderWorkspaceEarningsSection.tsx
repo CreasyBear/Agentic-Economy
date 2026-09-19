@@ -1,6 +1,6 @@
 import { AeSection } from '@/components/ae/layout/AeSection'
 import { ProviderWorkspacePayoutPolicyPanel } from './ProviderWorkspacePayoutPolicyPanel'
-import { AeSupplyEarningsCard } from '@/components/ae/supply/AeSupplyEarningsCard'
+import { AeSupplyEarningsCard } from '@/components/ae/supply/earnings-card/AeSupplyEarningsCard'
 import { Skeleton } from '@/components/ui/skeleton'
 import type { OwnerProviderEarningsReadback } from '@/modules/capability-supply/supply-funnel.functions'
 import type { OwnerConnectReadinessReadback } from '@/modules/money/server'

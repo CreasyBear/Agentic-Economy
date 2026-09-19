@@ -9,55 +9,46 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { useClipboardCopy } from '@/hooks/use-clipboard-copy'
 import { cn } from '@/lib/utils'
+import type { Rule4Diagnostic } from '@/lib/ui/diagnostic'
 import { toast } from '@/lib/ui/toast'
 import { validateJsonSchema } from '@/modules/capability-contract/public'
+import type { JsonSchemaProperty, ToolTestResponse } from '@/modules/capability-supply/tool-test.contracts'
 
 export const TACTILE =
   'enabled:active:scale-[0.98] transition-transform duration-100 ease-out motion-reduce:transition-none motion-reduce:active:scale-100'
 
-export type ToolTestResponse = Readonly<{
-  status: number
-  latencyMs: number
-  data?: unknown
-  error?: string
-}>
-
-type PlaygroundDiagnostic = Readonly<{
-  whatHappened: string
-  financialImpact: string
-  nextStep: string
-}>
-
-const SYNTAX_DIAGNOSTIC: PlaygroundDiagnostic = {
+const SYNTAX_DIAGNOSTIC: Rule4Diagnostic = {
   whatHappened: 'Invalid JSON format.',
   financialImpact: 'A$0.00 affected — dry run probe blocked.',
   nextStep: 'Check syntax and ensure valid JSON before sending.',
 }
 
-const SCHEMA_DIAGNOSTIC: PlaygroundDiagnostic = {
+const SCHEMA_DIAGNOSTIC: Rule4Diagnostic = {
   whatHappened: 'Payload does not match schema.',
   financialImpact: 'A$0.00 affected — dry run probe blocked.',
   nextStep: 'Adjust arguments to satisfy required schema properties.',
 }
 
-const PROBE_FAILURE_DIAGNOSTIC: PlaygroundDiagnostic = {
+const PROBE_FAILURE_DIAGNOSTIC: Rule4Diagnostic = {
   whatHappened: 'Provider endpoint simulation failed.',
   financialImpact: 'A$0.00 affected — sandbox probe only.',
   nextStep: 'Verify the provider service is running and accessible.',
 }
 
+export type AeToolTestPlaygroundProps = Readonly<{
+  toolName: string
+  inputSchema?: Record<string, unknown>
+  onSendTestRequest?: (payload: unknown) => Promise<ToolTestResponse>
+}>
+
 export function AeToolTestPlayground({
   toolName,
   inputSchema,
   onSendTestRequest,
-}: Readonly<{
-  toolName: string
-  inputSchema?: Record<string, unknown>
-  onSendTestRequest?: (payload: unknown) => Promise<ToolTestResponse>
-}>) {
+}: AeToolTestPlaygroundProps) {
   const defaultPayload = extractDefaultPayload(inputSchema)
   const [inputJson, setInputJson] = useState(() => JSON.stringify(defaultPayload, null, 2))
-  const [diagnostic, setDiagnostic] = useState<PlaygroundDiagnostic>()
+  const [diagnostic, setDiagnostic] = useState<Rule4Diagnostic>()
   const [isRunning, setIsRunning] = useState(false)
   const [response, setResponse] = useState<ToolTestResponse>()
 
@@ -270,17 +261,6 @@ export function mapHttpStatus(status: number): string {
       return `${status} Error`
   }
 }
-
-type JsonSchemaProperty = Readonly<{
-  default?: unknown
-  example?: unknown
-  examples?: readonly unknown[]
-  enum?: readonly unknown[]
-  type?: string
-  format?: string
-  minimum?: number
-  properties?: Record<string, JsonSchemaProperty>
-}>
 
 export function extractExamplePayload(schema?: Record<string, unknown>): Record<string, unknown> {
   if (!schema || typeof schema !== 'object') return {}

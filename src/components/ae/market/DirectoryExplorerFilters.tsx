@@ -9,16 +9,11 @@ import { Label } from '@/components/ui/label'
 import { Sheet, SheetClose, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet'
 import { cn } from '@/lib/utils'
 import { x402DirectoryFilterSchema } from '@/modules/market/x402-directory'
-import type { X402DirectoryCatalogueInput, X402DirectoryCatalogueOverview, X402DirectoryFacet } from '@/modules/market/x402-directory-catalogue'
+import type { X402DirectoryCatalogueOverview, X402DirectoryFacet } from '@/modules/market/x402-directory-catalogue'
+import type { DirectoryExplorerFilterPatch, DirectoryExplorerFilterValues } from '@/modules/market/directory-filters.contracts'
 import { formatPaymentNetwork } from '@/modules/market/tool-view-model'
 
-export type DirectoryExplorerFilterValues = Readonly<Pick<X402DirectoryCatalogueInput,
-  'directoryCategory' | 'network' | 'provider' | 'minUsdPrice' | 'maxUsdPrice' |
-  'minPayers30d' | 'maxPayers30d' | 'priceBand' | 'adoptionBand' | 'curatedOnly' | 'hasInputFields' | 'hasOutputExample' |
-  'hasInputSchema' | 'hasOutputFields' | 'hasOutputSchema' | 'tags' | 'bundleSlugs'
->>
-export type DirectoryExplorerFilterPatch = { [Key in keyof DirectoryExplorerFilterValues]?: DirectoryExplorerFilterValues[Key] | undefined }
-type Props = Readonly<{
+export type DirectoryExplorerFiltersProps = Readonly<{
   search: DirectoryExplorerFilterValues
   overview?: X402DirectoryCatalogueOverview
   onChange: (patch: DirectoryExplorerFilterPatch) => void
@@ -73,7 +68,7 @@ function Facets({ label, values, selected, onChange, searchable = false }: Reado
   </fieldset>
 }
 
-function ListedPriceFilter({ search, onChange }: Pick<Props, 'search' | 'onChange'>) {
+function ListedPriceFilter({ search, onChange }: Pick<DirectoryExplorerFiltersProps, 'search' | 'onChange'>) {
   const id = useId()
   const [minimum, setMinimum] = useState(() => search.minUsdPrice?.toString() ?? '')
   const [maximum, setMaximum] = useState(() => search.maxUsdPrice?.toString() ?? '')
@@ -92,7 +87,7 @@ function ListedPriceFilter({ search, onChange }: Pick<Props, 'search' | 'onChang
   </form>
 }
 
-function ProviderFilter({ search, onChange }: Pick<Props, 'search' | 'onChange'>) {
+function ProviderFilter({ search, onChange }: Pick<DirectoryExplorerFiltersProps, 'search' | 'onChange'>) {
   const id = useId()
   const [provider, setProvider] = useState(search.provider ?? '')
   const [providerError, setProviderError] = useState<string>()
@@ -104,14 +99,14 @@ function ProviderFilter({ search, onChange }: Pick<Props, 'search' | 'onChange'>
     }}><Field><FieldLabel htmlFor={`${id}-provider`}>Provider</FieldLabel><Input id={`${id}-provider`} value={provider} onChange={event => setProvider(event.target.value)} placeholder="api.example.com" autoCapitalize="none" autoCorrect="off" spellCheck={false} aria-invalid={providerError !== undefined} aria-describedby={providerError === undefined ? undefined : `${id}-provider-error`} /><FieldError id={`${id}-provider-error`} className="text-xs">{providerError}</FieldError></Field><Button type="submit" variant="outline" size="sm" className="w-full">Apply Provider</Button></form>
 }
 
-function PublishedDetailsFilter({ search, onChange }: Pick<Props, 'search' | 'onChange'>) {
+function PublishedDetailsFilter({ search, onChange }: Pick<DirectoryExplorerFiltersProps, 'search' | 'onChange'>) {
   return <fieldset className="flex flex-col gap-3 border-t pt-5"><legend className="sr-only">Published request details</legend><p className="text-sm font-semibold">Published details</p>
       {([{ key: 'hasInputFields', label: 'Request fields' }, { key: 'hasInputSchema', label: 'Request schema' }, { key: 'hasOutputFields', label: 'Output fields' }, { key: 'hasOutputSchema', label: 'Output schema' }, { key: 'hasOutputExample', label: 'Output example' }, { key: 'curatedOnly', label: 'Bazaar curated' }] as const).map(filter => <Label key={filter.key} className="min-h-10 py-1 text-xs font-normal leading-relaxed"><Checkbox checked={search[filter.key] === true} onCheckedChange={checked => onChange({ [filter.key]: checked === true ? true : undefined })} />{filter.label}</Label>)}
       <p className="text-xs leading-relaxed text-muted-foreground">Provider metadata and source curation.</p>
     </fieldset>
 }
 
-function PayerBreadthFilter({ search, onChange }: Pick<Props, 'search' | 'onChange'>) {
+function PayerBreadthFilter({ search, onChange }: Pick<DirectoryExplorerFiltersProps, 'search' | 'onChange'>) {
   return <fieldset className="flex flex-col gap-2 border-t pt-5"><legend className="sr-only">Payer breadth</legend><p className="text-sm font-semibold">Payer breadth · 30 days</p>
       {search.adoptionBand === undefined ? null : <Button type="button" variant="secondary" className="h-auto min-h-9 justify-between gap-2 text-xs whitespace-normal" aria-label={`Remove payer band: ${adoptionBandLabels[search.adoptionBand]}`} onClick={() => onChange({ adoptionBand: undefined })}>{adoptionBandLabels[search.adoptionBand]}<XIcon className="size-3" /></Button>}
       {search.maxPayers30d === undefined ? null : <Button type="button" variant="secondary" className="h-auto min-h-9 justify-between gap-2 text-xs whitespace-normal" aria-label="Remove maximum payer count" onClick={() => onChange({ maxPayers30d: undefined })}>At most {search.maxPayers30d.toLocaleString('en-AU')} paying addresses<XIcon className="size-3" /></Button>}
@@ -123,7 +118,7 @@ function PayerBreadthFilter({ search, onChange }: Pick<Props, 'search' | 'onChan
     </fieldset>
 }
 
-function AdvancedFilters({ search, overview, onChange }: Pick<Props, 'search' | 'overview' | 'onChange'>) {
+function AdvancedFilters({ search, overview, onChange }: Pick<DirectoryExplorerFiltersProps, 'search' | 'overview' | 'onChange'>) {
   const facets = overview?.kind === 'ok' ? overview : undefined
   const activeCount = activeAdvancedFilterCount(search)
   const [open, setOpen] = useState(activeCount > 0)
@@ -143,7 +138,7 @@ function AdvancedFilters({ search, overview, onChange }: Pick<Props, 'search' | 
     </Collapsible>
 }
 
-function FilterBody({ search, overview, onChange, onReset, showHeading = true }: Props & Readonly<{ showHeading?: boolean }>) {
+function FilterBody({ search, overview, onChange, onReset, showHeading = true }: DirectoryExplorerFiltersProps & Readonly<{ showHeading?: boolean }>) {
   const facets = overview?.kind === 'ok' ? overview : undefined
   return <div className="flex flex-col gap-6">
     {showHeading ? <div className="flex items-center justify-between"><p className="text-sm font-semibold">Filters</p><Button type="button" variant="ghost" size="sm" className="min-h-touch" onClick={onReset}>Clear all</Button></div> : null}
@@ -154,7 +149,7 @@ function FilterBody({ search, overview, onChange, onReset, showHeading = true }:
 }
 
 /** Values are passed to the route; the current page is never filtered in the browser. */
-export function DirectoryExplorerFilters(props: Props) {
+export function DirectoryExplorerFilters(props: DirectoryExplorerFiltersProps) {
   const count = explorerFilterKeys.filter(key => props.search[key] !== undefined && props.search[key] !== false).length
   const key = JSON.stringify(props.search)
   return <>

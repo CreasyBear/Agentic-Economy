@@ -7,15 +7,29 @@ import { Button } from '@/components/ui/button'
 import { buttonVariants } from '@/components/ui/button-variants'
 import { Input } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
+import type { ProviderConnectionInspection } from '@/modules/capability-supply/provider-connection.contracts'
 
-export type ProviderConnectionInspection = Readonly<{
-  digest: string
-  payTo: string
-  amount: string
-  network: string
-  asset: string
-  claimMessage: string
-  claimExpiresAt: number
+export type AeProviderConnectionFormProps = Readonly<{
+  canConnect: boolean
+  readOnly: boolean
+  resourceUrl: string
+  method: 'GET' | 'POST'
+  environment: string
+  inspection?: ProviderConnectionInspection
+  claimSignature?: string
+  busy?: string
+  refreshRequired: boolean
+  reauthorizing: boolean
+  fieldsLocked: boolean
+  resourceUrlInputRef: RefObject<HTMLInputElement | null>
+  onResourceUrlChange: (value: string) => void
+  onMethodChange: (value: 'GET' | 'POST') => void
+  onSubmit: (event: FormEvent<HTMLFormElement>) => void
+  onInspect: () => void
+  onProvePayeeControl: () => void
+  onCancelReauthorization: () => void
+  notice?: Readonly<{ kind: 'error' | 'status'; text: string }>
+  onRefresh: () => void
 }>
 
 export function AeProviderConnectionForm({
@@ -39,28 +53,7 @@ export function AeProviderConnectionForm({
   onCancelReauthorization,
   notice,
   onRefresh,
-}: Readonly<{
-  canConnect: boolean
-  readOnly: boolean
-  resourceUrl: string
-  method: 'GET' | 'POST'
-  environment: string
-  inspection?: ProviderConnectionInspection
-  claimSignature?: string
-  busy?: string
-  refreshRequired: boolean
-  reauthorizing: boolean
-  fieldsLocked: boolean
-  resourceUrlInputRef: RefObject<HTMLInputElement | null>
-  onResourceUrlChange: (value: string) => void
-  onMethodChange: (value: 'GET' | 'POST') => void
-  onSubmit: (event: FormEvent<HTMLFormElement>) => void
-  onInspect: () => void
-  onProvePayeeControl: () => void
-  onCancelReauthorization: () => void
-  notice?: Readonly<{ kind: 'error' | 'status'; text: string }>
-  onRefresh: () => void
-}>) {
+}: AeProviderConnectionFormProps) {
   return (
     <>
       {canConnect ? (

@@ -36,7 +36,7 @@ import {
   buildAgentAccessEnvFile,
   type AgentAccessConfigSnippetId,
 } from '@/modules/agent-access/config-snippets'
-import type { IssuedAgentAccessReveal } from './AeConnectAgentWizardDialog'
+import type { IssuedAgentAccessReveal } from '@/modules/agent-access/issue-key.contracts'
 
 const MASKED_SECRET_DISPLAY = '••••••••••••••••'
 

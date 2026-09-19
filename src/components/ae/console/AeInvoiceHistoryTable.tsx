@@ -28,6 +28,7 @@ import {
 import { toast } from '@/lib/ui/toast'
 import { formatTimestamp } from '@/lib/ui/format-time'
 import { calculateAudGstSplit } from '@/modules/money/public'
+import type { AeInvoiceHistoryRow } from '@/modules/money/invoice-history.view-model'
 
 const AUD_INCLUSIVE_GST_BPS = 1_000
 
@@ -40,26 +41,12 @@ const EXPORT_FORMAT_BUTTON_CLASS =
 const MONEY_SAFE_ERROR_DESCRIPTION =
   'A$0.00 charged — your account balance is unaffected. Please refresh the page or contact support if the issue persists.'
 
-export interface AeInvoiceHistoryRow {
-  commandRef: string
-  createdAt: number
-  description: string
-  totalUnits: string
-  status: 'succeeded' | 'reversed'
-  appliedTransactionRef: string | null
-  hasPaymentReceipt: boolean
-  taxInvoice?:
-    | { kind: 'issued'; documentRef: string }
-    | { kind: 'withheld'; reason: string }
-    | undefined
-}
-
-export interface AeInvoiceHistoryTableProps {
+export type AeInvoiceHistoryTableProps = Readonly<{
   rows?: readonly AeInvoiceHistoryRow[]
   isLoading?: boolean
   onDownloadTaxInvoice?: (row: AeInvoiceHistoryRow) => Promise<void> | void
   onViewStripeReceipt?: (row: AeInvoiceHistoryRow) => Promise<void> | void
-}
+}>
 
 function statusLabel(status: AeInvoiceHistoryRow['status']): string {
   return status === 'succeeded' ? 'Paid' : 'Reversed'

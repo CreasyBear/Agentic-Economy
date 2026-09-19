@@ -4,7 +4,7 @@ import { moneyServerMocks } from "./supply-funnel-harness";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
-import { AeSupplyEarningsCard } from "@/components/ae/supply/AeSupplyEarningsCard";
+import { AeSupplyEarningsCard } from "@/components/ae/supply/earnings-card/AeSupplyEarningsCard";
 import { toast } from "@/lib/ui/toast";
 
 vi.mock("@/lib/ui/toast", () => ({

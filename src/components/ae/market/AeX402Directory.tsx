@@ -12,7 +12,8 @@ import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput } from '
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import type { MarketReturnSearch } from './market-return-context'
 import { MarketNavigationProvider, type MarketPath, useMarketPath } from './market-navigation-context'
-import { DirectoryExplorerFilters, type DirectoryExplorerFilterPatch } from './DirectoryExplorerFilters'
+import { DirectoryExplorerFilters } from './DirectoryExplorerFilters'
+import type { DirectoryExplorerFilterPatch } from '@/modules/market/directory-filters.contracts'
 import { DirectoryHero } from './DirectoryHero'
 import { DirectoryIndexDiscovery } from './DirectoryIndexDiscovery'
 import { DirectoryHomeDiscovery } from './DirectoryHomeDiscovery'
@@ -26,13 +27,15 @@ import type { X402MarketplaceHome } from '@/modules/market/x402-marketplace-home
 import { DirectoryComparison } from './DirectoryComparison'
 import { DirectoryFilters } from './DirectoryFilters'
 import { DirectoryProviderCards } from './DirectoryProviderCards'
-import { DirectorySavedToolsProvider, useDirectorySavedTools, type SavedDirectoryTool } from './DirectorySavedTools'
+import { DirectorySavedToolsProvider, useDirectorySavedTools } from './DirectorySavedTools'
+import { toDirectoryToolCardModel } from '@/modules/market/directory-card.view-model'
+import type { SavedDirectoryTool } from '@/modules/market/saved-tools.contracts'
 import { DirectoryToolCard } from './DirectoryToolCard'
 import type { X402DirectoryEntry, X402DirectoryFilters, X402DirectoryInput, X402DirectoryPage } from '@/modules/market/x402-directory'
 
 type DirectorySearch = MarketReturnSearch
 
-type DirectoryProps = Readonly<{ page: X402DirectoryPage; search: DirectorySearch; marketPath?: MarketPath; workspace?: boolean; activeView?: NonNullable<DirectorySearch['view']>; home?: X402MarketplaceHome; catalogue?: X402DirectoryCatalogue; overview?: X402DirectoryCatalogueOverview; providers?: X402DirectoryProvidersPage }>
+type AeX402DirectoryProps = Readonly<{ page: X402DirectoryPage; search: DirectorySearch; marketPath?: MarketPath; workspace?: boolean; activeView?: NonNullable<DirectorySearch['view']>; home?: X402MarketplaceHome; catalogue?: X402DirectoryCatalogue; overview?: X402DirectoryCatalogueOverview; providers?: X402DirectoryProvidersPage }>
 type IndexedPaginationState = Readonly<{
   source: X402DirectoryCatalogue | undefined
   items: readonly X402DirectoryEntry[]
@@ -75,7 +78,7 @@ function useIndexedPagination(indexed: boolean, catalogue: X402DirectoryCatalogu
   return { state, loadNextPage }
 }
 
-export function AeX402Directory(props: DirectoryProps) {
+export function AeX402Directory(props: AeX402DirectoryProps) {
   const marketPath = props.marketPath ?? '/market'
   return <MarketNavigationProvider path={marketPath}><DirectorySavedToolsProvider><DirectoryMarketplace {...props} /></DirectorySavedToolsProvider></MarketNavigationProvider>
 }
@@ -90,7 +93,7 @@ function directoryInput(search: X402DirectoryInput) {
   }
 }
 
-function DirectoryMarketplace({ page, search, workspace = false, activeView, home, catalogue, overview, providers }: DirectoryProps) {
+function DirectoryMarketplace({ page, search, workspace = false, activeView, home, catalogue, overview, providers }: AeX402DirectoryProps) {
   const navigate = useNavigate()
   const marketPath = useMarketPath()
   const [comparison, setComparison] = useState<readonly SavedDirectoryTool[]>([])
@@ -188,7 +191,7 @@ function DirectoryMarketplace({ page, search, workspace = false, activeView, hom
   function toolGrid(items: readonly SavedDirectoryTool[]) {
     return <ul className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
       {items.map(item => <li key={item.entry.resource} className="min-w-0">
-        <DirectoryToolCard entry={item.entry} onSave={() => saved.toggleSavedTool(item)} saved={saved.isSaved(item.entry.resource)}
+        <DirectoryToolCard model={toDirectoryToolCardModel(item.entry)} onSave={() => saved.toggleSavedTool(item)} saved={saved.isSaved(item.entry.resource)}
           onCompare={() => toggleComparison(item)} comparing={comparison.some(other => other.entry.resource === item.entry.resource)} compareDisabled={comparison.length >= 4 && !comparison.some(other => other.entry.resource === item.entry.resource)} />
       </li>)}
     </ul>
@@ -327,5 +330,5 @@ function DirectoryMarketplace({ page, search, workspace = false, activeView, hom
 }
 
 export function X402DirectoryCards({ entries }: Readonly<{ entries: readonly X402DirectoryEntry[] }>) {
-  return <ul className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">{entries.map(entry => <li key={entry.resource} className="min-w-0"><DirectoryToolCard entry={entry} /></li>)}</ul>
+  return <ul className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">{entries.map(entry => <li key={entry.resource} className="min-w-0"><DirectoryToolCard model={toDirectoryToolCardModel(entry)} /></li>)}</ul>
 }

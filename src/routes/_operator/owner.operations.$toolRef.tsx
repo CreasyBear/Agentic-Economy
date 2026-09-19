@@ -9,10 +9,8 @@ import {
   readProviderToolStatusServer,
   readOwnerToolBySlugServer,
 } from '@/components/ae/offerings/provider-workspace.functions'
-import {
-  AeProviderToolDetail,
-  type ProviderToolActionOutcome,
-} from '@/components/ae/supply/AeProviderToolDetail'
+import { AeProviderToolDetail } from '@/components/ae/supply/AeProviderToolDetail'
+import type { ProviderToolActionOutcome } from '@/modules/capability-supply/provider-tool-actions.contracts'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { buttonVariants } from '@/components/ui/button-variants'
 import { cn } from '@/lib/utils'
