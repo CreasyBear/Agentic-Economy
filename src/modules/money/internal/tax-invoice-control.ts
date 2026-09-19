@@ -25,6 +25,14 @@ export function normalizeAbn(value: string): string {
   return value.replace(/[\s-]/gu, '')
 }
 
+export function formatAbnDisplay(digits: string): string {
+  const cleaned = normalizeAbn(digits).slice(0, 11)
+  if (cleaned.length <= 2) return cleaned
+  if (cleaned.length <= 5) return `${cleaned.slice(0, 2)} ${cleaned.slice(2)}`
+  if (cleaned.length <= 8) return `${cleaned.slice(0, 2)} ${cleaned.slice(2, 5)} ${cleaned.slice(5)}`
+  return `${cleaned.slice(0, 2)} ${cleaned.slice(2, 5)} ${cleaned.slice(5, 8)} ${cleaned.slice(8)}`
+}
+
 export function isValidAbn(abn: string): boolean {
   if (!/^\d{11}$/u.test(abn)) return false
   const digits = [...abn].map(Number)

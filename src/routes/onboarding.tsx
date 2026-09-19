@@ -88,6 +88,7 @@ function isTypingTarget(target: EventTarget | null): boolean {
 }
 
 export const Route = createFileRoute('/onboarding')({
+  staticData: { shellMode: 'minimal' },
   validateSearch: (search: Record<string, unknown>): OnboardingSearch => {
     const redirect = sanitizeAuthRedirectTarget(search.redirect)
     if (redirect === undefined || redirect.startsWith('/onboarding')) {

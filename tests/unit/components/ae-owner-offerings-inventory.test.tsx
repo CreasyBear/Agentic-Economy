@@ -129,11 +129,13 @@ describe('AeOwnerOfferingsList (W-34)', () => {
     render(<AeOwnerOfferingsList offerings={testTools} />)
 
     const testRun = screen.getAllByRole('link', { name: 'Test Run for Australian Tax Calculator' })[0]
-    expect(testRun.getAttribute('href')).toBe('/owner/operations/tax-calculator')
-    expect(testRun.className).toContain('active:scale-[0.98]')
+    expect(testRun).toBeDefined()
+    expect(testRun?.getAttribute('href')).toBe('/owner/operations/tax-calculator')
+    expect(testRun?.className).toContain('active:scale-[0.98]')
 
     const activity = screen.getAllByRole('link', { name: 'View logs for Australian Tax Calculator' })[0]
-    expect(activity.getAttribute('href')).toBe('/activity')
+    expect(activity).toBeDefined()
+    expect(activity?.getAttribute('href')).toBe('/activity')
 
     expect(TACTILE_PRESS_CLASS).toContain('motion-reduce:active:scale-100')
   })
@@ -182,7 +184,11 @@ describe('AeOwnerOfferingsList (W-34)', () => {
 
     const resetButtons = screen.getAllByRole('button', { name: 'Reset filter' })
     expect(resetButtons.length).toBeGreaterThan(0)
-    fireEvent.click(resetButtons[0])
+    const firstResetButton = resetButtons[0]
+    expect(firstResetButton).toBeDefined()
+    if (firstResetButton) {
+      fireEvent.click(firstResetButton)
+    }
     expect(onFilterChange).toHaveBeenCalledWith('')
   })
 
@@ -191,6 +197,8 @@ describe('AeOwnerOfferingsList (W-34)', () => {
 
     const compactList = screen.getByTestId('provider-workspace-compact-list')
     const firstRow = within(compactList).getAllByRole('listitem')[0]
+    expect(firstRow).toBeDefined()
+    if (!firstRow) return
 
     expect(within(firstRow).getByText('Published')).toBeInTheDocument()
     expect(within(firstRow).getByText('Operational')).toBeInTheDocument()

@@ -31,6 +31,7 @@ import {
   invokeProviderConsequenceViaVercel,
   providerConsequenceX402PaymentCustodyAvailable,
 } from './providerConsequenceBridge'
+import { adjudicatePayloadOutput } from './output-adjudication'
 
 type PreparedExecutionRun = Extract<CallPreparation, { kind: 'prepared' }>
 
@@ -496,7 +497,13 @@ export async function releaseCallRun(
           operationKeyDigest,
         })
       : undefined
-    const outputValidation = parseContractOutput(observation, descriptor)
+    const rawOutputValidation = parseContractOutput(observation, descriptor)
+    const outputValidation = await adjudicatePayloadOutput(
+      rawOutputValidation,
+      observation,
+      dispatch.callRef,
+      dispatch.toolRef,
+    )
     const deliveryOutcome = chargeSettlementOutcome(observation, economicRail, outputValidation.valid)
     const settledPayment = isManagedCanary
       && recordedX402Observation?.settlementStatus === 'settled'

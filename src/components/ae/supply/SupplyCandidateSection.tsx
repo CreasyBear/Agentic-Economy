@@ -10,7 +10,7 @@ export function SupplyCandidateSection({ candidates, selectedRef, onSelect }: Re
 }>) {
   return (
     <AeSection title="Select a Tool" description={`${candidates.length} candidate${candidates.length === 1 ? '' : 's'} found. Unsupported source methods remain visible with their correction.`}>
-      <RadioGroup value={selectedRef} onValueChange={onSelect}>
+      <RadioGroup value={selectedRef} onValueChange={(val) => onSelect(String(val))}>
         {candidates.map((candidate) => <CandidateRow key={candidate.candidateRef} candidate={candidate} />)}
       </RadioGroup>
     </AeSection>

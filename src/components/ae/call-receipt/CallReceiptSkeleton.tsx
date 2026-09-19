@@ -1,52 +1,79 @@
 import { Skeleton } from '@/components/ui/skeleton'
 
+const SUMMARY_FACT_ROWS = 6
+
+function SummaryFactRowSkeleton() {
+  return (
+    <div className="grid gap-intra sm:grid-cols-[minmax(8rem,0.45fr)_minmax(0,1fr)] sm:gap-related">
+      <Skeleton className="h-4 w-28" />
+      <Skeleton className="h-4 w-full max-w-md" />
+    </div>
+  )
+}
+
 export function CallReceiptSkeleton() {
   return (
-    <div className="grid gap-section py-2" aria-busy="true" aria-label="Loading call receipt">
-      <div className="rounded-xl border border-border bg-card p-5 grid gap-3">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <Skeleton className="h-6 w-32 rounded-full" />
-          <Skeleton className="h-8 w-48 max-w-full" />
-        </div>
-        <Skeleton className="h-8 w-3/4" />
-        <Skeleton className="h-4 w-1/2" />
-      </div>
-
-      <div className="min-h-[12rem] rounded-xl border border-border bg-card p-5 grid gap-4">
-        <Skeleton className="h-5 w-40" />
-        <Skeleton className="h-4 w-full" />
-        <Skeleton className="h-4 w-5/6" />
-        <Skeleton className="h-16 w-full rounded-lg" />
+    <div
+      role="status"
+      className="grid gap-section py-2"
+      aria-busy="true"
+      aria-label="Loading call receipt"
+    >
+      <section className="grid gap-related" aria-hidden="true">
+        <Skeleton className="h-6 w-32 rounded-full" />
+        <Skeleton className="h-7 w-48 max-w-full" />
         <Skeleton className="h-4 w-2/3" />
-      </div>
-
-      <div className="min-h-[13.5rem] rounded-xl border border-border bg-card p-5 grid gap-4">
-        <Skeleton className="h-5 w-56" />
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-          <div className="grid gap-1">
-            <Skeleton className="h-3 w-16" />
-            <Skeleton className="h-6 w-24" />
-          </div>
-          <div className="grid gap-1">
-            <Skeleton className="h-3 w-16" />
-            <Skeleton className="h-6 w-24" />
-          </div>
-          <div className="grid gap-1">
-            <Skeleton className="h-3 w-16" />
-            <Skeleton className="h-6 w-24" />
+        <div className="grid gap-related">
+          {Array.from({ length: SUMMARY_FACT_ROWS }, (_, index) => (
+            <SummaryFactRowSkeleton key={index} />
+          ))}
+          <div className="grid gap-intra sm:grid-cols-[minmax(8rem,0.45fr)_minmax(0,1fr)] sm:gap-related">
+            <Skeleton className="h-4 w-28" />
+            <Skeleton className="h-5 w-24 font-mono" />
           </div>
         </div>
-        <Skeleton className="h-4 w-2/3" />
-      </div>
+      </section>
 
-      <div className="min-h-[4.5rem] rounded-xl border border-border bg-card p-5 grid gap-3">
-        <Skeleton className="h-5 w-36" />
-        <Skeleton className="h-10 w-40" />
-      </div>
+      <section
+        className="grid min-h-[12rem] gap-related rounded-xl border border-border bg-card p-4"
+        aria-hidden="true"
+      >
+        {Array.from({ length: 4 }, (_, index) => (
+          <div key={index} className="grid gap-intra">
+            <Skeleton className="h-3 w-32" />
+            <Skeleton className="h-4 w-full" />
+          </div>
+        ))}
+        <Skeleton className="h-10 w-full rounded-lg" />
+      </section>
 
-      <div className="border-t border-border pt-related">
-        <Skeleton className="h-10 w-40" />
-      </div>
+      <section className="grid min-h-[13.5rem] gap-section" aria-hidden="true">
+        {(['Before', 'After'] as const).map((stack) => (
+          <div key={stack} className="grid gap-related">
+            <Skeleton className="h-5 w-40" />
+            <div className="grid gap-related">
+              {Array.from({ length: 3 }, (_, index) => (
+                <div key={index} className="grid gap-intra sm:grid-cols-[minmax(8rem,0.45fr)_minmax(0,1fr)] sm:gap-related">
+                  <Skeleton className="h-4 w-28" />
+                  <Skeleton className="h-5 w-24 font-mono" />
+                </div>
+              ))}
+            </div>
+          </div>
+        ))}
+      </section>
+
+      <section
+        className="grid min-h-[4.5rem] gap-related border-t border-border pt-section"
+        aria-hidden="true"
+      >
+        <Skeleton className="h-7 w-40" />
+        <Skeleton className="h-10 w-36" />
+      </section>
+
+      <section className="border-t border-border pt-related" aria-hidden="true">
+        <Skeleton className="min-h-touch h-touch w-44" />
+      </section>
     </div>
   )
 }

@@ -1,6 +1,6 @@
 import * as React from "react"
 import { ChevronRight, MoreHorizontal } from "lucide-react"
-import { Slot } from "radix-ui"
+import { useRender } from "@base-ui/react/use-render"
 
 import { cn } from "@/lib/utils"
 
@@ -32,21 +32,24 @@ function BreadcrumbItem({ className, ...props }: React.ComponentProps<"li">) {
 }
 
 function BreadcrumbLink({
-  asChild,
   className,
+  render,
   ...props
 }: React.ComponentProps<"a"> & {
-  asChild?: boolean
+  render?: useRender.RenderProp
 }) {
-  const Comp = asChild ? Slot.Root : "a"
-
-  return (
-    <Comp
-      data-slot="breadcrumb-link"
-      className={cn("inline-flex items-center transition-colors hover:text-foreground max-sm:min-h-touch", className)}
-      {...props}
-    />
-  )
+  return useRender({
+    render,
+    props: {
+      "data-slot": "breadcrumb-link",
+      className: cn(
+        "inline-flex items-center transition-[color,transform] duration-100 ease-out hover:text-foreground active:scale-[0.98] motion-reduce:transition-none motion-reduce:active:scale-100 max-sm:min-h-touch",
+        className
+      ),
+      ...props,
+    },
+    defaultTagName: "a",
+  })
 }
 
 function BreadcrumbPage({
@@ -102,7 +105,7 @@ function BreadcrumbEllipsis({
       data-slot="breadcrumb-ellipsis"
       role="presentation"
       aria-hidden="true"
-      className={cn("flex size-9 items-center justify-center", className)}
+      className={cn("flex size-8 items-center justify-center", className)}
       {...props}
     >
       <MoreHorizontal className="size-4" />

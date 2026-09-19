@@ -1,0 +1,136 @@
+import { readBoundedRequestText } from '@/lib/server/bounded-request-body'
+import { isJsonContentType } from '@/lib/server/json-content-type'
+import { problem } from '@/lib/server/problem'
+import { withHttpRateLimit } from '@/lib/server/rate-limit'
+import { runWithRequestCorrelation, withRequestCorrelationHeader } from '@/lib/server/request-correlation'
+import { response } from '@/lib/server/no-store-response'
+import {
+  authenticateCallGateway,
+  createCallService,
+  type CallHandlerOptions,
+} from '@/lib/server/call-api'
+import {
+  toolProcureAction,
+} from '@/modules/capability-execution/procure.actions'
+import {
+  CapabilityProcurementEngine,
+  defaultProductionCatalogSearcher,
+  type ProcurementEngineDependencies,
+} from '@/modules/capability-execution/procure-engine'
+
+const MAX_PROCURE_BODY_BYTES = 64 * 1024
+const procureResponseHeaders = {
+  'Content-Type': 'application/json',
+} as const
+
+export function createProcurementEngine(
+  deps?: Partial<ProcurementEngineDependencies>,
+): CapabilityProcurementEngine {
+  return new CapabilityProcurementEngine({
+    catalogSearcher: deps?.catalogSearcher ?? defaultProductionCatalogSearcher,
+    ...(deps?.callExecutor !== undefined ? { callExecutor: deps.callExecutor } : {}),
+    ...(deps?.callService !== undefined ? { callService: deps.callService } : {}),
+    ...(deps?.principal !== undefined ? { principal: deps.principal } : {}),
+    ...(deps?.correlationId !== undefined ? { correlationId: deps.correlationId } : {}),
+  })
+}
+
+export async function handleToolProcurePost(
+  request: Request,
+  optionsOrEngine?: CallHandlerOptions | CapabilityProcurementEngine,
+  engineOverride?: CapabilityProcurementEngine,
+): Promise<Response> {
+  const isEngine = optionsOrEngine instanceof CapabilityProcurementEngine
+  const options: CallHandlerOptions = isEngine ? {} : (optionsOrEngine ?? {})
+  const engine = isEngine ? optionsOrEngine : engineOverride
+
+  return await runWithRequestCorrelation(request, async ({ correlationId }) => {
+    return await withHttpRateLimit(request, 'public-mutation', async () => {
+      const bounded = await readBoundedRequestText(request, MAX_PROCURE_BODY_BYTES)
+      if (!bounded.ok) {
+        return withRequestCorrelationHeader(
+          problem({
+            status: 413,
+            kind: 'PAYLOAD_TOO_LARGE',
+            code: bounded.code,
+            detail: 'The capability procurement body is too large.',
+          }),
+          correlationId,
+        )
+      }
+
+      if (!(await isJsonContentType(request.headers.get('content-type')))) {
+        return withRequestCorrelationHeader(
+          problem({
+            status: 415,
+            kind: 'UNSUPPORTED_MEDIA_TYPE',
+            code: 'invalid_content_type',
+            detail: 'The request content-type must be application/json.',
+          }),
+          correlationId,
+        )
+      }
+
+      let rawBody: unknown
+      try {
+        rawBody = JSON.parse(bounded.text)
+      } catch {
+        return withRequestCorrelationHeader(
+          problem({
+            status: 400,
+            kind: 'INVALID_ARGUMENT',
+            code: 'invalid_json',
+            detail: 'The request body must be valid JSON.',
+          }),
+          correlationId,
+        )
+      }
+
+      const parsed = toolProcureAction.schema.safeParse(rawBody)
+      if (!parsed.success) {
+        return withRequestCorrelationHeader(
+          problem({
+            status: 400,
+            kind: 'INVALID_ARGUMENT',
+            code: 'invalid_request',
+            detail: parsed.error.issues[0]?.message ?? 'The request did not match the procurement schema.',
+          }),
+          correlationId,
+        )
+      }
+
+      try {
+        let procurementEngine = engine
+        if (procurementEngine === undefined) {
+          const admitted = await authenticateCallGateway(request, correlationId, options, bounded.text)
+          if (admitted instanceof Response) return admitted
+
+          const callService = options.callService ?? createCallService(request, bounded.text)
+          procurementEngine = new CapabilityProcurementEngine({
+            catalogSearcher: defaultProductionCatalogSearcher,
+            callService,
+            principal: admitted.principal,
+            correlationId,
+          })
+        }
+
+        const result = await procurementEngine.procure(parsed.data)
+        const projected = toolProcureAction.outputSchema.parse(result)
+        return withRequestCorrelationHeader(
+          response(projected, 200, procureResponseHeaders),
+          correlationId,
+        )
+      } catch (error) {
+        return withRequestCorrelationHeader(
+          problem({
+            status: 500,
+            kind: 'INTERNAL',
+            code: 'procurement_failed',
+            detail: error instanceof Error ? error.message : 'Capability procurement failed unexpectedly.',
+          }),
+          correlationId,
+        )
+      }
+    })
+  })
+}

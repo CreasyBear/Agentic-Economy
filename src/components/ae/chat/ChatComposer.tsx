@@ -2,6 +2,8 @@ import { SendIcon } from 'lucide-react'
 
 import { AeCopyReference } from '@/components/ae/data/AeCopyReference'
 import { Button } from '@/components/ui/button'
+import { buttonVariants } from '@/components/ui/button-variants'
+import { cn } from '@/lib/utils'
 import {
   Field,
   FieldDescription,
@@ -96,9 +98,12 @@ export function ChatComposer({
                         </p>
                       )}
                       {browseMarketOnError ? (
-                        <Button asChild type="button" variant="outline" size="sm" className="min-h-touch w-fit">
-                          <a href="/market">{chatRecovery.browse}</a>
-                        </Button>
+                        <a
+                          href="/market"
+                          className={cn(buttonVariants({ variant: 'outline', size: 'sm' }), 'min-h-touch w-fit')}
+                        >
+                          {chatRecovery.browse}
+                        </a>
                       ) : null}
                     </FieldError>
                   )

@@ -39,11 +39,13 @@ export function ChatHeader({
       <header className="flex min-h-14 items-center gap-related border-b border-border px-gutter">
         {authenticated ? (
           <Sheet>
-            <SheetTrigger asChild>
-              <Button type="button" variant="ghost" size="icon" className="min-h-touch min-w-touch lg:hidden" aria-label={chatHistory.openHistory}>
-                <MenuIcon aria-hidden="true" />
-              </Button>
-            </SheetTrigger>
+            <SheetTrigger
+              render={
+                <Button type="button" variant="ghost" size="icon" className="min-h-touch min-w-touch lg:hidden" aria-label={chatHistory.openHistory}>
+                  <MenuIcon aria-hidden="true" />
+                </Button>
+              }
+            />
             <SheetContent side="left" className="w-[min(90vw,20rem)] p-0">
               <SheetHeader className="px-gutter pt-related">
                 <SheetTitle>{chatHistory.sheetTitle}</SheetTitle>

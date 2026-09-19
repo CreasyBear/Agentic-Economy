@@ -2,7 +2,7 @@
 
 import * as React from "react"
 import { XIcon } from "lucide-react"
-import { Dialog as SheetPrimitive } from "radix-ui"
+import { Dialog as SheetPrimitive } from "@base-ui/react/dialog"
 
 import { cn } from "@/lib/utils"
 
@@ -28,15 +28,15 @@ function SheetPortal({
   return <SheetPrimitive.Portal data-slot="sheet-portal" {...props} />
 }
 
-function SheetOverlay({
+function SheetBackdrop({
   className,
   ...props
-}: React.ComponentProps<typeof SheetPrimitive.Overlay>) {
+}: React.ComponentProps<typeof SheetPrimitive.Backdrop>) {
   return (
-    <SheetPrimitive.Overlay
-      data-slot="sheet-overlay"
+    <SheetPrimitive.Backdrop
+      data-slot="sheet-backdrop"
       className={cn(
-        "fixed inset-0 z-50 bg-[var(--ae-overlay-scrim)] duration-base ease-standard data-[state=closed]:pointer-events-none data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:animate-in data-[state=open]:fade-in-0 motion-reduce:animate-none",
+        "fixed inset-0 z-50 bg-[var(--ae-overlay-scrim)] duration-base ease-standard data-closed:pointer-events-none data-closed:animate-out data-closed:fade-out-0 data-open:animate-in data-open:fade-in-0 motion-reduce:animate-none",
         className
       )}
       {...props}
@@ -50,38 +50,39 @@ function SheetContent({
   side = "right",
   showCloseButton = true,
   ...props
-}: React.ComponentProps<typeof SheetPrimitive.Content> & {
+}: React.ComponentProps<typeof SheetPrimitive.Popup> & {
   side?: "top" | "right" | "bottom" | "left"
   showCloseButton?: boolean
 }) {
   return (
     <SheetPortal>
-      <SheetOverlay />
-      <SheetPrimitive.Content
+      <SheetBackdrop />
+      <SheetPrimitive.Popup
         data-slot="sheet-content"
+        data-side={side}
         className={cn(
-          "fixed z-50 flex overscroll-contain flex-col gap-4 bg-popover text-popover-foreground shadow-overlay duration-slow ease-emphasized data-[state=closed]:pointer-events-none data-[state=closed]:animate-out data-[state=open]:animate-in motion-reduce:animate-none",
+          "fixed z-50 flex overscroll-contain flex-col gap-4 bg-popover text-popover-foreground shadow-overlay duration-slow ease-emphasized data-closed:pointer-events-none data-closed:animate-out data-open:animate-in motion-reduce:animate-none",
           side === "right" &&
-            "inset-y-0 right-0 h-full w-3/4 border-l data-[state=closed]:slide-out-to-right data-[state=open]:slide-in-from-right sm:max-w-sm",
+            "inset-y-0 right-0 h-full w-3/4 border-l data-closed:slide-out-to-right data-open:slide-in-from-right sm:max-w-sm",
           side === "left" &&
-            "inset-y-0 left-0 h-full w-3/4 border-r data-[state=closed]:slide-out-to-left data-[state=open]:slide-in-from-left sm:max-w-sm",
+            "inset-y-0 left-0 h-full w-3/4 border-r data-closed:slide-out-to-left data-open:slide-in-from-left sm:max-w-sm",
           side === "top" &&
-            "inset-x-0 top-0 h-auto border-b data-[state=closed]:slide-out-to-top data-[state=open]:slide-in-from-top",
+            "inset-x-0 top-0 h-auto border-b data-closed:slide-out-to-top data-open:slide-in-from-top",
           side === "bottom" &&
-            "inset-x-0 bottom-0 h-auto border-t data-[state=closed]:slide-out-to-bottom data-[state=open]:slide-in-from-bottom",
+            "inset-x-0 bottom-0 h-auto border-t data-closed:slide-out-to-bottom data-open:slide-in-from-bottom",
           className
         )}
         {...props}
         aria-modal="true"
       >
         {children}
-        {showCloseButton && (
-          <SheetPrimitive.Close className="absolute top-4 right-4 flex min-h-6 min-w-6 items-center justify-center rounded-xs opacity-70 transition-[color,background-color,opacity,scale] duration-fast ease-standard outline-none hover:opacity-100 active:scale-[0.96] focus-visible:outline-1 focus-visible:outline-offset-1 focus-visible:outline-brand disabled:pointer-events-none data-[state=open]:bg-secondary motion-reduce:transition-none max-sm:min-h-touch max-sm:min-w-touch">
+        {showCloseButton ? (
+          <SheetPrimitive.Close className="absolute top-4 right-4 flex min-h-6 min-w-6 items-center justify-center rounded-xs opacity-70 transition-[color,background-color,opacity,transform] duration-fast ease-standard outline-none hover:opacity-100 enabled:active:scale-[0.96] motion-reduce:active:scale-100 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none data-open:bg-secondary motion-reduce:transition-none max-sm:min-h-touch max-sm:min-w-touch">
             <XIcon className="size-4" />
             <span className="sr-only">Close</span>
           </SheetPrimitive.Close>
-        )}
-      </SheetPrimitive.Content>
+        ) : null}
+      </SheetPrimitive.Popup>
     </SheetPortal>
   )
 }

@@ -10,7 +10,8 @@ import {
 } from '@/components/ae/layout/AeRouteStates'
 import { AeSettingsStack } from '@/components/ae/layout/AeSection'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
-import { Button } from '@/components/ui/button'
+import { buttonVariants } from '@/components/ui/button-variants'
+import { cn } from '@/lib/utils'
 import { readAgentAccessConsentServer } from '@/lib/server/agent-access-consent.functions'
 import { readAgentConsentDetails } from '@/modules/agent-access/consent-read-model'
 import { presentConnectionProblem } from '@/modules/agent-access/public'
@@ -126,9 +127,12 @@ function AgentAccessAuthorizeRoute() {
             <AlertDescription>
               <p>The approval may have completed. Do not submit it again.</p>
               <p className="mt-2 break-all">Request reference: {loaded.grantRef}</p>
-              <Button asChild variant="secondary" className="mt-4 min-h-touch">
-                <Link to="/agent-access">Open Agents</Link>
-              </Button>
+              <Link
+                to="/agent-access"
+                className={cn(buttonVariants({ variant: 'secondary' }), 'mt-4 min-h-touch')}
+              >
+                Open Agents
+              </Link>
             </AlertDescription>
           </Alert>
         </AeSettingsStack>
@@ -144,9 +148,12 @@ function AgentAccessAuthorizeRoute() {
             <AlertDescription>
               <p>This approval has completed. Open Agents for the current credential status.</p>
               <p className="mt-2 break-all">Request reference: {loaded.grantRef}</p>
-              <Button asChild variant="secondary" className="mt-4 min-h-touch">
-                <Link to="/agent-access">Open Agents</Link>
-              </Button>
+              <Link
+                to="/agent-access"
+                className={cn(buttonVariants({ variant: 'secondary' }), 'mt-4 min-h-touch')}
+              >
+                Open Agents
+              </Link>
             </AlertDescription>
           </Alert>
         </AeSettingsStack>

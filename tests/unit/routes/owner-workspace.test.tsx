@@ -34,6 +34,19 @@ vi.mock('@/components/ae/website/clerk-appearance', () => ({
   clerkAppearance: { cssLayerName: 'clerk' },
 }))
 
+vi.mock('@/components/ae/settings/TaxProfileFormSection', () => ({
+  TaxProfileFormSection: () => <div data-testid="tax-profile-form-section" />,
+}))
+
+vi.mock('@/components/ae/settings/WorkspaceDangerZone', () => ({
+  WorkspaceDangerZone: () => <div data-testid="workspace-danger-zone" />,
+}))
+
+vi.mock('convex/react', () => ({
+  useQuery: vi.fn(),
+  useMutation: vi.fn(),
+}))
+
 vi.mock('@clerk/tanstack-react-start', () => {
   const OrganizationProfilePage = ({ label }: { label: string }) => {
     return <div data-testid={`organization-profile-page-${label}`} data-label={label} />
@@ -88,9 +101,10 @@ describe('/owner/workspace route (W-12)', () => {
     })
   })
 
-  it('U3: renders OrganizationProfile from Clerk', () => {
+  it('U3: renders OrganizationProfile from Clerk inside min-h-96 shell', () => {
     renderWorkspaceRoute()
     expect(screen.getByTestId('organization-profile')).toBeTruthy()
+    expect(document.querySelector('.min-h-96')).toBeTruthy()
   })
 
   it('U4: passes hash routing and afterLeaveOrganizationUrl', () => {
@@ -107,11 +121,14 @@ describe('/owner/workspace route (W-12)', () => {
     expect(page.getAttribute('data-label')).toBe('general')
   })
 
-  it('U6: contains no hand-rolled workspace profile form controls', () => {
+  it('U6: composes billing tax and danger zone sections without hand-rolled Clerk profile fields', () => {
     renderWorkspaceRoute()
-    expect(screen.queryByRole('textbox')).toBeNull()
-    expect(screen.queryByRole('button', { name: /save/i })).toBeNull()
-    expect(document.querySelector('input[type="file"]')).toBeNull()
+
+    expect(screen.getByRole('heading', { name: 'Billing & tax' })).toBeTruthy()
+    expect(screen.getByTestId('tax-profile-form-section')).toBeTruthy()
+    expect(screen.getByRole('heading', { name: 'Danger zone' })).toBeTruthy()
+    expect(screen.getByTestId('workspace-danger-zone')).toBeTruthy()
+    expect(document.querySelector('.ae-owner-workspace.grid.gap-8')).toBeTruthy()
   })
 
   it('U7: head meta title mentions Workspace', () => {

@@ -1,11 +1,19 @@
 import type { ReactNode } from 'react'
-import { AeEmptyState } from './AeEmptyState'
+
+import {
+  AeEmptyState,
+  type AeEmptyStateRecipe,
+} from './AeEmptyState'
+
+export { TACTILE } from './AeEmptyState'
 
 export type AeTableEmptyStateProps = Readonly<{
   title: string
   description: string
   action?: ReactNode
   icon?: ReactNode
+  recipes?: readonly AeEmptyStateRecipe[]
+  financialReassurance?: string
 }>
 
 export function AeTableEmptyState({
@@ -13,14 +21,19 @@ export function AeTableEmptyState({
   description,
   action,
   icon,
+  recipes,
+  financialReassurance,
 }: AeTableEmptyStateProps) {
   return (
-    <div className="rounded-lg border border-dashed border-border/80 bg-muted/10 p-6">
+    <div className="min-h-[14rem] rounded-lg border border-dashed border-border/80 bg-muted/10 p-related">
       <AeEmptyState
+        compact={true}
         title={title}
         description={description}
-        action={action}
-        icon={icon}
+        {...(action !== undefined ? { action } : {})}
+        {...(icon !== undefined ? { icon } : {})}
+        {...(recipes !== undefined ? { recipes } : {})}
+        {...(financialReassurance !== undefined ? { financialReassurance } : {})}
       />
     </div>
   )

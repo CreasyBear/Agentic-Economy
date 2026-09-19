@@ -8,7 +8,8 @@ import {
   SearchIcon,
   StoreIcon,
 } from 'lucide-react'
-import { Button } from '@/components/ui/button'
+import { buttonVariants } from '@/components/ui/button-variants'
+import { cn } from '@/lib/utils'
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion'
 
 import { AePublicPage } from '@/components/ae/layout/AePublicPage'
@@ -93,8 +94,10 @@ function TermsRoute() {
         </section>
 
         <section className="flex flex-wrap gap-related border-t border-border pt-section">
-          <Button asChild variant="default" className="min-h-touch"><Link to="/market">Browse catalog</Link></Button>
-          <Button asChild variant="secondary" className="min-h-touch"><Link to="/for-providers">Publish a Tool <ArrowRightIcon aria-hidden="true" /></Link></Button>
+          <Link to="/market" className={cn(buttonVariants(), 'min-h-touch')}>Browse catalog</Link>
+          <Link to="/for-providers" className={cn(buttonVariants({ variant: 'secondary' }), 'min-h-touch')}>
+            Publish a Tool <ArrowRightIcon aria-hidden="true" />
+          </Link>
         </section>
       </div>
     </AePublicPage>
@@ -111,7 +114,7 @@ function TermsAccordion() {
     >
       {termsItems.map(({ icon: Icon, title, body }) => (
         <AccordionItem key={title} value={title} className="rounded-card border bg-card">
-          <AccordionTrigger className="flex min-h-touch w-full items-center justify-start gap-related px-gutter py-0 text-start hover:no-underline [&>svg:last-child]:hidden [&[data-state=open]>svg]:rotate-0">
+          <AccordionTrigger className="flex min-h-touch w-full items-center justify-start gap-related px-gutter py-0 text-start hover:no-underline [&>svg:last-child]:hidden [&[data-panel-open]>svg]:rotate-0">
             <Icon className="size-4 shrink-0 text-foreground" aria-hidden="true" />
             <span className="text-lg font-medium text-foreground">{title}</span>
           </AccordionTrigger>

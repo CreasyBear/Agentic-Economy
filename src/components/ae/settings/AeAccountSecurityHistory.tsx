@@ -87,14 +87,28 @@ export function AeAccountSecurityHistory({
     <AeSection
       id="security-history"
       title="Security history"
-      description="Account-scoped session, security, agent, connection, and consequential-action evidence recorded since history activation."
+      description="Evidence of session, Agent, connection, and account actions. Revoke devices in Profile above. Rotate credentials from the compromise checklist."
     >
       {result.kind === 'unavailable' ? (
         <Alert variant="destructive">
-          <AlertTitle>Security history unavailable</AlertTitle>
-          <AlertDescription>
-            <p>No newer security state is being claimed. Your Clerk profile and session controls remain available above.</p>
-            <Button type="button" variant="secondary" disabled={loading} onClick={() => void load(null)}>
+          <AlertTitle>Security history is temporarily unavailable.</AlertTitle>
+          <AlertDescription className="grid gap-1">
+            <p>
+              <strong>What happened:</strong> Security history is temporarily unavailable.
+            </p>
+            <p className="font-mono text-xs tabular-nums">
+              <strong>Financial impact:</strong> A$0.00 affected — Profile, sessions, and the compromise checklist remain available above.
+            </p>
+            <p>
+              <strong>Next step:</strong> Check your connection and try again.
+            </p>
+            <Button
+              type="button"
+              variant="secondary"
+              disabled={loading}
+              className="mt-2 min-w-[8.5rem] enabled:active:scale-[0.98] transition-transform duration-100 ease-out motion-reduce:transition-none motion-reduce:active:scale-100"
+              onClick={() => void load(null)}
+            >
               {loading ? 'Trying again…' : 'Try again'}
             </Button>
           </AlertDescription>

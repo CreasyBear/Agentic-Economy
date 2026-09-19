@@ -17,8 +17,8 @@
 | **Wave 1: Buyer Onboarding & Developer Launchpad** | 6 | `W-01`, `W-02`, `W-25`, `W-26`, `W-27`, `W-29` | 6 | 0 | 0 | **VERIFIED** |
 | **Wave 2: Financial Peace-of-Mind & Spend Observability** | 8 | `W-20`, `W-21`, `W-22`, `W-23`, `W-24`, `W-38`, `W-39`, `W-40` | 8 | 0 | 0 | **VERIFIED** |
 | **Wave 3: Supplier Monetization & Testing Playground** | 8 | `W-30`, `W-31`, `W-32`, `W-33`, `W-34`, `W-35`, `W-36`, `W-37` | 8 | 0 | 0 | **VERIFIED** |
-| **Wave 4: Team Operations, Identity & Tactile Standards** | 22 | `W-03`–`W-09`, `W-10`–`W-19`, `W-28`, `W-41`–`W-44` | 0 | 0 | 22 | `PENDING` |
-| **Total** | **44** | **All 44 Standard Workflows** | **22** | **0** | **22** | `IN PROGRESS` |
+| **Wave 4: Team Operations, Identity & Tactile Standards** | 22 | `W-03`–`W-09`, `W-10`–`W-19`, `W-28`, `W-41`–`W-44` | 22 | 0 | 0 | **VERIFIED** |
+| **Total** | **44** | **All 44 Standard Workflows** | **44** | **0** | **0** | **VERIFIED** |
 
 ---
 
@@ -381,26 +381,30 @@
 # Wave 4: Team Operations, Identity & Tactile Standards
 
 ### W-03 to W-09: User Profile, Preferences & Security Hub
-- **Surfaces:** `src/components/ae/settings/OwnerNotificationSettings.tsx`, `convex/personalAccount.ts`, `convex/notifications.ts`
+- **Surfaces:** `src/components/ae/settings/OwnerNotificationSettings.tsx`, `src/components/ae/settings/OwnerSettingsSections.tsx`, `src/components/ae/settings/AeCompromiseRecoveryChecklist.tsx`, `src/components/ae/settings/AeAccountSecurityHistory.tsx`, `src/components/ae/settings/AeSecurityHistoryTable.tsx`
 - **Incumbent Baseline:** Profile view, notification checkboxes, and session list.
 - **Target Ergonomic Spec:**
-  - Granular notification controls with Emil Kowalski spring toggles.
-  - Security command center with device icons, IP geolocation badges, and 1-click *"Revoke Other Sessions"*.
-  - Respectful 1-click GDPR/Personal Data ZIP export and safe account retirement preflight.
-- **Subagent Assignment:** Grok (Scout) $\rightarrow$ Composer (Craft) $\rightarrow$ Orchestrator (Verify)
-- **Status:** `PENDING`
+  - Granular notification controls with Emil Kowalski spring toggles (`enabled:active:scale-[0.98] transition-transform duration-100 ease-out`).
+  - Tactile threshold preset chips (`A$10.00`, `A$25.00 (Default)`, `A$50.00`) with monospace tabular digits (`font-mono tabular-nums`).
+  - Live threshold projection statement in reserved `min-h-[2.5rem]` slot: *"Alert sent when balance drops below A$25.00."*
+  - Structured Rule 4 diagnostic playbooks for preference save / query failures (`A$0.00 affected — existing preferences remain active.`) with `toast.error` and amount-aware `toast.success`.
+  - Security command center and compromise recovery checklist with explicit financial reassurance (`A$0.00 affected — opening this list does not revoke sessions, Agents, or payouts.`) and structured Rule 4 unavailable/pagination failure playbooks.
+  - Zero-CLS reserved geometry: `min-h-96` well for Clerk `<UserProfile />`, `min-h-[2.5rem]` diagnostic slots, and fixed button geometry.
+- **Subagent Assignment:** Grok (Scout: `84afecec-be5d-4c5c-bddf-404a6dc09033`) $\rightarrow$ Composer (Craft: `57ff9299-be91-4a09-a0e2-60066fdc7fb6`) $\rightarrow$ Orchestrator (Verify)
+- **Status:** `VERIFIED`
 
 ---
 
 ### W-10 to W-14: Command-Grade Workspace Management
-- **Surfaces:** `src/components/ae/layout/AeOrganizationSwitcher.tsx`, `src/routes/_operator/owner.workspace.tsx`, `src/components/ae/settings/WorkspaceDangerZone.tsx`
+- **Surfaces:** `src/components/ae/layout/AeOrganizationSwitcher.tsx`, `src/routes/_operator/owner.workspace.tsx`, `src/components/ae/settings/TaxProfileForm.tsx`, `src/components/ae/settings/TaxProfileFormSection.tsx`, `src/components/ae/settings/WorkspaceDangerZone.tsx`
 - **Incumbent Baseline:** Simple workspace switcher and profile forms.
 - **Target Ergonomic Spec:**
-  - Command-grade `Cmd+K` workspace switcher with avatar icons, role badges, and billing health pills.
-  - Frictionless workspace provisioning in $<300\text{ms}$ with auto-generated slug.
-  - Safe workspace decommission preflight checking outstanding calls and offering 1-click balance refund.
-- **Subagent Assignment:** Grok (Scout) $\rightarrow$ Composer (Craft) $\rightarrow$ Orchestrator (Verify)
-- **Status:** `PENDING`
+  - Zero-CLS switcher rail well (`h-8 w-full min-w-0`, collapsed: `size-8 p-0`) with tactile press physics (`enabled:active:scale-[0.98] transition-transform duration-100 ease-out`) across both collapsed and expanded variants, with Clerk create-org theme harmonization.
+  - Three-tier `/owner/workspace` composition: (1) Clerk general profile in `min-h-96` well, (2) Billing & tax with live 11-digit ABN formatting (`formatAbnDisplay`), `font-mono tabular-nums`, and (3) Workspace danger zone.
+  - Live ABN and billing validation with reserved `min-h-[2.5rem]` Rule 4 diagnostic slots (`A$0.00 affected — tax profile not saved.`) and amount-aware `toast.success`.
+  - Command-grade workspace decommission safety: always-mounted `min-h-[28rem]` shell, explicit money badges (`A$0.00 active obligations`), human-readable fence copy, dual confirmation dialogs (close & transfer) disclosing financial peace-of-mind (`A$0.00 moved until confirmed`), and stable idempotency keys.
+- **Subagent Assignment:** Grok (Scout: `94baae34-1250-400f-837c-ea6939245f82`) $\rightarrow$ Composer (Craft: `3349a7fd-160b-43fa-b147-149e827d6d6a`) $\rightarrow$ Orchestrator (Verify)
+- **Status:** `VERIFIED`
 
 ---
 
@@ -408,33 +412,38 @@
 - **Surfaces:** `src/components/ae/settings/AeTeamDirectoryTable.tsx`, `src/routes/_operator/owner.team.tsx`, `convex/workspaceInvitations.ts`
 - **Incumbent Baseline:** Member table and invite form.
 - **Target Ergonomic Spec:**
-  - Instant client-side search by name/email with role filter pills.
-  - 1-click **"Copy Direct Invite Link"** button alongside email dispatch for instant Slack sharing.
-  - Tactile role editor popover preventing accidental owner lockouts.
-  - Warm team welcome portal with workspace branding and 1-click join button.
-- **Subagent Assignment:** Grok (Scout) $\rightarrow$ Composer (Craft) $\rightarrow$ Orchestrator (Verify)
-- **Status:** `PENDING`
+  - Instant client-side search across both display name and email address with zero input layout jump.
+  - Tactile role filter pills (**All**, **Owner**, **Admin**, **Member**) with Emil Kowalski press physics (`enabled:active:scale-[0.98] transition-transform duration-100 ease-out`), `aria-pressed`, and live count badges (`font-mono tabular-nums`) from the unfiltered roster.
+  - Stable layout geometry: `min-h-[3rem]` filter bar, `min-h-4` status count (`Showing X of Y`), `min-h-[18rem]` table wrapper, and `min-h-[14rem]` filter-empty well with tactile "Reset filters" button.
+  - 1-click email copy with tactile physics, 2000ms checkmark transition, and toast confirmation (`toast.success('Copied email to clipboard')`).
+  - Zero-CLS loading skeleton (`min-h-[18rem]`, 5 matching headers, 4 skeleton rows, `aria-busy="true"`) replacing dummy rows, and reserved `min-h-96` Clerk `<OrganizationProfile />` well anchored at `#invite`.
+- **Subagent Assignment:** Grok (Scout: `730dfd59-52c3-44d8-b972-57b58fec19d2`) $\rightarrow$ Composer (Craft: `48c72f2c-f76f-4b03-a9ec-f407daf9b32d`) $\rightarrow$ Orchestrator (Verify)
+- **Status:** `VERIFIED`
 
 ---
 
 ### W-28: Safe Agent Revocation with Graceful Drainage
-- **Surfaces:** `src/components/ae/console/AeAgentOperatorConsole.tsx`, `convex/agentSpendingPolicy.ts`
+- **Surfaces:** `src/components/ae/console/AeAgentOperatorConsole.tsx`, `src/components/ae/feedback/AeConfirmDialog.tsx`
 - **Incumbent Baseline:** Direct delete button.
 - **Target Ergonomic Spec:**
-  - Dual revocation choices: (1) **Immediate Freeze** (halts immediately) vs (2) **Graceful Drain** (allows in-flight calls to finish within 30s).
-  - Explicit confirmation modal explaining impact on autonomous workflows.
-- **Subagent Assignment:** Grok (Scout) $\rightarrow$ Composer (Craft) $\rightarrow$ Orchestrator (Verify)
-- **Status:** `PENDING`
+  - Dual revocation choices: (1) **Graceful Drain** (default: new admissions stop immediately, in-flight Calls allowed to finish within 30s) vs (2) **Immediate Freeze** (halts immediately, new Calls refused).
+  - Explicit financial peace-of-mind disclosure: *"A$0.00 unreleased holds remain protected — in-flight calls finish or release immediately"* with `font-mono tabular-nums`.
+  - Dynamic confirm actions per mode: *"Drain then remove"* vs *"Remove immediately"*, *"Drain then revoke"* vs *"Revoke immediately"*, *"Drain then disconnect"* vs *"Disconnect immediately"*.
+  - Full Emil Kowalski tactile physics (`enabled:active:scale-[0.98] transition-transform duration-100 ease-out`) across mode cards, confirm buttons, cancel actions, and operator triggers.
+  - Success toasts (`toast.success('Agent access revoked')`) and structured in-dialog Rule 4 diagnostic playbooks on failure with `toast.error` and financial safety reassurance (`A$0.00 affected — agent remains active`).
+  - Zero-CLS geometry: reserved dialog description (`min-h-[4.5rem]`), mode card well (`min-h-[7.5rem]`), financial well (`min-h-[2.75rem]`), and diagnostic slot (`min-h-[4.5rem]`).
+- **Subagent Assignment:** Grok (Scout: `32af3dfb-61c6-4400-a613-b98481934e4c`) $\rightarrow$ Composer (Craft: `cc2bf291-4073-469e-b053-4bf9ed3b46c0`) $\rightarrow$ Orchestrator (Verify)
+- **Status:** `VERIFIED`
 
 ---
 
 ### W-41 to W-44: Design Engineering, Layout Stability & Tactile Physics
-- **Surfaces:** `src/components/ae/call-receipt/CallReceiptSkeleton.tsx`, `src/components/ae/feedback/AeTableEmptyState.tsx`, `src/components/ae/layout/ThemeToggle.tsx`, `src/styles/globals.css`
+- **Surfaces:** `src/components/ae/call-receipt/CallReceiptSkeleton.tsx`, `src/components/ae/feedback/AeEmptyState.tsx`, `src/components/ae/feedback/AeTableEmptyState.tsx`, `src/components/ae/layout/ThemeToggle.tsx`, `src/components/ui/dropdown-menu.tsx`, `src/lib/theme/theme-mode.ts`
 - **Incumbent Baseline:** Basic pulse divs, plain empty states, and standard theme toggle.
 - **Target Ergonomic Spec:**
-  - **Zero-CLS Skeletons (W-41):** Custom SVG/CSS skeletons designed to exact pixel dimensions, column counts, and padding of the final rendered cards. Zero layout shift.
-  - **Inspiring Zero-State Accelerators (W-42):** Action-oriented cards with illustrations and 1-click recipe templates.
-  - **Flicker-Free Theme Toggle (W-43):** Smooth spring toggle between `System`, `Light`, and `Dark` with zero flash of unstyled content.
-  - **Emil Kowalski Tactile Physics (W-44):** Button `:active:scale-[0.98]` compression, Radix transform-origin popover origins, and monospace tabular currency digits.
-- **Subagent Assignment:** Grok (Scout) $\rightarrow$ Composer (Craft) $\rightarrow$ Orchestrator (Verify)
-- **Status:** `PENDING`
+  - **Zero-CLS Skeletons (W-41):** `CallReceiptSkeleton` perfectly matches the loaded `CallStatusFoundView` shell with five uncarded/carded regions: summary (fact rows + mono buyer amount), playbook (`p-4`, 4 labeled rows, reserved financial well), money Before/After stacks, recovery strip (`pt-section`, `min-h-[4.5rem]`), and technical record summary bar (`min-h-touch`).
+  - **Inspiring Zero-State Accelerators (W-42):** `AeEmptyState` and `AeTableEmptyState` export standard `TACTILE` token, fixed `size-16` decorative illustration well, always-reserved `min-h-touch` action well, optional tactile 1-click recipe accelerator chips (`recipes`), optional financial reassurance slot (`A$0.00 charged — nothing to reconcile yet.`), and action feedback toast hook.
+  - **Flicker-Free Theme Toggle (W-43):** Early HTML boot script registers `document.documentElement.dataset.appearancePreference` before paint so `ThemeToggle` matches stored/system preference on the very first client hydration frame without icon flashes. Trigger sized to `size-8 shrink-0` with dynamic accessible label (`Appearance: Light/Dark/System`).
+  - **Emil Kowalski Tactile Physics (W-44):** Full tactile physics (`enabled:active:scale-[0.98] transition-transform duration-100 ease-out motion-reduce:transition-none motion-reduce:active:scale-100`) across theme trigger, radio items, and empty-state action/recipe buttons; Radix origin mapping `origin-(--radix-dropdown-menu-content-transform-origin)` on dropdown contents.
+- **Subagent Assignment:** Grok (Scout: `844e0437-0f85-4ace-9ea1-1d04d561db64`) $\rightarrow$ Composer (Craft: `63632db1-3ffa-4f03-a7d9-c8cb43f2bd5e`) $\rightarrow$ Orchestrator (Verify)
+- **Status:** `VERIFIED`

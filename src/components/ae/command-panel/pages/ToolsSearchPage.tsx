@@ -2,10 +2,24 @@
 
 import { ToolPriceText } from "@/components/ae/market/AeToolPrice"
 
+import {
+  Activity,
+  CheckCircle2,
+  Compass,
+  CreditCard,
+  Key,
+  Server,
+  Settings,
+  SunMoon,
+  Wrench,
+  type LucideIcon,
+} from 'lucide-react'
 import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from 'react'
 import { Link } from '@tanstack/react-router'
 
 import { Button } from '@/components/ui/button'
+import { buttonVariants } from '@/components/ui/button-variants'
+import { cn } from '@/lib/utils'
 import {
   Command,
   CommandEmpty,
@@ -39,11 +53,105 @@ type PendingSelectionIntent = Readonly<{
 export const TOOLS_SEARCH_DEBOUNCE_MS = 200
 const NO_MOUNTED_CHOICE_VALUE = '__ae_no_mounted_choice__'
 
+export type CommandNavigationItem = Readonly<{
+  href: string
+  label: string
+  keywords: readonly string[]
+  icon: LucideIcon
+}>
+
+export type CommandQuickAction = Readonly<{
+  id: string
+  label: string
+  description: string
+  keywords: readonly string[]
+  icon: LucideIcon
+  href?: string
+}>
+
+export const COMMAND_NAVIGATION_ITEMS: readonly CommandNavigationItem[] = [
+  {
+    href: '/market',
+    label: 'Tools Market',
+    keywords: ['market', 'catalogue', 'catalog', 'browse', 'tools'],
+    icon: Compass,
+  },
+  {
+    href: '/activity',
+    label: 'Calls & Activity',
+    keywords: ['activity', 'calls', 'history', 'runs', 'executions'],
+    icon: Activity,
+  },
+  {
+    href: '/owner/operations',
+    label: 'Tools Operations',
+    keywords: ['operations', 'supply', 'provider', 'offerings', 'publish'],
+    icon: Wrench,
+  },
+  {
+    href: '/owner/credit',
+    label: 'Balance & Credit',
+    keywords: ['credit', 'balance', 'billing', 'top up', 'funds', 'money'],
+    icon: CreditCard,
+  },
+  {
+    href: '/owner/settings',
+    label: 'Account & Settings',
+    keywords: ['settings', 'account', 'security', 'profile', 'keys', 'team'],
+    icon: Settings,
+  },
+  {
+    href: '/agent-access',
+    label: 'Agent Access & Keys',
+    keywords: ['agent', 'access', 'principal', 'tokens', 'keys', 'credentials'],
+    icon: Key,
+  },
+  {
+    href: '/for-providers',
+    label: 'Provider Workspace',
+    keywords: ['providers', 'host', 'api', 'monetize', 'seller'],
+    icon: Server,
+  },
+] as const
+
+export const COMMAND_QUICK_ACTIONS: readonly CommandQuickAction[] = [
+  {
+    id: 'toggle-theme',
+    label: 'Toggle Theme',
+    description: 'Switch between light and dark appearance',
+    keywords: ['theme', 'dark', 'light', 'mode', 'appearance'],
+    icon: SunMoon,
+  },
+  {
+    id: 'status',
+    label: 'Check System Status',
+    description: 'View platform health and uptime',
+    href: '/status',
+    keywords: ['status', 'health', 'uptime', 'operational'],
+    icon: CheckCircle2,
+  },
+] as const
+
+export function filterCommandPaletteEntries<
+  T extends Readonly<{ label: string; keywords: readonly string[]; href?: string }>,
+>(entries: readonly T[], trimmedQuery: string): T[] {
+  if (trimmedQuery === '') return [...entries]
+  const query = trimmedQuery.toLowerCase()
+  return entries.filter(
+    (entry) =>
+      entry.label.toLowerCase().includes(query)
+      || (entry.href !== undefined && entry.href.toLowerCase().includes(query))
+      || entry.keywords.some((keyword) => keyword.toLowerCase().includes(query)),
+  )
+}
+
 type ToolsSearchPageProps = Readonly<{
   isActive?: boolean
   query: string
   onQueryChange: (query: string) => void
   onSelectTool: (toolRef: string) => void
+  onNavigate?: (href: string) => void
+  onToggleTheme?: () => void
   searchTools?: (
     input: MarketToolSearchInput,
   ) => Promise<ToolChoiceSearchResult>
@@ -59,9 +167,13 @@ export function ToolsSearchPage({
   query,
   onQueryChange,
   onSelectTool,
+  onNavigate,
+  onToggleTheme,
   searchTools = searchMarketTools,
 }: ToolsSearchPageProps) {
   const trimmedQuery = query.trim()
+  const matchingNavItems = filterCommandPaletteEntries(COMMAND_NAVIGATION_ITEMS, trimmedQuery)
+  const matchingQuickActions = filterCommandPaletteEntries(COMMAND_QUICK_ACTIONS, trimmedQuery)
   const [state, setState] = useState<SearchState>({ kind: 'idle' })
   const [searchAttempt, setSearchAttempt] = useState(0)
   const recentToolRefs = useRecentToolRefs()
@@ -81,10 +193,17 @@ export function ToolsSearchPage({
     || state.kind === 'loading'
     || (state.kind === 'done' && state.query !== trimmedQuery)
   )
-  const choiceValues = choices.map((choice) => (
+  const toolChoiceValues = choices.map((choice) => (
     choice.kind === 'recent' ? choice.toolRef : choice.item.toolRef
   ))
+  const navChoiceValues = matchingNavItems.map((item) => `ae-nav:${item.href}`)
+  const quickChoiceValues = matchingQuickActions.map((action) => `ae-action:${action.id}`)
+  const choiceValues = [...navChoiceValues, ...quickChoiceValues, ...toolChoiceValues]
   const choiceValuesKey = choiceValues.join('\u001f')
+  const showCommandEmpty =
+    matchingNavItems.length === 0
+    && matchingQuickActions.length === 0
+    && choices.length === 0
 
   useEffect(() => {
     const trimmed = query.trim()
@@ -232,6 +351,29 @@ export function ToolsSearchPage({
       || isAwaitingChoices
     )
     switch (event.key) {
+      case 'Tab': {
+        const groups: string[][] = []
+        if (navChoiceValues.length > 0) groups.push(navChoiceValues)
+        if (quickChoiceValues.length > 0) groups.push(quickChoiceValues)
+        if (toolChoiceValues.length > 0) groups.push(toolChoiceValues)
+
+        if (groups.length > 1) {
+          event.preventDefault()
+          const currentGroupIndex = groups.findIndex((group) => group.includes(selectedValue))
+          const direction = event.shiftKey ? -1 : 1
+          const nextGroupIndex = currentGroupIndex === -1
+            ? (direction === 1 ? 0 : groups.length - 1)
+            : (currentGroupIndex + direction + groups.length) % groups.length
+
+          const targetValue = groups[nextGroupIndex]?.[0]
+          if (targetValue) {
+            pendingSelectionIntentRef.current = null
+            selectedValueRef.current = targetValue
+            setSelectedValue(targetValue)
+          }
+        }
+        break
+      }
       case 'ArrowDown': {
         if (liveChoices.length > 0 || !awaitingLiveChoices) return
         consumeNavigationKey(event)
@@ -295,7 +437,7 @@ export function ToolsSearchPage({
       value={selectedValue}
       onValueChange={handleSelectedValueChange}
       onKeyDown={handleKeyDown}
-      className="min-h-0 flex-1"
+      className="min-h-0 flex-1 [&_[data-slot=command-input-wrapper]]:h-12 [&_[data-slot=command-input-wrapper]]:shrink-0 [&_[data-slot=command-input-wrapper]]:border-border [&_[data-slot=command-input-wrapper]]:px-gutter [&_[data-slot=command-input-wrapper]]:focus-within:border-foreground/25 [&_[data-slot=command-input]]:text-sm [&_[data-slot=command-item][data-selected=true]]:bg-accent/90"
     >
       <CommandInput
         ref={inputRef}
@@ -304,6 +446,7 @@ export function ToolsSearchPage({
         placeholder="Search Tools…"
         value={query}
         onValueChange={handleQueryInputChange}
+        className="h-12 py-0"
       />
       <div role="status" className="sr-only">
         {statusMessage}
@@ -313,6 +456,59 @@ export function ToolsSearchPage({
         aria-busy={isAwaitingChoices}
         className="min-h-0 max-h-none flex-1 overscroll-contain"
       >
+        {matchingNavItems.length > 0 ? (
+          <CommandGroup heading="Navigation">
+            {matchingNavItems.map((item) => {
+              const Icon = item.icon
+              const value = `ae-nav:${item.href}`
+              return (
+                <CommandItem
+                  key={value}
+                  value={value}
+                  disabled={!isActive}
+                  onSelect={() => {
+                    pendingSelectionIntentRef.current = null
+                    onNavigate?.(item.href)
+                  }}
+                  className="min-h-touch gap-intra px-gutter py-intra"
+                >
+                  <Icon aria-hidden="true" className="size-4 shrink-0 text-muted-foreground" />
+                  <span className="grid min-w-0 flex-1 gap-0.5">
+                    <span className="truncate text-sm font-medium text-foreground">{item.label}</span>
+                    <span className="truncate font-mono text-xs text-muted-foreground">{item.href}</span>
+                  </span>
+                </CommandItem>
+              )
+            })}
+          </CommandGroup>
+        ) : null}
+        {matchingQuickActions.length > 0 ? (
+          <CommandGroup heading="Quick Actions">
+            {matchingQuickActions.map((action) => {
+              const Icon = action.icon
+              const value = `ae-action:${action.id}`
+              return (
+                <CommandItem
+                  key={value}
+                  value={value}
+                  disabled={!isActive}
+                  onSelect={() => {
+                    pendingSelectionIntentRef.current = null
+                    if (action.id === 'toggle-theme') onToggleTheme?.()
+                    else if (action.href !== undefined) onNavigate?.(action.href)
+                  }}
+                  className="min-h-touch gap-intra px-gutter py-intra"
+                >
+                  <Icon aria-hidden="true" className="size-4 shrink-0 text-muted-foreground" />
+                  <span className="grid min-w-0 flex-1 gap-0.5">
+                    <span className="truncate text-sm font-medium text-foreground">{action.label}</span>
+                    <span className="truncate text-xs text-muted-foreground">{action.description}</span>
+                  </span>
+                </CommandItem>
+              )
+            })}
+          </CommandGroup>
+        ) : null}
         {choices.length > 0 ? (
           <CommandGroup heading={groupHeading}>
             {choices.map((choice) => {
@@ -359,7 +555,8 @@ export function ToolsSearchPage({
               )
             })}
           </CommandGroup>
-        ) : (
+        ) : null}
+        {showCommandEmpty ? (
           <CommandEmpty>
             <EmptySearchState
               state={state}
@@ -369,7 +566,7 @@ export function ToolsSearchPage({
               onRetry={() => setSearchAttempt((attempt) => attempt + 1)}
             />
           </CommandEmpty>
-        )}
+        ) : null}
       </CommandList>
     </Command>
   )
@@ -475,9 +672,12 @@ function SearchRecovery({
         >
           Clear search
         </Button>
-        <Button asChild variant="secondary" size="sm" className="min-h-touch">
-          <Link to="/market">Browse current Tools</Link>
-        </Button>
+        <Link
+          to="/market"
+          className={cn(buttonVariants({ variant: 'secondary', size: 'sm' }), 'min-h-touch')}
+        >
+          Browse current Tools
+        </Link>
       </div>
     </div>
   )

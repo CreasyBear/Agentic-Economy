@@ -4,7 +4,9 @@ import type { FormEvent, RefObject } from 'react'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { AeEmptyState } from '@/components/ae/feedback/AeEmptyState'
 import { Button } from '@/components/ui/button'
+import { buttonVariants } from '@/components/ui/button-variants'
 import { Input } from '@/components/ui/input'
+import { cn } from '@/lib/utils'
 
 export type ProviderConnectionInspection = Readonly<{
   digest: string
@@ -149,9 +151,12 @@ export function AeProviderConnectionForm({
           title="Provider identity is required to connect"
           description="Create an unpublished provider workspace, then return here to inspect and claim the x402 endpoint."
           action={
-            <Button asChild className="min-h-touch">
-              <Link to="/owner/operations">Create provider workspace</Link>
-            </Button>
+            <Link
+              to="/owner/operations"
+              className={cn(buttonVariants(), 'min-h-touch')}
+            >
+              Create provider workspace
+            </Link>
           }
         />
       )}

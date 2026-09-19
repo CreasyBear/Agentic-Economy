@@ -18,6 +18,7 @@ export {
 export {
   admitTaxInvoiceIssuance,
   calculateAudGstSplit,
+  formatAbnDisplay,
   isValidAbn,
   normalizeAbn,
 } from './internal/tax-invoice-control'

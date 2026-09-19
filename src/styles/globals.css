@@ -279,7 +279,7 @@
   --secondary-foreground: var(--ae-fg);
   --muted: var(--ae-surface-sunken);
   --muted-foreground: var(--ae-muted-fg);
-  --accent: var(--ae-surface-sunken);
+  --accent: var(--ae-surface-raised);
   --accent-foreground: var(--ae-fg);
   --border: var(--ae-border);
   --input: var(--ae-border);
@@ -355,10 +355,14 @@
   }
 }
 
-/* Route view transitions: the persistent frame does not animate; only the content region cross-fades on the 220ms ladder. */
+/* Route view transitions: the persistent frame (header & sidebar) does not animate; only the content region cross-fades on the 220ms ladder. */
 @media (prefers-reduced-motion: no-preference) {
   [data-shell="app-header"] { view-transition-name: ae-app-header; }
   ::view-transition-group(ae-app-header) { animation: none; }
+
+  [data-slot="sidebar"] { view-transition-name: ae-operator-sidebar; }
+  ::view-transition-group(ae-operator-sidebar) { animation: none; }
+
   ::view-transition-old(root), ::view-transition-new(root) { animation-duration: var(--motion-duration-base); animation-timing-function: var(--motion-ease-standard); }
 }
 @media (prefers-reduced-motion: reduce) {

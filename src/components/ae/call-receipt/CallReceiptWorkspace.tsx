@@ -2,7 +2,8 @@ import { Link } from '@tanstack/react-router'
 import type { ReactNode } from 'react'
 
 import { AeOperatorPage } from '@/components/ae/layout/AeOperatorPage'
-import { Button } from '@/components/ui/button'
+import { buttonVariants } from '@/components/ui/button-variants'
+import { cn } from '@/lib/utils'
 
 export function CallReceiptWorkspace({
   callRef,
@@ -23,9 +24,12 @@ export function CallReceiptWorkspace({
       currentPath={`/calls/${encodeURIComponent(callRef)}`}
       breadcrumbs={[{ label: 'Calls', href: '/activity' }, { label: 'Call receipt' }]}
       actions={(
-        <Button asChild variant="outline" className="min-h-touch">
-          <Link to="/activity">Back to Calls</Link>
-        </Button>
+        <Link
+          to="/activity"
+          className={cn(buttonVariants({ variant: 'outline' }), 'min-h-touch')}
+        >
+          Back to Calls
+        </Link>
       )}
       pending={pending}
     >

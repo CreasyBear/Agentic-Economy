@@ -2,6 +2,8 @@ import { Link } from '@tanstack/react-router'
 
 import { AePageState } from '@/components/ae/layout/AePageState'
 import { Button } from '@/components/ui/button'
+import { buttonVariants } from '@/components/ui/button-variants'
+import { cn } from '@/lib/utils'
 import { formatDisplayAmount } from '@/modules/money/public'
 
 export type FundingReturnViewState =
@@ -19,9 +21,9 @@ export type FundingReturnViewState =
     }>
 
 const OPEN_BALANCE_ACTION = (
-  <Button asChild className="min-h-touch">
-    <Link to="/owner/credit">Open Balance</Link>
-  </Button>
+  <Link to="/owner/credit" className={cn(buttonVariants(), 'min-h-touch')}>
+    Open Balance
+  </Link>
 )
 
 export function AeFundingReturnState({
@@ -55,9 +57,9 @@ export function AeFundingReturnState({
         title="Funding link unavailable"
         description="This funding link is invalid or no longer available. Return to the agent that provided it for a current link."
         action={(
-          <Button asChild className="min-h-touch">
-            <Link to="/market">Open Market</Link>
-          </Button>
+          <Link to="/market" className={cn(buttonVariants(), 'min-h-touch')}>
+            Open Market
+          </Link>
         )}
       />
     )

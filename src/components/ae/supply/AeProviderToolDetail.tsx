@@ -9,6 +9,8 @@ import { AeToolTestPlayground } from './AeToolTestPlayground'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { buttonVariants } from '@/components/ui/button-variants'
+import { cn } from '@/lib/utils'
 import { formatTimestamp } from '@/lib/ui/format-time'
 import {
   providerToolReasonPresentation,
@@ -215,11 +217,25 @@ function PrimaryAction({
   onUpdatePrice?: () => void
 }>) {
   if (status.ownerHandoff !== undefined) {
-    return <Button asChild className="min-h-touch w-fit"><a href={status.ownerHandoff.cta}>{status.ownerHandoff.ctaLabel}</a></Button>
+    return (
+      <a
+        href={status.ownerHandoff.cta}
+        className={cn(buttonVariants(), 'min-h-touch w-fit')}
+      >
+        {status.ownerHandoff.ctaLabel}
+      </a>
+    )
   }
   switch (status.continuation?.action) {
     case 'supply.source.preview':
-      return <Button asChild className="min-h-touch w-fit"><a href={resumeHref ?? '/owner/operations/new'}>Continue setup</a></Button>
+      return (
+        <a
+          href={resumeHref ?? '/owner/operations/new'}
+          className={cn(buttonVariants(), 'min-h-touch w-fit')}
+        >
+          Continue setup
+        </a>
+      )
     case 'supply.status':
     case 'supply.offboarding.status':
       return onRefresh === undefined ? null : <Button type="button" className="min-h-touch w-fit" disabled={pending} onClick={onRefresh}>{pending ? 'Refreshing…' : 'Refresh status'}</Button>

@@ -40,16 +40,26 @@ export function AeSecurityHistoryTable({
         emptyMessage={emptyMessage}
         maxHeight="32rem"
       />
-      {loadFailed ? (
-        <p className="text-sm text-muted-foreground" role="status">
-          Older events could not be loaded. Known security history remains visible.
-        </p>
-      ) : null}
+      <div className="min-h-[2.5rem]" role="status" aria-live="polite">
+        {loadFailed ? (
+          <div className="grid gap-1 text-sm text-muted-foreground">
+            <p>
+              <strong>What happened:</strong> Older security events could not be loaded.
+            </p>
+            <p className="font-mono text-xs tabular-nums">
+              <strong>Financial impact:</strong> A$0.00 affected — known security history remains visible.
+            </p>
+            <p>
+              <strong>Next step:</strong> Check your connection and retry older events.
+            </p>
+          </div>
+        ) : null}
+      </div>
       {isDone ? null : (
         <Button
           type="button"
           variant="secondary"
-          className="justify-self-start"
+          className="min-h-touch min-w-[11rem] justify-self-start enabled:active:scale-[0.98] transition-transform duration-100 ease-out motion-reduce:transition-none motion-reduce:active:scale-100"
           disabled={loading}
           onClick={onLoadMore}
         >

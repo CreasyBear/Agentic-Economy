@@ -5,6 +5,8 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { AeEmptyState } from '@/components/ae/feedback/AeEmptyState'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { buttonVariants } from '@/components/ui/button-variants'
+import { cn } from '@/lib/utils'
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput } from '@/components/ui/input-group'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
@@ -248,7 +250,7 @@ function DirectoryMarketplace({ page, search, workspace = false, activeView, hom
         <TabsContent value="discover" className="pt-7">
           {overview?.kind === 'ok' ? <DirectoryIndexDiscovery overview={overview} onSave={saved.toggleSavedTool} isSaved={saved.isSaved} onCompare={toggleComparison}
             isComparing={resource => comparison.some(item => item.entry.resource === resource)} compareDisabled={resource => comparison.length >= 4 && !comparison.some(item => item.entry.resource === resource)} /> : null}
-          {home === undefined ? <AeEmptyState title="Explore the Tool catalogue" description="Open All Tools to browse the current directory, or search for a service above." action={<Button asChild variant="outline"><Link to={marketPath} search={{ view: 'tools' }}>Browse all Tools</Link></Button>} /> : <DirectoryHomeDiscovery home={home} onSave={saved.toggleSavedTool} isSaved={saved.isSaved} onCompare={toggleComparison}
+          {home === undefined ? <AeEmptyState title="Explore the Tool catalogue" description="Open All Tools to browse the current directory, or search for a service above." action={<Link to={marketPath} search={{ view: 'tools' }} className={cn(buttonVariants({ variant: 'outline' }))}>Browse all Tools</Link>} /> : <DirectoryHomeDiscovery home={home} onSave={saved.toggleSavedTool} isSaved={saved.isSaved} onCompare={toggleComparison}
             isComparing={resource => comparison.some(item => item.entry.resource === resource)} compareDisabled={resource => comparison.length >= 4 && !comparison.some(item => item.entry.resource === resource)} />}
         </TabsContent>
         <TabsContent value="saved" className="pt-5">
@@ -280,12 +282,12 @@ function DirectoryMarketplace({ page, search, workspace = false, activeView, hom
               {indexed && search.query !== undefined ? <p className="mt-1 text-xs text-muted-foreground">Keyword search across the catalogue</p> : null}
               {page.kind === 'ok' && tabItems.length > 0 ? <p className="mt-1 text-xs text-muted-foreground">{indexed ? `${tabItems.length.toLocaleString()} Tools loaded` : page.mode === 'search' || !browse ? `${page.items.length} matching Tools` : `Showing ${page.offset + 1}–${page.offset + page.items.length}${page.total === undefined ? '' : ` of ${page.total.toLocaleString()}`}`}</p> : null}
             </div>
-            {!browse ? <Button asChild variant="ghost" size="sm"><Link to={marketPath} search={{ view: tab }}><XIcon />Clear search & filters</Link></Button> : null}
+            {!browse ? <Link to={marketPath} search={{ view: tab }} className={cn(buttonVariants({ variant: 'ghost', size: 'sm' }))}><XIcon />Clear search & filters</Link> : null}
           </div>
           {search.network !== undefined || search.maxUsdPrice !== undefined ? <div className="mb-4 flex flex-wrap gap-2">{search.network === undefined ? null : <Badge variant="outline">Network: {overview?.kind === 'ok' ? overview.networks.find(item => item.key === search.network)?.label ?? search.network : search.network}</Badge>}{search.maxUsdPrice === undefined ? null : <Badge variant="outline">Up to {search.maxUsdPrice} USDC</Badge>}</div> : null}
           {page.kind === 'unavailable' ? <AeEmptyState icon={<SearchIcon />} title={page.reason === 'query_invalid' ? 'Check your search' : 'Catalogue temporarily unavailable'}
             description={page.reason === 'query_invalid' ? 'Use a service description without personal identifiers.' : search.indexCursor !== undefined ? 'This catalogue page could not be loaded. Refresh results to start again with the same search and filters.' : 'The discovery service could not be reached. Try again.'}
-            action={<Button asChild variant="outline"><Link to={marketPath} reloadDocument search={search.indexCursor === undefined ? search : { ...indexedSearch(), view: tab }}>{search.indexCursor === undefined ? "Try again" : "Refresh results"}</Link></Button>} /> : <>
+            action={<Link to={marketPath} reloadDocument search={search.indexCursor === undefined ? search : { ...indexedSearch(), view: tab }} className={cn(buttonVariants({ variant: 'outline' }))}>{search.indexCursor === undefined ? "Try again" : "Refresh results"}</Link>} /> : <>
             {page.partialResults === true ? <p role="status" className="mb-4 text-sm text-muted-foreground">Coinbase returned its top matches. Refine your search to find more Tools.</p> : null}
             {tabItems.length === 0 ? <AeEmptyState title={indexed && catalogue.kind === 'ok' && !catalogue.isDone ? 'More of the catalogue remains' : 'No matching Tools'} description={indexed && catalogue.kind === 'ok' && !catalogue.isDone ? 'No matches in this portion. Continue to the next page to check the remaining Tools.' : 'Try a different description or broaden your filters.'} /> : tab === 'providers'
               ? <DirectoryProviderCards entries={tabItems} onSelect={provider => { void navigate({ to: marketPath, search: { ...sourceInput, provider, offset: 0 } }) }} />
@@ -299,8 +301,8 @@ function DirectoryMarketplace({ page, search, workspace = false, activeView, hom
                   {loadMore.status === 'loading' ? <Loader2Icon className="animate-spin" /> : null}Load more<ArrowRightIcon />
                 </Button></div>}
               </> : <>
-              <span>{page.previousOffset === undefined ? null : <Button asChild variant="outline"><Link to={marketPath} search={{ ...sourceInput, view: tab, offset: page.previousOffset }}><ArrowLeftIcon />Previous page</Link></Button>}</span>
-              {page.nextOffset === undefined ? null : <Button asChild variant="outline"><Link to={marketPath} search={{ ...sourceInput, view: tab, offset: page.nextOffset }}>Next page<ArrowRightIcon /></Link></Button>}
+              <span>{page.previousOffset === undefined ? null : <Link to={marketPath} search={{ ...sourceInput, view: tab, offset: page.previousOffset }} className={cn(buttonVariants({ variant: 'outline' }))}><ArrowLeftIcon />Previous page</Link>}</span>
+              {page.nextOffset === undefined ? null : <Link to={marketPath} search={{ ...sourceInput, view: tab, offset: page.nextOffset }} className={cn(buttonVariants({ variant: 'outline' }))}>Next page<ArrowRightIcon /></Link>}
             </>}
             </nav>
             <p className="mt-4 text-xs text-muted-foreground">Directory: Coinbase Bazaar. Descriptions and payment requirements are published by providers.</p>

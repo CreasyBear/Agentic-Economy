@@ -1,8 +1,17 @@
+import { Field as BaseField } from '@base-ui/react/field'
 import { makeFunctionReference } from 'convex/server'
 import { useMutation, useQuery } from 'convex/react'
-import { useMemo, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 
 import { AeConfirmDialog } from '@/components/ae/feedback/AeConfirmDialog'
+import { TACTILE } from '@/components/ae/settings/OwnerNotificationSettings'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { Skeleton } from '@/components/ui/skeleton'
+import { cn } from '@/lib/utils'
+import { toast } from '@/lib/ui/toast'
 
 export type WorkspaceDecommissionEligibilityView = Readonly<{
   accountRef: string
@@ -27,14 +36,36 @@ export type WorkspaceDecommissionEligibilityView = Readonly<{
   }>[]
 }>
 
-const FENCE_LABELS: Record<WorkspaceDecommissionEligibilityView['fences'][number], string> = {
-  unsettled_provider_obligations: 'Unsettled provider obligations',
-  unwithdrawn_earnings: 'Unwithdrawn earnings',
-  open_calls: 'Open calls',
-  unreleased_call_holds: 'Unreleased call holds',
-  in_flight_funding: 'In-flight funding',
-  open_reconciliation: 'Open reconciliation',
+const FENCE_MESSAGES: Record<WorkspaceDecommissionEligibilityView['fences'][number], string> = {
+  unsettled_provider_obligations: 'Provider obligations are still unsettled.',
+  unwithdrawn_earnings: 'Provider earnings have not been withdrawn.',
+  open_calls: 'One or more Calls are still open.',
+  unreleased_call_holds: 'Call holds have not been released.',
+  in_flight_funding: 'A funding command is still in flight.',
+  open_reconciliation: 'A reconciliation case is still open.',
 }
+
+type DiagnosticTriplet = Readonly<{
+  whatHappened: string
+  financialImpact: string
+  nextStep: string
+}>
+
+const CLOSE_FAILURE_DIAGNOSTIC: DiagnosticTriplet = {
+  whatHappened: 'Workspace close did not complete.',
+  financialImpact: 'A$0.00 moved — prepaid credit and balances are unchanged.',
+  nextStep: 'Resolve the listed blockers or try again in a moment.',
+}
+
+const TRANSFER_FAILURE_DIAGNOSTIC: DiagnosticTriplet = {
+  whatHappened: 'Ownership transfer did not complete.',
+  financialImpact: 'A$0.00 moved — balances and Calls stayed on this workspace.',
+  nextStep: 'Confirm the successor is still an active member and try again.',
+}
+
+const OWNER_ONLY_COPY = 'Only the workspace owner can close the workspace or transfer ownership.'
+
+const SELECT_CLASS = `rounded-md border border-input bg-background px-3 py-2 ${TACTILE}`
 
 function correlationRef(label: string): string {
   return `ui:workspace-danger:${label}`
@@ -76,6 +107,26 @@ const transferWorkspaceOwnershipRef = makeFunctionReference<
   unknown
 >('workspaceAccounts:transferWorkspaceOwnership')
 
+function DiagnosticSlot({ diagnostic }: Readonly<{ diagnostic: DiagnosticTriplet | null }>) {
+  return (
+    <div className="min-h-[2.5rem]" role="status" aria-live="polite">
+      {diagnostic ? (
+        <div className="grid gap-1 text-sm text-muted-foreground">
+          <p>
+            <strong>What happened:</strong> {diagnostic.whatHappened}
+          </p>
+          <p className="font-mono text-xs tabular-nums">
+            <strong>Financial impact:</strong> {diagnostic.financialImpact}
+          </p>
+          <p>
+            <strong>Next step:</strong> {diagnostic.nextStep}
+          </p>
+        </div>
+      ) : null}
+    </div>
+  )
+}
+
 export function WorkspaceDangerZone() {
   const eligibility = useQuery(readWorkspaceDecommissionEligibilityRef)
   const closeWorkspaceMutation = useMutation(closeWorkspaceRef)
@@ -84,77 +135,132 @@ export function WorkspaceDangerZone() {
   const [confirmationName, setConfirmationName] = useState('')
   const [successorPrincipalRef, setSuccessorPrincipalRef] = useState('')
   const [showCloseConfirmDialog, setShowCloseConfirmDialog] = useState(false)
+  const [showTransferConfirmDialog, setShowTransferConfirmDialog] = useState(false)
+  const [closePending, setClosePending] = useState(false)
+  const [transferPending, setTransferPending] = useState(false)
+  const [closeDiagnostic, setCloseDiagnostic] = useState<DiagnosticTriplet | null>(null)
+  const [transferDiagnostic, setTransferDiagnostic] = useState<DiagnosticTriplet | null>(null)
 
-  const fenceLabels = useMemo(() => {
+  const closeAttemptIdempotencyRef = useRef<string | null>(null)
+  const transferAttemptIdempotencyRef = useRef<string | null>(null)
+
+  const fenceMessages = useMemo(() => {
     if (eligibility === undefined) return []
-    return eligibility.fences.map((fence) => FENCE_LABELS[fence])
+    return eligibility.fences.map((fence) => FENCE_MESSAGES[fence])
   }, [eligibility])
 
   if (eligibility === undefined) {
-    return null
+    return (
+      <div className="grid min-h-[28rem] gap-section" aria-busy="true">
+        <Skeleton className="min-h-[12rem] w-full" />
+        <Skeleton className="min-h-[12rem] w-full" />
+      </div>
+    )
   }
 
   const closeDisabled = eligibility.fences.length > 0
     || confirmationName !== eligibility.displayName
+    || closePending
 
   const selectedSuccessor = successorPrincipalRef.length > 0
     ? successorPrincipalRef
     : eligibility.transferCandidates[0]?.principalRef ?? ''
+
+  const successorName =
+    eligibility.transferCandidates.find((candidate) => candidate.principalRef === selectedSuccessor)
+      ?.displayName
+    ?? 'the selected member'
+
+  const fencesPresent = eligibility.fences.length > 0
 
   return (
     <div className="grid gap-section">
       <section className="grid gap-4">
         <h2 className="text-lg font-semibold tracking-tight">Close workspace</h2>
         {!eligibility.callerIsOwner ? (
-          <p className="text-muted-foreground text-sm">
-            Only the workspace owner can close the workspace or transfer ownership.
-          </p>
+          <p className="text-muted-foreground text-sm">{OWNER_ONLY_COPY}</p>
         ) : (
           <>
-            {fenceLabels.length > 0 && (
-              <ul className="list-disc pl-5 text-sm">
-                {fenceLabels.map((label) => (
-                  <li key={label}>{label}</li>
-                ))}
-              </ul>
+            {fencesPresent ? (
+              <div className="grid gap-2">
+                <div className="flex flex-wrap items-center gap-2">
+                  <Badge variant="destructive">Close blocked</Badge>
+                  <span className="font-mono text-xs tabular-nums text-muted-foreground">
+                    A$0.00 moved — close is refused until these clear.
+                  </span>
+                </div>
+                <ul className="list-disc pl-5 text-sm text-muted-foreground">
+                  {fenceMessages.map((message) => (
+                    <li key={message}>{message}</li>
+                  ))}
+                </ul>
+              </div>
+            ) : (
+              <div className="grid gap-2">
+                <Badge variant="secondary" className="font-mono tabular-nums">
+                  A$0.00 active obligations
+                </Badge>
+                <p className="text-muted-foreground text-sm">
+                  Close is allowed. This action does not move money until you confirm.
+                </p>
+              </div>
             )}
-            <label className="grid gap-2 text-sm">
-              Type workspace name to confirm
-              <input
+            <BaseField.Root className="grid gap-2 text-sm">
+              <Label>Type workspace name to confirm</Label>
+              <Input
                 type="text"
                 aria-label="Type workspace name to confirm"
                 value={confirmationName}
-                onChange={(event) => setConfirmationName(event.target.value)}
-                className="rounded-md border border-input bg-background px-3 py-2"
+                onChange={(event) => {
+                  setConfirmationName(event.target.value)
+                  setCloseDiagnostic(null)
+                }}
+                className={cn(TACTILE)}
               />
-            </label>
-            <button
+            </BaseField.Root>
+            <Button
               type="button"
+              variant="destructive"
               disabled={closeDisabled}
-              className="inline-flex w-fit rounded-md bg-destructive px-4 py-2 text-sm font-medium text-destructive-foreground disabled:opacity-50"
+              className={cn('w-fit', TACTILE)}
               onClick={() => {
+                closeAttemptIdempotencyRef.current = idempotencyRef(`close:${crypto.randomUUID()}`)
+                setCloseDiagnostic(null)
                 setShowCloseConfirmDialog(true)
               }}
             >
               Close workspace
-            </button>
+            </Button>
+            <DiagnosticSlot diagnostic={closeDiagnostic} />
             <AeConfirmDialog
               open={showCloseConfirmDialog}
               onOpenChange={setShowCloseConfirmDialog}
               title="Close Workspace?"
-              description={`Are you sure you want to permanently close "${eligibility.displayName}"? All tools, API keys, and active delegations will be immediately terminated.`}
+              description={`Are you sure you want to permanently close "${eligibility.displayName}"? All tools, API keys, and active delegations will be immediately terminated. A$0.00 moved by opening this dialog — prepaid credit is not spent until close succeeds.`}
               confirmLabel="Permanently Close Workspace"
               confirmVariant="destructive"
+              pending={closePending}
               onConfirm={async () => {
-                await closeWorkspaceMutation({
-                  confirmationName,
-                  expectedAccountRevision: eligibility.accountRevision,
-                  expectedOwnershipRevision: eligibility.ownershipRevision,
-                  correlationRef: correlationRef('close'),
-                  idempotencyRef: idempotencyRef(`close:${Date.now()}`),
-                  factorEvidence: { firstFactorAgeMinutes: 1, secondFactorAgeMinutes: 1 },
-                })
-                setShowCloseConfirmDialog(false)
+                const attemptRef = closeAttemptIdempotencyRef.current ?? idempotencyRef(`close:${crypto.randomUUID()}`)
+                setClosePending(true)
+                setCloseDiagnostic(null)
+                try {
+                  await closeWorkspaceMutation({
+                    confirmationName,
+                    expectedAccountRevision: eligibility.accountRevision,
+                    expectedOwnershipRevision: eligibility.ownershipRevision,
+                    correlationRef: correlationRef('close'),
+                    idempotencyRef: attemptRef,
+                    factorEvidence: { firstFactorAgeMinutes: 1, secondFactorAgeMinutes: 1 },
+                  })
+                  toast.success('Workspace closed')
+                  setShowCloseConfirmDialog(false)
+                } catch {
+                  setCloseDiagnostic(CLOSE_FAILURE_DIAGNOSTIC)
+                  toast.error('Workspace was not closed')
+                } finally {
+                  setClosePending(false)
+                }
               }}
             />
           </>
@@ -163,15 +269,20 @@ export function WorkspaceDangerZone() {
 
       <section className="grid gap-4">
         <h2 className="text-lg font-semibold tracking-tight">Transfer ownership</h2>
-        {eligibility.callerIsOwner && (
+        {!eligibility.callerIsOwner ? (
+          <p className="text-muted-foreground text-sm">{OWNER_ONLY_COPY}</p>
+        ) : (
           <>
-            <label className="grid gap-2 text-sm">
-              New workspace owner
+            <BaseField.Root className="grid gap-2 text-sm">
+              <Label>New workspace owner</Label>
               <select
                 aria-label="New workspace owner"
                 value={selectedSuccessor}
-                onChange={(event) => setSuccessorPrincipalRef(event.target.value)}
-                className="rounded-md border border-input bg-background px-3 py-2"
+                onChange={(event) => {
+                  setSuccessorPrincipalRef(event.target.value)
+                  setTransferDiagnostic(null)
+                }}
+                className={SELECT_CLASS}
               >
                 {eligibility.transferCandidates.map((candidate) => (
                   <option key={candidate.principalRef} value={candidate.principalRef}>
@@ -179,24 +290,56 @@ export function WorkspaceDangerZone() {
                   </option>
                 ))}
               </select>
-            </label>
-            <button
+            </BaseField.Root>
+            <Button
               type="button"
-              className="inline-flex w-fit rounded-md border border-input px-4 py-2 text-sm font-medium"
-              disabled={eligibility.transferCandidates.length === 0 || selectedSuccessor.length === 0}
+              variant="outline"
+              className={cn('w-fit', TACTILE)}
+              disabled={
+                eligibility.transferCandidates.length === 0
+                || selectedSuccessor.length === 0
+                || transferPending
+              }
               onClick={() => {
-                void transferOwnershipMutation({
-                  successorPrincipalRef: selectedSuccessor,
-                  expectedAccountRevision: eligibility.accountRevision,
-                  expectedOwnershipRevision: eligibility.ownershipRevision,
-                  correlationRef: correlationRef('transfer'),
-                  idempotencyRef: idempotencyRef(`transfer:${Date.now()}`),
-                  factorEvidence: { firstFactorAgeMinutes: 1, secondFactorAgeMinutes: 1 },
-                })
+                transferAttemptIdempotencyRef.current = idempotencyRef(`transfer:${crypto.randomUUID()}`)
+                setTransferDiagnostic(null)
+                setShowTransferConfirmDialog(true)
               }}
             >
               Transfer ownership
-            </button>
+            </Button>
+            <DiagnosticSlot diagnostic={transferDiagnostic} />
+            <AeConfirmDialog
+              open={showTransferConfirmDialog}
+              onOpenChange={setShowTransferConfirmDialog}
+              title="Transfer workspace ownership?"
+              description={`Are you sure you want to transfer ownership to ${successorName}? A$0.00 moved — ownership changes, balances and Calls stay on this workspace. You will remain an active member.`}
+              confirmLabel="Transfer ownership"
+              pending={transferPending}
+              onConfirm={async () => {
+                const attemptRef =
+                  transferAttemptIdempotencyRef.current ?? idempotencyRef(`transfer:${crypto.randomUUID()}`)
+                setTransferPending(true)
+                setTransferDiagnostic(null)
+                try {
+                  await transferOwnershipMutation({
+                    successorPrincipalRef: selectedSuccessor,
+                    expectedAccountRevision: eligibility.accountRevision,
+                    expectedOwnershipRevision: eligibility.ownershipRevision,
+                    correlationRef: correlationRef('transfer'),
+                    idempotencyRef: attemptRef,
+                    factorEvidence: { firstFactorAgeMinutes: 1, secondFactorAgeMinutes: 1 },
+                  })
+                  toast.success('Workspace ownership transferred')
+                  setShowTransferConfirmDialog(false)
+                } catch {
+                  setTransferDiagnostic(TRANSFER_FAILURE_DIAGNOSTIC)
+                  toast.error('Ownership was not transferred')
+                } finally {
+                  setTransferPending(false)
+                }
+              }}
+            />
           </>
         )}
       </section>

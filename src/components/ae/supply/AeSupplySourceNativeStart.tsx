@@ -3,6 +3,7 @@ import { CheckIcon } from 'lucide-react'
 import { AeInlineState } from '@/components/ae/feedback/AeInlineState'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
+import { buttonVariants } from '@/components/ui/button-variants'
 import { cn } from '@/lib/utils'
 import type { SupplySourceInput } from '@/modules/capability-supply/source-preview'
 import { SupplyCandidateSection } from './SupplyCandidateSection'
@@ -203,13 +204,20 @@ function SupplyFlowFeedback({ error, requiredAction, success, publicationLocked 
 }>) {
   return (
     <>
-      {error === undefined ? null : <Alert variant="destructive" role="alert"><AlertTitle>Action required</AlertTitle><AlertDescription><p>{error}</p>{publicationLocked ? <Button asChild variant="outline" className="mt-4 min-h-touch"><a href="/owner/operations">Open Tools</a></Button> : null}</AlertDescription></Alert>}
+      {error === undefined ? null : <Alert variant="destructive" role="alert"><AlertTitle>Action required</AlertTitle><AlertDescription><p>{error}</p>{publicationLocked ? <a href="/owner/operations" className={cn(buttonVariants({ variant: 'outline' }), 'mt-4 min-h-touch')}>Open Tools</a> : null}</AlertDescription></Alert>}
       {requiredAction === undefined ? null : (
         <Alert role="status">
           <AlertTitle>{requiredAction.title}</AlertTitle>
           <AlertDescription>
             <p>{requiredAction.description}</p>
-            {requiredAction.cta === null ? null : <Button asChild variant="secondary" className="mt-4 min-h-touch"><a href={requiredAction.cta}>{requiredAction.ctaLabel}</a></Button>}
+            {requiredAction.cta === null ? null : (
+              <a
+                href={requiredAction.cta}
+                className={cn(buttonVariants({ variant: 'secondary' }), 'mt-4 min-h-touch')}
+              >
+                {requiredAction.ctaLabel}
+              </a>
+            )}
           </AlertDescription>
         </Alert>
       )}
@@ -218,7 +226,12 @@ function SupplyFlowFeedback({ error, requiredAction, success, publicationLocked 
           <AlertTitle>Submitted</AlertTitle>
           <AlertDescription className="grid gap-related">
             <p>{success}</p>
-            <Button asChild variant="secondary" className="w-fit min-h-touch"><a href="/owner/operations">Open Tools</a></Button>
+            <a
+              href="/owner/operations"
+              className={cn(buttonVariants({ variant: 'secondary' }), 'w-fit min-h-touch')}
+            >
+              Open Tools
+            </a>
           </AlertDescription>
         </Alert>
       )}

@@ -324,7 +324,7 @@ describe('/agent-access/authorize consent loading', () => {
     expect(screen.getByText('Maximum daily spend: USD 5.00. Maximum calls per hour: 42.')).toBeTruthy()
     expect(screen.getAllByText(/Access expires in 2 hours after issue/).length).toBeGreaterThan(0)
     expect(screen.queryByText(/\$1 each/)).toBeNull()
-    expect(screen.getByRole('radio', { name: /Work within limits/ }).getAttribute('data-state')).toBe('checked')
+    expect(screen.getByRole('radio', { name: /Work within limits/ })).toHaveAttribute('aria-checked', 'true')
     fireEvent.click(screen.getByRole('button', { name: 'Connect agent' }))
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalledOnce())
@@ -427,7 +427,7 @@ describe('/agent-access/authorize consent loading', () => {
 
     renderComponent()
 
-    expect((await screen.findByRole('radio', { name: /Replace credential/ })).getAttribute('data-state')).toBe('checked')
+    expect(await screen.findByRole('radio', { name: /Replace credential/ })).toHaveAttribute('aria-checked', 'true')
     expect(screen.getByRole('combobox', { name: 'Agent' }).textContent).toContain('Research agent')
   })
 
@@ -447,7 +447,7 @@ describe('/agent-access/authorize consent loading', () => {
 
     renderComponent()
 
-    expect((await screen.findByRole('radio', { name: /Replace credential/ })).getAttribute('data-state')).toBe('checked')
+    expect(await screen.findByRole('radio', { name: /Replace credential/ })).toHaveAttribute('aria-checked', 'true')
     expect(screen.getByRole('button', { name: 'Replace credential' }).hasAttribute('disabled')).toBe(true)
   })
 
@@ -487,7 +487,7 @@ describe('/agent-access/authorize consent loading', () => {
 
     await waitFor(() => expect(approveButton.hasAttribute('disabled')).toBe(false))
     expect(fetchMock).not.toHaveBeenCalled()
-    expect(screen.getByRole('radio', { name: /Work within limits/ }).getAttribute('data-state')).toBe('checked')
+    expect(screen.getByRole('radio', { name: /Work within limits/ })).toHaveAttribute('aria-checked', 'true')
     await waitFor(() => expect(document.activeElement).toBe(approveButton))
   })
 

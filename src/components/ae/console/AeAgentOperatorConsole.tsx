@@ -1,8 +1,10 @@
 'use client'
 
-import { useRef, useState, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 
-import { AeConfirmDialog } from '@/components/ae/feedback/AeConfirmDialog'
+import { AeConfirmDialog, TACTILE } from '@/components/ae/feedback/AeConfirmDialog'
+import { toast } from '@/lib/ui/toast'
+import { cn } from '@/lib/utils'
 import { AeFactList, type AeFact } from '@/components/ae/data/AeFactList'
 import { AeRecordSheet } from '@/components/ae/layout/AeRecordSheet'
 import { AeSection } from '@/components/ae/layout/AeSection'
@@ -102,8 +104,15 @@ export function AeAgentOperatorConsole({
     | Readonly<{ kind: 'agent'; principalRef: string; name: string }>
   >()
   const [revokePending, setRevokePending] = useState(false)
+  const [revocationMode, setRevocationMode] = useState<'drain' | 'freeze'>('drain')
+  const [revokeDiagnostic, setRevokeDiagnostic] = useState<{
+    whatHappened: string
+    financialImpact: string
+    nextStep: string
+  } | null>(null)
   const revokeTriggerRef = useRef<HTMLButtonElement>(null)
   const revokeInFlightRef = useRef(false)
+  const sheetDismissHandledRef = useRef(false)
   const routeControlled = getAgentHref !== undefined
   const selectedItem = routeControlled
     ? directoryItems.find((item) => item.principalRef === selectedPrincipalId)
@@ -111,6 +120,12 @@ export function AeAgentOperatorConsole({
   const selected = selectedItem === undefined
     ? undefined
     : directory.details.find(({ agent }) => agent.principalRef === selectedItem.principalRef)
+
+  useEffect(() => {
+    if (selected !== undefined) {
+      sheetDismissHandledRef.current = false
+    }
+  }, [selected])
 
   const approvalsSection = (
     <AeAgentApprovalsSection
@@ -132,18 +147,26 @@ export function AeAgentOperatorConsole({
     )
   }
 
+  function resetRevocationDialogState() {
+    setRevocationMode('drain')
+    setRevokeDiagnostic(null)
+  }
+
   function requestCredentialRevoke(item: AgentDetail, credentialRef: string, generation: number, trigger: HTMLButtonElement) {
     revokeTriggerRef.current = trigger
+    resetRevocationDialogState()
     setLifecycleTarget({ kind: 'credential', credentialRef, generation, name: item.agent.displayName })
   }
 
   function requestDisconnect(item: AgentDetail, trigger: HTMLButtonElement) {
     revokeTriggerRef.current = trigger
+    resetRevocationDialogState()
     setLifecycleTarget({ kind: 'agent', principalRef: item.agent.principalRef, name: item.agent.displayName })
   }
 
   function requestConnectionDisconnect(item: AgentDetail, connection: AgentConnectionReadback, trigger: HTMLButtonElement) {
     revokeTriggerRef.current = trigger
+    resetRevocationDialogState()
     setLifecycleTarget({
       kind: 'connection',
       connectionRef: connection.connectionRef,
@@ -153,16 +176,56 @@ export function AeAgentOperatorConsole({
     })
   }
 
+  function lifecycleConfirmLabel(
+    kind: 'credential' | 'connection' | 'agent',
+    mode: 'drain' | 'freeze',
+  ): string {
+    if (kind === 'agent') {
+      return mode === 'drain' ? 'Drain then remove' : 'Remove immediately'
+    }
+    if (kind === 'credential') {
+      return mode === 'drain' ? 'Drain then revoke' : 'Revoke immediately'
+    }
+    return mode === 'drain' ? 'Drain then disconnect' : 'Disconnect immediately'
+  }
+
   async function confirmLifecycle() {
     if (lifecycleTarget === undefined || revokeInFlightRef.current) return
     revokeInFlightRef.current = true
     setRevokePending(true)
+    setRevokeDiagnostic(null)
     try {
       if (lifecycleTarget.kind === 'credential') await onRevokeCredential(lifecycleTarget.credentialRef)
       else if (lifecycleTarget.kind === 'connection') {
         await onDisconnectConnection?.(lifecycleTarget.connectionRef, lifecycleTarget.revision)
       } else await onDisconnectAgent(lifecycleTarget.principalRef)
+
+      if (lifecycleTarget.kind === 'credential') toast.success('Credential revoked')
+      else if (lifecycleTarget.kind === 'connection') toast.success('Connection disconnected')
+      else toast.success('Agent access revoked')
+
       setLifecycleTarget(undefined)
+      resetRevocationDialogState()
+    } catch {
+      const triplet = lifecycleTarget.kind === 'credential'
+        ? {
+            whatHappened: 'Could not revoke this credential.',
+            financialImpact: 'A$0.00 affected — agent remains active',
+            nextStep: 'Try again. If this persists, refresh the directory and retry.',
+          }
+        : lifecycleTarget.kind === 'connection'
+          ? {
+              whatHappened: 'Could not disconnect this connection.',
+              financialImpact: 'A$0.00 affected — agent remains active',
+              nextStep: 'Try again. If this persists, refresh the directory and retry.',
+            }
+          : {
+              whatHappened: 'Could not revoke agent access.',
+              financialImpact: 'A$0.00 affected — agent remains active',
+              nextStep: 'Try again. If this persists, refresh the directory and retry.',
+            }
+      setRevokeDiagnostic(triplet)
+      toast.error(triplet.whatHappened)
     } finally {
       revokeInFlightRef.current = false
       setRevokePending(false)
@@ -214,7 +277,9 @@ export function AeAgentOperatorConsole({
       <AeRecordSheet
         open={selected !== undefined}
         onOpenChange={(open) => {
-          if (open) return
+          if (open || selected === undefined) return
+          if (sheetDismissHandledRef.current) return
+          sheetDismissHandledRef.current = true
           if (routeControlled) onClearSelectedPrincipal?.()
           else setLocalSelected(undefined)
         }}
@@ -247,9 +312,13 @@ export function AeAgentOperatorConsole({
               onDisconnect={(connection, trigger) => requestConnectionDisconnect(selected, connection, trigger)}
             />
             <Collapsible>
-              <CollapsibleTrigger asChild>
-                <Button type="button" variant="ghost" className="w-fit min-h-touch">Technical details</Button>
-              </CollapsibleTrigger>
+              <CollapsibleTrigger
+                render={
+                  <Button type="button" variant="ghost" className="w-fit min-h-touch">
+                    Technical details
+                  </Button>
+                }
+              />
               <CollapsibleContent className="grid gap-3 pt-2">
                 <AeFactList density="compact" facts={technicalAgentFacts(selected)} />
                 <AeAgentCredentialHistory
@@ -263,7 +332,7 @@ export function AeAgentOperatorConsole({
                   variant="destructive"
                   disabled={lifecyclePending !== undefined || selected.agent.status === 'disconnected'}
                   onClick={(event) => requestDisconnect(selected, event.currentTarget)}
-                  className="w-fit min-h-touch"
+                  className={cn('w-fit min-h-touch', TACTILE)}
                 >
                   Remove agent everywhere
                 </Button>
@@ -276,7 +345,10 @@ export function AeAgentOperatorConsole({
       <AeConfirmDialog
         open={lifecycleTarget !== undefined}
         onOpenChange={(open) => {
-          if (!open) setLifecycleTarget(undefined)
+          if (!open) {
+            setLifecycleTarget(undefined)
+            resetRevocationDialogState()
+          }
         }}
         title={lifecycleTarget === undefined
           ? 'Change agent access?'
@@ -292,15 +364,65 @@ export function AeAgentOperatorConsole({
             : lifecycleTarget.kind === 'connection'
               ? `Only this ${lifecycleTarget.connectorName} connection stops. Other connections for ${lifecycleTarget.name} remain usable.`
               : `Every active credential, grant, delegation, and provider key for ${lifecycleTarget.name} will be revoked. Historical activity remains readable.`}
-        confirmLabel={lifecycleTarget?.kind === 'credential'
-          ? 'Revoke credential'
-          : lifecycleTarget?.kind === 'connection'
-            ? 'Disconnect'
-            : 'Remove agent everywhere'}
+        confirmLabel={lifecycleTarget === undefined
+          ? 'Confirm'
+          : lifecycleConfirmLabel(lifecycleTarget.kind, revocationMode)}
         confirmVariant="destructive"
         pending={revokePending}
         onConfirm={confirmLifecycle}
         returnFocusRef={revokeTriggerRef}
+        {...(lifecycleTarget === undefined
+          ? {}
+          : {
+              financialImpact: (
+                <>
+                  <span className="font-mono tabular-nums">A$0.00</span>
+                  {' unreleased holds remain protected — in-flight calls finish or release immediately'}
+                </>
+              ),
+              diagnostic: revokeDiagnostic,
+              children: (
+                <div className="grid gap-2" role="group" aria-label="Revocation mode">
+                  {([
+                    {
+                      id: 'drain' as const,
+                      title: 'Graceful Drain',
+                      detail: 'New admissions stop now. In-flight Calls may finish within 30s.',
+                    },
+                    {
+                      id: 'freeze' as const,
+                      title: 'Immediate Freeze',
+                      detail: 'Halts immediately. New Calls are refused now.',
+                    },
+                  ]).map((option) => {
+                    const selected = revocationMode === option.id
+                    return (
+                      <div
+                        key={option.id}
+                        role="button"
+                        tabIndex={-1}
+                        aria-pressed={selected}
+                        className={cn(
+                          'cursor-pointer rounded-md border p-3 text-left text-sm',
+                          selected ? 'border-foreground bg-muted' : 'border-border bg-background',
+                          TACTILE,
+                        )}
+                        onClick={() => setRevocationMode(option.id)}
+                        onKeyDown={(event) => {
+                          if (event.key === 'Enter' || event.key === ' ') {
+                            event.preventDefault()
+                            setRevocationMode(option.id)
+                          }
+                        }}
+                      >
+                        <p className="font-medium text-foreground">{option.title}</p>
+                        <p className="text-xs text-muted-foreground">{option.detail}</p>
+                      </div>
+                    )
+                  })}
+                </div>
+              ),
+            })}
       />
 
     </div>
@@ -318,9 +440,13 @@ function AgentFactsDisclosure({
 }>) {
   return (
     <Collapsible>
-      <CollapsibleTrigger asChild>
-        <Button type="button" variant="ghost" className="w-fit min-h-touch">{label}</Button>
-      </CollapsibleTrigger>
+      <CollapsibleTrigger
+        render={
+          <Button type="button" variant="ghost" className="w-fit min-h-touch">
+            {label}
+          </Button>
+        }
+      />
       <CollapsibleContent className="grid gap-3 pt-2">
         <AeFactList density="compact" facts={facts} />
         {children}

@@ -4,6 +4,7 @@ import '@testing-library/jest-dom/vitest'
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { TACTILE } from '@/components/ae/feedback/AeEmptyState'
 import { ThemeToggle } from '@/components/ae/layout/ThemeToggle'
 import { ThemeProvider } from '@/components/ae/theme/ThemeProvider'
 import '../../setup/jsdom-platform'
@@ -22,6 +23,11 @@ function renderThemeToggle(): ReturnType<typeof render> {
       <ThemeToggle />
     </ThemeProvider>,
   )
+}
+
+function openAppearanceMenu(): void {
+  const trigger = screen.getByRole('button', { name: /appearance/i })
+  fireEvent.click(trigger)
 }
 
 function mockSystemPrefersDark(prefersDark: boolean): void {
@@ -59,21 +65,21 @@ describe('ThemeToggle', () => {
   it('T2: opens a menu with Light, Dark, and System options', async () => {
     renderThemeToggle()
 
-    fireEvent.click(screen.getByRole('button', { name: /appearance/i }))
+    openAppearanceMenu()
 
     await waitFor(() => {
       expect(screen.getByRole('menu')).toBeInTheDocument()
     })
-    expect(screen.getByRole('menuitem', { name: 'Light' })).toBeInTheDocument()
-    expect(screen.getByRole('menuitem', { name: 'Dark' })).toBeInTheDocument()
-    expect(screen.getByRole('menuitem', { name: 'System' })).toBeInTheDocument()
+    expect(screen.getByRole('menuitemradio', { name: 'Light' })).toBeInTheDocument()
+    expect(screen.getByRole('menuitemradio', { name: 'Dark' })).toBeInTheDocument()
+    expect(screen.getByRole('menuitemradio', { name: 'System' })).toBeInTheDocument()
   })
 
   it('T3: selecting Dark updates storage and document class', async () => {
     renderThemeToggle()
 
-    fireEvent.click(screen.getByRole('button', { name: /appearance/i }))
-    fireEvent.click(await screen.findByRole('menuitem', { name: 'Dark' }))
+    openAppearanceMenu()
+    fireEvent.click(await screen.findByRole('menuitemradio', { name: 'Dark' }))
 
     await waitFor(() => {
       expect(localStorage.getItem(THEME_STORAGE_KEY)).toBe('dark')
@@ -86,8 +92,8 @@ describe('ThemeToggle', () => {
     document.documentElement.classList.add('dark')
     renderThemeToggle()
 
-    fireEvent.click(screen.getByRole('button', { name: /appearance/i }))
-    fireEvent.click(await screen.findByRole('menuitem', { name: 'Light' }))
+    openAppearanceMenu()
+    fireEvent.click(await screen.findByRole('menuitemradio', { name: 'Light' }))
 
     await waitFor(() => {
       expect(localStorage.getItem(THEME_STORAGE_KEY)).toBe('light')
@@ -100,13 +106,60 @@ describe('ThemeToggle', () => {
     mockSystemPrefersDark(true)
     renderThemeToggle()
 
-    fireEvent.click(screen.getByRole('button', { name: /appearance/i }))
-    fireEvent.click(await screen.findByRole('menuitem', { name: 'System' }))
+    openAppearanceMenu()
+    fireEvent.click(await screen.findByRole('menuitemradio', { name: 'System' }))
 
     await waitFor(() => {
       expect(localStorage.getItem(THEME_STORAGE_KEY)).toBe('system')
       expect(document.documentElement.classList.contains('dark')).toBe(true)
       expect(document.documentElement.classList.contains('light')).toBe(false)
     })
+  })
+
+  it('T6: trigger button uses compact size and full tactile physics token', () => {
+    renderThemeToggle()
+
+    const trigger = screen.getByRole('button', { name: 'Appearance: System' })
+    expect(trigger.className).toContain('size-8')
+    for (const token of TACTILE.split(/\s+/u)) {
+      expect(trigger.className).toContain(token)
+    }
+  })
+
+  it('T8: menu content and radio items use Base UI origin and tactile classes', async () => {
+    renderThemeToggle()
+
+    openAppearanceMenu()
+
+    await waitFor(() => {
+      expect(screen.getByRole('menu')).toBeInTheDocument()
+    })
+
+    const menu = screen.getByRole('menu')
+    expect(menu.className).toContain('origin-(--transform-origin)')
+
+    const darkItem = screen.getByRole('menuitemradio', { name: 'Dark' })
+    for (const token of TACTILE.split(/\s+/u)) {
+      expect(darkItem.className).toContain(token)
+    }
+  })
+
+  it('T7: radio menu items expose aria-checked on the active preference', async () => {
+    renderThemeToggle()
+
+    openAppearanceMenu()
+
+    await waitFor(() => {
+      expect(screen.getByRole('menu')).toBeInTheDocument()
+    })
+
+    const radioItems = screen.getAllByRole('menuitemradio')
+    expect(radioItems).toHaveLength(3)
+
+    const checked = radioItems.filter(
+      (item) => item.getAttribute('aria-checked') === 'true',
+    )
+    expect(checked).toHaveLength(1)
+    expect(checked[0]).toHaveAccessibleName('System')
   })
 })

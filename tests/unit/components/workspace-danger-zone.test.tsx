@@ -23,6 +23,13 @@ vi.mock('convex/react', () => ({
   },
 }))
 
+vi.mock('@/lib/ui/toast', () => ({
+  toast: {
+    success: vi.fn(),
+    error: vi.fn(),
+  },
+}))
+
 const ownerEligible: WorkspaceDecommissionEligibilityView = {
   accountRef: `acc_${'2'.repeat(32)}`,
   displayName: 'Acme Corp',
@@ -75,13 +82,29 @@ describe('WorkspaceDangerZone (W-14)', () => {
     expect(screen.getByRole('heading', { name: 'Transfer ownership' })).toBeInTheDocument()
   })
 
+  it('U1b: loading eligibility renders reserved skeleton shell', () => {
+    useQuery.mockReturnValue(undefined)
+    const { container } = render(<WorkspaceDangerZone />)
+
+    expect(container.querySelector('[aria-busy="true"]')).toBeTruthy()
+    expect(container.querySelector('[data-slot="skeleton"]')).toBeTruthy()
+  })
+
   it('U2: if fences present, displays human reasons and disables close', () => {
     useQuery.mockReturnValue(fencedOwner)
     render(<WorkspaceDangerZone />)
 
-    expect(screen.getByText(/unsettled provider obligations/i)).toBeInTheDocument()
-    expect(screen.getByText(/open calls/i)).toBeInTheDocument()
+    expect(screen.getByText(/provider obligations are still unsettled/i)).toBeInTheDocument()
+    expect(screen.getByText(/one or more calls are still open/i)).toBeInTheDocument()
+    expect(screen.getByText(/close blocked/i)).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Close workspace' })).toBeDisabled()
+  })
+
+  it('U2b: clear fences show money-safe reassurance badge', () => {
+    render(<WorkspaceDangerZone />)
+
+    expect(screen.getByText(/A\$0\.00 active obligations/i)).toBeInTheDocument()
+    expect(screen.getByText(/close is allowed/i)).toBeInTheDocument()
   })
 
   it('U3: delete confirmation button disabled until exact matching workspace name typed', () => {
@@ -102,7 +125,7 @@ describe('WorkspaceDangerZone (W-14)', () => {
     expect(screen.getByRole('button', { name: 'Close workspace' })).toBeEnabled()
   })
 
-  it('U5: clicking close workspace opens AeConfirmDialog', () => {
+  it('U5: clicking close workspace opens AeConfirmDialog with money reassurance', () => {
     render(<WorkspaceDangerZone />)
 
     const input = screen.getByRole('textbox', { name: 'Type workspace name to confirm' })
@@ -113,6 +136,7 @@ describe('WorkspaceDangerZone (W-14)', () => {
 
     expect(screen.getByRole('alertdialog')).toBeInTheDocument()
     expect(screen.getByText('Close Workspace?')).toBeInTheDocument()
+    expect(screen.getByText(/prepaid credit is not spent until close succeeds/i)).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Permanently Close Workspace' })).toBeInTheDocument()
   })
 
@@ -126,11 +150,22 @@ describe('WorkspaceDangerZone (W-14)', () => {
     expect(options).not.toContain('Acme Corp')
   })
 
-  it('U7: non-owner renders read-only explanation without destructive controls', () => {
+  it('U6b: transfer opens confirm dialog before mutation', () => {
+    useQuery.mockReturnValue(ownerWithMember)
+    render(<WorkspaceDangerZone />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Transfer ownership' }))
+
+    expect(screen.getByRole('alertdialog')).toBeInTheDocument()
+    expect(screen.getByText(/transfer ownership to Sarah Connor/i)).toBeInTheDocument()
+    expect(screen.getByText(/balances and Calls stay on this workspace/i)).toBeInTheDocument()
+  })
+
+  it('U7: non-owner renders read-only explanation under both sections', () => {
     useQuery.mockReturnValue(memberView)
     render(<WorkspaceDangerZone />)
 
-    expect(screen.getByText(/only the workspace owner/i)).toBeInTheDocument()
+    expect(screen.getAllByText(/only the workspace owner/i)).toHaveLength(2)
     expect(screen.queryByRole('button', { name: 'Close workspace' })).toBeNull()
     expect(screen.queryByRole('button', { name: 'Transfer ownership' })).toBeNull()
     expect(screen.queryByRole('combobox', { name: 'New workspace owner' })).toBeNull()

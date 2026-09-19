@@ -14,9 +14,13 @@ export function DirectoryFilters({ search, onApply }: Props) {
   const [open, setOpen] = useState(false)
   const count = [search.network, search.provider, search.maxUsdPrice].filter(value => value !== undefined).length
   return <Sheet open={open} onOpenChange={setOpen}>
-    <SheetTrigger asChild><Button variant="outline" className="rounded-full">
-      <SlidersHorizontal className="size-4" /> Filters{count > 0 ? ` (${count})` : ''}
-    </Button></SheetTrigger>
+    <SheetTrigger
+      render={
+        <Button variant="outline" className="min-h-touch rounded-full sm:min-h-10">
+          <SlidersHorizontal className="size-4" /> Filters{count > 0 ? ` (${count})` : ''}
+        </Button>
+      }
+    />
       <SheetContent className="w-full overflow-y-auto sm:max-w-md p-6">
         <SheetTitle>Filter Tools</SheetTitle>
         <SheetDescription>Search the directory by network, provider or maximum price per Call.</SheetDescription>

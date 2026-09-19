@@ -134,5 +134,6 @@ describe('getThemeScript', () => {
     expect(script).toContain(`localStorage.getItem("${THEME_STORAGE_KEY}")`)
     expect(script).toContain('classList.add')
     expect(script).toContain('colorScheme')
+    expect(script).toContain('appearancePreference')
   })
 })

@@ -1,5 +1,6 @@
 import { Outlet, Link, createFileRoute, notFound, useLocation } from '@tanstack/react-router'
-import { Button } from '@/components/ui/button'
+import { buttonVariants } from '@/components/ui/button-variants'
+import { cn } from '@/lib/utils'
 import { Skeleton } from '@/components/ui/skeleton'
 
 import { AeProviderListingPage } from '@/components/ae/listing/AeProviderListingPage'
@@ -124,8 +125,8 @@ function ProviderListingError() {
       description="Try again, or return to the catalogue."
       action={
         <div className="flex flex-col gap-3 sm:flex-row sm:justify-center">
-          <Button asChild variant="default" className="min-h-touch"><a href={pathname}>Try again</a></Button>
-          <Button asChild variant="secondary" className="min-h-touch"><Link to="/market">Back to catalog</Link></Button>
+          <a href={pathname} className={cn(buttonVariants(), 'min-h-touch')}>Try again</a>
+          <Link to="/market" className={cn(buttonVariants({ variant: 'secondary' }), 'min-h-touch')}>Back to catalog</Link>
         </div>
       }
     />
@@ -142,8 +143,8 @@ export function PublicBusinessUnavailable() {
       description="The supplier catalogue source is unavailable right now. Try again in a moment."
       action={
         <div className="flex flex-col gap-3 sm:flex-row sm:justify-center">
-          <Button asChild variant="default" className="min-h-touch"><a href={pathname}>Try again</a></Button>
-          <Button asChild variant="secondary" className="min-h-touch"><Link to="/market">Back to catalog</Link></Button>
+          <a href={pathname} className={cn(buttonVariants(), 'min-h-touch')}>Try again</a>
+          <Link to="/market" className={cn(buttonVariants({ variant: 'secondary' }), 'min-h-touch')}>Back to catalog</Link>
         </div>
       }
     />

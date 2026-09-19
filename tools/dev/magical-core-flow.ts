@@ -27,7 +27,10 @@ import {
   SANDBOX_TOOL_LABEL,
   SANDBOX_REFERENCE_ROUTE_PATH,
 } from '../../convex/devSeedFixtures'
-import { callSystemOne, type JevResponse } from './try-jev-aecon'
+import {
+  executeDecisionGateway,
+  type DecisionGatewayResponse,
+} from '@/modules/decision-engine/public'
 
 // --- The Real In-App Tool Descriptors ---
 
@@ -272,13 +275,15 @@ export class MagicalProcurementEngine {
     }
     criteria['unsupported'] = 'None of the available in-app tools can handle this need.'
 
-    const response = await callSystemOne(
-      { need },
+    const response = await executeDecisionGateway(
       {
-        selectedTool: {
-          type: 'choice',
-          instructions: 'Select the single best tool in the catalogue that directly fulfills this capability gap.',
-          criteria,
+        state: { need },
+        questions: {
+          selectedTool: {
+            type: 'choice',
+            instructions: 'Select the single best tool in the catalogue that directly fulfills this capability gap.',
+            criteria,
+          },
         },
       },
     )
@@ -390,13 +395,13 @@ export class MagicalProcurementEngine {
     fault: 'upstream_provider' | 'buyer_input' | 'none'
     confidence: number
   }> {
-    const response: JevResponse = await callSystemOne(
-      {
+    const response: DecisionGatewayResponse = await executeDecisionGateway({
+      state: {
         toolName: tool.name,
         toolDescription: tool.description,
         receivedPayload: payload,
       },
-      {
+      questions: {
         isFailure: {
           type: 'noul',
           instructions:
@@ -412,7 +417,7 @@ export class MagicalProcurementEngine {
           },
         },
       },
-    )
+    })
 
     const isFailureAns = response.answers.isFailure
     const faultAns = response.answers.faultParty

@@ -1,6 +1,5 @@
 import {
   AlertDialog,
-  AlertDialogAction,
   AlertDialogCancel,
   AlertDialogContent,
   AlertDialogDescription,
@@ -8,9 +7,14 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { useRef, type RefObject } from "react";
+import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
+import { useRef, type ReactNode, type RefObject } from "react";
 
-type AeConfirmDialogProps = {
+export const TACTILE =
+  "enabled:active:scale-[0.98] transition-transform duration-100 ease-out motion-reduce:transition-none motion-reduce:active:scale-100";
+
+export type AeConfirmDialogProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   title: string;
@@ -23,6 +27,13 @@ type AeConfirmDialogProps = {
   onConfirm: () => void | Promise<void>;
   returnFocusRef?: RefObject<HTMLElement | null>;
   returnFocusFallbackRefs?: readonly RefObject<HTMLElement | null>[];
+  children?: ReactNode;
+  financialImpact?: ReactNode;
+  diagnostic?: {
+    whatHappened: string;
+    financialImpact: string;
+    nextStep: string;
+  } | null;
 };
 
 export function AeConfirmDialog({
@@ -38,8 +49,13 @@ export function AeConfirmDialog({
   onConfirm,
   returnFocusRef,
   returnFocusFallbackRefs = [],
+  children,
+  financialImpact,
+  diagnostic = null,
 }: AeConfirmDialogProps) {
   const confirmationInFlightRef = useRef(false);
+  const extendedBody =
+    children != null || financialImpact != null || diagnostic != null;
 
   function handleOpenChange(nextOpen: boolean) {
     if (pending && !nextOpen) {
@@ -64,41 +80,74 @@ export function AeConfirmDialog({
   return (
     <AlertDialog open={open} onOpenChange={handleOpenChange}>
       <AlertDialogContent
-        onCloseAutoFocus={returnFocusRef === undefined && returnFocusFallbackRefs.length === 0
-          ? undefined
-          : (event) => {
-              event.preventDefault();
-              const targets = [returnFocusRef, ...returnFocusFallbackRefs];
-              const target = targets
-                .map((ref) => ref?.current)
-                .find((element) => element !== null
-                  && element !== undefined
-                  && element.isConnected
-                  && element !== document.body
-                  && !(element instanceof HTMLButtonElement && element.disabled));
-              target?.focus();
-            }}
+        {...(returnFocusRef !== undefined || returnFocusFallbackRefs.length > 0
+          ? {
+              onCloseAutoFocus: (event) => {
+                event.preventDefault();
+                const targets = [returnFocusRef, ...returnFocusFallbackRefs];
+                const target = targets
+                  .map((ref) => ref?.current)
+                  .find((element) => element !== null
+                    && element !== undefined
+                    && element.isConnected
+                    && element !== document.body
+                    && !(element instanceof HTMLButtonElement && element.disabled));
+                target?.focus();
+              },
+            }
+          : {})}
       >
         <AlertDialogHeader>
           <AlertDialogTitle>{title}</AlertDialogTitle>
-          <AlertDialogDescription>{description}</AlertDialogDescription>
+          <AlertDialogDescription
+            className={cn(children !== undefined || financialImpact !== undefined ? "min-h-[4.5rem]" : undefined)}
+          >
+            {description}
+          </AlertDialogDescription>
+          {extendedBody ? (
+            <>
+              {children !== undefined ? (
+                <div className="min-h-[7.5rem] grid gap-2">{children}</div>
+              ) : null}
+              {financialImpact !== undefined ? (
+                <div className="min-h-[2.75rem] rounded-md border border-border bg-muted/40 p-2.5 text-xs text-muted-foreground">
+                  {financialImpact}
+                </div>
+              ) : null}
+              <div className="min-h-[4.5rem]" role="status" aria-live="polite">
+                {diagnostic ? (
+                  <div className="grid gap-1 text-sm text-muted-foreground">
+                    <p>
+                      <strong>What happened:</strong> {diagnostic.whatHappened}
+                    </p>
+                    <p className="font-mono text-xs tabular-nums">
+                      <strong>Financial impact:</strong> {diagnostic.financialImpact}
+                    </p>
+                    <p>
+                      <strong>Next step:</strong> {diagnostic.nextStep}
+                    </p>
+                  </div>
+                ) : null}
+              </div>
+            </>
+          ) : null}
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogCancel type="button" disabled={pending}>
+          <AlertDialogCancel type="button" disabled={pending} className={TACTILE}>
             {cancelLabel}
           </AlertDialogCancel>
           {showConfirm ? (
-            <AlertDialogAction
+            <Button
               type="button"
               variant={confirmVariant}
               disabled={pending}
-              onClick={(event) => {
-                event.preventDefault();
+              className={cn("min-w-[11rem]", TACTILE)}
+              onClick={() => {
                 void handleConfirm();
               }}
             >
               {pending ? "Working…" : confirmLabel}
-            </AlertDialogAction>
+            </Button>
           ) : null}
         </AlertDialogFooter>
       </AlertDialogContent>

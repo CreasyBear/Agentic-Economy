@@ -14,11 +14,14 @@ import {
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { buttonVariants } from '@/components/ui/button-variants'
 import { Field, FieldDescription, FieldGroup, FieldLabel } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
 import { toast } from '@/lib/ui/toast'
-import { isValidAbn, normalizeAbn } from '@/modules/money/public'
+import { cn } from '@/lib/utils'
+import { formatAbnDisplay, isValidAbn, normalizeAbn } from '@/modules/money/public'
 
+export { formatAbnDisplay }
 export type SupplierOnboardingStep = 'profile' | 'payouts' | 'first_tool'
 
 export type AeSupplierOnboardingWizardProps = Readonly<{
@@ -53,14 +56,6 @@ const STEP_META: ReadonlyArray<{
   { id: 'payouts', label: '2. Payout Account (Stripe)', duration: '~3 mins', icon: CreditCardIcon },
   { id: 'first_tool', label: '3. First Tool Publication', duration: '~1 min', icon: WrenchIcon },
 ]
-
-export function formatAbnDisplay(digits: string): string {
-  const clean = digits.replace(/\D/g, '').slice(0, 11)
-  if (clean.length <= 2) return clean
-  if (clean.length <= 5) return `${clean.slice(0, 2)} ${clean.slice(2)}`
-  if (clean.length <= 8) return `${clean.slice(0, 2)} ${clean.slice(2, 5)} ${clean.slice(5)}`
-  return `${clean.slice(0, 2)} ${clean.slice(2, 5)} ${clean.slice(5, 8)} ${clean.slice(8)}`
-}
 
 function diagnosticForProfileValidation(
   trimmedName: string,
@@ -428,12 +423,13 @@ export function AeSupplierOnboardingWizard({
                 AE provides instant schema validation, pricing config, and a zero-cost test console.
               </p>
             </div>
-            <Button asChild className={`gap-2 min-h-touch mt-2 ${TACTILE}`}>
-              <Link to="/owner/operations/new">
-                <span>Import OpenAPI / MCP Tool</span>
-                <ArrowRightIcon className="size-4" />
-              </Link>
-            </Button>
+            <Link
+              to="/owner/operations/new"
+              className={cn(buttonVariants(), 'gap-2 min-h-touch mt-2', TACTILE)}
+            >
+              <span>Import OpenAPI / MCP Tool</span>
+              <ArrowRightIcon className="size-4" />
+            </Link>
           </div>
         </div>
       )}

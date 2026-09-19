@@ -8,6 +8,7 @@ type AeRecordHeaderProps = {
   icon?: ReactNode
   actions?: ReactNode
   className?: string
+  sticky?: boolean
 }
 
 /**
@@ -19,6 +20,7 @@ export function AeRecordHeader({
   icon,
   actions,
   className,
+  sticky = false,
 }: AeRecordHeaderProps) {
   const titleId = useId()
   const descriptionId = useId()
@@ -27,8 +29,11 @@ export function AeRecordHeader({
     <div
       className={cn(
         'flex min-h-touch flex-wrap items-start justify-between gap-related py-related',
+        sticky &&
+          'sticky top-(--header-height) z-10 -mx-gutter px-gutter bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/85 border-b border-border transition-[padding,background-color] duration-150',
         className,
       )}
+      data-record-header-sticky={sticky ? 'true' : undefined}
       {...(description === undefined ? {} : { 'aria-describedby': descriptionId })}
     >
       <div className="flex min-w-0 items-start gap-related">

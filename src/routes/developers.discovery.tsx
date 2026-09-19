@@ -3,7 +3,8 @@ import { SearchCode } from 'lucide-react'
 import { CodeBlock } from '@/components/ai-elements/code-block'
 
 import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
+import { buttonVariants } from '@/components/ui/button-variants'
+import { cn } from '@/lib/utils'
 import { AeFactList } from '@/components/ae/data/AeFactList'
 import { AeEmptyState } from '@/components/ae/feedback/AeEmptyState'
 import { AeOperatorPage } from '@/components/ae/layout/AeOperatorPage'
@@ -51,9 +52,13 @@ function DevelopersDiscoveryRoute() {
       actions={
         <div className="flex flex-wrap gap-2">
           {readback.artifacts.map((artifact) => (
-            <Button asChild key={artifact.kind} variant="secondary" size="sm">
-              <a href={artifact.route}>{artifact.downloadLabel}</a>
-            </Button>
+            <a
+              key={artifact.kind}
+              href={artifact.route}
+              className={cn(buttonVariants({ variant: 'secondary', size: 'sm' }))}
+            >
+              {artifact.downloadLabel}
+            </a>
           ))}
         </div>
       }

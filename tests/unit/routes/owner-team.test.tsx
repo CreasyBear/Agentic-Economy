@@ -2,7 +2,7 @@
  * @vitest-environment jsdom
  */
 import { createElement } from 'react'
-import { cleanup, render, screen } from '@testing-library/react'
+import { cleanup, render, screen, within } from '@testing-library/react'
 import type { ComponentType, ReactNode } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import '../../setup/jsdom-platform'
@@ -35,7 +35,12 @@ vi.mock('@/components/ae/website/clerk-appearance', () => ({
 }))
 
 vi.mock('@/components/ae/settings/AeTeamDirectoryTable', () => ({
-  AeTeamDirectoryTable: () => <div data-testid="team-directory-table" />,
+  AeTeamDirectoryTable: (props: { directory?: unknown }) => (
+    <div
+      data-testid="team-directory-table"
+      data-has-directory={props.directory === undefined ? 'false' : 'true'}
+    />
+  ),
 }))
 
 vi.mock('convex/react', () => ({
@@ -126,5 +131,20 @@ describe('/owner/team route (W-15)', () => {
     expect(head).toBeTypeOf('function')
     const meta = head?.().meta ?? []
     expect(meta.some((entry) => (entry.title ?? '').includes('Team'))).toBe(true)
+  })
+
+  it('U8: wraps OrganizationProfile in zero-CLS invite anchor well', () => {
+    renderTeamRoute()
+    const inviteWell = document.getElementById('invite')
+    expect(inviteWell).toBeTruthy()
+    expect(inviteWell?.className).toContain('min-h-96')
+    expect(inviteWell?.className).toContain('w-full')
+    expect(within(inviteWell as HTMLElement).getByTestId('organization-profile')).toBeTruthy()
+  })
+
+  it('U9: passes undefined directory while query is loading (no dummy placeholder)', () => {
+    renderTeamRoute()
+    const table = screen.getByTestId('team-directory-table')
+    expect(table.getAttribute('data-has-directory')).toBe('false')
   })
 })

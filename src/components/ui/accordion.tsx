@@ -1,13 +1,68 @@
 import * as React from "react"
 import { ChevronDownIcon } from "lucide-react"
-import { Accordion as AccordionPrimitive } from "radix-ui"
+import { Accordion as AccordionPrimitive } from "@base-ui/react/accordion"
 
 import { cn } from "@/lib/utils"
 
+type AccordionProps = Omit<
+  React.ComponentProps<typeof AccordionPrimitive.Root>,
+  "value" | "defaultValue" | "onValueChange" | "multiple"
+> & {
+  type?: "single" | "multiple"
+  collapsible?: boolean
+  value?: string | string[]
+  defaultValue?: string | string[]
+  onValueChange?: (value: string | string[]) => void
+}
+
+function toAccordionValue(
+  value: string | string[] | undefined
+): string[] | undefined {
+  if (value === undefined) {
+    return undefined
+  }
+  if (Array.isArray(value)) {
+    return value
+  }
+  if (value === "") {
+    return []
+  }
+  return [value]
+}
+
 function Accordion({
+  type = "single",
+  collapsible = false,
+  value,
+  defaultValue,
+  onValueChange,
   ...props
-}: React.ComponentProps<typeof AccordionPrimitive.Root>) {
-  return <AccordionPrimitive.Root data-slot="accordion" {...props} />
+}: AccordionProps) {
+  const multiple = type === "multiple"
+
+  return (
+    <AccordionPrimitive.Root
+      data-slot="accordion"
+      multiple={multiple}
+      {...(toAccordionValue(value) === undefined
+        ? {}
+        : { value: toAccordionValue(value) })}
+      {...(toAccordionValue(defaultValue) === undefined
+        ? {}
+        : { defaultValue: toAccordionValue(defaultValue) })}
+      onValueChange={(nextValue) => {
+        if (multiple) {
+          onValueChange?.(nextValue)
+          return
+        }
+        if (!collapsible && nextValue.length === 0) {
+          return
+        }
+        onValueChange?.(nextValue[0] ?? "")
+      }}
+      {...props}
+    />
+  )
 }
 
 function AccordionItem({
@@ -33,7 +88,7 @@ function AccordionTrigger({
       <AccordionPrimitive.Trigger
         data-slot="accordion-trigger"
         className={cn(
-          "flex flex-1 items-start justify-between gap-4 rounded-md py-4 text-left text-sm font-medium transition-[color,background-color,border-color,box-shadow] duration-fast outline-none hover:underline focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:pointer-events-none disabled:opacity-50 [&[data-state=open]>svg]:rotate-180",
+          "flex flex-1 items-start justify-between gap-4 rounded-md py-4 text-left text-sm font-medium transition-[color,background-color,border-color,box-shadow,transform] duration-fast ease-standard outline-none enabled:active:scale-[0.98] motion-reduce:transition-none motion-reduce:active:scale-100 hover:underline focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:pointer-events-none disabled:opacity-50 max-sm:min-h-touch [&[data-panel-open]>svg]:rotate-180",
           className
         )}
         {...props}
@@ -49,15 +104,15 @@ function AccordionContent({
   className,
   children,
   ...props
-}: React.ComponentProps<typeof AccordionPrimitive.Content>) {
+}: React.ComponentProps<typeof AccordionPrimitive.Panel>) {
   return (
-    <AccordionPrimitive.Content
+    <AccordionPrimitive.Panel
       data-slot="accordion-content"
-      className="overflow-hidden text-sm data-[state=closed]:animate-accordion-up data-[state=open]:animate-accordion-down"
+      className="overflow-hidden text-sm data-closed:animate-accordion-up data-open:animate-accordion-down"
       {...props}
     >
       <div className={cn("pt-0 pb-4", className)}>{children}</div>
-    </AccordionPrimitive.Content>
+    </AccordionPrimitive.Panel>
   )
 }
 

@@ -2,7 +2,8 @@ import { Link, createFileRoute } from '@tanstack/react-router'
 import { useServerFn } from '@tanstack/react-start'
 import { useReverification } from '@clerk/tanstack-react-start'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
-import { Button } from '@/components/ui/button'
+import { buttonVariants } from '@/components/ui/button-variants'
+import { cn } from '@/lib/utils'
 
 import { AeOperatorPage } from '@/components/ae/layout/AeOperatorPage'
 import { AeSupplySourceNativeStart } from '@/components/ae/supply/AeSupplySourceNativeStart'
@@ -92,7 +93,12 @@ function NewOwnerOfferingRouteView({ publish }: Readonly<{
           <AlertTitle>Provider workspace unavailable</AlertTitle>
           <AlertDescription className="grid gap-related">
             <p>AE could not confirm the current Business. Return to Tools and try again.</p>
-            <Button asChild variant="outline" className="justify-self-start min-h-touch"><Link to="/owner/operations">Return to Tools</Link></Button>
+            <Link
+              to="/owner/operations"
+              className={cn(buttonVariants({ variant: 'outline' }), 'justify-self-start min-h-touch')}
+            >
+              Return to Tools
+            </Link>
           </AlertDescription>
         </Alert>
       ) : sourceUnavailable ? (

@@ -2,7 +2,8 @@
 import { ArrowUpRight, Globe2 } from 'lucide-react'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
+import { buttonVariants } from '@/components/ui/button-variants'
+import { cn } from '@/lib/utils'
 import { x402DirectoryFilterSchema, type X402DirectoryEntry } from '@/modules/market/x402-directory'
 
 type Props = Readonly<{ provider: string; entries: readonly X402DirectoryEntry[]; totalTools?: number }>
@@ -30,7 +31,7 @@ export function DirectoryProviderHeader({ provider, entries, totalTools }: Props
         <h2 className="break-all text-3xl font-medium tracking-tight sm:text-4xl">{provider}</h2>
         <p className="text-sm text-muted-foreground">{total === undefined ? `${tools.length} ${tools.length === 1 ? 'Tool' : 'Tools'} in these results` : `${total.toLocaleString()} ${total === 1 ? 'Tool' : 'Tools'} in the indexed catalogue`}</p>
         {labels.length > 0 && <div className="flex flex-wrap gap-2" aria-label="Provider-declared categories and tags">{labels.map(label => <Badge key={label} variant="secondary" className="rounded-full px-3 py-1">{label}</Badge>)}</div>}
-        {validHost.success && <Button asChild variant="outline" className="mt-1 rounded-full"><a href={`https://${validHost.data.provider}/`} target="_blank" rel="noopener noreferrer">Visit {provider}<ArrowUpRight className="size-4" /></a></Button>}
+        {validHost.success && <a href={`https://${validHost.data.provider}/`} target="_blank" rel="noopener noreferrer" className={cn(buttonVariants({ variant: 'outline' }), 'mt-1 rounded-full')}>Visit {provider}<ArrowUpRight className="size-4" /></a>}
       </div>
       {tools.length > 0 && <div className="grid content-start gap-4 rounded-xl bg-muted/40 p-5">
         <p className="text-xs font-medium text-muted-foreground">A few Tools from this hostname</p>

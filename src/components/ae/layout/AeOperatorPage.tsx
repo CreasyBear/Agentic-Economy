@@ -87,6 +87,7 @@ export type AeOperatorPageProps = {
   description: string
   actions?: ReactNode
   secondaryBar?: ReactNode
+  stickyHeader?: boolean
   currentPath: string
   mainContentId?: string
   breadcrumbs?: readonly OperatorBreadcrumbItem[]
@@ -98,11 +99,11 @@ export type AeOperatorPageProps = {
 }
 
 type OperatorPageChromeInput = Pick<AeOperatorPageProps, 'operatorRole' | 'title' | 'description' | 'currentPath'> & {
-  [K in 'actions' | 'secondaryBar' | 'mainContentId' | 'breadcrumbs' | 'navBadges' | 'suppressSurfaceNavigation' | 'pending']?: AeOperatorPageProps[K] | undefined
+  [K in 'actions' | 'secondaryBar' | 'stickyHeader' | 'mainContentId' | 'breadcrumbs' | 'navBadges' | 'suppressSurfaceNavigation' | 'pending']?: AeOperatorPageProps[K] | undefined
 }
 
 function chromeFromProps(props: OperatorPageChromeInput): OperatorPageChrome {
-  const { operatorRole, title, description, actions, secondaryBar, currentPath, mainContentId, breadcrumbs, navBadges, suppressSurfaceNavigation, pending } = props
+  const { operatorRole, title, description, actions, secondaryBar, stickyHeader, currentPath, mainContentId, breadcrumbs, navBadges, suppressSurfaceNavigation, pending } = props
   return {
     operatorRole,
     title,
@@ -110,6 +111,7 @@ function chromeFromProps(props: OperatorPageChromeInput): OperatorPageChrome {
     currentPath,
     ...(actions === undefined ? {} : { actions }),
     ...(secondaryBar === undefined ? {} : { secondaryBar }),
+    ...(stickyHeader === undefined ? {} : { stickyHeader }),
     ...(mainContentId === undefined ? {} : { mainContentId }),
     ...(breadcrumbs === undefined ? {} : { breadcrumbs }),
     ...(navBadges === undefined ? {} : { navBadges }),
@@ -119,10 +121,10 @@ function chromeFromProps(props: OperatorPageChromeInput): OperatorPageChrome {
 }
 
 function useChromeFromProps(props: Omit<AeOperatorPageProps, 'children'>): OperatorPageChrome {
-  const { operatorRole, title, description, actions, secondaryBar, currentPath, mainContentId, breadcrumbs, navBadges, suppressSurfaceNavigation, pending } = props
+  const { operatorRole, title, description, actions, secondaryBar, stickyHeader, currentPath, mainContentId, breadcrumbs, navBadges, suppressSurfaceNavigation, pending } = props
   return useMemo<OperatorPageChrome>(
-    () => chromeFromProps({ operatorRole, title, description, actions, secondaryBar, currentPath, mainContentId, breadcrumbs, navBadges, suppressSurfaceNavigation, pending }),
-    [operatorRole, title, description, actions, secondaryBar, currentPath, mainContentId, breadcrumbs, navBadges, suppressSurfaceNavigation, pending],
+    () => chromeFromProps({ operatorRole, title, description, actions, secondaryBar, stickyHeader, currentPath, mainContentId, breadcrumbs, navBadges, suppressSurfaceNavigation, pending }),
+    [operatorRole, title, description, actions, secondaryBar, stickyHeader, currentPath, mainContentId, breadcrumbs, navBadges, suppressSurfaceNavigation, pending],
   )
 }
 
@@ -173,6 +175,7 @@ function RootOperatorPage(props: AeOperatorPageProps) {
     description,
     actions,
     secondaryBar,
+    stickyHeader,
     currentPath,
     mainContentId,
     breadcrumbs: providedBreadcrumbs,
@@ -205,21 +208,38 @@ function RootOperatorPage(props: AeOperatorPageProps) {
         id={resolvedMainContentId}
         tabIndex={-1}
         data-testid="operator-content"
-        className="ae-rail flex min-h-0 flex-1 flex-col pb-[calc(var(--spacing-touch)+env(safe-area-inset-bottom,0px))] focus:outline-none md:pb-related"
+        className="ae-rail flex min-h-0 flex-1 flex-col pb-[calc(4.5rem+env(safe-area-inset-bottom,0px))] focus:outline-none md:pb-related"
       >
         {mobileTrigger === null && breadcrumbs.length === 0 ? null : (
-          <div className="flex items-center gap-related">
+          <div className="flex min-h-touch shrink-0 items-center gap-related px-gutter pt-intra">
             {mobileTrigger}
             {breadcrumbs.length === 0 ? null : <AeOperatorBreadcrumbs items={breadcrumbs} />}
           </div>
         )}
-        <AeRecordHeader
-          title={title}
-          description={description}
-          {...(secondaryBar === undefined ? {} : { className: 'pb-intra' })}
-          {...(actions === undefined ? {} : { actions })}
-        />
-        {secondaryBar === undefined ? null : secondaryBar}
+        {stickyHeader === true ? (
+          <div
+            data-testid="operator-sticky-shelf"
+            data-sticky-shelf="true"
+            className="sticky top-(--header-height) z-10 -mx-gutter px-gutter border-b border-border/80 bg-background/95 pb-intra backdrop-blur supports-[backdrop-filter]:bg-background/85"
+          >
+            <AeRecordHeader
+              title={title}
+              description={description}
+              {...(actions === undefined ? {} : { actions })}
+            />
+            {secondaryBar === undefined ? null : secondaryBar}
+          </div>
+        ) : (
+          <>
+            <AeRecordHeader
+              title={title}
+              description={description}
+              {...(secondaryBar === undefined ? {} : { className: 'pb-intra' })}
+              {...(actions === undefined ? {} : { actions })}
+            />
+            {secondaryBar === undefined ? null : secondaryBar}
+          </>
+        )}
         <div
           data-testid="operator-page-stack"
           className="grid min-h-0 flex-1 content-start gap-section pt-related"

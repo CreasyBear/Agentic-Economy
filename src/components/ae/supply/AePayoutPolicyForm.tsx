@@ -72,7 +72,7 @@ const SCHEDULE_OPTIONS: ReadonlyArray<{
 
 const RADIO_CARD_CLASS = cn(
   'grid min-h-touch cursor-pointer grid-cols-[auto_minmax(0,1fr)] items-start gap-3 rounded-md border border-border px-3 py-3',
-  'has-[[data-state=checked]]:border-foreground has-[[data-state=checked]]:bg-muted',
+  'has-[[data-checked]]:border-foreground has-[[data-checked]]:bg-muted',
   TACTILE,
 )
 

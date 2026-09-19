@@ -5,7 +5,8 @@ import { AeCopyCommand } from '@/components/ae/data/AeCopyCommand'
 import { AePublicPage } from '@/components/ae/layout/AePublicPage'
 import { AeSection } from '@/components/ae/layout/AeSection'
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion'
-import { Button } from '@/components/ui/button'
+import { buttonVariants } from '@/components/ui/button-variants'
+import { cn } from '@/lib/utils'
 import { readCanonicalBaseUrlServer } from '@/lib/server/canonical-url.functions'
 import { buildPublicPageHead } from '@/modules/seo/public'
 
@@ -54,9 +55,9 @@ function SupportRoute() {
       title="Help"
       description="Keep the request or Call reference shown with the problem. It helps us find the right record without asking you to share private inputs."
       actions={
-        <Button asChild className="min-h-touch">
-          <a href={supportEmail}>Email support</a>
-        </Button>
+        <a href={supportEmail} className={cn(buttonVariants(), 'min-h-touch')}>
+          Email support
+        </a>
       }
     >
       <div className="ae-rail grid gap-section pb-page">
@@ -71,16 +72,16 @@ function SupportRoute() {
           description="The original Call shows its current status and next action. If the result is uncertain, check that Call before trying again."
         >
           <div className="flex flex-wrap gap-related">
-            <Button asChild className="min-h-touch"><Link to="/activity">Open Calls</Link></Button>
-            <Button asChild variant="outline" className="min-h-touch"><Link to="/owner/operations">Continue Provider setup</Link></Button>
-            <Button asChild variant="outline" className="min-h-touch"><Link to="/owner/credit">Review account credit</Link></Button>
+            <Link to="/activity" className={cn(buttonVariants(), 'min-h-touch')}>Open Calls</Link>
+            <Link to="/owner/operations" className={cn(buttonVariants({ variant: 'outline' }), 'min-h-touch')}>Continue Provider setup</Link>
+            <Link to="/owner/credit" className={cn(buttonVariants({ variant: 'outline' }), 'min-h-touch')}>Review account credit</Link>
           </div>
         </AeSection>
         <AeSection
           title="Agent connection"
           description="Use your client's account connection, then return to your task. Connection and spending permission are separate."
         >
-          <Button asChild variant="outline" className="min-h-touch"><Link to="/for-agents">Review agent setup</Link></Button>
+          <Link to="/for-agents" className={cn(buttonVariants({ variant: 'outline' }), 'min-h-touch')}>Review agent setup</Link>
           <Accordion type="single" collapsible className="mt-related">
             <AccordionItem value="diagnostics">
               <AccordionTrigger>Advanced connection diagnostics</AccordionTrigger>
@@ -98,9 +99,14 @@ function SupportRoute() {
           <p className="text-sm text-muted-foreground">
             GitHub issues are public. Use them only for non-sensitive developer reports.
           </p>
-          <Button asChild variant="outline" className="mt-related min-h-touch">
-            <a href={ISSUE_URL} target="_blank" rel="noreferrer">Open a public developer issue <ArrowUpRightIcon aria-hidden="true" /></a>
-          </Button>
+          <a
+            href={ISSUE_URL}
+            target="_blank"
+            rel="noreferrer"
+            className={cn(buttonVariants({ variant: 'outline' }), 'mt-related min-h-touch')}
+          >
+            Open a public developer issue <ArrowUpRightIcon aria-hidden="true" />
+          </a>
           <div className="mt-related flex flex-wrap gap-related">
             <Link to="/for-providers" className="inline-flex min-h-touch items-center underline underline-offset-4">Review Provider requirements</Link>
             <Link to="/privacy/remove-business" className="inline-flex min-h-touch items-center underline underline-offset-4">Request a listing correction</Link>

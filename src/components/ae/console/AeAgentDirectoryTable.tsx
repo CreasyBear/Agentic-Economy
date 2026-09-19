@@ -7,7 +7,8 @@ import {
   AeRecordTable,
 } from '@/components/ae/operator/AeOperatorDataTable'
 import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
+import { buttonVariants } from '@/components/ui/button-variants'
+import { cn } from '@/lib/utils'
 import { stagedListPhase, useFirstLoadPending } from '@/components/ui/data-state'
 import { InlineEditField } from '@/components/ui/inline-edit-field'
 import { Progress } from '@/components/ui/progress'
@@ -170,9 +171,12 @@ export function AeAgentDirectoryTable({
         title="No agent is connected yet"
         description="Start setup from the agent and approve the request to create access you can revoke."
         action={
-          <Button asChild className="min-h-touch">
-            <a href={missingAgentNextAction.href}>{missingAgentNextAction.label}</a>
-          </Button>
+          <a
+            href={missingAgentNextAction.href}
+            className={cn(buttonVariants(), 'min-h-touch')}
+          >
+            {missingAgentNextAction.label}
+          </a>
         }
       />
     )

@@ -4,7 +4,8 @@ import { z } from 'zod'
 import { AeOperatorPage } from '@/components/ae/layout/AeOperatorPage'
 import { AeSettingsStack } from '@/components/ae/layout/AeSection'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
-import { Button } from '@/components/ui/button'
+import { buttonVariants } from '@/components/ui/button-variants'
+import { cn } from '@/lib/utils'
 import { operatorRouteOptions } from '@/lib/operator/route-options'
 import {
   completeOwnerMcpProviderConnectionServer,
@@ -81,11 +82,15 @@ function OwnerMcpOAuthCallbackRoute() {
             <p>{connected
               ? 'AE verified the live MCP source and stored its connection. Return to Add Tool to continue.'
               : 'AE could not confirm the source connection. Return to Add Tool to review the saved source and current connection status before retrying.'}</p>
-              <Button asChild variant="secondary" className="mt-4 min-h-touch">
-              <Link to="/owner/operations/new" search={'continuationDraftRef' in result && result.continuationDraftRef !== undefined
-                ? { draft: result.continuationDraftRef }
-                : {}}>Return to Add Tool</Link>
-            </Button>
+              <Link
+                to="/owner/operations/new"
+                search={'continuationDraftRef' in result && result.continuationDraftRef !== undefined
+                  ? { draft: result.continuationDraftRef }
+                  : {}}
+                className={cn(buttonVariants({ variant: 'secondary' }), 'mt-4 min-h-touch')}
+              >
+                Return to Add Tool
+              </Link>
           </AlertDescription>
         </Alert>
       </AeSettingsStack>

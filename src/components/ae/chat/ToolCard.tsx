@@ -4,7 +4,7 @@ import { AeCopyReference } from '@/components/ae/data/AeCopyReference'
 import { AeToolPrice } from '@/components/ae/market/AeToolPrice'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
+import { buttonVariants } from '@/components/ui/button-variants'
 import { Card, CardAction, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
 import {
   Item,
@@ -55,30 +55,34 @@ function readinessVariant(readiness: string | undefined): 'success' | 'warning' 
 function ChoiceRow({ choice }: { choice: ToolChoiceRow }) {
   const badgeVariant = readinessVariant(choice.readiness)
   return (
-    <Item asChild variant="muted" size="sm">
-      <a href={inspectHref(choice.toolRef)} aria-label={chatChoiceLinkName(choice.title, choice.readiness)}>
-        <ItemMedia variant="icon" aria-hidden="true" className="font-mono text-xs font-semibold">
-          {choiceInitial(choice.title)}
-        </ItemMedia>
-        <ItemContent>
-          <ItemHeader>
-            <ItemTitle>{choice.title}</ItemTitle>
-            {choice.readiness === undefined || badgeVariant === undefined ? null : (
-              <Badge variant={badgeVariant}>{choice.readiness}</Badge>
+    <Item
+      variant="muted"
+      size="sm"
+      render={
+        <a href={inspectHref(choice.toolRef)} aria-label={chatChoiceLinkName(choice.title, choice.readiness)}>
+          <ItemMedia variant="icon" aria-hidden="true" className="font-mono text-xs font-semibold">
+            {choiceInitial(choice.title)}
+          </ItemMedia>
+          <ItemContent>
+            <ItemHeader>
+              <ItemTitle>{choice.title}</ItemTitle>
+              {choice.readiness === undefined || badgeVariant === undefined ? null : (
+                <Badge variant={badgeVariant}>{choice.readiness}</Badge>
+              )}
+            </ItemHeader>
+            {choice.provider === undefined ? null : (
+              <ItemDescription>{choice.provider}</ItemDescription>
             )}
-          </ItemHeader>
-          {choice.provider === undefined ? null : (
-            <ItemDescription>{choice.provider}</ItemDescription>
+            {choice.access === undefined ? null : (
+              <ItemFooter className="text-muted-foreground">{choice.access}</ItemFooter>
+            )}
+          </ItemContent>
+          {choice.price === undefined ? null : (
+            <AeToolPrice price={choice.price} {...(choice.priceValidUntil === undefined ? {} : { validUntil: choice.priceValidUntil })} size="sm" className="basis-full sm:ms-auto sm:basis-auto" />
           )}
-          {choice.access === undefined ? null : (
-            <ItemFooter className="text-muted-foreground">{choice.access}</ItemFooter>
-          )}
-        </ItemContent>
-        {choice.price === undefined ? null : (
-          <AeToolPrice price={choice.price} {...(choice.priceValidUntil === undefined ? {} : { validUntil: choice.priceValidUntil })} size="sm" className="basis-full sm:ms-auto sm:basis-auto" />
-        )}
-      </a>
-    </Item>
+        </a>
+      }
+    />
   )
 }
 
@@ -141,16 +145,20 @@ function CardBody({ projection }: { projection: ToolCardProjection }) {
             <AlertDescription>{projection.summary}</AlertDescription>
           </Alert>
           {projection.name === undefined || toolRef === undefined ? null : (
-            <Item asChild variant="muted" size="sm">
-              <a href={inspectHref(toolRef)} aria-label={chatViewTool(projection.name)}>
-                <ItemMedia variant="icon" aria-hidden="true" className="font-mono text-xs font-semibold">
-                  {choiceInitial(projection.name)}
-                </ItemMedia>
-                <ItemContent>
-                  <ItemTitle>{projection.name}</ItemTitle>
-                </ItemContent>
-              </a>
-            </Item>
+            <Item
+              variant="muted"
+              size="sm"
+              render={
+                <a href={inspectHref(toolRef)} aria-label={chatViewTool(projection.name)}>
+                  <ItemMedia variant="icon" aria-hidden="true" className="font-mono text-xs font-semibold">
+                    {choiceInitial(projection.name)}
+                  </ItemMedia>
+                  <ItemContent>
+                    <ItemTitle>{projection.name}</ItemTitle>
+                  </ItemContent>
+                </a>
+              }
+            />
           )}
           {projection.outputPreview === undefined ? null : (
             <section className="grid min-w-0 gap-intra" aria-label="Call result">
@@ -212,9 +220,12 @@ function ExecuteNextAction({ projection }: Readonly<{
   if (suggestedNextAction === undefined) return null
   if (suggestedNextAction.href !== undefined) {
     return (
-      <Button asChild variant="outline" size="sm">
-        <a href={suggestedNextAction.href}>{suggestedNextAction.label}</a>
-      </Button>
+      <a
+        href={suggestedNextAction.href}
+        className={buttonVariants({ variant: 'outline', size: 'sm' })}
+      >
+        {suggestedNextAction.label}
+      </a>
     )
   }
   return suggestedNextAction.command === undefined

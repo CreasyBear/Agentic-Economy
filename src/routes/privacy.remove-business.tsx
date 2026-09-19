@@ -241,7 +241,9 @@ function RemoveBusinessRoute() {
                 value={value.reasonCode}
                 disabled={pending}
                 onValueChange={(nextValue) => {
-                  setValue((current) => ({ ...current, reasonCode: toRemovalReason(nextValue) }))
+                  if (nextValue != null) {
+                    setValue((current) => ({ ...current, reasonCode: toRemovalReason(nextValue) }))
+                  }
                 }}
               >
                 <SelectTrigger id="reasonCode" className="min-h-touch w-full">

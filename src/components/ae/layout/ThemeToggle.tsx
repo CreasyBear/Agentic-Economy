@@ -1,10 +1,17 @@
 'use client'
 
 import { Monitor, Moon, Sun } from 'lucide-react'
-import { useState } from 'react'
 
+import { TACTILE } from '@/components/ae/feedback/AeEmptyState'
 import { useAppearance } from '@/components/ae/theme/ThemeProvider'
 import { buttonVariants } from '@/components/ui/button-variants'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import { cn } from '@/lib/utils'
 import type { AppearancePreference } from '@/lib/theme/theme-mode'
 
@@ -16,43 +23,38 @@ const OPTIONS: { value: AppearancePreference; label: string; icon: typeof Sun }[
 
 export function ThemeToggle() {
   const { preference, setPreference } = useAppearance()
-  const [open, setOpen] = useState(false)
-  const ActiveIcon = OPTIONS.find((option) => option.value === preference)?.icon ?? Monitor
+  const activeOption =
+    OPTIONS.find((option) => option.value === preference) ?? OPTIONS[2]!
+  const ActiveIcon = activeOption.icon
+  const currentLabel = activeOption.label
 
   return (
-    <div className="relative">
-      <button
-        type="button"
-        aria-label="Appearance"
-        aria-haspopup="menu"
-        aria-expanded={open}
-        className={cn(buttonVariants({ variant: 'ghost', size: 'icon', className: 'size-9 shrink-0' }))}
-        onClick={() => setOpen((current) => !current)}
+    <DropdownMenu>
+      <DropdownMenuTrigger
+        aria-label={`Appearance: ${currentLabel}`}
+        className={cn(
+          buttonVariants({
+            variant: 'ghost',
+            size: 'icon',
+            className: cn('size-8 shrink-0', TACTILE),
+          }),
+        )}
       >
         <ActiveIcon aria-hidden="true" className="size-4" />
-      </button>
-      {open ? (
-        <div
-          role="menu"
-          className="absolute bottom-full left-0 z-20 mb-1 min-w-[8rem] overflow-hidden rounded-md border border-border bg-popover p-1 text-popover-foreground shadow-soft"
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" side="top" className="min-w-[9.5rem]">
+        <DropdownMenuRadioGroup
+          value={preference}
+          onValueChange={(value) => setPreference(value as AppearancePreference)}
         >
           {OPTIONS.map(({ value, label, icon: Icon }) => (
-            <button
-              key={value}
-              type="button"
-              role="menuitem"
-              className="relative flex w-full cursor-default select-none items-center gap-2 rounded-sm px-2 py-1.5 text-left text-sm outline-none hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground"
-              onClick={() => {
-                setPreference(value)
-                setOpen(false)
-              }}
-            >
+            <DropdownMenuRadioItem key={value} value={value}>
               <Icon aria-hidden="true" className="size-4" />
               {label}
-            </button>
+            </DropdownMenuRadioItem>
           ))}
-        </div>
-      ) : null}
-    </div>
+        </DropdownMenuRadioGroup>
+      </DropdownMenuContent>
+    </DropdownMenu>
   )
 }

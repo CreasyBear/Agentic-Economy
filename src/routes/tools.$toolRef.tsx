@@ -7,6 +7,8 @@ import { AeToolInspector } from '@/components/ae/market/tool-detail'
 import { REASON_COPY, REASON_COPY_FALLBACK } from '@/content/reason-copy'
 import { useMarketBackNavigation } from '@/components/ae/market/market-return-context'
 import { Button } from '@/components/ui/button'
+import { buttonVariants } from '@/components/ui/button-variants'
+import { cn } from '@/lib/utils'
 import {
   isPublicToolRef,
   type PublicToolDescriptor,
@@ -129,12 +131,13 @@ export function MarketBackButton({ label, ...buttonProps }: Readonly<{ label: st
     )
   }
   return (
-    <Button asChild {...buttonProps}>
-      <Link to="/market">
-        <ArrowLeftIcon aria-hidden="true" />
-        {label}
-      </Link>
-    </Button>
+    <Link
+      to="/market"
+      className={cn(buttonVariants({ variant: buttonProps.variant }), buttonProps.className)}
+    >
+      <ArrowLeftIcon aria-hidden="true" />
+      {label}
+    </Link>
   )
 }
 

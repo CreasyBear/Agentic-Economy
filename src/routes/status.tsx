@@ -6,6 +6,8 @@ import { AeCopyReference } from '@/components/ae/data/AeCopyReference'
 import { AePublicPage } from '@/components/ae/layout/AePublicPage'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { buttonVariants } from '@/components/ui/button-variants'
+import { cn } from '@/lib/utils'
 import { captureClientExceptionOnClient } from '@/lib/observability/capture-client-exception'
 import { buildPublicPageHead } from '@/modules/seo/public'
 import { readStatusProbesServer, type ProbeId, type ProbeOutcome } from '@/routes/-status.functions'
@@ -122,9 +124,12 @@ function StatusRoute() {
               </h2>
               <p className="text-sm text-muted-foreground">{recovery.description}</p>
             </div>
-            <Button asChild className="min-h-touch w-full sm:w-auto">
-              <Link to={recovery.href}>{recovery.label}</Link>
-            </Button>
+            <Link
+              to={recovery.href}
+              className={cn(buttonVariants(), 'min-h-touch w-full sm:w-auto')}
+            >
+              {recovery.label}
+            </Link>
           </section>
         )}
         <div className="mt-related flex flex-wrap items-center justify-between gap-intra text-sm text-muted-foreground">

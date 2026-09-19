@@ -9,7 +9,8 @@ import {
   SearchIcon,
   StoreIcon,
 } from 'lucide-react'
-import { Button } from '@/components/ui/button'
+import { buttonVariants } from '@/components/ui/button-variants'
+import { cn } from '@/lib/utils'
 import { Card } from '@/components/ui/card'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 
@@ -145,7 +146,12 @@ function PrivacyRoute() {
               Send the Provider slug and what should change.
             </p>
           </div>
-          <Button asChild variant="secondary" className="min-h-touch"><Link to="/privacy/remove-business">Open corrections <ArrowRightIcon aria-hidden="true" /></Link></Button>
+          <Link
+            to="/privacy/remove-business"
+            className={cn(buttonVariants({ variant: 'secondary' }), 'min-h-touch')}
+          >
+            Open corrections <ArrowRightIcon aria-hidden="true" />
+          </Link>
         </section>
       </div>
     </AePublicPage>

@@ -151,9 +151,18 @@ export function SupplySourceTypeSection({
             </span>
           </Button>
           <Collapsible defaultOpen={sourceKind !== 'x402'}>
-            <CollapsibleTrigger asChild>
-              <Button type="button" variant="ghost" className={cn('w-fit min-h-touch', TACTILE)} disabled={disabled}>Other source types</Button>
-            </CollapsibleTrigger>
+            <CollapsibleTrigger
+              render={
+                <Button
+                  type="button"
+                  variant="ghost"
+                  className={cn('w-fit min-h-touch', TACTILE)}
+                  disabled={disabled}
+                >
+                  Other source types
+                </Button>
+              }
+            />
             <CollapsibleContent className="pt-2">
               <Tabs value={sourceKind} onValueChange={onSourceKindChange}>
                 <TabsList className="max-w-full overflow-x-auto" aria-label="Other source types">

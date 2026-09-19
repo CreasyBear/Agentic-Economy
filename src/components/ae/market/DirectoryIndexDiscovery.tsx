@@ -3,7 +3,8 @@ import { ArrowUpRight, BracesIcon } from 'lucide-react'
 import { useId } from 'react'
 
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
-import { Button } from '@/components/ui/button'
+import { buttonVariants } from '@/components/ui/button-variants'
+import { cn } from '@/lib/utils'
 import { Card, CardContent } from '@/components/ui/card'
 import { Carousel, CarouselContent, CarouselItem, CarouselNext, CarouselPrevious } from '@/components/ui/carousel'
 import type { X402DirectoryCatalogueOverview } from '@/modules/market/x402-directory-catalogue'
@@ -37,7 +38,7 @@ export function DirectoryIndexDiscovery({ overview, onSave, isSaved, onCompare, 
         <div className="mb-5 flex flex-wrap items-end justify-between gap-4">
           <div className="max-w-2xl"><h2 id={`${id}-${shelf.key}`} className="text-2xl font-medium tracking-tight sm:text-3xl">{shelf.title}</h2><p className="mt-2 text-sm leading-relaxed text-muted-foreground">{shelf.description}</p></div>
           <div className="flex shrink-0 items-center gap-2">
-            <Button asChild variant="ghost" size="sm" className="mr-1 rounded-full"><Link to={marketPath} search={{ view: 'tools', sort: shelf.sort }} aria-label={`View all ${shelf.title.toLowerCase()}`}>View all<ArrowUpRight className="size-4" /></Link></Button>
+            <Link to={marketPath} search={{ view: 'tools', sort: shelf.sort }} aria-label={`View all ${shelf.title.toLowerCase()}`} className={cn(buttonVariants({ variant: 'ghost', size: 'sm' }), 'mr-1 rounded-full')}>View all<ArrowUpRight className="size-4" aria-hidden="true" /></Link>
             {shelf.entries.length === 0 ? null : <><CarouselPrevious className="static size-9 translate-y-0" aria-label={`Previous ${shelf.title}`} /><CarouselNext className="static size-9 translate-y-0" aria-label={`Next ${shelf.title}`} /></>}
           </div>
         </div>
@@ -58,7 +59,7 @@ export function DirectoryIndexDiscovery({ overview, onSave, isSaved, onCompare, 
     <section aria-labelledby={`${id}-providers`}>
       <div className="mb-5 flex flex-wrap items-end justify-between gap-4">
         <div><h2 id={`${id}-providers`} className="text-2xl font-medium tracking-tight sm:text-3xl">Explore Providers</h2><p className="mt-2 text-sm leading-relaxed text-muted-foreground">An A–Z selection, with catalogue-wide Tool counts.</p></div>
-        <Button asChild variant="ghost" size="sm" className="rounded-full"><Link to={marketPath} search={{ view: 'providers' }}>All Providers<ArrowUpRight className="size-4" /></Link></Button>
+        <Link to={marketPath} search={{ view: 'providers' }} className={cn(buttonVariants({ variant: 'ghost', size: 'sm' }), 'rounded-full')}>All Providers<ArrowUpRight className="size-4" aria-hidden="true" /></Link>
       </div>
       {overview.providers.length === 0 ? <p className="text-sm text-muted-foreground">No Provider hostnames are available for this selection.</p> : <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
         {overview.providers.map(provider => <li key={provider.key} className="min-w-0">

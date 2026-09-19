@@ -2,7 +2,7 @@ import { Link } from '@tanstack/react-router'
 
 import { AeCopyCommand } from '@/components/ae/data/AeCopyCommand'
 import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
+import { buttonVariants } from '@/components/ui/button-variants'
 import {
   Card,
   CardContent,
@@ -54,9 +54,12 @@ export function AeToolNextAction({
         </dl>
 
         {nextAction.kind === 'navigate' && nextAction.href !== undefined ? (
-          <Button asChild variant="secondary" className="min-h-touch w-full">
-            <Link to={nextAction.href}>{nextAction.label}</Link>
-          </Button>
+          <Link
+            to={nextAction.href}
+            className={cn(buttonVariants({ variant: 'secondary' }), 'min-h-touch w-full')}
+          >
+            {nextAction.label}
+          </Link>
         ) : code !== undefined ? (
           <AeCopyCommand
             comfortable
@@ -71,9 +74,15 @@ export function AeToolNextAction({
             <p className="text-xs leading-5 text-background/55">
               Your agent confirms the exact buyer amount in AUD, authority, balance, and availability through tool.quote before it can Call.
             </p>
-            <Button asChild variant="outline" className="min-h-touch w-full border-background/30 bg-transparent text-background hover:bg-background/10 hover:text-background">
-              <a href={agentSetupHref(model.toolRef)}>Connect an Agent first</a>
-            </Button>
+            <a
+              href={agentSetupHref(model.toolRef)}
+              className={cn(
+                buttonVariants({ variant: 'outline' }),
+                'min-h-touch w-full border-background/30 bg-transparent text-background hover:bg-background/10 hover:text-background',
+              )}
+            >
+              Connect an Agent first
+            </a>
           </div>
         ) : null}
       </aside>
@@ -93,13 +102,12 @@ export function AeToolNextAction({
       </CardHeader>
       <CardContent className="grid gap-3">
         {nextAction.kind === 'navigate' && nextAction.href !== undefined ? (
-          <Button
-            asChild
-            size="sm"
-            className="min-h-touch"
+          <Link
+            to={nextAction.href}
+            className={cn(buttonVariants({ size: 'sm' }), 'min-h-touch')}
           >
-            <Link to={nextAction.href}>{nextAction.label}</Link>
-          </Button>
+            {nextAction.label}
+          </Link>
         ) : code !== undefined ? (
           <AeCopyCommand
             compact
@@ -108,9 +116,12 @@ export function AeToolNextAction({
           />
         ) : null}
         {nextAction.label === 'Tool reference' ? (
-          <Button asChild variant="outline" size="sm" className="min-h-touch">
-            <a href={agentSetupHref(model.toolRef)}>Connect an Agent first</a>
-          </Button>
+          <a
+            href={agentSetupHref(model.toolRef)}
+            className={cn(buttonVariants({ variant: 'outline', size: 'sm' }), 'min-h-touch')}
+          >
+            Connect an Agent first
+          </a>
         ) : null}
       </CardContent>
     </Card>

@@ -1,22 +1,29 @@
 import * as React from "react"
-import { Label as LabelPrimitive } from "radix-ui"
+import { useRender } from "@base-ui/react/use-render"
 
 import { cn } from "@/lib/utils"
 
+export interface LabelProps extends React.ComponentProps<"label"> {
+  render?: useRender.RenderProp
+}
+
 function Label({
   className,
+  render,
   ...props
-}: React.ComponentProps<typeof LabelPrimitive.Root>) {
-  return (
-    <LabelPrimitive.Root
-      data-slot="label"
-      className={cn(
+}: LabelProps) {
+  return useRender({
+    render,
+    props: {
+      "data-slot": "label",
+      className: cn(
         "flex items-center gap-2 text-sm leading-none font-medium select-none group-data-[disabled=true]:pointer-events-none group-data-[disabled=true]:opacity-50 peer-disabled:cursor-not-allowed peer-disabled:opacity-50",
         className
-      )}
-      {...props}
-    />
-  )
+      ),
+      ...props,
+    },
+    defaultTagName: "label",
+  })
 }
 
 export { Label }

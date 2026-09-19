@@ -1,6 +1,13 @@
+import { Field as BaseField } from '@base-ui/react/field'
 import { useState, type FormEvent, type ReactElement } from 'react'
 
-import { isValidAbn, normalizeAbn } from '@/modules/money/public'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { TACTILE } from '@/components/ae/settings/OwnerNotificationSettings'
+import { toast } from '@/lib/ui/toast'
+import { cn } from '@/lib/utils'
+import { formatAbnDisplay, isValidAbn, normalizeAbn } from '@/modules/money/public'
 
 export type TaxProfileInitialData =
   | Readonly<{ kind: 'missing'; revision: 0 }>
@@ -31,17 +38,21 @@ export type TaxProfileSubmitPayload = Readonly<{
 
 export type TaxProfileFormProps = Readonly<{
   initialData: TaxProfileInitialData
-  onSubmit: (payload: TaxProfileSubmitPayload) => void
+  onSubmit: (payload: TaxProfileSubmitPayload) => void | Promise<void>
   isSubmitting?: boolean
 }>
 
-function formatAbnDisplay(digits: string): string {
-  const clean = digits.replace(/\D/gu, '')
-  if (clean.length <= 2) return clean
-  if (clean.length <= 5) return `${clean.slice(0, 2)} ${clean.slice(2)}`
-  if (clean.length <= 8) return `${clean.slice(0, 2)} ${clean.slice(2, 5)} ${clean.slice(5)}`
-  return `${clean.slice(0, 2)} ${clean.slice(2, 5)} ${clean.slice(5, 8)} ${clean.slice(8, 11)}`
-}
+const VALIDATION_DIAGNOSTIC = {
+  whatHappened: 'Invalid ABN or incomplete billing address.',
+  financialImpact: 'A$0.00 affected — tax profile not saved.',
+  nextStep: 'Enter an 11-digit Australian Business Number and valid address.',
+} as const
+
+const SUBMIT_FAILURE_DIAGNOSTIC = {
+  whatHappened: 'Billing and tax profile could not be saved.',
+  financialImpact: 'A$0.00 affected — tax profile not saved.',
+  nextStep: 'Check your connection and try again. Your previous tax facts remain unchanged.',
+} as const
 
 export function TaxProfileForm({
   initialData,
@@ -57,11 +68,12 @@ export function TaxProfileForm({
   const [locality, setLocality] = useState(isAvailable ? initialData.locality : '')
   const [region, setRegion] = useState(isAvailable ? (initialData.region ?? '') : '')
   const [postalCode, setPostalCode] = useState(isAvailable ? initialData.postalCode : '')
+  const [internalSubmitting, setInternalSubmitting] = useState(false)
+  const [submitDiagnostic, setSubmitDiagnostic] = useState<typeof SUBMIT_FAILURE_DIAGNOSTIC | null>(null)
 
   const normalizedAbn = normalizeAbn(abn)
   const isAbnDirty = abn.trim().length > 0
   const isAbnValid = isValidAbn(normalizedAbn)
-  const isAbnInvalid = isAbnDirty && !isAbnValid
 
   const isLegalNameValid = legalName.trim().length > 0
   const isAddressValid =
@@ -69,17 +81,33 @@ export function TaxProfileForm({
     && locality.trim().length > 0
     && /^\d{4}$/u.test(postalCode.trim())
 
+  const hasStarted =
+    legalName.trim().length > 0
+    || isAbnDirty
+    || addressLine1.trim().length > 0
+    || locality.trim().length > 0
+    || postalCode.trim().length > 0
+
+  const showValidationDiagnostic =
+    hasStarted
+    && !isSubmitting
+    && !internalSubmitting
+    && (!isLegalNameValid || !isAbnValid || !isAddressValid)
+
   const canSave =
     isLegalNameValid
     && isAbnValid
     && isAddressValid
     && !isSubmitting
+    && !internalSubmitting
+
+  const submitting = isSubmitting || internalSubmitting
 
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     if (!canSave) return
 
-    onSubmit({
+    const payload: TaxProfileSubmitPayload = {
       abn: normalizedAbn,
       legalName: legalName.trim(),
       addressLine1: addressLine1.trim(),
@@ -89,137 +117,189 @@ export function TaxProfileForm({
       postalCode: postalCode.trim(),
       country: 'AU',
       expectedRevision: initialData.revision,
-    })
+    }
+
+    setInternalSubmitting(true)
+    setSubmitDiagnostic(null)
+
+    void Promise.resolve(onSubmit(payload))
+      .then(() => {
+        toast.success('Billing & tax profile updated')
+      })
+      .catch(() => {
+        setSubmitDiagnostic(SUBMIT_FAILURE_DIAGNOSTIC)
+        toast.error('Billing & tax profile was not saved')
+      })
+      .finally(() => {
+        setInternalSubmitting(false)
+      })
   }
+
+  const activeDiagnostic = submitDiagnostic ?? (showValidationDiagnostic ? VALIDATION_DIAGNOSTIC : null)
 
   return (
     <form onSubmit={handleSubmit} className="grid gap-4 max-w-lg">
-      <div className="grid gap-1">
-        <label htmlFor="tax-profile-legal-name" className="block text-xs font-medium text-foreground">
+      <BaseField.Root className="grid gap-1">
+        <Label htmlFor="tax-profile-legal-name" className="text-xs text-foreground">
           Legal business name
-        </label>
-        <input
+        </Label>
+        <Input
           id="tax-profile-legal-name"
           type="text"
           value={legalName}
-          onChange={(event) => setLegalName(event.target.value)}
+          onChange={(event) => {
+            setLegalName(event.target.value)
+            setSubmitDiagnostic(null)
+          }}
           placeholder="Acme Technologies Pty Ltd"
-          className="w-full border border-border bg-container px-3 py-1.5 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+          className="text-xs"
         />
-      </div>
+      </BaseField.Root>
 
-      <div className="grid gap-1">
-        <label htmlFor="tax-profile-abn" className="block text-xs font-medium text-foreground">
+      <BaseField.Root className="grid gap-1">
+        <Label htmlFor="tax-profile-abn" className="text-xs text-foreground">
           ABN
-        </label>
-        <input
+        </Label>
+        <Input
           id="tax-profile-abn"
           type="text"
+          inputMode="numeric"
           value={abn}
-          onChange={(event) => setAbn(event.target.value)}
+          onChange={(event) => {
+            setAbn(formatAbnDisplay(event.target.value))
+            setSubmitDiagnostic(null)
+          }}
           placeholder="51 824 753 556"
-          className="w-full border border-border bg-container px-3 py-1.5 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+          className="font-mono text-xs tabular-nums"
         />
-        {isAbnInvalid ? (
-          <p className="text-xs text-destructive">Invalid ABN checksum</p>
-        ) : null}
-      </div>
+      </BaseField.Root>
 
-      <div className="grid gap-1">
-        <label htmlFor="tax-profile-address" className="block text-xs font-medium text-foreground">
+      <BaseField.Root className="grid gap-1">
+        <Label htmlFor="tax-profile-address" className="text-xs text-foreground">
           Address
-        </label>
-        <input
+        </Label>
+        <Input
           id="tax-profile-address"
           type="text"
           value={addressLine1}
-          onChange={(event) => setAddressLine1(event.target.value)}
+          onChange={(event) => {
+            setAddressLine1(event.target.value)
+            setSubmitDiagnostic(null)
+          }}
           placeholder="1 Market Street"
-          className="w-full border border-border bg-container px-3 py-1.5 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+          className="text-xs"
         />
-      </div>
+      </BaseField.Root>
 
-      <div className="grid gap-1">
-        <label htmlFor="tax-profile-address-2" className="block text-xs font-medium text-foreground">
+      <BaseField.Root className="grid gap-1">
+        <Label htmlFor="tax-profile-address-2" className="text-xs text-foreground">
           Address line 2 (optional)
-        </label>
-        <input
+        </Label>
+        <Input
           id="tax-profile-address-2"
           type="text"
           value={addressLine2}
-          onChange={(event) => setAddressLine2(event.target.value)}
+          onChange={(event) => {
+            setAddressLine2(event.target.value)
+            setSubmitDiagnostic(null)
+          }}
           placeholder="Suite 400"
-          className="w-full border border-border bg-container px-3 py-1.5 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+          className="text-xs"
         />
-      </div>
+      </BaseField.Root>
 
       <div className="grid grid-cols-2 gap-3">
-        <div className="grid gap-1">
-          <label htmlFor="tax-profile-city" className="block text-xs font-medium text-foreground">
+        <BaseField.Root className="grid gap-1">
+          <Label htmlFor="tax-profile-city" className="text-xs text-foreground">
             City/Locality
-          </label>
-          <input
+          </Label>
+          <Input
             id="tax-profile-city"
             type="text"
             value={locality}
-            onChange={(event) => setLocality(event.target.value)}
+            onChange={(event) => {
+              setLocality(event.target.value)
+              setSubmitDiagnostic(null)
+            }}
             placeholder="Sydney"
-            className="w-full border border-border bg-container px-3 py-1.5 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+            className="text-xs"
           />
-        </div>
+        </BaseField.Root>
 
-        <div className="grid gap-1">
-          <label htmlFor="tax-profile-state" className="block text-xs font-medium text-foreground">
+        <BaseField.Root className="grid gap-1">
+          <Label htmlFor="tax-profile-state" className="text-xs text-foreground">
             State/Region
-          </label>
-          <input
+          </Label>
+          <Input
             id="tax-profile-state"
             type="text"
             value={region}
-            onChange={(event) => setRegion(event.target.value)}
+            onChange={(event) => {
+              setRegion(event.target.value)
+              setSubmitDiagnostic(null)
+            }}
             placeholder="NSW"
-            className="w-full border border-border bg-container px-3 py-1.5 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+            className="text-xs"
           />
-        </div>
+        </BaseField.Root>
       </div>
 
       <div className="grid grid-cols-2 gap-3">
-        <div className="grid gap-1">
-          <label htmlFor="tax-profile-postal-code" className="block text-xs font-medium text-foreground">
+        <BaseField.Root className="grid gap-1">
+          <Label htmlFor="tax-profile-postal-code" className="text-xs text-foreground">
             Postal code
-          </label>
-          <input
+          </Label>
+          <Input
             id="tax-profile-postal-code"
             type="text"
             value={postalCode}
-            onChange={(event) => setPostalCode(event.target.value)}
+            onChange={(event) => {
+              setPostalCode(event.target.value)
+              setSubmitDiagnostic(null)
+            }}
             placeholder="2000"
-            className="w-full border border-border bg-container px-3 py-1.5 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+            className="text-xs"
           />
-        </div>
+        </BaseField.Root>
 
-        <div className="grid gap-1">
-          <label htmlFor="tax-profile-country" className="block text-xs font-medium text-foreground">
+        <BaseField.Root className="grid gap-1">
+          <Label htmlFor="tax-profile-country" className="text-xs text-foreground">
             Country
-          </label>
-          <input
+          </Label>
+          <Input
             id="tax-profile-country"
             type="text"
             value="AU"
             readOnly
-            className="w-full border border-border bg-muted px-3 py-1.5 text-xs text-muted-foreground focus:outline-none"
+            className="bg-muted text-xs text-muted-foreground"
           />
-        </div>
+        </BaseField.Root>
+      </div>
+
+      <div className="min-h-[2.5rem]" role="status" aria-live="polite">
+        {activeDiagnostic ? (
+          <div className="grid gap-1 text-sm text-muted-foreground">
+            <p>
+              <strong>What happened:</strong> {activeDiagnostic.whatHappened}
+            </p>
+            <p className="font-mono text-xs tabular-nums">
+              <strong>Financial impact:</strong> {activeDiagnostic.financialImpact}
+            </p>
+            <p>
+              <strong>Next step:</strong> {activeDiagnostic.nextStep}
+            </p>
+          </div>
+        ) : null}
       </div>
 
       <div className="pt-2">
-        <button
+        <Button
           type="submit"
           disabled={!canSave}
-          className="border border-border bg-foreground px-4 py-1.5 text-xs font-medium text-background hover:bg-foreground/90 disabled:cursor-not-allowed disabled:opacity-50"
+          className={cn('min-h-touch text-xs', TACTILE)}
         >
-          {isSubmitting ? 'Saving...' : 'Save'}
-        </button>
+          {submitting ? 'Saving...' : 'Save'}
+        </Button>
       </div>
     </form>
   )

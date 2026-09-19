@@ -72,5 +72,6 @@ declare module '@tanstack/react-router' {
   interface StaticDataRouteOption {
     nav?: NavStaticData
     shell?: 'operator'
+    shellMode?: 'standard' | 'minimal'
   }
 }

@@ -13,6 +13,7 @@ import {
 import { Alert } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { buttonVariants } from '@/components/ui/button-variants'
 import { cn } from '@/lib/utils'
 import { toast } from '@/lib/ui/toast'
 import type { OwnerConnectReadinessReadback } from '@/modules/money/server'
@@ -242,12 +243,13 @@ export function AeConnectReturnPoller({
               <p className="text-xs text-muted-foreground">{READY_DESCRIPTION}</p>
             </div>
           </div>
-          <Button asChild size="sm" className={cn('gap-1.5 min-h-touch w-fit', TACTILE)}>
-            <Link to="/owner/operations/new">
-              <span>Add your first Tool</span>
-              <ArrowRightIcon className="size-3.5" />
-            </Link>
-          </Button>
+          <Link
+            to="/owner/operations/new"
+            className={cn(buttonVariants({ size: 'sm' }), 'gap-1.5 min-h-touch w-fit', TACTILE)}
+          >
+            <span>Add your first Tool</span>
+            <ArrowRightIcon className="size-3.5" />
+          </Link>
         </div>
       )}
 

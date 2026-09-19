@@ -2,6 +2,8 @@ import { ErrorBoundary as SentryErrorBoundary } from '@sentry/react'
 import type { ReactNode } from 'react'
 
 import { Button } from '@/components/ui/button'
+import { buttonVariants } from '@/components/ui/button-variants'
+import { cn } from '@/lib/utils'
 import { AeEmptyState } from '@/components/ae/feedback/AeEmptyState'
 import { attemptViteStaleChunkReload } from '@/lib/observability/stale-chunk-reload'
 
@@ -21,7 +23,7 @@ function AeObservabilityErrorFallback() {
           <Button type="button" variant="default" className="min-h-touch" onClick={() => window.location.reload()}>
             Try again
           </Button>
-          <Button asChild variant="secondary" className="min-h-touch"><a href="/market">Browse Tools</a></Button>
+          <a href="/market" className={cn(buttonVariants({ variant: 'secondary' }), 'min-h-touch')}>Browse Tools</a>
         </div>
       }
     />

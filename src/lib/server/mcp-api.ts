@@ -52,6 +52,7 @@ import { createAccountManagementService, type AccountManagementService } from '@
 import { createMarketDemandService, type MarketDemandService } from '@/modules/market-demand/market-demand.actions'
 import { createFundingHandoffService } from '@/lib/server/funding-handoff-api'
 import type { FundingHandoffService } from '@/modules/money/funding-handoff.actions'
+import type { ToolCatalogSearcher } from '@/modules/capability-execution/procure-engine'
 const MAX_MCP_REQUEST_BODY_BYTES = 320 * 1024
 const AE_MCP_INSTRUCTIONS = [
   'Use Agentic Economy to acquire one bounded outside contribution when your current harness lacks a capability.',
@@ -77,6 +78,7 @@ export type McpAccessTier = Readonly<{
   accountManagementService?: AccountManagementService
   marketDemandService?: MarketDemandService
   fundingHandoffService?: FundingHandoffService
+  catalogSearcher?: ToolCatalogSearcher
   rolloutEnvironment?: StringEnvironment
   /** Test-only override for the tools/list page size (default: MCP_TOOLS_LIST_PAGE_SIZE). */
   toolsListPageSize?: number
@@ -553,6 +555,7 @@ export function createAeMcpServer(
               ...(access.marketDemandService === undefined ? {} : { marketDemandService: access.marketDemandService }),
               ...(access.fundingHandoffService === undefined ? {} : { fundingHandoffService: access.fundingHandoffService }),
               ...(access.callService === undefined ? {} : { callService: access.callService }),
+              ...(access.catalogSearcher === undefined ? {} : { catalogSearcher: access.catalogSearcher }),
             },
           })
           const outputValidation = await safeParseAsync(action.outputSchema, result)
@@ -607,6 +610,7 @@ type McpRequestOptions = Readonly<{
   fundingHandoffService?: FundingHandoffService
   timing?: ActionTimingSink
   callService?: CallService
+  catalogSearcher?: ToolCatalogSearcher
   rolloutEnvironment?: StringEnvironment
   /** Test-only override for the tools/list page size (default: MCP_TOOLS_LIST_PAGE_SIZE). */
   toolsListPageSize?: number
@@ -739,6 +743,7 @@ export async function handleMcpRequest(request: Request, options: McpRequestOpti
           ?? createMarketDemandService(boundedRequest, bounded.bodyText),
         fundingHandoffService: options.fundingHandoffService
           ?? createFundingHandoffService(boundedRequest, bounded.bodyText),
+        ...(options.catalogSearcher === undefined ? {} : { catalogSearcher: options.catalogSearcher }),
         ...(options.rolloutEnvironment === undefined ? {} : { rolloutEnvironment: options.rolloutEnvironment }),
         ...(options.toolsListPageSize === undefined ? {} : { toolsListPageSize: options.toolsListPageSize }),
       })

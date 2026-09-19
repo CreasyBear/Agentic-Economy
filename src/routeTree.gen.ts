@@ -78,8 +78,8 @@ import { Route as ApiClerkWebhookRouteImport } from './routes/api.clerk.webhook'
 import { Route as ApiChatAnonymousRouteImport } from './routes/api.chat.anonymous'
 import { Route as ApiBusinessesSearchRouteImport } from './routes/api.businesses.search'
 import { Route as ApiBusinessesSlugRouteImport } from './routes/api.businesses.$slug'
-import { Route as OperatorOwnerTeamRouteImport } from './routes/_operator/owner.team'
 import { Route as OperatorOwnerWorkspaceRouteImport } from './routes/_operator/owner.workspace'
+import { Route as OperatorOwnerTeamRouteImport } from './routes/_operator/owner.team'
 import { Route as OperatorOwnerSettingsRouteImport } from './routes/_operator/owner.settings'
 import { Route as OperatorOwnerOperationsRouteImport } from './routes/_operator/owner.operations'
 import { Route as OperatorOwnerMarketRouteImport } from './routes/_operator/owner.market'
@@ -89,6 +89,7 @@ import { Route as OperatorAgentAccessAuthorizeRouteImport } from './routes/_oper
 import { Route as OperatorAdminIndexHealthRouteImport } from './routes/_operator/admin.index-health'
 import { Route as OperatorAdminAuditEventsRouteImport } from './routes/_operator/admin.audit-events'
 import { Route as ApiV1ToolsQuoteRouteImport } from './routes/api.v1.tools.quote'
+import { Route as ApiV1ToolsProcureRouteImport } from './routes/api.v1.tools.procure'
 import { Route as ApiV1ToolsCallRouteImport } from './routes/api.v1.tools.call'
 import { Route as ApiV1SupplyWithdrawRouteImport } from './routes/api.v1.supply.withdraw'
 import { Route as ApiV1SupplyStatusRouteImport } from './routes/api.v1.supply.status'
@@ -482,14 +483,14 @@ const ApiBusinessesSlugRoute = ApiBusinessesSlugRouteImport.update({
   path: '/$slug',
   getParentRoute: () => ApiBusinessesRoute,
 } as any)
-const OperatorOwnerTeamRoute = OperatorOwnerTeamRouteImport.update({
-  id: '/owner/team',
-  path: '/owner/team',
-  getParentRoute: () => OperatorRoute,
-} as any)
 const OperatorOwnerWorkspaceRoute = OperatorOwnerWorkspaceRouteImport.update({
   id: '/owner/workspace',
   path: '/owner/workspace',
+  getParentRoute: () => OperatorRoute,
+} as any)
+const OperatorOwnerTeamRoute = OperatorOwnerTeamRouteImport.update({
+  id: '/owner/team',
+  path: '/owner/team',
   getParentRoute: () => OperatorRoute,
 } as any)
 const OperatorOwnerSettingsRoute = OperatorOwnerSettingsRouteImport.update({
@@ -538,6 +539,11 @@ const OperatorAdminAuditEventsRoute =
 const ApiV1ToolsQuoteRoute = ApiV1ToolsQuoteRouteImport.update({
   id: '/api/v1/tools/quote',
   path: '/api/v1/tools/quote',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiV1ToolsProcureRoute = ApiV1ToolsProcureRouteImport.update({
+  id: '/api/v1/tools/procure',
+  path: '/api/v1/tools/procure',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiV1ToolsCallRoute = ApiV1ToolsCallRouteImport.update({
@@ -865,6 +871,7 @@ export interface FileRoutesByFullPath {
   '/api/v1/supply/status': typeof ApiV1SupplyStatusRoute
   '/api/v1/supply/withdraw': typeof ApiV1SupplyWithdrawRoute
   '/api/v1/tools/call': typeof ApiV1ToolsCallRoute
+  '/api/v1/tools/procure': typeof ApiV1ToolsProcureRoute
   '/api/v1/tools/quote': typeof ApiV1ToolsQuoteRoute
   '/owner/supply/connections/new': typeof OperatorOwnerSupplyConnectionsNewRoute
   '/api/v1/account/funding-sessions/$fundingSessionId': typeof ApiV1AccountFundingSessionsFundingSessionIdRoute
@@ -986,6 +993,7 @@ export interface FileRoutesByTo {
   '/api/v1/supply/status': typeof ApiV1SupplyStatusRoute
   '/api/v1/supply/withdraw': typeof ApiV1SupplyWithdrawRoute
   '/api/v1/tools/call': typeof ApiV1ToolsCallRoute
+  '/api/v1/tools/procure': typeof ApiV1ToolsProcureRoute
   '/api/v1/tools/quote': typeof ApiV1ToolsQuoteRoute
   '/owner/supply/connections/new': typeof OperatorOwnerSupplyConnectionsNewRoute
   '/api/v1/account/funding-sessions/$fundingSessionId': typeof ApiV1AccountFundingSessionsFundingSessionIdRoute
@@ -1109,6 +1117,7 @@ export interface FileRoutesById {
   '/api/v1/supply/status': typeof ApiV1SupplyStatusRoute
   '/api/v1/supply/withdraw': typeof ApiV1SupplyWithdrawRoute
   '/api/v1/tools/call': typeof ApiV1ToolsCallRoute
+  '/api/v1/tools/procure': typeof ApiV1ToolsProcureRoute
   '/api/v1/tools/quote': typeof ApiV1ToolsQuoteRoute
   '/_operator/owner/supply/connections/new': typeof OperatorOwnerSupplyConnectionsNewRoute
   '/api/v1/account/funding-sessions/$fundingSessionId': typeof ApiV1AccountFundingSessionsFundingSessionIdRoute
@@ -1232,6 +1241,7 @@ export interface FileRouteTypes {
     | '/api/v1/supply/status'
     | '/api/v1/supply/withdraw'
     | '/api/v1/tools/call'
+    | '/api/v1/tools/procure'
     | '/api/v1/tools/quote'
     | '/owner/supply/connections/new'
     | '/api/v1/account/funding-sessions/$fundingSessionId'
@@ -1353,6 +1363,7 @@ export interface FileRouteTypes {
     | '/api/v1/supply/status'
     | '/api/v1/supply/withdraw'
     | '/api/v1/tools/call'
+    | '/api/v1/tools/procure'
     | '/api/v1/tools/quote'
     | '/owner/supply/connections/new'
     | '/api/v1/account/funding-sessions/$fundingSessionId'
@@ -1475,6 +1486,7 @@ export interface FileRouteTypes {
     | '/api/v1/supply/status'
     | '/api/v1/supply/withdraw'
     | '/api/v1/tools/call'
+    | '/api/v1/tools/procure'
     | '/api/v1/tools/quote'
     | '/_operator/owner/supply/connections/new'
     | '/api/v1/account/funding-sessions/$fundingSessionId'
@@ -1570,6 +1582,7 @@ export interface RootRouteChildren {
   ApiV1SupplyStatusRoute: typeof ApiV1SupplyStatusRoute
   ApiV1SupplyWithdrawRoute: typeof ApiV1SupplyWithdrawRoute
   ApiV1ToolsCallRoute: typeof ApiV1ToolsCallRoute
+  ApiV1ToolsProcureRoute: typeof ApiV1ToolsProcureRoute
   ApiV1ToolsQuoteRoute: typeof ApiV1ToolsQuoteRoute
   ApiV1SupplyConnectionsConnectRoute: typeof ApiV1SupplyConnectionsConnectRoute
   ApiV1SupplyConnectionsDetailRoute: typeof ApiV1SupplyConnectionsDetailRoute
@@ -2066,18 +2079,18 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiBusinessesSlugRouteImport
       parentRoute: typeof ApiBusinessesRoute
     }
-    '/_operator/owner/team': {
-      id: '/_operator/owner/team'
-      path: '/owner/team'
-      fullPath: '/owner/team'
-      preLoaderRoute: typeof OperatorOwnerTeamRouteImport
-      parentRoute: typeof OperatorRoute
-    }
     '/_operator/owner/workspace': {
       id: '/_operator/owner/workspace'
       path: '/owner/workspace'
       fullPath: '/owner/workspace'
       preLoaderRoute: typeof OperatorOwnerWorkspaceRouteImport
+      parentRoute: typeof OperatorRoute
+    }
+    '/_operator/owner/team': {
+      id: '/_operator/owner/team'
+      path: '/owner/team'
+      fullPath: '/owner/team'
+      preLoaderRoute: typeof OperatorOwnerTeamRouteImport
       parentRoute: typeof OperatorRoute
     }
     '/_operator/owner/settings': {
@@ -2141,6 +2154,13 @@ declare module '@tanstack/react-router' {
       path: '/api/v1/tools/quote'
       fullPath: '/api/v1/tools/quote'
       preLoaderRoute: typeof ApiV1ToolsQuoteRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/v1/tools/procure': {
+      id: '/api/v1/tools/procure'
+      path: '/api/v1/tools/procure'
+      fullPath: '/api/v1/tools/procure'
+      preLoaderRoute: typeof ApiV1ToolsProcureRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/v1/tools/call': {
@@ -2709,6 +2729,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiV1SupplyStatusRoute: ApiV1SupplyStatusRoute,
   ApiV1SupplyWithdrawRoute: ApiV1SupplyWithdrawRoute,
   ApiV1ToolsCallRoute: ApiV1ToolsCallRoute,
+  ApiV1ToolsProcureRoute: ApiV1ToolsProcureRoute,
   ApiV1ToolsQuoteRoute: ApiV1ToolsQuoteRoute,
   ApiV1SupplyConnectionsConnectRoute: ApiV1SupplyConnectionsConnectRoute,
   ApiV1SupplyConnectionsDetailRoute: ApiV1SupplyConnectionsDetailRoute,

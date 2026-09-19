@@ -64,7 +64,10 @@ export function ThemeProvider({
   const [prefersDark, setPrefersDark] = useState(false)
 
   useEffect(() => {
-    const stored = parseStoredAppearance(localStorage.getItem(storageKey))
+    const fromDataset = document.documentElement.dataset.appearancePreference ?? null
+    const stored = parseStoredAppearance(
+      fromDataset ?? localStorage.getItem(storageKey),
+    )
     setPreferenceState(stored)
     setPrefersDark(readPrefersDark())
     applyAppearance(stored)

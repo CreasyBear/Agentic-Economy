@@ -44,6 +44,9 @@ describe('account security history', () => {
     expect(disclosure?.hasAttribute('open')).toBe(true)
     expect(screen.getByText('This page does not mark the Account contained')).toBeTruthy()
     expect(screen.getByText(/Resetting MFA alone does not revoke existing sessions/u)).toBeTruthy()
+    expect(screen.getByText(/A\$0\.00 affected — opening this list does not revoke sessions, Agents, or payouts\./u))
+      .toBeTruthy()
+    expect(screen.getByText(/reviewing does not change them/u)).toBeTruthy()
     expect(screen.getAllByText('Review at source')).toHaveLength(5)
     expect(screen.getByRole('link', { name: /Review and revoke Clerk sessions/u }).getAttribute('href'))
       .toBe('#clerk-account-security')
@@ -104,7 +107,10 @@ describe('account security history', () => {
     readHistory.mockResolvedValueOnce(available())
     render(<AeAccountSecurityHistory initialResult={{ kind: 'unavailable', reason: 'source_unavailable' }} />)
 
-    expect(screen.getByRole('alert').textContent).toContain('No newer security state is being claimed')
+    expect(screen.getByRole('alert').textContent).toContain('Security history is temporarily unavailable')
+    expect(screen.getByText(/What happened:/u)).toBeTruthy()
+    expect(screen.getByText(/A\$0\.00 affected — Profile, sessions, and the compromise checklist remain available above\./u))
+      .toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Try again' }))
     await waitFor(() => expect(screen.getByText('Session revoked')).toBeTruthy())
     expect(readHistory).toHaveBeenCalledWith({ data: {} })
@@ -181,7 +187,9 @@ describe('account security history', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Load older events' }))
     await waitFor(() => expect(screen.getByRole('button', { name: 'Retry older events' })).toBeTruthy())
     expect(screen.getByText('Session revoked')).toBeTruthy()
-    expect(screen.getByText('Older events could not be loaded. Known security history remains visible.')).toBeTruthy()
+    expect(screen.getByText(/Older security events could not be loaded\./u)).toBeTruthy()
+    expect(screen.getByText(/A\$0\.00 affected — known security history remains visible\./u)).toBeTruthy()
+    expect(screen.getByText(/Check your connection and retry older events\./u)).toBeTruthy()
 
     fireEvent.click(screen.getByRole('button', { name: 'Retry older events' }))
     await waitFor(() => expect(screen.getByText('Session ended')).toBeTruthy())
@@ -293,7 +301,9 @@ describe('Agent security history', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Load older events' }))
     await waitFor(() => expect(screen.getByRole('button', { name: 'Retry older events' })).toBeTruthy())
     expect(screen.getByText('Session revoked')).toBeTruthy()
-    expect(screen.getByText('Older events could not be loaded. Known security history remains visible.')).toBeTruthy()
+    expect(screen.getByText(/Older security events could not be loaded\./u)).toBeTruthy()
+    expect(screen.getByText(/A\$0\.00 affected — known security history remains visible\./u)).toBeTruthy()
+    expect(screen.getByText(/Check your connection and retry older events\./u)).toBeTruthy()
   })
 
   it('ignores an old Agent read after the selected identity changes', async () => {

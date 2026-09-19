@@ -9,9 +9,10 @@ export function AeCopyReference({
   label,
   value,
   className,
-}: Readonly<{ label: string; value: string; className?: string }>) {
+  copyFeedbackMs = 1_600,
+}: Readonly<{ label: string; value: string; className?: string; copyFeedbackMs?: number }>) {
   const { status, isCopied: copied, copy } = useClipboardCopy(value, {
-    timeout: 1_600,
+    timeout: copyFeedbackMs,
   })
 
   const feedback = copied ? 'Copied' : status === 'failed' ? 'Copy failed' : ''

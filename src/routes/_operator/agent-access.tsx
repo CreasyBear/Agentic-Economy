@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
+import { buttonVariants } from '@/components/ui/button-variants'
+import { cn } from '@/lib/utils'
 import { Link, Outlet, createFileRoute, useLocation, useNavigate } from '@tanstack/react-router'
 import { useServerFn } from '@tanstack/react-start'
 import { KeyRound } from 'lucide-react'
@@ -425,9 +427,13 @@ function AgentAccessHome() {
           className="rounded-xl border border-border bg-card p-gutter shadow-soft"
         >
           {hasConnectedAgent ? (
-            <Button asChild className="w-fit min-h-touch">
-              <Link to="/tools/$toolRef" params={{ toolRef: search.resumeTool }}>Return to selected Tool</Link>
-            </Button>
+            <Link
+              to="/tools/$toolRef"
+              params={{ toolRef: search.resumeTool }}
+              className={cn(buttonVariants(), 'w-fit min-h-touch')}
+            >
+              Return to selected Tool
+            </Link>
           ) : null}
         </AeSection>
       )}

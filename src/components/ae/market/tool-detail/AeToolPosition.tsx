@@ -8,7 +8,8 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from '@/components/ui/accordion'
-import { Button } from '@/components/ui/button'
+import { buttonVariants } from '@/components/ui/button-variants'
+import { cn } from '@/lib/utils'
 import type { PublicToolDescriptor } from '@/modules/capability-supply/public'
 
 /** Compact-only actions that locate this Tool in the wider market. */
@@ -21,17 +22,16 @@ export function AeToolPosition({
 }>) {
   return (
     <div className="grid gap-intra">
-      <Button asChild variant="secondary" size="sm" className="min-h-touch justify-self-start">
-        <Link
-          to="/tools/$toolRef"
-          params={{ toolRef: tool.toolRef }}
-          data-testid="command-panel-open-tool"
-          onClick={onNavigate}
-        >
-          Open full Tool details
-          <ArrowUpRightIcon aria-hidden="true" data-icon="inline-end" />
-        </Link>
-      </Button>
+      <Link
+        to="/tools/$toolRef"
+        params={{ toolRef: tool.toolRef }}
+        data-testid="command-panel-open-tool"
+        onClick={onNavigate}
+        className={cn(buttonVariants({ variant: 'secondary', size: 'sm' }), 'min-h-touch justify-self-start')}
+      >
+        Open full Tool details
+        <ArrowUpRightIcon aria-hidden="true" data-icon="inline-end" />
+      </Link>
       <Accordion type="single" collapsible>
         <AccordionItem value="actions" className="rounded-card border bg-card px-related">
           <AccordionTrigger className="min-h-touch py-intra hover:no-underline">

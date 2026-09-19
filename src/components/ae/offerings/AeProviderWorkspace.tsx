@@ -7,7 +7,9 @@ import { AeEmptyState } from '@/components/ae/feedback/AeEmptyState'
 import { AeOperatorPage } from '@/components/ae/layout/AeOperatorPage'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
+import { buttonVariants } from '@/components/ui/button-variants'
 import { captureClientExceptionOnClient } from '@/lib/observability/capture-client-exception'
+import { cn } from '@/lib/utils'
 import { renameProviderDisplayNameServer } from '@/lib/server/owner-workspace.functions'
 import { parseOwnerToolsCompatibilitySearch, parseOwnerToolsX402ConnectionSearch } from '@/lib/operator/supply-compatibility'
 import { readOwnerProviderEarningsServer } from '@/modules/capability-supply/supply-funnel.functions'
@@ -356,5 +358,9 @@ function AvailableWorkspace({
 }
 
 function AddToolAction() {
-  return <Button asChild><Link to="/owner/operations/new">Add Tool</Link></Button>
+  return (
+    <Link to="/owner/operations/new" className={cn(buttonVariants(), 'min-h-touch')}>
+      Add Tool
+    </Link>
+  )
 }

@@ -5,6 +5,7 @@ import { AeFactList } from '@/components/ae/data/AeFactList'
 import { AeEmptyState } from '@/components/ae/feedback/AeEmptyState'
 import { AeSection } from '@/components/ae/layout/AeSection'
 import { Button } from '@/components/ui/button'
+import { buttonVariants } from '@/components/ui/button-variants'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Field, FieldDescription, FieldError, FieldLabel } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
@@ -12,6 +13,7 @@ import type { RenameProviderDisplayNameResult } from '@/lib/server/owner-workspa
 import type { PublicOwnerStatusRouteReadbackResult } from '@/modules/catalog/public'
 import type { PublicBusinessCatalogApiV2Dto } from '@/modules/registry/public'
 import { captureClientExceptionOnClient } from '@/lib/observability/capture-client-exception'
+import { cn } from '@/lib/utils'
 
 export function AeWorkspaceGeneral({
   result,
@@ -46,9 +48,12 @@ export function AeWorkspaceGeneral({
         description="A public provider listing is required before this workspace can show its catalog identity."
         role="status"
         action={
-          <Button asChild className="min-h-touch">
-            <Link to="/for-providers">Review provider setup</Link>
-          </Button>
+          <Link
+            to="/for-providers"
+            className={cn(buttonVariants(), 'min-h-touch')}
+          >
+            Review provider setup
+          </Link>
         }
       />
     )
@@ -61,9 +66,13 @@ export function AeWorkspaceGeneral({
         description="Try again in a moment. If this keeps happening, open Help."
         role="alert"
         action={
-          <Button asChild variant="secondary" className="min-h-touch">
-            <Link to="/owner/operations" hash="provider-identity">Try again</Link>
-          </Button>
+          <Link
+            to="/owner/operations"
+            hash="provider-identity"
+            className={cn(buttonVariants({ variant: 'secondary' }), 'min-h-touch')}
+          >
+            Try again
+          </Link>
         }
       />
     )

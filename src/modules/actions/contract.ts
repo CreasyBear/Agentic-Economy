@@ -8,6 +8,7 @@ import { toolMarketNavigation } from '@/modules/registry/tool-entry'
 import type { SourceWriteAdmissionRequest } from '@/modules/security/source-write-admission'
 import type { MarketDemandService } from '@/modules/market-demand/market-demand.actions'
 import type { FundingHandoffService } from '@/modules/money/funding-handoff.actions'
+import type { ToolCatalogSearcher } from '@/modules/capability-execution/procure-engine'
 
 export const CURRENT_TOOL_PROJECTION_NAVIGATION = Object.freeze({
   market: Object.freeze({
@@ -42,5 +43,7 @@ declare module '@/modules/common/action' {
     marketDemandService?: MarketDemandService
     /** Agent-native hosted funding session service shared by HTTP and MCP. */
     fundingHandoffService?: FundingHandoffService
+    /** Tool catalog search port for capability procurement. */
+    catalogSearcher?: ToolCatalogSearcher
   }
 }

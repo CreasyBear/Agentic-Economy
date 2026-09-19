@@ -64,12 +64,14 @@ export function AeAgentJsonAffordance({ agentJsonUrl, query }: AeAgentJsonAfford
 
   return (
       <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
-        <DialogTrigger asChild>
-      <Button type="button" variant="secondary" size="sm" onClick={() => void openPreview()}>
-        <CodeIcon aria-hidden="true" />
-        Agent-readable data
-      </Button>
-        </DialogTrigger>
+        <DialogTrigger
+          render={
+            <Button type="button" variant="secondary" size="sm" onClick={() => void openPreview()}>
+              <CodeIcon aria-hidden="true" />
+              Agent-readable data
+            </Button>
+          }
+        />
         <DialogContent
           className="max-h-[calc(100dvh-2rem)] max-w-[min(42rem,calc(100vw-2rem))] overflow-y-auto"
         >

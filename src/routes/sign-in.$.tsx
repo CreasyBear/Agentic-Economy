@@ -33,6 +33,7 @@ export function SignInClerkFallback() {
 }
 
 export const Route = createFileRoute('/sign-in/$')({
+  staticData: { shellMode: 'minimal' },
   validateSearch: (search: Record<string, unknown>): SignInSearch => {
     const redirect = sanitizeAuthRedirectTarget(search.redirect)
     return redirect === undefined ? {} : { redirect }

@@ -8,6 +8,7 @@ import { AeOperatorPage } from '@/components/ae/layout/AeOperatorPage'
 import { AeSection, AeSettingsStack } from '@/components/ae/layout/AeSection'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
+import { buttonVariants } from '@/components/ui/button-variants'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
@@ -25,6 +26,17 @@ import {
 } from '@/modules/agent-access/consent-read-model'
 import { presentConnectionProblem } from '@/modules/agent-access/public'
 import { degrade } from '@/lib/observability/degrade'
+import { cn } from '@/lib/utils'
+
+const AUTHORIZE_RADIO_CARD_CLASS = cn(
+  'grid cursor-pointer grid-cols-[auto_minmax(0,1fr)] gap-3 rounded-md border border-border p-3',
+  'has-[[data-checked]]:border-foreground has-[[data-checked]]:bg-muted',
+)
+
+const AUTHORIZE_RADIO_CARD_CLASS_TOUCH = cn(
+  AUTHORIZE_RADIO_CARD_CLASS,
+  'min-h-touch items-start px-3 py-3',
+)
 
 type PublicAuthorityMode = Exclude<AgentAccessAuthorityMode, 'unrestricted_test_only'>
 
@@ -346,11 +358,11 @@ function AgentAccessAuthorizeForm({ locator, oauthState, details, submitApproval
                   onValueChange={(value) => dispatch({ kind: 'select_connection', value: value as 'new_agent' | 'replace_credential' })}
                   className="grid gap-2 sm:grid-cols-2"
                 >
-                  <Label htmlFor="connection-new" className="grid cursor-pointer grid-cols-[auto_minmax(0,1fr)] gap-3 rounded-md border p-3 has-[[data-state=checked]]:border-foreground">
+                  <Label htmlFor="connection-new" className={AUTHORIZE_RADIO_CARD_CLASS}>
                     <RadioGroupItem id="connection-new" value="new_agent" className="mt-1" />
                     <span><span className="block font-medium">New agent</span><span className="text-sm font-normal text-muted-foreground">Create an independent agent identity.</span></span>
                   </Label>
-                  <Label htmlFor="connection-replace" className="grid cursor-pointer grid-cols-[auto_minmax(0,1fr)] gap-3 rounded-md border p-3 has-[[data-state=checked]]:border-foreground">
+                  <Label htmlFor="connection-replace" className={AUTHORIZE_RADIO_CARD_CLASS}>
                     <RadioGroupItem id="connection-replace" value="replace_credential" disabled={agentTargets.length === 0} className="mt-1" />
                     <span><span className="block font-medium">Replace credential</span><span className="text-sm font-normal text-muted-foreground">Keep one agent and rotate only its secret.</span></span>
                   </Label>
@@ -358,7 +370,7 @@ function AgentAccessAuthorizeForm({ locator, oauthState, details, submitApproval
                 {connectionTarget === 'replace_credential' ? (
                   <div className="grid gap-2">
                     <Label htmlFor="replacement-agent">Agent</Label>
-                    <Select value={replacementPrincipalRef ?? ''} onValueChange={(value) => dispatch({ kind: 'select_replacement', value })}>
+                    <Select value={replacementPrincipalRef ?? ''} onValueChange={(value) => { if (value != null) dispatch({ kind: 'select_replacement', value }) }}>
                       <SelectTrigger id="replacement-agent"><SelectValue placeholder="Choose an agent" /></SelectTrigger>
                       <SelectContent>
                         {agentTargets.map((agent) => <SelectItem key={agent.principalRef} value={agent.principalRef}>{agent.displayName}</SelectItem>)}
@@ -371,11 +383,11 @@ function AgentAccessAuthorizeForm({ locator, oauthState, details, submitApproval
                         onValueChange={(value) => dispatch({ kind: 'select_replacement_mode', value: value as 'planned' | 'compromise' })}
                         className="grid gap-2 sm:grid-cols-2"
                       >
-                        <Label htmlFor="replacement-planned" className="grid cursor-pointer grid-cols-[auto_minmax(0,1fr)] gap-3 rounded-md border p-3 has-[[data-state=checked]]:border-foreground">
+                        <Label htmlFor="replacement-planned" className={AUTHORIZE_RADIO_CARD_CLASS}>
                           <RadioGroupItem id="replacement-planned" value="planned" className="mt-1" />
                           <span><span className="block font-medium">Planned rotation</span><span className="text-sm font-normal text-muted-foreground">Keep the current credential usable until the successor is delivered.</span></span>
                         </Label>
-                        <Label htmlFor="replacement-compromise" className="grid cursor-pointer grid-cols-[auto_minmax(0,1fr)] gap-3 rounded-md border p-3 has-[[data-state=checked]]:border-foreground">
+                        <Label htmlFor="replacement-compromise" className={AUTHORIZE_RADIO_CARD_CLASS}>
                           <RadioGroupItem id="replacement-compromise" value="compromise" className="mt-1" />
                           <span><span className="block font-medium">Suspected compromise</span><span className="text-sm font-normal text-muted-foreground">Revoke the current credential before issuing its successor.</span></span>
                         </Label>
@@ -407,7 +419,7 @@ function AgentAccessAuthorizeForm({ locator, oauthState, details, submitApproval
                   {authorityOptions.map((option) => {
                     const disabled = !canSelectAuthority(option.value, mode)
                     return (
-                      <Label key={option.value} htmlFor={`authority-${option.value}`} className="grid min-h-touch cursor-pointer grid-cols-[auto_minmax(0,1fr)] items-start gap-3 rounded-md border border-border px-3 py-3 has-[[data-state=checked]]:border-foreground">
+                      <Label key={option.value} htmlFor={`authority-${option.value}`} className={AUTHORIZE_RADIO_CARD_CLASS_TOUCH}>
                         <RadioGroupItem id={`authority-${option.value}`} value={option.value} disabled={disabled} className="mt-1" />
                         <span className="grid gap-1">
                           <span className="font-medium text-foreground">{option.label}</span>
@@ -427,11 +439,11 @@ function AgentAccessAuthorizeForm({ locator, oauthState, details, submitApproval
                       onValueChange={(value) => setApprovedToolAccess(value as 'all_admitted' | 'selected_tools')}
                       className="grid gap-2 sm:grid-cols-2"
                     >
-                      <Label htmlFor="tools-all" className="grid cursor-pointer grid-cols-[auto_minmax(0,1fr)] gap-3 rounded-md border p-3 has-[[data-state=checked]]:border-foreground">
+                      <Label htmlFor="tools-all" className={AUTHORIZE_RADIO_CARD_CLASS}>
                         <RadioGroupItem id="tools-all" value="all_admitted" className="mt-1" />
                         <span><span className="block font-medium">All admitted Tools</span><span className="text-sm font-normal text-muted-foreground">Includes Tools admitted later.</span></span>
                       </Label>
-                      <Label htmlFor="tools-selected" className="grid cursor-pointer grid-cols-[auto_minmax(0,1fr)] gap-3 rounded-md border p-3 has-[[data-state=checked]]:border-foreground">
+                      <Label htmlFor="tools-selected" className={AUTHORIZE_RADIO_CARD_CLASS}>
                         <RadioGroupItem id="tools-selected" value="selected_tools" className="mt-1" />
                         <span><span className="block font-medium">Selected Tools</span><span className="text-sm font-normal text-muted-foreground">Limit this Agent to exact current Tool references.</span></span>
                       </Label>
@@ -494,9 +506,13 @@ function AgentAccessAuthorizeForm({ locator, oauthState, details, submitApproval
                 { label: 'Connection', value: `Stays signed in until ${formatConsentDuration(expiresInSeconds)} after approval, unless you disconnect it first.` },
               ]} />
               <Collapsible>
-                <CollapsibleTrigger asChild>
-                  <Button type="button" variant="ghost" className="w-fit min-h-touch">Technical details</Button>
-                </CollapsibleTrigger>
+                <CollapsibleTrigger
+                  render={
+                    <Button type="button" variant="ghost" className="w-fit min-h-touch">
+                      Technical details
+                    </Button>
+                  }
+                />
                 <CollapsibleContent className="pt-2">
                   <AeFactList density="compact" facts={[
                     { label: 'Request revision', value: String(grantRevision), mono: true },
@@ -529,9 +545,14 @@ function AgentAccessAuthorizeForm({ locator, oauthState, details, submitApproval
         ) : status === 'outcome_unknown' ? (
           <div className="grid gap-3">
             <ConnectionProblemAlert code="outcome_unknown" technicalReference={grantRef} />
-            <Button asChild variant="secondary">
-              <Link to="/agent-access/authorize" search={{ grant_ref: grantRef, ...(oauthState === undefined ? {} : { state: oauthState }) }} reloadDocument>Check approval status</Link>
-            </Button>
+            <Link
+              to="/agent-access/authorize"
+              search={{ grant_ref: grantRef, ...(oauthState === undefined ? {} : { state: oauthState }) }}
+              reloadDocument
+              className={buttonVariants({ variant: 'secondary' })}
+            >
+              Check approval status
+            </Link>
           </div>
         ) : (
           <ConnectionProblemAlert code={state.errorCode ?? (state.errorReference === undefined ? 'expired_token' : 'source_unavailable')} {...(state.errorReference === undefined ? {} : { technicalReference: state.errorReference })} />

@@ -13,6 +13,8 @@ import {
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { buttonVariants } from '@/components/ui/button-variants'
+import { cn } from '@/lib/utils'
 import type {
   BusinessOfferingProjection,
   BusinessOfferingStatus,
@@ -163,26 +165,28 @@ export function AeOwnerOfferingsList({
         const testRunHref = `/owner/operations/${encodeURIComponent(item.slug ?? item.offering.offeringRef)}`
         return (
           <div className="flex items-center gap-1">
-            <Button
-              asChild
-              variant="ghost"
-              size="sm"
-              className={`h-8 px-2 text-xs ${TACTILE_PRESS_CLASS}`}
+            <Link
+              to={testRunHref}
+              aria-label={`Test Run for ${item.offering.name}`}
+              className={cn(
+                buttonVariants({ variant: 'ghost', size: 'sm' }),
+                'h-8 px-2 text-xs',
+                TACTILE_PRESS_CLASS,
+              )}
             >
-              <Link to={testRunHref} aria-label={`Test Run for ${item.offering.name}`}>
-                Test Run
-              </Link>
-            </Button>
-            <Button
-              asChild
-              variant="ghost"
-              size="sm"
-              className={`h-8 px-2 text-xs ${TACTILE_PRESS_CLASS}`}
+              Test Run
+            </Link>
+            <Link
+              to="/activity"
+              aria-label={`View logs for ${item.offering.name}`}
+              className={cn(
+                buttonVariants({ variant: 'ghost', size: 'sm' }),
+                'h-8 px-2 text-xs',
+                TACTILE_PRESS_CLASS,
+              )}
             >
-              <Link to="/activity" aria-label={`View logs for ${item.offering.name}`}>
-                Activity
-              </Link>
-            </Button>
+              Activity
+            </Link>
           </div>
         )
       },
@@ -212,7 +216,14 @@ export function AeOwnerOfferingsList({
         <AeEmptyState
           title="No Tools yet"
           description="Connect a source and choose the exact Tool AE should validate."
-          action={<Button asChild className="min-h-touch"><Link to="/owner/operations/new">Add Tool</Link></Button>}
+          action={
+            <Link
+              to="/owner/operations/new"
+              className={cn(buttonVariants(), 'min-h-touch')}
+            >
+              Add Tool
+            </Link>
+          }
         />
       ) : (
         <AeRecordTable
@@ -269,27 +280,34 @@ export function AeOwnerOfferingsList({
                           <span className="text-xs text-muted-foreground">{item.blocker}</span>
                         )}
                       </div>
-                      <Button asChild variant="secondary" className={`min-h-touch w-full whitespace-normal ${TACTILE_PRESS_CLASS}`}>
-                        <a
-                          href={action.href}
-                          data-ae-row-action-id={item.offering.offeringRef}
-                          aria-label={`${action.label} for ${item.offering.name}`}
-                          onFocus={() => onActiveRowActionIdChange?.(item.offering.offeringRef)}
-                        >
-                          {action.label}
-                        </a>
-                      </Button>
+                      <a
+                        href={action.href}
+                        data-ae-row-action-id={item.offering.offeringRef}
+                        aria-label={`${action.label} for ${item.offering.name}`}
+                        onFocus={() => onActiveRowActionIdChange?.(item.offering.offeringRef)}
+                        className={cn(
+                          buttonVariants({ variant: 'secondary' }),
+                          'min-h-touch w-full whitespace-normal',
+                          TACTILE_PRESS_CLASS,
+                        )}
+                      >
+                        {action.label}
+                      </a>
                       <div className="flex gap-2">
-                        <Button asChild variant="outline" size="sm" className={TACTILE_PRESS_CLASS}>
-                          <Link to={testRunHref} aria-label={`Test Run for ${item.offering.name}`}>
-                            Test Run
-                          </Link>
-                        </Button>
-                        <Button asChild variant="outline" size="sm" className={TACTILE_PRESS_CLASS}>
-                          <Link to="/activity" aria-label={`View logs for ${item.offering.name}`}>
-                            Activity
-                          </Link>
-                        </Button>
+                        <Link
+                          to={testRunHref}
+                          aria-label={`Test Run for ${item.offering.name}`}
+                          className={cn(buttonVariants({ variant: 'outline', size: 'sm' }), TACTILE_PRESS_CLASS)}
+                        >
+                          Test Run
+                        </Link>
+                        <Link
+                          to="/activity"
+                          aria-label={`View logs for ${item.offering.name}`}
+                          className={cn(buttonVariants({ variant: 'outline', size: 'sm' }), TACTILE_PRESS_CLASS)}
+                        >
+                          Activity
+                        </Link>
                       </div>
                     </li>
                   )

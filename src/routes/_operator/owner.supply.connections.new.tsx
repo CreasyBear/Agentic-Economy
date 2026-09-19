@@ -9,6 +9,8 @@ import { AeOperatorPage } from '@/components/ae/layout/AeOperatorPage'
 import { AeSettingsStack } from '@/components/ae/layout/AeSection'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
+import { buttonVariants } from '@/components/ui/button-variants'
+import { cn } from '@/lib/utils'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { captureClientExceptionOnClient } from '@/lib/observability/capture-client-exception'
@@ -318,9 +320,13 @@ function ReturnToAddTool({ connectionRef, environment, draftRef }: Readonly<{
     ? (draftRef === undefined ? {} : { draft: draftRef })
     : { connection: connectionRef, environment, ...(draftRef === undefined ? {} : { draft: draftRef }) }
   return (
-    <Button asChild variant="secondary" className="mt-4 min-h-touch">
-      <Link to="/owner/operations/new" search={search}>Return to Add Tool</Link>
-    </Button>
+    <Link
+      to="/owner/operations/new"
+      search={search}
+      className={cn(buttonVariants({ variant: 'secondary' }), 'mt-4 min-h-touch')}
+    >
+      Return to Add Tool
+    </Link>
   )
 }
 

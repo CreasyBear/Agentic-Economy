@@ -5,6 +5,7 @@ import { makeFunctionReference } from 'convex/server'
 import { v, type Infer } from 'convex/values'
 import { degradeBackend } from '@/lib/observability/degrade-backend'
 import { recoveryResultValue } from '@/modules/capability-execution/convex'
+import { executeDecisionGateway } from '@/modules/decision-engine/public'
 import {
   expireAuthorizationRecovery,
   readRecoveryStatus,
@@ -130,6 +131,102 @@ export const reconcilePreClaimRefund = internalAction({
   args: { callRef: v.string() },
   returns: v.object({ kind: v.union(v.literal('settled'), v.literal('retried'), v.literal('manual_review'), v.literal('not_claimed')) }),
   handler: reconcilePreClaimRefundHandler,
+})
+
+export async function adjudicateStealthFailureAndReleaseHold(
+  ctx: ActionCtx,
+  args: {
+    callRef: string
+    toolRef: string
+    outputJson: string
+  },
+): Promise<{
+  adjudicated: boolean
+  isFailure: boolean
+  fault: 'upstream_provider' | 'buyer_input' | 'none'
+  releasedHold: boolean
+  confidence: number
+}> {
+  let parsedPayload: Record<string, unknown>
+  try {
+    parsedPayload = JSON.parse(args.outputJson) as Record<string, unknown>
+  } catch {
+    parsedPayload = { raw: args.outputJson }
+  }
+
+  const decision = await executeDecisionGateway({
+    state: {
+      callRef: args.callRef,
+      toolRef: args.toolRef,
+      receivedPayload: parsedPayload,
+    },
+    questions: {
+      isFailure: {
+        type: 'noul',
+        instructions:
+          'Evaluate if the received payload indicates an unhandled upstream failure, error code, timeout, empty dataset, or server fault rather than a successful response.',
+      },
+      faultParty: {
+        type: 'choice',
+        instructions: 'Who is responsible for this failure state?',
+        criteria: {
+          upstream_provider: 'Provider failed with timeout, gateway error, or server exception.',
+          buyer_input: 'The buyer supplied invalid or unparseable inputs.',
+          none: 'The payload represents a completely healthy and successful delivery.',
+        },
+      },
+    },
+  })
+
+  const isFailureAns = decision.answers.isFailure
+  const faultAns = decision.answers.faultParty
+  const isFailure = isFailureAns?.type === 'noul' && isFailureAns.noul >= 0.70
+  const fault =
+    faultAns?.type === 'choice'
+      ? (faultAns.choice as 'upstream_provider' | 'buyer_input' | 'none')
+      : 'none'
+  const confidence = faultAns?.type === 'choice' ? faultAns.confidence : 0.85
+
+  let releasedHold = false
+  if (isFailure && fault === 'upstream_provider' && confidence >= 0.75) {
+    try {
+      const releaseResult = await ctx.runAction(internal.moneyManagedCallLifecycle.releaseBeforeSubmission, {
+        callRef: args.callRef,
+        now: Date.now(),
+      })
+      if (releaseResult.kind === 'accepted' && releaseResult.state === 'released') {
+        releasedHold = true
+      }
+    } catch (cause) {
+      degradeBackend(cause, undefined, { site: 'adjudicateStealthFailureAndReleaseHold:release', reason: 'source_unavailable' })
+    }
+  }
+
+  return {
+    adjudicated: true,
+    isFailure,
+    fault,
+    releasedHold,
+    confidence,
+  }
+}
+
+export const adjudicateStealthFailureAndReleaseHoldAction = internalAction({
+  args: {
+    callRef: v.string(),
+    toolRef: v.string(),
+    outputJson: v.string(),
+  },
+  returns: v.object({
+    adjudicated: v.boolean(),
+    isFailure: v.boolean(),
+    fault: v.union(v.literal('upstream_provider'), v.literal('buyer_input'), v.literal('none')),
+    releasedHold: v.boolean(),
+    confidence: v.number(),
+  }),
+  handler: async (ctx, args) => {
+    return await adjudicateStealthFailureAndReleaseHold(ctx, args)
+  },
 })
 
 export const run = internalAction({

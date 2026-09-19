@@ -13,13 +13,15 @@ import {
   type SortingState,
   type Table as TanStackTable,
 } from '@tanstack/react-table'
-import * as RovingFocusGroup from '@radix-ui/react-roving-focus'
+import * as RovingFocusGroup from '@/components/ui/roving-focus'
 import { Link } from '@tanstack/react-router'
 import { ArrowUpDownIcon } from 'lucide-react'
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import { AeViewBar } from '@/components/ae/data/AeViewBar'
 import { Button } from '@/components/ui/button'
+import { buttonVariants } from '@/components/ui/button-variants'
+import { cn } from '@/lib/utils'
 import { Checkbox } from '@/components/ui/checkbox'
 import { useFirstLoadPending } from '@/components/ui/data-state'
 import {
@@ -406,17 +408,17 @@ function RecordTableAction<TData>({
   const label = action.getLabel?.(row.original) ?? action.label
   const control =
     action.kind === 'link' ? (
-      <Button
-        asChild
-        variant="ghost"
-        size="sm"
-        className="min-h-touch sm:min-h-8"
+      <Link
+        to={action.getHref(row.original)}
+        aria-label={accessibleLabel}
         data-ae-row-action-id={row.id}
+        className={cn(
+          buttonVariants({ variant: 'ghost', size: 'sm' }),
+          'min-h-touch sm:min-h-8',
+        )}
       >
-        <Link to={action.getHref(row.original)} aria-label={accessibleLabel}>
-          {label}
-        </Link>
-      </Button>
+        {label}
+      </Link>
     ) : (
       <Button
         type="button"
@@ -432,9 +434,7 @@ function RecordTableAction<TData>({
     )
 
   return (
-    <RovingFocusGroup.Item asChild tabStopId={row.id}>
-      {control}
-    </RovingFocusGroup.Item>
+    <RovingFocusGroup.Item render={control} tabStopId={row.id} />
   )
 }
 
@@ -452,17 +452,17 @@ function RecordTableBody({
   const body = <TableBody>{children}</TableBody>
   return roving ? (
     <RovingFocusGroup.Root
-      asChild
+      render={body}
       orientation="vertical"
       loop={false}
       {...(onCurrentTabStopChange === undefined
         ? {}
         : { onCurrentTabStopChange })}
-      {...(defaultTabStopId === undefined ? {} : { defaultCurrentTabStopId: defaultTabStopId })}
-    >
-      {body}
-    </RovingFocusGroup.Root>
-  ) : body
+      {...(defaultTabStopId === undefined ? {} : { defaultTabStopId })}
+    />
+  ) : (
+    body
+  )
 }
 
 function TableSelectionHeader<TData>({

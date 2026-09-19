@@ -128,10 +128,10 @@ function AdvancedFilters({ search, overview, onChange }: Pick<Props, 'search' | 
   const activeCount = activeAdvancedFilterCount(search)
   const [open, setOpen] = useState(activeCount > 0)
   return <Collapsible open={open} onOpenChange={setOpen} className="border-t pt-3">
-      <CollapsibleTrigger asChild><Button type="button" variant="ghost" className="h-auto min-h-10 w-full justify-between px-2" aria-label={activeCount > 0 ? `Advanced filters ${activeCount} active` : 'Advanced filters'}>
+      <CollapsibleTrigger render={<Button type="button" variant="ghost" className="h-auto min-h-10 w-full justify-between px-2" aria-label={activeCount > 0 ? `Advanced filters ${activeCount} active` : 'Advanced filters'}>
         <span>Advanced filters{activeCount > 0 ? <span className="ml-2 rounded bg-muted px-1.5 text-xs tabular-nums">{activeCount}</span> : null}</span>
         <ChevronDownIcon className={cn('transition-transform', open && 'rotate-180')} aria-hidden="true" />
-      </Button></CollapsibleTrigger>
+      </Button>} />
       <CollapsibleContent className="flex flex-col gap-6 pt-4">
         {facets === undefined ? null : <Facets label="Network" values={facets.networks.map(item => ({ ...item, label: formatPaymentNetwork(item.label) }))} selected={search.network} onChange={network => onChange({ network })} />}
         <ProviderFilter search={search} onChange={onChange} />
@@ -159,6 +159,6 @@ export function DirectoryExplorerFilters(props: Props) {
   const key = JSON.stringify(props.search)
   return <>
     <aside aria-label="Tool filters" className="sticky top-24 hidden max-h-[calc(100dvh-7rem)] w-52 shrink-0 self-start overflow-y-auto overscroll-contain pr-4 md:block"><FilterBody key={key} {...props} /></aside>
-    <div className="md:hidden"><Sheet><SheetTrigger asChild><Button variant="outline" size="sm" aria-label={count > 0 ? `Filters ${count}` : 'Filters'}><SlidersHorizontalIcon />Filters{count > 0 ? <span className="rounded bg-muted px-1.5 tabular-nums">{count}</span> : null}</Button></SheetTrigger><SheetContent side="left" className="w-full gap-0 sm:max-w-md"><SheetHeader className="border-b p-5"><SheetTitle>Refine Tools</SheetTitle><SheetDescription>Filter the catalogue by price, Provider and published details.</SheetDescription></SheetHeader><div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-5"><FilterBody key={key} {...props} /></div><SheetFooter className="border-t"><SheetClose asChild><Button>Show results</Button></SheetClose></SheetFooter></SheetContent></Sheet></div>
+    <div className="md:hidden"><Sheet><SheetTrigger render={<Button variant="outline" size="sm" aria-label={count > 0 ? `Filters ${count}` : 'Filters'}><SlidersHorizontalIcon />Filters{count > 0 ? <span className="rounded bg-muted px-1.5 tabular-nums">{count}</span> : null}</Button>} /><SheetContent side="left" className="w-full gap-0 sm:max-w-md"><SheetHeader className="border-b p-5"><SheetTitle>Refine Tools</SheetTitle><SheetDescription>Filter the catalogue by price, Provider and published details.</SheetDescription></SheetHeader><div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-5"><FilterBody key={key} {...props} /></div><SheetFooter className="border-t"><SheetClose render={<Button>Show results</Button>} /></SheetFooter></SheetContent></Sheet></div>
   </>
 }

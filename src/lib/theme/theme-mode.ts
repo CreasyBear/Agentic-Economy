@@ -40,6 +40,7 @@ export function applyAppearance(preference: AppearancePreference): void {
   document.documentElement.classList.remove('light', 'dark')
   document.documentElement.classList.add(resolved)
   document.documentElement.style.colorScheme = resolved
+  document.documentElement.dataset.appearancePreference = preference
 
   try {
     localStorage.setItem(THEME_STORAGE_KEY, preference)
@@ -53,5 +54,5 @@ export function getThemeScript(
   storageKey = THEME_STORAGE_KEY,
   defaultTheme: AppearancePreference = 'system',
 ): string {
-  return `(function(){try{var t=localStorage.getItem("${storageKey}");if(t!=='light'&&t!=='dark'&&t!=='system')t='${defaultTheme}';var d=matchMedia('(prefers-color-scheme: dark)').matches;var r=t==='system'?(d?'dark':'light'):t;var e=document.documentElement;e.classList.remove('light','dark');e.classList.add(r);e.style.colorScheme=r;}catch(e){}})();`
+  return `(function(){try{var t=localStorage.getItem("${storageKey}");if(t!=='light'&&t!=='dark'&&t!=='system')t='${defaultTheme}';var d=matchMedia('(prefers-color-scheme: dark)').matches;var r=t==='system'?(d?'dark':'light'):t;var e=document.documentElement;e.classList.remove('light','dark');e.classList.add(r);e.style.colorScheme=r;e.dataset.appearancePreference=t;}catch(e){}})();`
 }

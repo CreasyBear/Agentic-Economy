@@ -14,7 +14,8 @@ import {
   type ProviderToolActionOutcome,
 } from '@/components/ae/supply/AeProviderToolDetail'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
-import { Button } from '@/components/ui/button'
+import { buttonVariants } from '@/components/ui/button-variants'
+import { cn } from '@/lib/utils'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import {
   recheckOwnerCapabilityServer,
@@ -159,9 +160,12 @@ function UnavailableTool({ toolRef, unavailable }: Readonly<{ toolRef: string; u
               : 'This Tool is not part of the current Provider workspace.'}
           </AlertDescription>
         </Alert>
-        <Button asChild variant="secondary" className="min-h-touch w-fit">
-          <Link to="/owner/operations">Return to Tools</Link>
-        </Button>
+        <Link
+          to="/owner/operations"
+          className={cn(buttonVariants({ variant: 'secondary' }), 'min-h-touch w-fit')}
+        >
+          Return to Tools
+        </Link>
       </div>
     </AeOperatorPage>
   )

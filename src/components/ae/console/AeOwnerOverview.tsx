@@ -3,7 +3,8 @@ import { ActivityIcon, BotIcon, StoreIcon, WalletIcon } from 'lucide-react'
 
 import { AeOperatorPage } from '@/components/ae/layout/AeOperatorPage'
 import { AeSection } from '@/components/ae/layout/AeSection'
-import { Button } from '@/components/ui/button'
+import { buttonVariants } from '@/components/ui/button-variants'
+import { cn } from '@/lib/utils'
 import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { formatDisplayAmount, type ExactAmount } from '@/modules/money/public'
 
@@ -68,7 +69,14 @@ function OverviewCard({ title, description, value, action, icon: Icon, dominant 
     <CardHeader>
       <div className="flex items-center gap-2 text-muted-foreground"><Icon className="size-4" aria-hidden="true" /><CardTitle>{title}</CardTitle></div>
       <CardDescription>{description}</CardDescription>
-      <CardAction><Button asChild variant="ghost" size="sm"><Link to={action.href}>{action.label}</Link></Button></CardAction>
+      <CardAction>
+        <Link
+          to={action.href}
+          className={cn(buttonVariants({ variant: 'ghost', size: 'sm' }), 'min-h-touch sm:min-h-8')}
+        >
+          {action.label}
+        </Link>
+      </CardAction>
     </CardHeader>
     <CardContent><p className={dominant ? 'text-4xl font-semibold tracking-tight tabular-nums' : 'text-2xl font-semibold tracking-tight tabular-nums'}>{value}</p></CardContent>
   </Card>
@@ -82,7 +90,12 @@ function ProviderSetupEntry({ provider }: Readonly<{ provider: OwnerOverviewSnap
         <p className="text-sm font-medium text-foreground">Want to offer a service?</p>
         <p className="text-sm text-muted-foreground">Start a separate Provider setup when you are ready to publish a Tool.</p>
       </div>
-      <Button asChild variant="outline" className="w-fit min-h-touch"><Link to="/owner/operations">Offer a Tool</Link></Button>
+      <Link
+        to="/owner/operations"
+        className={cn(buttonVariants({ variant: 'outline' }), 'w-fit min-h-touch')}
+      >
+        Offer a Tool
+      </Link>
     </aside>
   )
 }
@@ -103,7 +116,12 @@ export function AeOwnerOverview({ snapshot }: Readonly<{ snapshot: OwnerOverview
   return <AeOperatorPage operatorRole="owner" title="Overview" description="See what needs attention, your available Balance, and connected Agents." currentPath="/owner">
     <div className="grid gap-section pb-page">
       <AeSection title="Next step" description={next.description} className="rounded-xl border border-border bg-card p-gutter shadow-soft">
-        <Button asChild className="w-fit min-h-touch"><Link to={next.href}>{next.label}</Link></Button>
+        <Link
+          to={next.href}
+          className={cn(buttonVariants(), 'w-fit min-h-touch')}
+        >
+          {next.label}
+        </Link>
       </AeSection>
       <section aria-label="Account summary" className="grid gap-related md:grid-cols-2 xl:grid-cols-3">
         <OverviewCard title="Available Balance" description={snapshot.balance.kind === 'available' && snapshot.balance.locked ? 'Credit is recorded, but spending is temporarily locked.' : 'AUD credit available for authorized Agent Calls.'} value={balanceValue} action={{ label: 'Open Balance', href: '/owner/credit' }} icon={WalletIcon} dominant />

@@ -125,18 +125,20 @@ describe('operator shell nested chrome', () => {
 
     renderAt(
       <AeAppShell>
-        <OperatorChromeProvider
-          sidebar={<AeOperatorSidebar operatorRole="owner" currentPath="/agent-access/unknown" />}
-        >
-          <AeOperatorPage
-            operatorRole="owner"
-            title="Operator workspace"
-            description="Loading the latest operator view."
-            currentPath="/agent-access/unknown"
+        <SidebarProvider className="contents" defaultOpen>
+          <OperatorChromeProvider
+            sidebar={<AeOperatorSidebar operatorRole="owner" currentPath="/agent-access/unknown" />}
           >
-            <OperatorRouteNotFound />
-          </AeOperatorPage>
-        </OperatorChromeProvider>
+            <AeOperatorPage
+              operatorRole="owner"
+              title="Operator workspace"
+              description="Loading the latest operator view."
+              currentPath="/agent-access/unknown"
+            >
+              <OperatorRouteNotFound />
+            </AeOperatorPage>
+          </OperatorChromeProvider>
+        </SidebarProvider>
       </AeAppShell>,
       '/agent-access/unknown',
     )
@@ -373,8 +375,11 @@ describe('owner mobile navigation', () => {
     expect(mobileNav.classList.contains('md:hidden')).toBe(true)
     expect(mobileNav.classList.contains('pb-[env(safe-area-inset-bottom,0px)]')).toBe(true)
     expect(
+      mobileNav.classList.contains('h-[calc(3.5rem+env(safe-area-inset-bottom,0px))]'),
+    ).toBe(true)
+    expect(
       content.classList.contains(
-        'pb-[calc(var(--spacing-touch)+env(safe-area-inset-bottom,0px))]',
+        'pb-[calc(4.5rem+env(safe-area-inset-bottom,0px))]',
       ),
     ).toBe(true)
     expect(content.classList.contains('md:pb-related')).toBe(true)

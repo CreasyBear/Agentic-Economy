@@ -249,10 +249,10 @@ export function AeConnectAgentWizardDialog({
   const isNameValid = name.trim().length > 0 && name.trim().length <= 80
 
   const envCardBase =
-    'grid min-h-touch cursor-pointer gap-1 rounded-md border border-border bg-container p-3 hover:bg-muted/60 has-[[data-state=checked]]:border-foreground enabled:active:scale-[0.98] transition-transform duration-100 ease-out motion-reduce:transition-none motion-reduce:active:scale-100'
+    'grid min-h-touch cursor-pointer gap-1 rounded-md border border-border bg-container p-3 hover:bg-muted/60 has-[[data-checked]]:border-foreground enabled:active:scale-[0.98] transition-transform duration-100 ease-out motion-reduce:transition-none motion-reduce:active:scale-100'
 
   const authorityCardBase =
-    'grid min-h-touch cursor-pointer grid-cols-[auto_minmax(0,1fr)] items-start gap-3 rounded-md border border-border px-3 py-3 has-[[data-state=checked]]:border-foreground has-[[data-state=checked]]:bg-muted enabled:active:scale-[0.98] transition-transform duration-100 ease-out motion-reduce:transition-none motion-reduce:active:scale-100'
+    'grid min-h-touch cursor-pointer grid-cols-[auto_minmax(0,1fr)] items-start gap-3 rounded-md border border-border px-3 py-3 has-[[data-checked]]:border-foreground has-[[data-checked]]:bg-muted enabled:active:scale-[0.98] transition-transform duration-100 ease-out motion-reduce:transition-none motion-reduce:active:scale-100'
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
@@ -319,7 +319,7 @@ export function AeConnectAgentWizardDialog({
               >
                 <Label
                   htmlFor="env-sandbox"
-                  className={`${envCardBase} has-[[data-state=checked]]:bg-muted`}
+                  className={`${envCardBase} has-[[data-checked]]:bg-muted`}
                 >
                   <div className="flex items-center gap-2">
                     <RadioGroupItem value="sandbox" id="env-sandbox" />
@@ -331,7 +331,7 @@ export function AeConnectAgentWizardDialog({
                 </Label>
                 <Label
                   htmlFor="env-production"
-                  className={`${envCardBase} has-[[data-state=checked]]:border-warning-ring has-[[data-state=checked]]:bg-warning-subtle`}
+                  className={`${envCardBase} has-[[data-checked]]:border-warning-ring has-[[data-checked]]:bg-warning-subtle`}
                 >
                   <div className="flex items-center gap-2">
                     <RadioGroupItem value="production" id="env-production" />

@@ -8,7 +8,8 @@ import {
   AeOperatorSortableHeader,
   AeRecordTable,
 } from '@/components/ae/operator/AeOperatorDataTable'
-import { Button } from '@/components/ui/button'
+import { buttonVariants } from '@/components/ui/button-variants'
+import { cn } from '@/lib/utils'
 import type { PublicBusinessCatalogApiV2Dto, PublicListingDto } from '@/modules/registry/public'
 
 type AeCapabilityListProps = {
@@ -53,9 +54,12 @@ export function AeCapabilityList({ catalog }: AeCapabilityListProps) {
         title="No published Tools yet"
         description="Add a Tool so visitors can inspect its published facts and price."
         action={
-          <Button asChild className="min-h-touch">
-            <a href="/owner/operations/new">Add Tool</a>
-          </Button>
+          <a
+            href="/owner/operations/new"
+            className={cn(buttonVariants(), 'min-h-touch')}
+          >
+            Add Tool
+          </a>
         }
       />
     )

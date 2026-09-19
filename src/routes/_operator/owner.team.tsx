@@ -38,23 +38,21 @@ function OwnerTeamRoute() {
 
   return (
     <div className="ae-owner-team grid gap-8">
-      <OrganizationProfile
-        routing="hash"
-        afterLeaveOrganizationUrl="/owner"
-        appearance={clerkAppearance}
-      >
-        <OrganizationProfile.Page label="members" />
-      </OrganizationProfile>
+      <div id="invite" className="min-h-96 w-full">
+        <OrganizationProfile
+          routing="hash"
+          afterLeaveOrganizationUrl="/owner"
+          appearance={clerkAppearance}
+        >
+          <OrganizationProfile.Page label="members" />
+        </OrganizationProfile>
+      </div>
 
       <section className="grid gap-4">
         <h2 className="text-lg font-semibold tracking-tight text-foreground">
           Canonical Directory
         </h2>
-        {directory !== undefined ? (
-          <AeTeamDirectoryTable directory={directory} />
-        ) : (
-          <AeTeamDirectoryTable directory={{ accountRef: '', owner: { kind: 'owner', principalRef: '', displayName: '', email: null, ownershipRef: '', joinedAt: 0 }, members: [] }} />
-        )}
+        <AeTeamDirectoryTable {...(directory !== undefined ? { directory } : {})} />
       </section>
     </div>
   )

@@ -91,7 +91,8 @@ function BoundaryFixture({
   router,
   children = <p>Operator content</p>,
 }: {
-  router: ReturnType<typeof createRouter>
+  // biome-ignore lint/suspicious/noExplicitAny: TanStack Router exactOptionalPropertyTypes variance
+  router: any
   children?: ReactNode
 }) {
   return (

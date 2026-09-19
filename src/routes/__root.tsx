@@ -6,12 +6,13 @@ import { ClientOnly, HeadContent, Link, Outlet, Scripts, createRootRoute, useRou
 import { useEffect, useState, type ReactNode } from 'react'
 import { Toaster } from 'sonner'
 
-
 import { AeAppShell } from '@/components/ae/layout/AeAppShell'
+import { useIsMobile } from '@/hooks/use-mobile'
 import { ThemeProvider } from '@/components/ae/theme/ThemeProvider'
 import { RouteProgressBar } from '@/components/ae/layout/AeRouteProgressBar'
 import { AePageState } from '@/components/ae/layout/AePageState'
-import { Button } from '@/components/ui/button'
+import { buttonVariants } from '@/components/ui/button-variants'
+import { cn } from '@/lib/utils'
 import { SITE_THEME_COLOR_HEX } from '@/components/ui/theme-meta'
 
 import { AeObservabilityErrorBoundary } from '@/components/ae/feedback/AeObservabilityErrorBoundary'
@@ -66,8 +67,25 @@ function RootComponent() {
   )
 }
 
+function responsiveToasterRef(node: HTMLElement | null) {
+  node?.setAttribute('aria-live', 'off')
+}
+
+function responsiveToasterProps(isMobile: boolean) {
+  return {
+    position: (isMobile ? 'top-right' : 'bottom-right') as 'top-right' | 'bottom-right',
+    offset: isMobile ? '72px' : '16px',
+    duration: 6000,
+    visibleToasts: 5,
+    toastOptions: {
+      className: 'border-border bg-card text-foreground shadow-overlay',
+    },
+  }
+}
+
 function RootDocument({ children }: { children: ReactNode }) {
   const pathname = useRouterState({ select: (state) => state.location.pathname })
+  const isMobile = useIsMobile()
   const chatProvidersRequired = requiresChatProviders(pathname)
   const content = (
     <ClerkProvider appearance={clerkAppearance}>
@@ -85,18 +103,17 @@ function RootDocument({ children }: { children: ReactNode }) {
         <AeObservabilityBoot />
         <AeObservabilityErrorBoundary>{content}</AeObservabilityErrorBoundary>
         <ClientOnly>
-          <Toaster
-            ref={(node) => {
-              node?.setAttribute('aria-live', 'off')
-            }}
-            duration={6000}
-            visibleToasts={5}
-          />
+          <Toaster ref={responsiveToasterRef} {...responsiveToasterProps(isMobile)} />
         </ClientOnly>
         <Scripts />
       </body>
     </html>
   )
+}
+
+export function ResponsiveToaster() {
+  const isMobile = useIsMobile()
+  return <Toaster ref={responsiveToasterRef} {...responsiveToasterProps(isMobile)} />
 }
 
 function ChatConvexProvider({ children }: { children: ReactNode }) {
@@ -108,11 +125,9 @@ function ChatConvexProvider({ children }: { children: ReactNode }) {
         description="Chat is not configured. The Tool catalogue remains available."
         tone="warning"
         action={(
-          <Button asChild className="min-h-touch">
-            <Link to="/market">
-              Browse Tools
-            </Link>
-          </Button>
+          <Link to="/market" className={cn(buttonVariants(), 'min-h-touch')}>
+            Browse Tools
+          </Link>
         )}
       />
     )

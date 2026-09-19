@@ -3,7 +3,8 @@ import { Link } from '@tanstack/react-router'
 import { AeCopyCommand } from '@/components/ae/data/AeCopyCommand'
 import { AeFactList } from '@/components/ae/data/AeFactList'
 import { AeSection } from '@/components/ae/layout/AeSection'
-import { Button } from '@/components/ui/button'
+import { buttonVariants } from '@/components/ui/button-variants'
+import { cn } from '@/lib/utils'
 import { formatUtcTimestamp, timestampIso } from '@/lib/ui/format-time'
 import type { CallResult } from '@/modules/capability-execution/call-contracts'
 import type { CallReceiptView } from '@/modules/capability-execution/call-receipt-view'
@@ -152,9 +153,13 @@ export function CallReuseActions({ view }: Readonly<{ view: CallReceiptView }>) 
       title="Use this Tool again"
       description="Review the Tool and its current terms before starting a separate Call. This receipt will not be reused."
     >
-      <Button asChild className="w-fit min-h-touch">
-        <Link to="/tools/$toolRef" params={{ toolRef }}>Review Tool</Link>
-      </Button>
+      <Link
+        to="/tools/$toolRef"
+        params={{ toolRef }}
+        className={cn(buttonVariants(), 'w-fit min-h-touch')}
+      >
+        Review Tool
+      </Link>
       <details className="border-t border-border pt-related">
         <summary className="flex min-h-touch cursor-pointer items-center text-sm font-medium text-foreground">Technical ways to reuse</summary>
         <div className="grid gap-section pt-related">

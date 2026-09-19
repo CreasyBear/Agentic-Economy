@@ -394,12 +394,14 @@ describe('owner credit target', () => {
     expect(screen.queryByText('Some transaction attribution is incomplete')).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: 'Load more history' }))
     await waitFor(() => expect(read).toHaveBeenCalledWith({ cursor: 'cursor:next' }))
-    expect(screen.getByText('Some transaction attribution is incomplete')).toBeTruthy()
-    expect(screen.getAllByText('Credit added')).toHaveLength(1)
-    expect(screen.getByText('Document adjustment')).toBeTruthy()
-    expect(screen.getByText('No Balance change')).toBeTruthy()
-    expect(screen.getByText('−<A$0.01')).toBeTruthy()
-    expect(screen.getByText('Reverted')).toBeTruthy()
+    await waitFor(() => {
+      expect(screen.getByText('Some transaction attribution is incomplete')).toBeTruthy()
+      expect(screen.getAllByText('Credit added')).toHaveLength(1)
+      expect(screen.getByText('Document adjustment')).toBeTruthy()
+      expect(screen.getByText('No Balance change')).toBeTruthy()
+      expect(screen.getByText('−<A$0.01')).toBeTruthy()
+      expect(screen.getByText('Reverted')).toBeTruthy()
+    })
   })
 
   it('keeps booked rows and retries the same cursor after pagination fails', async () => {

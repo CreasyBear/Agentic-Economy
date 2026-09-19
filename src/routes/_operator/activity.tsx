@@ -12,6 +12,8 @@ import {
   AeRecordTable,
 } from '@/components/ae/operator/AeOperatorDataTable'
 import { Button } from '@/components/ui/button'
+import { buttonVariants } from '@/components/ui/button-variants'
+import { cn } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { operatorRouteOptions } from '@/lib/operator/route-options'
@@ -488,9 +490,13 @@ function ActivityAvailable({
                   <span className="text-muted-foreground">
                     Agent · <span className="font-mono text-foreground">{filteredAgentShortId}</span>
                   </span>
-                  <Button asChild variant="ghost" size="sm" className={`h-6 px-1.5 text-xs ${TACTILE_PRESS_CLASS}`}>
-                    <Link to="/activity" aria-label="Clear agent filter">×</Link>
-                  </Button>
+                  <Link
+                    to="/activity"
+                    aria-label="Clear agent filter"
+                    className={cn(buttonVariants({ variant: 'ghost', size: 'sm' }), `h-6 px-1.5 text-xs ${TACTILE_PRESS_CLASS}`)}
+                  >
+                    ×
+                  </Link>
                 </div>
               ) : null}
             </div>
@@ -570,7 +576,7 @@ function ActivityAvailable({
           <AeEmptyState
             title="No Calls yet"
             description="Find a Tool and complete one Call. Its task, outcome, amount, and receipt will appear here."
-            action={<Button asChild className="min-h-touch"><Link to="/owner/market">Find Tools</Link></Button>}
+            action={<Link to="/owner/market" className={cn(buttonVariants(), 'min-h-touch')}>Find Tools</Link>}
           />
         ) : filteredItems.length === 0 ? (
           <AeEmptyState
