@@ -16,9 +16,9 @@
 | :--- | :---: | :--- | :---: | :---: | :---: | :---: |
 | **Wave 1: Buyer Onboarding & Developer Launchpad** | 6 | `W-01`, `W-02`, `W-25`, `W-26`, `W-27`, `W-29` | 6 | 0 | 0 | **VERIFIED** |
 | **Wave 2: Financial Peace-of-Mind & Spend Observability** | 8 | `W-20`, `W-21`, `W-22`, `W-23`, `W-24`, `W-38`, `W-39`, `W-40` | 8 | 0 | 0 | **VERIFIED** |
-| **Wave 3: Supplier Monetization & Testing Playground** | 8 | `W-30`, `W-31`, `W-32`, `W-33`, `W-34`, `W-35`, `W-36`, `W-37` | 4 | 0 | 4 | `IN PROGRESS` |
+| **Wave 3: Supplier Monetization & Testing Playground** | 8 | `W-30`, `W-31`, `W-32`, `W-33`, `W-34`, `W-35`, `W-36`, `W-37` | 5 | 0 | 3 | `IN PROGRESS` |
 | **Wave 4: Team Operations, Identity & Tactile Standards** | 22 | `W-03`–`W-09`, `W-10`–`W-19`, `W-28`, `W-41`–`W-44` | 0 | 0 | 22 | `PENDING` |
-| **Total** | **44** | **All 44 Standard Workflows** | **18** | **0** | **26** | `IN PROGRESS` |
+| **Total** | **44** | **All 44 Standard Workflows** | **19** | **0** | **25** | `IN PROGRESS` |
 
 ---
 
@@ -314,15 +314,17 @@
 ---
 
 ### W-34: Tool Performance & Catalog Inventory Table
-- **Surfaces:** `src/components/ae/offerings/AeOwnerOfferings.tsx`, `src/components/ae/offerings/provider-workspace-projection.ts`
+- **Surfaces:** `src/components/ae/offerings/AeOwnerOfferings.tsx`, `src/components/ae/offerings/provider-workspace-projection.ts`, `tests/unit/components/ae-owner-offerings-inventory.test.tsx`, `tests/unit/ui/offering-surfaces.test.tsx`
 - **Incumbent Baseline:** Table showing tool name, status, price, and call count.
 - **Ergonomic Gap:** Column sorting is basic; lacks tool protocol icons (`MCP`, `OpenAPI`, `x402`); no quick-action toolbar.
 - **Target Ergonomic Spec:**
-  - High-density table with protocol badges, health status indicators (`Operational` / `Degraded`), and 30-day earnings.
-  - Quick action buttons on hover: `Test Run`, `Edit Price`, `View Logs`.
-  - Instant client-side search by tool name or operation ID.
-- **Subagent Assignment:** Grok (Scout) $\rightarrow$ Composer (Craft) $\rightarrow$ Orchestrator (Verify)
-- **Status:** `PENDING`
+  - High-density table presentation with dedicated visual badges: Protocol (`OpenAPI`, `MCP`, `x402`), Availability / Health with status dots (`Operational`, `Degraded`, `Checking`), and Lifecycle (`Published`, `Draft`, `Updating`, `Retired`).
+  - Usage / Calls count formatted with Australian locale grouping and `font-mono tabular-nums` (e.g. `1,420 calls`).
+  - Quick action toolbar / links per row: `Test Run` (linking to tool operations playground) and `Activity` (linking to logs) with `TACTILE_PRESS_CLASS`.
+  - Unified search matcher across name, summary, protocol, offeringRef, slug, lifecycle, and availability labels.
+  - Zero-CLS filter empty states: desktop preserves table chrome with `No tools match '{query}'`, compact renders a reserved empty container with a tactile `Reset filter` button.
+- **Subagent Assignment:** Grok (Scout: `69a563b8-e5a0-43a7-a551-5a99c76cb36f`) $\rightarrow$ Composer (Craft: `3a75d767-ec62-4033-85f5-65d2a70cfae4`) $\rightarrow$ Orchestrator (Verify)
+- **Status:** `VERIFIED`
 
 ---
 

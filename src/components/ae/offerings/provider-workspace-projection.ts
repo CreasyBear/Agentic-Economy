@@ -8,15 +8,93 @@ import {
   providerToolReasonPresentation,
 } from '@/modules/capability-supply/provider-tool-status'
 import type { ProviderToolStatus } from '@/modules/capability-supply/provider-tool-status'
-import type { OwnerOfferingSummary } from './AeOwnerOfferings'
 import type { OfferingRef } from '@/modules/common/ids'
+import type {
+  BusinessOfferingProjection,
+  BusinessOfferingStatus,
+  PublicOfferingSupplyProjection,
+} from '@/modules/catalog/public'
 import {
   displayPriceFromPricingConfig,
   formatDisplayAmount,
   normalizePricingConfig,
 } from '@/modules/money/public'
 
+export type OwnerOfferingSummary = Readonly<{
+  offering: BusinessOfferingProjection
+  status: BusinessOfferingStatus
+  accessPathCount: number
+  support?: PublicOfferingSupplyProjection['support']
+  lifecycleLabel?: string
+  availability?: 'available' | 'unavailable' | 'unknown'
+  blocker?: string
+  continuation?: Readonly<{ label: string; href: string }>
+  lifecyclePending?: boolean
+  pricingLabel?: string
+  protocolLabel?: string
+  callsCount?: number
+  slug?: string
+}>
+
 export type OwnerToolAvailability = 'available' | 'unavailable' | 'unknown'
+
+export type OwnerToolBadgeVariant = 'outline' | 'secondary' | 'success' | 'warning' | 'destructive'
+
+export function ownerToolProtocolBadgeVariant(protocolLabel: string | undefined): 'outline' | 'secondary' {
+  return protocolLabel === 'MCP' ? 'secondary' : 'outline'
+}
+
+export function ownerToolAvailabilityPresentation(availability: OwnerToolAvailability | undefined): Readonly<{
+  label: string
+  variant: OwnerToolBadgeVariant
+  hasDot: boolean
+}> | undefined {
+  if (availability === undefined) return undefined
+  switch (availability) {
+    case 'available':
+      return { label: 'Operational', variant: 'success', hasDot: true }
+    case 'unavailable':
+      return { label: 'Degraded', variant: 'destructive', hasDot: true }
+    case 'unknown':
+      return { label: 'Checking', variant: 'warning', hasDot: false }
+    default: {
+      const _exhaustive: never = availability
+      return _exhaustive
+    }
+  }
+}
+
+export function ownerToolLifecycleVariant(
+  lifecycle: string,
+  pending?: boolean,
+): Readonly<{ label: string; variant: OwnerToolBadgeVariant }> {
+  if (pending === true) {
+    return { label: 'Updating', variant: 'warning' }
+  }
+  if (lifecycle === 'Published') {
+    return { label: 'Published', variant: 'success' }
+  }
+  if (
+    lifecycle === 'Draft'
+    || lifecycle === 'Needs setup'
+    || lifecycle === 'Submitted'
+    || lifecycle === 'Under review'
+  ) {
+    return { label: lifecycle, variant: 'outline' }
+  }
+  if (
+    lifecycle === 'Paused'
+    || lifecycle === 'Action required'
+    || lifecycle === 'Updating'
+    || lifecycle === 'Status unavailable'
+  ) {
+    return { label: lifecycle, variant: 'warning' }
+  }
+  if (lifecycle === 'Retired') {
+    return { label: 'Retired', variant: 'secondary' }
+  }
+  return { label: lifecycle, variant: 'outline' }
+}
 
 export function ownerToolProtocolLabel(source: ProviderToolStatus['source'] | undefined): string | undefined {
   if (source === undefined || source.kind === 'unavailable') return undefined
@@ -193,6 +271,7 @@ export function toOfferingSummary(row: ProviderWorkspaceProjectionRow): OwnerOff
     ...(pricingLabel === undefined ? {} : { pricingLabel }),
     ...(row.protocolLabel === undefined ? {} : { protocolLabel: row.protocolLabel }),
     ...(row.callsCount === undefined ? {} : { callsCount: row.callsCount }),
+    ...(row.slug === undefined ? {} : { slug: row.slug }),
   }
 }
 

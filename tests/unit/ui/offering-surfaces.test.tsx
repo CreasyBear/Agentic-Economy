@@ -50,6 +50,7 @@ describe('Provider Tool directory', () => {
       'Status',
       'Price',
       'Usage',
+      'Quick actions',
       'Next action',
     ])
   })
@@ -67,12 +68,14 @@ describe('Provider Tool directory', () => {
 
     const compactList = screen.getByTestId('provider-workspace-compact-list')
     const row = within(compactList).getByRole('listitem')
-    expect(Array.from(row.children).map((child) => child.textContent)).toEqual([
-      'Blockchain data queryPublished · AvailableReconnect the provider',
-      'Manage connection',
-    ])
+    expect(within(row).getByRole('heading', { name: 'Blockchain data query' })).toBeTruthy()
+    expect(within(row).getByText('Published')).toBeTruthy()
+    expect(within(row).getByText('Operational')).toBeTruthy()
+    expect(within(row).getByText('Reconnect the provider')).toBeTruthy()
     expect(within(row).getByRole('link', { name: 'Manage connection for Blockchain data query' }).className)
       .toContain('w-full')
+    expect(within(row).getByRole('link', { name: 'Test Run for Blockchain data query' })).toBeTruthy()
+    expect(within(row).getByRole('link', { name: 'View logs for Blockchain data query' })).toBeTruthy()
   })
 })
 
