@@ -16,9 +16,9 @@
 | :--- | :---: | :--- | :---: | :---: | :---: | :---: |
 | **Wave 1: Buyer Onboarding & Developer Launchpad** | 6 | `W-01`, `W-02`, `W-25`, `W-26`, `W-27`, `W-29` | 6 | 0 | 0 | **VERIFIED** |
 | **Wave 2: Financial Peace-of-Mind & Spend Observability** | 8 | `W-20`, `W-21`, `W-22`, `W-23`, `W-24`, `W-38`, `W-39`, `W-40` | 8 | 0 | 0 | **VERIFIED** |
-| **Wave 3: Supplier Monetization & Testing Playground** | 8 | `W-30`, `W-31`, `W-32`, `W-33`, `W-34`, `W-35`, `W-36`, `W-37` | 7 | 0 | 1 | `IN PROGRESS` |
+| **Wave 3: Supplier Monetization & Testing Playground** | 8 | `W-30`, `W-31`, `W-32`, `W-33`, `W-34`, `W-35`, `W-36`, `W-37` | 8 | 0 | 0 | **VERIFIED** |
 | **Wave 4: Team Operations, Identity & Tactile Standards** | 22 | `W-03`–`W-09`, `W-10`–`W-19`, `W-28`, `W-41`–`W-44` | 0 | 0 | 22 | `PENDING` |
-| **Total** | **44** | **All 44 Standard Workflows** | **21** | **0** | **23** | `IN PROGRESS` |
+| **Total** | **44** | **All 44 Standard Workflows** | **22** | **0** | **22** | `IN PROGRESS` |
 
 ---
 
@@ -361,15 +361,20 @@
 ---
 
 ### W-37: Transparent Pricing Revision Modal
-- **Surfaces:** `src/components/ae/supply/AePriceUpdateModal.tsx`
+- **Surfaces:** `src/components/ae/supply/AePriceUpdateModal.tsx`, `tests/unit/components/ae-price-update-modal.test.tsx`
 - **Incumbent Baseline:** Modal updating price in cents.
 - **Ergonomic Gap:** No price comparison visualization; doesn't clarify what happens to in-flight quotes.
 - **Target Ergonomic Spec:**
-  - Side-by-side comparison: *"Current Price: A$0.10 $\rightarrow$ New Price: A$0.15"*.
-  - Australian GST itemization recalculated live.
-  - Reassurance callout: *"Existing quotes locked by agents remain valid until their 15-minute expiration"*.
-- **Subagent Assignment:** Grok (Scout) $\rightarrow$ Composer (Craft) $\rightarrow$ Orchestrator (Verify)
-- **Status:** `PENDING`
+  - Side-by-side comparison card: *"Current Price: A$0.10 $\rightarrow$ New Price: A$0.15"* with live delta calculation (`+A$0.05`, `No change`) and `font-mono tabular-nums`.
+  - Live Australian 1/11th GST itemization (Base price, GST 10%, Total buyer consideration) recalculated live on input.
+  - Prominent in-flight quote reassurance callout: *"Existing quotes locked by agents remain valid until their 15-minute expiration. New pricing applies only to subsequent quote requests."*
+  - Tactile preset chips: percentage adjustments (`+10%`, `+25%`, `-10%`) and common tiers (`A$0.05`, `A$0.10`, `A$0.25`, `A$0.50`).
+  - Structured Rule 4 diagnostic playbooks for invalid/zero prices and publish failures (`A$0.00 affected`).
+  - Zero-CLS reserved geometry: comparison & GST slot (`min-h-[8.5rem]`) and diagnostic slot (`min-h-[2.5rem]`).
+  - Tactile press physics (`enabled:active:scale-[0.98] transition-transform duration-100 ease-out`) across all buttons and chips.
+  - Amount-aware success toast (`toast.success('Pricing revision published', ...)`) on publish completion.
+- **Subagent Assignment:** Grok (Scout: `c78492d6-fa79-4ee9-88e3-b18e79caf94b`) $\rightarrow$ Composer (Craft: `75d97239-a8e8-4b46-bdbc-486c987de207`) $\rightarrow$ Orchestrator (Verify)
+- **Status:** `VERIFIED`
 
 ---
 
