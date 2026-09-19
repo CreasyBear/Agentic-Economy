@@ -5,7 +5,7 @@ import { SlidersHorizontal } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Field, FieldGroup, FieldLabel, FieldDescription } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
-import { Sheet, SheetContent, SheetDescription, SheetTitle, SheetTrigger } from '@/components/ui/sheet'
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet'
 import { x402DirectoryFilterSchema, type X402DirectoryFilters } from '@/modules/market/x402-directory'
 
 type Props = { search: X402DirectoryFilters; onApply: (filters: X402DirectoryFilters) => void }
@@ -21,10 +21,14 @@ export function DirectoryFilters({ search, onApply }: Props) {
         </Button>
       }
     />
-      <SheetContent className="w-full overflow-y-auto sm:max-w-md p-6">
-        <SheetTitle>Filter Tools</SheetTitle>
-        <SheetDescription>Search the directory by network, provider or maximum price per Call.</SheetDescription>
-        {open && <FilterForm search={search} onApply={filters => { onApply(filters); setOpen(false) }} />}
+      <SheetContent className="flex w-full flex-col gap-0 overflow-hidden p-0 sm:max-w-md">
+        <SheetHeader className="border-b p-6 pr-12">
+          <SheetTitle>Filter Tools</SheetTitle>
+          <SheetDescription>Search the directory by network, provider or maximum price per Call.</SheetDescription>
+        </SheetHeader>
+        <div className="min-h-0 flex-1 overflow-y-auto p-6">
+          {open && <FilterForm search={search} onApply={filters => { onApply(filters); setOpen(false) }} />}
+        </div>
       </SheetContent>
   </Sheet>
 }
@@ -70,9 +74,9 @@ function FilterForm({ search, onApply }: Props) {
     </Field>
     </FieldGroup>
     {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
-    <div className="mt-auto flex gap-3 border-t pt-4">
-      <Button type="button" variant="outline" onClick={() => { setNetwork(''); setProvider(''); setPrice(''); setError(undefined) }}>Clear filters</Button>
-      <Button type="submit" className="flex-1">Show results</Button>
+    <div className="mt-auto flex items-stretch gap-3 border-t pt-4">
+      <Button type="button" variant="outline" className="min-h-touch flex-1" onClick={() => { setNetwork(''); setProvider(''); setPrice(''); setError(undefined) }}>Clear filters</Button>
+      <Button type="submit" className="min-h-touch flex-1">Show results</Button>
     </div>
   </form>
 }

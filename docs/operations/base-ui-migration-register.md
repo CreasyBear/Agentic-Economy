@@ -517,3 +517,32 @@
   - Mark migration 100% complete and verified.
 - **Subagent Assignment:** Grok $\rightarrow$ Composer $\rightarrow$ Orchestrator
 - **Status:** `VERIFIED`
+
+---
+
+# Post-Migration Craft Reaudit & Composition Polish (Waves A, B, C & Subagents)
+
+### Comprehensive Design System & Ergonomics Audit
+Following the clean-sheet Base UI migration, waves of Grok scouting and Composer craft subagents were dispatched across all UI primitives, App Shell layouts, and product surfaces to identify and eliminate compositional and tactile regressions:
+
+1. **Button Variants & Universal Tactile Physics (`src/components/ui/button-variants.ts`)**:
+   - **Root Cause:** `buttonVariants` originally specified `enabled:active:scale-[0.98]`. In CSS, `:enabled` only matches form controls (`<button>`, `<input>`, `<select>`), completely stripping press physics from semantic `<Link>` and `<a>` elements across the app.
+   - **Remediation:** Changed to `active:scale-[0.98] disabled:active:scale-100 motion-reduce:transition-none motion-reduce:active:scale-100`. Universal tactile feel restored to all link-styled buttons.
+
+2. **Overlay Scrim & Modal Backdrop Elevation (`dialog.tsx`, `alert-dialog.tsx`, `sheet.tsx`)**:
+   - **Audit Finding:** Overlays used a faint 16% scrim without blur, causing background content to compete with modal content. Close triggers were only 24px (`min-h-6 min-w-6`) on desktop.
+   - **Remediation:** Upgraded backdrop to `bg-black/30 backdrop-blur-sm` for cognitive calm and visual isolation. Enlarged close targets to `size-8 max-sm:min-h-touch max-sm:min-w-touch` with brand outline focus rings. Snapped sheet duration from 300ms to 220ms (`duration-base ease-standard`).
+
+3. **Discovery & Market Polish (`DirectoryHomeDiscovery.tsx`, `DirectoryIndexDiscovery.tsx`, `DirectoryExplorerFilters.tsx`, `DirectoryFilters.tsx`, `AeCapabilityTile.tsx`)**:
+   - **Audit Finding:** Carousel navigation and filter triggers were 32–36px. Filter sheets contained redundant duplicate headings ("Filters" inside "Refine Tools").
+   - **Remediation:** Enforced `min-h-touch` and `size-10` on all carousel controls and shelf CTAs. Deduplicated filter headings, padded sheet headers with `pr-12` to prevent close-button collisions, and enhanced inverted panel contrast to pass WCAG AA standards.
+
+4. **Operator Console, Activity & Form Selection Controls (`AeOperatorDataTable.tsx`, `activity.tsx`, `SupplyCandidateSection.tsx`, `WorkspaceDangerZone.tsx`)**:
+   - **Audit Finding:** Checkboxes in data tables were raw 16px boxes. Activity filter chips were 28px (`h-7`). Radio candidate selections were wrapped in non-clickable `<div>` elements. Danger zone text inputs had accidental button scale.
+   - **Remediation:** Wrapped table checkboxes in `size-9` touch pads. Enforced `min-h-9 sm:min-h-8` on activity filters. Wrapped candidate selections in full `<Label>` cards with `has-[[data-checked]]:border-foreground has-[[data-checked]]:bg-muted`. Removed scale from text inputs. Content-sized all confirm/reveal dialog slots without artificial reserved empty heights.
+
+### Verification Census
+- `npx oxlint --deny-warnings`: 0 errors, 0 warnings
+- `npm run test:types`: 4/4 suites pass
+- `npm run deps:check`: 0 circular dependencies
+- `vitest run tests/unit/`: 592/592 test files pass, 5,901/5,901 tests pass

@@ -44,10 +44,6 @@ export function DirectoryHomeDiscovery({ home, onSave, isSaved, onCompare, isCom
         return <Link key={rail.id} to={marketPath} search={collectionSearch(rail)} className={cn(buttonVariants({ variant: 'outline' }), 'shrink-0 gap-2 rounded-full border-border/70 bg-card px-4 sm:px-5')}><Icon className="size-4" aria-hidden="true" />{item.label}</Link>
       })}
     </nav>
-    <div className="mb-8 flex items-baseline justify-between gap-3">
-      <p className="text-xs tracking-wide text-muted-foreground">Selections from the live directory</p>
-      <span className="hidden text-xs text-muted-foreground sm:block">A little inspiration for the next step</span>
-    </div>
     <div className="grid gap-12 sm:gap-16">
       {rails.map(rail => <section key={rail.id} className="min-w-0" aria-labelledby={`directory-collection-${rail.id}`}>
         <Carousel opts={{ align: 'start', loop: false }} aria-label={`${rail.category} Tools`}>
@@ -58,10 +54,10 @@ export function DirectoryHomeDiscovery({ home, onSave, isSaved, onCompare, isCom
               <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{rail.description}</p>
             </div>
             <div className="flex shrink-0 items-center gap-2">
-              <Link to={marketPath} search={collectionSearch(rail)} aria-label={`View ${rail.category} collection`} className={cn(buttonVariants({ variant: 'ghost', size: 'sm' }), 'mr-1 rounded-full')}>View collection<ArrowUpRight className="size-4" aria-hidden="true" /></Link>
+              <Link to={marketPath} search={collectionSearch(rail)} aria-label={`View ${rail.category} collection`} className={cn(buttonVariants({ variant: 'ghost', size: 'sm' }), 'mr-1 min-h-touch rounded-full')}>View collection<ArrowUpRight className="size-4" aria-hidden="true" /></Link>
               {rail.kind === 'ok' && rail.items.length > 0 ? <>
-                <CarouselPrevious className="static size-9 translate-y-0" aria-label={`Previous ${rail.category} Tools`} />
-                <CarouselNext className="static size-9 translate-y-0" aria-label={`Next ${rail.category} Tools`} />
+                <CarouselPrevious className="static size-10 min-h-touch translate-y-0" aria-label={`Previous ${rail.category} Tools`} />
+                <CarouselNext className="static size-10 min-h-touch translate-y-0" aria-label={`Next ${rail.category} Tools`} />
               </> : null}
             </div>
           </div>

@@ -22,6 +22,11 @@ import { cn } from '@/lib/utils'
 
 import { CallReceiptStatusFeedback, callReceiptRefreshLabel, callReceiptTactilePressClassName } from './CallReceiptPrimitives'
 
+const RECONCILIATION_RESOLUTIONS = [
+  { value: 'not_released', label: 'Effect not released' },
+  { value: 'released', label: 'Effect released' },
+] as const
+
 type CallRecoveryAvailability = Readonly<{
   canCancelNow: boolean
   canReconcileNow: boolean
@@ -199,7 +204,8 @@ function AdvancedReconciliation({
             <FieldLabel htmlFor="reconciliation-resolution">Observed provider outcome</FieldLabel>
             <Select
               value={resolution}
-              onValueChange={(value) => setResolution(value as CallReconciliationForm['resolution'])}
+              onValueChange={(value) => { if (value != null) setResolution(value as CallReconciliationForm['resolution']) }}
+              items={RECONCILIATION_RESOLUTIONS}
               disabled={recoveryPending}
               required
             >

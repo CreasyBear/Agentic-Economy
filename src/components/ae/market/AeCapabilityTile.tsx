@@ -1,5 +1,7 @@
-import { useCurrentToolPrice } from "./AeToolPrice";
 import { Link } from "@tanstack/react-router";
+
+import { cn } from "@/lib/utils";
+import { useCurrentToolPrice } from "./AeToolPrice";
 
 import {
   Item,
@@ -28,12 +30,15 @@ export function AeCapabilityTile({
 
   return (
     <Item
-      className="group h-full rounded-none border-0 border-t border-border bg-transparent px-0 py-related hover:bg-transparent"
+      className="group h-full rounded-none border-0 border-t border-border bg-transparent px-0 py-related"
       render={
         <Link
           to="/market"
           search={{ query: group.label }}
           aria-label={`${group.label}, ${listingFact}, ${price}`}
+          className={cn(
+            "block rounded-md transition-colors hover:bg-muted/40 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring",
+          )}
         >
           <ItemContent>
             <ItemHeader>

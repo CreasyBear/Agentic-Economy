@@ -63,7 +63,7 @@ export function AeToolCompactDecision({
           <Link
             to={model.nextAction.href}
             onClick={onNavigate}
-            className={cn(buttonVariants({ size: 'sm' }), 'min-h-touch justify-self-start')}
+            className={cn(buttonVariants({ size: 'sm' }), 'min-h-touch w-fit self-start justify-self-start')}
           >
             {model.nextAction.label}
           </Link>
@@ -72,7 +72,7 @@ export function AeToolCompactDecision({
             <Button
               type="button"
               size="sm"
-              className="min-h-touch"
+              className="min-h-touch w-fit self-start"
               aria-label={isCopied
                 ? `${model.nextAction.label} copied`
                 : `Copy ${model.nextAction.label}`}

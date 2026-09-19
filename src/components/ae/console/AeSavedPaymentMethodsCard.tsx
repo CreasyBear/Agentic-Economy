@@ -139,7 +139,8 @@ export function AeSavedPaymentMethodsCard({
       } else {
         throw new Error('portal_url_missing')
       }
-    } catch {
+    } catch (cause) {
+      void cause
       setPortalDiagnostic(true)
       toast.error('Could not open Stripe billing portal.', {
         description: 'Please check your network connection or try again in a few moments.',

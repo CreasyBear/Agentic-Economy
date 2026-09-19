@@ -71,7 +71,7 @@ export function AeToolNextAction({
 
         {nextAction.label === 'Tool reference' ? (
           <div className="grid gap-3">
-            <p className="text-xs leading-5 text-background/55">
+            <p className="text-xs leading-5 text-background/75">
               Your agent confirms the exact buyer amount in AUD, authority, balance, and availability through tool.quote before it can Call.
             </p>
             <a
@@ -140,7 +140,7 @@ function TicketFact({
 }: Readonly<{ label: string; value: string; mono?: boolean; className?: string }>) {
   return (
     <div className={cn('grid min-w-0 gap-1 py-3', className)}>
-      <dt className="text-xs font-medium text-background/55">
+      <dt className="text-xs font-medium text-background/75">
         {label}
       </dt>
       <dd className={cn(

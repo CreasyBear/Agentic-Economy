@@ -25,7 +25,8 @@ export function inspectHttpsUrl(value: string): HttpsUrlPreflight {
   try {
     const u = new URL(trimmed)
     return u.protocol === 'https:' ? 'valid' : 'insecure'
-  } catch {
+  } catch (cause) {
+    void cause
     return 'invalid'
   }
 }
@@ -39,7 +40,8 @@ export function inspectJsonPayload(value: string, requiredKeys: readonly string[
     const rec = parsed as Record<string, unknown>
     const hasAll = requiredKeys.every((k) => k in rec && rec[k] !== undefined && rec[k] !== null)
     return hasAll ? 'valid' : 'missing_fields'
-  } catch {
+  } catch (cause) {
+    void cause
     return 'invalid'
   }
 }

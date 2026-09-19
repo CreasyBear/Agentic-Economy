@@ -15,7 +15,7 @@ import {
 } from '@tanstack/react-table'
 import * as RovingFocusGroup from '@/components/ui/roving-focus'
 import { Link } from '@tanstack/react-router'
-import { ArrowUpDownIcon } from 'lucide-react'
+import { ArrowDownIcon, ArrowUpDownIcon, ArrowUpIcon } from 'lucide-react'
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import { AeViewBar } from '@/components/ae/data/AeViewBar'
@@ -161,7 +161,7 @@ export function AeRecordTable<TData>({
               />
             ),
             cell: ({ row }) => (
-              <Checkbox
+              <SelectionCheckbox
                 checked={row.getIsSelected()}
                 disabled={!row.getCanSelect()}
                 onCheckedChange={(checked) => row.toggleSelected(checked === true)}
@@ -289,7 +289,7 @@ export function AeRecordTable<TData>({
                   <TableHead
                     key={header.id}
                     scope="col"
-                    className="sticky top-0 z-10 bg-container"
+                    className="sticky top-0 z-10 bg-container px-3 py-2.5"
                     aria-sort={
                       !header.column.getCanSort()
                         ? undefined
@@ -389,7 +389,7 @@ function RecordTableRow<TData>({
       className={`has-[:focus-visible]:bg-muted/50 has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-inset has-[:focus-visible]:ring-ring${row.getIsSelected() && selectedRowClassName !== undefined ? ` ${selectedRowClassName}` : ''}`}
     >
       {row.getVisibleCells().map((cell) => (
-        <TableCell key={cell.id} className="whitespace-normal">
+        <TableCell key={cell.id} className="whitespace-normal align-middle">
           {flexRender(cell.column.columnDef.cell, cell.getContext())}
         </TableCell>
       ))}
@@ -434,7 +434,33 @@ function RecordTableAction<TData>({
     )
 
   return (
-    <RovingFocusGroup.Item render={control} tabStopId={row.id} />
+    <div className="flex items-center">
+      <RovingFocusGroup.Item render={control} tabStopId={row.id} />
+    </div>
+  )
+}
+
+function SelectionCheckbox({
+  checked,
+  disabled,
+  onCheckedChange,
+  'aria-label': ariaLabel,
+}: Readonly<{
+  checked: boolean | 'indeterminate'
+  disabled?: boolean
+  onCheckedChange: (checked: boolean) => void
+  'aria-label': string
+}>) {
+  return (
+    <div className="flex size-9 min-h-touch min-w-touch items-center justify-center">
+      <Checkbox
+        className="size-4"
+        checked={checked}
+        disabled={disabled}
+        onCheckedChange={(value) => onCheckedChange(value === true)}
+        aria-label={ariaLabel}
+      />
+    </div>
   )
 }
 
@@ -477,7 +503,7 @@ function TableSelectionHeader<TData>({
   if (showSelectAll === false) return <span className="sr-only">Select</span>
 
   return (
-    <Checkbox
+    <SelectionCheckbox
       checked={
         table.getIsAllPageRowsSelected()
           ? true
@@ -486,7 +512,7 @@ function TableSelectionHeader<TData>({
             : false
       }
       disabled={!table.getRowModel().rows.some((row) => row.getCanSelect())}
-      onCheckedChange={(checked) => table.toggleAllPageRowsSelected(checked === true)}
+      onCheckedChange={(checked) => table.toggleAllPageRowsSelected(checked)}
       aria-label={`Select all ${caption}`}
     />
   )
@@ -503,17 +529,27 @@ export function AeOperatorSortableHeader({
   label: string
   column: { toggleSorting: (desc?: boolean) => void; getIsSorted: () => false | 'asc' | 'desc' }
 }) {
+  const sorted = column.getIsSorted()
+  const SortIcon =
+    sorted === 'asc' ? ArrowUpIcon : sorted === 'desc' ? ArrowDownIcon : ArrowUpDownIcon
+
   return (
     <Button
       type="button"
       variant="ghost"
       size="sm"
-      className="-ms-2 h-8 min-h-8 px-2"
-      onClick={() => column.toggleSorting(column.getIsSorted() === 'asc')}
-      aria-label={`Sort by ${label}`}
+      className={cn(
+        '-ms-2 h-9 min-h-9 gap-1.5 px-3',
+        sorted ? 'text-foreground' : 'text-muted-foreground',
+      )}
+      onClick={() => column.toggleSorting(sorted === 'asc')}
+      aria-label={`Sort by ${label}${sorted ? `, ${sorted === 'asc' ? 'ascending' : 'descending'}` : ''}`}
     >
       <span>{label}</span>
-      <ArrowUpDownIcon aria-hidden="true" className="size-3.5" />
+      <SortIcon
+        aria-hidden="true"
+        className={cn('size-3.5 shrink-0', sorted ? 'text-foreground' : 'opacity-50')}
+      />
     </Button>
   )
 }

@@ -4,73 +4,23 @@ import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
 import { toast } from '@/lib/ui/toast'
 import { cn } from '@/lib/utils'
-import { AUD_EXPONENT, formatDisplayAmount, rescaleExactAmount } from '@/modules/money/public'
+import {
+  PREFERENCE_SWITCHES,
+  THRESHOLD_OPTIONS,
+  UPDATE_FAILED_DIAGNOSTIC,
+  lowCreditThresholdStatement,
+  type NotificationPreferencePatch,
+  type NotificationPreferencesView,
+  type NotificationUpdateDiagnostic,
+} from '@/modules/principal-account/notification-preferences.view-model'
 
 export const TACTILE =
   'enabled:active:scale-[0.98] transition-transform duration-100 ease-out motion-reduce:transition-none motion-reduce:active:scale-100'
 
-export type NotificationPreferencesView = Readonly<{
-  lowCreditBalance: boolean
-  lowCreditThresholdCents: number
-  spendCapWarning: boolean
-  callFailureSpike: boolean
-  invoiceReady: boolean
-  teamMembershipChanged: boolean
-  revision: number
-}>
-
-export type NotificationPreferencePatch = Readonly<{
-  lowCreditBalance?: boolean
-  lowCreditThresholdCents?: number
-  spendCapWarning?: boolean
-  callFailureSpike?: boolean
-  invoiceReady?: boolean
-  teamMembershipChanged?: boolean
-  expectedRevision: number
-}>
-
-const UPDATE_FAILED_DIAGNOSTIC = {
-  whatHappened: 'Could not update notification preferences.',
-  financialImpact: 'A$0.00 affected — existing preferences remain active.',
-  nextStep: 'Please check your connection and try again.',
-} as const
-
-type OwnerNotificationSettingsProps = Readonly<{
+export type OwnerNotificationSettingsProps = Readonly<{
   preferences: NotificationPreferencesView
   onUpdate: (patch: NotificationPreferencePatch) => void | Promise<void>
 }>
-
-type PreferenceSwitchKey =
-  | 'lowCreditBalance'
-  | 'spendCapWarning'
-  | 'callFailureSpike'
-  | 'invoiceReady'
-  | 'teamMembershipChanged'
-
-const PREFERENCE_SWITCHES: ReadonlyArray<{
-  key: PreferenceSwitchKey
-  label: string
-}> = [
-  { key: 'lowCreditBalance', label: 'Low credit balance' },
-  { key: 'spendCapWarning', label: 'Spend cap warning' },
-  { key: 'callFailureSpike', label: 'Repeated call failures' },
-  { key: 'invoiceReady', label: 'Tax invoice or statement ready' },
-  { key: 'teamMembershipChanged', label: 'Team membership changes' },
-]
-
-const THRESHOLD_OPTIONS: ReadonlyArray<{ cents: number; label: string }> = [
-  { cents: 1000, label: 'A$10.00' },
-  { cents: 2500, label: 'A$25.00 (Default)' },
-  { cents: 5000, label: 'A$50.00' },
-]
-
-function thresholdDisplayUnits(cents: number): string {
-  const exact = rescaleExactAmount(
-    { currency: 'AUD', units: String(cents), exponent: 2 },
-    AUD_EXPONENT,
-  )
-  return exact?.units ?? String(cents * 10_000)
-}
 
 function PreferenceSwitch({
   id,
@@ -107,7 +57,7 @@ export function OwnerNotificationSettings({
   onUpdate,
 }: OwnerNotificationSettingsProps) {
   const [pending, setPending] = useState(false)
-  const [updateDiagnostic, setUpdateDiagnostic] = useState<typeof UPDATE_FAILED_DIAGNOSTIC | undefined>()
+  const [updateDiagnostic, setUpdateDiagnostic] = useState<NotificationUpdateDiagnostic | undefined>()
   const thresholdDisabled = !preferences.lowCreditBalance
 
   const applyPatch = async (patch: NotificationPreferencePatch) => {
@@ -116,7 +66,8 @@ export function OwnerNotificationSettings({
     try {
       await onUpdate(patch)
       toast.success('Notification preferences updated')
-    } catch {
+    } catch (cause) {
+      void cause
       setUpdateDiagnostic(UPDATE_FAILED_DIAGNOSTIC)
       toast.error('Could not update notification preferences.', {
         description: 'Please check your connection and try again.',
@@ -129,13 +80,7 @@ export function OwnerNotificationSettings({
   const controlsDisabled = pending
   const thresholdControlsDisabled = thresholdDisabled || pending
 
-  const thresholdStatement = preferences.lowCreditBalance
-    ? `Alert sent when balance drops below ${formatDisplayAmount({
-        currency: 'AUD',
-        exponent: AUD_EXPONENT,
-        units: thresholdDisplayUnits(preferences.lowCreditThresholdCents),
-      })}.`
-    : 'Low-balance alerts are off. Existing spend and call alerts are unchanged.'
+  const thresholdStatement = lowCreditThresholdStatement(preferences)
 
   return (
     <div className="grid gap-section">

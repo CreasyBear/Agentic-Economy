@@ -263,7 +263,7 @@ export function AeKeyRevealDialog({
                 type="button"
                 variant="ghost"
                 size="icon-sm"
-                className="shrink-0 min-h-touch min-w-touch"
+                className="shrink-0 min-h-touch min-w-touch enabled:active:scale-[0.98] transition-transform duration-100 ease-out motion-reduce:transition-none motion-reduce:active:scale-100"
                 aria-label={copiedSecret ? 'Secret key copied' : 'Copy secret key'}
                 onClick={() => void handleCopySecret()}
               >

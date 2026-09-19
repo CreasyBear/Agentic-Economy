@@ -114,9 +114,9 @@ function PrivacyRoute() {
         <section className="border-t border-border pt-section">
           <div className="grid gap-related">
             <Tabs defaultValue="call">
-              <TabsList aria-label="Privacy moments" className="min-h-touch w-full">
+              <TabsList aria-label="Privacy moments" className="h-auto min-h-touch w-full flex-wrap justify-start gap-1 p-1 sm:flex-nowrap">
                 {moments.map(({ value, label }) => (
-                  <TabsTrigger key={value} value={value} className="min-h-touch flex-1">{label}</TabsTrigger>
+                  <TabsTrigger key={value} value={value} className="min-h-touch shrink-0 flex-none px-3 sm:flex-1">{label}</TabsTrigger>
                 ))}
               </TabsList>
               {moments.map(({ value, icon: Icon, title, points }) => (

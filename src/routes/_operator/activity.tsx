@@ -454,7 +454,7 @@ function ActivityAvailable({
                       type="button"
                       variant={statusFilter === s ? 'secondary' : 'ghost'}
                       size="sm"
-                      className={`h-7 text-xs ${TACTILE_PRESS_CLASS}`}
+                      className={`min-h-9 text-xs sm:min-h-8 ${TACTILE_PRESS_CLASS}`}
                       aria-pressed={statusFilter === s}
                       onClick={() => setStatusFilter(s)}
                     >
@@ -475,7 +475,7 @@ function ActivityAvailable({
                       type="button"
                       variant={dateRangeFilter === d ? 'secondary' : 'ghost'}
                       size="sm"
-                      className={`h-7 text-xs ${TACTILE_PRESS_CLASS}`}
+                      className={`min-h-9 text-xs sm:min-h-8 ${TACTILE_PRESS_CLASS}`}
                       aria-pressed={dateRangeFilter === d}
                       onClick={() => setDateRangeFilter(d)}
                     >
@@ -507,7 +507,7 @@ function ActivityAvailable({
                   type="button"
                   variant="ghost"
                   size="sm"
-                  className={`h-7 text-xs text-muted-foreground ${TACTILE_PRESS_CLASS}`}
+                  className={`min-h-9 text-xs text-muted-foreground sm:min-h-8 ${TACTILE_PRESS_CLASS}`}
                   onClick={() => {
                     setStatusFilter('all')
                     setDateRangeFilter('all')
@@ -540,7 +540,8 @@ function ActivityAvailable({
                     const csv = generateCallsCsv(exportRows)
                     downloadCsv(`activity-calls-${new Date().toISOString().slice(0, 10)}.csv`, csv)
                     toast.success(formatExportSuccessToast(count, 'CSV'))
-                  } catch {
+                  } catch (cause) {
+                    void cause
                     toast.error(EXPORT_ERROR_WHAT, { description: EXPORT_ERROR_IMPACT })
                   }
                 }}
@@ -561,7 +562,8 @@ function ActivityAvailable({
                     const document = toExportDocument('activity-calls', exportRows)
                     downloadJson(`activity-calls-${new Date().toISOString().slice(0, 10)}.json`, document)
                     toast.success(formatExportSuccessToast(count, 'JSON'))
-                  } catch {
+                  } catch (cause) {
+                    void cause
                     toast.error(EXPORT_ERROR_WHAT, { description: EXPORT_ERROR_IMPACT })
                   }
                 }}

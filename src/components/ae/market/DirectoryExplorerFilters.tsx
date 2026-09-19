@@ -48,7 +48,7 @@ function MultipleFacets({ label, values, selected = [], onChange }: Readonly<{ l
     onChange(next.length === 0 ? undefined : next)
   }
   return <fieldset className="flex min-w-0 flex-col gap-3 border-t pt-5"><legend className="sr-only">{label}</legend><p className="text-sm font-semibold">{label}</p><Input value={query} aria-label={`Find shown ${label.toLowerCase()}`} onChange={event => setQuery(event.target.value)} placeholder={`Find ${label.toLowerCase()}…`} className="h-9 text-xs" /><div className="flex max-h-52 flex-col gap-1 overflow-y-auto overscroll-contain">
-    {visible.map(item => <Label key={item.key} className="min-h-8 justify-between gap-2 text-xs font-normal"><span className="flex min-w-0 items-center gap-2"><Checkbox aria-label={`${item.label} ${item.count.toLocaleString('en-AU')}`} checked={selectedKeys.has(item.key)} disabled={selected.length >= 5 && !selectedKeys.has(item.key)} onCheckedChange={() => toggle(item.key)} /><span className="break-words">{item.label}</span></span><span className="shrink-0 text-muted-foreground tabular-nums">{item.count.toLocaleString('en-AU')}</span></Label>)}
+    {visible.map(item => <Label key={item.key} className="min-h-10 justify-between gap-2 py-1 text-xs font-normal"><span className="flex min-w-0 items-center gap-2"><Checkbox aria-label={`${item.label} ${item.count.toLocaleString('en-AU')}`} checked={selectedKeys.has(item.key)} disabled={selected.length >= 5 && !selectedKeys.has(item.key)} onCheckedChange={() => toggle(item.key)} /><span className="break-words">{item.label}</span></span><span className="shrink-0 text-muted-foreground tabular-nums">{item.count.toLocaleString('en-AU')}</span></Label>)}
     {visible.length === 0 ? <p className="text-xs text-muted-foreground">No match in the shown {label.toLowerCase()}.</p> : null}
   </div>{unlistedSelected.map(key => <Button key={key} variant="secondary" size="sm" className="h-auto min-h-9 justify-between whitespace-normal" onClick={() => toggle(key)} aria-label={`Remove ${label.toLowerCase()}: ${key}`}>{key}<XIcon className="size-3" /></Button>)}<p className="text-xs leading-relaxed text-muted-foreground">A selection from the catalogue. Choose up to five; Tools can match any selected {label === 'Tags' ? 'tag' : 'collection'}.</p></fieldset>
 }
@@ -63,8 +63,8 @@ function Facets({ label, values, selected, onChange, searchable = false }: Reado
     <legend className="mb-3 text-sm font-semibold">{label}</legend>
     {searchable ? <div className="relative"><SearchIcon className="pointer-events-none absolute top-2.5 left-2.5 size-3.5 text-muted-foreground" /><Input aria-label={`Find ${label.toLowerCase()}`} value={query} onChange={event => setQuery(event.target.value)} placeholder="Find a category…" className="h-9 pl-8 text-xs" /></div> : null}
     <div className="max-h-60 flex flex-col gap-0.5 overflow-y-auto overscroll-contain">
-      <Button type="button" variant="ghost" onClick={() => onChange(undefined)} aria-pressed={selected === undefined} className={cn('h-auto min-h-9 w-full justify-start rounded-md px-2 text-xs font-normal', selected === undefined && 'bg-muted font-medium')}>All {label === 'Network' ? 'networks' : 'categories'}</Button>
-      {visible.map(item => <Button key={item.key} type="button" variant="ghost" aria-label={`${item.label} ${item.count.toLocaleString('en-AU')}`} aria-pressed={selected === item.key} onClick={() => onChange(selected === item.key ? undefined : item.key)} className={cn('h-auto min-h-9 w-full justify-between gap-3 rounded-md px-2 text-xs font-normal', selected === item.key && 'bg-muted font-medium')}>
+      <Button type="button" variant="ghost" onClick={() => onChange(undefined)} aria-pressed={selected === undefined} className={cn('h-auto min-h-10 w-full justify-start rounded-md px-2 text-xs font-normal', selected === undefined && 'bg-muted font-medium')}>All {label === 'Network' ? 'networks' : 'categories'}</Button>
+      {visible.map(item => <Button key={item.key} type="button" variant="ghost" aria-label={`${item.label} ${item.count.toLocaleString('en-AU')}`} aria-pressed={selected === item.key} onClick={() => onChange(selected === item.key ? undefined : item.key)} className={cn('h-auto min-h-10 w-full justify-between gap-3 rounded-md px-2 text-xs font-normal', selected === item.key && 'bg-muted font-medium')}>
         <span className="min-w-0 break-words text-left whitespace-normal">{item.label}</span><span className="shrink-0 text-muted-foreground tabular-nums">{item.count.toLocaleString('en-AU')}</span>
       </Button>)}
       {visible.length === 0 ? <p className="px-2 py-2 text-xs text-muted-foreground">No matching {label.toLowerCase()}.</p> : null}
@@ -106,7 +106,7 @@ function ProviderFilter({ search, onChange }: Pick<Props, 'search' | 'onChange'>
 
 function PublishedDetailsFilter({ search, onChange }: Pick<Props, 'search' | 'onChange'>) {
   return <fieldset className="flex flex-col gap-3 border-t pt-5"><legend className="sr-only">Published request details</legend><p className="text-sm font-semibold">Published details</p>
-      {([{ key: 'hasInputFields', label: 'Request fields' }, { key: 'hasInputSchema', label: 'Request schema' }, { key: 'hasOutputFields', label: 'Output fields' }, { key: 'hasOutputSchema', label: 'Output schema' }, { key: 'hasOutputExample', label: 'Output example' }, { key: 'curatedOnly', label: 'Bazaar curated' }] as const).map(filter => <Label key={filter.key} className="min-h-8 text-xs font-normal leading-relaxed"><Checkbox checked={search[filter.key] === true} onCheckedChange={checked => onChange({ [filter.key]: checked === true ? true : undefined })} />{filter.label}</Label>)}
+      {([{ key: 'hasInputFields', label: 'Request fields' }, { key: 'hasInputSchema', label: 'Request schema' }, { key: 'hasOutputFields', label: 'Output fields' }, { key: 'hasOutputSchema', label: 'Output schema' }, { key: 'hasOutputExample', label: 'Output example' }, { key: 'curatedOnly', label: 'Bazaar curated' }] as const).map(filter => <Label key={filter.key} className="min-h-10 py-1 text-xs font-normal leading-relaxed"><Checkbox checked={search[filter.key] === true} onCheckedChange={checked => onChange({ [filter.key]: checked === true ? true : undefined })} />{filter.label}</Label>)}
       <p className="text-xs leading-relaxed text-muted-foreground">Provider metadata and source curation.</p>
     </fieldset>
 }
@@ -117,7 +117,7 @@ function PayerBreadthFilter({ search, onChange }: Pick<Props, 'search' | 'onChan
       {search.maxPayers30d === undefined ? null : <Button type="button" variant="secondary" className="h-auto min-h-9 justify-between gap-2 text-xs whitespace-normal" aria-label="Remove maximum payer count" onClick={() => onChange({ maxPayers30d: undefined })}>At most {search.maxPayers30d.toLocaleString('en-AU')} paying addresses<XIcon className="size-3" /></Button>}
       {[{ label: 'Any payer count', value: undefined }, { label: '10+ paying addresses', value: 10 }, { label: '100+ paying addresses', value: 100 }, { label: '1,000+ paying addresses', value: 1000 }].map(option => {
         const selected = search.minPayers30d === option.value && search.adoptionBand === undefined && search.maxPayers30d === undefined
-        return <Button key={option.label} type="button" variant="ghost" aria-pressed={selected} className={cn('h-auto min-h-9 w-full justify-start px-2 text-xs font-normal', selected && 'bg-muted font-medium')} onClick={() => onChange({ minPayers30d: option.value, maxPayers30d: undefined, adoptionBand: undefined })}>{option.label}</Button>
+        return <Button key={option.label} type="button" variant="ghost" aria-pressed={selected} className={cn('h-auto min-h-10 w-full justify-start px-2 text-xs font-normal', selected && 'bg-muted font-medium')} onClick={() => onChange({ minPayers30d: option.value, maxPayers30d: undefined, adoptionBand: undefined })}>{option.label}</Button>
       })}
       <p className="text-xs leading-relaxed text-muted-foreground">Distinct paying addresses per Tool, not people or Customers.</p>
     </fieldset>
@@ -143,10 +143,10 @@ function AdvancedFilters({ search, overview, onChange }: Pick<Props, 'search' | 
     </Collapsible>
 }
 
-function FilterBody({ search, overview, onChange, onReset }: Props) {
+function FilterBody({ search, overview, onChange, onReset, showHeading = true }: Props & Readonly<{ showHeading?: boolean }>) {
   const facets = overview?.kind === 'ok' ? overview : undefined
   return <div className="flex flex-col gap-6">
-    <div className="flex items-center justify-between"><p className="text-sm font-semibold">Filters</p><Button type="button" variant="ghost" size="sm" onClick={onReset}>Clear all</Button></div>
+    {showHeading ? <div className="flex items-center justify-between"><p className="text-sm font-semibold">Filters</p><Button type="button" variant="ghost" size="sm" className="min-h-touch" onClick={onReset}>Clear all</Button></div> : null}
     {facets === undefined ? <p className="text-xs text-muted-foreground">Category and network counts are unavailable.</p> : <><p className="text-xs leading-relaxed text-muted-foreground">Counts cover the full indexed catalogue.</p><Facets label="Provider category" values={facets.categories} selected={search.directoryCategory} onChange={directoryCategory => onChange({ directoryCategory })} searchable /></>}
     <ListedPriceFilter search={search} onChange={onChange} />
     <AdvancedFilters search={search} {...(overview === undefined ? {} : { overview })} onChange={onChange} />
@@ -159,6 +159,6 @@ export function DirectoryExplorerFilters(props: Props) {
   const key = JSON.stringify(props.search)
   return <>
     <aside aria-label="Tool filters" className="sticky top-24 hidden max-h-[calc(100dvh-7rem)] w-52 shrink-0 self-start overflow-y-auto overscroll-contain pr-4 md:block"><FilterBody key={key} {...props} /></aside>
-    <div className="md:hidden"><Sheet><SheetTrigger render={<Button variant="outline" size="sm" aria-label={count > 0 ? `Filters ${count}` : 'Filters'}><SlidersHorizontalIcon />Filters{count > 0 ? <span className="rounded bg-muted px-1.5 tabular-nums">{count}</span> : null}</Button>} /><SheetContent side="left" className="w-full gap-0 sm:max-w-md"><SheetHeader className="border-b p-5"><SheetTitle>Refine Tools</SheetTitle><SheetDescription>Filter the catalogue by price, Provider and published details.</SheetDescription></SheetHeader><div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-5"><FilterBody key={key} {...props} /></div><SheetFooter className="border-t"><SheetClose render={<Button>Show results</Button>} /></SheetFooter></SheetContent></Sheet></div>
+    <div className="md:hidden"><Sheet><SheetTrigger render={<Button variant="outline" size="sm" className="min-h-touch" aria-label={count > 0 ? `Filters ${count}` : 'Filters'}><SlidersHorizontalIcon />Filters{count > 0 ? <span className="rounded bg-muted px-1.5 tabular-nums">{count}</span> : null}</Button>} /><SheetContent side="left" className="w-full gap-0 sm:max-w-md"><SheetHeader className="border-b p-5 pr-12"><SheetTitle>Refine Tools</SheetTitle><SheetDescription>Filter the catalogue by price, Provider and published details.</SheetDescription></SheetHeader><div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-5"><FilterBody key={key} {...props} showHeading={false} /></div><SheetFooter className="flex flex-row items-stretch gap-3 border-t p-5"><Button type="button" variant="outline" className="min-h-touch flex-1" onClick={props.onReset}>Clear filters</Button><SheetClose render={<Button className="min-h-touch flex-1">Show results</Button>} /></SheetFooter></SheetContent></Sheet></div>
   </>
 }

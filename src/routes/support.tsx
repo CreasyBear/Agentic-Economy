@@ -71,10 +71,10 @@ function SupportRoute() {
           title="Continue from the current status"
           description="The original Call shows its current status and next action. If the result is uncertain, check that Call before trying again."
         >
-          <div className="flex flex-wrap gap-related">
-            <Link to="/activity" className={cn(buttonVariants(), 'min-h-touch')}>Open Calls</Link>
-            <Link to="/owner/operations" className={cn(buttonVariants({ variant: 'outline' }), 'min-h-touch')}>Continue Provider setup</Link>
-            <Link to="/owner/credit" className={cn(buttonVariants({ variant: 'outline' }), 'min-h-touch')}>Review account credit</Link>
+          <div className="flex flex-col gap-related sm:flex-row sm:flex-wrap">
+            <Link to="/activity" className={cn(buttonVariants(), 'min-h-touch w-full sm:w-auto')}>Open Calls</Link>
+            <Link to="/owner/operations" className={cn(buttonVariants({ variant: 'outline' }), 'min-h-touch w-full sm:w-auto')}>Continue Provider setup</Link>
+            <Link to="/owner/credit" className={cn(buttonVariants({ variant: 'outline' }), 'min-h-touch w-full sm:w-auto')}>Review account credit</Link>
           </div>
         </AeSection>
         <AeSection
@@ -108,8 +108,8 @@ function SupportRoute() {
             Open a public developer issue <ArrowUpRightIcon aria-hidden="true" />
           </a>
           <div className="mt-related flex flex-wrap gap-related">
-            <Link to="/for-providers" className="inline-flex min-h-touch items-center underline underline-offset-4">Review Provider requirements</Link>
-            <Link to="/privacy/remove-business" className="inline-flex min-h-touch items-center underline underline-offset-4">Request a listing correction</Link>
+            <Link to="/for-providers" className="inline-flex min-h-touch items-center rounded-sm underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">Review Provider requirements</Link>
+            <Link to="/privacy/remove-business" className="inline-flex min-h-touch items-center rounded-sm underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">Request a listing correction</Link>
           </div>
         </AeSection>
       </div>

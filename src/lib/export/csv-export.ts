@@ -28,7 +28,18 @@ export type InvoiceExportRow = Readonly<{
   amountAud: string
   gstAud: string
   netAud: string
-  status: string
+  status:
+    | 'completed'
+    | 'failed'
+    | 'pending'
+    | 'delivered'
+    | 'refunded'
+    | 'Open — pending'
+    | 'Open — outcome uncertain'
+    | 'Resolved — delivered'
+    | 'Resolved — refunded'
+    | 'Resolved — failed'
+    | (string & {})
   taxInvoice: string
 }>
 

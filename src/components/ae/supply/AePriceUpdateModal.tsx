@@ -201,7 +201,8 @@ export function AePriceUpdateModal({
       } else {
         setDiagnostic(PUBLISH_FAILURE_DIAGNOSTIC)
       }
-    } catch {
+    } catch (cause) {
+      void cause
       setDiagnostic(PUBLISH_FAILURE_DIAGNOSTIC)
     } finally {
       setPending(false)

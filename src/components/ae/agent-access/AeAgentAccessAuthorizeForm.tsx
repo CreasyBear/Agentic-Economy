@@ -370,7 +370,11 @@ function AgentAccessAuthorizeForm({ locator, oauthState, details, submitApproval
                 {connectionTarget === 'replace_credential' ? (
                   <div className="grid gap-2">
                     <Label htmlFor="replacement-agent">Agent</Label>
-                    <Select value={replacementPrincipalRef ?? ''} onValueChange={(value) => { if (value != null) dispatch({ kind: 'select_replacement', value }) }}>
+                    <Select
+                      value={replacementPrincipalRef ?? ''}
+                      onValueChange={(value) => { if (value != null) dispatch({ kind: 'select_replacement', value }) }}
+                      items={agentTargets.map((agent) => ({ value: agent.principalRef, label: agent.displayName }))}
+                    >
                       <SelectTrigger id="replacement-agent"><SelectValue placeholder="Choose an agent" /></SelectTrigger>
                       <SelectContent>
                         {agentTargets.map((agent) => <SelectItem key={agent.principalRef} value={agent.principalRef}>{agent.displayName}</SelectItem>)}

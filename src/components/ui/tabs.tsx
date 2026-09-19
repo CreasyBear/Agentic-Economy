@@ -59,11 +59,13 @@ function TabsList({
 function TabsTrigger({
   className,
   onMouseDown,
+  nativeButton = true,
   ...props
 }: React.ComponentProps<typeof TabsPrimitive.Tab>) {
   return (
     <TabsPrimitive.Tab
       data-slot="tabs-trigger"
+      nativeButton={nativeButton}
       onMouseDown={(e) => {
         // Base UI activates on click; bridge mouse-down triggers in test environments
         onMouseDown?.(e)

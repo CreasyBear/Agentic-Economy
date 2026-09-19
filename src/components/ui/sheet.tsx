@@ -36,7 +36,7 @@ function SheetBackdrop({
     <SheetPrimitive.Backdrop
       data-slot="sheet-backdrop"
       className={cn(
-        "fixed inset-0 z-50 bg-[var(--ae-overlay-scrim)] duration-base ease-standard data-closed:pointer-events-none data-closed:animate-out data-closed:fade-out-0 data-open:animate-in data-open:fade-in-0 motion-reduce:animate-none",
+        "fixed inset-0 z-50 bg-black/30 backdrop-blur-sm duration-base ease-standard data-closed:pointer-events-none data-closed:animate-out data-closed:fade-out-0 data-open:animate-in data-open:fade-in-0 motion-reduce:animate-none",
         className
       )}
       {...props}
@@ -61,7 +61,7 @@ function SheetContent({
         data-slot="sheet-content"
         data-side={side}
         className={cn(
-          "fixed z-50 flex overscroll-contain flex-col gap-4 bg-popover text-popover-foreground shadow-overlay duration-slow ease-emphasized data-closed:pointer-events-none data-closed:animate-out data-open:animate-in motion-reduce:animate-none",
+          "fixed z-50 flex overscroll-contain flex-col gap-4 bg-popover text-popover-foreground shadow-overlay duration-base ease-standard data-closed:pointer-events-none data-closed:animate-out data-open:animate-in motion-reduce:animate-none",
           side === "right" &&
             "inset-y-0 right-0 h-full w-3/4 border-l data-closed:slide-out-to-right data-open:slide-in-from-right sm:max-w-sm",
           side === "left" &&
@@ -77,7 +77,7 @@ function SheetContent({
       >
         {children}
         {showCloseButton ? (
-          <SheetPrimitive.Close className="absolute top-4 right-4 flex min-h-6 min-w-6 items-center justify-center rounded-xs opacity-70 transition-[color,background-color,opacity,transform] duration-fast ease-standard outline-none hover:opacity-100 enabled:active:scale-[0.96] motion-reduce:active:scale-100 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none data-open:bg-secondary motion-reduce:transition-none max-sm:min-h-touch max-sm:min-w-touch">
+          <SheetPrimitive.Close className="absolute top-4 right-4 flex size-8 items-center justify-center rounded-xs opacity-70 transition-[color,background-color,opacity,transform] duration-fast ease-standard outline-none hover:opacity-100 active:scale-[0.96] disabled:active:scale-100 motion-reduce:active:scale-100 motion-reduce:transition-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand disabled:pointer-events-none data-open:bg-secondary max-sm:min-h-touch max-sm:min-w-touch">
             <XIcon className="size-4" />
             <span className="sr-only">Close</span>
           </SheetPrimitive.Close>

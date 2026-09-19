@@ -92,9 +92,20 @@ describe('AeObservabilityErrorBoundary', () => {
     expect(screen.queryByRole('link', { name: /chat/i })).toBeNull()
 
     const reload = vi.fn()
-    vi.stubGlobal('window', { location: { reload } })
-    retryButton.click()
-    expect(reload).toHaveBeenCalledOnce()
+    const originalLocation = window.location
+    try {
+      Object.defineProperty(window, 'location', {
+        configurable: true,
+        value: { ...originalLocation, reload },
+      })
+      retryButton.click()
+      expect(reload).toHaveBeenCalledOnce()
+    } finally {
+      Object.defineProperty(window, 'location', {
+        configurable: true,
+        value: originalLocation,
+      })
+    }
   })
 
   it('offers a stale-chunk error from the first client render to automatic recovery', () => {

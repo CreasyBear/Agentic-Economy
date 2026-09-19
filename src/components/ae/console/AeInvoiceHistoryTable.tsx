@@ -189,7 +189,8 @@ function TaxInvoiceAction({
     void (async () => {
       try {
         await onDownloadTaxInvoice?.(row)
-      } catch {
+      } catch (cause) {
+        void cause
         toast.error('Could not open tax invoice.', {
           description: MONEY_SAFE_ERROR_DESCRIPTION,
         })
@@ -255,7 +256,8 @@ function StripeReceiptButton({
     void (async () => {
       try {
         await onViewStripeReceipt?.(row)
-      } catch {
+      } catch (cause) {
+        void cause
         toast.error('Could not open Stripe receipt.', {
           description: MONEY_SAFE_ERROR_DESCRIPTION,
         })
@@ -300,7 +302,8 @@ export function AeInvoiceHistoryTable({
       const csvContent = generateInvoicesCsv(exportRows)
       downloadCsv(`billing-topups-${exportDateSuffix}.csv`, csvContent)
       toast.success(formatExportSuccessToast(exportRows.length, 'CSV'))
-    } catch {
+    } catch (cause) {
+      void cause
       toast.error(EXPORT_ERROR_WHAT, { description: EXPORT_ERROR_IMPACT })
     }
   }
@@ -310,7 +313,8 @@ export function AeInvoiceHistoryTable({
       const document = toExportDocument('billing-topups', exportRows)
       downloadJson(`billing-topups-${exportDateSuffix}.json`, document)
       toast.success(formatExportSuccessToast(exportRows.length, 'JSON'))
-    } catch {
+    } catch (cause) {
+      void cause
       toast.error(EXPORT_ERROR_WHAT, { description: EXPORT_ERROR_IMPACT })
     }
   }

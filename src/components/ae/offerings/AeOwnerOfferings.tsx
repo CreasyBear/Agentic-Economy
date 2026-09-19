@@ -170,7 +170,7 @@ export function AeOwnerOfferingsList({
               aria-label={`Test Run for ${item.offering.name}`}
               className={cn(
                 buttonVariants({ variant: 'ghost', size: 'sm' }),
-                'h-8 px-2 text-xs',
+                'min-h-touch items-center px-2 text-xs sm:min-h-8',
                 TACTILE_PRESS_CLASS,
               )}
             >
@@ -181,7 +181,7 @@ export function AeOwnerOfferingsList({
               aria-label={`View logs for ${item.offering.name}`}
               className={cn(
                 buttonVariants({ variant: 'ghost', size: 'sm' }),
-                'h-8 px-2 text-xs',
+                'min-h-touch items-center px-2 text-xs sm:min-h-8',
                 TACTILE_PRESS_CLASS,
               )}
             >

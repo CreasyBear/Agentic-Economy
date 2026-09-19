@@ -266,11 +266,8 @@ export function AeConnectAgentWizardDialog({
           </DialogHeader>
 
           <div className="grid gap-5 py-4">
-            <div
-              className="min-h-[4.75rem] rounded-md"
-              aria-live="polite"
-            >
-              {diagnostic !== null ? (
+            {diagnostic !== null ? (
+              <div aria-live="polite">
                 <Alert variant="destructive">
                   <AlertTitle>{diagnostic.title}</AlertTitle>
                   <AlertDescription className="grid gap-1">
@@ -278,8 +275,8 @@ export function AeConnectAgentWizardDialog({
                     <span>{diagnostic.nextStep}</span>
                   </AlertDescription>
                 </Alert>
-              ) : null}
-            </div>
+              </div>
+            ) : null}
 
             <div className="grid gap-2">
               <Label htmlFor="agent-name">Agent name</Label>
@@ -376,7 +373,7 @@ export function AeConnectAgentWizardDialog({
               </RadioGroup>
             </div>
 
-            <div className="min-h-[9.75rem] rounded-md border p-3">
+            <div className="rounded-md border p-3">
               <div className="grid grid-cols-3 gap-2">
                 <div className="grid gap-1">
                   <Label htmlFor="limit-per-call" className="text-xs">
@@ -439,7 +436,7 @@ export function AeConnectAgentWizardDialog({
             </div>
           </div>
 
-          <DialogFooter className="gap-2 sm:gap-0">
+          <DialogFooter className="gap-2">
             <Button
               type="button"
               variant="outline"

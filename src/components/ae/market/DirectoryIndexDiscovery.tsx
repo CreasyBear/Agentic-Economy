@@ -32,14 +32,13 @@ export function DirectoryIndexDiscovery({ overview, onSave, isSaved, onCompare, 
   ] as const
 
   return <div className="grid min-w-0 gap-12 pb-10 sm:gap-16">
-    <p className="-mb-6 text-xs text-muted-foreground">Find your next favourite. See what other agents use.</p>
     {shelves.map(shelf => <section key={shelf.key} className="min-w-0">
       <Carousel opts={{ align: 'start', loop: false }} aria-labelledby={`${id}-${shelf.key}`}>
         <div className="mb-5 flex flex-wrap items-end justify-between gap-4">
           <div className="max-w-2xl"><h2 id={`${id}-${shelf.key}`} className="text-2xl font-medium tracking-tight sm:text-3xl">{shelf.title}</h2><p className="mt-2 text-sm leading-relaxed text-muted-foreground">{shelf.description}</p></div>
           <div className="flex shrink-0 items-center gap-2">
-            <Link to={marketPath} search={{ view: 'tools', sort: shelf.sort }} aria-label={`View all ${shelf.title.toLowerCase()}`} className={cn(buttonVariants({ variant: 'ghost', size: 'sm' }), 'mr-1 rounded-full')}>View all<ArrowUpRight className="size-4" aria-hidden="true" /></Link>
-            {shelf.entries.length === 0 ? null : <><CarouselPrevious className="static size-9 translate-y-0" aria-label={`Previous ${shelf.title}`} /><CarouselNext className="static size-9 translate-y-0" aria-label={`Next ${shelf.title}`} /></>}
+            <Link to={marketPath} search={{ view: 'tools', sort: shelf.sort }} aria-label={`View all ${shelf.title.toLowerCase()}`} className={cn(buttonVariants({ variant: 'ghost', size: 'sm' }), 'mr-1 min-h-touch rounded-full')}>View all<ArrowUpRight className="size-4" aria-hidden="true" /></Link>
+            {shelf.entries.length === 0 ? null : <><CarouselPrevious className="static size-10 min-h-touch translate-y-0" aria-label={`Previous ${shelf.title}`} /><CarouselNext className="static size-10 min-h-touch translate-y-0" aria-label={`Next ${shelf.title}`} /></>}
           </div>
         </div>
         {shelf.entries.length === 0 ? <p className="rounded-xl border border-dashed border-border px-5 py-8 text-sm text-muted-foreground">{shelf.key === 'popular' ? 'No reported Call activity is available for this selection yet.' : 'No published update dates are available for this selection yet.'}</p> : <CarouselContent className="-ml-4 py-1">
@@ -59,7 +58,7 @@ export function DirectoryIndexDiscovery({ overview, onSave, isSaved, onCompare, 
     <section aria-labelledby={`${id}-providers`}>
       <div className="mb-5 flex flex-wrap items-end justify-between gap-4">
         <div><h2 id={`${id}-providers`} className="text-2xl font-medium tracking-tight sm:text-3xl">Explore Providers</h2><p className="mt-2 text-sm leading-relaxed text-muted-foreground">An A–Z selection, with catalogue-wide Tool counts.</p></div>
-        <Link to={marketPath} search={{ view: 'providers' }} className={cn(buttonVariants({ variant: 'ghost', size: 'sm' }), 'rounded-full')}>All Providers<ArrowUpRight className="size-4" aria-hidden="true" /></Link>
+        <Link to={marketPath} search={{ view: 'providers' }} className={cn(buttonVariants({ variant: 'ghost', size: 'sm' }), 'min-h-touch rounded-full')}>All Providers<ArrowUpRight className="size-4" aria-hidden="true" /></Link>
       </div>
       {overview.providers.length === 0 ? <p className="text-sm text-muted-foreground">No Provider hostnames are available for this selection.</p> : <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
         {overview.providers.map(provider => <li key={provider.key} className="min-w-0">

@@ -150,7 +150,8 @@ export async function adjudicateStealthFailureAndReleaseHold(
   let parsedPayload: Record<string, unknown>
   try {
     parsedPayload = JSON.parse(args.outputJson) as Record<string, unknown>
-  } catch {
+  } catch (cause) {
+    void cause
     parsedPayload = { raw: args.outputJson }
   }
 

@@ -12,56 +12,15 @@ import { Label } from '@/components/ui/label'
 import { Skeleton } from '@/components/ui/skeleton'
 import { cn } from '@/lib/utils'
 import { toast } from '@/lib/ui/toast'
-
-export type WorkspaceDecommissionEligibilityView = Readonly<{
-  accountRef: string
-  displayName: string
-  accountRevision: number
-  ownershipRevision: number
-  callerIsOwner: boolean
-  canClose: boolean
-  canTransfer: boolean
-  fences: readonly (
-    | 'unsettled_provider_obligations'
-    | 'unwithdrawn_earnings'
-    | 'open_calls'
-    | 'unreleased_call_holds'
-    | 'in_flight_funding'
-    | 'open_reconciliation'
-  )[]
-  transferCandidates: readonly Readonly<{
-    principalRef: string
-    displayName: string
-    membershipRef: string
-  }>[]
-}>
-
-const FENCE_MESSAGES: Record<WorkspaceDecommissionEligibilityView['fences'][number], string> = {
-  unsettled_provider_obligations: 'Provider obligations are still unsettled.',
-  unwithdrawn_earnings: 'Provider earnings have not been withdrawn.',
-  open_calls: 'One or more Calls are still open.',
-  unreleased_call_holds: 'Call holds have not been released.',
-  in_flight_funding: 'A funding command is still in flight.',
-  open_reconciliation: 'A reconciliation case is still open.',
-}
-
-type DiagnosticTriplet = Readonly<{
-  whatHappened: string
-  financialImpact: string
-  nextStep: string
-}>
-
-const CLOSE_FAILURE_DIAGNOSTIC: DiagnosticTriplet = {
-  whatHappened: 'Workspace close did not complete.',
-  financialImpact: 'A$0.00 moved — prepaid credit and balances are unchanged.',
-  nextStep: 'Resolve the listed blockers or try again in a moment.',
-}
-
-const TRANSFER_FAILURE_DIAGNOSTIC: DiagnosticTriplet = {
-  whatHappened: 'Ownership transfer did not complete.',
-  financialImpact: 'A$0.00 moved — balances and Calls stayed on this workspace.',
-  nextStep: 'Confirm the successor is still an active member and try again.',
-}
+import {
+  CLOSE_FAILURE_DIAGNOSTIC,
+  TRANSFER_FAILURE_DIAGNOSTIC,
+  fenceMessagesFor,
+  type WorkspaceCloseCommand,
+  type WorkspaceDangerDiagnostic,
+  type WorkspaceDecommissionEligibilityView,
+  type WorkspaceTransferCommand,
+} from '@/modules/principal-account/workspace-decommission.view-model'
 
 const OWNER_ONLY_COPY = 'Only the workspace owner can close the workspace or transfer ownership.'
 
@@ -83,31 +42,17 @@ const readWorkspaceDecommissionEligibilityRef = makeFunctionReference<
 
 const closeWorkspaceRef = makeFunctionReference<
   'mutation',
-  Readonly<{
-    confirmationName: string
-    expectedAccountRevision: number
-    expectedOwnershipRevision: number
-    correlationRef: string
-    idempotencyRef: string
-    factorEvidence: { firstFactorAgeMinutes: number; secondFactorAgeMinutes: number }
-  }>,
+  WorkspaceCloseCommand,
   unknown
 >('workspaceAccounts:closeWorkspace')
 
 const transferWorkspaceOwnershipRef = makeFunctionReference<
   'mutation',
-  Readonly<{
-    successorPrincipalRef: string
-    expectedAccountRevision: number
-    expectedOwnershipRevision: number
-    correlationRef: string
-    idempotencyRef: string
-    factorEvidence: { firstFactorAgeMinutes: number; secondFactorAgeMinutes: number }
-  }>,
+  WorkspaceTransferCommand,
   unknown
 >('workspaceAccounts:transferWorkspaceOwnership')
 
-function DiagnosticSlot({ diagnostic }: Readonly<{ diagnostic: DiagnosticTriplet | null }>) {
+function DiagnosticSlot({ diagnostic }: Readonly<{ diagnostic: WorkspaceDangerDiagnostic | null }>) {
   return (
     <div className="min-h-[2.5rem]" role="status" aria-live="polite">
       {diagnostic ? (
@@ -138,15 +83,15 @@ export function WorkspaceDangerZone() {
   const [showTransferConfirmDialog, setShowTransferConfirmDialog] = useState(false)
   const [closePending, setClosePending] = useState(false)
   const [transferPending, setTransferPending] = useState(false)
-  const [closeDiagnostic, setCloseDiagnostic] = useState<DiagnosticTriplet | null>(null)
-  const [transferDiagnostic, setTransferDiagnostic] = useState<DiagnosticTriplet | null>(null)
+  const [closeDiagnostic, setCloseDiagnostic] = useState<WorkspaceDangerDiagnostic | null>(null)
+  const [transferDiagnostic, setTransferDiagnostic] = useState<WorkspaceDangerDiagnostic | null>(null)
 
   const closeAttemptIdempotencyRef = useRef<string | null>(null)
   const transferAttemptIdempotencyRef = useRef<string | null>(null)
 
   const fenceMessages = useMemo(() => {
     if (eligibility === undefined) return []
-    return eligibility.fences.map((fence) => FENCE_MESSAGES[fence])
+    return fenceMessagesFor(eligibility.fences)
   }, [eligibility])
 
   if (eligibility === undefined) {
@@ -215,7 +160,6 @@ export function WorkspaceDangerZone() {
                   setConfirmationName(event.target.value)
                   setCloseDiagnostic(null)
                 }}
-                className={cn(TACTILE)}
               />
             </BaseField.Root>
             <Button
@@ -255,7 +199,8 @@ export function WorkspaceDangerZone() {
                   })
                   toast.success('Workspace closed')
                   setShowCloseConfirmDialog(false)
-                } catch {
+                } catch (cause) {
+                  void cause
                   setCloseDiagnostic(CLOSE_FAILURE_DIAGNOSTIC)
                   toast.error('Workspace was not closed')
                 } finally {
@@ -332,7 +277,8 @@ export function WorkspaceDangerZone() {
                   })
                   toast.success('Workspace ownership transferred')
                   setShowTransferConfirmDialog(false)
-                } catch {
+                } catch (cause) {
+                  void cause
                   setTransferDiagnostic(TRANSFER_FAILURE_DIAGNOSTIC)
                   toast.error('Ownership was not transferred')
                 } finally {

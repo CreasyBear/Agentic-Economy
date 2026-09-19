@@ -114,9 +114,11 @@ function TermsAccordion() {
     >
       {termsItems.map(({ icon: Icon, title, body }) => (
         <AccordionItem key={title} value={title} className="rounded-card border bg-card">
-          <AccordionTrigger className="flex min-h-touch w-full items-center justify-start gap-related px-gutter py-0 text-start hover:no-underline [&>svg:last-child]:hidden [&[data-panel-open]>svg]:rotate-0">
-            <Icon className="size-4 shrink-0 text-foreground" aria-hidden="true" />
-            <span className="text-lg font-medium text-foreground">{title}</span>
+          <AccordionTrigger className="flex min-h-touch w-full items-center gap-related px-gutter py-3 text-start hover:no-underline [&>svg:last-child]:ms-auto">
+            <span className="inline-flex shrink-0" aria-hidden="true">
+              <Icon className="size-4 text-foreground" />
+            </span>
+            <span className="flex-1 text-lg font-medium text-foreground">{title}</span>
           </AccordionTrigger>
           <AccordionContent className="pb-0">
             <p className="block px-gutter pb-gutter ps-[calc(var(--spacing-gutter)+var(--spacing-related)+1rem)] text-muted-foreground">{body}</p>

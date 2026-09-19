@@ -206,7 +206,8 @@ export function AeAgentOperatorConsole({
 
       setLifecycleTarget(undefined)
       resetRevocationDialogState()
-    } catch {
+    } catch (cause) {
+      void cause
       const triplet = lifecycleTarget.kind === 'credential'
         ? {
             whatHappened: 'Could not revoke this credential.',

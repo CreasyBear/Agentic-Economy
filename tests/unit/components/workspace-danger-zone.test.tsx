@@ -4,7 +4,7 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import '../../setup/jsdom-platform'
 
-import type { WorkspaceDecommissionEligibilityView } from '@/components/ae/settings/WorkspaceDangerZone'
+import type { WorkspaceDecommissionEligibilityView } from '@/modules/principal-account/workspace-decommission.view-model'
 import { WorkspaceDangerZone } from '@/components/ae/settings/WorkspaceDangerZone'
 
 const useQuery = vi.fn()

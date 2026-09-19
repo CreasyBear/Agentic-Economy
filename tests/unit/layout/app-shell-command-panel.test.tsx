@@ -66,7 +66,9 @@ describe('app shell command panel', () => {
     expect(trigger.getAttribute('aria-controls')).toBe(dialog.id)
     expect(dialog.id).not.toBe('')
     expect(trigger.getAttribute('aria-label')).toBe('Close public menu')
-    expect(dialog.contains(document.activeElement)).toBe(true)
+    await waitFor(() => {
+      expect(dialog.contains(document.activeElement)).toBe(true)
+    })
 
     fireEvent.keyDown(document.activeElement ?? document, { key: 'Escape' })
     await waitFor(() => {

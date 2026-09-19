@@ -21,10 +21,12 @@ const OPTIONS: { value: AppearancePreference; label: string; icon: typeof Sun }[
   { value: 'system', label: 'System', icon: Monitor },
 ]
 
+const DEFAULT_OPTION = { value: 'system' as const, label: 'System', icon: Monitor }
+
 export function ThemeToggle() {
   const { preference, setPreference } = useAppearance()
   const activeOption =
-    OPTIONS.find((option) => option.value === preference) ?? OPTIONS[2]!
+    OPTIONS.find((option) => option.value === preference) ?? DEFAULT_OPTION
   const ActiveIcon = activeOption.icon
   const currentLabel = activeOption.label
 
@@ -36,8 +38,9 @@ export function ThemeToggle() {
           buttonVariants({
             variant: 'ghost',
             size: 'icon',
-            className: cn('size-8 shrink-0', TACTILE),
           }),
+          'size-8 shrink-0',
+          TACTILE,
         )}
       >
         <ActiveIcon aria-hidden="true" className="size-4" />

@@ -99,23 +99,19 @@ export function AeConfirmDialog({
       >
         <AlertDialogHeader>
           <AlertDialogTitle>{title}</AlertDialogTitle>
-          <AlertDialogDescription
-            className={cn(children !== undefined || financialImpact !== undefined ? "min-h-[4.5rem]" : undefined)}
-          >
-            {description}
-          </AlertDialogDescription>
+          <AlertDialogDescription>{description}</AlertDialogDescription>
           {extendedBody ? (
             <>
               {children !== undefined ? (
-                <div className="min-h-[7.5rem] grid gap-2">{children}</div>
+                <div className="grid gap-2">{children}</div>
               ) : null}
               {financialImpact !== undefined ? (
-                <div className="min-h-[2.75rem] rounded-md border border-border bg-muted/40 p-2.5 text-xs text-muted-foreground">
+                <div className="rounded-md border border-border bg-muted/40 p-2.5 text-xs text-muted-foreground">
                   {financialImpact}
                 </div>
               ) : null}
-              <div className="min-h-[4.5rem]" role="status" aria-live="polite">
-                {diagnostic ? (
+              {diagnostic ? (
+                <div role="status" aria-live="polite">
                   <div className="grid gap-1 text-sm text-muted-foreground">
                     <p>
                       <strong>What happened:</strong> {diagnostic.whatHappened}
@@ -127,8 +123,8 @@ export function AeConfirmDialog({
                       <strong>Next step:</strong> {diagnostic.nextStep}
                     </p>
                   </div>
-                ) : null}
-              </div>
+                </div>
+              ) : null}
             </>
           ) : null}
         </AlertDialogHeader>

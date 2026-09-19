@@ -83,7 +83,8 @@ export function AeToolTestPlayground({
     let parsed: unknown
     try {
       parsed = JSON.parse(inputJson)
-    } catch {
+    } catch (cause) {
+      void cause
       setDiagnostic(SYNTAX_DIAGNOSTIC)
       return
     }
