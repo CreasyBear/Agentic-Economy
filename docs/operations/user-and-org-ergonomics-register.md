@@ -16,9 +16,9 @@
 | :--- | :---: | :--- | :---: | :---: | :---: | :---: |
 | **Wave 1: Buyer Onboarding & Developer Launchpad** | 6 | `W-01`, `W-02`, `W-25`, `W-26`, `W-27`, `W-29` | 6 | 0 | 0 | **VERIFIED** |
 | **Wave 2: Financial Peace-of-Mind & Spend Observability** | 8 | `W-20`, `W-21`, `W-22`, `W-23`, `W-24`, `W-38`, `W-39`, `W-40` | 8 | 0 | 0 | **VERIFIED** |
-| **Wave 3: Supplier Monetization & Testing Playground** | 8 | `W-30`, `W-31`, `W-32`, `W-33`, `W-34`, `W-35`, `W-36`, `W-37` | 6 | 0 | 2 | `IN PROGRESS` |
+| **Wave 3: Supplier Monetization & Testing Playground** | 8 | `W-30`, `W-31`, `W-32`, `W-33`, `W-34`, `W-35`, `W-36`, `W-37` | 7 | 0 | 1 | `IN PROGRESS` |
 | **Wave 4: Team Operations, Identity & Tactile Standards** | 22 | `W-03`–`W-09`, `W-10`–`W-19`, `W-28`, `W-41`–`W-44` | 0 | 0 | 22 | `PENDING` |
-| **Total** | **44** | **All 44 Standard Workflows** | **20** | **0** | **24** | `IN PROGRESS` |
+| **Total** | **44** | **All 44 Standard Workflows** | **21** | **0** | **23** | `IN PROGRESS` |
 
 ---
 
@@ -344,16 +344,19 @@
 ---
 
 ### W-36: Postman-Grade Dry-Run Testing Playground
-- **Surfaces:** `src/components/ae/supply/AeToolTestPlayground.tsx`
+- **Surfaces:** `src/components/ae/supply/AeToolTestPlayground.tsx`, `tests/unit/components/ae-tool-test-playground.test.tsx`
 - **Incumbent Baseline:** Form with input arguments textarea and synthetic response preview.
 - **Ergonomic Gap:** Arguments must be written by hand; no schema auto-fill; output lacks syntax formatting and execution latency.
 - **Target Ergonomic Spec:**
-  - 1-click *"Load Example Arguments"* auto-populated directly from the tool's JSON Schema.
-  - Prominent *"Send Test Invocation"* button with execution timer (`⚡ 142ms`) and HTTP response code.
-  - Formatted JSON response pane with 1-click copy button.
-  - Clear zero-cost guarantee banner: *"Simulation Mode: Zero credit deducted"*.
-- **Subagent Assignment:** Grok (Scout) $\rightarrow$ Composer (Craft) $\rightarrow$ Orchestrator (Verify)
-- **Status:** `PENDING`
+  - Prominent zero-cost guarantee banner (*"Simulation Mode: Zero credit deducted. Sandbox dry-run probes never create Quotes, Charges, or debits."*).
+  - 1-click *"Load Example Arguments"* auto-populated from tool's JSON schema with success toast feedback and *"Reset to defaults"* action.
+  - Prominent *"Send Test Invocation"* trigger with execution latency badge (`⚡ 142ms` in `font-mono tabular-nums`) and semantic HTTP response status badges (`200 OK`, `502 Bad Gateway`).
+  - 1-click *"Copy response"* action with tactile feedback, checkmark icon, and accessible label.
+  - Zero-CLS reserved geometry: always-mounted response well (`min-h-[12rem]`) and diagnostic slot (`min-h-[2.5rem]`).
+  - Structured Rule 4 diagnostic playbooks for syntax errors, schema mismatches, and probe execution failures (`A$0.00 affected`).
+  - Tactile press physics (`enabled:active:scale-[0.98] transition-transform duration-100 ease-out`) across all action buttons.
+- **Subagent Assignment:** Grok (Scout: `ae6fb137-3c20-4bc4-a79f-9dd6ff2ae8f1`) $\rightarrow$ Composer (Craft: `98168851-c44c-46d6-b390-846c447e6064`) $\rightarrow$ Orchestrator (Verify)
+- **Status:** `VERIFIED`
 
 ---
 
