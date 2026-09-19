@@ -526,7 +526,7 @@ describe('source-native Provider start', () => {
     }, expect.any(String))
   })
 
-  it('validates URLs inline with helpful error messages on invalid formats', async () => {
+  it('shows live OpenAPI URL preflight without clicking Discover', () => {
     render(
       <AeSupplySourceNativeStart
         businessRef="business:one"
@@ -537,23 +537,29 @@ describe('source-native Provider start', () => {
       />,
     )
 
-    // Select OpenAPI
     fireEvent.click(screen.getByRole('button', { name: 'Other source types' }))
     fireEvent.mouseDown(screen.getByRole('tab', { name: 'OpenAPI' }))
 
-    // Enter non-https URL
-    const openApiInput = screen.getByLabelText('OpenAPI URL')
-    fireEvent.change(openApiInput, { target: { value: 'http://insecure.example.com/openapi.json' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Discover endpoints' }))
+    fireEvent.change(screen.getByLabelText('OpenAPI URL'), {
+      target: { value: 'http://insecure.example.com/openapi.json' },
+    })
+    expect(screen.getByText('Insecure HTTP URL detected. Agentic Economy requires secure HTTPS endpoints.')).toBeTruthy()
 
-    expect(await screen.findByText(/OpenAPI URL must be a public HTTPS endpoint/i)).toBeTruthy()
+    fireEvent.change(screen.getByLabelText('OpenAPI URL'), { target: { value: 'notaurl' } })
+    expect(screen.getByText('Enter a valid HTTPS URL (e.g. https://api.example.com/openapi.json).')).toBeTruthy()
+
+    fireEvent.change(screen.getByLabelText('OpenAPI URL'), {
+      target: { value: 'https://api.example.com/openapi.json' },
+    })
+    expect(screen.getByText('Valid HTTPS endpoint format')).toBeTruthy()
   })
 
-  it('refuses non-HTTPS MCP server URLs inline before discovery', async () => {
+  it('shows live MCP and x402 URL preflight badges', () => {
+    const onPreview = vi.fn()
     render(
       <AeSupplySourceNativeStart
         businessRef="business:one"
-        onPreview={vi.fn()}
+        onPreview={onPreview}
         onConnect={vi.fn()}
         onSelectCandidate={vi.fn()}
         onPublish={vi.fn()}
@@ -562,11 +568,95 @@ describe('source-native Provider start', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Other source types' }))
     fireEvent.mouseDown(screen.getByRole('tab', { name: 'MCP' }))
+    fireEvent.change(screen.getByLabelText('MCP server URL'), {
+      target: { value: 'https://mcp.example.com/sse' },
+    })
+    expect(screen.getByText('Valid HTTPS endpoint format')).toBeTruthy()
 
-    const mcpInput = screen.getByLabelText('MCP server URL')
-    fireEvent.change(mcpInput, { target: { value: 'http://insecure.example.com/mcp' } })
+    fireEvent.click(screen.getByRole('button', { name: /x402 recommended for alpha/i }))
+
+    fireEvent.change(screen.getByLabelText('x402 resource URL'), {
+      target: { value: 'http://insecure.example.com/paid' },
+    })
+    expect(screen.getByText('Insecure HTTP URL detected. Agentic Economy requires secure HTTPS endpoints.')).toBeTruthy()
+    expect(onPreview).not.toHaveBeenCalled()
+  })
+
+  it('blocks Discover on insecure URLs with Rule 4 diagnostic and skips preview', async () => {
+    const onPreview = vi.fn()
+    render(
+      <AeSupplySourceNativeStart
+        businessRef="business:one"
+        onPreview={onPreview}
+        onConnect={vi.fn()}
+        onSelectCandidate={vi.fn()}
+        onPublish={vi.fn()}
+      />,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Other source types' }))
+    fireEvent.mouseDown(screen.getByRole('tab', { name: 'OpenAPI' }))
+    fireEvent.change(screen.getByLabelText('OpenAPI URL'), {
+      target: { value: 'http://insecure.example.com/openapi.json' },
+    })
     fireEvent.click(screen.getByRole('button', { name: 'Discover endpoints' }))
 
-    expect(await screen.findByText(/MCP server URL must use HTTPS/i)).toBeTruthy()
+    expect(await screen.findByText('Insecure HTTP protocol.')).toBeTruthy()
+    expect(screen.getByText('A$0.00 affected — endpoint discovery blocked.')).toBeTruthy()
+    expect(screen.getByText('Provide an HTTPS URL to ensure encrypted capability invocation.')).toBeTruthy()
+    expect(onPreview).not.toHaveBeenCalled()
+  })
+
+  it('blocks Discover on malformed plugin JSON with Rule 4 diagnostic', async () => {
+    const onPreview = vi.fn()
+    render(
+      <AeSupplySourceNativeStart
+        businessRef="business:one"
+        onPreview={onPreview}
+        onConnect={vi.fn()}
+        onSelectCandidate={vi.fn()}
+        onPublish={vi.fn()}
+      />,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Other source types' }))
+    fireEvent.mouseDown(screen.getByRole('tab', { name: 'Agent Plugin' }))
+
+    const malformed = new File(['{not-json'], 'plugin.json', { type: 'application/json' })
+    fireEvent.change(screen.getByLabelText('plugin.json'), { target: { files: [malformed] } })
+    await waitFor(() => {
+      expect(screen.getByText('JSON syntax is invalid.')).toBeTruthy()
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Discover endpoints' }))
+
+    expect(await screen.findByText('Malformed JSON payload.')).toBeTruthy()
+    expect(screen.getByText('A$0.00 affected — plugin discovery blocked.')).toBeTruthy()
+    expect(screen.getByText('Ensure the JSON syntax is valid before discovering endpoints.')).toBeTruthy()
+    expect(onPreview).not.toHaveBeenCalled()
+  })
+
+  it('reserves preflight height and applies tactile physics to source controls', () => {
+    render(
+      <AeSupplySourceNativeStart
+        businessRef="business:one"
+        onPreview={vi.fn()}
+        onConnect={vi.fn()}
+        onSelectCandidate={vi.fn()}
+        onPublish={vi.fn()}
+      />,
+    )
+
+    const tactile = 'active:scale-[0.98]'
+    expect(screen.getByRole('button', { name: /x402 recommended for alpha/i }).className).toContain(tactile)
+    expect(screen.getByRole('button', { name: 'Other source types' }).className).toContain(tactile)
+    expect(screen.getByRole('button', { name: 'Discover endpoints' }).className).toContain(tactile)
+    expect(screen.getByRole('radio', { name: 'Sandbox' }).closest('label')?.className).toContain(tactile)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Other source types' }))
+    fireEvent.mouseDown(screen.getByRole('tab', { name: 'OpenAPI' }))
+    fireEvent.change(screen.getByLabelText('OpenAPI URL'), { target: { value: 'notaurl' } })
+
+    const slot = document.querySelector('.min-h-\\[2\\.5rem\\][aria-live="polite"]')
+    expect(slot).toBeTruthy()
   })
 })

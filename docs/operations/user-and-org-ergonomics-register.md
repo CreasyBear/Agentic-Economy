@@ -16,9 +16,9 @@
 | :--- | :---: | :--- | :---: | :---: | :---: | :---: |
 | **Wave 1: Buyer Onboarding & Developer Launchpad** | 6 | `W-01`, `W-02`, `W-25`, `W-26`, `W-27`, `W-29` | 6 | 0 | 0 | **VERIFIED** |
 | **Wave 2: Financial Peace-of-Mind & Spend Observability** | 8 | `W-20`, `W-21`, `W-22`, `W-23`, `W-24`, `W-38`, `W-39`, `W-40` | 8 | 0 | 0 | **VERIFIED** |
-| **Wave 3: Supplier Monetization & Testing Playground** | 8 | `W-30`, `W-31`, `W-32`, `W-33`, `W-34`, `W-35`, `W-36`, `W-37` | 5 | 0 | 3 | `IN PROGRESS` |
+| **Wave 3: Supplier Monetization & Testing Playground** | 8 | `W-30`, `W-31`, `W-32`, `W-33`, `W-34`, `W-35`, `W-36`, `W-37` | 6 | 0 | 2 | `IN PROGRESS` |
 | **Wave 4: Team Operations, Identity & Tactile Standards** | 22 | `W-03`–`W-09`, `W-10`–`W-19`, `W-28`, `W-41`–`W-44` | 0 | 0 | 22 | `PENDING` |
-| **Total** | **44** | **All 44 Standard Workflows** | **19** | **0** | **25** | `IN PROGRESS` |
+| **Total** | **44** | **All 44 Standard Workflows** | **20** | **0** | **24** | `IN PROGRESS` |
 
 ---
 
@@ -329,15 +329,17 @@
 ---
 
 ### W-35: Intelligent Source Ingestion Scanner (Preflight Wizard)
-- **Surfaces:** `src/components/ae/supply/supply-source-native-start-presentation.ts`, `src/components/ae/supply/AeProviderToolDetail.tsx`
+- **Surfaces:** `src/components/ae/supply/SupplySourceTypeSection.tsx`, `src/components/ae/supply/supply-source-native-start-presentation.ts`, `tests/unit/ui/supply-source-native-start.test.tsx`
 - **Incumbent Baseline:** URL input form with protocol validation.
 - **Ergonomic Gap:** No pre-parse feedback; user has to submit before seeing whether their OpenAPI or MCP endpoint was recognized.
 - **Target Ergonomic Spec:**
-  - Debounced live URL inspection: As user types, fetches and validates the schema in the background.
-  - Displays instant preview chip: *"Valid MCP server detected: 4 tools discovered"*.
-  - Inline error warnings for HTTP URLs or malformed JSON payloads before submission.
-- **Subagent Assignment:** Grok (Scout) $\rightarrow$ Composer (Craft) $\rightarrow$ Orchestrator (Verify)
-- **Status:** `PENDING`
+  - Real-time preflight URL format validation across OpenAPI, MCP server, and x402 endpoints (`Valid HTTPS endpoint format`, `Insecure HTTP URL detected...`, `Enter a valid HTTPS URL...`).
+  - Real-time JSON format and schema preflight validation on `plugin.json` and `mcp.json` file uploads (`Valid JSON payload`, `JSON syntax is invalid`, `JSON is missing required fields`).
+  - Gated discovery with Rule 4 diagnostic triplets for insecure HTTP and malformed JSON payloads (`A$0.00 affected — endpoint discovery blocked`).
+  - Zero-CLS preflight reserved well (`min-h-[2.5rem]` with `aria-live="polite"`).
+  - Tactile press physics (`enabled:active:scale-[0.98] transition-transform duration-100 ease-out`) across source controls, radio cards, and Discover button.
+- **Subagent Assignment:** Grok (Scout: `3848f1d8-fb17-4331-be78-b9714c82f559`) $\rightarrow$ Composer (Craft: `2abed63f-d9f2-426e-9152-523ec37617bc`) $\rightarrow$ Orchestrator (Verify)
+- **Status:** `VERIFIED`
 
 ---
 

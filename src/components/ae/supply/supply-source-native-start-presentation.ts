@@ -13,6 +13,52 @@ import {
   rescaleExactAmount,
 } from '@/modules/money/public'
 
+export const TACTILE =
+  'enabled:active:scale-[0.98] transition-transform duration-100 ease-out motion-reduce:transition-none motion-reduce:active:scale-100'
+
+export type HttpsUrlPreflight = 'empty' | 'invalid' | 'insecure' | 'valid'
+export type JsonPreflight = 'empty' | 'invalid' | 'not_object' | 'missing_fields' | 'valid'
+
+export function inspectHttpsUrl(value: string): HttpsUrlPreflight {
+  const trimmed = value.trim()
+  if (trimmed === '') return 'empty'
+  try {
+    const u = new URL(trimmed)
+    return u.protocol === 'https:' ? 'valid' : 'insecure'
+  } catch {
+    return 'invalid'
+  }
+}
+
+export function inspectJsonPayload(value: string, requiredKeys: readonly string[]): JsonPreflight {
+  const trimmed = value.trim()
+  if (trimmed === '') return 'empty'
+  try {
+    const parsed: unknown = JSON.parse(trimmed)
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return 'not_object'
+    const rec = parsed as Record<string, unknown>
+    const hasAll = requiredKeys.every((k) => k in rec && rec[k] !== undefined && rec[k] !== null)
+    return hasAll ? 'valid' : 'missing_fields'
+  } catch {
+    return 'invalid'
+  }
+}
+
+export const INSECURE_URL_DIAGNOSTIC = {
+  whatHappened: 'Insecure HTTP protocol.',
+  financialImpact: 'A$0.00 affected — endpoint discovery blocked.',
+  nextStep: 'Provide an HTTPS URL to ensure encrypted capability invocation.',
+} as const
+
+export const MALFORMED_JSON_DIAGNOSTIC = {
+  whatHappened: 'Malformed JSON payload.',
+  financialImpact: 'A$0.00 affected — plugin discovery blocked.',
+  nextStep: 'Ensure the JSON syntax is valid before discovering endpoints.',
+} as const
+
+export const PLUGIN_JSON_REQUIRED_KEYS = ['$schema', 'name'] as const
+export const MCP_JSON_REQUIRED_KEYS = ['$schema', 'mcpServers'] as const
+
 export type SourceKind = SupplySourceInput['kind']
 export type Environment = SupplySourceInput['environment']
 export type AttestationKey = keyof PublishSupplyToolV2Input['attestation']
