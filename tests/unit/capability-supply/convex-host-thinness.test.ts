@@ -8,7 +8,8 @@ const convexHost = readFileSync('convex/capabilitySupply.ts', 'utf8')
 const convexSupply = [
   convexHost,
   readFileSync('convex/capabilitySupplyShared.ts', 'utf8'),
-  readFileSync('convex/capabilitySupplyPublish.ts', 'utf8'),
+  readFileSync('convex/lib/capabilitySupply/publishPrepared.ts', 'utf8'),
+  readFileSync('convex/lib/capabilitySupply/publishBootstrap.ts', 'utf8'),
   readFileSync('convex/capabilitySupplyProbes.ts', 'utf8'),
   readFileSync('convex/capabilitySupplyGraph.ts', 'utf8'),
   readFileSync('convex/capabilitySupplyLists.ts', 'utf8'),

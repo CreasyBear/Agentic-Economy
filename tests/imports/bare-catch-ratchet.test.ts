@@ -27,8 +27,9 @@ import { describe, expect, it } from 'vitest'
  *     - src/lib/observability/sentry.server.ts (2)
  *   The ceiling is therefore NOT expected to reach zero.
  * - 3 are documented non-guard skips, reviewed and left as-is deliberately:
- *     - convex/capabilitySupplyPublish.ts - a multi-statement fallback that
- *       derives a safe synthetic revision id if canonical digesting throws
+ *     - convex/lib/capabilitySupply/publishBootstrap.ts - a multi-statement
+ *       fallback that derives a safe synthetic revision id if canonical
+ *       digesting throws
  *     - src/lib/server/agent-access-oauth-api.ts - a nested retry path
  *     - src/modules/market/x402-directory.functions.ts - a typed
  *       `{ kind: 'unavailable' }` fallback for a source-resolution call

@@ -3,20 +3,8 @@ import {
   Client,
   StreamableHTTPClientTransport,
   UnauthorizedError,
-  type OAuthClientInformationContext,
-  type OAuthClientMetadata,
   type OAuthClientProvider,
-  type OAuthDiscoveryState,
-  type StoredOAuthClientInformation,
-  type StoredOAuthTokens,
 } from '@modelcontextprotocol/client'
-import {
-  OAuthMetadataSchema,
-  OAuthProtectedResourceMetadataSchema,
-  OpenIdProviderDiscoveryMetadataSchema,
-  SafeUrlSchema,
-} from '@modelcontextprotocol/sdk/shared/auth.js'
-import * as oauth from 'oauth4webapi'
 
 import { requireStrictClerkConsequenceProof } from '@/lib/server/clerk-consequence-proof'
 import {
@@ -31,12 +19,10 @@ import { readTrimmedEnv } from '@/lib/server/read-trimmed-env'
 import { package5RolloutDecision } from '@/lib/server/package5-rollout'
 import { sourceWriteAdmissionFromContext } from '@/lib/server/source-write-admission'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
-import { isRecord } from '@/modules/common/is-record'
 import { sendGuardedHttpRequest } from '@/modules/network-guard/server'
 import { defaultDnsResolver, isPublicHttpTarget } from '@/modules/network-guard/public'
 import { sourceWriteRequestFromAdmission } from '@/modules/security/source-write-admission'
 import type {
-  ProviderConnectionCleanupOutcome,
   ProviderConnectionSourceAuthentication,
 } from '../../provider-connection'
 import type { McpSourceDiscovery } from '../../source-preview'
@@ -58,9 +44,17 @@ import {
   type CancelOwnerProviderConnectionAttemptResult,
   type OwnerMcpProviderConnectionStartResult,
   type OwnerProviderConnectionAttemptReadback,
-  type ProviderOAuthCleanupResult,
   type SecretPointerInput,
 } from './provider-connection-handoff-contract'
+import {
+  StoredMcpOAuthProvider,
+  oauthStateHash,
+  randomOAuthState,
+  validOAuthState,
+  type SecretAuthority,
+} from './provider-connection-handoff-mcp-session'
+
+export { revokeStoredMcpProviderConnection } from './provider-connection-handoff-revoke'
 
 export {
   cancelOwnerProviderConnectionAttemptInputSchema,
@@ -77,18 +71,6 @@ export type {
   ProviderOAuthCleanupResult,
   SecretPointerInput,
 } from './provider-connection-handoff-contract'
-
-type SecretAuthority = Readonly<{
-  operation: 'provision' | 'rotate'
-  snapshotRef: string
-  accountRef: string
-  actorPrincipalRef: string
-  grantRef: string
-  grantGeneration: number
-  correlationRef: string
-  idempotencyRef: string
-  occurredAt: number
-}>
 
 type PrepareResult =
   | Readonly<{
@@ -154,15 +136,6 @@ type HttpCredentialPreviewRuntime = Readonly<{
     credential: Uint8Array
   }>) => Promise<ValidOpenApiDocument>
   randomCorrelation?: () => string
-}>
-
-type McpOAuthRevocationRuntime = Readonly<{
-  revoke?: (input: Readonly<{
-    authorizationServer: oauth.AuthorizationServer
-    client: oauth.Client
-    token: string
-    tokenTypeHint: 'refresh_token' | 'access_token'
-  }>) => Promise<Readonly<{ status: number }>>
 }>
 
 type PrepareOAuthResult =
@@ -847,333 +820,6 @@ function canonicalOAuthCallback(value: string, attemptRef: string): string | und
     return url.toString()
   } catch (cause) {
     return degradeBackend(cause, undefined, { site: 'canonicalOAuthCallback', reason: 'invalid_response' })
-  }
-}
-
-function randomOAuthState(): string {
-  return `${crypto.randomUUID().replaceAll('-', '')}${crypto.randomUUID().replaceAll('-', '')}`
-}
-
-function validOAuthState(value: string): boolean {
-  return /^[A-Za-z0-9._~-]{16,500}$/u.test(value)
-}
-
-function oauthStateHash(state: string): string {
-  return canonicalDigest({ format: 'ae.provider-mcp-oauth-state:v1', state })
-}
-
-type StoredSession = Readonly<{
-  version: 'ae.mcp-oauth-session:v1'
-  attemptRef: string
-  serverUrl: string
-  environment: 'sandbox' | 'production'
-  redirectUrl: string
-  state: string
-  codeVerifier?: string
-  clientInformation?: StoredOAuthClientInformation
-  tokens?: StoredOAuthTokens
-  discoveryState?: OAuthDiscoveryState
-  resourceUrl?: string
-  rotationAuthority: SecretAuthority
-  rotationIdempotencyRef: string
-}>
-
-const secretAuthoritySchema = z.strictObject({
-  operation: z.enum(['provision', 'rotate']),
-  snapshotRef: z.string().min(1),
-  accountRef: z.string().min(1),
-  actorPrincipalRef: z.string().min(1),
-  grantRef: z.string().min(1),
-  grantGeneration: z.number().int().positive(),
-  correlationRef: z.string().min(1),
-  idempotencyRef: z.string().min(1),
-  occurredAt: z.number().int().nonnegative(),
-})
-
-const oauthDiscoveryStateSchema = z.looseObject({
-  authorizationServerUrl: SafeUrlSchema,
-  authorizationServerMetadata: OAuthMetadataSchema
-    .or(OpenIdProviderDiscoveryMetadataSchema)
-    .optional(),
-  resourceMetadata: OAuthProtectedResourceMetadataSchema.optional(),
-  resourceMetadataUrl: SafeUrlSchema.optional(),
-}).transform(({
-  authorizationServerUrl,
-  authorizationServerMetadata,
-  resourceMetadata,
-  resourceMetadataUrl,
-  ...extensions
-}) => ({
-  ...extensions,
-  authorizationServerUrl,
-  ...(authorizationServerMetadata === undefined
-    ? {}
-    : { authorizationServerMetadata }),
-  ...(resourceMetadata === undefined ? {} : { resourceMetadata }),
-  ...(resourceMetadataUrl === undefined ? {} : { resourceMetadataUrl }),
-})) satisfies z.ZodType<OAuthDiscoveryState>
-
-const storedSessionSchema = z.strictObject({
-  version: z.literal('ae.mcp-oauth-session:v1'),
-  attemptRef: z.string().min(1).max(300),
-  serverUrl: z.url().max(2_048),
-  environment: z.enum(['sandbox', 'production']),
-  redirectUrl: z.url().max(2_048),
-  state: z.string().min(16).max(500),
-  codeVerifier: z.string().min(43).max(128).optional(),
-  clientInformation: z.record(z.string(), z.unknown()).optional(),
-  tokens: z.record(z.string(), z.unknown()).optional(),
-  discoveryState: oauthDiscoveryStateSchema.optional(),
-  resourceUrl: z.url().max(2_048).optional(),
-  rotationAuthority: secretAuthoritySchema,
-  rotationIdempotencyRef: z.string().min(1).max(200),
-})
-
-class StoredMcpOAuthProvider implements OAuthClientProvider {
-  readonly attemptRef: string
-  readonly serverUrl: string
-  readonly environment: 'sandbox' | 'production'
-  readonly redirectUrl: string
-  readonly oauthState: string
-  readonly rotationAuthority: SecretAuthority
-  readonly rotationIdempotencyRef: string
-  authorizationUrl: string | undefined
-  #codeVerifier: string | undefined
-  #clientInformation: StoredOAuthClientInformation | undefined
-  #tokens: StoredOAuthTokens | undefined
-  #discoveryState: OAuthDiscoveryState | undefined
-  #resourceUrl: string | undefined
-
-  constructor(session: Omit<StoredSession, 'version'>) {
-    this.attemptRef = session.attemptRef
-    this.serverUrl = session.serverUrl
-    this.environment = session.environment
-    this.redirectUrl = session.redirectUrl
-    this.oauthState = session.state
-    this.rotationAuthority = session.rotationAuthority
-    this.rotationIdempotencyRef = session.rotationIdempotencyRef
-    this.#codeVerifier = session.codeVerifier
-    this.#clientInformation = session.clientInformation
-    this.#tokens = session.tokens
-    this.#discoveryState = session.discoveryState
-    this.#resourceUrl = session.resourceUrl
-  }
-
-  get clientMetadata(): OAuthClientMetadata {
-    return {
-      client_name: 'Agentic Economy Provider Connection',
-      redirect_uris: [this.redirectUrl],
-      grant_types: ['authorization_code', 'refresh_token'],
-      response_types: ['code'],
-      token_endpoint_auth_method: 'none',
-    }
-  }
-
-  state(): string { return this.oauthState }
-  clientInformation(_context?: OAuthClientInformationContext): StoredOAuthClientInformation | undefined {
-    return this.#clientInformation
-  }
-  saveClientInformation(value: StoredOAuthClientInformation): void { this.#clientInformation = value }
-  tokens(_context?: OAuthClientInformationContext): StoredOAuthTokens | undefined { return this.#tokens }
-  saveTokens(value: StoredOAuthTokens): void { this.#tokens = value }
-  redirectToAuthorization(url: URL): void { this.authorizationUrl = url.toString() }
-  saveCodeVerifier(value: string): void { this.#codeVerifier = value }
-  codeVerifier(): string {
-    if (this.#codeVerifier === undefined) throw new TypeError('mcp_oauth_verifier_unavailable')
-    return this.#codeVerifier
-  }
-  saveDiscoveryState(value: OAuthDiscoveryState): void { this.#discoveryState = value }
-  discoveryState(): OAuthDiscoveryState | undefined { return this.#discoveryState }
-  saveResourceUrl(value: string): void { this.#resourceUrl = value }
-  resourceUrl(): string | undefined { return this.#resourceUrl }
-  invalidateCredentials(scope: 'all' | 'client' | 'tokens' | 'verifier' | 'discovery'): void {
-    if (scope === 'all' || scope === 'client') this.#clientInformation = undefined
-    if (scope === 'all' || scope === 'tokens') this.#tokens = undefined
-    if (scope === 'all' || scope === 'verifier') this.#codeVerifier = undefined
-    if (scope === 'all' || scope === 'discovery') this.#discoveryState = undefined
-  }
-
-  get currentTokens(): StoredOAuthTokens | undefined { return this.#tokens }
-
-  readyForRedirect(): boolean {
-    return this.authorizationUrl !== undefined
-      && this.#codeVerifier !== undefined
-      && this.#clientInformation !== undefined
-      && this.#discoveryState !== undefined
-  }
-
-  serialize(): string {
-    const session: StoredSession = {
-      version: 'ae.mcp-oauth-session:v1',
-      attemptRef: this.attemptRef,
-      serverUrl: this.serverUrl,
-      environment: this.environment,
-      redirectUrl: this.redirectUrl,
-      state: this.oauthState,
-      ...(this.#codeVerifier === undefined ? {} : { codeVerifier: this.#codeVerifier }),
-      ...(this.#clientInformation === undefined ? {} : { clientInformation: this.#clientInformation }),
-      ...(this.#tokens === undefined ? {} : { tokens: this.#tokens }),
-      ...(this.#discoveryState === undefined ? {} : { discoveryState: this.#discoveryState }),
-      ...(this.#resourceUrl === undefined ? {} : { resourceUrl: this.#resourceUrl }),
-      rotationAuthority: this.rotationAuthority,
-      rotationIdempotencyRef: this.rotationIdempotencyRef,
-    }
-    return JSON.stringify(session)
-  }
-
-  static parse(value: string): StoredMcpOAuthProvider {
-    const parsed = storedSessionSchema.parse(JSON.parse(value) as unknown)
-    return new StoredMcpOAuthProvider({
-      attemptRef: parsed.attemptRef,
-      serverUrl: parsed.serverUrl,
-      environment: parsed.environment,
-      redirectUrl: parsed.redirectUrl,
-      state: parsed.state,
-      ...(parsed.codeVerifier === undefined ? {} : { codeVerifier: parsed.codeVerifier }),
-      ...(parsed.clientInformation === undefined ? {} : {
-        clientInformation: parsed.clientInformation as StoredOAuthClientInformation,
-      }),
-      ...(parsed.tokens === undefined ? {} : { tokens: parsed.tokens as StoredOAuthTokens }),
-      ...(parsed.discoveryState === undefined ? {} : {
-        discoveryState: parsed.discoveryState,
-      }),
-      ...(parsed.resourceUrl === undefined ? {} : { resourceUrl: parsed.resourceUrl }),
-      rotationAuthority: parsed.rotationAuthority,
-      rotationIdempotencyRef: parsed.rotationIdempotencyRef,
-    })
-  }
-}
-
-function oauthCleanupResult(
-  outcome: ProviderConnectionCleanupOutcome,
-  reasonCode: string,
-  responseDigest?: string,
-): ProviderOAuthCleanupResult {
-  return {
-    outcome,
-    reasonCode,
-    ...(responseDigest === undefined ? {} : { responseDigest }),
-    evidenceRefs: [`provider_cleanup:${reasonCode}`],
-  }
-}
-
-function exactHttpsEndpoint(value: unknown): string | undefined {
-  if (typeof value !== 'string') return undefined
-  try {
-    const endpoint = new URL(value)
-    return endpoint.protocol === 'https:'
-      && endpoint.username === ''
-      && endpoint.password === ''
-      && endpoint.hash === ''
-      ? value
-      : undefined
-  } catch (cause) {
-    return degradeBackend(cause, undefined, { site: 'exactHttpsEndpoint', reason: 'invalid_response' })
-  }
-}
-
-async function defaultRevokeMcpOAuthToken(input: Readonly<{
-  authorizationServer: oauth.AuthorizationServer
-  client: oauth.Client
-  token: string
-  tokenTypeHint: 'refresh_token' | 'access_token'
-}>): Promise<Readonly<{ status: number }>> {
-  const response = await oauth.revocationRequest(
-    input.authorizationServer,
-    input.client,
-    oauth.None(),
-    input.token,
-    {
-      additionalParameters: { token_type_hint: input.tokenTypeHint },
-      [oauth.customFetch]: async (url, options) => await sendGuardedHttpRequest(
-        new Request(url, options as RequestInit),
-        64 * 1024,
-      ),
-    },
-  )
-  await oauth.processRevocationResponse(response)
-  return { status: response.status }
-}
-
-/**
- * Revokes an MCP OAuth token from an ephemeral Infisical generation. The raw
- * bytes and token never cross the server boundary or enter the cleanup result.
- */
-export async function revokeStoredMcpProviderConnection(
-  material: Uint8Array,
-  runtime: McpOAuthRevocationRuntime = {},
-): Promise<ProviderOAuthCleanupResult> {
-  let provider: StoredMcpOAuthProvider
-  try {
-    provider = StoredMcpOAuthProvider.parse(new TextDecoder('utf-8', { fatal: true }).decode(material))
-  } catch (cause) {
-    return degradeBackend(cause, oauthCleanupResult('outcome_unknown', 'oauth_credential_unavailable'), { site: 'revokeStoredMcpProviderConnection', reason: 'invalid_response' })
-  } finally {
-    material.fill(0)
-  }
-
-  const discovery = provider.discoveryState()
-  const metadata = discovery?.authorizationServerMetadata
-  if (!isRecord(metadata)) {
-    return oauthCleanupResult('unsupported', 'oauth_revocation_unsupported')
-  }
-  const metadataRecord: Record<string, unknown> = metadata
-  const issuer = exactHttpsEndpoint(metadataRecord.issuer)
-  const authorizationServerUrl = exactHttpsEndpoint(discovery?.authorizationServerUrl)
-  if (issuer === undefined || authorizationServerUrl === undefined || issuer !== authorizationServerUrl) {
-    return oauthCleanupResult('outcome_unknown', 'oauth_discovery_invalid')
-  }
-  const revocationEndpoint = exactHttpsEndpoint(metadataRecord.revocation_endpoint)
-  if (revocationEndpoint === undefined) {
-    return metadataRecord.revocation_endpoint === undefined
-      ? oauthCleanupResult('unsupported', 'oauth_revocation_unsupported')
-      : oauthCleanupResult('outcome_unknown', 'oauth_discovery_invalid')
-  }
-  const clientInformation = provider.clientInformation()
-  const tokens = provider.currentTokens
-  if (!isRecord(clientInformation)
-    || typeof clientInformation.client_id !== 'string'
-    || clientInformation.client_id.length === 0
-    || (typeof clientInformation.issuer === 'string' && clientInformation.issuer !== issuer)
-    || !isRecord(tokens)
-    || (typeof tokens.issuer === 'string' && tokens.issuer !== issuer)) {
-    return oauthCleanupResult('outcome_unknown', 'oauth_credential_unavailable')
-  }
-  const tokenTypeHint = typeof tokens.refresh_token === 'string' && tokens.refresh_token.length > 0
-    ? 'refresh_token' as const
-    : 'access_token' as const
-  const token = tokenTypeHint === 'refresh_token' ? tokens.refresh_token : tokens.access_token
-  if (typeof token !== 'string' || token.length === 0) {
-    return oauthCleanupResult('outcome_unknown', 'oauth_credential_unavailable')
-  }
-  const authorizationServer = {
-    ...metadataRecord,
-    issuer,
-    revocation_endpoint: revocationEndpoint,
-  } as oauth.AuthorizationServer
-  const client = { client_id: clientInformation.client_id }
-  try {
-    const response = await (runtime.revoke ?? defaultRevokeMcpOAuthToken)({
-      authorizationServer,
-      client,
-      token,
-      tokenTypeHint,
-    })
-    return oauthCleanupResult(
-      'revoked',
-      'oauth_revoked',
-      canonicalDigest({
-        format: 'provider-mcp-oauth-revocation:v1',
-        issuer,
-        revocationEndpoint,
-        clientId: client.client_id,
-        responseStatus: response.status,
-      }),
-    )
-  } catch (error) {
-    return error instanceof oauth.ResponseBodyError
-      ? oauthCleanupResult('provider_refused', 'oauth_revocation_refused')
-      : oauthCleanupResult('outcome_unknown', 'oauth_revocation_unknown')
   }
 }
 

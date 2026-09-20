@@ -5,7 +5,8 @@ import { describe, expect, it } from 'vitest'
 import { listTsFiles } from '../../helpers/source-files'
 
 const convexHost = readFileSync('convex/capabilitySupply.ts', 'utf8')
-const publishSource = readFileSync('convex/capabilitySupplyPublish.ts', 'utf8')
+const publishSource = readFileSync('convex/lib/capabilitySupply/publishPrepared.ts', 'utf8')
+const readPublicationSource = readFileSync('convex/lib/capabilitySupply/readPublication.ts', 'utf8')
 const commandsSource = readFileSync('convex/capabilitySupplyCommands.ts', 'utf8')
 const sharedSource = readFileSync('convex/capabilitySupplyShared.ts', 'utf8')
 const portsSource = readFileSync('convex/capabilitySupplyPublicationPorts.ts', 'utf8')
@@ -15,14 +16,13 @@ const moduleRoot = 'src/modules/capability-supply/internal/publication'
 describe('capability-supply publication-commands thinness', () => {
   it('does not keep retired owner bypass mutations in the Convex host', () => {
     const publishStart = publishSource.indexOf('export async function publishPreparedCapabilityHandler(')
-    const readStart = publishSource.indexOf('export async function readCapabilityPublicationHandler(')
     expect(convexHost).toMatch(/export const publishPreparedCapability\s*=/)
     expect(convexHost).toMatch(/export const readCapabilityPublication\s*=/)
     expect(convexHost).toMatch(/export const queryCapabilityGraph\s*=/)
     expect(publishStart).toBeGreaterThanOrEqual(0)
-    expect(readStart).toBeGreaterThan(publishStart)
+    expect(readPublicationSource).toMatch(/export async function readCapabilityPublicationHandler\(/)
 
-    const publishBody = publishSource.slice(publishStart, readStart)
+    const publishBody = publishSource.slice(publishStart)
     expect(publishBody).toContain('publishPreparedCapabilityCommand')
     expect(publishBody).not.toContain(['publishCapability', 'Command'].join(''))
     expect(publishBody).not.toContain(['CapabilityPublication', 'CommandImport'].join(''))

@@ -339,6 +339,7 @@ function isReviewedTransportSdkImport(violation: ScanViolation): boolean {
     "src/modules/capability-supply/internal/readiness-probe-mcp.ts",
     "src/modules/capability-supply/internal/mcp-source-discovery.ts",
     "src/modules/capability-supply/internal/supply-funnel/provider-connection-handoff.ts",
+    "src/modules/capability-supply/internal/supply-funnel/provider-connection-handoff-mcp-session.ts",
     "src/modules/capability-supply/internal/route-transport-call.ts",
     "src/modules/capability-supply/internal/route-transport-mcp.ts",
     "src/modules/capability-supply/internal/route-transport-x402.ts",
