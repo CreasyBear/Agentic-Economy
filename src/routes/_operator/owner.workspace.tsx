@@ -4,7 +4,7 @@ import { Building2 } from 'lucide-react'
 
 import { AeSection } from '@/components/ae/layout/AeSection'
 import { TaxProfileFormSection } from '@/components/ae/settings/TaxProfileFormSection'
-import { WorkspaceDangerZone } from '@/components/ae/settings/WorkspaceDangerZone'
+import { WorkspaceDangerZone } from '@/components/ae/settings/workspace-danger-zone/WorkspaceDangerZone'
 import { clerkAppearance } from '@/components/ae/website/clerk-appearance'
 import { operatorRouteOptions } from '@/lib/operator/route-options'
 

@@ -1,0 +1,70 @@
+import { AlertCircleIcon, CheckCircle2Icon, CreditCardIcon } from 'lucide-react'
+
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+
+import { TACTILE } from '../supplier-onboarding-wizard.contracts'
+import type { PayoutsStepProps } from '../supplier-onboarding-wizard.contracts'
+
+export function PayoutsStep({
+  payoutsConfigured,
+  onConnectPayouts,
+  onSkipForNow,
+}: PayoutsStepProps) {
+  return (
+    <div className="grid gap-4">
+      <Alert className="border-border bg-muted/40 py-2.5">
+        <CreditCardIcon className="size-4 text-primary" />
+        <AlertTitle className="text-xs font-semibold">Step 2: Connect Bank Account via Stripe Express</AlertTitle>
+        <AlertDescription className="text-xs text-muted-foreground">
+          Stripe Express securely hosts KYC and identity verification. Direct credit settlements are deposited into your Australian bank account (BSB + Account Number). Agentic Economy never stores account numbers.
+        </AlertDescription>
+      </Alert>
+
+      <div className="rounded-lg border bg-muted/20 p-4 grid gap-3">
+        <div className="flex items-center justify-between gap-3">
+          <div className="grid gap-1">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-xs font-semibold text-foreground">Payout Status</span>
+              {payoutsConfigured ? (
+                <Badge variant="success" className="gap-1">
+                  <CheckCircle2Icon className="size-3" />
+                  Ready
+                </Badge>
+              ) : (
+                <Badge variant="warning" className="gap-1">
+                  <AlertCircleIcon className="size-3" />
+                  Action Required
+                </Badge>
+              )}
+            </div>
+            <span className="text-[11px] text-muted-foreground">
+              {payoutsConfigured
+                ? 'Bank account connected for monthly settlements.'
+                : 'Connect your Australian bank account or debit card for direct credit.'}
+            </span>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2 pt-2 flex-wrap">
+          <Button
+            type="button"
+            onClick={onConnectPayouts}
+            className={`min-h-touch ${TACTILE}`}
+          >
+            Set up Payouts with Stripe
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={onSkipForNow}
+            className={`min-h-touch ${TACTILE}`}
+          >
+            Skip for now
+          </Button>
+        </div>
+      </div>
+    </div>
+  )
+}

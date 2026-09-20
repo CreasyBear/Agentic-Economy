@@ -7,7 +7,7 @@ import '../../setup/jsdom-platform'
 
 import { TACTILE } from '@/components/ae/feedback/AeConfirmDialog'
 import { AeOwnerCredit } from '@/components/ae/console/AeOwnerCredit'
-import { AeAgentOperatorConsole } from '@/components/ae/console/AeAgentOperatorConsole'
+import { AeAgentOperatorConsole } from '@/components/ae/console/agent-operator-console/AeAgentOperatorConsole'
 import { toast } from '@/lib/ui/toast'
 import type { AgentConnectionReadback } from '@/modules/agent-access/public'
 import type { AgentCredentialSource, AgentDirectoryProjection } from '@/modules/agent-access/agent-operator-view-model'

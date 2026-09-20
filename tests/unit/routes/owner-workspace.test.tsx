@@ -38,7 +38,7 @@ vi.mock('@/components/ae/settings/TaxProfileFormSection', () => ({
   TaxProfileFormSection: () => <div data-testid="tax-profile-form-section" />,
 }))
 
-vi.mock('@/components/ae/settings/WorkspaceDangerZone', () => ({
+vi.mock('@/components/ae/settings/workspace-danger-zone/WorkspaceDangerZone', () => ({
   WorkspaceDangerZone: () => <div data-testid="workspace-danger-zone" />,
 }))
 

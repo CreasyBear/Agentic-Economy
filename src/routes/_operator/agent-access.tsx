@@ -7,7 +7,7 @@ import { Link, Outlet, createFileRoute, useLocation, useNavigate } from '@tansta
 import { useServerFn } from '@tanstack/react-start'
 import { KeyRound } from 'lucide-react'
 
-import { AeAgentOperatorConsole } from '@/components/ae/console/AeAgentOperatorConsole'
+import { AeAgentOperatorConsole } from '@/components/ae/console/agent-operator-console/AeAgentOperatorConsole'
 import { AeAgentSecurityHistory } from '@/components/ae/agent-access/AeAgentSecurityHistory'
 import { AeAssistantInstallFunnel } from '@/components/ae/console/AeAssistantInstallFunnel'
 import { AeConnectAgentWizardDialog } from '@/components/ae/console/connect-agent-wizard/AeConnectAgentWizardDialog'

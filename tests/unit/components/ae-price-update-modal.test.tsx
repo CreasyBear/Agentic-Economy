@@ -7,7 +7,7 @@ import '../../setup/jsdom-platform'
 import {
   AePriceUpdateModal,
   TACTILE,
-} from '@/components/ae/supply/AePriceUpdateModal'
+} from '@/components/ae/supply/price-update-modal/AePriceUpdateModal'
 import { toast } from '@/lib/ui/toast'
 
 vi.mock('@/lib/ui/toast', () => ({

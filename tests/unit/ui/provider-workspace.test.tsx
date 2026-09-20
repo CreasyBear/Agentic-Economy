@@ -49,7 +49,7 @@ vi.mock('@/components/ae/status/AeStatusCard', () => ({ AeStatusCard: (props: un
 vi.mock('@/components/ae/status/AeCapabilityList', () => ({ AeCapabilityList: (props: unknown) => { rendered.capabilities(props); return <div data-testid="provider-capability-list" /> } }))
 vi.mock('@/components/ae/settings/AeWorkspaceGeneral', () => ({ AeWorkspaceGeneral: (props: unknown) => { rendered.identity(props); return <div data-testid="provider-identity-controls" /> } }))
 
-import { AeProviderWorkspace } from '@/components/ae/offerings/AeProviderWorkspace'
+import { AeProviderWorkspace } from '@/components/ae/offerings/provider-workspace/AeProviderWorkspace'
 
 const inventory = { kind: 'available', provider: { name: 'Provider' }, tools: [], projection: 'current', isDone: true, continueCursor: '' } as const
 const unavailable = Promise.resolve({ kind: 'not_applicable' as const })

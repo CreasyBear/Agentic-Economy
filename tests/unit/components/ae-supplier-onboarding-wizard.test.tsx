@@ -17,7 +17,7 @@ vi.mock('@/lib/ui/toast', () => ({
   toast: { success: vi.fn(), error: vi.fn(), info: vi.fn() },
 }))
 
-import { AeSupplierOnboardingWizard } from '@/components/ae/supply/AeSupplierOnboardingWizard'
+import { AeSupplierOnboardingWizard } from '@/components/ae/supply/supplier-onboarding-wizard/AeSupplierOnboardingWizard'
 import { formatAbnDisplay } from '@/modules/money/public'
 import { toast } from '@/lib/ui/toast'
 

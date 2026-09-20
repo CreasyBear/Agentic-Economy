@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   AeToolTestPlayground,
   TACTILE,
-} from '@/components/ae/supply/AeToolTestPlayground'
+} from '@/components/ae/supply/tool-test-playground/AeToolTestPlayground'
 
 const toastSuccess = vi.fn()
 vi.mock('@/lib/ui/toast', () => ({

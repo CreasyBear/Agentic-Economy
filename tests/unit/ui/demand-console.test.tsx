@@ -6,7 +6,7 @@ import type { ReactNode } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import '../../setup/jsdom-platform'
 
-import { AeAgentOperatorConsole } from '@/components/ae/console/AeAgentOperatorConsole'
+import { AeAgentOperatorConsole } from '@/components/ae/console/agent-operator-console/AeAgentOperatorConsole'
 import type { AgentCredentialSource, AgentDirectoryProjection } from '@/modules/agent-access/agent-operator-view-model'
 import { projectAgentDirectory } from '@/modules/agent-access/agent-access-console'
 import { canonicalAgentRecord } from '../../helpers/agent-directory-fixture'

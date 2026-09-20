@@ -24,7 +24,7 @@ vi.mock('@tanstack/react-start', async (importOriginal) => ({
   useServerFn: () => mocks.ensureSupplier,
 }))
 
-import { ProviderIdentityForm } from '@/components/ae/offerings/AeProviderWorkspace'
+import { ProviderIdentityForm } from '@/components/ae/offerings/ProviderIdentityForm'
 
 afterEach(() => {
   cleanup()

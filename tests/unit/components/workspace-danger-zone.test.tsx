@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import '../../setup/jsdom-platform'
 
 import type { WorkspaceDecommissionEligibilityView } from '@/modules/principal-account/workspace-decommission.view-model'
-import { WorkspaceDangerZone } from '@/components/ae/settings/WorkspaceDangerZone'
+import { WorkspaceDangerZone } from '@/components/ae/settings/workspace-danger-zone/WorkspaceDangerZone'
 
 const useQuery = vi.fn()
 const closeWorkspace = vi.fn()

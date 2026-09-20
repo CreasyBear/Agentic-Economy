@@ -51,7 +51,7 @@ vi.mock('@tanstack/react-start', () => ({
   useServerFn: (reference: unknown) => routeHarness.serverFns.get(reference) ?? (async () => undefined),
 }))
 
-vi.mock('@/components/ae/console/AeAgentOperatorConsole', () => ({
+vi.mock('@/components/ae/console/agent-operator-console/AeAgentOperatorConsole', () => ({
   AeAgentOperatorConsole: (props: Record<string, unknown>) => {
     routeHarness.consoleProps = props
     return <div data-testid="agent-console" />
