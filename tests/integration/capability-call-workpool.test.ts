@@ -19,6 +19,7 @@ import {
 
 import {
   INPUT,
+  prepareFundedProductionBuyer,
   prepareFundedSandboxBuyer as prepareFundedSandboxBuyerHarness,
   quoteByCallKey,
   registerRotatingBuyer,
@@ -76,7 +77,12 @@ import { callStatusResultSchema } from '@/modules/capability-execution/call-reco
 import { issuedAgentGrantRef } from '@/modules/agent-access/issued-agent-binding'
 import { createFormanceContext, readFormanceAccount, readFormanceTransactionByReference } from '@/modules/money/formance'
 import { bookFormanceFundingSettlement, formanceAccountMetadataDigest, readFormanceDisplayBalance, readFormanceSpendingPeriod, type FormanceManagedCallBooking } from '@/modules/money/formance-workflows'
-import { BASE_SEPOLIA_NETWORK, BASE_SEPOLIA_USDC_ADDRESS } from '@/modules/capability-supply/server'
+import {
+  BASE_MAINNET_NETWORK,
+  BASE_MAINNET_USDC_ADDRESS,
+  BASE_SEPOLIA_NETWORK,
+  BASE_SEPOLIA_USDC_ADDRESS,
+} from '@/modules/capability-supply/server'
 
 const providerFetch = vi.hoisted(() => vi.fn<typeof UndiciFetch>())
 const external = vi.hoisted(() => ({ cdpClient: vi.fn(), receipt: vi.fn(), rate: vi.fn() }))
@@ -502,6 +508,313 @@ async function expectAgentPeriodBalances(
 
 
 describe('capability Call Workpool lifecycle', () => {
+  it.runIf(process.env.AE_FORMANCE_INTEGRATION === 'true')(
+    'carries one standard-production mainnet USDC Quote through Call settlement and replay',
+    async () => {
+      const {
+        backend,
+        published,
+        buyer,
+        resource,
+        payer,
+        signedAuthorizations,
+        readBalance,
+        input,
+      } = await prepareFundedProductionBuyer({ mocks: { providerFetch, external } })
+      await seedCommercialPolicies(backend, Date.now())
+      const deliveries: string[] = []
+      const providerRequests: Array<{ url: string; paid: boolean }> = []
+      const settlementHash: Hex = `0x${'6'.repeat(64)}`
+      providerFetch.mockImplementation(async (_url, init) => {
+        const challenge = {
+          ...resource.paymentRequired,
+          resource: { ...resource.paymentRequired.resource, url: String(_url) },
+          accepts: resource.paymentRequired.accepts.map((requirement) => ({
+            ...requirement,
+            maxTimeoutSeconds: 60,
+          })),
+        }
+        const payment = new Headers(init?.headers as HeadersInit).get('payment-signature')
+        providerRequests.push({ url: String(_url), paid: payment !== null })
+        if (payment === null) {
+          return new UndiciResponse('', {
+            status: 402,
+            headers: { 'Payment-Required': encodePaymentRequiredHeader(challenge) },
+          })
+        }
+        const decoded = decodePaymentSignatureHeader(payment)
+        const authorization = (decoded.payload as {
+          authorization: {
+            from: Hex
+            to: Hex
+            value: string
+            validAfter: string
+            validBefore: string
+            nonce: Hex
+          }
+        }).authorization
+        deliveries.push(payment)
+        external.receipt.mockResolvedValue({
+          transactionHash: settlementHash,
+          status: 'success',
+          confirmations: 12n,
+          blockHash: `0x${'7'.repeat(64)}`,
+          blockNumber: 101n,
+          observedBlockTimestamp: BigInt(Math.floor(Date.now() / 1000)),
+          authorizationState: true,
+          transactionTo: BASE_MAINNET_USDC_ADDRESS,
+          transactionInput: encodeFunctionData({
+            abi: eip3009ABI,
+            functionName: 'transferWithAuthorization',
+            args: [
+              authorization.from,
+              authorization.to,
+              BigInt(authorization.value),
+              BigInt(authorization.validAfter),
+              BigInt(authorization.validBefore),
+              authorization.nonce,
+              27,
+              `0x${'d'.repeat(64)}`,
+              `0x${'e'.repeat(64)}`,
+            ],
+          }),
+          logs: [{
+            address: BASE_MAINNET_USDC_ADDRESS,
+            data: encodeAbiParameters([{ type: 'uint256' }], [BigInt(authorization.value)]),
+            topics: encodeEventTopics({
+              abi: erc20Abi,
+              eventName: 'Transfer',
+              args: { from: authorization.from, to: authorization.to },
+            }),
+          }],
+        })
+        return new UndiciResponse(JSON.stringify({ result: 'mainnet production fixture result' }), {
+          status: 200,
+          headers: {
+            'Content-Type': 'application/json',
+            'Payment-Response': encodePaymentResponseHeader({
+              success: true,
+              transaction: settlementHash,
+              network: BASE_MAINNET_NETWORK,
+              payer: payer.address,
+            }),
+          },
+        })
+      })
+
+      const quoteCommand = {
+        operationKey: 'production-mainnet:quote',
+        correlationId: 'production-mainnet:quote',
+        principal: { ...buyer.principal, scopes: [...buyer.principal.scopes] },
+        toolRef: published.toolRef,
+        input,
+      }
+      const quote = await backend.action(
+        api.capabilityQuotes.quote,
+        await withSourceWrite('protected_action', quoteCommand),
+      )
+      if (quote.kind !== 'committed') {
+        throw new Error(`production_quote_missing:${JSON.stringify({
+          quote,
+          providerRequests,
+        })}`)
+      }
+      expect(quote).toMatchObject({ kind: 'committed' })
+      quoteByCallKey.set(`${buyer.principal.credentialId}:production-mainnet`, quote.quoteRef)
+      const pending = await invokeCall(
+        backend,
+        buyer.principal,
+        published.toolRef,
+        'production-mainnet',
+        'production-mainnet',
+      )
+      expect(pending).toMatchObject({ kind: 'pending' })
+      if (pending.kind !== 'pending') throw new Error(`production_call_missing:${JSON.stringify(pending)}`)
+      await backend.finishAllScheduledFunctions(() => vi.advanceTimersByTime(1))
+      const completed = await readEvidence(backend, pending.callRef)
+      expect(completed.call).toMatchObject({
+        state: 'completed',
+        environment: 'production',
+        quoteRef: quote.quoteRef,
+        result: {
+          kind: 'completed',
+          output: { result: 'mainnet production fixture result' },
+          usage: { chargeState: 'paid', amount: { currency: 'AUD', units: '1200', exponent: 6 } },
+          receipt: {
+            providerObligation: { amount: { currency: 'USDC', units: '1000', exponent: 6 } },
+            providerSettlement: {
+              network: BASE_MAINNET_NETWORK,
+              asset: BASE_MAINNET_USDC_ADDRESS,
+            },
+          },
+        },
+      })
+      const persistedQuote = await backend.run(async (ctx) => await ctx.db.query('capabilityQuotes')
+        .withIndex('by_quoteRef', (query) => query.eq('quoteRef', quote.quoteRef))
+        .unique())
+      expect(persistedQuote).toMatchObject({
+        state: 'consumed',
+        environment: 'production',
+        consumedCallRef: pending.callRef,
+        decisionAudUnits: '1200',
+        sourceUsdcUnits: '1000',
+      })
+      const balanceAfter = await readBalance()
+      const replay = await invokeCall(
+        backend,
+        buyer.principal,
+        published.toolRef,
+        'production-mainnet',
+        'production-mainnet-replay',
+      )
+      expect(replay).toMatchObject({ kind: 'completed', callRef: pending.callRef })
+      expect(await readBalance()).toMatchObject(balanceAfter)
+      expect(deliveries).toHaveLength(1)
+      expect(signedAuthorizations).toHaveLength(1)
+      expect(providerRequests.filter(({ paid }) => paid)).toHaveLength(1)
+      expect(await backend.run(async (ctx) => await ctx.db.query('moneyX402PaymentAttempts').collect()))
+        .toEqual([expect.objectContaining({
+          state: 'observed',
+          settlementStatus: 'settled',
+          network: BASE_MAINNET_NETWORK,
+          asset: BASE_MAINNET_USDC_ADDRESS,
+        })])
+      expect(completed.call?.formanceReservationRefs).toEqual(
+        (await readEvidence(backend, pending.callRef)).call?.formanceReservationRefs,
+      )
+      expect(completed.call?.formanceSettlementRefs).toEqual(
+        (await readEvidence(backend, pending.callRef)).call?.formanceSettlementRefs,
+      )
+    },
+  )
+
+  it.runIf(process.env.AE_FORMANCE_INTEGRATION === 'true')(
+    'refuses mainnet payment drift without payment and releases any reserved funds',
+    async () => {
+      const { backend, published, buyer, resource, readBalance, signedAuthorizations, input } =
+        await prepareFundedProductionBuyer({ mocks: { providerFetch, external } })
+      await seedCommercialPolicies(backend, Date.now())
+      const original = resource.paymentRequired
+      const cases = [
+        ['network', (challenge: typeof original) => ({ ...challenge, accepts: challenge.accepts.map((item) => ({ ...item, network: BASE_SEPOLIA_NETWORK })) })],
+        ['asset', (challenge: typeof original) => ({ ...challenge, accepts: challenge.accepts.map((item) => ({ ...item, asset: BASE_SEPOLIA_USDC_ADDRESS })) })],
+        ['payee', (challenge: typeof original) => ({ ...challenge, accepts: challenge.accepts.map((item) => ({ ...item, payTo: '0x0000000000000000000000000000000000000001' })) })],
+      ] as const
+      for (const [label, drift] of cases) {
+        providerFetch.mockResolvedValue(new UndiciResponse('', {
+          status: 402,
+          headers: { 'Payment-Required': encodePaymentRequiredHeader(drift(structuredClone(original))) },
+        }))
+        const quote = await backend.action(api.capabilityQuotes.quote, await withSourceWrite('protected_action', {
+          operationKey: `production-drift:${label}`,
+          correlationId: `production-drift:${label}`,
+          principal: { ...buyer.principal, scopes: [...buyer.principal.scopes] },
+          toolRef: published.toolRef,
+          input,
+        }))
+        expect(quote, label).toMatchObject({ kind: 'refused' })
+      }
+      for (const [label, drift] of [
+        ['amount', (challenge: typeof original) => ({ ...challenge, accepts: challenge.accepts.map((item) => ({
+          ...item,
+          amount: (BigInt(item.amount) + 1n).toString(),
+        })) })],
+        ['resource', (challenge: typeof original) => ({
+          ...challenge,
+          resource: { ...challenge.resource, url: `${challenge.resource.url}&drift=1` },
+        })],
+      ] as const) {
+        providerFetch.mockResolvedValue(new UndiciResponse('', {
+          status: 402,
+          headers: { 'Payment-Required': encodePaymentRequiredHeader(original) },
+        }))
+        const key = `production-${label}-drift`
+        const quote = await backend.action(api.capabilityQuotes.quote, await withSourceWrite('protected_action', {
+          operationKey: `${key}:quote`,
+          correlationId: `${key}:quote`,
+          principal: { ...buyer.principal, scopes: [...buyer.principal.scopes] },
+          toolRef: published.toolRef,
+          input,
+        }))
+        if (quote.kind !== 'committed') throw new Error(`${key}_quote_missing:${JSON.stringify(quote)}`)
+        quoteByCallKey.set(`${buyer.principal.credentialId}:${key}`, quote.quoteRef)
+        providerFetch.mockResolvedValue(new UndiciResponse('', {
+          status: 402,
+          headers: { 'Payment-Required': encodePaymentRequiredHeader(drift(structuredClone(original))) },
+        }))
+        const call = await invokeCall(backend, buyer.principal, published.toolRef, key, key)
+        if (label === 'amount') {
+          expect(call).toMatchObject({ kind: 'refused', code: 'operation_not_current' })
+        } else {
+          if (call.kind !== 'pending') throw new Error(`${key}_call_missing:${JSON.stringify(call)}`)
+          await backend.finishAllScheduledFunctions(() => vi.advanceTimersByTime(1))
+          expect((await readEvidence(backend, call.callRef)).call).toMatchObject({
+            state: 'refused',
+            formanceReleaseRefs: expect.any(Array),
+          })
+        }
+      }
+      expect(await readBalance()).toMatchObject({ kind: 'available', units: '10000000' })
+      expect(signedAuthorizations).toHaveLength(0)
+      expect(await backend.run(async (ctx) => await ctx.db.query('moneyX402PaymentAttempts').collect()))
+        .toEqual([])
+      expect(providerFetch.mock.calls.filter(([, init]) =>
+        new Headers(init?.headers as HeadersInit).has('payment-signature'))).toHaveLength(0)
+    },
+  )
+
+  it.runIf(process.env.AE_FORMANCE_INTEGRATION === 'true')(
+    'releases one reserved Call exactly once when managed x402 cannot create an authorization',
+    async () => {
+      const { backend, published, buyer, readBalance, signedAuthorizations } =
+        await prepareFundedSandboxBuyer({})
+      await backend.run(async (ctx) => await ctx.runMutation(components.workpool.config.update, {
+        maxParallelism: 0,
+      }))
+      const pending = await invokeCall(
+        backend,
+        buyer.principal,
+        published.toolRef,
+        'definite-no-authorization',
+        'definite-no-authorization',
+      )
+      if (pending.kind !== 'pending') throw new Error(`noauth_call_missing:${JSON.stringify(pending)}`)
+      expect(await readBalance()).toMatchObject({ kind: 'available', units: '9988000' })
+
+      vi.stubEnv('AE_X402_CUSTODY_ENABLED', 'false')
+      await backend.run(async (ctx) => await ctx.runMutation(components.workpool.config.update, {
+        maxParallelism: 1,
+      }))
+      await backend.finishAllScheduledFunctions(() => vi.advanceTimersByTime(1))
+
+      const refused = await readEvidence(backend, pending.callRef)
+      expect(refused.call).toMatchObject({
+        state: 'refused',
+        result: { kind: 'refused', code: 'provider_refused' },
+      })
+      expect(refused.call?.formanceReleaseRefs).toEqual(expect.any(Array))
+      expect(refused.call?.formanceReleaseRefs?.length).toBeGreaterThan(0)
+      expect(await backend.run(async (ctx) => await ctx.db.query('moneyX402PaymentAttempts').collect()))
+        .toEqual([])
+      expect(await readBalance()).toMatchObject({ kind: 'available', units: '10000000' })
+      expect(signedAuthorizations).toHaveLength(0)
+      expect(providerFetch.mock.calls.filter(([, init]) =>
+        new Headers(init?.headers as HeadersInit).has('payment-signature'))).toHaveLength(0)
+
+      const releaseRefs = refused.call?.formanceReleaseRefs
+      expect(await invokeCall(
+        backend,
+        buyer.principal,
+        published.toolRef,
+        'definite-no-authorization',
+        'definite-no-authorization-replay',
+      )).toMatchObject({ kind: 'refused', code: 'provider_refused' })
+      const replayed = await readEvidence(backend, pending.callRef)
+      expect(replayed.call?.formanceReleaseRefs).toEqual(releaseRefs)
+      expect(await readBalance()).toMatchObject({ kind: 'available', units: '10000000' })
+    },
+  )
+
   it.runIf(process.env.AE_FORMANCE_INTEGRATION === 'true')('enforces a distinct daily limit while monthly capacity remains available', async () => {
     const { backend, published, buyer, readBalance, signedAuthorizations } = await prepareFundedSandboxBuyer({
       buyerSetup: backend => registerRotatingBuyer(backend, '5000000'),

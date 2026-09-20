@@ -149,6 +149,44 @@ export async function runCommittedManagedX402Transport(
   })
   if (reservation === null) throw new Error('managed_call_reservation_missing')
 
+  const preauthorizationRefusal = observation.transport === 'x402'
+    && observation.disposition === 'refused'
+    && observation.paymentAuthorizationStatus === 'not_created'
+    && observation.paymentSubmissionStatus === 'not_submitted'
+    && observation.settlementEvidence?.kind === 'not_submitted'
+    && observation.releaseStarted === false
+  if (preauthorizationRefusal) {
+    let attemptMissing: boolean
+    try {
+      attemptMissing = await ctx.runQuery(
+        internal.moneyX402PaymentAttempts.readX402PaymentAttempt,
+        {
+          dispatchRef: input.dispatch.callRef,
+          attemptRef: input.durableAttemptRef,
+          effectGeneration: input.durableEffectGeneration,
+        },
+      ) === null
+    } catch (cause) {
+      captureBackendException(cause, { site: 'readDefinitePreauthorizationAttempt' }, 'warning')
+      await retainManagedCallUnknown(ctx, input, observation)
+      await projectManagedCall(ctx, input, observation, recordedAt, output, reservation, 'unknown')
+      return observation
+    }
+    if (attemptMissing) {
+      const released = await ctx.runAction(
+        internal.moneyManagedCallLifecycle.releaseBeforeSubmission,
+        { callRef: input.dispatch.callRef, now: Date.parse(recordedAt) },
+      )
+      if (released.kind === 'accepted') {
+        await projectManagedCall(ctx, input, observation, recordedAt, output, reservation, 'released')
+        return observation
+      }
+      await retainManagedCallUnknown(ctx, input, observation)
+      await projectManagedCall(ctx, input, observation, recordedAt, output, reservation, 'unknown')
+      return observation
+    }
+  }
+
   let recorded
   try {
     recorded = await recordX402TransportObservation(ctx, {

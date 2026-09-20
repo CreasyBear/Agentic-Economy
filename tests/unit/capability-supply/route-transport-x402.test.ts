@@ -14,6 +14,7 @@ import { privateKeyToAccount } from 'viem/accounts'
 
 import type { RouteTransportFetch } from '@/modules/capability-supply/route-transport-runtime'
 import { x402PaymentCredentialRefFromEnvironment } from '@/modules/capability-supply/server'
+import { prepareX402PaymentMaterial } from '@/modules/capability-supply/internal/route-transport-x402-payment'
 
 import {
   X402_PAYMENT_CREDENTIAL_REF,
@@ -76,6 +77,21 @@ async function invokeRouteTransport(
       return await runtime.send(target, init)
     },
   })
+}
+
+async function preparePaymentMaterial(
+  routeInvocation: HarnessInvocation,
+  runtime: HarnessRuntime,
+) {
+  const endpoint = new URL(routeInvocation.binding.endpointUrl)
+  return await prepareX402PaymentMaterial(
+    endpoint,
+    JSON.parse(routeInvocation.binding.configJson),
+    routeInvocation,
+    'sha256:test-request',
+    runtime,
+    endpoint,
+  )
 }
 
 function registeredBinding(
@@ -981,6 +997,63 @@ describe('registered route transport runtime', () => {
     expect(fetch).not.toHaveBeenCalled()
   })
   it.each([
+    [
+      'resource outside authority',
+      x402PaidInvocation({
+        challenge: x402PaymentRequired('https://provider.example/other-resource'),
+      }),
+      'payment_requirement_outside_authority',
+    ],
+    [
+      'currency mismatch',
+      x402PaidInvocation({
+        authority: {
+          ...authority,
+          maximumSpend: { currency: 'AUD', units: '125', exponent: 2 },
+        },
+      }),
+      'payment_currency_mismatch',
+    ],
+  ])('records explicit preauthorization evidence for %s', async (_label, routeInvocation, failureCode) => {
+    const fetch = vi.fn<RouteTransportFetch>()
+    const sign = vi.fn(async () => 'must-not-sign')
+    const prepared = await preparePaymentMaterial(routeInvocation, {
+      send: fetch,
+      resolveCredential: resolveProviderCredential('unused'),
+      ...preparedX402Custody(sign),
+    })
+    if (prepared.kind !== 'refused') throw new Error('preauthorization_fixture_not_refused')
+    const observed = prepared.observation
+
+    expect(observed).toMatchObject({
+      transport: 'x402',
+      disposition: 'refused',
+      releaseStarted: false,
+      failureCode,
+      paymentAuthorizationStatus: 'not_created',
+      paymentSubmissionStatus: 'not_submitted',
+      settlementEvidence: { kind: 'not_submitted' },
+    })
+    expect(sign).not.toHaveBeenCalled()
+    expect(fetch).not.toHaveBeenCalled()
+  })
+  it('records explicit preauthorization evidence when custody lookup is unavailable', async () => {
+    const routeInvocation = x402PaidInvocation()
+    const prepared = await preparePaymentMaterial(routeInvocation, {
+      readX402PaymentCredentialRef: () => undefined,
+    } as HarnessRuntime)
+    if (prepared.kind !== 'refused') throw new Error('custody_fixture_not_refused')
+    expect(prepared.observation).toMatchObject({
+      transport: 'x402',
+      disposition: 'refused',
+      releaseStarted: false,
+      failureCode: 'payment_custody_unavailable',
+      paymentAuthorizationStatus: 'not_created',
+      paymentSubmissionStatus: 'not_submitted',
+      settlementEvidence: { kind: 'not_submitted' },
+    })
+  })
+  it.each([
     ['revoked', 'connection_inactive', 'connection_authority_inactive'],
     [
       'reauthorized',
@@ -1181,6 +1254,9 @@ describe('registered route transport runtime', () => {
       releaseStarted: false,
       paymentChallengeDigest: expect.stringMatching(/^sha256:[0-9a-f]{64}$/),
       failureCode: 'payment_exceeds_step_ceiling',
+      paymentAuthorizationStatus: 'not_created',
+      paymentSubmissionStatus: 'not_submitted',
+      settlementEvidence: { kind: 'not_submitted' },
     })
     expect(createPayment).not.toHaveBeenCalled()
     expect(fetch).not.toHaveBeenCalled()
@@ -1281,6 +1357,9 @@ describe('registered route transport runtime', () => {
       disposition: 'refused',
       releaseStarted: false,
       failureCode: 'payment_amount_mismatch',
+      paymentAuthorizationStatus: 'not_created',
+      paymentSubmissionStatus: 'not_submitted',
+      settlementEvidence: { kind: 'not_submitted' },
     })
     expect(belowSigner).not.toHaveBeenCalled()
     expect(belowFetch).not.toHaveBeenCalled()
@@ -1312,6 +1391,9 @@ describe('registered route transport runtime', () => {
       disposition: 'refused',
       releaseStarted: false,
       failureCode: 'payment_exceeds_step_ceiling',
+      paymentAuthorizationStatus: 'not_created',
+      paymentSubmissionStatus: 'not_submitted',
+      settlementEvidence: { kind: 'not_submitted' },
     })
     expect(aboveSigner).not.toHaveBeenCalled()
     expect(aboveFetch).not.toHaveBeenCalled()

@@ -66,7 +66,7 @@ order. Only one implementation package may be active.
 | Package | Existing AM parents | Dependency and order | Owner role | Initial status and evidence level | Exact acceptance and package exit |
 | --- | --- | --- | --- | --- | --- |
 | LP-0 Candidate baseline reconciliation | AM-01–32 | First | Manager assigns; Luna gathers bounded evidence; worker maps source | **ACCEPTED — 20 September 2026, candidate `0fafd075d90fbc552ed5faef13d30953705c22be`** | Every AM row has current source ownership, attributable existing proof, proof freshness and finite missing source/hosted conditions. This accepted map is not repaired code or a readiness claim. |
-| LP-1 Bounded source repairs | Only AM parents with an LP-0 source defect or bounded source unknown; AM-14/18–20 standard-mode proof is active; AM-14-B awaits user schema-scope approval; AM-27/29 remain planned | LP-0 accepted; one repair/proof package at a time in dependency order | Sol implements one bounded package; separate Luna reviews; manager accepts | **ACTIVE — AM-14/18–20 standard-mode production Quote/Call proof** | Each accepted source defect meets its full semantic contract through observable inputs/outputs and focused failure/retry/concurrency evidence. Every repair has independent review. Exit when no mapped release-blocking source defect remains; hosted proof stays open. |
+| LP-1 Bounded source repairs | Only AM parents with an LP-0 source defect or bounded source unknown; AM-14/18–20 local source package is accepted; AM-14-B awaits user schema-scope approval; AM-27/29 remain planned | LP-0 accepted; one repair/proof package at a time in dependency order | Sol implements one bounded package; separate Luna reviews; manager accepts | **ACTIVE — next bounded package pending manager selection** | Each accepted source defect meets its full semantic contract through observable inputs/outputs and focused failure/retry/concurrency evidence. Every repair has independent review. Exit when no mapped release-blocking source defect remains; hosted proof stays open. |
 | LP-2 Integrated candidate, gates and review | AM-01–32, with direct emphasis AM-01, AM-25–32 | LP-1 exit | Sol integrates/configures; Luna reviews candidate; manager freezes revision and artifacts | **PLANNED — no coherent frozen candidate evidence** | Freeze the source revision, build artifacts and intended exact target manifest; local/CI checks pass; secrets, telemetry, support, recovery and release gates are reviewed; no unresolved release-blocking integration defect. Exit is one reviewed artifact/evidence manifest with intended targets and rollback source. |
 | LP-3 Deployed qualification and Base Sepolia | AM-02–24, AM-26–32 | LP-2 frozen artifacts and target manifest | Sol executes bounded deployment/repair; Luna runs finite hosted evidence; manager accepts | **PLANNED — source/sandbox history only, no current complete deployed journey** | Deployed web, backend and integration identities align with the LP-2 manifest. Fresh Customer/Agent and Provider journeys complete with sandbox AUD funding and an actual paid Base Sepolia buyer Call, usable output, exact records, duplicate/interruption/recovery checks and installed-client continuation. Provider validation cannot substitute for buyer purchase. Exit retains exact deployment/run/transaction/recovery references. |
 | LP-4 Production activation prerequisites | AM-01, AM-07–12, AM-18–20, AM-25–26, AM-30–32 | LP-2 frozen artifacts permit read-only preflight and adviser evidence gathering alongside LP-3; every infrastructure mutation and activation waits for manager-accepted LP-3 exit and LP-4 active status | Named human approvers decide commercial perimeter; Sol handles bounded infrastructure only while LP-4 is active; Luna verifies readback; manager accepts | **DEPENDENCY BLOCKED / NOT VERIFIED — required legal, AML/CTF, tax, banking and infrastructure evidence not supplied** | Attributable decisions and conditions are recorded; production identities/state align with the intended manifest and are fresh; AWS/Cloudflare/Convex/Vercel/Stripe/Formance/Infisical targets and recovery are exact; alerts and rollback work; synthetic state is not promoted. Exit occurs when the manager confirms all prerequisite gates are evidenced under the existing launch authorization, not from configuration presence alone. |
@@ -121,11 +121,22 @@ or roll back only the reversible deployment layer; never erase economic evidence
 
 1. **Accepted:** LP-0 — the AM-01–32 map for candidate
    `0fafd075d90fbc552ed5faef13d30953705c22be` passed separate Luna and manager review.
-2. **Active:** LP-1/AM-14/18–20 — prove the existing standard-mode production
-   Quote/Call path and pre-effect mainnet material-drift refusals.
+2. **Accepted local source package:** LP-1/AM-14/18–20 standard-mode production
+   Quote/Call path and mainnet material-drift refusals. This does not complete
+   those AM rows or LP-1.
 3. **Held:** AM-14-B delegated-Agent validation awaits user approval for the
    prepared schema-scope package; later LP-1 items and LP-2–LP-6 remain planned
    or dependency-blocked.
+
+Current AM-14/18–20 finding: a supported facilitator-discovered production Tool
+reaches standard-mode Quote, Call admission, confirmed mainnet-USDC settlement
+and exact replay with distinct AUD/USDC amounts. Preauthorization refusals now
+carry explicit no-authorization/no-submission evidence; the brokered worker
+releases only after an exact durable-attempt lookup returns null. Lookup failure
+retains reconciliation; an existing attempt follows the original observation/
+reconciliation path, including legitimate recorded pre-submit release; a crossed
+submission fence refuses release and retains reconciliation. The bounded source
+package passed independent review; it is not hosted or live-mainnet proof.
 
 Decision log: **20 September 2026** — launch goal expanded from sandbox/source
 closure to Base Sepolia plus controlled Base mainnet; cumulative campaign limits
@@ -149,13 +160,22 @@ change establishes delegated-Agent validation or a real hosted payment.
 **21 September 2026** — the manager held AM-14-B before source edits because
 delegated reconstruction needs a distinct persisted expiry for the short-lived
 x402 seller claim; reusing provider-connection authority expiry would wrongly
-expire long-lived supply. The schema decision is pending. AM-24 then ran as the
+expire long-lived supply. Existing replay/audit stores hashes and command
+identities, not the verified claim expiry, and the redacted audit cannot recover
+it truthfully. The schema decision is pending. AM-24 then ran as the
 one active independent package so work did not switch mid-package.
 
 **21 September 2026** — Luna PASS and manager acceptance closed the AM-24 local
 source package after the paid pre-claim, uncertain and terminal parity cases and
 the complete 16/16 Workpool file passed. This does not establish hosted Sepolia,
 production/mainnet parity or overall launch readiness.
+
+**21 September 2026** — Luna PASS and manager acceptance closed the bounded
+AM-14/18–20 local source package. The full Workpool file passed 19/19; focused
+x402 transport/worker tests passed 74/74; TypeScript, scoped lint and diff checks
+passed. External Provider, custody, RPC and payment effects remain mocked and
+Formance is a local simulator. Owner production admission, AM-14-B, hosted
+Sepolia and real mainnet value remain open.
 
 ## LP-0 current-candidate evidence map
 
@@ -185,9 +205,9 @@ named target and relevant behavior are unchanged.
 | AM-15 | Accepted source claim: never-signed, expired-signing and submitted-uncertain recovery retains one validation Call | LP-3 hosted interruption/return with same Call and no buyer reservation; repeat on approved production supply if LP-4 changes this boundary. |
 | AM-16 | Accepted source claim: withdrawal/routeability freeze blocks late promotion | LP-3 hosted expiry/source/ownership/offboarding changes and retained historical Call evidence; LP-4 production gate readback. |
 | AM-17 | Accepted source claim: material drift, withdrawal, republish and historical Call isolation | LP-3 full hosted lifecycle/replay; LP-4 verifies the same production state transitions after activation. |
-| AM-18 | **Current proof:** Quote suite covers identity/policy/currentness/refusals and correctly refuses production while service mode is `hosted_alpha`; `src/lib/deployment/service-mode.ts` permits production in `standard` mode | LP-3 admitted Base Sepolia discovery/Quote. Bounded LP-1 verification must trace the actual standard-mode Quote entry through existing commercial-policy/custody gates and prove Base mainnet asset/network/recipient/amount/drift refusal before effects; repair only a specific uncovered condition. |
-| AM-19 | Accepted source claim: local Formance/Workpool buyer Call, one AUD capture and replay; external payment/Provider are fixtures | LP-3 actual paid Base Sepolia buyer Call. LP-5 actual mainnet delivery with separate AUD/USDC evidence; Provider validation cannot satisfy either. |
-| AM-20 | Accepted source claim: atomic balance/policy/treasury scarcity, stable period limits and safe pre-submission release | LP-3 hosted concurrency/refusals and scheduling; LP-1 traces standard-mode production through the existing commercial-policy and custody gates, then LP-5 exercises bounded live refusal without release. |
+| AM-18 | **Accepted local source proof — 21 September 2026:** Quote suite covers identity/policy/currentness/refusals and correctly refuses production while service mode is `hosted_alpha`; a focused standard-mode run issues a production Quote for an actually facilitator-discovered Base-mainnet USDC Tool after current policy/legal/custody/treasury checks. Wrong network/asset/payee are refused before Quote effects; changed amount is refused at Call admission. | Owner production admission remains the separate AM-14 gap. LP-3 still owes deployed Base Sepolia Quote proof; LP-4 must configure two distinct production RPC targets. |
+| AM-19 | **Accepted local source proof — 21 September 2026:** on one backend, the actual production Quote causes one reserved Call, one mocked custody signature, unanimous mocked two-RPC mainnet receipt verification, terminal output and exact replay. The persisted Call/Quote/attempt retain production, distinct AUD 1,200 atomic and USDC 1,000 atomic, Base-mainnet asset/network and original ledger references. | External Provider, custody, RPC and payment effects remain fixtures. LP-3 owes actual paid Base Sepolia; LP-5 owes actual mainnet delivery. |
+| AM-20 | **Accepted local source proof — 21 September 2026:** atomic balance/policy/treasury scarcity, stable period limits and safe pre-submission release remain green. Network/asset/payee/amount/material drift produces no signature/payment; postreservation resource drift releases the exact reservation. Definite noauthorization with null attempt releases once and replay keeps the same release refs/balance; attempt-read failure retains reconciliation, an existing attempt follows the original observation path, and a crossed fence refuses release and retains reconciliation. | LP-3/LP-5 retain hosted/live conditions. |
 | AM-21 | **Current proof:** HTTP recovery suite; existing integration proof covers fresh-process Call recovery/hold/cancel | LP-3 installed-client interruption before/after possible Sepolia submission; LP-5 same-reference mainnet reconciliation with no new payment. |
 | AM-22 | **Current proof:** managed-Call remedy idempotency and conflict refusal | LP-3 hosted remedy with original Call/Provider obligation; LP-5 one supported live refund/adjustment and retry. |
 | AM-23 | **Current proof:** Call projection reconciles Logs/Usage/Spend/Provider obligation without phantom spend | LP-3 hosted refresh/replay and role views; LP-5 reconciles distinct AUD and mainnet USDC facts plus adjustment. |
@@ -222,9 +242,9 @@ This uncertainty is not a source defect and does not invalidate unrelated proof.
 4. AM-27/29 bounded supported-surface and offboarding source map; make only the
    finite repairs identified before LP-2 freezes artifacts.
 
-LP-0 passed separate Luna and manager review on 20 September 2026. AM-14/18–20
-standard-mode production Quote/Call proof is the one active package; AM-14-B
-awaits user schema-scope approval and later LP-1 items remain planned.
+LP-0 passed separate Luna and manager review on 20 September 2026. The bounded
+AM-14/18–20 local source package passed Luna and manager review on 21 September;
+AM-14-B awaits user schema-scope approval and later LP-1 items remain planned.
 
 ### Record-by-record execution
 

@@ -1,6 +1,7 @@
 import { Response as UndiciResponse } from 'undici'
 import { expect, vi } from 'vitest'
 import { encodePaymentRequiredHeader } from '@x402/core/http'
+import type { PaymentRequired } from '@x402/core/types'
 import type { WorkId } from '@convex-dev/workpool'
 import { privateKeyToAccount } from 'viem/accounts'
 
@@ -12,7 +13,7 @@ import {
   publishedBusinessOwner,
   type ConvexFixtureBackend,
 } from '../helpers/convex-fixtures'
-import { seedCatalogOffering } from './capability-publication-harness'
+import { admitPublication, seedCatalogOffering } from './capability-publication-harness'
 import { prepareOwnerPublicationCommand, x402SourceForConnection } from './capability-supply-owner-funnel-harness'
 import { installTestSourceWriteSecret, withSourceWrite } from '../helpers/source-write-admission'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
@@ -32,7 +33,7 @@ import { issuedAgentGrantRef } from '@/modules/agent-access/issued-agent-binding
 import { createCustomerRequestServiceAssertion, toStableHashValue } from '@/modules/agent-access/service-auth-envelope'
 import { createFormanceContext, installPackage4FormanceSchema } from '@/modules/money/formance'
 import { bookFormanceFundingSettlement, readFormanceDisplayBalance } from '@/modules/money/formance-workflows'
-import { BASE_SEPOLIA_NETWORK, BASE_SEPOLIA_USDC_ADDRESS, cdpX402CustodyConfigurationFromEnvironment,
+import { BASE_MAINNET_NETWORK, BASE_MAINNET_USDC_ADDRESS, BASE_SEPOLIA_NETWORK, BASE_SEPOLIA_USDC_ADDRESS, cdpX402CustodyConfigurationFromEnvironment,
   cdpX402CustodyBudgetRef, cdpX402PolicyRulesDigest } from '@/modules/capability-supply/server'
 import {
   SELLER_ONBOARDING_CANARY_BUDGET_POLICY_REF,
@@ -45,6 +46,7 @@ import {
   SELLER_ONBOARDING_CANARY_PLATFORM_PRINCIPAL_ID,
 } from '../../convex/capabilitySupplyCanaryFunding'
 import { marketDispatchWorkpool } from '../../convex/marketDispatchWorkpool'
+import { admitDiscoveredToolFixture } from '../helpers/discovered-tool-fixture'
 
 
 export const INPUT = { request: 'lookup' } as const
@@ -249,9 +251,23 @@ async function promotePaidBuyerFixtureAfterSellerCanary(input: Readonly<{
 export async function prepareFundedSandboxBuyer(options: PrepareBuyerOptions & {
   mocks: FundedSandboxBuyerMocks
 }) {
+  return await prepareFundedBuyer(options, 'sandbox')
+}
+
+export async function prepareFundedProductionBuyer(options: PrepareBuyerOptions & {
+  mocks: FundedSandboxBuyerMocks
+}) {
+  return await prepareFundedBuyer(options, 'production')
+}
+
+async function prepareFundedBuyer(options: PrepareBuyerOptions & {
+  mocks: FundedSandboxBuyerMocks
+}, environment: 'sandbox' | 'production') {
   const { external, providerFetch } = options.mocks
   const gatewayUrl = process.env.AE_FORMANCE_GATEWAY_URL ?? 'http://127.0.0.1:3069'
   const ledger = `ae-buyer-${Date.now()}-${process.pid}`
+  // The application path may be production, but this external ledger is the
+  // maintained loopback simulator. Production Formance transport requires HTTPS.
   const formance = createFormanceContext({ environment: 'sandbox', gatewayUrl, ledger, requestTimeoutMs: 10_000 })
   expect(await installPackage4FormanceSchema(formance)).toMatchObject({ kind: 'completed' })
   vi.stubEnv('AE_FORMANCE_ENVIRONMENT', 'sandbox')
@@ -259,7 +275,13 @@ export async function prepareFundedSandboxBuyer(options: PrepareBuyerOptions & {
   vi.stubEnv('AE_FORMANCE_LEDGER', ledger)
   vi.stubEnv('AE_ROUTE_CALL_SIGNING_SECRET', 'buyer-integration-signing-secret-test-32-bytes')
   vi.stubEnv('AE_ROUTE_CALL_SIGNING_KEY_ID', 'route-calls:buyer-integration')
-  vi.stubEnv('AE_X402_RPC_URLS_JSON', JSON.stringify({ [BASE_SEPOLIA_NETWORK]: ['https://rpc.example.test'] }))
+  const network = environment === 'production' ? BASE_MAINNET_NETWORK : BASE_SEPOLIA_NETWORK
+  const asset = environment === 'production' ? BASE_MAINNET_USDC_ADDRESS : BASE_SEPOLIA_USDC_ADDRESS
+  vi.stubEnv('AE_X402_RPC_URLS_JSON', JSON.stringify({
+    [network]: environment === 'production'
+      ? ['https://rpc-a.example.test', 'https://rpc-b.example.test']
+      : ['https://rpc.example.test'],
+  }))
   installTestSourceWriteSecret()
   vi.spyOn(defaultDnsResolver, 'lookup').mockResolvedValue([{ address: '93.184.216.34', family: 4 }])
 
@@ -273,14 +295,14 @@ export async function prepareFundedSandboxBuyer(options: PrepareBuyerOptions & {
     { name: 'validAfter', type: 'uint256' }, { name: 'validBefore', type: 'uint256' }, { name: 'nonce', type: 'bytes32' },
   ] } }
   const accountPolicy = { id: accountPolicyId, scope: 'account' as const, rules: [{ action: 'accept', operation: 'signEvmTypedData', criteria: [
-    { type: 'evmTypedDataVerifyingContract', addresses: [BASE_SEPOLIA_USDC_ADDRESS], operator: 'in' },
+    { type: 'evmTypedDataVerifyingContract', addresses: [asset], operator: 'in' },
     { type: 'evmTypedDataField', types: typedData, conditions: [
       { path: 'from', operator: 'in', addresses: [payer.address] }, { path: 'value', operator: '<=', value: '1000000' },
     ] },
   ] }] }
   const projectPolicy = { id: projectPolicyId, scope: 'project' as const, rules: [
     { action: 'reject', operation: 'signEvmTypedData', criteria: [
-      { type: 'evmTypedDataVerifyingContract', addresses: [BASE_SEPOLIA_USDC_ADDRESS], operator: 'not in' },
+      { type: 'evmTypedDataVerifyingContract', addresses: [asset], operator: 'not in' },
     ] },
     { action: 'reject', operation: 'signEvmTypedData', criteria: [
       { type: 'evmTypedDataField', types: typedData, conditions: [{ path: 'value', operator: '>', value: '1000000' }] },
@@ -312,6 +334,80 @@ export async function prepareFundedSandboxBuyer(options: PrepareBuyerOptions & {
   vi.useFakeTimers()
   if (options.initialTime !== undefined) vi.setSystemTime(options.initialTime)
   const backend = convexTestWithWorkers()
+  if (environment === 'production') {
+    const discovered = await admitDiscoveredToolFixture(backend)
+    const paymentRequired = structuredClone(discovered.paymentRequired) as PaymentRequired
+    const capturedResource = new URL(paymentRequired.resource.url)
+    const input = Object.fromEntries(capturedResource.searchParams.entries())
+    if (Object.keys(input).length === 0) throw new Error('buyer_production_input_fixture_missing')
+    const resource = { paymentRequired }
+    providerFetch.mockImplementation(async () => new UndiciResponse('', {
+      status: 402,
+      headers: { 'Payment-Required': encodePaymentRequiredHeader(paymentRequired) },
+    }))
+    const buyer = options.buyerSetup === undefined
+      ? await seedPrincipal(
+          backend,
+          'funded-production-buyer',
+          Date.now(),
+          discovered.toolRef,
+          [CUSTOMER_REQUEST_SPENDING_POLICY_SCOPE, MARKET_TOOLS_CALL_SCOPE],
+          {
+            environment,
+            spendUnits: '5000000',
+            ...(options.maximumConcurrentCalls === undefined
+              ? {}
+              : { maximumConcurrentCalls: options.maximumConcurrentCalls }),
+          },
+        )
+      : await options.buyerSetup(backend)
+    const custody = cdpX402CustodyConfigurationFromEnvironment()
+    if (custody === undefined) throw new Error('buyer_custody_fixture_invalid')
+    expect(await backend.mutation(internal.moneyTreasury.recordObservation, {
+      environment,
+      custodyRef: cdpX402CustodyBudgetRef(custody, environment),
+      custodyGeneration: custody.credentialGeneration,
+      network,
+      asset: 'USDC',
+      exponent: 6,
+      observationRef: 'buyer-journey:production-treasury',
+      totalUnits: options.treasuryTotalUnits ?? '10000000',
+      bufferUnits: '10000',
+      evidenceRef: 'cdp:buyer-journey:production-treasury',
+      evidenceDigest: canonicalDigest({ treasury: 'buyer-journey-production' }),
+      observedAt: Date.now(),
+    })).toMatchObject({ kind: 'accepted' })
+    const principalUnits = options.accountPrincipalUnits ?? '10000000'
+    const funding = await bookFormanceFundingSettlement(formance, {
+      commandRef: 'buyer-journey:production-funding',
+      idempotencyKey: 'buyer-journey:production-funding',
+      accountRef: buyer.principal.ownerId,
+      processorRef: 'stripe:production:buyer-journey',
+      principalUnits,
+      serviceFeeUnits: '500000',
+      taxUnits: '50000',
+      totalUnits: (BigInt(principalUnits) + 550000n).toString(),
+      policyDigest,
+      externalEvidenceDigest: canonicalDigest({ funding: 'verified production fixture' }),
+    })
+    expect(funding, JSON.stringify(funding)).toMatchObject({ kind: 'completed', replayed: false })
+    const readBalance = async () => await readFormanceDisplayBalance(formance, {
+      balanceKind: 'account_aud', subjectRef: buyer.principal.ownerId, now: Date.now(),
+    })
+    expect(await readBalance()).toMatchObject({ kind: 'available', units: principalUnits })
+    return {
+      gatewayUrl,
+      formance,
+      backend,
+      published: { toolRef: discovered.toolRef },
+      buyer,
+      resource,
+      payer,
+      signedAuthorizations,
+      readBalance,
+      input,
+    }
+  }
   const provider = await publishedBusinessOwner(backend, 'buyer-journey-provider')
   const offeringRef = 'catalog-offering:buyer-journey'
   const sourceHash = canonicalDigest({ offeringRef, revision: 1 })
@@ -343,14 +439,14 @@ export async function prepareFundedSandboxBuyer(options: PrepareBuyerOptions & {
   const source = { ...baseSource, commercial: { ...baseSource.commercial, authority: {
     kind: 'provider_connection' as const, connectionRef: 'connection:owner:x402', providerRef: 'provider:x402:buyer-journey',
   } } }
-  const resource = source.resource as { paymentRequired: Parameters<typeof encodePaymentRequiredHeader>[0] }
+  const resource = source.resource as { paymentRequired: PaymentRequired }
   providerFetch.mockImplementation(async () => new UndiciResponse('', {
     status: 402, headers: { 'Payment-Required': encodePaymentRequiredHeader(resource.paymentRequired) },
   }))
   const sellerClaim = {
     businessId: String(provider.businessId), endpointUrl: endpoint, method: 'POST' as const,
     observationDigest: canonicalDigest({ kind: 'official-x402-v2-unpaid-inspection', endpoint,
-      network: BASE_SEPOLIA_NETWORK, payTo: '0xbA667287B8Ef89565F8fD7AcD4d22Ce98E0f39cd' }),
+      network, payTo: '0xbA667287B8Ef89565F8fD7AcD4d22Ce98E0f39cd' }),
     payTo: '0xbA667287B8Ef89565F8fD7AcD4d22Ce98E0f39cd', expiresAt: Date.now() + 300_000,
   }
   const connection = createX402ProviderConnection({
@@ -369,7 +465,7 @@ export async function prepareFundedSandboxBuyer(options: PrepareBuyerOptions & {
   if (accessPath === null) throw new Error('buyer_access_path_fixture_missing')
   const prepared = await prepareOwnerPublicationCommand(backend, provider.businessId, offeringRef, 1, sourceHash,
     source, 'buyer-journey:publish', { kind: 'catalog_offering', offeringRef, offeringRevision: 1, offeringSourceHash: sourceHash,
-      declaredAccessPathRef: accessPath.accessPathRef, accessPathSourceHash: accessPath.sourceHash }, 'sandbox')
+      declaredAccessPathRef: accessPath.accessPathRef, accessPathSourceHash: accessPath.sourceHash }, environment)
   if (prepared.kind !== 'prepared') throw new Error(`buyer_tool_prepare:${prepared.reason}`)
   const published = await provider.owner.mutation(
     api.capabilitySupply.stageOwnerX402Capability,
@@ -400,16 +496,20 @@ export async function prepareFundedSandboxBuyer(options: PrepareBuyerOptions & {
     validUntil: Date.now() + 3_600_000, operationKey: 'buyer-journey:ready', correlationId: 'buyer-journey',
     reasonCode: 'test_readiness', evidenceRefs: ['test:buyer-journey'],
   })).toMatchObject({ kind: 'observed' })
-  await promotePaidBuyerFixtureAfterSellerCanary({
-    backend,
-    owner: provider.owner,
-    businessId: provider.businessId,
-    offeringRef,
-    sourceHash,
-    publicationRef: published.publicationRef,
-    publicationRevision: published.publicationRevision,
-    toolRef: published.toolRef,
-  })
+  if (environment === 'sandbox') {
+    await promotePaidBuyerFixtureAfterSellerCanary({
+      backend,
+      owner: provider.owner,
+      businessId: provider.businessId,
+      offeringRef,
+      sourceHash,
+      publicationRef: published.publicationRef,
+      publicationRevision: published.publicationRevision,
+      toolRef: published.toolRef,
+    })
+  } else {
+    await admitPublication(backend, published, 'buyer-journey-production')
+  }
   const qualification = await backend.run(async (ctx) => {
     const row = await ctx.db.query('capabilityPublications').withIndex('by_publicationRef_and_revision', q => q
       .eq('publicationRef', published.publicationRef).eq('revision', published.publicationRevision)).unique()
@@ -422,25 +522,25 @@ export async function prepareFundedSandboxBuyer(options: PrepareBuyerOptions & {
   expect(qualification, JSON.stringify(qualification)).toMatchObject({ status: 'eligible', reasons: [] })
   const buyer = options.buyerSetup === undefined
     ? await seedPrincipal(backend, 'funded-buyer', Date.now(), published.toolRef, [CUSTOMER_REQUEST_SPENDING_POLICY_SCOPE, MARKET_TOOLS_CALL_SCOPE],
-      { environment: 'sandbox', spendUnits: '5000000', ...(options.maximumConcurrentCalls === undefined ? {} : { maximumConcurrentCalls: options.maximumConcurrentCalls }) })
+      { environment, spendUnits: '5000000', ...(options.maximumConcurrentCalls === undefined ? {} : { maximumConcurrentCalls: options.maximumConcurrentCalls }) })
     : await options.buyerSetup(backend)
   expect(buyer.principal.ownerId).not.toBe(provider.canonicalAccountRef)
   const custody = cdpX402CustodyConfigurationFromEnvironment()
   if (custody === undefined) throw new Error('buyer_custody_fixture_invalid')
   expect(await backend.mutation(internal.moneyTreasury.recordObservation, {
-    environment: 'sandbox', custodyRef: cdpX402CustodyBudgetRef(custody, 'sandbox'), custodyGeneration: custody.credentialGeneration,
-    network: BASE_SEPOLIA_NETWORK, asset: 'USDC', exponent: 6, observationRef: 'buyer-journey:treasury',
+    environment, custodyRef: cdpX402CustodyBudgetRef(custody, environment), custodyGeneration: custody.credentialGeneration,
+    network, asset: 'USDC', exponent: 6, observationRef: 'buyer-journey:treasury',
     totalUnits: options.treasuryTotalUnits ?? '10000000', bufferUnits: '10000', evidenceRef: 'cdp:buyer-journey:treasury',
     evidenceDigest: canonicalDigest({ treasury: 'buyer-journey' }), observedAt: Date.now(),
   })).toMatchObject({ kind: 'accepted' })
   const principalUnits = options.accountPrincipalUnits ?? '10000000'
   const funding = await bookFormanceFundingSettlement(formance, {
     commandRef: 'buyer-journey:funding', idempotencyKey: 'buyer-journey:funding', accountRef: buyer.principal.ownerId,
-    processorRef: 'stripe:sandbox:buyer-journey', principalUnits, serviceFeeUnits: '500000', taxUnits: '50000', totalUnits: (BigInt(principalUnits) + 550000n).toString(),
-    policyDigest, externalEvidenceDigest: canonicalDigest({ funding: 'verified sandbox fixture' }),
+    processorRef: `stripe:${environment}:buyer-journey`, principalUnits, serviceFeeUnits: '500000', taxUnits: '50000', totalUnits: (BigInt(principalUnits) + 550000n).toString(),
+    policyDigest, externalEvidenceDigest: canonicalDigest({ funding: `verified ${environment} fixture` }),
   })
   expect(funding, JSON.stringify(funding)).toMatchObject({ kind: 'completed', replayed: false })
   const readBalance = async () => await readFormanceDisplayBalance(formance, { balanceKind: 'account_aud', subjectRef: buyer.principal.ownerId, now: Date.now() })
   expect(await readBalance()).toMatchObject({ kind: 'available', units: principalUnits })
-  return { gatewayUrl, formance, backend, published, buyer, resource, payer, signedAuthorizations, readBalance }
+  return { gatewayUrl, formance, backend, published, buyer, resource, payer, signedAuthorizations, readBalance, input: INPUT }
 }

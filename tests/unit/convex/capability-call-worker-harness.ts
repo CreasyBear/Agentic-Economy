@@ -210,6 +210,8 @@ type WorkerOptions = Readonly<{
   reconcileNone?: boolean
   failPaymentObservation?: boolean
   failPaymentSignature?: boolean
+  paymentAttemptRead?: 'missing' | 'throw'
+  releaseBeforeSubmissionRefused?: boolean
   preparePaymentErrorState?: 'possibly_submitted'
   invalidOutputTransitionResult?: 'accepted' | 'refused' | 'throw'
   invalidOutputLossResult?: 'settled' | 'refused' | 'throw'
@@ -991,6 +993,7 @@ export function createWorker(kind: WorkerKind, options: WorkerOptions = {}): { c
           releaseStarted: false,
           requestDigest: digest('f'),
           failureCode: 'payment_signature_unavailable',
+          paymentAuthorizationStatus: 'not_created',
           paymentSubmissionStatus: 'not_submitted',
           settlementEvidence: { kind: 'not_submitted' },
         }
@@ -1169,6 +1172,8 @@ export function createWorker(kind: WorkerKind, options: WorkerOptions = {}): { c
         }
         case 'capabilityProviderConnections:validateLeaseAuthority': return { kind: 'valid' }
         case 'moneyX402PaymentAttempts:readX402PaymentAttempt':
+          if (options.paymentAttemptRead === 'throw') throw new Error('payment_attempt_read_unavailable')
+          if (options.paymentAttemptRead === 'missing') return null
           return state.payment.prepare === undefined
             ? null
             : {
@@ -1433,6 +1438,9 @@ export function createWorker(kind: WorkerKind, options: WorkerOptions = {}): { c
           return { kind: 'accepted', state: managedCallState, replayed: false }
         case 'moneyManagedCallLifecycle:releaseBeforeSubmission':
         case 'moneyManagedCallLifecycle:releaseBeforeSubmissionWithX402Proof':
+          if (options.releaseBeforeSubmissionRefused === true) {
+            return { kind: 'refused', code: 'managed_call_state_conflict' }
+          }
           if (managedCallState !== 'reserved' && managedCallState !== 'released') {
             return { kind: 'refused', code: 'managed_call_state_conflict' }
           }
