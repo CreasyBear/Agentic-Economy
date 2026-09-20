@@ -1,0 +1,3146 @@
+[
+  {
+    "visibility": "internal",
+    "module": "actionExecutionControl",
+    "method": "readAttempt",
+    "kind": "query"
+  },
+  {
+    "visibility": "internal",
+    "module": "actionExecutionControl",
+    "method": "readAttempts",
+    "kind": "query"
+  },
+  {
+    "visibility": "internal",
+    "module": "actionExecutionControl",
+    "method": "readControl",
+    "kind": "query"
+  },
+  {
+    "visibility": "public",
+    "module": "actionExecutionControl",
+    "method": "readControlSource",
+    "kind": "query"
+  },
+  {
+    "visibility": "internal",
+    "module": "actionExecutionControl",
+    "method": "readHistory",
+    "kind": "query"
+  },
+  {
+    "visibility": "internal",
+    "module": "actionExecutionControl",
+    "method": "readHistoryCommand",
+    "kind": "query"
+  },
+  {
+    "visibility": "internal",
+    "module": "actionExecutionControl",
+    "method": "recordLateObservation",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "public",
+    "module": "actionExecutionControl",
+    "method": "recordLateObservationSource",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "actionExecutionControl",
+    "method": "transact",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "public",
+    "module": "agentAccessOAuth",
+    "method": "claimRefreshFamily",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "agentAccessOAuth",
+    "method": "cleanupExpiredOAuthGrants",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "public",
+    "module": "agentAccessOAuth",
+    "method": "commitRefreshFamilyRotation",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "public",
+    "module": "agentAccessOAuth",
+    "method": "createRefreshFamily",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "public",
+    "module": "agentAccessOAuth",
+    "method": "getClient",
+    "kind": "query"
+  },
+  {
+    "visibility": "public",
+    "module": "agentAccessOAuth",
+    "method": "getGrantByHash",
+    "kind": "query"
+  },
+  {
+    "visibility": "public",
+    "module": "agentAccessOAuth",
+    "method": "getGrantByRef",
+    "kind": "query"
+  },
+  {
+    "visibility": "public",
+    "module": "agentAccessOAuth",
+    "method": "insertClient",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "public",
+    "module": "agentAccessOAuth",
+    "method": "insertGrant",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "public",
+    "module": "agentAccessOAuth",
+    "method": "listOwnerConnectionHistory",
+    "kind": "query"
+  },
+  {
+    "visibility": "public",
+    "module": "agentAccessOAuth",
+    "method": "listOwnerConnectionReadbacks",
+    "kind": "query"
+  },
+  {
+    "visibility": "public",
+    "module": "agentAccessOAuth",
+    "method": "listOwnerReconnectCandidates",
+    "kind": "query"
+  },
+  {
+    "visibility": "public",
+    "module": "agentAccessOAuth",
+    "method": "reserveAgentAccessConsent",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "public",
+    "module": "agentAccessOAuth",
+    "method": "revokeOwnerConnection",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "public",
+    "module": "agentAccessOAuth",
+    "method": "revokeRefreshFamily",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "public",
+    "module": "agentAccessOAuth",
+    "method": "revokeRefreshFamilyByAccessToken",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "public",
+    "module": "agentAccessOAuth",
+    "method": "updateGrant",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "public",
+    "module": "agentAccessPolicy",
+    "method": "listOwnerGrantReadbacks",
+    "kind": "query"
+  },
+  {
+    "visibility": "internal",
+    "module": "agentAccessPolicy",
+    "method": "readActiveGrant",
+    "kind": "query"
+  },
+  {
+    "visibility": "internal",
+    "module": "agentAccessPolicy",
+    "method": "readGrant",
+    "kind": "query"
+  },
+  {
+    "visibility": "public",
+    "module": "agentAccessPolicy",
+    "method": "registerGrantForServer",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "agentAccessPolicy",
+    "method": "revokeGrant",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "agentAccessPolicy",
+    "method": "upsertGrant",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "public",
+    "module": "agentAccessPrincipals",
+    "method": "cancelCredentialReplacementForServer",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "public",
+    "module": "agentAccessPrincipals",
+    "method": "disconnectAgentForServer",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "agentAccessPrincipals",
+    "method": "getAgentPrincipal",
+    "kind": "query"
+  },
+  {
+    "visibility": "public",
+    "module": "agentAccessPrincipals",
+    "method": "prepareCredentialReplacementForServer",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "public",
+    "module": "agentAccessPrincipals",
+    "method": "promoteCredentialReplacementForServer",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "agentAccessPrincipals",
+    "method": "recordAgentPrincipal",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "public",
+    "module": "agentAccessPrincipals",
+    "method": "recordProviderRevocationForServer",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "public",
+    "module": "agentAccessPrincipals",
+    "method": "registerAgentPrincipal",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "public",
+    "module": "agentAccessPrincipals",
+    "method": "registerIssuedAgentBindingForServer",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "public",
+    "module": "agentAccessPrincipals",
+    "method": "renameAgentForServer",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "public",
+    "module": "agentAccessPrincipals",
+    "method": "revokeCredentialForServer",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "public",
+    "module": "agentDirectory",
+    "method": "listOwned",
+    "kind": "query"
+  },
+  {
+    "visibility": "public",
+    "module": "agentDirectory",
+    "method": "listOwnedPage",
+    "kind": "query"
+  },
+  {
+    "visibility": "public",
+    "module": "agentMoneyReads",
+    "method": "activity",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "public",
+    "module": "agentMoneyReads",
+    "method": "balance",
+    "kind": "action"
+  },
+  {
+    "visibility": "internal",
+    "module": "agentMoneyReads",
+    "method": "prepareBalance",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "agentSpendingPeriods",
+    "method": "acknowledge",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "public",
+    "module": "agentSpendingPolicy",
+    "method": "readCurrent",
+    "kind": "query"
+  },
+  {
+    "visibility": "public",
+    "module": "agentSpendingPolicy",
+    "method": "updateForServer",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "public",
+    "module": "authorityBoundary",
+    "method": "resolveAgentBinding",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "public",
+    "module": "businesses",
+    "method": "setBusinessSuppression",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "capabilityCallLiveX402",
+    "method": "inspect",
+    "kind": "action"
+  },
+  {
+    "visibility": "public",
+    "module": "capabilityCallProjection",
+    "method": "listAgentSupplyCalls",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "public",
+    "module": "capabilityCallProjections",
+    "method": "listOwnerCalls",
+    "kind": "query"
+  },
+  {
+    "visibility": "internal",
+    "module": "capabilityCallProjections",
+    "method": "prepareOwnerSpendRead",
+    "kind": "query"
+  },
+  {
+    "visibility": "public",
+    "module": "capabilityCallProjections",
+    "method": "readOwnerAgentReadback",
+    "kind": "query"
+  },
+  {
+    "visibility": "public",
+    "module": "capabilityCallProjections",
+    "method": "readOwnerUsage",
+    "kind": "query"
+  },
+  {
+    "visibility": "internal",
+    "module": "capabilityCallProjections",
+    "method": "rebuild",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "capabilityCalls",
+    "method": "abandon",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "capabilityCalls",
+    "method": "admit",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "public",
+    "module": "capabilityCalls",
+    "method": "call",
+    "kind": "action"
+  },
+  {
+    "visibility": "internal",
+    "module": "capabilityCalls",
+    "method": "cancelBeforeClaim",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "public",
+    "module": "capabilityCalls",
+    "method": "cancelCall",
+    "kind": "action"
+  },
+  {
+    "visibility": "public",
+    "module": "capabilityCalls",
+    "method": "cancelOwnerCall",
+    "kind": "action"
+  },
+  {
+    "visibility": "internal",
+    "module": "capabilityCalls",
+    "method": "claimAutomaticReconciliationCandidate",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "capabilityCalls",
+    "method": "claimDispatch",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "capabilityCalls",
+    "method": "completeWork",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "public",
+    "module": "capabilityCalls",
+    "method": "decideCallApproval",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "capabilityCalls",
+    "method": "dispatch",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "capabilityCalls",
+    "method": "finalizeDispatch",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "capabilityCalls",
+    "method": "finishAutomaticReconciliation",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "capabilityCalls",
+    "method": "listAgentCallSummaries",
+    "kind": "query"
+  },
+  {
+    "visibility": "public",
+    "module": "capabilityCalls",
+    "method": "listCalls",
+    "kind": "action"
+  },
+  {
+    "visibility": "internal",
+    "module": "capabilityCalls",
+    "method": "listDueAutomaticReconciliationCandidates",
+    "kind": "query"
+  },
+  {
+    "visibility": "public",
+    "module": "capabilityCalls",
+    "method": "listPendingCallApprovals",
+    "kind": "query"
+  },
+  {
+    "visibility": "internal",
+    "module": "capabilityCalls",
+    "method": "openDispatch",
+    "kind": "query"
+  },
+  {
+    "visibility": "internal",
+    "module": "capabilityCalls",
+    "method": "projectRecovery",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "capabilityCalls",
+    "method": "readAcceptedCallGrantAfterLimitUpdate",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "public",
+    "module": "capabilityCalls",
+    "method": "readCallStatus",
+    "kind": "action"
+  },
+  {
+    "visibility": "internal",
+    "module": "capabilityCalls",
+    "method": "readCurrentProviderConnectionAuthority",
+    "kind": "query"
+  },
+  {
+    "visibility": "public",
+    "module": "capabilityCalls",
+    "method": "readOwnerCallStatus",
+    "kind": "action"
+  },
+  {
+    "visibility": "internal",
+    "module": "capabilityCalls",
+    "method": "readOwnerReceiptContext",
+    "kind": "query"
+  },
+  {
+    "visibility": "internal",
+    "module": "capabilityCalls",
+    "method": "readOwnerRecovery",
+    "kind": "query"
+  },
+  {
+    "visibility": "internal",
+    "module": "capabilityCalls",
+    "method": "readPreClaimRefund",
+    "kind": "query"
+  },
+  {
+    "visibility": "internal",
+    "module": "capabilityCalls",
+    "method": "readProviderLeaseAuthority",
+    "kind": "query"
+  },
+  {
+    "visibility": "internal",
+    "module": "capabilityCalls",
+    "method": "readPurchaseResolution",
+    "kind": "query"
+  },
+  {
+    "visibility": "internal",
+    "module": "capabilityCalls",
+    "method": "readRecovery",
+    "kind": "query"
+  },
+  {
+    "visibility": "internal",
+    "module": "capabilityCalls",
+    "method": "readReplay",
+    "kind": "query"
+  },
+  {
+    "visibility": "public",
+    "module": "capabilityCalls",
+    "method": "reconcileCall",
+    "kind": "action"
+  },
+  {
+    "visibility": "internal",
+    "module": "capabilityCalls",
+    "method": "reconcileCallWorkloadAuthority",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "public",
+    "module": "capabilityCalls",
+    "method": "reconcileOwnerCall",
+    "kind": "action"
+  },
+  {
+    "visibility": "internal",
+    "module": "capabilityCalls",
+    "method": "record",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "capabilityCalls",
+    "method": "refuseUnclaimed",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "capabilityCalls",
+    "method": "reserve",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "capabilityCalls",
+    "method": "resolveCallAgentAuthority",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "capabilityCallWorker",
+    "method": "adjudicateStealthFailureAndReleaseHoldAction",
+    "kind": "action"
+  },
+  {
+    "visibility": "internal",
+    "module": "capabilityCallWorker",
+    "method": "reconcilePreClaimRefund",
+    "kind": "action"
+  },
+  {
+    "visibility": "internal",
+    "module": "capabilityCallWorker",
+    "method": "reconcileScheduled",
+    "kind": "action"
+  },
+  {
+    "visibility": "internal",
+    "module": "capabilityCallWorker",
+    "method": "recover",
+    "kind": "action"
+  },
+  {
+    "visibility": "internal",
+    "module": "capabilityCallWorker",
+    "method": "run",
+    "kind": "action"
+  },
+  {
+    "visibility": "internal",
+    "module": "capabilityCallX402AuthorizationExpiry",
+    "method": "queueExpiredX402Authorization",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "capabilityContractDocuments",
+    "method": "getActiveExactInternal",
+    "kind": "query"
+  },
+  {
+    "visibility": "public",
+    "module": "capabilityContractDocuments",
+    "method": "register",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "capabilityProviderApprovals",
+    "method": "issue",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "capabilityProviderApprovals",
+    "method": "project",
+    "kind": "query"
+  },
+  {
+    "visibility": "internal",
+    "module": "capabilityProviderApprovals",
+    "method": "read",
+    "kind": "query"
+  },
+  {
+    "visibility": "internal",
+    "module": "capabilityProviderApprovals",
+    "method": "readAtGeneration",
+    "kind": "query"
+  },
+  {
+    "visibility": "public",
+    "module": "capabilityProviderConnectionAgents",
+    "method": "connectX402",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "public",
+    "module": "capabilityProviderConnectionAgents",
+    "method": "list",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "public",
+    "module": "capabilityProviderConnectionAgents",
+    "method": "read",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "public",
+    "module": "capabilityProviderConnectionAgents",
+    "method": "reconnect",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "public",
+    "module": "capabilityProviderConnectionAgents",
+    "method": "retryCleanup",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "public",
+    "module": "capabilityProviderConnectionAgents",
+    "method": "revoke",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "public",
+    "module": "capabilityProviderConnectionAttempts",
+    "method": "bindOAuthOwner",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "public",
+    "module": "capabilityProviderConnectionAttempts",
+    "method": "cancelOwner",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "public",
+    "module": "capabilityProviderConnectionAttempts",
+    "method": "finalizeOwner",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "public",
+    "module": "capabilityProviderConnectionAttempts",
+    "method": "prepareOAuthOwner",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "public",
+    "module": "capabilityProviderConnectionAttempts",
+    "method": "prepareOwner",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "public",
+    "module": "capabilityProviderConnectionAttempts",
+    "method": "readOAuthCallbackOwner",
+    "kind": "query"
+  },
+  {
+    "visibility": "public",
+    "module": "capabilityProviderConnectionAttempts",
+    "method": "readOwner",
+    "kind": "query"
+  },
+  {
+    "visibility": "public",
+    "module": "capabilityProviderConnectionAttempts",
+    "method": "readOwnerSourceDraft",
+    "kind": "query"
+  },
+  {
+    "visibility": "public",
+    "module": "capabilityProviderConnectionAttempts",
+    "method": "reserveAgent",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "public",
+    "module": "capabilityProviderConnectionAttempts",
+    "method": "reserveOwner",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "capabilityProviderConnectionCleanup",
+    "method": "completeWork",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "capabilityProviderConnectionCleanup",
+    "method": "run",
+    "kind": "action"
+  },
+  {
+    "visibility": "internal",
+    "module": "capabilityProviderConnectionCleanupAction",
+    "method": "perform",
+    "kind": "action"
+  },
+  {
+    "visibility": "internal",
+    "module": "capabilityProviderConnectionMigration",
+    "method": "backfillFacilitatorDiscoveryAuthority",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "capabilityProviderConnections",
+    "method": "advanceLeaseDrain",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "capabilityProviderConnections",
+    "method": "beginLeaseEffect",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "capabilityProviderConnections",
+    "method": "beginRevocation",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "public",
+    "module": "capabilityProviderConnections",
+    "method": "checkX402Owner",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "public",
+    "module": "capabilityProviderConnections",
+    "method": "connectX402Owner",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "capabilityProviderConnections",
+    "method": "consumeLease",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "capabilityProviderConnections",
+    "method": "create",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "capabilityProviderConnections",
+    "method": "expireLease",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "capabilityProviderConnections",
+    "method": "invalidateLease",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "capabilityProviderConnections",
+    "method": "issueLease",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "capabilityProviderConnections",
+    "method": "listByBusinessLifecycle",
+    "kind": "query"
+  },
+  {
+    "visibility": "internal",
+    "module": "capabilityProviderConnections",
+    "method": "listByProviderLifecycle",
+    "kind": "query"
+  },
+  {
+    "visibility": "public",
+    "module": "capabilityProviderConnections",
+    "method": "listOwner",
+    "kind": "query"
+  },
+  {
+    "visibility": "public",
+    "module": "capabilityProviderConnections",
+    "method": "prepareOwnerHttpRuntimeForServer",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "public",
+    "module": "capabilityProviderConnections",
+    "method": "prepareOwnerMcpRuntimeForServer",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "capabilityProviderConnections",
+    "method": "read",
+    "kind": "query"
+  },
+  {
+    "visibility": "internal",
+    "module": "capabilityProviderConnections",
+    "method": "readAtGeneration",
+    "kind": "query"
+  },
+  {
+    "visibility": "internal",
+    "module": "capabilityProviderConnections",
+    "method": "readCleanupTarget",
+    "kind": "query"
+  },
+  {
+    "visibility": "internal",
+    "module": "capabilityProviderConnections",
+    "method": "readLease",
+    "kind": "query"
+  },
+  {
+    "visibility": "internal",
+    "module": "capabilityProviderConnections",
+    "method": "readLeaseByInvocation",
+    "kind": "query"
+  },
+  {
+    "visibility": "public",
+    "module": "capabilityProviderConnections",
+    "method": "readOwner",
+    "kind": "query"
+  },
+  {
+    "visibility": "internal",
+    "module": "capabilityProviderConnections",
+    "method": "reauthorize",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "public",
+    "module": "capabilityProviderConnections",
+    "method": "reconnectOwner",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "capabilityProviderConnections",
+    "method": "recordCleanupResult",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "capabilityProviderConnections",
+    "method": "resolveCredentialRef",
+    "kind": "query"
+  },
+  {
+    "visibility": "internal",
+    "module": "capabilityProviderConnections",
+    "method": "resolveLeaseCredentialRef",
+    "kind": "query"
+  },
+  {
+    "visibility": "public",
+    "module": "capabilityProviderConnections",
+    "method": "retryOwnerCleanup",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "public",
+    "module": "capabilityProviderConnections",
+    "method": "revokeOwner",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "public",
+    "module": "capabilityProviderConnections",
+    "method": "rotateOwner",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "capabilityProviderConnections",
+    "method": "validateAuthority",
+    "kind": "query"
+  },
+  {
+    "visibility": "internal",
+    "module": "capabilityProviderConnections",
+    "method": "validateLeaseAuthority",
+    "kind": "query"
+  },
+  {
+    "visibility": "internal",
+    "module": "capabilityProviderConsequenceJournal",
+    "method": "abortProviderConsequence",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "capabilityProviderConsequenceJournal",
+    "method": "attestProviderConsequenceTicket",
+    "kind": "query"
+  },
+  {
+    "visibility": "internal",
+    "module": "capabilityProviderConsequenceJournal",
+    "method": "authorizeProviderConsequenceX402Rpc",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "capabilityProviderConsequenceJournal",
+    "method": "claimProviderConsequence",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "capabilityProviderConsequenceJournal",
+    "method": "completeProviderConsequence",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "capabilityProviderConsequenceJournal",
+    "method": "issueProviderConsequenceTicket",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "public",
+    "module": "capabilityProviderOffboarding",
+    "method": "cancelCase",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "capabilityProviderOffboarding",
+    "method": "completeCallDrain",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "capabilityProviderOffboarding",
+    "method": "completeConnectionRevocation",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "capabilityProviderOffboarding",
+    "method": "completeFreeze",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "capabilityProviderOffboarding",
+    "method": "drainCallsPage",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "capabilityProviderOffboarding",
+    "method": "freezeRouteability",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "public",
+    "module": "capabilityProviderOffboarding",
+    "method": "readAgentStatus",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "public",
+    "module": "capabilityProviderOffboarding",
+    "method": "readStatus",
+    "kind": "query"
+  },
+  {
+    "visibility": "public",
+    "module": "capabilityProviderOffboarding",
+    "method": "resumeCase",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "capabilityProviderOffboarding",
+    "method": "retireOfferingTargetsPage",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "capabilityProviderOffboarding",
+    "method": "revokeConnectionsPage",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "capabilityProviderOffboarding",
+    "method": "settleObligations",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "capabilityProviderOffboarding",
+    "method": "snapshotConnectionTargetsPage",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "capabilityProviderOffboarding",
+    "method": "snapshotOfferingTargetsPage",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "public",
+    "module": "capabilityProviderOffboarding",
+    "method": "startCase",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "capabilityProviderOffboarding",
+    "method": "verifyCallsPage",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "capabilityProviderOffboarding",
+    "method": "verifyCompletion",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "capabilityProviderOffboarding",
+    "method": "withdrawCatalogDocumentsPage",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "capabilityProviderOffboarding",
+    "method": "withdrawToolTargetsPage",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "capabilityProviderTools",
+    "method": "backfillAdmissionPage",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "capabilityProviderTools",
+    "method": "backfillDraftPage",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "public",
+    "module": "capabilityProviderTools",
+    "method": "listAgent",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "public",
+    "module": "capabilityProviderTools",
+    "method": "listOwner",
+    "kind": "query"
+  },
+  {
+    "visibility": "public",
+    "module": "capabilityProviderTools",
+    "method": "readAgent",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "public",
+    "module": "capabilityProviderTools",
+    "method": "readOwner",
+    "kind": "query"
+  },
+  {
+    "visibility": "public",
+    "module": "capabilityProviderTools",
+    "method": "resolveOwnerToolSlug",
+    "kind": "query"
+  },
+  {
+    "visibility": "internal",
+    "module": "capabilityQuotes",
+    "method": "admitCall",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "capabilityQuotes",
+    "method": "issueQuote",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "capabilityQuotes",
+    "method": "prepareFinancialSubjects",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "capabilityQuotes",
+    "method": "prepareSpendingPeriods",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "public",
+    "module": "capabilityQuotes",
+    "method": "quote",
+    "kind": "action"
+  },
+  {
+    "visibility": "internal",
+    "module": "capabilityQuotes",
+    "method": "readForCall",
+    "kind": "query"
+  },
+  {
+    "visibility": "internal",
+    "module": "capabilitySupply",
+    "method": "authorizeOwnerSupplyAction",
+    "kind": "query"
+  },
+  {
+    "visibility": "public",
+    "module": "capabilitySupply",
+    "method": "inspectBindingControlState",
+    "kind": "query"
+  },
+  {
+    "visibility": "internal",
+    "module": "capabilitySupply",
+    "method": "listIntegrated",
+    "kind": "query"
+  },
+  {
+    "visibility": "internal",
+    "module": "capabilitySupply",
+    "method": "listMappings",
+    "kind": "query"
+  },
+  {
+    "visibility": "internal",
+    "module": "capabilitySupply",
+    "method": "listRouteable",
+    "kind": "query"
+  },
+  {
+    "visibility": "internal",
+    "module": "capabilitySupply",
+    "method": "observeCapabilityReadiness",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "public",
+    "module": "capabilitySupply",
+    "method": "publishPreparedCapability",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "public",
+    "module": "capabilitySupply",
+    "method": "queryCapabilityGraph",
+    "kind": "query"
+  },
+  {
+    "visibility": "internal",
+    "module": "capabilitySupply",
+    "method": "readCapabilityProbeTarget",
+    "kind": "query"
+  },
+  {
+    "visibility": "public",
+    "module": "capabilitySupply",
+    "method": "readCapabilityPublication",
+    "kind": "query"
+  },
+  {
+    "visibility": "internal",
+    "module": "capabilitySupply",
+    "method": "readOwnerStagedCapabilityProbeTarget",
+    "kind": "query"
+  },
+  {
+    "visibility": "internal",
+    "module": "capabilitySupply",
+    "method": "recordCapabilityCallEvent",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "capabilitySupply",
+    "method": "recordCapabilityProbeResult",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "capabilitySupply",
+    "method": "recordOwnerStagedCapabilityProbeResult",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "capabilitySupply",
+    "method": "scheduleDueCapabilityProbes",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "public",
+    "module": "capabilitySupply",
+    "method": "stageOwnerX402Capability",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "public",
+    "module": "capabilitySupply",
+    "method": "verifyCapabilitySourceAuthority",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "capabilitySupplyCanaryFunding",
+    "method": "provisionSellerOnboardingCanaryFunding",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "capabilitySupplyCanaryFunding",
+    "method": "readExactSellerOnboardingCanaryPlatformGrant",
+    "kind": "query"
+  },
+  {
+    "visibility": "internal",
+    "module": "capabilitySupplyCanaryFunding",
+    "method": "readSellerOnboardingCanaryFundingReadiness",
+    "kind": "query"
+  },
+  {
+    "visibility": "internal",
+    "module": "capabilitySupplyCanaryFundingPreflight",
+    "method": "readSellerOnboardingCanaryCdpReadiness",
+    "kind": "action"
+  },
+  {
+    "visibility": "internal",
+    "module": "capabilitySupplyCurrentTool",
+    "method": "readExactSellerCanaryOperationSnapshot",
+    "kind": "query"
+  },
+  {
+    "visibility": "internal",
+    "module": "capabilitySupplyCurrentTool",
+    "method": "readManagedX402InspectionSnapshot",
+    "kind": "query"
+  },
+  {
+    "visibility": "internal",
+    "module": "capabilitySupplyCurrentTool",
+    "method": "recordManagedX402Inspection",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "capabilitySupplyOwnerCanary",
+    "method": "readSellerOnboardingCanaryEvidence",
+    "kind": "query"
+  },
+  {
+    "visibility": "internal",
+    "module": "capabilitySupplyOwnerCanary",
+    "method": "requestSellerOnboardingCanary",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "capabilitySupplyOwnerCanary",
+    "method": "requestSellerOnboardingCanaryForAdmittedPublication",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "public",
+    "module": "capabilitySupplyOwnerFunnel",
+    "method": "readAgentOwnerSupplyFunnel",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "public",
+    "module": "capabilitySupplyOwnerFunnel",
+    "method": "readOwnerSupplyFunnel",
+    "kind": "query"
+  },
+  {
+    "visibility": "public",
+    "module": "capabilitySupplyOwnerFunnel",
+    "method": "readOwnerSupplyIntegrationDraft",
+    "kind": "query"
+  },
+  {
+    "visibility": "public",
+    "module": "capabilitySupplyOwnerFunnel",
+    "method": "refreshOwnerCapability",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "public",
+    "module": "capabilitySupplyOwnerFunnel",
+    "method": "republishOwnerCapability",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "public",
+    "module": "capabilitySupplyOwnerFunnel",
+    "method": "reserveOwnerCapabilityPublication",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "public",
+    "module": "capabilitySupplyOwnerFunnel",
+    "method": "saveAgentSupplyIntegrationDraft",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "public",
+    "module": "capabilitySupplyOwnerFunnel",
+    "method": "saveOwnerSupplyIntegrationDraft",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "public",
+    "module": "capabilitySupplyOwnerFunnel",
+    "method": "withdrawOwnerCapability",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "public",
+    "module": "capabilitySupplyOwnerSupply",
+    "method": "runOwnerSupplyReadiness",
+    "kind": "action"
+  },
+  {
+    "visibility": "public",
+    "module": "capabilitySupplyOwnerSupply",
+    "method": "runOwnerSupplyTest",
+    "kind": "action"
+  },
+  {
+    "visibility": "public",
+    "module": "capabilitySupplyProjection",
+    "method": "latestReconcileBusinessSupplyProjectionsCompletion",
+    "kind": "query"
+  },
+  {
+    "visibility": "internal",
+    "module": "capabilitySupplyProjection",
+    "method": "rebuildAllBusinessSupplyProjections",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "capabilitySupplyReadiness",
+    "method": "probe",
+    "kind": "action"
+  },
+  {
+    "visibility": "internal",
+    "module": "capabilitySupplyReadiness",
+    "method": "probeFromCron",
+    "kind": "action"
+  },
+  {
+    "visibility": "internal",
+    "module": "capabilitySupplyReadiness",
+    "method": "probeOwnerStaged",
+    "kind": "action"
+  },
+  {
+    "visibility": "public",
+    "module": "capabilitySupplyTools",
+    "method": "compare",
+    "kind": "query"
+  },
+  {
+    "visibility": "public",
+    "module": "capabilitySupplyTools",
+    "method": "detail",
+    "kind": "query"
+  },
+  {
+    "visibility": "public",
+    "module": "capabilitySupplyTools",
+    "method": "offeringToolMap",
+    "kind": "query"
+  },
+  {
+    "visibility": "internal",
+    "module": "capabilitySupplyTools",
+    "method": "readCurrentPublishedToolSnapshot",
+    "kind": "query"
+  },
+  {
+    "visibility": "internal",
+    "module": "capabilitySupplyTools",
+    "method": "readExactSellerCanaryOperationSnapshot",
+    "kind": "query"
+  },
+  {
+    "visibility": "public",
+    "module": "capabilitySupplyTools",
+    "method": "search",
+    "kind": "query"
+  },
+  {
+    "visibility": "public",
+    "module": "capabilityToolCatalog",
+    "method": "compare",
+    "kind": "action"
+  },
+  {
+    "visibility": "public",
+    "module": "capabilityToolCatalog",
+    "method": "detail",
+    "kind": "action"
+  },
+  {
+    "visibility": "internal",
+    "module": "capabilityToolCatalog",
+    "method": "rerank",
+    "kind": "action"
+  },
+  {
+    "visibility": "public",
+    "module": "capabilityToolCatalog",
+    "method": "search",
+    "kind": "action"
+  },
+  {
+    "visibility": "internal",
+    "module": "capabilityToolCatalogData",
+    "method": "filterNetwork",
+    "kind": "query"
+  },
+  {
+    "visibility": "internal",
+    "module": "capabilityToolCatalogData",
+    "method": "priceSources",
+    "kind": "query"
+  },
+  {
+    "visibility": "public",
+    "module": "catalog",
+    "method": "authorizeProviderBusiness",
+    "kind": "query"
+  },
+  {
+    "visibility": "public",
+    "module": "catalog",
+    "method": "ensureProviderBusiness",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "public",
+    "module": "catalog",
+    "method": "getCurrentOwnerProviderIdentity",
+    "kind": "query"
+  },
+  {
+    "visibility": "public",
+    "module": "catalog",
+    "method": "getCurrentOwnerPublicCatalog",
+    "kind": "query"
+  },
+  {
+    "visibility": "public",
+    "module": "catalog",
+    "method": "getPublicBusinessCatalogBySlug",
+    "kind": "query"
+  },
+  {
+    "visibility": "public",
+    "module": "catalog",
+    "method": "renameProviderBusiness",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "catalogOfferingMutations",
+    "method": "promoteAdmittedSellerCanary",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "public",
+    "module": "chatAdmission",
+    "method": "admitAnonymousEdge",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "chatGenerate",
+    "method": "generate",
+    "kind": "action"
+  },
+  {
+    "visibility": "internal",
+    "module": "chatMessages",
+    "method": "authorizeScheduledGeneration",
+    "kind": "query"
+  },
+  {
+    "visibility": "internal",
+    "module": "chatMessages",
+    "method": "clearActiveGeneration",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "public",
+    "module": "chatMessages",
+    "method": "listMessages",
+    "kind": "query"
+  },
+  {
+    "visibility": "public",
+    "module": "chatMessages",
+    "method": "sendMessage",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "public",
+    "module": "chatShares",
+    "method": "getShareState",
+    "kind": "query"
+  },
+  {
+    "visibility": "public",
+    "module": "chatShares",
+    "method": "issueShare",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "public",
+    "module": "chatShares",
+    "method": "listSharedMessages",
+    "kind": "query"
+  },
+  {
+    "visibility": "public",
+    "module": "chatShares",
+    "method": "revokeShare",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "public",
+    "module": "chatThreads",
+    "method": "createThread",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "public",
+    "module": "chatThreads",
+    "method": "deleteThread",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "public",
+    "module": "chatThreads",
+    "method": "getThread",
+    "kind": "query"
+  },
+  {
+    "visibility": "public",
+    "module": "chatThreads",
+    "method": "listThreads",
+    "kind": "query"
+  },
+  {
+    "visibility": "public",
+    "module": "chatThreads",
+    "method": "renameThread",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "public",
+    "module": "chatThreads",
+    "method": "searchThreads",
+    "kind": "query"
+  },
+  {
+    "visibility": "internal",
+    "module": "devSeed",
+    "method": "provisionDevSeedCatalogIdentity",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "devSeed",
+    "method": "publishSandboxTool",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "devSeed",
+    "method": "seedDevCatalog",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "devSeed",
+    "method": "seedOfferingSupply",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "devSeed",
+    "method": "seedSandboxSpendingPolicy",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "public",
+    "module": "discovery",
+    "method": "readDiscoveryBusinessSlugPage",
+    "kind": "query"
+  },
+  {
+    "visibility": "public",
+    "module": "discovery",
+    "method": "readLlmsTxt",
+    "kind": "query"
+  },
+  {
+    "visibility": "internal",
+    "module": "facilitatorDiscovery",
+    "method": "reconcile",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "facilitatorDiscoveryAction",
+    "method": "run",
+    "kind": "action"
+  },
+  {
+    "visibility": "public",
+    "module": "interactiveAuthority",
+    "method": "materializeCurrentInteractiveAuthority",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "interactiveAuthority",
+    "method": "readCurrentInteractiveAuthorityFacts",
+    "kind": "query"
+  },
+  {
+    "visibility": "internal",
+    "module": "interactiveAuthority",
+    "method": "reconcileScheduledInteractiveAuthority",
+    "kind": "query"
+  },
+  {
+    "visibility": "internal",
+    "module": "interactiveAuthority",
+    "method": "resolveCurrentInteractiveAuthority",
+    "kind": "action"
+  },
+  {
+    "visibility": "internal",
+    "module": "interactiveCredentialLifecycle",
+    "method": "armInteractiveCredentialExpiry",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "interactiveCredentialLifecycle",
+    "method": "expireInteractiveCredential",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "interactiveCredentialLifecycle",
+    "method": "reconcileInteractiveCredentialExpiry",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "public",
+    "module": "interactiveOnboarding",
+    "method": "complete",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "public",
+    "module": "interactiveOnboarding",
+    "method": "readState",
+    "kind": "query"
+  },
+  {
+    "visibility": "public",
+    "module": "interactiveSession",
+    "method": "listUserWorkspaces",
+    "kind": "query"
+  },
+  {
+    "visibility": "public",
+    "module": "interactiveSession",
+    "method": "setActiveWorkspace",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "public",
+    "module": "marketDemandSignals",
+    "method": "list",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "public",
+    "module": "marketDemandSignals",
+    "method": "read",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "public",
+    "module": "marketDemandSignals",
+    "method": "record",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "marketListingEvidence",
+    "method": "assignCategory",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "public",
+    "module": "marketListingEvidence",
+    "method": "rate",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "public",
+    "module": "marketListingEvidence",
+    "method": "read",
+    "kind": "query"
+  },
+  {
+    "visibility": "public",
+    "module": "marketMetrics",
+    "method": "read",
+    "kind": "query"
+  },
+  {
+    "visibility": "internal",
+    "module": "marketPresence",
+    "method": "refresh",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "public",
+    "module": "moneyAccountFunding",
+    "method": "bind",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "public",
+    "module": "moneyAccountFunding",
+    "method": "bindAgentHandoff",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "moneyAccountFunding",
+    "method": "finalizeVerifiedEvent",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "moneyAccountFunding",
+    "method": "finalizeVerifiedEventFromInbox",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "moneyAccountFunding",
+    "method": "finalizeVerifiedRefund",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "moneyAccountFunding",
+    "method": "finalizeVerifiedRefundFromInbox",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "public",
+    "module": "moneyAccountFunding",
+    "method": "listOwnerInvoiceHistory",
+    "kind": "query"
+  },
+  {
+    "visibility": "internal",
+    "module": "moneyAccountFunding",
+    "method": "markFundingBookingUnknown",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "moneyAccountFunding",
+    "method": "markFundingReversalUnknown",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "public",
+    "module": "moneyAccountFunding",
+    "method": "markOutcomeUnknown",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "moneyAccountFunding",
+    "method": "prepareVerifiedEvent",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "moneyAccountFunding",
+    "method": "prepareVerifiedEventFromInbox",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "public",
+    "module": "moneyAccountFunding",
+    "method": "read",
+    "kind": "query"
+  },
+  {
+    "visibility": "public",
+    "module": "moneyAccountFunding",
+    "method": "readAgentHandoff",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "moneyAccountFunding",
+    "method": "readBalanceSubject",
+    "kind": "query"
+  },
+  {
+    "visibility": "public",
+    "module": "moneyAccountFunding",
+    "method": "readOwnerFundingCommandForReceipt",
+    "kind": "query"
+  },
+  {
+    "visibility": "public",
+    "module": "moneyAccountFunding",
+    "method": "readPayerSafeHandoff",
+    "kind": "query"
+  },
+  {
+    "visibility": "public",
+    "module": "moneyAccountFunding",
+    "method": "readWebhookCommand",
+    "kind": "query"
+  },
+  {
+    "visibility": "internal",
+    "module": "moneyAccountFunding",
+    "method": "readWebhookCommandForWorker",
+    "kind": "query"
+  },
+  {
+    "visibility": "public",
+    "module": "moneyAccountFunding",
+    "method": "readWebhookRefundCommand",
+    "kind": "query"
+  },
+  {
+    "visibility": "internal",
+    "module": "moneyAccountFunding",
+    "method": "readWebhookRefundCommandForWorker",
+    "kind": "query"
+  },
+  {
+    "visibility": "public",
+    "module": "moneyAccountFunding",
+    "method": "reserve",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "public",
+    "module": "moneyAccountFunding",
+    "method": "reserveAgentHandoff",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "moneyAccountFundingFormance",
+    "method": "applyVerifiedEventFromInbox",
+    "kind": "action"
+  },
+  {
+    "visibility": "public",
+    "module": "moneyAccountFundingFormance",
+    "method": "readBalance",
+    "kind": "action"
+  },
+  {
+    "visibility": "public",
+    "module": "moneyAutoRecharge",
+    "method": "configureAutoRecharge",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "public",
+    "module": "moneyAutoRecharge",
+    "method": "readAutoRechargeSettings",
+    "kind": "query"
+  },
+  {
+    "visibility": "public",
+    "module": "moneyCommercialPolicy",
+    "method": "change",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "public",
+    "module": "moneyCommercialPolicy",
+    "method": "readOwnerFundingConstraints",
+    "kind": "query"
+  },
+  {
+    "visibility": "public",
+    "module": "moneyCommercialPolicy",
+    "method": "readPlatformFundingConstraints",
+    "kind": "query"
+  },
+  {
+    "visibility": "public",
+    "module": "moneyCustomerTaxFacts",
+    "method": "readCustomerTaxFacts",
+    "kind": "query"
+  },
+  {
+    "visibility": "public",
+    "module": "moneyCustomerTaxFacts",
+    "method": "upsertCustomerTaxFacts",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "public",
+    "module": "moneyDocumentRender",
+    "method": "renderOwnerDocument",
+    "kind": "action"
+  },
+  {
+    "visibility": "internal",
+    "module": "moneyDocumentRender",
+    "method": "renderQueuedDocument",
+    "kind": "action"
+  },
+  {
+    "visibility": "internal",
+    "module": "moneyDocuments",
+    "method": "applyStatementPage",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "moneyDocuments",
+    "method": "attachRenderedFile",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "moneyDocuments",
+    "method": "completeDocumentWork",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "public",
+    "module": "moneyDocuments",
+    "method": "createOwnerStatement",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "public",
+    "module": "moneyDocuments",
+    "method": "createOwnerTaxInvoice",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "moneyDocuments",
+    "method": "finalizeStatement",
+    "kind": "action"
+  },
+  {
+    "visibility": "public",
+    "module": "moneyDocuments",
+    "method": "listOwnerDocuments",
+    "kind": "query"
+  },
+  {
+    "visibility": "internal",
+    "module": "moneyDocuments",
+    "method": "queueStatementRender",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "moneyDocuments",
+    "method": "readForRender",
+    "kind": "query"
+  },
+  {
+    "visibility": "public",
+    "module": "moneyDocuments",
+    "method": "readOwnerDocumentUrl",
+    "kind": "query"
+  },
+  {
+    "visibility": "internal",
+    "module": "moneyDocuments",
+    "method": "readQueuedForRender",
+    "kind": "query"
+  },
+  {
+    "visibility": "internal",
+    "module": "moneyDocuments",
+    "method": "readStatementFinalization",
+    "kind": "query"
+  },
+  {
+    "visibility": "internal",
+    "module": "moneyDocuments",
+    "method": "readStatementPage",
+    "kind": "query"
+  },
+  {
+    "visibility": "internal",
+    "module": "moneyDocuments",
+    "method": "runStatementPage",
+    "kind": "action"
+  },
+  {
+    "visibility": "public",
+    "module": "moneyDocuments",
+    "method": "signOwnerDailyClose",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "moneyFormance",
+    "method": "adjustSpendingPeriod",
+    "kind": "action"
+  },
+  {
+    "visibility": "internal",
+    "module": "moneyFormance",
+    "method": "bookBuyerAdjustment",
+    "kind": "action"
+  },
+  {
+    "visibility": "internal",
+    "module": "moneyFormance",
+    "method": "bookFundingReversal",
+    "kind": "action"
+  },
+  {
+    "visibility": "internal",
+    "module": "moneyFormance",
+    "method": "bookFundingSettlement",
+    "kind": "action"
+  },
+  {
+    "visibility": "internal",
+    "module": "moneyFormance",
+    "method": "canRebindLegalCustomer",
+    "kind": "action"
+  },
+  {
+    "visibility": "internal",
+    "module": "moneyFormance",
+    "method": "health",
+    "kind": "action"
+  },
+  {
+    "visibility": "internal",
+    "module": "moneyFormance",
+    "method": "installSchema",
+    "kind": "action"
+  },
+  {
+    "visibility": "internal",
+    "module": "moneyFormance",
+    "method": "readAccount",
+    "kind": "action"
+  },
+  {
+    "visibility": "internal",
+    "module": "moneyFormance",
+    "method": "readAccountHistory",
+    "kind": "action"
+  },
+  {
+    "visibility": "internal",
+    "module": "moneyFormance",
+    "method": "readDisplayBalance",
+    "kind": "action"
+  },
+  {
+    "visibility": "internal",
+    "module": "moneyFormance",
+    "method": "readPeriodSpend",
+    "kind": "action"
+  },
+  {
+    "visibility": "internal",
+    "module": "moneyFormance",
+    "method": "readSpendingPeriod",
+    "kind": "action"
+  },
+  {
+    "visibility": "internal",
+    "module": "moneyFormance",
+    "method": "readStatementPage",
+    "kind": "action"
+  },
+  {
+    "visibility": "internal",
+    "module": "moneyFormance",
+    "method": "readTransactionByReference",
+    "kind": "action"
+  },
+  {
+    "visibility": "internal",
+    "module": "moneyFormance",
+    "method": "releaseManagedCall",
+    "kind": "action"
+  },
+  {
+    "visibility": "internal",
+    "module": "moneyFormance",
+    "method": "reserveManagedCall",
+    "kind": "action"
+  },
+  {
+    "visibility": "internal",
+    "module": "moneyFormance",
+    "method": "reverseProviderSettlement",
+    "kind": "action"
+  },
+  {
+    "visibility": "internal",
+    "module": "moneyFormance",
+    "method": "settleManagedCall",
+    "kind": "action"
+  },
+  {
+    "visibility": "internal",
+    "module": "moneyFormance",
+    "method": "syncCapacity",
+    "kind": "action"
+  },
+  {
+    "visibility": "public",
+    "module": "moneyLedger",
+    "method": "authorizeConnectOnboarding",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "public",
+    "module": "moneyLedger",
+    "method": "finalizeConnectAccount",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "public",
+    "module": "moneyLedger",
+    "method": "listCreditActivity",
+    "kind": "action"
+  },
+  {
+    "visibility": "public",
+    "module": "moneyLedger",
+    "method": "readAgentProviderEarnings",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "public",
+    "module": "moneyLedger",
+    "method": "readCreditAccount",
+    "kind": "action"
+  },
+  {
+    "visibility": "internal",
+    "module": "moneyLedger",
+    "method": "readCreditAccountMoneyFacts",
+    "kind": "query"
+  },
+  {
+    "visibility": "public",
+    "module": "moneyLedger",
+    "method": "readKeyUsage",
+    "kind": "action"
+  },
+  {
+    "visibility": "public",
+    "module": "moneyLedger",
+    "method": "readOwnerPayoutAccount",
+    "kind": "query"
+  },
+  {
+    "visibility": "public",
+    "module": "moneyLedger",
+    "method": "readOwnerProviderEarnings",
+    "kind": "query"
+  },
+  {
+    "visibility": "public",
+    "module": "moneyLedger",
+    "method": "readPayoutAccountByStripeId",
+    "kind": "query"
+  },
+  {
+    "visibility": "internal",
+    "module": "moneyLedger",
+    "method": "readPayoutAccountByStripeIdForWorker",
+    "kind": "query"
+  },
+  {
+    "visibility": "public",
+    "module": "moneyLedger",
+    "method": "recordConnectAccountEvent",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "moneyLedger",
+    "method": "recordConnectAccountEventFromInbox",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "public",
+    "module": "moneyLedger",
+    "method": "reserveConnectAccount",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "moneyManagedCall",
+    "method": "attachReservation",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "moneyManagedCall",
+    "method": "markReservationUnknown",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "moneyManagedCall",
+    "method": "readBooking",
+    "kind": "query"
+  },
+  {
+    "visibility": "internal",
+    "module": "moneyManagedCallLifecycle",
+    "method": "finalizeRelease",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "moneyManagedCallLifecycle",
+    "method": "finalizeSettlement",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "moneyManagedCallLifecycle",
+    "method": "markOutcomeUnknown",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "moneyManagedCallLifecycle",
+    "method": "markPossiblySubmitted",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "moneyManagedCallLifecycle",
+    "method": "readReservation",
+    "kind": "query"
+  },
+  {
+    "visibility": "internal",
+    "module": "moneyManagedCallLifecycle",
+    "method": "releaseBeforeSubmission",
+    "kind": "action"
+  },
+  {
+    "visibility": "internal",
+    "module": "moneyManagedCallLifecycle",
+    "method": "releaseBeforeSubmissionWithX402Proof",
+    "kind": "action"
+  },
+  {
+    "visibility": "internal",
+    "module": "moneyManagedCallLifecycle",
+    "method": "settle",
+    "kind": "action"
+  },
+  {
+    "visibility": "internal",
+    "module": "moneyManagedCallLifecycle",
+    "method": "validateX402ReleaseProof",
+    "kind": "query"
+  },
+  {
+    "visibility": "public",
+    "module": "moneyMonthlySpendBudget",
+    "method": "configureMonthlySpendBudget",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "public",
+    "module": "moneyMonthlySpendBudget",
+    "method": "readMonthlySpendBudget",
+    "kind": "query"
+  },
+  {
+    "visibility": "internal",
+    "module": "moneyMonthlySpendBudget",
+    "method": "readOrganizationMonthlySpendBudgetForAccount",
+    "kind": "query"
+  },
+  {
+    "visibility": "public",
+    "module": "moneyOwnerSpend",
+    "method": "readOwnerHistory",
+    "kind": "action"
+  },
+  {
+    "visibility": "public",
+    "module": "moneyOwnerSpend",
+    "method": "readOwnerSpend",
+    "kind": "action"
+  },
+  {
+    "visibility": "public",
+    "module": "moneyPayoutPolicy",
+    "method": "configurePayoutPreferences",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "public",
+    "module": "moneyPayoutPolicy",
+    "method": "readPayoutPreferences",
+    "kind": "query"
+  },
+  {
+    "visibility": "internal",
+    "module": "moneyProviderObligations",
+    "method": "finalizeOwnerReversal",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "public",
+    "module": "moneyProviderObligations",
+    "method": "listOwnerObligations",
+    "kind": "query"
+  },
+  {
+    "visibility": "internal",
+    "module": "moneyProviderObligations",
+    "method": "markDisputed",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "moneyProviderObligations",
+    "method": "markOwnerReversalUnknown",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "moneyProviderObligations",
+    "method": "prepareOwnerReversal",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "moneyProviderObligations",
+    "method": "resolveDispute",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "public",
+    "module": "moneyProviderObligations",
+    "method": "reverseOwnerSettlement",
+    "kind": "action"
+  },
+  {
+    "visibility": "public",
+    "module": "moneyReconciliationCases",
+    "method": "listOwnerCases",
+    "kind": "query"
+  },
+  {
+    "visibility": "public",
+    "module": "moneyReconciliationCases",
+    "method": "resolveOwnerCase",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "public",
+    "module": "moneyStripeCustomer",
+    "method": "observeStripePaymentMandate",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "public",
+    "module": "moneyStripeCustomer",
+    "method": "readStripeCustomerBinding",
+    "kind": "query"
+  },
+  {
+    "visibility": "public",
+    "module": "moneyStripeCustomer",
+    "method": "recordBillingPortalStarted",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "public",
+    "module": "moneyStripeCustomer",
+    "method": "upsertStripeCustomerBinding",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "moneyStripeWebhookInbox",
+    "method": "complete",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "public",
+    "module": "moneyStripeWebhookInbox",
+    "method": "ingest",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "moneyStripeWebhookInbox",
+    "method": "readForProcessing",
+    "kind": "query"
+  },
+  {
+    "visibility": "internal",
+    "module": "moneyStripeWebhookInbox",
+    "method": "readHealth",
+    "kind": "query"
+  },
+  {
+    "visibility": "internal",
+    "module": "moneyStripeWebhookWorker",
+    "method": "process",
+    "kind": "action"
+  },
+  {
+    "visibility": "internal",
+    "module": "moneyTreasury",
+    "method": "recordObservation",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "moneyTreasuryObservation",
+    "method": "observe",
+    "kind": "action"
+  },
+  {
+    "visibility": "internal",
+    "module": "moneyX402PaymentAttempts",
+    "method": "claimX402PaymentAuthorization",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "moneyX402PaymentAttempts",
+    "method": "listExpiredPreparedX402PaymentAttempts",
+    "kind": "query"
+  },
+  {
+    "visibility": "internal",
+    "module": "moneyX402PaymentAttempts",
+    "method": "markX402PaymentPossiblySubmitted",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "moneyX402PaymentAttempts",
+    "method": "observeX402PaymentAttempt",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "moneyX402PaymentAttempts",
+    "method": "prepareSellerOnboardingCanaryPaymentAuthorization",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "moneyX402PaymentAttempts",
+    "method": "prepareX402PaymentAuthorization",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "moneyX402PaymentAttempts",
+    "method": "readX402PaymentAttempt",
+    "kind": "query"
+  },
+  {
+    "visibility": "internal",
+    "module": "moneyX402PaymentAttempts",
+    "method": "readX402PaymentAuthorization",
+    "kind": "query"
+  },
+  {
+    "visibility": "internal",
+    "module": "moneyX402PaymentAttempts",
+    "method": "readX402PaymentAuthorizationByDigest",
+    "kind": "query"
+  },
+  {
+    "visibility": "internal",
+    "module": "moneyX402PaymentAttempts",
+    "method": "reconcileX402PaymentAttempt",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "moneyX402PaymentAttempts",
+    "method": "recordX402PaymentAuthorizationFailure",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "moneyX402PaymentAttempts",
+    "method": "recordX402PaymentObservation",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "moneyX402PaymentAttempts",
+    "method": "recordX402PaymentSignatureDigest",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "moneyX402PaymentAttempts",
+    "method": "recordX402PaymentSigningIntent",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "notifications",
+    "method": "dispatchNotificationInternal",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "public",
+    "module": "notifications",
+    "method": "readPreferences",
+    "kind": "query"
+  },
+  {
+    "visibility": "public",
+    "module": "notifications",
+    "method": "updatePreferences",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "public",
+    "module": "operatorContext",
+    "method": "readCurrent",
+    "kind": "query"
+  },
+  {
+    "visibility": "public",
+    "module": "personalAccount",
+    "method": "exportUserData",
+    "kind": "query"
+  },
+  {
+    "visibility": "public",
+    "module": "personalAccount",
+    "method": "readDeletionEligibility",
+    "kind": "query"
+  },
+  {
+    "visibility": "public",
+    "module": "personalAccount",
+    "method": "retirePersonalAccountForServer",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "qualifiedUse",
+    "method": "readQualifiedUseByCall",
+    "kind": "query"
+  },
+  {
+    "visibility": "internal",
+    "module": "qualifiedUse",
+    "method": "recordQualifiedUse",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "rateLimit",
+    "method": "admit",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "public",
+    "module": "rateLimit",
+    "method": "admitHttp",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "public",
+    "module": "recoveryBreakGlass",
+    "method": "authorizeRecoveryOperation",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "public",
+    "module": "recoveryBreakGlass",
+    "method": "submitRecoveryApproval",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "public",
+    "module": "registry",
+    "method": "getPublicBusinessOfferingSupplyBySlug",
+    "kind": "query"
+  },
+  {
+    "visibility": "public",
+    "module": "registry",
+    "method": "listPublicBusinessOfferingSupply",
+    "kind": "query"
+  },
+  {
+    "visibility": "public",
+    "module": "registry",
+    "method": "searchPublicBusinessOfferingSupply",
+    "kind": "query"
+  },
+  {
+    "visibility": "internal",
+    "module": "scheduledFunctionRetirement",
+    "method": "cancelByName",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "secretLifecycleOperations",
+    "method": "advanceSecretPointer",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "secretLifecycleOperations",
+    "method": "initializeSecretPointer",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "secretLifecycleOperations",
+    "method": "insertLifecyclePrepared",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "secretLifecycleOperations",
+    "method": "readLifecycleJournal",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "secretLifecycleOperations",
+    "method": "readSecretPointer",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "secretLifecycleOperations",
+    "method": "replaceLifecycleJournal",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "public",
+    "module": "security",
+    "method": "bootstrapOwnerAdmin",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "public",
+    "module": "security",
+    "method": "closeRemovalDispute",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "public",
+    "module": "security",
+    "method": "grantAdminMembership",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "public",
+    "module": "security",
+    "method": "openRemovalDispute",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "public",
+    "module": "security",
+    "method": "readAdminAuditEvents",
+    "kind": "query"
+  },
+  {
+    "visibility": "public",
+    "module": "security",
+    "method": "readAdminIndexHealth",
+    "kind": "query"
+  },
+  {
+    "visibility": "public",
+    "module": "security",
+    "method": "revokeAdminMembership",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "public",
+    "module": "securityAccountHistory",
+    "method": "listCurrentOwnerAgentSecurityHistory",
+    "kind": "query"
+  },
+  {
+    "visibility": "public",
+    "module": "securityAccountHistory",
+    "method": "listCurrentOwnerSecurityHistory",
+    "kind": "query"
+  },
+  {
+    "visibility": "public",
+    "module": "securityAccountHistory",
+    "method": "recordClerkSecurityEventForServer",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "sourceWriteAdmission",
+    "method": "cleanupExpiredSourceWriteNonces",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "workloadCron",
+    "method": "admit",
+    "kind": "query"
+  },
+  {
+    "visibility": "internal",
+    "module": "workloadCron",
+    "method": "cleanupExpiredAgentAccessOAuthGrants",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "workloadCron",
+    "method": "cleanupExpiredSourceWriteNonces",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "workloadCron",
+    "method": "dispatchConsequence",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "workloadCron",
+    "method": "ensurePlatformWorkloadIdentities",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "workloadCron",
+    "method": "observeX402Treasury",
+    "kind": "action"
+  },
+  {
+    "visibility": "internal",
+    "module": "workloadCron",
+    "method": "reconcile",
+    "kind": "query"
+  },
+  {
+    "visibility": "internal",
+    "module": "workloadCron",
+    "method": "reconcileBusinessSupplyProjections",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "workloadCron",
+    "method": "reconcileDueFacilitatorInvocations",
+    "kind": "action"
+  },
+  {
+    "visibility": "internal",
+    "module": "workloadCron",
+    "method": "refreshAgenticEconomyApiRegistry",
+    "kind": "action"
+  },
+  {
+    "visibility": "internal",
+    "module": "workloadCron",
+    "method": "refreshCapabilitySupplyReadiness",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "workloadCron",
+    "method": "refreshCurrentMarketPresence",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "workloadCron",
+    "method": "refreshFacilitatorDiscovery",
+    "kind": "action"
+  },
+  {
+    "visibility": "public",
+    "module": "workspaceAccounts",
+    "method": "closeWorkspace",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "public",
+    "module": "workspaceAccounts",
+    "method": "readWorkspaceDecommissionEligibility",
+    "kind": "query"
+  },
+  {
+    "visibility": "public",
+    "module": "workspaceAccounts",
+    "method": "transferWorkspaceOwnership",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "public",
+    "module": "workspaceInvitations",
+    "method": "recordOrganizationInvitationCreatedForServer",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "public",
+    "module": "workspaceInvitations",
+    "method": "recordOrganizationInvitationRevokedForServer",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "public",
+    "module": "workspaceMemberships",
+    "method": "recordOrganizationMembershipCreatedForServer",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "public",
+    "module": "workspaceMemberships",
+    "method": "recordOrganizationMembershipDeletedForServer",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "public",
+    "module": "workspaceMemberships",
+    "method": "recordOrganizationMembershipUpdatedForServer",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "public",
+    "module": "workspaceProfile",
+    "method": "syncOrganizationDisplayNameForServer",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "public",
+    "module": "workspaceProvisioning",
+    "method": "claimCreatedWorkspace",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "public",
+    "module": "workspaceProvisioning",
+    "method": "provisionOrganizationWorkspaceForServer",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "public",
+    "module": "workspaceSecurity",
+    "method": "readPolicy",
+    "kind": "query"
+  },
+  {
+    "visibility": "public",
+    "module": "workspaceSecurity",
+    "method": "updatePolicy",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "public",
+    "module": "workspaceTeam",
+    "method": "listDirectory",
+    "kind": "query"
+  },
+  {
+    "visibility": "public",
+    "module": "x402Directory",
+    "method": "resolve",
+    "kind": "action"
+  },
+  {
+    "visibility": "public",
+    "module": "x402DirectoryIndex",
+    "method": "analytics",
+    "kind": "query"
+  },
+  {
+    "visibility": "public",
+    "module": "x402DirectoryIndex",
+    "method": "browse",
+    "kind": "query"
+  },
+  {
+    "visibility": "public",
+    "module": "x402DirectoryIndex",
+    "method": "bySlug",
+    "kind": "query"
+  },
+  {
+    "visibility": "public",
+    "module": "x402DirectoryIndex",
+    "method": "canonicalUrlForTool",
+    "kind": "query"
+  },
+  {
+    "visibility": "public",
+    "module": "x402DirectoryIndex",
+    "method": "facets",
+    "kind": "query"
+  },
+  {
+    "visibility": "internal",
+    "module": "x402DirectoryIndex",
+    "method": "firstEligiblePage",
+    "kind": "query"
+  },
+  {
+    "visibility": "public",
+    "module": "x402DirectoryIndex",
+    "method": "overview",
+    "kind": "query"
+  },
+  {
+    "visibility": "public",
+    "module": "x402DirectoryIndex",
+    "method": "resource",
+    "kind": "query"
+  },
+  {
+    "visibility": "internal",
+    "module": "x402DirectoryIndex",
+    "method": "selectedSource",
+    "kind": "query"
+  },
+  {
+    "visibility": "public",
+    "module": "x402DirectoryIndex",
+    "method": "status",
+    "kind": "query"
+  },
+  {
+    "visibility": "internal",
+    "module": "x402DirectoryIndexBackfill",
+    "method": "batch",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "x402DirectoryIndexBackfill",
+    "method": "start",
+    "kind": "action"
+  },
+  {
+    "visibility": "internal",
+    "module": "x402DirectoryIndexBackfill",
+    "method": "state",
+    "kind": "query"
+  },
+  {
+    "visibility": "internal",
+    "module": "x402DirectoryIndexCategoryStats",
+    "method": "finalize",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "x402DirectoryIndexRefresh",
+    "method": "onComplete",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "x402DirectoryIndexRefresh",
+    "method": "start",
+    "kind": "action"
+  },
+  {
+    "visibility": "internal",
+    "module": "x402DirectoryIndexSource",
+    "method": "page",
+    "kind": "action"
+  },
+  {
+    "visibility": "internal",
+    "module": "x402DirectoryIndexStore",
+    "method": "applyPage",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "x402DirectoryIndexStore",
+    "method": "begin",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "x402DirectoryIndexStore",
+    "method": "checkpoint",
+    "kind": "query"
+  },
+  {
+    "visibility": "internal",
+    "module": "x402DirectoryIndexStore",
+    "method": "cleanup",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "x402DirectoryIndexStore",
+    "method": "fail",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "x402DirectoryIndexStore",
+    "method": "reconcileProviderDirectoryRows",
+    "kind": "mutation"
+  }
+]

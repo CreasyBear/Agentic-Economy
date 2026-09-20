@@ -87,6 +87,32 @@ export default defineConfig({
         complexity: ['error', { max: 10, variant: 'classic' }],
       },
     },
+    // Verbatim handler moves from former `capabilityProviderConnectionAttempts.ts` monolith.
+    // Per-file complexity ceilings are ratchets — lower as handlers are simplified; never raise.
+    {
+      files: ['convex/lib/providerConnections/cancelAttemptOwner.ts'],
+      rules: {
+        complexity: ['error', { max: 12, variant: 'classic' }],
+      },
+    },
+    {
+      files: ['convex/lib/providerConnections/bindAttemptOAuthOwner.ts'],
+      rules: {
+        complexity: ['error', { max: 19, variant: 'classic' }],
+      },
+    },
+    {
+      files: ['convex/lib/providerConnections/finalizeAttemptOwner.ts'],
+      rules: {
+        complexity: ['error', { max: 34, variant: 'classic' }],
+      },
+    },
+    {
+      files: ['convex/lib/providerConnections/reserveAttempt.ts'],
+      rules: {
+        complexity: ['error', { max: 59, variant: 'classic' }],
+      },
+    },
     {
       files: [
         'convex/moneyBrokeredDisputeEvidence.ts',
