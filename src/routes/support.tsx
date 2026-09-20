@@ -1,21 +1,10 @@
-import { createFileRoute, Link } from '@tanstack/react-router'
-import { ArrowUpRightIcon, CircleHelp } from 'lucide-react'
+import { createFileRoute } from '@tanstack/react-router'
+import { CircleHelp } from 'lucide-react'
 
-import { AeCopyCommand } from '@/components/ae/data/AeCopyCommand'
-import { AePublicPage } from '@/components/ae/layout/AePublicPage'
-import { AeSection } from '@/components/ae/layout/AeSection'
-import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion'
-import { buttonVariants } from '@/components/ui/button-variants'
-import { cn } from '@/lib/utils'
+import { AeSupportHelpPage } from '@/components/ae/support/help/AeSupportHelpPage'
+import type { SupportSearch } from '@/components/ae/support/help/help.contracts'
 import { readCanonicalBaseUrlServer } from '@/lib/server/canonical-url.functions'
 import { buildPublicPageHead } from '@/modules/seo/public'
-
-const ISSUE_URL = 'https://github.com/CreasyBear/Agentic-Economy/issues/new/choose'
-const SUPPORT_EMAIL = 'mailto:support@aecon.ai'
-
-type SupportSearch = {
-  callRef?: string
-}
 
 export const Route = createFileRoute('/support')({
   validateSearch: (search: Record<string, unknown>): SupportSearch => {
@@ -39,80 +28,8 @@ export const Route = createFileRoute('/support')({
   component: SupportRoute,
 })
 
-function supportEmailHref(callRef?: string): string {
-  if (callRef === undefined) return SUPPORT_EMAIL
-  return `mailto:support@aecon.ai?subject=Help%20with%20Call%20${encodeURIComponent(callRef)}&body=I%20need%20help%20with%20Call%20reference%3A%20${encodeURIComponent(callRef)}%0A%0AWhat%20happened%3A%0A`
-}
-
 function SupportRoute() {
   const canonicalBaseUrl = Route.useLoaderData()
   const search = Route.useSearch()
-  const supportEmail = supportEmailHref(search.callRef)
-  return (
-    <AePublicPage
-      kind="document"
-      eyebrow="Support"
-      title="Help"
-      description="Keep the request or Call reference shown with the problem. It helps us find the right record without asking you to share private inputs."
-      actions={
-        <a href={supportEmail} className={cn(buttonVariants(), 'min-h-touch')}>
-          Email support
-        </a>
-      }
-    >
-      <div className="ae-rail grid gap-section pb-page">
-        {search.callRef !== undefined ? (
-          <div className="rounded-lg border border-border bg-muted/40 px-related py-related text-sm">
-            Referenced Call: {search.callRef}
-          </div>
-        ) : null}
-        <AeSection
-          id="message-troubleshooting"
-          title="Continue from the current status"
-          description="The original Call shows its current status and next action. If the result is uncertain, check that Call before trying again."
-        >
-          <div className="flex flex-col gap-related sm:flex-row sm:flex-wrap">
-            <Link to="/activity" className={cn(buttonVariants(), 'min-h-touch w-full sm:w-auto')}>Open Calls</Link>
-            <Link to="/owner/operations" className={cn(buttonVariants({ variant: 'outline' }), 'min-h-touch w-full sm:w-auto')}>Continue Provider setup</Link>
-            <Link to="/owner/credit" className={cn(buttonVariants({ variant: 'outline' }), 'min-h-touch w-full sm:w-auto')}>Review account credit</Link>
-          </div>
-        </AeSection>
-        <AeSection
-          title="Agent connection"
-          description="Use your client's account connection, then return to your task. Connection and spending permission are separate."
-        >
-          <Link to="/for-agents" className={cn(buttonVariants({ variant: 'outline' }), 'min-h-touch')}>Review agent setup</Link>
-          <Accordion type="single" collapsible className="mt-related">
-            <AccordionItem value="diagnostics">
-              <AccordionTrigger>Advanced connection diagnostics</AccordionTrigger>
-              <AccordionContent className="grid gap-related">
-                <p>If you use the AE CLI, this read-only check reports the configured server and account status.</p>
-                <AeCopyCommand comfortable label="diagnostic command" code={`ae doctor --base-url "${canonicalBaseUrl}"`} />
-              </AccordionContent>
-            </AccordionItem>
-          </Accordion>
-        </AeSection>
-        <AeSection
-          title="Contact support privately"
-          description="For account, billing, security or Call problems, email support@aecon.ai with what you expected, what happened and a safe request reference. Do not include credentials, raw inputs or private results."
-        >
-          <p className="text-sm text-muted-foreground">
-            GitHub issues are public. Use them only for non-sensitive developer reports.
-          </p>
-          <a
-            href={ISSUE_URL}
-            target="_blank"
-            rel="noreferrer"
-            className={cn(buttonVariants({ variant: 'outline' }), 'mt-related min-h-touch')}
-          >
-            Open a public developer issue <ArrowUpRightIcon aria-hidden="true" />
-          </a>
-          <div className="mt-related flex flex-wrap gap-related">
-            <Link to="/for-providers" className="inline-flex min-h-touch items-center rounded-sm underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">Review Provider requirements</Link>
-            <Link to="/privacy/remove-business" className="inline-flex min-h-touch items-center rounded-sm underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">Request a listing correction</Link>
-          </div>
-        </AeSection>
-      </div>
-    </AePublicPage>
-  )
+  return <AeSupportHelpPage canonicalBaseUrl={canonicalBaseUrl} callRef={search.callRef} />
 }
