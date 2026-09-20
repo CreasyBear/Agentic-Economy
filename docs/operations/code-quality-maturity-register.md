@@ -1,7 +1,7 @@
 # Code Quality, Component Purity & Structural Decoupling: Operational Register
 
 **Date:** 20 September 2026  
-**Status:** ACTIVE REFINEMENT REGISTER (Waves 1–2 Complete; Wave 3 In Progress)  
+**Status:** ACTIVE REFINEMENT REGISTER (Waves 1–4 Complete; Wave 5 Ready)  
 **Operating Protocol:** `docs/operations/code-quality-maturity-protocol.md`  
 **Master Architectural Specification:** `docs/designs/2026-09-19-code-quality-iceinvein.md`  
 **Core Rules:** `.cursor/rules/leaf-and-component-cleanliness.mdc`, `AGENTS.md`
@@ -16,10 +16,10 @@
 | :--- | :--- | :---: | :---: | :---: | :---: | :---: |
 | **Wave 1: Component Type Quarantine & Contract Extraction** | Extract 80+ trapped types from `.tsx` into domain contracts | `CQ-01` – `CQ-06` | 6 | 0 | 0 | `COMPLETE` |
 | **Wave 2: Leaf & Container Decoupling: Critical Surfaces** | Earnings, Chat, Consent, Spending Limits, Command Palette | `CQ-07` – `CQ-12` | 6 | 0 | 0 | `COMPLETE` |
-| **Wave 3: Leaf & Container Decoupling: Wizards & Settings** | Danger Zone, Provider Workspace, Onboarding, Price Modal, Playground | `CQ-13` – `CQ-18` | 0 | 0 | 6 | `IN PROGRESS` |
-| **Wave 4: Convex God-Files & CQS Nonce Rectification** | Decompose six 1,000-line files + 9 CQS query mutations | `CQ-19` – `CQ-25` | 0 | 0 | 7 | `READY` |
+| **Wave 3: Leaf & Container Decoupling: Wizards & Settings** | Danger Zone, Provider Workspace, Onboarding, Price Modal, Playground, Operator Console | `CQ-13` – `CQ-18` | 6 | 0 | 0 | `COMPLETE` |
+| **Wave 4: Convex God-Files & CQS Nonce Rectification** | Four façade decompositions + 11 CQS read conversions + RPC contract guards (`CQ-22` dropped; `CQ-25` parked) | `CQ-19` – `CQ-25` | 6 | 0 | 0 | `COMPLETE` |
 | **Wave 5: Barrel Cycle Eradication & Dependency Ratchet** | Eradicate type-on-barrel imports; drop ceiling 32 $\rightarrow$ 0 | `CQ-26` – `CQ-30` | 0 | 0 | 5 | `READY` |
-| **Total** | **All 30 Code Quality Workflows** | **30** | **12** | **0** | **18** | `IN PROGRESS` |
+| **Total** | **All 30 Code Quality Workflows** | **30** | **24** | **0** | **6** | `IN PROGRESS` |
 
 ### Wave 1 Verification Evidence
 
@@ -42,6 +42,50 @@
 | **Gate 4 Tests** | `npx vitest run` | 719 of 723 files and **6,738 tests passing**, 25 skipped, 3 todo. The 8 remaining failures are all attributed to non-campaign causes (see the Known Red Baseline section). |
 
 `no-circular-via-barrel` remained **32 after Wave 2**, confirming compound-folder extractions added zero new barrel cycles.
+
+### Wave 3 Verification Evidence
+
+| Gate | Command | Result |
+| :--- | :--- | :--- |
+| **Gate 1 Lint** | `npm run lint` (oxlint, `--deny-warnings`) | Exit 0, zero warnings. |
+| **Gate 2 Typecheck** | `npm run typecheck` (`tsc --noEmit`, `exactOptionalPropertyTypes: true`) | Exit 0, zero errors. |
+| **Gate 3 Dependency ratchet** | `npm run deps:check` | Exit 0. `no-circular` 0/0, `no-circular-capability-supply-internal` 0/0, `no-circular-via-barrel` 32/32. |
+| **Gate 4 Tests** | `npx vitest run` | 737 of 741 files and **6,830 tests passing**, 25 skipped, 3 todo. The 8 remaining failures are all attributed to non-campaign causes (see the Known Red Baseline section). |
+
+`no-circular-via-barrel` remained **32 after Wave 3**, confirming the six new compound folders added zero new barrel cycles.
+
+### Wave 4 Verification Evidence
+
+| Gate | Command | Result |
+| :--- | :--- | :--- |
+| **Gate 1 Lint** | `npm run lint` (oxlint, `--deny-warnings`) | Exit 0, zero warnings. |
+| **Gate 2 Typecheck** | `npm run typecheck` (`tsc --noEmit`, `exactOptionalPropertyTypes: true`) | Exit 0, zero errors. |
+| **Gate 3 Dependency ratchet** | `npm run deps:check` | Exit 0. `no-circular` 0/0, `no-circular-capability-supply-internal` 0/0, `no-circular-via-barrel` 32/32. |
+| **Gate 4 Tests** | `npx vitest run` | **743** files and **6,870 tests passing**, 25 skipped, 3 todo. **8 failures in 3 files**, exactly matching the Known Red Baseline (`module-boundaries.test.ts` 3, `module-boundaries-ratchet.test.ts` 2, `native-platform-procure.test.ts` 3). No new failures. |
+
+`no-circular-via-barrel` remained **32 after Wave 4**. Both RPC contract guards (`convex-api-kind-snapshot.test.ts`, `convex-string-reference-ratchet.test.ts`) passed with **unmodified fixtures** after all façade moves.
+
+### Wave 4 Campaign Commits
+
+Wave 4 landed in two commits on `main`:
+
+- `363db3499` — façade decompositions (`CQ-20`, `CQ-21`, `CQ-23`, `CQ-24`). `CQ-20` ran first deliberately to establish the `convex/lib/<domain>/` submodule convention the other three followed.
+- `197e87336` — CQS read conversions (`CQ-19`), with `CQ-19a` RPC guards already in place before any Convex file was touched.
+
+### Wave 4 Cross-Cutting Infrastructure
+
+- **Façade layout correction:** The register's original Wave 4 target placed logic under `convex/<name>/` subfolders. That layout would **break generated RPC paths** (`api.<name>.<method>` must stay on the root façade file). The campaign adopted the existing **`convex/lib/<domain>/`** convention instead: the root `convex/<name>.ts` file remains a thin entry-point re-exporting handlers defined in `convex/lib/...`. All generated API paths are unchanged.
+- **RPC contract guards (`CQ-19a`):** String-literal `api.*` references fail silently when a function moves or changes kind. Before any decomposition, two import tests and a shared scanner were added: `tests/imports/convex-api-kind-snapshot.test.ts` pins **524** `module.method → kind` triples (`tests/fixtures/convex-api-kind-snapshot.json`); `tests/imports/convex-string-reference-ratchet.test.ts` resolves **322** string-literal references against those triples; shared logic lives in `tests/helpers/convex-rpc-contract-scans.ts`. Both guards were proven to bite by deliberately breaking a reference before relying on them.
+- **Scope shrink (scout, 20 Sep 2026):** Re-derived against current source, Wave 4 shrank from seven workflows to five verified census IDs (`CQ-19`, `CQ-20`, `CQ-21`, `CQ-23`, `CQ-24`) plus additive `CQ-19a`. **`CQ-22`** (`capabilitySupplyPublish.ts`) was **dropped** — it is already a helper module, not a god RPC file; there was no 1,000-line violation to fix. **`CQ-25`** (`capabilityCallProjection.ts`) is **parked** pending a concurrent agent's in-flight call-worker ADR; pick up once that settles. Scorecard **Pending** **6** = **`CQ-25`** (parked) + **`CQ-26`–`CQ-30`**; **`CQ-22`** is **`DROPPED`**, not pending.
+
+### Wave 3 Campaign Commit
+
+Wave 3 was committed locally on `main` as `ba52df05d` (**90 files**, **+5,560 / −2,314**), deliberately excluding the concurrent agent's in-flight `convex/`, registry, actions, decision-engine, and capability-execution changes.
+
+### Wave 3 Cross-Cutting Infrastructure
+
+- **Stage 4 guardrail remediation:** Implementer `f22d7927-0e94-4f26-80da-87c1d4482cb9` cleared **9** `tests/imports/ts-standards.test.ts` violations that appeared once the new colocated tests ran: one `inexact-convex-return` fixed by typing a mock against `SupplierOnboardingSaveResult` instead of `Promise<unknown>`; two `unknown-double-cast` fixed by narrowing the onboarding submit handler to `Pick<FormEvent, 'preventDefault'>` (the same fix Wave 2 applied twice); and six `unknown-double-cast` fixed by widening both payload extractors to `schema?: unknown`, which is honest since both open with a runtime guard for non-object input. **Lesson:** each wave's colocated tests widen the guardrail scan surface, so a Stage 4 pass should now be expected rather than treated as a surprise.
+- **Commit-hook React Doctor advisory:** 0 errors, **4 warnings**. Two are `no-chain-state-updates` in `src/components/ae/offerings/provider-workspace/useProviderWorkspaceSheets.ts`; those chained effects were copied verbatim from the incumbent component, so they are pre-existing behaviour surfaced by the extraction rather than new defects. Logged as a **Wave 5 candidate** (likely paired with broader effect-hygiene work rather than a dedicated workflow).
 
 ### Wave 2 Campaign Commit (Waves 1 + 2)
 
@@ -76,6 +120,33 @@ Attribution was established by forensic scout `49ac5025-902c-4cf3-bd9e-bfd6ec0b6
 - The ratchet's own comment says "Lower these as work lands; never raise them." It was authored on 2026-09-10, nine days before this campaign, and did not anticipate type quarantine.
 - **Decision (Owner, 19 Sep 2026): accept the breach for this refactor and rebaseline the ratchet later.** The ceiling stays at 198 for now and this test stays red.
 - **Rejected alternative:** Re-exporting the 25 types through each module's `public.ts` barrel would hold the count at 198, but would push 25 more type imports through the very barrels that Wave 5 (`CQ-26` to `CQ-29`) exists to decouple, with `no-circular-via-barrel` already at 32. Deep module imports were chosen as the architecturally correct direction.
+
+### Accepted Debt: Price Modal GST Leg Display (`CQ-16`)
+
+- `AePriceUpdateModal` compound intentionally **bypasses** the sanctioned `displayPriceFromPricingConfig` display chain (`AGENTS.md`) for GST leg preview, formatting micro-units via `Number(units) / 1_000_000` at **four decimal places**.
+- The sanctioned formatter caps at two decimals and maps small amounts to `<A$0.01`, which would change locked test figures such as `A$0.1364` and `A$0.0136`.
+- **Decision (Orchestrator, 20 Sep 2026): preserve the bypass for Wave 3; resolve via a deliberate display-contract decision**, not an opportunistic refactor. Track alongside the entry-surface ratchet debt until a money-module display variant or playground-specific formatter is specified.
+
+### Accepted Debt: Convex Complexity Ratchets (`CQ-24`)
+
+- Moving handlers into `convex/lib/providerConnections/` brought them under that directory's oxlint `complexity` rule (`max: 10`) for the first time.
+- Four files carry explicit per-file ceilings as ratchets to **lower and never raise**: `cancelAttemptOwner.ts` **12**, `bindAttemptOAuthOwner.ts` **19**, `finalizeAttemptOwner.ts` **34**, `reserveAttempt.ts` **59**. The other five submodule files pass unmodified.
+- **`reserveAttempt.ts` at 59** is the standout simplification target.
+
+### Accepted Debt: React Doctor Advisories in Moved Convex Code (Wave 4)
+
+- `server-sequential-independent-await` and `async-await-in-loop` advisories in `convex/lib/interactiveAuthority/accessFacts.ts`, `convex/lib/interactiveAuthority/accountResolution.ts`, and `convex/lib/money/ownerFundingInvoiceHistory.ts`.
+- Pre-existing behaviour carried verbatim during pure moves; deliberately not mixed into decomposition commits.
+
+### Accepted Debt: Agent Funding Handoff `args as never` (`CQ-21` / `CQ-19`)
+
+- `convex/lib/money/agentFundingHandoff.ts` uses `args as never` on the new read-admit path, mirroring a pre-existing cast on the write path.
+- Disables type checking on a security-relevant admission argument; deserves a deliberate fix, not an opportunistic cast extension.
+
+### Parked Work: `capabilityCallProjection` Façade (`CQ-25`)
+
+- **`CQ-25`** decomposition of `convex/capabilityCallProjection.ts` (~1,041 lines) is **parked**, not abandoned.
+- **Reason:** Collides with a concurrent agent's in-flight ADR work on the call worker. Resume once that ADR settles so projection and worker boundaries are not fought twice.
 
 ---
 
@@ -270,182 +341,199 @@ Attribution was established by forensic scout `49ac5025-902c-4cf3-bd9e-bfd6ec0b6
 
 # Wave 3: Leaf & Container Decoupling: Wizards, Settings & Testing
 
-### CQ-13: Decompose `WorkspaceDangerZone.tsx` (348 lines)
-- **Surfaces:** `src/components/ae/settings/WorkspaceDangerZone.tsx`
-- **Incumbent Baseline:** Settings leaf component inlines Convex queries (`readWorkspaceDecommissionEligibility`) and mutations (`closeWorkspace`, `transferWorkspaceOwnership`).
+### CQ-13: Decompose `WorkspaceDangerZone.tsx` (294 lines)
+- **Surfaces:** `src/components/ae/settings/workspace-danger-zone/WorkspaceDangerZone.tsx` (container **19** lines; was 294 at refactor start; register pre-Wave 3 incorrectly cited 348)
+- **Incumbent Baseline:** Zero-prop settings section inlines Convex queries (`readWorkspaceDecommissionEligibility`) and mutations (`closeWorkspace`, `transferWorkspaceOwnership`). It was never a pure leaf — it was an I/O-owning section with no external props.
 - **Code Quality Gap:** Presentation markup directly executing destructive database mutations.
 - **Target Spec:**
   - Extract `WorkspaceDangerZoneContainer.tsx` (or hook) to own query and mutation bindings.
   - Split presentation into pure leaves: `WorkspaceClosePanel.tsx`, `WorkspaceTransferPanel.tsx`, `DecommissionFenceList.tsx`.
-- **Subagent Assignment:** Grok (Spec: `9d72774d-a2b7-4905-9888-9fb280449696`) $\rightarrow$ Composer (Implement) $\rightarrow$ Orchestrator (Verify)
-- **Status:** `READY`
+- **Subagent Assignment:** Grok (Spec: `d2870b22-f7d1-46ba-a5d3-3f9196ccd738`) $\rightarrow$ Composer (Implement: `047c730a-2f94-4f88-8275-81e7b10f5642`) $\rightarrow$ Orchestrator (Verify: Passed 4/4 Gates)
+- **Delivered Surfaces:** `src/components/ae/settings/workspace-danger-zone/WorkspaceDangerZone.tsx`, `src/components/ae/settings/workspace-danger-zone/WorkspaceDangerZoneSkeleton.tsx`, `src/components/ae/settings/workspace-danger-zone/WorkspaceDangerZoneSkeleton.test.tsx`, `src/components/ae/settings/workspace-danger-zone/workspace-danger-zone.contracts.ts`, `src/components/ae/settings/workspace-danger-zone/useWorkspaceDangerZone.ts`, `src/components/ae/settings/workspace-danger-zone/useWorkspaceDangerZone.test.ts`, `src/components/ae/settings/workspace-danger-zone/components/DecommissionFenceList.tsx`, `src/components/ae/settings/workspace-danger-zone/components/DecommissionFenceList.test.tsx`, `src/components/ae/settings/workspace-danger-zone/components/WorkspaceClosePanel.tsx`, `src/components/ae/settings/workspace-danger-zone/components/WorkspaceClosePanel.test.tsx`, `src/components/ae/settings/workspace-danger-zone/components/WorkspaceTransferPanel.tsx`, `src/components/ae/settings/workspace-danger-zone/components/WorkspaceTransferPanel.test.tsx`, `src/components/ae/settings/workspace-danger-zone/components/WorkspaceDangerDiagnosticSlot.tsx`
+- **Deviations:** The register named the container `WorkspaceDangerZoneContainer.tsx`; every Wave 2 compound keeps the original public export name, so the container is `WorkspaceDangerZone.tsx`. A fourth leaf, `WorkspaceDangerDiagnosticSlot.tsx`, was added because both panels shared that inline markup and its CLS reservation.
+- **Status:** `VERIFIED`
 
 ---
 
 ### CQ-14: Decompose `AeProviderWorkspace.tsx` (366 lines)
-- **Surfaces:** `src/components/ae/offerings/AeProviderWorkspace.tsx`
+- **Surfaces:** `src/components/ae/offerings/provider-workspace/AeProviderWorkspace.tsx` (container **150** lines; was 366)
 - **Incumbent Baseline:** Inlines six `useServerFn` calls for identity, connections, earnings, and provider registration inside JSX.
 - **Code Quality Gap:** Page markup acts as API controller.
 - **Target Spec:**
   - Extract `useProviderWorkspaceInventory.ts` and `useProviderWorkspaceSheets.ts`.
   - Move onboarding save into route controller; leaf workspace imports zero server functions.
-- **Subagent Assignment:** Grok (Spec: `9d72774d-a2b7-4905-9888-9fb280449696`) $\rightarrow$ Composer (Implement) $\rightarrow$ Orchestrator (Verify)
-- **Status:** `READY`
+- **Subagent Assignment:** Grok (Spec: `482d1a66-ae65-4e62-9c83-84fc6e320555`) $\rightarrow$ Composer (Implement: `4852ec13-bcb4-4641-8c43-cd8d8b33b490`) $\rightarrow$ Orchestrator (Verify: Passed 4/4 Gates)
+- **Delivered Surfaces:** `src/components/ae/offerings/provider-workspace/AeProviderWorkspace.tsx`, `src/components/ae/offerings/provider-workspace/AeProviderWorkspaceSkeleton.tsx`, `src/components/ae/offerings/provider-workspace/provider-workspace.contracts.ts`, `src/components/ae/offerings/provider-workspace/useProviderWorkspaceInventory.ts`, `src/components/ae/offerings/provider-workspace/useProviderWorkspaceInventory.test.ts`, `src/components/ae/offerings/provider-workspace/useProviderWorkspaceSheets.ts`, `src/components/ae/offerings/provider-workspace/useProviderWorkspaceSheets.test.ts`, `src/components/ae/offerings/provider-workspace/components/AddToolAction.tsx`, `src/components/ae/offerings/provider-workspace/components/WorkspaceInventoryGate.tsx`, `src/components/ae/offerings/provider-workspace/components/WorkspaceInventoryGate.test.tsx`
+- **Deviations:** The register's instruction to move the onboarding save into the route controller was **overruled**. `src/routes/_operator/owner.operations.tsx` was already 72 lines against the 80-line ceiling in cleanliness rule §9, and a route controller is not a place for I/O. The save lives in `useProviderWorkspaceInventory`. The route shrank to **59** lines because its inline pending component moved into the colocated skeleton. `ProviderWorkspaceEarningsSection` and the `CQ-07` earnings card were deliberately left untouched and composed rather than absorbed, since the section is a DTO-carrying adapter and not a pure leaf.
+- **Status:** `VERIFIED`
 
 ---
 
-### CQ-15: Decompose `AeSupplierOnboardingWizard.tsx` (438 lines)
-- **Surfaces:** `src/components/ae/supply/AeSupplierOnboardingWizard.tsx`
+### CQ-15: Decompose `AeSupplierOnboardingWizard.tsx` (435 lines)
+- **Surfaces:** `src/components/ae/supply/supplier-onboarding-wizard/AeSupplierOnboardingWizard.tsx` (container **92** lines; was 435 at refactor start; register pre-Wave 3 incorrectly cited 438)
 - **Incumbent Baseline:** 3-step wizard owns ABN checksums, HTTPS origin validation, and state machine navigation.
 - **Code Quality Gap:** Domain validation logic baked into presentation forms.
 - **Target Spec:**
   - Extract `useSupplierOnboardingWizard.ts` hook.
   - Share ABN and origin validation in `provider-identity-validation.ts` (shared with `TaxProfileForm`).
   - Extract pure leaves: `OnboardingStepper.tsx`, `ProviderIdentityFields.tsx`, `PayoutsStep.tsx`.
-- **Subagent Assignment:** Grok (Spec: `9d72774d-a2b7-4905-9888-9fb280449696`) $\rightarrow$ Composer (Implement) $\rightarrow$ Orchestrator (Verify)
-- **Status:** `READY`
+- **Subagent Assignment:** Grok (Spec: `25c1d645-6f0d-4c8d-99c5-38a45c383437`) $\rightarrow$ Composer (Implement: `3244ec1e-3ae5-4dbe-83e6-7553e9c83cc9`) $\rightarrow$ Orchestrator (Verify: Passed 4/4 Gates)
+- **Delivered Surfaces:** `src/components/ae/supply/supplier-onboarding-wizard/AeSupplierOnboardingWizard.tsx`, `src/components/ae/supply/supplier-onboarding-wizard/AeSupplierOnboardingWizardSkeleton.tsx`, `src/components/ae/supply/supplier-onboarding-wizard/supplier-onboarding-wizard.contracts.ts`, `src/components/ae/supply/supplier-onboarding-wizard/useSupplierOnboardingWizard.ts`, `src/components/ae/supply/supplier-onboarding-wizard/useSupplierOnboardingWizard.test.ts`, `src/components/ae/supply/supplier-onboarding-wizard/provider-identity-validation.ts`, `src/components/ae/supply/supplier-onboarding-wizard/provider-identity-validation.test.ts`, `src/components/ae/supply/supplier-onboarding-wizard/components/OnboardingStepper.tsx`, `src/components/ae/supply/supplier-onboarding-wizard/components/ProviderIdentityFields.tsx`, `src/components/ae/supply/supplier-onboarding-wizard/components/PayoutsStep.tsx`, `src/components/ae/supply/supplier-onboarding-wizard/components/FirstToolStep.tsx`
+- **Deviations:** The register's premise was wrong on both halves. ABN validation was **already shared** — `isValidAbn`, `normalizeAbn`, and `formatAbnDisplay` live in `src/modules/money/internal/tax-invoice-control.ts` and are re-exported from `@/modules/money/public`, which both the wizard and `TaxProfileForm` already imported. `TaxProfileForm` has **no website field and no origin check**, so there was nothing to unify. The planned shared `provider-identity-validation.ts` became a compound-local diagnostic composer that delegates the checksum to the money module. `TaxProfileForm` was not rewired. A fourth leaf, `FirstToolStep.tsx`, was added so each of the three rendered steps has its own leaf.
+- **Status:** `VERIFIED`
 
 ---
 
-### CQ-16: Decompose `AePriceUpdateModal.tsx` (357 lines)
-- **Surfaces:** `src/components/ae/supply/AePriceUpdateModal.tsx`
-- **Incumbent Baseline:** Modal calculates Australian GST splits (`calculateAudGstSplit`), ExactAmount rescaling, and percentage deltas in `useMemo` inside render.
+### CQ-16: Decompose `AePriceUpdateModal.tsx` (353 lines)
+- **Surfaces:** `src/components/ae/supply/price-update-modal/AePriceUpdateModal.tsx` (container **140** lines; was 353 at refactor start; register pre-Wave 3 incorrectly cited 357)
+- **Incumbent Baseline:** Modal calculates Australian GST splits (`calculateAudGstSplit`), ExactAmount rescaling, and price deltas inside render. *(Register pre-Wave 3 incorrectly described "percentage deltas in `useMemo`"; the rendered delta is a **dollar** delta computed outside `useMemo`, and the percent chips only adjust the input.)*
 - **Code Quality Gap:** Financial tax math embedded in modal markup.
 - **Target Spec:**
   - Extract unit-tested pure module `price-revision-preview.ts` for GST split and price deltas.
   - Extract `usePriceRevisionForm.ts` hook.
   - Extract pure leaves: `PriceDeltaPreview.tsx`, `GstSplitBreakdown.tsx`, `PriceAdjustmentChips.tsx`.
-- **Subagent Assignment:** Grok (Spec: `9d72774d-a2b7-4905-9888-9fb280449696`) $\rightarrow$ Composer (Implement) $\rightarrow$ Orchestrator (Verify)
-- **Status:** `READY`
+- **Subagent Assignment:** Grok (Spec: `7e19d153-916d-41f7-9778-b2d53d22e16f`) $\rightarrow$ Composer (Implement: `2cc5b270-d858-422c-9c26-b96c1b2292d9`) $\rightarrow$ Orchestrator (Verify: Passed 4/4 Gates)
+- **Delivered Surfaces:** `src/components/ae/supply/price-update-modal/AePriceUpdateModal.tsx`, `src/components/ae/supply/price-update-modal/AePriceUpdateModalSkeleton.tsx`, `src/components/ae/supply/price-update-modal/price-update-modal.contracts.ts`, `src/components/ae/supply/price-update-modal/price-revision-preview.ts`, `src/components/ae/supply/price-update-modal/price-revision-preview.test.ts`, `src/components/ae/supply/price-update-modal/usePriceRevisionForm.ts`, `src/components/ae/supply/price-update-modal/usePriceRevisionForm.test.ts`, `src/components/ae/supply/price-update-modal/components/PriceDeltaPreview.tsx`, `src/components/ae/supply/price-update-modal/components/GstSplitBreakdown.tsx`, `src/components/ae/supply/price-update-modal/components/PriceAdjustmentChips.tsx`, `src/components/ae/supply/price-update-modal/components/PriceRevisionAmountField.tsx`, `src/components/ae/supply/price-update-modal/components/PriceRevisionDiagnosticSlot.tsx`
+- **Deviations:** Extra leaves `PriceRevisionAmountField.tsx` and `PriceRevisionDiagnosticSlot.tsx` beyond the three named in the target spec. The modal **bypasses** the sanctioned `displayPriceFromPricingConfig` display chain for GST leg preview (four-decimal micro-unit formatting). Preserved deliberately; recorded as **Accepted Debt: Price Modal GST Leg Display (`CQ-16`)** above.
+- **Status:** `VERIFIED`
 
 ---
 
-### CQ-17: Decompose `AeToolTestPlayground.tsx` (370 lines)
-- **Surfaces:** `src/components/ae/supply/AeToolTestPlayground.tsx`
-- **Incumbent Baseline:** Test playground owns recursive JSON Schema walking, default extraction, and latency timing.
+### CQ-17: Decompose `AeToolTestPlayground.tsx` (352 lines)
+- **Surfaces:** `src/components/ae/supply/tool-test-playground/AeToolTestPlayground.tsx` (container **97** lines; was 352 at refactor start; register pre-Wave 3 incorrectly cited 370)
+- **Incumbent Baseline:** Test playground owns JSON Schema default extraction and response display. *(Register pre-Wave 3 incorrectly claimed the playground owns latency timing; it only displays `latencyMs` from its injected port, and the only clock is a `Date.now` stub in the parent.)*
 - **Code Quality Gap:** Schema parsing algorithms embedded in UI component.
 - **Target Spec:**
   - Extract `tool-test-payload.ts` for schema default extraction.
   - Extract `useToolTestPlayground.ts` hook for execution timing and response handling.
   - Extract pure leaves: `JsonPayloadEditor.tsx`, `PlaygroundResponsePane.tsx`.
-- **Subagent Assignment:** Grok (Spec: `9d72774d-a2b7-4905-9888-9fb280449696`) $\rightarrow$ Composer (Implement) $\rightarrow$ Orchestrator (Verify)
-- **Status:** `READY`
+- **Subagent Assignment:** Grok (Spec: `1a5b384e-1c4c-4de8-830e-beb77e32f754`) $\rightarrow$ Composer (Implement: `6b24650c-e422-494b-9630-27fa92622abf`) $\rightarrow$ Orchestrator (Verify: Passed 4/4 Gates)
+- **Delivered Surfaces:** `src/components/ae/supply/tool-test-playground/AeToolTestPlayground.tsx`, `src/components/ae/supply/tool-test-playground/AeToolTestPlaygroundSkeleton.tsx`, `src/components/ae/supply/tool-test-playground/tool-test-playground.contracts.ts`, `src/components/ae/supply/tool-test-playground/tool-test-payload.ts`, `src/components/ae/supply/tool-test-playground/tool-test-payload.test.ts`, `src/components/ae/supply/tool-test-playground/useToolTestPlayground.ts`, `src/components/ae/supply/tool-test-playground/components/JsonPayloadEditor.tsx`, `src/components/ae/supply/tool-test-playground/components/PlaygroundResponsePane.tsx`
+- **Deviations:** The register described one recursive walker; there are **two extractors with deliberately different semantics** in `tool-test-payload.ts`: `extractDefaultPayload` is shallow and omits objects, arrays, and untyped properties; `extractExamplePayload` recurses and yields `{}`, `[]`, and `null` for those same cases, and disagrees on boolean (`false` versus `true`) and on numbers without a minimum (`0` versus `1`). They were not unified. No execution clock was added to the compound. **Observation (not a defect):** neither extractor has a depth bound or cycle guard and neither dereferences `$ref`; adding a bound would have been a behaviour change.
+- **Status:** `VERIFIED`
 
 ---
 
-### CQ-18: Decompose `AeAgentOperatorConsole.tsx` (456 lines)
-- **Surfaces:** `src/components/ae/console/AeAgentOperatorConsole.tsx`
+### CQ-18: Decompose `AeAgentOperatorConsole.tsx` (455 lines)
+- **Surfaces:** `src/components/ae/console/agent-operator-console/AeAgentOperatorConsole.tsx` (container **164** lines; was 455 at refactor start; register pre-Wave 3 incorrectly cited 456)
 - **Incumbent Baseline:** Mixes route selection, revoke/drain lifecycle dialogs, and toast handling.
 - **Code Quality Gap:** Conflation of sheet navigation, modal states, and table rendering.
 - **Target Spec:**
   - Extract `useAgentLifecycleDialog.ts` and `useAgentSelection.ts`.
   - Extract pure leaves: `AgentRecordSheet.tsx`, `AgentLifecycleConfirmDialog.tsx`.
-- **Subagent Assignment:** Grok (Spec: `9d72774d-a2b7-4905-9888-9fb280449696`) $\rightarrow$ Composer (Implement) $\rightarrow$ Orchestrator (Verify)
-- **Status:** `READY`
+- **Subagent Assignment:** Grok (Spec: `b62253b7-daea-4d12-bfd3-4815579d976c`) $\rightarrow$ Composer (Implement: `cd4e7994-145e-4b95-9e96-32f4367c20cd`) $\rightarrow$ Orchestrator (Verify: Passed 4/4 Gates)
+- **Delivered Surfaces:** `src/components/ae/console/agent-operator-console/AeAgentOperatorConsole.tsx`, `src/components/ae/console/agent-operator-console/AeAgentOperatorConsoleSkeleton.tsx`, `src/components/ae/console/agent-operator-console/agent-operator-console.contracts.ts`, `src/components/ae/console/agent-operator-console/agent-lifecycle-copy.ts`, `src/components/ae/console/agent-operator-console/agent-lifecycle-copy.test.ts`, `src/components/ae/console/agent-operator-console/build-agent-record-sheet-props.tsx`, `src/components/ae/console/agent-operator-console/useAgentLifecycleDialog.ts`, `src/components/ae/console/agent-operator-console/useAgentLifecycleDialog.test.ts`, `src/components/ae/console/agent-operator-console/useAgentSelection.ts`, `src/components/ae/console/agent-operator-console/useAgentSelection.test.ts`, `src/components/ae/console/agent-operator-console/components/AgentFactsDisclosure.tsx`, `src/components/ae/console/agent-operator-console/components/AgentLifecycleConfirmDialog.tsx`, `src/components/ae/console/agent-operator-console/components/AgentLifecycleConfirmDialog.test.tsx`, `src/components/ae/console/agent-operator-console/components/AgentRecordSheet.tsx`, `src/components/ae/console/agent-operator-console/components/AgentRecordSheet.test.tsx`
+- **Deviations:** Container is **164** lines, fourteen over the 150-line compound-container guideline; thirty of those are the `AeAgentOperatorConsoleProps` block, which cleanliness rule §1 requires to stay in the `.tsx`. Accepted as a deviation. The register implied the console was parent to both Wave 2 console compounds; it is parent to `spending-limits-form` only, while `connect-agent-wizard` is owned by the route. Two files beyond the sketch were added: `agent-lifecycle-copy.ts` and `AgentFactsDisclosure.tsx`. **Preserved invariant:** drain versus freeze is label-only — `revocationMode` reaches only the confirm button verb, never a mutation, and no server function has a mode field. There is **no typed-to-confirm** and **no client idempotency key** on this surface, contrary to what the register implied.
+- **Status:** `VERIFIED`
 
 ---
 
 # Wave 4: Convex God-Files & CQS Nonce Rectification
 
-### CQ-19: Rectify Nonce-Burning Agent Reads to Pure Queries (9 Handlers)
-- **Surfaces:** `convex/moneyAccountFunding.ts`, `convex/capabilityCallProjection.ts`, `convex/capabilityProviderTools.ts`, `convex/capabilityProviderOffboarding.ts`, `convex/capabilityProviderConnectionAgents.ts`, `convex/capabilitySupplyOwnerFunnel.ts`, `convex/agentMoneyReads.ts`, `convex/marketDemandSignals.ts`, `convex/moneyLedger.ts`
-- **Incumbent Baseline:** 9 agent read operations are registered as Convex `mutation` purely to consume a one-time `sourceWriteNonces` record.
-- **Code Quality Gap:** Major CQS violation. Reads fail with `source_write_nonce_replayed` on refresh; cannot be cached.
+### CQ-19: Rectify Nonce-Burning Agent Reads to Pure Queries (11 Handlers)
+- **Surfaces:** `convex/capabilityProviderOffboarding.ts`, `convex/capabilityCallProjection.ts`, `convex/capabilityProviderTools.ts`, `convex/capabilityProviderConnectionAgents.ts`, `convex/marketDemandSignals.ts`, `convex/capabilitySupplyOwnerFunnel.ts`, `convex/moneyAccountFunding.ts`, `convex/agentMoneyReads.ts` (commit `197e87336`)
+- **Incumbent Baseline:** Eleven agent read operations were registered as Convex `mutation` purely to consume a one-time `sourceWriteNonces` record. The register originally scoped nine handlers including `moneyLedger.readAgentProviderEarnings`; scout corrected the live set before implementation.
+- **Code Quality Gap:** Major CQS violation. A refresh or retry reusing a still-valid signed admission failed with `source_write_nonce_replayed`; reads could not be cached or safely retried.
 - **Target Spec:**
-  - Convert all 9 handlers to `query` or `internalQuery` using `requireSourceRead`.
+  - Convert eligible handlers to `query` using `requireSourceRead`.
+  - `requireSourceRead` retains HMAC signature, 5-minute freshness, scope, `operationKey`, `correlationId`, command digest, and request binding; only the single-use nonce insert is dropped.
   - Update callers and test mocks to invoke queries without write nonces.
-- **Subagent Assignment:** Grok (Spec: `6033918e-28e4-4e49-a1c6-b9b7016314ea`) $\rightarrow$ Composer (Implement) $\rightarrow$ Orchestrator (Verify)
-- **Status:** `READY`
+- **Converted handlers:** `capabilityProviderOffboarding.readAgentStatus`; `capabilityCallProjection.listAgentSupplyCalls`; `capabilityProviderTools.listAgent` and `.readAgent`; `capabilityProviderConnectionAgents.list` and `.read`; `marketDemandSignals.list` and `.read`; `capabilitySupplyOwnerFunnel.readAgentOwnerSupplyFunnel`; `moneyAccountFunding.readAgentHandoff`; `agentMoneyReads.activity`.
+- **Central hazard (reusable lesson):** Four admit helpers were shared between these reads and real commands. Converting a shared helper in place would have stripped replay protection from `reserveAgentHandoff`, `bindAgentHandoff`, `marketDemandSignals.record`, and four connection commands — with lint, typecheck, and both RPC guards all staying green. The safe incision was a read-only sibling beside an untouched write path: `agentActor` / `agentActorForRead`, `admitForWrite` / `admitForRead`, `admitAgentHandoff` / `admitAgentHandoffForRead`, `admitAgentMoneyReadForWrite` / `admitAgentMoneyReadForRead`.
+- **Deliberate non-conversions:**
+  - **`agentMoneyReads.prepareBalance`** stays `internalMutation`. It gates the `balance` action, which calls Formance (external ledger). Converting it would make a signed admission replayable against a third party for five minutes; replay protection was judged worth more than CQS symmetry.
+  - **`moneyLedger.readAgentProviderEarnings`** dropped from scope. Stub returning `source_unavailable`; burns no nonce. Revisit when earnings are implemented.
+- **Subagent Assignment:** Grok (Spec: `6033918e-28e4-4e49-a1c6-b9b7016314ea`) $\rightarrow$ Composer (Implement: `197e87336`) $\rightarrow$ Orchestrator (Verify: Passed 4/4 Gates + RPC guards)
+- **Status:** `VERIFIED`
 
 ---
 
-### CQ-20: Decompose `convex/interactiveAuthority.ts` (1,172 lines)
-- **Surfaces:** `convex/interactiveAuthority.ts`
+### CQ-19a: Pin Convex RPC Kind Snapshot & String-Reference Ratchet
+- **Surfaces:** `tests/imports/convex-api-kind-snapshot.test.ts`, `tests/imports/convex-string-reference-ratchet.test.ts`, `tests/helpers/convex-rpc-contract-scans.ts`, `tests/fixtures/convex-api-kind-snapshot.json`
+- **Incumbent Baseline:** No automated guard when a Convex handler moves between files or changes kind (`query` / `mutation` / `action`). String-literal `api.module.method` references fail silently at runtime.
+- **Code Quality Gap:** Façade decompositions and CQS kind changes are high-risk without a contract ratchet; lint and typecheck stay green when a reference points at the wrong kind.
+- **Target Spec:**
+  - Snapshot **524** `module.method → kind` triples in a committed fixture.
+  - Ratchet **322** string-literal references in the repo against that snapshot.
+  - Centralise scan logic in `tests/helpers/convex-rpc-contract-scans.ts`.
+  - Prove both tests fail on a deliberate broken reference before relying on them in Wave 4 commits.
+- **Delivered Surfaces:** `tests/imports/convex-api-kind-snapshot.test.ts`, `tests/imports/convex-string-reference-ratchet.test.ts`, `tests/helpers/convex-rpc-contract-scans.ts`, `tests/fixtures/convex-api-kind-snapshot.json`
+- **Deviations:** Additive workflow inserted after `CQ-19` was specced; not one of the original `CQ-01`–`CQ-30` census IDs, but counted in the Wave 4 **Verified** column (six delivered entries).
+- **Status:** `VERIFIED`
+
+---
+
+### CQ-20: Decompose `convex/interactiveAuthority.ts` (1,172 $\rightarrow$ 102 lines)
+- **Surfaces:** `convex/interactiveAuthority.ts`, **14** submodules under `convex/lib/interactiveAuthority/` (commit `363db3499`; ran first in Wave 4 to establish the `convex/lib/<domain>/` façade pattern)
 - **Incumbent Baseline:** 1,172 lines jamming error codes, Clerk organization locator, identity provisioning, credential rotation, fact reads, and scheduled reconcile.
 - **Code Quality Gap:** 1,000-line rule violation; multiple disparate responsibilities.
 - **Target Spec:**
-  - Extract `convex/lib/interactiveAuthority/errors.ts`.
-  - Extract `convex/lib/interactiveAuthority/provisioning.ts`.
-  - Extract `convex/lib/interactiveAuthority/facts.ts`.
-  - Extract `convex/lib/interactiveAuthority/accountSelection.ts`.
-  - Reduce root `interactiveAuthority.ts` to <200 lines.
-- **Subagent Assignment:** Grok (Spec: `6033918e-28e4-4e49-a1c6-b9b7016314ea`) $\rightarrow$ Composer (Implement) $\rightarrow$ Orchestrator (Verify)
-- **Status:** `READY`
+  - Move logic to `convex/lib/interactiveAuthority/*`; keep root `convex/interactiveAuthority.ts` as thin RPC façade (**not** `convex/interactiveAuthority/` — that would break generated `api.interactiveAuthority.*` paths).
+  - Reduce root file to <200 lines.
+- **Delivered:** Root façade **102** lines; **14** files under `convex/lib/interactiveAuthority/`. All generated API paths unchanged; both RPC guards passed with unmodified fixtures.
+- **Subagent Assignment:** Grok (Spec: `6033918e-28e4-4e49-a1c6-b9b7016314ea`) $\rightarrow$ Composer (Implement: `363db3499`) $\rightarrow$ Orchestrator (Verify: Passed 4/4 Gates + RPC guards)
+- **Deviations:** React Doctor `server-sequential-independent-await` / `async-await-in-loop` advisories in `accessFacts.ts` and `accountResolution.ts` — pre-existing behaviour, logged as Accepted Debt.
+- **Status:** `VERIFIED`
 
 ---
 
-### CQ-21: Decompose `convex/moneyAccountFunding.ts` (1,172 lines)
-- **Surfaces:** `convex/moneyAccountFunding.ts`
+### CQ-21: Decompose `convex/moneyAccountFunding.ts` (1,172 $\rightarrow$ 222 lines)
+- **Surfaces:** `convex/moneyAccountFunding.ts`, **11** submodules under `convex/lib/money/` (commit `363db3499`)
 - **Incumbent Baseline:** 1,172 lines mixing owner top-up commands, agent handoff reserves, webhook reads, and invoice history projection.
 - **Code Quality Gap:** 1,000-line rule violation.
 - **Target Spec:**
-  - Extract `convex/lib/money/fundingValidators.ts`.
-  - Extract `convex/lib/money/fundingOwnerCommands.ts`.
-  - Extract `convex/lib/money/fundingAgentHandoff.ts`.
-  - Extract `convex/lib/money/fundingWebhookReads.ts`.
-  - Extract `convex/lib/money/fundingInvoiceHistory.ts`.
-  - Reduce root file to <250 lines.
-- **Subagent Assignment:** Grok (Spec: `6033918e-28e4-4e49-a1c6-b9b7016314ea`) $\rightarrow$ Composer (Implement) $\rightarrow$ Orchestrator (Verify)
-- **Status:** `READY`
+  - Move logic to `convex/lib/money/*`; reduce root façade to <250 lines.
+- **Delivered:** Root façade **222** lines; **11** files under `convex/lib/money/`. All generated API paths unchanged; both RPC guards passed with unmodified fixtures.
+- **Subagent Assignment:** Grok (Spec: `6033918e-28e4-4e49-a1c6-b9b7016314ea`) $\rightarrow$ Composer (Implement: `363db3499`) $\rightarrow$ Orchestrator (Verify: Passed 4/4 Gates + RPC guards)
+- **Deviations:** React Doctor advisories in `ownerFundingInvoiceHistory.ts` (pre-existing). `args as never` on read-admit path in `agentFundingHandoff.ts` — Accepted Debt.
+- **Status:** `VERIFIED`
 
 ---
 
-### CQ-22: Decompose `convex/capabilitySupplyPublish.ts` (1,135 lines)
+### CQ-22: Decompose `convex/capabilitySupplyPublish.ts` — DROPPED
 - **Surfaces:** `convex/capabilitySupplyPublish.ts`
-- **Incumbent Baseline:** 1,135 lines mixing source-authority verification, prepared publishing, admission cases, bootstrap decoding, and curated capability management.
-- **Code Quality Gap:** 1,000-line rule violation.
-- **Target Spec:**
-  - Extract `convex/lib/capabilitySupply/sourceAuthority.ts`.
-  - Extract `convex/lib/capabilitySupply/publishPrepared.ts`.
-  - Extract `convex/lib/capabilitySupply/publishBootstrap.ts`.
-  - Extract `convex/lib/capabilitySupply/readPublication.ts`.
-  - Reduce root file to <200 lines.
-- **Subagent Assignment:** Grok (Spec: `6033918e-28e4-4e49-a1c6-b9b7016314ea`) $\rightarrow$ Composer (Implement) $\rightarrow$ Orchestrator (Verify)
-- **Status:** `READY`
+- **Incumbent Baseline (register, pre-scout):** Assumed a 1,135-line god RPC file mixing source-authority verification, prepared publishing, admission cases, bootstrap decoding, and curated capability management.
+- **Scout finding (20 Sep 2026):** `capabilitySupplyPublish.ts` is **already a helper module**, not a root Convex RPC façade. There is no 1,000-line rule violation and no decomposition problem to solve.
+- **Decision (Orchestrator, 20 Sep 2026):** **Drop `CQ-22` from Wave 4.** Do not force a façade split that would confuse ownership with real RPC entry points.
+- **Status:** `DROPPED`
 
 ---
 
-### CQ-23: Decompose `convex/capabilityQuotes.ts` (1,116 lines)
-- **Surfaces:** `convex/capabilityQuotes.ts`
+### CQ-23: Decompose `convex/capabilityQuotes.ts` (1,116 $\rightarrow$ 75 lines)
+- **Surfaces:** `convex/capabilityQuotes.ts`, **9** submodules under `convex/lib/capabilityQuotes/` (commit `363db3499`)
 - **Incumbent Baseline:** 1,116 lines mixing financial subject preparation, quote hashing, Formance sync action, rate lookup, and call admission.
 - **Code Quality Gap:** 1,000-line rule violation.
 - **Target Spec:**
-  - Extract `convex/lib/capabilityQuotes/financialSubjects.ts`.
-  - Extract `convex/lib/capabilityQuotes/issueQuote.ts`.
-  - Extract `convex/lib/capabilityQuotes/quoteAction.ts`.
-  - Reduce root file to <250 lines.
-- **Subagent Assignment:** Grok (Spec: `6033918e-28e4-4e49-a1c6-b9b7016314ea`) $\rightarrow$ Composer (Implement) $\rightarrow$ Orchestrator (Verify)
-- **Status:** `READY`
+  - Move logic to `convex/lib/capabilityQuotes/*`; reduce root façade to <250 lines.
+- **Delivered:** Root façade **75** lines; **9** files under `convex/lib/capabilityQuotes/`. All generated API paths unchanged; both RPC guards passed with unmodified fixtures.
+- **Subagent Assignment:** Grok (Spec: `6033918e-28e4-4e49-a1c6-b9b7016314ea`) $\rightarrow$ Composer (Implement: `363db3499`) $\rightarrow$ Orchestrator (Verify: Passed 4/4 Gates + RPC guards)
+- **Status:** `VERIFIED`
 
 ---
 
-### CQ-24: Decompose `convex/capabilityProviderConnectionAttempts.ts` (1,105 lines)
-- **Surfaces:** `convex/capabilityProviderConnectionAttempts.ts`
+### CQ-24: Decompose `convex/capabilityProviderConnectionAttempts.ts` (1,105 $\rightarrow$ 100 lines)
+- **Surfaces:** `convex/capabilityProviderConnectionAttempts.ts`, **9** submodules under `convex/lib/providerConnections/` (commit `363db3499`)
 - **Incumbent Baseline:** 1,105 lines mixing attempt reserves, secret preparation, OAuth callback bindings, and atomic finalization.
 - **Code Quality Gap:** 1,000-line rule violation.
 - **Target Spec:**
-  - Extract `convex/lib/providerConnections/attemptReserve.ts`.
-  - Extract `convex/lib/providerConnections/attemptOwnerReads.ts`.
-  - Extract `convex/lib/providerConnections/attemptPrepare.ts`.
-  - Extract `convex/lib/providerConnections/attemptFinalize.ts`.
-  - Reduce root file to <200 lines.
-- **Subagent Assignment:** Grok (Spec: `6033918e-28e4-4e49-a1c6-b9b7016314ea`) $\rightarrow$ Composer (Implement) $\rightarrow$ Orchestrator (Verify)
-- **Status:** `READY`
+  - Move logic to `convex/lib/providerConnections/*`; reduce root façade to <200 lines.
+- **Delivered:** Root façade **100** lines; **9** files under `convex/lib/providerConnections/`. All generated API paths unchanged; both RPC guards passed with unmodified fixtures.
+- **Subagent Assignment:** Grok (Spec: `6033918e-28e4-4e49-a1c6-b9b7016314ea`) $\rightarrow$ Composer (Implement: `363db3499`) $\rightarrow$ Orchestrator (Verify: Passed 4/4 Gates + RPC guards)
+- **Deviations:** Submodule files triggered `oxlint.config.ts` per-directory complexity ceiling (`max: 10`). Four per-file ratchets added — see **Accepted Debt: Convex Complexity Ratchets (`CQ-24`)**.
+- **Status:** `VERIFIED`
 
 ---
 
-### CQ-25: Decompose `convex/capabilityCallProjection.ts` (1,041 lines)
+### CQ-25: Decompose `convex/capabilityCallProjection.ts` (1,041 lines) — PARKED
 - **Surfaces:** `convex/capabilityCallProjection.ts`
 - **Incumbent Baseline:** 1,041 lines mixing worker dispatch mapping, canary projection, recovery calculation, and provider supply call listings.
-- **Code Quality Gap:** 1,000-line rule violation.
-- **Target Spec:**
-  - Extract `convex/lib/callLifecycle/workerProjection.ts`.
-  - Extract `convex/lib/callLifecycle/canaryProjection.ts`.
-  - Extract `convex/lib/callLifecycle/recoveryProjection.ts`.
-  - Extract `convex/lib/callLifecycle/supplyCalls.ts`.
+- **Code Quality Gap:** 1,000-line rule violation remains.
+- **Target Spec (unchanged intent):**
+  - Move logic to `convex/lib/callLifecycle/*` (or equivalent under `convex/lib/`); keep root façade for RPC paths.
   - Reduce root file to <200 lines.
-- **Subagent Assignment:** Grok (Spec: `6033918e-28e4-4e49-a1c6-b9b7016314ea`) $\rightarrow$ Composer (Implement) $\rightarrow$ Orchestrator (Verify)
-- **Status:** `READY`
+- **Parked reason:** Concurrent agent in-flight ADR on the call worker. Decomposing projection now risks fighting the same boundaries twice. **`listAgentSupplyCalls` was converted to a query in `CQ-19`**; the file is smaller in risk surface but still over the 1,000-line rule.
+- **Subagent Assignment:** Grok (Spec: `6033918e-28e4-4e49-a1c6-b9b7016314ea`) $\rightarrow$ *(resume after call-worker ADR)*
+- **Status:** `PARKED`
 
 ---
 
