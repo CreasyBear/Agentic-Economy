@@ -1,7 +1,7 @@
 # Code Quality, Component Purity & Structural Decoupling: Operational Register
 
 **Date:** 20 September 2026  
-**Status:** ACTIVE REFINEMENT REGISTER (Waves 1–4 Complete; Wave 5 Ready)  
+**Status:** CAMPAIGN CLOSED (Waves 1–5 Complete; commit `147b602a7`)  
 **Operating Protocol:** `docs/operations/code-quality-maturity-protocol.md`  
 **Master Architectural Specification:** `docs/designs/2026-09-19-code-quality-iceinvein.md`  
 **Core Rules:** `.cursor/rules/leaf-and-component-cleanliness.mdc`, `AGENTS.md`
@@ -10,7 +10,7 @@
 
 ## 1. Progress & Census Scorecard
 
-*Refinement in Progress via 4-Phase Subagent Protocol*
+*Campaign complete — 4-Phase Subagent Protocol*
 
 | Wave | Scope | Workflows | Verified | In Review | Pending | Target Status |
 | :--- | :--- | :---: | :---: | :---: | :---: | :---: |
@@ -18,8 +18,8 @@
 | **Wave 2: Leaf & Container Decoupling: Critical Surfaces** | Earnings, Chat, Consent, Spending Limits, Command Palette | `CQ-07` – `CQ-12` | 6 | 0 | 0 | `COMPLETE` |
 | **Wave 3: Leaf & Container Decoupling: Wizards & Settings** | Danger Zone, Provider Workspace, Onboarding, Price Modal, Playground, Operator Console | `CQ-13` – `CQ-18` | 6 | 0 | 0 | `COMPLETE` |
 | **Wave 4: Convex God-Files & CQS Nonce Rectification** | Four façade decompositions + 11 CQS read conversions + RPC contract guards (`CQ-22` dropped; `CQ-25` parked) | `CQ-19` – `CQ-25` | 6 | 0 | 0 | `COMPLETE` |
-| **Wave 5: Barrel Cycle Eradication & Dependency Ratchet** | Eradicate type-on-barrel imports; drop ceiling 32 $\rightarrow$ 0 | `CQ-26` – `CQ-30` | 0 | 0 | 5 | `READY` |
-| **Total** | **All 30 Code Quality Workflows** | **30** | **24** | **0** | **6** | `IN PROGRESS` |
+| **Wave 5: Barrel Cycle Eradication & Dependency Ratchet** | Type relocation out of barrels; `no-circular-via-barrel` 32 $\rightarrow$ 0; module ratchet rebaseline (`CQ-29` collateral; not executed) | `CQ-26` – `CQ-30` | 4 | 0 | 0 | `COMPLETE` |
+| **Total** | **All 30 Code Quality Workflows** | **30** | **28** | 0 | 0 | `CLOSED` (`CQ-22` `DROPPED`; `CQ-25` `PARKED`; `CQ-29` collateral) |
 
 ### Wave 1 Verification Evidence
 
@@ -65,6 +65,56 @@
 
 `no-circular-via-barrel` remained **32 after Wave 4**. Both RPC contract guards (`convex-api-kind-snapshot.test.ts`, `convex-string-reference-ratchet.test.ts`) passed with **unmodified fixtures** after all façade moves.
 
+### Wave 5 Verification Evidence
+
+| Gate | Command | Result |
+| :--- | :--- | :--- |
+| **Gate 1 Lint** | `npm run lint` (oxlint, `--deny-warnings`) | Exit 0, zero warnings. |
+| **Gate 2 Typecheck** | `npm run typecheck` (`tsc --noEmit`, `exactOptionalPropertyTypes: true`) | Exit 0, zero errors. |
+| **Gate 3 Dependency ratchet** | `npm run deps:check` | Exit 0. **`no-circular` 0/0 ok**, **`no-circular-capability-supply-internal` 0/0 ok**, **`no-circular-via-barrel` 0/0 ok** — all three rules green for the first time in the campaign. |
+| **Gate 4 Tests** | `npx vitest run` | **6 failures in 2 files**, down from the Wave 1–4 baseline of **8 in 3** (see Known Red Baseline). **`module-boundaries-ratchet.test.ts` now passes** — both ratchet failures from that file are resolved. |
+
+All **32** `no-circular-via-barrel` violations were one repeated pattern across **six** barrels (`money`, `security`, `observability`, `business`, `seo`, `discovery`): `public.ts` **defined** types, the module's own `internal/` imported them back from the barrel, and the barrel re-exported those same internals — an `internal → public.ts → same internal` loop. None were structural cross-module cycles. None were introduced by Waves 1–4; all were pre-existing.
+
+### Wave 5 Campaign Commit
+
+Wave 5 landed on `main` as `147b602a7` — barrel cycle eradication (`CQ-26`–`CQ-28`), dependency and module ratchet close-out (`CQ-30`), and the **first commit** of `src/modules/module-boundaries.ts` (see correction below).
+
+### Wave 5 Cross-Cutting Infrastructure & Register Corrections
+
+- **Wrong fix in the Wave 5 plan (reusable lesson):** The register advised `import type` as the cheap decoupling move. **It does not work.** `.dependency-cruiser.cjs` sets `tsPreCompilationDeps: true`, so type-only edges still count as cycles; most of the 32 violations already used `import type`. The only effective fix is **relocating the type out of the barrel entirely** into an `internal/` leaf that internals import directly; `public.ts` re-exports for external consumers only.
+- **Wrong module census in the Wave 5 plan (reusable lesson):** The register named four modules (`money`, `security`, `observability`, `discovery`). There were **six**. It missed **`business`** and **`seo`**, and undersold **`discovery`** and **`security`** (discovery's 11 cycles were transitive through other barrels; security had six cycles, not a single-file anecdote).
+- **`CQ-29` never ran:** Discovery's 11 cycles resolved as **collateral** of `CQ-26` through `CQ-28`, because discovery's loops ran through those barrels. Verified by measurement — `depcruise` reports zero violations and no discovery `internal/` file imports its own barrel — not assumed.
+- **`module-boundaries.ts` history correction:** Waves 1–3 recorded registering **25** entry surfaces in `src/modules/module-boundaries.ts`. That file was **never committed** by the campaign until `147b602a7`; its git history stopped at pre-campaign `ac16182cb`, and the surfaces existed only as **uncommitted working-tree changes**. That is the real reason the module ratchet was red from Wave 1 onward — not the rationale previously recorded under Accepted Debt.
+- **Ratchet rebaseline (`CQ-30`):** `tests/imports/module-boundaries-ratchet.test.ts` rebaselined from **28 modules / 198 surfaces** to measured **29 / 224**, derived from the manifest rather than estimated. The rise reflects type quarantine moving domain types out of `.tsx` into declared surfaces — the intended outcome, not module sprawl. **One module and one surface** of 29/224 (`decision-engine` entries kept; `registry/tool-reranker.ts` **omitted**) belong to concurrent in-flight work and should be re-attributed when that agent lands, at which point the omitted surface is re-added. Declaring `tool-reranker.ts` now would trip `module-unknown-entry` on a clean checkout because the file is untracked in their branch.
+- **Barrel invariants preserved:** Every `public.ts` kept its exported surface identical — no external consumer changed. No file under any `internal/` imports its own barrel (cleanliness rule §5). New type leaves are deliberately **not** declared as entry surfaces.
+
+### Campaign Closing Summary
+
+The code-quality campaign ran five waves across **28 verified workflows** (`CQ-22` dropped, `CQ-25` parked, `CQ-29` resolved without execution):
+
+1. **Wave 1 — Type quarantine:** Extracted 80+ domain and view-model types from `.tsx` into module contracts and view-models; consolidated Rule-4 diagnostics; enabled deep module imports without widening barrel cycles.
+2. **Wave 2 — Critical surface decomposition:** Earnings, chat, consent, spending limits, and command palette became compound folders with hooks, pure leaves, and colocated tests; enabled `src/**/*.test.ts` discovery in Vitest.
+3. **Wave 3 — Wizards and settings:** Danger zone, provider workspace, onboarding, price modal, playground, and operator console received the same container or hook plus leaf pattern.
+4. **Wave 4 — Convex façades and CQS:** Four god RPC files split under `convex/lib/<domain>/` with unchanged generated paths; eleven nonce-burning reads converted to queries with read-only admit siblings; RPC kind snapshot and string-reference ratchets added.
+5. **Wave 5 — Barrel cycle eradication:** Relocated shared types out of six god-barrels into internal leaves; lowered `no-circular-via-barrel` to **0**; committed `module-boundaries.ts` and rebaselined the module manifest ratchet to measured truth.
+
+### Outstanding Work (Post-Campaign)
+
+Nothing below was in scope for Wave 5 close-out; carry forward explicitly so recorded debt is not lost:
+
+| Item | Notes |
+| :--- | :--- |
+| **`CQ-25`** | `capabilityCallProjection.ts` façade decomposition — parked behind concurrent call-worker ADR. |
+| **`oxlint.config.ts` complexity ratchets (`CQ-24`)** | Per-file ceilings in `convex/lib/providerConnections/`; **`reserveAttempt.ts` at 59** is the standout simplification target. |
+| **React Doctor advisories (Wave 4)** | `server-sequential-independent-await` / `async-await-in-loop` in verbatim-moved Convex submodules — see Accepted Debt. |
+| **`args as never` (`CQ-21`)** | `convex/lib/money/agentFundingHandoff.ts` read-admit path — security-relevant; needs deliberate fix. |
+| **`no-chain-state-updates`** | `src/components/ae/offerings/provider-workspace/useProviderWorkspaceSheets.ts` — surfaced at Wave 3 commit hook. |
+| **`CQ-16` GST display** | Price modal bypasses `displayPriceFromPricingConfig` for four-decimal leg preview — see Accepted Debt. |
+| **`directory-presentation.ts`** | Re-export shim left from `CQ-05`; structural cleanup candidate. |
+| **`registry/tool-reranker.ts`** | Re-attribute the omitted manifest surface when concurrent agent work lands at `HEAD`. |
+| **Known red tests (concurrent agent)** | Six failures in `module-boundaries.test.ts` (3) and `native-platform-procure.test.ts` (3) — ADR 0002 `tool.procure` removal; not campaign-owned. |
+
 ### Wave 4 Campaign Commits
 
 Wave 4 landed in two commits on `main`:
@@ -101,25 +151,22 @@ Waves 1 and 2 were committed locally on `main` as `0014668bc` (**180 files**, **
 
 ## 2. Known Red Baseline (Non-Campaign Failures)
 
-This checkout is shared with a concurrent agent working on procurement, the decision engine, and the registry. The failures below are not owned by this campaign; Waves 2 through 5 gate on **no new failures against this baseline** rather than on a zero-failure suite.
+This checkout is shared with a concurrent agent working on procurement, the decision engine, and the registry. The failures below are not owned by this campaign. Wave 5 closed with **no new campaign-owned failures**; the module manifest ratchet is green after `CQ-30`.
 
 | Test File | Count | Attribution | Evidence |
 | :--- | :---: | :--- | :--- |
-| `tests/imports/module-boundaries.test.ts` | 3 | Concurrent agent | `src/modules/capability-execution/procure-engine.ts` is imported but absent from `entrySurfaces`; a forbidden `capability-execution` to `registry` edge at `procure-engine.ts:7`; 7 unowned white-box test imports while `testOnlyWhiteBoxExceptions` is empty. All three already failing at `HEAD` (`713f904b9`). |
-| `tests/imports/module-boundaries-ratchet.test.ts` | 2 | Mixed | One failure: module count 29 exceeds the ceiling of 28, caused by the new `decision-engine` module (concurrent agent; this campaign added zero modules). Second failure: `totalEntrySurfaces` breach owned by this campaign (see Accepted Debt below). |
-| `tests/unit/core-flow/native-platform-procure.test.ts` | 3 | Concurrent agent | `toolProcureAction` and `TOOL_PROCURE_ROUTE_CONTRACT` were removed from `src/modules/actions/index.ts`, so `tool.procure` and the derived `ae_tool_procure` MCP catalog entry both resolve `undefined`. New breakage in the working tree; registered at `HEAD`. |
+| `tests/imports/module-boundaries.test.ts` | 3 | Concurrent agent | `src/modules/capability-execution/procure-engine.ts` is imported but absent from `entrySurfaces`; a forbidden `capability-execution` to `registry` edge at `procure-engine.ts:7`; unowned white-box test imports while `testOnlyWhiteBoxExceptions` is empty. In-flight ADR 0002 / `tool.procure` removal. |
+| `tests/unit/core-flow/native-platform-procure.test.ts` | 3 | Concurrent agent | `toolProcureAction` and `TOOL_PROCURE_ROUTE_CONTRACT` removed from `src/modules/actions/index.ts`, so `tool.procure` and the derived `ae_tool_procure` MCP catalog entry resolve `undefined`. |
 
-**8 failures in 3 files** (down from the pre–Wave 2 baseline of **9 failures in 4 files**). The `tests/ui-contract/ui-contract.test.ts` failure (`bg-black/30` on dialog/sheet) was **resolved during Wave 2** by overlay scrim re-tokenization (see Wave 2 Cross-Cutting Infrastructure); the test was not weakened.
+**6 failures in 2 files** (down from **8 in 3** carried since Wave 1). **`tests/imports/module-boundaries-ratchet.test.ts` — resolved in Wave 5 (`CQ-30`).** The `tests/ui-contract/ui-contract.test.ts` failure (`bg-black/30` on dialog/sheet) was **resolved during Wave 2** by overlay scrim re-tokenization (see Wave 2 Cross-Cutting Infrastructure); the test was not weakened.
 
 Attribution was established by forensic scout `49ac5025-902c-4cf3-bd9e-bfd6ec0b6d9a`, corroborated by pre-campaign gate logs showing the same `no-circular-via-barrel` count of 32 and typecheck failures confined to concurrent-agent files.
 
-### Accepted Debt: Module Entry Surface Ratchet
+### Resolved in Wave 5: Module Entry Surface Ratchet (`CQ-30`)
 
-- `tests/imports/module-boundaries-ratchet.test.ts` pins `totalEntrySurfaces` at **198**.
-- Wave 1 legitimately raised it to **223** by registering 25 new entry surfaces (principal-account +5, agent-access +4, money +7, capability-supply +5, market +4). The concurrent agent adds 2 more (`decision-engine/public.ts`, `registry/tool-reranker.ts`), making the observed total **225**.
-- The ratchet's own comment says "Lower these as work lands; never raise them." It was authored on 2026-09-10, nine days before this campaign, and did not anticipate type quarantine.
-- **Decision (Owner, 19 Sep 2026): accept the breach for this refactor and rebaseline the ratchet later.** The ceiling stays at 198 for now and this test stays red.
-- **Rejected alternative:** Re-exporting the 25 types through each module's `public.ts` barrel would hold the count at 198, but would push 25 more type imports through the very barrels that Wave 5 (`CQ-26` to `CQ-29`) exists to decouple, with `no-circular-via-barrel` already at 32. Deep module imports were chosen as the architecturally correct direction.
+- **Historical correction:** The register previously stated Waves 1–3 **committed** 25 new entry surfaces in `src/modules/module-boundaries.ts`. That file was **not committed** until `147b602a7`; surfaces from Wave 1 lived only in the working tree while the ratchet test kept failing against the stale **198** ceiling.
+- **Close-out:** Ratchet rebaselined to measured **29 modules / 224 entry surfaces** from the manifest. One module and one surface are attributed to concurrent work (`decision-engine` kept at `HEAD`; `registry/tool-reranker.ts` deliberately omitted until that file lands — see Wave 5 Cross-Cutting Infrastructure).
+- **Rejected alternative (unchanged):** Re-exporting quarantined types through each module's `public.ts` barrel would have held the surface count lower but would have fed the `no-circular-via-barrel` loops Wave 5 eradicated.
 
 ### Accepted Debt: Price Modal GST Leg Display (`CQ-16`)
 
@@ -541,60 +588,62 @@ Attribution was established by forensic scout `49ac5025-902c-4cf3-bd9e-bfd6ec0b6
 
 ### CQ-26: Eradicate Money Module Internal Barrel Cycles
 - **Surfaces:** `src/modules/money/public.ts`, `src/modules/money/internal/*`
-- **Incumbent Baseline:** `public.ts` is a 680-line god-barrel. Internal modules import `MoneyRefusal`, `MoneyPayout`, `PricingResolution`, and `RakeConfig` from `public.ts`.
-- **Code Quality Gap:** Generates circular dependency warnings in dependency-cruiser.
+- **Incumbent Baseline:** `public.ts` is a 680-line god-barrel. Internal modules imported shared money types from `public.ts` while `public.ts` re-exported those same internals — classic `internal → public.ts → same internal` loops (**11** `no-circular-via-barrel` violations).
+- **Code Quality Gap:** Circular barrel cycles; `import type` alone does not satisfy dependency-cruiser with `tsPreCompilationDeps: true` (see Wave 5 Cross-Cutting Infrastructure).
 - **Target Spec:**
   - Move shared types to `src/modules/money/internal/money-types.ts`.
   - Internal modules import from sibling types. `public.ts` re-exports only.
-- **Subagent Assignment:** Grok (Spec: `6033918e-28e4-4e49-a1c6-b9b7016314ea`) $\rightarrow$ Composer (Implement) $\rightarrow$ Orchestrator (Verify)
-- **Status:** `READY`
+- **Delivered Surfaces:** `src/modules/money/internal/money-types.ts`, `src/modules/money/internal/money-query-views.ts`
+- **Cycles removed:** **11**
+- **Subagent Assignment:** Grok (Spec: `6033918e-28e4-4e49-a1c6-b9b7016314ea`) $\rightarrow$ Composer (Implement: `147b602a7`) $\rightarrow$ Orchestrator (Verify: Passed 4/4 Gates)
+- **Status:** `VERIFIED`
 
 ---
 
 ### CQ-27: Eradicate Security Module Internal Barrel Cycles
 - **Surfaces:** `src/modules/security/public.ts`, `src/modules/security/internal/*`
-- **Incumbent Baseline:** `internal/admin-authority.ts` imports `AdminAction` and `AdminMembership` from `security/public.ts`.
-- **Code Quality Gap:** Circular barrel cycle.
-- **Target Spec:**
-  - Move admin authority types to `internal/admin-authority-types.ts`.
-  - Internal files import sibling types. `public.ts` re-exports only.
-- **Subagent Assignment:** Grok (Spec: `6033918e-28e4-4e49-a1c6-b9b7016314ea`) $\rightarrow$ Composer (Implement) $\rightarrow$ Orchestrator (Verify)
-- **Status:** `READY`
+- **Incumbent Baseline:** Multiple security internals imported authority and membership types from `security/public.ts` (**6** violations — more than the single-file anecdote in the pre-Wave 5 register).
+- **Code Quality Gap:** Circular barrel cycles.
+- **Target Spec (register plan):** Move admin authority types to `internal/admin-authority-types.ts`.
+- **Delivered Surfaces:** `src/modules/security/internal/security-types.ts` (consolidated leaf; plan filename superseded)
+- **Cycles removed:** **6**
+- **Subagent Assignment:** Grok (Spec: `6033918e-28e4-4e49-a1c6-b9b7016314ea`) $\rightarrow$ Composer (Implement: `147b602a7`) $\rightarrow$ Orchestrator (Verify: Passed 4/4 Gates)
+- **Status:** `VERIFIED`
 
 ---
 
-### CQ-28: Eradicate Observability Module Internal Barrel Cycles
-- **Surfaces:** `src/modules/observability/public.ts`, `src/modules/observability/internal/*`
-- **Incumbent Baseline:** `internal/schema.ts`, `operation-keys.ts`, and `outbox.ts` import `ActorKind` and `OperationKeyRecord` from `observability/public.ts`.
-- **Code Quality Gap:** Circular barrel cycle.
-- **Target Spec:**
-  - Move types to `internal/literals.ts`.
-  - Internals import local types; barrel re-exports only.
-- **Subagent Assignment:** Grok (Spec: `6033918e-28e4-4e49-a1c6-b9b7016314ea`) $\rightarrow$ Composer (Implement) $\rightarrow$ Orchestrator (Verify)
-- **Status:** `READY`
+### CQ-28: Eradicate Observability, Business & SEO Internal Barrel Cycles
+- **Surfaces:** `src/modules/observability/public.ts`, `src/modules/business/public.ts`, `src/modules/seo/public.ts`, and each module's `internal/*`
+- **Incumbent Baseline:** The pre-Wave 5 register scoped only observability and named `internal/literals.ts`. **`business` and `seo` were omitted** from the plan despite sharing the same barrel-definition loop pattern.
+- **Code Quality Gap:** Circular barrel cycles across three modules (**4** violations in this workflow's direct edits; remaining discovery cycles cleared collaterally — see `CQ-29`).
+- **Target Spec (register plan):** Move observability types to `internal/literals.ts`; internals import local types; barrel re-exports only.
+- **Delivered Surfaces:** `src/modules/observability/internal/contracts.ts`, `src/modules/business/internal/business-record.ts`, `src/modules/seo/internal/seo-types.ts`
+- **Cycles removed:** **4** (direct)
+- **Subagent Assignment:** Grok (Spec: `6033918e-28e4-4e49-a1c6-b9b7016314ea`) $\rightarrow$ Composer (Implement: `147b602a7`) $\rightarrow$ Orchestrator (Verify: Passed 4/4 Gates)
+- **Status:** `VERIFIED`
 
 ---
 
-### CQ-29: Eradicate Discovery Module Internal Barrel Cycles
+### CQ-29: Eradicate Discovery Module Internal Barrel Cycles — NOT EXECUTED (COLLATERAL)
 - **Surfaces:** `src/modules/discovery/public.ts`, `src/modules/discovery/internal/*`
-- **Incumbent Baseline:** `discovery-files.ts` and `offering-discovery-file.ts` import `BuildDiscoveryFileOptions` from `discovery/public.ts`.
-- **Code Quality Gap:** Circular barrel cycle.
-- **Target Spec:**
-  - Move discovery options to `internal/discovery-file-types.ts`.
-  - Internals import sibling types; barrel re-exports only.
-- **Subagent Assignment:** Grok (Spec: `6033918e-28e4-4e49-a1c6-b9b7016314ea`) $\rightarrow$ Composer (Implement) $\rightarrow$ Orchestrator (Verify)
-- **Status:** `READY`
+- **Incumbent Baseline:** Discovery internals imported options types from `discovery/public.ts` (**11** violations at campaign start, all via transitive loops through `money`, `security`, `observability`, `business`, and `seo` barrels).
+- **Code Quality Gap:** Circular barrel cycles.
+- **Target Spec (unchanged intent):** Move discovery options to an internal leaf; internals import sibling types; barrel re-exports only.
+- **Outcome:** **Workflow never ran.** All 11 discovery cycles dropped to zero as collateral when `CQ-26`–`CQ-28` broke the upstream barrels discovery's internals imported through. Confirmed: `npm run deps:check` reports zero `no-circular-via-barrel` violations; no file under `discovery/internal/` imports `discovery/public.ts`.
+- **Subagent Assignment:** *(not assigned — superseded by measurement)*
+- **Status:** `RESOLVED (COLLATERAL)` — counts toward zero violations, not toward Wave 5 **Verified** (4 executed workflows).
 
 ---
 
-### CQ-30: Lower Dependency-Cruiser Ratchet Ceilings to Zero
-- **Surfaces:** `tools/dev/deps-ratchet.ts`, `.dependency-cruiser.cjs`, `tests/imports/module-boundaries-ratchet.test.ts`
-- **Incumbent Baseline:** `no-circular-via-barrel` ceiling is set to 32.
-- **Code Quality Gap:** Permissive ceiling allowing barrel cycles to persist.
+### CQ-30: Lower Dependency-Cruiser Ratchet Ceilings to Zero & Rebaseline Module Manifest
+- **Surfaces:** `tools/dev/deps-ratchet.ts`, `.dependency-cruiser.cjs`, `tests/imports/module-boundaries-ratchet.test.ts`, `src/modules/module-boundaries.ts` (first campaign commit)
+- **Incumbent Baseline:** `no-circular-via-barrel` ceiling **32**; module ratchet **28 / 198** with manifest surfaces uncommitted since Wave 1.
+- **Code Quality Gap:** Permissive dependency ceiling; stale module ratchet masking true manifest size.
 - **Target Spec:**
-  - Verify all 32 cycles are resolved across Waves 1–5.
-  - Lower `no-circular-via-barrel` ceiling in `tools/dev/deps-ratchet.ts` from 32 to 0.
-  - Run `npm run deps:check` to prove zero violations.
-  - Rebaseline the module boundary ratchet — set `totalEntrySurfaces` and `numModules` to the true post-campaign counts, and record the justification for the raise.
-- **Subagent Assignment:** Orchestrator (Verify Gate)
-- **Status:** `READY`
+  - Verify all 32 cycles are resolved.
+  - Lower `no-circular-via-barrel` ceiling from 32 to **0**.
+  - Run `npm run deps:check` to prove zero violations on all three circular rules.
+  - Rebaseline module boundary ratchet to measured post-campaign counts.
+- **Delivered:** `no-circular-via-barrel` **0/0 ok**; `no-circular` and `no-circular-capability-supply-internal` **0/0 ok**; module ratchet **29 modules / 224 entry surfaces**; `module-boundaries.ts` committed for the first time in `147b602a7`.
+- **Subagent Assignment:** Orchestrator (Verify Gate: `147b602a7`)
+- **Status:** `VERIFIED`
