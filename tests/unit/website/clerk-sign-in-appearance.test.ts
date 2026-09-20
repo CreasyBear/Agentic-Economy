@@ -26,7 +26,10 @@ describe('Clerk sign-in appearance', () => {
       footerActionLink: expect.stringContaining('text-foreground'),
     })
 
-    const signInRoute = readFileSync(resolve(projectRoot, 'src/routes/sign-in.$.tsx'), 'utf8')
+    const signInRoute = readFileSync(
+      resolve(projectRoot, 'src/components/ae/auth/sign-in/AeSignInPage.tsx'),
+      'utf8',
+    )
     expect(signInRoute).toContain('appearance: clerkSignInSurfaceAppearance')
     expect(signInRoute).not.toContain('clerkAuthSurfaceAppearance')
   })

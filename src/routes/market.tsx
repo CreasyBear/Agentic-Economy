@@ -1,7 +1,6 @@
 import { createFileRoute, type ErrorComponentProps } from "@tanstack/react-router";
-import { AePublicPage } from "@/components/ae/layout/AePublicPage";
 import { AePageSkeleton, AePageState } from "@/components/ae/layout/AePageState";
-import { AeX402Directory } from "@/components/ae/market/AeX402Directory";
+import { AeMarketPage } from "@/components/ae/market/AeMarketPage";
 import { Button } from "@/components/ui/button";
 import { readCanonicalBaseUrlServer } from "@/lib/server/canonical-url.functions";
 import { loadMarketRouteData, marketLoaderDeps, validateMarketSearch } from '@/modules/market/market.functions';
@@ -76,10 +75,5 @@ function MarketError({ reset, error }: ErrorComponentProps) {
 function MarketRoute() {
   const data = Route.useLoaderData();
   const search = Route.useSearch();
-
-  return (
-    <AePublicPage>
-      <AeX402Directory marketPath="/market" activeView={data.view} page={data.page} search={search} catalogue={data.catalogue} overview={data.overview} {...(data.providers === undefined ? {} : { providers: data.providers })} {...(data.home === undefined ? {} : { home: data.home })} />
-    </AePublicPage>
-  );
+  return <AeMarketPage data={data} search={search} />;
 }
