@@ -42,6 +42,7 @@ const chatActionIds = [
   'registry.tools.describe',
   'registry.tools.compare',
   'tool.quote',
+  'tool.procure',
   'tool.call',
 ] as const
 

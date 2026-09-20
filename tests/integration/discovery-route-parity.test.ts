@@ -8,6 +8,8 @@ import {
   toolChoiceSearchOutputSchema,
 } from '@/modules/registry/tool-choice-contracts'
 import { CALL_ROUTE_CONTRACT } from '@/modules/capability-execution/call-entry'
+import { TOOL_PROCURE_PATH } from '@/modules/capability-execution/procure'
+import { TOOL_PROCURE_ROUTE_CONTRACT } from '@/modules/capability-execution/procure.actions'
 import { brandNonEmpty } from '@/modules/common/ids'
 import { isRecord } from '@/modules/common/is-record'
 import {
@@ -37,6 +39,7 @@ import { Route as MarketToolCompareRoute } from '@/routes/api.v1.market-tools.co
 import { Route as MarketToolDescribeRoute } from '@/routes/api.v1.market-tools.describe'
 import { Route as MarketToolListRoute } from '@/routes/api.v1.market-tools.list'
 import { Route as MarketToolSearchRoute } from '@/routes/api.v1.market-tools.search'
+import { Route as ToolProcureRoute } from '@/routes/api.v1.tools.procure'
 import { handleUcpManifestRequest } from '../helpers/discovery-fixture-routes'
 import { createFixtureDiscoverySourceState } from '../helpers/discovery-fixture-source-state'
 import { handleRobotsTxtRequest } from '@/routes/robots[.]txt'
@@ -186,6 +189,7 @@ describe('discovery route parity', () => {
       TOOL_MARKET_SEARCH_PATH,
       TOOL_MARKET_DESCRIBE_PATH,
       TOOL_MARKET_COMPARE_PATH,
+      TOOL_PROCURE_PATH,
     ].sort()
 
     expect(apiPaths.sort()).toEqual(expectedApiPaths)
@@ -253,7 +257,7 @@ function advertisedRoute(url: string): AdvertisedRoute {
   const marketRoute = TOOL_MARKET_ACTION_ENTRIES.find((entry) => entry.pathTemplate === path)
   return {
     url,
-    method: marketRoute?.method ?? 'GET',
+    method: marketRoute?.method ?? (path === TOOL_PROCURE_PATH ? TOOL_PROCURE_ROUTE_CONTRACT.method : 'GET'),
   }
 }
 type RouteHandler = (context: Readonly<{
@@ -348,6 +352,11 @@ async function resolveAdvertisedRoute(route: AdvertisedRoute, state: DiscoverySo
 
   if (marketRoute !== undefined) {
     return route.method === marketRoute.method && await resolveMarketToolRoute(route)
+  }
+
+  if (path === TOOL_PROCURE_PATH) {
+    routeHandler(ToolProcureRoute, TOOL_PROCURE_ROUTE_CONTRACT.method)
+    return route.method === TOOL_PROCURE_ROUTE_CONTRACT.method
   }
 
   if (path === '/') {

@@ -394,17 +394,25 @@ describe('capability operation reservation admission', () => {
     }))).resolves.toEqual({ kind: 'conflict' })
   })
 
-  it('fails closed on crossed environment or partial canary reservation identity', async () => {
+  it('reserves and replays a matching production canary, but refuses crossed environment or partial identity', async () => {
     const production = context({ environment: 'production' })
-    await expect(reserveHandler(production, args({
+    const productionArgs = args({
       environment: 'production',
       sellerOnboardingCanary: canaryEnvelope(),
-    }))).resolves.toEqual({ kind: 'conflict' })
+    })
+    await expect(reserveHandler(production, productionArgs)).resolves.toMatchObject({ kind: 'reserved' })
+    await expect(reserveHandler(production, productionArgs)).resolves.toMatchObject({ kind: 'replayed' })
+    expect(production.db.rows('capabilityCalls')).toHaveLength(1)
+
+    const crossedEnvironment = context({ environment: 'production' })
+    await expect(reserveHandler(crossedEnvironment, args({
+      sellerOnboardingCanary: canaryEnvelope(),
+    }))).resolves.toMatchObject({ kind: 'refused', code: 'environment_mismatch', retryable: false })
     const wrongOperation = context()
     await expect(reserveHandler(wrongOperation, args({
       sellerOnboardingCanary: canaryEnvelope({ toolRef: 'operation:swapped' }),
     }))).resolves.toEqual({ kind: 'conflict' })
-    expect(production.db.rows('capabilityCalls')).toHaveLength(0)
+    expect(crossedEnvironment.db.rows('capabilityCalls')).toHaveLength(0)
     expect(wrongOperation.db.rows('capabilityCalls')).toHaveLength(0)
   })
 

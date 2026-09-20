@@ -4,7 +4,7 @@ import type { JsonValue } from '@/modules/capability-contract/public'
 import type { CallService } from './call-authority'
 import type { CallResult } from './call-contracts'
 import { callPublicSourceQuery, sourceQuery } from '@/lib/server/convex-source'
-import { deserializeToolSearchResult } from '@/modules/registry/public'
+import { deserializeToolSearchResult } from '@/modules/capability-supply/public'
 import {
   calculateAudGstSplit,
   compareExactAmounts,

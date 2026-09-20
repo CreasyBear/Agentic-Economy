@@ -11,6 +11,10 @@ import {
   TOOL_QUOTE_ACTION_ID,
   TOOL_QUOTE_PATH,
 } from '@/modules/capability-execution/quote'
+import {
+  TOOL_PROCURE_ACTION_ID,
+  TOOL_PROCURE_PATH,
+} from '@/modules/capability-execution/procure'
 
 export const PUBLIC_TOOL_REF_EXAMPLE = `operation:v1:${'a'.repeat(64)}` as const
 export const PUBLIC_CALL_REF_EXAMPLE = 'invocation:v1:example' as const
@@ -50,6 +54,24 @@ export function callRouteExample(route: PublicCallRouteDescriptor): PublicCallRo
       actionInput,
       http: {
         path: TOOL_QUOTE_PATH,
+        headers: {
+          Authorization: authorization,
+          'Content-Type': CALL_ROUTE_CONTRACT.media.request,
+          Accept: CALL_ROUTE_CONTRACT.media.response,
+        },
+        body: actionInput,
+      },
+    }
+  }
+  if (route.actionId === TOOL_PROCURE_ACTION_ID) {
+    const actionInput = {
+      need: 'Convert 3:30 PM New York time to Tokyo time',
+      maxSpendAud: '0.50',
+    }
+    return {
+      actionInput,
+      http: {
+        path: TOOL_PROCURE_PATH,
         headers: {
           Authorization: authorization,
           'Content-Type': CALL_ROUTE_CONTRACT.media.request,

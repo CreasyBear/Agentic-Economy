@@ -168,4 +168,23 @@ describe('POST /api/v1/tools/procure route', () => {
     expect(body.kind).toBe('INVALID_ARGUMENT')
     expect(body.code).toBe('invalid_json')
   })
+
+  it('rejects unknown procurement fields through the strict input contract', async () => {
+    setHttpRateLimitAdmissionForTests(async () => ({ ok: true }))
+
+    const response = await handleToolProcurePost(
+      postProcureRequest({
+        need: 'Convert 3:30 PM New York time to Tokyo time',
+        maxSpendAud: '0.50',
+        endpointUrl: 'https://attacker.example',
+      }),
+      testEngine,
+    )
+
+    expect(response.status).toBe(400)
+    await expect(response.json()).resolves.toMatchObject({
+      kind: 'INVALID_ARGUMENT',
+      code: 'invalid_request',
+    })
+  })
 })

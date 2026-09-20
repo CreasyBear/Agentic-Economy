@@ -13,13 +13,16 @@ import {
  * out of `.tsx` files into declared `.view-model.ts` / `.contracts.ts` entry
  * surfaces (intended quarantine, not module sprawl). One module and one surface
  * (`decision-engine` / `public.ts`) belong to concurrent in-flight work and
- * should be re-attributed when that lands.
+ * should be re-attributed when that lands. Three procurement entries are the
+ * existing supported action, contract and engine seams now under this guard.
+ * Two exact unit-test exceptions retain white-box checks of payment preparation
+ * and output adjudication without declaring those internal files public.
  */
 const RATCHET = {
   numModules: 29,
-  totalEntrySurfaces: 224,
-  numTestOnlyWhiteBoxExceptions: 0,
-  numToCapabilitySupply: 0,
+  totalEntrySurfaces: 227,
+  numTestOnlyWhiteBoxExceptions: 2,
+  numToCapabilitySupply: 1,
 } as const
 
 describe('module-boundaries ratchet', () => {

@@ -1,8 +1,9 @@
 import { convexTest, type TestConvex } from 'convex-test'
-import { register as registerWorkpool } from '@convex-dev/workpool/test'
+import workpoolTest, { register as registerWorkpool } from '@convex-dev/workpool/test'
 import { register as registerRateLimiter } from '@convex-dev/rate-limiter/test'
 import { register as registerAggregate } from '@convex-dev/aggregate/test'
-import { register as registerWorkflow } from '@convex-dev/workflow/test'
+import workflowTest, { register as registerWorkflow } from '@convex-dev/workflow/test'
+import batchWorkerTest from '@convex-dev/batch-worker/test'
 import agentTest from '@convex-dev/agent/test'
 import { api, components, internal } from '../../convex/_generated/api'
 import type { Id } from '../../convex/_generated/dataModel'
@@ -34,6 +35,25 @@ export const convexModules = Object.fromEntries(
 export type ConvexTestWithWorkersOptions = Readonly<{
   pauseWorkpool?: boolean
 }>
+
+async function preloadRuntimeComponentModules(moduleMap: Record<string, () => Promise<unknown>>) {
+  // Workflow removes Node globals for deterministic execution. Cache component
+  // modules first so nested Workpool calls avoid Vite's process-dependent lazy RPC.
+  const runtimeModules = Object.entries(moduleMap)
+    .filter(([path]) => !path.includes('/_generated/') && !path.endsWith('.test.ts') && !path.endsWith('/convex.config.ts'))
+  await Promise.all(runtimeModules.map(async ([path, loadModule]) => {
+    const loaded = await loadModule()
+    moduleMap[path] = async () => loaded
+  }))
+}
+
+export async function preloadWorkflowComponentModules() {
+  await Promise.all([
+    preloadRuntimeComponentModules(workflowTest.modules),
+    preloadRuntimeComponentModules(workpoolTest.modules),
+    preloadRuntimeComponentModules(batchWorkerTest.modules),
+  ])
+}
 
 export function convexTestWithMarketComponents() {
   const backend = convexTest(schema, convexModules)
@@ -807,4 +827,3 @@ export async function createTestHumanOwner(
 ) {
   return ownerAdmin(backend, subject)
 }
-

@@ -1,8 +1,11 @@
-import type { InvalidationIntent } from '@/modules/observability/public'
-import type { RegistrySourceState } from '@/modules/registry/public'
 import {
   type DiscoveryStatus,
 } from './internal/schema-values'
+export type {
+  BuildDiscoveryFileOptions,
+  DiscoveryFileBuildResult,
+  DiscoverySourceState,
+} from './internal/discovery-contracts'
 export {
   OfferingDiscoveryManifestSchemaVersion,
   buildOfferingDiscoveryManifest,
@@ -58,21 +61,6 @@ export {
   DiscoveryStatusValues,
 } from './internal/schema-values'
 export type { DiscoveryStatus }
-
-export type DiscoverySourceState = RegistrySourceState & {
-  invalidationIntents: InvalidationIntent[]
-}
-
-export type BuildDiscoveryFileOptions = {
-  canonicalBaseUrl: string
-  routingBaseUrl?: string
-  now?: number
-}
-
-export type DiscoveryFileBuildResult = {
-  body: string
-  urls: readonly string[]
-}
 
 export { safePublicText } from './internal/manifest-projection'
 

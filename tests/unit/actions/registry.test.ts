@@ -18,6 +18,7 @@ describe('action registry', () => {
       'registry.tools.describe',
       'registry.tools.compare',
       'tool.quote',
+      'tool.procure',
       'tool.call',
     ]))
     expect(ids).not.toEqual(expect.arrayContaining([
@@ -89,6 +90,7 @@ describe('action registry', () => {
       'registry.tools.describe',
       'registry.tools.compare',
       'tool.quote',
+      'tool.procure',
       'tool.call',
     ])
   })
@@ -106,7 +108,7 @@ describe('action registry', () => {
       'agentAccess.balance', 'agentAccess.activity',
       'funding.handoff.config', 'funding.handoff.create', 'funding.handoff.status',
       'marketDemand.record', 'marketDemand.list', 'marketDemand.status',
-      'tool.quote', 'tool.call', 'call.list', 'call.status',
+      'tool.quote', 'tool.procure', 'tool.call', 'call.list', 'call.status',
       'call.cancel', 'call.reconcile',
       'supply.source.preview', 'supply.tools.list', 'supply.status', 'supply.publish', 'supply.withdraw',
       'supply.recheck', 'supply.republish', 'supply.earnings', 'supply.calls',
@@ -131,9 +133,9 @@ describe('action registry', () => {
     expect(exposed.find((action) => action.id === 'call.status')?.readOnly).toBe(true)
     expect(exposed.find((action) => action.id === 'call.cancel')?.readOnly).toBe(false)
     expect(exposed.find((action) => action.id === 'call.reconcile')?.readOnly).toBe(false)
-    for (const id of ['tool.call', 'call.status', 'call.cancel', 'call.reconcile']) {
+    for (const id of ['tool.procure', 'tool.call', 'call.status', 'call.cancel', 'call.reconcile']) {
       expect(exposed.find((action) => action.id === id)?.surfaces).toEqual(
-        id === 'tool.call' ? ['http', 'mcp', 'cli', 'chat'] : ['http', 'mcp', 'cli'],
+        id === 'tool.procure' || id === 'tool.call' ? ['http', 'mcp', 'cli', 'chat'] : ['http', 'mcp', 'cli'],
       )
     }
     expect(exposed.map((action) => mcpToolName(action))).toEqual([
@@ -143,7 +145,7 @@ describe('action registry', () => {
       'ae_agentAccess_balance', 'ae_agentAccess_activity',
       'ae_funding_handoff_config', 'ae_funding_handoff_create', 'ae_funding_handoff_status',
       'ae_marketDemand_record', 'ae_marketDemand_list', 'ae_marketDemand_status',
-      'ae_tool_quote', 'ae_tool_call', 'ae_call_list', 'ae_call_status',
+      'ae_tool_quote', 'ae_tool_procure', 'ae_tool_call', 'ae_call_list', 'ae_call_status',
       'ae_call_cancel', 'ae_call_reconcile',
       'ae_supply_source_preview', 'ae_supply_tools_list', 'ae_supply_status', 'ae_supply_publish', 'ae_supply_withdraw',
       'ae_supply_recheck', 'ae_supply_republish', 'ae_supply_earnings', 'ae_supply_calls',

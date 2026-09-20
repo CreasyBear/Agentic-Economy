@@ -126,12 +126,12 @@ or roll back only the reversible deployment layer; never erase economic evidence
    those AM rows or LP-1.
 3. **Accepted local source package:** AM-14 production-owner admission, explicit
    production platform funding rotation and causal mainnet canary/Quote proof.
-4. **Active design:** AM-29 personal-login deletion enforcement. The eligibility
-   query and Clerk deletion webhook are tested but disconnected; no source path
-   gates the destructive Clerk action on workspace and Provider closure.
-5. **Held:** AM-14-B delegated-Agent validation awaits user approval for the
-   prepared schema-scope package; later LP-1 items and LP-2–LP-6 remain planned
-   or dependency-blocked.
+4. **Active preparation:** the reviewed four-commit route dependency is merged
+   into the isolated launch candidate; focused route checks pass and the source
+   gate is pending. This prepares LP-2 but does not activate or complete it.
+5. **Held:** AM-14-B delegated-Agent validation and AM-29.1 personal-login
+   deletion enforcement await user approval for their prepared schema scopes;
+   later LP-1 items and LP-2–LP-6 remain planned or dependency-blocked.
 
 Current AM-14/18–20 finding: a supported facilitator-discovered production Tool
 reaches standard-mode Quote, Call admission, confirmed mainnet-USDC settlement
@@ -215,11 +215,18 @@ the manager accepted, inclusion of four committed local `main` refactors as one
 coherent launch-supported route dependency:
 `176385637` (thin eight public/operator page routes), `aa0cbba72` (thin Tool
 detail routes), `b25e89e80` (thin public Business route) and `52df868b0` (thin
-funding return route). Actual synchronization remains held until this doc sync is
-accepted. Local `main` is at `52df868b05a883f33f1e407c27841a114a7fd75b`
-and was observed 182 commits ahead of local `origin/main`; this records local
-repository state and does not claim remote publication. This is reviewed doc
-sync and read-only LP-2 preparation only. LP-2 remains planned: no candidate
+funding return route). The accepted synchronization used local `main` pinned at
+`52df868b05a883f33f1e407c27841a114a7fd75b` and observed 182 commits ahead of
+local `origin/main`; this records local repository state and does not claim
+remote publication. The exact four commits were merged without conflict after
+the authoritative document sync `e9e212a39422906a31809e8681ad9ee026d9569c`.
+The resulting isolated candidate is merge revision
+`be7e7aead759c398addb9a64f01613149c4b3529`; no moving or dirty shared-root
+source was copied. Focused authentication, market, Tool, Business, onboarding,
+funding-return, status, support and legal route checks pass 104/104. These route
+refactors reduce page-entry coupling across Customer acquisition and Provider
+distribution while retaining their observable route contracts. This remains
+reviewed candidate preparation only. LP-2 remains planned: no candidate
 revision/artifact/target manifest is frozen, no package exit is accepted and no
 pending schema approval is implied.
 
@@ -228,6 +235,141 @@ dirty experimental work. They are neither copied nor waived. The eventual
 integrated candidate must pass its applicable gates; any recurrence on that
 candidate requires diagnosis against its exact revision rather than attribution
 to excluded root work.
+
+**Current integrated-candidate gate receipt — 21 September 2026.** The required
+gate on merge candidate `be7e7aead` passed deployment manifest checks, **480**
+conformance cases, **55** chat-conformance cases, anonymous Convex codegen,
+release integrity, architecture, lint, zero-ceiling dependency checks,
+typecheck, **598 files / 5,959 unit tests**, **159 files / 1,816 integration
+tests** plus one skipped file, and all four type tests. The accepted finite
+repairs preserve authenticated `POST tool.procure`; canonical OpenAPI/HTTP/MCP/
+chat inventory and hostile-input behavior; matching production canary replay and
+cross-environment refusal; and the real Workflow/Workpool lifecycle. Their
+focused receipts are **111/111 in nine files**, **3/3** Workflow lifecycle cases
+and **19/19** integration-repair cases.
+
+The import-boundary follow-up is also accepted: the exact procurement entry and
+consumer declarations, two white-box test pairs, Formance Node-action fence and
+pure capability-supply import pass **16/16** focused boundary cases. The only
+remaining tool-surface/import-stage blocker is substantive `tool.procure` CLI and
+durable recovery behavior; the supported payment capability was not removed to
+make the inventory green. Independent suffix diagnostics passed TypeScript
+standards (**1/1**), SEO (**28/28**), UI contracts (**2/2**), packaged CLI and
+production build. These individually successful suffix checks do not constitute
+one passing final gate.
+
+The worktree's shared-root `node_modules` symlink caused Vite to resolve existing
+React Start/Nitro runtime files outside the candidate and fail before Playwright.
+Replacing only that symlink with `npm ci` from the unchanged lock made Vite start
+normally; no package or version changed. The first real browser execution then
+reported **28 passed, 8 authenticated skipped and 4 failed**: two compact tests
+assumed the intentionally hidden desktop `Primary` navigation, and schema checks
+could not authenticate the public-read limiter without a running selected local
+Convex runtime. The viewport-aware compact repair keyboard-opens the labelled
+public menu, proves the `Public navigation` landmark/link and focus restoration,
+while retaining the wide `Primary` assertions; its focused compact/wide suite
+passes **8/8**. A fresh candidate-local anonymous Convex deployment then supplied
+the real public-read limiter and source-write/server-function secrets from
+ignored local files without seeding or bypass. The focused developer-discovery
+schema/examples check passed **4/4**; the full browser suite passed **32/32**
+public cases with **8** authenticated cases skipped, and the accessibility suite
+passed **18/18**. The loopback backend and browser servers were stopped after
+the run. This proves candidate-local public behavior only: keyless Clerk,
+unseeded degraded market reads and skipped authentication are not hosted or
+authenticated evidence.
+
+This is a current candidate defect/evidence receipt, not a passing full gate,
+hosted proof, frozen LP-2 artifact or release acceptance. AM-14-B delegated-Agent
+claim-expiry storage and AM-29.1 deletion-command storage remain held for user
+schema approval. The AM-24/25 `tool.procure` storage/public-contract proposal
+below is also held; none of those held designs has been implemented.
+
+#### AM-24/25 durable `tool.procure` repair proposal — approval held
+
+The integrated gate confirmed that `tool.procure` advertises CLI support without
+an adapter. Its production engine also creates a random Call key, loses the
+durable Call reference for nonterminal results, maps uncertainty to
+`no_matching_tool`, and claims an immediate refund from Provider refusal codes
+without authoritative money evidence. It also synthesizes GST with
+`calculateAudGstSplit(total, 1000)`, fixed `jevDecisionsCostAud`, fixed
+adjudicator confidence and refund copy. Those are not Quote or Call facts and
+must not appear as authoritative purchase evidence.
+
+**Proposed contract.** Requires an authenticated current caller and a stable
+caller-supplied `idempotencyKey` at every HTTP, MCP, chat and CLI adapter before
+search, Quote or purchase effects. The canonical request binds normalized need,
+maximum spend and simulation input to an immutable admitted authority binding.
+Ensures one durable procurement reference, one frozen selected Quote and at most
+one Call for that request. Before the Quote is atomically frozen, a fenced retry
+may reselect because no purchase exists; after the freeze, catalog change,
+retry, concurrency or response loss can never reroute the intent. Supported
+successor-Credential recovery must freshly prove the same Account, Principal,
+application and environment through the stored grant lineage without rewriting
+the original binding. Money and audit fields come only from persisted
+Quote/Call/receipt evidence. On conflict or stale/unrelated authority, return a
+structured refusal without a new Quote, Call, reservation or payment.
+
+The public result becomes a phase-discriminated union so references are required
+only after they exist:
+
+- `pending/selection_or_quote`: `procurementRef`, `retryAfterMs`; no invented
+  Quote or Call reference.
+- `pending/quoted`: `procurementRef`, `quoteRef`, `retryAfterMs`; no Call
+  reference before reservation.
+- `pending/call`: `procurementRef`, `quoteRef`, `callRef`, `retryAfterMs`.
+- `needs_authority/quote`: the exact Quote refusal requirements/continuation and
+  no required Call reference; `needs_authority/call`: the frozen Quote, Call and
+  exact authority request.
+- `outcome_unknown`: the same procurement, Quote and Call references plus the
+  existing reconciliation evidence and any persisted receipt.
+- terminal delivered/remedied: the same three references and authoritative
+  output/receipt facts. `price`, tax, refund and audit fields are present only
+  when the Quote/Call/receipt records establish them.
+- structured `refused` distinguishes pre-effect selection/Quote refusal from a
+  Call refusal and carries retryability and the supported continuation. A
+  Provider refusal alone never asserts release or `A$0.00`; only authoritative
+  settlement/refund evidence does.
+
+The smallest storage change reuses `operationKeys` under a `toolProcure`
+namespace and adds two optional fields, leaving existing rows and indexes
+compatible:
+
+- `claimGeneration: number` fences each bounded lease/reclaim.
+- `authorityBinding: { actorKind, accountRef, principalRef, applicationRef,
+  environment, originalCredentialRef, originalGrantRef,
+  originalGrantGeneration, lineageDigest, bindingDigest }` records the typed,
+  immutable admitted identity and lineage. The digests authenticate the
+  canonical material; they do not replace its recoverable typed fields.
+
+`requestHash` covers the normalized business request and stored
+`authorityBinding.bindingDigest`; `effectRefs` retain the Quote then Call. Every
+claim/replay runs the existing current-authority resolver. It accepts the
+original current authority or a valid successor only when verified lineage
+reaches the stored original grant family with the same Account, Principal,
+application and environment; it never rewrites `authorityBinding`.
+
+Before a Quote exists, `claimGeneration` and `retryAfter` permit one successor
+worker to reselect while a stale generation cannot freeze anything. Quote
+issuance verifies that generation and binding and appends the selected Quote in
+the same mutation. A crash immediately before that mutation leaves no purchase;
+a crash immediately after it is recovered from the frozen `quoteRef` and can
+never reselect. Call reservation uses a deterministic key and appends the Call
+in its admission transaction; concurrent or response-lost retries recover the
+same Call. Accepted or uncertain intents do not expire, reopen or disappear
+before their Call/financial retention boundary. Definite pre-effect failures
+may be reclaimed under a new generation; accepted effects never are.
+
+The CLI adds `procure --input <json> --idempotency-key <key> [--wait]`, retains
+the exact request/key before HTTP, and replays that intent after transport loss.
+Once a Call reference exists it uses the existing status/wait/cancel/reconcile
+surfaces; no new recovery endpoint or dependency is proposed. Acceptance covers
+concurrent first claim and reclaim, process loss on both sides of Quote freeze
+and Call binding, exact adapter replay, conflicting input, unrelated/stale and
+valid successor authority, Quote-only and Call authority requirements,
+pending/unknown continuations, authoritative refund versus unproved refusal,
+and terminal replay with one Quote, Call, reservation and payment maximum. This
+needs user approval for the two optional storage fields and public input/result
+change before implementation.
 
 **21 September 2026 — AM-29 open launch blocker:** `readDeletionEligibility`
 has focused source tests but no caller, so it does not enforce a prerequisite to

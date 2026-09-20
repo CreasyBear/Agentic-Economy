@@ -56,6 +56,6 @@ describe('convex api kind snapshot', () => {
 
   it('reports scanned modules that are absent from generated fullApi (informational)', () => {
     const missing = scannedModulesMissingFromGeneratedApi(scanConvexApiSurfaceFromSources())
-    expect(missing).toEqual(['moneyPayoutPolicy'])
+    expect(missing).toEqual([])
   })
 })

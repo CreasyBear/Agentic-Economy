@@ -1292,6 +1292,12 @@
   {
     "visibility": "internal",
     "module": "capabilitySupplyCanaryFunding",
+    "method": "provisionProductionSellerOnboardingCanaryFunding",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "capabilitySupplyCanaryFunding",
     "method": "provisionSellerOnboardingCanaryFunding",
     "kind": "mutation"
   },
@@ -1299,6 +1305,12 @@
     "visibility": "internal",
     "module": "capabilitySupplyCanaryFunding",
     "method": "readExactSellerOnboardingCanaryPlatformGrant",
+    "kind": "query"
+  },
+  {
+    "visibility": "internal",
+    "module": "capabilitySupplyCanaryFunding",
+    "method": "readProductionSellerOnboardingCanaryFundingReadiness",
     "kind": "query"
   },
   {
@@ -1491,12 +1503,6 @@
     "visibility": "public",
     "module": "capabilityToolCatalog",
     "method": "detail",
-    "kind": "action"
-  },
-  {
-    "visibility": "internal",
-    "module": "capabilityToolCatalog",
-    "method": "rerank",
     "kind": "action"
   },
   {
