@@ -3,7 +3,7 @@ import { cleanup, fireEvent, render, screen, within } from '@testing-library/rea
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ReactNode } from 'react'
 
-import { ActivityPage } from '@/routes/_operator/activity'
+import { AeActivity } from '@/components/ae/activity/AeActivity'
 import { toast } from '@/lib/ui/toast'
 import { downloadCsv, downloadJson } from '@/lib/export/csv-export'
 
@@ -102,7 +102,7 @@ describe('ActivityPage & Filtering (W-38)', () => {
 
   const renderActivity = (overrides?: { filteredAgent?: string }) => {
     render(
-      <ActivityPage
+      <AeActivity
         result={{
           kind: 'available',
           calls: sampleCalls,
@@ -240,7 +240,7 @@ describe('ActivityPage & Filtering (W-38)', () => {
 
   it('shows loaded-only preview when more history is available', () => {
     render(
-      <ActivityPage
+      <AeActivity
         result={{
           kind: 'available',
           calls: {

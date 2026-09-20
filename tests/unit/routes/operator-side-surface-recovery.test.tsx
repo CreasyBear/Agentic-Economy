@@ -22,7 +22,9 @@ vi.mock('@/components/ae/layout/AeOperatorPage', () => ({
   AeOperatorPage: ({ children, title }: { children: ReactNode; title: string }) => <main><h1>{title}</h1>{children}</main>,
 }))
 
-import { ActivityPage, Route as ActivityRoute, type ActivityLoaderResult } from '@/routes/_operator/activity'
+import { AeActivity } from '@/components/ae/activity/AeActivity'
+import type { ActivityLoaderResult } from '@/components/ae/activity/activity.contracts'
+import { Route as ActivityRoute } from '@/routes/_operator/activity'
 
 afterEach(() => {
   cleanup()
@@ -37,11 +39,11 @@ function renderActivity(result: ActivityLoaderResult) {
   const routeTree = rootRoute.addChildren([createRoute({ getParentRoute: () => rootRoute, path: '/' })])
   const router = createRouter({ routeTree, history: createMemoryHistory({ initialEntries: ['/'] }) })
   const invalidate = vi.spyOn(router, 'invalidate').mockResolvedValue(undefined)
-  const rendered = render(<RouterContextProvider router={router}><ActivityPage result={result} /></RouterContextProvider>)
+  const rendered = render(<RouterContextProvider router={router}><AeActivity result={result} /></RouterContextProvider>)
   return {
     invalidate,
     updateResult(next: ActivityLoaderResult) {
-      rendered.rerender(<RouterContextProvider router={router}><ActivityPage result={next} /></RouterContextProvider>)
+      rendered.rerender(<RouterContextProvider router={router}><AeActivity result={next} /></RouterContextProvider>)
     },
   }
 }
