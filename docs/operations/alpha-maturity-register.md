@@ -9,10 +9,200 @@ Neither creates an additional backlog outside this register.
 
 ## Marking rules
 
-**Current sequence: complete source first.** Deployment repair, environment
-changes and hosted acceptance are deferred. Complete all applicable source
-obligations and agreed UX P0/P1 repairs, then give Joel the source-complete
-handoff; do not automatically enter deployment afterward.
+**Current goal — 20 September 2026: launch-ready alpha with real transactions.**
+Joel authorized stabilisation, repairs, deployment and hosted acceptance through
+real x402 purchases using test USDC on Base Sepolia and real USDC on Base mainnet.
+Source completion and sandbox acceptance are intermediate milestones. Complete
+the required production prerequisites and activation; do not close the goal at
+the source handoff or sandbox stage. This decision supersedes the previous
+source-only stop and sandbox-only release scope. It does not establish that any
+production prerequisite or purchase has passed.
+
+The existing 32 records remain the queue. Their sandbox scenarios still prove
+environment isolation and recovery. The additional launch proof is assigned to
+the same parents below; sandbox-only wording does not limit final acceptance.
+
+| Parents | Required launch evidence |
+| --- | --- |
+| AM-01, AM-25, AM-26, AM-30, AM-32 | Coherent production candidate with fresh production identities/state, scoped secrets, alerts, tested recovery and current production approvals; synthetic release data is never promoted in place. |
+| AM-07–12 | Live AUD funding with the accepted credit/fee/total, one attributable credit, exact documents and a supported refund/adjustment. Sandbox webhook fault/replay proof remains required. |
+| AM-14–18 | Supported Provider supply and exact Quotes on Base Sepolia and Base mainnet; asset, network, recipient, amount, authority and material drift checks remain enforced. |
+| AM-19–24 | Actual paid x402 delivery on both networks, distinct AUD and USDC records, fresh-process continuation, once-only effects and supported recovery. Retain network, asset, transaction hash, Call/Quote and ledger references. |
+| AM-02–06, AM-27–29, AM-31–32 | Customer/Provider activation, installed-client use, truthful UI/help, telemetry and finite cold journeys on the release candidate; no unresolved launch-blocking defect. |
+
+Before real-value actions, record Joel's financial exposure limits and the exact
+target/recovery boundary. Close the legal, AML/CTF, tax, banking and infrastructure
+prerequisites in START_LINE.md and aws-foundation.md through attributable evidence
+and the necessary human decisions. Do not fabricate approvals or bypass controls.
+
+### Launch execution controls and deployment package
+
+The authorized campaign ceilings are **A$25 cumulative live funding including
+fees and tax**, **USDC 5 cumulative Provider payments across networks where the
+asset has real value**, and **0.001 ETH cumulative mainnet gas**. There is no
+automatic replenishment or limit increase. Accepted obligations and uncertain
+submissions consume the remaining cap until reconciled; refunds do not
+automatically restore it. Each effect requires exact pre-effect readback of the
+environment, chain, asset, recipient, Tool, Quote, Call, amount and recovery
+reference. These are launch-execution controls, not a product budget feature,
+and the existing USD 400 monthly AWS ceiling is unchanged.
+
+The production deployment package remains **NOT VERIFIED**. It must carry
+attributable approval evidence for the AFSL/non-cash-payment and purchased-
+payment-facility position; AML/CTF stored-value, remittance and virtual-asset
+position; GST, tax-invoice, adjustment and service-fee treatment; and operating-
+account, safeguarding or client-money treatment. It must also satisfy the
+production gate in [aws-foundation.md](aws-foundation.md), including fresh
+production state and identities, target/recovery evidence and unresolved
+infrastructure blockers. Launch authorization is not approval evidence.
+
+## Governing launch-control register
+
+This is the sole launch process. Packages are finite acceptance units mapped to
+the existing AM rows; they do not replace, waive or multiply those obligations.
+Only the manager changes package status, accepts an exit or changes dependency
+order. Only one implementation package may be active.
+
+| Package | Existing AM parents | Dependency and order | Owner role | Initial status and evidence level | Exact acceptance and package exit |
+| --- | --- | --- | --- | --- | --- |
+| LP-0 Candidate baseline reconciliation | AM-01–32 | First | Manager assigns; Luna gathers bounded evidence; worker maps source | **ACCEPTED — 20 September 2026, candidate `0fafd075d90fbc552ed5faef13d30953705c22be`** | Every AM row has current source ownership, attributable existing proof, proof freshness and finite missing source/hosted conditions. This accepted map is not repaired code or a readiness claim. |
+| LP-1 Bounded source repairs | Only AM parents with an LP-0 source defect or bounded source unknown; AM-14 is active; AM-18–20, AM-24 and AM-27/29 remain planned | LP-0 accepted; one repair/proof package at a time in dependency order | Sol implements one bounded package; separate Luna reviews; manager accepts | **ACTIVE — AM-14 supported-entry proof only** | Each accepted source defect meets its full semantic contract through observable inputs/outputs and focused failure/retry/concurrency evidence. Every repair has independent review. Exit when no mapped release-blocking source defect remains; hosted proof stays open. |
+| LP-2 Integrated candidate, gates and review | AM-01–32, with direct emphasis AM-01, AM-25–32 | LP-1 exit | Sol integrates/configures; Luna reviews candidate; manager freezes revision and artifacts | **PLANNED — no coherent frozen candidate evidence** | Freeze the source revision, build artifacts and intended exact target manifest; local/CI checks pass; secrets, telemetry, support, recovery and release gates are reviewed; no unresolved release-blocking integration defect. Exit is one reviewed artifact/evidence manifest with intended targets and rollback source. |
+| LP-3 Deployed qualification and Base Sepolia | AM-02–24, AM-26–32 | LP-2 frozen artifacts and target manifest | Sol executes bounded deployment/repair; Luna runs finite hosted evidence; manager accepts | **PLANNED — source/sandbox history only, no current complete deployed journey** | Deployed web, backend and integration identities align with the LP-2 manifest. Fresh Customer/Agent and Provider journeys complete with sandbox AUD funding and an actual paid Base Sepolia buyer Call, usable output, exact records, duplicate/interruption/recovery checks and installed-client continuation. Provider validation cannot substitute for buyer purchase. Exit retains exact deployment/run/transaction/recovery references. |
+| LP-4 Production activation prerequisites | AM-01, AM-07–12, AM-18–20, AM-25–26, AM-30–32 | LP-2 frozen artifacts permit read-only preflight and adviser evidence gathering alongside LP-3; every infrastructure mutation and activation waits for manager-accepted LP-3 exit and LP-4 active status | Named human approvers decide commercial perimeter; Sol handles bounded infrastructure only while LP-4 is active; Luna verifies readback; manager accepts | **DEPENDENCY BLOCKED / NOT VERIFIED — required legal, AML/CTF, tax, banking and infrastructure evidence not supplied** | Attributable decisions and conditions are recorded; production identities/state align with the intended manifest and are fresh; AWS/Cloudflare/Convex/Vercel/Stripe/Formance/Infisical targets and recovery are exact; alerts and rollback work; synthetic state is not promoted. Exit occurs when the manager confirms all prerequisite gates are evidenced under the existing launch authorization, not from configuration presence alone. |
+| LP-5 Controlled live AUD and Base mainnet | AM-07–12, AM-18–24, AM-30–32 | LP-3 and LP-4 exits | Sol executes one bounded live run; Luna observes/reconciles; manager controls remaining cap and accepts | **DEPENDENCY BLOCKED — real-value effects forbidden until prerequisites pass** | Within cumulative A$25/USDC 5/0.001 ETH ceilings, live funding posts once and one real mainnet buyer Call yields usable delivery, separate AUD/USDC facts, transaction hash, exact documents and supported recovery/refund or adjustment evidence. Accepted/uncertain effects consume cap until reconciled. Exit leaves no unknown financial outcome. |
+| LP-6 Final cold journeys and launch closeout | AM-01–32 plus the Base mainnet extension | LP-5 exit | Luna executes finite cold journeys; Sol only receives bounded defects; separate Luna rechecks; manager decides launch | **PLANNED — cannot begin from historical source totals** | All 32 original contracts and expanded production scope have fresh applicable proof; every supported surface has truthful success/failure/recovery and cross-client parity; blockers are closed and nonblockers dispositioned. Exit is the manager's evidence-backed launch decision and retained rollback/support handoff. |
+
+### Definition of Done and end conditions
+
+The goal is complete only when LP-0 through LP-6 have manager-accepted exits,
+all 32 AM contracts and the mainnet extension meet their stated acceptance, the
+production deployment package is verified, no financial outcome is unknown and
+the frozen candidate has rollback, support and attributable evidence. Source
+labels, test totals, configuration values, a free Call, Provider validation or
+one happy-path transaction cannot establish completion.
+
+A package ends when its table exit is evidenced and separately reviewed. If the
+manager records it blocked, the exact unmet dependency, evidence sought and next
+action remain active and the queue does not advance. Only verified launch criteria
+complete the goal. A no-go decision halts affected release effects and records the
+next action; the goal remains incomplete unless Joel explicitly cancels or pauses
+it, or the host's blocked rules apply.
+
+### Findings, uncertainty and evidence freshness
+
+Attach every new finding to an existing AM parent and classify it **release
+blocker**, **nonblocker** or **unknown**. Record the next diagnostic evidence.
+Do not switch the active package unless the finding changes a dependency and the
+manager records the reason. A relevant code, configuration, target or approval
+change invalidates only the proofs it affects; it does not restart unrelated
+audits.
+
+For an unknown, record: factual question; why it changes acceptance; evidence
+sought; owner; next action; and dependent packages held. Unknown is neither a
+pass nor a fabricated blocker. Resolve it by readback or the smallest diagnostic
+before proposing repair.
+
+### Access, approvals, escalation and rollback
+
+Workers receive only the access and exact targets required by the active package.
+Professional legal/AML/CTF, tax and banking decisions remain human-owned. Joel's
+launch authorization already permits production activation once the recorded
+prerequisites, exposure controls and exact-target gates pass; do not add another
+blanket approval stop. Missing access or prerequisite evidence, and any genuinely
+new out-of-scope risk, is escalated to the manager with the blocked effect and
+evidence required; it is never bypassed. Before deployment or real value, record
+the prior revision/configuration, exact rollback action, authorised operator and
+post-rollback readback. On target mismatch, isolation failure, duplicate-risk or
+uncertain submission, stop new effects, preserve durable references and reconcile
+or roll back only the reversible deployment layer; never erase economic evidence.
+
+### Current working set and decision log
+
+1. **Accepted:** LP-0 — the AM-01–32 map for candidate
+   `0fafd075d90fbc552ed5faef13d30953705c22be` passed separate Luna and manager review.
+2. **Active:** LP-1/AM-14 — supported owner/delegated-Agent publication proof only.
+3. **Held:** later LP-1 items and LP-2–LP-6 remain planned or dependency-blocked.
+
+Decision log: **20 September 2026** — launch goal expanded from sandbox/source
+closure to Base Sepolia plus controlled Base mainnet; cumulative campaign limits
+set to A$25 including fees/tax, USDC 5 and 0.001 ETH, without auto-replenishment.
+The production approval package remains NOT VERIFIED. The manager accepted this
+launch-control process after independent Luna review; that acceptance completes
+the process package only and does not complete any AM row. The manager separately
+accepted LP-0 on 20 September after Luna reviewed the complete AM-01–32 map and
+the corrected standard/hosted-alpha and AM-27 sequencing boundaries. The reviewed
+scope is source candidate `0fafd075d90fbc552ed5faef13d30953705c22be` plus
+these launch-control documents; the launch goal remains incomplete.
+
+## LP-0 current-candidate evidence map
+
+Source candidate: `0fafd075d90fbc552ed5faef13d30953705c22be` plus the
+uncommitted launch-control documents in this package. **Current proof** means the
+supplied 20 September focused run passed 6 files / 73 tests. **Accepted claim**
+means the existing row cites a prior focused pass and current proof path, but it
+was not rerun for LP-0. **Retained hosted evidence** remains usable only while its
+named target and relevant behavior are unchanged.
+
+| AM | Current source/evidence classification | Exact remaining condition or bounded next diagnostic |
+| --- | --- | --- |
+| AM-01 | Hosted-only claim; registry already records web/backend revision mismatch | LP-2 freezes manifest; LP-3 proves qualification identities/fences and dependency failure; LP-4 proves production identities and activation gates. |
+| AM-02 | Accepted source claim: auth redirect, unique provisioning and stable Account contracts in release design | Hosted invite/Google flow, sign-out/session expiry, interrupted return and concurrent first provisioning against LP-3 deployment. |
+| AM-03 | Accepted source claim plus retained signed-webhook/replay record | Confirm target/fingerprint unchanged in LP-2; otherwise send one signed duplicate and read one Account-scoped history row in LP-3. |
+| AM-04 | Accepted source claim: named-resource owner/Agent/admin isolation tests | LP-3 two-Account positive/negative direct-route and storage readback; public Tool discovery remains public. |
+| AM-05 | Accepted source claim including installed CLI connection/Quote cases | LP-3 hosted approval, credential propagation, expired/reconnect and installed-client return to the correct Account/Quote. |
+| AM-06 | Accepted source claim: replacement/revocation, stable Principal capacity and retained history | LP-3 simultaneous old/new clients and revoked-call refusal; LP-4 verifies production scheduling and provider cleanup readback. |
+| AM-07 | Accepted source claim: exact principal/fee/tax/total, stale-policy refusal and explicit requote | LP-3 sandbox display/Checkout; LP-5 live display and charge within cumulative cap. |
+| AM-08 | Accepted source claim plus retained A$10.55→A$10 sandbox receipt | LP-3 fresh payment/return/refresh with matching Stripe/Formance/documents; LP-5 repeats live once. |
+| AM-09 | Accepted source claim: cancel/fail/expire/outcome-unknown states preserve command identity | LP-3 hosted negative returns, including settled despite failed return, with no duplicate Checkout. |
+| AM-10 | Accepted source claim: duplicate/reordered Stripe events converge on one command/posting/documents | LP-3 forced sandbox duplicate/reordering/interruption; LP-5 confirms live replay protection without spending twice. |
+| AM-11 | Accepted source claim: exact-unit aggregation, Account-bound document access and distinct document kinds | LP-3 hosted open/refresh/period aggregation and concealed foreign link; LP-5 exact live documents/adjustment. |
+| AM-12 | Accepted source claim: one refund identity, event reordering and recoverable Formance uncertainty | LP-3 sandbox refund failure/retry; LP-5 supported live refund/adjustment with original payment retained. |
+| AM-13 | Accepted source claim plus retained approved sandbox connection/draft | LP-3 fresh owner UI/CLI connection and payee-control readback; production Provider connection belongs to LP-4. |
+| AM-14 | **Source gap:** component proof covers platform-funded canary, empty buyer ledger, native admission and promotion safety; cited integrated test is absent | Focused supported-entry proof for owner and delegated Agent, same-Tool progress/failure continuation, exactly one canary and post-promotion Quote eligibility. Separately trace production entry through standard service mode and `src/lib/server/package5-rollout.ts` into existing commercial/custody gates; hosted-alpha refusal remains correct. |
+| AM-15 | Accepted source claim: never-signed, expired-signing and submitted-uncertain recovery retains one validation Call | LP-3 hosted interruption/return with same Call and no buyer reservation; repeat on approved production supply if LP-4 changes this boundary. |
+| AM-16 | Accepted source claim: withdrawal/routeability freeze blocks late promotion | LP-3 hosted expiry/source/ownership/offboarding changes and retained historical Call evidence; LP-4 production gate readback. |
+| AM-17 | Accepted source claim: material drift, withdrawal, republish and historical Call isolation | LP-3 full hosted lifecycle/replay; LP-4 verifies the same production state transitions after activation. |
+| AM-18 | **Current proof:** Quote suite covers identity/policy/currentness/refusals and correctly refuses production while service mode is `hosted_alpha`; `src/lib/deployment/service-mode.ts` permits production in `standard` mode | LP-3 admitted Base Sepolia discovery/Quote. Bounded LP-1 verification must trace the actual standard-mode Quote entry through existing commercial-policy/custody gates and prove Base mainnet asset/network/recipient/amount/drift refusal before effects; repair only a specific uncovered condition. |
+| AM-19 | Accepted source claim: local Formance/Workpool buyer Call, one AUD capture and replay; external payment/Provider are fixtures | LP-3 actual paid Base Sepolia buyer Call. LP-5 actual mainnet delivery with separate AUD/USDC evidence; Provider validation cannot satisfy either. |
+| AM-20 | Accepted source claim: atomic balance/policy/treasury scarcity, stable period limits and safe pre-submission release | LP-3 hosted concurrency/refusals and scheduling; LP-1 traces standard-mode production through the existing commercial-policy and custody gates, then LP-5 exercises bounded live refusal without release. |
+| AM-21 | **Current proof:** HTTP recovery suite; existing integration proof covers fresh-process Call recovery/hold/cancel | LP-3 installed-client interruption before/after possible Sepolia submission; LP-5 same-reference mainnet reconciliation with no new payment. |
+| AM-22 | **Current proof:** managed-Call remedy idempotency and conflict refusal | LP-3 hosted remedy with original Call/Provider obligation; LP-5 one supported live refund/adjustment and retry. |
+| AM-23 | **Current proof:** Call projection reconciles Logs/Usage/Spend/Provider obligation without phantom spend | LP-3 hosted refresh/replay and role views; LP-5 reconciles distinct AUD and mainnet USDC facts plus adjustment. |
+| AM-24 | **Current partial proof:** MCP recovery, HTTP recovery and CLI-helper/shared-presentation tests pass; installed CLI served-route proof is free/keyless and durable-recovery harness is HTTP-only | Focused paid-state parity across HTTP, MCP, supported chat and installed CLI for identities, amounts, result/status and continuation, including a fresh process and no new purchase; then hosted LP-3 proof. |
+| AM-25 | Hosted-only claim: projects/trust/bindings configured | LP-3 exact Infisical create/use/rotate/revoke/delete and denial readback for qualification; LP-4 fresh production scope without copied secrets. |
+| AM-26 | Accepted source claim: Account/generation isolation and resumable cleanup | LP-3 hosted cross-Account, stale-generation and failed-cleanup readback; LP-4 repeats for production identities. |
+| AM-27 | Partial source evidence: Call status and demand console tests cover honest pending/cancelled/refused/error transitions | Before LP-2, a bounded LP-1 proof package must inventory supported surfaces and map desktop/compact/keyboard/focus/loading/empty/error source evidence; repair only a concrete missing behavior. Observable cold journeys remain LP-6. |
+| AM-28 | Hosted-only; configured destinations are not delivery proof | LP-3 resolve actual Sentry/PostHog destinations and send one non-sensitive failure/event with matching user/operator correlation reference; production alert readback in LP-4. |
+| AM-29 | Partial source evidence: support route preserves Call reference and avoids invented retry | Bounded source check must map account/security/offboarding blocks and retained unresolved obligations; LP-3 hosted support/offboarding journey. |
+| AM-30 | Hosted-only; retired restore achieved 308s and fails current 300s RPO acceptance | LP-4 current-target restart/restore, ≤300s RPO, retained financial reconciliation and actual alert delivery; retain exact rollback evidence. |
+| AM-31 | Hosted-only; finite audit protocol restored, no candidate run | LP-6 cold inventory coverage with six-turn/twelve-minute limits and explicit pass/fail/untested disposition. |
+| AM-32 | Hosted-only release rollup | LP-6 trace every AM row and mainnet extension to fresh applicable evidence, release checks, no critical child defect and tested rollback/support handoff. |
+
+Candidate-integration uncertainty: the shared root contains authorized dirty work
+that is not copied here. Factual question: which root changes the manager will
+integrate into the launch candidate. It affects proof freshness and the LP-2
+artifact manifest. Evidence sought: manager-selected integration revision/diff;
+owner: manager; next action: select after accepting LP-0; LP-2 onward are held.
+This uncertainty is not a source defect and does not invalidate unrelated proof.
+
+### Dependency-ordered LP-1 recommendation
+
+1. AM-14 supported-entry verification; repair only if the focused journey exposes
+   a defect.
+2. AM-24 paid-state cross-client parity and fresh-process verification; repair
+   the owning adapter only where parity fails.
+3. AM-14/18–20 production path verification: trace standard service mode through
+   Provider rollout flags and existing commercial-policy/custody gates, preserving
+   correct hosted-alpha sandbox refusal; repair only a specifically proven gap.
+4. AM-19–24 production buyer integration verification against that existing
+   gated path; repair only missing mainnet admission/recovery/projection behavior.
+5. AM-27/29 bounded supported-surface and offboarding source map; make only the
+   finite repairs identified before LP-2 freezes artifacts.
+
+LP-0 passed separate Luna and manager review on 20 September 2026. Only the first
+recommended package, AM-14 supported-entry proof, is active; later LP-1 items
+remain planned until separately assigned.
 
 ### Record-by-record execution
 
@@ -41,10 +231,22 @@ For each assigned record:
    audit or cleanup loop between records. Missing paperwork does not invalidate
    correct work; establish the missing substantive evidence without restarting it.
 
-**Current controlled assignments: STOPPED at Joel's request after AM-07.**
-AM-07 is source-accepted. Do not start AM-09 or another release record without
-new user authorization. Monitoring is paused. UX remains archived. Outstanding
-cross-record dependencies are retained for a future explicitly resumed session.
+### Bounded package protocol
+
+The manager assigns one package with an explicit owner, files, full behavioral
+contract, accepted prior evidence and finite completion checks. Consequential
+implementation uses Sol; bounded evidence collection and independent review use
+Luna. The worker proves the complete assigned contract and reports satisfied and
+remaining conditions. A separate reviewer checks the changed result and evidence;
+the manager accepts or returns a bounded repair, then alone advances the queue.
+Only one implementation package is active at a time. Do not start broad repeated
+audits or create a parallel status ledger.
+
+**Current assignment: reconcile the candidate and remaining proof.** The
+20 September launch instruction resumes this work. Existing claims report 26
+source-verified rows and six hosted-only rows; these are historical acceptance
+claims, not a fresh verification of the current checkout. Reuse attributable
+evidence and inspect contrary evidence before deciding that a row needs repair.
 
 **UX phase boundary:** address every existing finding at source first. During
 this phase use the selected skills/contracts and narrow relevant source checks;
@@ -55,16 +257,16 @@ dependency remains blocked; deferred browser proof alone is not a source defect.
 After all required source findings are complete, the manager commissions one
 consolidated review of the integrated result. Repair defects found in that review
 and recheck the affected behavior, without restarting open-ended audit cycles.
-This final review does not authorize deployment or hosted configuration repair.
+Deployment and hosted configuration repair then proceed under the authorized
+launch goal and the deployment-operations target and recovery controls.
 
-**Next source closeout order:** AM-07, AM-09, AM-10,
-AM-11, AM-12, AM-14, AM-15, AM-16, AM-17, AM-18, AM-21, AM-22, AM-23, AM-24,
-AM-26, AM-29. AM-27 retains its explicit source dependencies. Already
-source-verified rows are not reopened without relevant contrary evidence;
-AM-01/25/28/30/31/32 remain the hosted-only queue. A concrete dependency can change
-this order through the manager, with the reason recorded; incidental discoveries
-cannot. Reports identify the active record, conditions satisfied/remaining and
-the next record, not merely files changed or tests run.
+**Next closeout order:** reconcile source evidence and linked repairs, close
+actual gaps in dependency order, verify the integrated candidate, establish
+hosted/testnet proof, close production prerequisites, then prove mainnet and
+launch acceptance. AM-27 retains its linked UX conditions. Already verified
+behavior is not reopened without relevant contrary evidence. Reports identify
+the active record, conditions satisfied/remaining and next record, not merely
+files changed or tests run.
 
 ### Source and hosted status
 
@@ -166,7 +368,7 @@ at Quote/Call admission and before paid effects.
 | ID | Given / When → Then | Failure, recovery or linked check | Status | Source status / next owner action | Evidence or outstanding proof |
 | --- | --- | --- | --- | --- | --- |
 | AM-13 | Given the controlled sandbox source, the Provider can preview it and establish an approved connection with payee-control evidence; returning through owner UI/CLI finds the saved connection and draft | Setup completion does not claim that the Tool is published or buyer-ready; publication is AM-14 and stale or invalid authority is AM-16 | VERIFIED | SOURCE VERIFIED — Owner connection onboarding/proof/refresh tests and retained UI/CLI connection evidence cover this narrow row. | Approved `Agentic Economy Sandbox Tools` business and persisted x402 connection/payee claim in cutover evidence; retained draft exists |
-| AM-14 | Given an approved current draft and connection, the owner or delegated Agent submits through the supported entry point; one bounded platform-funded validation returns contract-valid output and makes that version available for supported sandbox Quotes and Calls | Submission shows progress on the same Tool; setup or validation failure explains the blocker and safe next action. No buyer balance funds Provider validation; interruption/continuation is AM-15 | PARTIAL | SOURCE VERIFIED — Owner and delegated Agent `supply.publish` write the seller-canary fence. A healthy 402 probe does not make the Tool Quote-eligible; one platform-funded canary then promotion does. Known failures stay action_required without published/Quote. Replay after admit does not mint a second canary. Buyer ledgers stay empty. Hosted paid validation/publication outstanding. | Journey tests in `tests/integration/capability-supply-sandbox-publish.test.ts`. Funnel-run and capability-supply boundary imports hold. Hosted paid canary remains unverified |
+| AM-14 | Given an approved current draft and connection, the owner or delegated Agent submits through the supported entry point; one bounded platform-funded validation returns contract-valid output and makes that version available for supported sandbox Quotes and Calls | Submission shows progress on the same Tool; setup or validation failure explains the blocker and safe next action. No buyer balance funds Provider validation; interruption/continuation is AM-15 | PARTIAL | SOURCE GAP (verification) — Component tests prove platform-funded seller-canary settlement, no buyer ledger mutation, native admission and promotion safety. The previously cited integrated journey test is absent. A focused supported-entry test must still prove owner and delegated-Agent submission, same-Tool progress/failure continuation, one canary and Quote eligibility after promotion. Hosted paid validation/publication remains open. | Real component evidence: `tests/unit/convex/capability-call-worker-charge.test.ts`, `tests/integration/capability-supply-native-admission.test.ts`, and `tests/integration/capability-supply-owner-funnel-withdraw-republish.test.ts` |
 | AM-15 | Given submitted validation, the Provider closes the client or work is interrupted, pending or timed out; returning shows the same validation case and platform-funded Call with a working safe continuation | Recheck/recovery follows current authority and resumes that validation Call without buyer reservation or Charge. Possible submission remains uncertain; no second payment, permanent polling dead end or manual database repair | PARTIAL | SOURCE VERIFIED — Provider validation recovery distinguishes never-signed vs expired-signing vs submitted-uncertain. Resuming interrupted validation retains the original platform-funded Call, respects current workload authority, and creates no buyer reservation. | Tested in `tests/unit/convex/capability-call-recovery.test.ts` and `tests/unit/convex/capability-call-worker-run.test.ts`. Hosted validation recovery journey remains unverified. |
 | AM-16 | Given pending validation or publication, claims expire, source/connection changes, ownership changes or offboarding begins; the Provider sees the current blocker and permitted correction | Those changes block new effects and promotion. A late callback cannot republish withdrawn supply or overwrite authoritative state; retained accepted Calls and their evidence remain recoverable | PARTIAL | SOURCE VERIFIED — Late worker completion cannot promote withdrawn supply (`target_drift`); routeability freeze prevents promotion under offboarding or authority revocation. Tested in `tests/integration/capability-supply-owner-funnel-withdraw-republish.test.ts`. Hosted proof outstanding. | Integration tests prove late callback protection, withdrawal and freeze enforcement |
 | AM-17 | Given a draft or published Tool, the Provider repeats submission/recheck, revises, withdraws and republishes through supported actions; the displayed version and discoverable/callable state match the accepted action | Replay after promotion or interruption preserves identity and evidence. Withdrawal blocks new purchases without erasing accepted Calls; republishing cannot reuse stale approval for changed material | PARTIAL | SOURCE VERIFIED — Material change (digest, source, price) rejects republishing; withdrawal isolates historical Call records to their accepted publication revision. Tested in `tests/integration/capability-supply-owner-funnel-withdraw-republish.test.ts`. Hosted lifecycle proof outstanding. | Replay, revise, withdraw, republish material-drift rejection and Call isolation verified |
@@ -181,7 +383,7 @@ at Quote/Call admission and before paid effects.
 | AM-21 | Given an accepted Call interrupted before or after possible submission, the buyer resumes it by durable reference: proven pre-submission failure releases safely; uncertainty retains the reservation and status | Status/cancel/reconcile are offered only when permitted and work from a fresh process. A timeout cannot authorize a fresh Call, duplicate payment, false delivery or an unsupported release | PARTIAL | SOURCE VERIFIED — Interrupted buyer Call resumption parity proven across fresh processes: authentic clients resume by `callRef` alone; uncertain states retain holds and return `reconciliation_required`; pre-claim cancel returns safe release. Tested in `tests/unit/server/call-recovery-api.test.ts` and `tests/integration/capability-call-workpool.test.ts`. Hosted recovery proof outstanding. | Fresh-process `callRef` recovery, hold retention and cancellation verified |
 | AM-22 | Given a failed or disputed delivery eligible for a supported remedy, the buyer follows the original Call to an attributable refund/adjustment and resolved purchase status | Interrupted or refused remedy retains a reason and safe next step. Retry applies the remedy once; original delivery, payment and adjustment records remain linked and visible | PARTIAL | SOURCE VERIFIED — Single remedy applies once and is attributable: pre-submission release replays idempotently with `replayed: true`; conflicting release references refuse with `managed_call_release_conflict`; original Call row and Provider obligations retain linked evidence. Tested in `tests/unit/convex/money-managed-call.test.ts` and `tests/integration/capability-call-workpool.test.ts`. Hosted proof outstanding. | Single-remedy idempotent replay and attributable evidence verified |
 | AM-23 | Given the same sandbox purchase and remedy, the Customer reads Calls, Logs, Usage, Spend and documents while the Provider reads its permitted earnings/obligation records; identities, amounts and states reconcile | Refresh/replay cannot duplicate lines or conflate AUD buyer consideration with upstream settlement. Provider, Seller and recipient remain distinct; pending/adjusted purchases are shown truthfully | PARTIAL | SOURCE VERIFIED — Cross-surface reconciliation across Operator Logs, Usage, Spend, and Provider obligations verified without drift: settled amounts (AUD 2.50) aggregate into `settledSpendUnits`, uncertain amounts are excluded from settled spend, and rebuilds remain strictly idempotent. Tested in `tests/unit/convex/capability-call-projection.test.ts`. Hosted proof outstanding. | Cross-surface reconciliation across Logs, Usage, Spend, and Provider obligations verified |
-| AM-24 | Given equivalent authority and the same purchase state, HTTP, installed CLI, MCP and supported chat agree on Tool/Quote/Call identities, amounts, result/status and permitted continuation | After interruption, the supported client can resume from durable references without conversation history; no surface offers a fresh purchase where another requires reconciliation | PARTIAL | SOURCE VERIFIED — Continuation parity across CLI, HTTP, and presentation verified: uncertain Calls direct to `reconcile` (`ae help recover`), never blind retry; pending/awaiting authority directs to status read (`ae status`), never fresh purchase. Tested in `tests/unit/market-terminal/suggested-continuation-adapter.test.ts`. Hosted proof outstanding. | Cross-harness continuation parity verified for uncertain, pending, and terminal states |
+| AM-24 | Given equivalent authority and the same purchase state, HTTP, installed CLI, MCP and supported chat agree on Tool/Quote/Call identities, amounts, result/status and permitted continuation | After interruption, the supported client can resume from durable references without conversation history; no surface offers a fresh purchase where another requires reconciliation | PARTIAL | SOURCE GAP (verification) — The adapter test compares CLI helpers with shared presentation only; it does not exercise HTTP, MCP, chat or an installed client. Installed CLI tests separately prove served-route use for a free/keyless Tool and fresh-process durable recovery against a local HTTP harness. A focused parity test must seed one paid purchase state and compare HTTP, MCP, supported chat and installed CLI identities, amounts, result/status and continuation, including fresh-process recovery without a new purchase. Hosted proof remains open. | Existing partial evidence: `tests/unit/market-terminal/suggested-continuation-adapter.test.ts`, `tests/integration/capability-call-workpool.test.ts` and `tests/unit/market-terminal/call-durable-recovery.test.ts` |
 
 ## Connections, usability and operations
 
@@ -268,8 +470,10 @@ Use the full available skill catalog to select the relevant expertise for each
 item. Read and apply the selected skills to the actual boundary; do not run the
 whole library on every item. Detailed UX and specialist audit queues remain
 intact, with findings, status and evidence mapped to these 32 release items.
-They can proceed independently within agreed file ownership. The following
-are starting points, not a restriction to one subset of the catalog:
+Independent work is limited to read-only evidence gathering. Every source or
+configuration mutation is serialized under the one active package and its agreed
+ownership. The following are starting points, not a restriction to one subset of
+the catalog:
 
 | Work boundary | Skills to select when applicable |
 | --- | --- |
@@ -373,10 +577,12 @@ Preserve failures and previous evidence rather than overwriting them. A baseline
 VERIFIED row links earlier hosted evidence; revalidate it if a relevant change
 invalidates that proof. Never place secrets in this register.
 
-Scope follows Joel’s sandbox-only funding and Tools decision: live Stripe
-payments, mainnet Tool payments and live payouts remain disabled. These are not
-hidden failures or waived rows; AM-01 must prove the sandbox restrictions remain
-effective.
+Qualification retains sandbox Stripe funding and Base Sepolia execution so
+fault/replay behavior can be proved without production value. Launch acceptance
+also requires controlled live funding and Base mainnet purchase proof under the
+deployment package and exposure controls above. Production effects remain
+disabled until every applicable gate is evidenced; this is a current blocker,
+not a waiver or a sandbox-only release decision.
 
 ## Evidence log — 14 September 2026
 
@@ -801,11 +1007,17 @@ action_required without published/Quote. Replay after admit does not mint a
 second canary. Buyer ledgers stay empty. AM-14 Status remains PARTIAL. Hosted
 paid validation/publication outstanding. AM-15 is unchanged.
 
+**Evidence correction — 20 September 2026:** the integrated journey test cited
+for this closeout is absent from the current repository. The component evidence
+listed in the AM-14 row remains valid, but the supported owner/delegated-Agent
+entry-to-promotion journey is an LP-0 source verification gap until focused proof
+is added or located.
+
 ## Easy AM items source closeout (AM-16.2, AM-18, AM-26, AM-29) — 16 September 2026
 
 Fanned out Composer subagents for discrete file-specific tasks (<3 files):
 - **AM-15 (SOURCE VERIFIED):** Verified platform-funded validation call recovery distinction across never-signed, expired-signing, and submitted-uncertain states in `tests/unit/convex/capability-call-recovery.test.ts` and `tests/unit/convex/capability-call-worker-run.test.ts`. Flipped status from FAILING to PARTIAL / SOURCE VERIFIED.
-- **AM-16.2 (FIXED IN SOURCE):** `promoteX402SellerCanaryForOwner` in `convex/catalogOfferingMutations.ts` enforces `providerRouteabilityIsFrozen` and `capabilityOfferings.status === 'active'`, refusing promotion with `target_drift` if routeability is frozen or the offering is withdrawn. Verified in `tests/integration/capability-supply-sandbox-publish.test.ts`.
+- **AM-16.2 (FIXED IN SOURCE):** `promoteX402SellerCanaryForOwner` in `convex/catalogOfferingMutations.ts` enforces `providerRouteabilityIsFrozen` and `capabilityOfferings.status === 'active'`, refusing promotion with `target_drift` if routeability is frozen or the offering is withdrawn. Current proof is in `tests/integration/capability-supply-owner-funnel-withdraw-republish.test.ts`.
 - **AM-18 (SOURCE VERIFIED):** `quoteResult` committed variant in `convex/capabilityQuotes.ts` projects distinct `parties: { seller: 'Agentic Economy', provider: operation.identity.businessId, paymentRecipient: operation.identity.paymentRecipient }`. Verified in `tests/unit/convex/capability-quotes.test.ts`.
 - **AM-26 (SOURCE VERIFIED):** Scoped credential isolation, cross-account and stale generation rejection, and uncommitted cleanup / resumable pointer reconciliation verified across `tests/security/maturity/isolation-secret-canary.test.ts`, `tests/unit/convex/secret-lifecycle-operations.test.ts`, and `tests/unit/secrets/secret-plane.test.ts`.
 - **AM-29 (SOURCE VERIFIED):** `src/routes/support.tsx` implements reference-bearing help path via `callRef` search param with displayed banner and prefilled mailto href. Verified in `tests/unit/routes/support-route.test.tsx`.
@@ -821,10 +1033,11 @@ Orchestrated IceInVein source closeout across all remaining open source gaps wit
 - **AM-21 (SOURCE VERIFIED):** Interrupted buyer Call resumption parity across fresh processes verified by `callRef` + bearer key alone (with 401/404 foreign principal boundaries, uncertain hold retention, and pre-claim safe release) in `tests/unit/server/call-recovery-api.test.ts` and `src/lib/server/call-api.ts`.
 - **AM-22 (SOURCE VERIFIED):** Single remedy and attributable adjustment verified: idempotent pre-submission release replay with `replayed: true`, conflict rejection on divergent transaction references, and intact Provider obligations with linked evidence in `tests/unit/convex/money-managed-call.test.ts`.
 - **AM-23 (SOURCE VERIFIED):** Cross-surface reconciliation across Operator Logs, Usage, Spend, and Provider obligations verified without drift or phantom spend in `tests/unit/convex/capability-call-projection.test.ts`.
-- **AM-24 (SOURCE VERIFIED):** Cross-harness continuation parity across CLI, HTTP, and shared presentation verified for `reconciliation_required` (`ae help recover`), `awaiting_authority` / `pending` (`ae status`), and terminal states in `tests/unit/market-terminal/suggested-continuation-adapter.test.ts`.
+- **AM-24 correction — 20 September 2026:** the cited adapter test proves CLI-helper/shared-presentation agreement only. HTTP, MCP, supported chat and installed-client paid-state parity remain a finite source verification gap in the row above.
 - **AM-27 (SOURCE VERIFIED):** Honest UI state rendering verified for cancelled and refused-before-claim Calls (no false success "Complete", no misleading reuse actions, no fabricated output or money facts) in `tests/unit/routes/call-status-route.test.tsx`.
 
 6-Gate Verification: 8 test suites (111 tests) passed, TypeScript typecheck passed (0 errors), ESLint passed (0 errors), dependency ratchet passed (0 circular), module boundaries passed (12/12), TypeScript standards passed.
 
-Totals: **26 source verified, 0 source unclosed, 6 hosted-only** out of 32. **Source phase is 100% complete.**
-
+Historical total recorded on 17 September: **26 source verified, 0 source
+unclosed, 6 hosted-only** out of 32. This is superseded by the AM-14 and AM-24
+evidence corrections above and cannot close LP-0 or establish source completion.

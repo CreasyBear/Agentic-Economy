@@ -1,7 +1,7 @@
 # Waitlist alpha: integrated release design
 
 Date: 14 September 2026. Status: design baseline; bounded implementation is tracked in the maturity register.
-Authority: [PRODUCT.md](../../PRODUCT.md), Joel's sandbox-only decision and
+Authority: [PRODUCT.md](../../PRODUCT.md), Joel's 20 September 2026 launch decision and
 [START_LINE.md](../../START_LINE.md). This defines completion work, not a claim
 that the application is ready. Evidence and audit protocol remain in the
 [alpha validation plan](alpha-validation-plan.md).
@@ -19,12 +19,18 @@ Two complete journeys establish the market: a Provider makes supported supply
 available, and a Customer authorizes an Agent to buy and use it. Account setup,
 funding, connections, records and support must work around those journeys.
 
-Stripe uses sandbox money and x402 uses the supported sandbox network. Clerk,
-Convex, Formance and Infisical are real hosted integrations. Sandbox does not
-relax isolation, spending limits, truthful status, durability or recovery.
-Real-money funding, mainnet settlement and live payouts remain outside the
-authorized alpha mode. This does not authorize removing other product surfaces:
-every advertised or exposed supported behavior must be covered by acceptance.
+Qualification uses Stripe sandbox funding and real x402 testnet execution on
+Base Sepolia. Launch acceptance additionally requires live AUD funding and real
+USDC x402 purchases on Base mainnet, with usable delivery, reconciled records
+and supported recovery. Clerk, Convex, Formance and Infisical are real hosted
+integrations. Source and sandbox proof cannot close the launch goal.
+
+Production activation follows the existing commercial and infrastructure gates,
+fresh production identities/state, explicit financial exposure limits and exact
+target/rollback proof. Synthetic release data is not promoted in place. Supported
+payout obligations remain subject to their existing contract; this decision does
+not invent another payout rail. Every advertised or exposed supported behavior
+must be covered by acceptance, including failure and recovery.
 
 Use the current app, service topology, components and official SDKs. No new
 service, dependency, generic workflow engine, general ledger or navigation
@@ -488,8 +494,8 @@ app; they must not become extra diagnostic calls on every purchase.
 | Transition | Required behavior and evidence |
 | --- | --- |
 | Sign in → connect Agent | Bind the correct Account, role, replaceable credential and current spending policy; revoke the old credential without losing history |
-| Funding quote → Checkout → credit | Disclose credit, fee and total; post confirmed sandbox funding once; cancellation grants nothing; repeated events preserve the same credit/documents |
-| Discovery → Quote | Browsing has no paid effects. Quote binds Tool version, input, challenge, all-in AUD price, authority, expiry and evidence; unsupported/mainnet paths are refused |
+| Funding quote → Checkout → credit | Disclose credit, fee and total; post confirmed funding once in the applicable qualification or approved live environment; cancellation grants nothing; repeated events preserve the same credit/documents |
+| Discovery → Quote | Browsing has no paid effects. Quote binds Tool version, input, challenge, all-in AUD price, authority, expiry and evidence; unsupported network paths are refused, while approved Base Sepolia and Base mainnet paths remain environment-separated |
 | Accept Quote → reserve → dispatch | Recheck exact facts and fresh treasury capacity. Reserve shared funds and Agent exposure before signing; concurrency cannot overspend |
 | Known usable delivery | Capture the correct AUD amount once and retain separate upstream settlement and delivery records |
 | Known pre-submission failure | Release safely with evidence; preserve the same Call and explain the permitted next action |
@@ -537,10 +543,10 @@ owned files where practical, one behavior contract and a finite completion point
 | --- | --- | --- | --- |
 | 1 | Establish Provider lifecycle acceptance against this design | Encode evidence precedence, interrupted continuation, stale callbacks, exact replay after promotion and withdrawal; pending-work disposition is fixed above | Tests precede the remaining coordination, projection and recovery changes; no deployment until this complete milestone passes |
 | 2 | Deliver supported publication as a complete journey | Owner and Agent submission, one testnet validation, usable output, publication visibility, repeat submission and safe change/withdrawal on a coherent candidate | Root integrates reviewed 1–3-file tasks and performs exact hosted proof |
-| 3 | Prove buyer purchase and remedy | Fresh user/Agent, sandbox credit, Quote, paid Call, matched ledger/delivery/documents; limits, duplicates, interruption and remedy | Bounded fixes only for established contract failures, grouped by owning boundary; re-run the whole affected journey |
+| 3 | Prove buyer purchase and remedy | Fresh user/Agent, qualification credit, Quote, paid Base Sepolia Call, matched ledger/delivery/documents; limits, duplicates, interruption and remedy | Bounded fixes only for established contract failures, grouped by owning boundary; re-run the whole affected journey |
 | 4 | Close supporting integrations and operations | Hosted Infisical create/use/revoke/delete and tenant isolation; credential rotation; documents; actionable alert/support; restore proof and current operating constraints | Readback first. Configuration tasks use official tools. No new service or speculative monitoring layer |
-| 5 | Freeze one candidate and audit every supported surface | Reconcile routes/navigation/API/CLI/MCP/chat inventory with finite cold-user reports; desktop, compact layout, keyboard and all relevant states | Cold Luna/max agents, isolated test resources, at most six decision turns or twelve minutes each |
-| 6 | Consolidate and close maturity findings | Group by root cause and user impact; design one correction per cause; fresh verification against a named revision | No auditor patches; no release while critical findings or untested supported journeys remain |
+| 5 | Freeze one candidate and audit every supported surface | Reconcile routes/navigation/API/CLI/MCP/chat inventory with finite cold-user reports; desktop, compact layout, keyboard and all relevant states | Bounded cold Luna review, isolated test resources, at most six decision turns or twelve minutes each |
+| 6 | Close the production package and launch proof | Group remaining findings by root cause, satisfy attributable commercial/infrastructure gates, then execute the bounded live funding and Base mainnet purchase against a named revision | No auditor patches; no release while approvals, critical findings or supported production journeys remain unverified |
 
 Orders 2 and 3 form one transaction milestone, not separate declarations of
 readiness. Supporting integration readbacks may run alongside them where they
