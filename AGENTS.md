@@ -17,6 +17,26 @@ Use each source for the question it can answer:
 Dated research, comparison papers, execution gates, generated maps and Git
 history are evidence or history. They do not override the product charter.
 
+### Prevent product-framing drift
+
+For product/architecture assessments, read the current PRODUCT.md, including
+"Core market journeys", before deriving priorities from memory, existing code
+hooks or historical plans. Understand both buyer acquisition and Provider
+distribution. State which journey improves, what friction disappears and what
+observable outcome would demonstrate the improvement. Distinguish the entry
+release, implemented source and future vision; a narrow release is not the
+whole product.
+
+Jev assessments centre natural-language capability matching, useful comparison,
+low-friction purchasing, Provider discoverability, later supply matching and
+better repeat allocation. Delivery verification is a minor supporting use case,
+not the architecture's organising purpose. Do not turn supporting governance or
+failure controls into the product thesis, or remove required controls in the
+name of experience. No historic "north star", compaction anchor or maturity
+register overrides the current charter. Record substantive user corrections in
+the authoritative documents, not only in conversation or a disclaimer above a
+contradictory design.
+
 ## Product boundary
 
 Agentic Economy is a cross-harness Tool market and commercial boundary for

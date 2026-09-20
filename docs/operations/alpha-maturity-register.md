@@ -194,6 +194,41 @@ validation passed Luna and manager review. The shared Workpool regression remain
 19/19. This is not hosted proof or
 real-value evidence.
 
+**21 September 2026 — candidate preparation, not LP-2 activation:** the manager
+included the exact current authoritative root `PRODUCT.md` and `AGENTS.md` in
+this isolated worktree. The charter adds the six core buyer/Provider market
+journeys and keeps managed x402 as the entry release rather than the product's
+limit. The process instructions require product and architecture assessments to
+ground priorities in those journeys, treat Jev delivery verification as a minor
+supporting use case, and keep governance controls from replacing the product
+purpose. The copied file digests are `PRODUCT.md`
+`c100ffb7dd2260238854dacb62e3dcd9241900932d305ed56e8e3ce998d78b19` and
+`AGENTS.md` `e868936f6b01eac75d6cfe7add2e86b5e465a0b4b4079051372bfc041c12c7f3`.
+These two reviewed document edits are included despite being dirty in
+the shared root because they are authoritative corrections; no other dirty root
+file was copied.
+
+Dirty experimental Jev, discovery reranking, chat changes and their dependent
+generated spillover remain excluded. Unrelated governance, research and history
+remain context rather than launch proof. Luna's bounded review recommended, and
+the manager accepted, inclusion of four committed local `main` refactors as one
+coherent launch-supported route dependency:
+`176385637` (thin eight public/operator page routes), `aa0cbba72` (thin Tool
+detail routes), `b25e89e80` (thin public Business route) and `52df868b0` (thin
+funding return route). Actual synchronization remains held until this doc sync is
+accepted. Local `main` is at `52df868b05a883f33f1e407c27841a114a7fd75b`
+and was observed 182 commits ahead of local `origin/main`; this records local
+repository state and does not claim remote publication. This is reviewed doc
+sync and read-only LP-2 preparation only. LP-2 remains planned: no candidate
+revision/artifact/target manifest is frozen, no package exit is accepted and no
+pending schema approval is implied.
+
+The shared-root validation previously observed seven Jev/reranker failures amid
+dirty experimental work. They are neither copied nor waived. The eventual
+integrated candidate must pass its applicable gates; any recurrence on that
+candidate requires diagnosis against its exact revision rather than attribution
+to excluded root work.
+
 **21 September 2026 — AM-29 open launch blocker:** `readDeletionEligibility`
 has focused source tests but no caller, so it does not enforce a prerequisite to
 Clerk self-deletion. The Clerk `user.deleted` webhook truthfully retires the
