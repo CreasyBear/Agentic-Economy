@@ -1,21 +1,20 @@
 import { Response as UndiciResponse } from 'undici'
 import { expect, vi } from 'vitest'
 import { encodePaymentRequiredHeader } from '@x402/core/http'
+import type { WorkId } from '@convex-dev/workpool'
 import { privateKeyToAccount } from 'viem/accounts'
 
 import { api, internal } from '../../convex/_generated/api'
+import type { Id } from '../../convex/_generated/dataModel'
 import {
   convexTestWithWorkers,
   createTestAgentPrincipal,
   publishedBusinessOwner,
   type ConvexFixtureBackend,
 } from '../helpers/convex-fixtures'
-import {
-  admitPublication,
-  seedCatalogOffering,
-} from './capability-publication-harness'
-import { prepareOwnerPublicationCommand, x402Source } from './capability-supply-owner-funnel-harness'
-import { installTestSourceWriteSecret } from '../helpers/source-write-admission'
+import { seedCatalogOffering } from './capability-publication-harness'
+import { prepareOwnerPublicationCommand, x402SourceForConnection } from './capability-supply-owner-funnel-harness'
+import { installTestSourceWriteSecret, withSourceWrite } from '../helpers/source-write-admission'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import {
   CUSTOMER_REQUEST_SPENDING_POLICY_SCOPE,
@@ -35,6 +34,17 @@ import { createFormanceContext, installPackage4FormanceSchema } from '@/modules/
 import { bookFormanceFundingSettlement, readFormanceDisplayBalance } from '@/modules/money/formance-workflows'
 import { BASE_SEPOLIA_NETWORK, BASE_SEPOLIA_USDC_ADDRESS, cdpX402CustodyConfigurationFromEnvironment,
   cdpX402CustodyBudgetRef, cdpX402PolicyRulesDigest } from '@/modules/capability-supply/server'
+import {
+  SELLER_ONBOARDING_CANARY_BUDGET_POLICY_REF,
+  SELLER_ONBOARDING_CANARY_GRANT_GENERATION,
+  SELLER_ONBOARDING_CANARY_MAXIMUM_PER_CALL_ATOMIC,
+  SELLER_ONBOARDING_CANARY_PLATFORM_APPLICATION_REF,
+  SELLER_ONBOARDING_CANARY_PLATFORM_CREDENTIAL_ID,
+  SELLER_ONBOARDING_CANARY_PLATFORM_GRANT_REF,
+  SELLER_ONBOARDING_CANARY_PLATFORM_OWNER_ID,
+  SELLER_ONBOARDING_CANARY_PLATFORM_PRINCIPAL_ID,
+} from '../../convex/capabilitySupplyCanaryFunding'
+import { marketDispatchWorkpool } from '../../convex/marketDispatchWorkpool'
 
 
 export const INPUT = { request: 'lookup' } as const
@@ -71,7 +81,7 @@ export async function seedPrincipal(
   }
 }
 
-export async function registerRotatingBuyer(backend: ConvexFixtureBackend, monthlyUnits = '1200000', dailyUnits = '1200000', maximumConcurrentCalls = 2) {
+export async function registerRotatingBuyer(backend: ConvexFixtureBackend, monthlyUnits = '12000', dailyUnits = '12000', maximumConcurrentCalls = 2) {
   const subject = 'user_rotating-buyer'
   const owner = (await publishedBusinessOwner(backend, 'rotating-buyer')).owner
   const serviceKey = 'rotating-buyer-service-test-key-32-bytes'
@@ -83,7 +93,7 @@ export async function registerRotatingBuyer(backend: ConvexFixtureBackend, month
     })
     return { ...assertion, scopes: [...assertion.scopes] }
   }
-  const limit = { currency: 'AUD' as const, units: '1200000', exponent: 6 as const }
+  const limit = { currency: 'AUD' as const, units: '12000', exponent: 6 as const }
   const policy = buildAgentAccessPolicy({ environment: 'sandbox', currency: 'AUD', exponent: 6,
     maximumSpendPerCall: limit, maximumDailySpend: { ...limit, units: dailyUnits }, maximumMonthlySpend: { ...limit, units: monthlyUnits } })
   const input = {
@@ -121,6 +131,119 @@ export type PrepareBuyerOptions = {
   accountPrincipalUnits?: string
   initialTime?: number
   buyerSetup?: (backend: ConvexFixtureBackend) => Promise<{ principal: TestPrincipal; grantRef: string }>
+}
+
+async function promotePaidBuyerFixtureAfterSellerCanary(input: Readonly<{
+  backend: ConvexFixtureBackend
+  owner: ReturnType<ConvexFixtureBackend['withIdentity']>
+  businessId: Id<'businesses'>
+  offeringRef: string
+  sourceHash: string
+  publicationRef: string
+  publicationRevision: number
+  toolRef: string
+}>): Promise<void> {
+  await input.backend.mutation(
+    internal.capabilitySupplyCanaryFunding.provisionSellerOnboardingCanaryFunding,
+    { now: Date.now() },
+  )
+  const command = await withSourceWrite('catalog_publish', {
+    businessId: input.businessId,
+    offeringRef: input.offeringRef,
+    offeringRevision: 1,
+    offeringSourceHash: input.sourceHash,
+    publicationRef: input.publicationRef,
+    publicationRevision: input.publicationRevision,
+    operationKey: 'buyer-journey:seller-canary',
+    correlationId: 'buyer-journey:seller-canary',
+  })
+  const readiness = await input.owner.action(
+    api.capabilitySupplyOwnerSupply.runOwnerSupplyReadiness,
+    command,
+  )
+  expect(readiness).toMatchObject({
+    step: 'readiness', state: 'completed', publicationRef: input.publicationRef, toolRef: input.toolRef,
+  })
+  const requested = await input.owner.action(
+    api.capabilitySupplyOwnerSupply.runOwnerSupplyTest,
+    command,
+  )
+  if (requested.state !== 'completed'
+    || requested.canaryRef === undefined
+    || requested.callRef === undefined) {
+    throw new Error(`buyer_seller_canary_request_failed:${JSON.stringify(requested)}`)
+  }
+  const call = await input.backend.run(async (ctx) => ctx.db.query('capabilityCalls')
+    .withIndex('by_callRef', (query) => query.eq('callRef', requested.callRef!))
+    .unique())
+  if (call?.sellerOnboardingCanary === undefined) throw new Error('buyer_seller_canary_call_missing')
+  if (call.workId === undefined) throw new Error('buyer_seller_canary_work_missing')
+  const canaryWorkId = call.workId as WorkId
+  expect(call.sellerOnboardingCanary.funding).toMatchObject({
+    budgetRef: SELLER_ONBOARDING_CANARY_BUDGET_POLICY_REF,
+    principalId: SELLER_ONBOARDING_CANARY_PLATFORM_PRINCIPAL_ID,
+    ownerId: SELLER_ONBOARDING_CANARY_PLATFORM_OWNER_ID,
+    credentialId: SELLER_ONBOARDING_CANARY_PLATFORM_CREDENTIAL_ID,
+    applicationRef: SELLER_ONBOARDING_CANARY_PLATFORM_APPLICATION_REF,
+    grantRef: SELLER_ONBOARDING_CANARY_PLATFORM_GRANT_REF,
+    grantGeneration: SELLER_ONBOARDING_CANARY_GRANT_GENERATION,
+    requestedSpend: {
+      currency: 'USD',
+      units: SELLER_ONBOARDING_CANARY_MAXIMUM_PER_CALL_ATOMIC,
+      exponent: 6,
+    },
+  })
+  const completedAt = Date.now()
+  const output = { result: 'contract-valid canary output' }
+  const evidenceHash = canonicalDigest({ canaryRef: requested.canaryRef, output })
+  const quoted = call.sellerOnboardingCanary.funding.requestedSpend
+  const zero = { currency: quoted.currency, units: '0', exponent: quoted.exponent }
+  await input.backend.mutation(internal.capabilityCalls.record, {
+    callRef: call.callRef,
+    principalId: call.principalId,
+    state: 'completed',
+    dispatchState: 'completed',
+    result: {
+      kind: 'completed', callRef: call.callRef, toolRef: call.toolRef, output, evidenceHash,
+      receipt: {
+        commercialModel: 'seller_canary_x402',
+        receiptRef: `seller-canary-receipt:${requested.canaryRef}:controlled-worker`,
+        state: 'settled',
+        providerQuotedAmount: quoted,
+        agenticEconomyFee: zero,
+        totalBuyerAuthorization: zero,
+        priceDigest: call.sellerOnboardingCanary.priceDigest,
+        network: BASE_SEPOLIA_NETWORK,
+        asset: BASE_SEPOLIA_USDC_ADDRESS,
+        settlementTransactionHash: `0x${'1'.repeat(64)}`,
+        paymentIdentifier: `seller-canary-payment:${requested.canaryRef}`,
+        externalSettlementRef: `seller-canary-settlement:${requested.canaryRef}`,
+        refundState: 'not_applicable',
+        lossState: 'none',
+        evidenceHash,
+        issuedAt: new Date(completedAt).toISOString(),
+      },
+    },
+    evidenceHash,
+    now: completedAt,
+  })
+  expect(await input.backend.mutation(
+    internal.catalogOfferingMutations.promoteAdmittedSellerCanary,
+    { canaryRef: requested.canaryRef },
+  )).toMatchObject({ kind: 'promoted', toolRef: input.toolRef })
+  await input.backend.run(async (ctx) => await marketDispatchWorkpool.cancel(ctx, canaryWorkId))
+  await input.backend.finishAllScheduledFunctions(vi.runAllTimers)
+  expect(await input.backend.run(async (ctx) => await marketDispatchWorkpool.status(ctx, canaryWorkId)))
+    .toEqual({ state: 'finished' })
+  expect(await input.backend.mutation(
+    internal.catalogOfferingMutations.promoteAdmittedSellerCanary,
+    { canaryRef: requested.canaryRef },
+  )).toMatchObject({ kind: 'replayed', toolRef: input.toolRef })
+  const buyerLedger = await input.backend.run(async (ctx) => ({
+    usage: await ctx.db.query('moneyUsageEvents').collect(),
+    obligations: await ctx.db.query('moneyProviderObligations').collect(),
+  }))
+  expect(buyerLedger).toEqual({ usage: [], obligations: [] })
 }
 
 export async function prepareFundedSandboxBuyer(options: PrepareBuyerOptions & {
@@ -191,10 +314,32 @@ export async function prepareFundedSandboxBuyer(options: PrepareBuyerOptions & {
   const backend = convexTestWithWorkers()
   const provider = await publishedBusinessOwner(backend, 'buyer-journey-provider')
   const offeringRef = 'catalog-offering:buyer-journey'
-  const sourceHash = 'catalog-source:buyer-journey'
+  const sourceHash = canonicalDigest({ offeringRef, revision: 1 })
   await seedCatalogOffering(backend, provider.businessId, 'buyer-journey', '/paid-lookup', 'POST')
+  await backend.run(async (ctx) => {
+    const revision = await ctx.db.query('businessOfferingRevisions')
+      .withIndex('by_offeringRef_and_revision', (query) => query.eq('offeringRef', offeringRef).eq('revision', 1))
+      .unique()
+    const path = await ctx.db.query('offeringAccessPaths')
+      .withIndex('by_offeringRef_and_status', (query) => query.eq('offeringRef', offeringRef).eq('status', 'published'))
+      .unique()
+    if (revision === null || path === null) throw new Error('buyer_catalog_fixture_missing')
+    await ctx.db.patch(revision._id, { sourceHash })
+    await ctx.db.patch(path._id, {
+      offeringSourceHash: sourceHash,
+      sourceHash: canonicalDigest({
+        accessPathRef: path.accessPathRef,
+        offeringSourceHash: sourceHash,
+        descriptor: path.descriptor,
+      }),
+    })
+  })
   const endpoint = 'https://buyer-journey.example.test/paid-lookup'
-  const baseSource = x402Source('sandbox', endpoint)
+  const baseSource = x402SourceForConnection(
+    endpoint,
+    'connection:owner:x402',
+    'provider:x402:buyer-journey',
+  )
   const source = { ...baseSource, commercial: { ...baseSource.commercial, authority: {
     kind: 'provider_connection' as const, connectionRef: 'connection:owner:x402', providerRef: 'provider:x402:buyer-journey',
   } } }
@@ -226,15 +371,45 @@ export async function prepareFundedSandboxBuyer(options: PrepareBuyerOptions & {
     source, 'buyer-journey:publish', { kind: 'catalog_offering', offeringRef, offeringRevision: 1, offeringSourceHash: sourceHash,
       declaredAccessPathRef: accessPath.accessPathRef, accessPathSourceHash: accessPath.sourceHash }, 'sandbox')
   if (prepared.kind !== 'prepared') throw new Error(`buyer_tool_prepare:${prepared.reason}`)
-  const published = await provider.owner.mutation(api.capabilitySupply.publishPreparedCapability, prepared.command)
-  if (published.kind !== 'published') throw new Error(`buyer_tool_publish:${published.kind}`)
-  await admitPublication(backend, published, 'buyer-journey')
+  const published = await provider.owner.mutation(
+    api.capabilitySupply.stageOwnerX402Capability,
+    await withSourceWrite('catalog_publish', (() => {
+      const {
+        runtimeEnvironment: _runtimeEnvironment,
+        proof: _proof,
+        sourceWrite: _sourceWrite,
+        sourceWriteRequest: _sourceWriteRequest,
+        ...unsignedPrepared
+      } = prepared.command
+      return {
+        ...unsignedPrepared,
+        sellerClaim,
+        evidenceRefs: [
+          `x402-payee-claim:${x402SellerClaimDigest(sellerClaim)}`,
+          `x402-endpoint-inspection:${sellerClaim.observationDigest}`,
+        ],
+        operationKey: 'buyer-journey:stage',
+        correlationId: 'buyer-journey:stage',
+      }
+    })()),
+  )
+  if (published.kind !== 'published') throw new Error(`buyer_tool_publish:${JSON.stringify(published)}`)
   await backend.finishAllScheduledFunctions(() => vi.advanceTimersByTime(1))
   expect(await backend.mutation(internal.capabilitySupply.observeCapabilityReadiness, {
     publicationRef: published.publicationRef, expectedRevision: published.publicationRevision, credentialState: 'ready', healthState: 'healthy',
     validUntil: Date.now() + 3_600_000, operationKey: 'buyer-journey:ready', correlationId: 'buyer-journey',
     reasonCode: 'test_readiness', evidenceRefs: ['test:buyer-journey'],
   })).toMatchObject({ kind: 'observed' })
+  await promotePaidBuyerFixtureAfterSellerCanary({
+    backend,
+    owner: provider.owner,
+    businessId: provider.businessId,
+    offeringRef,
+    sourceHash,
+    publicationRef: published.publicationRef,
+    publicationRevision: published.publicationRevision,
+    toolRef: published.toolRef,
+  })
   const qualification = await backend.run(async (ctx) => {
     const row = await ctx.db.query('capabilityPublications').withIndex('by_publicationRef_and_revision', q => q
       .eq('publicationRef', published.publicationRef).eq('revision', published.publicationRevision)).unique()
@@ -255,7 +430,7 @@ export async function prepareFundedSandboxBuyer(options: PrepareBuyerOptions & {
   expect(await backend.mutation(internal.moneyTreasury.recordObservation, {
     environment: 'sandbox', custodyRef: cdpX402CustodyBudgetRef(custody, 'sandbox'), custodyGeneration: custody.credentialGeneration,
     network: BASE_SEPOLIA_NETWORK, asset: 'USDC', exponent: 6, observationRef: 'buyer-journey:treasury',
-    totalUnits: options.treasuryTotalUnits ?? '10000000', bufferUnits: '1000000', evidenceRef: 'cdp:buyer-journey:treasury',
+    totalUnits: options.treasuryTotalUnits ?? '10000000', bufferUnits: '10000', evidenceRef: 'cdp:buyer-journey:treasury',
     evidenceDigest: canonicalDigest({ treasury: 'buyer-journey' }), observedAt: Date.now(),
   })).toMatchObject({ kind: 'accepted' })
   const principalUnits = options.accountPrincipalUnits ?? '10000000'
