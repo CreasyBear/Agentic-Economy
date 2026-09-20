@@ -59,7 +59,7 @@ describe('capability readiness probe', () => {
       expectedPaymentJson: JSON.stringify({
         scheme: 'exact', network: 'eip155:8453', asset: '0xasset', payTo: '0xpayee',
         currency: 'USD', routeAmountExponent: 2, assetAmountExponent: 6,
-        paidAmount: { currency: 'USD', units: '1200', exponent: 2 },
+        paidAmount: { currency: 'USDC', units: '12000000', exponent: 6 },
       }),
     }, {
       resolveProviderConnectionCredential: async () => undefined,
@@ -119,7 +119,7 @@ describe('capability readiness probe', () => {
       expectedPaymentJson: JSON.stringify({
         scheme: 'exact', network: 'eip155:8453', asset: '0xasset', payTo: '0xpayee',
         currency: 'USD', routeAmountExponent: 2, assetAmountExponent: 6,
-        paidAmount: { currency: 'USD', units: '1200', exponent: 2 },
+        paidAmount: { currency: 'USDC', units: '12000000', exponent: 6 },
       }),
     }, {
       resolveProviderConnectionCredential: async () => undefined,
@@ -130,6 +130,52 @@ describe('capability readiness probe', () => {
     expect(result.outcome).toBe('response_invalid')
     expect(result.evidenceRefs).toContain('probe:x402_payment_required_mismatch')
   })
+
+  it.each([
+    ['currency', { currency: 'USD', units: '1', exponent: 6 }],
+    ['precision', { currency: 'USDC', units: '1', exponent: 5 }],
+  ])('rejects a challenge when the stored source %s is not the exact USDC asset denomination', async (_label, paidAmount) => {
+    const paymentRequired = {
+      x402Version: 2 as const,
+      resource: { url: target.endpointUrl },
+      accepts: [{
+        scheme: 'exact' as const,
+        network: 'eip155:84532' as const,
+        amount: '1',
+        asset: '0xasset',
+        payTo: '0xpayee',
+        maxTimeoutSeconds: 30,
+        extra: {},
+      }],
+    }
+    const result = await runCapabilityReadinessProbe({
+      ...target,
+      authority: keylessAuthority,
+      adapterId: 'x402-fetch:v2',
+      transportConfigJson: JSON.stringify({
+        method: 'POST', requestTimeoutMs: 5_000, scheme: 'exact',
+        network: 'eip155:84532', currency: 'USD', routeAmountExponent: 6,
+        assetAmountExponent: 6, asset: '0xasset', payTo: '0xpayee',
+        paymentRequiredJson: pinPaymentRequired(paymentRequired),
+      }),
+      expectedPaymentJson: JSON.stringify({
+        scheme: 'exact', network: 'eip155:84532', asset: '0xasset', payTo: '0xpayee',
+        currency: 'USD', routeAmountExponent: 6, assetAmountExponent: 6,
+        paidAmount,
+      }),
+    }, {
+      resolveProviderConnectionCredential: async () => undefined,
+      validateTarget: async () => true,
+      send: async () => new Response(null, {
+        status: 402,
+        headers: { 'Payment-Required': encodeX402PaymentRequiredHeader(paymentRequired) },
+      }),
+      now: () => 10_000,
+    })
+    expect(result.outcome).toBe('response_invalid')
+    expect(result.evidenceRefs).toContain('probe:x402_payment_required_mismatch')
+  })
+
   it('rejects a malformed x402 PaymentRequired header', async () => {
     const paymentRequired = {
       x402Version: 2,
@@ -157,7 +203,7 @@ describe('capability readiness probe', () => {
       expectedPaymentJson: JSON.stringify({
         scheme: 'exact', network: 'eip155:8453', asset: '0xasset', payTo: '0xpayee',
         currency: 'USD', routeAmountExponent: 2, assetAmountExponent: 6,
-        paidAmount: { currency: 'USD', units: '1200', exponent: 2 },
+        paidAmount: { currency: 'USDC', units: '12000000', exponent: 6 },
       }),
     }, {
       resolveProviderConnectionCredential: async () => undefined,
@@ -231,7 +277,7 @@ describe('capability readiness probe', () => {
         currency: 'USD',
         routeAmountExponent: 3,
         assetAmountExponent: 6,
-        paidAmount: { currency: 'USD', units: '1', exponent: 3 },
+        paidAmount: { currency: 'USDC', units: accepted.amount, exponent: 6 },
       }),
       targetDigest: canonicalDigest({
         publicationRef: 'offering:timezone:convert',

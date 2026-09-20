@@ -240,7 +240,7 @@ export const runOwnerSupplyTest = action({
         offeringSourceHash: args.offeringSourceHash,
         publicationRef: args.publicationRef,
         publicationRevision: args.publicationRevision,
-        input: args.input ?? {},
+        ...(args.input === undefined ? {} : { input: args.input }),
         operationKey: args.operationKey,
         correlationId: args.correlationId,
         ...(args.sourceWrite === undefined ? {} : { sourceWrite: args.sourceWrite }),

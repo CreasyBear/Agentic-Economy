@@ -1,7 +1,6 @@
 import {
   compareExactAmounts,
   exactAmountSchema,
-  rescaleExactAmount,
   type ExactAmount,
 } from "@/modules/money/public";
 import {
@@ -150,8 +149,11 @@ async function probeX402Challenge(
     expected.network !== configuration.network ||
     expected.asset.toLowerCase() !== configuration.asset.toLowerCase() ||
     expected.payTo.toLowerCase() !== configuration.payTo.toLowerCase() ||
-    expected.paidAmount.currency !== configuration.currency ||
-    expected.paidAmount.exponent !== configuration.routeAmountExponent ||
+    expected.currency !== configuration.currency ||
+    expected.routeAmountExponent !== configuration.routeAmountExponent ||
+    expected.assetAmountExponent !== configuration.assetAmountExponent ||
+    expected.paidAmount.currency !== "USDC" ||
+    expected.paidAmount.exponent !== configuration.assetAmountExponent ||
     !/^(?:0|[1-9]\d{0,77})$/.test(String(requirement.amount))
   ) {
     await cancelResponseBody(response);
@@ -164,19 +166,14 @@ async function probeX402Challenge(
       metadata,
     );
   }
-  const expectedAsset = rescaleExactAmount(
-    expected.paidAmount,
-    configuration.assetAmountExponent,
-  );
   const received = exactAmountSchema.safeParse({
     currency: expected.paidAmount.currency,
     units: requirement.amount,
     exponent: configuration.assetAmountExponent,
   });
   if (
-    expectedAsset === undefined ||
     !received.success ||
-    compareExactAmounts(expectedAsset, received.data) !== 0
+    compareExactAmounts(expected.paidAmount, received.data) !== 0
   ) {
     await cancelResponseBody(response);
     return unhealthy(

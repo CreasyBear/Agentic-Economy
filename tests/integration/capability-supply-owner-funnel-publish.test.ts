@@ -1,19 +1,322 @@
 import { convexTest } from 'convex-test'
-import { describe, expect, it } from 'vitest'
+import { encodePaymentRequiredHeader } from '@x402/core/http'
+import { validatePaymentRequired } from '@x402/core/schemas'
+import type { fetch as UndiciFetch } from 'undici'
+import { Response as UndiciResponse } from 'undici'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import { api } from '../../convex/_generated/api'
+import { api, internal } from '../../convex/_generated/api'
+import { canonicalDigest } from '@/modules/common/canonical-digest'
+import { defaultDnsResolver } from '@/modules/network-guard/public'
 import schema from '../../convex/schema'
-import { convexModules as modules } from '../helpers/convex-fixtures'
+import {
+  createTestAgentPrincipal,
+  convexModules as modules,
+  convexTestWithWorkers,
+} from '../helpers/convex-fixtures'
 import {
   createPublishedBusinessOwner,
   directSource,
   openApiSource,
   prepareOwnerPublicationCommand,
   seedCatalogOffering,
+  seedPaidX402Publication,
 } from './capability-supply-owner-funnel-harness'
 import { withSourceWrite } from '../helpers/source-write-admission'
 
+const readinessFetch = vi.hoisted(() => vi.fn<typeof UndiciFetch>())
+vi.mock('undici', async (importOriginal) => ({
+  ...await importOriginal<Record<string, unknown>>(),
+  fetch: readinessFetch,
+}))
+
 describe('owner capability publication admission', () => {
+  afterEach(() => {
+    vi.restoreAllMocks()
+    vi.unstubAllGlobals()
+    readinessFetch.mockReset()
+  })
+
+  it.each(['owner', 'agent'] as const)(
+    'exercises the supported %s sandbox x402 publication and validation boundary',
+    async (publisher) => {
+      const backend = convexTestWithWorkers({ pauseWorkpool: true })
+      const slug = `publish-canary-${publisher}`
+      vi.spyOn(defaultDnsResolver, 'lookup').mockResolvedValue([
+        { address: '93.184.216.34', family: 4 },
+      ])
+      const fixture = await seedPaidX402Publication(backend, slug, {
+        publisher,
+        price: { currency: 'USD', units: '1', exponent: 6 },
+        routeAmountExponent: 6,
+        assetAmount: '1',
+        onPaymentRequired(paymentRequired) {
+          if (paymentRequired.x402Version !== 2) {
+            throw new Error('x402_payment_required_v2_expected')
+          }
+          readinessFetch.mockImplementation(async () => new UndiciResponse('', {
+            status: 402,
+            headers: {
+              'Payment-Required': encodePaymentRequiredHeader(
+                paymentRequired as Parameters<typeof encodePaymentRequiredHeader>[0],
+              ),
+            },
+          }) as never)
+        },
+      })
+      expect(readinessFetch).toHaveBeenCalled()
+      const stagedTarget = await backend.query(
+        internal.capabilitySupply.readOwnerStagedCapabilityProbeTarget,
+        {
+          publicationRef: fixture.published.publicationRef,
+          expectedRevision: fixture.published.publicationRevision,
+          businessId: fixture.businessId,
+          now: Date.now(),
+        },
+      )
+      if (stagedTarget.kind !== 'available') {
+        throw new Error(`staged_probe_target_unavailable:${stagedTarget.reason}`)
+      }
+      const expectedPayment = JSON.parse(stagedTarget.target.expectedPaymentJson ?? '{}') as {
+        scheme: string
+        network: string
+        asset: string
+        payTo: string
+        currency: string
+        routeAmountExponent: number
+        assetAmountExponent: number
+        paidAmount: { currency: string; units: string; exponent: number }
+      }
+      expect(expectedPayment).toMatchObject({
+        network: 'eip155:84532',
+        asset: '0x036CbD53842c5426634e7929541eC2318f3dCF7e',
+        currency: 'USD',
+        routeAmountExponent: 6,
+        assetAmountExponent: 6,
+        paidAmount: { currency: 'USDC', units: '1', exponent: 6 },
+      })
+      const amount = (
+        BigInt(expectedPayment.paidAmount.units)
+        * 10n ** BigInt(expectedPayment.assetAmountExponent - expectedPayment.paidAmount.exponent)
+      ).toString()
+      const exactChallenge = validatePaymentRequired({
+        x402Version: 2,
+        resource: { url: fixture.endpoint },
+        accepts: [{
+          scheme: expectedPayment.scheme,
+          network: expectedPayment.network,
+          amount,
+          asset: expectedPayment.asset,
+          payTo: expectedPayment.payTo,
+          maxTimeoutSeconds: 60,
+          extra: { name: 'USD Coin', version: '2', assetTransferMethod: 'eip3009' },
+        }],
+      })
+      if (exactChallenge.x402Version !== 2) {
+        throw new Error('x402_payment_required_v2_expected')
+      }
+      readinessFetch.mockImplementation(async () => new UndiciResponse('', {
+        status: 402,
+        headers: {
+          'Payment-Required': encodePaymentRequiredHeader(
+            exactChallenge as Parameters<typeof encodePaymentRequiredHeader>[0],
+          ),
+        },
+      }) as never)
+
+      await backend.mutation(
+        internal.capabilitySupplyCanaryFunding.provisionSellerOnboardingCanaryFunding,
+        { now: Date.now() },
+      )
+      const command = await withSourceWrite('catalog_publish', {
+        businessId: fixture.businessId,
+        offeringRef: fixture.offeringRef,
+        offeringRevision: 1,
+        offeringSourceHash: fixture.sourceHash,
+        publicationRef: fixture.published.publicationRef,
+        publicationRevision: fixture.published.publicationRevision,
+        operationKey: `seller-canary:${slug}`,
+        correlationId: `seller-canary:${slug}`,
+      })
+      if (publisher === 'agent') {
+        expect(fixture.agentPrincipal).toBeDefined()
+        await expect(backend.run(async (ctx) => ctx.db
+          .query('capabilityCalls')
+          .withIndex('by_sellerOnboardingCanary_target', (query) => query
+            .eq('sellerOnboardingCanary.businessId', String(fixture.businessId))
+            .eq('sellerOnboardingCanary.offeringRef', fixture.offeringRef)
+            .eq('sellerOnboardingCanary.offeringRevision', 1)
+            .eq('sellerOnboardingCanary.offeringSourceHash', fixture.sourceHash)
+            .eq('sellerOnboardingCanary.publicationRef', fixture.published.publicationRef)
+            .eq('sellerOnboardingCanary.publicationRevision', fixture.published.publicationRevision))
+          .collect())).resolves.toEqual([])
+        return
+      }
+      const readiness = await fixture.owner.action(
+        api.capabilitySupplyOwnerSupply.runOwnerSupplyReadiness,
+        command,
+      )
+      if (readiness.state === 'refused') {
+        const readback = await fixture.owner.query(
+          api.capabilitySupplyOwnerFunnel.readOwnerSupplyFunnel,
+          { businessId: fixture.businessId },
+        )
+        throw new Error(`owner_readiness_refused:${readiness.refusal}:${JSON.stringify(readback)}`)
+      }
+      expect(readiness).toMatchObject({
+        step: 'readiness',
+        state: 'completed',
+        publicationRef: fixture.published.publicationRef,
+        toolRef: fixture.published.toolRef,
+      })
+      const requested = await fixture.owner.action(
+        api.capabilitySupplyOwnerSupply.runOwnerSupplyTest,
+        command,
+      )
+      if (requested.state === 'refused') {
+        throw new Error(`seller_canary_request_refused:${requested.refusal}`)
+      }
+      expect(requested).toMatchObject({
+        step: 'test',
+        state: 'completed',
+        toolRef: fixture.published.toolRef,
+        canaryRef: expect.any(String),
+        callRef: expect.any(String),
+      })
+      if (requested.state !== 'completed'
+        || requested.canaryRef === undefined
+        || requested.callRef === undefined) {
+        throw new Error('seller_canary_request_missing')
+      }
+
+      await expect(
+        fixture.owner.action(
+          api.capabilitySupplyOwnerSupply.runOwnerSupplyTest,
+          await withSourceWrite('catalog_publish', {
+            businessId: fixture.businessId,
+            offeringRef: fixture.offeringRef,
+            offeringRevision: 1,
+            offeringSourceHash: fixture.sourceHash,
+            publicationRef: fixture.published.publicationRef,
+            publicationRevision: fixture.published.publicationRevision,
+            operationKey: `seller-canary:${slug}`,
+            correlationId: `seller-canary:${slug}`,
+          }),
+        ),
+      ).resolves.toMatchObject({
+        state: 'completed',
+        canaryRef: requested.canaryRef,
+        callRef: requested.callRef,
+      })
+
+      const call = await backend.run(async (ctx) => ctx.db
+        .query('capabilityCalls')
+        .withIndex('by_callRef', (query) => query.eq('callRef', requested.callRef!))
+        .unique())
+      if (call?.sellerOnboardingCanary === undefined) {
+        throw new Error('seller_canary_call_missing')
+      }
+      const completedAt = Date.now()
+      const evidenceHash = canonicalDigest({
+        canaryRef: requested.canaryRef,
+        output: { result: 'contract-valid canary output' },
+      })
+      const quoted = call.sellerOnboardingCanary.funding.requestedSpend
+      const zero = { currency: quoted.currency, units: '0', exponent: quoted.exponent }
+      await backend.mutation(internal.capabilityCalls.record, {
+        callRef: call.callRef,
+        principalId: call.principalId,
+        state: 'completed',
+        dispatchState: 'completed',
+        result: {
+          kind: 'completed',
+          callRef: call.callRef,
+          toolRef: call.toolRef,
+          output: { result: 'contract-valid canary output' },
+          evidenceHash,
+          receipt: {
+            commercialModel: 'seller_canary_x402',
+            receiptRef: `seller-canary-receipt:${requested.canaryRef}:controlled-worker`,
+            state: 'settled',
+            providerQuotedAmount: quoted,
+            agenticEconomyFee: zero,
+            totalBuyerAuthorization: zero,
+            priceDigest: call.sellerOnboardingCanary.priceDigest,
+            network: 'eip155:84532',
+            asset: '0x036CbD53842c5426634e7929541eC2318f3dCF7e',
+            settlementTransactionHash: `0x${'1'.repeat(64)}`,
+            paymentIdentifier: `seller-canary-payment:${requested.canaryRef}`,
+            externalSettlementRef: `seller-canary-settlement:${requested.canaryRef}`,
+            refundState: 'not_applicable',
+            lossState: 'none',
+            evidenceHash,
+            issuedAt: new Date(completedAt).toISOString(),
+          },
+        },
+        evidenceHash,
+        now: completedAt,
+      })
+
+      const promoted = await backend.mutation(
+        internal.catalogOfferingMutations.promoteAdmittedSellerCanary,
+        { canaryRef: requested.canaryRef },
+      )
+      expect(promoted).toMatchObject({
+        kind: 'promoted',
+        toolRef: fixture.published.toolRef,
+      })
+      await expect(
+        backend.mutation(internal.catalogOfferingMutations.promoteAdmittedSellerCanary, {
+          canaryRef: requested.canaryRef,
+        }),
+      ).resolves.toMatchObject({ kind: 'replayed', toolRef: fixture.published.toolRef })
+      await expect(
+        backend.query(api.capabilitySupplyTools.detail, { toolRef: fixture.published.toolRef }),
+      ).resolves.toMatchObject({ kind: 'found', tool: { toolRef: fixture.published.toolRef } })
+      const quoteAgent = await createTestAgentPrincipal(
+        backend,
+        `quote-${slug}`,
+        {
+          environment: 'sandbox',
+          spendUnits: '5000000',
+          resourceRefs: [fixture.published.toolRef],
+        },
+      )
+      const quote = await backend.action(
+        api.capabilityQuotes.quote,
+        await withSourceWrite('protected_action', {
+          operationKey: `quote:${slug}`,
+          correlationId: `quote:${slug}`,
+          principal: quoteAgent.principal,
+          toolRef: fixture.published.toolRef,
+          input: { request: 'hello' },
+        }),
+      )
+      expect(quote).toMatchObject({
+        kind: 'refused',
+        code: 'inspection_unavailable',
+        retryable: true,
+        toolRef: fixture.published.toolRef,
+        continuation: { action: 'tool.quote' },
+      })
+
+      const state = await backend.run(async (ctx) => ({
+        canaries: await ctx.db.query('capabilityCalls')
+          .withIndex('by_sellerOnboardingCanary_canaryRef', (query) => (
+            query.eq('sellerOnboardingCanary.canaryRef', requested.canaryRef!)
+          ))
+          .collect(),
+        buyerUsage: await ctx.db.query('moneyUsageEvents').collect(),
+        buyerObligations: await ctx.db.query('moneyProviderObligations').collect(),
+      }))
+      expect(state).toMatchObject({
+        canaries: [expect.objectContaining({ state: 'completed' })],
+        buyerUsage: [],
+        buyerObligations: [],
+      })
+    },
+  )
+
   it('refuses anonymous and wrong-owner admission without publication', async () => {
     const backend = convexTest(schema, modules)
     const { businessId } = await createPublishedBusinessOwner(
