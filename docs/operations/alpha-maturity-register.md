@@ -66,7 +66,7 @@ order. Only one implementation package may be active.
 | Package | Existing AM parents | Dependency and order | Owner role | Initial status and evidence level | Exact acceptance and package exit |
 | --- | --- | --- | --- | --- | --- |
 | LP-0 Candidate baseline reconciliation | AM-01–32 | First | Manager assigns; Luna gathers bounded evidence; worker maps source | **ACCEPTED — 20 September 2026, candidate `0fafd075d90fbc552ed5faef13d30953705c22be`** | Every AM row has current source ownership, attributable existing proof, proof freshness and finite missing source/hosted conditions. This accepted map is not repaired code or a readiness claim. |
-| LP-1 Bounded source repairs | Only AM parents with an LP-0 source defect or bounded source unknown; AM-14 production-owner and AM-14/18–20 local source packages are accepted; AM-14-B awaits user schema-scope approval; AM-27/29 remain planned | LP-0 accepted; one repair/proof package at a time in dependency order | Sol implements one bounded package; separate Luna reviews; manager accepts | **ACTIVE — next bounded package pending manager selection** | Each accepted source defect meets its full semantic contract through observable inputs/outputs and focused failure/retry/concurrency evidence. Every repair has independent review. Exit when no mapped release-blocking source defect remains; hosted proof stays open. |
+| LP-1 Bounded source repairs | Only AM parents with an LP-0 source defect or bounded source unknown; AM-14 production-owner and AM-14/18–20 local source packages are accepted; AM-14-B awaits user schema-scope approval; AM-27 source inventory is reviewed with hosted cold journeys open; AM-29 deletion enforcement design awaits user schema approval | LP-0 accepted; one repair/proof package at a time in dependency order | Sol implements one bounded package; separate Luna reviews; manager accepts | **ACTIVE — AM-29 deletion enforcement approval pending** | Each accepted source defect meets its full semantic contract through observable inputs/outputs and focused failure/retry/concurrency evidence. Every repair has independent review. Exit when no mapped release-blocking source defect remains; hosted proof stays open. |
 | LP-2 Integrated candidate, gates and review | AM-01–32, with direct emphasis AM-01, AM-25–32 | LP-1 exit | Sol integrates/configures; Luna reviews candidate; manager freezes revision and artifacts | **PLANNED — no coherent frozen candidate evidence** | Freeze the source revision, build artifacts and intended exact target manifest; local/CI checks pass; secrets, telemetry, support, recovery and release gates are reviewed; no unresolved release-blocking integration defect. Exit is one reviewed artifact/evidence manifest with intended targets and rollback source. |
 | LP-3 Deployed qualification and Base Sepolia | AM-02–24, AM-26–32 | LP-2 frozen artifacts and target manifest | Sol executes bounded deployment/repair; Luna runs finite hosted evidence; manager accepts | **PLANNED — source/sandbox history only, no current complete deployed journey** | Deployed web, backend and integration identities align with the LP-2 manifest. Fresh Customer/Agent and Provider journeys complete with sandbox AUD funding and an actual paid Base Sepolia buyer Call, usable output, exact records, duplicate/interruption/recovery checks and installed-client continuation. Provider validation cannot substitute for buyer purchase. Exit retains exact deployment/run/transaction/recovery references. |
 | LP-4 Production activation prerequisites | AM-01, AM-07–12, AM-18–20, AM-25–26, AM-30–32 | LP-2 frozen artifacts permit read-only preflight and adviser evidence gathering alongside LP-3; every infrastructure mutation and activation waits for manager-accepted LP-3 exit and LP-4 active status | Named human approvers decide commercial perimeter; Sol handles bounded infrastructure only while LP-4 is active; Luna verifies readback; manager accepts | **DEPENDENCY BLOCKED / NOT VERIFIED — required legal, AML/CTF, tax, banking and infrastructure evidence not supplied** | Attributable decisions and conditions are recorded; production identities/state align with the intended manifest and are fresh; AWS/Cloudflare/Convex/Vercel/Stripe/Formance/Infisical targets and recovery are exact; alerts and rollback work; synthetic state is not promoted. Exit occurs when the manager confirms all prerequisite gates are evidenced under the existing launch authorization, not from configuration presence alone. |
@@ -126,7 +126,10 @@ or roll back only the reversible deployment layer; never erase economic evidence
    those AM rows or LP-1.
 3. **Accepted local source package:** AM-14 production-owner admission, explicit
    production platform funding rotation and causal mainnet canary/Quote proof.
-4. **Held:** AM-14-B delegated-Agent validation awaits user approval for the
+4. **Active design:** AM-29 personal-login deletion enforcement. The eligibility
+   query and Clerk deletion webhook are tested but disconnected; no source path
+   gates the destructive Clerk action on workspace and Provider closure.
+5. **Held:** AM-14-B delegated-Agent validation awaits user approval for the
    prepared schema-scope package; later LP-1 items and LP-2–LP-6 remain planned
    or dependency-blocked.
 
@@ -191,6 +194,206 @@ validation passed Luna and manager review. The shared Workpool regression remain
 19/19. This is not hosted proof or
 real-value evidence.
 
+**21 September 2026 — AM-29 open launch blocker:** `readDeletionEligibility`
+has focused source tests but no caller, so it does not enforce a prerequisite to
+Clerk self-deletion. The Clerk `user.deleted` webhook truthfully retires the
+principal after deletion but cannot prevent it. Clerk self-delete must be disabled
+and read back on each deployed instance in LP-3/LP-4 until a supported
+eligibility-gated final action exists. The current instance setting is NOT
+VERIFIED. The user must close outstanding solely-owned scope or complete a
+supported ownership transfer. Provider offboarding and financial fences apply
+to scope actually being closed; a transferred Account and its Provider activity
+remain with the valid successor. Retained commercial records are not erased by
+identity retirement.
+
+#### AM-27 reviewed source surface inventory
+
+This finite inventory was reviewed on 21 September 2026. It maps maintained
+source behavior and existing tests; the suites were not rerun for this docs-only
+package. It does not complete AM-27: authenticated deployed desktop/compact and
+keyboard cold journeys, real loading latency, focus across hosted navigation,
+and observed empty/error/recovery behavior remain LP-3/LP-6 evidence.
+
+| Supported surface | Existing source evidence | Exact remaining condition |
+| --- | --- | --- |
+| Market discovery, comparison and Tool detail | `tests/unit/routes/market-search.test.ts` covers guided/default/filter behavior without silently broadening invalid input; `tests/unit/market-terminal/compare.test.ts` preserves canonical comparison facts and exact continuations; `tests/unit/routes/tool-detail-route.test.tsx` keeps compact/full facts, focus and callable/setup-required/unavailable states aligned. | Cold browse → compare → inspect on deployed desktop and compact layouts, including real loading, empty and source-failure states. |
+| Activation and Agent management | `tests/unit/routes/onboarding.test.tsx` covers role selection, keyboard progression, validation, failure and landing; `tests/unit/ui/assistant-install-progression.test.tsx` proves ordered connection steps and non-repeatable checking; `tests/unit/ui/agent-access-owner-console.test.tsx` covers consequential Agent controls. | Hosted sign-in/onboarding/connection with one real installed client; compact and keyboard completion with actual authentication latency and failure recovery. |
+| Tool → Agent handoff and retained continuation | `tests/unit/routes/agent-access-caller-continuation.test.tsx` validates and retains `resumeTool`, preserves it across Agent selection, returns only after confirmed connection and keeps known Agents on read failure; `tests/unit/ui/assistant-install-progression.test.tsx` states setup creates no Call. Authorization/close outcomes remain truthful in `tests/unit/routes/agent-access-authorize.test.tsx`. | Hosted browser/client handoff, user close and resume from the same Tool with no lost context, duplicate connection or invented Call. |
+| Funding and Call status/recovery | `tests/unit/routes/funding-return-route.test.tsx` keeps one funding session across processing/transient failure and never offers an invented new payment; `tests/unit/routes/call-status-route.test.tsx` distinguishes pending, reconciliation, cancelled and refused states, retains exact retry identity and never fabricates settlement. | Hosted funding return and interrupted paid Call on desktop/compact/keyboard, with real refresh latency and the same durable references. |
+| Provider lifecycle | `tests/integration/capability-provider-offboarding.test.ts` covers routeability freeze, bounded retirement, status isolation, pre-freeze cancel and post-freeze refusal; `tests/unit/capability-supply/provider-offboarding.test.ts` covers truthful blockers and one continuation. | Authenticated deployed Provider connect/publish/withdraw/offboard journey, including compact status, action-required recovery and retained history. |
+| Support | `tests/unit/routes/support-route.test.tsx` preserves a Call reference, points back to authoritative records and does not invent retry; private support remains primary. | Hosted support handoff with the exact reference and an actual response/recovery path; AM-29.1 remains a linked deletion-enforcement source blocker. |
+| Security history | `tests/unit/settings/account-security-history.test.tsx` distinguishes AE/Clerk/provider observations, protects raw identifiers, preserves loaded evidence/cursor on failure and leaves vendor controls available when history is unavailable. | Authenticated hosted history pagination, security controls and failure recovery with real Clerk events. |
+| Compact, keyboard and shell recovery | `tests/unit/layout/shell-a11y-focus.test.tsx`, `tests/unit/operator-shell-chrome.test.tsx`, `tests/unit/layout/keyboard-shortcuts-dialog.test.tsx`, `tests/unit/layout/operator-sidebar-collapsed-mode.test.tsx` and `tests/unit/layout/owner-primary-navigation.test.tsx` cover skip/focus targets, route-commit focus, pending/error shell retention, mobile navigation, collapsed labels and keyboard help. | Deployed viewport/keyboard/screen-reader cold traversal across each supported journey; unit shell contracts do not prove browser focus timing or usable touch layout. |
+
+Inventory status: **SOURCE REVIEWED / AM-27 PARTIAL**. New source findings attach
+to the relevant row above; evidence freshness reopens only the affected surface.
+
+#### AM-29.1 deletion-command storage approval package
+
+**Selected boundary.** Keep Clerk as identity deleter and the existing verified
+`user.deleted` webhook as the authoritative AE retirement observation. Add one
+AE-gated Settings action and one durable intent/attempt record. This removes the
+unsafe gap between the tested eligibility query and Clerk deletion without
+introducing the unimplemented privacy-request, exit-archive or operator-case
+system described in the later lifecycle design.
+
+**Semantic contract.** Requires an authenticated current human, Clerk strict
+reverification, an exact active identity binding, and no outstanding solely-owned
+scope. Each formerly owned Account must either be active under a different valid
+successor, or be closed with its applicable financial fences clear and every
+Provider business retired through the existing offboarding workflow. Ensures one
+durable deletion intent and at most one claimed remote-delete dispatch for that
+intent; Clerk acknowledgement and webhook completion remain separate facts.
+Throughout admission and an unresolved remote result, the principal is
+`suspended`, so existing active-principal authority checks fail while an exact
+status read remains available. Identity deletion never erases commercial records
+or substitutes for Account closure, ownership transfer or Provider retirement.
+On stale authority, prerequisite drift or failed reverification, refuse before a
+Clerk effect. A timeout, process loss after dispatch claim or ambiguous Clerk
+error remains `outcome_unknown` under the same command reference and is not sent
+again blindly.
+
+**New storage requiring user confirmation.** Add
+`personalAccountDeletionCommands` with fields `commandRef`, `principalRef`,
+`bindingRef`, `targetRefHash`, `auditAccountRef`, `idempotencyRef`,
+`commandDigest`, `prerequisiteDigest`, `evidenceRefs`, `reverificationId`,
+`proofVerifiedAt`, `proofExpiresAt`, `lockedPrincipalRevision`, `state`,
+`revision`, bounded `remoteAttempts` entries containing attempt reference,
+user-or-operator actor, start time, disposition and observed time, and optional
+`failureCode` and `completedAt`, plus `createdAt`/`updatedAt`. States are
+`admitted`, `attempting`, `outcome_unknown`, `acknowledged`, `completed` and
+`refused`. Indexes: `by_commandRef`, `by_principalRef_and_createdAt`,
+`by_reverificationId`, and `by_state_and_updatedAt`. `commandRef` is derived
+from principal plus idempotency input; Convex transaction serialization and the
+principal lookup enforce one unresolved command. `auditAccountRef` supplies
+retained audit attribution after closure has ended every ownership/membership;
+it grants no Account access.
+
+The application claims the initial attempt before invoking Clerk, but this is not
+an exactly-once remote-delivery claim: transport retry or process loss can make
+the external outcome unknowable. An expired `attempting` lease projects as
+`outcome_unknown`; it is never recycled into a fresh dispatch automatically.
+Any later operator attempt is separately authorized, appended and attributable;
+it is not replay of the initial attempt.
+
+**Exact source seams and reachable route.** The existing `/owner/settings` route
+cannot own the final action: `requireOperatorBeforeLoad` requires canonical
+Account access, and closing a workspace ends its ownership and memberships. Add
+the account-neutral authenticated route `src/routes/account.delete.tsx`, guarded
+only by `requireClerkServerSession`; it grants no owner/business surface. A
+Settings panel in `OwnerSettingsSections.tsx` links to this route and explains
+the current blocker. Its workspace-closure link uses one validated fixed return
+intent, `continue=account-delete`; `_operator/owner.workspace.tsx` accepts that
+enum value only, never an arbitrary return URL. `useWorkspaceDangerZone.ts`
+returns to `/account/delete` after successful closure only when that explicit
+personal-login deletion intent is present. Ordinary workspace closure keeps its
+existing supported completion path. The route uses server functions,
+not ordinary owner resolution or automatic workspace provisioning, to read
+`personalAccount:readDeletionEligibility` and
+`personalAccount:readCurrentDeletionStatus`; it links blockers back to
+`/owner/workspace` or `/owner/operations#offboarding` while those scopes remain
+active.
+
+The POST server function in `personal-account-deletion.functions.ts` uses
+existing `auth()`, `requireStrictClerkConsequenceProof()` and
+`clerkClient().users.deleteUser(userId)`. Convex mutations in
+`personalAccount.ts` admit/lock the command, claim its initial remote attempt, and
+record acknowledgement/refusal/unknown through the existing server-function
+service assertion pattern. `retirePersonalAccountForServer` matches the exact
+principal/target command and advances it to `completed`; duplicate webhooks keep
+the existing replay contract.
+
+The lock uses the existing `active -> suspended -> retired` principal lifecycle,
+not a new lifecycle value. Current ownership transfer already rejects a successor
+whose principal is not active; organization-workspace provisioning resolves only
+an active creator; interactive and owner consequence resolvers require an active
+principal. The existing authenticated-identity provisioning seam must also check
+the bound principal before refreshing credentials, so a suspended deletion
+principal cannot regain authority. A special deletion-status query may resolve
+the same active Clerk binding while the principal is suspended, but exposes no
+other Account data or authority. If the Clerk session expires, the command
+persists; self-service status becomes authentication-required and the retained
+command reference is used for private support/reconciliation. Session expiry
+does not authorize another delete attempt.
+
+**Definite refusal and lock release.** A prerequisite or proof refusal before
+admission creates no command and never suspends the principal. After admission
+but before any attempt claim, an expired proof or exact local refusal transitions
+the same command to `refused` and restores `principal.lifecycle` from
+`suspended` to `active` in one Convex transaction only when the principal still
+matches `principalRef`, kind `human`, `lockedPrincipalRevision`, and the command
+is the sole unresolved command for that binding. The restore increments the
+principal revision and records the refusal code. If any compare fails, retain
+the suspension and surface action-required/unknown; never guess that reopening
+authority is safe. Once an attempt is claimed, every thrown or transport result
+is treated as possibly effected unless Clerk supplies documented definitive
+no-effect evidence; the initial implementation assumes no such exception.
+`attempting`, `outcome_unknown` and `acknowledged` therefore stay locked until
+the exact webhook completes retirement or a separately evidenced reconciliation
+is authorized. A duplicate request cannot restore an unknown or acknowledged
+command.
+
+**Unknown-outcome operational recovery.** Extend the existing admin audit
+surface rather than use the public support mailbox as a deletion entry. An
+admin-authorized read in `personal-account-deletion.functions.ts` returns the
+exact redacted command, locked principal revision, binding/target hashes,
+attempt history and current state. Its server-only branch resolves the persisted
+binding to the same Clerk user and calls Clerk user readback; raw provider
+identity does not enter the browser or audit payload. If Clerk reports the user
+absent, keep the command locked and await the genuine verified `user.deleted`
+delivery; an authentic provider replay may complete the same command. Never
+synthesize a webhook or retirement observation from the readback. If Clerk
+reports the exact user still present, an authorized admin may explicitly request
+one same-target completion: Convex first revalidates the original admitted
+eligibility digest, suspended-principal revision, binding target, unresolved
+state and admin authority, then appends a distinct operator attempt before the
+server invokes Clerk. Any resulting genuine webhook completes the intent. A
+failed or ambiguous read/completion remains unknown and cannot unlock authority
+or trigger an automatic resend.
+
+This recovers an already admitted, locked command; it differs from the rejected
+support-email path for starting deletion without enforcement. Clerk documents
+Dashboard/API user inspection and deletion, but this production instance's
+operator access and Clerk/Svix event readback or authentic replay are unproved.
+LP-3 must demonstrate those hosted controls and the new admin source seam;
+otherwise unknown-outcome recovery remains NOT VERIFIED and AM-29 cannot close.
+
+**Observable acceptance.** Focused tests must show: active ownership, incomplete
+Provider retirement, financial fences, stale revisions and stale proof produce
+no Clerk call; a transferred Account remains active under its successor and does
+not block the former owner; every actually closed Account has retired Providers;
+same-input replay and concurrent requests produce one intent and one claimed
+attempt, while changed input conflicts; principal suspension blocks ownership,
+provisioning and ordinary authority yet permits the exact status read; Clerk
+acknowledgement remains pending until webhook completion; timeout, lookup failure
+and process-loss simulation retain `outcome_unknown` and never auto-resend;
+process loss after the initial claim is recoverable by exact admin inspection:
+absent identity waits for authentic webhook delivery/replay, while present
+identity permits only a newly authorized same-target operator attempt;
+duplicate webhook delivery converges on one completed command; retirement retains
+Calls, obligations, receipts and audit evidence. Route tests must additionally
+prove `/account/delete` remains reachable with a valid Clerk session and no
+active Account, `/owner/settings` is not used as the post-closure boundary, the
+fixed deletion return intent resumes `/account/delete`, an absent/invalid intent
+cannot redirect ordinary closure, an exact pre-attempt refusal restores only the
+matching suspended revision, and revision drift/unknown/acknowledged states
+never restore authority. LP-3 and
+LP-4 separately require
+deployed-instance readback that Clerk self-delete is OFF. No external setting is
+changed by this source package.
+
+**Complexity decision.** Keep the single command table because an external
+destructive effect cannot be recovered truthfully from the current query and
+post-effect webhook alone. Reject advisory-only UI and direct Clerk deletion;
+they do not enforce prerequisites. Reject the support-mail operator path because
+the current route has no verified request, durable case or status. Reject the
+larger future privacy/exit-archive subsystem because AM-29 does not require
+inventing it for this alpha. The cost is one table, one user application server
+action, narrow user/admin Convex command/status seams, one account-neutral
+authenticated route, a bounded panel on the existing admin audit surface and the
+existing webhook reconciliation; no public versioned API, dependency or
+additional external service is added.
+
 ## LP-0 current-candidate evidence map
 
 Source candidate: `0fafd075d90fbc552ed5faef13d30953705c22be` plus the
@@ -228,9 +431,9 @@ named target and relevant behavior are unchanged.
 | AM-24 | **Accepted source proof — 21 September 2026:** focused local-Formance cases carry the same paid Call through fresh installed CLI, HTTP status, MCP status and canonical chat replay before claim, after possible submission and after successful settlement. They agree on durable identity, state/continuation, exact AUD/USDC receipt and terminal output without another reservation, payment or Provider attempt. Luna PASS and manager acceptance followed a 16/16 shared Workpool run and static checks. | LP-3 proves the same supported surfaces against the deployed Base Sepolia target. Production proof remains LP-5. |
 | AM-25 | Hosted-only claim: projects/trust/bindings configured | LP-3 exact Infisical create/use/rotate/revoke/delete and denial readback for qualification; LP-4 fresh production scope without copied secrets. |
 | AM-26 | Accepted source claim: Account/generation isolation and resumable cleanup | LP-3 hosted cross-Account, stale-generation and failed-cleanup readback; LP-4 repeats for production identities. |
-| AM-27 | Partial source evidence: Call status and demand console tests cover honest pending/cancelled/refused/error transitions | Before LP-2, a bounded LP-1 proof package must inventory supported surfaces and map desktop/compact/keyboard/focus/loading/empty/error source evidence; repair only a concrete missing behavior. Observable cold journeys remain LP-6. |
+| AM-27 | **SOURCE REVIEWED / PARTIAL:** the finite inventory above maps Market/comparison/Tool, activation/Agent, retained handoff, funding/Call status, Provider lifecycle, support, security history and compact/keyboard shell evidence. No concrete additional source defect was established by this bounded inventory. | LP-3/LP-6 must run authenticated deployed desktop/compact/keyboard cold journeys with real loading, focus, empty/error and recovery behavior; source changes reopen only affected surfaces. |
 | AM-28 | Hosted-only; configured destinations are not delivery proof | LP-3 resolve actual Sentry/PostHog destinations and send one non-sensitive failure/event with matching user/operator correlation reference; production alert readback in LP-4. |
-| AM-29 | Partial source evidence: support route preserves Call reference and avoids invented retry | Bounded source check must map account/security/offboarding blocks and retained unresolved obligations; LP-3 hosted support/offboarding journey. |
+| AM-29 | Partial source evidence: support route preserves Call reference; workspace closure, Provider offboarding, deletion eligibility and webhook retirement exist as separate contracts. **OPEN BLOCKER:** no caller enforces eligibility before Clerk self-delete. | Choose and prove one coherent eligibility-gated final deletion action. LP-3/LP-4 must prove Clerk self-delete disabled on each deployed instance while this blocker is open, then exercise hosted support/offboarding without erasing unresolved obligations. |
 | AM-30 | Hosted-only; retired restore achieved 308s and fails current 300s RPO acceptance | LP-4 current-target restart/restore, ≤300s RPO, retained financial reconciliation and actual alert delivery; retain exact rollback evidence. |
 | AM-31 | Hosted-only; finite audit protocol restored, no candidate run | LP-6 cold inventory coverage with six-turn/twelve-minute limits and explicit pass/fail/untested disposition. |
 | AM-32 | Hosted-only release rollup | LP-6 trace every AM row and mainnet extension to fresh applicable evidence, release checks, no critical child defect and tested rollback/support handoff. |
@@ -253,8 +456,9 @@ This uncertainty is not a source defect and does not invalidate unrelated proof.
    `package5RolloutDecision` is a supply-write/connect gate, not a buyer-call gate.
 3. AM-19–24 production buyer integration verification against that existing
    gated path; repair only missing mainnet admission/recovery/projection behavior.
-4. AM-27/29 bounded supported-surface and offboarding source map; make only the
-   finite repairs identified before LP-2 freezes artifacts.
+4. AM-27 source inventory is reviewed with hosted cold journeys open. AM-29.1
+   remains the active source blocker and awaits user confirmation for its exact
+   one-table storage/action scope before LP-2 freezes artifacts.
 
 LP-0 passed separate Luna and manager review on 20 September 2026. The bounded
 AM-14/18–20 local source package passed Luna and manager review on 21 September;
@@ -447,9 +651,9 @@ at Quote/Call admission and before paid effects.
 | --- | --- | --- | --- | --- | --- |
 | AM-25 | Given the deployed app identity and an authorized connection, the operator verifies hosted secret create/use/rotate/revoke/delete in the intended Infisical scope; the supported app action can consume the stored credential | Exact provider readback establishes each lifecycle result. Missing trust or denied access yields a truthful setup/recovery state, without an operator copying secret values between services to complete the test | NOT VERIFIED | HOSTED ONLY — Secrets owner: configured Infisical lifecycle requires real scope/delivery proof; no additional source change indicated. | Projects, OIDC trust and nine bindings configured; hosted lifecycle unproved |
 | AM-26 | Given scoped connections and credential generations, only the owning authorized actor can use or change them; revocation/cleanup reports the actual external result | Cross-Account access and stale-generation cleanup cannot affect another owner or replacement credential. Failed cleanup remains resumable; no secret exposure or premature deletion claim | PARTIAL | SOURCE VERIFIED — Scoped connection and credential isolation matrix (`tests/security/maturity/isolation-secret-canary.test.ts`), cross-account and stale authority rejection (`tests/unit/convex/secret-lifecycle-operations.test.ts`), and uncommitted cleanup / resumable pointer reconciliation (`tests/unit/secrets/secret-plane.test.ts`). | Scoped pointer/cleanup boundaries verified in source; hosted isolation, stale-generation and failed-cleanup proof outstanding |
-| AM-27 | Given each supported UI journey, a user can complete it on desktop, compact layout and keyboard; focus, loading, empty, validation, error and success states explain progress and next action | Invalid input or failed requests preserve recoverable work; no dead controls, inaccessible action or internal jargon. Test interaction and transitions, not screenshots alone | PARTIAL | SOURCE VERIFIED — Call receipt workspace and console components verified for honest state presentation: cancelled and refused-before-claim states render without false success ("Complete"), misleading reuse buttons, or fabricated money facts. Heavyweight charting dependencies removed. Tested in `tests/unit/routes/call-status-route.test.tsx` and `tests/unit/ui/demand-console.test.tsx`. Hosted user journeys outstanding. | Honest state badges, empty states, cancelled/refused rendering verified in unit tests |
+| AM-27 | Given each supported UI journey, a user can complete it on desktop, compact layout and keyboard; focus, loading, empty, validation, error and success states explain progress and next action | Invalid input or failed requests preserve recoverable work; no dead controls, inaccessible action or internal jargon. Test interaction and transitions, not screenshots alone | PARTIAL | SOURCE REVIEWED — The 21 September finite inventory maps maintained evidence for Market/comparison/Tool, activation/Agent, retained Tool handoff, funding/Call status, Provider lifecycle, support, security history and compact/keyboard shell behavior. Existing tests cover honest pending/cancelled/refused/error states without fabricated effects. The inventory was docs-only and did not rerun suites. | No concrete new source defect identified. Authenticated deployed desktop/compact/keyboard cold journeys, real loading/focus timing and observed empty/error/recovery behavior remain LP-3/LP-6. |
 | AM-28 | Given a deliberate application failure, the user gets a usable correlation reference and the operator receives the matching event at the intended error/alert destination; configured analytics receives a non-sensitive test event | Failure details support diagnosis without secret exposure; a missing delivery is a failed check, not proof from an enabled integration toggle | NOT VERIFIED | HOSTED ONLY — Observability owner: destination identity and actual event/alert delivery deferred; no additional source change indicated. | Actual Sentry/PostHog project destinations and delivery remain unverified; resolve and record them before running the AM-28 acceptance scenario below |
-| AM-29 | Given an uncertain Call, the user can reach the supported help path with that Call’s reference; supported account/security/offboarding actions explain what completes and what remains outstanding | Offboarding cannot silently erase history, unresolved purchases or obligations; blocked actions give a reason and supported next step without promising cancellation of an already submitted effect | PARTIAL | SOURCE VERIFIED — Reference-bearing help path accepts `callRef` query parameter on `/support`, renders Call reference banner, and prefills support mailto link with Call reference subject and body. Verified by `tests/unit/routes/support-route.test.tsx`. | Unit route tests pass; hosted support and isolated test-account offboarding journeys outstanding |
+| AM-29 | Given an uncertain Call or a request to leave, the user can reach the supported help path with the relevant reference; supported workspace, Provider and personal-login actions explain what completes and what remains outstanding | Offboarding cannot silently erase history, unresolved purchases or obligations. Personal-login deletion requires the user to close outstanding solely-owned scope or transfer it to a valid successor; Provider offboarding and financial fences apply to actual closure. A blocked action gives a reason and supported next step without promising cancellation or erasure | PARTIAL | SOURCE PARTIAL — The reference-bearing `/support` path is tested. Workspace closure, ownership transfer, Provider offboarding, `readDeletionEligibility`, Clerk webhook retirement and retained-record behavior exist, but the eligibility query has no caller and does not gate Clerk self-delete. | Open source blocker: implement and prove one supported eligibility-gated final deletion action. Deployment blocker: disable Clerk self-delete per instance and read back the setting in LP-3/LP-4. Hosted support/offboarding journeys remain outstanding. |
 | AM-30 | Given a runtime interruption, the operator restores service from the declared recovery/backup procedure and demonstrates the recorded alpha recovery target using authoritative data, including recovery-point loss of at most 300 seconds | Exercise restart, recovery and actual alert delivery; retained accepted work and financial records remain reconcilable. Missing target evidence or an exceeded target keeps the row open | PARTIAL | HOSTED ONLY — Operations owner: current restore/restart/alert/RPO proof deferred; no additional source change indicated. | Infrastructure and retained backups established. The 308s result is from the retired environment’s 4 September restore, not current-alpha acceptance; the 300s target remains. Current restore and SNS delivery unverified |
 | AM-31 | Given the frozen supported UI and machine inventory, cold Luna/max auditors attempt the assigned user jobs and record observed outcomes, easy/difficult steps, likes/dislikes, papercuts and tasks over three turns | Every surface has evidence or an explicit failed/untested result. Stop each assignment at six decision turns or twelve minutes; unfinished work stays unverified and findings receive disposition, not silent scope cuts | NOT VERIFIED | HOSTED ONLY — Audit owner: final cold user audit is deferred; source-level UX repairs remain AM-27, with original acceptance intact. | Audit follows the existing six-turn/twelve-minute lifecycle. More than three turns is a friction flag, not automatic failure |
 | AM-32 | Given one named candidate, the release owner can trace every preceding row to accepted evidence, passing relevant regression/release checks and no open critical child defect before inviting the waitlist | A relevant candidate change reopens affected proof. Green health or source tests cannot substitute for hosted behavior; an unmet contract prevents the alpha-ready claim | NOT VERIFIED | HOSTED ONLY — Release owner: final candidate/acceptance rollup deferred; source-complete handoff to Joel is required first. | Final release audit; no readiness claim from source tests or a green health endpoint alone |
@@ -466,6 +670,7 @@ close its parent until the parent's acceptance is met.
 | AM-15.2 | AM-15 | Resume/recheck the original case and Call; replace the permanent workflow-ID no-resume guard | FIXED IN SOURCE |
 | AM-16.1 | AM-16 | Apply consistent evidence precedence across readiness, promotion and workflow completion; retained admission markers must not demote admitted supply | FIXED IN SOURCE |
 | AM-16.2 | AM-16 | Prove withdrawal/freeze/current-authority refusal at final promotion and safe handling of late completion | FIXED IN SOURCE |
+| AM-29.1 | AM-29 | Before the supported personal-login deletion action, require outstanding solely-owned scope to be closed with applicable Provider/financial fences or transferred to a valid successor; retain commercial records and make duplicate/concurrent requests converge without deleting on an uncertain result | OPEN — design active; Clerk self-delete instance setting NOT VERIFIED |
 | AM-17.1 | AM-17 | Prove replay after promotion and after interruption between promotion and coordinator completion | FIXED IN SOURCE |
 
 ## Execution order and boundaries
