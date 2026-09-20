@@ -1,14 +1,14 @@
 import { v, type Infer } from 'convex/values'
 
 import type { Id } from './_generated/dataModel'
-import type { MutationCtx } from './_generated/server'
+import type { QueryCtx } from './_generated/server'
 import { agentAccessPrincipalValue, verifySupplyAgentPrincipal } from './agentAccessPrincipals'
 import {
   readOwnerSupplyFunnelProjection,
   type OwnerSupplyFunnelResult,
 } from './capabilitySupplyOwnerFunnelProjection'
 import {
-  requireSourceWrite,
+  requireSourceRead,
   sourceWriteAdmissionArg,
   sourceWriteArgs,
   sourceWriteRequestArg,
@@ -32,10 +32,10 @@ export type AgentOwnerSupplyFunnelReadArgs = {
 }
 
 export async function readAgentOwnerSupplyFunnelHandler(
-  ctx: MutationCtx,
+  ctx: QueryCtx,
   args: AgentOwnerSupplyFunnelReadArgs,
 ): Promise<OwnerSupplyFunnelResult> {
-    const sourceWrite = await requireSourceWrite(ctx, args, 'catalog_publish')
+    const sourceWrite = await requireSourceRead(args, 'catalog_publish')
     if (sourceWrite.kind === 'rejected')
       return { kind: 'error', code: 'unauthenticated' }
     const admission = await verifySupplyAgentPrincipal(ctx, args.agentPrincipal)

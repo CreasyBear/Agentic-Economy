@@ -115,7 +115,7 @@ describe('private Provider preparation authority', () => {
     expect(save).toMatchObject({ kind: 'saved', candidateRef, sourceDigest })
     if (save.kind !== 'saved') throw new Error(`private_provider_save:${save.kind}`)
 
-    const read = await backend.mutation(
+    const read = await backend.query(
       api.capabilitySupplyOwnerFunnel.readAgentOwnerSupplyFunnel,
       await withSourceWrite('catalog_publish', {
         businessId: provider.businessId,
@@ -209,7 +209,7 @@ describe('private Provider preparation authority', () => {
       throw new Error(`private_provider_tool_fixture_save:${saveA.kind}:${saveB.kind}`)
     }
 
-    const ownList = await backend.mutation(
+    const ownList = await backend.query(
       api.capabilityProviderTools.listAgent,
       await withSourceWrite('catalog_publish', {
         businessId: providerA.businessId,
@@ -227,7 +227,7 @@ describe('private Provider preparation authority', () => {
       toolRef: saveA.offeringRef,
     })
 
-    const ownRead = await backend.mutation(
+    const ownRead = await backend.query(
       api.capabilityProviderTools.readAgent,
       await withSourceWrite('catalog_publish', {
         businessId: providerA.businessId,
@@ -244,7 +244,7 @@ describe('private Provider preparation authority', () => {
       toolRef: saveA.offeringRef,
     })
 
-    await expect(backend.mutation(
+    await expect(backend.query(
       api.capabilityProviderTools.listAgent,
       await withSourceWrite('catalog_publish', {
         businessId: providerB.businessId,
@@ -255,7 +255,7 @@ describe('private Provider preparation authority', () => {
       }),
     )).resolves.toEqual({ kind: 'not_found' })
 
-    await expect(backend.mutation(
+    await expect(backend.query(
       api.capabilityProviderTools.readAgent,
       await withSourceWrite('catalog_publish', {
         businessId: providerA.businessId,
@@ -266,7 +266,7 @@ describe('private Provider preparation authority', () => {
       }),
     )).resolves.toEqual({ kind: 'not_found' })
 
-    await expect(backend.mutation(
+    await expect(backend.query(
       api.capabilityProviderTools.readAgent,
       await withSourceWrite('catalog_publish', {
         businessId: providerA.businessId,
@@ -281,14 +281,14 @@ describe('private Provider preparation authority', () => {
       projections: await ctx.db.query('capabilityProviderToolProjections').collect(),
       sourceWriteNonces: await ctx.db.query('sourceWriteNonces').collect(),
     }))
-    await expect(backend.mutation(api.capabilityProviderTools.listAgent, {
+    await expect(backend.query(api.capabilityProviderTools.listAgent, {
       businessId: providerA.businessId,
       agentPrincipal: principalA,
       operationKey: 'private-provider-tools:account-a:list-missing-source',
       correlationId: 'private-provider-tools:account-a:list-missing-source',
       paginationOpts: { numItems: 50, cursor: null },
     })).resolves.toEqual({ kind: 'not_found' })
-    await expect(backend.mutation(api.capabilityProviderTools.readAgent, {
+    await expect(backend.query(api.capabilityProviderTools.readAgent, {
       businessId: providerA.businessId,
       agentPrincipal: principalA,
       toolRef: saveA.offeringRef,

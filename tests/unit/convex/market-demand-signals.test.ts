@@ -11,10 +11,10 @@ const REGISTER_OPERATION = 'agentAccessPrincipals.registerIssuedAgentBindingForS
 const recordDemand = makeFunctionReference<'mutation', Record<string, unknown>, Record<string, unknown>>(
   'marketDemandSignals:record',
 )
-const listDemand = makeFunctionReference<'mutation', Record<string, unknown>, Record<string, unknown>>(
+const listDemand = makeFunctionReference<'query', Record<string, unknown>, Record<string, unknown>>(
   'marketDemandSignals:list',
 )
-const readDemand = makeFunctionReference<'mutation', Record<string, unknown>, Record<string, unknown>>(
+const readDemand = makeFunctionReference<'query', Record<string, unknown>, Record<string, unknown>>(
   'marketDemandSignals:read',
 )
 
@@ -46,6 +46,14 @@ async function invoke(
   input: Record<string, unknown>,
 ) {
   return await backend.mutation(reference, await withSourceWrite('protected_action', input as never))
+}
+
+async function invokeQuery(
+  backend: ConvexFixtureBackend,
+  reference: typeof listDemand,
+  input: Record<string, unknown>,
+) {
+  return await backend.query(reference, await withSourceWrite('protected_action', input as never))
 }
 
 describe('private market demand signals', () => {
@@ -97,7 +105,7 @@ describe('private market demand signals', () => {
       correlationId: 'market-demand:record:conflict',
     })).resolves.toEqual({ kind: 'refused', code: 'idempotency_conflict' })
 
-    await expect(invoke(backend, listDemand, {
+    await expect(invokeQuery(backend, listDemand, {
       paginationOpts: { numItems: 20, cursor: null },
       agentPrincipal: first,
       operationKey: 'market-demand:list:first',
@@ -107,7 +115,7 @@ describe('private market demand signals', () => {
       requests: { page: [{ requestRef: recorded.requestRef, query: base.query }], isDone: true },
     })
 
-    await expect(invoke(backend, readDemand, {
+    await expect(invokeQuery(backend, readDemand, {
       requestRef: recorded.requestRef,
       agentPrincipal: second,
       operationKey: 'market-demand:read:other',

@@ -3,7 +3,9 @@ import type { FunctionReference, FunctionReturnType } from 'convex/server'
 import { degradeBackend } from '@/lib/observability/degrade-backend'
 import {
   callPublicSourceMutation,
+  callPublicSourceQuery,
   sourceMutation,
+  sourceQuery,
 } from '@/lib/server/convex-source'
 import { sourceWriteAdmissionFromRequest, sourceWriteRequestFromAdmission } from '@/lib/server/source-write-admission'
 import type { AgentAccessPrincipal } from '@/modules/agent-access/agent-access'
@@ -151,8 +153,8 @@ type ProviderToolAgentList = Readonly<{
   isDone: boolean
   continueCursor: string
 }> | Readonly<{ kind: 'not_found' }>
-const providerToolReadMutation = sourceMutation<Record<string, unknown>, ProviderToolAgentRead>('capabilityProviderTools:readAgent')
-const providerToolListMutation = sourceMutation<Record<string, unknown>, ProviderToolAgentList>('capabilityProviderTools:listAgent')
+const providerToolReadQuery = sourceQuery<Record<string, unknown>, ProviderToolAgentRead>('capabilityProviderTools:readAgent')
+const providerToolListQuery = sourceQuery<Record<string, unknown>, ProviderToolAgentList>('capabilityProviderTools:listAgent')
 const withdrawMutation = sourceMutation<Record<string, unknown>, OwnerSupplyCommandResult>('capabilitySupplyOwnerFunnel:withdrawOwnerCapability')
 const recheckMutation = sourceMutation<Record<string, unknown>, OwnerSupplyCommandResult>('capabilitySupplyOwnerFunnel:refreshOwnerCapability')
 const republishMutation = sourceMutation<Record<string, unknown>, OwnerSupplyCommandResult>('capabilitySupplyOwnerFunnel:republishOwnerCapability')
@@ -167,9 +169,9 @@ type SupplyCallsBackendResult =
       nextCursor?: SupplyCallsCursor
     }>
   | Readonly<{ kind: 'error'; code: 'unauthenticated' | 'source_unavailable' }>
-const callsListMutation = sourceMutation<Record<string, unknown>, SupplyCallsBackendResult>('capabilityCallProjection:listAgentSupplyCalls')
-const connectionListMutation = sourceMutation<Record<string, unknown>, SupplyConnectionListResult>('capabilityProviderConnectionAgents:list')
-const connectionDetailMutation = sourceMutation<Record<string, unknown>, SupplyConnectionDetailResult>('capabilityProviderConnectionAgents:read')
+const callsListQuery = sourceQuery<Record<string, unknown>, SupplyCallsBackendResult>('capabilityCallProjection:listAgentSupplyCalls')
+const connectionListQuery = sourceQuery<Record<string, unknown>, SupplyConnectionListResult>('capabilityProviderConnectionAgents:list')
+const connectionDetailQuery = sourceQuery<Record<string, unknown>, SupplyConnectionDetailResult>('capabilityProviderConnectionAgents:read')
 type ProviderConnectionBackendCommandResult =
   | Readonly<{ kind: 'applied' | 'duplicate'; connection: ProviderConnectionProjection; commandDigest: string }>
   | Readonly<{ kind: 'refused'; code: Extract<SupplyConnectionCommandResult, Readonly<{ kind: 'refused' }>>['reason'] }>
@@ -180,7 +182,7 @@ type ProviderConnectionAttemptReservationResult =
 const connectionAttemptReservationMutation = sourceMutation<Record<string, unknown>, ProviderConnectionAttemptReservationResult>('capabilityProviderConnectionAttempts:reserveAgent')
 const connectionReconnectMutation = sourceMutation<Record<string, unknown>, ProviderConnectionBackendCommandResult>('capabilityProviderConnectionAgents:reconnect')
 const connectionRevokeMutation = sourceMutation<Record<string, unknown>, ProviderConnectionBackendCommandResult>('capabilityProviderConnectionAgents:revoke')
-const offboardingStatusMutation = sourceMutation<Record<string, unknown>, SupplyOffboardingStatusResult>('capabilityProviderOffboarding:readAgentStatus')
+const offboardingStatusQuery = sourceQuery<Record<string, unknown>, SupplyOffboardingStatusResult>('capabilityProviderOffboarding:readAgentStatus')
 
 function commandKey(action: string, principal: AgentAccessPrincipal, idempotencyKey: string): string {
   return canonicalDigest({ action, ownerId: principal.ownerId, idempotencyKey })
@@ -203,6 +205,19 @@ export function createSupplyManagementService(request: Request, bodyText: string
       sourceWrite,
     })
   }
+  const query = async <Q extends FunctionReference<'query', 'public', Record<string, unknown>>>(
+    sourceQueryRef: Q,
+    command: Record<string, unknown>,
+    operationKey: string,
+    correlationId: string,
+  ): Promise<FunctionReturnType<Q>> => {
+    const sourceWrite = await sourceWriteAdmissionFromRequest({ request, command, body: bodyText, scope: 'catalog_publish', operationKey, correlationId })
+    return await callPublicSourceQuery(sourceQueryRef, {
+      ...command,
+      sourceWriteRequest: sourceWriteRequestFromAdmission(sourceWrite),
+      sourceWrite,
+    })
+  }
   const status = async ({ input, principal, correlationId }: { input: SupplyStatusInput; principal: AgentAccessPrincipal; correlationId: string }): Promise<SupplyStatusResult> => {
     const operationKey = canonicalDigest({
       action: SUPPLY_ACTION_IDS.status,
@@ -211,7 +226,7 @@ export function createSupplyManagementService(request: Request, bodyText: string
       toolRef: input.toolRef,
       correlationId,
     })
-    const readback = await mutate(providerToolReadMutation, {
+    const readback = await query(providerToolReadQuery, {
       businessId: input.businessRef,
       toolRef: input.toolRef,
       agentPrincipal: principal,
@@ -237,7 +252,7 @@ export function createSupplyManagementService(request: Request, bodyText: string
       cursor: input.cursor ?? null,
       correlationId,
     })
-    const readback = await mutate(providerToolListMutation, {
+    const readback = await query(providerToolListQuery, {
       businessId: input.businessRef,
       paginationOpts: { numItems: input.limit, cursor: input.cursor ?? null },
       agentPrincipal: principal,
@@ -260,7 +275,7 @@ export function createSupplyManagementService(request: Request, bodyText: string
     await previewSupplySource(input)
   )
   const publish = async ({ input, principal }: { input: SupplyPublishInput; principal: AgentAccessPrincipal; correlationId: string }): Promise<SupplyPublishResult> => {
-    return await executePublishCommitPipeline({ input, principal, mutate })
+    return await executePublishCommitPipeline({ input, principal, mutate, query })
   }
   const withdraw = async ({ input, principal, correlationId: _transportCorrelationId }: { input: SupplyWithdrawInput; principal: AgentAccessPrincipal; correlationId: string }): Promise<SupplyWithdrawResult> => {
     const baseKey = commandKey('supply.withdraw', principal, input.idempotencyKey)
@@ -340,7 +355,7 @@ export function createSupplyManagementService(request: Request, bodyText: string
       limit: input.limit,
       correlationId,
     })
-    const result = await mutate(connectionListMutation, {
+    const result = await query(connectionListQuery, {
       businessId: input.businessId,
       ...(input.lifecycle === undefined ? {} : { lifecycle: input.lifecycle }),
       limit: input.limit,
@@ -358,7 +373,7 @@ export function createSupplyManagementService(request: Request, bodyText: string
       connectionRef: input.connectionRef,
       correlationId,
     })
-    const result = await mutate(connectionDetailMutation, {
+    const result = await query(connectionDetailQuery, {
       connectionRef: input.connectionRef,
       agentPrincipal: principal,
       operationKey,
@@ -531,7 +546,7 @@ export function createSupplyManagementService(request: Request, bodyText: string
       businessRef: input.businessRef,
       correlationId,
     })
-    return await mutate(offboardingStatusMutation, {
+    return await query(offboardingStatusQuery, {
       businessId: input.businessRef,
       agentPrincipal: principal,
       operationKey,
@@ -563,7 +578,7 @@ export function createSupplyManagementService(request: Request, bodyText: string
       limit: input.limit,
       cursor: input.cursor ?? null,
     })
-    const result = await mutate(callsListMutation, {
+    const result = await query(callsListQuery, {
       agentPrincipal: principal,
       ...(input.state === undefined ? {} : { state: input.state }),
       limit: input.limit,

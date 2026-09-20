@@ -104,7 +104,7 @@ export const bindAgentHandoff = mutation({
   handler: bindAgentHandoffHandler,
 })
 
-export const readAgentHandoff = mutation({
+export const readAgentHandoff = query({
   args: readAgentHandoffArgs.fields,
   returns: readAgentHandoffResult,
   handler: readAgentHandoffHandler,

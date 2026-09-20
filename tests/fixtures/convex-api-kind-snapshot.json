@@ -273,7 +273,7 @@
     "visibility": "public",
     "module": "agentMoneyReads",
     "method": "activity",
-    "kind": "mutation"
+    "kind": "query"
   },
   {
     "visibility": "public",
@@ -327,7 +327,7 @@
     "visibility": "public",
     "module": "capabilityCallProjection",
     "method": "listAgentSupplyCalls",
-    "kind": "mutation"
+    "kind": "query"
   },
   {
     "visibility": "public",
@@ -663,13 +663,13 @@
     "visibility": "public",
     "module": "capabilityProviderConnectionAgents",
     "method": "list",
-    "kind": "mutation"
+    "kind": "query"
   },
   {
     "visibility": "public",
     "module": "capabilityProviderConnectionAgents",
     "method": "read",
-    "kind": "mutation"
+    "kind": "query"
   },
   {
     "visibility": "public",
@@ -1035,7 +1035,7 @@
     "visibility": "public",
     "module": "capabilityProviderOffboarding",
     "method": "readAgentStatus",
-    "kind": "mutation"
+    "kind": "query"
   },
   {
     "visibility": "public",
@@ -1125,7 +1125,7 @@
     "visibility": "public",
     "module": "capabilityProviderTools",
     "method": "listAgent",
-    "kind": "mutation"
+    "kind": "query"
   },
   {
     "visibility": "public",
@@ -1137,7 +1137,7 @@
     "visibility": "public",
     "module": "capabilityProviderTools",
     "method": "readAgent",
-    "kind": "mutation"
+    "kind": "query"
   },
   {
     "visibility": "public",
@@ -1353,7 +1353,7 @@
     "visibility": "public",
     "module": "capabilitySupplyOwnerFunnel",
     "method": "readAgentOwnerSupplyFunnel",
-    "kind": "mutation"
+    "kind": "query"
   },
   {
     "visibility": "public",
@@ -1779,13 +1779,13 @@
     "visibility": "public",
     "module": "marketDemandSignals",
     "method": "list",
-    "kind": "mutation"
+    "kind": "query"
   },
   {
     "visibility": "public",
     "module": "marketDemandSignals",
     "method": "read",
-    "kind": "mutation"
+    "kind": "query"
   },
   {
     "visibility": "public",
@@ -1905,7 +1905,7 @@
     "visibility": "public",
     "module": "moneyAccountFunding",
     "method": "readAgentHandoff",
-    "kind": "mutation"
+    "kind": "query"
   },
   {
     "visibility": "internal",

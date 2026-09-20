@@ -149,11 +149,11 @@ describe('durable Provider offboarding', () => {
       operationKey: 'provider-offboarding:agent-status',
       correlationId: 'provider-offboarding:agent-status',
     }
-    await expect(backend.mutation(
+    await expect(backend.query(
       api.capabilityProviderOffboarding.readAgentStatus,
       await withSourceWrite('catalog_publish', { ...readCommand, agentPrincipal: principal }),
     )).resolves.toMatchObject({ kind: 'available', status: { businessRef: String(fixture.businessId) } })
-    await expect(backend.mutation(
+    await expect(backend.query(
       api.capabilityProviderOffboarding.readAgentStatus,
       await withSourceWrite('catalog_publish', { ...readCommand, agentPrincipal: foreignPrincipal }),
     )).resolves.toEqual({ kind: 'not_found' })

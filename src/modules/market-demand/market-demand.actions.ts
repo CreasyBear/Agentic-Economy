@@ -1,6 +1,6 @@
 import { z } from 'zod'
 
-import { callPublicSourceMutation, sourceMutation } from '@/lib/server/convex-source'
+import { callPublicSourceMutation, callPublicSourceQuery, sourceMutation, sourceQuery } from '@/lib/server/convex-source'
 import { sourceWriteAdmissionFromRequest, sourceWriteRequestFromAdmission } from '@/lib/server/source-write-admission'
 import { MARKET_TOOLS_CALL_SCOPE } from '@/modules/agent-access/contract'
 import type { AgentAccessPrincipal } from '@/modules/agent-access/agent-access'
@@ -131,8 +131,8 @@ export type MarketDemandService = Readonly<{
 }>
 
 const recordMutation = sourceMutation<Record<string, unknown>, unknown>('marketDemandSignals:record')
-const listMutation = sourceMutation<Record<string, unknown>, unknown>('marketDemandSignals:list')
-const readMutation = sourceMutation<Record<string, unknown>, unknown>('marketDemandSignals:read')
+const listQuery = sourceQuery<Record<string, unknown>, unknown>('marketDemandSignals:list')
+const readQuery = sourceQuery<Record<string, unknown>, unknown>('marketDemandSignals:read')
 const MARKET_DEMAND_CURSOR = { kind: 'market-demand' as const, scope: 'v1' }
 
 export function createMarketDemandService(request: Request, bodyText: string): MarketDemandService {
@@ -151,6 +151,27 @@ export function createMarketDemandService(request: Request, bodyText: string): M
       correlationId,
     })
     return await callPublicSourceMutation(reference, {
+      ...command,
+      sourceWriteRequest: sourceWriteRequestFromAdmission(sourceWrite),
+      sourceWrite,
+    }) as T
+  }
+
+  async function querySource<T>(
+    reference: Parameters<typeof callPublicSourceQuery>[0],
+    command: Record<string, unknown>,
+    operationKey: string,
+    correlationId: string,
+  ): Promise<T> {
+    const sourceWrite = await sourceWriteAdmissionFromRequest({
+      request,
+      command,
+      body: bodyText,
+      scope: 'protected_action',
+      operationKey,
+      correlationId,
+    })
+    return await callPublicSourceQuery(reference, {
       ...command,
       sourceWriteRequest: sourceWriteRequestFromAdmission(sourceWrite),
       sourceWrite,
@@ -196,7 +217,7 @@ export function createMarketDemandService(request: Request, bodyText: string): M
         limit: input.limit,
         correlationId,
       })
-      const result = await mutate<unknown>(listMutation, {
+      const result = await querySource<unknown>(listQuery, {
         paginationOpts: { numItems: input.limit, cursor: engineCursor },
         agentPrincipal: principal,
         operationKey,
@@ -232,7 +253,7 @@ export function createMarketDemandService(request: Request, bodyText: string): M
         requestRef: input.requestRef,
         correlationId,
       })
-      const raw = await mutate<unknown>(readMutation, {
+      const raw = await querySource<unknown>(readQuery, {
         requestRef: input.requestRef,
         agentPrincipal: principal,
         operationKey,

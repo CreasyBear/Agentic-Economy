@@ -11,8 +11,8 @@ import { upsertProviderToolIdentity } from './capabilityProviderToolProjection'
 import { canonicalSlugForToolRef, activeDirectoryGeneration } from './lib/x402DirectoryIndex/rows'
 import { providerKeyForBusiness } from './x402DirectoryIndexStore'
 import type { Doc } from './_generated/dataModel'
-import { internalMutation, mutation, query, type MutationCtx, type QueryCtx } from './_generated/server'
-import { requireSourceWrite, sourceWriteArgs } from './sourceWriteAdmission'
+import { internalMutation, query, type MutationCtx, type QueryCtx } from './_generated/server'
+import { requireSourceRead, sourceWriteArgs } from './sourceWriteAdmission'
 
 const EVIDENCE_WINDOW_MS = 30 * 24 * 60 * 60_000
 const EVIDENCE_READ_LIMIT = 10_000
@@ -88,7 +88,7 @@ const agentReadArgs = {
   ...sourceWriteArgs,
 } as const
 
-async function authorize(ctx: MutationCtx, args: { businessId: Doc<'businesses'>['_id']; agentPrincipal: Parameters<typeof verifySupplyAgentPrincipal>[1] }) {
+async function authorize(ctx: QueryCtx, args: { businessId: Doc<'businesses'>['_id']; agentPrincipal: Parameters<typeof verifySupplyAgentPrincipal>[1] }) {
   const admission = await verifySupplyAgentPrincipal(ctx, args.agentPrincipal)
   if (admission.kind !== 'allowed') return null
   const business = await ctx.db.get(args.businessId)
@@ -367,11 +367,11 @@ export const resolveOwnerToolSlug = query({
   },
 })
 
-export const listAgent = mutation({
+export const listAgent = query({
   args: { ...agentReadArgs, paginationOpts: paginationOptsValidator },
   returns: listResultValue,
   handler: async (ctx, args) => {
-    if ((await requireSourceWrite(ctx, args, 'catalog_publish')).kind === 'rejected') return { kind: 'not_found' as const }
+    if ((await requireSourceRead(args, 'catalog_publish')).kind === 'rejected') return { kind: 'not_found' as const }
     if ((await authorize(ctx, args)) === null) return { kind: 'not_found' as const }
     const rows = await ctx.db.query('capabilityProviderToolProjections')
       .withIndex('by_businessId_and_updatedAt', (query) => query.eq('businessId', args.businessId))
@@ -383,11 +383,11 @@ export const listAgent = mutation({
   },
 })
 
-export const readAgent = mutation({
+export const readAgent = query({
   args: { ...agentReadArgs, toolRef: v.string() },
   returns: readResultValue,
   handler: async (ctx, args) => {
-    if ((await requireSourceWrite(ctx, args, 'catalog_publish')).kind === 'rejected') return { kind: 'not_found' as const }
+    if ((await requireSourceRead(args, 'catalog_publish')).kind === 'rejected') return { kind: 'not_found' as const }
     if ((await authorize(ctx, args)) === null) return { kind: 'not_found' as const }
     const identity = await ctx.db.query('capabilityProviderToolProjections')
       .withIndex('by_businessId_and_toolRef', (query) => query.eq('businessId', args.businessId).eq('toolRef', args.toolRef))

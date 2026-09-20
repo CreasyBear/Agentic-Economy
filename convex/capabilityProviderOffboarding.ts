@@ -23,7 +23,7 @@ import {
 import { revokeProviderConnectionForActor } from './lib/providerConnections/owner'
 import { admitInteractiveOwnerConsequence } from './lib/ownerConsequence'
 import { clerkConsequenceProofValue } from './lib/consequenceProof'
-import { requireSourceWrite, sourceWriteArgs } from './sourceWriteAdmission'
+import { requireSourceRead, requireSourceWrite, sourceWriteArgs } from './sourceWriteAdmission'
 import {
   loadExactOfferingSourceState,
   persistOfferingSourceState,
@@ -284,7 +284,7 @@ export const readStatus = query({
   },
 })
 
-export const readAgentStatus = mutation({
+export const readAgentStatus = query({
   args: {
     businessId: v.id('businesses'),
     agentPrincipal: agentAccessPrincipalValue,
@@ -294,7 +294,7 @@ export const readAgentStatus = mutation({
   },
   returns: resultValue,
   handler: async (ctx, args) => {
-    const sourceWrite = await requireSourceWrite(ctx, args, 'catalog_publish')
+    const sourceWrite = await requireSourceRead(args, 'catalog_publish')
     if (sourceWrite.kind === 'rejected') return { kind: 'not_found' as const }
     const admission = await verifySupplyAgentPrincipal(ctx, args.agentPrincipal)
     if (admission.kind !== 'allowed') return { kind: 'not_found' as const }

@@ -1,13 +1,13 @@
 import { paginationOptsValidator, paginationResultValidator } from 'convex/server'
 import { v, type Infer } from 'convex/values'
 
-import type { MutationCtx } from '../_generated/server'
+import type { MutationCtx, QueryCtx } from '../_generated/server'
 import {
   agentAccessPrincipalValue,
   verifyMarketAgentPrincipal,
 } from '../agentAccessPrincipals'
 import { exactAmount } from '../moneyLedgerValues'
-import { requireSourceWrite, sourceWriteArgs } from '../sourceWriteAdmission'
+import { requireSourceRead, requireSourceWrite, sourceWriteArgs } from '../sourceWriteAdmission'
 
 const agentMoneyRequestFields = {
   agentPrincipal: agentAccessPrincipalValue,
@@ -83,7 +83,7 @@ type AgentMoneyRequest = Readonly<{
   sourceWriteRequest?: unknown
 }>
 
-async function admitAgentMoneyRead(
+async function admitAgentMoneyReadForWrite(
   ctx: MutationCtx,
   args: AgentMoneyRequest,
 ): Promise<Awaited<ReturnType<typeof verifyMarketAgentPrincipal>> | null> {
@@ -92,11 +92,19 @@ async function admitAgentMoneyRead(
   return await verifyMarketAgentPrincipal(ctx, args.agentPrincipal)
 }
 
+async function admitAgentMoneyReadForRead(
+  ctx: QueryCtx,
+  args: AgentMoneyRequest,
+): Promise<Awaited<ReturnType<typeof verifyMarketAgentPrincipal>> | null> {
+  if ((await requireSourceRead(args, 'billing')).kind === 'rejected') return null
+  return await verifyMarketAgentPrincipal(ctx, args.agentPrincipal)
+}
+
 export async function prepareAgentBalanceHandler(
   ctx: MutationCtx,
   args: Infer<typeof balanceArgsValue>,
 ): Promise<Infer<typeof agentBalanceAdmissionResult>> {
-  const admission = await admitAgentMoneyRead(ctx, args)
+  const admission = await admitAgentMoneyReadForWrite(ctx, args)
   if (admission?.kind !== 'allowed') return { kind: 'error', code: 'unauthenticated' }
   return {
     kind: 'allowed',
@@ -106,10 +114,10 @@ export async function prepareAgentBalanceHandler(
 }
 
 export async function listAgentActivityHandler(
-  ctx: MutationCtx,
+  ctx: QueryCtx,
   args: Infer<typeof activityArgsValue>,
 ): Promise<Infer<typeof agentActivityResult>> {
-  const admission = await admitAgentMoneyRead(ctx, args)
+  const admission = await admitAgentMoneyReadForRead(ctx, args)
   if (admission?.kind !== 'allowed') return { kind: 'error', code: 'unauthenticated' }
   if (args.paginationOpts.numItems < 1 || args.paginationOpts.numItems > 100) {
     return { kind: 'error', code: 'source_unavailable' }

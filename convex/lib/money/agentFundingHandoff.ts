@@ -10,7 +10,7 @@ import {
 } from '../../agentAccessPrincipals'
 import { readCommercialPolicyGate } from '../../moneyCommercialPolicy'
 import { resolveAndBindLegalCustomer } from '../moneyLegalCustomer'
-import { requireSourceWrite } from '../../sourceWriteAdmission'
+import { requireSourceRead, requireSourceWrite } from '../../sourceWriteAdmission'
 import { canonicalDigest } from '../../../src/modules/common/canonical-digest'
 import {
   AUD_EXPONENT,
@@ -67,6 +67,19 @@ async function admitAgentHandoff(
 ) {
   const source = await requireSourceWrite(ctx, args as never, 'billing')
   if (source.kind === 'rejected') return null
+  const admission = await verifyMarketAgentPrincipal(ctx, args.agentPrincipal)
+  return admission.kind === 'allowed' ? admission : null
+}
+
+async function admitAgentHandoffForRead(
+  ctx: QueryCtx,
+  args: Readonly<{
+    agentPrincipal: AgentAccessPrincipalValue
+    operationKey: string
+    correlationId: string
+  }>,
+) {
+  if ((await requireSourceRead(args as never, 'billing')).kind === 'rejected') return null
   const admission = await verifyMarketAgentPrincipal(ctx, args.agentPrincipal)
   return admission.kind === 'allowed' ? admission : null
 }
@@ -207,10 +220,10 @@ export async function bindAgentHandoffHandler(
 }
 
 export async function readAgentHandoffHandler(
-  ctx: MutationCtx,
+  ctx: QueryCtx,
   args: Infer<typeof readAgentHandoffArgsValue>,
 ): Promise<FundingResult> {
-  const admission = await admitAgentHandoff(ctx, args)
+  const admission = await admitAgentHandoffForRead(ctx, args)
   if (admission === null) return refused('billing_identity_missing')
   const command = await ctx.db.query('moneyFundingCommands')
     .withIndex('by_externalRef', (builder) => builder.eq('externalRef', args.externalRef))

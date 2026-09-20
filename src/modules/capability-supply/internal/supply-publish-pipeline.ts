@@ -1,6 +1,6 @@
 import type { FunctionReference, FunctionReturnType } from 'convex/server'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
-import { sourceMutation } from '@/lib/server/convex-source'
+import { sourceMutation, sourceQuery } from '@/lib/server/convex-source'
 import type { AgentAccessPrincipal } from '@/modules/agent-access/agent-access'
 import type {
   OwnerSupplyFunnelReadback,
@@ -28,6 +28,13 @@ export type MutateFn = <Mutation extends FunctionReference<'mutation', 'public',
   correlationId: string,
 ) => Promise<FunctionReturnType<Mutation>>
 
+export type QueryFn = <Q extends FunctionReference<'query', 'public', Record<string, unknown>>>(
+  sourceQueryRef: Q,
+  command: Record<string, unknown>,
+  operationKey: string,
+  correlationId: string,
+) => Promise<FunctionReturnType<Q>>
+
 type ConnectionDetailResult =
   | Readonly<{ kind: 'found'; connection: Readonly<{ businessId: string; connectionRef: string; providerRef: string; lifecycle: string; available: boolean }> }>
   | Readonly<{ kind: 'not_found' }>
@@ -42,8 +49,8 @@ type SupplyIntegrationDraftSaveResult =
   | Readonly<{ kind: 'saved' | 'replayed'; offeringRef: string; accessPathRef: string; candidateRef: string; sourceDigest: string }>
   | Readonly<{ kind: 'refused'; reason: string }>
 
-const connectionDetailMutation = sourceMutation<Record<string, unknown>, ConnectionDetailResult>('capabilityProviderConnectionAgents:read')
-const supplyReadMutation = sourceMutation<Record<string, unknown>, OwnerSupplyFunnelReadback>('capabilitySupplyOwnerFunnel:readAgentOwnerSupplyFunnel')
+const connectionDetailQuery = sourceQuery<Record<string, unknown>, ConnectionDetailResult>('capabilityProviderConnectionAgents:read')
+const supplyReadQuery = sourceQuery<Record<string, unknown>, OwnerSupplyFunnelReadback>('capabilitySupplyOwnerFunnel:readAgentOwnerSupplyFunnel')
 const integrationDraftSaveMutation = sourceMutation<Record<string, unknown>, SupplyIntegrationDraftSaveResult>('capabilitySupplyOwnerFunnel:saveAgentSupplyIntegrationDraft')
 const publishReservationMutation = sourceMutation<Record<string, unknown>, OwnerPublicationReservationResult>('capabilitySupplyOwnerFunnel:reserveOwnerCapabilityPublication')
 const publishMutation = sourceMutation<Record<string, unknown>, PublishPreparedCapabilityCommandResult>('capabilitySupply:publishPreparedCapability')
@@ -60,14 +67,15 @@ export async function executePublishCommitPipeline(options: {
   input: PublishSupplyToolV2Input
   principal: AgentAccessPrincipal
   mutate: MutateFn
+  query: QueryFn
 }): Promise<SupplyPublishPipelineResult> {
-  const { input, principal, mutate } = options
+  const { input, principal, mutate, query } = options
   const baseKey = commandKey('supply.publish', principal, input.idempotencyKey)
   const durableCorrelationId = baseKey
   let providerAuthority: { kind: 'provider_connection'; connectionRef: string; providerRef: string } | undefined
 
   if (input.connectionRef !== undefined) {
-    const connection = await mutate(connectionDetailMutation, {
+    const connection = await query(connectionDetailQuery, {
       connectionRef: input.connectionRef,
       agentPrincipal: principal,
       operationKey: `${baseKey}:connection`,
@@ -108,7 +116,7 @@ export async function executePublishCommitPipeline(options: {
   }, `${baseKey}:draft`, durableCorrelationId)
   if (saved.kind === 'refused') return refused(saved.reason)
 
-  const readback = await mutate(supplyReadMutation, {
+  const readback = await query(supplyReadQuery, {
     businessId: input.businessRef,
     agentPrincipal: principal,
     operationKey: `${baseKey}:read`,

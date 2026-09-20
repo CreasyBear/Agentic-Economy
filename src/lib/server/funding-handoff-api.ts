@@ -44,7 +44,7 @@ import { z } from 'zod'
 const MAX_BODY_BYTES = 64 * 1024
 const reserveAgentHandoff = sourceMutation<Record<string, unknown>, FundingCommandResult>('moneyAccountFunding:reserveAgentHandoff')
 const bindAgentHandoff = sourceMutation<Record<string, unknown>, FundingCommandResult>('moneyAccountFunding:bindAgentHandoff')
-const readAgentHandoff = sourceMutation<Record<string, unknown>, FundingCommandResult>('moneyAccountFunding:readAgentHandoff')
+const readAgentHandoff = sourceQuery<Record<string, unknown>, FundingCommandResult>('moneyAccountFunding:readAgentHandoff')
 const readPayerSafeHandoff = sourceQuery<{ externalRef: string }, PublicHandoffResult>('moneyAccountFunding:readPayerSafeHandoff')
 
 type FundingCommandResult = { kind: 'accepted'; command: AccountFundingCommandView } | MoneyRefusal
@@ -82,6 +82,21 @@ export function createFundingHandoffService(
       request, command, body: bodyText, scope: 'billing', operationKey, correlationId,
     })
     return await callPublicSourceMutation(reference, {
+      ...command,
+      sourceWriteRequest: sourceWriteRequestFromAdmission(sourceWrite),
+      sourceWrite,
+    }) as FundingCommandResult
+  }
+  async function queryHandoff(
+    reference: Parameters<typeof callSourceQuery>[0],
+    command: Record<string, unknown>,
+    operationKey: string,
+    correlationId: string,
+  ): Promise<FundingCommandResult> {
+    const sourceWrite = await sourceWriteAdmissionFromRequest({
+      request, command, body: bodyText, scope: 'billing', operationKey, correlationId,
+    })
+    return await callSourceQuery(reference, {
       ...command,
       sourceWriteRequest: sourceWriteRequestFromAdmission(sourceWrite),
       sourceWrite,
@@ -162,7 +177,7 @@ export function createFundingHandoffService(
     },
     status: async ({ input, principal, correlationId }) => {
       const operationKey = 'moneyAccountFunding:readAgentHandoff'
-      const found = await mutate(readAgentHandoff, {
+      const found = await queryHandoff(readAgentHandoff, {
         externalRef: input.fundingSessionId, agentPrincipal: principal, operationKey, correlationId,
       }, operationKey, correlationId)
       if (isMoneyRefusal(found)) {

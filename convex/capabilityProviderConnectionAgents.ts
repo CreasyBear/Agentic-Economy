@@ -1,4 +1,4 @@
-import { mutationGeneric } from 'convex/server'
+import { mutationGeneric, queryGeneric } from 'convex/server'
 
 import {
   agentConnectionCommandResult,
@@ -18,13 +18,13 @@ import {
   revokeAgentHandler,
 } from './lib/providerConnections/agent'
 
-export const list = mutationGeneric({
+export const list = queryGeneric({
   args: listAgentArgs,
   returns: agentConnectionListResult,
   handler: listAgentHandler,
 })
 
-export const read = mutationGeneric({
+export const read = queryGeneric({
   args: readAgentArgs,
   returns: agentConnectionReadResult,
   handler: readAgentHandler,

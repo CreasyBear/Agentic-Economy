@@ -279,7 +279,7 @@ describe('Account AUD funding through Formance', () => {
       commandRef: reserved.command.commandRef, evidence, agentPrincipal: first,
       operationKey: 'moneyAccountFunding:bindAgentHandoff', correlationId: 'funding-agent-bind',
     }))).resolves.toMatchObject({ kind: 'accepted', command: { externalRef: evidence.externalRef } })
-    await expect(backend.mutation(readAgentHandoff, await withSourceWrite('billing', {
+    await expect(backend.query(readAgentHandoff, await withSourceWrite('billing', {
       externalRef: evidence.externalRef, agentPrincipal: second,
       operationKey: 'moneyAccountFunding:readAgentHandoff', correlationId: 'funding-agent-cross-read',
     }))).resolves.toEqual({ kind: 'refused', code: 'funding_pending', retryable: false })

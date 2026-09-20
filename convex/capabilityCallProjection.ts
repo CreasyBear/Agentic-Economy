@@ -38,12 +38,12 @@ import {
   type CallResult,
 } from '@/modules/capability-execution/call-contracts'
 import { v } from 'convex/values'
-import type { ActionCtx, MutationCtx } from './_generated/server'
-import { mutation } from './_generated/server'
+import type { ActionCtx, QueryCtx } from './_generated/server'
+import { query } from './_generated/server'
 import { internal } from './_generated/api'
 import type { SellerOnboardingCanaryExecutionEnvelope } from '@/modules/capability-execution'
 import { agentAccessPrincipalValue, verifySupplyAgentPrincipal } from './agentAccessPrincipals'
-import { requireSourceWrite, sourceWriteArgs } from './sourceWriteAdmission'
+import { requireSourceRead, sourceWriteArgs } from './sourceWriteAdmission'
 import { callState } from './lib/callLifecycle/contracts'
 import { canonicalTerminalOutcome } from './lib/callLifecycle/terminalProjection'
 
@@ -963,7 +963,7 @@ function projectSupplyCallSummary(row: SupplyCallRow) {
  * their current Tools itself.
  */
 export async function listAgentSupplyCallsHandler(
-  ctx: Pick<MutationCtx, 'db'>,
+  ctx: Pick<QueryCtx, 'db'>,
   args: Readonly<{
     ownerId: string
     state?: 'pending' | 'completed' | 'refused' | 'reconciliation_required' | 'cancelled'
@@ -1021,11 +1021,11 @@ export async function listAgentSupplyCallsHandler(
   }
 }
 
-export const listAgentSupplyCalls = mutation({
+export const listAgentSupplyCalls = query({
   args: supplyCallsArgs,
   returns: supplyCallsResultValue,
   handler: async (ctx, args) => {
-    if ((await requireSourceWrite(ctx, args, 'catalog_publish')).kind === 'rejected') {
+    if ((await requireSourceRead(args, 'catalog_publish')).kind === 'rejected') {
       return { kind: 'error' as const, code: 'source_unavailable' as const }
     }
     const admission = await verifySupplyAgentPrincipal(ctx, args.agentPrincipal)

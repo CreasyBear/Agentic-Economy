@@ -1,11 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type * as ConvexSourceModule from '@/lib/server/convex-source'
 
-const { mutation } = vi.hoisted(() => ({ mutation: vi.fn() }))
+const { query } = vi.hoisted(() => ({ query: vi.fn() }))
 
 vi.mock('@/lib/server/convex-source', async (importOriginal) => ({
   ...(await importOriginal<typeof ConvexSourceModule>()),
-  callPublicSourceMutation: mutation,
+  callPublicSourceQuery: query,
 }))
 
 vi.mock('@/lib/server/source-write-admission', () => ({
@@ -37,8 +37,8 @@ const listPage = {
 
 describe('market demand list cursors', () => {
   beforeEach(() => {
-    mutation.mockReset()
-    mutation.mockResolvedValue(listPage)
+    query.mockReset()
+    query.mockResolvedValue(listPage)
   })
 
   it('wraps the engine continue cursor and refuses a raw engine token', async () => {
@@ -63,7 +63,7 @@ describe('market demand list cursors', () => {
       correlationId: 'correlation:raw',
     })
     expect(refused).toEqual({ kind: 'error', code: 'invalid_cursor' })
-    expect(mutation.mock.calls.some((call) => {
+    expect(query.mock.calls.some((call) => {
       const args = call[1] as { paginationOpts?: { cursor?: string | null } } | undefined
       return args?.paginationOpts?.cursor === 'engine-next'
     })).toBe(false)
@@ -74,7 +74,7 @@ describe('market demand list cursors', () => {
       new Request('https://ae.example/api/v1/market-requests/list', { method: 'POST', body: '{}' }),
       '{}',
     )
-    mutation.mockResolvedValue({
+    query.mockResolvedValue({
       kind: 'available',
       requests: { page: [], isDone: true, continueCursor: '' },
     })
@@ -88,7 +88,7 @@ describe('market demand list cursors', () => {
       correlationId: 'correlation:opaque',
     })
     expect(listed).toMatchObject({ kind: 'available', hasMore: false })
-    expect(mutation).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
+    expect(query).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
       paginationOpts: { numItems: 20, cursor: 'engine-next' },
     }))
   })

@@ -4,7 +4,9 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => ({
   callPublicSourceMutation: vi.fn(),
+  callPublicSourceQuery: vi.fn(),
   sourceMutation: vi.fn((name: string) => ({ name })),
+  sourceQuery: vi.fn((name: string) => ({ name })),
   sourceWriteAdmissionFromRequest: vi.fn(),
   sourceWriteRequestFromAdmission: vi.fn(),
   prepareSupplyPublicationV2: vi.fn(),
@@ -15,7 +17,9 @@ const mocks = vi.hoisted(() => ({
 vi.mock('@/lib/server/convex-source', async (importOriginal) => ({
   ...(await importOriginal<typeof ConvexSourceModule>()),
   callPublicSourceMutation: mocks.callPublicSourceMutation,
+  callPublicSourceQuery: mocks.callPublicSourceQuery,
   sourceMutation: mocks.sourceMutation,
+  sourceQuery: mocks.sourceQuery,
 }))
 vi.mock('@/lib/server/source-write-admission', async (importOriginal) => ({
   ...(await importOriginal<typeof SourceWriteAdmissionModule>()),
@@ -152,8 +156,6 @@ function setHappyPublishResponses() {
     switch (mutation.name) {
       case 'capabilitySupplyOwnerFunnel:saveAgentSupplyIntegrationDraft':
         return { kind: 'saved', offeringRef: 'offering:one', accessPathRef: 'access:one', candidateRef: publishInput.candidateRef, sourceDigest: publishInput.expectedSourceDigest }
-      case 'capabilitySupplyOwnerFunnel:readAgentOwnerSupplyFunnel':
-        return readback
       case 'capabilitySupplyOwnerFunnel:reserveOwnerCapabilityPublication':
         return { kind: 'reserved' }
       case 'capabilitySupply:publishPreparedCapability':
@@ -168,10 +170,15 @@ function setHappyPublishResponses() {
         throw new Error(`unexpected_source_mutation:${mutation.name}`)
     }
   })
+  mocks.callPublicSourceQuery.mockImplementation(async (queryRef: { name: string }) => {
+    if (queryRef.name === 'capabilitySupplyOwnerFunnel:readAgentOwnerSupplyFunnel') return readback
+    throw new Error(`unexpected_source_query:${queryRef.name}`)
+  })
 }
 
 beforeEach(() => {
   mocks.callPublicSourceMutation.mockReset()
+  mocks.callPublicSourceQuery.mockReset()
   mocks.sourceWriteAdmissionFromRequest.mockReset()
   mocks.sourceWriteRequestFromAdmission.mockReset()
   mocks.prepareSupplyPublicationV2.mockReset()
@@ -212,7 +219,7 @@ describe('supply action runtime boundaries', () => {
         operationalConditions: [],
       },
     }
-    mocks.callPublicSourceMutation.mockImplementation(async (mutation: { name: string }) => mutation.name === 'capabilityProviderTools:listAgent'
+    mocks.callPublicSourceQuery.mockImplementation(async (queryRef: { name: string }) => queryRef.name === 'capabilityProviderTools:listAgent'
       ? { kind: 'available', page: [{ statusJson: JSON.stringify(projectedStatus) }], isDone: true, continueCursor: '' }
       : { kind: 'available', statusJson: JSON.stringify(projectedStatus) })
     const service = createSupplyManagementService(new Request('https://agent.example/api'), '{}')
@@ -305,10 +312,12 @@ describe('supply action runtime boundaries', () => {
       mocks.callPublicSourceMutation.mock.calls.map(([mutation]) => mutation.name),
     ).toEqual([
       'capabilitySupplyOwnerFunnel:saveAgentSupplyIntegrationDraft',
-      'capabilitySupplyOwnerFunnel:readAgentOwnerSupplyFunnel',
       'capabilitySupplyOwnerFunnel:reserveOwnerCapabilityPublication',
       'capabilitySupply:publishPreparedCapability',
     ])
+    expect(
+      mocks.callPublicSourceQuery.mock.calls.map(([queryRef]) => queryRef.name),
+    ).toEqual(['capabilitySupplyOwnerFunnel:readAgentOwnerSupplyFunnel'])
   })
 
   it('reuses publish command identity across transport correlation and credential rotation', async () => {
@@ -346,7 +355,11 @@ describe('supply action runtime boundaries', () => {
       if (mutation.name === 'capabilitySupplyOwnerFunnel:saveAgentSupplyIntegrationDraft') {
         return { kind: 'saved', offeringRef: 'offering:one', accessPathRef: 'access:one', candidateRef: publishInput.candidateRef, sourceDigest: publishInput.expectedSourceDigest }
       }
-      if (mutation.name === 'capabilitySupplyOwnerFunnel:readAgentOwnerSupplyFunnel') {
+      if (mutation.name === 'capabilitySupply:publishPreparedCapability') return { kind: 'published', publicationRef: 'publication:one', publicationRevision: 1, toolRef: 'operation:one', lifecycle: { state: 'active', reasons: [] } }
+      throw new Error(`unexpected_source_mutation:${mutation.name}`)
+    })
+    mocks.callPublicSourceQuery.mockImplementation(async (queryRef: { name: string }) => {
+      if (queryRef.name === 'capabilitySupplyOwnerFunnel:readAgentOwnerSupplyFunnel') {
         return {
           kind: 'available',
           offerings: [
@@ -354,12 +367,12 @@ describe('supply action runtime boundaries', () => {
           ],
         }
       }
-      if (mutation.name === 'capabilitySupply:publishPreparedCapability') return { kind: 'published', publicationRef: 'publication:one', publicationRevision: 1, toolRef: 'operation:one', lifecycle: { state: 'active', reasons: [] } }
-      throw new Error(`unexpected_source_mutation:${mutation.name}`)
+      throw new Error(`unexpected_source_query:${queryRef.name}`)
     })
     const service = createSupplyManagementService(new Request('https://agent.example/api'), '{}')
     await service.publish({ input: publishInput, principal, correlationId: 'transport:first' })
     const beforeEvidenceRetry = mocks.callPublicSourceMutation.mock.calls.length
+    const beforeEvidenceRetryQueries = mocks.callPublicSourceQuery.mock.calls.length
     const changedEvidence: SupplyPublishInput = {
       ...publishInput,
       consequences: {
@@ -372,10 +385,13 @@ describe('supply action runtime boundaries', () => {
     const evidenceRetryNames = mocks.callPublicSourceMutation.mock.calls.slice(beforeEvidenceRetry).map(([mutation]) => mutation.name)
     expect(evidenceRetryNames).toEqual([
       'capabilitySupplyOwnerFunnel:saveAgentSupplyIntegrationDraft',
-      'capabilitySupplyOwnerFunnel:readAgentOwnerSupplyFunnel',
       'capabilitySupplyOwnerFunnel:reserveOwnerCapabilityPublication',
     ])
+    expect(
+      mocks.callPublicSourceQuery.mock.calls.slice(beforeEvidenceRetryQueries).map(([queryRef]) => queryRef.name),
+    ).toEqual(['capabilitySupplyOwnerFunnel:readAgentOwnerSupplyFunnel'])
     const beforeOfferingRetry = mocks.callPublicSourceMutation.mock.calls.length
+    const beforeOfferingRetryQueries = mocks.callPublicSourceQuery.mock.calls.length
     const changedOffering: SupplyPublishInput = {
       ...publishInput,
       presentation: { ...publishInput.presentation, description: 'Changed Provider presentation.' },
@@ -385,9 +401,11 @@ describe('supply action runtime boundaries', () => {
     const offeringRetryNames = mocks.callPublicSourceMutation.mock.calls.slice(beforeOfferingRetry).map(([mutation]) => mutation.name)
     expect(offeringRetryNames).toEqual([
       'capabilitySupplyOwnerFunnel:saveAgentSupplyIntegrationDraft',
-      'capabilitySupplyOwnerFunnel:readAgentOwnerSupplyFunnel',
       'capabilitySupplyOwnerFunnel:reserveOwnerCapabilityPublication',
     ])
+    expect(
+      mocks.callPublicSourceQuery.mock.calls.slice(beforeOfferingRetryQueries).map(([queryRef]) => queryRef.name),
+    ).toEqual(['capabilitySupplyOwnerFunnel:readAgentOwnerSupplyFunnel'])
   })
 
   it('binds withdraw operationKey and correlationId identically through source admission', async () => {
@@ -572,7 +590,7 @@ describe('supply action runtime boundaries', () => {
       createdAt: 10,
       updatedAt: 10,
     }
-    mocks.callPublicSourceMutation.mockResolvedValue({
+    mocks.callPublicSourceQuery.mockResolvedValue({
       kind: 'available',
       businessId: 'business:supply-actions',
       connections: [connection],
@@ -586,7 +604,7 @@ describe('supply action runtime boundaries', () => {
     })
 
     expect(result).toEqual({ kind: 'available', businessId: 'business:supply-actions', connections: [connection] })
-    expect(mocks.callPublicSourceMutation).toHaveBeenCalledWith(
+    expect(mocks.callPublicSourceQuery).toHaveBeenCalledWith(
       { name: 'capabilityProviderConnectionAgents:list' },
       expect.objectContaining({
         businessId: 'business:supply-actions',
@@ -878,7 +896,7 @@ describe('supply action runtime boundaries', () => {
   })
 
   it('fails closed when a connection detail source attempts to return a credential reference', async () => {
-    mocks.callPublicSourceMutation.mockResolvedValue({
+    mocks.callPublicSourceQuery.mockResolvedValue({
       kind: 'found',
       connection: {
         connectionRef: 'connection:x402:one',
