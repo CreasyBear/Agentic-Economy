@@ -114,7 +114,7 @@ function canaryEnvelopeMatchesReservation(args: ReserveArgs): boolean {
   const canary = args.sellerOnboardingCanary
   if (canary === undefined) return true
   return [
-    args.environment === 'sandbox',
+    (args.environment === 'sandbox' || args.environment === 'production'),
     canary.executionPurpose === 'seller_onboarding_canary',
     canary.callRef === args.callRef,
     canary.toolRef === args.toolRef,

@@ -679,9 +679,9 @@ export async function projectOuterResult(
 }
 
 /**
- * Finalize the internal seller-onboarding canary without inventing a buyer
- * usage event. Package 4 refuses its retired payment lane before financial
- * submission, so this projector records no qualified use or financial state.
+ * Finalize the platform-funded seller-onboarding canary without inventing
+ * buyer usage or Provider earnings. The canary receipt preserves its exact
+ * payment evidence for promotion and audit.
  */
 export async function projectSellerOnboardingCanaryResult(
   ctx: ActionCtx,
@@ -707,9 +707,7 @@ export async function projectSellerOnboardingCanaryResult(
     : undefined
   if (
     canary === undefined
-    || dispatch.environment !== 'sandbox'
     || profile === undefined
-    || profile.network !== 'eip155:84532'
     || pricingConfigDecisionAmount(operation.pricingConfig) !== undefined
   ) throw new Error('seller_canary_projection_identity_invalid')
 

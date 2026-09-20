@@ -158,7 +158,7 @@ function sellerCanaryDispatchAuthorityMatches(
   canary: NonNullable<Doc<'capabilityCalls'>['sellerOnboardingCanary']>,
 ): boolean {
   return [
-    row.environment === 'sandbox',
+    row.environment === 'sandbox' || row.environment === 'production',
     canary.funding.grantRef === row.grantRef,
     canary.funding.principalId === row.principalId,
     canary.funding.ownerId === row.ownerId,
@@ -197,7 +197,7 @@ async function reconcilePersistedSellerCanaryAuthority(
       ownerId: row.ownerId,
       credentialId: row.credentialId,
       applicationRef: row.applicationRef,
-      environment: 'sandbox',
+      environment: row.environment,
       generation: row.grantGeneration,
       spendingPolicyDigest: row.policyDigest,
       expiresAt: row.grantExpiresAt,

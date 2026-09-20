@@ -857,7 +857,8 @@ async function ownerStagedProbeBusinessIsAllowed(
   if (publication === null
     || publication.disposition !== 'current'
     || publication.businessId !== args.businessId
-    || publication.runtimeEnvironment !== 'sandbox'
+    || (publication.runtimeEnvironment !== 'sandbox'
+      && publication.runtimeEnvironment !== 'production')
     || publication.authorityMode !== 'provider_owned'
     || publication.sourceKind !== 'x402'
     || (publication.registrationEvidenceRefs ?? []).filter(

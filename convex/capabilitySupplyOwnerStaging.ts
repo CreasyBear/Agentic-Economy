@@ -135,21 +135,26 @@ function exactCatalogOrigin(
     : undefined
 }
 
-function exactSandboxX402Material(
+function exactOwnerX402Environment(
   prepared: Infer<typeof preparedPublicationMaterialValue>,
   claim: X402SellerClaim,
-): boolean {
+): 'sandbox' | 'production' | undefined {
   if (
     prepared.sourceKind !== 'x402'
     || prepared.binding.adapter.adapterId !== 'x402-fetch:v2'
     || prepared.binding.authority.kind !== 'provider_connection'
-  ) return false
+  ) return undefined
   const endpoint = canonicalEndpoint(prepared.binding.endpointUrl)
   const claimEndpoint = canonicalEndpoint(claim.endpointUrl)
   const config = parseX402FetchTransportConfiguration(
     prepared.binding.adapter.config,
   )
-  const profile = x402PaymentProfileForEnvironment('sandbox')
+  const environment = config?.network === 'eip155:84532'
+    ? 'sandbox'
+    : config?.network === 'eip155:8453'
+      ? 'production'
+      : undefined
+  const profile = x402PaymentProfileForEnvironment(environment)
   if (
     endpoint === undefined
     || claimEndpoint !== endpoint
@@ -160,7 +165,7 @@ function exactSandboxX402Material(
     || config.network !== profile.network
     || config.asset.toLowerCase() !== profile.asset.toLowerCase()
     || config.payTo.toLowerCase() !== claim.payTo.toLowerCase()
-  ) return false
+  ) return undefined
 
   const paymentRequired = parsePinnedX402PaymentRequiredJson(
     config.paymentRequiredJson,
@@ -169,7 +174,7 @@ function exactSandboxX402Material(
     paymentRequired === undefined
     || paymentRequired.x402Version !== 2
     || canonicalEndpoint(paymentRequired.resource.url) !== endpoint
-  ) return false
+  ) return undefined
   const matching = paymentRequired.accepts.filter((candidate) => (
     isX402PaymentRequirementForProfile({
       ...candidate,
@@ -180,13 +185,13 @@ function exactSandboxX402Material(
     && candidate.asset.toLowerCase() === config.asset.toLowerCase()
     && candidate.payTo.toLowerCase() === config.payTo.toLowerCase()
   ))
-  if (matching.length !== 1) return false
+  if (matching.length !== 1) return undefined
 
   let pricing: ReturnType<typeof normalizePricingConfig>
   try {
     pricing = normalizePricingConfig(JSON.parse(prepared.pricingConfigJson))
   } catch (cause) {
-    return degradeBackend(cause, false, { site: 'exactSandboxX402Material', reason: 'invalid_response' })
+    return degradeBackend(cause, undefined, { site: 'exactOwnerX402Environment', reason: 'invalid_response' })
   }
   if (
     pricing.kind !== 'valid'
@@ -194,12 +199,14 @@ function exactSandboxX402Material(
     || pricing.config.kind !== 'managed_x402'
     || pricing.config.sourceRequirement.network !== config.network
     || pricing.config.sourceRequirement.asset.toLowerCase() !== config.asset.toLowerCase()
-  ) return false
+  ) return undefined
   const atomicAmount = rescaleExactAmount(
     pricingConfigSourceAmount(pricing.config),
     config.assetAmountExponent,
   )
   return atomicAmount !== undefined && matching[0]?.amount === atomicAmount.units
+    ? environment
+    : undefined
 }
 
 function convexStagingResult(
@@ -419,12 +426,14 @@ async function reuseExactStagedPublication(
   ).length
   const sourceSelector = publication.sourceSelector
   const priceDigest = publication.priceDigest
+  const runtimeEnvironment = exactOwnerX402Environment(input.args.prepared, input.args.sellerClaim)
   if (
     existingEvidenceOfferingHash !== offering.registrationHash
     || existingEvidenceBindingHash !== binding.registrationHash
     || admissionFenceCount !== 1
     || publication.businessId !== input.args.businessId
-    || publication.runtimeEnvironment !== 'sandbox'
+    || runtimeEnvironment === undefined
+    || publication.runtimeEnvironment !== runtimeEnvironment
     || publication.disposition !== 'current'
     || publication.toolRef !== toolRef
     || publication.offeringId !== offering.offeringId
@@ -506,8 +515,8 @@ async function reuseExactStagedPublication(
 }
 
 /**
- * Owner-only admission of one Base Sepolia x402 staging Tool. The
- * The exact publication receives a Tool-scoped admission fence. Seller
+ * Owner-only admission of one exact managed x402 staging Tool. The exact
+ * publication receives a Tool-scoped admission fence. Seller
  * business visibility therefore cannot expose this revision before its paid
  * canary is explicitly promoted.
  */
@@ -531,11 +540,12 @@ export async function stageOwnerX402CapabilityHandler(
   ) return { kind: 'refused', reason: 'authorization_denied' }
 
   const now = Date.now()
+  const runtimeEnvironment = exactOwnerX402Environment(args.prepared, args.sellerClaim)
   if (
     !boundedSellerClaim(args.sellerClaim)
     || args.sellerClaim.businessId !== String(args.businessId)
     || !validX402SellerClaimTime(args.sellerClaim.expiresAt, now)
-    || !exactSandboxX402Material(args.prepared, args.sellerClaim)
+    || runtimeEnvironment === undefined
   ) return { kind: 'refused', reason: 'payment_required_invalid' }
   if (!await exactCatalogTarget(ctx, args)) {
     return { kind: 'refused', reason: 'catalog_offering_origin_changed' }
@@ -562,7 +572,7 @@ export async function stageOwnerX402CapabilityHandler(
 
   const result = await publishPreparedCapabilityCommand({
     businessId: String(args.businessId),
-    runtimeEnvironment: 'sandbox',
+    runtimeEnvironment,
     prepared: args.prepared,
     actor: { kind: 'owner', ref: actor.canonicalPrincipalRef },
     origin: args.prepared.offering.origin,

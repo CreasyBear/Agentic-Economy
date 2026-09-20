@@ -32,7 +32,6 @@ import {
   type CdpX402CustodyConfiguration,
 } from './server-credential'
 import {
-  BASE_SEPOLIA_USDC_ADDRESS,
   isX402PaymentRequirementForProfile,
   normalizeX402PaymentRequirement,
   x402PaymentProfileForEnvironment,
@@ -346,14 +345,17 @@ const TRANSFER_WITH_AUTHORIZATION_TYPES = {
 export function cdpX402SellerCanaryPolicyRules(
   payerAddress: string,
   maximumAtomic: string,
+  aeEnvironment: X402AeEnvironment = 'sandbox',
 ): Readonly<{ accountRules: readonly unknown[]; projectRules: readonly unknown[] }> {
+  const profile = x402PaymentProfileForEnvironment(aeEnvironment)
+  if (profile === undefined) throw new Error('x402_canary_payment_profile_invalid')
   return {
     accountRules: [{
       action: 'accept',
       operation: 'signEvmTypedData',
       criteria: [{
         type: 'evmTypedDataVerifyingContract',
-        addresses: [BASE_SEPOLIA_USDC_ADDRESS],
+        addresses: [profile.asset],
         operator: 'in',
       }, {
         type: 'evmTypedDataField',
@@ -374,7 +376,7 @@ export function cdpX402SellerCanaryPolicyRules(
       operation: 'signEvmTypedData',
       criteria: [{
         type: 'evmTypedDataVerifyingContract',
-        addresses: [BASE_SEPOLIA_USDC_ADDRESS],
+        addresses: [profile.asset],
         operator: 'not in',
       }],
     }, {
@@ -398,8 +400,9 @@ export function cdpX402SellerCanaryPolicyIsExact(
   projectPolicy: CdpX402PolicyIdentity,
   payerAddress: string,
   maximumAtomic: string,
+  aeEnvironment: X402AeEnvironment = 'sandbox',
 ): boolean {
-  const expected = cdpX402SellerCanaryPolicyRules(payerAddress, maximumAtomic)
+  const expected = cdpX402SellerCanaryPolicyRules(payerAddress, maximumAtomic, aeEnvironment)
   return canonicalDigest(accountPolicy.rules as StableHashValue)
       === canonicalDigest(expected.accountRules as StableHashValue)
     && canonicalDigest(projectPolicy.rules as StableHashValue)
@@ -567,12 +570,12 @@ export async function createCdpEvmX402PaymentSignature(
       || !sameEvmAddress(account.address, configuration.expectedEvmAddress)
     ) return undefined
     if (
-      profile.aeEnvironment === 'sandbox'
-      && !cdpX402SellerCanaryPolicyIsExact(
+      !cdpX402SellerCanaryPolicyIsExact(
         accountPolicy,
         projectPolicy,
         account.address,
         configuration.maxAtomic.toString(),
+        profile.aeEnvironment,
       )
     ) return undefined
 

@@ -1,11 +1,14 @@
 import { convexTest } from 'convex-test'
-import { encodePaymentRequiredHeader } from '@x402/core/http'
+import { decodePaymentSignatureHeader, encodePaymentRequiredHeader, encodePaymentResponseHeader } from '@x402/core/http'
+import { eip3009ABI } from '@x402/evm'
+import { encodeAbiParameters, encodeEventTopics, encodeFunctionData, erc20Abi, type Hex } from 'viem'
+import { privateKeyToAccount } from 'viem/accounts'
 import { validatePaymentRequired } from '@x402/core/schemas'
 import type { fetch as UndiciFetch } from 'undici'
 import { Response as UndiciResponse } from 'undici'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import { api, internal } from '../../convex/_generated/api'
+import { api, components, internal } from '../../convex/_generated/api'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { defaultDnsResolver } from '@/modules/network-guard/public'
 import schema from '../../convex/schema'
@@ -23,8 +26,31 @@ import {
   seedPaidX402Publication,
 } from './capability-supply-owner-funnel-harness'
 import { withSourceWrite } from '../helpers/source-write-admission'
+import { seedCommercialPolicies as seedQuoteCommercialPolicies } from '../helpers/quote-fixtures'
+import {
+  BASE_MAINNET_NETWORK,
+  BASE_MAINNET_USDC_ADDRESS,
+  cdpX402CustodyBudgetRef,
+  cdpX402CustodyConfigurationFromEnvironment,
+  cdpX402PolicyRulesDigest,
+} from '@/modules/capability-supply/server'
+import { createFormanceContext, installPackage4FormanceSchema } from '@/modules/money/formance'
+import { bookFormanceFundingSettlement } from '@/modules/money/formance-workflows'
 
 const readinessFetch = vi.hoisted(() => vi.fn<typeof UndiciFetch>())
+const productionExternal = vi.hoisted(() => ({ cdpClient: vi.fn(), receipt: vi.fn(), rate: vi.fn() }))
+vi.mock('@coinbase/cdp-sdk', async (importOriginal) => ({
+  ...await importOriginal<Record<string, unknown>>(),
+  CdpClient: class { constructor() { return productionExternal.cdpClient() } },
+}))
+vi.mock('@/modules/capability-supply/server', async (importOriginal) => ({
+  ...await importOriginal<Record<string, unknown>>(),
+  readGuardedX402EvmReceipt: productionExternal.receipt,
+}))
+vi.mock('@/modules/money/reference-rate', async (importOriginal) => ({
+  ...await importOriginal<Record<string, unknown>>(),
+  fetchCoinbaseReferenceRate: productionExternal.rate,
+}))
 vi.mock('undici', async (importOriginal) => ({
   ...await importOriginal<Record<string, unknown>>(),
   fetch: readinessFetch,
@@ -35,6 +61,9 @@ describe('owner capability publication admission', () => {
     vi.restoreAllMocks()
     vi.unstubAllGlobals()
     readinessFetch.mockReset()
+    productionExternal.cdpClient.mockReset()
+    productionExternal.receipt.mockReset()
+    productionExternal.rate.mockReset()
   })
 
   it.each(['owner', 'agent'] as const)(
@@ -315,6 +344,220 @@ describe('owner capability publication admission', () => {
         buyerObligations: [],
       })
     },
+  )
+
+  it.runIf(process.env.AE_FORMANCE_INTEGRATION === 'true')(
+    'executes one production owner canary through mainnet custody before promotion and Quote admission',
+    async () => {
+    const backend = convexTestWithWorkers({ pauseWorkpool: true })
+    vi.spyOn(defaultDnsResolver, 'lookup').mockResolvedValue([{ address: '93.184.216.34', family: 4 }])
+    vi.stubEnv('AE_ROUTE_CALL_SIGNING_SECRET', 'owner-production-canary-signing-secret-32-bytes')
+    vi.stubEnv('AE_ROUTE_CALL_SIGNING_KEY_ID', 'route-calls:owner-production-canary')
+    vi.stubEnv('AE_X402_RPC_URLS_JSON', JSON.stringify({
+      [BASE_MAINNET_NETWORK]: ['https://rpc-a.example.test', 'https://rpc-b.example.test'],
+    }))
+    const payer = privateKeyToAccount(`0x${'31'.repeat(32)}`)
+    const accountPolicyId = '31111111-1111-4111-8111-111111111111'
+    const projectPolicyId = '32222222-2222-4222-8222-222222222222'
+    const typedData = { primaryType: 'TransferWithAuthorization', types: { TransferWithAuthorization: [
+      { name: 'from', type: 'address' }, { name: 'to', type: 'address' }, { name: 'value', type: 'uint256' },
+      { name: 'validAfter', type: 'uint256' }, { name: 'validBefore', type: 'uint256' }, { name: 'nonce', type: 'bytes32' },
+    ] } }
+    const accountPolicy = { id: accountPolicyId, scope: 'account' as const, rules: [{ action: 'accept', operation: 'signEvmTypedData', criteria: [
+      { type: 'evmTypedDataVerifyingContract', addresses: [BASE_MAINNET_USDC_ADDRESS], operator: 'in' },
+      { type: 'evmTypedDataField', types: typedData, conditions: [
+        { path: 'from', operator: 'in', addresses: [payer.address] },
+        { path: 'value', operator: '<=', value: '10000' },
+      ] },
+    ] }] }
+    const projectPolicy = { id: projectPolicyId, scope: 'project' as const, rules: [
+      { action: 'reject', operation: 'signEvmTypedData', criteria: [
+        { type: 'evmTypedDataVerifyingContract', addresses: [BASE_MAINNET_USDC_ADDRESS], operator: 'not in' },
+      ] },
+      { action: 'reject', operation: 'signEvmTypedData', criteria: [
+        { type: 'evmTypedDataField', types: typedData, conditions: [{ path: 'value', operator: '>', value: '10000' }] },
+      ] },
+    ] }
+    const policyDigest = cdpX402PolicyRulesDigest(accountPolicy, projectPolicy)
+    if (policyDigest === undefined) throw new Error('production_canary_policy_invalid')
+    for (const [name, value] of Object.entries({
+      AE_X402_CUSTODY_ENABLED: 'true', AE_X402_CUSTODY_MAX_ATOMIC: '10000', AE_X402_CUSTODY_DAILY_MAX_ATOMIC: '50000',
+      CDP_API_KEY_ID: 'production-canary-key', CDP_API_KEY_SECRET: 'production-canary-secret', CDP_WALLET_SECRET: 'production-canary-wallet',
+      AE_X402_CDP_ACCOUNT_NAME: 'production-canary', AE_X402_CDP_EXPECTED_EVM_ADDRESS: payer.address,
+      AE_X402_CDP_ACCOUNT_POLICY_ID: accountPolicyId, AE_X402_CDP_PROJECT_POLICY_ID: projectPolicyId,
+      AE_X402_CDP_POLICY_RULES_DIGEST: policyDigest, AE_X402_CDP_CREDENTIAL_GENERATION: '1',
+    })) vi.stubEnv(name, value)
+    const signatures: string[] = []
+    productionExternal.cdpClient.mockReturnValue({
+      policies: { getPolicyById: async ({ id }: { id: string }) => id === accountPolicyId ? accountPolicy : projectPolicy },
+      evm: {
+        getAccount: async () => ({ name: 'production-canary', address: payer.address, policies: [accountPolicyId, projectPolicyId] }),
+        signTypedData: async (data: Parameters<typeof payer.signTypedData>[0] & { idempotencyKey: string }) => {
+          signatures.push(data.idempotencyKey)
+          return { signature: await payer.signTypedData(data) }
+        },
+      },
+    })
+    productionExternal.rate.mockResolvedValue({
+      source: 'coinbase', base: 'USDC', quote: 'AUD', rate: '1.2', fetchedAt: Date.now(),
+    })
+
+    let challenge: Parameters<typeof encodePaymentRequiredHeader>[0] | undefined
+    const fixture = await seedPaidX402Publication(backend, 'owner-production-canary', {
+      environment: 'production',
+      price: { currency: 'USD', units: '10000', exponent: 6 },
+      routeAmountExponent: 6,
+      assetAmount: '10000',
+      onPaymentRequired(value) {
+        const validated = validatePaymentRequired(value)
+        if (validated.x402Version !== 2) throw new Error('production_canary_challenge_v2_required')
+        challenge = validated as Parameters<typeof encodePaymentRequiredHeader>[0]
+        readinessFetch.mockResolvedValue(new UndiciResponse('', {
+          status: 402,
+          headers: { 'Payment-Required': encodePaymentRequiredHeader(challenge) },
+        }) as never)
+      },
+    })
+    if (challenge === undefined || challenge.x402Version !== 2) throw new Error('production_canary_challenge_missing')
+    const issuedAt = Date.now()
+    await expect(backend.mutation(
+      internal.capabilitySupplyCanaryFunding.provisionProductionSellerOnboardingCanaryFunding,
+      { generation: 1, issuedAt, expiresAt: issuedAt + 60 * 60_000, now: issuedAt },
+    )).resolves.toMatchObject({ kind: 'ensured', generation: 1 })
+    const command = await withSourceWrite('catalog_publish', {
+      businessId: fixture.businessId,
+      offeringRef: fixture.offeringRef,
+      offeringRevision: 1,
+      offeringSourceHash: fixture.sourceHash,
+      publicationRef: fixture.published.publicationRef,
+      publicationRevision: fixture.published.publicationRevision,
+      operationKey: 'owner-production-canary',
+      correlationId: 'owner-production-canary',
+    })
+    expect(await fixture.owner.action(api.capabilitySupplyOwnerSupply.runOwnerSupplyReadiness, command))
+      .toMatchObject({ step: 'readiness', state: 'completed' })
+    const requested = await fixture.owner.action(api.capabilitySupplyOwnerSupply.runOwnerSupplyTest, command)
+    if (requested.state !== 'completed' || requested.canaryRef === undefined || requested.callRef === undefined) {
+      throw new Error(`production_canary_request_failed:${JSON.stringify(requested)}`)
+    }
+
+    let authorization: { from: Hex; to: Hex; value: string; validAfter: string; validBefore: string; nonce: Hex } | undefined
+    const settlementHash: Hex = `0x${'9'.repeat(64)}`
+    readinessFetch.mockImplementation(async (_url, init) => {
+      const payment = new Headers(init?.headers as HeadersInit).get('payment-signature')
+      if (payment === null) return new UndiciResponse('', {
+        status: 402,
+        headers: { 'Payment-Required': encodePaymentRequiredHeader(challenge!) },
+      }) as never
+      authorization = (decodePaymentSignatureHeader(payment).payload as { authorization: typeof authorization }).authorization
+      return new UndiciResponse(JSON.stringify({ result: 'production canary output' }), {
+        status: 200,
+        headers: {
+          'Content-Type': 'application/json',
+          'Payment-Response': encodePaymentResponseHeader({
+            success: true, transaction: settlementHash, network: BASE_MAINNET_NETWORK, payer: payer.address,
+          }),
+        },
+      }) as never
+    })
+    productionExternal.receipt.mockImplementation(async () => {
+      if (authorization === undefined) throw new Error('production_canary_authorization_missing')
+      return {
+        transactionHash: settlementHash, status: 'success', confirmations: 12n,
+        blockHash: `0x${'8'.repeat(64)}`, blockNumber: 101n,
+        observedBlockTimestamp: BigInt(Math.floor(Date.now() / 1000)), authorizationState: true,
+        transactionTo: BASE_MAINNET_USDC_ADDRESS,
+        transactionInput: encodeFunctionData({
+          abi: eip3009ABI, functionName: 'transferWithAuthorization',
+          args: [authorization.from, authorization.to, BigInt(authorization.value), BigInt(authorization.validAfter),
+            BigInt(authorization.validBefore), authorization.nonce, 27, `0x${'d'.repeat(64)}`, `0x${'e'.repeat(64)}`],
+        }),
+        logs: [{ address: BASE_MAINNET_USDC_ADDRESS,
+          data: encodeAbiParameters([{ type: 'uint256' }], [BigInt(authorization.value)]),
+          topics: encodeEventTopics({ abi: erc20Abi, eventName: 'Transfer', args: { from: authorization.from, to: authorization.to } }),
+        }],
+      }
+    })
+    await backend.run(async (ctx) => ctx.runMutation(components.workpool.config.update, { maxParallelism: 1 }))
+    await backend.finishAllScheduledFunctions(() => undefined)
+    const completed = await backend.query(internal.capabilitySupplyOwnerCanary.readSellerOnboardingCanaryEvidence, {
+      canaryRef: requested.canaryRef,
+    })
+    expect(completed).toMatchObject({ state: 'completed', result: {
+      kind: 'completed', output: { result: 'production canary output' }, receipt: {
+        network: BASE_MAINNET_NETWORK, asset: BASE_MAINNET_USDC_ADDRESS,
+      },
+    } })
+    expect(signatures).toHaveLength(1)
+    await expect(backend.mutation(internal.catalogOfferingMutations.promoteAdmittedSellerCanary, {
+      canaryRef: requested.canaryRef,
+    })).resolves.toMatchObject({ kind: 'promoted', toolRef: fixture.published.toolRef })
+    await expect(backend.query(api.capabilitySupplyTools.detail, { toolRef: fixture.published.toolRef }))
+      .resolves.toMatchObject({ kind: 'found', tool: { toolRef: fixture.published.toolRef } })
+    const gatewayUrl = process.env.AE_FORMANCE_GATEWAY_URL ?? 'http://127.0.0.1:3069'
+    const formanceLedger = `ae-owner-production-${Date.now()}-${process.pid}`
+    const formance = createFormanceContext({
+      environment: 'sandbox',
+      gatewayUrl,
+      ledger: formanceLedger,
+      requestTimeoutMs: 10_000,
+    })
+    expect(await installPackage4FormanceSchema(formance)).toMatchObject({ kind: 'completed' })
+    vi.stubEnv('AE_FORMANCE_ENVIRONMENT', 'sandbox')
+    vi.stubEnv('AE_FORMANCE_GATEWAY_URL', gatewayUrl)
+    vi.stubEnv('AE_FORMANCE_LEDGER', formanceLedger)
+    await seedQuoteCommercialPolicies(backend, 'owner-production', Date.now())
+    const quoteAgent = await createTestAgentPrincipal(backend, 'owner-production-quote', {
+      environment: 'production', spendUnits: '5000000', resourceRefs: [fixture.published.toolRef],
+    })
+    const custody = cdpX402CustodyConfigurationFromEnvironment()
+    if (custody === undefined) throw new Error('owner_production_custody_missing')
+    await expect(backend.mutation(internal.moneyTreasury.recordObservation, {
+      environment: 'production',
+      custodyRef: cdpX402CustodyBudgetRef(custody, 'production'),
+      custodyGeneration: custody.credentialGeneration,
+      network: BASE_MAINNET_NETWORK,
+      asset: 'USDC',
+      exponent: 6,
+      observationRef: 'owner-production:treasury',
+      totalUnits: '50000',
+      bufferUnits: '10000',
+      evidenceRef: 'cdp:owner-production:treasury',
+      evidenceDigest: canonicalDigest({ treasury: 'owner-production' }),
+      observedAt: Date.now(),
+    })).resolves.toMatchObject({ kind: 'accepted' })
+    expect(await bookFormanceFundingSettlement(formance, {
+      commandRef: 'owner-production:funding',
+      idempotencyKey: 'owner-production:funding',
+      accountRef: quoteAgent.principal.ownerId,
+      processorRef: 'stripe:owner-production',
+      principalUnits: '5000000',
+      serviceFeeUnits: '500000',
+      taxUnits: '50000',
+      totalUnits: '5550000',
+      policyDigest,
+      externalEvidenceDigest: canonicalDigest({ funding: 'owner-production' }),
+    })).toMatchObject({ kind: 'completed', replayed: false })
+    const quote = await backend.action(api.capabilityQuotes.quote, await withSourceWrite('protected_action', {
+      operationKey: 'owner-production:quote',
+      correlationId: 'owner-production:quote',
+      principal: quoteAgent.principal,
+      toolRef: fixture.published.toolRef,
+      input: { request: 'hello' },
+    }))
+    expect(quote).toMatchObject({
+      kind: 'committed',
+      toolRef: fixture.published.toolRef,
+      price: { currency: 'AUD', units: '12000', exponent: 6 },
+      sourceRequirement: { currency: 'USDC', units: '10000', exponent: 6 },
+    })
+    const ledger = await backend.run(async (ctx) => ({
+      usage: await ctx.db.query('moneyUsageEvents').collect(),
+      obligations: await ctx.db.query('moneyProviderObligations').collect(),
+    }))
+    expect(ledger).toEqual({ usage: [], obligations: [] })
+    },
+    30_000,
   )
 
   it('refuses anonymous and wrong-owner admission without publication', async () => {

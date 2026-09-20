@@ -14,8 +14,10 @@ import {
   SELLER_ONBOARDING_CANARY_PLATFORM_OWNER_ID,
   SELLER_ONBOARDING_CANARY_PLATFORM_PRINCIPAL_ID,
   SELLER_ONBOARDING_CANARY_RATE_POLICY_REF,
+  PRODUCTION_SELLER_ONBOARDING_CANARY_PLATFORM_CREDENTIAL_ID,
+  PRODUCTION_SELLER_ONBOARDING_CANARY_PLATFORM_PRINCIPAL_ID,
 } from '../../../convex/capabilitySupplyCanaryFunding'
-import { BASE_SEPOLIA_NETWORK } from '../../../src/modules/capability-supply/public'
+import { BASE_MAINNET_NETWORK, BASE_SEPOLIA_NETWORK } from '../../../src/modules/capability-supply/public'
 import { convexModules as modules } from '../../helpers/convex-fixtures'
 
 const NOW = Date.parse('2026-08-31T00:00:00.000Z')
@@ -382,5 +384,159 @@ describe('seller onboarding canary funding readiness', () => {
       throw new Error('canary funding fixture policy missing')
     }
     expect(stillDrifted.spendingPolicy.budget.maximumMonthlySpend.units).toBe('50001')
+  })
+
+  it.each([
+    ['live predecessor', 30_000],
+    ['expired predecessor renewal', 120_000],
+  ] as const)('provisions and explicitly rotates one short-lived production grant atomically with %s', async (
+    _label,
+    rotationDelayMs,
+  ) => {
+    configureManagedSandboxCustody({
+      AE_X402_RPC_URLS_JSON: JSON.stringify({
+        [BASE_MAINNET_NETWORK]: ['https://base-mainnet-a.example', 'https://base-mainnet-b.example'],
+      }),
+    })
+    const backend = convexTest(schema, modules)
+    const first = { generation: 1, issuedAt: NOW, expiresAt: NOW + 60_000, now: NOW }
+    const [created, replayed] = await Promise.all([
+      backend.mutation(internal.capabilitySupplyCanaryFunding.provisionProductionSellerOnboardingCanaryFunding, first),
+      backend.mutation(internal.capabilitySupplyCanaryFunding.provisionProductionSellerOnboardingCanaryFunding, first),
+    ])
+    expect([created.kind, replayed.kind].sort()).toEqual(['ensured', 'replayed'])
+    const generationOne = await backend.run(async (ctx) => ctx.db.query('agentAccessGrants')
+      .withIndex('by_credentialId_and_environment_and_lifecycle', (query) => query
+        .eq('credentialId', PRODUCTION_SELLER_ONBOARDING_CANARY_PLATFORM_CREDENTIAL_ID)
+        .eq('environment', 'production')
+        .eq('lifecycle', 'active'))
+      .unique())
+    if (generationOne === null || created.kind === 'conflict') {
+      throw new Error('production_canary_generation_one_missing')
+    }
+    if (generationOne.spendingPolicyDigest === undefined) {
+      throw new Error('production_canary_generation_one_policy_missing')
+    }
+    const generationOneDispatch = {
+      sellerOwnerId: 'acc_production_seller',
+      expected: {
+        kind: 'persisted_dispatch' as const,
+        grantRef: generationOne.grantRef,
+        principalId: generationOne.principalId,
+        ownerId: generationOne.ownerId,
+        credentialId: generationOne.credentialId,
+        applicationRef: generationOne.applicationRef,
+        environment: 'production' as const,
+        generation: generationOne.generation,
+        spendingPolicyDigest: generationOne.spendingPolicyDigest,
+        expiresAt: generationOne.expiresAt,
+      },
+      now: NOW,
+    }
+    await expect(backend.query(
+      internal.capabilitySupplyCanaryFunding.readExactSellerOnboardingCanaryPlatformGrant,
+      generationOneDispatch,
+    )).resolves.toMatchObject({ generation: 1, environment: 'production' })
+
+    const second = {
+      generation: 2,
+      issuedAt: NOW + rotationDelayMs,
+      expiresAt: NOW + rotationDelayMs + 7 * 24 * 60 * 60_000,
+      now: NOW + rotationDelayMs,
+    }
+    if (rotationDelayMs < 60_000) {
+      await expect(backend.query(
+        internal.capabilitySupplyCanaryFunding.readExactSellerOnboardingCanaryPlatformGrant,
+        { ...generationOneDispatch, now: second.now },
+      )).resolves.toMatchObject({ generation: 1, environment: 'production' })
+    }
+    const [rotated, rotationReplay] = await Promise.all([
+      backend.mutation(
+        internal.capabilitySupplyCanaryFunding.provisionProductionSellerOnboardingCanaryFunding,
+        second,
+      ),
+      backend.mutation(
+        internal.capabilitySupplyCanaryFunding.provisionProductionSellerOnboardingCanaryFunding,
+        second,
+      ),
+    ])
+    expect([rotated.kind, rotationReplay.kind].sort()).toEqual(['ensured', 'replayed'])
+    await expect(backend.query(
+      internal.capabilitySupplyCanaryFunding.readExactSellerOnboardingCanaryPlatformGrant,
+      { ...generationOneDispatch, now: second.now },
+    )).resolves.toBeNull()
+
+    const material = await backend.run(async (ctx) => ({
+      grants: await ctx.db.query('agentAccessGrants')
+        .withIndex('by_credentialId_and_environment_and_lifecycle', (query) => query
+          .eq('credentialId', PRODUCTION_SELLER_ONBOARDING_CANARY_PLATFORM_CREDENTIAL_ID)
+          .eq('environment', 'production')
+          .eq('lifecycle', 'active'))
+        .collect(),
+      allGrants: await ctx.db.query('agentAccessGrants')
+        .withIndex('by_credentialId_and_environment_and_lifecycle', (query) => query
+          .eq('credentialId', PRODUCTION_SELLER_ONBOARDING_CANARY_PLATFORM_CREDENTIAL_ID)
+          .eq('environment', 'production'))
+        .collect(),
+      principal: await ctx.db.query('agentAccessPrincipals')
+        .withIndex('by_principalId', (query) => query.eq('principalId', PRODUCTION_SELLER_ONBOARDING_CANARY_PLATFORM_PRINCIPAL_ID))
+        .unique(),
+    }))
+    expect(material.grants).toHaveLength(1)
+    expect(material.grants[0]).toMatchObject({ generation: 2, expiresAt: second.expiresAt })
+    expect(material.allGrants).toEqual(expect.arrayContaining([
+      expect.objectContaining({ generation: 1, lifecycle: 'revoked' }),
+      expect.objectContaining({ generation: 2, lifecycle: 'active' }),
+    ]))
+    expect(material.allGrants).toHaveLength(2)
+    expect(material.principal).toMatchObject({
+      grantGeneration: 2,
+      expiresAt: second.expiresAt,
+      authorityMode: 'spending_policy',
+    })
+    await expect(backend.query(
+      internal.capabilitySupplyCanaryFunding.readProductionSellerOnboardingCanaryFundingReadiness,
+      { now: second.now },
+    )).resolves.toMatchObject({ kind: 'ready', generation: 2, rpcEndpointCount: 2 })
+    await backend.run(async (ctx) => {
+      const principal = await ctx.db.query('agentAccessPrincipals')
+        .withIndex('by_principalId', (query) => query
+          .eq('principalId', PRODUCTION_SELLER_ONBOARDING_CANARY_PLATFORM_PRINCIPAL_ID))
+        .unique()
+      if (principal === null) throw new Error('production_canary_principal_missing')
+      await ctx.db.patch(principal._id, { scopes: ['market_tools:call', 'market_supply:manage'] })
+    })
+    await expect(backend.query(
+      internal.capabilitySupplyCanaryFunding.readProductionSellerOnboardingCanaryFundingReadiness,
+      { now: second.now },
+    )).resolves.toMatchObject({ kind: 'not_ready', codes: ['canary_grant_missing'] })
+  })
+
+  it('refuses long, gapped, and drifted production grant rotation', async () => {
+    const backend = convexTest(schema, modules)
+    await expect(backend.mutation(
+      internal.capabilitySupplyCanaryFunding.provisionProductionSellerOnboardingCanaryFunding,
+      { generation: 1, issuedAt: NOW, expiresAt: NOW + 7 * 24 * 60 * 60_000 + 1, now: NOW },
+    )).resolves.toEqual({ kind: 'conflict', code: 'issuance_invalid' })
+    await expect(backend.mutation(
+      internal.capabilitySupplyCanaryFunding.provisionProductionSellerOnboardingCanaryFunding,
+      { generation: 2, issuedAt: NOW, expiresAt: NOW + 60_000, now: NOW },
+    )).resolves.toEqual({ kind: 'conflict', code: 'generation_gap' })
+
+    await backend.mutation(
+      internal.capabilitySupplyCanaryFunding.provisionProductionSellerOnboardingCanaryFunding,
+      { generation: 1, issuedAt: NOW, expiresAt: NOW + 60_000, now: NOW },
+    )
+    await backend.run(async (ctx) => {
+      const principal = await ctx.db.query('agentAccessPrincipals')
+        .withIndex('by_principalId', (query) => query.eq('principalId', PRODUCTION_SELLER_ONBOARDING_CANARY_PLATFORM_PRINCIPAL_ID))
+        .unique()
+      if (principal === null) throw new Error('production_canary_principal_missing')
+      await ctx.db.patch(principal._id, { spendingPolicyDigest: `sha256:${'f'.repeat(64)}` })
+    })
+    await expect(backend.mutation(
+      internal.capabilitySupplyCanaryFunding.provisionProductionSellerOnboardingCanaryFunding,
+      { generation: 2, issuedAt: NOW + 120_000, expiresAt: NOW + 180_000, now: NOW + 120_000 },
+    )).resolves.toEqual({ kind: 'conflict', code: 'principal_conflict' })
   })
 })

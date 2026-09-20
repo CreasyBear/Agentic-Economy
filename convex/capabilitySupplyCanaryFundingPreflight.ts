@@ -12,6 +12,8 @@ import {
 import {
   BASE_SEPOLIA_NETWORK,
   BASE_SEPOLIA_USDC_ADDRESS,
+  BASE_MAINNET_NETWORK,
+  BASE_MAINNET_USDC_ADDRESS,
   cdpX402PolicyRulesDigest,
   cdpX402SellerCanaryPolicyIsExact,
 } from '@/modules/capability-supply/server'
@@ -28,6 +30,7 @@ const EXPECTED_USDC_DECIMALS = 6
 /** CDP SDK network ids for the USDC lanes AE custodies (sandbox, production). */
 export type CdpUsdcNetwork = 'base-sepolia' | 'base'
 const CDP_BASE_SEPOLIA_NETWORK: CdpUsdcNetwork = 'base-sepolia'
+const CDP_BASE_MAINNET_NETWORK: CdpUsdcNetwork = 'base'
 
 export type SellerOnboardingCanaryCdpPreflightCode =
   | 'authorization_denied'
@@ -60,8 +63,8 @@ export type SellerOnboardingCanaryCdpPreflightResult =
       accountPolicyId: string
       projectPolicyId: string
       policyRulesDigest: string
-      network: typeof BASE_SEPOLIA_NETWORK
-      asset: typeof BASE_SEPOLIA_USDC_ADDRESS
+      network: typeof BASE_SEPOLIA_NETWORK | typeof BASE_MAINNET_NETWORK
+      asset: typeof BASE_SEPOLIA_USDC_ADDRESS | typeof BASE_MAINNET_USDC_ADDRESS
       usdcBalanceAtomic: string
       minimumRequiredAtomic: typeof SELLER_ONBOARDING_CANARY_MAXIMUM_PER_CALL_ATOMIC
       balancePagesRead: number
@@ -114,6 +117,7 @@ type CdpPreflightClient = Readonly<{
 
 export type SellerOnboardingCanaryCdpPreflightDependencies = Readonly<{
   environment?: StringEnvironment
+  aeEnvironment?: 'sandbox' | 'production'
   createClient?: (configuration: CdpX402CustodyConfiguration) => CdpPreflightClient
 }>
 
@@ -182,8 +186,8 @@ const resultValue = v.union(
     accountPolicyId: v.string(),
     projectPolicyId: v.string(),
     policyRulesDigest: v.string(),
-    network: v.literal(BASE_SEPOLIA_NETWORK),
-    asset: v.literal(BASE_SEPOLIA_USDC_ADDRESS),
+    network: v.union(v.literal(BASE_SEPOLIA_NETWORK), v.literal(BASE_MAINNET_NETWORK)),
+    asset: v.union(v.literal(BASE_SEPOLIA_USDC_ADDRESS), v.literal(BASE_MAINNET_USDC_ADDRESS)),
     usdcBalanceAtomic: v.string(),
     minimumRequiredAtomic: v.literal(SELLER_ONBOARDING_CANARY_MAXIMUM_PER_CALL_ATOMIC),
     balancePagesRead: v.number(),
@@ -292,13 +296,14 @@ export async function readCdpUsdcBalance(
 
 /**
  * Executes only the official CDP 1.55 read APIs: named account, policy
- * documents, and Base Sepolia token balances.
+ * documents, and the selected environment's USDC token balances.
  */
 export async function inspectSellerOnboardingCanaryCdpReadiness(
   checkedAt: number,
   dependencies: SellerOnboardingCanaryCdpPreflightDependencies = {},
 ): Promise<SellerOnboardingCanaryCdpPreflightResult> {
   const environment = dependencies.environment ?? process.env
+  const aeEnvironment = dependencies.aeEnvironment ?? 'sandbox'
   const routeSigningKeyId = readTrimmedEnv(environment, 'AE_ROUTE_CALL_SIGNING_KEY_ID')
   const routeSigningSecret = readTrimmedEnv(environment, 'AE_ROUTE_CALL_SIGNING_SECRET')
   if (routeSigningKeyId === undefined && routeSigningSecret === undefined) {
@@ -379,12 +384,24 @@ export async function inspectSellerOnboardingCanaryCdpReadiness(
     projectPolicy,
     account.address,
     configuration.maxAtomic.toString(),
+    aeEnvironment,
   )) return notReady(checkedAt, 'cdp_seller_canary_policy_profile_mismatch')
 
+  const profile = aeEnvironment === 'production'
+    ? {
+        network: BASE_MAINNET_NETWORK,
+        asset: BASE_MAINNET_USDC_ADDRESS,
+        cdpNetwork: CDP_BASE_MAINNET_NETWORK,
+      }
+    : {
+        network: BASE_SEPOLIA_NETWORK,
+        asset: BASE_SEPOLIA_USDC_ADDRESS,
+        cdpNetwork: CDP_BASE_SEPOLIA_NETWORK,
+      }
   const balance = await readCdpUsdcBalance(
     client.evm,
     account.address as `0x${string}`,
-    { network: CDP_BASE_SEPOLIA_NETWORK, assetAddress: BASE_SEPOLIA_USDC_ADDRESS },
+    { network: profile.cdpNetwork, assetAddress: profile.asset },
   )
   if (balance.kind === 'failed') return notReady(checkedAt, 'cdp_balance_read_failed')
   if (balance.kind === 'not_verifiable') {
@@ -401,8 +418,8 @@ export async function inspectSellerOnboardingCanaryCdpReadiness(
     accountPolicyId: configuration.accountPolicyId,
     projectPolicyId: configuration.projectPolicyId,
     policyRulesDigest,
-    network: BASE_SEPOLIA_NETWORK,
-    asset: BASE_SEPOLIA_USDC_ADDRESS,
+    network: profile.network,
+    asset: profile.asset,
     usdcBalanceAtomic: balance.amount.toString(),
     minimumRequiredAtomic: SELLER_ONBOARDING_CANARY_MAXIMUM_PER_CALL_ATOMIC,
     balancePagesRead: balance.pagesRead,
@@ -412,23 +429,32 @@ export async function inspectSellerOnboardingCanaryCdpReadiness(
 
 export async function readSellerOnboardingCanaryCdpReadinessHandler(
   ctx: ActionCtx,
-  args: Readonly<{ now: number }>,
+  args: Readonly<{ now: number; environment?: 'sandbox' | 'production' }>,
 ): Promise<SellerOnboardingCanaryCdpPreflightResult> {
-  const configured = await ctx.runQuery(
-    internal.capabilitySupplyCanaryFunding.readSellerOnboardingCanaryFundingReadiness,
-    { now: args.now },
-  )
+  const aeEnvironment = args.environment ?? 'sandbox'
+  const configured = aeEnvironment === 'production'
+    ? await ctx.runQuery(
+        internal.capabilitySupplyCanaryFunding.readProductionSellerOnboardingCanaryFundingReadiness,
+        { now: args.now },
+      )
+    : await ctx.runQuery(
+        internal.capabilitySupplyCanaryFunding.readSellerOnboardingCanaryFundingReadiness,
+        { now: args.now },
+      )
   if (configured.kind !== 'ready') {
     return notReady(args.now, 'ae_canary_funding_not_ready')
   }
   return await inspectSellerOnboardingCanaryCdpReadiness(args.now, {
     environment: process.env,
+    aeEnvironment,
   })
 }
 
 export const readSellerOnboardingCanaryCdpReadiness = internalAction({
-  args: { now: v.number() },
+  args: {
+    now: v.number(),
+    environment: v.optional(v.union(v.literal('sandbox'), v.literal('production'))),
+  },
   returns: resultValue,
   handler: readSellerOnboardingCanaryCdpReadinessHandler,
 })
-

@@ -376,7 +376,7 @@ export function createX402PaymentCallbacks(
   const managedBuyer = input.useCustodySigner === true
     && input.dispatch.sellerOnboardingCanary === undefined
   const managedCanary = input.useCustodySigner === true
-    && input.dispatch.environment === 'sandbox'
+    && (input.dispatch.environment === 'sandbox' || input.dispatch.environment === 'production')
     && input.dispatch.sellerOnboardingCanary?.executionPurpose === 'seller_onboarding_canary'
 
   const settleManagedPreparationFailure = async (

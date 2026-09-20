@@ -47,8 +47,11 @@ import { X402_MANAGED_CUSTODY_REF } from '@/modules/capability-execution/convex'
 import {
   readExactSellerOnboardingCanaryPlatformGrantHandler,
   SELLER_ONBOARDING_CANARY_MAXIMUM_DAILY_ATOMIC,
+  PRODUCTION_SELLER_ONBOARDING_CANARY_MAXIMUM_DAILY_ATOMIC,
 } from './capabilitySupplyCanaryFunding'
 import {
+  BASE_MAINNET_NETWORK,
+  BASE_MAINNET_USDC_ADDRESS,
   BASE_SEPOLIA_NETWORK,
   BASE_SEPOLIA_USDC_ADDRESS,
   parsePublishedToolSnapshot,
@@ -67,7 +70,7 @@ export const prepareSellerOnboardingCanaryPaymentAuthorization = internalMutatio
     if (call === null || canary === undefined
       || call.state !== 'pending'
       || call.dispatchState !== 'running' || call.attemptRef !== args.attemptRef
-      || call.environment !== 'sandbox'
+      || (call.environment !== 'sandbox' && call.environment !== 'production')
       || canary.executionPurpose !== 'seller_onboarding_canary'
       || canary.callRef !== call.callRef
       || canary.toolRef !== call.toolRef || args.toolRef !== call.toolRef
@@ -87,17 +90,23 @@ export const prepareSellerOnboardingCanaryPaymentAuthorization = internalMutatio
       || canary.funding.grantRef !== call.grantRef
       || canary.funding.grantGeneration !== call.grantGeneration
       || canary.funding.policyDigest !== call.policyDigest
+      || (args.aeEnvironment !== undefined && args.aeEnvironment !== call.environment)
       || args.reservationRef !== undefined
       || args.credentialRef !== X402_MANAGED_CUSTODY_REF
-      || args.scheme !== 'exact' || args.network !== BASE_SEPOLIA_NETWORK
-      || args.asset.toLowerCase() !== BASE_SEPOLIA_USDC_ADDRESS.toLowerCase()
+      || args.scheme !== 'exact'
+      || args.network !== (call.environment === 'production' ? BASE_MAINNET_NETWORK : BASE_SEPOLIA_NETWORK)
+      || args.asset.toLowerCase() !== (call.environment === 'production'
+        ? BASE_MAINNET_USDC_ADDRESS
+        : BASE_SEPOLIA_USDC_ADDRESS).toLowerCase()
       || args.payTo.toLowerCase() !== canary.sellerPayTo.toLowerCase()
       || args.currency !== canary.funding.requestedSpend.currency || args.exponent !== 6
       || !/^[1-9][0-9]{0,77}$/.test(args.amountUnits)
       || args.amountUnits !== canary.funding.requestedSpend.units
       || canary.funding.requestedSpend.exponent !== 6
       || args.custodyBudgetRef === undefined || args.custodyGeneration === undefined
-      || args.custodyDailyMaximumUnits !== SELLER_ONBOARDING_CANARY_MAXIMUM_DAILY_ATOMIC
+      || args.custodyDailyMaximumUnits !== (call.environment === 'production'
+        ? PRODUCTION_SELLER_ONBOARDING_CANARY_MAXIMUM_DAILY_ATOMIC
+        : SELLER_ONBOARDING_CANARY_MAXIMUM_DAILY_ATOMIC)
       || args.requestFingerprint === undefined
     ) throw new Error('seller_canary_payment_authority_invalid')
 
@@ -119,7 +128,7 @@ export const prepareSellerOnboardingCanaryPaymentAuthorization = internalMutatio
       attemptRef: args.attemptRef, effectGeneration: args.effectGeneration,
     })
     if (operation === undefined
-      || operation.runtimeEnvironment !== 'sandbox'
+      || operation.runtimeEnvironment !== call.environment
       || operation.pricingConfig.kind !== 'managed_x402'
       || operation.pricingConfig.sourceRequirement.atomicUnits !== args.amountUnits
       || operation.identity.payment.kind !== 'x402'
@@ -139,7 +148,7 @@ export const prepareSellerOnboardingCanaryPaymentAuthorization = internalMutatio
       expected: {
         kind: 'persisted_dispatch', grantRef: call.grantRef, principalId: call.principalId,
         ownerId: call.ownerId, credentialId: call.credentialId, applicationRef: call.applicationRef,
-        environment: 'sandbox', generation: call.grantGeneration,
+        environment: call.environment, generation: call.grantGeneration,
         spendingPolicyDigest: call.policyDigest, expiresAt: call.grantExpiresAt,
       },
       now,
@@ -154,7 +163,7 @@ export const prepareSellerOnboardingCanaryPaymentAuthorization = internalMutatio
 
     return await prepareX402PaymentAuthorizationHandler(ctx, {
       ...args,
-      aeEnvironment: args.aeEnvironment ?? 'sandbox',
+      aeEnvironment: call.environment,
     })
   },
 })
