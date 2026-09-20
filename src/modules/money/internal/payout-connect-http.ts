@@ -21,11 +21,8 @@ import {
 } from '@/lib/server/clerk-consequence-proof'
 import { createRuntimeId } from '@/modules/common/runtime-id'
 import { sourceWriteRequestFromAdmission } from '@/modules/security/source-write-admission'
-import {
-  isMoneyRefusal,
-  type MoneyRefusal,
-  type PayoutStatusView,
-} from '../public'
+import { isMoneyRefusal, type MoneyRefusal } from './money-types'
+import type { PayoutStatusView } from './money-query-views'
 import type { StripeMoneyClient, StripeMoneyMode, StripeMoneyProviderConfig } from '@/lib/server/stripe-money-provider'
 import type {
   StripeAccountUpdatedWebhookEvent,

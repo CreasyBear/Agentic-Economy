@@ -1,5 +1,3 @@
-import type { BusinessId, OperationKey, SourceHash } from '@/modules/common/ids'
-import type { VisibilityTargetType } from '@/modules/business/public'
 import {
   markOperationSucceeded as markOperationSucceededImpl,
   reserveOperationKey as reserveOperationKeyImpl,
@@ -71,31 +69,7 @@ export type FunnelEventType = (typeof FunnelEventTypeValues)[number]
 export type ActivationStage = (typeof ActivationStageValues)[number]
 export type CurrentAuditValidationResult = AuditValidationResult
 
-export type OperationKeyRecord = {
-  actorRef: string
-  actorKind: ActorKind
-  operationName: string
-  key: OperationKey
-  requestHash: SourceHash
-  sourceHash?: SourceHash
-  status: OperationKeyStatus
-  resultHash?: SourceHash
-  effectRefs: readonly string[]
-  retryAfter?: number
-  createdAt: number
-  updatedAt: number
-}
-
-export type InvalidationIntent = {
-  intentId: string
-  businessId: BusinessId
-  targetType: VisibilityTargetType
-  targetRef: string
-  surfaces: readonly InvalidationSurface[]
-  status: InvalidationIntentStatus
-  reasonCode: string
-  createdAt: number
-}
+export type { InvalidationIntent, OperationKeyRecord } from './internal/contracts'
 
 export type {
   ActorKind,

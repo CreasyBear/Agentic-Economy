@@ -1,4 +1,4 @@
-import type { AdminMembership } from '@/modules/security/public'
+import type { AdminMembership } from './security-types'
 import { requireAdminAuthority } from './admin-authority'
 
 const AdminReadbackSurfaceValues = ['audit_events', 'index_health'] as const

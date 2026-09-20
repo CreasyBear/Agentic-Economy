@@ -6,7 +6,7 @@ import { callSourceQuery, sourceQuery } from '@/lib/server/convex-source'
 import { resolveStripeReceiptUrl, type StripeReceiptRefusalCode } from '@/lib/server/stripe-receipt'
 import { createStripeMoneyClient } from '@/lib/server/stripe-money-client'
 import { readStripeMoneyProviderConfig } from '@/lib/server/stripe-money-provider-config'
-import { isMoneyRefusal, type MoneyRefusalCode } from '@/modules/money/public'
+import { isMoneyRefusal, type MoneyRefusalCode } from './money-types'
 
 const readOwnerFundingCommandForReceiptQuery = sourceQuery<
   Readonly<{ commandRef: string }>,

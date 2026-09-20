@@ -1,4 +1,4 @@
-import type { InvalidationIntent } from '@/modules/observability/public'
+import type { InvalidationIntent } from './contracts'
 
 export function recordInvalidationIntent(
   intents: InvalidationIntent[],

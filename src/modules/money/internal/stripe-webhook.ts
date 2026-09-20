@@ -4,7 +4,8 @@ import { problem } from '@/lib/server/problem'
 import { readBoundedRequestText } from '@/lib/server/bounded-request-body'
 import { degradeBackend } from '@/lib/observability/degrade-backend'
 
-import { isMoneyRefusal, type ExactAmount, type MoneyRefusal } from '../public'
+import type { ExactAmount } from './exact-amount'
+import { isMoneyRefusal, type MoneyRefusal } from './money-types'
 
 const MAX_STRIPE_WEBHOOK_BODY_BYTES = 256 * 1024
 const RETRY_AFTER_SECONDS = 5

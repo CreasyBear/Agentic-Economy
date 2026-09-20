@@ -11,12 +11,8 @@ import {
   type SourceWriteAdmission,
   type SourceWriteAdmissionRequest,
 } from '@/modules/security/source-write-admission'
-import {
-  isMoneyRefusal,
-  type MoneyRefusal,
-  type PayoutStatusView,
-  type ProviderEarningsView,
-} from '../public'
+import { isMoneyRefusal, type MoneyRefusal } from './money-types'
+import type { PayoutStatusView, ProviderEarningsView } from './money-query-views'
 import type { ConnectAccountPort, PayoutTransferPort } from './ports'
 import {
   createStripeMoneyProvider,

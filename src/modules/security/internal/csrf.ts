@@ -1,4 +1,4 @@
-import type { CsrfCheckInput, CsrfDecision } from '@/modules/security/public'
+import type { CsrfCheckInput, CsrfDecision } from './security-types'
 
 export function assertCsrf(input: CsrfCheckInput): CsrfDecision {
   if (

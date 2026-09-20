@@ -1,4 +1,4 @@
-import type { BusinessRecord } from '@/modules/business/public'
+import type { BusinessRecord } from './business-record'
 
 export function isPubliclyDiscoverable(
   business: Pick<BusinessRecord, 'publicStatus' | 'suppressedAt'> | undefined,

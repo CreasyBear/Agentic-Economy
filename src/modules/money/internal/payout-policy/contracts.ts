@@ -2,7 +2,7 @@ import type {
   MoneyPayout,
   MoneyPayoutAccount,
   PayoutAccountState,
-} from '../../public'
+} from '../money-types'
 
 // Stripe only guarantees idempotency-key retention for at least 24 hours.
 // Stop automatic key-based recovery one hour before that lower bound.

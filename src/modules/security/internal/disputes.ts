@@ -14,7 +14,7 @@ import type {
   DisputeSourceState,
   RemovalDisputeReasonCode,
   RemovalDisputeReceipt,
-} from '@/modules/security/public'
+} from './security-types'
 
 const maxEvidenceItems = 5
 const maxEvidenceItemBytes = 2_000_000

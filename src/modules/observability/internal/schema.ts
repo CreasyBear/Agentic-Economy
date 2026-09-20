@@ -5,7 +5,7 @@ import { literalUnion } from '@/modules/common/convex-literals'
 import {
   ActorKindValues,
   OperationKeyStatusValues,
-} from '@/modules/observability/public'
+} from './literals'
 import {
   AuditSourceSystemValues,
   AuditEventTypeValues,

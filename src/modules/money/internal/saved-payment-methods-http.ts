@@ -11,7 +11,7 @@ import {
   type SavedCardDetails,
 } from '@/lib/server/stripe-customer-portal'
 import { createRuntimeId } from '@/modules/common/runtime-id'
-import { isMoneyRefusal, type MoneyRefusal } from '@/modules/money/public'
+import { isMoneyRefusal, type MoneyRefusal } from './money-types'
 
 type StripeCustomerBindingRead = Readonly<{
   accountRef: string

@@ -1,5 +1,3 @@
-import { v } from 'convex/values'
-
 import { degradeBackend } from '@/lib/observability/degrade-backend'
 import type { BusinessId, OwnerId, Slug, SourceHash } from '@/modules/common/ids'
 import type {
@@ -8,21 +6,22 @@ import type {
   OwnershipRef,
 } from '@/modules/principal-account/account/public'
 import type { PrincipalRef } from '@/modules/principal-account/principal/public'
+import type { PublicStatus, TrustTier } from './internal/literals'
 
-export const PublicStatusValues = ['unpublished', 'published', 'suppressed'] as const
-export type PublicStatus = (typeof PublicStatusValues)[number]
-
-export const TrustTierValues = ['claimed', 'contact_confirmed', 'listed', 'registry_verified'] as const
-export type TrustTier = (typeof TrustTierValues)[number]
+export {
+  BusinessContextKindValues,
+  PublicStatusValues,
+  TrustTierValues,
+  type BusinessContextKind,
+  type PublicStatus,
+  type TrustTier,
+} from './internal/literals'
 
 export function normalizeTrustTier(value: unknown): TrustTier {
   return value === 'contact_confirmed' || value === 'listed' || value === 'registry_verified'
     ? value
     : 'claimed'
 }
-
-export const BusinessContextKindValues = ['local_human', 'programmable_provider'] as const
-export type BusinessContextKind = (typeof BusinessContextKindValues)[number]
 
 export type LocalHumanBusinessContext = {
   kind: 'local_human'
@@ -39,21 +38,8 @@ export type ProgrammableProviderBusinessContext = {
 }
 
 export type BusinessContext = LocalHumanBusinessContext | ProgrammableProviderBusinessContext
-const localHumanBusinessContext = v.object({
-  kind: v.literal('local_human'),
-  suburb: v.string(),
-  stateTerritory: v.string(),
-  postcode: v.optional(v.string()),
-  publishedPhone: v.optional(v.string()),
-})
 
-const programmableProviderBusinessContext = v.object({
-  kind: v.literal('programmable_provider'),
-  website: v.string(),
-  providerIdentifier: v.string(),
-})
-
-export const businessContext = v.union(localHumanBusinessContext, programmableProviderBusinessContext)
+export { businessContext } from './internal/business-context-schema'
 
 
 export function canonicalProviderWebsite(value: string): string | undefined {
@@ -171,20 +157,9 @@ export type PublicBusinessPhoto = {
   alt: string
 }
 
-export type BusinessRecord = {
-  businessId: BusinessId
-  slug: Slug
-  name: string
-  normalizedName: string
-  category: string
-  businessContext: BusinessContext
-  publicStatus: PublicStatus
-  trustTier: TrustTier
-  sourceHash: SourceHash
-  createdAt: number
-  updatedAt: number
-  suppressedAt?: number
-}
+export type { BusinessRecord } from './internal/business-record'
+
+import type { BusinessRecord } from './internal/business-record'
 
 export type BusinessSourceState = {
   businesses: BusinessRecord[]

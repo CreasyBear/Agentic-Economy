@@ -2,11 +2,8 @@ import { defineTable } from 'convex/server'
 import { v } from 'convex/values'
 
 import { literalUnion } from '@/modules/common/convex-literals'
-import {
-  PublicStatusValues,
-  TrustTierValues,
-  businessContext,
-} from '@/modules/business/public'
+import { businessContext } from './business-context-schema'
+import { PublicStatusValues, TrustTierValues } from './literals'
 
 export const businessTables = {
   businesses: defineTable({

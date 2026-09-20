@@ -4,7 +4,7 @@ import type {
   BuildPublicBusinessSeoInput,
   PublicBusinessSeoContract,
   PublicBusinessSeoOffering,
-} from '@/modules/seo/public'
+} from './seo-types'
 import type { JsonLdObject } from './json-ld'
 
 export function buildPublicBusinessSeo(input: BuildPublicBusinessSeoInput): PublicBusinessSeoContract {

@@ -8,7 +8,7 @@ import type {
   AdminMembership,
   AdminMembershipAuditEventType,
   AdminRole,
-} from '@/modules/security/public'
+} from './security-types'
 
 const AdminActionMatrix = {
   owner_admin: {

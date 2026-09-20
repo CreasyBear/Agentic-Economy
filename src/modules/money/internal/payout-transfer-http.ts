@@ -3,11 +3,8 @@ import { setResponseHeader } from '@tanstack/react-start/server'
 import { z } from 'zod'
 
 import { idempotencyKeySchema } from '@/modules/common/action'
-import {
-  exactAmountSchema,
-  type ExactAmount,
-  type MoneyRefusal,
-} from '../public'
+import { exactAmountSchema, type ExactAmount } from './exact-amount'
+import type { MoneyRefusal } from './money-types'
 import { ownerBusiness, type OwnerMoneyServerRuntime } from './payout-http-runtime'
 
 type OwnerPayoutTransferView = Readonly<{

@@ -1,4 +1,5 @@
-import type { ExactAmount, MoneyRefusal } from '../public'
+import type { ExactAmount } from './exact-amount'
+import type { MoneyRefusal } from './money-types'
 
 export type CreditPaymentRequest = Readonly<{
   commandRef: string

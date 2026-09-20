@@ -1,4 +1,4 @@
-import type { MoneyPayout } from '../../public'
+import type { MoneyPayout } from '../money-types'
 import { addExactAmounts, compareExactAmounts } from '../exact-amount'
 import type { PayoutActionOf, PayoutPolicyResult, PayoutTransitionInput } from './contracts'
 
