@@ -6,7 +6,6 @@ import type {
 import type { CallStatusResult } from './call-recovery-contracts'
 import type { PurchaseResolutionRecord } from './purchase-resolution'
 import type { JsonValue } from '@/modules/capability-contract/public'
-import { formatDisplayAmount } from '@/modules/money/public'
 
 export type PublicCallStatusRead = CallStatusResult | Readonly<{
   kind: 'source_unavailable'
@@ -37,12 +36,6 @@ export type CallIssueView = Readonly<{
   automaticNext: string
   userNext: string
   retainedReference: string
-  remedyCertificate?: Readonly<{
-    adjudicator: string
-    confidence: number
-    decisionTier: string
-    releasedAmountAud: string
-  }>
 }>
 
 export type CallReceiptView = Readonly<{
@@ -292,15 +285,6 @@ function issueFromFound(
       : input.state === 'retryable'
         ? 'Wait, then Try again on this same receipt.'
         : 'Keep this receipt reference; start a new Call only from the Tool page with fresh input and identity.'
-  const isRemedied = receipt?.state === 'refunded' || usage?.chargeState === 'refunded'
-  const remedyCertificate = isRemedied
-    ? {
-        adjudicator: 'jev-payload-auditor (System One)',
-        confidence: 0.95,
-        decisionTier: 'jev_system_one',
-        releasedAmountAud: usage?.amount !== undefined ? formatDisplayAmount(usage.amount) : 'A$0.00',
-      }
-    : undefined
 
   return {
     title: issueTitle(normalizeDiagnosticCode(code)),
@@ -311,7 +295,6 @@ function issueFromFound(
       : 'No duplicate charge and no automatic retry.',
     userNext: next,
     retainedReference: input.callRef,
-    ...(remedyCertificate !== undefined ? { remedyCertificate } : {}),
   }
 }
 

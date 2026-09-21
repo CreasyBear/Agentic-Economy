@@ -158,6 +158,7 @@ describe('public Call receipt projection', () => {
 
     expect(purchaseStatusLabel(input)).toBe('Resolved — refunded')
     expect(projectCallReceipt(input).issue?.moneyMovement).toBe('Reserved credit was released back to your balance.')
+    expect(projectCallReceipt(input).issue).not.toHaveProperty('remedyCertificate')
   })
 
   it('keeps purchase resolution open when completed output has uncertain payment', () => {

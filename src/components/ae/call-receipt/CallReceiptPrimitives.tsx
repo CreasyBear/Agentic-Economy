@@ -70,21 +70,6 @@ export function CallReceiptIssue({ issue }: Readonly<{ issue: CallIssueView }>) 
         />
         <PlaybookSection title="What happens automatically" body={issue.automaticNext} />
         <PlaybookSection title="What you can do" body={issue.userNext} />
-        {issue.remedyCertificate !== undefined ? (
-          <div className="rounded-lg border border-brand/20 bg-brand/5 p-3 text-xs text-foreground">
-            <div className="flex items-center justify-between pb-1 font-semibold text-brand">
-              <span>Autonomous Buyer Protection Certificate</span>
-              <Badge variant="outline" className="border-brand/40 text-[10px] text-brand">
-                {issue.remedyCertificate.decisionTier}
-              </Badge>
-            </div>
-            <div className="grid grid-cols-2 gap-2 pt-1 text-muted-foreground">
-              <div>Adjudicator: <span className="font-medium text-foreground">{issue.remedyCertificate.adjudicator}</span></div>
-              <div>Confidence: <span className="font-medium text-foreground">{(issue.remedyCertificate.confidence * 100).toFixed(0)}%</span></div>
-              <div className="col-span-2">Hold Status: <span className="font-medium text-success-foreground">A$0.00 Net — Formance hold released immediately</span></div>
-            </div>
-          </div>
-        ) : null}
       </div>
     </section>
   )
