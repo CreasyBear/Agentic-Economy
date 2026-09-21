@@ -14,7 +14,7 @@ export const aeStatusValues = [
   'ready_now',
   'setup_required',
   'completed',
-  'credential_current',
+  'current',
   'credential_expired',
   'credential_revoked',
   'degraded',

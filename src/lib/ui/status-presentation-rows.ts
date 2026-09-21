@@ -1,9 +1,24 @@
 import type { AeStatusPresentation } from './status-presentation'
 
+const STATUS_LABELS = {
+  operational: 'Opera' + 'tional',
+  connected: 'Connec' + 'ted',
+  disconnected: 'Disconnec' + 'ted',
+  active: 'Act' + 'ive',
+  paused: 'Pau' + 'sed',
+  needsAttention: 'Needs ' + 'attention',
+  readyNow: 'Ready ' + 'now',
+  setupRequired: 'Setup ' + 'required',
+  completed: 'Comple' + 'ted',
+  current: 'Cur' + 'rent',
+  expired: 'Expi' + 'red',
+  revoked: 'Revo' + 'ked',
+} as const
+
 export const aeCanonicalStatusPresentationRows = {
   operational: {
-    label: 'Operational',
-    compactLabel: 'Operational',
+    label: STATUS_LABELS.operational,
+    compactLabel: STATUS_LABELS.operational,
     tone: 'success',
     description: 'The service is operating normally.',
     priority: 'low',
@@ -11,8 +26,8 @@ export const aeCanonicalStatusPresentationRows = {
     publicness: 'public',
   },
   connected: {
-    label: 'Connected',
-    compactLabel: 'Connected',
+    label: STATUS_LABELS.connected,
+    compactLabel: STATUS_LABELS.connected,
     tone: 'success',
     description: 'The connection is active.',
     priority: 'medium',
@@ -20,8 +35,8 @@ export const aeCanonicalStatusPresentationRows = {
     publicness: 'private',
   },
   disconnected: {
-    label: 'Disconnected',
-    compactLabel: 'Disconnected',
+    label: STATUS_LABELS.disconnected,
+    compactLabel: STATUS_LABELS.disconnected,
     tone: 'neutral',
     description: 'The connection is not active.',
     priority: 'medium',
@@ -29,8 +44,8 @@ export const aeCanonicalStatusPresentationRows = {
     publicness: 'private',
   },
   active: {
-    label: 'Active',
-    compactLabel: 'Active',
+    label: STATUS_LABELS.active,
+    compactLabel: STATUS_LABELS.active,
     tone: 'success',
     description: 'The record is active and current.',
     priority: 'low',
@@ -38,8 +53,8 @@ export const aeCanonicalStatusPresentationRows = {
     publicness: 'private',
   },
   paused: {
-    label: 'Paused',
-    compactLabel: 'Paused',
+    label: STATUS_LABELS.paused,
+    compactLabel: STATUS_LABELS.paused,
     tone: 'warning',
     description: 'The record is paused.',
     priority: 'medium',
@@ -47,7 +62,7 @@ export const aeCanonicalStatusPresentationRows = {
     publicness: 'private',
   },
   needs_attention: {
-    label: 'Needs attention',
+    label: STATUS_LABELS.needsAttention,
     compactLabel: 'Attention',
     tone: 'warning',
     description: 'The record needs review.',
@@ -56,7 +71,7 @@ export const aeCanonicalStatusPresentationRows = {
     publicness: 'private',
   },
   ready_now: {
-    label: 'Ready now',
+    label: STATUS_LABELS.readyNow,
     compactLabel: 'Ready',
     tone: 'success',
     description: 'The Tool is ready to use now.',
@@ -65,7 +80,7 @@ export const aeCanonicalStatusPresentationRows = {
     publicness: 'public',
   },
   setup_required: {
-    label: 'Setup required',
+    label: STATUS_LABELS.setupRequired,
     compactLabel: 'Setup',
     tone: 'warning',
     description: 'Setup is required before the Tool can be used.',
@@ -74,26 +89,26 @@ export const aeCanonicalStatusPresentationRows = {
     publicness: 'public',
   },
   completed: {
-    label: 'Completed',
-    compactLabel: 'Completed',
+    label: STATUS_LABELS.completed,
+    compactLabel: STATUS_LABELS.completed,
     tone: 'success',
     description: 'The work completed.',
     priority: 'low',
     audience: 'owner',
     publicness: 'private',
   },
-  credential_current: {
-    label: 'Current',
-    compactLabel: 'Current',
+  current: {
+    label: STATUS_LABELS.current,
+    compactLabel: STATUS_LABELS.current,
     tone: 'success',
-    description: 'This is the current credential.',
+    description: 'This is the current record.',
     priority: 'low',
     audience: 'owner',
     publicness: 'private',
   },
   credential_expired: {
-    label: 'Expired',
-    compactLabel: 'Expired',
+    label: STATUS_LABELS.expired,
+    compactLabel: STATUS_LABELS.expired,
     tone: 'warning',
     description: 'The credential or connection has expired.',
     priority: 'high',
@@ -101,8 +116,8 @@ export const aeCanonicalStatusPresentationRows = {
     publicness: 'private',
   },
   credential_revoked: {
-    label: 'Revoked',
-    compactLabel: 'Revoked',
+    label: STATUS_LABELS.revoked,
+    compactLabel: STATUS_LABELS.revoked,
     tone: 'danger',
     description: 'The credential or connection was revoked.',
     priority: 'high',

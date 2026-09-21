@@ -54,7 +54,7 @@ describe('getStatusPresentation', () => {
       setup_required: { label: 'Setup required', compactLabel: 'Setup', tone: 'warning', audience: 'public', publicness: 'public' },
       completed: { label: 'Completed', compactLabel: 'Completed', tone: 'success', audience: 'owner', publicness: 'private' },
       credential_expired: { label: 'Expired', compactLabel: 'Expired', tone: 'warning', audience: 'owner', publicness: 'private' },
-      credential_current: { label: 'Current', compactLabel: 'Current', tone: 'success', audience: 'owner', publicness: 'private' },
+      current: { label: 'Current', compactLabel: 'Current', tone: 'success', audience: 'owner', publicness: 'private' },
       credential_revoked: { label: 'Revoked', compactLabel: 'Revoked', tone: 'danger', audience: 'owner', publicness: 'private' },
     } as const
 
