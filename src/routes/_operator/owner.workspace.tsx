@@ -2,7 +2,6 @@ import { createFileRoute } from '@tanstack/react-router'
 import { OrganizationProfile } from '@clerk/tanstack-react-start'
 import { AeOperatorPage } from '@/components/ae/layout/AeOperatorPage'
 import { AeSection } from '@/components/ae/layout/AeSection'
-import { TaxProfileFormSection } from '@/components/ae/settings/TaxProfileFormSection'
 import { WorkspaceDangerZone } from '@/components/ae/settings/workspace-danger-zone/WorkspaceDangerZone'
 import { clerkAppearance } from '@/components/ae/website/clerk-appearance'
 import { operatorRouteOptions } from '@/lib/operator/route-options'
@@ -29,7 +28,7 @@ function OwnerWorkspaceRoute() {
     <AeOperatorPage
       operatorRole="owner"
       title="Workspace"
-      description="Business profile, tax details, and settings shared by every Agent in this workspace."
+      description="Business profile and settings shared by every Agent in this workspace."
       currentPath="/owner/workspace"
     >
       <div className="ae-owner-workspace grid gap-8">
@@ -42,9 +41,6 @@ function OwnerWorkspaceRoute() {
             <OrganizationProfile.Page label="general" />
           </OrganizationProfile>
         </div>
-        <AeSection title="Billing & tax">
-          <TaxProfileFormSection />
-        </AeSection>
         <AeSection title="Danger zone">
           <WorkspaceDangerZone />
         </AeSection>

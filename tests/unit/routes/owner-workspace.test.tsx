@@ -40,9 +40,6 @@ vi.mock('@/components/ae/website/clerk-appearance', () => ({
   clerkAppearance: { cssLayerName: 'clerk' },
 }))
 
-vi.mock('@/components/ae/settings/TaxProfileFormSection', () => ({
-  TaxProfileFormSection: () => <div data-testid="tax-profile-form-section" />,
-}))
 
 vi.mock('@/components/ae/settings/workspace-danger-zone/WorkspaceDangerZone', () => ({
   WorkspaceDangerZone: () => <div data-testid="workspace-danger-zone" />,
@@ -119,11 +116,12 @@ describe('/owner/workspace route (W-12)', () => {
     expect(page.getAttribute('data-label')).toBe('general')
   })
 
-  it('U6: composes billing tax and danger zone sections without hand-rolled Clerk profile fields', () => {
+  it('U6: keeps billing and Credit controls separate from Workspace settings', () => {
     renderWorkspaceRoute()
 
-    expect(screen.getByRole('heading', { name: 'Billing & tax' })).toBeTruthy()
-    expect(screen.getByTestId('tax-profile-form-section')).toBeTruthy()
+    expect(screen.queryByRole('heading', { name: 'Billing & tax' })).toBeNull()
+    expect(screen.queryByText(/Credit/i)).toBeNull()
+    expect(screen.queryByTestId('tax-profile-form-section')).toBeNull()
     expect(screen.getByRole('heading', { name: 'Danger zone' })).toBeTruthy()
     expect(screen.getByTestId('workspace-danger-zone')).toBeTruthy()
     expect(document.querySelector('.ae-owner-workspace.grid.gap-8')).toBeTruthy()

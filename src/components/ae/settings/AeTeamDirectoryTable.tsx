@@ -120,8 +120,8 @@ export function AeTeamDirectoryTable({ directory, loading }: AeTeamDirectoryTabl
   ]
 
   return (
-    <div className="grid gap-4">
-      <div className="flex min-h-[3rem] flex-wrap items-center gap-3">
+    <div className="grid min-w-0 gap-4">
+      <div className="flex min-h-[3rem] min-w-0 flex-wrap items-center gap-3">
         <label className="relative min-w-[12rem] flex-1 max-w-sm">
           <span className="sr-only">Filter team members</span>
           <input
@@ -134,7 +134,7 @@ export function AeTeamDirectoryTable({ directory, loading }: AeTeamDirectoryTabl
             className="w-full rounded-md border border-input bg-background px-3 py-1.5 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
           />
         </label>
-        <div className="flex flex-wrap gap-2" role="group" aria-label="Filter by role">
+        <div className="flex max-w-full flex-wrap gap-2" role="group" aria-label="Filter by role">
           {roleChips.map((chip) => {
             const pressed = roleFilter === chip.id
             return (
@@ -164,7 +164,7 @@ export function AeTeamDirectoryTable({ directory, loading }: AeTeamDirectoryTabl
 
       {isLoading ? (
         <div
-          className="min-h-[18rem] rounded-md border"
+          className="min-h-[18rem] min-w-0 overflow-hidden rounded-md border"
           role="status"
           aria-busy="true"
           aria-label="Loading team directory"
@@ -185,7 +185,7 @@ export function AeTeamDirectoryTable({ directory, loading }: AeTeamDirectoryTabl
           </Table>
         </div>
       ) : (
-        <div className="min-h-[18rem] rounded-md border">
+        <div className="min-h-[18rem] min-w-0 overflow-hidden rounded-md border">
           <Table aria-label="Team directory" className="text-left text-sm">
             {TABLE_HEADERS}
             <TableBody className="divide-y divide-border">

@@ -34,8 +34,8 @@ function OwnerTeamRoute() {
       description="Who can act for this business, their roles, and pending invitations."
       currentPath="/owner/team"
     >
-      <div className="ae-owner-team grid gap-8">
-        <div id="invite" className="min-h-96 w-full">
+      <div className="ae-owner-team grid min-w-0 gap-8">
+        <div id="invite" className="min-h-96 w-full min-w-0 overflow-x-auto">
           <OrganizationProfile
             routing="hash"
             afterLeaveOrganizationUrl="/owner"
@@ -45,7 +45,7 @@ function OwnerTeamRoute() {
           </OrganizationProfile>
         </div>
 
-        <section className="grid gap-4">
+        <section className="grid min-w-0 gap-4">
           <h2 className="text-base font-medium tracking-tight text-foreground">
             Canonical directory
           </h2>
