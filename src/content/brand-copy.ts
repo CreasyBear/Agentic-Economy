@@ -60,12 +60,32 @@ export const AGENT_PAGE = {
     'Find an outside service, compare its terms, and connect Codex, Claude Code or Cursor to make an authorized Call.',
   eyebrow: 'Connections',
   heading: 'Connect your Agent.',
-  subhead: 'Find the service your task needs. Connect your account, review the terms, and make a Call within the authority you have granted.',
+  subhead: 'We’re building one AUD account for your agents’ paid tools, with spending limits and purchase records.',
   primaryCta: 'Start setup',
   openAgentsCta: 'Open Agents',
   spendingPolicyStepHeading: 'Set a Spending policy',
   spendingPolicyStepBody: 'Set limits for each Agent before it makes paid Calls.',
   spendingPolicyCta: 'Review Spending policy',
+  faqHeading: 'Before you connect',
+  faqQuestions: [
+    {
+      question: 'Do I need to move my Agent into Agentic Economy?',
+      answer:
+        'No. Your Agent stays in its existing app or framework. Agentic Economy supplies discovery and paid Tool access; your Agent continues to manage the larger task.',
+    },
+    {
+      question: 'Is AUD Credit a crypto wallet?',
+      answer:
+        'No. AUD Credit belongs to the Business account. It is separate from the settlement mechanics used by x402 Tools.',
+    },
+    {
+      question: 'When can I connect an Agent?',
+      answer:
+        'Agentic Economy is pre-launch. Public access, funding and purchases are not open yet. The status page tracks availability.',
+    },
+  ],
+  faqStatusLinkLead: 'For current availability, visit our',
+  faqStatusLinkLabel: 'status page',
 } as const
 
 /** Supplier door on `/` (routes to the existing supply mode). */

@@ -2,6 +2,13 @@
  * @vitest-environment jsdom
  */
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import {
+  RouterContextProvider,
+  createMemoryHistory,
+  createRootRoute,
+  createRoute,
+  createRouter,
+} from '@tanstack/react-router'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import '../../setup/jsdom-platform'
 
@@ -14,7 +21,18 @@ describe('agent door page', () => {
   it('shows one selected native connection path without exposing protocol work', async () => {
     const writeText = vi.fn(async (_text: string) => undefined)
     Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } })
-    render(<AeAgentDoorPage canonicalBaseUrl="https://ae.example" />)
+    const rootRoute = createRootRoute()
+    const router = createRouter({
+      routeTree: rootRoute.addChildren([
+        createRoute({ getParentRoute: () => rootRoute, path: '/status' }),
+      ]),
+      history: createMemoryHistory({ initialEntries: ['/'] }),
+    })
+    render(
+      <RouterContextProvider router={router}>
+        <AeAgentDoorPage canonicalBaseUrl="https://ae.example" />
+      </RouterContextProvider>,
+    )
 
     expect(screen.getByRole('heading', { level: 1, name: 'Connect your Agent.' })).toBeTruthy()
     expect(screen.getByText(AGENT_PAGE.subhead)).toBeTruthy()
@@ -30,6 +48,8 @@ describe('agent door page', () => {
     expect(screen.getByRole('link', { name: 'Open Agents' }).getAttribute('href')).toBe('/agent-access')
     expect(screen.getByRole('heading', { name: 'Set a Spending policy' })).toBeTruthy()
     expect(screen.getByRole('link', { name: 'Review Spending policy' }).getAttribute('href')).toBe('/agent-access')
+    expect(screen.getByRole('heading', { name: AGENT_PAGE.faqHeading })).toBeTruthy()
+    expect(screen.getByRole('button', { name: AGENT_PAGE.faqQuestions[0].question })).toBeTruthy()
 
     fireEvent.click(screen.getByRole('button', { name: 'Copy Codex MCP command' }))
     fireEvent.click(screen.getByRole('button', { name: 'Use Claude Code or Cursor' }))

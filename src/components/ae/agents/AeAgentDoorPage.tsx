@@ -7,6 +7,7 @@ import {
   AeSiteHeadingPair,
   AeSiteHeroIntro,
   AeSiteSection,
+  AeSiteFaq,
 } from '@/components/ae/website'
 import { AGENT_PAGE } from '@/content/brand-copy'
 
@@ -38,6 +39,13 @@ export function AeAgentDoorPage({ canonicalBaseUrl }: { canonicalBaseUrl: string
       <AeSiteSection id="agent-setup" ariaLabel="Agent connection" scheme="surface">
         <AeAssistantInstallFunnel canonicalBaseUrl={canonicalBaseUrl} />
       </AeSiteSection>
+      <AeSiteFaq
+        labelledBy="agent-faq"
+        title={AGENT_PAGE.faqHeading}
+        questions={AGENT_PAGE.faqQuestions}
+        statusLinkLead={AGENT_PAGE.faqStatusLinkLead}
+        statusLinkLabel={AGENT_PAGE.faqStatusLinkLabel}
+      />
     </>
   )
 }
