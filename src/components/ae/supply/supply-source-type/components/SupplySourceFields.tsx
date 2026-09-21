@@ -1,4 +1,5 @@
 import { Field, FieldDescription, FieldLabel } from '@/components/ui/field'
+import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 import { cn } from '@/lib/utils'
@@ -8,13 +9,13 @@ import {
   TACTILE,
   type Environment,
 } from '../../supply-source-native-start-presentation'
-import { TextField } from '../../SupplyFieldPrimitives'
-import type {
-  AgentPluginFieldsProps,
-  EnvironmentFieldProps,
-  McpSourceFieldsProps,
-  SupplySourceFieldsProps,
-  X402SourceFieldsProps,
+import {
+  SUPPLY_SOURCE_TYPE_COPY,
+  type AgentPluginFieldsProps,
+  type EnvironmentFieldProps,
+  type McpSourceFieldsProps,
+  type SupplySourceFieldsProps,
+  type X402SourceFieldsProps,
 } from '../supply-source-type.contracts'
 import { JsonFileField, UrlFieldWithPreflight } from './SourceValidationResults'
 
@@ -50,10 +51,12 @@ export function SupplySourceFields({
           id="supply-native-openapi-url"
           label="OpenAPI URL"
           value={definitionUrl}
-          description="OpenAPI 3.0 or 3.1, JSON or YAML, at a public HTTPS URL."
+          description={SUPPLY_SOURCE_TYPE_COPY.openApiUrl.description}
+          placeholder={SUPPLY_SOURCE_TYPE_COPY.openApiUrl.placeholder}
           {...(discoverDiagnostic?.target === 'definitionUrl'
             ? { discoverDiagnostic: discoverDiagnostic.diagnostic }
             : {})}
+          disabled={disabled}
           onChange={onDefinitionUrlChange}
         />
       ) : null}
@@ -62,6 +65,7 @@ export function SupplySourceFields({
           locator={mcpLocator}
           serverUrl={serverUrl}
           registryName={registryName}
+          disabled={disabled}
           {...(discoverDiagnostic?.target === 'serverUrl'
             ? { serverUrlDiscoverDiagnostic: discoverDiagnostic.diagnostic }
             : {})}
@@ -74,6 +78,7 @@ export function SupplySourceFields({
         <AgentPluginFields
           pluginJson={pluginJson}
           mcpJson={mcpJson}
+          disabled={disabled}
           {...(discoverDiagnostic?.target === 'pluginJson'
             ? { pluginDiscoverDiagnostic: discoverDiagnostic.diagnostic }
             : {})}
@@ -89,6 +94,7 @@ export function SupplySourceFields({
         <X402SourceFields
           resourceUrl={resourceUrl}
           method={x402Method}
+          disabled={disabled}
           {...(discoverDiagnostic?.target === 'resourceUrl'
             ? { resourceUrlDiscoverDiagnostic: discoverDiagnostic.diagnostic }
             : {})}
@@ -103,8 +109,8 @@ export function SupplySourceFields({
 function EnvironmentField({ value, disabled, onChange }: EnvironmentFieldProps) {
   return (
     <Field>
-      <FieldLabel>Environment</FieldLabel>
-      <RadioGroup value={value} disabled={disabled} className="grid-cols-2" onValueChange={(next) => onChange(next as Environment)}>
+      <FieldLabel id="supply-native-environment-label">Environment <span aria-hidden="true" className="text-xs font-normal text-muted-foreground">{SUPPLY_SOURCE_TYPE_COPY.required}</span></FieldLabel>
+      <RadioGroup aria-labelledby="supply-native-environment-label" aria-required="true" value={value} disabled={disabled} className="grid-cols-2" onValueChange={(next) => onChange(next as Environment)}>
         <Label className={cn('min-h-touch rounded-md border border-border p-3', TACTILE)}><RadioGroupItem value="sandbox" />Sandbox</Label>
         <Label className={cn('min-h-touch rounded-md border border-border p-3', TACTILE)}><RadioGroupItem value="production" />Production</Label>
       </RadioGroup>
@@ -117,6 +123,7 @@ function McpSourceFields({
   locator,
   serverUrl,
   registryName,
+  disabled,
   serverUrlDiscoverDiagnostic,
   onLocatorChange,
   onServerUrlChange,
@@ -125,8 +132,8 @@ function McpSourceFields({
   return (
     <>
       <Field>
-        <FieldLabel>MCP location</FieldLabel>
-        <RadioGroup value={locator} className="grid-cols-2" onValueChange={(next) => onLocatorChange(next as 'url' | 'registry')}>
+        <FieldLabel id="supply-native-mcp-location-label">MCP location <span aria-hidden="true" className="text-xs font-normal text-muted-foreground">{SUPPLY_SOURCE_TYPE_COPY.required}</span></FieldLabel>
+        <RadioGroup aria-labelledby="supply-native-mcp-location-label" aria-required="true" value={locator} disabled={disabled} className="grid-cols-2" onValueChange={(next) => onLocatorChange(next as 'url' | 'registry')}>
           <Label className={cn('min-h-touch rounded-md border border-border p-3', TACTILE)}><RadioGroupItem value="url" />Server URL</Label>
           <Label className={cn('min-h-touch rounded-md border border-border p-3', TACTILE)}><RadioGroupItem value="registry" />Registry name</Label>
         </RadioGroup>
@@ -137,12 +144,20 @@ function McpSourceFields({
               id="supply-native-mcp-url"
               label="MCP server URL"
               value={serverUrl}
-              description="Remote streamable HTTP over public HTTPS."
+              description={SUPPLY_SOURCE_TYPE_COPY.mcpServerUrl.description}
+              placeholder={SUPPLY_SOURCE_TYPE_COPY.mcpServerUrl.placeholder}
+              disabled={disabled}
               discoverDiagnostic={serverUrlDiscoverDiagnostic}
               onChange={onServerUrlChange}
             />
           )
-        : <TextField id="supply-native-mcp-registry" label="MCP Registry name" value={registryName} onChange={onRegistryNameChange} description="The exact published Registry name." />}
+        : (
+            <Field>
+              <FieldLabel htmlFor="supply-native-mcp-registry">MCP Registry name <span aria-hidden="true" className="text-xs font-normal text-muted-foreground">{SUPPLY_SOURCE_TYPE_COPY.required}</span></FieldLabel>
+              <Input id="supply-native-mcp-registry" aria-label="MCP Registry name" required placeholder={SUPPLY_SOURCE_TYPE_COPY.mcpRegistryName.placeholder} value={registryName} disabled={disabled} onChange={(event) => onRegistryNameChange(event.currentTarget.value)} />
+              <FieldDescription>{SUPPLY_SOURCE_TYPE_COPY.mcpRegistryName.description}</FieldDescription>
+            </Field>
+          )}
     </>
   )
 }
@@ -150,6 +165,7 @@ function McpSourceFields({
 function AgentPluginFields({
   pluginJson,
   mcpJson,
+  disabled,
   pluginDiscoverDiagnostic,
   mcpDiscoverDiagnostic,
   onPluginJsonChange,
@@ -164,6 +180,7 @@ function AgentPluginFields({
         loaded={pluginJson !== ''}
         jsonValue={pluginJson}
         requiredKeys={PLUGIN_JSON_REQUIRED_KEYS}
+        disabled={disabled}
         discoverDiagnostic={pluginDiscoverDiagnostic}
         onChange={onPluginJsonChange}
         onError={onError}
@@ -174,6 +191,7 @@ function AgentPluginFields({
         loaded={mcpJson !== ''}
         jsonValue={mcpJson}
         requiredKeys={MCP_JSON_REQUIRED_KEYS}
+        disabled={disabled}
         discoverDiagnostic={mcpDiscoverDiagnostic}
         onChange={onMcpJsonChange}
         onError={onError}
@@ -185,6 +203,7 @@ function AgentPluginFields({
 function X402SourceFields({
   resourceUrl,
   method,
+  disabled,
   resourceUrlDiscoverDiagnostic,
   onResourceUrlChange,
   onMethodChange,
@@ -195,13 +214,15 @@ function X402SourceFields({
         id="supply-native-x402-url"
         label="x402 resource URL"
         value={resourceUrl}
-        description="AE reads payment facts from the live signed 402 response."
+        description={SUPPLY_SOURCE_TYPE_COPY.x402ResourceUrl.description}
+        placeholder={SUPPLY_SOURCE_TYPE_COPY.x402ResourceUrl.placeholder}
+        disabled={disabled}
         discoverDiagnostic={resourceUrlDiscoverDiagnostic}
         onChange={onResourceUrlChange}
       />
       <Field>
-        <FieldLabel>Method</FieldLabel>
-        <RadioGroup value={method} className="grid-cols-2" onValueChange={(next) => onMethodChange(next as 'GET' | 'POST')}>
+        <FieldLabel id="supply-native-x402-method-label">Method <span aria-hidden="true" className="text-xs font-normal text-muted-foreground">{SUPPLY_SOURCE_TYPE_COPY.required}</span></FieldLabel>
+        <RadioGroup aria-labelledby="supply-native-x402-method-label" aria-required="true" value={method} disabled={disabled} className="grid-cols-2" onValueChange={(next) => onMethodChange(next as 'GET' | 'POST')}>
           <Label className={cn('min-h-touch rounded-md border border-border p-3', TACTILE)}><RadioGroupItem value="GET" />GET</Label>
           <Label className={cn('min-h-touch rounded-md border border-border p-3', TACTILE)}><RadioGroupItem value="POST" />POST</Label>
         </RadioGroup>

@@ -5,13 +5,14 @@ import { Badge } from '@/components/ui/badge'
 import { Field, FieldDescription, FieldLabel } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
 import { inspectHttpsUrl, inspectJsonPayload } from '../../supply-source-native-start-presentation'
-import type {
-  HttpsUrlPreflightBadgeProps,
-  JsonFileFieldProps,
-  JsonPreflightBadgeProps,
-  PreflightRule4AlertProps,
-  PreflightSlotProps,
-  UrlFieldWithPreflightProps,
+import {
+  SUPPLY_SOURCE_TYPE_COPY,
+  type HttpsUrlPreflightBadgeProps,
+  type JsonFileFieldProps,
+  type JsonPreflightBadgeProps,
+  type PreflightRule4AlertProps,
+  type PreflightSlotProps,
+  type UrlFieldWithPreflightProps,
 } from '../supply-source-type.contracts'
 
 export function UrlFieldWithPreflight({
@@ -19,14 +20,16 @@ export function UrlFieldWithPreflight({
   label,
   value,
   description,
+  placeholder,
+  disabled,
   discoverDiagnostic,
   onChange,
 }: UrlFieldWithPreflightProps) {
   const preflight = inspectHttpsUrl(value)
   return (
     <Field>
-      <FieldLabel htmlFor={id}>{label}</FieldLabel>
-      <Input id={id} type="url" value={value} onChange={(event) => onChange(event.currentTarget.value)} />
+      <FieldLabel htmlFor={id}>{label} <span aria-hidden="true" className="text-xs font-normal text-muted-foreground">{SUPPLY_SOURCE_TYPE_COPY.required}</span></FieldLabel>
+      <Input id={id} aria-label={label} type="url" required placeholder={placeholder} value={value} disabled={disabled} onChange={(event) => onChange(event.currentTarget.value)} />
       <FieldDescription>{description}</FieldDescription>
       <PreflightSlot>
         {discoverDiagnostic !== undefined ? (
@@ -45,6 +48,7 @@ export function JsonFileField({
   loaded,
   jsonValue,
   requiredKeys,
+  disabled,
   discoverDiagnostic,
   onChange,
   onError,
@@ -52,11 +56,14 @@ export function JsonFileField({
   const preflight = inspectJsonPayload(jsonValue, requiredKeys)
   return (
     <Field>
-      <FieldLabel htmlFor={id}>{label}</FieldLabel>
+      <FieldLabel htmlFor={id}>{label} <span aria-hidden="true" className="text-xs font-normal text-muted-foreground">{SUPPLY_SOURCE_TYPE_COPY.required}</span></FieldLabel>
       <Input
         id={id}
+        aria-label={label}
         type="file"
         accept=".json,application/json"
+        required
+        disabled={disabled}
         onChange={(event) => {
           const file = event.currentTarget.files?.[0]
           if (file === undefined) return
@@ -90,31 +97,34 @@ function PreflightSlot({ children }: PreflightSlotProps) {
 function HttpsUrlPreflightBadge({ status }: HttpsUrlPreflightBadgeProps) {
   if (status === 'empty') return null
   if (status === 'insecure') {
-    return <Badge variant="warning">Insecure HTTP URL detected. Agentic Economy requires secure HTTPS endpoints.</Badge>
+    return <Badge variant="warning">{SUPPLY_SOURCE_TYPE_COPY.httpsPreflight.insecure}</Badge>
   }
   if (status === 'invalid') {
-    return <Badge variant="warning">Enter a valid HTTPS URL (e.g. https://api.example.com/openapi.json).</Badge>
+    return <Badge variant="warning">{SUPPLY_SOURCE_TYPE_COPY.httpsPreflight.invalid}</Badge>
   }
   return (
     <Badge variant="success" className="gap-1.5">
       <CheckCircle2Icon className="size-3" />
-      Valid HTTPS endpoint format
+      {SUPPLY_SOURCE_TYPE_COPY.httpsPreflight.valid}
     </Badge>
   )
 }
 
 function JsonPreflightBadge({ status }: JsonPreflightBadgeProps) {
   if (status === 'empty') return null
-  if (status === 'invalid' || status === 'not_object') {
-    return <Badge variant="warning">JSON syntax is invalid.</Badge>
+  if (status === 'invalid') {
+    return <Badge variant="warning">{SUPPLY_SOURCE_TYPE_COPY.jsonPreflight.invalid}</Badge>
+  }
+  if (status === 'not_object') {
+    return <Badge variant="warning">{SUPPLY_SOURCE_TYPE_COPY.jsonPreflight.notObject}</Badge>
   }
   if (status === 'missing_fields') {
-    return <Badge variant="warning">JSON is missing required fields.</Badge>
+    return <Badge variant="warning">{SUPPLY_SOURCE_TYPE_COPY.jsonPreflight.missingFields}</Badge>
   }
   return (
     <Badge variant="success" className="gap-1.5">
       <CheckCircle2Icon className="size-3" />
-      Valid JSON payload
+      {SUPPLY_SOURCE_TYPE_COPY.jsonPreflight.valid}
     </Badge>
   )
 }

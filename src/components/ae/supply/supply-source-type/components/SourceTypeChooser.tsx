@@ -2,15 +2,15 @@ import { Button } from '@/components/ui/button'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import { Field, FieldDescription, FieldLabel } from '@/components/ui/field'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { SUPPLY_SOURCE_TYPE_COPY } from '@/content/reason-copy'
+import { SUPPLY_SOURCE_TYPE_COPY as SUPPLY_SOURCE_REASON_COPY } from '@/content/reason-copy'
 import { cn } from '@/lib/utils'
 import { TACTILE } from '../../supply-source-native-start-presentation'
-import type { SourceTypeChooserProps } from '../supply-source-type.contracts'
+import { SUPPLY_SOURCE_TYPE_COPY, type SourceTypeChooserProps } from '../supply-source-type.contracts'
 
 export function SourceTypeChooser({ sourceKind, disabled, onSourceKindChange }: SourceTypeChooserProps) {
   return (
     <Field>
-      <FieldLabel>Source type</FieldLabel>
+      <FieldLabel>Source type <span aria-hidden="true" className="text-xs font-normal text-muted-foreground">{SUPPLY_SOURCE_TYPE_COPY.required}</span></FieldLabel>
       <Button
         type="button"
         variant={sourceKind === 'x402' ? 'secondary' : 'outline'}
@@ -40,14 +40,14 @@ export function SourceTypeChooser({ sourceKind, disabled, onSourceKindChange }: 
         <CollapsibleContent className="pt-2">
           <Tabs value={sourceKind} onValueChange={onSourceKindChange}>
             <TabsList className="max-w-full overflow-x-auto" aria-label="Other source types">
-              <TabsTrigger value="openapi" disabled={disabled} className={TACTILE}>OpenAPI</TabsTrigger>
-              <TabsTrigger value="mcp" disabled={disabled} className={TACTILE}>MCP</TabsTrigger>
-              <TabsTrigger value="agent_plugin" disabled={disabled} className={TACTILE}>Agent Plugin</TabsTrigger>
+              <TabsTrigger value="openapi" disabled={disabled} className={cn('min-h-touch', TACTILE)}>OpenAPI</TabsTrigger>
+              <TabsTrigger value="mcp" disabled={disabled} className={cn('min-h-touch', TACTILE)}>MCP</TabsTrigger>
+              <TabsTrigger value="agent_plugin" disabled={disabled} className={cn('min-h-touch', TACTILE)}>Agent Plugin</TabsTrigger>
             </TabsList>
           </Tabs>
         </CollapsibleContent>
       </Collapsible>
-      <FieldDescription>{SUPPLY_SOURCE_TYPE_COPY[sourceKind]}</FieldDescription>
+      <FieldDescription>{SUPPLY_SOURCE_REASON_COPY[sourceKind]}</FieldDescription>
     </Field>
   )
 }

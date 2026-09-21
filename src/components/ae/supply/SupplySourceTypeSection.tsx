@@ -4,7 +4,7 @@ import { FieldGroup } from '@/components/ui/field'
 import { cn } from '@/lib/utils'
 import { SourceTypeChooser } from './supply-source-type/components/SourceTypeChooser'
 import { SupplySourceFields } from './supply-source-type/components/SupplySourceFields'
-import type { SupplySourceTypeSectionProps } from './supply-source-type/supply-source-type.contracts'
+import { SUPPLY_SOURCE_TYPE_COPY, type SupplySourceTypeSectionProps } from './supply-source-type/supply-source-type.contracts'
 import { useSupplySourceType } from './supply-source-type/useSupplySourceType'
 import { TACTILE } from './supply-source-native-start-presentation'
 
@@ -16,17 +16,12 @@ export function SupplySourceTypeSection(props: SupplySourceTypeSectionProps) {
   } = useSupplySourceType(props)
 
   return (
-    <AeSection title="Source" description="Start with the interface you already operate. AE discovers the Tools and derives the protocol facts.">
+    <AeSection title="Source" description={SUPPLY_SOURCE_TYPE_COPY.sectionDescription}>
       <FieldGroup className="gap-5">
         <SourceTypeChooser
           sourceKind={props.sourceKind}
           disabled={props.disabled}
           onSourceKindChange={props.onSourceKindChange}
-        />
-        <SupplySourceFields
-          {...props}
-          {...sourceFieldHandlers}
-          discoverDiagnostic={discoverDiagnostic}
         />
         <Button
           type="button"
@@ -35,8 +30,13 @@ export function SupplySourceTypeSection(props: SupplySourceTypeSectionProps) {
           aria-busy={props.discovering || undefined}
           onClick={handleDiscover}
         >
-          {props.discovering ? 'Discovering endpoints…' : 'Discover endpoints'}
+          {props.discovering ? SUPPLY_SOURCE_TYPE_COPY.findingTools : SUPPLY_SOURCE_TYPE_COPY.findTools}
         </Button>
+        <SupplySourceFields
+          {...props}
+          {...sourceFieldHandlers}
+          discoverDiagnostic={discoverDiagnostic}
+        />
       </FieldGroup>
     </AeSection>
   )

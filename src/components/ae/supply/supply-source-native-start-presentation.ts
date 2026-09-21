@@ -48,17 +48,6 @@ export function inspectJsonPayload(value: string, requiredKeys: readonly string[
   }
 }
 
-export const INSECURE_URL_DIAGNOSTIC = {
-  whatHappened: 'Insecure HTTP protocol.',
-  financialImpact: 'A$0.00 affected — endpoint discovery blocked.',
-  nextStep: 'Provide an HTTPS URL to ensure encrypted capability invocation.',
-} as const
-
-export const MALFORMED_JSON_DIAGNOSTIC = {
-  whatHappened: 'Malformed JSON payload.',
-  financialImpact: 'A$0.00 affected — plugin discovery blocked.',
-  nextStep: 'Ensure the JSON syntax is valid before discovering endpoints.',
-} as const
 
 export const PLUGIN_JSON_REQUIRED_KEYS = ['$schema', 'name'] as const
 export const MCP_JSON_REQUIRED_KEYS = ['$schema', 'mcpServers'] as const

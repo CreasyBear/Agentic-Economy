@@ -259,7 +259,7 @@ describe('source-native Provider start', () => {
     fireEvent.change(screen.getByLabelText('OpenAPI URL'), {
       target: { value: 'https://provider.example/openapi.yaml' },
     })
-    fireEvent.click(screen.getByRole('button', { name: 'Discover endpoints' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Find Tools' }))
     await screen.findByText('Reference lookup')
     expect(onPreview).toHaveBeenCalledWith(
       {
@@ -446,7 +446,7 @@ describe('source-native Provider start', () => {
     )
 
     fireEvent.click(screen.getByRole('button', { name: 'Edit Source' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Discover endpoints' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Find Tools' }))
 
     const action = await screen.findByRole('link', { name: 'Connect server' })
     expect(action.getAttribute('href')).toBe('/owner/supply/connections/new?attempt=pca_one')
@@ -504,7 +504,7 @@ describe('source-native Provider start', () => {
     )
 
     fireEvent.click(screen.getByRole('button', { name: 'Edit Source' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Discover endpoints' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Find Tools' }))
 
     expect(await screen.findByText('Select MCP server')).toBeTruthy()
     expect(onPreview).toHaveBeenNthCalledWith(1, {
@@ -524,6 +524,24 @@ describe('source-native Provider start', () => {
       remoteRef,
       environment: 'sandbox',
     }, expect.any(String))
+  })
+
+  it('labels required source fields and exposes the Find Tools action', () => {
+    render(
+      <AeSupplySourceNativeStart
+        businessRef="business:one"
+        onPreview={vi.fn()}
+        onConnect={vi.fn()}
+        onSelectCandidate={vi.fn()}
+        onPublish={vi.fn()}
+      />,
+    )
+
+    const resourceUrl = screen.getByLabelText('x402 resource URL') as HTMLInputElement
+    expect(resourceUrl.required).toBe(true)
+    expect(resourceUrl.placeholder).toBe('https://api.example.com/paid-operation')
+    expect(screen.getAllByText('Required')).toHaveLength(4)
+    expect(screen.getByRole('button', { name: 'Find Tools' })).toBeTruthy()
   })
 
   it('shows live OpenAPI URL preflight without clicking Discover', () => {
@@ -546,7 +564,7 @@ describe('source-native Provider start', () => {
     expect(screen.getByText('Insecure HTTP URL detected. Agentic Economy requires secure HTTPS endpoints.')).toBeTruthy()
 
     fireEvent.change(screen.getByLabelText('OpenAPI URL'), { target: { value: 'notaurl' } })
-    expect(screen.getByText('Enter a valid HTTPS URL (e.g. https://api.example.com/openapi.json).')).toBeTruthy()
+    expect(screen.getByText('Enter a valid HTTPS URL, for example https://api.example.com/openapi.json.')).toBeTruthy()
 
     fireEvent.change(screen.getByLabelText('OpenAPI URL'), {
       target: { value: 'https://api.example.com/openapi.json' },
@@ -599,11 +617,11 @@ describe('source-native Provider start', () => {
     fireEvent.change(screen.getByLabelText('OpenAPI URL'), {
       target: { value: 'http://insecure.example.com/openapi.json' },
     })
-    fireEvent.click(screen.getByRole('button', { name: 'Discover endpoints' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Find Tools' }))
 
-    expect(await screen.findByText('Insecure HTTP protocol.')).toBeTruthy()
-    expect(screen.getByText('A$0.00 affected — endpoint discovery blocked.')).toBeTruthy()
-    expect(screen.getByText('Provide an HTTPS URL to ensure encrypted capability invocation.')).toBeTruthy()
+    expect(await screen.findByText('The URL uses insecure HTTP.')).toBeTruthy()
+    expect(screen.getByText('A$0.00 affected. Tool discovery was blocked.')).toBeTruthy()
+    expect(screen.getByText('Replace http:// with https:// and try again.')).toBeTruthy()
     expect(onPreview).not.toHaveBeenCalled()
   })
 
@@ -627,11 +645,11 @@ describe('source-native Provider start', () => {
     await waitFor(() => {
       expect(screen.getByText('JSON syntax is invalid.')).toBeTruthy()
     })
-    fireEvent.click(screen.getByRole('button', { name: 'Discover endpoints' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Find Tools' }))
 
-    expect(await screen.findByText('Malformed JSON payload.')).toBeTruthy()
-    expect(screen.getByText('A$0.00 affected — plugin discovery blocked.')).toBeTruthy()
-    expect(screen.getByText('Ensure the JSON syntax is valid before discovering endpoints.')).toBeTruthy()
+    expect(await screen.findByText('JSON file syntax is invalid.')).toBeTruthy()
+    expect(screen.getByText('A$0.00 affected. Tool discovery was blocked.')).toBeTruthy()
+    expect(screen.getByText('Fix the JSON syntax, then choose the file again.')).toBeTruthy()
     expect(onPreview).not.toHaveBeenCalled()
   })
 
@@ -649,7 +667,7 @@ describe('source-native Provider start', () => {
     const tactile = 'active:scale-[0.98]'
     expect(screen.getByRole('button', { name: /x402 recommended for alpha/i }).className).toContain(tactile)
     expect(screen.getByRole('button', { name: 'Other source types' }).className).toContain(tactile)
-    expect(screen.getByRole('button', { name: 'Discover endpoints' }).className).toContain(tactile)
+    expect(screen.getByRole('button', { name: 'Find Tools' }).className).toContain(tactile)
     expect(screen.getByRole('radio', { name: 'Sandbox' }).closest('label')?.className).toContain(tactile)
 
     fireEvent.click(screen.getByRole('button', { name: 'Other source types' }))
