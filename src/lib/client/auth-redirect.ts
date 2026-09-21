@@ -6,6 +6,8 @@
  */
 const authRedirectOrigin = 'https://aecon.ai'
 
+export type AuthRedirectSearch = Readonly<{ redirect?: string }>
+
 export function sanitizeAuthRedirectTarget(value: unknown): string | undefined {
   if (typeof value !== 'string') {
     return undefined

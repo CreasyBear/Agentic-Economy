@@ -6,14 +6,10 @@ import {
   ProviderListingError,
   ProviderListingPending,
 } from '@/components/ae/listing/public-business/AePublicBusiness'
+import type { ProviderListingSearch } from '@/components/ae/listing/public-business/public-business.contracts'
 import { degrade } from '@/lib/observability/degrade'
 import { readPublicBusinessRouteServer, type PublicBusinessRouteDataResult } from '@/lib/server/public-business-route.functions'
 import { buildPublicBusinessPageHead } from '@/modules/seo/public-route'
-
-type ProviderListingSearch = {
-  from?: 'thread'
-  id?: string
-}
 
 export const Route = createFileRoute('/$slug')({
   validateSearch: (search: Record<string, unknown>): ProviderListingSearch => {

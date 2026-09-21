@@ -1,17 +1,13 @@
 import { createFileRoute } from '@tanstack/react-router'
 
 import { AeSignInPage } from '@/components/ae/auth/sign-in/AeSignInPage'
-import { sanitizeAuthRedirectTarget } from '@/lib/client/auth-redirect'
+import { sanitizeAuthRedirectTarget, type AuthRedirectSearch } from '@/lib/client/auth-redirect'
 
 export { SignInClerkFallback } from '@/components/ae/auth/sign-in/AeSignInPage'
 
-type SignInSearch = {
-  redirect?: string
-}
-
 export const Route = createFileRoute('/sign-in/$')({
   staticData: { shellMode: 'minimal' },
-  validateSearch: (search: Record<string, unknown>): SignInSearch => {
+  validateSearch: (search: Record<string, unknown>): AuthRedirectSearch => {
     const redirect = sanitizeAuthRedirectTarget(search.redirect)
     return redirect === undefined ? {} : { redirect }
   },

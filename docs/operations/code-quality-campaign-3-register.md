@@ -1,8 +1,8 @@
 # Code Quality Campaign 3: Funding/payment façades — Operational Register
 
 **Date:** 21 September 2026  
-**Status:** OPEN — Wave 1 **VERIFIED**. Waves 2–3 staffed (`CQ3-04`–`CQ3-10` READY). Campaign 2 remains **CLOSED**.  
-**Unified tree:** `main` at Phase 0 commit `de8bd68ab` (A01 closed; Jev/procure cutover reconciled). Wave 1 extracts: `e86184cd2` (CQ3-01) + `942029008` (CQ3-02/03).  
+**Status:** **CLOSED** — Waves 1–3 **VERIFIED**. A07 / CQ-25 and A10 remain recorded deferrals. A14/A15 unclaimed. Campaign 2 remains **CLOSED**.  
+**Unified tree:** `main` at Phase 0 commit `de8bd68ab`. Wave 1: `e86184cd2` + `942029008`. Wave 2: `7db24dbbd` + `176948beb` + `ba8e04661`. Wave 3: this close batch.  
 **Operating Protocol:** `docs/operations/code-quality-maturity-protocol.md` (same 5-stage Grok → Composer → Orchestrator lifecycle; IDs `CQ3-*`)  
 **Intake evidence:** `docs/operations/code-quality-amendment-register.md` (A01–A15). This file is the assignment surface.  
 **Predecessor:** `docs/operations/code-quality-ceiling-register.md` (Campaign 2 CLOSED)
@@ -11,9 +11,9 @@
 
 **Wave 1 success metric (met):** funding façade **114** (<200); preflight façade **107** (<200); payment façade **153** (<200); every extracted helper **< 400**; canary payment authorization calls `prepareX402PaymentAuthorizationHandler` **in-process** (no second mutation). RPC names unchanged. A01 and canary/payment tests remain green.
 
-**Wave 2 success metric:** `capabilitySupplyOwnerCanary.ts` façade <200 with admission still one mutation; `capabilitySupplyOwnerSupply.ts` Node action façade <200; staging and probe **root helpers** become re-export shells so `capabilitySupply.ts` RPC names stay put; extracted helpers <400; CQS on probes (authority reads stay queries).
+**Wave 2 success metric (met):** owner-canary façade **36**; owner-supply façade **35**; staging re-export **2**; probes root **188** with thinness wrappers; extracted helpers <400; admission and probe writes stay one mutation each; authority reads stay query-safe.
 
-**Wave 3 success metric:** A11 search types moved out of TSX; A12 adds colocated tests only for named behavioural gaps; A13 records static-page skeleton N/A. No operator-route reopen. No `routeTree.gen.ts`.
+**Wave 3 success metric (met):** search types moved out of TSX; A12 seven accepted EXCEPTIONS (no manufactured tests); A13 skeleton N/A for privacy/terms/help. Routes: sign-in 26, sign-up 26, `$slug` 62.
 
 ---
 
@@ -23,8 +23,8 @@
 | :--- | :--- | :--- | :---: | :---: | :---: | :---: |
 | **Wave 1: Funding/payment façades** | A02–A04 | `CQ3-01` – `CQ3-03` | 3 | 0 | 0 | `VERIFIED` |
 | **Wave 2: Inherited Convex cohesion** | A05, A06, A08, A09 | `CQ3-04` – `CQ3-07` | 4 | 0 | 0 | `VERIFIED` |
-| **Wave 3: Wave 3 residue** | A11–A13 | `CQ3-08` – `CQ3-10` | 0 | 0 | 3 | `READY` |
-| **Total** | Campaign 3 | **10 named** | **7** | **0** | **3** | `OPEN` |
+| **Wave 3: Wave 3 residue** | A11–A13 | `CQ3-08` – `CQ3-10` | 3 | 0 | 0 | `VERIFIED` |
+| **Total** | Campaign 3 | **10 named** | **10** | **0** | **0** | `CLOSED` |
 
 ### Do not touch (standing)
 
@@ -152,7 +152,7 @@ RPC kind snapshot unchanged. No `convex/<name>/` directories created.
 - **Surfaces:** `convex/capabilitySupplyProbes.ts`
 - **Host RPCs (do not move):** `observeCapabilityReadiness`, `readCapabilityProbeTarget`, `readOwnerStagedCapabilityProbeTarget`, `recordCapabilityProbeResult`, `recordOwnerStagedCapabilityProbeResult`, `scheduleDueCapabilityProbes`
 - **Status:** `VERIFIED`
-- **Commit:** pending this batch
+- **Commit:** `ba8e04661`
 - **Subagent Assignment:** Grok (Spec: `cfc41b5b-ae95-4510-831d-47217a2d8ef6`) → Composer (Implement: `71629cb1-08fb-49e0-badb-fc2e4e037fa5`) → Orchestrator (Verify: Passed 4/4 Gates; 1 lint heal — unused value imports dropped, re-exports kept)
 - **After:** root 188; `probeAuthority.ts` 303; `probeObserve.ts` 274; `probeTarget.ts` 212; `probeSchedule.ts` 49
 - **CQS:** authority/target helpers query-safe; observe/record/schedule stay mutations. Thinness wrappers remain on the root.
@@ -178,24 +178,42 @@ RPC kind snapshot unchanged. No `convex/<name>/` directories created.
 
 | ID | Amendment | File | Incision | Size | Status |
 | :--- | :--- | :--- | :--- | :---: | :--- |
-| **CQ3-08** | A11 | `src/routes/$slug.tsx`, `sign-in.$.tsx`, `sign-up.$.tsx` | Move search types out of TSX. Do not document an exception. Do not expand to onboarding/support. | S | `READY` |
-| **CQ3-09** | A12 | Seven compounds under `src/components/ae/{auth,legal,principal-account,status,support}/` | Map existing coverage. Add colocated tests only for named behavioural gaps. No markup-mirroring tests. | M | `READY` |
-| **CQ3-10** | A13 | privacy / terms / help | Explicit skeleton **not applicable** for synchronous static pages. Do not add fake skeletons. | S | `READY` |
+| **CQ3-08** | A11 | `src/routes/$slug.tsx`, `sign-in.$.tsx`, `sign-up.$.tsx` | Move search types out of TSX. Do not document an exception. Do not expand to onboarding/support. | S | `VERIFIED` |
+| **CQ3-09** | A12 | Seven compounds under `src/components/ae/{auth,legal,principal-account,status,support}/` | Map existing coverage. Add colocated tests only for named behavioural gaps. No markup-mirroring tests. | M | `VERIFIED` |
+| **CQ3-10** | A13 | privacy / terms / help | Explicit skeleton **not applicable** for synchronous static pages. Do not add fake skeletons. | S | `VERIFIED` |
 
 ### CQ3-08 — A11 framework search types
 
-- **Status:** `READY`
+- **Status:** `VERIFIED`
+- **Commit:** pending this batch
+- **Subagent Assignment:** Grok (Spec: `4705510f-4c53-4385-958c-f44a398fbb60`) → Composer (Implement: `4efe5ad2-1045-4f12-9c67-71e6cb9df3d0`) → Orchestrator (Verify: Passed 4/4 Gates)
 - **Locked decision:** move, do not document an exception
+- **Types moved:** `AuthRedirectSearch` → `src/lib/client/auth-redirect.ts`; `ProviderListingSearch` → `src/components/ae/listing/public-business/public-business.contracts.ts`. Routes: sign-in 26, sign-up 26, `$slug` 62.
+- **Gates:** lint clean; `deps:check` 0/0/0; `tsc --noEmit` 0; 49 tests in 6 route/website files
 
 ### CQ3-09 — A12 colocated tests
 
-- **Status:** `READY`
-- **Locked decision:** justified tests only
+- **Status:** `VERIFIED`
+- **Commit:** pending this batch
+- **Subagent Assignment:** same Wave 3 scout/implement as CQ3-08
+- **Locked decision:** justified tests only; seven accepted **EXCEPTION** rows. No new colocated tests.
+
+| Compound | EXCEPTION | Existing coverage |
+| :--- | :--- | :--- |
+| `auth/sign-in/` | accepted | `tests/unit/routes/sign-in-single-account-exit.test.tsx`, `tests/unit/routes/sign-in-stage.test.tsx`, `tests/unit/routes/auth-redirect-sanitizer.test.ts`, `tests/unit/website/clerk-sign-in-appearance.test.ts` |
+| `auth/sign-up/` | accepted | `tests/unit/routes/sign-up-neutral-account-entry.test.tsx`, `tests/unit/routes/auth-redirect-sanitizer.test.ts` |
+| `legal/privacy/` | accepted | `tests/unit/routes/public-semantic-comfort.test.tsx`, `tests/unit/routes/privacy-removal-outcome.test.tsx` |
+| `legal/terms/` | accepted | `tests/unit/routes/public-semantic-comfort.test.tsx` |
+| `principal-account/onboarding/` | accepted | `tests/unit/routes/onboarding.test.tsx` |
+| `status/system-status/` | accepted | `tests/unit/routes/status-route.test.tsx` |
+| `support/help/` | accepted | `tests/unit/routes/support-route.test.tsx` |
 
 ### CQ3-10 — A13 static-page skeletons
 
-- **Status:** `READY`
-- **Locked decision:** N/A for privacy, terms, help
+- **Status:** `VERIFIED`
+- **Commit:** pending this batch
+- **Subagent Assignment:** same Wave 3 scout/implement as CQ3-08
+- **Locked decision:** privacy, terms, and help are synchronous static pages — colocated skeleton **N/A**; do not add fake skeletons. Protocol and leaf-rule amendments are the §5 docs pass.
 
 ---
 
