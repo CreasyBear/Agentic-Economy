@@ -1,6 +1,6 @@
 /** @vitest-environment jsdom */
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
-import { RouterContextProvider, createMemoryHistory, createRootRoute, createRoute, createRouter } from '@tanstack/react-router'
+import { RouterContextProvider, createMemoryHistory, createRootRoute, createRoute, createRouter, useRouterState } from '@tanstack/react-router'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import '../../setup/jsdom-platform'
 import { AeX402Directory } from '@/components/ae/market/AeX402Directory'
@@ -18,6 +18,12 @@ const entries: X402DirectoryEntry[] = Array.from({ length: 20 }, (_, i) => ({
   protocol: i === 19 ? 'mcp' : 'http', provider: 'example.com', prices: [], metadataJson: '{}', slug: `tool-${i}`,
 }))
 type Props = ComponentProps<typeof AeX402Directory>
+// Mirrors the route: the URL's search is what the page receives, so URL-held
+// state (Compare selection) follows navigations exactly as in production.
+function Directory({ search, ...rest }: Props) {
+  const urlSearch = useRouterState({ select: (state) => state.location.search }) as Partial<Props['search']>
+  return <AeX402Directory {...rest} search={{ ...search, ...urlSearch }} />
+}
 function show(search: Props['search'] = { offset: 20 }, items = entries, extra: Partial<Omit<Props, 'search'>> = {}) {
   const root = createRootRoute()
   const router = createRouter({ routeTree: root.addChildren([
@@ -25,18 +31,18 @@ function show(search: Props['search'] = { offset: 20 }, items = entries, extra: 
     createRoute({ getParentRoute: () => root, path: '/owner/market' }),
     createRoute({ getParentRoute: () => root, path: '/tools/$providerHost/$slug' }),
   ]), history: createMemoryHistory({ initialEntries: [extra.marketPath ?? '/market'] }) })
-  const result = render(<RouterContextProvider router={router}><AeX402Directory
+  const result = render(<RouterContextProvider router={router}><Directory
     page={{ kind: 'ok', items, total: 14455, offset: 20, limit: 20, nextOffset: 40, previousOffset: 0 }}
     {...extra} search={search} /></RouterContextProvider>)
   return { ...result, router, updatePage(nextPage: Props['page']) {
-    result.rerender(<RouterContextProvider router={router}><AeX402Directory
+    result.rerender(<RouterContextProvider router={router}><Directory
       {...extra} page={nextPage} search={search} /></RouterContextProvider>)
   }, updateSearch(nextSearch: Props['search']) {
-    result.rerender(<RouterContextProvider router={router}><AeX402Directory
+    result.rerender(<RouterContextProvider router={router}><Directory
       page={{ kind: 'ok', items, total: 14455, offset: 20, limit: 20, nextOffset: 40, previousOffset: 0 }}
       {...extra} search={nextSearch} /></RouterContextProvider>)
   }, updateCatalogue(nextSearch: Props['search'], nextPage: Props['page'], nextCatalogue: NonNullable<Props['catalogue']>) {
-    result.rerender(<RouterContextProvider router={router}><AeX402Directory
+    result.rerender(<RouterContextProvider router={router}><Directory
       {...extra} page={nextPage} catalogue={nextCatalogue} search={nextSearch} /></RouterContextProvider>)
   } }
 }

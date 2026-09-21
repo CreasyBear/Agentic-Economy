@@ -34,7 +34,7 @@ export function marketCompareParam(refs: readonly string[]): string | undefined 
  * Keep `compare` on Market navigations unless the next search sets it.
  * `compare: undefined` clears the set.
  */
-export function carryMarketCompare<T extends Record<string, unknown>>(
+export function carryMarketCompare<const T extends Record<string, unknown>>(
   from: Readonly<{ compare?: string }>,
   to: T,
 ): T {

@@ -171,7 +171,7 @@ function DirectoryMarketplace({ page, search, workspace = false, activeView, hom
   function applyExplorerFilters(patch: DirectoryExplorerFilterPatch) {
     const next = { ...indexedSearch(), ...patch, view: 'tools' as const }
     for (const key of Object.keys(next)) if (next[key as keyof typeof next] === undefined) delete next[key as keyof typeof next]
-    void navigate({ to: marketPath, resetScroll: false, search: next })
+    void navigate({ to: marketPath, resetScroll: false, search: carryMarketCompare(search, next) })
   }
   function toggleComparison(item: SavedDirectoryTool) {
     go({ ...search, compare: marketCompareParam(toggleMarketCompareRef(compareRefs, item.entry.resource)) })
@@ -200,12 +200,13 @@ function DirectoryMarketplace({ page, search, workspace = false, activeView, hom
           event.preventDefault()
           const query = new FormData(event.currentTarget).get('query')?.toString().trim() ?? ''
           const { query: _query, sort: _sort, ...filters } = indexedSearch()
-          void navigate({ to: marketPath, search: {
+          void navigate({ to: marketPath, search: carryMarketCompare(search, {
             ...filters,
             ...(query === '' ? {} : { query }),
             view: 'tools',
-          } })
+          }) })
         }}>
+          {search.compare === undefined ? null : <input type="hidden" name="compare" value={search.compare} />}
           <input type="hidden" name="view" value="tools" />
           {search.directoryCategory === undefined ? null : <input type="hidden" name="directoryCategory" value={search.directoryCategory} />}
           {search.network === undefined ? null : <input type="hidden" name="network" value={search.network} />}
@@ -219,7 +220,7 @@ function DirectoryMarketplace({ page, search, workspace = false, activeView, hom
               {search.query === undefined ? null : <InputGroupButton type="button" size="icon-sm" variant="ghost" aria-label="Clear search" onClick={() => {
                 if (searchInput.current) searchInput.current.value = ''
                 const { query: _query, sort: _sort, ...filters } = indexedSearch()
-                void navigate({ to: marketPath, resetScroll: false, search: { ...filters, view: 'tools' } })
+                void navigate({ to: marketPath, resetScroll: false, search: carryMarketCompare(search, { ...filters, view: 'tools' }) })
               }}><XIcon aria-hidden="true" /></InputGroupButton>}
               <Button type="submit" className="mr-1 rounded-full" aria-label="Search Tools"><SearchIcon aria-hidden="true" /><span className="hidden sm:inline">Search</span></Button>
             </InputGroupAddon>
@@ -228,9 +229,9 @@ function DirectoryMarketplace({ page, search, workspace = false, activeView, hom
       </DirectoryHero>
       <Tabs value={view} onValueChange={value => {
         if (value === 'discover' || value === 'tools' || value === 'providers' || value === 'saved') {
-          void navigate({ to: marketPath, search: value === 'saved' || value === 'discover' || value === 'providers' ? { view: value } : {
+          void navigate({ to: marketPath, search: carryMarketCompare(search, value === 'saved' || value === 'discover' || value === 'providers' ? { view: value } : {
             ...indexedSearch(), view: value,
-          } })
+          }) })
         }
       }}>
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border pb-4">
@@ -288,7 +289,7 @@ function DirectoryMarketplace({ page, search, workspace = false, activeView, hom
           {indexed && tab === 'tools' ? <DirectoryExplorerFilters search={search} {...(overview === undefined ? {} : { overview })} onChange={applyExplorerFilters} onReset={() => explore({})} /> : null}
           <section className="min-w-0" aria-label="Tool results">
           {indexed ? <div className="mb-5 flex flex-wrap items-center justify-between gap-3" aria-label="Catalogue ordering and display">
-            <Select value={search.query === undefined ? search.sort ?? 'adoption' : 'relevance'} onValueChange={value => { if (value === 'popular' || value === 'updated' || value === 'relevance' || value === 'adoption' || value === 'price_asc') void navigate({ to: marketPath, search: { ...indexedSearch(), view: tab, sort: value } }) }}>
+            <Select value={search.query === undefined ? search.sort ?? 'adoption' : 'relevance'} onValueChange={value => { if (value === 'popular' || value === 'updated' || value === 'relevance' || value === 'adoption' || value === 'price_asc') void navigate({ to: marketPath, search: carryMarketCompare(search, { ...indexedSearch(), view: tab, sort: value }) }) }}>
               <SelectTrigger className="min-h-10 bg-card" aria-label="Sort Tools"><SelectValue /></SelectTrigger><SelectContent><SelectGroup>{search.query === undefined ? <><SelectItem value="adoption">Broader adoption · 30 days</SelectItem><SelectItem value="price_asc">Lowest listed price</SelectItem><SelectItem value="updated">Recently updated</SelectItem>{search.sort === 'popular' ? <SelectItem value="popular">Call volume · 30 days</SelectItem> : null}</> : <SelectItem value="relevance">Search relevance</SelectItem>}</SelectGroup></SelectContent>
             </Select>
           </div> : null}
@@ -330,7 +331,7 @@ function DirectoryMarketplace({ page, search, workspace = false, activeView, hom
             action={<Link to={marketPath} reloadDocument search={search.indexCursor === undefined ? search : { ...indexedSearch(), view: tab }} className={cn(buttonVariants({ variant: 'outline' }))}>{search.indexCursor === undefined ? "Try again" : "Refresh results"}</Link>} /> : <>
             {page.partialResults === true ? <p role="status" className="mb-4 text-sm text-muted-foreground">Coinbase returned its top matches. Refine your search to find more Tools.</p> : null}
             {tabItems.length === 0 ? <AeEmptyState title={indexed && catalogue.kind === 'ok' && !catalogue.isDone ? 'More of the catalogue remains' : 'No matching Tools'} description={indexed && catalogue.kind === 'ok' && !catalogue.isDone ? 'No matches in this portion. Continue to the next page to check the remaining Tools.' : 'Try a different description or broaden your filters.'} /> : tab === 'providers'
-              ? <DirectoryProviderCards entries={tabItems} onSelect={provider => { void navigate({ to: marketPath, search: { ...sourceInput, provider, offset: 0 } }) }} />
+              ? <DirectoryProviderCards entries={tabItems} onSelect={provider => { void navigate({ to: marketPath, search: carryMarketCompare(search, { ...sourceInput, provider, offset: 0 }) }) }} />
               : toolGrid(tabItems.map(entry => ({ entry, search: sourceInput })))}
             {tab === 'tools' && view === 'tools' ? comparisonTray : null}
             <nav aria-label="Catalogue pages" className="mt-8 flex justify-between gap-4 border-t border-border pt-5">
