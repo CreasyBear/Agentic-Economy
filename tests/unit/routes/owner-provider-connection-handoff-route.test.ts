@@ -339,7 +339,12 @@ describe('Provider connection handoff route', () => {
     await expect(loader({
       deps: { attempt: 'pca_oauth', state: 'oauth-state-never-forwarded', error: 'access_denied' },
       location: { searchStr: '?attempt=pca_oauth&state=oauth-state-never-forwarded&error=access_denied&error_description=never-forward-this' },
-    })).resolves.toEqual({ kind: 'refused', code: 'connection_conflict', continuationDraftRef: 'sds_exact_source' })
+    })).resolves.toEqual({
+      kind: 'refused',
+      code: 'connection_conflict',
+      continuationDraftRef: 'sds_exact_source',
+      environment: 'production',
+    })
     expect(mocks.completeMcp).toHaveBeenCalledWith({ data: {
       attemptRef: 'pca_oauth',
       callbackParameters: [
@@ -351,16 +356,49 @@ describe('Provider connection handoff route', () => {
     } })
   })
 
-  it('does not report a failed OAuth connection when authoritative status is unavailable', () => {
-    vi.spyOn(CallbackRoute, 'useLoaderData').mockReturnValue({ kind: 'refused', code: 'source_unavailable', continuationDraftRef: 'sds_exact_source' } as never)
+  it('classifies a callback without an attempt as a missing connection link', async () => {
+    const loader = CallbackRoute.options.loader as (input: {
+      deps: { attempt?: string }
+      location: { searchStr: string }
+    }) => Promise<unknown>
+
+    await expect(loader({ deps: {}, location: { searchStr: '' } })).resolves.toEqual({
+      kind: 'refused',
+      code: 'not_found',
+    })
+    expect(mocks.completeMcp).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    ['not_found', 'Connection link missing'],
+    ['attempt_expired', 'Connection link expired'],
+    ['not_supported', 'Provider connection unsupported'],
+    ['reauthentication_required', 'Confirmation expired'],
+    ['secret_unavailable', 'Connection not saved'],
+    ['connection_conflict', 'Connection changed'],
+    ['source_unavailable', 'Provider connection unavailable'],
+  ] as const)('names the %s OAuth callback outcome without exposing callback parameters', (code, title) => {
+    vi.spyOn(CallbackRoute, 'useLoaderData').mockReturnValue({
+      kind: 'refused',
+      code,
+      continuationDraftRef: 'sds_exact_source',
+      environment: 'sandbox',
+    } as never)
     const Component = CallbackRoute.options.component
     if (Component === undefined) throw new Error('callback_component_missing')
     const rootRoute = createRootRoute()
     const routeTree = rootRoute.addChildren([createRoute({ getParentRoute: () => rootRoute, path: '/' })])
     const router = createRouter({ routeTree, history: createMemoryHistory({ initialEntries: ['/'] }) })
     const RouterProvider = RouterContextProvider as ComponentType<{ router: typeof router }>
+
     render(createElement(RouterProvider, { router }, createElement(Component)))
-    expect(screen.getByText('Connection status unavailable')).toBeTruthy()
-    expect(screen.queryByText('Service not connected')).toBeNull()
+
+    expect(screen.getByRole('heading', { level: 1, name: 'Provider connection' })).toBeTruthy()
+    expect(screen.getByText(title)).toBeTruthy()
+    expect(screen.getByText('Sandbox')).toBeTruthy()
+    expect(document.body.textContent).not.toContain('oauth-code-never-forwarded')
+    expect(document.body.textContent).not.toContain('oauth-state-never-forwarded')
+    expect(screen.getByRole('link', { name: 'Return to Add Tool and retry' }).getAttribute('href'))
+      .toBe('/owner/operations/new?draft=sds_exact_source')
   })
 })

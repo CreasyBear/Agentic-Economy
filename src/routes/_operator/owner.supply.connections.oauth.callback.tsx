@@ -22,7 +22,7 @@ export const Route = createFileRoute('/_operator/owner/supply/connections/oauth/
   loaderDeps: ({ search }) => search,
   loader: async ({ deps, location }) => {
     if (deps.attempt === undefined) {
-      return { kind: 'refused' as const, code: 'authorization_denied' as const }
+      return { kind: 'refused' as const, code: 'not_found' as const }
     }
     const attempt = await readOwnerProviderConnectionAttemptServer({ data: { attemptRef: deps.attempt } })
     if (attempt.kind !== 'available') return { kind: 'refused' as const, code: 'not_found' as const }
@@ -44,11 +44,15 @@ export const Route = createFileRoute('/_operator/owner/supply/connections/oauth/
       })
     }
     return result.kind === 'refused'
-      ? { ...result, continuationDraftRef: attempt.attempt.draftRef ?? attempt.attempt.candidateDraftRef }
+      ? {
+          ...result,
+          continuationDraftRef: attempt.attempt.draftRef ?? attempt.attempt.candidateDraftRef,
+          environment: attempt.attempt.environment,
+        }
       : result
   },
   head: () => ({ meta: [
-    { title: 'Service connection | Agentic Economy' },
+    { title: 'Provider connection | Agentic Economy' },
     { name: 'robots', content: 'noindex' },
     { name: 'referrer', content: 'no-referrer' },
   ] }),
