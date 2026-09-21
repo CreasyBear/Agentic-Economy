@@ -8,6 +8,7 @@ import { Badge } from '@/components/ui/badge'
 import { buttonVariants } from '@/components/ui/button-variants'
 import { cn } from '@/lib/utils'
 import { formatTimestamp, timestampIso } from '@/lib/ui/format-time'
+import { getStatusPresentation } from '@/lib/ui/status-presentation'
 import { telUri } from '@/lib/ui/tel-uri'
 import { formatOfferingPrice, isPublicHttpsUrl } from '@/modules/catalog/public'
 import type { PublicBusinessCatalogApiV2Dto, PublicListingDto } from '@/modules/registry/public'
@@ -86,7 +87,7 @@ export function AeProviderListingPage({
                   label: 'Provider type',
                   value: catalog.businessContext.kind === 'programmable_provider' ? 'Programmable provider' : 'Human-operated provider',
                 },
-                { label: 'Catalogue status', value: catalog.disposition === 'current' ? 'Current' : catalog.disposition },
+                { label: 'Catalogue status', value: catalog.disposition === 'current' ? getStatusPresentation('current').label : catalog.disposition },
                 {
                   label: 'Observed',
                   value: <time dateTime={timestampIso(catalog.observedAt)}>{formatTimestamp(catalog.observedAt)}</time>,
@@ -150,7 +151,7 @@ export function ListingFirstScreen({
         className="sm:grid-cols-3"
         facts={[
           { label: 'Tools', value: String(offerings.length), mono: true },
-          { label: 'Ready now', value: String(readyCount), mono: true },
+          { label: getStatusPresentation('ready_now').label, value: String(readyCount), mono: true },
           {
             label: 'Last indexed',
             value: <time dateTime={timestampIso(catalog.observedAt)}>{formatTimestamp(catalog.observedAt)}</time>,
@@ -182,7 +183,11 @@ function OperationRow({ offering, catalog }: { offering: PublicListingDto; catal
           <div className="flex flex-wrap items-center gap-intra">
             <h3 className="text-base font-semibold text-foreground">{offering.name}</h3>
             <Badge variant={offering.support.aeSupportedAction ? 'success' : offering.support.integrated ? 'warning' : 'secondary'}>
-              {offering.support.aeSupportedAction ? 'Ready now' : offering.support.integrated ? 'Setup required' : 'Inspect only'}
+              {offering.support.aeSupportedAction
+                ? getStatusPresentation('ready_now').label
+                : offering.support.integrated
+                  ? getStatusPresentation('setup_required').label
+                  : 'Inspect only'}
             </Badge>
           </div>
           <p className="text-sm text-muted-foreground">{offering.summary}</p>

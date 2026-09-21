@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from 'react'
 
+import { getStatusPresentation } from '@/lib/ui/status-presentation'
+
 import {
   TOOL_SEARCH_RESULT_LIMIT,
   searchMarketTools,
@@ -20,9 +22,9 @@ type CatalogSearchItem = Extract<ToolChoiceSearchResult, { kind: 'ok' }>['items'
 function mapCatalogSearchItemToRowModel(item: CatalogSearchItem): ToolSearchResultRowModel {
   const healthLabel =
     item.healthStatus === 'operational'
-      ? 'Operational'
+      ? getStatusPresentation('operational').label
       : item.healthStatus === 'degraded'
-        ? 'Degraded'
+        ? getStatusPresentation('degraded').label
         : 'Unverified'
   const row: ToolSearchResultRowModel = {
     toolRef: item.toolRef,

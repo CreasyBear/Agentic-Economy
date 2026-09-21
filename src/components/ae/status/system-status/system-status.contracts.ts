@@ -1,4 +1,6 @@
 import type { ProbeId, ProbeOutcome, StatusProbesResult } from '@/routes/-status.functions'
+import { aeStatusPresentation, getStatusPresentation } from '@/lib/ui/status-presentation'
+
 
 export type StatusCheckState = 'checking' | ProbeOutcome['state']
 
@@ -8,7 +10,10 @@ export type StatusCheckView = Readonly<{
   state: StatusCheckState
   detail: string
   checkedAtLabel: string
-  badgeLabel: 'Operational' | 'Degraded' | 'Checking'
+  badgeLabel:
+    | typeof aeStatusPresentation.operational.label
+    | typeof aeStatusPresentation.degraded.label
+    | 'Checking'
   badgeVariant: 'success' | 'destructive' | 'secondary'
   requestRef?: string
 }>
@@ -96,7 +101,7 @@ export function projectStatusChecks(
       state: outcome.state,
       detail: outcome.detail,
       checkedAtLabel: `${statusCheckTimeLabel} ${relativeCheckedAt}`,
-      badgeLabel: outcome.state === 'operational' ? 'Operational' : 'Degraded',
+      badgeLabel: getStatusPresentation(outcome.state === 'operational' ? 'operational' : 'degraded').label,
       badgeVariant: outcome.state === 'operational' ? 'success' : 'destructive',
       ...(outcome.requestRef === undefined ? {} : { requestRef: outcome.requestRef }),
     }

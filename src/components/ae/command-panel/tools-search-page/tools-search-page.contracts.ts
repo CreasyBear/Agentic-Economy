@@ -10,11 +10,16 @@ import {
   type LucideIcon,
 } from 'lucide-react'
 
+import { aeStatusPresentation } from '@/lib/ui/status-presentation'
+
 export type ToolSearchResultRowModel = Readonly<{
   toolRef: string
   title: string
   providerLine: string
-  healthLabel: 'Operational' | 'Degraded' | 'Unverified'
+  healthLabel:
+    | typeof aeStatusPresentation.operational.label
+    | typeof aeStatusPresentation.degraded.label
+    | 'Unverified'
   priceLabel: string
   priceValidUntil?: number
 }>
