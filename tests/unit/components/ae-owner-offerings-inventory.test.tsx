@@ -64,28 +64,28 @@ describe('AeOwnerOfferingsList (W-34)', () => {
     },
   ]
 
-  it('T1: renders tool name, status badges, protocol badges, pricing, and formatted usage', () => {
+  it('T1: renders Tool name, canonical status badges, pricing, and Calls', () => {
     render(<AeOwnerOfferingsList offerings={testTools} />)
 
     expect(screen.getAllByText('Australian Tax Calculator').length).toBeGreaterThan(0)
     expect(screen.getByText('Calculates exact PAYG withholding and Medicare levy.')).toBeInTheDocument()
     expect(screen.getAllByText('A$0.10 / call').length).toBeGreaterThan(0)
     expect(screen.getAllByText('OpenAPI').length).toBeGreaterThan(0)
-    expect(screen.getAllByText('Operational').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('Available').length).toBeGreaterThan(0)
     expect(screen.getAllByText('Published').length).toBeGreaterThan(0)
     expect(screen.queryByText('Protocol: OpenAPI')).not.toBeInTheDocument()
     expect(screen.queryByText('Catalog: Published')).not.toBeInTheDocument()
-    expect(screen.getAllByText('1,420 calls').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('1,420').length).toBeGreaterThan(0)
 
     expect(screen.getAllByText('AU Postcode Validator').length).toBeGreaterThan(0)
     expect(screen.getAllByText('A$0.02 / call').length).toBeGreaterThan(0)
     expect(screen.getAllByText('MCP').length).toBeGreaterThan(0)
-    expect(screen.getAllByText('Degraded').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('Unavailable').length).toBeGreaterThan(0)
     expect(screen.getAllByText('Draft').length).toBeGreaterThan(0)
-    expect(screen.getAllByText('0 calls').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('0').length).toBeGreaterThan(0)
   })
 
-  it('T2: falls back to access path count when callsCount is undefined', () => {
+  it('T2: shows an unknown Calls value when callsCount is undefined', () => {
     const withoutCalls: readonly OwnerOfferingSummary[] = [
       {
         offering: {
@@ -104,12 +104,13 @@ describe('AeOwnerOfferingsList (W-34)', () => {
     render(<AeOwnerOfferingsList offerings={withoutCalls} />)
 
     expect(screen.getAllByText('ABN Checker').length).toBeGreaterThan(0)
-    const usage = screen.getAllByText('3 access paths').find((node) =>
+    const calls = screen.getAllByText('—').find((node) =>
       node.className.includes('text-foreground'),
     )
-    expect(usage).toBeDefined()
-    expect(usage?.className).toContain('font-mono')
-    expect(usage?.className).toContain('tabular-nums')
+    expect(calls).toBeDefined()
+    expect(calls?.className).toContain('font-mono')
+    expect(calls?.className).toContain('tabular-nums')
+    expect(screen.queryByText('3 access paths')).not.toBeInTheDocument()
     expect(screen.getAllByText('—').length).toBeGreaterThan(0)
   })
 
@@ -192,7 +193,7 @@ describe('AeOwnerOfferingsList (W-34)', () => {
     expect(onFilterChange).toHaveBeenCalledWith('')
   })
 
-  it('T7: compact list shows badges, price, usage, and quick actions', () => {
+  it('T7: compact list shows canonical badges, price, Calls, and quick actions', () => {
     render(<AeOwnerOfferingsList offerings={testTools} />)
 
     const compactList = screen.getByTestId('provider-workspace-compact-list')
@@ -201,10 +202,10 @@ describe('AeOwnerOfferingsList (W-34)', () => {
     if (!firstRow) return
 
     expect(within(firstRow).getByText('Published')).toBeInTheDocument()
-    expect(within(firstRow).getByText('Operational')).toBeInTheDocument()
+    expect(within(firstRow).getByText('Available')).toBeInTheDocument()
     expect(within(firstRow).getByText('OpenAPI')).toBeInTheDocument()
     expect(within(firstRow).getByText('A$0.10 / call')).toBeInTheDocument()
-    expect(within(firstRow).getByText('1,420 calls')).toBeInTheDocument()
+    expect(within(firstRow).getByText('1,420')).toBeInTheDocument()
     expect(within(firstRow).getByRole('link', { name: 'Test Run for Australian Tax Calculator' })).toBeInTheDocument()
     expect(within(firstRow).getByRole('link', { name: 'View logs for Australian Tax Calculator' })).toBeInTheDocument()
   })

@@ -6,6 +6,12 @@ import type { OwnerOfferingSummary } from '@/components/ae/offerings/provider-wo
 export const TACTILE_PRESS_CLASS =
   'enabled:active:scale-[0.98] transition-transform duration-100 ease-out motion-reduce:transition-none motion-reduce:active:scale-100'
 
+export const OWNER_OFFERINGS_COPY = {
+  callsColumn: 'Calls',
+  emptyAction: 'Start setup',
+  emptyDescription: 'Add a source, then choose a Tool to publish.',
+} as const
+
 export type OwnerOfferingsState = Readonly<{
   compactRootRef: RefObject<HTMLUListElement | null>
   hasLifecyclePresentation: boolean

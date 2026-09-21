@@ -4,7 +4,6 @@ import { useMemo } from 'react'
 
 import { AeOperatorSortableHeader, AeRecordTable } from '@/components/ae/operator/AeOperatorDataTable'
 import {
-  ownerToolAvailabilityPresentation,
   ownerToolLifecycleVariant,
   ownerToolProtocolBadgeVariant,
   type OwnerOfferingSummary,
@@ -15,6 +14,7 @@ import { buttonVariants } from '@/components/ui/button-variants'
 import { cn } from '@/lib/utils'
 
 import {
+  OWNER_OFFERINGS_COPY,
   TACTILE_PRESS_CLASS,
   type OwnerOfferingStatusClusterProps,
   type OwnerOfferingsTableProps,
@@ -23,6 +23,10 @@ import {
   matchesOwnerOfferingInventory,
   statusLabel,
 } from '../useOwnerOfferings'
+import {
+  formatOwnerOfferingCalls,
+  ownerOfferingAvailabilityPresentation,
+} from '../owner-offerings.view-model'
 
 export function OwnerOfferingsTable({
   offerings,
@@ -80,10 +84,10 @@ export function OwnerOfferingsTable({
       id: 'activity',
       accessorFn: (item) => item.callsCount ?? 0,
       enableGlobalFilter: false,
-      header: ({ column }) => <AeOperatorSortableHeader label="Usage" column={column} />,
+      header: ({ column }) => <AeOperatorSortableHeader label={OWNER_OFFERINGS_COPY.callsColumn} column={column} />,
       cell: ({ row }) => (
         <span className="font-mono text-xs tabular-nums text-foreground">
-          {formatOwnerOfferingUsage(row.original)}
+          {formatOwnerOfferingCalls(row.original)}
         </span>
       ),
     },
@@ -174,7 +178,7 @@ export function OwnerOfferingsTable({
                     <div className="flex items-center gap-2 font-mono text-xs tabular-nums text-muted-foreground">
                       <span>{item.pricingLabel ?? '—'}</span>
                       <span>·</span>
-                      <span>{formatOwnerOfferingUsage(item)}</span>
+                      <span>{formatOwnerOfferingCalls(item)}</span>
                     </div>
                     {item.blocker === undefined ? null : (
                       <span className="text-xs text-muted-foreground">{item.blocker}</span>
@@ -234,7 +238,7 @@ function OwnerOfferingStatusCluster({
     item.lifecycleLabel ?? statusLabel(item.status),
     item.lifecyclePending,
   )
-  const availability = ownerToolAvailabilityPresentation(item.availability)
+  const availability = ownerOfferingAvailabilityPresentation(item.availability)
   return (
     <div className="flex flex-wrap items-center gap-1.5">
       <Badge variant={lifecycle.variant}>{lifecycle.label}</Badge>
@@ -256,11 +260,4 @@ function OwnerOfferingStatusCluster({
       ) : null}
     </div>
   )
-}
-
-function formatOwnerOfferingUsage(item: OwnerOfferingSummary): string {
-  if (item.callsCount !== undefined) {
-    return `${item.callsCount.toLocaleString('en-AU')} calls`
-  }
-  return `${item.accessPathCount.toLocaleString('en-AU')} access path${item.accessPathCount === 1 ? '' : 's'}`
 }

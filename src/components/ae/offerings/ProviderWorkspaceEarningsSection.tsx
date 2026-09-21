@@ -1,11 +1,10 @@
 import { AeSection } from '@/components/ae/layout/AeSection'
-import { ProviderWorkspacePayoutPolicyPanel } from './ProviderWorkspacePayoutPolicyPanel'
-import { AeSupplyEarningsCard } from '@/components/ae/supply/earnings-card/AeSupplyEarningsCard'
+import { Alert, AlertTitle } from '@/components/ui/alert'
 import { Skeleton } from '@/components/ui/skeleton'
-import type { OwnerProviderEarningsReadback } from '@/modules/capability-supply/supply-funnel.functions'
 import type { OwnerConnectReadinessReadback } from '@/modules/money/server'
 import { DeferredSection, SecondarySummary, SummaryCard, UnavailableSummary } from './ProviderWorkspaceSharedUi'
 import type { ProviderWorkspacePayoutResult } from './provider-workspace.functions'
+import { PROVIDER_WORKSPACE_EARNINGS_COPY } from './provider-workspace/provider-workspace.contracts'
 
 export function ProviderWorkspaceEarningsSection({
   payouts,
@@ -14,34 +13,40 @@ export function ProviderWorkspaceEarningsSection({
   earningsDetail,
   onOpenEarnings,
   onRetryEarnings,
-  onStatusRefreshed,
 }: Readonly<{
   payouts?: Promise<ProviderWorkspacePayoutResult>
   earningsOpen: boolean
   earningsPending: boolean
-  earningsDetail?: Readonly<{ earnings: OwnerProviderEarningsReadback; connect: OwnerConnectReadinessReadback }>
+  earningsDetail?: Readonly<{ connect: OwnerConnectReadinessReadback }>
   onOpenEarnings: () => void
   onRetryEarnings: () => void
-  onStatusRefreshed: () => void
 }>) {
+  const connectionDetail = earningsDetail?.connect.kind === 'available'
+    ? earningsDetail.connect.accounts.some(({ account }) => account.state === 'ready')
+      ? PROVIDER_WORKSPACE_EARNINGS_COPY.connected
+      : PROVIDER_WORKSPACE_EARNINGS_COPY.notConnected
+    : earningsDetail?.connect.kind === 'not_found'
+      ? PROVIDER_WORKSPACE_EARNINGS_COPY.notConnected
+      : PROVIDER_WORKSPACE_EARNINGS_COPY.unavailable
   return (
-    <AeSection id="earnings" title="Earnings" description="Provider earnings and payout readiness.">
-      <DeferredSection promise={payouts} loadingLabel="Loading earnings" unavailableTitle="Earnings unavailable">
+    <AeSection id="earnings" title="Earnings" description={PROVIDER_WORKSPACE_EARNINGS_COPY.connectionTitle}>
+      <DeferredSection promise={payouts} loadingLabel={PROVIDER_WORKSPACE_EARNINGS_COPY.loading} unavailableTitle={PROVIDER_WORKSPACE_EARNINGS_COPY.unavailable}>
         {(result) => result.kind === 'available' ? (
-          <SummaryCard title="Payout readiness" detail={`${result.value.readyAccounts} ready · ${result.value.needsAttention} need attention`} action="Manage earnings" onAction={onOpenEarnings} />
-        ) : <SecondarySummary result={result} subject="Payout readiness" notApplicableTitle="Payout readiness not configured" unavailableTitle="Earnings unavailable" />}
+          <SummaryCard
+            title={PROVIDER_WORKSPACE_EARNINGS_COPY.connectionTitle}
+            detail={result.value.readyAccounts > 0 ? PROVIDER_WORKSPACE_EARNINGS_COPY.connected : PROVIDER_WORKSPACE_EARNINGS_COPY.notConnected}
+            action={PROVIDER_WORKSPACE_EARNINGS_COPY.reviewAction}
+            onAction={onOpenEarnings}
+          />
+        ) : <SecondarySummary result={result} subject={PROVIDER_WORKSPACE_EARNINGS_COPY.connectionTitle} notApplicableTitle={PROVIDER_WORKSPACE_EARNINGS_COPY.notConnected} unavailableTitle={PROVIDER_WORKSPACE_EARNINGS_COPY.unavailable} />}
       </DeferredSection>
-      {earningsOpen ? earningsPending ? <div aria-busy="true"><Skeleton className="h-24 w-full" /></div> : earningsDetail === undefined ? <UnavailableSummary title="Earnings controls unavailable" retryLabel="Try earnings again" onRetry={onRetryEarnings} /> : (
-        <div className="grid gap-6">
-          <AeSupplyEarningsCard readback={earningsDetail.earnings} connect={earningsDetail.connect} onStatusRefreshed={onStatusRefreshed} />
-          {earningsDetail.earnings.kind === 'available' && earningsDetail.connect.kind === 'available' && earningsDetail.connect.accounts.some((a) => a.account.state === 'ready') && (
-            <ProviderWorkspacePayoutPolicyPanel
-              businessId={earningsDetail.earnings.businessId}
-              currency="AUD"
-            />
-          )}
-        </div>
-      ) : null}
+      {earningsOpen
+        ? earningsPending
+          ? <div aria-busy="true"><Skeleton className="h-24 w-full" /></div>
+          : earningsDetail === undefined
+            ? <UnavailableSummary title={PROVIDER_WORKSPACE_EARNINGS_COPY.unavailable} retryLabel={PROVIDER_WORKSPACE_EARNINGS_COPY.retryAction} onRetry={onRetryEarnings} />
+            : <Alert><AlertTitle>{connectionDetail}</AlertTitle></Alert>
+        : null}
     </AeSection>
   )
 }

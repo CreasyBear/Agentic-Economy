@@ -25,9 +25,9 @@ describe('Provider Tool directory', () => {
   it('starts the source-native Add Tool journey', () => {
     renderAt(<AeOwnerOfferingsList offerings={[]} />, '/owner/operations')
 
-    expect(screen.getByRole('heading', { name: 'No Tools yet' })).toBeTruthy()
-    expect(screen.getByText('Connect a source and choose the exact Tool AE should validate.')).toBeTruthy()
-    expect(screen.getByRole('link', { name: 'Add Tool' }).getAttribute('href')).toBe('/owner/operations/new')
+    expect(screen.getByRole('heading', { name: 'Add your first Tool' })).toBeTruthy()
+    expect(screen.getByText('Add a source, then choose a Tool to publish.')).toBeTruthy()
+    expect(screen.getByRole('link', { name: 'Start setup' }).getAttribute('href')).toBe('/owner/operations/new')
   })
 
   it('opens the authoritative Provider Tool readback', () => {
@@ -49,7 +49,7 @@ describe('Provider Tool directory', () => {
       'Tool',
       'Status',
       'Price',
-      'Usage',
+      'Calls',
       'Quick actions',
       'Next action',
     ])
@@ -70,7 +70,7 @@ describe('Provider Tool directory', () => {
     const row = within(compactList).getByRole('listitem')
     expect(within(row).getByRole('heading', { name: 'Blockchain data query' })).toBeTruthy()
     expect(within(row).getByText('Published')).toBeTruthy()
-    expect(within(row).getByText('Operational')).toBeTruthy()
+    expect(within(row).getByText('Available')).toBeTruthy()
     expect(within(row).getByText('Reconnect the provider')).toBeTruthy()
     expect(within(row).getByRole('link', { name: 'Manage connection for Blockchain data query' }).className)
       .toContain('w-full')

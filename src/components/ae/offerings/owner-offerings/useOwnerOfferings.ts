@@ -1,8 +1,7 @@
 import { useEffect, useMemo, useRef } from 'react'
 
-import {
-  ownerToolAvailabilityPresentation,
-  type OwnerOfferingSummary,
+import type {
+  OwnerOfferingSummary,
 } from '@/components/ae/offerings/provider-workspace-projection'
 import type {
   BusinessOfferingProjection,
@@ -14,11 +13,12 @@ import type {
   AeOwnerOfferingsListProps,
   OwnerOfferingsState,
 } from './owner-offerings.contracts'
+import { ownerOfferingAvailabilityPresentation } from './owner-offerings.view-model'
 
 export function matchesOwnerOfferingInventory(item: OwnerOfferingSummary, query: string): boolean {
   const normalized = query.trim().toLocaleLowerCase()
   if (normalized.length === 0) return true
-  const availabilityPresentation = ownerToolAvailabilityPresentation(item.availability)
+  const availabilityPresentation = ownerOfferingAvailabilityPresentation(item.availability)
   const candidates = [
     item.offering.name,
     item.offering.summary,
@@ -29,6 +29,8 @@ export function matchesOwnerOfferingInventory(item: OwnerOfferingSummary, query:
     availabilityPresentation?.label,
     item.availability,
     item.blocker,
+    item.pricingLabel,
+    item.callsCount?.toLocaleString('en-AU'),
   ]
   return candidates.some((value) => value?.toLocaleLowerCase().includes(normalized) === true)
 }
@@ -103,6 +105,6 @@ function compactSortValue(item: OwnerOfferingSummary, id: string): string {
   if (id === 'name') return item.offering.name
   if (id === 'status') return item.lifecycleLabel ?? statusLabel(item.status)
   if (id === 'price') return item.pricingLabel ?? ''
-  if (id === 'activity') return String(item.callsCount ?? item.accessPathCount)
+  if (id === 'activity') return String(item.callsCount ?? -1)
   return item.offering.name
 }

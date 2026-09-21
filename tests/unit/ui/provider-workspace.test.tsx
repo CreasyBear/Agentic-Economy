@@ -41,10 +41,8 @@ vi.mock('@/components/ae/offerings/provider-identity.functions', () => ({ ensure
 vi.mock('@/lib/server/owner-workspace.functions', () => ({ renameProviderDisplayNameServer: tokens.rename }))
 vi.mock('@/modules/capability-supply/supply-funnel.functions', () => ({ readOwnerProviderEarningsServer: tokens.earnings }))
 vi.mock('@/modules/money/money.functions', () => ({ readOwnerConnectReadinessServer: tokens.connect }))
-vi.mock('@/components/ae/layout/AeOperatorPage', () => ({ AeOperatorPage: ({ children }: { children: ReactNode }) => <main>{children}</main> }))
-vi.mock('@/components/ae/offerings/AeOwnerOfferings', () => ({ AeOwnerOfferingsList: () => <div data-testid="tools-list" /> }))
+vi.mock('@/components/ae/layout/AeOperatorPage', () => ({ AeOperatorPage: ({ actions, children }: { actions?: ReactNode; children: ReactNode }) => <main>{actions}{children}</main> }))
 vi.mock('@/components/ae/supply/AeOwnerProviderConnections', () => ({ AeOwnerProviderConnections: (props: unknown) => { rendered.connections(props); return <div data-testid="connection-controls" /> } }))
-vi.mock('@/components/ae/supply/earnings-card/AeSupplyEarningsCard', () => ({ AeSupplyEarningsCard: () => <div data-testid="earnings-controls" /> }))
 vi.mock('@/components/ae/status/AeStatusCard', () => ({ AeStatusCard: (props: unknown) => { rendered.status(props); return <div data-testid="provider-status-card" /> } }))
 vi.mock('@/components/ae/status/AeCapabilityList', () => ({ AeCapabilityList: (props: unknown) => { rendered.capabilities(props); return <div data-testid="provider-capability-list" /> } }))
 vi.mock('@/components/ae/settings/AeWorkspaceGeneral', () => ({ AeWorkspaceGeneral: (props: unknown) => { rendered.identity(props); return <div data-testid="provider-identity-controls" /> } }))
@@ -63,6 +61,17 @@ afterEach(() => {
 })
 
 describe('Tools management disclosure', () => {
+  it('shows one Add Tool primary and honest disconnected payout state', async () => {
+    render(<AeProviderWorkspace inventory={inventory} lifecycle={unavailable} connections={unavailable} payouts={unavailable} publicStatus={unavailable} />)
+
+    await screen.findByText('Add a source, then choose a Tool to publish.')
+    const addTool = screen.getAllByRole('link', { name: 'Add Tool' })
+    expect(addTool).toHaveLength(1)
+    expect(addTool[0]?.getAttribute('href')).toBe('/owner/operations/new')
+    expect(screen.getByText('Stripe account not connected.')).toBeTruthy()
+    expect(screen.queryByText(/monthly settlements/u)).toBeNull()
+  })
+
   it('renders a provider ownership conflict without lifecycle actions', async () => {
     render(<AeProviderWorkspace inventory={inventory} lifecycle={Promise.resolve({ kind: 'conflict', reason: 'business_mismatch' })} connections={unavailable} payouts={unavailable} publicStatus={unavailable} />)
 
@@ -88,10 +97,10 @@ describe('Tools management disclosure', () => {
     await waitFor(() => expect(calls.connections).toHaveBeenCalledTimes(1))
     expect(await screen.findByTestId('connection-controls')).toBeTruthy()
 
-    fireEvent.click(screen.getByRole('button', { name: 'Manage earnings' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Review connection' }))
     await waitFor(() => expect(calls.earnings).toHaveBeenCalledTimes(1))
     expect(calls.connect).toHaveBeenCalledTimes(1)
-    expect(await screen.findByTestId('earnings-controls')).toBeTruthy()
+    expect(await screen.findByText('Stripe account not connected', { selector: '[data-slot="alert-title"]' })).toBeTruthy()
   })
 
   it('keeps controls absent on a business mismatch', async () => {
@@ -114,7 +123,7 @@ describe('Tools management disclosure', () => {
 
     expect(await screen.findByText('Connections ownership conflict')).toBeTruthy()
     expect(screen.getAllByText('Public status ownership conflict').length).toBeGreaterThan(0)
-    expect(screen.getByText('Payout readiness not configured')).toBeTruthy()
+    expect(screen.getByRole('heading', { name: 'Stripe account not connected' })).toBeTruthy()
     expect(screen.queryByText('Earnings unavailable')).toBeNull()
   })
 
@@ -179,7 +188,7 @@ describe('Tools management disclosure', () => {
 
     await waitFor(() => expect(calls.earnings).toHaveBeenCalledTimes(1))
     expect(calls.connect).toHaveBeenCalledTimes(1)
-    expect(await screen.findByTestId('earnings-controls')).toBeTruthy()
+    expect(await screen.findByText('Stripe account not connected', { selector: '[data-slot="alert-title"]' })).toBeTruthy()
   })
 
   it('opens provider connections and carries the exact x402 source handoff from the CTA', async () => {
@@ -206,11 +215,11 @@ describe('Tools management disclosure', () => {
     calls.connect.mockResolvedValue({ kind: 'not_found' })
     render(<AeProviderWorkspace inventory={inventory} lifecycle={unavailable} connections={unavailable} payouts={Promise.resolve({ kind: 'available', value: { currencies: [], earningsAccounts: 0, payoutAccounts: 0, readyAccounts: 0, needsAttention: 0 } })} publicStatus={unavailable} />)
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Manage earnings' }))
-    expect(await screen.findByText('Earnings controls unavailable')).toBeTruthy()
-    fireEvent.click(screen.getByRole('button', { name: 'Try earnings again' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Review connection' }))
+    expect(await screen.findByText('Stripe connection state unavailable')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Try connection again' }))
 
-    expect(await screen.findByTestId('earnings-controls')).toBeTruthy()
+    expect(await screen.findByText('Stripe account not connected', { selector: '[data-slot="alert-title"]' })).toBeTruthy()
     expect(calls.earnings).toHaveBeenCalledTimes(2)
     expect(calls.connect).toHaveBeenCalledTimes(2)
   })

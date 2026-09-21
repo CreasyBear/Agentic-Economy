@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button'
 import { buttonVariants } from '@/components/ui/button-variants'
 import { cn } from '@/lib/utils'
 
-import type { OwnerOfferingsProjectionGateProps } from '../owner-offerings.contracts'
+import { OWNER_OFFERINGS_COPY, type OwnerOfferingsProjectionGateProps } from '../owner-offerings.contracts'
 
 export function OwnerOfferingsProjectionGate({
   projectionState,
@@ -33,13 +33,13 @@ export function OwnerOfferingsEmptyState() {
   return (
     <AeEmptyState
       title="Add your first Tool"
-      description="Connect a source and choose the exact Tool AE should validate."
+      description={OWNER_OFFERINGS_COPY.emptyDescription}
       action={
         <Link
           to="/owner/operations/new"
-          className={cn(buttonVariants(), 'min-h-touch')}
+          className={cn(buttonVariants({ variant: 'secondary' }), 'min-h-touch')}
         >
-          Add Tool
+          {OWNER_OFFERINGS_COPY.emptyAction}
         </Link>
       }
     />

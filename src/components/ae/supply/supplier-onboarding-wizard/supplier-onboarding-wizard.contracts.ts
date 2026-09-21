@@ -25,6 +25,10 @@ export const TACTILE =
 export const SHELL = 'min-h-[28rem]'
 export const SLOT = 'min-h-[3rem]'
 export const ABN_INPUT_CLASS = 'text-sm font-mono tabular-nums'
+export const PAYOUT_CONNECTION_STATUS_COPY = {
+  connected: 'Stripe account connected.',
+  notConnected: 'Stripe account not connected.',
+} as const
 
 export const STEP_META: ReadonlyArray<{
   id: SupplierOnboardingStep

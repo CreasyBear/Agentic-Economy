@@ -4,7 +4,7 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 
-import { TACTILE } from '../supplier-onboarding-wizard.contracts'
+import { PAYOUT_CONNECTION_STATUS_COPY, TACTILE } from '../supplier-onboarding-wizard.contracts'
 import type { PayoutsStepProps } from '../supplier-onboarding-wizard.contracts'
 
 export function PayoutsStep({
@@ -41,8 +41,8 @@ export function PayoutsStep({
             </div>
             <span className="text-[11px] text-muted-foreground">
               {payoutsConfigured
-                ? 'Bank account connected for monthly settlements.'
-                : 'Connect your Australian bank account or debit card for direct credit.'}
+                ? PAYOUT_CONNECTION_STATUS_COPY.connected
+                : PAYOUT_CONNECTION_STATUS_COPY.notConnected}
             </span>
           </div>
         </div>

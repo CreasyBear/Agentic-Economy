@@ -127,7 +127,6 @@ function AvailableWorkspaceBody({
         {...(sheets.earningsDetail === undefined ? {} : { earningsDetail: sheets.earningsDetail })}
         onOpenEarnings={sheets.openEarnings}
         onRetryEarnings={sheets.loadEarnings}
-        onStatusRefreshed={sheets.onStatusRefreshed}
       />
       <details className="rounded-card border border-border p-4" open={location.hash === 'provider-identity' || undefined}>
         <summary className="cursor-pointer font-medium">Provider settings and administration</summary>

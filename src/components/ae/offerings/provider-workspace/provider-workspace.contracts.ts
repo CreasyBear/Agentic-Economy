@@ -11,6 +11,16 @@ import type {
 } from '@/components/ae/offerings/provider-workspace.functions'
 import type { ProviderWorkspaceProjectionRow } from '@/components/ae/offerings/provider-workspace-projection'
 
+export const PROVIDER_WORKSPACE_EARNINGS_COPY = {
+  connected: 'Stripe account connected',
+  connectionTitle: 'Stripe payout connection',
+  loading: 'Loading Stripe connection',
+  notConnected: 'Stripe account not connected',
+  reviewAction: 'Review connection',
+  retryAction: 'Try connection again',
+  unavailable: 'Stripe connection state unavailable',
+} as const
+
 export type AeProviderWorkspaceProps = Readonly<{
   inventory: ProviderWorkspaceInventoryResult
   lifecycle?: Promise<ProviderWorkspaceLifecycleResult>
