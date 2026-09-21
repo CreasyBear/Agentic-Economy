@@ -156,7 +156,7 @@ describe('Deep IceInVein 8-Point Architecture Audit', () => {
       ).rejects.toThrow(/Failed to parse price/)
     })
 
-    it('POSTCONDITION: Guaranteed A$0.00 Net deduction on any provider remedy', async () => {
+    it('POSTCONDITION: Payload text cannot establish a refund', async () => {
       const engine = new CapabilityProcurementEngine({
         catalogSearcher: async () => [AUDIT_CATALOG[1]!],
         callExecutor: async () => ({
@@ -170,12 +170,9 @@ describe('Deep IceInVein 8-Point Architecture Audit', () => {
         simulateProviderFailure: true,
       })
 
-      expect(outcome.status).toBe('remedied')
-      if (outcome.status === 'remedied') {
-        expect(outcome.netChargeAud).toBe('A$0.00')
-        expect(outcome.refundedAmountAud).toBe('A$0.0022')
-        expect(outcome.diagnostic.financialImpact).toContain('A$0.00 deducted')
-      }
+      expect(outcome.status).toBe('delivered')
+      expect(outcome).not.toHaveProperty('refundedAmountAud')
+      expect(outcome).not.toHaveProperty('netChargeAud')
     })
   })
 
@@ -319,8 +316,8 @@ describe('Deep IceInVein 8-Point Architecture Audit', () => {
   // 5. ERROR TAXONOMY & GUARANTEES (error-strategist / Duffy & Abrahams)
   // Hostile Provider Payloads & Rule 4/5 Diagnostic Triplets
   // =========================================================================
-  describe('Dimension 5: Error Taxonomy & Stealth Failure Detection', () => {
-    it('detects GraphQL stealth errors masked behind HTTP 200', async () => {
+  describe('Dimension 5: Semantic suspicion remains advisory', () => {
+    it('does not invent a refund from GraphQL error content', async () => {
       const engine = new CapabilityProcurementEngine({
         catalogSearcher: async () => [AUDIT_CATALOG[0]!],
         callExecutor: async () => ({
@@ -342,16 +339,12 @@ describe('Deep IceInVein 8-Point Architecture Audit', () => {
         simulateProviderFailure: true,
       })
 
-      expect(outcome.status).toBe('remedied')
-      if (outcome.status === 'remedied') {
-        expect(outcome.netChargeAud).toBe('A$0.00')
-        expect(outcome.diagnostic.whatHappened).toContain('Upstream provider')
-        expect(outcome.diagnostic.financialImpact).toContain('A$0.00 deducted')
-        expect(outcome.diagnostic.nextStep).toContain('Autonomous buyer protection')
-      }
+      expect(outcome.status).toBe('delivered')
+      expect(outcome).not.toHaveProperty('refundedAmountAud')
+      expect(outcome).not.toHaveProperty('netChargeAud')
     })
 
-    it('detects Base EVM RPC connection drops and remedies customer', async () => {
+    it('does not invent a refund from RPC error content', async () => {
       const engine = new CapabilityProcurementEngine({
         catalogSearcher: async () => [AUDIT_CATALOG[1]!],
         callExecutor: async () => ({
@@ -368,11 +361,9 @@ describe('Deep IceInVein 8-Point Architecture Audit', () => {
         simulateProviderFailure: true,
       })
 
-      expect(outcome.status).toBe('remedied')
-      if (outcome.status === 'remedied') {
-        expect(outcome.netChargeAud).toBe('A$0.00')
-        expect(outcome.audit.confidence).toBeGreaterThanOrEqual(0.75)
-      }
+      expect(outcome.status).toBe('delivered')
+      expect(outcome).not.toHaveProperty('refundedAmountAud')
+      expect(outcome).not.toHaveProperty('netChargeAud')
     })
   })
 

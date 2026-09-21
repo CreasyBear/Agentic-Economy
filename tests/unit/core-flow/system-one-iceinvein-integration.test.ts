@@ -109,21 +109,18 @@ describe('Comprehensive System One & IceInVein Integration Test', () => {
     }
   })
 
-  it('autonomously detects stealth provider timeout and yields A$0.00 net deduction', async () => {
+  it('preserves executor success without manufacturing a semantic refund', async () => {
     const outcome = await engine.procure({
       need: 'Audit ASIC compliance for company',
       maxSpendAud: '0.1000',
       simulateProviderFailure: true,
     })
 
-    expect(outcome.status).toBe('remedied')
-    if (outcome.status === 'remedied') {
-      expect(outcome.netChargeAud).toBe('A$0.00')
-      expect(outcome.refundedAmountAud).toBe('A$0.0550')
-      expect(outcome.diagnostic.whatHappened).toContain('Upstream provider')
-      expect(outcome.diagnostic.financialImpact).toContain('A$0.00 deducted')
-      expect(outcome.audit.adjudicator).toBe('jev-payload-auditor')
-      expect(outcome.audit.confidence).toBeGreaterThanOrEqual(0.75)
+    expect(outcome.status).toBe('delivered')
+    expect(outcome).not.toHaveProperty('refundedAmountAud')
+    if (outcome.status === 'delivered') {
+      expect(outcome.output).toMatchObject({ code: 'ETIMEDOUT' })
+      expect(outcome.audit.jevDecisionsCostAud).toBe('unknown')
     }
   })
 
