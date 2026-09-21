@@ -2,7 +2,7 @@
 
 **Date:** 21 September 2026  
 **Status:** OPEN — Wave 1 **VERIFIED**. Waves 2–3 unstaffed. Campaign 2 remains **CLOSED**.  
-**Unified tree:** `main` at Phase 0 commit `de8bd68ab` (A01 closed; Jev/procure cutover reconciled). Wave 1 extracts: `e86184cd2` (CQ3-01) + this batch (CQ3-02/03).  
+**Unified tree:** `main` at Phase 0 commit `de8bd68ab` (A01 closed; Jev/procure cutover reconciled). Wave 1 extracts: `e86184cd2` (CQ3-01) + `942029008` (CQ3-02/03).  
 **Operating Protocol:** `docs/operations/code-quality-maturity-protocol.md` (same 5-stage Grok → Composer → Orchestrator lifecycle; IDs `CQ3-*`)  
 **Intake evidence:** `docs/operations/code-quality-amendment-register.md` (A01–A15). This file is the assignment surface.  
 **Predecessor:** `docs/operations/code-quality-ceiling-register.md` (Campaign 2 CLOSED)
@@ -69,7 +69,7 @@ Lint, `tsc --noEmit`, `deps:check` 0/0/0, targeted + funding/payment regression 
 - **RPC to preserve:** `readSellerOnboardingCanaryCdpReadiness`
 - **Façade re-exports to preserve:** `readCdpUsdcBalance`, `CdpUsdcBalanceReader`, `CdpUsdcNetwork`, preflight result/code/dependency types (treasury observation + tests keep façade import paths)
 - **Status:** `VERIFIED`
-- **Commit:** this Wave 1 close batch
+- **Commit:** `942029008`
 - **Subagent Assignment:** Grok (Spec: `928209d3-2f42-424c-8199-ab05d9f77d75`) → Composer (Implement: `ebd8c107-cbc6-4c1a-b593-4aa1b082babd`) → Orchestrator (Verify: Passed 4/4 Gates)
 - **After:** façade 107; `canaryFundingPreflightInspect.ts` 343; `canaryFundingPreflightBalance.ts` 91
 - **Accepted deviation:** inspect helper carries `"use node"` so `@/modules/capability-supply` Node-side imports stay out of default Convex runtime. CDP SDK remains only on the façade. Funding is reached only via `internal.capabilitySupplyCanaryFunding.read*`.
@@ -80,7 +80,7 @@ Lint, `tsc --noEmit`, `deps:check` 0/0/0, targeted + funding/payment regression 
 - **Surfaces:** `convex/moneyX402PaymentAttempts.ts`; sibling `convex/lib/x402PaymentAttemptCanary.ts` (did not grow `x402PaymentAttempt.ts`)
 - **RPC to preserve:** `prepareSellerOnboardingCanaryPaymentAuthorization` (and the existing payment-attempt RPC wrap set)
 - **Status:** `VERIFIED`
-- **Commit:** this Wave 1 close batch
+- **Commit:** `942029008`
 - **Subagent Assignment:** Grok (Spec: `b59e8f79-bdc2-4351-99b5-6b0145d2e4c4`) → Composer (Implement: `990441b6-b6a2-45a2-ac3a-bebb3b9aab87`) → Orchestrator (Verify: Passed 4/4 Gates)
 - **After:** façade 153; `x402PaymentAttemptCanary.ts` 132; `x402PaymentAttempt.ts` unchanged
 - **Atomicity:** canary handler calls `prepareX402PaymentAuthorizationHandler(ctx, …)` in-process. No `ctx.runMutation`. Grant reader imported from the funding façade, not `canaryFundingReads.ts`.
