@@ -3,7 +3,7 @@
 **Status:** wave 1 register — destinations derived from jobs/journeys, not path names  
 **Date:** 2026-09-21  
 **Authority:** [`PRODUCT.md`](../../PRODUCT.md) core market journeys 1–6; [`CONTEXT.md`](../../CONTEXT.md); [`buyer-page-register.md`](./buyer-page-register.md); live evidence in [`buyer-ia-coverage.md`](./buyer-ia-coverage.md)  
-**Companion:** [`platform-design-package.md`](./platform-design-package.md) part 4. Job IDs (`J-B…`) land in [`platform-job-map.md`](./platform-job-map.md) (not written yet); this file uses **journey stage** until then.
+**Companion:** [`platform-design-package.md`](./platform-design-package.md) part 4. Job IDs (`J-B…`, `J-A…`, `J-P…`, `J-R…`, `J-S…`) live in [`platform-job-map.md`](./platform-job-map.md). Journey stages remain the dest grouping; job IDs name the decision each dest serves.
 
 The withdrawn Search / Keys / Trips dest law is **not** used. Do not infer Airbnb Trips / Messages / Wishlists / Switch to hosting until a signed-in walk (`buyer-ia-coverage.md` §9).
 
@@ -47,19 +47,19 @@ Maps AE objects ([`CONTEXT.md`](../../CONTEXT.md)) to chrome bands. A destinatio
 
 ---
 
-## Buyer job → journey stages (until `J-B…` exists)
+## Buyer job → journey stages
 
-From [`buyer-page-register.md`](./buyer-page-register.md): find a suitable **Tool**, let the **Agent** buy within granted **Spending policy**, leave a **Call** record that can be explained and remedied. Journeys **1, 2, 3, 5, 6** first; **4** is publish (Provider), not the organising buyer dest.
+From [`buyer-page-register.md`](./buyer-page-register.md) and [`platform-job-map.md`](./platform-job-map.md): find a suitable **Tool**, let the **Agent** buy within granted **Spending policy**, leave a **Call** record that can be explained and remedied. Journeys **1, 2, 3, 5, 6** first; **4** is publish (Provider), not the organising buyer dest.
 
-| Stage | PRODUCT.md journey | Decision the user makes |
-| --- | --- | --- |
-| **S1 — Need & discover** | 1 | What capability do I need? Where do I browse or describe it? |
-| **S2 — Compare & choose** | 2, 3 | Which Tool version fits? What price/terms? Proceed to Quote/Call? |
-| **S3 — Authorize agents** | 3 (governance) | Which agents may spend? On which tools? Under what limits? |
-| **S4 — Fund** | 3 (precondition) | Is there prepaid **credit** to reserve for Calls? (Funding ≠ authority.) |
-| **S5 — Record & remedy** | 3, 6 | What happened on this **Call**? Purchase resolution / recovery? |
-| **S6 — No fit / later** | 5 | Nothing suitable now — signal or wait (not a chrome dest until implemented) |
-| **S7 — Publish supply** | 4 | Admit/publish Tools, connections, pricing (Provider context) |
+| Stage | PRODUCT.md journey | Primary jobs | Decision the user makes |
+| --- | --- | --- | --- |
+| **S1 — Need & discover** | 1 | J-B01, J-A01 | What capability do I need? Where do I browse or describe it? |
+| **S2 — Compare & choose** | 2, 3 | J-B02, J-B03, J-A02 | Which Tool version fits? What price/terms? Proceed to Quote/Call? |
+| **S3 — Authorize agents** | 3 (governance) | J-B05, J-R02 | Which agents may spend? On which tools? Under what limits? |
+| **S4 — Fund** | 3 (precondition) | J-B06, J-R02 | Is there prepaid **credit** to reserve for Calls? (Funding ≠ authority.) |
+| **S5 — Record & remedy** | 3, 6 | J-B07, J-B08, J-S01, J-S02 | What happened on this **Call**? Purchase resolution / recovery? |
+| **S6 — No fit / later** | 5 | J-B04, J-R01 | Nothing suitable now — signal or wait (not a chrome dest until implemented) |
+| **S7 — Publish supply** | 4 | J-P01, J-P02 | Admit/publish Tools, connections, pricing (Provider context) |
 
 ---
 
@@ -69,26 +69,26 @@ From [`buyer-page-register.md`](./buyer-page-register.md): find a suitable **Too
 
 ### Public discovery
 
-| Dest ID | Serves (stage) | Decision | Current AE path(s) | Verdict | Evidence | Page vs dialog | Query vs path |
+| Dest ID | Serves (stage / jobs) | Decision | Current AE path(s) | Verdict | Evidence | Page vs dialog | Query vs path |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| `DEST-PUBLIC-MARKET` | S1, S2, S6 | Where do I discover and describe need? | `/market` (`/` → redirect) | **KEEP dest** | **SEEN** http://127.0.0.1:3024/market (ask, tabs Tools/Collections/Providers/Saved); **SOURCE** `src/routes/market.tsx`; **CHARTER** journeys 1–2 | Page (home + resume browse) | Path `/market`; tabs/filters/compare in **query** (`validateMarketSearch`) |
-| `DEST-PUBLIC-FOR-AGENTS` | S3 (door) | How do agents connect? | `/for-agents` | **PAGE not dest** (marketing) | **SOURCE** `src/routes/for-agents.tsx`; not a logged-in working dest | Page | Path only |
-| `DEST-PUBLIC-FOR-PROVIDERS` | S7 (door) | How do I supply? | `/for-providers` | **PAGE not dest** (marketing); candidate **menu** anchor for supply switch | **SOURCE** `src/routes/for-providers.tsx`; **SEEN** parallel: Nevermined “List your service”, Airbnb “Become a host” | Page | Path only |
+| `DEST-PUBLIC-MARKET` | S1, S2, S6 · J-B01, J-B02, J-B04 | Where do I discover and describe need? | `/market` (`/` → redirect) | **KEEP dest** | **SEEN** http://127.0.0.1:3024/market (ask, tabs Tools/Collections/Providers/Saved); **SOURCE** `src/routes/market.tsx`; **CHARTER** journeys 1–2 | Page (home + resume browse) | Path `/market`; tabs/filters/compare in **query** (`validateMarketSearch`) |
+| `DEST-PUBLIC-FOR-AGENTS` | S3 (door) · J-B05 | How do agents connect? | `/for-agents` | **PAGE not dest** (marketing) | **SOURCE** `src/routes/for-agents.tsx`; not a logged-in working dest | Page | Path only |
+| `DEST-PUBLIC-FOR-PROVIDERS` | S7 (door) · J-P01 | How do I supply? | `/for-providers` | **PAGE not dest** (marketing); candidate **menu** anchor for supply switch | **SOURCE** `src/routes/for-providers.tsx`; **SEEN** parallel: Nevermined “List your service”, Airbnb “Become a host” | Page | Path only |
 
 ### Buyer working (signed-in)
 
-| Dest ID | Serves (stage) | Decision | Current AE path(s) | Verdict | Evidence | Page vs dialog | Query vs path |
+| Dest ID | Serves (stage / jobs) | Decision | Current AE path(s) | Verdict | Evidence | Page vs dialog | Query vs path |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| `DEST-BUYER-MARKET` | S1, S2 | Same as public Market, signed-in shell | `/market` (header); duplicate **`/owner/market`** (rail only) | **KEEP dest** on `/market`; **`/owner/market` → FOLD** | **SOURCE** `owner.market.tsx` + `market.tsx` same loader pattern; **SEEN** refs use one catalog (Locus `/tools`, Nevermined `/catalog/`); signed-in AE header **not walked** | Page | One path **`/market`**; retire rail-only duplicate when one shell lands (`design-system-maturity-register.md` DS-37: do not use `/owner/market`) |
-| `DEST-BUYER-AGENTS` | S3 | Who is connected and what may they spend? | `/agent-access` | **KEEP dest**; header slot **OPEN** | **SOURCE** `agent-access.tsx`; **CHARTER** Spending policy + Agent; no logged-out peer on reference homes (`buyer-ia-coverage.md` §8) | Page; `/agent-access/authorize` grant review | Path dest; `caller`, `resumeTool` in **query** |
-| `DEST-BUYER-CALLS` | S5, S6 | What Calls happened; explain/remedy? | `/activity` | **KEEP dest**; label maps to **Call** not “Trips” | **SOURCE** `activity.tsx`; **CHARTER** Call + purchase resolution; Airbnb trip-like dest **BLOCKED** | Page | Path `/activity`; agent filter **`?agent=`** |
-| `DEST-BUYER-CREDIT` | S4 | Prepaid balance / top-up? | `/owner/credit` | **KEEP dest** (rail); **DEMOTE off dest** if ever in mobile primary | **SOURCE** `owner.credit.tsx`; **CHARTER** Prepaid ≠ Spending policy; Nevermined listing **Top up** **SEEN** on listing not as peer tab | Page | Path; funding return `/fund/…` handoff **PAGE not dest** |
+| `DEST-BUYER-MARKET` | S1, S2 · J-B01, J-B02 | Same as public Market, signed-in shell | `/market` (header); duplicate **`/owner/market`** (rail only) | **KEEP dest** on `/market`; **`/owner/market` → FOLD** | **SOURCE** `owner.market.tsx` + `market.tsx` same loader pattern; **SEEN** refs use one catalog (Locus `/tools`, Nevermined `/catalog/`); signed-in AE header **not walked** | Page | One path **`/market`**; retire rail-only duplicate when one shell lands (`design-system-maturity-register.md` DS-37: do not use `/owner/market`) |
+| `DEST-BUYER-AGENTS` | S3 · J-B05, J-R02 | Who is connected and what may they spend? | `/agent-access` | **KEEP dest**; header slot **OPEN** | **SOURCE** `agent-access.tsx`; **CHARTER** Spending policy + Agent; no logged-out peer on reference homes (`buyer-ia-coverage.md` §8) | Page; `/agent-access/authorize` grant review | Path dest; `caller`, `resumeTool` in **query** |
+| `DEST-BUYER-CALLS` | S5, S6 · J-B07, J-B08, J-S02 | What Calls happened; explain/remedy? | `/activity` | **KEEP dest**; label maps to **Call** not “Trips” | **SOURCE** `activity.tsx`; **CHARTER** Call + purchase resolution; Airbnb trip-like dest **BLOCKED** | Page | Path `/activity`; agent filter **`?agent=`** |
+| `DEST-BUYER-CREDIT` | S4 · J-B06 | Prepaid balance / top-up? | `/owner/credit` | **KEEP dest** (rail); **DEMOTE off dest** if ever in mobile primary | **SOURCE** `owner.credit.tsx`; **CHARTER** Prepaid ≠ Spending policy; Nevermined listing **Top up** **SEEN** on listing not as peer tab | Page | Path; funding return `/fund/…` handoff **PAGE not dest** |
 
 ### Provider working
 
-| Dest ID | Serves (stage) | Decision | Current AE path(s) | Verdict | Evidence | Page vs dialog | Query vs path |
+| Dest ID | Serves (stage / jobs) | Decision | Current AE path(s) | Verdict | Evidence | Page vs dialog | Query vs path |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| `DEST-PROVIDER-SUPPLY` | S7 | Manage published Tools, sources, connections | `/owner/operations` (+ `/new`, `/$toolRef`, supply/oauth) | **DEMOTE off dest** (header/mobile peer); **KEEP** route | **SOURCE** header order 3 `owner.operations.tsx`; **SEEN** hosting/list patterns in menu/header not as 4th buyer tab; **CHARTER** journey 4 not buyer organising dest | Page (workspace + tool detail) | Path for workspace; list **cursor** in query |
+| `DEST-PROVIDER-SUPPLY` | S7 · J-P01, J-P02 | Manage published Tools, sources, connections | `/owner/operations` (+ `/new`, `/$toolRef`, supply/oauth) | **DEMOTE off dest** (header/mobile peer); **KEEP** route | **SOURCE** header order 3 `owner.operations.tsx`; **SEEN** hosting/list patterns in menu/header not as 4th buyer tab; **CHARTER** journey 4 not buyer organising dest | Page (workspace + tool detail) | Path for workspace; list **cursor** in query |
 
 ### Shared account (organisation + person)
 
@@ -183,9 +183,9 @@ Use for **decisions**, not object names. Full URLs in [`buyer-ia-coverage.md`](.
 2. Signed-in **AE** header (Market / Agents / Calls / My tools) — not walked  
 3. AE **Tool listing** primary action (Reserve vs top-up vs Quote) — not walked  
 4. Whether **Agents** and **Calls** earn header slots like future signed-in Airbnb dests — **OPEN**  
-5. **`platform-job-map.md`** — replace journey stage column with `J-B…` IDs when written  
+5. Job IDs now exist in [`platform-job-map.md`](./platform-job-map.md); dest tables still use stages as the grouping. Do not rename chrome from job IDs alone.
 
-Until 1–2 update [`buyer-ia-coverage.md`](./buyer-ia-coverage.md), treat **FOLD** and **DEMOTE** rows as design direction backed by **SOURCE + SEEN references**, not shipped renames.
+Until 1–2 update [`buyer-ia-coverage.md`](./buyer-ia-coverage.md), treat **FOLD** and **DEMOTE** rows as dest law with a written path ([`ia-rationalisation-protocol.md`](./ia-rationalisation-protocol.md)), not as shipped chrome. DS-36/37 four-dest freeze is incumbent evidence; it does not veto dest law. Signed-in walks measure scent. They do not unlock the dest set.
 
 ---
 
