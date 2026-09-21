@@ -29,4 +29,11 @@ describe('provider supply route', () => {
     expect(primaryCta.getAttribute('href')).toBe('/owner/operations/new')
     expect(screen.getAllByRole('link', { name: 'Add Tool' })).toHaveLength(1)
   })
+
+  it('shows provider publishing questions', () => {
+    render(createElement(AeSupplyLanding, { tools: [], publishedTools: [] }))
+
+    expect(screen.getByRole('heading', { name: 'Before you publish' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'What kinds of Tools are supported first?' })).toBeTruthy()
+  })
 })

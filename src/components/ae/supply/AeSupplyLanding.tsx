@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button'
 import { AeCollectionRail } from '@/components/ae/shared/AeCollectionRail'
 import {
   AeSiteBody,
+  AeSiteFaq,
   AeSiteButton,
   AeSiteEyebrow,
   AeSiteHeading,
@@ -11,6 +12,7 @@ import {
   AeSiteHeroIntro,
   AeSiteSection,
 } from '@/components/ae/website'
+import { PROVIDER_FAQ } from '@/content/provider-copy'
 
 import type { SupplyLandingTool } from '@/modules/capability-supply/supply-funnel.functions'
 import type { ToolCardViewModel } from '@/modules/market/tool-view-model'
@@ -156,6 +158,11 @@ export function AeSupplyLanding({
           <AeSupplyAgentProof tools={tools} publishedTools={publishedTools} />
         </AeSiteSection>
       ) : null}
+      <AeSiteFaq
+        labelledBy="provider-faq-heading"
+        title={PROVIDER_FAQ.heading}
+        questions={PROVIDER_FAQ.questions}
+      />
     </>
   )
 }
