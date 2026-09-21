@@ -1063,7 +1063,7 @@ Verdict: **6/10 on canon**.
 
 Orchestrator dispositions:
 
-- `/sign-in` H1: fixed; commit pending: AuthHeading.
+- `/sign-in` H1: fixed; COMMIT 82a58626e (AeSiteAuthPanel renders the H1 through AeSiteHeading md; measured 36px on /sign-in and /sign-up).
 - `/sign-in` identifier autofocus: accepted; benchmark Linear.
 - `/status`: single-section page; section H2 is N/A.
 - `/terms` and `/privacy`: legal rhythm accepted by design. Policy: legal documents use the utility-document rhythm (80/48) and no eyebrow.
