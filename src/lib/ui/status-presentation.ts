@@ -1,8 +1,22 @@
 
+import { aeCanonicalStatusPresentationRows } from './status-presentation-rows'
+
 export const aeStatusValues = [
   'available',
   'claimed',
   'contact_confirmed',
+  'operational',
+  'connected',
+  'disconnected',
+  'active',
+  'paused',
+  'needs_attention',
+  'ready_now',
+  'setup_required',
+  'completed',
+  'credential_current',
+  'credential_expired',
+  'credential_revoked',
   'degraded',
   'failed',
   'guarded',
@@ -220,6 +234,7 @@ export const aeStatusPresentation = {
     publicness: 'public',
     disabledReason: 'Availability has not been established.',
   },
+  ...aeCanonicalStatusPresentationRows,
   notification_bounced: {
     label: 'Notification bounced',
     compactLabel: 'Bounced',
