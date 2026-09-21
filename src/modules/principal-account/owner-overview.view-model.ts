@@ -1,3 +1,5 @@
+import { getStatusPresentation } from '@/lib/ui/status-presentation'
+
 export type OwnerOverviewAmount = Readonly<{
   currency: string
   units: string
@@ -119,7 +121,7 @@ export function providerCardFor(
   if (provider === undefined) return undefined
   switch (provider.kind) {
     case 'attention':
-      return { description: 'Provider state needs review.', value: 'Needs attention' }
+      return { description: 'Provider state needs review.', value: getStatusPresentation('needs_attention').label }
     case 'unavailable':
       return {
         description: 'Provider status could not be confirmed. Existing Tools remain available to inspect.',

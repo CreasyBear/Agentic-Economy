@@ -12,6 +12,7 @@ import { Button } from '@/components/ui/button'
 import { buttonVariants } from '@/components/ui/button-variants'
 import { cn } from '@/lib/utils'
 import { formatTimestamp } from '@/lib/ui/format-time'
+import { getStatusPresentation } from '@/lib/ui/status-presentation'
 import {
   providerToolReasonPresentation,
   type ProviderToolStatus,
@@ -282,7 +283,7 @@ function sourceLabel(kind: ProviderToolStatus['source']['kind']): string {
   if (kind === 'agent_plugin') return 'Agent Plugin'
   if (kind === 'x402') return 'x402'
   if (kind === 'legacy') return 'Legacy source'
-  return 'Unavailable'
+  return getStatusPresentation('unavailable').label
 }
 
 function sentenceCase(value: string): string {

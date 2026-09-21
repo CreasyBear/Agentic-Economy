@@ -1,4 +1,5 @@
 import { formatRelativeTime, formatTimestamp } from '@/lib/ui/format-time'
+import { getStatusPresentation } from '@/lib/ui/status-presentation'
 import { captureClientExceptionOnClient } from '@/lib/observability/capture-client-exception'
 import { degrade } from '@/lib/observability/degrade'
 import type { OwnerProviderConnection } from '@/modules/capability-supply/supply-funnel.functions'
@@ -105,7 +106,7 @@ export function providerConnectionStatus(connection: OwnerProviderConnection): s
     case 'cleanup_required':
       return 'Cleanup required'
     case 'revoked':
-      return 'Revoked'
+      return getStatusPresentation('credential_revoked').label
     default: {
       const exhaustive: never = connection.lifecycle
       return exhaustive

@@ -6,7 +6,7 @@ import { scanStatusVocabulary } from '@/lib/ui/contract-scans/status-vocabulary'
 import { fixtureTargets, isFixtureMode } from './scan-targets'
 
 // pinned 2026-09-21 from first run; may only decrease
-const STATUS_LITERAL_FILE_CEILING = 19
+const STATUS_LITERAL_FILE_CEILING = 17
 const STATUS_LITERAL_FILE_MARGIN = 2
 const CLEAN_TARGETS: readonly ScanTarget[] = [
   { root: 'src', includeExtensions: ['.ts', '.tsx'] },
