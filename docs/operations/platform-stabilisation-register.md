@@ -81,8 +81,8 @@ The 43 route entries are all assigned once. `/support` is assigned to the Receip
 **Copy:** <table><tr><th>where</th><th>current</th><th>target</th></tr><tr><td>H1</td><td>Who this market is for.</td><td>Tools agents can call.</td></tr><tr><td>subhead</td><td>Agents find, compare, and call. Providers publish the job, the price, and the access terms, and get paid after delivery.</td><td>Agents buy Tools. Providers set prices and receive AUD payouts after completed Calls.</td></tr></table>
 **Target spec:** one thesis above fold; verified operator/contact; Agents and Providers named once; payout claim links fee, currency and timing. **Cut:** “Listed Providers” definition and duplicate catalogue cover.
 **ROOT-ECON:** provider economics (fee %, take rate, payout method, payout cadence/trigger, merchant-of-record, GST treatment, refund/dispute terms) are unsupplied facts; owner Joel. Until supplied, no surface states a fee, payout timing, "automated" payout, or refund rule.
-**Blocked:** verified operator/entity contact and the fee linkage are unsupplied facts. Roast PARTIAL: `/` redirects to `/market`, whose H1 is “Tools for what's next.”, so the platform entry lacks the thesis; `/about` states AUD and the completed-Call trigger but no fee or payout delivery window.
-**Priority:** P1. **Status:** IN REVIEW. **Verification evidence:** LIVE 2026-09-21 http://127.0.0.1:3024/about H1 was “Tools agents can call.”; approved subhead was present; SOURCE `src/content/brand-copy.ts:84-86`; COMMIT `f44e8e356`. **Provenance:** RegDoors, 21 Sep 2026.
+**Blocked:** verified operator/contact remains absent; `/` still redirects to `/market`, so the platform entry thesis remains open.
+**Priority:** P1. **Status:** IN REVIEW. **Verification evidence:** LIVE 2026-09-21 http://127.0.0.1:3024/about H1 “Tools agents can call.”; approved subhead was present; SOURCE `src/content/brand-copy.ts:84-86`; COMMIT `f44e8e356`. Marketing-site port: Hero 7 → `AeSiteAboutHero`, Content 4 → `AeSiteEditorial`, Features 4 → `AeSiteFeatureGrid`, CTA 2 → `AeSiteCtaBand`; COMMIT `63b8aed88`. **Provenance:** RegDoors, PortAbout, 21 Sep 2026.
 
 ### R-02 Agent door: `/for-agents`
 **Benchmark:** Stripe developer docs landing. **Incumbent baseline:** one integration outcome, recommended path, copyable command, one start.
@@ -260,22 +260,22 @@ The 43 route entries are all assigned once. `/support` is assigned to the Receip
 
 ### R-23 Terms: `/terms`
 **Benchmark:** Stripe Legal. **Incumbent baseline:** dated/versioned agreement, parties, fees, payment roles, tax, refunds, disputes and law.
-**Current state (LIVE):** three marketing cards and two CTAs, not a legal agreement.
-**Gaps:** • [HELP-03] “no date, version, ToC, legal entity, acceptance, liability, termination, or governing law” (`src/components/ae/legal/terms/AeTermsPage.tsx:14-29`) • [HELP-04] “fee ABSENT; take rate ABSENT; payout ABSENT; refund ABSENT; dispute ABSENT; GST ABSENT; merchant of record ABSENT; data retention ABSENT” (`src/components/ae/legal/terms/terms.contracts.ts:17-50`).
-**Copy:** <table><tr><th>where</th><th>current</th><th>target</th></tr><tr><td>card</td><td>Search…by capability, category, supplier, or task.</td><td>Search by capability, category, Provider, or task.</td></tr></table>
+**Current state (LIVE):** Joel’s published Terms, dated 7 September 2026, are ported from marketing `terms.tsx` into one UtilityDocument with 15 ordered sections.
+**PRESENT (Joel’s text):** parties/acceptance — “Scope and agreement”, “Eligibility and account control”; fee section — “Prices, fees, tax and records”, “Publishing and supplying services”; MoR/GST/refunds/disputes — “Discovery, providers and purchases”, “Failed requests, disputes and refunds”; liability/termination/law — “Responsibility and legal rights”, “Suspension and closure”, “Complaints, notices and governing law”.
+**Copy:** <table><tr><th>where</th><th>current</th><th>target</th></tr><tr><td>card</td><td colspan="2">N/A: card removed with the port</td></tr></table>
 **Target spec:** date/version/ToC; parties/acceptance; fee/take/payout; MoR/GST/refunds/disputes; liability/termination/law. **Cut:** Find/Compare/Call cards and dual CTAs.
-**ROOT-ECON:** provider economics (fee %, take rate, payout method, payout cadence/trigger, merchant-of-record, GST treatment, refund/dispute terms) are unsupplied facts; owner Joel. Until supplied, no surface states a fee, payout timing, "automated" payout, or refund rule.
-**Blocked:** legal owner must supply contracting parties and acceptance; ROOT-ECON fee, take-rate, payout, merchant-of-record, GST, refund and dispute terms; liability, termination and governing law. Roast PARTIAL: no version; the page says “Search the catalogue by capability, category, Provider, or task.” instead of the Copy-table target; `terms.contracts.ts:54` still says lowercase `supplier`.
-**Priority:** P0. **Status:** IN REVIEW. **Verification evidence:** LIVE 2026-09-21 http://127.0.0.1:3024/terms H1 “Terms”; “Last updated 20 September 2026” present; all four ToC targets resolved; SOURCE `src/components/ae/legal/terms/terms.contracts.ts:39-54`; COMMIT `ebae8fb6f`. **Provenance:** RegHelpLegal, 21 Sep 2026.
+**ROOT-ECON:** Joel’s published Terms now state the fee/tax/payout FRAMEWORK; numeric take rate and cadence still unsupplied.
+**Blocked:** take rate/fee schedule/payout cadence; definitive seller entity; fixed jurisdiction/liability cap.
+**Priority:** P0. **Status:** IN REVIEW. **Verification evidence:** LIVE 2026-09-21 http://127.0.0.1:3024/terms rendered one H1 followed by 15 ordered H2s; SOURCE marketing `terms.tsx`, dated 7 September 2026, ported verbatim via `AeSiteUtilityDocument`; COMMIT `1b5d825e7`. **Provenance:** RegHelpLegal, PortLegal, 21 Sep 2026.
 
 ### R-24 Privacy: `/privacy`
 **Benchmark:** Stripe Privacy Center. **Incumbent baseline:** dated notice, controller, categories/purposes, recipients, retention, rights, transfers and contact.
-**Current state (LIVE):** four product-flow tabs and Open corrections action.
-**Gaps:** • [HELP-05] “omits controller, lawful basis, retention periods, rights, processors, transfers, cookies, and complaint route” (`src/components/ae/legal/privacy/privacy.contracts.ts:27-77`) • [HELP-06] “data retention ABSENT” and payment roles absent (`src/components/ae/legal/privacy/AePrivacyPage.tsx:8-11`).
+**Current state (LIVE):** Joel’s published Privacy notice, dated 13 September 2026, is ported from marketing `privacy.tsx` into one UtilityDocument with 15 ordered sections.
+**PRESENT (Joel’s text):** controller/contact — “Who this policy covers”, “Contact and privacy complaints”; retention — “Retention and deletion”; transfers/complaints — “Overseas processing and public networks”, “Contact and privacy complaints”.
 **Copy:** <table><tr><th>where</th><th>current</th><th>target</th></tr><tr><td>intro</td><td>What the market handles…</td><td>How Agentic Economy collects and uses data.</td></tr></table>
 **Target spec:** date/version/ToC; controller/contact; category-purpose-recipient table; retention/rights; transfers/complaints. **Cut:** decorative recap.
-**Blocked:** legal owner must supply controller/contact; recipients for browsing, Call records, payment data and Provider publishing; retention; transfers and complaints. Roast PARTIAL: after clicking `#data-use-recipients`, the target was not in view at top `−204.84px`.
-**Priority:** P0. **Status:** IN REVIEW. **Verification evidence:** LIVE 2026-09-21 http://127.0.0.1:3024/privacy H1 “Privacy”; intro visible; all four ToC links resolved; SOURCE `src/components/ae/legal/privacy/privacy.contracts.ts:48-79,124-130`; COMMIT `4dde5e35d`. **Provenance:** RegHelpLegal, 21 Sep 2026.
+**Blocked:** exact retention periods; recipient-country list; one controller entity. The former ToC in-view defect is fixed: `#sharing` lands 72.25px below the 65px header.
+**Priority:** P0. **Status:** IN REVIEW. **Verification evidence:** LIVE 2026-09-21 http://127.0.0.1:3024/privacy rendered one H1 followed by 15 ordered H2s; `#sharing` landed 72.25px below the 65px sticky header; SOURCE marketing `privacy.tsx`, dated 13 September 2026, ported verbatim via `AeSiteUtilityDocument`; COMMIT `d839157ea`. **Provenance:** RegHelpLegal, PortLegal, 21 Sep 2026.
 
 ### R-25 Provider correction or removal: `/privacy/remove-business`
 **Benchmark:** Google Business Profile remove/claim listing. **Incumbent baseline:** identity check, consequences, review time, receipt and status path.
@@ -292,7 +292,7 @@ The 43 route entries are all assigned once. `/support` is assigned to the Receip
 **Gaps:** • [SUP-01] “Action Required” versus “Nothing is required here…” (`ProviderWorkspaceEarningsSection.tsx:28-44`) • [SUP-02] “DOM links contain no Tool/public preview” (`AeProviderWorkspace.tsx:27-35`) • [SUP-03] “Environment: production” is text (`useOwnerProviderConnectionsState.ts:69-74`) • [SUP-04] columns omit Updated (`AeOwnerOfferings.tsx:114-194`) • [SUP-05] “Supplier activation” (`AeSupplierOnboardingWizard.tsx:48-56`).
 **Copy:** <table><tr><th>where</th><th>current</th><th>target</th></tr><tr><td>title</td><td>Supplier activation</td><td>Provider setup</td></tr><tr><td>empty</td><td>Connect a source and choose the exact Tool AE should validate.</td><td>Add a source, then choose a Tool to publish.</td></tr></table>
 **Target spec:** name/price/status/updated/Calls with filters; one Add Tool; one Stripe-linked payout truth; explicit production choice; preview/edit/archive. **Cut:** duplicate Add Tool and contradictory earnings card.
-**ROOT-ECON:** provider economics (fee %, take rate, payout method, payout cadence/trigger, merchant-of-record, GST treatment, refund/dispute terms) are unsupplied facts; owner Joel. Until supplied, no surface states a fee, payout timing, "automated" payout, or refund rule.
+**ROOT-ECON:** Joel’s published Terms now state the fee/tax/payout FRAMEWORK; numeric take rate and cadence still unsupplied.
 **Priority:** P1. **Status:** PENDING. **Verification evidence:** none. **Provenance:** RegSupplyList, 21 Sep 2026.
 
 ### R-27 Owner Tool detail: `/owner/operations/$toolRef`
@@ -569,8 +569,8 @@ KNOWLEDGE references: OR OpenRouter, ST Stripe, RA RapidAPI, SA Shopify App Stor
 
 | Surface | Research decision | Source and adoption constraint |
 |---|---|---|
-| Marketing/About, Agent and Provider doors, FAQ and footer blocks | **ADOPT Tailark OSS**; pilot on R-01 | MIT ([licence](https://raw.githubusercontent.com/tailark/blocks/main/LICENCE.md)); Base UI and Tailwind v4 native; registry `https://oss.tailark.com/r/{name}.json`; swap Next imports to TanStack equivalents. Research: [Tailark registry](https://oss.tailark.com/r/registry.json). |
-| Terms and Privacy text | **ADOPT (pending legal owner)** GitHub Site Policy Marketplace Terms plus Privacy Statement as the Terms spine, and Basecamp Privacy/AUP | GitHub Site Policy is CC0 ([licence](https://github.com/github/site-policy/blob/main/LICENSE.md)); Basecamp policies are CC BY 4.0 ([licence](https://github.com/basecamp/policies/blob/master/LICENSE.md)) and require attribution. Joel/legal must supply entity, ABN, address and date; authority and age; platform-Provider contract and merchant-of-record; currency, fees, payout timing and holds, processor, GST and invoices, refunds, chargebacks and Purchase resolution; ACL guarantees; liability and indemnities; termination and export; law and courts; actual data categories, sources and purposes; cookies and analytics; recipients, subprocessors, Provider and Business-admin sharing; storage and overseas countries; retention; rights, complaints and OAIC escalation; children; security claims; and significant automated decisions. Exclude Legalmattic (CC BY-SA) and PolicyForge (unfounded defaults). Research: [GitHub Marketplace Terms](https://github.com/github/site-policy/blob/main/Policies/github-terms/github-marketplace-terms-of-service.md), [GitHub Privacy](https://github.com/github/site-policy/blob/main/Policies/privacy-policies/github-general-privacy-statement.md), [Basecamp Privacy](https://github.com/basecamp/policies/blob/master/privacy/index.md), [Basecamp AUP](https://github.com/basecamp/policies/blob/master/abuse/index.md). |
+| Marketing/About, Agent and Provider doors, FAQ and footer blocks | **ADOPT marketing-site components (Joel's `/Users/.../agentic-economy-website`; same TanStack/React 19/Tailwind 4.3/Base UI stack; its blocks are Tailark-MIT-derived) — Tailark direct install stood down 2026-09-21 (registry entry reverted, no commit)** | Source inventory: Hero 7, Content 4, Features 4, FAQ 1, CTA 2, Footer 2, UtilityDocument, Pricing 2 and ServiceStrip. Presentational components are framework-portable; retain AE tokens, TanStack routing and existing Base UI primitives. |
+| Terms and Privacy text | **ADOPTED: Joel's published Terms (15 sections, marketing `terms.tsx`, dated 7 Sep 2026) and Privacy (15 sections, marketing `privacy.tsx`, dated 13 Sep 2026) ported verbatim; GitHub/Basecamp templates retained as PATTERN-ONLY cross-check** | Marketing UtilityDocument was ported to `AeSiteUtilityDocument`; the published route text is the authority. GitHub Site Policy remains CC0 and Basecamp policies remain CC BY 4.0 for pattern cross-checks only. |
 | Status page | **HOST (pending Joel)** OpenStatus or Upptime; no drop-in React widget exists | OpenStatus is AGPL-3.0 ([licence](https://github.com/openstatusHQ/openstatus/blob/main/LICENSE)), runs as a separate service, supports [public double-opt-in subscriptions](https://www.openstatus.dev/docs/reference/subscriber), and managed Starter is [about US$30/month](https://www.openstatus.dev/pricing). Upptime is MIT ([licence](https://github.com/upptime/upptime/blob/master/LICENSE)), runs on GitHub Pages and has [operator notifications](https://upptime.js.org/docs/notifications/) but no public subscriber signup. Exclude Cachet (source-available) and Statping-ng (GPL). |
 
 ### TOP 10 ABSENT THAT DEFINE THE CLASS
@@ -741,3 +741,39 @@ No wave may invent a second authority, status model, money formatter, Tool proje
 - R-24 IN REVIEW: Joel/legal must supply controller, contact, recipient, retention, transfer and complaint facts; the ToC viewport defect remains.
 - R-25 IN REVIEW: Joel must define requester verification, merge semantics and review time; the adopted class-gap seam lacks backing for the remaining flow.
 - §4 features 40-41 remain DEFERRED until Joel approves OpenStatus hosting or accepts Upptime without public subscriber signup.
+
+### Wave B · round 2 (marketing-site port) · 2026-09-21
+
+`git log --oneline 6681085d2..HEAD` recorded the three marketing-site port commits below before this close-out commit. The Tailark direct-install pilot was stood down: `components.json` was restored byte-for-byte and no commit was created.
+
+#### Commits
+
+- `63b8aed88` — R-01 About rebuilt on marketing-site components.
+- `1b5d825e7` — R-23 Terms rebuilt on marketing-site UtilityDocument with Joel’s published text.
+- `d839157ea` — R-24 Privacy rebuilt on marketing-site UtilityDocument with Joel’s published text.
+
+#### Source → destination ports
+
+- Hero 7 → `AeSiteAboutHero`; Content 4 → `AeSiteEditorial`; Features 4 → `AeSiteFeatureGrid`; CTA 2 → `AeSiteCtaBand`.
+- Marketing `components/content/utility-document.tsx` → `AeSiteUtilityDocument.tsx`.
+- Marketing `routes/terms.tsx` / `routes/privacy.tsx` → AE legal contracts/pages.
+
+#### Token mappings
+
+- About: `.eyebrow` → AE eyebrow tokens; `.editorial-link` → AE primary underline treatment; button import → `button-variants`; `/media` → `/website`.
+- Legal: `editorial-link` → tokenized Tailwind links; `prose` → `max-w-[70ch]`/explicit leading; `scroll-mt-28` → `scroll-mt-anchor`.
+
+#### Found, not fixed
+
+- About CTA `Publish a Tool` differs from the app CTA `Add Tool`.
+- `Agentic Economy is pre-launch.` is a marketing sentence now inside the app.
+- `joel-chan.png` was skipped at 541,938 B.
+- `ds-grammar` `developers.discovery` title/H1 mismatch is pre-existing.
+
+#### Open at close
+
+- R-01 remains IN REVIEW: verified operator/contact is absent and the `/` thesis remains open.
+- R-23 remains IN REVIEW: take rate/fee schedule/payout cadence, definitive seller entity and fixed jurisdiction/liability cap remain absent.
+- R-24 remains IN REVIEW: exact retention periods, recipient-country list and one controller entity remain absent.
+- R-26 remains PENDING: Joel’s Terms state the fee/tax/payout framework, but numeric take rate and cadence remain unsupplied.
+- §4 Status page remains HOST (pending Joel).
