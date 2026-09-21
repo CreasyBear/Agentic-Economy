@@ -7,12 +7,12 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import '../../setup/jsdom-platform'
 
 const convexMocks = vi.hoisted(() => ({
-  readPreferences: vi.fn(),
+  readQuery: vi.fn(),
   updatePreferences: vi.fn(),
 }))
 
 vi.mock('convex/react', () => ({
-  useQuery: convexMocks.readPreferences,
+  useQuery: convexMocks.readQuery,
   useMutation: () => convexMocks.updatePreferences,
 }))
 
@@ -30,9 +30,9 @@ vi.mock('@/components/ae/website', () => ({
 
 vi.mock('@/components/ae/settings/AeCompromiseRecoveryChecklist', () => ({
   AeCompromiseRecoveryChecklist: () => (
-    <section id="compromise-recovery" aria-labelledby="recovery-heading">
-      <h2 id="recovery-heading">If you suspect compromise</h2>
-    </section>
+    <details id="compromise-recovery">
+      <summary>If you suspect compromise</summary>
+    </details>
   ),
 }))
 
@@ -82,6 +82,23 @@ const savedPreferences = {
   updatedAt: 1,
   isVirtualDefault: false,
 } as const
+const missingTaxFacts = {
+  kind: 'missing',
+  accountRef: 'account:test',
+  revision: 0,
+} as const
+
+function mockSettingsQueries() {
+  convexMocks.readQuery.mockImplementation((reference: unknown) => {
+    if (reference !== null && typeof reference === 'object') {
+      const functionName = Object.getOwnPropertySymbols(reference)
+        .map((symbol) => Reflect.get(reference, symbol))
+        .find((value): value is string => typeof value === 'string')
+      if (functionName === 'moneyCustomerTaxFacts:readCustomerTaxFacts') return missingTaxFacts
+    }
+    return savedPreferences
+  })
+}
 
 afterEach(() => {
   cleanup()
@@ -100,23 +117,32 @@ describe('/owner/settings R-17', () => {
     expect(nav.closest('main')?.getAttribute('data-sticky-header')).toBe('true')
     expect(within(nav).getByRole('link', { name: 'Profile' }).getAttribute('href')).toBe('#clerk-account-security')
     expect(within(nav).getByRole('link', { name: 'Team' }).getAttribute('href')).toBe('#team')
+    expect(within(nav).getByRole('link', { name: 'Business' }).getAttribute('href')).toBe('#business')
     expect(within(nav).getByRole('link', { name: 'Email alerts' }).getAttribute('href')).toBe('#notifications')
     expect(within(nav).getByRole('link', { name: 'Security history' }).getAttribute('href')).toBe('#security-history')
   })
 
   it('keeps Profile and Team as separate labelled sections and links Team to its page', () => {
-    convexMocks.readPreferences.mockReturnValue(savedPreferences)
+    mockSettingsQueries()
     render(<AccountSettingsSection history={history} />)
 
     const headings = screen.getAllByRole('heading', { level: 2 }).map((heading) => heading.textContent)
-    expect(headings).toEqual(['Profile', 'Team', 'If you suspect compromise', 'Email alerts', 'Security history'])
+    expect(headings).toEqual([
+      'Profile',
+      'Team',
+      'Business',
+      'Email alerts',
+      'Security history',
+    ])
+    expect(screen.getByRole('textbox', { name: 'ABN' })).toBeTruthy()
+    expect(screen.getByText('ABN and GST facts used on your tax invoices.')).toBeTruthy()
     expect(screen.getByRole('link', { name: /Manage Team/ }).getAttribute('href')).toBe('/owner/team')
     expect(screen.getByText(/Saved for this Account\./)).toBeTruthy()
     expect(screen.getByRole('textbox', { name: 'Filter security history' })).toBeTruthy()
   })
 
   it('reads saved notification choices and writes changes through the persistent mutation', async () => {
-    convexMocks.readPreferences.mockReturnValue(savedPreferences)
+    mockSettingsQueries()
     convexMocks.updatePreferences.mockResolvedValue({ kind: 'updated', revision: 5 })
     render(<AccountSettingsSection history={history} />)
 

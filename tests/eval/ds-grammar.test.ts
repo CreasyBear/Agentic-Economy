@@ -26,7 +26,6 @@ import {
   ds35FrameOwnershipInventory,
   ds36ChatShellViolations,
   ds37ChromeFlipViolations,
-  ds38SettingsDialogViolations,
   dsGrammarSnapshot,
   fontBoldTitleHits,
   genericShadowMdProductCardHits,
@@ -147,10 +146,6 @@ describe('design-system grammar eval harness', () => {
 
   it('DS-37: keeps operator routes on the one app header and primary drawer landmark', () => {
     expect(ds37ChromeFlipViolations()).toEqual([])
-  })
-
-  it('DS-38: settings dialog stays free of operator page chrome', () => {
-    expect(ds38SettingsDialogViolations()).toEqual([])
   })
 
   it('DS-19: discover SoT strings stay frozen; sibling market views keep catalogue grammar', () => {

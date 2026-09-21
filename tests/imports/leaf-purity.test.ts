@@ -12,9 +12,7 @@ const LEAF_TARGETS: readonly ScanTarget[] = [
 ]
 
 // pinned 2026-09-21 from first run; may only decrease
-const LEAF_PURITY_EXCEPTIONS: readonly string[] = [
-  'src/components/ae/settings/settings-dialog/components/WorkspaceSettingsBody.tsx',
-]
+const LEAF_PURITY_EXCEPTIONS: readonly string[] = []
 
 describe('leaf purity guardrail', () => {
   it('keeps leaf components free of data-access imports', () => {

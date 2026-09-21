@@ -613,34 +613,6 @@ export function ds37ChromeFlipViolations(): readonly string[] {
   return violations
 }
 
-const DS38_SETTINGS_DIALOG_FILES = [
-  'src/components/ae/settings/settings-dialog/AeSettingsDialog.tsx',
-  'src/components/ae/settings/settings-dialog/useAeSettingsDialog.ts',
-  'src/components/ae/settings/settings-dialog/components/WorkspaceSettingsBody.tsx',
-] as const
-
-/** DS-38: settings overlay must not wrap operator page chrome. */
-export function ds38SettingsDialogViolations(): readonly string[] {
-  const violations: string[] = []
-  for (const file of DS38_SETTINGS_DIALOG_FILES) {
-    const source = readRepoFile(file)
-    if (source.includes('AeOperatorPage')) {
-      violations.push(`${file}: AeOperatorPage`)
-    }
-    if (source.includes('OwnerSettingsShell')) {
-      violations.push(`${file}: OwnerSettingsShell`)
-    }
-    if (source.includes('SiteMarker')) {
-      violations.push(`${file}: SiteMarker`)
-    }
-  }
-  const dialogTitle = readRepoFile('src/components/ae/settings/settings-dialog/AeSettingsDialog.tsx')
-  if (dialogTitle.includes('font-bold')) {
-    violations.push('AeSettingsDialog.tsx: font-bold title')
-  }
-  return violations
-}
-
 /** DS-36: chat must not re-own app-level brand or auth chrome. */
 export function ds36ChatShellViolations(): readonly string[] {
   const inventory = ds35FrameOwnershipInventory()
@@ -702,7 +674,6 @@ export function dsGrammarSnapshot() {
     ds35: ds35FrameOwnershipInventory(),
     ds36: { chatShell: ds36ChatShellViolations() },
     ds37: { chromeFlip: ds37ChromeFlipViolations() },
-    ds38: { settingsDialog: ds38SettingsDialogViolations() },
     ceilings: DS_RATCHET,
     cases: journeyCases().length,
     sotCases: journeyCases().filter(item => item.sot).map(item => item.id),

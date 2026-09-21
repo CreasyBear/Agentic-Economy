@@ -4,9 +4,13 @@ import { AeSection, AeSettingsRow } from '@/components/ae/layout/AeSection'
 import { AeAccountSecurityHistory } from '@/components/ae/settings/AeAccountSecurityHistory'
 import { AeCompromiseRecoveryChecklist } from '@/components/ae/settings/AeCompromiseRecoveryChecklist'
 import { OwnerNotificationSettings } from '@/components/ae/settings/OwnerNotificationSettings'
+import { TaxProfileFormSection } from '@/components/ae/settings/TaxProfileFormSection'
 import { AeSiteAuthPanel, AeSiteAuthSubmit } from '@/components/ae/website'
 
-import type { AccountSettingsSectionProps } from './owner-settings.contracts'
+import {
+  ownerSettingsBusinessSection,
+  type AccountSettingsSectionProps,
+} from './owner-settings.contracts'
 import { useOwnerNotificationPreferences } from './useOwnerNotificationPreferences'
 
 export function AccountSettingsSection({ history }: AccountSettingsSectionProps) {
@@ -46,6 +50,13 @@ export function AccountSettingsSection({ history }: AccountSettingsSectionProps)
           description="Open Team settings to manage members, roles, and invitations."
           href="/owner/team"
         />
+      </AeSection>
+      <AeSection
+        id={ownerSettingsBusinessSection.id}
+        title={ownerSettingsBusinessSection.title}
+        description={ownerSettingsBusinessSection.description}
+      >
+        <TaxProfileFormSection />
       </AeSection>
       <AeCompromiseRecoveryChecklist />
       <AeSection
