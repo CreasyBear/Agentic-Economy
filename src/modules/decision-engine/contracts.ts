@@ -67,6 +67,9 @@ export type DecisionGatewayResponse = Readonly<{
 
 export type DecisionGatewayOptions = Readonly<{
   timeoutMs?: number
+  signal?: AbortSignal
+  deadlineAt?: number
+  purpose?: 'discovery'
   maxRetries?: number
   openrouterApiKey?: string
   typesafeApiKey?: string
@@ -77,3 +80,14 @@ export type DecisionGatewayOptions = Readonly<{
   disableSecondaryLlm?: boolean
   fetchImpl?: typeof fetch
 }>
+
+/** Operational inference failure; contains no upstream payload or credential. */
+export class JevUnavailableError extends Error {
+  constructor(readonly reason:
+    | 'disabled' | 'missing_key' | 'cancelled' | 'timeout' | 'rate_limited'
+    | 'authentication' | 'service_unavailable' | 'connection' | 'invalid_response'
+    | 'evidence_too_large') {
+    super(`jev_${reason}`)
+    this.name = 'JevUnavailableError'
+  }
+}

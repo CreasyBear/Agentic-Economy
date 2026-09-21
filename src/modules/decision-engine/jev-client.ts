@@ -1,4 +1,5 @@
-import { TypeSafeClient, type EntryType } from '@typesafe-ai/sdk'
+import { APIConnectionError, APIError, APITimeoutError, APIUserAbortError, TypeSafeClient, type EntryType, type RequestOptions } from '@typesafe-ai/sdk'
+import { JevUnavailableError } from './contracts'
 import type {
   DecisionGatewayOptions,
   DecisionGatewayRequest,
@@ -9,11 +10,35 @@ import type {
 const DEFAULT_JEV_MODEL = '~typesafe/jev-latest'
 const DEFAULT_JEV_TIMEOUT_MS = 1500
 
+/**
+ * Requires valid SDK questions and positive timing/retry configuration.
+ * Ensures consumed answers are validated, or a classified operational failure.
+ * Discovery has one attempt and a total <= 1,500 ms budget, including body delivery.
+ * Invariant: SDK owns I/O; no payload/credentials escape in operational errors.
+ * On programmer/configuration defects: throw; never manufacture fallback answers.
+ */
 export async function callJevSystemOne(
   request: DecisionGatewayRequest,
   options: DecisionGatewayOptions = {},
 ): Promise<DecisionGatewayResponse> {
   const startedAt = Date.now()
+  const configuredTimeout = options.timeoutMs ?? DEFAULT_JEV_TIMEOUT_MS
+  if (!Number.isFinite(configuredTimeout) || configuredTimeout <= 0
+    || (options.deadlineAt !== undefined && !Number.isFinite(options.deadlineAt))
+    || (options.maxRetries !== undefined && (!Number.isInteger(options.maxRetries) || options.maxRetries < 0))) {
+    throw new RangeError('Invalid Jev timing or retry configuration')
+  }
+  if (options.signal?.aborted) throw new JevUnavailableError('cancelled')
+  if (options.disableJev === true) throw new JevUnavailableError('disabled')
+  const discovery = options.purpose === 'discovery'
+  if (discovery && process.env.AE_JEV_DISCOVERY_ENABLED === 'false') throw new JevUnavailableError('disabled')
+  if (discovery && JSON.stringify(request.state).length > 32_000) throw new JevUnavailableError('evidence_too_large')
+  const deadlineAt = Math.min(
+    options.deadlineAt ?? Infinity,
+    discovery ? startedAt + Math.min(configuredTimeout, DEFAULT_JEV_TIMEOUT_MS) : Infinity,
+  )
+  const timeout = Math.min(configuredTimeout, deadlineAt - Date.now())
+  if (timeout <= 0) throw new JevUnavailableError('timeout')
   const apiKey =
     options.typesafeApiKey ||
     options.openrouterApiKey ||
@@ -22,7 +47,7 @@ export async function callJevSystemOne(
     ''
 
   if (apiKey.length === 0) {
-    throw new Error('missing_openrouter_api_key')
+    throw new JevUnavailableError('missing_key')
   }
 
   const isOpenRouter = apiKey.startsWith('sk-or-') || !apiKey.startsWith('ts-')
@@ -31,17 +56,18 @@ export async function callJevSystemOne(
     : 'https://api.typesafe.ai'
   const baseURL = options.baseURL ?? process.env.TYPESAFE_BASE_URL ?? defaultBaseURL
   const defaultModel = options.jevModel ?? (isOpenRouter ? DEFAULT_JEV_MODEL : 'jev-latest')
-  const timeout = options.timeoutMs ?? DEFAULT_JEV_TIMEOUT_MS
+  if (!URL.canParse(baseURL)) throw new TypeError('Invalid Jev base URL')
   const baseFetch = options.fetchImpl ?? fetch
 
   // Adapt fetch to map OpenRouter alpha endpoint and append referral metadata
   const adaptedFetch: typeof fetch = async (url, init) => {
     let resolvedUrl = url.toString()
-    if (resolvedUrl.includes('openrouter.ai') && resolvedUrl.endsWith('/v1/systemone')) {
+    const isOpenRouterHost = new URL(resolvedUrl).hostname === 'openrouter.ai'
+    if (isOpenRouterHost && resolvedUrl.endsWith('/v1/systemone')) {
       resolvedUrl = resolvedUrl.replace('/v1/systemone', '/decisions')
     }
     const headers = new Headers(init?.headers)
-    if (resolvedUrl.includes('openrouter.ai')) {
+    if (isOpenRouterHost) {
       headers.set('HTTP-Referer', 'https://agentic-economy.local')
       headers.set('X-Title', 'Agentic Economy Decision Engine')
     }
@@ -53,15 +79,47 @@ export async function callJevSystemOne(
     baseURL,
     defaultModel,
     timeout,
+    logLevel: 'off',
     fetch: adaptedFetch,
-    retry: { maxRetries: options.maxRetries ?? 1 },
+    retry: { maxRetries: discovery ? 0 : options.maxRetries ?? 1 },
   })
 
-  const result = await client.systemOne({
-    state: request.state as EntryType,
-    questions: request.questions,
-    model: defaultModel,
-  })
+  const remainingMs = deadlineAt - Date.now()
+  if (remainingMs <= 0) throw new JevUnavailableError('timeout')
+  const deadlineSignal = Number.isFinite(remainingMs) ? AbortSignal.timeout(Math.ceil(remainingMs)) : undefined
+  const signals = [options.signal, deadlineSignal].filter((signal): signal is AbortSignal => signal !== undefined)
+  const requestOptions: RequestOptions = {
+    timeout: Math.min(timeout, remainingMs),
+    retry: { maxRetries: discovery ? 0 : options.maxRetries ?? 1 },
+    ...(signals.length === 0 ? {} : { signal: AbortSignal.any(signals) }),
+  }
+  // SDK owns transport, body buffering, timeout cleanup and retries. Only its
+  // operational errors become unavailable; configuration/programming errors escape.
+  let result
+  try {
+    result = await client.systemOne({
+      state: request.state as EntryType,
+      questions: request.questions,
+      model: defaultModel,
+    }, requestOptions)
+  } catch (cause) {
+    if (cause instanceof APIUserAbortError) throw new JevUnavailableError(options.signal?.aborted ? 'cancelled' : 'timeout')
+    if (cause instanceof APITimeoutError) throw new JevUnavailableError('timeout')
+    if (cause instanceof APIConnectionError) throw new JevUnavailableError('connection')
+    if (cause instanceof APIError) {
+      if (cause.status === 400 || cause.status === 422) {
+        // Raw SDK causes contain response bodies; preserve only the safe status.
+        // oxlint-disable-next-line preserve-caught-error
+        throw new TypeError('Jev request rejected as invalid', { cause: { status: cause.status } })
+      }
+      throw new JevUnavailableError(cause.status === 429 ? 'rate_limited'
+        : cause.status === 401 || cause.status === 403 ? 'authentication' : 'service_unavailable')
+    }
+    throw cause
+  }
+  if (options.signal?.aborted) throw new JevUnavailableError('cancelled')
+  if (Date.now() >= deadlineAt) throw new JevUnavailableError('timeout')
+  if (!validAnswers(result?.answers, request)) throw new JevUnavailableError('invalid_response')
 
   const inputTokens = result.usage?.input_tokens ?? 120
   const outputTokens = result.usage?.output_tokens ?? 0
@@ -79,4 +137,19 @@ export async function callJevSystemOne(
     durationMs,
     attemptedTiers: ['jev_system_one'],
   }
+}
+
+function validAnswers(answers: unknown, request: DecisionGatewayRequest): boolean {
+  if (typeof answers !== 'object' || answers === null || Array.isArray(answers)) return false
+  const values = answers as Record<string, JevAnswer>
+  const probability = (value: number) => Number.isFinite(value) && value >= 0 && value <= 1
+  return Object.entries(request.questions).every(([key, question]) => {
+    const answer = values[key]
+    if (!Object.hasOwn(values, key) || answer?.type !== question.type) return false
+    if (answer.type === 'noul') return probability(answer.noul)
+    if (!probability(answer.confidence)) return false
+    if (answer.type === 'choice' && question.type === 'choice') return Object.hasOwn(question.criteria, answer.choice)
+    return answer.type === 'score' && question.type === 'score'
+      && Number.isFinite(answer.score) && answer.score >= 0 && answer.score <= question.criteria.length - 1
+  })
 }

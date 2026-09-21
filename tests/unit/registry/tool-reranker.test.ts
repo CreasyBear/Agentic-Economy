@@ -289,14 +289,30 @@ describe('Jev x402 Tool Search Re-ranker (cookbooks/rerank_typesafe.md)', () => 
     gateway.mockRestore()
   })
 
-  it('gracefully returns the original result if the Decision Gateway throws', async () => {
+  it('surfaces a programming defect instead of disguising it as an outage', async () => {
     const gateway = vi.spyOn(decisionEngine, 'executeDecisionGateway').mockRejectedValue(new Error('Fatal internal error'))
 
-    const reranked = await rerankToolSearchResult(sampleOkResult, 'some query', {
+    await expect(rerankToolSearchResult(sampleOkResult, 'some query', {
       openrouterApiKey: 'test-key',
-    })
-
-    expect(reranked).toBe(sampleOkResult)
+    })).rejects.toThrow('Fatal internal error')
     gateway.mockRestore()
   })
+  it('skips an oversized complete query without dropping constraints or candidates', async () => {
+    const fetchImpl = mockJevFetch({})
+    await expect(rerankToolSearchResult(sampleOkResult, 'x'.repeat(32_001), { openrouterApiKey: 'test-key', fetchImpl })).resolves.toBe(sampleOkResult)
+    expect(fetchImpl).not.toHaveBeenCalled()
+  })
+
+  it('preserves the page on caller cancellation, making no request', async () => {
+    const fetchImpl = mockJevFetch({})
+    await expect(rerankToolSearchResult(sampleOkResult, ERC20_QUERY, { openrouterApiKey: 'test-key', fetchImpl, signal: AbortSignal.abort() })).resolves.toBe(sampleOkResult)
+    expect(fetchImpl).not.toHaveBeenCalled()
+  })
+
+  it('does not retry even when a caller requests retries', async () => {
+    const fetchImpl = mockFailedJevFetch(503)
+    await expect(rerankToolSearchResult(sampleOkResult, ERC20_QUERY, { openrouterApiKey: 'test-key', fetchImpl, maxRetries: 5 })).resolves.toBe(sampleOkResult)
+    expect(fetchImpl).toHaveBeenCalledTimes(1)
+  })
+
 })
