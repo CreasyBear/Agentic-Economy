@@ -116,13 +116,6 @@ export const MODULE_BOUNDARY_MANIFEST: ModuleBoundaryManifest = {
       owner: 'capability-supply',
     },
     {
-      id: 'native-procure-output-adjudication-contract',
-      importers: ['tests/unit/core-flow/native-platform-procure.test.ts'],
-      to: 'capability-execution',
-      entry: 'call-worker/output-adjudication.ts',
-      owner: 'capability-execution',
-    },
-    {
       id: 'market-directory-reranker-tests',
       importers: ['tests/unit/market/x402-directory-reranker.test.ts'],
       to: 'market',
