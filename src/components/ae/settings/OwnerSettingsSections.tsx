@@ -7,6 +7,7 @@ import { OwnerNotificationSettings } from '@/components/ae/settings/OwnerNotific
 import { TaxProfileFormSection } from '@/components/ae/settings/TaxProfileFormSection'
 import { AeSiteAuthPanel, AeSiteAuthSubmit } from '@/components/ae/website'
 import { buttonVariants } from '@/components/ui/button-variants'
+import { clerkEmbeddedProfileAppearance } from '@/components/ae/website/clerk-appearance'
 
 import {
   ownerSettingsBusinessSection,
@@ -27,7 +28,7 @@ export function AccountSettingsSection({ history }: AccountSettingsSectionProps)
       >
         <div className="grid gap-section">
           <div className="min-h-96 w-full">
-            <UserProfile />
+            <UserProfile appearance={clerkEmbeddedProfileAppearance} />
           </div>
           <AeSiteAuthPanel
             eyebrow=""

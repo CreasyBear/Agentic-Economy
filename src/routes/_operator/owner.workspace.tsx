@@ -3,7 +3,7 @@ import { OrganizationProfile } from '@clerk/tanstack-react-start'
 import { AeOperatorPage } from '@/components/ae/layout/AeOperatorPage'
 import { AeSection } from '@/components/ae/layout/AeSection'
 import { WorkspaceDangerZone } from '@/components/ae/settings/workspace-danger-zone/WorkspaceDangerZone'
-import { clerkAppearance } from '@/components/ae/website/clerk-appearance'
+import { clerkEmbeddedProfileAppearance } from '@/components/ae/website/clerk-appearance'
 import { operatorRouteOptions } from '@/lib/operator/route-options'
 
 export const Route = createFileRoute('/_operator/owner/workspace')({
@@ -36,7 +36,7 @@ function OwnerWorkspaceRoute() {
           <OrganizationProfile
             routing="hash"
             afterLeaveOrganizationUrl="/owner"
-            appearance={clerkAppearance}
+            appearance={clerkEmbeddedProfileAppearance}
           >
             <OrganizationProfile.Page label="general" />
           </OrganizationProfile>

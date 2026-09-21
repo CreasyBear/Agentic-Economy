@@ -37,7 +37,7 @@ vi.mock('@/components/ae/layout/AeOperatorPage', () => ({
 }))
 
 vi.mock('@/components/ae/website/clerk-appearance', () => ({
-  clerkAppearance: { cssLayerName: 'clerk' },
+  clerkEmbeddedProfileAppearance: { cssLayerName: 'clerk' },
 }))
 
 

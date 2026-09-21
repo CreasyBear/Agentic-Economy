@@ -69,6 +69,16 @@ export const clerkAppearance = {
   },
 }
 
+/** Embedded profiles use the host page's h1; Clerk's profile controls remain unchanged. */
+export const clerkEmbeddedProfileAppearance = {
+  ...clerkAppearance,
+  elements: {
+    ...clerkAppearance.elements,
+    headerTitle: { display: 'none' },
+    navbar: { '& h1': { display: 'none' } },
+  },
+}
+
 /** Layered on SignIn / SignUp so the site panel is the card. */
 export const clerkAuthSurfaceAppearance = {
   variables: {
