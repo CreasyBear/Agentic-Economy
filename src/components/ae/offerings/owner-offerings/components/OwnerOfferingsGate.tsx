@@ -32,7 +32,7 @@ export function OwnerOfferingsProjectionGate({
 export function OwnerOfferingsEmptyState() {
   return (
     <AeEmptyState
-      title="No Tools yet"
+      title="Add your first Tool"
       description="Connect a source and choose the exact Tool AE should validate."
       action={
         <Link
