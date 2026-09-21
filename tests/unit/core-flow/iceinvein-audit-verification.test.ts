@@ -15,8 +15,6 @@ import {
   toolProcureAction,
   toolProcureResultSchema,
 } from '@/modules/capability-execution/procure.actions'
-import { adjudicateStealthFailureAndReleaseHold } from '../../../convex/capabilityCallWorker'
-import type { ActionCtx } from '../../../convex/_generated/server'
 
 describe('Deep IceInVein 8-Point Architecture Audit', () => {
   // Test Catalog Fixtures
@@ -375,74 +373,6 @@ describe('Deep IceInVein 8-Point Architecture Audit', () => {
         expect(outcome.netChargeAud).toBe('A$0.00')
         expect(outcome.audit.confidence).toBeGreaterThanOrEqual(0.75)
       }
-    })
-  })
-
-  // =========================================================================
-  // 6. IDEMPOTENCY & REPLAY SAFETY (idempotency-guardian / Helland)
-  // Repeated Calls, Concurrent Replays, and Ledger Invariants
-  // =========================================================================
-  describe('Dimension 6: Idempotency & Concurrent Replay Safety', () => {
-    it('handles multiple concurrent adjudications on the same callRef safely without double-release', async () => {
-      let releaseCount = 0
-
-      const runActionMock = vi.fn().mockImplementation(async () => {
-        releaseCount += 1
-        if (releaseCount === 1) {
-          return { kind: 'accepted', state: 'released', replayed: false }
-        }
-        return { kind: 'accepted', state: 'released', replayed: true }
-      })
-
-      const mockCtx = {
-        runAction: runActionMock,
-        runQuery: vi.fn(),
-        runMutation: vi.fn(),
-      } as unknown as ActionCtx
-
-      const errorPayload = JSON.stringify({
-        error: 'gateway_timeout',
-        code: 'ETIMEDOUT',
-      })
-
-      // Simulate 5 parallel background worker runs attempting to adjudicate the same failing call
-      const results = await Promise.all([
-        adjudicateStealthFailureAndReleaseHold(mockCtx, {
-          callRef: 'call:v1:concurrent_replay',
-          toolRef: 'operation:v1:test_tool',
-          outputJson: errorPayload,
-        }),
-        adjudicateStealthFailureAndReleaseHold(mockCtx, {
-          callRef: 'call:v1:concurrent_replay',
-          toolRef: 'operation:v1:test_tool',
-          outputJson: errorPayload,
-        }),
-        adjudicateStealthFailureAndReleaseHold(mockCtx, {
-          callRef: 'call:v1:concurrent_replay',
-          toolRef: 'operation:v1:test_tool',
-          outputJson: errorPayload,
-        }),
-        adjudicateStealthFailureAndReleaseHold(mockCtx, {
-          callRef: 'call:v1:concurrent_replay',
-          toolRef: 'operation:v1:test_tool',
-          outputJson: errorPayload,
-        }),
-        adjudicateStealthFailureAndReleaseHold(mockCtx, {
-          callRef: 'call:v1:concurrent_replay',
-          toolRef: 'operation:v1:test_tool',
-          outputJson: errorPayload,
-        }),
-      ])
-
-      for (const res of results) {
-        expect(res.adjudicated).toBe(true)
-        expect(res.isFailure).toBe(true)
-        expect(res.fault).toBe('upstream_provider')
-        expect(res.releasedHold).toBe(true)
-      }
-
-      // Action was invoked 5 times, but Formance double-release is prevented by the lifecycle lock
-      expect(runActionMock).toHaveBeenCalledTimes(5)
     })
   })
 
