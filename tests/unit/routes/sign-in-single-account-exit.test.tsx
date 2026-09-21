@@ -2,7 +2,7 @@
  * @vitest-environment jsdom
  */
 import { cleanup, render, screen } from '@testing-library/react'
-import type { ComponentType } from 'react'
+import type { ComponentType, ReactNode } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import '../../setup/jsdom-platform'
 
@@ -21,12 +21,14 @@ vi.mock('@tanstack/react-router', () => ({
       useSearch: () => routeState.search,
     }
   },
+  Link: ({ children, to }: { children: ReactNode; to: string }) => <a href={to}>{children}</a>,
   // AePublicPage renders AeSiteFooter, which reads the route table via
   // useRouter(); an empty table is enough to render its (empty) columns.
   useRouter: () => ({ routesByPath: {} }),
 }))
 
 vi.mock('@clerk/tanstack-react-start', () => ({
+  useAuth: () => ({ isLoaded: true, isSignedIn: false }),
   SignIn: (props: Record<string, unknown>) => {
     routeState.clerkProps = props
     return (
@@ -58,8 +60,8 @@ describe('sign-in account exit', () => {
     expect(document.body.textContent?.toLowerCase()).not.toContain('supplier')
     expect(document.body.textContent).not.toContain('manage Operations')
     expect(routeState.clerkProps).toMatchObject({
-      fallbackRedirectUrl: '/owner/settings',
-      signUpFallbackRedirectUrl: '/owner/settings',
+      fallbackRedirectUrl: '/market',
+      signUpFallbackRedirectUrl: '/market',
       signUpUrl: '/sign-up',
     })
   })

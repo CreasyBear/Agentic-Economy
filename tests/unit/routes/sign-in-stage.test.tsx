@@ -33,6 +33,7 @@ vi.mock('@tanstack/react-router', () => ({
 }))
 
 vi.mock('@clerk/tanstack-react-start', () => ({
+  useAuth: () => ({ isLoaded: true, isSignedIn: false }),
   SignIn: (props: Record<string, unknown>) => {
     routeState.signInProps = props
     return <div>clerk-sign-in</div>
