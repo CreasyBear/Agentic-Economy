@@ -141,7 +141,7 @@ describe('AeOwnerOfferingsList (W-34)', () => {
     expect(TACTILE_PRESS_CLASS).toContain('motion-reduce:active:scale-100')
   })
 
-  it('T5: filters inventory by name, summary, protocol, and offering ref or slug', () => {
+  it('T5: filters inventory by name, summary, protocol, price, Calls, and references', () => {
     function FilterHarness({ initial }: { initial: string }) {
       const [filterValue, setFilterValue] = useState(initial)
       return (
@@ -157,6 +157,8 @@ describe('AeOwnerOfferingsList (W-34)', () => {
       { query: 'PAYG', visible: 'Australian Tax Calculator', hidden: 'AU Postcode Validator' },
       { query: 'OpenAPI', visible: 'Australian Tax Calculator', hidden: 'AU Postcode Validator' },
       { query: 'mcp', visible: 'AU Postcode Validator', hidden: 'Australian Tax Calculator' },
+      { query: 'A$0.02', visible: 'AU Postcode Validator', hidden: 'Australian Tax Calculator' },
+      { query: '1,420', visible: 'Australian Tax Calculator', hidden: 'AU Postcode Validator' },
       { query: 'tax-calculator', visible: 'Australian Tax Calculator', hidden: 'AU Postcode Validator' },
       { query: 'offering:postcode-lookup', visible: 'AU Postcode Validator', hidden: 'Australian Tax Calculator' },
     ]
