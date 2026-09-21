@@ -2,6 +2,7 @@ import { degrade } from '@/lib/observability/degrade'
 import { callPublicSourceQuery, sourceQuery } from '@/lib/server/convex-source'
 import { CATALOGUE_STALE_AFTER_MS, sourceFreshnessState, type SourceFreshnessState } from '@/modules/common/freshness'
 import { readX402Directory } from './x402-directory.server'
+import { rerankX402DirectoryPage } from './x402-directory-reranker'
 import type { X402DirectoryIndexCoverage, X402DirectoryIndexInput, X402IndexedDirectoryEntry } from './x402-directory-index'
 import { decodeOpaqueCursor, encodeOpaqueCursor } from '@/modules/registry/opaque-cursor'
 import {
@@ -130,10 +131,10 @@ export async function readX402DirectoryCatalogue(input: X402DirectoryCatalogueIn
     const { network, provider, maxUsdPrice } = filters
     return {
       kind: 'ok', source: 'index', coverage: result.coverage, searchMethod: result.searchMethod,
-      page: { kind: 'ok', items: result.page.map(item => item.entry), offset: 0, limit: 24,
+      page: await rerankX402DirectoryPage({ kind: 'ok', items: result.page.map(item => item.entry), offset: 0, limit: 24,
         mode: filters.query ? 'search' : 'browse',
         appliedFilters: { ...(network === undefined ? {} : { network }), ...(provider === undefined ? {} : { provider }), ...(maxUsdPrice === undefined ? {} : { maxUsdPrice }) },
-      },
+      }, filters.query),
       isDone: result.isDone, ...(result.isDone ? {} : { indexCursor: encodeOpaqueCursor({ kind: 'x402-directory', scope: result.coverage.generation ?? cursorScope, cursor: result.continueCursor }) }),
       ...(result.pageStatus === undefined ? {} : { pageStatus: result.pageStatus }),
       ...(result.splitCursor === undefined ? {} : { splitCursor: result.splitCursor }),

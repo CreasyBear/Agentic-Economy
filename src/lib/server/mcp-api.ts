@@ -735,6 +735,7 @@ export async function handleMcpRequest(request: Request, options: McpRequestOpti
         correlationId,
         callService: options.callService
           ?? createCallService(boundedRequest, bounded.bodyText),
+        ...(options.catalogSearcher === undefined ? {} : { catalogSearcher: options.catalogSearcher }),
         supplyManagementService: options.supplyManagementService
           ?? createSupplyManagementService(boundedRequest, bounded.bodyText),
         accountManagementService: options.accountManagementService
@@ -743,7 +744,6 @@ export async function handleMcpRequest(request: Request, options: McpRequestOpti
           ?? createMarketDemandService(boundedRequest, bounded.bodyText),
         fundingHandoffService: options.fundingHandoffService
           ?? createFundingHandoffService(boundedRequest, bounded.bodyText),
-        ...(options.catalogSearcher === undefined ? {} : { catalogSearcher: options.catalogSearcher }),
         ...(options.rolloutEnvironment === undefined ? {} : { rolloutEnvironment: options.rolloutEnvironment }),
         ...(options.toolsListPageSize === undefined ? {} : { toolsListPageSize: options.toolsListPageSize }),
       })

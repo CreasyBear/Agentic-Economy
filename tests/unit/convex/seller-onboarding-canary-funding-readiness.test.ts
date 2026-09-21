@@ -510,6 +510,112 @@ describe('seller onboarding canary funding readiness', () => {
       internal.capabilitySupplyCanaryFunding.readProductionSellerOnboardingCanaryFundingReadiness,
       { now: second.now },
     )).resolves.toMatchObject({ kind: 'not_ready', codes: ['canary_grant_missing'] })
+    const beforeReplay = await backend.run(async (ctx) => ({
+      grants: await ctx.db.query('agentAccessGrants')
+        .withIndex('by_credentialId_and_environment_and_lifecycle', (query) => query
+          .eq('credentialId', PRODUCTION_SELLER_ONBOARDING_CANARY_PLATFORM_CREDENTIAL_ID)
+          .eq('environment', 'production')
+          .eq('lifecycle', 'active'))
+        .collect(),
+      allGrants: await ctx.db.query('agentAccessGrants')
+        .withIndex('by_credentialId_and_environment_and_lifecycle', (query) => query
+          .eq('credentialId', PRODUCTION_SELLER_ONBOARDING_CANARY_PLATFORM_CREDENTIAL_ID)
+          .eq('environment', 'production'))
+        .collect(),
+      principal: await ctx.db.query('agentAccessPrincipals')
+        .withIndex('by_principalId', (query) => query
+          .eq('principalId', PRODUCTION_SELLER_ONBOARDING_CANARY_PLATFORM_PRINCIPAL_ID))
+        .unique(),
+    }))
+    await expect(backend.mutation(
+      internal.capabilitySupplyCanaryFunding.provisionProductionSellerOnboardingCanaryFunding,
+      second,
+    )).resolves.toEqual({ kind: 'conflict', code: 'material_conflict' })
+    expect(await backend.run(async (ctx) => ({
+      grants: await ctx.db.query('agentAccessGrants')
+        .withIndex('by_credentialId_and_environment_and_lifecycle', (query) => query
+          .eq('credentialId', PRODUCTION_SELLER_ONBOARDING_CANARY_PLATFORM_CREDENTIAL_ID)
+          .eq('environment', 'production')
+          .eq('lifecycle', 'active'))
+        .collect(),
+      allGrants: await ctx.db.query('agentAccessGrants')
+        .withIndex('by_credentialId_and_environment_and_lifecycle', (query) => query
+          .eq('credentialId', PRODUCTION_SELLER_ONBOARDING_CANARY_PLATFORM_CREDENTIAL_ID)
+          .eq('environment', 'production'))
+        .collect(),
+      principal: await ctx.db.query('agentAccessPrincipals')
+        .withIndex('by_principalId', (query) => query
+          .eq('principalId', PRODUCTION_SELLER_ONBOARDING_CANARY_PLATFORM_PRINCIPAL_ID))
+        .unique(),
+    }))).toEqual(beforeReplay)
+  })
+
+  it('refuses same-generation production replay after first-issuance principal scope drift', async () => {
+    configureManagedSandboxCustody({
+      AE_X402_RPC_URLS_JSON: JSON.stringify({
+        [BASE_MAINNET_NETWORK]: ['https://base-mainnet-a.example', 'https://base-mainnet-b.example'],
+      }),
+    })
+    const backend = convexTest(schema, modules)
+    const first = { generation: 1, issuedAt: NOW, expiresAt: NOW + 60_000, now: NOW }
+    await backend.mutation(
+      internal.capabilitySupplyCanaryFunding.provisionProductionSellerOnboardingCanaryFunding,
+      first,
+    )
+    await expect(backend.query(
+      internal.capabilitySupplyCanaryFunding.readProductionSellerOnboardingCanaryFundingReadiness,
+      { now: first.now },
+    )).resolves.toMatchObject({ kind: 'ready', generation: 1, rpcEndpointCount: 2 })
+    await backend.run(async (ctx) => {
+      const principal = await ctx.db.query('agentAccessPrincipals')
+        .withIndex('by_principalId', (query) => query
+          .eq('principalId', PRODUCTION_SELLER_ONBOARDING_CANARY_PLATFORM_PRINCIPAL_ID))
+        .unique()
+      if (principal === null) throw new Error('production_canary_principal_missing')
+      await ctx.db.patch(principal._id, { scopes: ['market_tools:call', 'market_supply:manage'] })
+    })
+    await expect(backend.query(
+      internal.capabilitySupplyCanaryFunding.readProductionSellerOnboardingCanaryFundingReadiness,
+      { now: first.now },
+    )).resolves.toMatchObject({ kind: 'not_ready', codes: ['canary_grant_missing'] })
+    const beforeReplay = await backend.run(async (ctx) => ({
+      grants: await ctx.db.query('agentAccessGrants')
+        .withIndex('by_credentialId_and_environment_and_lifecycle', (query) => query
+          .eq('credentialId', PRODUCTION_SELLER_ONBOARDING_CANARY_PLATFORM_CREDENTIAL_ID)
+          .eq('environment', 'production')
+          .eq('lifecycle', 'active'))
+        .collect(),
+      allGrants: await ctx.db.query('agentAccessGrants')
+        .withIndex('by_credentialId_and_environment_and_lifecycle', (query) => query
+          .eq('credentialId', PRODUCTION_SELLER_ONBOARDING_CANARY_PLATFORM_CREDENTIAL_ID)
+          .eq('environment', 'production'))
+        .collect(),
+      principal: await ctx.db.query('agentAccessPrincipals')
+        .withIndex('by_principalId', (query) => query
+          .eq('principalId', PRODUCTION_SELLER_ONBOARDING_CANARY_PLATFORM_PRINCIPAL_ID))
+        .unique(),
+    }))
+    await expect(backend.mutation(
+      internal.capabilitySupplyCanaryFunding.provisionProductionSellerOnboardingCanaryFunding,
+      first,
+    )).resolves.toEqual({ kind: 'conflict', code: 'material_conflict' })
+    expect(await backend.run(async (ctx) => ({
+      grants: await ctx.db.query('agentAccessGrants')
+        .withIndex('by_credentialId_and_environment_and_lifecycle', (query) => query
+          .eq('credentialId', PRODUCTION_SELLER_ONBOARDING_CANARY_PLATFORM_CREDENTIAL_ID)
+          .eq('environment', 'production')
+          .eq('lifecycle', 'active'))
+        .collect(),
+      allGrants: await ctx.db.query('agentAccessGrants')
+        .withIndex('by_credentialId_and_environment_and_lifecycle', (query) => query
+          .eq('credentialId', PRODUCTION_SELLER_ONBOARDING_CANARY_PLATFORM_CREDENTIAL_ID)
+          .eq('environment', 'production'))
+        .collect(),
+      principal: await ctx.db.query('agentAccessPrincipals')
+        .withIndex('by_principalId', (query) => query
+          .eq('principalId', PRODUCTION_SELLER_ONBOARDING_CANARY_PLATFORM_PRINCIPAL_ID))
+        .unique(),
+    }))).toEqual(beforeReplay)
   })
 
   it('refuses long, gapped, and drifted production grant rotation', async () => {

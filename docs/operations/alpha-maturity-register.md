@@ -225,6 +225,16 @@ validation passed Luna and manager review. The shared Workpool regression remain
 19/19. This is not hosted proof or
 real-value evidence.
 
+**21 September 2026 — A01 quality follow-up, not an AM-14 reopener:** local
+production-canary proof stays accepted. After merge, same-generation production
+replay omitted principal scopes while readiness and rotation required exactly
+`market_tools:call`. That gap is closed on unified `main`: replay now uses the
+same exact-material check, returns `material_conflict` after scope drift, and
+does not change stored records. Readiness still fails closed. A02–A04
+(funding/payment façade extracts) are Campaign 3 quality follow-ups, not launch
+blockers. AM-24 remains source-accepted locally; AM-25 hosted proof remains
+NOT VERIFIED.
+
 **21 September 2026 — candidate preparation, not LP-2 activation:** the manager
 included the exact current authoritative root `PRODUCT.md` and `AGENTS.md` in
 this isolated worktree. The charter adds the six core buyer/Provider market
@@ -626,7 +636,7 @@ named target and relevant behavior are unchanged.
 | AM-11 | Accepted source claim: exact-unit aggregation, Account-bound document access and distinct document kinds | LP-3 hosted open/refresh/period aggregation and concealed foreign link; LP-5 exact live documents/adjustment. |
 | AM-12 | Accepted source claim: one refund identity, event reordering and recoverable Formance uncertainty | LP-3 sandbox refund failure/retry; LP-5 supported live refund/adjustment with original payment retained. |
 | AM-13 | Accepted source claim plus retained approved sandbox connection/draft | LP-3 fresh owner UI/CLI connection and payee-control readback; production Provider connection belongs to LP-4. |
-| AM-14 | **Accepted local source proof — 21 September 2026:** the owner path stages the exact sandbox or production x402 revision, completes readiness, requests one environment-bound platform-funded canary, and keeps the Tool private until actual promotion. The production case uses explicit privileged grant provisioning, real worker/custody logic with mocked external CDP/RPC/Provider effects, then issues an exact AUD Quote for the promoted Tool's USDC obligation. Buyer usage and Provider-obligation ledgers remain empty during validation. | Delegated-Agent submission remains AM-14-B and awaits user schema-scope approval. LP-3 owes hosted Base Sepolia validation; LP-4 owes exact production provisioning/target readback; LP-5 owes real mainnet value. Hosted-alpha refusal remains correct. |
+| AM-14 | **Accepted local source proof — 21 September 2026:** the owner path stages the exact sandbox or production x402 revision, completes readiness, requests one environment-bound platform-funded canary, and keeps the Tool private until actual promotion. The production case uses explicit privileged grant provisioning, real worker/custody logic with mocked external CDP/RPC/Provider effects, then issues an exact AUD Quote for the promoted Tool's USDC obligation. Buyer usage and Provider-obligation ledgers remain empty during validation. **Quality follow-up A01 closed on unified `main` the same day:** production replay now requires the same exact principal scopes as readiness; same-generation replay after scope drift is `material_conflict` with no stored-record change. This does not reopen AM-14. | Delegated-Agent submission remains AM-14-B and awaits user schema-scope approval. LP-3 owes hosted Base Sepolia validation; LP-4 owes exact production provisioning/target readback; LP-5 owes real mainnet value. Hosted-alpha refusal remains correct. A02–A04 are Campaign 3 quality follow-ups, not launch blockers. |
 | AM-15 | Accepted source claim: never-signed, expired-signing and submitted-uncertain recovery retains one validation Call | LP-3 hosted interruption/return with same Call and no buyer reservation; repeat on approved production supply if LP-4 changes this boundary. |
 | AM-16 | Accepted source claim: withdrawal/routeability freeze blocks late promotion | LP-3 hosted expiry/source/ownership/offboarding changes and retained historical Call evidence; LP-4 production gate readback. |
 | AM-17 | Accepted source claim: material drift, withdrawal, republish and historical Call isolation | LP-3 full hosted lifecycle/replay; LP-4 verifies the same production state transitions after activation. |

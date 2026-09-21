@@ -1,3 +1,4 @@
+import { TypeSafeClient, type EntryType } from '@typesafe-ai/sdk'
 import type {
   DecisionGatewayOptions,
   DecisionGatewayRequest,
@@ -14,53 +15,62 @@ export async function callJevSystemOne(
 ): Promise<DecisionGatewayResponse> {
   const startedAt = Date.now()
   const apiKey =
-    options.openrouterApiKey ??
-    process.env.OPENROUTER_API_KEY ??
+    options.typesafeApiKey ||
+    options.openrouterApiKey ||
+    process.env.TYPESAFE_API_KEY ||
+    process.env.OPENROUTER_API_KEY ||
     ''
 
   if (apiKey.length === 0) {
     throw new Error('missing_openrouter_api_key')
   }
 
-  const model = options.jevModel ?? process.env.JEV_MODEL ?? DEFAULT_JEV_MODEL
-  const timeoutMs = options.timeoutMs ?? DEFAULT_JEV_TIMEOUT_MS
-  const fetchFn = options.fetchImpl ?? fetch
+  const isOpenRouter = apiKey.startsWith('sk-or-') || !apiKey.startsWith('ts-')
+  const defaultBaseURL = isOpenRouter
+    ? 'https://openrouter.ai/api/alpha'
+    : 'https://api.typesafe.ai'
+  const baseURL = options.baseURL ?? process.env.TYPESAFE_BASE_URL ?? defaultBaseURL
+  const defaultModel = options.jevModel ?? (isOpenRouter ? DEFAULT_JEV_MODEL : 'jev-latest')
+  const timeout = options.timeoutMs ?? DEFAULT_JEV_TIMEOUT_MS
+  const baseFetch = options.fetchImpl ?? fetch
 
-  const response = await fetchFn('https://openrouter.ai/api/alpha/decisions', {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      'Content-Type': 'application/json',
-      'HTTP-Referer': 'https://agentic-economy.local',
-      'X-Title': 'Agentic Economy Decision Engine',
-    },
-    body: JSON.stringify({
-      model,
-      state: request.state,
-      questions: request.questions,
-    }),
-    signal: AbortSignal.timeout(timeoutMs),
+  // Adapt fetch to map OpenRouter alpha endpoint and append referral metadata
+  const adaptedFetch: typeof fetch = async (url, init) => {
+    let resolvedUrl = url.toString()
+    if (resolvedUrl.includes('openrouter.ai') && resolvedUrl.endsWith('/v1/systemone')) {
+      resolvedUrl = resolvedUrl.replace('/v1/systemone', '/decisions')
+    }
+    const headers = new Headers(init?.headers)
+    if (resolvedUrl.includes('openrouter.ai')) {
+      headers.set('HTTP-Referer', 'https://agentic-economy.local')
+      headers.set('X-Title', 'Agentic Economy Decision Engine')
+    }
+    return baseFetch(resolvedUrl, { ...init, headers })
+  }
+
+  const client = new TypeSafeClient({
+    apiKey,
+    baseURL,
+    defaultModel,
+    timeout,
+    fetch: adaptedFetch,
+    retry: { maxRetries: options.maxRetries ?? 1 },
   })
 
-  if (!response.ok) {
-    const errorBody = await response.text().catch(() => '')
-    throw new Error(`jev_api_error_${response.status}:${errorBody.slice(0, 100)}`)
-  }
+  const result = await client.systemOne({
+    state: request.state as EntryType,
+    questions: request.questions,
+    model: defaultModel,
+  })
 
-  const data = (await response.json()) as {
-    model: string
-    answers: Record<string, JevAnswer>
-    usage?: { input_tokens?: number; output_tokens?: number; cost?: number }
-  }
-
-  const inputTokens = data.usage?.input_tokens ?? 120
-  const outputTokens = data.usage?.output_tokens ?? 0
+  const inputTokens = result.usage?.input_tokens ?? 120
+  const outputTokens = result.usage?.output_tokens ?? 0
   const durationMs = Date.now() - startedAt
 
   return {
     tier: 'jev_system_one',
-    model: data.model || model,
-    answers: data.answers,
+    model: result.model || defaultModel,
+    answers: result.answers as Record<string, JevAnswer>,
     usage: {
       inputTokens,
       outputTokens,

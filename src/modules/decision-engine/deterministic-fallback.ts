@@ -7,14 +7,21 @@ import type {
   JevScoreAnswer,
 } from './contracts'
 
+function entryToSearchText(entry: unknown): string {
+  if (entry === null || entry === undefined) return ''
+  if (typeof entry === 'string') return entry.toLowerCase()
+  try {
+    return JSON.stringify(entry).toLowerCase()
+  } catch {
+    return ''
+  }
+}
+
 export function callDeterministicRuleEngine(
   request: DecisionGatewayRequest,
 ): DecisionGatewayResponse {
   const startedAt = Date.now()
-  const stateText =
-    typeof request.state === 'string'
-      ? request.state.toLowerCase()
-      : JSON.stringify(request.state).toLowerCase()
+  const stateText = entryToSearchText(request.state)
 
   const answers: Record<string, JevAnswer> = {}
   const hasErrorTokens =
@@ -47,16 +54,16 @@ export function callDeterministicRuleEngine(
         }
       } else {
         for (const [choiceKey, criteriaDesc] of Object.entries(qVal.criteria)) {
-          if (choiceKey === 'unsupported') continue
+          if (choiceKey === 'unsupported' || choiceKey === 'none_matched') continue
           let score = 0
-          const keyTokens = choiceKey.toLowerCase().split(/[_:.-]+/)
+          const keyTokens = choiceKey.toLowerCase().split(/[_:./-]+/)
           for (const token of keyTokens) {
             if (token.length > 2 && stateText.includes(token)) {
               score += 3
             }
           }
           if (criteriaDesc) {
-            const descTokens = criteriaDesc.toLowerCase().split(/\s+/)
+            const descTokens = entryToSearchText(criteriaDesc).split(/\s+/)
             for (const token of descTokens) {
               const cleanToken = token.replace(/[^a-z0-9]/g, '')
               if (cleanToken.length > 3 && stateText.includes(cleanToken)) {
@@ -73,7 +80,7 @@ export function callDeterministicRuleEngine(
       }
 
       const confidence =
-        maxScore > 0 ? Math.min(0.70 + maxScore * 0.03, 0.95) : 0.0
+        maxScore > 0 ? Math.min(0.75 + maxScore * 0.03, 0.98) : 0.0
       const ans: JevChoiceAnswer = {
         type: 'choice',
         choice: bestChoice,
@@ -82,7 +89,31 @@ export function callDeterministicRuleEngine(
       }
       answers[qKey] = ans
     } else if (qVal.type === 'noul') {
-      const noul = hasErrorTokens ? 0.95 : 0.05
+      const inst = entryToSearchText(qVal.instructions)
+      const isErrorQuestion =
+        inst.includes('error') ||
+        inst.includes('failure') ||
+        inst.includes('crash') ||
+        inst.includes('timeout')
+
+      let noul = 0.5
+      if (isErrorQuestion) {
+        noul = hasErrorTokens ? 0.95 : 0.05
+      } else {
+        // Evaluate candidate matching or semantic presence via token overlap
+        const criterionText = entryToSearchText(qVal.criteria?.true)
+        const combined = `${inst} ${criterionText}`
+        const tokens = combined.replace(/[^a-z0-9]/g, ' ').split(/\s+/).filter((t: string) => t.length > 3)
+        const matches = tokens.filter((t: string) => stateText.includes(t))
+        if (matches.length >= 2) {
+          noul = 0.92
+        } else if (matches.length === 1) {
+          noul = 0.72
+        } else {
+          noul = 0.25
+        }
+      }
+
       const ans: JevNoulAnswer = {
         type: 'noul',
         noul,

@@ -43,7 +43,8 @@ export async function adjudicatePayloadOutput(
     let parsedPayload: Record<string, unknown>
     try {
       parsedPayload = JSON.parse(observation.outputJson) as Record<string, unknown>
-    } catch {
+    } catch (cause) {
+      void cause
       parsedPayload = { raw: observation.outputJson }
     }
 

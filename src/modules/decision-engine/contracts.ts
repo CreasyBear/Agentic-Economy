@@ -1,42 +1,41 @@
-export type JevChoiceQuestion = Readonly<{
-  type: 'choice'
-  instructions: string
-  criteria: Readonly<Record<string, string | null>>
-}>
+import type {
+  ChoiceCriteria,
+  ChoiceQuestion,
+  ChoiceResponse,
+  Description,
+  EntryType,
+  NoulQuestion,
+  NoulResponse,
+  Question,
+  Questions,
+  ScoreCriteria,
+  ScoreQuestion,
+  ScoreResponse,
+  SystemOneRequest,
+  SystemOneResult,
+  Usage,
+} from '@typesafe-ai/sdk'
 
-export type JevScoreQuestion = Readonly<{
-  type: 'score'
-  instructions: string
-  criteria: readonly string[]
-}>
+export type JevChoiceQuestion = ChoiceQuestion
+export type JevChoiceAnswer = ChoiceResponse
+export type JevDescription = Description
+export type JevEntryType = EntryType
+export type JevNoulQuestion = NoulQuestion
+export type JevNoulAnswer = NoulResponse
+export type JevQuestion = Question
+export type JevQuestions = Questions
+export type JevScoreQuestion = ScoreQuestion
+export type JevScoreAnswer = ScoreResponse
+export type JevUsage = Usage
 
-export type JevNoulQuestion = Readonly<{
-  type: 'noul'
-  instructions: string
-  criteria?: Readonly<{ true?: string; false?: string }>
-}>
-
-export type JevQuestion = JevChoiceQuestion | JevScoreQuestion | JevNoulQuestion
-
-export type JevChoiceAnswer = Readonly<{
-  type: 'choice'
-  choice: string
-  probabilities: Readonly<Record<string, number>>
-  confidence: number
-}>
-
-export type JevScoreAnswer = Readonly<{
-  type: 'score'
-  score: number
-  legend: Readonly<Record<string, string>>
-  probabilities: Readonly<Record<string, number>>
-  confidence: number
-}>
-
-export type JevNoulAnswer = Readonly<{
-  type: 'noul'
-  noul: number
-}>
+export type {
+  ChoiceCriteria,
+  Description,
+  EntryType,
+  ScoreCriteria,
+  SystemOneRequest,
+  SystemOneResult,
+}
 
 export type JevAnswer = JevChoiceAnswer | JevScoreAnswer | JevNoulAnswer
 
@@ -47,8 +46,8 @@ export type DecisionTier =
   | 'safe_refusal'
 
 export type DecisionGatewayRequest = Readonly<{
-  state: Readonly<Record<string, unknown>> | string
-  questions: Readonly<Record<string, JevQuestion>>
+  state: EntryType | Record<string, unknown>
+  questions: Questions
 }>
 
 export type DecisionGatewayUsage = Readonly<{
@@ -68,7 +67,10 @@ export type DecisionGatewayResponse = Readonly<{
 
 export type DecisionGatewayOptions = Readonly<{
   timeoutMs?: number
+  maxRetries?: number
   openrouterApiKey?: string
+  typesafeApiKey?: string
+  baseURL?: string
   jevModel?: string
   secondaryModel?: string
   disableJev?: boolean

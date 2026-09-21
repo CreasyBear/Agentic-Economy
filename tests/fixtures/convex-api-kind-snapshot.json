@@ -1506,6 +1506,12 @@
     "kind": "action"
   },
   {
+    "visibility": "internal",
+    "module": "capabilityToolCatalog",
+    "method": "rerank",
+    "kind": "action"
+  },
+  {
     "visibility": "public",
     "module": "capabilityToolCatalog",
     "method": "search",

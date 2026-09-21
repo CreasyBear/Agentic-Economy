@@ -22,6 +22,7 @@ import {
   type SupplyProjectionFreshness,
   type ToolCompareResolution,
 } from './tool-choice-contracts'
+import { rerankToolSearchResult } from './tool-reranker'
 
 // `market-tools/list` and `market-tools/search` read `registrySearchDocuments`,
 // kept current by the hourly "reconcile business supply projections" workload
@@ -123,13 +124,15 @@ export const registryToolsSearchAction = defineAction({
     const scope = marketToolsCursorScope(freshness)
     const cursor = decodeMarketToolsCursor(data.cursor, scope)
     const filters = sourceFilters(data.filters)
-    const projected = projectToolSearchChoices(await readCapabilityToolSearch({
+    const searchResult = await readCapabilityToolSearch({
       query: data.query,
       limit: data.limit,
       ...(data.source === undefined ? {} : { source: data.source }),
       ...(cursor === undefined ? {} : { cursor }),
       ...(filters === undefined ? {} : { filters }),
-    }), data.filters)
+    })
+    const rerankedResult = await rerankToolSearchResult(searchResult, data.query)
+    const projected = projectToolSearchChoices(rerankedResult, data.filters)
     return projected.kind === 'unavailable'
       ? projected
       : { ...projected, pagination: opaquePagination(projected.pagination, scope), freshness }

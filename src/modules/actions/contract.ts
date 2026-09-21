@@ -2,13 +2,13 @@ import type { AgentAccessPrincipal } from '@/modules/agent-access/agent-access'
 import type { AccountManagementService } from '@/modules/agent-access/account.actions'
 import { CALL_ROUTE_CONTRACT } from '@/modules/capability-execution/call-entry'
 import type { CallService } from '@/modules/capability-execution/call-authority'
+import type { ToolCatalogSearcher } from '@/modules/capability-execution/procure-engine'
 import type { ToolProjectionNavigationContract } from '@/modules/capability-supply/tool-projection'
 import type { SupplyManagementService } from '@/modules/capability-supply/supply-actions'
 import { toolMarketNavigation } from '@/modules/registry/tool-entry'
 import type { SourceWriteAdmissionRequest } from '@/modules/security/source-write-admission'
 import type { MarketDemandService } from '@/modules/market-demand/market-demand.actions'
 import type { FundingHandoffService } from '@/modules/money/funding-handoff.actions'
-import type { ToolCatalogSearcher } from '@/modules/capability-execution/procure-engine'
 
 export const CURRENT_TOOL_PROJECTION_NAVIGATION = Object.freeze({
   market: Object.freeze({
@@ -37,13 +37,13 @@ declare module '@/modules/common/action' {
     callService?: CallService
     /** One injected supply-management service shared by authenticated MCP and CLI adapters. */
     supplyManagementService?: SupplyManagementService
+    /** Injected catalog searcher for capability procurement. */
+    catalogSearcher?: ToolCatalogSearcher
     /** One injected account read service shared by authenticated HTTP, MCP, and CLI adapters. */
     accountManagementService?: AccountManagementService
     /** Private market-demand memory shared by authenticated HTTP, MCP, and CLI adapters. */
     marketDemandService?: MarketDemandService
     /** Agent-native hosted funding session service shared by HTTP and MCP. */
     fundingHandoffService?: FundingHandoffService
-    /** Tool catalog search port for capability procurement. */
-    catalogSearcher?: ToolCatalogSearcher
   }
 }

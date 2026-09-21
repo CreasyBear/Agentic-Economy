@@ -25,25 +25,27 @@ describe('Decision Gateway & Fallback Matrix', () => {
   }
 
   it('Tier 1: uses Jev System One when endpoint returns valid answers', async () => {
-    const mockFetch = vi.fn().mockResolvedValue({
-      ok: true,
-      json: async () => ({
-        model: '~typesafe/jev-latest',
-        answers: {
-          toolChoice: {
-            type: 'choice',
-            choice: 'timezone_converter',
-            confidence: 0.98,
-            probabilities: { timezone_converter: 0.98 },
+    const mockFetch = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          model: '~typesafe/jev-latest',
+          answers: {
+            toolChoice: {
+              type: 'choice',
+              choice: 'timezone_converter',
+              confidence: 0.98,
+              probabilities: { timezone_converter: 0.98 },
+            },
+            hasError: {
+              type: 'noul',
+              noul: 0.05,
+            },
           },
-          hasError: {
-            type: 'noul',
-            noul: 0.05,
-          },
-        },
-        usage: { input_tokens: 150, output_tokens: 0 },
-      }),
-    })
+          usage: { input_tokens: 150, output_tokens: 0 },
+        }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } },
+      ),
+    )
 
     const res = await executeDecisionGateway(sampleRequest, {
       openrouterApiKey: 'test-key',
@@ -60,17 +62,12 @@ describe('Decision Gateway & Fallback Matrix', () => {
 
   it('Tier 2: degrades gracefully to Secondary LLM adapter when Jev times out or 500s', async () => {
     const mockFetch = vi.fn().mockImplementation(async (url: string) => {
-      if (url.includes('/api/alpha/decisions')) {
-        return {
-          ok: false,
-          status: 504,
-          text: async () => 'Gateway Timeout',
-        }
+      if (url.includes('/decisions') || url.includes('/v1/systemone')) {
+        return new Response('Gateway Timeout', { status: 504 })
       }
       if (url.includes('/api/v1/chat/completions')) {
-        return {
-          ok: true,
-          json: async () => ({
+        return new Response(
+          JSON.stringify({
             choices: [
               {
                 message: {
@@ -92,7 +89,8 @@ describe('Decision Gateway & Fallback Matrix', () => {
             ],
             usage: { prompt_tokens: 300, completion_tokens: 40 },
           }),
-        }
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        )
       }
       throw new Error(`Unexpected url: ${url}`)
     })

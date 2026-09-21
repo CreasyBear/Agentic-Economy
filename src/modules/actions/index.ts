@@ -58,13 +58,13 @@ import {
 } from '@/modules/capability-execution/call-recovery.actions'
 import { callAction } from '@/modules/capability-execution/call.actions'
 import {
-  toolQuoteAction,
-  TOOL_QUOTE_ROUTE_CONTRACT,
-} from '@/modules/capability-execution/quote.actions'
-import {
   toolProcureAction,
   TOOL_PROCURE_ROUTE_CONTRACT,
 } from '@/modules/capability-execution/procure.actions'
+import {
+  toolQuoteAction,
+  TOOL_QUOTE_ROUTE_CONTRACT,
+} from '@/modules/capability-execution/quote.actions'
 import { callListAction } from '@/modules/capability-execution/call-history.actions'
 import {
   marketRequestCreateAction,

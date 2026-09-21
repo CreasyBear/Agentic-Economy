@@ -1,4 +1,5 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { mockJevFetch } from '../../helpers/tool-search-rerank-fixtures'
 const { query, upstream } = vi.hoisted(() => ({ query: vi.fn(), upstream: vi.fn() }))
 vi.mock('@/lib/server/convex-source', () => ({ sourceQuery: (name: string) => name, callPublicSourceQuery: query }))
 vi.mock('@/modules/market/x402-directory.server', () => ({ readX402Directory: upstream }))
@@ -7,7 +8,32 @@ import { x402DirectoryCatalogueInputSchema } from '@/modules/market/x402-directo
 import { decodeOpaqueCursor, encodeOpaqueCursor } from '@/modules/registry/opaque-cursor'
 
 beforeEach(() => { query.mockReset(); upstream.mockReset() })
+afterEach(() => { vi.unstubAllGlobals(); vi.unstubAllEnvs() })
 describe('indexed catalogue server boundary', () => {
+  it('uses Jev for query ordering without changing index filters, coverage or cursors', async () => {
+    vi.stubEnv('TYPESAFE_API_KEY', '')
+    vi.stubEnv('OPENROUTER_API_KEY', 'test-key')
+    const fetchImpl = mockJevFetch({ match_0: { type: 'noul', noul: 0.1 }, match_1: { type: 'noul', noul: 0.9 } })
+    vi.stubGlobal('fetch', fetchImpl)
+    const entries = ['Weather forecasts', 'Image background removal'].map((description, index) => ({
+      resource: `https://example.com/${index}`, title: description, description,
+      protocol: 'http', provider: 'example.com', prices: [], metadataJson: '{}',
+    }))
+    const coverage = { indexedTotal: 4000, generation: 'gen-1' }
+    query.mockResolvedValue({ kind: 'ok', coverage, searchMethod: 'native_full_text', page: entries.map(entry => ({ entry })), continueCursor: 'next', isDone: false })
+    const result = await readX402DirectoryCatalogue({ query: 'transparent images', network: 'base', maxUsdPrice: 0.1 })
+    expect(result).toMatchObject({ kind: 'ok', source: 'index', coverage, searchMethod: 'native_full_text', isDone: false, page: {
+      items: [entries[1], entries[0]], appliedFilters: { network: 'base', maxUsdPrice: 0.1 },
+    } })
+    expect(query).toHaveBeenCalledWith('x402DirectoryIndex:browse', {
+      query: 'transparent images', network: 'base', maxUsdPrice: 0.1,
+      paginationOpts: { numItems: 24, cursor: null, maximumRowsRead: 512 },
+    })
+    if (result.kind !== 'ok') throw new Error('expected catalogue')
+    expect(decodeOpaqueCursor(result.indexCursor ?? '', { kind: 'x402-directory', scope: 'gen-1' })).toBe('next')
+    expect(fetchImpl).toHaveBeenCalledOnce()
+    expect(upstream).not.toHaveBeenCalled()
+  })
   it('validates source-only inputs and rejects incompatible search sorting', async () => {
     for (const input of [{ provider: 'https://example.com' }, { indexCursor: '' }, { query: 'image', sort: 'popular' }, { directoryCategory: '' }, { indexCursor: 'cursor', offset: 20 }, { executable: 'anything' }]) {
       expect(x402DirectoryCatalogueInputSchema.safeParse(input).success).toBe(false)

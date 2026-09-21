@@ -678,6 +678,8 @@ export const provisionProductionSellerOnboardingCanaryFunding = internalMutation
         && principal.grantGeneration === expected.generation
         && principal.spendingPolicyDigest === expected.spendingPolicyDigest
         && principal.expiresAt === expected.expiresAt
+        && principal.scopes.length === 1
+        && principal.scopes[0] === MARKET_TOOLS_CALL_SCOPE
       return exactProductionGrantMaterial(target, expected) && principalExact && active.length === 1
         ? {
             kind: 'replayed' as const,

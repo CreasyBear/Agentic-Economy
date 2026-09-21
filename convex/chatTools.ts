@@ -45,7 +45,7 @@ import {
 } from '@/modules/registry/tool-action-contracts'
 import type { InteractiveBusinessAuthorityContext } from '@/modules/business/public'
 
-import { api, components } from './_generated/api'
+import { api, components, internal } from './_generated/api'
 
 export {
   CHAT_TOOL_IDS,
@@ -272,11 +272,29 @@ export function createChatAgent(
             ...(filters === undefined ? {} : { filters }),
           },
         )
-        return projectedModelFacingOutput(
-          'registry.tools.search',
-          searchContract.outputSchema,
-          () => projectToolSearchChoices(deserializeToolSearchResult(result), data.filters),
-        )
+        try {
+          const source = deserializeToolSearchResult(result)
+          const reranked = source.kind === 'ok' && source.items.length > 1
+            ? await ctx.runAction(internal.capabilityToolCatalog.rerank, {
+                result,
+                query: data.query,
+              }).then(deserializeToolSearchResult).catch((cause) =>
+                degradeBackend(cause, source, {
+                  site: 'chatToolSearchRerank',
+                  reason: 'source_unavailable',
+                }))
+            : source
+          return projectedModelFacingOutput(
+            'registry.tools.search',
+            searchContract.outputSchema,
+            () => projectToolSearchChoices(reranked, data.filters),
+          )
+        } catch (cause) {
+          return degradeBackend(cause, failure('registry.tools.search', 'source_output_invalid'), {
+            site: 'chatToolSearch',
+            reason: 'invalid_response',
+          })
+        }
       },
     }),
     [CHAT_TOOL_NAME_MAP.canonicalToProvider['registry.tools.describe']]: createTool({

@@ -11,10 +11,18 @@ import {
   MAX_CHAT_TOOL_RESULT_BYTES,
   type ChatToolId,
 } from '../../../convex/chatTools'
-import { api } from '../../../convex/_generated/api'
+import { api, internal } from '../../../convex/_generated/api'
 import type { InteractiveBusinessAuthorityContext } from '@/modules/business/public'
+import { serializeToolSearchResult } from '@/modules/capability-supply/public'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { registryToolsSearchContract } from '@/modules/registry/tool-action-contracts'
+import {
+  ERC20_QUERY,
+  TOOL_CRYPTO_TX,
+  TOOL_CURRENCY,
+  TOOL_TIMEZONE,
+  misorderedSearchResult,
+} from '../../helpers/tool-search-rerank-fixtures'
 
 const OPERATION_REF = `operation:v1:${'a'.repeat(64)}`
 const COMMITMENT_REF = `operation-commitment:v1:${'b'.repeat(64)}`
@@ -245,6 +253,45 @@ describe('Tool chat Agent tools', () => {
       getFunctionName(api.capabilityToolCatalog.search),
       getFunctionName(api.capabilityToolCatalog.detail),
       getFunctionName(api.capabilityToolCatalog.compare),
+    ])
+  })
+
+  it('classifies and re-ranks Tool search results before exposing them to the chat model', async () => {
+    const source = misorderedSearchResult(ERC20_QUERY)
+    const reranked = serializeToolSearchResult({
+      ...source,
+      items: [TOOL_CRYPTO_TX, TOOL_CURRENCY, TOOL_TIMEZONE],
+      ranking: [
+        { toolRef: TOOL_CRYPTO_TX.toolRef, rank: 1, score: 0.94 },
+        { toolRef: TOOL_CURRENCY.toolRef, rank: 2, score: 0.11 },
+        { toolRef: TOOL_TIMEZONE.toolRef, rank: 3, score: 0.08 },
+      ],
+    })
+    const runAction = vi.fn(async (reference) => {
+      const name = getFunctionName(reference)
+      if (name === getFunctionName(api.capabilityToolCatalog.search)) {
+        return serializeToolSearchResult(source)
+      }
+      if (name === getFunctionName(internal.capabilityToolCatalog.rerank)) {
+        return reranked
+      }
+      throw new Error(`Unexpected action: ${name}`)
+    })
+    const agent = createChatAgent(mockModel(), AUTHORITY)
+    const ctx = toolCtx({ runAction: runAction as ToolCtx['runAction'] })
+
+    const result = await invokeTool(
+      agent,
+      'registry.tools.search',
+      ctx,
+      { query: ERC20_QUERY },
+    ) as { kind: string; items: readonly { toolRef: string }[] }
+
+    expect(result.kind).toBe('ok')
+    expect(result.items[0]?.toolRef).toBe(TOOL_CRYPTO_TX.toolRef)
+    expect(runAction.mock.calls.map(([reference]) => getFunctionName(reference))).toEqual([
+      getFunctionName(api.capabilityToolCatalog.search),
+      getFunctionName(internal.capabilityToolCatalog.rerank),
     ])
   })
 

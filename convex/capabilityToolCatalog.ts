@@ -1,6 +1,7 @@
 "use node"
 
 import { listX402DiscoveryResources, searchX402Resources } from '@coinbase/cdp-sdk'
+import { v } from 'convex/values'
 import { degradeBackend } from '@/lib/observability/degrade-backend'
 import { readBoundedRequestJson } from '@/lib/server/bounded-request-body'
 import { CURRENT_TOOL_PROJECTION_NAVIGATION } from '@/modules/actions/contract'
@@ -16,8 +17,9 @@ import {
 import { defaultDnsResolver, isPublicHttpTarget } from '@/modules/network-guard/public'
 import { fetchCoinbaseReferenceRate } from '@/modules/money/reference-rate'
 import { quoteManagedX402BuyerAud } from '@/modules/money/public'
+import { rerankToolSearchResult } from '@/modules/registry/tool-reranker'
 import { api, internal } from './_generated/api'
-import { action, type ActionCtx } from './_generated/server'
+import { action, env, internalAction, type ActionCtx } from './_generated/server'
 import { reconcileReadyItems } from './capabilitySupplyShared'
 import { publicSearchReturns, searchArgs, publicDetailReturns, publicCompareReturns, toolRefArgs, compareArgs } from './capabilitySupplyToolQueries'
 import { bindWorkloadCronActionContext } from './workloadCron'
@@ -126,6 +128,29 @@ export const search = action({
       return detail.kind === 'found' && matchesToolFilters(detail.tool, input.filters ?? {}) ? [detail.tool] : []
     })
     return serializeToolSearchResult(await decorate(ctx, { kind: 'ok', schemaVersion: 'registry-tools:v3', query: input.query, items, ranking: [], pagination: { limit: page.limit, hasMore: page.nextCursor !== undefined, ...(page.nextCursor === undefined ? {} : { nextCursor: page.nextCursor }) }, ...(page.partialResults === undefined ? {} : { partialResults: page.partialResults }), navigation }))
+  },
+})
+
+/**
+ * Node-only bridge for chat's default Convex runtime. The chat Tool keeps its
+ * catalogue read in the default runtime and sends the bounded wire page here
+ * so the TypeSafe SDK and server observability dependencies never leak into
+ * that runtime. A failed or incomplete Jev decision returns the original page.
+ */
+export const rerank = internalAction({
+  args: {
+    result: publicSearchReturns,
+    query: v.string(),
+  },
+  returns: publicSearchReturns,
+  handler: async (_ctx, args): Promise<ToolSearchWireResult> => {
+    const source = deserializeToolSearchResult(args.result as ToolSearchWireResult)
+    const reranked = await rerankToolSearchResult(source, args.query, {
+      ...(env.OPENROUTER_API_KEY === undefined
+        ? {}
+        : { openrouterApiKey: env.OPENROUTER_API_KEY }),
+    })
+    return serializeToolSearchResult(reranked)
   },
 })
 
