@@ -141,7 +141,7 @@ export function AeAppShell({ children }: { children: ReactNode }) {
             <div className="flex h-(--header-height) min-h-touch items-center justify-between px-gutter">
               <BrandLink />
               <div className="flex items-center gap-intra">
-                <AeNetworkHealthIndicator withBanner={false} />
+                <AeNetworkHealthIndicator />
                 <ThemeToggle />
                 <Link
                   to="/market"
@@ -162,7 +162,7 @@ export function AeAppShell({ children }: { children: ReactNode }) {
                 <BrandLink />
                 <AppHeaderNav />
                 <div className="ms-auto flex items-center gap-intra">
-                  <AeNetworkHealthIndicator withBanner={false} />
+                  <AeNetworkHealthIndicator />
                   <AeCommandPanel />
                   <Show when="signed-in">
                     <div className="hidden max-w-[12rem] min-w-0 md:block">
