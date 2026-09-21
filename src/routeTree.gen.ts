@@ -68,6 +68,7 @@ import { Route as ApiV1CallsRouteImport } from './routes/api.v1.calls'
 import { Route as ApiV1BusinessesRouteImport } from './routes/api.v1.businesses'
 import { Route as ApiV1AccountRouteImport } from './routes/api.v1.account'
 import { Route as ApiStripeWebhookRouteImport } from './routes/api.stripe.webhook'
+import { Route as ApiOwnerDataExportRouteImport } from './routes/api.owner.data-export'
 import { Route as ApiObservabilityClientErrorRouteImport } from './routes/api.observability.client-error'
 import { Route as ApiInternalSecretLifecycleRouteImport } from './routes/api.internal.secret-lifecycle'
 import { Route as ApiInternalProviderConsequenceRouteImport } from './routes/api.internal.provider-consequence'
@@ -428,6 +429,11 @@ const ApiV1AccountRoute = ApiV1AccountRouteImport.update({
 const ApiStripeWebhookRoute = ApiStripeWebhookRouteImport.update({
   id: '/api/stripe/webhook',
   path: '/api/stripe/webhook',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiOwnerDataExportRoute = ApiOwnerDataExportRouteImport.update({
+  id: '/api/owner/data-export',
+  path: '/api/owner/data-export',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiObservabilityClientErrorRoute =
@@ -841,6 +847,7 @@ export interface FileRoutesByFullPath {
   '/api/internal/provider-consequence': typeof ApiInternalProviderConsequenceRoute
   '/api/internal/secret-lifecycle': typeof ApiInternalSecretLifecycleRoute
   '/api/observability/client-error': typeof ApiObservabilityClientErrorRoute
+  '/api/owner/data-export': typeof ApiOwnerDataExportRoute
   '/api/stripe/webhook': typeof ApiStripeWebhookRouteWithChildren
   '/api/v1/account': typeof ApiV1AccountRouteWithChildren
   '/api/v1/businesses': typeof ApiV1BusinessesRouteWithChildren
@@ -964,6 +971,7 @@ export interface FileRoutesByTo {
   '/api/internal/provider-consequence': typeof ApiInternalProviderConsequenceRoute
   '/api/internal/secret-lifecycle': typeof ApiInternalSecretLifecycleRoute
   '/api/observability/client-error': typeof ApiObservabilityClientErrorRoute
+  '/api/owner/data-export': typeof ApiOwnerDataExportRoute
   '/api/stripe/webhook': typeof ApiStripeWebhookRouteWithChildren
   '/api/v1/account': typeof ApiV1AccountRouteWithChildren
   '/api/v1/businesses': typeof ApiV1BusinessesRouteWithChildren
@@ -1089,6 +1097,7 @@ export interface FileRoutesById {
   '/api/internal/provider-consequence': typeof ApiInternalProviderConsequenceRoute
   '/api/internal/secret-lifecycle': typeof ApiInternalSecretLifecycleRoute
   '/api/observability/client-error': typeof ApiObservabilityClientErrorRoute
+  '/api/owner/data-export': typeof ApiOwnerDataExportRoute
   '/api/stripe/webhook': typeof ApiStripeWebhookRouteWithChildren
   '/api/v1/account': typeof ApiV1AccountRouteWithChildren
   '/api/v1/businesses': typeof ApiV1BusinessesRouteWithChildren
@@ -1214,6 +1223,7 @@ export interface FileRouteTypes {
     | '/api/internal/provider-consequence'
     | '/api/internal/secret-lifecycle'
     | '/api/observability/client-error'
+    | '/api/owner/data-export'
     | '/api/stripe/webhook'
     | '/api/v1/account'
     | '/api/v1/businesses'
@@ -1337,6 +1347,7 @@ export interface FileRouteTypes {
     | '/api/internal/provider-consequence'
     | '/api/internal/secret-lifecycle'
     | '/api/observability/client-error'
+    | '/api/owner/data-export'
     | '/api/stripe/webhook'
     | '/api/v1/account'
     | '/api/v1/businesses'
@@ -1461,6 +1472,7 @@ export interface FileRouteTypes {
     | '/api/internal/provider-consequence'
     | '/api/internal/secret-lifecycle'
     | '/api/observability/client-error'
+    | '/api/owner/data-export'
     | '/api/stripe/webhook'
     | '/api/v1/account'
     | '/api/v1/businesses'
@@ -1570,6 +1582,7 @@ export interface RootRouteChildren {
   ApiInternalProviderConsequenceRoute: typeof ApiInternalProviderConsequenceRoute
   ApiInternalSecretLifecycleRoute: typeof ApiInternalSecretLifecycleRoute
   ApiObservabilityClientErrorRoute: typeof ApiObservabilityClientErrorRoute
+  ApiOwnerDataExportRoute: typeof ApiOwnerDataExportRoute
   ApiStripeWebhookRoute: typeof ApiStripeWebhookRouteWithChildren
   ApiV1AccountRoute: typeof ApiV1AccountRouteWithChildren
   ApiV1BusinessesRoute: typeof ApiV1BusinessesRouteWithChildren
@@ -2020,6 +2033,13 @@ declare module '@tanstack/react-router' {
       path: '/api/stripe/webhook'
       fullPath: '/api/stripe/webhook'
       preLoaderRoute: typeof ApiStripeWebhookRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/owner/data-export': {
+      id: '/api/owner/data-export'
+      path: '/api/owner/data-export'
+      fullPath: '/api/owner/data-export'
+      preLoaderRoute: typeof ApiOwnerDataExportRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/observability/client-error': {
@@ -2726,6 +2746,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiInternalProviderConsequenceRoute: ApiInternalProviderConsequenceRoute,
   ApiInternalSecretLifecycleRoute: ApiInternalSecretLifecycleRoute,
   ApiObservabilityClientErrorRoute: ApiObservabilityClientErrorRoute,
+  ApiOwnerDataExportRoute: ApiOwnerDataExportRoute,
   ApiStripeWebhookRoute: ApiStripeWebhookRouteWithChildren,
   ApiV1AccountRoute: ApiV1AccountRouteWithChildren,
   ApiV1BusinessesRoute: ApiV1BusinessesRouteWithChildren,

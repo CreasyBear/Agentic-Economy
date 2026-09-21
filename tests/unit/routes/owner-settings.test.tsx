@@ -129,6 +129,7 @@ describe('/owner/settings R-17', () => {
     expect(within(nav).getByRole('link', { name: 'Profile' }).getAttribute('href')).toBe('#clerk-account-security')
     expect(within(nav).getByRole('link', { name: 'Team' }).getAttribute('href')).toBe('#team')
     expect(within(nav).getByRole('link', { name: 'Business' }).getAttribute('href')).toBe('#business')
+    expect(within(nav).getByRole('link', { name: 'Privacy' }).getAttribute('href')).toBe('#privacy')
     expect(within(nav).getByRole('link', { name: 'Email alerts' }).getAttribute('href')).toBe('#notifications')
     expect(within(nav).getByRole('link', { name: 'Security history' }).getAttribute('href')).toBe('#security-history')
   })
@@ -142,12 +143,17 @@ describe('/owner/settings R-17', () => {
       'Profile',
       'Team',
       'Business',
+      'Privacy',
       'Email alerts',
       'Security history',
     ])
     expect(screen.getByRole('textbox', { name: 'ABN' })).toBeTruthy()
     expect(screen.getByText('ABN and GST facts used on your tax invoices.')).toBeTruthy()
     expect(screen.getByRole('link', { name: /Manage Team/ }).getAttribute('href')).toBe('/owner/team')
+    expect(screen.getByText('Download a copy of the data Agentic Economy holds for this Account.')).toBeTruthy()
+    const exportLink = screen.getByRole('link', { name: 'Download your data (JSON)' })
+    expect(exportLink.getAttribute('href')).toBe('/api/owner/data-export')
+    expect(exportLink.hasAttribute('download')).toBe(true)
     expect(screen.getByText(/Saved for this Account\./)).toBeTruthy()
     expect(screen.getByRole('textbox', { name: 'Filter security history' })).toBeTruthy()
     expect(screen.queryByText('Session', { exact: true })).toBeNull()

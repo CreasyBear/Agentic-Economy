@@ -40,10 +40,19 @@ export const ownerSettingsBusinessSection = {
   description: 'ABN and GST facts used on your tax invoices.',
 } as const
 
+export const ownerSettingsPrivacySection = {
+  id: 'privacy',
+  title: 'Privacy',
+  description: 'Download a copy of the data Agentic Economy holds for this Account.',
+  downloadLabel: 'Download your data (JSON)',
+  downloadHref: '/api/owner/data-export',
+} as const
+
 export const ownerSettingsSectionNavigation = [
   { id: 'clerk-account-security', label: 'Profile' },
   { id: 'team', label: 'Team' },
   { id: ownerSettingsBusinessSection.id, label: ownerSettingsBusinessSection.title },
+  { id: ownerSettingsPrivacySection.id, label: ownerSettingsPrivacySection.title },
   { id: 'compromise-recovery', label: 'Recovery' },
   { id: 'notifications', label: 'Email alerts' },
   { id: 'security-history', label: 'Security history' },

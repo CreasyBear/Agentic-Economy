@@ -6,6 +6,7 @@ export * from './account/public'
 export * from './external-identity/public'
 export * from './principal/public'
 export * from './workload-context/public'
+export * from './personal-data-export'
 
 /** Canonical Phase 1 tables, composed only at the module's public boundary. */
 export const principalAccountTables = {

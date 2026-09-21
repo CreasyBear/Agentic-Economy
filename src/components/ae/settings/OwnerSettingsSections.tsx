@@ -6,9 +6,11 @@ import { AeCompromiseRecoveryChecklist } from '@/components/ae/settings/AeCompro
 import { OwnerNotificationSettings } from '@/components/ae/settings/OwnerNotificationSettings'
 import { TaxProfileFormSection } from '@/components/ae/settings/TaxProfileFormSection'
 import { AeSiteAuthPanel, AeSiteAuthSubmit } from '@/components/ae/website'
+import { buttonVariants } from '@/components/ui/button-variants'
 
 import {
   ownerSettingsBusinessSection,
+  ownerSettingsPrivacySection,
   type AccountSettingsSectionProps,
 } from './owner-settings.contracts'
 import { useOwnerNotificationPreferences } from './useOwnerNotificationPreferences'
@@ -57,6 +59,19 @@ export function AccountSettingsSection({ history }: AccountSettingsSectionProps)
         description={ownerSettingsBusinessSection.description}
       >
         <TaxProfileFormSection />
+      </AeSection>
+      <AeSection
+        id={ownerSettingsPrivacySection.id}
+        title={ownerSettingsPrivacySection.title}
+        description={ownerSettingsPrivacySection.description}
+      >
+        <a
+          href={ownerSettingsPrivacySection.downloadHref}
+          download
+          className={buttonVariants({ variant: 'outline' })}
+        >
+          {ownerSettingsPrivacySection.downloadLabel}
+        </a>
       </AeSection>
       <AeCompromiseRecoveryChecklist />
       <AeSection
