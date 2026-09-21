@@ -7,6 +7,7 @@ export type StatusCheckView = Readonly<{
   label: string
   state: StatusCheckState
   detail: string
+  checkedAtLabel: string
   badgeLabel: 'Operational' | 'Degraded' | 'Checking'
   badgeVariant: 'success' | 'destructive' | 'secondary'
   requestRef?: string
@@ -31,6 +32,7 @@ export type UseSystemStatusResult = Readonly<{
   refreshLabel: string
   checks: readonly StatusCheckView[]
   statusAnnouncement: string
+  lastUpdated: string
   onRefresh: () => void
   recovery?: StatusRecoveryGuidance
 }>
@@ -67,9 +69,13 @@ export const probeOrder: readonly ProbeId[] = [
 export const statusPageDescription =
   'Live checks for the public site and shared agent interfaces. Individual Tool readiness is shown in the catalogue and on each Tool page.'
 
+export const statusCheckTimeLabel = 'Checked'
+export const statusLastUpdatedLabel = 'Last updated'
+
 export function projectStatusChecks(
   outcomes: readonly ProbeOutcome[],
   isChecking: boolean,
+  relativeCheckedAt: string,
 ): readonly StatusCheckView[] {
   return probeOrder.map((id) => {
     const outcome = outcomes.find((candidate) => candidate.id === id)
@@ -80,6 +86,7 @@ export function projectStatusChecks(
         state: 'checking',
         detail: 'Checking now…',
         badgeLabel: 'Checking',
+        checkedAtLabel: 'Checking now…',
         badgeVariant: 'secondary',
       }
     }
@@ -88,6 +95,7 @@ export function projectStatusChecks(
       label: probeLabels[id],
       state: outcome.state,
       detail: outcome.detail,
+      checkedAtLabel: `${statusCheckTimeLabel} ${relativeCheckedAt}`,
       badgeLabel: outcome.state === 'operational' ? 'Operational' : 'Degraded',
       badgeVariant: outcome.state === 'operational' ? 'success' : 'destructive',
       ...(outcome.requestRef === undefined ? {} : { requestRef: outcome.requestRef }),
@@ -123,7 +131,7 @@ export function statusPageTitle(isChecking: boolean, degraded: boolean): string 
     ? 'Checking system status.'
     : degraded
       ? 'Some systems are degraded.'
-      : 'All systems operational.'
+      : 'All systems operational'
 }
 
 export function statusAnnouncementText(

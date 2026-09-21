@@ -12,6 +12,7 @@ export function StatusCheckList({ checks, isChecking }: StatusCheckListProps) {
             <div className="min-w-0 flex-1">
               <p className="font-medium text-foreground">{check.label}</p>
               <p className="text-sm text-muted-foreground">{check.detail}</p>
+              <p className="text-xs text-muted-foreground">{check.checkedAtLabel}</p>
               {check.requestRef !== undefined && (
                 <div className="mt-intra grid gap-1">
                   <p className="text-xs font-medium text-muted-foreground">Request reference</p>

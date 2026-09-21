@@ -36,6 +36,7 @@ export function AeSystemStatus({ loaded }: AeSystemStatusProps) {
     >
       <div className="ae-rail pb-page">
         <StatusCheckList checks={model.checks} isChecking={model.isChecking} />
+        <p className="mt-intra text-sm text-muted-foreground">{model.lastUpdated}</p>
         {model.recovery !== undefined ? <StatusRecoveryPanel recovery={model.recovery} /> : null}
         <StatusPageFooter statusAnnouncement={model.statusAnnouncement} />
       </div>
