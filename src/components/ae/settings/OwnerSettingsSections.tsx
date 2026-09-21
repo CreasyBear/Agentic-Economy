@@ -28,7 +28,7 @@ export function AccountSettingsSection({ history }: AccountSettingsSectionProps)
             <UserProfile />
           </div>
           <AeSiteAuthPanel
-            eyebrow="Session"
+            eyebrow=""
             title="Sign out"
             titleId="owner-sign-out"
             titleAs="h3"

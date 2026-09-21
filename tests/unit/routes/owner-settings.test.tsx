@@ -22,8 +22,19 @@ vi.mock('@clerk/tanstack-react-start', () => ({
 }))
 
 vi.mock('@/components/ae/website', () => ({
-  AeSiteAuthPanel: ({ children, title }: { children: ReactNode; title: string }) => (
-    <section aria-label={title}>{children}</section>
+  AeSiteAuthPanel: ({
+    children,
+    eyebrow,
+    title,
+  }: {
+    children: ReactNode
+    eyebrow?: string
+    title: string
+  }) => (
+    <section aria-label={title}>
+      {eyebrow ? <p>{eyebrow}</p> : null}
+      {children}
+    </section>
   ),
   AeSiteAuthSubmit: ({ children }: { children: ReactNode }) => <button type="button">{children}</button>,
 }))
@@ -139,6 +150,7 @@ describe('/owner/settings R-17', () => {
     expect(screen.getByRole('link', { name: /Manage Team/ }).getAttribute('href')).toBe('/owner/team')
     expect(screen.getByText(/Saved for this Account\./)).toBeTruthy()
     expect(screen.getByRole('textbox', { name: 'Filter security history' })).toBeTruthy()
+    expect(screen.queryByText('Session', { exact: true })).toBeNull()
   })
 
   it('reads saved notification choices and writes changes through the persistent mutation', async () => {
