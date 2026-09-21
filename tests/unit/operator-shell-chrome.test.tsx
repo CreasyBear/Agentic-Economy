@@ -278,8 +278,9 @@ describe('operator shell nested chrome', () => {
     )
 
     expect(await screen.findByText('You don’t have access to this workspace')).toBeTruthy()
-    expect(screen.getByRole('link', { name: 'Return to market' }).getAttribute('href')).toBe('/market')
-    expect(screen.getByRole('link', { name: 'Help' }).getAttribute('href')).toBe('/support')
+    expect(screen.getByText('Your account does not have the Admin role for this page.')).toBeTruthy()
+    expect(screen.getByRole('link', { name: 'Ask an Admin for access' }).getAttribute('href')).toBe('/support')
+    expect(screen.getByRole('link', { name: 'Return to Market' }).getAttribute('href')).toBe('/market')
     expect(screen.getByRole('button', { name: 'Sign out' })).toBeTruthy()
     expect(screen.queryByRole('link', { name: 'Catalog health' })).toBeNull()
     expect(screen.queryByRole('link', { name: 'Audit' })).toBeNull()

@@ -196,7 +196,7 @@ describe('/agent-access/authorize consent loading', () => {
     expect(screen.getByText(heading)).toBeTruthy()
     expect(screen.getByText(nextAction)).toBeTruthy()
     expect(screen.queryByRole('button', { name: 'Connect agent' })).toBeNull()
-    expect(screen.queryByText('Try loading it again')).toBeNull()
+    expect(screen.queryByText('Nothing was charged. Try again, or check system status.')).toBeNull()
   })
 
   it('keeps a temporary consent read failure on the generic retry boundary', async () => {
@@ -209,7 +209,7 @@ describe('/agent-access/authorize consent loading', () => {
     ) => Promise<unknown>)({ deps: { grantRef: 'grant-temporary-failure' } })).rejects.toThrow('authorization_unavailable')
 
     renderComponent(ErrorComponent)
-    expect(screen.getByText(/Try loading it again/u)).toBeTruthy()
+    expect(screen.getAllByText('Nothing was charged. Try again, or check system status.').length).toBeGreaterThan(0)
   })
 
   it('shows terminal recovery copy when the consent request is unavailable', async () => {
@@ -221,7 +221,7 @@ describe('/agent-access/authorize consent loading', () => {
 
     expect(screen.queryByText('Loading workspace')).toBeNull()
     expect(screen.getAllByText('Couldn’t load this page').length).toBeGreaterThan(0)
-    expect(screen.getByText(/Try loading it again/)).toBeTruthy()
+    expect(screen.getAllByText('Nothing was charged. Try again, or check system status.').length).toBeGreaterThan(0)
   })
 
   it('renders an issuing request as read-only recovery without approval or generic retry', async () => {

@@ -30,7 +30,7 @@ function RouteErrorState({ error, operator }: { error: unknown; operator: boolea
       <AeOperatorPage
         operatorRole={operatorRoleForPath(pathname) ?? 'owner'}
         title="You don’t have access"
-        description="This signed-in account cannot open the requested workspace."
+        description="Your account does not have the Admin role for this page."
         currentPath={pathname}
         suppressSurfaceNavigation
       >
@@ -82,7 +82,7 @@ function RouteErrorState({ error, operator }: { error: unknown; operator: boolea
       <AePageState
         state="unavailable"
         title="Couldn’t load this page"
-        description="The current source could not be reached. No newer state is claimed."
+        description="The page could not be loaded. Nothing was charged."
         action={actions}
       />
     )
@@ -91,9 +91,9 @@ function RouteErrorState({ error, operator }: { error: unknown; operator: boolea
   const operatorRole = operatorRoleForPath(pathname) ?? 'owner'
   const body = (
     <Alert variant="destructive">
-      <AlertTitle>Couldn’t load this page</AlertTitle>
+      {parentShell === null ? null : <AlertTitle>Couldn’t load this page</AlertTitle>}
       <AlertDescription>
-        <p>Try loading it again. If it still fails, check system status before repeating a Call.</p>
+        <p>Nothing was charged. Try again, or check system status.</p>
         {correlationRef === undefined
           ? null
           : <AeCopyReference label="support reference" value={correlationRef} />}
@@ -130,7 +130,7 @@ function RouteErrorState({ error, operator }: { error: unknown; operator: boolea
     <AeOperatorPage
       operatorRole={operatorRole}
       title="Couldn’t load this page"
-      description="Try again, then check system status if the page still does not load."
+      description="Nothing was charged. Try again, or check system status."
       currentPath={pathname}
     >
       {body}
@@ -164,11 +164,11 @@ function OperatorForbiddenBody() {
       <AlertDescription>
         <p>Use the account that owns this workspace, or return to the public market.</p>
         <div className="flex w-full flex-wrap gap-intra">
-          <Link to="/market" className={cn(buttonVariants(), 'min-h-touch')}>
-            Return to market
+          <Link to="/support" className={cn(buttonVariants(), 'min-h-touch')}>
+            Ask an Admin for access
           </Link>
-          <Link to="/support" className={cn(buttonVariants({ variant: 'secondary' }), 'min-h-touch')}>
-            Help
+          <Link to="/market" className={cn(buttonVariants({ variant: 'secondary' }), 'min-h-touch')}>
+            Return to Market
           </Link>
           <SignOutButton redirectUrl="/">
             <Button type="button" variant="outline" className="min-h-touch">Sign out</Button>
