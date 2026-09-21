@@ -15,7 +15,7 @@ import type {
 } from './public-tool-detail.contracts'
 
 export function AeDirectoryToolCanonicalPage({ data }: AeDirectoryToolCanonicalPageProps) {
-  if (data.metadata.kind !== 'found') {
+  if (data.metadata.kind !== 'found' && data.metadata.kind !== 'found_upstream') {
     return <DirectoryEntryUnavailable metadata={data.metadata} />
   }
   const { admission, metadata } = data
@@ -25,7 +25,7 @@ export function AeDirectoryToolCanonicalPage({ data }: AeDirectoryToolCanonicalP
     return <DirectoryEntryUnavailable metadata={{ kind: 'unavailable', reason: 'source_unavailable' }} />
   }
   return (
-    <Await promise={admission} fallback={<DirectoryEntrySummaryPage entry={metadata.item.entry} />}>
+    <Await promise={admission} fallback={<DirectoryEntrySummaryPage entry={metadata.item.entry} upstream={metadata.kind === 'found_upstream'} />}>
       {(resolved: ToolDetailPresentation) => (
         <PublicToolDetail
           result={resolved.result}
@@ -36,8 +36,8 @@ export function AeDirectoryToolCanonicalPage({ data }: AeDirectoryToolCanonicalP
   )
 }
 
-/** Renders at once from the indexed lookup, before the admission promise resolves - title, Provider, price and description, per the design's "no blank first content" requirement. */
-function DirectoryEntrySummaryPage({ entry }: DirectoryEntrySummaryPageProps) {
+/** Renders at once from the directory lookup, before the admission promise resolves - title, Provider, price and description, per the design's "no blank first content" requirement. */
+function DirectoryEntrySummaryPage({ entry, upstream }: DirectoryEntrySummaryPageProps) {
   return (
     <AePublicPage>
       <div className="ae-rail grid gap-section pb-page">
@@ -47,6 +47,7 @@ function DirectoryEntrySummaryPage({ entry }: DirectoryEntrySummaryPageProps) {
           description={entry.provider}
           actions={<MarketBackButton label="Catalog" className="min-h-touch" variant="ghost" />}
         />
+        {upstream ? <p className="text-sm text-muted-foreground">Listed by the Provider directory; not yet verified in AE&apos;s index.</p> : null}
         <div className="grid max-w-2xl gap-related">
           <p className="text-sm leading-relaxed text-muted-foreground">{entry.description}</p>
           <div>

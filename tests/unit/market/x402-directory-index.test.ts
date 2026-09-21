@@ -1,6 +1,10 @@
-import { describe, expect, it } from 'vitest'
-import { directoryEntryMatchesFilters, directoryNetwork, directoryPriceBand, directoryAdoptionBand, minimumDirectoryUsdPrice } from '@/modules/market/x402-directory-index'
+import { describe, expect, it, vi } from 'vitest'
+import { directoryAdoptionBand, directoryEntryMatchesFilters, directoryNetwork, directoryPriceBand, directorySlugBase, minimumDirectoryUsdPrice } from '@/modules/market/x402-directory-index'
 import type { X402DirectoryEntry } from '@/modules/market/x402-directory'
+const { query, upstream } = vi.hoisted(() => ({ query: vi.fn(), upstream: vi.fn() }))
+vi.mock('@/lib/server/convex-source', () => ({ sourceQuery: (name: string) => name, callPublicSourceQuery: query }))
+vi.mock('@/modules/market/x402-directory.server', () => ({ readX402Directory: upstream }))
+import { readX402DirectoryCatalogueBySlug } from '@/modules/market/x402-directory-index.server'
 const entry: X402DirectoryEntry = {
   resource: 'https://provider.test/tool', title: 'Tool', description: '', protocol: 'http', provider: 'provider.test', metadataJson: '{}',
   prices: [
@@ -33,6 +37,24 @@ describe('directory hard filters', () => {
     expect(['0', '0.009999', '0.01', '0.029999', '0.03', '0.1', '1', '10'].map(directoryPriceBand)).toEqual(['lt_0_01', 'lt_0_01', '0_01_to_0_03', '0_01_to_0_03', '0_03_to_0_10', '0_10_to_1', '1_to_10', '10_plus'])
     expect(directoryPriceBand(undefined)).toBe('unknown')
     expect([undefined, 0, 1, 2, 4, 5, 9, 10, 49, 50].map(directoryAdoptionBand)).toEqual(['missing', '0', '1', '2_4', '2_4', '5_9', '5_9', '10_49', '10_49', '50_plus'])
+  })
+
+  it('resolves an index miss from the upstream Provider page without replacing the original miss', async () => {
+    const upstreamEntry = { ...entry, resource: 'https://provider.test/v1/images/generations' }
+    const indexUnavailable = { kind: 'unavailable', reason: 'index_unavailable' } as const
+    query.mockResolvedValue(indexUnavailable)
+    upstream.mockResolvedValue({ kind: 'ok', items: [upstreamEntry], offset: 0, limit: 20 })
+
+    expect(await readX402DirectoryCatalogueBySlug({
+      providerKey: 'provider.test',
+      slug: directorySlugBase(upstreamEntry.resource),
+    })).toEqual({ kind: 'found_upstream', item: { entry: upstreamEntry } })
+
+    upstream.mockResolvedValue({ kind: 'ok', items: [], offset: 0, limit: 20 })
+    expect(await readX402DirectoryCatalogueBySlug({
+      providerKey: 'provider.test',
+      slug: directorySlugBase(upstreamEntry.resource),
+    })).toEqual(indexUnavailable)
   })
 
 })

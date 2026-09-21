@@ -2,8 +2,9 @@ import { degrade } from '@/lib/observability/degrade'
 import { callPublicSourceQuery, sourceQuery } from '@/lib/server/convex-source'
 import { CATALOGUE_STALE_AFTER_MS, sourceFreshnessState, type SourceFreshnessState } from '@/modules/common/freshness'
 import { readX402Directory } from './x402-directory.server'
+import type { X402DirectoryEntry } from './x402-directory'
 import { rerankX402DirectoryPage } from './x402-directory-reranker'
-import type { X402DirectoryIndexCoverage, X402DirectoryIndexInput, X402IndexedDirectoryEntry } from './x402-directory-index'
+import { directorySlugBase, directorySlugWithMethod, type X402DirectoryIndexCoverage, type X402DirectoryIndexInput, type X402IndexedDirectoryEntry } from './x402-directory-index'
 import { decodeOpaqueCursor, encodeOpaqueCursor } from '@/modules/registry/opaque-cursor'
 import {
   x402DirectoryProvidersInputSchema, type X402DirectoryProvidersInput, type X402DirectoryProvidersPage,
@@ -177,13 +178,33 @@ export async function readX402DirectoryCatalogueResource(input: { resource: stri
 /** Canonical `/tools/<providerHost>/<slug>` lookup - the route's synchronous directory metadata plus the admitted toolRef, when already joined. */
 export async function readX402DirectoryCatalogueBySlug(input: { providerKey: string; slug: string }): Promise<X402DirectoryCatalogueResource> {
   if (input.providerKey.length === 0 || input.slug.length === 0) return { kind: 'unavailable', reason: 'query_invalid' }
-  try { return await callPublicSourceQuery(bySlug, input) }
+  let indexed: X402DirectoryCatalogueResource
+  try { indexed = await callPublicSourceQuery(bySlug, input) }
   catch (cause) {
-    return degrade(cause, { kind: 'unavailable', reason: 'source_unavailable' } as const, {
+    indexed = degrade(cause, { kind: 'unavailable', reason: 'source_unavailable' } as const, {
       site: 'readX402DirectoryCatalogueBySlug',
       reason: 'source_unavailable',
     })
   }
+  if (indexed.kind === 'found' || indexed.kind === 'found_upstream') return indexed
+  if (indexed.kind === 'unavailable' && indexed.reason === 'query_invalid') return indexed
+  // The index has no row for this slug. Market renders cards from the same upstream when the index is
+  // unavailable, so the card's destination must resolve from that upstream too (path = destination).
+  for (let offset = 0, pages = 0; pages < 3; pages += 1) {
+    const page = await readX402Directory({ provider: input.providerKey, ...(offset === 0 ? {} : { offset }) })
+    if (page.kind !== 'ok') break
+    const match = page.items.find(entry => directorySlugsFor(entry).includes(input.slug))
+    if (match !== undefined) return { kind: 'found_upstream', item: { entry: match } }
+    if (page.nextOffset === undefined) break
+    offset = page.nextOffset
+  }
+  return indexed
+}
+
+/** Every slug form a card or index row may have used for this entry. */
+function directorySlugsFor(entry: X402DirectoryEntry): readonly string[] {
+  return [...new Set([entry.slug, directorySlugBase(entry.resource), directorySlugWithMethod(entry.resource, entry.method)]
+    .filter((slug): slug is string => slug !== undefined))]
 }
 
 /** Reverse lookup for the `/tools/$toolRef` redirect; `null` keeps the caller on that route. */

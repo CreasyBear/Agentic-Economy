@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import { directoryIndexRangesValid, x402DirectoryIndexInputSchema, type DirectoryDepthBand, type DirectoryMomentumBand, type DirectoryRecencyBand, type X402DirectoryIndexCoverage, type X402IndexedDirectoryEntry } from './x402-directory-index'
-import type { X402DirectoryPage } from './x402-directory'
+import type { X402DirectoryEntry, X402DirectoryPage } from './x402-directory'
 
 export const x402DirectoryCatalogueInputSchema = x402DirectoryIndexInputSchema.omit({ category: true }).extend({
   directoryCategory: z.string().trim().min(1).max(80).transform(value => value.toLowerCase()).optional(),
@@ -30,9 +30,10 @@ export type X402DirectoryCatalogueOverview = X402DirectoryCatalogueUnavailable |
   popular: readonly X402IndexedDirectoryEntry[]; recentlyUpdated: readonly X402IndexedDirectoryEntry[]
 }>
 export const x402DirectoryCatalogueResourceInputSchema = z.strictObject({ resource: z.string().min(1).max(8192) })
+/** found_upstream: resolved from the Coinbase upstream because the index had no active generation or no row; carries no index coverage or admitted toolRef. */
 export type X402DirectoryCatalogueResource = X402DirectoryCatalogueUnavailable | Readonly<{ kind: 'not_found' }> | Readonly<{
   kind: 'found'; coverage: X402DirectoryIndexCoverage; item: X402IndexedDirectoryEntry
-}>
+}> | Readonly<{ kind: 'found_upstream'; item: Readonly<{ entry: X402DirectoryEntry }> }>
 
 export const x402DirectoryProvidersInputSchema = z.strictObject({
   providerCursor: z.string().min(1).max(16384).optional(),

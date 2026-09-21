@@ -26,10 +26,11 @@ export type ToolUnavailableProps = Readonly<{
 
 export type DirectoryEntrySummaryPageProps = Readonly<{
   entry: X402DirectoryEntry
+  upstream: boolean
 }>
 
 export type DirectoryEntryUnavailableProps = Readonly<{
-  metadata: Exclude<X402DirectoryCatalogueResource, { kind: 'found' }>
+  metadata: Exclude<X402DirectoryCatalogueResource, { kind: 'found' } | { kind: 'found_upstream' }>
 }>
 
 export type DirectoryToolCanonicalLoaderData = Readonly<{
