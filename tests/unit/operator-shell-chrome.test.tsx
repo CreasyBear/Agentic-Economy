@@ -277,7 +277,8 @@ describe('operator shell nested chrome', () => {
       '/admin/index-health',
     )
 
-    expect(await screen.findByText('You don’t have access to this workspace')).toBeTruthy()
+    expect(await screen.findByRole('heading', { level: 1, name: 'Admin access required' })).toBeTruthy()
+    expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1)
     expect(screen.getByText('Your account does not have the Admin role for this page.')).toBeTruthy()
     expect(screen.getByRole('link', { name: 'Ask an Admin for access' }).getAttribute('href')).toBe('/support')
     expect(screen.getByRole('link', { name: 'Return to Market' }).getAttribute('href')).toBe('/market')
@@ -292,7 +293,7 @@ describe('operator shell nested chrome', () => {
       '/admin/index-health',
     )
 
-    expect(await screen.findByText('You don’t have access to this workspace')).toBeTruthy()
+    expect(await screen.findByRole('heading', { level: 1, name: 'Admin access required' })).toBeTruthy()
     expect(screen.queryByText('Couldn’t load this page')).toBeNull()
   })
 
@@ -302,7 +303,7 @@ describe('operator shell nested chrome', () => {
       '/admin/index-health',
     )
 
-    expect(await screen.findByText('You don’t have access to this workspace')).toBeTruthy()
+    expect(await screen.findByRole('heading', { level: 1, name: 'Admin access required' })).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Sign out' })).toBeTruthy()
     expect(screen.queryByRole('link', { name: 'Catalog health' })).toBeNull()
     expect(screen.queryByRole('link', { name: 'Audit' })).toBeNull()

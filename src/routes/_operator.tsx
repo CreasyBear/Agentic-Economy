@@ -1,6 +1,7 @@
 import { Outlet, createFileRoute, useLocation } from '@tanstack/react-router'
 
 import { OperatorChromeProvider } from '@/components/ae/layout/AeOperatorPage'
+import { OperatorRouteForbidden } from '@/components/ae/layout/AeRouteError'
 import { AeOperatorSidebar } from '@/components/ae/layout/AeOperatorSidebar'
 import { WorkspaceTransitionBoundary } from '@/components/ae/layout/WorkspaceTransitionBoundary'
 import { SidebarProvider, SidebarTrigger } from '@/components/ui/sidebar'
@@ -17,6 +18,10 @@ export const Route = createFileRoute('/_operator')({
 function OperatorLayoutRoute() {
   const { pathname } = useLocation()
   const operatorContext = Route.useRouteContext()
+  if (operatorContext.kind === 'forbidden') {
+    return <OperatorRouteForbidden surface={operatorContext.surface} />
+  }
+
   const operatorRole = operatorSurfaceForPath(pathname)
   const mountSidebar = shouldMountOperatorSidebar(operatorRole, pathname)
   const slimSidebarChrome = operatorRole === 'admin' || operatorRole === 'developer'

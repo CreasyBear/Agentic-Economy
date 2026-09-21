@@ -8,10 +8,12 @@ import { AePageState } from '@/components/ae/layout/AePageState'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { buttonVariants } from '@/components/ui/button-variants'
+import { operatorForbiddenCopy } from '@/components/ae/layout/route-error.contracts'
 import { captureClientExceptionOnClient } from '@/lib/observability/capture-client-exception'
 import {
   OPERATOR_SURFACE_FORBIDDEN_MESSAGE,
   OperatorSurfaceForbiddenError,
+  type OperatorSurface,
 } from '@/lib/operator/operator-context'
 import { operatorRoleForPath } from '@/lib/operator/roles'
 import { cn } from '@/lib/utils'
@@ -25,18 +27,10 @@ function RouteErrorState({ error, operator }: { error: unknown; operator: boolea
   const correlationRef = errorCorrelationRef(error)
 
   if (isOperatorSurfaceForbidden(error)) {
-    if (!operator || parentShell !== null) return <OperatorForbiddenBody />
-    return (
-      <AeOperatorPage
-        operatorRole={operatorRoleForPath(pathname) ?? 'owner'}
-        title="You don’t have access"
-        description="Your account does not have the Admin role for this page."
-        currentPath={pathname}
-        suppressSurfaceNavigation
-      >
-        <OperatorForbiddenBody />
-      </AeOperatorPage>
-    )
+    const surface = error instanceof OperatorSurfaceForbiddenError
+      ? error.surface
+      : (operatorRoleForPath(pathname) ?? 'owner')
+    return operator ? <OperatorRouteForbidden surface={surface} /> : <OperatorForbiddenActions surface={surface} />
   }
 
   if (!operator) {
@@ -157,25 +151,40 @@ export function errorCorrelationRef(error: unknown): string | undefined {
   return undefined
 }
 
-function OperatorForbiddenBody() {
+export type OperatorRouteForbiddenProps = Readonly<{
+  surface: OperatorSurface
+}>
+
+export function OperatorRouteForbidden({ surface }: OperatorRouteForbiddenProps) {
+  const { pathname } = useLocation()
+  const copy = operatorForbiddenCopy[surface]
   return (
-    <Alert>
-      <AlertTitle>You don’t have access to this workspace</AlertTitle>
-      <AlertDescription>
-        <p>Use the account that owns this workspace, or return to the public market.</p>
-        <div className="flex w-full flex-wrap gap-intra">
-          <Link to="/support" className={cn(buttonVariants(), 'min-h-touch')}>
-            Ask an Admin for access
-          </Link>
-          <Link to="/market" className={cn(buttonVariants({ variant: 'secondary' }), 'min-h-touch')}>
-            Return to Market
-          </Link>
-          <SignOutButton redirectUrl="/">
-            <Button type="button" variant="outline" className="min-h-touch">Sign out</Button>
-          </SignOutButton>
-        </div>
-      </AlertDescription>
-    </Alert>
+    <AeOperatorPage
+      operatorRole={surface}
+      title={copy.title}
+      description={copy.description}
+      currentPath={pathname}
+      suppressSurfaceNavigation
+    >
+      <OperatorForbiddenActions surface={surface} />
+    </AeOperatorPage>
+  )
+}
+
+function OperatorForbiddenActions({ surface }: OperatorRouteForbiddenProps) {
+  const copy = operatorForbiddenCopy[surface]
+  return (
+    <div className="flex w-full flex-wrap gap-intra">
+      <Link to="/support" className={cn(buttonVariants(), 'min-h-touch')}>
+        {copy.supportAction}
+      </Link>
+      <Link to="/market" className={cn(buttonVariants({ variant: 'secondary' }), 'min-h-touch')}>
+        {copy.marketAction}
+      </Link>
+      <SignOutButton redirectUrl="/">
+        <Button type="button" variant="outline" className="min-h-touch">Sign out</Button>
+      </SignOutButton>
+    </div>
   )
 }
 
