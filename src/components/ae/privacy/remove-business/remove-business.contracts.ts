@@ -11,6 +11,11 @@ export const removalReasonOptions = [
   { value: 'unsafe_or_inaccurate', label: 'Incorrect Tool or Provider facts' },
 ] as const
 
+export const removalRequestCopy = {
+  submit: 'Submit request',
+  referenceSupport: 'Quote this reference and status if you contact support.',
+} as const
+
 export const correctionPaths = [
   {
     icon: FileWarningIcon,

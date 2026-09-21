@@ -7,7 +7,7 @@ import { Input } from '@/components/ui/input'
 import { Spinner } from '@/components/ui/spinner'
 import { Textarea } from '@/components/ui/textarea'
 
-import { removalReasonOptions, type RemovalRequestFormProps } from '../remove-business.contracts'
+import { removalReasonOptions, removalRequestCopy, type RemovalRequestFormProps } from '../remove-business.contracts'
 
 export function RemovalRequestForm(props: RemovalRequestFormProps) {
   const {
@@ -50,7 +50,10 @@ export function RemovalRequestForm(props: RemovalRequestFormProps) {
       {receipt === undefined ? null : (
         <Alert>
           <AlertTitle>Request recorded</AlertTitle>
-          <AlertDescription>{receipt}</AlertDescription>
+          <AlertDescription>
+            <span>{receipt}</span>
+            <span className="block">{removalRequestCopy.referenceSupport}</span>
+          </AlertDescription>
         </Alert>
       )}
       <FieldGroup>
@@ -137,7 +140,7 @@ export function RemovalRequestForm(props: RemovalRequestFormProps) {
       </FieldGroup>
       <Button type="submit" disabled={pending || outcomeUnknown} className="min-h-touch justify-self-start">
         {pending ? <Spinner /> : null}
-        {outcomeUnknown ? 'Outcome not confirmed' : 'Send request'}
+        {outcomeUnknown ? 'Outcome not confirmed' : removalRequestCopy.submit}
       </Button>
     </form>
   )
