@@ -2,8 +2,6 @@ import type { ReactNode } from 'react'
 
 import { cn } from '@/lib/utils'
 
-import { AeSiteEyebrow } from './AeSiteType'
-
 type AeSiteCoverProps = {
   eyebrow: string
   title: string
@@ -34,7 +32,9 @@ export function AeSiteCover({
         className,
       )}
     >
-      <AeSiteEyebrow>{eyebrow}</AeSiteEyebrow>
+      <p className="font-sans text-eyebrow font-medium tracking-eyebrow text-background uppercase">
+        {eyebrow}
+      </p>
       <span className="font-display text-3xl font-medium tracking-tight sm:text-4xl">{title}</span>
       <span className="font-mono text-xs">{meta}</span>
       {children}

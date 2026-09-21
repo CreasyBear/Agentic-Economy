@@ -216,12 +216,12 @@ export function AeTeamDirectoryTable({ directory, loading }: AeTeamDirectoryTabl
                         <DirectoryEmailCell email={row.email} />
                       </TableCell>
                       <TableCell className="px-4 py-3">
-                        <span className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold bg-secondary text-secondary-foreground">
+                        <span className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium bg-secondary text-secondary-foreground">
                           {row.roleLabel}
                         </span>
                       </TableCell>
                       <TableCell className="px-4 py-3">
-                        <span className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold bg-success/15 text-success">
+                        <span className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium bg-success/15 text-success">
                           {row.statusLabel}
                         </span>
                       </TableCell>

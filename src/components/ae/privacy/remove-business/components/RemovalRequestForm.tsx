@@ -34,8 +34,10 @@ export function RemovalRequestForm(props: RemovalRequestFormProps) {
     onEvidenceSummaryChange,
   } = props
 
+  const selectedReasonLabel = removalReasonOptions.find((option) => option.value === value.reasonCode)?.label
+
   return (
-    <form onSubmit={onSubmit} className="mx-auto grid w-full max-w-3xl gap-section" noValidate>
+    <form onSubmit={onSubmit} className="grid w-full gap-section" noValidate>
       {error === undefined ? null : (
         <Alert variant="destructive">
           <AlertTitle>Request needs attention</AlertTitle>
@@ -101,7 +103,7 @@ export function RemovalRequestForm(props: RemovalRequestFormProps) {
             }}
           >
             <SelectTrigger id="reasonCode" className="min-h-touch w-full">
-              <SelectValue placeholder="Choose one" />
+              <SelectValue placeholder="Choose one">{selectedReasonLabel}</SelectValue>
             </SelectTrigger>
             <SelectContent>
               <SelectGroup>

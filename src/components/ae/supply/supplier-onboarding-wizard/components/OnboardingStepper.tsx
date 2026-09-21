@@ -23,7 +23,7 @@ export function OnboardingStepper({
             aria-current={active ? 'step' : undefined}
             onClick={() => onGoToStep(id)}
             className={`flex flex-col items-start gap-0.5 p-2 rounded-md text-left disabled:opacity-50 disabled:cursor-not-allowed ${TACTILE} ${
-              active ? 'bg-primary/10 text-primary font-semibold' : 'text-muted-foreground'
+              active ? 'bg-primary/10 text-primary font-medium' : 'text-muted-foreground'
             }`}
           >
             <span className="flex items-center gap-2 w-full">

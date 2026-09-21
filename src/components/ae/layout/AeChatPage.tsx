@@ -22,19 +22,26 @@ type AeChatSharedPageProps = {
 export function AeChatPage(props: AeChatAskPageProps | AeChatSharedPageProps) {
   if (props.kind === 'shared') {
     return (
-      <section className="flex min-h-dvh flex-col bg-background" aria-label="Shared chat">
+      <main
+        id="main-content"
+        tabIndex={-1}
+        className="flex min-h-0 flex-1 flex-col bg-background"
+        aria-label="Shared chat"
+      >
         {props.header}
         <div className="flex min-h-0 flex-1 flex-col">{props.children}</div>
-      </section>
+      </main>
     )
   }
 
   const hasRail = props.rail !== undefined
   return (
-    <section
+    <main
+      id="main-content"
+      tabIndex={-1}
       className={hasRail
-        ? 'grid min-h-dvh bg-background lg:grid-cols-[16rem_minmax(0,1fr)]'
-        : 'flex min-h-dvh flex-col bg-background'}
+        ? 'grid min-h-0 flex-1 bg-background lg:grid-cols-[16rem_minmax(0,1fr)]'
+        : 'flex min-h-0 flex-1 flex-col bg-background'}
       aria-label="Chat"
     >
       {hasRail ? (
@@ -49,6 +56,6 @@ export function AeChatPage(props: AeChatAskPageProps | AeChatSharedPageProps) {
         </div>
         {props.dock}
       </div>
-    </section>
+    </main>
   )
 }

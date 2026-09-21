@@ -6,7 +6,7 @@ export function AeAgentAccessAuthorizeFormSkeleton() {
   return (
     <AeOperatorPage operatorRole="owner" title="Review agent access" description="Choose what this agent may do, then approve or decline." currentPath="/agent-access">
       <AeSettingsStack>
-        <div className="grid overflow-hidden rounded-xl border border-border bg-card shadow-soft">
+        <div className="grid overflow-hidden rounded-xl border border-border bg-card">
           <AeSection title="Loading access request" description="Preparing connection choices." className="p-4 sm:p-5">
             <div className="grid gap-3">
               <Skeleton className="h-24 w-full" />

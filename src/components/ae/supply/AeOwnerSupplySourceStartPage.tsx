@@ -8,6 +8,7 @@ import { AeOperatorPage } from '@/components/ae/layout/AeOperatorPage'
 import { AeSupplySourceNativeStart } from '@/components/ae/supply/AeSupplySourceNativeStart'
 import type { ProviderWorkspaceIdentityDetailResult } from '@/components/ae/offerings/provider-workspace.functions'
 import {
+  assessOwnerSupplySourceServer,
   filterOwnerSupplyAuthorityOptions,
   previewOwnerSupplySourceServer,
   publishOwnerSupplySourceServer,
@@ -42,6 +43,7 @@ export type AeOwnerSupplySourceStartPageProps = Readonly<{
 
 export function AeOwnerSupplySourceStartPage({ data, search, navigate }: AeOwnerSupplySourceStartPageProps) {
   const { identity, connections, resume, resumeRequested, sourceUnavailable } = data
+  const assess = useServerFn(assessOwnerSupplySourceServer)
   const preview = useServerFn(previewOwnerSupplySourceServer)
   const connect = useServerFn(startOwnerSupplySourceConnectionServer)
   const saveDraft = useServerFn(saveOwnerSupplySourceDraftServer)
@@ -49,7 +51,7 @@ export function AeOwnerSupplySourceStartPage({ data, search, navigate }: AeOwner
   const publish = useReverification(publishRequest)
 
   return (
-    <AeOperatorPage operatorRole="owner" title="Add Tool" description="Connect the interface you already operate. AE discovers the Tools and validates the one you submit." currentPath="/owner/operations/new" breadcrumbs={[{ label: 'Tools', href: '/owner/operations' }, { label: 'Add Tool' }]}>
+    <AeOperatorPage operatorRole="owner" title="Add Tool" description="Connect the interface you already operate. AE discovers the Tools and validates the one you submit." currentPath="/owner/operations/new" breadcrumbs={[{ label: 'My tools', href: '/owner/operations' }, { label: 'Add Tool' }]}>
       {identity.kind !== 'available' ? (
         <Alert variant="destructive">
           <AlertTitle>Provider workspace unavailable</AlertTitle>
@@ -73,6 +75,7 @@ export function AeOwnerSupplySourceStartPage({ data, search, navigate }: AeOwner
           businessRef={identity.businessId}
           connections={filterOwnerSupplyAuthorityOptions(identity.businessId, connections)}
           {...(resume.kind === 'available' ? { initial: resume } : {})}
+          onAssess={(input, signal) => assess({ data: input, signal })}
           onPreview={(source, idempotencyKey) => preview({ data: { businessId: identity.businessId, source, idempotencyKey } })}
           onConnect={(input) => connect({ data: input })}
           onSelectCandidate={(input) => saveDraft({ data: input })}

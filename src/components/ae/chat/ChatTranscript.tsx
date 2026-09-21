@@ -48,7 +48,7 @@ export function ChatTranscript({
     return (
       <Empty className="min-h-0 flex-1 border-0">
         <EmptyHeader className="max-w-prose gap-related">
-          <h1 className="text-balance font-sans text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">
+          <h1 className="max-w-prose text-balance font-sans text-title font-medium tracking-tight text-foreground">
             {chatEmpty.title}
           </h1>
           <EmptyDescription>{chatEmpty.description}</EmptyDescription>

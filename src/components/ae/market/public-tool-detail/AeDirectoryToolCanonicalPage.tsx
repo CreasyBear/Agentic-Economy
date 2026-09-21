@@ -1,5 +1,6 @@
 import { Await } from '@tanstack/react-router'
 
+import { AePageHeader } from '@/components/ae/layout/AePageHeader'
 import { AePublicPage } from '@/components/ae/layout/AePublicPage'
 import { AePageState } from '@/components/ae/layout/AePageState'
 import { directoryPrice, directoryPriceContext, directoryTitle } from '@/modules/market/directory-card.view-model'
@@ -38,20 +39,23 @@ export function AeDirectoryToolCanonicalPage({ data }: AeDirectoryToolCanonicalP
 /** Renders at once from the indexed lookup, before the admission promise resolves - title, Provider, price and description, per the design's "no blank first content" requirement. */
 function DirectoryEntrySummaryPage({ entry }: DirectoryEntrySummaryPageProps) {
   return (
-    <AePublicPage
-      kind="workspace"
-      title={directoryTitle(entry)}
-      description={entry.provider}
-      actions={<MarketBackButton label="Catalog" className="min-h-touch" variant="ghost" />}
-    >
-      <div className="grid max-w-2xl gap-related">
-        <p className="text-sm leading-relaxed text-muted-foreground">{entry.description}</p>
-        <div>
-          <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Provider-listed price</p>
-          <p className="text-lg font-semibold tabular-nums">{directoryPrice(entry)}</p>
-          <p className="mt-0.5 text-xs text-muted-foreground">{directoryPriceContext(entry)}</p>
+    <AePublicPage>
+      <div className="ae-rail grid gap-section pb-page">
+        <AePageHeader
+          eyebrow="Tool"
+          title={directoryTitle(entry)}
+          description={entry.provider}
+          actions={<MarketBackButton label="Catalog" className="min-h-touch" variant="ghost" />}
+        />
+        <div className="grid max-w-2xl gap-related">
+          <p className="text-sm leading-relaxed text-muted-foreground">{entry.description}</p>
+          <div>
+            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Provider-listed price</p>
+            <p className="text-lg font-semibold tabular-nums">{directoryPrice(entry)}</p>
+            <p className="mt-0.5 text-xs text-muted-foreground">{directoryPriceContext(entry)}</p>
+          </div>
+          <p role="status" className="text-sm text-muted-foreground">Checking whether this Tool is ready to call…</p>
         </div>
-        <p role="status" className="text-sm text-muted-foreground">Checking whether this Tool is ready to call…</p>
       </div>
     </AePublicPage>
   )

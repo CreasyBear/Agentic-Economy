@@ -102,6 +102,7 @@ import { Route as ApiV1MarketToolsSearchRouteImport } from './routes/api.v1.mark
 import { Route as ApiV1MarketToolsListRouteImport } from './routes/api.v1.market-tools.list'
 import { Route as ApiV1MarketToolsDescribeRouteImport } from './routes/api.v1.market-tools.describe'
 import { Route as ApiV1MarketToolsCompareRouteImport } from './routes/api.v1.market-tools.compare'
+import { Route as ApiV1MarketRequestsWithdrawRouteImport } from './routes/api.v1.market-requests.withdraw'
 import { Route as ApiV1MarketRequestsStatusRouteImport } from './routes/api.v1.market-requests.status'
 import { Route as ApiV1MarketRequestsListRouteImport } from './routes/api.v1.market-requests.list'
 import { Route as ApiV1FundingQuoteRouteImport } from './routes/api.v1.funding.quote'
@@ -607,6 +608,12 @@ const ApiV1MarketToolsCompareRoute = ApiV1MarketToolsCompareRouteImport.update({
   path: '/api/v1/market-tools/compare',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiV1MarketRequestsWithdrawRoute =
+  ApiV1MarketRequestsWithdrawRouteImport.update({
+    id: '/withdraw',
+    path: '/withdraw',
+    getParentRoute: () => ApiV1MarketRequestsRoute,
+  } as any)
 const ApiV1MarketRequestsStatusRoute =
   ApiV1MarketRequestsStatusRouteImport.update({
     id: '/status',
@@ -859,6 +866,7 @@ export interface FileRoutesByFullPath {
   '/api/v1/funding/quote': typeof ApiV1FundingQuoteRoute
   '/api/v1/market-requests/list': typeof ApiV1MarketRequestsListRoute
   '/api/v1/market-requests/status': typeof ApiV1MarketRequestsStatusRoute
+  '/api/v1/market-requests/withdraw': typeof ApiV1MarketRequestsWithdrawRoute
   '/api/v1/market-tools/compare': typeof ApiV1MarketToolsCompareRoute
   '/api/v1/market-tools/describe': typeof ApiV1MarketToolsDescribeRoute
   '/api/v1/market-tools/list': typeof ApiV1MarketToolsListRoute
@@ -981,6 +989,7 @@ export interface FileRoutesByTo {
   '/api/v1/funding/quote': typeof ApiV1FundingQuoteRoute
   '/api/v1/market-requests/list': typeof ApiV1MarketRequestsListRoute
   '/api/v1/market-requests/status': typeof ApiV1MarketRequestsStatusRoute
+  '/api/v1/market-requests/withdraw': typeof ApiV1MarketRequestsWithdrawRoute
   '/api/v1/market-tools/compare': typeof ApiV1MarketToolsCompareRoute
   '/api/v1/market-tools/describe': typeof ApiV1MarketToolsDescribeRoute
   '/api/v1/market-tools/list': typeof ApiV1MarketToolsListRoute
@@ -1105,6 +1114,7 @@ export interface FileRoutesById {
   '/api/v1/funding/quote': typeof ApiV1FundingQuoteRoute
   '/api/v1/market-requests/list': typeof ApiV1MarketRequestsListRoute
   '/api/v1/market-requests/status': typeof ApiV1MarketRequestsStatusRoute
+  '/api/v1/market-requests/withdraw': typeof ApiV1MarketRequestsWithdrawRoute
   '/api/v1/market-tools/compare': typeof ApiV1MarketToolsCompareRoute
   '/api/v1/market-tools/describe': typeof ApiV1MarketToolsDescribeRoute
   '/api/v1/market-tools/list': typeof ApiV1MarketToolsListRoute
@@ -1229,6 +1239,7 @@ export interface FileRouteTypes {
     | '/api/v1/funding/quote'
     | '/api/v1/market-requests/list'
     | '/api/v1/market-requests/status'
+    | '/api/v1/market-requests/withdraw'
     | '/api/v1/market-tools/compare'
     | '/api/v1/market-tools/describe'
     | '/api/v1/market-tools/list'
@@ -1351,6 +1362,7 @@ export interface FileRouteTypes {
     | '/api/v1/funding/quote'
     | '/api/v1/market-requests/list'
     | '/api/v1/market-requests/status'
+    | '/api/v1/market-requests/withdraw'
     | '/api/v1/market-tools/compare'
     | '/api/v1/market-tools/describe'
     | '/api/v1/market-tools/list'
@@ -1474,6 +1486,7 @@ export interface FileRouteTypes {
     | '/api/v1/funding/quote'
     | '/api/v1/market-requests/list'
     | '/api/v1/market-requests/status'
+    | '/api/v1/market-requests/withdraw'
     | '/api/v1/market-tools/compare'
     | '/api/v1/market-tools/describe'
     | '/api/v1/market-tools/list'
@@ -2247,6 +2260,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiV1MarketToolsCompareRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/v1/market-requests/withdraw': {
+      id: '/api/v1/market-requests/withdraw'
+      path: '/withdraw'
+      fullPath: '/api/v1/market-requests/withdraw'
+      preLoaderRoute: typeof ApiV1MarketRequestsWithdrawRouteImport
+      parentRoute: typeof ApiV1MarketRequestsRoute
+    }
     '/api/v1/market-requests/status': {
       id: '/api/v1/market-requests/status'
       path: '/status'
@@ -2638,11 +2658,13 @@ const ApiV1CallsRouteWithChildren = ApiV1CallsRoute._addFileChildren(
 interface ApiV1MarketRequestsRouteChildren {
   ApiV1MarketRequestsListRoute: typeof ApiV1MarketRequestsListRoute
   ApiV1MarketRequestsStatusRoute: typeof ApiV1MarketRequestsStatusRoute
+  ApiV1MarketRequestsWithdrawRoute: typeof ApiV1MarketRequestsWithdrawRoute
 }
 
 const ApiV1MarketRequestsRouteChildren: ApiV1MarketRequestsRouteChildren = {
   ApiV1MarketRequestsListRoute: ApiV1MarketRequestsListRoute,
   ApiV1MarketRequestsStatusRoute: ApiV1MarketRequestsStatusRoute,
+  ApiV1MarketRequestsWithdrawRoute: ApiV1MarketRequestsWithdrawRoute,
 }
 
 const ApiV1MarketRequestsRouteWithChildren =

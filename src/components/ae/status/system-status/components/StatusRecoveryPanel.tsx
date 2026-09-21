@@ -9,7 +9,7 @@ export function StatusRecoveryPanel({ recovery }: StatusRecoveryPanelProps) {
   return (
     <section
       aria-labelledby="status-recovery-title"
-      className="mt-related grid gap-related rounded-lg border border-border bg-card p-gutter sm:grid-cols-[1fr_auto] sm:items-center"
+      className="mt-related grid gap-related rounded-card border border-border bg-card p-gutter sm:grid-cols-[1fr_auto] sm:items-center"
     >
       <div className="grid gap-1">
         <h2 id="status-recovery-title" className="font-medium text-foreground">

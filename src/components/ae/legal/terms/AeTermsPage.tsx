@@ -1,6 +1,7 @@
 import { Link } from '@tanstack/react-router'
 import { ArrowRightIcon } from 'lucide-react'
 
+import { AeSiteHeading } from '@/components/ae/website/AeSiteType'
 import { buttonVariants } from '@/components/ui/button-variants'
 import { cn } from '@/lib/utils'
 
@@ -14,9 +15,9 @@ export function AeTermsPage() {
       <TermsCapabilityList items={canDoItems} />
 
       <section className="border-t border-border pt-section">
-        <h2 className="mb-related text-2xl font-semibold tracking-tight text-foreground">
+        <AeSiteHeading as="h2" size="sm" className="mb-related">
           What these terms mean in practice
-        </h2>
+        </AeSiteHeading>
         <TermsPracticeAccordion items={termsItems} />
       </section>
 

@@ -1,7 +1,7 @@
 import { Link } from '@tanstack/react-router'
 
+import { AeCollectionRail } from '@/components/ae/shared/AeCollectionRail'
 import {
-  AeCornerMarks,
   AeSiteBody,
   AeSiteButton,
   AeSiteCover,
@@ -16,7 +16,6 @@ import {
   AeSiteStack,
 } from '@/components/ae/website'
 import { ABOUT, AGENT_DOOR, BUSINESS_DOOR } from '@/content/brand-copy'
-import { AECON_MARK_SRC, aeconMarkClassName } from '@/content/brand-assets'
 
 const MACHINE_FILES = [
   { name: 'llms.txt', description: 'Public catalog index', href: '/llms.txt', letter: 'L' },
@@ -27,22 +26,22 @@ const MACHINE_FILES = [
 export function AeAboutPage() {
   return (
     <>
-      <AeSiteSection labelledBy="about-hero" rhythm="hero" scheme="ink">
+      <AeSiteSection labelledBy="about-hero" rhythm="hero" scheme="muted">
         <AeSiteHeroIntro>
           <AeSiteHeadingPair>
             <AeSiteEyebrow>{ABOUT.eyebrow}</AeSiteEyebrow>
-            <div className="mx-auto w-full max-w-xl">
+            <div className="w-full max-w-xl">
               <AeSiteHeading as="h1" size="lg" id="about-hero">
                 {ABOUT.heading}
               </AeSiteHeading>
             </div>
-            <div className="mx-auto w-full max-w-lg">
-              <AeSiteBody muted size="sm" className="mx-auto">
+            <div className="w-full max-w-lg">
+              <AeSiteBody muted size="sm">
                 {ABOUT.subhead}
               </AeSiteBody>
             </div>
           </AeSiteHeadingPair>
-          <div className="flex flex-wrap items-center justify-center gap-related">
+          <div className="flex flex-wrap items-center gap-related">
             <AeSiteButton asChild>
               <Link to="/for-agents">{AGENT_DOOR.cta}</Link>
             </AeSiteButton>
@@ -51,14 +50,11 @@ export function AeAboutPage() {
             </AeSiteButton>
           </div>
         </AeSiteHeroIntro>
-        <div className="relative mx-auto mt-hero size-20">
-          <img src={AECON_MARK_SRC} alt="" aria-hidden="true" className={aeconMarkClassName.about} />
-        </div>
       </AeSiteSection>
       <AeSiteSection labelledBy="about-doors" scheme="surface">
         <AeSiteStack>
           <AeSiteIntro>
-            <AeSiteHeading as="h2" size="lg" id="about-doors">
+            <AeSiteHeading as="h2" size="sm" id="about-doors">
               {ABOUT.doorsHeading}
             </AeSiteHeading>
           </AeSiteIntro>
@@ -82,7 +78,7 @@ export function AeAboutPage() {
       </AeSiteSection>
       <AeSiteSection labelledBy="about-settlement" scheme="canvas">
         <div className="grid max-w-3xl gap-related">
-          <AeSiteHeading as="h2" size="md" id="about-settlement">
+          <AeSiteHeading as="h2" size="sm" id="about-settlement">
             {ABOUT.settlementHeading}
           </AeSiteHeading>
           <AeSiteBody muted>{ABOUT.settlementBody}</AeSiteBody>
@@ -93,7 +89,7 @@ export function AeAboutPage() {
           left={
             <div className="grid content-start gap-section">
               <div className="grid gap-related">
-                <AeSiteHeading as="h2" size="md" id="about-suppliers">
+                <AeSiteHeading as="h2" size="sm" id="about-suppliers">
                   {ABOUT.providersHeading}
                 </AeSiteHeading>
                 <AeSiteBody muted>{ABOUT.providersBody}</AeSiteBody>
@@ -117,20 +113,15 @@ export function AeAboutPage() {
         />
       </AeSiteSection>
       <AeSiteSection labelledBy="about-machines" scheme="muted">
-        <div className="relative max-w-3xl border border-border bg-container p-page">
-          <AeCornerMarks />
-          <div className="grid gap-section">
-            <div className="grid gap-related">
-              <AeSiteHeading as="h2" size="md" id="about-machines">
-                {ABOUT.machinesHeading}
-              </AeSiteHeading>
-              <AeSiteBody muted>{ABOUT.machinesBody}</AeSiteBody>
-            </div>
-            <nav aria-label="Machine-readable files">
-              <AeSiteResourceList items={MACHINE_FILES} />
-            </nav>
-          </div>
-        </div>
+        <AeCollectionRail
+          title={ABOUT.machinesHeading}
+          titleId="about-machines"
+          deck={ABOUT.machinesBody}
+        >
+          <nav aria-label="Machine-readable files">
+            <AeSiteResourceList items={MACHINE_FILES} />
+          </nav>
+        </AeCollectionRail>
       </AeSiteSection>
     </>
   )
@@ -148,9 +139,9 @@ function AboutDoor({
   return (
     <div className="grid content-start gap-related">
       <div className="grid gap-intra">
-        <h3 id={headingId} className="font-display text-2xl font-medium tracking-tight sm:text-3xl">
+        <AeSiteHeading as="h3" size="sm" id={headingId}>
           {heading}
-        </h3>
+        </AeSiteHeading>
         <AeSiteBody muted size="sm">
           {body}
         </AeSiteBody>

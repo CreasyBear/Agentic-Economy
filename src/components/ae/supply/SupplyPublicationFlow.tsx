@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react'
 import { AeInlineState } from '@/components/ae/feedback/AeInlineState'
 import { AeFactList } from '@/components/ae/data/AeFactList'
 import { AeSection } from '@/components/ae/layout/AeSection'
@@ -18,6 +19,7 @@ export function SupplyPublicationFlow({
   reviewing,
   name,
   description,
+  descriptionSuggestion,
   category,
   serviceArea,
   availability,
@@ -55,6 +57,7 @@ export function SupplyPublicationFlow({
   reviewing: boolean
   name: string
   description: string
+  descriptionSuggestion?: ReactNode
   category: string
   serviceArea: string
   availability: string
@@ -94,6 +97,7 @@ export function SupplyPublicationFlow({
       <FieldGroup className="gap-5">
         <TextField id="supply-native-name" label="Tool name" value={name} disabled={disabled} onChange={onNameChange} description="Shown to agents in discovery." />
         <TextAreaField id="supply-native-description" label="Description" value={description} disabled={disabled} onChange={onDescriptionChange} description="What this Tool does and returns." />
+        {descriptionSuggestion}
         <TextField id="supply-native-category" label="Category" value={category} disabled={disabled} onChange={onCategoryChange} description="A familiar service category, such as Research or Data." />
         <TextField id="supply-native-service-area" label="Service area (optional)" value={serviceArea} disabled={disabled} onChange={onServiceAreaChange} description="Where this service is available, if relevant." />
         <TextField id="supply-native-availability" label="Availability (optional)" value={availability} disabled={disabled} onChange={onAvailabilityChange} description="Any operating-hours or availability constraint." />

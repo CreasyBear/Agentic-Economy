@@ -37,10 +37,10 @@ function PublicBusinessUnavailable() {
   return (
     <AePageState
       tone="warning"
-      title="Supplier temporarily unavailable"
-      description="The supplier catalogue source is unavailable right now. Try again in a moment."
+      title="Provider temporarily unavailable"
+      description="The provider catalogue source is unavailable right now. Try again in a moment."
       action={
-        <div className="flex flex-col gap-3 sm:flex-row sm:justify-center">
+        <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap">
           <a href={pathname} className={cn(buttonVariants(), 'min-h-touch')}>Try again</a>
           <Link to="/market" className={cn(buttonVariants({ variant: 'secondary' }), 'min-h-touch')}>Back to catalog</Link>
         </div>
@@ -52,7 +52,7 @@ function PublicBusinessUnavailable() {
 export function ProviderListingPending() {
   return (
     <AePublicPage>
-      <article className="ae-rail grid gap-6 py-section" aria-busy="true" aria-label="Loading supplier">
+      <article className="ae-rail grid gap-6 py-section" aria-busy="true" aria-label="Loading provider">
         <Skeleton className="h-11 w-36" />
         <header className="grid gap-4 border-b border-border pb-6">
           <Skeleton className="h-5 w-20" />
@@ -80,10 +80,10 @@ export function ProviderListingError() {
   return (
     <AePageState
       tone="danger"
-      title="This supplier didn’t load"
+      title="This provider didn’t load"
       description="Try again, or return to the catalogue."
       action={
-        <div className="flex flex-col gap-3 sm:flex-row sm:justify-center">
+        <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap">
           <a href={pathname} className={cn(buttonVariants(), 'min-h-touch')}>Try again</a>
           <Link to="/market" className={cn(buttonVariants({ variant: 'secondary' }), 'min-h-touch')}>Back to catalog</Link>
         </div>

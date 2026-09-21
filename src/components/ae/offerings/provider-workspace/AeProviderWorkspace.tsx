@@ -28,7 +28,7 @@ export function AeProviderWorkspace(props: AeProviderWorkspaceProps) {
   return (
     <AeOperatorPage
       operatorRole="owner"
-      title="Tools"
+      title="My tools"
       description="Publish the exact tools agents can inspect and call."
       currentPath="/owner/operations"
       {...(actions === undefined ? {} : { actions })}
@@ -129,7 +129,7 @@ function AvailableWorkspaceBody({
         onRetryEarnings={sheets.loadEarnings}
         onStatusRefreshed={sheets.onStatusRefreshed}
       />
-      <details className="rounded-lg border border-border p-4" open={location.hash === 'provider-identity' || undefined}>
+      <details className="rounded-card border border-border p-4" open={location.hash === 'provider-identity' || undefined}>
         <summary className="cursor-pointer font-medium">Provider settings and administration</summary>
         <div className="mt-6 grid gap-section">
           <ProviderWorkspaceIdentitySection

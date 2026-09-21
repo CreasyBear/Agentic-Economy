@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react'
 import { Link } from '@tanstack/react-router'
 
-import { AeSection } from '@/components/ae/layout/AeSection'
+import { AeCollectionRail } from '@/components/ae/shared/AeCollectionRail'
 import { Badge } from '@/components/ui/badge'
 
 import type { SupplyLandingTool } from '@/modules/capability-supply/supply-funnel.functions'
@@ -17,9 +17,10 @@ export function AeSupplyAgentProof({
   publishedTools: readonly ToolCardViewModel[]
 }>) {
   return (
-    <AeSection
+    <AeCollectionRail
+      kicker="Published facts"
       title="What agents can inspect"
-      description="Provider profiles are business metadata. AE interface actions help agents inspect them; neither becomes callable supply until a Tool is admitted and published."
+      deck="Provider profiles are business metadata. AE interface actions help agents inspect them; neither becomes callable supply until a Tool is admitted and published."
     >
       <div className="grid gap-8">
         <div className="grid gap-3">
@@ -49,7 +50,7 @@ export function AeSupplyAgentProof({
           )}
         </div>
       </div>
-    </AeSection>
+    </AeCollectionRail>
   )
 }
 

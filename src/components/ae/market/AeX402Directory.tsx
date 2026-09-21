@@ -3,6 +3,7 @@ import { ArrowLeftIcon, ArrowRightIcon, CompassIcon, HeartIcon, ListFilterIcon, 
 import { useEffect, useMemo, useRef, useState } from 'react'
 
 import { AeEmptyState } from '@/components/ae/feedback/AeEmptyState'
+import { AeCollectionRail } from '@/components/ae/shared/AeCollectionRail'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { buttonVariants } from '@/components/ui/button-variants'
@@ -22,6 +23,12 @@ import { DirectoryProviderHeader } from './DirectoryProviderHeader'
 import type { X402DirectoryCatalogue, X402DirectoryCatalogueInput, X402DirectoryCatalogueOverview, X402DirectoryProvidersPage } from '@/modules/market/x402-directory-catalogue'
 import { readX402DirectoryCatalogueServer } from '@/modules/market/x402-directory-index.functions'
 import { directoryCatalogueSearchValues } from '@/modules/market/x402-directory-navigation'
+import {
+  carryMarketCompare,
+  marketCompareParam,
+  parseMarketCompareRefs,
+  toggleMarketCompareRef,
+} from '@/modules/market/market-route-data'
 import { directoryDate } from './directory-presentation'
 import type { X402MarketplaceHome } from '@/modules/market/x402-marketplace-home'
 import { DirectoryComparison } from './DirectoryComparison'
@@ -96,7 +103,6 @@ function directoryInput(search: X402DirectoryInput) {
 function DirectoryMarketplace({ page, search, workspace = false, activeView, home, catalogue, overview, providers }: AeX402DirectoryProps) {
   const navigate = useNavigate()
   const marketPath = useMarketPath()
-  const [comparison, setComparison] = useState<readonly SavedDirectoryTool[]>([])
   const [compareOpen, setCompareOpen] = useState(false)
   const searchInput = useRef<HTMLInputElement>(null)
   const compareTrigger = useRef<HTMLButtonElement>(null)
@@ -115,35 +121,19 @@ function DirectoryMarketplace({ page, search, workspace = false, activeView, hom
   // (a real filter/sort/query navigation), never by this component's own
   // appends.
   const { state: loadMore, loadNextPage } = useIndexedPagination(indexed, catalogue, filterValues)
-  // Legacy `?compare=` links (from the retired capability-catalog tree, or
-  // shared before it was removed) carry resource identifiers rather than a
-  // selection made in this component's own state. Resolve them against
-  // whatever the loader already fetched - no extra request - preselect any
-  // matches into the comparison tray, open the dialog, then drop the param
-  // so the URL stops carrying one-time navigation state.
-  useEffect(() => {
-    if (search.compare === undefined) return
-    const refs = search.compare.split(',')
-    const pool = [
-      ...loadMore.items,
-      ...(page.kind === 'ok' ? page.items : []),
-      ...(overview?.kind === 'ok' ? [...overview.popular, ...overview.recentlyUpdated].map(item => item.entry) : []),
-    ]
-    const matched = refs.flatMap(ref => {
-      const found = pool.find(entry => entry.resource === ref)
-      return found === undefined ? [] : [{ entry: found, search: sourceInput }]
-    }).slice(0, 4)
-    if (matched.length > 0) {
-      setComparison(matched)
-      setCompareOpen(true)
-    }
-    const { compare: _compare, ...rest } = search
-    void navigate({ to: marketPath, search: rest, replace: true, resetScroll: false })
-    // Runs once per `compare` value that appears in the URL; the navigate
-    // call above clears it, so re-including the loaded pool here would only
-    // re-trigger on unrelated data refreshes.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [search.compare])
+  const compareRefs = parseMarketCompareRefs(search.compare) ?? []
+  const comparisonPool = useMemo(() => [
+    ...loadMore.items,
+    ...(page.kind === 'ok' ? page.items : []),
+    ...(overview?.kind === 'ok' ? [...overview.popular, ...overview.recentlyUpdated].map(item => item.entry) : []),
+  ], [loadMore.items, overview, page])
+  const comparison = useMemo(() => compareRefs.flatMap(ref => {
+    const found = comparisonPool.find(entry => entry.resource === ref)
+    return found === undefined ? [] : [{ entry: found, search: sourceInput }]
+  }), [compareRefs, comparisonPool, sourceInput])
+  function go(next: Record<string, unknown>) {
+    void navigate({ to: marketPath, resetScroll: false, search: carryMarketCompare(search, next) })
+  }
   // A query or filter changes what "the count" means: the catalogue total no
   // longer describes what's on screen, so switch to how many Tools matched.
   // The indexed catalogue already separates the two (coverage total here,
@@ -196,6 +186,14 @@ function DirectoryMarketplace({ page, search, workspace = false, activeView, hom
       </li>)}
     </ul>
   }
+
+  const comparisonTray = comparison.length === 0 ? null : (
+    <div className="mt-8 flex w-fit max-w-full items-center gap-3 rounded-card border border-border bg-card px-4 py-3" aria-label="Selected comparison" data-compare-tray="flow">
+      <span className="text-sm">{comparison.length} of 4 selected</span>
+      <Button ref={compareTrigger} onClick={() => setCompareOpen(true)} disabled={comparison.length < 2}>Compare Tools</Button>
+      <Button size="icon-sm" variant="ghost" onClick={() => setComparison([])} aria-label="Clear comparison"><XIcon /></Button>
+    </div>
+  )
 
   return (
     <div className="ae-rail pb-page">
@@ -255,13 +253,21 @@ function DirectoryMarketplace({ page, search, workspace = false, activeView, hom
             isComparing={resource => comparison.some(item => item.entry.resource === resource)} compareDisabled={resource => comparison.length >= 4 && !comparison.some(item => item.entry.resource === resource)} /> : null}
           {home === undefined ? <AeEmptyState title="Explore the Tool catalogue" description="Open All Tools to browse the current directory, or search for a service above." action={<Link to={marketPath} search={{ view: 'tools' }} className={cn(buttonVariants({ variant: 'outline' }))}>Browse all Tools</Link>} /> : <DirectoryHomeDiscovery home={home} onSave={saved.toggleSavedTool} isSaved={saved.isSaved} onCompare={toggleComparison}
             isComparing={resource => comparison.some(item => item.entry.resource === resource)} compareDisabled={resource => comparison.length >= 4 && !comparison.some(item => item.entry.resource === resource)} />}
+          {view === 'discover' ? comparisonTray : null}
         </TabsContent>
         <TabsContent value="saved" className="pt-5">
-          <div className="mb-5 flex flex-wrap items-baseline justify-between gap-2">
-            <h2 className="text-xl font-medium tracking-tight">Your saved Tools</h2>
-            <p className="text-xs text-muted-foreground">{saved.storageState === 'session' ? 'Saved for this session only' : 'Saved on this browser'} · Prices may have changed</p>
-          </div>
-          {!saved.hydrated ? <p role="status">Loading saved Tools…</p> : saved.savedTools.length === 0 ? <AeEmptyState icon={<HeartIcon />} title="Keep a few possibilities close" description="Save a Tool from its card, then come back when your agent needs it." /> : toolGrid(saved.savedTools)}
+          <AeCollectionRail
+            kicker="Saved"
+            title="Your saved Tools"
+            action={
+              <p className="max-w-xs text-right text-xs text-muted-foreground">
+                {saved.storageState === 'session' ? 'Saved for this session only' : 'Saved on this browser'} · Prices may have changed
+              </p>
+            }
+            className="mb-5"
+          />
+          {!saved.hydrated ? <p role="status">Loading saved Tools…</p> : saved.savedTools.length === 0 ? <AeEmptyState icon={<HeartIcon />} title="Keep a few possibilities close" description="Save a Tool from its card, then come back when your agent needs it." action={<Link to={marketPath} search={{ view: 'tools' }} className={cn(buttonVariants({ variant: 'outline' }))}>Browse Tools</Link>} /> : toolGrid(saved.savedTools)}
+          {view === 'saved' ? comparisonTray : null}
         </TabsContent>
         {(['tools', 'providers'] as const).map(tab => {
         // Only the indexed "tools" tab accumulates via "Load more" - the
@@ -279,14 +285,50 @@ function DirectoryMarketplace({ page, search, workspace = false, activeView, hom
             </Select>
           </div> : null}
           {search.provider !== undefined && page.kind === 'ok' ? <div className="mb-8"><DirectoryProviderHeader provider={search.provider} entries={page.items} /></div> : null}
-          <div className="mb-5 flex flex-wrap items-start justify-between gap-3">
-            <div>
-              <h2 className="text-xl font-medium tracking-tight">{search.provider !== undefined ? `Tools from this Provider` : search.query === undefined ? tab === 'providers' ? 'Explore Providers' : search.directoryCategory === undefined ? 'Explore the catalogue' : `${search.directoryCategory} Tools` : `Results for “${search.query}”`}</h2>
-              {indexed && search.query !== undefined ? <p className="mt-1 text-xs text-muted-foreground">Keyword search across the catalogue</p> : null}
-              {page.kind === 'ok' && tabItems.length > 0 ? <p className="mt-1 text-xs text-muted-foreground">{indexed ? `${tabItems.length.toLocaleString()} Tools loaded` : page.mode === 'search' || !browse ? `${page.items.length} matching Tools` : `Showing ${page.offset + 1}–${page.offset + page.items.length}${page.total === undefined ? '' : ` of ${page.total.toLocaleString()}`}`}</p> : null}
-            </div>
-            {!browse ? <Link to={marketPath} search={{ view: tab }} className={cn(buttonVariants({ variant: 'ghost', size: 'sm' }))}><XIcon />Clear search & filters</Link> : null}
-          </div>
+          <AeCollectionRail
+            kicker={
+              search.query !== undefined
+                ? 'Search'
+                : search.provider !== undefined
+                  ? 'Provider'
+                  : tab === 'providers'
+                    ? 'Providers'
+                    : search.directoryCategory === undefined
+                      ? 'Catalogue'
+                      : 'Category'
+            }
+            title={
+              search.provider !== undefined
+                ? 'Tools from this Provider'
+                : search.query === undefined
+                  ? tab === 'providers'
+                    ? 'Explore Providers'
+                    : search.directoryCategory === undefined
+                      ? 'Explore the catalogue'
+                      : `${search.directoryCategory} Tools`
+                  : `Results for “${search.query}”`
+            }
+            deck={[
+              indexed && search.query !== undefined ? 'Keyword search across the catalogue' : undefined,
+              page.kind === 'ok' && tabItems.length > 0
+                ? indexed
+                  ? `${tabItems.length.toLocaleString()} Tools loaded`
+                  : page.mode === 'search' || !browse
+                    ? `${page.items.length} matching Tools`
+                    : `Showing ${page.offset + 1}–${page.offset + page.items.length}${page.total === undefined ? '' : ` of ${page.total.toLocaleString()}`}`
+                : undefined,
+            ]
+              .filter((line): line is string => line !== undefined)
+              .join(' · ') || undefined}
+            action={
+              !browse ? (
+                <Link to={marketPath} search={{ view: tab }} className={cn(buttonVariants({ variant: 'ghost', size: 'sm' }), 'rounded-full')}>
+                  <XIcon />Clear search & filters
+                </Link>
+              ) : undefined
+            }
+            className="mb-5"
+          />
           {search.network !== undefined || search.maxUsdPrice !== undefined ? <div className="mb-4 flex flex-wrap gap-2">{search.network === undefined ? null : <Badge variant="outline">Network: {overview?.kind === 'ok' ? overview.networks.find(item => item.key === search.network)?.label ?? search.network : search.network}</Badge>}{search.maxUsdPrice === undefined ? null : <Badge variant="outline">Up to {search.maxUsdPrice} USDC</Badge>}</div> : null}
           {page.kind === 'unavailable' ? <AeEmptyState icon={<SearchIcon />} title={page.reason === 'query_invalid' ? 'Check your search' : 'Catalogue temporarily unavailable'}
             description={page.reason === 'query_invalid' ? 'Use a service description without personal identifiers.' : search.indexCursor !== undefined ? 'This catalogue page could not be loaded. Refresh results to start again with the same search and filters.' : 'The discovery service could not be reached. Try again.'}
@@ -295,6 +337,7 @@ function DirectoryMarketplace({ page, search, workspace = false, activeView, hom
             {tabItems.length === 0 ? <AeEmptyState title={indexed && catalogue.kind === 'ok' && !catalogue.isDone ? 'More of the catalogue remains' : 'No matching Tools'} description={indexed && catalogue.kind === 'ok' && !catalogue.isDone ? 'No matches in this portion. Continue to the next page to check the remaining Tools.' : 'Try a different description or broaden your filters.'} /> : tab === 'providers'
               ? <DirectoryProviderCards entries={tabItems} onSelect={provider => { void navigate({ to: marketPath, search: { ...sourceInput, provider, offset: 0 } }) }} />
               : toolGrid(tabItems.map(entry => ({ entry, search: sourceInput })))}
+            {tab === 'tools' && view === 'tools' ? comparisonTray : null}
             <nav aria-label="Catalogue pages" className="mt-8 flex justify-between gap-4 border-t border-border pt-5">
               {tab === 'tools' && indexed ? <>
                 <span />
@@ -316,11 +359,6 @@ function DirectoryMarketplace({ page, search, workspace = false, activeView, hom
         </TabsContent>
         })}
       </Tabs>
-      {comparison.length === 0 ? null : <div className="sticky bottom-5 z-20 mx-auto mt-6 flex w-fit max-w-full items-center gap-3 rounded-xl border border-border bg-card px-4 py-3 shadow-float" aria-label="Selected comparison">
-        <span className="text-sm">{comparison.length} of 4 selected</span>
-        <Button ref={compareTrigger} onClick={() => setCompareOpen(true)} disabled={comparison.length < 2}>Compare Tools</Button>
-        <Button size="icon-sm" variant="ghost" onClick={() => setComparison([])} aria-label="Clear comparison"><XIcon /></Button>
-      </div>}
       <DirectoryComparison entries={comparison.map(item => item.entry)} open={compareOpen} onOpenChange={setCompareOpen} onCloseAutoFocus={event => {
         event.preventDefault()
         compareTrigger.current?.focus()

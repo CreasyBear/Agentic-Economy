@@ -26,7 +26,7 @@ export function PayoutsStep({
         <div className="flex items-center justify-between gap-3">
           <div className="grid gap-1">
             <div className="flex items-center gap-2 flex-wrap">
-              <span className="text-xs font-semibold text-foreground">Payout Status</span>
+              <span className="text-xs font-medium text-foreground">Payout Status</span>
               {payoutsConfigured ? (
                 <Badge variant="success" className="gap-1">
                   <CheckCircle2Icon className="size-3" />

@@ -7,8 +7,8 @@ import { buttonVariants } from '@/components/ui/button-variants'
 import { cn } from '@/lib/utils'
 import { AeFactList } from '@/components/ae/data/AeFactList'
 import { AeEmptyState } from '@/components/ae/feedback/AeEmptyState'
-import { AeOperatorPage } from '@/components/ae/layout/AeOperatorPage'
-import { AeSection } from '@/components/ae/layout/AeSection'
+import { AePublicPage } from '@/components/ae/layout/AePublicPage'
+import { AeCollectionRail } from '@/components/ae/shared/AeCollectionRail'
 import { loadDeveloperDiscoveryRouteServer } from '@/modules/discovery/developer-discovery-route'
 
 export const Route = createFileRoute('/developers/discovery')({
@@ -26,9 +26,9 @@ export const Route = createFileRoute('/developers/discovery')({
     },
   },
   loader: () => loadDeveloperDiscoveryRouteServer(),
-  head: () => ({
+  head: ({ loaderData }) => ({
     meta: [
-      { title: 'Builder readbacks | Agentic Economy' },
+      { title: `${loaderData.copy.title} | Agentic Economy` },
       {
         name: 'description',
         content: 'Read-only public catalog facts, schema shape, examples, freshness, and unavailable states.',
@@ -43,12 +43,11 @@ function DevelopersDiscoveryRoute() {
   const readback = Route.useLoaderData()
 
   return (
-    <AeOperatorPage
-      operatorRole="developer"
+    <AePublicPage
+      kind="document"
+      eyebrow="Developers"
       title={readback.copy.title}
       description={readback.copy.description}
-      currentPath="/developers/discovery"
-      mainContentId="main-content"
       actions={
         <div className="flex flex-wrap gap-2">
           {readback.artifacts.map((artifact) => (
@@ -63,19 +62,25 @@ function DevelopersDiscoveryRoute() {
         </div>
       }
     >
-      <div className="grid w-full gap-8">
-        <AeSection title="Source-owned readback" description={readback.copy.readOnlyNotice}>
-          <AeFactList
-            facts={[
-              { label: 'Freshness', value: readback.freshness.label },
-              { label: 'Published catalogs', value: String(readback.catalogCount) },
-              { label: 'Schema version', value: readback.schemaVersion },
-            ]}
-          />
-          <p className="text-sm text-muted-foreground">{readback.freshness.reason}</p>
-        </AeSection>
+      <div className="ae-rail grid gap-page pb-page">
+        <AeCollectionRail title="Source-owned readback" deck={readback.copy.readOnlyNotice}>
+          <div className="grid gap-related">
+            <AeFactList
+              facts={[
+                { label: 'Freshness', value: readback.freshness.label },
+                { label: 'Published catalogs', value: String(readback.catalogCount) },
+                { label: 'Schema version', value: readback.schemaVersion },
+              ]}
+            />
+            <p className="text-sm text-muted-foreground">{readback.freshness.reason}</p>
+          </div>
+        </AeCollectionRail>
 
-        <AeSection id="facts" title="Current public catalog facts" description="Rendered from the public catalog DTO, not private owner evidence.">
+        <AeCollectionRail
+          titleId="facts"
+          title="Current public catalog facts"
+          deck="Rendered from the public catalog DTO, not private owner evidence."
+        >
           {readback.publicFacts.length === 0 ? (
             <AeEmptyState
               title="No published catalog facts"
@@ -93,10 +98,14 @@ function DevelopersDiscoveryRoute() {
               }))}
             />
           )}
-        </AeSection>
+        </AeCollectionRail>
 
-        <AeSection id="schema" title="Schema, examples, and fixture labels" description="Each artifact is withheld or marked degraded from the same freshness readback.">
-          <div className="grid gap-6">
+        <AeCollectionRail
+          titleId="schema"
+          title="Schema, examples, and fixture labels"
+          deck="Each artifact is withheld or marked degraded from the same freshness readback."
+        >
+          <div className="grid gap-related">
             {readback.artifacts.map((artifact) => (
               <section key={artifact.kind} id={artifact.kind} className="grid gap-3">
                 <div className="flex flex-wrap items-center justify-between gap-3">
@@ -111,9 +120,9 @@ function DevelopersDiscoveryRoute() {
               </section>
             ))}
           </div>
-        </AeSection>
+        </AeCollectionRail>
 
-        <AeSection title="Read path status" description="Public read paths only.">
+        <AeCollectionRail title="Read path status" deck="Public read paths only.">
           <DiscoveryRows
             rows={readback.routeHealth.map((health) => ({
               id: health.route,
@@ -122,9 +131,13 @@ function DevelopersDiscoveryRoute() {
               description: health.route,
             }))}
           />
-        </AeSection>
+        </AeCollectionRail>
 
-        <AeSection id="support-matrix" title="Discovery support matrix" description="Shipped rows are limited to route-tested public readbacks.">
+        <AeCollectionRail
+          titleId="support-matrix"
+          title="Discovery support matrix"
+          deck="Shipped rows are limited to route-tested public readbacks."
+        >
           <DiscoveryRows
             rows={readback.supportMatrix.map((row) => ({
               id: row.surface,
@@ -133,9 +146,12 @@ function DevelopersDiscoveryRoute() {
               description: row.nextAction,
             }))}
           />
-        </AeSection>
+        </AeCollectionRail>
 
-        <AeSection title="Not in this product" description="Unavailable and deferred surfaces are listed so builders do not infer authority.">
+        <AeCollectionRail
+          title="Not in this product"
+          deck="Unavailable and deferred surfaces are listed so builders do not infer authority."
+        >
           <DiscoveryRows
             rows={[
               ...readback.unsupportedCapabilities.map((capability) => ({
@@ -152,9 +168,9 @@ function DevelopersDiscoveryRoute() {
               })),
             ]}
           />
-        </AeSection>
+        </AeCollectionRail>
       </div>
-    </AeOperatorPage>
+    </AePublicPage>
   )
 }
 
@@ -178,7 +194,7 @@ function DiscoveryRows({
         <li key={row.id} className="grid gap-1 py-3 first:pt-0 last:pb-0">
           <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
             <span className="font-medium text-foreground">{row.label}</span>
-            <span className="text-sm text-muted-foreground">{row.state}</span>
+            <span className="text-sm text-muted-foreground">{discoveryRowStateLabel(row.state)}</span>
           </div>
           {row.description === undefined ? null : (
             <p className="text-sm text-muted-foreground">{row.description}</p>
@@ -187,6 +203,13 @@ function DiscoveryRows({
       ))}
     </ul>
   )
+}
+
+function discoveryRowStateLabel(state: string): string {
+  if (state === '') {
+    return state
+  }
+  return `${state.charAt(0).toUpperCase()}${state.slice(1)}`
 }
 
 function developerDiscoveryStateVariant(state: string): 'default' | 'secondary' | 'destructive' | 'outline' {

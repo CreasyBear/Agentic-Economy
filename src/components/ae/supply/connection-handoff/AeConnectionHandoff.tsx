@@ -69,7 +69,7 @@ function Shell({ children }: Readonly<{ children: React.ReactNode }>) {
       title="Connect Provider"
       description="Connect the credential required by this Provider source."
       currentPath="/owner/operations/new"
-      breadcrumbs={[{ label: 'Tools', href: '/owner/operations' }, { label: 'Add Tool', href: '/owner/operations/new' }, { label: 'Connect Provider' }]}
+      breadcrumbs={[{ label: 'My tools', href: '/owner/operations' }, { label: 'Add Tool', href: '/owner/operations/new' }, { label: 'Connect Provider' }]}
     >
       <AeSettingsStack>{children}</AeSettingsStack>
     </AeOperatorPage>

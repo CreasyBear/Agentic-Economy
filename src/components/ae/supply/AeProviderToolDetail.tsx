@@ -75,7 +75,7 @@ export function AeProviderToolDetail({
     <div className="grid gap-section">
       <section aria-labelledby="provider-tool-state" className="grid gap-related">
         <div className="flex flex-wrap items-center gap-intra">
-          <h2 id="provider-tool-state" className="font-sans text-xl font-semibold tracking-tight">{status.state}</h2>
+          <h2 id="provider-tool-state" className="font-sans text-xl font-medium tracking-tight">{status.state}</h2>
           <Badge variant={status.routeability.available ? 'default' : 'outline'}>
             {status.routeability.available ? 'Available to buyers' : 'Not available to buyers'}
           </Badge>

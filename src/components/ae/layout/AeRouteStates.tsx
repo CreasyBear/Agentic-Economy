@@ -73,7 +73,7 @@ function TableSkeleton() {
       <Skeleton className="h-10 w-full rounded-md" />
       <div
         data-testid="skeleton-table"
-        className="min-h-[14rem] overflow-hidden rounded-lg border border-border bg-card/40"
+        className="min-h-[14rem] overflow-hidden rounded-card border border-border bg-card/40"
       >
         <div className="grid grid-cols-4 gap-gutter border-b border-border p-4">
           {Array.from({ length: 4 }, (_, index) => (

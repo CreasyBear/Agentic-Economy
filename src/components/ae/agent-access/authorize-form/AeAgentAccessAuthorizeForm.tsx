@@ -44,7 +44,7 @@ export function AeAgentAccessAuthorizeForm({ locator, oauthState, details }: AeA
     <AeOperatorPage operatorRole="owner" title="Review agent access" description="Choose what this agent may do, then approve or decline." currentPath="/agent-access">
       <AeSettingsStack>
         {vm.decision.phase === 'idle' || vm.decision.phase === 'submitting' ? (
-          <div className="grid overflow-hidden rounded-xl border border-border bg-card shadow-soft" role="group" aria-label={`Access decision for ${vm.clientName}`}>
+          <div className="grid overflow-hidden rounded-xl border border-border bg-card" role="group" aria-label={`Access decision for ${vm.clientName}`}>
             <AeSection
               title={`Connect ${vm.clientName}`}
               description={vm.accessProfile === 'provider'

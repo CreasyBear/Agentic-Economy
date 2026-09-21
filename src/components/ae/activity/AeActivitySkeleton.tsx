@@ -9,7 +9,7 @@ export function AeActivitySkeleton() {
       currentPath="/activity"
     >
       <div className="grid gap-section animate-pulse">
-        <div className="min-h-[3rem] rounded-lg border border-border bg-muted/30" />
+        <div className="min-h-[3rem] rounded-card border border-border bg-muted/30" />
         <div className="grid gap-related">
           <div className="h-8 w-48 rounded bg-muted/40" />
           <div className="min-h-[12rem] rounded-md border border-border bg-muted/20" />

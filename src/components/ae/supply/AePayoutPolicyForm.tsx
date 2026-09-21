@@ -180,7 +180,7 @@ export function AePayoutPolicyForm({
   return (
     <div className="grid min-h-[26rem] gap-4 rounded-xl border bg-card p-5 shadow-xs">
       <div>
-        <h4 className="text-sm font-semibold text-foreground">Payout Schedule & Threshold</h4>
+        <h4 className="text-sm font-medium text-foreground">Payout Schedule & Threshold</h4>
         <p className="text-xs text-muted-foreground">
           Choose how often accumulated AUD earnings leave your provider balance, and the minimum that
           must accumulate first.

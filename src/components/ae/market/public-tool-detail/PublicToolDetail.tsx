@@ -1,3 +1,4 @@
+import { AePageHeader } from '@/components/ae/layout/AePageHeader'
 import { AePublicPage } from '@/components/ae/layout/AePublicPage'
 import { AePageState } from '@/components/ae/layout/AePageState'
 import { AeToolInspector } from '@/components/ae/market/tool-detail'
@@ -31,17 +32,20 @@ function CurrentToolDetail({
   evidence,
 }: CurrentToolDetailProps) {
   return (
-    <AePublicPage
-      kind="workspace"
-      title={toolDisplayTitle(tool)}
-      description={`${tool.business.name} · ${tool.contract.capabilityId}`}
-      actions={<MarketBackButton label="Catalog" className="min-h-touch" variant="ghost" />}
-    >
-      <AeToolInspector
-        tool={tool}
-        {...(evidence === undefined ? {} : { evidence })}
-        variant="full"
-      />
+    <AePublicPage>
+      <div className="ae-rail grid gap-section pb-page">
+        <AePageHeader
+          eyebrow="Tool"
+          title={toolDisplayTitle(tool)}
+          description={`${tool.business.name} · ${tool.contract.capabilityId}`}
+          actions={<MarketBackButton label="Catalog" className="min-h-touch" variant="ghost" />}
+        />
+        <AeToolInspector
+          tool={tool}
+          {...(evidence === undefined ? {} : { evidence })}
+          variant="full"
+        />
+      </div>
     </AePublicPage>
   )
 }

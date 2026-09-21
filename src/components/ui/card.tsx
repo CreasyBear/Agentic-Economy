@@ -2,12 +2,20 @@ import * as React from "react"
 
 import { cn } from "@/lib/utils"
 
-function Card({ className, ...props }: React.ComponentProps<"div">) {
+type CardProps = React.ComponentProps<"div"> & {
+  /** Discover listing lift (hairline card hover). Default off for operator surfaces. */
+  discoverLift?: boolean
+}
+
+function Card({ className, discoverLift = false, ...props }: CardProps) {
   return (
     <div
       data-slot="card"
+      {...(discoverLift ? { "data-ae-discover-lift": "" } : {})}
       className={cn(
-        "flex flex-col gap-4 rounded-card bg-card py-4 text-card-foreground shadow-soft",
+        "flex flex-col gap-4 rounded-card border border-border/70 bg-card py-4 text-card-foreground shadow-none",
+        discoverLift &&
+          "transition-[box-shadow,transform] duration-base ease-standard hover:-translate-y-1 hover:shadow-float motion-reduce:transition-none motion-reduce:hover:translate-y-0",
         className
       )}
       {...props}
@@ -32,7 +40,10 @@ function CardTitle({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
       data-slot="card-title"
-      className={cn("leading-none font-semibold", className)}
+      className={cn(
+        "text-lg font-semibold leading-snug tracking-tight",
+        className
+      )}
       {...props}
     />
   )
@@ -42,7 +53,7 @@ function CardDescription({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
       data-slot="card-description"
-      className={cn("text-sm text-muted-foreground", className)}
+      className={cn("text-sm leading-relaxed text-muted-foreground", className)}
       {...props}
     />
   )

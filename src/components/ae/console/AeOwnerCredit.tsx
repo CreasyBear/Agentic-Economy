@@ -200,9 +200,9 @@ export function AeOwnerCredit({
             </AlertDescription>
           </Alert>
         ) : (
-          <div className="grid gap-2 rounded-xl border border-border bg-card p-5 shadow-soft">
+          <div className="grid gap-2 rounded-xl border border-border bg-card p-5">
             <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Available credit</p>
-            <p className="font-mono text-4xl font-semibold tracking-tight tabular-nums sm:text-5xl">
+            <p className="font-mono text-2xl font-medium tracking-tight tabular-nums">
               {balance === undefined ? 'Checking…' : formatDisplayAmount(balance)}
             </p>
             <p className="text-sm text-muted-foreground">
@@ -234,7 +234,7 @@ export function AeOwnerCredit({
             />
           ) : (
             <div
-              className="grid gap-3 rounded-xl border border-border/70 p-4"
+              className="grid gap-3 border-t border-border pt-4"
               aria-busy="true"
               aria-label="Loading monthly spending cap"
             >
@@ -263,7 +263,7 @@ export function AeOwnerCredit({
             />
           ) : (
             <div
-              className="grid gap-3 rounded-xl border border-border/70 p-4"
+              className="grid gap-3 border-t border-border pt-4"
               aria-busy="true"
               aria-label="Loading auto-recharge settings"
             >
@@ -282,7 +282,7 @@ export function AeOwnerCredit({
             </div>
           )
         ) : null}
-        <div className="grid gap-3 rounded-xl border border-border/70 p-4">
+        <div className="grid gap-3 border-t border-border pt-4">
           <div>
             <h3 className="font-medium">Add credit</h3>
             <p className="text-sm text-muted-foreground">Review the exact credit, fee, and total before continuing to secure payment.</p>

@@ -84,7 +84,7 @@ export function CallRecoveryPanel({
   return (
     <section className="grid gap-related border-t border-border pt-section" aria-labelledby="recovery-actions-title">
       <div className="grid gap-intra">
-        <h2 id="recovery-actions-title" className="text-xl font-semibold tracking-tight text-foreground">Resolve this Call</h2>
+        <h2 id="recovery-actions-title" className="text-base font-medium leading-snug tracking-tight text-foreground">Resolve this Call</h2>
         <p className="text-sm text-muted-foreground">Use only the action supported by the recorded state. Each action refreshes this exact Call.</p>
       </div>
       <CallReceiptStatusFeedback feedback={actions?.feedback} callRef={result.callRef} />
@@ -109,7 +109,7 @@ function ReconciliationBlockers({ availability }: Readonly<{ availability: CallR
           <AlertTitle>Reconciliation cannot be submitted</AlertTitle>
           <AlertDescription>
             This record does not expose the attempt reference and effect generation required by the reconciliation contract. No evidence is fabricated or submitted from this browser.
-            <p className="mt-intra rounded-lg border border-success-ring bg-success-subtle px-3 py-2 text-sm text-success-foreground">
+            <p className="mt-intra rounded-card border border-success-ring bg-success-subtle px-3 py-2 text-sm text-success-foreground">
               A$0.00 charged — this receipt is unchanged until evidence is accepted.
             </p>
           </AlertDescription>
@@ -120,7 +120,7 @@ function ReconciliationBlockers({ availability }: Readonly<{ availability: CallR
           <AlertTitle>Evidence submission is unavailable</AlertTitle>
           <AlertDescription>
             Permission to submit Provider evidence could not be confirmed from this receipt source. Refresh this exact Call to check again; no evidence can be submitted here until permission is available.
-            <p className="mt-intra rounded-lg border border-success-ring bg-success-subtle px-3 py-2 text-sm text-success-foreground">
+            <p className="mt-intra rounded-card border border-success-ring bg-success-subtle px-3 py-2 text-sm text-success-foreground">
               A$0.00 charged — this receipt is unchanged until evidence is accepted.
             </p>
           </AlertDescription>

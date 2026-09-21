@@ -29,7 +29,7 @@ export function SharedChat({ shareToken }: { shareToken: string }) {
         <header className="flex min-h-14 items-center gap-related border-b border-border px-gutter">
           <LockKeyholeIcon aria-hidden="true" className="size-4 text-muted-foreground" />
           <div className="min-w-0 flex-1">
-            <h1 className="truncate text-sm font-semibold">{result?.title ?? chatShared.fallbackTitle}</h1>
+            <h1 className="truncate text-sm font-medium">{result?.title ?? chatShared.fallbackTitle}</h1>
             <p className="text-xs text-muted-foreground">{chatShared.detail}</p>
           </div>
           <Badge variant="outline">{chatShared.badge}</Badge>

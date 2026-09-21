@@ -46,7 +46,7 @@ export function AeRecordHeader({
           </span>
         )}
         <div className="grid min-w-0 gap-intra">
-          <h1 id={titleId} className="truncate font-sans text-2xl font-semibold leading-tight tracking-tight text-foreground">
+          <h1 id={titleId} className="truncate font-sans text-title font-medium leading-tight tracking-tight text-foreground">
             {title}
           </h1>
           {description === undefined ? null : (

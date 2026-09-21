@@ -23,7 +23,8 @@ export const buttonVariants = cva(
       },
       size: {
         default: "h-10 px-5 has-[>svg]:px-3",
-        xs: "h-6 gap-1 rounded-md px-2 text-[10px] has-[>svg]:px-1.5 [&_svg:not([class*='size-'])]:size-3",
+        xs: "h-6 gap-1 rounded-md px-2 text-caption has-[>svg]:px-1.5 [&_svg:not([class*='size-'])]:size-3",
+        pill: "h-10 rounded-full border-border/70 bg-card px-4 sm:px-5",
         sm: "h-8 gap-1.5 rounded-md px-4 has-[>svg]:px-2.5",
         lg: "h-12 rounded-md px-6 has-[>svg]:px-4",
         icon: "size-10",

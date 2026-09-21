@@ -5,6 +5,7 @@ import { useMemo } from "react";
 import { AeEmptyState } from "@/components/ae/feedback/AeEmptyState";
 import { AeCapabilityTile } from "@/components/ae/market/AeCapabilityTile";
 import { X402DirectoryCards } from "@/components/ae/market/AeX402Directory";
+import { AeCollectionRail } from "@/components/ae/shared/AeCollectionRail";
 import {
   AeAgentInstructionCard,
   AeConnectingFrame,
@@ -15,9 +16,7 @@ import {
   AeSiteHeading,
   AeSiteHeadingPair,
   AeSiteHeroIntro,
-  AeSiteIntro,
   AeSiteSection,
-  AeSiteStack,
 } from "@/components/ae/website";
 import { ItemGroup } from "@/components/ui/item";
 import { HOME } from "@/content/brand-copy";
@@ -57,18 +56,18 @@ function HomeHero({
       <AeSiteHeroIntro>
         <AeSiteHeadingPair>
           {showMeta ? <AeSiteEyebrow>{meta}</AeSiteEyebrow> : null}
-          <div className="mx-auto w-full max-w-xl">
+          <div className="w-full max-w-xl">
             <AeSiteHeading as="h1" size="xl" id="home-hero">
               {HOME.heroHeading}
             </AeSiteHeading>
           </div>
-          <div className="mx-auto w-full max-w-lg">
-            <AeSiteBody muted size="sm" className="mx-auto">
+          <div className="w-full max-w-lg">
+            <AeSiteBody muted size="sm">
               {HOME.heroSubhead}
             </AeSiteBody>
           </div>
         </AeSiteHeadingPair>
-        <div className="flex flex-wrap items-center justify-center gap-related">
+        <div className="flex flex-wrap items-center gap-related">
           <AeSiteButton asChild>
             <Link to="/market">Browse Tools</Link>
           </AeSiteButton>
@@ -102,12 +101,7 @@ export function HomeCapabilityResults({
       className="scroll-mt-anchor"
     >
       <div className="py-page md:pb-hero">
-        <AeSiteStack>
-          <AeSiteIntro>
-            <AeSiteHeading as="h2" size="md" id="home-catalog-heading">
-              {HOME.catalogHeading}
-            </AeSiteHeading>
-          </AeSiteIntro>
+        <AeCollectionRail title={HOME.catalogHeading} titleId="home-catalog-heading">
           {read.kind === "unavailable" ? (
             <AeEmptyState
               icon={<SearchIcon />}
@@ -149,7 +143,7 @@ export function HomeCapabilityResults({
               </ItemGroup>
             </div>
           )}
-        </AeSiteStack>
+        </AeCollectionRail>
       </div>
     </AeSiteSection>
   );

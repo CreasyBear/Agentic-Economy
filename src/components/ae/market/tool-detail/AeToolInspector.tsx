@@ -76,12 +76,10 @@ export function AeToolInspector({
     )
   }
 
-  const runTicket = <AeToolNextAction model={model} variant="full" />
-
   const researchPanel = (
     <Tabs
       defaultValue="overview"
-      className="flex min-h-0 min-w-0 flex-col gap-0 bg-card lg:h-full"
+      className="flex min-w-0 flex-col gap-0"
     >
       <div className="flex min-h-12 shrink-0 items-center justify-between gap-3 border-b border-border px-gutter">
         <TabsList variant="line" aria-label="Tool views" className="h-12 p-0 max-sm:!h-12">
@@ -103,7 +101,7 @@ export function AeToolInspector({
 
       <TabsContent
         value="overview"
-        className="min-h-0 overscroll-contain lg:overflow-y-auto"
+        className="min-w-0"
       >
         <AeToolDecision tool={tool} model={model} />
         <AeToolTrackRecord evidence={trackRecord} />
@@ -112,7 +110,7 @@ export function AeToolInspector({
 
       <TabsContent
         value="contract"
-        className="min-h-0 overscroll-contain px-gutter py-6 lg:overflow-y-auto"
+        className="min-w-0 px-gutter py-6"
       >
         <AeToolContractSections
           tool={tool}
@@ -123,24 +121,19 @@ export function AeToolInspector({
     </Tabs>
   )
 
+  const continuation = <AeToolNextAction model={model} variant="full" />
+
   return (
     <article
       ref={fullInspectorRef}
       tabIndex={-1}
       aria-label={`${tool.listing.label} Tool details`}
       data-tool-inspector="full"
-      className="ae-nav flex min-h-0 w-full flex-1 flex-col overflow-hidden pb-3 focus:outline-none"
+      className="min-w-0 focus:outline-none"
     >
-      <div
-        data-tool-layout="responsive"
-        className="grid min-h-0 flex-1 grid-cols-1 overflow-y-auto overscroll-contain bg-card lg:grid-cols-[minmax(0,7fr)_minmax(18rem,3fr)] lg:overflow-hidden"
-      >
-        <div className="order-2 min-h-0 lg:order-1 lg:overflow-hidden">
-          {researchPanel}
-        </div>
-        <div className="order-1 border-b border-border lg:order-2 lg:min-h-0 lg:overflow-y-auto lg:border-b-0 lg:border-l">
-          {runTicket}
-        </div>
+      <div data-tool-layout="responsive" className="min-w-0">
+        {researchPanel}
+        {continuation}
       </div>
 
       <Sheet open={technicalContractOpen} onOpenChange={setTechnicalContractOpen}>

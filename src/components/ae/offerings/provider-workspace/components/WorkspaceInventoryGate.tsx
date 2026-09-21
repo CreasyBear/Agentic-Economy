@@ -25,7 +25,7 @@ export function WorkspaceInventoryGate(props: WorkspaceInventoryGateProps) {
   }
   return (
     <AeEmptyState
-      title="Tools did not load"
+      title="My tools did not load"
       description="The Tool inventory is temporarily unavailable."
       role="alert"
       action={

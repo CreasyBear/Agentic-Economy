@@ -54,19 +54,19 @@ export function AeProviderListingPage({
         <ListingFirstScreen catalog={catalog} offerings={offerings} />
 
         <div className="grid gap-section lg:grid-cols-[minmax(0,1fr)_18rem] lg:items-start">
-          <section aria-labelledby="provider-tools-title" className="overflow-hidden rounded-card border border-border bg-card">
-            <div className="grid gap-intra border-b border-border p-gutter">
-              <h2 id="provider-tools-title" className="text-lg font-semibold text-foreground">Listed tools</h2>
+          <section aria-labelledby="provider-tools-title" className="min-w-0 grid gap-related">
+            <div className="grid gap-intra">
+              <h2 id="provider-tools-title" className="text-lg font-medium text-foreground">Listed tools</h2>
               <p className="text-sm text-muted-foreground">Inspect the price, access path, and current readiness before calling.</p>
             </div>
 
           {offerings.length === 0 ? (
-            <div className="grid gap-intra px-gutter py-section">
+            <div className="grid gap-intra border-y border-border py-section">
               <p className="font-medium text-foreground">No tools listed</p>
               <p className="text-sm text-muted-foreground">This provider profile remains visible while its catalogue is prepared.</p>
             </div>
           ) : (
-            <ul className="m-0 divide-y divide-border p-0" aria-label={`${catalog.name} tools`}>
+            <ul className="m-0 divide-y divide-border border-y border-border p-0" aria-label={`${catalog.name} tools`}>
               {offerings.map((offering) => (
                 <OperationRow key={offering.offeringRef} offering={offering} catalog={catalog} />
               ))}

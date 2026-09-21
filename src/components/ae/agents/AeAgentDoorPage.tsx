@@ -19,19 +19,19 @@ export function AeAgentDoorPage({ canonicalBaseUrl }: { canonicalBaseUrl: string
         <AeSiteHeroIntro>
           <AeSiteHeadingPair>
             <AeSiteEyebrow>{AGENT_PAGE.eyebrow}</AeSiteEyebrow>
-            <div className="mx-auto w-full max-w-xl">
-              <AeSiteHeading as="h1" size="md" id="agent-hero">
+            <div className="w-full max-w-xl">
+              <AeSiteHeading as="h1" size="lg" id="agent-hero">
                 {AGENT_PAGE.heading}
               </AeSiteHeading>
             </div>
             <p className="font-medium text-foreground">{AGENT_PAGE.harnesses}</p>
-            <div className="mx-auto w-full max-w-lg">
-              <AeSiteBody muted size="sm" className="mx-auto">
+            <div className="w-full max-w-lg">
+              <AeSiteBody muted size="sm">
                 {AGENT_PAGE.subhead}
               </AeSiteBody>
             </div>
           </AeSiteHeadingPair>
-          <div className="flex flex-wrap items-center justify-center gap-related">
+          <div className="flex flex-wrap items-center gap-related">
             <AeSiteButton asChild>
               <Link to="/market">Browse Tools</Link>
             </AeSiteButton>
@@ -42,9 +42,7 @@ export function AeAgentDoorPage({ canonicalBaseUrl }: { canonicalBaseUrl: string
         </AeSiteHeroIntro>
       </AeSiteSection>
       <AeSiteSection ariaLabel="Agent connection" scheme="surface">
-        <div className="mx-auto w-full max-w-5xl">
-          <AeAssistantInstallFunnel canonicalBaseUrl={canonicalBaseUrl} />
-        </div>
+        <AeAssistantInstallFunnel canonicalBaseUrl={canonicalBaseUrl} />
       </AeSiteSection>
     </>
   )

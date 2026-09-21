@@ -5,7 +5,7 @@ export function AeProviderWorkspaceSkeleton() {
   return (
     <AeOperatorPage
       operatorRole="owner"
-      title="Tools"
+      title="My tools"
       description="Publish the exact tools agents can inspect and call."
       currentPath="/owner/operations"
     >

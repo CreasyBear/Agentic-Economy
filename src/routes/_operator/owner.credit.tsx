@@ -7,7 +7,7 @@ import { operatorRouteOptions } from '@/lib/operator/route-options'
 export const Route = createFileRoute('/_operator/owner/credit')({
   staticData: {
     nav: {
-      label: 'Balance',
+      label: 'Credit',
       operator: {
         roles: ['owner'],
         group: 'Buy',
@@ -21,7 +21,7 @@ export const Route = createFileRoute('/_operator/owner/credit')({
   ...operatorRouteOptions,
   head: () => ({
     meta: [
-      { title: 'Balance | Agentic Economy' },
+      { title: 'Credit | Agentic Economy' },
       { name: 'robots', content: 'noindex' },
     ],
   }),

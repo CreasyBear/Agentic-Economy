@@ -38,7 +38,7 @@ export function AeToolFacts({
   return (
     <section aria-label="Provider and access" className="min-w-0 px-gutter py-6">
       <div className="mb-4 flex min-w-0 items-baseline justify-between gap-related">
-        <h2 className="text-sm font-semibold text-foreground">Provider and access</h2>
+        <h2 className="text-sm font-medium text-foreground">Provider and access</h2>
         <p className="shrink-0 text-xs text-muted-foreground">Current catalog facts</p>
       </div>
       <AeFactList
@@ -57,7 +57,7 @@ export function AeToolFacts({
                 ),
             mono: model.lastVerifiedAt !== undefined,
           },
-          { label: 'Authentication', value: model.authenticationLabel },
+          { label: 'Access', value: model.authenticationLabel },
           ...(model.paymentNetwork === undefined ? [] : [{ label: 'Payment network', value: model.paymentNetwork, mono: true }]),
           { label: 'Readiness', value: model.readinessLabel },
         ]}

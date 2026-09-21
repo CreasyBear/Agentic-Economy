@@ -3,6 +3,7 @@ import { Link, useRouter } from '@tanstack/react-router'
 
 import { AeEmptyState } from '@/components/ae/feedback/AeEmptyState'
 import { AeOperatorPage } from '@/components/ae/layout/AeOperatorPage'
+import { Button } from '@/components/ui/button'
 import { buttonVariants } from '@/components/ui/button-variants'
 import { cn } from '@/lib/utils'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
@@ -84,12 +85,17 @@ function AeActivityAvailable({
           <AeEmptyState
             title="No Calls yet"
             description="Find a Tool and complete one Call. Its task, outcome, amount, and receipt will appear here."
-            action={<Link to="/owner/market" className={cn(buttonVariants(), 'min-h-touch')}>Find Tools</Link>}
+            action={<Link to="/market" className={cn(buttonVariants(), 'min-h-touch')}>Find Tools</Link>}
           />
         ) : vm.showEmptyNoMatch ? (
           <AeEmptyState
             title="No calls match these filters"
-            description="No calls match the current filter criteria."
+            description="Active filters are hiding matching Calls."
+            action={
+              <Button type="button" className="min-h-touch" onClick={vm.resetFilters}>
+                Reset filters
+              </Button>
+            }
           />
         ) : vm.showQueues ? (
           <>

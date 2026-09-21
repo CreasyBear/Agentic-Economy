@@ -1,4 +1,3 @@
-import { SignInButton } from '@clerk/tanstack-react-start'
 import { CheckIcon, CopyIcon, MenuIcon, PlusIcon, Share2Icon, UnlinkIcon } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
@@ -6,7 +5,6 @@ import { Field, FieldLabel } from '@/components/ui/field'
 import { InputGroup, InputGroupAddon, InputGroupInput } from '@/components/ui/input-group'
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet'
 import { chatHistory, chatStageDetail, chatStageTitle } from '@/lib/public/chat-ia'
-import { AECON_MARK_SRC, aeconMarkClassName } from '@/content/brand-assets'
 
 import type { ChatHeaderProps } from '../chat-session.contracts'
 
@@ -44,25 +42,13 @@ export function ChatHeader({
             </SheetContent>
           </Sheet>
         ) : null}
-        <a
-          href="/"
-          aria-label={chatHistory.home}
-          className="flex min-h-touch min-w-touch shrink-0 items-center justify-center no-underline"
-        >
-          <img src={AECON_MARK_SRC} alt="" aria-hidden="true" className={aeconMarkClassName.chat} />
-        </a>
         <div className="min-w-0 flex-1">
-          <p className="truncate text-sm font-semibold">{chatStageTitle(threadId)}</p>
+          <p className="truncate text-sm font-medium">{chatStageTitle(threadId)}</p>
           <p className="text-xs text-muted-foreground">{chatStageDetail(authenticated)}</p>
         </div>
         <Button type="button" variant="ghost" size="icon" className="min-h-touch min-w-touch" aria-label={chatHistory.newChat} onClick={onNewChat}>
           <PlusIcon aria-hidden="true" />
         </Button>
-        {!authenticated ? (
-          <SignInButton mode="modal">
-            <Button type="button" variant="outline" className="min-h-touch">{chatHistory.signIn}</Button>
-          </SignInButton>
-        ) : null}
         {authenticated && threadId !== null ? (
           <div className="flex items-center gap-intra">
             <Button type="button" variant="ghost" size="icon" className="min-h-touch min-w-touch" aria-label={shareState === 'active' ? chatHistory.shareGet : chatHistory.shareCreate} disabled={busy} onClick={onIssueShare}>

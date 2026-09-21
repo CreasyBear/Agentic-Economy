@@ -1,11 +1,10 @@
 import { Link } from '@tanstack/react-router'
-import { ActivityIcon, BotIcon, StoreIcon, WalletIcon } from 'lucide-react'
+import { ChevronRightIcon } from 'lucide-react'
 
 import { AeOperatorPage } from '@/components/ae/layout/AeOperatorPage'
 import { AeSection } from '@/components/ae/layout/AeSection'
 import { buttonVariants } from '@/components/ui/button-variants'
 import { cn } from '@/lib/utils'
-import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { formatDisplayAmount } from '@/modules/money/public'
 import {
   countLabel,
@@ -18,29 +17,38 @@ export type AeOwnerOverviewProps = Readonly<{
   snapshot: OwnerOverviewSnapshot
 }>
 
-function OverviewCard({ title, description, value, action, icon: Icon, dominant = false }: Readonly<{
+function OverviewFactRow({
+  title,
+  description,
+  value,
+  action,
+}: Readonly<{
   title: string
   description: string
   value: string
   action: Readonly<{ label: string; href: string }>
-  icon: typeof WalletIcon
-  dominant?: boolean
 }>) {
-  return <Card className={dominant ? 'md:col-span-2' : undefined}>
-    <CardHeader>
-      <div className="flex items-center gap-2 text-muted-foreground"><Icon className="size-4" aria-hidden="true" /><CardTitle>{title}</CardTitle></div>
-      <CardDescription>{description}</CardDescription>
-      <CardAction>
+  return (
+    <div className="flex flex-col gap-related border-b border-border py-related last:border-b-0 sm:flex-row sm:items-center sm:justify-between">
+      <div className="grid min-w-0 flex-1 gap-intra">
+        <span className="font-medium text-foreground">{title}</span>
+        <span className="text-pretty text-sm text-muted-foreground">{description}</span>
+      </div>
+      <div className="flex flex-wrap items-center gap-related sm:justify-end">
+        <span className="font-mono text-base tabular-nums text-foreground">{value}</span>
         <Link
           to={action.href}
-          className={cn(buttonVariants({ variant: 'ghost', size: 'sm' }), 'min-h-touch sm:min-h-8')}
+          className={cn(
+            buttonVariants({ variant: 'ghost', size: 'sm' }),
+            'min-h-touch gap-1 sm:min-h-8',
+          )}
         >
           {action.label}
+          <ChevronRightIcon aria-hidden="true" className="size-4 shrink-0 text-muted-foreground" />
         </Link>
-      </CardAction>
-    </CardHeader>
-    <CardContent><p className={dominant ? 'text-4xl font-semibold tracking-tight tabular-nums' : 'text-2xl font-semibold tracking-tight tabular-nums'}>{value}</p></CardContent>
-  </Card>
+      </div>
+    </div>
+  )
 }
 
 function ProviderSetupEntry({ provider }: Readonly<{ provider: OwnerOverviewSnapshot['provider'] }>) {
@@ -74,23 +82,53 @@ export function AeOwnerOverview({ snapshot }: AeOwnerOverviewProps) {
     ? countLabel(snapshot.agents.connected, 'connected Agent', 'connected Agents', snapshot.agents.complete)
     : 'Agents unavailable'
 
-  return <AeOperatorPage operatorRole="owner" title="Overview" description="See what needs attention, your available Balance, and connected Agents." currentPath="/owner">
-    <div className="grid gap-section pb-page">
-      <AeSection title="Next step" description={next.description} className="rounded-xl border border-border bg-card p-gutter shadow-soft">
-        <Link
-          to={next.href}
-          className={cn(buttonVariants(), 'w-fit min-h-touch')}
-        >
-          {next.label}
-        </Link>
-      </AeSection>
-      <section aria-label="Account summary" className="grid gap-related md:grid-cols-2 xl:grid-cols-3">
-        <OverviewCard title="Available Balance" description={snapshot.balance.kind === 'available' && snapshot.balance.locked ? 'Credit is recorded, but spending is temporarily locked.' : 'AUD credit available for authorized Agent Calls.'} value={balanceValue} action={{ label: 'Open Balance', href: '/owner/credit' }} icon={WalletIcon} dominant />
-        <OverviewCard title="Calls" description="Work waiting for a decision appears before completed Calls." value={callsValue} action={{ label: 'Open Calls', href: '/activity' }} icon={ActivityIcon} />
-        <OverviewCard title="Agents" description="See connected Agents and review their access." value={agentsValue} action={{ label: 'Open Agents', href: '/agent-access' }} icon={BotIcon} />
-        {providerCard === undefined ? null : <OverviewCard title="Provider workspace" description={providerCard.description} value={providerCard.value} action={{ label: 'Open My Tools', href: '/owner/operations' }} icon={StoreIcon} />}
-      </section>
-      <ProviderSetupEntry provider={snapshot.provider} />
-    </div>
-  </AeOperatorPage>
+  return (
+    <AeOperatorPage
+      operatorRole="owner"
+      title="Overview"
+      description="See what needs attention, your available Balance, and connected Agents."
+      currentPath="/owner"
+    >
+      <div className="grid gap-section pb-page">
+        <AeSection title="Next step" description={next.description}>
+          <Link to={next.href} className={cn(buttonVariants(), 'w-fit min-h-touch')}>
+            {next.label}
+          </Link>
+        </AeSection>
+        <section aria-label="Account summary" className="border-y border-border">
+          <OverviewFactRow
+            title="Available Balance"
+            description={
+              snapshot.balance.kind === 'available' && snapshot.balance.locked
+                ? 'Credit is recorded, but spending is temporarily locked.'
+                : 'AUD credit available for authorized Agent Calls.'
+            }
+            value={balanceValue}
+            action={{ label: 'Open Balance', href: '/owner/credit' }}
+          />
+          <OverviewFactRow
+            title="Calls"
+            description="Work waiting for a decision appears before completed Calls."
+            value={callsValue}
+            action={{ label: 'Open Calls', href: '/activity' }}
+          />
+          <OverviewFactRow
+            title="Agents"
+            description="See connected Agents and review their access."
+            value={agentsValue}
+            action={{ label: 'Open Agents', href: '/agent-access' }}
+          />
+          {providerCard === undefined ? null : (
+            <OverviewFactRow
+              title="Provider workspace"
+              description={providerCard.description}
+              value={providerCard.value}
+              action={{ label: 'Open My Tools', href: '/owner/operations' }}
+            />
+          )}
+        </section>
+        <ProviderSetupEntry provider={snapshot.provider} />
+      </div>
+    </AeOperatorPage>
+  )
 }

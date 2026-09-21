@@ -1,3 +1,5 @@
+import type { OwnerSupplySourceAssessmentInput } from '@/modules/capability-supply/source-first-owner'
+import type { SupplySourceAssessment } from '@/modules/capability-supply/source-first-owner'
 import { REASON_COPY, REASON_COPY_FALLBACK } from '@/content/reason-copy'
 import { degrade } from '@/lib/observability/degrade'
 import { isRecord } from '@/modules/common/is-record'
@@ -74,6 +76,7 @@ export type SupplyNativeStartProps = Readonly<{
     candidateRef: string
     connectionRef?: string
   }>
+  onAssess?: (input: OwnerSupplySourceAssessmentInput, signal: AbortSignal) => Promise<SupplySourceAssessment>
   onPreview: (source: SupplySourceInput, idempotencyKey: string) => Promise<SupplySourcePreview>
   onConnect: (input: Readonly<{
     businessId: string

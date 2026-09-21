@@ -33,13 +33,13 @@ const recoveryChecks = [
 
 export function AeCompromiseRecoveryChecklist() {
   return (
-    <details id="compromise-recovery" className="rounded-lg border border-border p-gutter">
+    <details id="compromise-recovery" className="rounded-card border border-border p-gutter">
       <summary
         className="cursor-pointer marker:text-muted-foreground"
         aria-label="If you suspect compromise"
       >
         <span className="ml-intra inline-grid gap-intra align-middle">
-          <span className="font-sans text-base font-semibold leading-snug tracking-tight text-foreground">If you suspect compromise</span>
+          <span className="font-sans text-base font-medium leading-snug tracking-tight text-foreground">If you suspect compromise</span>
           <span className="text-sm font-normal text-muted-foreground">
             Sessions, Agents, Provider connections, and payout authority — reviewing does not change them.
           </span>

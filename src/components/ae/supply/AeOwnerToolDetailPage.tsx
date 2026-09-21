@@ -86,7 +86,7 @@ export function AeOwnerToolDetailPage({ toolRef, identity, status }: AeOwnerTool
       title={name}
       description="Current publication, source health, delivery and Qualified Use."
       currentPath={`/owner/operations/${encodeURIComponent(toolRef)}`}
-      breadcrumbs={[{ label: 'Tools', href: '/owner/operations' }, { label: name }]}
+      breadcrumbs={[{ label: 'My tools', href: '/owner/operations' }, { label: name }]}
     >
       <AeProviderToolDetail
         name={name}

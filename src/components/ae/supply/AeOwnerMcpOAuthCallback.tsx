@@ -34,7 +34,7 @@ export function AeOwnerMcpOAuthCallback({ result }: AeOwnerMcpOAuthCallbackProps
       description="Return to Add Tool after the source confirms authentication."
       currentPath="/owner/operations/new"
       breadcrumbs={[
-        { label: 'Tools', href: '/owner/operations' },
+        { label: 'My tools', href: '/owner/operations' },
         { label: 'Add Tool', href: '/owner/operations/new' },
         { label: 'Service connection' },
       ]}

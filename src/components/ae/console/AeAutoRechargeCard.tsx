@@ -199,7 +199,7 @@ export function AeAutoRechargeCard({
   }
 
   return (
-    <div className="grid gap-3 rounded-xl border border-border/70 p-4">
+    <div className="grid gap-3 border-t border-border pt-4">
       <div>
         <h3 className="font-medium">Auto-recharge</h3>
         <p className="text-sm text-muted-foreground">

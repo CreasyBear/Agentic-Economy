@@ -5,7 +5,7 @@ import type { StatusCheckListProps } from '../system-status.contracts'
 
 export function StatusCheckList({ checks, isChecking }: StatusCheckListProps) {
   return (
-    <div className="overflow-hidden rounded-lg border border-border bg-card">
+    <div className="overflow-hidden rounded-card border border-border bg-card">
       <ul className="divide-y divide-border" aria-busy={isChecking}>
         {checks.map((check) => (
           <li key={check.id} className="flex min-h-touch flex-wrap items-center gap-intra px-gutter py-intra">

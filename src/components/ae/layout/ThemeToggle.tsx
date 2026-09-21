@@ -13,7 +13,10 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { cn } from '@/lib/utils'
-import type { AppearancePreference } from '@/lib/theme/theme-mode'
+import {
+  DEFAULT_APPEARANCE_PREFERENCE,
+  type AppearancePreference,
+} from '@/lib/theme/theme-mode'
 
 const OPTIONS: { value: AppearancePreference; label: string; icon: typeof Sun }[] = [
   { value: 'light', label: 'Light', icon: Sun },
@@ -21,7 +24,7 @@ const OPTIONS: { value: AppearancePreference; label: string; icon: typeof Sun }[
   { value: 'system', label: 'System', icon: Monitor },
 ]
 
-const DEFAULT_OPTION = { value: 'system' as const, label: 'System', icon: Monitor }
+const DEFAULT_OPTION = OPTIONS.find((option) => option.value === DEFAULT_APPEARANCE_PREFERENCE) ?? OPTIONS[0]
 
 export function ThemeToggle() {
   const { preference, setPreference } = useAppearance()

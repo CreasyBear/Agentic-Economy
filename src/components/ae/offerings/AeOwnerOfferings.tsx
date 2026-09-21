@@ -269,7 +269,7 @@ export function AeOwnerOfferingsList({
                   return (
                     <li key={item.offering.offeringRef} className="grid min-w-0 gap-related py-related">
                       <div className="grid gap-2">
-                        <h3 className="break-words font-semibold">{item.offering.name}</h3>
+                        <h3 className="break-words font-medium">{item.offering.name}</h3>
                         <OwnerOfferingStatusCluster item={item} />
                         <div className="flex items-center gap-2 font-mono text-xs tabular-nums text-muted-foreground">
                           <span>{item.pricingLabel ?? '—'}</span>

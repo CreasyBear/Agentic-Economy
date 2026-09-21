@@ -18,7 +18,7 @@ export function AeSystemStatusSkeleton() {
       }
     >
       <div className="ae-rail pb-page">
-        <div className="overflow-hidden rounded-lg border border-border bg-card">
+        <div className="overflow-hidden rounded-card border border-border bg-card">
           <ul className="divide-y divide-border" aria-hidden="true">
             {Array.from({ length: 5 }, (_, index) => (
               <li key={index} className="flex min-h-touch flex-wrap items-center gap-intra px-gutter py-intra">

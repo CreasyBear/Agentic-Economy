@@ -140,7 +140,7 @@ export function AeSavedPaymentMethodsCard({
   if (isLoading) {
     return (
       <div
-        className="grid gap-3 rounded-xl border border-border/70 p-4"
+        className="grid gap-3 border-t border-border pt-4"
         aria-busy="true"
         role="status"
         aria-label="Loading payment methods"
@@ -158,7 +158,7 @@ export function AeSavedPaymentMethodsCard({
   const ready = summary?.kind === 'ready' && summary.hasPaymentMethod
 
   return (
-    <div className="grid gap-3 rounded-xl border border-border/70 p-4">
+    <div className="grid gap-3 border-t border-border pt-4">
       <h3 className="font-medium">Payment methods</h3>
 
       <div className="min-h-[4.5rem]">

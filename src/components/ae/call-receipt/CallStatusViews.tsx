@@ -71,7 +71,7 @@ export function CallStatusUnchangedView({
           <CallReceiptRef value={result.callRef} />
         </div>
         <div className="grid gap-intra">
-          <h2 id="unchanged-receipt-title" className="text-lg font-semibold tracking-tight text-foreground">
+          <h2 id="unchanged-receipt-title" className="text-base font-medium leading-snug tracking-tight text-foreground">
             No status change
           </h2>
           <p className="text-sm text-muted-foreground">
@@ -105,7 +105,7 @@ export function CallStatusFoundView({
       <CallRecoveryPanel result={result} {...(actions === undefined ? {} : { actions })} />
       {result.result === undefined ? (
         <section className="grid gap-intra border-t border-border pt-section" aria-labelledby="current-result-title">
-          <h2 id="current-result-title" className="text-xl font-semibold tracking-tight text-foreground">Current result</h2>
+          <h2 id="current-result-title" className="text-base font-medium leading-snug tracking-tight text-foreground">Current result</h2>
           <p className="text-muted-foreground">No canonical result is recorded yet. The state above remains authoritative.</p>
         </section>
       ) : <CallOutputSection result={result.result} />}

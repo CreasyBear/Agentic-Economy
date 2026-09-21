@@ -48,7 +48,7 @@ export function CallReceiptIssue({ issue }: Readonly<{ issue: CallIssueView }>) 
         <Badge variant="warning" className="w-fit">Diagnostic Playbook</Badge>
         <CallReceiptRef value={issue.retainedReference} />
       </div>
-      <h2 id="call-receipt-playbook-title" className="text-lg font-semibold tracking-tight text-foreground">
+      <h2 id="call-receipt-playbook-title" className="text-base font-medium leading-snug tracking-tight text-foreground">
         {issue.title}
       </h2>
       <div className="grid gap-related">
@@ -58,7 +58,7 @@ export function CallReceiptIssue({ issue }: Readonly<{ issue: CallIssueView }>) 
           body={(
             <p
               className={cn(
-                'rounded-lg border px-3 py-2 text-sm tabular-nums',
+                'rounded-card border px-3 py-2 text-sm tabular-nums',
                 moneyTone === 'success' && 'border-success-ring bg-success-subtle text-success-foreground',
                 moneyTone === 'warning' && 'border-warning-ring bg-warning-subtle text-warning-foreground',
                 moneyTone === 'neutral' && 'border-border bg-muted/40 text-foreground',

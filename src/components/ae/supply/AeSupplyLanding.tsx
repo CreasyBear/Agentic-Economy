@@ -1,6 +1,7 @@
 import { Link } from '@tanstack/react-router'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
+import { AeCollectionRail } from '@/components/ae/shared/AeCollectionRail'
 import {
   AeSiteBody,
   AeSiteButton,
@@ -9,7 +10,6 @@ import {
   AeSiteHeadingPair,
   AeSiteHeroIntro,
   AeSiteSection,
-  AeSiteStack,
 } from '@/components/ae/website'
 
 import type { SupplyLandingTool } from '@/modules/capability-supply/supply-funnel.functions'
@@ -64,21 +64,23 @@ export function AeSupplyLanding({
       <AeSiteSection labelledBy="supply-hero" rhythm="hero" scheme="muted">
         <AeSiteHeroIntro>
           <AeSiteHeadingPair>
-            <div className="mx-auto grid w-full max-w-xl justify-items-center gap-3">
+            <div className="grid w-full max-w-xl justify-items-start gap-3">
               <AeSiteEyebrow>Providers</AeSiteEyebrow>
-              <AeSiteHeading as="h1" size="md" id="supply-hero">
+              <AeSiteHeading as="h1" size="lg" id="supply-hero">
                 List a Tool.
               </AeSiteHeading>
             </div>
-            <div className="mx-auto w-full max-w-lg">
-              <AeSiteBody muted size="sm" className="mx-auto">
+            <div className="w-full max-w-lg">
+              <AeSiteBody muted size="sm">
                 {SUPPLY_OFFER_SENTENCE}
               </AeSiteBody>
             </div>
           </AeSiteHeadingPair>
-          <AeSiteButton asChild>
-            <Link to="/owner/operations">List a Tool</Link>
-          </AeSiteButton>
+          <div className="flex flex-wrap items-center gap-related">
+            <AeSiteButton asChild>
+              <Link to="/owner/operations">List a Tool</Link>
+            </AeSiteButton>
+          </div>
         </AeSiteHeroIntro>
       </AeSiteSection>
       {sourceError === undefined ? null : (
@@ -114,28 +116,27 @@ export function AeSupplyLanding({
           <p className="text-sm text-muted-foreground">
             Creating the Provider business is an owner step. After that, an owner can approve a separate agent credential for maintenance. The source preview confirms the exact current contract.
           </p>
-          <div className="grid gap-related sm:grid-cols-3" aria-label="Supported source paths">
+          <ul className="m-0 grid list-none gap-0 p-0" aria-label="Supported source paths">
             {SUPPLY_SOURCE_FIT.map((source) => (
-              <article key={source.title} className="grid content-start gap-intra rounded-card border border-border bg-card p-gutter">
-                <h3 className="font-semibold text-foreground">{source.title}</h3>
+              <li key={source.title} className="grid gap-intra border-b border-border py-related last:border-b-0">
+                <h3 className="font-medium text-foreground">{source.title}</h3>
                 <p className="text-sm text-muted-foreground">{source.body}</p>
-              </article>
+              </li>
             ))}
-          </div>
+          </ul>
         </div>
       </AeSiteSection>
       <AeSiteSection ariaLabel="How to publish a Tool" scheme="surface">
-        <AeSiteStack>
-          <ol className="m-0 grid list-none gap-page p-0">
+        <AeCollectionRail kicker="How to publish" title="Steps to list a Tool" titleId="supply-publish-steps">
+          <ol className="m-0 grid list-none gap-0 p-0">
             {SUPPLY_STEPS.map((step) => (
-              <li key={step.number} className="grid gap-intra border-b border-border pb-page last:border-b-0 last:pb-0">
-                <AeSiteEyebrow>{step.number}</AeSiteEyebrow>
-                <h2 className="font-display text-2xl font-medium tracking-tight sm:text-3xl">{step.title}</h2>
+              <li key={step.number} className="grid gap-intra border-b border-border py-related last:border-b-0">
+                <AeSiteHeading as="h3" size="sm">{step.title}</AeSiteHeading>
                 <AeSiteBody muted size="sm">{step.detail}</AeSiteBody>
               </li>
             ))}
           </ol>
-        </AeSiteStack>
+        </AeCollectionRail>
       </AeSiteSection>
       <AeSiteSection ariaLabel="Listing control" scheme="canvas">
         <div className="grid max-w-3xl gap-section">

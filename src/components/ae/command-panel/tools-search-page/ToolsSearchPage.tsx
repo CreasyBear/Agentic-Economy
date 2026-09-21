@@ -30,6 +30,7 @@ type ToolsSearchPageProps = Readonly<{
   onQueryChange: (query: string) => void
   onSelectTool: (toolRef: string) => void
   onNavigate?: (href: string) => void
+  onOpenSettings?: (scope: 'personal' | 'workspace') => void
   onToggleTheme?: () => void
   searchTools?: (
     input: MarketToolSearchInput,
@@ -42,6 +43,7 @@ export function ToolsSearchPage({
   onQueryChange,
   onSelectTool,
   onNavigate,
+  onOpenSettings,
   onToggleTheme,
   searchTools = searchMarketTools,
 }: ToolsSearchPageProps) {
@@ -102,6 +104,7 @@ export function ToolsSearchPage({
           isActive={isActive}
           navItems={matchingNavItems}
           {...(onNavigate === undefined ? {} : { onNavigate })}
+          {...(onOpenSettings === undefined ? {} : { onOpenSettings })}
           onClearPendingIntent={selection.clearPendingIntent}
         />
         <CommandQuickActionsGroup

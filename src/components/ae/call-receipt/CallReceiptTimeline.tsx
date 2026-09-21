@@ -8,7 +8,7 @@ export function CallReceiptTimeline({ stages }: Readonly<{ stages: readonly Call
   return (
     <section className="grid gap-related border-t border-border pt-section" aria-labelledby="receipt-progress-title">
       <div className="grid gap-intra">
-        <h2 id="receipt-progress-title" className="text-xl font-semibold tracking-tight text-foreground">What happened</h2>
+        <h2 id="receipt-progress-title" className="text-base font-medium leading-snug tracking-tight text-foreground">What happened</h2>
         <p className="text-sm text-muted-foreground">Recorded progress for this exact call. A pending stage is not claimed as complete.</p>
       </div>
       <ol className="grid overflow-hidden rounded-card border bg-card sm:grid-cols-2 lg:grid-cols-6">

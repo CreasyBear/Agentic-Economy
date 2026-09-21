@@ -192,7 +192,7 @@ export function AeConnectReturnPoller({
     <div className={shellClassName}>
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-2">
-          <span className="text-sm font-semibold text-foreground">Stripe Connect Onboarding</span>
+          <span className="text-sm font-medium text-foreground">Stripe Connect Onboarding</span>
           {status === 'verifying' && (
             <Badge variant="outline" className="gap-1.5 animate-pulse text-muted-foreground">
               <Loader2Icon className="size-3 animate-spin" />
@@ -239,7 +239,7 @@ export function AeConnectReturnPoller({
           <div className="flex items-start gap-2">
             <CheckCircle2Icon className="size-5 shrink-0 text-success" />
             <div className="grid min-w-0 gap-1">
-              <h4 className="text-sm font-semibold text-foreground">{READY_TITLE}</h4>
+              <h4 className="text-sm font-medium text-foreground">{READY_TITLE}</h4>
               <p className="text-xs text-muted-foreground">{READY_DESCRIPTION}</p>
             </div>
           </div>

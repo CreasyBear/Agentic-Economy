@@ -1,4 +1,3 @@
-import { Card } from '@/components/ui/card'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 
 import type { PrivacyMomentTabsProps } from '../privacy.contracts'
@@ -15,8 +14,8 @@ export function PrivacyMomentTabs({ moments }: PrivacyMomentTabsProps) {
           </TabsList>
           {moments.map(({ value, icon: Icon, title, points }) => (
             <TabsContent key={value} value={value}>
-              <Card className="grid gap-related p-gutter">
-                <p className="flex items-center gap-intra text-lg font-semibold text-foreground">
+              <div className="grid gap-related border-t border-border pt-related">
+                <p className="flex items-center gap-intra text-lg font-medium text-foreground">
                   <Icon className="size-4 text-foreground" aria-hidden="true" /> {title}
                 </p>
                 <ul className="grid gap-related text-sm leading-6 text-muted-foreground">
@@ -24,7 +23,7 @@ export function PrivacyMomentTabs({ moments }: PrivacyMomentTabsProps) {
                     <li key={point}>{point}</li>
                   ))}
                 </ul>
-              </Card>
+              </div>
             </TabsContent>
           ))}
         </Tabs>

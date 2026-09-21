@@ -10,7 +10,7 @@ export function AeOwnerCreditPage() {
   return (
     <AeOperatorPage
       operatorRole="owner"
-      title="Balance"
+      title="Credit"
       description="Add AUD credit for paid Calls. Each Agent’s spending limit remains separate."
       currentPath="/owner/credit"
     >

@@ -7,6 +7,7 @@ import { buttonVariants } from '@/components/ui/button-variants'
 import { cn } from '@/lib/utils'
 import type { SupplySourceInput } from '@/modules/capability-supply/source-preview'
 import { SupplyCandidateSection } from './SupplyCandidateSection'
+import { SupplySourceSuggestion } from './SupplySourceSuggestion'
 import { SupplyPublicationFlow } from './SupplyPublicationFlow'
 import { SupplyRemoteSelectionSection } from './SupplyRemoteSelectionSection'
 import { SupplySourceTypeSection } from './SupplySourceTypeSection'
@@ -108,7 +109,7 @@ export function AeSupplySourceNativeStart(props: SupplyNativeStartProps) {
 
       {vm.selected === undefined || (stage !== 'terms' && stage !== 'review') ? null : (
         <div className="grid gap-section">
-          <div className="sticky top-20 z-10 grid gap-intra rounded-xl border border-border bg-background/95 p-3 shadow-soft backdrop-blur supports-[backdrop-filter]:bg-background/85 sm:grid-cols-2">
+          <div className="sticky top-20 z-10 grid gap-intra rounded-xl border border-border bg-background/95 p-3 backdrop-blur supports-[backdrop-filter]:bg-background/85 sm:grid-cols-2">
             <CompletedStageSummary step="Source" detail={sourceSummary(vm.source)} disabled={vm.pending !== undefined || vm.publicationLocked} onEdit={vm.editSource} />
             <CompletedStageSummary step="Tool" detail={vm.selected.title} disabled={vm.pending !== undefined || vm.publicationLocked} onEdit={vm.editTool} />
             {stage === 'review' ? <CompletedStageSummary step="Terms" detail={termsSummary(vm)} disabled={vm.pending !== undefined || vm.publicationLocked} onEdit={vm.editTerms} /> : null}
@@ -117,6 +118,18 @@ export function AeSupplySourceNativeStart(props: SupplyNativeStartProps) {
             reviewing={stage === 'review'}
             name={vm.name}
             description={vm.description}
+            descriptionSuggestion={props.onAssess === undefined || vm.preview === undefined || vm.source === undefined ? undefined : (
+              <SupplySourceSuggestion
+                key={`${vm.preview.sourceDigest}:${vm.selected.candidateRef}:${vm.connectionRef}:${vm.description}:${vm.pending ?? ''}:${vm.publicationLocked}`}
+                input={{ businessId: props.businessRef, source: vm.source,
+                  expectedSourceDigest: vm.preview.sourceDigest, expectedSourceRevision: vm.preview.sourceRevision,
+                  candidateRef: vm.selected.candidateRef,
+                  ...(vm.connectionRef ? { connectionRef: vm.connectionRef } : {}) }}
+                disabled={vm.pending !== undefined || vm.publicationLocked}
+                onAssess={props.onAssess}
+                onUse={vm.setDescription}
+              />
+            )}
             category={vm.category}
             serviceArea={vm.serviceArea}
             availability={vm.availability}

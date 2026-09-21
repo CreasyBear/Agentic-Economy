@@ -1,7 +1,7 @@
 import { Link } from '@tanstack/react-router'
 import { ArrowUpRightIcon } from 'lucide-react'
 
-import { AeSection } from '@/components/ae/layout/AeSection'
+import { AeCollectionRail } from '@/components/ae/shared/AeCollectionRail'
 import { buttonVariants } from '@/components/ui/button-variants'
 import { cn } from '@/lib/utils'
 
@@ -9,9 +9,9 @@ import { ISSUE_URL } from '../help.contracts'
 
 export function PrivateSupportSection() {
   return (
-    <AeSection
+    <AeCollectionRail
       title="Contact support privately"
-      description="For account, billing, security or Call problems, email support@aecon.ai with what you expected, what happened and a safe request reference. Do not include credentials, raw inputs or private results."
+      deck="For account, billing, security or Call problems, email support@aecon.ai with what you expected, what happened and a safe request reference. Do not include credentials, raw inputs or private results."
     >
       <p className="text-sm text-muted-foreground">
         GitHub issues are public. Use them only for non-sensitive developer reports.
@@ -28,6 +28,6 @@ export function PrivateSupportSection() {
         <Link to="/for-providers" className="inline-flex min-h-touch items-center rounded-sm underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">Review Provider requirements</Link>
         <Link to="/privacy/remove-business" className="inline-flex min-h-touch items-center rounded-sm underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">Request a listing correction</Link>
       </div>
-    </AeSection>
+    </AeCollectionRail>
   )
 }

@@ -11,7 +11,7 @@ export function EarningsFactsList({
   return (
     <>
       <div className="grid gap-1">
-        <h4 className="font-semibold text-foreground">
+        <h4 className="font-medium text-foreground">
           {currency} earnings
         </h4>
         <p className="text-sm text-muted-foreground">

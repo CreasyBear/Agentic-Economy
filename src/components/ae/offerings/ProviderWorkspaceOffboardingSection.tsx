@@ -118,8 +118,8 @@ function ProviderOffboardingCard({ initial, refreshWorkspace }: Readonly<{
   }
   if (result.kind === 'not_found') {
     return (
-      <div className="grid gap-related rounded-lg border border-border p-related">
-        <div><h3 className="font-semibold">Retire this Provider</h3><p className="text-sm text-muted-foreground">AE freezes new work first, then waits for Calls, obligations and payouts before revoking connections.</p></div>
+      <div className="grid gap-related rounded-card border border-border p-related">
+        <div><h3 className="font-medium">Retire this Provider</h3><p className="text-sm text-muted-foreground">AE freezes new work first, then waits for Calls, obligations and payouts before revoking connections.</p></div>
         {error === undefined ? null : <Alert variant="destructive" role="alert"><AlertTitle>Provider was not retired</AlertTitle><AlertDescription>{error}</AlertDescription></Alert>}
         <Button ref={triggerRef} type="button" variant="destructive" className="justify-self-start min-h-touch" onClick={() => setConfirmOpen(true)}>Start Provider offboarding</Button>
         <AeConfirmDialog
@@ -142,8 +142,8 @@ function ProviderOffboardingCard({ initial, refreshWorkspace }: Readonly<{
   const canCancel = status.state === 'Freezing' && !status.routeabilityFrozen
   const isTerminal = status.state === 'Retired' || status.state === 'Cancelled'
   return (
-    <div className="grid gap-related rounded-lg border border-border p-related" aria-live="polite">
-      <div><h3 className="font-semibold">{status.state}</h3><p className="text-sm text-muted-foreground">{status.routeabilityFrozen ? 'New work is frozen.' : 'AE is preparing to freeze new work.'} Case {status.caseRef}</p></div>
+    <div className="grid gap-related rounded-card border border-border p-related" aria-live="polite">
+      <div><h3 className="font-medium">{status.state}</h3><p className="text-sm text-muted-foreground">{status.routeabilityFrozen ? 'New work is frozen.' : 'AE is preparing to freeze new work.'} Case {status.caseRef}</p></div>
       {status.blockerCodes.length === 0 ? null : (
         <Alert><AlertTitle>Action required</AlertTitle><AlertDescription>{status.blockerCodes.map(offboardingBlocker).join(' ')}</AlertDescription></Alert>
       )}

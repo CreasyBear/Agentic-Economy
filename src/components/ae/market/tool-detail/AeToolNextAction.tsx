@@ -1,7 +1,6 @@
 import { Link } from '@tanstack/react-router'
 
 import { AeCopyCommand } from '@/components/ae/data/AeCopyCommand'
-import { Badge } from '@/components/ui/badge'
 import { buttonVariants } from '@/components/ui/button-variants'
 import {
   Card,
@@ -28,35 +27,29 @@ export function AeToolNextAction({
   const code = nextActionCode(model)
 
   if (variant === 'full') {
+    const showHeading = nextAction.label !== 'Tool reference'
+
     return (
       <aside
         aria-label="What you can do next"
-        className="grid h-full min-w-0 content-start gap-5 bg-foreground px-gutter py-6 text-background"
+        className="grid min-w-0 content-start gap-related border-t border-border px-gutter py-section"
       >
-        <div className="grid min-w-0 gap-3">
-          <Badge
-            variant="outline"
-            className="border-background/25 bg-background/10 text-background"
+        {showHeading ? (
+          <h2
+            id={titleId}
+            className="text-pretty text-lg font-medium leading-snug tracking-tight text-foreground"
           >
-            {model.readinessLabel}
-          </Badge>
-          <h2 id={titleId} className="text-balance font-sans text-2xl font-semibold leading-tight tracking-tight">
             {nextActionTitle(model)}
           </h2>
-          <p className="text-sm leading-6 text-background/70">
-            {model.nextActionDescription}
-          </p>
-        </div>
-
-        <dl className="grid min-w-0 grid-cols-2 border-y border-background/20">
-          <TicketFact label="Indicative price" value={model.totalPrice} mono className="border-e border-background/20" />
-          <TicketFact label="Access" value={model.authenticationLabel} />
-        </dl>
+        ) : null}
+        <p className="text-sm leading-6 text-muted-foreground">
+          {model.nextActionDescription}
+        </p>
 
         {nextAction.kind === 'navigate' && nextAction.href !== undefined ? (
           <Link
             to={nextAction.href}
-            className={cn(buttonVariants({ variant: 'secondary' }), 'min-h-touch w-full')}
+            className={cn(buttonVariants(), 'min-h-touch w-full sm:w-auto sm:justify-self-start')}
           >
             {nextAction.label}
           </Link>
@@ -65,21 +58,17 @@ export function AeToolNextAction({
             comfortable
             label={nextAction.label}
             code={code}
-            className="[&_code]:text-foreground"
           />
         ) : null}
 
         {nextAction.label === 'Tool reference' ? (
-          <div className="grid gap-3">
-            <p className="text-xs leading-5 text-background/75">
+          <div className="grid gap-intra">
+            <p className="text-xs leading-5 text-muted-foreground">
               Your agent confirms the exact buyer amount in AUD, authority, balance, and availability through tool.quote before it can Call.
             </p>
             <a
               href={agentSetupHref(model.toolRef)}
-              className={cn(
-                buttonVariants({ variant: 'outline' }),
-                'min-h-touch w-full border-background/30 bg-transparent text-background hover:bg-background/10 hover:text-background',
-              )}
+              className={cn(buttonVariants({ variant: 'outline' }), 'min-h-touch w-full sm:w-auto sm:justify-self-start')}
             >
               Connect an Agent first
             </a>
@@ -130,27 +119,6 @@ export function AeToolNextAction({
 
 function agentSetupHref(toolRef: string): string {
   return `/agent-access?resumeTool=${encodeURIComponent(toolRef)}`
-}
-
-function TicketFact({
-  label,
-  value,
-  mono = false,
-  className,
-}: Readonly<{ label: string; value: string; mono?: boolean; className?: string }>) {
-  return (
-    <div className={cn('grid min-w-0 gap-1 py-3', className)}>
-      <dt className="text-xs font-medium text-background/75">
-        {label}
-      </dt>
-      <dd className={cn(
-        'break-words text-sm font-semibold text-background',
-        mono && 'font-mono tabular-nums',
-      )}>
-        {value}
-      </dd>
-    </div>
-  )
 }
 
 function nextActionTitle(model: ToolInspectorModel): string {

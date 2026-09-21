@@ -89,10 +89,21 @@ const MAX_ANONYMOUS_HANDOFF_BYTES = 16 * 1024
 const MAX_ANONYMOUS_HANDOFF_TEXT = 8_000
 
 export function textFromParts(parts: readonly unknown[]): string {
-  return parts.flatMap((part) => {
-    if (!isRecord(part)) return []
-    return part.type === 'text' && typeof part.text === 'string' ? [part.text] : []
-  }).join('')
+  // Text chunks in one step remain contiguous. A later model/tool step starts
+  // a paragraph; private reasoning, sources and malformed parts stay excluded.
+  let text = ''
+  let newStep = false
+  for (const part of parts) {
+    if (!isRecord(part)) continue
+    if (part.type === 'step-start' || (typeof part.type === 'string' && part.type.startsWith('tool-'))) {
+      newStep = text.length > 0
+    } else if (part.type === 'text' && typeof part.text === 'string' && part.text.length > 0) {
+      if (newStep && !text.endsWith('\n\n') && !part.text.startsWith('\n\n')) text += '\n\n'
+      text += part.text
+      newStep = false
+    }
+  }
+  return text
 }
 
 export type TranscriptTurn = Readonly<{

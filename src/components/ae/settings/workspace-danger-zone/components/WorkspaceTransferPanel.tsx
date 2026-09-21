@@ -29,7 +29,7 @@ export function WorkspaceTransferPanel({
 }: WorkspaceTransferPanelProps) {
   return (
     <section className="grid gap-4">
-      <h2 className="text-lg font-semibold tracking-tight">Transfer ownership</h2>
+      <h2 className="text-lg font-medium tracking-tight">Transfer ownership</h2>
       {!callerIsOwner ? (
         <p className="text-muted-foreground text-sm">{OWNER_ONLY_COPY}</p>
       ) : (

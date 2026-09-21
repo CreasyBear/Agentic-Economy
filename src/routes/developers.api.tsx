@@ -27,6 +27,13 @@ export const Route = createFileRoute('/developers/api')({
   component: DevelopersApiRoute,
 })
 
+/** Scalar mutates `document.body` for dark mode; keep CDN scripts inside srcDoc only. */
+const scalarApiReferenceSrcDoc =
+  '<!DOCTYPE html><html><head><meta charset="utf-8"></head><body style="margin:0">' +
+  '<script id="api-reference" data-url="/openapi.json"></script>' +
+  '<script src="https://cdn.jsdelivr.net/npm/@scalar/api-reference"></script>' +
+  '</body></html>'
+
 function DevelopersApiRoute() {
   return (
     <AePublicPage
@@ -35,8 +42,11 @@ function DevelopersApiRoute() {
       title="API reference"
       description="Every public REST operation - Tool market reads, the Call gateway, funding preflight, and business discovery - documented from the same contracts the platform runs on."
     >
-      <script id="api-reference" data-url="/openapi.json" />
-      <script src="https://cdn.jsdelivr.net/npm/@scalar/api-reference" />
+      <iframe
+        title="API reference"
+        className="min-h-[70vh] w-full border-0"
+        srcDoc={scalarApiReferenceSrcDoc}
+      />
     </AePublicPage>
   )
 }

@@ -23,7 +23,7 @@ export function CallSummarySection({
         <Badge variant={receiptView.complete ? 'success' : receiptView.issue === undefined ? 'secondary' : 'warning'}>{receiptView.statusLabel}</Badge>
       </div>
       <div className="grid gap-intra">
-        <h2 id="call-summary-title" className="text-xl font-semibold tracking-tight text-foreground">Call summary</h2>
+        <h2 id="call-summary-title" className="text-base font-medium leading-snug tracking-tight text-foreground">Call summary</h2>
         <p className="text-sm text-muted-foreground">The outcome and buyer-facing money facts for this exact Call.</p>
       </div>
       <AeFactList

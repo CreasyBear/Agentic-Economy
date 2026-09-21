@@ -31,7 +31,7 @@ export function WorkspaceClosePanel({
 }: WorkspaceClosePanelProps) {
   return (
     <section className="grid gap-4">
-      <h2 className="text-lg font-semibold tracking-tight">Close workspace</h2>
+      <h2 className="text-lg font-medium tracking-tight">Close workspace</h2>
       {!callerIsOwner ? (
         <p className="text-muted-foreground text-sm">{OWNER_ONLY_COPY}</p>
       ) : (
@@ -72,9 +72,9 @@ export function WorkspaceClosePanel({
           <AeConfirmDialog
             open={showCloseConfirmDialog}
             onOpenChange={onCloseDialogOpenChange}
-            title="Close Workspace?"
+            title="Close workspace?"
             description={`Are you sure you want to permanently close "${displayName}"? All tools, API keys, and active delegations will be immediately terminated. A$0.00 moved by opening this dialog — prepaid credit is not spent until close succeeds.`}
-            confirmLabel="Permanently Close Workspace"
+            confirmLabel="Permanently close workspace"
             confirmVariant="destructive"
             pending={closePending}
             onConfirm={onConfirmClose}

@@ -42,7 +42,7 @@ const clerkAuthInteractiveElements = {
   alertText: 'text-sm text-destructive',
   alert: 'border border-destructive bg-destructive/10 text-destructive',
   badge: 'bg-brand-muted text-info-foreground text-xs font-medium',
-  headerTitle: 'font-sans text-xl font-semibold tracking-tight',
+  headerTitle: 'font-sans text-xl font-medium tracking-tight',
   headerSubtitle: 'text-muted-foreground',
   footerActionLink: clerkFooterLinkClasses,
   logoBox: 'hidden',

@@ -16,13 +16,13 @@ type AePageHeaderProps = {
   variant?: 'page' | 'market' | 'workspace'
 }
 
-/** Public editorial statement: display face, wide page-level scale. */
+/** Public editorial statement: ExtraLight display, discover tracking. */
 const PAGE_TITLE_CLASS =
-  'text-balance font-display text-3xl font-normal leading-[1.06] tracking-[-0.03em] text-foreground sm:text-4xl'
+  'text-balance font-display text-3xl font-extralight leading-[1.06] tracking-display text-foreground sm:text-4xl'
 
-/** Market terminal statement: sans, one shelf above the catalog section headings. */
+/** Market terminal statement: medium collection title, not a second weight language. */
 const MARKET_TITLE_CLASS =
-  'text-balance font-sans text-2xl font-semibold leading-tight tracking-tight text-foreground sm:text-3xl'
+  'text-balance font-sans text-title font-medium tracking-tight text-foreground sm:text-title-lg'
 
 export function AePageHeader({
   eyebrow,
@@ -47,7 +47,7 @@ export function AePageHeader({
           <div className="flex min-w-0 items-center gap-related">
             <div className="min-w-0 flex-1">
               <div className="flex min-w-0 items-baseline gap-intra">
-                <h1 id={titleId} className="truncate font-sans text-xl font-bold leading-tight tracking-tight text-foreground sm:text-2xl">
+                <h1 id={titleId} className="truncate font-sans text-xl font-medium leading-tight tracking-tight text-foreground sm:text-2xl">
                   {title}
                 </h1>
                 {eyebrow === undefined ? null : (

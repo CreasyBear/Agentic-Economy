@@ -21,7 +21,7 @@ export function DeferredSection<T>({ promise, loadingLabel, unavailableTitle, ch
 }
 
 export function SummaryCard({ title, detail, action, onAction }: Readonly<{ title: string; detail: string; action: string; onAction: () => void }>) {
-  return <div className="grid gap-related rounded-lg border border-border p-related"><div><h3 className="font-semibold">{title}</h3><p className="text-sm text-muted-foreground">{detail}</p></div><Button type="button" variant="secondary" className="justify-self-start min-h-touch" onClick={onAction}>{action}</Button></div>
+  return <div className="grid gap-related rounded-card border border-border p-related"><div><h3 className="font-medium">{title}</h3><p className="text-sm text-muted-foreground">{detail}</p></div><Button type="button" variant="secondary" className="justify-self-start min-h-touch" onClick={onAction}>{action}</Button></div>
 }
 
 export function UnavailableSummary({ title, retryLabel, onRetry }: Readonly<{
@@ -33,7 +33,7 @@ export function UnavailableSummary({ title, retryLabel, onRetry }: Readonly<{
     <Alert>
       <AlertTitle>{title}</AlertTitle>
       <AlertDescription>
-        <p>This section could not be confirmed. The rest of Tools remains available.</p>
+        <p>This section could not be confirmed. The rest of My tools remains available.</p>
         {retryLabel === undefined || onRetry === undefined ? null : (
           <Button type="button" variant="secondary" className="mt-intra min-h-touch" onClick={onRetry}>{retryLabel}</Button>
         )}
@@ -50,7 +50,7 @@ export function SecondarySummary({ result, subject, notApplicableTitle, unavaila
 }>) {
   if (result.kind === 'conflict') return <OwnershipConflict title={`${subject} ownership conflict`} />
   if (result.kind === 'not_applicable') {
-    return <AeEmptyState title={notApplicableTitle} description="Nothing is required here until this provider uses this part of Tools." />
+    return <AeEmptyState title={notApplicableTitle} description="Nothing is required here until this provider uses this part of My tools." />
   }
   return <UnavailableSummary title={unavailableTitle} />
 }

@@ -43,7 +43,7 @@ function CandidateRow({ candidate }: Readonly<{ candidate: SupplyToolCandidate }
         className="mt-0.5"
       />
       <div className="grid min-w-0 gap-1">
-        <p className="font-semibold text-foreground">{candidate.title}</p>
+        <p className="font-medium text-foreground">{candidate.title}</p>
         <p className="text-sm text-muted-foreground">{candidate.description}</p>
         <p className="text-sm text-muted-foreground">{candidate.authentication.kind === 'public' ? 'Public' : 'Connection required'} · {candidate.validationExampleAvailable ? 'Validation input available' : 'Validation input required'}</p>
         {supported ? null : <p className="text-sm text-destructive">Action required: update this Tool at its source. {REASON_COPY[candidate.disposition.reason] ?? REASON_COPY_FALLBACK}</p>}
