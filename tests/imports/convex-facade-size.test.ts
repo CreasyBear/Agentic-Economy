@@ -47,7 +47,6 @@ const FACADE_SIZE_EXCEPTIONS: Record<string, number> = {
   'convex/devSeed.ts': 937,
   'convex/facilitatorDiscovery.ts': 553,
   'convex/interactiveCredentialLifecycle.ts': 297,
-  'convex/interactiveOnboarding.ts': 221,
   'convex/interactiveSession.ts': 241,
   'convex/marketDemandSignals.ts': 244,
   'convex/moneyAccountFunding.ts': 223,
