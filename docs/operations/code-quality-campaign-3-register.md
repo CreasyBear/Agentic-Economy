@@ -2,7 +2,7 @@
 
 **Date:** 21 September 2026  
 **Status:** **CLOSED** — Waves 1–3 **VERIFIED**. A07 / CQ-25 and A10 remain recorded deferrals. A14/A15 unclaimed. Campaign 2 remains **CLOSED**.  
-**Unified tree:** `main` at Phase 0 commit `de8bd68ab`. Wave 1: `e86184cd2` + `942029008`. Wave 2: `7db24dbbd` + `176948beb` + `ba8e04661`. Wave 3: this close batch.  
+**Unified tree:** `main` at Phase 0 commit `de8bd68ab`. Wave 1: `e86184cd2` + `942029008`. Wave 2: `7db24dbbd` + `176948beb` + `ba8e04661`. Wave 3: `6af2a4966`. §5 docs: `da44c1dd1`.  
 **Operating Protocol:** `docs/operations/code-quality-maturity-protocol.md` (same 5-stage Grok → Composer → Orchestrator lifecycle; IDs `CQ3-*`)  
 **Intake evidence:** `docs/operations/code-quality-amendment-register.md` (A01–A15). This file is the assignment surface.  
 **Predecessor:** `docs/operations/code-quality-ceiling-register.md` (Campaign 2 CLOSED)
@@ -185,7 +185,7 @@ RPC kind snapshot unchanged. No `convex/<name>/` directories created.
 ### CQ3-08 — A11 framework search types
 
 - **Status:** `VERIFIED`
-- **Commit:** pending this batch
+- **Commit:** `6af2a4966`
 - **Subagent Assignment:** Grok (Spec: `4705510f-4c53-4385-958c-f44a398fbb60`) → Composer (Implement: `4efe5ad2-1045-4f12-9c67-71e6cb9df3d0`) → Orchestrator (Verify: Passed 4/4 Gates)
 - **Locked decision:** move, do not document an exception
 - **Types moved:** `AuthRedirectSearch` → `src/lib/client/auth-redirect.ts`; `ProviderListingSearch` → `src/components/ae/listing/public-business/public-business.contracts.ts`. Routes: sign-in 26, sign-up 26, `$slug` 62.
@@ -194,7 +194,7 @@ RPC kind snapshot unchanged. No `convex/<name>/` directories created.
 ### CQ3-09 — A12 colocated tests
 
 - **Status:** `VERIFIED`
-- **Commit:** pending this batch
+- **Commit:** `6af2a4966`
 - **Subagent Assignment:** same Wave 3 scout/implement as CQ3-08
 - **Locked decision:** justified tests only; seven accepted **EXCEPTION** rows. No new colocated tests.
 
@@ -211,9 +211,9 @@ RPC kind snapshot unchanged. No `convex/<name>/` directories created.
 ### CQ3-10 — A13 static-page skeletons
 
 - **Status:** `VERIFIED`
-- **Commit:** pending this batch
+- **Commit:** `6af2a4966`
 - **Subagent Assignment:** same Wave 3 scout/implement as CQ3-08
-- **Locked decision:** privacy, terms, and help are synchronous static pages — colocated skeleton **N/A**; do not add fake skeletons. Protocol and leaf-rule amendments are the §5 docs pass.
+- **Locked decision:** privacy, terms, and help are synchronous static pages — colocated skeleton **N/A**; do not add fake skeletons. Protocol and leaf-rule amendments are `da44c1dd1`.
 
 ---
 
