@@ -56,19 +56,19 @@ No subagent edits these unless dispatched from the spine plan by Joel.
 
 | Family | Routes | Rows | P0 | P1 | P2 | Status today |
 |---|---:|---:|---:|---:|---:|---|
-| DOORS | 4 | 3 | 0 | 3 | 0 | PENDING |
+| DOORS | 4 | 3 | 0 | 3 | 0 | VERIFIED/IN REVIEW |
 | MARKET | 6 | 6 | 3 | 2 | 1 | OWNER/IN REVIEW/PENDING |
 | ASK | 2 | 1 | 1 | 0 | 0 | OWNER |
 | AGENTS | 3 | 2 | 1 | 1 | 0 | OWNER/PENDING |
 | CREDIT | 3 | 2 | 2 | 0 | 0 | OWNER/PENDING |
 | ACCOUNT | 7 | 5 | 1 | 4 | 0 | PENDING |
 | RECORDS | 2 | 2 | 2 | 0 | 0 | OWNER |
-| HELP | 5 | 4 | 2 | 2 | 0 | PENDING |
+| HELP | 5 | 4 | 2 | 2 | 0 | VERIFIED/IN REVIEW |
 | SUPPLY | 5 | 6 | 2 | 4 | 0 | PENDING/PARKED |
 | DEV/ADMIN | 4 | 4 | 2 | 2 | 0 | PENDING |
 | SHELL | 2 | 1 | 0 | 0 | 1 | PARKED |
 | CROSS-CUTTING | n/a | 12 | 7 | 5 | 0 | OWNER/VERIFIED/IN REVIEW/PENDING |
-| CLASS GAPS | n/a | 49 | n/a | n/a | n/a | DECISION RECORDED |
+| CLASS GAPS | n/a | 52 | n/a | n/a | n/a | 49 RECORDED + 3 BASE-PAGE DECISIONS |
 
 The 43 route entries are all assigned once. `/support` is assigned to the Receipt and Support row because that is its buyer job. The four DEV/ADMIN routes are separated from the five Provider supply routes even though the route inventory classified all nine as SUPPLY.
 
@@ -80,7 +80,9 @@ The 43 route entries are all assigned once. `/support` is assigned to the Receip
 **Gaps:** • [DOOR-01] “No company thesis, operator/team, or contact route” (`src/components/ae/about/AeAboutPage.tsx:26-126`) • [DOOR-02] “Providers are paid when the job is delivered.” lacks currency, fee and timing (`src/content/brand-copy.ts:81-86`) • [DOOR-03] “both CTAs top 292px” (`src/components/ae/about/AeAboutPage.tsx:44-50`).
 **Copy:** <table><tr><th>where</th><th>current</th><th>target</th></tr><tr><td>H1</td><td>Who this market is for.</td><td>Tools agents can call.</td></tr><tr><td>subhead</td><td>Agents find, compare, and call. Providers publish the job, the price, and the access terms, and get paid after delivery.</td><td>Agents buy Tools. Providers set prices and receive AUD payouts after completed Calls.</td></tr></table>
 **Target spec:** one thesis above fold; verified operator/contact; Agents and Providers named once; payout claim links fee, currency and timing. **Cut:** “Listed Providers” definition and duplicate catalogue cover.
-**Priority:** P1. **Status:** PENDING. **Verification evidence:** none. **Provenance:** RegDoors, 21 Sep 2026.
+**ROOT-ECON:** provider economics (fee %, take rate, payout method, payout cadence/trigger, merchant-of-record, GST treatment, refund/dispute terms) are unsupplied facts; owner Joel. Until supplied, no surface states a fee, payout timing, "automated" payout, or refund rule.
+**Blocked:** verified operator/entity contact and the fee linkage are unsupplied facts. Roast PARTIAL: `/` redirects to `/market`, whose H1 is “Tools for what's next.”, so the platform entry lacks the thesis; `/about` states AUD and the completed-Call trigger but no fee or payout delivery window.
+**Priority:** P1. **Status:** IN REVIEW. **Verification evidence:** LIVE 2026-09-21 http://127.0.0.1:3024/about H1 was “Tools agents can call.”; approved subhead was present; SOURCE `src/content/brand-copy.ts:84-86`; COMMIT `f44e8e356`. **Provenance:** RegDoors, 21 Sep 2026.
 
 ### R-02 Agent door: `/for-agents`
 **Benchmark:** Stripe developer docs landing. **Incumbent baseline:** one integration outcome, recommended path, copyable command, one start.
@@ -88,7 +90,7 @@ The 43 route entries are all assigned once. `/support` is assigned to the Receip
 **Gaps:** • [DOOR-04] “Neither hero CTA performs the promised connection” (`src/components/ae/agents/AeAgentDoorPage.tsx:34-40`) • [DOOR-05] “Claude Code, Cursor, and Codex” spreads focus and uses service (`src/content/brand-copy.ts:62-64`) • [DOOR-06] “Account connection does not grant spending permission.” has no policy action (`src/components/ae/console/AeAssistantInstallFunnel.tsx:53-68`).
 **Copy:** <table><tr><th>where</th><th>current</th><th>target</th></tr><tr><td>H1</td><td>Add the market to your agent.</td><td>Connect your Agent.</td></tr><tr><td>primary CTA</td><td>Browse Tools</td><td>Start setup</td></tr></table>
 **Target spec:** one Codex setup CTA; one-click named command; confirmation links to Agents; explicit Spending policy step; alternatives secondary. **Cut:** Read the skill hero CTA and duplicate three-client strapline.
-**Priority:** P1. **Status:** PENDING. **Verification evidence:** none. **Provenance:** RegDoors, 21 Sep 2026.
+**Priority:** P1. **Status:** VERIFIED. **Verification evidence:** LIVE 2026-09-21 http://127.0.0.1:3024/for-agents H1 “Connect your Agent.”; “Start setup” href `#agent-setup`, click set the hash and scrolled the setup section to `72.1875px`; Agents and policy links both resolved to `/agent-access`; SOURCE `tests/unit/ui/agent-door-page.test.tsx:19-32`, `tests/unit/ui/assistant-install-progression.test.tsx:23-31`; COMMIT `7e52c8886`. **Provenance:** RegDoors, 21 Sep 2026.
 
 ### R-03 Provider door: `/for-providers`
 **Benchmark:** Shopify Sell online. **Incumbent baseline:** sellable unit, total cost, payout method/timing, eligibility, direct start.
@@ -96,7 +98,9 @@ The 43 route entries are all assigned once. `/support` is assigned to the Receip
 **Gaps:** • [DOOR-07] “automated AUD payouts” with no fee/currency/timing (`src/components/ae/supply/AeSupplyLanding.tsx:64-84`) • [DOOR-08] href `/owner/operations`, then Add Tool (`src/components/ae/supply/AeSupplyLanding.tsx:79-82`) • [DOOR-09] “all inputs live after the CTA” (`src/components/ae/supply/AeSupplyLanding.tsx:101-128`) • [DOOR-10] “Supplier activation” (`UNANCHORED`).
 **Copy:** <table><tr><th>where</th><th>current</th><th>target</th></tr><tr><td>subhead</td><td>List one Tool agents can inspect and call. You describe the price, access, effects, and evidence; Agentic Economy records it as a Tool.</td><td>List one Tool, set an AUD price, and review fees and payout timing before publishing.</td></tr><tr><td>primary CTA</td><td>List a Tool</td><td>Add Tool</td></tr></table>
 **Target spec:** fee, AUD payout method, trigger and timing above fold; one CTA opens form; eligibility before live check; no Supplier vocabulary. **Cut:** “AE public inspection actions” and duplicate Manage listed Tools promotion.
-**Priority:** P1. **Status:** PENDING. **Verification evidence:** none. **Provenance:** RegDoors, 21 Sep 2026.
+**ROOT-ECON:** provider economics (fee %, take rate, payout method, payout cadence/trigger, merchant-of-record, GST treatment, refund/dispute terms) are unsupplied facts; owner Joel. Until supplied, no surface states a fee, payout timing, "automated" payout, or refund rule.
+**Blocked:** ROOT-ECON; the implementation report also found no eligibility/readiness step in the existing `source → tool → terms → review` funnel to reorder, while the live roast found the static eligibility sentence before the safe-example check. Roast PARTIAL: the required economics are absent and the target subhead was not applied. “Manage listed Tools” and “AE public inspection actions” remain.
+**Priority:** P1. **Status:** IN REVIEW. **Verification evidence:** LIVE 2026-09-21 http://127.0.0.1:3024/for-providers H1 “List a Tool.”; exactly one “Add Tool” link with href `/owner/operations/new`; SOURCE `src/components/ae/supply/AeSupplyLanding.tsx:80-82`; COMMIT `92a63fdfd`. **Provenance:** RegDoors, 21 Sep 2026.
 
 ### R-04 Public Business: `/$slug`
 **Benchmark:** Google Business Profile and Stripe Apps partner page. **Incumbent baseline:** verified identity, contact, offers and trust signals.
@@ -252,7 +256,7 @@ The 43 route entries are all assigned once. `/support` is assigned to the Receip
 **Gaps:** • [HELP-01] “five checks plus Help only” (`src/components/ae/status/system-status/AeSystemStatus.tsx:37-40`) • [HELP-02] “Catalogue freshness…within the last 36 hours” (`src/components/ae/status/system-status/components/StatusCheckList.tsx:10-23`).
 **Copy:** <table><tr><th>where</th><th>current</th><th>target</th></tr><tr><td>H1</td><td>All systems operational.</td><td>All systems operational</td></tr></table>
 **Target spec:** component timestamps; current/past incidents; last updated; subscribe; refresh. **Cut:** marketing footer links from task.
-**Priority:** P1. **Status:** PENDING. **Verification evidence:** none. **Provenance:** RegHelpLegal, 21 Sep 2026.
+**Priority:** P1. **Status:** VERIFIED. **Verification evidence:** LIVE 2026-09-21 http://127.0.0.1:3024/status H1 “All systems operational”; assertion “Last updated just now”; five component timestamps and Refresh present; SOURCE `tests/unit/routes/status-route.test.tsx:139-155`; COMMIT `fb1be270e`. Current/past incidents and subscribe remain DEFERRED under §4 features 40-41 pending a hosted status vendor. **Provenance:** RegHelpLegal, 21 Sep 2026.
 
 ### R-23 Terms: `/terms`
 **Benchmark:** Stripe Legal. **Incumbent baseline:** dated/versioned agreement, parties, fees, payment roles, tax, refunds, disputes and law.
@@ -260,7 +264,9 @@ The 43 route entries are all assigned once. `/support` is assigned to the Receip
 **Gaps:** • [HELP-03] “no date, version, ToC, legal entity, acceptance, liability, termination, or governing law” (`src/components/ae/legal/terms/AeTermsPage.tsx:14-29`) • [HELP-04] “fee ABSENT; take rate ABSENT; payout ABSENT; refund ABSENT; dispute ABSENT; GST ABSENT; merchant of record ABSENT; data retention ABSENT” (`src/components/ae/legal/terms/terms.contracts.ts:17-50`).
 **Copy:** <table><tr><th>where</th><th>current</th><th>target</th></tr><tr><td>card</td><td>Search…by capability, category, supplier, or task.</td><td>Search by capability, category, Provider, or task.</td></tr></table>
 **Target spec:** date/version/ToC; parties/acceptance; fee/take/payout; MoR/GST/refunds/disputes; liability/termination/law. **Cut:** Find/Compare/Call cards and dual CTAs.
-**Priority:** P0. **Status:** PENDING. **Verification evidence:** none. **Provenance:** RegHelpLegal, 21 Sep 2026.
+**ROOT-ECON:** provider economics (fee %, take rate, payout method, payout cadence/trigger, merchant-of-record, GST treatment, refund/dispute terms) are unsupplied facts; owner Joel. Until supplied, no surface states a fee, payout timing, "automated" payout, or refund rule.
+**Blocked:** legal owner must supply contracting parties and acceptance; ROOT-ECON fee, take-rate, payout, merchant-of-record, GST, refund and dispute terms; liability, termination and governing law. Roast PARTIAL: no version; the page says “Search the catalogue by capability, category, Provider, or task.” instead of the Copy-table target; `terms.contracts.ts:54` still says lowercase `supplier`.
+**Priority:** P0. **Status:** IN REVIEW. **Verification evidence:** LIVE 2026-09-21 http://127.0.0.1:3024/terms H1 “Terms”; “Last updated 20 September 2026” present; all four ToC targets resolved; SOURCE `src/components/ae/legal/terms/terms.contracts.ts:39-54`; COMMIT `ebae8fb6f`. **Provenance:** RegHelpLegal, 21 Sep 2026.
 
 ### R-24 Privacy: `/privacy`
 **Benchmark:** Stripe Privacy Center. **Incumbent baseline:** dated notice, controller, categories/purposes, recipients, retention, rights, transfers and contact.
@@ -268,7 +274,8 @@ The 43 route entries are all assigned once. `/support` is assigned to the Receip
 **Gaps:** • [HELP-05] “omits controller, lawful basis, retention periods, rights, processors, transfers, cookies, and complaint route” (`src/components/ae/legal/privacy/privacy.contracts.ts:27-77`) • [HELP-06] “data retention ABSENT” and payment roles absent (`src/components/ae/legal/privacy/AePrivacyPage.tsx:8-11`).
 **Copy:** <table><tr><th>where</th><th>current</th><th>target</th></tr><tr><td>intro</td><td>What the market handles…</td><td>How Agentic Economy collects and uses data.</td></tr></table>
 **Target spec:** date/version/ToC; controller/contact; category-purpose-recipient table; retention/rights; transfers/complaints. **Cut:** decorative recap.
-**Priority:** P0. **Status:** PENDING. **Verification evidence:** none. **Provenance:** RegHelpLegal, 21 Sep 2026.
+**Blocked:** legal owner must supply controller/contact; recipients for browsing, Call records, payment data and Provider publishing; retention; transfers and complaints. Roast PARTIAL: after clicking `#data-use-recipients`, the target was not in view at top `−204.84px`.
+**Priority:** P0. **Status:** IN REVIEW. **Verification evidence:** LIVE 2026-09-21 http://127.0.0.1:3024/privacy H1 “Privacy”; intro visible; all four ToC links resolved; SOURCE `src/components/ae/legal/privacy/privacy.contracts.ts:48-79,124-130`; COMMIT `4dde5e35d`. **Provenance:** RegHelpLegal, 21 Sep 2026.
 
 ### R-25 Provider correction or removal: `/privacy/remove-business`
 **Benchmark:** Google Business Profile remove/claim listing. **Incumbent baseline:** identity check, consequences, review time, receipt and status path.
@@ -276,7 +283,8 @@ The 43 route entries are all assigned once. `/support` is assigned to the Receip
 **Gaps:** • [HELP-07] “accepts slug/email/note only” (`src/components/ae/privacy/remove-business/components/RemovalRequestForm.tsx:56-137`) • [HELP-08] only “A short note is enough.” (`src/components/ae/privacy/remove-business/remove-business.contracts.ts:14-32`).
 **Copy:** <table><tr><th>where</th><th>current</th><th>target</th></tr><tr><td>CTA</td><td>Send request</td><td>Submit request</td></tr></table>
 **Target spec:** verify requester; preview affected Business/Tools; removal versus merge; review time; reference/status. **Cut:** three repeating summary cards.
-**Priority:** P1. **Status:** PENDING. **Verification evidence:** none. **Provenance:** RegHelpLegal, 21 Sep 2026.
+**Blocked:** the adopted dispute seam has no requester-identity verification, affected-Tool projection, merge intent or merge operation; Joel must supply a review-time commitment. Roast BROKEN: “Fix published facts”, “Resolve Provider ownership” and “Remove or merge” remain; the first four Target-spec requirements are absent and the success state was not safely exercised.
+**Priority:** P1. **Status:** IN REVIEW. **Verification evidence:** LIVE 2026-09-21 http://127.0.0.1:3024/privacy/remove-business H1 “Provider corrections”; button “Submit request”; SOURCE `src/components/ae/privacy/remove-business/remove-business.contracts.ts:14-16`, `tests/unit/routes/privacy-removal-outcome.test.tsx:94-114`; COMMIT `9ce068fb1`. **Provenance:** RegHelpLegal, 21 Sep 2026.
 
 ### R-26 My tools: `/owner/operations`
 **Benchmark:** Stripe Products and Shopify admin Products. **Incumbent baseline:** name, price, status, updated, filters, Add Tool, preview/edit/archive and payout readiness.
@@ -284,6 +292,7 @@ The 43 route entries are all assigned once. `/support` is assigned to the Receip
 **Gaps:** • [SUP-01] “Action Required” versus “Nothing is required here…” (`ProviderWorkspaceEarningsSection.tsx:28-44`) • [SUP-02] “DOM links contain no Tool/public preview” (`AeProviderWorkspace.tsx:27-35`) • [SUP-03] “Environment: production” is text (`useOwnerProviderConnectionsState.ts:69-74`) • [SUP-04] columns omit Updated (`AeOwnerOfferings.tsx:114-194`) • [SUP-05] “Supplier activation” (`AeSupplierOnboardingWizard.tsx:48-56`).
 **Copy:** <table><tr><th>where</th><th>current</th><th>target</th></tr><tr><td>title</td><td>Supplier activation</td><td>Provider setup</td></tr><tr><td>empty</td><td>Connect a source and choose the exact Tool AE should validate.</td><td>Add a source, then choose a Tool to publish.</td></tr></table>
 **Target spec:** name/price/status/updated/Calls with filters; one Add Tool; one Stripe-linked payout truth; explicit production choice; preview/edit/archive. **Cut:** duplicate Add Tool and contradictory earnings card.
+**ROOT-ECON:** provider economics (fee %, take rate, payout method, payout cadence/trigger, merchant-of-record, GST treatment, refund/dispute terms) are unsupplied facts; owner Joel. Until supplied, no surface states a fee, payout timing, "automated" payout, or refund rule.
 **Priority:** P1. **Status:** PENDING. **Verification evidence:** none. **Provenance:** RegSupplyList, 21 Sep 2026.
 
 ### R-27 Owner Tool detail: `/owner/operations/$toolRef`
@@ -556,6 +565,14 @@ KNOWLEDGE references: OR OpenRouter, ST Stripe, RA RapidAPI, SA Shopify App Stor
 | 48 | Spend-anomaly alerts | ST | ABSENT `OwnerNotificationSettings.tsx:54-74` | installed PostHog plus Convex Workflow | high | ADOPT PostHog and Convex Workflow |
 | 49 | Command palette | GH, VE | PRESENT `AeCommandPanel.tsx:24-55` | installed cmdk | low | ADOPT cmdk |
 
+### Base pages (OSS)
+
+| Surface | Research decision | Source and adoption constraint |
+|---|---|---|
+| Marketing/About, Agent and Provider doors, FAQ and footer blocks | **ADOPT Tailark OSS**; pilot on R-01 | MIT ([licence](https://raw.githubusercontent.com/tailark/blocks/main/LICENCE.md)); Base UI and Tailwind v4 native; registry `https://oss.tailark.com/r/{name}.json`; swap Next imports to TanStack equivalents. Research: [Tailark registry](https://oss.tailark.com/r/registry.json). |
+| Terms and Privacy text | **ADOPT (pending legal owner)** GitHub Site Policy Marketplace Terms plus Privacy Statement as the Terms spine, and Basecamp Privacy/AUP | GitHub Site Policy is CC0 ([licence](https://github.com/github/site-policy/blob/main/LICENSE.md)); Basecamp policies are CC BY 4.0 ([licence](https://github.com/basecamp/policies/blob/master/LICENSE.md)) and require attribution. Joel/legal must supply entity, ABN, address and date; authority and age; platform-Provider contract and merchant-of-record; currency, fees, payout timing and holds, processor, GST and invoices, refunds, chargebacks and Purchase resolution; ACL guarantees; liability and indemnities; termination and export; law and courts; actual data categories, sources and purposes; cookies and analytics; recipients, subprocessors, Provider and Business-admin sharing; storage and overseas countries; retention; rights, complaints and OAIC escalation; children; security claims; and significant automated decisions. Exclude Legalmattic (CC BY-SA) and PolicyForge (unfounded defaults). Research: [GitHub Marketplace Terms](https://github.com/github/site-policy/blob/main/Policies/github-terms/github-marketplace-terms-of-service.md), [GitHub Privacy](https://github.com/github/site-policy/blob/main/Policies/privacy-policies/github-general-privacy-statement.md), [Basecamp Privacy](https://github.com/basecamp/policies/blob/master/privacy/index.md), [Basecamp AUP](https://github.com/basecamp/policies/blob/master/abuse/index.md). |
+| Status page | **HOST (pending Joel)** OpenStatus or Upptime; no drop-in React widget exists | OpenStatus is AGPL-3.0 ([licence](https://github.com/openstatusHQ/openstatus/blob/main/LICENSE)), runs as a separate service, supports [public double-opt-in subscriptions](https://www.openstatus.dev/docs/reference/subscriber), and managed Starter is [about US$30/month](https://www.openstatus.dev/pricing). Upptime is MIT ([licence](https://github.com/upptime/upptime/blob/master/LICENSE)), runs on GitHub Pages and has [operator notifications](https://upptime.js.org/docs/notifications/) but no public subscriber signup. Exclude Cachet (source-available) and Statping-ng (GPL). |
+
 ### TOP 10 ABSENT THAT DEFINE THE CLASS
 
 1. **Buyer dispute initiation** — money marketplaces need visible recourse; extend Stripe-hosted billing, not a home-grown case system. **Decision:** HOST Stripe Customer Portal.
@@ -669,3 +686,58 @@ No wave may invent a second authority, status model, money formatter, Tool proje
 - C-07 PENDING: no Wave A change landed; named Market and Agent accessibility gaps remain in the OWNER spine.
 - C-10 IN REVIEW: OWNER-LOCKED overclaims remain in spine W0-01, W2-09, W2-10 and W4-06.
 - R-06 IN REVIEW: the live redirect walk passed, but no ratchet fell and no `tests/e2e` or `tests/unit` assertion covers its Target spec.
+
+### Wave B · 2026-09-21
+
+`git log --oneline e292cf056..HEAD` recorded seven Wave B commits before this close-out commit. Tailark R-01 pilot in flight.
+
+#### Gates
+
+- `FILE_SIZE_CEILINGS`: `over300=281`, `over500=103`, `over1000=1` — unchanged from Wave 0 + A.
+- `TSX_TYPE_EXPORT_CEILING=18` — unchanged.
+- `COPY_CEILINGS`: `supplier=0`, `invocation=0`, `mandate=0`, `commitment=0`, `callable-operation=0`, `commercial-closure=0`, `legacy-credential=2`, `used-recently=1`, `one-call-away=1`, `connection-online=0`, `authority-mode=1`, `balance=8` — unchanged.
+- `STATUS_LITERAL_FILE_CEILING=28` — unchanged.
+
+#### Rows moved
+
+- R-01 → IN REVIEW.
+- R-02 → VERIFIED.
+- R-03 → IN REVIEW.
+- R-22 → VERIFIED for non-deferred Target-spec bullets; incidents and subscribe remain DEFERRED under §4.
+- R-23 → IN REVIEW.
+- R-24 → IN REVIEW.
+- R-25 → IN REVIEW.
+
+#### Roast verdicts
+
+- R-01 PARTIAL: `/about` names Agents and Providers once; `/` ends at `/market` with H1 “Tools for what's next.”; operator/contact, fee and payout delivery window are absent.
+- R-02 PRESENT: `Start setup` jumps to the Codex funnel; the named Codex command, Agents confirmation, Spending policy step and collapsed alternatives are present.
+- R-03 PARTIAL: exactly one “Add Tool” link points to `/owner/operations/new`; “One supported source and one Tool you are authorised to list.” appears before “A safe example for the check.”; fee, AUD payout method, trigger and timing are absent.
+- R-22 PRESENT for non-deferred bullets: five components show “Checked just now”; “Last updated just now” and the Refresh busy state are present; current/past incidents and subscribe are deferred.
+- R-23 PARTIAL: “Last updated 20 September 2026” and four working ToC links are present; there is no version; required copy is not exact; `terms.contracts.ts:54` says `supplier`; legal sections are absent.
+- R-24 PARTIAL: version/date, disclosure table, rights and correction route are present; `#data-use-recipients` is not in view after click, at top `−204.84px`; controller/contact, retention, transfers and complaints are absent.
+- R-25 BROKEN: `Provider corrections` and `Submit request` are present; requester verification, affected Business/Tools preview, removal versus merge and review time are absent; “Fix published facts”, “Resolve Provider ownership” and “Remove or merge” remain.
+
+#### Contingencies taken
+
+- ROOT-ECON now blocks the economics subheads on R-01, R-03, R-23 and R-26 until Joel supplies provider economics.
+- Legal bullets were not written because entity, commercial, privacy, retention, transfer, complaint and governing-law facts are unsupplied.
+- Under Joel's directive, the Tailark OSS R-01 pilot was opened while the base-page source and licence decision was recorded.
+
+#### Found, not fixed
+
+- R-01 `/about`: “Listed Providers” remains beside a second “CATALOG / Market / Inspect before you call” cover.
+- R-02 `/for-agents`: hero copy remains “Find the service your task needs.”
+- R-03 `/for-providers`: “Manage listed Tools” and “AE public inspection actions” remain.
+- R-23 `/terms`: `terms.contracts.ts:54` still says lowercase `supplier`.
+- R-24 `/privacy`: `#data-use-recipients` is not in view after click; measured top `−204.84px`.
+- R-25 `/privacy/remove-business`: “Fix published facts”, “Resolve Provider ownership” and “Remove or merge” remain.
+
+#### Open at close
+
+- R-01 IN REVIEW: Joel must supply verified operator/contact and ROOT-ECON facts; the platform entry still lacks the About thesis.
+- R-03 IN REVIEW: Joel must supply ROOT-ECON facts; the implemented funnel has no genuine eligibility/readiness step to reorder.
+- R-23 IN REVIEW: Joel/legal must supply the agreement and ROOT-ECON facts; the exact copy and lowercase `supplier` also remain.
+- R-24 IN REVIEW: Joel/legal must supply controller, contact, recipient, retention, transfer and complaint facts; the ToC viewport defect remains.
+- R-25 IN REVIEW: Joel must define requester verification, merge semantics and review time; the adopted class-gap seam lacks backing for the remaining flow.
+- §4 features 40-41 remain DEFERRED until Joel approves OpenStatus hosting or accepts Upptime without public subscriber signup.
