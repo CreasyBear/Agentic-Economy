@@ -30,7 +30,6 @@ import {
   parseContractOutput,
 } from '../../../../convex/capabilityCallProjection'
 import { recordX402TransportObservation } from './x402Route'
-import { adjudicatePayloadOutput } from './output-adjudication'
 
 export function buildBrokeredX402Receipt(input: Readonly<{
   operation: PublishedTool
@@ -137,13 +136,8 @@ export async function runCommittedManagedX402Transport(
 ): Promise<RouteTransportObservation> {
   const observation = await invokePreparedRouteTransport(input.prepared, input.runtime)
   const recordedAt = new Date().toISOString()
-  const rawOutput = parseContractOutput(observation, input.descriptor)
-  const output = await adjudicatePayloadOutput(
-    rawOutput,
-    observation,
-    input.dispatch.callRef,
-    input.dispatch.toolRef,
-  )
+  // Delivery and payment consequences use the declared contract; semantic suspicion is advisory.
+  const output = parseContractOutput(observation, input.descriptor)
   const reservation = await ctx.runQuery(internal.moneyManagedCallLifecycle.readReservation, {
     callRef: input.dispatch.callRef,
   })

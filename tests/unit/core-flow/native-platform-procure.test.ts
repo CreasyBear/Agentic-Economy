@@ -13,12 +13,10 @@ import {
   CapabilityProcurementEngine,
   type CatalogToolCandidate,
 } from '@/modules/capability-execution/procure-engine'
-import { adjudicatePayloadOutput } from '@/modules/capability-execution/call-worker/output-adjudication'
 import { handleToolProcurePost } from '@/lib/server/procure-api'
 import { postMcp, readMcpBody } from '../server/mcp-api-harness'
 import type { CallService } from '@/modules/capability-execution/call-authority'
 import type { AgentAccessPrincipal } from '@/modules/agent-access/agent-access'
-import type { RouteTransportObservation } from '@/modules/capability-supply/route-transport-runtime'
 
 const SAMPLE_PRINCIPAL: AgentAccessPrincipal = {
   principalId: 'prn_00000000000040008000000000000044',
@@ -251,59 +249,6 @@ describe('Native Platform System One Procurement', () => {
         expect(outcome.detail).toBe('Daily policy limit exceeded for account.')
       }
       expect(mockCallService.callTool).not.toHaveBeenCalled()
-    })
-  })
-
-  describe('Native Output Validation Seam (Call Worker Adjudication)', () => {
-    it('invalidates contract output when stealth provider timeout is detected in HTTP 200 payload', async () => {
-      const observation: RouteTransportObservation = {
-        transport: 'http',
-        disposition: 'succeeded',
-        requestDigest: 'sha256:0000000000000000000000000000000000000000000000000000000000000000',
-        outputJson: JSON.stringify({
-          error: 'upstream_gateway_timeout: remote host 10.0.1.5 timed out after 30000ms',
-          code: 'ETIMEDOUT',
-        }),
-        releaseStarted: true,
-      }
-
-      const initialValidation = { valid: true as const, output: JSON.parse(observation.outputJson!) }
-      const adjudicated = await adjudicatePayloadOutput(
-        initialValidation,
-        observation,
-        'call:test:stealth',
-        'operation:v1:timezone_converter',
-      )
-
-      expect(adjudicated.valid).toBe(false)
-    })
-
-    it('preserves contract validity for healthy payload without false positive degradation', async () => {
-      const observation: RouteTransportObservation = {
-        transport: 'http',
-        disposition: 'succeeded',
-        requestDigest: 'sha256:0000000000000000000000000000000000000000000000000000000000000000',
-        outputJson: JSON.stringify({
-          result: {
-            convertedTime: '2026-09-20T08:00:00+10:00',
-            originalTime: '2026-09-19T23:00:00Z',
-          },
-        }),
-        releaseStarted: true,
-      }
-
-      const initialValidation = { valid: true as const, output: JSON.parse(observation.outputJson!) }
-      const adjudicated = await adjudicatePayloadOutput(
-        initialValidation,
-        observation,
-        'call:test:clean',
-        'operation:v1:timezone_converter',
-      )
-
-      expect(adjudicated.valid).toBe(true)
-      if (adjudicated.valid) {
-        expect(adjudicated.output).toEqual(initialValidation.output)
-      }
     })
   })
 
