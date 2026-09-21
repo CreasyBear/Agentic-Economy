@@ -100,7 +100,7 @@ describe('POST /api/v1/tools/procure route', () => {
     expect(body.audit.totalLatencyMs).toBeGreaterThanOrEqual(0)
   })
 
-  it('autonomously remedies stealth provider errors with A$0.00 net charge and Rule 4 triplet', async () => {
+  it('preserves executor success without inventing a refund from payload semantics', async () => {
     setHttpRateLimitAdmissionForTests(async () => ({ ok: true }))
 
     const response = await handleToolProcurePost(
@@ -114,12 +114,12 @@ describe('POST /api/v1/tools/procure route', () => {
     expect(response.status).toBe(200)
     const body = await response.json()
     expect(body.schemaVersion).toBe('tool.procure:v1')
-    expect(body.status).toBe('remedied')
-    expect(body.netChargeAud).toBe('A$0.00')
-    expect(body.refundedAmountAud).toBe('A$0.0020')
-    expect(body.diagnostic.whatHappened).toContain('Upstream provider')
-    expect(body.diagnostic.financialImpact).toContain('A$0.00 deducted')
-    expect(body.diagnostic.nextStep).toContain('Autonomous buyer protection')
+    expect(body.status).toBe('delivered')
+    expect(body.output).toMatchObject({ code: 'ETIMEDOUT' })
+    expect(body.price.totalAud).toBe('A$0.0020')
+    expect(body).not.toHaveProperty('refundedAmountAud')
+    expect(body).not.toHaveProperty('netChargeAud')
+    expect(body).not.toHaveProperty('diagnostic')
   })
 
   it('enforces deterministic IceInVein budget gates before any execution', async () => {
