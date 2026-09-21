@@ -1,37 +1,37 @@
 [
   {
     "file": "tests/unit/convex/workflow-component-proof.test.ts",
-    "line": 21,
+    "line": 23,
     "literal": "workflowProof:begin",
     "helper": "makeFunctionReference"
   },
   {
     "file": "tests/unit/convex/workflow-component-proof.test.ts",
-    "line": 22,
+    "line": 24,
     "literal": "workflowProof:permit",
     "helper": "makeFunctionReference"
   },
   {
     "file": "tests/unit/convex/workflow-component-proof.test.ts",
-    "line": 23,
+    "line": 25,
     "literal": "workflowProof:retry",
     "helper": "makeFunctionReference"
   },
   {
     "file": "tests/unit/convex/workflow-component-proof.test.ts",
-    "line": 24,
+    "line": 26,
     "literal": "workflowProof:resume",
     "helper": "makeFunctionReference"
   },
   {
     "file": "tests/unit/convex/workflow-component-proof.test.ts",
-    "line": 25,
+    "line": 27,
     "literal": "workflowProof:stop",
     "helper": "makeFunctionReference"
   },
   {
     "file": "tests/unit/convex/workflow-component-proof.test.ts",
-    "line": 26,
+    "line": 28,
     "literal": "workflowProof:inspect",
     "helper": "makeFunctionReference"
   },

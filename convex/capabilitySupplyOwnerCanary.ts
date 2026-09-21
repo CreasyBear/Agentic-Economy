@@ -303,7 +303,7 @@ export async function requestSellerOnboardingCanaryForAdmittedPublicationHandler
   if (
     publication === null
     || publication.disposition !== 'current'
-    || publication.runtimeEnvironment !== 'sandbox'
+    || (publication.runtimeEnvironment !== 'sandbox' && publication.runtimeEnvironment !== 'production')
     || publication.sourceKind !== 'x402'
     || publication.registrationEvidenceRefs.filter(
       (ref) => ref === X402_SELLER_CANARY_ADMISSION_REQUIRED_REF,
@@ -363,7 +363,8 @@ async function requestSellerOnboardingCanaryWithOwner(
     || snapshot.offeringSourceHash !== args.offeringSourceHash
   ) return { kind: 'refused', code: 'staging_snapshot_missing' }
   const operation = parsePublishedToolSnapshot(snapshot.toolJson)
-  if (operation === undefined || operation.runtimeEnvironment !== 'sandbox') {
+  if (operation === undefined
+    || (operation.runtimeEnvironment !== 'sandbox' && operation.runtimeEnvironment !== 'production')) {
     return { kind: 'refused', code: 'staging_snapshot_missing' }
   }
   const descriptor = materializeRuntimePublishedTool(operation)
@@ -388,7 +389,7 @@ async function requestSellerOnboardingCanaryWithOwner(
   const now = Date.now()
   const grant = await readExactSellerOnboardingCanaryPlatformGrantHandler(
     ctx,
-    sellerOnboardingCanaryPlatformGrantExpectation(args.ownerId, now),
+    sellerOnboardingCanaryPlatformGrantExpectation(args.ownerId, now, operation.runtimeEnvironment),
   )
   if (grant === null) return { kind: 'refused', code: 'canary_grant_missing' }
   const maximumSpend = grant.spendingPolicy.budget.maximumSpendPerCall
@@ -561,7 +562,7 @@ async function requestSellerOnboardingCanaryWithOwner(
     credentialId: grant.credentialId,
     applicationRef: grant.applicationRef,
     grantRef: grant.grantRef,
-    environment: 'sandbox',
+    environment: operation.runtimeEnvironment,
     toolRef: snapshot.toolRef,
     idempotencyKey: args.operationKey,
     inputDigest,
@@ -637,4 +638,3 @@ export const readSellerOnboardingCanaryEvidence = internalQuery({
     }
   },
 })
-

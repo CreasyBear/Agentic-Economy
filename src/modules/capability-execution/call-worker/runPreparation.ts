@@ -66,10 +66,11 @@ export {
 
 export function sellerCanaryExecutionContext(
   envelope: SellerOnboardingCanaryExecutionEnvelope,
+  environment: 'sandbox' | 'production' = 'sandbox',
 ): X402ExecutionContext {
   return {
     kind: 'seller_onboarding_canary',
-    paymentProfile: 'base-sepolia-usdc-exact',
+    paymentProfile: environment === 'production' ? 'base-usdc-exact' : 'base-sepolia-usdc-exact',
     canaryRef: envelope.canaryRef,
     canaryCommitmentDigest: envelope.canaryCommitmentDigest,
     fundingBudgetRef: envelope.funding.budgetRef,
@@ -200,7 +201,7 @@ export async function prepareCallRun(
   }
   const executionContext = sellerCanary === undefined
     ? undefined
-    : sellerCanaryExecutionContext(sellerCanary)
+    : sellerCanaryExecutionContext(sellerCanary, dispatch.environment)
   const economicRail: EconomicRail = economicRailForCall({
     isX402,
     sellerOnboardingCanary: sellerCanary !== undefined,

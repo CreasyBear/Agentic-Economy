@@ -142,8 +142,8 @@ export function exactSellerCanarySnapshotMatches(input: Readonly<{
       evidence: operation.contract.evidence,
     } as StableHashValue)
     const payment = operation.identity.payment
-    return dispatch.environment === 'sandbox'
-      && operation.runtimeEnvironment === 'sandbox'
+    return (dispatch.environment === 'sandbox' || dispatch.environment === 'production')
+      && operation.runtimeEnvironment === dispatch.environment
       && payment.kind === 'x402'
       && envelope.callRef === dispatch.callRef
       && envelope.toolRef === dispatch.toolRef
@@ -324,7 +324,7 @@ export async function gateGrantValidityBeforeClaim(
         ownerId: dispatch.ownerId,
         now: grantReadAt,
       })
-    : dispatch.environment !== 'sandbox'
+    : (dispatch.environment !== 'sandbox' && dispatch.environment !== 'production')
       ? null
       : await ctx.runQuery(
           internal.capabilitySupplyCanaryFunding.readExactSellerOnboardingCanaryPlatformGrant,
@@ -337,7 +337,7 @@ export async function gateGrantValidityBeforeClaim(
               ownerId: dispatch.ownerId,
               credentialId: dispatch.credentialId,
               applicationRef: dispatch.applicationRef,
-              environment: 'sandbox',
+              environment: dispatch.environment,
               generation: dispatch.grantGeneration,
               spendingPolicyDigest: dispatch.policyDigest,
               expiresAt: dispatch.grantExpiresAt,
@@ -457,7 +457,7 @@ async function readGrantValidityForRelease(
             ownerId: dispatch.ownerId,
             credentialId: dispatch.credentialId,
             applicationRef: dispatch.applicationRef,
-            environment: 'sandbox',
+            environment: dispatch.environment,
             generation: dispatch.grantGeneration,
             spendingPolicyDigest: dispatch.policyDigest,
             expiresAt: dispatch.grantExpiresAt,

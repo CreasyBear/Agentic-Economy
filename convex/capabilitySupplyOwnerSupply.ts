@@ -240,7 +240,7 @@ export const runOwnerSupplyTest = action({
         offeringSourceHash: args.offeringSourceHash,
         publicationRef: args.publicationRef,
         publicationRevision: args.publicationRevision,
-        input: args.input ?? {},
+        ...(args.input === undefined ? {} : { input: args.input }),
         operationKey: args.operationKey,
         correlationId: args.correlationId,
         ...(args.sourceWrite === undefined ? {} : { sourceWrite: args.sourceWrite }),
@@ -262,7 +262,7 @@ export const runOwnerSupplyTest = action({
         toolRef: canary.toolRef,
         canaryRef: canary.canaryRef,
         callRef: canary.callRef,
-        message: 'The exact seller canary was admitted and queued on Base Sepolia. Publication remains blocked until settlement and output evidence pass.',
+        message: 'The exact seller canary was admitted and queued on its selected x402 network. Publication remains blocked until settlement and output evidence pass.',
       }
     }
     const taskStartedAt = Date.now()

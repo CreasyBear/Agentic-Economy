@@ -1,6 +1,8 @@
 import { describe, expect, it, vi } from 'vitest'
 
 import {
+  BASE_MAINNET_NETWORK,
+  BASE_MAINNET_USDC_ADDRESS,
   BASE_SEPOLIA_NETWORK,
   BASE_SEPOLIA_USDC_ADDRESS,
   cdpX402PolicyRulesDigest,
@@ -165,6 +167,61 @@ function fixture(options: Readonly<{
 }
 
 describe('seller-onboarding CDP live preflight', () => {
+  it('proves the exact production policy and Base mainnet USDC balance', async () => {
+    const accountRules = [{
+      ...ACCOUNT_POLICY_RULES[0],
+      criteria: ACCOUNT_POLICY_RULES[0].criteria.map((criterion) => (
+        criterion.type === 'evmTypedDataVerifyingContract'
+          ? { ...criterion, addresses: [BASE_MAINNET_USDC_ADDRESS] }
+          : criterion
+      )),
+    }] as const
+    const projectRules = [{
+      ...PROJECT_POLICY_RULES[0],
+      criteria: PROJECT_POLICY_RULES[0].criteria.map((criterion) => ({
+        ...criterion,
+        addresses: [BASE_MAINNET_USDC_ADDRESS],
+      })),
+    }, PROJECT_POLICY_RULES[1]] as const
+    const digest = cdpX402PolicyRulesDigest(
+      { id: ACCOUNT_POLICY_ID, scope: 'account', rules: accountRules },
+      { id: PROJECT_POLICY_ID, scope: 'project', rules: projectRules },
+    )
+    if (digest === undefined) throw new Error('production policy digest invalid')
+    const listTokenBalances = vi.fn(async () => ({ balances: [{
+      token: { contractAddress: BASE_MAINNET_USDC_ADDRESS, network: 'base' },
+      amount: { amount: 50_000n, decimals: 6 },
+    }] }))
+
+    await expect(inspectSellerOnboardingCanaryCdpReadiness(NOW, {
+      aeEnvironment: 'production',
+      environment: environment({ AE_X402_CDP_POLICY_RULES_DIGEST: digest }),
+      createClient: () => ({
+        evm: {
+          getAccount: async () => ({
+            name: ACCOUNT_NAME,
+            address: ACCOUNT_ADDRESS,
+            policies: [ACCOUNT_POLICY_ID, PROJECT_POLICY_ID],
+          }),
+          listTokenBalances,
+        },
+        policies: { getPolicyById: async ({ id }) => id === ACCOUNT_POLICY_ID
+          ? { id, scope: 'account', rules: accountRules }
+          : { id, scope: 'project', rules: projectRules } },
+      }),
+    })).resolves.toMatchObject({
+      kind: 'ready',
+      network: BASE_MAINNET_NETWORK,
+      asset: BASE_MAINNET_USDC_ADDRESS,
+      usdcBalanceAtomic: '50000',
+    })
+    expect(listTokenBalances).toHaveBeenCalledWith({
+      address: ACCOUNT_ADDRESS,
+      network: 'base',
+      pageSize: 100,
+    })
+  })
+
   it('proves the exact named payer, applied policy documents, and funded Base Sepolia USDC', async () => {
     const test = fixture({
       balancePages: [

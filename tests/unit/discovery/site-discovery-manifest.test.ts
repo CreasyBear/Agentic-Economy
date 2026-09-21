@@ -6,6 +6,7 @@ import { LATEST_PROTOCOL_VERSION } from '@modelcontextprotocol/sdk/types.js'
 
 import { describeActionForAgent, findAction } from '@/modules/actions'
 import { CALL_ROUTE_CONTRACT } from '@/modules/capability-execution/call-entry'
+import { TOOL_PROCURE_ROUTE_CONTRACT } from '@/modules/capability-execution/procure.actions'
 import { TOOL_QUOTE_ROUTE_CONTRACT } from '@/modules/capability-execution/quote.actions'
 import { canonicalDigest, schemaDescriptorDigest } from '@/modules/common/canonical-digest'
 import type { StableHashValue } from '@/modules/common/stable-hash'
@@ -251,6 +252,7 @@ describe('Site discovery manifest', () => {
   it('projects every Tool and Call route and schema from the canonical contract', () => {
     const expected = [
       TOOL_QUOTE_ROUTE_CONTRACT,
+      TOOL_PROCURE_ROUTE_CONTRACT,
       CALL_ROUTE_CONTRACT.call,
       CALL_ROUTE_CONTRACT.list,
       CALL_ROUTE_CONTRACT.status,

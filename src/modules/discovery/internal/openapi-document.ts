@@ -2,6 +2,7 @@ import { convertSchemaToJsonSchema, type JSONSchema } from '@tanstack/ai'
 import { z } from 'zod'
 
 import { CALL_ROUTE_CONTRACT } from '@/modules/capability-execution/call-entry'
+import { TOOL_PROCURE_ACTION_ID } from '@/modules/capability-execution/procure'
 import { PROBLEM_KINDS, DEFAULT_STATUS, type ProblemKind } from '@/lib/errors'
 import { describeActionForAgent, findAction, listCallRouteDescriptors, type PublicCallRouteDescriptor } from '@/modules/actions'
 import { FUNDING_PREFLIGHT_ROUTE_CONTRACTS } from '@/modules/money/public'
@@ -183,6 +184,10 @@ const CALL_ROUTE_FACTS: Readonly<Record<string, Readonly<{ summary: string; prob
   [TOOL_QUOTE_ACTION_ID]: {
     summary: 'Resolve one expiring, caller-bound Quote for a Tool purchase.',
     problemKinds: ['UNAUTHENTICATED', 'PERMISSION_DENIED', 'INVALID_ARGUMENT', 'FAILED_PRECONDITION', 'RESOURCE_EXHAUSTED', 'UNAVAILABLE'],
+  },
+  [TOOL_PROCURE_ACTION_ID]: {
+    summary: 'Resolve a capability need, purchase the selected Tool, and return its result.',
+    problemKinds: ['UNAUTHENTICATED', 'PERMISSION_DENIED', 'INVALID_ARGUMENT', 'RESOURCE_EXHAUSTED', 'INTERNAL'],
   },
   [CALL_ROUTE_CONTRACT.call.actionId]: {
     summary: 'Execute a Tool Call against a returned Quote.',

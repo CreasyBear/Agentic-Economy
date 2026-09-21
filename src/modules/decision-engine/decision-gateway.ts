@@ -1,4 +1,4 @@
-import { degrade } from '@/lib/observability/degrade'
+import { degradeBackend } from '@/lib/observability/degrade-backend'
 import type {
   DecisionGatewayOptions,
   DecisionGatewayRequest,
@@ -28,7 +28,7 @@ export async function executeDecisionGateway(
         attemptedTiers,
       }
     } catch (cause) {
-      degrade(cause, undefined, {
+      degradeBackend(cause, undefined, {
         site: 'executeDecisionGateway:jev_system_one',
         reason: 'timeout',
       })
@@ -47,7 +47,7 @@ export async function executeDecisionGateway(
         attemptedTiers,
       }
     } catch (cause) {
-      degrade(cause, undefined, {
+      degradeBackend(cause, undefined, {
         site: 'executeDecisionGateway:secondary_llm_adapter',
         reason: 'invalid_response',
       })
@@ -65,7 +65,7 @@ export async function executeDecisionGateway(
       attemptedTiers,
     }
   } catch (cause) {
-    degrade(cause, undefined, {
+    degradeBackend(cause, undefined, {
       site: 'executeDecisionGateway:deterministic_rule_engine',
       reason: 'invalid_response',
     })

@@ -91,7 +91,7 @@ export const MODULE_BOUNDARY_MANIFEST: ModuleBoundaryManifest = {
     { name: 'action-execution', entrySurfaces: ['public.ts', 'runtime.ts', 'schema.ts'], allowedDependencies: ['common', 'capability-contract', 'money', 'security', 'network-guard', 'observability'] },
     { name: 'capability-supply', entrySurfaces: ['public.ts', 'server.ts', 'schema.ts', 'convex.ts', 'current-tool.ts', 'tool-projection.ts', 'tool-schemas.ts', 'tool-source.ts', 'provider-approval.ts', 'provider-connection.ts', 'provider-connection-handoff.ts', 'provider-offboarding.ts', 'published-tool.ts', 'route-transport-runtime.ts', 'source-authority-review.functions.ts', 'source-first-owner.ts', 'source-selection-draft.ts', 'supplied-quote.actions.ts', 'supplied-quote.ts', 'supply-actions.ts', 'supply-funnel.functions.ts', 'owner-supply-validators.ts', 'integration-draft.ts', 'tool-health.ts', 'source-preview.ts', 'provider-tool-status.ts', 'supply-publication-v2.ts', 'provider-connection.contracts.ts', 'supplier-onboarding.contracts.ts', 'provider-tool-actions.contracts.ts', 'earnings.view-model.ts', 'tool-test.contracts.ts'], allowedDependencies: ['common', 'network-guard', 'capability-contract', 'capability-contract-registry', 'business', 'security', 'agent-access', 'money', 'observability', 'secrets'] },
     { name: 'catalog', entrySurfaces: ['public.ts', 'schema.ts', 'convex.ts', 'schema-values.ts'], allowedDependencies: ['common', 'business', 'money'] },
-    { name: 'capability-execution', entrySurfaces: ['index.ts', 'schema.ts', 'convex.ts', 'purchase-resolution.ts', 'current-tool-quote.ts', 'call-receipt-view.ts', 'call-runtime.ts', 'provider-consequence-runtime.ts', 'live-x402-requirement.ts', 'call-approval.functions.ts', 'call-approval-contracts.ts', 'quote.ts', 'quote.actions.ts', 'call-history.actions.ts', 'call-entry.ts', 'call-contracts.ts', 'call.actions.ts', 'call-authority.ts', 'call-recovery-contracts.ts', 'call-recovery.actions.ts', 'call-recovery.functions.ts'], allowedDependencies: ['common', 'network-guard', 'capability-contract', 'business', 'security', 'agent-access', 'money', 'observability', 'action-execution', 'capability-supply', 'principal-account', 'secrets', 'decision-engine'] },
+    { name: 'capability-execution', entrySurfaces: ['index.ts', 'schema.ts', 'convex.ts', 'purchase-resolution.ts', 'current-tool-quote.ts', 'call-receipt-view.ts', 'call-runtime.ts', 'provider-consequence-runtime.ts', 'live-x402-requirement.ts', 'call-approval.functions.ts', 'call-approval-contracts.ts', 'quote.ts', 'quote.actions.ts', 'call-history.actions.ts', 'call-entry.ts', 'call-contracts.ts', 'call.actions.ts', 'call-authority.ts', 'call-recovery-contracts.ts', 'call-recovery.actions.ts', 'call-recovery.functions.ts', 'procure.ts', 'procure.actions.ts', 'procure-engine.ts'], allowedDependencies: ['common', 'network-guard', 'capability-contract', 'business', 'security', 'agent-access', 'money', 'observability', 'action-execution', 'capability-supply', 'principal-account', 'secrets', 'decision-engine'] },
     { name: 'decision-engine', entrySurfaces: ['public.ts'], allowedDependencies: ['common'] },
     { name: 'registry', entrySurfaces: ['public.ts', 'schema.ts', 'tool-entry.ts', 'tool-paths.ts', 'tool-action-contracts.ts', 'tool-choice-contracts.ts', 'opaque-cursor.ts', 'next-action.ts', 'registry.actions.ts', 'tools.actions.ts', 'registry.functions.ts', 'tool-detail-route.functions.ts'], allowedDependencies: ['common', 'capability-contract', 'business', 'catalog', 'capability-supply', 'money', 'observability', 'decision-engine'] },
     { name: 'market', entrySurfaces: ['server.ts', 'schema.ts', 'contracts.ts', 'allocation-evidence.ts', 'home-catalogue.ts', 'listing-evidence.ts', 'market.functions.ts', 'tool-view-model.ts', 'suggested-next-action.ts', 'x402-directory.ts', 'x402-directory.functions.ts', 'x402-directory.server.ts', 'x402-directory-catalogue.ts', 'x402-directory-index.ts', 'x402-directory-index.functions.ts', 'x402-directory-index.server.ts', 'x402-directory-metadata.ts', 'x402-directory-navigation.ts', 'x402-directory-title.ts', 'x402-marketplace-home.ts', 'x402-marketplace-home.functions.ts', 'x402-marketplace-home.server.ts', 'directory-filters.contracts.ts', 'saved-tools.contracts.ts', 'tool-detail-presentation.ts', 'directory-card.view-model.ts'], allowedDependencies: ['common', 'capability-contract', 'business', 'capability-supply', 'money', 'observability', 'registry'] },
@@ -107,5 +107,20 @@ export const MODULE_BOUNDARY_MANIFEST: ModuleBoundaryManifest = {
     { name: 'workspace-membership', entrySurfaces: ['organization-membership-observation.ts'], allowedDependencies: [] },
   ],
   temporaryRuntimeExceptions: [],
-  testOnlyWhiteBoxExceptions: [],
+  testOnlyWhiteBoxExceptions: [
+    {
+      id: 'x402-payment-material-unit-contract',
+      importers: ['tests/unit/capability-supply/route-transport-x402.test.ts'],
+      to: 'capability-supply',
+      entry: 'internal/route-transport-x402-payment.ts',
+      owner: 'capability-supply',
+    },
+    {
+      id: 'native-procure-output-adjudication-contract',
+      importers: ['tests/unit/core-flow/native-platform-procure.test.ts'],
+      to: 'capability-execution',
+      entry: 'call-worker/output-adjudication.ts',
+      owner: 'capability-execution',
+    },
+  ],
 }

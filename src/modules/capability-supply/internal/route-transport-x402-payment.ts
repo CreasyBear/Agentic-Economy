@@ -55,6 +55,20 @@ export type X402ChallengeSelection = Readonly<{
   requirement: X402Challenge['accepts'][number]
 }>
 
+function refuseBeforeAuthorization(
+  requestDigest: string,
+  failureCode: string,
+  paymentChallengeDigest?: string,
+): RouteTransportObservation {
+  return {
+    ...refused('x402', requestDigest, false, failureCode),
+    ...(paymentChallengeDigest === undefined ? {} : { paymentChallengeDigest }),
+    paymentAuthorizationStatus: 'not_created',
+    paymentSubmissionStatus: 'not_submitted',
+    settlementEvidence: { kind: 'not_submitted' },
+  }
+}
+
 export async function prepareX402PaymentMaterial(
   endpoint: URL,
   configuration: X402Configuration,
@@ -71,13 +85,13 @@ export async function prepareX402PaymentMaterial(
   )
     return {
       kind: 'refused',
-      observation: refused('x402', requestDigest, false, 'input_invalid'),
+      observation: refuseBeforeAuthorization(requestDigest, 'input_invalid'),
     }
   const challenge = selection?.challenge ?? decodePinnedX402Challenge(configuration, invocation.committedPaymentRequiredJson)
   if (challenge === undefined) {
     return {
       kind: 'refused',
-      observation: refused('x402', requestDigest, false, 'payment_challenge_invalid'),
+      observation: refuseBeforeAuthorization(requestDigest, 'payment_challenge_invalid'),
     }
   }
   const paymentChallengeDigest = canonicalDigest(challenge as StableHashValue)
@@ -86,10 +100,11 @@ export async function prepareX402PaymentMaterial(
   if (requirement === undefined) {
     return {
       kind: 'refused',
-      observation: {
-        ...refused('x402', requestDigest, false, 'payment_requirement_unsupported'),
+      observation: refuseBeforeAuthorization(
+        requestDigest,
+        'payment_requirement_unsupported',
         paymentChallengeDigest,
-      },
+      ),
     }
   }
   if (
@@ -98,10 +113,11 @@ export async function prepareX402PaymentMaterial(
   ) {
     return {
       kind: 'refused',
-      observation: {
-        ...refused('x402', requestDigest, false, 'payment_requirement_unsupported'),
+      observation: refuseBeforeAuthorization(
+        requestDigest,
+        'payment_requirement_unsupported',
         paymentChallengeDigest,
-      },
+      ),
     }
   }
   if (
@@ -115,29 +131,32 @@ export async function prepareX402PaymentMaterial(
   ) {
     return {
       kind: 'refused',
-      observation: {
-        ...refused('x402', requestDigest, false, 'payment_requirement_outside_authority'),
+      observation: refuseBeforeAuthorization(
+        requestDigest,
+        'payment_requirement_outside_authority',
         paymentChallengeDigest,
-      },
+      ),
     }
   }
   if (invocation.authority.maximumSpend.currency !== configuration.currency) {
     return {
       kind: 'refused',
-      observation: {
-        ...refused('x402', requestDigest, false, 'payment_currency_mismatch'),
+      observation: refuseBeforeAuthorization(
+        requestDigest,
+        'payment_currency_mismatch',
         paymentChallengeDigest,
-      },
+      ),
     }
   }
   const expectedAmount = expectedX402Amount(invocation.authority.maximumSpend, configuration)
   if (expectedAmount === undefined) {
     return {
       kind: 'refused',
-      observation: {
-        ...refused('x402', requestDigest, false, 'payment_authority_invalid'),
+      observation: refuseBeforeAuthorization(
+        requestDigest,
+        'payment_authority_invalid',
         paymentChallengeDigest,
-      },
+      ),
     }
   }
   const parsedPaymentAmount = exactAmountSchema.safeParse({
@@ -148,10 +167,11 @@ export async function prepareX402PaymentMaterial(
   if (!parsedPaymentAmount.success) {
     return {
       kind: 'refused',
-      observation: {
-        ...refused('x402', requestDigest, false, 'payment_challenge_invalid'),
+      observation: refuseBeforeAuthorization(
+        requestDigest,
+        'payment_challenge_invalid',
         paymentChallengeDigest,
-      },
+      ),
     }
   }
   const paymentAmount = parsedPaymentAmount.data
@@ -159,15 +179,11 @@ export async function prepareX402PaymentMaterial(
   if (amountComparison !== 0) {
     return {
       kind: 'refused',
-      observation: {
-        ...refused(
-          'x402',
-          requestDigest,
-          false,
-          amountComparison === 1 ? 'payment_exceeds_step_ceiling' : 'payment_amount_mismatch',
-        ),
+      observation: refuseBeforeAuthorization(
+        requestDigest,
+        amountComparison === 1 ? 'payment_exceeds_step_ceiling' : 'payment_amount_mismatch',
         paymentChallengeDigest,
-      },
+      ),
     }
   }
   const signedOfferRequired = challenge.extensions !== undefined
@@ -183,13 +199,11 @@ export async function prepareX402PaymentMaterial(
     if (offerVerification.kind !== 'verified') {
       return {
         kind: 'refused',
-        observation: {
-          ...refused('x402', requestDigest, false, 'payment_offer_invalid'),
+        observation: refuseBeforeAuthorization(
+          requestDigest,
+          'payment_offer_invalid',
           paymentChallengeDigest,
-          paymentAuthorizationStatus: 'not_created',
-          paymentSubmissionStatus: 'not_submitted',
-          settlementEvidence: { kind: 'not_submitted' },
-        },
+        ),
       }
     }
     verifiedOffer = offerVerification.context
@@ -206,10 +220,11 @@ export async function prepareX402PaymentMaterial(
   if (paymentCredentialRef === undefined) {
     return {
       kind: 'refused',
-      observation: {
-        ...refused('x402', requestDigest, false, 'payment_custody_unavailable'),
+      observation: refuseBeforeAuthorization(
+        requestDigest,
+        'payment_custody_unavailable',
         paymentChallengeDigest,
-      },
+      ),
     }
   }
   const authorizationIdentity: X402PaymentAuthorizationIdentity = {

@@ -12,6 +12,7 @@ import {
 import {
   SELLER_ONBOARDING_CANARY_PLATFORM_APPLICATION_REF,
   SELLER_ONBOARDING_CANARY_PLATFORM_GRANT_REF,
+  PRODUCTION_SELLER_ONBOARDING_CANARY_PLATFORM_APPLICATION_REF,
 } from '../../capabilitySupplyCanaryFunding'
 import {
   createSellerOnboardingCanaryCommitment,
@@ -284,9 +285,15 @@ function exactPlatformCanaryFundingEvidence(
   const funding = envelope.funding
   const authority = row.authority
   const authorizedAmount = readExactAmount(authority?.limits.amount)
+  const exactEnvironmentIdentity = row.environment === 'sandbox'
+    ? funding.applicationRef === SELLER_ONBOARDING_CANARY_PLATFORM_APPLICATION_REF
+      && funding.grantRef === SELLER_ONBOARDING_CANARY_PLATFORM_GRANT_REF
+    : row.environment === 'production'
+      ? funding.applicationRef === PRODUCTION_SELLER_ONBOARDING_CANARY_PLATFORM_APPLICATION_REF
+        && /^agent-access-grant:platform:seller-onboarding-canary:production:v[1-9]\d*$/.test(funding.grantRef)
+      : false
   if (funding.ownerId === envelope.ownerId
-    || funding.applicationRef !== SELLER_ONBOARDING_CANARY_PLATFORM_APPLICATION_REF
-    || funding.grantRef !== SELLER_ONBOARDING_CANARY_PLATFORM_GRANT_REF
+    || !exactEnvironmentIdentity
     || row.principalId !== funding.principalId
     || row.ownerId !== funding.ownerId
     || row.credentialId !== funding.credentialId
@@ -294,7 +301,6 @@ function exactPlatformCanaryFundingEvidence(
     || row.grantRef !== funding.grantRef
     || row.grantGeneration !== funding.grantGeneration
     || row.policyDigest !== funding.policyDigest
-    || row.environment !== 'sandbox'
     || authority === undefined
     || authorizedAmount === undefined) return false
   return authority.callRef === row.callRef
@@ -498,7 +504,7 @@ export async function promoteX402SellerCanaryForOwner(
     : parsePublishedToolSnapshot(row.toolJson)
   if (commitment === undefined
     || retainedOperation === undefined
-    || retainedOperation.runtimeEnvironment !== 'sandbox'
+    || retainedOperation.runtimeEnvironment !== row.environment
     || retainedOperation.materialDigest !== envelope.toolMaterialDigest
     || retainedOperation.identity.contractDigest !== envelope.contractDigest
     || retainedOperation.identity.bindingDigest !== envelope.bindingDigest

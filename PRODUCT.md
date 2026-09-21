@@ -23,6 +23,36 @@ An agent stays in its existing app or framework. When it needs an outside
 service, it can find one, check its price and terms, and use it within the
 customer's spending policy. Agentic Economy does not take over the larger task.
 
+### Core market journeys
+
+**Product emphasis clarified with Joel: 2026-09-20.** The product's centre is a
+two-sided capability market: agents acquire contributions during work, and
+Providers reach relevant demand across harnesses. The experience should make
+these journeys effortless:
+
+1. Describe a need naturally and find the right capability despite vocabulary differences.
+2. Compare suitable services and reach a useful choice without inspecting a large catalogue.
+3. Choose, buy and continue working with minimal integration burden.
+4. Expose a capability and reach relevant buyers without becoming a distribution expert.
+5. Find no suitable supply today and connect with relevant supply when it becomes available.
+6. Use the market repeatedly and benefit from progressively better matches.
+
+The future supply side includes specialist businesses, data owners, professional
+contributors, machine operators and other agents, not only conventional API
+vendors. Managed x402 purchasing is the entry, not the limit of the vision.
+
+Assess intelligence such as Jev by the friction it removes from these journeys:
+successful matching, fewer agent turns, time to usable results, Provider
+activation and useful repeat purchases. Delivery verification is a minor
+supporting application in that assessment; bounded evidence is a governance
+principle, not the product purpose. Existing commercial correctness, privacy and
+recovery obligations remain required without defining the experience.
+
+These are product outcomes, not a declaration that every journey is implemented
+or requires Jev. The roadmap still sequences delivery; later matching/learning
+does not become an additional managed-x402 release gate. AE supports procurement
+while the customer's harness retains the wider objective and plan.
+
 ### Reference products are the default
 
 - **Locus:** the reference for connecting agents, prepaid tool access, spending

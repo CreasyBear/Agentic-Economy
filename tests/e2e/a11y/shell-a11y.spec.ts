@@ -17,17 +17,32 @@ test.describe('app shell accessibility (S-19)', () => {
   test('dismissing keyboard shortcuts restores focus to the active element', async ({ page }) => {
     await gotoSettledShell(page, '/market')
 
-    const primaryNav = page.getByRole('navigation', { name: 'Primary' })
-    const marketLink = primaryNav.getByRole('link', { name: 'Market' })
-    await marketLink.focus()
-    await expect(marketLink).toBeFocused()
+    const viewport = page.viewportSize()
+    const compact = viewport !== null && viewport.width < 768
+    const focusTarget = compact
+      ? page.getByRole('button', { name: 'Open public menu' })
+      : page.getByRole('navigation', { name: 'Primary' }).getByRole('link', { name: 'Market' })
+
+    await focusTarget.focus()
+    await expect(focusTarget).toBeFocused()
+    if (compact) {
+      await focusTarget.press('Enter')
+      const publicNav = page.getByRole('navigation', { name: 'Public navigation' })
+      await expect(publicNav).toBeVisible()
+      const marketLink = publicNav.getByRole('link', { name: 'Market' })
+      await marketLink.focus()
+      await expect(marketLink).toBeFocused()
+      await page.keyboard.press('Escape')
+      await expect(publicNav).toHaveCount(0)
+      await expect(focusTarget).toBeFocused()
+    }
 
     await page.keyboard.press('?')
     await expect(page.getByRole('dialog', { name: 'Keyboard shortcuts' })).toBeVisible()
 
     await page.keyboard.press('Escape')
     await expect(page.getByRole('dialog', { name: 'Keyboard shortcuts' })).toHaveCount(0)
-    await expect(marketLink).toBeFocused()
+    await expect(focusTarget).toBeFocused()
   })
 
   test('dismissing command console restores focus after Escape', async ({ page }) => {
@@ -48,7 +63,18 @@ test.describe('app shell accessibility (S-19)', () => {
     await gotoSettledShell(page, '/market')
 
     await expect(page.locator('header[data-shell="app-header"]')).toBeVisible()
-    await expect(page.getByRole('navigation', { name: 'Primary' })).toBeVisible()
+    const viewport = page.viewportSize()
+    if (viewport !== null && viewport.width < 768) {
+      const openMenu = page.getByRole('button', { name: 'Open public menu' })
+      await openMenu.focus()
+      await openMenu.press('Enter')
+      const publicNav = page.getByRole('navigation', { name: 'Public navigation' })
+      await expect(publicNav).toBeVisible()
+      await page.keyboard.press('Escape')
+      await expect(publicNav).toHaveCount(0)
+    } else {
+      await expect(page.getByRole('navigation', { name: 'Primary' })).toBeVisible()
+    }
     await expect(page.getByRole('main')).toBeVisible()
     await expect(page.locator('#main-content')).toBeVisible()
     await expect(page.getByRole('contentinfo')).toBeVisible()

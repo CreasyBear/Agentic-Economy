@@ -98,7 +98,7 @@ export async function readCurrentPublishedTool(
 }
 
 /**
- * Internal-only exact staging read for one seller-owned Base Sepolia canary.
+ * Internal-only exact staging read for one seller-owned x402 canary.
  * It never participates in discovery and only relaxes the business-publication
  * routeability gate; every contract, catalog, binding, claim, pricing, and
  * fresh-readiness anchor remains exact.
@@ -116,7 +116,7 @@ export async function readExactSellerCanaryOperationSnapshotHandler(
   if (
     publication === null
     || publication.disposition !== 'current'
-    || publication.runtimeEnvironment !== 'sandbox'
+    || (publication.runtimeEnvironment !== 'sandbox' && publication.runtimeEnvironment !== 'production')
     || publication.sourceKind !== 'x402'
     || publication.readinessObservedAt === undefined
     || publication.readinessValidUntil === undefined
@@ -172,7 +172,7 @@ export async function readExactSellerCanaryOperationSnapshotHandler(
   if (binding.adapter.adapterId !== 'x402-fetch:v2' || binding.authority.kind !== 'provider_connection') return null
   const connectionRef = binding.authority.connectionRef
   const x402 = parseX402FetchTransportConfiguration(binding.adapter.config)
-  const profile = x402PaymentProfileForEnvironment('sandbox')
+  const profile = x402PaymentProfileForEnvironment(publication.runtimeEnvironment)
   if (
     x402 === undefined
     || profile === undefined

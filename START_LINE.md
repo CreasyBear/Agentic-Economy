@@ -135,6 +135,41 @@ USDC are netted into one monetary leg.
 
 ## Australian production boundary
 
+**Launch scope authorized — 20 September 2026.** Joel requires the full alpha
+to reach real x402 purchases using test USDC on Base Sepolia and real USDC on
+Base mainnet. This start-line proof is an intermediate milestone. The launch
+goal includes closing the production prerequisites below, controlled live AUD
+funding and mainnet settlement, usable delivery, exact records and recovery;
+it cannot finish on source or sandbox evidence alone. The
+[alpha maturity register](docs/operations/alpha-maturity-register.md) owns the
+launch acceptance and records transaction exposure limits before live execution.
+Authorization to pursue launch does not itself establish adviser approval.
+
+The production activation package is **NOT VERIFIED** until attributable
+approval evidence exists for the legal/AML/CTF, tax and banking questions below
+and the infrastructure production gate passes. Record the approver, scope,
+decision, conditions, evidence reference and effective date; do not infer an
+approval from launch authorization, source behavior or a configured provider.
+
+The first live execution is bounded by all of these operational controls:
+
+- at most **A$25 cumulative live customer funding, including every fee and tax**;
+- at most **USDC 5 cumulative Provider payments** across Base Sepolia and Base
+  mainnet where the asset has real value;
+- at most **0.001 ETH cumulative mainnet gas**;
+- no automatic replenishment and no automatic limit increase; and
+- before each effect, read back the exact environment, chain, asset, recipient,
+  Tool/Quote/Call, amount and recovery reference, then retain the transaction
+  hash and reconciled AUD/USDC records.
+
+Accepted obligations and uncertain submissions consume the remaining campaign
+cap until reconciled. Refunds do not automatically restore the test budget. Any
+target mismatch, missing approval, unavailable readback or uncertain prior
+submission stops a new payment; recovery must reconcile the same durable Call.
+Changing these limits requires a new explicit decision recorded before execution.
+These are launch-validation controls, not a customer-facing budget feature, and
+they do not change the existing USD 400 monthly AWS ceiling.
+
 The complete flow may be built and exercised with sandbox funding and one
 controlled x402 testnet transaction. Production funding and production USDC
 settlement remain disabled until named Australian advisers approve:

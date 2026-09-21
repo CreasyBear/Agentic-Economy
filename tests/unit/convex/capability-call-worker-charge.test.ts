@@ -331,10 +331,14 @@ describe('capability operation invocation worker charge/x402', () => {
     mocks.invokePreparedRouteTransport.mockResolvedValueOnce({
       transport: 'x402', disposition: 'refused', releaseStarted: false,
       requestDigest: digest('c'), failureCode: 'payment_provider_requirement_stale',
+      paymentAuthorizationStatus: 'not_created',
       paymentSubmissionStatus: 'not_submitted',
+      settlementEvidence: { kind: 'not_submitted' },
     } satisfies RouteTransportObservation)
     await expect(handler(worker.ctx, { callRef: invocationRef })).resolves.toEqual({ kind: 'recorded' })
     const paths = worker.state.mutationCalls.map(({ path }) => path)
+    expect(worker.state.queryCalls).toContain('moneyX402PaymentAttempts:readX402PaymentAttempt')
+    expect(paths).not.toContain('moneyX402PaymentAttempts:recordX402PaymentObservation')
     expect(paths).toContain('moneyManagedCallLifecycle:releaseBeforeSubmission')
     expect(paths).not.toContain('moneyX402PaymentAttempts:recordX402PaymentSigningIntent')
     expect(worker.state.payment.prepare).toBeUndefined()
@@ -350,6 +354,8 @@ describe('capability operation invocation worker charge/x402', () => {
 
     await expect(handler(worker.ctx, { callRef: invocationRef })).resolves.toEqual({ kind: 'recorded' })
     const paths = worker.state.mutationCalls.map(({ path }) => path)
+    expect(worker.state.queryCalls).toContain('moneyX402PaymentAttempts:readX402PaymentAttempt')
+    expect(paths).toContain('moneyX402PaymentAttempts:recordX402PaymentObservation')
     expect(paths).toContain('moneyManagedCallLifecycle:releaseBeforeSubmission')
     expect(paths).not.toContain('moneyLedger:reserveBrokeredInvocationCharge')
     expect(paths).not.toContain('moneyLedger:reserveExternalInvocationSpend')
@@ -357,6 +363,53 @@ describe('capability operation invocation worker charge/x402', () => {
     expect(worker.state.records.at(-1)).toMatchObject({
       state: 'refused',
       result: { kind: 'refused', code: 'payment_signature_unavailable' },
+    })
+  })
+  it('releases a definite no-authorization refusal only after proving no payment attempt exists', async () => {
+    const worker = createWorker('x402', {
+      environment: 'production',
+      failPaymentSignature: true,
+      paymentAttemptRead: 'missing',
+    })
+
+    await expect(handler(worker.ctx, { callRef: invocationRef })).resolves.toEqual({ kind: 'recorded' })
+
+    const paths = worker.state.mutationCalls.map(({ path }) => path)
+    expect(worker.state.queryCalls).toContain('moneyX402PaymentAttempts:readX402PaymentAttempt')
+    expect(paths).toContain('moneyManagedCallLifecycle:releaseBeforeSubmission')
+    expect(paths).not.toContain('moneyX402PaymentAttempts:recordX402PaymentObservation')
+    expect(worker.state.reconciliations).toEqual([
+      expect.objectContaining({ callRef: invocationRef }),
+    ])
+    expect(worker.state.unknownCharges).toHaveLength(0)
+    expect(worker.state.records.at(-1)).toMatchObject({
+      state: 'refused',
+      result: { kind: 'refused', code: 'payment_signature_unavailable' },
+    })
+  })
+  it.each([
+    ['attempt lookup is unavailable', { paymentAttemptRead: 'throw' as const }],
+    ['the submission fence has crossed', {
+      paymentAttemptRead: 'missing' as const,
+      releaseBeforeSubmissionRefused: true,
+    }],
+  ])('retains the reservation when %s', async (_label, options) => {
+    const worker = createWorker('x402', {
+      environment: 'production',
+      failPaymentSignature: true,
+      ...options,
+    })
+
+    await expect(handler(worker.ctx, { callRef: invocationRef })).resolves.toEqual({ kind: 'recorded' })
+
+    const releaseCalls = worker.state.mutationCalls.filter(({ path }) =>
+      path === 'moneyManagedCallLifecycle:releaseBeforeSubmission')
+    if (options.paymentAttemptRead === 'throw') expect(releaseCalls).toHaveLength(0)
+    else expect(releaseCalls).toHaveLength(1)
+    expect(worker.state.reconciliations).toHaveLength(0)
+    expect(worker.state.records.at(-1)).toMatchObject({
+      state: 'reconciliation_required',
+      result: { kind: 'reconciliation_required' },
     })
   })
   it('requires proof reconciliation when the grant is revoked after the submission fence', async () => {

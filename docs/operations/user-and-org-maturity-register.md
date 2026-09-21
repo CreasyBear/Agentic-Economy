@@ -290,21 +290,22 @@ To eliminate security vulnerabilities, maintainability drag, and thousands of li
 ### W-09: Delete Personal Account & Data Export (GDPR)
 - **External Standard:** "Danger Zone" in settings allows user to export their data (JSON/CSV) and request permanent account deletion (with confirmation modal requiring typing "DELETE").
 - **Gold Standard Design Reference:** [Clerk Account Deletion Flow](https://clerk.com/docs/components/user/user-profile#danger-zone) & [GDPR Article 15/17 Right to Erasure Standard](https://gdpr-info.eu/art-17-gdpr/).
-- **Zero-Handroll Implementation Blueprint:** Mount Clerk's built-in "Delete Account" button within the `<UserProfile />` Danger Zone. The Clerk webhook `user.deleted` triggers a Convex handler that anonymizes audit records and soft-deletes the principal. A single Convex query `users.exportUserData` returns all user records as a downloadable JSON blob. Never build custom password-re-entry deletion modals or manual data-gathering routines.
-- **Current Repository State:** `VERIFIED`
+- **Zero-Handroll Implementation Blueprint (superseded for alpha deletion entry):** The original blueprint mounted Clerk's built-in "Delete Account" button within the `<UserProfile />` Danger Zone. That direct entry cannot enforce AE workspace and Provider exit prerequisites. Keep Clerk's maintained profile/security controls, disable self-delete per deployed instance, and expose deletion only through the gated AE action once implemented. The Clerk webhook `user.deleted` remains the retirement projection. `personalAccount.exportUserData` remains the structured export contract; do not build custom password-re-entry or data-gathering machinery.
+- **Current Repository State:** `PARTIAL`
   - Added support for `user.deleted` webhooks in `src/lib/server/clerk-security-webhook.ts` and `src/modules/security/account-security.ts`.
   - Implemented `retirePersonalAccountForServer` in `convex/personalAccount.ts` with atomic principal retirement, pseudonymization (`Deleted User`), binding/credential revocation, cascade to creator-scoped machine agent tokens, membership termination, session selection deletion, and emission of `account.personal_account.retired` audit record while preserving immutable commercial records.
-  - Implemented `readDeletionEligibility` in `convex/personalAccount.ts` blocking deletion if the principal is the sole owner of a populated or active workspace (`last_owner_of_populated_workspace` or `workspace_close_required`).
+  - Implemented and tested `readDeletionEligibility` in `convex/personalAccount.ts`; it detects when the principal is the sole owner of a populated or active workspace (`last_owner_of_populated_workspace` or `workspace_close_required`). No source caller currently enforces this result before Clerk self-deletion.
   - Implemented `exportUserData` in `convex/personalAccount.ts` conforming to `ae.personal-account.export:v1` returning structured JSON of principal details, memberships, ownerships, linked accounts, and redacted security history.
-  - Verified with 27 unit tests in `tests/unit/server/clerk-security-webhook-deletion.test.ts` and `tests/unit/convex/personal-account-deletion.test.ts`.
+  - The webhook projection, retirement behavior, eligibility query and export contract are covered by 27 unit tests in `tests/unit/server/clerk-security-webhook-deletion.test.ts` and `tests/unit/convex/personal-account-deletion.test.ts`; those tests do not prove pre-deletion enforcement.
+  - Clerk supports disabling self-service account deletion per instance while retaining the hosted profile and security controls. That setting has not been read back for the deployed alpha, and no eligibility-gated supported final deletion action exists in source.
 - **Checklist:**
   - [x] Webhook `user.deleted` projection to `retire_personal_account` security action.
   - [x] Principal lifecycle retirement, pseudonymization (`Deleted User`), and interactive credential revocation.
   - [x] Machine agent token and OAuth family revocation cascade for creator-owned agents.
-  - [x] Pre-deletion eligibility gating for workspace owners (`readDeletionEligibility`).
+  - [ ] Enforce `readDeletionEligibility` before personal-login deletion and provide the supported final action after solely-owned scope is closed with applicable Provider/financial fences or transferred to a valid successor.
   - [x] Machine-readable GDPR data export query (`exportUserData` contract `ae.personal-account.export:v1`).
   - [x] Preservation of commercial ledger records and attribution invariants.
-- **Priority:** `P3` | **Status:** `VERIFIED`
+- **Priority:** `P3` | **Status:** `PARTIAL`
 
 ---
 

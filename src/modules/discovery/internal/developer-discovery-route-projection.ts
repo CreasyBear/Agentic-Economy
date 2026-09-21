@@ -5,7 +5,8 @@ import { trimTrailingSlashes } from '@/modules/common/trim-trailing-slashes'
 import { readCatalogHealth } from '@/modules/registry/public'
 import { sanitizeText } from '@/modules/common/sanitize-text'
 import type { PublicBusinessCatalogApiV2Dto } from '@/modules/registry/public'
-import type { DiscoverySourceState, DiscoveryStatus } from '@/modules/discovery/public'
+import type { DiscoverySourceState } from './discovery-contracts'
+import type { DiscoveryStatus } from './schema-values'
 import {
   DeveloperDiscoveryArtifacts,
   DeveloperDiscoveryPublicRoutes,

@@ -6,6 +6,8 @@ import { api, internal } from '../../convex/_generated/api'
 import { toRow as providerConnectionRow } from '../../convex/lib/providerConnections/codecs'
 import { createX402ProviderConnection } from '@/modules/capability-supply/provider-connection'
 import {
+  BASE_MAINNET_NETWORK,
+  BASE_MAINNET_USDC_ADDRESS,
   BASE_SEPOLIA_NETWORK,
   BASE_SEPOLIA_USDC_ADDRESS,
   x402SellerClaimDigest,
@@ -639,19 +641,26 @@ export function x402SourceForConnection(
   endpoint: string,
   connectionRef: string,
   providerRef: string,
+  pricing: Readonly<{
+    environment?: 'sandbox' | 'production'
+    price?: { currency: 'USD'; units: string; exponent: number }
+    routeAmountExponent?: number
+    assetAmount?: string
+  }> = {},
 ) {
-  const source = x402Source('sandbox', endpoint)
+  const environment = pricing.environment ?? 'sandbox'
+  const source = x402Source(environment, endpoint)
   if (!isRecord(source.resource)) throw new Error('owner_publication_x402_resource_invalid')
   const payTo = source.resource.payTo as string
-  const price = { currency: 'USD', units: '1', exponent: 2 }
+  const price = pricing.price ?? { currency: 'USD', units: '1', exponent: 2 }
   const paymentRequired = validatePaymentRequired({
     x402Version: 2,
     resource: { url: endpoint },
     accepts: [{
       scheme: 'exact',
-      network: BASE_SEPOLIA_NETWORK,
-      amount: '10000',
-      asset: BASE_SEPOLIA_USDC_ADDRESS,
+      network: environment === 'production' ? BASE_MAINNET_NETWORK : BASE_SEPOLIA_NETWORK,
+      amount: pricing.assetAmount ?? '10000',
+      asset: environment === 'production' ? BASE_MAINNET_USDC_ADDRESS : BASE_SEPOLIA_USDC_ADDRESS,
       payTo,
       maxTimeoutSeconds: 60,
       extra: {
@@ -666,8 +675,9 @@ export function x402SourceForConnection(
     resource: {
       ...source.resource,
       price,
-      network: BASE_SEPOLIA_NETWORK,
-      asset: BASE_SEPOLIA_USDC_ADDRESS,
+      routeAmountExponent: pricing.routeAmountExponent ?? source.resource.routeAmountExponent,
+      network: environment === 'production' ? BASE_MAINNET_NETWORK : BASE_SEPOLIA_NETWORK,
+      asset: environment === 'production' ? BASE_MAINNET_USDC_ADDRESS : BASE_SEPOLIA_USDC_ADDRESS,
       paymentRequired,
     },
     commercial: {
@@ -746,9 +756,17 @@ export async function seedPaidX402Publication(
   backend: ConvexFixtureBackend,
   slug: string,
   overrides: Readonly<{
+    environment?: 'sandbox' | 'production'
     endpoint?: string
     providerRef?: string
     payTo?: string
+    publisher?: 'owner' | 'agent'
+    price?: { currency: 'USD'; units: string; exponent: number }
+    routeAmountExponent?: number
+    assetAmount?: string
+    onPaymentRequired?: (
+      paymentRequired: ReturnType<typeof x402SourceForConnection>['resource']['paymentRequired'],
+    ) => void
   }> = {},
 ) {
   const identity = await createPublishedBusinessOwner(backend, slug)
@@ -760,6 +778,7 @@ export async function seedPaidX402Publication(
   const connectionRef = `connection:x402:${slug}`
   const providerRef = overrides.providerRef ?? 'provider:x402:paid-lookup'
   const payTo = overrides.payTo ?? DEFAULT_X402_PAY_TO
+  const environment = overrides.environment ?? 'sandbox'
 
   await seedCatalogOffering(backend, identity.businessId, offeringRef, 1, 1, sourceHash)
   await backend.run(async (ctx) => {
@@ -792,7 +811,7 @@ export async function seedPaidX402Publication(
     observationDigest: canonicalDigest({
       kind: 'official-x402-v2-unpaid-inspection',
       endpoint,
-      network: BASE_SEPOLIA_NETWORK,
+      network: environment === 'production' ? BASE_MAINNET_NETWORK : BASE_SEPOLIA_NETWORK,
       payTo,
     }),
     payTo,
@@ -829,13 +848,22 @@ export async function seedPaidX402Publication(
     )
   })
 
+  const source = x402SourceForConnection(endpoint, connectionRef, providerRef, {
+    environment,
+    ...(overrides.price === undefined ? {} : { price: overrides.price }),
+    ...(overrides.routeAmountExponent === undefined
+      ? {}
+      : { routeAmountExponent: overrides.routeAmountExponent }),
+    ...(overrides.assetAmount === undefined ? {} : { assetAmount: overrides.assetAmount }),
+  })
+  overrides.onPaymentRequired?.(source.resource.paymentRequired)
   const prepared = await prepareOwnerPublicationCommand(
     backend,
     identity.businessId,
     offeringRef,
     1,
     sourceHash,
-    x402SourceForConnection(endpoint, connectionRef, providerRef),
+    source,
     `owner-supply:${slug}:publish`,
     {
       kind: 'catalog_offering',
@@ -845,28 +873,46 @@ export async function seedPaidX402Publication(
       declaredAccessPathRef: accessPathRef,
       accessPathSourceHash,
     },
-    'sandbox',
+    environment,
   )
   if (prepared.kind === 'refused') {
     throw new Error(`publication_prepare_failed:${prepared.reason}`)
   }
-  const {
-    runtimeEnvironment: _runtimeEnvironment,
-    proof: _proof,
-    sourceWrite: _sourceWrite,
-    sourceWriteRequest: _sourceWriteRequest,
-    ...unsignedCommand
-  } = prepared.command
-  const published = await identity.owner.mutation(
-    api.capabilitySupply.stageOwnerX402Capability,
-    await withSourceWrite('catalog_publish', {
-      ...unsignedCommand,
-      sellerClaim,
-      evidenceRefs: [claimEvidence, inspectionEvidence],
-      operationKey: `owner-supply:${slug}:stage`,
-      correlationId: `owner-supply:${slug}:stage`,
-    }),
-  )
+  const agentPrincipal = overrides.publisher === 'agent'
+    ? await seedSupplyAgentPrincipal(backend, identity.canonicalAccountRef, `${slug}:publish`)
+    : undefined
+  const published = agentPrincipal === undefined
+    ? await identity.owner.mutation(
+        api.capabilitySupply.stageOwnerX402Capability,
+        await withSourceWrite('catalog_publish', (() => {
+          const {
+            runtimeEnvironment: _runtimeEnvironment,
+            proof: _proof,
+            sourceWrite: _sourceWrite,
+            sourceWriteRequest: _sourceWriteRequest,
+            ...unsignedCommand
+          } = prepared.command
+          return {
+            ...unsignedCommand,
+            sellerClaim,
+            evidenceRefs: [claimEvidence, inspectionEvidence],
+            operationKey: `owner-supply:${slug}:stage`,
+            correlationId: `owner-supply:${slug}:stage`,
+          }
+        })()),
+      )
+    : await backend.mutation(
+        api.capabilitySupply.publishPreparedCapability,
+        await withSourceWrite('catalog_publish', (() => {
+          const {
+            proof: _proof,
+            sourceWrite: _sourceWrite,
+            sourceWriteRequest: _sourceWriteRequest,
+            ...unsignedCommand
+          } = prepared.command
+          return { ...unsignedCommand, agentPrincipal }
+        })()),
+      )
   if (published.kind === 'refused') {
     throw new Error(`publication_stage_failed:${published.reason}`)
   }
@@ -939,6 +985,6 @@ export async function seedPaidX402Publication(
     sellerClaim,
     claimEvidence,
     inspectionEvidence,
+    agentPrincipal,
   }
 }
-

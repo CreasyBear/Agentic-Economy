@@ -7,7 +7,7 @@ import type {
 import type { ExactAmount } from '@/modules/money/public'
 
 /**
- * Seller canaries spend AE-owned testnet funds but never create buyer usage,
+ * Seller canaries spend AE-owned validation funds but never create buyer usage,
  * provider earnings, or platform rake. This builder is shared by initial
  * execution and recovery so evidence survives without inventing accounting.
  */
@@ -37,8 +37,8 @@ export function buildSellerOnboardingCanaryReceipt(input: Readonly<{
     : undefined
   if (
     input.canary.executionPurpose !== 'seller_onboarding_canary'
-    || input.operation.runtimeEnvironment !== 'sandbox'
-    || profile?.network !== 'eip155:84532'
+    || (input.operation.runtimeEnvironment !== 'sandbox' && input.operation.runtimeEnvironment !== 'production')
+    || profile === undefined
     || input.canary.callRef !== input.callRef
     || input.canary.toolRef !== input.toolRef
     || input.canary.priceDigest !== input.operation.priceDigest
