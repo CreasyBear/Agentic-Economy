@@ -113,4 +113,11 @@ describe('Bazaar search semantic ordering', () => {
     expect(body.state.candidates.every((item: { description: string }) => item.description.length <= 1200)).toBe(true)
     expect(JSON.stringify(body.state).length).toBeLessThan(32_000)
   })
+  it('preserves the page on pre-cancellation and surfaces invalid configuration', async () => {
+    const fetchImpl = mockJevFetch(answers(0.1, 0.9))
+    await expect(rerankX402DirectoryPage(page, 'image', { ...options, fetchImpl, signal: AbortSignal.abort() })).resolves.toBe(page)
+    await expect(rerankX402DirectoryPage(page, 'image', { ...options, fetchImpl, timeoutMs: -1 })).rejects.toBeInstanceOf(RangeError)
+    expect(fetchImpl).not.toHaveBeenCalled()
+  })
+
 })

@@ -179,6 +179,14 @@ jobs:
       # Agent access consent requires the owner's strict reverification in a
       # browser, so this job proves the anonymous sandbox only; doctor reports
       # the credentialed checks as warn/skipped by design.
+      - name: Install Chromium for configured-stack discovery proof
+        run: npm exec -- playwright install --with-deps chromium
+
+      - name: Prove discovery artifacts through real backend admission
+        env:
+          PLAYWRIGHT_BASE_URL: http://127.0.0.1:3024
+        run: npm exec -- playwright test tests/e2e/developer-discovery.spec.ts
+
       - name: Doctor
         run: |
           npm run --silent ae -- doctor --json --base-url http://127.0.0.1:3024 > output/fresh-checkout/doctor.json
