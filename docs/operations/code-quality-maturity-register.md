@@ -1,7 +1,7 @@
 # Code Quality, Component Purity & Structural Decoupling: Operational Register
 
 **Date:** 20 September 2026  
-**Status:** CAMPAIGN CLOSED (Waves 1–5 Complete; commit `147b602a7`)  
+**Status:** CAMPAIGN CLOSED (Waves 1–5 Complete; commit `147b602a7`). **Historical.** Current 1,000-line / 80-line compliance is the Campaign 2 close (`docs/operations/code-quality-ceiling-register.md`). Campaign 3 façade/helper follow-through: `docs/operations/code-quality-campaign-3-register.md`. **Post-campaign re-audit recorded below is a 20 Sep snapshot — do not treat its “seven files over 1,000” / “24 routes over 80” rows as current.**  
 **Operating Protocol:** `docs/operations/code-quality-maturity-protocol.md`  
 **Master Architectural Specification:** `docs/designs/2026-09-19-code-quality-iceinvein.md`  
 **Core Rules:** `.cursor/rules/leaf-and-component-cleanliness.mdc`, `AGENTS.md`
@@ -10,7 +10,7 @@
 
 ## 1. Progress & Census Scorecard
 
-*Campaign complete — 4-Phase Subagent Protocol*
+*Campaign complete — historical close. Operating protocol is the **five-stage** Grok → Composer → Orchestrator lifecycle (`docs/operations/code-quality-maturity-protocol.md`). “4-Phase” below is archival wording only.*
 
 | Wave | Scope | Workflows | Verified | In Review | Pending | Target Status |
 | :--- | :--- | :---: | :---: | :---: | :---: | :---: |
@@ -101,6 +101,8 @@ The code-quality campaign ran five waves across **28 verified workflows** (`CQ-2
 
 ### Outstanding Work (Post-Campaign)
 
+**Hard 1,000-line files and ultra-thin page routes are claimed by Campaign 2** (`docs/operations/code-quality-ceiling-register.md`). Everything else below stays here so it is not lost:
+
 Nothing below was in scope for Wave 5 close-out; carry forward explicitly so recorded debt is not lost:
 
 | Item | Notes |
@@ -114,6 +116,106 @@ Nothing below was in scope for Wave 5 close-out; carry forward explicitly so rec
 | **`directory-presentation.ts`** | Re-export shim left from `CQ-05`; structural cleanup candidate. |
 | **`registry/tool-reranker.ts`** | Re-attribute the omitted manifest surface when concurrent agent work lands at `HEAD`. |
 | **Known red tests (concurrent agent)** | Six failures in `module-boundaries.test.ts` (3) and `native-platform-procure.test.ts` (3) — ADR 0002 `tool.procure` removal; not campaign-owned. |
+| **Hard 1,000-line files (re-audit)** | Seven files still over the hard ceiling — see Post-Campaign Re-Audit census. Includes dropped `CQ-22` (`capabilitySupplyPublish.ts` 1135) and `admission.ts` 1037. |
+| **Ultra-thin routes (re-audit)** | 24 route files over 80 lines. Campaign never scoped this invariant. Worst: `activity.tsx` 769. |
+| **`registry/internal` own-barrel import (re-audit)** | `registry-action-contracts.ts` imports `@/modules/registry/public`. Only remaining same-module barrel hit; `deps:check` still 0 because the rule matches `public.ts` cycles, not this edge alone. |
+| **React Doctor errors (re-audit)** | 4 errors on full scan: carousel effect cleanup, `status.tsx` route property order, two `secret-in-fallback` hits in `tools/dev/`. Not campaign regressions. |
+
+### Post-Campaign Re-Audit (20 September 2026)
+
+Re-measured the original ten cleanliness invariants and the Stage-4 gates against **current source**, not the register's close-out claims. Scout: `81ea5cb5-f04b-49bb-9d9f-f7fbdb8f7492`. Gates and React Doctor were re-run independently (same day, after `97e944b3c`).
+
+**Verdict:** The campaign closed the work it scheduled. It did **not** make the ten invariants true of the current tree. Waves 1–5 extracted the named 80 types, decomposed the named top-12 surfaces, split four Convex gods, converted eleven nonce-burning reads, and drove `no-circular-via-barrel` to 0. File-size, route-thickness, remaining Convex gods, leftover money math in standalone `.tsx`, and one own-barrel import were never in those 30 workflows and are still red.
+
+#### Gate re-run
+
+| Gate | Command | Result |
+| :--- | :--- | :--- |
+| **Gate 1 Lint** | `npm run lint` (`oxlint --deny-warnings`) | Exit 0. |
+| **Gate 2 Typecheck** | `npm run typecheck` (`tsc --noEmit`) | Exit 0. |
+| **Gate 3 Dependency ratchet** | `npm run deps:check` | Exit 0. **`no-circular` 0/0 ok**, **`no-circular-capability-supply-internal` 0/0 ok**, **`no-circular-via-barrel` 0/0 ok**. |
+| **Gate 4 Tests** | `npx vitest run` | **6 failed / 6,836 passed / 25 skipped / 3 todo** (6,870). **2 files** fail: `module-boundaries.test.ts` (3), `native-platform-procure.test.ts` (3). Matches Known Red Baseline. |
+| **TS standards** | `npm run test:ts-standards` | **1/1 passed**. |
+| **UI contract** | `npm run test:ui-contract` | **2/2 passed**. |
+| **RPC guards** | `convex-api-kind-snapshot` + `convex-string-reference-ratchet` + `module-boundaries-ratchet` | All **pass**. Module ratchet remains at measured **29 / 224**. |
+
+#### React Doctor (`npm run doctor -- --yes --scope full`)
+
+`react-doctor` **0.7.7**, full-repo, `--blocking none`. **4 errors, 412 warnings, 220 files, 416 diagnostics.** Categories: Performance 205, Maintainability 148, Bugs 55, Security 6, Accessibility 2. Score API skipped (`--no-telemetry`).
+
+**Errors (4):**
+
+| Rule | File | Notes |
+| :--- | :--- | :--- |
+| `effect-needs-cleanup` | `src/components/ui/carousel.tsx:96` | Subscription in `useEffect` without cleanup. Vendored/Tier-1 primitive; not campaign-owned. |
+| `tanstack-start-route-property-order` | `src/routes/status.tsx:27` | `loader` after `head` breaks type inference. |
+| `secret-in-fallback` | `tools/dev/experiment-chained-jev-router.ts:42` | Hardcoded secret fallback for an env var. Dev experiment; not product runtime. |
+| `secret-in-fallback` | `tools/dev/try-jev-aecon.ts:76` | Same class. |
+
+**Security warnings (4 more):** `build-pipeline-secret-boundary` on `.github/workflows/kernel-release-gate.yml`; `agent-tool-capability-risk` on `convex/chatTools.ts`; `local-rpc-native-bridge-risk` on `tools/dev/local-source-write-secret.ts`; `mcp-tool-capability-risk` on the package-5 reference provider. Treat as review items, not campaign regressions.
+
+**Top warning rules:** `async-await-in-loop` (96), `unused-export` (73), `js-set-map-lookups` (49), `server-sequential-independent-await` (31), `js-combine-iterations` (28), `unused-file` (20). These are advisory; CI is `blocking: none`.
+
+**Campaign-adjacent React Doctor hits that confirm recorded debt:**
+
+- `no-chain-state-updates` still fires in `useProviderWorkspaceSheets.ts` (lines 128, 131) plus `AeKeyRevealDialog.tsx`, `AeConnectReturnPoller.tsx`, and `src/components/ui/data-state.ts`.
+- `no-giant-component` names `AeKeyRevealDialog`, `AeOwnerCredit`, and the three fattest routes (`activity.tsx`, `agent-access.tsx`, `owner.credit.tsx`) — same files the size census flags.
+- `server-sequential-independent-await` / `async-await-in-loop` remain widespread in Convex, including the Wave-4 moved files.
+
+#### Ten-invariant scorecard
+
+Measured against `.cursor/rules/leaf-and-component-cleanliness.mdc` and the protocol's Canonical Quality Invariants. Line counts are `wc -l`.
+
+| # | Invariant | Status | What held | What is still red |
+| :---: | :--- | :---: | :--- | :--- |
+| 1 | Component Type Quarantine | **PARTIAL** | Named Wave-1 80 types live in view-models/contracts. Canonical `Rule4Diagnostic` is unique (`src/lib/ui/diagnostic.ts`). | **2** domain re-exports still leave `.tsx` (`AeOwnerOfferings.tsx` → `OwnerOfferingSummary`; `AePayoutPolicyForm.tsx` → `PayoutScheduleType`). Domain-ish locals remain in standalone cards/routes (`AvailableAccountHistory`, `SavedToolsContextValue`, `ActivityLoaderResult`, …). Strict “exactly one `<Name>Props`” is not true of 82 of 315 scanned `.tsx` files. |
+| 2 | Pure Leaf Invariant | **PARTIAL** | All **12** campaign compound `components/` leaves + `SpendingLimitInputs.tsx` have **zero** I/O and **zero** inline GST/ABN/BigInt. | Standalone money surfaces still compute in `.tsx`: `AeInvoiceHistoryTable.tsx` (`calculateAudGstSplit`), `TaxProfileForm.tsx` (`isValidAbn`), BigInt cards (`AeMonthlySpendCeilingCard`, `AeAutoRechargeCard`, `AePayoutPolicyForm`, `AeAccountHistoryTable`). `AeAgentJsonAffordance.tsx` still `fetch`es. |
+| 3 | File size ceilings | **FAIL** | Named Wave-2/3 compounds are under 300 (except recorded deviations). Four named Convex façades are under 1,000. | **7 files > 1,000** (hard fail). **19** UI components > 300. **24** Convex roots ≥ 500. See census below. |
+| 4 | CQS — reads do not burn write nonces | **PARTIAL** | All **11** CQ-19 handlers remain `query` / `queryGeneric` + `requireSourceRead`. No `query` calls `requireSourceWrite`. RPC kind snapshot still green. | `agentMoneyReads.balance` (action) still `runMutation`s `prepareBalance` → `requireSourceWrite` (deliberate Wave-4 non-conversion). `moneyLedger.readAgentProviderEarnings` is still a `mutation` accepting `sourceWriteArgs` (stub; burns no nonce). |
+| 5 | Internal never imports own barrel | **PARTIAL** | Money, security, observability, discovery, business, seo internals are clean. `deps:check` barrel rule **0/0**. | **1** same-module hit: `src/modules/registry/internal/registry-action-contracts.ts:18` imports `@/modules/registry/public`. |
+| 6 | Compound folder encapsulation | **PARTIAL** | **12/12** Wave 2–3 compounds have container + hook + contracts + skeleton + `components/`. No leftover flats at the old `AeSupplyEarningsCard.tsx` paths. | `src/components/ae/market/tool-detail/` is a 13-file pile with no hook/contracts/skeleton/leaves (`AeToolContractSections.tsx` **447**). Three I/O panels remain flat under `offerings/`. |
+| 7 | Three-tier hierarchy | **PARTIAL** | `src/components/ui/` → **0** `@/modules/*`. `src/components/ae/shared/` → **0** `@/modules/*`. | Law examples (`AeCopyReference`, `AeGstBreakdown`) do not live in `shared/`. Extra non-tier directories (`ae/data/`, `ae/feedback/`, `ae/forms/`, `ae/status/`) predate the campaign. |
+| 8 | Convex façade pattern | **PARTIAL** | `interactiveAuthority.ts` **102**, `capabilityQuotes.ts` **75**, `capabilityProviderConnectionAttempts.ts` **100**; logic under `convex/lib/<domain>/`. RPC paths unchanged. | `moneyAccountFunding.ts` **222** over the **200**-line façade ceiling. `capabilityCallProjection.ts` **1041** (CQ-25 parked). `capabilitySupplyPublish.ts` **1135** (CQ-22 dropped — still a 1,000-line file). **16** `convex/lib/` files > 400, including `admission.ts` **1037**. |
+| 9 | Ultra-thin route controllers | **FAIL** | Campaign-touched `owner.operations.tsx` stayed under 80. | **24** of ~42 `src/routes/**/*.tsx` exceed **80**. Worst: `activity.tsx` **769**, `agent-access.tsx` **519**, `owner.credit.tsx` **401**. Campaign never scoped this invariant. |
+| 10 | Colocated skeletons & tests | **PARTIAL** | All 12 compounds have a colocated `*Skeleton.tsx`. `vitest.config.ts` includes `src/**/*.test.ts(x)`. | `tool-test-playground` has **no** hook test and **no** leaf tests. Connect-wizard, spending-limits, price-modal, onboarding are hook-only. |
+
+#### Hard 1,000-line census (current `wc -l`)
+
+| Lines | File | Notes |
+| ---: | :--- | :--- |
+| 1310 | `src/modules/money/formance.ts` | Not in CQ-01–CQ-30. |
+| 1302 | `src/modules/capability-supply/internal/supply-funnel/provider-connection-handoff.ts` | Not in CQ-01–CQ-30. |
+| 1135 | `convex/capabilitySupplyPublish.ts` | CQ-22 dropped (helper, not RPC façade); **still over the hard ceiling**. |
+| 1054 | `convex/capabilityProviderOffboarding.ts` | Not decomposed. |
+| 1041 | `convex/capabilityCallProjection.ts` | CQ-25 parked. |
+| 1038 | `src/modules/capability-supply/internal/cdp-x402-payment-signer.ts` | Historical re-audit. Current unified `main` measurement is **1,041** (Campaign 2 A10 deferral; see ceiling + C3 registers). |
+| 1037 | `convex/lib/callLifecycle/admission.ts` | Submodule over the 400-line façade-submodule guideline **and** the 1,000-line hard ceiling. |
+
+#### Ranked remaining debt (re-audit)
+
+Adds to, and does not replace, the Outstanding Work table above.
+
+1. **Seven files over the 1,000-line hard ceiling** — **historical 20 Sep re-audit.** Campaign 2 claimed the in-scope gods; the standing exception is the signer at **1,041**. See `docs/operations/code-quality-ceiling-register.md`.
+2. **Twenty-four routes over 80 lines** — **historical 20 Sep re-audit.** Campaign 2 Wave 2–3 claimed page-route controllers (≤80). Do not reopen the five newest operator routes.
+3. **Twenty-four Convex roots still ≥ 500** after Wave 4 only split four files. The façade pattern is not yet the repo norm.
+4. **CQS residuals** — `prepareBalance` nonce burn (deliberate); `readAgentProviderEarnings` mutation shape.
+5. **Standalone money math still in `.tsx`** — invoice GST, ABN, ceiling/recharge/payout BigInt cards. Compound leaves are clean; the original “top 12” was not the whole set.
+6. **`registry/internal` → `registry/public`** — the only remaining own-barrel import; Wave 5 claimed zero.
+7. **`tool-detail/` pile + three Wave-3 leftover I/O panels** under `offerings/`.
+8. **React Doctor errors (4)** and security warnings (6) — none are campaign regressions; the two `secret-in-fallback` hits in `tools/dev/` deserve a deliberate look because they fail open.
+9. **Accepted / already-recorded:** `reserveAttempt` complexity **59**; `args as never` on agent funding handoff; price-modal GST display bypass; `directory-presentation.ts` shim (still **2** runtime consumers); `useProviderWorkspaceSheets` chained effects.
+
+#### What the re-audit confirms held
+
+- Compound leaf purity on every Wave 2–3 `components/` file.
+- The eleven CQ-19 query conversions and both RPC contract guards.
+- Four named Convex façades (except the 200-line miss on `moneyAccountFunding.ts`).
+- Wave-1 extraction of the named 80 types out of `.tsx` **as definitions**.
+- Unique `Rule4Diagnostic`.
+- `vitest` discovery of colocated `src/**` tests.
+- No leftover campaign containers at the old flat paths.
+- Tier 1 / `shared/` `@/modules` import freeze.
+- Dependency ratchet at **0 / 0 / 0**.
 
 ### Wave 4 Campaign Commits
 

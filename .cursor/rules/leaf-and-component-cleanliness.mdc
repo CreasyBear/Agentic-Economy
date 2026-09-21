@@ -85,21 +85,23 @@ Every UI component in the codebase belongs strictly to one of three tiers:
 
 ## 8. Convex Façade Router Pattern (Zero-Breakage RPC)
 
-When decomposing a >1,000-line Convex file:
+When decomposing a Convex RPC module:
 1. **The root file `convex/<name>.ts` must remain as a thin Façade (<200 lines).** It defines only the public `query`, `mutation`, and `action` entry points and parameter validation schemas.
-2. **Logic submodules move to `convex/<name>/<submodule>.ts` (<400 lines each).**
-3. **Zero RPC Breakage:** This guarantees generated Convex API paths (`api.<name>.<method>`) remain 100% unchanged for clients and tests.
+2. **Logic moves to `convex/lib/<domain>/` (<400 lines each).** Never `convex/<name>/` — that breaks `api.<name>.<method>`.
+3. **Root helpers (0 RPC)** may exist beside the host façade as re-export shells. They are not façade violations.
+4. **Zero RPC Breakage:** generated Convex API paths (`api.<name>.<method>`) remain 100% unchanged for clients and tests.
 
 ## 9. Ultra-Thin Route Controller Invariant
 
 Route files in `src/routes/` must act strictly as Route Controllers:
-- Validate URL params and search queries via `zod`.
+- Validate URL params and search queries via `zod` (or a typed validator). Search types live in existing `.ts` contract modules, not the route `.tsx`.
 - Declare route loader/prefetching.
 - Render the corresponding Page Container component from `src/components/ae/`.
-- **Hard Ceiling:** Route files must not exceed **80 lines**. Zero inline modal state or complex layout markup inside route files.
+- **Hard Ceiling:** Route files must not exceed **80 lines** (≤80). Zero inline modal state or complex layout markup inside route files.
 
 ## 10. Colocated Zero-CLS Skeletons & Test Topology
 
-- **Skeletons:** Every compound component must colocate `<ComponentName>Skeleton.tsx` mirroring identical layout dimensions, flex/grid properties, and border radiuses to guarantee zero Cumulative Layout Shift (CLS).
-- **Test Colocation:** Unit tests for pure leaf components and container hooks are colocated with their source (`<name>.test.tsx`, `use<Name>.test.ts`). Integration and route tests remain in `tests/unit/routes/` and `tests/integration/`.
+- **Skeletons:** Every compound with an asynchronous loading boundary must colocate `<ComponentName>Skeleton.tsx` mirroring identical layout dimensions, flex/grid properties, and border radiuses to guarantee zero Cumulative Layout Shift (CLS).
+- **Static-page N/A:** Synchronous pages with no pending/loader (privacy, terms, help) do **not** require a skeleton. Record the exception; do not add a fake one.
+- **Test Colocation:** Unit tests for pure leaf components and container hooks are colocated with their source (`<name>.test.tsx`, `use<Name>.test.ts`) when a behavioural gap warrants them. Integration and route tests remain in `tests/unit/routes/` and `tests/integration/`.
 

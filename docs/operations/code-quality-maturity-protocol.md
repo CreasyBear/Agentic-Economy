@@ -19,10 +19,10 @@ When context windows compact or subagents are dispatched, **always read this fil
 4. **Command-Query Separation (CQS):** Queries are 100% read-only and cache-safe. Reads never burn one-time write nonces.
 5. **Internal Modules Never Import Own Barrel:** No file under `src/modules/<domain>/internal/` may import from `src/modules/<domain>/public.ts`.
 6. **Compound Component Encapsulation:** Decomposed components live in dedicated feature folders (`src/components/ae/<domain>/<feature>/`), preventing loose-file sprawl.
-7. **Convex Façade Router Pattern:** Root `convex/<module>.ts` remains a thin Façade (<200 lines) preserving RPC routes; logic lives in `convex/<module>/<submodule>.ts`.
+7. **Convex Façade Router Pattern:** Root `convex/<module>.ts` remains a thin Façade (<200 lines) preserving RPC routes. **Campaign 2/3 layout:** logic lives in `convex/lib/<domain>/` (<400 each). Never `convex/<module>/` — that breaks `api.<module>.<method>`. Root files with **0 RPC** are helpers, not façades (A08/A09); they may stay as re-export shells plus thinness wrappers.
 8. **Three-Tier Component Hierarchy:** Clean separation between Tier 1 (Atomic `src/components/ui`), Tier 2 (Shared Domain `src/components/ae/shared`), and Tier 3 (Feature Compounds).
-9. **Ultra-Thin Route Controllers:** Route files in `src/routes/` are <80 lines, handling only URL params, loaders, and rendering page containers.
-10. **Colocated Zero-CLS Skeletons & Tests:** Skeletons and unit tests are colocated directly within the compound component folder.
+9. **Ultra-Thin Route Controllers:** Route files in `src/routes/` are **≤80** lines, handling only URL params, loaders, and rendering page containers. Framework search types live in `.ts` contract modules, not the route `.tsx` (A11).
+10. **Colocated Zero-CLS Skeletons & Tests:** Skeletons and unit tests are colocated directly within the compound component folder. **Synchronous static pages** (no pending/loader boundary) do not require a skeleton — record **N/A** (A13: privacy, terms, help).
 
 ---
 
@@ -226,15 +226,15 @@ src/components/ae/<domain>/<feature-name>/
 ```
 
 ### 2. Convex Façade Router Pattern
-To prevent breaking existing client RPC paths (`api.<module>.<method>`):
+To prevent breaking existing client RPC paths (`api.<module>.<method>`), Campaign 2/3 use this layout (not a per-module folder):
 ```text
 convex/
-  ├── <module>.ts                  # Thin Façade (<200 lines): query/mutation schemas & delegations
-  └── <module>/                    # Internal submodules (<400 lines each)
-        ├── <submoduleOne>.ts      # Pure business logic & database transactions
-        ├── <submoduleTwo>.ts      # Telemetry & verification helpers
-        └── <module>.contracts.ts  # Backend-internal type definitions
+  ├── <module>.ts                      # Thin Façade (<200): query/mutation/action registrations
+  └── lib/<domain>/                    # Extracted logic (<400 each)
+        ├── <concernOne>.ts
+        └── <concernTwo>.ts
 ```
+Never create `convex/<module>/` for AE-owned RPC modules. Root **helper** files with 0 RPC (A08/A09) re-export from `convex/lib/<domain>/` so the host façade can keep `from './<helper>'`.
 
 ### 3. Three-Tier Component Hierarchy
 - **Tier 1 (Atomic Primitives):** `src/components/ui/` (Zero domain logic, zero `@/modules/*` imports).
@@ -242,5 +242,5 @@ convex/
 - **Tier 3 (Feature Compounds):** `src/components/ae/<domain>/<feature>/` (Encapsulated workflow packages).
 
 ### 4. Ultra-Thin Route Controllers
-Files in `src/routes/` are strictly controllers (<80 lines). They validate search params via Zod, invoke loaders, and render the Page Container from `src/components/ae/`. All state, modals, and layouts reside inside the component container.
+Files in `src/routes/` are strictly controllers (**≤80** lines). They validate search params via Zod (or a typed validator), invoke loaders, and render the Page Container from `src/components/ae/`. Search types belong in existing `.ts` contract modules, not the route `.tsx`. All state, modals, and layouts reside inside the component container.
 

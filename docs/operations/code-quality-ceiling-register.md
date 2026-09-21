@@ -1,10 +1,11 @@
 # Code Quality Campaign 2: Hard Ceilings — Operational Register
 
 **Date:** 20 September 2026 (Wave 3 close-out measured 21 Sep 2026)  
-**Status:** WAVE 1 VERIFIED (`e140512a0`); WAVE 2 VERIFIED (`0fafd075d`); WAVE 3 VERIFIED (`fea40841a`; typecheck heal `252bed4bb`); **Evaluation** written 21 Sep 2026; **Cold review** recorded 21 Sep 2026; campaign **CLOSED** (Campaign 1 closed at `147b602a7`)  
+**Status:** WAVE 1 VERIFIED (`e140512a0`); WAVE 2 VERIFIED (`0fafd075d`); WAVE 3 VERIFIED (`fea40841a`; typecheck heal `252bed4bb`); **Evaluation** written 21 Sep 2026; **Cold review** recorded 21 Sep 2026; campaign **CLOSED** (Campaign 1 closed at `147b602a7`). Do not reopen Wave 3 or the five newest operator-route controllers.  
 **Operating Protocol:** `docs/operations/code-quality-maturity-protocol.md` (same 5-stage Grok → Composer → Orchestrator lifecycle; IDs `CQ2-*`)  
 **Design:** `docs/designs/2026-09-20-code-quality-ceilings.md`  
 **Predecessor:** `docs/operations/code-quality-maturity-register.md` (Campaign 1; re-audit 20 Sep 2026)  
+**Successor:** `docs/operations/code-quality-campaign-3-register.md` (Campaign 3 — façade/helper follow-through; **CLOSED** 21 Sep 2026)  
 **Core Rules:** `.cursor/rules/leaf-and-component-cleanliness.mdc` §4 (1,000-line hard ceiling) and §9 (80-line page-route controllers)
 
 **Thesis:** Make the two hard ceilings true — no in-scope file in `src/` or `convex/` exceeds 1,000 lines, and page-route files are controllers under 80 lines.
@@ -86,7 +87,7 @@ Parallel-safe: `CQ2-01` through `CQ2-05` touch disjoint files. Run `CQ2-06` afte
 
 | Outcome | Detail |
 | :--- | :--- |
-| Over 1,000 (hand-written) | **1** — `src/modules/capability-supply/internal/cdp-x402-payment-signer.ts` at **1,038** (recorded deferral) |
+| Over 1,000 (hand-written) | **1** — `src/modules/capability-supply/internal/cdp-x402-payment-signer.ts` at **1,038** at C2 close; **1,041** on current unified `main` (A10 deferral) |
 | Excluded generated | `src/routeTree.gen.ts` at **2,745** — campaign forbidden to regenerate; not counted as a miss |
 
 **Wave 1 thesis met:** at most one hand-written file over 1,000, and it is the recorded deferral.
@@ -233,10 +234,11 @@ Every reported violation names `procure-engine`, `procure.actions`, `output-adju
 
 ---
 
-### Deferred: `cdp-x402-payment-signer.ts` (1,038 lines)
+### Deferred: `cdp-x402-payment-signer.ts` (1,041 lines on unified `main`)
 
 - **Surfaces:** `src/modules/capability-supply/internal/cdp-x402-payment-signer.ts`
 - **Decision (Orchestrator, 20 Sep 2026):** Out of Wave 1. Vendor-shaped custody wrapper. Wave 1 success metric **allows this one remaining file over 1,000**. Revisit after Wave 1 if the other six are green.
+- **Current measurement (21 Sep 2026):** **1,041** on unified `main` (historical close text recorded 1,038 at `1d8d07583`). Still **DEFERRED** — Campaign 3 did not extract it (A10).
 - **Status:** `DEFERRED`
 
 ---
@@ -466,7 +468,7 @@ All measurements below used Node 22 unless noted.
 
 | Outcome | Detail |
 | :--- | :--- |
-| Over 1,000 (hand-written) | **1** — `src/modules/capability-supply/internal/cdp-x402-payment-signer.ts` at **1,038** (recorded deferral) |
+| Over 1,000 (hand-written) | **1** — `src/modules/capability-supply/internal/cdp-x402-payment-signer.ts` at **1,038** at C2 close; **1,041** on current unified `main` (A10 deferral) |
 | Generated excluded | `src/routeTree.gen.ts` at **2,745** — not counted |
 
 **80-line page-route census** — `src/routes/*.tsx`, exclude `__root.tsx` and `api*`:
@@ -527,7 +529,7 @@ Campaign 2 Wave 1 explicitly excluded `*.test.*` from the 1,000-line success met
 
 ### What the reviewer scored
 
-**(a) 1,000-line production — FAIL** — one citation only: `src/modules/capability-supply/internal/cdp-x402-payment-signer.ts` at **1,038**.
+**(a) 1,000-line production — FAIL** — one citation only: `src/modules/capability-supply/internal/cdp-x402-payment-signer.ts` at **1,038**. Current unified `main` measurement is **1,041**; still the recorded A10 deferral.
 
 **(b) 80-line page routes — FAIL** — one citation only: `src/routes/developers.discovery.tsx` at **197**.
 
