@@ -25,7 +25,7 @@ Provenance format: agent name + date. All findings below preserve the source rep
 | `tests/imports/own-barrel-imports.test.ts` | `OWN_BARREL_EXCEPTIONS`: `src/modules/registry/internal/registry-action-contracts.ts` |
 | `tests/imports/convex-facade-size.test.ts` | `FACADE_MAX_LINES=200`; 73 pinned `FACADE_SIZE_EXCEPTIONS` |
 | `tests/imports/copy-vocabulary.test.ts` | `COPY_CEILINGS`: `supplier=0`, `invocation=0`, `connection-online=0`, `balance=8`, `legacy-credential=2`, `used-recently=1`, `one-call-away=1`, `authority-mode=1`, `mandate=0`, `commitment=0`, `callable-operation=0`, `commercial-closure=0`; `MARGIN=2` |
-| `tests/imports/status-vocabulary.test.ts` | `STATUS_LITERAL_FILE_CEILING=28`; `MARGIN=2` |
+| `tests/imports/status-vocabulary.test.ts` | `STATUS_LITERAL_FILE_CEILING=17`; `MARGIN=2` |
 
 A row is VERIFIED only if its commit lowered at least one ratchet constant or its Target spec is asserted by a test under tests/e2e or tests/unit; a human re-walk alone never verifies a row.
 
@@ -61,7 +61,7 @@ No subagent edits these unless dispatched from the spine plan by Joel.
 | MARKET | 6 | 6 | 3 | 2 | 1 | OWNER/IN REVIEW/PENDING |
 | ASK | 2 | 1 | 1 | 0 | 0 | OWNER |
 | AGENTS | 3 | 2 | 1 | 1 | 0 | OWNER/PENDING |
-| CREDIT | 3 | 2 | 2 | 0 | 0 | OWNER/PENDING |
+| CREDIT | 3 | 2 | 2 | 0 | 0 | OWNER/VERIFIED |
 | ACCOUNT | 7 | 5 | 1 | 4 | 0 | VERIFIED/IN REVIEW |
 | RECORDS | 2 | 2 | 2 | 0 | 0 | OWNER |
 | HELP | 5 | 4 | 2 | 2 | 0 | VERIFIED/IN REVIEW |
@@ -69,7 +69,7 @@ No subagent edits these unless dispatched from the spine plan by Joel.
 | DEV/ADMIN | 4 | 4 | 2 | 2 | 0 | VERIFIED/IN REVIEW |
 | SHELL | 2 | 1 | 0 | 0 | 1 | PARKED |
 | CROSS-CUTTING | n/a | 12 | 7 | 5 | 0 | OWNER/VERIFIED/IN REVIEW/PENDING |
-| CLASS GAPS | n/a | 55 | n/a | n/a | n/a | 49 RECORDED + 6 BASE-PAGE DECISIONS |
+| CLASS GAPS | n/a | 55 | n/a | n/a | n/a | 1 ADOPTED + 48 RECORDED + 6 BASE-PAGE DECISIONS |
 
 The 43 route entries are all assigned once. `/support` is assigned to the Receipt and Support row because that is its buyer job. The four DEV/ADMIN routes are separated from the five Provider supply routes even though the route inventory classified all nine as SUPPLY.
 
@@ -207,11 +207,11 @@ The 43 route entries are all assigned once. `/support` is assigned to the Receip
 **Benchmark:** Stripe Dashboard Home. **Incumbent baseline:** today’s money and actionable exceptions, not vanity counts.
 **Current state (LIVE):** “Balance unavailable”; “No Calls need attention” conflicts with unavailable summaries; “8 connected Agents”.
 **ROOT:** R-14.
-**ROOT-ATTN:** one attention count source shared with R-20; dispatched in Wave E.
+**ROOT-ATTN:** LANDED. Overview now distinguishes an unavailable Calls read from a complete zero result; SOURCE `tests/unit/routes/owner-overview-route.test.tsx`; COMMIT `02eb4e0f9`.
 **Gaps:** • [ACC-04] “No Calls need attention” while `/activity` cannot summarize (`AeOwnerOverview.tsx:76-80`) • [ACC-05] “Check Balance” and “Open Balance” duplicate (`AeOwnerOverview.tsx:93-107`) • [ACC-06] “8 connected Agents” exposes no decision (`AeOwnerOverview.tsx:115-120`).
 **Copy:** <table><tr><th>where</th><th>current</th><th>target</th></tr><tr><td>intro</td><td>See what needs attention, your available Balance, and connected Agents.</td><td>Review Credit, Calls needing attention, and Agents.</td></tr><tr><td>action</td><td>Open Balance</td><td>Open Credit</td></tr></table>
 **Target spec:** honest Credit state; attention agrees with Calls; Agent tile names a decision; one primary; no vanity counts. **Cut:** duplicate Open Balance and Provider upsell.
-**Priority:** P1. **Status:** IN REVIEW. **Verification evidence:** LIVE 2026-09-21 http://127.0.0.1:3024/owner rendered `Credit unavailable`, `Nothing was charged.`, one primary `Check Credit` and `Review Spending policy`; SOURCE `tests/unit/routes/owner-overview-route.test.tsx`; COMMIT `4dc32ea4a`. BROKEN: `No Calls need attention` versus `/activity` `NEEDS ATTENTION —`; `8 connected Agents`; duplicate `Check Credit`/`Open Credit`; `Want to offer a service?`. ROOT: R-14. ROOT-ATTN dispatched in Wave E. **Provenance:** RegAccount, RowR16Overview, RoastD15D16, 21 Sep 2026.
+**Priority:** P1. **Status:** IN REVIEW. **Verification evidence:** SOURCE `tests/unit/routes/owner-overview-route.test.tsx:54-103` asserts unavailable versus zero Calls, exactly one Credit action, no vanity Agent count and no Provider upsell; COMMIT `02eb4e0f9`. Remaining blocker: R-14 ROOT, because the local stack has no Formance ledger configuration. **Provenance:** RegAccount, RowR16Overview, RoastD15D16, AttentionSource, 21 Sep 2026.
 
 ### R-17 Account and security: `/owner/settings`
 **Benchmark:** GitHub Settings. **Incumbent baseline:** persistent section navigation, saved controls, destructive jobs isolated last.
@@ -220,7 +220,7 @@ The 43 route entries are all assigned once. `/support` is assigned to the Receip
 **Gaps:** • [ACC-07] “Low credit balance” true→false→reload restored true (`OwnerSettingsSections.tsx:18-25`) • [ACC-08] “A 3,112px page has no settings section nav” (`OwnerSettingsShell.tsx:15-22`) • [ACC-09] Profile bundles profile, sessions, sign-out and recovery (`OwnerSettingsSections.tsx:30-63`).
 **Copy:** <table><tr><th>where</th><th>current</th><th>target</th></tr><tr><td>alerts</td><td>Changes apply to this Account only.</td><td>Saved for this Account.</td></tr></table>
 **Target spec:** choices survive reload; section nav; personal Profile distinct from Team; filterable security history; workspace danger last elsewhere. **Cut:** SESSION eyebrow.
-**Priority:** P0. **Status:** IN REVIEW. **Verification evidence:** LIVE 2026-09-21 http://127.0.0.1:3024/owner/settings confirmed choices survive reload, sticky section navigation, separate Profile/Team/Business sections and filterable security history; SOURCE `tests/unit/routes/owner-settings.test.tsx:108-161`; COMMIT `e2ab92dcd`, `ef6e7cc43`. BROKEN: `SESSION` eyebrow remains; reload persistence is live-observed but not asserted; Clerk adds H1s `Account` and `Profile details`. ROOT-CLERK-H1 dispatched in Wave E. **Provenance:** RegAccount, RowR17Settings, TaxProfileHome, RoastD17D18, 21 Sep 2026.
+**Priority:** P0. **Status:** IN REVIEW. **Verification evidence:** LIVE 2026-09-21 http://127.0.0.1:3024/owner/settings confirmed choices survive reload, sticky section navigation, separate Profile/Team/Business/Privacy sections, filterable security history, no `SESSION` eyebrow and one accessibility-tree H1; SOURCE `tests/unit/routes/owner-settings.test.tsx:108-161`; COMMIT `e2ab92dcd`, `ef6e7cc43`, `f6c41441c`, `01a5194a6`, `1a8e966cf`. The behavioral assertion for reload persistence is missing, so §0a keeps this row IN REVIEW. Hidden Clerk vendor H1 nodes remain in the raw DOM but not the rendered or accessibility tree. **Provenance:** RegAccount, RowR17Settings, TaxProfileHome, RoastD17D18, SessionEyebrow, DataExport, ClerkHeadings, 21 Sep 2026.
 
 ### R-18 Team and Workspace: `/owner/team` and `/owner/workspace`
 **Benchmark:** GitHub Organization settings and Vercel Team settings. **Incumbent baseline:** one authoritative member/role view, environment controls and actor-attributed audit.
@@ -229,7 +229,7 @@ The 43 route entries are all assigned once. `/support` is assigned to the Receip
 **Gaps:** • [GH-15] “Clerk row says `R10 Smoke Owner … Admin`; canonical directory says same workspace has `user_… — Owner Active`” (`UNANCHORED`) • [GH-20] “connection hard-codes `Environment: production`; no workspace environment switcher” (`UNANCHORED`) • [GH-22] “`/owner/workspace` and `/owner/team` expose no workspace audit stream” (`UNANCHORED`).
 **Copy:** <table><tr><th>where</th><th>current</th><th>target</th></tr><tr><td>role</td><td>Admin / Owner for the same membership</td><td>One authoritative membership role</td></tr></table>
 **Target spec:** one role source; owner protections; environment choice visible; actor-attributed admin events; billing stays separate. **Cut:** duplicate membership projection.
-**Priority:** P1. **Status:** IN REVIEW. **Verification evidence:** LIVE 2026-09-21 `/owner/team` rendered one authoritative `Owner` role and `/owner/workspace` kept Danger zone last with Billing/Credit absent; SOURCE `tests/unit/routes/owner-team.test.tsx:78-90`, `tests/unit/settings/team-directory-table.test.tsx:51-60,93-108`, `tests/unit/routes/owner-workspace.test.tsx:99-127`; COMMIT `fc24cd5eb`, `66c3fa3a1`, `ef6e7cc43`. BLOCKED: environment choice and actor-attributed admin events are ABSENT because `convex/workspaceTeam.ts:36-40` exposes only `accountRef`, `owner` and `members`; no environment or event fields exist. Clerk adds H1s `Organization` and `Members`. ROOT-CLERK-H1 dispatched in Wave E. **Provenance:** ExpectGitHubVercel, RowR18TeamWorkspace, R18RemovalCheck, RoastD17D18, 21 Sep 2026.
+**Priority:** P1. **Status:** IN REVIEW. **Verification evidence:** LIVE 2026-09-21 `/owner/team` rendered one authoritative `Owner` role, `/owner/workspace` kept Danger zone last with Billing/Credit absent, and both pages exposed one accessibility-tree H1; SOURCE `tests/unit/routes/owner-team.test.tsx:78-90`, `tests/unit/settings/team-directory-table.test.tsx:51-60,93-108`, `tests/unit/routes/owner-workspace.test.tsx:99-127`; COMMIT `fc24cd5eb`, `66c3fa3a1`, `ef6e7cc43`, `1a8e966cf`. BLOCKED: environment choice and actor-attributed admin events remain absent because the Team/Workspace DTO exposes no environment or actor-event fields. Hidden Clerk vendor H1 nodes remain in the raw DOM but not the rendered or accessibility tree. **Provenance:** ExpectGitHubVercel, RowR18TeamWorkspace, RoastD17D18, ClerkHeadings, 21 Sep 2026.
 
 ### R-19 Authentication redirects: `/sign-in/$` and `/sign-up/$`
 **Benchmark:** Linear Login. **Incumbent baseline:** one auth surface, SSO/passkeys, exact deep-link return.
@@ -443,7 +443,10 @@ The 43 route entries are all assigned once. `/support` is assigned to the Receip
 **Gaps:** `AeStatus[52]`; UI state[11]; chat `{Working,Pending,Complete,Needs attention,Refused,Couldn't run}`; Tool readiness `{Ready now,Setup required,Unavailable,Checked when quoting}`; activity `{Completed,Refused,Needs Attention}` plus five purchase states; receipt labels; Agent `{Connected,Needs attention,Expired,Disconnected}`; credential `{Current,Active,Expired,Revoked}`; connection `{Connected,Expired,Revoked}`; invoice `{Paid,Reversed}`; spending `{Paused,Active}`; listing `{Ready now,Setup required,Inspect only}`; health `{Operational,Degraded,Checking}`; payout-return four-state; Express three-state; Provider availability two-state; owner availability three-state; lifecycle nine-state (`src/lib/ui/status-presentation.ts:3-57` and PatternInventory §3 anchors).
 **Copy:** <table><tr><th>where</th><th>current</th><th>target</th></tr><tr><td>all status UI</td><td>18 sets</td><td>`status-presentation.ts`</td></tr></table>
 **Target spec:** each touched page maps through canonical presentation; obsolete local labels deleted. **Cut:** local status sets with no distinct domain state.
-**Priority:** P1. **Status:** PENDING. **Verification evidence:** none. **Provenance:** PatternInventory, 21 Sep 2026.
+**OWNER remainder → buyer spine:** `src/components/ae/activity/AeActivity.tsx`, `src/components/ae/activity/components/ActivityMonthlySummary.tsx`, `src/components/ae/activity/useAeActivity.ts`, `src/components/ae/chat/ToolCard.tsx`, `src/components/ae/market/tool-detail/tool-inspector-model.ts`, `src/lib/public/chat-ia.ts`, `src/modules/chat/tool-card.ts`, `src/modules/market/tool-view-model.ts`.
+**Scanner false positives:** `src/components/ae/console/AeAgentConnectionReceipts.tsx` (time-fact heading); `src/components/ae/console/agent-operator-console-model.ts` (count/missing-data headings); `src/components/ae/offerings/provider-workspace-projection.ts` and `src/components/ae/supply/AeProviderToolDetail.tsx` (typed `Paused` discriminants); `src/components/ae/readback/AeAdminReadbackPanel.tsx` (count/missing-ref headings); `src/lib/errors.ts` (RFC 9457 title); `src/modules/capability-supply/internal/supply-funnel/types.ts`, `src/modules/capability-supply/provider-tool-status.ts` and `src/modules/capability-supply/tool-health.ts` (wire/Zod discriminants).
+**Future gate task — Status PENDING, not a row:** scanner refinement: exclude count/time headings, RFC titles, wire discriminants.
+**Priority:** P1. **Status:** IN REVIEW. **Verification evidence:** COMMIT `276294174` `3df79fb5c` `caa86a24f` `cb55d4250` `7919453dd` `162a7df74`; status-vocabulary 28→17; canonical rows added in `src/lib/ui/status-presentation-rows.ts:18-127` (`operational`, `connected`, `disconnected`, `active`, `paused`, `needs_attention`, `ready_now`, `setup_required`, `completed`, `current`, `credential_expired`, `credential_revoked`). **Provenance:** PatternInventory, StatusVocabBurndown, StatusVocabRoot, 21 Sep 2026.
 
 ### C-05 Tool summary projection
 **Surfaces affected:** Market, Ask, command panel, home, canonical Tool page and Provider door.
@@ -467,11 +470,11 @@ The 43 route entries are all assigned once. `/support` is assigned to the Receip
 **Surfaces affected:** Market, Agents, Credit and dialogs.
 **Benchmark:** WCAG 2.2 named controls, focus order and live updates. **Incumbent baseline:** one labelled native control per choice and announced result/error changes.
 **Current state (LIVE):** keyboard procurement path cannot efficiently search, compare or safely set policy.
-**ROOT-CLERK-H1:** Clerk-embedded components (UserProfile, OrganizationProfile, SignIn) render their own `<h1>`: `/owner/settings` 3 H1s (Account, Profile details), `/owner/workspace` 3 (Organization, Members), `/sign-in` 2 (Sign in to Agentic Economy). Fix = one Clerk appearance rule demoting embedded headings (`src/components/ae/website/clerk-appearance.ts`), not per-page hacks.
+**ROOT-CLERK-H1:** LANDED. One shared Clerk appearance rule leaves one accessibility-tree H1 on `/owner/settings`, `/owner/workspace`, `/owner/team`, `/sign-in` and `/sign-up`; hidden vendor H1 nodes remain in the raw DOM because Clerk exposes CSS-only appearance. COMMIT `1a8e966cf`.
 **Gaps:** • [A11Y-01] “search is Tab 12; submit moves focus to BODY; no live/status region or result count” (`UNANCHORED`) • [A11Y-02] “91 Tabs to first ‘Add … to comparison,’ then 31 to ‘Compare Tools’” (`UNANCHORED`) • [A11Y-03] unnamed radios and checkbox (`UNANCHORED`) • [A11Y-04] “Done returns focus to BODY” (`UNANCHORED`) • [A11Y-05] “unnamed progressbar” (`UNANCHORED`) • [A11Y-06] “two regions both named ‘Popular Tools’” (`UNANCHORED`) • [A11Y-07] “control what each Agent can do” versus unnamed policy radio (`UNANCHORED`) • [A11Y-08] “A world of Tools, ready to explore” versus 91 stops (`UNANCHORED`).
 **Copy:** <table><tr><th>where</th><th>current</th><th>target</th></tr><tr><td>search</td><td>silent result update</td><td>announce “12 results”; retain deliberate focus</td></tr><tr><td>policy</td><td>empty accessible names</td><td>one labelled native control per choice</td></tr></table>
 **Target spec:** search near skip link; count announced; compare bar focused after selection; controls named once; errors linked; dialog restores trigger/created row; landmarks unique. **Cut:** duplicate AX nodes and inert focus targets.
-**Priority:** P0. **Status:** PENDING. **Verification evidence:** Footer slice LIVE 2026-09-21 `/about`, `/terms` and `/status`: one `contentinfo` on each page; Resources, Help, Legal and Machines accordion groups each toggled `aria-expanded=false→true` at 390px; SOURCE `src/components/ae/website/AeSiteFooter.tsx`; COMMIT `e47cbd75c`. Named Market, Agent, Credit and dialog gaps remain open. **Provenance:** PersonaAccessibility, Roast3Footer, 21 Sep 2026.
+**Priority:** P0. **Status:** IN REVIEW. **Verification evidence:** LIVE 2026-09-21 `/owner/settings`, `/owner/workspace`, `/owner/team`, `/sign-in` and `/sign-up` each exposed one accessibility-tree H1; SOURCE `src/components/ae/website/clerk-appearance.ts:72-80`, `tests/unit/website/clerk-sign-in-appearance.test.ts:22-27`; COMMIT `1a8e966cf`. Named Market, Agent, Credit and dialog accessibility gaps remain open in the OWNER spine. **Provenance:** PersonaAccessibility, Roast3Footer, ClerkHeadings, 21 Sep 2026.
 
 ### C-08 Empty, error and loading states
 **Surfaces affected:** all async routes.
@@ -524,7 +527,7 @@ The 43 route entries are all assigned once. `/support` is assigned to the Receip
 | paths | absent | absent | quote/call | `ae_tool_quote/call` | quote/call | quote/call | linked canonical paths |
 | price | absent | A$ per call, GST incl. | ExactAmount plus AUD fields | absent | absent | mixed | one ExactAmount; buyer display per C-02 |
 **Target spec:** all advertised docs resolve; one runtime host; one auth name/header; canonical nouns; linked paths; one ExactAmount. **Cut:** dead glossary link and unconfigured signatures from inventory.
-**Priority:** P0. **Status:** IN REVIEW. **Verification evidence:** LIVE 2026-09-21 `/developers/api` and `/developers/discovery` used one runtime origin and the API reference rendered one Bearer sentence; `/glossary.md` HEAD and GET returned 200 with body beginning `# Glossary`. SOURCE `tests/unit/discovery/openapi-document.test.ts:68-134`, `tests/e2e/developer-discovery.spec.ts`, `src/routes/glossary[.]md.ts:7-38`; COMMIT `d8f3b3470`, `3951c5345`, `b5244c324`. Remaining setup-snippet and machine-endpoint vocabulary is Wave E work. **Provenance:** RegDevAdmin, GlossaryRoute, RowR31DevApi, RowR32Discovery, RoastD31D32, 21 Sep 2026.
+**Priority:** P0. **Status:** VERIFIED. **Verification evidence:** LIVE 2026-09-21 all 7 machine documents returned 200 and all 13 linked public paths returned 200; one runtime host, one `Authorization: Bearer <Agent access key>` form and one `ExactAmount` definition are asserted by 19 discovery/SEO files with 99 tests; SOURCE `src/modules/discovery/internal/agent-skill.ts:7-13`, `src/modules/discovery/internal/offering-discovery-file.ts:61-66,95-103`, `src/modules/discovery/internal/site-manifest.ts:44`, `src/modules/discovery/internal/glossary.md:24-27,49-53`; COMMIT `44decf45c`. **Provenance:** RegDevAdmin, GlossaryRoute, RowR31DevApi, RowR32Discovery, RoastD31D32, MachineDocsConsistency, 21 Sep 2026.
 
 ## 4. Class gaps: what an app of this kind has that AE does not
 
@@ -577,7 +580,7 @@ KNOWLEDGE references: OR OpenRouter, ST Stripe, RA RapidAPI, SA Shopify App Stor
 | 43 | Locale switch/i18n | SA | ABSENT `format-time.ts:7-21` | maintained i18n package not declared | high | DEFER until alpha market scope requires it |
 | 44 | Accessible states | all | PRESENT `AeActivity.tsx:84-94` | shadcn/Base UI | low | ADOPT existing UI primitives |
 | 45 | Report/moderate listing | SA | PARTIAL `useRemoveBusinessPage.ts:75-78` | existing dispute seam | medium | ADOPT existing dispute seam |
-| 46 | Personal-data export | GH, ST | ABSENT `convex/personalAccount.ts:177-194` | existing per-account reads | low | **DEFAULT (orchestrator, 2026-09-21); Joel may override:** ADOPT the existing export seam: synchronous `Download your data (JSON)` for the caller's own account records via existing per-account read functions; no email pipeline; the download manifest lists every record family excluded because no per-account read exists |
+| 46 | Personal-data export | GH, ST | ADOPTED `src/lib/server/personal-data-export.functions.ts:47-100` | existing per-account reads | low | **ADOPTED: COMMIT `01a5194a6`; Settings › Privacy › Download your data (JSON); sections `workspaceProfile`, `memberships`, `notificationPreferences`, `taxProfile`, `agentConnections`, `securityHistory`, `calls`, `invoices`; composed from existing caller-scoped reads via `src/lib/server/personal-data-export.functions.ts`; no new Convex query.** |
 | 47 | Org SSO/SCIM controls | GH, VE | ABSENT `owner.team.tsx:27-44` | Clerk enterprise | high | **DEFAULT (orchestrator, 2026-09-21); Joel may override:** DEFER; Clerk enterprise plan is a purchase decision |
 | 48 | Spend-anomaly alerts | ST | ABSENT `OwnerNotificationSettings.tsx:54-74` | existing telemetry and notifications | high | **DEFAULT (orchestrator, 2026-09-21); Joel may override:** DEFER; Credit is OWNER-LOCKED and alerts land with W6/W7 |
 | 49 | Command palette | GH, VE | PRESENT `AeCommandPanel.tsx:24-55` | installed cmdk | low | ADOPT cmdk |
@@ -603,7 +606,7 @@ KNOWLEDGE references: OR OpenRouter, ST Stripe, RA RapidAPI, SA Shopify App Stor
 6. **Spend-anomaly alerts** — prepaid autonomous spending needs abuse detection beyond low-balance thresholds. **DEFAULT (orchestrator, 2026-09-21); Joel may override:** DEFER; Credit is OWNER-LOCKED and alerts land with W6/W7.
 7. **Per-key IP allowlists** — leaked machine credentials need another containment boundary; enforce at the gateway. **Decision:** DEFER until gateway authority is named.
 8. **Org SSO/SCIM controls** — serious provider/buyer teams expect centralized identity lifecycle. **DEFAULT (orchestrator, 2026-09-21); Joel may override:** DEFER; Clerk enterprise plan is a purchase decision.
-9. **Personal-data export** — closure without portable readback is incomplete. **DEFAULT (orchestrator, 2026-09-21); Joel may override:** ADOPT the existing export seam: synchronous `Download your data (JSON)` for the caller's own account records via existing per-account read functions; no email pipeline; excluded record families are listed in the download manifest.
+9. **Personal-data export** — closure without portable readback is incomplete. **ADOPTED:** COMMIT `01a5194a6`; Settings › Privacy › Download your data (JSON), composed from existing caller-scoped reads with no new Convex query.
 10. **Locale switching/i18n** — hard-pinned `en-AU` blocks broader marketplace operation; adopt a maintained i18n library. **Decision:** DEFER until alpha market scope requires it.
 
 ## 5. Execution protocol
@@ -1006,3 +1009,64 @@ No wave may invent a second authority, status model, money formatter, Tool proje
 - C-11 IN REVIEW: the navigation collision is fixed; remaining named hit boxes and above-fold actions stay open.
 - C-12 IN REVIEW: R-31/R-32 establish the runtime origin, Bearer sentence and discovery projection; remaining machine-doc vocabulary is Wave E work.
 - Wave E starts from the §4 orchestrator defaults: status remains in-app, economics remain figure-free, #46 ADOPT existing export seam, #47 DEFER and #48 DEFER.
+
+### Wave E · 2026-09-21
+
+#### Commits
+
+- `f6c41441c` — R-17 removed the `SESSION` eyebrow.
+- `02eb4e0f9` — R-16 ROOT-ATTN, unavailable versus zero Calls, one Credit action, no vanity count and no upsell.
+- `276294174`, `3df79fb5c`, `caa86a24f`, `cb55d4250`, `7919453dd`, `162a7df74` — C-04 canonical status rows and status-literal burndown.
+- `44decf45c` — C-12 one machine-doc host, auth header, price shape and resolvable advertised paths.
+- `01a5194a6` — §4 #46 caller-scoped personal-data JSON export under Settings › Privacy.
+- `1a8e966cf` — C-07 ROOT-CLERK-H1 shared appearance rule.
+
+#### Gate scoreboard before→after
+
+- `FILE_SIZE_CEILINGS`: `over300=277`, `over500=100`, `over1000=0` — unchanged.
+- `ROUTE_SIZE_EXCEPTIONS`: `{src/routes/__root.tsx: 114}` — unchanged.
+- `TSX_TYPE_EXPORT_CEILING=18` — unchanged.
+- `LEAF_PURITY_EXCEPTIONS=[]` — unchanged.
+- `FACADE_SIZE_EXCEPTIONS`: 73 — unchanged.
+- `COPY_CEILINGS`: `supplier=0`, `invocation=0`, `connection-online=0`, `balance=8`, `legacy-credential=2`, `used-recently=1`, `one-call-away=1`, `authority-mode=1`, `mandate=0`, `commitment=0`, `callable-operation=0`, `commercial-closure=0` — unchanged.
+- `STATUS_LITERAL_FILE_CEILING`: 28→17.
+- Bare-catch ceiling: 19 — unchanged.
+- Module boundaries: `totalEntrySurfaces=230`, capability-supply exceptions 2 — unchanged.
+
+#### Roast verdicts
+
+- R-16 IN REVIEW: its observable contract is asserted; only the R-14 ROOT remains blocked by missing local Formance configuration.
+- R-17 IN REVIEW: navigation, copy, Privacy, no-`SESSION` and one accessibility-tree H1 are covered; reload persistence remains live-only and lacks a behavioral assertion.
+- R-18 IN REVIEW: ROOT-CLERK-H1 landed; environment and actor-attributed events remain absent from the DTO.
+- C-04 IN REVIEW: the ratchet fell 28→17; eight OWNER files move to the buyer spine and nine scanner false positives await the named gate refinement.
+- C-07 IN REVIEW: ROOT-CLERK-H1 landed; the named Market, Agent, Credit and dialog gaps remain in the OWNER spine.
+- C-12 VERIFIED: 7 machine documents and 13 advertised paths returned 200; the discovery/SEO suites assert host, auth and ExactAmount consistency.
+- §4 #46 ADOPTED: the caller can download the eight named JSON sections from Settings › Privacy without a new Convex query.
+- Roast-free wave. Final cohesion roast: see agent FinalCohesionRoast in the next entry.
+
+#### Contingencies taken
+
+- The SEAM exception allowed the canonical status-presentation rows file to move with C-04 without creating another status authority.
+- The export moved to `src/lib/server` to avoid raising the module-boundaries ratchet.
+- The page-markdown assertion followed the approved R-01 copy.
+
+#### Found, not fixed
+
+- Clerk leaves CSS-hidden vendor H1 nodes in the raw DOM; the rendered and accessibility trees expose one H1.
+
+#### Open at close
+
+- R-14 remains OWNER; its local Formance ROOT is the only remaining R-16 blocker.
+- R-17 remains IN REVIEW until reload persistence has a behavioral assertion.
+- R-18 remains IN REVIEW because the Team/Workspace DTO lacks environment and actor-event fields.
+- R-26 remains IN REVIEW because populated-Tool inventory behavior is still unobservable.
+- R-33/R-34 remain IN REVIEW: authorized view awaits an Admin fixture; pagination awaits a cursor contract.
+- C-01 remains IN REVIEW in the OWNER spine.
+- C-04 remains IN REVIEW: eight OWNER files move to the spine; nine scanner false positives await the future gate task.
+- C-07 remains IN REVIEW: named Market, Agent, Credit and dialog gaps remain in the OWNER spine.
+- C-11 remains IN REVIEW: named hit boxes and above-fold actions remain open.
+- Standing defaults await Joel: in-app versus hosted status vendor; economics/legal figures; #47 SSO/SCIM; #48 spend-anomaly alerts.
+
+## 8. Plan status · 2026-09-21
+
+Foundation-reset plan Steps 1–6 are complete for Waves 0, A, B (three rounds), C, D and E. §1 now totals 11 VERIFIED, 22 IN REVIEW, 5 PENDING, 1 PARKED and 9 OWNER rows. Standing DEFAULTS awaiting Joel are the status vendor, economics/legal figures, #47 SSO/SCIM and #48 spend-anomaly alerts. Stuck checks: no file appears in three consecutive wave logs; no row has two REOPENED lines; the gate-constant check fires because the TSX-type, copy-vocabulary, bare-catch and module-boundaries constants were unmoved for at least two waves (status vocabulary moved 28→17 in Wave E).
