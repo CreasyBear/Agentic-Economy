@@ -165,6 +165,10 @@ import type * as lib_capabilitySupply_ownerStagingValues from "../lib/capability
 import type * as lib_capabilitySupply_ownerSupplyActions from "../lib/capabilitySupply/ownerSupplyActions.js";
 import type * as lib_capabilitySupply_ownerSupplyContext from "../lib/capabilitySupply/ownerSupplyContext.js";
 import type * as lib_capabilitySupply_ownerSupplyValues from "../lib/capabilitySupply/ownerSupplyValues.js";
+import type * as lib_capabilitySupply_probeAuthority from "../lib/capabilitySupply/probeAuthority.js";
+import type * as lib_capabilitySupply_probeObserve from "../lib/capabilitySupply/probeObserve.js";
+import type * as lib_capabilitySupply_probeSchedule from "../lib/capabilitySupply/probeSchedule.js";
+import type * as lib_capabilitySupply_probeTarget from "../lib/capabilitySupply/probeTarget.js";
 import type * as lib_capabilitySupply_publicationValues from "../lib/capabilitySupply/publicationValues.js";
 import type * as lib_capabilitySupply_publishBootstrap from "../lib/capabilitySupply/publishBootstrap.js";
 import type * as lib_capabilitySupply_publishPrepared from "../lib/capabilitySupply/publishPrepared.js";
@@ -491,6 +495,10 @@ declare const fullApi: ApiFromModules<{
   "lib/capabilitySupply/ownerSupplyActions": typeof lib_capabilitySupply_ownerSupplyActions;
   "lib/capabilitySupply/ownerSupplyContext": typeof lib_capabilitySupply_ownerSupplyContext;
   "lib/capabilitySupply/ownerSupplyValues": typeof lib_capabilitySupply_ownerSupplyValues;
+  "lib/capabilitySupply/probeAuthority": typeof lib_capabilitySupply_probeAuthority;
+  "lib/capabilitySupply/probeObserve": typeof lib_capabilitySupply_probeObserve;
+  "lib/capabilitySupply/probeSchedule": typeof lib_capabilitySupply_probeSchedule;
+  "lib/capabilitySupply/probeTarget": typeof lib_capabilitySupply_probeTarget;
   "lib/capabilitySupply/publicationValues": typeof lib_capabilitySupply_publicationValues;
   "lib/capabilitySupply/publishBootstrap": typeof lib_capabilitySupply_publishBootstrap;
   "lib/capabilitySupply/publishPrepared": typeof lib_capabilitySupply_publishPrepared;

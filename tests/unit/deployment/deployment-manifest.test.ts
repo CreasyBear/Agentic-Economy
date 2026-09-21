@@ -68,6 +68,17 @@ function productionEnvironment(): Record<string, string> {
 }
 
 describe('deployment manifest validator', () => {
+  it.each([undefined, 'true', 'false'])('accepts the optional discovery rollback setting %s', value => {
+    expect(validateDeploymentManifest({ ...productionEnvironment(), AE_JEV_DISCOVERY_ENABLED: value }).ok).toBe(true)
+    expect(DEPLOYMENT_MANIFEST.configuration.optional).toContain('AE_JEV_DISCOVERY_ENABLED')
+  })
+
+  it.each(['', ' ', 'FALSE', '0', 'false ', 'unknown'])('rejects ambiguous discovery rollback setting %j', value => {
+    const result = validateDeploymentManifest({ ...productionEnvironment(), AE_JEV_DISCOVERY_ENABLED: value })
+    expect(result.ok).toBe(false)
+    expect(result.findings).toContainEqual(expect.objectContaining({ code: 'ae_jev_discovery_enabled_invalid' }))
+  })
+
   it('admits a complete production configuration and declares only real resources/probes', () => {
     const result = validateDeploymentManifest(productionEnvironment(), { nodeMajor: 22 })
 

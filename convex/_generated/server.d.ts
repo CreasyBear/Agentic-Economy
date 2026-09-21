@@ -34,6 +34,7 @@ type Env = {
   readonly AE_CHAT_SHARE_KEY_ID: string | undefined;
   readonly AE_CHAT_SHARE_SECRET: string | undefined;
   readonly AE_CONVEX_SERVER_FUNCTION_TOKEN: string | undefined;
+  readonly AE_JEV_DISCOVERY_ENABLED: "true" | "false" | undefined;
   readonly AE_LLM_MODEL: string | undefined;
   readonly AE_OPENROUTER_API_BASE_URL: string | undefined;
   readonly AE_PACKAGE4_SANDBOX_DEPLOYMENT_PROFILE: string | undefined;

@@ -22,11 +22,11 @@ vi.mock('@/modules/capability-supply/tool-source', () => ({
   readCapabilityToolCompare: vi.fn(),
 }))
 
-async function runSearch(query: string) {
+async function runSearch(query: string, request?: Request) {
   const data = toolCatalogSearchInputSchema.parse({ query, limit: 10 })
   return registryToolsSearchAction.run({
     data,
-    context: { caller: 'http' },
+    context: { caller: 'http', ...(request === undefined ? {} : { request }) },
   })
 }
 
@@ -38,6 +38,7 @@ describe('registryToolsSearchAction Jev re-rank wiring', () => {
   afterEach(() => {
     setPublicSourceTransportForTests(undefined)
     vi.unstubAllGlobals()
+    vi.unstubAllEnvs()
     vi.restoreAllMocks()
     vi.mocked(readCapabilityToolSearch).mockReset()
   })
@@ -48,6 +49,27 @@ describe('registryToolsSearchAction Jev re-rank wiring', () => {
       mutation: async () => undefined,
       action: async () => undefined,
     } as never)
+  })
+
+  it.each(['before', 'during'])('preserves discovery when the HTTP request is cancelled %s inference', async timing => {
+    const source = misorderedSearchResult(ERC20_QUERY)
+    vi.mocked(readCapabilityToolSearch).mockResolvedValue(source)
+    vi.stubEnv('OPENROUTER_API_KEY', 'sk-or-test')
+    const controller = new AbortController()
+    const fetcher = vi.fn<typeof fetch>().mockImplementation(async (_url, init) => {
+      return new Promise((_resolve, reject) => {
+        init?.signal?.addEventListener('abort', () => reject(init.signal?.reason), { once: true })
+        controller.abort()
+      })
+    })
+    stubJevFetch(fetcher)
+    if (timing === 'before') controller.abort()
+    const result = await runSearch(ERC20_QUERY, new Request('https://ae.test/api/v1/market-tools/search', { signal: controller.signal }))
+    expect(result.kind).toBe('ok')
+    if (result.kind !== 'ok') return
+    expect(result.items.map(item => item.toolRef)).toEqual(source.items.map(item => item.toolRef))
+    expect(fetcher).toHaveBeenCalledTimes(timing === 'before' ? 0 : 1)
+    if (timing === 'during') expect(fetcher.mock.calls[0]?.[1]?.signal?.aborted).toBe(true)
   })
 
   it('reads candidates, scores them through the Decision Gateway, and returns Jev order', async () => {
