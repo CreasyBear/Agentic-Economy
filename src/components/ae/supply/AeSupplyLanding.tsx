@@ -17,7 +17,7 @@ import type { ToolCardViewModel } from '@/modules/market/tool-view-model'
 
 import { AeSupplyAgentProof } from './AeSupplyAgentProof'
 
-export const SUPPLY_OFFER_SENTENCE = 'List one Tool agents can inspect and call. You describe the price, access, effects, and evidence; Agentic Economy records it as a Tool.'
+export const SUPPLY_OFFER_SENTENCE = 'Connect a Tool you already run. Agentic Economy checks what agents can buy.'
 
 const SUPPLY_STEPS = [
   { number: '01', title: 'Choose one Tool', detail: 'Choose one bounded Tool with exact inputs and one usable outcome—not an entire app or account.' },
