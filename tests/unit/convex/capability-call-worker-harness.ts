@@ -205,6 +205,7 @@ type WorkerOptions = Readonly<{
   finalGrant?: Readonly<Record<string, unknown>> | null
   signingBoundaryGrant?: Readonly<Record<string, unknown>> | null
   signingBoundaryProviderAuthority?: 'invalid' | 'throw'
+  outputSchema?: PublishedTool['contract']['outputSchema']
   observation?: RouteTransportObservation
   reconcileRefused?: boolean
   reconcileNone?: boolean
@@ -295,8 +296,8 @@ function operationWithPricing(
   }
 }
 
-function operationFor(kind: WorkerKind, validUntil: number, priceUnits = '1', brokered = false, environment: 'sandbox' | 'production' = 'sandbox'): PublishedTool {
-  const fixture = buildDevelopmentPublishedToolEvidence()
+function operationFor(kind: WorkerKind, validUntil: number, priceUnits = '1', brokered = false, environment: 'sandbox' | 'production' = 'sandbox', outputSchema?: PublishedTool['contract']['outputSchema']): PublishedTool {
+  const fixture = buildDevelopmentPublishedToolEvidence(outputSchema === undefined ? {} : { outputSchema })
   const pricedOperation = operationWithPricing(fixture.tool, brokered
         ? {
             version: 'pricing:v3',
@@ -452,6 +453,7 @@ export function createWorker(kind: WorkerKind, options: WorkerOptions = {}): { c
     options.priceUnits,
     kind === 'x402',
     environment,
+    options.outputSchema,
   )
   const x402Profile = environment === 'production'
     ? { network: BASE_MAINNET_NETWORK, asset: BASE_MAINNET_USDC_ADDRESS }

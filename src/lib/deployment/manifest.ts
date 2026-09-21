@@ -143,6 +143,7 @@ const conditional: readonly RequirementGroup[] = [
 ]
 
 const optionalNames = Object.freeze([
+  'AE_JEV_DISCOVERY_ENABLED',
   'AE_CSP_REPORT_ONLY', 'AE_COOKIE_SECURE',
   'AE_DISABLE_OBSERVABILITY', 'VITE_AE_DISABLE_OBSERVABILITY', 'AE_ROUTING_PUBLIC_BASE_URL',
   'AE_SITE_URL', 'SITE_URL', 'VITE_SENTRY_DSN', 'SENTRY_DSN', 'VITE_SENTRY_ENVIRONMENT',
@@ -156,6 +157,7 @@ const optionalNames = Object.freeze([
 ])
 
 export const fieldRules: readonly FieldRule[] = [
+  { name: 'AE_JEV_DISCOVERY_ENABLED', kind: 'boolean' },
   { name: 'AE_SCHEDULED_WORKLOADS_ENABLED', kind: 'boolean' },
   { name: 'AE_CANONICAL_BASE_URL', kind: 'url' }, { name: 'AE_CANONICAL_HOST_ALLOWLIST', kind: 'host-list' },
   { name: 'CONVEX_URL', kind: 'url' }, { name: 'VITE_CONVEX_URL', kind: 'url' }, { name: 'CLERK_JWT_ISSUER_DOMAIN', kind: 'url' },
@@ -534,7 +536,7 @@ function validateX402Custody(
   }
 }
 function validateField(environment: DeploymentEnvironmentInput, rule: FieldRule, production: boolean, add: (kind: DeploymentFindingKind, code: string, names: readonly string[], scope: string) => void): void {
-  const value = rule.name === 'AE_SCHEDULED_WORKLOADS_ENABLED' ? environment[rule.name] : present(environment, rule.name)
+  const value = ['AE_SCHEDULED_WORKLOADS_ENABLED', 'AE_JEV_DISCOVERY_ENABLED'].includes(rule.name) ? environment[rule.name] : present(environment, rule.name)
   if (value === undefined || !isMalformed(rule, value, production)) return
   const code = rule.name === 'AE_CANONICAL_BASE_URL' ? 'url_configuration_invalid' : rule.name === 'AE_CANONICAL_HOST_ALLOWLIST' ? 'canonical_host_allowlist_invalid' : `${rule.name.toLowerCase()}_invalid`
   add('malformed', code, [rule.name], rule.name.startsWith('AE_') ? 'ae-config' : 'configuration')

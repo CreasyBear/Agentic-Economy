@@ -15,8 +15,6 @@ import {
   toolProcureAction,
   toolProcureResultSchema,
 } from '@/modules/capability-execution/procure.actions'
-import { adjudicateStealthFailureAndReleaseHold } from '../../../convex/capabilityCallWorker'
-import type { ActionCtx } from '../../../convex/_generated/server'
 
 describe('Deep IceInVein 8-Point Architecture Audit', () => {
   // Test Catalog Fixtures
@@ -158,7 +156,7 @@ describe('Deep IceInVein 8-Point Architecture Audit', () => {
       ).rejects.toThrow(/Failed to parse price/)
     })
 
-    it('POSTCONDITION: Guaranteed A$0.00 Net deduction on any provider remedy', async () => {
+    it('POSTCONDITION: Payload text cannot establish a refund', async () => {
       const engine = new CapabilityProcurementEngine({
         catalogSearcher: async () => [AUDIT_CATALOG[1]!],
         callExecutor: async () => ({
@@ -172,12 +170,9 @@ describe('Deep IceInVein 8-Point Architecture Audit', () => {
         simulateProviderFailure: true,
       })
 
-      expect(outcome.status).toBe('remedied')
-      if (outcome.status === 'remedied') {
-        expect(outcome.netChargeAud).toBe('A$0.00')
-        expect(outcome.refundedAmountAud).toBe('A$0.0022')
-        expect(outcome.diagnostic.financialImpact).toContain('A$0.00 deducted')
-      }
+      expect(outcome.status).toBe('delivered')
+      expect(outcome).not.toHaveProperty('refundedAmountAud')
+      expect(outcome).not.toHaveProperty('netChargeAud')
     })
   })
 
@@ -321,8 +316,8 @@ describe('Deep IceInVein 8-Point Architecture Audit', () => {
   // 5. ERROR TAXONOMY & GUARANTEES (error-strategist / Duffy & Abrahams)
   // Hostile Provider Payloads & Rule 4/5 Diagnostic Triplets
   // =========================================================================
-  describe('Dimension 5: Error Taxonomy & Stealth Failure Detection', () => {
-    it('detects GraphQL stealth errors masked behind HTTP 200', async () => {
+  describe('Dimension 5: Semantic suspicion remains advisory', () => {
+    it('does not invent a refund from GraphQL error content', async () => {
       const engine = new CapabilityProcurementEngine({
         catalogSearcher: async () => [AUDIT_CATALOG[0]!],
         callExecutor: async () => ({
@@ -344,16 +339,12 @@ describe('Deep IceInVein 8-Point Architecture Audit', () => {
         simulateProviderFailure: true,
       })
 
-      expect(outcome.status).toBe('remedied')
-      if (outcome.status === 'remedied') {
-        expect(outcome.netChargeAud).toBe('A$0.00')
-        expect(outcome.diagnostic.whatHappened).toContain('Upstream provider')
-        expect(outcome.diagnostic.financialImpact).toContain('A$0.00 deducted')
-        expect(outcome.diagnostic.nextStep).toContain('Autonomous buyer protection')
-      }
+      expect(outcome.status).toBe('delivered')
+      expect(outcome).not.toHaveProperty('refundedAmountAud')
+      expect(outcome).not.toHaveProperty('netChargeAud')
     })
 
-    it('detects Base EVM RPC connection drops and remedies customer', async () => {
+    it('does not invent a refund from RPC error content', async () => {
       const engine = new CapabilityProcurementEngine({
         catalogSearcher: async () => [AUDIT_CATALOG[1]!],
         callExecutor: async () => ({
@@ -370,79 +361,9 @@ describe('Deep IceInVein 8-Point Architecture Audit', () => {
         simulateProviderFailure: true,
       })
 
-      expect(outcome.status).toBe('remedied')
-      if (outcome.status === 'remedied') {
-        expect(outcome.netChargeAud).toBe('A$0.00')
-        expect(outcome.audit.confidence).toBeGreaterThanOrEqual(0.75)
-      }
-    })
-  })
-
-  // =========================================================================
-  // 6. IDEMPOTENCY & REPLAY SAFETY (idempotency-guardian / Helland)
-  // Repeated Calls, Concurrent Replays, and Ledger Invariants
-  // =========================================================================
-  describe('Dimension 6: Idempotency & Concurrent Replay Safety', () => {
-    it('handles multiple concurrent adjudications on the same callRef safely without double-release', async () => {
-      let releaseCount = 0
-
-      const runActionMock = vi.fn().mockImplementation(async () => {
-        releaseCount += 1
-        if (releaseCount === 1) {
-          return { kind: 'accepted', state: 'released', replayed: false }
-        }
-        return { kind: 'accepted', state: 'released', replayed: true }
-      })
-
-      const mockCtx = {
-        runAction: runActionMock,
-        runQuery: vi.fn(),
-        runMutation: vi.fn(),
-      } as unknown as ActionCtx
-
-      const errorPayload = JSON.stringify({
-        error: 'gateway_timeout',
-        code: 'ETIMEDOUT',
-      })
-
-      // Simulate 5 parallel background worker runs attempting to adjudicate the same failing call
-      const results = await Promise.all([
-        adjudicateStealthFailureAndReleaseHold(mockCtx, {
-          callRef: 'call:v1:concurrent_replay',
-          toolRef: 'operation:v1:test_tool',
-          outputJson: errorPayload,
-        }),
-        adjudicateStealthFailureAndReleaseHold(mockCtx, {
-          callRef: 'call:v1:concurrent_replay',
-          toolRef: 'operation:v1:test_tool',
-          outputJson: errorPayload,
-        }),
-        adjudicateStealthFailureAndReleaseHold(mockCtx, {
-          callRef: 'call:v1:concurrent_replay',
-          toolRef: 'operation:v1:test_tool',
-          outputJson: errorPayload,
-        }),
-        adjudicateStealthFailureAndReleaseHold(mockCtx, {
-          callRef: 'call:v1:concurrent_replay',
-          toolRef: 'operation:v1:test_tool',
-          outputJson: errorPayload,
-        }),
-        adjudicateStealthFailureAndReleaseHold(mockCtx, {
-          callRef: 'call:v1:concurrent_replay',
-          toolRef: 'operation:v1:test_tool',
-          outputJson: errorPayload,
-        }),
-      ])
-
-      for (const res of results) {
-        expect(res.adjudicated).toBe(true)
-        expect(res.isFailure).toBe(true)
-        expect(res.fault).toBe('upstream_provider')
-        expect(res.releasedHold).toBe(true)
-      }
-
-      // Action was invoked 5 times, but Formance double-release is prevented by the lifecycle lock
-      expect(runActionMock).toHaveBeenCalledTimes(5)
+      expect(outcome.status).toBe('delivered')
+      expect(outcome).not.toHaveProperty('refundedAmountAud')
+      expect(outcome).not.toHaveProperty('netChargeAud')
     })
   })
 

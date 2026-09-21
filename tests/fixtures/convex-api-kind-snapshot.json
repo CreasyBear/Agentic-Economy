@@ -584,12 +584,6 @@
   {
     "visibility": "internal",
     "module": "capabilityCallWorker",
-    "method": "adjudicateStealthFailureAndReleaseHoldAction",
-    "kind": "action"
-  },
-  {
-    "visibility": "internal",
-    "module": "capabilityCallWorker",
     "method": "reconcilePreClaimRefund",
     "kind": "action"
   },

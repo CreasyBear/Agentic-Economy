@@ -12,10 +12,7 @@ import {
   parseDecimalExactAmount,
   type ExactAmount,
 } from '@/modules/money/public'
-import {
-  executeDecisionGateway,
-  type DecisionGatewayResponse,
-} from '@/modules/decision-engine/public'
+import { executeDecisionGateway } from '@/modules/decision-engine/public'
 import type {
   ToolProcureInput,
   ToolProcureResult,
@@ -131,7 +128,7 @@ export type ProcurementEngineDependencies = Readonly<{
  * - Dynamic catalog resolution via injected ToolCatalogSearcher
  * - Execution delegated to native CallService (or injected CallExecutor)
  * - Deterministic IceInVein budget & GST barriers
- * - Autonomous delivery adjudication & instant buyer remedy
+ * - Delivery and remedy from authoritative execution/settlement outcomes
  */
 export class CapabilityProcurementEngine {
   constructor(private readonly dependencies: ProcurementEngineDependencies) {}
@@ -221,32 +218,13 @@ export class CapabilityProcurementEngine {
     })
     const executionLatencyMs = Date.now() - execStart
 
-    // Autonomous Remedy Adjudication via Decision Gateway
-    const remedyStart = Date.now()
-    const audit = await this.auditProviderPayload(matchedTool, outcome.payload)
-    const remedyLatencyMs = Date.now() - remedyStart
-
-    if (audit.isFailure && audit.fault === 'upstream_provider' && audit.confidence >= 0.80) {
+    // The injected executor owns validation. Payload wording is not payment evidence.
+    // No approved delivery-evidence projection exists for inference.
+    if (!Number.isInteger(outcome.status) || outcome.status < 200 || outcome.status >= 300) {
       return {
-        schemaVersion: 'tool.procure:v1',
-        kind: 'remedied',
-        status: 'remedied',
-        toolRef: matchedTool.toolRef,
-        toolName: matchedTool.name,
-        quoteRef,
-        refundedAmountAud: formatExactProcureAud(totalExact.units),
-        netChargeAud: 'A$0.00',
-        diagnostic: {
-          whatHappened: `Upstream provider (${matchedTool.endpoint}) failed: ${String(outcome.payload.error ?? 'Service timeout or gateway failure')}`,
-          financialImpact: `A$0.00 deducted — ${formatExactProcureAud(totalExact.units)} refunded immediately to available balance.`,
-          nextStep: 'Autonomous buyer protection secured your funds. You can retry with a different parameter set or alternate tool.',
-        },
-        audit: {
-          adjudicator: 'jev-payload-auditor',
-          confidence: audit.confidence,
-          remedyLatencyMs,
-          totalLatencyMs: Date.now() - startedAt,
-        },
+        schemaVersion: 'tool.procure:v1', kind: 'refused', status: 'refused',
+        code: 'no_matching_tool',
+        detail: 'Provider execution did not complete successfully. No refund is established by this result.',
       }
     }
 
@@ -266,7 +244,7 @@ export class CapabilityProcurementEngine {
         routingLatencyMs,
         executionLatencyMs,
         totalLatencyMs: Date.now() - startedAt,
-        jevDecisionsCostAud: '$0.00003 AUD',
+        jevDecisionsCostAud: 'unknown',
       },
     }
   }
@@ -379,36 +357,14 @@ export class CapabilityProcurementEngine {
           routingLatencyMs,
           executionLatencyMs,
           totalLatencyMs: Date.now() - startedAt,
-          jevDecisionsCostAud: '$0.00003 AUD',
+          jevDecisionsCostAud: 'unknown',
         },
       }
     }
 
     if (callRes.kind === 'refused') {
-      if (callRes.code === 'provider_output_invalid' || callRes.code === 'provider_refused') {
-        return {
-          schemaVersion: 'tool.procure:v1',
-          kind: 'remedied',
-          status: 'remedied',
-          toolRef: matchedTool.toolRef,
-          toolName: matchedTool.name,
-          quoteRef,
-          refundedAmountAud: formatDisplayAmount(quotePrice),
-          netChargeAud: 'A$0.00',
-          diagnostic: {
-            whatHappened: `Provider execution refused: ${callRes.code}`,
-            financialImpact: `A$0.00 deducted — ${formatDisplayAmount(quotePrice)} refunded immediately to available balance.`,
-            nextStep: callRes.nextAction ?? 'Retry or select an alternate tool.',
-          },
-          audit: {
-            adjudicator: 'jev-payload-auditor',
-            confidence: 0.95,
-            remedyLatencyMs: 0,
-            totalLatencyMs: Date.now() - startedAt,
-          },
-        }
-      }
-
+      // Refusal is not proof of released funds. Preserve the CallService outcome
+      // without manufacturing a remedy or a model adjudication certificate.
       return {
         schemaVersion: 'tool.procure:v1',
         kind: 'refused',
@@ -512,51 +468,4 @@ export class CapabilityProcurementEngine {
     return params
   }
 
-  private async auditProviderPayload(
-    tool: CatalogToolCandidate,
-    payload: Record<string, unknown>,
-  ): Promise<{
-    isFailure: boolean
-    fault: 'upstream_provider' | 'buyer_input' | 'none'
-    confidence: number
-  }> {
-    const response: DecisionGatewayResponse = await executeDecisionGateway({
-      state: {
-        toolName: tool.name,
-        toolDescription: tool.description,
-        receivedPayload: payload,
-      },
-      questions: {
-        isFailure: {
-          type: 'noul',
-          instructions:
-            'Evaluate if the received payload indicates an unhandled upstream failure, error code, timeout, or empty dataset rather than actual delivery of the service.',
-        },
-        faultParty: {
-          type: 'choice',
-          instructions: 'Who is responsible for this failure state?',
-          criteria: {
-            upstream_provider: 'Provider failed with timeout, gateway error, or server exception.',
-            buyer_input: 'The buyer supplied invalid or unparseable inputs.',
-            none: 'The payload represents a completely healthy and successful delivery.',
-          },
-        },
-      },
-    })
-
-    const isFailureAns = response.answers.isFailure
-    const faultAns = response.answers.faultParty
-
-    const isFailure = isFailureAns?.type === 'noul' && isFailureAns.noul > 0.70
-    const fault =
-      faultAns?.type === 'choice'
-        ? (faultAns.choice as 'upstream_provider' | 'buyer_input' | 'none')
-        : 'none'
-
-    return {
-      isFailure,
-      fault,
-      confidence: faultAns?.type === 'choice' ? faultAns.confidence : 0.9,
-    }
-  }
 }

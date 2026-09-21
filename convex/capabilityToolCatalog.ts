@@ -144,8 +144,12 @@ export const rerank = internalAction({
   },
   returns: publicSearchReturns,
   handler: async (_ctx, args): Promise<ToolSearchWireResult> => {
+    // RPC does not propagate browser cancellation; bound this Node attempt locally.
+    const deadlineAt = Date.now() + 1500
+    const signal = AbortSignal.timeout(1500)
     const source = deserializeToolSearchResult(args.result as ToolSearchWireResult)
     const reranked = await rerankToolSearchResult(source, args.query, {
+      deadlineAt, signal, disableJev: env.AE_JEV_DISCOVERY_ENABLED === 'false',
       ...(env.OPENROUTER_API_KEY === undefined
         ? {}
         : { openrouterApiKey: env.OPENROUTER_API_KEY }),

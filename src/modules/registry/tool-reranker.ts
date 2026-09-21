@@ -1,6 +1,7 @@
 import { degradeBackend } from '@/lib/observability/degrade-backend'
 import {
   executeDecisionGateway,
+  JevUnavailableError,
   type DecisionGatewayOptions,
   type JevQuestion,
 } from '@/modules/decision-engine/public'
@@ -55,107 +56,105 @@ export async function rerankToolSearchResult(
   const candidatesToScore = result.items.slice(0, maxCandidates)
   const remainingCandidates = result.items.slice(maxCandidates)
 
-  try {
-    const questions: Record<string, JevQuestion> = {}
-    const candidateChoices: Record<string, string> = {}
+  const questions: Record<string, JevQuestion> = {}
+  const candidateChoices: Record<string, string> = {}
 
-    const candidateState = candidatesToScore.map((item) => ({
-      toolRef: item.toolRef,
-      label: item.listing.label,
-      capabilityId: item.contract.capabilityId,
-      summary: item.summary,
-    }))
+  const candidateState = candidatesToScore.map((item) => ({
+    toolRef: item.toolRef,
+    label: item.listing.label,
+    capabilityId: item.contract.capabilityId,
+    summary: item.summary,
+  }))
 
-    candidatesToScore.forEach((item, index) => {
-      const qKey = `match_${index}`
-      const candidateSummary = `${item.listing.label} (${item.contract.capabilityId}): ${item.summary}`
-      candidateChoices[item.toolRef] = candidateSummary
+  candidatesToScore.forEach((item, index) => {
+    const qKey = `match_${index}`
+    const candidateSummary = `${item.listing.label} (${item.contract.capabilityId}): ${item.summary}`
+    candidateChoices[item.toolRef] = candidateSummary
 
-      questions[qKey] = {
-        type: 'noul',
-        instructions: `Does \`candidates[${index}]\` directly satisfy the capability request in \`query\`?`,
-        criteria: {
-          true: 'The Tool directly performs the requested bounded contribution and satisfies every explicit capability constraint supported by the supplied facts.',
-          false: 'The Tool is unrelated, only shares generic terms, or the supplied facts do not establish one or more explicit capability constraints.',
-        },
-      }
-    })
-
-    questions.best_match = {
-      type: 'choice',
-      instructions: `Which candidate tool is the single best match for the capability request: "${cleanQuery}"?`,
-      criteria: candidateChoices,
+    questions[qKey] = {
+      type: 'noul',
+      instructions: `Does \`candidates[${index}]\` directly satisfy the capability request in \`query\`?`,
+      criteria: {
+        true: 'The Tool directly performs the requested bounded contribution and satisfies every explicit capability constraint supported by the supplied facts.',
+        false: 'The Tool is unrelated, only shares generic terms, or the supplied facts do not establish one or more explicit capability constraints.',
+      },
     }
+  })
 
-    const decision = await executeDecisionGateway(
+  questions.best_match = {
+    type: 'choice',
+    instructions: `Which candidate tool is the single best match for the capability request: "${cleanQuery}"?`,
+    criteria: candidateChoices,
+  }
+
+  let decision
+  try {
+    decision = await executeDecisionGateway(
       {
         state: { query: cleanQuery, candidates: candidateState },
         questions,
       },
-      { ...options, disableSecondaryLlm: true },
+      { ...options, purpose: 'discovery', disableSecondaryLlm: true },
     )
-
-    if (decision.tier !== 'jev_system_one') return result
-
-    const bestToolRef =
-      decision.answers.best_match?.type === 'choice'
-        ? decision.answers.best_match.choice
-        : undefined
-
-    if (bestToolRef === undefined || !(bestToolRef in candidateChoices)) return result
-
-    const scoredCandidates = candidatesToScore.map((item, index) => {
-      const noulAns = decision.answers[`match_${index}`]
-      if (
-        noulAns?.type !== 'noul' ||
-        !Number.isFinite(noulAns.noul) ||
-        noulAns.noul < 0 ||
-        noulAns.noul > 1
-      ) {
-        return undefined
-      }
-      return {
-        item,
-        originalIndex: index,
-        score: Math.round(noulAns.noul * 1000) / 1000,
-      }
-    })
-
-    if (scoredCandidates.some((candidate) => candidate === undefined)) return result
-    const completeScores = scoredCandidates.filter(
-      (candidate): candidate is NonNullable<typeof candidate> => candidate !== undefined,
-    )
-
-    completeScores.sort((a, b) =>
-      b.score - a.score ||
-      Number(b.item.toolRef === bestToolRef) - Number(a.item.toolRef === bestToolRef) ||
-      a.originalIndex - b.originalIndex,
-    )
-
-    const rerankedItems = [
-      ...completeScores.map((candidate) => candidate.item),
-      ...remainingCandidates,
-    ]
-
-    const ranking: ToolSearchRanking[] = rerankedItems.map((item, index) => {
-      const scored = completeScores.find((candidate) => candidate.item.toolRef === item.toolRef)
-      return {
-        toolRef: item.toolRef,
-        rank: index + 1,
-        score: scored ? scored.score : 0.0,
-      }
-    })
-
-    return {
-      ...result,
-      items: rerankedItems,
-      ranking,
-    }
   } catch (cause) {
-    degradeBackend(cause, undefined, {
-      site: 'rerankToolSearchResult',
-      reason: 'invalid_response',
-    })
-    return result
+    if (!(cause instanceof JevUnavailableError)) throw cause
+    return degradeBackend(cause, result, { site: 'rerankToolSearchResult', reason: 'source_unavailable' })
+  }
+
+  if (decision.tier !== 'jev_system_one') return result
+
+  const bestToolRef =
+    decision.answers.best_match?.type === 'choice'
+      ? decision.answers.best_match.choice
+      : undefined
+
+  if (bestToolRef === undefined || !(bestToolRef in candidateChoices)) return result
+
+  const scoredCandidates = candidatesToScore.map((item, index) => {
+    const noulAns = decision.answers[`match_${index}`]
+    if (
+      noulAns?.type !== 'noul' ||
+      !Number.isFinite(noulAns.noul) ||
+      noulAns.noul < 0 ||
+      noulAns.noul > 1
+    ) {
+      return undefined
+    }
+    return {
+      item,
+      originalIndex: index,
+      score: Math.round(noulAns.noul * 1000) / 1000,
+    }
+  })
+
+  if (scoredCandidates.some((candidate) => candidate === undefined)) return result
+  const completeScores = scoredCandidates.filter(
+    (candidate): candidate is NonNullable<typeof candidate> => candidate !== undefined,
+  )
+
+  completeScores.sort((a, b) =>
+    b.score - a.score ||
+    Number(b.item.toolRef === bestToolRef) - Number(a.item.toolRef === bestToolRef) ||
+    a.originalIndex - b.originalIndex,
+  )
+
+  const rerankedItems = [
+    ...completeScores.map((candidate) => candidate.item),
+    ...remainingCandidates,
+  ]
+
+  const ranking: ToolSearchRanking[] = rerankedItems.map((item, index) => {
+    const scored = completeScores.find((candidate) => candidate.item.toolRef === item.toolRef)
+    return {
+      toolRef: item.toolRef,
+      rank: index + 1,
+      score: scored ? scored.score : 0.0,
+    }
+  })
+
+  return {
+    ...result,
+    items: rerankedItems,
+    ranking,
   }
 }

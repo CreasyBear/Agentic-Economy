@@ -119,7 +119,7 @@ export const registryToolsListAction = defineAction({
 
 export const registryToolsSearchAction = defineAction({
   ...registryToolsSearchContract,
-  run: async ({ data }) => {
+  run: async ({ data, context }) => {
     const freshness = await readSupplyProjectionFreshness()
     const scope = marketToolsCursorScope(freshness)
     const cursor = decodeMarketToolsCursor(data.cursor, scope)
@@ -131,7 +131,9 @@ export const registryToolsSearchAction = defineAction({
       ...(cursor === undefined ? {} : { cursor }),
       ...(filters === undefined ? {} : { filters }),
     })
-    const rerankedResult = await rerankToolSearchResult(searchResult, data.query)
+    const rerankedResult = await rerankToolSearchResult(searchResult, data.query, {
+      ...(context.request === undefined ? {} : { signal: context.request.signal }),
+    })
     const projected = projectToolSearchChoices(rerankedResult, data.filters)
     return projected.kind === 'unavailable'
       ? projected

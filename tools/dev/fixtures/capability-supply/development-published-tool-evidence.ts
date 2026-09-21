@@ -1,4 +1,4 @@
-import { defineCapabilityContract } from '@/modules/capability-contract/public'
+import { defineCapabilityContract, type CapabilityContractDocument } from '@/modules/capability-contract/public'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { stableStringify, type StableHashValue } from '@/modules/common/stable-hash'
 import {
@@ -258,7 +258,7 @@ const developmentPublishedEndpointCards = [
   { method: 'POST', path: '/x402/v3/key/info', summary: 'API key information' },
 ] as const
 
-export function buildDevelopmentPublishedToolEvidence() {
+export function buildDevelopmentPublishedToolEvidence(options: { outputSchema?: CapabilityContractDocument['outputSchema'] } = {}) {
   const contract = defineCapabilityContract({
     contractFormat: 'ae.capability-contract:v2',
     capabilityId: 'cryptocurrency.quotes.latest',
@@ -275,7 +275,7 @@ export function buildDevelopmentPublishedToolEvidence() {
       required: ['symbol', 'convert'],
       additionalProperties: false,
     },
-    outputSchema: {
+    outputSchema: options.outputSchema ?? {
       $schema: 'https://json-schema.org/draft/2020-12/schema',
       type: 'object',
       properties: {
