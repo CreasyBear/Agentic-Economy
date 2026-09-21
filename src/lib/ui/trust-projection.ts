@@ -1,6 +1,6 @@
 import type { PublicBusinessCatalogApiV2Dto } from '@/modules/registry/public'
 
-import { plainHoursLabel } from './status-presentation'
+import { plainHoursLabel } from './provider-plain-labels'
 
 export const DIRECT_CONTACT_EXPLAINER = 'Use the published phone number to contact this business directly.' as const
 export const NO_CONTACT_EXPLAINER = 'Contact details and a request path are not published yet.' as const

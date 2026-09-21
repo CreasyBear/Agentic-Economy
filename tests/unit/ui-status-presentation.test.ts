@@ -2,12 +2,14 @@ import { describe, expect, it } from 'vitest'
 
 import { brandNonEmpty } from '@/modules/common/ids'
 import {
-  aeStatusPresentation,
-  aeStatusValues,
   dispositionToAeStatus,
-  getStatusPresentation,
   offeringAccessToAeStatus,
   offeringSupportToAeStatus,
+} from '@/lib/ui/business-status-mapping'
+import {
+  aeStatusPresentation,
+  aeStatusValues,
+  getStatusPresentation,
 } from '@/lib/ui/status-presentation'
 
 

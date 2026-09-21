@@ -14,7 +14,7 @@ import {
   offeringAccessToAeStatus,
   offeringSupportToAeStatus,
   trustTierToAeStatus,
-} from '@/lib/ui/status-presentation'
+} from '@/lib/ui/business-status-mapping'
 
 type AeStatusCardProps = {
   readback: PublicOwnerStatusRouteReadback<PublicBusinessCatalogApiV2Dto>

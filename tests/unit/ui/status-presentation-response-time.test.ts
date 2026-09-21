@@ -4,7 +4,7 @@ import {
   categoryIllustrationPath,
   formatProviderTrustCue,
   plainResponseTimeLabel,
-} from '@/lib/ui/status-presentation'
+} from '@/lib/ui/provider-plain-labels'
 
 describe('plainResponseTimeLabel', () => {
   it('formats minutes under one hour', () => {
