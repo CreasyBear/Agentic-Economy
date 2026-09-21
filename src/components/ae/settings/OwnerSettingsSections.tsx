@@ -1,29 +1,16 @@
-import { useState } from 'react'
 import { SignOutButton, UserProfile } from '@clerk/tanstack-react-start'
 
-import { AeSection } from '@/components/ae/layout/AeSection'
+import { AeSection, AeSettingsRow } from '@/components/ae/layout/AeSection'
 import { AeAccountSecurityHistory } from '@/components/ae/settings/AeAccountSecurityHistory'
 import { AeCompromiseRecoveryChecklist } from '@/components/ae/settings/AeCompromiseRecoveryChecklist'
 import { OwnerNotificationSettings } from '@/components/ae/settings/OwnerNotificationSettings'
 import { AeSiteAuthPanel, AeSiteAuthSubmit } from '@/components/ae/website'
-import {
-  DEFAULT_NOTIFICATION_PREFERENCES,
-  type NotificationPreferencePatch,
-} from '@/modules/principal-account/notification-preferences.view-model'
-import type { AccountSecurityHistoryResult } from '@/modules/security/account-security'
 
-export function AccountSettingsSection({
-  history,
-}: Readonly<{ history: AccountSecurityHistoryResult }>) {
-  const [notificationPreferences, setNotificationPreferences] = useState(DEFAULT_NOTIFICATION_PREFERENCES)
+import type { AccountSettingsSectionProps } from './owner-settings.contracts'
+import { useOwnerNotificationPreferences } from './useOwnerNotificationPreferences'
 
-  const handleNotificationUpdate = (patch: NotificationPreferencePatch) => {
-    setNotificationPreferences((current) => ({
-      ...current,
-      ...patch,
-      revision: current.revision + 1,
-    }))
-  }
+export function AccountSettingsSection({ history }: AccountSettingsSectionProps) {
+  const notifications = useOwnerNotificationPreferences()
 
   return (
     <>
@@ -49,15 +36,27 @@ export function AccountSettingsSection({
           </AeSiteAuthPanel>
         </div>
       </AeSection>
+      <AeSection
+        id="team"
+        title="Team"
+        description="Members, roles, and invitations for this workspace."
+      >
+        <AeSettingsRow
+          title="Manage Team"
+          description="Open Team settings to manage members, roles, and invitations."
+          href="/owner/team"
+        />
+      </AeSection>
       <AeCompromiseRecoveryChecklist />
       <AeSection
         id="notifications"
         title="Email alerts"
-        description="Choose which emails this owner receives. Changes apply to this Account only."
+        description="Choose which emails this owner receives. Saved for this Account."
       >
         <OwnerNotificationSettings
-          preferences={notificationPreferences}
-          onUpdate={handleNotificationUpdate}
+          preferences={notifications.preferences}
+          disabled={notifications.loading}
+          onUpdate={notifications.update}
         />
       </AeSection>
       <AeAccountSecurityHistory initialResult={history} />

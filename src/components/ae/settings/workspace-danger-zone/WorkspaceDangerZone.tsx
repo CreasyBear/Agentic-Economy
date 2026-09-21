@@ -1,3 +1,5 @@
+import { Alert } from '@/components/ui/alert'
+
 import { WorkspaceClosePanel } from './components/WorkspaceClosePanel'
 import { WorkspaceTransferPanel } from './components/WorkspaceTransferPanel'
 import { useWorkspaceDangerZone } from './useWorkspaceDangerZone'
@@ -11,9 +13,9 @@ export function WorkspaceDangerZone() {
   }
 
   return (
-    <div className="grid gap-section">
+    <Alert variant="destructive" className="grid-cols-1 gap-section p-gutter [&>*]:col-start-1">
       <WorkspaceClosePanel {...closePanel} />
       <WorkspaceTransferPanel {...transferPanel} />
-    </div>
+    </Alert>
   )
 }

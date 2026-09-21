@@ -10,17 +10,17 @@ import {
   UPDATE_FAILED_DIAGNOSTIC,
   lowCreditThresholdStatement,
   type NotificationPreferencePatch,
-  type NotificationPreferencesView,
   type NotificationUpdateDiagnostic,
 } from '@/modules/principal-account/notification-preferences.view-model'
+
+import type {
+  OwnerNotificationSettingsProps,
+  PreferenceSwitchProps,
+} from './owner-settings.contracts'
 
 export const TACTILE =
   'enabled:active:scale-[0.98] transition-transform duration-100 ease-out motion-reduce:transition-none motion-reduce:active:scale-100'
 
-export type OwnerNotificationSettingsProps = Readonly<{
-  preferences: NotificationPreferencesView
-  onUpdate: (patch: NotificationPreferencePatch) => void | Promise<void>
-}>
 
 function PreferenceSwitch({
   id,
@@ -28,13 +28,7 @@ function PreferenceSwitch({
   checked,
   disabled,
   onToggle,
-}: Readonly<{
-  id: string
-  label: string
-  checked: boolean
-  disabled: boolean
-  onToggle: () => void
-}>) {
+}: PreferenceSwitchProps) {
   return (
     <div className="flex items-center justify-between gap-4">
       <Label htmlFor={id} className="cursor-pointer text-sm font-normal text-foreground">
@@ -54,6 +48,7 @@ function PreferenceSwitch({
 
 export function OwnerNotificationSettings({
   preferences,
+  disabled = false,
   onUpdate,
 }: OwnerNotificationSettingsProps) {
   const [pending, setPending] = useState(false)
@@ -77,8 +72,8 @@ export function OwnerNotificationSettings({
     }
   }
 
-  const controlsDisabled = pending
-  const thresholdControlsDisabled = thresholdDisabled || pending
+  const controlsDisabled = disabled || pending
+  const thresholdControlsDisabled = thresholdDisabled || controlsDisabled
 
   const thresholdStatement = lowCreditThresholdStatement(preferences)
 
