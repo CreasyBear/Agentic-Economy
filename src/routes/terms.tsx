@@ -21,12 +21,7 @@ export const Route = createFileRoute('/terms')({
 
 function TermsRoute() {
   return (
-    <AePublicPage
-      kind="document"
-      eyebrow="Legal"
-      title="Terms"
-      description="Use Agentic Economy to find, inspect, pay for, and call published Tools."
-    >
+    <AePublicPage>
       <AeTermsPage />
     </AePublicPage>
   )

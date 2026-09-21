@@ -15,14 +15,14 @@ vi.mock('@tanstack/react-router', () => ({
 import { AeTermsPage } from '@/components/ae/legal/terms/AeTermsPage'
 
 describe('Terms page', () => {
-  it('links its table of contents to existing sections and uses Provider vocabulary', () => {
+  it('renders the published terms and links every contents entry to its section', () => {
     render(<AeTermsPage />)
 
-    expect(screen.getByText('Search the catalogue by capability, category, Provider, or task.')).toBeTruthy()
+    expect(screen.getByRole('heading', { level: 2, name: '1. Scope and agreement' })).toBeTruthy()
 
-    const contents = screen.getByRole('navigation', { name: 'Terms sections' })
+    const contents = screen.getByRole('navigation', { name: 'On this page' })
     const links = within(contents).getAllByRole('link')
-    expect(links.length).toBeGreaterThan(0)
+    expect(links).toHaveLength(15)
     for (const link of links) {
       const href = link.getAttribute('href')
       expect(href?.startsWith('#')).toBe(true)
