@@ -11,37 +11,69 @@ import {
 } from '@/modules/principal-account/onboarding.contracts'
 import { api } from '../../../../../convex/_generated/api'
 
-import type { UseOnboardingPageInput, UseOnboardingPageResult } from './onboarding.contracts'
+import {
+  onboardingCompletionDescription,
+  type UseOnboardingPageInput,
+  type UseOnboardingPageResult,
+} from './onboarding.contracts'
 
-function isTypingTarget(target: EventTarget | null): boolean {
-  if (target === null || !(target instanceof HTMLElement)) return false
-  const tag = target.tagName
-  return tag === 'INPUT' || tag === 'TEXTAREA' || target.isContentEditable
-}
 
 export function useOnboardingPage(input: UseOnboardingPageInput): UseOnboardingPageResult {
   const navigate = useNavigate()
   const state = useQuery(api.interactiveOnboarding.readState)
   const completeOnboarding = useMutation(api.interactiveOnboarding.complete)
 
-  const [step, setStep] = useState<1 | 2>(1)
+  const [step, setStep] = useState<1 | 2>(input.step ?? 1)
   const [roleIntent, setRoleIntent] = useState<OnboardingRoleIntent | null>(() =>
-    initialRoleIntentFromRedirect(input.redirect),
+    input.roleIntent ?? initialRoleIntentFromRedirect(input.redirect),
   )
-  const [workspaceName, setWorkspaceName] = useState('')
+  const [workspaceName, setWorkspaceName] = useState(input.workspaceName ?? '')
   const [submitting, setSubmitting] = useState(false)
   const [openingWorkspace, setOpeningWorkspace] = useState(false)
   const workspaceInputRef = useRef<HTMLInputElement>(null)
 
   const finishDisabled = workspaceName.trim().length === 0 || submitting
-  const continueDisabled = roleIntent === null
+  const skipDisabled = submitting || state?.phase !== 'incomplete'
+  const completionDescription = onboardingCompletionDescription(input.redirect, roleIntent)
+
+  const persistProgress = useCallback(
+    (next: Readonly<{
+      step: 1 | 2
+      roleIntent: OnboardingRoleIntent | null
+      workspaceName: string
+    }>) => {
+      void navigate({
+        to: '/onboarding',
+        replace: true,
+        search: {
+          ...(input.redirect === undefined ? {} : { redirect: input.redirect }),
+          ...(next.step === 1 ? {} : { step: 2 as const }),
+          ...(next.roleIntent === null ? {} : { roleIntent: next.roleIntent }),
+          ...(next.workspaceName === '' ? {} : { workspaceName: next.workspaceName }),
+        },
+      })
+    },
+    [input.redirect, navigate],
+  )
+
+  const handleRoleIntentChange = useCallback(
+    (intent: OnboardingRoleIntent) => {
+      setRoleIntent(intent)
+      persistProgress({ step, roleIntent: intent, workspaceName })
+    },
+    [persistProgress, step, workspaceName],
+  )
 
   const openWorkspaceStep = useCallback(() => {
-    if (state?.phase === 'incomplete') {
-      setWorkspaceName(resolveSuggestedWorkspaceName(state.suggestedWorkspaceName))
-    }
+    if (roleIntent === null) return
+    const nextWorkspaceName =
+      workspaceName === '' && state?.phase === 'incomplete'
+        ? resolveSuggestedWorkspaceName(state.suggestedWorkspaceName)
+        : workspaceName
+    setWorkspaceName(nextWorkspaceName)
     setStep(2)
-  }, [state])
+    persistProgress({ step: 2, roleIntent, workspaceName: nextWorkspaceName })
+  }, [persistProgress, roleIntent, state, workspaceName])
 
   useEffect(() => {
     if (state?.phase === 'complete') {
@@ -51,24 +83,12 @@ export function useOnboardingPage(input: UseOnboardingPageInput): UseOnboardingP
   }, [state, input.redirect, navigate])
 
   useEffect(() => {
-    function handleKeyDown(event: KeyboardEvent) {
-      if (isTypingTarget(event.target)) return
-      if (event.key === '1') {
-        setRoleIntent('buyer')
-        return
-      }
-      if (event.key === '2') {
-        setRoleIntent('supplier')
-        return
-      }
-      if (event.key === 'Enter' && step === 1 && roleIntent !== null) {
-        event.preventDefault()
-        openWorkspaceStep()
-      }
-    }
-    window.addEventListener('keydown', handleKeyDown)
-    return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [step, roleIntent, openWorkspaceStep])
+    if (step !== 2 || workspaceName !== '' || state?.phase !== 'incomplete') return
+    const suggestedName = resolveSuggestedWorkspaceName(state.suggestedWorkspaceName)
+    setWorkspaceName(suggestedName)
+    persistProgress({ step: 2, roleIntent, workspaceName: suggestedName })
+  }, [persistProgress, roleIntent, state, step, workspaceName])
+
 
   useEffect(() => {
     if (step !== 2) return
@@ -77,45 +97,70 @@ export function useOnboardingPage(input: UseOnboardingPageInput): UseOnboardingP
     }
   }, [step])
 
-  const handleFinish = useCallback(async () => {
-    if (roleIntent === null || finishDisabled) return
-    setSubmitting(true)
-    try {
-      const result = await completeOnboarding({
-        roleIntent,
-        workspaceName,
-        correlationRef: `onboarding:${globalThis.crypto.randomUUID()}`,
-      })
-      const trimmedName = workspaceName.trim()
-      const successTitle =
-        roleIntent === 'buyer'
-          ? "Workspace created. Let's make your first Call"
-          : 'Workspace created. Welcome to Provider Operations'
-      toast.success(successTitle, { description: trimmedName })
-      setOpeningWorkspace(true)
-      navigate({ to: input.redirect ?? result.redirectPath })
-    } catch (error: unknown) {
-      const diagnostic = onboardingCompletionDiagnostic(error)
-      toast.error(diagnostic.title, { description: diagnostic.description })
-    } finally {
-      setSubmitting(false)
-    }
-  }, [roleIntent, finishDisabled, workspaceName, completeOnboarding, input.redirect, navigate])
+  const finishOnboarding = useCallback(
+    async (name: string) => {
+      if (roleIntent === null || name.trim().length === 0 || submitting) return
+      setSubmitting(true)
+      try {
+        const result = await completeOnboarding({
+          roleIntent,
+          workspaceName: name,
+          correlationRef: `onboarding:${globalThis.crypto.randomUUID()}`,
+        })
+        const trimmedName = name.trim()
+        const successTitle =
+          roleIntent === 'buyer'
+            ? "Workspace created. Let's make your first Call"
+            : 'Workspace created. Welcome to Provider Operations'
+        toast.success(successTitle, { description: trimmedName })
+        setOpeningWorkspace(true)
+        navigate({ to: input.redirect ?? result.redirectPath })
+      } catch (error: unknown) {
+        const diagnostic = onboardingCompletionDiagnostic(error)
+        toast.error(diagnostic.title, { description: diagnostic.description })
+      } finally {
+        setSubmitting(false)
+      }
+    },
+    [roleIntent, submitting, completeOnboarding, input.redirect, navigate],
+  )
+
+  const handleSkip = useCallback(async () => {
+    if (state?.phase !== 'incomplete') return
+    const suggestedName = resolveSuggestedWorkspaceName(state.suggestedWorkspaceName)
+    setWorkspaceName(suggestedName)
+    persistProgress({ step: 2, roleIntent, workspaceName: suggestedName })
+    await finishOnboarding(suggestedName)
+  }, [finishOnboarding, persistProgress, roleIntent, state])
 
   const surface: UseOnboardingPageResult['surface'] =
     openingWorkspace || state?.phase === 'complete'
       ? { kind: 'opening' }
       : step === 1
-        ? { kind: 'role', roleIntent, continueDisabled }
-        : { kind: 'workspace', workspaceName, finishDisabled, submitting }
+        ? { kind: 'role', roleIntent, continueDisabled: roleIntent === null }
+        : {
+            kind: 'workspace',
+            workspaceName,
+            finishDisabled,
+            skipDisabled,
+            submitting,
+            completionDescription,
+          }
 
   return {
     surface,
     workspaceInputRef,
-    onRoleIntentChange: setRoleIntent,
+    onRoleIntentChange: handleRoleIntentChange,
     onContinue: openWorkspaceStep,
-    onWorkspaceNameChange: setWorkspaceName,
-    onBack: () => setStep(1),
-    onFinish: handleFinish,
+    onWorkspaceNameChange: (value) => {
+      setWorkspaceName(value)
+      persistProgress({ step, roleIntent, workspaceName: value })
+    },
+    onBack: () => {
+      setStep(1)
+      persistProgress({ step: 1, roleIntent, workspaceName })
+    },
+    onSkip: handleSkip,
+    onFinish: () => finishOnboarding(workspaceName),
   }
 }

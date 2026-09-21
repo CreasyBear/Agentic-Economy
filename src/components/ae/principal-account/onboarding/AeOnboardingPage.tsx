@@ -38,7 +38,7 @@ export function AeOnboardingPage(props: AeOnboardingPageProps) {
       <AeSiteAuthStage labelledBy="onboarding-context-heading" url="/onboarding">
         <AeSiteAuthPanel
           eyebrow="Account"
-          title="Set up your workspace"
+          title="Finish workspace"
           titleId="onboarding-context-heading"
           body="Choose how you’ll use Agentic Economy and name your workspace."
         >
@@ -55,10 +55,13 @@ export function AeOnboardingPage(props: AeOnboardingPageProps) {
               <OnboardingWorkspaceStep
                 workspaceName={surface.workspaceName}
                 finishDisabled={surface.finishDisabled}
+                skipDisabled={surface.skipDisabled}
                 submitting={surface.submitting}
+                completionDescription={surface.completionDescription}
                 workspaceInputRef={model.workspaceInputRef}
                 onWorkspaceNameChange={model.onWorkspaceNameChange}
                 onBack={model.onBack}
+                onSkip={model.onSkip}
                 onFinish={model.onFinish}
               />
             )}

@@ -4,6 +4,9 @@ export type OnboardingRedirectPath = '/owner' | '/owner/operations'
 
 export type OnboardingSearch = Readonly<{
   redirect?: string
+  step?: 1 | 2
+  roleIntent?: OnboardingRoleIntent
+  workspaceName?: string
 }>
 
 export type OnboardingReadState =

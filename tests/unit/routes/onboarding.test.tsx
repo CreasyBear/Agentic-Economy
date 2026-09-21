@@ -1,7 +1,7 @@
 /**
  * @vitest-environment jsdom
  */
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import type { ComponentType, ReactNode } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import '../../setup/jsdom-platform'
@@ -15,7 +15,12 @@ const toastState = vi.hoisted(() => ({
 
 const routeState = vi.hoisted(() => ({
   Onboarding: null as ComponentType | null,
-  search: {} as { redirect?: string },
+  search: {} as {
+    redirect?: string
+    step?: 1 | 2
+    roleIntent?: 'buyer' | 'supplier'
+    workspaceName?: string
+  },
   navigate: vi.fn(),
   readState: {
     phase: 'incomplete' as 'incomplete' | 'complete',
@@ -76,7 +81,7 @@ function renderOnboarding() {
   return render(<Component />)
 }
 
-function selectRole(label: 'Buyer / Agent Operator' | 'Tool Provider') {
+function selectRole(label: 'Buy with an Agent' | 'Provide a Tool') {
   fireEvent.click(screen.getByRole('radio', { name: label }))
 }
 
@@ -109,51 +114,51 @@ describe('onboarding route', () => {
   it('R1: incomplete state renders role intent step with Continue disabled', () => {
     renderOnboarding()
 
-    expect(screen.getByRole('heading', { name: 'Set up your workspace' })).toBeTruthy()
+    expect(screen.getByRole('heading', { name: 'Finish workspace' })).toBeTruthy()
     expect(screen.getByText('Step 1 of 2')).toBeTruthy()
     expect(screen.getByRole('radiogroup')).toBeTruthy()
-    expect(screen.getByRole('radio', { name: 'Buyer / Agent Operator' })).toBeTruthy()
-    expect(screen.getByRole('radio', { name: 'Tool Provider' })).toBeTruthy()
+    expect(screen.getByRole('radio', { name: 'Buy with an Agent' })).toBeTruthy()
+    expect(screen.getByRole('radio', { name: 'Provide a Tool' })).toBeTruthy()
+    expect(screen.getByText('Unlocks Market, Agents, Credit, and Call records. You can change this in Settings.')).toBeTruthy()
+    expect(screen.getByText('Unlocks Provider Operations to publish Tools and manage Calls. You can change this in Settings.')).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Continue' })).toHaveProperty('disabled', true)
   })
 
   it('R2: selecting a role enables Continue and opens the workspace name step', () => {
     renderOnboarding()
 
-    selectRole('Buyer / Agent Operator')
+    selectRole('Buy with an Agent')
     expect(screen.getByRole('button', { name: 'Continue' })).toHaveProperty('disabled', false)
+    expect(routeState.navigate).toHaveBeenCalledWith({
+      to: '/onboarding',
+      replace: true,
+      search: { roleIntent: 'buyer' },
+    })
     advanceToWorkspaceStep()
 
     expect(screen.getByText('Step 2 of 2')).toBeTruthy()
     expect(screen.queryByRole('heading', { name: 'Workspace name' })).toBeNull()
     expect(screen.getByRole('textbox', { name: 'Workspace name' })).toHaveProperty('value', SUGGESTED_NAME)
+    expect(routeState.navigate).toHaveBeenCalledWith({
+      to: '/onboarding',
+      replace: true,
+      search: {
+        step: 2,
+        roleIntent: 'buyer',
+        workspaceName: SUGGESTED_NAME,
+      },
+    })
+    expect(screen.getByText('Create workspace opens Workspace overview.')).toBeTruthy()
+    expect(screen.getByText('Skip: you can set this later in Settings')).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Back' })).toBeTruthy()
   })
 
-  it('R2b: keyboard 1 selects buyer and Enter advances to step 2', async () => {
-    renderOnboarding()
-
-    await act(async () => {
-      fireEvent.keyDown(document.body, { key: '1', bubbles: true })
-    })
-    await waitFor(() => {
-      expect(screen.getByRole('radio', { name: 'Buyer / Agent Operator' }).getAttribute('aria-checked')).toBe('true')
-    })
-    await act(async () => {
-      fireEvent.keyDown(document.body, { key: 'Enter', bubbles: true })
-    })
-
-    await waitFor(() => {
-      expect(screen.getByText('Step 2 of 2')).toBeTruthy()
-    })
-    expect(screen.getByRole('textbox', { name: 'Workspace name' })).toHaveProperty('value', SUGGESTED_NAME)
-  })
 
   it('R2c: agent-access redirect preselects buyer and enables Continue', () => {
     routeState.search = { redirect: '/agent-access' }
     renderOnboarding()
 
-    expect(screen.getByRole('radio', { name: 'Buyer / Agent Operator' }).getAttribute('aria-checked')).toBe('true')
+    expect(screen.getByRole('radio', { name: 'Buy with an Agent' }).getAttribute('aria-checked')).toBe('true')
     expect(screen.getByRole('button', { name: 'Continue' })).toHaveProperty('disabled', false)
   })
 
@@ -161,13 +166,13 @@ describe('onboarding route', () => {
     routeState.search = { redirect: '/owner/supply' }
     renderOnboarding()
 
-    expect(screen.getByRole('radio', { name: 'Tool Provider' }).getAttribute('aria-checked')).toBe('true')
+    expect(screen.getByRole('radio', { name: 'Provide a Tool' }).getAttribute('aria-checked')).toBe('true')
   })
 
   it('R2e: sanitizes Clerk-style suggested workspace names on step 2', () => {
     routeState.readState.suggestedWorkspaceName = 'user_2abcClerkId'
     renderOnboarding()
-    selectRole('Buyer / Agent Operator')
+    selectRole('Buy with an Agent')
     advanceToWorkspaceStep()
 
     expect(screen.getByRole('textbox', { name: 'Workspace name' })).toHaveProperty('value', 'Acme')
@@ -175,17 +180,52 @@ describe('onboarding route', () => {
 
   it('R3: empty workspace name blocks finish and does not call complete', async () => {
     renderOnboarding()
-    selectRole('Buyer / Agent Operator')
+    selectRole('Buy with an Agent')
     advanceToWorkspaceStep()
 
     const nameInput = screen.getByRole('textbox', { name: 'Workspace name' })
     fireEvent.change(nameInput, { target: { value: '   ' } })
 
-    const finishButton = screen.getByRole('button', { name: 'Finish setup' })
+    const finishButton = screen.getByRole('button', { name: 'Create workspace' })
     expect(finishButton).toHaveProperty('disabled', true)
     fireEvent.click(finishButton)
     await waitFor(() => {
       expect(routeState.completeMutation).not.toHaveBeenCalled()
+    })
+  })
+
+  it('R3b: reload restores the selected role, workspace step, and workspace name from search', () => {
+    routeState.search = {
+      step: 2,
+      roleIntent: 'supplier',
+      workspaceName: 'Reloaded workspace',
+    }
+    renderOnboarding()
+
+    expect(screen.getByText('Step 2 of 2')).toBeTruthy()
+    expect(screen.getByRole('textbox', { name: 'Workspace name' })).toHaveProperty(
+      'value',
+      'Reloaded workspace',
+    )
+    expect(screen.getByText('Create workspace opens Provider Operations.')).toBeTruthy()
+  })
+
+  it('R3c: Skip creates the workspace with the suggested name', async () => {
+    renderOnboarding()
+    selectRole('Buy with an Agent')
+    advanceToWorkspaceStep()
+    fireEvent.change(screen.getByRole('textbox', { name: 'Workspace name' }), {
+      target: { value: 'Discard this edit' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Skip' }))
+
+    await waitFor(() => {
+      expect(routeState.completeMutation).toHaveBeenCalledWith(
+        expect.objectContaining({
+          roleIntent: 'buyer',
+          workspaceName: SUGGESTED_NAME,
+        }),
+      )
     })
   })
 
@@ -196,13 +236,13 @@ describe('onboarding route', () => {
       redirectPath: '/owner',
     })
     renderOnboarding()
-    selectRole('Buyer / Agent Operator')
+    selectRole('Buy with an Agent')
     advanceToWorkspaceStep()
 
     fireEvent.change(screen.getByRole('textbox', { name: 'Workspace name' }), {
       target: { value: 'Acme Corp' },
     })
-    fireEvent.click(screen.getByRole('button', { name: 'Finish setup' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Create workspace' }))
 
     await waitFor(() => {
       expect(routeState.completeMutation).toHaveBeenCalledWith(
@@ -222,12 +262,12 @@ describe('onboarding route', () => {
       redirectPath: '/owner',
     })
     renderOnboarding()
-    selectRole('Buyer / Agent Operator')
+    selectRole('Buy with an Agent')
     advanceToWorkspaceStep()
     fireEvent.change(screen.getByRole('textbox', { name: 'Workspace name' }), {
       target: { value: 'Acme Corp' },
     })
-    fireEvent.click(screen.getByRole('button', { name: 'Finish setup' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Create workspace' }))
 
     await waitFor(() => {
       expect(toastState.success).toHaveBeenCalledWith(
@@ -241,9 +281,9 @@ describe('onboarding route', () => {
   it('R4c: mapped error toast states no charge on failure', async () => {
     routeState.completeMutation.mockRejectedValue(new Error('display_name_invalid'))
     renderOnboarding()
-    selectRole('Buyer / Agent Operator')
+    selectRole('Buy with an Agent')
     advanceToWorkspaceStep()
-    fireEvent.click(screen.getByRole('button', { name: 'Finish setup' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Create workspace' }))
 
     await waitFor(() => {
       expect(toastState.error).toHaveBeenCalledWith(
@@ -253,7 +293,7 @@ describe('onboarding route', () => {
         }),
       )
     })
-    expect(routeState.navigate).not.toHaveBeenCalled()
+    expect(routeState.navigate).not.toHaveBeenCalledWith({ to: '/owner' })
   })
 
   it('R5: buyer lands on /owner and supplier lands on /owner/operations without redirect param', async () => {
@@ -263,9 +303,9 @@ describe('onboarding route', () => {
       redirectPath: '/owner',
     })
     renderOnboarding()
-    selectRole('Buyer / Agent Operator')
+    selectRole('Buy with an Agent')
     advanceToWorkspaceStep()
-    fireEvent.click(screen.getByRole('button', { name: 'Finish setup' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Create workspace' }))
 
     await waitFor(() => {
       expect(routeState.navigate).toHaveBeenCalledWith({ to: '/owner' })
@@ -280,9 +320,9 @@ describe('onboarding route', () => {
       redirectPath: '/owner/operations',
     })
     renderOnboarding()
-    selectRole('Tool Provider')
+    selectRole('Provide a Tool')
     advanceToWorkspaceStep()
-    fireEvent.click(screen.getByRole('button', { name: 'Finish setup' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Create workspace' }))
 
     await waitFor(() => {
       expect(routeState.navigate).toHaveBeenCalledWith({ to: '/owner/operations' })
@@ -298,7 +338,7 @@ describe('onboarding route', () => {
     })
     renderOnboarding()
     advanceToWorkspaceStep()
-    fireEvent.click(screen.getByRole('button', { name: 'Finish setup' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Create workspace' }))
 
     await waitFor(() => {
       expect(routeState.navigate).toHaveBeenCalledWith({ to: '/agent-access' })
@@ -319,6 +359,6 @@ describe('onboarding route', () => {
     await waitFor(() => {
       expect(routeState.navigate).toHaveBeenCalledWith({ to: '/owner' })
     })
-    expect(screen.queryByRole('heading', { name: 'Set up your workspace' })).toBeNull()
+    expect(screen.queryByRole('heading', { name: 'Finish workspace' })).toBeNull()
   })
 })

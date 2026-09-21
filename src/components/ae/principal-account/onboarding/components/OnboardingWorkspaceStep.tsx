@@ -1,16 +1,22 @@
 import { Button } from '@/components/ui/button'
-import { FieldLabel } from '@/components/ui/field'
+import { FieldDescription, FieldLabel } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
 
-import type { OnboardingWorkspaceStepProps } from '../onboarding.contracts'
+import {
+  ONBOARDING_SKIP_HELPER,
+  type OnboardingWorkspaceStepProps,
+} from '../onboarding.contracts'
 
 export function OnboardingWorkspaceStep({
   workspaceName,
   finishDisabled,
+  skipDisabled,
   submitting,
+  completionDescription,
   workspaceInputRef,
   onWorkspaceNameChange,
   onBack,
+  onSkip,
   onFinish,
 }: OnboardingWorkspaceStepProps) {
   return (
@@ -30,8 +36,10 @@ export function OnboardingWorkspaceStep({
             }
           }}
           autoComplete="organization"
+          maxLength={200}
         />
       </div>
+      <FieldDescription>{completionDescription}</FieldDescription>
       <div className="grid gap-related sm:grid-cols-2">
         <Button
           type="button"
@@ -48,8 +56,20 @@ export function OnboardingWorkspaceStep({
           disabled={finishDisabled}
           onClick={() => void onFinish()}
         >
-          {submitting ? 'Creating workspace...' : 'Finish setup'}
+          {submitting ? 'Creating workspace...' : 'Create workspace'}
         </Button>
+      </div>
+      <div className="grid justify-items-center gap-1">
+        <Button
+          type="button"
+          variant="ghost"
+          className="min-h-touch"
+          disabled={skipDisabled}
+          onClick={() => void onSkip()}
+        >
+          Skip
+        </Button>
+        <FieldDescription>{ONBOARDING_SKIP_HELPER}</FieldDescription>
       </div>
     </div>
   )

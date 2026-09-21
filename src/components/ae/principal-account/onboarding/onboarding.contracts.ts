@@ -1,12 +1,41 @@
 import type { RefObject } from 'react'
 
-import type { OnboardingRoleIntent } from '@/modules/principal-account/onboarding.contracts'
+import type {
+  OnboardingRoleIntent,
+  OnboardingSearch,
+} from '@/modules/principal-account/onboarding.contracts'
 
-export type AeOnboardingPageProps = Readonly<{
-  redirect?: string
-}>
+export type AeOnboardingPageProps = OnboardingSearch
 
 export type OnboardingWizardStep = 1 | 2
+
+export const ONBOARDING_ROLE_COPY = {
+  buyer: {
+    label: 'Buy with an Agent',
+    description:
+      'Unlocks Market, Agents, Credit, and Call records. You can change this in Settings.',
+  },
+  supplier: {
+    label: 'Provide a Tool',
+    description:
+      'Unlocks Provider Operations to publish Tools and manage Calls. You can change this in Settings.',
+  },
+} as const satisfies Record<
+  OnboardingRoleIntent,
+  Readonly<{ label: string; description: string }>
+>
+
+export const ONBOARDING_SKIP_HELPER = 'Skip: you can set this later in Settings'
+
+export function onboardingCompletionDescription(
+  redirect: string | undefined,
+  roleIntent: OnboardingRoleIntent | null,
+): string {
+  if (redirect !== undefined) return `Create workspace continues to ${redirect}.`
+  return roleIntent === 'supplier'
+    ? 'Create workspace opens Provider Operations.'
+    : 'Create workspace opens Workspace overview.'
+}
 
 export type OnboardingSurface =
   | Readonly<{ kind: 'opening' }>
@@ -19,7 +48,9 @@ export type OnboardingSurface =
       kind: 'workspace'
       workspaceName: string
       finishDisabled: boolean
+      skipDisabled: boolean
       submitting: boolean
+      completionDescription: string
     }>
 
 export type UseOnboardingPageInput = AeOnboardingPageProps
@@ -31,6 +62,7 @@ export type UseOnboardingPageResult = Readonly<{
   onContinue: () => void
   onWorkspaceNameChange: (value: string) => void
   onBack: () => void
+  onSkip: () => void
   onFinish: () => void
 }>
 
@@ -48,9 +80,12 @@ export type OnboardingRoleStepProps = Readonly<{
 export type OnboardingWorkspaceStepProps = Readonly<{
   workspaceName: string
   finishDisabled: boolean
+  skipDisabled: boolean
   submitting: boolean
+  completionDescription: string
   workspaceInputRef: RefObject<HTMLInputElement | null>
   onWorkspaceNameChange: (value: string) => void
   onBack: () => void
+  onSkip: () => void
   onFinish: () => void
 }>
