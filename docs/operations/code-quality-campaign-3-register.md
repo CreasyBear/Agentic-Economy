@@ -17,10 +17,10 @@
 
 | Wave | Scope | Workflows | Verified | In Review | Pending | Target Status |
 | :--- | :--- | :--- | :---: | :---: | :---: | :---: |
-| **Wave 1: Funding/payment façades** | A02–A04 | `CQ3-01` – `CQ3-03` | 0 | 0 | 3 | `READY` |
+| **Wave 1: Funding/payment façades** | A02–A04 | `CQ3-01` – `CQ3-03` | 1 | 0 | 2 | `IN PROGRESS` |
 | **Wave 2: Inherited Convex cohesion** | A05, A06, A08, A09 | unstaffed | — | — | — | not opened |
 | **Wave 3: Wave 3 residue** | A11–A13 | unstaffed | — | — | — | not opened |
-| **Total** | Campaign 3 Wave 1 | **3 named** | **0** | **0** | **3** | `OPEN` |
+| **Total** | Campaign 3 Wave 1 | **3 named** | **1** | **0** | **2** | `OPEN` |
 
 ### Do not touch (standing)
 
@@ -48,26 +48,30 @@ Lint, `tsc --noEmit`, `deps:check` 0/0/0, targeted + funding/payment regression 
 
 | ID | Amendment | File | Lines | Incision | Size | Status |
 | :--- | :--- | :--- | ---: | :--- | :---: | :--- |
-| **CQ3-01** | A02 | `convex/capabilitySupplyCanaryFunding.ts` | 980 | Reuse `convex/lib/capabilitySupply/canaryFundingConstants.ts`. Extract grant policy/identity/exact-material, atomic provision+rotate handlers, durable grant/readiness reads, custody/RPC parsing. Façade keeps the five RPC exports and re-exports consumed by payment attempts. | L | `READY` |
-| **CQ3-02** | A03 | `convex/capabilitySupplyCanaryFundingPreflight.ts` | 460 | `"use node"`. Separate CDP adapter and readiness inspection from the thin Node action façade. Preserve result/error codes. Staff after CQ3-01 façade exports are stable. | M | `READY` (blocked on CQ3-01) |
-| **CQ3-03** | A04 | `convex/moneyX402PaymentAttempts.ts` | 271 | Move `prepareSellerOnboardingCanaryPaymentAuthorization` into `convex/lib/x402PaymentAttempt*`. Authorization and reservation writes stay in the **same** mutation. Staff after CQ3-01. | M | `READY` (blocked on CQ3-01) |
+| **CQ3-01** | A02 | `convex/capabilitySupplyCanaryFunding.ts` | 114 (was 980) | Reuse `convex/lib/capabilitySupply/canaryFundingConstants.ts`. Extract grant policy/identity/exact-material, atomic provision+rotate handlers, durable grant/readiness reads, custody/RPC parsing. Façade keeps the five RPC exports and re-exports consumed by payment attempts. | L | `VERIFIED` |
+| **CQ3-02** | A03 | `convex/capabilitySupplyCanaryFundingPreflight.ts` | 460 | `"use node"`. Separate CDP adapter and readiness inspection from the thin Node action façade. Preserve result/error codes. Staff after CQ3-01 façade exports are stable. | M | `READY` |
+| **CQ3-03** | A04 | `convex/moneyX402PaymentAttempts.ts` | 271 | Move `prepareSellerOnboardingCanaryPaymentAuthorization` into `convex/lib/x402PaymentAttempt*`. Authorization and reservation writes stay in the **same** mutation. Staff after CQ3-01. | M | `READY` |
 
 ### CQ3-01 — A02 production/sandbox canary funding
 
 - **Surfaces:** `convex/capabilitySupplyCanaryFunding.ts`; existing `convex/lib/capabilitySupply/canaryFundingConstants.ts`
 - **RPC to preserve:** `readExactSellerOnboardingCanaryPlatformGrant`, `provisionProductionSellerOnboardingCanaryFunding`, `provisionSellerOnboardingCanaryFunding`, `readSellerOnboardingCanaryFundingReadiness`, `readProductionSellerOnboardingCanaryFundingReadiness`
 - **Façade re-exports to preserve:** constants and `readExactSellerOnboardingCanaryPlatformGrantHandler` consumed by `convex/moneyX402PaymentAttempts.ts` and tests
-- **Status:** `READY`
+- **Status:** `VERIFIED`
+- **Commit:** pending this batch
+- **Subagent Assignment:** Grok (Spec: `5d61076c-504c-41f5-a753-4d023a748656`) → Composer (Implement: `d0d84431-c38c-45f6-9f82-bdfe5392fbec`) → Orchestrator (Verify: Passed 4/4 Gates)
+- **After:** façade 114; `canaryFundingIdentity.ts` 278; `canaryFundingProvision.ts` 249; `canaryFundingReads.ts` 331; `canaryFundingCustody.ts` 48; `canaryFundingValues.ts` 151; `canaryFundingConstants.ts` 21
+- **Gates:** lint clean; `deps:check` 0/0/0; `tsc --noEmit` 0; 104 tests in 3 files (readiness, payment-attempts, API-kind snapshot)
 
 ### CQ3-02 — A03 CDP preflight Node action
 
 - **Surfaces:** `convex/capabilitySupplyCanaryFundingPreflight.ts`
-- **Status:** `READY` (implement after CQ3-01)
+- **Status:** `READY`
 
 ### CQ3-03 — A04 canary payment authorization
 
 - **Surfaces:** `convex/moneyX402PaymentAttempts.ts`, `convex/lib/x402PaymentAttempt.ts`
-- **Status:** `READY` (implement after CQ3-01)
+- **Status:** `READY`
 
 ---
 
