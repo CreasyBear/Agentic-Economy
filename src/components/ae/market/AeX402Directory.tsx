@@ -174,9 +174,7 @@ function DirectoryMarketplace({ page, search, workspace = false, activeView, hom
     void navigate({ to: marketPath, resetScroll: false, search: next })
   }
   function toggleComparison(item: SavedDirectoryTool) {
-    setComparison(current => current.some(other => other.entry.resource === item.entry.resource)
-      ? current.filter(other => other.entry.resource !== item.entry.resource)
-      : current.length < 4 ? [...current, item] : current)
+    go({ ...search, compare: marketCompareParam(toggleMarketCompareRef(compareRefs, item.entry.resource)) })
   }
   function toolGrid(items: readonly SavedDirectoryTool[]) {
     return <ul className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
@@ -191,7 +189,7 @@ function DirectoryMarketplace({ page, search, workspace = false, activeView, hom
     <div className="mt-8 flex w-fit max-w-full items-center gap-3 rounded-card border border-border bg-card px-4 py-3" aria-label="Selected comparison" data-compare-tray="flow">
       <span className="text-sm">{comparison.length} of 4 selected</span>
       <Button ref={compareTrigger} onClick={() => setCompareOpen(true)} disabled={comparison.length < 2}>Compare Tools</Button>
-      <Button size="icon-sm" variant="ghost" onClick={() => setComparison([])} aria-label="Clear comparison"><XIcon /></Button>
+      <Button size="icon-sm" variant="ghost" onClick={() => go({ ...search, compare: undefined })} aria-label="Clear comparison"><XIcon /></Button>
     </div>
   )
 
@@ -275,6 +273,16 @@ function DirectoryMarketplace({ page, search, workspace = false, activeView, hom
         // (An unavailable page never reaches the code below that reads
         // `tabItems`; the `[]` fallback here only satisfies the type.)
         const tabItems: readonly X402DirectoryEntry[] = tab === 'tools' && indexed ? loadMore.items : page.kind === 'ok' ? page.items : []
+        const railDeck = [
+          indexed && search.query !== undefined ? 'Keyword search across the catalogue' : undefined,
+          page.kind === 'ok' && tabItems.length > 0
+            ? indexed
+              ? `${tabItems.length.toLocaleString()} Tools loaded`
+              : page.mode === 'search' || !browse
+                ? `${page.items.length} matching Tools`
+                : `Showing ${page.offset + 1}–${page.offset + page.items.length}${page.total === undefined ? '' : ` of ${page.total.toLocaleString()}`}`
+            : undefined,
+        ].filter((line): line is string => line !== undefined).join(' · ') || undefined
         return <TabsContent key={tab} value={tab} className="pt-5">
           {tab === 'providers' && providers !== undefined ? <DirectoryProvidersIndex result={providers} /> : <div className={indexed && tab === 'tools' ? 'grid min-w-0 items-start gap-5 md:grid-cols-[13rem_minmax(0,1fr)] lg:gap-7' : 'min-w-0'}>
           {indexed && tab === 'tools' ? <DirectoryExplorerFilters search={search} {...(overview === undefined ? {} : { overview })} onChange={applyExplorerFilters} onReset={() => explore({})} /> : null}
@@ -308,25 +316,12 @@ function DirectoryMarketplace({ page, search, workspace = false, activeView, hom
                       : `${search.directoryCategory} Tools`
                   : `Results for “${search.query}”`
             }
-            deck={[
-              indexed && search.query !== undefined ? 'Keyword search across the catalogue' : undefined,
-              page.kind === 'ok' && tabItems.length > 0
-                ? indexed
-                  ? `${tabItems.length.toLocaleString()} Tools loaded`
-                  : page.mode === 'search' || !browse
-                    ? `${page.items.length} matching Tools`
-                    : `Showing ${page.offset + 1}–${page.offset + page.items.length}${page.total === undefined ? '' : ` of ${page.total.toLocaleString()}`}`
-                : undefined,
-            ]
-              .filter((line): line is string => line !== undefined)
-              .join(' · ') || undefined}
-            action={
-              !browse ? (
-                <Link to={marketPath} search={{ view: tab }} className={cn(buttonVariants({ variant: 'ghost', size: 'sm' }), 'rounded-full')}>
-                  <XIcon />Clear search & filters
-                </Link>
-              ) : undefined
-            }
+            {...(railDeck === undefined ? {} : { deck: railDeck })}
+            {...(browse ? {} : { action: (
+              <Link to={marketPath} search={{ view: tab }} className={cn(buttonVariants({ variant: 'ghost', size: 'sm' }), 'rounded-full')}>
+                <XIcon />Clear search & filters
+              </Link>
+            ) })}
             className="mb-5"
           />
           {search.network !== undefined || search.maxUsdPrice !== undefined ? <div className="mb-4 flex flex-wrap gap-2">{search.network === undefined ? null : <Badge variant="outline">Network: {overview?.kind === 'ok' ? overview.networks.find(item => item.key === search.network)?.label ?? search.network : search.network}</Badge>}{search.maxUsdPrice === undefined ? null : <Badge variant="outline">Up to {search.maxUsdPrice} USDC</Badge>}</div> : null}
