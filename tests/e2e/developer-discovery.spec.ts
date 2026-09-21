@@ -1,5 +1,7 @@
 import { expect, test, type Page } from '@playwright/test'
 
+const sourceOnly = process.env.PLAYWRIGHT_BASE_URL === undefined
+
 const futureAuthorityCopy =
   /book now|booking confirmed|pay now|payment required|protected action proposal|request market|autonomous|agent handled|MCP tools available|OpenAPI action descriptor.*available|callable endpoint.*live|payment handler.*live|agent-callable/i
 const privateFieldCopy =
@@ -7,7 +9,7 @@ const privateFieldCopy =
 
 test.describe('developer discovery', () => {
   test('page renders read-only discovery contracts without future authority copy', async ({ page }) => {
-    await page.goto('/developers/discovery')
+    await page.goto('/developers/discovery', { waitUntil: 'domcontentloaded' })
 
     await expect(page.getByRole('main')).toBeVisible()
     await expect(page.locator('#main-content')).toBeVisible()
@@ -30,7 +32,17 @@ test.describe('developer discovery', () => {
     await expectNoHorizontalOverflow(page)
   })
 
+  test('machine endpoints fail closed without a backend admission credential', async ({ request }) => {
+    test.skip(!sourceOnly, 'Configured stack checks admission and discovery artifacts below.')
+    for (const path of ['/api/discovery/schema', '/api/discovery/examples']) {
+      const response = await request.get(path)
+      expect(response.status()).toBe(503)
+      expect(await response.json()).not.toHaveProperty('kind')
+    }
+  })
+
   test('machine endpoints expose schema and examples while omitting the fixture artifact', async ({ request }) => {
+    test.skip(sourceOnly, 'Requires the configured stack; covered by the fresh-checkout release job.')
     const listResponse = await request.get('/api/businesses')
     const schemaResponse = await request.get('/api/discovery/schema')
     const examplesResponse = await request.get('/api/discovery/examples')

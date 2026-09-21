@@ -1,4 +1,4 @@
-import { degrade } from '@/lib/observability/degrade'
+import { degradeBackend } from '@/lib/observability/degrade-backend'
 import { callJevSystemOne, type DecisionGatewayOptions, type JevQuestion } from '@/modules/decision-engine/public'
 import type { X402DirectoryContract, X402DirectoryPage } from './x402-directory'
 
@@ -64,14 +64,14 @@ export async function rerankX402DirectoryPage<P extends X402DirectoryPage>(
       ...options, timeoutMs: options.timeoutMs ?? 1500, maxRetries: 0,
     })
   } catch (cause) {
-    return degrade(cause, page, { site: 'rerankX402DirectoryPage', reason: 'source_unavailable' })
+    return degradeBackend(cause, page, { site: 'rerankX402DirectoryPage', reason: 'source_unavailable' })
   }
   const scored = page.items.map((item, index) => {
     const answer = decision.answers?.[`match_${index}`]
     return { item, index, score: answer?.type === 'noul' ? answer.noul : undefined }
   })
   if (scored.some(item => typeof item.score !== 'number' || !Number.isFinite(item.score) || item.score < 0 || item.score > 1)) {
-    return degrade(new Error('invalid_directory_relevance_answers'), page, { site: 'rerankX402DirectoryPage', reason: 'invalid_response' })
+    return degradeBackend(new Error('invalid_directory_relevance_answers'), page, { site: 'rerankX402DirectoryPage', reason: 'invalid_response' })
   }
   // No forced Choice winner or arbitrary exclusion threshold: all candidates
   // may fit poorly, and several may be equally useful.
