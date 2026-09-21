@@ -84,10 +84,15 @@ describe('design-system grammar eval harness', () => {
     const supply = readFileSync('src/components/ae/supply/AeSupplyLanding.tsx', 'utf8')
     const agents = readFileSync('src/components/ae/agents/AeAgentDoorPage.tsx', 'utf8')
     const about = readFileSync('src/components/ae/about/AeAboutPage.tsx', 'utf8')
+    const aboutHero = readFileSync('src/components/ae/website/AeSiteAboutHero.tsx', 'utf8')
+    const brandCopy = readFileSync('src/content/brand-copy.ts', 'utf8')
     expect(supply).toContain('<AeSiteEyebrow>Providers</AeSiteEyebrow>')
     expect(supply).toContain('<AeSiteEyebrow>Before you sign in</AeSiteEyebrow>')
     expect(agents).toContain('<AeSiteEyebrow>{AGENT_PAGE.eyebrow}</AeSiteEyebrow>')
-    expect(about).toContain('<AeSiteEyebrow>{ABOUT.eyebrow}</AeSiteEyebrow>')
+    expect(brandCopy).toContain("eyebrow: 'About'")
+    expect(about).toContain('<AeSiteAboutHero')
+    expect(about).toContain('label={ABOUT.eyebrow}')
+    expect(aboutHero).toMatch(/<span[^>]*text-eyebrow[^>]*>[\s\S]*\{label\}[\s\S]*<\/span>/)
     expect(
       numberedStepProductEyebrowHits().some(hit => hit.file.includes('AeSupplyLanding.tsx')),
     ).toBe(false)
