@@ -74,7 +74,10 @@ describe('public semantic comfort', () => {
   it('keeps About sequential and its door actions comfortable', () => {
     renderRoute('/about')
 
-    expect(screen.getByRole('heading', { level: 1, name: ABOUT.heading })).toBeTruthy()
+    expect(screen.getByRole('heading', { level: 1, name: 'Tools agents can call.' })).toBeTruthy()
+    expect(
+      screen.getByText('Agents buy Tools. Providers set prices and receive AUD payouts after completed Calls.'),
+    ).toBeTruthy()
     expect(screen.getByRole('heading', { level: 2, name: ABOUT.doorsHeading })).toBeTruthy()
     expect(screen.getByRole('heading', { level: 2, name: ABOUT.providersHeading })).toBeTruthy()
     expect(screen.getByRole('link', { name: 'Browse the live catalog' }).classList.contains('min-h-touch')).toBe(true)

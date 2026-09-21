@@ -49,7 +49,7 @@ test.describe('market product accessibility', () => {
     await expect(footer.getByRole('link', { name: 'About AECON' })).toBeVisible()
     await expect(footer.getByRole('link', { name: 'System status' })).toBeVisible()
     await gotoSettled(page, '/about')
-    await expect(page.getByRole('heading', { level: 1, name: 'Who this market is for.' })).toBeVisible()
+    await expect(page.getByRole('heading', { level: 1, name: 'Tools agents can call.' })).toBeVisible()
     await expect(page.getByRole('heading', { name: 'Listed Providers' })).toBeVisible()
     await expect(page.getByRole('link', { name: 'Browse the live catalog' })).toBeVisible()
     const compact = (page.viewportSize()?.width ?? 1280) < 768

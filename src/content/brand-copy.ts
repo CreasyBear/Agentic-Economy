@@ -77,13 +77,13 @@ export const ABOUT = {
   metaTitle: 'About | Agentic Economy',
   metaDescription: CORE_SENTENCE,
   eyebrow: 'About',
-  heading: 'Who this market is for.',
+  heading: 'Tools agents can call.',
   subhead:
-    'Agents find, compare, and call. Providers publish the job, the price, and the access terms, and get paid after delivery.',
+    'Agents buy Tools. Providers set prices and receive AUD payouts after completed Calls.',
   doorsHeading: 'Agents and Providers',
   settlementHeading: 'Pay per call',
   settlementBody:
-    'Browse and inspect without a Provider account. The price sits on the card before a Call. Providers are paid when the job is delivered.',
+    'Browse and inspect without a Provider account. The price sits on the card before a Call.',
   providersHeading: 'Listed Providers',
   providersBody:
     'A Provider is listed when it publishes a Tool agents can inspect in the current catalogue.',
