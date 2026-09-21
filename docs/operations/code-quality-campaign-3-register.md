@@ -1,15 +1,19 @@
 # Code Quality Campaign 3: Funding/payment façades — Operational Register
 
 **Date:** 21 September 2026  
-**Status:** OPEN — Wave 1 **VERIFIED**. Waves 2–3 unstaffed. Campaign 2 remains **CLOSED**.  
+**Status:** OPEN — Wave 1 **VERIFIED**. Waves 2–3 staffed (`CQ3-04`–`CQ3-10` READY). Campaign 2 remains **CLOSED**.  
 **Unified tree:** `main` at Phase 0 commit `de8bd68ab` (A01 closed; Jev/procure cutover reconciled). Wave 1 extracts: `e86184cd2` (CQ3-01) + `942029008` (CQ3-02/03).  
 **Operating Protocol:** `docs/operations/code-quality-maturity-protocol.md` (same 5-stage Grok → Composer → Orchestrator lifecycle; IDs `CQ3-*`)  
 **Intake evidence:** `docs/operations/code-quality-amendment-register.md` (A01–A15). This file is the assignment surface.  
 **Predecessor:** `docs/operations/code-quality-ceiling-register.md` (Campaign 2 CLOSED)
 
-**Thesis:** Restore the Convex façade invariant on the funding/payment cluster the alpha merge put on `main`, without changing canary, payment, or market behaviour. Quality follow-through, not a market-journey campaign.
+**Thesis:** Restore the Convex façade/helper invariant on Journey 4 machinery (funding, owner canary, owner supply, staging, probes) without changing canary, payment, staging, readiness, or probe semantics. Quality follow-through, not a market-journey campaign.
 
 **Wave 1 success metric (met):** funding façade **114** (<200); preflight façade **107** (<200); payment façade **153** (<200); every extracted helper **< 400**; canary payment authorization calls `prepareX402PaymentAuthorizationHandler` **in-process** (no second mutation). RPC names unchanged. A01 and canary/payment tests remain green.
+
+**Wave 2 success metric:** `capabilitySupplyOwnerCanary.ts` façade <200 with admission still one mutation; `capabilitySupplyOwnerSupply.ts` Node action façade <200; staging and probe **root helpers** become re-export shells so `capabilitySupply.ts` RPC names stay put; extracted helpers <400; CQS on probes (authority reads stay queries).
+
+**Wave 3 success metric:** A11 search types moved out of TSX; A12 adds colocated tests only for named behavioural gaps; A13 records static-page skeleton N/A. No operator-route reopen. No `routeTree.gen.ts`.
 
 ---
 
@@ -18,9 +22,9 @@
 | Wave | Scope | Workflows | Verified | In Review | Pending | Target Status |
 | :--- | :--- | :--- | :---: | :---: | :---: | :---: |
 | **Wave 1: Funding/payment façades** | A02–A04 | `CQ3-01` – `CQ3-03` | 3 | 0 | 0 | `VERIFIED` |
-| **Wave 2: Inherited Convex cohesion** | A05, A06, A08, A09 | unstaffed | — | — | — | not opened |
-| **Wave 3: Wave 3 residue** | A11–A13 | unstaffed | — | — | — | not opened |
-| **Total** | Campaign 3 | **3 named** | **3** | **0** | **0** | `OPEN` (Wave 1 closed) |
+| **Wave 2: Inherited Convex cohesion** | A05, A06, A08, A09 | `CQ3-04` – `CQ3-07` | 0 | 0 | 4 | `IN PROGRESS` |
+| **Wave 3: Wave 3 residue** | A11–A13 | `CQ3-08` – `CQ3-10` | 0 | 0 | 3 | `READY` |
+| **Total** | Campaign 3 | **10 named** | **3** | **0** | **7** | `OPEN` |
 
 ### Do not touch (standing)
 
@@ -101,7 +105,71 @@ RPC kind snapshot unchanged. No `convex/<name>/` directories created.
 
 ---
 
-## Recorded deferrals (not Wave 1)
+# Wave 2: Inherited Convex cohesion
+
+| ID | Amendment | File | Lines | Incision | Size | Status |
+| :--- | :--- | :--- | ---: | :--- | :---: | :--- |
+| **CQ3-04** | A05 | `convex/capabilitySupplyOwnerCanary.ts` | 640 | Identity/commitment validation, atomic admission handler, evidence reader → `convex/lib/capabilitySupply/ownerCanary*`. Façade keeps the three RPCs. Grant reads via funding façade. Admission stays one mutation. | L | `READY` |
+| **CQ3-05** | A06 | `convex/capabilitySupplyOwnerSupply.ts` | 330 | `"use node"`. Extract readiness/test orchestration. Keep action names and thinness strings (`internal.capabilitySupplyReadiness.probe`; no `observeCapabilityReadiness`). | M | `READY` |
+| **CQ3-06** | A08 | `convex/capabilitySupplyOwnerStaging.ts` | 589 | Helper (0 RPC). Split normalization / exact-publication reuse / staging orchestration. Root file becomes re-exports. `capabilitySupply.stageOwnerX402Capability` stays on the host. | M | `READY` |
+| **CQ3-07** | A09 | `convex/capabilitySupplyProbes.ts` | 909 | Helper (0 RPC). Split authority (query-safe), target reads, observation writes, scheduling. Root keeps thinness-asserted wrappers. CQS: `record*` / `scheduleDue*` stay mutations. | L | `READY` |
+
+### CQ3-04 — A05 owner canary admission
+
+- **Surfaces:** `convex/capabilitySupplyOwnerCanary.ts`
+- **RPC to preserve:** `requestSellerOnboardingCanary`, `requestSellerOnboardingCanaryForAdmittedPublication`, `readSellerOnboardingCanaryEvidence`
+- **Status:** `READY`
+- **Staff after:** Wave 1 closed
+
+### CQ3-05 — A06 owner supply Node actions
+
+- **Surfaces:** `convex/capabilitySupplyOwnerSupply.ts`
+- **RPC to preserve:** `runOwnerSupplyReadiness`, `runOwnerSupplyTest`
+- **Status:** `READY`
+- **Staff after:** CQ3-04
+
+### CQ3-06 — A08 owner staging helper
+
+- **Surfaces:** `convex/capabilitySupplyOwnerStaging.ts`
+- **Host RPC (do not move):** `capabilitySupply.stageOwnerX402Capability`
+- **Status:** `READY`
+- **Staff after:** CQ3-04
+
+### CQ3-07 — A09 capability probes helper
+
+- **Surfaces:** `convex/capabilitySupplyProbes.ts`
+- **Host RPCs (do not move):** `observeCapabilityReadiness`, `readCapabilityProbeTarget`, `readOwnerStagedCapabilityProbeTarget`, `recordCapabilityProbeResult`, `recordOwnerStagedCapabilityProbeResult`, `scheduleDueCapabilityProbes`
+- **Status:** `READY`
+- **Staff after:** CQ3-05/06
+
+---
+
+# Wave 3: Leaf-rule residue
+
+| ID | Amendment | File | Incision | Size | Status |
+| :--- | :--- | :--- | :--- | :---: | :--- |
+| **CQ3-08** | A11 | `src/routes/$slug.tsx`, `sign-in.$.tsx`, `sign-up.$.tsx` | Move search types out of TSX. Do not document an exception. Do not expand to onboarding/support. | S | `READY` |
+| **CQ3-09** | A12 | Seven compounds under `src/components/ae/{auth,legal,principal-account,status,support}/` | Map existing coverage. Add colocated tests only for named behavioural gaps. No markup-mirroring tests. | M | `READY` |
+| **CQ3-10** | A13 | privacy / terms / help | Explicit skeleton **not applicable** for synchronous static pages. Do not add fake skeletons. | S | `READY` |
+
+### CQ3-08 — A11 framework search types
+
+- **Status:** `READY`
+- **Locked decision:** move, do not document an exception
+
+### CQ3-09 — A12 colocated tests
+
+- **Status:** `READY`
+- **Locked decision:** justified tests only
+
+### CQ3-10 — A13 static-page skeletons
+
+- **Status:** `READY`
+- **Locked decision:** N/A for privacy, terms, help
+
+---
+
+## Recorded deferrals (not Wave 2/3)
 
 | ID | File | Measurement | Owner |
 | :--- | :--- | ---: | :--- |
