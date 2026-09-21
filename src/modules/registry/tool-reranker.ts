@@ -1,4 +1,4 @@
-import { degrade } from '@/lib/observability/degrade'
+import { degradeBackend } from '@/lib/observability/degrade-backend'
 import {
   executeDecisionGateway,
   JevUnavailableError,
@@ -98,7 +98,7 @@ export async function rerankToolSearchResult(
     )
   } catch (cause) {
     if (!(cause instanceof JevUnavailableError)) throw cause
-    return degrade(cause, result, { site: 'rerankToolSearchResult', reason: 'source_unavailable' })
+    return degradeBackend(cause, result, { site: 'rerankToolSearchResult', reason: 'source_unavailable' })
   }
 
   if (decision.tier !== 'jev_system_one') return result
