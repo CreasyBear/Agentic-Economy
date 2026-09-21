@@ -24,9 +24,16 @@ export type ToolUnavailableProps = Readonly<{
   result: Exclude<ToolDetailPresentationResult, { kind: 'found' }>
 }>
 
+export type ToolUnavailablePresentation = Readonly<{
+  tone: 'neutral' | 'warning'
+  title: string
+  description: string
+}>
+
 export type DirectoryEntrySummaryPageProps = Readonly<{
   entry: X402DirectoryEntry
   upstream: boolean
+  readiness?: ToolUnavailablePresentation
 }>
 
 export type DirectoryEntryUnavailableProps = Readonly<{

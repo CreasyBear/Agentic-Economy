@@ -7,7 +7,7 @@ import { directoryPrice, directoryPriceContext, directoryTitle } from '@/modules
 import type { ToolDetailPresentation } from '@/modules/market/tool-detail-presentation'
 
 import { MarketBackButton } from './MarketBackButton'
-import { PublicToolDetail } from './PublicToolDetail'
+import { PublicToolDetail, toolUnavailablePresentation } from './PublicToolDetail'
 import type {
   AeDirectoryToolCanonicalPageProps,
   DirectoryEntrySummaryPageProps,
@@ -26,18 +26,15 @@ export function AeDirectoryToolCanonicalPage({ data }: AeDirectoryToolCanonicalP
   }
   return (
     <Await promise={admission} fallback={<DirectoryEntrySummaryPage entry={metadata.item.entry} upstream={metadata.kind === 'found_upstream'} />}>
-      {(resolved: ToolDetailPresentation) => (
-        <PublicToolDetail
-          result={resolved.result}
-          {...(resolved.evidence === undefined ? {} : { evidence: resolved.evidence })}
-        />
-      )}
+      {(resolved: ToolDetailPresentation) => resolved.result.kind === 'found'
+        ? <PublicToolDetail result={resolved.result} {...(resolved.evidence === undefined ? {} : { evidence: resolved.evidence })} />
+        : <DirectoryEntrySummaryPage entry={metadata.item.entry} upstream={metadata.kind === 'found_upstream'} readiness={toolUnavailablePresentation(resolved.result)} />}
     </Await>
   )
 }
 
-/** Renders at once from the directory lookup, before the admission promise resolves - title, Provider, price and description, per the design's "no blank first content" requirement. */
-function DirectoryEntrySummaryPage({ entry, upstream }: DirectoryEntrySummaryPageProps) {
+/** Renders at once from the directory lookup, before and after the admission promise resolves - title, Provider, price, description and inline readiness state, per the design's "no blank first content" requirement. */
+function DirectoryEntrySummaryPage({ entry, upstream, readiness }: DirectoryEntrySummaryPageProps) {
   return (
     <AePublicPage>
       <div className="ae-rail grid gap-section pb-page">
@@ -55,7 +52,13 @@ function DirectoryEntrySummaryPage({ entry, upstream }: DirectoryEntrySummaryPag
             <p className="text-lg font-semibold tabular-nums">{directoryPrice(entry)}</p>
             <p className="mt-0.5 text-xs text-muted-foreground">{directoryPriceContext(entry)}</p>
           </div>
-          <p role="status" className="text-sm text-muted-foreground">Checking whether this Tool is ready to call…</p>
+          {readiness === undefined
+            ? <p role="status" className="text-sm text-muted-foreground">Checking whether this Tool is ready to call…</p>
+            : <div role="status" className="grid gap-1 text-sm">
+                <p className="font-medium">{readiness.title}</p>
+                <p className="text-muted-foreground">{readiness.description}</p>
+                <a href="" className="text-sm underline underline-offset-4">Check again</a>
+              </div>}
         </div>
       </div>
     </AePublicPage>
