@@ -28,7 +28,7 @@ export const Route = createFileRoute('/developers/discovery')({
   loader: () => loadDeveloperDiscoveryRouteServer(),
   head: ({ loaderData }) => ({
     meta: [
-      { title: `${loaderData.copy.title} | Agentic Economy` },
+      { title: `${loaderData?.copy.title ?? 'Discovery'} | Agentic Economy` },
       {
         name: 'description',
         content: 'Read-only public catalog facts, schema shape, examples, freshness, and unavailable states.',

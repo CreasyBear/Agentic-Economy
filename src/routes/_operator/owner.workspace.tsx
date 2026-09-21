@@ -26,7 +26,12 @@ export const Route = createFileRoute('/_operator/owner/workspace')({
 
 function OwnerWorkspaceRoute() {
   return (
-    <AeOperatorPage operatorRole="owner" title="Workspace" currentPath="/owner/workspace">
+    <AeOperatorPage
+      operatorRole="owner"
+      title="Workspace"
+      description="Business profile, tax details, and settings shared by every Agent in this workspace."
+      currentPath="/owner/workspace"
+    >
       <div className="ae-owner-workspace grid gap-8">
         <div className="min-h-96 w-full">
           <OrganizationProfile

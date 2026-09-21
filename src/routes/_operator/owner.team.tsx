@@ -28,7 +28,12 @@ function OwnerTeamRoute() {
   const directory = useQuery(api.workspaceTeam.listDirectory)
 
   return (
-    <AeOperatorPage operatorRole="owner" title="Team" currentPath="/owner/team">
+    <AeOperatorPage
+      operatorRole="owner"
+      title="Team"
+      description="Who can act for this business, their roles, and pending invitations."
+      currentPath="/owner/team"
+    >
       <div className="ae-owner-team grid gap-8">
         <div id="invite" className="min-h-96 w-full">
           <OrganizationProfile
