@@ -9,7 +9,7 @@ export function PrivacyCorrectionCta() {
   return (
     <section className="flex flex-col gap-related border-t border-border pt-section md:flex-row md:items-center md:justify-between">
       <div className="max-w-2xl">
-        <AeSiteHeading as="h2" size="sm">
+        <AeSiteHeading as="h2" size="sm" id="corrections-removal">
           Need a Provider profile fixed?
         </AeSiteHeading>
         <p className="mt-intra text-muted-foreground">

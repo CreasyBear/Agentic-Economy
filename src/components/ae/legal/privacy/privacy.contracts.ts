@@ -24,6 +24,60 @@ export type PrivacyMoment = Readonly<{
   points: ReadonlyArray<string>
 }>
 
+export type PrivacySection = Readonly<{
+  id: string
+  label: string
+}>
+
+export type PrivacyDisclosure = Readonly<{
+  category: string
+  purpose: string
+  recipient: string
+}>
+
+export type PrivacyDisclosureTable = Readonly<{
+  description: string
+  columns: Readonly<{
+    category: string
+    purpose: string
+    recipient: string
+  }>
+  rows: ReadonlyArray<PrivacyDisclosure>
+}>
+
+export const privacyIntro = 'How Agentic Economy collects and uses data.'
+
+export const privacyDocumentMeta = {
+  versionLabel: 'Version',
+  version: '2026-09-20',
+  lastUpdatedLabel: 'Last updated',
+  lastUpdated: '2026-09-20',
+  contentsLabel: 'Privacy sections',
+} as const
+
+export const privacySections = [
+  { id: 'data-handling', label: 'How data is handled' },
+  { id: 'data-use-recipients', label: 'Data use and recipients' },
+  { id: 'privacy-moments', label: 'Data at each step' },
+  { id: 'corrections-removal', label: 'Corrections and removal' },
+] as const satisfies ReadonlyArray<PrivacySection>
+
+export const privacyDisclosureTable = {
+  description: 'This table only lists recipients named by this notice.',
+  columns: {
+    category: 'Data category',
+    purpose: 'Purpose',
+    recipient: 'Recipient',
+  },
+  rows: [
+    {
+      category: 'Inputs required by the exact Tool',
+      purpose: 'Release them through the published Call path',
+      recipient: 'The selected Provider',
+    },
+  ],
+} as const satisfies PrivacyDisclosureTable
+
 export const detailCards = [
   {
     icon: BracesIcon,
@@ -82,4 +136,11 @@ export type PrivacyDetailCardsProps = Readonly<{
 
 export type PrivacyMomentTabsProps = Readonly<{
   moments: ReadonlyArray<PrivacyMoment>
+}>
+
+export type PrivacyNoticeOverviewProps = Readonly<{
+  meta: typeof privacyDocumentMeta
+  sections: ReadonlyArray<PrivacySection>
+  disclosureSection: PrivacySection
+  disclosureTable: PrivacyDisclosureTable
 }>

@@ -2,6 +2,7 @@ import { Outlet, createFileRoute, useLocation } from '@tanstack/react-router'
 
 import { AePublicPage } from '@/components/ae/layout/AePublicPage'
 import { AePrivacyPage } from '@/components/ae/legal/privacy/AePrivacyPage'
+import { privacyIntro } from '@/components/ae/legal/privacy/privacy.contracts'
 import { buildPublicPageHead } from '@/modules/seo/public'
 
 export const Route = createFileRoute('/privacy')({
@@ -14,7 +15,7 @@ export const Route = createFileRoute('/privacy')({
   head: () => buildPublicPageHead({
     path: '/privacy',
     title: 'Privacy | Agentic Economy',
-    description: 'What Agentic Economy handles when you browse, call, pay for, or publish Tools and listings.',
+    description: privacyIntro,
   }),
   component: PrivacyRoute,
 })
@@ -31,7 +32,7 @@ function PrivacyRoute() {
       kind="document"
       eyebrow="Legal"
       title="Privacy"
-      description="What the market handles when you browse, call, pay for, or publish Tools and listings."
+      description={privacyIntro}
     >
       <AePrivacyPage />
     </AePublicPage>
