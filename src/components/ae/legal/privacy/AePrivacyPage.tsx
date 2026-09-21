@@ -1,41 +1,50 @@
-import { AeSiteHeading } from '@/components/ae/website/AeSiteType'
+import { Link } from '@tanstack/react-router'
 
-import { PrivacyCorrectionCta } from './components/PrivacyCorrectionCta'
-import { PrivacyDetailCards } from './components/PrivacyDetailCards'
-import { PrivacyMomentTabs } from './components/PrivacyMomentTabs'
-import { PrivacyNoticeOverview } from './components/PrivacyNoticeOverview'
+import { AeSiteUtilityDocument } from '@/components/ae/website/AeSiteUtilityDocument'
+
 import {
-  detailCards,
-  moments,
-  privacyDisclosureTable,
-  privacyDocumentMeta,
+  privacyCorrectionLink,
+  privacyIntro,
+  privacyLastUpdated,
+  privacyOaicLead,
+  privacyOaicLink,
+  privacyOpening,
   privacySections,
+  privacyTermsLead,
+  privacyTermsLink,
+  privacyTitle,
 } from './privacy.contracts'
 
-export function AePrivacyPage() {
-  const [handlingSection, disclosureSection, momentsSection] = privacySections
+const documentLinkClassName = 'text-primary underline underline-offset-4'
 
+export function AePrivacyPage() {
   return (
-    <div className="ae-rail grid max-w-prose gap-page pb-page">
-      <PrivacyNoticeOverview
-        meta={privacyDocumentMeta}
-        sections={privacySections}
-        disclosureSection={disclosureSection}
-        disclosureTable={privacyDisclosureTable}
-      />
-      <section aria-labelledby={handlingSection.id} className="grid gap-related border-t border-border pt-section">
-        <AeSiteHeading as="h2" size="sm" id={handlingSection.id}>
-          {handlingSection.label}
-        </AeSiteHeading>
-        <PrivacyDetailCards cards={detailCards} />
-      </section>
-      <section aria-labelledby={momentsSection.id} className="grid gap-related border-t border-border pt-section">
-        <AeSiteHeading as="h2" size="sm" id={momentsSection.id}>
-          {momentsSection.label}
-        </AeSiteHeading>
-        <PrivacyMomentTabs moments={moments} />
-      </section>
-      <PrivacyCorrectionCta />
-    </div>
+    <AeSiteUtilityDocument
+      title={privacyTitle}
+      description={privacyIntro}
+      lastUpdated={privacyLastUpdated}
+      sections={privacySections}
+      intro={<p>{privacyOpening}</p>}
+      footer={(
+        <div className="grid gap-4">
+          <p>
+            <Link to="/privacy/remove-business" className={documentLinkClassName}>
+              {privacyCorrectionLink}
+            </Link>.
+          </p>
+          <p>
+            {privacyTermsLead}{' '}
+            <Link to="/terms" className={documentLinkClassName}>{privacyTermsLink}</Link>.{' '}
+            {privacyOaicLead}{' '}
+            <a
+              href="https://www.oaic.gov.au/privacy/privacy-complaints"
+              className={documentLinkClassName}
+            >
+              {privacyOaicLink}
+            </a>.
+          </p>
+        </div>
+      )}
+    />
   )
 }

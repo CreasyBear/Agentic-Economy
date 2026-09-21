@@ -28,12 +28,7 @@ function PrivacyRoute() {
   }
 
   return (
-    <AePublicPage
-      kind="document"
-      eyebrow="Legal"
-      title="Privacy"
-      description={privacyIntro}
-    >
+    <AePublicPage>
       <AePrivacyPage />
     </AePublicPage>
   )

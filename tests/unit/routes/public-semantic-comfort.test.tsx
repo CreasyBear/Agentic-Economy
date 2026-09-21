@@ -50,25 +50,35 @@ import '@/routes/about'
 afterEach(cleanup)
 
 describe('public semantic comfort', () => {
-  it('keeps the Terms outline sequential and its standalone actions comfortable', () => {
+  it('keeps the Terms outline sequential and its standalone rail actions comfortable', () => {
     renderRoute('/terms')
 
-    const headings = within(screen.getByRole('main')).getAllByRole('heading')
-    expect(headings.map((heading) => heading.tagName)).toEqual(['H1', 'H2', 'H3', 'H3', 'H3'])
-    expect(screen.getByRole('heading', { level: 2, name: 'What these terms mean in practice' })).toBeTruthy()
-    expect(screen.getByRole('link', { name: 'Browse catalog' }).classList.contains('min-h-touch')).toBe(true)
-    expect(screen.getByRole('link', { name: /Publish a Tool/ }).classList.contains('min-h-touch')).toBe(true)
+    const article = screen.getByRole('article')
+    const headings = within(article).getAllByRole('heading')
+    expect(headings.map((heading) => heading.tagName)).toEqual(['H1', ...Array(15).fill('H2')])
+    const contents = within(article).getByRole('navigation', { name: 'On this page' })
+    for (const link of within(contents).getAllByRole('link')) {
+      expect(document.querySelector(link.getAttribute('href') ?? '')).toBeTruthy()
+    }
+    const company = screen.getByRole('navigation', { name: 'Company and website' })
+    for (const link of within(company).getAllByRole('link')) {
+      expect(link.classList.contains('min-h-touch')).toBe(true)
+    }
   })
 
-  it('gives every privacy tab a comfortable standalone target', () => {
+  it('keeps the Privacy outline sequential with working contents and correction links', () => {
     routeState.location = { pathname: '/privacy' }
     renderRoute('/privacy')
 
-    const tablist = screen.getByRole('tablist', { name: 'Privacy moments' })
-    expect(tablist.classList.contains('min-h-touch')).toBe(true)
-    for (const tab of within(tablist).getAllByRole('tab')) {
-      expect(tab.classList.contains('min-h-touch')).toBe(true)
+    const article = screen.getByRole('article')
+    const headings = within(article).getAllByRole('heading')
+    expect(headings.map((heading) => heading.tagName)).toEqual(['H1', ...Array(15).fill('H2')])
+    const contents = within(article).getByRole('navigation', { name: 'On this page' })
+    for (const link of within(contents).getAllByRole('link')) {
+      expect(document.querySelector(link.getAttribute('href') ?? '')).toBeTruthy()
     }
+    expect(within(article).getByRole('link', { name: 'Request a correction or removal' }).getAttribute('href'))
+      .toBe('/privacy/remove-business')
   })
 
   it('keeps About sequential and its actions comfortable', () => {

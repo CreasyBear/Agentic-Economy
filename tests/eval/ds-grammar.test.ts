@@ -12,7 +12,6 @@ import {
   ds18PublicToolWorkspaceKindViolations,
   ds18SiteMarkerViolations,
   ds15LegalPageHeadingViolations,
-  ds15PrivacyMomentNestedCardViolations,
   ds15RemovalFormCenteredWellViolations,
   ds15SiteMarkerViolations,
   ds16DevelopersApiHarvestViolations,
@@ -111,7 +110,6 @@ describe('design-system grammar eval harness', () => {
   it('DS-15: document pages use read-mode grammar, not dashboard headings', () => {
     expect(ds15LegalPageHeadingViolations()).toEqual([])
     expect(ds15SiteMarkerViolations()).toEqual([])
-    expect(ds15PrivacyMomentNestedCardViolations()).toEqual([])
     expect(ds15RemovalFormCenteredWellViolations()).toEqual([])
   })
 

@@ -380,12 +380,6 @@ export const DS_15_SOURCE_FILES = [
   'src/components/ae/support/help/components/PrivateSupportSection.tsx',
   'src/components/ae/support/help/components/ReferencedCallBanner.tsx',
   'src/components/ae/legal/privacy/AePrivacyPage.tsx',
-  'src/components/ae/legal/privacy/components/PrivacyDetailCards.tsx',
-  'src/components/ae/legal/privacy/components/PrivacyMomentTabs.tsx',
-  'src/components/ae/legal/privacy/components/PrivacyCorrectionCta.tsx',
-  'src/components/ae/legal/terms/AeTermsPage.tsx',
-  'src/components/ae/legal/terms/components/TermsCapabilityList.tsx',
-  'src/components/ae/legal/terms/components/TermsPracticeAccordion.tsx',
   'src/components/ae/privacy/remove-business/AeRemoveBusinessPage.tsx',
   'src/components/ae/privacy/remove-business/AeRemoveBusinessPageSkeleton.tsx',
   'src/components/ae/privacy/remove-business/components/CorrectionPathCards.tsx',
@@ -424,11 +418,6 @@ export function ds15SiteMarkerViolations(): readonly DsHit[] {
   return hits
 }
 
-export function ds15PrivacyMomentNestedCardViolations(): readonly string[] {
-  const relative = 'src/components/ae/legal/privacy/components/PrivacyMomentTabs.tsx'
-  const source = readRepoFile(relative)
-  return source.includes('<Card') ? [`${relative}: Card-per-tab dashboard chrome`] : []
-}
 
 export function ds15RemovalFormCenteredWellViolations(): readonly string[] {
   const violations: string[] = []
@@ -699,7 +688,6 @@ export function dsGrammarSnapshot() {
     ds15: {
       legalPageHeadings: ds15LegalPageHeadingViolations(),
       siteMarker: ds15SiteMarkerViolations(),
-      privacyMomentNestedCard: ds15PrivacyMomentNestedCardViolations(),
       removalFormCenteredWell: ds15RemovalFormCenteredWellViolations(),
     },
     ds16: {

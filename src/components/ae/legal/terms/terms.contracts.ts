@@ -88,7 +88,7 @@ export const termsSections = [
     heading: 'Customer data and confidentiality',
     body: [
       'Customers retain their rights in their inputs and existing materials. They grant AE the limited permissions necessary to deliver the agreed service, secure it, maintain required records and handle support or disputes. AE will not use customer content to train general-purpose models or sell that content under this permission. Any separate use requires an express, informed agreement.',
-      'The privacy policy governs AE’s handling of personal information. Where AE processes personal information on a customer’s behalf, the parties must agree the applicable processing instructions, security measures, providers, transfers, assistance and deletion arrangements. Selecting a provider may involve disclosure to that provider under the terms presented before purchase.',
+      'The privacy policy governs AE’s handling of personal information. Where AE processes personal information on a customer’s behalf, the parties must agree the applicable processing instructions, security measures, subprocessors, transfers, assistance and deletion arrangements. Selecting a provider may involve disclosure to that provider under the terms presented before purchase.',
       'Each party must protect the other’s non-public business information with reasonable care, use it only for the agreed relationship and limit access to people or service providers who need it and are bound to protect it. This does not restrict information already lawfully public, independently developed or lawfully received elsewhere. Required legal disclosures should be limited and notified where permitted.',
     ],
   },

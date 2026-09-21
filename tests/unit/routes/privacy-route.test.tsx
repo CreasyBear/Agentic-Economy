@@ -32,16 +32,21 @@ import '@/routes/privacy'
 afterEach(cleanup)
 
 describe('privacy route', () => {
-  it('explains data use and links every contents entry to an on-page section', () => {
+  it('renders the published policy, links its contents, and offers correction or removal', () => {
     const Component = routeState.component
     if (Component === undefined) throw new Error('privacy_route_component_missing')
 
     render(<Component />)
 
     expect(screen.getByText('How Agentic Economy collects and uses data.')).toBeTruthy()
+    expect(screen.getByRole('heading', { level: 2, name: '1. Who this policy covers' })).toBeTruthy()
+    expect(screen.getByRole('link', { name: 'Request a correction or removal' }).getAttribute('href'))
+      .toBe('/privacy/remove-business')
 
-    const contents = screen.getByRole('navigation', { name: 'Privacy sections' })
-    for (const link of within(contents).getAllByRole('link')) {
+    const contents = screen.getByRole('navigation', { name: 'On this page' })
+    const links = within(contents).getAllByRole('link')
+    expect(links).toHaveLength(15)
+    for (const link of links) {
       const href = link.getAttribute('href')
       expect(href).toMatch(/^#[a-z-]+$/)
       expect(document.querySelector(href!)).toBeTruthy()
