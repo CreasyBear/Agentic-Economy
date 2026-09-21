@@ -32,7 +32,7 @@ function securitySchemeFor(canonicalBaseUrl: string): Readonly<{ type: 'http'; s
     type: 'http',
     scheme: 'bearer',
     description:
-      `AE agent access key. Connect through the OAuth device flow (\`ae connect\`) or the ` +
+      `AE Agent access key. Connect through the OAuth device flow (\`ae connect\`) or the ` +
       `\`${trimTrailingSlashes(canonicalBaseUrl)}/.well-known/oauth-protected-resource\` metadata; ` +
       `send the resulting key as \`Authorization: Bearer <token>\`.`,
   }

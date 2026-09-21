@@ -1,19 +1,25 @@
 import { convertSchemaToJsonSchema, type JSONSchema } from '@tanstack/ai'
 import { z } from 'zod'
 
-import { PROBLEM_KINDS } from '@/lib/errors'
+import { defaultTitle, PROBLEM_KINDS, type ProblemKind } from '@/lib/errors'
 
 import type { NormalizedOperation } from './openapi-document-types'
 
 export const AGENT_ACCESS_SECURITY_SCHEME = 'agentAccessKey' as const
 
+type OpenApiProblemKind = Exclude<ProblemKind, 'NO_DATA'>
+const OPENAPI_PROBLEM_KINDS = PROBLEM_KINDS.filter(
+  (kind): kind is OpenApiProblemKind => kind !== 'NO_DATA',
+)
+const OPENAPI_PROBLEM_TITLES = OPENAPI_PROBLEM_KINDS.map((kind) => defaultTitle(kind))
+
 const problemDetailsSchema = z.looseObject({
   type: z.literal('about:blank'),
-  title: z.string(),
+  title: z.enum(OPENAPI_PROBLEM_TITLES),
   status: z.number().int(),
   detail: z.string().optional(),
   instance: z.string().optional(),
-  kind: z.enum(PROBLEM_KINDS),
+  kind: z.enum(OPENAPI_PROBLEM_KINDS),
   code: z.string(),
   reason: z.string().optional(),
   retryable: z.boolean().optional(),
