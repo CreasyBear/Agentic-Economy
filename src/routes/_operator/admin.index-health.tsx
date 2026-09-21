@@ -51,10 +51,11 @@ export const Route = createFileRoute('/_operator/admin/index-health')({
 
 function AdminIndexHealthRoute() {
   const { readback } = Route.useLoaderData()
+  const review = sourceAuthorityReviewFromSearch(Route.useSearch())
   return (
     <AeAdminCatalogHealthPage
       readback={readback}
-      review={sourceAuthorityReviewFromSearch(Route.useSearch())}
+      {...(review === undefined ? {} : { review })}
     />
   )
 }
