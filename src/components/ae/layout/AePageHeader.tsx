@@ -1,6 +1,6 @@
 import { useId, type ReactNode } from 'react'
 
-import { AeSiteEyebrow } from '@/components/ae/website/AeSiteType'
+import { AeSiteEyebrow, AeSiteHeading } from '@/components/ae/website/AeSiteType'
 
 type AePageHeaderProps = {
   eyebrow?: string
@@ -15,14 +15,6 @@ type AePageHeaderProps = {
   meta?: ReactNode
   variant?: 'page' | 'market' | 'workspace'
 }
-
-/** Public editorial statement: ExtraLight display, discover tracking. */
-const PAGE_TITLE_CLASS =
-  'text-balance font-display text-3xl font-extralight leading-[1.06] tracking-display text-foreground sm:text-4xl'
-
-/** Market terminal statement: medium collection title, not a second weight language. */
-const MARKET_TITLE_CLASS =
-  'text-balance font-sans text-title font-medium tracking-tight text-foreground sm:text-title-lg'
 
 export function AePageHeader({
   eyebrow,
@@ -74,33 +66,23 @@ export function AePageHeader({
     )
   }
 
-  const isMarket = variant === 'market'
-  const headerProfile = isMarket ? 'market' : 'editorial'
-  const sectionPaddingClass = isMarket
-    ? 'py-related sm:py-section'
-    : 'py-section md:py-page'
+  const headerProfile = variant === 'market' ? 'market' : 'editorial'
 
   return (
     <section
       data-header-profile={headerProfile}
       aria-labelledby={titleId}
       aria-describedby={descriptionId}
-      className={`ae-rail w-full ${sectionPaddingClass}`}
+      className="ae-rail w-full py-16 md:py-24"
     >
       <div className="grid gap-related border-b border-border pb-section md:grid-cols-[minmax(0,1fr)_auto] md:items-end">
         <div className="grid max-w-4xl gap-related">
-          {eyebrow === undefined ? (
-            <h1 id={titleId} className={isMarket ? MARKET_TITLE_CLASS : PAGE_TITLE_CLASS}>
+          <div>
+            {eyebrow === undefined ? null : <AeSiteEyebrow>{eyebrow}</AeSiteEyebrow>}
+            <AeSiteHeading as="h1" size="lg" id={titleId} className="text-foreground">
               {title}
-            </h1>
-          ) : (
-            <div className="grid gap-intra">
-              <AeSiteEyebrow>{eyebrow}</AeSiteEyebrow>
-              <h1 id={titleId} className={isMarket ? MARKET_TITLE_CLASS : PAGE_TITLE_CLASS}>
-                {title}
-              </h1>
-            </div>
-          )}
+            </AeSiteHeading>
+          </div>
           <p id={descriptionId} className="max-w-prose text-pretty text-sm leading-6 text-muted-foreground">
             {description}
           </p>

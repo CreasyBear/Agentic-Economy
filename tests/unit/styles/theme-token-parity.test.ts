@@ -204,6 +204,7 @@ describe('AE theme token parity (src/styles/globals.css)', () => {
       '--text-title-lg',
       '--text-display',
       '--tracking-eyebrow',
+      '--font-weight-eyebrow',
       '--tracking-caption',
       '--tracking-display',
       '--leading-caption',
@@ -233,6 +234,7 @@ describe('AE theme token parity (src/styles/globals.css)', () => {
       '--ae-text-title-lg',
       '--ae-text-display',
       '--ae-tracking-eyebrow',
+      '--ae-weight-eyebrow',
       '--ae-tracking-caption',
       '--ae-tracking-display',
       '--ae-leading-caption',
@@ -270,7 +272,7 @@ describe('AE theme token parity (src/styles/globals.css)', () => {
     expect(problems, problems.join('; ')).toEqual([])
   })
 
-  it('(b4) discover type scale values match IceInVein §5 (from SoT)', () => {
+  it('(b4) public type scale values match the marketing canon', () => {
     const rootByName = new Map(rootDecls.map((d) => [d.name, d.value]))
     const expected: ReadonlyArray<readonly [string, string]> = [
       ['--ae-text-caption', '0.625rem'],
@@ -287,10 +289,11 @@ describe('AE theme token parity (src/styles/globals.css)', () => {
       ['--ae-leading-title', '1.25'],
       ['--ae-leading-title-lg', '1.2'],
       ['--ae-leading-display', '1.02'],
-      ['--ae-tracking-eyebrow', '0.12em'],
+      ['--ae-tracking-eyebrow', '0.16em'],
       ['--ae-tracking-caption', '0.14em'],
       ['--ae-tracking-display', '-0.055em'],
       ['--ae-weight-extralight', '200'],
+      ['--ae-weight-eyebrow', '700'],
       ['--ae-weight-regular', '400'],
       ['--ae-weight-medium', '500'],
       ['--ae-weight-semibold', '600'],

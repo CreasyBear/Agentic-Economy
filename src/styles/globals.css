@@ -101,6 +101,7 @@
   --tracking-eyebrow: var(--ae-tracking-eyebrow);
   --tracking-caption: var(--ae-tracking-caption);
   --tracking-display: var(--ae-tracking-display);
+  --font-weight-eyebrow: var(--ae-weight-eyebrow);
   --font-weight-extralight: var(--ae-weight-extralight);
   --font-weight-regular: var(--ae-weight-regular);
   --font-weight-medium: var(--ae-weight-medium);
@@ -162,6 +163,7 @@
   --ae-weight-regular: 400;
   --ae-weight-medium: 500;
   --ae-weight-semibold: 600;
+  --ae-weight-eyebrow: 700;
   --ae-text-caption: 0.625rem;
   --ae-text-eyebrow: 0.75rem;
   --ae-text-deck: 0.875rem;
@@ -176,7 +178,7 @@
   --ae-leading-title: 1.25;
   --ae-leading-title-lg: 1.2;
   --ae-leading-display: 1.02;
-  --ae-tracking-eyebrow: 0.12em;
+  --ae-tracking-eyebrow: 0.16em;
   --ae-tracking-caption: 0.14em;
   --ae-tracking-display: -0.055em;
   --font-family-body:

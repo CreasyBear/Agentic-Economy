@@ -17,8 +17,8 @@ type AeSiteHeadingProps = {
 /** Discover display recipes. ExtraLight; no viewport-fluid weight jumps. */
 const sizeClass: Record<AeSiteHeadingSize, string> = {
   xl: 'font-display max-w-xl text-display leading-[1.02] font-extralight tracking-display lg:text-6xl xl:text-7xl',
-  lg: 'font-display max-w-xl text-5xl leading-[1.02] font-extralight tracking-display lg:text-6xl',
-  md: 'font-display max-w-xl text-4xl leading-[1.06] font-extralight tracking-display lg:text-5xl',
+  lg: 'text-4xl font-extralight tracking-[-0.035em] md:text-5xl lg:text-6xl',
+  md: 'text-4xl font-extralight tracking-[-0.035em]',
   sm: 'font-sans text-title font-medium tracking-tight sm:text-title-lg',
   xs: 'font-sans text-lg font-medium leading-snug tracking-tight sm:text-xl',
 }
@@ -64,7 +64,7 @@ export function AeSiteBody({ children, muted = false, size = 'md', id, className
 
 export function AeSiteEyebrow({ children }: { children: string }) {
   return (
-    <p className="ae-site-eyebrow font-sans text-eyebrow font-medium tracking-eyebrow text-muted-foreground uppercase">
+    <p className="ae-site-eyebrow mb-3 block font-sans text-eyebrow font-eyebrow tracking-eyebrow text-muted-foreground uppercase">
       {children}
     </p>
   )
