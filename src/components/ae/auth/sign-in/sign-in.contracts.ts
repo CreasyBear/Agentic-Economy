@@ -1,3 +1,5 @@
+import { sanitizeAuthRedirectTarget } from '@/lib/client/auth-redirect'
+
 export const methodsBlurb = 'Use email, Google, GitHub, or a passkey.'
 
 export type AeSignInPageProps = Readonly<{
@@ -19,6 +21,10 @@ export type UseSignInPageResult = Readonly<{
   signUpFallbackRedirectUrl: string
   signUpUrl: '/sign-up'
 }>
+
+export function resolveSignInRedirectTarget(value: unknown): string {
+  return sanitizeAuthRedirectTarget(value) ?? '/market'
+}
 
 export function projectSignInCopy(redirect: string | undefined): SignInCopy {
   const isAgentAccessFlow = redirect?.startsWith('/agent-access') ?? false

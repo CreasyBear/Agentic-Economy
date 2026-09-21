@@ -18,6 +18,8 @@ vi.mock('@/components/ae/website', () => ({
   clerkAuthSurfaceAppearance: {},
   clerkSignInSurfaceAppearance: {},
 }))
+import { resolveSignInRedirectTarget } from '@/components/ae/auth/sign-in/sign-in.contracts'
+import { useSignInPage } from '@/components/ae/auth/sign-in/useSignInPage'
 import { sanitizeAuthRedirectTarget } from '@/lib/client/auth-redirect'
 import { Route as SignInRoute } from '@/routes/sign-in.$'
 import { Route as SignUpRoute } from '@/routes/sign-up.$'
@@ -55,6 +57,17 @@ describe('auth redirect sanitizer', () => {
 
     expect(sanitized).toBe(expected)
     expect(sanitized === undefined ? undefined : new URL(sanitized, origin).href).toBe(resolved)
+  })
+
+  it('keeps a safe deep link through Clerk and escapes auth loops', () => {
+    const model = useSignInPage({ redirect: '/owner/operations' })
+
+    expect(resolveSignInRedirectTarget('/owner/operations')).toBe('/owner/operations')
+    expect(model.fallbackRedirectUrl).toBe('/owner/operations')
+    expect(model.signUpFallbackRedirectUrl).toBe('/owner/operations')
+    expect(resolveSignInRedirectTarget('/sign-in')).toBe('/market')
+    expect(resolveSignInRedirectTarget('https://evil.example/owner/operations')).toBe('/market')
+    expect(resolveSignInRedirectTarget(undefined)).toBe('/market')
   })
 
   it.each([
