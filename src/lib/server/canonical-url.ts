@@ -1,9 +1,11 @@
+import { resolveDeploymentMode, vercelPreviewHosts } from '@/lib/deployment/environment'
 import { degradeBackend } from '@/lib/observability/degrade-backend'
 import { trimTrailingSlashes } from '@/modules/common/trim-trailing-slashes'
 
 export type CanonicalBaseUrlResolution =
   | { kind: 'configured'; baseUrl: string }
   | { kind: 'allowlisted-origin'; baseUrl: string }
+  | { kind: 'preview-origin'; baseUrl: string }
   | { kind: 'loopback-origin'; baseUrl: string }
   | { kind: 'fallback'; baseUrl: string }
 
@@ -22,7 +24,16 @@ export function resolveCanonicalBaseUrl(request?: Request): CanonicalBaseUrlReso
     return { kind: 'allowlisted-origin', baseUrl: requestUrl.origin }
   }
 
-  if (process.env.NODE_ENV === 'production') {
+  const previewHosts = vercelPreviewHosts(process.env)
+  if (requestUrl !== undefined && previewHosts.includes(requestUrl.host.toLowerCase())) {
+    return { kind: 'preview-origin', baseUrl: requestUrl.origin }
+  }
+  const previewHost = previewHosts[0]
+  if (previewHost !== undefined) {
+    return { kind: 'preview-origin', baseUrl: `https://${previewHost}` }
+  }
+
+  if (resolveDeploymentMode(process.env) === 'production') {
     throw new Error('canonical_base_url_configuration_required')
   }
   if (requestUrl !== undefined && loopbackHostnames[requestUrl.hostname.toLowerCase()] === true) {
