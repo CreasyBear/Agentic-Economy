@@ -11,10 +11,7 @@ import {
   TOOL_QUOTE_ACTION_ID,
   TOOL_QUOTE_PATH,
 } from '@/modules/capability-execution/quote'
-import {
-  TOOL_PROCURE_ACTION_ID,
-  TOOL_PROCURE_PATH,
-} from '@/modules/capability-execution/procure'
+import { TOOL_PROCURE_ACTION_ID } from '@/modules/capability-execution/procure'
 
 export const PUBLIC_TOOL_REF_EXAMPLE = `operation:v1:${'a'.repeat(64)}` as const
 export const PUBLIC_CALL_REF_EXAMPLE = 'invocation:v1:example' as const
@@ -47,31 +44,13 @@ export type PublicCallRouteExample = Readonly<{
 }>
 
 export function callRouteExample(route: PublicCallRouteDescriptor): PublicCallRouteExample {
-  const authorization = 'Bearer $AE_API_KEY'
+  const authorization = 'Bearer <Agent access key>'
   if (route.actionId === TOOL_QUOTE_ACTION_ID) {
     const actionInput = { toolRef: PUBLIC_TOOL_REF_EXAMPLE, input: {} }
     return {
       actionInput,
       http: {
         path: TOOL_QUOTE_PATH,
-        headers: {
-          Authorization: authorization,
-          'Content-Type': CALL_ROUTE_CONTRACT.media.request,
-          Accept: CALL_ROUTE_CONTRACT.media.response,
-        },
-        body: actionInput,
-      },
-    }
-  }
-  if (route.actionId === TOOL_PROCURE_ACTION_ID) {
-    const actionInput = {
-      need: 'Convert 3:30 PM New York time to Tokyo time',
-      maxSpendAud: '0.50',
-    }
-    return {
-      actionInput,
-      http: {
-        path: TOOL_PROCURE_PATH,
         headers: {
           Authorization: authorization,
           'Content-Type': CALL_ROUTE_CONTRACT.media.request,
@@ -156,11 +135,16 @@ export function callRouteExample(route: PublicCallRouteDescriptor): PublicCallRo
   }
 }
 
+/** The canonical Quote → Call contract; the legacy one-shot procure action is not advertised. */
+export function listDocumentedCallRouteDescriptors(): readonly PublicCallRouteDescriptor[] {
+  return listCallRouteDescriptors().filter((route) => route.actionId !== TOOL_PROCURE_ACTION_ID)
+}
+
 export function callRouteExamples(): readonly Readonly<{
   route: PublicCallRouteDescriptor
   example: PublicCallRouteExample
 }>[] {
-  return listCallRouteDescriptors().map((route) => {
+  return listDocumentedCallRouteDescriptors().map((route) => {
     const example = callRouteExample(route)
     const action = findAction(route.actionId)
     if (action === undefined) throw new Error(`Call route action is not registered: ${route.actionId}`)
@@ -180,14 +164,16 @@ export type PublicMcpToolDoc = Readonly<{
 }>
 
 export function publicMcpToolDocs(): readonly PublicMcpToolDoc[] {
-  return listMcpActionDescriptors().map((descriptor) => ({
-    name: descriptor.toolName,
-    actionId: descriptor.id,
-    summary: descriptor.summary,
-    readOnly: descriptor.readOnly,
-    ...(descriptor.inputJsonSchema === undefined ? {} : { inputJsonSchema: descriptor.inputJsonSchema }),
-    ...(descriptor.outputJsonSchema === undefined ? {} : { outputJsonSchema: descriptor.outputJsonSchema }),
-  }))
+  return listMcpActionDescriptors()
+    .filter((descriptor) => descriptor.id !== TOOL_PROCURE_ACTION_ID)
+    .map((descriptor) => ({
+      name: descriptor.toolName,
+      actionId: descriptor.id,
+      summary: descriptor.summary,
+      readOnly: descriptor.readOnly,
+      ...(descriptor.inputJsonSchema === undefined ? {} : { inputJsonSchema: descriptor.inputJsonSchema }),
+      ...(descriptor.outputJsonSchema === undefined ? {} : { outputJsonSchema: descriptor.outputJsonSchema }),
+    }))
 }
 
 export function callRoutesMarkdown(): readonly string[] {

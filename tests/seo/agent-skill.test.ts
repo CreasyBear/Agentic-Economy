@@ -6,18 +6,22 @@ import { listMcpActions, mcpToolName } from '@/modules/actions'
 import handlePublicAgentSkillNitroRequest, { handlePublicAgentSkillRequest } from '@/routes/SKILL[.]md'
 
 const packagedSkill = readFileSync(new URL('../../plugins/agentic-economy/skills/use-agentic-economy/SKILL.md', import.meta.url), 'utf8')
+const productionBaseUrl = 'https://app.aecon.ai'
 
 describe('public agent skill', () => {
-  it('serves the exact packaged skill for every public content negotiation choice', async () => {
+  it('serves the packaged skill with URLs derived from the canonical base', async () => {
     for (const accept of ['*/*', 'application/json', 'text/markdown', 'text/plain', 'text/html']) {
-      const response = handlePublicAgentSkillRequest(new Request('https://ae.example/SKILL.md', {
+      const response = handlePublicAgentSkillRequest(new Request(`${productionBaseUrl}/SKILL.md`, {
         headers: { Accept: accept },
       }))
       expect(response.status).toBe(200)
       expect(response.headers.get('Content-Type')).toContain('text/markdown')
-      expect(await response.text()).toBe(packagedSkill)
+      expect(await response.text()).toContain('/for-agents')
     }
-    expect(buildPublicAgentSkillMarkdown({ canonicalBaseUrl: 'https://ae.example' })).toBe(packagedSkill)
+    expect(buildPublicAgentSkillMarkdown({ canonicalBaseUrl: productionBaseUrl })).toBe(packagedSkill)
+    const local = buildPublicAgentSkillMarkdown({ canonicalBaseUrl: 'http://127.0.0.1:3024/' })
+    expect(local).toContain('http://127.0.0.1:3024/for-agents')
+    expect(local).not.toContain(productionBaseUrl)
   })
 
   it('only names existing MCP tools and keeps the instructions compact', () => {

@@ -8,8 +8,6 @@ import {
   toolChoiceSearchOutputSchema,
 } from '@/modules/registry/tool-choice-contracts'
 import { CALL_ROUTE_CONTRACT } from '@/modules/capability-execution/call-entry'
-import { TOOL_PROCURE_PATH } from '@/modules/capability-execution/procure'
-import { TOOL_PROCURE_ROUTE_CONTRACT } from '@/modules/capability-execution/procure.actions'
 import { brandNonEmpty } from '@/modules/common/ids'
 import { isRecord } from '@/modules/common/is-record'
 import {
@@ -39,7 +37,6 @@ import { Route as MarketToolCompareRoute } from '@/routes/api.v1.market-tools.co
 import { Route as MarketToolDescribeRoute } from '@/routes/api.v1.market-tools.describe'
 import { Route as MarketToolListRoute } from '@/routes/api.v1.market-tools.list'
 import { Route as MarketToolSearchRoute } from '@/routes/api.v1.market-tools.search'
-import { Route as ToolProcureRoute } from '@/routes/api.v1.tools.procure'
 import { handleUcpManifestRequest } from '../helpers/discovery-fixture-routes'
 import { createFixtureDiscoverySourceState } from '../helpers/discovery-fixture-source-state'
 import { handleRobotsTxtRequest } from '@/routes/robots[.]txt'
@@ -189,7 +186,8 @@ describe('discovery route parity', () => {
       TOOL_MARKET_SEARCH_PATH,
       TOOL_MARKET_DESCRIBE_PATH,
       TOOL_MARKET_COMPARE_PATH,
-      TOOL_PROCURE_PATH,
+      '/api/v1/release',
+      '/api/v1/catalogue-status',
     ].sort()
 
     expect(apiPaths.sort()).toEqual(expectedApiPaths)
@@ -257,7 +255,7 @@ function advertisedRoute(url: string): AdvertisedRoute {
   const marketRoute = TOOL_MARKET_ACTION_ENTRIES.find((entry) => entry.pathTemplate === path)
   return {
     url,
-    method: marketRoute?.method ?? (path === TOOL_PROCURE_PATH ? TOOL_PROCURE_ROUTE_CONTRACT.method : 'GET'),
+    method: marketRoute?.method ?? 'GET',
   }
 }
 type RouteHandler = (context: Readonly<{
@@ -354,22 +352,17 @@ async function resolveAdvertisedRoute(route: AdvertisedRoute, state: DiscoverySo
     return route.method === marketRoute.method && await resolveMarketToolRoute(route)
   }
 
-  if (path === TOOL_PROCURE_PATH) {
-    routeHandler(ToolProcureRoute, TOOL_PROCURE_ROUTE_CONTRACT.method)
-    return route.method === TOOL_PROCURE_ROUTE_CONTRACT.method
-  }
 
   if (path === '/') {
     return route.method === 'GET'
   }
 
-  // Literal static GETs advertised by llms/sitemap. `/market`, `/about`,
-  // `/terms`, and `/privacy` are static public routes (src/routes/*.tsx, no
-  // `$slug` data dependency), so they cannot fall through to the business-catalog
-  // pageMatch below — that lookup only resolves registered provider slugs.
+  // Literal static GETs advertised by llms/sitemap. These routes have no
+  // business-catalog dependency, so they cannot fall through to pageMatch.
   if (path === '/for-agents' || path === '/for-providers' || path === '/privacy/remove-business'
     || path === '/market' || path === '/about' || path === '/terms' || path === '/privacy'
-    || path === '/support' || path === '/status' || path === '/SKILL.md') {
+    || path === '/support' || path === '/status' || path === '/SKILL.md' || path === '/glossary.md'
+    || path === '/openapi.json' || path === '/api/v1/release' || path === '/api/v1/catalogue-status') {
     return route.method === 'GET'
   }
 

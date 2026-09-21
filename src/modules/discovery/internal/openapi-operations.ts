@@ -1,14 +1,14 @@
 import type { JSONSchema } from '@tanstack/ai'
 
 import { CALL_ROUTE_CONTRACT } from '@/modules/capability-execution/call-entry'
-import { TOOL_PROCURE_ACTION_ID } from '@/modules/capability-execution/procure'
 import { DEFAULT_STATUS, type ProblemKind } from '@/lib/errors'
-import { describeActionForAgent, findAction, listCallRouteDescriptors, type PublicCallRouteDescriptor } from '@/modules/actions'
+import { describeActionForAgent, findAction, type PublicCallRouteDescriptor } from '@/modules/actions'
 import { FUNDING_PREFLIGHT_ROUTE_CONTRACTS } from '@/modules/money/public'
 import { TOOL_MARKET_ACTION_ENTRIES } from '@/modules/registry/tool-entry'
 
 import { OPENAPI_SUPPLEMENTAL_ROUTES } from './openapi-utility-routes'
 import { jsonSchemaOf, PROBLEM_JSON_SCHEMA } from './openapi-document-schema'
+import { listDocumentedCallRouteDescriptors } from './tool-contract'
 import type { NormalizedOperation, NormalizedParam, NormalizedResponse } from './openapi-document-types'
 
 /** `{name}` segments of an OpenAPI path template, in order. */
@@ -75,10 +75,6 @@ const CALL_ROUTE_FACTS: Readonly<Record<string, Readonly<{ summary: string; prob
     summary: 'Resolve one expiring, caller-bound Quote for a Tool purchase.',
     problemKinds: ['UNAUTHENTICATED', 'PERMISSION_DENIED', 'INVALID_ARGUMENT', 'FAILED_PRECONDITION', 'RESOURCE_EXHAUSTED', 'UNAVAILABLE'],
   },
-  [TOOL_PROCURE_ACTION_ID]: {
-    summary: 'Resolve a capability need, purchase the selected Tool, and return its result.',
-    problemKinds: ['UNAUTHENTICATED', 'PERMISSION_DENIED', 'INVALID_ARGUMENT', 'RESOURCE_EXHAUSTED', 'INTERNAL'],
-  },
   [CALL_ROUTE_CONTRACT.call.actionId]: {
     summary: 'Execute a Tool Call against a returned Quote.',
     problemKinds: ['UNAUTHENTICATED', 'PERMISSION_DENIED', 'INVALID_ARGUMENT', 'FAILED_PRECONDITION', 'ALREADY_EXISTS', 'RESOURCE_EXHAUSTED', 'UNAVAILABLE', 'INTERNAL'],
@@ -109,7 +105,7 @@ function problemResponses(kinds: readonly ProblemKind[]): readonly NormalizedRes
 }
 
 export function callRouteOperations(): readonly NormalizedOperation[] {
-  return listCallRouteDescriptors().map((descriptor: PublicCallRouteDescriptor) => {
+  return listDocumentedCallRouteDescriptors().map((descriptor: PublicCallRouteDescriptor) => {
     const facts = CALL_ROUTE_FACTS[descriptor.actionId]
     if (facts === undefined) throw new Error(`openapi_call_route_facts_missing:${descriptor.actionId}`)
     const method = descriptor.method as 'GET' | 'POST'
@@ -212,7 +208,7 @@ function requireAction(actionId: string) {
 /** Every operation id the built document must expose - the parity guard's source of truth. */
 export function listOpenApiOperationIds(): readonly string[] {
   return [
-    ...listCallRouteDescriptors().map((descriptor) => descriptor.actionId),
+    ...listDocumentedCallRouteDescriptors().map((descriptor) => descriptor.actionId),
     ...TOOL_MARKET_ACTION_ENTRIES.map((entry) => entry.actionId),
     ...FUNDING_PREFLIGHT_ROUTE_CONTRACTS.map((route) => `funding.${route.method === 'GET' ? 'constraints' : 'quote'}`),
     ...OPENAPI_SUPPLEMENTAL_ROUTES.map((route) => route.operationId),

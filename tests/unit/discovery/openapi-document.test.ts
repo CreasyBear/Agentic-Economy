@@ -110,6 +110,9 @@ describe('openapi document', () => {
       json: '{"currency":"AUD","units":"1250000","exponent":6}',
       formatted: 'A$1.25',
     })
+    expect(JSON.stringify(result.document)).not.toMatch(
+      /"tool\.procure"|"maxSpendAud"|"totalAud"|"netAud"|"gstAud"|"refundedAmountAud"|"netChargeAud"/u,
+    )
     expect(page.versionPolicy).toBe(
       `Breaking changes ship as a new version; current version ${rawDocument.info.version}.`,
     )

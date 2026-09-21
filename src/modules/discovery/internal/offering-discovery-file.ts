@@ -3,7 +3,6 @@ import { trimTrailingSlashes } from '@/modules/common/trim-trailing-slashes'
 import type { PublicBusinessCatalogApiV2Dto } from '@/modules/registry/public'
 import { CALL_ROUTE_CONTRACT } from '@/modules/capability-execution/call-entry'
 import { TOOL_QUOTE_PATH } from '@/modules/capability-execution/quote'
-import { TOOL_PROCURE_PATH } from '@/modules/capability-execution/procure'
 import {
   TOOL_MARKET_COMPARE_PATH,
   TOOL_MARKET_DESCRIBE_PATH,
@@ -24,13 +23,15 @@ export const DiscoveryPublicSurfacePaths = [
   '/SKILL.md',
   '/llms.txt',
   '/robots.txt',
+  '/glossary.md',
+  '/openapi.json',
+  '/api/v1/release',
+  '/api/v1/catalogue-status',
   '/sitemap.xml',
   TOOL_MARKET_SEARCH_PATH,
   TOOL_MARKET_LIST_PATH,
   TOOL_MARKET_DESCRIBE_PATH,
   TOOL_MARKET_COMPARE_PATH,
-  TOOL_PROCURE_PATH,
-  '/api/v1/market-requests/withdraw',
 ] as const
 
 /** Supporting provider facts never become executable merely because they are published. */
@@ -58,7 +59,8 @@ export function toolMarketLines(canonicalBaseUrl: string): readonly string[] {
     `5. Keep the receipt: \`${cli} status "$AE_CALL_REF" --base-url "${canonicalBaseUrl}" --json\` (\`${status.method} ${canonicalBaseUrl}${status.path}\`). Use cancel or recover only when that receipt offers the action.`,
     '',
     ToolMarketAnonymousBoundaryLine,
-    'The AE key identifies the caller. It never contains provider credentials or silently grants payment or consequential authority.',
+    'Authenticate direct HTTP calls with `Authorization: Bearer <Agent access key>`.',
+    'The Agent access key identifies the caller. It never contains Provider credentials or silently grants payment or consequential authority.',
     ToolMarketCallScopeLine,
     ToolMarketIdempotencyLine,
     'Never infer fulfilment, payment, deployment, or a receipt from discovery, a caller key, or a pending Call.',
@@ -94,6 +96,10 @@ export function buildOfferingLlmsTxt(
     `- Skill: ${canonicalBaseUrl}/SKILL.md`,
     `- Deployment manifest: ${canonicalBaseUrl}/.well-known/ucp`,
     `- Human guide: ${canonicalBaseUrl}/for-agents`,
+    `- Glossary: ${canonicalBaseUrl}/glossary.md`,
+    `- OpenAPI: ${canonicalBaseUrl}/openapi.json`,
+    `- Release: ${canonicalBaseUrl}/api/v1/release`,
+    `- Catalogue status: ${canonicalBaseUrl}/api/v1/catalogue-status`,
     `- MCP: ${canonicalBaseUrl}/mcp`,
     '',
     'Canonical catalogue:',
