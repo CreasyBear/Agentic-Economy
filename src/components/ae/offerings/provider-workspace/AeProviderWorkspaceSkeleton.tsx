@@ -6,7 +6,7 @@ export function AeProviderWorkspaceSkeleton() {
     <AeOperatorPage
       operatorRole="owner"
       title="My tools"
-      description="Publish the exact tools agents can inspect and call."
+      description="Manage the Tools buyers can find and call."
       currentPath="/owner/operations"
     >
       <AeOwnerOfferingsList offerings={[]} loading />
