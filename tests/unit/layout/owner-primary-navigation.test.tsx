@@ -31,7 +31,7 @@ function renderNavigation(pathname: string) {
     createRoute({ getParentRoute: () => root, path: '/market', staticData: { nav: { label: 'Market', operator: { ...ownerNav, mobilePrimary: true, mobileOrder: 0, icon: StoreIcon } } } }),
     createRoute({ getParentRoute: () => root, path: '/agent-access', staticData: { nav: { label: 'Agents', operator: { ...ownerNav, mobilePrimary: true, mobileOrder: 10 } } } }),
     createRoute({ getParentRoute: () => root, path: '/activity', staticData: { nav: { label: 'Calls', operator: { ...ownerNav, mobilePrimary: true, mobileOrder: 20 } } } }),
-    createRoute({ getParentRoute: () => root, path: '/owner/operations', staticData: { nav: { label: 'My tools', operator: { ...ownerNav, mobilePrimary: true, mobileOrder: 30 } } } }),
+    createRoute({ getParentRoute: () => root, path: '/owner/operations', staticData: { nav: { label: 'Tools', operator: { ...ownerNav, mobilePrimary: true, mobileOrder: 30 } } } }),
     createRoute({ getParentRoute: () => root, path: '/owner/operations/new' }),
   ])
   const router = createRouter({ routeTree, history: createMemoryHistory({ initialEntries: [pathname] }) })
@@ -67,7 +67,7 @@ describe('owner primary navigation', () => {
       }),
       createRoute({ getParentRoute: () => root, path: '/agent-access', staticData: { nav: { label: 'Agents', operator: { ...ownerNav, mobilePrimary: true, mobileOrder: 10 } } } }),
       createRoute({ getParentRoute: () => root, path: '/activity', staticData: { nav: { label: 'Calls', operator: { ...ownerNav, mobilePrimary: true, mobileOrder: 20 } } } }),
-      createRoute({ getParentRoute: () => root, path: '/owner/operations', staticData: { nav: { label: 'My tools', operator: { ...ownerNav, mobilePrimary: true, mobileOrder: 30 } } } }),
+      createRoute({ getParentRoute: () => root, path: '/owner/operations', staticData: { nav: { label: 'Tools', operator: { ...ownerNav, mobilePrimary: true, mobileOrder: 30 } } } }),
     ])
     const router = createRouter({ routeTree, history: createMemoryHistory({ initialEntries: ['/market'] }) })
 
@@ -79,25 +79,25 @@ describe('owner primary navigation', () => {
 
     const navigation = screen.getByRole('navigation', { name: 'Owner primary navigation' })
     const links = within(navigation).getAllByRole('link')
-    expect(links.map(link => link.textContent)).toEqual(['Market', 'Agents', 'Calls', 'My tools'])
+    expect(links.map(link => link.textContent)).toEqual(['Market', 'Agents', 'Calls', 'Tools'])
     expect(links[0]?.getAttribute('aria-current')).toBe('page')
   })
 
-  it('keeps the mobile progression to Market, Agents, Calls and My tools', () => {
+  it('keeps the mobile progression to Market, Agents, Calls and Tools', () => {
     renderNavigation('/activity')
 
     const navigation = screen.getByRole('navigation', { name: 'Owner primary navigation' })
     const links = within(navigation).getAllByRole('link')
-    expect(links.map(link => link.textContent)).toEqual(['Market', 'Agents', 'Calls', 'My tools'])
+    expect(links.map(link => link.textContent)).toEqual(['Market', 'Agents', 'Calls', 'Tools'])
     expect(links.map(link => link.getAttribute('href'))).toEqual(['/market', '/agent-access', '/activity', '/owner/operations'])
     expect(links.filter(link => link.getAttribute('aria-current') === 'page').map(link => link.textContent)).toEqual(['Calls'])
     expect(navigation.querySelectorAll('svg[aria-hidden="true"]')).toHaveLength(4)
   })
 
-  it('marks My tools active on operations routes without mislabeling nested paths', () => {
+  it('marks Tools active on operations routes without mislabeling nested paths', () => {
     renderNavigation('/owner/operations/new')
 
     const navigation = screen.getByRole('navigation', { name: 'Owner primary navigation' })
-    expect(within(navigation).getByRole('link', { name: 'My tools' }).getAttribute('aria-current')).toBe('page')
+    expect(within(navigation).getByRole('link', { name: 'Tools' }).getAttribute('aria-current')).toBe('page')
   })
 })

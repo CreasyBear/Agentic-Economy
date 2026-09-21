@@ -27,7 +27,7 @@ const OWNER_MOBILE_NAV_FALLBACK: Record<
   '/market': { label: 'Market', icon: StoreIcon },
   '/agent-access': { label: 'Agents', icon: KeyRound },
   '/activity': { label: 'Calls', icon: Activity },
-  '/owner/operations': { label: 'My tools', icon: Boxes },
+  '/owner/operations': { label: 'Tools', icon: Boxes },
 }
 
 function normalizedPath(path: string): string {

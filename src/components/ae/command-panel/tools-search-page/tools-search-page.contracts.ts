@@ -75,7 +75,7 @@ export const COMMAND_NAVIGATION_ITEMS: readonly CommandNavigationItem[] = [
   },
   {
     href: '/owner/operations',
-    label: 'My tools',
+    label: 'Tools',
     keywords: ['operations', 'supply', 'provider', 'offerings', 'publish'],
     icon: Wrench,
   },

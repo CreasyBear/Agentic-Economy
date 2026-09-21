@@ -9,7 +9,7 @@ export function AeConnectionHandoffSkeleton() {
       title="Connect Provider"
       description="Connect the credential required by this Provider source."
       currentPath="/owner/operations/new"
-      breadcrumbs={[{ label: 'My tools', href: '/owner/operations' }, { label: 'Add Tool', href: '/owner/operations/new' }, { label: 'Connect Provider' }]}
+      breadcrumbs={[{ label: 'Tools', href: '/owner/operations' }, { label: 'Add Tool', href: '/owner/operations/new' }, { label: 'Connect Provider' }]}
     >
       <AeSettingsStack>
         <div className="grid max-w-xl gap-5">

@@ -32,7 +32,7 @@ function useOperatorListCrumb(operatorRole: OperatorRole, currentPath: string): 
 
   return useMemo(() => {
     if (operatorRole === 'owner' && ownerWorkspaceOwnerForPath(currentPath) === 'operations' && currentPath !== '/owner/operations') {
-      return { label: 'My tools', href: '/owner/operations' }
+      return { label: 'Tools', href: '/owner/operations' }
     }
 
     const ancestor = matches.slice(0, -1).findLast((match) => match.staticData.nav?.label !== undefined)

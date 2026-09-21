@@ -11,7 +11,7 @@ const headerRoutes = [
   { to: '/for-providers', label: 'For providers', search: undefined, order: 2, audience: 'public' as const },
   { to: '/activity', label: 'Calls', search: undefined, order: 2, audience: 'signed-in' as const },
   { to: '/agent-access', label: 'Agents', search: undefined, order: 1, audience: 'signed-in' as const },
-  { to: '/owner/operations', label: 'My tools', search: undefined, order: 3, audience: 'signed-in' as const },
+  { to: '/owner/operations', label: 'Tools', search: undefined, order: 3, audience: 'signed-in' as const },
 ] as const
 
 const clerkSignedIn = vi.hoisted(() => ({ value: false }))
@@ -91,7 +91,7 @@ describe('Twenty-style public nav', () => {
       'Market',
       'Agents',
       'Calls',
-      'My tools',
+      'Tools',
     ])
     expect(within(nav).queryByRole('link', { name: 'For agents' })).toBeNull()
   })

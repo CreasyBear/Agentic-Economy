@@ -51,7 +51,7 @@ export function AeOwnerSupplySourceStartPage({ data, search, navigate }: AeOwner
   const publish = useReverification(publishRequest)
 
   return (
-    <AeOperatorPage operatorRole="owner" title="Add Tool" description="Connect a Tool you already run. Agentic Economy checks what agents can buy." currentPath="/owner/operations/new" breadcrumbs={[{ label: 'My tools', href: '/owner/operations' }, { label: 'Add Tool' }]}>
+    <AeOperatorPage operatorRole="owner" title="Add Tool" description="Connect a Tool you already run. Agentic Economy checks what agents can buy." currentPath="/owner/operations/new" breadcrumbs={[{ label: 'Tools', href: '/owner/operations' }, { label: 'Add Tool' }]}>
       {identity.kind !== 'available' ? (
         <Alert variant="destructive">
           <AlertTitle>Provider workspace unavailable</AlertTitle>

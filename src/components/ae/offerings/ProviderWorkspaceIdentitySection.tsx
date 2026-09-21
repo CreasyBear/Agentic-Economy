@@ -42,7 +42,7 @@ export function ProviderWorkspaceIdentitySection({
       ) : identityDetail?.kind === 'conflict' ? (
         <OwnershipConflict title="Provider identity ownership conflict" />
       ) : identityDetail?.kind === 'not_applicable' ? (
-        <AeEmptyState title="Provider identity not configured" description="Reload My tools to create the current account’s provider identity." />
+        <AeEmptyState title="Provider identity not configured" description="Reload the Tools page to create the current account’s provider identity." />
       ) : <UnavailableSummary title="Provider identity controls unavailable" retryLabel="Try provider identity again" onRetry={onRetryIdentity} /> : null}
     </AeSection>
   )

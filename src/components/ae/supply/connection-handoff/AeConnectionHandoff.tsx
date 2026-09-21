@@ -24,7 +24,7 @@ export function AeConnectionHandoff({ loaded }: AeConnectionHandoffProps) {
       description={page.description}
       currentPath="/owner/operations/new"
       breadcrumbs={[
-        { label: 'My tools', href: '/owner/operations' },
+        { label: 'Tools', href: '/owner/operations' },
         { label: 'Add Tool', href: '/owner/operations/new' },
         { label: 'Connect Provider' },
       ]}

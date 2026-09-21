@@ -22,7 +22,7 @@ export function AeOwnerMcpOAuthCallback({ result }: AeOwnerMcpOAuthCallbackProps
       description={OWNER_MCP_OAUTH_CALLBACK_COPY.pageDescription}
       currentPath="/owner/operations/new"
       breadcrumbs={[
-        { label: 'My tools', href: '/owner/operations' },
+        { label: 'Tools', href: '/owner/operations' },
         { label: 'Add Tool', href: '/owner/operations/new' },
         { label: OWNER_MCP_OAUTH_CALLBACK_COPY.pageTitle },
       ]}

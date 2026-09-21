@@ -16,7 +16,7 @@ import { parseOwnerToolsCompatibilitySearch } from '@/lib/operator/supply-compat
 export const Route = createFileRoute('/_operator/owner/operations')({
   staticData: {
     nav: {
-      label: 'My tools',
+      label: 'Tools',
       header: { order: 3, audience: 'signed-in' },
       operator: {
         roles: ['owner'],
@@ -47,7 +47,7 @@ export const Route = createFileRoute('/_operator/owner/operations')({
       offboarding: readOwnerProviderOffboardingServer().catch(() => ({ kind: 'unavailable' as const })),
     }
   },
-  head: () => ({ meta: [{ title: 'My tools | Agentic Economy' }, { name: 'robots', content: 'noindex' }] }),
+  head: () => ({ meta: [{ title: 'Tools | Agentic Economy' }, { name: 'robots', content: 'noindex' }] }),
   component: OwnerOfferingsRoute,
 })
 

@@ -33,7 +33,7 @@ export function UnavailableSummary({ title, retryLabel, onRetry }: Readonly<{
     <Alert>
       <AlertTitle>{title}</AlertTitle>
       <AlertDescription>
-        <p>This section could not be confirmed. The rest of My tools remains available.</p>
+        <p>This section could not be confirmed. The rest of the Tools page remains available.</p>
         {retryLabel === undefined || onRetry === undefined ? null : (
           <Button type="button" variant="secondary" className="mt-intra min-h-touch" onClick={onRetry}>{retryLabel}</Button>
         )}
@@ -50,7 +50,7 @@ export function SecondarySummary({ result, subject, notApplicableTitle, unavaila
 }>) {
   if (result.kind === 'conflict') return <OwnershipConflict title={`${subject} ownership conflict`} />
   if (result.kind === 'not_applicable') {
-    return <AeEmptyState title={notApplicableTitle} description="Nothing is required here until this provider uses this part of My tools." />
+    return <AeEmptyState title={notApplicableTitle} description="Nothing is required here until this provider uses this part of the Tools page." />
   }
   return <UnavailableSummary title={unavailableTitle} />
 }
