@@ -27,6 +27,7 @@ import {
 } from '@/lib/export/csv-export'
 import { toast } from '@/lib/ui/toast'
 import { formatTimestamp } from '@/lib/ui/format-time'
+import { getStatusPresentation } from '@/lib/ui/status-presentation'
 import { calculateAudGstSplit } from '@/modules/money/public'
 import type { AeInvoiceHistoryRow } from '@/modules/money/invoice-history.view-model'
 
@@ -49,7 +50,9 @@ export type AeInvoiceHistoryTableProps = Readonly<{
 }>
 
 function statusLabel(status: AeInvoiceHistoryRow['status']): string {
-  return status === 'succeeded' ? 'Paid' : 'Reversed'
+  return status === 'succeeded'
+    ? getStatusPresentation('billing_paid').compactLabel
+    : getStatusPresentation('protected_action_reversed').compactLabel
 }
 
 function unitsToAudDollarsFixed(units: string): string {
