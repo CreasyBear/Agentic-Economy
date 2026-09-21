@@ -33,7 +33,7 @@ export function ProviderIdentityFields({
       <FieldGroup className="grid gap-3">
         <Field>
           <FieldLabel htmlFor="supplier-name" className="text-xs">
-            Supplier / Brand Name
+            Provider or brand name
           </FieldLabel>
           <Input
             id="supplier-name"

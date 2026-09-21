@@ -38,10 +38,10 @@ export function OnboardingRoleStep({
         </Label>
         <Label className={roleCardClassName} data-selected={roleIntent === 'supplier'}>
           <div className="flex gap-3">
-            <RadioGroupItem value="supplier" aria-label="Supplier / Tool Provider" className="mt-1" />
+            <RadioGroupItem value="supplier" aria-label="Tool Provider" className="mt-1" />
             <div className="grid flex-1 gap-1">
               <div className="flex items-center justify-between gap-2">
-                <span className="font-medium text-foreground">Supplier / Tool Provider</span>
+                <span className="font-medium text-foreground">Tool Provider</span>
                 <kbd className="text-xs text-muted-foreground font-mono">2</kbd>
               </div>
               <FieldDescription>

@@ -10,7 +10,7 @@ export function OnboardingStepper({
   onGoToStep,
 }: OnboardingStepperProps) {
   return (
-    <nav aria-label="Supplier activation" className="grid grid-cols-1 sm:grid-cols-3 gap-3 border-b pb-4 mb-4">
+    <nav aria-label="Provider setup" className="grid grid-cols-1 sm:grid-cols-3 gap-3 border-b pb-4 mb-4">
       {STEP_META.map(({ id, label, duration, icon: Icon }) => {
         const active = step === id
         const completed = isCompleted(id)

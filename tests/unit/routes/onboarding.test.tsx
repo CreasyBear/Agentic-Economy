@@ -76,7 +76,7 @@ function renderOnboarding() {
   return render(<Component />)
 }
 
-function selectRole(label: 'Buyer / Agent Operator' | 'Supplier / Tool Provider') {
+function selectRole(label: 'Buyer / Agent Operator' | 'Tool Provider') {
   fireEvent.click(screen.getByRole('radio', { name: label }))
 }
 
@@ -113,7 +113,7 @@ describe('onboarding route', () => {
     expect(screen.getByText('Step 1 of 2')).toBeTruthy()
     expect(screen.getByRole('radiogroup')).toBeTruthy()
     expect(screen.getByRole('radio', { name: 'Buyer / Agent Operator' })).toBeTruthy()
-    expect(screen.getByRole('radio', { name: 'Supplier / Tool Provider' })).toBeTruthy()
+    expect(screen.getByRole('radio', { name: 'Tool Provider' })).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Continue' })).toHaveProperty('disabled', true)
   })
 
@@ -161,7 +161,7 @@ describe('onboarding route', () => {
     routeState.search = { redirect: '/owner/supply' }
     renderOnboarding()
 
-    expect(screen.getByRole('radio', { name: 'Supplier / Tool Provider' }).getAttribute('aria-checked')).toBe('true')
+    expect(screen.getByRole('radio', { name: 'Tool Provider' }).getAttribute('aria-checked')).toBe('true')
   })
 
   it('R2e: sanitizes Clerk-style suggested workspace names on step 2', () => {
@@ -280,7 +280,7 @@ describe('onboarding route', () => {
       redirectPath: '/owner/operations',
     })
     renderOnboarding()
-    selectRole('Supplier / Tool Provider')
+    selectRole('Tool Provider')
     advanceToWorkspaceStep()
     fireEvent.click(screen.getByRole('button', { name: 'Finish setup' }))
 

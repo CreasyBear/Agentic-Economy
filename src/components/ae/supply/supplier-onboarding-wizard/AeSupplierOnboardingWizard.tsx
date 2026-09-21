@@ -49,10 +49,10 @@ export function AeSupplierOnboardingWizard({
     <div className={`grid max-w-2xl gap-4 rounded-xl border bg-card p-6 shadow-xs ${SHELL}`}>
       <div className="grid gap-1">
         <h2 className="text-lg font-medium tracking-tight text-foreground">
-          Supplier activation
+          Provider setup
         </h2>
         <p className="text-xs text-muted-foreground">
-          Complete the 3-step checklist to start selling tools and receiving automated AUD payouts.
+          Complete three steps to publish Tools and receive AUD payouts.
         </p>
       </div>
 
