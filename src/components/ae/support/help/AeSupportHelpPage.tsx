@@ -1,4 +1,5 @@
 import { AePublicPage } from '@/components/ae/layout/AePublicPage'
+import { AeSiteFaq } from '@/components/ae/website/AeSiteFaq'
 import { buttonVariants } from '@/components/ui/button-variants'
 import { cn } from '@/lib/utils'
 
@@ -6,7 +7,11 @@ import { AgentConnectionSection } from './components/AgentConnectionSection'
 import { PrivateSupportSection } from './components/PrivateSupportSection'
 import { ReferencedCallBanner } from './components/ReferencedCallBanner'
 import { SupportStatusSection } from './components/SupportStatusSection'
-import type { AeSupportHelpPageProps } from './help.contracts'
+import {
+  SUPPORT_FAQ_HEADING,
+  SUPPORT_FAQ_ITEMS,
+  type AeSupportHelpPageProps,
+} from './help.contracts'
 import { useSupportHelpPage } from './useSupportHelpPage'
 
 export function AeSupportHelpPage({ canonicalBaseUrl, callRef }: AeSupportHelpPageProps) {
@@ -30,6 +35,11 @@ export function AeSupportHelpPage({ canonicalBaseUrl, callRef }: AeSupportHelpPa
         <AgentConnectionSection diagnosticCommand={diagnosticCommand} />
         <PrivateSupportSection />
       </div>
+      <AeSiteFaq
+        labelledBy="support-faq-heading"
+        questions={SUPPORT_FAQ_ITEMS}
+        title={SUPPORT_FAQ_HEADING}
+      />
     </AePublicPage>
   )
 }

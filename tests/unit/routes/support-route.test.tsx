@@ -1,7 +1,7 @@
 /**
  * @vitest-environment jsdom
  */
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import type { ComponentType, ReactNode } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import '../../setup/jsdom-platform'
@@ -62,6 +62,18 @@ describe('/support', () => {
     expect(screen.getByRole('link', { name: 'Review account credit' }).getAttribute('href')).toBe('/owner/credit')
     expect(screen.getByText(/check that Call before trying again/)).toBeTruthy()
     expect(screen.queryByRole('button', { name: /retry/i })).toBeNull()
+  })
+
+  it('answers common support questions from the existing support guidance', () => {
+    renderRoute()
+    const faq = screen.getByRole('region', { name: 'Questions' })
+    expect(within(faq).getByRole('heading', { level: 2, name: 'Questions' })).toBeTruthy()
+    const firstQuestion = within(faq).getByRole('button', {
+      name: 'What should I do if a Call result is uncertain?',
+    })
+    fireEvent.click(firstQuestion)
+    expect(firstQuestion.getAttribute('aria-expanded')).toBe('true')
+    expect(within(faq).getByText(/check that Call before trying again/)).toBeTruthy()
   })
 
   it('keeps private support primary and labels public escalation', () => {
