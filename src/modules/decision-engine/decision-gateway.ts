@@ -33,7 +33,7 @@ export async function executeDecisionGateway(
         attemptedTiers,
       }
     } catch (cause) {
-      if (!(cause instanceof JevUnavailableError) || cause.reason === 'cancelled' || options.purpose === 'discovery') throw cause
+      if (!(cause instanceof JevUnavailableError) || cause.reason === 'cancelled') throw cause
       degradeBackend(cause, undefined, {
         site: 'executeDecisionGateway:jev_system_one',
         reason: cause.reason === 'timeout' ? 'timeout' : 'source_unavailable',
