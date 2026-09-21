@@ -1,10 +1,10 @@
 # Platform stabilisation register
 
-**Status:** ACTIVE STABILISATION REGISTER · **Date:** 21 September 2026 · **Owner:** Joel · **Scope:** every UI surface outside the already-verified user/org workflows (W-01..W-44) and shell workflows (S-01..S-20), plus cross-cutting patterns and the class-defining gaps. · **Method:** one row per surface; each row is worked by one bounded subagent change at a time with narrow verification and its own commit; a row is VERIFIED only by a live re-walk against its Target spec. · **Evidence classes:** LIVE (observed on the local stack 21 Sep 2026), SOURCE (file:line), KNOWLEDGE (benchmark behaviour).
+**Status:** ACTIVE STABILISATION REGISTER · **Date:** 21 September 2026 · **Owner:** Joel · **Scope:** every UI surface outside the already-verified user/org workflows (W-01..W-44) and shell workflows (S-01..S-20), plus cross-cutting patterns and the class-defining gaps. · **Method:** one row per surface; each row is worked by one bounded subagent change at a time with narrow verification and its own commit; a row is VERIFIED only when its commit lowers a ratchet constant or a test under `tests/e2e` or `tests/unit` asserts its Target spec. · **Evidence classes:** LIVE (observed on the local stack 21 Sep 2026), SOURCE (file:line), KNOWLEDGE (benchmark behaviour).
 
 ## 0. How to read and work this register
 
-Status vocabulary: `PENDING` (gap recorded, no work) · `IN REVIEW` (change landed, re-walk not done) · `VERIFIED` (re-walk passed Target spec; evidence recorded) · `PARKED` (decision deferred, reason named) · `OWNER` (Joel works it personally: core flow).
+Status vocabulary: `PENDING` (gap recorded, no work) · `IN REVIEW` (change landed, verification gate not met) · `VERIFIED` (ratchet lowered or Target spec asserted by a test under `tests/e2e` or `tests/unit`; evidence recorded) · `PARKED` (decision deferred, reason named) · `OWNER` (Joel works it personally: core flow).
 
 Priority: P0 job impossible or user misled · P1 credibility/usefulness · P2 polish.
 
@@ -13,6 +13,44 @@ Row anatomy: `Benchmark` · `Incumbent baseline` · `Current state (LIVE)` · `G
 Verification evidence format: `LIVE <date> <url> <what passed>; SOURCE <file:line>; COMMIT <hash>`.
 
 Provenance format: agent name + date. All findings below preserve the source report ID, verbatim evidence fragment, and source anchor or `UNANCHORED`.
+
+## 0a. Wave 0: gates (landed)
+
+| Gate test | Pinned constant(s) |
+|---|---|
+| `tests/imports/route-controller-size.test.ts` | `ROUTE_CONTROLLER_MAX_LINES=80`; `ROUTE_SIZE_EXCEPTIONS`: `src/routes/__root.tsx` 114, `src/routes/developers.discovery.tsx` 221 |
+| `tests/imports/file-size-ratchet.test.ts` | `FILE_SIZE_CEILINGS`: `over300=281`, `over500=103`, `over1000=1`; `OVER_1000_ALLOWED`: `src/modules/capability-supply/internal/cdp-x402-payment-signer.ts` |
+| `tests/imports/tsx-type-quarantine.test.ts` | `TSX_TYPE_EXPORT_CEILING=18` |
+| `tests/imports/leaf-purity.test.ts` | `LEAF_PURITY_EXCEPTIONS`: `src/components/ae/settings/settings-dialog/components/WorkspaceSettingsBody.tsx` |
+| `tests/imports/own-barrel-imports.test.ts` | `OWN_BARREL_EXCEPTIONS`: `src/modules/registry/internal/registry-action-contracts.ts` |
+| `tests/imports/convex-facade-size.test.ts` | `FACADE_MAX_LINES=200`; 74 pinned `FACADE_SIZE_EXCEPTIONS` |
+| `tests/imports/copy-vocabulary.test.ts` | `COPY_CEILINGS`: `supplier=0`, `invocation=0`, `connection-online=0`, `balance=8`, `legacy-credential=2`, `used-recently=1`, `one-call-away=1`, `authority-mode=1`, `mandate=0`, `commitment=0`, `callable-operation=0`, `commercial-closure=0`; `MARGIN=2` |
+| `tests/imports/status-vocabulary.test.ts` | `STATUS_LITERAL_FILE_CEILING=28`; `MARGIN=2` |
+
+A row is VERIFIED only if its commit lowered at least one ratchet constant or its Target spec is asserted by a test under tests/e2e or tests/unit; a human re-walk alone never verifies a row.
+
+Progress is read from `git grep -n "pinned 2026-09" tests/imports/`. Commit bodies end `R-nn · <gate>: a→b`.
+
+A row whose evidence names a symptom seen on more than one surface carries a ROOT line before dispatch.
+
+## 0b. OWNER-LOCKED files
+
+- `src/components/ae/market/**`
+- `src/routes/market.tsx`
+- `src/routes/tools.*.tsx`
+- `src/components/ae/chat/**`
+- `src/routes/t.*.tsx`
+- `src/components/ae/agent-access/**`
+- `src/routes/_operator/agent-access*.tsx`
+- `src/components/ae/console/owner-credit/**`
+- `src/routes/_operator/owner.credit.tsx`
+- `src/components/ae/activity/**`
+- `src/routes/_operator/activity.tsx`
+- `src/components/ae/call-receipt/**`
+- `src/routes/_operator/calls.$callRef.tsx`
+- `src/components/ae/support/**`
+
+No subagent edits these unless dispatched from the spine plan by Joel.
 
 ## 1. Summary by family
 
@@ -143,6 +181,7 @@ The 43 route entries are all assigned once. `/support` is assigned to the Receip
 ### R-14 Credit: `/owner/credit`
 **Benchmark:** Stripe Balance and Checkout. **Incumbent baseline:** authoritative available/reserved/total, explicit fee/GST/total, reliable return state.
 **Current state (LIVE):** H1 Credit is reachable; observed balance remained unavailable while funding controls were shown.
+**ROOT:** local stack has no Formance ledger configured; not a product defect. UI says "Credit unavailable" and "Nothing was charged."
 **Gaps:** • [OPS-02] “INDICATIVE PRICE About A$0.04” and “Listed Provider amount USDC 0.025000” before funding (`UNANCHORED`) • [SKP-02] “Balance unavailable” and “Some summaries are unavailable” (`UNANCHORED`) • [JNY-03] “Stripe → Agents … Tool, Agent and amount gone” (`UNANCHORED`) • [JNY-04] Credit was two clicks inside Find Tools (`UNANCHORED`) • [JNY-05] “Balance unavailable” while asking for payment (`UNANCHORED`) • [OR-07] “Balance unavailable… Refresh to read the authoritative Account balance” (`UNANCHORED`) • [ST-06] no available/pending/reserved split (`UNANCHORED`) • [DEV-R2-04] `/credit` fails while actual page is `/owner/credit` (`UNANCHORED`).
 **Copy:** <table><tr><th>where</th><th>current</th><th>target</th></tr><tr><td>value</td><td>Balance unavailable</td><td>Credit unavailable</td></tr><tr><td>error</td><td>check system status before repeating a Call</td><td>Retry. If Credit still cannot load, check system status.</td></tr></table>
 **Target spec:** available, reserved and total in AUD; amount/fee/GST/total before Stripe; funding preserves Tool, Agent and amount; failures say whether money moved; retry safe. **Cut:** duplicate failure heading and Provider-workspace sign-in copy.
@@ -159,6 +198,7 @@ The 43 route entries are all assigned once. `/support` is assigned to the Receip
 ### R-16 Owner overview: `/owner/`
 **Benchmark:** Stripe Dashboard Home. **Incumbent baseline:** today’s money and actionable exceptions, not vanity counts.
 **Current state (LIVE):** “Balance unavailable”; “No Calls need attention” conflicts with unavailable summaries; “8 connected Agents”.
+**ROOT:** R-14.
 **Gaps:** • [ACC-04] “No Calls need attention” while `/activity` cannot summarize (`AeOwnerOverview.tsx:76-80`) • [ACC-05] “Check Balance” and “Open Balance” duplicate (`AeOwnerOverview.tsx:93-107`) • [ACC-06] “8 connected Agents” exposes no decision (`AeOwnerOverview.tsx:115-120`).
 **Copy:** <table><tr><th>where</th><th>current</th><th>target</th></tr><tr><td>intro</td><td>See what needs attention, your available Balance, and connected Agents.</td><td>Review Credit, Calls needing attention, and Agents.</td></tr><tr><td>action</td><td>Open Balance</td><td>Open Credit</td></tr></table>
 **Target spec:** honest Credit state; attention agrees with Calls; Agent tile names a decision; one primary; no vanity counts. **Cut:** duplicate Open Balance and Provider upsell.
@@ -191,6 +231,7 @@ The 43 route entries are all assigned once. `/support` is assigned to the Receip
 ### R-20 Calls: `/activity`
 **Benchmark:** Stripe Payments and OpenRouter Activity. **Incumbent baseline:** identifiable ledger rows, fixed statuses, URL filters, saved views and export.
 **Current state (LIVE):** empty Calls page; no populated rows; summaries unavailable.
+**ROOT:** R-14.
 **Gaps:** • [OR-02] promised fields only “task, outcome, amount, and receipt” (`UNANCHORED`) • [OR-03] “no filter/export” (`UNANCHORED`) • [ST-02] “zero tables/inputs; only ‘No Calls yet’ and summary cards” (`UNANCHORED`) • [ST-03] “no filter controls or query state” (`UNANCHORED`) • [ST-04] “no saved-view control” (`UNANCHORED`) • [ST-05] “no export action” (`UNANCHORED`).
 **Copy:** <table><tr><th>where</th><th>current</th><th>target</th></tr><tr><td>row nouns</td><td>Task · Caller Agent · Purchase status</td><td>Tool · Agent · Purchase resolution</td></tr><tr><td>filtered empty</td><td>No Calls yet</td><td>No Calls for this Agent</td></tr></table>
 **Target spec:** one ledger job; removable Agent filter always visible; row leads Call identity, Agent, Tool, status, amount, time; export; receipt path preserves scope. **Cut:** monthly summary and unavailable tiles.
@@ -199,6 +240,7 @@ The 43 route entries are all assigned once. `/support` is assigned to the Receip
 ### R-21 Receipt and Support: `/calls/$callRef` and `/support`
 **Benchmark:** Stripe payment detail and support handoff. **Incumbent baseline:** amount/status first, timeline later, state-gated recourse and payment ID carried to Help.
 **Current state (LIVE):** missing receipt has clear impact copy, but populated receipt was not reached; Support retains direct reference yet is not reachable from receipt.
+**ROOT:** R-14.
 **Gaps:** • [JNY-02] “detail said ‘Connect an Agent first’; `/activity` said ‘No Calls yet’” (`UNANCHORED`) • [ST-07] “Receipt not found; no valid Call existed to verify” (`UNANCHORED`) • [ST-08] “no timeline in reached state” (`UNANCHORED`) • [ST-09] customer/payment method/receipt absent in refused state (`UNANCHORED`) • [ST-10] refund/dispute gating unverified (`UNANCHORED`) • [ST-11] “Keep this reference and contact the owner or operator,” but no help action (`UNANCHORED`) • [ST-12] Credit failure never states whether money moved (`UNANCHORED`).
 **Copy:** <table><tr><th>where</th><th>current</th><th>target</th></tr><tr><td>receipt error</td><td>owner-scoped status read</td><td>We couldn’t open this Call for this workspace</td></tr><tr><td>support</td><td>Help</td><td>Call</td></tr></table>
 **Target spec:** Delivery, Payment, Purchase resolution and Who acts next first; only applicable same-Call action; exact Call reaches Support; blank/malformed refs distinct; Back/refresh retain ref; every failure says whether money moved. **Cut:** advanced evidence before decision facts; no new support form.
@@ -316,6 +358,13 @@ The 43 route entries are all assigned once. `/support` is assigned to the Receip
 **Target spec:** cross-ref S-01..S-20 remains intact; IA-01..04 alone change destinations after the spine gate. **Cut:** no chrome work now.
 **Priority:** P2. **Status:** PARKED. **Verification evidence:** Reason: “Chrome is not the hole”. Cross-ref: S-01..S-20. **Provenance:** RoastChromeInConcert, ExpectGitHubVercel, PatternInventory, 21 Sep 2026.
 
+### R-36 Capability-supply payment signer
+**Benchmark:** the repository hard ceiling of 1,000 lines. **Incumbent baseline:** focused internal modules below the enforced ceiling.
+**Current state (SOURCE):** `src/modules/capability-supply/internal/cdp-x402-payment-signer.ts` is 1,042 lines and is the sole path in `OVER_1000_ALLOWED`.
+**Gaps:** `tests/imports/file-size-ratchet.test.ts` permits this one over-1,000-line file.
+**Target spec:** split below 1,000 (`OVER_1000_ALLOWED` in `tests/imports/file-size-ratchet.test.ts` becomes `[]`). **Cut:** no behaviour or RPC changes.
+**Priority:** P1. **Status:** PENDING. **Verification evidence:** none. **Provenance:** Wave 0 file-size gate, 21 Sep 2026.
+
 ## 3. Cross-cutting rows
 
 ### C-01 One vocabulary
@@ -352,7 +401,7 @@ The 43 route entries are all assigned once. `/support` is assigned to the Receip
 **Gaps:** [OPS-02] “About A$0.04 per Call” and “USDC 0.025000” (`UNANCHORED`); [JNY-06] “$0.003/page” versus “0.01 USDC/About A$0.01” (`UNANCHORED`); [OR-11] “0.010000 USDC / 10000 atomic units” (`UNANCHORED`); [DEV-03] `{currency,units,exponent}` versus `{totalAud,netAud,gstAud}` (`src/modules/capability-execution/procure.ts:33-36`).
 **Copy:** <table><tr><th>where</th><th>current</th><th>target</th></tr><tr><td>buyer first</td><td>USDC / AUD / atomic units / per page</td><td>A$x.xx per Call (GST incl.)</td></tr><tr><td>Contract</td><td>mixed</td><td>Provider units and billing unit</td></tr></table>
 **Target spec:** `A$x.xx per Call (GST incl.)` first; Provider units under Contract; multi-unit Tools show an estimator; Quote remains exact. **Cut:** atomic units from decision surfaces.
-**Priority:** P0. **Status:** PENDING. **Verification evidence:** none. **Provenance:** PersonaOpsManager, PersonaJourneyOwner, ExpectOpenRouter, RegDevAdmin, 21 Sep 2026.
+**Priority:** P0. **Status:** OWNER. **Verification evidence:** Queue: `buyer-spine-stabilisation-plan.md W2-03/W2-04`. **Provenance:** PersonaOpsManager, PersonaJourneyOwner, ExpectOpenRouter, RegDevAdmin, 21 Sep 2026.
 
 ### C-03 Callable state
 **Surfaces affected:** Market, Tool detail, Ask and Agent consent.
@@ -379,7 +428,7 @@ The 43 route entries are all assigned once. `/support` is assigned to the Receip
 **Gaps:** DirectoryToolCard provider→title→price→action (`DirectoryToolCard.tsx:39-62`); ToolCard title→status→choice→readiness→provider→price→action (`ToolCard.tsx:55-83,245-266`); ToolSearchResultRow title→provider→status→price→action (`ToolSearchResultRow.tsx:21-42`); AeCapabilityTile title→provider→price→action (`AeCapabilityTile.tsx:19-58`); DirectoryEntrySummary title→provider→action→price→status (`AeDirectoryToolCanonicalPage.tsx:39-58`); PublishedToolProofRow title→provider→status→price→action (`AeSupplyAgentProof.tsx:107-128`).
 **Copy:** <table><tr><th>where</th><th>current</th><th>target</th></tr><tr><td>all summaries</td><td>six orders</td><td>Provider → title → callable state → listed price → one action</td></tr></table>
 **Target spec:** `directory-card.view-model.ts` owns order; DirectoryToolCard stays full card; compact rows share one projection. **Cut:** per-surface field ordering.
-**Priority:** P1. **Status:** PENDING. **Verification evidence:** none. **Provenance:** PatternInventory, 21 Sep 2026.
+**Priority:** P1. **Status:** OWNER. **Verification evidence:** Queue: `buyer-spine-stabilisation-plan.md W2-03/W2-04`. **Provenance:** PatternInventory, 21 Sep 2026.
 
 ### C-06 Focus visibility
 **Surfaces affected:** all link-styled buttons and Tier-1 buttons.
@@ -526,9 +575,9 @@ Rule for every wave: one file per subagent, precondition, verify command or walk
 
 | Wave | Entry condition | Work | Exit condition |
 |---|---|---|---|
-| A: cross-cutting unblockers | register committed; owners named | C-06 focus ring; C-07 accessible names; C-08 money-moved line; C-10 overclaim removals; C-02 one price | all named rows IN REVIEW, then live re-walk, then VERIFIED |
-| B: doors and help/legal | Wave A shared primitives IN REVIEW | R-01..R-03 and R-22..R-25; P0 Terms/Privacy truthfulness; door economics | every row IN REVIEW; legal owner confirms facts; live mobile/keyboard re-walk; VERIFIED |
-| C: supply | Provider commercial terms available | R-26..R-30; NEW-01 human-delivered path remains PARKED pending Joel; complete all other source, payout, environment and callback gaps | all unparked supply rows IN REVIEW, then Provider journey re-walk, then VERIFIED |
+| A: cross-cutting unblockers | register committed; owners named | C-06 focus ring; C-07 accessible names; C-08 money-moved line; C-10 overclaim removals; C-02 one price | all named rows IN REVIEW, then assertion (preferred) or re-walk, then VERIFIED |
+| B: doors and help/legal | Wave A shared primitives IN REVIEW | R-01..R-03 and R-22..R-25; P0 Terms/Privacy truthfulness; door economics | every row IN REVIEW; legal owner confirms facts; assertion (preferred) or re-walk; VERIFIED |
+| C: supply | Provider commercial terms available | R-26..R-30; NEW-01 human-delivered path remains PARKED pending Joel; complete all other source, payout, environment and callback gaps | all unparked supply rows IN REVIEW, then assertion (preferred) or re-walk, then VERIFIED |
 | D: account, records, dev/admin | Waves A and B stable; buyer spine supplies populated fixtures where required | R-13, R-15..R-19, R-31..R-34; records outside OWNER queue only after W6/W7 contracts settle | all included rows IN REVIEW, role-gate and return-path walks pass, then VERIFIED |
 | E: class-gap reuse | corresponding product decision approved; source/license verified | execute ADOPT/HOST items only; PATTERN-ONLY means learn structure without copying restricted code | adopted/hosted feature has live path and source evidence; row VERIFIED |
 | Buyer spine in parallel | Joel owns core flow | R-05, R-08, R-10, R-11, R-14, R-20, R-21 under `buyer-spine-stabilisation-plan.md` W2..W7 | seven page passes, then FIND → ALLOW → USE → RECORD proof |

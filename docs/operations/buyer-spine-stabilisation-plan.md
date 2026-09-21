@@ -316,11 +316,20 @@ Local stack: `npm run dev:local` on Node 22, with Convex on 3210 and Vite on `12
 
 Each row is one bounded subagent change unless marked read-only. Every change gets narrow verification and its own commit.
 
+### W0 (OWNER proposals)
+
+W0 imposes no design; evidence pointers only.
+
+| ID and roast IDs | evidence pointer |
+|---|---|
+| W0-01 · SKP-01/APP-05/JNY-02 | Tool detail shows "Connect an Agent first" although Connected Agents exist; offer "Choose an Agent" and one browser-visible Call path. |
+| W0-02 · JNY-01/APP-02/GH-01 | `resumeTool` must produce a grant scoped to the selected Tool, never "All admitted Tools". |
+
 ### W1 Unblockers
 
 | ID and roast IDs | files | change | verify | done-when |
 |---|---|---|---|---|
-| W1-01 · KB-01, ASK-FOCUS, FOCUS-01, CRD-05, RCP-04 | `src/components/ui/button.tsx` | Add one unmistakable `focus-visible` ring to `buttonVariants`, including link-styled buttons. | Keyboard walk: Tab to detail escape, Ask Send, Credit retry, receipt action and Email support. | Every target paints the same visible ring; Agents retains its visible ring. |
+| W1-01 · KB-01, ASK-FOCUS, FOCUS-01, CRD-05, RCP-04 | `src/components/ui/button.tsx` | Add one unmistakable `focus-visible` ring to `buttonVariants`, including link-styled buttons. | Keyboard walk: Tab to detail escape, Ask Send, Credit retry, receipt action and Email support. | Every target paints the same visible ring; Agents retains its visible ring. · ABSORBED: foundation-reset |
 | W1-02 · NONE, baseline red | `src/components/ae/market/DirectoryIndexDiscovery.tsx:14,55` | Give the two “Popular Tools” landmarks distinct accessible names. Fix the accessibility defect, not the test. | `npm test -- tests/unit/market/directory-index-discovery.test.tsx` | The named test passes and both landmarks are distinguishable. |
 | W1-03 · DETAIL-JOB, read-only | `x402-directory.functions.ts:14-15` and the now-logged detail degrade cause | Read the dev-server degrade log and anchor the readiness probe's local failure. Do not edit. | Walk: open one `found_upstream` Tool detail and capture the logged cause. | Report contains the exact error, `file:line`, failing assumption and the smallest repair boundary. |
 | W1-04 · MKT-02, LST-02, ASK-01/ASK-02, AGT-05, read-only | `src/modules/market/x402-directory-index.server.ts:118-126`; Ask search seam UNANCHORED | Map where Ask searches, where Market reads, and where `toolRef` can join listed rows to callable Tools. Do not edit. | Trace the same image-generation need through both pipelines with `file:line` anchors. | Report names both catalogues, their join point and the exact producer of callable state. |
@@ -337,7 +346,9 @@ Each row is one bounded subagent change unless marked read-only. Every change ge
 | W2-06 · MKT-04 | files named by W2-05 | Enforce whole-need relevance before claiming a match; preserve honest partial discovery as a next action. | Walk: search `zzqx plumbing quantum`. | Page shows an honest no-fit and a useful next action, not “17 matching Tools”. |
 | W2-07 · MKT-06 | `AeX402Directory.tsx:188-193,336` | Dock the mobile comparison tray near the results header. | 390px walk: select two Tools and open Compare without page-end scrolling. | Tray remains visible near the shortlist and does not cover card actions. |
 | W2-08 · MKT-05 | `AeX402Directory.tsx:329-335` | Keep the query and give Providers a single retryable in-place failure state. | Walk: switch to Providers during failure, retry, then return to Tools. | Search context survives and Provider failure never replaces the Market job. |
-| W2-09 · MKT-07, MKT-08 | Market hero and comparison price cells, anchors UNANCHORED | Apply the approved Market copy and collapse atomic price internals behind decision-level listed price. | Walk desktop and 390px Market plus comparison. | The shortlist is focal and each comparison price is readable at a glance. |
+| W2-09 · MKT-07, MKT-08 | Market hero and comparison price cells, anchors UNANCHORED; `src/components/ae/market/DirectoryHero.tsx:38` | Apply the approved Market copy, remove "one Call away", and collapse atomic price internals behind decision-level listed price. | Walk desktop and 390px Market plus comparison. | The shortlist is focal, "one Call away" is absent, and each comparison price is readable at a glance. |
+| W2-10 · SKP-03/APP-01 | `src/modules/market/directory-card.view-model.ts:67` | Remove "Used recently by other agents" unless a count is rendered. | Walk Market cards against their completed-Call evidence. | Usage copy is absent or shows its count. |
+| W2-11 · SUP-08..11 | `src/components/ae/market/market-navigation-context.tsx:3` | Remove `/owner/market` from `MarketPath`; `/owner/market` now redirects. | Open `/owner/market?query=ocr` and inspect Market navigation. | The URL is `/market?query=ocr` and one Market destination remains. |
 
 ### W3 Ask
 
@@ -363,7 +374,8 @@ Each row is one bounded subagent change unless marked read-only. Every change ge
 | W4-03 · AGT-05 | `AeConnectAgentWizardDialog.tsx:68-105` | Require Tool scope before a Direct key is issued. | Create an Agent without choosing Tool scope, then choose a subset. | Issue is blocked until scope is explicit; row shows that scope. |
 | W4-04 · AGT-04 | `useAeAgentAccessHome.ts:70-71,346-352`; `AeKeyRevealDialog.tsx:141-153` | Persist creation draft and guard Back, refresh and close during one-time reveal. | Exercise Back and refresh before and after key issue. | Draft survives; an issued unrecoverable key cannot be silently lost. |
 | W4-05 · AGT-03 | `AeAgentDirectoryTable.tsx:85-119` | Show Tool scope and per-Call, daily and monthly Spending policy without Credit controls. | Inspect a returning Agent row. | Connection, grant and Credit remain distinct. |
-| W4-06 · AGT-06 | `ConsentRequestFacts.tsx:20-25`; `AeAgentDirectoryTable.tsx:85-91` | Use `A$1.00`, `1 Agent`, `for 7 days after approval` and `Direct key`. | Walk request facts and one-Agent directory. | Grammar and money precision match the approved language. |
+| W4-06 · AGT-06 | `ConsentRequestFacts.tsx:20-25`; `AeAgentDirectoryTable.tsx:85-91`; `src/components/ae/console/AeAgentDirectoryTable.tsx:90`; `src/components/ae/console/AeAgentConnectionReceipts.tsx:27` | Use `A$1.00`, `1 Agent`, `for 7 days after approval` and `Direct key`; replace both remaining `Legacy credential` labels. | Walk request facts, one-Agent directory and connection receipts. | Grammar and money precision match the approved language; no `Legacy credential` label remains. |
+| W4-07 · A11Y-03/A11Y-04 | `AeConnectAgentWizardDialog.tsx:68-105`; `AeKeyRevealDialog.tsx:141-153` | Give the environment/authority radios and the saved-secret checkbox accessible names; return focus to the created Agent row on Done. | Complete the wizard with a keyboard and inspect accessible names and final focus. | Every choice is named and Done focuses the created Agent row. |
 
 ### W5 Credit
 
@@ -374,6 +386,7 @@ Each row is one bounded subagent change unless marked read-only. Every change ge
 | W5-03 · CRD-04, CRD-05 | `src/components/ae/layout/AeRouteStates.tsx:287-317` | Replace Call-specific failure text with one route-neutral heading and recovery action. | Force Credit load failure and Tab to retry. | “Credit couldn’t load” appears once and retry copy mentions no Call. · ABSORBED: foundation-reset 3b |
 | W5-04 · CRD-01, GATE-01 | `src/components/ae/auth/sign-in/sign-in.contracts.ts:24-35` | Classify `/owner/credit`, `/activity` and `/calls/*` as named buyer destinations. | Open each signed out, sign in and refresh the gate. | Copy names Credit or the same Call and redirect remains exact. |
 | W5-05 · CRD-01 to CRD-05 | Credit page | Run the FULL roast that was unreachable before the provider fix. | Repeat the Credit laws, invalid amount, mobile, keyboard, refresh and Back checks. | VERDICT PASS with no P0 and L1/L5/L7 PASS. |
+| W5-06 · C-01 | `AeOwnerCredit.tsx` ×3; `AeAccountHistoryTable.tsx` ×4; call-receipt copy | Replace remaining `Balance` and "prepaid balance" with `Credit`. | Walk Credit, account history and the owner-locked receipt surface. | Buyer-visible copy uses Credit consistently. |
 
 ### W6 Calls
 
