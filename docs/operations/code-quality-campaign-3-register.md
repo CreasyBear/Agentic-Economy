@@ -22,9 +22,9 @@
 | Wave | Scope | Workflows | Verified | In Review | Pending | Target Status |
 | :--- | :--- | :--- | :---: | :---: | :---: | :---: |
 | **Wave 1: Funding/payment façades** | A02–A04 | `CQ3-01` – `CQ3-03` | 3 | 0 | 0 | `VERIFIED` |
-| **Wave 2: Inherited Convex cohesion** | A05, A06, A08, A09 | `CQ3-04` – `CQ3-07` | 1 | 0 | 3 | `IN PROGRESS` |
+| **Wave 2: Inherited Convex cohesion** | A05, A06, A08, A09 | `CQ3-04` – `CQ3-07` | 3 | 0 | 1 | `IN PROGRESS` |
 | **Wave 3: Wave 3 residue** | A11–A13 | `CQ3-08` – `CQ3-10` | 0 | 0 | 3 | `READY` |
-| **Total** | Campaign 3 | **10 named** | **4** | **0** | **6** | `OPEN` |
+| **Total** | Campaign 3 | **10 named** | **6** | **0** | **4** | `OPEN` |
 
 ### Do not touch (standing)
 
@@ -110,8 +110,8 @@ RPC kind snapshot unchanged. No `convex/<name>/` directories created.
 | ID | Amendment | File | Lines | Incision | Size | Status |
 | :--- | :--- | :--- | ---: | :--- | :---: | :--- |
 | **CQ3-04** | A05 | `convex/capabilitySupplyOwnerCanary.ts` | 36 (was 640) | Identity/commitment validation, atomic admission handler, evidence reader → `convex/lib/capabilitySupply/ownerCanary*`. Façade keeps the three RPCs. Grant reads via funding façade. Admission stays one mutation. | L | `VERIFIED` |
-| **CQ3-05** | A06 | `convex/capabilitySupplyOwnerSupply.ts` | 330 | `"use node"`. Extract readiness/test orchestration. Keep action names and thinness strings (`internal.capabilitySupplyReadiness.probe`; no `observeCapabilityReadiness`). | M | `READY` |
-| **CQ3-06** | A08 | `convex/capabilitySupplyOwnerStaging.ts` | 589 | Helper (0 RPC). Split normalization / exact-publication reuse / staging orchestration. Root file becomes re-exports. `capabilitySupply.stageOwnerX402Capability` stays on the host. | M | `READY` |
+| **CQ3-05** | A06 | `convex/capabilitySupplyOwnerSupply.ts` | 35 (was 330) | `"use node"`. Extract readiness/test orchestration. Keep action names and thinness strings (`internal.capabilitySupplyReadiness.probe`; no `observeCapabilityReadiness`). | M | `VERIFIED` |
+| **CQ3-06** | A08 | `convex/capabilitySupplyOwnerStaging.ts` | 2 (was 589) | Helper (0 RPC). Split normalization / exact-publication reuse / staging orchestration. Root file becomes re-exports. `capabilitySupply.stageOwnerX402Capability` stays on the host. | M | `VERIFIED` |
 | **CQ3-07** | A09 | `convex/capabilitySupplyProbes.ts` | 909 | Helper (0 RPC). Split authority (query-safe), target reads, observation writes, scheduling. Root keeps thinness-asserted wrappers. CQS: `record*` / `scheduleDue*` stay mutations. | L | `READY` |
 
 ### CQ3-04 — A05 owner canary admission
@@ -119,7 +119,7 @@ RPC kind snapshot unchanged. No `convex/<name>/` directories created.
 - **Surfaces:** `convex/capabilitySupplyOwnerCanary.ts`
 - **RPC to preserve:** `requestSellerOnboardingCanary`, `requestSellerOnboardingCanaryForAdmittedPublication`, `readSellerOnboardingCanaryEvidence`
 - **Status:** `VERIFIED`
-- **Commit:** pending this batch
+- **Commit:** `7db24dbbd`
 - **Subagent Assignment:** Grok (Spec: `3eead20a-730d-4f26-ac93-620280d0bf9c`) → Composer (Implement: `226d70c6-2a3b-457f-a75d-8fd685208a7b`) → Orchestrator (Verify: Passed 4/4 Gates)
 - **After:** façade 36; `ownerCanaryAdmission.ts` 365; `ownerCanaryIdentity.ts` 168; `ownerCanaryValues.ts` 82; `ownerCanaryEvidence.ts` 31
 - **Atomicity:** `requestSellerOnboardingCanaryWithOwner` remains one in-process function. Grant reads via funding façade.
@@ -129,15 +129,23 @@ RPC kind snapshot unchanged. No `convex/<name>/` directories created.
 
 - **Surfaces:** `convex/capabilitySupplyOwnerSupply.ts`
 - **RPC to preserve:** `runOwnerSupplyReadiness`, `runOwnerSupplyTest`
-- **Status:** `READY`
-- **Staff after:** CQ3-04
+- **Status:** `VERIFIED`
+- **Commit:** pending this batch
+- **Subagent Assignment:** Grok (Spec: `3f480867-b527-4d32-a4aa-e029ac23af64`) → Composer (Implement: `3c7b8b89-b740-4460-898b-b7f8b4ac6da2`) → Orchestrator (Verify: Passed 4/4 Gates)
+- **After:** façade 35; `ownerSupplyActions.ts` 216; `ownerSupplyContext.ts` 86; `ownerSupplyValues.ts` 70
+- **Thinness:** root still contains `internal.capabilitySupplyReadiness.probe`; no `observeCapabilityReadiness`. Canary via generated API.
+- **Gates:** lint clean; `deps:check` 0/0/0; `tsc --noEmit` 0; 46 tests in 9 files (interactive-consequence, thinness, readiness-authority, A01, sandbox-staging, funnel-publish, funnel-run-test, API-kind, node-only)
 
 ### CQ3-06 — A08 owner staging helper
 
 - **Surfaces:** `convex/capabilitySupplyOwnerStaging.ts`
 - **Host RPC (do not move):** `capabilitySupply.stageOwnerX402Capability`
-- **Status:** `READY`
-- **Staff after:** CQ3-04
+- **Status:** `VERIFIED`
+- **Commit:** pending this batch
+- **Subagent Assignment:** Grok (Spec: `abbab5ab-70cd-4c10-bc0a-0bae556a080f`) → Composer (Implement: `421fb7cd-d71b-4d51-955b-a3d9ffebd0a1`) → Orchestrator (Verify: Passed 4/4 Gates)
+- **After:** root re-export 2; `ownerStagingReuse.ts` 321; `ownerStagingNormalize.ts` 168; `ownerStagingAdmission.ts` 96; `ownerStagingValues.ts` 48
+- **Host:** `convex/capabilitySupply.ts` unchanged
+- **Gates:** same batch as CQ3-05
 
 ### CQ3-07 — A09 capability probes helper
 
