@@ -59,12 +59,13 @@ describe('owner Overview', () => {
     expect(screen.getByText('Review Credit, Calls needing attention, and Agents.')).toBeTruthy()
     expect(screen.getByText('A$25.00')).toBeTruthy()
     expect(screen.getByText('At least 1 Call needs attention')).toBeTruthy()
-    expect(screen.getByText('2 connected Agents')).toBeTruthy()
+    expect(screen.queryByText('2 connected Agents')).toBeNull()
     expect(screen.getByRole('link', { name: 'Review Spending policy' }).getAttribute('href')).toBe('/agent-access')
     expect(document.querySelectorAll('a.bg-primary')).toHaveLength(1)
     expect(screen.getByRole('link', { name: 'Review Call' }).getAttribute('href')).toBe('/activity')
+    expect(screen.getAllByRole('link', { name: 'Check Credit' })).toHaveLength(1)
     expect(screen.queryByText('Provider workspace')).toBeNull()
-    expect(screen.getByRole('link', { name: 'Offer a Tool' }).getAttribute('href')).toBe('/owner/operations')
+    expect(screen.queryByText('Want to offer a service?')).toBeNull()
     const nextStep = screen.getByRole('region', { name: 'Next step' })
     const summary = screen.getByRole('region', { name: 'Account summary' })
     expect(nextStep.compareDocumentPosition(summary) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
@@ -78,8 +79,27 @@ describe('owner Overview', () => {
     expect(screen.getByText('Nothing was charged.')).toBeTruthy()
     expect(screen.queryByText('A$25.00')).toBeNull()
     expect(screen.getByText('At least 1 Call needs attention')).toBeTruthy()
-    expect(screen.getByText('2 connected Agents')).toBeTruthy()
+    expect(screen.queryByText('2 connected Agents')).toBeNull()
     expect(screen.getByRole('link', { name: 'Review Call' })).toBeTruthy()
+  })
+
+  it('distinguishes unavailable Calls from a complete zero and keeps one Credit action', async () => {
+    reads.calls.mockRejectedValueOnce(new Error('calls unavailable'))
+    renderOverview(await loadOverview())
+
+    expect(screen.getByText('Calls unavailable')).toBeTruthy()
+    expect(screen.getByText('Nothing was charged.')).toBeTruthy()
+    expect(screen.queryByText('No Calls need attention')).toBeNull()
+    expect(screen.getAllByRole('link', { name: 'Check Credit' })).toHaveLength(1)
+    cleanup()
+
+    reads.calls.mockResolvedValueOnce({ page: [], continueCursor: '', isDone: true })
+    reads.balance.mockRejectedValueOnce(new Error('balance unavailable'))
+    renderOverview(await loadOverview())
+
+    expect(screen.getByText('No Calls need attention')).toBeTruthy()
+    expect(screen.queryByText('Calls unavailable')).toBeNull()
+    expect(screen.getAllByRole('link', { name: 'Check Credit' })).toHaveLength(1)
   })
 
   it('does not turn an incomplete Calls page into a complete zero', async () => {

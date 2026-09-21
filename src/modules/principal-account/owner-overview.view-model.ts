@@ -40,7 +40,8 @@ export type OwnerOverviewProviderCard = Readonly<{
 }>
 export const ownerOverviewCopy = {
   description: 'Review Credit, Calls needing attention, and Agents.',
-  creditUnavailableDescription: 'Nothing was charged.',
+  nothingCharged: 'Nothing was charged.',
+  checkCredit: 'Check Credit',
   connectAgent: 'Connect an Agent',
   reviewSpendingPolicy: 'Review Spending policy',
   checkAgents: 'Check Agents',
@@ -93,7 +94,7 @@ export function nextActionFor(snapshot: OwnerOverviewSnapshot): OwnerOverviewNex
   }
   if (snapshot.balance.kind === 'unavailable' || snapshot.balance.locked) {
     return {
-      label: 'Check Credit',
+      label: ownerOverviewCopy.checkCredit,
       description: 'Confirm available credit before asking your Agent to make a Call.',
       href: '/owner/credit',
     }
