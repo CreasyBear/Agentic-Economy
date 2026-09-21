@@ -19,9 +19,9 @@ Provenance format: agent name + date. All findings below preserve the source rep
 | Gate test | Pinned constant(s) |
 |---|---|
 | `tests/imports/route-controller-size.test.ts` | `ROUTE_CONTROLLER_MAX_LINES=80`; `ROUTE_SIZE_EXCEPTIONS`: `src/routes/__root.tsx` 114, `src/routes/developers.discovery.tsx` 221 |
-| `tests/imports/file-size-ratchet.test.ts` | `FILE_SIZE_CEILINGS`: `over300=278`, `over500=101`, `over1000=0`; `OVER_1000_ALLOWED`: `[]` |
+| `tests/imports/file-size-ratchet.test.ts` | `FILE_SIZE_CEILINGS`: `over300=277`, `over500=100`, `over1000=0`; `OVER_1000_ALLOWED`: `[]` |
 | `tests/imports/tsx-type-quarantine.test.ts` | `TSX_TYPE_EXPORT_CEILING=18` |
-| `tests/imports/leaf-purity.test.ts` | `LEAF_PURITY_EXCEPTIONS`: `src/components/ae/settings/settings-dialog/components/WorkspaceSettingsBody.tsx` |
+| `tests/imports/leaf-purity.test.ts` | `LEAF_PURITY_EXCEPTIONS`: `[]` |
 | `tests/imports/own-barrel-imports.test.ts` | `OWN_BARREL_EXCEPTIONS`: `src/modules/registry/internal/registry-action-contracts.ts` |
 | `tests/imports/convex-facade-size.test.ts` | `FACADE_MAX_LINES=200`; 74 pinned `FACADE_SIZE_EXCEPTIONS` |
 | `tests/imports/copy-vocabulary.test.ts` | `COPY_CEILINGS`: `supplier=0`, `invocation=0`, `connection-online=0`, `balance=8`, `legacy-credential=2`, `used-recently=1`, `one-call-away=1`, `authority-mode=1`, `mandate=0`, `commitment=0`, `callable-operation=0`, `commercial-closure=0`; `MARGIN=2` |
@@ -32,7 +32,7 @@ A row is VERIFIED only if its commit lowered at least one ratchet constant or it
 Progress is read from `git grep -n "pinned 2026-09" tests/imports/`. Commit bodies end `R-nn · <gate>: a→b`.
 
 A row whose evidence names a symptom seen on more than one surface carries a ROOT line before dispatch.
-**ROOT-TYPE:** public pages do not share one type scale/rhythm: /about H1 60px, H2 48px, section padding 96/80/64/80; /for-agents H2 30px, padding 48/96; /for-providers H2 30px; /support H1 36px, H2 30-36px, eyebrow classes differ (ae-site-eyebrow vs mb-3 block). Fix = one AeSite type/rhythm contract applied to every public page (Wave C/E), not per-page tweaks.
+**ROOT-TYPE:** LANDED. Public-page H1 is 60px, page-level section H2 is 36px, eyebrows are weight 700 with 0.16em tracking, and legal H2 remains 24px per the marketing canon. Policy: page-level section heading = md (36px); rail/card-group heading inside a section = sm (30px). COMMIT `2998ee3da`, `a18db69cb`.
 
 ## 0b. OWNER-LOCKED files
 
@@ -65,7 +65,7 @@ No subagent edits these unless dispatched from the spine plan by Joel.
 | ACCOUNT | 7 | 5 | 1 | 4 | 0 | PENDING |
 | RECORDS | 2 | 2 | 2 | 0 | 0 | OWNER |
 | HELP | 5 | 4 | 2 | 2 | 0 | VERIFIED/IN REVIEW |
-| SUPPLY | 5 | 6 | 2 | 4 | 0 | VERIFIED/PENDING/PARKED |
+| SUPPLY | 5 | 6 | 2 | 4 | 0 | VERIFIED/IN REVIEW/PARKED |
 | DEV/ADMIN | 4 | 4 | 2 | 2 | 0 | PENDING |
 | SHELL | 2 | 1 | 0 | 0 | 1 | PARKED |
 | CROSS-CUTTING | n/a | 12 | 7 | 5 | 0 | OWNER/VERIFIED/IN REVIEW/PENDING |
@@ -101,7 +101,7 @@ The 43 route entries are all assigned once. `/support` is assigned to the Receip
 **Copy:** <table><tr><th>where</th><th>current</th><th>target</th></tr><tr><td>subhead</td><td>List one Tool agents can inspect and call. You describe the price, access, effects, and evidence; Agentic Economy records it as a Tool.</td><td>List one Tool, set an AUD price, and review fees and payout timing before publishing.</td></tr><tr><td>primary CTA</td><td>List a Tool</td><td>Add Tool</td></tr></table>
 **Target spec:** fee, AUD payout method, trigger and timing above fold; one CTA opens form; eligibility before live check; no Supplier vocabulary. **Cut:** “AE public inspection actions” and duplicate Manage listed Tools promotion.
 **ROOT-ECON:** provider economics (fee %, take rate, payout method, payout cadence/trigger, merchant-of-record, GST treatment, refund/dispute terms) are unsupplied facts; owner Joel. Until supplied, no surface states a fee, payout timing, "automated" payout, or refund rule.
-**ROOT-TYPE:** public pages do not share one type scale/rhythm: /about H1 60px, H2 48px, section padding 96/80/64/80; /for-agents H2 30px, padding 48/96; /for-providers H2 30px; /support H1 36px, H2 30-36px, eyebrow classes differ (ae-site-eyebrow vs mb-3 block). Fix = one AeSite type/rhythm contract applied to every public page (Wave C/E), not per-page tweaks.
+**ROOT-TYPE:** LANDED. Public-page H1 is 60px, page-level section H2 is 36px, eyebrows are weight 700 with 0.16em tracking, and legal H2 remains 24px per the marketing canon. Policy: page-level section heading = md (36px); rail/card-group heading inside a section = sm (30px). COMMIT `2998ee3da`, `a18db69cb`.
 **Blocked:** ROOT-ECON; the live roast found the static eligibility sentence before the safe-example check, but no eligibility/readiness step exists in the `source → tool → terms → review` funnel.
 **Open gap (next task):** cut “Manage listed Tools” and “AE public inspection actions”; LIVE 2026-09-21 http://127.0.0.1:3024/for-providers found each phrase once.
 **Priority:** P1. **Status:** IN REVIEW. **Verification evidence:** LIVE 2026-09-21 http://127.0.0.1:3024/for-providers H1 “List a Tool.”; exactly one “Add Tool” link with href `/owner/operations/new`; SOURCE `src/components/ae/supply/AeSupplyLanding.tsx:80-82`; COMMIT `92a63fdfd`. FAQ 1 slice: “Before you publish” follows “What agents can inspect”; first question “What kinds of Tools are supported first?” opened with `aria-expanded=true`; SOURCE `src/content/provider-copy.ts`, `src/components/ae/supply/AeSupplyLanding.tsx`; COMMIT `a20ae18cd`. Roast verdict: IN REVIEW; economics absent, eligibility PARTIAL, both required cuts remain. **Provenance:** RegDoors, ProvidersFaq, Roast3Providers, 21 Sep 2026.
@@ -249,7 +249,7 @@ The 43 route entries are all assigned once. `/support` is assigned to the Receip
 **Benchmark:** Stripe payment detail and support handoff. **Incumbent baseline:** amount/status first, timeline later, state-gated recourse and payment ID carried to Help.
 **Current state (LIVE):** missing receipt has clear impact copy, but populated receipt was not reached; Support retains direct reference yet is not reachable from receipt.
 **ROOT:** R-14.
-**ROOT-TYPE:** public pages do not share one type scale/rhythm: /about H1 60px, H2 48px, section padding 96/80/64/80; /for-agents H2 30px, padding 48/96; /for-providers H2 30px; /support H1 36px, H2 30-36px, eyebrow classes differ (ae-site-eyebrow vs mb-3 block). Fix = one AeSite type/rhythm contract applied to every public page (Wave C/E), not per-page tweaks.
+**ROOT-TYPE:** LANDED. Public-page H1 is 60px, page-level section H2 is 36px, eyebrows are weight 700 with 0.16em tracking, and legal H2 remains 24px per the marketing canon. Policy: page-level section heading = md (36px); rail/card-group heading inside a section = sm (30px). COMMIT `2998ee3da`, `a18db69cb`.
 **Gaps:** • [JNY-02] “detail said ‘Connect an Agent first’; `/activity` said ‘No Calls yet’” (`UNANCHORED`) • [ST-07] “Receipt not found; no valid Call existed to verify” (`UNANCHORED`) • [ST-08] “no timeline in reached state” (`UNANCHORED`) • [ST-09] customer/payment method/receipt absent in refused state (`UNANCHORED`) • [ST-10] refund/dispute gating unverified (`UNANCHORED`) • [ST-11] “Keep this reference and contact the owner or operator,” but no help action (`UNANCHORED`) • [ST-12] Credit failure never states whether money moved (`UNANCHORED`).
 **Copy:** <table><tr><th>where</th><th>current</th><th>target</th></tr><tr><td>receipt error</td><td>owner-scoped status read</td><td>We couldn’t open this Call for this workspace</td></tr><tr><td>support</td><td>Help</td><td>Call</td></tr></table>
 **Target spec:** Delivery, Payment, Purchase resolution and Who acts next first; only applicable same-Call action; exact Call reaches Support; blank/malformed refs distinct; Back/refresh retain ref; every failure says whether money moved. **Cut:** advanced evidence before decision facts; no new support form.
@@ -298,7 +298,8 @@ The 43 route entries are all assigned once. `/support` is assigned to the Receip
 **Copy:** <table><tr><th>where</th><th>current</th><th>target</th></tr><tr><td>title</td><td>Supplier activation</td><td>Provider setup</td></tr><tr><td>empty</td><td>Connect a source and choose the exact Tool AE should validate.</td><td>Add a source, then choose a Tool to publish.</td></tr></table>
 **Target spec:** name/price/status/updated/Calls with filters; one Add Tool; one Stripe-linked payout truth; explicit production choice; preview/edit/archive. **Cut:** duplicate Add Tool and contradictory earnings card.
 **ROOT-ECON:** Joel’s published Terms now state the fee/tax/payout FRAMEWORK; numeric take rate and cadence still unsupplied.
-**Priority:** P1. **Status:** PENDING. **Verification evidence:** none. **Provenance:** RegSupplyList, 21 Sep 2026.
+**Open gaps:** `Stripe account not connected` conflicts with `Nothing is required here…`; inventory filtering and preview/edit/archive are unobservable with 0 Tools.
+**Priority:** P1. **Status:** IN REVIEW. **Verification evidence:** LIVE 2026-09-21 http://127.0.0.1:3024/owner/operations rendered one H1 `Tools`, one `Add Tool` action above the 390×844 fold, and no cadence or fee claim; the 0-Tool fixture did not expose inventory interactions. SOURCE `src/components/ae/offerings/owner-offerings/components/OwnerOfferingsTable.tsx:72-101`, `src/components/ae/offerings/provider-workspace/provider-workspace.contracts.ts:17-20`, `src/components/ae/offerings/ProviderWorkspaceSharedUi.tsx:52-55`; COMMIT `f5b03cadf`, `566de52b4`. **Provenance:** RegSupplyList, RoastC26, 21 Sep 2026.
 
 ### R-27 Owner Tool detail: `/owner/operations/$toolRef`
 **Benchmark:** Stripe Product detail. **Incumbent baseline:** price/status, sales, update history, preview, edit and archive.
@@ -306,7 +307,9 @@ The 43 route entries are all assigned once. `/support` is assigned to the Receip
 **Gaps:** • [SUP-06] “No Tools yet; no row/href” (`AeOwnerOfferings.tsx:215-227`) • [SUP-07] required facts “lack live evidence because the required first-listed-Tool path does not exist” (`AeOwnerToolDetailPage.tsx:83-103`).
 **Copy:** <table><tr><th>where</th><th>current</th><th>target</th></tr><tr><td>list gate</td><td>No Tools yet</td><td>Add your first Tool</td></tr></table>
 **Target spec:** draft makes openable row; price/status/Calls/updated; buyer preview; consequence-aware edit/archive; missing ref recovers. **Cut:** none measurable.
-**Priority:** P0. **Status:** PENDING. **Verification evidence:** none. **Provenance:** RegSupplyList, 21 Sep 2026.
+**Blocked:** local fixture has no Tools; needs seeded Tool to walk detail.
+**Contingency:** `c9621da14` introduced 61 type errors; stop-the-line commit `6226d4830` restored typecheck to 0 and added the TanStack-safe recovery variant.
+**Priority:** P0. **Status:** IN REVIEW. **Verification evidence:** LIVE 2026-09-21 http://127.0.0.1:3024/owner/operations/not-a-ref rendered H1 `Page not found` and `Back to Tools` linking to `/owner/operations`; recovery and copy are asserted, while detail bullets remain unobservable with 0 Tools. SOURCE `src/components/ae/supply/AeOwnerToolDetailPage.tsx:48-71`, `tests/unit/routes/owner-tool-detail-route.test.tsx:133-134`; COMMIT `f2335d8aa`, `c9621da14`, `6226d4830`. **Provenance:** RegSupplyList, RoastC27C28, 21 Sep 2026.
 
 ### R-28 Add Tool: `/owner/operations/new`
 **Benchmark:** RapidAPI Add API and Stripe Connect Express onboarding. **Incumbent baseline:** identity, source, endpoints, price, preview and publish; commercial terms before payout setup.
@@ -314,7 +317,8 @@ The 43 route entries are all assigned once. `/support` is assigned to the Receip
 **Gaps:** • [NEW-01] only “x402 resource URL”, “OpenAPI URL”, “MCP server URL”, or plugin documents (`SupplySourceTypeSection.tsx:136-253`) • [NEW-02] “no fee/take/payout copy” (`SupplyPublicationFlow.tsx:133-150`) • [NEW-03] “Malformed JSON payload. A$0.00 affected” for well-formed JSON (`supply-source-native-start-presentation.ts:36-64`) • [NEW-04] source failures hide DNS/HTTP/schema check (`SupplySourceTypeSection.tsx:95-132`) • [NEW-05] `required=false` until submit (`SupplySourceTypeSection.tsx:179-253`) • [NEW-06] Discover endpoints y=912 and 20/28px controls (`SupplySourceTypeSection.tsx:135-263`).
 **Copy:** <table><tr><th>where</th><th>current</th><th>target</th></tr><tr><td>deck</td><td>Connect the interface you already operate. AE discovers the Tools and validates the one you submit.</td><td>Describe a service or connect its interface. AE checks what agents can buy.</td></tr><tr><td>CTA</td><td>Discover endpoints</td><td>Find Tools</td></tr></table>
 **Target spec:** human-delivered or connected Tool first; visibly required fields/examples; syntax/schema/DNS/HTTP distinct; fee/GST/payout before submit; mobile action above fold; targets 44px; focus visible. **Cut:** “A$0.00 affected” and repeated discovery copy.
-**Priority:** P0. **Status:** PARKED for NEW-01; other gaps PENDING. **Verification evidence:** none. **Provenance:** RegSupplyNew, 21 Sep 2026.
+**Open gaps:** mobile `Sandbox`/`Production` controls end at y=791.5 while fixed bottom navigation starts at y=789; `A$0.00 affected` remains. NEW-01 is PARKED.
+**Priority:** P0. **Status:** IN REVIEW (NEW-01 PARKED). **Verification evidence:** LIVE 2026-09-21 http://127.0.0.1:3024/owner/operations/new rendered H1 `Add Tool`, required markers, examples and `Find Tools`; the action was above the 390×844 fold and chooser/environment/method targets measured at least 44px, but the environment controls overlapped the fixed bottom navigation. SOURCE `src/components/ae/supply/supply-source-type/supply-source-type.contracts.ts:10-68`, `src/components/ae/supply/supply-source-type/components/SupplySourceFields.tsx:111-227`, `tests/unit/ui/supply-source-native-start.test.tsx:529-544`; COMMIT `f3498b9fb`. **Provenance:** RegSupplyNew, RoastC27C28, 21 Sep 2026.
 
 ### R-29 Provider connection handoff: `/owner/supply/connections/new`
 **Benchmark:** Zapier Connect account. **Incumbent baseline:** app identity, requested access, one connect action, return to interrupted setup.
@@ -322,7 +326,8 @@ The 43 route entries are all assigned once. `/support` is assigned to the Receip
 **Gaps:** • [NEW-07] “no cause or retained context” (`AeConnectionHandoff.tsx:18-37`) • [NEW-08] “names neither [Provider nor scope]” (`AeConnectionHandoff.tsx:39-59`).
 **Copy:** <table><tr><th>where</th><th>current</th><th>target</th></tr><tr><td>error</td><td>This connection request is unavailable</td><td>Connection link unavailable</td></tr><tr><td>recovery</td><td>Return to Add Tool and start the connection again.</td><td>Return to Add Tool and reconnect.</td></tr></table>
 **Target spec:** Provider and access named; one connect action with return; missing/expired distinct; saved Tool retained; inline credential error. **Cut:** duplicate H1/breadcrumb.
-**Priority:** P1. **Status:** PENDING. **Verification evidence:** none. **Provenance:** RegSupplyNew, 21 Sep 2026.
+**Open gaps:** breadcrumb and H1 both `Connect Provider`; Provider/access are not named on the no-param walk.
+**Priority:** P1. **Status:** IN REVIEW. **Verification evidence:** LIVE 2026-09-21 http://127.0.0.1:3024/owner/supply/connections/new rendered `Connection link unavailable` and `Return to Add Tool and reconnect.` with one 44px recovery action above the 390×844 fold; the no-param walk exposed no Provider, access, environment or connect action. SOURCE `src/components/ae/supply/connection-handoff/connection-handoff.contracts.ts:30-34`, `src/components/ae/supply/connection-handoff/AeConnectionHandoff.tsx:21-35`; COMMIT `abbd589ab`. **Provenance:** RegSupplyNew, RoastC29C30, 21 Sep 2026.
 
 ### R-30 Provider OAuth callback: `/owner/supply/connections/oauth/callback`
 **Benchmark:** Zapier/GitHub OAuth callback. **Incumbent baseline:** named success/failure, what happened, retry/return.
@@ -330,7 +335,7 @@ The 43 route entries are all assigned once. `/support` is assigned to the Receip
 **Gaps:** • [NEW-09] no-attempt maps to `authorization_denied` but shows generic failure (`owner.supply.connections.oauth.callback.tsx:23-28`; `AeOwnerMcpOAuthCallback.tsx:43-48`) • [NEW-10] “Failure has no direct retry” (`AeOwnerMcpOAuthCallback.tsx:49-57`).
 **Copy:** <table><tr><th>where</th><th>current</th><th>target</th></tr><tr><td>H1</td><td>Service connection</td><td>Provider connection</td></tr><tr><td>failure</td><td>Service not connected</td><td>Connection link missing</td></tr></table>
 **Target spec:** every outcome named; safe cause; retry retains Tool; success auto-returns; no persistent intermediate page. **Cut:** generic preamble.
-**Priority:** P1. **Status:** PENDING. **Verification evidence:** none. **Provenance:** RegSupplyNew, 21 Sep 2026.
+**Priority:** P1. **Status:** VERIFIED. **Verification evidence:** LIVE 2026-09-21 http://127.0.0.1:3024/owner/supply/connections/oauth/callback rendered `Provider connection` and `Connection link missing`; a direct `?code=SECRET123&state=abc` walk did not render either secret. Seven callback outcomes and retained-draft retry are asserted. SOURCE `src/components/ae/supply/owner-mcp-oauth-callback.contracts.ts:1-37`, `tests/unit/routes/owner-provider-connection-handoff-route.test.ts:372-402`; COMMIT `eba21ac72`, `abb28ace5`. **Provenance:** RegSupplyNew, RoastC29C30, 21 Sep 2026.
 
 ### R-31 API reference: `/developers/api`
 **Benchmark:** Stripe API reference. **Incumbent baseline:** one base URL, Bearer header, valid request, error codes and version policy.
@@ -406,7 +411,7 @@ The 43 route entries are all assigned once. `/support` is assigned to the Receip
 | listed price | TOTAL PRICE; Provider-listed price | Ask; Market | listed price |
 | support context | Help; owner-scoped status read | Support; receipt | Call; We couldn’t open this Call for this workspace |
 **Target spec:** canonical terms appear in page copy, machine docs and status labels; replacements happen page by page. **Cut:** synonyms that encode no distinct domain state.
-**Priority:** P1. **Status:** IN REVIEW. **Verification evidence:** LIVE 2026-09-21 `/owner/` was not re-walked after the copy cutover; SOURCE `src/components/ae/console/AeOwnerOverview.tsx:75-107`; COMMIT `9e0924ad7`, `0f3e7388d`, `7ac486307`. Remaining OWNER-LOCKED copy → spine W4-06, W4-07 and W5-06. **Provenance:** buyer-spine T4, RegDoors, RegSupplyList, RegSupplyNew, RegDevAdmin, Persona reports, 21 Sep 2026.
+**Priority:** P1. **Status:** IN REVIEW. **Verification evidence:** LIVE 2026-09-21 `/owner/operations` rendered H1 `Tools`, operator navigation `Market, Agents, Calls, Tools`, and document title `Tools | Agentic Economy`; `My tools`→`Tools` changed 14 source files and the pre-existing navigation red is green. SOURCE `src/routes/_operator/owner.operations.tsx:18-20,49-50`, `tests/unit/routes/supply-owner-routes.test.tsx:70-72`; COMMIT `9e0924ad7`, `0f3e7388d`, `7ac486307`, `30ea76afe`. Remaining OWNER-LOCKED copy → spine W4-06, W4-07 and W5-06. **Provenance:** buyer-spine T4, RegDoors, RegSupplyList, RegSupplyNew, RegDevAdmin, Persona reports, ToolsNavIdentity, 21 Sep 2026.
 
 ### C-02 One price
 **Surfaces affected:** Market, Tool detail, Compare, Ask, Agents, Credit, API reference and Provider publishing.
@@ -478,7 +483,7 @@ The 43 route entries are all assigned once. `/support` is assigned to the Receip
 **Gaps:** [ST-01] “Sandbox appears only as small per-agent pills” (`UNANCHORED`); [GH-20] “connection hard-codes `Environment: production`; no workspace environment switcher” (`UNANCHORED`).
 **Copy:** <table><tr><th>where</th><th>current</th><th>target</th></tr><tr><td>Agent</td><td>small pills</td><td>per-Agent environment pill</td></tr><tr><td>Provider connection</td><td>production text</td><td>explicit environment choice</td></tr></table>
 **Target spec:** retain per-Agent pills; require explicit Provider environment; no global test-mode promise until data actually switches. **Cut:** false global mode chrome.
-**Priority:** P1. **Status:** PENDING. **Verification evidence:** none. **Provenance:** ExpectStripe, ExpectGitHubVercel, 21 Sep 2026.
+**Priority:** P1. **Status:** IN REVIEW. **Verification evidence:** LIVE 2026-09-21 http://127.0.0.1:3024/owner/operations had 0 Provider connections, so no environment badge was observable; the fixture asserts a `Sandbox` badge on a connection row. SOURCE `src/components/ae/supply/AeProviderConnectionList.tsx:83-88`, `tests/unit/ui/owner-provider-connections.test.tsx:44-75`; COMMIT `ee6c1db53`. **Provenance:** ExpectStripe, ExpectGitHubVercel, ConnectionEnvironment, 21 Sep 2026.
 
 ### C-10 Overclaims
 **Surfaces affected:** Market, Tool detail, Agents, chrome, Provider doors and My tools.
@@ -496,8 +501,8 @@ The 43 route entries are all assigned once. `/support` is assigned to the Receip
 **Gaps:** My tools “Connection icon 20×20 and user menu 28×28” (`UNANCHORED`); Owner Market “utility buttons are 20×20/28×28” (`UNANCHORED`); Add Tool “20/28px header controls and 16px radios” plus CTA y=912 (`SupplySourceTypeSection.tsx:135-263`); [ACT-04] “‘Connection online’ is 20×20px” (`UNANCHORED`); Terms CTA y=967, Privacy y=999, correction y=846 (`UNANCHORED`).
 **Copy:** <table><tr><th>where</th><th>current</th><th>target</th></tr><tr><td>interactive hit box</td><td>16/20/28px</td><td>at least 44×44 without enlarging glyph</td></tr></table>
 **Target spec:** every named hit box 44×44; primary for the page’s first job above fold at 390×844; no horizontal overflow. **Cut:** decorative mobile content before first action.
-**ROOT-TYPE:** public pages do not share one type scale/rhythm: /about H1 60px, H2 48px, section padding 96/80/64/80; /for-agents H2 30px, padding 48/96; /for-providers H2 30px; /support H1 36px, H2 30-36px, eyebrow classes differ (ae-site-eyebrow vs mb-3 block). Fix = one AeSite type/rhythm contract applied to every public page (Wave C/E), not per-page tweaks.
-**Priority:** P1. **Status:** PENDING. **Verification evidence:** Footer slice LIVE 2026-09-21 `/about`, `/terms` and `/status` at 390px measured `scrollWidth=368` and `clientWidth=390`; no horizontal overflow. Named hit boxes and above-fold first actions remain open. SOURCE `src/components/ae/website/AeSiteFooter.tsx`; COMMIT `e47cbd75c`. **Provenance:** RegSupplyList, RegSupplyNew, RegHelpLegal, buyer-spine Calls, Roast3Footer, 21 Sep 2026.
+**ROOT-TYPE:** LANDED. Public-page H1 is 60px, page-level section H2 is 36px, eyebrows are weight 700 with 0.16em tracking, and legal H2 remains 24px per the marketing canon. Policy: page-level section heading = md (36px); rail/card-group heading inside a section = sm (30px). COMMIT `2998ee3da`, `a18db69cb`.
+**Priority:** P1. **Status:** PENDING. **Verification evidence:** Footer slice LIVE 2026-09-21 `/about`, `/terms` and `/status` at 390px measured `scrollWidth=368` and `clientWidth=390`; no horizontal overflow. Add Tool slice LIVE 2026-09-21 http://127.0.0.1:3024/owner/operations/new measured the 336×96 source chooser and secondary chooser, environment and method controls at least 44px; `Find Tools` was above the fold. SOURCE `src/components/ae/supply/supply-source-type/components/SourceTypeChooser.tsx:32-45`, `src/components/ae/supply/supply-source-type/components/SupplySourceFields.tsx:111-227`; COMMIT `e47cbd75c`, `f3498b9fb`. Other named hit boxes and above-fold first actions remain open. **Provenance:** RegSupplyList, RegSupplyNew, RegHelpLegal, buyer-spine Calls, Roast3Footer, RoastC27C28, 21 Sep 2026.
 
 ### C-12 Machine docs consistency
 **Surfaces affected:** `/for-agents`, setup snippets, `/developers/api`, `/SKILL.md`, `/llms.txt`, `/openapi.json`, `/glossary.md`, `/mcp`, `/.well-known/*`.
@@ -847,3 +852,79 @@ No wave may invent a second authority, status model, money formatter, Tool proje
 - C-12 IN REVIEW: `/glossary.md` is fixed; runtime host, auth, noun, path and price consistency remain.
 - ROOT-TYPE is open for Wave C/E across all public pages.
 - Status vendor hosting is deferred by the §4 default until an incident process exists. ROOT-ECON remains framework-only until Joel supplies figures.
+
+### Wave C · 2026-09-21
+
+`git log --oneline 091a093d4..HEAD` interleaved Wave C with Wave D round 1. Only the Wave C commits below move rows in this close-out.
+
+#### Commits
+
+- `f5b03cadf`, `566de52b4` — R-26 Provider Tool operations and asserted inventory filters.
+- `f2335d8aa`, `c9621da14`, `6226d4830` — R-27 empty copy, operational Tool detail and type-safe recovery.
+- `f3498b9fb` — R-28 required source fields, specific validation and mobile action.
+- `abbd589ab` — R-29 retained Tool context in the Provider handoff.
+- `eba21ac72`, `abb28ace5` — R-30 classified callback outcomes and typed fixtures.
+- `30ea76afe` — C-01 `My tools`→`Tools` across 14 source files.
+- `ee6c1db53` — C-09 Provider connection environment badge.
+- `af016e98c` — R-36 payment signer split below 1,000 lines.
+- `08b240249` — owner offerings pure-move extraction.
+- `96af346e9` — supply source type pure-move extraction.
+- `2998ee3da`, `a18db69cb` — ROOT-TYPE shared public-page type and rhythm contract.
+
+#### Extractions
+
+- `cdp-x402-payment-signer.ts`: 1,041→38 lines plus seven files at 137, 139, 205, 142, 279, 89 and 150 lines.
+- `AeOwnerOfferings.tsx`: 383→63 lines plus contracts 54, hook 108, gate 47 and table 266.
+- `SupplySourceTypeSection.tsx`: 535→43 lines plus chooser 53, fields 210, results 132, contracts 135 and hook 78.
+
+#### Gate scoreboard before→after
+
+- `FILE_SIZE_CEILINGS`: `over300` 278→277; `over500` 101→100; `over1000` 0→0.
+- `OVER_1000_ALLOWED`: `[]`.
+- `LEAF_PURITY_EXCEPTIONS`: one path→`[]` via Wave D commit `ef6e7cc43`.
+- `TSX_TYPE_EXPORT_CEILING`: 18→18.
+- `STATUS_LITERAL_FILE_CEILING`: 28→28.
+
+#### Roast verdicts
+
+- R-26 IN REVIEW: H1, empty copy and one Add Tool are PRESENT; inventory is unobservable with 0 Tools; `Stripe account not connected` versus `Nothing is required here…` is BROKEN.
+- R-27 IN REVIEW: recovery and copy are asserted; detail bullets are unobservable because the local fixture has 0 Tools.
+- R-28 IN REVIEW: required fields, distinct syntax/schema copy, action position, 44px targets and focus are PRESENT; mobile environment controls overlap the fixed bottom navigation; `A$0.00 affected` remains; NEW-01 is PARKED.
+- R-29 IN REVIEW: recovery copy and return are PRESENT; breadcrumb + H1 both `Connect Provider`, and Provider/access are not named on the no-param walk.
+- R-30 VERIFIED: seven outcomes and retained retry are asserted; direct callback secret suppression passed live.
+- C-09 IN REVIEW: the badge is asserted on a fixture; the live workspace has 0 connections.
+- R-36 VERIFIED: no file exceeds 1,000 lines and the allowlist is empty.
+- ROOT-TYPE LANDED: H1 60px on all public pages; page-level section H2 36px; eyebrow 700/0.16em; legal H2 24px per canon.
+
+#### Contingencies taken
+
+- File-size constant edits were serialized R-36→OwnerOfferings→SourceType; no agent raised a shared ceiling.
+- R-27 commit `c9621da14` introduced 61 type errors. Work stopped until `6226d4830` restored typecheck to 0.
+- Status-vocabulary transiently measured 29 during concurrent edits and returned to 28 before commit.
+- R-28 copy used `Connect a Tool you already run. Agentic Economy checks what agents can buy.` because NEW-01 human-delivered Tools remains PARKED.
+- `OperatorRouteNotFoundRecovery` carries Tool-detail recovery while the zero-prop `OperatorRouteNotFound` remains safe for TanStack route options.
+
+#### Wave D round 1 (in flight)
+
+- R-13 `2df48e395`; R-15 `853a7b695`; R-16 `4dc32ea4a`; R-17 `e2ab92dcd`; R-18 `fc24cd5eb`, `66c3fa3a1`; R-19 `9f9a13604`, `257a51aa9`.
+- R-33/R-34 `2a212ba18`, `33e137d4d`, `e8f1de44d`, `f140c6b44`; tax-profile restore `ef6e7cc43`; OpenAPI split `0749ec791`.
+- No Wave D row moves in this close-out.
+
+#### Found, not fixed
+
+- http://127.0.0.1:3024/owner/operations: `Stripe account not connected` conflicts with `Nothing is required here until this provider uses this part of the Tools page.` → dispatched Wave D round 2.
+- http://127.0.0.1:3024/owner/operations/new: mobile `Sandbox`/`Production` controls end at y=791.5 while fixed bottom navigation starts at y=789, visibly overlapping them → dispatched Wave D round 2.
+- http://127.0.0.1:3024/sign-up: a signed-in account with an existing workspace is sent to `/onboarding` → dispatched Wave D round 2.
+
+#### Open at close
+
+- R-26 IN REVIEW: resolve the Stripe guidance contradiction and prove inventory behavior with a populated Tool fixture.
+- R-27 IN REVIEW: seed a Tool to walk price, status, Calls, updated time, buyer preview and edit/archive.
+- R-28 IN REVIEW: NEW-01 remains PARKED; ROOT-ECON facts, `A$0.00 affected` and the mobile bottom-navigation overlap remain open.
+- R-29 IN REVIEW: remove the repeated `Connect Provider` breadcrumb and prove Provider/access/environment on a real handoff.
+- R-30 VERIFIED: outcome classification, retained retry and callback secret suppression are asserted.
+- C-01 IN REVIEW: OWNER-LOCKED Direct key, Spending policy and Credit terms remain.
+- C-09 IN REVIEW: live proof awaits a workspace with at least one Provider connection.
+- C-11 PENDING: the Add Tool slice passes; remaining named hit boxes and above-fold actions are open.
+- R-36 VERIFIED; ROOT-TYPE LANDED.
+- Wave D round 1 is in flight. Its rows did not move in this close-out.
