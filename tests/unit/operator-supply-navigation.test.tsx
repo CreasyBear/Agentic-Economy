@@ -55,7 +55,7 @@ function renderSidebar(currentPath: string) {
   const router = createRouter({
     routeTree: root.addChildren([
       route('/owner'),
-      route('/owner/market', 'Market'),
+      route('/market', 'Market'),
       route('/owner/operations', 'Tools', 'Supply'),
       route('/owner/operations/new'),
     ]),

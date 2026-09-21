@@ -14,7 +14,7 @@ export function RoutePending({
   return <AePageSkeleton title={title} description={description} />
 }
 
-const OVERVIEW_CARD_PATHS = new Set(['/owner', '/owner/workspace', '/owner/market'])
+const OVERVIEW_CARD_PATHS = new Set(['/owner', '/owner/workspace'])
 
 export function inferOperatorSkeletonPreset(pathname: string): OperatorRouteSkeletonPreset {
   if (OVERVIEW_CARD_PATHS.has(pathname)) return 'overview-cards'

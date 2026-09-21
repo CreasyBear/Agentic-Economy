@@ -574,11 +574,6 @@ function renderAt(ui: ReactElement, pathname: string) {
       path: '/market',
       staticData: { nav: { label: 'Market', operator: { roles: ['owner'], group: 'Buy', groupOrder: 0, order: 0, icon: NavIcon, tier: 'core', mobilePrimary: true, mobileOrder: 0 } } },
     }),
-    createRoute({
-      getParentRoute: () => rootRoute,
-      path: '/owner/market',
-      staticData: { nav: { label: 'Market', operator: { roles: ['owner'], group: 'Buy', groupOrder: 0, order: 0, icon: NavIcon, tier: 'core', mobilePrimary: true, mobileOrder: 10 } } },
-    }),
     createRoute({ getParentRoute: () => rootRoute, path: '/owner/operations/new' }),
     createRoute({
       getParentRoute: () => rootRoute,
