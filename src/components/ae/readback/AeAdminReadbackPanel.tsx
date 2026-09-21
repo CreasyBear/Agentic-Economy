@@ -6,32 +6,17 @@ import { AeFactList } from '@/components/ae/data/AeFactList'
 import { AeEmptyState } from '@/components/ae/feedback/AeEmptyState'
 import { AeSection } from '@/components/ae/layout/AeSection'
 import { AeOperatorDataTable, AeOperatorSortableHeader } from '@/components/ae/operator/AeOperatorDataTable'
+import {
+  adminReadbackRepairLabels,
+  adminReadbackRowStateLabels,
+  adminReadbackSurfaceLabels,
+} from '@/components/ae/readback/admin-readback.contracts'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import type { AdminReadbackRow, AdminReadbackSurface, AdminShellReadback } from '@/modules/security/public'
+import { formatTimestamp, timestampIso } from '@/lib/ui/format-time'
 
-const surfaceLabels = {
-  audit_events: 'Activity log',
-  index_health: 'Catalog health',
-} satisfies Record<AdminReadbackSurface, string>
-
-const rowStateLabels = {
-  no_source_rows: 'No source rows',
-  guarded: 'Guarded',
-  queued: 'Queued',
-  indexed: 'Indexed',
-  degraded: 'Degraded',
-  stale: 'Stale',
-  suppressed: 'Suppressed',
-} satisfies Record<AdminReadbackRow['rowState'], string>
-
-const repairLabels = {
-  inspect_audit: 'Inspect audit',
-  regenerate_projection: 'Regenerate projection',
-  source_auth_required: 'Source auth required',
-  no_repair_available: 'No repair available',
-} satisfies Record<AdminReadbackRow['repairAction'], string>
 
 type AeAdminReadbackPanelProps = {
   title: string
@@ -55,7 +40,7 @@ export function AeAdminReadbackPanel({ title, description, readback }: AeAdminRe
         <AlertDescription>
           {readback.kind === 'denied'
             ? `${readback.publicMessage} ${accessLabel}.`
-            : `${surfaceLabels[readback.surface]} is available to ${readback.actorRef}. ${accessLabel}.`}
+            : `${adminReadbackSurfaceLabels[readback.surface]} is available to ${readback.actorRef}. ${accessLabel}.`}
         </AlertDescription>
       </Alert>
 
@@ -70,7 +55,7 @@ function DeniedReadback({ readback }: { readback: Extract<AdminShellReadback, { 
   return (
     <AeFactList
       facts={[
-        { label: 'Surface', value: surfaceLabels[readback.surface] },
+        { label: 'Surface', value: adminReadbackSurfaceLabels[readback.surface] },
         { label: 'Decision', value: readback.reason.replaceAll('_', ' ') },
         { label: 'Private rows returned', value: String(readback.rows.length) },
       ]}
@@ -119,7 +104,7 @@ function useAdminReadbackColumns(surface: AdminReadbackSurface): ColumnDef<Admin
           <div className="grid max-w-[16rem] gap-1 whitespace-normal">
             <span className="font-medium text-foreground">Object ref</span>
             <span className="text-xs text-muted-foreground">
-              {row.original.rowType.replaceAll('_', ' ')} · {surfaceLabels[surface]}
+              {row.original.rowType.replaceAll('_', ' ')} · {adminReadbackSurfaceLabels[surface]}
             </span>
             <RefDisclosure raw={row.original.objectRef} />
           </div>
@@ -127,15 +112,27 @@ function useAdminReadbackColumns(surface: AdminReadbackSurface): ColumnDef<Admin
       },
       {
         id: 'state',
-        accessorFn: (row) => rowStateLabels[row.rowState],
+        accessorFn: (row) => adminReadbackRowStateLabels[row.rowState],
         header: ({ column }) => <AeOperatorSortableHeader label="State" column={column} />,
-        cell: ({ row }) => rowStateLabels[row.original.rowState],
+        cell: ({ row }) => adminReadbackRowStateLabels[row.original.rowState],
+      },
+      {
+        id: 'updated',
+        accessorFn: (row) => row.updatedAt,
+        header: ({ column }) => <AeOperatorSortableHeader label="Updated" column={column} />,
+        cell: ({ row }) => (
+          <time dateTime={timestampIso(row.original.updatedAt)}>
+            {formatTimestamp(row.original.updatedAt)}
+          </time>
+        ),
       },
       {
         id: 'repair',
-        accessorFn: (row) => repairLabels[row.repairAction],
+        accessorFn: (row) => adminReadbackRepairLabels[row.repairAction],
         header: 'Repair',
-        cell: ({ row }) => <Badge variant="outline">{repairLabels[row.original.repairAction]}</Badge>,
+        cell: ({ row }) => (
+          <Badge variant="outline">{adminReadbackRepairLabels[row.original.repairAction]}</Badge>
+        ),
       },
       {
         id: 'readback',
