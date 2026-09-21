@@ -6,7 +6,7 @@ import { scanTsxTypeQuarantine } from '@/lib/ui/contract-scans/tsx-type-quaranti
 import { fixtureTargets, isFixtureMode } from './scan-targets'
 
 // pinned 2026-09-21 from first run; may only decrease
-const TSX_TYPE_EXPORT_CEILING = 19
+const TSX_TYPE_EXPORT_CEILING = 18
 const TSX_TYPE_EXPORT_MARGIN = 0
 const CLEAN_TARGETS = [
   { root: 'src/components', includeExtensions: ['.tsx'] },
