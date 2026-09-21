@@ -16,6 +16,7 @@
     "dev": "vite dev --host 127.0.0.1",
     "dev:local": "node tools/dev/require-supported-node.ts -- node tools/dev/local-dev.ts",
     "connect:local": "node tools/dev/local-connect.ts",
+    "dev:sign-in-url": "node --env-file-if-exists=.env --env-file-if-exists=.env.local --env-file-if-exists=.env.development --env-file-if-exists=.env.development.local tools/dev/clerk-sign-in-url.ts",
     "env:example": "tsx tools/release/render-env-example.ts",
     "env:example:check": "tsx tools/release/render-env-example.ts --check",
     "build": "npm run pack:cli:public && vite build",
