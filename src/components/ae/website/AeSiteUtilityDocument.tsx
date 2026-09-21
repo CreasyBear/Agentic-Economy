@@ -5,6 +5,8 @@ import { cn } from '@/lib/utils'
 import type { AeSiteUtilityDocumentProps } from './utility-document.contracts'
 import { utilityDocumentNavigation } from './utility-document.contracts'
 
+import { AeSiteHeading } from './AeSiteType'
+
 export function AeSiteUtilityDocument({
   title,
   description,
@@ -43,9 +45,9 @@ export function AeSiteUtilityDocument({
           <p className="mb-3 text-sm text-muted-foreground">
             Legal · Last updated {lastUpdated}{version === undefined ? '' : ` · Version ${version}`}
           </p>
-          <h1 className="text-4xl font-extralight tracking-[-0.035em] text-foreground md:text-5xl">
+          <AeSiteHeading as="h1" size="lg" className="text-foreground">
             {title}
-          </h1>
+          </AeSiteHeading>
           {description === undefined ? null : (
             <p className="mt-4 max-w-2xl text-lg leading-relaxed text-muted-foreground">
               {description}

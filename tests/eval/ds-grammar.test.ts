@@ -92,7 +92,7 @@ describe('design-system grammar eval harness', () => {
     expect(brandCopy).toContain("eyebrow: 'About'")
     expect(about).toContain('<AeSiteAboutHero')
     expect(about).toContain('label={ABOUT.eyebrow}')
-    expect(aboutHero).toMatch(/<span[^>]*text-eyebrow[^>]*>[\s\S]*\{label\}[\s\S]*<\/span>/)
+    expect(aboutHero).toContain('<AeSiteEyebrow>{label}</AeSiteEyebrow>')
     expect(
       numberedStepProductEyebrowHits().some(hit => hit.file.includes('AeSupplyLanding.tsx')),
     ).toBe(false)

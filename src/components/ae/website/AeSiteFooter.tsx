@@ -12,6 +12,7 @@ import {
 import { FOOTER } from '@/content/brand-copy'
 
 import { AE_SITE_FOOTER, type AeSiteFooterLinkItem } from './AeSiteFooter.contracts'
+import { AeSiteHeading } from './AeSiteType'
 
 export function AeSiteFooter() {
   const { routesByPath } = useRouter()
@@ -57,7 +58,7 @@ export function AeSiteFooter() {
       </div>
 
       <div className="ae-rail pt-6 pb-8 md:pt-16 md:pb-16">
-        <div className="relative mb-12 overflow-hidden rounded-3xl border border-white/15 shadow-2xl shadow-black/60 ring-1 ring-white/10 md:mb-16">
+        <div className="relative mb-12 overflow-hidden rounded-3xl border border-white/15 shadow-overlay ring-1 ring-white/10 md:mb-16">
           <img
             src={AE_SITE_FOOTER.images.closer.src}
             srcSet={AE_SITE_FOOTER.images.closer.srcSet}
@@ -68,12 +69,12 @@ export function AeSiteFooter() {
           />
           <div className="absolute inset-0 bg-linear-to-t from-black/85 via-black/40 to-black/20" />
           <div className="relative z-10 flex min-h-[320px] flex-col items-center justify-center p-8 text-center md:min-h-[380px] md:p-14">
-            <span className="mb-3 inline-block rounded-full border border-white/20 bg-black/40 px-3.5 py-1 text-xs font-medium tracking-widest text-white/90 uppercase backdrop-blur-md">
+            <span className="mb-3 inline-block rounded-full border border-white/20 bg-[var(--ae-overlay-scrim)] px-3.5 py-1 text-xs font-medium tracking-widest text-white/90 uppercase backdrop-blur-md">
               {AE_SITE_FOOTER.closer.eyebrow}
             </span>
-            <h2 className="max-w-2xl text-balance text-3xl font-extralight tracking-tight text-white drop-shadow-md md:text-5xl lg:text-6xl">
+            <AeSiteHeading as="h2" size="md" className="max-w-2xl text-white">
               {AE_SITE_FOOTER.closer.heading}
-            </h2>
+            </AeSiteHeading>
             <p className="mt-4 max-w-xl text-balance text-base text-white/80 drop-shadow-xs md:text-lg">
               {AE_SITE_FOOTER.closer.description}
             </p>
@@ -82,7 +83,7 @@ export function AeSiteFooter() {
                 to="/market"
                 className={buttonVariants({
                   size: 'lg',
-                  className: 'rounded-full bg-white px-6 font-semibold text-zinc-950 shadow-lg hover:bg-zinc-100 hover:text-black',
+                  className: 'rounded-full bg-white px-6 font-semibold text-zinc-950 shadow-float-dark hover:bg-zinc-100 hover:text-black',
                 })}
               >
                 {AE_SITE_FOOTER.closer.primaryAction}
@@ -92,7 +93,7 @@ export function AeSiteFooter() {
                 className={buttonVariants({
                   variant: 'outline',
                   size: 'lg',
-                  className: 'rounded-full border-white/30 bg-black/30 px-6 text-white backdrop-blur-md hover:bg-white/10 hover:text-white',
+                  className: 'rounded-full border-white/30 bg-[var(--ae-overlay-scrim)] px-6 text-white backdrop-blur-md hover:bg-white/10 hover:text-white',
                 })}
               >
                 {AE_SITE_FOOTER.closer.secondaryAction}
@@ -102,7 +103,7 @@ export function AeSiteFooter() {
         </div>
 
         <div className="grid grid-cols-2 gap-x-6 gap-y-8 sm:grid-cols-4 lg:grid-cols-6">
-          <div className="col-span-full space-y-4 lg:col-span-2">
+          <div className="col-span-full grid gap-4 lg:col-span-2">
             <a
               href={AECON_MARKETING_URL}
               aria-label="About AECON"
@@ -155,7 +156,7 @@ export function AeSiteFooter() {
               <h2 id={column.id} className="text-xs font-semibold tracking-wider text-foreground uppercase">
                 {column.title}
               </h2>
-              <ul className="mt-4 list-inside space-y-3">
+              <ul className="mt-4 grid list-inside gap-3">
                 {column.links.map((link) => (
                   <li key={link.to}>
                     <Link

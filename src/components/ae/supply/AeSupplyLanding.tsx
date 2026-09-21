@@ -104,7 +104,7 @@ export function AeSupplyLanding({
         <div className="grid max-w-3xl gap-page">
           <div className="grid gap-intra">
             <AeSiteEyebrow>Before you sign in</AeSiteEyebrow>
-            <AeSiteHeading as="h2" size="sm">Check whether your Tool is a fit.</AeSiteHeading>
+            <AeSiteHeading as="h2" size="md">Check whether your Tool is a fit.</AeSiteHeading>
             <AeSiteBody muted size="sm">
               List one Tool an agent can search, inspect, and call. Public sources need no provider secret. For a source that needs credentials, use an existing owner-controlled connection; this flow does not collect a raw provider key.
             </AeSiteBody>

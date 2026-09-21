@@ -7,6 +7,9 @@ import {
   AccordionTrigger,
 } from '@/components/ui/accordion'
 
+import { AeSiteSection } from './AeSiteSection'
+import { AeSiteHeading } from './AeSiteType'
+
 import type { AeSiteFaqProps } from './faq.contracts'
 
 /** Port of aecon.ai's Dusk FAQ 1 two-column accordion. */
@@ -18,17 +21,19 @@ export function AeSiteFaq({
   statusLinkLabel,
 }: AeSiteFaqProps) {
   return (
-    <section className="py-16 md:py-24" aria-labelledby={labelledBy}>
+    <AeSiteSection labelledBy={labelledBy} rhythm="section">
       <div className="mx-auto max-w-7xl px-6">
         <div className="grid gap-6 md:grid-cols-2 md:gap-6">
           <div>
             {title === undefined ? null : (
-              <h2
+              <AeSiteHeading
+                as="h2"
+                size="md"
                 id={labelledBy}
-                className="max-w-sm text-balance text-4xl font-extralight tracking-[-0.035em] text-foreground"
+                className="max-w-sm"
               >
                 {title}
-              </h2>
+              </AeSiteHeading>
             )}
           </div>
           <div>
@@ -60,6 +65,6 @@ export function AeSiteFaq({
           </div>
         </div>
       </div>
-    </section>
+    </AeSiteSection>
   )
 }

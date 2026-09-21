@@ -1,5 +1,8 @@
 import type { ReactNode } from 'react'
 
+import { AeSiteSection } from './AeSiteSection'
+import { AeSiteEyebrow, AeSiteHeading } from './AeSiteType'
+
 export type AeSiteAboutHeroProps = Readonly<{
   label: string
   title: string
@@ -17,16 +20,14 @@ export function AeSiteAboutHero({
   children,
 }: AeSiteAboutHeroProps) {
   return (
-    <section className="overflow-hidden py-16 md:py-24" aria-labelledby="about-hero">
+    <AeSiteSection labelledBy="about-hero" rhythm="section" clip={false} className="overflow-hidden">
       <div className="relative mx-auto grid max-w-7xl items-center gap-6 px-6 md:gap-12 lg:grid-cols-2">
         <div>
-          <span className="mb-3 block text-eyebrow font-medium tracking-eyebrow text-muted-foreground uppercase">
-            {label}
-          </span>
+          <AeSiteEyebrow>{label}</AeSiteEyebrow>
           <div className="mt-3 flex max-w-xl flex-col gap-6 md:mt-6">
-            <h1 id="about-hero" className="text-balance text-4xl font-extralight tracking-[-0.035em] md:text-5xl lg:text-6xl">
+            <AeSiteHeading as="h1" size="lg" id="about-hero">
               {title}
-            </h1>
+            </AeSiteHeading>
             <p className="max-w-md text-lg leading-relaxed text-muted-foreground">
               {description}
             </p>
@@ -45,6 +46,6 @@ export function AeSiteAboutHero({
           />
         </div>
       </div>
-    </section>
+    </AeSiteSection>
   )
 }
