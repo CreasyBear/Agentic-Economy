@@ -90,7 +90,7 @@ function RootDocument({ children }: { children: ReactNode }) {
   const chatProvidersRequired = requiresChatProviders(pathname)
   const content = (
     <ClerkProvider appearance={clerkAppearance}>
-      {chatProvidersRequired ? <ChatConvexProvider>{children}</ChatConvexProvider> : children}
+      {chatProvidersRequired ? <ChatConvexProvider>{children}</ChatConvexProvider> : <SignedInConvexProvider>{children}</SignedInConvexProvider>}
     </ClerkProvider>
   )
 
@@ -115,6 +115,19 @@ function RootDocument({ children }: { children: ReactNode }) {
 export function ResponsiveToaster() {
   const isMobile = useIsMobile()
   return <Toaster ref={responsiveToasterRef} {...responsiveToasterProps(isMobile)} />
+}
+
+/**
+ * Signed-in pages get a live Convex client without chat's identity gate: server-rendered content
+ * shows at once and each `useQuery` site's own loading state covers the auth handshake. Anonymous
+ * visitors on public pages open no websocket.
+ */
+function SignedInConvexProvider({ children }: { children: ReactNode }) {
+  const auth = useAuth()
+  const convexUrl = import.meta.env.VITE_CONVEX_URL?.trim()
+  const [client] = useState(() => (convexUrl ? new ConvexReactClient(convexUrl) : null))
+  if (!auth.isSignedIn || client === null) return children
+  return <ConvexProviderWithClerk client={client} useAuth={useAuth}>{children}</ConvexProviderWithClerk>
 }
 
 function ChatConvexProvider({ children }: { children: ReactNode }) {
