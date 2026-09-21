@@ -9,7 +9,7 @@ const ROUTE_SIZE_MARGIN = 0
 
 // pinned 2026-09-21 from first run; may only decrease
 export const ROUTE_SIZE_EXCEPTIONS: Record<string, number> = {
-  'src/routes/__root.tsx': 236,
+  'src/routes/__root.tsx': 114,
   'src/routes/developers.discovery.tsx': 221,
 }
 

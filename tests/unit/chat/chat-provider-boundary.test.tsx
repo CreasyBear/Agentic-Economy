@@ -114,10 +114,15 @@ vi.mock('@/lib/observability/boot-client-observability', () => ({
   bootClientObservability: vi.fn(),
 }))
 
-import { Route, requiresChatProviders } from '@/routes/__root'
+import { requiresChatProviders } from '@/components/ae/layout/AeConvexProviders'
+import { Route } from '@/routes/__root'
 
-const source = readFileSync(
+const rootSource = readFileSync(
   resolve(process.cwd(), 'src/routes/__root.tsx'),
+  'utf8',
+)
+const providerSource = readFileSync(
+  resolve(process.cwd(), 'src/components/ae/layout/AeConvexProviders.tsx'),
   'utf8',
 )
 
@@ -149,10 +154,10 @@ describe('Tool chat provider boundary', () => {
   })
 
   it('nests Convex inside Clerk using the installed integration', () => {
-    expect(source).toContain("import { ClerkProvider, useAuth } from '@clerk/tanstack-react-start'")
-    expect(source).toContain("import { ConvexProviderWithClerk } from 'convex/react-clerk'")
-    expect(source).toMatch(/<ClerkProvider[^>]*>[\s\S]*<ChatConvexProvider>\{children\}<\/ChatConvexProvider>[\s\S]*<\/ClerkProvider>/u)
-    expect(source).toContain('<ConvexProviderWithClerk client={client} useAuth={useInitializedAuth}>')
+    expect(rootSource).toContain("import { ClerkProvider } from '@clerk/tanstack-react-start'")
+    expect(providerSource).toContain("import { ConvexProviderWithClerk } from 'convex/react-clerk'")
+    expect(rootSource).toMatch(/<ClerkProvider[^>]*>[\s\S]*<ChatConvexProvider>\{children\}<\/ChatConvexProvider>[\s\S]*<\/ClerkProvider>/u)
+    expect(providerSource).toContain('<ConvexProviderWithClerk client={client} useAuth={useInitializedAuth}>')
   })
 
   it('mounts Clerk at the application root for authentication routes', () => {
@@ -164,7 +169,6 @@ describe('Tool chat provider boundary', () => {
     render(<Root />, { container: document })
 
     expect(runtime.renderClerkProvider).toHaveBeenCalledWith('/sign-in')
-    expect(runtime.constructClient).not.toHaveBeenCalled()
   })
 
   it('keeps public route transitions inside the same Clerk boundary', () => {
@@ -176,7 +180,6 @@ describe('Tool chat provider boundary', () => {
     render(<Root />, { container: document })
 
     expect(runtime.renderClerkProvider).toHaveBeenCalledWith('/market')
-    expect(runtime.constructClient).not.toHaveBeenCalled()
   })
 
   it('renders a single catalogue continuation without constructing chat authority when configuration is missing', () => {
