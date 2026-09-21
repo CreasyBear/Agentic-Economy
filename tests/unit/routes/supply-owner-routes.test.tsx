@@ -16,7 +16,12 @@ vi.mock('@/components/ae/offerings/provider-workspace.functions', () => ({
 vi.mock('@/components/ae/layout/AeOperatorPage', async () => {
   const React = await import('react')
   return {
-    AeOperatorPage: ({ children }: { children: ReactNode }) => React.createElement('main', null, children),
+    AeOperatorPage: ({ children, title }: { children: ReactNode; title: string }) => React.createElement(
+      'main',
+      null,
+      React.createElement('h1', null, title),
+      children,
+    ),
   }
 })
 vi.mock('@/components/ae/supply/AeProviderToolDetail', async () => {
@@ -78,11 +83,16 @@ describe('owner supply routes', () => {
     const renderDetail = (businessRef: string) => {
       vi.spyOn(OwnerSupplyDetailRoute, 'useParams').mockReturnValue({ toolRef: 'offering:one' } as never)
       vi.spyOn(OwnerSupplyDetailRoute, 'useLoaderData').mockReturnValue({
-        identity: { kind: 'available', businessId: 'business:one' },
+        identity: { kind: 'available', businessId: 'business:one', slug: 'provider-one' },
         status: {
           kind: 'available',
           tool: { offeringRef: 'offering:one', name: 'Reference lookup' },
-          status: { businessRef },
+          status: {
+            businessRef,
+            state: 'Published',
+            observedAt: Date.UTC(2026, 8, 20),
+            routeability: { available: true },
+          },
         },
       } as never)
       render(
@@ -96,19 +106,20 @@ describe('owner supply routes', () => {
     expect(screen.getByTestId('tool-detail').textContent).toBe('Reference lookup')
     cleanup()
     renderDetail('business:other')
-    expect(screen.getByText('Tool not found')).toBeTruthy()
+    expect(screen.getByRole('heading', { name: 'Page not found' })).toBeTruthy()
+    expect(screen.getByRole('link', { name: 'Back to Tools' }).getAttribute('href')).toBe('/owner/operations')
     expect(screen.queryByTestId('tool-detail')).toBeNull()
   })
 
   it.each([
-    [{ kind: 'not_found' as const }, 'Tool not found'],
+    [{ kind: 'not_found' as const }, 'Page not found'],
     [{ kind: 'unavailable' as const }, 'Tool status unavailable'],
   ])('keeps %s readback refusal at the render boundary', (status, title) => {
     const Component = OwnerSupplyDetailRoute.options.component
     if (Component === undefined) throw new Error('owner_supply_detail_component_missing')
     vi.spyOn(OwnerSupplyDetailRoute, 'useParams').mockReturnValue({ toolRef: 'offering:one' } as never)
     vi.spyOn(OwnerSupplyDetailRoute, 'useLoaderData').mockReturnValue({
-      identity: { kind: 'available', businessId: 'business:one' },
+      identity: { kind: 'available', businessId: 'business:one', slug: 'provider-one' },
       status,
     } as never)
     render(
@@ -117,5 +128,8 @@ describe('owner supply routes', () => {
       </RouterContextProvider>,
     )
     expect(screen.getByText(title)).toBeTruthy()
+    if (status.kind === 'not_found') {
+      expect(screen.getByRole('link', { name: 'Back to Tools' }).getAttribute('href')).toBe('/owner/operations')
+    }
   })
 })

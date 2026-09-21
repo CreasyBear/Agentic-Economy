@@ -3,16 +3,21 @@ import { useServerFn } from '@tanstack/react-start'
 import { useReverification } from '@clerk/tanstack-react-start'
 import { useState } from 'react'
 
+import { AeFactList } from '@/components/ae/data/AeFactList'
 import { AeOperatorPage } from '@/components/ae/layout/AeOperatorPage'
+import { OperatorRouteNotFound } from '@/components/ae/layout/AeRouteStates'
+import { AeSection } from '@/components/ae/layout/AeSection'
 import type {
   ProviderToolStatusResult,
   ProviderWorkspaceIdentityDetailResult,
 } from '@/components/ae/offerings/provider-workspace.functions'
 import { AeProviderToolDetail } from '@/components/ae/supply/AeProviderToolDetail'
+import { OWNER_TOOL_DETAIL_COPY } from '@/components/ae/supply/owner-tool-detail.contracts'
 import type { ProviderToolActionOutcome } from '@/modules/capability-supply/provider-tool-actions.contracts'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { buttonVariants } from '@/components/ui/button-variants'
 import { cn } from '@/lib/utils'
+import { formatTimestamp } from '@/lib/ui/format-time'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import {
   recheckOwnerCapabilityServer,
@@ -37,8 +42,19 @@ export function AeOwnerToolDetailPage({ toolRef, identity, status }: AeOwnerTool
   const republishRequest = useServerFn(republishOwnerCapabilityServer)
   const republish = useReverification(republishRequest)
 
-  if (identity.kind !== 'available' || status.kind !== 'available') {
+  if (identity.kind !== 'available') {
     return <UnavailableTool toolRef={toolRef} unavailable={status.kind === 'unavailable'} />
+  }
+  if (status.kind === 'not_found') {
+    return (
+      <OperatorRouteNotFound
+        recoveryHref="/owner/operations"
+        recoveryLabel={OWNER_TOOL_DETAIL_COPY.notFoundRecoveryLabel}
+      />
+    )
+  }
+  if (status.kind === 'unavailable') {
+    return <UnavailableTool toolRef={toolRef} unavailable />
   }
   // Well 8 Lane C: the URL held either this Tool's slug (live reviewed-tier
   // publication) or its offeringRef (no publication yet) - only one matches
@@ -47,7 +63,12 @@ export function AeOwnerToolDetailPage({ toolRef, identity, status }: AeOwnerTool
     (status.tool.slug !== toolRef && status.tool.offeringRef !== toolRef)
     || status.status.businessRef !== identity.businessId
   ) {
-    return <UnavailableTool toolRef={toolRef} unavailable={false} />
+    return (
+      <OperatorRouteNotFound
+        recoveryHref="/owner/operations"
+        recoveryLabel={OWNER_TOOL_DETAIL_COPY.notFoundRecoveryLabel}
+      />
+    )
   }
   const context: SupplyFunnelActionContext | undefined = status.maintenance === undefined
     ? undefined
@@ -88,6 +109,38 @@ export function AeOwnerToolDetailPage({ toolRef, identity, status }: AeOwnerTool
       currentPath={`/owner/operations/${encodeURIComponent(toolRef)}`}
       breadcrumbs={[{ label: 'My tools', href: '/owner/operations' }, { label: name }]}
     >
+      <AeSection title={OWNER_TOOL_DETAIL_COPY.overviewTitle}>
+        <AeFactList
+          density="compact"
+          className="grid-cols-2 sm:grid-cols-4"
+          facts={[
+            {
+              label: OWNER_TOOL_DETAIL_COPY.priceLabel,
+              value: status.tool.pricingLabel ?? OWNER_TOOL_DETAIL_COPY.missingValue,
+            },
+            { label: OWNER_TOOL_DETAIL_COPY.statusLabel, value: status.status.state },
+            {
+              label: OWNER_TOOL_DETAIL_COPY.callsLabel,
+              value: status.tool.callsCount === undefined
+                ? OWNER_TOOL_DETAIL_COPY.missingValue
+                : `${status.tool.callsCount.toLocaleString('en-AU')} Calls`,
+            },
+            {
+              label: OWNER_TOOL_DETAIL_COPY.updatedLabel,
+              value: formatTimestamp(status.status.observedAt),
+            },
+          ]}
+        />
+        {status.tool.slug === undefined ? null : (
+          <Link
+            to="/tools/$providerHost/$slug"
+            params={{ providerHost: identity.slug, slug: status.tool.slug }}
+            className={cn(buttonVariants({ variant: 'secondary' }), 'min-h-touch w-fit')}
+          >
+            {OWNER_TOOL_DETAIL_COPY.publicPreviewLabel}
+          </Link>
+        )}
+      </AeSection>
       <AeProviderToolDetail
         name={name}
         status={status.status}

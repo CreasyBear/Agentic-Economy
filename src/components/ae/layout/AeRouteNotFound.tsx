@@ -7,17 +7,24 @@ import { buttonVariants } from '@/components/ui/button-variants'
 import { operatorRoleForPath, roleHomeHref } from '@/lib/operator/roles'
 import { cn } from '@/lib/utils'
 
+export type OperatorRouteNotFoundProps = Readonly<{
+  recoveryHref?: string
+  recoveryLabel?: string
+}>
+
 export function RouteNotFound() {
   return <AeNotFound />
 }
 
-export function OperatorRouteNotFound() {
+export function OperatorRouteNotFound({
+  recoveryHref: recoveryHrefOverride,
+  recoveryLabel: recoveryLabelOverride,
+}: OperatorRouteNotFoundProps = {}) {
   const { pathname } = useLocation()
   const operatorRole = operatorRoleForPath(pathname) ?? 'owner'
   const isAssistantAccessPath = pathname.startsWith('/agent-access/')
-  const recoveryHref = isAssistantAccessPath ? '/agent-access' : roleHomeHref[operatorRole]
-  const recoveryLabel = isAssistantAccessPath ? 'Back to Agents' : 'Back to workspace'
-
+  const recoveryHref = recoveryHrefOverride ?? (isAssistantAccessPath ? '/agent-access' : roleHomeHref[operatorRole])
+  const recoveryLabel = recoveryLabelOverride ?? (isAssistantAccessPath ? 'Back to Agents' : 'Back to workspace')
   return (
     <AeOperatorPage
       operatorRole={operatorRole}
