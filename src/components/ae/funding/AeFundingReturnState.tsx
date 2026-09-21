@@ -1,6 +1,7 @@
 import { Link } from '@tanstack/react-router'
 
 import { AePageState } from '@/components/ae/layout/AePageState'
+import { fundingReturnCopy } from '@/components/ae/funding/funding-return.contracts'
 import { Button } from '@/components/ui/button'
 import { buttonVariants } from '@/components/ui/button-variants'
 import { cn } from '@/lib/utils'
@@ -12,9 +13,15 @@ export type AeFundingReturnStateProps = Readonly<{
   onCheck: () => Promise<void>
 }>
 
-const OPEN_BALANCE_ACTION = (
+const OPEN_CREDIT_ACTION = (
   <Link to="/owner/credit" className={cn(buttonVariants(), 'min-h-touch')}>
-    Open Credit
+    {fundingReturnCopy.openCreditAction}
+  </Link>
+)
+
+const OPEN_AGENTS_ACTION = (
+  <Link to="/agent-access" className={cn(buttonVariants(), 'min-h-touch')}>
+    {fundingReturnCopy.openAgentsAction}
   </Link>
 )
 
@@ -43,13 +50,9 @@ export function AeFundingReturnState({
     return (
       <AePageState
         tone="neutral"
-        title="Funding link unavailable"
-        description="This funding link is invalid or no longer available. Return to the agent that provided it for a current link."
-        action={(
-          <Link to="/market" className={cn(buttonVariants(), 'min-h-touch')}>
-            Open Market
-          </Link>
-        )}
+        title={fundingReturnCopy.invalid.title}
+        description={fundingReturnCopy.invalid.description}
+        action={OPEN_CREDIT_ACTION}
       />
     )
   }
@@ -72,9 +75,9 @@ export function AeFundingReturnState({
       return (
         <AePageState
           tone="positive"
-          title="Account credit added"
-          description={`${amount} is available. Return to ${funding.agentName} and ask it to retry the original Tool. Open Balance only to verify the credit.`}
-          action={OPEN_BALANCE_ACTION}
+          title={fundingReturnCopy.paid.title}
+          description={fundingReturnCopy.paid.description(amount, funding.agentName)}
+          action={OPEN_AGENTS_ACTION}
         />
       )
     case 'processing':
@@ -104,8 +107,8 @@ export function AeFundingReturnState({
         <AePageState
           tone="neutral"
           title="Funding link expired"
-          description={`The unpaid link for ${amount} expired, so no credit was added. Return to ${funding.agentName}, or open Balance if you own the Account and need a new payment.`}
-          action={OPEN_BALANCE_ACTION}
+          description={`The unpaid link for ${amount} expired, so no Credit was added. Return to ${funding.agentName}, or open Credit if you own the Account and need a new payment.`}
+          action={OPEN_CREDIT_ACTION}
         />
       )
     case 'failed':
@@ -113,8 +116,8 @@ export function AeFundingReturnState({
         <AePageState
           tone="warning"
           title="Payment failed"
-          description={`This payment did not add ${amount} to the Account. Return to ${funding.agentName}, or open Balance if you own the Account and need a new payment.`}
-          action={OPEN_BALANCE_ACTION}
+          description={`This payment did not add ${amount} to the Account. Return to ${funding.agentName}, or open Credit if you own the Account and need a new payment.`}
+          action={OPEN_CREDIT_ACTION}
         />
       )
     default: {

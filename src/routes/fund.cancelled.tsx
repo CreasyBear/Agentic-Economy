@@ -1,5 +1,6 @@
 import { Link, createFileRoute } from '@tanstack/react-router'
 
+import { fundingReturnCopy } from '@/components/ae/funding/funding-return.contracts'
 import { AePageState } from '@/components/ae/layout/AePageState'
 import { RouteError, RoutePending } from '@/components/ae/layout/AeRouteStates'
 import { buttonVariants } from '@/components/ui/button-variants'
@@ -17,12 +18,17 @@ export const Route = createFileRoute('/fund/cancelled')({
   component: () => (
     <AePageState
       tone="neutral"
-      title="Payment cancelled"
-      description="No Account credit or authority changed. Return to the agent if you still want to fund it."
+      title={fundingReturnCopy.cancelled.title}
+      description={fundingReturnCopy.cancelled.description}
       action={(
-        <Link to="/market" className={cn(buttonVariants({ variant: 'secondary' }), 'min-h-touch')}>
-          Back to Market
-        </Link>
+        <div className="flex flex-wrap gap-3">
+          <Link to="/owner/credit" className={cn(buttonVariants(), 'min-h-touch')}>
+            {fundingReturnCopy.cancelled.retryAction}
+          </Link>
+          <Link to="/agent-access" className={cn(buttonVariants({ variant: 'secondary' }), 'min-h-touch')}>
+            {fundingReturnCopy.openAgentsAction}
+          </Link>
+        </div>
       )}
     />
   ),
