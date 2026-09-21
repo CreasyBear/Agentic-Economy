@@ -1,4 +1,4 @@
-import { degrade } from '@/lib/observability/degrade'
+import { degradeBackend } from '@/lib/observability/degrade-backend'
 import {
   executeDecisionGateway,
   type DecisionGatewayOptions,
@@ -152,7 +152,7 @@ export async function rerankToolSearchResult(
       ranking,
     }
   } catch (cause) {
-    degrade(cause, undefined, {
+    degradeBackend(cause, undefined, {
       site: 'rerankToolSearchResult',
       reason: 'invalid_response',
     })
