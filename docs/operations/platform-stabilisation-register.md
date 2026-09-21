@@ -32,7 +32,7 @@ A row is VERIFIED only if its commit lowered at least one ratchet constant or it
 Progress is read from `git grep -n "pinned 2026-09" tests/imports/`. Commit bodies end `R-nn · <gate>: a→b`.
 
 A row whose evidence names a symptom seen on more than one surface carries a ROOT line before dispatch.
-**ROOT-TYPE:** LANDED. Public-page H1 is 60px, page-level section H2 is 36px, eyebrows are weight 700 with 0.16em tracking, and legal H2 remains 24px per the marketing canon. Policy: page-level section heading = md (36px); rail/card-group heading inside a section = sm (30px). COMMIT `2998ee3da`, `a18db69cb`.
+**ROOT-TYPE:** LANDED. Public-page H1 is 60px, page-level section H2 is 36px, eyebrows are weight 700 with 0.16em tracking, and legal H2 remains 24px per the marketing canon. Policy: page-level section heading = md (36px); rail/card-group heading inside a section = sm (30px); auth/dialog pages: H1 = md (36px); legal documents: utility-document rhythm 80/48, no eyebrow. COMMIT `2998ee3da`, `a18db69cb`.
 
 ## 0b. OWNER-LOCKED files
 
@@ -1042,7 +1042,31 @@ No wave may invent a second authority, status model, money formatter, Tool proje
 - C-07 IN REVIEW: ROOT-CLERK-H1 landed; the named Market, Agent, Credit and dialog gaps remain in the OWNER spine.
 - C-12 VERIFIED: 7 machine documents and 13 advertised paths returned 200; the discovery/SEO suites assert host, auth and ExactAmount consistency.
 - §4 #46 ADOPTED: the caller can download the eight named JSON sections from Settings › Privacy without a new Convex query.
-- Roast-free wave. Final cohesion roast: see agent FinalCohesionRoast in the next entry.
+- Roast-free wave. Final cohesion roast follows.
+
+#### Final cohesion roast (agent FinalCohesionRoast)
+
+| Page | H1 px | first H2 px | Eyebrow weight/spacing | First-section py | Footer: count · groups | H1 raw/accessible | First Tab | 390 scrollWidth | Errors | Canon |
+|---|---:|---:|---:|---:|---|---:|---|---:|---:|---|
+| `/about` | 60/36 ✓ | 36/36 ✓ | 700/1.92px ✓ | 96/64 ✓ | 1 · Resources, Help, Legal, Machines ✓ | 1/1 ✓ | Skip to content ✓ | 368 ✓ | 0 ✓ | **YES** |
+| `/for-agents` | 60/36 ✓ | 30/24 ✓ | 700/1.92px ✓ | 96/64 ✓ | 1 · Resources, Help, Legal, Machines ✓ | 1/1 ✓ | Skip to content ✓ | 368 ✓ | 0 ✓ | **YES** |
+| `/for-providers` | 60/36 ✓ | 36/36 ✓ | 700/1.92px ✓ | 96/64 ✓ | 1 · Resources, Help, Legal, Machines ✓ | 1/1 ✓ | Skip to content ✓ | 368 ✓ | 0 ✓ | **YES** |
+| `/support` | 60/36 ✓ | 30/24 ✓ | 700/1.92px ✓ | 96/64 ✓ | 1 · Resources, Help, Legal, Machines ✓ | 1/1 ✓ | Skip to content ✓ | 368 ✓ | 0 ✓ | **YES** |
+| `/status` | 60/36 ✓ | absent ✗ | 700/1.92px ✓ | 96/64 ✓ | 1 · Resources, Help, Legal, Machines ✓ | 1/1 ✓ | Skip to content ✓ | 368 ✓ | 0 ✓ | **NO** |
+| `/terms` | 60/36 ✓ | 24/24 ✓ legal | absent ✗ | 80/48 ✗ | 1 · Resources, Help, Legal, Machines ✓ | 1/1 ✓ | Skip to content ✓ | 368 ✓ | 0 ✓ | **NO** |
+| `/privacy` | 60/36 ✓ | 24/24 ✓ legal | absent ✗ | 80/48 ✗ | 1 · Resources, Help, Legal, Machines ✓ | 1/1 ✓ | Skip to content ✓ | 368 ✓ | 0 ✓ | **NO** |
+| `/developers/api` | 60/36 ✓ | 30/24 ✓ | 700/1.92px ✓ | 96/64 ✓ | 1 · Resources, Help, Legal, Machines ✓ | 1/1 ✓ | Skip to content ✓ | 368 ✓ | 0 ✓ | **YES** |
+| `/developers/discovery` | 60/36 ✓ | 30/24 ✓ | 700/1.92px ✓ | 96/64 ✓ | 1 · Resources, Help, Legal, Machines ✓ | 1/1 ✓ | Skip to content ✓ | 368 ✓ | 0 ✓ | **YES** |
+| `/sign-in` | 30/24 ✗ | absent ✗ | 700/1.92px ✓ | 96/64 ✓ | 1 · Resources, Help, Legal, Machines ✓ | 2/1 ✗ | Continue ✗ | 368 ✓ | 0 ✓ | **NO** |
+
+Verdict: **6/10 on canon**.
+
+Orchestrator dispositions:
+
+- `/sign-in` H1: fixed; commit pending: AuthHeading.
+- `/sign-in` identifier autofocus: accepted; benchmark Linear.
+- `/status`: single-section page; section H2 is N/A.
+- `/terms` and `/privacy`: legal rhythm accepted by design. Policy: legal documents use the utility-document rhythm (80/48) and no eyebrow.
 
 #### Contingencies taken
 
@@ -1069,4 +1093,4 @@ No wave may invent a second authority, status model, money formatter, Tool proje
 
 ## 8. Plan status · 2026-09-21
 
-Foundation-reset plan Steps 1–6 are complete for Waves 0, A, B (three rounds), C, D and E. §1 now totals 11 VERIFIED, 22 IN REVIEW, 5 PENDING, 1 PARKED and 9 OWNER rows. Standing DEFAULTS awaiting Joel are the status vendor, economics/legal figures, #47 SSO/SCIM and #48 spend-anomaly alerts. Stuck checks: no file appears in three consecutive wave logs; no row has two REOPENED lines; the gate-constant check fires because the TSX-type, copy-vocabulary, bare-catch and module-boundaries constants were unmoved for at least two waves (status vocabulary moved 28→17 in Wave E).
+Foundation-reset plan Steps 1–6 are complete for Waves 0, A, B (three rounds), C, D and E. §1 now totals 11 VERIFIED, 22 IN REVIEW, 5 PENDING, 1 PARKED and 9 OWNER rows. Standing DEFAULTS awaiting Joel are the status vendor, economics/legal figures, #47 SSO/SCIM and #48 spend-anomaly alerts. Stuck checks: no file appears in three consecutive wave logs; no row has two REOPENED lines; the gate-constant check fires because the TSX-type, copy-vocabulary, bare-catch and module-boundaries constants were unmoved for at least two waves (status vocabulary moved 28→17 in Wave E). Cohesion: 6/10 measured; 9/10 after dispositions (sign-in fixed; status N/A; legal by design) — remaining public-spine deviation: none outstanding.
