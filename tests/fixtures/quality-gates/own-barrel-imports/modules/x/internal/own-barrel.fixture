@@ -1,0 +1,3 @@
+import { publicValue } from '../public'
+
+export const internalValue = publicValue
