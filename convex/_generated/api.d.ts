@@ -207,6 +207,7 @@ import type * as lib_money_ownerFundingMarkUnknown from "../lib/money/ownerFundi
 import type * as lib_money_ownerFundingRead from "../lib/money/ownerFundingRead.js";
 import type * as lib_money_ownerFundingReserve from "../lib/money/ownerFundingReserve.js";
 import type * as lib_moneyLegalCustomer from "../lib/moneyLegalCustomer.js";
+import type * as lib_onboarding_authority from "../lib/onboarding/authority.js";
 import type * as lib_ownerConsequence from "../lib/ownerConsequence.js";
 import type * as lib_providerConnections_agent from "../lib/providerConnections/agent.js";
 import type * as lib_providerConnections_attemptShared from "../lib/providerConnections/attemptShared.js";
@@ -537,6 +538,7 @@ declare const fullApi: ApiFromModules<{
   "lib/money/ownerFundingRead": typeof lib_money_ownerFundingRead;
   "lib/money/ownerFundingReserve": typeof lib_money_ownerFundingReserve;
   "lib/moneyLegalCustomer": typeof lib_moneyLegalCustomer;
+  "lib/onboarding/authority": typeof lib_onboarding_authority;
   "lib/ownerConsequence": typeof lib_ownerConsequence;
   "lib/providerConnections/agent": typeof lib_providerConnections_agent;
   "lib/providerConnections/attemptShared": typeof lib_providerConnections_attemptShared;
