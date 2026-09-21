@@ -38,6 +38,13 @@ export type OwnerOverviewProviderCard = Readonly<{
   description: string
   value: string
 }>
+export const ownerOverviewCopy = {
+  description: 'Review Credit, Calls needing attention, and Agents.',
+  creditUnavailableDescription: 'Nothing was charged.',
+  connectAgent: 'Connect an Agent',
+  reviewSpendingPolicy: 'Review Spending policy',
+  checkAgents: 'Check Agents',
+} as const
 
 export function countLabel(
   count: number,

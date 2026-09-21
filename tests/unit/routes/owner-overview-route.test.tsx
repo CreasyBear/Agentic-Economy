@@ -1,6 +1,6 @@
 /** @vitest-environment jsdom */
 import { createElement } from 'react'
-import { cleanup, render, screen } from '@testing-library/react'
+import { cleanup, render, screen, within } from '@testing-library/react'
 import { RouterContextProvider, createMemoryHistory, createRootRoute, createRoute, createRouter } from '@tanstack/react-router'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import '../../setup/jsdom-platform'
@@ -56,9 +56,12 @@ describe('owner Overview', () => {
     renderOverview(await loadOverview())
 
     expect(screen.getByRole('heading', { name: 'Overview' })).toBeTruthy()
+    expect(screen.getByText('Review Credit, Calls needing attention, and Agents.')).toBeTruthy()
     expect(screen.getByText('A$25.00')).toBeTruthy()
     expect(screen.getByText('At least 1 Call needs attention')).toBeTruthy()
     expect(screen.getByText('2 connected Agents')).toBeTruthy()
+    expect(screen.getByRole('link', { name: 'Review Spending policy' }).getAttribute('href')).toBe('/agent-access')
+    expect(document.querySelectorAll('a.bg-primary')).toHaveLength(1)
     expect(screen.getByRole('link', { name: 'Review Call' }).getAttribute('href')).toBe('/activity')
     expect(screen.queryByText('Provider workspace')).toBeNull()
     expect(screen.getByRole('link', { name: 'Offer a Tool' }).getAttribute('href')).toBe('/owner/operations')
@@ -72,6 +75,8 @@ describe('owner Overview', () => {
     renderOverview(await loadOverview())
 
     expect(screen.getByText('Credit unavailable')).toBeTruthy()
+    expect(screen.getByText('Nothing was charged.')).toBeTruthy()
+    expect(screen.queryByText('A$25.00')).toBeNull()
     expect(screen.getByText('At least 1 Call needs attention')).toBeTruthy()
     expect(screen.getByText('2 connected Agents')).toBeTruthy()
     expect(screen.getByRole('link', { name: 'Review Call' })).toBeTruthy()
@@ -100,7 +105,8 @@ describe('owner Overview', () => {
     reads.calls.mockResolvedValueOnce({ page: [], continueCursor: '', isDone: true })
     reads.agents.mockResolvedValueOnce({ items: [], details: [], nextCursor: 'more' })
     renderOverview(await loadOverview())
-    expect(screen.getByRole('link', { name: 'Check Agents' }).getAttribute('href')).toBe('/agent-access')
+    expect(within(screen.getByRole('region', { name: 'Next step' })).getByRole('link', { name: 'Check Agents' }).getAttribute('href')).toBe('/agent-access')
+    expect(within(screen.getByRole('region', { name: 'Account summary' })).getByRole('link', { name: 'Check Agents' }).getAttribute('href')).toBe('/agent-access')
     expect(screen.queryByRole('link', { name: 'Connect an Agent' })).toBeNull()
   })
 
@@ -111,7 +117,7 @@ describe('owner Overview', () => {
     reads.balance.mockResolvedValueOnce(emptyAccount)
     const first = await loadOverview()
     renderOverview(first)
-    expect(screen.getByRole('link', { name: 'Connect an Agent' }).getAttribute('href')).toBe('/agent-access')
+    expect(within(screen.getByRole('region', { name: 'Account summary' })).getByRole('link', { name: 'Connect an Agent' }).getAttribute('href')).toBe('/agent-access')
     cleanup()
 
     reads.agents.mockResolvedValueOnce({ items: [{ principalRef: 'prn_one', status: 'connected' }], details: [] })

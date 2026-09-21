@@ -9,6 +9,7 @@ import { formatDisplayAmount } from '@/modules/money/public'
 import {
   countLabel,
   nextActionFor,
+  ownerOverviewCopy,
   providerCardFor,
   type OwnerOverviewSnapshot,
 } from '@/modules/principal-account/owner-overview.view-model'
@@ -81,12 +82,19 @@ export function AeOwnerOverview({ snapshot }: AeOwnerOverviewProps) {
   const agentsValue = snapshot.agents.kind === 'available'
     ? countLabel(snapshot.agents.connected, 'connected Agent', 'connected Agents', snapshot.agents.complete)
     : 'Agents unavailable'
+  const agentsAction = snapshot.agents.kind === 'available'
+    ? snapshot.agents.connected > 0
+      ? { label: ownerOverviewCopy.reviewSpendingPolicy, href: '/agent-access' }
+      : snapshot.agents.complete
+        ? { label: ownerOverviewCopy.connectAgent, href: '/agent-access' }
+        : { label: ownerOverviewCopy.checkAgents, href: '/agent-access' }
+    : { label: ownerOverviewCopy.checkAgents, href: '/agent-access' }
 
   return (
     <AeOperatorPage
       operatorRole="owner"
       title="Overview"
-      description="See what needs attention, your available Credit, and connected Agents."
+      description={ownerOverviewCopy.description}
       currentPath="/owner"
     >
       <div className="grid gap-section pb-page">
@@ -99,9 +107,11 @@ export function AeOwnerOverview({ snapshot }: AeOwnerOverviewProps) {
           <OverviewFactRow
             title="Available Credit"
             description={
-              snapshot.balance.kind === 'available' && snapshot.balance.locked
-                ? 'Credit is recorded, but spending is temporarily locked.'
-                : 'AUD credit available for authorized Agent Calls.'
+              snapshot.balance.kind === 'unavailable'
+                ? ownerOverviewCopy.creditUnavailableDescription
+                : snapshot.balance.locked
+                  ? 'Credit is recorded, but spending is temporarily locked.'
+                  : 'AUD credit available for authorized Agent Calls.'
             }
             value={balanceValue}
             action={{ label: 'Open Credit', href: '/owner/credit' }}
@@ -116,7 +126,7 @@ export function AeOwnerOverview({ snapshot }: AeOwnerOverviewProps) {
             title="Agents"
             description="See connected Agents and review their access."
             value={agentsValue}
-            action={{ label: 'Open Agents', href: '/agent-access' }}
+            action={agentsAction}
           />
           {providerCard === undefined ? null : (
             <OverviewFactRow
