@@ -19,9 +19,9 @@ export const adminReadbackRowStateLabels = {
   suppressed: 'Suppressed',
 } satisfies Record<AdminReadbackRow['rowState'], string>
 
-export const adminReadbackRepairLabels = {
-  inspect_audit: 'Inspect audit',
-  regenerate_projection: 'Regenerate projection',
-  source_auth_required: 'Source auth required',
-  no_repair_available: 'No repair available',
+export const adminReadbackRepairNextSteps = {
+  inspect_audit: 'Inspect the audit record',
+  regenerate_projection: 'Regenerate the projection',
+  source_auth_required: 'Restore source authorization',
+  no_repair_available: 'No repair is available',
 } satisfies Record<AdminReadbackRepairAction, string>

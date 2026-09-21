@@ -7,7 +7,7 @@ import { AeEmptyState } from '@/components/ae/feedback/AeEmptyState'
 import { AeSection } from '@/components/ae/layout/AeSection'
 import { AeOperatorDataTable, AeOperatorSortableHeader } from '@/components/ae/operator/AeOperatorDataTable'
 import {
-  adminReadbackRepairLabels,
+  adminReadbackRepairNextSteps,
   adminReadbackRowStateLabels,
   adminReadbackSurfaceLabels,
 } from '@/components/ae/readback/admin-readback.contracts'
@@ -128,10 +128,10 @@ function useAdminReadbackColumns(surface: AdminReadbackSurface): ColumnDef<Admin
       },
       {
         id: 'repair',
-        accessorFn: (row) => adminReadbackRepairLabels[row.repairAction],
-        header: 'Repair',
+        accessorFn: (row) => adminReadbackRepairNextSteps[row.repairAction],
+        header: 'Next step',
         cell: ({ row }) => (
-          <Badge variant="outline">{adminReadbackRepairLabels[row.original.repairAction]}</Badge>
+          <Badge variant="outline">{adminReadbackRepairNextSteps[row.original.repairAction]}</Badge>
         ),
       },
       {
