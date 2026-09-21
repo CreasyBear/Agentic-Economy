@@ -67,11 +67,11 @@ describe('owner Overview', () => {
     expect(nextStep.compareDocumentPosition(summary) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
   })
 
-  it('preserves known Calls and Agents when the Balance read fails', async () => {
+  it('preserves known Calls and Agents when the Credit read fails', async () => {
     reads.balance.mockRejectedValueOnce(new Error('balance unavailable'))
     renderOverview(await loadOverview())
 
-    expect(screen.getByText('Balance unavailable')).toBeTruthy()
+    expect(screen.getByText('Credit unavailable')).toBeTruthy()
     expect(screen.getByText('At least 1 Call needs attention')).toBeTruthy()
     expect(screen.getByText('2 connected Agents')).toBeTruthy()
     expect(screen.getByRole('link', { name: 'Review Call' })).toBeTruthy()
@@ -124,7 +124,7 @@ describe('owner Overview', () => {
     reads.balance.mockResolvedValueOnce(availableBalance)
     const ready = await loadOverview()
     renderOverview(ready)
-    expect(screen.getByRole('link', { name: 'Explore Market' }).getAttribute('href')).toBe('/owner/market')
+    expect(screen.getByRole('link', { name: 'Explore Market' }).getAttribute('href')).toBe('/market')
   })
 
   it('shows Provider status only when the existing Provider projection says it applies', async () => {

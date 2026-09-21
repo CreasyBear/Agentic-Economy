@@ -69,7 +69,7 @@ describe('public funding return', () => {
 
     expect(await screen.findByRole('heading', { name: 'Account credit added' })).toBeTruthy()
     expect(screen.getByText(/Return to Research Agent/u)).toBeTruthy()
-    expect(screen.getByRole('link', { name: 'Open Balance' })).toBeTruthy()
+    expect(screen.getByRole('link', { name: 'Open Credit' })).toBeTruthy()
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2))
     expect(fetchMock.mock.calls.map(([url]) => url)).toEqual([
       '/api/v1/account/funding-sessions/public/cs_agent_one',
@@ -123,7 +123,7 @@ describe('public funding return', () => {
     renderFundingReturn()
 
     expect(await screen.findByRole('heading', { name: title })).toBeTruthy()
-    expect(screen.getByRole('link', { name: 'Open Balance' })).toBeTruthy()
+    expect(screen.getByRole('link', { name: 'Open Credit' })).toBeTruthy()
     expect(screen.queryByRole('button', { name: /Check/u })).toBeNull()
   })
 

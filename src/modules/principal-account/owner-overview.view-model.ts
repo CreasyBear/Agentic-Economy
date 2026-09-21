@@ -86,7 +86,7 @@ export function nextActionFor(snapshot: OwnerOverviewSnapshot): OwnerOverviewNex
   }
   if (snapshot.balance.kind === 'unavailable' || snapshot.balance.locked) {
     return {
-      label: 'Check Balance',
+      label: 'Check Credit',
       description: 'Confirm available credit before asking your Agent to make a Call.',
       href: '/owner/credit',
     }
@@ -94,14 +94,14 @@ export function nextActionFor(snapshot: OwnerOverviewSnapshot): OwnerOverviewNex
   if (snapshot.balance.amount.units === '0') {
     return {
       label: 'Add credit',
-      description: 'Fund the AUD Balance your connected Agent can use within its spending policy.',
+      description: 'Fund the AUD Credit your connected Agent can use within its Spending policy.',
       href: '/owner/credit#fund',
     }
   }
   return {
     label: 'Explore Market',
     description: 'Describe the service you need, inspect a Tool, then continue with your Agent.',
-    href: '/owner/market',
+    href: '/market',
   }
 }
 

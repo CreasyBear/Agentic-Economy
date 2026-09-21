@@ -46,7 +46,7 @@ const COPY_CEILINGS: Record<CopyRuleId, number> = {
   'one-call-away': 1,
   'connection-online': 0,
   'authority-mode': 1,
-  balance: 17,
+  balance: 8,
 }
 
 const COPY_CEILING_MARGIN = 2

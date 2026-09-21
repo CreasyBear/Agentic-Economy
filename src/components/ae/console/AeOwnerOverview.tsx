@@ -72,7 +72,7 @@ function ProviderSetupEntry({ provider }: Readonly<{ provider: OwnerOverviewSnap
 export function AeOwnerOverview({ snapshot }: AeOwnerOverviewProps) {
   const next = nextActionFor(snapshot)
   const providerCard = providerCardFor(snapshot.provider)
-  const balanceValue = snapshot.balance.kind === 'available' ? formatDisplayAmount(snapshot.balance.amount) : 'Balance unavailable'
+  const balanceValue = snapshot.balance.kind === 'available' ? formatDisplayAmount(snapshot.balance.amount) : 'Credit unavailable'
   const callsValue = snapshot.calls.kind === 'available'
     ? snapshot.calls.attention === 0
       ? snapshot.calls.complete ? 'No Calls need attention' : 'No attention in recent Calls'
@@ -86,7 +86,7 @@ export function AeOwnerOverview({ snapshot }: AeOwnerOverviewProps) {
     <AeOperatorPage
       operatorRole="owner"
       title="Overview"
-      description="See what needs attention, your available Balance, and connected Agents."
+      description="See what needs attention, your available Credit, and connected Agents."
       currentPath="/owner"
     >
       <div className="grid gap-section pb-page">
@@ -97,14 +97,14 @@ export function AeOwnerOverview({ snapshot }: AeOwnerOverviewProps) {
         </AeSection>
         <section aria-label="Account summary" className="border-y border-border">
           <OverviewFactRow
-            title="Available Balance"
+            title="Available Credit"
             description={
               snapshot.balance.kind === 'available' && snapshot.balance.locked
                 ? 'Credit is recorded, but spending is temporarily locked.'
                 : 'AUD credit available for authorized Agent Calls.'
             }
             value={balanceValue}
-            action={{ label: 'Open Balance', href: '/owner/credit' }}
+            action={{ label: 'Open Credit', href: '/owner/credit' }}
           />
           <OverviewFactRow
             title="Calls"

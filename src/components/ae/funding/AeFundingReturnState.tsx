@@ -14,7 +14,7 @@ export type AeFundingReturnStateProps = Readonly<{
 
 const OPEN_BALANCE_ACTION = (
   <Link to="/owner/credit" className={cn(buttonVariants(), 'min-h-touch')}>
-    Open Balance
+    Open Credit
   </Link>
 )
 

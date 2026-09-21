@@ -81,7 +81,7 @@ export const COMMAND_NAVIGATION_ITEMS: readonly CommandNavigationItem[] = [
   },
   {
     href: '/owner/credit',
-    label: 'Balance & Credit',
+    label: 'Credit',
     keywords: ['credit', 'balance', 'billing', 'top up', 'funds', 'money'],
     icon: CreditCard,
   },
