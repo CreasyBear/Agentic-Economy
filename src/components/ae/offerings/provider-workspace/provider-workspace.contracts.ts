@@ -1,5 +1,6 @@
 import type { SortingState } from '@tanstack/react-table'
 import type { ReactNode } from 'react'
+import type { AeTone } from '@/lib/ui/status-presentation'
 
 import type {
   ProviderWorkspaceInventoryResult,
@@ -12,14 +13,37 @@ import type {
 import type { ProviderWorkspaceProjectionRow } from '@/components/ae/offerings/provider-workspace-projection'
 
 export const PROVIDER_WORKSPACE_EARNINGS_COPY = {
-  connected: 'Stripe account connected',
   connectionTitle: 'Stripe payout connection',
-  loading: 'Loading Stripe connection',
-  notConnected: 'Stripe account not connected',
-  reviewAction: 'Review connection',
+  connectAction: 'Connect Stripe',
+  connectedSentence: 'Stripe is connected for payouts.',
+  disconnectedSentence: 'Connect Stripe to receive payouts.',
+  unavailableSentence: 'Stripe connection status could not be loaded.',
   retryAction: 'Try connection again',
   unavailable: 'Stripe connection state unavailable',
 } as const
+
+export type ProviderWorkspacePayoutConnectionState =
+  | 'not_connected'
+  | 'pending'
+  | 'connected'
+  | 'unavailable'
+
+export type ProviderWorkspacePayoutConnectionPresentation = Readonly<{
+  state: ProviderWorkspacePayoutConnectionState
+  label: string
+  sentence: string
+  tone: AeTone
+  action?: string
+}>
+
+export type ProviderWorkspaceEarningsSectionProps = Readonly<{
+  payoutConnection: ProviderWorkspacePayoutConnectionPresentation
+  earningsOpen: boolean
+  earningsPending: boolean
+  earningsDetailAvailable: boolean
+  onOpenEarnings: () => void
+  onRetryEarnings: () => void
+}>
 
 export type AeProviderWorkspaceProps = Readonly<{
   inventory: ProviderWorkspaceInventoryResult

@@ -1,51 +1,50 @@
 import { AeSection } from '@/components/ae/layout/AeSection'
-import { Alert, AlertTitle } from '@/components/ui/alert'
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
-import type { OwnerConnectReadinessReadback } from '@/modules/money/server'
-import { DeferredSection, SecondarySummary, SummaryCard, UnavailableSummary } from './ProviderWorkspaceSharedUi'
-import type { ProviderWorkspacePayoutResult } from './provider-workspace.functions'
-import { PROVIDER_WORKSPACE_EARNINGS_COPY } from './provider-workspace/provider-workspace.contracts'
+import { aeStatusToneVariants } from '@/lib/ui/status-presentation'
+import { UnavailableSummary } from './ProviderWorkspaceSharedUi'
+import {
+  PROVIDER_WORKSPACE_EARNINGS_COPY,
+  type ProviderWorkspaceEarningsSectionProps,
+} from './provider-workspace/provider-workspace.contracts'
 
 export function ProviderWorkspaceEarningsSection({
-  payouts,
+  payoutConnection,
   earningsOpen,
   earningsPending,
-  earningsDetail,
+  earningsDetailAvailable,
   onOpenEarnings,
   onRetryEarnings,
-}: Readonly<{
-  payouts?: Promise<ProviderWorkspacePayoutResult>
-  earningsOpen: boolean
-  earningsPending: boolean
-  earningsDetail?: Readonly<{ connect: OwnerConnectReadinessReadback }>
-  onOpenEarnings: () => void
-  onRetryEarnings: () => void
-}>) {
-  const connectionDetail = earningsDetail?.connect.kind === 'available'
-    ? earningsDetail.connect.accounts.some(({ account }) => account.state === 'ready')
-      ? PROVIDER_WORKSPACE_EARNINGS_COPY.connected
-      : PROVIDER_WORKSPACE_EARNINGS_COPY.notConnected
-    : earningsDetail?.connect.kind === 'not_found'
-      ? PROVIDER_WORKSPACE_EARNINGS_COPY.notConnected
-      : PROVIDER_WORKSPACE_EARNINGS_COPY.unavailable
+}: ProviderWorkspaceEarningsSectionProps) {
   return (
     <AeSection id="earnings" title="Earnings" description={PROVIDER_WORKSPACE_EARNINGS_COPY.connectionTitle}>
-      <DeferredSection promise={payouts} loadingLabel={PROVIDER_WORKSPACE_EARNINGS_COPY.loading} unavailableTitle={PROVIDER_WORKSPACE_EARNINGS_COPY.unavailable}>
-        {(result) => result.kind === 'available' ? (
-          <SummaryCard
-            title={PROVIDER_WORKSPACE_EARNINGS_COPY.connectionTitle}
-            detail={result.value.readyAccounts > 0 ? PROVIDER_WORKSPACE_EARNINGS_COPY.connected : PROVIDER_WORKSPACE_EARNINGS_COPY.notConnected}
-            action={PROVIDER_WORKSPACE_EARNINGS_COPY.reviewAction}
-            onAction={onOpenEarnings}
-          />
-        ) : <SecondarySummary result={result} subject={PROVIDER_WORKSPACE_EARNINGS_COPY.connectionTitle} notApplicableTitle={PROVIDER_WORKSPACE_EARNINGS_COPY.notConnected} unavailableTitle={PROVIDER_WORKSPACE_EARNINGS_COPY.unavailable} />}
-      </DeferredSection>
+      <div className="grid gap-related rounded-card border border-border p-related">
+        <div className="grid gap-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <h3 className="font-medium">{PROVIDER_WORKSPACE_EARNINGS_COPY.connectionTitle}</h3>
+            <Badge variant={aeStatusToneVariants[payoutConnection.tone]}>{payoutConnection.label}</Badge>
+          </div>
+          <p className="text-sm text-muted-foreground">{payoutConnection.sentence}</p>
+        </div>
+        {payoutConnection.action === undefined ? null : (
+          <Button type="button" variant="secondary" className="justify-self-start min-h-touch" onClick={onOpenEarnings}>
+            {payoutConnection.action}
+          </Button>
+        )}
+      </div>
       {earningsOpen
         ? earningsPending
           ? <div aria-busy="true"><Skeleton className="h-24 w-full" /></div>
-          : earningsDetail === undefined
+          : !earningsDetailAvailable
             ? <UnavailableSummary title={PROVIDER_WORKSPACE_EARNINGS_COPY.unavailable} retryLabel={PROVIDER_WORKSPACE_EARNINGS_COPY.retryAction} onRetry={onRetryEarnings} />
-            : <Alert><AlertTitle>{connectionDetail}</AlertTitle></Alert>
+            : (
+                <Alert>
+                  <AlertTitle>{payoutConnection.label}</AlertTitle>
+                  <AlertDescription>{payoutConnection.sentence}</AlertDescription>
+                </Alert>
+              )
         : null}
     </AeSection>
   )

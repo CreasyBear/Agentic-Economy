@@ -138,6 +138,6 @@ describe('useProviderWorkspaceInventory', () => {
     })
 
     await waitFor(() => expect(mocks.capture).toHaveBeenCalled())
-    expect(result.current.payoutSummaryReady).toBe(false)
+    expect(result.current.payoutConnection.state).toBe('unavailable')
   })
 })

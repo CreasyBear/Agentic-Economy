@@ -61,7 +61,6 @@ function AvailableWorkspaceBody({
   sheets: ReturnType<typeof useProviderWorkspaceSheets>
 }>) {
   const location = useLocation()
-  const payoutsConfiguredForWizard = sheets.connectPayoutsReady || inventoryHook.payoutSummaryReady
 
   const renderList = (rows: readonly ProviderWorkspaceProjectionRow[]) => (
     <AeOwnerOfferingsList
@@ -94,9 +93,9 @@ function AvailableWorkspaceBody({
       {inventory.tools.length === 0 && (
         <div className="mb-2">
           <AeSupplierOnboardingWizard
-            currentStep={payoutsConfiguredForWizard ? 'first_tool' : 'payouts'}
+            currentStep={inventoryHook.payoutConnection.state === 'connected' ? 'first_tool' : 'payouts'}
             providerName={inventory.provider.name}
-            payoutsConfigured={payoutsConfiguredForWizard}
+            payoutConnection={inventoryHook.payoutConnection}
             onConnectPayouts={() => {
               sheets.openEarnings()
             }}
@@ -121,10 +120,10 @@ function AvailableWorkspaceBody({
         onRetryConnections={sheets.loadConnections}
       />
       <ProviderWorkspaceEarningsSection
-        {...(payouts === undefined ? {} : { payouts })}
+        payoutConnection={inventoryHook.payoutConnection}
         earningsOpen={sheets.earningsOpen}
         earningsPending={sheets.earningsPending}
-        {...(sheets.earningsDetail === undefined ? {} : { earningsDetail: sheets.earningsDetail })}
+        earningsDetailAvailable={sheets.earningsDetail !== undefined}
         onOpenEarnings={sheets.openEarnings}
         onRetryEarnings={sheets.loadEarnings}
       />

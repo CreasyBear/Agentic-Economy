@@ -6,6 +6,7 @@ import {
 import type { FormEvent } from 'react'
 
 import type { Rule4Diagnostic } from '@/lib/ui/diagnostic'
+import type { ProviderWorkspacePayoutConnectionPresentation } from '@/components/ae/offerings/provider-workspace/provider-workspace.contracts'
 import type {
   SupplierOnboardingProfile,
   SupplierOnboardingSaveResult,
@@ -15,7 +16,7 @@ import type {
 export type AeSupplierOnboardingWizardProps = Readonly<{
   currentStep?: SupplierOnboardingStep
   providerName?: string
-  payoutsConfigured?: boolean
+  payoutConnection?: ProviderWorkspacePayoutConnectionPresentation
   onSaveProfile?: (profile: SupplierOnboardingProfile) => Promise<SupplierOnboardingSaveResult>
   onConnectPayouts?: () => void | Promise<void>
 }>
@@ -25,10 +26,6 @@ export const TACTILE =
 export const SHELL = 'min-h-[28rem]'
 export const SLOT = 'min-h-[3rem]'
 export const ABN_INPUT_CLASS = 'text-sm font-mono tabular-nums'
-export const PAYOUT_CONNECTION_STATUS_COPY = {
-  connected: 'Stripe account connected.',
-  notConnected: 'Stripe account not connected.',
-} as const
 
 export const STEP_META: ReadonlyArray<{
   id: SupplierOnboardingStep
@@ -44,7 +41,7 @@ export const STEP_META: ReadonlyArray<{
 export type SupplierOnboardingWizardPorts = Readonly<{
   currentStep?: SupplierOnboardingStep
   providerName?: string
-  payoutsConfigured?: boolean
+  payoutConnection?: ProviderWorkspacePayoutConnectionPresentation
   onSaveProfile?: (profile: SupplierOnboardingProfile) => Promise<SupplierOnboardingSaveResult>
   onConnectPayouts?: () => void | Promise<void>
 }>
@@ -56,7 +53,7 @@ export type SupplierOnboardingWizardViewState = Readonly<{
   abn: string
   diagnostic: Rule4Diagnostic | undefined
   pending: boolean
-  payoutsConfigured: boolean
+  payoutConnection: ProviderWorkspacePayoutConnectionPresentation
 }>
 
 export type OnboardingStepperProps = Readonly<{
@@ -78,7 +75,7 @@ export type ProviderIdentityFieldsProps = Readonly<{
 }>
 
 export type PayoutsStepProps = Readonly<{
-  payoutsConfigured: boolean
+  payoutConnection: ProviderWorkspacePayoutConnectionPresentation
   onConnectPayouts: () => void
   onSkipForNow: () => void
 }>

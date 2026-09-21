@@ -4,10 +4,11 @@ import { toast } from '@/lib/ui/toast'
 import type { Rule4Diagnostic } from '@/lib/ui/diagnostic'
 import { formatAbnDisplay, normalizeAbn } from '@/modules/money/public'
 import type { SupplierOnboardingStep } from '@/modules/capability-supply/supplier-onboarding.contracts'
+import { providerWorkspacePayoutConnection } from '@/components/ae/offerings/provider-workspace/provider-workspace.view-model'
 
-import type {
-  SupplierOnboardingWizardPorts,
-  SupplierOnboardingWizardViewState,
+import {
+  type SupplierOnboardingWizardPorts,
+  type SupplierOnboardingWizardViewState,
 } from './supplier-onboarding-wizard.contracts'
 import {
   diagnosticForProfileValidation,
@@ -18,10 +19,14 @@ import {
 export function useSupplierOnboardingWizard({
   currentStep = 'profile',
   providerName,
-  payoutsConfigured = false,
+  payoutConnection,
   onSaveProfile,
   onConnectPayouts,
 }: SupplierOnboardingWizardPorts) {
+  const resolvedPayoutConnection = payoutConnection ?? providerWorkspacePayoutConnection({
+    result: { kind: 'not_applicable' },
+    pending: false,
+  })
   const [step, setStep] = useState<SupplierOnboardingStep>(currentStep)
   const [name, setName] = useState(providerName ?? '')
   const [website, setWebsite] = useState('')
@@ -51,7 +56,7 @@ export function useSupplierOnboardingWizard({
 
   const isCompleted = (stepId: SupplierOnboardingStep): boolean => {
     if (stepId === 'profile') return profileCompleted
-    if (stepId === 'payouts') return payoutsConfigured
+    if (stepId === 'payouts') return resolvedPayoutConnection.state === 'connected'
     return false
   }
 
@@ -139,7 +144,7 @@ export function useSupplierOnboardingWizard({
     abn,
     diagnostic,
     pending,
-    payoutsConfigured,
+    payoutConnection: resolvedPayoutConnection,
   }
 
   return {

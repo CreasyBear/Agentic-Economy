@@ -17,13 +17,13 @@ export type { AeSupplierOnboardingWizardProps } from './supplier-onboarding-wiza
 export function AeSupplierOnboardingWizard({
   currentStep = 'profile',
   providerName,
-  payoutsConfigured = false,
+  payoutConnection,
   onSaveProfile,
   onConnectPayouts,
 }: AeSupplierOnboardingWizardProps) {
   const wizard = useSupplierOnboardingWizard({
     currentStep,
-    payoutsConfigured,
+    ...(payoutConnection !== undefined ? { payoutConnection } : {}),
     ...(providerName !== undefined ? { providerName } : {}),
     ...(onSaveProfile !== undefined ? { onSaveProfile } : {}),
     ...(onConnectPayouts !== undefined ? { onConnectPayouts } : {}),
@@ -80,7 +80,7 @@ export function AeSupplierOnboardingWizard({
 
       {view.step === 'payouts' && (
         <PayoutsStep
-          payoutsConfigured={view.payoutsConfigured}
+          payoutConnection={view.payoutConnection}
           onConnectPayouts={wizard.handleConnectPayouts}
           onSkipForNow={wizard.handleSkipForNow}
         />

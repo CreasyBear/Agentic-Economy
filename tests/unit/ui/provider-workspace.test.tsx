@@ -1,5 +1,5 @@
 /** @vitest-environment jsdom */
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import '../../setup/jsdom-platform'
@@ -61,14 +61,29 @@ afterEach(() => {
 })
 
 describe('Tools management disclosure', () => {
-  it('shows one Add Tool primary and honest disconnected payout state', async () => {
-    render(<AeProviderWorkspace inventory={inventory} lifecycle={unavailable} connections={unavailable} payouts={unavailable} publicStatus={unavailable} />)
+  it('uses one disconnected payout presentation in setup and Earnings', async () => {
+    render(<AeProviderWorkspace
+      inventory={inventory}
+      lifecycle={unavailable}
+      connections={unavailable}
+      payouts={Promise.resolve({ kind: 'available', value: { currencies: [], earningsAccounts: 0, payoutAccounts: 0, readyAccounts: 0, needsAttention: 0 } })}
+      publicStatus={unavailable}
+    />)
 
     await screen.findByText('Add a source, then choose a Tool to publish.')
     const addTool = screen.getAllByRole('link', { name: 'Add Tool' })
     expect(addTool).toHaveLength(1)
     expect(addTool[0]?.getAttribute('href')).toBe('/owner/operations/new')
-    expect(screen.getByText('Stripe account not connected.')).toBeTruthy()
+
+    const setup = screen.getByRole('heading', { name: 'Provider setup' }).parentElement?.parentElement
+    const earnings = screen.getByRole('heading', { name: 'Earnings' }).closest('section')
+    expect(setup).not.toBeNull()
+    expect(earnings).not.toBeNull()
+    expect(within(setup as HTMLElement).getByText('Billing action required')).toBeTruthy()
+    expect(within(earnings as HTMLElement).getByText('Billing action required')).toBeTruthy()
+    expect(screen.getAllByText('Connect Stripe to receive payouts.')).toHaveLength(2)
+    expect(screen.getAllByRole('button', { name: 'Connect Stripe' })).toHaveLength(2)
+    expect(screen.queryByText(/nothing is required here/u)).toBeNull()
     expect(screen.queryByText(/monthly settlements/u)).toBeNull()
   })
 
@@ -97,10 +112,10 @@ describe('Tools management disclosure', () => {
     await waitFor(() => expect(calls.connections).toHaveBeenCalledTimes(1))
     expect(await screen.findByTestId('connection-controls')).toBeTruthy()
 
-    fireEvent.click(screen.getByRole('button', { name: 'Review connection' }))
+    fireEvent.click(within(earningsHeading.closest('section') as HTMLElement).getByRole('button', { name: 'Connect Stripe' }))
     await waitFor(() => expect(calls.earnings).toHaveBeenCalledTimes(1))
     expect(calls.connect).toHaveBeenCalledTimes(1)
-    expect(await screen.findByText('Stripe account not connected', { selector: '[data-slot="alert-title"]' })).toBeTruthy()
+    expect(await screen.findByText('Billing action required', { selector: '[data-slot="alert-title"]' })).toBeTruthy()
   })
 
   it('keeps controls absent on a business mismatch', async () => {
@@ -123,7 +138,7 @@ describe('Tools management disclosure', () => {
 
     expect(await screen.findByText('Connections ownership conflict')).toBeTruthy()
     expect(screen.getAllByText('Public status ownership conflict').length).toBeGreaterThan(0)
-    expect(screen.getByRole('heading', { name: 'Stripe account not connected' })).toBeTruthy()
+    expect(screen.getAllByText('Billing action required').length).toBeGreaterThan(0)
     expect(screen.queryByText('Earnings unavailable')).toBeNull()
   })
 
@@ -188,7 +203,7 @@ describe('Tools management disclosure', () => {
 
     await waitFor(() => expect(calls.earnings).toHaveBeenCalledTimes(1))
     expect(calls.connect).toHaveBeenCalledTimes(1)
-    expect(await screen.findByText('Stripe account not connected', { selector: '[data-slot="alert-title"]' })).toBeTruthy()
+    expect(await screen.findByText('Billing action required', { selector: '[data-slot="alert-title"]' })).toBeTruthy()
   })
 
   it('opens provider connections and carries the exact x402 source handoff from the CTA', async () => {
@@ -215,11 +230,12 @@ describe('Tools management disclosure', () => {
     calls.connect.mockResolvedValue({ kind: 'not_found' })
     render(<AeProviderWorkspace inventory={inventory} lifecycle={unavailable} connections={unavailable} payouts={Promise.resolve({ kind: 'available', value: { currencies: [], earningsAccounts: 0, payoutAccounts: 0, readyAccounts: 0, needsAttention: 0 } })} publicStatus={unavailable} />)
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Review connection' }))
+    const earningsSection = screen.getByRole('heading', { name: 'Earnings' }).closest('section')
+    fireEvent.click(within(earningsSection as HTMLElement).getByRole('button', { name: 'Connect Stripe' }))
     expect(await screen.findByText('Stripe connection state unavailable')).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Try connection again' }))
 
-    expect(await screen.findByText('Stripe account not connected', { selector: '[data-slot="alert-title"]' })).toBeTruthy()
+    expect(await screen.findByText('Billing action required', { selector: '[data-slot="alert-title"]' })).toBeTruthy()
     expect(calls.earnings).toHaveBeenCalledTimes(2)
     expect(calls.connect).toHaveBeenCalledTimes(2)
   })
