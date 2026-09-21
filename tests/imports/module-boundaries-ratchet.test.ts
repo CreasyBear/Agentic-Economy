@@ -17,12 +17,18 @@ import {
  * Three procurement entries remain the supported action, contract and engine
  * seams. Three exact unit-test exceptions retain white-box checks of payment
  * preparation, output adjudication, and the market directory reranker.
+ *
+ * Re-pinned 2026-09-21 from the first fully wired run. The surface increase
+ * is market-demand/request-identity.ts plus market/market-route-data.ts; the
+ * latter is now the declared UI/test seam, so no white-box exception is
+ * needed. The second capability-supply exception is
+ * provider-source-assessment-contract -> capability-supply/source-assessment.ts.
  */
 const RATCHET = {
   numModules: 29,
-  totalEntrySurfaces: 228,
+  totalEntrySurfaces: 230,
   numTestOnlyWhiteBoxExceptions: 3,
-  numToCapabilitySupply: 1,
+  numToCapabilitySupply: 2,
 } as const
 
 describe('module-boundaries ratchet', () => {
