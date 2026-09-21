@@ -208,7 +208,7 @@ function RootOperatorPage(props: AeOperatorPageProps) {
         id={resolvedMainContentId}
         tabIndex={-1}
         data-testid="operator-content"
-        className="ae-rail flex min-h-0 flex-1 flex-col pb-[calc(4.5rem+env(safe-area-inset-bottom,0px))] focus:outline-none md:pb-related"
+        className="ae-rail flex min-h-0 flex-1 flex-col pb-[calc(var(--ae-mobile-nav-height)+env(safe-area-inset-bottom,0px))] focus:outline-none md:pb-related"
       >
         {mobileTrigger === null && breadcrumbs.length === 0 ? null : (
           <div className="flex min-h-touch shrink-0 items-center gap-related px-gutter pt-intra">

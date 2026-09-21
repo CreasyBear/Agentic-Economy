@@ -385,11 +385,13 @@ describe('owner mobile navigation', () => {
     expect(mobileNav.classList.contains('md:hidden')).toBe(true)
     expect(mobileNav.classList.contains('pb-[env(safe-area-inset-bottom,0px)]')).toBe(true)
     expect(
-      mobileNav.classList.contains('h-[calc(3.5rem+env(safe-area-inset-bottom,0px))]'),
+      mobileNav.classList.contains(
+        'h-[calc(var(--ae-mobile-nav-height)+env(safe-area-inset-bottom,0px))]',
+      ),
     ).toBe(true)
     expect(
       content.classList.contains(
-        'pb-[calc(4.5rem+env(safe-area-inset-bottom,0px))]',
+        'pb-[calc(var(--ae-mobile-nav-height)+env(safe-area-inset-bottom,0px))]',
       ),
     ).toBe(true)
     expect(content.classList.contains('md:pb-related')).toBe(true)

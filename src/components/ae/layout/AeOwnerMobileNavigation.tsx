@@ -98,7 +98,7 @@ export function AeOwnerMobileNavigation({ operatorContext, currentPath }: AeOwne
   return (
     <nav
       aria-label="Owner primary navigation"
-      className="fixed inset-x-0 bottom-0 z-20 h-[calc(3.5rem+env(safe-area-inset-bottom,0px))] border-t border-border bg-background/95 pb-[env(safe-area-inset-bottom,0px)] backdrop-blur supports-[backdrop-filter]:bg-background/85 md:hidden"
+      className="fixed inset-x-0 bottom-0 z-20 h-[calc(var(--ae-mobile-nav-height)+env(safe-area-inset-bottom,0px))] border-t border-border bg-background/95 pb-[env(safe-area-inset-bottom,0px)] backdrop-blur supports-[backdrop-filter]:bg-background/85 md:hidden"
     >
       <div className="grid h-14 grid-cols-4 px-gutter">
         {items.map((item) => {

@@ -264,6 +264,8 @@
   --ae-touch: 44px;
   /* Measured sticky public header (pt-3 + nav pill). */
   --ae-nav-stack: 56px;
+  /* Measured fixed owner navigation, excluding the device safe area. */
+  --ae-mobile-nav-height: 56px;
   --ae-fold-peek: 48px;
   --ae-anchor: calc(var(--ae-nav-stack) + 16px);
   --ae-fold: calc(100svh - var(--ae-nav-stack));
