@@ -2,7 +2,7 @@
  * @vitest-environment jsdom
  */
 import { createElement } from 'react'
-import { cleanup, render, screen, within } from '@testing-library/react'
+import { cleanup, render, screen } from '@testing-library/react'
 import type { ComponentType, ReactNode } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import '../../setup/jsdom-platform'
@@ -36,9 +36,6 @@ vi.mock('@/components/ae/layout/AeOperatorPage', () => ({
   ),
 }))
 
-vi.mock('@/components/ae/website/clerk-appearance', () => ({
-  clerkAppearance: { cssLayerName: 'clerk' },
-}))
 
 vi.mock('@/components/ae/settings/AeTeamDirectoryTable', () => ({
   AeTeamDirectoryTable: (props: { directory?: unknown }) => (
@@ -53,26 +50,6 @@ vi.mock('convex/react', () => ({
   useQuery: () => undefined,
 }))
 
-vi.mock('@clerk/tanstack-react-start', () => {
-  const OrganizationProfilePage = ({ label }: { label: string }) => {
-    return <div data-testid={`organization-profile-page-${label}`} data-label={label} />
-  }
-  const OrganizationProfile = (props: Record<string, unknown>) => {
-    return (
-      <div
-        data-testid="organization-profile"
-        data-routing={String(props.routing ?? '')}
-        data-after-leave={String(props.afterLeaveOrganizationUrl ?? '')}
-      >
-        {props.children as ReactNode}
-      </div>
-    )
-  }
-  OrganizationProfile.Page = OrganizationProfilePage
-  return {
-    OrganizationProfile,
-  }
-})
 
 import { Route } from '@/routes/_operator/owner.team'
 
@@ -97,31 +74,19 @@ describe('/owner/team route (W-15)', () => {
     expect(nav).toEqual({ label: 'Team' })
   })
 
-  it('U3: renders OrganizationProfile with hash routing and afterLeaveOrganizationUrl', () => {
-    renderTeamRoute()
-    const profile = screen.getByTestId('organization-profile')
-    expect(profile.getAttribute('data-routing')).toBe('hash')
-    expect(profile.getAttribute('data-after-leave')).toBe('/owner')
-  })
-
-  it('U4: OrganizationProfile.Page child has label members', () => {
-    renderTeamRoute()
-    const page = screen.getByTestId('organization-profile-page-members')
-    expect(page).toBeTruthy()
-    expect(page.getAttribute('data-label')).toBe('members')
-  })
 
   it('U5: renders AeTeamDirectoryTable', () => {
     renderTeamRoute()
     expect(screen.getByTestId('team-directory-table')).toBeTruthy()
   })
 
-  it('U6: contains no hand-rolled invite, role, or remove controls', () => {
+  it('U6: contains no duplicate membership or hand-rolled membership controls', () => {
     renderTeamRoute()
+    expect(screen.queryByTestId('organization-profile')).toBeNull()
     expect(screen.queryByRole('textbox')).toBeNull()
     expect(screen.queryByRole('button', { name: /invite/i })).toBeNull()
     expect(screen.queryByRole('combobox')).toBeNull()
-    expect(screen.queryByRole('button', { name: /remove/i })).toBeNull()
+    expect(screen.queryByRole('button', { name: /remove|change role/i })).toBeNull()
   })
 
   it('U7: head meta title mentions Team', () => {
@@ -131,14 +96,6 @@ describe('/owner/team route (W-15)', () => {
     expect(meta.some((entry) => (entry.title ?? '').includes('Team'))).toBe(true)
   })
 
-  it('U8: wraps OrganizationProfile in zero-CLS invite anchor well', () => {
-    renderTeamRoute()
-    const inviteWell = document.getElementById('invite')
-    expect(inviteWell).toBeTruthy()
-    expect(inviteWell?.className).toContain('min-h-96')
-    expect(inviteWell?.className).toContain('w-full')
-    expect(within(inviteWell as HTMLElement).getByTestId('organization-profile')).toBeTruthy()
-  })
 
   it('U9: passes undefined directory while query is loading (no dummy placeholder)', () => {
     renderTeamRoute()

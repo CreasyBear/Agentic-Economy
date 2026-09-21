@@ -1,7 +1,6 @@
 import { CheckIcon, CopyIcon } from 'lucide-react'
 import { useMemo, useState, type ReactElement } from 'react'
 
-import { AeTableEmptyState } from '@/components/ae/feedback/AeTableEmptyState'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import {
@@ -101,11 +100,6 @@ export function AeTeamDirectoryTable({ directory, loading }: AeTeamDirectoryTabl
 
   const filtersActive = normalizedFilter.length > 0 || roleFilter !== 'all'
   const showFilterEmpty = !isLoading && directory !== undefined && filteredRows.length === 0 && filtersActive
-  const showMemberEmptyState = !isLoading
-    && directory !== undefined
-    && directory.members.length === 0
-    && !showFilterEmpty
-    && filteredRows.length > 0
 
   const resetFilters = () => {
     setSearchTerm('')
@@ -230,27 +224,6 @@ export function AeTeamDirectoryTable({ directory, loading }: AeTeamDirectoryTabl
                       </TableCell>
                     </TableRow>
                   ))}
-                  {showMemberEmptyState && (
-                    <TableRow className="hover:bg-transparent">
-                      <TableCell colSpan={5} className="p-0">
-                        <AeTableEmptyState
-                          title="No other members in this workspace"
-                          description="Invite collaborators or administrators to access workspace resources."
-                          action={(
-                            <a
-                              href="#invite"
-                              className={cn(
-                                'inline-flex items-center justify-center rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
-                                TACTILE,
-                              )}
-                            >
-                              + Invite Member
-                            </a>
-                          )}
-                        />
-                      </TableCell>
-                    </TableRow>
-                  )}
                 </>
               )}
             </TableBody>

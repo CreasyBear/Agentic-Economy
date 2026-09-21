@@ -83,11 +83,11 @@ describe('AeTeamDirectoryTable (W-15)', () => {
     expect(screen.queryByText('Joel Chan')).toBeNull()
   })
 
-  it('T3: empty members still shows owner row and empty-members message', () => {
+  it('T3: owner-only directory shows the authoritative owner without unavailable membership controls', () => {
     render(<AeTeamDirectoryTable directory={{ ...directoryFixture, members: [] }} />)
 
     expect(screen.getByText('Joel Chan')).toBeInTheDocument()
-    expect(screen.getByText(/no other members/i)).toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: /invite/i })).toBeNull()
   })
 
   it('T5: admin member renders Admin label while owner still renders Owner', () => {
@@ -124,15 +124,6 @@ describe('AeTeamDirectoryTable (W-15)', () => {
     expect(screen.queryByRole('button', { name: /copy email/i })).toBeNull()
   })
 
-  it('T6: displays empty state with invite button when workspace has no other members', () => {
-    render(<AeTeamDirectoryTable directory={{
-      ...directoryFixture,
-      members: [],
-    }} />)
-
-    expect(screen.getByText('No other members in this workspace')).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: /\+ Invite Member/i })).toBeInTheDocument()
-  })
 
   it('T7: undefined directory renders loading skeleton with accessible status', () => {
     render(<AeTeamDirectoryTable />)
