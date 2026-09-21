@@ -78,7 +78,7 @@ export function AeSupplyLanding({
           </AeSiteHeadingPair>
           <div className="flex flex-wrap items-center gap-related">
             <AeSiteButton asChild>
-              <Link to="/owner/operations">List a Tool</Link>
+              <Link to="/owner/operations/new">Add Tool</Link>
             </AeSiteButton>
           </div>
         </AeSiteHeroIntro>
