@@ -37,7 +37,7 @@ export type AeOwnerSupplySourceStartPageProps = Readonly<{
       environment?: 'sandbox' | 'production'
     }>
     replace: true
-  }>) => Promise<unknown>
+  }>) => Promise<void>
 }>
 
 export function AeOwnerSupplySourceStartPage({ data, search, navigate }: AeOwnerSupplySourceStartPageProps) {
