@@ -36,7 +36,7 @@ type CopyRuleId = (typeof COPY_RULES)[number]['id']
 // pinned 2026-09-21 from first run; may only decrease
 const COPY_CEILINGS: Record<CopyRuleId, number> = {
   supplier: 0,
-  invocation: 1,
+  invocation: 0,
   mandate: 0,
   commitment: 0,
   'callable-operation': 0,

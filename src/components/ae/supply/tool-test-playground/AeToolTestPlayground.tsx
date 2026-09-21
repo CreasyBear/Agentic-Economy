@@ -66,7 +66,7 @@ export function AeToolTestPlayground({
             disabled={isRunning}
             className={cn('min-h-touch', TACTILE)}
           >
-            {isRunning ? 'Sending invocation…' : 'Send Test Invocation'}
+            {isRunning ? 'Sending test Call…' : 'Send test Call'}
           </Button>
           <div className="min-h-[1.75rem] flex items-center gap-2 text-xs">
             {response ? (
