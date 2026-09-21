@@ -1,28 +1,11 @@
-import { Link, createFileRoute, useRouter } from '@tanstack/react-router'
-import { useServerFn } from '@tanstack/react-start'
-import { useReverification } from '@clerk/tanstack-react-start'
-import { useState } from 'react'
+import { createFileRoute } from '@tanstack/react-router'
 
-import { AeOperatorPage } from '@/components/ae/layout/AeOperatorPage'
 import {
   readProviderWorkspaceIdentityDetailServer,
   readProviderToolStatusServer,
   readOwnerToolBySlugServer,
 } from '@/components/ae/offerings/provider-workspace.functions'
-import { AeProviderToolDetail } from '@/components/ae/supply/AeProviderToolDetail'
-import type { ProviderToolActionOutcome } from '@/modules/capability-supply/provider-tool-actions.contracts'
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
-import { buttonVariants } from '@/components/ui/button-variants'
-import { cn } from '@/lib/utils'
-import { canonicalDigest } from '@/modules/common/canonical-digest'
-import {
-  recheckOwnerCapabilityServer,
-  republishOwnerCapabilityServer,
-  withdrawOwnerCapabilityServer,
-  type OwnerSupplyCommandResult,
-  type OwnerSupplyMaintenanceInput,
-  type SupplyFunnelActionContext,
-} from '@/modules/capability-supply/supply-funnel.functions'
+import { AeOwnerToolDetailPage } from '@/components/ae/supply/AeOwnerToolDetailPage'
 import { operatorRouteOptions } from '@/lib/operator/route-options'
 
 export const Route = createFileRoute('/_operator/owner/operations/$toolRef')({
@@ -66,139 +49,5 @@ export const Route = createFileRoute('/_operator/owner/operations/$toolRef')({
 function OwnerSupplyDetailRoute() {
   const { toolRef } = Route.useParams()
   const result = Route.useLoaderData()
-  const router = useRouter()
-  const [toolKeys] = useState(() => new Map<string, string>())
-  const recheck = useServerFn(recheckOwnerCapabilityServer)
-  const withdraw = useServerFn(withdrawOwnerCapabilityServer)
-  const republishRequest = useServerFn(republishOwnerCapabilityServer)
-  const republish = useReverification(republishRequest)
-
-  if (result.identity.kind !== 'available' || result.status.kind !== 'available') {
-    return <UnavailableTool toolRef={toolRef} unavailable={result.status.kind === 'unavailable'} />
-  }
-  // Well 8 Lane C: the URL held either this Tool's slug (live reviewed-tier
-  // publication) or its offeringRef (no publication yet) - only one matches
-  // depending on lifecycle phase, so accept whichever the loader resolved.
-  if (
-    (result.status.tool.slug !== toolRef && result.status.tool.offeringRef !== toolRef)
-    || result.status.status.businessRef !== result.identity.businessId
-  ) {
-    return <UnavailableTool toolRef={toolRef} unavailable={false} />
-  }
-  const context: SupplyFunnelActionContext | undefined = result.status.maintenance === undefined
-    ? undefined
-    : { businessId: result.identity.businessId, ...result.status.maintenance }
-  const name = result.status.tool.name
-  const resumeHref = result.status.resumeCandidateRef === undefined
-    ? undefined
-    : `/owner/operations/new?draft=${encodeURIComponent(result.status.resumeCandidateRef)}`
-
-  function maintenanceAction(
-    action: 'recheck' | 'withdraw' | 'republish',
-    serverFn: (input: { data: OwnerSupplyMaintenanceInput }) => Promise<OwnerSupplyCommandResult>,
-  ): (() => Promise<ProviderToolActionOutcome>) | undefined {
-    if (context === undefined) return undefined
-    return async () => {
-      const actionKey = `${action}:${canonicalDigest(context)}`
-      let toolKey = toolKeys.get(actionKey)
-      if (toolKey === undefined) {
-        toolKey = `owner-supply:${action}:${crypto.randomUUID()}`
-        toolKeys.set(actionKey, toolKey)
-      }
-      const outcome = await serverFn({ data: maintenanceCommand(context, action, toolKey) })
-      if (!sourceUnavailable(outcome)) toolKeys.delete(actionKey)
-      if (outcome.kind === 'refused') return { kind: 'refused', message: correctionRefusal(outcome.reason) }
-      await router.invalidate()
-      return { kind: 'applied', message: correctionMessage(outcome) }
-    }
-  }
-
-  const onRecheck = maintenanceAction('recheck', recheck)
-  const onWithdraw = maintenanceAction('withdraw', withdraw)
-  const onRepublish = maintenanceAction('republish', republish)
-  return (
-    <AeOperatorPage
-      operatorRole="owner"
-      title={name}
-      description="Current publication, source health, delivery and Qualified Use."
-      currentPath={`/owner/operations/${encodeURIComponent(toolRef)}`}
-      breadcrumbs={[{ label: 'Tools', href: '/owner/operations' }, { label: name }]}
-    >
-      <AeProviderToolDetail
-        name={name}
-        status={result.status.status}
-        showTestPlayground={result.status.status.state === 'Published' || Boolean(result.status.status.routeability?.available)}
-        {...(resumeHref === undefined ? {} : { resumeHref })}
-        onRefresh={async () => {
-          await router.invalidate()
-          return { kind: 'applied', message: 'The canonical Tool status is current.' }
-        }}
-        {...(onRecheck === undefined ? {} : { onRecheck })}
-        {...(onWithdraw === undefined ? {} : { onWithdraw })}
-        {...(onRepublish === undefined ? {} : { onRepublish })}
-      />
-    </AeOperatorPage>
-  )
-}
-
-function UnavailableTool({ toolRef, unavailable }: Readonly<{ toolRef: string; unavailable: boolean }>) {
-  return (
-    <AeOperatorPage
-      operatorRole="owner"
-      title="Tool status"
-      description="AE could not confirm this Tool."
-      currentPath={`/owner/operations/${encodeURIComponent(toolRef)}`}
-    >
-      <div className="grid gap-related">
-        <Alert variant={unavailable ? 'destructive' : 'default'}>
-          <AlertTitle>{unavailable ? 'Tool status unavailable' : 'Tool not found'}</AlertTitle>
-          <AlertDescription>
-            {unavailable
-              ? 'AE could not read the canonical lifecycle. No Tool was changed.'
-              : 'This Tool is not part of the current Provider workspace.'}
-          </AlertDescription>
-        </Alert>
-        <Link
-          to="/owner/operations"
-          className={cn(buttonVariants({ variant: 'secondary' }), 'min-h-touch w-fit')}
-        >
-          Return to Tools
-        </Link>
-      </div>
-    </AeOperatorPage>
-  )
-}
-
-function maintenanceCommand(
-  context: SupplyFunnelActionContext,
-  action: 'recheck' | 'withdraw' | 'republish',
-  toolKey: string,
-): OwnerSupplyMaintenanceInput {
-  return {
-    ...context,
-    operationKey: toolKey,
-    correlationId: `owner-supply:${action}:${context.offeringRef}`,
-    reasonCode: `owner_supply_${action}`,
-    evidenceRefs: ['owner-supply:tool-status'],
-  }
-}
-
-function correctionMessage(result: Exclude<OwnerSupplyCommandResult, { kind: 'refused' }>): string {
-  if (result.kind === 'withdrawn') return 'The Tool is withdrawn and no longer accepts new work.'
-  if (result.kind === 'republished') return 'The Tool was submitted for validation before returning to the market.'
-  return 'AE scheduled a fresh source and readiness check for this Tool.'
-}
-
-function correctionRefusal(reason: string): string {
-  if (reason === 'revision_changed' || reason === 'publication_stale') {
-    return 'The Tool changed elsewhere. Reload its current status before trying again.'
-  }
-  if (reason === 'source_unavailable') {
-    return 'AE could not confirm the source. Reload this Tool before trying another action.'
-  }
-  return 'AE refused this change because the current Tool no longer satisfies its required preconditions.'
-}
-
-function sourceUnavailable(result: OwnerSupplyCommandResult): boolean {
-  return result.kind === 'refused' && result.reason === 'source_unavailable'
+  return <AeOwnerToolDetailPage toolRef={toolRef} identity={result.identity} status={result.status} />
 }
