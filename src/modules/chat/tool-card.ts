@@ -648,10 +648,15 @@ function providerToolName(part: Record<string, unknown>): string | undefined {
 }
 
 function outputRecord(part: Record<string, unknown>): Record<string, unknown> | undefined {
-  if (!isRecord(part.output)) return undefined
-  return part.output.type === 'json' && isRecord(part.output.value)
-    ? part.output.value
-    : part.output
+  let output: unknown = part.output
+  if (isRecord(output) && (output.type === 'json' || output.type === 'text')) output = output.value
+  if (typeof output === 'string') {
+    // Schema-bearing Tool results are JSON text because Convex reserves `$`
+    // object keys. Invalid text remains an unavailable card, never a success.
+    if (new TextEncoder().encode(output).byteLength > 64 * 1024) return undefined
+    try { output = JSON.parse(output) } catch { return undefined }
+  }
+  return isRecord(output) ? output : undefined
 }
 
 function statusCard(toolId: ChatToolId, state: 'refused' | 'error', summary: string): ToolCardProjection {
@@ -792,6 +797,10 @@ export function projectToolCard(part: unknown): ToolCardProjection | null {
   const output = outputRecord(part)
   const kind = output?.kind
   if (kind === 'error') return statusCard(toolId, 'error', 'Tool unavailable')
+  if (kind === 'no_candidates' && (toolId === 'registry.tools.search' || toolId === 'registry.tools.list')) {
+    return { ...chrome(toolId), kind: 'choices', state: 'complete', choices: [], toolRefs: [], count: 0 }
+  }
+  if (kind === 'unavailable') return statusCard(toolId, 'error', 'Tool unavailable')
   if (toolId === 'tool.call') {
     if (kind === 'chat_tool_refused') {
       const reason = typeof output?.reason === 'string' ? REFUSAL_SUMMARIES[output.reason] : undefined
@@ -816,11 +825,11 @@ export function projectToolCard(part: unknown): ToolCardProjection | null {
       : statusCard(
           toolId,
           'refused',
-          REFUSAL_SUMMARIES[result.data.code] ?? result.data.code.replaceAll('_', ' '),
+          result.data.requiredActions?.[0]?.description
+            ?? REFUSAL_SUMMARIES[result.data.code] ?? result.data.code.replaceAll('_', ' '),
         )
   }
   const refused = kind === 'refused'
-    || kind === 'unavailable'
     || kind === 'chat_tool_refused'
     || kind === 'no_candidates'
     || kind === 'not_found'

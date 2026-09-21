@@ -7,14 +7,25 @@ import type { AgentAccessPrincipal } from '@/modules/agent-access/agent-access'
 import { defineAction, idempotencyKeySchema } from '@/modules/common/action'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { publicToolChoiceSchema } from '@/modules/registry/tool-choice-contracts'
-import { registryToolsSearchAction } from '@/modules/registry/tools.actions'
+import { registryToolsCompareAction, registryToolsSearchAction } from '@/modules/registry/tools.actions'
 import { decodeOpaqueCursor, encodeOpaqueCursor } from '@/modules/registry/opaque-cursor'
+import { marketRequestRef } from './request-identity'
 
 export const MARKET_REQUEST_CREATE_ACTION_ID = 'marketDemand.record' as const
 export const MARKET_REQUEST_LIST_ACTION_ID = 'marketDemand.list' as const
 export const MARKET_REQUEST_STATUS_ACTION_ID = 'marketDemand.status' as const
+export const MARKET_REQUEST_WITHDRAW_ACTION_ID = 'marketDemand.withdraw' as const
+export const MARKET_REQUEST_ACTIVE_WINDOW_MS = 30 * 24 * 60 * 60 * 1000
 
 export const MARKET_REQUEST_ROUTE_CONTRACTS = Object.freeze({
+  withdraw: Object.freeze({
+    actionId: MARKET_REQUEST_WITHDRAW_ACTION_ID,
+    contractVersion: 'market-demand-withdraw:v1' as const,
+    method: 'POST' as const,
+    path: '/api/v1/market-requests/withdraw' as const,
+    routerPath: '/api/v1/market-requests/withdraw' as const,
+    scope: MARKET_TOOLS_CALL_SCOPE,
+  }),
   create: Object.freeze({
     actionId: MARKET_REQUEST_CREATE_ACTION_ID,
     contractVersion: 'market-demand-record:v1' as const,
@@ -91,6 +102,13 @@ export const marketRequestStatusInputSchema = z.strictObject({
   requestRef: z.string().min(1).max(300),
 })
 
+export const marketRequestWithdrawResultSchema = z.discriminatedUnion('kind', [
+  z.strictObject({ kind: z.literal('withdrawn'), requestRef: z.string().min(1).max(300) }),
+  z.strictObject({ kind: z.literal('not_found') }),
+  z.strictObject({ kind: z.literal('error'), code: z.enum(['unauthenticated', 'source_unavailable']) }),
+])
+export type MarketRequestWithdrawResult = z.infer<typeof marketRequestWithdrawResultSchema>
+
 export const marketRequestStatusResultSchema = z.discriminatedUnion('kind', [
   z.strictObject({
     kind: z.literal('open'),
@@ -125,12 +143,14 @@ type PrincipalRequest<Input> = Readonly<{
 }>
 
 export type MarketDemandService = Readonly<{
+  withdraw: (request: PrincipalRequest<MarketRequestStatusInput>) => Promise<MarketRequestWithdrawResult>
   create: (request: PrincipalRequest<MarketRequestCreateInput>) => Promise<MarketRequestCreateResult>
   list: (request: PrincipalRequest<MarketRequestListInput>) => Promise<MarketRequestListResult>
   status: (request: PrincipalRequest<MarketRequestStatusInput>) => Promise<MarketRequestStatusResult>
 }>
 
 const recordMutation = sourceMutation<Record<string, unknown>, unknown>('marketDemandSignals:record')
+const withdrawMutation = sourceMutation<Record<string, unknown>, unknown>('marketDemandSignals:withdraw')
 const listQuery = sourceQuery<Record<string, unknown>, unknown>('marketDemandSignals:list')
 const readQuery = sourceQuery<Record<string, unknown>, unknown>('marketDemandSignals:read')
 const MARKET_DEMAND_CURSOR = { kind: 'market-demand' as const, scope: 'v1' }
@@ -179,13 +199,26 @@ export function createMarketDemandService(request: Request, bodyText: string): M
   }
 
   return {
-    create: async ({ input, principal, correlationId }) => {
-      const current = await registryToolsSearchAction.run({
-        data: registryToolsSearchAction.schema.parse({ query: input.query, limit: 1 }),
-        context: { caller: 'http', request },
+    withdraw: async ({ input, principal, correlationId }) => {
+      const operationKey = canonicalDigest({
+        action: MARKET_REQUEST_WITHDRAW_ACTION_ID,
+        principalId: principal.principalId,
+        credentialId: principal.credentialId,
+        requestRef: input.requestRef,
       })
-      if (current.kind === 'unavailable') return { kind: 'refused', code: 'source_unavailable' }
-      if (current.kind === 'ok') return { kind: 'refused', code: 'current_match_exists' }
+      const raw = await mutate<unknown>(withdrawMutation, {
+        requestRef: input.requestRef, agentPrincipal: principal, operationKey, correlationId,
+      }, operationKey, correlationId)
+      const result = marketRequestWithdrawResultSchema.safeParse(raw)
+      if (!result.success || (result.data.kind === 'withdrawn' && result.data.requestRef !== input.requestRef)) {
+        return { kind: 'error', code: 'source_unavailable' }
+      }
+      return result.data
+    },
+    create: async ({ input, principal, correlationId }) => {
+      // Requires current credential ownership. A retry returns its original
+      // retained need before any new inference; changed input conflicts. Only
+      // a missing identity may enter discovery and the atomic record mutation.
       const operationKey = canonicalDigest({
         action: MARKET_REQUEST_ROUTE_CONTRACTS.create.actionId,
         principalId: principal.principalId,
@@ -193,6 +226,35 @@ export function createMarketDemandService(request: Request, bodyText: string): M
         query: input.query,
         idempotencyKey: input.idempotencyKey,
       })
+      const requestRef = marketRequestRef({
+        principalId: principal.principalId, credentialId: principal.credentialId, idempotencyKey: input.idempotencyKey,
+      })
+      const existing = await querySource<unknown>(readQuery, {
+        requestRef, agentPrincipal: principal, operationKey, correlationId,
+      }, operationKey, correlationId)
+      if (typeof existing !== 'object' || existing === null || !('kind' in existing)) {
+        return { kind: 'refused', code: 'source_unavailable' }
+      }
+      if (existing.kind === 'error' && 'code' in existing && existing.code === 'unauthenticated') {
+        return { kind: 'refused', code: 'unauthenticated' }
+      }
+      if (existing.kind === 'withdrawn') return { kind: 'refused', code: 'invalid_request' }
+      if (existing.kind === 'found' && 'request' in existing) {
+        const retained = marketRequestSummarySchema.safeParse(existing.request)
+        if (!retained.success || retained.data.requestRef !== requestRef) {
+          return { kind: 'refused', code: 'source_unavailable' }
+        }
+        if (retained.data.query !== input.query.trim()) return { kind: 'refused', code: 'idempotency_conflict' }
+        return { kind: 'replayed', requestRef, query: retained.data.query, createdAt: retained.data.createdAt }
+      }
+      if (existing.kind !== 'not_found') return { kind: 'refused', code: 'source_unavailable' }
+      const current = await registryToolsSearchAction.run({
+        data: registryToolsSearchAction.schema.parse({ query: input.query, limit: 1 }),
+        context: { caller: 'http', request },
+      })
+      if (current.kind === 'unavailable') return { kind: 'refused', code: 'source_unavailable' }
+      if (current.kind === 'ok') return { kind: 'refused', code: 'current_match_exists' }
+      if (current.pagination.hasMore) return { kind: 'refused', code: 'source_unavailable' }
       const result = await mutate<unknown>(recordMutation, {
         ...input,
         agentPrincipal: principal,
@@ -246,6 +308,11 @@ export function createMarketDemandService(request: Request, bodyText: string): M
       return parsed.success ? parsed.data : { kind: 'error', code: 'source_unavailable' }
     },
     status: async ({ input, principal, correlationId }) => {
+      // Requires current credential ownership and a valid creation timestamp.
+      // Ensures matching is eligible only before the original 30-day deadline,
+      // including after asynchronous inference and the final ownership read.
+      // Invariant: reads/retries never renew the request or authorize a purchase.
+      // On violation: expired requests use v1 not_found; invalid time is unavailable.
       const operationKey = canonicalDigest({
         action: MARKET_REQUEST_ROUTE_CONTRACTS.status.actionId,
         principalId: principal.principalId,
@@ -262,17 +329,70 @@ export function createMarketDemandService(request: Request, bodyText: string): M
       if (typeof raw !== 'object' || raw === null || !('kind' in raw)) {
         return { kind: 'error', code: 'source_unavailable' }
       }
-      if (raw.kind === 'not_found') return { kind: 'not_found' }
+      if (raw.kind === 'not_found' || raw.kind === 'withdrawn') return { kind: 'not_found' }
       if (raw.kind === 'error') return { kind: 'error', code: 'unauthenticated' }
       if (raw.kind !== 'found' || !('request' in raw)) return { kind: 'error', code: 'source_unavailable' }
       const requestRecord = marketRequestSummarySchema.safeParse(raw.request)
-      if (!requestRecord.success) return { kind: 'error', code: 'source_unavailable' }
+      if (!requestRecord.success || requestRecord.data.requestRef !== input.requestRef) {
+        return { kind: 'error', code: 'source_unavailable' }
+      }
+      const expiresAt = requestRecord.data.createdAt + MARKET_REQUEST_ACTIVE_WINDOW_MS
+      const startedAt = Date.now()
+      if (requestRecord.data.createdAt > startedAt) return { kind: 'error', code: 'source_unavailable' }
+      if (startedAt >= expiresAt) return { kind: 'not_found' }
       const search = await registryToolsSearchAction.run({
         data: registryToolsSearchAction.schema.parse({ query: requestRecord.data.query, limit: 3 }),
         context: { caller: 'http', request },
       })
       if (search.kind === 'unavailable') return { kind: 'error', code: 'source_unavailable' }
+      let tools: z.infer<typeof publicToolChoiceSchema>[] = []
+      if (search.kind === 'ok') {
+        const assessed = search.items.slice(0, 3)
+        const currentTools = await registryToolsCompareAction.run({
+          data: registryToolsCompareAction.schema.parse({ toolRefs: assessed.map(tool => tool.toolRef) }),
+          context: { caller: 'http', request },
+        })
+        if (currentTools.kind !== 'ok') return { kind: 'error', code: 'source_unavailable' }
+        const byRef = new Map(currentTools.tools.map(tool => [tool.toolRef, tool]))
+        if (byRef.size !== assessed.length || currentTools.tools.length !== assessed.length) {
+          return { kind: 'error', code: 'source_unavailable' }
+        }
+        for (const prior of assessed) {
+          const current = byRef.get(prior.toolRef)
+          // A changed capability invalidates the assessment; prices and health
+          // can refresh independently without changing the ranked identities.
+          if (current === undefined || current.capabilityId !== prior.capabilityId
+            || current.title !== prior.title || current.description !== prior.description
+            || current.provider.name !== prior.provider.name || current.provider.slug !== prior.provider.slug) {
+            return { kind: 'error', code: 'source_unavailable' }
+          }
+          tools.push(current)
+        }
+      }
+      // Inference can outlive the credential or the request version it assessed.
+      const refreshed = await querySource<unknown>(readQuery, {
+        requestRef: input.requestRef,
+        agentPrincipal: principal,
+        operationKey,
+        correlationId,
+      }, operationKey, correlationId)
+      if (typeof refreshed !== 'object' || refreshed === null || !('kind' in refreshed)) {
+        return { kind: 'error', code: 'source_unavailable' }
+      }
+      if (refreshed.kind === 'not_found' || refreshed.kind === 'withdrawn') return { kind: 'not_found' }
+      if (refreshed.kind === 'error') return { kind: 'error', code: 'unauthenticated' }
+      if (refreshed.kind !== 'found' || !('request' in refreshed)) return { kind: 'error', code: 'source_unavailable' }
+      const currentRequest = marketRequestSummarySchema.safeParse(refreshed.request)
+      if (!currentRequest.success
+        || currentRequest.data.requestRef !== requestRecord.data.requestRef
+        || currentRequest.data.query !== requestRecord.data.query
+        || currentRequest.data.createdAt !== requestRecord.data.createdAt
+        || currentRequest.data.updatedAt !== requestRecord.data.updatedAt) {
+        return { kind: 'error', code: 'source_unavailable' }
+      }
+      if (Date.now() >= expiresAt) return { kind: 'not_found' }
       if (search.kind === 'no_candidates') {
+        if (search.pagination.hasMore) return { kind: 'error', code: 'source_unavailable' }
         return {
           kind: 'open',
           requestRef: requestRecord.data.requestRef,
@@ -281,13 +401,12 @@ export function createMarketDemandService(request: Request, bodyText: string): M
           matchedCount: 0,
         }
       }
-      const tools = search.items.slice(0, 5)
       return marketRequestStatusResultSchema.parse({
         kind: 'matched',
         requestRef: requestRecord.data.requestRef,
         query: requestRecord.data.query,
         createdAt: requestRecord.data.createdAt,
-        matchedCount: search.count,
+        matchedCount: tools.length,
         tools,
       })
     },
@@ -302,6 +421,8 @@ export const marketRequestCreateAction = defineAction<MarketRequestCreateInput, 
     'Stores only the bounded job phrase and authenticated credential ownership; it is not a project, task, tender, or supplier message.',
     'The signal never becomes a Tool and grants no supplier authority.',
     'Raw requests remain private to the exact credential profile in this interface.',
+    'Matching stays active for 30 days from original creation; retries never extend that window or authorize a purchase.',
+    'A withdrawn request cannot be recreated with its old idempotency key; an intentional new request requires a new key.',
   ],
   schema: marketRequestCreateInputSchema,
   outputSchema: marketRequestCreateResultSchema,
@@ -335,6 +456,39 @@ export const marketRequestCreateAction = defineAction<MarketRequestCreateInput, 
   },
 })
 
+export const marketRequestWithdrawAction = defineAction<MarketRequestStatusInput, MarketRequestWithdrawResult>({
+  id: MARKET_REQUEST_WITHDRAW_ACTION_ID,
+  name: 'Withdraw private market request',
+  summary: 'Stop matching a private missing need and erase its saved job phrase.',
+  boundaries: [
+    'Only the exact authenticated principal and credential profile can withdraw its request.',
+    'Retains a minimal identity receipt so delayed retries cannot recreate the withdrawn request.',
+    'Does not cancel existing purchases, contact Providers, or authorize any purchase.',
+  ],
+  schema: marketRequestStatusInputSchema,
+  outputSchema: marketRequestWithdrawResultSchema,
+  parameters: [{ name: 'requestRef', type: 'string', description: 'Exact private request to withdraw.', required: true }],
+  readOnly: false,
+  effect: { class: 'external_state_change', reversible: false, recipientKind: 'none', dataClasses: ['market_demand'], spendExposure: 'none', approval: 'none' },
+  surfaces: ['http', 'mcp', 'cli'],
+  mcp: { idempotent: true, openWorld: false, destructive: true },
+  credentialAdmission: { scope: MARKET_TOOLS_CALL_SCOPE, authority: 'descriptor_classified' },
+  invocationContract: {
+    version: MARKET_REQUEST_ROUTE_CONTRACTS.withdraw.contractVersion,
+    consequenceClass: 'external_effect', materialInputPaths: ['requestRef'], authorityRequirement: 'principal',
+    retryClass: 'replayable', expectedEvidence: ['market_request_withdrawal'], safeContinuations: ['marketDemand.list'],
+    invalidationConditions: ['request_ref_changed', 'credential_profile_changed'],
+  },
+  run: async ({ data, context }) => {
+    if (context.agentAccessPrincipal === undefined) throw new Error('agent_access_context_missing')
+    if (context.marketDemandService === undefined) throw new Error('market_demand_service_unavailable')
+    return await context.marketDemandService.withdraw({
+      input: data, principal: context.agentAccessPrincipal,
+      correlationId: context.correlationId ?? globalThis.crypto.randomUUID(),
+    })
+  },
+})
+
 export const marketRequestListAction = defineAction<MarketRequestListInput, MarketRequestListResult>({
   id: MARKET_REQUEST_LIST_ACTION_ID,
   name: 'List private market requests',
@@ -342,6 +496,7 @@ export const marketRequestListAction = defineAction<MarketRequestListInput, Mark
   boundaries: [
     'Returns only signals owned by the exact authenticated principal and credential profile.',
     'Does not expose other buyers, supplier analytics, project context, or raw Tool inputs.',
+    'History can include expired requests; matching ends 30 days after each original createdAt timestamp.',
   ],
   schema: marketRequestListInputSchema,
   outputSchema: marketRequestListResultSchema,
@@ -378,6 +533,7 @@ export const marketRequestStatusAction = defineAction<MarketRequestStatusInput, 
     'Reads only a request owned by the exact authenticated principal and credential profile.',
     'A match is recomputed from current canonical Tools; stored demand is never treated as supply.',
     'Checking does not call, reserve, notify, or authorize any Tool.',
+    'Matching ends 30 days after original creation. Expired requests return not_found; retries do not renew them.',
   ],
   schema: marketRequestStatusInputSchema,
   outputSchema: marketRequestStatusResultSchema,

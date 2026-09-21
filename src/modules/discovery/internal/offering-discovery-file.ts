@@ -30,6 +30,7 @@ export const DiscoveryPublicSurfacePaths = [
   TOOL_MARKET_DESCRIBE_PATH,
   TOOL_MARKET_COMPARE_PATH,
   TOOL_PROCURE_PATH,
+  '/api/v1/market-requests/withdraw',
 ] as const
 
 /** Supporting provider facts never become executable merely because they are published. */

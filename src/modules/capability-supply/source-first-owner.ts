@@ -1,4 +1,6 @@
 export {
+  assessOwnerSupplySource,
+  ownerSourceAssessmentInputSchema,
   ownerSourceConnectionInputSchema,
   ownerSourceDraftInputSchema,
   ownerSourcePreviewInputSchema,
@@ -10,4 +12,6 @@ export {
   startOwnerSupplySourceConnection,
 } from './internal/supply-funnel/source-first-owner'
 
-export type { OwnerSupplySourceResumeResult } from './internal/supply-funnel/source-first-owner'
+export type { OwnerSupplySourceAssessmentInput, OwnerSupplySourceResumeResult } from './internal/supply-funnel/source-first-owner'
+
+export type { SupplySourceAssessment } from './source-assessment'

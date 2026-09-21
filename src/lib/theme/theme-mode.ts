@@ -2,12 +2,13 @@ export type AppearancePreference = 'light' | 'dark' | 'system'
 export type ResolvedAppearance = 'light' | 'dark'
 
 export const THEME_STORAGE_KEY = 'ae-theme'
+export const DEFAULT_APPEARANCE_PREFERENCE: AppearancePreference = 'light'
 
 export function parseStoredAppearance(raw: string | null): AppearancePreference {
   if (raw === 'light' || raw === 'dark' || raw === 'system') {
     return raw
   }
-  return 'system'
+  return DEFAULT_APPEARANCE_PREFERENCE
 }
 
 export function resolveAppearance(
@@ -52,7 +53,7 @@ export function applyAppearance(preference: AppearancePreference): void {
 
 export function getThemeScript(
   storageKey = THEME_STORAGE_KEY,
-  defaultTheme: AppearancePreference = 'system',
+  defaultTheme: AppearancePreference = DEFAULT_APPEARANCE_PREFERENCE,
 ): string {
   return `(function(){try{var t=localStorage.getItem("${storageKey}");if(t!=='light'&&t!=='dark'&&t!=='system')t='${defaultTheme}';var d=matchMedia('(prefers-color-scheme: dark)').matches;var r=t==='system'?(d?'dark':'light'):t;var e=document.documentElement;e.classList.remove('light','dark');e.classList.add(r);e.style.colorScheme=r;e.dataset.appearancePreference=t;}catch(e){}})();`
 }

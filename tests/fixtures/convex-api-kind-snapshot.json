@@ -1800,6 +1800,12 @@
     "kind": "mutation"
   },
   {
+    "visibility": "public",
+    "module": "marketDemandSignals",
+    "method": "withdraw",
+    "kind": "mutation"
+  },
+  {
     "visibility": "internal",
     "module": "marketListingEvidence",
     "method": "assignCategory",

@@ -135,9 +135,9 @@ describe('WorkspaceDangerZone (W-14)', () => {
     fireEvent.click(closeBtn)
 
     expect(screen.getByRole('alertdialog')).toBeInTheDocument()
-    expect(screen.getByText('Close Workspace?')).toBeInTheDocument()
+    expect(screen.getByText('Close workspace?')).toBeInTheDocument()
     expect(screen.getByText(/prepaid credit is not spent until close succeeds/i)).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Permanently Close Workspace' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Permanently close workspace' })).toBeInTheDocument()
   })
 
   it('U6: transfer candidate dropdown lists active members excluding incumbent owner', () => {

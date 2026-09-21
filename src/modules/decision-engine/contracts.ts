@@ -71,7 +71,7 @@ export type DecisionGatewayOptions = Readonly<{
   timeoutMs?: number
   signal?: AbortSignal
   deadlineAt?: number
-  purpose?: 'discovery'
+  purpose?: 'discovery' | 'provider_source'
   maxRetries?: number
   openrouterApiKey?: string
   typesafeApiKey?: string

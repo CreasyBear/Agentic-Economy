@@ -25,13 +25,15 @@ const DEFAULT_MAX_CANDIDATES = 20
  * Implements the canonical TypeSafe Re-ranking pattern (cookbooks/rerank_typesafe.md):
  * 1. Takes candidate tools from fast retrieval (Convex database index).
  * 2. Classifies each candidate in parallel in a single System One call using calibrated Noul scoring.
- * 3. Asks a companion Choice question to determine separation and the top recommendation.
- * 4. Uses the Noul probabilities as reusable relevance scores and the Choice only as a tie-break.
+ * 3. Orders by the Noul probabilities, preserving retrieval order on ties.
+ * 4. Requires no winner when the evidence supports no candidate or cannot separate them.
  * 5. Returns updated ToolSearchResult with re-ranked items and populated ranking array.
  *
  * Discovery is intentionally Jev-only. If Jev is unavailable or returns an
  * incomplete classification, callers retain the retriever's original order;
  * this latency-sensitive read path never escalates to a frontier LLM.
+ * Requires complete valid relevance answers before reordering. Preserves Tool
+ * facts, eligibility and page metadata; operational failure returns the original page.
  */
 export async function rerankToolSearchResult(
   result: ToolSearchResult,
@@ -46,6 +48,9 @@ export async function rerankToolSearchResult(
   ) {
     return result
   }
+  // Assessments are keyed by Tool identity; a duplicate page cannot support an
+  // unambiguous assessment. Preserve retrieval rather than inventing one.
+  if (new Set(result.items.map(item => item.toolRef)).size !== result.items.length) return result
 
   const cleanQuery = query.trim()
   const requestedCandidateLimit = options.maxCandidatesToScore
@@ -57,7 +62,6 @@ export async function rerankToolSearchResult(
   const remainingCandidates = result.items.slice(maxCandidates)
 
   const questions: Record<string, JevQuestion> = {}
-  const candidateChoices: Record<string, string> = {}
 
   const candidateState = candidatesToScore.map((item) => ({
     toolRef: item.toolRef,
@@ -66,10 +70,8 @@ export async function rerankToolSearchResult(
     summary: item.summary,
   }))
 
-  candidatesToScore.forEach((item, index) => {
+  candidatesToScore.forEach((_item, index) => {
     const qKey = `match_${index}`
-    const candidateSummary = `${item.listing.label} (${item.contract.capabilityId}): ${item.summary}`
-    candidateChoices[item.toolRef] = candidateSummary
 
     questions[qKey] = {
       type: 'noul',
@@ -80,12 +82,6 @@ export async function rerankToolSearchResult(
       },
     }
   })
-
-  questions.best_match = {
-    type: 'choice',
-    instructions: `Which candidate tool is the single best match for the capability request: "${cleanQuery}"?`,
-    criteria: candidateChoices,
-  }
 
   let decision
   try {
@@ -102,13 +98,6 @@ export async function rerankToolSearchResult(
   }
 
   if (decision.tier !== 'jev_system_one') return result
-
-  const bestToolRef =
-    decision.answers.best_match?.type === 'choice'
-      ? decision.answers.best_match.choice
-      : undefined
-
-  if (bestToolRef === undefined || !(bestToolRef in candidateChoices)) return result
 
   const scoredCandidates = candidatesToScore.map((item, index) => {
     const noulAns = decision.answers[`match_${index}`]
@@ -134,7 +123,6 @@ export async function rerankToolSearchResult(
 
   completeScores.sort((a, b) =>
     b.score - a.score ||
-    Number(b.item.toolRef === bestToolRef) - Number(a.item.toolRef === bestToolRef) ||
     a.originalIndex - b.originalIndex,
   )
 
@@ -143,14 +131,13 @@ export async function rerankToolSearchResult(
     ...remainingCandidates,
   ]
 
-  const ranking: ToolSearchRanking[] = rerankedItems.map((item, index) => {
-    const scored = completeScores.find((candidate) => candidate.item.toolRef === item.toolRef)
-    return {
-      toolRef: item.toolRef,
-      rank: index + 1,
-      score: scored ? scored.score : 0.0,
-    }
-  })
+  // Only observed scores belong here. A tail item remains in the page but has
+  // no ranking entry, distinguishable from an assessed candidate scoring zero.
+  const ranking: ToolSearchRanking[] = completeScores.map(({ item, score }, index) => ({
+    toolRef: item.toolRef,
+    rank: index + 1,
+    score,
+  }))
 
   return {
     ...result,

@@ -116,7 +116,7 @@ describe('ProviderListingError copy', () => {
     const ErrorComponent = Route.options.errorComponent as ComponentType
     renderWithRouter(<ErrorComponent />)
 
-    expect(screen.getByText('This supplier didn’t load')).toBeTruthy()
+    expect(screen.getByText('This provider didn’t load')).toBeTruthy()
     expect(screen.queryByText(/registry/i)).toBeNull()
     expect(screen.getByRole('link', { name: 'Try again' }).classList.contains('min-h-touch')).toBe(true)
     expect(screen.getByRole('link', { name: 'Back to catalog' }).getAttribute('href')).toBe('/market')

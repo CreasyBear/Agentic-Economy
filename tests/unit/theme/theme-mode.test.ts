@@ -16,6 +16,7 @@ function resetDocumentTheme(): void {
   const root = document.documentElement
   root.classList.remove('light', 'dark')
   root.style.colorScheme = ''
+  delete root.dataset.appearancePreference
 }
 
 beforeEach(() => {
@@ -36,11 +37,11 @@ describe('parseStoredAppearance', () => {
     expect(parseStoredAppearance('system')).toBe('system')
   })
 
-  it('M2: defaults to system for null, empty, wrong case, and invalid values', () => {
-    expect(parseStoredAppearance(null)).toBe('system')
-    expect(parseStoredAppearance('')).toBe('system')
-    expect(parseStoredAppearance('Dark')).toBe('system')
-    expect(parseStoredAppearance('invalid')).toBe('system')
+  it('M2: defaults to light for null, empty, wrong case, and invalid values', () => {
+    expect(parseStoredAppearance(null)).toBe('light')
+    expect(parseStoredAppearance('')).toBe('light')
+    expect(parseStoredAppearance('Dark')).toBe('light')
+    expect(parseStoredAppearance('invalid')).toBe('light')
   })
 })
 
@@ -135,5 +136,12 @@ describe('getThemeScript', () => {
     expect(script).toContain('classList.add')
     expect(script).toContain('colorScheme')
     expect(script).toContain('appearancePreference')
+  })
+
+  it('M12: unset storage falls back to light, not system or OS dark', () => {
+    const script = getThemeScript()
+
+    expect(script).toContain("t='light'")
+    expect(script).not.toContain("t='system'")
   })
 })

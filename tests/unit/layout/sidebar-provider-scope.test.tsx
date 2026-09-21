@@ -23,8 +23,14 @@ vi.mock('@/lib/observability/funnel-client', () => ({
   emitFunnelEventOnce: vi.fn(),
 }))
 
+vi.mock('@/components/ae/command-panel', () => ({
+  CommandPanelProvider: ({ children }: { children: ReactNode }) => children,
+  AeCommandPanel: () => null,
+}))
+
 vi.mock('@clerk/tanstack-react-start', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@clerk/tanstack-react-start')>()),
+  useAuth: () => ({ isSignedIn: false }),
   useUser: () => ({
     isLoaded: true,
     isSignedIn: true,

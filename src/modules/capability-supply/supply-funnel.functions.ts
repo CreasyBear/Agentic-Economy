@@ -22,6 +22,8 @@ import {
   withdrawOwnerCapability,
 } from './internal/supply-funnel/funnel-owner'
 import {
+  ownerSourceAssessmentInputSchema,
+  assessOwnerSupplySource,
   ownerSourcePreviewInputSchema,
   ownerSourceConnectionInputSchema,
   ownerSourceDraftInputSchema,
@@ -159,6 +161,10 @@ export const revokeOwnerProviderConnectionServer = createServerFn({
   .handler(revokeOwnerProviderConnection)
 
 export const readOwnerProviderEarningsServer = createServerFn().handler(readOwnerProviderEarnings)
+
+export const assessOwnerSupplySourceServer = createServerFn({ method: 'POST' })
+  .validator((data) => ownerSourceAssessmentInputSchema.parse(data))
+  .handler((input) => assessOwnerSupplySource({ ...input, signal: getRequest().signal }))
 
 export const previewOwnerSupplySourceServer = createServerFn({ method: 'POST' })
   .validator((data) => ownerSourcePreviewInputSchema.parse(data))

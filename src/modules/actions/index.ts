@@ -70,6 +70,7 @@ import {
   marketRequestCreateAction,
   marketRequestListAction,
   marketRequestStatusAction,
+  marketRequestWithdrawAction,
 } from '@/modules/market-demand/market-demand.actions'
 import {
   fundingHandoffConfigAction,
@@ -101,6 +102,7 @@ const registeredActions: readonly AnyAction[] = [
   marketRequestCreateAction,
   marketRequestListAction,
   marketRequestStatusAction,
+  marketRequestWithdrawAction,
   toolQuoteAction,
   toolProcureAction,
   callAction,

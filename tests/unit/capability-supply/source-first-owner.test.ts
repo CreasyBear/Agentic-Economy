@@ -2,20 +2,23 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => ({
   callSourceQuery: vi.fn(),
+  callSourceMutation: vi.fn(),
   sourceQuery: vi.fn((name: string) => ({ name })),
   sourceMutation: vi.fn((name: string) => ({ name })),
   sourceAction: vi.fn((name: string) => ({ name })),
   previewOwnerMcpProviderConnection: vi.fn(),
   previewSupplySource: vi.fn(),
+  assessSupplySource: vi.fn(),
 }))
 
 vi.mock('@/lib/server/convex-source', () => ({
   callSourceQuery: mocks.callSourceQuery,
-  callSourceMutation: vi.fn(),
+  callSourceMutation: mocks.callSourceMutation,
   sourceQuery: mocks.sourceQuery,
   sourceMutation: mocks.sourceMutation,
   sourceAction: mocks.sourceAction,
 }))
+vi.mock('@/modules/capability-supply/source-assessment', () => ({ assessSupplySource: mocks.assessSupplySource }))
 vi.mock('@/lib/server/clerk-consequence-proof', () => ({
   requireStrictClerkConsequenceProof: vi.fn(),
 }))
@@ -41,6 +44,7 @@ vi.mock('@/modules/capability-supply/source-preview', async (importOriginal) => 
 })
 
 import {
+  assessOwnerSupplySource,
   resumeOwnerSupplySourceDraft,
   startOwnerSupplySourceConnection,
 } from '@/modules/capability-supply/source-first-owner'
@@ -438,5 +442,52 @@ describe('owner source-first resumption', () => {
     } else {
       expect(mocks.previewSupplySource).not.toHaveBeenCalled()
     }
+  })
+})
+
+
+describe('owner-scoped source assessment', () => {
+  const source = { kind: 'x402' as const, resourceUrl: 'https://provider.example/paid', method: 'POST' as const, environment: 'sandbox' as const }
+  const sourceDigest = `sha256:${'1'.repeat(64)}`
+  const candidateRef = `sha256:${'2'.repeat(64)}`
+  const ready = { kind: 'ready', sourceDigest, sourceRevision: 'revision:one', candidates: [{ candidateRef, disposition: { kind: 'supported' } }] }
+  const data = { businessId: 'business:one', source, expectedSourceDigest: sourceDigest, expectedSourceRevision: 'revision:one', candidateRef, mode: 'suggest' as const, idempotencyKey: 'source-suggestion' }
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mocks.callSourceQuery.mockReset().mockResolvedValue({ kind: 'available' })
+    mocks.previewSupplySource.mockReset().mockResolvedValue(ready)
+    mocks.assessSupplySource.mockReset().mockResolvedValue({ kind: 'suggested', sourceDigest, sourceRevision: 'revision:one', candidateRef, description: 'Source description.', evidence: [] })
+  })
+
+  it('refuses an unavailable owner before inference or source access', async () => {
+    mocks.callSourceQuery.mockResolvedValue({ kind: 'unavailable' })
+    expect(await assessOwnerSupplySource({ data, context: {} })).toEqual({ kind: 'unavailable', reason: 'source_unavailable' })
+    expect(mocks.assessSupplySource).not.toHaveBeenCalled()
+    expect(mocks.previewSupplySource).not.toHaveBeenCalled()
+  })
+
+  it('refuses changed evidence before inference', async () => {
+    mocks.previewSupplySource.mockResolvedValue({ ...ready, sourceRevision: 'revision:two' })
+    expect(await assessOwnerSupplySource({ data, context: {} })).toEqual({ kind: 'unavailable', reason: 'source_changed' })
+    expect(mocks.assessSupplySource).not.toHaveBeenCalled()
+  })
+
+  it('invalidates a suggestion when the source changes while inference runs', async () => {
+    mocks.previewSupplySource.mockResolvedValueOnce(ready).mockResolvedValueOnce({ ...ready, sourceRevision: 'revision:two' })
+    expect(await assessOwnerSupplySource({ data, context: {} })).toEqual({ kind: 'unavailable', reason: 'source_changed' })
+    expect(mocks.assessSupplySource).toHaveBeenCalledTimes(1)
+  })
+
+  it('rechecks ownership after inference', async () => {
+    mocks.callSourceQuery.mockResolvedValueOnce({ kind: 'available' }).mockResolvedValueOnce({ kind: 'unavailable' })
+    expect(await assessOwnerSupplySource({ data, context: {} })).toEqual({ kind: 'unavailable', reason: 'source_unavailable' })
+    expect(mocks.assessSupplySource).toHaveBeenCalledTimes(1)
+  })
+
+  it('verifies a current source without another model request or any mutation', async () => {
+    expect(await assessOwnerSupplySource({ data: { ...data, mode: 'verify' }, context: {} }))
+      .toEqual({ kind: 'current', sourceDigest, sourceRevision: 'revision:one', candidateRef })
+    expect(mocks.callSourceMutation).not.toHaveBeenCalled()
+    expect(mocks.assessSupplySource).not.toHaveBeenCalled()
   })
 })

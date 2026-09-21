@@ -196,6 +196,23 @@ describe('AE theme token parity (src/styles/globals.css)', () => {
       '--font-sans',
       '--font-display',
       '--font-mono',
+      '--text-caption',
+      '--text-eyebrow',
+      '--text-deck',
+      '--text-body',
+      '--text-title',
+      '--text-title-lg',
+      '--text-display',
+      '--tracking-eyebrow',
+      '--tracking-caption',
+      '--tracking-display',
+      '--leading-caption',
+      '--leading-eyebrow',
+      '--leading-deck',
+      '--leading-body',
+      '--leading-title',
+      '--leading-title-lg',
+      '--leading-display',
       '--duration-fast',
       '--duration-base',
       '--duration-slow',
@@ -208,6 +225,27 @@ describe('AE theme token parity (src/styles/globals.css)', () => {
       '--ae-font-sans',
       '--ae-font-display',
       '--ae-font-mono',
+      '--ae-text-caption',
+      '--ae-text-eyebrow',
+      '--ae-text-deck',
+      '--ae-text-body',
+      '--ae-text-title',
+      '--ae-text-title-lg',
+      '--ae-text-display',
+      '--ae-tracking-eyebrow',
+      '--ae-tracking-caption',
+      '--ae-tracking-display',
+      '--ae-leading-caption',
+      '--ae-leading-eyebrow',
+      '--ae-leading-deck',
+      '--ae-leading-body',
+      '--ae-leading-title',
+      '--ae-leading-title-lg',
+      '--ae-leading-display',
+      '--ae-weight-extralight',
+      '--ae-weight-regular',
+      '--ae-weight-medium',
+      '--ae-weight-semibold',
       '--motion-duration-fast',
       '--motion-duration-base',
       '--motion-duration-slow',
@@ -230,6 +268,37 @@ describe('AE theme token parity (src/styles/globals.css)', () => {
     const sidebarMissing = sidebarMembers.filter((n) => !themeNames.has(`--color-${n}`) || !rootNames.has(`--${n}`))
     if (sidebarMissing.length) problems.push(`missing sidebar tokens: ${sidebarMissing.map((n) => `--color-${n}/--${n}`).join(', ')}`)
     expect(problems, problems.join('; ')).toEqual([])
+  })
+
+  it('(b4) discover type scale values match IceInVein §5 (from SoT)', () => {
+    const rootByName = new Map(rootDecls.map((d) => [d.name, d.value]))
+    const expected: ReadonlyArray<readonly [string, string]> = [
+      ['--ae-text-caption', '0.625rem'],
+      ['--ae-text-eyebrow', '0.75rem'],
+      ['--ae-text-deck', '0.875rem'],
+      ['--ae-text-body', '1rem'],
+      ['--ae-text-title', '1.5rem'],
+      ['--ae-text-title-lg', '1.875rem'],
+      ['--ae-text-display', '2.75rem'],
+      ['--ae-leading-caption', '1.35'],
+      ['--ae-leading-eyebrow', '1.35'],
+      ['--ae-leading-deck', '1.625'],
+      ['--ae-leading-body', '1.55'],
+      ['--ae-leading-title', '1.25'],
+      ['--ae-leading-title-lg', '1.2'],
+      ['--ae-leading-display', '1.02'],
+      ['--ae-tracking-eyebrow', '0.12em'],
+      ['--ae-tracking-caption', '0.14em'],
+      ['--ae-tracking-display', '-0.055em'],
+      ['--ae-weight-extralight', '200'],
+      ['--ae-weight-regular', '400'],
+      ['--ae-weight-medium', '500'],
+      ['--ae-weight-semibold', '600'],
+    ]
+    const mismatches = expected
+      .filter(([name, value]) => rootByName.get(name) !== value)
+      .map(([name, value]) => `${name}: expected ${value}, got ${rootByName.get(name) ?? 'missing'}`)
+    expect(mismatches, mismatches.join('; ')).toEqual([])
   })
 
   it('(c1) no duplicate custom-property declarations inside a scope', () => {

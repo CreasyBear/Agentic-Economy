@@ -82,6 +82,27 @@ const admitHttp = makeFunctionReference<'mutation', {
 }, Readonly<{ ok: boolean; retryAfter?: number }>>('rateLimit:admitHttp')
 
 describe('anonymous operation chat transport', () => {
+  it('reserves the final step for an answer after repeated lookups', async () => {
+    const backend = convexTestWithMarketComponents()
+    const model = mockModel({ contentSteps: [
+      ...Array.from({ length: 5 }, (_, index) => [{
+        type: 'tool-call' as const, toolCallId: `lookup-${index}`, toolName: 'registry_tools_describe',
+        input: JSON.stringify({ toolRef: `operation:v1:${'a'.repeat(64)}` }),
+      }]),
+      [{ type: 'text', text: 'No verified fit was found.' }],
+    ] })
+    const calls = vi.spyOn(model, 'doStream')
+    const body = await backend.action(async ctx => {
+      const response = await streamAnonymousChatResponse(ctx, [{ role: 'user', content: 'Find a verified OCR Tool.' }], model)
+      return await response.text()
+    })
+    expect(calls).toHaveBeenCalledTimes(6)
+    expect(JSON.stringify(calls.mock.calls[0]?.[0].prompt)).toContain('Use the returned priceLabel as an indicative price.')
+    expect(JSON.stringify(calls.mock.calls[5]?.[0].prompt)).toContain('This chat displays plain text.')
+    expect(calls.mock.calls[5]?.[0].toolChoice).toEqual({ type: 'none' })
+    expect(body).toContain('"delta":"No"')
+    expect(body).toContain('"delta":" fit"')
+  })
   it('streams from a fake model without creating Agent threads or messages', async () => {
     const backend = convexTestWithMarketComponents()
     const streamed = await backend.action(async (ctx) => {

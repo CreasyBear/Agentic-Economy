@@ -16,6 +16,7 @@ describe('AE UI contract', () => {
 
   it('keeps shared shell primitives on the system motion and surface language', () => {
     const primitiveFiles = [
+      'src/components/ui/card.tsx',
       'src/components/ui/dialog.tsx',
       'src/components/ui/sheet.tsx',
       'src/components/ui/sidebar.tsx',
@@ -31,5 +32,9 @@ describe('AE UI contract', () => {
     expect(primitiveSource).toContain('ease-emphasized')
     expect(primitiveSource).toContain('shadow-overlay')
     expect(primitiveSource).toContain('active:scale-[0.96]')
+    expect(primitiveSource).toContain('rounded-xl')
+    expect(primitiveSource).toContain('data-ae-discover-lift')
+    expect(primitiveSource).toContain('shadow-none')
+    expect(primitiveSource).toContain('hover:shadow-float')
   })
 })

@@ -56,7 +56,7 @@ export async function prepareFinancialSubjectsHandler(
   args: QuoteArgs,
 ): Promise<FinancialSubjectsResult> {
   const sourceWrite = await requireSourceWrite(ctx, args, 'protected_action')
-  if (sourceWrite.kind === 'rejected') return { kind: 'refused', code: 'inspection_unavailable' }
+  if (sourceWrite.kind === 'rejected') return { kind: 'refused', code: 'inspection_unavailable', reason: sourceWrite.reason }
   const now = Date.now()
   const authority = await resolveCurrentAgentAuthority(
     ctx,

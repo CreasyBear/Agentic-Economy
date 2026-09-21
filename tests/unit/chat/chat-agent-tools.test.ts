@@ -1,6 +1,8 @@
 import { mockModel, type ToolCtx } from '@convex-dev/agent'
 import { generateText, type ToolSet } from 'ai'
 import { getFunctionName } from 'convex/server'
+import { convexToJson, type Value } from 'convex/values'
+import { projectToolCard } from '@/modules/chat/tool-card'
 import { describe, expect, it, vi } from 'vitest'
 
 import {
@@ -13,7 +15,7 @@ import {
 } from '../../../convex/chatTools'
 import { api, internal } from '../../../convex/_generated/api'
 import type { InteractiveBusinessAuthorityContext } from '@/modules/business/public'
-import { serializeToolSearchResult } from '@/modules/capability-supply/public'
+import { serializeToolSearchResult, serializeToolDetailResult } from '@/modules/capability-supply/public'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { registryToolsSearchContract } from '@/modules/registry/tool-action-contracts'
 import {
@@ -111,6 +113,31 @@ function nativeReadResult(functionName: string): unknown {
 }
 
 describe('Tool chat Agent tools', () => {
+  it('persists schema-bearing detail output losslessly and renders its completed card', async () => {
+    const inputJsonSchema = {
+      $schema: 'https://json-schema.org/draft/2020-12/schema',
+      type: 'object',
+      properties: { value: { $ref: '#/$defs/text' } },
+      $defs: { text: { type: 'string' } },
+    }
+    const tool = { ...TOOL_CURRENCY, toolRef: OPERATION_REF as typeof TOOL_CURRENCY.toolRef, toolId: OPERATION_REF,
+      contract: { ...TOOL_CURRENCY.contract, inputJsonSchema } }
+    const agent = createChatAgent(mockModel())
+    const output = await invokeTool(agent, 'registry.tools.describe', toolCtx({
+      runAction: vi.fn().mockResolvedValue(serializeToolDetailResult({
+        kind: 'found', schemaVersion: 'registry-tools:v3', tool,
+      })),
+    }), { toolRef: OPERATION_REF })
+    expect(() => convexToJson(output as Value)).not.toThrow()
+    expect(typeof output).toBe('string')
+    const decoded = JSON.parse(output as string)
+    expect(decoded.tool.inputJsonSchema).toEqual(inputJsonSchema)
+    expect(projectToolCard({
+      type: `tool-${CHAT_TOOL_NAME_MAP.canonicalToProvider['registry.tools.describe']}`,
+      state: 'output-available', output,
+    })).toMatchObject({ state: 'complete', toolRefs: [OPERATION_REF] })
+  })
+
   it('exports exactly the six canonical tools and bounded Agent defaults', () => {
     const agent = createChatAgent(mockModel(), AUTHORITY)
 
@@ -330,7 +357,7 @@ describe('Tool chat Agent tools', () => {
     })
   })
 
-  it('enforces four total tool calls per Agent factory invocation', async () => {
+  it('enforces eight total tool calls per Agent factory invocation', async () => {
     const runAction = vi.fn(async () => noCandidates)
     const agent = createChatAgent(mockModel())
     const ctx = toolCtx({ runAction: runAction as ToolCtx['runAction'] })
@@ -354,6 +381,22 @@ describe('Tool chat Agent tools', () => {
       reason: 'tool_limit',
     })
     expect(runAction).toHaveBeenCalledTimes(MAX_CHAT_TOOL_CALLS)
+  })
+
+  it('lets a shortlist journey reach comparison after two searches and three detail reads', async () => {
+    const runAction = vi.fn(async reference => nativeReadResult(getFunctionName(reference)))
+    const agent = createChatAgent(mockModel())
+    const ctx = toolCtx({ runAction: runAction as ToolCtx['runAction'] })
+    for (const query of ['OCR', 'scanned PDFs']) {
+      expect(await invokeTool(agent, 'registry.tools.search', ctx, { query })).toMatchObject({ kind: 'no_candidates' })
+    }
+    for (let index = 0; index < 3; index += 1) {
+      expect(await invokeTool(agent, 'registry.tools.describe', ctx, { toolRef: OPERATION_REF })).toMatchObject({ kind: 'not_found' })
+    }
+    const result = await invokeTool(agent, 'registry.tools.compare', ctx, { toolRefs: [OPERATION_REF] })
+    expect(result).toMatchObject({ kind: 'unavailable' })
+    expect(runAction).toHaveBeenCalledTimes(6)
+    expect(getFunctionName(runAction.mock.calls[5]![0])).toBe('capabilityToolCatalog:compare')
   })
 
   it('reserves the single execute slot before parallel work awaits', async () => {

@@ -264,7 +264,10 @@ describe('ActivityPage & Filtering (W-38)', () => {
     fireEvent.click(screen.getByRole('button', { name: /Needs Attention\s+0/u }))
 
     expect(screen.getByText('No calls match these filters')).toBeTruthy()
-    expect(screen.getByText('No calls match the current filter criteria.')).toBeTruthy()
+    const emptyState = screen.getByText('Active filters are hiding matching Calls.').closest('[role="status"]') as HTMLElement
+    expect(emptyState).toBeTruthy()
+    fireEvent.click(within(emptyState).getByRole('button', { name: 'Reset filters' }))
+    expect(screen.queryByText('No calls match these filters')).toBeNull()
   })
 
   it('shows agent filter pill in the filter bar', () => {

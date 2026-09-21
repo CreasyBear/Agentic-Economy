@@ -227,7 +227,12 @@ export function projectToolQuoteRefusal(input: Readonly<{
       }
       return input.retryable
         ? { ...base, continuation: inspect(5000) }
-        : { ...base, requiredActions: [requiredAction(true)] }
+        : { ...base, requiredActions: [operatorAction(
+          'contact_support',
+          'Contact support',
+          'AE could not complete this Quote request. Contact support before trying again.',
+          '/support',
+        )] }
     case 'treasury_capacity_unavailable':
       return { ...base, continuation: inspect(30000) }
     case 'input_invalid':

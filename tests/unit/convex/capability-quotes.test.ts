@@ -88,6 +88,41 @@ describe('legal customer binding refusals', () => {
 })
 
 describe('direct Quote handlers', () => {
+  it.each(['missing', 'changed', 'interactive_identity'] as const)('does not retry %s admission or contact a Provider', async (admission) => {
+    const backend = convexTestWithMarketComponents()
+    const command = {
+      operationKey: 'chat-quote-admission', correlationId: 'chat-quote-admission',
+      principal: {
+        principalId: `prn_${'1'.repeat(32)}`, ownerId: `acc_${'2'.repeat(32)}`,
+        credentialId: 'interactive-chat', applicationRef: 'interactive-chat',
+        environment: 'sandbox' as const, scopes: ['market_tools:call'],
+        authorityMode: 'approval_required' as const,
+      },
+      toolRef: `operation:v1:${'a'.repeat(64)}`, input: { request: 'Perth' },
+    }
+    const args = admission === 'missing' ? command : {
+      ...await withSourceWrite('protected_action', command),
+      ...(admission === 'changed' ? { input: { request: 'changed' } } : {}),
+    }
+    const upstream = vi.fn(async () => { throw new Error('unadmitted_quote_reached_provider') })
+    const handler = (quote as unknown as { _handler: (ctx: unknown, args: unknown) => Promise<unknown> })._handler
+    const result = await handler({ runMutation: backend.mutation, runAction: upstream }, args)
+    expect(result).toMatchObject({
+      kind: 'refused', retryable: false,
+      ...(admission === 'interactive_identity'
+        ? { code: 'grant_not_found', requiredActions: [{ cta: '/agent-access' }] }
+        : {
+            code: 'inspection_unavailable',
+            reason: admission === 'missing' ? 'missing_source_write_admission' : 'source_write_command_mismatch',
+            requiredActions: [{ cta: '/support' }],
+          }),
+    })
+    expect(result).not.toHaveProperty('continuation')
+    expect(upstream).not.toHaveBeenCalled()
+    expect(await backend.run(ctx => ctx.db.query('capabilityQuotes').take(1))).toEqual([])
+    expect(await backend.run(ctx => ctx.db.query('capabilityCalls').take(1))).toEqual([])
+  })
+
   it('refuses shared legal-account exposure without issuing a Quote or advising a top-up', async () => {
     const backend = convexTestWithMarketComponents()
     const suffix = 'quote-account-exposure'

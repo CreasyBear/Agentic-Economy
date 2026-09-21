@@ -19,6 +19,7 @@ import {
   marketRequestCreateAction,
   marketRequestListAction,
   marketRequestStatusAction,
+  marketRequestWithdrawAction,
   type MarketDemandService,
 } from '@/modules/market-demand/market-demand.actions'
 
@@ -28,6 +29,7 @@ const requestActions = Object.freeze({
   create: marketRequestCreateAction,
   list: marketRequestListAction,
   status: marketRequestStatusAction,
+  withdraw: marketRequestWithdrawAction,
 })
 
 export type MarketRequestActionName = keyof typeof requestActions
@@ -37,6 +39,7 @@ const rateLimitScopeByAction = Object.freeze({
   create: 'public-mutation',
   list: 'public-read',
   status: 'public-read',
+  withdraw: 'public-mutation',
 } as const satisfies Record<MarketRequestActionName, 'public-mutation' | 'public-read'>)
 
 export type MarketDemandHandlerOptions = Readonly<{
@@ -121,7 +124,9 @@ export async function handleMarketRequestPost(
           ? await marketRequestCreateAction.run({ data: marketRequestCreateAction.schema.parse(rawBody), context })
           : actionName === 'list'
             ? await marketRequestListAction.run({ data: marketRequestListAction.schema.parse(rawBody), context })
-            : await marketRequestStatusAction.run({ data: marketRequestStatusAction.schema.parse(rawBody), context })
+            : actionName === 'status'
+              ? await marketRequestStatusAction.run({ data: marketRequestStatusAction.schema.parse(rawBody), context })
+              : await marketRequestWithdrawAction.run({ data: marketRequestWithdrawAction.schema.parse(rawBody), context })
         const projected = action.outputSchema.safeParse(result)
         if (!projected.success) throw new Error('market_request_action_result_invalid')
         return response(projected.data, 200, {

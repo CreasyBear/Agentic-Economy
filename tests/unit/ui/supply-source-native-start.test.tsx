@@ -660,3 +660,80 @@ describe('source-native Provider start', () => {
     expect(slot).toBeTruthy()
   })
 })
+
+
+describe('Provider source suggestion review', () => {
+  const suggestion = { kind: 'suggested', sourceDigest: selectedOpenApiInitial.preview.sourceDigest,
+    sourceRevision: selectedOpenApiInitial.preview.sourceRevision, candidateRef: candidate.candidateRef,
+    description: 'A source-backed description.', evidence: [] }
+  const current = { kind: 'current', sourceDigest: suggestion.sourceDigest, sourceRevision: suggestion.sourceRevision, candidateRef: candidate.candidateRef }
+  function setup(onAssess = vi.fn().mockResolvedValueOnce(suggestion).mockResolvedValueOnce(current)) {
+    const onPublish = vi.fn()
+    const view = render(<AeSupplySourceNativeStart businessRef="business:one" initial={selectedOpenApiInitial}
+      onPreview={vi.fn()} onConnect={vi.fn()} onSelectCandidate={vi.fn()} onPublish={onPublish} onAssess={onAssess} />)
+    return { ...view, onAssess, onPublish }
+  }
+
+  it('requires explicit acceptance and a fresh source check before changing text', async () => {
+    const { onAssess, onPublish } = setup()
+    fireEvent.click(screen.getByRole('button', { name: 'Suggest from source' }))
+    await screen.findByRole('button', { name: 'Use description' })
+    expect((screen.getByLabelText('Description') as HTMLTextAreaElement).value).toBe(candidate.description)
+    expect(onPublish).not.toHaveBeenCalled()
+    fireEvent.click(screen.getByRole('button', { name: 'Use description' }))
+    await waitFor(() => expect((screen.getByLabelText('Description') as HTMLTextAreaElement).value).toBe(suggestion.description))
+    expect(onAssess.mock.calls.map(call => call[0].mode)).toEqual(['suggest', 'verify'])
+    expect(onPublish).not.toHaveBeenCalled()
+    onPublish.mockResolvedValue({ kind: 'refused', reason: 'source_unavailable' })
+    fireEvent.change(screen.getByLabelText('Category'), { target: { value: 'Research' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Continue to review' }))
+    fireEvent.click(screen.getByRole('checkbox', { name: 'I am authorised to publish this service' }))
+    fireEvent.click(screen.getByRole('checkbox', { name: 'The information is accurate' }))
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Publish after validation succeeds' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Submit for validation' }))
+    await waitFor(() => expect(onPublish).toHaveBeenCalledOnce())
+    expect(onPublish).toHaveBeenCalledWith(expect.objectContaining({
+      expectedSourceDigest: suggestion.sourceDigest,
+      candidateRef: suggestion.candidateRef,
+      presentation: expect.objectContaining({ description: suggestion.description }),
+    }))
+  })
+
+  it('keeps the existing description when dismissed', async () => {
+    const { onAssess } = setup()
+    fireEvent.click(screen.getByRole('button', { name: 'Suggest from source' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Keep current description' }))
+    expect((screen.getByLabelText('Description') as HTMLTextAreaElement).value).toBe(candidate.description)
+    expect(onAssess).toHaveBeenCalledTimes(1)
+  })
+
+  it('does not apply a suggestion after source verification fails', async () => {
+    setup(vi.fn().mockResolvedValueOnce(suggestion).mockResolvedValueOnce({ kind: 'unavailable', reason: 'source_changed' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Suggest from source' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Use description' }))
+    await screen.findByText(/No current suggestion is available/)
+    expect((screen.getByLabelText('Description') as HTMLTextAreaElement).value).toBe(candidate.description)
+  })
+
+  it('cancels an in-flight verification when the Provider edits the description', async () => {
+    const verification = deferred<typeof current>()
+    const { onAssess } = setup(vi.fn().mockResolvedValueOnce(suggestion).mockReturnValueOnce(verification.promise))
+    fireEvent.click(screen.getByRole('button', { name: 'Suggest from source' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Use description' }))
+    const signal = onAssess.mock.calls[1]?.[1] as AbortSignal
+    fireEvent.change(screen.getByLabelText('Description'), { target: { value: 'My newer description.' } })
+    expect(signal.aborted).toBe(true)
+    verification.resolve(current)
+    await waitFor(() => expect((screen.getByLabelText('Description') as HTMLTextAreaElement).value).toBe('My newer description.'))
+  })
+
+  it('aborts inference when leaving the source editor', async () => {
+    const pending = deferred<typeof suggestion>()
+    const { onAssess, unmount } = setup(vi.fn().mockReturnValue(pending.promise))
+    fireEvent.click(screen.getByRole('button', { name: 'Suggest from source' }))
+    const signal = onAssess.mock.calls[0]?.[1] as AbortSignal
+    unmount()
+    expect(signal.aborted).toBe(true)
+    pending.resolve(suggestion)
+  })
+})

@@ -3,14 +3,18 @@
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 
-import { cleanup, render, screen, waitFor } from '@testing-library/react'
-import type { ComponentType, ReactNode } from 'react'
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { useEffect, type ComponentType, type ReactNode } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const runtime = vi.hoisted(() => ({
   pathname: '/t/new',
   isAuthenticated: true,
+  sessionId: "session-1",
   constructClient: vi.fn(),
+  setHttpAuth: vi.fn(),
+  getToken: vi.fn(async () => 'verified-token'),
+  refresh: null as null | (() => Promise<string | null>),
   materialize: vi.fn(async () => true),
   renderClerkProvider: vi.fn(),
 }))
@@ -20,11 +24,23 @@ vi.mock('@clerk/tanstack-react-start', () => ({
     runtime.renderClerkProvider(runtime.pathname)
     return children
   },
-  useAuth: () => ({ isLoaded: true, isSignedIn: runtime.isAuthenticated }),
+  useAuth: () => ({ isLoaded: true, isSignedIn: runtime.isAuthenticated, sessionId: runtime.sessionId, userId: 'owner-1', orgId: null, getToken: runtime.getToken }),
 }))
 
 vi.mock('convex/react-clerk', () => ({
-  ConvexProviderWithClerk: ({ children }: { children: ReactNode }) => children,
+  ConvexProviderWithClerk: ({ children, useAuth }: { children: ReactNode; useAuth: () => { isSignedIn: boolean; getToken: () => Promise<string | null> } }) => {
+    const { getToken, isSignedIn } = useAuth()
+    runtime.refresh = getToken
+    useEffect(() => { if (isSignedIn) void getToken() }, [getToken, isSignedIn])
+    return children
+  },
+}))
+
+vi.mock('convex/browser', () => ({
+  ConvexHttpClient: class ConvexHttpClient {
+    setAuth(token: string) { runtime.setHttpAuth(token) }
+    mutation = runtime.materialize
+  },
 }))
 
 vi.mock('convex/react', () => ({
@@ -57,7 +73,7 @@ vi.mock('@tanstack/react-router', () => ({
     const fragment = hash === undefined ? '' : `#${hash}`
     return <a href={`${to}${query}${fragment}`} className={className}>{children}</a>
   },
-  Outlet: () => null,
+  Outlet: () => <div>Chat ready<input aria-label="Draft" defaultValue="" /></div>,
   Scripts: () => null,
   ScriptOnce: ({ children }: { children?: ReactNode }) => children ?? null,
   createRootRoute: (options: unknown) => ({ options }),
@@ -108,6 +124,9 @@ const source = readFileSync(
 beforeEach(() => {
   runtime.pathname = '/t/new'
   runtime.isAuthenticated = true
+  runtime.sessionId = "session-1"
+  runtime.getToken.mockReset().mockResolvedValue('verified-token')
+  runtime.setHttpAuth.mockReset()
   runtime.constructClient.mockReset()
   runtime.materialize.mockReset().mockResolvedValue(true)
   runtime.renderClerkProvider.mockReset()
@@ -117,6 +136,7 @@ beforeEach(() => {
 afterEach(() => {
   cleanup()
   vi.unstubAllEnvs()
+  vi.useRealTimers()
 })
 
 describe('Tool chat provider boundary', () => {
@@ -132,7 +152,7 @@ describe('Tool chat provider boundary', () => {
     expect(source).toContain("import { ClerkProvider, useAuth } from '@clerk/tanstack-react-start'")
     expect(source).toContain("import { ConvexProviderWithClerk } from 'convex/react-clerk'")
     expect(source).toMatch(/<ClerkProvider[^>]*>[\s\S]*<ChatConvexProvider>\{children\}<\/ChatConvexProvider>[\s\S]*<\/ClerkProvider>/u)
-    expect(source).toContain('<ConvexProviderWithClerk client={client} useAuth={useAuth}>')
+    expect(source).toContain('<ConvexProviderWithClerk client={client} useAuth={useInitializedAuth}>')
   })
 
   it('mounts Clerk at the application root for authentication routes', () => {
@@ -193,7 +213,7 @@ describe('Tool chat provider boundary', () => {
     }).options.component
     const view = render(<Root />, { container: document })
 
-    await waitFor(() => expect(runtime.materialize).toHaveBeenCalledWith({}))
+    await waitFor(() => expect(runtime.materialize).toHaveBeenCalledWith(expect.anything(), {}))
     expect(runtime.materialize).toHaveBeenCalledTimes(1)
 
     runtime.isAuthenticated = false
@@ -202,13 +222,71 @@ describe('Tool chat provider boundary', () => {
     expect(runtime.materialize).toHaveBeenCalledTimes(1)
   })
 
-  it('keeps provider rendering available when lifecycle materialization refuses', async () => {
-    runtime.materialize.mockRejectedValueOnce(new Error('credential_not_current'))
-    const Root = (Route as unknown as {
-      options: { component: ComponentType }
-    }).options.component
-
-    expect(() => render(<Root />, { container: document })).not.toThrow()
-    await waitFor(() => expect(runtime.materialize).toHaveBeenCalledWith({}))
+  it('waits for authority initialization before mounting authenticated chat', async () => {
+    let finish!: (ready: boolean) => void
+    runtime.materialize.mockImplementationOnce(() => new Promise<boolean>((resolve) => { finish = resolve }))
+    const Root = (Route as unknown as { options: { component: ComponentType } }).options.component
+    render(<Root />, { container: document })
+    expect(screen.queryByText('Chat ready')).toBeNull()
+    await waitFor(() => expect(runtime.materialize).toHaveBeenCalled())
+    await act(async () => { finish(true) })
+    expect(screen.getByText('Chat ready')).toBeTruthy()
   })
+
+  it.each(['refusal', 'rejection'])('keeps %s recoverable without mounting authenticated chat', async (failure) => {
+    if (failure === 'refusal') runtime.materialize.mockResolvedValueOnce(false)
+    else runtime.materialize.mockRejectedValueOnce(new Error('credential_not_current'))
+    const Root = (Route as unknown as { options: { component: ComponentType } }).options.component
+    render(<Root />, { container: document })
+    await screen.findByRole('button', { name: 'Try again' })
+    expect(screen.queryByText('Chat ready')).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Try again' }))
+    await screen.findByText('Chat ready')
+    expect(runtime.materialize).toHaveBeenCalledTimes(2)
+  })
+
+  it('ignores initialization completed for a previous session', async () => {
+    const pending: Array<(ready: boolean) => void> = []
+    runtime.materialize.mockImplementation(() => new Promise<boolean>((resolve) => { pending.push(resolve) }))
+    const Root = (Route as unknown as { options: { component: ComponentType } }).options.component
+    const view = render(<Root />, { container: document })
+    await waitFor(() => expect(pending).toHaveLength(1))
+    runtime.sessionId = 'session-2'
+    view.rerender(<Root />)
+    await waitFor(() => expect(pending).toHaveLength(2))
+    await act(async () => { pending[0]!(true) })
+    expect(screen.queryByText('Chat ready')).toBeNull()
+    await act(async () => { pending[1]!(true) })
+    expect(screen.getByText('Chat ready')).toBeTruthy()
+  })
+  it('reinitializes renewed tokens before exposing authenticated chat again', async () => {
+    const Root = (Route as unknown as { options: { component: ComponentType } }).options.component
+    render(<Root />, { container: document })
+    await screen.findByText('Chat ready')
+    let finish!: (ready: boolean) => void
+    runtime.getToken.mockResolvedValueOnce('renewed-token')
+    runtime.materialize.mockImplementationOnce(() => new Promise<boolean>((resolve) => { finish = resolve }))
+    let renewal!: Promise<string | null>
+    await act(async () => { renewal = runtime.refresh!() })
+    expect(screen.queryByText('Chat ready')).toBeNull()
+    expect(runtime.setHttpAuth).toHaveBeenLastCalledWith('renewed-token')
+    await act(async () => { finish(true); await renewal })
+    expect(await renewal).toBe('renewed-token')
+    expect(screen.getByText('Chat ready')).toBeTruthy()
+  })
+
+  it('renews active account authority without losing the draft and blocks on refusal', async () => {
+    vi.useFakeTimers()
+    const Root = (Route as unknown as { options: { component: ComponentType } }).options.component
+    await act(async () => { render(<Root />, { container: document }) })
+    fireEvent.change(screen.getByRole('textbox', { name: 'Draft' }), { target: { value: 'Keep my OCR request' } })
+    await act(async () => { await vi.advanceTimersByTimeAsync(40_000) })
+    expect(runtime.materialize).toHaveBeenCalledTimes(3)
+    expect(screen.getByDisplayValue('Keep my OCR request')).toBeTruthy()
+    runtime.materialize.mockResolvedValueOnce(false)
+    await act(async () => { await vi.advanceTimersByTimeAsync(20_000) })
+    expect(screen.queryByText('Chat ready')).toBeNull()
+    expect(screen.getByRole('button', { name: 'Try again' })).toBeTruthy()
+  })
+
 })

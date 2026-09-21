@@ -140,7 +140,7 @@ describe.sequential('durable Tool chat messaging and shares', () => {
     await drainExpectedUnavailableGenerations(backend)
   })
 
-  it('persists a fake-model response and settles saved stream deltas without network access', async () => {
+  it.each([false, true])('persists a final response and settles stream deltas (extended lookup=%s)', async extended => {
     const backend = convexTestWithMarketComponents()
     const { owner, canonicalAccountRef } = await publishedBusinessOwner(backend, 'chat-model-owner')
     const created = await owner.mutation(api.chatThreads.createThread, {
@@ -163,15 +163,26 @@ describe.sequential('durable Tool chat messaging and shares', () => {
       return saved.messageId
     })
 
+    const model = mockModel({
+      contentSteps: [
+        ...(extended ? Array.from({ length: 5 }, (_, index) => [{
+          type: 'tool-call' as const, toolCallId: `lookup-${index}`, toolName: 'registry_tools_describe',
+          input: JSON.stringify({ toolRef: `operation:v1:${'a'.repeat(64)}` }),
+        }]) : []),
+        [{ type: 'text', text: 'One current exchange-rate Tool is available.' }],
+      ],
+    })
+    const modelCalls = vi.spyOn(model, 'doStream')
     await backend.action(async (ctx) => {
       await streamDurableChatResponse(ctx, {
         threadId: created.threadId,
         ownerId: canonicalAccountRef,
         promptMessageId,
-      }, mockModel({
-        content: [{ type: 'text', text: 'One current exchange-rate Tool is available.' }],
-      }))
+      }, model)
     })
+    expect(modelCalls).toHaveBeenCalledTimes(extended ? 6 : 1)
+    expect(JSON.stringify(modelCalls.mock.calls[0]?.[0].prompt)).toContain('Use the returned priceLabel as an indicative price.')
+    if (extended) expect(modelCalls.mock.calls[5]?.[0].toolChoice).toEqual({ type: 'none' })
     await backend.mutation(internal.chatMessages.clearActiveGeneration, {
       threadId: created.threadId,
       promptMessageId,

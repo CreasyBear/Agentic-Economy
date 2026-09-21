@@ -29,5 +29,8 @@ export {
   marketLoaderDeps,
   validateMarketSearch,
   parseMarketCompareRefs,
+  toggleMarketCompareRef,
+  marketCompareParam,
+  carryMarketCompare,
   type MarketSearch,
 } from './market-route-data'

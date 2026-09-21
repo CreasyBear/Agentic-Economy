@@ -8,6 +8,7 @@ import {
 } from './agentAccessPrincipals'
 import { requireSourceRead, requireSourceWrite, sourceWriteArgs } from './sourceWriteAdmission'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
+import { marketRequestRef } from '@/modules/market-demand/request-identity'
 
 const demandSignalValue = v.object({
   requestRef: v.string(),
@@ -63,13 +64,20 @@ const readArgsValue = v.object({
 
 const readResultValue = v.union(
   v.object({ kind: v.literal('found'), request: demandSignalValue }),
+  v.object({ kind: v.literal('withdrawn') }),
+  v.object({ kind: v.literal('not_found') }),
+  v.object({ kind: v.literal('error'), code: v.literal('unauthenticated') }),
+)
+
+const withdrawResultValue = v.union(
+  v.object({ kind: v.literal('withdrawn'), requestRef: v.string() }),
   v.object({ kind: v.literal('not_found') }),
   v.object({ kind: v.literal('error'), code: v.literal('unauthenticated') }),
 )
 
 async function admitForWrite(
   ctx: MutationCtx,
-  args: Infer<typeof recordArgsValue>,
+  args: Infer<typeof recordArgsValue> | Infer<typeof readArgsValue>,
 ) {
   const source = await requireSourceWrite(ctx, args, 'protected_action')
   if (source.kind === 'rejected') return null
@@ -106,6 +114,7 @@ export const record = mutation({
     if (existing.length > 1) return { kind: 'refused', code: 'idempotency_conflict' }
     const replay = existing[0]
     if (replay !== undefined) {
+      if (replay.schemaVersion === 'market-demand-withdrawn:v1') return { kind: 'refused', code: 'invalid_request' }
       return replay.queryDigest === queryDigest
         ? {
             kind: 'replayed',
@@ -116,11 +125,11 @@ export const record = mutation({
         : { kind: 'refused', code: 'idempotency_conflict' }
     }
     const createdAt = Date.now()
-    const requestRef = `market-request:v1:${canonicalDigest({
+    const requestRef = marketRequestRef({
       principalId: principal.principalId,
       credentialId: args.agentPrincipal.credentialId,
       idempotencyKey,
-    }).replace('sha256:', '')}`
+    })
     await ctx.db.insert('marketDemandSignals', {
       schemaVersion: 'market-demand-signal:v1',
       requestRef,
@@ -158,7 +167,7 @@ export const list = query({
       kind: 'available',
       requests: {
         ...requests,
-        page: requests.page.map((row) => ({
+        page: requests.page.filter((row) => row.schemaVersion === 'market-demand-signal:v1').map((row) => ({
           requestRef: row.requestRef,
           query: row.query,
           createdAt: row.createdAt,
@@ -185,6 +194,7 @@ export const read = query({
       || row.principalId !== principal.principalId
       || row.credentialId !== args.agentPrincipal.credentialId
     ) return { kind: 'not_found' }
+    if (row.schemaVersion === 'market-demand-withdrawn:v1') return { kind: 'withdrawn' }
     return {
       kind: 'found',
       request: {
@@ -194,5 +204,40 @@ export const read = query({
         updatedAt: row.updatedAt,
       },
     }
+  },
+})
+
+export const withdraw = mutation({
+  args: readArgsValue.fields,
+  returns: withdrawResultValue,
+  handler: async (ctx, args): Promise<Infer<typeof withdrawResultValue>> => {
+    // Requires signed admission and current exact credential ownership.
+    // Ensures withdrawal erases the need and atomically prevents resurrection.
+    // Invariant: repeat withdrawals preserve the first receipt; no inference/purchase.
+    // On violation: unauthenticated or not_found, without disclosing other owners.
+    const principal = await admitForWrite(ctx, args)
+    if (principal === null) return { kind: 'error', code: 'unauthenticated' }
+    const rows = await ctx.db.query('marketDemandSignals')
+      .withIndex('by_requestRef', (index) => index.eq('requestRef', args.requestRef))
+      .take(2)
+    const row = rows[0]
+    if (rows.length !== 1 || row === undefined
+      || row.principalId !== principal.principalId
+      || row.credentialId !== args.agentPrincipal.credentialId) return { kind: 'not_found' }
+    if (row.schemaVersion === 'market-demand-signal:v1') {
+      await ctx.db.replace(row._id, {
+        schemaVersion: 'market-demand-withdrawn:v1',
+        requestRef: row.requestRef,
+        principalId: row.principalId,
+        ownerId: row.ownerId,
+        credentialId: row.credentialId,
+        applicationRef: row.applicationRef,
+        environment: row.environment,
+        idempotencyKey: row.idempotencyKey,
+        createdAt: row.createdAt,
+        updatedAt: Date.now(),
+      })
+    }
+    return { kind: 'withdrawn', requestRef: row.requestRef }
   },
 })

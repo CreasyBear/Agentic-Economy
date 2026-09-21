@@ -166,6 +166,17 @@ it('returns focus to Compare after dismissing the comparison dialog', async () =
   fireEvent.click(screen.getByRole('button', { name: 'Close' }))
   await waitFor(() => expect(document.activeElement).toBe(opener))
 })
+it('docks the comparison tray in document flow below results without sticky overlay', () => {
+  show(undefined, entries.slice(0, 4))
+  fireEvent.click(screen.getByRole('button', { name: 'Add Tool 0 to comparison' }))
+  const tray = document.querySelector('[data-compare-tray="flow"]')
+  expect(tray).toBeTruthy()
+  expect(tray!.className).not.toContain('sticky')
+  expect(tray!.className).not.toContain('fixed')
+  expect(tray!.className).not.toContain('shadow-float')
+  const cataloguePages = screen.getByRole('navigation', { name: 'Catalogue pages' })
+  expect(tray!.compareDocumentPosition(cataloguePages) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+})
 
 const coverage = { source: 'coinbase' as const, generation: 'generation-1', indexedTotal: 14455, reportedTotal: 14455, reportedTotalAtStart: 14455, sourceChangedDuringScan: false, duplicateObservations: 0, pagesFetched: 145, startedAt: 1, completedAt: 2, completeness: 'completed_observed_scan' as const }
 const indexedPage = { kind: 'ok' as const, items: entries.slice(0, 2), offset: 0, limit: 20 }
@@ -214,12 +225,12 @@ describe('indexed x402 catalogue controls', () => {
       page: { kind: 'ok', items: nextItems, offset: 0, limit: 20 }, isDone: true,
     })
     show({ ...nativeFilters, sort: 'relevance', query: 'weather' }, undefined, { page: indexedPage, catalogue: indexedCatalogue, overview })
-    expect(screen.getByText('2 Tools loaded')).toBeTruthy()
+    expect(screen.getByText(/2 Tools loaded/)).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Load more' }))
     const { view: _view, ...filtersWithoutView } = nativeFilters
     expect(readX402DirectoryCatalogueServer).toHaveBeenCalledWith({ data: { ...filtersWithoutView, sort: 'relevance', query: 'weather', indexCursor: indexedCatalogue.indexCursor } })
     await waitFor(() => expect(screen.getByRole('link', { name: nextItems[0]!.title })).toBeTruthy())
-    expect(screen.getByText('4 Tools loaded')).toBeTruthy()
+    expect(screen.getByText(/4 Tools loaded/)).toBeTruthy()
     // The server reported isDone this time, so Load more is gone.
     expect(screen.queryByRole('button', { name: 'Load more' })).toBeNull()
   })
@@ -238,13 +249,13 @@ describe('indexed x402 catalogue controls', () => {
     expect(failure.textContent).toContain('More Tools could not be loaded')
     expect(failure.className).toContain('text-muted-foreground')
     expect(failure.className).not.toContain('text-destructive')
-    expect(screen.getByText('2 Tools loaded')).toBeTruthy()
+    expect(screen.getByText(/2 Tools loaded/)).toBeTruthy()
 
     fireEvent.click(screen.getByRole('button', { name: 'Try loading more again' }))
     await waitFor(() => expect(screen.getByRole('link', { name: nextItems[0]!.title })).toBeTruthy())
     expect(readX402DirectoryCatalogueServer).toHaveBeenNthCalledWith(2, { data: { indexCursor: indexedCatalogue.indexCursor } })
     expect(screen.queryByRole('alert')).toBeNull()
-    expect(screen.getByText('4 Tools loaded')).toBeTruthy()
+    expect(screen.getByText(/4 Tools loaded/)).toBeTruthy()
   })
   it('ignores a stale Load more response after a new search has supplied an authoritative first page', async () => {
     let resolveContinuation: (value: unknown) => void = () => undefined
@@ -280,10 +291,10 @@ describe('indexed x402 catalogue controls', () => {
   it('separates the catalogue total from the number of Tools loaded so far', () => {
     show({ ...nativeFilters, query: 'weather', sort: 'relevance' }, undefined, { page: { ...indexedPage, total: coverage.indexedTotal }, catalogue: indexedCatalogue, overview })
     expect(screen.getByText('14,455 Tools in the catalogue')).toBeTruthy()
-    expect(screen.getByText('2 Tools loaded')).toBeTruthy()
+    expect(screen.getByText(/2 Tools loaded/)).toBeTruthy()
     expect(screen.queryByText('14,455 matching Tools')).toBeNull()
     expect(screen.queryByText('2 matching Tools')).toBeNull()
-    expect(screen.getByText('Keyword search across the catalogue')).toBeTruthy()
+    expect(screen.getByText(/Keyword search across the catalogue/)).toBeTruthy()
   })
   it('keeps Load more available for an empty portion when the index has more entries', () => {
     const empty = { ...indexedPage, items: [] }

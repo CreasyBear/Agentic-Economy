@@ -1,10 +1,12 @@
 import { describe, expect, it } from 'vitest'
 
-import type { ToolQuoteResult } from '@/modules/capability-execution/quote'
+import { projectToolQuoteRefusal, type ToolQuoteResult } from '@/modules/capability-execution/quote'
 import {
   INSPECT_ACCOUNT_AVAILABLE_LABEL,
   INSPECT_AGENT_MAXIMUM_LABEL,
   projectInspectResult,
+  projectToolCard,
+  CHAT_TOOL_NAME_MAP,
   serializeToolCard,
 } from '@/modules/chat/tool-card'
 import { formatCurrencyAmount } from '@/modules/money/public'
@@ -16,6 +18,22 @@ const AVAILABLE = { currency: 'AUD', units: '5000000', exponent: 6 } as const
 const MAXIMUM = { currency: 'AUD', units: '2000000', exponent: 6 } as const
 const SOURCE_REQUIREMENT = { currency: 'AUD', units: '250000', exponent: 6 } as const
 const EXPIRES_AT = 1_700_000_060_000
+
+describe('search result state', () => {
+  it('shows a successful empty search as complete and preserves it in shared history', () => {
+    const card = projectToolCard({ type: `tool-${CHAT_TOOL_NAME_MAP.canonicalToProvider['registry.tools.search']}`,
+      state: 'output-available', output: { kind: 'no_candidates', items: [], count: 0 } })
+    expect(card).toMatchObject({ kind: 'choices', state: 'complete', count: 0, choices: [], toolRefs: [] })
+    if (card === null) throw new Error('missing_card')
+    expect(projectToolCard(serializeToolCard(card))).toEqual(card)
+  })
+
+  it('keeps a source outage distinct from a successful empty search', () => {
+    expect(projectToolCard({ type: `tool-${CHAT_TOOL_NAME_MAP.canonicalToProvider['registry.tools.search']}`,
+      state: 'output-available', output: { kind: 'unavailable', reason: 'source_unavailable' } }))
+      .toMatchObject({ kind: 'status', state: 'error', summary: 'Tool unavailable' })
+  })
+})
 
 function committedQuote(): Extract<ToolQuoteResult, { kind: 'committed' }> {
   return {
@@ -60,6 +78,23 @@ function serializedInspectFacts(card: ReturnType<typeof projectInspectResult>): 
 }
 
 describe('inspect Quote tool cards', () => {
+  it('shows the required recovery action for an unadmitted Quote, including in shared history', () => {
+    const output = projectToolQuoteRefusal({
+      toolRef: TOOL_REF, input: {}, code: 'inspection_unavailable',
+      retryable: false, reason: 'missing_source_write_admission', correlationRef: 'chat-quote-refusal',
+    })
+    const card = projectToolCard({
+      type: `tool-${CHAT_TOOL_NAME_MAP.canonicalToProvider['tool.quote']}`,
+      state: 'output-available', output,
+    })
+    expect(card).toMatchObject({
+      kind: 'status', state: 'refused',
+      summary: 'AE could not complete this Quote request. Contact support before trying again.',
+    })
+    if (card === null) throw new Error('missing_card')
+    expect(projectToolCard(serializeToolCard(card))).toEqual(card)
+  })
+
   it('keeps Account available and Agent maximum on the owner inspect projection', () => {
     const card = projectInspectResult(committedQuote())
     expect(card.kind).toBe('inspect')
@@ -99,5 +134,15 @@ describe('inspect Quote tool cards', () => {
     ]))
     expect(factLabels(facts)).not.toContain(INSPECT_ACCOUNT_AVAILABLE_LABEL)
     expect(factLabels(facts)).not.toContain(INSPECT_AGENT_MAXIMUM_LABEL)
+  })
+})
+
+
+describe('chat JSON result decoding', () => {
+  it.each(['invalid JSON', '[]', 'null', 'x'.repeat(65 * 1024)])('refuses invalid or oversized text (%#)', (output) => {
+    expect(projectToolCard({
+      type: `tool-${CHAT_TOOL_NAME_MAP.canonicalToProvider['registry.tools.describe']}`,
+      state: 'output-available', output,
+    })).toMatchObject({ kind: 'status', state: 'error' })
   })
 })

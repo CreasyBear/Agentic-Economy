@@ -12,7 +12,7 @@ import {
 import { internal } from './_generated/api'
 import { env, httpAction } from './_generated/server'
 import type { ActionCtx } from './_generated/server'
-import { createChatAgent } from './chatTools'
+import { createChatAgent, prepareChatStep } from './chatTools'
 
 export const MAX_ANONYMOUS_CHAT_MESSAGES = 12
 export const MAX_ANONYMOUS_CHAT_PROMPT_CHARACTERS = 2_000
@@ -172,6 +172,7 @@ export async function streamAnonymousChatResponse(
     { userId: 'anonymous-ephemeral' },
     {
       messages: messages.map((message) => ({ ...message })) as ModelMessage[],
+      prepareStep: prepareChatStep,
       ...(abortSignal === undefined ? {} : { abortSignal }),
     },
   )

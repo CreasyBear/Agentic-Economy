@@ -568,6 +568,23 @@ describe('interactive authority', () => {
       })
     })
 
+    it('renews a verified active fallback window before expiry without duplicate generations', async () => {
+      const backend = createBackend()
+      const identity = provisionedIdentity({ exp: undefined })
+      const owner = backend.withIdentity(identity)
+      await expectMaterialize(owner, true)
+      vi.setSystemTime(NOW + 40_000)
+      await Promise.all([expectMaterialize(owner, true), expectMaterialize(owner, true)])
+      const rows = await collectAuthorityTables(backend)
+      expect(rows.credentials).toHaveLength(2)
+      expect(rows.credentials.find(({ generation }) => generation === 2)).toMatchObject({
+        lifecycle: 'active', issuedAt: NOW + 40_000, expiresAt: NOW + 100_000,
+      })
+      vi.setSystemTime(NOW + 65_000)
+      await expect(resolveContext(backend, identity))
+        .resolves.toMatchObject({ provenance: { credentialGeneration: 2 } })
+    })
+
     it('anchors the credential window on the server clock when the identity carries no exp claim', async () => {
       const backend = createBackend()
       const owner = backend.withIdentity(provisionedIdentity({ exp: undefined }))

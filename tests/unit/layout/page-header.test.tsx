@@ -7,7 +7,7 @@ import { describe, expect, it } from 'vitest'
 import { AePageHeader } from '@/components/ae/layout/AePageHeader'
 
 describe('AePageHeader', () => {
-  it('uses the site eyebrow marker for public page intros', () => {
+  it('uses a discover eyebrow without a marker for public page intros', () => {
     render(
       <AePageHeader
         eyebrow="Catalog"
@@ -19,7 +19,7 @@ describe('AePageHeader', () => {
     expect(screen.getByText('Catalog')).toBeTruthy()
     const heading = screen.getByRole('heading', { level: 1, name: 'The tool catalog' })
     expect(heading.classList.contains('font-display')).toBe(true)
-    expect(heading.classList.contains('font-normal')).toBe(true)
+    expect(heading.classList.contains('font-extralight')).toBe(true)
     expect(screen.getByText('Compare exact Operations on price and readiness.')).toBeTruthy()
   })
 
@@ -40,7 +40,8 @@ describe('AePageHeader', () => {
 
     const heading = screen.getByRole('heading', { level: 1, name: 'Operation terminal' })
     expect(heading.classList.contains('font-sans')).toBe(true)
-    expect(heading.classList.contains('font-bold')).toBe(true)
+    expect(heading.classList.contains('font-medium')).toBe(true)
+    expect(heading.classList.contains('font-bold')).toBe(false)
     expect(heading.classList.contains('font-display')).toBe(false)
   })
 
@@ -58,7 +59,7 @@ describe('AePageHeader', () => {
     expect(section?.className).toMatch(/py-section/)
     expect(section?.className).toMatch(/md:py-page/)
     expect(heading.classList.contains('font-display')).toBe(true)
-    expect(heading.classList.contains('font-normal')).toBe(true)
+    expect(heading.classList.contains('font-extralight')).toBe(true)
     expect(heading.classList.contains('text-3xl')).toBe(true)
   })
 
@@ -95,7 +96,7 @@ describe('AePageHeader', () => {
     expect(section?.className).not.toMatch(/md:py-page/)
 
     expect(heading.classList.contains('font-sans')).toBe(true)
-    expect(heading.classList.contains('font-semibold')).toBe(true)
+    expect(heading.classList.contains('font-medium')).toBe(true)
     expect(heading.classList.contains('font-display')).toBe(false)
 
     const status = screen.getByRole('status')

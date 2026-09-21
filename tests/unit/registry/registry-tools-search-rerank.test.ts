@@ -97,7 +97,6 @@ describe('registryToolsSearchAction Jev re-rank wiring', () => {
         match_0: { type: 'noul' },
         match_1: { type: 'noul' },
         match_2: { type: 'noul' },
-        best_match: { type: 'choice' },
       },
     })
     expect(result.kind).toBe('ok')

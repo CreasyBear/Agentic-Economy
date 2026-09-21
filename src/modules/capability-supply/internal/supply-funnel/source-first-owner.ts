@@ -26,6 +26,7 @@ import {
   type SupplySourcePreview,
   type SupplySourcePreviewDependencies,
 } from '../../source-preview'
+import { assessSupplySource, type SupplySourceAssessment } from '../../source-assessment'
 import type { SupplyPublishResult } from '../../supply-actions'
 import { readOwnerSupplyQuery } from './funnel-owner'
 import type { OwnerSupplyFunnelReadback } from './types'
@@ -36,6 +37,46 @@ const ownerSourcePreviewInputSchema = z.strictObject({
   connectionRef: z.string().trim().min(1).max(300).optional(),
   idempotencyKey: idempotencyKeySchema,
 })
+
+export const ownerSourceAssessmentInputSchema = ownerSourcePreviewInputSchema.extend({
+  expectedSourceDigest: z.string().regex(/^sha256:[0-9a-f]{64}$/u),
+  expectedSourceRevision: z.string().min(1),
+  candidateRef: z.string().regex(/^sha256:[0-9a-f]{64}$/u),
+  mode: z.enum(['suggest', 'verify']),
+})
+
+export type OwnerSupplySourceAssessmentInput = z.infer<typeof ownerSourceAssessmentInputSchema>
+
+export async function assessOwnerSupplySource(input: {
+  data: OwnerSupplySourceAssessmentInput
+  context: unknown
+  signal?: AbortSignal
+}): Promise<SupplySourceAssessment> {
+  const { data } = input
+  const previewInput = { data: ownerSourcePreviewInputSchema.parse({
+    businessId: data.businessId, source: data.source, idempotencyKey: data.idempotencyKey,
+    ...(data.connectionRef === undefined ? {} : { connectionRef: data.connectionRef }),
+  }), context: input.context }
+  const current = (preview: Extract<SupplySourcePreview, { kind: 'ready' }>): boolean => (
+    preview.kind === 'ready' && preview.sourceDigest === data.expectedSourceDigest
+    && preview.sourceRevision === data.expectedSourceRevision
+    && preview.candidates.some(candidate => candidate.candidateRef === data.candidateRef && candidate.disposition.kind === 'supported')
+  )
+  if (input.signal?.aborted) return { kind: 'unavailable', reason: 'cancelled' }
+  const preview = await previewOwnerSupplySource(previewInput)
+  if (preview.kind !== 'ready' || !current(preview)) return { kind: 'unavailable', reason: preview.kind === 'ready' ? 'source_changed' : 'source_unavailable' }
+  if (input.signal?.aborted) return { kind: 'unavailable', reason: 'cancelled' }
+  if (data.mode === 'verify') return { kind: 'current', sourceDigest: preview.sourceDigest,
+    sourceRevision: preview.sourceRevision, candidateRef: data.candidateRef }
+  const assessment = await assessSupplySource(preview, data.candidateRef,
+    input.signal === undefined ? {} : { signal: input.signal })
+  if (assessment.kind !== 'suggested') return assessment
+  // Source refresh or ownership loss during inference invalidates the suggestion.
+  const refreshed = await previewOwnerSupplySource(previewInput)
+  if (refreshed.kind !== 'ready' || !current(refreshed)) return { kind: 'unavailable', reason: refreshed.kind === 'ready' ? 'source_changed' : 'source_unavailable' }
+  if (input.signal?.aborted) return { kind: 'unavailable', reason: 'cancelled' }
+  return assessment
+}
 
 const ownerSourceConnectionInputSchema = z.strictObject({
   businessId: z.string().min(1),

@@ -13,6 +13,25 @@ const referenceRate = vi.hoisted(() => vi.fn(async () => ({ source: 'coinbase' a
 vi.mock('@/modules/money/reference-rate', () => ({ fetchCoinbaseReferenceRate: referenceRate }))
 
 describe('native admitted Tool catalogue', () => {
+  it('does not recommend unrelated Tools merely because a request contains filler words', async () => {
+    const backend = convexTest(schema, convexModules)
+    await admitDiscoveredToolFixture(backend)
+    await backend.run(async (ctx) => {
+      const publication = await ctx.db.query('capabilityPublications').unique()
+      if (publication === null) throw new Error('fixture_missing')
+      await ctx.db.patch(publication._id, { searchText: 'Convert timezone from one region to another' })
+    })
+    for (const query of ['extract text from scanned PDFs using OCR', 'find for me']) {
+      const result = await backend.query(api.capabilitySupplyTools.search, { query })
+      expect(result).toMatchObject({ kind: 'no_candidates', query: query.toLowerCase(), matchedCount: 0 })
+    }
+    const matched = await backend.query(api.capabilitySupplyTools.search, { query: 'find timezone for me' })
+    expect(matched).toMatchObject({ kind: 'ok', query: 'find timezone for me' })
+    if (matched.kind !== 'ok') throw new Error('expected_timezone_tool')
+    expect(matched.items).toHaveLength(1)
+    expect(await backend.query(api.capabilitySupplyTools.search, { query: '' })).toMatchObject({ kind: 'ok' })
+  })
+
   it('rejects sensitive queries before native reads or external disclosure', async () => {
     const backend = convexTest(schema, convexModules)
     const query = 'background check SSN 123-45-6789 victim@example.com'

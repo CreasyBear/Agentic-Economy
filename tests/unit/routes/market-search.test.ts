@@ -1,6 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { Route, parseMarketCompareRefs, validateMarketSearch } from "@/routes/market";
+import {
+  carryMarketCompare,
+  marketCompareParam,
+  toggleMarketCompareRef,
+} from "@/modules/market/market-route-data";
 import { resolveCanonicalBaseUrl } from "@/lib/server/canonical-url";
 
 vi.mock("@/lib/server/canonical-url.functions", () => ({
@@ -82,6 +87,35 @@ describe("legacy compare mapping", () => {
     expect(validateMarketSearch({ compare: `${first},${second},${third},${fourth},${fifth}` })).toEqual({});
     expect(validateMarketSearch({ compare: "" })).toEqual({});
     expect(validateMarketSearch({ compare: `${first},   ,${second}` })).toEqual({ compare: `${first},${second}` });
+  });
+
+  it("toggles a compare set and carries it across Market search patches", () => {
+    const first = "https://api.example.com/tools/first";
+    const second = "https://api.example.com/tools/second";
+    const third = "https://api.example.com/tools/third";
+    const fourth = "https://api.example.com/tools/fourth";
+    const fifth = "https://api.example.com/tools/fifth";
+
+    expect(toggleMarketCompareRef([], first)).toEqual([first]);
+    expect(toggleMarketCompareRef([first], first)).toEqual([]);
+    expect(toggleMarketCompareRef([first, second, third, fourth], fifth)).toEqual([
+      first,
+      second,
+      third,
+      fourth,
+    ]);
+    expect(marketCompareParam([first, second])).toBe(`${first},${second}`);
+    expect(marketCompareParam([])).toBeUndefined();
+
+    const withCompare = { query: "image generation", compare: `${first},${second}` };
+    expect(carryMarketCompare(withCompare, { query: "image generation", view: "tools" })).toEqual({
+      query: "image generation",
+      view: "tools",
+      compare: `${first},${second}`,
+    });
+    expect(carryMarketCompare(withCompare, { view: "tools", compare: undefined })).toEqual({
+      view: "tools",
+    });
   });
 });
 

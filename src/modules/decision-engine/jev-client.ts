@@ -14,7 +14,7 @@ const DEFAULT_JEV_TIMEOUT_MS = 1500
 /**
  * Requires valid SDK questions and positive timing/retry configuration.
  * Ensures consumed answers are validated, or a classified operational failure.
- * Discovery has one attempt and a total <= 1,500 ms budget, including body delivery.
+ * Interactive discovery/Provider review has one attempt and a total <= 1,500 ms budget, including body delivery.
  * Invariant: SDK owns I/O; no payload/credentials escape in operational errors.
  * On programmer/configuration defects: throw; never manufacture fallback answers.
  */
@@ -32,11 +32,12 @@ export async function callJevSystemOne(
   if (options.signal?.aborted) throw new JevUnavailableError('cancelled')
   if (options.disableJev === true) throw new JevUnavailableError('disabled')
   const discovery = options.purpose === 'discovery'
+  const interactive = discovery || options.purpose === 'provider_source'
   if (discovery && process.env.AE_JEV_DISCOVERY_ENABLED === 'false') throw new JevUnavailableError('disabled')
-  if (discovery && JSON.stringify(request.state).length > 32_000) throw new JevUnavailableError('evidence_too_large')
+  if (interactive && JSON.stringify(request.state).length > 32_000) throw new JevUnavailableError('evidence_too_large')
   const deadlineAt = Math.min(
     options.deadlineAt ?? Infinity,
-    discovery ? startedAt + Math.min(configuredTimeout, DEFAULT_JEV_TIMEOUT_MS) : Infinity,
+    interactive ? startedAt + Math.min(configuredTimeout, DEFAULT_JEV_TIMEOUT_MS) : Infinity,
   )
   const timeout = Math.min(configuredTimeout, deadlineAt - Date.now())
   if (timeout <= 0) throw new JevUnavailableError('timeout')
@@ -84,7 +85,7 @@ export async function callJevSystemOne(
     timeout,
     logLevel: 'off',
     fetch: adaptedFetch,
-    retry: { maxRetries: discovery ? 0 : options.maxRetries ?? 1 },
+    retry: { maxRetries: interactive ? 0 : options.maxRetries ?? 1 },
   })
 
   const remainingMs = deadlineAt - Date.now()
@@ -93,7 +94,7 @@ export async function callJevSystemOne(
   const signals = [options.signal, deadlineSignal].filter((signal): signal is AbortSignal => signal !== undefined)
   const requestOptions: RequestOptions = {
     timeout: Math.min(timeout, remainingMs),
-    retry: { maxRetries: discovery ? 0 : options.maxRetries ?? 1 },
+    retry: { maxRetries: interactive ? 0 : options.maxRetries ?? 1 },
     ...(signals.length === 0 ? {} : { signal: AbortSignal.any(signals) }),
   }
   // SDK owns transport, body buffering, timeout cleanup and retries. Only its

@@ -9,6 +9,8 @@ import {
   projectTranscriptTurns,
   readAnonymousChatHandoff,
   rememberAnonymousChatHandoff,
+  textFromParts,
+  projectAnonymousTranscript,
 } from '@/components/ae/chat/presentation'
 import { providerSafeActionToolName } from '@/modules/actions/tool-contract'
 
@@ -75,6 +77,26 @@ describe('anonymous chat recovery', () => {
 })
 
 describe('transcript projector', () => {
+  it.each(['step-start', 'tool-registry_tools_search', 'tool-card'])('separates text across %s without splitting streamed chunks', (boundary) => {
+    const parts = [
+      { type: 'text', text: 'Found ' }, { type: 'text', text: 'three Tools.' },
+      { type: boundary }, { type: 'reasoning', text: 'PRIVATE_REASONING' },
+      { type: 'text', text: '' },
+      { type: 'text', text: 'Compare ' }, { type: 'text', text: 'their inputs.' },
+      { type: boundary },
+    ]
+    expect(textFromParts(parts)).toBe('Found three Tools.\n\nCompare their inputs.')
+    expect(projectAnonymousTranscript([{ id: 'one', role: 'assistant', parts }]))
+      .toEqual([{ role: 'assistant', content: 'Found three Tools.\n\nCompare their inputs.' }])
+  })
+
+  it('keeps existing paragraph spacing and ignores non-text evidence', () => {
+    expect(textFromParts([
+      { type: 'text', text: 'Found Tools.\n\n' }, { type: 'step-start' },
+      { type: 'source-url', url: 'https://private.example' },
+      { type: 'text', text: 'Inspect the input.' },
+    ])).toBe('Found Tools.\n\nInspect the input.')
+  })
   it('allowlists the six market Tools and drops reasoning, sources, and files', () => {
     const turns = projectTranscriptTurns([{
       id: 'assistant-1',

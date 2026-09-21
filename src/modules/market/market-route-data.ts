@@ -18,6 +18,43 @@ export function parseMarketCompareRefs(value: unknown): readonly string[] | unde
   return refs
 }
 
+/** Add or remove one Tool ref. Cap stays 4. */
+export function toggleMarketCompareRef(current: readonly string[], ref: string): readonly string[] {
+  if (ref.length === 0 || ref.length > 8_192) return current
+  if (current.includes(ref)) return current.filter((item) => item !== ref)
+  if (current.length >= 4) return current
+  return [...current, ref]
+}
+
+export function marketCompareParam(refs: readonly string[]): string | undefined {
+  return parseMarketCompareRefs(refs.join(','))?.join(',')
+}
+
+/**
+ * Keep `compare` on Market navigations unless the next search sets it.
+ * `compare: undefined` clears the set.
+ */
+export function carryMarketCompare<T extends Record<string, unknown>>(
+  from: Readonly<{ compare?: string }>,
+  to: T,
+): T {
+  if (Object.prototype.hasOwnProperty.call(to, 'compare')) {
+    const compare = to.compare
+    if (typeof compare !== 'string') {
+      const { compare: _compare, ...rest } = to
+      return rest as T
+    }
+    const parsed = parseMarketCompareRefs(compare)
+    if (parsed === undefined) {
+      const { compare: _compare, ...rest } = to
+      return rest as T
+    }
+    return { ...to, compare: parsed.join(',') }
+  }
+  if (from.compare === undefined) return to
+  return { ...to, compare: from.compare }
+}
+
 export function validateMarketSearch(search: Record<string, unknown>): MarketSearch {
   const directory = x402DirectoryCatalogueInputSchema.parse(directoryCatalogueSearchValues(search))
   if (search.providerCursor !== undefined && (typeof search.providerCursor !== 'string' || search.providerCursor.length === 0 || search.providerCursor.length > 16_384)) {
