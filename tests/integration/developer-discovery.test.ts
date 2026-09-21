@@ -106,7 +106,9 @@ describe('developer discovery route handlers', () => {
   })
 
   it('keeps the page loader on the public readback contract', async () => {
-    const readback = await loadDeveloperDiscoveryRoute()
+    const readback = await loadDeveloperDiscoveryRoute(
+      new Request('http://127.0.0.1:3024/developers/discovery'),
+    )
 
     expect(readback).toMatchObject({
       schemaVersion: 'developer-discovery:v1',

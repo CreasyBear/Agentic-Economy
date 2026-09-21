@@ -48,7 +48,15 @@ describe('developer discovery route readback', () => {
     const readback = readDeveloperDiscoveryRoute(state, { now: 4_000 })
     const copy = renderDeveloperDiscoveryRouteCopy(readback)
 
-    await expect(loadDeveloperDiscoveryRoute()).resolves.toMatchObject({ schemaVersion: 'developer-discovery:v1' })
+    const pageReadback = await loadDeveloperDiscoveryRoute(
+      new Request('http://127.0.0.1:3024/developers/discovery'),
+    )
+    expect(pageReadback).toMatchObject({
+      schemaVersion: 'developer-discovery:v1',
+      canonicalBaseUrl: 'http://127.0.0.1:3024',
+      copy: { title: 'Discovery status' },
+    })
+    expect(pageReadback.artifacts.every((artifact) => artifact.checkedAt === pageReadback.generatedAt)).toBe(true)
     expect(readback.publicFacts).toEqual([
       expect.objectContaining({
         slug: 'demo-listed-provider',

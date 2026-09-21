@@ -450,52 +450,67 @@ export function ds19HarvestBudgetViolations(): readonly string[] {
   return violations
 }
 
-/** DS-16 harvest budget — developers API + discovery routes. */
+/** DS-16 harvest budget — developers API + discovery surfaces. */
 export const DS_16_SOURCE_FILES = [
   'src/routes/developers.api.tsx',
+  'src/components/ae/developers/api-reference/DevelopersApiPage.tsx',
+  'src/components/ae/developers/api-reference/developers-api.contracts.ts',
   'src/routes/developers.discovery.tsx',
+  'src/components/ae/developers/discovery/AeDeveloperDiscoveryPage.tsx',
+  'src/components/ae/developers/discovery/discovery.view-model.ts',
 ] as const
 
 export function ds16DevelopersApiHarvestViolations(): readonly string[] {
-  const relative = 'src/routes/developers.api.tsx'
+  const relative = 'src/components/ae/developers/api-reference/DevelopersApiPage.tsx'
+  const contractRelative = 'src/components/ae/developers/api-reference/developers-api.contracts.ts'
+  const routeSource = readRepoFile('src/routes/developers.api.tsx')
   const source = readRepoFile(relative)
+  const contractSource = readRepoFile(contractRelative)
   const violations: string[] = []
   if (!source.includes('AePublicPage')) {
     violations.push(`${relative}: missing AePublicPage`)
   }
-  if (!source.includes('eyebrow="Developers"')) {
-    violations.push(`${relative}: missing Developers eyebrow`)
+  if (!contractSource.includes("eyebrow: 'Developers'")) {
+    violations.push(`${contractRelative}: missing Developers eyebrow`)
+  }
+  if (
+    !source.includes('title={DEVELOPERS_API_COPY.title}') ||
+    !contractSource.includes("title: 'API reference'") ||
+    !routeSource.includes("title: 'API reference | Agentic Economy'")
+  ) {
+    violations.push(`${relative}: tab title not tied to visible h1 copy`)
   }
   if (/^ {6,}<script\b/m.test(source)) {
-    violations.push(`${relative}: Scalar CDN script in parent document`)
-  }
-  if (!source.includes('srcDoc')) {
-    violations.push(`${relative}: missing Scalar srcDoc iframe isolation`)
+    violations.push(`${relative}: script in parent document`)
   }
   return violations
 }
 
 export function ds16DevelopersDiscoveryHarvestViolations(): readonly string[] {
-  const relative = 'src/routes/developers.discovery.tsx'
-  const source = readRepoFile(relative)
+  const routeRelative = 'src/routes/developers.discovery.tsx'
+  const pageRelative = 'src/components/ae/developers/discovery/AeDeveloperDiscoveryPage.tsx'
+  const viewModelRelative = 'src/components/ae/developers/discovery/discovery.view-model.ts'
+  const routeSource = readRepoFile(routeRelative)
+  const pageSource = readRepoFile(pageRelative)
+  const viewModelSource = readRepoFile(viewModelRelative)
   const violations: string[] = []
-  if (source.includes('AeOperatorPage')) {
-    violations.push(`${relative}: AeOperatorPage`)
+  if (pageSource.includes('AeOperatorPage')) {
+    violations.push(`${pageRelative}: AeOperatorPage`)
   }
-  if (!source.includes('AePublicPage')) {
-    violations.push(`${relative}: missing AePublicPage`)
+  if (!pageSource.includes('AePublicPage')) {
+    violations.push(`${pageRelative}: missing AePublicPage`)
   }
-  if (!source.includes('CodeBlock')) {
-    violations.push(`${relative}: missing CodeBlock`)
+  if (!pageSource.includes('CodeBlock')) {
+    violations.push(`${pageRelative}: missing CodeBlock`)
   }
-  if (source.includes('Builder readbacks | Agentic Economy')) {
-    violations.push(`${relative}: stale tab title`)
+  if (routeSource.includes('Builder readbacks | Agentic Economy')) {
+    violations.push(`${routeRelative}: stale tab title`)
   }
-  if (!source.includes('loaderData.copy.title')) {
-    violations.push(`${relative}: tab title not tied to visible h1 copy`)
+  if (!routeSource.includes('loaderData?.copy.title') || !pageSource.includes('title={model.copy.title}')) {
+    violations.push(`${routeRelative}: tab title not tied to visible h1 copy`)
   }
-  if (!source.includes('discoveryRowStateLabel')) {
-    violations.push(`${relative}: raw row state labels`)
+  if (!viewModelSource.includes('discoveryRowStateLabel')) {
+    violations.push(`${viewModelRelative}: raw row state labels`)
   }
   return violations
 }

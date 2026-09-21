@@ -1,14 +1,13 @@
 import { expect, test, type Page } from '@playwright/test'
 
 test.describe('developer discovery accessibility', () => {
-  test('download links, status panels, and compact layout stay keyboard reachable', async ({ page }) => {
+  test('artifact links and compact status rows stay keyboard reachable', async ({ page }) => {
     await page.setViewportSize({ width: 375, height: 812 })
     await gotoSettled(page, '/developers/discovery')
 
-    await expect(page.getByRole('heading', { name: /read-only public catalog files/i })).toBeVisible()
-    await expect(page.getByRole('link', { name: /download schema json/i })).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Discovery status', level: 1 })).toBeVisible()
+    await expect(page.getByRole('link', { name: 'View schema status' })).toBeVisible()
     await expect(page.getByText(/read path status/i)).toBeVisible()
-    await expect(page.getByText(/discovery support matrix/i)).toBeVisible()
 
     const skipLink = page.getByRole('link', { name: /skip to content/i })
     const mainContent = page.locator('#main-content')
@@ -21,8 +20,8 @@ test.describe('developer discovery accessibility', () => {
     await page.keyboard.press('Enter')
     await expect(mainContent).toBeFocused()
 
-    await page.getByRole('link', { name: /download schema json/i }).focus()
-    await expect(page.getByRole('link', { name: /download schema json/i })).toBeFocused()
+    await page.getByRole('link', { name: 'View schema status' }).focus()
+    await expect(page.getByRole('link', { name: 'View schema status' })).toBeFocused()
     await expectNoHorizontalOverflow(page)
   })
 })
