@@ -1,4 +1,5 @@
 import { formatTimestamp } from '@/lib/ui/format-time'
+import { getStatusPresentation } from '@/lib/ui/status-presentation'
 import type { MoneyDocumentView } from '@/lib/server/money-documents.functions'
 import {
   formatDisplayAmount,
@@ -23,7 +24,7 @@ export function documentStatusLabel(state: MoneyDocumentView['state']): string {
     : state === 'awaiting_signature'
       ? 'Awaiting owner signature'
       : state === 'failed'
-        ? 'Needs attention'
+        ? getStatusPresentation('needs_attention').label
         : 'Preparing'
 }
 

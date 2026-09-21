@@ -1,3 +1,5 @@
+import { getStatusPresentation } from '@/lib/ui/status-presentation'
+
 export type DirectoryOwner = Readonly<{
   kind: 'owner'
   principalRef: string
@@ -25,8 +27,8 @@ export type TeamDirectoryData = Readonly<{
 }>
 
 export type DirectoryRow =
-  | (DirectoryOwner & { roleLabel: 'Owner'; statusLabel: 'Active' })
-  | (DirectoryMember & { roleLabel: 'Admin' | 'Member'; statusLabel: 'Active' })
+  | (DirectoryOwner & { roleLabel: 'Owner'; statusLabel: string })
+  | (DirectoryMember & { roleLabel: 'Admin' | 'Member'; statusLabel: string })
 
 export type TeamDirectoryRoleFilter = 'all' | 'owner' | 'admin' | 'member'
 
@@ -39,11 +41,11 @@ export type TeamDirectoryRoleCounts = Readonly<{
 
 export function toDirectoryRows(directory: TeamDirectoryData): DirectoryRow[] {
   return [
-    { ...directory.owner, roleLabel: 'Owner', statusLabel: 'Active' },
+    { ...directory.owner, roleLabel: 'Owner', statusLabel: getStatusPresentation('active').label },
     ...directory.members.map((member) => ({
       ...member,
       roleLabel: member.role === 'admin' ? 'Admin' as const : 'Member' as const,
-      statusLabel: 'Active' as const,
+      statusLabel: getStatusPresentation('active').label,
     })),
   ]
 }

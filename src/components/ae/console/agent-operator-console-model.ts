@@ -1,5 +1,6 @@
 import type { AeFact } from '@/components/ae/data/AeFactList'
 import { formatTimestamp } from '@/lib/ui/format-time'
+import { aeStatusPresentation, getStatusPresentation } from '@/lib/ui/status-presentation'
 import { formatCurrencyAmount, formatDisplayAmount, type ExactAmount } from '@/modules/money/public'
 import type {
   AgentDetail,
@@ -175,11 +176,15 @@ export function technicalAgentFacts(detail: AgentDetail): readonly AeFact[] {
   ]
 }
 
-export function agentStatusLabel(status: AgentDirectoryItem['status']): 'Connected' | 'Needs attention' | 'Expired' | 'Disconnected' {
-  if (status === 'connected') return 'Connected'
-  if (status === 'attention') return 'Needs attention'
-  if (status === 'expired') return 'Expired'
-  return 'Disconnected'
+export function agentStatusLabel(status: AgentDirectoryItem['status']):
+  | typeof aeStatusPresentation.connected.label
+  | typeof aeStatusPresentation.needs_attention.label
+  | typeof aeStatusPresentation.credential_expired.label
+  | typeof aeStatusPresentation.disconnected.label {
+  if (status === 'connected') return getStatusPresentation('connected').label
+  if (status === 'attention') return getStatusPresentation('needs_attention').label
+  if (status === 'expired') return getStatusPresentation('credential_expired').label
+  return getStatusPresentation('disconnected').label
 }
 
 export function agentStatusBadgeVariant(
@@ -242,9 +247,9 @@ export function agentRecoveryCopy(detail: AgentDetail): string | undefined {
 }
 
 export function connectionStateLabel(state: AgentConnectionReadback['state']): string {
-  if (state === 'active') return 'Connected'
-  if (state === 'expired') return 'Expired'
-  return 'Revoked'
+  if (state === 'active') return getStatusPresentation('connected').label
+  if (state === 'expired') return getStatusPresentation('credential_expired').label
+  return getStatusPresentation('credential_revoked').label
 }
 
 export function reconnectInstructionFor(connectorDisplayName: string): string {

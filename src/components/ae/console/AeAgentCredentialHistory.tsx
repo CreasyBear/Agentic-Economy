@@ -1,6 +1,7 @@
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { formatTimestamp } from '@/lib/ui/format-time'
+import { getStatusPresentation } from '@/lib/ui/status-presentation'
 import type { AgentDetail } from '@/modules/agent-access/agent-operator-view-model'
 
 export function AeAgentCredentialHistory({
@@ -35,10 +36,12 @@ export function AeAgentCredentialHistory({
             <span className="flex items-center gap-2">
               <Badge variant={credential.lifecycle === 'active' ? 'default' : 'outline'}>
                 {credential.lifecycle === 'active'
-                  ? credential.credentialRef === detail.currentCredentialRef ? 'Current' : 'Active'
+                  ? credential.credentialRef === detail.currentCredentialRef
+                    ? getStatusPresentation('current').label
+                    : getStatusPresentation('active').label
                   : credential.lifecycle === 'stale'
-                    ? 'Expired'
-                    : 'Revoked'}
+                    ? getStatusPresentation('credential_expired').label
+                    : getStatusPresentation('credential_revoked').label}
               </Badge>
               {credential.lifecycle === 'active' ? (
                 <Button
