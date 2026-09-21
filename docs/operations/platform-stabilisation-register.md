@@ -19,7 +19,7 @@ Provenance format: agent name + date. All findings below preserve the source rep
 | Gate test | Pinned constant(s) |
 |---|---|
 | `tests/imports/route-controller-size.test.ts` | `ROUTE_CONTROLLER_MAX_LINES=80`; `ROUTE_SIZE_EXCEPTIONS`: `src/routes/__root.tsx` 114, `src/routes/developers.discovery.tsx` 221 |
-| `tests/imports/file-size-ratchet.test.ts` | `FILE_SIZE_CEILINGS`: `over300=281`, `over500=103`, `over1000=1`; `OVER_1000_ALLOWED`: `src/modules/capability-supply/internal/cdp-x402-payment-signer.ts` |
+| `tests/imports/file-size-ratchet.test.ts` | `FILE_SIZE_CEILINGS`: `over300=278`, `over500=101`, `over1000=0`; `OVER_1000_ALLOWED`: `[]` |
 | `tests/imports/tsx-type-quarantine.test.ts` | `TSX_TYPE_EXPORT_CEILING=18` |
 | `tests/imports/leaf-purity.test.ts` | `LEAF_PURITY_EXCEPTIONS`: `src/components/ae/settings/settings-dialog/components/WorkspaceSettingsBody.tsx` |
 | `tests/imports/own-barrel-imports.test.ts` | `OWN_BARREL_EXCEPTIONS`: `src/modules/registry/internal/registry-action-contracts.ts` |
@@ -32,6 +32,7 @@ A row is VERIFIED only if its commit lowered at least one ratchet constant or it
 Progress is read from `git grep -n "pinned 2026-09" tests/imports/`. Commit bodies end `R-nn · <gate>: a→b`.
 
 A row whose evidence names a symptom seen on more than one surface carries a ROOT line before dispatch.
+**ROOT-TYPE:** public pages do not share one type scale/rhythm: /about H1 60px, H2 48px, section padding 96/80/64/80; /for-agents H2 30px, padding 48/96; /for-providers H2 30px; /support H1 36px, H2 30-36px, eyebrow classes differ (ae-site-eyebrow vs mb-3 block). Fix = one AeSite type/rhythm contract applied to every public page (Wave C/E), not per-page tweaks.
 
 ## 0b. OWNER-LOCKED files
 
@@ -64,11 +65,11 @@ No subagent edits these unless dispatched from the spine plan by Joel.
 | ACCOUNT | 7 | 5 | 1 | 4 | 0 | PENDING |
 | RECORDS | 2 | 2 | 2 | 0 | 0 | OWNER |
 | HELP | 5 | 4 | 2 | 2 | 0 | VERIFIED/IN REVIEW |
-| SUPPLY | 5 | 6 | 2 | 4 | 0 | PENDING/PARKED |
+| SUPPLY | 5 | 6 | 2 | 4 | 0 | VERIFIED/PENDING/PARKED |
 | DEV/ADMIN | 4 | 4 | 2 | 2 | 0 | PENDING |
 | SHELL | 2 | 1 | 0 | 0 | 1 | PARKED |
 | CROSS-CUTTING | n/a | 12 | 7 | 5 | 0 | OWNER/VERIFIED/IN REVIEW/PENDING |
-| CLASS GAPS | n/a | 52 | n/a | n/a | n/a | 49 RECORDED + 3 BASE-PAGE DECISIONS |
+| CLASS GAPS | n/a | 55 | n/a | n/a | n/a | 49 RECORDED + 6 BASE-PAGE DECISIONS |
 
 The 43 route entries are all assigned once. `/support` is assigned to the Receipt and Support row because that is its buyer job. The four DEV/ADMIN routes are separated from the five Provider supply routes even though the route inventory classified all nine as SUPPLY.
 
@@ -81,8 +82,9 @@ The 43 route entries are all assigned once. `/support` is assigned to the Receip
 **Copy:** <table><tr><th>where</th><th>current</th><th>target</th></tr><tr><td>H1</td><td>Who this market is for.</td><td>Tools agents can call.</td></tr><tr><td>subhead</td><td>Agents find, compare, and call. Providers publish the job, the price, and the access terms, and get paid after delivery.</td><td>Agents buy Tools. Providers set prices and receive AUD payouts after completed Calls.</td></tr></table>
 **Target spec:** one thesis above fold; verified operator/contact; Agents and Providers named once; payout claim links fee, currency and timing. **Cut:** “Listed Providers” definition and duplicate catalogue cover.
 **ROOT-ECON:** provider economics (fee %, take rate, payout method, payout cadence/trigger, merchant-of-record, GST treatment, refund/dispute terms) are unsupplied facts; owner Joel. Until supplied, no surface states a fee, payout timing, "automated" payout, or refund rule.
-**Blocked:** verified operator/contact remains absent; `/` still redirects to `/market`, so the platform entry thesis remains open.
-**Priority:** P1. **Status:** IN REVIEW. **Verification evidence:** LIVE 2026-09-21 http://127.0.0.1:3024/about H1 “Tools agents can call.”; approved subhead was present; SOURCE `src/content/brand-copy.ts:84-86`; COMMIT `f44e8e356`. Marketing-site port: Hero 7 → `AeSiteAboutHero`, Content 4 → `AeSiteEditorial`, Features 4 → `AeSiteFeatureGrid`, CTA 2 → `AeSiteCtaBand`; COMMIT `63b8aed88`. **Provenance:** RegDoors, PortAbout, 21 Sep 2026.
+**PRESENT:** verified operator/contact: “Operated in Australia · ABN 98 700 838 115 · support@aecon.ai”.
+**Blocked:** `/` still redirects to `/market`, so the platform entry thesis remains open; fee and payout timing remain blocked by ROOT-ECON.
+**Priority:** P1. **Status:** IN REVIEW. **Verification evidence:** LIVE 2026-09-21 http://127.0.0.1:3024/about H1 “Tools agents can call.”; approved subhead was present; SOURCE `src/content/brand-copy.ts:84-86`; COMMIT `f44e8e356`. Marketing-site port: Hero 7 → `AeSiteAboutHero`, Content 4 → `AeSiteEditorial`, Features 4 → `AeSiteFeatureGrid`, CTA 2 → `AeSiteCtaBand`; COMMIT `63b8aed88`. Operator/contact bullet PRESENT: LIVE 2026-09-21 http://127.0.0.1:3024/about rendered “Operated in Australia · ABN 98 700 838 115 · support@aecon.ai” once at 390px; SOURCE `src/components/ae/about/AeAboutPage.tsx`, `src/content/brand-copy.ts`; COMMIT `e9ac04882`. **Provenance:** RegDoors, PortAbout, OperatorFact, 21 Sep 2026.
 
 ### R-02 Agent door: `/for-agents`
 **Benchmark:** Stripe developer docs landing. **Incumbent baseline:** one integration outcome, recommended path, copyable command, one start.
@@ -90,7 +92,7 @@ The 43 route entries are all assigned once. `/support` is assigned to the Receip
 **Gaps:** • [DOOR-04] “Neither hero CTA performs the promised connection” (`src/components/ae/agents/AeAgentDoorPage.tsx:34-40`) • [DOOR-05] “Claude Code, Cursor, and Codex” spreads focus and uses service (`src/content/brand-copy.ts:62-64`) • [DOOR-06] “Account connection does not grant spending permission.” has no policy action (`src/components/ae/console/AeAssistantInstallFunnel.tsx:53-68`).
 **Copy:** <table><tr><th>where</th><th>current</th><th>target</th></tr><tr><td>H1</td><td>Add the market to your agent.</td><td>Connect your Agent.</td></tr><tr><td>primary CTA</td><td>Browse Tools</td><td>Start setup</td></tr></table>
 **Target spec:** one Codex setup CTA; one-click named command; confirmation links to Agents; explicit Spending policy step; alternatives secondary. **Cut:** Read the skill hero CTA and duplicate three-client strapline.
-**Priority:** P1. **Status:** VERIFIED. **Verification evidence:** LIVE 2026-09-21 http://127.0.0.1:3024/for-agents H1 “Connect your Agent.”; “Start setup” href `#agent-setup`, click set the hash and scrolled the setup section to `72.1875px`; Agents and policy links both resolved to `/agent-access`; SOURCE `tests/unit/ui/agent-door-page.test.tsx:19-32`, `tests/unit/ui/assistant-install-progression.test.tsx:23-31`; COMMIT `7e52c8886`. **Provenance:** RegDoors, 21 Sep 2026.
+**Priority:** P1. **Status:** VERIFIED. **Verification evidence:** LIVE 2026-09-21 http://127.0.0.1:3024/for-agents H1 “Connect your Agent.”; “Start setup” href `#agent-setup`, click set the hash and scrolled the setup section to `72.1875px`; Agents and policy links both resolved to `/agent-access`; SOURCE `tests/unit/ui/agent-door-page.test.tsx:19-32`, `tests/unit/ui/assistant-install-progression.test.tsx:23-31`; COMMIT `7e52c8886`. FAQ 1 and Footer 2 slice: all Target-spec bullets PRESENT; subhead “We’re building one AUD account for your agents’ paid tools, with spending limits and purchase records.”; “Before you connect” followed by three questions, first disclosure opened with `aria-expanded=true`; SOURCE `src/components/ae/website/AeSiteFaq.tsx`, `src/content/brand-copy.ts`; COMMIT `eb0a3b767`. Roast verdict: may remain VERIFIED. **Provenance:** RegDoors, FaqPort, Roast3Agents, 21 Sep 2026.
 
 ### R-03 Provider door: `/for-providers`
 **Benchmark:** Shopify Sell online. **Incumbent baseline:** sellable unit, total cost, payout method/timing, eligibility, direct start.
@@ -99,8 +101,10 @@ The 43 route entries are all assigned once. `/support` is assigned to the Receip
 **Copy:** <table><tr><th>where</th><th>current</th><th>target</th></tr><tr><td>subhead</td><td>List one Tool agents can inspect and call. You describe the price, access, effects, and evidence; Agentic Economy records it as a Tool.</td><td>List one Tool, set an AUD price, and review fees and payout timing before publishing.</td></tr><tr><td>primary CTA</td><td>List a Tool</td><td>Add Tool</td></tr></table>
 **Target spec:** fee, AUD payout method, trigger and timing above fold; one CTA opens form; eligibility before live check; no Supplier vocabulary. **Cut:** “AE public inspection actions” and duplicate Manage listed Tools promotion.
 **ROOT-ECON:** provider economics (fee %, take rate, payout method, payout cadence/trigger, merchant-of-record, GST treatment, refund/dispute terms) are unsupplied facts; owner Joel. Until supplied, no surface states a fee, payout timing, "automated" payout, or refund rule.
-**Blocked:** ROOT-ECON; the implementation report also found no eligibility/readiness step in the existing `source → tool → terms → review` funnel to reorder, while the live roast found the static eligibility sentence before the safe-example check. Roast PARTIAL: the required economics are absent and the target subhead was not applied. “Manage listed Tools” and “AE public inspection actions” remain.
-**Priority:** P1. **Status:** IN REVIEW. **Verification evidence:** LIVE 2026-09-21 http://127.0.0.1:3024/for-providers H1 “List a Tool.”; exactly one “Add Tool” link with href `/owner/operations/new`; SOURCE `src/components/ae/supply/AeSupplyLanding.tsx:80-82`; COMMIT `92a63fdfd`. **Provenance:** RegDoors, 21 Sep 2026.
+**ROOT-TYPE:** public pages do not share one type scale/rhythm: /about H1 60px, H2 48px, section padding 96/80/64/80; /for-agents H2 30px, padding 48/96; /for-providers H2 30px; /support H1 36px, H2 30-36px, eyebrow classes differ (ae-site-eyebrow vs mb-3 block). Fix = one AeSite type/rhythm contract applied to every public page (Wave C/E), not per-page tweaks.
+**Blocked:** ROOT-ECON; the live roast found the static eligibility sentence before the safe-example check, but no eligibility/readiness step exists in the `source → tool → terms → review` funnel.
+**Open gap (next task):** cut “Manage listed Tools” and “AE public inspection actions”; LIVE 2026-09-21 http://127.0.0.1:3024/for-providers found each phrase once.
+**Priority:** P1. **Status:** IN REVIEW. **Verification evidence:** LIVE 2026-09-21 http://127.0.0.1:3024/for-providers H1 “List a Tool.”; exactly one “Add Tool” link with href `/owner/operations/new`; SOURCE `src/components/ae/supply/AeSupplyLanding.tsx:80-82`; COMMIT `92a63fdfd`. FAQ 1 slice: “Before you publish” follows “What agents can inspect”; first question “What kinds of Tools are supported first?” opened with `aria-expanded=true`; SOURCE `src/content/provider-copy.ts`, `src/components/ae/supply/AeSupplyLanding.tsx`; COMMIT `a20ae18cd`. Roast verdict: IN REVIEW; economics absent, eligibility PARTIAL, both required cuts remain. **Provenance:** RegDoors, ProvidersFaq, Roast3Providers, 21 Sep 2026.
 
 ### R-04 Public Business: `/$slug`
 **Benchmark:** Google Business Profile and Stripe Apps partner page. **Incumbent baseline:** verified identity, contact, offers and trust signals.
@@ -245,10 +249,11 @@ The 43 route entries are all assigned once. `/support` is assigned to the Receip
 **Benchmark:** Stripe payment detail and support handoff. **Incumbent baseline:** amount/status first, timeline later, state-gated recourse and payment ID carried to Help.
 **Current state (LIVE):** missing receipt has clear impact copy, but populated receipt was not reached; Support retains direct reference yet is not reachable from receipt.
 **ROOT:** R-14.
+**ROOT-TYPE:** public pages do not share one type scale/rhythm: /about H1 60px, H2 48px, section padding 96/80/64/80; /for-agents H2 30px, padding 48/96; /for-providers H2 30px; /support H1 36px, H2 30-36px, eyebrow classes differ (ae-site-eyebrow vs mb-3 block). Fix = one AeSite type/rhythm contract applied to every public page (Wave C/E), not per-page tweaks.
 **Gaps:** • [JNY-02] “detail said ‘Connect an Agent first’; `/activity` said ‘No Calls yet’” (`UNANCHORED`) • [ST-07] “Receipt not found; no valid Call existed to verify” (`UNANCHORED`) • [ST-08] “no timeline in reached state” (`UNANCHORED`) • [ST-09] customer/payment method/receipt absent in refused state (`UNANCHORED`) • [ST-10] refund/dispute gating unverified (`UNANCHORED`) • [ST-11] “Keep this reference and contact the owner or operator,” but no help action (`UNANCHORED`) • [ST-12] Credit failure never states whether money moved (`UNANCHORED`).
 **Copy:** <table><tr><th>where</th><th>current</th><th>target</th></tr><tr><td>receipt error</td><td>owner-scoped status read</td><td>We couldn’t open this Call for this workspace</td></tr><tr><td>support</td><td>Help</td><td>Call</td></tr></table>
 **Target spec:** Delivery, Payment, Purchase resolution and Who acts next first; only applicable same-Call action; exact Call reaches Support; blank/malformed refs distinct; Back/refresh retain ref; every failure says whether money moved. **Cut:** advanced evidence before decision facts; no new support form.
-**Priority:** P0. **Status:** OWNER. **Verification evidence:** Queue: `docs/operations/buyer-spine-stabilisation-plan.md §3 W7`. **Provenance:** PersonaJourneyOwner, ExpectStripe, 21 Sep 2026.
+**Priority:** P0. **Status:** OWNER. **Verification evidence:** Queue: `docs/operations/buyer-spine-stabilisation-plan.md §3 W7`. FAQ slice: LIVE 2026-09-21 http://127.0.0.1:3024/support rendered “Questions” with four disclosure rows; first answer opened with `aria-expanded=true`; “Email support” remained `mailto:support@aecon.ai`; SOURCE `src/components/ae/support/help.contracts.ts`, `tests/unit/routes/support-route.test.tsx:67-76`; COMMIT `a0631aa0f`. Roast verdict: VERIFIED for FAQ and C-06 regression; focused Email support after 10 Tabs painted `outlineStyle` `solid`, width `2px`. Receipt and reference-carrying behavior remains OWNER. **Provenance:** PersonaJourneyOwner, ExpectStripe, SupportFaq, Roast3Support, 21 Sep 2026.
 
 ### R-22 System status: `/status`
 **Benchmark:** Atlassian Statuspage. **Incumbent baseline:** component state, timestamped incidents, last update and subscription.
@@ -369,10 +374,10 @@ The 43 route entries are all assigned once. `/support` is assigned to the Receip
 
 ### R-36 Capability-supply payment signer
 **Benchmark:** the repository hard ceiling of 1,000 lines. **Incumbent baseline:** focused internal modules below the enforced ceiling.
-**Current state (SOURCE):** `src/modules/capability-supply/internal/cdp-x402-payment-signer.ts` is 1,042 lines and is the sole path in `OVER_1000_ALLOWED`.
-**Gaps:** `tests/imports/file-size-ratchet.test.ts` permits this one over-1,000-line file.
-**Target spec:** split below 1,000 (`OVER_1000_ALLOWED` in `tests/imports/file-size-ratchet.test.ts` becomes `[]`). **Cut:** no behaviour or RPC changes.
-**Priority:** P1. **Status:** PENDING. **Verification evidence:** none. **Provenance:** Wave 0 file-size gate, 21 Sep 2026.
+**Current state (SOURCE):** the former 1,041-line `src/modules/capability-supply/internal/cdp-x402-payment-signer.ts` is now a 38-line entry over seven focused modules, each below 300 lines.
+**Gaps:** closed; `tests/imports/file-size-ratchet.test.ts` permits no file over 1,000 lines.
+**Target spec:** split below 1,000 (`OVER_1000_ALLOWED` in `tests/imports/file-size-ratchet.test.ts` is `[]`). **Cut:** no behaviour or RPC changes.
+**Priority:** P1. **Status:** VERIFIED. **Verification evidence:** SOURCE `src/modules/capability-supply/internal/cdp-x402-payment-signer.ts` split from 1,041 lines to a 38-line entry and seven focused modules, each below 300 lines; `FILE_SIZE_CEILINGS` moved `over1000` 1→0 and `OVER_1000_ALLOWED` became `[]`; COMMIT `af016e98c`. **Provenance:** Wave 0 file-size gate, SplitPaymentSigner, 21 Sep 2026.
 
 ## 3. Cross-cutting rows
 
@@ -446,7 +451,7 @@ The 43 route entries are all assigned once. `/support` is assigned to the Receip
 **Gaps:** [DOOR-14] “outline-style none and box-shadow none” (`src/components/ae/listing/PublicBusinessNotFound.tsx:35`); [HELP-01 context] Refresh computed outline none (`UNANCHORED`); [HELP-08 context] submit outline none (`UNANCHORED`); [NEW-06] `:focus-visible=true` but outline none (`SupplySourceTypeSection.tsx:135-263`); [RCP-04] “no visible outline/ring” (`UNANCHORED`); [FOCUS-01] “computed outline-style is none” (`AeSupportHelpPage.tsx:22`).
 **Copy:** <table><tr><th>where</th><th>current</th><th>target</th></tr><tr><td>focus-visible</td><td>none on repeated primaries</td><td>one unmistakable Tier-1 ring</td></tr></table>
 **Target spec:** `src/components/ui/button.tsx` ring covers buttons and link variants; every named control paints it. **Cut:** page-local ring patches.
-**Priority:** P0. **Status:** IN REVIEW. **Verification evidence:** LIVE 2026-09-21 `/support` Email support and `/t/new` Send message painted `outline-style: solid` and `outline-width: 2px`; SOURCE `src/components/ui/button-variants.ts:9`; COMMIT `75eecb4b8`. **Provenance:** RegDoors, RegHelpLegal, RegSupplyNew, buyer-spine, 21 Sep 2026.
+**Priority:** P0. **Status:** IN REVIEW. **Verification evidence:** LIVE 2026-09-21 `/support` Email support and `/t/new` Send message painted `outline-style: solid` and `outline-width: 2px`; SOURCE `src/components/ui/button-variants.ts:9`; COMMIT `75eecb4b8`. Regression LIVE 2026-09-21 http://127.0.0.1:3024/support: Email support focused after 10 Tabs; `outlineStyle` `solid`, width `2px`; SOURCE Roast3Support. **Provenance:** RegDoors, RegHelpLegal, RegSupplyNew, buyer-spine, Roast3Support, 21 Sep 2026.
 
 ### C-07 Accessible names and announcements
 **Surfaces affected:** Market, Agents, Credit and dialogs.
@@ -455,7 +460,7 @@ The 43 route entries are all assigned once. `/support` is assigned to the Receip
 **Gaps:** • [A11Y-01] “search is Tab 12; submit moves focus to BODY; no live/status region or result count” (`UNANCHORED`) • [A11Y-02] “91 Tabs to first ‘Add … to comparison,’ then 31 to ‘Compare Tools’” (`UNANCHORED`) • [A11Y-03] unnamed radios and checkbox (`UNANCHORED`) • [A11Y-04] “Done returns focus to BODY” (`UNANCHORED`) • [A11Y-05] “unnamed progressbar” (`UNANCHORED`) • [A11Y-06] “two regions both named ‘Popular Tools’” (`UNANCHORED`) • [A11Y-07] “control what each Agent can do” versus unnamed policy radio (`UNANCHORED`) • [A11Y-08] “A world of Tools, ready to explore” versus 91 stops (`UNANCHORED`).
 **Copy:** <table><tr><th>where</th><th>current</th><th>target</th></tr><tr><td>search</td><td>silent result update</td><td>announce “12 results”; retain deliberate focus</td></tr><tr><td>policy</td><td>empty accessible names</td><td>one labelled native control per choice</td></tr></table>
 **Target spec:** search near skip link; count announced; compare bar focused after selection; controls named once; errors linked; dialog restores trigger/created row; landmarks unique. **Cut:** duplicate AX nodes and inert focus targets.
-**Priority:** P0. **Status:** PENDING. **Verification evidence:** none. **Provenance:** PersonaAccessibility, 21 Sep 2026.
+**Priority:** P0. **Status:** PENDING. **Verification evidence:** Footer slice LIVE 2026-09-21 `/about`, `/terms` and `/status`: one `contentinfo` on each page; Resources, Help, Legal and Machines accordion groups each toggled `aria-expanded=false→true` at 390px; SOURCE `src/components/ae/website/AeSiteFooter.tsx`; COMMIT `e47cbd75c`. Named Market, Agent, Credit and dialog gaps remain open. **Provenance:** PersonaAccessibility, Roast3Footer, 21 Sep 2026.
 
 ### C-08 Empty, error and loading states
 **Surfaces affected:** all async routes.
@@ -491,13 +496,14 @@ The 43 route entries are all assigned once. `/support` is assigned to the Receip
 **Gaps:** My tools “Connection icon 20×20 and user menu 28×28” (`UNANCHORED`); Owner Market “utility buttons are 20×20/28×28” (`UNANCHORED`); Add Tool “20/28px header controls and 16px radios” plus CTA y=912 (`SupplySourceTypeSection.tsx:135-263`); [ACT-04] “‘Connection online’ is 20×20px” (`UNANCHORED`); Terms CTA y=967, Privacy y=999, correction y=846 (`UNANCHORED`).
 **Copy:** <table><tr><th>where</th><th>current</th><th>target</th></tr><tr><td>interactive hit box</td><td>16/20/28px</td><td>at least 44×44 without enlarging glyph</td></tr></table>
 **Target spec:** every named hit box 44×44; primary for the page’s first job above fold at 390×844; no horizontal overflow. **Cut:** decorative mobile content before first action.
-**Priority:** P1. **Status:** PENDING. **Verification evidence:** none. **Provenance:** RegSupplyList, RegSupplyNew, RegHelpLegal, buyer-spine Calls, 21 Sep 2026.
+**ROOT-TYPE:** public pages do not share one type scale/rhythm: /about H1 60px, H2 48px, section padding 96/80/64/80; /for-agents H2 30px, padding 48/96; /for-providers H2 30px; /support H1 36px, H2 30-36px, eyebrow classes differ (ae-site-eyebrow vs mb-3 block). Fix = one AeSite type/rhythm contract applied to every public page (Wave C/E), not per-page tweaks.
+**Priority:** P1. **Status:** PENDING. **Verification evidence:** Footer slice LIVE 2026-09-21 `/about`, `/terms` and `/status` at 390px measured `scrollWidth=368` and `clientWidth=390`; no horizontal overflow. Named hit boxes and above-fold first actions remain open. SOURCE `src/components/ae/website/AeSiteFooter.tsx`; COMMIT `e47cbd75c`. **Provenance:** RegSupplyList, RegSupplyNew, RegHelpLegal, buyer-spine Calls, Roast3Footer, 21 Sep 2026.
 
 ### C-12 Machine docs consistency
 **Surfaces affected:** `/for-agents`, setup snippets, `/developers/api`, `/SKILL.md`, `/llms.txt`, `/openapi.json`, `/glossary.md`, `/mcp`, `/.well-known/*`.
 **Benchmark:** OpenAI OpenAPI and llms.txt conventions. **Incumbent baseline:** one host, auth vocabulary, nouns, endpoints and price shape.
 **Current state (LIVE):** machine endpoints mostly return deliberate statuses, but their contract facts diverge.
-**Gaps:** [DEV-12] advertised glossary returns HTML 404 (`src/routes/glossary[.]md.ts:7-38`); [DEV-13] SKILL hard-codes production (`src/modules/discovery/internal/agent-skill.ts:6-10`); [DEV-14] “AE key”, `agentAccessKey`, `clerk_api_key` (`src/modules/discovery/internal/site-manifest.ts:44`); [DEV-15] “capability purchases”, “paid tools”, “per call” (`src/components/ae/agent-access/home/agent-access-home.contracts.ts:13`).
+**Gaps:** [DEV-12] CLOSED: `/glossary.md` HEAD and GET now return 200 (`vite.config.ts`; `src/routes/glossary[.]md.ts:7-38`); [DEV-13] SKILL hard-codes production (`src/modules/discovery/internal/agent-skill.ts:6-10`); [DEV-14] “AE key”, `agentAccessKey`, `clerk_api_key` (`src/modules/discovery/internal/site-manifest.ts:44`); [DEV-15] “capability purchases”, “paid tools”, “per call” (`src/components/ae/agent-access/home/agent-access-home.contracts.ts:13`).
 **Copy:**
 | fact | /for-agents | setup snippets | /developers/api | /SKILL.md | /llms.txt | /openapi.json | target |
 |---|---|---|---|---|---|---|---|
@@ -507,7 +513,7 @@ The 43 route entries are all assigned once. `/support` is assigned to the Receip
 | paths | absent | absent | quote/call | `ae_tool_quote/call` | quote/call | quote/call | linked canonical paths |
 | price | absent | A$ per call, GST incl. | ExactAmount plus AUD fields | absent | absent | mixed | one ExactAmount; buyer display per C-02 |
 **Target spec:** all advertised docs resolve; one runtime host; one auth name/header; canonical nouns; linked paths; one ExactAmount. **Cut:** dead glossary link and unconfigured signatures from inventory.
-**Priority:** P0. **Status:** PENDING. **Verification evidence:** none. **Provenance:** RegDevAdmin, 21 Sep 2026.
+**Priority:** P0. **Status:** IN REVIEW. **Verification evidence:** Gap DEV-12 closed: LIVE 2026-09-21 http://127.0.0.1:3024/glossary.md HEAD and GET returned 200 and the body began `# Glossary`; root cause was `vite.config.ts` registering only `/SKILL.md` with Nitro; SOURCE `vite.config.ts`, `src/routes/glossary[.]md.ts`; COMMIT `d8f3b3470`. Runtime host, auth, noun, path and price consistency gaps remain. **Provenance:** RegDevAdmin, GlossaryRoute, 21 Sep 2026.
 
 ## 4. Class gaps: what an app of this kind has that AE does not
 
@@ -569,9 +575,12 @@ KNOWLEDGE references: OR OpenRouter, ST Stripe, RA RapidAPI, SA Shopify App Stor
 
 | Surface | Research decision | Source and adoption constraint |
 |---|---|---|
-| Marketing/About, Agent and Provider doors, FAQ and footer blocks | **ADOPT marketing-site components (Joel's `/Users/.../agentic-economy-website`; same TanStack/React 19/Tailwind 4.3/Base UI stack; its blocks are Tailark-MIT-derived) — Tailark direct install stood down 2026-09-21 (registry entry reverted, no commit)** | Source inventory: Hero 7, Content 4, Features 4, FAQ 1, CTA 2, Footer 2, UtilityDocument, Pricing 2 and ServiceStrip. Presentational components are framework-portable; retain AE tokens, TanStack routing and existing Base UI primitives. |
+| Marketing/About and Agent/Provider doors | **ADOPTED from Joel's marketing site**; same TanStack/React 19/Tailwind 4.3/Base UI stack, with Tailark-MIT-derived blocks | Hero 7, Content 4, Features 4 and CTA 2 now compose the About page. AE tokens, TanStack routing and existing Base UI primitives remain authoritative. Tailark direct install stood down 2026-09-21; its registry entry was reverted and no commit was created. |
+| FAQ blocks | **ADOPTED: FAQ 1 → `AeSiteFaq` on `/for-agents`, `/for-providers` and `/support`** | Copy remains page-owned in `src/content/**` or the page contract. The shared component owns only the disclosure composition. |
+| Footer blocks | **ADOPTED: Footer 2 → `AeSiteFooter`** | LinkedIn, X and Facebook come from marketing `site.ts`. Consent and analytics were dropped. AE route groups and the existing single `AePublicPage` mount remain authoritative. |
 | Terms and Privacy text | **ADOPTED: Joel's published Terms (15 sections, marketing `terms.tsx`, dated 7 Sep 2026) and Privacy (15 sections, marketing `privacy.tsx`, dated 13 Sep 2026) ported verbatim; GitHub/Basecamp templates retained as PATTERN-ONLY cross-check** | Marketing UtilityDocument was ported to `AeSiteUtilityDocument`; the published route text is the authority. GitHub Site Policy remains CC0 and Basecamp policies remain CC BY 4.0 for pattern cross-checks only. |
-| Status page | **HOST (pending Joel)** OpenStatus or Upptime; no drop-in React widget exists | OpenStatus is AGPL-3.0 ([licence](https://github.com/openstatusHQ/openstatus/blob/main/LICENSE)), runs as a separate service, supports [public double-opt-in subscriptions](https://www.openstatus.dev/docs/reference/subscriber), and managed Starter is [about US$30/month](https://www.openstatus.dev/pricing). Upptime is MIT ([licence](https://github.com/upptime/upptime/blob/master/LICENSE)), runs on GitHub Pages and has [operator notifications](https://upptime.js.org/docs/notifications/) but no public subscriber signup. Exclude Cachet (source-available) and Statping-ng (GPL). |
+| Status page | **DEFAULT (orchestrator, 2026-09-21): keep in-app `/status`; hosted vendor deferred until an incident process exists; Joel may override.** | OpenStatus and Upptime remain researched hosting options. Do not add incident history or subscriptions until the incident process and vendor are approved. |
+| Provider economics | **DEFAULT: framework text only; no figures until Joel supplies.** | ROOT-ECON covers fee %, take rate, payout method/cadence/trigger, merchant-of-record, GST treatment and refund/dispute terms. |
 
 ### TOP 10 ABSENT THAT DEFINE THE CLASS
 
@@ -777,3 +786,64 @@ No wave may invent a second authority, status model, money formatter, Tool proje
 - R-24 remains IN REVIEW: exact retention periods, recipient-country list and one controller entity remain absent.
 - R-26 remains PENDING: Joel’s Terms state the fee/tax/payout framework, but numeric take rate and cadence remain unsupplied.
 - §4 Status page remains HOST (pending Joel).
+
+### Wave B · round 3 (FAQ/footer port, extractions) · 2026-09-21
+
+`git log --oneline 54b1aff96..HEAD` recorded the Wave B round 3 ports, factual corrections and extractions below. Concurrent Wave C row commits are outside this close-out.
+
+#### Commits
+
+- `eb0a3b767` — R-02 FAQ 1 port and shared `AeSiteFaq`.
+- `a20ae18cd` — R-03 Provider FAQ 1 port.
+- `a0631aa0f` — R-21 Support FAQ 1 port.
+- `e47cbd75c` — Footer 2 port to the shared public-page footer.
+- `e9ac04882` — R-01 operator, ABN and support contact from published facts.
+- `d8f3b3470` — C-12 `/glossary.md` Nitro registration.
+- `af016e98c` — R-36 payment signer split below 1,000 lines.
+- `08b240249` — owner offerings pure-move extraction.
+- `96af346e9` — supply source type pure-move extraction.
+
+#### Source → destination ports
+
+- Marketing `components/sections/faqs-1.tsx` → `AeSiteFaq`; marketing agent, Provider and contact copy → `/for-agents`, `/for-providers` and `/support`.
+- Marketing `components/layout/footer-2.tsx` → `AeSiteFooter`; LinkedIn, X and Facebook from marketing `site.ts` → `AeSiteFooter.contracts.ts`. Consent and analytics were dropped.
+
+#### Extractions
+
+- `cdp-x402-payment-signer.ts`: 1,041→38 lines; authorization 137, contracts 139, material 205, policy 142, signing 279, treasury 89 and validation 150.
+- `AeOwnerOfferings.tsx`: 383→63 lines; contracts 54, hook 108, gate 47 and table 266.
+- `SupplySourceTypeSection.tsx`: 535→43 lines; chooser 53, fields 210, results 132, contracts 135 and hook 78.
+
+#### Gate scoreboard before→after
+
+- `FILE_SIZE_CEILINGS`: `over300` 281→278; `over500` 103→101; `over1000` 1→0.
+- `OVER_1000_ALLOWED`: one payment-signer path → `[]`.
+
+#### Roast verdicts
+
+- R-01 operator/contact bullet PRESENT: `/about` rendered “Operated in Australia · ABN 98 700 838 115 · support@aecon.ai” once.
+- R-02 VERIFIED: every Target-spec bullet was PRESENT; FAQ 1, Footer 2 and the new hero subhead passed live.
+- R-03 IN REVIEW: Add Tool, supported-source guidance, FAQ 1 and footer are PRESENT; eligibility is PARTIAL; ROOT-ECON and both cuts remain.
+- R-21 FAQ slice VERIFIED: four disclosure rows, working first disclosure and `mailto:support@aecon.ai`; the row remains OWNER for receipt behavior.
+- C-06 regression PRESENT: Support Email support painted `outlineStyle` `solid`, width `2px`.
+- C-07/C-11 footer slice PRESENT: `/about`, `/terms` and `/status` each had one `contentinfo`; four accordion groups toggled; at 390px, `scrollWidth=368` and `clientWidth=390`.
+- R-36 VERIFIED: no file remains over 1,000 lines and the allowlist is empty.
+
+#### Found, not fixed
+
+- FIXED in the same round: `/glossary.md` returned 404 until `vite.config.ts` registered its Nitro handler; HEAD and GET now return 200.
+- The in-page ABR HEAD probe failed because the cross-origin request was blocked. This is not a product defect.
+- `tests/unit/layout/shell-a11y.test.tsx` still expects the stale compact-shell label `Open public menu`; pre-existing.
+- R-03 `/for-providers`: “Manage listed Tools” and “AE public inspection actions” each remain once; these are the row’s next task.
+- ROOT-TYPE: public page scale and rhythm drift across `/about`, `/for-agents`, `/for-providers` and `/support`; fix the shared AeSite contract in Wave C/E, not each page.
+
+#### Open at close
+
+- R-01 IN REVIEW: operator/contact is PRESENT; the `/` thesis and ROOT-ECON facts remain.
+- R-03 IN REVIEW: ROOT-ECON, a genuine eligibility/readiness step and both required cuts remain.
+- R-21 remains OWNER: the FAQ slice is verified, but receipt and reference-carrying behavior stays in the buyer spine.
+- C-06 IN REVIEW: the focus regression passed; the full cross-surface Target spec is not yet asserted.
+- C-07 and C-11 remain PENDING: only the shared footer slices passed.
+- C-12 IN REVIEW: `/glossary.md` is fixed; runtime host, auth, noun, path and price consistency remain.
+- ROOT-TYPE is open for Wave C/E across all public pages.
+- Status vendor hosting is deferred by the §4 default until an incident process exists. ROOT-ECON remains framework-only until Joel supplies figures.
