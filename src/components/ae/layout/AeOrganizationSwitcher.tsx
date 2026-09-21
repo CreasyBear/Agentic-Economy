@@ -20,11 +20,7 @@ export function AeOrganizationSwitcher({ isCollapsed = false }: AeOrganizationSw
       <OrganizationSwitcher
         hidePersonal={false}
         createOrganizationMode="modal"
-        organizationProfileMode="navigation"
-        organizationProfileUrl="/owner/workspace"
-        afterSelectOrganizationUrl="/owner/operations"
-        afterCreateOrganizationUrl="/owner/operations"
-        afterLeaveOrganizationUrl="/owner/operations"
+        organizationProfileMode="modal"
         appearance={{
           elements: {
             ...clerkAppearance.elements,

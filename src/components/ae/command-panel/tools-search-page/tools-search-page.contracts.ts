@@ -5,7 +5,6 @@ import {
   CreditCard,
   Key,
   Server,
-  Settings,
   SunMoon,
   Wrench,
   type LucideIcon,
@@ -48,6 +47,8 @@ export type CommandNavigationItem = Readonly<{
   label: string
   keywords: readonly string[]
   icon: LucideIcon
+  /** Opens the in-task settings dialog instead of navigating away. */
+  opensSettings?: 'personal' | 'workspace'
 }>
 
 export type CommandQuickAction = Readonly<{
@@ -74,7 +75,7 @@ export const COMMAND_NAVIGATION_ITEMS: readonly CommandNavigationItem[] = [
   },
   {
     href: '/owner/operations',
-    label: 'Tools Operations',
+    label: 'My tools',
     keywords: ['operations', 'supply', 'provider', 'offerings', 'publish'],
     icon: Wrench,
   },
@@ -83,12 +84,6 @@ export const COMMAND_NAVIGATION_ITEMS: readonly CommandNavigationItem[] = [
     label: 'Balance & Credit',
     keywords: ['credit', 'balance', 'billing', 'top up', 'funds', 'money'],
     icon: CreditCard,
-  },
-  {
-    href: '/owner/settings',
-    label: 'Account & Settings',
-    keywords: ['settings', 'account', 'security', 'profile', 'keys', 'team'],
-    icon: Settings,
   },
   {
     href: '/agent-access',

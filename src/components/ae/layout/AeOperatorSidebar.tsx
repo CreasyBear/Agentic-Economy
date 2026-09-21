@@ -104,6 +104,8 @@ type AeOperatorSidebarProps = {
   currentPath: string
   navBadges?: OperatorNavBadges
   suppressSurfaceNavigation?: boolean
+  /** Records rail: no duplicate app-header chrome (`DS-37`). */
+  slimChrome?: boolean
   className?: string
 }
 
@@ -142,7 +144,7 @@ function AuthenticatedOwnerAccount({ isCollapsed }: { isCollapsed: boolean }) {
   )
 }
 
-export function AeOperatorSidebar({ operatorRole, operatorContext, currentPath, navBadges: navBadgesProp, suppressSurfaceNavigation = false, className }: AeOperatorSidebarProps) {
+export function AeOperatorSidebar({ operatorRole, operatorContext, currentPath, navBadges: navBadgesProp, suppressSurfaceNavigation = false, slimChrome = false, className }: AeOperatorSidebarProps) {
   const navBadges = useResolvedNavBadges(navBadgesProp)
   const { state, isMobile, open, openMobile, setOpenMobile } = useSidebar()
   const isCollapsed = !isMobile && state === 'collapsed'
@@ -202,33 +204,35 @@ export function AeOperatorSidebar({ operatorRole, operatorContext, currentPath, 
   return (
     <Sidebar variant="sidebar" collapsible="icon" role="complementary" aria-label="Workspace navigation" className={className}>
       <nav id="operator-sidebar-navigation" aria-label="Operator navigation" className="flex h-full min-h-0 flex-1 flex-col">
-        <SidebarHeader className="px-related pt-intra">
-          {/* The frame header owns the brand mark; the rail names the mode only. */}
-          <SidebarMenu>
-            <SidebarMenuItem>
-              <SidebarMenuButton
-                size="lg"
-                tooltip={roleLabel[operatorRole]}
-                className="h-14 rounded-none border-b border-sidebar-border px-1 hover:bg-transparent active:scale-[0.98] transition-transform duration-100 ease-out motion-reduce:transition-none motion-reduce:active:scale-100"
-                render={
-                  <Link
-                    to={roleHomeHref[operatorRole]}
-                    aria-label={`${roleLabel[operatorRole]} home`}
-                    onClick={closeMobileNavigation}
-                  />
-                }
-              >
-                <span className={isCollapsed ? 'sr-only' : 'flex items-center gap-2 truncate font-sans text-xs font-medium text-muted-foreground'}>
-                  <SiteMarker tone="info" visible />
-                  {roleLabel[operatorRole]}
-                </span>
-              </SidebarMenuButton>
-            </SidebarMenuItem>
-            <SidebarMenuItem className="pt-1">
-              <AeOrganizationSwitcher isCollapsed={isCollapsed} />
-            </SidebarMenuItem>
-          </SidebarMenu>
-        </SidebarHeader>
+        {slimChrome ? null : (
+          <SidebarHeader className="px-related pt-intra">
+            {/* The frame header owns the brand mark; the rail names the mode only. */}
+            <SidebarMenu>
+              <SidebarMenuItem>
+                <SidebarMenuButton
+                  size="lg"
+                  tooltip={roleLabel[operatorRole]}
+                  className="h-14 rounded-none border-b border-sidebar-border px-1 hover:bg-transparent active:scale-[0.98] transition-transform duration-100 ease-out motion-reduce:transition-none motion-reduce:active:scale-100"
+                  render={
+                    <Link
+                      to={roleHomeHref[operatorRole]}
+                      aria-label={`${roleLabel[operatorRole]} home`}
+                      onClick={closeMobileNavigation}
+                    />
+                  }
+                >
+                  <span className={isCollapsed ? 'sr-only' : 'flex items-center gap-2 truncate font-sans text-xs font-medium text-muted-foreground'}>
+                    <SiteMarker tone="info" visible />
+                    {roleLabel[operatorRole]}
+                  </span>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+              <SidebarMenuItem className="pt-1">
+                <AeOrganizationSwitcher isCollapsed={isCollapsed} />
+              </SidebarMenuItem>
+            </SidebarMenu>
+          </SidebarHeader>
+        )}
         <SidebarContent>
           {navGroups.map((group) => (
             <SidebarGroup key={group.id} className="gap-related px-related py-related">
@@ -281,46 +285,54 @@ export function AeOperatorSidebar({ operatorRole, operatorContext, currentPath, 
           ))}
         </SidebarContent>
         <SidebarFooter className="mt-auto gap-related border-t border-sidebar-border px-related py-related">
-          <SidebarGroupLabel className="h-6 rounded-none px-2 font-sans text-xs font-medium text-muted-foreground" render={<span />}>
-            Resources
-          </SidebarGroupLabel>
-          <SidebarMenu>
-            {utilityItems.map((item) => {
-              const current = isPathActive(currentPath, item.href)
-              const Icon = item.icon
+          {utilityItems.length === 0 ? null : (
+            <>
+              <SidebarGroupLabel className="h-6 rounded-none px-2 font-sans text-xs font-medium text-muted-foreground" render={<span />}>
+                Resources
+              </SidebarGroupLabel>
+              <SidebarMenu>
+                {utilityItems.map((item) => {
+                  const current = isPathActive(currentPath, item.href)
+                  const Icon = item.icon
 
-              return (
-                <SidebarMenuItem key={item.href}>
-                  <SidebarMenuButton
-                    isActive={current}
-                    tooltip={item.label}
-                    className={OPERATOR_NAV_BUTTON_CLASS}
-                    render={
-                      <Link
-                        to={item.href}
-                        aria-label={isCollapsed ? item.label : undefined}
-                        aria-current={current ? 'page' : undefined}
-                        onClick={closeMobileNavigation}
-                      />
-                    }
-                  >
-                    <Icon aria-hidden="true" />
-                    <span className={isCollapsed ? 'sr-only' : 'min-w-0 flex-1 truncate'}>{item.label}</span>
-                  </SidebarMenuButton>
+                  return (
+                    <SidebarMenuItem key={item.href}>
+                      <SidebarMenuButton
+                        isActive={current}
+                        tooltip={item.label}
+                        className={OPERATOR_NAV_BUTTON_CLASS}
+                        render={
+                          <Link
+                            to={item.href}
+                            aria-label={isCollapsed ? item.label : undefined}
+                            aria-current={current ? 'page' : undefined}
+                            onClick={closeMobileNavigation}
+                          />
+                        }
+                      >
+                        <Icon aria-hidden="true" />
+                        <span className={isCollapsed ? 'sr-only' : 'min-w-0 flex-1 truncate'}>{item.label}</span>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                  )
+                })}
+              </SidebarMenu>
+            </>
+          )}
+          {slimChrome ? null : (
+            <>
+              <SidebarMenu>
+                <SidebarMenuItem>
+                  <ThemeToggle />
                 </SidebarMenuItem>
-              )
-            })}
-          </SidebarMenu>
-          <SidebarMenu>
-            <SidebarMenuItem>
-              <ThemeToggle />
-            </SidebarMenuItem>
-          </SidebarMenu>
-          <SidebarMenu>
-            <SidebarMenuItem>
-              <AuthenticatedOwnerAccount isCollapsed={isCollapsed} />
-            </SidebarMenuItem>
-          </SidebarMenu>
+              </SidebarMenu>
+              <SidebarMenu>
+                <SidebarMenuItem>
+                  <AuthenticatedOwnerAccount isCollapsed={isCollapsed} />
+                </SidebarMenuItem>
+              </SidebarMenu>
+            </>
+          )}
         </SidebarFooter>
       </nav>
       <SidebarRail

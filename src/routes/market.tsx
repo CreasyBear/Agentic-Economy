@@ -14,7 +14,7 @@ export const Route = createFileRoute("/market")({
     nav: {
       label: 'Market',
       search: {},
-      header: { order: 0 },
+      header: { order: 0, audience: 'always' },
       footer: { column: 'Market', order: 0 },
     },
   },

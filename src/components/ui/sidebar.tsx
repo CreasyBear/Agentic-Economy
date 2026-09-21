@@ -5,7 +5,7 @@ import { cva, type VariantProps } from "class-variance-authority"
 import { PanelLeftIcon } from "lucide-react"
 import { useRender } from "@base-ui/react/use-render"
 
-import { useIsMobile } from "@/hooks/use-mobile"
+import { useIsMobile, useViewportKind } from "@/hooks/use-mobile"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -167,7 +167,8 @@ function Sidebar({
   variant?: "sidebar" | "floating" | "inset"
   collapsible?: "offcanvas" | "icon" | "none"
 }) {
-  const { isMobile, state, openMobile, setOpenMobile } = useSidebar()
+  const { state, openMobile, setOpenMobile } = useSidebar()
+  const viewport = useViewportKind()
 
   if (collapsible === "none") {
     return (
@@ -184,7 +185,17 @@ function Sidebar({
     )
   }
 
-  if (isMobile) {
+  if (viewport === "unknown") {
+    return (
+      <div
+        aria-hidden
+        data-slot="sidebar-pending"
+        className="hidden w-(--sidebar-width) shrink-0 md:block"
+      />
+    )
+  }
+
+  if (viewport === "mobile") {
     return (
       <Sheet open={openMobile} onOpenChange={setOpenMobile} {...props}>
         <SheetContent

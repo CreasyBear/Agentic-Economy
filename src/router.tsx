@@ -42,7 +42,7 @@ export function getRouter() {
 export type NavStaticData = {
   label: string
   search?: Record<string, string>
-  header?: { order: number }                                   // public primary nav
+  header?: { order: number; audience: 'public' | 'signed-in' | 'always' }
   footer?: { column: string; order: number }                   // public footer, internal links only
   operator?: {
     roles: ReadonlyArray<'owner' | 'admin' | 'developer'>

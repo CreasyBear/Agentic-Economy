@@ -9,7 +9,7 @@ export const Route = createFileRoute('/for-providers')({
   staticData: {
     nav: {
       label: 'For providers',
-      header: { order: 2 },
+      header: { order: 2, audience: 'public' },
       footer: { column: 'Market', order: 2 },
     },
   },

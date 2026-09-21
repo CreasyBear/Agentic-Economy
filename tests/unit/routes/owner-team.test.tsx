@@ -30,6 +30,12 @@ vi.mock('@/lib/operator/route-options', () => ({
   operatorRouteOptions: {},
 }))
 
+vi.mock('@/components/ae/layout/AeOperatorPage', () => ({
+  AeOperatorPage: ({ children, title }: { children: ReactNode; title: string }) => (
+    <div data-testid="operator-page" data-title={title}>{children}</div>
+  ),
+}))
+
 vi.mock('@/components/ae/website/clerk-appearance', () => ({
   clerkAppearance: { cssLayerName: 'clerk' },
 }))
@@ -86,17 +92,9 @@ describe('/owner/team route (W-15)', () => {
     expect(Route).toBeDefined()
   })
 
-  it('U2: staticData.nav uses Team core owner navigation', () => {
+  it('U2: Team remains a deep-link page, not a rail destination', () => {
     const nav = (routeState.routeOptions?.staticData as { nav?: Record<string, unknown> } | undefined)?.nav
-    expect(nav).toMatchObject({
-      label: 'Team',
-      operator: {
-        roles: ['owner'],
-        group: 'Workspace',
-        order: 2,
-        tier: 'core',
-      },
-    })
+    expect(nav).toEqual({ label: 'Team' })
   })
 
   it('U3: renders OrganizationProfile with hash routing and afterLeaveOrganizationUrl', () => {

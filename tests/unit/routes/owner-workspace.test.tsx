@@ -30,6 +30,12 @@ vi.mock('@/lib/operator/route-options', () => ({
   operatorRouteOptions: {},
 }))
 
+vi.mock('@/components/ae/layout/AeOperatorPage', () => ({
+  AeOperatorPage: ({ children, title }: { children: ReactNode; title: string }) => (
+    <div data-testid="operator-page" data-title={title}>{children}</div>
+  ),
+}))
+
 vi.mock('@/components/ae/website/clerk-appearance', () => ({
   clerkAppearance: { cssLayerName: 'clerk' },
 }))
@@ -88,17 +94,9 @@ describe('/owner/workspace route (W-12)', () => {
     expect(Route).toBeDefined()
   })
 
-  it('U2: staticData.nav uses Workspace core owner navigation', () => {
+  it('U2: Workspace remains a deep-link page, not a rail destination', () => {
     const nav = (routeState.routeOptions?.staticData as { nav?: Record<string, unknown> } | undefined)?.nav
-    expect(nav).toMatchObject({
-      label: 'Workspace',
-      operator: {
-        roles: ['owner'],
-        group: 'Workspace',
-        order: 1,
-        tier: 'core',
-      },
-    })
+    expect(nav).toEqual({ label: 'Workspace' })
   })
 
   it('U3: renders OrganizationProfile from Clerk inside min-h-96 shell', () => {

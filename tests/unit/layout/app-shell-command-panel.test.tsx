@@ -21,9 +21,14 @@ vi.mock('@/lib/observability/funnel-client', () => ({
 
 vi.mock('@clerk/tanstack-react-start', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@clerk/tanstack-react-start')>()),
-  Show: ({ when, children, fallback }: { when: string; children: ReactNode; fallback?: ReactNode }) =>
-    when === 'signed-out' ? children : (fallback ?? null),
+  useAuth: () => ({ isSignedIn: false }),
+  Show: ({ when, children, fallback }: { when: string; children?: ReactNode; fallback?: ReactNode }) => {
+    if (when === 'signed-out') return children ?? null
+    if (when === 'signed-in') return null
+    return fallback ?? null
+  },
   UserButton: () => <button type="button" aria-label="Account menu" />,
+  OrganizationSwitcher: () => null,
 }))
 
 afterEach(() => {
@@ -112,7 +117,7 @@ describe('app shell command panel', () => {
     const marketRoute = createRoute({
       getParentRoute: () => rootRoute,
       path: '/market',
-      staticData: { nav: { label: 'Market', header: { order: 0 } } },
+      staticData: { nav: { label: 'Market', header: { order: 0, audience: 'always' } } },
     })
     const router = createRouter({
       routeTree: rootRoute.addChildren([operatorRoute.addChildren([ownerRoute]), marketRoute]),

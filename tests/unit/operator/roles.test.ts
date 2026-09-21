@@ -1,6 +1,34 @@
 import { describe, expect, it } from 'vitest'
 
-import { ownerWorkspaceOwnerForPath } from '@/lib/operator/roles'
+import {
+  ownerBuyerOperatorSurfaceForPath,
+  ownerWorkspaceOwnerForPath,
+  shouldMountOperatorSidebar,
+} from '@/lib/operator/roles'
+
+describe('ownerBuyerOperatorSurfaceForPath (DS-37)', () => {
+  it('treats activity, call receipts, agent access, and owner workspace as buyer header surfaces', () => {
+    expect(ownerBuyerOperatorSurfaceForPath('/activity')).toBe(true)
+    expect(ownerBuyerOperatorSurfaceForPath('/activity/')).toBe(true)
+    expect(ownerBuyerOperatorSurfaceForPath('/calls')).toBe(true)
+    expect(ownerBuyerOperatorSurfaceForPath('/calls/')).toBe(true)
+    expect(ownerBuyerOperatorSurfaceForPath('/calls/call_test_123')).toBe(true)
+    expect(ownerBuyerOperatorSurfaceForPath('/agent-access')).toBe(true)
+    expect(ownerBuyerOperatorSurfaceForPath('/owner')).toBe(true)
+    expect(ownerBuyerOperatorSurfaceForPath('/owner/credit')).toBe(true)
+  })
+
+  it('does not treat admin or developer routes as buyer surfaces', () => {
+    expect(ownerBuyerOperatorSurfaceForPath('/admin')).toBe(false)
+    expect(ownerBuyerOperatorSurfaceForPath('/developers/discovery')).toBe(false)
+  })
+
+  it('keeps call receipts off the owner workspace sidebar', () => {
+    expect(shouldMountOperatorSidebar('owner', '/calls/call_test_123')).toBe(false)
+    expect(shouldMountOperatorSidebar('owner', '/owner/operations')).toBe(false)
+    expect(shouldMountOperatorSidebar('admin', '/admin')).toBe(true)
+  })
+})
 
 describe('ownerWorkspaceOwnerForPath (W-12)', () => {
   it('R1: /owner/workspace resolves to workspace', () => {

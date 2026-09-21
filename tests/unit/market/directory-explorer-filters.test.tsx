@@ -6,7 +6,7 @@ import { DirectoryExplorerFilters } from '@/components/ae/market/DirectoryExplor
 import type { DirectoryExplorerFilterValues } from '@/modules/market/directory-filters.contracts'
 import type { X402DirectoryCatalogueOverview } from '@/modules/market/x402-directory-catalogue'
 
-const overview: X402DirectoryCatalogueOverview = { kind: 'ok', coverage: { source: 'coinbase', generation: 'test', indexedTotal: 14000, reportedTotal: 14000, reportedTotalAtStart: 14000, sourceChangedDuringScan: false, duplicateObservations: 0, pagesFetched: 140, startedAt: 1, completedAt: 2, completeness: 'completed_observed_scan' }, categories: [{ key: 'search', label: 'Search', count: 500 }, { key: 'unclassified', label: 'Unclassified', count: 13000 }], networks: [{ key: 'eip155:8453', label: 'Base', count: 4000 }], providers: [], popular: [], recentlyUpdated: [] }
+const overview: X402DirectoryCatalogueOverview = { kind: 'ok', coverage: { source: 'coinbase', generation: 'test', indexedTotal: 14000, reportedTotal: 14000, reportedTotalAtStart: 14000, sourceChangedDuringScan: false, duplicateObservations: 0, pagesFetched: 140, startedAt: 1, completedAt: 2, completeness: 'completed_observed_scan' }, categories: [{ key: 'search', label: 'Search', count: 500 }, { key: 'unclassified', label: 'Unclassified', count: 13000 }], networks: [{ key: 'eip155:8453', label: 'Base', count: 4000 }], providers: [{ key: 'api.example.com', label: 'api.example.com', count: 42 }], popular: [], recentlyUpdated: [] }
 afterEach(cleanup)
 function show(search: DirectoryExplorerFilterValues = {}) {
   const change = vi.fn(), reset = vi.fn()
@@ -22,8 +22,19 @@ it('searches global category facets without altering counts or filtering the sup
   fireEvent.click(filters.getByRole('button', { name: 'Search 500' }))
   expect(change).toHaveBeenCalledWith({ directoryCategory: 'search' })
 })
-it('applies price bounds together and rejects inverted bounds', () => {
+it('picks a Provider from the catalogue index instead of typing a hostname', () => {
   const { filters, change } = show()
+  fireEvent.click(filters.getByRole('button', { name: 'api.example.com 42' }))
+  expect(change).toHaveBeenCalledWith({ provider: 'api.example.com' })
+})
+it('picks a listed-price band from the published index', () => {
+  const { filters, change } = show()
+  fireEvent.click(filters.getByRole('button', { name: '0.01–<0.03 USDC' }))
+  expect(change).toHaveBeenCalledWith({ priceBand: '0_01_to_0_03', minUsdPrice: undefined, maxUsdPrice: undefined })
+})
+it('keeps typed price bounds in Advanced and rejects inverted bounds', () => {
+  const { filters, change } = show()
+  fireEvent.click(filters.getByRole('button', { name: 'Advanced filters' }))
   fireEvent.change(filters.getByLabelText('Min USDC'), { target: { value: '0.1' } })
   fireEvent.change(filters.getByLabelText('Max USDC'), { target: { value: '0.01' } })
   fireEvent.click(filters.getByRole('button', { name: 'Apply price range' }))
@@ -33,8 +44,9 @@ it('applies price bounds together and rejects inverted bounds', () => {
   fireEvent.click(filters.getByRole('button', { name: 'Apply price range' }))
   expect(change).toHaveBeenCalledWith({ minUsdPrice: 0.1, maxUsdPrice: 1, priceBand: undefined })
 })
-it('validates Provider hostnames and permits explicitly clearing a constraint', () => {
+it('keeps typed Provider hostnames in Advanced and permits explicitly clearing a constraint', () => {
   const { filters, change } = show({ provider: 'api.example.com', directoryCategory: 'search' })
+  fireEvent.click(filters.getByRole('button', { name: 'Advanced filters' }))
   fireEvent.change(filters.getByLabelText('Provider'), { target: { value: 'https://invalid.example.com/path' } })
   fireEvent.click(filters.getByRole('button', { name: 'Apply Provider' }))
   expect(change).not.toHaveBeenCalled()
@@ -70,7 +82,7 @@ it('provides the same filter actions in a scrollable mobile Sheet', async () => 
 })
 it('makes chart bands visible and replaces them when a price range or payer threshold is chosen', () => {
   const { filters, change } = show({ priceBand: '0_01_to_0_03', adoptionBand: '2_4', maxPayers30d: 4 })
-  expect(filters.getByRole('button', { name: 'Remove price band: 0.01–<0.03 USDC' })).toBeTruthy()
+  expect(filters.getByRole('button', { name: '0.01–<0.03 USDC' }).getAttribute('aria-pressed')).toBe('true')
   expect(filters.getByRole('button', { name: 'Remove payer band: 2–4 paying addresses' })).toBeTruthy()
   expect(filters.getByRole('button', { name: 'Any payer count' }).getAttribute('aria-pressed')).toBe('false')
   fireEvent.change(filters.getByLabelText('Max USDC'), { target: { value: '0.1' } })

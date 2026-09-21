@@ -1,5 +1,5 @@
 import { useMemo } from 'react'
-import type { LucideIcon } from 'lucide-react'
+import { Activity, Boxes, KeyRound, StoreIcon, type LucideIcon } from 'lucide-react'
 import { Link, useRouter } from '@tanstack/react-router'
 
 import { ownerWorkspaceOwnerForPath } from '@/lib/operator/roles'
@@ -13,11 +13,22 @@ type AeOwnerMobileNavigationProps = {
 type MobileNavItem = { href: string; label: string; icon: LucideIcon; mobileOrder: number }
 
 const OWNER_PRIMARY_DESTINATIONS = [
-  { href: '/owner', mobileOrder: 0 },
-  { href: '/owner/market', mobileOrder: 10 },
+  { href: '/market', mobileOrder: 0 },
+  { href: '/agent-access', mobileOrder: 10 },
   { href: '/activity', mobileOrder: 20 },
-  { href: '/owner/credit', mobileOrder: 30 },
+  { href: '/owner/operations', mobileOrder: 30 },
 ] as const
+
+/** Public or header-only routes in the mobile primary set lack `nav.operator`. */
+const OWNER_MOBILE_NAV_FALLBACK: Record<
+  (typeof OWNER_PRIMARY_DESTINATIONS)[number]['href'],
+  { label: string; icon: LucideIcon }
+> = {
+  '/market': { label: 'Market', icon: StoreIcon },
+  '/agent-access': { label: 'Agents', icon: KeyRound },
+  '/activity': { label: 'Calls', icon: Activity },
+  '/owner/operations': { label: 'My tools', icon: Boxes },
+}
 
 function normalizedPath(path: string): string {
   return path.length > 1 && path.endsWith('/') ? path.slice(0, -1) : path
@@ -58,8 +69,23 @@ export function AeOwnerMobileNavigation({ operatorContext, currentPath }: AeOwne
         : nav?.operatorUtility?.roles.includes('owner') === true
           ? nav.operatorUtility
           : undefined
-      if (nav === undefined || ownerNav === undefined) continue
-      collected.push({ href: destination.href, label: nav.label, icon: ownerNav.icon, mobileOrder: destination.mobileOrder })
+      if (nav === undefined) continue
+      if (ownerNav !== undefined) {
+        collected.push({
+          href: destination.href,
+          label: nav.label,
+          icon: ownerNav.icon,
+          mobileOrder: destination.mobileOrder,
+        })
+        continue
+      }
+      const fallback = OWNER_MOBILE_NAV_FALLBACK[destination.href]
+      collected.push({
+        href: destination.href,
+        label: nav.label ?? fallback.label,
+        icon: fallback.icon,
+        mobileOrder: destination.mobileOrder,
+      })
     }
     return collected.sort((left, right) => left.mobileOrder - right.mobileOrder)
   }, [router, operatorContext])

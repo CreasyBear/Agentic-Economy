@@ -12,6 +12,7 @@ import { x402DirectoryFilterSchema } from '@/modules/market/x402-directory'
 import type { X402DirectoryCatalogueOverview, X402DirectoryFacet } from '@/modules/market/x402-directory-catalogue'
 import type { DirectoryExplorerFilterPatch, DirectoryExplorerFilterValues } from '@/modules/market/directory-filters.contracts'
 import { formatPaymentNetwork } from '@/modules/market/tool-view-model'
+import { DIRECTORY_PRICE_BANDS, type DirectoryPriceBand } from '@/modules/market/x402-directory-index'
 
 export type DirectoryExplorerFiltersProps = Readonly<{
   search: DirectoryExplorerFilterValues
@@ -21,8 +22,11 @@ export type DirectoryExplorerFiltersProps = Readonly<{
 }>
 const priceBandLabels = { lt_0_01: 'Under 0.01 USDC', '0_01_to_0_03': '0.01–<0.03 USDC', '0_03_to_0_10': '0.03–<0.10 USDC', '0_10_to_1': '0.10–<1 USDC', '1_to_10': '1–<10 USDC', '10_plus': '10+ USDC', unknown: 'Price not comparable' }
 const adoptionBandLabels = { missing: 'Payers not reported', '0': '0 paying addresses', '1': '1 paying address', '2_4': '2–4 paying addresses', '5_9': '5–9 paying addresses', '10_49': '10–49 paying addresses', '50_plus': '50+ paying addresses' }
-const advancedFilterKeys = ['network', 'provider', 'minPayers30d', 'maxPayers30d', 'adoptionBand', 'curatedOnly', 'hasInputFields', 'hasOutputExample', 'hasInputSchema', 'hasOutputFields', 'hasOutputSchema', 'tags', 'bundleSlugs'] as const
+const advancedFilterKeys = ['network', 'minUsdPrice', 'maxUsdPrice', 'minPayers30d', 'maxPayers30d', 'adoptionBand', 'curatedOnly', 'hasInputFields', 'hasOutputExample', 'hasInputSchema', 'hasOutputFields', 'hasOutputSchema', 'tags', 'bundleSlugs'] as const
 const explorerFilterKeys = ['directoryCategory', 'network', 'provider', 'minUsdPrice', 'maxUsdPrice', 'minPayers30d', 'maxPayers30d', 'priceBand', 'adoptionBand', 'curatedOnly', 'hasInputFields', 'hasOutputExample', 'hasInputSchema', 'hasOutputFields', 'hasOutputSchema', 'tags', 'bundleSlugs'] as const
+
+const discoverFacetPill = 'rounded-full border border-border/70 bg-card'
+const discoverFacetSelected = cn(discoverFacetPill, 'font-medium')
 
 function activeAdvancedFilterCount(search: DirectoryExplorerFilterValues) {
   return advancedFilterKeys.filter(key => {
@@ -45,25 +49,26 @@ function MultipleFacets({ label, values, selected = [], onChange }: Readonly<{ l
   return <fieldset className="flex min-w-0 flex-col gap-3 border-t pt-5"><legend className="sr-only">{label}</legend><p className="text-sm font-semibold">{label}</p><Input value={query} aria-label={`Find shown ${label.toLowerCase()}`} onChange={event => setQuery(event.target.value)} placeholder={`Find ${label.toLowerCase()}…`} className="h-9 text-xs" /><div className="flex max-h-52 flex-col gap-1 overflow-y-auto overscroll-contain">
     {visible.map(item => <Label key={item.key} className="min-h-10 justify-between gap-2 py-1 text-xs font-normal"><span className="flex min-w-0 items-center gap-2"><Checkbox aria-label={`${item.label} ${item.count.toLocaleString('en-AU')}`} checked={selectedKeys.has(item.key)} disabled={selected.length >= 5 && !selectedKeys.has(item.key)} onCheckedChange={() => toggle(item.key)} /><span className="break-words">{item.label}</span></span><span className="shrink-0 text-muted-foreground tabular-nums">{item.count.toLocaleString('en-AU')}</span></Label>)}
     {visible.length === 0 ? <p className="text-xs text-muted-foreground">No match in the shown {label.toLowerCase()}.</p> : null}
-  </div>{unlistedSelected.map(key => <Button key={key} variant="secondary" size="sm" className="h-auto min-h-9 justify-between whitespace-normal" onClick={() => toggle(key)} aria-label={`Remove ${label.toLowerCase()}: ${key}`}>{key}<XIcon className="size-3" /></Button>)}<p className="text-xs leading-relaxed text-muted-foreground">A selection from the catalogue. Choose up to five; Tools can match any selected {label === 'Tags' ? 'tag' : 'collection'}.</p></fieldset>
+  </div>{unlistedSelected.map(key => <Button key={key} variant="outline" size="sm" className={cn('h-auto min-h-9 justify-between whitespace-normal', discoverFacetSelected)} onClick={() => toggle(key)} aria-label={`Remove ${label.toLowerCase()}: ${key}`}>{key}<XIcon className="size-3" /></Button>)}<p className="text-xs leading-relaxed text-muted-foreground">A selection from the catalogue. Choose up to five; Tools can match any selected {label === 'Tags' ? 'tag' : 'collection'}.</p></fieldset>
 }
 
-function Facets({ label, values, selected, onChange, searchable = false }: Readonly<{
+function Facets({ label, values, selected, onChange, searchable = false, allLabel, showCount = true }: Readonly<{
   label: string; values: readonly X402DirectoryFacet[]; selected?: string | undefined
-  onChange: (value: string | undefined) => void; searchable?: boolean
+  onChange: (value: string | undefined) => void; searchable?: boolean; allLabel?: string; showCount?: boolean
 }>) {
   const [query, setQuery] = useState('')
   const visible = values.filter(item => `${item.label} ${item.key}`.toLowerCase().includes(query.trim().toLowerCase()))
+  const allText = allLabel ?? (label === 'Network' ? 'All networks' : 'All categories')
   return <fieldset className="min-w-0 flex flex-col gap-3">
     <legend className="mb-3 text-sm font-semibold">{label}</legend>
-    {searchable ? <div className="relative"><SearchIcon className="pointer-events-none absolute top-2.5 left-2.5 size-3.5 text-muted-foreground" /><Input aria-label={`Find ${label.toLowerCase()}`} value={query} onChange={event => setQuery(event.target.value)} placeholder="Find a category…" className="h-9 pl-8 text-xs" /></div> : null}
+    {searchable ? <div className="relative"><SearchIcon className="pointer-events-none absolute top-2.5 left-2.5 size-3.5 text-muted-foreground" /><Input aria-label={`Find ${label.toLowerCase()}`} value={query} onChange={event => setQuery(event.target.value)} placeholder={`Find ${label.toLowerCase()}…`} className="h-9 pl-8 text-xs" /></div> : null}
     <div className="max-h-60 flex flex-col gap-0.5 overflow-y-auto overscroll-contain">
-      <Button type="button" variant="ghost" onClick={() => onChange(undefined)} aria-pressed={selected === undefined} className={cn('h-auto min-h-10 w-full justify-start rounded-md px-2 text-xs font-normal', selected === undefined && 'bg-muted font-medium')}>All {label === 'Network' ? 'networks' : 'categories'}</Button>
-      {visible.map(item => <Button key={item.key} type="button" variant="ghost" aria-label={`${item.label} ${item.count.toLocaleString('en-AU')}`} aria-pressed={selected === item.key} onClick={() => onChange(selected === item.key ? undefined : item.key)} className={cn('h-auto min-h-10 w-full justify-between gap-3 rounded-md px-2 text-xs font-normal', selected === item.key && 'bg-muted font-medium')}>
-        <span className="min-w-0 break-words text-left whitespace-normal">{item.label}</span><span className="shrink-0 text-muted-foreground tabular-nums">{item.count.toLocaleString('en-AU')}</span>
+      <Button type="button" variant="ghost" onClick={() => onChange(undefined)} aria-pressed={selected === undefined} className={cn('h-auto min-h-10 w-full justify-start px-3 text-xs font-normal', selected === undefined ? discoverFacetSelected : 'rounded-full')}>{allText}</Button>
+      {visible.map(item => <Button key={item.key} type="button" variant="ghost" aria-label={showCount ? `${item.label} ${item.count.toLocaleString('en-AU')}` : item.label} aria-pressed={selected === item.key} onClick={() => onChange(selected === item.key ? undefined : item.key)} className={cn('h-auto min-h-10 w-full justify-between gap-3 px-3 text-xs font-normal', selected === item.key ? discoverFacetSelected : 'rounded-full')}>
+        <span className="min-w-0 break-words text-left whitespace-normal">{item.label}</span>{showCount ? <span className="shrink-0 text-muted-foreground tabular-nums">{item.count.toLocaleString('en-AU')}</span> : null}
       </Button>)}
       {visible.length === 0 ? <p className="px-2 py-2 text-xs text-muted-foreground">No matching {label.toLowerCase()}.</p> : null}
-      {selected !== undefined && !values.some(item => item.key === selected) ? <Button type="button" variant="secondary" className="h-auto min-h-9 w-full justify-start whitespace-normal" aria-pressed onClick={() => onChange(undefined)}>{selected}</Button> : null}
+      {selected !== undefined && !values.some(item => item.key === selected) ? <Button type="button" variant="outline" className={cn('h-auto min-h-9 w-full justify-start whitespace-normal', discoverFacetSelected)} aria-pressed onClick={() => onChange(undefined)}>{selected}</Button> : null}
     </div>
   </fieldset>
 }
@@ -79,11 +84,10 @@ function ListedPriceFilter({ search, onChange }: Pick<DirectoryExplorerFiltersPr
     if ((min !== undefined && (!Number.isFinite(min) || min < 0)) || (max !== undefined && (!Number.isFinite(max) || max < 0)) || (min !== undefined && max !== undefined && min > max)) { setPriceError('Enter a valid price range with the minimum no greater than the maximum.'); return }
     setPriceError(undefined); onChange({ minUsdPrice: min, maxUsdPrice: max, priceBand: undefined })
   }}>
-    <p className="text-sm font-semibold">Listed price</p>
-    {search.priceBand === undefined ? null : <Button type="button" variant="secondary" className="h-auto min-h-9 justify-between gap-2 text-xs whitespace-normal" aria-label={`Remove price band: ${priceBandLabels[search.priceBand]}`} onClick={() => onChange({ priceBand: undefined })}>{priceBandLabels[search.priceBand]}<XIcon className="size-3" /></Button>}
+    <p className="text-sm font-semibold">Custom listed price</p>
     <FieldGroup className="grid grid-cols-2 gap-2"><Field className="gap-2"><FieldLabel className="text-xs font-normal" htmlFor={`${id}-minimum`}>Min USDC</FieldLabel><Input id={`${id}-minimum`} type="number" min="0" step="any" inputMode="decimal" placeholder="0" value={minimum} aria-invalid={priceError !== undefined} aria-describedby={priceError === undefined ? undefined : `${id}-price-error`} onChange={event => setMinimum(event.target.value)} /></Field><Field className="gap-2"><FieldLabel className="text-xs font-normal" htmlFor={`${id}-maximum`}>Max USDC</FieldLabel><Input id={`${id}-maximum`} type="number" min="0" step="any" inputMode="decimal" placeholder="Any" value={maximum} aria-invalid={priceError !== undefined} aria-describedby={priceError === undefined ? undefined : `${id}-price-error`} onChange={event => setMaximum(event.target.value)} /></Field></FieldGroup>
     <FieldError id={`${id}-price-error`} className="text-xs">{priceError}</FieldError>
-    <p className="text-xs leading-relaxed text-muted-foreground">Provider-declared USDC price per Call. Network-specific prices are available under Advanced filters.</p><Button type="submit" variant="outline" size="sm" className="w-full">Apply price range</Button>
+    <p className="text-xs leading-relaxed text-muted-foreground">A custom USDC range. Applying it clears the listed-price band.</p><Button type="submit" variant="outline" size="sm" className="w-full">Apply price range</Button>
   </form>
 }
 
@@ -108,11 +112,11 @@ function PublishedDetailsFilter({ search, onChange }: Pick<DirectoryExplorerFilt
 
 function PayerBreadthFilter({ search, onChange }: Pick<DirectoryExplorerFiltersProps, 'search' | 'onChange'>) {
   return <fieldset className="flex flex-col gap-2 border-t pt-5"><legend className="sr-only">Payer breadth</legend><p className="text-sm font-semibold">Payer breadth · 30 days</p>
-      {search.adoptionBand === undefined ? null : <Button type="button" variant="secondary" className="h-auto min-h-9 justify-between gap-2 text-xs whitespace-normal" aria-label={`Remove payer band: ${adoptionBandLabels[search.adoptionBand]}`} onClick={() => onChange({ adoptionBand: undefined })}>{adoptionBandLabels[search.adoptionBand]}<XIcon className="size-3" /></Button>}
-      {search.maxPayers30d === undefined ? null : <Button type="button" variant="secondary" className="h-auto min-h-9 justify-between gap-2 text-xs whitespace-normal" aria-label="Remove maximum payer count" onClick={() => onChange({ maxPayers30d: undefined })}>At most {search.maxPayers30d.toLocaleString('en-AU')} paying addresses<XIcon className="size-3" /></Button>}
+      {search.adoptionBand === undefined ? null : <Button type="button" variant="outline" className={cn('h-auto min-h-9 justify-between gap-2 text-xs whitespace-normal', discoverFacetSelected)} aria-label={`Remove payer band: ${adoptionBandLabels[search.adoptionBand]}`} onClick={() => onChange({ adoptionBand: undefined })}>{adoptionBandLabels[search.adoptionBand]}<XIcon className="size-3" /></Button>}
+      {search.maxPayers30d === undefined ? null : <Button type="button" variant="outline" className={cn('h-auto min-h-9 justify-between gap-2 text-xs whitespace-normal', discoverFacetSelected)} aria-label="Remove maximum payer count" onClick={() => onChange({ maxPayers30d: undefined })}>At most {search.maxPayers30d.toLocaleString('en-AU')} paying addresses<XIcon className="size-3" /></Button>}
       {[{ label: 'Any payer count', value: undefined }, { label: '10+ paying addresses', value: 10 }, { label: '100+ paying addresses', value: 100 }, { label: '1,000+ paying addresses', value: 1000 }].map(option => {
         const selected = search.minPayers30d === option.value && search.adoptionBand === undefined && search.maxPayers30d === undefined
-        return <Button key={option.label} type="button" variant="ghost" aria-pressed={selected} className={cn('h-auto min-h-10 w-full justify-start px-2 text-xs font-normal', selected && 'bg-muted font-medium')} onClick={() => onChange({ minPayers30d: option.value, maxPayers30d: undefined, adoptionBand: undefined })}>{option.label}</Button>
+        return <Button key={option.label} type="button" variant="ghost" aria-pressed={selected} className={cn('h-auto min-h-10 w-full justify-start px-3 text-xs font-normal', selected ? discoverFacetSelected : 'rounded-full')} onClick={() => onChange({ minPayers30d: option.value, maxPayers30d: undefined, adoptionBand: undefined })}>{option.label}</Button>
       })}
       <p className="text-xs leading-relaxed text-muted-foreground">Distinct paying addresses per Tool, not people or Customers.</p>
     </fieldset>
@@ -128,7 +132,8 @@ function AdvancedFilters({ search, overview, onChange }: Pick<DirectoryExplorerF
         <ChevronDownIcon className={cn('transition-transform', open && 'rotate-180')} aria-hidden="true" />
       </Button>} />
       <CollapsibleContent className="flex flex-col gap-6 pt-4">
-        {facets === undefined ? null : <Facets label="Network" values={facets.networks.map(item => ({ ...item, label: formatPaymentNetwork(item.label) }))} selected={search.network} onChange={network => onChange({ network })} />}
+        {facets === undefined ? null : <Facets label="Network" allLabel="All networks" values={facets.networks.map(item => ({ ...item, label: formatPaymentNetwork(item.label) }))} selected={search.network} onChange={network => onChange({ network })} />}
+        <ListedPriceFilter search={search} onChange={onChange} />
         <ProviderFilter search={search} onChange={onChange} />
         <PublishedDetailsFilter search={search} onChange={onChange} />
         <PayerBreadthFilter search={search} onChange={onChange} />
@@ -142,8 +147,12 @@ function FilterBody({ search, overview, onChange, onReset, showHeading = true }:
   const facets = overview?.kind === 'ok' ? overview : undefined
   return <div className="flex flex-col gap-6">
     {showHeading ? <div className="flex items-center justify-between"><p className="text-sm font-semibold">Filters</p><Button type="button" variant="ghost" size="sm" className="min-h-touch" onClick={onReset}>Clear all</Button></div> : null}
-    {facets === undefined ? <p className="text-xs text-muted-foreground">Category and network counts are unavailable.</p> : <><p className="text-xs leading-relaxed text-muted-foreground">Counts cover the full indexed catalogue.</p><Facets label="Provider category" values={facets.categories} selected={search.directoryCategory} onChange={directoryCategory => onChange({ directoryCategory })} searchable /></>}
-    <ListedPriceFilter search={search} onChange={onChange} />
+    {facets === undefined ? <p className="text-xs text-muted-foreground">Category and network counts are unavailable.</p> : <><p className="text-xs leading-relaxed text-muted-foreground">Counts cover the full indexed catalogue.</p><Facets label="Provider category" allLabel="All categories" values={facets.categories} selected={search.directoryCategory} onChange={directoryCategory => onChange({ directoryCategory })} searchable /><Facets label="Provider" allLabel="All providers" values={facets.providers} selected={search.provider} onChange={provider => onChange({ provider })} searchable /></>}
+    <Facets label="Listed price" allLabel="Any listed price" showCount={false} values={DIRECTORY_PRICE_BANDS.map(key => ({ key, label: priceBandLabels[key], count: 0 }))} selected={search.priceBand} onChange={value => {
+      const priceBand = value === undefined ? undefined : DIRECTORY_PRICE_BANDS.find((band): band is DirectoryPriceBand => band === value)
+      if (value !== undefined && priceBand === undefined) return
+      onChange({ priceBand, minUsdPrice: undefined, maxUsdPrice: undefined })
+    }} />
     <AdvancedFilters search={search} {...(overview === undefined ? {} : { overview })} onChange={onChange} />
   </div>
 }

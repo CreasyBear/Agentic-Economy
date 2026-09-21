@@ -16,6 +16,7 @@ import '../../setup/jsdom-platform'
 import '../../setup/jsdom-dialog'
 
 import { AeAppShell } from '@/components/ae/layout/AeAppShell'
+import { AeChatPage } from '@/components/ae/layout/AeChatPage'
 import { AePublicPage } from '@/components/ae/layout/AePublicPage'
 import {
   Dialog,
@@ -38,9 +39,14 @@ vi.mock('@/lib/observability/funnel-client', () => ({
 
 vi.mock('@clerk/tanstack-react-start', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@clerk/tanstack-react-start')>()),
-  Show: ({ when, children, fallback }: { when: string; children: ReactNode; fallback?: ReactNode }) =>
-    when === 'signed-out' ? children : (fallback ?? null),
+  useAuth: () => ({ isSignedIn: false }),
+  Show: ({ when, children, fallback }: { when: string; children?: ReactNode; fallback?: ReactNode }) => {
+    if (when === 'signed-out') return children ?? null
+    if (when === 'signed-in') return null
+    return fallback ?? null
+  },
   UserButton: () => <button type="button" aria-label="Account menu" />,
+  OrganizationSwitcher: () => null,
 }))
 
 vi.mock('@tanstack/react-router', async (importOriginal) => {
@@ -97,6 +103,21 @@ describe('AeAppShell skip link (S-19)', () => {
     expect(
       skip.compareDocumentPosition(header!) & Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBe(Node.DOCUMENT_POSITION_FOLLOWING)
+  })
+})
+
+describe('AeChatPage main landmark (S-19)', () => {
+  it('sets tabIndex -1 on chat main-content for skip-link focus', () => {
+    render(
+      <AeChatPage header={<p>Ask</p>} dock={<span />}>
+        <p>Thread</p>
+      </AeChatPage>,
+    )
+
+    const main = document.getElementById('main-content')
+    expect(main).toBeTruthy()
+    expect(main).toHaveAttribute('tabindex', '-1')
+    expect(main).toHaveAttribute('aria-label', 'Chat')
   })
 })
 
@@ -176,22 +197,22 @@ function renderAppShell(): void {
     createRoute({
       getParentRoute: () => rootRoute,
       path: '/market',
-      staticData: { nav: { label: 'Market', header: { order: 0 } } },
+      staticData: { nav: { label: 'Market', header: { order: 0, audience: 'always' } } },
     }),
     createRoute({
       getParentRoute: () => rootRoute,
       path: '/for-agents',
-      staticData: { nav: { label: 'For agents', header: { order: 1 } } },
+      staticData: { nav: { label: 'For agents', header: { order: 1, audience: 'public' } } },
     }),
     createRoute({
       getParentRoute: () => rootRoute,
       path: '/for-providers',
-      staticData: { nav: { label: 'For providers', header: { order: 2 } } },
+      staticData: { nav: { label: 'For providers', header: { order: 2, audience: 'public' } } },
     }),
     createRoute({
       getParentRoute: () => rootRoute,
       path: '/activity',
-      staticData: { nav: { label: 'Calls', header: { order: 3 } } },
+      staticData: { nav: { label: 'Calls', header: { order: 2, audience: 'signed-in' } } },
     }),
     createRoute({ getParentRoute: () => rootRoute, path: '/sign-in/$' }),
   ])

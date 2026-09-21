@@ -15,7 +15,7 @@ export const Route = createFileRoute('/_operator/activity')({
   staticData: {
     nav: {
       label: 'Calls',
-      header: { order: 3 },
+      header: { order: 2, audience: 'signed-in' },
       footer: { column: 'Market', order: 3 },
       operator: {
         roles: ['owner'],

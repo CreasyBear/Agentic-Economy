@@ -1,29 +1,43 @@
 import { Fragment, forwardRef, useMemo, type ButtonHTMLAttributes } from 'react'
+import { useAuth } from '@clerk/tanstack-react-start'
 import { Link, useMatchRoute, useRouter } from '@tanstack/react-router'
 
 import { AeDottedRule, AeVerticalHairline } from '@/components/ae/website/AeSiteMarks'
+import type { NavStaticData } from '@/router'
 import { cn } from '@/lib/utils'
 
-type HeaderNavItem = {
+export type HeaderNavItem = {
   to: string
   label: string
   search?: Record<string, string>
   order: number
 }
 
-function useHeaderNavItems(): HeaderNavItem[] {
+type HeaderNavAudience = NonNullable<NavStaticData['header']>['audience']
+
+function headerNavMatchesAudience(audience: HeaderNavAudience, signedIn: boolean): boolean {
+  if (audience === 'always') return true
+  if (audience === 'public') return !signedIn
+  return signedIn
+}
+
+export function useHeaderNavItems(): HeaderNavItem[] {
   const { routesByPath } = useRouter()
+  const { isSignedIn } = useAuth()
+  const signedIn = isSignedIn === true
 
   return useMemo(
     () =>
       Object.values(routesByPath)
         .flatMap((route) => {
           const nav = route.options.staticData?.nav
-          if (nav?.header === undefined) return []
-          return [{ to: route.to, label: nav.label, search: nav.search, order: nav.header.order }]
+          const header = nav?.header
+          if (header === undefined) return []
+          if (!headerNavMatchesAudience(header.audience, signedIn)) return []
+          return [{ to: route.to, label: nav.label, search: nav.search, order: header.order }]
         })
         .sort((a, b) => a.order - b.order),
-    [routesByPath],
+    [routesByPath, signedIn],
   )
 }
 
@@ -46,7 +60,7 @@ export function AeSiteDrawerNav({ onNavigate }: { onNavigate: () => void }) {
   const items = useHeaderNavItems()
 
   return (
-    <nav aria-label="Public navigation" className="grid content-center gap-section px-gutter py-page">
+    <nav aria-label="Primary" className="grid content-center gap-section px-gutter py-page">
       {items.map((item, index) => (
         <Fragment key={item.to}>
           {index > 0 ? <AeDottedRule /> : null}

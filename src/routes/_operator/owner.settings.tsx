@@ -1,5 +1,4 @@
 import { Outlet, createFileRoute, useLocation } from '@tanstack/react-router'
-import { Settings } from 'lucide-react'
 
 import { AccountSettingsSection } from '@/components/ae/settings/OwnerSettingsSections'
 import { OwnerSettingsShell } from '@/components/ae/settings/OwnerSettingsShell'
@@ -11,14 +10,6 @@ export const Route = createFileRoute('/_operator/owner/settings')({
   staticData: {
     nav: {
       label: 'Account & security',
-      operator: {
-        roles: ['owner'],
-        group: 'Account',
-        groupOrder: 2,
-        order: 0,
-        icon: Settings,
-        tier: 'core',
-      },
     },
   },
   ...operatorRouteOptions,

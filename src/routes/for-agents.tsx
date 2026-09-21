@@ -12,7 +12,7 @@ export const Route = createFileRoute('/for-agents')({
   staticData: {
     nav: {
       label: 'For agents',
-      header: { order: 1 },
+      header: { order: 1, audience: 'public' },
       footer: { column: 'Market', order: 1 },
       operatorUtility: { roles: ['owner', 'admin', 'developer'], order: 1, icon: Bot },
     },

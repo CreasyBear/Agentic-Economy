@@ -1,5 +1,5 @@
-import { Fragment, useEffect, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties, type ReactNode, type RefObject } from 'react'
-import { Link, useMatches, useMatchRoute, useRouter } from '@tanstack/react-router'
+import { Fragment, useEffect, useRef, useState, useSyncExternalStore, type CSSProperties, type ReactNode, type RefObject } from 'react'
+import { Link, useMatches, useMatchRoute } from '@tanstack/react-router'
 import { Show, UserButton } from '@clerk/tanstack-react-start'
 import { ArrowLeftIcon, MenuIcon, XIcon } from 'lucide-react'
 
@@ -11,7 +11,13 @@ import {
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet'
 import { emitFunnelEventOnce } from '@/lib/observability/funnel-client'
 import { buttonVariants } from '@/components/ui/button-variants'
-import { AeSiteDrawerNav, AeSiteIconButton } from '@/components/ae/website/AeSiteNav'
+import { AeOrganizationSwitcher } from '@/components/ae/layout/AeOrganizationSwitcher'
+import {
+  AeSiteDrawerNav,
+  AeSiteIconButton,
+  useHeaderNavItems,
+  type HeaderNavItem,
+} from '@/components/ae/website/AeSiteNav'
 import { AeVerticalHairline } from '@/components/ae/website/AeSiteMarks'
 import { AECON_MARK_SRC, AECON_MOBILE_LOCKUP_SRC, aeconMarkClassName } from '@/content/brand-assets'
 import { cn } from '@/lib/utils'
@@ -20,13 +26,6 @@ import {
   AeNetworkHealthBanner,
   AeNetworkHealthIndicator,
 } from '@/components/ae/layout/AeNetworkHealthIndicator'
-
-type HeaderNavItem = {
-  to: string
-  label: string
-  search?: Record<string, string>
-  order: number
-}
 
 function AeFunnelAttributionBoot() {
   useEffect(() => {
@@ -161,57 +160,67 @@ export function AeAppShell({ children }: { children: ReactNode }) {
                 className="ae-nav flex h-(--header-height) min-h-(--header-height) items-center gap-related px-1 shadow-none transition-shadow duration-200 ease-out data-[elevated]:shadow-soft motion-reduce:transition-none sm:px-2"
               >
                 <BrandLink />
-                {operatorWorkspace ? null : <AppHeaderNav />}
+                <AppHeaderNav />
                 <div className="ms-auto flex items-center gap-intra">
                   <AeNetworkHealthIndicator withBanner={false} />
                   <AeCommandPanel />
+                  <Show when="signed-in">
+                    <div className="hidden max-w-[12rem] min-w-0 md:block">
+                      <AeOrganizationSwitcher />
+                    </div>
+                  </Show>
                   <ThemeToggle />
-                  <Show when="signed-out" fallback={<UserButton />}>
+                  <Show when="signed-out" fallback={<UserButton userProfileMode="modal" />}>
                     <Link
                       to="/sign-in/$"
                       params={{ _splat: '' }}
-                      className={cn(buttonVariants({ variant: 'ghost' }), 'hidden lg:inline-flex')}
+                      className={cn(buttonVariants({ variant: 'ghost' }), 'hidden md:inline-flex')}
                     >
                       Sign in
                     </Link>
                   </Show>
-                  {operatorWorkspace ? null : (
-                    <SheetTrigger
-                      render={
-                        <AeSiteIconButton
-                          ariaLabel={mobileNavOpen ? 'Close public menu' : 'Open public menu'}
-                          className="md:hidden"
-                        >
-                          <MenuIcon aria-hidden="true" />
-                        </AeSiteIconButton>
-                      }
-                    />
-                  )}
+                  <SheetTrigger
+                    render={
+                      <AeSiteIconButton
+                        ariaLabel={mobileNavOpen ? 'Close menu' : 'Open menu'}
+                        className="md:hidden"
+                      >
+                        <MenuIcon aria-hidden="true" />
+                      </AeSiteIconButton>
+                    }
+                  />
                 </div>
               </div>
               <SheetContent side="left" className="w-80 max-w-[calc(100vw-2rem)] p-0" showCloseButton={false}>
                 <SheetHeader className="border-b border-border">
                   <div className="flex items-center justify-between gap-3">
-                    <SheetTitle>Public navigation</SheetTitle>
-                    <AeSiteIconButton ariaLabel="Close public menu" onClick={() => setMobileNavOpen(false)}>
+                    <SheetTitle>Menu</SheetTitle>
+                    <AeSiteIconButton ariaLabel="Close menu" onClick={() => setMobileNavOpen(false)}>
                       <XIcon aria-hidden="true" />
                     </AeSiteIconButton>
                   </div>
                   <SheetDescription className="sr-only">Choose where to go on Agentic Economy.</SheetDescription>
                 </SheetHeader>
                 <AeSiteDrawerNav onNavigate={() => setMobileNavOpen(false)} />
-                <div className="flex items-center justify-between border-t border-border p-gutter">
-                  <Show when="signed-out" fallback={<UserButton />}>
-                    <Link
-                      to="/sign-in/$"
-                      params={{ _splat: '' }}
-                      onClick={() => setMobileNavOpen(false)}
-                      className={buttonVariants({ variant: 'outline' })}
-                    >
-                      Sign in
-                    </Link>
+                <div className="flex flex-col gap-related border-t border-border p-gutter">
+                  <Show when="signed-in">
+                    <div className="min-w-0 md:hidden">
+                      <AeOrganizationSwitcher />
+                    </div>
                   </Show>
-                  <ThemeToggle />
+                  <div className="flex items-center justify-between">
+                    <Show when="signed-out">
+                      <Link
+                        to="/sign-in/$"
+                        params={{ _splat: '' }}
+                        onClick={() => setMobileNavOpen(false)}
+                        className={buttonVariants({ variant: 'outline' })}
+                      >
+                        Sign in
+                      </Link>
+                    </Show>
+                    <ThemeToggle />
+                  </div>
                 </div>
               </SheetContent>
             </Sheet>
@@ -227,7 +236,7 @@ export function AeAppShell({ children }: { children: ReactNode }) {
 
 function CloseDrawerOnDesktop({ onClose }: { onClose: (open: boolean) => void }) {
   useEffect(() => {
-    const mediaQuery = window.matchMedia('(min-width: 1024px)')
+    const mediaQuery = window.matchMedia('(min-width: 768px)')
     const handleChange = () => {
       if (mediaQuery.matches) onClose(false)
     }
@@ -252,18 +261,7 @@ function BrandLink() {
 }
 
 function AppHeaderNav() {
-  const { routesByPath } = useRouter()
-  const items = useMemo(
-    () =>
-      Object.values(routesByPath)
-        .flatMap((route) => {
-          const nav = route.options.staticData?.nav
-          if (nav?.header === undefined) return []
-          return [{ to: route.to, label: nav.label, search: nav.search, order: nav.header.order }]
-        })
-        .sort((a, b) => a.order - b.order),
-    [routesByPath],
-  )
+  const items = useHeaderNavItems()
 
   return (
     <nav aria-label="Primary" className="hidden items-center md:flex">

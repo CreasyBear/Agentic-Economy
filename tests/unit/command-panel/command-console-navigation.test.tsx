@@ -8,12 +8,30 @@ import {
   createRoute,
   createRouter,
 } from '@tanstack/react-router'
-import { useState } from 'react'
-import type { ReactElement } from 'react'
+import { useState, type ReactElement } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import '../../setup/resize-observer'
 import '../../setup/jsdom-platform'
 import '../../setup/jsdom-dialog'
+
+vi.mock('@tanstack/react-start', async (importOriginal) => ({
+  ...await importOriginal<typeof import('@tanstack/react-start')>(),
+  useServerFn: () =>
+    vi.fn(async () => ({
+      items: [],
+      page: { isDone: true, continueCursor: '' },
+    })),
+}))
+
+vi.mock('convex/react', () => ({
+  useQuery: () => undefined,
+}))
+
+vi.mock('@clerk/tanstack-react-start', () => ({
+  UserProfile: () => null,
+  SignOutButton: ({ children }: { children: React.ReactNode }) => children,
+  OrganizationProfile: Object.assign(() => null, { Page: () => null }),
+}))
 
 import { AeCommandPanel, CommandPanelProvider } from '@/components/ae/command-panel'
 import { ThemeProvider } from '@/components/ae/theme/ThemeProvider'
@@ -34,21 +52,14 @@ describe('command console navigation groups', () => {
     expect(screen.getByRole('option', { name: /Toggle Theme/ })).toBeTruthy()
   })
 
-  it('filters Navigation to Account & Settings for "settings" and navigates on select', async () => {
-    const router = renderCommandPanel({ openImmediately: true })
+  it('does not offer a second settings product from the command palette', async () => {
+    renderCommandPanel({ openImmediately: true })
 
     const input = screen.getByRole('combobox', { name: 'Search Tools' })
     fireEvent.change(input, { target: { value: 'settings' } })
 
-    expect(screen.queryByText('Navigation')).toBeTruthy()
-    expect(screen.queryByText('Quick Actions')).toBeNull()
-    const settingsItem = await screen.findByRole('option', { name: /Account & Settings/ })
-    fireEvent.click(settingsItem)
-
-    await waitFor(() => {
-      expect(router.state.location.pathname).toBe('/owner/settings')
-      expect(screen.queryByRole('dialog')).toBeNull()
-    })
+    expect(screen.queryByRole('option', { name: /Account & Settings/ })).toBeNull()
+    expect(screen.queryByRole('dialog', { name: 'Account & settings' })).toBeNull()
   })
 
   it('shows Toggle Theme in Quick Actions when the query is "theme"', async () => {
