@@ -7,16 +7,47 @@ import { cn } from '@/lib/utils'
 
 import { TermsCapabilityList } from './components/TermsCapabilityList'
 import { TermsPracticeAccordion } from './components/TermsPracticeAccordion'
-import { canDoItems, termsItems } from './terms.contracts'
+import {
+  canDoItems,
+  termsItems,
+  termsLastUpdated,
+  termsPracticeSection,
+  termsTableOfContents,
+  termsTableOfContentsHeading,
+  termsTableOfContentsLabel,
+} from './terms.contracts'
 
 export function AeTermsPage() {
   return (
     <div className="ae-rail grid max-w-prose gap-page pb-page">
+      <p className="text-sm text-muted-foreground">{termsLastUpdated}</p>
+
+      <nav aria-label={termsTableOfContentsLabel} className="grid gap-intra">
+        <p className="font-medium text-foreground">{termsTableOfContentsHeading}</p>
+        <ul className="grid gap-1">
+          {termsTableOfContents.map(({ id, title }) => (
+            <li key={id}>
+              <a
+                href={`#${id}`}
+                className={cn(buttonVariants({ variant: 'link', size: 'sm' }), 'justify-start px-0')}
+              >
+                {title}
+              </a>
+            </li>
+          ))}
+        </ul>
+      </nav>
+
       <TermsCapabilityList items={canDoItems} />
 
       <section className="border-t border-border pt-section">
-        <AeSiteHeading as="h2" size="sm" className="mb-related">
-          What these terms mean in practice
+        <AeSiteHeading
+          as="h2"
+          size="sm"
+          id={termsPracticeSection.id}
+          className="mb-related"
+        >
+          {termsPracticeSection.title}
         </AeSiteHeading>
         <TermsPracticeAccordion items={termsItems} />
       </section>

@@ -10,9 +10,12 @@ export function TermsPracticeAccordion({ items }: TermsPracticeAccordionProps) {
       defaultValue={items[0]?.title ?? ''}
       className="grid gap-intra"
     >
-      {items.map(({ icon: Icon, title, body }) => (
-        <AccordionItem key={title} value={title} className="rounded-card border bg-card">
-          <AccordionTrigger className="flex min-h-touch w-full items-center gap-related px-gutter py-3 text-start hover:no-underline [&>svg:last-child]:ms-auto">
+      {items.map(({ id, icon: Icon, title, body }) => (
+        <AccordionItem key={id} value={title} className="rounded-card border bg-card">
+          <AccordionTrigger
+            id={id}
+            className="flex min-h-touch w-full items-center gap-related px-gutter py-3 text-start hover:no-underline [&>svg:last-child]:ms-auto"
+          >
             <span className="inline-flex shrink-0" aria-hidden="true">
               <Icon className="size-4 text-foreground" />
             </span>
