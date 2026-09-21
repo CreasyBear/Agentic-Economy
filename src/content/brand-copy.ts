@@ -59,9 +59,13 @@ export const AGENT_PAGE = {
   metaDescription:
     'Find an outside service, compare its terms, and connect Codex, Claude Code or Cursor to make an authorized Call.',
   eyebrow: 'Connections',
-  heading: 'Add the market to your agent.',
-  harnesses: 'Claude Code, Cursor, and Codex',
+  heading: 'Connect your Agent.',
   subhead: 'Find the service your task needs. Connect your account, review the terms, and make a Call within the authority you have granted.',
+  primaryCta: 'Start setup',
+  openAgentsCta: 'Open Agents',
+  spendingPolicyStepHeading: 'Set a Spending policy',
+  spendingPolicyStepBody: 'Set limits for each Agent before it makes paid Calls.',
+  spendingPolicyCta: 'Review Spending policy',
 } as const
 
 /** Supplier door on `/` (routes to the existing supply mode). */

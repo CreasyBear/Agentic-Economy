@@ -1,5 +1,3 @@
-import { Link } from '@tanstack/react-router'
-
 import { AeAssistantInstallFunnel } from '@/components/ae/console/AeAssistantInstallFunnel'
 import {
   AeSiteBody,
@@ -24,7 +22,6 @@ export function AeAgentDoorPage({ canonicalBaseUrl }: { canonicalBaseUrl: string
                 {AGENT_PAGE.heading}
               </AeSiteHeading>
             </div>
-            <p className="font-medium text-foreground">{AGENT_PAGE.harnesses}</p>
             <div className="w-full max-w-lg">
               <AeSiteBody muted size="sm">
                 {AGENT_PAGE.subhead}
@@ -33,15 +30,12 @@ export function AeAgentDoorPage({ canonicalBaseUrl }: { canonicalBaseUrl: string
           </AeSiteHeadingPair>
           <div className="flex flex-wrap items-center gap-related">
             <AeSiteButton asChild>
-              <Link to="/market">Browse Tools</Link>
-            </AeSiteButton>
-            <AeSiteButton asChild variant="outlined">
-              <Link to="/SKILL.md">Read the skill</Link>
+              <a href="#agent-setup">{AGENT_PAGE.primaryCta}</a>
             </AeSiteButton>
           </div>
         </AeSiteHeroIntro>
       </AeSiteSection>
-      <AeSiteSection ariaLabel="Agent connection" scheme="surface">
+      <AeSiteSection id="agent-setup" ariaLabel="Agent connection" scheme="surface">
         <AeAssistantInstallFunnel canonicalBaseUrl={canonicalBaseUrl} />
       </AeSiteSection>
     </>

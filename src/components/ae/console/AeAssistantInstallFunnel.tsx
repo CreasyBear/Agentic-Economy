@@ -2,6 +2,8 @@ import { AeCopyCommand } from '@/components/ae/data/AeCopyCommand'
 import { AeCollectionRail } from '@/components/ae/shared/AeCollectionRail'
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion'
 import { Button } from '@/components/ui/button'
+import { buttonVariants } from '@/components/ui/button-variants'
+import { AGENT_PAGE } from '@/content/brand-copy'
 import {
   NATIVE_MCP_CLIENTS,
   nativeMcpClient,
@@ -49,12 +51,15 @@ export function AeAssistantInstallFunnel({
           <h3 className="font-medium">Approve access in the browser</h3>
           <p className="text-sm leading-6 text-muted-foreground">{recommended.authenticationInstruction}</p>
         </li>
-        <li className="grid gap-intra py-related">
+        <li className="grid gap-intra border-b border-border py-related">
           <h3 className="font-medium">Confirm the connection</h3>
           <p className="text-sm leading-6 text-muted-foreground">
             Connection is complete only when it appears in Agents. A live result confirms the connection;
             installing it alone does not. Account connection does not grant spending permission.
           </p>
+          <a href="/agent-access" className={buttonVariants({ variant: 'link' })}>
+            {AGENT_PAGE.openAgentsCta}
+          </a>
           {onCheckConnection === undefined ? null : (
             <Button
               type="button"
@@ -67,10 +72,17 @@ export function AeAssistantInstallFunnel({
             </Button>
           )}
         </li>
+        <li className="grid gap-intra py-related">
+          <h3 className="font-medium">{AGENT_PAGE.spendingPolicyStepHeading}</h3>
+          <p className="text-sm leading-6 text-muted-foreground">{AGENT_PAGE.spendingPolicyStepBody}</p>
+          <a href="/agent-access" className={buttonVariants({ variant: 'link' })}>
+            {AGENT_PAGE.spendingPolicyCta}
+          </a>
+        </li>
       </ol>
       <Accordion type="single" collapsible className="max-w-3xl">
         <AccordionItem value="alternatives">
-          <AccordionTrigger>Use Claude Code or Cursor</AccordionTrigger>
+          <AccordionTrigger className={buttonVariants({ variant: 'link' })}>Use Claude Code or Cursor</AccordionTrigger>
           <AccordionContent className="grid gap-related">
         {NATIVE_MCP_CLIENTS.filter((client) => client.id !== 'codex').map((client) => (
           <div key={client.id} className="grid gap-related rounded-card border border-border bg-background p-related">

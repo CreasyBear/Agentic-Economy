@@ -24,9 +24,11 @@ describe('Agent connection progression', () => {
       expect.stringContaining('Start the connection'),
       expect.stringContaining('Approve access in the browser'),
       expect.stringContaining('Confirm the connection'),
+      expect.stringContaining('Set a Spending policy'),
     ])
     expect(screen.getByText(/Connection is complete only when it appears in Agents/u)).toBeTruthy()
-
+    expect(screen.getByRole('link', { name: 'Open Agents' }).getAttribute('href')).toBe('/agent-access')
+    expect(screen.getByRole('link', { name: 'Review Spending policy' }).getAttribute('href')).toBe('/agent-access')
     fireEvent.click(screen.getByRole('button', { name: 'Check connection' }))
     expect(checkConnection).toHaveBeenCalledOnce()
   })

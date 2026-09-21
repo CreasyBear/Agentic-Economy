@@ -2,21 +2,11 @@
  * @vitest-environment jsdom
  */
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
-import type { ReactNode } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import '../../setup/jsdom-platform'
 
-import {
-  AGENT_PAGE,
-} from '@/content/brand-copy'
-
-vi.mock('@tanstack/react-router', () => ({
-  Link: ({ children, to, className }: { children: ReactNode; to: string; className?: string }) => (
-    <a href={to} className={className}>{children}</a>
-  ),
-}))
-
 import { AeAgentDoorPage } from '@/components/ae/agents/AeAgentDoorPage'
+import { AGENT_PAGE } from '@/content/brand-copy'
 
 describe('agent door page', () => {
   afterEach(cleanup)
@@ -26,16 +16,20 @@ describe('agent door page', () => {
     Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } })
     render(<AeAgentDoorPage canonicalBaseUrl="https://ae.example" />)
 
-    expect(screen.getByRole('heading', { level: 1, name: AGENT_PAGE.heading })).toBeTruthy()
-    expect(screen.getByText(AGENT_PAGE.harnesses)).toBeTruthy()
+    expect(screen.getByRole('heading', { level: 1, name: 'Connect your Agent.' })).toBeTruthy()
     expect(screen.getByText(AGENT_PAGE.subhead)).toBeTruthy()
     expect(screen.getByRole('heading', { name: 'Connect with Codex' })).toBeTruthy()
-    expect(screen.getByRole('link', { name: 'Browse Tools' })).toBeTruthy()
+    const startSetup = screen.getByRole('link', { name: 'Start setup' })
+    expect(startSetup.getAttribute('href')).toBe('#agent-setup')
     expect(screen.getByRole('button', { name: 'Copy Codex MCP command' })).toBeTruthy()
     expect(screen.queryByRole('button', { name: 'Copy Claude Code MCP command' })).toBeNull()
     expect(screen.queryByRole('button', { name: 'Copy Cursor MCP command' })).toBeNull()
     expect(screen.queryByRole('heading', { name: 'Six-step agent quickstart' })).toBeNull()
     expect(document.querySelector('[data-slot="ae-site-browser"]')).toBeNull()
+    expect(screen.queryByRole('link', { name: 'Read the skill' })).toBeNull()
+    expect(screen.getByRole('link', { name: 'Open Agents' }).getAttribute('href')).toBe('/agent-access')
+    expect(screen.getByRole('heading', { name: 'Set a Spending policy' })).toBeTruthy()
+    expect(screen.getByRole('link', { name: 'Review Spending policy' }).getAttribute('href')).toBe('/agent-access')
 
     fireEvent.click(screen.getByRole('button', { name: 'Copy Codex MCP command' }))
     fireEvent.click(screen.getByRole('button', { name: 'Use Claude Code or Cursor' }))
