@@ -7,6 +7,8 @@ This is the execution and completion register. The
 the [validation plan](alpha-validation-plan.md) defines the cold-audit protocol.
 Neither creates an additional backlog outside this register.
 
+Jev product integration is tracked in the [Jev platform integration register](jev-platform-integration-register.md). Its buyer matching, Provider discoverability and later-matching assignments integrate with this launch programme; JI-07b reuses LP-3/LP-4/LP-5 and the existing exposure controls. Jev source acceptance does not close any hosted or financial prerequisite here.
+
 ## Marking rules
 
 **Current goal — 20 September 2026: launch-ready alpha with real transactions.**

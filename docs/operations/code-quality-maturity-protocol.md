@@ -1,7 +1,7 @@
 # Code Quality, Component Purity & Structural Decoupling: Operating Protocol
 
-**Date:** 19 September 2026
-**Status:** Approved Master Protocol & Execution Reference
+**Date:** 19 September 2026 (programme close addendum 21 September 2026)
+**Status:** Approved Master Protocol. Campaigns 1–3 are **CLOSED**. New extracts need a named assignment; do not resume CQ-01–CQ-30, CQ2-*, or CQ3-* from memory.
 **Authority:** `PRODUCT.md`, `CONTEXT.md`, `AGENTS.md`, `docs/designs/2026-09-19-code-quality-iceinvein.md`, `.cursor/rules/leaf-and-component-cleanliness.mdc`
 
 ---
@@ -243,4 +243,10 @@ Never create `convex/<module>/` for AE-owned RPC modules. Root **helper** files 
 
 ### 4. Ultra-Thin Route Controllers
 Files in `src/routes/` are strictly controllers (**≤80** lines). They validate search params via Zod (or a typed validator), invoke loaders, and render the Page Container from `src/components/ae/`. Search types belong in existing `.ts` contract modules, not the route `.tsx`. All state, modals, and layouts reside inside the component container.
+
+---
+
+## Programme close (21 September 2026)
+
+Campaigns 1–3 are closed. The 5-stage lifecycle still applies to any *new* named assignment. Do not resume CQ-01–CQ-30, CQ2-*, or CQ3-* from this file or from `.planning/codebase/CONCERNS.md`. Current census and leftovers live on the Campaign 3 register *Final programme re-audit*.
 

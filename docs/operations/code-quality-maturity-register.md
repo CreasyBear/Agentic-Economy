@@ -1,7 +1,7 @@
 # Code Quality, Component Purity & Structural Decoupling: Operational Register
 
 **Date:** 20 September 2026  
-**Status:** CAMPAIGN CLOSED (Waves 1–5 Complete; commit `147b602a7`). **Historical.** Current 1,000-line / 80-line compliance is the Campaign 2 close (`docs/operations/code-quality-ceiling-register.md`). Campaign 3 façade/helper follow-through: `docs/operations/code-quality-campaign-3-register.md`. **Post-campaign re-audit recorded below is a 20 Sep snapshot — do not treat its “seven files over 1,000” / “24 routes over 80” rows as current.**  
+**Status:** CAMPAIGN CLOSED (Waves 1–5 Complete; commit `147b602a7`). **Historical.** Current 1,000-line / 80-line compliance is the Campaign 2 close (`docs/operations/code-quality-ceiling-register.md`). Campaign 3 façade/helper follow-through: `docs/operations/code-quality-campaign-3-register.md`. **20 Sep rows below are a snapshot — do not treat “seven files over 1,000” / “24 routes over 80” as current.** Programme close and 21 Sep re-audit: Campaign 3 register, *Final programme re-audit*.  
 **Operating Protocol:** `docs/operations/code-quality-maturity-protocol.md`  
 **Master Architectural Specification:** `docs/designs/2026-09-19-code-quality-iceinvein.md`  
 **Core Rules:** `.cursor/rules/leaf-and-component-cleanliness.mdc`, `AGENTS.md`
@@ -195,8 +195,8 @@ Measured against `.cursor/rules/leaf-and-component-cleanliness.mdc` and the prot
 
 Adds to, and does not replace, the Outstanding Work table above.
 
-1. **Seven files over the 1,000-line hard ceiling** — **historical 20 Sep re-audit.** Campaign 2 claimed the in-scope gods; the standing exception is the signer at **1,041**. See `docs/operations/code-quality-ceiling-register.md`.
-2. **Twenty-four routes over 80 lines** — **historical 20 Sep re-audit.** Campaign 2 Wave 2–3 claimed page-route controllers (≤80). Do not reopen the five newest operator routes.
+1. **Seven files over the 1,000-line hard ceiling** — **historical 20 Sep re-audit.** Superseded 21 Sep: production list is **one** file, the A10 signer at **1,041**. See Campaign 3 *Final programme re-audit*.
+2. **Twenty-four routes over 80 lines** — **historical 20 Sep re-audit.** Superseded 21 Sep: one recorded skip, `developers.discovery.tsx` **197**. Do not reopen the five newest operator routes.
 3. **Twenty-four Convex roots still ≥ 500** after Wave 4 only split four files. The façade pattern is not yet the repo norm.
 4. **CQS residuals** — `prepareBalance` nonce burn (deliberate); `readAgentProviderEarnings` mutation shape.
 5. **Standalone money math still in `.tsx`** — invoice GST, ABN, ceiling/recharge/payout BigInt cards. Compound leaves are clean; the original “top 12” was not the whole set.

@@ -1,7 +1,7 @@
 # Code Quality Campaign 3: Funding/payment façades — Operational Register
 
 **Date:** 21 September 2026  
-**Status:** **CLOSED** — Waves 1–3 **VERIFIED**. A07 / CQ-25 and A10 remain recorded deferrals. A14/A15 unclaimed. Campaign 2 remains **CLOSED**.  
+**Status:** **CLOSED** — Waves 1–3 **VERIFIED**. Programme re-audit **21 Sep 2026** recorded below. A07 / CQ-25 and A10 remain recorded deferrals. A14/A15 unclaimed. Campaigns 1–2 remain **CLOSED**. Do not open Campaign 4 from this close-out.  
 **Unified tree:** `main` at Phase 0 commit `de8bd68ab`. Wave 1: `e86184cd2` + `942029008`. Wave 2: `7db24dbbd` + `176948beb` + `ba8e04661`. Wave 3: `6af2a4966`. §5 docs: `da44c1dd1`.  
 **Operating Protocol:** `docs/operations/code-quality-maturity-protocol.md` (same 5-stage Grok → Composer → Orchestrator lifecycle; IDs `CQ3-*`)  
 **Intake evidence:** `docs/operations/code-quality-amendment-register.md` (A01–A15). This file is the assignment surface.  
@@ -223,3 +223,52 @@ RPC kind snapshot unchanged. No `convex/<name>/` directories created.
 | :--- | :--- | ---: | :--- |
 | A07 / CQ-25 | `convex/capabilityCallProjection.ts` | 873 | PARKED — call-worker design dependency |
 | A10 | `src/modules/capability-supply/internal/cdp-x402-payment-signer.ts` | **1,041** | Campaign 2 Wave 1 deferral; measurement updated from historical 1,038 |
+
+---
+
+## Final programme re-audit (21 September 2026)
+
+**Thesis of this pass:** close Campaigns 1–3 against the original ten invariants and the same Grok-scout / Orchestrator-census method. No Composer extracts. No Campaign 4.
+
+**Cold scouts (registers withheld):** [size/routes/façades](b2764b16-425e-49a2-ae08-13a52ab1f358) · [leaves/compounds/CQS](054107d4-020f-4efd-8621-190a3bf92906) · [scratch/saleability](8926e705-0947-47fb-b876-ee289aa03ecd)
+
+**Orchestrator census** (Node `wc -l`, exclude `convex/_generated`, `src/routeTree.gen.ts`, `*.test.*` from the production 1,000-line list):
+
+| Ceiling / invariant | Current measure | Campaign metric | Verdict |
+| :--- | :--- | :--- | :---: |
+| Production 1,000-line hard ceiling | **1** file: signer **1,041** | C2 Wave 1 — at most the A10 deferral | **MET** |
+| Page-route controllers ≤80 | **1** miss: `developers.discovery.tsx` **197** | C2 Wave 3 — every non-exempt page except the skip | **MET** |
+| Named C3 façades <200 | funding 114; preflight 107; payment 153; owner-canary 36; owner-supply 35; staging 2; probes 188 | C3 Waves 1–2 | **MET** |
+| `deps:check` barrel cycles | last recorded **0/0/0** (C2/C3 close) | C1 Wave 5 | **HELD** |
+| CQS query-safe agent reads | CQ-19 conversions held; `prepareBalance` still burns a nonce | C1 Wave 4 residual | **PARTIAL** |
+| Internal → own barrel | one leftover: `registry/internal/registry-action-contracts.ts` | C1 Wave 5 residual | **PARTIAL** |
+| Compound leftover piles | `market/tool-detail/`, offerings flats, money-card flats, `directory-presentation.ts` shim | C1 Wave 2–3 residue | **RECORDED** |
+| `convex/<name>/` that can break RPC | `capabilitySupplyOwnerFunnelProjection/` is in generated API | never `convex/<name>/` | **RECORDED** |
+
+**Cold literal FAILs that are accepted exceptions** (same pattern as the C2 cold review): signer 1,041 (A10); `developers.discovery.tsx` 197 (discovery dirt). The scouts did not have those exceptions, so FAIL is the correct cold result.
+
+**Not a miss of this programme:** 14 test files over 1,000 (including A14 workpool **2,344**). The production ceiling excludes `*.test.*`. A later assignment may claim test-file ceilings; this close-out does not.
+
+**Fleet residual (visible, not staffed):** 81 Convex roots ≥200; 18 ≥500; 26 `convex/lib` files >400; 19 components >300 (3 >500, of which `sidebar.tsx` is Tier-1). Do not reopen named C3 façades or the five newest operator routes to chase the fleet.
+
+**Do not do from this close-out**
+
+- Folder `src/routes/api.v1.*` or regenerate `routeTree.gen.ts`
+- Delete `tool.procure`
+- Extract A07 / A10
+- Treat `.planning/codebase/CONCERNS.md` (19 Sep, gitignored) as a work queue
+- Merge Jev / ADR 0003 / evals through a quality PR
+- Push protected `main` (GitHub is 209 commits behind this tree)
+
+**Saleability / scratch disposition**
+
+| Item | Disposition |
+| :--- | :--- |
+| Quality registers + this re-audit | Authoritative close |
+| `.planning/codebase/CONCERNS.md` | Local only; stamped superseded |
+| Unused `discovery-file-types.ts` | Deleted (duplicate of `discovery-contracts.ts`) |
+| Empty `convex/moneyCreditTopup/`, `convex/moneyPayoutTransferShared/` | Removed (not in generated API) |
+| `src/routeTree.gen.ts` dirty sort | Leave; restore locally — hook blocks `git restore` |
+| Jev ADR 0003, archive snapshot, registers, research, evals | Untracked product — do not delete |
+| `output/` (~225M, gitignored) | Local eval bloat — do not commit |
+| GitHub `main` | Joel owns `well-11/unified-baseline`; not this programme |

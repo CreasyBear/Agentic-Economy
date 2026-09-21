@@ -63,6 +63,10 @@ facts, business-document evidence and purchase resolution are not yet one
 explicit production record. Source and tests remain the authority for current
 behaviour.
 
+Source-tree code-quality campaigns 1–3 are closed (21 September 2026). That is
+not hosted GitHub `main`, installed-package compatibility, or a production sale.
+See [Campaign 3 programme re-audit](./docs/operations/code-quality-campaign-3-register.md).
+
 ## Current source entrances
 
 - `/market` exposes the public service catalogue and comparison flow.

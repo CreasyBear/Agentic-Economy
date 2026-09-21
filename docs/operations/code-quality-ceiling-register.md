@@ -5,7 +5,7 @@
 **Operating Protocol:** `docs/operations/code-quality-maturity-protocol.md` (same 5-stage Grok → Composer → Orchestrator lifecycle; IDs `CQ2-*`)  
 **Design:** `docs/designs/2026-09-20-code-quality-ceilings.md`  
 **Predecessor:** `docs/operations/code-quality-maturity-register.md` (Campaign 1; re-audit 20 Sep 2026)  
-**Successor:** `docs/operations/code-quality-campaign-3-register.md` (Campaign 3 — façade/helper follow-through; **CLOSED** 21 Sep 2026)  
+**Successor:** `docs/operations/code-quality-campaign-3-register.md` (Campaign 3 — façade/helper follow-through; **CLOSED** 21 Sep 2026; programme re-audit same day)  
 **Core Rules:** `.cursor/rules/leaf-and-component-cleanliness.mdc` §4 (1,000-line hard ceiling) and §9 (80-line page-route controllers)
 
 **Thesis:** Make the two hard ceilings true — no in-scope file in `src/` or `convex/` exceeds 1,000 lines, and page-route files are controllers under 80 lines.

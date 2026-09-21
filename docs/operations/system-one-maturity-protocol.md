@@ -1,18 +1,26 @@
 # System One & Autonomous Capability Procurement: Operating Protocol
 
 **Date:** 19 September 2026  
-**Status:** Approved Master Protocol & Execution Reference  
-**Authority:** `PRODUCT.md`, `CONTEXT.md`, `AGENTS.md`, `docs/adr/0002-jev-system-one-opportunity-statement.md`, `docs/operations/system-one-maturity-register.md`, `docs/operations/user-and-org-maturity-protocol.md`, `docs/operations/user-and-org-ergonomics-protocol.md`
+**Status:** RETIRED EXECUTION PROTOCOL — HISTORICAL REFERENCE ONLY
+
+**Current authority:** `PRODUCT.md`, `CONTEXT.md`, `AGENTS.md`. ADR 0002 is withdrawn; this document does not authorise execution.
 
 ---
 
+**Current Jev working protocol:** [platform integration register, section 8](jev-platform-integration-register.md#8-execution-ownership-and-uncertainty-control). The current registered `tool.procure` action remains capability-execution-owned. Historical targets and remedy assertions below are not present-day implementation or rollout instructions.
+
 ## 1. Executive Purpose & Anti-Compaction Memory Anchor
 
-This document is the **immutable operating manual** for executing and hardening System One Intelligence, Chained Decisions, and Autonomous Capability Procurement across the Agentic Economy platform.
+This document records a superseded execution framing. Its assumptions, numerical
+targets and completion claims are retained for historical inspection, not
+endorsed as current product requirements or implementation truth.
 
-When context windows compact or subagents are dispatched, **always read this file first** to restore exact operational alignment.
+After compaction or handoff, read PRODUCT.md and its core market journeys first,
+then current source for implementation claims. Do not restore priorities from
+this protocol. The proposed replacement assessment is
+[ADR 0003](../adr/0003-jev-market-journey-intelligence.md).
 
-### The Canonical North Star
+### Superseded north-star statement — not an accepted requirement
 > **"An autonomous agent can describe a natural language capability need, have it resolved, quoted, executed, and adjudicated in sub-second time, with cryptographic ledger holds, exact Australian GST itemization, and instantaneous autonomous buyer protection if the upstream provider fails."**
 
 ### Inviolable Product & Architectural Boundaries
