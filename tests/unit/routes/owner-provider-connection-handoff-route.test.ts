@@ -1,6 +1,6 @@
 /** @vitest-environment jsdom */
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
-import { createElement, type ComponentType } from 'react'
+import { createElement, type ComponentType, type ReactNode } from 'react'
 import { RouterContextProvider, createMemoryHistory, createRootRoute, createRoute, createRouter } from '@tanstack/react-router'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import '../../setup/jsdom-platform'
@@ -35,7 +35,7 @@ vi.mock('@/components/ae/offerings/provider-workspace.functions', () => ({ readP
 vi.mock('@/components/ae/layout/AeOperatorPage', async () => {
   const React = await import('react')
   return {
-    AeOperatorPage: ({ title, description, children }: { title: string; description: string; children: unknown }) => React.createElement(
+    AeOperatorPage: ({ title, description, children }: { title: string; description: string; children: ReactNode }) => React.createElement(
       React.Fragment,
       undefined,
       React.createElement('h1', undefined, title),
