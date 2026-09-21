@@ -1,7 +1,7 @@
 # Code Quality Campaign 2: Hard Ceilings — Operational Register
 
 **Date:** 20 September 2026 (Wave 3 close-out measured 21 Sep 2026)  
-**Status:** WAVE 1 VERIFIED (`e140512a0`); WAVE 2 VERIFIED (`0fafd075d`); WAVE 3 VERIFIED (`fea40841a`); campaign **OPEN** (eval + cold review outstanding; Campaign 1 closed at `147b602a7`)  
+**Status:** WAVE 1 VERIFIED (`e140512a0`); WAVE 2 VERIFIED (`0fafd075d`); WAVE 3 VERIFIED (`fea40841a`; typecheck heal `252bed4bb`); **Evaluation** written 21 Sep 2026; **Cold review** recorded 21 Sep 2026; campaign **CLOSED** (Campaign 1 closed at `147b602a7`)  
 **Operating Protocol:** `docs/operations/code-quality-maturity-protocol.md` (same 5-stage Grok → Composer → Orchestrator lifecycle; IDs `CQ2-*`)  
 **Design:** `docs/designs/2026-09-20-code-quality-ceilings.md`  
 **Predecessor:** `docs/operations/code-quality-maturity-register.md` (Campaign 1; re-audit 20 Sep 2026)  
@@ -18,7 +18,7 @@
 | **Wave 1: 1,000-line hard ceiling** | Split the in-scope gods; one recorded deferral | `CQ2-01` – `CQ2-06` | 6 | 0 | 0 | `VERIFIED` |
 | **Wave 2: Fat page routes** | Extract containers from the five worst page routes | `CQ2-07` – `CQ2-11` | 5 | 0 | 0 | `VERIFIED` |
 | **Wave 3: Remaining page routes** | Same incision on leftover non-exempt page routes over 80 | `CQ2-12` – `CQ2-24` | 13 | 0 | 0 | `VERIFIED` |
-| **Total** | Campaign 2 | **24 named** | **24** | **0** | **0** | `OPEN` |
+| **Total** | Campaign 2 | **24 named** | **24** | **0** | **0** | `CLOSED` |
 
 **Wave 1 success metric:** `wc -l` on `src/` and `convex/` (exclude `_generated`, `*.test.*`) reports **at most one** file over 1,000 — the recorded deferral `src/modules/capability-supply/internal/cdp-x402-payment-signer.ts`.
 
@@ -243,7 +243,7 @@ Every reported violation names `procure-engine`, `procure.actions`, `output-adju
 
 # Wave 2: Fat page routes (verified)
 
-Wave 1 thesis met at `e140512a0`. Wave 2 ran under the same gate bar and is now verified. Wave 3 is verified at `fea40841a`; campaign remains open (eval and cold review outstanding).
+Wave 1 thesis met at `e140512a0`. Wave 2 ran under the same gate bar and is now verified. Wave 3 is verified at `fea40841a`; campaign closed after eval and cold review (21 Sep 2026).
 
 Exempt this campaign: `src/routes/api*`, `src/routes/__root.tsx`. Skip `src/routes/developers.discovery.tsx` until discovery dirt lands. Do not add or rename routes.
 
@@ -417,12 +417,12 @@ Same bar as Wave 2. Orchestrator re-checked on Node 22 after `fea40841a` landed.
 | Gate | Result |
 | :--- | :--- |
 | Lint (`npm run lint`, oxlint `--deny-warnings`) | Exit 0, clean |
-| Typecheck (`npx tsc --noEmit`) | **1 error** — `src/routes/_operator/admin.index-health.tsx` optional `review` prop vs `exactOptionalPropertyTypes` (`CQ2-24`); Wave 2 had reached 0 repo-wide |
+| Typecheck (`npx tsc --noEmit`) | Exit 0 — **0 errors repo-wide** (healed `252bed4bb`: omit-spread `review` at the `admin.index-health.tsx` route call site; `fea40841a` had left one `exactOptionalPropertyTypes` mismatch from `CQ2-24`) |
 | `deps:check` | Expected pass at 0/0/0 — Wave 3 touched no forbidden manifests |
 | RPC guards | Not required — **no Convex RPC registrations changed** in Wave 3 |
 | Full vitest | **Inherited Known Red Baseline unchanged** — still **7 failures in 3 files** (see §1); no Wave 3 surface appears in failure output |
 
-Eval and cold review have **not** run; this section records implementation gates only.
+Typecheck on this table reflects the post-`252bed4bb` heal (see deviation #6). Orchestrator eval census and gate re-check: **Evaluation** section below. **Cold review** recorded in the section after Evaluation.
 
 ### React Doctor (Wave 3)
 
@@ -448,13 +448,120 @@ Wave 3 did not require a campaign-owned edit to `src/modules/module-boundaries.t
 3. **CQ2-17 tool detail pair.** Route re-exports `PublicToolDetail` because `tool-detail-route.test.tsx` named-imports it. Slug loader still does not await admission. `DirectoryToolCanonicalLoaderData.admission` typed `Promise<T> | undefined` for `exactOptionalPropertyTypes`.
 4. **CQ2-19 funding return.** One-file cut to `AeFundingReturnPage`; `check_not_found` still wipes confirmed funding (behaviour preserved).
 5. **CQ2-21 `owner.operations.new.tsx`.** Asserts page search type because parent layout adds operator search keys under `exactOptionalPropertyTypes`.
-6. **CQ2-24 `admin.index-health.tsx`.** Kept `createServerFn` on the route; did not rename `operationRef` to `toolRef`. Close-out `tsc` reports one `exactOptionalPropertyTypes` mismatch on the optional `review` prop — fix deferred to eval/cold-review hygiene, not mixed into this provenance pass.
+6. **CQ2-24 `admin.index-health.tsx`.** Kept `createServerFn` on the route; did not rename `operationRef` to `toolRef`. `fea40841a` left one `exactOptionalPropertyTypes` mismatch on the optional `review` prop; **healed** in `252bed4bb` by omit-spreading `review` at the route call site so `npx tsc --noEmit` is again 0 errors repo-wide.
 7. **CQ2-23 `agent-access.authorize.tsx`.** `ssr: false` preserved; problem-code reader stays private; 5xx still throws even when the body contains `expired_token`.
 8. **CQ2-15 `status.tsx`.** Pre-wave React Doctor `loader`-after-`head` ordering issue was resolved as part of the thin-controller extract (property reorder in the same file), not as a separate fix wave.
 
-### Open question for the post-campaign eval (do not resolve here)
+---
 
-The 1,000-line census now reports only **one** hand-written source file over the ceiling — the recorded deferral `cdp-x402-payment-signer.ts` (1,038) — but three Convex **test** files are also over: `convex/agentAccessOAuth.test.ts` 2,383, `convex/agentAccessPrincipals.test.ts` 1,435, `convex/securityAccountHistory.test.ts` 1,233. The Wave 1 success metric explicitly excluded `*.test.*`, while the underlying rule §4 says “no file in `src/` or `convex/`”. **Recorded as an open scope question for the eval to rule on.**
+# Evaluation (Stage 5 — Orchestrator, 21 Sep 2026)
+
+**Campaign status at eval write-up:** eval complete; cold review was still outstanding (now recorded below).
+
+All measurements below used Node 22 unless noted.
+
+### Post-campaign census (21 Sep 2026)
+
+**1,000-line census** — `find` on `src` and `convex`, exclude `_generated` and `*.test.*`:
+
+| Outcome | Detail |
+| :--- | :--- |
+| Over 1,000 (hand-written) | **1** — `src/modules/capability-supply/internal/cdp-x402-payment-signer.ts` at **1,038** (recorded deferral) |
+| Generated excluded | `src/routeTree.gen.ts` at **2,745** — not counted |
+
+**80-line page-route census** — `src/routes/*.tsx`, exclude `__root.tsx` and `api*`:
+
+| Outcome | Detail |
+| :--- | :--- |
+| Over 80 | **1** — `src/routes/developers.discovery.tsx` at **197** (recorded skip; discovery dirt) |
+
+**Convex `*.test.*` over 1,000** (open scope question — see verdict below):
+
+| File | Lines |
+| :--- | ---: |
+| `convex/agentAccessOAuth.test.ts` | 2,383 |
+| `convex/agentAccessPrincipals.test.ts` | 1,435 |
+| `convex/securityAccountHistory.test.ts` | 1,233 |
+
+### Gate evidence (eval re-check, after `252bed4bb`)
+
+Orchestrator re-ran implementation gates on Node 22 after the `CQ2-24` typecheck heal landed.
+
+| Gate | Result |
+| :--- | :--- |
+| Lint (`npm run lint`, oxlint `--deny-warnings`) | Exit 0, clean |
+| Typecheck (`npx tsc --noEmit`) | Exit 0 — **0 errors repo-wide** |
+| `deps:check` | `no-circular` 0/0, `no-circular-capability-supply-internal` 0/0, `no-circular-via-barrel` 0/0 — all ok |
+| RPC guards (`convex-api-kind-snapshot`, `convex-string-reference-ratchet`) | 2 files, 4 tests, all pass |
+
+**Vitest** was not re-baselined for this eval pass. The inherited Known Red Baseline in §1 remains authoritative: **7 failures in 3 files** (concurrent procure / `tool-reranker` work), unchanged from Wave 2 and Wave 3 close-out.
+
+### React Doctor (eval disposition)
+
+On the commits through `252bed4bb`, React Doctor reported **0 errors**. Warnings observed are **pre-existing**, not campaign-opened hygiene:
+
+1. `zod-v4-prefer-top-level-string-formats` — admin index-health search schema.
+2. Sequential OAuth loader awaits in the supply OAuth callback route — **required** ordering (read-then-complete), not an independent parallel-fetch candidate.
+
+“React Doctor warning cleanup” remains on the standing *Do not touch* list. **Not fixed** as part of Campaign 2.
+
+### Thesis verdict (Orchestrator)
+
+| Ceiling | Campaign metric | Verdict |
+| :--- | :--- | :--- |
+| Hard 1,000-line ceiling (`src/` + `convex/`, hand-written) | Wave 1 — at most one file over 1,000, and it is the recorded deferral | **MET** |
+| 80-line page-route controllers | Wave 3 — every non-exempt page route ≤ 80 except the recorded skip | **MET** |
+
+This eval does **not** assess product behaviour, Jev journeys, or commercial outcomes. It records structure and gate evidence for the ceiling campaign only.
+
+### Open scope question (do not resolve here)
+
+Campaign 2 Wave 1 explicitly excluded `*.test.*` from the 1,000-line success metric. `.cursor/rules/leaf-and-component-cleanliness.mdc` §4 states the hard ceiling applies to “no file in `src/` or `convex/`” without carving out tests. Three Convex test files exceed 1,000 lines (census above). **The reader must decide** whether that is a violation of §4 or out of Campaign 2 scope. If the rule is read as covering tests, recommend a **later campaign** to split or ratchet them — do not fold that work into this close-out.
+
+---
+
+# Cold review (Stage 5 — Grok, 21 Sep 2026)
+
+**Reviewer:** Grok `b909c121-00ca-457b-a4c4-fff39f48da31`  
+**Access:** none to this register, the maturity register, the protocol, the ceilings design, or any plan file. The reviewer independently re-measured both ceilings against the tree as it stood on 21 Sep 2026.
+
+### What the reviewer scored
+
+**(a) 1,000-line production — FAIL** — one citation only: `src/modules/capability-supply/internal/cdp-x402-payment-signer.ts` at **1,038**.
+
+**(b) 80-line page routes — FAIL** — one citation only: `src/routes/developers.discovery.tsx` at **197**.
+
+The reviewer correctly treated `routeTree.gen.ts`, `__root.tsx`, and `api*` as non-fails. It separately listed the three Convex test files over 1,000 (`convex/agentAccessOAuth.test.ts`, `convex/agentAccessPrincipals.test.ts`, `convex/securityAccountHistory.test.ts`) — same set as the Evaluation census.
+
+### Orchestrator verdict
+
+The cold review **agrees with the Evaluation census**. The two FAILs are exactly the two recorded exceptions (Wave 1 deferral; Wave 3 skip). Under Campaign 2's success metrics both ceilings are **MET**. The reviewer did not have those exceptions, so a literal FAIL on each ceiling is the correct cold result and is not a surprise miss.
+
+| Ceiling | Cold literal result | Campaign metric | Orchestrator |
+| :--- | :---: | :--- | :---: |
+| Hard 1,000-line ceiling (hand-written production) | FAIL (1 file) | Wave 1 — at most one over 1,000, and it is the deferral | **MET** |
+| 80-line page-route controllers | FAIL (1 route) | Wave 3 — every non-exempt route ≤ 80 except the skip | **MET** |
+
+Wave 1–3 remain **VERIFIED**. Wave 3 is not reopened. No Campaign 3 is opened here.
+
+### Sampled regressions (accepted leftover-cut deviations)
+
+The reviewer spot-checked extracted surfaces. None of the following are new campaign breaks — they are documented one-file or pre-existing residue from scout cuts:
+
+1. **`AeOwnerMcpOAuthCallback.tsx`** — the refused-code union lives in the props type. CQ2-20 scout chose a one-file leftover; no separate contracts file.
+2. **`AeFundingReturnPage.tsx`** — houses `publicFundingSchema` plus fetch. CQ2-19 scout chose a one-file leftover; types already live in `funding-return.view-model.ts`; container fetch is allowed.
+3. **`AeFundingReturnState.tsx`** — formats `formatDisplayAmount` in render. **Pre-existing leaf**, not moved by Campaign 2; out of scope.
+4. **`PublicToolDetail.tsx`** — re-exports `PublicToolDetailProps` so the route can re-export `PublicToolDetail` for `tool-detail-route.test.tsx` (CQ2-17 deviation #3).
+
+### Spot-check confirmations
+
+- Sampled public, OAuth, and funding routes still keep loaders, `head`, and `Route.use*` on the route file.
+- No sampled leaf called `useQuery`, `useMutation`, or `useServerFn`.
+- Convex façades `capabilityQuotes.ts` and `moneyAccountFunding.ts` still export their public RPC names.
+
+### Campaign close
+
+**Status:** **CLOSED** — Evaluation written 21 Sep 2026; cold review recorded 21 Sep 2026. Both ceiling success metrics **MET** with the two standing exceptions unchanged.
 
 ---
 
