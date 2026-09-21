@@ -16,7 +16,11 @@ export function RouteNotFound() {
   return <AeNotFound />
 }
 
-export function OperatorRouteNotFound({
+export function OperatorRouteNotFound() {
+  return <OperatorRouteNotFoundRecovery />
+}
+
+export function OperatorRouteNotFoundRecovery({
   recoveryHref: recoveryHrefOverride,
   recoveryLabel: recoveryLabelOverride,
 }: OperatorRouteNotFoundProps = {}) {

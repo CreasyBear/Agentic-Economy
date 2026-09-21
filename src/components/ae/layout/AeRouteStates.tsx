@@ -9,5 +9,5 @@ export {
   OperatorRouteError,
   RouteError,
 } from './AeRouteError'
-export { OperatorRouteNotFound, RouteNotFound } from './AeRouteNotFound'
+export { OperatorRouteNotFound, OperatorRouteNotFoundRecovery, RouteNotFound } from './AeRouteNotFound'
 export type { OperatorRouteSkeletonPreset } from './route-states.contracts'

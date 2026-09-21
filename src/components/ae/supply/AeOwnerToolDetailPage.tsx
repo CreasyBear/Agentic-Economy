@@ -5,7 +5,7 @@ import { useState } from 'react'
 
 import { AeFactList } from '@/components/ae/data/AeFactList'
 import { AeOperatorPage } from '@/components/ae/layout/AeOperatorPage'
-import { OperatorRouteNotFound } from '@/components/ae/layout/AeRouteStates'
+import { OperatorRouteNotFoundRecovery } from '@/components/ae/layout/AeRouteStates'
 import { AeSection } from '@/components/ae/layout/AeSection'
 import type {
   ProviderToolStatusResult,
@@ -45,15 +45,15 @@ export function AeOwnerToolDetailPage({ toolRef, identity, status }: AeOwnerTool
   if (identity.kind !== 'available') {
     return <UnavailableTool toolRef={toolRef} unavailable={status.kind === 'unavailable'} />
   }
-  if (status.kind === 'not_found') {
-    return (
-      <OperatorRouteNotFound
-        recoveryHref="/owner/operations"
-        recoveryLabel={OWNER_TOOL_DETAIL_COPY.notFoundRecoveryLabel}
-      />
-    )
-  }
-  if (status.kind === 'unavailable') {
+  if (status.kind !== 'available') {
+    if (status.kind === 'not_found') {
+      return (
+        <OperatorRouteNotFoundRecovery
+          recoveryHref="/owner/operations"
+          recoveryLabel={OWNER_TOOL_DETAIL_COPY.notFoundRecoveryLabel}
+        />
+      )
+    }
     return <UnavailableTool toolRef={toolRef} unavailable />
   }
   // Well 8 Lane C: the URL held either this Tool's slug (live reviewed-tier
@@ -64,7 +64,7 @@ export function AeOwnerToolDetailPage({ toolRef, identity, status }: AeOwnerTool
     || status.status.businessRef !== identity.businessId
   ) {
     return (
-      <OperatorRouteNotFound
+      <OperatorRouteNotFoundRecovery
         recoveryHref="/owner/operations"
         recoveryLabel={OWNER_TOOL_DETAIL_COPY.notFoundRecoveryLabel}
       />
