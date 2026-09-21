@@ -71,20 +71,17 @@ describe('public semantic comfort', () => {
     }
   })
 
-  it('keeps About sequential and its door actions comfortable', () => {
+  it('keeps About sequential and its actions comfortable', () => {
     renderRoute('/about')
 
     expect(screen.getByRole('heading', { level: 1, name: 'Tools agents can call.' })).toBeTruthy()
     expect(
       screen.getByText('Agents buy Tools. Providers set prices and receive AUD payouts after completed Calls.'),
     ).toBeTruthy()
-    expect(screen.getByRole('heading', { level: 2, name: ABOUT.doorsHeading })).toBeTruthy()
-    expect(screen.getByRole('heading', { level: 2, name: ABOUT.providersHeading })).toBeTruthy()
-    expect(screen.getByRole('link', { name: 'Browse the live catalog' }).classList.contains('min-h-touch')).toBe(true)
-    const machines = screen.getByRole('navigation', { name: 'Machine-readable files' })
-    expect(within(machines).getByRole('link', { name: /llms\.txt/ }).getAttribute('href')).toBe('/llms.txt')
-    expect(within(machines).getByRole('link', { name: /SKILL\.md/ }).getAttribute('href')).toBe('/SKILL.md')
-    expect(within(machines).getByRole('link', { name: /well-known\/ucp/ }).getAttribute('href')).toBe('/.well-known/ucp')
+    expect(screen.getByRole('heading', { level: 2, name: ABOUT.editorialTitle })).toBeTruthy()
+    expect(screen.getByRole('heading', { level: 2, name: ABOUT.featuresHeading })).toBeTruthy()
+    expect(screen.getByRole('heading', { level: 2, name: ABOUT.ctaHeading })).toBeTruthy()
+    expect(screen.getByRole('link', { name: ABOUT.ctaPrimary }).classList.contains('h-12')).toBe(true)
   })
 
 })

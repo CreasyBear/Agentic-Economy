@@ -50,17 +50,17 @@ test.describe('market product accessibility', () => {
     await expect(footer.getByRole('link', { name: 'System status' })).toBeVisible()
     await gotoSettled(page, '/about')
     await expect(page.getByRole('heading', { level: 1, name: 'Tools agents can call.' })).toBeVisible()
-    await expect(page.getByRole('heading', { name: 'Listed Providers' })).toBeVisible()
-    await expect(page.getByRole('link', { name: 'Browse the live catalog' })).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Joel Chan' })).toBeVisible()
+    await expect(page.getByRole('link', { name: 'Browse Tools' })).toBeVisible()
     const compact = (page.viewportSize()?.width ?? 1280) < 768
     if (compact) {
       // The preceding keyboard-navigation test exercises the drawer itself.
       // Here the menu trigger proves compact navigation is retained on /about.
-      await expect(page.getByRole('button', { name: 'Open public menu' })).toBeVisible()
+      await expect(page.getByRole('button', { name: 'Open menu' })).toBeVisible()
       return
     }
     const primary = page.getByRole('navigation', { name: 'Primary' })
-    await expect(primary.getByRole('link', { name: 'Calls' })).toBeVisible()
+    await expect(primary.getByRole('link', { name: 'Market' })).toBeVisible()
   })
 })
 

@@ -93,6 +93,47 @@ export const ABOUT = {
     'A Provider is listed when it publishes a Tool agents can inspect in the current catalogue.',
   machinesHeading: 'Files for agents',
   machinesBody: 'The same facts the site shows: an index, a skill file, and a handshake.',
+  heroImage: '/website/terrace-forest.webp',
+  heroPrimaryCta: 'Browse Tools',
+  heroSecondaryCta: 'Publish a Tool',
+  editorialLabel: 'Meet the founder',
+  editorialTitle: 'Joel Chan',
+  editorialDescription:
+    'Joel is building Agentic Economy to help Australian businesses sell their expertise to a new kind of customer: AI agents.',
+  editorialParagraphs: [
+    'His focus is on making that shift practical—giving businesses a way to make their services discoverable, deliver work and get paid as more purchasing moves into the hands of software acting on people’s behalf.',
+    'Joel is part of the 2026 AI Founder Sprint in Perth, delivered by Plus Eight in partnership with Superteam Australia and Solana.',
+    'Joel also writes about how AI agents are reshaping commerce, accountability and the institutions built around human decisions.',
+  ],
+  editorialLinks: [
+    { label: 'Spacecubed’s founder cohort', href: 'https://blog.spacecubed.com/meet-the-12-exciting-founders-taking-part-in-our-superteam-ai-founder-sprint' },
+    { label: 'Read The Agentic Economy →', href: 'https://www.agentic-economy.ai/writing/entry' },
+    { label: 'All essays →', href: 'https://www.agentic-economy.ai/writing' },
+  ],
+  featuresLabel: 'How it works',
+  featuresHeading: 'New possibilities. Clear responsibilities.',
+  features: [
+    {
+      title: 'Permission before spending',
+      description: 'Your business chooses what an agent may buy and how much it may spend. Available Credit does not grant authority.',
+    },
+    {
+      title: 'Evidence after the request',
+      description: 'Keep the price, delivered result and next step together. A successful charge alone does not prove delivery.',
+    },
+    {
+      title: 'A familiar business starting point',
+      description: 'AUD Credit, explicit spending controls and understandable usage records shape the experience we’re building for Australian businesses.',
+    },
+    {
+      title: 'Your agent. Your way of working.',
+      description: 'Your chosen agent, apps and frameworks keep the surrounding task. Agentic Economy focuses on finding, buying and recording the outside service.',
+    },
+  ],
+  ctaHeading: 'Building it. Sharing the journey.',
+  ctaDescription: 'Agentic Economy is pre-launch.',
+  ctaPrimary: 'Browse the live catalog',
+  ctaSecondary: 'Publish a Tool',
 } as const
 
 /** Public footer wordmark line. */
