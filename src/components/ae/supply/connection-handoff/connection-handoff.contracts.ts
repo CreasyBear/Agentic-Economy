@@ -8,6 +8,32 @@ export type HandoffReturnSearch = Readonly<{
   draft?: string
 }>
 
+export type ConnectionHandoffPageViewModel = Readonly<{
+  title: string
+  description: string
+  environmentLabel?: 'Sandbox' | 'Production'
+}>
+
+export const CONNECTION_HANDOFF_COPY = {
+  pageTitle: 'Connect Provider',
+  pageDescription: 'Connect the credential required by this Provider source.',
+  providerTitle: (providerName: string) => `Connect ${providerName}`,
+  providerAccessDescription: (accessKind: string) => `${accessKind} access for this Provider.`,
+  accessKind: {
+    apiKey: (name: string) => `${name} API key`,
+    bearer: 'Bearer token',
+    oauth: 'OAuth',
+  },
+  environment: {
+    sandbox: 'Sandbox',
+    production: 'Production',
+  },
+  unavailableTitle: 'Connection link unavailable',
+  unavailableDescription: 'Return to Add Tool and reconnect.',
+  expiredTitle: 'Connection link expired',
+  expiredDescription: 'Return to Add Tool and reconnect.',
+} as const
+
 export type ConnectionHandoffSurface =
   | Readonly<{ kind: 'unavailable' }>
   | Readonly<{ kind: 'consumed'; title: string; description: string; returnSearch: HandoffReturnSearch }>

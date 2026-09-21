@@ -32,7 +32,18 @@ vi.mock('@/modules/capability-supply/supply-funnel.functions', () => ({
   startOwnerSupplySourceConnectionServer: vi.fn(),
 }))
 vi.mock('@/components/ae/offerings/provider-workspace.functions', () => ({ readProviderWorkspaceIdentityDetailServer: mocks.readIdentity }))
-vi.mock('@/components/ae/layout/AeOperatorPage', () => ({ AeOperatorPage: ({ children }: { children: unknown }) => children }))
+vi.mock('@/components/ae/layout/AeOperatorPage', async () => {
+  const React = await import('react')
+  return {
+    AeOperatorPage: ({ title, description, children }: { title: string; description: string; children: unknown }) => React.createElement(
+      React.Fragment,
+      undefined,
+      React.createElement('h1', undefined, title),
+      React.createElement('p', undefined, description),
+      children,
+    ),
+  }
+})
 vi.mock('@/components/ae/supply/AeSupplySourceNativeStart', async () => {
   const React = await import('react')
   return {
@@ -83,6 +94,22 @@ describe('Provider connection handoff route', () => {
     const loader = Route.options.loader as (input: { deps: { attemptRef?: string } }) => Promise<unknown>
     await expect(loader({ deps: {} })).resolves.toEqual({ kind: 'not_found' })
     expect(mocks.readAttempt).not.toHaveBeenCalled()
+  })
+
+  it('names a missing handoff and gives the Add Tool recovery path', () => {
+    vi.spyOn(Route, 'useLoaderData').mockReturnValue({ kind: 'not_found' } as never)
+    const Component = Route.options.component
+    if (Component === undefined) throw new Error('handoff_component_missing')
+    const rootRoute = createRootRoute()
+    const routeTree = rootRoute.addChildren([createRoute({ getParentRoute: () => rootRoute, path: '/' })])
+    const router = createRouter({ routeTree, history: createMemoryHistory({ initialEntries: ['/'] }) })
+    const RouterProvider = RouterContextProvider as ComponentType<{ router: typeof router }>
+
+    render(createElement(RouterProvider, { router }, createElement(Component)))
+
+    expect(screen.getByRole('heading', { level: 1, name: 'Connect Provider' })).toBeTruthy()
+    expect(screen.getByText('Connection link unavailable')).toBeTruthy()
+    expect(screen.getByText('Return to Add Tool and reconnect.')).toBeTruthy()
   })
 
   it('preserves the requested environment when a saved draft navigation completes', async () => {
@@ -156,6 +183,38 @@ describe('Provider connection handoff route', () => {
     } })
   })
 
+  it('names the Provider, OAuth access, environment, and saved Tool on an expired handoff', () => {
+    vi.spyOn(Route, 'useLoaderData').mockReturnValue({
+      kind: 'available',
+      attempt: {
+        attemptRef: 'pca_expired',
+        sourceKind: 'mcp_oauth',
+        sourceUrl: 'https://api.github.example/mcp',
+        sourceOrigin: 'https://api.github.example',
+        authentication: { kind: 'mcp_oauth' },
+        environment: 'sandbox',
+        state: 'expired',
+        draftRef: 'sds_saved_tool',
+        expiresAt: Date.now() - 1,
+      },
+    } as never)
+    const Component = Route.options.component
+    if (Component === undefined) throw new Error('handoff_component_missing')
+    const rootRoute = createRootRoute()
+    const routeTree = rootRoute.addChildren([createRoute({ getParentRoute: () => rootRoute, path: '/' })])
+    const router = createRouter({ routeTree, history: createMemoryHistory({ initialEntries: ['/'] }) })
+    const RouterProvider = RouterContextProvider as ComponentType<{ router: typeof router }>
+
+    render(createElement(RouterProvider, { router }, createElement(Component)))
+
+    expect(screen.getByRole('heading', { level: 1, name: 'Connect api.github.example' })).toBeTruthy()
+    expect(screen.getByText('OAuth access for this Provider.')).toBeTruthy()
+    expect(screen.getByText('Sandbox')).toBeTruthy()
+    expect(screen.getByText('Connection link expired')).toBeTruthy()
+    const href = screen.getByRole('link', { name: 'Return to Add Tool' }).getAttribute('href')
+    expect(href).toBe('/owner/operations/new?draft=sds_saved_tool')
+  })
+
   it('cancels the exact pending attempt and leaves the user in place when cancellation is unconfirmed', async () => {
     vi.spyOn(Route, 'useLoaderData').mockReturnValue({
       kind: 'available',
@@ -199,6 +258,35 @@ describe('Provider connection handoff route', () => {
     } })
     expect(mocks.readAttempt).toHaveBeenCalledWith({ data: { attemptRef: 'pca_uncertain' } })
     expect(screen.queryByText(/try again with the same credential/u)).toBeNull()
+  })
+
+  it('places a credential failure beside the credential field', async () => {
+    vi.spyOn(Route, 'useLoaderData').mockReturnValue({
+      kind: 'available',
+      attempt: {
+        attemptRef: 'pca_credential_error',
+        sourceKind: 'http_credential',
+        sourceUrl: 'https://api.provider.example/openapi.json',
+        sourceOrigin: 'https://api.provider.example',
+        authentication: { kind: 'api_key', location: 'header', name: 'X-API-Key' },
+        environment: 'production',
+        state: 'pending',
+        draftRef: 'sds_saved_tool',
+        expiresAt: Date.now() + 60_000,
+      },
+    } as never)
+    mocks.complete.mockResolvedValue({ kind: 'refused', code: 'secret_unavailable' })
+    const Component = Route.options.component
+    if (Component === undefined) throw new Error('handoff_component_missing')
+
+    render(createElement(Component))
+    const field = screen.getByLabelText('X-API-Key API key')
+    fireEvent.change(field, { target: { value: 'credential-never-rendered' } })
+    fireEvent.submit(screen.getByRole('button', { name: 'Connect Provider' }).closest('form')!)
+
+    const error = await screen.findByRole('alert')
+    expect(error.textContent).toContain('The credential could not be stored.')
+    expect(field.parentElement?.contains(error)).toBe(true)
   })
 
   it('completes an exact OAuth callback without forwarding provider error prose', async () => {

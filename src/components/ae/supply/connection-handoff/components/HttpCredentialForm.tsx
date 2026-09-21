@@ -1,4 +1,3 @@
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -38,13 +37,12 @@ export function HttpCredentialForm({
           aria-invalid={error === undefined ? undefined : true}
           onChange={(event) => onCredentialChange(event.target.value)}
         />
+        {error === undefined ? null : (
+          <p id="provider-connection-error" className="text-sm text-destructive" role="alert">
+            {error}
+          </p>
+        )}
       </div>
-      {error === undefined ? null : (
-        <Alert id="provider-connection-error" variant="destructive" role="alert">
-          <AlertTitle>Provider not connected</AlertTitle>
-          <AlertDescription>{error}</AlertDescription>
-        </Alert>
-      )}
       <div className="flex flex-wrap gap-3">
         <Button type="submit" disabled={busy || credential.length === 0}>
           {busy ? 'Connecting…' : 'Connect Provider'}
