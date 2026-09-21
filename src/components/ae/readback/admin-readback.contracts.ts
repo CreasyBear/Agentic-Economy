@@ -3,6 +3,7 @@ import type {
   AdminReadbackRow,
   AdminReadbackSurface,
 } from '@/modules/security/public'
+import { getStatusPresentation } from '@/lib/ui/status-presentation'
 
 export const adminReadbackSurfaceLabels = {
   audit_events: 'Activity log',
@@ -14,7 +15,7 @@ export const adminReadbackRowStateLabels = {
   guarded: 'Guarded',
   queued: 'Queued',
   indexed: 'Indexed',
-  degraded: 'Degraded',
+  degraded: getStatusPresentation('degraded').label,
   stale: 'Stale',
   suppressed: 'Suppressed',
 } satisfies Record<AdminReadbackRow['rowState'], string>
