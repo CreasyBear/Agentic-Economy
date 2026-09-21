@@ -1,8 +1,10 @@
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   executeDecisionGateway,
   callDeterministicRuleEngine,
 } from '@/modules/decision-engine/public'
+
+afterEach(() => vi.restoreAllMocks())
 
 describe('Decision Gateway & Fallback Matrix', () => {
   const sampleRequest = {
@@ -61,6 +63,7 @@ describe('Decision Gateway & Fallback Matrix', () => {
   })
 
   it('Tier 2: degrades gracefully to Secondary LLM adapter when Jev times out or 500s', async () => {
+    const log = vi.spyOn(console, 'info').mockImplementation(() => {})
     const mockFetch = vi.fn().mockImplementation(async (url: string) => {
       if (url.includes('/decisions') || url.includes('/v1/systemone')) {
         return new Response('Gateway Timeout', { status: 504 })
@@ -100,7 +103,11 @@ describe('Decision Gateway & Fallback Matrix', () => {
       fetchImpl: mockFetch as unknown as typeof fetch,
     })
 
+    const attempts = log.mock.calls.map(call => JSON.parse(String(call[1])))
+    expect(attempts.map(attempt => attempt.outcome)).toEqual(['failed', 'completed'])
+    expect(res.durationMs).toBeGreaterThanOrEqual(attempts.reduce((sum, attempt) => sum + attempt.durationMs, 0))
     expect(res.tier).toBe('secondary_llm_adapter')
+    expect(res.usage).toEqual({ inputTokens: null, outputTokens: null, estimatedCostAud: null })
     expect(res.attemptedTiers).toEqual(['jev_system_one', 'secondary_llm_adapter'])
     if (res.answers.toolChoice?.type === 'choice') {
       expect(res.answers.toolChoice.choice).toBe('timezone_converter')
@@ -116,6 +123,7 @@ describe('Decision Gateway & Fallback Matrix', () => {
     })
 
     expect(res.tier).toBe('deterministic_rule_engine')
+    expect(res.usage).toEqual({ inputTokens: null, outputTokens: null, estimatedCostAud: null })
     expect(res.attemptedTiers).toEqual([
       'jev_system_one',
       'secondary_llm_adapter',
@@ -143,6 +151,7 @@ describe('Decision Gateway & Fallback Matrix', () => {
     })
 
     expect(res.tier).toBe('deterministic_rule_engine')
+    expect(res.usage).toEqual({ inputTokens: 0, outputTokens: 0, estimatedCostAud: 'A$0.000000' })
     const ans = res.answers.isFailure
     expect(ans?.type).toBe('noul')
     if (ans?.type === 'noul') {

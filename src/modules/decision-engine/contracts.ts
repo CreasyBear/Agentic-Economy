@@ -51,9 +51,11 @@ export type DecisionGatewayRequest = Readonly<{
 }>
 
 export type DecisionGatewayUsage = Readonly<{
-  inputTokens: number
-  outputTokens: number
-  estimatedCostAud: string
+  /** Observed totals only. Null means unknown, including an unmetered failed attempt. */
+  inputTokens: number | null
+  outputTokens: number | null
+  /** No estimate is supplied without a versioned rate and currency policy. */
+  estimatedCostAud: string | null
 }>
 
 export type DecisionGatewayResponse = Readonly<{

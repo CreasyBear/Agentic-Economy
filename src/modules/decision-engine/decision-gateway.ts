@@ -6,6 +6,7 @@ import type {
   DecisionTier,
 } from './contracts'
 import { JevUnavailableError } from './contracts'
+import { observedInferenceUsage } from './inference-observation'
 import { callDeterministicRuleEngine } from './deterministic-fallback'
 import { callJevSystemOne } from './jev-client'
 import { callSecondaryLlmAdapter } from './secondary-llm-adapter'
@@ -27,6 +28,8 @@ export async function executeDecisionGateway(
       const jevResult = await callJevSystemOne(request, options)
       return {
         ...jevResult,
+        usage: attemptedTiers.length > 1 ? observedInferenceUsage(null, null) : jevResult.usage,
+        durationMs: Date.now() - startedAt,
         attemptedTiers,
       }
     } catch (cause) {
@@ -47,6 +50,8 @@ export async function executeDecisionGateway(
       const secondaryResult = await callSecondaryLlmAdapter(request, options)
       return {
         ...secondaryResult,
+        usage: attemptedTiers.length > 1 ? observedInferenceUsage(null, null) : secondaryResult.usage,
+        durationMs: Date.now() - startedAt,
         attemptedTiers,
       }
     } catch (cause) {
@@ -65,6 +70,8 @@ export async function executeDecisionGateway(
     const deterministicResult = callDeterministicRuleEngine(request)
     return {
       ...deterministicResult,
+      usage: attemptedTiers.length > 1 ? observedInferenceUsage(null, null) : deterministicResult.usage,
+      durationMs: Date.now() - startedAt,
       attemptedTiers,
     }
   } catch (cause) {
@@ -82,11 +89,7 @@ export async function executeDecisionGateway(
     tier: 'safe_refusal',
     model: 'none',
     answers: {},
-    usage: {
-      inputTokens: 0,
-      outputTokens: 0,
-      estimatedCostAud: 'A$0.000000',
-    },
+    usage: observedInferenceUsage(null, null),
     durationMs: Date.now() - startedAt,
     attemptedTiers,
   }

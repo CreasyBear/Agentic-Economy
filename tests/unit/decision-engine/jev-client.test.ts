@@ -7,6 +7,42 @@ const response = () => Response.json({ model: 'jev-test', answers: { fits: { typ
 afterEach(() => { vi.unstubAllEnvs(); vi.restoreAllMocks() })
 
 describe('Jev SDK lifecycle', () => {
+  it.each([
+    [undefined, null, null],
+    [{ input_tokens: 0, output_tokens: 0 }, 0, 0],
+    [{ input_tokens: 17 }, 17, null],
+    [{ output_tokens: 4 }, null, 4],
+    [{ input_tokens: -1, output_tokens: 1.5 }, null, null],
+  ])('preserves observed usage without inventing missing values: %j', async (usage, inputTokens, outputTokens) => {
+    const result = await callJevSystemOne(request, { ...options, fetchImpl: vi.fn<typeof fetch>().mockResolvedValue(Response.json({ model: 'jev-resolved', answers: { fits: { type: 'noul', noul: 0.8 } }, usage })) })
+    expect(result.usage).toEqual({ inputTokens, outputTokens, estimatedCostAud: null })
+  })
+
+  it('does not log a malformed model field as arbitrary provider output', async () => {
+    const log = vi.spyOn(console, 'info').mockImplementation(() => {})
+    const result = await callJevSystemOne(request, { ...options, fetchImpl: vi.fn<typeof fetch>().mockResolvedValue(Response.json({ model: { body: 'private provider output' }, answers: { fits: { type: 'noul', noul: 0.8 } } })) })
+    expect(result.model).toBe('jev-latest')
+    expect(JSON.parse(String(log.mock.calls[0]?.[1]))).toMatchObject({ modelSource: 'requested' })
+    expect(JSON.stringify(log.mock.calls)).not.toMatch(/private|provider output/)
+  })
+
+  it('records every failed SDK path safely, with unknown consumption', async () => {
+    const log = vi.spyOn(console, 'info').mockImplementation(() => {})
+    await expect(callJevSystemOne(request, { ...options, fetchImpl: vi.fn<typeof fetch>().mockResolvedValue(new Response('private upstream ts-test-secret', { status: 503 })) })).rejects.toMatchObject({ reason: 'service_unavailable' })
+    const event = JSON.parse(String(log.mock.calls[0]?.[1]))
+    expect(event).toMatchObject({ purpose: 'discovery', outcome: 'failed', reason: 'service_unavailable', outboundAttempts: 1, usage: { inputTokens: null, outputTokens: null, estimatedCostAud: null } })
+    expect(JSON.stringify(log.mock.calls)).not.toMatch(/private|ts-test-secret/)
+  })
+
+  it('does not report a successful retry as the total consumption', async () => {
+    const log = vi.spyOn(console, 'info').mockImplementation(() => {})
+    const fetchImpl = vi.fn<typeof fetch>().mockResolvedValueOnce(new Response('unavailable', { status: 503 }))
+      .mockResolvedValueOnce(Response.json({ model: 'jev-resolved', answers: { fits: { type: 'noul', noul: 0.8 } }, usage: { input_tokens: 10, output_tokens: 0 } }))
+    const result = await callJevSystemOne(request, { typesafeApiKey: 'ts-test', maxRetries: 1, fetchImpl })
+    expect(result.usage).toEqual({ inputTokens: null, outputTokens: null, estimatedCostAud: null })
+    expect(JSON.parse(String(log.mock.calls[0]?.[1]))).toMatchObject({ outboundAttempts: 2, outcome: 'completed', model: 'jev-resolved' })
+  })
+
   it.each([[401, 'authentication'], [403, 'authentication'], [429, 'rate_limited'], [500, 'service_unavailable'], [503, 'service_unavailable']])('classifies HTTP %s without retry or leaking the body', async (status, reason) => {
     const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(new Response('private upstream body ts-secret', { status: Number(status) }))
     const failure = await callJevSystemOne(request, { ...options, maxRetries: 5, fetchImpl }).catch(cause => cause)

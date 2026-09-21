@@ -1,5 +1,6 @@
 import { APIConnectionError, APIError, APITimeoutError, APIUserAbortError, TypeSafeClient, type EntryType, type RequestOptions } from '@typesafe-ai/sdk'
 import { JevUnavailableError } from './contracts'
+import { observedInferenceModel, observedInferenceUsage, recordInferenceAttempt } from './inference-observation'
 import type {
   DecisionGatewayOptions,
   DecisionGatewayRequest,
@@ -60,6 +61,7 @@ export async function callJevSystemOne(
   const baseFetch = options.fetchImpl ?? fetch
 
   // Adapt fetch to map OpenRouter alpha endpoint and append referral metadata
+  let outboundAttempts = 0
   const adaptedFetch: typeof fetch = async (url, init) => {
     let resolvedUrl = url.toString()
     const isOpenRouterHost = new URL(resolvedUrl).hostname === 'openrouter.ai'
@@ -71,6 +73,7 @@ export async function callJevSystemOne(
       headers.set('HTTP-Referer', 'https://agentic-economy.local')
       headers.set('X-Title', 'Agentic Economy Decision Engine')
     }
+    outboundAttempts += 1
     return baseFetch(resolvedUrl, { ...init, headers })
   }
 
@@ -95,48 +98,43 @@ export async function callJevSystemOne(
   }
   // SDK owns transport, body buffering, timeout cleanup and retries. Only its
   // operational errors become unavailable; configuration/programming errors escape.
-  let result
   try {
-    result = await client.systemOne({
+    const result = await client.systemOne({
       state: request.state as EntryType,
       questions: request.questions,
       model: defaultModel,
     }, requestOptions)
+    if (options.signal?.aborted) throw new JevUnavailableError('cancelled')
+    if (Date.now() >= deadlineAt) throw new JevUnavailableError('timeout')
+    if (!validAnswers(result?.answers, request)) throw new JevUnavailableError('invalid_response')
+    // A successful retry does not disclose the failed attempt's consumption.
+    const usage = outboundAttempts > 1 ? observedInferenceUsage(null, null)
+      : observedInferenceUsage(result.usage?.input_tokens, result.usage?.output_tokens)
+    const durationMs = Date.now() - startedAt
+    const { model, modelSource } = observedInferenceModel(result.model, defaultModel)
+    recordInferenceAttempt({ tier: 'jev_system_one', purpose: options.purpose, model, modelSource, outcome: 'completed', outboundAttempts, durationMs, usage })
+    return { tier: 'jev_system_one', model, answers: result.answers as Record<string, JevAnswer>, usage, durationMs, attemptedTiers: ['jev_system_one'] }
   } catch (cause) {
-    if (cause instanceof APIUserAbortError) throw new JevUnavailableError(options.signal?.aborted ? 'cancelled' : 'timeout')
-    if (cause instanceof APITimeoutError) throw new JevUnavailableError('timeout')
-    if (cause instanceof APIConnectionError) throw new JevUnavailableError('connection')
-    if (cause instanceof APIError) {
-      if (cause.status === 400 || cause.status === 422) {
-        // Raw SDK causes contain response bodies; preserve only the safe status.
-        // oxlint-disable-next-line preserve-caught-error
-        throw new TypeError('Jev request rejected as invalid', { cause: { status: cause.status } })
-      }
-      throw new JevUnavailableError(cause.status === 429 ? 'rate_limited'
-        : cause.status === 401 || cause.status === 403 ? 'authentication' : 'service_unavailable')
-    }
-    throw cause
+    const failure = classifyFailure(cause, options.signal)
+    recordInferenceAttempt({
+      tier: 'jev_system_one', purpose: options.purpose, model: defaultModel, modelSource: 'requested', outcome: 'failed',
+      reason: failure instanceof JevUnavailableError ? failure.reason : failure instanceof TypeError ? 'invalid_request' : 'unexpected',
+      outboundAttempts, durationMs: Date.now() - startedAt, usage: observedInferenceUsage(null, null),
+    })
+    throw failure
   }
-  if (options.signal?.aborted) throw new JevUnavailableError('cancelled')
-  if (Date.now() >= deadlineAt) throw new JevUnavailableError('timeout')
-  if (!validAnswers(result?.answers, request)) throw new JevUnavailableError('invalid_response')
+}
 
-  const inputTokens = result.usage?.input_tokens ?? 120
-  const outputTokens = result.usage?.output_tokens ?? 0
-  const durationMs = Date.now() - startedAt
-
-  return {
-    tier: 'jev_system_one',
-    model: result.model || defaultModel,
-    answers: result.answers as Record<string, JevAnswer>,
-    usage: {
-      inputTokens,
-      outputTokens,
-      estimatedCostAud: `A$${((inputTokens * 0.042) / 1_000_000).toFixed(6)}`,
-    },
-    durationMs,
-    attemptedTiers: ['jev_system_one'],
+function classifyFailure(cause: unknown, signal: AbortSignal | undefined): unknown {
+  if (cause instanceof APIUserAbortError) return new JevUnavailableError(signal?.aborted ? 'cancelled' : 'timeout')
+  if (cause instanceof APITimeoutError) return new JevUnavailableError('timeout')
+  if (cause instanceof APIConnectionError) return new JevUnavailableError('connection')
+  if (cause instanceof APIError) {
+    if (cause.status === 400 || cause.status === 422) return new TypeError('Jev request rejected as invalid', { cause: { status: cause.status } })
+    return new JevUnavailableError(cause.status === 429 ? 'rate_limited'
+      : cause.status === 401 || cause.status === 403 ? 'authentication' : 'service_unavailable')
   }
+  return cause
 }
 
 function validAnswers(answers: unknown, request: DecisionGatewayRequest): boolean {
