@@ -40,7 +40,7 @@ function DevelopersApiRoute() {
       kind="document"
       eyebrow="Developers"
       title="API reference"
-      description="Every public REST operation - Tool market reads, the Call gateway, funding preflight, and business discovery - documented from the same contracts the platform runs on."
+      description="Search Tools, request a Quote, and make a Call."
     >
       <iframe
         title="API reference"
