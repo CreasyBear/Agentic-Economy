@@ -6,8 +6,12 @@ import {
   AeSiteEditorial,
   AeSiteFeatureGrid,
 } from '@/components/ae/website'
+import { AE_SITE_FOOTER } from '@/components/ae/website/AeSiteFooter.contracts'
+import { SUPPORT_EMAIL } from '@/components/ae/support/help/help.contracts'
 import { buttonVariants } from '@/components/ui/button-variants'
 import { ABOUT } from '@/content/brand-copy'
+
+const SUPPORT_EMAIL_LABEL = SUPPORT_EMAIL.replace(/^mailto:/, '')
 
 export function AeAboutPage() {
   return (
@@ -59,7 +63,30 @@ export function AeAboutPage() {
 
       <AeSiteCtaBand
         title={ABOUT.ctaHeading}
-        description={ABOUT.ctaDescription}
+        description={(
+          <>
+            {ABOUT.ctaDescription}
+            <span className="mt-4 block text-sm">
+              {ABOUT.operatorLine.prefix}
+              {ABOUT.operatorLine.separator}
+              <a
+                href={AE_SITE_FOOTER.abn.href}
+                rel="noreferrer"
+                target="_blank"
+                className="font-medium text-foreground underline underline-offset-4"
+              >
+                {AE_SITE_FOOTER.abn.label}
+              </a>
+              {ABOUT.operatorLine.separator}
+              <a
+                href={SUPPORT_EMAIL}
+                className="font-medium text-foreground underline underline-offset-4"
+              >
+                {SUPPORT_EMAIL_LABEL}
+              </a>
+            </span>
+          </>
+        )}
         primary={{ label: ABOUT.ctaPrimary, to: '/market' }}
         secondary={{ label: ABOUT.ctaSecondary, to: '/for-providers' }}
       />

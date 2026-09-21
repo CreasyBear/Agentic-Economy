@@ -1,10 +1,12 @@
+import type { ReactNode } from 'react'
+
 import { Link } from '@tanstack/react-router'
 
 import { buttonVariants } from '@/components/ui/button-variants'
 
 export type AeSiteCtaBandProps = Readonly<{
   title: string
-  description: string
+  description: ReactNode
   primary: Readonly<{ label: string; to: '/market' | '/for-agents' }>
   secondary: Readonly<{ label: string; to: '/for-providers' }>
 }>

@@ -83,6 +83,7 @@ describe('public semantic comfort', () => {
 
   it('keeps About sequential and its actions comfortable', () => {
     renderRoute('/about')
+    const about = within(screen.getByRole('main'))
 
     expect(screen.getByRole('heading', { level: 1, name: 'Tools agents can call.' })).toBeTruthy()
     expect(
@@ -92,6 +93,10 @@ describe('public semantic comfort', () => {
     expect(screen.getByRole('heading', { level: 2, name: ABOUT.featuresHeading })).toBeTruthy()
     expect(screen.getByRole('heading', { level: 2, name: ABOUT.ctaHeading })).toBeTruthy()
     expect(screen.getByRole('link', { name: ABOUT.ctaPrimary }).classList.contains('h-12')).toBe(true)
+    expect(about.getByRole('link', { name: 'ABN 98 700 838 115' }).getAttribute('href'))
+      .toBe('https://abr.business.gov.au/ABN/View?abn=98700838115')
+    expect(about.getByRole('link', { name: 'support@aecon.ai' }).getAttribute('href'))
+      .toBe('mailto:support@aecon.ai')
   })
 
 })

@@ -152,6 +152,10 @@ export const ABOUT = {
   ],
   ctaHeading: 'Building it. Sharing the journey.',
   ctaDescription: 'Agentic Economy is pre-launch.',
+  operatorLine: {
+    prefix: 'Operated in Australia',
+    separator: ' · ',
+  },
   ctaPrimary: 'Browse the live catalog',
   ctaSecondary: 'Publish a Tool',
 } as const
