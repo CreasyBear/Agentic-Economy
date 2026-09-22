@@ -22,14 +22,17 @@ import {
   SheetTitle,
   SheetTrigger,
 } from '@/components/ui/sheet'
+import { ADMIN_NAVIGATION } from '@/components/ae/layout/app-shell/app-shell.contracts'
 import {
   mobileNavigation,
   resolveAppDestination,
   type AppDestinationId,
 } from '@/lib/navigation/app-navigation'
+import type { OperatorRole } from '@/lib/operator/roles'
 
 type AeOwnerMobileNavigationProps = {
   currentPath: string
+  operatorRole?: OperatorRole
 }
 
 const DESTINATION_ICONS: Record<AppDestinationId, LucideIcon> = {
@@ -60,8 +63,41 @@ const MORE_GROUPS = [
 
 const primaryItemClassName = 'relative flex min-h-touch min-w-touch flex-col items-center justify-center gap-1 px-2 py-1 font-sans text-xs font-medium text-muted-foreground no-underline transition-transform duration-100 ease-out hover:bg-muted/60 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset active:scale-[0.98] motion-reduce:transition-none motion-reduce:active:scale-100 aria-[current=page]:font-semibold aria-[current=page]:text-foreground aria-[current=page]:after:absolute aria-[current=page]:after:inset-x-4 aria-[current=page]:after:top-0 aria-[current=page]:after:h-0.5 aria-[current=page]:after:bg-info'
 
-export function AeOwnerMobileNavigation({ currentPath }: AeOwnerMobileNavigationProps) {
+export function AeOwnerMobileNavigation({
+  currentPath,
+  operatorRole = 'owner',
+}: AeOwnerMobileNavigationProps) {
   const { hash } = useLocation()
+
+  if (operatorRole === 'admin') {
+    return (
+      <nav
+        aria-label="Admin primary navigation"
+        className="fixed inset-x-0 bottom-0 z-20 h-[calc(var(--ae-mobile-nav-height)+env(safe-area-inset-bottom,0px))] border-t border-border bg-background/95 pb-[env(safe-area-inset-bottom,0px)] backdrop-blur supports-[backdrop-filter]:bg-background/85 md:hidden"
+      >
+        <div className="grid h-14 grid-cols-2 px-gutter">
+          {ADMIN_NAVIGATION.map((destination) => {
+            const Icon = destination.icon
+            const current = currentPath === destination.href
+              || currentPath.startsWith(`${destination.href}/`)
+
+            return (
+              <Link
+                key={destination.href}
+                to={destination.href}
+                activeOptions={{ exact: true }}
+                aria-current={current ? 'page' : undefined}
+                className={primaryItemClassName}
+              >
+                <Icon aria-hidden="true" className="size-5" />
+                <span>{destination.label}</span>
+              </Link>
+            )
+          })}
+        </div>
+      </nav>
+    )
+  }
   const currentDestination = resolveAppDestination(currentPath, hash)
   const moreCurrent = MOBILE_NAVIGATION.more.some(destination => destination.id === currentDestination)
 

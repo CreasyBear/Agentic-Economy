@@ -13,7 +13,6 @@ import { useAppShellState } from './app-shell/useAppShellState'
 
 export function AeAppShell({ children }: { children: ReactNode }) {
   const shell = useAppShellState()
-  const signedInFrame = shell.isSignedIn && !shell.isMinimalShell
   const contentClassName = cn(
     'flex min-h-0 flex-1 flex-col',
     shell.hidePublicFooter ? '[&_footer]:hidden' : null,
@@ -44,26 +43,42 @@ export function AeAppShell({ children }: { children: ReactNode }) {
       </a>
       <div ref={shell.sentinelRef} aria-hidden="true" className="pointer-events-none absolute inset-x-0 top-0 h-2" />
       <CommandPanelProvider open={shell.commandOpen} onOpenChange={shell.handleCommandOpenChange}>
-        {signedInFrame ? (
-          <SidebarProvider className="min-h-0 flex-1" defaultOpen>
-            <OperatorChromeProvider>
-              <AeAppSidebar
-                operatorRole={shell.operatorRole}
-                pathname={shell.pathname}
-                hash={shell.hash}
-              />
-              <SidebarInset role="presentation" className="min-h-svh pb-[calc(var(--ae-mobile-nav-height)+env(safe-area-inset-bottom,0px))] md:pb-0">
-                {header}
-                <div className={contentClassName}>{children}</div>
-                <AeOwnerMobileNavigation currentPath={shell.pathname} />
-              </SidebarInset>
-            </OperatorChromeProvider>
-          </SidebarProvider>
-        ) : (
+        {shell.isMinimalShell ? (
           <>
             {header}
             <div className={contentClassName}>{children}</div>
           </>
+        ) : (
+          // Keep the frame depth stable while Clerk resolves; swapping wrappers here remounts routed pages.
+          <SidebarProvider className="min-h-0 flex-1" defaultOpen>
+            <OperatorChromeProvider>
+              {shell.isSignedIn ? (
+                <AeAppSidebar
+                  operatorRole={shell.operatorRole}
+                  pathname={shell.pathname}
+                  hash={shell.hash}
+                />
+              ) : null}
+              <SidebarInset
+                role="presentation"
+                className={cn(
+                  'min-h-svh',
+                  shell.isSignedIn
+                    ? 'pb-[calc(var(--ae-mobile-nav-height)+env(safe-area-inset-bottom,0px))] md:pb-0'
+                    : null,
+                )}
+              >
+                {header}
+                <div className={contentClassName}>{children}</div>
+                {shell.isSignedIn ? (
+                  <AeOwnerMobileNavigation
+                    currentPath={shell.pathname}
+                    operatorRole={shell.operatorRole}
+                  />
+                ) : null}
+              </SidebarInset>
+            </OperatorChromeProvider>
+          </SidebarProvider>
         )}
         <KeyboardShortcutsDialog open={shell.shortcutsOpen} onOpenChange={shell.setShortcutsOpen} />
       </CommandPanelProvider>

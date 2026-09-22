@@ -2,7 +2,7 @@
  * @vitest-environment jsdom
  */
 import type { ReactNode } from 'react'
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { cleanup, render, screen } from '@testing-library/react'
 import {
   RouterContextProvider,
   createMemoryHistory,
@@ -56,21 +56,26 @@ afterEach(() => {
 })
 
 describe('SidebarProvider scope (S-01)', () => {
-  it('does not mount sidebar wrapper on public AeAppShell', () => {
+  it('keeps the routed page under the same provider boundary across auth resolution', () => {
+    clerkSignedIn.value = false
     renderPublicShell()
+    const signedOutChain = pageWrapperChain(screen.getByText('Public page'))
 
-    expect(document.querySelector('[data-slot="sidebar-wrapper"]')).toBeNull()
+    cleanup()
+    clerkSignedIn.value = true
+    renderPublicShell()
+    const signedInChain = pageWrapperChain(screen.getByText('Public page'))
+
+    expect(signedOutChain).toEqual(signedInChain)
+    expect(signedOutChain).toMatchInlineSnapshot(`
+      [
+        "div",
+        "main[data-slot=sidebar-inset]",
+        "div[data-slot=sidebar-wrapper]",
+      ]
+    `)
   })
 
-  it('does not set sidebar_state cookie when Cmd+B is pressed on a public page', () => {
-    renderPublicShell()
-
-    const cookiesBefore = document.cookie
-    fireEvent.keyDown(window, { key: 'b', metaKey: true })
-
-    expect(document.cookie).toBe(cookiesBefore)
-    expect(document.cookie).not.toMatch(/sidebar_state=/)
-  })
 
   it('sets --header-height on the public app shell root', () => {
     renderPublicShell()
@@ -140,4 +145,15 @@ function renderPublicShell(): void {
       <AeAppShell><p>Public page</p></AeAppShell>
     </RouterContextProvider>,
   )
+}
+
+function pageWrapperChain(page: HTMLElement): string[] {
+  const content = page.parentElement
+  const inset = content?.parentElement
+  const provider = inset?.parentElement
+  return [content, inset, provider].map(element => {
+    if (element === null || element === undefined) return 'missing'
+    const slot = element.dataset.slot
+    return `${element.tagName.toLowerCase()}${slot === undefined ? '' : `[data-slot=${slot}]`}`
+  })
 }

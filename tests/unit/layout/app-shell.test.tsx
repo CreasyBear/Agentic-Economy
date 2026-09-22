@@ -73,9 +73,20 @@ describe('AeAppShell', () => {
     expect(screen.getByTestId('org-switcher')).toBeTruthy()
     expect(screen.queryByRole('link', { name: 'Sign in' })).toBeNull()
   })
+
+  it('shows admin destinations in mobile navigation on admin routes', () => {
+    clerkSignedIn.value = true
+    renderAppShell('/admin/index-health')
+
+    const nav = screen.getByRole('navigation', { name: 'Admin primary navigation' })
+    expect(Array.from(nav.querySelectorAll('a')).map(link => link.textContent)).toEqual([
+      'Catalog health',
+      'Audit',
+    ])
+  })
 })
 
-function renderAppShell(): void {
+function renderAppShell(pathname = clerkSignedIn.value ? '/market' : '/'): void {
   const rootRoute = createRootRoute()
   const routeTree = rootRoute.addChildren([
     createRoute({ getParentRoute: () => rootRoute, path: '/' }),
@@ -110,10 +121,12 @@ function renderAppShell(): void {
       staticData: { nav: { label: 'Tools', header: { order: 3, audience: 'signed-in' } } },
     }),
     createRoute({ getParentRoute: () => rootRoute, path: '/sign-in/$' }),
+    createRoute({ getParentRoute: () => rootRoute, path: '/admin/index-health' }),
+    createRoute({ getParentRoute: () => rootRoute, path: '/admin/audit-events' }),
   ])
   const router = createRouter({
     routeTree,
-    history: createMemoryHistory({ initialEntries: [clerkSignedIn.value ? '/market' : '/'] }),
+    history: createMemoryHistory({ initialEntries: [pathname] }),
   })
 
   render(
