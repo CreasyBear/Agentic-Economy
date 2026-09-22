@@ -10,7 +10,6 @@ import {
   generateOwnershipRef,
 } from '../src/modules/principal-account/account/public'
 import { principalRef } from '../src/modules/principal-account/principal/public'
-import type { ClerkFactorEvidence } from './lib/consequenceProof'
 import {
   checkWorkspaceFences,
   type WorkspaceFenceReason,
@@ -52,12 +51,13 @@ const decommissionEligibilityValue = v.object({
   })),
 })
 
-const factorEvidenceValue = v.object({
-  firstFactorAgeMinutes: v.number(),
-  secondFactorAgeMinutes: v.number(),
+const mfaReverificationRefusalValue = v.object({
+  kind: v.literal('refused'),
+  code: v.literal('mfa_reverification_required'),
 })
 
 const closeWorkspaceReceiptValue = v.union(
+  mfaReverificationRefusalValue,
   v.object({
     kind: v.literal('closed'),
     accountRef: v.string(),
@@ -71,6 +71,7 @@ const closeWorkspaceReceiptValue = v.union(
 )
 
 const transferWorkspaceReceiptValue = v.union(
+  mfaReverificationRefusalValue,
   v.object({
     kind: v.literal('transferred'),
     accountRef: v.string(),
@@ -318,7 +319,6 @@ export const closeWorkspace = mutation({
     expectedOwnershipRevision: v.number(),
     correlationRef: v.string(),
     idempotencyRef: v.string(),
-    factorEvidence: factorEvidenceValue,
   },
   returns: closeWorkspaceReceiptValue,
   handler: async (ctx, args) => {
@@ -378,10 +378,10 @@ export const closeWorkspace = mutation({
       throw new InteractiveAuthorityError('workspace_confirmation_mismatch')
     }
 
-    await assertStepUpForSensitiveAction(ctx.db, {
+    const stepUp = await assertStepUpForSensitiveAction(ctx.db, identity, {
       accountRef: canonicalAccountRef,
-      factorEvidence: args.factorEvidence as ClerkFactorEvidence,
     })
+    if (stepUp.kind === 'refused') return stepUp
 
     const fences = await checkWorkspaceFences(ctx, canonicalAccountRef)
     if (fences.length > 0) {
@@ -491,7 +491,6 @@ export const transferWorkspaceOwnership = mutation({
     expectedOwnershipRevision: v.number(),
     correlationRef: v.string(),
     idempotencyRef: v.string(),
-    factorEvidence: factorEvidenceValue,
   },
   returns: transferWorkspaceReceiptValue,
   handler: async (ctx, args) => {
@@ -557,10 +556,10 @@ export const transferWorkspaceOwnership = mutation({
       throw new InteractiveAuthorityError('successor_principal_inactive')
     }
 
-    await assertStepUpForSensitiveAction(ctx.db, {
+    const stepUp = await assertStepUpForSensitiveAction(ctx.db, identity, {
       accountRef: canonicalAccountRef,
-      factorEvidence: args.factorEvidence as ClerkFactorEvidence,
     })
+    if (stepUp.kind === 'refused') return stepUp
 
     if (args.expectedAccountRevision !== account.revision) {
       throw new InteractiveAuthorityError('account_revision_conflict')

@@ -249,6 +249,7 @@ import type * as lib_secretLifecyclePersistence from "../lib/secretLifecyclePers
 import type * as lib_secretPointerPersistence from "../lib/secretPointerPersistence.js";
 import type * as lib_workloadCron_context from "../lib/workloadCron/context.js";
 import type * as lib_workspaceDecommissionFences from "../lib/workspaceDecommissionFences.js";
+import type * as lib_workspaceSecurity_factorVerification from "../lib/workspaceSecurity/factorVerification.js";
 import type * as lib_x402DirectoryIndex_analytics from "../lib/x402DirectoryIndex/analytics.js";
 import type * as lib_x402DirectoryIndex_categoryStats from "../lib/x402DirectoryIndex/categoryStats.js";
 import type * as lib_x402DirectoryIndex_contracts from "../lib/x402DirectoryIndex/contracts.js";
@@ -581,6 +582,7 @@ declare const fullApi: ApiFromModules<{
   "lib/secretPointerPersistence": typeof lib_secretPointerPersistence;
   "lib/workloadCron/context": typeof lib_workloadCron_context;
   "lib/workspaceDecommissionFences": typeof lib_workspaceDecommissionFences;
+  "lib/workspaceSecurity/factorVerification": typeof lib_workspaceSecurity_factorVerification;
   "lib/x402DirectoryIndex/analytics": typeof lib_x402DirectoryIndex_analytics;
   "lib/x402DirectoryIndex/categoryStats": typeof lib_x402DirectoryIndex_categoryStats;
   "lib/x402DirectoryIndex/contracts": typeof lib_x402DirectoryIndex_contracts;

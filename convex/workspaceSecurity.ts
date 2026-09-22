@@ -11,6 +11,10 @@ import {
   requireAccessFactForAccount,
   resolveActiveAccountRefForPrincipal,
 } from './interactiveAuthority'
+import {
+  hasFreshMfaFactorVerification,
+  MFA_REVERIFICATION_REQUIRED,
+} from './lib/workspaceSecurity/factorVerification'
 
 const CLERK_USER_PROVIDER_NAMESPACE = 'clerk/user' as const
 const CORRELATION_REF_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/u
@@ -80,22 +84,6 @@ function validateFactorEvidenceForPolicyUpdate(evidence: ClerkFactorEvidence): v
   }
 }
 
-function validateFactorEvidenceForStepUp(evidence: ClerkFactorEvidence | undefined): void {
-  if (
-    evidence === undefined
-    || !Number.isSafeInteger(evidence.firstFactorAgeMinutes)
-    || !Number.isSafeInteger(evidence.secondFactorAgeMinutes)
-    || evidence.firstFactorAgeMinutes < 0
-  ) {
-    throw new WorkspaceSecurityError('step_up_required')
-  }
-  if (evidence.secondFactorAgeMinutes < 0) {
-    throw new WorkspaceSecurityError('mfa_required')
-  }
-  if (evidence.secondFactorAgeMinutes > MFA_EVIDENCE_MAX_AGE_MINUTES) {
-    throw new WorkspaceSecurityError('step_up_required')
-  }
-}
 
 async function requireInteractiveHumanPrincipal(
   db: SecurityDb,
@@ -274,12 +262,20 @@ export const updatePolicy = mutation({
 
 export async function assertStepUpForSensitiveAction(
   db: SecurityDb,
-  input: Readonly<{
-    accountRef: string
-    factorEvidence?: ClerkFactorEvidence
-    now?: number
-  }>,
-): Promise<{ requireMfaForMembers: boolean; policyRevision?: number }> {
+  identity: UserIdentity,
+  input: Readonly<{ accountRef: string }>,
+): Promise<
+  | Readonly<{
+    kind: 'allowed'
+    requireMfaForMembers: boolean
+    policyRevision?: number
+  }>
+  | typeof MFA_REVERIFICATION_REQUIRED
+> {
+  if (!hasFreshMfaFactorVerification(identity.fva)) {
+    return MFA_REVERIFICATION_REQUIRED
+  }
+
   const canonicalAccountRef = accountRef(input.accountRef)
   const row = await db
     .query('accountSecurityPolicies')
@@ -287,9 +283,12 @@ export async function assertStepUpForSensitiveAction(
     .unique()
 
   if (row === null || !row.requireMfaForMembers) {
-    return { requireMfaForMembers: false }
+    return { kind: 'allowed', requireMfaForMembers: false }
   }
 
-  validateFactorEvidenceForStepUp(input.factorEvidence)
-  return { requireMfaForMembers: true, policyRevision: row.revision }
+  return {
+    kind: 'allowed',
+    requireMfaForMembers: true,
+    policyRevision: row.revision,
+  }
 }

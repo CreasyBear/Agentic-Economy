@@ -26,6 +26,31 @@ const convexMocks = vi.hoisted(() => {
   return { useQuery, closeWorkspace, transferWorkspaceOwnership, convexRefName }
 })
 
+const clerkMocks = vi.hoisted(() => ({
+  prompts: 0,
+}))
+
+vi.mock('@clerk/tanstack-react-start', () => ({
+  useReverification: (
+    fetcher: (...args: never[]) => Promise<unknown>,
+  ) => async (...args: never[]) => {
+    const first = await fetcher(...args)
+    if (
+      typeof first === 'object'
+      && first !== null
+      && 'clerk_error' in first
+    ) {
+      clerkMocks.prompts += 1
+      return await fetcher(...args)
+    }
+    return first
+  },
+}))
+
+vi.mock('@clerk/shared/authorization-errors', () => ({
+  reverificationError: (level: string) => ({ clerk_error: { level } }),
+}))
+
 const { useQuery, closeWorkspace, transferWorkspaceOwnership } = convexMocks
 
 vi.mock('convex/react', () => ({
@@ -77,6 +102,7 @@ const fencedOwner: WorkspaceDecommissionEligibilityView = {
 
 afterEach(() => {
   vi.clearAllMocks()
+  clerkMocks.prompts = 0
   useQuery.mockReturnValue(ownerEligible)
 })
 
@@ -119,7 +145,7 @@ describe('useWorkspaceDangerZone', () => {
   it('sends close mutation payload with static correlation and live revisions', async () => {
     const uuid = '11111111-1111-4111-8111-111111111111'
     vi.spyOn(crypto, 'randomUUID').mockReturnValue(uuid)
-    closeWorkspace.mockResolvedValue(undefined)
+    closeWorkspace.mockResolvedValue({ kind: 'closed', accountRef: ownerEligible.accountRef })
     const { result } = renderHook(() => useWorkspaceDangerZone())
     act(() => {
       result.current.closePanel?.onConfirmationNameChange('Acme Corp')
@@ -135,7 +161,6 @@ describe('useWorkspaceDangerZone', () => {
       expectedOwnershipRevision: 3,
       correlationRef: 'ui:workspace-danger:close',
       idempotencyRef: expectedIdempotency,
-      factorEvidence: { firstFactorAgeMinutes: 1, secondFactorAgeMinutes: 1 },
     })
     expect(toast.success).toHaveBeenCalledWith('Workspace closed')
     vi.mocked(crypto.randomUUID).mockRestore()
@@ -146,7 +171,7 @@ describe('useWorkspaceDangerZone', () => {
     const confirmUuid = '33333333-3333-4333-8333-333333333333'
     const randomSpy = vi.spyOn(crypto, 'randomUUID')
     randomSpy.mockReturnValueOnce(openUuid).mockReturnValueOnce(confirmUuid)
-    closeWorkspace.mockResolvedValue(undefined)
+    closeWorkspace.mockResolvedValue({ kind: 'closed', accountRef: ownerEligible.accountRef })
     const { result } = renderHook(() => useWorkspaceDangerZone())
     act(() => {
       result.current.closePanel?.onConfirmationNameChange('Acme Corp')
@@ -166,7 +191,10 @@ describe('useWorkspaceDangerZone', () => {
     const uuid = '44444444-4444-4444-8444-444444444444'
     vi.spyOn(crypto, 'randomUUID').mockReturnValue(uuid)
     useQuery.mockReturnValue(ownerWithMember)
-    transferWorkspaceOwnership.mockResolvedValue(undefined)
+    transferWorkspaceOwnership.mockResolvedValue({
+      kind: 'transferred',
+      accountRef: ownerEligible.accountRef,
+    })
     const { result } = renderHook(() => useWorkspaceDangerZone())
     act(() => {
       result.current.transferPanel?.onRequestTransfer()
@@ -182,7 +210,6 @@ describe('useWorkspaceDangerZone', () => {
       expectedOwnershipRevision: 3,
       correlationRef: 'ui:workspace-danger:transfer',
       idempotencyRef: `idem:workspace-danger:transfer:${uuid}`,
-      factorEvidence: { firstFactorAgeMinutes: 1, secondFactorAgeMinutes: 1 },
     })
     expect(toast.success).toHaveBeenCalledWith('Workspace ownership transferred')
     vi.mocked(crypto.randomUUID).mockRestore()
@@ -195,8 +222,11 @@ describe('useWorkspaceDangerZone', () => {
       configurable: true,
       value: { ...window.location, assign, reload },
     })
-    closeWorkspace.mockResolvedValue(undefined)
-    transferWorkspaceOwnership.mockResolvedValue(undefined)
+    closeWorkspace.mockResolvedValue({ kind: 'closed', accountRef: ownerEligible.accountRef })
+    transferWorkspaceOwnership.mockResolvedValue({
+      kind: 'transferred',
+      accountRef: ownerEligible.accountRef,
+    })
     useQuery.mockReturnValue(ownerWithMember)
     const { result } = renderHook(() => useWorkspaceDangerZone())
     act(() => {
@@ -214,6 +244,71 @@ describe('useWorkspaceDangerZone', () => {
     })
     expect(assign).not.toHaveBeenCalled()
     expect(reload).not.toHaveBeenCalled()
+  })
+
+  it('prompts once and retries close with the same command after MFA reverification', async () => {
+    closeWorkspace
+      .mockResolvedValueOnce({ kind: 'refused', code: 'mfa_reverification_required' })
+      .mockResolvedValueOnce({ kind: 'closed', accountRef: ownerEligible.accountRef })
+    const { result } = renderHook(() => useWorkspaceDangerZone())
+    act(() => {
+      result.current.closePanel?.onConfirmationNameChange('Acme Corp')
+      result.current.closePanel?.onRequestClose()
+    })
+
+    await act(async () => {
+      await result.current.closePanel?.onConfirmClose()
+    })
+
+    expect(clerkMocks.prompts).toBe(1)
+    expect(closeWorkspace).toHaveBeenCalledTimes(2)
+    expect(closeWorkspace.mock.calls[1]).toEqual(closeWorkspace.mock.calls[0])
+    expect(toast.success).toHaveBeenCalledWith('Workspace closed')
+  })
+
+  it('prompts once and retries transfer with the same command after MFA reverification', async () => {
+    useQuery.mockReturnValue(ownerWithMember)
+    transferWorkspaceOwnership
+      .mockResolvedValueOnce({ kind: 'refused', code: 'mfa_reverification_required' })
+      .mockResolvedValueOnce({ kind: 'transferred', accountRef: ownerEligible.accountRef })
+    const { result } = renderHook(() => useWorkspaceDangerZone())
+    act(() => {
+      result.current.transferPanel?.onRequestTransfer()
+    })
+
+    await act(async () => {
+      await result.current.transferPanel?.onConfirmTransfer()
+    })
+
+    expect(clerkMocks.prompts).toBe(1)
+    expect(transferWorkspaceOwnership).toHaveBeenCalledTimes(2)
+    expect(transferWorkspaceOwnership.mock.calls[1]).toEqual(
+      transferWorkspaceOwnership.mock.calls[0],
+    )
+    expect(toast.success).toHaveBeenCalledWith('Workspace ownership transferred')
+  })
+
+  it('keeps a second MFA refusal visible with the required recovery copy', async () => {
+    closeWorkspace.mockResolvedValue({
+      kind: 'refused',
+      code: 'mfa_reverification_required',
+    })
+    const { result } = renderHook(() => useWorkspaceDangerZone())
+    act(() => {
+      result.current.closePanel?.onConfirmationNameChange('Acme Corp')
+      result.current.closePanel?.onRequestClose()
+    })
+
+    await act(async () => {
+      await result.current.closePanel?.onConfirmClose()
+    })
+
+    expect(clerkMocks.prompts).toBe(1)
+    expect(closeWorkspace).toHaveBeenCalledTimes(2)
+    expect(result.current.closePanel?.closeDiagnostic?.nextStep).toBe(
+      'Confirm with a fresh sign-in verification to continue.',
+    )
+    expect(toast.error).toHaveBeenCalledWith('Workspace was not closed')
   })
 
   it('sets static diagnostic and error toast on close failure', async () => {

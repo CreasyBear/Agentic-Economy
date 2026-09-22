@@ -26,18 +26,12 @@ export type WorkspaceDecommissionEligibilityView = Readonly<{
   transferCandidates: readonly WorkspaceTransferCandidate[]
 }>
 
-export type WorkspaceFactorEvidence = Readonly<{
-  firstFactorAgeMinutes: number
-  secondFactorAgeMinutes: number
-}>
-
 export type WorkspaceCloseCommand = Readonly<{
   confirmationName: string
   expectedAccountRevision: number
   expectedOwnershipRevision: number
   correlationRef: string
   idempotencyRef: string
-  factorEvidence: WorkspaceFactorEvidence
 }>
 
 export type WorkspaceTransferCommand = Readonly<{
@@ -46,8 +40,42 @@ export type WorkspaceTransferCommand = Readonly<{
   expectedOwnershipRevision: number
   correlationRef: string
   idempotencyRef: string
-  factorEvidence: WorkspaceFactorEvidence
 }>
+
+export type WorkspaceMfaReverificationRefusal = Readonly<{
+  kind: 'refused'
+  code: 'mfa_reverification_required'
+}>
+
+export type WorkspaceCloseResult =
+  | WorkspaceMfaReverificationRefusal
+  | Readonly<{
+    kind: 'closed' | 'replayed'
+    accountRef: string
+    accountRevision: number
+  }>
+
+export type WorkspaceTransferResult =
+  | WorkspaceMfaReverificationRefusal
+  | Readonly<{
+    kind: 'transferred'
+    accountRef: string
+    previousOwnershipRef: string
+    currentOwnershipRef: string
+    accountRevision: number
+  }>
+  | Readonly<{
+    kind: 'replayed'
+    accountRef: string
+    currentOwnershipRef: string
+    accountRevision: number
+  }>
+
+export function isWorkspaceMfaReverificationRefusal(
+  value: WorkspaceCloseResult | WorkspaceTransferResult,
+): value is WorkspaceMfaReverificationRefusal {
+  return value.kind === 'refused'
+}
 
 export type WorkspaceDangerDiagnostic = Rule4Diagnostic
 

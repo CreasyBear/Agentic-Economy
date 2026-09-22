@@ -12,6 +12,7 @@ const runtime = vi.hoisted(() => ({
   isAuthenticated: true,
   isLoaded: true,
   sessionId: "session-1",
+  factorVerificationAge: [1, -1] as number[],
   constructClient: vi.fn(),
   setHttpAuth: vi.fn(),
   getToken: vi.fn(async () => 'verified-token'),
@@ -25,14 +26,34 @@ vi.mock('@clerk/tanstack-react-start', () => ({
     runtime.renderClerkProvider(runtime.pathname)
     return children
   },
-  useAuth: () => ({ isLoaded: runtime.isLoaded, isSignedIn: runtime.isAuthenticated, sessionId: runtime.sessionId, userId: 'owner-1', orgId: null, getToken: runtime.getToken }),
+  useAuth: () => ({
+    isLoaded: runtime.isLoaded,
+    isSignedIn: runtime.isAuthenticated,
+    sessionId: runtime.sessionId,
+    userId: 'owner-1',
+    orgId: null,
+    sessionClaims: { fva: runtime.factorVerificationAge },
+    getToken: runtime.getToken,
+  }),
 }))
 
 vi.mock('convex/react-clerk', () => ({
-  ConvexProviderWithClerk: ({ children, useAuth }: { children: ReactNode; useAuth: () => { isSignedIn: boolean; getToken: () => Promise<string | null> } }) => {
-    const { getToken, isSignedIn } = useAuth()
+  ConvexProviderWithClerk: ({
+    children,
+    useAuth,
+  }: {
+    children: ReactNode
+    useAuth: () => {
+      isSignedIn: boolean
+      sessionId?: string | null
+      getToken: () => Promise<string | null>
+    }
+  }) => {
+    const { getToken, isSignedIn, sessionId } = useAuth()
     runtime.refresh = getToken
-    useEffect(() => { if (isSignedIn) void getToken() }, [getToken, isSignedIn])
+    useEffect(() => {
+      if (isSignedIn) void getToken()
+    }, [getToken, isSignedIn, sessionId])
     return children
   },
 }))
@@ -132,6 +153,7 @@ beforeEach(() => {
   runtime.isLoaded = true
   runtime.isAuthenticated = true
   runtime.sessionId = "session-1"
+  runtime.factorVerificationAge = [1, -1]
   runtime.getToken.mockReset().mockResolvedValue('verified-token')
   runtime.setHttpAuth.mockReset()
   runtime.constructClient.mockReset()
@@ -294,7 +316,7 @@ describe('Tool chat provider boundary', () => {
     expect(screen.getByRole('button', { name: 'Try again' })).toBeTruthy()
   })
 
-  it('keeps the signed-in Convex boundary mounted while Clerk finishes loading', () => {
+  it('keeps the signed-in Convex boundary mounted while refreshing authority', async () => {
     runtime.isLoaded = false
     runtime.isAuthenticated = false
     const mounted = vi.fn()
@@ -311,6 +333,11 @@ describe('Tool chat provider boundary', () => {
     runtime.isLoaded = true
     runtime.isAuthenticated = true
     view.rerender(<SignedInConvexProvider><Child /></SignedInConvexProvider>)
+    await waitFor(() => expect(runtime.getToken).toHaveBeenCalledTimes(1))
+
+    runtime.factorVerificationAge = [0, 0]
+    view.rerender(<SignedInConvexProvider><Child /></SignedInConvexProvider>)
+    await waitFor(() => expect(runtime.getToken).toHaveBeenCalledTimes(2))
 
     expect(mounted).toHaveBeenCalledTimes(1)
   })

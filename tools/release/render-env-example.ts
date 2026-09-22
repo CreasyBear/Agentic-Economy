@@ -138,7 +138,11 @@ function renderGroupSubsection(
       if (usedNames.has(name)) continue
       usedNames.add(name)
       const kindComment = fieldKindComment(fieldKinds, name)
-      const comments = kindComment === undefined ? [description] : [description, kindComment]
+      const clerkTemplateComment = name === 'CLERK_JWT_ISSUER_DOMAIN'
+        ? '# Clerk JWT template "convex" must include the fva claim (Session token → Customize → add {{session.factor_verification_age}})'
+        : undefined
+      const comments = [description, kindComment, clerkTemplateComment]
+        .filter((comment): comment is string => comment !== undefined)
       lines.push(renderName(name, comments, convexEnvNameSet))
     }
   }

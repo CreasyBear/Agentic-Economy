@@ -50,10 +50,16 @@ type UpdatePolicyInput = Readonly<{
   idempotencyRef: string
 }>
 
-type StepUpAdmission = Readonly<{
-  requireMfaForMembers: boolean
-  policyRevision?: number
-}>
+type StepUpAdmission =
+  | Readonly<{
+    kind: 'allowed'
+    requireMfaForMembers: boolean
+    policyRevision?: number
+  }>
+  | Readonly<{
+    kind: 'refused'
+    code: 'mfa_reverification_required'
+  }>
 
 const readPolicyRef = makeFunctionReference<
   'query',
@@ -117,16 +123,12 @@ async function listPolicyRows(backend: InteractiveAuthorityBackend): Promise<Pol
 
 async function runAssertStepUp(
   backend: InteractiveAuthorityBackend,
-  input: Readonly<{
-    accountRef: string
-    factorEvidence: ClerkFactorEvidence
-  }>,
+  presentedIdentity: UserIdentity,
+  account = ACCOUNT_REF,
 ): Promise<StepUpAdmission> {
   return await backend.run(async (ctx) =>
-    assertStepUpForSensitiveAction(ctx.db, {
-      accountRef: input.accountRef,
-      factorEvidence: input.factorEvidence,
-      now: NOW,
+    assertStepUpForSensitiveAction(ctx.db, presentedIdentity, {
+      accountRef: account,
     }))
 }
 
@@ -393,72 +395,47 @@ describe('workspaceSecurity policy', () => {
     )
   })
 
-  it('S16: assertStepUp admits when policy is default and MFA absent', async () => {
+  it('S16: assertStepUp admits fresh signed Clerk fva when workspace MFA policy is off', async () => {
     const backend = createBackend()
     await seedAuthority(backend)
 
-    await expect(runAssertStepUp(backend, {
-      accountRef: ACCOUNT_REF,
-      factorEvidence: noMfa,
-    })).resolves.toEqual({ requireMfaForMembers: false })
-  })
-
-  it('S17: assertStepUp refuses mfa_required when policy requires MFA', async () => {
-    const backend = createBackend()
-    await seedAuthority(backend)
-
-    await updatePolicy(backend, enablePolicyPayload())
-
-    await expect(runAssertStepUp(backend, {
-      accountRef: ACCOUNT_REF,
-      factorEvidence: noMfa,
-    })).rejects.toMatchObject({
-      name: 'InteractiveAuthorityError',
-      code: 'mfa_required',
+    await expect(runAssertStepUp(backend, identity({ fva: [1, 1] }))).resolves.toEqual({
+      kind: 'allowed',
+      requireMfaForMembers: false,
     })
   })
 
-  it('S18: assertStepUp refuses step_up_required when MFA evidence is stale', async () => {
+  it('S17: assertStepUp refuses when the signed Clerk fva claim is absent', async () => {
     const backend = createBackend()
     await seedAuthority(backend)
 
-    await updatePolicy(backend, enablePolicyPayload())
-
-    await expect(runAssertStepUp(backend, {
-      accountRef: ACCOUNT_REF,
-      factorEvidence: staleMfa,
-    })).rejects.toMatchObject({
-      name: 'InteractiveAuthorityError',
-      code: 'step_up_required',
+    await expect(runAssertStepUp(backend, identity())).resolves.toEqual({
+      kind: 'refused',
+      code: 'mfa_reverification_required',
     })
   })
 
-  it('S19: assertStepUp admits when policy requires MFA and evidence is fresh', async () => {
+  it('S18: assertStepUp refuses when the signed Clerk fva has no second factor', async () => {
     const backend = createBackend()
     await seedAuthority(backend)
 
-    await updatePolicy(backend, enablePolicyPayload())
-
-    await expect(runAssertStepUp(backend, {
-      accountRef: ACCOUNT_REF,
-      factorEvidence: freshMfa,
-    })).resolves.toEqual({
-      requireMfaForMembers: true,
-      policyRevision: 1,
+    await expect(runAssertStepUp(backend, identity({ fva: [1, -1] }))).resolves.toEqual({
+      kind: 'refused',
+      code: 'mfa_reverification_required',
     })
   })
 
-  it('S20: policy on account A does not tighten step-up on account B', async () => {
+  it('S20: policy on account A cannot exempt a sensitive action on account B', async () => {
     const backend = createBackend()
     await seedAuthority(backend)
     await seedSecondOwnedAccount(backend)
 
     await updatePolicy(backend, enablePolicyPayload())
 
-    await expect(runAssertStepUp(backend, {
-      accountRef: ACCOUNT_B,
-      factorEvidence: noMfa,
-    })).resolves.toEqual({ requireMfaForMembers: false })
+    await expect(runAssertStepUp(backend, identity({ fva: [1, -1] }), ACCOUNT_B)).resolves.toEqual({
+      kind: 'refused',
+      code: 'mfa_reverification_required',
+    })
   })
 
   it('S21: readPolicy after update does not insert extra policy rows', async () => {
@@ -475,22 +452,19 @@ describe('workspaceSecurity policy', () => {
   })
 
   it.each([
-    ['nan-first-factor', { firstFactorAgeMinutes: Number.NaN, secondFactorAgeMinutes: 1 }],
-    ['negative-first-factor', { firstFactorAgeMinutes: -1, secondFactorAgeMinutes: 1 }],
+    ['malformed', [1]],
+    ['non-numeric', [1, '1']],
+    ['stale-first-factor', [11, 1]],
+    ['stale-second-factor', [1, 11]],
   ] as const)(
-    'S22: assertStepUp refuses step_up_required for invalid first-factor evidence (%s)',
-    async (_label, factorEvidence) => {
+    'S22: assertStepUp refuses a %s signed Clerk fva claim',
+    async (_label, fva) => {
       const backend = createBackend()
       await seedAuthority(backend)
 
-      await updatePolicy(backend, enablePolicyPayload())
-
-      await expect(runAssertStepUp(backend, {
-        accountRef: ACCOUNT_REF,
-        factorEvidence,
-      })).rejects.toMatchObject({
-        name: 'InteractiveAuthorityError',
-        code: 'step_up_required',
+      await expect(runAssertStepUp(backend, identity({ fva: [...fva] }))).resolves.toEqual({
+        kind: 'refused',
+        code: 'mfa_reverification_required',
       })
     },
   )

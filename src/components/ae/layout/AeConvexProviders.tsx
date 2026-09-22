@@ -15,12 +15,34 @@ import { api } from '../../../../convex/_generated/api'
  * shows at once and each `useQuery` site's own loading state covers the auth handshake. Anonymous
  * visitors on public pages open no websocket.
  */
+
+function useAuthWithFactorVerificationRefresh() {
+  const auth = useAuth()
+  const factorVerificationAge = auth.sessionClaims?.fva
+  const factorVerificationKey = Array.isArray(factorVerificationAge)
+    ? factorVerificationAge.join(':')
+    : 'missing'
+  return {
+    ...auth,
+    // Convex's Clerk adapter refreshes its token when sessionId changes. Add the signed
+    // factor-age epoch only to that adapter input so reverification refreshes the JWT
+    // without remounting this provider or its children.
+    sessionId: auth.sessionId === undefined || auth.sessionId === null
+      ? auth.sessionId
+      : `${auth.sessionId}:fva:${factorVerificationKey}`,
+  }
+}
+
 export function SignedInConvexProvider({ children }: { children: ReactNode }) {
   const convexUrl = import.meta.env.VITE_CONVEX_URL?.trim()
   const [client] = useState(() => (convexUrl ? new ConvexReactClient(convexUrl) : null))
   if (client === null) return children
   // Keep this wrapper mounted while Clerk resolves auth; changing its depth remounts the shell and resets navigation state.
-  return <ConvexProviderWithClerk client={client} useAuth={useAuth}>{children}</ConvexProviderWithClerk>
+  return (
+    <ConvexProviderWithClerk client={client} useAuth={useAuthWithFactorVerificationRefresh}>
+      {children}
+    </ConvexProviderWithClerk>
+  )
 }
 
 export function ChatConvexProvider({ children }: { children: ReactNode }) {
