@@ -121,6 +121,7 @@ The 43 route entries are all assigned once. `/support` is assigned to the Receip
 **Copy:** <table><tr><th>where</th><th>current</th><th>target</th></tr><tr><td>H1</td><td>Tools for what’s next.</td><td>Find the right Tool.</td></tr><tr><td>usage</td><td>Used recently by other agents</td><td>Recent Agent Calls, with count and source</td></tr></table>
 **Target spec:** search returns whole-job fits or honest no-fit; Provider, callable state, listed price and one action per card; query and compare survive tabs, Back and refresh; compare reachable at 390px and by keyboard. **Cut:** unquantified usage, creative promo and atomic price internals.
 **Priority:** P0. **Status:** OWNER. **Verification evidence:** Queue: `docs/operations/buyer-spine-stabilisation-plan.md §3 W2`. **Provenance:** PersonaOpsManager, PersonaSkeptic, PersonaAccessibility, ExpectOpenRouter, ExpectAppStoreShopify, 21 Sep 2026.
+**Evidence (orchestrator exception):** compare refs now survive Market navigation, page changes and reload-style hydration from by-ref resolutions; SOURCE `tests/unit/market/x402-directory-page.test.tsx:154-165`, `tests/unit/routes/market-search.test.ts:68-112`; COMMIT `4783d51fc`, `63c289b8a`. Status remains OWNER.
 
 ### R-06 Owner Market duplicate: `/owner/market`
 **Benchmark:** Shopify admin versus storefront. **Incumbent baseline:** admin manages records; storefront sells; no reduced duplicate storefront.
@@ -145,6 +146,7 @@ The 43 route entries are all assigned once. `/support` is assigned to the Receip
 **Copy:** <table><tr><th>where</th><th>current</th><th>target</th></tr><tr><td>action</td><td>Connect an Agent first</td><td>Add to Agent</td></tr><tr><td>readiness</td><td>Checked when quoting</td><td>Callable by Agents / Listed, not yet callable</td></tr></table>
 **Target spec:** copyable stable Tool reference; verified Provider/contact; callable state; exact data/permission; `A$x.xx per Call (GST incl.)`; runnable example; selected Agent handoff preserves Tool. **Cut:** unproved usage and internal transport detail above decision facts.
 **Priority:** P0. **Status:** OWNER. **Verification evidence:** Queue: `docs/operations/buyer-spine-stabilisation-plan.md §3 W2`. **Provenance:** PersonaSkeptic, ExpectAppStoreShopify, ExpectOpenRouter, PersonaAgentDev, 21 Sep 2026.
+**Evidence (orchestrator exception):** bounded refusal reasons now produce cause-specific recovery and fail closed to `source_unavailable`; SOURCE `tests/unit/routes/tool-detail-route.test.tsx:582-621`; COMMIT `d62defe14`, `84e4c321e`. Status remains OWNER.
 
 ### R-09 Invalid Tool reference: `/tools/$toolRef`
 **Benchmark:** npm 404 package page. **Incumbent baseline:** plain reason, search/browse recovery, no fabricated facts.
@@ -230,6 +232,7 @@ The 43 route entries are all assigned once. `/support` is assigned to the Receip
 **Copy:** <table><tr><th>where</th><th>current</th><th>target</th></tr><tr><td>role</td><td>Admin / Owner for the same membership</td><td>One authoritative membership role</td></tr></table>
 **Target spec:** one role source; owner protections; environment choice visible; actor-attributed admin events; billing stays separate. **Cut:** duplicate membership projection.
 **Priority:** P1. **Status:** IN REVIEW. **Verification evidence:** LIVE 2026-09-21 `/owner/team` rendered one authoritative `Owner` role, `/owner/workspace` kept Danger zone last with Billing/Credit absent, and both pages exposed one accessibility-tree H1; SOURCE `tests/unit/routes/owner-team.test.tsx:78-90`, `tests/unit/settings/team-directory-table.test.tsx:51-60,93-108`, `tests/unit/routes/owner-workspace.test.tsx:99-127`; COMMIT `fc24cd5eb`, `66c3fa3a1`, `ef6e7cc43`, `1a8e966cf`. BLOCKED: environment choice and actor-attributed admin events remain absent because the Team/Workspace DTO exposes no environment or actor-event fields. Hidden Clerk vendor H1 nodes remain in the raw DOM but not the rendered or accessibility tree. **Provenance:** ExpectGitHubVercel, RowR18TeamWorkspace, RoastD17D18, ClerkHeadings, 21 Sep 2026.
+**MFA evidence:** workspace close and ownership transfer reject client-supplied `factorEvidence`, trust only the signed Clerk `fva` claim and fail closed with `mfa_reverification_required`; SOURCE `tests/unit/convex/workspace-decommission.test.ts:943-972,1205-1211`, `tests/unit/convex/workspace-security-policy.test.ts:398-465`; COMMIT `f7c02bc85`. Status stays IN REVIEW until the live Clerk `convex` JWT template includes `fva`.
 
 ### R-19 Authentication redirects: `/sign-in/$` and `/sign-up/$`
 **Benchmark:** Linear Login. **Incumbent baseline:** one auth surface, SSO/passkeys, exact deep-link return.
@@ -259,6 +262,7 @@ The 43 route entries are all assigned once. `/support` is assigned to the Receip
 **Copy:** <table><tr><th>where</th><th>current</th><th>target</th></tr><tr><td>receipt error</td><td>owner-scoped status read</td><td>We couldn’t open this Call for this workspace</td></tr><tr><td>support</td><td>Help</td><td>Call</td></tr></table>
 **Target spec:** Delivery, Payment, Purchase resolution and Who acts next first; only applicable same-Call action; exact Call reaches Support; blank/malformed refs distinct; Back/refresh retain ref; every failure says whether money moved. **Cut:** advanced evidence before decision facts; no new support form.
 **Priority:** P0. **Status:** OWNER. **Verification evidence:** Queue: `docs/operations/buyer-spine-stabilisation-plan.md §3 W7`. FAQ slice: LIVE 2026-09-21 http://127.0.0.1:3024/support rendered “Questions” with four disclosure rows; first answer opened with `aria-expanded=true`; “Email support” remained `mailto:support@aecon.ai`; SOURCE `src/components/ae/support/help.contracts.ts`, `tests/unit/routes/support-route.test.tsx:67-76`; COMMIT `a0631aa0f`. Roast verdict: VERIFIED for FAQ and C-06 regression; focused Email support after 10 Tabs painted `outlineStyle` `solid`, width `2px`. Receipt and reference-carrying behavior remains OWNER. **Provenance:** PersonaJourneyOwner, ExpectStripe, SupportFaq, Roast3Support, 21 Sep 2026.
+**Evidence (orchestrator exception):** uncertain Calls no longer claim `A$0.00 charged`, and receipt-to-Support handoff retains only a canonical valid Call reference while naming malformed input; SOURCE `tests/unit/routes/call-status-route.test.tsx:299-364`, `tests/unit/routes/support-route.test.tsx:118-150`; COMMIT `7cb685492`, `c1527875b`. Status remains OWNER.
 
 ### R-22 System status: `/status`
 **Benchmark:** Atlassian Statuspage. **Incumbent baseline:** component state, timestamped incidents, last update and subscription.
@@ -1096,6 +1100,7 @@ Orchestrator dispositions:
 Foundation-reset plan Steps 1–6 are complete for Waves 0, A, B (three rounds), C, D and E. §1 now totals 10 VERIFIED, 23 IN REVIEW, 5 PENDING, 1 PARKED and 9 OWNER rows. Standing DEFAULTS awaiting Joel are the status vendor, economics/legal figures, #47 SSO/SCIM and #48 spend-anomaly alerts. Stuck checks: no file appears in three consecutive wave logs; no row has two REOPENED lines; the gate-constant check fires because the TSX-type, copy-vocabulary, bare-catch and module-boundaries constants were unmoved for at least two waves (status vocabulary moved 28→17 in Wave E). Cohesion: 6/10 measured; 9/10 after dispositions (sign-in fixed; status N/A; legal by design) — remaining public-spine deviation: none outstanding.
 
 Re-audit round complete 2026-09-22: IA migration landed (IA-1..15), shell remount ROOT fixed, seeded catalog live; next = spine (OWNER) rows + Joel facts.
+External alpha review 2026-09-22: five confirmed findings are fixed with behavioural assertions; R-18 remains IN REVIEW pending the live Clerk `fva` claim, while OWNER-row fixes landed under the recorded orchestrator exception for Joel review.
 
 ## 9. Re-audit · 2026-09-21/22
 
@@ -1171,3 +1176,19 @@ Label contract (`docs/designs/2026-09-21-ia-untangle.md` §4): destination label
 - An orphan Convex backend (PID 31264, 20 h) blocked pushes; it was killed.
 - Convex CLI link/upgrade prompts were bypassed with `CONVEX_AGENT_MODE=anonymous`; the backend was upgraded to `precompiled-2026-09-21`.
 - The supervised `hub` process name is now `ae-stack`.
+
+## 10. External alpha review · 2026-09-22
+
+| Finding | Verdict | Fix commit(s) | Assertion (test file) | Row/spine item |
+|---|---|---|---|---|
+| MFA bypass on workspace close/transfer | CONFIRMED | `f7c02bc85` | `tests/unit/convex/workspace-decommission.test.ts` | R-18 |
+| `A$0.00 charged` on uncertain Calls | CONFIRMED | `7cb685492` | `tests/unit/routes/call-status-route.test.tsx` | R-21 / W7-06 |
+| Tool detail refusal collapsed distinct causes | CONFIRMED | `d62defe14`, `84e4c321e` | `tests/unit/routes/tool-detail-route.test.tsx` | R-08 / W1-03 |
+| Compare lost selections across navigation/refresh | CONFIRMED | `4783d51fc`, `63c289b8a` | `tests/unit/market/x402-directory-page.test.tsx`, `tests/unit/routes/market-search.test.ts` | R-05 / W2-02 |
+| Help dropped the exact Call | CONFIRMED | `c1527875b` | `tests/unit/routes/support-route.test.tsx`, `tests/unit/routes/call-status-route.test.tsx` | R-21 / W7-02, W7-04 |
+
+ORCHESTRATOR EXCEPTION: fixes 2–5 touched OWNER-LOCKED paths (call-receipt/**, market/**, src/modules/market/**, support/**) — authorised as minimal correctness/money-truth fixes, not core-flow design; record the exception explicitly so Joel can review.
+
+**Joel action:** add `{{session.factor_verification_age}}` as the `fva` claim in Clerk → JWT templates → `convex`; until then workspace close and ownership transfer refuse safely.
+
+Shared-index sweep: 7cb685492 captured FixHelpCallHandoff's test edits (recorded, not amended).
