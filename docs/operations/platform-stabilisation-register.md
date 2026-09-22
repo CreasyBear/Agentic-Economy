@@ -67,6 +67,7 @@ No subagent edits these unless dispatched from the spine plan by Joel.
 | HELP | 5 | 4 | 2 | 2 | 0 | VERIFIED/IN REVIEW |
 | SUPPLY | 5 | 6 | 2 | 4 | 0 | VERIFIED/IN REVIEW/PARKED |
 | DEV/ADMIN | 4 | 4 | 2 | 2 | 0 | VERIFIED/IN REVIEW |
+| ADMIN | 6 | 6 | 0 | 4 | 2 | PENDING |
 | SHELL | 2 | 1 | 0 | 0 | 1 | PARKED |
 | CROSS-CUTTING | n/a | 12 | 7 | 5 | 0 | OWNER/VERIFIED/IN REVIEW/PENDING |
 | CLASS GAPS | n/a | 55 | n/a | n/a | n/a | 1 ADOPTED + 48 RECORDED + 6 BASE-PAGE DECISIONS |
@@ -393,6 +394,27 @@ The 43 route entries are all assigned once. `/support` is assigned to the Receip
 **Target spec:** split below 1,000 (`OVER_1000_ALLOWED` in `tests/imports/file-size-ratchet.test.ts` is `[]`). **Cut:** no behaviour or RPC changes.
 **Priority:** P1. **Status:** VERIFIED. **Verification evidence:** SOURCE `src/modules/capability-supply/internal/cdp-x402-payment-signer.ts` split from 1,041 lines to a 38-line entry and seven focused modules, each below 300 lines; `FILE_SIZE_CEILINGS` moved `over1000` 1→0 and `OVER_1000_ALLOWED` became `[]`; COMMIT `af016e98c`. **Provenance:** Wave 0 file-size gate, SplitPaymentSigner, 21 Sep 2026.
 
+## 2x. ADMIN (operator console)
+
+| Row | Benchmark | Anchors | Absent gap | Target spec | Priority | Status |
+|---|---|---|---|---|---|---|
+| R-37 Overview | Stripe Dashboard | `src/routes/_operator/admin.*.tsx`; `src/components/ae/readback/**`; `src/components/ae/layout/app-shell/app-shell.contracts.ts` `ADMIN_NAVIGATION` | `listAdminExceptions`; real health/worker failure readback; uncertain-Call/removal/source-review feeds | One viewport shows honest configuration state, exact search and oldest real exceptions; unavailable never renders as zero | P1 | PENDING |
+| R-38 Search + shared list | Stripe Dashboard | `src/routes/_operator/admin.*.tsx`; `src/components/ae/readback/**`; `src/components/ae/layout/app-shell/app-shell.contracts.ts` `ADMIN_NAVIGATION` | cross-account lookup read; joined Call/Workspace/Agent/Tool/Provider/Stripe search | Exact canonical ref opens one result; partial search is grouped; query persists in URL; non-admin denied | P1 | PENDING |
+| R-39 Call object | Stripe Dashboard | `src/routes/_operator/admin.*.tsx`; `src/components/ae/readback/**`; `src/components/ae/layout/app-shell/app-shell.contracts.ts` `ADMIN_NAVIGATION` | admin-scoped joined Call → attempt/control → Quote → usage/x402 → receipt/obligation/resolution read | Outcome-unknown Call states whether money moved, disables unsafe retry, keeps ref visible, and reuses receipt evidence | P1 | PENDING |
+| R-40 Provider object | Stripe Connect review | `src/routes/_operator/admin.*.tsx`; `src/components/ae/readback/**`; `src/components/ae/layout/app-shell/app-shell.contracts.ts` `ADMIN_NAVIGATION` | joined admin Provider read; removal/source-review feed; fresh-fva enforcement; second-approval command | owner action cannot submit without reason/evidence/fresh fva; preview equals emitted audit; support/reviewer cannot invoke | P2 | PENDING |
+| R-41 Purchase resolutions | Stripe Radar | `src/routes/_operator/admin.*.tsx`; `src/components/ae/readback/**`; `src/components/ae/layout/app-shell/app-shell.contracts.ts` `ADMIN_NAVIGATION` | admin open queue; immutable decision history; Purchase-resolution disposition/refund command; SLA | Open cases sort oldest first; evidence stays visible; decision is audited; money action stays disabled until its command and money rail are live | P2 | PENDING |
+| R-42 Audit | GitHub audit | `src/routes/_operator/admin.*.tsx`; `src/components/ae/readback/**`; `src/components/ae/layout/app-shell/app-shell.contracts.ts` `ADMIN_NAVIGATION` | pagination/search/export; admin-access UI; break-glass authority seam fix | Actor/action/target/time/reason/auth/correlation filters persist in URL; next page is stable; membership mutation appears only after a second seat is needed | P1 | PENDING |
+
+**ROOT-AUTH (R-40):** use_break_glass and control_kernel_incidents bypass the admin-authority seam (convex/recoveryBreakGlass.ts:416-453) — fix before any UI exposes them.
+
+**ROOT-AUTH (R-42):** use_break_glass and control_kernel_incidents bypass the admin-authority seam (convex/recoveryBreakGlass.ts:416-453) — fix before any UI exposes them.
+
+- **Who is alpha admin?** **DEFAULT (orchestrator, 2026-09-22); Joel may override:** Joel's Clerk principal is the only `owner_admin`; provision no support/reviewer membership yet.
+- **Which actions need two people?** **DEFAULT (orchestrator, 2026-09-22); Joel may override:** suppression, refunds and commercial-policy change; keep them disabled until a distinct second owner exists.
+- **What are the Purchase-resolution outcomes and clocks?** **DEFAULT (orchestrator, 2026-09-22); Joel may override:** uphold, refuse and request evidence; display age without “late” until Joel publishes an SLA; refund waits for live money.
+- **Which identifiers may global search accept?** **DEFAULT (orchestrator, 2026-09-22); Joel may override:** exact canonical refs plus Provider/Tool names; defer email, Clerk and Stripe lookup until a PII-access policy exists.
+- **Do APP requests and incidents belong in alpha?** **DEFAULT (orchestrator, 2026-09-22); Joel may override:** no; un-defer APP workflow after legal applicability/source mapping, and incident publishing after choosing a hosted status vendor.
+
 ## 3. Cross-cutting rows
 
 ### C-01 One vocabulary
@@ -588,6 +610,8 @@ KNOWLEDGE references: OR OpenRouter, ST Stripe, RA RapidAPI, SA Shopify App Stor
 | 47 | Org SSO/SCIM controls | GH, VE | ABSENT `owner.team.tsx:27-44` | Clerk enterprise | high | **DEFAULT (orchestrator, 2026-09-21); Joel may override:** DEFER; Clerk enterprise plan is a purchase decision |
 | 48 | Spend-anomaly alerts | ST | ABSENT `OwnerNotificationSettings.tsx:54-74` | existing telemetry and notifications | high | **DEFAULT (orchestrator, 2026-09-21); Joel may override:** DEFER; Credit is OWNER-LOCKED and alerts land with W6/W7 |
 | 49 | Command palette | GH, VE | PRESENT `AeCommandPanel.tsx:24-55` | installed cmdk | low | ADOPT cmdk |
+**Admin console:** BUILD-IN-APP from installed primitives (shadcn Base Data Table, sidebar, cmdk) + HOST Convex Dashboard for raw ops; low-code sidecars EXCLUDED (Convex-only data, second role system) — design `docs/designs/2026-09-22-admin-console-review.md`; sketches `docs/designs/sketches/admin-console/`.
+
 
 ### Base pages (OSS)
 
@@ -625,6 +649,14 @@ Rule for every wave: one file per subagent, precondition, verify command or walk
 | D: account, records, dev/admin | Waves A and B stable; buyer spine supplies populated fixtures where required | R-13, R-15..R-19, R-31..R-34; records outside OWNER queue only after W6/W7 contracts settle | all included rows IN REVIEW, role-gate and return-path walks pass, then VERIFIED |
 | E: class-gap reuse | corresponding product decision approved; source/license verified | execute ADOPT/HOST items only; PATTERN-ONLY means learn structure without copying restricted code | adopted/hosted feature has live path and source evidence; row VERIFIED |
 | Buyer spine in parallel | Joel owns core flow | R-05, R-08, R-10, R-11, R-14, R-20, R-21 under `buyer-spine-stabilisation-plan.md` W2..W7 | seven page passes, then FIND → ALLOW → USE → RECORD proof |
+### Wave F · admin console
+
+**Entry:** R-18 fva template configured in Clerk; Joel's principal in `ADMIN_BOOTSTRAP_PRINCIPAL_IDS`.
+
+**Work:** R-37..R-42.
+
+**Exit:** R-37..R-42 IN REVIEW with assertions.
+
 
 No wave may invent a second authority, status model, money formatter, Tool projection or Provider identity. Existing VERIFIED W-01..W-44 and S-01..S-20 are regression boundaries, not work queues.
 
@@ -636,6 +668,12 @@ No wave may invent a second authority, status model, money formatter, Tool proje
 - Whether Support gains an on-page form or remains reference-aware mailto: unblocks the post-W7 form decision for R-21.
 - Whether recurring plans and buyer disputes enter alpha scope: unblocks class gaps 14 and 15.
 - Whether `/developers/discovery` remains public: unblocks R-32 and DEV-06.
+- Credit/payout/reconciliation views until Formance and x402 are live plus cross-account aggregates exist.
+- Incident authoring until a hosted status vendor and incident command exist.
+- Assignment/SLA/presence until a second seat, case ownership and published SLA exist.
+- APP 12/13 workflow until Joel confirms APP applicability and the disclosure sources.
+- Marketplace charts until four weeks of real activity.
+- Two-person actions until a second `owner_admin` is provisioned.
 
 ## 7. Wave log
 
