@@ -15,7 +15,7 @@ import {
 import { parseAdminObjectRef } from '@/lib/operator/admin-console/ref-parsers'
 import { operatorRouteOptions } from '@/lib/operator/route-options'
 import { createAuthenticatedSourceTransport } from '@/lib/server/convex-source'
-import { requireOperatorBeforeLoad } from '@/lib/server/require-operator-session'
+import { readOperatorContextThroughSource } from '@/lib/server/operator-context.functions'
 import { principalRef } from '@/modules/principal-account/principal/public'
 
 const readAdminCallServer = createServerFn()
@@ -23,17 +23,16 @@ const readAdminCallServer = createServerFn()
   .handler(async ({ data }): Promise<AdminCallLoaderResult> => {
     const parsed = parseAdminObjectRef('call', data.callRef)
     if (parsed.kind === 'malformed') return { kind: 'malformed' }
-    const session = await requireOperatorBeforeLoad({
-      location: { href: `/admin/calls/${encodeURIComponent(data.callRef)}` },
-    })
+    const session = await readOperatorContextThroughSource()
     const source = await createAuthenticatedSourceTransport()
     const result = await source.query(api.adminConsoleObjects.readAdminObject, { ref: parsed.ref })
-    const found = result.kind === 'call'
-    captureAdminEvent(
-      principalRef(session.principalRef),
-      'admin_lookup',
-      buildAdminEventProperties('admin_lookup', { refKind: 'call', found }),
-    )
+    if (session.kind === 'authorized') {
+      captureAdminEvent(
+        principalRef(session.principalRef),
+        'admin_lookup',
+        buildAdminEventProperties('admin_lookup', { refKind: 'call', found: result.kind === 'call' }),
+      )
+    }
     if (result.kind === 'call' || result.kind === 'object_not_found' || result.kind === 'refused') {
       return result
     }
