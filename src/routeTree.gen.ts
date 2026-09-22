@@ -57,6 +57,7 @@ import { Route as DotwellKnownHttpMessageSignaturesDirectoryRouteImport } from '
 import { Route as DotwellKnownApiCatalogRouteImport } from './routes/[.]well-known/api-catalog'
 import { Route as SlugUcpRouteImport } from './routes/$slug.ucp'
 import { Route as OperatorOwnerIndexRouteImport } from './routes/_operator/owner.index'
+import { Route as OperatorAdminIndexRouteImport } from './routes/_operator/admin.index'
 import { Route as ToolsProviderHostSlugRouteImport } from './routes/tools.$providerHost.$slug'
 import { Route as ApiV1SandboxReferenceRouteImport } from './routes/api.v1.sandbox-reference'
 import { Route as ApiV1ReleaseRouteImport } from './routes/api.v1.release'
@@ -79,6 +80,7 @@ import { Route as ApiClerkWebhookRouteImport } from './routes/api.clerk.webhook'
 import { Route as ApiChatAnonymousRouteImport } from './routes/api.chat.anonymous'
 import { Route as ApiBusinessesSearchRouteImport } from './routes/api.businesses.search'
 import { Route as ApiBusinessesSlugRouteImport } from './routes/api.businesses.$slug'
+import { Route as ApiAdminMetricsExportRouteImport } from './routes/api.admin.metrics-export'
 import { Route as OperatorOwnerWorkspaceRouteImport } from './routes/_operator/owner.workspace'
 import { Route as OperatorOwnerTeamRouteImport } from './routes/_operator/owner.team'
 import { Route as OperatorOwnerSettingsRouteImport } from './routes/_operator/owner.settings'
@@ -89,7 +91,7 @@ import { Route as OperatorCallsCallRefRouteImport } from './routes/_operator/cal
 import { Route as OperatorAgentAccessAuthorizeRouteImport } from './routes/_operator/agent-access.authorize'
 import { Route as OperatorAdminSearchRouteImport } from './routes/_operator/admin.search'
 import { Route as OperatorAdminProvidersRouteImport } from './routes/_operator/admin.providers'
-import { Route as OperatorAdminIndexHealthRouteImport } from './routes/_operator/admin.index-health'
+import { Route as OperatorAdminMetricsRouteImport } from './routes/_operator/admin.metrics'
 import { Route as OperatorAdminExceptionsRouteImport } from './routes/_operator/admin.exceptions'
 import { Route as OperatorAdminAuditEventsRouteImport } from './routes/_operator/admin.audit-events'
 import { Route as ApiV1ToolsQuoteRouteImport } from './routes/api.v1.tools.quote'
@@ -385,6 +387,11 @@ const OperatorOwnerIndexRoute = OperatorOwnerIndexRouteImport.update({
   path: '/owner/',
   getParentRoute: () => OperatorRoute,
 } as any)
+const OperatorAdminIndexRoute = OperatorAdminIndexRouteImport.update({
+  id: '/admin/',
+  path: '/admin/',
+  getParentRoute: () => OperatorRoute,
+} as any)
 const ToolsProviderHostSlugRoute = ToolsProviderHostSlugRouteImport.update({
   id: '/tools/$providerHost/$slug',
   path: '/tools/$providerHost/$slug',
@@ -499,6 +506,11 @@ const ApiBusinessesSlugRoute = ApiBusinessesSlugRouteImport.update({
   path: '/$slug',
   getParentRoute: () => ApiBusinessesRoute,
 } as any)
+const ApiAdminMetricsExportRoute = ApiAdminMetricsExportRouteImport.update({
+  id: '/api/admin/metrics-export',
+  path: '/api/admin/metrics-export',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const OperatorOwnerWorkspaceRoute = OperatorOwnerWorkspaceRouteImport.update({
   id: '/owner/workspace',
   path: '/owner/workspace',
@@ -550,12 +562,11 @@ const OperatorAdminProvidersRoute = OperatorAdminProvidersRouteImport.update({
   path: '/admin/providers',
   getParentRoute: () => OperatorRoute,
 } as any)
-const OperatorAdminIndexHealthRoute =
-  OperatorAdminIndexHealthRouteImport.update({
-    id: '/admin/index-health',
-    path: '/admin/index-health',
-    getParentRoute: () => OperatorRoute,
-  } as any)
+const OperatorAdminMetricsRoute = OperatorAdminMetricsRouteImport.update({
+  id: '/admin/metrics',
+  path: '/admin/metrics',
+  getParentRoute: () => OperatorRoute,
+} as any)
 const OperatorAdminExceptionsRoute = OperatorAdminExceptionsRouteImport.update({
   id: '/admin/exceptions',
   path: '/admin/exceptions',
@@ -889,7 +900,7 @@ export interface FileRoutesByFullPath {
   '/tools/$toolRef': typeof ToolsToolRefRoute
   '/admin/audit-events': typeof OperatorAdminAuditEventsRoute
   '/admin/exceptions': typeof OperatorAdminExceptionsRoute
-  '/admin/index-health': typeof OperatorAdminIndexHealthRoute
+  '/admin/metrics': typeof OperatorAdminMetricsRoute
   '/admin/providers': typeof OperatorAdminProvidersRouteWithChildren
   '/admin/search': typeof OperatorAdminSearchRoute
   '/agent-access/authorize': typeof OperatorAgentAccessAuthorizeRoute
@@ -900,6 +911,7 @@ export interface FileRoutesByFullPath {
   '/owner/settings': typeof OperatorOwnerSettingsRoute
   '/owner/team': typeof OperatorOwnerTeamRoute
   '/owner/workspace': typeof OperatorOwnerWorkspaceRoute
+  '/api/admin/metrics-export': typeof ApiAdminMetricsExportRoute
   '/api/businesses/$slug': typeof ApiBusinessesSlugRoute
   '/api/businesses/search': typeof ApiBusinessesSearchRoute
   '/api/chat/anonymous': typeof ApiChatAnonymousRoute
@@ -922,6 +934,7 @@ export interface FileRoutesByFullPath {
   '/api/v1/release': typeof ApiV1ReleaseRoute
   '/api/v1/sandbox-reference': typeof ApiV1SandboxReferenceRoute
   '/tools/$providerHost/$slug': typeof ToolsProviderHostSlugRoute
+  '/admin/': typeof OperatorAdminIndexRoute
   '/owner/': typeof OperatorOwnerIndexRoute
   '/admin/agents/$principalRef': typeof OperatorAdminAgentsPrincipalRefRoute
   '/admin/calls/$callRef': typeof OperatorAdminCallsCallRefRoute
@@ -1022,7 +1035,7 @@ export interface FileRoutesByTo {
   '/tools/$toolRef': typeof ToolsToolRefRoute
   '/admin/audit-events': typeof OperatorAdminAuditEventsRoute
   '/admin/exceptions': typeof OperatorAdminExceptionsRoute
-  '/admin/index-health': typeof OperatorAdminIndexHealthRoute
+  '/admin/metrics': typeof OperatorAdminMetricsRoute
   '/admin/providers': typeof OperatorAdminProvidersRouteWithChildren
   '/admin/search': typeof OperatorAdminSearchRoute
   '/agent-access/authorize': typeof OperatorAgentAccessAuthorizeRoute
@@ -1033,6 +1046,7 @@ export interface FileRoutesByTo {
   '/owner/settings': typeof OperatorOwnerSettingsRoute
   '/owner/team': typeof OperatorOwnerTeamRoute
   '/owner/workspace': typeof OperatorOwnerWorkspaceRoute
+  '/api/admin/metrics-export': typeof ApiAdminMetricsExportRoute
   '/api/businesses/$slug': typeof ApiBusinessesSlugRoute
   '/api/businesses/search': typeof ApiBusinessesSearchRoute
   '/api/chat/anonymous': typeof ApiChatAnonymousRoute
@@ -1055,6 +1069,7 @@ export interface FileRoutesByTo {
   '/api/v1/release': typeof ApiV1ReleaseRoute
   '/api/v1/sandbox-reference': typeof ApiV1SandboxReferenceRoute
   '/tools/$providerHost/$slug': typeof ToolsProviderHostSlugRoute
+  '/admin': typeof OperatorAdminIndexRoute
   '/owner': typeof OperatorOwnerIndexRoute
   '/admin/agents/$principalRef': typeof OperatorAdminAgentsPrincipalRefRoute
   '/admin/calls/$callRef': typeof OperatorAdminCallsCallRefRoute
@@ -1157,7 +1172,7 @@ export interface FileRoutesById {
   '/tools/$toolRef': typeof ToolsToolRefRoute
   '/_operator/admin/audit-events': typeof OperatorAdminAuditEventsRoute
   '/_operator/admin/exceptions': typeof OperatorAdminExceptionsRoute
-  '/_operator/admin/index-health': typeof OperatorAdminIndexHealthRoute
+  '/_operator/admin/metrics': typeof OperatorAdminMetricsRoute
   '/_operator/admin/providers': typeof OperatorAdminProvidersRouteWithChildren
   '/_operator/admin/search': typeof OperatorAdminSearchRoute
   '/_operator/agent-access/authorize': typeof OperatorAgentAccessAuthorizeRoute
@@ -1168,6 +1183,7 @@ export interface FileRoutesById {
   '/_operator/owner/settings': typeof OperatorOwnerSettingsRoute
   '/_operator/owner/team': typeof OperatorOwnerTeamRoute
   '/_operator/owner/workspace': typeof OperatorOwnerWorkspaceRoute
+  '/api/admin/metrics-export': typeof ApiAdminMetricsExportRoute
   '/api/businesses/$slug': typeof ApiBusinessesSlugRoute
   '/api/businesses/search': typeof ApiBusinessesSearchRoute
   '/api/chat/anonymous': typeof ApiChatAnonymousRoute
@@ -1190,6 +1206,7 @@ export interface FileRoutesById {
   '/api/v1/release': typeof ApiV1ReleaseRoute
   '/api/v1/sandbox-reference': typeof ApiV1SandboxReferenceRoute
   '/tools/$providerHost/$slug': typeof ToolsProviderHostSlugRoute
+  '/_operator/admin/': typeof OperatorAdminIndexRoute
   '/_operator/owner/': typeof OperatorOwnerIndexRoute
   '/_operator/admin/agents/$principalRef': typeof OperatorAdminAgentsPrincipalRefRoute
   '/_operator/admin/calls/$callRef': typeof OperatorAdminCallsCallRefRoute
@@ -1292,7 +1309,7 @@ export interface FileRouteTypes {
     | '/tools/$toolRef'
     | '/admin/audit-events'
     | '/admin/exceptions'
-    | '/admin/index-health'
+    | '/admin/metrics'
     | '/admin/providers'
     | '/admin/search'
     | '/agent-access/authorize'
@@ -1303,6 +1320,7 @@ export interface FileRouteTypes {
     | '/owner/settings'
     | '/owner/team'
     | '/owner/workspace'
+    | '/api/admin/metrics-export'
     | '/api/businesses/$slug'
     | '/api/businesses/search'
     | '/api/chat/anonymous'
@@ -1325,6 +1343,7 @@ export interface FileRouteTypes {
     | '/api/v1/release'
     | '/api/v1/sandbox-reference'
     | '/tools/$providerHost/$slug'
+    | '/admin/'
     | '/owner/'
     | '/admin/agents/$principalRef'
     | '/admin/calls/$callRef'
@@ -1425,7 +1444,7 @@ export interface FileRouteTypes {
     | '/tools/$toolRef'
     | '/admin/audit-events'
     | '/admin/exceptions'
-    | '/admin/index-health'
+    | '/admin/metrics'
     | '/admin/providers'
     | '/admin/search'
     | '/agent-access/authorize'
@@ -1436,6 +1455,7 @@ export interface FileRouteTypes {
     | '/owner/settings'
     | '/owner/team'
     | '/owner/workspace'
+    | '/api/admin/metrics-export'
     | '/api/businesses/$slug'
     | '/api/businesses/search'
     | '/api/chat/anonymous'
@@ -1458,6 +1478,7 @@ export interface FileRouteTypes {
     | '/api/v1/release'
     | '/api/v1/sandbox-reference'
     | '/tools/$providerHost/$slug'
+    | '/admin'
     | '/owner'
     | '/admin/agents/$principalRef'
     | '/admin/calls/$callRef'
@@ -1559,7 +1580,7 @@ export interface FileRouteTypes {
     | '/tools/$toolRef'
     | '/_operator/admin/audit-events'
     | '/_operator/admin/exceptions'
-    | '/_operator/admin/index-health'
+    | '/_operator/admin/metrics'
     | '/_operator/admin/providers'
     | '/_operator/admin/search'
     | '/_operator/agent-access/authorize'
@@ -1570,6 +1591,7 @@ export interface FileRouteTypes {
     | '/_operator/owner/settings'
     | '/_operator/owner/team'
     | '/_operator/owner/workspace'
+    | '/api/admin/metrics-export'
     | '/api/businesses/$slug'
     | '/api/businesses/search'
     | '/api/chat/anonymous'
@@ -1592,6 +1614,7 @@ export interface FileRouteTypes {
     | '/api/v1/release'
     | '/api/v1/sandbox-reference'
     | '/tools/$providerHost/$slug'
+    | '/_operator/admin/'
     | '/_operator/owner/'
     | '/_operator/admin/agents/$principalRef'
     | '/_operator/admin/calls/$callRef'
@@ -1688,6 +1711,7 @@ export interface RootRouteChildren {
   TThreadIdRoute: typeof TThreadIdRoute
   TNewRoute: typeof TNewRoute
   ToolsToolRefRoute: typeof ToolsToolRefRoute
+  ApiAdminMetricsExportRoute: typeof ApiAdminMetricsExportRoute
   ApiChatAnonymousRoute: typeof ApiChatAnonymousRoute
   ApiClerkWebhookRoute: typeof ApiClerkWebhookRoute
   ApiDiscoveryExamplesRoute: typeof ApiDiscoveryExamplesRoute
@@ -2072,6 +2096,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof OperatorOwnerIndexRouteImport
       parentRoute: typeof OperatorRoute
     }
+    '/_operator/admin/': {
+      id: '/_operator/admin/'
+      path: '/admin'
+      fullPath: '/admin/'
+      preLoaderRoute: typeof OperatorAdminIndexRouteImport
+      parentRoute: typeof OperatorRoute
+    }
     '/tools/$providerHost/$slug': {
       id: '/tools/$providerHost/$slug'
       path: '/tools/$providerHost/$slug'
@@ -2226,6 +2257,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiBusinessesSlugRouteImport
       parentRoute: typeof ApiBusinessesRoute
     }
+    '/api/admin/metrics-export': {
+      id: '/api/admin/metrics-export'
+      path: '/api/admin/metrics-export'
+      fullPath: '/api/admin/metrics-export'
+      preLoaderRoute: typeof ApiAdminMetricsExportRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/_operator/owner/workspace': {
       id: '/_operator/owner/workspace'
       path: '/owner/workspace'
@@ -2296,11 +2334,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof OperatorAdminProvidersRouteImport
       parentRoute: typeof OperatorRoute
     }
-    '/_operator/admin/index-health': {
-      id: '/_operator/admin/index-health'
-      path: '/admin/index-health'
-      fullPath: '/admin/index-health'
-      preLoaderRoute: typeof OperatorAdminIndexHealthRouteImport
+    '/_operator/admin/metrics': {
+      id: '/_operator/admin/metrics'
+      path: '/admin/metrics'
+      fullPath: '/admin/metrics'
+      preLoaderRoute: typeof OperatorAdminMetricsRouteImport
       parentRoute: typeof OperatorRoute
     }
     '/_operator/admin/exceptions': {
@@ -2719,7 +2757,7 @@ interface OperatorRouteChildren {
   OperatorAgentAccessRoute: typeof OperatorAgentAccessRouteWithChildren
   OperatorAdminAuditEventsRoute: typeof OperatorAdminAuditEventsRoute
   OperatorAdminExceptionsRoute: typeof OperatorAdminExceptionsRoute
-  OperatorAdminIndexHealthRoute: typeof OperatorAdminIndexHealthRoute
+  OperatorAdminMetricsRoute: typeof OperatorAdminMetricsRoute
   OperatorAdminProvidersRoute: typeof OperatorAdminProvidersRouteWithChildren
   OperatorAdminSearchRoute: typeof OperatorAdminSearchRoute
   OperatorCallsCallRefRoute: typeof OperatorCallsCallRefRoute
@@ -2729,6 +2767,7 @@ interface OperatorRouteChildren {
   OperatorOwnerSettingsRoute: typeof OperatorOwnerSettingsRoute
   OperatorOwnerTeamRoute: typeof OperatorOwnerTeamRoute
   OperatorOwnerWorkspaceRoute: typeof OperatorOwnerWorkspaceRoute
+  OperatorAdminIndexRoute: typeof OperatorAdminIndexRoute
   OperatorOwnerIndexRoute: typeof OperatorOwnerIndexRoute
   OperatorAdminAgentsPrincipalRefRoute: typeof OperatorAdminAgentsPrincipalRefRoute
   OperatorAdminCallsCallRefRoute: typeof OperatorAdminCallsCallRefRoute
@@ -2744,7 +2783,7 @@ const OperatorRouteChildren: OperatorRouteChildren = {
   OperatorAgentAccessRoute: OperatorAgentAccessRouteWithChildren,
   OperatorAdminAuditEventsRoute: OperatorAdminAuditEventsRoute,
   OperatorAdminExceptionsRoute: OperatorAdminExceptionsRoute,
-  OperatorAdminIndexHealthRoute: OperatorAdminIndexHealthRoute,
+  OperatorAdminMetricsRoute: OperatorAdminMetricsRoute,
   OperatorAdminProvidersRoute: OperatorAdminProvidersRouteWithChildren,
   OperatorAdminSearchRoute: OperatorAdminSearchRoute,
   OperatorCallsCallRefRoute: OperatorCallsCallRefRoute,
@@ -2754,6 +2793,7 @@ const OperatorRouteChildren: OperatorRouteChildren = {
   OperatorOwnerSettingsRoute: OperatorOwnerSettingsRoute,
   OperatorOwnerTeamRoute: OperatorOwnerTeamRoute,
   OperatorOwnerWorkspaceRoute: OperatorOwnerWorkspaceRoute,
+  OperatorAdminIndexRoute: OperatorAdminIndexRoute,
   OperatorOwnerIndexRoute: OperatorOwnerIndexRoute,
   OperatorAdminAgentsPrincipalRefRoute: OperatorAdminAgentsPrincipalRefRoute,
   OperatorAdminCallsCallRefRoute: OperatorAdminCallsCallRefRoute,
@@ -2945,6 +2985,7 @@ const rootRouteChildren: RootRouteChildren = {
   TThreadIdRoute: TThreadIdRoute,
   TNewRoute: TNewRoute,
   ToolsToolRefRoute: ToolsToolRefRoute,
+  ApiAdminMetricsExportRoute: ApiAdminMetricsExportRoute,
   ApiChatAnonymousRoute: ApiChatAnonymousRoute,
   ApiClerkWebhookRoute: ApiClerkWebhookRoute,
   ApiDiscoveryExamplesRoute: ApiDiscoveryExamplesRoute,
