@@ -2426,6 +2426,12 @@
   {
     "visibility": "internal",
     "module": "moneyManagedCallRemedyActions",
+    "method": "resolveInvalidResult",
+    "kind": "action"
+  },
+  {
+    "visibility": "internal",
+    "module": "moneyManagedCallRemedyActions",
     "method": "resolveLostResult",
     "kind": "action"
   },
@@ -2710,6 +2716,12 @@
     "module": "moneyX402PaymentAttempts",
     "method": "recordX402PaymentSigningIntent",
     "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "moneyX402PaymentAttempts",
+    "method": "responseRecoveryIsCurrent",
+    "kind": "query"
   },
   {
     "visibility": "internal",
