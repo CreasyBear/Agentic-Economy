@@ -4,7 +4,7 @@ import { v } from 'convex/values'
 import { degradeBackend } from '@/lib/observability/degrade-backend'
 import { admitFacilitatorDiscoveryItems } from '@/modules/capability-supply/server'
 import { projectX402DirectoryEntry, readX402DirectoryRawPage } from '@/modules/market/x402-directory.server'
-import { x402DirectoryResolveInputSchema, type X402DirectoryResolution } from '@/modules/market/x402-directory'
+import { x402DirectoryResolveInputSchema, type X402DirectoryResolution, type X402DirectoryResolutionReason } from '@/modules/market/x402-directory'
 import type { X402DirectoryEntry } from '@/modules/market/x402-directory'
 import { directoryEntryMatchesFilters, isDirectoryEntryEligible } from '@/modules/market/x402-directory-index'
 import { directoryMetadataFlags } from '@/modules/market/x402-directory-metadata'
@@ -29,6 +29,31 @@ function directoryResolutionEligible(entry: X402DirectoryEntry): boolean {
   return isDirectoryEntryEligible({ hasOutputSchema: flags.hasOutputSchema, hasOutputExample: flags.hasOutputExample, payersOrder })
 }
 
+function boundedResolutionReason(reason: string): X402DirectoryResolutionReason {
+  switch (reason) {
+    case 'query_invalid':
+    case 'resource_filters_mismatch':
+    case 'resource_not_found':
+    case 'source_unavailable':
+    case 'admission_unavailable':
+    case 'tool_unavailable':
+    case 'bazaar_missing':
+    case 'bazaar_discovery_invalid':
+    case 'schema_missing':
+    case 'transport_unsupported':
+    case 'scheme_unsupported':
+    case 'chain_unsupported':
+    case 'asset_unsupported':
+    case 'amount_invalid':
+    case 'payment_terms_invalid':
+    case 'resource_invalid':
+    case 'source_invalid':
+      return reason
+    default:
+      return 'source_unavailable'
+  }
+}
+
 /** Resolve only a server-retrieved directory resource selected by the customer. */
 export const resolve = action({
   args: { resource: v.string(), query: v.optional(v.string()), offset: v.optional(v.number()), network: v.optional(v.string()), provider: v.optional(v.string()), maxUsdPrice: v.optional(v.number()) },
@@ -48,7 +73,9 @@ export const resolve = action({
       selected = JSON.parse(indexed.sourceJson) as unknown
     }
     else if (indexed.kind === 'not_found') return { kind: 'unavailable', reason: 'resource_not_found' }
-    else if (indexed.reason !== 'index_unavailable') return indexed
+    else if (indexed.reason !== 'index_unavailable') {
+      return { kind: 'unavailable', reason: boundedResolutionReason(indexed.reason) }
+    }
     else {
       const page = await readX402DirectoryRawPage(context)
       if (page.kind === 'unavailable') return page

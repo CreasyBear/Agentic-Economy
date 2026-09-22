@@ -1,13 +1,15 @@
-import { Await } from '@tanstack/react-router'
+import { Await, Link } from '@tanstack/react-router'
 
 import { AePageHeader } from '@/components/ae/layout/AePageHeader'
 import { AePublicPage } from '@/components/ae/layout/AePublicPage'
 import { AePageState } from '@/components/ae/layout/AePageState'
+import { buttonVariants } from '@/components/ui/button-variants'
 import { directoryPrice, directoryPriceContext, directoryTitle } from '@/modules/market/directory-card.view-model'
 import type { ToolDetailPresentation } from '@/modules/market/tool-detail-presentation'
 
 import { MarketBackButton } from './MarketBackButton'
 import { PublicToolDetail, toolUnavailablePresentation } from './PublicToolDetail'
+import { TOOL_UNAVAILABLE_COPY } from './public-tool-detail.contracts'
 import type {
   AeDirectoryToolCanonicalPageProps,
   DirectoryEntrySummaryPageProps,
@@ -57,7 +59,9 @@ function DirectoryEntrySummaryPage({ entry, upstream, readiness }: DirectoryEntr
             : <div role="status" className="grid gap-1 text-sm">
                 <p className="font-medium">{readiness.title}</p>
                 <p className="text-muted-foreground">{readiness.description}</p>
-                <a href="" className="text-sm underline underline-offset-4">Check again</a>
+                <Link to={readiness.action.to} className="text-sm underline underline-offset-4">
+                  {readiness.action.label}
+                </Link>
               </div>}
         </div>
       </div>
@@ -66,15 +70,25 @@ function DirectoryEntrySummaryPage({ entry, upstream, readiness }: DirectoryEntr
 }
 
 function DirectoryEntryUnavailable({ metadata }: DirectoryEntryUnavailableProps) {
-  const presentation = metadata.kind === 'not_found'
-    ? { tone: 'neutral' as const, title: 'This Tool is unknown or no longer listed', description: 'AE has no current directory entry for this reference.' }
-    : { tone: 'warning' as const, title: 'Tool details are unavailable', description: metadata.reason === 'query_invalid' ? 'The Tool reference is malformed.' : 'AE cannot verify the current directory entry right now.' }
+  const reason = metadata.kind === 'not_found'
+    ? 'resource_not_found'
+    : metadata.reason === 'query_invalid'
+      ? 'query_invalid'
+      : 'source_unavailable'
+  const presentation = TOOL_UNAVAILABLE_COPY[reason]
   return (
     <AePageState
-      tone={presentation.tone}
+      tone={presentation.action.to === '/status' ? 'warning' : 'neutral'}
       title={presentation.title}
-      description={presentation.description}
-      action={<MarketBackButton label="Browse current Tools" className="min-h-touch" />}
+      description={`${presentation.cause} ${presentation.nextStep}`}
+      action={(
+        <Link
+          to={presentation.action.to}
+          className={buttonVariants({ className: 'min-h-touch' })}
+        >
+          {presentation.action.label}
+        </Link>
+      )}
     />
   )
 }

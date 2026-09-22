@@ -7,6 +7,7 @@ import { readPublicToolDetailRouteServer } from '@/modules/registry/tool-detail-
 
 export type ToolDetailPresentationResult =
   | PublicToolDetailRouteResult
+  | Extract<X402DirectoryResolution, { kind: 'unavailable' }>
   | Readonly<{ kind: 'invalid_ref'; toolRef: string }>
 
 export type ToolDetailPresentation = Readonly<{
@@ -32,7 +33,7 @@ export async function resolveDirectoryToolDetail(
     const resolution = await prepareX402DirectoryResourceServer({ data: { resource } })
       .catch((): X402DirectoryResolution => ({ kind: 'unavailable', reason: 'source_unavailable' }))
     if (resolution.kind !== 'ready') {
-      return { result: { kind: 'source_unavailable', toolRef: resource } }
+      return { result: { kind: 'unavailable', reason: resolution.reason } }
     }
     toolRef = resolution.toolRef
   }

@@ -27,6 +27,7 @@ import {
 
 const readDetailMock = vi.hoisted(() => vi.fn())
 const readCanonicalMock = vi.hoisted(() => vi.fn())
+const prepareDirectoryMock = vi.hoisted(() => vi.fn())
 
 vi.mock('@/modules/registry/tool-detail-route.functions', () => ({
   readPublicToolDetailRouteServer: readDetailMock,
@@ -34,9 +35,15 @@ vi.mock('@/modules/registry/tool-detail-route.functions', () => ({
 vi.mock('@/modules/market/x402-directory-index.functions', () => ({
   readX402DirectoryCanonicalUrlForToolServer: readCanonicalMock,
 }))
+vi.mock('@/modules/market/x402-directory.functions', () => ({
+  prepareX402DirectoryResourceServer: prepareDirectoryMock,
+}))
 
 import { PublicToolDetail, Route } from '@/routes/tools.$toolRef'
-import type { ToolDetailPresentationResult } from '@/modules/market/tool-detail-presentation'
+import {
+  resolveDirectoryToolDetail,
+  type ToolDetailPresentationResult,
+} from '@/modules/market/tool-detail-presentation'
 
 const sourceRecord = {
   operationId: 'operation:invoice.extract',
@@ -211,6 +218,7 @@ afterEach(() => {
   cleanup()
   readDetailMock.mockReset()
   readCanonicalMock.mockReset()
+  prepareDirectoryMock.mockReset()
 })
 
 describe('/tools/$toolRef', () => {
@@ -549,31 +557,68 @@ describe('/tools/$toolRef', () => {
       toolRef: tool.toolRef,
       navigation: [],
       expectedTitle: /unknown or no longer current/i,
-    },
-    {
-      kind: 'unavailable' as const,
-      schemaVersion: PublicToolRegistrySchemaVersion,
-      toolRef: tool.toolRef,
-      reason: 'temporarily_unavailable' as const,
-      navigation: [],
-      expectedTitle: /not currently available/i,
+      expectedAction: 'Browse current Tools',
     },
     {
       kind: 'source_unavailable' as const,
       toolRef: tool.toolRef,
       expectedTitle: /details are unavailable/i,
+      expectedAction: 'Check Status',
     },
-  ])('keeps the truth ceiling for $kind', ({ expectedTitle, ...result }) => {
+  ])('keeps the truth ceiling for $kind', ({ expectedTitle, expectedAction, ...result }) => {
     renderWithRouter(result)
 
-    expect(screen.getByRole('heading', { level: 1, name: expectedTitle })).toBeTruthy()
-    expect(screen.getByRole('link', { name: 'Browse current Tools' })).toBeTruthy()
-    expect(screen.queryByRole('link', { name: 'Back to market' })).toBeNull()
-    expect(screen.queryByText('USD 1.25')).toBeNull()
-    expect(screen.queryByText('digest:current-price')).toBeNull()
-    expect(screen.queryByRole('complementary', { name: 'Use this capability' })).toBeNull()
-    expect(screen.queryByText(/npm run -s ae -- invoke/)).toBeNull()
-    expect(screen.queryByText(/npm run -s ae -- recover/)).toBeNull()
+    const main = screen.getByRole('main')
+    expect(within(main).getByRole('heading', { level: 1, name: expectedTitle })).toBeTruthy()
+    expect(within(main).getByRole('link', { name: expectedAction })).toBeTruthy()
+    expect(within(main).queryByRole('link', { name: 'Back to market' })).toBeNull()
+    expect(within(main).queryByText('USD 1.25')).toBeNull()
+    expect(within(main).queryByText('digest:current-price')).toBeNull()
+    expect(within(main).queryByRole('complementary', { name: 'Use this capability' })).toBeNull()
+    expect(within(main).queryByText(/npm run -s ae -- invoke/)).toBeNull()
+    expect(within(main).queryByText(/npm run -s ae -- recover/)).toBeNull()
+  })
+
+  it('preserves the directory admission refusal reason', async () => {
+    prepareDirectoryMock.mockResolvedValue({ kind: 'unavailable', reason: 'schema_missing' })
+
+    await expect(resolveDirectoryToolDetail('https://provider.example/tool')).resolves.toEqual({
+      result: { kind: 'unavailable', reason: 'schema_missing' },
+    })
+    expect(readDetailMock).not.toHaveBeenCalled()
+  })
+
+  it('offers retry and Status when the listing source is temporarily unavailable', () => {
+    renderWithRouter({ kind: 'unavailable', reason: 'source_unavailable' })
+
+    const main = screen.getByRole('main')
+    expect(within(main).getByText(/Try again/)).toBeTruthy()
+    expect(within(main).getByRole('link', { name: 'Check Status' })).toBeTruthy()
+  })
+
+  it('names a permanent Provider listing refusal without offering retry', () => {
+    renderWithRouter({ kind: 'unavailable', reason: 'schema_missing' })
+
+    const main = screen.getByRole('main')
+    expect(within(main).getByText(/This Tool cannot be called through Agentic Economy yet:.*required schema.*Provider must update the listing/i)).toBeTruthy()
+    expect(within(main).getByRole('link', { name: 'Browse Tools' })).toBeTruthy()
+    expect(within(main).queryByText(/Try again/)).toBeNull()
+  })
+
+  it('explains when a Tool is no longer listed', () => {
+    renderWithRouter({ kind: 'unavailable', reason: 'resource_not_found' })
+
+    const main = screen.getByRole('main')
+    expect(within(main).getByText(/^This Tool is no longer listed\./)).toBeTruthy()
+    expect(within(main).getByRole('link', { name: 'Browse Tools' })).toBeTruthy()
+  })
+
+  it('explains an invalid directory link', () => {
+    renderWithRouter({ kind: 'unavailable', reason: 'query_invalid' })
+
+    const main = screen.getByRole('main')
+    expect(within(main).getByText(/^This link is not valid\./)).toBeTruthy()
+    expect(within(main).getByRole('link', { name: 'Browse Tools' })).toBeTruthy()
   })
 
   it('renders malformed references distinctly and offers a plain way back', () => {
