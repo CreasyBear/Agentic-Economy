@@ -1,5 +1,3 @@
-import { env } from './_generated/server'
-import { degradeBackend } from '@/lib/observability/degrade-backend'
 import type { JsonValue } from '@/modules/capability-contract/public'
 import { DEV_SEED_BUSINESS_FIXTURES, type DevSeedBusinessFixture } from '../src/modules/dev/public'
 import {
@@ -112,11 +110,12 @@ export type SandboxToolSpec = Readonly<{
   requestField: string
   /** Output property the completion evidence is read from. */
   resultField: string
+  additionalRequestFields?: readonly string[]
   inputSchema: Readonly<Record<string, unknown>>
   outputSchema: Readonly<Record<string, unknown>>
   recovery: 'retry_safe' | 'reconcile_required'
   endpointUrl: string
-  method: 'POST'
+  method: 'GET' | 'POST'
   pricingSummary: string
   /**
    * The publication no longer carries a display price of its own; every
@@ -134,6 +133,7 @@ export type SandboxToolSpec = Readonly<{
   authenticationSummary: string
   accessPathSummary: string
   searchTerms: readonly string[]
+  inputExamples?: readonly Readonly<{ label?: string; input: Readonly<Record<string, JsonValue>> }>[]
   /**
    * How the publication is imported. An `ae_envelope` source may only carry an
    * `http-json:v1` binding (publication/draft.ts pins one adapter per source
@@ -160,77 +160,61 @@ export const sandboxToolBindingId = (spec: SandboxToolSpec) => `capability-bindi
 export const sandboxToolAccessPathRef = (spec: SandboxToolSpec) => `access:${spec.businessSlug}:x402`
 export const sandboxToolSourceRevision = (spec: SandboxToolSpec) => `seed:sandbox:${spec.businessSlug}:v1`
 export const sandboxToolEvidenceRef = (spec: SandboxToolSpec) => `private:evidence:dev-seed:${spec.businessSlug}`
-
-/*
- * The sandbox Tool price facts.
- *
- * `/tools/<ref>` and `ae describe` read the capability-supply publication
- * price; the business page reads the catalog Offering's `price` /
- * `pricingSummary`. Both are published below from the same spec constants, so a
- * reader can never be quoted two different numbers for the same Tool.
- */
 export const SANDBOX_TOOL_BUSINESS_SLUG = 'sandbox-aecon-reference'
-export const SANDBOX_TOOL_LABEL = 'AEcon sandbox reference Tool'
-export const SANDBOX_TOOL_CAPABILITY_ID = 'sandbox.aecon-reference'
+export const SANDBOX_TOOL_LABEL = 'AEcon sandbox FX reference Tool'
+export const SANDBOX_TOOL_CAPABILITY_ID = 'sandbox.frankfurter-fx'
 // The sandbox commercial-policy fixture every sandbox money gate resolves to
 // (src/modules/money/internal/commercial-policy.ts). Declared on the seeded
 // Tool so the fixture the Quote path admits is visible in the seed itself.
 export const SANDBOX_TOOL_COMMERCIAL_FIXTURE = 'managed_x402_deterministic_v1'
 
 /*
- * The reference Tool's endpoint is AEcon's own sandbox counterparty
- * (`src/routes/api.v1.sandbox-reference.ts`), reached through this
- * deployment's own public origin - never a hard-coded host. On loopback (local
- * dev) the readiness probe's SSRF guard refuses the target by design, so the
- * Tool stays unlisted locally; on a hosted HTTPS origin it becomes healthy
- * (Wells 1+2 decision D9 A). Without `AE_SITE_URL` there is no origin to
- * publish against, so the Tool is skipped rather than published against a
- * guessed URL.
+ * The local owner sandbox uses Frankfurter's real public, keyless HTTPS
+ * endpoint. It passes the same production transport and access-path admission
+ * as any other Tool; no localhost or validator exception exists.
  */
-export const SANDBOX_REFERENCE_ROUTE_PATH = '/api/v1/sandbox-reference'
-export const SANDBOX_REFERENCE_SKIP_SITE_URL_MISSING = 'AE_SITE_URL_missing'
+export const SANDBOX_TOOL_ENDPOINT_URL = 'https://api.frankfurter.app/latest'
 
-export function sandboxReferenceEndpointUrl(): string | undefined {
-  const origin = env.AE_SITE_URL?.trim()
-  if (origin === undefined || origin.length === 0) return undefined
-  try {
-    const url = new URL(origin)
-    const loopback = url.hostname === 'localhost' || url.hostname === '127.0.0.1' || url.hostname === '[::1]'
-    const validOrigin = (url.protocol === 'https:' || (url.protocol === 'http:' && loopback))
-      && url.username === '' && url.password === ''
-    return validOrigin ? new URL(SANDBOX_REFERENCE_ROUTE_PATH, origin).toString() : undefined
-  } catch (cause) {
-    return degradeBackend(cause, undefined, { site: 'sandboxReferenceEndpointUrl', reason: 'invalid_response' })
-  }
+export function sandboxReferenceEndpointUrl(): string {
+  return SANDBOX_TOOL_ENDPOINT_URL
 }
 
 export function sandboxReferenceToolSpec(endpointUrl: string): SandboxToolSpec {
   return {
     businessSlug: SANDBOX_TOOL_BUSINESS_SLUG,
-    businessName: 'AEcon sandbox reference provider',
+    businessName: 'AEcon sandbox FX reference provider',
     label: SANDBOX_TOOL_LABEL,
     capabilityId: SANDBOX_TOOL_CAPABILITY_ID,
-    summary: 'Deterministic sandbox Tool that returns one structured reference result.',
-    contractDescription: 'Return a deterministic sandbox reference result for a structured request.',
-    requestField: 'request',
-    resultField: 'result',
+    summary: 'Current exchange rate for a currency pair from Frankfurter.',
+    contractDescription: 'Return the current Frankfurter exchange rate for a base and quote currency.',
+    requestField: 'from',
+    resultField: 'rates',
+    additionalRequestFields: ['to'],
     inputSchema: {
       $schema: 'https://json-schema.org/draft/2020-12/schema',
       type: 'object',
-      properties: { request: { type: 'string', minLength: 1 } },
-      required: ['request'],
+      properties: {
+        from: { type: 'string', description: 'Base currency', pattern: '^[A-Z]{3}$' },
+        to: { type: 'string', description: 'Quote currency', pattern: '^[A-Z]{3}$' },
+      },
+      required: ['from', 'to'],
       additionalProperties: false,
     },
     outputSchema: {
       $schema: 'https://json-schema.org/draft/2020-12/schema',
       type: 'object',
-      properties: { result: { type: 'string' } },
-      required: ['result'],
+      properties: {
+        amount: { type: 'number' },
+        base: { type: 'string' },
+        date: { type: 'string' },
+        rates: { type: 'object', additionalProperties: { type: 'number' } },
+      },
+      required: ['amount', 'base', 'date', 'rates'],
       additionalProperties: false,
     },
     recovery: 'retry_safe',
     endpointUrl,
-    method: 'POST',
+    method: 'GET',
     pricingSummary: SANDBOX_TOOL_PRICING_SUMMARY,
     pricingConfig: {
       version: 'pricing:v3',
@@ -246,20 +230,29 @@ export function sandboxReferenceToolSpec(endpointUrl: string): SandboxToolSpec {
       value: SANDBOX_TOOL_COMMERCIAL_FIXTURE,
     }],
     commercialFixture: SANDBOX_TOOL_COMMERCIAL_FIXTURE,
-    ownerMessage: 'Sandbox-only reference provider seeded for local Quote bring-up.',
-    sourceLabel: `Sandbox reference fixture ${SANDBOX_TOOL_COMMERCIAL_FIXTURE} ${endpointUrl}`,
-    serviceAreaSummary: 'Sandbox network only',
-    availabilitySummary: 'Always available in the sandbox environment',
-    authenticationSummary: `Sandbox x402 fixture ${SANDBOX_TOOL_COMMERCIAL_FIXTURE}.`,
-    accessPathSummary: 'Sandbox x402 access path for the seeded reference Tool.',
-    searchTerms: ['sandbox', 'sandbox reference tool', SANDBOX_TOOL_COMMERCIAL_FIXTURE],
+    ownerMessage: 'Sandbox-only FX reference provider seeded for local catalogue bring-up.',
+    sourceLabel: `Frankfurter public keyless FX endpoint ${endpointUrl}`,
+    serviceAreaSummary: 'Public internet',
+    availabilitySummary: 'Availability is checked from the public Frankfurter endpoint',
+    authenticationSummary: 'Public keyless HTTPS endpoint.',
+    accessPathSummary: 'Current Frankfurter exchange rate for a base and quote currency.',
+    searchTerms: ['sandbox', 'foreign exchange', 'currency rate', 'frankfurter'],
+    inputExamples: [{ label: 'EUR to USD', input: { from: 'EUR', to: 'USD' } }],
     source: {
       kind: 'ae_envelope',
       transport: {
         authority: { kind: 'public_upstream' },
         adapter: {
           adapterId: 'http-json:v1',
-          config: { method: 'POST', requestTimeoutMs: 10_000 },
+          config: {
+            method: 'GET',
+            query: [
+              { inputPointer: '/from', parameter: 'from' },
+              { inputPointer: '/to', parameter: 'to' },
+            ],
+            requestTimeoutMs: 5_000,
+            credential: { kind: 'none' },
+          },
         },
       },
     },
@@ -431,6 +424,8 @@ export function sandboxToolFixture(spec: SandboxToolSpec): DevSeedBusinessFixtur
     stateTerritory: 'External',
     ownerMessage: spec.ownerMessage,
     sourceLabel: spec.sourceLabel,
+    // sandboxReferenceEndpointUrl admits HTTP only for these sandbox loopback fixtures.
+    allowLoopbackSource: true,
     offerings: [{
       name: spec.label,
       category: 'API services',
@@ -447,29 +442,37 @@ export function sandboxToolFixture(spec: SandboxToolSpec): DevSeedBusinessFixtur
 }
 
 export function sandboxToolContractMetadata(spec: SandboxToolSpec): Readonly<Record<string, unknown>> {
+  const requestFields = [spec.requestField, ...(spec.additionalRequestFields ?? [])]
   return {
     capabilityId: spec.capabilityId,
     version: 1,
     name: spec.label,
     description: spec.contractDescription,
+    ...(spec.inputExamples === undefined ? {} : { inputExamples: spec.inputExamples }),
     customerAnnotations: [
-      { annotationId: 'request', document: 'input', pointer: `/${spec.requestField}`, label: 'Request', role: 'request' },
+      ...requestFields.map((field, index) => ({
+        annotationId: index === 0 ? 'request' : `request_${field}`,
+        document: 'input',
+        pointer: `/${field}`,
+        label: index === 0 ? 'Request' : field,
+        role: 'request',
+      })),
       { annotationId: 'result', document: 'output', pointer: `/${spec.resultField}`, label: 'Result', role: 'completion_evidence' },
     ],
-    dataUse: [{
-      effectId: 'request_release',
-      inputPointer: `/${spec.requestField}`,
+    dataUse: requestFields.map((field) => ({
+      effectId: `request_release_${field}`,
+      inputPointer: `/${field}`,
       classification: 'personal',
       phase: 'execution',
       recipient: { kind: 'selected_binding' },
       purposes: ['return_requested_result'],
-    }],
-    effects: [{
-      effectId: 'request_release',
+    })),
+    effects: requestFields.map((field) => ({
+      effectId: `request_release_${field}`,
       class: 'data_release',
       authority: 'mandate_or_explicit',
       reversibility: 'irreversible',
-    }],
+    })),
     evidence: [{ evidenceId: 'result', outputPointer: `/${spec.resultField}`, purpose: 'completion' }],
     lifecycle: { idempotency: 'required', recovery: spec.recovery },
   }

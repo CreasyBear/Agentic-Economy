@@ -600,9 +600,10 @@ export async function runStages(
 
 const seedFix = (reference: string) => `${reference} must exist and be idempotent; add it in convex/devSeed.ts or rerun \`npm run dev:local -- --skip-seed\``
 
-export function buildStages({ skipScan = false, skipSeed = false, run }: {
+export function buildStages({ skipScan = false, skipSeed = false, ownerAccountRef, run }: {
   skipScan?: boolean
   skipSeed?: boolean
+  ownerAccountRef?: string
   run: (reference: string, args?: string) => Promise<StageOutcome>
 }): LaunchStage[] {
   return [
@@ -648,9 +649,12 @@ export function buildStages({ skipScan = false, skipSeed = false, run }: {
       id: 'sandbox-tool',
       skip: skipSeed,
       skipReason: '--skip-seed',
-      async run() {
-        const published = await run('devSeed:publishSandboxTool', '{}')
-        return published.ok ? { ok: true } : { ...published, fix: seedFix('devSeed:publishSandboxTool') }
+      async run(ctx) {
+        const args = ownerAccountRef === undefined ? {} : { owningAccountRef: ownerAccountRef }
+        const published = await run('devSeed:publishSandboxTool', JSON.stringify(args))
+        if (!published.ok) return { ...published, fix: seedFix('devSeed:publishSandboxTool') }
+        ;(ctx.log ?? log)(`sandbox Tool published under ${ownerAccountRef === undefined ? 'seed' : 'owner'} account`)
+        return { ok: true }
       },
     },
   ]
@@ -1152,9 +1156,15 @@ async function runLocalStack({ viteArgs, skipScan, skipSeed, runDoctor }: Launch
       supervisor.terminateAll('SIGINT', 'peer-failure')
       return 1
     }
+    const ownerAccountRef = nonEmpty(env.AE_DEV_OWNER_ACCOUNT_REF)
 
     const staged = await runStages(
-      buildStages({ skipScan, skipSeed, run: convexRunner(supervisor, env) }),
+      buildStages({
+        skipScan,
+        skipSeed,
+        ...(ownerAccountRef === undefined ? {} : { ownerAccountRef }),
+        run: convexRunner(supervisor, env),
+      }),
       { log },
     )
     if (!staged.ok) {

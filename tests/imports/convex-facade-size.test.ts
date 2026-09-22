@@ -44,7 +44,7 @@ const FACADE_SIZE_EXCEPTIONS: Record<string, number> = {
   'convex/chatMessages.ts': 247,
   'convex/chatShares.ts': 402,
   'convex/chatThreads.ts': 226,
-  'convex/devSeed.ts': 937,
+  'convex/devSeed.ts': 917,
   'convex/facilitatorDiscovery.ts': 553,
   'convex/interactiveCredentialLifecycle.ts': 297,
   'convex/interactiveSession.ts': 241,

@@ -32,6 +32,8 @@ import {
   readCatalogDescriptor,
   rebuildBusinessSupplyProjectionSnapshotCommand,
 } from './catalog'
+import { resolveDevSeedOwningAccountRef } from './lib/catalog/devSeedAuthority'
+import { upsertDevSeedSandboxAccessPath } from './lib/catalog/devSeedAccessPath'
 import {
   admitDevSeedCatalogAuthority,
   DEV_SEED_CATALOG_ACCOUNT_NAME,
@@ -58,7 +60,6 @@ import {
   SANDBOX_TOOL_BUSINESS_SLUG,
   SANDBOX_TOOL_CAPABILITY_ID,
   SANDBOX_TOOL_NETWORK_ID,
-  SANDBOX_REFERENCE_SKIP_SITE_URL_MISSING,
   sandboxReferenceEndpointUrl,
   sandboxReferenceToolSpec,
   sandboxTestnetToolSpec,
@@ -77,7 +78,6 @@ import {
 
 export {
   DEV_SEED_PRICE_BY_SLUG,
-  SANDBOX_REFERENCE_SKIP_SITE_URL_MISSING,
   SANDBOX_TESTNET_SKIP_ORIGIN_MISSING,
   SANDBOX_TESTNET_SKIP_PAY_TO_MISSING,
 } from './devSeedFixtures'
@@ -313,8 +313,6 @@ export const seedDevCatalog = internalMutation({
   },
 })
 
-
-
 export const seedOfferingSupply = internalMutation({
   args: { cursor: v.union(v.string(), v.null()) },
   returns: v.object({
@@ -485,8 +483,8 @@ async function ensureSandboxToolCatalogOrigin(
   now: number,
 ): Promise<{ businessId: Id<'businesses'>; origin: SandboxToolCatalogOrigin }> {
   const accessPathRef = sandboxToolAccessPathRef(spec)
-  const bundle = buildDevSeedCatalogState([sandboxToolFixture(spec)], owningAccountRef)
-  const persisted = await persistDevSeedCatalogState(ctx.db, bundle, owningAccountRef)
+  const bundle = buildDevSeedCatalogState([sandboxToolFixture(spec)], DEV_SEED_CATALOG_ACCOUNT_REF)
+  const persisted = await persistDevSeedCatalogState(ctx.db, bundle, DEV_SEED_CATALOG_ACCOUNT_REF)
   const businessId = persisted.businessIdsBySlug[spec.businessSlug]
   if (businessId === undefined) throw new Error('dev_seed_sandbox_tool_business_missing')
   const offeringRef = bundle.state.offerings[0]?.offeringRef
@@ -507,32 +505,18 @@ async function ensureSandboxToolCatalogOrigin(
     .withIndex('by_offeringRef', (query) => query.eq('offeringRef', offeringRef))
     .unique()
   if (offering === null) throw new Error('dev_seed_sandbox_tool_offering_missing')
-  const existingPath = await ctx.db.query('offeringAccessPaths')
-    .withIndex('by_accessPathRef', (query) => query.eq('accessPathRef', accessPathRef))
-    .unique()
-  if (existingPath === null
-    || existingPath.status !== 'published'
-    || existingPath.offeringRevision !== offering.currentRevision) {
-    const upserted = await upsertOfferingAccessPathCommand(ctx, {
-      businessId,
-      offeringRef,
-      accessPathRef,
-      expectedRevision: offering.currentRevision,
-      operationKey: `seed:sandbox-tool-access-path:${spec.businessSlug}:${offering.currentRevision}`,
-      descriptor: {
-        kind: 'external_operation',
-        name: spec.label,
-        summary: spec.accessPathSummary,
-        url: spec.endpointUrl,
-        method: spec.method,
-        authenticationSummary: spec.authenticationSummary,
-        provenance: 'business_declared',
-      },
-    }, now)
-    if (upserted.kind === 'error') {
-      throw new Error(`dev_seed_sandbox_tool_access_path_${upserted.code}`)
-    }
-  }
+  await upsertDevSeedSandboxAccessPath(ctx, {
+    businessId,
+    offeringRef,
+    accessPathRef,
+    offeringRevision: offering.currentRevision,
+    name: spec.label,
+    summary: spec.accessPathSummary,
+    url: spec.endpointUrl,
+    method: spec.method,
+    authenticationSummary: spec.authenticationSummary,
+    now,
+  })
 
   const [revision, accessPath] = await Promise.all([
     ctx.db.query('businessOfferingRevisions')
@@ -546,6 +530,7 @@ async function ensureSandboxToolCatalogOrigin(
   ])
   if (revision === null) throw new Error('dev_seed_sandbox_tool_revision_missing')
   if (accessPath === null) throw new Error('dev_seed_sandbox_tool_access_path_missing')
+  if (owningAccountRef !== DEV_SEED_CATALOG_ACCOUNT_REF) await ctx.db.patch(businessId, { owningAccountRef })
   return {
     businessId,
     origin: {
@@ -609,9 +594,8 @@ const seededSandboxToolValue = v.union(
   v.object({ capabilityId: v.string(), toolRef: v.string(), created: v.boolean() }),
   v.object({ capabilityId: v.string(), skipped: v.string() }),
 )
-
 export const publishSandboxTool = internalMutation({
-  args: {},
+  args: { owningAccountRef: v.optional(v.string()) },
   returns: v.object({
     created: v.boolean(),
     publicationId: v.string(),
@@ -620,35 +604,31 @@ export const publishSandboxTool = internalMutation({
     businessSlug: v.string(),
     tools: v.array(seededSandboxToolValue),
   }),
-  handler: async (ctx) => {
+  handler: async (ctx, args) => {
     // Same deployment guard the money seed uses: never seed sandbox supply into
     // a deployment whose bypass owner account already carries a production agent.
     await requireLocalE2EOwnerAuthority(ctx)
     await provisionDevSeedCatalogIdentityRows(ctx)
     const authority = await admitDevSeedCatalogAuthority(ctx, 'publishSandboxTool')
+    const owningAccountRef = await resolveDevSeedOwningAccountRef(ctx, args.owningAccountRef, authority.accountRef)
     const now = Date.now()
 
-    const referenceEndpointUrl = sandboxReferenceEndpointUrl()
-    const reference = referenceEndpointUrl === undefined
-      ? undefined
-      : await publishSeededSandboxTool(
-          ctx,
-          sandboxReferenceToolSpec(referenceEndpointUrl),
-          authority.accountRef,
-          now,
-        )
-    const testnet = await publishSeededSandboxTestnetTool(ctx, authority.accountRef, now)
+    const reference = await publishSeededSandboxTool(
+      ctx,
+      sandboxReferenceToolSpec(sandboxReferenceEndpointUrl()),
+      owningAccountRef,
+      now,
+    )
+    const testnet = await publishSeededSandboxTestnetTool(ctx, owningAccountRef, now)
 
     return {
-      created: reference?.created ?? false,
-      publicationId: reference?.publicationRef ?? '',
-      publicationRevision: reference?.publicationRevision ?? 0,
-      toolRef: reference?.toolRef ?? '',
+      created: reference.created,
+      publicationId: reference.publicationRef,
+      publicationRevision: reference.publicationRevision,
+      toolRef: reference.toolRef,
       businessSlug: SANDBOX_TOOL_BUSINESS_SLUG,
       tools: [
-        reference === undefined
-          ? { capabilityId: SANDBOX_TOOL_CAPABILITY_ID, skipped: SANDBOX_REFERENCE_SKIP_SITE_URL_MISSING }
-          : { capabilityId: SANDBOX_TOOL_CAPABILITY_ID, toolRef: reference.toolRef, created: reference.created },
+        { capabilityId: SANDBOX_TOOL_CAPABILITY_ID, toolRef: reference.toolRef, created: reference.created },
         testnet,
       ],
     }

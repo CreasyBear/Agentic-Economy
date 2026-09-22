@@ -43,7 +43,7 @@ type CatalogPage = {
 }
 
 const SANDBOX_TOOL_BUSINESS_SLUG = 'sandbox-aecon-reference'
-const SANDBOX_TOOL_CAPABILITY_ID = 'sandbox.aecon-reference'
+const SANDBOX_TOOL_CAPABILITY_ID = 'sandbox.frankfurter-fx'
 const SANDBOX_TOOL_BINDING_ID = `capability-binding:${SANDBOX_TOOL_BUSINESS_SLUG}:x402:v1`
 const SANDBOX_TOOL_EVIDENCE_REF = `private:evidence:dev-seed:${SANDBOX_TOOL_BUSINESS_SLUG}`
 const SANDBOX_TESTNET_BUSINESS_SLUG = 'sandbox-aecon-testnet'
@@ -64,14 +64,9 @@ const SKIPPED_WITHOUT_FIXTURE_URL = {
 } as const
 // The reference Tool's own endpoint is derived from this deployment's public
 // origin (AE_SITE_URL), never a hard-coded host. Without it the reference
-// entry is skipped rather than published against a guessed URL.
 const SITE_URL_ENV = 'AE_SITE_URL'
 const SITE_URL = 'https://sandbox.example.test'
-const SANDBOX_REFERENCE_ENDPOINT_URL = `${SITE_URL}/api/v1/sandbox-reference`
-const SKIPPED_WITHOUT_SITE_URL = {
-  capabilityId: SANDBOX_TOOL_CAPABILITY_ID,
-  skipped: 'AE_SITE_URL_missing',
-} as const
+const SANDBOX_REFERENCE_ENDPOINT_URL = 'https://api.frankfurter.app/latest'
 
 type SandboxSupplyFacts = {
   sandboxBusinessSlugs: readonly string[]
@@ -216,6 +211,40 @@ describe('dev-seeded public catalog decision facts', () => {
     }
   }, 300_000)
 
+  it('publishes under the configured local owner Account without duplicating the Tool', async () => {
+    const backend = convexTestWithMarketComponents()
+    await seedDevCatalogAuthority(backend)
+    setSiteUrlEnvironment()
+    clearReferenceProviderEnvironment()
+    const owner = await backend.mutation(internal.devSeed.seedSandboxSpendingPolicy, {})
+
+    const first = await backend.mutation(internal.devSeed.publishSandboxTool, {
+      owningAccountRef: owner.accountRef,
+    })
+    const replay = await backend.mutation(internal.devSeed.publishSandboxTool, {
+      owningAccountRef: owner.accountRef,
+    })
+    expect(replay).toMatchObject({
+      created: false,
+      publicationId: first.publicationId,
+      toolRef: first.toolRef,
+    })
+
+    const seeded = await backend.run(async (ctx) => ({
+      businesses: await ctx.db.query('businesses')
+        .withIndex('by_slug', (query) => query.eq('slug', SANDBOX_TOOL_BUSINESS_SLUG))
+        .collect(),
+      publications: await ctx.db.query('capabilityPublications')
+        .withIndex('by_publicationRef_and_revision', (query) => query
+          .eq('publicationRef', first.publicationId)
+          .eq('revision', first.publicationRevision))
+        .collect(),
+    }))
+    expect(seeded.businesses).toHaveLength(1)
+    expect(seeded.businesses[0]?.owningAccountRef).toBe(owner.accountRef)
+    expect(seeded.publications).toHaveLength(1)
+  }, 300_000)
+
   /**
    * A Tool nobody can price and nobody can find is not seeded supply. The
    * business page reads the catalog Offering's own `price`, and
@@ -268,20 +297,22 @@ describe('dev-seeded public catalog decision facts', () => {
       .toEqual([SANDBOX_TOOL_BUSINESS_SLUG])
   }, 300_000)
 
-  /**
-   * `AE_SITE_URL` is this deployment's own public origin - there is no host to
-   * guess it from. Without it the reference Tool is skipped, exactly like the
-   * Base Sepolia Tool is skipped without the reference provider's own env.
-   */
-  it('publishes neither business when AE_SITE_URL is unset', async () => {
+  it('publishes the public keyless sandbox Tool when AE_SITE_URL is unset', async () => {
     const backend = convexTestWithMarketComponents()
     await seedDevCatalogAuthority(backend)
     clearSiteUrlEnvironment()
     clearReferenceProviderEnvironment()
 
     const published = await backend.mutation(internal.devSeed.publishSandboxTool, {})
-    expect(published.tools).toEqual([SKIPPED_WITHOUT_SITE_URL, SKIPPED_WITHOUT_FIXTURE_URL])
-    expect((await readSandboxSupply(backend)).sandboxBusinessSlugs).toEqual([])
+    expect(published.tools).toEqual([
+      {
+        capabilityId: SANDBOX_TOOL_CAPABILITY_ID,
+        toolRef: expect.any(String),
+        created: true,
+      },
+      SKIPPED_WITHOUT_FIXTURE_URL,
+    ])
+    expect((await readSandboxSupply(backend)).sandboxBusinessSlugs).toEqual([SANDBOX_TOOL_BUSINESS_SLUG])
   }, 300_000)
 })
 
@@ -966,7 +997,7 @@ async function prepareQuoteSubjects(
       correlationId: `test:dev-seed-quote:${agent.credentialId}`,
       principal: { ...agent, scopes: [...agent.scopes] },
       toolRef,
-      input: { request: 'ping' },
+      input: { from: 'EUR', to: 'USD' },
     }),
   )
 }

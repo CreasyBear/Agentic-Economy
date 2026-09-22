@@ -593,7 +593,10 @@ describe('x402-era stage set', () => {
     expect(await runStages(buildStages({ run: complete.run }), { log }))
       .toEqual({ ok: true, ran: ['identities', 'authority', 'sandbox-tool'], skipped: ['scan'] })
     expect(complete.calls).not.toContain('x402DirectoryIndexRefresh:start')
-    expect(lines).toEqual(['stage scan skipped: catalogue already complete'])
+    expect(lines).toEqual([
+      'stage scan skipped: catalogue already complete',
+      'sandbox Tool published under seed account',
+    ])
 
     const empty = stageRun({ 'x402DirectoryIndex:status': { ok: true, stdout: JSON.stringify({ kind: 'unavailable', refreshState: 'none' }) } })
     expect((await runStages(buildStages({ run: empty.run }), { log: () => {} })).ok).toBe(true)
@@ -604,6 +607,26 @@ describe('x402-era stage set', () => {
       'x402DirectoryIndexRefresh:start',
       'devSeed:publishSandboxTool',
     ])
+  })
+
+  it('passes the configured owner Account to the sandbox publisher and reports ownership', async () => {
+    const ownerAccountRef = 'acc_0123456789abcdef0123456789abcdef'
+    const calls: Array<readonly [string, string | undefined]> = []
+    const { lines, log } = recorder()
+    const outcome = await runStages(buildStages({
+      ownerAccountRef,
+      run: async (reference, args) => {
+        calls.push([reference, args])
+        return { ok: true, stdout: '', stderr: '' }
+      },
+    }), { log })
+
+    expect(outcome.ok).toBe(true)
+    expect(calls).toContainEqual([
+      'devSeed:publishSandboxTool',
+      JSON.stringify({ owningAccountRef: ownerAccountRef }),
+    ])
+    expect(lines).toEqual(['sandbox Tool published under owner account'])
   })
 
   it('honours --skip-scan and --skip-seed', async () => {
