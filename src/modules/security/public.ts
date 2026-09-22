@@ -11,6 +11,7 @@ import {
   recordAdminActionDenied as recordAdminActionDeniedImpl,
   requireAdminAuthority as requireAdminAuthorityImpl,
   revokeAdminMembership as revokeAdminMembershipImpl,
+  validateReasonAndEvidence as validateReasonAndEvidenceImpl,
 } from './internal/admin-authority'
 import { readAdminRouteShell as readAdminRouteShellImpl } from './internal/admin-readbacks'
 import type {
@@ -108,6 +109,7 @@ export const grantAdminMembership = grantAdminMembershipImpl
 export const recordAdminActionDenied = recordAdminActionDeniedImpl
 
 export const revokeAdminMembership = revokeAdminMembershipImpl
+export const validateReasonAndEvidence = validateReasonAndEvidenceImpl
 
 export const readAdminRouteShell = readAdminRouteShellImpl
 
