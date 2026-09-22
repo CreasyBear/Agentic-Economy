@@ -38,9 +38,9 @@ export const FOOTER_NAVIGATION = [
 export const AE_SITE_FOOTER = {
   closer: {
     eyebrow: 'Agentic Economy',
-    heading: 'Take Control of Your Agentic Future',
+    heading: 'Take control of your Agentic future',
     description:
-      'Paid service discovery with Bazaar, x402 settlement, and AUD spending controls built for Australian businesses.',
+      'Find Tools, pay per Call in AUD, and control Agent spending for your Business.',
     primaryAction: 'Browse Tools',
     secondaryAction: 'System status',
   },

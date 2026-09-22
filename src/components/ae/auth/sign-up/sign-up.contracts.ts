@@ -33,16 +33,16 @@ export function projectSignUpCopy(redirect: string | undefined): SignUpCopy {
   const isAgentAccessFlow = redirect?.startsWith('/agent-access') ?? false
   const isProviderFlow = redirect?.startsWith('/owner') ?? false
   const heading = isAgentAccessFlow
-    ? 'Create an account to connect an agent'
+    ? 'Create an account to connect an Agent'
     : isProviderFlow
       ? 'Create a Provider account'
       : 'Create an account'
   const body = isAgentAccessFlow
-    ? `${methodsBlurb} After you create your account, you’ll return to the agent connection you started.`
+    ? `${methodsBlurb} After you create your account, you’ll return to the Agent connection you started.`
     : isProviderFlow
-      ? `${methodsBlurb} After you create your account, you’ll continue to the Tool publishing workspace.`
+      ? `${methodsBlurb} After you create your account, you’ll continue to the Tool publishing Workspace.`
       : redirect === undefined
-        ? `${methodsBlurb} After you create your account, you’ll set up your workspace.`
+        ? `${methodsBlurb} After you create your account, you’ll set up your Workspace.`
         : `${methodsBlurb} After you create your account, you’ll return to where you left off.`
   return { heading, body }
 }

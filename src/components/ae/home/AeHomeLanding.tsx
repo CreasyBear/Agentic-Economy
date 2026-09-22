@@ -34,7 +34,7 @@ export function AeHomeLanding({ read }: AeHomeLandingProps) {
     read.kind === "unavailable"
       ? "Catalogue unavailable"
       : read.kind === 'directory'
-        ? `${toolCount.toLocaleString()} x402 Tools`
+        ? `${toolCount.toLocaleString()} Tools paid per Call in AUD`
       : read.matchedCount === undefined
         ? `${toolCount.toLocaleString()} shown`
         : `${toolCount.toLocaleString()} current ${toolLabel}`;
@@ -115,7 +115,7 @@ export function HomeCapabilityResults({
             />
           ) : read.kind === 'directory' && read.items.length > 0 ? (
             <div className="grid gap-related">
-              <AeSiteBody muted>Explore the x402 catalogue from Coinbase Bazaar.</AeSiteBody>
+              <AeSiteBody muted>Explore Tools paid per Call in AUD.</AeSiteBody>
               <X402DirectoryCards entries={read.items} />
             </div>
           ) : groups.length === 0 ? (

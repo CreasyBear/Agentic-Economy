@@ -30,14 +30,14 @@ export function projectSignInCopy(redirect: string | undefined): SignInCopy {
   const isAgentAccessFlow = redirect?.startsWith('/agent-access') ?? false
   const isProviderFlow = redirect?.startsWith('/owner') ?? false
   const heading = isAgentAccessFlow
-    ? 'Sign in to connect an agent'
+    ? 'Sign in to connect an Agent'
     : isProviderFlow
       ? 'Sign in to manage Tools'
       : 'Sign in'
   const body = isAgentAccessFlow
-    ? `${methodsBlurb} After you sign in, you’ll return to the agent connection you started.`
+    ? `${methodsBlurb} After you sign in, you’ll return to the Agent connection you started.`
     : isProviderFlow
-      ? `${methodsBlurb} After you sign in, you’ll return to your Provider workspace.`
+      ? `${methodsBlurb} After you sign in, you’ll return to your Provider Workspace.`
       : `${methodsBlurb} After you sign in, you’ll return to where you left off.`
   return { heading, body }
 }

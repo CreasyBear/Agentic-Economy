@@ -54,9 +54,9 @@ export function AeOwnerSupplySourceStartPage({ data, search, navigate }: AeOwner
     <AeOperatorPage operatorRole="owner" title="Add Tool" description="Connect a Tool you already run. Agentic Economy checks what agents can buy." currentPath="/owner/operations/new" breadcrumbs={[{ label: 'Tools', href: '/owner/operations' }, { label: 'Add Tool' }]}>
       {identity.kind !== 'available' ? (
         <Alert variant="destructive">
-          <AlertTitle>Provider workspace unavailable</AlertTitle>
+          <AlertTitle>Provider Workspace unavailable</AlertTitle>
           <AlertDescription className="grid gap-related">
-            <p>AE could not confirm the current Business. Return to Tools and try again.</p>
+            <p>Agentic Economy could not confirm the current Business. Return to Tools and try again.</p>
             <Link
               to="/owner/operations"
               className={cn(buttonVariants({ variant: 'outline' }), 'justify-self-start min-h-touch')}
@@ -66,7 +66,7 @@ export function AeOwnerSupplySourceStartPage({ data, search, navigate }: AeOwner
           </AlertDescription>
         </Alert>
       ) : sourceUnavailable ? (
-        <Alert variant="destructive"><AlertTitle>Saved source unavailable</AlertTitle><AlertDescription>AE could not read the saved source or current connections. Reload before starting or submitting another connection.</AlertDescription></Alert>
+        <Alert variant="destructive"><AlertTitle>Saved source unavailable</AlertTitle><AlertDescription>Agentic Economy could not read the saved source or current connections. Reload before starting or submitting another connection.</AlertDescription></Alert>
       ) : (<>
         {resumeRequested && resume.kind !== 'available' ? (
           <Alert variant="destructive" className="mb-5"><AlertTitle>Saved source could not be resumed</AlertTitle><AlertDescription>The saved source is unavailable or changed. Review it from Add Tool before starting another connection.</AlertDescription></Alert>

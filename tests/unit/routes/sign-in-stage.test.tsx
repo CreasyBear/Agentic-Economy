@@ -63,9 +63,9 @@ describe('sign-in site stage', () => {
     if (Component === undefined || Component === null) throw new Error('Sign-in route was not captured.')
     render(<Component />)
 
-    expect(screen.getByRole('heading', { name: 'Sign in to connect an agent' })).toBeTruthy()
+    expect(screen.getByRole('heading', { name: 'Sign in to connect an Agent' })).toBeTruthy()
     expect(screen.getByText(/Use email, Google, GitHub, or a passkey/)).toBeTruthy()
-    expect(screen.getByText(/return to the agent connection you started/)).toBeTruthy()
+    expect(screen.getByText(/return to the Agent connection you started/)).toBeTruthy()
     expect(document.querySelector('[data-slot="ae-site-browser"]')?.textContent).toContain('/sign-in')
     expect(screen.getByText('clerk-sign-in')).toBeTruthy()
     expect(document.querySelector('[data-slot="ae-site-auth-clerk-well"]')).toBeTruthy()
@@ -88,7 +88,7 @@ describe('sign-in site stage', () => {
     if (ProviderComponent === undefined || ProviderComponent === null) throw new Error('Sign-in route was not captured.')
     const { unmount } = render(<ProviderComponent />)
     expect(screen.getByText(/Use email, Google, GitHub, or a passkey/)).toBeTruthy()
-    expect(screen.getByText(/return to your Provider workspace/)).toBeTruthy()
+    expect(screen.getByText(/return to your Provider Workspace/)).toBeTruthy()
     unmount()
 
     routeState.search = { redirect: undefined }
