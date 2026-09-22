@@ -5,7 +5,7 @@ export const MARKET_COMPARE_MISSING_LABEL = 'Tool no longer available'
 export const MARKET_COMPARE_PENDING_LABEL = 'Loading selected Tool…'
 
 export type UseMarketCompareInput = Readonly<{
-  compare?: string
+  compare: string | undefined
   resolvedEntries: readonly MarketCompareEntry[]
   loadedEntries: readonly X402DirectoryEntry[]
 }>
