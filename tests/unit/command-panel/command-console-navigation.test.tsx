@@ -35,6 +35,7 @@ vi.mock('@clerk/tanstack-react-start', () => ({
 
 import { AeCommandPanel, CommandPanelProvider } from '@/components/ae/command-panel'
 import { ThemeProvider } from '@/components/ae/theme/ThemeProvider'
+import { APP_NAVIGATION } from '@/lib/navigation/app-navigation'
 
 afterEach(() => {
   cleanup()
@@ -43,13 +44,20 @@ afterEach(() => {
 })
 
 describe('command console navigation groups', () => {
-  it('shows Navigation and Quick Actions when the panel is open with an empty query', async () => {
+  it('projects canonical navigation and keeps only non-destination quick actions', async () => {
     renderCommandPanel({ openImmediately: true })
 
     expect(await screen.findByText('Navigation')).toBeTruthy()
     expect(screen.getByText('Quick Actions')).toBeTruthy()
-    expect(screen.getByRole('option', { name: /Tools Market/ })).toBeTruthy()
+    for (const destination of APP_NAVIGATION) {
+      const href = `${destination.to}${destination.hash ?? ''}`
+      const item = screen.getByRole('option', {
+        name: new RegExp(`^${destination.label}\\b`),
+      })
+      expect(item.getAttribute('data-value')).toBe(`ae-nav:${href}`)
+    }
     expect(screen.getByRole('option', { name: /Toggle Theme/ })).toBeTruthy()
+    expect(screen.queryByRole('option', { name: /Check System Status/ })).toBeNull()
   })
 
   it('does not offer a second settings product from the command palette', async () => {
@@ -128,7 +136,7 @@ describe('command console navigation groups', () => {
 
     // Press Shift+Tab to jump back to the Navigation group
     fireEvent.keyDown(command!, { key: 'Tab', shiftKey: true })
-    const navItem = screen.getByRole('option', { name: /Tools Market/ })
+    const navItem = screen.getByRole('option', { name: /^Market\b/ })
     expect(navItem.getAttribute('data-value')).toBe('ae-nav:/market')
   })
 })
