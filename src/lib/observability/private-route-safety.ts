@@ -121,7 +121,9 @@ export function isTelemetryAllowedForCurrentRoute(): boolean {
 
 export function safeTelemetryPath(location: Readonly<{ pathname: string }>): string {
   const pathname = location.pathname.trim()
-  return pathname.startsWith('/') ? redactShareTokenPath(pathname) : '/'
+  return pathname.startsWith('/')
+    ? redactShareTokenPath(pathname).replace(/^\/admin\/(calls|quotes|tools|workspaces|agents|providers)\/[^/?#\s]+/u, '/admin/$1/[ref]')
+    : '/'
 }
 
 function sanitizeTelemetryString(value: string): string {
