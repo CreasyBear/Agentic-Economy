@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react'
 
 import { captureClientExceptionOnClient } from '@/lib/observability/capture-client-exception'
+import { appDestination } from '@/lib/navigation/app-navigation'
 import type { SupplySourcePreview, SupplyToolCandidate } from '@/modules/capability-supply/source-preview'
 import {
   buildPublishInput,
@@ -15,10 +16,15 @@ import {
   type AttestationKey,
   type Environment,
   type SourceKind,
+  type SupplyJourneyContinuation,
   type SupplyNativeStartProps,
 } from './supply-source-native-start-presentation'
 
 export type { SupplyNativeStartProps } from './supply-source-native-start-presentation'
+const OPEN_TOOLS_CONTINUATION = {
+  label: 'Open Tools',
+  to: appDestination('tools').to,
+} as const satisfies SupplyJourneyContinuation
 
 /** Owns every piece of native-start form state plus the discover/select/connect/publish calls. */
 export function useSupplyNativeStartState({
@@ -67,6 +73,7 @@ export function useSupplyNativeStartState({
   const [error, setError] = useState<string>()
   const [requiredAction, setRequiredAction] = useState<Extract<SupplySourcePreview, { kind: 'action_required' }>['requiredAction']>()
   const [success, setSuccess] = useState<string>()
+  const continuation = success === undefined ? undefined : OPEN_TOOLS_CONTINUATION
   const [reviewing, setReviewing] = useState(false)
   const [publicationLocked, setPublicationLocked] = useState(false)
   const operationInFlight = useRef(false)
@@ -350,7 +357,7 @@ export function useSupplyNativeStartState({
     resourceUrl, x402Method, preview, remoteSelection, selectedRemoteRef, selectedRef,
     name, description, category, serviceArea, availability,
     pricingKind, price, connectionRef, externalEffect, dataRelease, financialExposure, dataClassification, attestation,
-    pending, error, requiredAction, success, reviewing, publicationLocked,
+    pending, error, requiredAction, success, continuation, reviewing, publicationLocked,
     source, selected, eligibleConnections,
     setEnvironment, setDefinitionUrl, setMcpLocator, setServerUrl, setRegistryName, setPluginJson, setMcpJson,
     setResourceUrl, setX402Method, setSelectedRemoteRef,

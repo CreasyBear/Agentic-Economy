@@ -12,6 +12,7 @@ import { SupplyPublicationFlow } from './SupplyPublicationFlow'
 import { SupplyRemoteSelectionSection } from './SupplyRemoteSelectionSection'
 import { SupplySourceTypeSection } from './SupplySourceTypeSection'
 import { pricingInput, publicationPriceSummary } from './supply-source-native-start-presentation'
+import type { SupplyJourneyContinuation } from './supply-source-native-start-presentation'
 import { useSupplyNativeStartState, type SupplyNativeStartProps } from './useSupplyNativeStartState'
 
 type SupplyStage = 'source' | 'tool' | 'terms' | 'review'
@@ -25,7 +26,7 @@ export function AeSupplySourceNativeStart(props: SupplyNativeStartProps) {
   return (
     <div className="grid gap-section">
       <SupplyProgress current={stage} />
-      <SupplyFlowFeedback error={vm.error} requiredAction={vm.requiredAction} success={vm.success} publicationLocked={vm.publicationLocked} />
+      <SupplyFlowFeedback error={vm.error} requiredAction={vm.requiredAction} success={vm.success} continuation={vm.continuation} publicationLocked={vm.publicationLocked} />
 
       {stage === 'source' ? (
         <SupplySourceTypeSection
@@ -209,10 +210,11 @@ function CompletedStageSummary({ step, detail, disabled, onEdit }: Readonly<{ st
   )
 }
 
-function SupplyFlowFeedback({ error, requiredAction, success, publicationLocked }: Readonly<{
+function SupplyFlowFeedback({ error, requiredAction, success, continuation, publicationLocked }: Readonly<{
   error: string | undefined
   requiredAction: ReturnType<typeof useSupplyNativeStartState>['requiredAction']
   success: string | undefined
+  continuation: SupplyJourneyContinuation | undefined
   publicationLocked: boolean
 }>) {
   return (
@@ -239,12 +241,14 @@ function SupplyFlowFeedback({ error, requiredAction, success, publicationLocked 
           <AlertTitle>Submitted</AlertTitle>
           <AlertDescription className="grid gap-related">
             <p>{success}</p>
-            <a
-              href="/owner/operations"
-              className={cn(buttonVariants({ variant: 'secondary' }), 'w-fit min-h-touch')}
-            >
-              Open Tools
-            </a>
+            {continuation === undefined ? null : (
+              <a
+                href={continuation.to}
+                className={cn(buttonVariants({ variant: 'secondary' }), 'w-fit min-h-touch')}
+              >
+                {continuation.label}
+              </a>
+            )}
           </AlertDescription>
         </Alert>
       )}

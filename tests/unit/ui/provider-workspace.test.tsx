@@ -85,6 +85,9 @@ describe('Tools management disclosure', () => {
     expect(screen.getAllByRole('button', { name: 'Connect Stripe' })).toHaveLength(2)
     expect(screen.queryByText(/nothing is required here/u)).toBeNull()
     expect(screen.queryByText(/monthly settlements/u)).toBeNull()
+    const settingsLinks = screen.getAllByRole('link', { name: 'Open Settings' })
+    expect(settingsLinks).toHaveLength(2)
+    expect(settingsLinks.every(link => link.getAttribute('href') === '/owner/settings')).toBe(true)
   })
 
   it('renders a provider ownership conflict without lifecycle actions', async () => {

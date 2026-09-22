@@ -55,6 +55,7 @@ export const MCP_JSON_REQUIRED_KEYS = ['$schema', 'mcpServers'] as const
 export type SourceKind = SupplySourceInput['kind']
 export type Environment = SupplySourceInput['environment']
 export type AttestationKey = keyof PublishSupplyToolV2Input['attestation']
+export type SupplyJourneyContinuation = Readonly<{ label: string; to: string }>
 
 export type SupplyNativeStartProps = Readonly<{
   businessRef: string

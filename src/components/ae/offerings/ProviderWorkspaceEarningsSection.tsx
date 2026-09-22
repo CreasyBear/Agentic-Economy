@@ -3,7 +3,10 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
+import { buttonVariants } from '@/components/ui/button-variants'
 import { aeStatusToneVariants } from '@/lib/ui/status-presentation'
+import { appDestination } from '@/lib/navigation/app-navigation'
+import { cn } from '@/lib/utils'
 import { UnavailableSummary } from './ProviderWorkspaceSharedUi'
 import {
   PROVIDER_WORKSPACE_EARNINGS_COPY,
@@ -46,6 +49,12 @@ export function ProviderWorkspaceEarningsSection({
                 </Alert>
               )
         : null}
+      <a
+        href={appDestination('settings').to}
+        className={cn(buttonVariants({ variant: 'secondary' }), 'w-fit min-h-touch')}
+      >
+        Open Settings
+      </a>
     </AeSection>
   )
 }
