@@ -13,10 +13,19 @@ import {
 } from './lib/adminConsole/reads/objectValues'
 import { readAdminQuoteView } from './lib/adminConsole/reads/quote'
 import { readAdminToolVersionView } from './lib/adminConsole/reads/toolVersion'
+import { readAdminProviderView } from './lib/adminConsole/reads/provider'
 import { readAdminWorkspaceView } from './lib/adminConsole/reads/workspace'
 import { defineAdminQuery } from './lib/adminConsole/registrars'
 
 const objectNotFoundValue = v.object({ kind: v.literal('object_not_found') })
+
+function objectNotFound(): Readonly<{ kind: 'object_not_found' }> {
+  return { kind: 'object_not_found' }
+}
+
+function found(ref: AdminObjectRef): Readonly<{ kind: 'found'; ref: AdminObjectRef }> {
+  return { kind: 'found', ref }
+}
 
 export const readAdminObject = defineAdminQuery({
   action: 'read_admin_readbacks',
@@ -25,7 +34,7 @@ export const readAdminObject = defineAdminQuery({
   handler: async (ctx, args) => {
     const parsed = parseAdminObjectRef(args.ref.kind, args.ref.ref)
     return parsed.kind === 'malformed'
-      ? { kind: 'object_not_found' as const }
+      ? objectNotFound()
       : await readParsedAdminObject(ctx, parsed.ref)
   },
 })
@@ -44,7 +53,7 @@ export const searchAdminObjects = defineAdminQuery({
     const view = await readParsedAdminObject(ctx, parsed.ref)
     return view.kind === 'object_not_found'
       ? view
-      : { kind: 'found' as const, ref: parsed.ref }
+      : found(parsed.ref)
   },
 })
 
@@ -75,8 +84,22 @@ async function readParsedAdminObject(ctx: QueryCtx, ref: AdminObjectRef) {
     }
     case 'tool_version':
       return await readAdminToolVersionView(ctx, ref.ref)
-    case 'provider':
-      // F2-1 replaces this branch with readAdminProviderView.
-      return { kind: 'object_not_found' as const }
+    case 'provider': {
+      const view = await readAdminProviderView(ctx, ref.ref)
+      return view.kind === 'object_not_found'
+        ? view
+        : {
+            ...view,
+            publications: view.publications.map((publication) => ({
+              ...publication,
+              sourceAuthorityReview: publication.sourceAuthorityReview === null
+                ? null
+                : { ...publication.sourceAuthorityReview },
+            })),
+            connections: view.connections.map((connection) => ({ ...connection })),
+            admissionCases: view.admissionCases.map((admissionCase) => ({ ...admissionCase })),
+            removalDisputes: view.removalDisputes.map((dispute) => ({ ...dispute })),
+          }
+    }
   }
 }

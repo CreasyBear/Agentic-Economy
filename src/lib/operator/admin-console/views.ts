@@ -75,3 +75,41 @@ export type AdminToolVersionView = {
   admissionCaseRef: string | null
   readinessValidUntil: number | null
 }
+
+export type AdminProviderView = {
+  kind: 'provider'
+  slug: Slug
+  publicStatus: 'unpublished' | 'published' | 'suppressed'
+  trustTier: 'claimed' | 'contact_confirmed' | 'listed' | 'registry_verified'
+  suppressedAt: number | null
+  publications: readonly {
+    ref: PublicToolRef
+    revision: number | null
+    disposition: 'current' | 'withdrawn' | 'incompatible' | 'superseded'
+    sourceAuthorityState: 'verified' | 'review_required'
+    sourceAuthorityReview: {
+      publicationRef: string
+      expectedRevision: number
+      expectedSourceDigest: string
+      operationRef: string
+      sourceKind: 'x402'
+      sourceUrl: string
+    } | null
+  }[]
+  connections: readonly {
+    connectionRef: string
+    lifecycle: 'active' | 'reauthorization_required' | 'revocation_pending' | 'revoked' | 'cleanup_required'
+    sourceEnvironment: string | null
+  }[]
+  admissionCases: readonly {
+    caseRef: string
+    state: 'submitted' | 'under_review' | 'completed'
+    updatedAt: number
+  }[]
+  removalDisputes: readonly {
+    disputeRef: string
+    status: 'opened' | 'updated' | 'closed' | 'contested'
+    updatedAt: number
+  }[]
+  payout: 'connected' | 'not_connected' | 'unavailable'
+}

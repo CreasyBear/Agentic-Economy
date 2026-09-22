@@ -1,0 +1,62 @@
+import type { ColumnDef } from '@tanstack/react-table'
+
+import { AeSection } from '@/components/ae/layout/AeSection'
+import { AeRecordTable } from '@/components/ae/operator/AeOperatorDataTable'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import {
+  PROVIDERS_LIST_COPY,
+  type AdminProviderRowModel,
+  type ProvidersTableProps,
+} from '../providers-list.contracts'
+
+const columns: ColumnDef<AdminProviderRowModel, unknown>[] = [
+  {
+    accessorKey: 'slug',
+    header: PROVIDERS_LIST_COPY.columns.provider,
+    cell: ({ row }) => (
+      <a
+        className="font-medium text-foreground underline-offset-4 hover:underline focus-visible:underline"
+        href={row.original.href}
+      >
+        {row.original.slug}
+      </a>
+    ),
+  },
+  {
+    accessorKey: 'publicStatusLabel',
+    header: PROVIDERS_LIST_COPY.columns.publicStatus,
+    cell: ({ row }) => <Badge variant="outline">{row.original.publicStatusLabel}</Badge>,
+  },
+  {
+    accessorKey: 'trustTierLabel',
+    header: PROVIDERS_LIST_COPY.columns.trustTier,
+  },
+  {
+    accessorKey: 'updatedAtLabel',
+    header: PROVIDERS_LIST_COPY.columns.updated,
+    cell: ({ row }) => (
+      <time dateTime={row.original.updatedAtIso}>{row.original.updatedAtLabel}</time>
+    ),
+  },
+]
+
+export function ProvidersTable({ rows, filtered, paginationStatus, onLoadMore }: ProvidersTableProps) {
+  return (
+    <AeSection title={PROVIDERS_LIST_COPY.tableTitle} description={PROVIDERS_LIST_COPY.tableDescription}>
+      <AeRecordTable
+        columns={columns}
+        data={rows}
+        getRowId={(row) => row.slug}
+        hideFilter
+        caption={PROVIDERS_LIST_COPY.tableTitle}
+        emptyMessage={filtered ? PROVIDERS_LIST_COPY.noMatches : PROVIDERS_LIST_COPY.noRows}
+      />
+      {paginationStatus === 'CanLoadMore' ? (
+        <Button type="button" variant="outline" className="justify-self-start" onClick={onLoadMore}>
+          {PROVIDERS_LIST_COPY.loadMore}
+        </Button>
+      ) : null}
+    </AeSection>
+  )
+}

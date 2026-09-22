@@ -13,6 +13,7 @@ import type {
 
 import { adminAgentViewValue } from './agent'
 import { adminToolVersionViewValue } from './toolVersion'
+import { adminProviderViewValue } from './provider'
 import { adminWorkspaceViewValue } from './workspace'
 
 export const adminObjectKindValue = v.union(
@@ -147,6 +148,7 @@ export const adminObjectViewValue = v.union(
   adminWorkspaceViewValue,
   adminAgentViewValue,
   adminToolVersionViewValue,
+  adminProviderViewValue,
 )
 
 type AdminCallWireView = Omit<
