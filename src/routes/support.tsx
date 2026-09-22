@@ -1,16 +1,25 @@
-import { createFileRoute } from '@tanstack/react-router'
+import { createFileRoute, type SearchSchemaInput } from '@tanstack/react-router'
 import { CircleHelp } from 'lucide-react'
 
 import { AeSupportHelpPage } from '@/components/ae/support/help/AeSupportHelpPage'
 import type { SupportSearch } from '@/components/ae/support/help/help.contracts'
 import { readCanonicalBaseUrlServer } from '@/lib/server/canonical-url.functions'
+import { parseCallRef } from '@/modules/capability-execution/call-contracts'
 import { buildPublicPageHead } from '@/modules/seo/public'
 
 export const Route = createFileRoute('/support')({
-  validateSearch: (search: Record<string, unknown>): SupportSearch => {
-    const raw = search.callRef
-    const callRef = typeof raw === 'string' && raw.trim().length > 0 ? raw.trim() : undefined
-    return callRef === undefined ? {} : { callRef }
+  validateSearch: (
+    search: { callRef?: string } & SearchSchemaInput,
+  ): SupportSearch => {
+    const raw: unknown = search.callRef
+    if (raw === undefined || (typeof raw === 'string' && raw.trim().length === 0)) {
+      return { callRef: { kind: 'absent' } }
+    }
+    if (typeof raw !== 'string') return { callRef: { kind: 'malformed' } }
+    const parsed = parseCallRef(raw)
+    return parsed.kind === 'valid'
+      ? { callRef: { kind: 'valid', value: parsed.ref } }
+      : { callRef: { kind: 'malformed' } }
   },
   staticData: {
     nav: {

@@ -1,5 +1,9 @@
 export const ISSUE_URL = 'https://github.com/CreasyBear/Agentic-Economy/issues/new/choose'
 export const SUPPORT_EMAIL = 'mailto:support@aecon.ai'
+export const MALFORMED_CALL_REFERENCE_MESSAGE =
+  'The Call reference in this link is not valid. Open Calls to find the right Call.'
+export const OPEN_CALL_LABEL = 'Open this Call'
+export const OPEN_CALLS_LABEL = 'Open Calls'
 
 export const SUPPORT_FAQ_HEADING = 'Questions'
 export const SUPPORT_FAQ_ITEMS = [
@@ -21,13 +25,18 @@ export const SUPPORT_FAQ_ITEMS = [
   },
 ] as const
 
-export type SupportSearch = {
-  callRef?: string
-}
+export type SupportCallRef =
+  | Readonly<{ kind: 'absent' }>
+  | Readonly<{ kind: 'valid'; value: string }>
+  | Readonly<{ kind: 'malformed' }>
+
+export type SupportSearch = Readonly<{
+  callRef: SupportCallRef
+}>
 
 export type AeSupportHelpPageProps = Readonly<{
   canonicalBaseUrl: string
-  callRef: string | undefined
+  callRef: SupportCallRef
 }>
 
 export type SupportHelpView = Readonly<{
@@ -37,6 +46,10 @@ export type SupportHelpView = Readonly<{
 
 export type ReferencedCallBannerProps = Readonly<{
   callRef: string
+}>
+
+export type SupportStatusSectionProps = Readonly<{
+  callRef: SupportCallRef
 }>
 
 export type AgentConnectionSectionProps = Readonly<{

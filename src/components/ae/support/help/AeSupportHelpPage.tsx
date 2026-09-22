@@ -16,6 +16,7 @@ import { useSupportHelpPage } from './useSupportHelpPage'
 
 export function AeSupportHelpPage({ canonicalBaseUrl, callRef }: AeSupportHelpPageProps) {
   const { supportEmailHref, diagnosticCommand } = useSupportHelpPage({ canonicalBaseUrl, callRef })
+  const referencedCallRef = callRef.kind === 'valid' ? callRef.value : undefined
 
   return (
     <AePublicPage
@@ -30,8 +31,8 @@ export function AeSupportHelpPage({ canonicalBaseUrl, callRef }: AeSupportHelpPa
       }
     >
       <div className="ae-rail grid gap-section pb-page">
-        {callRef === undefined ? null : <ReferencedCallBanner callRef={callRef} />}
-        <SupportStatusSection />
+        {referencedCallRef === undefined ? null : <ReferencedCallBanner callRef={referencedCallRef} />}
+        <SupportStatusSection callRef={callRef} />
         <AgentConnectionSection diagnosticCommand={diagnosticCommand} />
         <PrivateSupportSection />
       </div>

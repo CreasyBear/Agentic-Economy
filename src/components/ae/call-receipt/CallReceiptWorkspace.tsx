@@ -24,12 +24,21 @@ export function CallReceiptWorkspace({
       currentPath={`/calls/${encodeURIComponent(callRef)}`}
       breadcrumbs={[{ label: 'Calls', href: '/activity' }, { label: 'Call receipt' }]}
       actions={(
-        <Link
-          to="/activity"
-          className={cn(buttonVariants({ variant: 'outline' }), 'min-h-touch')}
-        >
-          Back to Calls
-        </Link>
+        <div className="flex flex-wrap gap-intra">
+          <Link
+            to="/support"
+            search={{ callRef }}
+            className={cn(buttonVariants(), 'min-h-touch')}
+          >
+            Get help with this Call
+          </Link>
+          <Link
+            to="/activity"
+            className={cn(buttonVariants({ variant: 'outline' }), 'min-h-touch')}
+          >
+            Back to Calls
+          </Link>
+        </div>
       )}
       pending={pending}
     >

@@ -54,6 +54,14 @@ export const callRefusalCodeValues = [
   'source_unavailable',
 ] as const
 export const callRefusalCodeSchema = z.enum(callRefusalCodeValues)
+const callRefPattern = /^operation-invocation:v1:[0-9a-f]{64}$/u
+
+export function parseCallRef(value: string):
+  | Readonly<{ kind: 'valid'; ref: string }>
+  | Readonly<{ kind: 'malformed' }> {
+  const ref = value.trim()
+  return callRefPattern.test(ref) ? { kind: 'valid', ref } : { kind: 'malformed' }
+}
 
 const callChargeStateSchema = z.enum([
   'free_tier',

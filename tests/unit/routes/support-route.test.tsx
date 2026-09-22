@@ -4,16 +4,24 @@
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import type { ComponentType, ReactNode } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import type { SupportSearch } from '@/components/ae/support/help/help.contracts'
 import '../../setup/jsdom-platform'
+
+const validCallRef = `operation-invocation:v1:${'b'.repeat(64)}`
 
 const routeState = vi.hoisted(() => ({
   component: undefined as ComponentType | undefined,
-  search: {} as { callRef?: string },
+  search: { callRef: { kind: 'absent' } } as SupportSearch,
+  validateSearch: undefined as ((search: Record<string, unknown>) => SupportSearch) | undefined,
 }))
 
 vi.mock('@tanstack/react-router', () => ({
-  createFileRoute: () => (options: { component: ComponentType }) => {
+  createFileRoute: () => (options: {
+    component: ComponentType
+    validateSearch: (search: Record<string, unknown>) => SupportSearch
+  }) => {
     routeState.component = options.component
+    routeState.validateSearch = options.validateSearch
     return {
       ...options,
       options,
@@ -27,16 +35,21 @@ vi.mock('@tanstack/react-router', () => ({
     className,
     search,
     hash,
+    params,
   }: {
     children: ReactNode
     to: string
     className?: string
     search?: Readonly<Record<string, string>>
     hash?: string
+    params?: Readonly<Record<string, string>>
   }) => {
+    const resolvedTo = to === '/calls/$callRef' && params?.callRef !== undefined
+      ? `/calls/${encodeURIComponent(params.callRef)}`
+      : to
     const query = search === undefined ? '' : `?${new URLSearchParams(search).toString()}`
     const fragment = hash === undefined ? '' : `#${hash}`
-    return <a href={`${to}${query}${fragment}`} className={className}>{children}</a>
+    return <a href={`${resolvedTo}${query}${fragment}`} className={className}>{children}</a>
   },
 }))
 
@@ -94,26 +107,51 @@ describe('/support', () => {
     expect(screen.getByRole('link', { name: 'Review agent setup' }).getAttribute('href')).toBe('/for-agents')
   })
 
-  it('renders without callRef: plain support email and no reference banner', () => {
+  it('renders an absent Call reference with the general Calls handoff', () => {
     renderRoute()
+    expect(screen.getByRole('link', { name: 'Open Calls' }).getAttribute('href')).toBe('/activity')
+    expect(screen.getByRole('link', { name: 'Email support' }).getAttribute('href')).toBe('mailto:support@aecon.ai')
+    expect(screen.queryByText(/Referenced Call:/)).toBeNull()
+    expect(screen.queryByText(/Call reference in this link is not valid/)).toBeNull()
+  })
+
+  it('renders a valid Call reference in the exact Call handoff and support email', () => {
+    renderRoute({ callRef: { kind: 'valid', value: validCallRef } })
+    expect(screen.getByText(`Referenced Call: ${validCallRef}`)).toBeTruthy()
+    expect(screen.queryByText(/Call reference in this link is not valid/)).toBeNull()
+    expect(screen.getByRole('link', { name: 'Open this Call' }).getAttribute('href')).toBe(
+      `/calls/${encodeURIComponent(validCallRef)}`,
+    )
+    const href = screen.getByRole('link', { name: 'Email support' }).getAttribute('href')
+    expect(href).toContain('mailto:support@aecon.ai?')
+    expect(href).toContain(`subject=Help%20with%20Call%20${encodeURIComponent(validCallRef)}`)
+    expect(href).toContain(
+      `body=I%20need%20help%20with%20Call%20reference%3A%20${encodeURIComponent(validCallRef)}%0A%0AWhat%20happened%3A%0A`,
+    )
+  })
+
+  it('names a malformed Call reference without rendering or mailing it', () => {
+    renderRoute({ callRef: { kind: 'malformed' } })
+    expect(screen.getByText('The Call reference in this link is not valid. Open Calls to find the right Call.')).toBeTruthy()
+    expect(screen.getByRole('link', { name: 'Open Calls' }).getAttribute('href')).toBe('/activity')
     expect(screen.getByRole('link', { name: 'Email support' }).getAttribute('href')).toBe('mailto:support@aecon.ai')
     expect(screen.queryByText(/Referenced Call:/)).toBeNull()
   })
 
-  it('renders with callRef: shows reference banner and prefilled support email', () => {
-    const callRef = 'call_abc123'
-    renderRoute({ callRef })
-    expect(screen.getByText(`Referenced Call: ${callRef}`)).toBeTruthy()
-    const href = screen.getByRole('link', { name: 'Email support' }).getAttribute('href')
-    expect(href).toContain('mailto:support@aecon.ai?')
-    expect(href).toContain(`subject=Help%20with%20Call%20${encodeURIComponent(callRef)}`)
-    expect(href).toContain(
-      `body=I%20need%20help%20with%20Call%20reference%3A%20${encodeURIComponent(callRef)}%0A%0AWhat%20happened%3A%0A`,
-    )
+  it('round-trips the Call reference through URL search validation', () => {
+    const validateSearch = routeState.validateSearch
+    if (validateSearch === undefined) throw new Error('Support route search validator was not captured.')
+    const query = new URLSearchParams({ callRef: validCallRef })
+
+    expect(validateSearch(Object.fromEntries(query))).toEqual({
+      callRef: { kind: 'valid', value: validCallRef },
+    })
+    expect(validateSearch({ callRef: '   ' })).toEqual({ callRef: { kind: 'absent' } })
+    expect(validateSearch({ callRef: 'not-a-call' })).toEqual({ callRef: { kind: 'malformed' } })
   })
 })
 
-function renderRoute(search: { callRef?: string } = {}) {
+function renderRoute(search: SupportSearch = { callRef: { kind: 'absent' } }) {
   routeState.search = search
   const Component = routeState.component
   if (Component === undefined) throw new Error('Support route component was not captured.')
