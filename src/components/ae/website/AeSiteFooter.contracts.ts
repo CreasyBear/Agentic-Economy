@@ -1,9 +1,39 @@
-export type AeSiteFooterLinkItem = Readonly<{
-  to: string
-  label: string
-  order: number
-  reloadDocument: boolean
-}>
+export const FOOTER_NAVIGATION = [
+  {
+    id: 'footer-resources',
+    title: 'Resources',
+    links: [
+      { to: '/developers/api', label: 'API reference', reloadDocument: false },
+    ],
+  },
+  {
+    id: 'footer-help',
+    title: 'Help',
+    links: [
+      { to: '/support', label: 'Support', reloadDocument: false },
+      { to: '/status', label: 'Status', reloadDocument: false },
+    ],
+  },
+  {
+    id: 'footer-legal',
+    title: 'Legal',
+    links: [
+      { to: '/privacy', label: 'Privacy', reloadDocument: false },
+      { to: '/terms', label: 'Terms', reloadDocument: false },
+      { to: '/privacy/remove-business', label: 'Remove a listing', reloadDocument: false },
+    ],
+  },
+  {
+    id: 'footer-machines',
+    title: 'Machines',
+    links: [
+      { to: '/llms.txt', label: 'llms.txt', reloadDocument: true },
+      { to: '/SKILL.md', label: 'SKILL.md', reloadDocument: true },
+      { to: '/.well-known/ucp', label: '.well-known/ucp', reloadDocument: true },
+      { to: '/glossary.md', label: 'glossary.md', reloadDocument: true },
+    ],
+  },
+] as const
 
 export const AE_SITE_FOOTER = {
   closer: {

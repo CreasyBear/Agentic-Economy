@@ -1,5 +1,4 @@
-import { useMemo } from 'react'
-import { Link, useRouter } from '@tanstack/react-router'
+import { Link } from '@tanstack/react-router'
 
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion'
 import { buttonVariants } from '@/components/ui/button-variants'
@@ -11,38 +10,10 @@ import {
 } from '@/content/brand-assets'
 import { FOOTER } from '@/content/brand-copy'
 
-import { AE_SITE_FOOTER, type AeSiteFooterLinkItem } from './AeSiteFooter.contracts'
+import { AE_SITE_FOOTER, FOOTER_NAVIGATION } from './AeSiteFooter.contracts'
 import { AeSiteHeading } from './AeSiteType'
 
 export function AeSiteFooter() {
-  const { routesByPath } = useRouter()
-
-  const columns = useMemo(() => {
-    const groups = new Map<string, AeSiteFooterLinkItem[]>()
-    for (const route of Object.values(routesByPath)) {
-      const nav = route.options.staticData?.nav
-      if (nav?.footer === undefined) continue
-      const links = groups.get(nav.footer.column) ?? []
-      links.push({
-        to: route.to,
-        label: nav.label,
-        order: nav.footer.order,
-        // Machine-readable routes are server handlers with no component.
-        reloadDocument: route.options.component === undefined,
-      })
-      groups.set(nav.footer.column, links)
-    }
-    for (const links of groups.values()) links.sort((a, b) => a.order - b.order)
-
-    return FOOTER.columns
-      .filter((title) => title !== 'Market')
-      .map((title) => ({
-        id: `footer-${title.toLowerCase()}`,
-        title,
-        links: groups.get(title) ?? [],
-      }))
-  }, [routesByPath])
-
   return (
     <footer className="relative isolate mt-auto overflow-hidden border-t border-border bg-background text-foreground">
       <div className="pointer-events-none absolute inset-0 -z-10 overflow-hidden opacity-15 mix-blend-luminosity dark:opacity-25">
@@ -127,7 +98,7 @@ export function AeSiteFooter() {
           </div>
 
           <Accordion className="col-span-full md:hidden" type="multiple">
-            {columns.map((column) => (
+            {FOOTER_NAVIGATION.map((column) => (
               <AccordionItem key={column.id} value={column.id}>
                 <AccordionTrigger className="min-h-touch hover:no-underline">
                   {column.title} links
@@ -151,7 +122,7 @@ export function AeSiteFooter() {
             ))}
           </Accordion>
 
-          {columns.map((column) => (
+          {FOOTER_NAVIGATION.map((column) => (
             <section key={column.id} className="hidden md:block" aria-labelledby={column.id}>
               <h2 id={column.id} className="text-xs font-semibold tracking-wider text-foreground uppercase">
                 {column.title}

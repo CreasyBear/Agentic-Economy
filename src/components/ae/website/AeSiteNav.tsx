@@ -1,53 +1,24 @@
-import { Fragment, forwardRef, useMemo, type ButtonHTMLAttributes } from 'react'
+import { Fragment, forwardRef, type ButtonHTMLAttributes } from 'react'
 import { useAuth } from '@clerk/tanstack-react-start'
-import { Link, useMatchRoute, useRouter } from '@tanstack/react-router'
+import { Link, useLocation } from '@tanstack/react-router'
 
 import { AeDottedRule, AeVerticalHairline } from '@/components/ae/website/AeSiteMarks'
-import type { NavStaticData } from '@/router'
+import {
+  PUBLIC_NAVIGATION,
+  resolveAppDestination,
+  type PublicDestination,
+} from '@/lib/navigation/app-navigation'
 import { cn } from '@/lib/utils'
 
-export type HeaderNavItem = {
-  to: string
-  label: string
-  search?: Record<string, string>
-  order: number
-}
-
-type HeaderNavAudience = NonNullable<NavStaticData['header']>['audience']
-
-function headerNavMatchesAudience(audience: HeaderNavAudience, signedIn: boolean): boolean {
-  if (audience === 'always') return true
-  if (audience === 'public') return !signedIn
-  return signedIn
-}
-
-export function useHeaderNavItems(): HeaderNavItem[] {
-  const { routesByPath } = useRouter()
-  const { isSignedIn } = useAuth()
-  const signedIn = isSignedIn === true
-
-  return useMemo(
-    () =>
-      Object.values(routesByPath)
-        .flatMap((route) => {
-          const nav = route.options.staticData?.nav
-          const header = nav?.header
-          if (header === undefined) return []
-          if (!headerNavMatchesAudience(header.audience, signedIn)) return []
-          return [{ to: route.to, label: nav.label, search: nav.search, order: header.order }]
-        })
-        .sort((a, b) => a.order - b.order),
-    [routesByPath, signedIn],
-  )
-}
-
 export function AeSitePrimaryNav() {
-  const items = useHeaderNavItems()
+  const { isSignedIn } = useAuth()
+
+  if (isSignedIn === true) return null
 
   return (
-    <nav aria-label="Primary" className="hidden items-center lg:flex">
-      {items.map((item, index) => (
-        <Fragment key={item.to}>
+    <nav aria-label="Primary" className="hidden items-center md:flex">
+      {PUBLIC_NAVIGATION.map((item, index) => (
+        <Fragment key={item.id}>
           {index > 0 ? <AeVerticalHairline /> : null}
           <PublicNavLink item={item} />
         </Fragment>
@@ -57,12 +28,14 @@ export function AeSitePrimaryNav() {
 }
 
 export function AeSiteDrawerNav({ onNavigate }: { onNavigate: () => void }) {
-  const items = useHeaderNavItems()
+  const { isSignedIn } = useAuth()
+
+  if (isSignedIn === true) return null
 
   return (
     <nav aria-label="Primary" className="grid content-center gap-section px-gutter py-page">
-      {items.map((item, index) => (
-        <Fragment key={item.to}>
+      {PUBLIC_NAVIGATION.map((item, index) => (
+        <Fragment key={item.id}>
           {index > 0 ? <AeDottedRule /> : null}
           <PublicNavLink item={item} onNavigate={onNavigate} drawer />
         </Fragment>
@@ -76,17 +49,18 @@ function PublicNavLink({
   onNavigate,
   drawer = false,
 }: {
-  item: HeaderNavItem
+  item: PublicDestination
   onNavigate?: () => void
   drawer?: boolean
 }) {
-  const matchRoute = useMatchRoute()
-  const active = matchRoute({ to: item.to, fuzzy: true, includeSearch: false }) !== false
+  const { pathname, hash } = useLocation()
+  const active = item.id === 'market'
+    ? resolveAppDestination(pathname, hash) === 'market'
+    : pathname === item.to
 
   return (
     <Link
       to={item.to}
-      {...(item.search === undefined ? {} : { search: item.search })}
       {...(onNavigate === undefined ? {} : { onClick: onNavigate })}
       aria-current={active ? 'page' : undefined}
       className={cn(
