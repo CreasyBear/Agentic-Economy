@@ -56,6 +56,7 @@ export const AuditTargetTypeValues = [
   'developer_discovery',
   'api_key',
   'protected_action',
+  'admin_approval_proposal',
   'protected_action_attempt',
   'billing',
   'billing_provider_event',

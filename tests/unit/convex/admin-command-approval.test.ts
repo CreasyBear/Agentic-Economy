@@ -1,0 +1,232 @@
+import { describe, expect, it } from 'vitest'
+
+import { resolveAdminAuthority } from '../../../convex/authz'
+import {
+  listOpenApprovalProposals,
+  resolveApprovalIntent,
+  type ApprovalResolution,
+} from '../../../convex/lib/adminConsole/approvals'
+import type { AdminApprovalIntent } from '@/lib/operator/admin-console/contracts'
+import {
+  convexTestWithMarketComponents,
+  ownerAdmin,
+  type ConvexFixtureBackend,
+} from '../../helpers/convex-fixtures'
+
+const ACTION = 'set_business_suppression'
+const COMMAND_DIGEST = 'sha256:approval-command'
+const NOW = 1_800_000_000_000
+const DAY_MS = 24 * 60 * 60 * 1_000
+const ISSUER = 'https://identity.example'
+
+describe('admin command second approval', () => {
+  it('executes without approval when exactly one owner admin is active', async () => {
+    const backend = convexTestWithMarketComponents()
+    await seedOwner(backend, 'user_first-owner')
+
+    await expect(runResolution(
+      backend,
+      'user_first-owner',
+      { kind: 'execute' },
+      COMMAND_DIGEST,
+      NOW,
+    )).resolves.toEqual({
+      kind: 'execute',
+      approval: 'not_required',
+      ownerAdminCountAtDecision: 1,
+    })
+  })
+
+  it('requires approval when two owner admins are active', async () => {
+    const backend = convexTestWithMarketComponents()
+    await seedOwner(backend, 'user_proposer')
+    await seedOwner(backend, 'user_approver')
+
+    await expect(runResolution(
+      backend,
+      'user_proposer',
+      { kind: 'execute' },
+      COMMAND_DIGEST,
+      NOW,
+    )).resolves.toEqual({
+      kind: 'refused',
+      code: 'approval_required',
+    })
+  })
+
+  it('persists one immutable proposal and its audit event', async () => {
+    const backend = convexTestWithMarketComponents()
+    await seedOwner(backend, 'user_proposer')
+    await seedOwner(backend, 'user_approver')
+
+    const result = await createProposal(backend, 'user_proposer')
+    expect(result).toMatchObject({
+      kind: 'proposed',
+      receipt: {
+        kind: 'proposed',
+        action: ACTION,
+        expiresAt: NOW + DAY_MS,
+        correlationId: 'corr:approval-test',
+      },
+    })
+    if (result.kind !== 'proposed') throw new Error('proposal_expected')
+    expect(result.receipt.proposalRef).toMatch(/^admin-proposal:/u)
+
+    const stored = await backend.run(async (ctx) => ({
+      proposals: await listOpenApprovalProposals(ctx),
+      rows: await ctx.db.query('adminApprovalProposals').collect(),
+      audits: await ctx.db
+        .query('auditEvents')
+        .withIndex('by_eventType_and_createdAt', (query) =>
+          query.eq('eventType', 'admin.action_proposed'))
+        .collect(),
+    }))
+    expect(stored.proposals).toEqual([{
+      proposalRef: result.receipt.proposalRef,
+      action: ACTION,
+      proposerRef: 'token_proposer',
+      createdAt: NOW,
+      expiresAt: NOW + DAY_MS,
+    }])
+    expect(stored.rows).toHaveLength(1)
+    expect(stored.audits).toHaveLength(1)
+    expect(stored.audits[0]).toMatchObject({
+      eventType: 'admin.action_proposed',
+      targetType: 'admin_approval_proposal',
+      targetRef: result.receipt.proposalRef,
+    })
+  })
+
+  it('refuses approval by the proposer', async () => {
+    const backend = convexTestWithMarketComponents()
+    await seedOwner(backend, 'user_proposer')
+    await seedOwner(backend, 'user_approver')
+    const proposalRef = proposalRefFrom(await createProposal(backend, 'user_proposer'))
+
+    await expect(runResolution(
+      backend,
+      'user_proposer',
+      { kind: 'approve', proposalRef },
+      COMMAND_DIGEST,
+      NOW + 1,
+    )).resolves.toEqual({ kind: 'refused', code: 'approval_same_actor' })
+  })
+
+  it('refuses approval when the command digest changed', async () => {
+    const backend = convexTestWithMarketComponents()
+    await seedOwner(backend, 'user_proposer')
+    await seedOwner(backend, 'user_approver')
+    const proposalRef = proposalRefFrom(await createProposal(backend, 'user_proposer'))
+
+    await expect(runResolution(
+      backend,
+      'user_approver',
+      { kind: 'approve', proposalRef },
+      'sha256:different-command',
+      NOW + 1,
+    )).resolves.toEqual({ kind: 'refused', code: 'approval_digest_mismatch' })
+  })
+
+  it('expires an approval after its 24 hour window', async () => {
+    const backend = convexTestWithMarketComponents()
+    await seedOwner(backend, 'user_proposer')
+    await seedOwner(backend, 'user_approver')
+    const proposalRef = proposalRefFrom(await createProposal(backend, 'user_proposer'))
+
+    await expect(runResolution(
+      backend,
+      'user_approver',
+      { kind: 'approve', proposalRef },
+      COMMAND_DIGEST,
+      NOW + DAY_MS + 1,
+    )).resolves.toEqual({ kind: 'refused', code: 'approval_expired' })
+    const row = await backend.run(async (ctx) =>
+      await ctx.db.query('adminApprovalProposals')
+        .withIndex('by_proposalRef', (query) => query.eq('proposalRef', proposalRef))
+        .unique())
+    expect(row).toMatchObject({ status: 'expired', resolvedAt: NOW + DAY_MS + 1 })
+  })
+
+  it('atomically consumes an approval once', async () => {
+    const backend = convexTestWithMarketComponents()
+    await seedOwner(backend, 'user_proposer')
+    await seedOwner(backend, 'user_approver')
+    const proposalRef = proposalRefFrom(await createProposal(backend, 'user_proposer'))
+    const approval = { kind: 'approve', proposalRef } satisfies AdminApprovalIntent
+
+    await expect(runResolution(
+      backend,
+      'user_approver',
+      approval,
+      COMMAND_DIGEST,
+      NOW + 1,
+    )).resolves.toEqual({
+      kind: 'execute',
+      approval: 'second_approved',
+      ownerAdminCountAtDecision: 2,
+    })
+    await expect(runResolution(
+      backend,
+      'user_approver',
+      approval,
+      COMMAND_DIGEST,
+      NOW + 2,
+    )).resolves.toEqual({
+      kind: 'refused',
+      code: 'approval_already_resolved',
+    })
+    const audits = await backend.run(async (ctx) =>
+      await ctx.db
+        .query('auditEvents')
+        .withIndex('by_eventType_and_createdAt', (query) =>
+          query.eq('eventType', 'admin.proposal_approved'))
+        .collect())
+    expect(audits).toHaveLength(1)
+  })
+})
+
+async function seedOwner(backend: ConvexFixtureBackend, subject: string): Promise<void> {
+  await ownerAdmin(backend, subject)
+}
+
+async function runResolution(
+  backend: ConvexFixtureBackend,
+  subject: string,
+  approval: AdminApprovalIntent,
+  commandDigest: string,
+  now: number,
+): Promise<ApprovalResolution<typeof ACTION>> {
+  const caller = backend.withIdentity({
+    subject,
+    issuer: ISSUER,
+    tokenIdentifier: subject.replace(/^user_/u, 'token_'),
+    exp: Math.floor(Date.now() / 1_000) + 86_400,
+  })
+  return await caller.run(async (ctx) => {
+    const authority = await resolveAdminAuthority(ctx, 'suppress_business')
+    if (authority.kind !== 'allowed') throw new Error('allowed_admin_authority_expected')
+    return await resolveApprovalIntent(ctx, authority, {
+      action: ACTION,
+      correlationId: 'corr:approval-test',
+      approval,
+    }, commandDigest, now)
+  })
+}
+
+async function createProposal(
+  backend: ConvexFixtureBackend,
+  proposerSubject: string,
+): Promise<ApprovalResolution<typeof ACTION>> {
+  return await runResolution(
+    backend,
+    proposerSubject,
+    { kind: 'propose' },
+    COMMAND_DIGEST,
+    NOW,
+  )
+}
+
+function proposalRefFrom(result: ApprovalResolution<typeof ACTION>): string {
+  if (result.kind !== 'proposed') throw new Error('proposal_expected')
+  return result.receipt.proposalRef
+}
