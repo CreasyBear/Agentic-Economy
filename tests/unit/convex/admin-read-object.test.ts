@@ -1,7 +1,7 @@
 /// <reference types="vite/client" />
 import { describe, expect, it } from 'vitest'
 
-import { makeFunctionReference } from 'convex/server'
+import { api } from '../../../convex/_generated/api'
 import {
   convexTestWithMarketComponents,
   nonAdmin,
@@ -11,16 +11,6 @@ import {
 
 const callRef = `operation-invocation:v1:${'a'.repeat(64)}`
 const unknownCallRef = `operation-invocation:v1:${'f'.repeat(64)}`
-const readAdminObject = makeFunctionReference<
-  'query',
-  { ref: { kind: 'call'; ref: string } },
-  unknown
->('adminConsoleObjects:readAdminObject')
-const searchAdminObjects = makeFunctionReference<
-  'query',
-  { kind: 'call'; ref: string },
-  unknown
->('adminConsoleObjects:searchAdminObjects')
 
 async function seedCall(backend: ConvexFixtureBackend): Promise<void> {
   await backend.run(async (ctx) => {
@@ -52,7 +42,7 @@ describe('admin object reads', () => {
     await seedCall(backend)
     const caller = await nonAdmin(backend, 'user_admin-read-non-admin')
 
-    await expect(caller.query(readAdminObject, {
+    await expect(caller.query(api.adminConsoleObjects.readAdminObject, {
       ref: { kind: 'call', ref: callRef },
     })).resolves.toEqual({ kind: 'refused', code: 'missing_membership' })
   })
@@ -62,7 +52,7 @@ describe('admin object reads', () => {
     await seedCall(backend)
     const caller = await ownerAdmin(backend, 'user_admin-read-owner')
 
-    const result = await caller.query(readAdminObject, {
+    const result = await caller.query(api.adminConsoleObjects.readAdminObject, {
       ref: { kind: 'call', ref: callRef },
     })
 
@@ -74,7 +64,7 @@ describe('admin object reads', () => {
     const backend = convexTestWithMarketComponents()
     const caller = await ownerAdmin(backend, 'user_admin-read-missing')
 
-    await expect(caller.query(readAdminObject, {
+    await expect(caller.query(api.adminConsoleObjects.readAdminObject, {
       ref: { kind: 'call', ref: unknownCallRef },
     })).resolves.toEqual({ kind: 'object_not_found' })
   })
@@ -83,7 +73,7 @@ describe('admin object reads', () => {
     const backend = convexTestWithMarketComponents()
     const caller = await ownerAdmin(backend, 'user_admin-read-malformed')
 
-    await expect(caller.query(searchAdminObjects, {
+    await expect(caller.query(api.adminConsoleObjects.searchAdminObjects, {
       kind: 'call',
       ref: 'not-a-call-ref',
     })).resolves.toEqual({ kind: 'malformed', code: 'malformed_call_ref' })
