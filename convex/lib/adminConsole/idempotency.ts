@@ -4,6 +4,7 @@ import type {
 } from '@/lib/operator/admin-console/contracts'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { isRecord } from '@/modules/common/is-record'
+import type { OperationKeyStatus } from '@/modules/observability/public'
 
 import type { MutationCtx } from '../../_generated/server'
 
@@ -12,7 +13,7 @@ type AdminOperationKeyRead =
   | {
       kind: 'replay'
       requestHash: string
-      status: string
+      status: OperationKeyStatus
       resultJson: string | null
       resultHash: string | null
     }
