@@ -87,6 +87,18 @@ describe('provider directory rows (Well 8 Lane C)', () => {
         status: 'active', admissionEvidenceRefs: [], eligibilityHash: `sha256:${'d'.repeat(64)}`,
         registeredAt: 1, updatedAt: 1,
       })
+      await ctx.db.insert('capabilityTransportBindings', {
+        bindingId: 'binding:lane-c-test', offeringId, networkId: 'eip155:8453',
+        capabilityId: 'lookup.exact', version: 1, contractDigest: `sha256:${'b'.repeat(64)}`,
+        endpointUrl: COINBASE_RESOURCE, authority: { kind: 'public_upstream' },
+        continuation: { kind: 'single_response', evidenceRefs: [] },
+        cancellation: { kind: 'unsupported', evidenceRefs: [] },
+        adapterId: 'http-json:v1', configJson: '{}', configDigest: `sha256:${'a'.repeat(64)}`,
+        registrationEvidenceRefs: [], registrationHash: `sha256:${'c'.repeat(64)}`,
+        admission: 'admitted', conformance: 'conformant',
+        admissionEvidenceRefs: [], conformanceEvidenceRefs: [],
+        eligibilityHash: `sha256:${'d'.repeat(64)}`, registeredAt: 1, updatedAt: 1,
+      })
       await ctx.db.insert('capabilityPublications', {
         publicationRef: 'publication:lane-c-test', toolRef: 'operation:lane-c-test', revision: 1,
         businessId, networkId: 'eip155:8453', runtimeEnvironment: 'production',
@@ -111,6 +123,7 @@ describe('provider directory rows (Well 8 Lane C)', () => {
     })
 
     await backend.run(async (ctx) => upsertProviderDirectoryRows(ctx, publication))
+    await backend.run(async (ctx) => upsertProviderDirectoryRows(ctx, publication))
 
     const afterPublish = await backend.run(async (ctx) => await ctx.db.query('marketDirectorySearchEntries')
       .withIndex('by_generation_and_sourceRouteRef', (q) => q.eq('generation', GENERATION).eq('sourceRouteRef', ROUTE_REF))
@@ -121,7 +134,7 @@ describe('provider directory rows (Well 8 Lane C)', () => {
     for (const row of afterPublish) {
       expect(row.source).toBe('provider')
       expect(row.providerKey).toBe('lane-c-provider')
-      expect(row.slug).toBe('provider-lookup')
+      expect(row.slug).toBe('v1-lookup')
     }
     const starRow = afterPublish.find((row) => row.network === '*')
     expect(starRow).toBeDefined()
@@ -182,6 +195,19 @@ describe('provider directory rows (Well 8 Lane C)', () => {
         searchTerms: [], registrationEvidenceRefs: [], registrationHash: `sha256:${'c'.repeat(64)}`,
         status: 'active', admissionEvidenceRefs: [], eligibilityHash: `sha256:${'d'.repeat(64)}`,
         registeredAt: 1, updatedAt: 1,
+      })
+      await ctx.db.insert('capabilityTransportBindings', {
+        bindingId: 'binding:lane-c-owner-route', offeringId, networkId: 'eip155:8453',
+        capabilityId: 'lookup.exact', version: 1, contractDigest: `sha256:${'b'.repeat(64)}`,
+        endpointUrl: 'https://provider.example.com/owner-route-lookup',
+        authority: { kind: 'public_upstream' },
+        continuation: { kind: 'single_response', evidenceRefs: [] },
+        cancellation: { kind: 'unsupported', evidenceRefs: [] },
+        adapterId: 'http-json:v1', configJson: '{}', configDigest: `sha256:${'a'.repeat(64)}`,
+        registrationEvidenceRefs: [], registrationHash: `sha256:${'c'.repeat(64)}`,
+        admission: 'admitted', conformance: 'conformant',
+        admissionEvidenceRefs: [], conformanceEvidenceRefs: [],
+        eligibilityHash: `sha256:${'d'.repeat(64)}`, registeredAt: 1, updatedAt: 1,
       })
       await ctx.db.insert('capabilityPublications', {
         publicationRef: 'publication:lane-c-owner-route', toolRef: 'operation:lane-c-owner-route', revision: 1,

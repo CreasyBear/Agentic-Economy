@@ -150,9 +150,7 @@ async function toggleEligibleFacetMembership(ctx: MutationCtx, generation: strin
  */
 async function resolveDirectorySlug(
   ctx: MutationCtx, generation: string, providerKey: string, resource: string, method: string | undefined,
-  // Well 8 Lane C: provider rows slug off the offering's label text, not a
-  // URL path (resource there is a synthetic sourceRouteRef key) - defaults to
-  // `resource` unchanged for every existing Coinbase caller.
+  // Provider rows keep synthetic resource identity but slug from the real binding endpoint URL.
   slugSource: string = resource,
 ): Promise<string> {
   const base = directorySlugBase(slugSource)
@@ -451,9 +449,7 @@ async function removeProviderDirectoryRow(ctx: MutationCtx, generation: string, 
  * lastSeenRunAt index would be the only way to instead *exclude* them from
  * that scan, at the cost of a new index on a large table for one field).
  */
-export type ProviderDirectoryPublicationInput = Readonly<Pick<Doc<'capabilityPublications'>,
-  'disposition' | 'authorityMode' | 'sourceRouteRef' | 'businessId' | 'offeringId' | 'networkId' | 'sourceKind'
->>
+export type ProviderDirectoryPublicationInput = Readonly<Pick<Doc<'capabilityPublications'>, 'disposition' | 'authorityMode' | 'sourceRouteRef' | 'businessId' | 'offeringId' | 'networkId' | 'sourceKind'> & { bindingId?: string }>
 
 export async function upsertProviderDirectoryRows(
   ctx: MutationCtx,
@@ -467,17 +463,20 @@ export async function upsertProviderDirectoryRows(
     await removeProviderDirectoryRow(ctx, generation.generation, routeRef)
     return
   }
-  const [business, offering] = await Promise.all([
+  const bindingId = publication.bindingId
+  if (bindingId === undefined) return
+  const [business, offering, binding] = await Promise.all([
     ctx.db.get(publication.businessId),
     ctx.db.query('capabilityOfferings').withIndex('by_offeringId', q => q.eq('offeringId', publication.offeringId)).unique(),
+    ctx.db.query('capabilityTransportBindings').withIndex('by_bindingId', q => q.eq('bindingId', bindingId)).unique(),
   ])
-  if (business === null || offering === null) return
+  if (business === null || offering === null || binding === null) return
   const now = Date.now()
   const providerKey = providerKeyForBusiness(business)
   const resource = providerResourceKey(routeRef)
   const entry = providerDirectoryEntry(resource, providerKey, business, offering, publication)
   const category = entry.category ?? 'uncategorized'
-  const slug = await resolveDirectorySlug(ctx, generation.generation, providerKey, resource, undefined, entry.title)
+  const slug = await resolveDirectorySlug(ctx, generation.generation, providerKey, resource, undefined, binding.endpointUrl)
   await absorbCoinbaseRowAtRoute(ctx, generation.generation, routeRef)
   const documentId = providerDocumentId(routeRef)
   const existing = await ctx.db.query('marketExternalRegistryEntries')

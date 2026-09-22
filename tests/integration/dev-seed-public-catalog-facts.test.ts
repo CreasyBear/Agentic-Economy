@@ -218,31 +218,43 @@ describe('dev-seeded public catalog decision facts', () => {
     clearReferenceProviderEnvironment()
     const owner = await backend.mutation(internal.devSeed.seedSandboxSpendingPolicy, {})
 
-    const first = await backend.mutation(internal.devSeed.publishSandboxTool, {
+    const seededUnderWorkload = await backend.mutation(internal.devSeed.publishSandboxTool, {})
+    const reparented = await backend.mutation(internal.devSeed.publishSandboxTool, {
       owningAccountRef: owner.accountRef,
     })
     const replay = await backend.mutation(internal.devSeed.publishSandboxTool, {
       owningAccountRef: owner.accountRef,
     })
-    expect(replay).toMatchObject({
+    expect(seededUnderWorkload.created).toBe(true)
+    expect(reparented).toMatchObject({
       created: false,
-      publicationId: first.publicationId,
-      toolRef: first.toolRef,
+      publicationId: seededUnderWorkload.publicationId,
+      toolRef: seededUnderWorkload.toolRef,
     })
+    expect(replay).toEqual(reparented)
 
-    const seeded = await backend.run(async (ctx) => ({
-      businesses: await ctx.db.query('businesses')
+    const seeded = await backend.run(async (ctx) => {
+      const businesses = await ctx.db.query('businesses')
         .withIndex('by_slug', (query) => query.eq('slug', SANDBOX_TOOL_BUSINESS_SLUG))
-        .collect(),
-      publications: await ctx.db.query('capabilityPublications')
-        .withIndex('by_publicationRef_and_revision', (query) => query
-          .eq('publicationRef', first.publicationId)
-          .eq('revision', first.publicationRevision))
-        .collect(),
-    }))
+        .collect()
+      return {
+        businesses,
+        publications: await ctx.db.query('capabilityPublications')
+          .withIndex('by_publicationRef_and_revision', (query) => query
+            .eq('publicationRef', seededUnderWorkload.publicationId)
+            .eq('revision', seededUnderWorkload.publicationRevision))
+          .collect(),
+        providerTools: businesses[0] === undefined
+          ? []
+          : await ctx.db.query('capabilityProviderToolProjections')
+            .withIndex('by_businessId_and_updatedAt', (query) => query.eq('businessId', businesses[0]!._id))
+            .collect(),
+      }
+    })
     expect(seeded.businesses).toHaveLength(1)
     expect(seeded.businesses[0]?.owningAccountRef).toBe(owner.accountRef)
     expect(seeded.publications).toHaveLength(1)
+    expect(seeded.providerTools).toHaveLength(1)
   }, 300_000)
 
   /**

@@ -22,6 +22,7 @@ import { publishCapabilityForSeed } from './capabilitySupplyPublish'
 import { ensureOwnerIdentityForAuthenticatedIdentity } from './interactiveAuthority'
 import { resolveAndBindLegalCustomer } from './lib/moneyLegalCustomer'
 import { persistDevSeedCatalogState } from './devSeedStore'
+import { upsertProviderDirectoryRows } from './x402DirectoryIndexStore'
 import { canonicalDigest } from '../src/modules/common/canonical-digest'
 import {
   MAX_ACCESS_PATHS_PER_OFFERING,
@@ -33,7 +34,7 @@ import {
   rebuildBusinessSupplyProjectionSnapshotCommand,
 } from './catalog'
 import { resolveDevSeedOwningAccountRef } from './lib/catalog/devSeedAuthority'
-import { upsertDevSeedSandboxAccessPath } from './lib/catalog/devSeedAccessPath'
+import { upsertDevSeedSandboxAccessPath, upsertDevSeedSandboxProviderToolProjection } from './lib/catalog/devSeedAccessPath'
 import {
   admitDevSeedCatalogAuthority,
   DEV_SEED_CATALOG_ACCOUNT_NAME,
@@ -483,8 +484,8 @@ async function ensureSandboxToolCatalogOrigin(
   now: number,
 ): Promise<{ businessId: Id<'businesses'>; origin: SandboxToolCatalogOrigin }> {
   const accessPathRef = sandboxToolAccessPathRef(spec)
-  const bundle = buildDevSeedCatalogState([sandboxToolFixture(spec)], DEV_SEED_CATALOG_ACCOUNT_REF)
-  const persisted = await persistDevSeedCatalogState(ctx.db, bundle, DEV_SEED_CATALOG_ACCOUNT_REF)
+  const bundle = buildDevSeedCatalogState([sandboxToolFixture(spec)], owningAccountRef)
+  const persisted = await persistDevSeedCatalogState(ctx.db, bundle, owningAccountRef)
   const businessId = persisted.businessIdsBySlug[spec.businessSlug]
   if (businessId === undefined) throw new Error('dev_seed_sandbox_tool_business_missing')
   const offeringRef = bundle.state.offerings[0]?.offeringRef
@@ -530,7 +531,6 @@ async function ensureSandboxToolCatalogOrigin(
   ])
   if (revision === null) throw new Error('dev_seed_sandbox_tool_revision_missing')
   if (accessPath === null) throw new Error('dev_seed_sandbox_tool_access_path_missing')
-  if (owningAccountRef !== DEV_SEED_CATALOG_ACCOUNT_REF) await ctx.db.patch(businessId, { owningAccountRef })
   return {
     businessId,
     origin: {
@@ -571,7 +571,6 @@ async function publishSeededSandboxTool(
   const evidenceRefs = [sandboxToolEvidenceRef(spec)]
   const { businessId, origin } = await ensureSandboxToolCatalogOrigin(ctx, spec, owningAccountRef, now)
   if (prepareBusiness !== undefined) await prepareBusiness(businessId)
-
   const existing = await ctx.db.query('capabilityPublications')
     .withIndex('by_publicationRef_and_revision', (query) => (
       query.eq('publicationRef', publicationRef).eq('revision', 1)
@@ -586,7 +585,8 @@ async function publishSeededSandboxTool(
         toolRef: existing.toolRef,
       }
     : await createSandboxToolPublication(ctx, spec, evidenceRefs, businessId, origin, now)
-
+  if (existing !== null) await upsertDevSeedSandboxProviderToolProjection(ctx, existing, origin.offeringRef, origin.offeringRevision, now)
+  if (existing !== null) await upsertProviderDirectoryRows(ctx, existing)
   return target
 }
 

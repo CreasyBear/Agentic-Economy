@@ -82,7 +82,7 @@ const FACADE_SIZE_EXCEPTIONS: Record<string, number> = {
   'convex/workspaceSecurity.ts': 296,
   'convex/workspaceTeam.ts': 242,
   'convex/x402DirectoryIndex.ts': 455,
-  'convex/x402DirectoryIndexStore.ts': 689,
+  'convex/x402DirectoryIndexStore.ts': 688,
 }
 const FACADE_SIZE_MARGIN = 0
 const FIXTURE_ROOT = 'tests/fixtures/quality-gates/convex-facade-size'

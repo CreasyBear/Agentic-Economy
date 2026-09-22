@@ -1,5 +1,6 @@
-import type { Id } from '../../_generated/dataModel'
+import type { Doc, Id } from '../../_generated/dataModel'
 import type { MutationCtx } from '../../_generated/server'
+import { upsertProviderToolIdentity } from '../../capabilityProviderToolProjection'
 import { upsertOfferingAccessPathCommand } from '../../catalogOfferingMutations'
 
 type Input = Readonly<{
@@ -40,4 +41,25 @@ export async function upsertDevSeedSandboxAccessPath(ctx: MutationCtx, input: In
     },
   }, input.now)
   if (upserted.kind === 'error') throw new Error(`dev_seed_sandbox_tool_access_path_${upserted.code}`)
+}
+
+export async function upsertDevSeedSandboxProviderToolProjection(
+  ctx: MutationCtx,
+  publication: Pick<Doc<'capabilityPublications'>, 'businessId' | 'toolRef' | 'publicationRef' | 'revision' | 'offeringId' | 'bindingId'>,
+  offeringRef: string,
+  offeringRevision: number,
+  updatedAt: number,
+): Promise<void> {
+  await upsertProviderToolIdentity(ctx, {
+    businessId: publication.businessId,
+    providerRef: String(publication.businessId),
+    toolRef: publication.toolRef,
+    offeringRef,
+    offeringRevision,
+    publicationRef: publication.publicationRef,
+    publicationRevision: publication.revision,
+    offeringId: publication.offeringId,
+    bindingId: publication.bindingId,
+    updatedAt,
+  })
 }
