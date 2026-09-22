@@ -126,6 +126,7 @@ describe('/owner/settings R-17', () => {
 
     const nav = screen.getByRole('navigation', { name: 'Account settings sections' })
     expect(nav.closest('main')?.getAttribute('data-sticky-header')).toBe('true')
+    expect(screen.getByRole('heading', { level: 1, name: 'Settings' })).toBeTruthy()
     expect(within(nav).getByRole('link', { name: 'Profile' }).getAttribute('href')).toBe('#clerk-account-security')
     expect(within(nav).getByRole('link', { name: 'Team' }).getAttribute('href')).toBe('#team')
     expect(within(nav).getByRole('link', { name: 'Business' }).getAttribute('href')).toBe('#business')

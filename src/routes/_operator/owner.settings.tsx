@@ -9,14 +9,14 @@ import { readAccountSecurityHistoryServer } from '@/modules/security/account-sec
 export const Route = createFileRoute('/_operator/owner/settings')({
   staticData: {
     nav: {
-      label: 'Account & security',
+      label: 'Settings',
     },
   },
   ...operatorRouteOptions,
   loader: async () => await readAccountSecurityHistoryServer({ data: {} }),
   head: () => ({
     meta: [
-      { title: 'Account & security | Agentic Economy' },
+      { title: 'Settings | Agentic Economy' },
       { name: 'description', content: 'Manage your owner profile, active sessions, recovery, and security history.' },
       { name: 'robots', content: 'noindex' },
     ],

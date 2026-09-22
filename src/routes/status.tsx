@@ -7,14 +7,14 @@ import { readStatusProbesServer } from '@/routes/-status.functions'
 export const Route = createFileRoute('/status')({
   staticData: {
     nav: {
-      label: 'System status',
+      label: 'Status',
       footer: { column: 'Help', order: 1 },
     },
   },
   loader: () => readStatusProbesServer(),
   head: () => buildPublicPageHead({
     path: '/status',
-    title: 'System status | Agentic Economy',
+    title: 'Status | Agentic Economy',
     description: 'Current Agentic Economy website, Tool API, machine discovery, release identity, and catalogue freshness status.',
   }),
   component: StatusRoute,
