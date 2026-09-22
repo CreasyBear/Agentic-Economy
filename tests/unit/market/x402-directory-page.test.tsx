@@ -33,17 +33,17 @@ function show(search: Props['search'] = { offset: 20 }, items = entries, extra: 
   ]), history: createMemoryHistory({ initialEntries: [extra.marketPath ?? '/market'] }) })
   const result = render(<RouterContextProvider router={router}><Directory
     page={{ kind: 'ok', items, total: 14455, offset: 20, limit: 20, nextOffset: 40, previousOffset: 0 }}
-    {...extra} search={search} /></RouterContextProvider>)
+    compareEntries={[]} {...extra} search={search} /></RouterContextProvider>)
   return { ...result, router, updatePage(nextPage: Props['page']) {
     result.rerender(<RouterContextProvider router={router}><Directory
-      {...extra} page={nextPage} search={search} /></RouterContextProvider>)
+      compareEntries={[]} {...extra} page={nextPage} search={search} /></RouterContextProvider>)
   }, updateSearch(nextSearch: Props['search']) {
     result.rerender(<RouterContextProvider router={router}><Directory
       page={{ kind: 'ok', items, total: 14455, offset: 20, limit: 20, nextOffset: 40, previousOffset: 0 }}
-      {...extra} search={nextSearch} /></RouterContextProvider>)
+      compareEntries={[]} {...extra} search={nextSearch} /></RouterContextProvider>)
   }, updateCatalogue(nextSearch: Props['search'], nextPage: Props['page'], nextCatalogue: NonNullable<Props['catalogue']>) {
     result.rerender(<RouterContextProvider router={router}><Directory
-      {...extra} page={nextPage} catalogue={nextCatalogue} search={nextSearch} /></RouterContextProvider>)
+      compareEntries={[]} {...extra} page={nextPage} catalogue={nextCatalogue} search={nextSearch} /></RouterContextProvider>)
   } }
 }
 // Every place that used to open the retired Tool detail dialog now navigates
@@ -150,6 +150,46 @@ it('keeps comparison choices when a new search is submitted and results refresh'
   const comparison = screen.getByRole('dialog', { name: 'Compare Tools' })
   expect(within(comparison).getByText('Tool 0')).toBeTruthy()
   expect(within(comparison).getByText('Tool 1')).toBeTruthy()
+})
+it('keeps a selected Tool hydrated across pages and a reload-style render', () => {
+  const selected = entries[19]!
+  const compareEntries = [{ resource: selected.resource, entry: selected }]
+  const { updatePage } = show({ offset: 20 }, entries, { compareEntries })
+  fireEvent.click(screen.getByRole('button', { name: 'Add Tool 19 to comparison' }))
+
+  updatePage({ kind: 'ok', items: entries.slice(0, 2), total: 14455, offset: 0, limit: 20, nextOffset: 20 })
+  expect(screen.getByText('Tool 19')).toBeTruthy()
+
+  cleanup()
+  show({ compare: selected.resource }, entries.slice(0, 2), { compareEntries })
+  expect(screen.getByText('Tool 19')).toBeTruthy()
+})
+it('keeps comparison refs when clearing filters and using offset pagination', () => {
+  const compare = entries[19]!.resource
+  show({ query: 'weather', offset: 20, provider: 'example.com', compare }, entries, {
+    compareEntries: [{ resource: compare, entry: entries[19]! }],
+  })
+
+  expect(toolHref(screen.getByRole('link', { name: 'Clear search & filters' })).searchParams.get('compare')).toBe(compare)
+  expect(toolHref(screen.getByRole('link', { name: 'Next page' })).searchParams.get('compare')).toBe(compare)
+  expect(toolHref(screen.getByRole('link', { name: 'Previous page' })).searchParams.get('compare')).toBe(compare)
+})
+it('shows an unavailable selected Tool with a remove control', async () => {
+  const resource = 'https://example.com/tool/removed'
+  const { router } = show({ compare: resource }, entries.slice(0, 2), {
+    compareEntries: [{ resource, missing: true }],
+  })
+
+  expect(screen.getByText('Tool no longer available')).toBeTruthy()
+  fireEvent.click(screen.getByRole('button', { name: 'Remove unavailable Tool from comparison' }))
+  await waitFor(() => expect(router.state.location.search).not.toHaveProperty('compare'))
+})
+it('does not call an URL selection unavailable while its loader hydration is pending', () => {
+  const resource = 'https://example.com/tool/loading'
+  show({ compare: resource }, entries.slice(0, 2))
+
+  expect(screen.getByText('Loading selected Tool…')).toBeTruthy()
+  expect(screen.queryByText('Tool no longer available')).toBeNull()
 })
 it('keeps workspace searches and pagination inside the authenticated Market route', async () => {
   const { router } = show({ offset: 20 }, entries, { workspace: true, marketPath: '/owner/market' })

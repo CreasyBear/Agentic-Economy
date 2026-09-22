@@ -23,12 +23,7 @@ import { DirectoryProviderHeader } from './DirectoryProviderHeader'
 import type { X402DirectoryCatalogue, X402DirectoryCatalogueInput, X402DirectoryCatalogueOverview, X402DirectoryProvidersPage } from '@/modules/market/x402-directory-catalogue'
 import { readX402DirectoryCatalogueServer } from '@/modules/market/x402-directory-index.functions'
 import { directoryCatalogueSearchValues } from '@/modules/market/x402-directory-navigation'
-import {
-  carryMarketCompare,
-  marketCompareParam,
-  parseMarketCompareRefs,
-  toggleMarketCompareRef,
-} from '@/modules/market/market-route-data'
+import { carryMarketCompare, marketCompareParam, toggleMarketCompareRef, type MarketCompareEntry } from '@/modules/market/market-route-data'
 import { directoryDate } from './directory-presentation'
 import type { X402MarketplaceHome } from '@/modules/market/x402-marketplace-home'
 import { DirectoryComparison } from './DirectoryComparison'
@@ -39,10 +34,12 @@ import { toDirectoryToolCardModel } from '@/modules/market/directory-card.view-m
 import type { SavedDirectoryTool } from '@/modules/market/saved-tools.contracts'
 import { DirectoryToolCard } from './DirectoryToolCard'
 import type { X402DirectoryEntry, X402DirectoryFilters, X402DirectoryInput, X402DirectoryPage } from '@/modules/market/x402-directory'
+import { MARKET_COMPARE_MISSING_LABEL, MARKET_COMPARE_PENDING_LABEL } from './compare/compare.contracts'
+import { useMarketCompare } from './compare/useMarketCompare'
 
 type DirectorySearch = MarketReturnSearch
 
-type AeX402DirectoryProps = Readonly<{ page: X402DirectoryPage; search: DirectorySearch; marketPath?: MarketPath; workspace?: boolean; activeView?: NonNullable<DirectorySearch['view']>; home?: X402MarketplaceHome; catalogue?: X402DirectoryCatalogue; overview?: X402DirectoryCatalogueOverview; providers?: X402DirectoryProvidersPage }>
+type AeX402DirectoryProps = Readonly<{ page: X402DirectoryPage; compareEntries: readonly MarketCompareEntry[]; search: DirectorySearch; marketPath?: MarketPath; workspace?: boolean; activeView?: NonNullable<DirectorySearch['view']>; home?: X402MarketplaceHome; catalogue?: X402DirectoryCatalogue; overview?: X402DirectoryCatalogueOverview; providers?: X402DirectoryProvidersPage }>
 type IndexedPaginationState = Readonly<{
   source: X402DirectoryCatalogue | undefined
   items: readonly X402DirectoryEntry[]
@@ -100,7 +97,7 @@ function directoryInput(search: X402DirectoryInput) {
   }
 }
 
-function DirectoryMarketplace({ page, search, workspace = false, activeView, home, catalogue, overview, providers }: AeX402DirectoryProps) {
+function DirectoryMarketplace({ page, compareEntries, search, workspace = false, activeView, home, catalogue, overview, providers }: AeX402DirectoryProps) {
   const navigate = useNavigate()
   const marketPath = useMarketPath()
   const [compareOpen, setCompareOpen] = useState(false)
@@ -121,16 +118,12 @@ function DirectoryMarketplace({ page, search, workspace = false, activeView, hom
   // (a real filter/sort/query navigation), never by this component's own
   // appends.
   const { state: loadMore, loadNextPage } = useIndexedPagination(indexed, catalogue, filterValues)
-  const compareRefs = parseMarketCompareRefs(search.compare) ?? []
   const comparisonPool = useMemo(() => [
     ...loadMore.items,
     ...(page.kind === 'ok' ? page.items : []),
     ...(overview?.kind === 'ok' ? [...overview.popular, ...overview.recentlyUpdated].map(item => item.entry) : []),
   ], [loadMore.items, overview, page])
-  const comparison = useMemo(() => compareRefs.flatMap(ref => {
-    const found = comparisonPool.find(entry => entry.resource === ref)
-    return found === undefined ? [] : [{ entry: found, search: sourceInput }]
-  }), [compareRefs, comparisonPool, sourceInput])
+  const { refs: compareRefs, selections: comparison, availableEntries: comparisonEntries } = useMarketCompare({ compare: search.compare, resolvedEntries: compareEntries, loadedEntries: comparisonPool })
   function go(next: Record<string, unknown>) {
     void navigate({ to: marketPath, resetScroll: false, search: carryMarketCompare(search, next) })
   }
@@ -151,7 +144,7 @@ function DirectoryMarketplace({ page, search, workspace = false, activeView, hom
   // is already looking at, so they keep the current scroll position instead
   // of resetting to the top the way a real page navigation would.
   function applyFilters(filters: X402DirectoryFilters) {
-    void navigate({ to: marketPath, resetScroll: false, search: {
+    void navigate({ to: marketPath, resetScroll: false, search: carryMarketCompare(search, {
       ...(search.query === undefined ? {} : { query: search.query }),
       view: view === 'providers' ? 'providers' : 'tools',
       ...(search.directoryCategory === undefined ? {} : { directoryCategory: search.directoryCategory }),
@@ -159,14 +152,14 @@ function DirectoryMarketplace({ page, search, workspace = false, activeView, hom
       ...(filters.network === undefined ? {} : { network: filters.network }),
       ...(filters.provider === undefined ? {} : { provider: filters.provider }),
       ...(filters.maxUsdPrice === undefined ? {} : { maxUsdPrice: filters.maxUsdPrice }),
-    } })
+    }) })
   }
   function indexedSearch() {
     const { indexCursor: _cursor, offset: _offset, ...filters } = filterValues
     return { ...filters }
   }
   function explore(filters: X402DirectoryCatalogueInput) {
-    void navigate({ to: marketPath, resetScroll: false, search: { ...filters, view: 'tools' } })
+    void navigate({ to: marketPath, resetScroll: false, search: carryMarketCompare(search, { ...filters, view: 'tools' }) })
   }
   function applyExplorerFilters(patch: DirectoryExplorerFilterPatch) {
     const next = { ...indexedSearch(), ...patch, view: 'tools' as const }
@@ -180,15 +173,19 @@ function DirectoryMarketplace({ page, search, workspace = false, activeView, hom
     return <ul className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
       {items.map(item => <li key={item.entry.resource} className="min-w-0">
         <DirectoryToolCard model={toDirectoryToolCardModel(item.entry)} onSave={() => saved.toggleSavedTool(item)} saved={saved.isSaved(item.entry.resource)}
-          onCompare={() => toggleComparison(item)} comparing={comparison.some(other => other.entry.resource === item.entry.resource)} compareDisabled={comparison.length >= 4 && !comparison.some(other => other.entry.resource === item.entry.resource)} />
+          onCompare={() => toggleComparison(item)} comparing={comparison.some(other => other.resource === item.entry.resource)} compareDisabled={comparison.length >= 4 && !comparison.some(other => other.resource === item.entry.resource)} />
       </li>)}
     </ul>
   }
 
   const comparisonTray = comparison.length === 0 ? null : (
-    <div className="mt-8 flex w-fit max-w-full items-center gap-3 rounded-card border border-border bg-card px-4 py-3" aria-label="Selected comparison" data-compare-tray="flow">
+    <div className="mt-8 flex w-fit max-w-full flex-wrap items-center gap-3 rounded-card border border-border bg-card px-4 py-3" aria-label="Selected comparison" data-compare-tray="flow">
       <span className="text-sm">{comparison.length} of 4 selected</span>
-      <Button ref={compareTrigger} onClick={() => setCompareOpen(true)} disabled={comparison.length < 2}>Compare Tools</Button>
+      {comparison.map(item => <Badge key={item.resource} variant="outline" className="gap-1.5 text-muted-foreground">
+        {item.entry?.title ?? ('missing' in item ? MARKET_COMPARE_MISSING_LABEL : MARKET_COMPARE_PENDING_LABEL)}
+        <Button size="icon-xs" variant="ghost" aria-label={'missing' in item ? 'Remove unavailable Tool from comparison' : item.entry === undefined ? 'Remove pending Tool from comparison' : `Remove ${item.entry.title} from selected comparison`} onClick={() => go({ ...search, compare: marketCompareParam(toggleMarketCompareRef(compareRefs, item.resource)) })}><XIcon /></Button>
+      </Badge>)}
+      <Button ref={compareTrigger} onClick={() => setCompareOpen(true)} disabled={comparisonEntries.length < 2}>Compare Tools</Button>
       <Button size="icon-sm" variant="ghost" onClick={() => go({ ...search, compare: undefined })} aria-label="Clear comparison"><XIcon /></Button>
     </div>
   )
@@ -249,9 +246,9 @@ function DirectoryMarketplace({ page, search, workspace = false, activeView, hom
         {saved.saveError === undefined ? null : <p role="alert" className="py-3 text-sm text-destructive">{saved.saveError}</p>}
         <TabsContent value="discover" className="pt-7">
           {overview?.kind === 'ok' ? <DirectoryIndexDiscovery overview={overview} onSave={saved.toggleSavedTool} isSaved={saved.isSaved} onCompare={toggleComparison}
-            isComparing={resource => comparison.some(item => item.entry.resource === resource)} compareDisabled={resource => comparison.length >= 4 && !comparison.some(item => item.entry.resource === resource)} /> : null}
-          {home === undefined ? <AeEmptyState title="Explore the Tool catalogue" description="Open All Tools to browse the current directory, or search for a service above." action={<Link to={marketPath} search={{ view: 'tools' }} className={cn(buttonVariants({ variant: 'outline' }))}>Browse all Tools</Link>} /> : <DirectoryHomeDiscovery home={home} onSave={saved.toggleSavedTool} isSaved={saved.isSaved} onCompare={toggleComparison}
-            isComparing={resource => comparison.some(item => item.entry.resource === resource)} compareDisabled={resource => comparison.length >= 4 && !comparison.some(item => item.entry.resource === resource)} />}
+            isComparing={resource => compareRefs.includes(resource)} compareDisabled={resource => compareRefs.length >= 4 && !compareRefs.includes(resource)} /> : null}
+          {home === undefined ? <AeEmptyState title="Explore the Tool catalogue" description="Open All Tools to browse the current directory, or search for a service above." action={<Link to={marketPath} search={carryMarketCompare(search, { view: 'tools' })} className={cn(buttonVariants({ variant: 'outline' }))}>Browse all Tools</Link>} /> : <DirectoryHomeDiscovery home={home} onSave={saved.toggleSavedTool} isSaved={saved.isSaved} onCompare={toggleComparison}
+            isComparing={resource => compareRefs.includes(resource)} compareDisabled={resource => compareRefs.length >= 4 && !compareRefs.includes(resource)} />}
           {view === 'discover' ? comparisonTray : null}
         </TabsContent>
         <TabsContent value="saved" className="pt-5">
@@ -265,7 +262,7 @@ function DirectoryMarketplace({ page, search, workspace = false, activeView, hom
             }
             className="mb-5"
           />
-          {!saved.hydrated ? <p role="status">Loading saved Tools…</p> : saved.savedTools.length === 0 ? <AeEmptyState icon={<HeartIcon />} title="Keep a few possibilities close" description="Save a Tool from its card, then come back when your agent needs it." action={<Link to={marketPath} search={{ view: 'tools' }} className={cn(buttonVariants({ variant: 'outline' }))}>Browse Tools</Link>} /> : toolGrid(saved.savedTools)}
+          {!saved.hydrated ? <p role="status">Loading saved Tools…</p> : saved.savedTools.length === 0 ? <AeEmptyState icon={<HeartIcon />} title="Keep a few possibilities close" description="Save a Tool from its card, then come back when your agent needs it." action={<Link to={marketPath} search={carryMarketCompare(search, { view: 'tools' })} className={cn(buttonVariants({ variant: 'outline' }))}>Browse Tools</Link>} /> : toolGrid(saved.savedTools)}
           {view === 'saved' ? comparisonTray : null}
         </TabsContent>
         {(['tools', 'providers'] as const).map(tab => {
@@ -319,7 +316,7 @@ function DirectoryMarketplace({ page, search, workspace = false, activeView, hom
             }
             {...(railDeck === undefined ? {} : { deck: railDeck })}
             {...(browse ? {} : { action: (
-              <Link to={marketPath} search={{ view: tab }} className={cn(buttonVariants({ variant: 'ghost', size: 'sm' }), 'rounded-full')}>
+              <Link to={marketPath} search={carryMarketCompare(search, { view: tab })} className={cn(buttonVariants({ variant: 'ghost', size: 'sm' }), 'rounded-full')}>
                 <XIcon />Clear search & filters
               </Link>
             ) })}
@@ -328,7 +325,7 @@ function DirectoryMarketplace({ page, search, workspace = false, activeView, hom
           {search.network !== undefined || search.maxUsdPrice !== undefined ? <div className="mb-4 flex flex-wrap gap-2">{search.network === undefined ? null : <Badge variant="outline">Network: {overview?.kind === 'ok' ? overview.networks.find(item => item.key === search.network)?.label ?? search.network : search.network}</Badge>}{search.maxUsdPrice === undefined ? null : <Badge variant="outline">Up to {search.maxUsdPrice} USDC</Badge>}</div> : null}
           {page.kind === 'unavailable' ? <AeEmptyState icon={<SearchIcon />} title={page.reason === 'query_invalid' ? 'Check your search' : 'Catalogue temporarily unavailable'}
             description={page.reason === 'query_invalid' ? 'Use a service description without personal identifiers.' : search.indexCursor !== undefined ? 'This catalogue page could not be loaded. Refresh results to start again with the same search and filters.' : 'The discovery service could not be reached. Try again.'}
-            action={<Link to={marketPath} reloadDocument search={search.indexCursor === undefined ? search : { ...indexedSearch(), view: tab }} className={cn(buttonVariants({ variant: 'outline' }))}>{search.indexCursor === undefined ? "Try again" : "Refresh results"}</Link>} /> : <>
+            action={<Link to={marketPath} reloadDocument search={carryMarketCompare(search, search.indexCursor === undefined ? search : { ...indexedSearch(), view: tab })} className={cn(buttonVariants({ variant: 'outline' }))}>{search.indexCursor === undefined ? "Try again" : "Refresh results"}</Link>} /> : <>
             {page.partialResults === true ? <p role="status" className="mb-4 text-sm text-muted-foreground">Coinbase returned its top matches. Refine your search to find more Tools.</p> : null}
             {tabItems.length === 0 ? <AeEmptyState title={indexed && catalogue.kind === 'ok' && !catalogue.isDone ? 'More of the catalogue remains' : 'No matching Tools'} description={indexed && catalogue.kind === 'ok' && !catalogue.isDone ? 'No matches in this portion. Continue to the next page to check the remaining Tools.' : 'Try a different description or broaden your filters.'} /> : tab === 'providers'
               ? <DirectoryProviderCards entries={tabItems} onSelect={provider => { void navigate({ to: marketPath, search: carryMarketCompare(search, { ...sourceInput, provider, offset: 0 }) }) }} />
@@ -343,8 +340,8 @@ function DirectoryMarketplace({ page, search, workspace = false, activeView, hom
                   {loadMore.status === 'loading' ? <Loader2Icon className="animate-spin" /> : null}Load more<ArrowRightIcon />
                 </Button></div>}
               </> : <>
-              <span>{page.previousOffset === undefined ? null : <Link to={marketPath} search={{ ...sourceInput, view: tab, offset: page.previousOffset }} className={cn(buttonVariants({ variant: 'outline' }))}><ArrowLeftIcon />Previous page</Link>}</span>
-              {page.nextOffset === undefined ? null : <Link to={marketPath} search={{ ...sourceInput, view: tab, offset: page.nextOffset }} className={cn(buttonVariants({ variant: 'outline' }))}>Next page<ArrowRightIcon /></Link>}
+              <span>{page.previousOffset === undefined ? null : <Link to={marketPath} search={carryMarketCompare(search, { ...sourceInput, view: tab, offset: page.previousOffset })} className={cn(buttonVariants({ variant: 'outline' }))}><ArrowLeftIcon />Previous page</Link>}</span>
+              {page.nextOffset === undefined ? null : <Link to={marketPath} search={carryMarketCompare(search, { ...sourceInput, view: tab, offset: page.nextOffset })} className={cn(buttonVariants({ variant: 'outline' }))}>Next page<ArrowRightIcon /></Link>}
             </>}
             </nav>
             <p className="mt-4 text-xs text-muted-foreground">Directory: Coinbase Bazaar. Descriptions and payment requirements are published by providers.</p>
@@ -355,7 +352,7 @@ function DirectoryMarketplace({ page, search, workspace = false, activeView, hom
         </TabsContent>
         })}
       </Tabs>
-      <DirectoryComparison entries={comparison.map(item => item.entry)} open={compareOpen} onOpenChange={setCompareOpen} onCloseAutoFocus={event => {
+      <DirectoryComparison entries={comparisonEntries} open={compareOpen} onOpenChange={setCompareOpen} onCloseAutoFocus={event => {
         event.preventDefault()
         compareTrigger.current?.focus()
       }} />
