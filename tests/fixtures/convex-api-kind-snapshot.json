@@ -2618,6 +2618,12 @@
   {
     "visibility": "internal",
     "module": "moneyX402PaymentAttempts",
+    "method": "beginResponseRecovery",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "moneyX402PaymentAttempts",
     "method": "checkpointX402Response",
     "kind": "mutation"
   },
@@ -2704,6 +2710,12 @@
     "module": "moneyX402PaymentAttempts",
     "method": "recordX402PaymentSigningIntent",
     "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "moneyX402ResponseActions",
+    "method": "recover",
+    "kind": "action"
   },
   {
     "visibility": "internal",
