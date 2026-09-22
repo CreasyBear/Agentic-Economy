@@ -7,6 +7,8 @@ import type { PurchaseResolutionRecord } from '@/modules/capability-execution/pu
 import type { PublicToolRef } from '@/modules/capability-supply/public'
 import type { AccountRef } from '@/modules/principal-account/account/public'
 import type { PrincipalRef } from '@/modules/principal-account/principal/public'
+import type { Slug } from '@/modules/common/ids'
+import type { AccountLifecycle } from '@/modules/principal-account/account/public'
 
 export type AdminTimelineEntry = {
   at: number
@@ -40,4 +42,36 @@ export type AdminQuoteView = {
   createdAt: number
   expiresAt: number | null
   consumedCallRef: CallRef | null
+}
+
+export type AdminWorkspaceView = {
+  kind: 'workspace'
+  ref: AccountRef
+  lifecycle: AccountLifecycle
+  ownerCount: number
+  memberCount: number
+  createdAt: number
+  externalOrganizationBound: boolean
+  hasActiveSpendingPolicy: boolean
+}
+
+export type AdminAgentView = {
+  kind: 'agent'
+  ref: PrincipalRef
+  workspaceRef: AccountRef | null
+  credentialLifecycle: 'active' | 'revoked' | 'expired'
+  spendingPolicyRef: string | null
+  recentCallRefs: readonly CallRef[]
+}
+
+export type AdminToolVersionView = {
+  kind: 'tool_version'
+  ref: PublicToolRef
+  publicationRef: string
+  revision: number | null
+  disposition: 'current' | 'withdrawn' | 'incompatible' | 'superseded'
+  businessSlug: Slug
+  sourceAuthorityState: 'verified' | 'review_required'
+  admissionCaseRef: string | null
+  readinessValidUntil: number | null
 }
