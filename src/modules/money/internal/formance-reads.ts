@@ -616,8 +616,20 @@ async function ensureLedger(context: FormanceContext): Promise<void> {
       },
     }, NO_RETRY)
   } catch (error) {
-    if (statusCode(error) !== 409) throw error
+    if (statusCode(error) !== 409 && !isLedgerAlreadyExists(error)) throw error
   }
+}
+
+/** Formance Ledger v2 reports an existing ledger as a typed HTTP 400 error. */
+function isLedgerAlreadyExists(error: unknown): boolean {
+  return typeof error === 'object'
+    && error !== null
+    && 'name' in error
+    && error.name === 'ErrorsV2ErrorResponse'
+    && 'statusCode' in error
+    && error.statusCode === 400
+    && 'errorCode' in error
+    && error.errorCode === 'LEDGER_ALREADY_EXISTS'
 }
 
 export type SupportedFormanceSchemaVersion =

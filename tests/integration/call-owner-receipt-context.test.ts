@@ -27,7 +27,7 @@ async function fixture(overrides: Partial<Doc<'capabilityCalls'>> = {}) {
       toolRef, environment: tool.runtimeEnvironment, idempotencyKey: 'receipt:test',
       grantRef: 'grant:receipt', grantGeneration: 1, policyDigest: 'sha256:policy', grantExpiresAt: 100,
       inputJson: JSON.stringify(input), inputDigest: canonicalDigest(input),
-      requestDigest: canonicalDigest({ toolRef, input }), toolJson: JSON.stringify(tool),
+      requestDigest: canonicalDigest({ operationRef: toolRef, input }), toolJson: JSON.stringify(tool),
       state: 'reconciliation_required', createdAt: 1, updatedAt: 2, ...overrides,
     })
     const principal = await ctx.db.insert('principals', {

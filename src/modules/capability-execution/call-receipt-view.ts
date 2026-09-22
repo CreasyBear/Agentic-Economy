@@ -132,22 +132,48 @@ export function projectCallReceipt(input: PublicCallStatusRead): CallReceiptView
   const resultReceipt = result !== undefined && 'receipt' in result ? result.receipt : undefined
   const receipt = input.receipt ?? resultReceipt
   const usage = input.usage ?? (result?.kind === 'completed' ? result.usage : undefined)
-  const completed = result?.kind === 'completed'
+  // Requires an owner-visible status. A recorded purchase resolution outranks
+  // stale execution progress; payment uncertainty never becomes completion.
+  // Missing money facts remain unknown rather than implying a zero charge.
+  const purchase = projectFoundCallPurchaseStatus(input)
+  const completed = result?.kind === 'completed' && purchase.kind === 'delivered'
   const issue = issueFromFound(input, result, usage, receipt)
   const purchaseResolution = input.purchaseResolution
+  const released = purchase.kind === 'refunded'
+    && (purchaseResolution?.terminalState === 'released' || receipt?.refundState === 'released')
   return {
     version: 'ae.public-invocation-receipt:v1',
     callRef: input.callRef,
     toolRef: input.toolRef,
     ...(input.previousInput === undefined ? {} : { previousInput: input.previousInput }),
-    statusLabel: foundStatusLabel(input.state, result),
-    statusDetail: foundStatusDetail(input.state, result),
+    statusLabel: purchase.kind === 'refunded'
+      ? released ? 'Credit released' : 'Refunded'
+      : purchase.kind === 'uncertain' ? 'Needs attention' : foundStatusLabel(input.state, result),
+    statusDetail: purchase.kind === 'refunded'
+      ? released ? 'Your reserved credit was returned to your balance.' : 'Your payment was refunded.'
+      : purchase.kind === 'uncertain'
+        ? 'The outcome needs review before another attempt.'
+        : foundStatusDetail(input.state, result),
     stages: stagesFromFound(input, result, usage, receipt),
     ...(usage === undefined ? {} : { usage }),
     ...(receipt === undefined ? {} : { receipt }),
     ...(result === undefined ? {} : { resultKind: result.kind }),
     ...(input.evidenceHash === undefined ? {} : { evidenceHash: input.evidenceHash }),
-    ...(issue === undefined ? {} : { issue }),
+    ...(purchase.kind === 'refunded' ? {
+      issue: {
+        title: released ? 'Credit released' : 'Refunded',
+        whatHappened: result?.kind === 'refused' && result.code === 'result_invalid'
+          && receipt?.externalSettlementRef !== undefined
+          ? 'AE could not recover the service response. Your credit has been restored.'
+          : result?.kind === 'refused'
+          ? foundIssueExplanation(result.code)
+          : 'This purchase has been closed.',
+        moneyMovement: released ? 'Reserved credit was released back to your balance.' : 'Your payment was refunded.',
+        automaticNext: 'No further payment will be attempted for this purchase.',
+        userNext: 'Return to the Tool to review a new Quote.',
+        retainedReference: input.callRef,
+      },
+    } : issue === undefined ? {} : { issue }),
     ...(purchaseResolution === undefined ? {} : { purchaseResolution }),
     complete: completed,
   }
@@ -164,6 +190,24 @@ export function purchaseStatusLabel(input: Extract<CallStatusResult, { kind: 'fo
 export function projectFoundCallPurchaseStatus(
   input: Extract<CallStatusResult, { kind: 'found' }>,
 ): BuyerCallPurchaseStatus {
+  const resolution = input.purchaseResolution
+  if (resolution !== undefined) {
+    if (resolution.callRef !== input.callRef
+      || resolution.terminalState === 'disputed'
+      || resolution.deliveryState === 'unknown'
+      || resolution.paymentState === 'unknown') return buyerPurchaseStatus('uncertain')
+    if (resolution.terminalState === 'released' && resolution.paymentState === 'not_applicable') {
+      return buyerPurchaseStatus('failed')
+    }
+    if (resolution.terminalState === 'released' || resolution.terminalState === 'refunded') {
+      return buyerPurchaseStatus('refunded')
+    }
+    if (resolution.deliveryState === 'delivered'
+      && (resolution.paymentState === 'settled' || resolution.paymentState === 'not_applicable')) {
+      return buyerPurchaseStatus('delivered')
+    }
+    return buyerPurchaseStatus('uncertain')
+  }
   const receipt = input.receipt ?? (input.result !== undefined && 'receipt' in input.result ? input.result.receipt : undefined)
   const usage = input.usage ?? (input.result?.kind === 'completed' ? input.result.usage : undefined)
   if (input.state === 'reconciliation_required'
@@ -289,7 +333,9 @@ function issueFromFound(
   return {
     title: issueTitle(normalizeDiagnosticCode(code)),
     whatHappened: foundIssueExplanation(code),
-    moneyMovement: moneyMovement(usage, receipt),
+    moneyMovement: code === 'insufficient_balance' && usage === undefined && receipt === undefined
+      ? 'A$0.00 charged — your prepaid balance is unaffected.'
+      : moneyMovement(usage, receipt),
     automaticNext: input.state === 'retryable'
       ? 'The original Call remains available for an explicit safe retry; no replacement Call was created.'
       : 'No duplicate charge and no automatic retry.',
@@ -316,7 +362,7 @@ function moneyMovement(usage: CallUsageSummary | undefined, receipt: CallReceipt
   if (usage?.chargeState === 'insufficient_credit') {
     return 'A$0.00 charged — your prepaid balance is unaffected.'
   }
-  return 'A$0.00 charged — your prepaid balance is unaffected.'
+  return 'The charge has not been confirmed.'
 }
 
 function normalizeDiagnosticCode(code: string): string {
@@ -385,13 +431,14 @@ function authorityPendingDetail(state: string): string {
 
 function foundStatusLabel(state: string, result: CallResult | undefined): string {
   if (result?.kind === 'completed') return 'Complete'
+  if (result?.kind === 'refused' && !result.retryable) return 'Not completed'
   const labels: Readonly<Record<string, string>> = {
     gathering_information: 'Preparing request',
     awaiting_authority: 'Waiting for approval',
     authorized: 'Authorized',
     leased: 'Preparing provider call',
     in_progress: 'Provider call in progress',
-    retryable: 'Safe retry available',
+    retryable: 'Not completed',
     reconciliation_required: 'Reconciliation required',
     terminal: 'Call finished',
     cancelled: 'Cancelled',
@@ -401,11 +448,12 @@ function foundStatusLabel(state: string, result: CallResult | undefined): string
 }
 
 function foundStatusDetail(state: string, result: CallResult | undefined): string {
-  if (result?.kind === 'completed') return 'The output, usage, evidence, and any payment receipt below belong to this exact Call.'
-  if (result?.kind === 'pending') return 'The call was accepted and has not produced a canonical result yet.'
-  if (result?.kind === 'needs_authority') return 'The call cannot proceed until the owner approves the requested authority.'
-  if (state === 'reconciliation_required') return 'The external outcome may have started and must be reconciled before retrying.'
-  if (state === 'retryable') return 'The same Call can be retried only through the supported recovery action.'
+  if (result?.kind === 'completed') return 'The service returned a result.'
+  if (result?.kind === 'refused') return foundIssueExplanation(result.code)
+  if (result?.kind === 'pending') return 'Waiting for the service to return a result.'
+  if (result?.kind === 'needs_authority') return 'Owner approval is needed to continue.'
+  if (state === 'reconciliation_required') return 'The outcome needs review before another attempt.'
+  if (state === 'retryable') return 'This attempt did not complete. Check its status before continuing.'
   return `The recorded Call state is ${humanize(state)}.`
 }
 
@@ -466,8 +514,12 @@ function issueTitle(code: string): string {
 
 function foundIssueExplanation(code: string): string {
   const normalized = normalizeDiagnosticCode(code)
+  if (normalized === 'payment_requirement_outside_authority') {
+    return 'The service could not run within the approved payment window.'
+  }
+  if (normalized === 'pre_release_failed') return 'The Call stopped before the service was started.'
   if (normalized === 'reconciliation_required') {
-    return 'The provider boundary may have been crossed, but the final external outcome is not conclusive.'
+    return 'The service result and payment need checking. Check status before trying again.'
   }
   if (normalized === 'retryable') {
     return 'The recorded attempt did not complete and the same Call is eligible for an explicit safe retry.'

@@ -216,8 +216,10 @@ describe('capability operation invocation worker charge/x402', () => {
         disposition: 'unknown',
         releaseStarted: true,
         requestDigest: digest('u'),
+        responseDigest: digest('u-response'),
+        outputJson: JSON.stringify({ quarantined: true }),
         paymentSubmissionStatus: 'possibly_submitted',
-        settlementEvidence: { kind: 'unknown', reason: 'network_timeout' },
+        settlementEvidence: { kind: 'unknown', reason: 'network_timeout', digest: digest('u-settlement') },
       },
     })
 
@@ -230,7 +232,13 @@ describe('capability operation invocation worker charge/x402', () => {
     expect(worker.state.payment.mark).toMatchObject({ dispatchRef: worker.state.dispatch.callRef })
     expect(worker.state.mutationCalls.map(({ path }) => path).filter((path) => path.startsWith('moneyManagedCallLifecycle:'))).toEqual([])
     expect(worker.state.mutationCalls.find(({ path }) => path === 'moneyX402PaymentAttempts:recordX402PaymentObservation')?.args)
-      .toMatchObject({ settlementStatus: 'unknown', transportRequestDigest: digest('u') })
+      .toMatchObject({
+        settlementStatus: 'unknown',
+        transportRequestDigest: digest('u'),
+        paymentResponseDigest: digest('u-settlement'),
+        quarantinedResponseDigest: digest('u-response'),
+        quarantinedOutputJson: JSON.stringify({ quarantined: true }),
+      })
   })
 
   it('holds validation when payment evidence cannot be saved, without signing again on replay', async () => {

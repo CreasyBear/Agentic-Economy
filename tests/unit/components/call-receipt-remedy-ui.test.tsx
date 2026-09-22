@@ -22,10 +22,10 @@ describe('CallReceiptIssue financial evidence', () => {
 
     render(<CallReceiptIssue issue={issue} />)
 
-    expect(screen.getByText('What happened')).toBeInTheDocument()
-    expect(screen.getByText('Financial impact')).toBeInTheDocument()
+    expect(screen.getByText('Needs attention')).toBeInTheDocument()
     expect(screen.getByText('A refund is recorded — reserved credit was returned to your prepaid balance.')).toBeInTheDocument()
-    expect(screen.getByText('No duplicate charge and no automatic retry.')).toBeInTheDocument()
+    expect(screen.getByText('Autonomous buyer protection secured your funds. You can retry with an alternate tool.')).toBeInTheDocument()
+    expect(screen.getByText('What happens next')).toBeInTheDocument()
     expect(screen.queryByText(/Confidence|Jev|System One|hold released immediately/i)).not.toBeInTheDocument()
   })
 })

@@ -14,6 +14,7 @@ import { formatCurrencyAmount } from '@/modules/money/public'
 import type { FoundCallStatus } from '@/lib/call-recovery/call-status-page-types'
 
 import { machineLabel } from './call-receipt-format'
+import { CallMoneyFacts } from './CallMoneyFacts'
 import { CallReceiptTimeline } from './CallReceiptTimeline'
 import { CallReceiptFact, CallReceiptRef } from './CallReceiptPrimitives'
 
@@ -21,7 +22,7 @@ export function CallTechnicalRecord({ result, view }: Readonly<{ result: FoundCa
   const ownerContext = result.ownerContext
   return (
     <details className="border-t border-border pt-related">
-      <summary className="flex min-h-touch cursor-pointer items-center text-sm font-medium text-foreground">Technical record</summary>
+      <summary className="flex min-h-touch cursor-pointer items-center text-sm font-medium text-foreground">Technical details</summary>
       <div className="grid gap-section pt-related">
         <AeFactList facts={[
           { label: "Call reference", value: <CallReceiptRef value={result.callRef} />, mono: true },
@@ -35,6 +36,12 @@ export function CallTechnicalRecord({ result, view }: Readonly<{ result: FoundCa
             { label: 'Agent application reference', value: <CallReceiptRef value={ownerContext.agent.applicationRef} />, mono: true },
           ]),
         ]} />
+        {result.previousInput === undefined ? null : (
+          <AeSection title="Request">
+            <pre className="max-h-64 overflow-auto whitespace-pre-wrap break-words text-xs"><code>{JSON.stringify(result.previousInput, null, 2)}</code></pre>
+          </AeSection>
+        )}
+        <CallMoneyFacts view={view} />
         <CallReceiptTimeline stages={view.stages} />
         {result.result === undefined ? null : <ResultDetails result={result.result} />}
         <CallSuggestedNextAction result={result} />

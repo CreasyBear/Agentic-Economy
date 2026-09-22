@@ -134,13 +134,11 @@ describe('/calls/$callRef', () => {
       },
     })
 
-    expect(screen.getByRole('heading', { level: 1, name: 'Call receipt' })).toBeTruthy()
+    expect(screen.getByRole('heading', { level: 1, name: 'Observe Perth weather' })).toBeTruthy()
     expect(screen.getAllByText(callRef).length).toBeGreaterThan(0)
-    const toolLink = screen.getByRole('link', { name: 'Observe Perth weather' })
-    expect(toolLink.getAttribute('href')).toBe(`/tools/${encodeURIComponent(toolRef)}`)
-    expect(screen.getByText('provider:weather:one (name not recorded)')).toBeTruthy()
+    expect(screen.queryByRole('link', { name: 'Observe Perth weather' })).toBeNull()
     expect(screen.getByText('Weather assistant')).toBeTruthy()
-    expect(screen.getByText('Not recorded for this Call')).toBeTruthy()
+    expect(screen.queryByText('Not recorded for this Call')).toBeNull()
     expect(screen.getAllByText('Terminal').length).toBeGreaterThan(0)
     expect(screen.getAllByText('AUD 1.25').length).toBeGreaterThan(0)
     expect(screen.getByText('attempt:exact')).toBeTruthy()
@@ -176,20 +174,20 @@ describe('/calls/$callRef', () => {
 
     expect(screen.getByRole('main')).toBeTruthy()
     expect(screen.getByRole('link', { name: 'Back to Calls' }).getAttribute('href')).toBe('/activity')
-    const helpLink = screen.getByRole('link', { name: 'Get help with this Call' })
+    const helpLink = screen.getByRole('link', { name: 'Get help' })
     const helpUrl = new URL(helpLink.getAttribute('href') ?? '', 'https://ae.example')
     expect(helpUrl.pathname).toBe('/support')
     expect(helpUrl.searchParams.get('callRef')).toBe(callRef)
-    expect(screen.getByRole('heading', { name: 'Call summary' })).toBeTruthy()
+    expect(screen.getByRole('region', { name: 'Call summary' })).toBeTruthy()
     expect(screen.getByRole('heading', { name: 'Output' })).toBeTruthy()
 
-    const technical = screen.getByText('Technical record').closest('details')
+    const technical = screen.getByText('Technical details').closest('details')
     expect(technical).not.toBeNull()
     expect((technical as HTMLDetailsElement).open).toBe(false)
     expect(within(technical as HTMLElement).getAllByText(callRef).length).toBeGreaterThan(0)
     expect(within(technical as HTMLElement).getByText('attempt:exact')).toBeTruthy()
     expect(within(technical as HTMLElement).getByText('3')).toBeTruthy()
-    expect(within(technical as HTMLElement).getByRole('heading', { name: 'What happened', hidden: true })).toBeTruthy()
+    expect(within(technical as HTMLElement).getByText('Money before and after the call')).toBeTruthy()
   })
 
   it('presents a completed receipt as six recorded stages with money facts and reuse actions', () => {
@@ -279,12 +277,10 @@ describe('/calls/$callRef', () => {
     renderWithRouter({ kind: 'found', version: 1, callRef, toolRef, state: 'reconciliation_required' })
 
     expect(screen.getAllByText('Reconciliation required').length).toBeGreaterThan(0)
-    expect(screen.getByText('No canonical result is recorded yet. The state above remains authoritative.')).toBeTruthy()
+    expect(screen.queryByText('No result has been recorded yet.')).toBeNull()
     expect(screen.queryByText('Completed')).toBeNull()
-    expect(screen.getAllByText('What happened').length).toBeGreaterThan(0)
-    expect(screen.getByText('Financial impact')).toBeTruthy()
-    expect(screen.getByText('What happens automatically')).toBeTruthy()
-    expect(screen.getByText('What you can do')).toBeTruthy()
+    expect(screen.getByText('Needs attention')).toBeTruthy()
+    expect(screen.queryByText('What happens next')).toBeNull()
     expect(screen.queryByText('Reference kept')).toBeNull()
     expect(screen.getByText('The external effect may have started. Reconcile before retrying.')).toBeTruthy()
   })
@@ -357,7 +353,7 @@ describe('/calls/$callRef', () => {
 
     expect(screen.getByText('Evidence submission is unavailable')).toBeTruthy()
     expect(screen.getByText(/Permission to submit Provider evidence could not be confirmed/)).toBeTruthy()
-    expect(screen.getByRole('button', { name: 'Refresh current status' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Check status' })).toBeTruthy()
     expect(screen.queryByRole('button', { name: 'Submit reconciliation evidence' })).toBeNull()
     expect(screen.queryByLabelText('Evidence source')).toBeNull()
     expect(screen.getByText('Charge not yet confirmed. We are reconciling this Call. Do not assume a charge or refund.')).toBeTruthy()
@@ -407,7 +403,7 @@ describe('/calls/$callRef', () => {
       state: 'in_progress',
     }, { onRefresh })
 
-    fireEvent.click(screen.getByRole('button', { name: 'Refresh current status' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Check status' }))
     expect(onRefresh).toHaveBeenCalledOnce()
 
     unmount()
@@ -418,7 +414,7 @@ describe('/calls/$callRef', () => {
       toolRef,
       state: 'in_progress',
     }, { onRefresh, refreshPending: true })
-    expect(screen.getByRole('button', { name: 'Refreshing current status…' }).hasAttribute('disabled')).toBe(true)
+    expect(screen.getByRole('button', { name: 'Checking…' }).hasAttribute('disabled')).toBe(true)
 
     cleanup()
     renderWithRouter({
@@ -428,7 +424,7 @@ describe('/calls/$callRef', () => {
       toolRef,
       state: 'terminal',
     }, { onRefresh })
-    expect(screen.queryByRole('button', { name: 'Refresh current status' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Check status' })).toBeNull()
   })
 
   it('replaces a nonterminal displayed state with the current source status after refresh', async () => {
@@ -442,9 +438,9 @@ describe('/calls/$callRef', () => {
     })
     renderRouteComponent({ kind: 'found', version: 1, callRef, toolRef, state: 'in_progress' })
 
-    fireEvent.click(screen.getByRole('button', { name: 'Refresh current status' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Check status' }))
 
-    await waitFor(() => expect(screen.getAllByText('Resolved — failed').length).toBeGreaterThan(0))
+    await waitFor(() => expect(screen.getAllByText('Call finished').length).toBeGreaterThan(0))
     expect(readStatusMock).toHaveBeenCalledWith({ data: { callRef } })
     expect(screen.queryByText('In progress')).toBeNull()
     expect(screen.getByText('Current status refreshed. Purchase status: Resolved — failed.')).toBeTruthy()
@@ -469,11 +465,11 @@ describe('/calls/$callRef', () => {
       <RouterContextProvider router={router}>{createElement(Component)}</RouterContextProvider>,
     )
 
-    expect(screen.getByRole('link', { name: 'Recorded Tool name unavailable' }).getAttribute('href')).toContain(encodeURIComponent(toolRef))
+    expect(screen.getByRole('heading', { level: 1, name: 'Call receipt' })).toBeTruthy()
     loader.mockReturnValue(next)
     view.rerender(<RouterContextProvider router={router}>{createElement(Component)}</RouterContextProvider>)
 
-    expect(screen.getByRole('link', { name: 'Recorded Tool name unavailable' }).getAttribute('href')).toContain(encodeURIComponent(nextToolRef))
+    expect(screen.getByRole('heading', { level: 1, name: 'Call receipt' })).toBeTruthy()
     expect(screen.queryByText(callRef)).toBeNull()
   })
 
@@ -481,7 +477,7 @@ describe('/calls/$callRef', () => {
     readStatusMock.mockRejectedValue(new Error('offline'))
     renderRouteComponent({ kind: 'found', version: 1, callRef, toolRef, state: 'in_progress' })
 
-    fireEvent.click(screen.getByRole('button', { name: 'Refresh current status' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Check status' }))
 
     expect(await screen.findByText('The current status source is unavailable. The displayed state has not changed.')).toBeTruthy()
     expect(screen.getAllByText('In progress').length).toBeGreaterThan(0)
@@ -669,7 +665,7 @@ describe('/calls/$callRef', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Submit reconciliation evidence' }))
     expect(await screen.findByText('The reconciliation source is unavailable. No new Call state is claimed.')).toBeTruthy()
 
-    fireEvent.click(screen.getByRole('button', { name: 'Refresh current status' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Check status' }))
     await screen.findByText('Current status refreshed. Purchase status: Open — outcome uncertain.')
     expect((screen.getByLabelText('Evidence source') as HTMLInputElement).value).toBe('')
     expect((screen.getByLabelText('Evidence reference') as HTMLInputElement).value).toBe('')
@@ -786,7 +782,7 @@ describe('/calls/$callRef', () => {
     renderWithRouter(result, { onRefresh })
 
     expect(screen.getByRole('heading', { level: 1, name: heading })).toBeTruthy()
-    fireEvent.click(screen.getByRole('button', { name: 'Try again' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Check status' }))
     expect(onRefresh).toHaveBeenCalledOnce()
     expect(screen.queryByRole('link', { name: 'Sign in to view current status' })).toBeNull()
   })
@@ -804,7 +800,7 @@ describe('/calls/$callRef', () => {
     const refusal = screen.getByRole('heading', { level: 2, name: 'Refusal evidence' }).closest('section')
     expect(refusal).not.toBeNull()
     expect(within(refusal as HTMLElement).getByText('Use the Tool environment recorded at creation.')).toBeTruthy()
-    expect(screen.queryByRole('button', { name: 'Refresh current status' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Check status' })).toBeNull()
     expect(screen.queryByRole('link', { name: 'Sign in to view current status' })).toBeNull()
   })
 
@@ -826,8 +822,8 @@ describe('/calls/$callRef', () => {
       ownerContext,
     })
 
-    expect(screen.getByRole('heading', { level: 1, name: 'Call receipt' })).toBeTruthy()
-    expect(screen.getByRole('heading', { name: 'Call summary' })).toBeTruthy()
+    expect(screen.getByRole('heading', { level: 1, name: 'Observe Perth weather' })).toBeTruthy()
+    expect(screen.getByRole('region', { name: 'Call summary' })).toBeTruthy()
     expect(screen.queryByText('Complete')).toBeNull()
     expect(screen.getAllByText(/Cancelled/i).length).toBeGreaterThan(0)
     expect(screen.queryByRole('button', { name: /Reuse/i })).toBeNull()
@@ -858,10 +854,10 @@ describe('/calls/$callRef', () => {
       },
     })
 
-    expect(screen.getByRole('heading', { level: 1, name: 'Call receipt' })).toBeTruthy()
-    expect(screen.getByRole('heading', { name: 'Call summary' })).toBeTruthy()
+    expect(screen.getByRole('heading', { level: 1, name: 'Observe Perth weather' })).toBeTruthy()
+    expect(screen.getByRole('region', { name: 'Call summary' })).toBeTruthy()
     expect(screen.queryByText('Complete')).toBeNull()
-    expect(screen.getAllByText(/Resolved — failed/i).length).toBeGreaterThan(0)
+    expect(screen.getAllByText(/Not completed/i).length).toBeGreaterThan(0)
     expect(screen.getAllByText('Authorize the Call and retry.').length).toBeGreaterThan(0)
     expect(screen.getAllByText('AUD 0.00').length).toBeGreaterThan(0)
     expect(screen.queryByRole('button', { name: /Reuse/i })).toBeNull()

@@ -211,7 +211,9 @@ export async function quoteActionHandler(
                 custodyRef: subjects.treasury.custodyRef,
                 custodyGeneration: subjects.treasury.custodyGeneration,
                 network: subjects.treasury.network,
-                availableUnits: treasury.units,
+                availableUnits: BigInt(treasury.units) < BigInt(subjects.treasury.targetUnits)
+                  ? treasury.units
+                  : subjects.treasury.targetUnits,
                 evidenceRef: subjects.treasury.evidenceRef,
                 evidenceDigest: subjects.treasury.evidenceDigest,
               },

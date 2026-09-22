@@ -184,6 +184,7 @@ function makeDependencies(options: Readonly<{
   onUnsignedMaterial?: (intent: CdpX402PaymentSigningIntent) => Promise<void> | void
   environment?: Readonly<Record<string, string | undefined>>
   aeEnvironment?: X402AeEnvironment
+  authorityExpiresAt?: number
 }> = {}): Readonly<{
   dependencies: CdpX402PaymentSignerDependencies
   createClient: ReturnType<typeof vi.fn>
@@ -232,6 +233,7 @@ function makeDependencies(options: Readonly<{
         ...options.environment,
       },
       createClient,
+      authorityExpiresAt: options.authorityExpiresAt ?? Date.now() + 300_000,
       ...(options.aeEnvironment === undefined ? {} : { aeEnvironment: options.aeEnvironment }),
       ...(options.persistedIntent === undefined ? {} : { persistedIntent: options.persistedIntent }),
       ...(options.onUnsignedMaterial === undefined ? {} : { onUnsignedMaterial: options.onUnsignedMaterial }),
@@ -457,6 +459,87 @@ describe('CDP x402 custody signer', () => {
       message: material.typedData.message,
     }))
     expect(decodePaymentSignatureHeader(header ?? '').payload.signature).toBe(SIGNATURE)
+  })
+
+  it('caps a new authorization to the admitted Call authority without changing the accepted requirement', async () => {
+    vi.useFakeTimers()
+    try {
+      const now = 1_800_000_000_000
+      vi.setSystemTime(now)
+      let intent: CdpX402PaymentSigningIntent | undefined
+      const authorityExpiresAt = now + 30_900
+      const fixture = makeDependencies({
+        authorityExpiresAt,
+        onUnsignedMaterial: (captured) => { intent = captured },
+      })
+
+      const header = await createCdpEvmX402PaymentSignature(request, {
+        ...fixture.dependencies,
+        requestFingerprintContext: fingerprintContext,
+      })
+      if (intent === undefined) throw new Error('test intent was not persisted')
+      const payload = decodePaymentSignatureHeader(header ?? '')
+      const authorization = payload.payload.authorization as { validBefore: string; nonce: string }
+
+      expect(payload.accepted).toEqual(requirement)
+      expect(authorization.validBefore).toBe(String(Math.floor(authorityExpiresAt / 1_000)))
+      expect(fixture.signTypedData).toHaveBeenCalledWith(expect.objectContaining({
+        message: expect.objectContaining({ validBefore: authorization.validBefore }),
+      }))
+      expect(intent.paymentAuthorizationValidBefore).toBe(authorization.validBefore)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('does not extend or regenerate persisted authorization under a tighter authority bound', async () => {
+    vi.useFakeTimers()
+    try {
+      const now = 1_800_000_000_000
+      vi.setSystemTime(now)
+      let persisted: CdpX402PaymentSigningIntent | undefined
+      const first = makeDependencies({
+        authorityExpiresAt: now + 30_000,
+        onUnsignedMaterial: (intent) => { persisted = intent },
+      })
+      await createCdpEvmX402PaymentSignature(request, {
+        ...first.dependencies,
+        requestFingerprintContext: fingerprintContext,
+      })
+      if (persisted === undefined) throw new Error('test intent was not persisted')
+      const retry = makeDependencies({
+        authorityExpiresAt: now + 20_000,
+        persistedIntent: persisted,
+      })
+
+      await expect(createCdpEvmX402PaymentSignature(request, {
+        ...retry.dependencies,
+        requestFingerprintContext: fingerprintContext,
+      })).rejects.toThrow('x402_payment_unsigned_identity_conflict')
+      expect(retry.signTypedData).not.toHaveBeenCalled()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('refuses when the authority cap elapses after material persistence and before signing', async () => {
+    vi.useFakeTimers()
+    try {
+      const now = 1_800_000_000_000
+      vi.setSystemTime(now)
+      const fixture = makeDependencies({
+        authorityExpiresAt: now + 10_000,
+        onUnsignedMaterial: () => { vi.setSystemTime(now + 5_000) },
+      })
+
+      expect(await createCdpEvmX402PaymentSignature(request, {
+        ...fixture.dependencies,
+        requestFingerprintContext: fingerprintContext,
+      })).toBeUndefined()
+      expect(fixture.signTypedData).not.toHaveBeenCalled()
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it('signs a standard challenge when the seller does not advertise the optional payment-identifier extension', async () => {

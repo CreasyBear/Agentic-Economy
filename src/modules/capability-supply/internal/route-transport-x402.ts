@@ -72,7 +72,9 @@ export {
 export type X402RouteTransportRuntime = RouteTransportRuntime &
   Readonly<{
     prepareX402PaymentAuthorization: (
-      request: X402PaymentSignatureRequest & X402PaymentAuthorizationIdentity,
+      request: X402PaymentSignatureRequest & X402PaymentAuthorizationIdentity & Readonly<{
+        authorityExpiresAt: number
+      }>,
     ) => Promise<X402PreparedAuthorization | undefined>
     readX402PaymentAuthorization: (
       prepared: X402PreparedAuthorization,
@@ -162,6 +164,7 @@ export async function invokeX402(
   try {
     preparedAuthorization = await runtime.prepareX402PaymentAuthorization({
       challenge,
+      authorityExpiresAt: invocation.authority.expiresAt,
       credential: paymentCredentialRef,
       selectedRequirement: requirement,
       ...authorizationIdentity,

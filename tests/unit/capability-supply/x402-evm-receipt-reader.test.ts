@@ -112,6 +112,31 @@ describe('guarded x402 EVM receipt reader', () => {
     mocks.isPublicHttpTarget.mockClear()
   })
 
+  it('reads the confirmation head after the receipt wait completes', async () => {
+    installSuccessfulRpc(BASE_SEPOLIA_USDC_ADDRESS)
+    const respond = mocks.fetch.getMockImplementation()!
+    let receiptReturned = false
+    mocks.fetch.mockImplementation(async (target: URL, init: RequestInit) => {
+      const request = JSON.parse(String(init.body)) as { method: string }
+      if (request.method === 'eth_getTransactionReceipt') {
+        await new Promise(resolve => setTimeout(resolve, 20))
+        receiptReturned = true
+      }
+      const response = await respond(target, init) as Response
+      if (request.method === 'eth_getBlockByNumber' && !receiptReturned) {
+        const body = await response.json() as { result: Record<string, unknown> }
+        return rpcResult({ ...body.result, number: '0x64' })
+      }
+      return response
+    })
+    await expect(readGuardedX402EvmReceipt({
+      target: new URL('https://rpc.example.test'), aeEnvironment: 'sandbox',
+      network: BASE_SEPOLIA_NETWORK, asset: BASE_SEPOLIA_USDC_ADDRESS,
+      transactionHash, payer, nonce, dispatcher: {} as never,
+      minimumConfirmations: 12, confirmationTimeoutMs: 1_000,
+    })).resolves.toMatchObject({ confirmations: 13n, authorizationState: true })
+  })
+
   it.each([
     ['sandbox', BASE_SEPOLIA_NETWORK, BASE_SEPOLIA_USDC_ADDRESS],
     ['production', BASE_MAINNET_NETWORK, BASE_MAINNET_USDC_ADDRESS],

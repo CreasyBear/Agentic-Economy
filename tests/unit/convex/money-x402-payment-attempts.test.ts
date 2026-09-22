@@ -192,8 +192,10 @@ describe('platform-funded validation payment preparation', () => {
       amount: String(args.amountUnits), payTo: String(args.payTo), maxTimeoutSeconds: 60,
       extra: { name: 'USD Coin', version: '2', assetTransferMethod: 'eip3009' },
     }
+    const callAuthority = call.authority as { expiresAt: string }
     const result = await callbacks.prepareX402PaymentAuthorization({
       challenge: { x402Version: 2, resource: { url: String(args.providerEndpoint) }, accepts: [requirement] },
+      authorityExpiresAt: Date.parse(callAuthority.expiresAt),
       credential: X402_MANAGED_CUSTODY_REF, selectedRequirement: requirement,
       paymentIdentifier: String(args.paymentIdentifier), attemptRef: String(args.attemptRef),
       effectGeneration: 1, challengeDigest: String(args.challengeDigest),
@@ -777,6 +779,22 @@ describe('money x402 payment authorization attempt', () => {
       kind: 'reconciliation_required',
     })
     expect(JSON.stringify(revoked.rows('moneyX402PaymentAttempts'))).toBe(before)
+  })
+
+  it('reconciles current spending-policy grants and rejects a mismatched current digest', async () => {
+    const db = new MemoryDb()
+    seedReconciliationAuthority(db, 'active')
+    const grant = db.rows('agentAccessGrants')[0]!
+    grant.spendingPolicyDigest = grant.policyDigest
+    delete grant.policyDigest
+    await expect(reconcile({ db, runMutation: async () => null }, reconciliationArgs()))
+      .resolves.toMatchObject({ kind: 'settled' })
+
+    const changed = new MemoryDb()
+    seedReconciliationAuthority(changed, 'active')
+    changed.rows('agentAccessGrants')[0]!.spendingPolicyDigest = 'sha256:changed'
+    await expect(reconcile({ db: changed, runMutation: async () => null }, reconciliationArgs()))
+      .resolves.toEqual({ kind: 'reconciliation_required' })
   })
 
   it.each([

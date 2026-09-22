@@ -126,6 +126,142 @@ async function seedReservationFixture(backend: ReturnType<typeof convexTest>) {
   })
 }
 
+async function seedLostResult(backend: ReturnType<typeof convexTest>) {
+  await seedReservationFixture(backend)
+  await backend.run(async ctx => {
+    const row = await ctx.db.query('capabilityCalls').first()
+    if (row === null) throw new Error('fixture_missing')
+    const amount = { currency: 'AUD', units: '6000000', exponent: 6 }
+    const usdc = { currency: 'USDC', units: '5000000', exponent: 6 }
+    await ctx.db.patch(row._id, {
+      state: 'reconciliation_required', formanceFinancialState: 'outcome_unknown',
+      result: { kind: 'reconciliation_required', callRef, toolRef,
+        evidence: { attemptRef: 'attempt:lost', effectGeneration: 1,
+          evidenceSource: 'provider:lost', requiredAt: new Date(now).toISOString(), retry: 'reconcile_before_retry' },
+        receipt: { commercialModel: 'account_aud', receiptRef: 'receipt:lost', state: 'reconciliation_required',
+          buyerCharge: amount, serviceFee: { ...amount, units: '0' }, totalBuyerCharge: amount,
+          providerObligation: { amount: usdc, settlementMethod: 'managed_x402', payoutEligible: false },
+          providerSettlement: { amount: usdc, network: 'eip155:84532', asset: '0x036CbD53842c5426634e7929541eC2318f3dCF7e' },
+          priceDigest: `sha256:${'a'.repeat(64)}`, evidenceHash: `sha256:${'b'.repeat(64)}`,
+          issuedAt: new Date(now).toISOString(), refundState: 'unknown', lossState: 'unknown' },
+      },
+    })
+    await ctx.db.insert('moneyX402PaymentAttempts', {
+      dispatchRef: callRef, attemptRef: 'attempt:lost', effectGeneration: 1, toolRef, inputDigest: row.inputDigest,
+      paymentIdentifier: 'payment:lost', operationKeyDigest: 'sha256:key', challengeDigest: 'sha256:challenge',
+      challengeJson: '{}', selectedRequirementJson: '{}', providerEndpoint: 'https://example.com/weather',
+      credentialRef: 'credential:lost', scheme: 'exact', network: 'eip155:84532',
+      asset: '0x036CbD53842c5426634e7929541eC2318f3dCF7e', payTo: '0x2222222222222222222222222222222222222222',
+      amountUnits: '5000000', currency: 'USDC', exponent: 6, custodyRef: 'custody:lost',
+      authorizationDigest: 'sha256:authorization', state: 'reconciliation_required', preparedAt: now,
+      submissionStartedAt: now, reservationRef: reservationRefs[1]!, paymentPayer: '0x1111111111111111111111111111111111111111',
+      paymentNonce: `0x${'c'.repeat(64)}`, evidenceRefs: [],
+    })
+  })
+}
+
+describe('paid Call with a lost response', () => {
+  const transactionHash = `0x${'d'.repeat(64)}`
+  const evidenceDigest = `sha256:${'e'.repeat(64)}`
+  it('completes delivery only from the retained response after settlement and replays once', async () => {
+    const backend = convexTest(schema, convexModules)
+    await seedLostResult(backend)
+    const output = { weather: 'fog', temperatureC: 13.8 }
+    const result = await backend.run(async ctx => {
+      const row = await ctx.db.query('capabilityCalls').first()
+      const attempt = await ctx.db.query('moneyX402PaymentAttempts').first()
+      if (row?.result?.kind !== 'reconciliation_required' || !row.result.receipt || !attempt) throw new Error('fixture_missing')
+      await ctx.db.patch(row._id, { attemptRef: attempt.attemptRef,
+        formanceSettlementRefs: ['formance:settle-buyer', 'formance:settle-provider'] })
+      await ctx.db.patch(attempt._id, { settlementStatus: 'settled',
+        reconciliationEvidenceDigest: evidenceDigest,
+        quarantinedOutputJson: JSON.stringify(output), quarantinedResponseDigest: evidenceDigest })
+      return { kind: 'completed' as const, callRef, toolRef, output, evidenceHash: evidenceDigest,
+        receipt: { ...row.result.receipt, state: 'settled' as const, refundState: 'not_applicable' as const } }
+    })
+    const args = { callRef, principalId: principalRef, state: 'completed' as const, result,
+      attemptRef: 'attempt:lost', dispatchState: 'completed' as const, now: now + 5,
+      clearResult: false, clearWorkId: false, clearAttemptRef: false,
+      clearEvidenceHash: false, clearDispatchState: false }
+    await backend.mutation(internal.capabilityCalls.projectRecovery, args)
+    await expect(backend.run(async ctx => (await ctx.db.query('capabilityCalls').first())?.state))
+      .resolves.toBe('reconciliation_required')
+    await backend.run(async ctx => {
+      const row = await ctx.db.query('capabilityCalls').first()
+      if (row) await ctx.db.patch(row._id, { formanceFinancialState: 'settled' })
+    })
+    await backend.mutation(internal.capabilityCalls.projectRecovery, {
+      ...args, result: { ...result, output: { weather: 'invented' } },
+    })
+    await expect(backend.run(async ctx => (await ctx.db.query('capabilityCalls').first())?.state))
+      .resolves.toBe('reconciliation_required')
+    await backend.mutation(internal.capabilityCalls.projectRecovery, args)
+    await backend.mutation(internal.capabilityCalls.projectRecovery, args)
+    await expect(backend.query(internal.capabilityCalls.readOwnerRecovery, { callRef }))
+      .resolves.toMatchObject({ state: 'completed', result: { output, usage: { chargeState: 'paid' },
+        receipt: { transactionRef: 'formance:settle-buyer',
+          accountingTransactionRefs: ['formance:settle-buyer', 'formance:settle-provider'] } } })
+    await backend.run(async ctx => {
+      const row = await ctx.db.query('capabilityCalls').first()
+      if (row?.result?.kind !== 'completed') throw new Error('fixture_missing')
+      const { usage: _usage, ...withoutUsage } = row.result
+      await ctx.db.patch(row._id, { result: withoutUsage, usage: undefined })
+    })
+    await backend.mutation(internal.capabilityCalls.projectRecovery, args)
+    await expect(backend.query(internal.capabilityCalls.readOwnerRecovery, { callRef }))
+      .resolves.toMatchObject({ state: 'completed', result: { output, usage: { chargeState: 'paid' } } })
+    await expect(backend.run(async ctx => await ctx.db.query('purchaseResolutionRecords').collect()))
+      .resolves.toHaveLength(1)
+    await expect(backend.run(async ctx => await ctx.db.query('capabilityCallProjections').collect()))
+      .resolves.toMatchObject([{ state: 'completed', deliveryState: 'delivered', paymentState: 'settled' }])
+  })
+
+  it('closes buyer credit and Provider settlement once without inventing delivery evidence', async () => {
+    const backend = convexTest(schema, convexModules)
+    await seedLostResult(backend)
+    const claim = { callRef, transactionHash }
+    const claims = await Promise.all([
+      backend.mutation(internal.moneyManagedCallRemedy.claim, claim),
+      backend.mutation(internal.moneyManagedCallRemedy.claim, claim),
+    ])
+    expect(claims.map(value => value?.kind)).toEqual(['claimed', 'claimed'])
+    expect(await backend.mutation(internal.moneyManagedCallRemedy.claim, {
+      callRef, transactionHash: `0x${'f'.repeat(64)}`,
+    })).toBeNull()
+    const finish = { ...claim, evidenceDigest, transactionRefs: ['formance:buyer-restored', 'formance:provider-paid'] }
+    expect(await backend.mutation(internal.moneyManagedCallRemedy.finish, finish)).toEqual({ kind: 'completed' })
+    expect(await backend.mutation(internal.moneyManagedCallRemedy.finish, finish)).toEqual({ kind: 'completed' })
+    const records = await backend.run(async ctx => ({
+      call: await ctx.db.query('capabilityCalls').first(),
+      payment: await ctx.db.query('moneyX402PaymentAttempts').first(),
+      obligation: await ctx.db.query('moneyProviderObligations').first(),
+    }))
+    expect(records.call).toMatchObject({ state: 'refused', formanceFinancialState: 'released',
+      result: { code: 'result_invalid', retryable: false, receipt: { state: 'refunded', refundState: 'released',
+        externalSettlementRef: transactionHash } } })
+    expect(records.payment).toMatchObject({ settlementStatus: 'settled', reconciliationEvidenceDigest: evidenceDigest })
+    expect(records.payment).not.toHaveProperty('transportObservationDigest')
+    expect(records.payment).not.toHaveProperty('quarantinedOutputJson')
+    expect(records.obligation).toMatchObject({ state: 'settled', settlementTransactionRef: 'formance:provider-paid' })
+    expect(await backend.mutation(internal.moneyManagedCallRemedy.claim, claim)).toEqual({ kind: 'completed' })
+  })
+
+  it('does not discard a recoverable response or finalize before recovery is claimed', async () => {
+    const backend = convexTest(schema, convexModules)
+    await seedLostResult(backend)
+    expect(await backend.mutation(internal.moneyManagedCallRemedy.finish, {
+      callRef, transactionHash, evidenceDigest, transactionRefs: ['a', 'b'],
+    })).toEqual({ kind: 'refused' })
+    await backend.run(async ctx => {
+      const payment = await ctx.db.query('moneyX402PaymentAttempts').first()
+      if (payment !== null) await ctx.db.patch(payment._id, {
+        quarantinedOutputJson: '{"weather":"sunny"}', quarantinedResponseDigest: 'sha256:response',
+      })
+    })
+    expect(await backend.mutation(internal.moneyManagedCallRemedy.claim, { callRef, transactionHash })).toBeNull()
+  })
+})
+
 describe('Formance managed Call evidence', () => {
   it('attaches one exact reservation from expired reference evidence and one payout-ineligible Provider obligation', async () => {
     const backend = convexTest(schema, convexModules)

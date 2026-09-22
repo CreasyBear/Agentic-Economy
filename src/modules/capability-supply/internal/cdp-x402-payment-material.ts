@@ -16,7 +16,10 @@ import { isRecord } from '@/modules/common/is-record'
 import { stableStringify, type StableHashValue } from '@/modules/common/stable-hash'
 
 import type { X402PaymentProfile } from './x402-payment-profile'
-import type { X402PaymentSignatureRequest } from './x402-challenge'
+import {
+  X402_MIN_AUTHORIZATION_VALIDITY_SECONDS,
+  type X402PaymentSignatureRequest,
+} from './x402-challenge'
 import { isPaymentSigningIdempotencyKey } from './cdp-x402-payment-authorization'
 import type {
   CdpX402PaymentSigningIntent,
@@ -39,6 +42,7 @@ export async function captureUnsignedMaterial(
   address: string,
   identifier: string,
   profile: X402PaymentProfile,
+  authorityExpiresAt: number,
 ): Promise<CdpX402PaymentUnsignedMaterial | undefined> {
   let capturedTypedData: CdpX402TypedData | undefined
   const captureSigner: ClientEvmSigner = {
@@ -90,6 +94,15 @@ export async function captureUnsignedMaterial(
       expiry === undefined
       || authorization.validBefore !== expiry.paymentAuthorizationValidBefore
     ) return undefined
+    const authorityValidBefore = Math.floor(authorityExpiresAt / 1_000)
+    const sdkValidBefore = Number(authorization.validBefore)
+    const nowSeconds = Math.floor(Date.now() / 1_000)
+    if (
+      !Number.isSafeInteger(authorityValidBefore)
+      || !Number.isSafeInteger(sdkValidBefore)
+      || authorityValidBefore <= nowSeconds + X402_MIN_AUTHORIZATION_VALIDITY_SECONDS
+    ) return undefined
+    const validBefore = String(Math.min(authorityValidBefore, sdkValidBefore))
     const material: CdpX402PaymentUnsignedMaterial = {
       x402Version: payload.x402Version,
       resource: required.resource,
@@ -100,10 +113,13 @@ export async function captureUnsignedMaterial(
         to: authorization.to,
         value: authorization.value,
         validAfter: authorization.validAfter,
-        validBefore: authorization.validBefore,
+        validBefore,
         nonce: authorization.nonce,
       },
-      typedData: capturedTypedData,
+      typedData: {
+        ...capturedTypedData,
+        message: { ...capturedTypedData.message, validBefore },
+      },
     }
     if (containsForbiddenSignatureKey(material)) return undefined
     canonicalDigest(material as StableHashValue)
@@ -120,6 +136,7 @@ export function readPersistedUnsignedMaterial(
   offeredRequirement: X402PaymentSignatureRequest['selectedRequirement'],
   accountAddress: string,
   requestFingerprint: string,
+  authorityExpiresAt: number,
 ): CdpX402PaymentUnsignedMaterial | undefined {
   if (
     !isPaymentSigningIdempotencyKey(intent.paymentSigningIdempotencyKey)
@@ -147,6 +164,7 @@ export function readPersistedUnsignedMaterial(
     || parsed.authorization.validBefore !== expiry.paymentAuthorizationValidBefore
     || intent.paymentAuthorizationValidBefore !== expiry.paymentAuthorizationValidBefore
     || intent.paymentAuthorizationExpiresAt !== expiry.paymentAuthorizationExpiresAt
+    || expiry.paymentAuthorizationExpiresAt > authorityExpiresAt
   ) return undefined
   if (
     parsed.x402Version !== required.x402Version

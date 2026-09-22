@@ -123,6 +123,8 @@ export type CdpX402PaymentSignerDependencies = Readonly<{
   persistedIntent?: CdpX402PaymentSigningIntent
   onUnsignedMaterial?: (intent: CdpX402PaymentSigningIntent) => Promise<void> | void
   requestFingerprintContext?: CdpX402RequestFingerprintContext
+  /** Exact admitted Call authority bound, in Unix milliseconds. */
+  authorityExpiresAt?: number
 }>
 
 export type CdpX402PaymentAuthorization = Readonly<{

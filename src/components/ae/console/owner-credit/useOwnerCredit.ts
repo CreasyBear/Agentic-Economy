@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useServerFn } from '@tanstack/react-start'
-import { useMutation, useQuery } from 'convex/react'
+import { useConvexAuth, useMutation, useQuery } from 'convex/react'
 
 import { api } from '../../../../../convex/_generated/api'
 
@@ -37,10 +37,21 @@ import type { AccountHistoryResult } from '@/modules/money/public'
 import type { AccountFundingBalance, AccountFundingConstraints } from '@/modules/money/server'
 
 export function useOwnerCredit(): AeOwnerCreditProps {
-  const invoiceHistoryRead = useQuery(api.moneyAccountFunding.listOwnerInvoiceHistory)
-  const autoRechargeRead = useQuery(api.moneyAutoRecharge.readAutoRechargeSettings)
+  const { isAuthenticated, isLoading: authLoading } = useConvexAuth()
+  const protectedQueriesEnabled = isAuthenticated && !authLoading
+  const invoiceHistoryRead = useQuery(
+    api.moneyAccountFunding.listOwnerInvoiceHistory,
+    protectedQueriesEnabled ? {} : 'skip',
+  )
+  const autoRechargeRead = useQuery(
+    api.moneyAutoRecharge.readAutoRechargeSettings,
+    protectedQueriesEnabled ? {} : 'skip',
+  )
   const configureAutoRecharge = useMutation(api.moneyAutoRecharge.configureAutoRecharge)
-  const monthlySpendBudgetRead = useQuery(api.moneyMonthlySpendBudget.readMonthlySpendBudget)
+  const monthlySpendBudgetRead = useQuery(
+    api.moneyMonthlySpendBudget.readMonthlySpendBudget,
+    protectedQueriesEnabled ? {} : 'skip',
+  )
   const configureMonthlySpendBudget = useMutation(api.moneyMonthlySpendBudget.configureMonthlySpendBudget)
   const beginAccountFunding = useServerFn(beginAccountFundingServer)
   const readAccountFunding = useServerFn(readAccountFundingServer)

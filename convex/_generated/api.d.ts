@@ -281,6 +281,8 @@ import type * as moneyLedger from "../moneyLedger.js";
 import type * as moneyLedgerValues from "../moneyLedgerValues.js";
 import type * as moneyManagedCall from "../moneyManagedCall.js";
 import type * as moneyManagedCallLifecycle from "../moneyManagedCallLifecycle.js";
+import type * as moneyManagedCallRemedy from "../moneyManagedCallRemedy.js";
+import type * as moneyManagedCallRemedyActions from "../moneyManagedCallRemedyActions.js";
 import type * as moneyMonthlySpendBudget from "../moneyMonthlySpendBudget.js";
 import type * as moneyOwnerSpend from "../moneyOwnerSpend.js";
 import type * as moneyPayoutPolicy from "../moneyPayoutPolicy.js";
@@ -614,6 +616,8 @@ declare const fullApi: ApiFromModules<{
   moneyLedgerValues: typeof moneyLedgerValues;
   moneyManagedCall: typeof moneyManagedCall;
   moneyManagedCallLifecycle: typeof moneyManagedCallLifecycle;
+  moneyManagedCallRemedy: typeof moneyManagedCallRemedy;
+  moneyManagedCallRemedyActions: typeof moneyManagedCallRemedyActions;
   moneyMonthlySpendBudget: typeof moneyMonthlySpendBudget;
   moneyOwnerSpend: typeof moneyOwnerSpend;
   moneyPayoutPolicy: typeof moneyPayoutPolicy;

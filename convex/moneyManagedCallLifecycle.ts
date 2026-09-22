@@ -161,6 +161,9 @@ export const finalizeSettlement = internalMutation({
     if (row === null || args.transactionRefs.length !== 2 || settlementTransactionRef === undefined) {
       return { kind: 'refused' as const, code: 'managed_call_settlement_invalid' }
     }
+    if (row.reconciliation?.leaseOwner?.startsWith('paid-result-loss:')) {
+      return { kind: 'refused' as const, code: 'managed_call_remedy_in_progress' }
+    }
     if (row.formanceFinancialState === 'settled') {
       return JSON.stringify(row.formanceSettlementRefs) === JSON.stringify(args.transactionRefs)
         ? { kind: 'accepted' as const, state: 'settled', replayed: true }

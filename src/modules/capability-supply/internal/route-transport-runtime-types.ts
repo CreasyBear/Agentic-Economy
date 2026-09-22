@@ -62,7 +62,9 @@ export type RouteTransportRuntime = Readonly<{
     }>,
   ) => boolean | Promise<boolean>
   prepareX402PaymentAuthorization?: (
-    request: X402PaymentSignatureRequest & X402PaymentAuthorizationIdentity,
+    request: X402PaymentSignatureRequest & X402PaymentAuthorizationIdentity & Readonly<{
+      authorityExpiresAt: number
+    }>,
   ) => Promise<X402PreparedAuthorization | undefined>
   readX402PaymentAuthorization?: (
     prepared: X402PreparedAuthorization,

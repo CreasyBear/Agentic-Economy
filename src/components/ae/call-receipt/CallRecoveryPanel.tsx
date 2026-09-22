@@ -44,7 +44,9 @@ function callRecoveryAvailability(
   result: FoundCallStatus,
   actions?: CallStatusPageActions,
 ): CallRecoveryAvailability {
-  const canCancelNow = result.state === 'authorized' || result.state === 'retryable' || result.state === 'leased'
+  const purchaseResolved = result.purchaseResolution !== undefined
+    || (result.result?.kind === 'refused' && !result.result.retryable)
+  const canCancelNow = !purchaseResolved && (result.state === 'authorized' || result.state === 'retryable' || result.state === 'leased')
   const canSubmitReconciliationEvidence = result.ownerContext?.reconciliation.canSubmitEvidence === true
   const hasReconciliationRecordBlocker = result.state === 'reconciliation_required'
     && (result.attemptRef === undefined || result.effectGeneration === undefined)
@@ -55,7 +57,7 @@ function callRecoveryAvailability(
     && !hasReconciliationRecordBlocker
     && !hasReconciliationPermissionBlocker
     && actions?.onReconcile !== undefined
-  const canRefreshNow = canRefreshCallStatus(result) && actions?.onRefresh !== undefined
+  const canRefreshNow = !purchaseResolved && canRefreshCallStatus(result) && actions?.onRefresh !== undefined
   const recoveryPending = actions?.refreshPending === true
     || actions?.cancelPending === true
     || actions?.reconcilePending === true
@@ -86,13 +88,10 @@ export function CallRecoveryPanel({
 
   return (
     <section className="grid gap-related border-t border-border pt-section" aria-labelledby="recovery-actions-title">
-      <div className="grid gap-intra">
-        <h2 id="recovery-actions-title" className="text-base font-medium leading-snug tracking-tight text-foreground">Resolve this Call</h2>
-        <p className="text-sm text-muted-foreground">Use only the action supported by the recorded state. Each action refreshes this exact Call.</p>
-      </div>
+      <h2 id="recovery-actions-title" className="sr-only">Call actions</h2>
       <CallReceiptStatusFeedback feedback={actions?.feedback} callRef={result.callRef} />
       <ReconciliationBlockers availability={availability} result={result} />
-      <RecoveryPrimaryActions availability={availability} result={result} {...(actions === undefined ? {} : { actions })} />
+      <RecoveryPrimaryActions availability={availability} {...(actions === undefined ? {} : { actions })} />
       {availability.canReconcileNow ? (
         <AdvancedReconciliation
           key={reconciliationBindingIdentity(result)}
@@ -150,11 +149,10 @@ function ReconciliationBlockers({
 function RecoveryPrimaryActions({
   availability,
   actions,
-  result,
-}: Readonly<{ availability: CallRecoveryAvailability; actions?: CallStatusPageActions; result: FoundCallStatus }>) {
+}: Readonly<{ availability: CallRecoveryAvailability; actions?: CallStatusPageActions }>) {
   const [cancelDialogOpen, setCancelDialogOpen] = useState(false)
   const canCancel = availability.canCancelNow && actions?.onCancel !== undefined
-  const refreshLabelMode = result.state === 'retryable' ? 'try_again' as const : 'refresh_status' as const
+  const refreshLabelMode = 'refresh_status' as const
   if (!availability.canRefreshNow && !canCancel) return null
 
   return (

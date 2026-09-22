@@ -1037,6 +1037,45 @@ describe('registered route transport runtime', () => {
     expect(sign).not.toHaveBeenCalled()
     expect(fetch).not.toHaveBeenCalled()
   })
+
+  it('admits a provider maximum window longer than the remaining usable Call authority', async () => {
+    const routeInvocation = x402PaidInvocation({
+      authority: { ...authority, expiresAt: Date.now() + 30_000 },
+    })
+    const prepared = await preparePaymentMaterial(routeInvocation, {
+      send: vi.fn<RouteTransportFetch>(),
+      resolveCredential: resolveProviderCredential('unused'),
+      readX402PaymentCredentialRef: () => X402_PAYMENT_CREDENTIAL_REF,
+      ...preparedX402Custody(async () => 'unused'),
+    })
+
+    expect(prepared.kind, JSON.stringify(prepared)).toBe('ready')
+    if (prepared.kind !== 'ready') throw new Error('payment material was refused')
+    expect(prepared.material.requirement.maxTimeoutSeconds).toBe(60)
+  })
+
+  it('refuses an authority with no protocol-usable authorization window before signing', async () => {
+    const sign = vi.fn(async () => 'must-not-sign')
+    const prepared = await preparePaymentMaterial(
+      x402PaidInvocation({ authority: { ...authority, expiresAt: Date.now() + 6_000 } }),
+      {
+        send: vi.fn<RouteTransportFetch>(),
+        resolveCredential: resolveProviderCredential('unused'),
+        readX402PaymentCredentialRef: () => X402_PAYMENT_CREDENTIAL_REF,
+        ...preparedX402Custody(sign),
+      },
+    )
+
+    expect(prepared).toMatchObject({
+      kind: 'refused',
+      observation: {
+        failureCode: 'payment_requirement_outside_authority',
+        paymentAuthorizationStatus: 'not_created',
+        paymentSubmissionStatus: 'not_submitted',
+      },
+    })
+    expect(sign).not.toHaveBeenCalled()
+  })
   it('records explicit preauthorization evidence when custody lookup is unavailable', async () => {
     const routeInvocation = x402PaidInvocation()
     const prepared = await preparePaymentMaterial(routeInvocation, {

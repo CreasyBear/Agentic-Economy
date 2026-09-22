@@ -204,11 +204,9 @@ export async function recordX402TransportObservation(
   }>,
 ): Promise<X402TransportObservationRecord> {
   const x402SettlementStatus = x402SettlementStatusForObservation(input.observation)
-  const settlementDigest =
-    input.observation.settlementEvidence?.kind === 'settled'
-    || input.observation.settlementEvidence?.kind === 'not_settled'
-      ? input.observation.settlementEvidence.digest
-      : undefined
+  const settlementDigest = input.observation.settlementEvidence?.kind !== 'not_submitted'
+    ? input.observation.settlementEvidence?.digest
+    : undefined
   const evidenceRefs = [
     ...input.operation.readiness.evidenceRefs,
     transportObservationDigest(input.observation),

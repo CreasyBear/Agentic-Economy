@@ -432,6 +432,7 @@ function prepared(): { custodyRef: string; authorizationDigest: string } {
 function expected(overrides: Partial<{
   credentialRef: string
   requestFingerprint: string
+  authorityExpiresAt: number
   useCustodySigner: boolean
   requestFingerprintContext: { method: 'GET' | 'POST'; toolRef: string; aeEnvironment: 'sandbox' | 'production' }
 }> = {}): {
@@ -442,6 +443,7 @@ function expected(overrides: Partial<{
   paymentIdentifier: string
   useCustodySigner: boolean
   requestFingerprint: string
+  authorityExpiresAt: number
   requestFingerprintContext: { method: 'GET' | 'POST'; toolRef: string; aeEnvironment: 'sandbox' | 'production' }
 } {
   return {
@@ -452,6 +454,7 @@ function expected(overrides: Partial<{
     paymentIdentifier: PAYMENT_IDENTIFIER,
     useCustodySigner: true,
     requestFingerprint: REQUEST_FINGERPRINT,
+    authorityExpiresAt: PAYMENT_AUTHORIZATION_EXPIRES_AT,
     requestFingerprintContext: { method: 'GET', toolRef: 'operation:one', aeEnvironment: 'production' },
     ...overrides,
   }

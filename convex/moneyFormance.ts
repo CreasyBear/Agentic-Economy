@@ -27,6 +27,7 @@ import {
   reverseFormanceProviderSettlement,
   reserveFormanceManagedCall,
   settleFormanceManagedCall,
+  remedyFormancePaidCall,
   syncFormanceCapacity,
 } from '../src/modules/money/formance-workflows'
 import { internalAction } from './_generated/server'
@@ -487,6 +488,17 @@ export const settleManagedCall = internalAction({
     return context.kind === 'setup_required'
       ? { kind: 'refused' as const, code: context.code, retryable: false as const }
       : convexMoneyResult(await settleFormanceManagedCall(context.context, args))
+  },
+})
+
+export const remedyPaidCall = internalAction({
+  args: { booking: v.object(managedCallBookingArgs), externalEvidenceDigest: v.string() },
+  returns: moneyResult,
+  handler: async (_ctx, args) => {
+    const context = configuredContext()
+    return context.kind === 'setup_required'
+      ? { kind: 'refused' as const, code: context.code, retryable: false as const }
+      : convexMoneyResult(await remedyFormancePaidCall(context.context, args))
   },
 })
 

@@ -16,7 +16,10 @@ import {
   normalizeX402PaymentRequirement,
   x402PaymentProfileForEnvironment,
 } from './x402-payment-profile'
-import type { X402PaymentSignatureRequest } from './x402-challenge'
+import {
+  X402_MIN_AUTHORIZATION_VALIDITY_SECONDS,
+  type X402PaymentSignatureRequest,
+} from './x402-challenge'
 import {
   cdpX402RequestFingerprint,
   isPaymentSigningIdempotencyKey,
@@ -55,6 +58,12 @@ export async function createCdpEvmX402PaymentSignature(
   request: X402PaymentSignatureRequest,
   dependencies: CdpX402PaymentSignerDependencies = {},
 ): Promise<string | undefined> {
+  const authorityExpiresAt = dependencies.authorityExpiresAt
+  if (
+    typeof authorityExpiresAt !== 'number'
+    || !Number.isSafeInteger(authorityExpiresAt)
+    || authorityExpiresAt <= 0
+  ) return undefined
   const requestedAeEnvironment = dependencies.aeEnvironment
     ?? dependencies.requestFingerprintContext?.aeEnvironment
     ?? 'production'
@@ -161,6 +170,7 @@ export async function createCdpEvmX402PaymentSignature(
       offeredRequirement,
       account.address,
       requestFingerprint,
+      authorityExpiresAt,
     )
     if (material === undefined) throw new Error('x402_payment_unsigned_identity_conflict')
   } else {
@@ -169,6 +179,7 @@ export async function createCdpEvmX402PaymentSignature(
       account.address,
       identifier,
       profile,
+      authorityExpiresAt,
     )
     if (material === undefined) return undefined
     const paymentSigningIdempotencyKey = crypto.randomUUID()
@@ -186,6 +197,12 @@ export async function createCdpEvmX402PaymentSignature(
   if (intent === undefined || material === undefined) {
     throw new Error('x402_payment_unsigned_identity_missing')
   }
+  if (
+    material.authorization.validBefore !== material.typedData.message.validBefore
+    || intent.paymentAuthorizationExpiresAt > authorityExpiresAt
+    || Number(material.authorization.validBefore)
+      <= Math.floor(Date.now() / 1_000) + X402_MIN_AUTHORIZATION_VALIDITY_SECONDS
+  ) return undefined
   const signatureResult = await cdp!.evm.signTypedData({
     address: account!.address,
     domain: material.typedData.domain,

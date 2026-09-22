@@ -218,6 +218,41 @@ describe('Account AUD funding HTTP boundary', () => {
     }))
   })
 
+  it('does not return a paid recovery session before its durable funding booking succeeds', async () => {
+    const durable = { ...command(), externalRef: 'cs_paid_recovery_pending' }
+    const payment = {
+      kind: 'hosted_redirect' as const,
+      expiresAt: durable.checkoutExpiresAt,
+      evidence: {
+        provider: 'stripe' as const,
+        externalRef: durable.externalRef!,
+        amount: { currency: 'AUD' as const, units: durable.totalUnits, exponent: 6 as const },
+        status: 'succeeded' as const,
+        checkoutStatus: 'complete' as const,
+        paymentStatus: 'paid' as const,
+        requestDigest: `sha256:${'a'.repeat(64)}`,
+        metadataDigest: durable.metadataDigest!,
+        checkoutSessionDigest: `sha256:${'b'.repeat(64)}`,
+        paymentIntentDigest: `sha256:${'c'.repeat(64)}`,
+        evidenceDigest: `sha256:${'d'.repeat(64)}`,
+        evidenceRef: 'stripe:checkout:cs_paid_recovery_pending',
+        observedAt: 100,
+      },
+    }
+    sourceMocks.callSourceMutation
+      .mockResolvedValueOnce({ kind: 'accepted', command: durable })
+      .mockResolvedValueOnce({ kind: 'accepted', command: { ...durable, state: 'pending' } })
+    const provider = {
+      createOrRecoverCreditPayment: vi.fn().mockResolvedValue(payment),
+      readCreditPayment: vi.fn(),
+    }
+
+    await expect(beginAccountFundingThroughSource(input, {}, {
+      resolveOwnerId: async () => 'owner-1',
+      provider,
+    })).resolves.toEqual({ kind: 'refused', code: 'funding_pending', retryable: true })
+  })
+
   it('uses live Stripe configuration only as a production policy gate signal', async () => {
     sourceMocks.callSourceMutation.mockResolvedValueOnce({
       kind: 'refused',
@@ -262,6 +297,114 @@ describe('Account AUD funding HTTP boundary', () => {
     })
     expect(provider.createOrRecoverCreditPayment).not.toHaveBeenCalled()
     expect(provider.readCreditPayment).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    ['pending', 'funding_pending'],
+    ['outcome_unknown', 'funding_outcome_unknown'],
+  ] as const)('does not expose paid provider evidence before durable %s funding settlement', async (state, refusalCode) => {
+    const durable = command({ externalRef: 'cs_paid_before_ledger' })
+    sourceMocks.callSourceQuery.mockResolvedValueOnce({ kind: 'accepted', command: durable })
+    sourceMocks.callSourceMutation.mockResolvedValueOnce({ kind: 'accepted', command: { ...durable, state } })
+    const payment = {
+      kind: 'hosted_redirect' as const,
+      expiresAt: durable.checkoutExpiresAt,
+      evidence: {
+        provider: 'stripe' as const,
+        externalRef: 'cs_paid_before_ledger',
+        amount: { currency: 'AUD' as const, units: durable.totalUnits, exponent: 6 as const },
+        status: 'succeeded' as const,
+        checkoutStatus: 'complete' as const,
+        paymentStatus: 'paid' as const,
+        requestDigest: `sha256:${'a'.repeat(64)}`,
+        metadataDigest: durable.metadataDigest!,
+        checkoutSessionDigest: `sha256:${'b'.repeat(64)}`,
+        paymentIntentDigest: `sha256:${'c'.repeat(64)}`,
+        evidenceDigest: `sha256:${'d'.repeat(64)}`,
+        evidenceRef: 'stripe:checkout:cs_paid_before_ledger',
+        observedAt: 100,
+      },
+    }
+    const provider = {
+      createOrRecoverCreditPayment: vi.fn(),
+      readCreditPayment: vi.fn().mockResolvedValue(payment),
+    }
+
+    const result = await readAccountFundingThroughSource({
+      commandRef: durable.commandRef,
+      idempotencyKey: durable.idempotencyKey,
+    }, {}, { provider })
+    expect(result).toEqual({ kind: 'refused', code: refusalCode, retryable: true })
+  })
+
+  it('exposes paid provider evidence only after durable funding settlement', async () => {
+    const durable = command({ externalRef: 'cs_paid_after_ledger' })
+    sourceMocks.callSourceQuery.mockResolvedValueOnce({ kind: 'accepted', command: durable })
+    sourceMocks.callSourceMutation.mockResolvedValueOnce({ kind: 'accepted', command: { ...durable, state: 'succeeded' } })
+    const payment = {
+      kind: 'hosted_redirect' as const,
+      expiresAt: durable.checkoutExpiresAt,
+      evidence: {
+        provider: 'stripe' as const,
+        externalRef: 'cs_paid_after_ledger',
+        amount: { currency: 'AUD' as const, units: durable.totalUnits, exponent: 6 as const },
+        status: 'succeeded' as const,
+        checkoutStatus: 'complete' as const,
+        paymentStatus: 'paid' as const,
+        requestDigest: `sha256:${'a'.repeat(64)}`,
+        metadataDigest: durable.metadataDigest!,
+        checkoutSessionDigest: `sha256:${'b'.repeat(64)}`,
+        paymentIntentDigest: `sha256:${'c'.repeat(64)}`,
+        evidenceDigest: `sha256:${'d'.repeat(64)}`,
+        evidenceRef: 'stripe:checkout:cs_paid_after_ledger',
+        observedAt: 100,
+      },
+    }
+    const provider = {
+      createOrRecoverCreditPayment: vi.fn(),
+      readCreditPayment: vi.fn().mockResolvedValue(payment),
+    }
+
+    await expect(readAccountFundingThroughSource({
+      commandRef: durable.commandRef,
+      idempotencyKey: durable.idempotencyKey,
+    }, {}, { provider })).resolves.toEqual(payment)
+  })
+
+  it('preserves an unpaid open Checkout session while its funding command is pending', async () => {
+    const durable = command({ externalRef: 'cs_open_pending' })
+    sourceMocks.callSourceQuery.mockResolvedValueOnce({ kind: 'accepted', command: durable })
+    sourceMocks.callSourceMutation.mockResolvedValueOnce({ kind: 'accepted', command: durable })
+    const payment = {
+      kind: 'hosted_redirect' as const,
+      expiresAt: durable.checkoutExpiresAt,
+      checkoutUrl: 'https://checkout.stripe.com/c/pay/cs_open_pending',
+      evidence: {
+        provider: 'stripe' as const,
+        externalRef: 'cs_open_pending',
+        amount: { currency: 'AUD' as const, units: durable.totalUnits, exponent: 6 as const },
+        status: 'pending' as const,
+        checkoutStatus: 'open' as const,
+        paymentStatus: 'unpaid' as const,
+        checkoutMode: 'hosted_page' as const,
+        checkoutExpiresAt: durable.checkoutExpiresAt,
+        requestDigest: `sha256:${'a'.repeat(64)}`,
+        metadataDigest: durable.metadataDigest!,
+        checkoutSessionDigest: `sha256:${'b'.repeat(64)}`,
+        evidenceDigest: `sha256:${'d'.repeat(64)}`,
+        evidenceRef: 'stripe:checkout:cs_open_pending',
+        observedAt: 100,
+      },
+    }
+    const provider = {
+      createOrRecoverCreditPayment: vi.fn(),
+      readCreditPayment: vi.fn().mockResolvedValue(payment),
+    }
+
+    await expect(readAccountFundingThroughSource({
+      commandRef: durable.commandRef,
+      idempotencyKey: durable.idempotencyKey,
+    }, {}, { provider })).resolves.toEqual(payment)
   })
 
   it('durably admits a verified Stripe event without synchronous provider work', async () => {

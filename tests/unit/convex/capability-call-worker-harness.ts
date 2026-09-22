@@ -919,6 +919,9 @@ export function createWorker(kind: WorkerKind, options: WorkerOptions = {}): { c
   mocks.guardedFetch.mockImplementation(async () => new Response('{}', { status: 200 }))
   mocks.invokePreparedRouteTransport.mockImplementation(async (_prepared: unknown, runtimeValue: unknown) => {
     const runtime = runtimeValue as X402RouteTransportRuntime
+    const preparedInvocation = _prepared as Readonly<{
+      invocation: Readonly<{ authority: Readonly<{ expiresAt: number }> }>
+    }>
     state.transportCalls += 1
     if (kind !== 'x402') {
       await runtime.send(new URL(operation.binding.endpointUrl), { method: 'POST' })
@@ -967,9 +970,12 @@ export function createWorker(kind: WorkerKind, options: WorkerOptions = {}): { c
         ? undefined
         : await runtime.readX402PaymentCredentialRef()
       if (paymentCredential === undefined) throw new Error('x402 payment credential locator missing')
-      const request: X402PaymentSignatureRequest & X402PaymentAuthorizationIdentity = {
+      const request: X402PaymentSignatureRequest & X402PaymentAuthorizationIdentity & Readonly<{
+        authorityExpiresAt: number
+      }> = {
         challenge,
         challengeDigest: canonicalDigest(challenge as StableHashValue),
+        authorityExpiresAt: preparedInvocation.invocation.authority.expiresAt,
         credential: paymentCredential,
         paymentIdentifier,
         selectedRequirement: challenge.accepts[0]!,

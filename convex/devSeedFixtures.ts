@@ -346,6 +346,8 @@ export function sandboxTestnetToolSpec(endpointUrl: string, payTo: string): Sand
       required: ['value'],
       additionalProperties: false,
     },
+    // Keep readiness inspection on the provider's declared validation input.
+    inputExamples: [{ label: 'Validation input', input: { value: 'x402-validation' } }],
     outputSchema: {
       $schema: 'https://json-schema.org/draft/2020-12/schema',
       type: 'object',
@@ -441,11 +443,14 @@ export function sandboxToolFixture(spec: SandboxToolSpec): DevSeedBusinessFixtur
   }
 }
 
-export function sandboxToolContractMetadata(spec: SandboxToolSpec): Readonly<Record<string, unknown>> {
+export function sandboxToolContractMetadata(
+  spec: SandboxToolSpec,
+  version = 1,
+): Readonly<Record<string, unknown>> {
   const requestFields = [spec.requestField, ...(spec.additionalRequestFields ?? [])]
   return {
     capabilityId: spec.capabilityId,
-    version: 1,
+    version,
     name: spec.label,
     description: spec.contractDescription,
     ...(spec.inputExamples === undefined ? {} : { inputExamples: spec.inputExamples }),
@@ -478,10 +483,10 @@ export function sandboxToolContractMetadata(spec: SandboxToolSpec): Readonly<Rec
   }
 }
 
-export function sandboxToolContractDocumentJson(spec: SandboxToolSpec): string {
+export function sandboxToolContractDocumentJson(spec: SandboxToolSpec, version = 1): string {
   return JSON.stringify({
     contractFormat: 'ae.capability-contract:v2',
-    ...sandboxToolContractMetadata(spec),
+    ...sandboxToolContractMetadata(spec, version),
     inputSchema: spec.inputSchema,
     outputSchema: spec.outputSchema,
   })

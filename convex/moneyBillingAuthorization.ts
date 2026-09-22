@@ -264,7 +264,9 @@ function grantAuthorityIsCurrent(
     grant.applicationRef === call.applicationRef,
     grant.environment === call.environment,
     grant.generation === call.grantGeneration,
-    grant.policyDigest === call.policyDigest,
+    // Current grants use spendingPolicyDigest; protected historical grants
+    // retain policyDigest. Admission records that same digest on the Call.
+    (grant.spendingPolicyDigest ?? grant.policyDigest) === call.policyDigest,
     grant.lifecycle === 'active',
     grant.expiresAt === call.grantExpiresAt,
     grant.expiresAt > now,

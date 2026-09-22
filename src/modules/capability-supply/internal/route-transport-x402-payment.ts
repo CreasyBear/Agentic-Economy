@@ -30,7 +30,10 @@ import {
 import { degradeBackend } from '@/lib/observability/degrade-backend'
 import type { X402FetchTransportConfiguration } from './transport-adapters'
 import type { X402PaymentAuthorizationIdentity } from './x402-payment-lifecycle'
-import type { X402Challenge } from './x402-challenge'
+import {
+  X402_MIN_AUTHORIZATION_VALIDITY_SECONDS,
+  type X402Challenge,
+} from './x402-challenge'
 
 type X402Configuration = X402FetchTransportConfiguration
 
@@ -127,7 +130,8 @@ export async function prepareX402PaymentMaterial(
       configuration.method,
       configuration.query !== undefined || configuration.queryObjectPointer !== undefined,
     )
-    || Date.now() + requirement.maxTimeoutSeconds * 1_000 > invocation.authority.expiresAt
+    || Math.floor(invocation.authority.expiresAt / 1_000)
+      <= Math.floor(Date.now() / 1_000) + X402_MIN_AUTHORIZATION_VALIDITY_SECONDS
   ) {
     return {
       kind: 'refused',

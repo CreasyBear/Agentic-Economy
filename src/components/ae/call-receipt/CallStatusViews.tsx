@@ -98,18 +98,13 @@ export function CallStatusFoundView({
   actions,
 }: Readonly<{ result: FoundCallStatus; actions?: CallStatusPageActions }>) {
   const receiptView = projectCallReceipt(result)
+  const recordedTool = result.ownerContext?.recordedTool.kind === 'available' ? result.ownerContext.recordedTool : undefined
+  const receiptTitle = recordedTool?.name
   return (
-    <CallReceiptWorkspace callRef={result.callRef} description={receiptView.statusDetail}>
+    <CallReceiptWorkspace callRef={result.callRef} {...(receiptTitle === undefined ? {} : { title: receiptTitle })} description={receiptView.issue?.whatHappened ?? receiptView.statusDetail}>
       <CallSummarySection result={result} receiptView={receiptView} />
-      {receiptView.issue === undefined ? null : <CallReceiptIssue issue={receiptView.issue} />}
       <CallRecoveryPanel result={result} {...(actions === undefined ? {} : { actions })} />
-      {result.result === undefined ? (
-        <section className="grid gap-intra border-t border-border pt-section" aria-labelledby="current-result-title">
-          <h2 id="current-result-title" className="text-base font-medium leading-snug tracking-tight text-foreground">Current result</h2>
-          <p className="text-muted-foreground">No canonical result is recorded yet. The state above remains authoritative.</p>
-        </section>
-      ) : <CallOutputSection result={result.result} />}
-      <CallMoneyFacts view={receiptView} />
+      {result.result === undefined ? null : <CallOutputSection result={result.result} />}
       {receiptView.complete ? (
         <CallReuseActions
           key={receiptView.toolRef ?? receiptView.callRef}
@@ -194,7 +189,7 @@ function CallReceiptBarrierHeader({
         <Badge variant="warning" className="w-fit">{badgeLabel}</Badge>
         <CallReceiptRef value={callRef} />
         {showRefresh && actions !== undefined ? (
-          <CallReceiptRefreshButton actions={actions} labelMode="try_again" />
+          <CallReceiptRefreshButton actions={actions} labelMode="refresh_status" />
         ) : null}
         <CallReceiptStatusFeedback feedback={actions?.feedback} callRef={callRef} />
       </div>

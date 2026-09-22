@@ -99,13 +99,15 @@ export async function readGuardedX402EvmReceipt(input: Readonly<{
           confirmations: minimumConfirmations,
           timeout: input.confirmationTimeoutMs,
         })
-    const [receipt, transaction, latestBlock] = await Promise.all([
+    const [receipt, transaction] = await Promise.all([
       receiptPromise,
       client.getTransaction({
         hash: input.transactionHash as Hex,
       }),
-      client.getBlock(),
     ])
+    // Read the head after the confirmation wait. A head captured before that
+    // wait makes a confirmed payment appear to have too few confirmations.
+    const latestBlock = await client.getBlock()
     if (
       latestBlock.number === null
       || latestBlock.number < receipt.blockNumber
