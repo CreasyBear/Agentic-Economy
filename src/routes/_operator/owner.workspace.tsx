@@ -7,11 +7,6 @@ import { clerkEmbeddedProfileAppearance } from '@/components/ae/website/clerk-ap
 import { operatorRouteOptions } from '@/lib/operator/route-options'
 
 export const Route = createFileRoute('/_operator/owner/workspace')({
-  staticData: {
-    nav: {
-      label: 'Workspace',
-    },
-  },
   ...operatorRouteOptions,
   head: () => ({
     meta: [

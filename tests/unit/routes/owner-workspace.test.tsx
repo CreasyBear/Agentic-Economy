@@ -91,9 +91,8 @@ describe('/owner/workspace route (W-12)', () => {
     expect(Route).toBeDefined()
   })
 
-  it('U2: Workspace remains a deep-link page, not a rail destination', () => {
-    const nav = (routeState.routeOptions?.staticData as { nav?: Record<string, unknown> } | undefined)?.nav
-    expect(nav).toEqual({ label: 'Workspace' })
+  it('U2: Workspace remains a deep-link page, not a route-declared rail destination', () => {
+    expect(routeState.routeOptions?.staticData).toBeUndefined()
   })
 
   it('U3: renders OrganizationProfile from Clerk inside min-h-96 shell', () => {

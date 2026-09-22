@@ -5,12 +5,6 @@ import { buildPublicPageHead } from '@/modules/seo/public'
 import { readStatusProbesServer } from '@/routes/-status.functions'
 
 export const Route = createFileRoute('/status')({
-  staticData: {
-    nav: {
-      label: 'Status',
-      footer: { column: 'Help', order: 1 },
-    },
-  },
   loader: () => readStatusProbesServer(),
   head: () => buildPublicPageHead({
     path: '/status',

@@ -6,11 +6,6 @@ import { operatorRouteOptions } from '@/lib/operator/route-options'
 import { api } from '../../../convex/_generated/api'
 
 export const Route = createFileRoute('/_operator/owner/team')({
-  staticData: {
-    nav: {
-      label: 'Team',
-    },
-  },
   ...operatorRouteOptions,
   head: () => ({
     meta: [

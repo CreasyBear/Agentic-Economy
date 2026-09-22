@@ -7,12 +7,6 @@ import { readCanonicalBaseUrlServer } from '@/lib/server/canonical-url.functions
 import { buildPublicPageHead, buildSiteJsonLd } from '@/modules/seo/public'
 
 export const Route = createFileRoute('/about')({
-  staticData: {
-    nav: {
-      label: 'About',
-      footer: { column: 'Market', order: 4 },
-    },
-  },
   loader: () => readCanonicalBaseUrlServer(),
   head: ({ loaderData }) => buildPublicPageHead({
     path: '/about',

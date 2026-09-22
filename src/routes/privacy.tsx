@@ -6,12 +6,6 @@ import { privacyIntro } from '@/components/ae/legal/privacy/privacy.contracts'
 import { buildPublicPageHead } from '@/modules/seo/public'
 
 export const Route = createFileRoute('/privacy')({
-  staticData: {
-    nav: {
-      label: 'Privacy',
-      footer: { column: 'Legal', order: 0 },
-    },
-  },
   head: () => buildPublicPageHead({
     path: '/privacy',
     title: 'Privacy | Agentic Economy',

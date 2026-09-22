@@ -69,9 +69,8 @@ describe('/owner/team route (W-15)', () => {
     expect(Route).toBeDefined()
   })
 
-  it('U2: Team remains a deep-link page, not a rail destination', () => {
-    const nav = (routeState.routeOptions?.staticData as { nav?: Record<string, unknown> } | undefined)?.nav
-    expect(nav).toEqual({ label: 'Team' })
+  it('U2: Team remains a deep-link page, not a route-declared rail destination', () => {
+    expect(routeState.routeOptions?.staticData).toBeUndefined()
   })
 
 

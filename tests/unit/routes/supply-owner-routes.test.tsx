@@ -65,8 +65,8 @@ function createTestRouter() {
 }
 
 describe('owner supply routes', () => {
-  it('uses Tools as the Provider navigation identity', () => {
-    expect(OwnerSupplyIndexRoute.options.staticData?.nav?.label).toBe('Tools')
+  it('uses Tools as the Provider document title without route-declared navigation', () => {
+    expect(OwnerSupplyIndexRoute.options.staticData).toBeUndefined()
     expect(OwnerSupplyIndexRoute.options.head?.({} as never)).toEqual({
       meta: [{ title: 'Tools | Agentic Economy' }, { name: 'robots', content: 'noindex' }],
     })

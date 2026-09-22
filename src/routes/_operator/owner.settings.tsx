@@ -7,11 +7,6 @@ import { operatorRouteOptions } from '@/lib/operator/route-options'
 import { readAccountSecurityHistoryServer } from '@/modules/security/account-security.functions'
 
 export const Route = createFileRoute('/_operator/owner/settings')({
-  staticData: {
-    nav: {
-      label: 'Settings',
-    },
-  },
   ...operatorRouteOptions,
   loader: async () => await readAccountSecurityHistoryServer({ data: {} }),
   head: () => ({

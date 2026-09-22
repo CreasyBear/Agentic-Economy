@@ -6,13 +6,6 @@ import { loadSupplyLandingReadbackServer } from '@/lib/server/supply-landing.fun
 import { buildPublicPageHead } from '@/modules/seo/public'
 
 export const Route = createFileRoute('/for-providers')({
-  staticData: {
-    nav: {
-      label: 'For providers',
-      header: { order: 2, audience: 'public' },
-      footer: { column: 'Market', order: 2 },
-    },
-  },
   loader: () => loadSupplyLandingReadbackServer(),
   pendingComponent: RoutePending,
   errorComponent: RouteError,

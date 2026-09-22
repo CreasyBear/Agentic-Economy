@@ -1,5 +1,4 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { LayoutDashboardIcon } from 'lucide-react'
 
 import { AeOwnerOverview } from '@/components/ae/console/AeOwnerOverview'
 import type { OwnerOverviewSnapshot } from '@/modules/principal-account/owner-overview.view-model'
@@ -11,21 +10,6 @@ import { readAccountFundingBalanceServer } from '@/modules/money/money.functions
 import { projectCallSummaryPurchaseStatus } from '@/modules/capability-execution/call-receipt-view'
 
 export const Route = createFileRoute('/_operator/owner/')({
-  staticData: {
-    nav: {
-      label: 'Overview',
-      operator: {
-        roles: ['owner'],
-        group: 'Workspace',
-        groupOrder: -1,
-        order: 0,
-        icon: LayoutDashboardIcon,
-        tier: 'core',
-        mobilePrimary: true,
-        mobileOrder: 0,
-      },
-    },
-  },
   ...operatorRouteOptions,
   loader: async (): Promise<OwnerOverviewSnapshot> => {
     const [balance, calls, agents, provider] = await Promise.allSettled([

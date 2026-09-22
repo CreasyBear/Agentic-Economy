@@ -6,12 +6,6 @@ import { buildPublicPageHead } from '@/modules/seo/public'
 
 /** Human reference projected from the same document served at `/openapi.json`. */
 export const Route = createFileRoute('/developers/api')({
-  staticData: {
-    nav: {
-      label: 'API reference',
-      footer: { column: 'Resources', order: 0 },
-    },
-  },
   loader: () => readDevelopersApiPageServer(),
   head: () => buildPublicPageHead({
     path: '/developers/api',
