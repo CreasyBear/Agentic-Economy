@@ -1,6 +1,6 @@
 import { z } from 'zod'
 
-import type { FacilitatorDiscoverySkipReason } from '@/modules/capability-supply/internal/facilitator-discovery-ingest'
+import type { FacilitatorDiscoverySkipReason } from '@/modules/capability-supply/server'
 import { degradeBackend } from '@/lib/observability/degrade-backend'
 
 export type X402DirectoryField = Readonly<{

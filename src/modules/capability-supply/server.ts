@@ -75,6 +75,7 @@ export {
 export { admitOfficialBazaarFromPaymentRequired } from './internal/facilitator-discovery-client'
 export { admitFacilitatorDiscoveryItems } from './internal/facilitator-discovery-admission'
 export { materializeOfficialBazaarX402Import } from './internal/facilitator-discovery-admission'
+export type { FacilitatorDiscoverySkipReason } from './internal/facilitator-discovery-ingest'
 export { admitBazaarDiscoveryInfo, admitBazaarFromPaymentRequired } from './internal/publication-importer-x402-bazaar'
 export type { BazaarAdmission } from './internal/publication-importer-x402-bazaar'
 export type {
