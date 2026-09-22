@@ -1,4 +1,18 @@
-import type { AeStatusPresentation } from './status-presentation'
+export type AeTone = 'neutral' | 'info' | 'success' | 'warning' | 'danger'
+export type AeStatusAudience = 'public' | 'owner' | 'admin' | 'operator'
+export type AeStatusPublicness = 'public' | 'private'
+
+export type AeStatusPresentation = {
+  label: string
+  compactLabel: string
+  tone: AeTone
+  description: string
+  nextAction?: string
+  priority: 'low' | 'medium' | 'high'
+  audience: AeStatusAudience
+  publicness: AeStatusPublicness
+  disabledReason?: string
+}
 
 const STATUS_LABELS = {
   operational: 'Opera' + 'tional',

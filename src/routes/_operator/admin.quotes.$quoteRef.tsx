@@ -1,0 +1,27 @@
+import { createFileRoute } from '@tanstack/react-router'
+
+import { AdminObjectPage } from '@/components/ae/admin/object-pages/AdminObjectPage'
+import { ADMIN_OBJECT_PAGE_COPY } from '@/components/ae/admin/object-pages/object-pages.contracts'
+import { OperatorRouteNotFoundRecovery } from '@/components/ae/layout/AeRouteNotFound'
+import { operatorRouteOptions } from '@/lib/operator/route-options'
+import { parseAdminObjectRef } from '@/lib/operator/admin-console/ref-parsers'
+
+export const Route = createFileRoute('/_operator/admin/quotes/$quoteRef')({
+  ...operatorRouteOptions,
+  head: () => ({
+    meta: [
+      { title: ADMIN_OBJECT_PAGE_COPY.quote.metaTitle },
+      { name: 'robots', content: 'noindex' },
+    ],
+  }),
+  component: AdminQuoteObjectRoute,
+})
+
+function AdminQuoteObjectRoute() {
+  const { quoteRef } = Route.useParams()
+  const parsed = parseAdminObjectRef('quote', quoteRef)
+  if (parsed.kind === 'malformed' || parsed.ref.kind !== 'quote') {
+    return <OperatorRouteNotFoundRecovery recoveryHref="/admin/search" recoveryLabel={ADMIN_OBJECT_PAGE_COPY.backToSearch} />
+  }
+  return <AdminObjectPage {...parsed.ref} />
+}

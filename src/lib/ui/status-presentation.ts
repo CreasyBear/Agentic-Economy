@@ -1,5 +1,5 @@
 
-import { aeCanonicalStatusPresentationRows } from './status-presentation-rows'
+import { aeCanonicalStatusPresentationRows, type AeTone, type AeStatusPresentation } from './status-presentation-rows'
 
 export const aeStatusValues = [
   'available',
@@ -18,8 +18,17 @@ export const aeStatusValues = [
   'expired',
   'refused',
   'completed',
+  'issued',
+  'consumed',
   'current',
+  'withdrawn',
+  'incompatible',
+  'superseded',
+  'pending_activation',
+  'suspended',
+  'closed',
   'credential_expired',
+  'revoked',
   'credential_revoked',
   'degraded',
   'failed',
@@ -72,21 +81,7 @@ export const aeStatusValues = [
 ] as const
 
 export type AeStatus = (typeof aeStatusValues)[number]
-export type AeTone = 'neutral' | 'info' | 'success' | 'warning' | 'danger'
-export type AeStatusAudience = 'public' | 'owner' | 'admin' | 'operator'
-export type AeStatusPublicness = 'public' | 'private'
-
-export type AeStatusPresentation = {
-  label: string
-  compactLabel: string
-  tone: AeTone
-  description: string
-  nextAction?: string
-  priority: 'low' | 'medium' | 'high'
-  audience: AeStatusAudience
-  publicness: AeStatusPublicness
-  disabledReason?: string
-}
+export type { AeTone, AeStatusAudience, AeStatusPublicness, AeStatusPresentation } from './status-presentation-rows'
 
 export const aeStatusPresentation = {
   available: {
@@ -151,6 +146,87 @@ export const aeStatusPresentation = {
     tone: 'neutral',
     description: 'The admin action was refused before execution.',
     priority: 'medium',
+    audience: 'admin',
+    publicness: 'private',
+  },
+  issued: {
+    label: 'Issued',
+    compactLabel: 'Issued',
+    tone: 'info',
+    description: 'The Quote has been issued and is ready to use.',
+    priority: 'medium',
+    audience: 'admin',
+    publicness: 'private',
+  },
+  consumed: {
+    label: 'Consumed',
+    compactLabel: 'Consumed',
+    tone: 'neutral',
+    description: 'The Quote was used for a Call.',
+    priority: 'low',
+    audience: 'admin',
+    publicness: 'private',
+  },
+  withdrawn: {
+    label: 'Withdrawn',
+    compactLabel: 'Withdrawn',
+    tone: 'neutral',
+    description: 'The Tool version was withdrawn.',
+    priority: 'medium',
+    audience: 'admin',
+    publicness: 'private',
+  },
+  incompatible: {
+    label: 'Incompatible',
+    compactLabel: 'Incompatible',
+    tone: 'warning',
+    description: 'The Tool version is incompatible with the current runtime.',
+    priority: 'high',
+    audience: 'admin',
+    publicness: 'private',
+  },
+  superseded: {
+    label: 'Superseded',
+    compactLabel: 'Superseded',
+    tone: 'neutral',
+    description: 'A newer Tool version replaced this record.',
+    priority: 'low',
+    audience: 'admin',
+    publicness: 'private',
+  },
+  pending_activation: {
+    label: 'Pending activation',
+    compactLabel: 'Pending',
+    tone: 'info',
+    description: 'The Workspace is waiting for activation.',
+    priority: 'medium',
+    audience: 'admin',
+    publicness: 'private',
+  },
+  suspended: {
+    label: 'Suspended',
+    compactLabel: 'Suspended',
+    tone: 'warning',
+    description: 'The Workspace is suspended.',
+    priority: 'high',
+    audience: 'admin',
+    publicness: 'private',
+  },
+  closed: {
+    label: 'Closed',
+    compactLabel: 'Closed',
+    tone: 'neutral',
+    description: 'The Workspace is closed.',
+    priority: 'low',
+    audience: 'admin',
+    publicness: 'private',
+  },
+  revoked: {
+    label: 'Revoked',
+    compactLabel: 'Revoked',
+    tone: 'danger',
+    description: 'The Agent credential was revoked.',
+    priority: 'high',
     audience: 'admin',
     publicness: 'private',
   },
