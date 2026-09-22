@@ -7,7 +7,7 @@ import type { MutationCtx } from '../../../convex/_generated/server'
 import {
   runAdminCommand,
   type AdminCommandSpec,
-} from '../../../convex/lib/adminConsole/command-envelope'
+} from '../../../convex/lib/adminConsole/commandEnvelope'
 import type { AdminCommandArgs } from '@/lib/operator/admin-console/contracts'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import {
