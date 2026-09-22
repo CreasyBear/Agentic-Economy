@@ -1,13 +1,17 @@
 import {
   ActivityIcon,
+  BarChart3Icon,
   BotIcon,
   BoxesIcon,
   CircleGaugeIcon,
   CircleHelpIcon,
   CreditCardIcon,
   HandCoinsIcon,
+  InboxIcon,
+  LayoutDashboardIcon,
   ScrollTextIcon,
   SearchCodeIcon,
+  SearchIcon,
   SettingsIcon,
   StoreIcon,
   type LucideIcon,
@@ -35,7 +39,11 @@ export const APP_NAVIGATION_ICONS: Readonly<Record<AppDestinationId, LucideIcon>
 }
 
 export const ADMIN_NAVIGATION: readonly AppSidebarItem[] = [
-  { href: '/admin/index-health', label: 'Catalog health', icon: ActivityIcon },
+  { href: '/admin', label: 'Overview', icon: LayoutDashboardIcon },
+  { href: '/admin/search', label: 'Search', icon: SearchIcon },
+  { href: '/admin/exceptions', label: 'Exceptions', icon: InboxIcon },
+  { href: '/admin/providers', label: 'Providers', icon: StoreIcon },
+  { href: '/admin/metrics', label: 'Metrics', icon: BarChart3Icon },
   { href: '/admin/audit-events', label: 'Audit', icon: ScrollTextIcon },
 ]
 

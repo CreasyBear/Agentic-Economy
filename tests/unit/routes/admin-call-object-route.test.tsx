@@ -1,0 +1,88 @@
+/** @vitest-environment jsdom */
+import { cleanup, render, screen } from '@testing-library/react'
+import {
+  RouterContextProvider,
+  createMemoryHistory,
+  createRootRoute,
+  createRoute,
+  createRouter,
+} from '@tanstack/react-router'
+import { afterEach, describe, expect, it } from 'vitest'
+import '../../setup/jsdom-platform'
+
+import { AdminCallObjectPage } from '@/components/ae/admin/call-object/AdminCallObjectPage'
+import { parseCallRef } from '@/modules/capability-execution/call-contracts'
+import type { CallStatusResult } from '@/modules/capability-execution/call-recovery-contracts'
+import {
+  projectCallReceipt,
+  projectFoundCallPurchaseStatus,
+} from '@/modules/capability-execution/call-receipt-view'
+import type { AdminCallView } from '@/lib/operator/admin-console/views'
+
+afterEach(cleanup)
+
+const callRefText = `operation-invocation:v1:${'a'.repeat(64)}`
+const parsedCallRef = parseCallRef(callRefText)
+if (parsedCallRef.kind === 'malformed') throw new Error('admin_call_fixture_ref_invalid')
+
+const uncertainStatus = {
+  kind: 'found',
+  callRef: callRefText,
+  version: 1,
+  toolRef: `operation:v1:${'b'.repeat(64)}`,
+  state: 'reconciliation_required',
+  usage: {
+    usageRef: 'usage:admin-call-test',
+    observedAt: Date.UTC(2026, 8, 22, 3),
+    chargeState: 'outcome_unknown',
+    amount: { currency: 'AUD', units: '0', exponent: 2 },
+    priceDigest: `sha256:${'c'.repeat(64)}`,
+  },
+} satisfies Extract<CallStatusResult, { kind: 'found' }>
+
+const uncertainView: AdminCallView = {
+  kind: 'call',
+  ref: parsedCallRef.ref,
+  state: 'reconciliation_required',
+  purchase: projectFoundCallPurchaseStatus(uncertainStatus),
+  receipt: projectCallReceipt(uncertainStatus),
+  quoteRef: null,
+  toolRef: null,
+  workspaceRef: null,
+  agentRef: null,
+  correlationId: null,
+  resolution: null,
+  timeline: [],
+}
+
+function renderCallPage() {
+  const rootRoute = createRootRoute()
+  const routeTree = rootRoute.addChildren([
+    createRoute({ getParentRoute: () => rootRoute, path: '/' }),
+    createRoute({ getParentRoute: () => rootRoute, path: '/admin' }),
+    createRoute({ getParentRoute: () => rootRoute, path: '/admin/search' }),
+  ])
+  const router = createRouter({ routeTree, history: createMemoryHistory({ initialEntries: ['/'] }) })
+  return render(
+    <RouterContextProvider router={router}>
+      <AdminCallObjectPage result={uncertainView} />
+    </RouterContextProvider>,
+  )
+}
+
+describe('/admin/calls/$callRef', () => {
+  it('shows the canonical uncertainty sentence without claiming a zero charge', () => {
+    const { container } = renderCallPage()
+    const uncertainty = uncertainView.receipt.issue?.moneyMovement
+    if (uncertainty === undefined) throw new Error('admin_call_fixture_uncertainty_missing')
+
+    expect(screen.getByText(uncertainty)).toBeTruthy()
+    expect(container.textContent).not.toContain('A$0.00')
+  })
+
+  it('shows the exact Call reference in the identity header', () => {
+    renderCallPage()
+
+    expect(screen.getByRole('heading', { level: 1, name: callRefText })).toBeTruthy()
+  })
+})
