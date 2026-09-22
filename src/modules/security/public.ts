@@ -68,6 +68,7 @@ export type {
   RemovalDisputeReasonCode,
   RemovalDisputeReceipt,
 } from './internal/security-types'
+export type { SourceWriteAdmissionFailureReason } from './source-write-admission'
 
 export type {
   AdminAllowedReadback,
