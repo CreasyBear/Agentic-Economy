@@ -15,9 +15,9 @@ import '../../setup/jsdom-platform'
 import '../../setup/jsdom-dialog'
 
 import { AeAppShell } from '@/components/ae/layout/AeAppShell'
-import { AeOperatorPage, OperatorChromeProvider } from '@/components/ae/layout/AeOperatorPage'
-import { AeOperatorSidebar } from '@/components/ae/layout/AeOperatorSidebar'
-import { SidebarProvider } from '@/components/ui/sidebar'
+import { AeOperatorPage } from '@/components/ae/layout/AeOperatorPage'
+
+const clerkSignedIn = vi.hoisted(() => ({ value: false }))
 
 vi.mock('@/lib/observability/funnel-client', () => ({
   emitFunnelEventOnce: vi.fn(),
@@ -30,10 +30,10 @@ vi.mock('@/components/ae/command-panel', () => ({
 
 vi.mock('@clerk/tanstack-react-start', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@clerk/tanstack-react-start')>()),
-  useAuth: () => ({ isSignedIn: false }),
+  useAuth: () => ({ isSignedIn: clerkSignedIn.value }),
   useUser: () => ({
     isLoaded: true,
-    isSignedIn: true,
+    isSignedIn: clerkSignedIn.value,
     user: {
       id: 'user_test',
       fullName: 'Test User',
@@ -42,7 +42,9 @@ vi.mock('@clerk/tanstack-react-start', async (importOriginal) => ({
     sessionId: 'session_test',
   }),
   Show: ({ when, children, fallback }: { when: string; children: ReactNode; fallback?: ReactNode }) =>
-    when === 'signed-out' ? children : (fallback ?? null),
+    when === 'signed-out'
+      ? (clerkSignedIn.value ? (fallback ?? null) : children)
+      : (clerkSignedIn.value ? children : (fallback ?? null)),
   UserButton: () => <button type="button" aria-label="Account menu" />,
   OrganizationSwitcher: () => <div data-testid="organization-switcher" />,
 }))
@@ -50,6 +52,7 @@ vi.mock('@clerk/tanstack-react-start', async (importOriginal) => ({
 afterEach(() => {
   cleanup()
   document.cookie = 'sidebar_state=; max-age=0; path=/'
+  clerkSignedIn.value = false
 })
 
 describe('SidebarProvider scope (S-01)', () => {
@@ -78,40 +81,12 @@ describe('SidebarProvider scope (S-01)', () => {
     expect(shellRoot?.style.getPropertyValue('--header-height')).toBe('4rem')
   })
 
-  it('mounts sidebar wrapper in the operator layout composition', () => {
-    const rootRoute = createRootRoute()
-    const routeTree = rootRoute.addChildren([
-      createRoute({
-        getParentRoute: () => rootRoute,
-        path: '/owner/operations',
-        staticData: { shell: 'operator' },
-      }),
-    ])
-    const router = createRouter({
-      routeTree,
-      history: createMemoryHistory({ initialEntries: ['/owner/operations'] }),
-    })
+  it('mounts one sidebar wrapper in the signed-in root frame', () => {
+    clerkSignedIn.value = true
+    renderPublicShell()
 
-    render(
-      <RouterContextProvider router={router}>
-        <SidebarProvider className="contents" defaultOpen>
-          <OperatorChromeProvider
-            sidebar={<AeOperatorSidebar operatorRole="owner" currentPath="/owner/operations" />}
-          >
-            <AeOperatorPage
-              operatorRole="owner"
-              title="Tools"
-              description="Publish tools."
-              currentPath="/owner/operations"
-            >
-              <div>Body</div>
-            </AeOperatorPage>
-          </OperatorChromeProvider>
-        </SidebarProvider>
-      </RouterContextProvider>,
-    )
-
-    expect(document.querySelector('[data-slot="sidebar-wrapper"]')).toBeTruthy()
+    expect(document.querySelectorAll('[data-slot="sidebar-wrapper"]')).toHaveLength(1)
+    expect(screen.getByRole('navigation', { name: 'App navigation' })).toBeTruthy()
   })
 
   it('renders isolated AeOperatorPage without SidebarProvider', () => {

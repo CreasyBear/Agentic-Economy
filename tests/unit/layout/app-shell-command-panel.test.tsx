@@ -18,14 +18,15 @@ import { AeAppShell } from '@/components/ae/layout/AeAppShell'
 vi.mock('@/lib/observability/funnel-client', () => ({
   emitFunnelEventOnce: vi.fn(),
 }))
+const clerkSignedIn = vi.hoisted(() => ({ value: false }))
 
 vi.mock('@clerk/tanstack-react-start', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@clerk/tanstack-react-start')>()),
-  useAuth: () => ({ isSignedIn: false }),
+  useAuth: () => ({ isSignedIn: clerkSignedIn.value }),
   Show: ({ when, children, fallback }: { when: string; children?: ReactNode; fallback?: ReactNode }) => {
-    if (when === 'signed-out') return children ?? null
-    if (when === 'signed-in') return null
-    return fallback ?? null
+    if (when === 'signed-out') return clerkSignedIn.value ? (fallback ?? null) : (children ?? null)
+    if (when === 'signed-in') return clerkSignedIn.value ? (children ?? null) : null
+    return children ?? null
   },
   UserButton: () => <button type="button" aria-label="Account menu" />,
   OrganizationSwitcher: () => null,
@@ -34,6 +35,7 @@ vi.mock('@clerk/tanstack-react-start', async (importOriginal) => ({
 afterEach(() => {
   cleanup()
   vi.clearAllMocks()
+  clerkSignedIn.value = false
 })
 
 describe('app shell command panel', () => {
@@ -111,6 +113,7 @@ describe('app shell command panel', () => {
   })
 
   it('keeps public navigation out of the authenticated workspace hierarchy', async () => {
+    clerkSignedIn.value = true
     const rootRoute = createRootRoute()
     const operatorRoute = createRoute({ getParentRoute: () => rootRoute, id: '_operator', staticData: { shell: 'operator' } })
     const ownerRoute = createRoute({ getParentRoute: () => operatorRoute, path: '/owner' })

@@ -4,7 +4,8 @@ import { Link, useLocation } from '@tanstack/react-router'
 import { AeNotFound } from '@/components/ae/layout/AeNotFound'
 import { AeOperatorPage } from '@/components/ae/layout/AeOperatorPage'
 import { buttonVariants } from '@/components/ui/button-variants'
-import { operatorRoleForPath, roleHomeHref } from '@/lib/operator/roles'
+import { appDestination } from '@/lib/navigation/app-navigation'
+import { operatorRoleForPath } from '@/lib/operator/roles'
 import { cn } from '@/lib/utils'
 
 export type OperatorRouteNotFoundProps = Readonly<{
@@ -27,8 +28,13 @@ export function OperatorRouteNotFoundRecovery({
   const { pathname } = useLocation()
   const operatorRole = operatorRoleForPath(pathname) ?? 'owner'
   const isAssistantAccessPath = pathname.startsWith('/agent-access/')
-  const recoveryHref = recoveryHrefOverride ?? (isAssistantAccessPath ? '/agent-access' : roleHomeHref[operatorRole])
-  const recoveryLabel = recoveryLabelOverride ?? (isAssistantAccessPath ? 'Back to Agents' : 'Back to workspace')
+  const defaultRecovery = operatorRole === 'owner'
+    ? { href: appDestination('market').to, label: 'Back to Market' }
+    : operatorRole === 'admin'
+      ? { href: '/admin/index-health', label: 'Back to Catalog health' }
+      : { href: '/developers/discovery', label: 'Back to Discovery' }
+  const recoveryHref = recoveryHrefOverride ?? (isAssistantAccessPath ? '/agent-access' : defaultRecovery.href)
+  const recoveryLabel = recoveryLabelOverride ?? (isAssistantAccessPath ? 'Back to Agents' : defaultRecovery.label)
   return (
     <AeOperatorPage
       operatorRole={operatorRole}

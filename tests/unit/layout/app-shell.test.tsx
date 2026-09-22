@@ -2,7 +2,7 @@
  * @vitest-environment jsdom
  */
 import type { ReactNode } from 'react'
-import { cleanup, render, screen } from '@testing-library/react'
+import { cleanup, render, screen, within } from '@testing-library/react'
 import {
   RouterContextProvider,
   createMemoryHistory,
@@ -51,14 +51,25 @@ describe('AeAppShell', () => {
     expect(screen.getByRole('link', { name: 'Sign in' }).className).toMatch(/md:inline-flex/)
   })
 
-  it('shows signed-in primary destinations and workspace switcher in the app header', () => {
+  it('renders the canonical sidebar and no destination row when signed in', () => {
     clerkSignedIn.value = true
     renderAppShell()
 
-    const nav = screen.getByRole('navigation', { name: 'Primary' })
-    expect(['Market', 'Agents', 'Calls', 'Tools']).toEqual(
-      Array.from(nav.querySelectorAll('a')).map((link) => link.textContent),
-    )
+    expect(screen.queryByRole('navigation', { name: 'Primary' })).toBeNull()
+    const nav = screen.getByRole('navigation', { name: 'App navigation' })
+    expect(Array.from(nav.querySelectorAll('a')).map((link) => link.textContent)).toEqual([
+      'Market',
+      'Agents',
+      'Calls',
+      'Credit',
+      'Tools',
+      'Earnings',
+      'Settings',
+      'Support',
+      'Status',
+    ])
+    expect(nav.querySelectorAll('[aria-current="page"]')).toHaveLength(1)
+    expect(within(nav).getByRole('link', { name: 'Market' }).getAttribute('aria-current')).toBe('page')
     expect(screen.getByTestId('org-switcher')).toBeTruthy()
     expect(screen.queryByRole('link', { name: 'Sign in' })).toBeNull()
   })
@@ -102,7 +113,7 @@ function renderAppShell(): void {
   ])
   const router = createRouter({
     routeTree,
-    history: createMemoryHistory({ initialEntries: ['/'] }),
+    history: createMemoryHistory({ initialEntries: [clerkSignedIn.value ? '/market' : '/'] }),
   })
 
   render(

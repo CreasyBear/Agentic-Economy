@@ -55,12 +55,11 @@ vi.mock('@/components/ae/command-panel', () => ({
 
 import { AeAppShell } from '@/components/ae/layout/AeAppShell'
 import { AeOperatorPage, OperatorChromeProvider } from '@/components/ae/layout/AeOperatorPage'
-import { AeOperatorSidebar } from '@/components/ae/layout/AeOperatorSidebar'
-import { SidebarProvider, SidebarTrigger } from '@/components/ui/sidebar'
+import { AeAppSidebar } from '@/components/ae/layout/app-shell/AeAppSidebar'
+import { SidebarProvider } from '@/components/ui/sidebar'
 import { OperatorRouteError, OperatorRouteNotFound, OperatorRoutePending } from '@/components/ae/layout/AeRouteStates'
 import { AECON_MARK_SRC } from '@/content/brand-assets'
 import { ownerSettingsChrome } from '@/lib/operator/settings-navigation'
-import { shouldMountOperatorSidebar } from '@/lib/operator/roles'
 import {
   OPERATOR_SURFACE_FORBIDDEN_MESSAGE,
   OperatorSurfaceForbiddenError,
@@ -127,20 +126,14 @@ describe('operator shell nested chrome', () => {
 
     renderAt(
       <AeAppShell>
-        <SidebarProvider className="contents" defaultOpen>
-          <OperatorChromeProvider
-            sidebar={<AeOperatorSidebar operatorRole="owner" currentPath="/agent-access/unknown" />}
-          >
-            <AeOperatorPage
-              operatorRole="owner"
-              title="Operator workspace"
-              description="Loading the latest operator view."
-              currentPath="/agent-access/unknown"
-            >
-              <OperatorRouteNotFound />
-            </AeOperatorPage>
-          </OperatorChromeProvider>
-        </SidebarProvider>
+        <AeOperatorPage
+          operatorRole="owner"
+          title="Operator workspace"
+          description="Loading the latest operator view."
+          currentPath="/agent-access/unknown"
+        >
+          <OperatorRouteNotFound />
+        </AeOperatorPage>
       </AeAppShell>,
       '/agent-access/unknown',
     )
@@ -149,8 +142,8 @@ describe('operator shell nested chrome', () => {
     expect(screen.getAllByRole('heading', { level: 1 }).map(({ textContent }) => textContent)).toEqual(['Page not found'])
     expect(screen.getAllByRole('main')).toHaveLength(1)
     expect(screen.getAllByTestId('skip-to-content')).toHaveLength(1)
-    expect(screen.getAllByRole('navigation', { name: 'Operator navigation' })).toHaveLength(1)
-    expect(screen.queryByRole('navigation', { name: 'Public navigation' })).toBeNull()
+    expect(screen.getAllByRole('navigation', { name: 'App navigation' })).toHaveLength(1)
+    expect(screen.queryByRole('navigation', { name: 'Primary' })).toBeNull()
 
     const recovery = screen.getByRole('link', { name: 'Back to Agents' })
     expect(recovery.getAttribute('href')).toBe('/agent-access')
@@ -159,9 +152,8 @@ describe('operator shell nested chrome', () => {
   it('uses slim records rail for admin without duplicating app-header chrome', async () => {
     renderAt(
       <SidebarProvider>
-        <OperatorChromeProvider
-          sidebar={<AeOperatorSidebar operatorRole="admin" currentPath="/admin" slimChrome />}
-        >
+        <OperatorChromeProvider>
+          <AeAppSidebar operatorRole="admin" pathname="/admin" hash="" />
           <AeOperatorPage
             operatorRole="admin"
             title="Administration"
@@ -175,10 +167,10 @@ describe('operator shell nested chrome', () => {
       '/admin',
     )
 
-    expect(await screen.findByRole('navigation', { name: 'Operator navigation' })).toBeTruthy()
-    expect(screen.queryByRole('link', { name: 'Administration home' })).toBeNull()
-    expect(screen.queryByRole('group', { name: /Signed in as/ })).toBeNull()
-    expect(screen.queryByRole('button', { name: 'Account menu' })).toBeNull()
+    const nav = await screen.findByRole('navigation', { name: 'App navigation' })
+    expect(within(nav).getByText('Admin')).toBeTruthy()
+    expect(within(nav).getByRole('link', { name: 'Catalog health' })).toBeTruthy()
+    expect(within(nav).getByRole('link', { name: 'Audit' })).toBeTruthy()
     expect(document.querySelectorAll(`img[src="${AECON_MARK_SRC}"]`).length).toBe(0)
   })
 
@@ -195,7 +187,7 @@ describe('operator shell nested chrome', () => {
       '/owner/settings',
     )
 
-    const heading = await screen.findByRole('heading', { level: 1, name: 'Account & security' })
+    const heading = await screen.findByRole('heading', { level: 1, name: 'Settings' })
     expect(heading.parentElement?.previousElementSibling).toBeNull()
   })
 
@@ -214,6 +206,27 @@ describe('operator shell nested chrome', () => {
 
     const heading = await screen.findByRole('heading', { level: 1, name: 'Tools' })
     expect(heading.parentElement?.previousElementSibling).toBeNull()
+    expect(screen.queryByRole('navigation', { name: 'Breadcrumb' })).toBeNull()
+  })
+
+  it('derives resource breadcrumbs from canonical destination ownership', async () => {
+    renderAt(
+      <AeOperatorPage
+        operatorRole="owner"
+        title="Add Tool"
+        description="Connect a Tool."
+        currentPath="/owner/operations/new"
+      >
+        <div>New Tool body</div>
+      </AeOperatorPage>,
+      '/owner/operations/new',
+    )
+
+    expect(screen.getByRole('heading', { level: 1, name: 'Add Tool' })).toBeTruthy()
+    const breadcrumbs = screen.getByRole('navigation', { name: 'Breadcrumb' })
+    expect(within(breadcrumbs).getByRole('link', { name: 'Tools' }).getAttribute('href')).toBe('/owner/operations')
+    expect(within(breadcrumbs).getByText('New Tool')).toBeTruthy()
+    expect(within(breadcrumbs).queryByText('Add Tool')).toBeNull()
   })
 
   it('keeps parent chrome while a nested pending state loads', async () => {
@@ -322,80 +335,61 @@ describe('owner mobile navigation', () => {
     await waitFor(() => expect(calls.getAttribute('data-status')).toBe('active'))
   })
 
-  it('renders the exact owner shortcuts from the shared navigation model in order', async () => {
+  it('renders the canonical primary destinations and More disclosure in order', async () => {
     renderOperatorShell('owner', '/owner/operations')
 
     const mobileNav = await screen.findByRole('navigation', { name: 'Owner primary navigation' })
     const links = within(mobileNav).getAllByRole('link')
 
-    expect(links.map((link) => link.textContent)).toEqual(['Market', 'Agents', 'Calls', 'Tools'])
+    expect(links.map((link) => link.textContent)).toEqual(['Market', 'Agents', 'Calls', 'Credit'])
     expect(links.map((link) => link.getAttribute('href'))).toEqual([
       '/market',
       '/agent-access',
       '/activity',
-      '/owner/operations',
+      '/owner/credit',
     ])
-    expect(links.filter((link) => link.getAttribute('aria-current') === 'page').map((link) => link.textContent))
-      .toEqual(['Tools'])
-    expect(mobileNav.querySelectorAll('svg[aria-hidden="true"]')).toHaveLength(4)
+    expect(within(mobileNav).getByRole('button', { name: 'More' }).getAttribute('aria-current')).toBe('page')
+    expect(mobileNav.querySelectorAll('svg[aria-hidden="true"]')).toHaveLength(5)
   })
 
-  it('does not mislabel secondary owner routes as a buyer shortcut', async () => {
+  it('keeps resource routes owned by the More disclosure', async () => {
     const descendant = renderOperatorShell('owner', '/owner/operations/new')
     const descendantNav = await screen.findByRole('navigation', { name: 'Owner primary navigation' })
-
-    expect(within(descendantNav).getAllByRole('link')
-      .filter((link) => link.getAttribute('aria-current') === 'page')
-      .map((link) => link.textContent))
-      .toEqual(['Tools'])
+    expect(within(descendantNav).getByRole('button', { name: 'More' }).getAttribute('aria-current')).toBe('page')
 
     descendant.unmount()
     renderOperatorShell('owner', '/owner/settings')
-    const unrelatedNav = await screen.findByRole('navigation', { name: 'Owner primary navigation' })
-
-    expect(within(unrelatedNav).getAllByRole('link')
-      .filter((link) => link.hasAttribute('aria-current')))
-      .toEqual([])
+    const settingsNav = await screen.findByRole('navigation', { name: 'Owner primary navigation' })
+    expect(within(settingsNav).getByRole('button', { name: 'More' }).getAttribute('aria-current')).toBe('page')
   })
 
-  it('keeps buyer owner routes on header and mobile nav without the workspace sidebar', async () => {
+  it('keeps one app sidebar across owner resources, receipts, and admin pages', async () => {
     const owner = renderOperatorShell('owner', '/owner/operations')
-
-    expect(screen.queryByRole('navigation', { name: 'Operator navigation' })).toBeNull()
-    expect(await screen.findByRole('navigation', { name: 'Owner primary navigation' })).toBeTruthy()
+    let appNav = await screen.findByRole('navigation', { name: 'App navigation' })
+    expect(within(appNav).getByRole('link', { name: 'Tools' }).getAttribute('aria-current')).toBe('page')
 
     owner.unmount()
     const receipt = renderOperatorShell('owner', '/calls/call_test_123')
-    expect(screen.queryByRole('navigation', { name: 'Operator navigation' })).toBeNull()
-    expect(await screen.findByRole('navigation', { name: 'Owner primary navigation' })).toBeTruthy()
+    appNav = await screen.findByRole('navigation', { name: 'App navigation' })
+    expect(within(appNav).getByRole('link', { name: 'Calls' }).getAttribute('aria-current')).toBe('page')
     receipt.unmount()
 
-    renderOperatorShell('admin', '/admin', { slimChrome: true })
-
-    expect(screen.queryByRole('navigation', { name: 'Owner primary navigation' })).toBeNull()
-    expect(await screen.findByRole('navigation', { name: 'Operator navigation' })).toBeTruthy()
+    renderOperatorShell('admin', '/admin')
+    appNav = await screen.findByRole('navigation', { name: 'App navigation' })
+    expect(within(appNav).getByText('Admin')).toBeTruthy()
   })
 
-  it('hides at md, clears mobile content, preserves desktop padding, and respects the safe area', async () => {
+  it('keeps mobile safe-area padding on the root inset', async () => {
     renderOperatorShell('owner', '/owner/operations')
 
     const mobileNav = await screen.findByRole('navigation', { name: 'Owner primary navigation' })
-    const content = screen.getByTestId('operator-content')
+    const inset = document.querySelector('[data-slot="sidebar-inset"]')
 
     expect(mobileNav.classList.contains('md:hidden')).toBe(true)
     expect(mobileNav.classList.contains('pb-[env(safe-area-inset-bottom,0px)]')).toBe(true)
-    expect(
-      mobileNav.classList.contains(
-        'h-[calc(var(--ae-mobile-nav-height)+env(safe-area-inset-bottom,0px))]',
-      ),
-    ).toBe(true)
-    expect(
-      content.classList.contains(
-        'pb-[calc(var(--ae-mobile-nav-height)+env(safe-area-inset-bottom,0px))]',
-      ),
-    ).toBe(true)
-    expect(content.classList.contains('md:pb-related')).toBe(true)
-    expect(content.classList.contains('ae-rail')).toBe(true)
+    expect(mobileNav.classList.contains('h-[calc(var(--ae-mobile-nav-height)+env(safe-area-inset-bottom,0px))]')).toBe(true)
+    expect(inset?.classList.contains('pb-[calc(var(--ae-mobile-nav-height)+env(safe-area-inset-bottom,0px))]')).toBe(true)
+    expect(screen.getByTestId('operator-content').classList.contains('ae-rail')).toBe(true)
     const pageStack = screen.getByTestId('operator-page-stack')
     expect(pageStack.classList.contains('gap-section')).toBe(true)
     expect(pageStack.classList.contains('content-start')).toBe(true)
@@ -411,16 +405,14 @@ describe('owner account identity', () => {
   it('keeps the Clerk account menu in the app header on buyer owner routes', async () => {
     renderAt(
       <AeAppShell>
-        <OperatorChromeProvider>
-          <AeOperatorPage
-            operatorRole="owner"
-            title="Tools"
-            description="Publish tools."
-            currentPath="/owner/operations"
-          >
-            <div>Tools body</div>
-          </AeOperatorPage>
-        </OperatorChromeProvider>
+        <AeOperatorPage
+          operatorRole="owner"
+          title="Tools"
+          description="Publish tools."
+          currentPath="/owner/operations"
+        >
+          <div>Tools body</div>
+        </AeOperatorPage>
       </AeAppShell>,
       '/owner/operations',
     )
@@ -435,19 +427,19 @@ describe('owner account identity', () => {
     expect(document.body.textContent).not.toContain('session_private_ada')
   })
 
-  it('retains identity semantics on the full owner sidebar when mounted in isolation', async () => {
+  it('keeps account controls out of the navigation sidebar', async () => {
     renderAt(
       <SidebarProvider>
-        <AeOperatorSidebar operatorRole="owner" currentPath="/owner/operations" />
+        <OperatorChromeProvider>
+          <AeAppSidebar operatorRole="owner" pathname="/owner/operations" hash="" />
+        </OperatorChromeProvider>
       </SidebarProvider>,
       '/owner/operations',
     )
 
-    const account = await screen.findByRole('group', { name: 'Signed in as ada@supply.example' })
-    expect(within(account).getByRole('button', { name: 'Account menu' })).toBeTruthy()
-    expect(shellMocks.userButton.mock.calls.at(-1)?.[0]).toMatchObject({
-      userProfileMode: 'modal',
-    })
+    expect(await screen.findByRole('navigation', { name: 'App navigation' })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Account menu' })).toBeNull()
+    expect(screen.queryByRole('group', { name: /Signed in as/ })).toBeNull()
   })
 
 })
@@ -462,9 +454,8 @@ function OperatorShellHarness() {
 
   return (
     <SidebarProvider>
-      <OperatorChromeProvider
-        sidebar={<AeOperatorSidebar operatorRole="admin" currentPath="/admin" />}
-      >
+      <OperatorChromeProvider>
+        <AeAppSidebar operatorRole="admin" pathname="/admin/audit-events" hash="" />
         <AeOperatorPage
           operatorRole="admin"
           title="Outer shell"
@@ -519,35 +510,18 @@ function FocusTransitionHarness() {
 function renderOperatorShell(
   operatorRole: 'owner' | 'admin',
   currentPath: string,
-  options?: { slimChrome?: boolean },
 ) {
-  const mountSidebar = shouldMountOperatorSidebar(operatorRole, currentPath)
-  const slimChrome = options?.slimChrome === true
-
   return renderAt(
-    <SidebarProvider>
-      <OperatorChromeProvider
-        mobileTrigger={
-          mountSidebar
-            ? <SidebarTrigger aria-label="Open operator navigation" className="md:hidden" />
-            : undefined
-        }
-        sidebar={
-          mountSidebar
-            ? <AeOperatorSidebar operatorRole={operatorRole} currentPath={currentPath} slimChrome={slimChrome} />
-            : undefined
-        }
+    <AeAppShell>
+      <AeOperatorPage
+        operatorRole={operatorRole}
+        title="Operator workspace"
+        description="Operator workspace content."
+        currentPath={currentPath}
       >
-        <AeOperatorPage
-          operatorRole={operatorRole}
-          title="Operator workspace"
-          description="Operator workspace content."
-          currentPath={currentPath}
-        >
-          <div>Workspace body</div>
-        </AeOperatorPage>
-      </OperatorChromeProvider>
-    </SidebarProvider>,
+        <div>Workspace body</div>
+      </AeOperatorPage>
+    </AeAppShell>,
     currentPath,
   )
 }

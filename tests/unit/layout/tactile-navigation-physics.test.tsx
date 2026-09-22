@@ -16,7 +16,8 @@ import '../../setup/jsdom-platform'
 
 import { AeAppShell } from '@/components/ae/layout/AeAppShell'
 import { AeOwnerMobileNavigation } from '@/components/ae/layout/AeOwnerMobileNavigation'
-import { AeOperatorSidebar } from '@/components/ae/layout/AeOperatorSidebar'
+import { AeAppSidebar } from '@/components/ae/layout/app-shell/AeAppSidebar'
+import { OperatorChromeProvider } from '@/components/ae/layout/AeOperatorPage'
 import { AeSitePrimaryNav } from '@/components/ae/website/AeSiteNav'
 import { SidebarProvider } from '@/components/ui/sidebar'
 
@@ -82,10 +83,10 @@ describe('tactile navigation physics (S-09)', () => {
     expect(brand.className).not.toContain('transition-all')
   })
 
-  it('AeOperatorSidebar nav buttons include active scale and motion-reduction classes', () => {
+  it('AeAppSidebar nav buttons include active scale and motion-reduction classes', () => {
     renderOperatorSidebar('/owner/operations')
 
-    const sidebarNav = screen.getByRole('navigation', { name: 'Operator navigation' })
+    const sidebarNav = screen.getByRole('navigation', { name: 'App navigation' })
     const toolsLink = within(sidebarNav).getByRole('link', { name: 'Tools' })
     expectTactileNavLink(toolsLink.className)
     expect(toolsLink.className).not.toContain('transition-all')
@@ -219,7 +220,9 @@ function renderOperatorSidebar(pathname: string): void {
   render(
     <RouterContextProvider router={router}>
       <SidebarProvider>
-        <AeOperatorSidebar operatorRole="owner" currentPath={pathname} />
+        <OperatorChromeProvider>
+          <AeAppSidebar operatorRole="owner" pathname={pathname} hash="" />
+        </OperatorChromeProvider>
       </SidebarProvider>
     </RouterContextProvider>,
   )

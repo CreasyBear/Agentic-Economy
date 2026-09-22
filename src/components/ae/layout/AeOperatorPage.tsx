@@ -2,43 +2,56 @@
 
 import { createContext, use, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
-import { useMatches } from '@tanstack/react-router'
+import { useLocation } from '@tanstack/react-router'
 
 import { AeOperatorBreadcrumbs, type OperatorBreadcrumbItem } from '@/components/ae/layout/AeOperatorBreadcrumbs'
-import { AeOwnerMobileNavigation } from '@/components/ae/layout/AeOwnerMobileNavigation'
 import { AeRecordHeader } from '@/components/ae/layout/AeRecordHeader'
-import {
-  ownerWorkspaceOwnerForPath,
-  type OperatorNavBadges,
-  type OperatorRole,
+import { appDestination, resolveAppDestination, type AppDestinationId } from '@/lib/navigation/app-navigation'
+import type {
+  OperatorNavBadges,
+  OperatorRole,
 } from '@/lib/operator/roles'
 import type { OperatorContext } from '@/lib/operator/operator-context'
 
-/**
- * The "List" half of a shell-derived breadcrumb trail: the nearest sidebar
- * destination that is a strict ancestor of `currentPath`. Returns undefined
- * on a list page itself (top of its section, no trail needed) or when no
- * ancestor match carries a nav label. The terminal "Detail" crumb (the
- * page's own title) is appended by RootOperatorPage, so no per-route
- * breadcrumbs prop is needed.
- *
- * Owner routes under /owner/supply/* and /owner/settings/{connections,payouts}
- * are not route-tree descendants of the /owner/operations sidebar item that
- * owns them, so that one owner-specific mapping is preserved on top of the
- * useMatches() ancestor walk.
- */
-function useOperatorListCrumb(operatorRole: OperatorRole, currentPath: string): OperatorBreadcrumbItem | undefined {
-  const matches = useMatches()
+function resourceBreadcrumbLabel(destinationId: AppDestinationId, currentPath: string): string {
+  if (destinationId === 'market') return 'Tool'
+  if (destinationId === 'calls') return currentPath.startsWith('/calls/') ? 'Receipt' : 'Call'
+  if (destinationId === 'agents') return 'Agent'
+  if (destinationId === 'credit') return 'Credit record'
+  if (destinationId === 'settings') {
+    if (currentPath.startsWith('/owner/team')) return 'Team settings'
+    if (currentPath.startsWith('/owner/workspace')) return 'Workspace settings'
+    return 'Account settings'
+  }
+  if (destinationId === 'tools') {
+    if (currentPath.endsWith('/new')) return 'New Tool'
+    if (currentPath.startsWith('/owner/supply')) return 'Provider connection'
+    return 'Tool'
+  }
+  return appDestination(destinationId).label
+}
 
-  return useMemo(() => {
-    if (operatorRole === 'owner' && ownerWorkspaceOwnerForPath(currentPath) === 'operations' && currentPath !== '/owner/operations') {
-      return { label: 'Tools', href: '/owner/operations' }
-    }
+function useDestinationBreadcrumbs(
+  currentPath: string,
+  title: string,
+  providedBreadcrumbs?: readonly OperatorBreadcrumbItem[],
+): readonly OperatorBreadcrumbItem[] {
+  const { hash } = useLocation()
+  if (providedBreadcrumbs !== undefined) {
+    return providedBreadcrumbs.filter(({ label }) => label !== title)
+  }
 
-    const ancestor = matches.slice(0, -1).findLast((match) => match.staticData.nav?.label !== undefined)
-    const label = ancestor?.staticData.nav?.label
-    return ancestor === undefined || label === undefined ? undefined : { label, href: ancestor.pathname }
-  }, [matches, operatorRole, currentPath])
+  const destinationId = resolveAppDestination(currentPath, hash)
+  if (destinationId === null) return []
+  const destination = appDestination(destinationId)
+  const destinationHash = destination.hash?.replace(/^#/u, '') ?? ''
+  const currentHash = hash.replace(/^#/u, '')
+  if (currentPath === destination.to && destinationHash === currentHash) return []
+
+  return [
+    { label: destination.label, href: destination.to },
+    { label: resourceBreadcrumbLabel(destinationId, currentPath) },
+  ]
 }
 
 type OperatorPageChrome = Omit<AeOperatorPageProps, 'children' | 'operatorContext'>
@@ -72,13 +85,6 @@ export function useOperatorSidebarChrome(): OperatorPageChrome | null {
   return use(OperatorSidebarChromeContext)?.chrome ?? null
 }
 
-// Carries the `/_operator` layout's mobile `SidebarTrigger` down into the
-// root AeOperatorPage's own header row (beside the breadcrumb), the same
-// way shadcn's `SidebarInset` header hosts the trigger next to its
-// breadcrumb. Defaults to null so tests that render AeOperatorPage without
-// a SidebarProvider ancestor (error/pending/not-found states) render no
-// trigger instead of throwing from `useSidebar`.
-const OperatorMobileTriggerContext = createContext<ReactNode | null>(null)
 
 export type AeOperatorPageProps = {
   operatorRole: OperatorRole
@@ -170,7 +176,6 @@ function RootOperatorPage(props: AeOperatorPageProps) {
   const currentChrome = registeredChrome ?? propsChrome
 
   const {
-    operatorRole,
     title,
     description,
     actions,
@@ -179,17 +184,10 @@ function RootOperatorPage(props: AeOperatorPageProps) {
     currentPath,
     mainContentId,
     breadcrumbs: providedBreadcrumbs,
-    suppressSurfaceNavigation,
   } = currentChrome
-  const { children, operatorContext } = props
+  const { children } = props
   const resolvedMainContentId = mainContentId ?? 'main-content'
-
-  const listCrumb = useOperatorListCrumb(operatorRole, currentPath)
-  const breadcrumbs = useMemo<readonly OperatorBreadcrumbItem[]>(
-    () => providedBreadcrumbs ?? (listCrumb === undefined ? [] : [listCrumb, { label: title }]),
-    [listCrumb, providedBreadcrumbs, title],
-  )
-  const mobileTrigger = use(OperatorMobileTriggerContext)
+  const breadcrumbs = useDestinationBreadcrumbs(currentPath, title, providedBreadcrumbs)
 
   // Bubble the resolved chrome (in particular navBadges) up to the hoisted
   // sidebar bridge, when one is mounted above this route (see
@@ -208,12 +206,11 @@ function RootOperatorPage(props: AeOperatorPageProps) {
         id={resolvedMainContentId}
         tabIndex={-1}
         data-testid="operator-content"
-        className="ae-rail flex min-h-0 flex-1 flex-col pb-[calc(var(--ae-mobile-nav-height)+env(safe-area-inset-bottom,0px))] focus:outline-none md:pb-related"
+        className="ae-rail flex min-h-0 flex-1 flex-col focus:outline-none"
       >
-        {mobileTrigger === null && breadcrumbs.length === 0 ? null : (
+        {breadcrumbs.length === 0 ? null : (
           <div className="flex min-h-touch shrink-0 items-center gap-related px-gutter pt-intra">
-            {mobileTrigger}
-            {breadcrumbs.length === 0 ? null : <AeOperatorBreadcrumbs items={breadcrumbs} />}
+            <AeOperatorBreadcrumbs items={breadcrumbs} />
           </div>
         )}
         {stickyHeader === true ? (
@@ -247,33 +244,19 @@ function RootOperatorPage(props: AeOperatorPageProps) {
           {children}
         </div>
       </main>
-      {operatorRole === 'owner' && suppressSurfaceNavigation !== true
-        ? (
-            <AeOwnerMobileNavigation
-              {...(operatorContext === undefined ? {} : { operatorContext })}
-              currentPath={currentPath}
-            />
-          )
-        : null}
     </OperatorShellChromeContext.Provider>
   )
 }
 
 export type OperatorChromeProviderProps = {
-  sidebar?: ReactNode
-  /** The mobile `SidebarTrigger`, rendered in flow in the root AeOperatorPage's header row. */
-  mobileTrigger?: ReactNode
   children: ReactNode
 }
 
 /**
- * Mounted once by the `/_operator` layout route around the sidebar and
- * the content column beside the sidebar. Hosts the Tier B bridge so
- * `AeOperatorSidebar` (a sibling of the routed outlet, not a descendant of
- * any AeOperatorPage) can read the navBadges the current route's root
- * AeOperatorPage resolves.
+ * Root-frame bridge for current operator chrome. It keeps focus transitions
+ * and sidebar badges stable while route content changes.
  */
-export function OperatorChromeProvider({ sidebar, mobileTrigger, children }: OperatorChromeProviderProps) {
+export function OperatorChromeProvider({ children }: OperatorChromeProviderProps) {
   const [chrome, setRegisteredChrome] = useState<OperatorPageChrome | null>(null)
   const setChrome = useCallback((nextChrome: OperatorPageChrome) => {
     setRegisteredChrome(nextChrome)
@@ -319,10 +302,7 @@ export function OperatorChromeProvider({ sidebar, mobileTrigger, children }: Ope
 
   return (
     <OperatorSidebarChromeContext.Provider value={registration}>
-      <OperatorMobileTriggerContext.Provider value={mobileTrigger ?? null}>
-        {sidebar}
-        <div className="relative flex w-full flex-1 flex-col bg-background">{children}</div>
-      </OperatorMobileTriggerContext.Provider>
+      {children}
     </OperatorSidebarChromeContext.Provider>
   )
 }
