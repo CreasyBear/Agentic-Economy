@@ -8,39 +8,36 @@ import type {
   AdminMembership,
 } from '../src/modules/security/public'
 
-type AdminReadbackSource = {
-  auditEvents: Doc<'auditEvents'>[]
-  businesses: Doc<'businesses'>[]
+type AdminReadbackSource = { businesses: Doc<'businesses'>[] }
+type AdminReadbackRowResult = Omit<AdminReadbackRow, 'affectedPublicSurfaces'> & {
+  affectedPublicSurfaces?: string[]
 }
+type AdminReadbackResult =
+  | (Omit<Extract<AdminShellReadback, { kind: 'allowed' }>, 'rows'> & {
+      rows: AdminReadbackRowResult[]
+    })
+  | (Omit<Extract<AdminShellReadback, { kind: 'denied' }>, 'rows'> & {
+      rows: AdminReadbackRowResult[]
+    })
 
-const ADMIN_READBACK_ROW_CAP = 100
-
-export async function readAdminAuditEventsHandler(ctx: QueryCtx) {
-  return readAdminRows(ctx, 'audit_events', (source, now) => buildAuditRows(source, now))
-}
 
 export async function readAdminIndexHealthHandler(ctx: QueryCtx) {
-  return readAdminRows(ctx, 'index_health', (source, now) => buildIndexRows(source, now))
-}
-
-async function readAdminRows(
-  ctx: QueryCtx,
-  surface: 'audit_events' | 'index_health',
-  buildRows: (source: AdminReadbackSource, now: number) => readonly AdminReadbackRow[],
-) {
   const membership = await readCurrentActiveMembership(ctx)
   const deniedNow = latestStoredAdminTimestamp(membership)
-  const denied = readAdminRouteShell({ membership, surface, rows: [], now: deniedNow })
+  const denied = readAdminRouteShell({ membership, surface: 'index_health', rows: [], now: deniedNow })
   if (denied.kind === 'denied') {
     return summarizeAdminReadback(denied)
   }
 
-  const source = await readAdminReadbackSource(ctx.db, surface)
+  const business = await ctx.db.query('businesses').first()
+  const source: AdminReadbackSource = {
+    businesses: business === null ? [] : [business],
+  }
   const now = latestStoredAdminTimestamp(membership, source)
   return summarizeAdminReadback(readAdminRouteShell({
     membership,
-    surface,
-    rows: buildRows(source, now),
+    surface: 'index_health',
+    rows: buildIndexRows(source, now),
     now,
   }))
 }
@@ -52,7 +49,6 @@ function latestStoredAdminTimestamp(
   const timestamps = [
     membership?.grantedAt,
     membership?.revokedAt,
-    ...(source?.auditEvents.map((event) => event.createdAt) ?? []),
     ...(source?.businesses.flatMap((business) => [business.createdAt, business.updatedAt]) ?? []),
   ]
   return timestamps.reduce<number>((latest, timestamp) => (
@@ -62,38 +58,7 @@ function latestStoredAdminTimestamp(
   ), 0)
 }
 
-async function readAdminReadbackSource(
-  db: QueryCtx['db'],
-  surface: 'audit_events' | 'index_health',
-): Promise<AdminReadbackSource> {
-  if (surface === 'audit_events') {
-    return {
-      auditEvents: await db.query('auditEvents').order('desc').take(ADMIN_READBACK_ROW_CAP),
-      businesses: [],
-    }
-  }
 
-  const business = await db.query('businesses').first()
-  const businesses = business === null ? [] : [business]
-  return { auditEvents: [], businesses }
-}
-
-function buildAuditRows(
-  source: AdminReadbackSource,
-  _now: number,
-): readonly AdminReadbackRow[] {
-  return source.auditEvents.map((event) => ({
-    rowId: `row:audit:${String(event.eventId)}`,
-    rowType: 'audit_event' as const,
-    objectRef: `audit:${String(event.eventType)}:${String(event.targetType)}`,
-    rowState: 'guarded' as const,
-    surface: 'audit_events' as const,
-    readbackState: 'available' as const,
-    repairAction: 'inspect_audit' as const,
-    correlationId: String(event.correlationId),
-    updatedAt: event.createdAt,
-  }))
-}
 
 function buildIndexRows(
   source: AdminReadbackSource,
@@ -114,32 +79,31 @@ function buildIndexRows(
   ]
 }
 
-function summarizeAdminReadback(readback: AdminShellReadback) {
-  const rows = readback.rows.map(summarizeAdminReadbackRow)
+function summarizeAdminReadback(readback: AdminShellReadback): AdminReadbackResult {
   if (readback.kind === 'allowed') {
     return {
-      kind: 'allowed' as const,
+      kind: 'allowed',
       httpStatus: readback.httpStatus,
       surface: readback.surface,
       generatedAt: readback.generatedAt,
       actorRef: readback.actorRef,
       summary: readback.summary,
-      rows,
+      rows: readback.rows.map(summarizeAdminReadbackRow),
     }
   }
 
   return {
-    kind: 'denied' as const,
+    kind: 'denied',
     httpStatus: readback.httpStatus,
     reason: readback.reason,
     surface: readback.surface,
     generatedAt: readback.generatedAt,
     publicMessage: readback.publicMessage,
-    rows,
+    rows: [],
   }
 }
 
-function summarizeAdminReadbackRow(row: AdminReadbackRow) {
+function summarizeAdminReadbackRow(row: AdminReadbackRow): AdminReadbackRowResult {
   return {
     rowId: row.rowId,
     rowType: row.rowType,

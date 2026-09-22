@@ -82,18 +82,15 @@ describe('admin audit pagination', () => {
       filter: {},
       paginationOpts: { numItems: PAGE_SIZE, cursor: null },
     })
-    if ('kind' in first) throw new Error(`unexpected refusal: ${first.code}`)
     await insertNewestAuditEvent(backend)
     const second = await admin.query(api.adminConsoleAudit.listAdminAuditEvents, {
       filter: {},
       paginationOpts: { numItems: PAGE_SIZE, cursor: first.continueCursor },
     })
-    if ('kind' in second) throw new Error(`unexpected refusal: ${second.code}`)
     const third = await admin.query(api.adminConsoleAudit.listAdminAuditEvents, {
       filter: {},
       paginationOpts: { numItems: PAGE_SIZE, cursor: second.continueCursor },
     })
-    if ('kind' in third) throw new Error(`unexpected refusal: ${third.code}`)
 
     const rows = [...first.page, ...second.page, ...third.page]
     const seenIds = rows.map(({ id }) => id)
@@ -121,14 +118,12 @@ describe('admin audit pagination', () => {
       filter: { eventType: 'admin.action_denied' },
       paginationOpts: { numItems: 50, cursor: null },
     })
-    if ('kind' in byEvent) throw new Error(`unexpected refusal: ${byEvent.code}`)
     expect(byEvent.page.every(({ eventType }) => eventType === 'admin.action_denied')).toBe(true)
 
     const byWindow = await admin.query(api.adminConsoleAudit.listAdminAuditEvents, {
       filter: { from: 1_005, to: 1_010 },
       paginationOpts: { numItems: 50, cursor: null },
     })
-    if ('kind' in byWindow) throw new Error(`unexpected refusal: ${byWindow.code}`)
     expect(byWindow.page.map(({ createdAt }) => createdAt)).toEqual([
       1_009,
       1_008,
@@ -138,13 +133,15 @@ describe('admin audit pagination', () => {
     ])
   })
 
-  it('returns the registrar refusal value for a non-admin caller', async () => {
+  it('returns an empty page plus an explicit access refusal for a non-admin caller', async () => {
     const backend = convexTest(schema, convexModules)
     const caller = await nonAdmin(backend, 'user_admin-audit-non-admin')
 
     await expect(caller.query(api.adminConsoleAudit.listAdminAuditEvents, {
       filter: {},
       paginationOpts: { numItems: PAGE_SIZE, cursor: null },
-    })).resolves.toEqual({ kind: 'refused', code: 'missing_membership' })
+    })).resolves.toMatchObject({ page: [], isDone: true, continueCursor: '' })
+    await expect(caller.query(api.adminConsoleAudit.readAdminAuditAccess, {}))
+      .resolves.toEqual({ kind: 'refused', code: 'missing_membership' })
   })
 })

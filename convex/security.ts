@@ -9,10 +9,7 @@ import {
   grantAdminMembershipHandler,
   revokeAdminMembershipHandler,
 } from './securityAdminMembership'
-import {
-  readAdminAuditEventsHandler,
-  readAdminIndexHealthHandler,
-} from './securityAdminReadbacks'
+import { readAdminIndexHealthHandler } from './securityAdminReadbacks'
 import {
   closeRemovalDisputeHandler,
   openRemovalDisputeHandler,
@@ -265,11 +262,6 @@ export const revokeAdminMembership = mutationGeneric({
   handler: revokeAdminMembershipHandler,
 })
 
-export const readAdminAuditEvents = queryGeneric({
-  args: {},
-  returns: adminReadbackResult,
-  handler: readAdminAuditEventsHandler,
-})
 
 export const readAdminIndexHealth = queryGeneric({
   args: {},

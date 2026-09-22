@@ -1,10 +1,10 @@
 import type { UserIdentity } from 'convex/server'
 import { describe, expect, it } from 'vitest'
 
+import { readAdminAuditAccess } from '../../convex/adminConsoleAudit'
 import {
   bootstrapOwnerAdmin,
   grantAdminMembership,
-  readAdminAuditEvents,
   readAdminIndexHealth,
 } from '../../convex/security'
 import { interactiveCredentialExpiryNonce } from '../../convex/interactiveCredentialLifecycle'
@@ -43,7 +43,7 @@ type TestCtx = {
 
 type Handler<Args> = (ctx: TestCtx, args: Args) => Promise<unknown>
 
-const readAuditHandler = (readAdminAuditEvents as unknown as { _handler: Handler<Record<string, never>> })._handler
+const readAuditAccessHandler = (readAdminAuditAccess as unknown as { _handler: Handler<Record<string, never>> })._handler
 const readIndexHealthHandler = (readAdminIndexHealth as unknown as { _handler: Handler<Record<string, never>> })._handler
 const bootstrapHandler = (bootstrapOwnerAdmin as unknown as { _handler: Handler<AdminBootstrapArgs> })._handler
 const grantHandler = (grantAdminMembership as unknown as { _handler: Handler<GrantArgs> })._handler
@@ -70,30 +70,25 @@ type GrantArgs = {
 }
 
 describe('admin Convex runtime controls', () => {
-  it('denies non-admin readbacks without private rows and allows owner_admin durable readbacks', async () => {
+  it('denies non-admin audit access and keeps index-health readbacks stable', async () => {
     const db = seededAdminDb()
 
-    const denied = await readAuditHandler(authCtx(db, null), {})
-    expect(denied).toMatchObject({ kind: 'denied', httpStatus: 401, rows: [] })
-    expect(JSON.stringify(denied)).not.toMatch(/private:evidence|owner@example|rawContact/i)
+    const denied = await readAuditAccessHandler(authCtx(db, null), {})
+    expect(denied).toEqual({ kind: 'refused', code: 'missing_membership' })
 
-    const audit = await readAuditHandler(authCtx(db, ownerAdmin()), {})
+    const access = await readAuditAccessHandler(authCtx(db, ownerAdmin()), {})
     const indexHealth = await readIndexHealthHandler(authCtx(db, ownerAdmin()), {})
-    const repeatedAudit = await readAuditHandler(authCtx(db, ownerAdmin()), {})
+    const repeatedAccess = await readAuditAccessHandler(authCtx(db, ownerAdmin()), {})
     const repeatedIndexHealth = await readIndexHealthHandler(authCtx(db, ownerAdmin()), {})
 
-    expect(JSON.stringify(repeatedAudit)).toBe(JSON.stringify(audit))
+    expect(JSON.stringify(repeatedAccess)).toBe(JSON.stringify(access))
     expect(JSON.stringify(repeatedIndexHealth)).toBe(JSON.stringify(indexHealth))
-
-    expect(audit).toMatchObject({
-      kind: 'allowed',
-      rows: [expect.objectContaining({ rowType: 'audit_event', readbackState: 'available' })],
-    })
+    expect(access).toEqual({ kind: 'allowed' })
     expect(indexHealth).toMatchObject({
       kind: 'allowed',
       rows: [expect.objectContaining({ rowType: 'index_surface', repairAction: 'regenerate_projection' })],
     })
-    expect(JSON.stringify({ audit, indexHealth })).not.toMatch(/private:evidence:raw|contactEmail|ownerId|adminId/i)
+    expect(JSON.stringify(indexHealth)).not.toMatch(/private:evidence:raw|contactEmail|ownerId|adminId/i)
   })
 
   it('bootstraps only a preauthorized first owner_admin and stores audit rows', async () => {

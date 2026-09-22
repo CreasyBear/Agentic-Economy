@@ -1,23 +1,21 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { createServerFn } from '@tanstack/react-start'
 
-import { AeOperatorPage } from '@/components/ae/layout/AeOperatorPage'
-import { AeAdminReadbackPanel } from '@/components/ae/readback/AeAdminReadbackPanel'
+import { AdminAuditPage } from '@/components/ae/admin/audit/AdminAuditPage'
+import { AdminAuditPageSkeleton } from '@/components/ae/admin/audit/AdminAuditPageSkeleton'
+import {
+  AUDIT_COPY,
+  adminAuditSearchSchema,
+} from '@/components/ae/admin/audit/audit.contracts'
 import { operatorRouteOptions } from '@/lib/operator/route-options'
-import { readAdminAuditEventsThroughSource } from '@/modules/security/admin-readback.functions'
-
-const readAdminAuditEventsServer = createServerFn().handler(() => readAdminAuditEventsThroughSource())
 
 export const Route = createFileRoute('/_operator/admin/audit-events')({
   ...operatorRouteOptions,
-  loader: () => readAdminAuditEventsServer(),
+  validateSearch: adminAuditSearchSchema,
+  pendingComponent: AdminAuditPageSkeleton,
   head: () => ({
     meta: [
-      { title: 'Activity log | Agentic Economy' },
-      {
-        name: 'description',
-        content: 'Inspect admin and recovery transitions with redacted payloads.',
-      },
+      { title: `${AUDIT_COPY.title} | Agentic Economy` },
+      { name: 'description', content: AUDIT_COPY.description },
       { name: 'robots', content: 'noindex' },
     ],
   }),
@@ -25,21 +23,14 @@ export const Route = createFileRoute('/_operator/admin/audit-events')({
 })
 
 function AdminAuditEventsRoute() {
-  const readback = Route.useLoaderData()
-
+  const search = Route.useSearch()
+  const navigate = Route.useNavigate()
   return (
-    <AeOperatorPage
-      operatorRole="admin"
-      title="Activity log"
-      description="Inspect admin and recovery transitions with redacted payloads after source-owned membership is resolved."
-      currentPath="/admin/audit-events"
-      navBadges={{ '/admin/audit-events': readback.rows.length }}
-    >
-      <AeAdminReadbackPanel
-        title="Audit readback"
-        description="Denied reads return no private event rows and preserve the HTTP decision for the operator."
-        readback={readback}
-      />
-    </AeOperatorPage>
+    <AdminAuditPage
+      search={search}
+      onSearchChange={(nextSearch) => {
+        void navigate({ search: nextSearch, replace: true })
+      }}
+    />
   )
 }
