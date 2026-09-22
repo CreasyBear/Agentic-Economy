@@ -26,7 +26,7 @@ import {
  */
 const RATCHET = {
   numModules: 29,
-  totalEntrySurfaces: 230,
+  totalEntrySurfaces: 229,
   numTestOnlyWhiteBoxExceptions: 3,
   numToCapabilitySupply: 2,
 } as const

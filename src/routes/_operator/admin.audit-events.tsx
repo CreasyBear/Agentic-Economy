@@ -1,6 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { createServerFn } from '@tanstack/react-start'
-import { ScrollText } from 'lucide-react'
 
 import { AeOperatorPage } from '@/components/ae/layout/AeOperatorPage'
 import { AeAdminReadbackPanel } from '@/components/ae/readback/AeAdminReadbackPanel'
@@ -10,19 +9,6 @@ import { readAdminAuditEventsThroughSource } from '@/modules/security/admin-read
 const readAdminAuditEventsServer = createServerFn().handler(() => readAdminAuditEventsThroughSource())
 
 export const Route = createFileRoute('/_operator/admin/audit-events')({
-  staticData: {
-    nav: {
-      label: 'Audit',
-      operator: {
-        roles: ['admin'],
-        group: 'Records',
-        groupOrder: 0,
-        order: 1,
-        icon: ScrollText,
-        tier: 'core',
-      },
-    },
-  },
   ...operatorRouteOptions,
   loader: () => readAdminAuditEventsServer(),
   head: () => ({

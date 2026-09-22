@@ -105,7 +105,7 @@ describe('/owner/workspace route (W-12)', () => {
     renderWorkspaceRoute()
     const profile = screen.getByTestId('organization-profile')
     expect(profile.getAttribute('data-routing')).toBe('hash')
-    expect(profile.getAttribute('data-after-leave')).toBe('/owner')
+    expect(profile.getAttribute('data-after-leave')).toBe('/market')
   })
 
   it('U5: includes OrganizationProfile.Page label general', () => {

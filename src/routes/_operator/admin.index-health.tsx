@@ -1,7 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { createServerFn } from '@tanstack/react-start'
 import { z } from 'zod'
-import { Activity } from 'lucide-react'
 
 import { AeAdminCatalogHealthPage } from '@/components/ae/admin/catalog-health/AeAdminCatalogHealthPage'
 import { sourceAuthorityReviewFromSearch } from '@/components/ae/admin/catalog-health/catalog-health.contracts'
@@ -11,19 +10,6 @@ import { readAdminIndexHealthThroughSource } from '@/modules/security/admin-read
 const readAdminIndexHealthServer = createServerFn().handler(() => readAdminIndexHealthThroughSource())
 
 export const Route = createFileRoute('/_operator/admin/index-health')({
-  staticData: {
-    nav: {
-      label: 'Catalog health',
-      operator: {
-        roles: ['admin'],
-        group: 'Records',
-        groupOrder: 0,
-        order: 0,
-        icon: Activity,
-        tier: 'core',
-      },
-    },
-  },
   ...operatorRouteOptions,
   validateSearch: z.object({
     publicationRef: z.string().trim().min(1).max(300).optional(),

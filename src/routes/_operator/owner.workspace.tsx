@@ -30,7 +30,7 @@ function OwnerWorkspaceRoute() {
         <div className="min-h-96 w-full">
           <OrganizationProfile
             routing="hash"
-            afterLeaveOrganizationUrl="/owner"
+            afterLeaveOrganizationUrl="/market"
             appearance={clerkEmbeddedProfileAppearance}
           >
             <OrganizationProfile.Page label="general" />

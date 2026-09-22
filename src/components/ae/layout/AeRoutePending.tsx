@@ -14,10 +14,8 @@ export function RoutePending({
   return <AePageSkeleton title={title} description={description} />
 }
 
-const OVERVIEW_CARD_PATHS = new Set(['/owner', '/owner/workspace'])
-
 export function inferOperatorSkeletonPreset(pathname: string): OperatorRouteSkeletonPreset {
-  if (OVERVIEW_CARD_PATHS.has(pathname)) return 'overview-cards'
+  if (pathname === '/owner/workspace') return 'overview-cards'
 
   if (pathname.includes('/settings') || pathname.endsWith('/new')) return 'form-record'
 

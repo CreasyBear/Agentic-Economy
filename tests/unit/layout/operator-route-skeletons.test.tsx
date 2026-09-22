@@ -94,8 +94,8 @@ function skeletonRoot() {
 }
 
 describe('inferOperatorSkeletonPreset', () => {
-  it('maps overview landing paths to overview-cards', () => {
-    expect(inferOperatorSkeletonPreset('/owner')).toBe('overview-cards')
+  it('maps the workspace landing path to overview-cards', () => {
+    expect(inferOperatorSkeletonPreset('/owner')).toBe('default')
     expect(inferOperatorSkeletonPreset('/owner/workspace')).toBe('overview-cards')
   })
 

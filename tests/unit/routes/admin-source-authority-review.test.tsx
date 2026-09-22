@@ -38,6 +38,7 @@ vi.mock('@/modules/capability-supply/source-authority-review.functions', () => (
   reviewSourceAuthorityServer: Symbol('review-source-authority'),
 }))
 
+import { Route as AdminAuditEventsRoute } from '@/routes/_operator/admin.audit-events'
 import { Route as AdminIndexHealthRoute } from '@/routes/_operator/admin.index-health'
 
 afterEach(() => {
@@ -46,6 +47,11 @@ afterEach(() => {
 })
 
 describe('admin source authority review', () => {
+  it('keeps admin routes out of the dead route navigation registry', () => {
+    expect(AdminAuditEventsRoute.options.staticData).toBeUndefined()
+    expect(AdminIndexHealthRoute.options.staticData).toBeUndefined()
+  })
+
   it('confirms one exact publication and tells the operator to resume the same release run', async () => {
     mocks.review.mockResolvedValue({
       kind: 'verified',
