@@ -137,8 +137,8 @@ describe('readStatusProbesServer', () => {
 
 describe('/status route', () => {
   const checkedAt = 'Sep 21, 2026, 9:05 AM UTC'
-  it('uses the canonical Status document title while keeping the live health result as the H1', () => {
-    const head = Route.options.head?.({} as never)
+  it('uses the canonical Status document title while keeping the live health result as the H1', async () => {
+    const head = await Route.options.head?.({} as never)
     expect(head?.meta).toEqual(expect.arrayContaining([
       expect.objectContaining({ title: 'Status | Agentic Economy' }),
     ]))
