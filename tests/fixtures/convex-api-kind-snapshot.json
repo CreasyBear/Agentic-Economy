@@ -60,6 +60,60 @@
     "kind": "query"
   },
   {
+    "visibility": "internal",
+    "module": "adminConsoleMetrics",
+    "method": "countEvidenceForWindow",
+    "kind": "query"
+  },
+  {
+    "visibility": "internal",
+    "module": "adminConsoleMetrics",
+    "method": "countOpenUncertainCalls",
+    "kind": "query"
+  },
+  {
+    "visibility": "internal",
+    "module": "adminConsoleMetrics",
+    "method": "pageCallsForWindow",
+    "kind": "query"
+  },
+  {
+    "visibility": "internal",
+    "module": "adminConsoleMetrics",
+    "method": "pageQuotesForWindow",
+    "kind": "query"
+  },
+  {
+    "visibility": "internal",
+    "module": "adminConsoleMetrics",
+    "method": "pageResolutionsForWindow",
+    "kind": "query"
+  },
+  {
+    "visibility": "internal",
+    "module": "adminConsoleMetrics",
+    "method": "pageUsageForWindow",
+    "kind": "query"
+  },
+  {
+    "visibility": "internal",
+    "module": "adminConsoleMetrics",
+    "method": "snapshotMarketplaceMetricsDay",
+    "kind": "action"
+  },
+  {
+    "visibility": "internal",
+    "module": "adminConsoleMetrics",
+    "method": "writeMarketplaceMetricsDay",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "public",
+    "module": "adminConsoleProviders",
+    "method": "listAdminProviders",
+    "kind": "query"
+  },
+  {
     "visibility": "public",
     "module": "agentAccessOAuth",
     "method": "claimRefreshFamily",
@@ -3009,6 +3063,12 @@
     "visibility": "internal",
     "module": "workloadCron",
     "method": "refreshFacilitatorDiscovery",
+    "kind": "action"
+  },
+  {
+    "visibility": "internal",
+    "module": "workloadCron",
+    "method": "snapshotMarketplaceMetricsDay",
     "kind": "action"
   },
   {

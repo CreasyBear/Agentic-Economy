@@ -88,7 +88,9 @@ import { Route as OperatorOwnerCreditRouteImport } from './routes/_operator/owne
 import { Route as OperatorCallsCallRefRouteImport } from './routes/_operator/calls.$callRef'
 import { Route as OperatorAgentAccessAuthorizeRouteImport } from './routes/_operator/agent-access.authorize'
 import { Route as OperatorAdminSearchRouteImport } from './routes/_operator/admin.search'
+import { Route as OperatorAdminProvidersRouteImport } from './routes/_operator/admin.providers'
 import { Route as OperatorAdminIndexHealthRouteImport } from './routes/_operator/admin.index-health'
+import { Route as OperatorAdminExceptionsRouteImport } from './routes/_operator/admin.exceptions'
 import { Route as OperatorAdminAuditEventsRouteImport } from './routes/_operator/admin.audit-events'
 import { Route as ApiV1ToolsQuoteRouteImport } from './routes/api.v1.tools.quote'
 import { Route as ApiV1ToolsProcureRouteImport } from './routes/api.v1.tools.procure'
@@ -121,6 +123,7 @@ import { Route as OperatorOwnerOperationsToolRefRouteImport } from './routes/_op
 import { Route as OperatorAdminWorkspacesAccountRefRouteImport } from './routes/_operator/admin.workspaces.$accountRef'
 import { Route as OperatorAdminToolsToolRefRouteImport } from './routes/_operator/admin.tools.$toolRef'
 import { Route as OperatorAdminQuotesQuoteRefRouteImport } from './routes/_operator/admin.quotes.$quoteRef'
+import { Route as OperatorAdminProvidersSlugRouteImport } from './routes/_operator/admin.providers.$slug'
 import { Route as OperatorAdminCallsCallRefRouteImport } from './routes/_operator/admin.calls.$callRef'
 import { Route as OperatorAdminAgentsPrincipalRefRouteImport } from './routes/_operator/admin.agents.$principalRef'
 import { Route as ApiV1SupplyToolsListRouteImport } from './routes/api.v1.supply.tools.list'
@@ -542,12 +545,22 @@ const OperatorAdminSearchRoute = OperatorAdminSearchRouteImport.update({
   path: '/admin/search',
   getParentRoute: () => OperatorRoute,
 } as any)
+const OperatorAdminProvidersRoute = OperatorAdminProvidersRouteImport.update({
+  id: '/admin/providers',
+  path: '/admin/providers',
+  getParentRoute: () => OperatorRoute,
+} as any)
 const OperatorAdminIndexHealthRoute =
   OperatorAdminIndexHealthRouteImport.update({
     id: '/admin/index-health',
     path: '/admin/index-health',
     getParentRoute: () => OperatorRoute,
   } as any)
+const OperatorAdminExceptionsRoute = OperatorAdminExceptionsRouteImport.update({
+  id: '/admin/exceptions',
+  path: '/admin/exceptions',
+  getParentRoute: () => OperatorRoute,
+} as any)
 const OperatorAdminAuditEventsRoute =
   OperatorAdminAuditEventsRouteImport.update({
     id: '/admin/audit-events',
@@ -720,6 +733,12 @@ const OperatorAdminQuotesQuoteRefRoute =
     path: '/admin/quotes/$quoteRef',
     getParentRoute: () => OperatorRoute,
   } as any)
+const OperatorAdminProvidersSlugRoute =
+  OperatorAdminProvidersSlugRouteImport.update({
+    id: '/$slug',
+    path: '/$slug',
+    getParentRoute: () => OperatorAdminProvidersRoute,
+  } as any)
 const OperatorAdminCallsCallRefRoute =
   OperatorAdminCallsCallRefRouteImport.update({
     id: '/admin/calls/$callRef',
@@ -869,7 +888,9 @@ export interface FileRoutesByFullPath {
   '/t/new': typeof TNewRoute
   '/tools/$toolRef': typeof ToolsToolRefRoute
   '/admin/audit-events': typeof OperatorAdminAuditEventsRoute
+  '/admin/exceptions': typeof OperatorAdminExceptionsRoute
   '/admin/index-health': typeof OperatorAdminIndexHealthRoute
+  '/admin/providers': typeof OperatorAdminProvidersRouteWithChildren
   '/admin/search': typeof OperatorAdminSearchRoute
   '/agent-access/authorize': typeof OperatorAgentAccessAuthorizeRoute
   '/calls/$callRef': typeof OperatorCallsCallRefRoute
@@ -904,6 +925,7 @@ export interface FileRoutesByFullPath {
   '/owner/': typeof OperatorOwnerIndexRoute
   '/admin/agents/$principalRef': typeof OperatorAdminAgentsPrincipalRefRoute
   '/admin/calls/$callRef': typeof OperatorAdminCallsCallRefRoute
+  '/admin/providers/$slug': typeof OperatorAdminProvidersSlugRoute
   '/admin/quotes/$quoteRef': typeof OperatorAdminQuotesQuoteRefRoute
   '/admin/tools/$toolRef': typeof OperatorAdminToolsToolRefRoute
   '/admin/workspaces/$accountRef': typeof OperatorAdminWorkspacesAccountRefRoute
@@ -999,7 +1021,9 @@ export interface FileRoutesByTo {
   '/t/new': typeof TNewRoute
   '/tools/$toolRef': typeof ToolsToolRefRoute
   '/admin/audit-events': typeof OperatorAdminAuditEventsRoute
+  '/admin/exceptions': typeof OperatorAdminExceptionsRoute
   '/admin/index-health': typeof OperatorAdminIndexHealthRoute
+  '/admin/providers': typeof OperatorAdminProvidersRouteWithChildren
   '/admin/search': typeof OperatorAdminSearchRoute
   '/agent-access/authorize': typeof OperatorAgentAccessAuthorizeRoute
   '/calls/$callRef': typeof OperatorCallsCallRefRoute
@@ -1034,6 +1058,7 @@ export interface FileRoutesByTo {
   '/owner': typeof OperatorOwnerIndexRoute
   '/admin/agents/$principalRef': typeof OperatorAdminAgentsPrincipalRefRoute
   '/admin/calls/$callRef': typeof OperatorAdminCallsCallRefRoute
+  '/admin/providers/$slug': typeof OperatorAdminProvidersSlugRoute
   '/admin/quotes/$quoteRef': typeof OperatorAdminQuotesQuoteRefRoute
   '/admin/tools/$toolRef': typeof OperatorAdminToolsToolRefRoute
   '/admin/workspaces/$accountRef': typeof OperatorAdminWorkspacesAccountRefRoute
@@ -1131,7 +1156,9 @@ export interface FileRoutesById {
   '/t/new': typeof TNewRoute
   '/tools/$toolRef': typeof ToolsToolRefRoute
   '/_operator/admin/audit-events': typeof OperatorAdminAuditEventsRoute
+  '/_operator/admin/exceptions': typeof OperatorAdminExceptionsRoute
   '/_operator/admin/index-health': typeof OperatorAdminIndexHealthRoute
+  '/_operator/admin/providers': typeof OperatorAdminProvidersRouteWithChildren
   '/_operator/admin/search': typeof OperatorAdminSearchRoute
   '/_operator/agent-access/authorize': typeof OperatorAgentAccessAuthorizeRoute
   '/_operator/calls/$callRef': typeof OperatorCallsCallRefRoute
@@ -1166,6 +1193,7 @@ export interface FileRoutesById {
   '/_operator/owner/': typeof OperatorOwnerIndexRoute
   '/_operator/admin/agents/$principalRef': typeof OperatorAdminAgentsPrincipalRefRoute
   '/_operator/admin/calls/$callRef': typeof OperatorAdminCallsCallRefRoute
+  '/_operator/admin/providers/$slug': typeof OperatorAdminProvidersSlugRoute
   '/_operator/admin/quotes/$quoteRef': typeof OperatorAdminQuotesQuoteRefRoute
   '/_operator/admin/tools/$toolRef': typeof OperatorAdminToolsToolRefRoute
   '/_operator/admin/workspaces/$accountRef': typeof OperatorAdminWorkspacesAccountRefRoute
@@ -1263,7 +1291,9 @@ export interface FileRouteTypes {
     | '/t/new'
     | '/tools/$toolRef'
     | '/admin/audit-events'
+    | '/admin/exceptions'
     | '/admin/index-health'
+    | '/admin/providers'
     | '/admin/search'
     | '/agent-access/authorize'
     | '/calls/$callRef'
@@ -1298,6 +1328,7 @@ export interface FileRouteTypes {
     | '/owner/'
     | '/admin/agents/$principalRef'
     | '/admin/calls/$callRef'
+    | '/admin/providers/$slug'
     | '/admin/quotes/$quoteRef'
     | '/admin/tools/$toolRef'
     | '/admin/workspaces/$accountRef'
@@ -1393,7 +1424,9 @@ export interface FileRouteTypes {
     | '/t/new'
     | '/tools/$toolRef'
     | '/admin/audit-events'
+    | '/admin/exceptions'
     | '/admin/index-health'
+    | '/admin/providers'
     | '/admin/search'
     | '/agent-access/authorize'
     | '/calls/$callRef'
@@ -1428,6 +1461,7 @@ export interface FileRouteTypes {
     | '/owner'
     | '/admin/agents/$principalRef'
     | '/admin/calls/$callRef'
+    | '/admin/providers/$slug'
     | '/admin/quotes/$quoteRef'
     | '/admin/tools/$toolRef'
     | '/admin/workspaces/$accountRef'
@@ -1524,7 +1558,9 @@ export interface FileRouteTypes {
     | '/t/new'
     | '/tools/$toolRef'
     | '/_operator/admin/audit-events'
+    | '/_operator/admin/exceptions'
     | '/_operator/admin/index-health'
+    | '/_operator/admin/providers'
     | '/_operator/admin/search'
     | '/_operator/agent-access/authorize'
     | '/_operator/calls/$callRef'
@@ -1559,6 +1595,7 @@ export interface FileRouteTypes {
     | '/_operator/owner/'
     | '/_operator/admin/agents/$principalRef'
     | '/_operator/admin/calls/$callRef'
+    | '/_operator/admin/providers/$slug'
     | '/_operator/admin/quotes/$quoteRef'
     | '/_operator/admin/tools/$toolRef'
     | '/_operator/admin/workspaces/$accountRef'
@@ -2252,11 +2289,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof OperatorAdminSearchRouteImport
       parentRoute: typeof OperatorRoute
     }
+    '/_operator/admin/providers': {
+      id: '/_operator/admin/providers'
+      path: '/admin/providers'
+      fullPath: '/admin/providers'
+      preLoaderRoute: typeof OperatorAdminProvidersRouteImport
+      parentRoute: typeof OperatorRoute
+    }
     '/_operator/admin/index-health': {
       id: '/_operator/admin/index-health'
       path: '/admin/index-health'
       fullPath: '/admin/index-health'
       preLoaderRoute: typeof OperatorAdminIndexHealthRouteImport
+      parentRoute: typeof OperatorRoute
+    }
+    '/_operator/admin/exceptions': {
+      id: '/_operator/admin/exceptions'
+      path: '/admin/exceptions'
+      fullPath: '/admin/exceptions'
+      preLoaderRoute: typeof OperatorAdminExceptionsRouteImport
       parentRoute: typeof OperatorRoute
     }
     '/_operator/admin/audit-events': {
@@ -2483,6 +2534,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof OperatorAdminQuotesQuoteRefRouteImport
       parentRoute: typeof OperatorRoute
     }
+    '/_operator/admin/providers/$slug': {
+      id: '/_operator/admin/providers/$slug'
+      path: '/$slug'
+      fullPath: '/admin/providers/$slug'
+      preLoaderRoute: typeof OperatorAdminProvidersSlugRouteImport
+      parentRoute: typeof OperatorAdminProvidersRoute
+    }
     '/_operator/admin/calls/$callRef': {
       id: '/_operator/admin/calls/$callRef'
       path: '/admin/calls/$callRef'
@@ -2626,6 +2684,20 @@ const OperatorAgentAccessRouteChildren: OperatorAgentAccessRouteChildren = {
 const OperatorAgentAccessRouteWithChildren =
   OperatorAgentAccessRoute._addFileChildren(OperatorAgentAccessRouteChildren)
 
+interface OperatorAdminProvidersRouteChildren {
+  OperatorAdminProvidersSlugRoute: typeof OperatorAdminProvidersSlugRoute
+}
+
+const OperatorAdminProvidersRouteChildren: OperatorAdminProvidersRouteChildren =
+  {
+    OperatorAdminProvidersSlugRoute: OperatorAdminProvidersSlugRoute,
+  }
+
+const OperatorAdminProvidersRouteWithChildren =
+  OperatorAdminProvidersRoute._addFileChildren(
+    OperatorAdminProvidersRouteChildren,
+  )
+
 interface OperatorOwnerOperationsRouteChildren {
   OperatorOwnerOperationsToolRefRoute: typeof OperatorOwnerOperationsToolRefRoute
   OperatorOwnerOperationsNewRoute: typeof OperatorOwnerOperationsNewRoute
@@ -2646,7 +2718,9 @@ interface OperatorRouteChildren {
   OperatorActivityRoute: typeof OperatorActivityRoute
   OperatorAgentAccessRoute: typeof OperatorAgentAccessRouteWithChildren
   OperatorAdminAuditEventsRoute: typeof OperatorAdminAuditEventsRoute
+  OperatorAdminExceptionsRoute: typeof OperatorAdminExceptionsRoute
   OperatorAdminIndexHealthRoute: typeof OperatorAdminIndexHealthRoute
+  OperatorAdminProvidersRoute: typeof OperatorAdminProvidersRouteWithChildren
   OperatorAdminSearchRoute: typeof OperatorAdminSearchRoute
   OperatorCallsCallRefRoute: typeof OperatorCallsCallRefRoute
   OperatorOwnerCreditRoute: typeof OperatorOwnerCreditRoute
@@ -2669,7 +2743,9 @@ const OperatorRouteChildren: OperatorRouteChildren = {
   OperatorActivityRoute: OperatorActivityRoute,
   OperatorAgentAccessRoute: OperatorAgentAccessRouteWithChildren,
   OperatorAdminAuditEventsRoute: OperatorAdminAuditEventsRoute,
+  OperatorAdminExceptionsRoute: OperatorAdminExceptionsRoute,
   OperatorAdminIndexHealthRoute: OperatorAdminIndexHealthRoute,
+  OperatorAdminProvidersRoute: OperatorAdminProvidersRouteWithChildren,
   OperatorAdminSearchRoute: OperatorAdminSearchRoute,
   OperatorCallsCallRefRoute: OperatorCallsCallRefRoute,
   OperatorOwnerCreditRoute: OperatorOwnerCreditRoute,
