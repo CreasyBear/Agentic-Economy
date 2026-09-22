@@ -174,6 +174,7 @@ import type * as lib_capabilitySupply_publishBootstrap from "../lib/capabilitySu
 import type * as lib_capabilitySupply_publishPrepared from "../lib/capabilitySupply/publishPrepared.js";
 import type * as lib_capabilitySupply_readPublication from "../lib/capabilitySupply/readPublication.js";
 import type * as lib_capabilitySupply_sourceAuthority from "../lib/capabilitySupply/sourceAuthority.js";
+import type * as lib_catalog_devSeedAccessPath from "../lib/catalog/devSeedAccessPath.js";
 import type * as lib_catalog_devSeedAuthority from "../lib/catalog/devSeedAuthority.js";
 import type * as lib_catalog_offeringPersistence from "../lib/catalog/offeringPersistence.js";
 import type * as lib_catalog_sellerCanary from "../lib/catalog/sellerCanary.js";
@@ -505,6 +506,7 @@ declare const fullApi: ApiFromModules<{
   "lib/capabilitySupply/publishPrepared": typeof lib_capabilitySupply_publishPrepared;
   "lib/capabilitySupply/readPublication": typeof lib_capabilitySupply_readPublication;
   "lib/capabilitySupply/sourceAuthority": typeof lib_capabilitySupply_sourceAuthority;
+  "lib/catalog/devSeedAccessPath": typeof lib_catalog_devSeedAccessPath;
   "lib/catalog/devSeedAuthority": typeof lib_catalog_devSeedAuthority;
   "lib/catalog/offeringPersistence": typeof lib_catalog_offeringPersistence;
   "lib/catalog/sellerCanary": typeof lib_catalog_sellerCanary;
