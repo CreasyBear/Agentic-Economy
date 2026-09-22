@@ -16,10 +16,10 @@ import { api } from '../../../../convex/_generated/api'
  * visitors on public pages open no websocket.
  */
 export function SignedInConvexProvider({ children }: { children: ReactNode }) {
-  const auth = useAuth()
   const convexUrl = import.meta.env.VITE_CONVEX_URL?.trim()
   const [client] = useState(() => (convexUrl ? new ConvexReactClient(convexUrl) : null))
-  if (!auth.isSignedIn || client === null) return children
+  if (client === null) return children
+  // Keep this wrapper mounted while Clerk resolves auth; changing its depth remounts the shell and resets navigation state.
   return <ConvexProviderWithClerk client={client} useAuth={useAuth}>{children}</ConvexProviderWithClerk>
 }
 

@@ -10,6 +10,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 const runtime = vi.hoisted(() => ({
   pathname: '/t/new',
   isAuthenticated: true,
+  isLoaded: true,
   sessionId: "session-1",
   constructClient: vi.fn(),
   setHttpAuth: vi.fn(),
@@ -24,7 +25,7 @@ vi.mock('@clerk/tanstack-react-start', () => ({
     runtime.renderClerkProvider(runtime.pathname)
     return children
   },
-  useAuth: () => ({ isLoaded: true, isSignedIn: runtime.isAuthenticated, sessionId: runtime.sessionId, userId: 'owner-1', orgId: null, getToken: runtime.getToken }),
+  useAuth: () => ({ isLoaded: runtime.isLoaded, isSignedIn: runtime.isAuthenticated, sessionId: runtime.sessionId, userId: 'owner-1', orgId: null, getToken: runtime.getToken }),
 }))
 
 vi.mock('convex/react-clerk', () => ({
@@ -114,7 +115,7 @@ vi.mock('@/lib/observability/boot-client-observability', () => ({
   bootClientObservability: vi.fn(),
 }))
 
-import { requiresChatProviders } from '@/components/ae/layout/AeConvexProviders'
+import { requiresChatProviders, SignedInConvexProvider } from '@/components/ae/layout/AeConvexProviders'
 import { Route } from '@/routes/__root'
 
 const rootSource = readFileSync(
@@ -128,6 +129,7 @@ const providerSource = readFileSync(
 
 beforeEach(() => {
   runtime.pathname = '/t/new'
+  runtime.isLoaded = true
   runtime.isAuthenticated = true
   runtime.sessionId = "session-1"
   runtime.getToken.mockReset().mockResolvedValue('verified-token')
@@ -292,4 +294,24 @@ describe('Tool chat provider boundary', () => {
     expect(screen.getByRole('button', { name: 'Try again' })).toBeTruthy()
   })
 
+  it('keeps the signed-in Convex boundary mounted while Clerk finishes loading', () => {
+    runtime.isLoaded = false
+    runtime.isAuthenticated = false
+    const mounted = vi.fn()
+    function Child() {
+      useEffect(() => {
+        mounted()
+      }, [])
+      return <div>Stable child</div>
+    }
+    const view = render(<SignedInConvexProvider><Child /></SignedInConvexProvider>)
+
+    expect(mounted).toHaveBeenCalledTimes(1)
+
+    runtime.isLoaded = true
+    runtime.isAuthenticated = true
+    view.rerender(<SignedInConvexProvider><Child /></SignedInConvexProvider>)
+
+    expect(mounted).toHaveBeenCalledTimes(1)
+  })
 })
