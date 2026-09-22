@@ -108,3 +108,15 @@ Reviewed RFC v2 at `2e72bf217` against the five blocking fixes above.
 The prior factual corrections are also resolved at RFC lines 35-51, 109 and 255-266.
 
 **GATE: STILL BLOCKED.**
+
+## Re-review (v3)
+
+Reviewed RFC v3 at `e2bbc6bec` against the five blocking fixes.
+
+1. **Type contract — RESOLVED** (`RFC:165-173,238-246`). Completed codes now exclude proposal creation. Only the two proposable actions can produce `kind: 'proposed'`; that receipt requires a proposal command ref, `awaiting: 'second_approval'` and empty effect refs. Completed receipts admit only `not_required | approved`, so a pending proposal is no longer representable as completed. The state-machine prose and behavioral assertion agree (`RFC:277,354`).
+2. **Idempotency and second approval — RESOLVED** (`RFC:275-277,322,353-354`).
+3. **CQS — RESOLVED** (`RFC:256,262,323,329,355`).
+4. **Deep ACL/public seams — RESOLVED** (`RFC:84,92,294-298,355`).
+5. **Refusal/error strategy — RESOLVED** (`RFC:175-207,264-289,331-356`).
+
+**GATE: APPROVED.**
