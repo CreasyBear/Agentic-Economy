@@ -94,3 +94,17 @@ The verified citations include the admin readback cap, Call money projection, pe
 7. Replace dead Polaris URLs and correct the licence statement.
 
 **GATE: APPROVED WITH FIXES (1-5 blocking; 6-7 required factual corrections).**
+
+## Re-review (v2)
+
+Reviewed RFC v2 at `2e72bf217` against the five blocking fixes above.
+
+1. **Type contract — STILL OPEN** (`RFC:115-245`). Canonical public refs, total parsers, literal refusal/success codes, action-indexed receipts, non-optional fields and a closed approval union are now specified. One illegal state remains: `approval_proposed` is a success code for suppression and commercial policy (`:165-172`), but the only success receipt is `kind: 'completed'` (`:237-239`), so a pending proposal is representable as completed. Add a separate `kind: 'proposed'` receipt with `code: 'approval_proposed'`, empty effect refs and `approval.kind: 'awaiting_second_approval'`; remove that code from completed outcomes.
+2. **Idempotency and second approval — RESOLVED** (`RFC:109,268-270,315,346-347`). All six actions use the existing operation-key index; canonical first-outcome bytes replay unchanged; changed material refuses; OCC protects a single effect; proposal and approval keys, digest, expiry, distinct active actor, concurrency and terminal replay are explicit.
+3. **CQS — RESOLVED** (`RFC:249,255,316,322,348`). Queries write nothing, lookup telemetry sits at the server boundary, mutations return receipts/effect refs only, object state is re-queried, and alpha annotation is unexposed.
+4. **Deep ACL/public seams — RESOLVED** (`RFC:84,92,287-291,348`). One Convex ACL owns raw-row translation; raw docs and internal imports cannot cross it; contracts live outside a new domain module; the 29-module ratchet remains fixed.
+5. **Refusal/error strategy — RESOLVED** (`RFC:174-206,257-282,324-338,349`). Refusals are closed per action, source-write failures are enumerated, presentation maps retryability/effect certainty/copy/next step, transaction certainty is explicit, and only unexpected faults reach Sentry.
+
+The prior factual corrections are also resolved at RFC lines 35-51, 109 and 255-266.
+
+**GATE: STILL BLOCKED.**
