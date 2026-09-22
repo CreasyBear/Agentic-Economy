@@ -32,23 +32,23 @@ The answer is not a generic CRUD admin, a new low-code sidecar, or a copy of ano
 
 ## 3. Reference designs adopted
 
-Shopify's former Polaris URLs now redirect to the current Shopify design documentation. We adopt the documented patterns, not the implementation. The source set is the [Polaris patterns index](https://polaris.shopify.com/patterns), [IndexTable](https://polaris.shopify.com/components/tables/index-table), [ResourceList](https://polaris.shopify.com/components/lists/resource-list), [Page](https://polaris.shopify.com/components/layout-and-structure/page), [Banner](https://polaris.shopify.com/components/feedback-indicators/banner), [actionable language](https://polaris.shopify.com/content/actionable-language) and [common actions](https://polaris.shopify.com/patterns/common-actions). Current equivalents document full-width resource indexes, dual-column details, settings grouping, one primary page action, contextual banners and date-range inputs ([patterns](https://shopify.dev/docs/api/app-home/latest/patterns), [index](https://shopify.dev/docs/api/app-home/latest/patterns/templates/resource-index), [details](https://shopify.dev/docs/api/app-home/latest/patterns/templates/details), [settings](https://shopify.dev/docs/api/app-home/latest/patterns/templates/settings), [page](https://shopify.dev/docs/api/app-home/latest/web-components/layout-and-structure/page), [banner](https://shopify.dev/docs/api/app-home/latest/web-components/feedback-and-status-indicators/banner), [date picker](https://shopify.dev/docs/api/app-home/latest/web-components/forms/date-picker)).
+Shopify's current App Home documentation supplies the [patterns index](https://shopify.dev/docs/api/app-home/latest/patterns), [resource index layout](https://shopify.dev/docs/api/app-home/latest/patterns/templates/resource-index), [resource details layout](https://shopify.dev/docs/api/app-home/latest/patterns/templates/details), [settings layout](https://shopify.dev/docs/api/app-home/latest/patterns/templates/settings), [index table composition](https://shopify.dev/docs/api/app-home/latest/patterns/compositions/index-table), [resource list composition](https://shopify.dev/docs/api/app-home/latest/patterns/compositions/resource-list), [Page](https://shopify.dev/docs/api/app-home/latest/web-components/layout-and-structure/page), [callout card](https://shopify.dev/docs/api/app-home/latest/patterns/compositions/callout-card) and [date picker](https://shopify.dev/docs/api/app-home/latest/web-components/forms/date-picker). We adopt the documented patterns, not the implementation.
 
 Medusa documents resource-shaped admin domains, file-based UI routes, nested settings, routed detail pages and a DataTable with row navigation, search, filtering, sorting and pagination ([Admin](https://docs.medusajs.com/learn/fundamentals/admin), [UI](https://docs.medusajs.com/ui), [UI routes](https://docs.medusajs.com/learn/fundamentals/admin/ui-routes), [routing](https://docs.medusajs.com/learn/fundamentals/admin/routing), [DataTable](https://docs.medusajs.com/ui/components/data-table)). Its User module, auth provider and RBAC role/policy APIs separate users, authentication and policy assignment ([User](https://docs.medusajs.com/resources/commerce-modules/user), [admin auth](https://docs.medusajs.com/resources/how-to-tutorials/how-to/admin/auth), [RBAC role](https://docs.medusajs.com/resources/references/js-sdk/admin/rbacRole), [RBAC policy](https://docs.medusajs.com/resources/references/js-sdk/admin/rbacPolicy)).
 
 Stripe documents grouped global search with direct object-ID navigation and URL-persisted queries, prioritized review queues, actionable connected-account lists, evidence-first dispute decisions and immutable event objects ([search](https://docs.stripe.com/dashboard/search), [Radar reviews](https://docs.stripe.com/radar/transaction-reviews), [Connect account review](https://docs.stripe.com/connect/dashboard/review-actionable-accounts), [disputes](https://docs.stripe.com/disputes/responding), [events](https://docs.stripe.com/api/events)).
 
-Polaris React components are Polaris-styled and Shopify-licensed, so we adopt only the documented patterns and render them with the repository's Base UI and shadcn-derived primitives. We do not take Shopify styling or information architecture. We do not take Medusa's runtime, Admin API, offset pagination, auth or RBAC. We keep Convex, Clerk and `adminMemberships`. We do not import Stripe's risk model, dispute state machine or financial authority. Stripe remains the hosted owner of payout onboarding and its own disputes.
+Archived Polaris React's license grants MIT-form permissions with Shopify-specific interoperability and visual-distinctness conditions ([license](https://github.com/Shopify/polaris-react/blob/main/LICENSE.md)); no Polaris package or code is pulled into AE. We render the patterns with the repository's Base UI and shadcn-derived primitives and do not take Shopify styling or information architecture. We do not take Medusa's runtime, Admin API, offset pagination, auth or RBAC. We keep Convex, Clerk and `adminMemberships`. We do not import Stripe's risk model, dispute state machine or financial authority. Stripe remains the hosted owner of payout onboarding and its own disputes.
 
 ## 4. Adaptation mapping
 
 | Reference pattern | AE surface and adaptation |
 |---|---|
-| Polaris resource index, IndexTable and ResourceList ([index](https://polaris.shopify.com/patterns), [IndexTable](https://polaris.shopify.com/components/tables/index-table), [ResourceList](https://polaris.shopify.com/components/lists/resource-list)) | Exceptions, Audit and Provider lists use stable columns, server filters, cursor pagination and row-to-object navigation. No bulk consequential actions. |
-| Polaris resource details layout ([patterns](https://polaris.shopify.com/patterns); [current details](https://shopify.dev/docs/api/app-home/latest/patterns/templates/details)) | Call and Provider object pages use identity and status first, primary evidence in the main column, related refs in the rail, timeline next, guarded actions last. |
-| Polaris Page and common actions ([Page](https://polaris.shopify.com/components/layout-and-structure/page); [common actions](https://polaris.shopify.com/patterns/common-actions)) | One contextual primary action at most. Secondary actions remain in the header. Destructive actions sit in a separated action area and require confirmation. |
-| Polaris Banner and actionable language ([Banner](https://polaris.shopify.com/components/feedback-indicators/banner); [language](https://polaris.shopify.com/content/actionable-language)) | Configuration gaps, uncertain money outcomes and required evidence use concise banners that state impact and the next action. |
-| Polaris settings and date picking ([patterns](https://polaris.shopify.com/patterns); [date picking](https://shopify.dev/docs/api/app-home/latest/web-components/forms/date-picker)) | Overview groups configuration truth by system. Audit uses bounded date ranges with explicit locale and timezone labels. |
+| Shopify resource index, index table and resource list ([index](https://shopify.dev/docs/api/app-home/latest/patterns/templates/resource-index), [index table](https://shopify.dev/docs/api/app-home/latest/patterns/compositions/index-table), [resource list](https://shopify.dev/docs/api/app-home/latest/patterns/compositions/resource-list)) | Exceptions, Audit and Provider lists use stable columns, server filters, cursor pagination and row-to-object navigation. No bulk consequential actions. |
+| Shopify resource details layout ([details](https://shopify.dev/docs/api/app-home/latest/patterns/templates/details)) | Call and Provider object pages use identity and status first, primary evidence in the main column, related refs in the rail, timeline next, guarded actions last. |
+| Shopify Page and layout guidance ([Page](https://shopify.dev/docs/api/app-home/latest/web-components/layout-and-structure/page); [layout](https://shopify.dev/docs/apps/design/layout)) | One contextual primary action at most. Secondary actions remain in the header. Destructive actions sit in a separated action area and require confirmation. |
+| Shopify callout card ([callout](https://shopify.dev/docs/api/app-home/latest/patterns/compositions/callout-card)) | Configuration gaps, uncertain money outcomes and required evidence use concise feedback that states impact and the next action. |
+| Shopify settings and date picking ([settings](https://shopify.dev/docs/api/app-home/latest/patterns/templates/settings); [date picking](https://shopify.dev/docs/api/app-home/latest/web-components/forms/date-picker)) | Overview groups configuration truth by system. Audit uses bounded date ranges with explicit locale and timezone labels. |
 | Medusa order, customer and product domains ([Admin](https://docs.medusajs.com/learn/fundamentals/admin)) | Adapt order to Call, customer to Workspace, and product to Tool plus Provider. These are analogies for page anatomy, not shared models. |
 | Medusa UI routes and routing ([UI routes](https://docs.medusajs.com/learn/fundamentals/admin/ui-routes); [routing](https://docs.medusajs.com/learn/fundamentals/admin/routing)) | Keep thin TanStack route controllers and dynamic object routes. Navigation remains in `ADMIN_NAVIGATION`, not scattered route metadata (`src/components/ae/layout/app-shell/app-shell.contracts.ts:37-49`). |
 | Medusa DataTable ([DataTable](https://docs.medusajs.com/ui/components/data-table)) | Reuse the existing TanStack-backed `AeRecordTable`; extend it for server cursor state rather than adding Medusa UI (`src/components/ae/operator/AeOperatorDataTable.tsx:3-15,61-113`). |
@@ -79,9 +79,9 @@ Polaris React components are Polaris-styled and Shopify-licensed, so we adopt on
 - **N5 Bounded reads.** All list reads use indexes and cursors. Each object page makes at most three Convex queries.
 - **N6 Product contracts.** Routes stay at or below 80 lines; async pages have matching skeletons; states use `getStatusPresentation`; controls retain app accessibility and canonical vocabulary.
 
-## 6. Domain model and bounded context
+## 6. Application adapter and context map
 
-The admin console is a read-and-command adapter over existing domains. It owns parsers, admin projections, exception projections, URL filters and command envelopes. It does not own Calls, money, supply, identity or audit records.
+The admin console is a downstream application adapter, not a new source-data bounded context. Source domains own lifecycle and writes. The adapter owns total ref parsing, query orchestration, operator projections, URL filters and command envelopes. It never owns or exports Calls, money, supply, identity, audit rows, `Doc<>` values or source DTOs.
 
 - **Identity boundary:** Clerk authenticates. `adminMemberships` authorizes (`src/modules/security/internal/schema.ts:15-28`).
 - **Execution boundary:** capability-execution owns Calls, Quotes, receipts and Purchase resolutions (`src/modules/capability-execution/internal/convex-schema.ts:289-336,337-458`).
@@ -89,7 +89,7 @@ The admin console is a read-and-command adapter over existing domains. It owns p
 - **Workspace boundary:** principal-account and agent-access own Workspaces and Agents (`src/modules/principal-account/account/convex-schema.ts:231-251`; `src/modules/agent-access/internal/principal-convex-schema.ts:8-30`).
 - **Audit boundary:** observability owns append-only audit rows and idempotency keys (`src/modules/observability/internal/schema.ts:15-65`).
 
-No `adminCases` or generic `adminObjects` table is added. Existing domain rows remain authoritative. One deliberate `admin-console` module may hold contracts and projections; it must be registered once in the module boundary manifest (`src/modules/module-boundaries.ts:71-80`).
+`convex/lib/adminConsole/` is the single ACL owner: it reads raw Convex rows and immediately translates them to stable operator contracts. Nothing under the adapter imports `@/modules/*/internal/*`; missing capabilities are exported through the owning module's declared public seam. An import-boundary test rejects internal imports and exported raw documents. Contracts and total parser composition live under `src/lib/operator/admin-console/`, not a thirtieth module. `tests/imports/module-boundaries-ratchet.test.ts:25-30,35-80` remains pinned at 29 modules and 229 entry surfaces. No `adminCases` or generic `adminObjects` table is added.
 
 ## 7. Schema and object mapping
 
@@ -106,43 +106,51 @@ SchemaFacts completed before this RFC was committed. `PRESENT` and `ABSENT` belo
 
 Add only indexes justified by these query contracts: `purchaseResolutionRecords.by_resolutionRef`, `purchaseResolutionRecords.by_terminalState_and_resolvedAt`, `disputes.by_status_and_updatedAt`, `capabilityCallProjections.by_state_and_updatedAt`, `capabilityProviderConnections.by_lifecycle_and_updatedAt`, and Audit indexes for `eventType+createdAt`, `actorRef+createdAt`, `targetType+targetRef+createdAt`, and `correlationId+createdAt`. Each is ABSENT in the cited table definitions (`src/modules/capability-execution/internal/convex-schema.ts:289-336`; `src/modules/capability-supply/internal/convex-schema.ts:483-550`; `src/modules/security/internal/schema.ts:42-61`; `src/modules/observability/internal/schema.ts:15-47`). The Call history query may also need `capabilityCalls.by_createdAt`, but it stays out until a measured global-history query proves it.
 
-Audit payload is additive, not a new table. Keep `beforeState`, `afterState`, `reasonCode`, `evidenceRefs`, `idempotencyKey`, `correlationId`, redacted payload and payload hash (`src/modules/common/audit-events.ts:168-190`). The redacted payload gains a versioned admin-command summary with permission, action, canonical object ref, input digest, expected revision when present, a boolean fresh-FVA result and outcome code. Never store raw `fva`, evidence bodies, secrets or PII search text.
+Reuse the PRESENT `operationKeys.by_actor_operation_key` index (`src/modules/observability/internal/schema.ts:49-65`). Add optional `resultJson` to that shared table; every `admin_operator` row requires canonical serialized first-outcome bytes and its existing `resultHash`. Other scopes remain unaffected. Audit adds a top-level permission and a versioned redacted before/after summary. It uses the existing `outcome` field rather than duplicating outcome inside payload (`src/modules/observability/internal/schema.ts:16-38`). If Joel enables two-person control, the justified `adminApprovalProposals` table stores proposal ref, action, command digest, proposer ref, expiry and a closed approval state, indexed only by proposal ref and status plus expiry. No raw command input is stored. Never store raw `fva`, evidence bodies, secrets or PII search text.
 
 ## 8. Type design
 
 These are signatures, not implementation.
 
 ```ts
-type Brand<T, Name extends string> = T & { readonly __brand: Name }
-type CallRef = Brand<string, 'CallRef'>
-type QuoteRef = Brand<string, 'QuoteRef'>
-type ToolVersionRef = Brand<string, 'ToolVersionRef'>
-type ProviderRef = Brand<string, 'ProviderRef'>
-type WorkspaceRef = Brand<string, 'WorkspaceRef'>
-type AgentRef = Brand<string, 'AgentRef'>
-
 type AdminObjectRef =
   | { readonly kind: 'call'; readonly ref: CallRef }
   | { readonly kind: 'quote'; readonly ref: QuoteRef }
-  | { readonly kind: 'tool_version'; readonly ref: ToolVersionRef }
-  | { readonly kind: 'provider'; readonly ref: ProviderRef }
-  | { readonly kind: 'workspace'; readonly ref: WorkspaceRef }
-  | { readonly kind: 'agent'; readonly ref: AgentRef }
+  | { readonly kind: 'tool_version'; readonly ref: PublicToolRef }
+  | { readonly kind: 'provider'; readonly ref: BusinessSlug }
+  | { readonly kind: 'workspace'; readonly ref: AccountRef }
+  | { readonly kind: 'agent'; readonly ref: PrincipalRef }
 
 type AdminObjectView =
   | { readonly kind: 'call'; readonly ref: CallRef; readonly value: AdminCallView }
   | { readonly kind: 'quote'; readonly ref: QuoteRef; readonly value: AdminQuoteView }
-  | { readonly kind: 'tool_version'; readonly ref: ToolVersionRef; readonly value: AdminToolVersionView }
-  | { readonly kind: 'provider'; readonly ref: ProviderRef; readonly value: AdminProviderView }
-  | { readonly kind: 'workspace'; readonly ref: WorkspaceRef; readonly value: AdminWorkspaceView }
-  | { readonly kind: 'agent'; readonly ref: AgentRef; readonly value: AdminAgentView }
+  | { readonly kind: 'tool_version'; readonly ref: PublicToolRef; readonly value: AdminToolVersionView }
+  | { readonly kind: 'provider'; readonly ref: BusinessSlug; readonly value: AdminProviderView }
+  | { readonly kind: 'workspace'; readonly ref: AccountRef; readonly value: AdminWorkspaceView }
+  | { readonly kind: 'agent'; readonly ref: PrincipalRef; readonly value: AdminAgentView }
 
 type AdminException =
   | { readonly kind: 'purchase_resolution'; readonly objectRef: CallRef; readonly openedAt: number }
-  | { readonly kind: 'removal_dispute'; readonly objectRef: ProviderRef; readonly openedAt: number }
-  | { readonly kind: 'source_authority_review'; readonly objectRef: ToolVersionRef; readonly openedAt: number }
-  | { readonly kind: 'admission_case'; readonly objectRef: ToolVersionRef; readonly openedAt: number }
+  | { readonly kind: 'removal_dispute'; readonly objectRef: BusinessSlug; readonly openedAt: number }
+  | { readonly kind: 'source_authority_review'; readonly objectRef: PublicToolRef; readonly openedAt: number }
+  | { readonly kind: 'admission_case'; readonly objectRef: PublicToolRef; readonly openedAt: number }
   | { readonly kind: 'uncertain_call'; readonly objectRef: CallRef; readonly openedAt: number }
+
+type AdminParseErrorCode =
+  | 'empty_ref'
+  | 'unknown_ref_kind'
+  | 'malformed_call_ref'
+  | 'malformed_quote_ref'
+  | 'malformed_tool_ref'
+  | 'malformed_provider_slug'
+  | 'malformed_account_ref'
+  | 'malformed_principal_ref'
+
+type AdminParseResult =
+  | { readonly kind: 'valid'; readonly value: AdminObjectRef }
+  | { readonly kind: 'malformed'; readonly code: AdminParseErrorCode }
+
+declare function parseAdminObjectRef(kind: AdminObjectRef['kind'], input: string): AdminParseResult
 
 type AdminActionInput = {
   readonly set_business_suppression: SetBusinessSuppressionInput
@@ -152,60 +160,135 @@ type AdminActionInput = {
   readonly revoke_admin_membership: RevokeAdminMembershipInput
   readonly change_commercial_policy: ChangeCommercialPolicyInput
 }
+type AdminCommandAction = keyof AdminActionInput
 
-type AdminCommand<A extends keyof AdminActionInput> = Readonly<{
+type AdminSuccessCodeByAction = {
+  readonly set_business_suppression: 'business_suppressed' | 'business_unsuppressed' | 'business_suppression_unchanged' | 'approval_proposed'
+  readonly close_removal_dispute: 'dispute_closed'
+  readonly verify_capability_source_authority: 'source_authority_verified'
+  readonly grant_admin_membership: 'admin_membership_granted'
+  readonly revoke_admin_membership: 'admin_membership_revoked'
+  readonly change_commercial_policy: 'commercial_policy_activated' | 'commercial_policy_replaced' | 'commercial_policy_suspended' | 'approval_proposed'
+}
+
+type SharedAdminRefusalCode =
+  | SourceWriteAdmissionFailureReason
+  | 'source_write_nonce_replayed'
+  | 'authentication_required'
+  | 'missing_membership'
+  | 'inactive_membership'
+  | 'action_not_allowed'
+  | 'mfa_reverification_required'
+  | 'admin_invalid_reason'
+  | 'admin_missing_evidence'
+  | 'idempotency_conflict'
+
+type AdminActionRefusalCodes = {
+  readonly set_business_suppression: 'business_not_found' | 'target_changed' | AdminApprovalRefusalCode
+  readonly close_removal_dispute: 'dispute_not_found' | 'target_changed'
+  readonly verify_capability_source_authority: 'publication_not_found' | 'revision_changed' | 'source_changed' | 'evidence_invalid'
+  readonly grant_admin_membership: 'malformed_token_identifier' | 'membership_conflict'
+  readonly revoke_admin_membership: 'admin_membership_not_found' | 'last_owner_admin' | 'target_changed'
+  readonly change_commercial_policy:
+    | 'commercial_policy_invalid'
+    | 'authority_mismatch'
+    | 'proof_stale'
+    | 'proof_replayed'
+    | 'command_changed'
+    | 'commercial_policy_ref_conflict'
+    | 'commercial_policy_conflict'
+    | 'commercial_policy_already_active'
+    | 'commercial_policy_revision_invalid'
+    | 'commercial_policy_current_changed'
+    | AdminApprovalRefusalCode
+}
+
+type AdminRefusalCode<A extends AdminCommandAction> = SharedAdminRefusalCode | AdminActionRefusalCodes[A]
+
+type AdminApprovalRefusalCode =
+  | 'approval_same_actor'
+  | 'approval_digest_mismatch'
+  | 'approval_expired'
+  | 'approval_already_resolved'
+  | 'approval_actor_inactive'
+
+type AdminApproval =
+  | { readonly kind: 'not_required' }
+  | { readonly kind: 'awaiting_second_approval'; readonly proposalRef: AdminApprovalProposalRef; readonly commandDigest: SourceHash; readonly proposerRef: string; readonly expiresAt: number }
+  | { readonly kind: 'approved'; readonly proposalRef: AdminApprovalProposalRef; readonly commandDigest: SourceHash; readonly proposerRef: string; readonly approverRef: string; readonly expiresAt: number; readonly approvedAt: number }
+  | { readonly kind: 'expired'; readonly proposalRef: AdminApprovalProposalRef; readonly commandDigest: SourceHash; readonly proposerRef: string; readonly expiresAt: number; readonly expiredAt: number }
+  | { readonly kind: 'refused'; readonly proposalRef: AdminApprovalProposalRef; readonly commandDigest: SourceHash; readonly proposerRef: string; readonly attemptedApproverRef: string; readonly expiresAt: number; readonly code: AdminApprovalRefusalCode }
+
+type AdminApprovalIntent =
+  | { readonly kind: 'execute' }
+  | { readonly kind: 'propose'; readonly expiresAt: number }
+  | { readonly kind: 'approve'; readonly proposalRef: AdminApprovalProposalRef; readonly commandDigest: SourceHash }
+
+type AdminCommand<A extends AdminCommandAction> = Readonly<{
   action: A
   input: AdminActionInput[A]
   reasonCode: string
   evidenceRefs: readonly string[]
-  operationKey: Brand<string, 'OperationKey'>
-  correlationId: Brand<string, 'CorrelationId'>
+  operationKey: OperationKey
+  correlationId: CorrelationId
+  approval: AdminApprovalIntent
 }>
 
-type AdminCommandOutcome<T> =
-  | { readonly kind: 'applied'; readonly code: string; readonly value: T; readonly auditEventId: string }
-  | { readonly kind: 'replayed'; readonly code: string; readonly value: T; readonly auditEventId: string }
-  | { readonly kind: 'refused'; readonly code: AdminRefusalCode; readonly retryable: boolean; readonly auditEventId?: string }
-
-type ParseResult<T> = { readonly kind: 'valid'; readonly value: T } | { readonly kind: 'malformed'; readonly code: string }
-declare function parseAdminObjectRef(input: string): ParseResult<AdminObjectRef>
+type AdminCommandReceipt<A extends AdminCommandAction> =
+  | { readonly kind: 'completed'; readonly action: A; readonly code: AdminSuccessCodeByAction[A]; readonly effectRefs: readonly string[]; readonly approval: AdminApproval; readonly auditEventId: AuditEventId; readonly operationKey: OperationKey; readonly correlationId: CorrelationId }
+  | { readonly kind: 'refused'; readonly action: A; readonly code: AdminRefusalCode<A>; readonly effectRefs: readonly []; readonly approval: AdminApproval; readonly auditEventId: AuditEventId; readonly operationKey: OperationKey; readonly correlationId: CorrelationId }
 
 type AdminPermission = AdminAction
 declare function requireAdminPermission(membership: AdminMembership | undefined, permission: AdminPermission): AdminAuthorityResult
 ```
 
-Every parser is total. Formats already exist for Call `operation-invocation:v1:<64 hex>`, Quote `operation-commitment:v1:<64 hex>`, Tool `operation:v1:<64 hex>`, Workspace `acc_<32 hex>` and Agent `prn_<32 hex>` (`src/modules/capability-execution/call-contracts.ts:57-75`; `src/modules/common/tool-ref.ts:1-7`; `src/modules/principal-account/account/registry/validation.ts:20-47`; `src/modules/principal-account/principal/registry.ts:1-8,76-85`). Provider uses the exact normalized Business slug because `businesses.by_slug` is authoritative (`src/modules/business/internal/schema.ts:9-26`). `AdminPermission` is the existing `AdminAction` matrix-key union; the matrix is constrained as `Record<AdminRole, Record<AdminAction, boolean>>` (`src/modules/security/internal/admin-authority.ts:13-53`). `AdminCommand` deliberately omits `fva`; the server reads and verifies it from the authenticated Clerk identity.
+The adapter consumes canonical public types only. `PublicToolRef`, `AccountRef` and `PrincipalRef` already have public guards or constructors (`src/modules/capability-supply/public.ts:19-20,59-65`; `src/modules/principal-account/account/public.ts:1-20`; `src/modules/principal-account/principal/public.ts:1-15`). Add branded `CallRef` to the existing total `parseCallRef` entry, and add branded `QuoteRef` plus a total parser on that same declared entry (`src/modules/capability-execution/call-contracts.ts:56-84`; `src/modules/module-boundaries.ts:94`). Add exact `BusinessSlug` parsing to the existing Business public seam; `normalizeSlug` transforms and may return empty, so it is not that parser (`src/modules/common/normalize-slug.ts:1-10`; `src/modules/business/public.ts:87-96`). Total admin adapters catch the current throwing Account/Principal constructors, and the Agent read verifies that the resolved Principal is an Agent. `AdminApprovalProposalRef` is adapter-owned with one total parser. `AdminPermission` remains the existing matrix-key union (`src/modules/security/internal/admin-authority.ts:13-53`).
 
 ## 9. Convex read API contracts
 
-Proposed queries are `searchAdminObjects`, `readAdminObject`, `listAdminExceptions`, `listAdminAuditEvents` and `readAdminOverview`. Each starts with `read_admin_readbacks`; object and exception projections may demand a stronger permission later, but never a weaker one. `readAdminObject` dispatches by parsed ref and uses no more than three parallel query groups. Search accepts exact refs only. Lists take `{ cursor, limit, filters }` and return `{ page, continueCursor, isDone }`.
+Proposed queries are `searchAdminObjects`, `readAdminObject`, `listAdminExceptions`, `listAdminAuditEvents` and `readAdminOverview`. Each starts with `read_admin_readbacks`; object and exception projections may demand a stronger permission later, but never a weaker one. `readAdminObject` dispatches by parsed ref and uses no more than three parallel query groups. Search accepts exact refs only. Lists take `{ cursor, limit, filters }` and return `{ page, continueCursor, isDone }`. These Convex queries never write audit, analytics, nonces or "viewed" state. Privacy-safe `admin_lookup` analytics emit only after the query returns, at the TanStack server telemetry boundary.
 
 The current `readAdminAuditEvents` and `readAdminIndexHealth` query façades remain useful names only if their contracts are replaced cleanly. Today they have no args and return the bounded readback union (`convex/security.ts:268-277`); Audit reads `order('desc').take(100)` (`convex/securityAdminReadbacks.ts:65-73`). No compatibility aliases are added.
 
 ## 10. Existing action adaptation
 
-Each action extends its existing mutation in place. The shared adaptation adds `operationKeys.by_actor_operation_key`. The six handlers do not currently use that seam consistently: suppression, dispute closure and membership changes key replay through domain or audit material; source verification does not persist a generic key; commercial policy persists idempotency refs without a generic replay row (`convex/businesses.ts:318-391`; `convex/security.ts:354-389,461-480,502-519`; `convex/capabilitySupply.ts:752-829`; `convex/moneyCommercialPolicy.ts:44-73`). The fresh-FVA check runs before domain lookup. Reason/evidence validation precedes effects. The effect and one audit row containing before and after state commit in the same Convex transaction.
+Each action extends its existing mutation in place and reuses `operationKeys.by_actor_operation_key`. Today suppression has only audit-ID replay, source verification has state-based replay, commercial policy has partial state-based replay, and dispute closure plus membership changes have no action replay guard (`convex/businesses.ts:133-285`; `convex/securityRemovalDisputes.ts:119-209,270-280`; `convex/securityAdminMembership.ts:108-187`; `convex/lib/capabilitySupply/sourceAuthority.ts:7-99`; `convex/moneyCommercialPolicy.ts:324-457`). The adapted effect, audit row and complete action receipt commit atomically. Mutations return only that receipt and effect refs; the UI re-reads object state through a query.
 
-| Existing mutation | Permission | Envelope additions or normalization | Audit event kind | Polaris placement | Refusal codes |
-|---|---|---|---|---|---|
-| `businesses.setBusinessSuppression` (`convex/businesses.ts:288-300`) | `suppress_business` | Retain reason, evidence, operation key and correlation; add server fresh-FVA and generic replay/conflict | Existing `business.suppressed` or `business.unsuppressed` (`convex/businesses.ts:206-209`) | Destructive action area for suppress; secondary for unsuppress | Existing `admin_action_denied`, `admin_invalid_reason`, `admin_missing_evidence`, `business_not_found`, plus `mfa_reverification_required`, `idempotency_conflict`, `target_changed` |
-| `security.closeRemovalDispute` (`convex/security.ts:314-324`) | `close_dispute` | Retain reason, evidence and idempotency refs; add fresh-FVA and generic replay/conflict | Existing `dispute.closed` with before/after (`convex/securityRemovalDisputes.ts:355-390`) | Primary decision in evidence Sheet and object page | Existing admin refusals and `dispute_not_found` (`convex/security.ts:205-224`), plus MFA, conflict and target-changed codes |
-| `capabilitySupply.verifyCapabilitySourceAuthority` (`convex/capabilitySupply.ts:99-102`) | `register_capability_supply` | Add reason; retain evidence, operation/correlation, expected revision/digest; add fresh-FVA and generic replay/conflict | Add existing-taxonomy kind `capability_supply.eligibility_changed`; the current handler does not write an audit event (`convex/lib/capabilitySupply/sourceAuthority.ts:7-91`; `src/modules/common/audit-events.ts:90-95`) | Primary review action | Existing `authorization_denied`, `evidence_invalid`, `publication_not_found`, `revision_changed`, `source_changed`; add MFA and idempotency conflict |
-| `security.grantAdminMembership` (`convex/security.ts:239-252`) | `manage_admin_membership` | Retain reason and evidence; add fresh-FVA and generic replay/conflict; prevent self-escalation outside bootstrap | Existing `admin.membership_granted` (`src/modules/security/internal/admin-authority.ts:344-364`) | Secondary page action with confirmation | Existing admin refusals, plus MFA, idempotency conflict, last-owner and two-person policy codes |
-| `security.revokeAdminMembership` (`convex/security.ts:254-266`) | `manage_admin_membership` | Retain reason and evidence; add fresh-FVA, generic replay/conflict, expected membership state and last-owner guard | Existing `admin.membership_revoked` (`src/modules/security/internal/admin-authority.ts:419-439`) | Destructive action area | Existing admin refusals and membership-not-found, plus MFA, idempotency conflict, target-changed and last-owner codes |
-| `moneyCommercialPolicy.change` (`convex/moneyCommercialPolicy.ts:460-464`) | `manage_commercial_policy` | Add reason and evidence-ref list around existing evidence ref/digest; retain operation/correlation/proof; add fresh-FVA and generic replay/conflict | Add taxonomy kind `admin.commercial_policy_changed` with policy before/after payload; the current mutation does not audit the policy change itself (`convex/moneyCommercialPolicy.ts:324-367,414-457`; current taxonomy at `src/modules/common/audit-events.ts:72-151`) | Destructive area for suspend/replace; primary only for first activation | Existing commercial-policy refusals (`convex/moneyCommercialPolicy.ts:369-411`), plus reason/evidence/MFA/idempotency codes |
+| Existing mutation | Permission | Completed codes and audit | Action-specific refusal codes in addition to `SharedAdminRefusalCode` |
+|---|---|---|---|
+| `businesses.setBusinessSuppression` (`convex/businesses.ts:288-300`) | `suppress_business` | `business_suppressed`, `business_unsuppressed`, `business_suppression_unchanged`; existing suppression events | `business_not_found`, `target_changed`, `AdminApprovalRefusalCode` |
+| `security.closeRemovalDispute` (`convex/security.ts:314-324`) | `close_dispute` | `dispute_closed`; existing `dispute.closed` | `dispute_not_found`, `target_changed` |
+| `capabilitySupply.verifyCapabilitySourceAuthority` (`convex/capabilitySupply.ts:99-102`) | `register_capability_supply` | `source_authority_verified`; add existing-taxonomy `capability_supply.eligibility_changed` | `publication_not_found`, `revision_changed`, `source_changed`, `evidence_invalid` (`convex/lib/capabilitySupply/publicationValues.ts:32-49`) |
+| `security.grantAdminMembership` (`convex/security.ts:239-252`) | `manage_admin_membership` | `admin_membership_granted`; existing grant event | `malformed_token_identifier`, `membership_conflict` (`src/modules/security/internal/admin-authority.ts:260-317`) |
+| `security.revokeAdminMembership` (`convex/security.ts:254-266`) | `manage_admin_membership` | `admin_membership_revoked`; existing revoke event | `admin_membership_not_found`, `last_owner_admin`, `target_changed` |
+| `moneyCommercialPolicy.change` (`convex/moneyCommercialPolicy.ts:460-464`) | `manage_commercial_policy` | activated/replaced/suspended; add `admin.commercial_policy_changed` | `commercial_policy_invalid`, `authority_mismatch`, `proof_stale`, `proof_replayed`, `command_changed`, `commercial_policy_ref_conflict`, `commercial_policy_conflict`, `commercial_policy_already_active`, `commercial_policy_revision_invalid`, `commercial_policy_current_changed`, `AdminApprovalRefusalCode` (`convex/moneyCommercialPolicy.ts:324-411`) |
 
-`AdminRefusalCode` is a closed union of the codes above. A refusal is data, not an exception. Unexpected storage or invariant failures remain thrown server faults and receive a correlation ref without claiming that no effect occurred.
+The clean cutover expands current collapsed `admin_action_denied`, `authorization_denied`, `source_write_denied`, `admin_authority_required` and `reauthentication_required` into the closed shared union. `SourceWriteAdmissionFailureReason` enumerates `missing_source_write_admission`, `missing_source_write_secret`, `source_write_crypto_unavailable`, `source_write_scope_mismatch`, `source_write_key_family_mismatch`, `unknown_source_write_key_id`, `invalid_source_write_key_id`, `source_write_operation_mismatch`, `source_write_correlation_mismatch`, `source_write_command_mismatch`, `missing_source_write_request`, `invalid_source_write_request`, `source_write_method_mismatch`, `source_write_origin_mismatch`, `source_write_target_origin_mismatch`, `source_write_path_mismatch`, `source_write_query_mismatch`, `source_write_body_mismatch`, `invalid_source_write_body_digest`, `stale_source_write_admission` and `invalid_source_write_signature`; the Convex layer adds `source_write_nonce_replayed` (`src/modules/security/source-write-admission.ts:63-84`; `convex/sourceWriteAdmission.ts:57-69`).
+
+**Idempotency state machine.** (1) Authenticate, derive actor, and enforce current permission plus fresh FVA; these access gates never disclose a stored receipt. (2) Hash canonical effect material: scope, actor, action, target, input, reason, evidence and expected state; exclude source-write proof, nonce and retry correlation. (3) Read `operationKeys` by actor/action/key. Same hash plus terminal `resultJson` returns those exact bytes; a changed hash returns `idempotency_conflict`; no `replayed` receipt exists. (4) For a new key, verify and consume source-write admission, validate, apply the effect, append one audit row and persist the complete receipt in one transaction. Every admitted input or domain refusal is persisted; correcting it requires a new operation key. Convex OCC makes concurrent claims converge on one terminal row.
+
+**Second approval.** Only suppression and commercial-policy replace/suspend may use it. The first call to the same mutation stores an immutable proposal, one `admin.action_proposed` audit and an `approval_proposed` receipt. Approval calls the same mutation with a separate operation key, the proposal ref and digest. It requires a fresh FVA, a distinct active owner_admin and digest equality. One concurrent approver wins through OCC; the effect audit records both actors, and later attempts return `approval_already_resolved` without repeating the effect. Same approval key/hash returns identical terminal bytes. Expired proposals project as `expired` without a query write; an approval attempt returns `approval_expired` and one denial audit. The purpose-built table in section 7 is added only if Joel enables two-person control; no alpha table is added while those actions are disabled.
+
+| Refusal code group | Retryable | Effect certainty | Operator copy | Next step |
+|---|---|---|---|---|
+| `source_write_crypto_unavailable`, `stale_source_write_admission`, `source_write_nonce_replayed` | yes, new key | not applied | "Command authorization expired or is unavailable." | Refresh authorization and submit a new operation key. |
+| All other `SourceWriteAdmissionFailureReason` literals | no | not applied | "This command could not be verified." | Inspect source-write configuration; do not repeat unchanged input. |
+| `authentication_required`, `missing_membership`, `inactive_membership`, `action_not_allowed` | no | not applied | "Your account does not have the Admin role for this action." | Ask an owner_admin for access. |
+| `mfa_reverification_required` | yes, new key | not applied | "Reverify before making this change." | Complete Clerk reverification, then resubmit. |
+| `admin_invalid_reason`, `admin_missing_evidence`, `evidence_invalid` | yes, new key | not applied | "A valid reason and evidence are required." | Correct the named field, then resubmit. |
+| `idempotency_conflict` | no | not applied | "This operation key belongs to another command." | Open the stored receipt; use a new key only for a new intent. |
+| `target_changed`, `revision_changed`, `source_changed`, `command_changed`, `commercial_policy_current_changed`, `approval_digest_mismatch`, `approval_expired` | yes, new key | not applied | "The reviewed record changed or expired." | Reload evidence and create a new command or proposal. |
+| All `*_not_found`, `membership_conflict`, `last_owner_admin`, `commercial_policy_ref_conflict`, `commercial_policy_conflict`, `commercial_policy_already_active`, `commercial_policy_revision_invalid`, `malformed_token_identifier`, `approval_same_actor`, `approval_actor_inactive`, `approval_already_resolved` | no | not applied | "This target is no longer actionable." | Open the current object or proposal and follow its stated status. |
+| `commercial_policy_invalid`, `authority_mismatch`, `proof_stale`, `proof_replayed` | `proof_stale` only | not applied | "The commercial-policy proof was refused." | Reverify for stale proof; otherwise inspect policy and authority evidence. |
 
 ## 11. Component architecture
 
 ```text
-src/modules/admin-console/
-  contracts.ts                         # refs, unions, cursors, commands, <=300
-  admin-console.view-model.ts          # pure projections, <=300
-  internal/                            # indexed query helpers, <=400 each
+src/lib/operator/admin-console/
+  contracts.ts                         # closed refs, receipts and cursors, <=300
+  ref-parsers.ts                       # total composition of public parsers, <=300
 convex/adminConsole.ts                 # public query façade only, <=200
-convex/lib/adminConsole/               # joined reads, <=400 each
+convex/lib/adminConsole/               # sole raw-row ACL and joined-read owner, <=400 each
 src/routes/_operator/admin.*.tsx       # route controllers, <=80 each
 src/components/ae/admin/
   overview/
@@ -229,22 +312,22 @@ Reuse `AeOperatorPage`, `AeRecordHeader`, `AeRecordTable`, TanStack Table, `Shee
 |---|---|
 | Client or route grants itself authority | Every query and mutation resolves active `adminMemberships` server-side; route visibility is only presentation (`src/modules/security/internal/admin-authority.ts:55-72`). |
 | Stolen session performs a consequential action | Verify both `identity.fva` factor ages server-side at 10 minutes or less; absent, stale or malformed values refuse (`convex/lib/workspaceSecurity/factorVerification.ts:1-17`). |
-| Replay or changed retry duplicates an effect | Bind actor, mutation name, operation key and request hash in `operationKeys`; same material replays, changed material refuses (`src/modules/observability/internal/schema.ts:49-65`). |
-| Cross-account search leaks PII | Alpha accepts canonical refs only, returns the minimum object projection, audits successful and denied access, and never searches reason text or evidence bodies. |
+| Replay or changed retry duplicates an effect | Bind scope, actor, action, key and canonical request hash in `operationKeys`; same material returns stored outcome bytes, changed material refuses, and OCC admits one concurrent claimant (`src/modules/observability/internal/schema.ts:49-65`). |
+| Cross-account search leaks PII | Alpha accepts canonical refs only and returns the minimum projection. Convex queries never audit reads; the TanStack server boundary emits allowlisted `admin_lookup` telemetry without refs, reasons, evidence or search text. |
 | TOCTOU changes the reviewed object | Commands carry expected revision/digest where the domain has one; mismatch returns `target_changed` before effect. |
 | UI invents money truth | Call pages consume `projectFoundCallPurchaseStatus`; uncertain stays uncertain (`src/modules/capability-execution/call-receipt-view.ts:164-180`). |
 | Evidence or reason leaks secrets | Store refs and redacted summaries only; `AuditEventContract` already separates evidence refs and redacted payload from payload hash (`src/modules/common/audit-events.ts:168-190`). |
 | Break-glass bypass | No break-glass or kernel controls until ROOT-AUTH routes those commands through the permission matrix (`convex/recoveryBreakGlass.ts:416-440`). |
 
-Support can read and annotate triage only; reviewer reads only; owner_admin holds all current permissions (`src/modules/security/internal/admin-authority.ts:13-53`). Two-person policy, if adopted, requires a distinct active owner_admin. Previewing another role changes rendering only.
+Support is read-only in alpha despite the matrix containing `annotate_triage`; that permission remains unexposed because annotation is not one of the six actions. Reviewer is read-only; owner_admin holds the current mutation permissions (`src/modules/security/internal/admin-authority.ts:13-53`). Two-person policy requires a distinct active owner_admin. Previewing another role changes rendering only.
 
 ## 13. Error handling
 
-- Parsers return `malformed_ref`; valid but absent objects return `object_not_found`.
-- Permission, MFA, reason, evidence, idempotency, stale-target and domain refusals return `AdminCommandOutcome.kind = 'refused'` with a stable code and retryability.
-- `not_configured`, `source_unavailable` and zero remain distinct read states. Overview never converts either of the first two to `0`.
-- A mutation result may say "Nothing changed" only for a proved refusal or replay. An unknown server outcome says that the result is unconfirmed and directs the operator to Audit by correlation ref.
-- UI copy uses `getStatusPresentation`; alerts name the failed action, state whether an effect is confirmed and offer one next step.
+- Total parsers return a named `AdminParseErrorCode`; a valid but absent object returns `object_not_found`.
+- Every expected refusal is an action-indexed `AdminCommandReceipt.kind = 'refused'`, maps through the exhaustive table above and never reaches Sentry.
+- A thrown pre-commit infrastructure or invariant fault aborts the Convex transaction, so certainty is `not_applied`; retry the same operation key.
+- If the response is lost after commit, certainty is `unknown`. Reinvoke with the same actor/action/key: a committed transaction returns its byte-identical stored receipt; an aborted one executes once. The correlation ref links Audit and Sentry during recovery.
+- `not_configured`, `source_unavailable` and zero remain distinct read states. UI copy uses `getStatusPresentation`, states effect certainty and offers one next step.
 
 ## 14. Observability and audit
 
@@ -258,9 +341,12 @@ PostHog product analytics use the existing `posthog-node` and `captureServerEven
 
 | Behaviour | Proposed test file | Harness and assertion |
 |---|---|---|
-| Permission matrix per role | `tests/unit/admin-console/admin-permissions.test.ts` | Pure table test generated from `AdminPermission`; owner_admin allowed as declared, support only read/annotate, reviewer only read. |
+| Permission matrix per role | `tests/unit/admin-console/admin-permissions.test.ts` | Pure table test generated from `AdminPermission`; owner_admin allowed as declared, support and reviewer read-only in the alpha UI. |
 | Fresh, stale, absent and malformed `fva` | `tests/unit/convex/admin-command-fva.test.ts` | `convex-test` identities; 0/10 minutes accepted, 11, `-1`, absent and malformed refused before effect. |
-| Idempotent replay and changed-material conflict | `tests/unit/convex/admin-command-idempotency.test.ts` | `convex-test`; same operation key and digest returns replay, changed digest refuses, one effect and one audit row. |
+| Idempotent replay and changed-material conflict | `tests/unit/convex/admin-command-idempotency.test.ts` | `convex-test`; same logical command with a fresh source-write admission returns byte-identical stored outcome, changed digest refuses, concurrent claims produce one effect and one audit row. |
+| Second approval state machine | `tests/unit/convex/admin-command-approval.test.ts` | Distinct active owner, digest equality, expiry, same-actor refusal, concurrent approval winner, terminal replay and no Purchase-resolution action. |
+| ACL and CQS | `tests/imports/admin-console-boundary.test.ts` | Module count remains 29; no internal imports or raw docs cross the ACL; queries cause no writes and mutations return receipts, not read models. |
+| Refusal presentation totality | `tests/unit/admin-console/admin-refusal-presentation.test.ts` | Every code in every action-indexed set has retryability, effect certainty, exact copy and one next step; no extra keys compile. |
 | Ref parser totality | `tests/unit/admin-console/admin-object-ref.test.ts` | Property and boundary cases; every string returns valid or malformed and never throws. Canonical Call shape follows `parseCallRef` (`src/modules/capability-execution/call-contracts.ts:57-63`). |
 | Joined Call money truth | `tests/unit/admin-console/admin-call-view.test.ts` | Seed contradictory receipt/usage facts; projection remains uncertain and disables unsafe action. |
 | Cursor stability | `tests/unit/convex/admin-audit-pagination.test.ts` | Insert between page reads; no duplicates or omissions for the snapshot cursor; filter change rejects old cursor. |
@@ -294,5 +380,5 @@ Each row stays in review until its named behaviour assertion passes. The Convex 
 1. **Clerk `fva` template.** Default: add `{{session.factor_verification_age}}` to the Convex JWT template before F3; all guarded actions fail closed until present.
 2. **`ADMIN_BOOTSTRAP_PRINCIPAL_IDS`.** Default: Joel's Clerk principal only. The bootstrap reads this environment list (`convex/securityAdminMembership.ts:301-302`).
 3. **PII search scope.** Default: canonical refs only. Add Provider/Tool name search later; defer email, Clerk and Stripe identifiers until access, logging and retention policy are approved.
-4. **Two-person actions.** Default: require a distinct second owner_admin for Business suppression, money-affecting Purchase resolution and commercial-policy replacement/suspension. Keep these actions disabled while Joel is the only owner.
+4. **Two-person actions.** Default: require a distinct second owner_admin only for Business suppression and commercial-policy replacement/suspension. No Purchase-resolution action exists in this RFC. Keep these actions disabled while Joel is the only owner.
 5. **Purchase-resolution outcomes.** Default: `uphold`, `refuse` and `request_evidence`. Show age without "late" until an SLA exists. Refund remains unavailable until a real refund command and live money rail exist.
