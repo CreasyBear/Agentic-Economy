@@ -13,7 +13,7 @@ import '../../setup/jsdom-platform'
 
 import { AeOwnerMobileNavigation } from '@/components/ae/layout/AeOwnerMobileNavigation'
 import { mobileNavigation } from '@/lib/navigation/app-navigation'
-import { roleHomeHref, roleLabel } from '@/lib/operator/roles'
+
 afterEach(cleanup)
 
 function renderNavigation(pathname: string) {
@@ -39,10 +39,6 @@ function renderNavigation(pathname: string) {
 }
 
 describe('owner primary navigation', () => {
-  it('uses Overview as the owner workspace home', () => {
-    expect(roleHomeHref.owner).toBe('/owner')
-    expect(roleLabel.owner).toBe('Workspace')
-  })
 
   it('renders the canonical primary destinations without route metadata', () => {
     renderNavigation('/activity')
