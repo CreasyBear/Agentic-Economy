@@ -18,9 +18,12 @@ import { reconciliationBindingIdentity } from '@/lib/call-recovery/client-storag
 import type { CallReconciliationForm, CallStatusPageActions, FoundCallStatus } from '@/lib/call-recovery/call-status-page-types'
 import { canRefreshCallStatus } from '@/lib/call-recovery/call-status-refresh'
 
+import { projectFoundCallPurchaseStatus } from '@/modules/capability-execution/call-receipt-view'
+import { formatCurrencyAmount } from '@/modules/money/public'
 import { cn } from '@/lib/utils'
 
 import { CallReceiptStatusFeedback, callReceiptRefreshLabel, callReceiptTactilePressClassName } from './CallReceiptPrimitives'
+import { callRecoveryPanelCopy } from './call-recovery-panel.contracts'
 
 const RECONCILIATION_RESOLUTIONS = [
   { value: 'not_released', label: 'Effect not released' },
@@ -88,7 +91,7 @@ export function CallRecoveryPanel({
         <p className="text-sm text-muted-foreground">Use only the action supported by the recorded state. Each action refreshes this exact Call.</p>
       </div>
       <CallReceiptStatusFeedback feedback={actions?.feedback} callRef={result.callRef} />
-      <ReconciliationBlockers availability={availability} />
+      <ReconciliationBlockers availability={availability} result={result} />
       <RecoveryPrimaryActions availability={availability} result={result} {...(actions === undefined ? {} : { actions })} />
       {availability.canReconcileNow ? (
         <AdvancedReconciliation
@@ -101,7 +104,17 @@ export function CallRecoveryPanel({
   )
 }
 
-function ReconciliationBlockers({ availability }: Readonly<{ availability: CallRecoveryAvailability }>) {
+function ReconciliationBlockers({
+  availability,
+  result,
+}: Readonly<{ availability: CallRecoveryAvailability; result: FoundCallStatus }>) {
+  const purchaseStatus = projectFoundCallPurchaseStatus(result)
+  const usage = result.usage ?? (result.result?.kind === 'completed' ? result.result.usage : undefined)
+  const moneyOutcome = purchaseStatus.kind === 'uncertain'
+    ? callRecoveryPanelCopy.uncertainCharge
+    : usage?.chargeState === 'free_tier' || usage?.chargeState === 'insufficient_credit'
+      ? callRecoveryPanelCopy.settledZeroCharge(formatCurrencyAmount(usage.amount))
+      : undefined
   return (
     <>
       {availability.hasReconciliationRecordBlocker ? (
@@ -109,9 +122,11 @@ function ReconciliationBlockers({ availability }: Readonly<{ availability: CallR
           <AlertTitle>Reconciliation cannot be submitted</AlertTitle>
           <AlertDescription>
             This record does not expose the attempt reference and effect generation required by the reconciliation contract. No evidence is fabricated or submitted from this browser.
-            <p className="mt-intra rounded-card border border-success-ring bg-success-subtle px-3 py-2 text-sm text-success-foreground">
-              A$0.00 charged — this receipt is unchanged until evidence is accepted.
-            </p>
+            {moneyOutcome === undefined ? null : (
+              <p className="mt-intra rounded-card border border-success-ring bg-success-subtle px-3 py-2 text-sm text-success-foreground">
+                {moneyOutcome}
+              </p>
+            )}
           </AlertDescription>
         </Alert>
       ) : null}
@@ -120,9 +135,11 @@ function ReconciliationBlockers({ availability }: Readonly<{ availability: CallR
           <AlertTitle>Evidence submission is unavailable</AlertTitle>
           <AlertDescription>
             Permission to submit Provider evidence could not be confirmed from this receipt source. Refresh this exact Call to check again; no evidence can be submitted here until permission is available.
-            <p className="mt-intra rounded-card border border-success-ring bg-success-subtle px-3 py-2 text-sm text-success-foreground">
-              A$0.00 charged — this receipt is unchanged until evidence is accepted.
-            </p>
+            {moneyOutcome === undefined ? null : (
+              <p className="mt-intra rounded-card border border-success-ring bg-success-subtle px-3 py-2 text-sm text-success-foreground">
+                {moneyOutcome}
+              </p>
+            )}
           </AlertDescription>
         </Alert>
       ) : null}

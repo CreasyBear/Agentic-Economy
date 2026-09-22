@@ -51,6 +51,7 @@ function renderWithRouter(result: CallStatusPageResult, actions?: CallStatusPage
     createRoute({ getParentRoute: () => rootRoute, path: '/tools/$toolRef' }),
     createRoute({ getParentRoute: () => rootRoute, path: '/calls/$callRef' }),
     createRoute({ getParentRoute: () => rootRoute, path: '/sign-in/$' }),
+    createRoute({ getParentRoute: () => rootRoute, path: '/support' }),
   ])
   const router = createRouter({ routeTree, history: createMemoryHistory({ initialEntries: ['/'] }) })
   return render(
@@ -175,6 +176,10 @@ describe('/calls/$callRef', () => {
 
     expect(screen.getByRole('main')).toBeTruthy()
     expect(screen.getByRole('link', { name: 'Back to Calls' }).getAttribute('href')).toBe('/activity')
+    const helpLink = screen.getByRole('link', { name: 'Get help with this Call' })
+    const helpUrl = new URL(helpLink.getAttribute('href') ?? '', 'https://ae.example')
+    expect(helpUrl.pathname).toBe('/support')
+    expect(helpUrl.searchParams.get('callRef')).toBe(callRef)
     expect(screen.getByRole('heading', { name: 'Call summary' })).toBeTruthy()
     expect(screen.getByRole('heading', { name: 'Output' })).toBeTruthy()
 
@@ -310,6 +315,27 @@ describe('/calls/$callRef', () => {
     })
   })
 
+  it('does not claim a zero charge when reconciliation binding facts are missing', () => {
+    renderWithRouter({
+      kind: 'found',
+      version: 1,
+      callRef,
+      toolRef,
+      state: 'reconciliation_required',
+      usage: {
+        usageRef: 'usage:outcome-unknown',
+        observedAt: Date.UTC(2026, 8, 22),
+        chargeState: 'outcome_unknown',
+        amount: { currency: 'AUD', units: '0', exponent: 2 },
+        priceDigest: 'sha256:uncertain-price',
+      },
+    })
+
+    expect(screen.getByText('Reconciliation cannot be submitted')).toBeTruthy()
+    expect(screen.getByText('Charge not yet confirmed. We are reconciling this Call. Do not assume a charge or refund.')).toBeTruthy()
+    expect(screen.queryByText(/A\$0\.00 charged/)).toBeNull()
+  })
+
   it('does not expose evidence submission when the owner receipt context is absent', () => {
     renderWithRouter({
       kind: 'found',
@@ -320,6 +346,13 @@ describe('/calls/$callRef', () => {
       attemptRef: 'attempt:uncertain',
       effectGeneration: 2,
       ownerContext: null,
+      usage: {
+        usageRef: 'usage:permission-unknown',
+        observedAt: Date.UTC(2026, 8, 22),
+        chargeState: 'outcome_unknown',
+        amount: { currency: 'AUD', units: '0', exponent: 2 },
+        priceDigest: 'sha256:uncertain-price',
+      },
     }, { onReconcile: vi.fn(), onRefresh: vi.fn(async () => undefined) })
 
     expect(screen.getByText('Evidence submission is unavailable')).toBeTruthy()
@@ -327,6 +360,8 @@ describe('/calls/$callRef', () => {
     expect(screen.getByRole('button', { name: 'Refresh current status' })).toBeTruthy()
     expect(screen.queryByRole('button', { name: 'Submit reconciliation evidence' })).toBeNull()
     expect(screen.queryByLabelText('Evidence source')).toBeNull()
+    expect(screen.getByText('Charge not yet confirmed. We are reconciling this Call. Do not assume a charge or refund.')).toBeTruthy()
+    expect(screen.queryByText(/A\$0\.00 charged/)).toBeNull()
   })
 
   it('requires explicit confirmation before requesting cancellation', async () => {
@@ -814,6 +849,13 @@ describe('/calls/$callRef', () => {
         nextAction: 'Authorize the Call and retry.',
       },
       ownerContext,
+      usage: {
+        usageRef: 'usage:settled-zero',
+        observedAt: Date.UTC(2026, 8, 22),
+        chargeState: 'insufficient_credit',
+        amount: { currency: 'AUD', units: '0', exponent: 2 },
+        priceDigest: 'sha256:settled-zero-price',
+      },
     })
 
     expect(screen.getByRole('heading', { level: 1, name: 'Call receipt' })).toBeTruthy()
@@ -821,6 +863,7 @@ describe('/calls/$callRef', () => {
     expect(screen.queryByText('Complete')).toBeNull()
     expect(screen.getAllByText(/Resolved — failed/i).length).toBeGreaterThan(0)
     expect(screen.getAllByText('Authorize the Call and retry.').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('AUD 0.00').length).toBeGreaterThan(0)
     expect(screen.queryByRole('button', { name: /Reuse/i })).toBeNull()
     expect(screen.queryByRole('link', { name: 'Review Tool' })).toBeNull()
     expect(screen.queryByRole('heading', { level: 2, name: 'Output' })).toBeNull()
