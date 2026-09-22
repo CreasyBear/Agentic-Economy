@@ -24,6 +24,7 @@ vi.mock('@tanstack/react-router', () => ({
   }),
 }))
 vi.mock('@tanstack/react-start', () => ({
+  createClientOnlyFn: (fn: (...args: never[]) => unknown) => fn,
   createServerFn: () => ({ handler: () => Symbol('admin-readback-server') }),
   useServerFn: () => mocks.review,
 }))
