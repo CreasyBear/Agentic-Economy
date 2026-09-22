@@ -67,7 +67,7 @@ No subagent edits these unless dispatched from the spine plan by Joel.
 | HELP | 5 | 4 | 2 | 2 | 0 | VERIFIED/IN REVIEW |
 | SUPPLY | 5 | 6 | 2 | 4 | 0 | VERIFIED/IN REVIEW/PARKED |
 | DEV/ADMIN | 4 | 4 | 2 | 2 | 0 | VERIFIED/IN REVIEW |
-| ADMIN | 6 | 6 | 0 | 4 | 2 | PENDING |
+| ADMIN | 8 | 8 | 0 | 6 | 2 | IN REVIEW/PENDING |
 | SHELL | 2 | 1 | 0 | 0 | 1 | PARKED |
 | CROSS-CUTTING | n/a | 12 | 7 | 5 | 0 | OWNER/VERIFIED/IN REVIEW/PENDING |
 | CLASS GAPS | n/a | 55 | n/a | n/a | n/a | 1 ADOPTED + 48 RECORDED + 6 BASE-PAGE DECISIONS |
@@ -398,14 +398,25 @@ The 43 route entries are all assigned once. `/support` is assigned to the Receip
 
 | Row | Benchmark | Anchors | Absent gap | Target spec | Priority | Status |
 |---|---|---|---|---|---|---|
-| R-37 Overview | Stripe Dashboard | `src/routes/_operator/admin.*.tsx`; `src/components/ae/readback/**`; `src/components/ae/layout/app-shell/app-shell.contracts.ts` `ADMIN_NAVIGATION` | `listAdminExceptions`; real health/worker failure readback; uncertain-Call/removal/source-review feeds | One viewport shows honest configuration state, exact search and oldest real exceptions; unavailable never renders as zero | P1 | PENDING |
-| R-38 Search + shared list | Stripe Dashboard | `src/routes/_operator/admin.*.tsx`; `src/components/ae/readback/**`; `src/components/ae/layout/app-shell/app-shell.contracts.ts` `ADMIN_NAVIGATION` | cross-account lookup read; joined Call/Workspace/Agent/Tool/Provider/Stripe search | Exact canonical ref opens one result; partial search is grouped; query persists in URL; non-admin denied | P1 | PENDING |
-| R-39 Call object | Stripe Dashboard | `src/routes/_operator/admin.*.tsx`; `src/components/ae/readback/**`; `src/components/ae/layout/app-shell/app-shell.contracts.ts` `ADMIN_NAVIGATION` | admin-scoped joined Call → attempt/control → Quote → usage/x402 → receipt/obligation/resolution read | Outcome-unknown Call states whether money moved, disables unsafe retry, keeps ref visible, and reuses receipt evidence | P1 | PENDING |
-| R-40 Provider object | Stripe Connect review | `src/routes/_operator/admin.*.tsx`; `src/components/ae/readback/**`; `src/components/ae/layout/app-shell/app-shell.contracts.ts` `ADMIN_NAVIGATION` | joined admin Provider read; removal/source-review feed; fresh-fva enforcement; second-approval command | owner action cannot submit without reason/evidence/fresh fva; preview equals emitted audit; support/reviewer cannot invoke | P2 | PENDING |
-| R-41 Purchase resolutions | Stripe Radar | `src/routes/_operator/admin.*.tsx`; `src/components/ae/readback/**`; `src/components/ae/layout/app-shell/app-shell.contracts.ts` `ADMIN_NAVIGATION` | admin open queue; immutable decision history; Purchase-resolution disposition/refund command; SLA | Open cases sort oldest first; evidence stays visible; decision is audited; money action stays disabled until its command and money rail are live | P2 | PENDING |
-| R-42 Audit | GitHub audit | `src/routes/_operator/admin.*.tsx`; `src/components/ae/readback/**`; `src/components/ae/layout/app-shell/app-shell.contracts.ts` `ADMIN_NAVIGATION` | pagination/search/export; admin-access UI; break-glass authority seam fix | Actor/action/target/time/reason/auth/correlation filters persist in URL; next page is stable; membership mutation appears only after a second seat is needed | P1 | PENDING |
-| R-43 Marketplace metrics | Stripe Reports / Shopify Analytics | `/admin/metrics` |  | Daily persisted snapshot (numerators only, ratios on read); headline strip on Overview; CSV export; money exact and labelled `settled_only` vs `not_configured` | P1 | PENDING |
+| R-37 Overview | Stripe Dashboard | `src/routes/_operator/admin.*.tsx`; `src/components/ae/readback/**`; `src/components/ae/layout/app-shell/app-shell.contracts.ts` `ADMIN_NAVIGATION` | `listAdminExceptions`; real health/worker failure readback; uncertain-Call/removal/source-review feeds | One viewport shows honest configuration state, exact search and oldest real exceptions; unavailable never renders as zero | P1 | IN REVIEW |
+| R-38 Search + shared list | Stripe Dashboard | `src/routes/_operator/admin.*.tsx`; `src/components/ae/readback/**`; `src/components/ae/layout/app-shell/app-shell.contracts.ts` `ADMIN_NAVIGATION` | cross-account lookup read; joined Call/Workspace/Agent/Tool/Provider/Stripe search | Exact canonical ref opens one result; partial search is grouped; query persists in URL; non-admin denied | P1 | IN REVIEW |
+| R-39 Call object | Stripe Dashboard | `src/routes/_operator/admin.*.tsx`; `src/components/ae/readback/**`; `src/components/ae/layout/app-shell/app-shell.contracts.ts` `ADMIN_NAVIGATION` | admin-scoped joined Call → attempt/control → Quote → usage/x402 → receipt/obligation/resolution read | Outcome-unknown Call states whether money moved, disables unsafe retry, keeps ref visible, and reuses receipt evidence | P1 | IN REVIEW |
+| R-40 Provider object | Stripe Connect review | `src/routes/_operator/admin.*.tsx`; `src/components/ae/readback/**`; `src/components/ae/layout/app-shell/app-shell.contracts.ts` `ADMIN_NAVIGATION` | joined admin Provider read; removal/source-review feed; fresh-fva enforcement; second-approval command | owner action cannot submit without reason/evidence/fresh fva; preview equals emitted audit; support/reviewer cannot invoke | P2 | IN REVIEW |
+| R-41 Purchase resolutions | Stripe Radar | `src/routes/_operator/admin.*.tsx`; `src/components/ae/readback/**`; `src/components/ae/layout/app-shell/app-shell.contracts.ts` `ADMIN_NAVIGATION` | admin open queue; immutable decision history; Purchase-resolution disposition/refund command; SLA | Open cases sort oldest first; evidence stays visible; decision is audited; money action stays disabled until its command and money rail are live | P2 | IN REVIEW |
+| R-42 Audit | GitHub audit | `src/routes/_operator/admin.*.tsx`; `src/components/ae/readback/**`; `src/components/ae/layout/app-shell/app-shell.contracts.ts` `ADMIN_NAVIGATION` | pagination/search/export; admin-access UI; break-glass authority seam fix | Actor/action/target/time/reason/auth/correlation filters persist in URL; next page is stable; membership mutation appears only after a second seat is needed | P1 | IN REVIEW |
+| R-43 Marketplace metrics | Stripe Reports / Shopify Analytics | `/admin/metrics` |  | Daily persisted snapshot (numerators only, ratios on read); headline strip on Overview; CSV export; money exact and labelled `settled_only` vs `not_configured` | P1 | IN REVIEW |
 | R-44 ROOT-AUTH break-glass seam |  | `convex/recoveryBreakGlass.ts:133-186,411-449`; `convex/securityShared.ts:196` | Authorises via workspace memberships plus an active `provider_token` credential and never calls `requireAdminAuthority(…, 'use_break_glass')`; `admin.break_glass_used` is remapped but never emitted | Gate both public recovery mutations through `resolveAdminAuthority(ctx, 'use_break_glass')` in addition to the existing checks | P1 | PENDING (Joel decision) |
+
+**Verification evidence (Wave F rounds F0–F2, 2026-09-22).** LIVE lines were observed with the local dev account, which is not a bootstrapped admin: every `/admin/*` route rendered the operator role gate (`Your account does not have the Admin role for this page.`) and no admin data. Admin behaviour is proven by convex-test assertions until `ADMIN_BOOTSTRAP_PRINCIPAL_IDS` carries Joel's principal.
+
+- R-37 Overview: SOURCE `src/routes/_operator/admin.index.tsx`, `src/components/ae/admin/overview/**`, `convex/adminConsoleOverview.ts`, `convex/lib/adminConsole/reads/overview.ts`, `src/modules/money/server.ts` (`readFormancePresence`); ASSERT `tests/unit/routes/admin-overview-route.test.tsx` (banner `Not configured`/`Absent`, four headline cards, `Nothing needs attention.`, refused copy); LIVE 2026-09-22 http://127.0.0.1:3024/admin role gate as non-admin; COMMIT `e69bc8ee0`.
+- R-38 Search + object pages: SOURCE `src/routes/_operator/admin.search.tsx`, `admin.{quotes,tools,workspaces,agents}.$*.tsx`, `src/components/ae/admin/{object-search,object-pages}/**`, `src/lib/operator/admin-console/{contracts,ref-parsers,views}.ts`, `convex/lib/adminConsole/reads/{workspace,agent,toolVersion}.ts`; ASSERT `tests/unit/admin-console/admin-object-ref.test.ts` (every parse error code reachable; 500-string totality per kind), `admin-views-redaction.test.ts` (no `@`, `displayName`, `secretRef`, `tokenIdentifier`, `clerkUserId`), `tests/unit/routes/admin-search-route.test.tsx`, `admin-object-pages-route.test.tsx`; COMMITS `05c3884f2`, `dda012427`, `367cf9d7a`, `350407ce0`, `914041af6`. Search is exact kind + ref only (no partial search) by RFC §18 default.
+- R-39 Call object: SOURCE `src/routes/_operator/admin.calls.$callRef.tsx`, `src/components/ae/admin/call-object/**`, `convex/adminConsoleObjects.ts`, `convex/lib/adminConsole/reads/{call,quote,objectValues}.ts`; ASSERT `tests/unit/admin-console/admin-call-view.test.ts` (contradictory receipt facts keep `purchase.kind === 'uncertain'`), `tests/unit/routes/admin-call-object-route.test.tsx` (uncertain fixture renders the uncertainty sentence and never `A$0.00`), `tests/unit/convex/admin-read-object.test.ts` (non-admin `missing_membership`, found, not found, malformed); COMMITS `ef76a1cc8`, `faf945766`, `5db1cc6a1`, `350407ce0`. Timeline joins audit events by the Call's `correlationId` (no Call audit target type exists).
+- R-40 Provider object: SOURCE `src/routes/_operator/admin.providers{,.$slug}.tsx`, `src/components/ae/admin/{provider-object,providers-list}/**`, `convex/adminConsoleProviders.ts`, `convex/lib/adminConsole/reads/provider.ts`; ASSERT `tests/unit/convex/admin-provider-read.test.ts` (no `secretRef`/`x402Payee`/`name`/`phone`; `local_human` slug not found; suppressed filter; non-admin empty envelope), `tests/unit/routes/admin-providers-route.test.tsx`; COMMITS `24cda6737`, `483a873a1`. Payout reads `unavailable` (no in-transaction money seam); guarded commands (suppress, source authority, commercial policy) are Wave F round F3.
+- R-41 Exceptions + Purchase resolutions: SOURCE `src/routes/_operator/admin.exceptions.tsx`, `src/components/ae/admin/exceptions/**`, `convex/adminConsoleExceptions.ts`, `convex/lib/adminConsole/reads/exceptions.ts`; ASSERT `tests/unit/convex/admin-exceptions.test.ts` (oldest first; fresh uncertain Call excluded under 15 min; failing source lands in `unavailable`, never zero), `tests/unit/routes/admin-exceptions-route.test.tsx`; COMMITS `ce46c0dfc`, `42ed7045c`. Purchase resolutions are read-only terminal records; no admin resolution command exists by plan decision.
+- R-42 Audit: SOURCE `src/routes/_operator/admin.audit-events.tsx`, `src/components/ae/admin/audit/**`, `convex/adminConsoleAudit.ts`, `convex/lib/adminConsole/reads/audit.ts`, `convex/lib/adminConsole/{commandEnvelope,approvals,idempotency,registrars,validators}.ts`; ASSERT `tests/unit/convex/admin-audit-pagination.test.ts` (30 rows, page 10, insert between pages, no duplicate or omission; `admin` block only for `admin.*` events; non-admin empty envelope + `readAdminAuditAccess` refused), `tests/unit/convex/admin-command-fva.test.ts` (missing/stale proof `mfa_reverification_required`, zero effects; revoked `missing_membership`; reviewer `action_not_allowed`), `admin-command-idempotency.test.ts` (identical replay identical bytes, one audit row, one operationKeys row; changed material `idempotency_conflict`), `admin-command-approval.test.ts` (single owner `not_required`; two owners `approval_required`, propose, same actor, digest mismatch, expired, already resolved); COMMITS `f62df0db5`, `68d1886fd`, `37ba719c4`, `49ba43923`, `acead8e8b`, `53a7a8564`, `0342937f7`. Legacy `security.readAdminAuditEvents` and `readAdminIndexHealth` removed.
+- R-43 Marketplace metrics: SOURCE `convex/adminConsoleMetrics.ts`, `convex/lib/adminConsole/metrics/{dayWindow,collect,write,read}.ts`, `convex/marketEvidence.ts` (`countMarketEvidenceBetween`), `src/lib/deployment/scheduled-workloads.ts` (`daily` 16:10 UTC = 00:10 Perth), `src/routes/_operator/admin.metrics.tsx`, `src/routes/api.admin.metrics-export.ts`, `src/components/ae/admin/metrics/**`; ASSERT `tests/unit/convex/admin-metrics.test.ts` (exact counts, `settledCallValue.units` BigInt sum, idempotent rerun, `not_configured` without paid rows, returning workspace on day two, non-AUD refused `unsupported_currency`), `tests/unit/convex/workload-cron.test.ts`, `tests/unit/routes/api-admin-metrics-export.test.ts` (403 problem on refusal; exact CSV header; 400 on bad range); LIVE 2026-09-22 `npx convex run adminConsoleMetrics:snapshotMarketplaceMetricsDay '{"day":"2026-09-21"}'` twice → `{ kind: 'written' }` both, `npx convex data marketplaceMetricDays` one row; COMMITS `ce46c0dfc`, `05fcf32cb`, `e69bc8ee0`.
+- Observability (RFC §14): SOURCE `src/lib/observability/admin-event-props.ts` (fixed `ae_*` props, `distinctId = 'admin:' + canonicalDigest(principalRef)`, `$process_person_profile: false`), `private-route-safety.ts` (`/admin/<kind>/[ref]` collapse); ASSERT `tests/unit/admin-console/admin-observability.test.ts`; COMMIT `f706aba04`.
 
 **ROOT-AUTH (R-40):** use_break_glass and control_kernel_incidents bypass the admin-authority seam (convex/recoveryBreakGlass.ts:416-453) — fix before any UI exposes them.
 
@@ -1134,6 +1145,47 @@ Orchestrator dispositions:
 - C-07 remains IN REVIEW: named Market, Agent, Credit and dialog gaps remain in the OWNER spine.
 - C-11 remains IN REVIEW: named hit boxes and above-fold actions remain open.
 - Standing defaults await Joel: in-app versus hosted status vendor; economics/legal figures; #47 SSO/SCIM; #48 spend-anomaly alerts.
+
+### Wave F · rounds F0–F2 · 2026-09-22
+
+`git log --oneline bb3f1bf01..HEAD` interleaved Wave F with the x402 instance's checkpoint commits; only the commits below move rows. Executed by parallel subagents in barriers (F0-A/B foundations, F1-A/B read backbone + UI, F2-A/B Provider, exceptions, metrics, Overview) with a serial GateOwner per barrier; round F3 (guarded operations on the admin command envelope) is open.
+
+#### Commits
+
+- `dd77b2150` — register rows R-43 metrics and R-44 ROOT-AUTH.
+- `f62df0db5`, `05c3884f2`, `f706aba04` — F0-A: schema indexes + `marketplaceMetricDays`/`marketplaceEntityDays`/`adminApprovalProposals`, admin audit taxonomy; branded `CallRef`/`QuoteRef`, admin contracts, total ref parsers; observability boundary.
+- `acead8e8b`, `68d1886fd`, `37ba719c4`, `49ba43923` — F0-B: two-person approval state machine; admin command envelope (authority → source-read → digests → idempotent replay → source-write → reason/evidence → consequence proof → target digest → approval → apply → audit → operation key), `defineAdminQuery` registrar, role fixtures.
+- `ef76a1cc8`, `faf945766`, `5db1cc6a1`, `dda012427`, `53a7a8564` — F1-A: Call/Quote/Workspace/Agent/Tool version views, `readAdminObject`/`searchAdminObjects`, paginated audit read + open proposals.
+- `367cf9d7a`, `350407ce0`, `914041af6`, `0342937f7` — F1-B: object pages, search + Call object page + `ADMIN_NAVIGATION`, audit page with URL filter chips and `Load more`; legacy audit readback removed.
+- `ce46c0dfc`, `42ed7045c`, `24cda6737`, `483a873a1`, `05fcf32cb` — F2-A: exceptions feed + page, metrics snapshot/read/daily cron, Provider object + list.
+- `e69bc8ee0` — F2-B: Overview, Metrics page, CSV export, sidebar longest-match, index-health retired.
+- `bf11aca72`, `6e3d08920`, `519330c3f`, `b06e21da9`, `01a6b5d59`, `ebc35cba4` — gate commits (API snapshot, routeTree).
+
+#### Gate scoreboard before→after
+
+- `FILE_SIZE_CEILINGS`: `over300=276`, `over500=100`, `over1000=0` — unchanged by Wave F (measured 277/101/1 with the x402 instance's uncommitted `convex/devSeed.ts` at 1177 lines; external).
+- `ROUTE_SIZE_EXCEPTIONS`: `{src/routes/__root.tsx: 114}` — unchanged; every new admin route ≤80.
+- `TSX_TYPE_EXPORT_CEILING`: 17 — unchanged.
+- `LEAF_PURITY_EXCEPTIONS=[]` — unchanged.
+- Convex façades: every `convex/adminConsole*.ts` ≤200; `convex/security.ts` 336→251; `convex/securityAdminReadbacks.ts` 157→deleted (neither pinned).
+- `COPY_CEILINGS`: `0,0,0,0,0,0,2,1,1,0,1,8` — unchanged.
+- `STATUS_LITERAL_FILE_CEILING`: 17 — unchanged; 13 `AeStatus` rows added for admin object states.
+- Bare-catch ceiling 19 — unchanged by Wave F (measured 22 with external x402 files).
+- Module boundaries: 29 modules; declared entry surfaces 229→228 (security `admin-readback.functions.ts` retired); zero admin-console violations; Formance SDK stays behind `convex/moneyFormance.ts` (`readFormancePresence` lives on `src/modules/money/server.ts`).
+- Convex API snapshot: +18 admin triples, −`security:readAdminAuditEvents`, −`security:readAdminIndexHealth`.
+
+#### Decisions taken in-flight
+
+- Paginated admin lists cannot carry a refusal union under `usePaginatedQuery`; they return the empty envelope on denial and the UI reads `api.adminConsoleAudit.readAdminAuditAccess` for the visible refusal.
+- Call timeline joins `auditEvents.by_correlationId_and_createdAt`; no Call audit target type exists.
+- Formance configuration truth is read Node-side (`readAdminFormanceConfigurationServer`), not from the Convex runtime env.
+- Metrics refuse any non-AUD paid usage row as `unsupported_currency` and write nothing (alpha is AUD-only).
+- Provider payout state reads `unavailable` until an in-transaction money seam exists.
+
+#### Open for round F3
+
+- Converge `setBusinessSuppression`, `closeRemovalDispute`, `grantAdminMembership`, `revokeAdminMembership`, `verifyCapabilitySourceAuthority`, `moneyCommercialPolicy.change` onto `runAdminCommand`; action sheet + refusal presentation; boundary gate (`test:imports` 29→30); operator e2e.
+- Joel: Clerk `fva` claim on the `convex` JWT template; his principal in `ADMIN_BOOTSTRAP_PRINCIPAL_IDS`; R-44 decision.
 
 ## 8. Plan status · 2026-09-21
 
