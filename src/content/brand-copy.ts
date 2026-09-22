@@ -49,7 +49,7 @@ export const AGENT_INSTRUCTION: AgentPasteInstruction = {
 export const AGENT_DOOR = {
   heading: 'For your agent',
   body: 'Browse public Tools. Connect your account when you are ready to make a Call.',
-  cta: 'Connect your agent',
+  cta: 'Connect an Agent',
   href: '/for-agents',
 } as const
 
@@ -61,7 +61,7 @@ export const AGENT_PAGE = {
   eyebrow: 'Connections',
   heading: 'Connect your Agent.',
   subhead: 'We’re building one AUD account for your agents’ paid tools, with spending limits and purchase records.',
-  primaryCta: 'Start setup',
+  primaryCta: 'Connect an Agent',
   openAgentsCta: 'Open Agents',
   spendingPolicyStepHeading: 'Set a Spending policy',
   spendingPolicyStepBody: 'Set limits for each Agent before it makes paid Calls.',
@@ -92,7 +92,7 @@ export const AGENT_PAGE = {
 export const BUSINESS_DOOR = {
   heading: 'Publish a Tool',
   body: 'Publish one bounded job, its price, readiness, and access terms. Agents inspect before they call.',
-  cta: 'Publish a Tool',
+  cta: 'Add Tool',
   href: '/for-providers',
 } as const
 
@@ -115,7 +115,7 @@ export const ABOUT = {
   machinesBody: 'The same facts the site shows: an index, a skill file, and a handshake.',
   heroImage: '/website/terrace-forest.webp',
   heroPrimaryCta: 'Browse Tools',
-  heroSecondaryCta: 'Publish a Tool',
+  heroSecondaryCta: 'Add Tool',
   editorialLabel: 'Meet the founder',
   editorialTitle: 'Joel Chan',
   editorialDescription:
@@ -156,8 +156,8 @@ export const ABOUT = {
     prefix: 'Operated in Australia',
     separator: ' · ',
   },
-  ctaPrimary: 'Browse the live catalog',
-  ctaSecondary: 'Publish a Tool',
+  ctaPrimary: 'Browse Tools',
+  ctaSecondary: 'Add Tool',
 } as const
 
 /** Public footer wordmark line. */

@@ -46,7 +46,7 @@ describe('admin role gate', () => {
     expect(screen.getAllByRole('heading', { level: 1, name: 'Admin access required' })).toHaveLength(1)
     expect(screen.getAllByText('Your account does not have the Admin role for this page.')).toHaveLength(1)
     expect(screen.getByRole('link', { name: 'Ask an Admin for access' }).getAttribute('href')).toBe('/support')
-    expect(screen.getByRole('link', { name: 'Return to Market' }).getAttribute('href')).toBe('/market')
+    expect(screen.getByRole('link', { name: 'Browse Tools' }).getAttribute('href')).toBe('/market')
   })
 
   it('returns an expected forbidden route context instead of throwing', async () => {

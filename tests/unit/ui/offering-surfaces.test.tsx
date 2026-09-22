@@ -27,7 +27,7 @@ describe('Provider Tool directory', () => {
 
     expect(screen.getByRole('heading', { name: 'Add your first Tool' })).toBeTruthy()
     expect(screen.getByText('Add a source, then choose a Tool to publish.')).toBeTruthy()
-    expect(screen.getByRole('link', { name: 'Start setup' }).getAttribute('href')).toBe('/owner/operations/new')
+    expect(screen.getByRole('link', { name: 'Add Tool' }).getAttribute('href')).toBe('/owner/operations/new')
   })
 
   it('opens the authoritative Provider Tool readback', () => {

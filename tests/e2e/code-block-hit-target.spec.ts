@@ -18,7 +18,7 @@ test('native setup copy and alternatives work by pointer and keyboard', async ({
 
   const manifestCopyButton = page.getByRole('button', { name: 'Copy Codex MCP command' })
 
-  await expect(page.getByRole('link', { name: 'Start setup', exact: true })).toHaveAttribute('href', '#agent-setup')
+  await expect(page.getByRole('link', { name: 'Connect an Agent', exact: true })).toHaveAttribute('href', '#agent-setup')
   await manifestCopyButton.scrollIntoViewIfNeeded()
   await expectInitialHitTarget(page, manifestCopyButton)
 

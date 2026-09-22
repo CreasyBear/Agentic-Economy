@@ -4,7 +4,7 @@ export const ADMIN_OPERATOR_FORBIDDEN_COPY = Object.freeze({
   title: 'Admin access required',
   description: 'Your account does not have the Admin role for this page.',
   supportAction: 'Ask an Admin for access',
-  marketAction: 'Return to Market',
+  marketAction: 'Browse Tools',
 })
 
 export const operatorForbiddenCopy = Object.freeze({

@@ -393,7 +393,7 @@ describe('owner credit target', () => {
     />)
 
     expect(screen.queryByText('Some transaction attribution is incomplete')).toBeNull()
-    fireEvent.click(screen.getByRole('button', { name: 'Load more history' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Load more' }))
     await waitFor(() => expect(read).toHaveBeenCalledWith({ cursor: 'cursor:next' }))
     await waitFor(() => {
       expect(screen.getByText('Some transaction attribution is incomplete')).toBeTruthy()
@@ -423,10 +423,10 @@ describe('owner credit target', () => {
       accountHistoryPort={{ read }}
     />)
 
-    fireEvent.click(screen.getByRole('button', { name: 'Load more history' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Load more' }))
     await waitFor(() => expect(screen.getByText('More history could not be loaded')).toBeTruthy())
     expect(screen.getByText('No booked Account transactions yet')).toBeTruthy()
-    fireEvent.click(screen.getByRole('button', { name: 'Retry more history' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Load more' }))
     await waitFor(() => expect(screen.getByText('Credit added')).toBeTruthy())
     expect(read).toHaveBeenNthCalledWith(1, { cursor: 'cursor:retry' })
     expect(read).toHaveBeenNthCalledWith(2, { cursor: 'cursor:retry' })
@@ -442,7 +442,7 @@ describe('owner credit target', () => {
       accountHistory={{ ...emptyAccountHistory, snapshotAt: 1, continueCursor: 'cursor:old', isDone: false }}
       accountHistoryPort={{ read }}
     />)
-    fireEvent.click(screen.getByRole('button', { name: 'Load more history' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Load more' }))
     await waitFor(() => expect(read).toHaveBeenCalledOnce())
 
     rerender(<AeOwnerCredit
@@ -1093,7 +1093,7 @@ describe('assistant access components', () => {
     expect(screen.getByText(/No missing transaction or amount is being inferred/)).toBeTruthy()
     expect(screen.getByText('A$12.50')).toBeTruthy()
     expect(screen.queryByText('No booked Account transactions yet')).toBeNull()
-    fireEvent.click(screen.getByRole('button', { name: 'Refresh history' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Try again' }))
     expect(onCreditRefresh).toHaveBeenCalledTimes(1)
   })
 

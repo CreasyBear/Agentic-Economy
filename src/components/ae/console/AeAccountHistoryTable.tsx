@@ -92,7 +92,7 @@ function UnavailableAccountHistory({
       <AlertDescription className="flex flex-wrap items-center gap-3">
         <span>Known Account balance remains visible. No missing transaction or amount is being inferred.</span>
         {onRefresh === undefined ? null : (
-          <Button type="button" variant="secondary" onClick={() => { void onRefresh() }}>Refresh history</Button>
+          <Button type="button" variant="secondary" onClick={() => { void onRefresh() }}>Try again</Button>
         )}
       </AlertDescription>
     </Alert>
@@ -137,7 +137,7 @@ function HistoryRefreshWarning({
         <span>The last booked transactions remain visible. No later transaction or amount is being inferred.</span>
         {onRefresh === undefined ? null : (
           <Button type="button" variant="secondary" disabled={loading} onClick={() => { void onRefresh() }}>
-            {loading ? 'Refreshing…' : 'Try history again'}
+            {loading ? 'Trying again…' : 'Try again'}
           </Button>
         )}
       </AlertDescription>
@@ -286,7 +286,7 @@ function AvailableAccountHistoryView({
       ) : (
         <div>
           <Button type="button" variant="secondary" disabled={state.status === 'loading'} onClick={() => { void loadNextPage() }}>
-            {state.status === 'loading' ? 'Loading more…' : state.status === 'failed' ? 'Retry more history' : 'Load more history'}
+            {state.status === 'loading' ? 'Loading more…' : 'Load more'}
           </Button>
         </div>
       )}

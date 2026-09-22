@@ -43,7 +43,7 @@ export type OwnerOverviewProviderCard = Readonly<{
 export const ownerOverviewCopy = {
   description: 'Review Credit, Calls needing attention, and Agents.',
   nothingCharged: 'Nothing was charged.',
-  checkCredit: 'Check Credit',
+  openCredit: 'Open Credit',
   connectAgent: 'Connect an Agent',
   reviewSpendingPolicy: 'Review Spending policy',
   checkAgents: 'Check Agents',
@@ -96,7 +96,7 @@ export function nextActionFor(snapshot: OwnerOverviewSnapshot): OwnerOverviewNex
   }
   if (snapshot.balance.kind === 'unavailable' || snapshot.balance.locked) {
     return {
-      label: ownerOverviewCopy.checkCredit,
+      label: ownerOverviewCopy.openCredit,
       description: 'Confirm available credit before asking your Agent to make a Call.',
       href: '/owner/credit',
     }
@@ -109,7 +109,7 @@ export function nextActionFor(snapshot: OwnerOverviewSnapshot): OwnerOverviewNex
     }
   }
   return {
-    label: 'Explore Market',
+    label: 'Browse Tools',
     description: 'Describe the service you need, inspect a Tool, then continue with your Agent.',
     href: '/market',
   }

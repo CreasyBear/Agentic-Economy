@@ -60,7 +60,7 @@ export function AeAppHeader({
               className="inline-flex min-h-touch items-center gap-1 font-sans text-xs font-medium text-muted-foreground transition-colors hover:text-foreground active:scale-[0.98] motion-reduce:transition-none motion-reduce:active:scale-100"
             >
               <ArrowLeftIcon aria-hidden="true" className="size-3.5" />
-              Back to market
+              Browse Tools
             </Link>
           </div>
         </div>

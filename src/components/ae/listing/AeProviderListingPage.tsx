@@ -301,7 +301,7 @@ function ListingBackLink({ from, threadId }: { from?: 'thread'; threadId?: strin
       to="/market"
       className={cn(buttonVariants({ variant: 'ghost', size: 'sm' }), 'min-h-touch px-2')}
     >
-      <ArrowLeftIcon aria-hidden="true" /> Back to catalog
+      <ArrowLeftIcon aria-hidden="true" /> Browse Tools
     </Link>
   )
 }

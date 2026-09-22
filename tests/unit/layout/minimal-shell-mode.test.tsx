@@ -40,8 +40,8 @@ describe('minimal shell mode (S-11)', () => {
 
     expect(document.querySelectorAll('[data-shell="app-header"]')).toHaveLength(1)
     expect(screen.getByRole('link', { name: 'Agentic Economy home' })).toBeTruthy()
-    expect(screen.getByRole('link', { name: 'Back to market' })).toBeTruthy()
-    expect(screen.getByRole('link', { name: 'Back to market' }).getAttribute('href')).toBe('/market')
+    expect(screen.getByRole('link', { name: 'Browse Tools' })).toBeTruthy()
+    expect(screen.getByRole('link', { name: 'Browse Tools' }).getAttribute('href')).toBe('/market')
   })
 
   it('suppresses primary navigation and Find Tools on minimal shell routes', async () => {

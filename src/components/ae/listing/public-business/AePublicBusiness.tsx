@@ -42,7 +42,7 @@ function PublicBusinessUnavailable() {
       action={
         <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap">
           <a href={pathname} className={cn(buttonVariants(), 'min-h-touch')}>Try again</a>
-          <Link to="/market" className={cn(buttonVariants({ variant: 'secondary' }), 'min-h-touch')}>Back to catalog</Link>
+          <Link to="/market" className={cn(buttonVariants({ variant: 'secondary' }), 'min-h-touch')}>Browse Tools</Link>
         </div>
       }
     />
@@ -85,7 +85,7 @@ export function ProviderListingError() {
       action={
         <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap">
           <a href={pathname} className={cn(buttonVariants(), 'min-h-touch')}>Try again</a>
-          <Link to="/market" className={cn(buttonVariants({ variant: 'secondary' }), 'min-h-touch')}>Back to catalog</Link>
+          <Link to="/market" className={cn(buttonVariants({ variant: 'secondary' }), 'min-h-touch')}>Browse Tools</Link>
         </div>
       }
     />

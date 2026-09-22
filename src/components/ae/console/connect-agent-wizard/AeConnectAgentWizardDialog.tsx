@@ -48,7 +48,7 @@ export function AeConnectAgentWizardDialog({
       <DialogContent className="sm:max-w-[620px]" data-slot="dialog-content">
         <form onSubmit={wizard.handleSubmit}>
           <DialogHeader>
-            <DialogTitle>Connect new agent</DialogTitle>
+            <DialogTitle>Connect an Agent</DialogTitle>
             <DialogDescription>Step 1 of 2 · Set policy</DialogDescription>
           </DialogHeader>
 
@@ -116,7 +116,7 @@ export function AeConnectAgentWizardDialog({
               Cancel
             </Button>
             <Button type="submit" disabled={!view.isNameValid || view.isSubmitting}>
-              {view.isSubmitting ? 'Creating…' : 'Connect agent'}
+              {view.isSubmitting ? 'Connecting…' : 'Connect an Agent'}
             </Button>
           </DialogFooter>
         </form>

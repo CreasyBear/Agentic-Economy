@@ -69,7 +69,7 @@ export function AeSupplyLanding({
             <div className="grid w-full max-w-xl justify-items-start gap-3">
               <AeSiteEyebrow>Providers</AeSiteEyebrow>
               <AeSiteHeading as="h1" size="lg" id="supply-hero">
-                List a Tool.
+                Add a Tool.
               </AeSiteHeading>
             </div>
             <div className="w-full max-w-lg">
@@ -128,8 +128,8 @@ export function AeSupplyLanding({
           </ul>
         </div>
       </AeSiteSection>
-      <AeSiteSection ariaLabel="How to publish a Tool" scheme="surface">
-        <AeCollectionRail kicker="How to publish" title="Steps to list a Tool" titleId="supply-publish-steps">
+      <AeSiteSection ariaLabel="How to add a Tool" scheme="surface">
+        <AeCollectionRail kicker="How to add" title="Steps to add a Tool" titleId="supply-publish-steps">
           <ol className="m-0 grid list-none gap-0 p-0">
             {SUPPLY_STEPS.map((step) => (
               <li key={step.number} className="grid gap-intra border-b border-border py-related last:border-b-0">

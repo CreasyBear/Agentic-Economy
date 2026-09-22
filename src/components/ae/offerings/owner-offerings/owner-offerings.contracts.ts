@@ -8,7 +8,7 @@ export const TACTILE_PRESS_CLASS =
 
 export const OWNER_OFFERINGS_COPY = {
   callsColumn: 'Calls',
-  emptyAction: 'Start setup',
+  emptyAction: 'Add Tool',
   emptyDescription: 'Add a source, then choose a Tool to publish.',
 } as const
 

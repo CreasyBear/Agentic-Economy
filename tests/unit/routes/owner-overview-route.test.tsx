@@ -63,7 +63,7 @@ describe('owner Overview', () => {
     expect(screen.getByRole('link', { name: 'Review Spending policy' }).getAttribute('href')).toBe('/agent-access')
     expect(document.querySelectorAll('a.bg-primary')).toHaveLength(1)
     expect(screen.getByRole('link', { name: 'Review Call' }).getAttribute('href')).toBe('/activity')
-    expect(screen.getAllByRole('link', { name: 'Check Credit' })).toHaveLength(1)
+    expect(screen.getAllByRole('link', { name: 'Open Credit' })).toHaveLength(1)
     expect(screen.queryByText('Provider workspace')).toBeNull()
     expect(screen.queryByText('Want to offer a service?')).toBeNull()
     const nextStep = screen.getByRole('region', { name: 'Next step' })
@@ -90,7 +90,7 @@ describe('owner Overview', () => {
     expect(screen.getByText('Calls unavailable')).toBeTruthy()
     expect(screen.getByText('Nothing was charged.')).toBeTruthy()
     expect(screen.queryByText('No Calls need attention')).toBeNull()
-    expect(screen.getAllByRole('link', { name: 'Check Credit' })).toHaveLength(1)
+    expect(screen.getAllByRole('link', { name: 'Open Credit' })).toHaveLength(1)
     cleanup()
 
     reads.calls.mockResolvedValueOnce({ page: [], continueCursor: '', isDone: true })
@@ -99,7 +99,7 @@ describe('owner Overview', () => {
 
     expect(screen.getByText('No Calls need attention')).toBeTruthy()
     expect(screen.queryByText('Calls unavailable')).toBeNull()
-    expect(screen.getAllByRole('link', { name: 'Check Credit' })).toHaveLength(1)
+    expect(screen.getAllByRole('link', { name: 'Open Credit' })).toHaveLength(1)
   })
 
   it('does not turn an incomplete Calls page into a complete zero', async () => {
@@ -113,7 +113,7 @@ describe('owner Overview', () => {
     expect(screen.getByText('No attention in recent Calls')).toBeTruthy()
     expect(screen.queryByText('No Calls need attention')).toBeNull()
     expect(screen.getByRole('link', { name: 'Check Calls' }).getAttribute('href')).toBe('/activity')
-    expect(screen.queryByRole('link', { name: 'Explore Market' })).toBeNull()
+    expect(screen.queryByRole('link', { name: 'Browse Tools' })).toBeNull()
   })
 
   it('does not advance past unavailable Calls or an incomplete empty Agent directory', async () => {
@@ -150,7 +150,7 @@ describe('owner Overview', () => {
     reads.balance.mockResolvedValueOnce(availableBalance)
     const ready = await loadOverview()
     renderOverview(ready)
-    expect(screen.getByRole('link', { name: 'Explore Market' }).getAttribute('href')).toBe('/market')
+    expect(screen.getByRole('link', { name: 'Browse Tools' }).getAttribute('href')).toBe('/market')
   })
 
   it('shows Provider status only when the existing Provider projection says it applies', async () => {
@@ -159,7 +159,7 @@ describe('owner Overview', () => {
 
     expect(screen.getByText('Provider workspace')).toBeTruthy()
     expect(screen.getByText('Example Provider · 1 Tool')).toBeTruthy()
-    expect(screen.getByRole('link', { name: 'Open My Tools' }).getAttribute('href')).toBe('/owner/operations')
+    expect(screen.getByRole('link', { name: 'Open Tools' }).getAttribute('href')).toBe('/owner/operations')
     expect(screen.queryByRole('link', { name: 'Offer a Tool' })).toBeNull()
   })
 
@@ -169,7 +169,7 @@ describe('owner Overview', () => {
 
     expect(screen.getByText('Provider workspace')).toBeTruthy()
     expect(screen.getByText('Status unavailable')).toBeTruthy()
-    expect(screen.getByRole('link', { name: 'Open My Tools' }).getAttribute('href')).toBe('/owner/operations')
+    expect(screen.getByRole('link', { name: 'Open Tools' }).getAttribute('href')).toBe('/owner/operations')
     expect(screen.queryByRole('link', { name: 'Offer a Tool' })).toBeNull()
   })
 })

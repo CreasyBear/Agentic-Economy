@@ -10,14 +10,14 @@ describe("supply landing", () => {
   it("leads with a plain-language Provider fit decision and published Tool rows", () => {
     renderWithRouter(<AeSupplyLanding tools={[tool]} publishedTools={[publishedTool]} />);
     expect(
-      screen.getByRole("heading", { name: "List a Tool." }),
+      screen.getByRole("heading", { name: "Add a Tool." }),
     ).toBeDefined();
     expect(screen.getByText("Providers")).toBeDefined();
     expect(
       screen
-        .getByRole("link", { name: "List a Tool" })
+        .getByRole("link", { name: "Add Tool" })
         .getAttribute("href"),
-    ).toBe("/owner/operations");
+    ).toBe("/owner/operations/new");
     expect(screen.getByRole("heading", { name: "Check whether your Tool is a fit." })).toBeDefined();
     expect(screen.getByText(/List one Tool an agent can search/i)).toBeDefined();
     expect(screen.getByText(/supported OpenAPI document, remote MCP server/i)).toBeDefined();

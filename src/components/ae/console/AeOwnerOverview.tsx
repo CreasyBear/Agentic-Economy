@@ -99,7 +99,7 @@ export function AeOwnerOverview({ snapshot }: AeOwnerOverviewProps) {
                   : 'AUD credit available for authorized Agent Calls.'
             }
             value={balanceValue}
-            {...(next.href.startsWith('/owner/credit') ? {} : { action: { label: ownerOverviewCopy.checkCredit, href: '/owner/credit' } })}
+            {...(next.href.startsWith('/owner/credit') ? {} : { action: { label: ownerOverviewCopy.openCredit, href: '/owner/credit' } })}
           />
           <OverviewFactRow
             title="Calls"
@@ -118,7 +118,7 @@ export function AeOwnerOverview({ snapshot }: AeOwnerOverviewProps) {
               title="Provider workspace"
               description={providerCard.description}
               value={providerCard.value}
-              action={{ label: 'Open My Tools', href: '/owner/operations' }}
+              action={{ label: 'Open Tools', href: '/owner/operations' }}
             />
           )}
         </section>
