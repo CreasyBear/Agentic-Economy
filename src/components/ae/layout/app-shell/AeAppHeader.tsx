@@ -27,10 +27,10 @@ function BrandLink() {
     <Link
       to="/"
       aria-label="Agentic Economy home"
-      className="flex min-h-touch min-w-touch items-center gap-related no-underline active:scale-[0.98] transition-transform duration-100 ease-out motion-reduce:transition-none motion-reduce:active:scale-100"
+      className="flex shrink-0 min-h-touch min-w-touch items-center gap-related no-underline active:scale-[0.98] transition-transform duration-100 ease-out motion-reduce:transition-none motion-reduce:active:scale-100"
     >
       <img src={AECON_MARK_SRC} alt="" aria-hidden="true" className={cn(aeconMarkClassName.light, 'hidden sm:block')} />
-      <img src={AECON_MOBILE_LOCKUP_SRC} alt="" aria-hidden="true" className="h-7 w-auto max-w-32 sm:hidden" />
+      <img src={AECON_MOBILE_LOCKUP_SRC} alt="" aria-hidden="true" className="h-5 w-auto max-w-24 sm:hidden" />
     </Link>
   )
 }
@@ -53,7 +53,7 @@ export function AeAppHeader({
         <div className="flex h-(--header-height) min-h-touch items-center justify-between px-gutter">
           <BrandLink />
           <div className="flex items-center gap-intra">
-            <AeNetworkHealthIndicator />
+            <div className="hidden sm:block"><AeNetworkHealthIndicator /></div>
             <ThemeToggle />
             <Link
               to="/market"
@@ -67,12 +67,12 @@ export function AeAppHeader({
       ) : signedIn ? (
         <div
           data-elevated={elevated ? '' : undefined}
-          className="ae-nav flex h-(--header-height) min-h-(--header-height) items-center gap-related px-1 shadow-none transition-shadow duration-200 ease-out data-[elevated]:shadow-soft motion-reduce:transition-none sm:px-2"
+          className="ae-nav flex h-(--header-height) min-h-(--header-height) items-center gap-1 px-1 shadow-none sm:gap-related transition-shadow duration-200 ease-out data-[elevated]:shadow-soft motion-reduce:transition-none sm:px-2"
         >
           <SidebarTrigger aria-label="Open app navigation" className="md:hidden" />
           <BrandLink />
-          <div className="ms-auto flex items-center gap-intra">
-            <AeNetworkHealthIndicator />
+          <div className="ms-auto flex items-center gap-1 sm:gap-intra">
+            <div className="hidden sm:block"><AeNetworkHealthIndicator /></div>
             <AeCommandPanel />
             <div className="hidden max-w-[12rem] min-w-0 md:block"><AeOrganizationSwitcher /></div>
             <ThemeToggle />
@@ -83,12 +83,12 @@ export function AeAppHeader({
         <Sheet open={mobileNavOpen} onOpenChange={setMobileNavOpen}>
           <div
             data-elevated={elevated ? '' : undefined}
-            className="ae-nav flex h-(--header-height) min-h-(--header-height) items-center gap-related px-1 shadow-none transition-shadow duration-200 ease-out data-[elevated]:shadow-soft motion-reduce:transition-none sm:px-2"
+            className="ae-nav flex h-(--header-height) min-h-(--header-height) items-center gap-1 px-1 shadow-none sm:gap-related transition-shadow duration-200 ease-out data-[elevated]:shadow-soft motion-reduce:transition-none sm:px-2"
           >
             <BrandLink />
             <AeSitePrimaryNav />
-            <div className="ms-auto flex items-center gap-intra">
-              <AeNetworkHealthIndicator />
+            <div className="ms-auto flex items-center gap-1 sm:gap-intra">
+              <div className="hidden sm:block"><AeNetworkHealthIndicator /></div>
               <AeCommandPanel />
               <ThemeToggle />
               <Link to="/sign-in/$" params={{ _splat: '' }} className={cn(buttonVariants({ variant: 'ghost' }), 'hidden md:inline-flex')}>Sign in</Link>

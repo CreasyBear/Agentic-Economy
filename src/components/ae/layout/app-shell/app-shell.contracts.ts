@@ -56,3 +56,19 @@ export function roleNavigation(role: OperatorRole): readonly AppSidebarItem[] {
   if (role === 'developer') return DEVELOPER_NAVIGATION
   return []
 }
+
+export function activeRoleNavigationHref(
+  pathname: string,
+  items: readonly AppSidebarItem[],
+): string | undefined {
+  let active: string | undefined
+  for (const item of items) {
+    if (
+      (pathname === item.href || pathname.startsWith(`${item.href}/`))
+      && (active === undefined || item.href.length > active.length)
+    ) {
+      active = item.href
+    }
+  }
+  return active
+}

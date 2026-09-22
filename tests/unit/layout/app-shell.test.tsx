@@ -74,15 +74,16 @@ describe('AeAppShell', () => {
     expect(screen.queryByRole('link', { name: 'Sign in' })).toBeNull()
   })
 
-  it('shows admin destinations in mobile navigation on admin routes', () => {
+  it('shows every admin destination and marks only the longest route match', () => {
     clerkSignedIn.value = true
-    renderAppShell('/admin/index-health')
+    renderAppShell('/admin/metrics')
 
     const nav = screen.getByRole('navigation', { name: 'Admin primary navigation' })
     expect(Array.from(nav.querySelectorAll('a')).map(link => link.textContent)).toEqual([
-      'Catalog health',
-      'Audit',
+      'Overview', 'Search', 'Exceptions', 'Providers', 'Metrics', 'Audit',
     ])
+    expect(nav.querySelectorAll('[aria-current=\"page\"]')).toHaveLength(1)
+    expect(within(nav).getByRole('link', { name: 'Metrics' }).getAttribute('aria-current')).toBe('page')
   })
 })
 
@@ -121,7 +122,11 @@ function renderAppShell(pathname = clerkSignedIn.value ? '/market' : '/'): void 
       staticData: { nav: { label: 'Tools', header: { order: 3, audience: 'signed-in' } } },
     }),
     createRoute({ getParentRoute: () => rootRoute, path: '/sign-in/$' }),
-    createRoute({ getParentRoute: () => rootRoute, path: '/admin/index-health' }),
+    createRoute({ getParentRoute: () => rootRoute, path: '/admin' }),
+    createRoute({ getParentRoute: () => rootRoute, path: '/admin/search' }),
+    createRoute({ getParentRoute: () => rootRoute, path: '/admin/exceptions' }),
+    createRoute({ getParentRoute: () => rootRoute, path: '/admin/providers' }),
+    createRoute({ getParentRoute: () => rootRoute, path: '/admin/metrics' }),
     createRoute({ getParentRoute: () => rootRoute, path: '/admin/audit-events' }),
   ])
   const router = createRouter({

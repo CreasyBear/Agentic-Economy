@@ -1,4 +1,4 @@
-import { mutationGeneric, queryGeneric } from 'convex/server'
+import { mutationGeneric } from 'convex/server'
 import { v } from 'convex/values'
 
 import { sourceWriteArgs } from './sourceWriteAdmission'
@@ -9,7 +9,6 @@ import {
   grantAdminMembershipHandler,
   revokeAdminMembershipHandler,
 } from './securityAdminMembership'
-import { readAdminIndexHealthHandler } from './securityAdminReadbacks'
 import {
   closeRemovalDisputeHandler,
   openRemovalDisputeHandler,
@@ -20,31 +19,6 @@ const adminMembershipState = v.union(v.literal('active'), v.literal('revoked'), 
 const visibilityTargetType = v.union(v.literal('business'), v.literal('service'), v.literal('capability'))
 const removalReason = literalUnion(RemovalDisputeReasonCodeValues)
 const disputeStatus = v.union(v.literal('opened'), v.literal('updated'), v.literal('closed'), v.literal('contested'))
-const adminReadbackSurface = v.union(
-  v.literal('audit_events'),
-  v.literal('index_health')
-)
-const adminReadbackDeniedReason = v.union(
-  v.literal('missing_membership'),
-  v.literal('inactive_membership'),
-  v.literal('action_not_allowed')
-)
-const adminReadbackRowType = v.union(v.literal('audit_event'), v.literal('index_surface'))
-const adminReadbackRowState = v.union(
-  v.literal('no_source_rows'),
-  v.literal('guarded'),
-  v.literal('queued'),
-  v.literal('indexed'),
-  v.literal('degraded'),
-  v.literal('stale'),
-  v.literal('suppressed')
-)
-const adminReadbackRepairAction = v.union(
-  v.literal('inspect_audit'),
-  v.literal('regenerate_projection'),
-  v.literal('source_auth_required'),
-  v.literal('no_repair_available')
-)
 
 const adminMembershipResult = v.object({
   clerkUserId: v.string(),
@@ -116,52 +90,6 @@ const adminMutationOkResult = v.object({
 
 const adminMutationResult = v.union(adminMutationOkResult, adminMutationErrorResult)
 
-const adminReadbackRowResult = v.object({
-  rowId: v.string(),
-  rowType: adminReadbackRowType,
-  objectRef: v.string(),
-  rowState: adminReadbackRowState,
-  surface: adminReadbackSurface,
-  readbackState: v.union(
-    v.literal('not_queued'),
-    v.literal('available'),
-    v.literal('guarded'),
-    v.literal('unavailable')
-  ),
-  repairAction: adminReadbackRepairAction,
-  repairResult: v.optional(v.union(v.literal('not_run'), v.literal('succeeded'), v.literal('failed'))),
-  affectedPublicSurfaces: v.optional(v.array(v.string())),
-  correlationId: v.optional(v.string()),
-  attemptRef: v.optional(v.string()),
-  updatedAt: v.number(),
-})
-
-const adminReadbackDeniedResult = v.object({
-  kind: v.literal('denied'),
-  httpStatus: v.union(v.literal(401), v.literal(403)),
-  reason: adminReadbackDeniedReason,
-  surface: adminReadbackSurface,
-  generatedAt: v.number(),
-  publicMessage: v.string(),
-  rows: v.array(adminReadbackRowResult),
-})
-
-const adminReadbackAllowedResult = v.object({
-  kind: v.literal('allowed'),
-  httpStatus: v.literal(200),
-  surface: adminReadbackSurface,
-  generatedAt: v.number(),
-  actorRef: v.string(),
-  summary: v.object({
-    queued: v.number(),
-    attention: v.number(),
-    stale: v.number(),
-    suppressed: v.number(),
-  }),
-  rows: v.array(adminReadbackRowResult),
-})
-
-const adminReadbackResult = v.union(adminReadbackDeniedResult, adminReadbackAllowedResult)
 
 const disputeReceiptResult = v.object({
   disputeId: v.string(),
@@ -263,11 +191,6 @@ export const revokeAdminMembership = mutationGeneric({
 })
 
 
-export const readAdminIndexHealth = queryGeneric({
-  args: {},
-  returns: adminReadbackResult,
-  handler: readAdminIndexHealthHandler,
-})
 
 export const openRemovalDispute = mutationGeneric({
   args: {

@@ -169,7 +169,7 @@ describe('operator shell nested chrome', () => {
 
     const nav = await screen.findByRole('navigation', { name: 'App navigation' })
     expect(within(nav).getByText('Admin')).toBeTruthy()
-    expect(within(nav).getByRole('link', { name: 'Catalog health' })).toBeTruthy()
+    expect(within(nav).getByRole('link', { name: 'Providers' })).toBeTruthy()
     expect(within(nav).getByRole('link', { name: 'Audit' })).toBeTruthy()
     expect(document.querySelectorAll(`img[src="${AECON_MARK_SRC}"]`).length).toBe(0)
   })
@@ -287,23 +287,23 @@ describe('operator shell nested chrome', () => {
   it('keeps the shell and offers recovery when the signed-in account lacks the requested surface', async () => {
     renderAt(
       <OperatorRouteError error={new OperatorSurfaceForbiddenError('admin')} />,
-      '/admin/index-health',
+      '/admin/providers',
     )
 
     expect(await screen.findByRole('heading', { level: 1, name: 'Admin access required' })).toBeTruthy()
     expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1)
     expect(screen.getByText('Your account does not have the Admin role for this page.')).toBeTruthy()
     expect(screen.getByRole('link', { name: 'Ask an Admin for access' }).getAttribute('href')).toBe('/support')
-    expect(screen.getByRole('link', { name: 'Return to Market' }).getAttribute('href')).toBe('/market')
+    expect(screen.getByRole('link', { name: 'Browse Tools' }).getAttribute('href')).toBe('/market')
     expect(screen.getByRole('button', { name: 'Sign out' })).toBeTruthy()
-    expect(screen.queryByRole('link', { name: 'Catalog health' })).toBeNull()
+    expect(screen.queryByRole('link', { name: 'Providers' })).toBeNull()
     expect(screen.queryByRole('link', { name: 'Audit' })).toBeNull()
   })
 
   it('recognizes a forbidden error after server serialization strips its custom fields', async () => {
     renderAt(
       <OperatorRouteError error={{ name: 'Error', message: OPERATOR_SURFACE_FORBIDDEN_MESSAGE }} />,
-      '/admin/index-health',
+      '/admin/providers',
     )
 
     expect(await screen.findByRole('heading', { level: 1, name: 'Admin access required' })).toBeTruthy()
@@ -313,12 +313,12 @@ describe('operator shell nested chrome', () => {
   it('renders forbidden recovery with a Clerk sign-out control', async () => {
     renderAt(
       <OperatorRouteError error={new OperatorSurfaceForbiddenError('admin')} />,
-      '/admin/index-health',
+      '/admin/providers',
     )
 
     expect(await screen.findByRole('heading', { level: 1, name: 'Admin access required' })).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Sign out' })).toBeTruthy()
-    expect(screen.queryByRole('link', { name: 'Catalog health' })).toBeNull()
+    expect(screen.queryByRole('link', { name: 'Providers' })).toBeNull()
     expect(screen.queryByRole('link', { name: 'Audit' })).toBeNull()
   })
 

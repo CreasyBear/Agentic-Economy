@@ -31,7 +31,7 @@ export function OperatorRouteNotFoundRecovery({
   const defaultRecovery = operatorRole === 'owner'
     ? { href: appDestination('market').to, label: 'Back to Market' }
     : operatorRole === 'admin'
-      ? { href: '/admin/index-health', label: 'Back to Catalog health' }
+      ? { href: '/admin', label: 'Back to Admin overview' }
       : { href: '/developers/discovery', label: 'Back to Discovery' }
   const recoveryHref = recoveryHrefOverride ?? (isAssistantAccessPath ? '/agent-access' : defaultRecovery.href)
   const recoveryLabel = recoveryLabelOverride ?? (isAssistantAccessPath ? 'Back to Agents' : defaultRecovery.label)

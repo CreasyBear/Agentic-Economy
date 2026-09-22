@@ -22,7 +22,10 @@ import {
   SheetTitle,
   SheetTrigger,
 } from '@/components/ui/sheet'
-import { ADMIN_NAVIGATION } from '@/components/ae/layout/app-shell/app-shell.contracts'
+import {
+  activeRoleNavigationHref,
+  ADMIN_NAVIGATION,
+} from '@/components/ae/layout/app-shell/app-shell.contracts'
 import {
   mobileNavigation,
   resolveAppDestination,
@@ -68,6 +71,9 @@ export function AeOwnerMobileNavigation({
   operatorRole = 'owner',
 }: AeOwnerMobileNavigationProps) {
   const { hash } = useLocation()
+  const activeAdminHref = operatorRole === 'admin'
+    ? activeRoleNavigationHref(currentPath, ADMIN_NAVIGATION)
+    : undefined
 
   if (operatorRole === 'admin') {
     return (
@@ -78,8 +84,7 @@ export function AeOwnerMobileNavigation({
         <div className="grid h-14 grid-cols-2 px-gutter">
           {ADMIN_NAVIGATION.map((destination) => {
             const Icon = destination.icon
-            const current = currentPath === destination.href
-              || currentPath.startsWith(`${destination.href}/`)
+            const current = destination.href === activeAdminHref
 
             return (
               <Link

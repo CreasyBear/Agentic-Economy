@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest'
 
 import schema from '../../../convex/schema'
 import { readAdminAgentView } from '../../../convex/lib/adminConsole/reads/agent'
-import { readAdminToolVersionView } from '../../../convex/lib/adminConsole/reads/tool-version'
+import { readAdminToolVersionView } from '../../../convex/lib/adminConsole/reads/toolVersion'
 import { readAdminWorkspaceView } from '../../../convex/lib/adminConsole/reads/workspace'
 import { accountRef } from '@/modules/principal-account/account/public'
 import { principalRef } from '@/modules/principal-account/principal/public'

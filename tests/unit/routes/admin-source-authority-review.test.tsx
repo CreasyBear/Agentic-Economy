@@ -1,12 +1,11 @@
 /** @vitest-environment jsdom */
-import type { ReactNode } from 'react'
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import '../../setup/jsdom-platform'
 
 const mocks = vi.hoisted(() => ({
   review: vi.fn(),
-  search: {
+  request: {
     publicationRef: 'publication:openapi',
     expectedRevision: 3,
     expectedSourceDigest: `sha256:${'a'.repeat(64)}`,
@@ -16,31 +15,12 @@ const mocks = vi.hoisted(() => ({
   },
 }))
 
-vi.mock('@tanstack/react-router', () => ({
-  createFileRoute: () => (options: Record<string, unknown>) => ({
-    options,
-    useLoaderData: () => ({ readback: { kind: 'allowed', rows: [] } }),
-    useSearch: () => mocks.search,
-  }),
-}))
-vi.mock('@tanstack/react-start', () => ({
-  createClientOnlyFn: (fn: (...args: never[]) => unknown) => fn,
-  createServerFn: () => ({ handler: () => Symbol('admin-readback-server') }),
-  useServerFn: () => mocks.review,
-}))
-vi.mock('@/components/ae/layout/AeOperatorPage', () => ({
-  AeOperatorPage: ({ children }: { children: ReactNode }) => <main>{children}</main>,
-}))
-vi.mock('@/components/ae/readback/AeAdminReadbackPanel', () => ({
-  AeAdminReadbackPanel: () => <section>Catalog readback</section>,
-}))
-vi.mock('@/lib/operator/route-options', () => ({ operatorRouteOptions: {} }))
+vi.mock('@tanstack/react-start', () => ({ useServerFn: () => mocks.review }))
 vi.mock('@/modules/capability-supply/source-authority-review.functions', () => ({
   reviewSourceAuthorityServer: Symbol('review-source-authority'),
 }))
 
-import { Route as AdminAuditEventsRoute } from '@/routes/_operator/admin.audit-events'
-import { Route as AdminIndexHealthRoute } from '@/routes/_operator/admin.index-health'
+import { SourceAuthorityReviewPanel } from '@/components/ae/admin/catalog-health/SourceAuthorityReviewPanel'
 
 afterEach(() => {
   cleanup()
@@ -48,28 +28,21 @@ afterEach(() => {
 })
 
 describe('admin source authority review', () => {
-  it('keeps admin routes out of the dead route navigation registry', () => {
-    expect(AdminAuditEventsRoute.options.staticData).toBeUndefined()
-    expect(AdminIndexHealthRoute.options.staticData).toBeUndefined()
-  })
-
   it('confirms one exact publication and tells the operator to resume the same release run', async () => {
     mocks.review.mockResolvedValue({
       kind: 'verified',
-      publicationRef: mocks.search.publicationRef,
-      revision: mocks.search.expectedRevision,
-      operationRef: mocks.search.operationRef,
+      publicationRef: mocks.request.publicationRef,
+      revision: mocks.request.expectedRevision,
+      operationRef: mocks.request.operationRef,
       sourceAuthorityState: 'verified',
     })
-    const Component = AdminIndexHealthRoute.options.component
-    if (Component === undefined) throw new Error('admin_index_health_component_missing')
-    render(<Component />)
+    render(<SourceAuthorityReviewPanel review={mocks.request} />)
 
     expect(screen.getByRole('heading', { name: 'Review source authority' })).toBeTruthy()
     expect(screen.getByText('Tool reference')).toBeTruthy()
     expect(screen.getByText(/Provider controls the source/u)).toBeTruthy()
-    expect(document.body.textContent).toContain(mocks.search.sourceUrl)
-    expect(document.body.textContent).toContain(mocks.search.expectedSourceDigest)
+    expect(document.body.textContent).toContain(mocks.request.sourceUrl)
+    expect(document.body.textContent).toContain(mocks.request.expectedSourceDigest)
     fireEvent.change(screen.getByLabelText('Authority evidence reference'), {
       target: { value: 'review:source-control:ticket-123' },
     })
@@ -77,9 +50,9 @@ describe('admin source authority review', () => {
 
     await waitFor(() => expect(mocks.review).toHaveBeenCalledWith({
       data: {
-        publicationRef: mocks.search.publicationRef,
-        expectedRevision: mocks.search.expectedRevision,
-        expectedSourceDigest: mocks.search.expectedSourceDigest,
+        publicationRef: mocks.request.publicationRef,
+        expectedRevision: mocks.request.expectedRevision,
+        expectedSourceDigest: mocks.request.expectedSourceDigest,
         evidenceRef: 'review:source-control:ticket-123',
       },
     }))
@@ -89,9 +62,7 @@ describe('admin source authority review', () => {
 
   it('does not claim approval when the canonical review is refused', async () => {
     mocks.review.mockResolvedValue({ kind: 'refused', reason: 'authorization_denied' })
-    const Component = AdminIndexHealthRoute.options.component
-    if (Component === undefined) throw new Error('admin_index_health_component_missing')
-    render(<Component />)
+    render(<SourceAuthorityReviewPanel review={mocks.request} />)
 
     fireEvent.change(screen.getByLabelText('Authority evidence reference'), {
       target: { value: 'review:source-control:ticket-123' },

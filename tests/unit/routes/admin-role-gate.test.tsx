@@ -56,10 +56,8 @@ vi.mock('@/lib/server/require-operator-session', () => ({
 
 import { OperatorRouteForbidden } from '@/components/ae/layout/AeRouteError'
 import { AdminAuditPage } from '@/components/ae/admin/audit/AdminAuditPage'
-import { AeAdminReadbackPanel } from '@/components/ae/readback/AeAdminReadbackPanel'
 import { OperatorSurfaceForbiddenError } from '@/lib/operator/operator-context'
 import { operatorLayoutRouteOptions } from '@/lib/operator/route-options'
-import { formatTimestamp } from '@/lib/ui/format-time'
 
 beforeEach(() => {
   mocks.auditAccess = { kind: 'allowed' }
@@ -101,54 +99,6 @@ describe('admin role gate', () => {
   })
 })
 
-describe('admin readback tables', () => {
-  it('shows the exposed filter, timestamp, and one next step for each failed index row', () => {
-    const staleAt = Date.UTC(2026, 0, 1, 3)
-    render(
-      <AeAdminReadbackPanel
-        title="Catalog readback"
-        description="Index health."
-        readback={{
-          kind: 'allowed',
-          httpStatus: 200,
-          surface: 'index_health',
-          generatedAt: staleAt,
-          actorRef: 'admin:test',
-          summary: { queued: 0, attention: 1, stale: 1, suppressed: 0 },
-          rows: [
-            {
-              rowId: 'row:index:stale',
-              rowType: 'index_surface',
-              objectRef: 'tool:stale',
-              rowState: 'stale',
-              surface: 'index_health',
-              readbackState: 'guarded',
-              repairAction: 'regenerate_projection',
-              repairResult: 'failed',
-              updatedAt: staleAt,
-            },
-            {
-              rowId: 'row:index:auth',
-              rowType: 'index_surface',
-              objectRef: 'source:unauthorized',
-              rowState: 'guarded',
-              surface: 'index_health',
-              readbackState: 'unavailable',
-              repairAction: 'source_auth_required',
-              repairResult: 'failed',
-              updatedAt: staleAt + 1,
-            },
-          ],
-        }}
-      />,
-    )
-
-    expect(screen.getByPlaceholderText('Filter by object, state, or correlation…')).toBeTruthy()
-    expect(screen.getAllByText(formatTimestamp(staleAt)).length).toBeGreaterThan(0)
-    expect(screen.getByText('Regenerate the projection')).toBeTruthy()
-    expect(screen.getByText('Restore source authorization')).toBeTruthy()
-  })
-})
 
 describe('admin audit page', () => {
   it('shows the explicit refusal for a non-admin caller', () => {

@@ -5,7 +5,6 @@ import { readAdminAuditAccess } from '../../convex/adminConsoleAudit'
 import {
   bootstrapOwnerAdmin,
   grantAdminMembership,
-  readAdminIndexHealth,
 } from '../../convex/security'
 import { interactiveCredentialExpiryNonce } from '../../convex/interactiveCredentialLifecycle'
 import { withSourceWrite } from '../helpers/source-write-admission'
@@ -44,7 +43,6 @@ type TestCtx = {
 type Handler<Args> = (ctx: TestCtx, args: Args) => Promise<unknown>
 
 const readAuditAccessHandler = (readAdminAuditAccess as unknown as { _handler: Handler<Record<string, never>> })._handler
-const readIndexHealthHandler = (readAdminIndexHealth as unknown as { _handler: Handler<Record<string, never>> })._handler
 const bootstrapHandler = (bootstrapOwnerAdmin as unknown as { _handler: Handler<AdminBootstrapArgs> })._handler
 const grantHandler = (grantAdminMembership as unknown as { _handler: Handler<GrantArgs> })._handler
 
@@ -70,25 +68,17 @@ type GrantArgs = {
 }
 
 describe('admin Convex runtime controls', () => {
-  it('denies non-admin audit access and keeps index-health readbacks stable', async () => {
+  it('denies non-admin audit access and keeps allowed reads stable', async () => {
     const db = seededAdminDb()
 
     const denied = await readAuditAccessHandler(authCtx(db, null), {})
     expect(denied).toEqual({ kind: 'refused', code: 'missing_membership' })
 
     const access = await readAuditAccessHandler(authCtx(db, ownerAdmin()), {})
-    const indexHealth = await readIndexHealthHandler(authCtx(db, ownerAdmin()), {})
     const repeatedAccess = await readAuditAccessHandler(authCtx(db, ownerAdmin()), {})
-    const repeatedIndexHealth = await readIndexHealthHandler(authCtx(db, ownerAdmin()), {})
 
     expect(JSON.stringify(repeatedAccess)).toBe(JSON.stringify(access))
-    expect(JSON.stringify(repeatedIndexHealth)).toBe(JSON.stringify(indexHealth))
     expect(access).toEqual({ kind: 'allowed' })
-    expect(indexHealth).toMatchObject({
-      kind: 'allowed',
-      rows: [expect.objectContaining({ rowType: 'index_surface', repairAction: 'regenerate_projection' })],
-    })
-    expect(JSON.stringify(indexHealth)).not.toMatch(/private:evidence:raw|contactEmail|ownerId|adminId/i)
   })
 
   it('bootstraps only a preauthorized first owner_admin and stores audit rows', async () => {

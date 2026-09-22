@@ -21,7 +21,7 @@ describe('operator route admission', () => {
     ['/agent-access', 'owner'],
     ['/agent-access/authorize', 'owner'],
     ['/activity', 'owner'],
-    ['/admin/index-health', 'admin'],
+    ['/admin/providers', 'admin'],
     ['/developers/discovery', 'developer'],
   ] as const)('maps %s to its protected surface', (pathname, surface) => {
     expect(operatorSurfaceForPath(pathname)).toBe(surface)
@@ -33,7 +33,7 @@ describe('operator route admission', () => {
   })
 
   it('rejects a disallowed surface before a route can continue', () => {
-    expect(() => admitOperatorContext(owner, '/admin/index-health')).toThrow(OperatorSurfaceForbiddenError)
+    expect(() => admitOperatorContext(owner, '/admin/providers')).toThrow(OperatorSurfaceForbiddenError)
   })
 
   it('fails closed when canonical owner context is unavailable', () => {

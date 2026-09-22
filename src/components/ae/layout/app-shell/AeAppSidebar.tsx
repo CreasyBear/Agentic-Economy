@@ -21,7 +21,11 @@ import {
 import { APP_NAVIGATION, resolveAppDestination, type AppNavGroup } from '@/lib/navigation/app-navigation'
 import type { OperatorNavBadgeValue, OperatorRole } from '@/lib/operator/roles'
 
-import { APP_NAVIGATION_ICONS, roleNavigation } from './app-shell.contracts'
+import {
+  activeRoleNavigationHref,
+  APP_NAVIGATION_ICONS,
+  roleNavigation,
+} from './app-shell.contracts'
 
 export type AeAppSidebarProps = Readonly<{
   operatorRole: OperatorRole
@@ -51,7 +55,7 @@ export function AeAppSidebar({ operatorRole, pathname, hash }: AeAppSidebarProps
   const activeDestinationId = resolveAppDestination(pathname, hash)
   const roleItems = roleNavigation(operatorRole)
   const activeRoleHref = activeDestinationId === null
-    ? roleItems.find(({ href }) => pathname === href || pathname.startsWith(`${href}/`))?.href
+    ? activeRoleNavigationHref(pathname, roleItems)
     : undefined
   const navBadges = useOperatorSidebarChrome()?.navBadges ?? {}
   const { state, isMobile, open, openMobile, setOpenMobile } = useSidebar()
