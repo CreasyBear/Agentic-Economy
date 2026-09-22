@@ -208,7 +208,7 @@ describe('admin marketplace metrics', () => {
     expect(row).toMatchObject({ settledCallValue: null, money: 'not_configured' })
   })
 
-  it('refuses malformed days and mixed money scales before writing', async () => {
+  it('refuses malformed days, mixed scales and unsupported currency before writing', async () => {
     const backend = convexTestWithMarketComponents()
     await expect(snapshot(backend, '2026-02-31')).resolves.toEqual({
       kind: 'refused',
@@ -220,11 +220,24 @@ describe('admin marketplace metrics', () => {
         .withIndex('by_usageRef', (query) => query.eq('usageRef', `usage:${FIRST_DAY}:1`))
         .unique()
       if (row === null) throw new Error('usage fixture missing')
-      await ctx.db.patch(row._id, { currency: 'USD' })
+      await ctx.db.patch(row._id, { exponent: 6 })
     })
     await expect(snapshot(backend, FIRST_DAY)).resolves.toEqual({
       kind: 'refused',
       code: 'multiple_currencies',
+    })
+    await backend.run(async (ctx) => {
+      for (const index of [0, 1]) {
+        const row = await ctx.db.query('moneyUsageEvents')
+          .withIndex('by_usageRef', (query) => query.eq('usageRef', `usage:${FIRST_DAY}:${index}`))
+          .unique()
+        if (row === null) throw new Error('usage fixture missing')
+        await ctx.db.patch(row._id, { currency: 'USD', exponent: 2 })
+      }
+    })
+    await expect(snapshot(backend, FIRST_DAY)).resolves.toEqual({
+      kind: 'refused',
+      code: 'unsupported_currency',
     })
     const rows = await backend.run(async (ctx) => await ctx.db.query('marketplaceMetricDays').collect())
     expect(rows).toEqual([])

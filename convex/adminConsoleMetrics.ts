@@ -50,7 +50,11 @@ export const snapshotMarketplaceMetricsDay = internalAction({
     v.object({ kind: v.literal('written'), day: v.string() }),
     v.object({
       kind: v.literal('refused'),
-      code: v.union(v.literal('malformed_day'), v.literal('multiple_currencies')),
+      code: v.union(
+        v.literal('malformed_day'),
+        v.literal('multiple_currencies'),
+        v.literal('unsupported_currency'),
+      ),
     }),
   ),
   handler: snapshotMarketplaceMetricsDayHandler,

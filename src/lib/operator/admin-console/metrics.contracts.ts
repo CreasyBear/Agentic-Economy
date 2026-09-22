@@ -1,6 +1,10 @@
 import type { ExactAmount } from '@/modules/money/public'
 
 export type MarketplaceMetricsRange = 'last_7' | 'last_30' | 'last_90'
+export type MarketplaceMetricsSnapshotRefusalCode =
+  | 'malformed_day'
+  | 'multiple_currencies'
+  | 'unsupported_currency'
 
 export type MarketplaceMetricDay = Readonly<{
   day: string

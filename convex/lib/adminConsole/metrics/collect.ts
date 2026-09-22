@@ -1,5 +1,6 @@
 import type { PaginationOptions, PaginationResult } from 'convex/server'
 import { v, type Infer } from 'convex/values'
+import type { MarketplaceMetricsSnapshotRefusalCode } from '@/lib/operator/admin-console/metrics.contracts'
 
 import { addExactAmounts, amountFromParts, type ExactAmount } from '@/modules/money/public'
 import { internal } from '../../../_generated/api'
@@ -106,8 +107,9 @@ function addEntity(target: Map<string, MarketplaceEntity>, entityKind: Marketpla
   if (entityRef !== null) target.set(`${entityKind}:${entityRef}`, { entityKind, entityRef })
 }
 
-function sumPaidUsage(rows: readonly MetricUsageRow[]): ExactAmount | 'multiple_currencies' | null {
+function sumPaidUsage(rows: readonly MetricUsageRow[]): ExactAmount | 'multiple_currencies' | 'unsupported_currency' | null {
   if (rows.length === 0) return null
+  if (rows.some((row) => row.currency !== 'AUD')) return 'unsupported_currency'
   const scales = new Set(rows.map((row) => `${row.currency}:${row.exponent}`))
   if (scales.size !== 1) return 'multiple_currencies'
   let total = amountFromParts(rows[0]?.currency, '0', rows[0]?.exponent)
@@ -139,7 +141,7 @@ async function collectPages<T>(
 export async function snapshotMarketplaceMetricsDayHandler(
   ctx: ActionCtx,
   args: Readonly<{ day?: string }>,
-): Promise<Readonly<{ kind: 'written'; day: string }> | Readonly<{ kind: 'refused'; code: 'malformed_day' | 'multiple_currencies' }>> {
+): Promise<Readonly<{ kind: 'written'; day: string }> | Readonly<{ kind: 'refused'; code: MarketplaceMetricsSnapshotRefusalCode }>> {
   const day = args.day ?? previousPerthDay(Date.now())
   const window = perthDayWindow(day)
   if (window.kind === 'refused') return window
@@ -156,7 +158,9 @@ export async function snapshotMarketplaceMetricsDayHandler(
     ctx.runQuery(internal.adminConsoleMetrics.countOpenUncertainCalls, {}),
   ])
   const settledCallValue = sumPaidUsage(usage)
-  if (settledCallValue === 'multiple_currencies') return { kind: 'refused', code: settledCallValue }
+  if (settledCallValue === 'multiple_currencies' || settledCallValue === 'unsupported_currency') {
+    return { kind: 'refused', code: settledCallValue }
+  }
   const entities = new Map<string, MarketplaceEntity>()
   const terminalCallRefs = new Set<string>()
   for (const call of calls) {
