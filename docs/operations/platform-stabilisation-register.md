@@ -298,13 +298,13 @@ The 43 route entries are all assigned once. `/support` is assigned to the Receip
 
 ### R-26 My tools: `/owner/operations`
 **Benchmark:** Stripe Products and Shopify admin Products. **Incumbent baseline:** name, price, status, updated, filters, Add Tool, preview/edit/archive and payout readiness.
-**Current state (LIVE):** no Tools; Provider setup, payout and connection cards conflict; production is implicit.
+**Current state (LIVE):** the local owner now has the seeded `sandbox-aecon-reference` Tool; Provider setup and populated inventory are walkable, while payout and connection readiness still require re-audit.
 **Gaps:** • [SUP-01] “Action Required” versus “Nothing is required here…” (`ProviderWorkspaceEarningsSection.tsx:28-44`) • [SUP-02] “DOM links contain no Tool/public preview” (`AeProviderWorkspace.tsx:27-35`) • [SUP-03] “Environment: production” is text (`useOwnerProviderConnectionsState.ts:69-74`) • [SUP-04] columns omit Updated (`AeOwnerOfferings.tsx:114-194`) • [SUP-05] “Supplier activation” (`AeSupplierOnboardingWizard.tsx:48-56`).
 **Copy:** <table><tr><th>where</th><th>current</th><th>target</th></tr><tr><td>title</td><td>Supplier activation</td><td>Provider setup</td></tr><tr><td>empty</td><td>Connect a source and choose the exact Tool AE should validate.</td><td>Add a source, then choose a Tool to publish.</td></tr></table>
 **Target spec:** name/price/status/updated/Calls with filters; one Add Tool; one Stripe-linked payout truth; explicit production choice; preview/edit/archive. **Cut:** duplicate Add Tool and contradictory earnings card.
 **ROOT-ECON:** Joel’s published Terms now state the fee/tax/payout FRAMEWORK; numeric take rate and cadence still unsupplied.
-**Open gaps:** inventory filtering and preview/edit/archive remain unobservable with 0 Tools.
-**Priority:** P1. **Status:** IN REVIEW. **Verification evidence:** LIVE 2026-09-21 http://127.0.0.1:3024/owner/operations rendered H1 `Tools`, one `Add Tool` action and matching payout truth in both locations: `Billing action required` / `Connect Stripe to receive payouts.` / `Connect Stripe`; the 0-Tool fixture did not expose inventory interactions. SOURCE `src/components/ae/offerings/provider-workspace/provider-workspace.view-model.ts:10-48`, `tests/unit/ui/provider-workspace.test.tsx`; COMMIT `f5b03cadf`, `566de52b4`, `2ffc72e72`. **Provenance:** RegSupplyList, RoastC26, StripeGuidance, RoastD33D34D26, 21 Sep 2026.
+**Open gaps:** inventory filtering, preview/edit/archive, payout and connection readiness have not been re-audited against the seeded Tool.
+**Priority:** P1. **Status:** IN REVIEW. **Verification evidence:** LIVE 2026-09-22 the idempotent sandbox publication belongs to the local owner and owner inventory returns one published Tool; SOURCE `convex/devSeed.ts`, `src/modules/dev/internal/dev-seed-fixture.ts`; COMMIT `1fff0da14`, `b3d300549`. Earlier empty-fixture evidence: LIVE 2026-09-21 http://127.0.0.1:3024/owner/operations rendered H1 `Tools`, one `Add Tool` action and matching payout truth in both locations; SOURCE `src/components/ae/offerings/provider-workspace/provider-workspace.view-model.ts:10-48`, `tests/unit/ui/provider-workspace.test.tsx`; COMMIT `f5b03cadf`, `566de52b4`, `2ffc72e72`. **Provenance:** RegSupplyList, RoastC26, StripeGuidance, RoastD33D34D26, SeedCatalogPath, LocalSeedRepair, SeedFinish, 21–22 Sep 2026.
 
 ### R-27 Owner Tool detail: `/owner/operations/$toolRef`
 **Benchmark:** Stripe Product detail. **Incumbent baseline:** price/status, sales, update history, preview, edit and archive.
@@ -416,7 +416,7 @@ The 43 route entries are all assigned once. `/support` is assigned to the Receip
 | listed price | TOTAL PRICE; Provider-listed price | Ask; Market | listed price |
 | support context | Help; owner-scoped status read | Support; receipt | Call; We couldn’t open this Call for this workspace |
 **Target spec:** canonical terms appear in page copy, machine docs and status labels; replacements happen page by page. **Cut:** synonyms that encode no distinct domain state.
-**Priority:** P1. **Status:** IN REVIEW. **Verification evidence:** LIVE 2026-09-21 `/owner/operations` rendered H1 `Tools`, operator navigation `Market, Agents, Calls, Tools`, and document title `Tools | Agentic Economy`; `My tools`→`Tools` changed 14 source files and the pre-existing navigation red is green. SOURCE `src/routes/_operator/owner.operations.tsx:18-20,49-50`, `tests/unit/routes/supply-owner-routes.test.tsx:70-72`; COMMIT `9e0924ad7`, `0f3e7388d`, `7ac486307`, `30ea76afe`. Remaining OWNER-LOCKED copy → spine W4-06, W4-07 and W5-06. **Provenance:** buyer-spine T4, RegDoors, RegSupplyList, RegSupplyNew, RegDevAdmin, Persona reports, ToolsNavIdentity, 21 Sep 2026.
+**Priority:** P1. **Status:** IN REVIEW. **Verification evidence:** LIVE 2026-09-21 `/owner/operations` rendered H1 `Tools`, operator navigation `Market, Agents, Calls, Tools`, and document title `Tools | Agentic Economy`; SOURCE `src/routes/_operator/owner.operations.tsx:18-20,49-50`, `tests/unit/routes/supply-owner-routes.test.tsx:70-72`; COMMIT `9e0924ad7`, `0f3e7388d`, `7ac486307`, `30ea76afe`. The re-audit standardized one label per intent and removed buyer-facing AE/x402/Bazaar/service drift outside OWNER-LOCKED surfaces; COMMIT `0076fd8f2`, `5be752e04`. Remaining OWNER append is queued in spine W2-09, W4-06, W5-06 and W7-06. **Provenance:** buyer-spine T4, RegDoors, RegSupplyList, RegSupplyNew, RegDevAdmin, Persona reports, ToolsNavIdentity, IntentLabels, NounsAndJargon, 21–22 Sep 2026.
 
 ### C-02 One price
 **Surfaces affected:** Market, Tool detail, Compare, Ask, Agents, Credit, API reference and Provider publishing.
@@ -483,7 +483,7 @@ The 43 route entries are all assigned once. `/support` is assigned to the Receip
 **Gaps:** PatternInventory §4 (`AeActivity.tsx:85-94`; `AeX402Directory.tsx:253-333`; `CallMoneyFacts.tsx:20-29`); [ST-12] `/owner/credit` never says whether money moved (`UNANCHORED`); Credit says “check system status before repeating a Call” on a non-Call error (`src/components/ae/layout/AeRouteStates.tsx:287-317`).
 **Copy:** <table><tr><th>where</th><th>current</th><th>target</th></tr><tr><td>financial failure</td><td>route-specific ambiguity</td><td>what happened; whether money moved; next action</td></tr></table>
 **Target spec:** shared state components; money-moved line on every financial failure; route-neutral copy; no “Call” in non-Call errors; matching skeleton geometry. **Cut:** bespoke branches when shared state fits.
-**Priority:** P0. **Status:** VERIFIED. **Verification evidence:** LIVE 2026-09-21 `/admin/audit-events` rendered headings “You don't have access” and “You don't have access to this workspace” without a duplicate heading; SOURCE `src/components/ae/layout/AeRouteError.tsx:85-168`; COMMIT `1cf57807d`. **Provenance:** PatternInventory, ExpectStripe, buyer-spine Credit, 21 Sep 2026.
+**Priority:** P0. **Status:** IN REVIEW. **Verification evidence:** LIVE 2026-09-21 `/admin/audit-events` rendered one route-error heading with route-neutral recovery; SOURCE `src/components/ae/layout/AeRouteError.tsx:85-168`; COMMIT `1cf57807d`. The re-audit converted named Tool, Provider, Earnings, generic page, funding, payment-method and Agent failures to alerts with explicit money outcome; 79 targeted tests passed; COMMIT `acad2e112`. Remaining OWNER-LOCKED Activity, Agent security, Credit, receipt and Support error states are queued in spine W5-03 and W7-06. **Provenance:** PatternInventory, ExpectStripe, buyer-spine Credit, ErrorsNotEmpty, 21–22 Sep 2026.
 
 ### C-09 Sandbox versus production visibility
 **Surfaces affected:** Agents and Provider connections only.
@@ -1093,4 +1093,81 @@ Orchestrator dispositions:
 
 ## 8. Plan status · 2026-09-21
 
-Foundation-reset plan Steps 1–6 are complete for Waves 0, A, B (three rounds), C, D and E. §1 now totals 11 VERIFIED, 22 IN REVIEW, 5 PENDING, 1 PARKED and 9 OWNER rows. Standing DEFAULTS awaiting Joel are the status vendor, economics/legal figures, #47 SSO/SCIM and #48 spend-anomaly alerts. Stuck checks: no file appears in three consecutive wave logs; no row has two REOPENED lines; the gate-constant check fires because the TSX-type, copy-vocabulary, bare-catch and module-boundaries constants were unmoved for at least two waves (status vocabulary moved 28→17 in Wave E). Cohesion: 6/10 measured; 9/10 after dispositions (sign-in fixed; status N/A; legal by design) — remaining public-spine deviation: none outstanding.
+Foundation-reset plan Steps 1–6 are complete for Waves 0, A, B (three rounds), C, D and E. §1 now totals 10 VERIFIED, 23 IN REVIEW, 5 PENDING, 1 PARKED and 9 OWNER rows. Standing DEFAULTS awaiting Joel are the status vendor, economics/legal figures, #47 SSO/SCIM and #48 spend-anomaly alerts. Stuck checks: no file appears in three consecutive wave logs; no row has two REOPENED lines; the gate-constant check fires because the TSX-type, copy-vocabulary, bare-catch and module-boundaries constants were unmoved for at least two waves (status vocabulary moved 28→17 in Wave E). Cohesion: 6/10 measured; 9/10 after dispositions (sign-in fixed; status N/A; legal by design) — remaining public-spine deviation: none outstanding.
+
+Re-audit round complete 2026-09-22: IA migration landed (IA-1..15), shell remount ROOT fixed, seeded catalog live; next = spine (OWNER) rows + Joel facts.
+
+## 9. Re-audit · 2026-09-21/22
+
+### Joel-reported shell evidence and ROOT dispositions
+
+| Evidence | ROOT | Disposition |
+|---|---|---|
+| Sidebar flickered, disappeared and lost its open state while Clerk resolved. | **ROOT-SHELL:** `SignedInConvexProvider` changed element depth on Clerk auth load → whole shell remounted, nav state reset (`AeConvexProviders.tsx:18-23`). | FIXED by `5a6313149`; one `ConvexProviderWithClerk` element now persists through auth loading. |
+| Tools collapsed into a header-only shell. | **ROOT-IA-2 / DS-37:** `roles.ts:47-60` suppressed the operator sidebar for every `/owner` route. | DS-37 suppression deleted by `83a8e8ab7`. |
+| Entering an operator route closed the other visible navigation. | `AeAppShell.tsx:104-106` drawer-close effect on operator route. | Effect deleted by `83a8e8ab7`; the signed-in frame owns one sidebar. |
+| Tools showed only `Provider setup`. | `Provider setup` = `WorkspaceInventoryGate` when 0 Tools (`AeProviderWorkspace.tsx:36-42`). | The seeded Tool makes the populated path walkable; commits `1fff0da14`, `b3d300549`. |
+
+### IA decision and landed commits
+
+Target sidebar: **Market · Agents · Calls · Credit | Provider: Tools · Earnings | Settings · Support · Status**. Mobile: **Market · Agents · Calls · Credit · More**. `/owner` remains PARKED and is not a navigation destination. Provider is a visible section, not a mode switch.
+
+| IA item | Decision | Commit |
+|---|---|---|
+| IA-1 | Canonical app navigation module | `79c7fd1eb` |
+| IA-2 | Persistent signed-in sidebar; delete DS-37 suppression | `83a8e8ab7` |
+| IA-3 | Canonical four-item mobile navigation plus More; remove obsolete owner-home assertion | `af4ac3446`, `69f8f980f` |
+| IA-4 | Command palette projects canonical navigation | `a7eeeaf79` |
+| IA-5 | Logged-out header only; signed-in header has no destination row | `9d1b8edd4` |
+| IA-6 | Hoist the signed-in frame to `AeAppShell` | `83a8e8ab7` |
+| IA-7 | `_operator` retains auth/transition/outlet only | `83a8e8ab7` |
+| IA-8 | Delete owner sidebar-suppression authority from `roles.ts` | `83a8e8ab7` |
+| IA-9 | Route files stop declaring navigation | `e78f39e90` |
+| IA-10 | Footer reads canonical public navigation | `9d1b8edd4` |
+| IA-11 | Breadcrumbs resolve through canonical navigation | `83a8e8ab7` |
+| IA-12 | `/owner` pending skeleton follows the parked `/owner` decision | PARKED; no commit |
+| IA-13 | Redirect `/owner` to Market | PARKED; no commit |
+| IA-14 | Post-publish and Provider section journey exits | `453c2f0ef` |
+| IA-15 | Destination H1/title parity and awaited Status head metadata | `4ad1dee4b`, `84f77d971` |
+
+Label contract (`docs/designs/2026-09-21-ia-untangle.md` §4): destination label, H1 and title agree for Market, Agents, Calls, Credit, Tools, Settings, Support and Status; Earnings remains a Tools-page H2. Tool detail keeps the Tool name; receipts use `Call receipt`. Visible aliases such as `Tools Market`, `Calls & Activity`, `Agent Access & Keys`, `Provider Workspace`, `My Tools`, `Overview`, `System status` and `Account & security` are not destination labels.
+
+### Can we pay via x402?
+
+**Not end-to-end today.** The brokered path exists: Formance reserve → CDP EIP-3009 USDC sign → Provider facilitator settles → Base RPC verifies 12 confirmations → Formance settles → receipt. The local environment lacks all 13 CDP/x402, 6 Formance and 2 route-signing variables. Without them Calls refuse with `commercial_policy_unavailable` / “Managed x402 payment custody is unavailable.” Sandbox uses Base Sepolia with the same signer and a manual faucet. Hosted Sepolia and mainnet remain unproved (`docs/operations/alpha-maturity-register.md:210-216`). Bazaar listings are observations, not callable until admitted, quoted and authorized.
+
+**Decision:** Joel supplies CDP keys and a Formance sandbox for a Sepolia pilot; until then x402 stays refused-by-design.
+
+### Seeded local catalogue
+
+- Sandbox Tool: `sandbox-aecon-reference`, backed by the Frankfurter FX HTTPS source and owned by the local owner.
+- `.env.local` needs `AE_DEV_OWNER_ACCOUNT_REF=acc_667b1893baf443cc8b737643c403dbf3`.
+- W8-02 is done: loopback source acceptance and local-owner publication landed in `1fff0da14`, `b3d300549`; `e2c9c0739` regenerated Convex API types.
+
+### Consistency close-out
+
+- C-01 stays IN REVIEW: one-label intent contract landed in `0076fd8f2`; buyer-facing canonical nouns and jargon removal landed in `5be752e04`; OWNER append is in spine W2-09, W4-06, W5-06 and W7-06.
+- C-08 stays IN REVIEW: alert-versus-empty-state and explicit money-outcome pass landed in `acad2e112`; OWNER append is in spine W5-03 and W7-06.
+
+### Found, not fixed
+
+- Dana: legal entity/controller is absent. **Owner: Joel facts.**
+- Dana: numeric fees and payout cadence remain deferred. **Owner: Joel facts.**
+- Dana: `/about` says `pre-launch` while `/status` says `All systems operational`. **Owner: new row.**
+- Dana: Status omits payments and payouts. **Owner: new row.**
+- Dana: `hello@aecon.ai` and `support@aecon.ai` conflict. **Owner: new row.**
+- Dana: `catalog` and `catalogue` conflict. **Owner: new row.**
+- Dana: public CTA styles drift between 48px solid and 44px transparent. **Owner: new row.**
+- Lena: the first five `/market` focus targets paint `none/auto/none/none/none`. **Owner: OWNER-LOCKED Market (C-06/C-07).**
+- Lena: reaching the first Tool takes 23 Tabs. **Owner: OWNER-LOCKED Market (C-07).**
+- Lena: the Market tabpanel is an extra focus stop. **Owner: OWNER-LOCKED Market (C-07).**
+- Lena: the Market result count is not live. **Owner: OWNER-LOCKED Market (C-07).**
+- Lena: two regions are both named `Popular Tools`. **Owner: OWNER-LOCKED Market (W1-02).**
+- Lena: the account menu lacked Credit. **FIXED by `83a8e8ab7`** through the persistent canonical sidebar.
+
+### Contingencies
+
+- Six agents died on provider aborts mid-flight and were revived from disk.
+- An orphan Convex backend (PID 31264, 20 h) blocked pushes; it was killed.
+- Convex CLI link/upgrade prompts were bypassed with `CONVEX_AGENT_MODE=anonymous`; the backend was upgraded to `precompiled-2026-09-21`.
+- The supervised `hub` process name is now `ae-stack`.
