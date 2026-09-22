@@ -279,7 +279,7 @@ describe('/calls/$callRef', () => {
     expect(screen.getAllByText('Reconciliation required').length).toBeGreaterThan(0)
     expect(screen.queryByText('No result has been recorded yet.')).toBeNull()
     expect(screen.queryByText('Completed')).toBeNull()
-    expect(screen.getByText('Needs attention')).toBeTruthy()
+    expect(screen.getByText('Needs review')).toBeTruthy()
     expect(screen.queryByText('What happens next')).toBeNull()
     expect(screen.queryByText('Reference kept')).toBeNull()
     expect(screen.getByText('The external effect may have started. Reconcile before retrying.')).toBeTruthy()
@@ -327,8 +327,10 @@ describe('/calls/$callRef', () => {
       },
     })
 
-    expect(screen.getByText('Reconciliation cannot be submitted')).toBeTruthy()
-    expect(screen.getByText('Charge not yet confirmed. We are reconciling this Call. Do not assume a charge or refund.')).toBeTruthy()
+    expect(screen.getByRole('link', { name: 'Get help with this Call' })).toBeTruthy()
+    expect(screen.queryByLabelText('Evidence source')).toBeNull()
+    expect(screen.getByText('The charge has not been confirmed.')).toBeTruthy()
+    expect(within(screen.getByRole('region', { name: 'Call summary' })).queryByText('AUD 0.00')).toBeNull()
     expect(screen.queryByText(/A\$0\.00 charged/)).toBeNull()
   })
 
@@ -351,13 +353,87 @@ describe('/calls/$callRef', () => {
       },
     }, { onReconcile: vi.fn(), onRefresh: vi.fn(async () => undefined) })
 
-    expect(screen.getByText('Evidence submission is unavailable')).toBeTruthy()
-    expect(screen.getByText(/Permission to submit Provider evidence could not be confirmed/)).toBeTruthy()
+    const help = screen.getByRole('link', { name: 'Get help with this Call' })
+    expect(new URL(help.getAttribute('href') ?? '', 'https://ae.example').searchParams.get('callRef')).toBe(callRef)
+    expect(screen.getByText(/Checking status only reads the latest record/)).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Check status' })).toBeTruthy()
     expect(screen.queryByRole('button', { name: 'Submit reconciliation evidence' })).toBeNull()
     expect(screen.queryByLabelText('Evidence source')).toBeNull()
-    expect(screen.getByText('Charge not yet confirmed. We are reconciling this Call. Do not assume a charge or refund.')).toBeTruthy()
+    expect(screen.getByText('The charge has not been confirmed.')).toBeTruthy()
+    expect(within(screen.getByRole('region', { name: 'Call summary' })).queryByText('AUD 0.00')).toBeNull()
     expect(screen.queryByText(/A\$0\.00 charged/)).toBeNull()
+  })
+
+  it('keeps review available for terminal execution with unconfirmed payment and does not offer a new purchase', () => {
+    renderWithRouter({
+      kind: 'found', version: 1, callRef, toolRef, state: 'terminal',
+      result: {
+        kind: 'completed', callRef, toolRef, output: { temperature: 24 }, evidenceHash: 'sha256:output',
+        usage: { usageRef: 'usage:uncertain', observedAt: 1, chargeState: 'outcome_unknown',
+          amount: { currency: 'AUD', units: '0', exponent: 2 }, priceDigest: 'sha256:price' },
+      },
+    }, { onRefresh: vi.fn(), onCancel: vi.fn() })
+    expect(screen.getByRole('link', { name: 'Get help with this Call' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Copy output' })).toBeTruthy()
+    expect(screen.queryByRole('link', { name: 'Review Tool' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Cancel Call' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Check status' })).toBeNull()
+    expect(screen.getByText('Needs review')).toBeTruthy()
+  })
+
+  it('keeps a retryable refusal on the original Call instead of offering a replacement', () => {
+    renderWithRouter({
+      kind: 'found', version: 1, callRef, toolRef, state: 'retryable',
+      result: { kind: 'refused', code: 'pre_release_failed', retryable: true },
+    }, { onRefresh: vi.fn(), onCancel: vi.fn() })
+    expect(screen.getByRole('button', { name: 'Check status' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Cancel Call' })).toBeTruthy()
+    expect(screen.queryByRole('link', { name: 'View Tool' })).toBeNull()
+    expect(screen.queryByRole('link', { name: 'Review Tool' })).toBeNull()
+  })
+
+  it('does not expose recovery actions when a refund outranks stale execution progress', () => {
+    renderWithRouter({
+      kind: 'found', version: 1, callRef, toolRef, state: 'reconciliation_required',
+      ownerContext, attemptRef: 'attempt:refunded', effectGeneration: 1,
+      usage: { usageRef: 'usage:refund', observedAt: 1, chargeState: 'refunded',
+        amount: { currency: 'AUD', units: '125', exponent: 2 }, priceDigest: 'sha256:price' },
+      purchaseResolution: {
+        resolutionRef: 'resolution:refund', recordDigest: 'sha256:refund', callRef,
+        quoteRef: 'quote:refund', accountRef: 'account:buyer', customerRef: 'customer:buyer',
+        agentPrincipalRef: 'agent:buyer', sellerRef: 'seller:ae', providerRef: 'provider:weather', paymentRecipientRef: 'recipient:weather',
+        terminalState: 'refunded', deliveryState: 'not_delivered', paymentState: 'released',
+        considerationAmount: { currency: 'AUD', units: '125', exponent: 2 }, considerationNetUnits: '125', considerationGstUnits: '0',
+        providerObligationAmount: { currency: 'USDC', units: '0', exponent: 6 }, resolvedAt: 1,
+      },
+    }, { onRefresh: vi.fn(), onCancel: vi.fn(), onReconcile: vi.fn() })
+    expect(screen.queryByRole('button', { name: 'Check status' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Cancel Call' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Submit reconciliation evidence' })).toBeNull()
+    expect(screen.getByRole('link', { name: 'View Tool' })).toBeTruthy()
+  })
+
+  it('shows no charge and restored credit in the visible receipt after unused payment expiry', () => {
+    const amount = { currency: 'AUD', units: '1408', exponent: 6 }
+    renderWithRouter({
+      kind: 'found', version: 1, callRef, toolRef, state: 'terminal', ownerContext,
+      result: { kind: 'refused', code: 'source_unavailable', retryable: false,
+        nextAction: 'The service did not complete and payment expired unused. Your credit has been restored. You can make a new request from the Tool page.',
+        receipt: {
+          commercialModel: 'account_aud', receiptRef: 'receipt:expired', state: 'refunded', refundState: 'released', lossState: 'none',
+          buyerCharge: amount, serviceFee: { ...amount, units: '0' }, totalBuyerCharge: amount,
+          providerObligation: { amount: { currency: 'USDC', units: '1000', exponent: 6 }, settlementMethod: 'managed_x402', payoutEligible: false },
+          providerSettlement: { network: 'eip155:84532', asset: '0x036CbD53842c5426634e7929541eC2318f3dCF7e', amount: { currency: 'USDC', units: '1000', exponent: 6 } },
+          priceDigest: 'sha256:price', evidenceHash: 'sha256:unused', issuedAt: '2026-09-22T09:00:00.000Z',
+        },
+      },
+    }, { onRefresh: vi.fn(), onCancel: vi.fn(), onReconcile: vi.fn() })
+    const explanation = screen.getByText('The service did not complete. You were not charged; your reserved credit has been restored.')
+    expect(explanation.closest('details')).toBeNull()
+    expect(screen.getByText('Credit released')).toBeTruthy()
+    expect(screen.getByRole('link', { name: 'View Tool' })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Check status' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Submit reconciliation evidence' })).toBeNull()
   })
 
   it('requires explicit confirmation before requesting cancellation', async () => {
@@ -403,6 +479,7 @@ describe('/calls/$callRef', () => {
       state: 'in_progress',
     }, { onRefresh })
 
+    expect(screen.getByText(/Closing the page does not cancel it/)).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Check status' }))
     expect(onRefresh).toHaveBeenCalledOnce()
 

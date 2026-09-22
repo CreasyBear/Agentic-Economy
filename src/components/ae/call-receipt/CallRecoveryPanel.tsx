@@ -1,8 +1,9 @@
 import { useState, type FormEvent } from 'react'
+import { Link } from '@tanstack/react-router'
 
 import { AeConfirmDialog } from '@/components/ae/feedback/AeConfirmDialog'
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
+import { buttonVariants } from '@/components/ui/button-variants'
 import { Field, FieldGroup, FieldLabel } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
 import {
@@ -19,11 +20,9 @@ import type { CallReconciliationForm, CallStatusPageActions, FoundCallStatus } f
 import { canRefreshCallStatus } from '@/lib/call-recovery/call-status-refresh'
 
 import { projectFoundCallPurchaseStatus } from '@/modules/capability-execution/call-receipt-view'
-import { formatCurrencyAmount } from '@/modules/money/public'
 import { cn } from '@/lib/utils'
 
 import { CallReceiptStatusFeedback, callReceiptRefreshLabel, callReceiptTactilePressClassName } from './CallReceiptPrimitives'
-import { callRecoveryPanelCopy } from './call-recovery-panel.contracts'
 
 const RECONCILIATION_RESOLUTIONS = [
   { value: 'not_released', label: 'Effect not released' },
@@ -31,10 +30,9 @@ const RECONCILIATION_RESOLUTIONS = [
 ] as const
 
 type CallRecoveryAvailability = Readonly<{
+  needsReview: boolean
   canCancelNow: boolean
   canReconcileNow: boolean
-  hasReconciliationRecordBlocker: boolean
-  hasReconciliationPermissionBlocker: boolean
   canRefreshNow: boolean
   recoveryPending: boolean
   visible: boolean
@@ -44,35 +42,28 @@ function callRecoveryAvailability(
   result: FoundCallStatus,
   actions?: CallStatusPageActions,
 ): CallRecoveryAvailability {
-  const purchaseResolved = result.purchaseResolution !== undefined
-    || (result.result?.kind === 'refused' && !result.result.retryable)
-  const canCancelNow = !purchaseResolved && (result.state === 'authorized' || result.state === 'retryable' || result.state === 'leased')
-  const canSubmitReconciliationEvidence = result.ownerContext?.reconciliation.canSubmitEvidence === true
-  const hasReconciliationRecordBlocker = result.state === 'reconciliation_required'
-    && (result.attemptRef === undefined || result.effectGeneration === undefined)
-  const hasReconciliationPermissionBlocker = result.state === 'reconciliation_required'
-    && !hasReconciliationRecordBlocker
-    && !canSubmitReconciliationEvidence
-  const canReconcileNow = result.state === 'reconciliation_required'
-    && !hasReconciliationRecordBlocker
-    && !hasReconciliationPermissionBlocker
+  const purchase = projectFoundCallPurchaseStatus(result)
+  const needsReview = purchase.kind === 'uncertain'
+  const purchaseResolved = ['delivered', 'refunded', 'failed'].includes(purchase.kind)
+  const canCancelNow = !purchaseResolved && !needsReview && (result.state === 'authorized' || result.state === 'retryable' || result.state === 'leased')
+  const canReconcileNow = needsReview && result.state === 'reconciliation_required'
+    && result.attemptRef !== undefined && result.effectGeneration !== undefined
+    && result.ownerContext?.reconciliation.canSubmitEvidence === true
     && actions?.onReconcile !== undefined
   const canRefreshNow = !purchaseResolved && canRefreshCallStatus(result) && actions?.onRefresh !== undefined
   const recoveryPending = actions?.refreshPending === true
     || actions?.cancelPending === true
     || actions?.reconcilePending === true
-  const visible = canRefreshNow
+  const visible = needsReview
+    || canRefreshNow
     || canCancelNow
     || canReconcileNow
-    || hasReconciliationRecordBlocker
-    || hasReconciliationPermissionBlocker
     || actions?.feedback !== undefined
 
   return {
+    needsReview,
     canCancelNow,
     canReconcileNow,
-    hasReconciliationRecordBlocker,
-    hasReconciliationPermissionBlocker,
     canRefreshNow,
     recoveryPending,
     visible,
@@ -90,8 +81,16 @@ export function CallRecoveryPanel({
     <section className="grid gap-related border-t border-border pt-section" aria-labelledby="recovery-actions-title">
       <h2 id="recovery-actions-title" className="sr-only">Call actions</h2>
       <CallReceiptStatusFeedback feedback={actions?.feedback} callRef={result.callRef} />
-      <ReconciliationBlockers availability={availability} result={result} />
-      <RecoveryPrimaryActions availability={availability} {...(actions === undefined ? {} : { actions })} />
+      {availability.needsReview ? (
+        <p className="text-sm text-muted-foreground">
+          This Call is saved in Calls. Get help to check its payment and result. Checking status only reads the latest record; it does not run or pay for the service again.
+        </p>
+      ) : (
+        <p className="text-sm text-muted-foreground">
+          You can leave this page and return to this Call from Calls. Closing the page does not cancel it.
+        </p>
+      )}
+      <RecoveryPrimaryActions callRef={result.callRef} availability={availability} {...(actions === undefined ? {} : { actions })} />
       {availability.canReconcileNow ? (
         <AdvancedReconciliation
           key={reconciliationBindingIdentity(result)}
@@ -103,64 +102,28 @@ export function CallRecoveryPanel({
   )
 }
 
-function ReconciliationBlockers({
-  availability,
-  result,
-}: Readonly<{ availability: CallRecoveryAvailability; result: FoundCallStatus }>) {
-  const purchaseStatus = projectFoundCallPurchaseStatus(result)
-  const usage = result.usage ?? (result.result?.kind === 'completed' ? result.result.usage : undefined)
-  const moneyOutcome = purchaseStatus.kind === 'uncertain'
-    ? callRecoveryPanelCopy.uncertainCharge
-    : usage?.chargeState === 'free_tier' || usage?.chargeState === 'insufficient_credit'
-      ? callRecoveryPanelCopy.settledZeroCharge(formatCurrencyAmount(usage.amount))
-      : undefined
-  return (
-    <>
-      {availability.hasReconciliationRecordBlocker ? (
-        <Alert>
-          <AlertTitle>Reconciliation cannot be submitted</AlertTitle>
-          <AlertDescription>
-            This record does not expose the attempt reference and effect generation required by the reconciliation contract. No evidence is fabricated or submitted from this browser.
-            {moneyOutcome === undefined ? null : (
-              <p className="mt-intra rounded-card border border-success-ring bg-success-subtle px-3 py-2 text-sm text-success-foreground">
-                {moneyOutcome}
-              </p>
-            )}
-          </AlertDescription>
-        </Alert>
-      ) : null}
-      {availability.hasReconciliationPermissionBlocker ? (
-        <Alert>
-          <AlertTitle>Evidence submission is unavailable</AlertTitle>
-          <AlertDescription>
-            Permission to submit Provider evidence could not be confirmed from this receipt source. Refresh this exact Call to check again; no evidence can be submitted here until permission is available.
-            {moneyOutcome === undefined ? null : (
-              <p className="mt-intra rounded-card border border-success-ring bg-success-subtle px-3 py-2 text-sm text-success-foreground">
-                {moneyOutcome}
-              </p>
-            )}
-          </AlertDescription>
-        </Alert>
-      ) : null}
-    </>
-  )
-}
-
 function RecoveryPrimaryActions({
+  callRef,
   availability,
   actions,
-}: Readonly<{ availability: CallRecoveryAvailability; actions?: CallStatusPageActions }>) {
+}: Readonly<{ callRef: string; availability: CallRecoveryAvailability; actions?: CallStatusPageActions }>) {
   const [cancelDialogOpen, setCancelDialogOpen] = useState(false)
   const canCancel = availability.canCancelNow && actions?.onCancel !== undefined
   const refreshLabelMode = 'refresh_status' as const
-  if (!availability.canRefreshNow && !canCancel) return null
+  if (!availability.needsReview && !availability.canRefreshNow && !canCancel) return null
 
   return (
     <>
       <div className="flex flex-wrap gap-intra">
+        {availability.needsReview ? (
+          <Link to="/support" search={{ callRef }} className={buttonVariants({ className: 'min-h-touch' })}>
+            Get help with this Call
+          </Link>
+        ) : null}
         {availability.canRefreshNow ? (
           <Button
             type="button"
+            variant={availability.needsReview ? 'outline' : 'default'}
             className={cn('min-h-touch', callReceiptTactilePressClassName)}
             disabled={availability.recoveryPending}
             onClick={() => { void actions?.onRefresh?.() }}
@@ -184,7 +147,7 @@ function RecoveryPrimaryActions({
         open={cancelDialogOpen}
         onOpenChange={setCancelDialogOpen}
         title="Cancel this Call?"
-        description="Cancellation is explicit and may be refused if the external effect has already started."
+        description="Cancel this Call before the service starts. If the service has already started, check its result and payment instead."
         confirmLabel="Confirm cancellation"
         cancelLabel="Keep Call"
         confirmVariant="destructive"

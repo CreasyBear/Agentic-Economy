@@ -106,9 +106,10 @@ export type FormanceManagedCallFinalization = Readonly<{
   externalEvidenceDigest: string
 }>
 
-export type FormanceManagedCallRelease = FormanceManagedCallFinalization & Readonly<{
-  submissionProvenAbsent: true
-}>
+export type FormanceManagedCallRelease = FormanceManagedCallFinalization & (
+  | Readonly<{ submissionProvenAbsent: true; authorizationProvenExpiredUnused?: never }>
+  | Readonly<{ authorizationProvenExpiredUnused: true; submissionProvenAbsent?: never }>
+)
 
 export type FormanceProviderReversal = Readonly<{
   booking: FormanceManagedCallBooking
@@ -179,7 +180,7 @@ export function prepareFormanceManagedCallRelease(
   const amounts = managedCallAmounts(input.booking)
   if (accounts === undefined
     || amounts === undefined
-    || input.submissionProvenAbsent !== true
+    || (input.submissionProvenAbsent !== true && input.authorizationProvenExpiredUnused !== true)
     || !SHA256.test(input.externalEvidenceDigest)) {
     return refused('formance_managed_call_input_invalid')
   }

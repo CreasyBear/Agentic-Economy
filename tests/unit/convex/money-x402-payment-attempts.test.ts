@@ -17,6 +17,8 @@ import { describe, expect, it, vi } from 'vitest'
 
 import {
   claimX402PaymentAuthorization,
+  checkpointX402Response,
+  beginResponseRecovery,
   listExpiredPreparedX402PaymentAttempts,
   markX402PaymentPossiblySubmitted,
   observeX402PaymentAttempt,
@@ -92,6 +94,8 @@ const recordAuthorizationFailure = (
 const markPossiblySubmitted = (markX402PaymentPossiblySubmitted as unknown as HandlerExport)._handler
 const observe = (observeX402PaymentAttempt as unknown as HandlerExport)._handler
 const recordObservation = (recordX402PaymentObservation as unknown as HandlerExport)._handler
+const checkpointResponse = (checkpointX402Response as unknown as HandlerExport)._handler
+const beginRecovery = (beginResponseRecovery as unknown as HandlerExport)._handler
 const reconcile = (reconcileX402PaymentAttempt as unknown as HandlerExport)._handler
 const listExpiredPrepared = (listExpiredPreparedX402PaymentAttempts as unknown as HandlerExport)._handler
 const queueExpired = (queueExpiredX402Authorization as unknown as HandlerExport)._handler
@@ -640,9 +644,9 @@ describe('money x402 payment authorization attempt', () => {
     expect(db.patchCalls).toHaveLength(0)
   })
 
-  it('durably reads a normalized paid response as quarantined while settlement remains unknown', async () => {
+  it.each(['unknown', 'settled'] as const)('durably reads a normalized paid response when settlement is %s', async (settlementStatus) => {
     const db = memoryDbWithPayment({ ...attempt(), state: 'possibly_submitted', submissionStartedAt: 11 })
-    const args = paymentObservationArgs({ settlementStatus: 'unknown' })
+    const args = paymentObservationArgs({ settlementStatus, quarantinedResponseDigest, quarantinedOutputJson })
 
     await expect(recordObservation({ db, runMutation: async () => null }, args)).resolves.toBeNull()
 
@@ -652,18 +656,54 @@ describe('money x402 payment authorization attempt', () => {
       effectGeneration: 1,
     })
     expect(persisted).toMatchObject({
-      state: 'reconciliation_required',
-      settlementStatus: 'unknown',
+      state: settlementStatus === 'unknown' ? 'reconciliation_required' : 'observed',
+      settlementStatus,
       quarantinedResponseDigest,
       quarantinedOutputJson,
     })
     expect(persisted).not.toHaveProperty('outputJson')
   })
 
+  it('retains the response across a crash before settlement verification without advancing payment state', async () => {
+    const db = memoryDbWithPayment({ ...attempt(), toolRef: 'operation:test', inputDigest: 'sha256:input', state: 'possibly_submitted', submissionStartedAt: 11 })
+    const observation = paymentObservationArgs({ settlementStatus: 'settled' })
+    const checkpoint = {
+      dispatchRef: observation.dispatchRef, attemptRef: observation.attemptRef,
+      effectGeneration: observation.effectGeneration, toolRef: observation.toolRef,
+      inputDigest: observation.inputDigest, paymentIdentifier: observation.paymentIdentifier,
+      responseDigest: quarantinedResponseDigest, outputJson: quarantinedOutputJson,
+      requestDigest: canonicalDigest('request'),
+      settlementTransactionRef: `chain:eip155:8453:0x${'a'.repeat(64)}`,
+      paymentResponseDigest: canonicalDigest('payment-response'),
+    }
+    const scheduler = { runAfter: vi.fn() }
+    const checkpointContext = { db, scheduler }
+    await checkpointResponse(checkpointContext, checkpoint)
+    await checkpointResponse(checkpointContext, checkpoint)
+    expect(db.patchCalls).toHaveLength(1)
+    expect(scheduler.runAfter).toHaveBeenCalledTimes(1)
+    const beforeVerification = await readAttempt({ db }, {
+      dispatchRef: 'invocation:test', attemptRef: 'attempt:test', effectGeneration: 1,
+    })
+    expect(beforeVerification).toMatchObject({
+      state: 'possibly_submitted', quarantinedOutputJson, quarantinedResponseDigest,
+    })
+    expect(beforeVerification).not.toHaveProperty('settlementStatus')
+    await expect(checkpointResponse({ db }, { ...checkpoint, inputDigest: 'wrong' }))
+      .rejects.toThrow('x402_payment_observation_attribution_invalid')
+    await expect(checkpointResponse({ db }, { ...checkpoint, outputJson: '{"changed":true}' }))
+      .rejects.toThrow('x402_payment_quarantined_output_conflict')
+    // A verifier failure can return an observation without a body; it must not erase it.
+    await recordObservation({ db, runMutation: async () => null }, observation)
+    expect(await readAttempt({ db }, {
+      dispatchRef: 'invocation:test', attemptRef: 'attempt:test', effectGeneration: 1,
+    })).toMatchObject({ settlementStatus: 'settled', quarantinedOutputJson, quarantinedResponseDigest })
+  })
+
   it.each([
     ['partial pair', { quarantinedOutputJson: undefined }],
-    ['settled observation', {
-      settlementStatus: 'settled',
+    ['not-settled observation', {
+      settlementStatus: 'not_settled',
       quarantinedResponseDigest,
       quarantinedOutputJson,
     }],
@@ -715,7 +755,7 @@ describe('money x402 payment authorization attempt', () => {
     expect(db.patchCalls).toHaveLength(0)
   })
 
-  it('refuses pre-existing quarantined output on an unobserved attempt', async () => {
+  it('preserves a matching pre-verification checkpoint when recording the observation', async () => {
     const db = new MemoryDb()
     const args = paymentObservationArgs({ settlementStatus: 'unknown' })
     db.seed({
@@ -726,9 +766,10 @@ describe('money x402 payment authorization attempt', () => {
       quarantinedOutputJson,
     })
 
-    await expect(recordObservation({ db }, args))
-      .rejects.toThrow('x402_payment_quarantined_output_conflict')
-    expect(db.patchCalls).toHaveLength(0)
+    await expect(recordObservation({ db, runMutation: async () => null }, args)).resolves.toBeNull()
+    expect(await readAttempt({ db }, {
+      dispatchRef: 'invocation:test', attemptRef: 'attempt:test', effectGeneration: 1,
+    })).toMatchObject({ quarantinedResponseDigest, quarantinedOutputJson, settlementStatus: 'unknown' })
   })
 
   it.each([
@@ -1051,3 +1092,39 @@ async function withMockedNow<T>(now: number, run: () => Promise<T>): Promise<T> 
 function expectNoPaymentAttempts(db: MemoryDb): void {
   expect(db.rows('moneyX402PaymentAttempts')).toHaveLength(0)
 }
+
+
+describe('retained response recovery watchdog', () => {
+  it('waits out an existing status sweep without losing or duplicating the paid-response watchdog', async () => {
+    const db = new MemoryDb()
+    const expiresAt = Date.now() + 10_000
+    db.seedTable('capabilityCalls', { _id: 'call:watchdog', callRef: 'call:watchdog', state: 'reconciliation_required',
+      reconciliation: { leaseOwner: 'reconciliation-sweep:one', leaseExpiresAt: expiresAt, nextAttemptAt: Date.now(),
+        attemptCount: 0, disposition: 'automatic', reason: 'unknown_settlement' } })
+    const scheduler = { runAt: vi.fn() }
+    const ctx = { db, scheduler }
+    await expect(beginRecovery(ctx, { callRef: 'call:watchdog', attempt: 0 })).resolves.toBe(false)
+    await expect(beginRecovery(ctx, { callRef: 'call:watchdog', attempt: 0 })).resolves.toBe(false)
+    expect(scheduler.runAt).toHaveBeenCalledTimes(1)
+    expect(scheduler.runAt.mock.calls[0]?.[0]).toBe(expiresAt + 1)
+    expect(db.rows('capabilityCalls')[0]).toMatchObject({ reconciliation: { leaseOwner: 'reconciliation-sweep:one' } })
+  })
+
+  it('durably queues one successor before recovery, prevents duplicate fanout, and bounds retry exhaustion', async () => {
+    const db = new MemoryDb()
+    db.seedTable('capabilityCalls', { _id: 'call:watchdog', callRef: 'call:watchdog', state: 'reconciliation_required' })
+    const scheduler = { runAt: vi.fn() }
+    const ctx = { db, scheduler }
+    await expect(beginRecovery(ctx, { callRef: 'call:watchdog', attempt: 0 })).resolves.toBe(true)
+    await expect(beginRecovery(ctx, { callRef: 'call:watchdog', attempt: 0 })).resolves.toBe(false)
+    expect(scheduler.runAt).toHaveBeenCalledTimes(1)
+    await expect(beginRecovery(ctx, { callRef: 'call:watchdog', attempt: 1 })).resolves.toBe(true)
+    await beginRecovery(ctx, { callRef: 'call:watchdog', attempt: 2 })
+    await beginRecovery(ctx, { callRef: 'call:watchdog', attempt: 3 })
+    await expect(beginRecovery(ctx, { callRef: 'call:watchdog', attempt: 4 })).resolves.toBe(false)
+    expect(scheduler.runAt).toHaveBeenCalledTimes(4)
+    expect(db.rows('capabilityCalls')[0]).toMatchObject({ reconciliation: { disposition: 'manual_review', attemptCount: 5 } })
+    await db.patch('call:watchdog', { state: 'completed' })
+    await expect(beginRecovery(ctx, { callRef: 'call:watchdog', attempt: 4 })).resolves.toBe(false)
+  })
+})

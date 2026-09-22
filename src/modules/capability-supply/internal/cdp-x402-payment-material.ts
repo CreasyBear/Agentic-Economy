@@ -1,13 +1,8 @@
-import {
-  ExactEvmScheme,
-  extractPaymentIdentifier,
-  isEIP3009Payload,
-  type ClientEvmSigner,
-  type ExactEvmPayloadV2,
-  type PaymentPayload,
-  type PaymentRequired,
-  x402Client,
-} from './cdp-x402-payment-signer'
+import { x402Client } from '@x402/core/client'
+import type { PaymentPayload, PaymentRequired } from '@x402/core/types'
+import { isEIP3009Payload, type ClientEvmSigner, type ExactEvmPayloadV2 } from '@x402/evm'
+import { ExactEvmScheme } from '@x402/evm/exact/client'
+import { extractPaymentIdentifier } from '@x402/extensions/payment-identifier'
 
 import { degradeBackend } from '@/lib/observability/degrade-backend'
 import { canonicalDigest } from '@/modules/common/canonical-digest'

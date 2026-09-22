@@ -744,6 +744,16 @@ export function createX402PaymentCallbacks(
       })
       input.onPaymentPossiblySubmitted?.()
     },
+    checkpointX402Response: async (response) => {
+      const { custodyRef: _custodyRef, authorizationDigest: _authorizationDigest, ...material } = response
+      await ctx.runMutation(internal.moneyX402PaymentAttempts.checkpointX402Response, {
+        dispatchRef: input.dispatch.callRef,
+        effectGeneration: input.effectGeneration,
+        toolRef: input.dispatch.toolRef,
+        inputDigest: input.dispatch.inputDigest,
+        ...material,
+      })
+    },
     observeX402PaymentAttempt: async (event) => {
       const { amount, settlementEvidence, ...paymentEvent } = event
       await ctx.runMutation(internal.moneyX402PaymentAttempts.observeX402PaymentAttempt, {

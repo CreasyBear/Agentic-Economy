@@ -20,6 +20,7 @@ type ManagedCallMaterial =
       reservationRefs?: string[]
       releaseRefs?: string[]
       settlementRefs?: string[]
+      remedyInProgress?: boolean
     }
   | { kind: 'not_found' | 'not_required' }
 
@@ -161,7 +162,8 @@ export const finalizeSettlement = internalMutation({
     if (row === null || args.transactionRefs.length !== 2 || settlementTransactionRef === undefined) {
       return { kind: 'refused' as const, code: 'managed_call_settlement_invalid' }
     }
-    if (row.reconciliation?.leaseOwner?.startsWith('paid-result-loss:')) {
+    if (row.reconciliation?.leaseOwner?.startsWith('paid-result-loss:')
+      || row.reconciliation?.leaseOwner?.startsWith('expired-unused:')) {
       return { kind: 'refused' as const, code: 'managed_call_remedy_in_progress' }
     }
     if (row.formanceFinancialState === 'settled') {
@@ -241,6 +243,7 @@ export const settle = internalAction({
     if (material.kind !== 'available') {
       return { kind: 'refused' as const, code: 'managed_call_reservation_not_found' }
     }
+    if (material.remedyInProgress) return { kind: 'refused' as const, code: 'managed_call_remedy_in_progress' }
     if (material.financialState === 'settled') {
       return { kind: 'accepted' as const, state: 'settled', replayed: true }
     }

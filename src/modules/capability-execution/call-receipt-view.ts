@@ -110,7 +110,7 @@ export function projectCallReceipt(input: PublicCallStatusRead): CallReceiptView
         whatHappened: refusalExplanation(input.code),
         moneyMovement: moneyMovement(undefined, receipt),
         automaticNext: 'No duplicate charge and no automatic retry.',
-        userNext: input.nextAction ?? (input.retryable ? 'Wait, then Try again on this same receipt.' : 'Keep this reference and contact the owner or operator.'),
+        userNext: input.nextAction ?? (input.retryable ? 'Check status on this receipt for an update.' : 'Keep this reference and contact the owner or operator.'),
         retainedReference: input.callRef,
       },
       complete: false,
@@ -148,11 +148,11 @@ export function projectCallReceipt(input: PublicCallStatusRead): CallReceiptView
     ...(input.previousInput === undefined ? {} : { previousInput: input.previousInput }),
     statusLabel: purchase.kind === 'refunded'
       ? released ? 'Credit released' : 'Refunded'
-      : purchase.kind === 'uncertain' ? 'Needs attention' : foundStatusLabel(input.state, result),
+      : purchase.kind === 'uncertain' ? 'Needs review' : foundStatusLabel(input.state, result),
     statusDetail: purchase.kind === 'refunded'
       ? released ? 'Your reserved credit was returned to your balance.' : 'Your payment was refunded.'
       : purchase.kind === 'uncertain'
-        ? 'The outcome needs review before another attempt.'
+        ? 'AE has not confirmed whether this Call completed. Its result and payment need review before another attempt.'
         : foundStatusDetail(input.state, result),
     stages: stagesFromFound(input, result, usage, receipt),
     ...(usage === undefined ? {} : { usage }),
@@ -165,6 +165,8 @@ export function projectCallReceipt(input: PublicCallStatusRead): CallReceiptView
         whatHappened: result?.kind === 'refused' && result.code === 'result_invalid'
           && receipt?.externalSettlementRef !== undefined
           ? 'AE could not recover the service response. Your credit has been restored.'
+          : released && result?.kind === 'refused' && result.code === 'source_unavailable'
+          ? 'The service did not complete. You were not charged; your reserved credit has been restored.'
           : result?.kind === 'refused'
           ? foundIssueExplanation(result.code)
           : 'This purchase has been closed.',
@@ -218,7 +220,8 @@ export function projectFoundCallPurchaseStatus(
     return buyerPurchaseStatus('refunded')
   }
   if (input.result?.kind === 'completed') return buyerPurchaseStatus('delivered')
-  if (input.state === 'terminal' || input.state === 'cancelled' || input.state === 'invalidated' || input.result?.kind === 'refused') {
+  if (input.state === 'terminal' || input.state === 'cancelled' || input.state === 'invalidated'
+    || (input.result?.kind === 'refused' && !input.result.retryable)) {
     return buyerPurchaseStatus('failed')
   }
   return buyerPurchaseStatus('pending')
@@ -325,9 +328,9 @@ function issueFromFound(
   const next = result?.kind === 'refused' && result.nextAction !== undefined
     ? result.nextAction
     : input.state === 'reconciliation_required' || result?.kind === 'reconciliation_required'
-      ? 'Submit reconciliation evidence for this Call before any retry.'
+      ? 'Get help with this Call to check its payment and result before another attempt.'
       : input.state === 'retryable'
-        ? 'Wait, then Try again on this same receipt.'
+        ? 'Check status on this receipt for an update.'
         : 'Keep this receipt reference; start a new Call only from the Tool page with fresh input and identity.'
 
   return {
@@ -452,7 +455,7 @@ function foundStatusDetail(state: string, result: CallResult | undefined): strin
   if (result?.kind === 'refused') return foundIssueExplanation(result.code)
   if (result?.kind === 'pending') return 'Waiting for the service to return a result.'
   if (result?.kind === 'needs_authority') return 'Owner approval is needed to continue.'
-  if (state === 'reconciliation_required') return 'The outcome needs review before another attempt.'
+  if (state === 'reconciliation_required') return 'AE has not confirmed whether this Call completed. Its result and payment need review before another attempt.'
   if (state === 'retryable') return 'This attempt did not complete. Check its status before continuing.'
   return `The recorded Call state is ${humanize(state)}.`
 }
@@ -494,7 +497,7 @@ function refusalExplanation(code: string): string {
 
 function issueTitle(code: string): string {
   const normalized = normalizeDiagnosticCode(code)
-  if (normalized === 'reconciliation_required') return 'The external outcome needs reconciliation'
+  if (normalized === 'reconciliation_required') return 'This Call needs review'
   if (normalized === 'retryable') return 'The Call can be retried safely'
   if (normalized === 'cancelled') return 'The Call was cancelled'
   if (normalized === 'invalidated') return 'The Call is no longer valid'
@@ -519,7 +522,7 @@ function foundIssueExplanation(code: string): string {
   }
   if (normalized === 'pre_release_failed') return 'The Call stopped before the service was started.'
   if (normalized === 'reconciliation_required') {
-    return 'The service result and payment need checking. Check status before trying again.'
+    return 'AE has not confirmed whether this Call completed. Its result and payment need review before another attempt.'
   }
   if (normalized === 'retryable') {
     return 'The recorded attempt did not complete and the same Call is eligible for an explicit safe retry.'

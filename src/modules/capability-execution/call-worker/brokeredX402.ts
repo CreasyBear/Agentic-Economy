@@ -283,6 +283,13 @@ async function projectManagedCall(
     sourceUsdcUnits?: string
     journalTransactionRef: string
   }
+  const booking = financialState === 'settled'
+    ? await ctx.runQuery(internal.moneyManagedCall.readBooking, { callRef: input.dispatch.callRef })
+    : undefined
+  const settlementRefs = booking?.kind === 'available' && booking.financialState === 'settled'
+    ? booking.settlementRefs : undefined
+  if (financialState === 'settled' && !settlementRefs?.length) throw new Error('managed_call_settlement_refs_missing')
+  const accountingTransactionRefs = settlementRefs ?? [managed.journalTransactionRef]
   const evidenceHash = observation.responseDigest
     ?? (observation.outputJson === undefined
       ? canonicalDigest({ requestDigest: observation.requestDigest, disposition: observation.disposition })
@@ -300,8 +307,8 @@ async function projectManagedCall(
     buyerCharge: { currency: 'AUD', exponent: 6, units: managed.decisionAudUnits },
     evidenceHash,
     issuedAt: recordedAt,
-    transactionRef: managed.journalTransactionRef,
-    accountingTransactionRefs: [managed.journalTransactionRef],
+    transactionRef: accountingTransactionRefs[0]!,
+    accountingTransactionRefs,
     ...(settlementRef === undefined ? {} : {
       settlementTransactionHash: settlementRef,
       externalSettlementRef: settlementRef,
@@ -355,7 +362,7 @@ async function projectManagedCall(
             effectGeneration: input.durableEffectGeneration,
             requiredAt: new Date(Date.parse(recordedAt) + 1_000).toISOString(),
             retry: 'reconcile_before_retry',
-            evidenceSource: `operation:${input.dispatch.toolRef}`,
+            evidenceSource: `published-tool:${input.operation.operationId}`,
           },
           receipt,
         },

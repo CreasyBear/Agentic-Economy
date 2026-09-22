@@ -8,6 +8,7 @@ import {
 import { stableStringify, type StableHashValue } from '@/modules/common/stable-hash'
 import {
   createReceiptEIP712,
+  createOfferEIP712,
   type SignTypedDataFn,
 } from '@x402/extensions/offer-receipt'
 import { privateKeyToAccount } from 'viem/accounts'
@@ -680,6 +681,48 @@ describe('registered route transport runtime', () => {
     expect(fetch).not.toHaveBeenCalled()
   })
 
+  it.each([true, false])('never checkpoints or recovers a response missing its required signed receipt (settled=%s)', async (verifiedSettlement) => {
+    const call = signedInvocation()
+    const config = JSON.parse(call.binding.configJson)
+    const offer = await createOfferEIP712(signedTarget, { acceptIndex: 0, ...signedRequirement, offerValiditySeconds: 60 }, providerSigner)
+    const challenge = { ...JSON.parse(config.paymentRequiredJson),
+      extensions: { 'offer-receipt': { info: { offers: [offer] } } } }
+    const paidCall = { ...call, binding: registeredBinding('x402-fetch:v2', signedTarget, providerAuthority,
+      { ...config, paymentRequiredJson: stableStringify(challenge as StableHashValue) }) }
+    const checkpointX402Response = vi.fn()
+    const observed = await invokeRouteTransport(paidCall, {
+      send: async () => Response.json({ serviceReference: 'unattested' }, { headers: {
+        'Payment-Response': settlementProofHeader({ transaction: `0x${'a'.repeat(64)}`,
+          network: signedRequirement.network, amount: signedRequirement.amount, payer: signedPayer.address }),
+      } }),
+      resolveCredential: resolveProviderCredential('unused'),
+      ...preparedX402Custody(async () => payerAuthorization()),
+      verifyX402Settlement: async () => verifiedSettlement, checkpointX402Response,
+      markX402PaymentPossiblySubmitted: () => undefined, observeX402PaymentAttempt: () => undefined,
+    })
+    expect(checkpointX402Response).not.toHaveBeenCalled()
+    expect(observed).not.toHaveProperty('outputJson')
+    expect(observed).toMatchObject({ failureCode: verifiedSettlement ? 'provider_receipt_invalid' : 'payment_settlement_unverified' })
+  })
+
+  it('does not promote a paid partial response into recoverable complete output', async () => {
+    const checkpointX402Response = vi.fn()
+    const observed = await invokeRouteTransport(x402PaidInvocation({ authority: x402LeaseAuthority(
+      'lease:x402:partial', 'invocation:x402:partial', 'operation:x402:partial') }), {
+      send: async () => Response.json({ serviceReference: 'first-page' }, { headers: {
+        'Continuation-Token': 'next-page',
+        'Payment-Response': settlementProofHeader({ transaction: `0x${'b'.repeat(64)}`, payer: 'test:payer' }),
+      } }),
+      resolveCredential: resolveProviderCredential('unused'),
+      ...preparedX402Custody(async () => 'signed-payment-payload'),
+      verifyX402Settlement: async () => false, checkpointX402Response,
+      markX402PaymentPossiblySubmitted: () => undefined, observeX402PaymentAttempt: () => undefined,
+    })
+    expect(checkpointX402Response).not.toHaveBeenCalled()
+    expect(observed.disposition).toBe('unknown')
+    expect(observed).not.toHaveProperty('outputJson')
+  })
+
   it('treats a paid response without an offer receipt as a settled response', async () => {
     const paymentSignature = payerAuthorization()
     const fetch = vi.fn<RouteTransportFetch>().mockResolvedValueOnce(Response.json(
@@ -796,7 +839,12 @@ describe('registered route transport runtime', () => {
         send: fetch,
         resolveCredential,
         ...preparedX402Custody(createPayment),
-        verifyX402Settlement: async () => true,
+        verifyX402Settlement: async () => { lifecycle.push('verify'); return true },
+        checkpointX402Response: async (response) => {
+          expect(response.outputJson).toBe(JSON.stringify({ serviceReference: 'service:paid' }))
+          expect(response.responseDigest).toMatch(/^sha256:/)
+          lifecycle.push('response-saved')
+        },
         markX402PaymentPossiblySubmitted: (event) => {
           lifecycle.push('marked')
           submissionEvents.push(event)
@@ -850,7 +898,7 @@ describe('registered route transport runtime', () => {
         amount: { currency: 'USD', units: '1250000', exponent: 6 },
       }),
     ])
-    expect(lifecycle).toEqual(['marked', 'paid-send'])
+    expect(lifecycle).toEqual(['marked', 'paid-send', 'response-saved', 'verify'])
     expect(observationEvents).toEqual([
       expect.objectContaining({
         state: 'settled',

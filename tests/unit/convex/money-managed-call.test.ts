@@ -205,11 +205,15 @@ describe('paid Call with a lost response', () => {
       const row = await ctx.db.query('capabilityCalls').first()
       if (row?.result?.kind !== 'completed') throw new Error('fixture_missing')
       const { usage: _usage, ...withoutUsage } = row.result
-      await ctx.db.patch(row._id, { result: withoutUsage, usage: undefined })
+      await ctx.db.patch(row._id, { result: { ...withoutUsage, receipt: { ...withoutUsage.receipt!,
+        transactionRef: 'formance:old-reservation', accountingTransactionRefs: ['formance:old-reservation'] } }, usage: undefined })
     })
     await backend.mutation(internal.capabilityCalls.projectRecovery, args)
     await expect(backend.query(internal.capabilityCalls.readOwnerRecovery, { callRef }))
-      .resolves.toMatchObject({ state: 'completed', result: { output, usage: { chargeState: 'paid' } } })
+      .resolves.toMatchObject({ state: 'completed', result: { output,
+        usage: { chargeState: 'paid', transactionRef: 'formance:settle-buyer' },
+        receipt: { transactionRef: 'formance:settle-buyer',
+          accountingTransactionRefs: ['formance:settle-buyer', 'formance:settle-provider'] } } })
     await expect(backend.run(async ctx => await ctx.db.query('purchaseResolutionRecords').collect()))
       .resolves.toHaveLength(1)
     await expect(backend.run(async ctx => await ctx.db.query('capabilityCallProjections').collect()))

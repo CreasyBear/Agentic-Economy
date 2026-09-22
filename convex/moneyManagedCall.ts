@@ -161,6 +161,7 @@ export const readBooking = internalQuery({
     releaseRefs: v.optional(transactionRefsValue),
     settlementRefs: v.optional(transactionRefsValue),
     entryRefusalCode: v.optional(v.literal('financial_scope_locked')),
+    remedyInProgress: v.optional(v.boolean()),
   }), v.object({ kind: v.literal('not_required') }), v.object({ kind: v.literal('not_found') })),
   handler: async (ctx, args) => {
     const call = await ctx.db.query('capabilityCalls')
@@ -201,6 +202,8 @@ export const readBooking = internalQuery({
     return {
       kind: 'available' as const,
       booking,
+      ...(call.reconciliation?.leaseOwner?.startsWith('expired-unused:')
+        || call.reconciliation?.leaseOwner?.startsWith('paid-result-loss:') ? { remedyInProgress: true } : {}),
       ...(financialScopeLocked ? { entryRefusalCode: 'financial_scope_locked' as const } : {}),
       ...(call.formanceFinancialState === undefined
         ? {}

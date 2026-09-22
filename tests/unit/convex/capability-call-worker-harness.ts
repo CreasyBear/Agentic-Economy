@@ -1154,6 +1154,10 @@ export function createWorker(kind: WorkerKind, options: WorkerOptions = {}): { c
                 : authorizationCurrentOperation,
           )
         case 'moneyLedger:readOperatorAccountVersion': return operatorAccountVersion
+        case 'moneyManagedCall:readBooking': return {
+          kind: 'available', financialState: managedCallState,
+          settlementRefs: ['formance:settle-buyer', 'formance:settle-provider'],
+        }
         case 'moneyManagedCallLifecycle:readReservation': return sellerCanary === undefined ? {
           ...managedCallReservation,
           state: managedCallState,

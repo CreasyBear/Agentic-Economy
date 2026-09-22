@@ -2,6 +2,7 @@ import { canonicalDigest } from '@/modules/common/canonical-digest'
 import type { StableHashValue } from '@/modules/common/stable-hash'
 import {
   readPublicExecutionStatus,
+  validateReconciliationEvidence,
   type ReconciliationEvidence,
 } from '@/modules/action-execution/runtime'
 import { x402PaymentReconciliationEvidenceValue } from '@/modules/action-execution/runtime'
@@ -16,6 +17,7 @@ import { Agent } from 'undici'
 import type { Infer } from 'convex/values'
 
 import type { ActionCtx } from '../../../../../convex/_generated/server'
+import { parseContractOutput } from '../../../../../convex/capabilityCallProjection'
 import { internal } from '../../../../../convex/_generated/api'
 import { readX402EvmReceipt } from '../x402Route'
 import type { RecoveryWorkContext } from './loading'
@@ -67,6 +69,15 @@ export async function prepareX402RecoveryEvidence(
     recordX402RecoveryStage(submitted, 'submitted_evidence_invalid')
     return { kind: 'required', status, receipt: reconciliationReceipt }
   }
+  const evidence = canonicalRecoveryEvidence(submitted)
+  if (!validCanonicalRecoveryEvidence(work, evidence)) {
+    recordX402RecoveryStage(submitted, 'submitted_evidence_invalid')
+    return { kind: 'required', status, receipt: reconciliationReceipt }
+  }
+  if (submitted.settlementStatus === 'settled' && !retainedDeliveryIsValid(work)) {
+    recordX402RecoveryStage(submitted, 'retained_delivery_invalid')
+    return { kind: 'required', status, receipt: reconciliationReceipt }
+  }
   if (!await verifySettlement(work, submitted)) {
     recordX402RecoveryStage(submitted, 'settlement_verification_failed')
     return { kind: 'required', status, receipt: reconciliationReceipt }
@@ -76,7 +87,6 @@ export async function prepareX402RecoveryEvidence(
     return { kind: 'required', status, receipt: reconciliationReceipt }
   }
   recordX402RecoveryStage(submitted, 'prepared')
-  const evidence = canonicalRecoveryEvidence(submitted)
   work.trustedReconciliationEvidenceDigest.value = canonicalDigest(evidence as StableHashValue)
   return {
     kind: 'prepared',
@@ -95,11 +105,43 @@ export async function prepareX402RecoveryEvidence(
   }
 }
 
+function retainedDeliveryIsValid(work: RecoveryWorkContext): boolean {
+  const attempt = work.x402Attempt
+  if (attempt?.quarantinedOutputJson === undefined || attempt.quarantinedResponseDigest === undefined) return false
+  return parseContractOutput({ transport: 'x402', disposition: 'succeeded', releaseStarted: true,
+    requestDigest: attempt.transportRequestDigest ?? '', outputJson: attempt.quarantinedOutputJson,
+    responseDigest: attempt.quarantinedResponseDigest }, work.descriptor).valid
+}
+
+function validCanonicalRecoveryEvidence(work: RecoveryWorkContext, evidence: ReconciliationEvidence): boolean {
+  const attempt = work.attemptRows.find(row => row.attemptRef === evidence.attemptRef
+    && row.effectGeneration === evidence.effectGeneration)
+  if (attempt === undefined || work.control.currentAttemptRef !== evidence.attemptRef
+    || work.control.currentEffectGeneration !== evidence.effectGeneration) return false
+  const outcome = attempt.outcome
+  const reconciledReplay = work.control.control.control.state === 'terminal'
+    && outcome.state === 'reconciled_released'
+    && work.managedReservation?.state === 'settled'
+  if (!reconciledReplay && work.control.control.control.state !== 'reconciliation_required') return false
+  const notBefore = outcome.state === 'uncertain' || outcome.state === 'timed_out'
+    ? outcome.reconciliationRequiredAt
+    : reconciledReplay && outcome.state === 'reconciled_released' ? outcome.observedAt : undefined
+  if (notBefore === undefined) return false
+  return validateReconciliationEvidence({
+    evidence, source: `published-tool:${work.operation.operationId}`,
+    executionRef: work.recovered.callRef, attemptRef: attempt.attemptRef,
+    effectGeneration: attempt.effectGeneration, now: new Date().toISOString(), notBefore,
+    // Payment facts and attribution are checked above; chain verification follows before effects.
+    verifySourceEvidence: () => true,
+  }) === undefined
+}
+
 function recordX402RecoveryStage(
   submitted: X402Evidence,
   stage:
     | 'payment_facts_unavailable'
     | 'submitted_evidence_invalid'
+    | 'retained_delivery_invalid'
     | 'settlement_verification_failed'
     | 'money_reconciliation_failed'
     | 'prepared',
@@ -164,6 +206,9 @@ function persistedAttemptEvidenceMatches(
     && submitted.paymentIdentifier === attempt.paymentIdentifier
     && submitted.challengeDigest === attempt.challengeDigest
     && submitted.reservationRef === attempt.reservationRef
+    && (attempt.transportRequestDigest === undefined || submitted.requestDigest === attempt.transportRequestDigest)
+    && (attempt.transportObservationDigest === undefined || submitted.transportObservationDigest === attempt.transportObservationDigest)
+    && (attempt.paymentObservationDigest === undefined || submitted.paymentObservationDigest === attempt.paymentObservationDigest)
 }
 
 function invocationEvidenceMatches(

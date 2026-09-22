@@ -83,4 +83,16 @@ export type RouteTransportRuntime = Readonly<{
         evidenceRefs: readonly string[]
       }>,
   ) => Promise<void> | void
+  /** Journal a sanitized response before waiting for independent payment verification. */
+  checkpointX402Response?: (response: Readonly<{
+    attemptRef: string
+    paymentIdentifier: string
+    responseDigest: string
+    outputJson: string
+    settlementTransactionRef?: string
+    requestDigest: string
+    paymentResponseDigest?: string
+    custodyRef: string
+    authorizationDigest: string
+  }>) => Promise<void>
 }>

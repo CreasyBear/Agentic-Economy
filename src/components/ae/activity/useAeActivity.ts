@@ -49,7 +49,7 @@ function formatPaymentStateLabel(
     case 'released':
       return 'Released'
     case 'unknown':
-      return 'Unknown'
+      return 'Not confirmed'
     case 'not_applicable':
       return 'Not applicable'
     default: {
@@ -84,6 +84,7 @@ function purchaseStatusBadge(
     case 'failed':
       return { variant: 'outline', label: purchase.label }
     case 'uncertain':
+      return { variant: 'outline', label: 'Needs review', warning: true }
     case 'pending':
       return { variant: 'outline', label: purchase.label, warning: true }
     default: {
@@ -151,6 +152,14 @@ function buildActivityExportRows(items: readonly CallRow[]) {
   })
 }
 
+function activityDuration(milliseconds: number): string {
+  if (!Number.isFinite(milliseconds) || milliseconds <= 0) return '—'
+  if (milliseconds < 1_000) return `${Math.round(milliseconds)} ms`
+  if (milliseconds < 60_000) return `${(milliseconds / 1_000).toFixed(1)} s`
+  if (milliseconds < 3_600_000) return `${Math.floor(milliseconds / 60_000)} min ${Math.floor(milliseconds / 1_000) % 60} s`
+  return `${Math.floor(milliseconds / 3_600_000)} hr ${Math.floor(milliseconds / 60_000) % 60} min`
+}
+
 function projectCallRow(item: CallRow, reviewMode: boolean): ActivityCallRowView {
   const purchase = projectCallSummaryPurchaseStatus(item)
   return {
@@ -158,8 +167,9 @@ function projectCallRow(item: CallRow, reviewMode: boolean): ActivityCallRowView
     toolLabel: item.toolLabel,
     agentShortId: item.principalRef ? item.principalRef.split(':').pop() ?? '—' : '—',
     agentTitle: item.principalRef,
-    durationLabel: item.latencyMs > 0 ? `${item.latencyMs}ms` : '—',
-    amountLabel: item.audAmountUnits === undefined
+    durationLabel: activityDuration(item.latencyMs),
+    amountLabel: item.paymentState === 'released' ? 'No charge'
+      : item.paymentState === 'unknown' ? 'Not confirmed' : item.audAmountUnits === undefined
       ? '—'
       : formatDisplayAmount({ currency: 'AUD', exponent: 6, units: item.audAmountUnits }),
     stateBadge: callStateStatusBadge(item.state),
@@ -310,7 +320,7 @@ export function useAeActivity({
   }
 
   const attentionDescription = pagination.cursor === undefined
-    ? 'Calls whose outcome still needs confirmation.'
+    ? 'Open a Call to check its latest result and payment, or get help. Do not start a replacement while it needs review.'
     : 'Calls needing confirmation in the loaded Account history. Load more to check older Calls.'
 
   const attentionEmptyMessage = pagination.cursor === undefined

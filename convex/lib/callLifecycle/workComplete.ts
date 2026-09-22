@@ -51,7 +51,7 @@ async function patchReconciliationRequired(
         effectGeneration: attempt.effectGeneration,
         requiredAt: new Date(Date.now() + 1_000).toISOString(),
         retry: 'reconcile_before_retry' as const,
-        evidenceSource: `operation:${row.toolRef}`,
+        evidenceSource: `published-tool:${row.toolRef}`,
       },
     },
     attemptRef: attempt.attemptRef,

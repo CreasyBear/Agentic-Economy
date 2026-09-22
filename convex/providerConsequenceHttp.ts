@@ -31,12 +31,12 @@ function exactKeys(value: Record<string, unknown>, expected: readonly string[]):
     && expected.every((key) => Object.hasOwn(value, key))
 }
 
-async function boundedJson(request: Request): Promise<Record<string, unknown> | undefined> {
+async function boundedJson(request: Request, maxBytes = MAX_BODY_BYTES): Promise<Record<string, unknown> | undefined> {
   if (!request.headers.get('content-type')?.toLowerCase().startsWith('application/json')) return undefined
   const length = Number(request.headers.get('content-length'))
-  if (Number.isFinite(length) && length > MAX_BODY_BYTES) return undefined
+  if (Number.isFinite(length) && length > maxBytes) return undefined
   const body = await request.text()
-  if (new TextEncoder().encode(body).byteLength > MAX_BODY_BYTES) return undefined
+  if (new TextEncoder().encode(body).byteLength > maxBytes) return undefined
   try {
     const value: unknown = JSON.parse(body)
     return isRecord(value) ? value : undefined
@@ -184,6 +184,7 @@ const X402_OPERATIONS = new Set([
   'record_signature_digest',
   'mark_possibly_submitted',
   'observe_attempt',
+  'checkpoint_response',
 ] as const)
 
 type X402Operation = typeof X402_OPERATIONS extends Set<infer Operation> ? Operation : never
@@ -212,6 +213,8 @@ async function runX402Operation(
       return await ctx.runMutation(internal.moneyX402PaymentAttempts.markX402PaymentPossiblySubmitted, checkedArgs)
     case 'observe_attempt':
       return await ctx.runMutation(internal.moneyX402PaymentAttempts.observeX402PaymentAttempt, checkedArgs)
+    case 'checkpoint_response':
+      return await ctx.runMutation(internal.moneyX402PaymentAttempts.checkpointX402Response, checkedArgs)
   }
 }
 
@@ -234,6 +237,12 @@ function canonicalX402Args(
   }>,
   reservationRef?: string,
 ): Record<string, unknown> {
+  if (operation === 'checkpoint_response') {
+    const { custodyRef: _custodyRef, authorizationDigest: _authorizationDigest, ...response } = supplied
+    return { ...response, dispatchRef: authority.callRef, toolRef: authority.toolRef,
+      inputDigest: authority.inputDigest, attemptRef: authority.attemptRef,
+      effectGeneration: authority.effectGeneration }
+  }
   if (operation === 'prepare_authorization') {
     const {
       dispatchRef: _dispatchRef,
@@ -276,7 +285,8 @@ function canonicalX402Args(
 
 export const providerConsequenceX402Rpc = httpActionGeneric(async (ctx, request) => {
   const token = bearer(request)
-  const body = await boundedJson(request)
+  // The checkpoint can carry a 512 KiB normalized JSON response inside a JSON string.
+  const body = await boundedJson(request, 1024 * 1024 + 16 * 1024)
   if (token === undefined || body === undefined || !exactKeys(body, ['ticketRef', 'operation', 'args'])) {
     return json({ kind: 'unavailable' }, token === undefined ? 401 : 400)
   }

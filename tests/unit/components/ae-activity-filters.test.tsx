@@ -26,9 +26,10 @@ vi.mock('@tanstack/react-router', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@tanstack/react-router')>()
   return {
     ...actual,
-    Link: ({ children, to }: { children: ReactNode; to: string }) => <a href={to}>{children}</a>,
+    Link: ({ children, to, 'aria-label': label }: { children: ReactNode; to: string; 'aria-label'?: string }) => <a href={to} aria-label={label}>{children}</a>,
     useRouter: () => ({ invalidate: vi.fn(), navigate: vi.fn(), routesByPath: {} }),
     useMatches: () => [],
+    useLocation: () => ({ pathname: '/activity', hash: '' }),
   }
 })
 
@@ -121,15 +122,42 @@ describe('ActivityPage & Filtering (W-38)', () => {
     vi.mocked(toast.success).mockClear()
   })
 
-  it('renders table columns for Task, Caller Agent, Duration, Amount, and When', () => {
+  it('shows time to outcome and no charge for a released reservation', () => {
     renderActivity()
 
     expect(screen.getByText('Australian Tax Calculator')).toBeTruthy()
     expect(screen.getByText('Postal Address Lookup')).toBeTruthy()
     expect(screen.getByText('alpha')).toBeTruthy()
     expect(screen.getByText('beta')).toBeTruthy()
-    expect(screen.getByText('142ms')).toBeTruthy()
-    expect(screen.getByText('85ms')).toBeTruthy()
+    expect(screen.getByText('142 ms')).toBeTruthy()
+    expect(screen.getByText('85 ms')).toBeTruthy()
+    expect(screen.getByRole('button', { name: /Time to outcome/u })).toBeTruthy()
+    const releasedRow = screen.getByRole('row', { name: /Postal Address Lookup/u })
+    expect(within(releasedRow).getByText('No charge')).toBeTruthy()
+    expect(within(releasedRow).queryByText('A$0.05')).toBeNull()
+  })
+
+  it.each([
+    [15_001, '15.0 s'], [65_432, '1 min 5 s'], [3_665_432, '1 hr 1 min'],
+  ])('formats a %i ms Call without exposing a raw millisecond count', (latencyMs, expected) => {
+    render(<AeActivity result={{ kind: 'available', calls: { ...sampleCalls, page: [{ ...sampleCalls.page[0]!, latencyMs }] },
+      usage: sampleUsage, spend: sampleSpend, periodStart: '2026-09' }} />)
+    expect(screen.getByText(expected)).toBeTruthy()
+  })
+
+  it('keeps a Call needing review reachable and does not imply a zero charge', () => {
+    const call = { ...sampleCalls.page[0]!, state: 'outcome_unknown' as const,
+      deliveryState: 'unknown' as const, paymentState: 'unknown' as const, audAmountUnits: '0' }
+    const result = { kind: 'available' as const, calls: { ...sampleCalls, page: [call] },
+      usage: sampleUsage, spend: sampleSpend, periodStart: '2026-09' }
+    const view = render(<AeActivity result={result} />)
+    expect(screen.getByText('Needs review')).toBeTruthy()
+    expect(screen.getByText('Not confirmed')).toBeTruthy()
+    expect(screen.queryByText('A$0.00')).toBeNull()
+    expect(screen.getByRole('link', { name: 'Review Australian Tax Calculator' }).getAttribute('href')).toBe('/calls/call%3A1')
+    view.rerender(<AeActivity result={{ ...result, calls: { ...sampleCalls, page: [sampleCalls.page[0]!] } }} />)
+    expect(screen.queryByText('Needs review')).toBeNull()
+    expect(screen.getByRole('link', { name: 'View receipt for Australian Tax Calculator' })).toBeTruthy()
   })
 
   it('shows status chips with counts from loaded calls', () => {

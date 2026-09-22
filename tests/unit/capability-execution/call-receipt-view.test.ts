@@ -54,6 +54,21 @@ describe('public Call receipt projection', () => {
     expect(view.complete).toBe(false)
   })
 
+  it('explains the expired-unused transport failure as no charge and restored credit', () => {
+    const view = projectCallReceipt({
+      kind: 'found', version: 1, callRef, toolRef, state: 'terminal',
+      purchaseResolution: releasedResolution,
+      result: { kind: 'refused', code: 'source_unavailable', retryable: false,
+        nextAction: 'The service did not complete and payment expired unused. Your credit has been restored. You can make a new request from the Tool page.',
+        receipt: { ...releasedReceipt, lossState: 'none' },
+      },
+    })
+    expect(view.statusLabel).toBe('Credit released')
+    expect(view.issue?.whatHappened).toBe('The service did not complete. You were not charged; your reserved credit has been restored.')
+    expect(view.issue?.userNext).toBe('Return to the Tool to review a new Quote.')
+    expect(view.complete).toBe(false)
+  })
+
   it('keeps conflicting or disputed resolution facts uncertain', () => {
     for (const resolution of [
       { ...releasedResolution, terminalState: 'disputed' as const },
@@ -63,8 +78,14 @@ describe('public Call receipt projection', () => {
       const input = { kind: 'found' as const, version: 1, callRef, toolRef,
         state: 'terminal' as const, purchaseResolution: resolution }
       expect(purchaseStatusLabel(input)).toBe('Open — outcome uncertain')
-      expect(projectCallReceipt(input).statusLabel).toBe('Needs attention')
+      expect(projectCallReceipt(input).statusLabel).toBe('Needs review')
     }
+  })
+
+  it('keeps a retryable refusal open while the original Call can continue', () => {
+    expect(purchaseStatusLabel({ kind: 'found', version: 1, callRef, toolRef, state: 'retryable',
+      result: { kind: 'refused', code: 'pre_release_failed', retryable: true },
+    })).toBe('Open — pending')
   })
 
   it('does not claim a zero charge when terminal money facts are missing', () => {
@@ -227,7 +248,7 @@ describe('public Call receipt projection', () => {
     }
 
     const view = projectCallReceipt(input)
-    expect(view.statusLabel).toBe('Needs attention')
+    expect(view.statusLabel).toBe('Needs review')
     expect(view.complete).toBe(false)
     expect(purchaseStatusLabel(input)).toBe('Open — outcome uncertain')
   })
@@ -251,11 +272,11 @@ describe('public Call receipt projection', () => {
     })
 
     expect(view.issue).toEqual({
-      title: 'The external outcome needs reconciliation',
-      whatHappened: 'The service result and payment need checking. Check status before trying again.',
+      title: 'This Call needs review',
+      whatHappened: 'AE has not confirmed whether this Call completed. Its result and payment need review before another attempt.',
       moneyMovement: 'Money movement is not yet conclusive — do not assume a charge or refund.',
       automaticNext: 'No duplicate charge and no automatic retry.',
-      userNext: 'Submit reconciliation evidence for this Call before any retry.',
+      userNext: 'Get help with this Call to check its payment and result before another attempt.',
       retainedReference: callRef,
     })
     expect(view.stages.find(({ id }) => id === 'settled')).toMatchObject({ state: 'attention' })

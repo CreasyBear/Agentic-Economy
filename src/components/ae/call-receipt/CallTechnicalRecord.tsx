@@ -3,6 +3,8 @@ import { Link } from '@tanstack/react-router'
 import { AeCopyCommand } from '@/components/ae/data/AeCopyCommand'
 import { AeFactList } from '@/components/ae/data/AeFactList'
 import { AeSection } from '@/components/ae/layout/AeSection'
+import { Button } from '@/components/ui/button'
+import { useClipboardCopy } from '@/hooks/use-clipboard-copy'
 import { buttonVariants } from '@/components/ui/button-variants'
 import { cn } from '@/lib/utils'
 import { formatUtcTimestamp, timestampIso } from '@/lib/ui/format-time'
@@ -132,9 +134,19 @@ function ResultDetails({ result }: Readonly<{ result: CallResult }>) {
 
 export function CallOutputSection({ result }: Readonly<{ result: CallResult }>) {
   if (result.kind !== 'completed') return null
+  return <RecordedCallOutput key={result.evidenceHash} output={result.output} />
+}
+
+function RecordedCallOutput({ output }: Readonly<{ output: Extract<CallResult, { kind: 'completed' }>['output'] }>) {
+  const text = typeof output === 'string' ? output : JSON.stringify(output, null, 2)
+  const clipboard = useClipboardCopy(text)
   return (
-    <AeSection title="Output" description="The Provider output recorded for this Call.">
-      <pre className="max-h-96 overflow-auto whitespace-pre-wrap break-words rounded-card bg-muted p-gutter text-xs text-foreground"><code>{JSON.stringify(result.output, null, 2)}</code></pre>
+    <AeSection title="Output">
+      <pre className="max-h-96 overflow-auto whitespace-pre-wrap break-words rounded-card bg-muted p-gutter text-sm text-foreground"><code>{text}</code></pre>
+      <Button type="button" variant="outline" className="min-h-touch w-fit" onClick={() => { void clipboard.copy() }}>
+        {clipboard.isCopied ? 'Output copied' : 'Copy output'}
+      </Button>
+      {clipboard.status === 'failed' ? <p role="status" className="text-sm text-muted-foreground">Copy failed. Select the output above and copy it manually.</p> : null}
     </AeSection>
   )
 }

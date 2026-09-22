@@ -424,3 +424,100 @@ preflight, local/fake facilitator result, free Tool, platform canary or Formance
 health response alone is insufficient. Stop with the package open if any target
 identity remains unknown, any financial effect is uncertain, or the cumulative
 allowance cannot cover the next bounded attempt.
+
+### Call journey hardening evidence — 22 September 2026
+
+Scope: existing AM-19–24/27 package, checkpoint `718fad729`, local anonymous
+Convex `http://127.0.0.1:3210` and web `http://127.0.0.1:3024`. Concurrent
+admin-console work shares this checkout, so this is bounded local proof, not a
+frozen hosted candidate.
+
+Data flow checked: Quote binds input, Tool revision, buyer AUD and Provider
+USDC; Call admission persists its identity and durable workpool job; original
+payment attempt pins EIP-3009 nonce; paid response is sanitized and durably
+checkpointed before independent RPC verification; accepted payment and valid
+output reach Formance settlement then receipt, purchase resolution and Activity.
+A scheduled watchdog continues the same Call after browser/process abandonment.
+No recovery path signs or requests the Provider again.
+
+Protocol basis: [x402 exact EVM](https://raw.githubusercontent.com/coinbase/x402/main/specs/schemes/exact/scheme_exact_evm.md),
+[EIP-3009](https://eips.ethereum.org/EIPS/eip-3009),
+[EIP-1898](https://eips.ethereum.org/EIPS/eip-1898),
+[Base safe chain state](https://docs.base.org/base-chain/specs/protocol/consensus/derivation),
+and [Convex scheduled functions](https://docs.convex.dev/scheduling/scheduled-functions).
+Nonce expiry needs chain time and nonce state, not a missing transaction/log or
+wall-clock timeout. Different RPC heads do not contradict matching immutable
+receipts; conservative confirmation counts and unanimous nonce state remain
+required. Scheduled actions are at-most-once, so successor work is committed
+before external recovery effects. Payment alone never proves valid delivery.
+
+The previously open Berlin Call
+`operation-invocation:v1:c0d925d8b8fa2674f09895b1b4cb4dee5b8b585f3d46d9e11f3a996787052b5f`
+was verified expired and unused on safe canonical chain state. The original
+A$0.001408 reservation and 0.001 test-USDC treasury reservation were released
+at `2026-09-22T09:10:36.667Z`. Evidence digest:
+`sha256:57b65de784c75ad2572574ec7cf6f546758fcc604084f5b6cb927eca5bd66d4e`.
+Exact Formance references:
+`ae-p4:c73d4213b113dba513518cf7084acf8973328e26072dd4f20403fa62c3cab700:release-aud`
+and `ae-p4:03be3c1083996ded492687df54e66095a91b009ce46a6b692eb4a1d7b3bb3fd7:release-usdc`.
+No new transfer/signature or replacement Call was created to resolve it.
+Replaying recovery returned completed; CLI returned terminal/source_unavailable,
+nonretryable, released payment and not-delivered purchase resolution
+`purchase-resolution:3f869bdfe1a5418e11c61f2f87ce11d6738e96779fb40a5466055cd6548a21ee`.
+Browser receipt explicitly displayed no charge and restored credit; Activity
+showed 1 completed, 3 refused, zero requiring attention.
+
+| Edge | Evidence and disposition |
+| --- | --- |
+| Browser leaves after acceptance | Existing transactional workpool acceptance continues without the browser; pending receipt explains return via Calls. |
+| Worker dies after Provider returns | Response checkpoint precedes chain wait; durable watchdog reconstructs exact original evidence. Focused crash/replay tests; forced live-process kill not performed. |
+| RPC head skew | Conservative minimum maturity accepted with exact immutable receipt/log match; nonce disagreement and conflicting block identity refused. |
+| Timeout with no transaction hash | Canonical safe-block expired-unused proof closes exact reservations; Berlin runtime and repeated readback verified. |
+| Concurrent/replayed recovery | Claim pins evidence; Formance keeps original release keys; tests cover duplicate claims, mismatched identity, interrupted receipt update and terminal replay. |
+| RPC/ledger unavailable | Original obligation retained; prearmed bounded successors precede effects; exhaustion explicitly records manual review. |
+| Malformed or stale recovery proof | Identity/source/time/digest validation precedes monetary action. |
+| Unknown payment in UI | No zero-charge claim or replacement link; exact-Call support retained. Resolved refund suppresses stale retry controls. |
+| Returned output | Readable text/JSON and exact copy, including clipboard failure; visible released-payment header tested. |
+
+Remaining distinct acceptance gaps: recovery after original Agent authority is
+revoked/expired requires the existing operator/consequence authority path; new
+background response recovery does not waive current authority. Automatic remedy
+for independently paid but contract-invalid output remains separate from the
+valid-retained-output recovery path. These are open AM-20/23 acceptance, not
+evidence that all abandonment scenarios or alpha deployment passed.
+
+Fresh normal-flow purchase: Perth request, idempotency key
+`alpha-call-journey-20260922-01`, completed without manual recovery.
+Call `operation-invocation:v1:8ceb3f7695fbc63b861838764e3694e07b71190bcf31494701b4815d24ce80b5`,
+original Base Sepolia transaction
+`0x4c4d0f26c9900243ef36cc30ed9f8e3a7a0fad587f1b3000f13e03f5739cc195`,
+buyer A$0.001404, Provider 0.001 test USDC. Output was Perth 17°C, clear sky,
+Open-Meteo fetched `2026-09-22T10:12:46.095Z`, completed
+`2026-09-22T10:13:11.979Z`. This establishes one normal local paid completion
+after the fixes; it does not establish hosted or mainnet acceptance.
+
+Same-key replay returned the identical Call, output digest and transaction hash.
+Activity showed exactly five Calls (two completed, three refused, zero requiring
+attention), including one Perth row at 35.1 seconds. The browser displayed the
+returned JSON, exact AUD charge and a working Copy output control (Output copied).
+Released Calls displayed No charge; the time column now says Time to outcome.
+
+The Perth receipt initially inherited a reservation reference from the normal
+worker. Source now projects actual settlement references; the existing completed
+projection replay corrected this record without a financial action or changed
+output. Durable settlement readback is
+`ae-p4:4915633bf708976b8e0bf9cf9d48e8c4d96d6152cf6db120f8d942e987ec2e03:settle-buyer`
+and `ae-p4:915a2d0ac87f7454eca88bb198340409dbc3d151174dc4d34b63d4e76c3e5341:settle-provider`.
+Berlin's exact safe-block proof reference is
+`chain:eip155:84532:0x7b74c5e525bd059c65d804c6a200e0d5472603531b2a2d89253f4d16175105f7`;
+its stored authorization expired at epoch milliseconds `1790066735000`.
+
+Final verification: `npx vitest run` over the 19 listed Call/payment/receipt
+suites passed 452 tests. `npm run typecheck`, scoped `oxlint --deny-warnings` and `git diff
+--check` passed. `npm run deps:check` remains blocked by the pre-existing
+`status-presentation-rows.ts` ↔ `status-presentation.ts` UI cycle (one against
+ceiling zero); five x402 own-barrel cycles were removed. No full release gate
+or hosted deployment is claimed. A concurrent admin module filename prevented
+local Convex loading; its mechanical camelCase rename restored successful
+compilation. Final completed-Call projection replay and readback confirmed
+both settlement references above and unchanged output, without another payment.

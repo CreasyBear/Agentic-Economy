@@ -54,7 +54,7 @@ export function ActivityCallQueue({
       {
         id: 'duration',
         accessorFn: (item) => item.durationLabel,
-        header: ({ column }) => <AeOperatorSortableHeader label="Duration" column={column} />,
+        header: ({ column }) => <AeOperatorSortableHeader label="Time to outcome" column={column} />,
         cell: ({ row }) => (
           <span className="font-mono text-xs tabular-nums text-muted-foreground">
             {row.original.durationLabel}

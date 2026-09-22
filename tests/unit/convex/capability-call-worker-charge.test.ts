@@ -56,6 +56,7 @@ describe('capability operation invocation worker charge/x402', () => {
       outputSchema: advisoryOutputSchema,
       observation: {
         ...invalidPaidOutputObservation,
+        responseDigest: digest('response'),
         outputJson: JSON.stringify(output),
       },
     })
@@ -68,7 +69,10 @@ describe('capability operation invocation worker charge/x402', () => {
 
     await expect(handler(worker.ctx, { callRef: invocationRef })).resolves.toEqual({ kind: 'recorded' })
     expect(worker.state.records.at(-1)).toMatchObject({
-      state: 'completed', result: { kind: 'completed', output, receipt: { state: 'settled', refundState: 'not_applicable', lossState: 'none' } },
+      state: 'completed', result: { kind: 'completed', output,
+        usage: { transactionRef: 'formance:settle-buyer' },
+        receipt: { state: 'settled', refundState: 'not_applicable', lossState: 'none',
+          transactionRef: 'formance:settle-buyer', accountingTransactionRefs: ['formance:settle-buyer', 'formance:settle-provider'] } },
     })
     await expect(handler(worker.ctx, { callRef: invocationRef })).resolves.toEqual({ kind: 'none' })
     expect(worker.state.transportCalls).toBe(1)
@@ -76,6 +80,12 @@ describe('capability operation invocation worker charge/x402', () => {
     const paths = worker.state.mutationCalls.map(({ path }) => path)
     expect(paths).not.toContain('moneyManagedCallLifecycle:releaseBeforeSubmission')
     expect(paths.filter(path => path === 'moneyManagedCallLifecycle:settle')).toHaveLength(1)
+    const observationIndex = paths.indexOf('moneyX402PaymentAttempts:recordX402PaymentObservation')
+    expect(observationIndex).toBeLessThan(paths.indexOf('moneyManagedCallLifecycle:settle'))
+    expect(worker.state.mutationCalls[observationIndex]?.args).toMatchObject({
+      settlementStatus: 'settled', quarantinedResponseDigest: digest('response'),
+      quarantinedOutputJson: JSON.stringify(output),
+    })
   })
 
   it('executes a verified seller canary with platform-funded payment facts', async () => {

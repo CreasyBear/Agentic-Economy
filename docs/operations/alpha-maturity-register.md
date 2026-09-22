@@ -1522,3 +1522,48 @@ Orchestrated IceInVein source closeout across all remaining open source gaps wit
 Historical total recorded on 17 September: **26 source verified, 0 source
 unclosed, 6 hosted-only** out of 32. This is superseded by the AM-14 and AM-24
 evidence corrections above and cannot close LP-0 or establish source completion.
+
+## Active bounded Call journey hardening — 22 September 2026
+
+Parents AM-19–24, AM-27; checkpoint `718fad729`. Joel requested checkpoint,
+edge-case evaluation, abandonment recovery and usable receipts. This package
+does not advance hosted or mainnet acceptance. Parent owns integration, expired
+unpaid recovery and runtime proof; reviewers own protocol/RPC evidence, durable
+response retention and receipt/Activity ergonomics in separate file boundaries.
+
+Acceptance: one Call identity survives client abandonment and replay; returned
+output survives interruption before payment verification/final projection; RPC
+head skew cannot invalidate matching confirmed payment; expired unused payment
+authorizations release exact reservations once; used/unexpired/disputed nonce
+never releases credit; Activity and receipt agree and explain the next action.
+No replacement payment while the Berlin attempt remains unresolved.
+
+The expired-unused boundary requires the same stopped Call and exact stored
+authorization, safe canonical chain block after expiry and unused nonce at that
+block on every configured RPC. It ensures atomic buyer/treasury release with
+stable ledger identities and terminal receipt. Invariant: no new signature or
+Provider request, no delivery inferred from settlement. On unavailable/used
+nonce, retain the original obligation for investigation. A durable scheduler
+retry is bounded; exhausted recovery remains attributable to this exact Call.
+
+Use existing payment-attempt fields, Formance commands and scheduler; no new
+schema, dependency or service. Added recovery code isolates chain evidence from
+financial mutations; reusing pre-submission release by pretending no submission
+occurred is rejected. Verification covers evidence refusal, duplicate/concurrent
+claim, crash/replay, exact ledger identity, output retention and product readback.
+Unknowns stay open until that evidence exists. Exit requires focused tests,
+typecheck, independent review and the existing stopped Call's product outcome;
+full hosted and live repeat acceptance remains a separate launch condition.
+
+Bounded package outcome: local paid completion and same-key replay verified;
+Berlin's stopped Call is terminal with credit restored. The 19 focused suites
+pass all 452 tests; whole-project typecheck and scoped lint pass. Independent
+review accepted response validation before charging, signed-receipt validation
+before retention, and exclusion of partial output from recovery. Runtime
+readback confirms receipt and usage now reference settlement, not reservation.
+Detailed Call/transaction references and the edge matrix are in
+`alpha-validation-plan.md`. AM-20/23 remain open for revoked-authority recovery
+and remedy for paid contract-invalid output. Forced live process termination
+and hosted/mainnet acceptance remain unverified. The repository dependency gate
+is still blocked by one existing status-presentation UI import cycle outside
+this change; its ceiling was not raised.

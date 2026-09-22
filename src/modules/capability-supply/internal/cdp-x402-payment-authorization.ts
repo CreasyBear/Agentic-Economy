@@ -1,8 +1,5 @@
-import {
-  decodePaymentSignatureHeader,
-  isEIP3009Payload,
-  type ExactEvmPayloadV2,
-} from './cdp-x402-payment-signer'
+import { decodePaymentSignatureHeader } from '@x402/core/http'
+import { isEIP3009Payload, type ExactEvmPayloadV2 } from '@x402/evm'
 
 import { degradeBackend } from '@/lib/observability/degrade-backend'
 import { canonicalDigest } from '@/modules/common/canonical-digest'

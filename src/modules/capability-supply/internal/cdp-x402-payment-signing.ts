@@ -1,10 +1,7 @@
 import { CdpClient } from '@coinbase/cdp-sdk'
-import {
-  appendPaymentIdentifierToExtensions,
-  encodePaymentSignatureHeader,
-  isPaymentIdentifierExtension,
-  type PaymentRequired,
-} from './cdp-x402-payment-signer'
+import { encodePaymentSignatureHeader } from '@x402/core/http'
+import type { PaymentRequired } from '@x402/core/types'
+import { appendPaymentIdentifierToExtensions, isPaymentIdentifierExtension } from '@x402/extensions/payment-identifier'
 
 import { degradeBackend } from '@/lib/observability/degrade-backend'
 import { canonicalDigest } from '@/modules/common/canonical-digest'

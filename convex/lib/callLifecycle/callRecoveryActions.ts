@@ -666,13 +666,26 @@ export async function projectRecoveryHandler(
   if (isCompletedProjection(row)) {
     // Repair an interrupted result projection without changing its output or
     // applying any financial effect. Completed HTTP results require usage.
-    if (row.result?.kind === 'completed' && row.result.usage === undefined && row.result.receipt) {
-      const usage = recoveredPaidUsage(row, row.result.receipt)
-      if (usage) await ctx.db.patch(row._id, { usage, result: { ...row.result, usage } })
+    if (row.result?.kind === 'completed') {
+      let result = row.result
+      const recordedReceipt = result.receipt
+      if (recordedReceipt?.commercialModel === 'account_aud' && recordedReceipt.state === 'settled'
+        && row.formanceFinancialState === 'settled' && row.formanceSettlementRefs?.length) {
+        const receipt = { ...recordedReceipt, transactionRef: row.formanceSettlementRefs[0]!,
+          accountingTransactionRefs: [...row.formanceSettlementRefs] }
+        const usage = recoveredPaidUsage(row, receipt)
+        if (usage) {
+          result = { ...result, receipt, usage }
+          await ctx.db.patch(row._id, { usage, result })
+        }
+      } else if (result.usage === undefined && recordedReceipt) {
+        const usage = recoveredPaidUsage(row, recordedReceipt)
+        if (usage) { result = { ...result, usage }; await ctx.db.patch(row._id, { usage, result }) }
+      }
+      await upsertCallProjection(ctx, row, {
+        state: 'completed', dispatchState: 'completed', result,
+      }, row.updatedAt)
     }
-    if (row.result?.kind === 'completed') await upsertCallProjection(ctx, row, {
-      state: 'completed', dispatchState: 'completed', result: row.result,
-    }, row.updatedAt)
     return { kind: 'recorded' as const }
   }
   if (row.state === 'reconciliation_required' && args.state === 'completed'

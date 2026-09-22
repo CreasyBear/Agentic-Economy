@@ -480,6 +480,20 @@ export const releaseManagedCall = internalAction({
   },
 })
 
+/** Only called after canonical safe-block proof that the exact authorization expired unused. */
+export const releaseExpiredUnusedCall = internalAction({
+  args: { booking: v.object(managedCallBookingArgs), externalEvidenceDigest: v.string() },
+  returns: moneyResult,
+  handler: async (_ctx, args) => {
+    const context = configuredContext()
+    return context.kind === 'setup_required'
+      ? { kind: 'refused' as const, code: context.code, retryable: false as const }
+      : convexMoneyResult(await releaseFormanceManagedCall(context.context, {
+          ...args, authorizationProvenExpiredUnused: true,
+        }))
+  },
+})
+
 export const settleManagedCall = internalAction({
   args: { booking: v.object(managedCallBookingArgs), externalEvidenceDigest: v.string() },
   returns: moneyResult,

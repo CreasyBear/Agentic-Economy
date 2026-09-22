@@ -234,6 +234,21 @@ describe('Package 4 official Formance boundary', () => {
     })
   })
 
+  it('uses the original release commands for an authorization proven expired unused and refuses missing proof', () => {
+    const input = { booking: managedCallBooking(), externalEvidenceDigest: `sha256:${DIGEST_A}` }
+    const original = prepareFormanceManagedCallRelease({ ...input, submissionProvenAbsent: true })
+    const expired = prepareFormanceManagedCallRelease({ ...input, authorizationProvenExpiredUnused: true })
+    expect(expired).toEqual(original)
+    expect(prepareFormanceManagedCallRelease({ ...input, authorizationProvenExpiredUnused: true })).toEqual(expired)
+    expect(prepareFormanceManagedCallRelease(input as never)).toEqual({
+      kind: 'refused', code: 'formance_managed_call_input_invalid', retryable: false,
+    })
+    expect(prepareFormanceManagedCallRelease({ ...input, externalEvidenceDigest: 'not-proof', authorizationProvenExpiredUnused: true }).kind).toBe('refused')
+    if (expired.kind !== 'prepared') throw new Error(expired.code)
+    expect(expired.bulk.commands.map(command => command.template)).toEqual(['CALL_RELEASED_AUD', 'CALL_RELEASED_USDC'])
+    expect(expired.bulk.commands.map(command => validateFormanceMoneyCommand(command))).toEqual([undefined, undefined])
+  })
+
   it('restores buyer credit while retaining the paid Provider expense, with stable replay identity', () => {
     const input = { booking: managedCallBooking(), externalEvidenceDigest: `sha256:${DIGEST_A}` }
     const prepared = prepareFormancePaidCallRemedy(input)

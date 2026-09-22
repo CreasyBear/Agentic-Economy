@@ -372,6 +372,24 @@ describe('provider consequence Convex HTTP callbacks', () => {
     stringifySpy.mockRestore()
   })
 
+  it('binds a response checkpoint to the authorized Call and strips custody proof before storage', async () => {
+    const runMutation = vi.fn().mockResolvedValueOnce(authority()).mockResolvedValueOnce(null)
+    const args = { custodyRef: 'custody:one', authorizationDigest: DIGEST('a'),
+      outputJson: '{"result":"ok"}', responseDigest: DIGEST('b'), requestDigest: DIGEST('c'),
+      paymentIdentifier: DIGEST('d') }
+    const response = await x402({ runMutation } as unknown as ActionCtx, request({
+      ticketRef: 'ticket:test', operation: 'checkpoint_response', args,
+    }))
+    expect(response.status).toBe(200)
+    const recorded = runMutation.mock.calls[1]!
+    expect(path(recorded[0])).toBe('moneyX402PaymentAttempts:checkpointX402Response')
+    expect(recorded[1]).toMatchObject({ outputJson: args.outputJson, responseDigest: args.responseDigest,
+      dispatchRef: authority().callRef, toolRef: authority().toolRef, inputDigest: authority().inputDigest,
+      attemptRef: authority().attemptRef, effectGeneration: authority().effectGeneration })
+    expect(recorded[1]).not.toHaveProperty('custodyRef')
+    expect(recorded[1]).not.toHaveProperty('authorizationDigest')
+  })
+
   it.each([
     ['read_authorization', 'moneyX402PaymentAttempts:readX402PaymentAuthorization', 'query'],
     ['read_authorization_by_digest', 'moneyX402PaymentAttempts:readX402PaymentAuthorizationByDigest', 'query'],

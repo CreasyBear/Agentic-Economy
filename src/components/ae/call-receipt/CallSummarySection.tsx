@@ -50,5 +50,5 @@ function receiptAmount(view: CallReceiptView) {
   if (view.purchaseResolution !== undefined) return view.purchaseResolution.considerationAmount
   if (view.receipt?.commercialModel === 'account_aud') return view.receipt.totalBuyerCharge
   if (view.receipt?.commercialModel === 'seller_canary_x402') return view.receipt.totalBuyerAuthorization
-  return view.usage?.amount
+  return view.usage?.chargeState === 'outcome_unknown' ? undefined : view.usage?.amount
 }

@@ -5,6 +5,7 @@ import { eip3009ABI } from '@x402/evm'
 import {
   createPublicClient,
   custom,
+  encodeFunctionData,
   isAddress,
   type Address,
   type Hex,
@@ -145,6 +146,70 @@ export async function readGuardedX402EvmReceipt(input: Readonly<{
     }
   } catch (cause) {
     return degradeBackend(cause, undefined, { site: 'readGuardedX402EvmReceipt', reason: 'source_unavailable' })
+  }
+}
+
+/**
+ * Requires an exact supported authorization identity and expiry. Ensures the
+ * nonce was unused at a canonical safe block at/after expiry. No wall-clock,
+ * missing-log or latest-head fallback can establish this proof. Unavailable,
+ * malformed or conflicting evidence returns undefined without side effects.
+ */
+export async function readGuardedX402UnusedAuthorization(input: Readonly<{
+  target: URL
+  aeEnvironment: X402AeEnvironment
+  network: string
+  asset: string
+  payer: string
+  nonce: string
+  dispatcher: Agent
+  expiresAt: number
+}>): Promise<Readonly<{
+  blockHash: string
+  blockNumber: bigint
+  blockTimestamp: bigint
+  authorizationState: false
+}> | undefined> {
+  const { defaultDnsResolver, isPublicHttpTarget } = await import('@/modules/network-guard/public')
+  const profile = x402PaymentProfileForEnvironment(input.aeEnvironment)
+  if (
+    profile === undefined
+    || input.target.protocol !== 'https:'
+    || input.network !== profile.network
+    || input.asset.toLowerCase() !== profile.asset.toLowerCase()
+    || !isAddress(input.payer)
+    || !/^0x[0-9a-fA-F]{64}$/.test(input.nonce)
+    || !Number.isSafeInteger(input.expiresAt)
+    || input.expiresAt <= 0
+    || !await isPublicHttpTarget(input.target, defaultDnsResolver)
+  ) return undefined
+
+  try {
+    const result = await readGuardedRpcResult(input.target, input.dispatcher,
+      'eth_getBlockByNumber', ['safe', false])
+    if (result.kind !== 'result' || !isRecord(result.value)) return undefined
+    const block = result.value
+    const quantity = /^0x(?:0|[1-9a-fA-F][0-9a-fA-F]{0,63})$/
+    if (
+      typeof block.hash !== 'string' || !/^0x[0-9a-fA-F]{64}$/.test(block.hash)
+      || typeof block.number !== 'string' || !quantity.test(block.number)
+      || typeof block.timestamp !== 'string' || !quantity.test(block.timestamp)
+    ) return undefined
+    const blockNumber = BigInt(block.number)
+    const blockTimestamp = BigInt(block.timestamp)
+    if (blockTimestamp * 1_000n < BigInt(input.expiresAt)) return undefined
+    const state = await readGuardedRpcResult(input.target, input.dispatcher, 'eth_call', [{
+      to: profile.asset,
+      data: encodeFunctionData({
+        abi: eip3009ABI,
+        functionName: 'authorizationState',
+        args: [input.payer as Address, input.nonce as Hex],
+      }),
+    }, { blockHash: block.hash, requireCanonical: true }])
+    if (state.kind !== 'result' || state.value !== `0x${'0'.repeat(64)}`) return undefined
+    return { blockHash: block.hash, blockNumber, blockTimestamp, authorizationState: false }
+  } catch (cause) {
+    return degradeBackend(cause, undefined, { site: 'readGuardedX402UnusedAuthorization', reason: 'source_unavailable' })
   }
 }
 
