@@ -163,13 +163,14 @@ type AdminActionInput = {
 type AdminCommandAction = keyof AdminActionInput
 
 type AdminSuccessCodeByAction = {
-  readonly set_business_suppression: 'business_suppressed' | 'business_unsuppressed' | 'business_suppression_unchanged' | 'approval_proposed'
+  readonly set_business_suppression: 'business_suppressed' | 'business_unsuppressed' | 'business_suppression_unchanged'
   readonly close_removal_dispute: 'dispute_closed'
   readonly verify_capability_source_authority: 'source_authority_verified'
   readonly grant_admin_membership: 'admin_membership_granted'
   readonly revoke_admin_membership: 'admin_membership_revoked'
-  readonly change_commercial_policy: 'commercial_policy_activated' | 'commercial_policy_replaced' | 'commercial_policy_suspended' | 'approval_proposed'
+  readonly change_commercial_policy: 'commercial_policy_activated' | 'commercial_policy_replaced' | 'commercial_policy_suspended'
 }
+type AdminProposableAction = 'set_business_suppression' | 'change_commercial_policy'
 
 type SharedAdminRefusalCode =
   | SourceWriteAdmissionFailureReason
@@ -234,9 +235,15 @@ type AdminCommand<A extends AdminCommandAction> = Readonly<{
   approval: AdminApprovalIntent
 }>
 
+type AdminProposedReceipt<A extends AdminCommandAction> =
+  A extends AdminProposableAction
+    ? { readonly kind: 'proposed'; readonly action: A; readonly commandRef: AdminApprovalProposalRef; readonly awaiting: 'second_approval'; readonly effectRefs: readonly []; readonly auditEventId: AuditEventId; readonly operationKey: OperationKey; readonly correlationId: CorrelationId }
+    : never
+
 type AdminCommandReceipt<A extends AdminCommandAction> =
-  | { readonly kind: 'completed'; readonly action: A; readonly code: AdminSuccessCodeByAction[A]; readonly effectRefs: readonly string[]; readonly approval: AdminApproval; readonly auditEventId: AuditEventId; readonly operationKey: OperationKey; readonly correlationId: CorrelationId }
-  | { readonly kind: 'refused'; readonly action: A; readonly code: AdminRefusalCode<A>; readonly effectRefs: readonly []; readonly approval: AdminApproval; readonly auditEventId: AuditEventId; readonly operationKey: OperationKey; readonly correlationId: CorrelationId }
+  | { readonly kind: 'completed'; readonly action: A; readonly code: AdminSuccessCodeByAction[A]; readonly effectRefs: readonly string[]; readonly approval: Extract<AdminApproval, { readonly kind: 'not_required' | 'approved' }>; readonly auditEventId: AuditEventId; readonly operationKey: OperationKey; readonly correlationId: CorrelationId }
+  | AdminProposedReceipt<A>
+  | { readonly kind: 'refused'; readonly action: A; readonly code: AdminRefusalCode<A>; readonly effectRefs: readonly []; readonly approval: Extract<AdminApproval, { readonly kind: 'not_required' | 'expired' | 'refused' }>; readonly auditEventId: AuditEventId; readonly operationKey: OperationKey; readonly correlationId: CorrelationId }
 
 type AdminPermission = AdminAction
 declare function requireAdminPermission(membership: AdminMembership | undefined, permission: AdminPermission): AdminAuthorityResult
@@ -267,7 +274,7 @@ The clean cutover expands current collapsed `admin_action_denied`, `authorizatio
 
 **Idempotency state machine.** (1) Authenticate, derive actor, and enforce current permission plus fresh FVA; these access gates never disclose a stored receipt. (2) Hash canonical effect material: scope, actor, action, target, input, reason, evidence and expected state; exclude source-write proof, nonce and retry correlation. (3) Read `operationKeys` by actor/action/key. Same hash plus terminal `resultJson` returns those exact bytes; a changed hash returns `idempotency_conflict`; no `replayed` receipt exists. (4) For a new key, verify and consume source-write admission, validate, apply the effect, append one audit row and persist the complete receipt in one transaction. Every admitted input or domain refusal is persisted; correcting it requires a new operation key. Convex OCC makes concurrent claims converge on one terminal row.
 
-**Second approval.** Only suppression and commercial-policy replace/suspend may use it. The first call to the same mutation stores an immutable proposal, one `admin.action_proposed` audit and an `approval_proposed` receipt. Approval calls the same mutation with a separate operation key, the proposal ref and digest. It requires a fresh FVA, a distinct active owner_admin and digest equality. One concurrent approver wins through OCC; the effect audit records both actors, and later attempts return `approval_already_resolved` without repeating the effect. Same approval key/hash returns identical terminal bytes. Expired proposals project as `expired` without a query write; an approval attempt returns `approval_expired` and one denial audit. The purpose-built table in section 7 is added only if Joel enables two-person control; no alpha table is added while those actions are disabled.
+**Second approval.** Only suppression and commercial-policy replace/suspend may use it. The first call to the same mutation stores an immutable proposal, one `admin.action_proposed` audit and a `kind: 'proposed'` receipt whose `commandRef` identifies the proposal, `awaiting` is `second_approval` and `effectRefs` is empty. Approval calls the same mutation with a separate operation key, the proposal ref and digest. It requires a fresh FVA, a distinct active owner_admin and digest equality. One concurrent approver wins through OCC; the effect audit records both actors, and later attempts return `approval_already_resolved` without repeating the effect. Same approval key/hash returns identical terminal bytes. Expired proposals project as `expired` without a query write; an approval attempt returns `approval_expired` and one denial audit. The purpose-built table in section 7 is added only if Joel enables two-person control; no alpha table is added while those actions are disabled.
 
 | Refusal code group | Retryable | Effect certainty | Operator copy | Next step |
 |---|---|---|---|---|
@@ -344,7 +351,7 @@ PostHog product analytics use the existing `posthog-node` and `captureServerEven
 | Permission matrix per role | `tests/unit/admin-console/admin-permissions.test.ts` | Pure table test generated from `AdminPermission`; owner_admin allowed as declared, support and reviewer read-only in the alpha UI. |
 | Fresh, stale, absent and malformed `fva` | `tests/unit/convex/admin-command-fva.test.ts` | `convex-test` identities; 0/10 minutes accepted, 11, `-1`, absent and malformed refused before effect. |
 | Idempotent replay and changed-material conflict | `tests/unit/convex/admin-command-idempotency.test.ts` | `convex-test`; same logical command with a fresh source-write admission returns byte-identical stored outcome, changed digest refuses, concurrent claims produce one effect and one audit row. |
-| Second approval state machine | `tests/unit/convex/admin-command-approval.test.ts` | Distinct active owner, digest equality, expiry, same-actor refusal, concurrent approval winner, terminal replay and no Purchase-resolution action. |
+| Second approval state machine | `tests/unit/convex/admin-command-approval.test.ts` | Proposed receipt has command ref, `awaiting: second_approval` and zero effect refs; then assert distinct active owner, digest equality, expiry, same-actor refusal, concurrent winner, terminal replay and no Purchase-resolution action. |
 | ACL and CQS | `tests/imports/admin-console-boundary.test.ts` | Module count remains 29; no internal imports or raw docs cross the ACL; queries cause no writes and mutations return receipts, not read models. |
 | Refusal presentation totality | `tests/unit/admin-console/admin-refusal-presentation.test.ts` | Every code in every action-indexed set has retryability, effect certainty, exact copy and one next step; no extra keys compile. |
 | Ref parser totality | `tests/unit/admin-console/admin-object-ref.test.ts` | Property and boundary cases; every string returns valid or malformed and never throws. Canonical Call shape follows `parseCallRef` (`src/modules/capability-execution/call-contracts.ts:57-63`). |
