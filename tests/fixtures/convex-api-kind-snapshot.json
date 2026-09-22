@@ -2216,7 +2216,19 @@
   {
     "visibility": "internal",
     "module": "moneyFormance",
+    "method": "releaseExpiredUnusedCall",
+    "kind": "action"
+  },
+  {
+    "visibility": "internal",
+    "module": "moneyFormance",
     "method": "releaseManagedCall",
+    "kind": "action"
+  },
+  {
+    "visibility": "internal",
+    "module": "moneyFormance",
+    "method": "remedyPaidCall",
     "kind": "action"
   },
   {
@@ -2400,6 +2412,24 @@
     "kind": "query"
   },
   {
+    "visibility": "internal",
+    "module": "moneyManagedCallRemedy",
+    "method": "claim",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "moneyManagedCallRemedy",
+    "method": "finish",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "moneyManagedCallRemedyActions",
+    "method": "resolveLostResult",
+    "kind": "action"
+  },
+  {
     "visibility": "public",
     "module": "moneyMonthlySpendBudget",
     "method": "configureMonthlySpendBudget",
@@ -2560,6 +2590,36 @@
     "module": "moneyTreasuryObservation",
     "method": "observe",
     "kind": "action"
+  },
+  {
+    "visibility": "internal",
+    "module": "moneyX402Expiry",
+    "method": "claim",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "moneyX402Expiry",
+    "method": "finish",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "moneyX402Expiry",
+    "method": "schedule",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "moneyX402ExpiryActions",
+    "method": "recover",
+    "kind": "action"
+  },
+  {
+    "visibility": "internal",
+    "module": "moneyX402PaymentAttempts",
+    "method": "checkpointX402Response",
+    "kind": "mutation"
   },
   {
     "visibility": "internal",
