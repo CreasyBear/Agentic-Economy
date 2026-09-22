@@ -55,6 +55,12 @@
   },
   {
     "visibility": "public",
+    "module": "adminConsoleAudit",
+    "method": "listAdminAuditEvents",
+    "kind": "query"
+  },
+  {
+    "visibility": "public",
     "module": "agentAccessOAuth",
     "method": "claimRefreshFamily",
     "kind": "mutation"
@@ -2890,12 +2896,6 @@
     "module": "security",
     "method": "openRemovalDispute",
     "kind": "mutation"
-  },
-  {
-    "visibility": "public",
-    "module": "security",
-    "method": "readAdminAuditEvents",
-    "kind": "query"
   },
   {
     "visibility": "public",
