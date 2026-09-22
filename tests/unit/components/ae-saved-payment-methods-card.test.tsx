@@ -156,11 +156,9 @@ describe('AeSavedPaymentMethodsCard (W-22)', () => {
     await waitFor(() => {
       expect(screen.getByText('Could not open Stripe billing portal.')).toBeInTheDocument()
     })
-    expect(
-      screen.getByText('A$0.00 charged — your payment methods are unchanged.'),
-    ).toBeInTheDocument()
+    expect(screen.getByText('Nothing was charged. Your payment methods are unchanged.')).toBeInTheDocument()
     expect(toast.error).toHaveBeenCalledWith('Could not open Stripe billing portal.', {
-      description: 'Please check your network connection or try again in a few moments.',
+      description: 'Nothing was charged. Check your network connection or try again in a few moments.',
     })
 
     cleanup()

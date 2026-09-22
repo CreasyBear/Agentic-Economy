@@ -95,8 +95,8 @@ function DiagnosticSlot({ showError }: { showError: boolean }) {
         <Alert variant="destructive">
           <AlertTitle className="text-sm font-medium">Could not open Stripe billing portal.</AlertTitle>
           <AlertDescription className="grid gap-1 text-xs">
-            <span>A$0.00 charged — your payment methods are unchanged.</span>
-            <span>Please check your network connection or try again in a few moments.</span>
+            <span>Nothing was charged. Your payment methods are unchanged.</span>
+            <span>Check your network connection or try again in a few moments.</span>
           </AlertDescription>
         </Alert>
       ) : null}
@@ -130,7 +130,7 @@ export function AeSavedPaymentMethodsCard({
       void cause
       setPortalDiagnostic(true)
       toast.error('Could not open Stripe billing portal.', {
-        description: 'Please check your network connection or try again in a few moments.',
+        description: 'Nothing was charged. Check your network connection or try again in a few moments.',
       })
     } finally {
       setManaging(false)

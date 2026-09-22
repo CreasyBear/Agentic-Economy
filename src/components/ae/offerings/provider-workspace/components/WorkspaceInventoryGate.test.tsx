@@ -40,9 +40,11 @@ describe('WorkspaceInventoryGate', () => {
     expect(screen.getByText('Provider identity needs attention')).toBeTruthy()
   })
 
-  it('renders unavailable retry chrome', () => {
+  it('renders an unavailable error alert with a retry and money outcome', () => {
     const onRefresh = vi.fn()
     render(<WorkspaceInventoryGate kind="unavailable" refreshPending={false} onRefresh={onRefresh} />)
+    expect(screen.getByRole('alert').textContent).toContain('Tools could not be loaded')
+    expect(screen.getByRole('alert').textContent).toContain('Nothing was charged.')
     fireEvent.click(screen.getByRole('button', { name: 'Try again' }))
     expect(onRefresh).toHaveBeenCalledTimes(1)
   })

@@ -61,11 +61,10 @@ export function AeWorkspaceGeneral({
 
   if (result.kind === 'unavailable') {
     return (
-      <AeEmptyState
-        title="Provider identity is unavailable"
-        description="Try again in a moment. If this keeps happening, open Help."
-        role="alert"
-        action={
+      <Alert variant="destructive">
+        <AlertTitle>Provider identity is unavailable</AlertTitle>
+        <AlertDescription className="flex flex-wrap items-center gap-3">
+          <span>Try again in a moment. If this keeps happening, open Help.</span>
           <Link
             to="/owner/operations"
             hash="provider-identity"
@@ -73,8 +72,8 @@ export function AeWorkspaceGeneral({
           >
             Try again
           </Link>
-        }
-      />
+        </AlertDescription>
+      </Alert>
     )
   }
 

@@ -18,7 +18,7 @@ describe('AeConnectAgentWizardDialog (W-26)', () => {
       />,
     )
 
-    expect(screen.getByRole('dialog', { name: /connect new agent/i })).toBeInTheDocument()
+    expect(screen.getByRole('dialog', { name: /connect an agent/i })).toBeInTheDocument()
     expect(screen.getByText(/step 1 of 2 · set policy/i)).toBeInTheDocument()
     expect(screen.getByLabelText(/agent name/i)).toBeInTheDocument()
     expect(screen.getByRole('radio', { name: /sandbox/i })).toBeInTheDocument()
@@ -26,7 +26,7 @@ describe('AeConnectAgentWizardDialog (W-26)', () => {
     expect(screen.getByRole('radio', { name: /browse only/i })).toBeInTheDocument()
     expect(screen.getByRole('radio', { name: /ask each time/i })).toBeInTheDocument()
     expect(screen.getByRole('radio', { name: /work within limits/i })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /connect agent/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /connect an agent/i })).toBeInTheDocument()
   })
 
   it('T2: requires agent name and enforces max length of 80 characters', () => {
@@ -39,7 +39,7 @@ describe('AeConnectAgentWizardDialog (W-26)', () => {
       />,
     )
 
-    const submitBtn = screen.getByRole('button', { name: /connect agent/i })
+    const submitBtn = screen.getByRole('button', { name: /connect an agent/i })
     expect(submitBtn).toBeDisabled()
 
     const nameInput = screen.getByLabelText(/agent name/i)
@@ -78,7 +78,7 @@ describe('AeConnectAgentWizardDialog (W-26)', () => {
     const nameInput = screen.getByLabelText(/agent name/i)
     fireEvent.change(nameInput, { target: { value: 'Test Assistant' } })
 
-    const submitBtn = screen.getByRole('button', { name: /connect agent/i })
+    const submitBtn = screen.getByRole('button', { name: /connect an agent/i })
     fireEvent.click(submitBtn)
 
     await waitFor(() => {
@@ -126,7 +126,7 @@ describe('AeConnectAgentWizardDialog (W-26)', () => {
     fireEvent.change(dailyInput, { target: { value: '25.00' } })
     fireEvent.change(monthlyInput, { target: { value: '100.00' } })
 
-    const submitBtn = screen.getByRole('button', { name: /connect agent/i })
+    const submitBtn = screen.getByRole('button', { name: /connect an agent/i })
     fireEvent.click(submitBtn)
 
     await waitFor(() => {
@@ -167,7 +167,7 @@ describe('AeConnectAgentWizardDialog (W-26)', () => {
     fireEvent.change(dailyInput, { target: { value: '20.00' } })
     fireEvent.change(monthlyInput, { target: { value: '100.00' } })
 
-    const submitBtn = screen.getByRole('button', { name: /connect agent/i })
+    const submitBtn = screen.getByRole('button', { name: /connect an agent/i })
     fireEvent.click(submitBtn)
 
     expect(screen.getByText(/per-call limit cannot exceed daily limit/i)).toBeInTheDocument()
@@ -188,7 +188,7 @@ describe('AeConnectAgentWizardDialog (W-26)', () => {
     fireEvent.change(screen.getByLabelText(/agent name/i), { target: { value: 'Observer' } })
     fireEvent.click(screen.getByRole('radio', { name: /browse only/i }))
 
-    fireEvent.click(screen.getByRole('button', { name: /connect agent/i }))
+    fireEvent.click(screen.getByRole('button', { name: /connect an agent/i }))
 
     await waitFor(() => {
       expect(onIssue).toHaveBeenCalledTimes(1)
@@ -216,7 +216,7 @@ describe('AeConnectAgentWizardDialog (W-26)', () => {
     )
 
     fireEvent.change(screen.getByLabelText(/agent name/i), { target: { value: 'My Agent' } })
-    fireEvent.click(screen.getByRole('button', { name: /connect agent/i }))
+    fireEvent.click(screen.getByRole('button', { name: /connect an agent/i }))
 
     await waitFor(() => {
       expect(onSuccess).toHaveBeenCalledTimes(1)
@@ -250,7 +250,7 @@ describe('AeConnectAgentWizardDialog (W-26)', () => {
     )
 
     fireEvent.change(screen.getByLabelText(/agent name/i), { target: { value: 'Faulty Agent' } })
-    fireEvent.click(screen.getByRole('button', { name: /connect agent/i }))
+    fireEvent.click(screen.getByRole('button', { name: /connect an agent/i }))
 
     await waitFor(() => {
       expect(screen.getByText(/could not connect agent/i)).toBeInTheDocument()
@@ -280,7 +280,7 @@ describe('AeConnectAgentWizardDialog (W-26)', () => {
 
     fireEvent.change(screen.getByLabelText(/agent name/i), { target: { value: 'Retry Agent' } })
 
-    const submitBtn = screen.getByRole('button', { name: /connect agent/i })
+    const submitBtn = screen.getByRole('button', { name: /connect an agent/i })
 
     // First attempt -> retryable failure
     fireEvent.click(submitBtn)
@@ -317,10 +317,10 @@ describe('AeConnectAgentWizardDialog (W-26)', () => {
 
     fireEvent.change(screen.getByLabelText(/agent name/i), { target: { value: 'In Flight Agent' } })
 
-    const submitBtn = screen.getByRole('button', { name: /connect agent/i })
+    const submitBtn = screen.getByRole('button', { name: /connect an agent/i })
     fireEvent.click(submitBtn)
 
-    expect(screen.getByRole('button', { name: /creating/i })).toBeDisabled()
+    expect(screen.getByRole('button', { name: /connecting/i })).toBeDisabled()
 
     resolvePromise({ kind: 'created', keyId: 'k1', secret: 's1' })
     await waitFor(() => {
@@ -328,7 +328,23 @@ describe('AeConnectAgentWizardDialog (W-26)', () => {
     })
   })
 
-  it('T11: adheres to zero-handroll directive without local secret generation or hashing', async () => {
+  it('T11: unexpected issuance failures state that the Agent was not connected or charged', async () => {
+    const onIssue = vi.fn().mockResolvedValue(undefined)
+    render(
+      <AeConnectAgentWizardDialog
+        open={true}
+        onOpenChange={vi.fn()}
+        onIssue={onIssue}
+      />,
+    )
+
+    fireEvent.change(screen.getByLabelText(/agent name/i), { target: { value: 'Unexpected Agent' } })
+    fireEvent.click(screen.getByRole('button', { name: /connect an agent/i }))
+
+    expect(await screen.findByText('The Agent could not be connected. Nothing was charged.')).toBeInTheDocument()
+  })
+
+  it('T12: adheres to zero-handroll directive without local secret generation or hashing', async () => {
     const fs = await import('node:fs')
     const path = await import('node:path')
     const wizardDir = path.resolve(__dirname, '../../../src/components/ae/console/connect-agent-wizard')

@@ -564,6 +564,13 @@ describe('assistant access components', () => {
     expect(screen.getByRole('button', { name: /pay A\$10\.55 and add A\$10\.00/i })).toBeTruthy()
   })
 
+  it('states the payment outcome when funding is unavailable', () => {
+    render(<AeAccountFundingPanel />)
+    expect(screen.getByRole('alert').textContent).toContain(
+      'No payment was made. Nothing was charged.',
+    )
+  })
+
   it('keeps quote geometry when the amount is empty or invalid', () => {
     render(<AeAccountFundingPanel port={{ begin: vi.fn(), read: vi.fn() }} constraints={fundingConstraints} />)
 
@@ -611,8 +618,8 @@ describe('assistant access components', () => {
     })
     render(<AeAccountFundingPanel port={{ begin: vi.fn(), read: vi.fn(async () => session) }} constraints={fundingConstraints} />)
 
-    expect(await screen.findByText(/A\$0\.00 deducted/u)).toBeTruthy()
-    expect(screen.getByText(/unchanged/u)).toBeTruthy()
+    expect(await screen.findByText(/Nothing was charged\./u)).toBeTruthy()
+    expect(screen.getByText(/Your balance is unchanged\./u)).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Add more credit' })).toBeTruthy()
   })
 
@@ -719,6 +726,7 @@ describe('assistant access components', () => {
       amount: { currency: 'AUD', units: '10000000', exponent: 6 },
       expectedPolicyDigest: refreshedConstraints.policyDigest,
     })
+    expect(await screen.findByText(/No payment was made\. Nothing was charged\./u)).toBeTruthy()
   })
 
   it('does not offer a stale payment when funding quote refresh fails', async () => {
@@ -955,8 +963,8 @@ describe('assistant access components', () => {
     const read = vi.fn(async () => session)
     render(<AeAccountFundingPanel port={{ begin, read }} constraints={fundingConstraints} />)
 
-    expect(await screen.findByText(/A\$0\.00 deducted/u)).toBeTruthy()
-    expect(screen.getByText(/unchanged/u)).toBeTruthy()
+    expect(await screen.findByText(/Nothing was charged\./u)).toBeTruthy()
+    expect(screen.getByText(/Your balance is unchanged\./u)).toBeTruthy()
     expect(screen.queryByRole('button', { name: 'Continue secure payment' })).toBeNull()
     expect(begin).not.toHaveBeenCalled()
     fireEvent.click(await screen.findByRole('button', { name: 'Add more credit' }))
@@ -1004,7 +1012,7 @@ describe('assistant access components', () => {
 
     expect(begin).toHaveBeenCalledOnce()
     expect(await screen.findByText(/account funding is unavailable/i)).toBeTruthy()
-    expect(screen.getByText(/no payment started.*balance did not change/i)).toBeTruthy()
+    expect(screen.getByText(/No payment was made\. Nothing was charged\. Your balance is unchanged\./u)).toBeTruthy()
     expect(screen.queryByText('Payment received')).toBeNull()
   })
 

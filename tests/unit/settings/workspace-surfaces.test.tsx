@@ -79,4 +79,14 @@ describe('owner workspace settings surfaces', () => {
     expect(screen.getByRole('link', { name: 'Review Provider setup' }).getAttribute('href')).toBe('/for-providers')
   })
 
+  it('renders an unavailable Provider identity as an error alert', () => {
+    render(<AeWorkspaceGeneral result={{ kind: 'unavailable', reason: 'source_unavailable', retryable: true }} />)
+    const alert = screen.getByRole('alert')
+    expect(alert.getAttribute('data-slot')).toBe('alert')
+    expect(alert.textContent).toContain('Provider identity is unavailable')
+    expect(screen.getByRole('link', { name: 'Try again' }).getAttribute('href')).toBe(
+      '/owner/operations#provider-identity',
+    )
+  })
+
 })
