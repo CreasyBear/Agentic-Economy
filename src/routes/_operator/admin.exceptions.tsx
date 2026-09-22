@@ -13,15 +13,17 @@ import {
 } from '@/lib/observability/admin-event-props'
 import type { AdminExceptionKind } from '@/lib/operator/admin-console/contracts'
 import { operatorRouteOptions } from '@/lib/operator/route-options'
-import { requireOperatorBeforeLoad } from '@/lib/server/require-operator-session'
+import { readOperatorContextThroughSource } from '@/lib/server/operator-context.functions'
 import { principalRef } from '@/modules/principal-account/principal/public'
 
 const captureAdminQueueViewServer = createServerFn()
   .validator((data: { kind: AdminExceptionKind | null }) => data)
   .handler(async ({ data }): Promise<null> => {
-    const session = await requireOperatorBeforeLoad({ location: { href: '/admin/exceptions' } })
-    const properties = buildAdminEventProperties('admin_queue_view', { kind: data.kind ?? 'all' })
-    captureAdminEvent(principalRef(session.principalRef), 'admin_queue_view', properties)
+    const session = await readOperatorContextThroughSource()
+    if (session.kind === 'authorized') {
+      const properties = buildAdminEventProperties('admin_queue_view', { kind: data.kind ?? 'all' })
+      captureAdminEvent(principalRef(session.principalRef), 'admin_queue_view', properties)
+    }
     return null
   })
 
