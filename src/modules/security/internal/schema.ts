@@ -27,6 +27,30 @@ export const securityTables = {
     .index('by_tokenIdentifier_and_state', ['tokenIdentifier', 'state'])
     .index('by_state_and_role', ['state', 'role']),
 
+  adminApprovalProposals: defineTable({
+    proposalRef: v.string(),
+    action: v.union(
+      v.literal('set_business_suppression'),
+      v.literal('change_commercial_policy'),
+      v.literal('grant_admin_membership'),
+      v.literal('revoke_admin_membership'),
+    ),
+    commandDigest: v.string(),
+    proposerRef: v.string(),
+    status: v.union(
+      v.literal('awaiting_second_approval'),
+      v.literal('approved'),
+      v.literal('expired'),
+      v.literal('refused'),
+    ),
+    createdAt: v.number(),
+    expiresAt: v.number(),
+    resolvedAt: v.optional(v.number()),
+    approverRef: v.optional(v.string()),
+  })
+    .index('by_proposalRef', ['proposalRef'])
+    .index('by_status_and_expiresAt', ['status', 'expiresAt']),
+
   adminMembershipAuditEvents: defineTable({
     auditEventId: v.string(),
     eventType: literalUnion(AdminMembershipAuditEventTypeValues),
@@ -58,7 +82,8 @@ export const securityTables = {
   })
     .index('by_business_status', ['businessId', 'status'])
     .index('by_operation_key', ['operationKey'])
-    .index('by_target_status', ['targetType', 'targetRef', 'status']),
+    .index('by_target_status', ['targetType', 'targetRef', 'status'])
+    .index('by_status_and_updatedAt', ['status', 'updatedAt']),
   // Replay ledger rows are retained only until `expiresAt`; schedule/batch purge uses
   // `by_expiresAt` so replay storage stays bounded without weakening first-use checks.
 

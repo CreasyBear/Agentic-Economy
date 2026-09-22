@@ -293,7 +293,8 @@ export const capabilityCallTables = {
   })
     .index('by_callRef', ['callRef'])
     .index('by_accountRef_and_resolvedAt', ['accountRef', 'resolvedAt'])
-    .index('by_customerRef_and_resolvedAt', ['customerRef', 'resolvedAt']),
+    .index('by_customerRef_and_resolvedAt', ['customerRef', 'resolvedAt'])
+    .index('by_resolvedAt', ['resolvedAt']),
   capabilityCallProjections: defineTable({
     callRef: v.string(),
     accountRef: v.string(),
@@ -399,7 +400,8 @@ export const capabilityCallTables = {
   })
     .index('by_quoteRef', ['quoteRef'])
     .index('by_credentialId_and_createdAt', ['credentialId', 'createdAt'])
-    .index('by_state_and_expiresAt', ['state', 'expiresAt']),
+    .index('by_state_and_expiresAt', ['state', 'expiresAt'])
+    .index('by_createdAt', ['createdAt']),
   capabilityCalls: defineTable({
     quoteRef: v.optional(v.string()),
     callRef: v.string(),
@@ -480,7 +482,8 @@ export const capabilityCallTables = {
     .index('by_state_and_reconciliation_nextAttemptAt', ['state', 'reconciliation.nextAttemptAt'])
     .index('by_state_and_reconciliation_disposition_reason_nextAttemptAt', [
       'state', 'reconciliation.disposition', 'reconciliation.reason', 'reconciliation.nextAttemptAt',
-    ]),
+    ])
+    .index('by_createdAt', ['createdAt']),
   // Append-only proof that a seller canary was re-armed only after either a
   // durable pre-claim refusal with no canonical attempt, or an exact canonical
   // safe-before-release attempt whose durable ledgers prove it ended unpaid.
