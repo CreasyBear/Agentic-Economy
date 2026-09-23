@@ -17,12 +17,13 @@ import {
 import { defaultDnsResolver, isPublicHttpTarget } from '@/modules/network-guard/public'
 import { fetchCoinbaseReferenceRate } from '@/modules/money/reference-rate'
 import { quoteManagedX402BuyerAud } from '@/modules/money/public'
-import { rerankToolSearchResult } from '@/modules/registry/tool-reranker'
+import { TOOL_SEARCH_USE } from '@/modules/registry/tool-reranker'
 import { api, internal } from './_generated/api'
-import { action, env, internalAction, type ActionCtx } from './_generated/server'
+import { action, internalAction, type ActionCtx } from './_generated/server'
 import { reconcileReadyItems } from './capabilitySupplyShared'
 import { publicSearchReturns, searchArgs, publicDetailReturns, publicCompareReturns, toolRefArgs, compareArgs } from './capabilitySupplyToolQueries'
 import { bindWorkloadCronActionContext } from './workloadCron'
+import { presentSearch as presentSearchDecision, rerankSearch } from './lib/capabilityToolCatalogPresentation'
 
 const PAGE_LIMIT = 20
 const TIMEOUT_MS = 10_000
@@ -143,19 +144,33 @@ export const rerank = internalAction({
     query: v.string(),
   },
   returns: publicSearchReturns,
-  handler: async (_ctx, args): Promise<ToolSearchWireResult> => {
-    // RPC does not propagate browser cancellation; bound this Node attempt locally.
-    const deadlineAt = Date.now() + 1500
-    const signal = AbortSignal.timeout(1500)
-    const source = deserializeToolSearchResult(args.result as ToolSearchWireResult)
-    const reranked = await rerankToolSearchResult(source, args.query, {
-      deadlineAt, signal, disableJev: env.AE_JEV_DISCOVERY_ENABLED === 'false',
-      ...(env.OPENROUTER_API_KEY === undefined
-        ? {}
-        : { openrouterApiKey: env.OPENROUTER_API_KEY }),
-    })
-    return serializeToolSearchResult(reranked)
+  handler: (_ctx, args) => rerankSearch({ result: args.result as ToolSearchWireResult, query: args.query }),
+})
+
+const presentSearchReturns = v.object({
+  result: publicSearchReturns,
+  use: v.union(
+    v.null(),
+    v.literal(TOOL_SEARCH_USE.search),
+    v.literal(TOOL_SEARCH_USE.compare),
+    v.literal(TOOL_SEARCH_USE.describe),
+    v.literal(TOOL_SEARCH_USE.clarify),
+  ),
+  belowMatch: v.array(v.string()),
+})
+
+/**
+ * Chat-only. Ranks the page and chooses the tool that presents it, in one Jev call.
+ * A failed decision returns the original page and no tool choice.
+ */
+export const presentSearch = internalAction({
+  args: {
+    result: publicSearchReturns,
+    query: v.string(),
+    request: v.optional(v.string()),
   },
+  returns: presentSearchReturns,
+  handler: (_ctx, args) => presentSearchDecision({ result: args.result as ToolSearchWireResult, query: args.query, ...(args.request === undefined ? {} : { request: args.request }) }),
 })
 
 

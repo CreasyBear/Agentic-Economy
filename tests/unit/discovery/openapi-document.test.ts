@@ -1,6 +1,8 @@
 import { validate } from '@scalar/openapi-parser'
 import { describe, expect, it } from 'vitest'
 
+import { createDevelopersApiViewModel } from '@/components/ae/developers/api-reference/developers-api.view-model'
+
 import {
   buildOpenApiDocumentWithMetrics,
   listOpenApiOperationIds,
@@ -61,5 +63,78 @@ describe('openapi document', () => {
   it('is deterministic given the same origin', () => {
     const again = buildOpenApiDocumentWithMetrics({ canonicalBaseUrl: `${origin}/` })
     expect(again.document).toEqual(result.document)
+  })
+
+  it('projects one runnable request per endpoint with canonical auth, errors, price, and version copy', () => {
+    const page = createDevelopersApiViewModel(result.document)
+    const rawDocument = result.document as {
+      info: { version: string }
+      components: {
+        schemas: {
+          Problem: {
+            properties: {
+              kind: { enum: readonly string[] }
+              title: { enum: readonly string[] }
+            }
+          }
+        }
+        securitySchemes: { agentAccessKey: { description: string } }
+      }
+    }
+
+    const pageOperations = page.operationGroups.flatMap((group) => group.operations)
+    expect(pageOperations).toHaveLength(collectOperationIds().length)
+    for (const operation of pageOperations) {
+      expect(operation.curl).toContain(`curl --request ${operation.method}`)
+      expect(operation.curl).toContain(`${origin}${operation.path}`)
+      expect(operation.curl).toContain('Authorization: Bearer <your key>')
+      if (operation.method === 'POST') {
+        expect(operation.curl).toContain('Content-Type: application/json')
+        expect(operation.curl).toContain('--data ')
+      }
+    }
+    expect(page.authDescription).toBe(rawDocument.components.securitySchemes.agentAccessKey.description)
+    expect(page.problems.map((problem) => problem.kind)).toEqual(
+      rawDocument.components.schemas.Problem.properties.kind.enum,
+    )
+    expect(page.problems.map((problem) => problem.title)).toEqual(
+      rawDocument.components.schemas.Problem.properties.title.enum,
+    )
+    expect(page.problems).toContainEqual({
+      kind: 'UNAUTHENTICATED',
+      type: 'about:blank',
+      title: 'Unauthenticated',
+      nextStep: 'Connect again and send a current Agent access key.',
+    })
+    expect(page.priceExample).toEqual({
+      shape: 'ExactAmount { currency, units, exponent }',
+      json: '{"currency":"AUD","units":"1250000","exponent":6}',
+      formatted: 'A$1.25',
+    })
+    expect(JSON.stringify(result.document)).not.toMatch(
+      /"tool\.procure"|"maxSpendAud"|"totalAud"|"netAud"|"gstAud"|"refundedAmountAud"|"netChargeAud"/u,
+    )
+    expect(page.versionPolicy).toBe(
+      `Breaking changes ship as a new version; current version ${rawDocument.info.version}.`,
+    )
+
+    const withExample = structuredClone(result.document) as {
+      paths: Record<string, Record<string, {
+        operationId: string
+        requestBody?: { content?: { 'application/json'?: { example?: unknown } } }
+      }>>
+    }
+    const exampleOperation = Object.values(withExample.paths)
+      .flatMap((methods) => Object.values(methods))
+      .find((operation) => operation.requestBody?.content?.['application/json'] !== undefined)
+    expect(exampleOperation).toBeDefined()
+    if (exampleOperation?.requestBody?.content?.['application/json'] !== undefined) {
+      exampleOperation.requestBody.content['application/json'].example = { need: 'weather' }
+    }
+    expect(
+      createDevelopersApiViewModel(withExample).operationGroups
+        .flatMap((group) => group.operations)
+        .find((operation) => operation.operationId === exampleOperation?.operationId)?.curl,
+    ).toContain(`--data '{"need":"weather"}'`)
   })
 })

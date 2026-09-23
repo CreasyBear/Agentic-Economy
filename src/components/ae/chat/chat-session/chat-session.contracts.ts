@@ -57,13 +57,17 @@ export type ChatComposerProps = Readonly<{
   anonymousMessageLimitReached: boolean
   onPromptChange(value: string): void
   onSubmit(): void
+  onStop?: () => void
 }>
 
 export type ChatTranscriptViewProps = Readonly<{
   messages: readonly TranscriptMessage[]
   pending?: boolean
   handoffAfter?: number
+  thinking?: boolean
+  clarifyDisabled?: boolean
   onSuggest?: (prompt: string) => void
+  onClarifyAnswer?: (answer: string) => void
 }>
 
 export type ChatHeaderViewProps = Omit<ChatHeaderProps, 'mobileHistory'>

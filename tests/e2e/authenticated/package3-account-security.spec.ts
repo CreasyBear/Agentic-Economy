@@ -21,15 +21,19 @@ test.describe('Package 3 Account security recovery', () => {
     await page.goto('/')
     await clerk.signIn({ page, emailAddress: environment.ownerEmail })
     await page.goto('/owner/settings')
+    await page.getByRole('tab', { name: 'Recovery' }).click()
 
     await expect(page.getByRole('heading', { name: 'If you suspect compromise' })).toBeVisible()
     await expect(page.getByText('This page does not mark the Account contained')).toBeVisible()
     await expect(page.getByText('Review at source')).toHaveCount(5)
+    await expect(page.getByRole('link', { name: /Review and revoke sessions/u })).toHaveCount(0)
+
+    await page.getByRole('tab', { name: 'Profile' }).click()
     await expect(page.getByRole('heading', { name: 'Profile', exact: true })).toBeVisible()
+    await page.getByRole('tab', { name: 'Security history' }).click()
     await expect(page.getByRole('heading', { name: 'Security history' })).toBeVisible()
 
-    await expect(page.getByRole('link', { name: /Review and revoke Clerk sessions/u }))
-      .toHaveAttribute('href', '#clerk-account-security')
+    await page.getByRole('tab', { name: 'Recovery' }).click()
     await expect(page.getByRole('link', { name: /Rotate or disconnect Agents/u }))
       .toHaveAttribute('href', '/agent-access')
     await expect(page.getByRole('link', { name: /supplier connections/u }))

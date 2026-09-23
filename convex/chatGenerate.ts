@@ -13,7 +13,7 @@ import {
 import { components, internal } from './_generated/api'
 import { env, internalAction } from './_generated/server'
 import type { ActionCtx } from './_generated/server'
-import { createChatAgent } from './chatTools'
+import { createChatAgent, prepareChatStep } from './chatTools'
 import { interactiveAuthorityContextValue } from './interactiveAuthority'
 import type { InteractiveBusinessAuthorityContext } from '../src/modules/business/public'
 import {
@@ -58,7 +58,7 @@ export async function streamDurableChatResponse(
   await agent.streamText(
     ctx,
     { threadId: args.threadId, userId: args.ownerId },
-    { promptMessageId: args.promptMessageId },
+    { promptMessageId: args.promptMessageId, prepareStep: prepareChatStep },
     {
       storageOptions: { saveMessages: 'promptAndOutput' },
       saveStreamDeltas: {

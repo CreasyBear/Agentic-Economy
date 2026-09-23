@@ -41,7 +41,7 @@ import { describeActionForAgent, findAction } from '@/modules/actions'
 import { SiteDiscoveryManifestSchemaVersion } from '../site-manifest-version'
 import { FUNDING_PREFLIGHT_ROUTE_CONTRACTS } from '@/modules/money/public'
 
-const AGENT_HTTP_AUTHENTICATION = 'clerk_api_key' as const
+const AGENT_HTTP_AUTHENTICATION = 'Authorization: Bearer <Agent access key>' as const
 export const SITE_DISCOVERY_SUMMARY_LINES = Object.freeze([
   'AE publishes a canonical catalogue of admitted market Tools.',
   'Paid market work goes through POST /api/v1/tools/call.',
@@ -204,6 +204,10 @@ const humanSurfaceLabels: Readonly<Record<string, string>> = {
   '/privacy/remove-business': 'Listing correction or removal',
   [SiteDiscoveryManifestPath]: 'This document',
   [PublicAgentSkillPath]: 'Assistant setup instructions',
+  '/glossary.md': 'Canonical vocabulary and money shape',
+  '/openapi.json': 'OpenAPI contract',
+  '/api/v1/release': 'Release identity',
+  '/api/v1/catalogue-status': 'Tool catalogue status',
 }
 
 /**

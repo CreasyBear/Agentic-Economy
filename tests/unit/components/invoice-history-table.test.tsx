@@ -136,13 +136,13 @@ describe('AeInvoiceHistoryTable (W-24)', () => {
     expect(screen.getByRole('button', { name: 'View Stripe Receipt' })).toBeEnabled()
   })
 
-  it('U2: withheld row for missing tax facts disables download and links to workspace tax details', () => {
+  it('U2: withheld row for missing tax facts disables download and links to Business settings', () => {
     renderTable({ rows: [withheldMissingFactsRow] })
 
     expect(screen.getByRole('button', { name: 'Download Tax Invoice' })).toBeDisabled()
-    const workspaceLink = screen.getByRole('link', { name: /tax details missing/i })
-    expect(workspaceLink).toHaveAttribute('href', '/owner/workspace')
-    expect(workspaceLink.textContent).toMatch(/abn/i)
+    const businessLink = screen.getByRole('link', { name: /tax details missing/i })
+    expect(businessLink).toHaveAttribute('href', '/owner/settings#business')
+    expect(businessLink.textContent).toMatch(/abn/i)
   })
 
   it('U3: withheld row for policy disabled does not blame missing ABN', () => {

@@ -174,10 +174,12 @@ async function ensureCurrentOwnerCredentialGeneration(
   if (current.expiresAt === expiresAt) {
     return { bindingRef: binding.bindingRef, principalRef: binding.principalRef }
   }
-  // Without a verified token window there is nothing to match exactly: the
-  // server-anchored credential stays current until its own window lapses,
-  // then the ordinary refresh below re-issues it.
-  if (!hasVerifiedTokenWindow && Date.now() < current.expiresAt) {
+  // A current verified presentation may renew the server-anchored fallback
+  // window before it lapses. Keep ample windows unchanged (including duplicate
+  // renewals); rotate through the existing generation/expiry controls near expiry.
+  // Revoked and conflicting generations have already been refused above.
+  if (!hasVerifiedTokenWindow
+    && current.expiresAt - Date.now() > INTERACTIVE_OWNER_SESSION_WINDOW_MS / 2) {
     return { bindingRef: binding.bindingRef, principalRef: binding.principalRef }
   }
   // A still-active generation whose window no longer matches the verified

@@ -31,7 +31,11 @@ const PANEL_CONTENT_ID = 'ae-command-panel-content'
  * Cmd/Ctrl-k toggles, Escape pops one layer, and the page deck survives the
  * toggle so a quick open-close-open never discards an inspection.
  */
-export function AeCommandPanel() {
+export function AeCommandPanel({
+  onOpenSettings,
+}: Readonly<{
+  onOpenSettings?: (scope: 'personal' | 'workspace') => void
+}> = {}) {
   const panel = useCommandPanel()
   const router = useRouter()
   const { setPreference, preference } = useAppearance()
@@ -130,6 +134,10 @@ export function AeCommandPanel() {
               onNavigate={(href) => {
                 completeNavigation()
                 void router.navigate({ to: href })
+              }}
+              onOpenSettings={(scope) => {
+                completeNavigation()
+                onOpenSettings?.(scope)
               }}
               onToggleTheme={() => {
                 setPreference(preference === 'dark' ? 'light' : 'dark')

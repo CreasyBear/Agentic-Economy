@@ -27,6 +27,7 @@ import {
 } from '@/lib/export/csv-export'
 import { toast } from '@/lib/ui/toast'
 import { formatTimestamp } from '@/lib/ui/format-time'
+import { getStatusPresentation } from '@/lib/ui/status-presentation'
 import { calculateAudGstSplit } from '@/modules/money/public'
 import type { AeInvoiceHistoryRow } from '@/modules/money/invoice-history.view-model'
 
@@ -49,7 +50,9 @@ export type AeInvoiceHistoryTableProps = Readonly<{
 }>
 
 function statusLabel(status: AeInvoiceHistoryRow['status']): string {
-  return status === 'succeeded' ? 'Paid' : 'Reversed'
+  return status === 'succeeded'
+    ? getStatusPresentation('billing_paid').compactLabel
+    : getStatusPresentation('protected_action_reversed').compactLabel
 }
 
 function unitsToAudDollarsFixed(units: string): string {
@@ -207,8 +210,8 @@ function TaxInvoiceAction({
           <Download className="size-3.5 shrink-0" aria-hidden="true" />
           <span>Download Tax Invoice</span>
         </Button>
-        <a href="/owner/workspace" className="text-xs text-primary underline-offset-4 hover:underline">
-          Tax details missing — Add ABN in Workspace Settings to generate ATO-compliant invoices
+        <a href="/owner/settings#business" className="text-xs text-primary underline-offset-4 hover:underline">
+          Tax details missing — Add an ABN in Business settings to generate ATO-compliant invoices
         </a>
       </div>
     )

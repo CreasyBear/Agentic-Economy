@@ -331,7 +331,7 @@ describe('agent-access caller route continuation', () => {
     const addAgent = screen.getByRole('region', { name: 'Add another Agent' })
     expect(consoleView.compareDocumentPosition(addAgent) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
 
-    fireEvent.click(screen.getByRole('button', { name: 'Connect another Agent' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Connect an Agent' }))
     const checkConnection = routeHarness.installProps?.onCheckConnection as (() => void) | undefined
     act(() => checkConnection?.())
 

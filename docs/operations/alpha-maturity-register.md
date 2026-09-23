@@ -1522,3 +1522,101 @@ Orchestrated IceInVein source closeout across all remaining open source gaps wit
 Historical total recorded on 17 September: **26 source verified, 0 source
 unclosed, 6 hosted-only** out of 32. This is superseded by the AM-14 and AM-24
 evidence corrections above and cannot close LP-0 or establish source completion.
+
+## Active bounded Call journey hardening — 22 September 2026
+
+Parents AM-19–24, AM-27; checkpoint `718fad729`. Joel requested checkpoint,
+edge-case evaluation, abandonment recovery and usable receipts. This package
+does not advance hosted or mainnet acceptance. Parent owns integration, expired
+unpaid recovery and runtime proof; reviewers own protocol/RPC evidence, durable
+response retention and receipt/Activity ergonomics in separate file boundaries.
+
+Acceptance: one Call identity survives client abandonment and replay; returned
+output survives interruption before payment verification/final projection; RPC
+head skew cannot invalidate matching confirmed payment; expired unused payment
+authorizations release exact reservations once; used/unexpired/disputed nonce
+never releases credit; Activity and receipt agree and explain the next action.
+No replacement payment while the Berlin attempt remains unresolved.
+
+The expired-unused boundary requires the same stopped Call and exact stored
+authorization, safe canonical chain block after expiry and unused nonce at that
+block on every configured RPC. It ensures atomic buyer/treasury release with
+stable ledger identities and terminal receipt. Invariant: no new signature or
+Provider request, no delivery inferred from settlement. On unavailable/used
+nonce, retain the original obligation for investigation. A durable scheduler
+retry is bounded; exhausted recovery remains attributable to this exact Call.
+
+Use existing payment-attempt fields, Formance commands and scheduler; no new
+schema, dependency or service. Added recovery code isolates chain evidence from
+financial mutations; reusing pre-submission release by pretending no submission
+occurred is rejected. Verification covers evidence refusal, duplicate/concurrent
+claim, crash/replay, exact ledger identity, output retention and product readback.
+Unknowns stay open until that evidence exists. Exit requires focused tests,
+typecheck, independent review and the existing stopped Call's product outcome;
+full hosted and live repeat acceptance remains a separate launch condition.
+
+Bounded package outcome: local paid completion and same-key replay verified;
+Berlin's stopped Call is terminal with credit restored. The 19 focused suites
+pass all 452 tests; whole-project typecheck and scoped lint pass. Independent
+review accepted response validation before charging, signed-receipt validation
+before retention, and exclusion of partial output from recovery. Runtime
+readback confirms receipt and usage now reference settlement, not reservation.
+Detailed Call/transaction references and the edge matrix are in
+`alpha-validation-plan.md`. AM-20/23 remain open for revoked-authority recovery
+and remedy for paid contract-invalid output. Forced live process termination
+and hosted/mainnet acceptance remain unverified. The repository dependency gate
+is still blocked by one existing status-presentation UI import cycle outside
+this change; its ceiling was not raised.
+
+### Buyer continuity and blind-spot pass — 22 September 2026
+
+Continue the bounded Call package: result comprehension, repeat through the
+existing Agent, waiting/return and recovery queue progress. Browser findings:
+returning buyer was told to connect first; Tool showed zero completions despite
+paid receipts; pending receipt required manual refresh. Avoid building a second
+browser purchasing channel during this pass.
+
+Contracts: status observation requires an owner-visible nonterminal Call,
+ensures bounded read-only updates while visible, preserves the last useful
+record on outage, never overlaps recovery commands, and stops after resolution
+or unmount. Repeat preparation requires bounded object JSON, ensures an editable
+handoff with current-quote/new-purchase instructions; it neither executes a Call
+nor changes the original. Shell examples must preserve literal input. Invalid
+JSON disables handoff. Output presentation preserves exact recorded values and
+copy data; bounded previews disclose omissions and expose full JSON.
+
+Structural decision: isolate the repeat editor from receipt diagnostics so its
+local draft/copy state has one owner; one small component replaces the existing
+reuse function, no dependency, storage or execution abstraction. Existing output
+renderer owns bounded presentation; no service-specific inference. Queue and
+historical recovery changes retain exact payment attribution and never grant
+new signing/spending authority. Tests and browser readback must establish these
+contracts before closeout; unresolved policy work stays explicit.
+
+Outcome: readable bounded output with exact JSON/copy, collapsed request and
+diagnostics, editable repeat handoff through the existing Agent, automatic
+visible-page status updates with outage backoff and command exclusion. Tool
+evidence now loads at the server boundary; recovered completion contributes once
+at its original timestamp. Local browser shows two completed Calls, working
+repeat-copy validation and a usable receipt at 320/390 pixels. Add credit now
+follows the balance, ahead of optional settings.
+
+Recovery closes the two source gaps recorded above: an exact already-submitted
+payment can finish accounting after original credential expiry/revocation,
+without new spending authority; independently verified payment with retained
+contract-invalid output releases still-held buyer credit while preserving the
+Provider settlement. The canonical public Tool reference is derived from the
+snapshot, not compared with its internal operation ID. A transactional scheduler
+step commits both effect and successor, including continuation after a remedy
+claim/crash. Permanent money fences survive retry exhaustion. Automatic queue
+filtering occurs before bounding results, so manual cases cannot starve it.
+
+Combined validation: 20 focused suites, 354 tests passed; the corrected scheduler
+test context also passed all 110 payment-attempt tests. React Doctor: 90/100,
+zero errors, three existing component-complexity warnings retained after review.
+The UI dependency cycle is removed without changing runtime semantics. Latest
+whole-checkout typecheck is affected by concurrent admin-console work; Call test
+context errors were corrected. This closes the bounded local improvement pass,
+not launch acceptance. Forced live process termination, hosted recovery and Base
+mainnet acceptance remain open; historical already-captured invalid output needs
+the distinct credit-adjustment path rather than reservation release.

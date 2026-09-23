@@ -87,7 +87,7 @@ export function AeAccountSecurityHistory({
     <AeSection
       id="security-history"
       title="Security history"
-      description="Evidence of session, Agent, connection, and account actions. Revoke devices in Profile above. Rotate credentials from the compromise checklist."
+      description="Evidence of session, Agent, connection, and account actions. Revoke devices in Profile. Rotate credentials in Recovery."
     >
       {result.kind === 'unavailable' ? (
         <Alert variant="destructive">
@@ -97,7 +97,7 @@ export function AeAccountSecurityHistory({
               <strong>What happened:</strong> Security history is temporarily unavailable.
             </p>
             <p className="font-mono text-xs tabular-nums">
-              <strong>Financial impact:</strong> A$0.00 affected — Profile, sessions, and the compromise checklist remain available above.
+              <strong>Financial impact:</strong> A$0.00 affected — Profile, sessions, and Recovery stay available.
             </p>
             <p>
               <strong>Next step:</strong> Check your connection and try again.

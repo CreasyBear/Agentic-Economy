@@ -4,7 +4,10 @@ import { Suspense, type ComponentProps } from 'react'
 import { AeEmptyState } from '@/components/ae/feedback/AeEmptyState'
 import { AeSection } from '@/components/ae/layout/AeSection'
 import { AeWorkspaceGeneral } from '@/components/ae/settings/AeWorkspaceGeneral'
+import { buttonVariants } from '@/components/ui/button-variants'
 import { Skeleton } from '@/components/ui/skeleton'
+import { appDestination } from '@/lib/navigation/app-navigation'
+import { cn } from '@/lib/utils'
 import { OwnershipConflict, SummaryCard, UnavailableSummary } from './ProviderWorkspaceSharedUi'
 import type {
   ProviderWorkspaceIdentityDetailResult,
@@ -42,8 +45,14 @@ export function ProviderWorkspaceIdentitySection({
       ) : identityDetail?.kind === 'conflict' ? (
         <OwnershipConflict title="Provider identity ownership conflict" />
       ) : identityDetail?.kind === 'not_applicable' ? (
-        <AeEmptyState title="Provider identity not configured" description="Reload Tools to create the current account’s provider identity." />
+        <AeEmptyState title="Provider identity not configured" description="Reload the Tools page to create the current account’s provider identity." />
       ) : <UnavailableSummary title="Provider identity controls unavailable" retryLabel="Try provider identity again" onRetry={onRetryIdentity} /> : null}
+      <a
+        href={appDestination('settings').to}
+        className={cn(buttonVariants({ variant: 'secondary' }), 'w-fit min-h-touch')}
+      >
+        Open Settings
+      </a>
     </AeSection>
   )
 }

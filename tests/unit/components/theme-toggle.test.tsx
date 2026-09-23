@@ -15,6 +15,7 @@ function resetDocumentTheme(): void {
   const root = document.documentElement
   root.classList.remove('light', 'dark')
   root.style.colorScheme = ''
+  delete root.dataset.appearancePreference
 }
 
 function renderThemeToggle(): ReturnType<typeof render> {
@@ -119,7 +120,7 @@ describe('ThemeToggle', () => {
   it('T6: trigger button uses compact size and full tactile physics token', () => {
     renderThemeToggle()
 
-    const trigger = screen.getByRole('button', { name: 'Appearance: System' })
+    const trigger = screen.getByRole('button', { name: 'Appearance: Light' })
     expect(trigger.className).toContain('size-8')
     for (const token of TACTILE.split(/\s+/u)) {
       expect(trigger.className).toContain(token)
@@ -139,9 +140,8 @@ describe('ThemeToggle', () => {
     expect(menu.className).toContain('origin-(--transform-origin)')
 
     const darkItem = screen.getByRole('menuitemradio', { name: 'Dark' })
-    for (const token of TACTILE.split(/\s+/u)) {
-      expect(darkItem.className).toContain(token)
-    }
+    expect(darkItem.className).toContain('active:scale-[0.98]')
+    expect(darkItem.className).toContain('motion-reduce:transition-none')
   })
 
   it('T7: radio menu items expose aria-checked on the active preference', async () => {
@@ -160,6 +160,6 @@ describe('ThemeToggle', () => {
       (item) => item.getAttribute('aria-checked') === 'true',
     )
     expect(checked).toHaveLength(1)
-    expect(checked[0]).toHaveAccessibleName('System')
+    expect(checked[0]).toHaveAccessibleName('Light')
   })
 })

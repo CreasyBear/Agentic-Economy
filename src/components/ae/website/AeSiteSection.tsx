@@ -82,9 +82,8 @@ function schemeClass(scheme: AeSiteScheme): string {
 function rhythmClass(rhythm: AeSiteRhythm): string {
   switch (rhythm) {
     case 'section':
-      return 'py-page md:py-band'
     case 'hero':
-      return 'py-section md:py-page'
+      return 'py-16 md:py-24'
     case 'spacious':
       return 'py-band md:py-hero'
     case 'flush':

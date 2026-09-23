@@ -8,6 +8,32 @@ export type HandoffReturnSearch = Readonly<{
   draft?: string
 }>
 
+export type ConnectionHandoffPageViewModel = Readonly<{
+  title: string
+  description: string
+  environmentLabel?: 'Sandbox' | 'Production'
+}>
+
+export const CONNECTION_HANDOFF_COPY = {
+  pageTitle: 'Connect Provider',
+  pageDescription: 'Connect the credential required by this Provider source.',
+  providerTitle: (providerName: string) => `Connect ${providerName}`,
+  providerAccessDescription: (accessKind: string) => `${accessKind} access for this Provider.`,
+  accessKind: {
+    apiKey: (name: string) => `${name} API key`,
+    bearer: 'Bearer token',
+    oauth: 'OAuth',
+  },
+  environment: {
+    sandbox: 'Sandbox',
+    production: 'Production',
+  },
+  unavailableTitle: 'Connection link unavailable',
+  unavailableDescription: 'Return to Add Tool and start again.',
+  expiredTitle: 'Connection link expired',
+  expiredDescription: 'Return to Add Tool and start again.',
+} as const
+
 export type ConnectionHandoffSurface =
   | Readonly<{ kind: 'unavailable' }>
   | Readonly<{ kind: 'consumed'; title: string; description: string; returnSearch: HandoffReturnSearch }>
@@ -74,7 +100,7 @@ export function refusalCopy(code: string): string {
     case 'connection_conflict':
       return 'The Provider connection changed. Return to Add Tool and review the current connection.'
     default:
-      return 'AE could not confirm the connection. Try again.'
+      return 'Agentic Economy could not confirm the connection. Try again.'
   }
 }
 

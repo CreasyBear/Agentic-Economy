@@ -23,7 +23,14 @@ export type Db = {
   patch: (id: string, value: Record<string, unknown>) => Promise<void>
 }
 export type Handler = (
-  ctx: { db: Db; runMutation?: () => Promise<null> },
+  ctx: {
+    db: Db
+    runMutation?: () => Promise<null>
+    scheduler?: {
+      runAt?: (timestamp: number, reference: unknown, args: Record<string, unknown>) => unknown
+      runAfter?: (delayMs: number, reference: unknown, args: Record<string, unknown>) => unknown
+    }
+  },
   args: Record<string, unknown>,
 ) => Promise<unknown>
 export type HandlerExport = { _handler: Handler }

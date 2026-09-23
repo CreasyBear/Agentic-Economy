@@ -30,7 +30,7 @@ export function AeSignUpPage(props: AeSignUpPageProps) {
   }
 
   return (
-    <AePublicPage>
+    <AePublicPage hideFooterCloser>
       <AeSiteAuthStage labelledBy={model.labelledBy} url={model.stageUrl}>
         <AeSiteAuthPanel
           eyebrow="Account"

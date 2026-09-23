@@ -9,11 +9,14 @@ type AePublicPageHeader = {
   description: string
   actions?: ReactNode
   meta?: ReactNode
+  focusTitle?: boolean
 }
 
 type AePublicEditorialPageProps = {
   kind?: 'editorial'
   children: ReactNode
+  /** When true, omit the footer closer panel. Default off. */
+  hideFooterCloser?: boolean
 }
 
 type AePublicRecordPageProps = AePublicPageHeader & {
@@ -68,12 +71,14 @@ export function AePublicPage(
     return props.children
   })()
 
+  const hideFooterCloser = 'hideFooterCloser' in props && props.hideFooterCloser === true
+
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <main id="main-content" data-shell-mode="page" tabIndex={-1} className="flex-1">
         {composition}
       </main>
-      <AeSiteFooter />
+      <AeSiteFooter hideCloser={hideFooterCloser} />
     </div>
   )
 }

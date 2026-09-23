@@ -1,10 +1,10 @@
 import { ErrorBoundary as SentryErrorBoundary } from '@sentry/react'
 import type { ReactNode } from 'react'
 
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { buttonVariants } from '@/components/ui/button-variants'
 import { cn } from '@/lib/utils'
-import { AeEmptyState } from '@/components/ae/feedback/AeEmptyState'
 import { attemptViteStaleChunkReload } from '@/lib/observability/stale-chunk-reload'
 
 /**
@@ -14,19 +14,20 @@ import { attemptViteStaleChunkReload } from '@/lib/observability/stale-chunk-rel
  */
 function AeObservabilityErrorFallback() {
   return (
-    <AeEmptyState
-      title="Something went wrong"
-      description="The page stopped unexpectedly. Try loading it again, or continue from the Tool catalogue."
-      role="alert"
-      action={
-        <div className="flex flex-wrap justify-center gap-3">
-          <Button type="button" variant="default" className="min-h-touch" onClick={() => window.location.reload()}>
-            Try again
-          </Button>
-          <a href="/market" className={cn(buttonVariants({ variant: 'secondary' }), 'min-h-touch')}>Browse Tools</a>
-        </div>
-      }
-    />
+    <div className="grid min-h-64 place-content-center py-page">
+      <Alert variant="destructive" className="max-w-md">
+        <AlertTitle>This page could not be loaded</AlertTitle>
+        <AlertDescription>
+          <span>Nothing was charged.</span>
+          <div className="flex flex-wrap gap-3 pt-2">
+            <Button type="button" variant="default" className="min-h-touch" onClick={() => window.location.reload()}>
+              Try again
+            </Button>
+            <a href="/market" className={cn(buttonVariants({ variant: 'secondary' }), 'min-h-touch')}>Browse Tools</a>
+          </div>
+        </AlertDescription>
+      </Alert>
+    </div>
   )
 }
 

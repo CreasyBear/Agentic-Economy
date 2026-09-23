@@ -1,3 +1,5 @@
+import type { OwnerSupplySourceAssessmentInput } from '@/modules/capability-supply/source-first-owner'
+import type { SupplySourceAssessment } from '@/modules/capability-supply/source-first-owner'
 import { REASON_COPY, REASON_COPY_FALLBACK } from '@/content/reason-copy'
 import { degrade } from '@/lib/observability/degrade'
 import { isRecord } from '@/modules/common/is-record'
@@ -46,17 +48,6 @@ export function inspectJsonPayload(value: string, requiredKeys: readonly string[
   }
 }
 
-export const INSECURE_URL_DIAGNOSTIC = {
-  whatHappened: 'Insecure HTTP protocol.',
-  financialImpact: 'A$0.00 affected — endpoint discovery blocked.',
-  nextStep: 'Provide an HTTPS URL to ensure encrypted capability invocation.',
-} as const
-
-export const MALFORMED_JSON_DIAGNOSTIC = {
-  whatHappened: 'Malformed JSON payload.',
-  financialImpact: 'A$0.00 affected — plugin discovery blocked.',
-  nextStep: 'Ensure the JSON syntax is valid before discovering endpoints.',
-} as const
 
 export const PLUGIN_JSON_REQUIRED_KEYS = ['$schema', 'name'] as const
 export const MCP_JSON_REQUIRED_KEYS = ['$schema', 'mcpServers'] as const
@@ -64,6 +55,44 @@ export const MCP_JSON_REQUIRED_KEYS = ['$schema', 'mcpServers'] as const
 export type SourceKind = SupplySourceInput['kind']
 export type Environment = SupplySourceInput['environment']
 export type AttestationKey = keyof PublishSupplyToolV2Input['attestation']
+export type SupplyJourneyContinuation = Readonly<{ label: string; to: string }>
+export type SupplyPublicationInvalidField =
+  | 'category'
+  | 'price'
+  | 'connection'
+  | 'attestation'
+  | 'candidate'
+
+export const SUPPLY_PUBLICATION_ERROR_ID = 'supply-publication-error'
+
+export const SUPPLY_PUBLICATION_FIELD_IDS = {
+  category: 'supply-native-category',
+  priceGroup: 'supply-native-price-group',
+  priceAud: 'supply-native-price-aud',
+  connection: 'supply-native-connection',
+  attestation: 'supply-attest-authorised',
+  candidate: 'supply-candidate-group',
+} as const
+
+/** Maps the existing validation copy to the control that message names. */
+export function publicationInvalidFieldForMessage(
+  message: string,
+): SupplyPublicationInvalidField | undefined {
+  switch (message) {
+    case 'Enter a category before submitting this Tool.':
+      return 'category'
+    case 'Enter a valid AUD price, or choose Free.':
+      return 'price'
+    case 'Choose a connected source before submitting this Tool.':
+      return 'connection'
+    case 'Confirm all three publication statements before submitting.':
+      return 'attestation'
+    case 'Select one supported Tool before submitting it.':
+      return 'candidate'
+    default:
+      return undefined
+  }
+}
 
 export type SupplyNativeStartProps = Readonly<{
   businessRef: string
@@ -74,6 +103,7 @@ export type SupplyNativeStartProps = Readonly<{
     candidateRef: string
     connectionRef?: string
   }>
+  onAssess?: (input: OwnerSupplySourceAssessmentInput, signal: AbortSignal) => Promise<SupplySourceAssessment>
   onPreview: (source: SupplySourceInput, idempotencyKey: string) => Promise<SupplySourcePreview>
   onConnect: (input: Readonly<{
     businessId: string

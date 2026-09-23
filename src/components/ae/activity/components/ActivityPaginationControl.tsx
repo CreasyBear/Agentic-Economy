@@ -9,7 +9,7 @@ export function ActivityPaginationControl({ pagination, onLoadMore }: ActivityPa
     <div className="flex flex-col items-center gap-intra border-t border-border pt-related">
       {pagination.status === 'failed' ? (
         <Alert>
-          <AlertTitle>Could not load older calls.</AlertTitle>
+          <AlertTitle>Could not load older Calls.</AlertTitle>
           <AlertDescription>
             A$0.00 affected — your account balance is unchanged. Check your connection and try loading more again.
           </AlertDescription>

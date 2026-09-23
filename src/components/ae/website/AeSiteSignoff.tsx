@@ -32,18 +32,18 @@ export function AeSiteSignoff({
       scheme="canvas"
       background={<AeGuideCrosshair crossX={SIGNOFF_CROSSHAIR_X[crosshairSide]} crossY={SIGNOFF_CROSSHAIR_Y} />}
     >
-      <div className="flex flex-col items-center py-hero text-center md:min-h-[36rem] md:justify-center md:py-0">
+      <div className="grid content-start gap-4 py-hero text-left md:min-h-[36rem] md:py-0">
         <div className="w-full max-w-xl">
-          <AeSiteHeading as="h2" size="lg" id={headingId}>
+          <AeSiteHeading as="h2" size="sm" id={headingId}>
             {heading}
           </AeSiteHeading>
         </div>
-        <div className="mt-2 w-full max-w-md">
-          <AeSiteBody muted size="sm" className="mx-auto">
+        <div className="w-full max-w-lg">
+          <AeSiteBody muted size="sm">
             {body}
           </AeSiteBody>
         </div>
-        <div className="mt-6 flex flex-wrap items-center justify-center gap-related">
+        <div className="flex flex-wrap items-center gap-related">
           {children}
         </div>
       </div>

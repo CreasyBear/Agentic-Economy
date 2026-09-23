@@ -1,3 +1,5 @@
+import { getStatusPresentation } from '@/lib/ui/status-presentation'
+
 export const AE_UI_STATES = [
   'loading',
   'empty',
@@ -97,7 +99,7 @@ export const AE_UI_STATE_PRESENTATIONS = {
     recoveryActions: [],
   },
   refused: {
-    label: 'Refused',
+    label: getStatusPresentation('protected_action_refused').compactLabel,
     title: 'Request refused',
     description: 'The request did not proceed. Review the reason before retrying.',
     tone: 'danger',
@@ -115,7 +117,7 @@ export const AE_UI_STATE_PRESENTATIONS = {
     recoveryActions: ['retry_read'],
   },
   unavailable: {
-    label: 'Unavailable',
+    label: getStatusPresentation('unavailable').label,
     title: 'Temporarily unavailable',
     description: 'The current source could not be reached. No newer state is claimed.',
     tone: 'warning',

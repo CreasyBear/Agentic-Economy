@@ -1,7 +1,6 @@
 import { CheckIcon, CopyIcon } from 'lucide-react'
 import { useMemo, useState, type ReactElement } from 'react'
 
-import { AeTableEmptyState } from '@/components/ae/feedback/AeTableEmptyState'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import {
@@ -49,7 +48,10 @@ const TABLE_HEADERS = (
   </TableHeader>
 )
 
-function DirectoryEmailCell({ email }: Readonly<{ email: string | null }>): ReactElement {
+function DirectoryEmailCell({
+  email,
+  displayName,
+}: Readonly<{ email: string | null; displayName: string }>): ReactElement {
   const { isCopied, copy } = useClipboardCopy(email ?? '', { timeout: 2_000 })
 
   if (email === null) {
@@ -64,7 +66,7 @@ function DirectoryEmailCell({ email }: Readonly<{ email: string | null }>): Reac
         variant="ghost"
         size="icon-sm"
         className={cn('shrink-0', TACTILE)}
-        aria-label={isCopied ? 'Email copied' : 'Copy email'}
+        aria-label={isCopied ? `Email copied for ${displayName}` : `Copy email for ${displayName}`}
         onClick={() => {
           void copy().then(() => {
             toast.success('Copied email to clipboard')
@@ -101,11 +103,6 @@ export function AeTeamDirectoryTable({ directory, loading }: AeTeamDirectoryTabl
 
   const filtersActive = normalizedFilter.length > 0 || roleFilter !== 'all'
   const showFilterEmpty = !isLoading && directory !== undefined && filteredRows.length === 0 && filtersActive
-  const showMemberEmptyState = !isLoading
-    && directory !== undefined
-    && directory.members.length === 0
-    && !showFilterEmpty
-    && filteredRows.length > 0
 
   const resetFilters = () => {
     setSearchTerm('')
@@ -120,8 +117,8 @@ export function AeTeamDirectoryTable({ directory, loading }: AeTeamDirectoryTabl
   ]
 
   return (
-    <div className="grid gap-4">
-      <div className="flex min-h-[3rem] flex-wrap items-center gap-3">
+    <div className="grid min-w-0 gap-4">
+      <div className="flex min-h-[3rem] min-w-0 flex-wrap items-center gap-3">
         <label className="relative min-w-[12rem] flex-1 max-w-sm">
           <span className="sr-only">Filter team members</span>
           <input
@@ -131,10 +128,10 @@ export function AeTeamDirectoryTable({ directory, loading }: AeTeamDirectoryTabl
             value={searchTerm}
             disabled={isLoading}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full rounded-md border border-input bg-background px-3 py-1.5 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+            className="w-full rounded-md border border-input bg-background px-3 py-1.5 ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
           />
         </label>
-        <div className="flex flex-wrap gap-2" role="group" aria-label="Filter by role">
+        <div className="flex max-w-full flex-wrap gap-2" role="group" aria-label="Filter by role">
           {roleChips.map((chip) => {
             const pressed = roleFilter === chip.id
             return (
@@ -159,12 +156,12 @@ export function AeTeamDirectoryTable({ directory, loading }: AeTeamDirectoryTabl
       </div>
 
       <p className="min-h-4 text-xs text-muted-foreground" aria-live="polite">
-        Showing {filteredRows.length} of {counts.all}
+        {isLoading ? '' : `Showing ${filteredRows.length} of ${counts.all}`}
       </p>
 
       {isLoading ? (
         <div
-          className="min-h-[18rem] rounded-md border"
+          className="min-h-[18rem] min-w-0 overflow-hidden rounded-md border"
           role="status"
           aria-busy="true"
           aria-label="Loading team directory"
@@ -185,7 +182,7 @@ export function AeTeamDirectoryTable({ directory, loading }: AeTeamDirectoryTabl
           </Table>
         </div>
       ) : (
-        <div className="min-h-[18rem] rounded-md border">
+        <div className="min-h-[18rem] min-w-0 overflow-hidden rounded-md border">
           <Table aria-label="Team directory" className="text-left text-sm">
             {TABLE_HEADERS}
             <TableBody className="divide-y divide-border">
@@ -213,15 +210,15 @@ export function AeTeamDirectoryTable({ directory, loading }: AeTeamDirectoryTabl
                     <TableRow key={row.kind === 'owner' ? row.ownershipRef : row.membershipRef}>
                       <TableCell className="px-4 py-3 font-medium text-foreground">{row.displayName}</TableCell>
                       <TableCell className="px-4 py-3">
-                        <DirectoryEmailCell email={row.email} />
+                        <DirectoryEmailCell email={row.email} displayName={row.displayName} />
                       </TableCell>
                       <TableCell className="px-4 py-3">
-                        <span className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold bg-secondary text-secondary-foreground">
+                        <span className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium bg-secondary text-secondary-foreground">
                           {row.roleLabel}
                         </span>
                       </TableCell>
                       <TableCell className="px-4 py-3">
-                        <span className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold bg-success/15 text-success">
+                        <span className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium bg-success/15 text-success">
                           {row.statusLabel}
                         </span>
                       </TableCell>
@@ -230,27 +227,6 @@ export function AeTeamDirectoryTable({ directory, loading }: AeTeamDirectoryTabl
                       </TableCell>
                     </TableRow>
                   ))}
-                  {showMemberEmptyState && (
-                    <TableRow className="hover:bg-transparent">
-                      <TableCell colSpan={5} className="p-0">
-                        <AeTableEmptyState
-                          title="No other members in this workspace"
-                          description="Invite collaborators or administrators to access workspace resources."
-                          action={(
-                            <a
-                              href="#invite"
-                              className={cn(
-                                'inline-flex items-center justify-center rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
-                                TACTILE,
-                              )}
-                            >
-                              + Invite Member
-                            </a>
-                          )}
-                        />
-                      </TableCell>
-                    </TableRow>
-                  )}
                 </>
               )}
             </TableBody>

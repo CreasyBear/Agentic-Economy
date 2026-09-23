@@ -14,7 +14,7 @@ import { AeAssistantInstallFunnel } from '@/components/ae/console/AeAssistantIns
 import { toast } from '@/lib/ui/toast'
 import { AeAccountFundingPanel } from '@/components/ae/console/AeCreditTopUpPanel'
 import type { AccountFundingPort } from '@/modules/money/account-funding.contracts'
-import { AeOwnerCredit } from '@/components/ae/console/AeOwnerCredit'
+import { AeOwnerCredit } from '@/components/ae/console/owner-credit/AeOwnerCredit'
 import type { AccountHistoryResult, CreditPaymentSession } from '@/modules/money/public'
 import type { AccountFundingBalance, AccountFundingBeginInput, AccountFundingConstraints } from '@/modules/money/server'
 
@@ -148,12 +148,17 @@ afterEach(() => {
   window.history.replaceState(null, '', '/')
 })
 
+function openLedger() {
+  fireEvent.click(screen.getByRole('tab', { name: 'Ledger' }))
+}
+
 describe('owner credit target', () => {
   it('renders booked Account transactions instead of Agent activity approximations', () => {
     render(<AeOwnerCredit
       accountBalance={accountBalance}
       accountHistory={emptyAccountHistory}
     />)
+    openLedger()
 
     expect(screen.queryByText('Weather lookup')).toBeNull()
     expect(screen.getByText('No booked Account transactions yet')).toBeTruthy()
@@ -179,6 +184,7 @@ describe('owner credit target', () => {
         }],
       }}
     />)
+    openLedger()
 
     expect(screen.getByText('Call purchase')).toBeTruthy()
     expect(screen.getByText('−A$0.50')).toBeTruthy()
@@ -391,9 +397,10 @@ describe('owner credit target', () => {
       }}
       accountHistoryPort={{ read }}
     />)
+    openLedger()
 
     expect(screen.queryByText('Some transaction attribution is incomplete')).toBeNull()
-    fireEvent.click(screen.getByRole('button', { name: 'Load more history' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Load more' }))
     await waitFor(() => expect(read).toHaveBeenCalledWith({ cursor: 'cursor:next' }))
     await waitFor(() => {
       expect(screen.getByText('Some transaction attribution is incomplete')).toBeTruthy()
@@ -422,11 +429,12 @@ describe('owner credit target', () => {
       accountHistory={{ ...emptyAccountHistory, continueCursor: 'cursor:retry', isDone: false }}
       accountHistoryPort={{ read }}
     />)
+    openLedger()
 
-    fireEvent.click(screen.getByRole('button', { name: 'Load more history' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Load more' }))
     await waitFor(() => expect(screen.getByText('More history could not be loaded')).toBeTruthy())
     expect(screen.getByText('No booked Account transactions yet')).toBeTruthy()
-    fireEvent.click(screen.getByRole('button', { name: 'Retry more history' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Load more' }))
     await waitFor(() => expect(screen.getByText('Credit added')).toBeTruthy())
     expect(read).toHaveBeenNthCalledWith(1, { cursor: 'cursor:retry' })
     expect(read).toHaveBeenNthCalledWith(2, { cursor: 'cursor:retry' })
@@ -442,7 +450,8 @@ describe('owner credit target', () => {
       accountHistory={{ ...emptyAccountHistory, snapshotAt: 1, continueCursor: 'cursor:old', isDone: false }}
       accountHistoryPort={{ read }}
     />)
-    fireEvent.click(screen.getByRole('button', { name: 'Load more history' }))
+    openLedger()
+    fireEvent.click(screen.getByRole('button', { name: 'Load more' }))
     await waitFor(() => expect(read).toHaveBeenCalledOnce())
 
     rerender(<AeOwnerCredit
@@ -474,7 +483,7 @@ describe('owner credit target', () => {
 
   it('never renders an unavailable balance as zero', () => {
     render(<AeOwnerCredit accountHistory={emptyAccountHistory} />)
-    expect(screen.getByText('Balance unavailable')).toBeTruthy()
+    expect(screen.getByText('Credit unavailable')).toBeTruthy()
     expect(document.body.textContent).not.toContain('A$0.00')
   })
 
@@ -494,7 +503,8 @@ describe('owner credit target', () => {
 
     expect(screen.getByText('A$12.50')).toBeTruthy()
     expect(screen.getByText('Balance could not be refreshed')).toBeTruthy()
-    expect(screen.getByText('Balance history could not be refreshed')).toBeTruthy()
+    openLedger()
+    expect(screen.getByText('Credit history could not be refreshed')).toBeTruthy()
     expect(screen.getByText('Credit added')).toBeTruthy()
   })
 })
@@ -508,7 +518,7 @@ describe('assistant access components', () => {
     expect(screen.getByRole('heading', { name: 'Connect with Codex' })).toBeTruthy()
     expect(document.body.textContent).toContain('codex mcp add agentic-economy --url "https://ae.example/mcp"')
     expect(document.body.textContent).toContain('codex mcp login agentic-economy')
-    expect(screen.getByText(/browse Tools before connecting/u)).toBeTruthy()
+    expect(screen.getByText(/Connection is complete only when it appears in Agents/u)).toBeTruthy()
     expect(screen.getByText(/A live result confirms the connection; installing it alone does not/u)).toBeTruthy()
     expect(screen.queryByText('claude mcp add --transport http --scope user agentic-economy "https://ae.example/mcp"')).toBeNull()
 
@@ -564,6 +574,13 @@ describe('assistant access components', () => {
     expect(screen.getByRole('button', { name: /pay A\$10\.55 and add A\$10\.00/i })).toBeTruthy()
   })
 
+  it('states the payment outcome when funding is unavailable', () => {
+    render(<AeAccountFundingPanel />)
+    expect(screen.getByRole('alert').textContent).toContain(
+      'No payment was made. Nothing was charged.',
+    )
+  })
+
   it('keeps quote geometry when the amount is empty or invalid', () => {
     render(<AeAccountFundingPanel port={{ begin: vi.fn(), read: vi.fn() }} constraints={fundingConstraints} />)
 
@@ -611,8 +628,8 @@ describe('assistant access components', () => {
     })
     render(<AeAccountFundingPanel port={{ begin: vi.fn(), read: vi.fn(async () => session) }} constraints={fundingConstraints} />)
 
-    expect(await screen.findByText(/A\$0\.00 deducted/u)).toBeTruthy()
-    expect(screen.getByText(/unchanged/u)).toBeTruthy()
+    expect(await screen.findByText(/Nothing was charged\./u)).toBeTruthy()
+    expect(screen.getByText(/Your balance is unchanged\./u)).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Add more credit' })).toBeTruthy()
   })
 
@@ -719,6 +736,7 @@ describe('assistant access components', () => {
       amount: { currency: 'AUD', units: '10000000', exponent: 6 },
       expectedPolicyDigest: refreshedConstraints.policyDigest,
     })
+    expect(await screen.findByText(/No payment was made\. Nothing was charged\./u)).toBeTruthy()
   })
 
   it('does not offer a stale payment when funding quote refresh fails', async () => {
@@ -955,8 +973,8 @@ describe('assistant access components', () => {
     const read = vi.fn(async () => session)
     render(<AeAccountFundingPanel port={{ begin, read }} constraints={fundingConstraints} />)
 
-    expect(await screen.findByText(/A\$0\.00 deducted/u)).toBeTruthy()
-    expect(screen.getByText(/unchanged/u)).toBeTruthy()
+    expect(await screen.findByText(/Nothing was charged\./u)).toBeTruthy()
+    expect(screen.getByText(/Your balance is unchanged\./u)).toBeTruthy()
     expect(screen.queryByRole('button', { name: 'Continue secure payment' })).toBeNull()
     expect(begin).not.toHaveBeenCalled()
     fireEvent.click(await screen.findByRole('button', { name: 'Add more credit' }))
@@ -1004,7 +1022,7 @@ describe('assistant access components', () => {
 
     expect(begin).toHaveBeenCalledOnce()
     expect(await screen.findByText(/account funding is unavailable/i)).toBeTruthy()
-    expect(screen.getByText(/no payment started.*balance did not change/i)).toBeTruthy()
+    expect(screen.getByText(/No payment was made\. Nothing was charged\. Your balance is unchanged\./u)).toBeTruthy()
     expect(screen.queryByText('Payment received')).toBeNull()
   })
 
@@ -1089,11 +1107,12 @@ describe('assistant access components', () => {
         onCreditRefresh={onCreditRefresh}
       />,
     )
-    expect(screen.getByText('Balance history unavailable')).toBeTruthy()
-    expect(screen.getByText(/No missing transaction or amount is being inferred/)).toBeTruthy()
     expect(screen.getByText('A$12.50')).toBeTruthy()
+    openLedger()
+    expect(screen.getByText('Credit history unavailable')).toBeTruthy()
+    expect(screen.getByText(/No missing transaction or amount is being inferred/)).toBeTruthy()
     expect(screen.queryByText('No booked Account transactions yet')).toBeNull()
-    fireEvent.click(screen.getByRole('button', { name: 'Refresh history' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Try again' }))
     expect(onCreditRefresh).toHaveBeenCalledTimes(1)
   })
 

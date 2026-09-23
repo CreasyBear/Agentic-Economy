@@ -5,8 +5,16 @@ import { AeToolLatencyChart } from './AeToolLatencyChart'
 export function AeToolTrackRecord({
   evidence,
 }: Readonly<{
-  evidence: MarketListingEvidenceProjection
+  evidence?: MarketListingEvidenceProjection
 }>) {
+  if (evidence === undefined) {
+    return (
+      <section aria-label="30-day track record" className="grid gap-2 border-b border-border px-gutter py-5">
+        <h2 className="text-sm font-semibold text-foreground">Observed performance</h2>
+        <p className="text-sm text-muted-foreground">Performance history is unavailable right now. You can still inspect and use this Tool.</p>
+      </section>
+    )
+  }
   return (
     <section
       aria-label="30-day track record"
@@ -33,7 +41,7 @@ export function AeToolTrackRecord({
           numeric={evidence.rating.kind === 'rated'}
         />
         <TrackMetric
-          label="Median latency"
+          label="Median time to result"
           value={evidence.latency.kind === 'measured' ? evidence.latency.display : 'Pending'}
           detail={evidence.latency.kind === 'measured'
             ? `${evidence.latency.sampleSize} timed calls`
@@ -41,12 +49,12 @@ export function AeToolTrackRecord({
           numeric={evidence.latency.kind === 'measured'}
         />
         <TrackMetric
-          label="P95 latency"
+          label="95th percentile time"
           value={evidence.latency.kind === 'measured'
             ? formatDuration(evidence.latency.p95Ms)
             : 'Pending'}
           detail={evidence.latency.kind === 'measured'
-            ? 'Tail response time'
+            ? '95% of completed Calls finish within this time'
             : 'Available after 5 samples'}
           numeric={evidence.latency.kind === 'measured'}
         />
@@ -54,6 +62,7 @@ export function AeToolTrackRecord({
 
       <div className="min-w-0 px-gutter py-5">
         <AeToolLatencyChart latency={evidence.latency} />
+        <p className="mt-related text-xs text-muted-foreground">Time from acceptance to result, including any recovery.</p>
       </div>
     </section>
   )

@@ -210,6 +210,7 @@ describe('useChatSession', () => {
     expect(latestListThreadArgs(useQueryCallsRef.current)).not.toBe('skip')
     expect(latestSearchThreadArgs(useQueryCallsRef.current)).toBe('skip')
 
+    expect(result.current.showHistoryRail).toBe(true)
     const panel = result.current.createHistoryPanel('test')
     expect(isValidElement(panel)).toBe(true)
     if (!isValidElement<ChatHistoryProps>(panel)) throw new Error('history panel missing')

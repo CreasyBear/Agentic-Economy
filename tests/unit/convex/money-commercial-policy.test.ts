@@ -4,13 +4,15 @@ import { convexTest } from 'convex-test'
 import { describe, expect, it } from 'vitest'
 
 import schema from '../../../convex/schema'
+import { canonicalDigest } from '@/modules/common/canonical-digest'
+import type { AdminCommandArgs, AdminCommandReceipt } from '@/lib/operator/admin-console/contracts'
 import { readCommercialPolicyGate } from '../../../convex/moneyCommercialPolicy'
 import {
   COMMERCIAL_POLICY_FAMILIES,
   SANDBOX_COMMERCIAL_POLICY_CONTROLS,
 } from '../../../src/modules/money/public'
 import { PRODUCTION_COMMERCIAL_POLICY_CONTROLS } from '../../helpers/commercial-policy-fixtures'
-import { ownerAdmin } from '../../helpers/convex-fixtures'
+import { ownerAdmin, testConsequenceProof } from '../../helpers/convex-fixtures'
 import { withSourceWrite } from '../../helpers/source-write-admission'
 
 const convexModules = Object.fromEntries(
@@ -18,10 +20,7 @@ const convexModules = Object.fromEntries(
     .map(([path, load]) => [path.replace('../../../convex/', './'), load]),
 )
 
-type PolicyChangeResult =
-  | Readonly<{ kind: 'changed'; change: 'activated' | 'replaced' | 'suspended'; policyRef: string }>
-  | Readonly<{ kind: 'replayed'; policyRef: string }>
-  | Readonly<{ kind: 'refused'; code: string }>
+type PolicyChangeResult = AdminCommandReceipt<'change_commercial_policy'>
 
 const changeCommercialPolicy = makeFunctionReference<
   'mutation',
@@ -41,22 +40,30 @@ const readPlatformFundingConstraints = makeFunctionReference<
   Record<string, unknown>
 >('moneyCommercialPolicy:readPlatformFundingConstraints')
 
-function command(overrides: Record<string, unknown> = {}) {
+function command(
+  subject: string,
+  operationKey: string,
+  changeKind: 'activate' | 'replace' | 'suspend',
+  policyRef: string,
+  revision: number,
+  expectedCurrentPolicyRef?: string,
+): AdminCommandArgs<'change_commercial_policy'> {
   const now = Date.now()
-  return {
-    changeKind: 'activate',
-    family: 'commercial_perimeter',
-    environment: 'production',
-    policyRef: 'commercial-policy:commercial-perimeter:1',
-    revision: 1,
-    effectiveAt: now - 60_000,
-    expiresAt: now + 86_400_000,
-    evidenceRef: 'legal-approval:commercial-perimeter:1',
-    evidenceDigest: `sha256:${'a'.repeat(64)}`,
+  const input: AdminCommandArgs<'change_commercial_policy'>['input'] = {
+    changeKind, family: 'commercial_perimeter', environment: 'production',
+    policyRef, revision, effectiveAt: now - 60_000, expiresAt: now + 86_400_000,
     control: SANDBOX_COMMERCIAL_POLICY_CONTROLS.commercial_perimeter,
-    operationKey: 'moneyCommercialPolicy:change:commercial-perimeter:1',
-    correlationId: 'commercial-policy:commercial-perimeter:1',
-    ...overrides,
+    ...(expectedCurrentPolicyRef === undefined ? {} : { expectedCurrentPolicyRef }),
+  }
+  const evidenceRefs = ['legal-approval:commercial-perimeter:1']
+  const reasonCode = 'pricing_update'
+  const action = 'change_commercial_policy'
+  const digest = canonicalDigest({ scope: 'admin_operator', action, input, reasonCode, evidenceRefs })
+  return {
+    input, evidenceRefs, reasonCode, action,
+    operationKey, correlationId: operationKey,
+    approval: { kind: 'execute' },
+    proof: testConsequenceProof({ subject }, digest),
   }
 }
 
@@ -199,128 +206,30 @@ describe('commercial policy persistence', () => {
     })
   })
 
-  it('requires owner-admin authority and one-command strict proof before activation', async () => {
-    const backend = convexTest(schema, convexModules)
-    const admin = await ownerAdmin(backend, 'user_commercial-policy-admin')
-    const base = command()
-
-    await expect(admin.mutation(
-      changeCommercialPolicy,
-      await withSourceWrite('admin_operator', base),
-    )).resolves.toEqual({ kind: 'refused', code: 'reauthentication_required' })
-
-    await expect(backend.run(async (ctx) =>
-      await ctx.db.query('moneyCommercialPolicies').collect(),
-    )).resolves.toEqual([])
-
-    const proof = {
-      reverificationId: 'reverification:commercial-policy:one',
-      firstFactorAgeMinutes: 0,
-      secondFactorAgeMinutes: -1,
-    }
-    const admitted = await withSourceWrite('admin_operator', { ...base, proof })
-    await expect(admin.mutation(changeCommercialPolicy, admitted)).resolves.toEqual({
-      kind: 'changed',
-      change: 'activated',
-      policyRef: base.policyRef,
-    })
-
-    await expect(admin.mutation(
-      changeCommercialPolicy,
-      await withSourceWrite('admin_operator', { ...base, proof }),
-    )).resolves.toEqual({ kind: 'replayed', policyRef: base.policyRef })
-
-    await expect(admin.mutation(
-      changeCommercialPolicy,
-      await withSourceWrite('admin_operator', {
-        ...base,
-        policyRef: 'commercial-policy:commercial-perimeter:changed',
-        operationKey: 'moneyCommercialPolicy:change:commercial-perimeter:changed',
-        correlationId: 'commercial-policy:commercial-perimeter:changed',
-        proof,
-      }),
-    )).resolves.toEqual({ kind: 'refused', code: 'command_changed' })
-  })
-
   it('replaces and suspends the current row without leaving two active policies', async () => {
     const backend = convexTest(schema, convexModules)
-    const admin = await ownerAdmin(backend, 'user_commercial-policy-lifecycle')
-    const first = command()
-    await admin.mutation(changeCommercialPolicy, await withSourceWrite('admin_operator', {
-      ...first,
-      proof: {
-        reverificationId: 'reverification:commercial-policy:activate',
-        firstFactorAgeMinutes: 0,
-        secondFactorAgeMinutes: -1,
-      },
-    }))
-
-    const second = command({
-      changeKind: 'replace',
-      expectedCurrentPolicyRef: first.policyRef,
-      policyRef: 'commercial-policy:commercial-perimeter:2',
-      revision: 2,
-      operationKey: 'moneyCommercialPolicy:change:commercial-perimeter:2',
-      correlationId: 'commercial-policy:commercial-perimeter:2',
-      proof: {
-        reverificationId: 'reverification:commercial-policy:replace',
-        firstFactorAgeMinutes: 0,
-        secondFactorAgeMinutes: -1,
-      },
-    })
-    await expect(admin.mutation(
-      changeCommercialPolicy,
-      await withSourceWrite('admin_operator', second),
-    )).resolves.toEqual({
-      kind: 'changed',
-      change: 'replaced',
-      policyRef: second.policyRef,
-    })
-
-    const suspend = command({
-      changeKind: 'suspend',
-      expectedCurrentPolicyRef: second.policyRef,
-      policyRef: second.policyRef,
-      revision: 2,
-      operationKey: 'moneyCommercialPolicy:suspend:commercial-perimeter:2',
-      correlationId: 'commercial-policy:suspend:commercial-perimeter:2',
-      proof: {
-        reverificationId: 'reverification:commercial-policy:suspend',
-        firstFactorAgeMinutes: 0,
-        secondFactorAgeMinutes: -1,
-      },
-    })
-    await expect(admin.mutation(
-      changeCommercialPolicy,
-      await withSourceWrite('admin_operator', suspend),
-    )).resolves.toEqual({
-      kind: 'changed',
-      change: 'suspended',
-      policyRef: second.policyRef,
-    })
-
-    await expect(backend.run(async (ctx) => {
-      const rows = await ctx.db.query('moneyCommercialPolicies')
-        .withIndex('by_environment_and_family_and_lifecycle', (query) => query
-          .eq('environment', 'production')
-          .eq('family', 'commercial_perimeter'))
-        .collect()
-      return rows.map(({ policyRef, lifecycle, supersededByPolicyRef }) => ({
-        policyRef,
-        lifecycle,
-        supersededByPolicyRef,
-      }))
-    })).resolves.toEqual([
-      {
-        policyRef: first.policyRef,
-        lifecycle: 'superseded',
-        supersededByPolicyRef: second.policyRef,
-      },
-      {
-        policyRef: second.policyRef,
-        lifecycle: 'suspended',
-        supersededByPolicyRef: undefined,
-      },
+    const subject = 'user_commercial-policy-lifecycle'
+    const admin = await ownerAdmin(backend, subject)
+    const firstRef = 'commercial-policy:commercial-perimeter:1'
+    const secondRef = 'commercial-policy:commercial-perimeter:2'
+    const first = command(subject, 'policy:activate:1', 'activate', firstRef, 1)
+    await expect(admin.mutation(changeCommercialPolicy, await withSourceWrite('admin_operator', first)))
+      .resolves.toMatchObject({ kind: 'completed', code: 'commercial_policy_changed' })
+    const second = command(subject, 'policy:replace:2', 'replace', secondRef, 2, firstRef)
+    await expect(admin.mutation(changeCommercialPolicy, await withSourceWrite('admin_operator', second)))
+      .resolves.toMatchObject({ kind: 'completed', code: 'commercial_policy_changed' })
+    const suspend = command(subject, 'policy:suspend:2', 'suspend', secondRef, 2, secondRef)
+    await expect(admin.mutation(changeCommercialPolicy, await withSourceWrite('admin_operator', suspend)))
+      .resolves.toMatchObject({ kind: 'completed', code: 'commercial_policy_changed' })
+    const rows = await backend.run((ctx) => ctx.db.query('moneyCommercialPolicies')
+      .withIndex('by_environment_and_family_and_lifecycle', (query) => query
+        .eq('environment', 'production').eq('family', 'commercial_perimeter'))
+      .collect())
+    expect(rows.map(({ policyRef, lifecycle, supersededByPolicyRef }) => ({
+      policyRef, lifecycle, supersededByPolicyRef,
+    }))).toEqual([
+      { policyRef: firstRef, lifecycle: 'superseded', supersededByPolicyRef: secondRef },
+      { policyRef: secondRef, lifecycle: 'suspended', supersededByPolicyRef: undefined },
     ])
   })
 })

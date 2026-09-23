@@ -16,6 +16,7 @@ import {
   getThemeScript,
   parseStoredAppearance,
   resolveAppearance,
+  DEFAULT_APPEARANCE_PREFERENCE,
   THEME_STORAGE_KEY,
   type AppearancePreference,
   type ResolvedAppearance,
@@ -53,7 +54,7 @@ function readPrefersDark(): boolean {
 
 export function ThemeProvider({
   children,
-  defaultTheme = 'system',
+  defaultTheme = DEFAULT_APPEARANCE_PREFERENCE,
   storageKey = THEME_STORAGE_KEY,
 }: {
   children: ReactNode
@@ -117,7 +118,7 @@ export function useAppearance(): ThemeProviderState {
   const context = useContext(ThemeContext)
   if (context === undefined) {
     return {
-      preference: 'system',
+      preference: DEFAULT_APPEARANCE_PREFERENCE,
       resolved: 'light',
       setPreference: () => {},
     }

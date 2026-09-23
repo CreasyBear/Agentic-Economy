@@ -15,7 +15,6 @@ import { CommandPaletteInput } from './components/CommandPaletteInput'
 import { ToolSearchStatus } from './components/ToolSearchStatus'
 import { ToolsSearchResultsGroup } from './components/ToolsSearchResultsGroup'
 import {
-  COMMAND_NAVIGATION_ITEMS,
   COMMAND_QUICK_ACTIONS,
   deriveToolsSearchChoices,
   filterCommandPaletteEntries,
@@ -30,6 +29,7 @@ type ToolsSearchPageProps = Readonly<{
   onQueryChange: (query: string) => void
   onSelectTool: (toolRef: string) => void
   onNavigate?: (href: string) => void
+  onOpenSettings?: (scope: 'personal' | 'workspace') => void
   onToggleTheme?: () => void
   searchTools?: (
     input: MarketToolSearchInput,
@@ -42,15 +42,16 @@ export function ToolsSearchPage({
   onQueryChange,
   onSelectTool,
   onNavigate,
+  onOpenSettings,
   onToggleTheme,
   searchTools = searchMarketTools,
 }: ToolsSearchPageProps) {
   const trimmedQuery = query.trim()
   const [searchAttempt, setSearchAttempt] = useState(0)
-  const { status } = useMarketToolSearch({ query, searchAttempt, searchTools })
+  const { status, navigationItems } = useMarketToolSearch({ query, searchAttempt, searchTools })
   const recentToolRefs = useRecentToolRefs()
   const inputRef = useRef<HTMLInputElement>(null)
-  const matchingNavItems = filterCommandPaletteEntries(COMMAND_NAVIGATION_ITEMS, trimmedQuery)
+  const matchingNavItems = filterCommandPaletteEntries(navigationItems, trimmedQuery)
   const matchingQuickActions = filterCommandPaletteEntries(COMMAND_QUICK_ACTIONS, trimmedQuery)
   const { choices, isAwaitingChoices } = deriveToolsSearchChoices(trimmedQuery, recentToolRefs, status)
   const navChoiceValues = matchingNavItems.map((item) => `ae-nav:${item.href}`)
@@ -102,6 +103,7 @@ export function ToolsSearchPage({
           isActive={isActive}
           navItems={matchingNavItems}
           {...(onNavigate === undefined ? {} : { onNavigate })}
+          {...(onOpenSettings === undefined ? {} : { onOpenSettings })}
           onClearPendingIntent={selection.clearPendingIntent}
         />
         <CommandQuickActionsGroup

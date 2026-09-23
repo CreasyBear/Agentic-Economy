@@ -223,7 +223,7 @@ describe('scheduled capability invocation reconciliation primitives', () => {
       nextAttemptAt: number
     }>
 
-    expect(db.indexes).toContain('by_state_and_reconciliation_nextAttemptAt')
+    expect(db.indexes).toContain('by_state_and_reconciliation_disposition_reason_nextAttemptAt')
     expect(candidates).toHaveLength(25)
     expect(candidates[0]).toEqual({ callRef: 'candidate:0', attemptCount: 0, nextAttemptAt: 1_000 })
     expect(Object.keys(candidates[0] as object)).toEqual(['callRef', 'attemptCount', 'nextAttemptAt'])
@@ -231,6 +231,28 @@ describe('scheduled capability invocation reconciliation primitives', () => {
     expect(JSON.stringify(candidates)).not.toContain('inputJson')
     expect(JSON.stringify(candidates)).not.toContain('authority')
     expect(JSON.stringify(candidates)).not.toContain('secret')
+  })
+
+  it('reaches automatic work behind a full older page of unresolved manual cases', async () => {
+    const manual = Array.from({ length: 25 }, (_, index) => row(`manual:${index}`, {
+      attemptCount: 5, nextAttemptAt: 1_000, disposition: 'manual_review', reason: 'recovery_failed',
+    }))
+    const due = row('due', { attemptCount: 0, nextAttemptAt: 2_000, disposition: 'automatic', reason: 'recovery_failed' })
+    const db = new MemoryDb([...manual, due])
+    expect(await listHandler({ db }, { now: 3_000, limit: 25 })).toEqual([
+      { callRef: 'due', attemptCount: 0, nextAttemptAt: 2_000 },
+    ])
+    expect(manual.every(item => item.reconciliation?.disposition === 'manual_review')).toBe(true)
+  })
+
+  it('merges reason partitions by due time under one shared output limit', async () => {
+    const db = new MemoryDb([
+      row('later', { attemptCount: 0, nextAttemptAt: 2_000, disposition: 'automatic', reason: 'unknown_settlement' }),
+      row('earlier', { attemptCount: 0, nextAttemptAt: 1_000, disposition: 'automatic', reason: 'recovery_failed' }),
+    ])
+    expect(await listHandler({ db }, { now: 3_000, limit: 1 })).toEqual([
+      { callRef: 'earlier', attemptCount: 0, nextAttemptAt: 1_000 },
+    ])
   })
 
   it.each(['refused', 'cancelled'])('selects a due %s refund despite older terminal rows without reconciliation', async (state) => {

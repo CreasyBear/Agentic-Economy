@@ -1,6 +1,7 @@
 import { useState } from 'react'
 
 import { Label } from '@/components/ui/label'
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 import { Switch } from '@/components/ui/switch'
 import { toast } from '@/lib/ui/toast'
 import { cn } from '@/lib/utils'
@@ -10,17 +11,17 @@ import {
   UPDATE_FAILED_DIAGNOSTIC,
   lowCreditThresholdStatement,
   type NotificationPreferencePatch,
-  type NotificationPreferencesView,
   type NotificationUpdateDiagnostic,
 } from '@/modules/principal-account/notification-preferences.view-model'
+
+import type {
+  OwnerNotificationSettingsProps,
+  PreferenceSwitchProps,
+} from './owner-settings.contracts'
 
 export const TACTILE =
   'enabled:active:scale-[0.98] transition-transform duration-100 ease-out motion-reduce:transition-none motion-reduce:active:scale-100'
 
-export type OwnerNotificationSettingsProps = Readonly<{
-  preferences: NotificationPreferencesView
-  onUpdate: (patch: NotificationPreferencePatch) => void | Promise<void>
-}>
 
 function PreferenceSwitch({
   id,
@@ -28,13 +29,7 @@ function PreferenceSwitch({
   checked,
   disabled,
   onToggle,
-}: Readonly<{
-  id: string
-  label: string
-  checked: boolean
-  disabled: boolean
-  onToggle: () => void
-}>) {
+}: PreferenceSwitchProps) {
   return (
     <div className="flex items-center justify-between gap-4">
       <Label htmlFor={id} className="cursor-pointer text-sm font-normal text-foreground">
@@ -54,6 +49,7 @@ function PreferenceSwitch({
 
 export function OwnerNotificationSettings({
   preferences,
+  disabled = false,
   onUpdate,
 }: OwnerNotificationSettingsProps) {
   const [pending, setPending] = useState(false)
@@ -77,8 +73,8 @@ export function OwnerNotificationSettings({
     }
   }
 
-  const controlsDisabled = pending
-  const thresholdControlsDisabled = thresholdDisabled || pending
+  const controlsDisabled = disabled || pending
+  const thresholdControlsDisabled = thresholdDisabled || controlsDisabled
 
   const thresholdStatement = lowCreditThresholdStatement(preferences)
 
@@ -103,40 +99,51 @@ export function OwnerNotificationSettings({
       </div>
       <div className="grid gap-2">
         <p className="text-sm font-medium">Low balance alert threshold</p>
-        <div
-          role="radiogroup"
+        <RadioGroup
+          value={String(preferences.lowCreditThresholdCents)}
+          onValueChange={(next) => {
+            const cents = Number(next)
+            if (
+              Number.isNaN(cents)
+              || preferences.lowCreditThresholdCents === cents
+              || thresholdControlsDisabled
+            ) {
+              return
+            }
+            void applyPatch({
+              lowCreditThresholdCents: cents,
+              expectedRevision: preferences.revision,
+            })
+          }}
+          disabled={thresholdControlsDisabled}
           aria-label="Low balance alert threshold"
           className="flex flex-wrap gap-2"
         >
           {THRESHOLD_OPTIONS.map(({ cents, label }) => {
             const selected = preferences.lowCreditThresholdCents === cents
+            const inputId = `low-balance-threshold-${cents}`
             return (
-              <button
+              <Label
                 key={cents}
-                type="button"
-                role="radio"
-                aria-checked={selected}
-                aria-label={label}
-                disabled={thresholdControlsDisabled}
+                htmlFor={inputId}
                 className={cn(
-                  'min-h-touch rounded-md border px-3 py-2 text-sm font-mono tabular-nums',
+                  'flex min-h-touch cursor-pointer items-center gap-2 rounded-md border px-3 py-2 text-sm font-mono tabular-nums',
                   selected ? 'border-foreground bg-muted' : 'border-border bg-container',
-                  thresholdControlsDisabled && 'opacity-50',
+                  thresholdControlsDisabled && 'opacity-50 cursor-not-allowed',
                   TACTILE,
                 )}
-                onClick={() => {
-                  if (selected || thresholdControlsDisabled) return
-                  void applyPatch({
-                    lowCreditThresholdCents: cents,
-                    expectedRevision: preferences.revision,
-                  })
-                }}
               >
+                <RadioGroupItem
+                  id={inputId}
+                  value={String(cents)}
+                  aria-label={label}
+                  disabled={thresholdControlsDisabled}
+                />
                 {label}
-              </button>
+              </Label>
             )
           })}
-        </div>
+        </RadioGroup>
         <div
           className="min-h-[2.5rem] font-mono text-sm tabular-nums text-muted-foreground"
           role="status"
@@ -162,7 +169,7 @@ export function OwnerNotificationSettings({
       </div>
       <p className="text-muted-foreground text-sm">
         Alerts are sent to the primary email verified in your Clerk profile. Update your email
-        address in the Profile section above.
+        address in Profile.
       </p>
     </div>
   )

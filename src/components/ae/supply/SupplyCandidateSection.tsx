@@ -1,21 +1,47 @@
+import { useEffect, type Ref } from 'react'
 import { AeSection } from '@/components/ae/layout/AeSection'
 import { Label } from '@/components/ui/label'
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 import { cn } from '@/lib/utils'
 import { REASON_COPY, REASON_COPY_FALLBACK } from '@/content/reason-copy'
 import type { SupplyToolCandidate } from '@/modules/capability-supply/source-preview'
+import {
+  SUPPLY_PUBLICATION_ERROR_ID,
+  SUPPLY_PUBLICATION_FIELD_IDS,
+  type SupplyPublicationInvalidField,
+} from './supply-source-native-start-presentation'
 
 const CANDIDATE_CARD_CLASS =
   'grid min-h-touch cursor-pointer grid-cols-[auto_1fr] gap-3 rounded-lg border border-border p-4 has-[[data-checked]]:border-foreground has-[[data-checked]]:bg-muted enabled:active:scale-[0.98] transition-transform duration-100 ease-out motion-reduce:transition-none motion-reduce:active:scale-100'
 
-export function SupplyCandidateSection({ candidates, selectedRef, onSelect }: Readonly<{
+export function SupplyCandidateSection({ candidates, selectedRef, invalidField, fieldError, headingRef, onSelect }: Readonly<{
   candidates: readonly SupplyToolCandidate[]
   selectedRef: string
+  invalidField?: SupplyPublicationInvalidField
+  fieldError?: string
+  headingRef?: Ref<HTMLHeadingElement>
   onSelect: (candidateRef: string) => void
 }>) {
+  const invalid = invalidField === 'candidate'
+  const errorDescribedBy = invalid && fieldError !== undefined ? SUPPLY_PUBLICATION_ERROR_ID : undefined
+
+  useEffect(() => {
+    if (!invalid || fieldError === undefined) return
+    document.getElementById(SUPPLY_PUBLICATION_FIELD_IDS.candidate)?.focus()
+  }, [invalid, fieldError])
+
   return (
-    <AeSection title="Select a Tool" description={`${candidates.length} candidate${candidates.length === 1 ? '' : 's'} found. Unsupported source methods remain visible with their correction.`}>
-      <RadioGroup value={selectedRef} onValueChange={(val) => onSelect(String(val))}>
+    <AeSection title="Select a Tool" description={`${candidates.length} candidate${candidates.length === 1 ? '' : 's'} found. Unsupported source methods remain visible with their correction.`} {...(headingRef === undefined ? {} : { headingRef })}>
+      <RadioGroup
+        id={SUPPLY_PUBLICATION_FIELD_IDS.candidate}
+        tabIndex={-1}
+        aria-label="Select a Tool"
+        aria-invalid={invalid || undefined}
+        data-invalid={invalid || undefined}
+        aria-describedby={errorDescribedBy}
+        value={selectedRef}
+        onValueChange={(val) => onSelect(String(val))}
+      >
         {candidates.map((candidate) => <CandidateRow key={candidate.candidateRef} candidate={candidate} />)}
       </RadioGroup>
     </AeSection>
@@ -43,7 +69,7 @@ function CandidateRow({ candidate }: Readonly<{ candidate: SupplyToolCandidate }
         className="mt-0.5"
       />
       <div className="grid min-w-0 gap-1">
-        <p className="font-semibold text-foreground">{candidate.title}</p>
+        <p className="font-medium text-foreground">{candidate.title}</p>
         <p className="text-sm text-muted-foreground">{candidate.description}</p>
         <p className="text-sm text-muted-foreground">{candidate.authentication.kind === 'public' ? 'Public' : 'Connection required'} · {candidate.validationExampleAvailable ? 'Validation input available' : 'Validation input required'}</p>
         {supported ? null : <p className="text-sm text-destructive">Action required: update this Tool at its source. {REASON_COPY[candidate.disposition.reason] ?? REASON_COPY_FALLBACK}</p>}

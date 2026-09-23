@@ -73,9 +73,13 @@ export type PrincipalRegistryOptions = Readonly<{
   randomUuid?: () => string
 }>
 
+export function isPrincipalRef(value: string): value is PrincipalRef {
+  return PRINCIPAL_REF_PATTERN.test(value)
+}
+
 export function principalRef(value: string): PrincipalRef {
-  if (!PRINCIPAL_REF_PATTERN.test(value)) throw new PrincipalRegistryError('invalid_principal_ref')
-  return value as PrincipalRef
+  if (!isPrincipalRef(value)) throw new PrincipalRegistryError('invalid_principal_ref')
+  return value
 }
 
 export function generatePrincipalRef(randomUuid: () => string = () => globalThis.crypto.randomUUID()): PrincipalRef {

@@ -11,8 +11,8 @@ import {
   recordAdminActionDenied as recordAdminActionDeniedImpl,
   requireAdminAuthority as requireAdminAuthorityImpl,
   revokeAdminMembership as revokeAdminMembershipImpl,
+  validateReasonAndEvidence as validateReasonAndEvidenceImpl,
 } from './internal/admin-authority'
-import { readAdminRouteShell as readAdminRouteShellImpl } from './internal/admin-readbacks'
 import type {
   AdminActionDeniedCommand,
   AdminAuthorityMutationResult,
@@ -22,20 +22,8 @@ import type {
   AdminGrantMembershipCommand,
   AdminRevokeMembershipCommand,
 } from './internal/admin-authority'
-import type {
-  AdminAllowedReadback,
-  AdminDeniedReadback,
-  AdminReadbackDeniedReason,
-  AdminReadbackRepairAction,
-  AdminReadbackRepairResult,
-  AdminReadbackRequest,
-  AdminReadbackRow,
-  AdminReadbackRowState,
-  AdminReadbackRowType,
-  AdminReadbackSummary,
-  AdminReadbackSurface,
-  AdminShellReadback,
-} from './internal/admin-readbacks'
+export { canAdminRolePerformAction } from './internal/admin-authority'
+
 
 export { AdminRoleValues, AdminRoleSchema } from './internal/validators'
 export {
@@ -68,27 +56,16 @@ export type {
   RemovalDisputeReasonCode,
   RemovalDisputeReceipt,
 } from './internal/security-types'
+export type { SourceWriteAdmissionFailureReason } from './source-write-admission'
 
 export type {
-  AdminAllowedReadback,
   AdminActionDeniedCommand,
   AdminAuthorityMutationResult,
   AdminAuthorityResult,
   AdminAuthorityState,
   AdminBootstrapCommand,
-  AdminDeniedReadback,
   AdminGrantMembershipCommand,
-  AdminReadbackDeniedReason,
-  AdminReadbackRepairAction,
-  AdminReadbackRepairResult,
-  AdminReadbackRequest,
-  AdminReadbackRow,
-  AdminReadbackRowState,
-  AdminReadbackRowType,
-  AdminReadbackSummary,
-  AdminReadbackSurface,
   AdminRevokeMembershipCommand,
-  AdminShellReadback,
 }
 
 export const assertCsrf = assertCsrfImpl
@@ -107,8 +84,8 @@ export const grantAdminMembership = grantAdminMembershipImpl
 export const recordAdminActionDenied = recordAdminActionDeniedImpl
 
 export const revokeAdminMembership = revokeAdminMembershipImpl
+export const validateReasonAndEvidence = validateReasonAndEvidenceImpl
 
-export const readAdminRouteShell = readAdminRouteShellImpl
 
 export const createEmptyDisputeSourceState = createEmptyDisputeSourceStateImpl
 

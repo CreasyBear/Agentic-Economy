@@ -212,6 +212,69 @@ export async function ownerAdmin(
   return owner
 }
 
+export async function supportAdmin(
+  backend: ConvexFixtureBackend,
+  subject: string,
+) {
+  return await adminWithRole(backend, subject, 'support')
+}
+
+export async function reviewerAdmin(
+  backend: ConvexFixtureBackend,
+  subject: string,
+) {
+  return await adminWithRole(backend, subject, 'reviewer')
+}
+
+export async function nonAdmin(
+  backend: ConvexFixtureBackend,
+  subject: string,
+) {
+  const authenticated = await ownerAdmin(backend, subject)
+  const tokenIdentifier = subject.replace(/^user_/u, 'token_')
+  await backend.run(async (ctx) => {
+    const membership = await ctx.db.query('adminMemberships')
+      .withIndex('by_tokenIdentifier_and_state', (query) =>
+        query.eq('tokenIdentifier', tokenIdentifier).eq('state', 'active'))
+      .unique()
+    if (membership !== null) await ctx.db.delete(membership._id)
+  })
+  return authenticated
+}
+
+export function testConsequenceProof(
+  identity: Readonly<{ subject?: string; tokenIdentifier?: string }>,
+  commandDigest: string,
+): Readonly<{
+  reverificationId: string
+  firstFactorAgeMinutes: number
+  secondFactorAgeMinutes: number
+}> {
+  return {
+    reverificationId: `test:${canonicalDigest({ identity, commandDigest })}`,
+    firstFactorAgeMinutes: 0,
+    secondFactorAgeMinutes: -1,
+  }
+}
+
+async function adminWithRole(
+  backend: ConvexFixtureBackend,
+  subject: string,
+  role: 'support' | 'reviewer',
+) {
+  const authenticated = await ownerAdmin(backend, subject)
+  const tokenIdentifier = subject.replace(/^user_/u, 'token_')
+  await backend.run(async (ctx) => {
+    const membership = await ctx.db.query('adminMemberships')
+      .withIndex('by_tokenIdentifier_and_state', (query) =>
+        query.eq('tokenIdentifier', tokenIdentifier).eq('state', 'active'))
+      .unique()
+    if (membership === null) throw new Error('admin_fixture_missing_membership')
+    await ctx.db.patch(membership._id, { role })
+  })
+  return authenticated
+}
+
 export type PublishedBusinessOwnerOptions = Readonly<{
   slugPrefix?: string
   identityPrefix?: string

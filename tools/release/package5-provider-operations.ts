@@ -312,7 +312,7 @@ async function waitForPublished(
     if (parsed.data.status.state === 'Published') return parsed.data.status
     if (parsed.data.status.state === 'Action required'
       && parsed.data.status.reasonCodes.includes('provider_authority_unverified')) {
-      const reviewUrl = new URL('/admin/index-health', config.baseUrl)
+      const reviewUrl = new URL('/admin/providers', config.baseUrl)
       reviewUrl.searchParams.set('publicationRef', publication.publicationRef)
       reviewUrl.searchParams.set('expectedRevision', String(publication.publicationRevision))
       reviewUrl.searchParams.set('expectedSourceDigest', publication.sourceDigest)

@@ -37,9 +37,13 @@ export const Route = createFileRoute('/_operator/owner/operations/$toolRef')({
     } })
     return { identity, status }
   },
-  head: () => ({
+  head: ({ loaderData }) => ({
     meta: [
-      { title: 'Tool status | Agentic Economy' },
+      {
+        title: loaderData?.status.kind === 'available'
+          ? `${loaderData.status.tool.name} | Agentic Economy`
+          : 'Tool status | Agentic Economy',
+      },
       { name: 'robots', content: 'noindex' },
     ],
   }),

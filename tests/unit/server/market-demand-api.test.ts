@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 
 import { handleMarketRequestPost } from '@/lib/server/market-demand-api'
+import { INVALID_MARKET_REQUEST_WITHDRAW_BODIES } from '../../helpers/catalogue-hostile-inputs'
 
 const authenticate = async (scopes: readonly string[] = ['market_tools:call']) => ({
   isAuthenticated: true as const,
@@ -16,6 +17,32 @@ const principal = {
 }
 
 describe('private market demand HTTP adapter', () => {
+  it('dispatches withdrawal with current authenticated ownership', async () => {
+    const withdraw = vi.fn().mockResolvedValue({ kind: 'withdrawn', requestRef: 'market-request:one' })
+    const response = await handleMarketRequestPost(new Request('https://ae.example/api/v1/market-requests/withdraw', {
+      method: 'POST', body: JSON.stringify({ requestRef: 'market-request:one' }),
+    }), 'withdraw', {
+      authenticate,
+      resolvePrincipal: async (projection) => ({ ...projection, ...principal }),
+      marketDemandService: { create: vi.fn(), list: vi.fn(), status: vi.fn(), withdraw },
+    })
+    expect(response.status).toBe(200)
+    expect(response.headers.get('cache-control')).toBe('no-store')
+    expect(await response.json()).toEqual({ kind: 'withdrawn', requestRef: 'market-request:one' })
+    expect(withdraw).toHaveBeenCalledWith(expect.objectContaining({ principal: expect.objectContaining(principal) }))
+  })
+
+  it.each(INVALID_MARKET_REQUEST_WITHDRAW_BODIES)('rejects invalid withdrawal input before mutation: %j', async body => {
+    const withdraw = vi.fn()
+    const response = await handleMarketRequestPost(new Request('https://ae.example/api/v1/market-requests/withdraw', {
+      method: 'POST', body: JSON.stringify(body),
+    }), 'withdraw', {
+      authenticate, resolvePrincipal: async projection => ({ ...projection, ...principal }),
+      marketDemandService: { create: vi.fn(), list: vi.fn(), status: vi.fn(), withdraw },
+    })
+    expect(response.status).toBe(400)
+    expect(withdraw).not.toHaveBeenCalled()
+  })
   it('dispatches an authenticated idempotent request without leaking bearer material', async () => {
     const create = vi.fn().mockResolvedValue({
       kind: 'recorded',
@@ -40,7 +67,7 @@ describe('private market demand HTTP adapter', () => {
           expect(consequenceResource).toBe('surface:http:market-request-create')
           return { ...projection, ...principal }
         },
-        marketDemandService: { create, list: vi.fn(), status: vi.fn() },
+        marketDemandService: { create, list: vi.fn(), status: vi.fn(), withdraw: vi.fn() },
       },
     )
 
@@ -70,7 +97,7 @@ describe('private market demand HTTP adapter', () => {
       'create',
       {
         authenticate: async () => await authenticate(['market_supply:manage']),
-        marketDemandService: { create, list: vi.fn(), status: vi.fn() },
+        marketDemandService: { create, list: vi.fn(), status: vi.fn(), withdraw: vi.fn() },
       },
     )
 
@@ -84,7 +111,7 @@ describe('private market demand HTTP adapter', () => {
 
   it('rejects oversized, malformed, and schema-invalid bodies without persistence', async () => {
     const create = vi.fn()
-    const service = { create, list: vi.fn(), status: vi.fn() }
+    const service = { create, list: vi.fn(), status: vi.fn(), withdraw: vi.fn() }
     const malformed = await handleMarketRequestPost(
       new Request('https://ae.example/api/v1/market-requests', {
         method: 'POST', headers: { Authorization: 'Bearer test' }, body: '{',

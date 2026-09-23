@@ -4,6 +4,78 @@ capturedAt: "2026-09-04T08:48:02Z"
 capturedFromRevision: "8621ef3f3017a0e2ebe19c6277da98f7d5488909"
 captureWorkingTree: dirty_preserved_user_and_infrastructure_changes
 
+# Current alpha pilot inventory; this supersedes the package4 resource identities
+# only for the Base Sepolia pilot. It does not mutate the dated baseline below.
+pilotInventory20260922:
+  capturedAt: "2026-09-22"
+  awsAccountId: "197716152388"
+  routineIdentity: arn:aws:iam::197716152388:role/Package4ReleaseOpenTofu
+  environment: ae-alpha
+  infrastructure:
+    k3sInstanceId: i-073197e0346d83010
+    k3sState: running
+    ssmState: online
+    rdsInstanceId: ae-alpha-formance
+    rdsState: available
+    rdsEngineVersion: "16.13"
+    rdsMultiAz: true
+  formance:
+    gatewayUrl: https://formance-alpha.aecon.ai
+    ledgerName: agentic-economy-alpha
+    ledgerId: 1
+    ledgerVersion: v2.4.12
+    schemaVersion: v1.4.0
+    schemaReadback: verified_digest_and_legacy_v1_3_retained
+    schemaVerified: true
+    accountCount: 5
+    transactionCount: 1
+    authenticatedHealth: http_200_true
+    serviceCredentialLocation: provider_managed_metadata_verified_value_not_recorded
+  cdpSandbox:
+    accountName: ae-x402-base-sepolia-v1
+    payerAddress: "0x8F012237dbcDf4038ea3E9EAbcEc6cA933a5f4B9"
+    accountPolicyId: 6277597e-0919-4d37-9d4f-406d31dc4a9a
+    projectPolicyId: c3e817f2-0fb2-44b2-9689-dac9b6238037
+    credentialGeneration: 2
+    perCallMaxAtomic: "10000"
+    dailyMaxAtomic: "50000"
+    readOnlyPreflight: ready
+    treasuryObservationWorkload: ran
+    platformCanaryReadiness: ae_canary_funding_not_ready_no_grant
+  executionTarget:
+    localConvex: anonymous-agent
+    serviceMode: standard
+    hostedTarget: not_selected
+    providerOrigin: https://agentic-economy-sandbox-tools.vercel.app
+    providerPayee: "0x9ec2cD9E2E2a7D93c426d98b48a745990972EE71"
+    providerAmountAtomic: "1000"
+    providerRuntimeRevision: not_verified
+    providerOriginPayeeBinding: verified_local_process_only
+    seededPublicationRevision: 2
+    legacyPublicationRevision: 1_preserved_immutable
+    toolReadiness: authority_stale_missing_revision_binding_snapshot
+    freshSeedValidationExample: x402-validation
+    existingRevisionMutation: preserved_noop
+    nextSupportedAction: source_repair_revision_binding_snapshot_then_exact_probe
+    seededToolRef: "operation:v1:3f9f7c5468f9a96fa1a834725666cebc7f6352a02a89c48714c2e5a22e16ab2e"
+  limits:
+    authority: local_sandbox_setup_with_schema_install_and_seed_binding
+    agentConnection: pending_owner_reverification
+    stripeWebhookRelay: active_for_successful_retry
+    stripeCheckoutSession: cs_test_b1gn7FGdpl2oI1nzxy5a7S1DXaRcIsQxrbPWVrAYvZNzqWDtm7wVdhkmpX
+    stripePaymentIntent: pi_3UIMFy70N4UjLqHt0emsFcbs
+    stripeWebhookEvent: evt_1UIMG070N4UjLqHt9KfsdMKJ
+    formanceFundingTransaction: "ae-p4:5aef213042c0992b45b2f8a84c0603266c4741066c6b2842b24a09d3f1383e3f:funding"
+    connectedPrincipal: prn_3c1758da42514dda85b966069103914a
+    connectedAccount: acc_7f239ab318004bad8d41654b9e993ace
+    connectedScope: market_tools:call
+    sandboxSpendingPolicy: A1_per_call_A5_daily_A20_monthly_one_concurrent_30_per_min_300_per_hour_7_days
+    stripeFunding: test_mode_AUD5_booked_formance_readback_verified
+    creditReadAuthRefresh: protected_queries_skip_until_convex_authenticated
+    providerPaidDoesNotImplyCredit: durable_funding_command_required
+    actualPaidCall: not_run
+    hostedAcceptance: not_proved
+
 environment:
   id: package4-release
   purpose: synthetic_release_qualification

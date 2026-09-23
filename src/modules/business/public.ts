@@ -40,7 +40,7 @@ export type ProgrammableProviderBusinessContext = {
 export type BusinessContext = LocalHumanBusinessContext | ProgrammableProviderBusinessContext
 
 export { businessContext } from './internal/business-context-schema'
-
+export { parseBusinessSlug } from './internal/slug'
 
 export function canonicalProviderWebsite(value: string): string | undefined {
   try {

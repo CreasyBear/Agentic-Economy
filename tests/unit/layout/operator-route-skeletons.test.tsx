@@ -72,7 +72,6 @@ function renderAt(ui: ReactElement, pathname: string) {
   const routeTree = rootRoute.addChildren([
     createRoute({ getParentRoute: () => rootRoute, path: '/owner' }),
     createRoute({ getParentRoute: () => rootRoute, path: '/owner/workspace' }),
-    createRoute({ getParentRoute: () => rootRoute, path: '/owner/market' }),
     createRoute({ getParentRoute: () => rootRoute, path: '/owner/operations' }),
     createRoute({ getParentRoute: () => rootRoute, path: '/owner/operations/new' }),
     createRoute({ getParentRoute: () => rootRoute, path: '/owner/settings' }),
@@ -95,10 +94,9 @@ function skeletonRoot() {
 }
 
 describe('inferOperatorSkeletonPreset', () => {
-  it('maps overview landing paths to overview-cards', () => {
-    expect(inferOperatorSkeletonPreset('/owner')).toBe('overview-cards')
+  it('maps the workspace landing path to overview-cards', () => {
+    expect(inferOperatorSkeletonPreset('/owner')).toBe('default')
     expect(inferOperatorSkeletonPreset('/owner/workspace')).toBe('overview-cards')
-    expect(inferOperatorSkeletonPreset('/owner/market')).toBe('overview-cards')
   })
 
   it('maps list and activity paths to table', () => {
@@ -174,9 +172,4 @@ describe('OperatorRoutePending skeleton presets (S-02)', () => {
     expect(screen.getByTestId('skeleton-default-body')).toBeTruthy()
   })
 
-  it('infers preset from pathname when preset prop is omitted', () => {
-    renderPending(undefined, '/owner/market')
-
-    expect(skeletonRoot().getAttribute('data-skeleton-preset')).toBe('overview-cards')
-  })
 })

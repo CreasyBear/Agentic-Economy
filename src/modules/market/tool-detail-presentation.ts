@@ -1,12 +1,12 @@
-import type { PublicToolDetailRouteResult } from '@/modules/registry/tool-detail-route.functions'
+import type { PublicToolDetailRouteResult } from '@/modules/market/tool-detail-route.functions'
 import type { MarketListingEvidenceProjection } from '@/modules/market/listing-evidence'
-import { readToolListingEvidence } from '@/modules/market/server'
 import type { X402DirectoryResolution } from '@/modules/market/x402-directory'
 import { prepareX402DirectoryResourceServer } from '@/modules/market/x402-directory.functions'
-import { readPublicToolDetailRouteServer } from '@/modules/registry/tool-detail-route.functions'
+import { readPublicToolDetailRouteServer } from '@/modules/market/tool-detail-route.functions'
 
 export type ToolDetailPresentationResult =
   | PublicToolDetailRouteResult
+  | Extract<X402DirectoryResolution, { kind: 'unavailable' }>
   | Readonly<{ kind: 'invalid_ref'; toolRef: string }>
 
 export type ToolDetailPresentation = Readonly<{
@@ -32,12 +32,12 @@ export async function resolveDirectoryToolDetail(
     const resolution = await prepareX402DirectoryResourceServer({ data: { resource } })
       .catch((): X402DirectoryResolution => ({ kind: 'unavailable', reason: 'source_unavailable' }))
     if (resolution.kind !== 'ready') {
-      return { result: { kind: 'source_unavailable', toolRef: resource } }
+      return { result: { kind: 'unavailable', reason: resolution.reason } }
     }
     toolRef = resolution.toolRef
   }
   const result = await readPublicToolDetailRouteServer({ data: { toolRef } })
     .catch((): PublicToolDetailRouteResult => ({ kind: 'source_unavailable', toolRef }))
-  const evidence = result.kind === 'found' ? await readToolListingEvidence(result.tool) : undefined
+  const evidence = result.kind === 'found' ? result.evidence : undefined
   return { result, ...(evidence === undefined ? {} : { evidence }) }
 }

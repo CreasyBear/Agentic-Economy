@@ -20,7 +20,8 @@ import { CallReceiptIssue, CallReceiptRefreshButton, CallReceiptRef, CallReceipt
 import { CallReceiptTimeline } from './CallReceiptTimeline'
 import { CallReceiptWorkspace } from './CallReceiptWorkspace'
 import { CallRecoveryPanel } from './CallRecoveryPanel'
-import { CallOutputSection, CallReuseActions, CallTechnicalRecord } from './CallTechnicalRecord'
+import { CallOutputSection, CallRequestSection, CallTechnicalRecord } from './CallTechnicalRecord'
+import { CallReuseActions } from './CallReuseActions'
 import { CallSummarySection } from './CallSummarySection'
 import { machineLabel } from './call-receipt-format'
 
@@ -71,7 +72,7 @@ export function CallStatusUnchangedView({
           <CallReceiptRef value={result.callRef} />
         </div>
         <div className="grid gap-intra">
-          <h2 id="unchanged-receipt-title" className="text-lg font-semibold tracking-tight text-foreground">
+          <h2 id="unchanged-receipt-title" className="text-base font-medium leading-snug tracking-tight text-foreground">
             No status change
           </h2>
           <p className="text-sm text-muted-foreground">
@@ -82,6 +83,7 @@ export function CallStatusUnchangedView({
           <Button
             type="button"
             className={cn('min-h-touch w-fit', callReceiptTactilePressClassName)}
+            variant="outline"
             disabled={actions.refreshPending === true}
             onClick={() => { void actions.onRefresh?.() }}
           >
@@ -98,21 +100,17 @@ export function CallStatusFoundView({
   actions,
 }: Readonly<{ result: FoundCallStatus; actions?: CallStatusPageActions }>) {
   const receiptView = projectCallReceipt(result)
+  const recordedTool = result.ownerContext?.recordedTool.kind === 'available' ? result.ownerContext.recordedTool : undefined
+  const receiptTitle = recordedTool?.name
   return (
-    <CallReceiptWorkspace callRef={result.callRef} description={receiptView.statusDetail}>
+    <CallReceiptWorkspace callRef={result.callRef} {...(receiptTitle === undefined ? {} : { title: receiptTitle })} description={receiptView.issue?.whatHappened ?? receiptView.statusDetail}>
       <CallSummarySection result={result} receiptView={receiptView} />
-      {receiptView.issue === undefined ? null : <CallReceiptIssue issue={receiptView.issue} />}
       <CallRecoveryPanel result={result} {...(actions === undefined ? {} : { actions })} />
-      {result.result === undefined ? (
-        <section className="grid gap-intra border-t border-border pt-section" aria-labelledby="current-result-title">
-          <h2 id="current-result-title" className="text-xl font-semibold tracking-tight text-foreground">Current result</h2>
-          <p className="text-muted-foreground">No canonical result is recorded yet. The state above remains authoritative.</p>
-        </section>
-      ) : <CallOutputSection result={result.result} />}
-      <CallMoneyFacts view={receiptView} />
+      <CallRequestSection input={result.previousInput} />
+      {result.result === undefined ? null : <CallOutputSection result={result.result} />}
       {receiptView.complete ? (
         <CallReuseActions
-          key={receiptView.toolRef ?? receiptView.callRef}
+          key={receiptView.callRef}
           view={receiptView}
         />
       ) : null}
@@ -194,7 +192,7 @@ function CallReceiptBarrierHeader({
         <Badge variant="warning" className="w-fit">{badgeLabel}</Badge>
         <CallReceiptRef value={callRef} />
         {showRefresh && actions !== undefined ? (
-          <CallReceiptRefreshButton actions={actions} labelMode="try_again" />
+          <CallReceiptRefreshButton actions={actions} labelMode="refresh_status" />
         ) : null}
         <CallReceiptStatusFeedback feedback={actions?.feedback} callRef={callRef} />
       </div>

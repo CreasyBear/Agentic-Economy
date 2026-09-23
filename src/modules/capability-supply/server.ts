@@ -75,6 +75,7 @@ export {
 export { admitOfficialBazaarFromPaymentRequired } from './internal/facilitator-discovery-client'
 export { admitFacilitatorDiscoveryItems } from './internal/facilitator-discovery-admission'
 export { materializeOfficialBazaarX402Import } from './internal/facilitator-discovery-admission'
+export type { FacilitatorDiscoverySkipReason } from './internal/facilitator-discovery-ingest'
 export { admitBazaarDiscoveryInfo, admitBazaarFromPaymentRequired } from './internal/publication-importer-x402-bazaar'
 export type { BazaarAdmission } from './internal/publication-importer-x402-bazaar'
 export type {
@@ -89,7 +90,8 @@ export {
 } from './internal/x402-settlement-verifier'
 export { verifyX402SignedOffer, verifyX402SignedReceipt } from './internal/x402-offer-receipt'
 export type { X402EvmReceipt } from './internal/x402-settlement-verifier'
-export { readGuardedX402EvmReceipt } from './internal/x402-evm-receipt-reader'
+export { readGuardedX402EvmReceipt, readGuardedX402UnusedAuthorization } from './internal/x402-evm-receipt-reader'
+export { assessSupplySource, type SupplySourceAssessment } from './source-assessment'
 export {
   chargeSettlementOutcome,
   economicRailForCall,

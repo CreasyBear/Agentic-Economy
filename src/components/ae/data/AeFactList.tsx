@@ -46,7 +46,7 @@ export function AeFactList({
           </dt>
           <dd
             className={cn(
-              "min-w-0 font-medium tabular-nums",
+              "min-w-0 break-all font-medium tabular-nums",
               density === "compact" ? "mt-0.5 break-words text-sm" : "text-sm",
               fact.mono && "font-mono",
               fact.muted ? "text-muted-foreground" : "text-foreground",

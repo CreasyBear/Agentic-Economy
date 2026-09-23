@@ -62,7 +62,9 @@ export type RouteTransportRuntime = Readonly<{
     }>,
   ) => boolean | Promise<boolean>
   prepareX402PaymentAuthorization?: (
-    request: X402PaymentSignatureRequest & X402PaymentAuthorizationIdentity,
+    request: X402PaymentSignatureRequest & X402PaymentAuthorizationIdentity & Readonly<{
+      authorityExpiresAt: number
+    }>,
   ) => Promise<X402PreparedAuthorization | undefined>
   readX402PaymentAuthorization?: (
     prepared: X402PreparedAuthorization,
@@ -81,4 +83,16 @@ export type RouteTransportRuntime = Readonly<{
         evidenceRefs: readonly string[]
       }>,
   ) => Promise<void> | void
+  /** Journal a sanitized response before waiting for independent payment verification. */
+  checkpointX402Response?: (response: Readonly<{
+    attemptRef: string
+    paymentIdentifier: string
+    responseDigest: string
+    outputJson: string
+    settlementTransactionRef?: string
+    requestDigest: string
+    paymentResponseDigest?: string
+    custodyRef: string
+    authorizationDigest: string
+  }>) => Promise<void>
 }>

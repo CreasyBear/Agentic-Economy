@@ -4,29 +4,36 @@ import { toast } from '@/lib/ui/toast'
 import type { Rule4Diagnostic } from '@/lib/ui/diagnostic'
 import { formatAbnDisplay, normalizeAbn } from '@/modules/money/public'
 import type { SupplierOnboardingStep } from '@/modules/capability-supply/supplier-onboarding.contracts'
+import { providerWorkspacePayoutConnection } from '@/components/ae/offerings/provider-workspace/provider-workspace.view-model'
 
-import type {
-  SupplierOnboardingWizardPorts,
-  SupplierOnboardingWizardViewState,
+import {
+  type SupplierOnboardingWizardPorts,
+  type SupplierOnboardingWizardViewState,
 } from './supplier-onboarding-wizard.contracts'
 import {
-  diagnosticForProfileValidation,
   FINANCIAL_NO_UPDATE,
+  profileValidationIssue,
   SAVE_FAILURE_DIAGNOSTIC,
+  type ProviderIdentityFieldId,
 } from './provider-identity-validation'
 
 export function useSupplierOnboardingWizard({
   currentStep = 'profile',
   providerName,
-  payoutsConfigured = false,
+  payoutConnection,
   onSaveProfile,
   onConnectPayouts,
 }: SupplierOnboardingWizardPorts) {
+  const resolvedPayoutConnection = payoutConnection ?? providerWorkspacePayoutConnection({
+    result: { kind: 'not_applicable' },
+    pending: false,
+  })
   const [step, setStep] = useState<SupplierOnboardingStep>(currentStep)
   const [name, setName] = useState(providerName ?? '')
   const [website, setWebsite] = useState('')
   const [abn, setAbn] = useState('')
   const [diagnostic, setDiagnostic] = useState<Rule4Diagnostic>()
+  const [invalidField, setInvalidField] = useState<ProviderIdentityFieldId>()
   const [pending, setPending] = useState(false)
   const [profileCompleted, setProfileCompleted] = useState(
     currentStep === 'payouts' || currentStep === 'first_tool',
@@ -51,7 +58,7 @@ export function useSupplierOnboardingWizard({
 
   const isCompleted = (stepId: SupplierOnboardingStep): boolean => {
     if (stepId === 'profile') return profileCompleted
-    if (stepId === 'payouts') return payoutsConfigured
+    if (stepId === 'payouts') return resolvedPayoutConnection.state === 'connected'
     return false
   }
 
@@ -60,6 +67,7 @@ export function useSupplierOnboardingWizard({
     setStep(stepId)
     if (stepId === 'first_tool') setFirstToolVisited(true)
     setDiagnostic(undefined)
+    setInvalidField(undefined)
   }
 
   const handleProfileSubmit = async (e: Pick<FormEvent, 'preventDefault'>) => {
@@ -68,9 +76,10 @@ export function useSupplierOnboardingWizard({
     const trimmedWebsite = website.trim()
     const cleanAbn = normalizeAbn(abn)
 
-    const validationError = diagnosticForProfileValidation(trimmedName, trimmedWebsite, cleanAbn)
-    if (validationError !== undefined) {
-      setDiagnostic(validationError)
+    const validationIssue = profileValidationIssue(trimmedName, trimmedWebsite, cleanAbn)
+    if (validationIssue !== undefined) {
+      setDiagnostic(validationIssue.diagnostic)
+      setInvalidField(validationIssue.field)
       return
     }
 
@@ -82,6 +91,7 @@ export function useSupplierOnboardingWizard({
 
     setPending(true)
     setDiagnostic(undefined)
+    setInvalidField(undefined)
     try {
       const result = await onSaveProfile({
         name: trimmedName,
@@ -98,10 +108,12 @@ export function useSupplierOnboardingWizard({
           financialImpact: FINANCIAL_NO_UPDATE,
           nextStep: SAVE_FAILURE_DIAGNOSTIC.nextStep,
         })
+        setInvalidField(undefined)
       }
     } catch (cause) {
       void cause
       setDiagnostic(SAVE_FAILURE_DIAGNOSTIC)
+      setInvalidField(undefined)
     } finally {
       setPending(false)
     }
@@ -110,17 +122,20 @@ export function useSupplierOnboardingWizard({
   const handleNameChange = (value: string) => {
     setName(value)
     setDiagnostic(undefined)
+    setInvalidField(undefined)
   }
 
   const handleWebsiteChange = (value: string) => {
     setWebsite(value)
     setDiagnostic(undefined)
+    setInvalidField(undefined)
   }
 
   const handleAbnChange = (value: string) => {
     const formatted = formatAbnDisplay(value)
     setAbn(formatted)
     setDiagnostic(undefined)
+    setInvalidField(undefined)
   }
 
   const handleConnectPayouts = () => {
@@ -138,8 +153,9 @@ export function useSupplierOnboardingWizard({
     website,
     abn,
     diagnostic,
+    invalidField,
     pending,
-    payoutsConfigured,
+    payoutConnection: resolvedPayoutConnection,
   }
 
   return {

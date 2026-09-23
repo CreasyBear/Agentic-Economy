@@ -1,6 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { Route, parseMarketCompareRefs, validateMarketSearch } from "@/routes/market";
+import {
+  carryMarketCompare,
+  marketCompareParam,
+  marketLoaderDeps,
+  toggleMarketCompareRef,
+} from "@/modules/market/market-route-data";
 import { resolveCanonicalBaseUrl } from "@/lib/server/canonical-url";
 
 vi.mock("@/lib/server/canonical-url.functions", () => ({
@@ -39,7 +45,7 @@ describe("market entry metadata", () => {
     const buildHead = Route.options.head;
     if (typeof loader !== "function" || buildHead === undefined) throw new Error("market_metadata_missing");
     const loaderData = await loader({ deps: { ...filters } } as never);
-    const head = await buildHead({ loaderData } as never);
+    const head = await buildHead({ loaderData, match: { search: filters } } as never);
     expect(head).toMatchObject({
       links: [{ rel: "canonical", href: `${origin}/market` }],
       meta: expect.arrayContaining([{ property: "og:url", content: `${origin}/market` }]),
@@ -82,6 +88,69 @@ describe("legacy compare mapping", () => {
     expect(validateMarketSearch({ compare: `${first},${second},${third},${fourth},${fifth}` })).toEqual({});
     expect(validateMarketSearch({ compare: "" })).toEqual({});
     expect(validateMarketSearch({ compare: `${first},   ,${second}` })).toEqual({ compare: `${first},${second}` });
+  });
+
+  it("toggles a compare set and carries it across Market search patches", () => {
+    const first = "https://api.example.com/tools/first";
+    const second = "https://api.example.com/tools/second";
+    const third = "https://api.example.com/tools/third";
+    const fourth = "https://api.example.com/tools/fourth";
+    const fifth = "https://api.example.com/tools/fifth";
+
+    expect(toggleMarketCompareRef([], first)).toEqual([first]);
+    expect(toggleMarketCompareRef([first], first)).toEqual([]);
+    expect(toggleMarketCompareRef([first, second, third, fourth], fifth)).toEqual([
+      first,
+      second,
+      third,
+      fourth,
+    ]);
+    expect(marketCompareParam([first, second])).toBe(`${first},${second}`);
+    expect(marketCompareParam([])).toBeUndefined();
+
+    const withCompare = { query: "image generation", compare: `${first},${second}` };
+    expect(carryMarketCompare(withCompare, { query: "image generation", view: "tools" })).toEqual({
+      query: "image generation",
+      view: "tools",
+      compare: `${first},${second}`,
+    });
+    expect(carryMarketCompare(withCompare, { view: "tools", compare: undefined })).toEqual({
+      view: "tools",
+    });
+  });
+
+  it("hydrates URL-selected Tools by ref in order and keeps unresolved refs", async () => {
+    const first = "https://api.example.com/tools/first";
+    const missing = "https://api.example.com/tools/missing";
+    const firstEntry = {
+      resource: first,
+      title: "First Tool",
+      description: "First description",
+      protocol: "http",
+      provider: "example.com",
+      prices: [],
+      metadataJson: "{}",
+    };
+    reads.resource.mockImplementation(async ({ data }: { data: { resource: string } }) =>
+      data.resource === first
+        ? { kind: "found_upstream", item: { entry: firstEntry } }
+        : { kind: "not_found" },
+    );
+    const search = validateMarketSearch({ view: "tools", compare: `${first},${missing}` });
+
+    expect(marketLoaderDeps(search)).toMatchObject({ view: "tools", compare: `${first},${missing}` });
+    const loader = Route.options.loader;
+    if (typeof loader !== "function") throw new Error("loader_missing");
+    const data = await loader({ deps: marketLoaderDeps(search) } as never);
+
+    expect(reads.resource.mock.calls.map(([call]) => call)).toEqual([
+      { data: { resource: first } },
+      { data: { resource: missing } },
+    ]);
+    expect(data.compareEntries).toEqual([
+      { resource: first, entry: firstEntry },
+      { resource: missing, missing: true },
+    ]);
   });
 });
 

@@ -23,7 +23,7 @@ export function AeAgentAccessAuthorizePage({ loaded }: AeAgentAccessAuthorizePag
   }
   if (loaded.kind === 'outcome_unknown') {
     return (
-      <AeOperatorPage operatorRole="owner" title="Review agent access" description="Confirm the current result before taking another action." currentPath="/agent-access">
+      <AeOperatorPage operatorRole="owner" title="Review Agent access" description="Confirm the current result before taking another action." currentPath="/agent-access">
         <AeSettingsStack>
           <Alert variant="destructive">
             <AlertTitle>Check the current access status</AlertTitle>
@@ -44,7 +44,7 @@ export function AeAgentAccessAuthorizePage({ loaded }: AeAgentAccessAuthorizePag
   }
   if (loaded.kind === 'succeeded') {
     return (
-      <AeOperatorPage operatorRole="owner" title="Review agent access" description="This request has already completed." currentPath="/agent-access">
+      <AeOperatorPage operatorRole="owner" title="Review Agent access" description="This request has already completed." currentPath="/agent-access">
         <AeSettingsStack>
           <Alert>
             <AlertTitle>Access approved</AlertTitle>
@@ -66,7 +66,7 @@ export function AeAgentAccessAuthorizePage({ loaded }: AeAgentAccessAuthorizePag
   if (loaded.kind === 'problem') {
     const presentation = presentConnectionProblem({ code: loaded.code })
     return (
-      <AeOperatorPage operatorRole="owner" title="Review agent access" description="This request cannot be used." currentPath="/agent-access">
+      <AeOperatorPage operatorRole="owner" title="Review Agent access" description="This request cannot be used." currentPath="/agent-access">
         <AeSettingsStack>
           <Alert variant="destructive">
             <AlertTitle>{presentation.heading}</AlertTitle>
@@ -80,11 +80,11 @@ export function AeAgentAccessAuthorizePage({ loaded }: AeAgentAccessAuthorizePag
     )
   }
   return (
-    <AeOperatorPage operatorRole="owner" title="Review agent access" description="Choose what this agent may do, then approve or decline." currentPath="/agent-access">
+    <AeOperatorPage operatorRole="owner" title="Review Agent access" description="Choose what this Agent may do, then approve or decline." currentPath="/agent-access">
       <AeSettingsStack>
         <Alert variant="destructive">
           <AlertTitle>This access request is missing a code</AlertTitle>
-          <AlertDescription>Start a new request from your agent.</AlertDescription>
+          <AlertDescription>Start a new request from your Agent.</AlertDescription>
         </Alert>
       </AeSettingsStack>
     </AeOperatorPage>

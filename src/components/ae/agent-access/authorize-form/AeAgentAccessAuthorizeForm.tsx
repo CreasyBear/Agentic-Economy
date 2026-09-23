@@ -1,3 +1,5 @@
+import { useEffect } from 'react'
+
 import { AeOperatorPage } from '@/components/ae/layout/AeOperatorPage'
 import { AeSection, AeSettingsStack } from '@/components/ae/layout/AeSection'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
@@ -29,84 +31,97 @@ export function AeAgentAccessAuthorizeForm({ locator, oauthState, details }: AeA
       pending={vm.pending}
       connectionTarget={vm.connectionTarget}
       replacementMode={vm.replacementMode}
-      {...(vm.replacementPrincipalRef === undefined ? {} : { replacementPrincipalRef: vm.replacementPrincipalRef })}
       agentTargetsUnavailable={vm.agentTargetsUnavailable}
-      approvedToolAccess={vm.approvedToolAccess}
-      approvedToolRefsCount={vm.approvedToolRefs.length}
       approvalLabel={vm.approvalLabel}
-      approvalPendingLabel={vm.approvalPendingLabel}
       onApprove={vm.approve}
       onDeny={vm.deny}
     />
   )
 
+  useEffect(() => {
+    const phase = vm.decision.phase
+    if (phase === 'idle' || phase === 'submitting') return
+    const heading = document.getElementById('consent-outcome-heading')
+    const recovery = document.getElementById('consent-outcome-recovery')
+    ;(heading ?? recovery)?.focus()
+  }, [vm.decision.phase])
+
   return (
-    <AeOperatorPage operatorRole="owner" title="Review agent access" description="Choose what this agent may do, then approve or decline." currentPath="/agent-access">
+    <AeOperatorPage operatorRole="owner" title="Review Agent access" description="Choose what this Agent may do, then approve or decline." currentPath="/agent-access">
       <AeSettingsStack>
         {vm.decision.phase === 'idle' || vm.decision.phase === 'submitting' ? (
-          <div className="grid overflow-hidden rounded-xl border border-border bg-card shadow-soft" role="group" aria-label={`Access decision for ${vm.clientName}`}>
-            <AeSection
-              title={`Connect ${vm.clientName}`}
-              description={vm.accessProfile === 'provider'
-                ? 'This separate credential can inspect and manage your provider Tools.'
-                : 'How much may this agent do without asking you?'}
-              className="p-4 sm:p-5"
-            >
-              <ConsentConnectionFieldset
-                pending={vm.pending}
-                connectionTarget={vm.connectionTarget}
-                replacementMode={vm.replacementMode}
-                {...(vm.replacementPrincipalRef === undefined ? {} : { replacementPrincipalRef: vm.replacementPrincipalRef })}
-                agentTargets={vm.agentTargets}
-                {...(vm.agentTargetsError === undefined ? {} : { agentTargetsError: vm.agentTargetsError })}
-                {...(vm.agentTargetsNextCursor === undefined ? {} : { agentTargetsNextCursor: vm.agentTargetsNextCursor })}
-                agentTargetsLoading={vm.agentTargetsLoading}
-                showConnectionFieldset={vm.showConnectionFieldset}
-                onSelectConnection={(value) => vm.dispatch({ kind: 'select_connection', value })}
-                onSelectReplacement={(value) => vm.dispatch({ kind: 'select_replacement', value })}
-                onSelectReplacementMode={(value) => vm.dispatch({ kind: 'select_replacement_mode', value })}
-                onLoadAgentTargets={vm.loadAgentTargets}
-              />
-              {vm.accessProfile === 'provider' ? (
-                <Alert>
-                  <AlertTitle>Provider management</AlertTitle>
-                  <AlertDescription>May inspect lifecycle and earnings, publish, recheck, withdraw, and republish your Tools. It cannot spend buyer credit or manage unrelated account settings.</AlertDescription>
-                </Alert>
-              ) : (
-                <AuthorityModeRadioGroup
-                  pending={vm.pending}
-                  selectedMode={vm.selectedMode}
-                  ceiling={vm.mode}
-                  onSelectMode={(value) => vm.dispatch({ kind: 'select_mode', value })}
+          <div
+            className="flex max-h-[min(40rem,calc(100dvh-12rem))] flex-col overflow-hidden rounded-xl border border-border bg-card"
+            role="group"
+            aria-label={`Access decision for ${vm.clientName}`}
+          >
+            <div className="shrink-0 p-4 sm:p-5">
+              <AeSection
+                title={`Connect ${vm.clientName}`}
+                description={vm.accessProfile === 'provider'
+                  ? 'This separate credential can inspect and manage your provider Tools.'
+                  : 'How much may this Agent do without asking you?'}
+              >
+                <ConsentRequestFacts
+                  clientName={vm.clientName}
+                  environment={vm.environment}
+                  toolSelectionSummary={vm.toolSelectionSummary}
+                  accessSummary={vm.accessSummary}
+                  expiresInSeconds={vm.expiresInSeconds}
+                  grantRevision={vm.grantRevision}
+                  grantRef={vm.grantRef}
+                  toolRefs={vm.toolRefs}
                 />
-              )}
-              {vm.accessProfile === 'market' ? (
-                <ConsentToolAccessFieldset
+              </AeSection>
+            </div>
+            <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-4 sm:px-5">
+              <div className="grid gap-related">
+                <ConsentConnectionFieldset
                   pending={vm.pending}
-                  toolAccess={vm.toolAccess}
-                  approvedToolAccess={vm.approvedToolAccess}
-                  approvedToolRefs={vm.approvedToolRefs}
-                  toolQuery={vm.toolQuery}
-                  toolSearch={vm.toolSearch}
-                  approvedToolRefSet={vm.approvedToolRefSet}
-                  onApprovedToolAccessChange={vm.setApprovedToolAccess}
-                  onToolQueryChange={vm.setToolQuery}
-                  onFindTools={vm.findTools}
-                  onAddApprovedTool={vm.addApprovedTool}
-                  onRemoveApprovedTool={vm.removeApprovedTool}
+                  connectionTarget={vm.connectionTarget}
+                  replacementMode={vm.replacementMode}
+                  {...(vm.replacementPrincipalRef === undefined ? {} : { replacementPrincipalRef: vm.replacementPrincipalRef })}
+                  agentTargets={vm.agentTargets}
+                  {...(vm.agentTargetsError === undefined ? {} : { agentTargetsError: vm.agentTargetsError })}
+                  {...(vm.agentTargetsNextCursor === undefined ? {} : { agentTargetsNextCursor: vm.agentTargetsNextCursor })}
+                  agentTargetsLoading={vm.agentTargetsLoading}
+                  showConnectionFieldset={vm.showConnectionFieldset}
+                  onSelectConnection={(value) => vm.dispatch({ kind: 'select_connection', value })}
+                  onSelectReplacement={(value) => vm.dispatch({ kind: 'select_replacement', value })}
+                  onSelectReplacementMode={(value) => vm.dispatch({ kind: 'select_replacement_mode', value })}
+                  onLoadAgentTargets={vm.loadAgentTargets}
                 />
-              ) : null}
-              <ConsentRequestFacts
-                clientName={vm.clientName}
-                environment={vm.environment}
-                toolSelectionSummary={vm.toolSelectionSummary}
-                accessSummary={vm.accessSummary}
-                expiresInSeconds={vm.expiresInSeconds}
-                grantRevision={vm.grantRevision}
-                grantRef={vm.grantRef}
-                toolRefs={vm.toolRefs}
-              />
-            </AeSection>
+                {vm.accessProfile === 'provider' ? (
+                  <Alert>
+                    <AlertTitle>Provider management</AlertTitle>
+                    <AlertDescription>May inspect lifecycle and earnings, publish, recheck, withdraw, and republish your Tools. It cannot spend buyer credit or manage unrelated account settings.</AlertDescription>
+                  </Alert>
+                ) : (
+                  <AuthorityModeRadioGroup
+                    pending={vm.pending}
+                    selectedMode={vm.selectedMode}
+                    ceiling={vm.mode}
+                    onSelectMode={(value) => vm.dispatch({ kind: 'select_mode', value })}
+                  />
+                )}
+                {vm.accessProfile === 'market' ? (
+                  <ConsentToolAccessFieldset
+                    pending={vm.pending}
+                    toolAccess={vm.toolAccess}
+                    approvedToolAccess={vm.approvedToolAccess}
+                    approvedToolRefs={vm.approvedToolRefs}
+                    toolQuery={vm.toolQuery}
+                    toolSearch={vm.toolSearch}
+                    approvedToolRefSet={vm.approvedToolRefSet}
+                    onApprovedToolAccessChange={vm.setApprovedToolAccess}
+                    onToolQueryChange={vm.setToolQuery}
+                    onFindTools={vm.findTools}
+                    onAddApprovedTool={vm.addApprovedTool}
+                    onRemoveApprovedTool={vm.removeApprovedTool}
+                  />
+                ) : null}
+              </div>
+            </div>
             {decisionBar}
           </div>
         ) : (

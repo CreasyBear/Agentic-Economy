@@ -198,7 +198,7 @@ export function readDeveloperDiscoveryRoute(
     copy: {
       eyebrow: 'Builder readbacks',
       title: 'Read-only public catalog files',
-      description: 'Source-owned catalog facts, schema shape, examples, freshness, and unavailable capability reasons for builders.',
+      description: 'Source-owned catalog facts, schema shape, examples, and freshness for builders.',
       readOnlyNotice:
         'Read-only public facts. This page does not grant mutation, booking, commercial, or owner-action authority.',
     },
@@ -635,7 +635,7 @@ function readDeveloperDiscoveryFreshnessFromFacts(
 
   return {
     state: 'current',
-    label: 'Discovery current',
+    label: 'Current',
     reason: 'Public catalog, read path status, schema, and examples match current source state.',
   }
 }
@@ -697,7 +697,7 @@ function readDeveloperDiscoveryFreshnessFromRouteReadback(
 
   return {
     state: 'current',
-    label: 'Discovery current',
+    label: 'Current',
     reason: 'Public routes, schema versions, and examples match current route readback.',
   }
 }

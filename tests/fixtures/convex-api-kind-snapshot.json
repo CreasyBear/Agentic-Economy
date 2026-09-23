@@ -55,6 +55,54 @@
   },
   {
     "visibility": "public",
+    "module": "adminConsoleAudit",
+    "method": "listAdminAuditEvents",
+    "kind": "query"
+  },
+  {
+    "visibility": "internal",
+    "module": "adminConsoleMetrics",
+    "method": "pageCallsForWindow",
+    "kind": "query"
+  },
+  {
+    "visibility": "internal",
+    "module": "adminConsoleMetrics",
+    "method": "pageQuotesForWindow",
+    "kind": "query"
+  },
+  {
+    "visibility": "internal",
+    "module": "adminConsoleMetrics",
+    "method": "pageResolutionsForWindow",
+    "kind": "query"
+  },
+  {
+    "visibility": "internal",
+    "module": "adminConsoleMetrics",
+    "method": "pageWorkspacesForDay",
+    "kind": "query"
+  },
+  {
+    "visibility": "internal",
+    "module": "adminConsoleMetrics",
+    "method": "snapshotMarketplaceMetricsDay",
+    "kind": "action"
+  },
+  {
+    "visibility": "internal",
+    "module": "adminConsoleMetrics",
+    "method": "writeMarketplaceMetricsDay",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "public",
+    "module": "adminConsoleProviders",
+    "method": "listAdminProviders",
+    "kind": "query"
+  },
+  {
+    "visibility": "public",
     "module": "agentAccessOAuth",
     "method": "claimRefreshFamily",
     "kind": "mutation"
@@ -1502,6 +1550,12 @@
   {
     "visibility": "internal",
     "module": "capabilityToolCatalog",
+    "method": "presentSearch",
+    "kind": "action"
+  },
+  {
+    "visibility": "internal",
+    "module": "capabilityToolCatalog",
     "method": "rerank",
     "kind": "action"
   },
@@ -1797,6 +1851,12 @@
     "visibility": "public",
     "module": "marketDemandSignals",
     "method": "record",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "public",
+    "module": "marketDemandSignals",
+    "method": "withdraw",
     "kind": "mutation"
   },
   {
@@ -2210,7 +2270,19 @@
   {
     "visibility": "internal",
     "module": "moneyFormance",
+    "method": "releaseExpiredUnusedCall",
+    "kind": "action"
+  },
+  {
+    "visibility": "internal",
+    "module": "moneyFormance",
     "method": "releaseManagedCall",
+    "kind": "action"
+  },
+  {
+    "visibility": "internal",
+    "module": "moneyFormance",
+    "method": "remedyPaidCall",
     "kind": "action"
   },
   {
@@ -2394,6 +2466,30 @@
     "kind": "query"
   },
   {
+    "visibility": "internal",
+    "module": "moneyManagedCallRemedy",
+    "method": "claim",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "moneyManagedCallRemedy",
+    "method": "finish",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "moneyManagedCallRemedyActions",
+    "method": "resolveInvalidResult",
+    "kind": "action"
+  },
+  {
+    "visibility": "internal",
+    "module": "moneyManagedCallRemedyActions",
+    "method": "resolveLostResult",
+    "kind": "action"
+  },
+  {
     "visibility": "public",
     "module": "moneyMonthlySpendBudget",
     "method": "configureMonthlySpendBudget",
@@ -2557,6 +2653,42 @@
   },
   {
     "visibility": "internal",
+    "module": "moneyX402Expiry",
+    "method": "claim",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "moneyX402Expiry",
+    "method": "finish",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "moneyX402Expiry",
+    "method": "schedule",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "moneyX402ExpiryActions",
+    "method": "recover",
+    "kind": "action"
+  },
+  {
+    "visibility": "internal",
+    "module": "moneyX402PaymentAttempts",
+    "method": "beginResponseRecovery",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "moneyX402PaymentAttempts",
+    "method": "checkpointX402Response",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
     "module": "moneyX402PaymentAttempts",
     "method": "claimX402PaymentAuthorization",
     "kind": "mutation"
@@ -2638,6 +2770,18 @@
     "module": "moneyX402PaymentAttempts",
     "method": "recordX402PaymentSigningIntent",
     "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "moneyX402PaymentAttempts",
+    "method": "responseRecoveryIsCurrent",
+    "kind": "query"
+  },
+  {
+    "visibility": "internal",
+    "module": "moneyX402ResponseActions",
+    "method": "recover",
+    "kind": "action"
   },
   {
     "visibility": "internal",
@@ -2804,18 +2948,6 @@
   {
     "visibility": "public",
     "module": "security",
-    "method": "readAdminAuditEvents",
-    "kind": "query"
-  },
-  {
-    "visibility": "public",
-    "module": "security",
-    "method": "readAdminIndexHealth",
-    "kind": "query"
-  },
-  {
-    "visibility": "public",
-    "module": "security",
     "method": "revokeAdminMembership",
     "kind": "mutation"
   },
@@ -2919,6 +3051,12 @@
     "visibility": "internal",
     "module": "workloadCron",
     "method": "refreshFacilitatorDiscovery",
+    "kind": "action"
+  },
+  {
+    "visibility": "internal",
+    "module": "workloadCron",
+    "method": "snapshotMarketplaceMetricsDay",
     "kind": "action"
   },
   {

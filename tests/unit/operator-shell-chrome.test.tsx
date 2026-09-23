@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 
+import type * as ConvexReactModule from 'convex/react'
 import { useMemo, useState, type ReactElement } from 'react'
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import {
@@ -15,7 +16,14 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { Boxes as NavIcon } from 'lucide-react'
 import '../setup/jsdom-platform'
 
+// Vitest hoists the mock factory, so its shared helper must be loaded inside it.
+vi.mock('convex/react', async (importOriginal) => ({
+  ...(await importOriginal<typeof ConvexReactModule>()),
+  ...(await import('../helpers/shell-convex-mock')).shellConvexMock,
+}))
+
 const shellMocks = vi.hoisted(() => ({
+  canAccessAdmin: false,
   readAgentKeys: vi.fn(async (): Promise<unknown[]> => []),
   useUser: vi.fn(() => ({
     isLoaded: true,
@@ -36,6 +44,7 @@ vi.mock('@tanstack/react-start', async (importOriginal) => ({
 }))
 vi.mock('@clerk/tanstack-react-start', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@clerk/tanstack-react-start')>()),
+  useAuth: () => ({ isSignedIn: shellMocks.useUser().isSignedIn === true }),
   useUser: shellMocks.useUser,
   UserButton: (props: unknown) => {
     shellMocks.userButton(props)
@@ -51,11 +60,14 @@ vi.mock('@/components/ae/command-panel', () => ({
   CommandPanelProvider: ({ children }: { children: ReactElement }) => children,
   AeCommandPanel: () => null,
 }))
+vi.mock('@/components/ae/layout/app-shell/useOperatorEntitlement', () => ({
+  useOperatorEntitlement: () => ({ canAccessAdmin: shellMocks.canAccessAdmin }),
+}))
 
 import { AeAppShell } from '@/components/ae/layout/AeAppShell'
 import { AeOperatorPage, OperatorChromeProvider } from '@/components/ae/layout/AeOperatorPage'
-import { AeOperatorSidebar } from '@/components/ae/layout/AeOperatorSidebar'
-import { SidebarProvider, SidebarTrigger } from '@/components/ui/sidebar'
+import { AeAppSidebar } from '@/components/ae/layout/app-shell/AeAppSidebar'
+import { SidebarProvider } from '@/components/ui/sidebar'
 import { OperatorRouteError, OperatorRouteNotFound, OperatorRoutePending } from '@/components/ae/layout/AeRouteStates'
 import { AECON_MARK_SRC } from '@/content/brand-assets'
 import { ownerSettingsChrome } from '@/lib/operator/settings-navigation'
@@ -73,6 +85,7 @@ afterEach(() => {
   shellMocks.readAgentKeys.mockResolvedValue([])
   shellMocks.useUser.mockClear()
   shellMocks.userButton.mockClear()
+  shellMocks.canAccessAdmin = false
 })
 
 describe('operator shell nested chrome', () => {
@@ -81,15 +94,17 @@ describe('operator shell nested chrome', () => {
 
     const calls = await screen.findByRole('link', { name: 'Open Calls' })
     const main = screen.getByTestId('operator-content')
-    const titlesAtFocus: string[] = []
+    const descriptionsAtFocus: string[] = []
     main.addEventListener('focus', () => {
-      titlesAtFocus.push(screen.getByRole('heading', { level: 1 }).textContent ?? '')
+      descriptionsAtFocus.push(
+        within(screen.getByTestId('operator-page-stack')).getByText('Review calls.').textContent ?? '',
+      )
     })
     expect(document.activeElement).not.toBe(main)
     fireEvent.click(calls)
 
     await waitFor(() => expect(document.activeElement).toBe(main))
-    expect(titlesAtFocus).toEqual(['Calls'])
+    expect(descriptionsAtFocus).toEqual(['Review calls.'])
   })
 
   it('does not move focus for hash-only navigation', async () => {
@@ -107,15 +122,16 @@ describe('operator shell nested chrome', () => {
     renderAt(<OperatorShellHarness />, '/admin')
 
     expect(await screen.findByText('Action one')).toBeTruthy()
-    expect(screen.getAllByText('First crumb').length).toBeGreaterThan(0)
+    expect(screen.queryByRole('navigation', { name: 'Breadcrumb' })).toBeNull()
+    expect(screen.queryByText('First crumb')).toBeNull()
     expect(screen.getAllByText('2').length).toBeGreaterThan(0)
 
     fireEvent.click(screen.getByRole('button', { name: 'Update chrome' }))
 
     expect(await screen.findByText('Action two')).toBeTruthy()
     expect(screen.queryByText('Action one')).toBeNull()
-    expect(screen.getAllByText('Second crumb').length).toBeGreaterThan(0)
-    expect(screen.queryByText('First crumb')).toBeNull()
+    expect(screen.queryByRole('navigation', { name: 'Breadcrumb' })).toBeNull()
+    expect(screen.queryByText('Second crumb')).toBeNull()
     expect(screen.getAllByText('5').length).toBeGreaterThan(0)
   })
 
@@ -125,20 +141,14 @@ describe('operator shell nested chrome', () => {
 
     renderAt(
       <AeAppShell>
-        <SidebarProvider className="contents" defaultOpen>
-          <OperatorChromeProvider
-            sidebar={<AeOperatorSidebar operatorRole="owner" currentPath="/agent-access/unknown" />}
-          >
-            <AeOperatorPage
-              operatorRole="owner"
-              title="Operator workspace"
-              description="Loading the latest operator view."
-              currentPath="/agent-access/unknown"
-            >
-              <OperatorRouteNotFound />
-            </AeOperatorPage>
-          </OperatorChromeProvider>
-        </SidebarProvider>
+        <AeOperatorPage
+          operatorRole="owner"
+          title="Operator workspace"
+          description="Loading the latest operator view."
+          currentPath="/agent-access/unknown"
+        >
+          <OperatorRouteNotFound />
+        </AeOperatorPage>
       </AeAppShell>,
       '/agent-access/unknown',
     )
@@ -147,46 +157,55 @@ describe('operator shell nested chrome', () => {
     expect(screen.getAllByRole('heading', { level: 1 }).map(({ textContent }) => textContent)).toEqual(['Page not found'])
     expect(screen.getAllByRole('main')).toHaveLength(1)
     expect(screen.getAllByTestId('skip-to-content')).toHaveLength(1)
-    expect(screen.getAllByRole('navigation', { name: 'Operator navigation' })).toHaveLength(1)
-    expect(screen.queryByRole('navigation', { name: 'Public navigation' })).toBeNull()
+    expect(screen.getAllByRole('button', { name: 'Workspace menu' })).toHaveLength(1)
+    expect(screen.queryByRole('navigation', { name: 'App navigation' })).toBeNull()
+    expect(screen.queryByRole('navigation', { name: 'Primary' })).toBeNull()
 
     const recovery = screen.getByRole('link', { name: 'Back to Agents' })
     expect(recovery.getAttribute('href')).toBe('/agent-access')
   })
 
-  it('names the mode on the rail without repeating the brand mark, and drops the nested settings record icon', async () => {
+  it('uses slim records rail for admin without duplicating app-header chrome', async () => {
     renderAt(
       <SidebarProvider>
-        <OperatorChromeProvider
-          sidebar={<AeOperatorSidebar operatorRole="owner" currentPath="/owner/settings" />}
-        >
+        <OperatorChromeProvider>
+          <AeAppSidebar operatorRole="admin" canAccessAdmin pathname="/admin" hash="" />
           <AeOperatorPage
-            operatorRole="owner"
-            title="Workspace"
-            description="Loading your latest marketplace activity."
-            currentPath="/owner/settings"
+            operatorRole="admin"
+            title="Administration"
+            description="Catalog and audit records."
+            currentPath="/admin"
           >
-            <AeOperatorPage
-              operatorRole="owner"
-              title={ownerSettingsChrome.title}
-              description={ownerSettingsChrome.description}
-              currentPath="/owner/settings"
-            >
-              <div>Settings body</div>
-            </AeOperatorPage>
+            <div>Admin body</div>
           </AeOperatorPage>
         </OperatorChromeProvider>
       </SidebarProvider>,
+      '/admin',
+    )
+
+    const nav = await screen.findByRole('navigation', { name: 'App navigation' })
+    expect(within(nav).getByText('Admin')).toBeTruthy()
+    expect(within(nav).getByRole('link', { name: 'Providers' })).toBeTruthy()
+    expect(within(nav).getByRole('link', { name: 'Audit' })).toBeTruthy()
+    expect(document.querySelectorAll(`img[src="${AECON_MARK_SRC}"]`).length).toBe(0)
+  })
+
+  it('drops the nested settings record icon on owner account pages', async () => {
+    renderAt(
+      <AeOperatorPage
+        operatorRole="owner"
+        title={ownerSettingsChrome.title}
+        description={ownerSettingsChrome.description}
+        currentPath="/owner/settings"
+      >
+        <div>Settings body</div>
+      </AeOperatorPage>,
       '/owner/settings',
     )
 
-    const heading = await screen.findByRole('heading', { level: 1, name: 'Account & security' })
-    expect(heading.parentElement?.previousElementSibling).toBeNull()
-    // The frame header owns the brand mark and wordmark; the rail names the mode only.
-    expect(screen.queryByText('AECON')).toBeNull()
-    expect(document.querySelectorAll(`img[src="${AECON_MARK_SRC}"]`).length).toBe(0)
-    expect(screen.getByRole('link', { name: 'Workspace home' })).toBeTruthy()
-    expect(screen.getAllByText('Workspace').length).toBeGreaterThan(0)
+    const stack = await screen.findByTestId('operator-page-stack')
+    expect(within(stack).getByText(ownerSettingsChrome.description)).toBeTruthy()
+    expect(within(stack).queryByRole('heading', { level: 1 })).toBeNull()
   })
 
   it('drops the record-header icon on operator lists', async () => {
@@ -202,8 +221,29 @@ describe('operator shell nested chrome', () => {
       '/owner/operations',
     )
 
-    const heading = await screen.findByRole('heading', { level: 1, name: 'Tools' })
-    expect(heading.parentElement?.previousElementSibling).toBeNull()
+    const stack = await screen.findByTestId('operator-page-stack')
+    expect(within(stack).getByText('Publish the exact tools agents can inspect and call.')).toBeTruthy()
+    expect(within(stack).queryByRole('heading', { level: 1 })).toBeNull()
+    expect(screen.queryByRole('navigation', { name: 'Breadcrumb' })).toBeNull()
+  })
+
+  it('derives resource breadcrumbs from canonical destination ownership', async () => {
+    renderAt(
+      <AeOperatorPage
+        operatorRole="owner"
+        title="Add Tool"
+        description="Connect a Tool."
+        currentPath="/owner/operations/new"
+      >
+        <div>New Tool body</div>
+      </AeOperatorPage>,
+      '/owner/operations/new',
+    )
+
+    const stack = screen.getByTestId('operator-page-stack')
+    expect(within(stack).getByText('Connect a Tool.')).toBeTruthy()
+    expect(within(stack).queryByRole('heading', { level: 1 })).toBeNull()
+    expect(screen.queryByRole('navigation', { name: 'Breadcrumb' })).toBeNull()
   })
 
   it('keeps parent chrome while a nested pending state loads', async () => {
@@ -219,7 +259,8 @@ describe('operator shell nested chrome', () => {
       '/owner/settings/connections',
     )
 
-    expect(await screen.findByRole('heading', { level: 1, name: 'Tools' })).toBeTruthy()
+    const stack = await screen.findByTestId('operator-page-stack')
+    expect(within(stack).getByText('Publish the exact tools agents can inspect and call.')).toBeTruthy()
     expect(screen.queryByRole('heading', { name: 'Loading workspace' })).toBeNull()
     expect(screen.getByLabelText('Loading workspace')).toBeTruthy()
   })
@@ -237,7 +278,8 @@ describe('operator shell nested chrome', () => {
       '/owner/settings/connections',
     )
 
-    expect(await screen.findByRole('heading', { level: 1, name: 'Tools' })).toBeTruthy()
+    const stack = await screen.findByTestId('operator-page-stack')
+    expect(within(stack).getByText('Publish the exact tools agents can inspect and call.')).toBeTruthy()
     expect(screen.queryByRole('heading', { name: 'Couldn’t load this page' })).toBeNull()
     expect(screen.getByText('Couldn’t load this page')).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Try again' })).toBeTruthy()
@@ -264,36 +306,42 @@ describe('operator shell nested chrome', () => {
   it('keeps the shell and offers recovery when the signed-in account lacks the requested surface', async () => {
     renderAt(
       <OperatorRouteError error={new OperatorSurfaceForbiddenError('admin')} />,
-      '/admin/index-health',
+      '/admin/providers',
     )
 
-    expect(await screen.findByText('You don’t have access to this workspace')).toBeTruthy()
-    expect(screen.getByRole('link', { name: 'Return to market' }).getAttribute('href')).toBe('/market')
-    expect(screen.getByRole('link', { name: 'Help' }).getAttribute('href')).toBe('/support')
+    const stack = await screen.findByTestId('operator-page-stack')
+    expect(within(stack).getByText('Your account does not have the Admin role for this page.')).toBeTruthy()
+    expect(within(stack).queryByRole('heading', { level: 1 })).toBeNull()
+    expect(screen.getByRole('link', { name: 'Ask an Admin for access' }).getAttribute('href')).toBe('/support')
+    expect(screen.getByRole('link', { name: 'Browse Tools' }).getAttribute('href')).toBe('/market')
     expect(screen.getByRole('button', { name: 'Sign out' })).toBeTruthy()
-    expect(screen.queryByRole('link', { name: 'Catalog health' })).toBeNull()
+    expect(screen.queryByRole('link', { name: 'Providers' })).toBeNull()
     expect(screen.queryByRole('link', { name: 'Audit' })).toBeNull()
   })
 
   it('recognizes a forbidden error after server serialization strips its custom fields', async () => {
     renderAt(
       <OperatorRouteError error={{ name: 'Error', message: OPERATOR_SURFACE_FORBIDDEN_MESSAGE }} />,
-      '/admin/index-health',
+      '/admin/providers',
     )
 
-    expect(await screen.findByText('You don’t have access to this workspace')).toBeTruthy()
+    const stack = await screen.findByTestId('operator-page-stack')
+    expect(within(stack).getByText('Your account does not have the Admin role for this page.')).toBeTruthy()
+    expect(within(stack).queryByRole('heading', { level: 1 })).toBeNull()
     expect(screen.queryByText('Couldn’t load this page')).toBeNull()
   })
 
   it('renders forbidden recovery with a Clerk sign-out control', async () => {
     renderAt(
       <OperatorRouteError error={new OperatorSurfaceForbiddenError('admin')} />,
-      '/admin/index-health',
+      '/admin/providers',
     )
 
-    expect(await screen.findByText('You don’t have access to this workspace')).toBeTruthy()
+    const stack = await screen.findByTestId('operator-page-stack')
+    expect(within(stack).getByText('Your account does not have the Admin role for this page.')).toBeTruthy()
+    expect(within(stack).queryByRole('heading', { level: 1 })).toBeNull()
     expect(screen.getByRole('button', { name: 'Sign out' })).toBeTruthy()
-    expect(screen.queryByRole('link', { name: 'Catalog health' })).toBeNull()
+    expect(screen.queryByRole('link', { name: 'Providers' })).toBeNull()
     expect(screen.queryByRole('link', { name: 'Audit' })).toBeNull()
   })
 
@@ -310,80 +358,62 @@ describe('owner mobile navigation', () => {
     await waitFor(() => expect(calls.getAttribute('data-status')).toBe('active'))
   })
 
-  it('renders the exact owner shortcuts from the shared navigation model in order', async () => {
+  it('renders the canonical primary destinations and More disclosure in order', async () => {
     renderOperatorShell('owner', '/owner/operations')
 
     const mobileNav = await screen.findByRole('navigation', { name: 'Owner primary navigation' })
     const links = within(mobileNav).getAllByRole('link')
 
-    expect(links.map((link) => link.textContent)).toEqual(['Overview', 'Market', 'Calls', 'Balance'])
+    expect(links.map((link) => link.textContent)).toEqual(['Market', 'Agents', 'Calls', 'Credit'])
     expect(links.map((link) => link.getAttribute('href'))).toEqual([
-      '/owner',
-      '/owner/market',
+      '/market',
+      '/agent-access',
       '/activity',
       '/owner/credit',
     ])
-    expect(links.filter((link) => link.getAttribute('aria-current') === 'page').map((link) => link.textContent))
-      .toEqual([])
-    expect(mobileNav.querySelectorAll('svg[aria-hidden="true"]')).toHaveLength(4)
+    expect(within(mobileNav).getByRole('button', { name: 'More' }).getAttribute('aria-current')).toBe('page')
+    expect(mobileNav.querySelectorAll('svg[aria-hidden="true"]')).toHaveLength(5)
   })
 
-  it('does not mislabel secondary owner routes as a buyer shortcut', async () => {
+  it('keeps resource routes owned by the More disclosure', async () => {
     const descendant = renderOperatorShell('owner', '/owner/operations/new')
     const descendantNav = await screen.findByRole('navigation', { name: 'Owner primary navigation' })
-
-    expect(within(descendantNav).getAllByRole('link')
-      .filter((link) => link.getAttribute('aria-current') === 'page')
-      .map((link) => link.textContent))
-      .toEqual([])
+    expect(within(descendantNav).getByRole('button', { name: 'More' }).getAttribute('aria-current')).toBe('page')
 
     descendant.unmount()
     renderOperatorShell('owner', '/owner/settings')
-    const unrelatedNav = await screen.findByRole('navigation', { name: 'Owner primary navigation' })
-
-    expect(within(unrelatedNav).getAllByRole('link')
-      .filter((link) => link.hasAttribute('aria-current')))
-      .toEqual([])
+    const settingsNav = await screen.findByRole('navigation', { name: 'Owner primary navigation' })
+    expect(within(settingsNav).getByRole('button', { name: 'More' }).getAttribute('aria-current')).toBe('page')
   })
 
-  it('is owner-only while preserving the full sidebar navigation', async () => {
+  it('keeps one workspace menu across owner resources, receipts, and admin pages', async () => {
     const owner = renderOperatorShell('owner', '/owner/operations')
-    const sidebarNav = await screen.findByRole('navigation', { name: 'Operator navigation' })
-
-    expect(within(sidebarNav).getByRole('link', { name: 'Tools' })).toBeTruthy()
-    expect(within(sidebarNav).getByRole('link', { name: 'Calls' })).toBeTruthy()
-    expect(within(sidebarNav).getByRole('link', { name: 'Agents' })).toBeTruthy()
-    expect(within(sidebarNav).getByRole('link', { name: 'Balance' })).toBeTruthy()
-    expect(within(sidebarNav).queryByRole('link', { name: 'Provider' })).toBeNull()
-    expect(within(sidebarNav).queryByRole('link', { name: 'Publish' })).toBeNull()
-    expect(within(sidebarNav).getByRole('link', { name: 'Workspace' })).toBeTruthy()
-    expect(within(sidebarNav).getByRole('link', { name: 'Account & security' })).toBeTruthy()
+    fireEvent.click(await screen.findByRole('button', { name: 'Workspace menu' }))
+    expect(within(screen.getByRole('menu')).getByRole('menuitem', { name: 'Tools' }).getAttribute('aria-current')).toBe('page')
 
     owner.unmount()
-    renderOperatorShell('admin', '/admin')
+    const receipt = renderOperatorShell('owner', '/calls/call_test_123')
+    fireEvent.click(await screen.findByRole('button', { name: 'Workspace menu' }))
+    expect(within(screen.getByRole('menu')).getByRole('menuitem', { name: 'Calls' }).getAttribute('aria-current')).toBe('page')
+    receipt.unmount()
 
-    expect(screen.queryByRole('navigation', { name: 'Owner primary navigation' })).toBeNull()
-    expect(await screen.findByRole('navigation', { name: 'Operator navigation' })).toBeTruthy()
+    shellMocks.canAccessAdmin = true
+    renderOperatorShell('admin', '/admin')
+    fireEvent.click(await screen.findByRole('button', { name: 'Workspace menu' }))
+    expect(within(screen.getByRole('menu')).getByText('Admin')).toBeTruthy()
   })
 
-  it('hides at md, clears mobile content, preserves desktop padding, and respects the safe area', async () => {
+  it('keeps mobile safe-area padding on the root inset', async () => {
     renderOperatorShell('owner', '/owner/operations')
 
     const mobileNav = await screen.findByRole('navigation', { name: 'Owner primary navigation' })
-    const content = screen.getByTestId('operator-content')
+    const inset = document.querySelector('[data-slot="sidebar-inset"]')
 
     expect(mobileNav.classList.contains('md:hidden')).toBe(true)
     expect(mobileNav.classList.contains('pb-[env(safe-area-inset-bottom,0px)]')).toBe(true)
-    expect(
-      mobileNav.classList.contains('h-[calc(3.5rem+env(safe-area-inset-bottom,0px))]'),
-    ).toBe(true)
-    expect(
-      content.classList.contains(
-        'pb-[calc(4.5rem+env(safe-area-inset-bottom,0px))]',
-      ),
-    ).toBe(true)
-    expect(content.classList.contains('md:pb-related')).toBe(true)
-    expect(content.classList.contains('ae-rail')).toBe(true)
+    expect(mobileNav.classList.contains('h-[calc(var(--ae-mobile-nav-height)+env(safe-area-inset-bottom,0px))]')).toBe(true)
+    expect(inset?.classList.contains('pb-[calc(var(--ae-mobile-nav-height)+env(safe-area-inset-bottom,0px))]')).toBe(true)
+    expect(screen.getByTestId('operator-content').classList.contains('ae-rail')).toBe(true)
     const pageStack = screen.getByTestId('operator-page-stack')
     expect(pageStack.classList.contains('gap-section')).toBe(true)
     expect(pageStack.classList.contains('content-start')).toBe(true)
@@ -396,75 +426,44 @@ describe('owner mobile navigation', () => {
 })
 
 describe('owner account identity', () => {
-  it('keeps the active account and maintained Clerk menu visible in expanded owner chrome', async () => {
-    renderOperatorShell('owner', '/owner/operations')
+  it('keeps the Clerk account menu in the app header on buyer owner routes', async () => {
+    renderAt(
+      <AeAppShell>
+        <AeOperatorPage
+          operatorRole="owner"
+          title="Tools"
+          description="Publish tools."
+          currentPath="/owner/operations"
+        >
+          <div>Tools body</div>
+        </AeOperatorPage>
+      </AeAppShell>,
+      '/owner/operations',
+    )
 
-    const account = await screen.findByRole('group', { name: 'Signed in as ada@supply.example' })
-    expect(within(account).getByText('ada@supply.example').classList.contains('sr-only')).toBe(false)
-    expect(within(account).getByRole('button', { name: 'Account menu' })).toBeTruthy()
+    expect(await screen.findByRole('button', { name: 'Account menu' })).toBeTruthy()
     expect(shellMocks.userButton).toHaveBeenCalled()
-    expect(shellMocks.userButton.mock.calls.at(-1)?.[0]).toMatchObject({
-      appearance: {
-        elements: {
-          avatarBox: 'size-6',
-          userButtonTrigger: expect.stringContaining('focus-visible:ring-2'),
-        },
-      },
+    expect(shellMocks.userButton.mock.calls[0]?.[0]).toMatchObject({
       userProfileMode: 'modal',
     })
+    expect(screen.queryByRole('group', { name: /Signed in as/ })).toBeNull()
     expect(document.body.textContent).not.toContain('user_private_ada')
     expect(document.body.textContent).not.toContain('session_private_ada')
   })
 
-  it('retains identity semantics when the desktop sidebar is collapsed', async () => {
-    renderOperatorShell('owner', '/owner/operations')
+  it('keeps account controls out of the navigation sidebar', async () => {
+    renderAt(
+      <SidebarProvider>
+        <OperatorChromeProvider>
+          <AeAppSidebar operatorRole="owner" pathname="/owner/operations" hash="" />
+        </OperatorChromeProvider>
+      </SidebarProvider>,
+      '/owner/operations',
+    )
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Collapse navigation' }))
-
-    const account = screen.getByRole('group', { name: 'Signed in as ada@supply.example' })
-    expect(within(account).getByText('ada@supply.example').classList.contains('sr-only')).toBe(true)
-    expect(within(account).getByRole('button', { name: 'Account menu' })).toBeTruthy()
-  })
-
-  it('falls back to the human name only when the primary email is absent', async () => {
-    const noEmailUser = {
-      isLoaded: true,
-      isSignedIn: true,
-      user: {
-        id: 'user_private_ada',
-        fullName: 'Ada Lovelace',
-        primaryEmailAddress: null,
-      },
-      sessionId: 'session_private_ada',
-    }
-    // The sidebar bridge settles one render after mount (its navBadges arrive
-    // from the route's root AeOperatorPage via an effect), so the account
-    // component renders more than once; queue the override for each pass.
-    shellMocks.useUser.mockReturnValueOnce(noEmailUser)
-    shellMocks.useUser.mockReturnValueOnce(noEmailUser)
-    shellMocks.useUser.mockReturnValueOnce(noEmailUser)
-
-    renderOperatorShell('owner', '/owner/operations')
-
-    const account = await screen.findByRole('group', { name: 'Signed in as Ada Lovelace' })
-    expect(within(account).getByText('Ada Lovelace')).toBeTruthy()
-    expect(document.body.textContent).not.toContain('user_private_ada')
-  })
-
-  it('keeps the identity visible inside the mobile drawer', async () => {
-    const desktopWidth = window.innerWidth
-    Object.defineProperty(window, 'innerWidth', { configurable: true, value: 390 })
-
-    try {
-      renderOperatorShell('owner', '/owner/operations')
-      fireEvent.click(await screen.findByRole('button', { name: 'Open operator navigation' }))
-
-      const account = await screen.findByRole('group', { name: 'Signed in as ada@supply.example' })
-      expect(within(account).getByText('ada@supply.example').classList.contains('sr-only')).toBe(false)
-      expect(within(account).getByRole('button', { name: 'Account menu' })).toBeTruthy()
-    } finally {
-      Object.defineProperty(window, 'innerWidth', { configurable: true, value: desktopWidth })
-    }
+    expect(await screen.findByRole('navigation', { name: 'App navigation' })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Account menu' })).toBeNull()
+    expect(screen.queryByRole('group', { name: /Signed in as/ })).toBeNull()
   })
 
 })
@@ -479,9 +478,8 @@ function OperatorShellHarness() {
 
   return (
     <SidebarProvider>
-      <OperatorChromeProvider
-        sidebar={<AeOperatorSidebar operatorRole="admin" currentPath="/admin" />}
-      >
+      <OperatorChromeProvider>
+        <AeAppSidebar operatorRole="admin" canAccessAdmin pathname="/admin/audit-events" hash="" />
         <AeOperatorPage
           operatorRole="admin"
           title="Outer shell"
@@ -533,23 +531,21 @@ function FocusTransitionHarness() {
   )
 }
 
-function renderOperatorShell(operatorRole: 'owner' | 'admin', currentPath: string) {
+function renderOperatorShell(
+  operatorRole: 'owner' | 'admin',
+  currentPath: string,
+) {
   return renderAt(
-    <SidebarProvider>
-      <OperatorChromeProvider
-        mobileTrigger={<SidebarTrigger aria-label="Open operator navigation" className="md:hidden" />}
-        sidebar={<AeOperatorSidebar operatorRole={operatorRole} currentPath={currentPath} />}
+    <AeAppShell>
+      <AeOperatorPage
+        operatorRole={operatorRole}
+        title="Operator workspace"
+        description="Operator workspace content."
+        currentPath={currentPath}
       >
-        <AeOperatorPage
-          operatorRole={operatorRole}
-          title="Operator workspace"
-          description="Operator workspace content."
-          currentPath={currentPath}
-        >
-          <div>Workspace body</div>
-        </AeOperatorPage>
-      </OperatorChromeProvider>
-    </SidebarProvider>,
+        <div>Workspace body</div>
+      </AeOperatorPage>
+    </AeAppShell>,
     currentPath,
   )
 }
@@ -576,8 +572,8 @@ function renderAt(ui: ReactElement, pathname: string) {
     }),
     createRoute({
       getParentRoute: () => rootRoute,
-      path: '/owner/market',
-      staticData: { nav: { label: 'Market', operator: { roles: ['owner'], group: 'Buy', groupOrder: 0, order: 0, icon: NavIcon, tier: 'core', mobilePrimary: true, mobileOrder: 10 } } },
+      path: '/market',
+      staticData: { nav: { label: 'Market', operator: { roles: ['owner'], group: 'Buy', groupOrder: 0, order: 0, icon: NavIcon, tier: 'core', mobilePrimary: true, mobileOrder: 0 } } },
     }),
     createRoute({ getParentRoute: () => rootRoute, path: '/owner/operations/new' }),
     createRoute({
@@ -612,6 +608,7 @@ function renderAt(ui: ReactElement, pathname: string) {
       path: '/activity',
       staticData: { nav: { label: 'Calls', operator: { roles: ['owner'], group: 'Buy', groupOrder: 0, order: 0, icon: NavIcon, tier: 'core', mobilePrimary: true, mobileOrder: 10 } } },
     }),
+    createRoute({ getParentRoute: () => rootRoute, path: '/calls/$callRef' }),
     createRoute({ getParentRoute: () => rootRoute, path: '/' }),
   ])
   const router = createRouter({

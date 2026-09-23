@@ -3,6 +3,7 @@ import { filter } from 'convex-helpers/server/filter'
 
 import { CURRENT_TOOL_PROJECTION_NAVIGATION } from '@/modules/actions/contract'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
+import { normalizeSearchText, SEARCH_STOP_WORDS } from '@/modules/common/normalize-search-text'
 import {
   CURRENT_TOOL_CALL_VIA,
   compareCapabilityTools,
@@ -318,11 +319,22 @@ export async function searchHandler(ctx: QueryCtx, args: ToolSearchInput) {
   args = { ...args, ...normalized }
   const now = Date.now()
   const query = args.query.trim()
+  // Requires a validated request. Native full-text search matches any supplied
+  // word, so filler such as "from" must not establish capability relevance.
+  // Preserve the literal request, eligibility and native cursor semantics;
+  // a nonempty request with no meaningful terms returns no candidates, never browse.
+  const searchQuery = normalizeSearchText(query).split(' ').filter((token) => token.length > 0 && !SEARCH_STOP_WORDS.has(token)).join(' ')
+  if (query.length > 0 && searchQuery.length === 0) {
+    return serializeToolSearchResult({
+      kind: 'no_candidates', schemaVersion: 'registry-tools:v3', query,
+      appliedFilters: args.filters ?? {}, matchedCount: 0, ranking: [], navigation,
+    })
+  }
   const limit = args.limit ?? 20
   const networkId = args.filters?.networkId
   const source = query.length > 0
     ? ctx.db.query('capabilityPublications').withSearchIndex('search_text', (q) => {
-        const search = q.search('searchText', query).eq('disposition', 'current')
+        const search = q.search('searchText', searchQuery).eq('disposition', 'current')
         return networkId === undefined ? search : search.eq('networkId', networkId)
       })
     : networkId === undefined

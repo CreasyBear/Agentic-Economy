@@ -4,12 +4,6 @@ import { AeRemoveBusinessPage } from '@/components/ae/privacy/remove-business/Ae
 import { AePublicPage } from '@/components/ae/layout/AePublicPage'
 
 export const Route = createFileRoute('/privacy/remove-business')({
-  staticData: {
-    nav: {
-      label: 'Remove a listing',
-      footer: { column: 'Legal', order: 2 },
-    },
-  },
   head: () => ({
     meta: [
       { title: 'Provider correction or removal | Agentic Economy' },
@@ -25,7 +19,7 @@ function RemoveBusinessRoute() {
     <AePublicPage
       kind="document"
       eyebrow="Privacy"
-      title="Provider corrections"
+      title="Remove a Business"
       description="Send the Provider slug, your email, and the exact Tool or profile fact that should change."
     >
       <AeRemoveBusinessPage />

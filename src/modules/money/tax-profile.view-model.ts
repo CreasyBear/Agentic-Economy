@@ -17,6 +17,8 @@ export type TaxProfileInitialData =
       revision: number
     }>
 
+export type TaxProfileInvalidField = 'legalName' | 'abn' | 'address'
+
 export type TaxProfileSubmitPayload = Readonly<{
   abn: string
   legalName: string

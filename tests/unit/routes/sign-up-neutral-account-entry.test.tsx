@@ -52,11 +52,10 @@ describe('sign-up account entry', () => {
     render(<Component />)
 
     expect(screen.getByRole('heading', { name: 'Create an account' })).toBeTruthy()
-    expect(screen.getByText(/Use email, Google, GitHub, or a passkey/)).toBeTruthy()
-    expect(screen.getByText(/you’ll set up your workspace/)).toBeTruthy()
+    expect(screen.getByText(/you’ll set up your Workspace/)).toBeTruthy()
     expect(document.body.textContent?.toLowerCase()).not.toContain('supplier')
     expect(document.body.textContent).not.toContain('manage Operations')
-    expect(document.body.textContent?.toLowerCase()).toContain('workspace')
+    expect(document.body.textContent).toContain('Workspace')
     expect(routeState.clerkProps).toMatchObject({
       fallbackRedirectUrl: '/onboarding',
       forceRedirectUrl: '/onboarding',
@@ -76,9 +75,8 @@ describe('sign-up account entry', () => {
 
     render(<Component />)
 
-    expect(screen.getByRole('heading', { name: 'Create a Provider account' })).toBeTruthy()
-    expect(screen.getByText(/Use email, Google, GitHub, or a passkey/)).toBeTruthy()
-    expect(screen.getByText(/Tool publishing workspace/)).toBeTruthy()
+    expect(screen.getByRole('heading', { name: 'Create an account' })).toBeTruthy()
+    expect(screen.getByText(/Tool publishing Workspace/)).toBeTruthy()
     expect(routeState.clerkProps).toMatchObject({
       fallbackRedirectUrl: '/onboarding?redirect=%2Fowner%2Fsupply',
       forceRedirectUrl: '/onboarding?redirect=%2Fowner%2Fsupply',
@@ -94,9 +92,8 @@ describe('sign-up account entry', () => {
 
     render(<Component />)
 
-    expect(screen.getByRole('heading', { name: 'Create an account to connect an agent' })).toBeTruthy()
-    expect(screen.getByText(/Use email, Google, GitHub, or a passkey/)).toBeTruthy()
-    expect(screen.getByText(/agent connection you started/)).toBeTruthy()
+    expect(screen.getByRole('heading', { name: 'Create an account' })).toBeTruthy()
+    expect(screen.getByText(/Agent connection you started/)).toBeTruthy()
     expect(routeState.clerkProps).toMatchObject({
       fallbackRedirectUrl: '/onboarding?redirect=%2Fagent-access',
       forceRedirectUrl: '/onboarding?redirect=%2Fagent-access',

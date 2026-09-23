@@ -5,7 +5,7 @@ import { createContext, use, useCallback, useMemo, useState, type ReactNode } fr
 import {
   readPublicToolDetailRouteServer,
   type PublicToolDetailRouteResult,
-} from '@/modules/registry/tool-detail-route.functions'
+} from '@/modules/market/tool-detail-route.functions'
 
 import {
   initialCommandPanelPages,

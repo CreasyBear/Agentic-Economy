@@ -142,7 +142,7 @@ type RequiredJitProviderX402RuntimeKey =
 
 export type JitProviderX402Runtime = Readonly<{
   [Key in RequiredJitProviderX402RuntimeKey]-?: NonNullable<X402RouteTransportRuntime[Key]>
-}> & Pick<X402RouteTransportRuntime, 'beforeX402PaymentAuthorizationRead'>
+}> & Pick<X402RouteTransportRuntime, 'beforeX402PaymentAuthorizationRead' | 'checkpointX402Response'>
 
 export type JitProviderX402RuntimeFactory = (
   input: Readonly<{
@@ -437,11 +437,14 @@ async function createCallbackScopedX402Runtime(
   if (!isRecord(candidate)
     || Object.keys(candidate).some((key) => (
       key !== 'beforeX402PaymentAuthorizationRead'
+      && key !== 'checkpointX402Response'
       && !REQUIRED_X402_RUNTIME_KEYS.includes(key as RequiredJitProviderX402RuntimeKey)
     ))
     || REQUIRED_X402_RUNTIME_KEYS.some((key) => typeof candidate[key] !== 'function')
     || (candidate.beforeX402PaymentAuthorizationRead !== undefined
-      && typeof candidate.beforeX402PaymentAuthorizationRead !== 'function')) return undefined
+      && typeof candidate.beforeX402PaymentAuthorizationRead !== 'function')
+    || (candidate.checkpointX402Response !== undefined
+      && typeof candidate.checkpointX402Response !== 'function')) return undefined
   return candidate as JitProviderX402Runtime
 }
 

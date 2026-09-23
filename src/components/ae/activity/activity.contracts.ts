@@ -7,6 +7,8 @@ import type {
 export const ACTIVITY_TACTILE_PRESS_CLASS =
   'enabled:active:scale-[0.98] transition-transform duration-100 ease-out motion-reduce:transition-none motion-reduce:active:scale-100'
 
+export const ACTIVITY_FILTER_CHIP_CLASS = `rounded-full ${ACTIVITY_TACTILE_PRESS_CLASS}`
+
 export const ACTIVITY_EXPORT_FORMAT_BUTTON_CLASS =
   'min-h-touch min-w-[4.75rem] enabled:active:scale-[0.98] transition-transform duration-100 ease-out motion-reduce:transition-none motion-reduce:active:scale-100'
 
@@ -84,10 +86,6 @@ export type ActivityFilterBarProps = Readonly<{
   filteredAgentShortId: string | undefined
   filtersActive: boolean
   onResetFilters: () => void
-  exportPreviewLabel: string
-  exportDisabled: boolean
-  onExportCsv: () => void
-  onExportJson: () => void
 }>
 
 export type ActivityCallQueueProps = Readonly<{

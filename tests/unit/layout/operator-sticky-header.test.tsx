@@ -48,7 +48,7 @@ describe('AeOperatorPage stickyHeader', () => {
     expect(screen.queryByTestId('operator-sticky-shelf')).toBeNull()
   })
 
-  it('renders the sticky shelf when stickyHeader is true', () => {
+  it('does not render a sticky shelf when stickyHeader is true', () => {
     renderAt(
       <AeOperatorPage
         operatorRole="owner"
@@ -62,11 +62,11 @@ describe('AeOperatorPage stickyHeader', () => {
       </AeOperatorPage>,
     )
 
-    const shelf = screen.getByTestId('operator-sticky-shelf')
-    expect(shelf.getAttribute('data-sticky-shelf')).toBe('true')
+    expect(document.querySelector('[data-sticky-shelf="true"]')).toBeNull()
+    expect(screen.queryByTestId('operator-sticky-shelf')).toBeNull()
   })
 
-  it('places record header and secondary bar inside the sticky shelf', () => {
+  it('places description and secondary bar inside the page stack without an h1', () => {
     renderAt(
       <AeOperatorPage
         operatorRole="owner"
@@ -80,9 +80,10 @@ describe('AeOperatorPage stickyHeader', () => {
       </AeOperatorPage>,
     )
 
-    const shelf = screen.getByTestId('operator-sticky-shelf')
-    expect(within(shelf).getByRole('heading', { level: 1, name: 'Tools' })).toBeTruthy()
-    expect(within(shelf).getByTestId('secondary-filter-bar')).toBeTruthy()
+    const stack = screen.getByTestId('operator-page-stack')
+    expect(within(stack).getByText('Manage tools.')).toBeTruthy()
+    expect(within(stack).getByTestId('secondary-filter-bar')).toBeTruthy()
+    expect(within(stack).queryByRole('heading', { level: 1 })).toBeNull()
   })
 })
 

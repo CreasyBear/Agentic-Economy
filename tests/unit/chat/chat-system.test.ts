@@ -9,6 +9,8 @@ import {
   projectTranscriptTurns,
   readAnonymousChatHandoff,
   rememberAnonymousChatHandoff,
+  textFromParts,
+  projectAnonymousTranscript,
 } from '@/components/ae/chat/presentation'
 import { providerSafeActionToolName } from '@/modules/actions/tool-contract'
 
@@ -21,7 +23,10 @@ afterEach(() => {
 
 describe('chat IA', () => {
   it('keeps empty-path suggestions inside the six-tool market loop', () => {
-    expect(chatEmpty.title).toContain('catalog')
+    expect(chatEmpty.title).toBe('Find Tools for an Agent.')
+    expect(chatEmpty.description).toBe(
+      'Compare and inspect. Then use one with your Agent. Price is on the card.',
+    )
     const serialized = JSON.stringify(chatSuggestions)
     expect(serialized).toMatch(/search|compare|inspect|call/i)
     expect(serialized).not.toMatch(/write a poem|plan my week|remember this/i)
@@ -75,7 +80,74 @@ describe('anonymous chat recovery', () => {
 })
 
 describe('transcript projector', () => {
-  it('allowlists the six market Tools and drops reasoning, sources, and files', () => {
+  it.each(['step-start', 'tool-registry_tools_search', 'tool-card'])('separates text across %s without splitting streamed chunks', (boundary) => {
+    const parts = [
+      { type: 'text', text: 'Found ' }, { type: 'text', text: 'three Tools.' },
+      { type: boundary }, { type: 'reasoning', text: 'PRIVATE_REASONING' },
+      { type: 'text', text: '' },
+      { type: 'text', text: 'Compare ' }, { type: 'text', text: 'their inputs.' },
+      { type: boundary },
+    ]
+    expect(textFromParts(parts)).toBe('Found three Tools.\n\nCompare their inputs.')
+    expect(projectAnonymousTranscript([{ id: 'one', role: 'assistant', parts }]))
+      .toEqual([{ role: 'assistant', content: 'Found three Tools.\n\nCompare their inputs.' }])
+  })
+
+  it('keeps streamed text chunks in one block', () => {
+    const [turn] = projectTranscriptTurns([{
+      id: 'assistant-stream',
+      role: 'assistant',
+      parts: [
+        { type: 'text', text: 'Found ' },
+        { type: 'text', text: 'three Tools.' },
+      ],
+    }])
+    expect(turn?.blocks).toEqual([{ kind: 'text', text: 'Found three Tools.' }])
+  })
+
+  it('keeps prose on either side of a rendered tool and drops blank text', () => {
+    const [turn] = projectTranscriptTurns([{
+      id: 'assistant-order',
+      role: 'assistant',
+      parts: [
+        { type: 'text', text: '   ' },
+        { type: 'text', text: 'Before.' },
+        {
+          type: `tool-${providerSafeActionToolName('registry.tools.search')}`,
+          state: 'input-available',
+        },
+        { type: 'text', text: 'After.' },
+      ],
+    }])
+    expect(turn?.text).toBe('Before.\n\nAfter.')
+    expect(turn?.blocks).toEqual([
+      { kind: 'text', text: 'Before.' },
+      { kind: 'tool', index: 0 },
+      { kind: 'text', text: 'After.' },
+    ])
+  })
+
+  it('keeps existing paragraph spacing and ignores non-text evidence', () => {
+    expect(textFromParts([
+      { type: 'text', text: 'Found Tools.\n\n' }, { type: 'step-start' },
+      { type: 'source-url', url: 'https://private.example' },
+      { type: 'text', text: 'Inspect the input.' },
+    ])).toBe('Found Tools.\n\nInspect the input.')
+  })
+  it('keeps a clarifying question in the anonymous request when the assistant wrote no prose', () => {
+    const question = 'Which region should the lookup cover?'
+    expect(projectAnonymousTranscript([{
+      id: 'assistant-clarify',
+      role: 'assistant',
+      parts: [{
+        type: `tool-${providerSafeActionToolName('chat.clarify')}`,
+        state: 'input-available',
+        input: { question, choices: ['Australia', 'Singapore', 'Global'] },
+      }],
+    }])).toEqual([{ role: 'assistant', content: question }])
+  })
+
+  it('allowlists the market Tools and drops reasoning, sources, and files', () => {
     const turns = projectTranscriptTurns([{
       id: 'assistant-1',
       role: 'assistant',

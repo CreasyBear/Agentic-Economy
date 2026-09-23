@@ -23,6 +23,14 @@ import {
 import { withSourceWrite } from '../helpers/source-write-admission'
 import { observeCapabilityReadinessHandler } from '../../convex/capabilitySupplyProbes'
 import { displayPriceFromPricingConfig, normalizePricingConfig } from '@/modules/money/public'
+import { validateJsonSchema } from '@/modules/capability-contract/public'
+import { encodeCapabilityContractDocumentJson } from '@/modules/capability-contract-registry/public'
+import { capabilityToolId, createPublicToolRef } from '@/modules/capability-supply/public'
+import {
+  sandboxTestnetToolSpec,
+  sandboxToolContractDocumentJson,
+} from '../../convex/devSeedFixtures'
+import { publicationPorts } from '../../convex/lib/capabilitySupply/publishPrepared'
 
 type SeedBackend = TestConvex<typeof schema>
 
@@ -43,7 +51,7 @@ type CatalogPage = {
 }
 
 const SANDBOX_TOOL_BUSINESS_SLUG = 'sandbox-aecon-reference'
-const SANDBOX_TOOL_CAPABILITY_ID = 'sandbox.aecon-reference'
+const SANDBOX_TOOL_CAPABILITY_ID = 'sandbox.frankfurter-fx'
 const SANDBOX_TOOL_BINDING_ID = `capability-binding:${SANDBOX_TOOL_BUSINESS_SLUG}:x402:v1`
 const SANDBOX_TOOL_EVIDENCE_REF = `private:evidence:dev-seed:${SANDBOX_TOOL_BUSINESS_SLUG}`
 const SANDBOX_TESTNET_BUSINESS_SLUG = 'sandbox-aecon-testnet'
@@ -64,14 +72,9 @@ const SKIPPED_WITHOUT_FIXTURE_URL = {
 } as const
 // The reference Tool's own endpoint is derived from this deployment's public
 // origin (AE_SITE_URL), never a hard-coded host. Without it the reference
-// entry is skipped rather than published against a guessed URL.
 const SITE_URL_ENV = 'AE_SITE_URL'
 const SITE_URL = 'https://sandbox.example.test'
-const SANDBOX_REFERENCE_ENDPOINT_URL = `${SITE_URL}/api/v1/sandbox-reference`
-const SKIPPED_WITHOUT_SITE_URL = {
-  capabilityId: SANDBOX_TOOL_CAPABILITY_ID,
-  skipped: 'AE_SITE_URL_missing',
-} as const
+const SANDBOX_REFERENCE_ENDPOINT_URL = 'https://api.frankfurter.app/latest'
 
 type SandboxSupplyFacts = {
   sandboxBusinessSlugs: readonly string[]
@@ -216,6 +219,52 @@ describe('dev-seeded public catalog decision facts', () => {
     }
   }, 300_000)
 
+  it('publishes under the configured local owner Account without duplicating the Tool', async () => {
+    const backend = convexTestWithMarketComponents()
+    await seedDevCatalogAuthority(backend)
+    setSiteUrlEnvironment()
+    clearReferenceProviderEnvironment()
+    const owner = await backend.mutation(internal.devSeed.seedSandboxSpendingPolicy, {})
+
+    const seededUnderWorkload = await backend.mutation(internal.devSeed.publishSandboxTool, {})
+    const reparented = await backend.mutation(internal.devSeed.publishSandboxTool, {
+      owningAccountRef: owner.accountRef,
+    })
+    const replay = await backend.mutation(internal.devSeed.publishSandboxTool, {
+      owningAccountRef: owner.accountRef,
+    })
+    expect(seededUnderWorkload.created).toBe(true)
+    expect(reparented).toMatchObject({
+      created: false,
+      publicationId: seededUnderWorkload.publicationId,
+      toolRef: seededUnderWorkload.toolRef,
+    })
+    expect(replay).toEqual(reparented)
+
+    const seeded = await backend.run(async (ctx) => {
+      const businesses = await ctx.db.query('businesses')
+        .withIndex('by_slug', (query) => query.eq('slug', SANDBOX_TOOL_BUSINESS_SLUG))
+        .collect()
+      return {
+        businesses,
+        publications: await ctx.db.query('capabilityPublications')
+          .withIndex('by_publicationRef_and_revision', (query) => query
+            .eq('publicationRef', seededUnderWorkload.publicationId)
+            .eq('revision', seededUnderWorkload.publicationRevision))
+          .collect(),
+        providerTools: businesses[0] === undefined
+          ? []
+          : await ctx.db.query('capabilityProviderToolProjections')
+            .withIndex('by_businessId_and_updatedAt', (query) => query.eq('businessId', businesses[0]!._id))
+            .collect(),
+      }
+    })
+    expect(seeded.businesses).toHaveLength(1)
+    expect(seeded.businesses[0]?.owningAccountRef).toBe(owner.accountRef)
+    expect(seeded.publications).toHaveLength(1)
+    expect(seeded.providerTools).toHaveLength(1)
+  }, 300_000)
+
   /**
    * A Tool nobody can price and nobody can find is not seeded supply. The
    * business page reads the catalog Offering's own `price`, and
@@ -268,20 +317,22 @@ describe('dev-seeded public catalog decision facts', () => {
       .toEqual([SANDBOX_TOOL_BUSINESS_SLUG])
   }, 300_000)
 
-  /**
-   * `AE_SITE_URL` is this deployment's own public origin - there is no host to
-   * guess it from. Without it the reference Tool is skipped, exactly like the
-   * Base Sepolia Tool is skipped without the reference provider's own env.
-   */
-  it('publishes neither business when AE_SITE_URL is unset', async () => {
+  it('publishes the public keyless sandbox Tool when AE_SITE_URL is unset', async () => {
     const backend = convexTestWithMarketComponents()
     await seedDevCatalogAuthority(backend)
     clearSiteUrlEnvironment()
     clearReferenceProviderEnvironment()
 
     const published = await backend.mutation(internal.devSeed.publishSandboxTool, {})
-    expect(published.tools).toEqual([SKIPPED_WITHOUT_SITE_URL, SKIPPED_WITHOUT_FIXTURE_URL])
-    expect((await readSandboxSupply(backend)).sandboxBusinessSlugs).toEqual([])
+    expect(published.tools).toEqual([
+      {
+        capabilityId: SANDBOX_TOOL_CAPABILITY_ID,
+        toolRef: expect.any(String),
+        created: true,
+      },
+      SKIPPED_WITHOUT_FIXTURE_URL,
+    ])
+    expect((await readSandboxSupply(backend)).sandboxBusinessSlugs).toEqual([SANDBOX_TOOL_BUSINESS_SLUG])
   }, 300_000)
 })
 
@@ -423,6 +474,26 @@ describe('dev-seeded Base Sepolia reference Tool', () => {
       pricingPolicyRef: 'pricing-policy:managed-x402-reference:v1',
       publicDisplay: 'on_request',
     })
+    const persistedContractJson = await backend.run(async (ctx) => {
+      const row = await ctx.db.query('capabilityContractDocuments')
+        .withIndex('by_capabilityId_and_version', (query) => query
+          .eq('capabilityId', SANDBOX_TESTNET_CAPABILITY_ID)
+          .eq('version', 1))
+        .unique()
+      if (row === null) throw new Error('testnet_contract_missing')
+      return row.documentJson
+    })
+    const persistedContract = JSON.parse(persistedContractJson) as {
+      inputSchema: Readonly<Record<string, unknown>>
+      inputExamples?: readonly Readonly<{ label?: string; input: Readonly<Record<string, unknown>> }>[]
+    }
+    expect(persistedContract.inputExamples).toEqual([
+      { label: 'Validation input', input: { value: 'x402-validation' } },
+    ])
+    expect(validateJsonSchema(
+      persistedContract.inputSchema,
+      persistedContract.inputExamples?.[0]?.input,
+    )).toBe(true)
 
     // Both Tools are findable through the same public read a buyer uses.
     expect([...await searchSandboxSlugs(backend, 'sandbox')].sort())
@@ -478,6 +549,131 @@ describe('dev-seeded Base Sepolia reference Tool', () => {
     expect(await readTestnetBinding(backend)).toEqual(testnet)
   }, 300_000)
 
+  it('appends the declared input example as revision two without rewriting legacy revision one', async () => {
+    const backend = convexTestWithMarketComponents()
+    await seedDevCatalogAuthority(backend)
+    setSiteUrlEnvironment()
+    setReferenceProviderEnvironment()
+    const first = await backend.mutation(internal.devSeed.publishSandboxTool, {})
+    await downgradeTestnetContractToLegacy(backend)
+    const before = await readTestnetPublicationChain(backend)
+
+    const migrated = await backend.mutation(internal.devSeed.publishSandboxTool, {})
+    expect(migrated.tools[1]).toMatchObject({
+      capabilityId: SANDBOX_TESTNET_CAPABILITY_ID,
+      created: false,
+    })
+    const after = await readTestnetPublicationChain(backend)
+    expect(after.map(({ revision, version, disposition }) => ({ revision, version, disposition })))
+      .toEqual([
+        { revision: 1, version: 1, disposition: 'superseded' },
+        { revision: 2, version: 2, disposition: 'current' },
+      ])
+    expect(after[0]?.contractDigest).toBe(before[0]?.contractDigest)
+    expect(after[0]?.toolRef).toBe(before[0]?.toolRef)
+    const replay = await backend.mutation(internal.devSeed.publishSandboxTool, {})
+    expect(replay.tools[1]).toEqual(migrated.tools[1])
+    expect(await readTestnetPublicationChain(backend)).toEqual(after)
+    expect(first.tools[1]).not.toEqual(migrated.tools[1])
+    expect(await backend.run(async (ctx) => {
+      const publication = await ctx.db.query('capabilityPublications')
+        .withIndex('by_publicationRef_and_revision', (query) => query
+          .eq('publicationRef', SANDBOX_TESTNET_OFFERING_ID)
+          .eq('revision', 2))
+        .unique()
+      if (publication === null) throw new Error('testnet_revision_two_missing')
+      const offering = await ctx.db.query('capabilityOfferings')
+        .withIndex('by_offeringId', (query) => query.eq('offeringId', publication.offeringId)).unique()
+      const binding = await ctx.db.query('capabilityTransportBindings')
+        .withIndex('by_bindingId', (query) => query.eq('bindingId', publication.bindingId)).unique()
+      return {
+        offeringStatus: offering?.status,
+        bindingAdmission: binding?.admission,
+        bindingConformance: binding?.conformance,
+      }
+    })).toEqual({
+      offeringStatus: 'active',
+      bindingAdmission: 'admitted',
+      bindingConformance: 'conformant',
+    })
+    await backend.run(async (ctx) => {
+      const publication = await ctx.db.query('capabilityPublications')
+        .withIndex('by_publicationRef_and_revision', (query) => query
+          .eq('publicationRef', SANDBOX_TESTNET_OFFERING_ID)
+          .eq('revision', 2))
+        .unique()
+      if (publication === null) throw new Error('testnet_revision_two_missing')
+      const offering = await ctx.db.query('capabilityOfferings')
+        .withIndex('by_offeringId', (query) => query.eq('offeringId', publication.offeringId)).unique()
+      if (offering === null) throw new Error('testnet_revision_two_offering_missing')
+      await ctx.db.patch(offering._id, { contractDigest: `sha256:${'0'.repeat(64)}` })
+    })
+    await expect(backend.mutation(internal.devSeed.publishSandboxTool, {}))
+      .rejects.toThrow('dev_seed_sandbox_testnet_supply_drift')
+    expect(await readTestnetPublicationChain(backend)).toHaveLength(2)
+  }, 300_000)
+
+  it('refuses legacy migration when the current transport drifted', async () => {
+    const backend = convexTestWithMarketComponents()
+    await seedDevCatalogAuthority(backend)
+    setSiteUrlEnvironment()
+    setReferenceProviderEnvironment()
+    await backend.mutation(internal.devSeed.publishSandboxTool, {})
+    await downgradeTestnetContractToLegacy(backend)
+    await backend.run(async (ctx) => {
+      const binding = await ctx.db.query('capabilityTransportBindings')
+        .withIndex('by_bindingId', (query) => query
+          .eq('bindingId', `capability-binding:${SANDBOX_TESTNET_BUSINESS_SLUG}:x402:v1`))
+        .unique()
+      if (binding === null) throw new Error('testnet_binding_missing')
+      await ctx.db.patch(binding._id, { endpointUrl: 'https://drift.example/x402/execute' })
+    })
+    await expect(backend.mutation(internal.devSeed.publishSandboxTool, {}))
+      .rejects.toThrow('dev_seed_sandbox_testnet_supply_drift')
+    expect(await readTestnetPublicationChain(backend)).toHaveLength(1)
+  }, 300_000)
+
+  it('does not re-admit a revision that was deliberately revoked', async () => {
+    const backend = convexTestWithMarketComponents()
+    await seedDevCatalogAuthority(backend)
+    setSiteUrlEnvironment()
+    setReferenceProviderEnvironment()
+    await backend.mutation(internal.devSeed.publishSandboxTool, {})
+    await downgradeTestnetContractToLegacy(backend)
+    await backend.mutation(internal.devSeed.publishSandboxTool, {})
+    await backend.run(async (ctx) => {
+      const publication = await ctx.db.query('capabilityPublications')
+        .withIndex('by_publicationRef_and_revision', (query) => query
+          .eq('publicationRef', SANDBOX_TESTNET_OFFERING_ID)
+          .eq('revision', 2))
+        .unique()
+      if (publication === null) throw new Error('testnet_revision_two_missing')
+      const offering = await ctx.db.query('capabilityOfferings')
+        .withIndex('by_offeringId', (query) => query.eq('offeringId', publication.offeringId)).unique()
+      const binding = await ctx.db.query('capabilityTransportBindings')
+        .withIndex('by_bindingId', (query) => query.eq('bindingId', publication.bindingId)).unique()
+      if (offering === null || binding === null) throw new Error('testnet_revision_two_supply_missing')
+      const revoked = await publicationPorts(ctx).setEligibility({
+        offeringId: offering.offeringId,
+        bindingId: binding.bindingId,
+        contractRef: {
+          capabilityId: publication.capabilityId,
+          version: publication.version,
+          contractDigest: publication.contractDigest,
+        },
+        decision: 'revoke',
+        expectedOfferingRegistrationHash: offering.registrationHash,
+        expectedBindingRegistrationHash: binding.registrationHash,
+        admissionEvidenceRefs: ['evidence:operator-revocation'],
+        conformanceEvidenceRefs: ['evidence:operator-revocation'],
+      }, Date.now())
+      if (revoked.kind !== 'ineligible') throw new Error('testnet_revision_two_revoke_failed')
+    })
+    await expect(backend.mutation(internal.devSeed.publishSandboxTool, {}))
+      .rejects.toThrow('dev_seed_sandbox_testnet_refresh_eligibility_not_pristine')
+    expect(await readTestnetPublicationChain(backend)).toHaveLength(2)
+  }, 300_000)
+
   it('keeps seeding the fixture Tool when only the payee env is missing', async () => {
     const backend = convexTestWithMarketComponents()
     await seedDevCatalogAuthority(backend)
@@ -497,6 +693,73 @@ describe('dev-seeded Base Sepolia reference Tool', () => {
       .toEqual([SANDBOX_TOOL_BUSINESS_SLUG])
   }, 300_000)
 })
+
+async function downgradeTestnetContractToLegacy(backend: SeedBackend): Promise<void> {
+  const spec = sandboxTestnetToolSpec(FIXTURE_ENDPOINT_URL, FIXTURE_PAY_TO)
+  const { inputExamples: _inputExamples, ...legacySpec } = spec
+  const encoded = encodeCapabilityContractDocumentJson(
+    sandboxToolContractDocumentJson(legacySpec, 1),
+  )
+  await backend.run(async (ctx) => {
+    const publication = await ctx.db.query('capabilityPublications')
+      .withIndex('by_publicationRef_and_revision', (query) => query
+        .eq('publicationRef', SANDBOX_TESTNET_OFFERING_ID)
+        .eq('revision', 1))
+      .unique()
+    const contract = await ctx.db.query('capabilityContractDocuments')
+      .withIndex('by_capabilityId_and_version', (query) => query
+        .eq('capabilityId', SANDBOX_TESTNET_CAPABILITY_ID)
+        .eq('version', 1))
+      .unique()
+    if (publication === null || contract === null) throw new Error('testnet_legacy_fixture_missing')
+    const toolRef = createPublicToolRef({
+      operationId: capabilityToolId(SANDBOX_TESTNET_CAPABILITY_ID),
+      publicationRef: publication.publicationRef,
+      publicationRevision: 1,
+      contractRef: encoded.contract.ref,
+    })
+    await ctx.db.patch(contract._id, {
+      contractDigest: encoded.contract.ref.contractDigest,
+      documentJson: encoded.documentJson,
+    })
+    await ctx.db.patch(publication._id, {
+      contractDigest: encoded.contract.ref.contractDigest,
+      toolRef,
+      ...(publication.connectionAuthority === undefined
+        ? {}
+        : { connectionAuthority: { ...publication.connectionAuthority, toolRef } }),
+    })
+    const offering = await ctx.db.query('capabilityOfferings')
+      .withIndex('by_offeringId', (query) => query.eq('offeringId', publication.offeringId)).unique()
+    const binding = await ctx.db.query('capabilityTransportBindings')
+      .withIndex('by_bindingId', (query) => query.eq('bindingId', publication.bindingId)).unique()
+    if (offering === null || binding === null) throw new Error('testnet_legacy_supply_missing')
+    await ctx.db.patch(offering._id, { contractDigest: encoded.contract.ref.contractDigest })
+    await ctx.db.patch(binding._id, {
+      contractDigest: encoded.contract.ref.contractDigest,
+      ...(binding.connectionAuthority === undefined
+        ? {}
+        : { connectionAuthority: { ...binding.connectionAuthority, toolRef } }),
+    })
+  })
+}
+
+async function readTestnetPublicationChain(backend: SeedBackend) {
+  return await backend.run(async (ctx) => (
+    await ctx.db.query('capabilityPublications')
+      .withIndex('by_publicationRef_and_revision', (query) => query
+        .eq('publicationRef', SANDBOX_TESTNET_OFFERING_ID))
+      .collect()
+  )).then((rows) => rows
+    .map((row) => ({
+      revision: row.revision,
+      version: row.version,
+      disposition: row.disposition,
+      contractDigest: row.contractDigest,
+      toolRef: row.toolRef,
+    }))
+    .sort((left, right) => left.revision - right.revision))
+}
 
 async function readTestnetPricingConfig(backend: SeedBackend): Promise<unknown> {
   return await backend.run(async (ctx) => {
@@ -966,7 +1229,7 @@ async function prepareQuoteSubjects(
       correlationId: `test:dev-seed-quote:${agent.credentialId}`,
       principal: { ...agent, scopes: [...agent.scopes] },
       toolRef,
-      input: { request: 'ping' },
+      input: { from: 'EUR', to: 'USD' },
     }),
   )
 }

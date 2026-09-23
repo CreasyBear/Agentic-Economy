@@ -30,6 +30,30 @@ vi.mock('@/lib/ui/toast', () => ({
   },
 }))
 
+vi.mock('@clerk/tanstack-react-start', () => ({
+  useReverification: (fetcher: unknown) => fetcher,
+}))
+
+vi.mock('@clerk/shared/authorization-errors', () => ({
+  reverificationError: (level: string) => ({ clerk_error: { level } }),
+}))
+
+vi.mock('@tanstack/react-router', () => ({
+  Link: ({
+    to,
+    children,
+    className,
+  }: {
+    to: string
+    children: unknown
+    className?: string
+  }) => (
+    <a href={to} className={className}>
+      {children as never}
+    </a>
+  ),
+}))
+
 const ownerEligible: WorkspaceDecommissionEligibilityView = {
   accountRef: `acc_${'2'.repeat(32)}`,
   displayName: 'Acme Corp',
@@ -66,6 +90,14 @@ const memberView: WorkspaceDecommissionEligibilityView = {
   transferCandidates: [],
 }
 
+function openClosePanel() {
+  fireEvent.click(screen.getByText('Close workspace', { selector: 'summary' }))
+}
+
+function openTransferPanel() {
+  fireEvent.click(screen.getByText('Transfer ownership', { selector: 'summary' }))
+}
+
 beforeEach(() => {
   useQuery.mockReturnValue(ownerEligible)
   closeWorkspace.mockReset()
@@ -78,8 +110,8 @@ describe('WorkspaceDangerZone (W-14)', () => {
   it('U1: renders Close Workspace and Transfer Ownership sections', () => {
     render(<WorkspaceDangerZone />)
 
-    expect(screen.getByRole('heading', { name: 'Close workspace' })).toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: 'Transfer ownership' })).toBeInTheDocument()
+    expect(screen.getByText('Close workspace', { selector: 'summary' })).toBeInTheDocument()
+    expect(screen.getByText('Transfer ownership', { selector: 'summary' })).toBeInTheDocument()
   })
 
   it('U1b: loading eligibility renders reserved skeleton shell', () => {
@@ -93,6 +125,7 @@ describe('WorkspaceDangerZone (W-14)', () => {
   it('U2: if fences present, displays human reasons and disables close', () => {
     useQuery.mockReturnValue(fencedOwner)
     render(<WorkspaceDangerZone />)
+    openClosePanel()
 
     expect(screen.getByText(/provider obligations are still unsettled/i)).toBeInTheDocument()
     expect(screen.getByText(/one or more calls are still open/i)).toBeInTheDocument()
@@ -100,15 +133,16 @@ describe('WorkspaceDangerZone (W-14)', () => {
     expect(screen.getByRole('button', { name: 'Close workspace' })).toBeDisabled()
   })
 
-  it('U2b: clear fences show money-safe reassurance badge', () => {
+  it('U2b: clear fences show close-allowed reassurance', () => {
     render(<WorkspaceDangerZone />)
+    openClosePanel()
 
-    expect(screen.getByText(/A\$0\.00 active obligations/i)).toBeInTheDocument()
     expect(screen.getByText(/close is allowed/i)).toBeInTheDocument()
   })
 
   it('U3: delete confirmation button disabled until exact matching workspace name typed', () => {
     render(<WorkspaceDangerZone />)
+    openClosePanel()
 
     const input = screen.getByRole('textbox', { name: 'Type workspace name to confirm' })
     fireEvent.change(input, { target: { value: 'Acme' } })
@@ -118,6 +152,7 @@ describe('WorkspaceDangerZone (W-14)', () => {
 
   it('U4: matching name enables destructive button', () => {
     render(<WorkspaceDangerZone />)
+    openClosePanel()
 
     const input = screen.getByRole('textbox', { name: 'Type workspace name to confirm' })
     fireEvent.change(input, { target: { value: 'Acme Corp' } })
@@ -125,24 +160,27 @@ describe('WorkspaceDangerZone (W-14)', () => {
     expect(screen.getByRole('button', { name: 'Close workspace' })).toBeEnabled()
   })
 
-  it('U5: clicking close workspace opens AeConfirmDialog with money reassurance', () => {
+  it('U5: clicking close workspace opens AeConfirmDialog', () => {
     render(<WorkspaceDangerZone />)
+    openClosePanel()
 
     const input = screen.getByRole('textbox', { name: 'Type workspace name to confirm' })
     fireEvent.change(input, { target: { value: 'Acme Corp' } })
 
-    const closeBtn = screen.getByRole('button', { name: 'Close workspace' })
-    fireEvent.click(closeBtn)
+    fireEvent.click(screen.getByRole('button', { name: 'Close workspace' }))
 
     expect(screen.getByRole('alertdialog')).toBeInTheDocument()
-    expect(screen.getByText('Close Workspace?')).toBeInTheDocument()
-    expect(screen.getByText(/prepaid credit is not spent until close succeeds/i)).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Permanently Close Workspace' })).toBeInTheDocument()
+    expect(screen.getByText('Close workspace?')).toBeInTheDocument()
+    expect(
+      screen.getByText(/Permanently close Acme Corp\. Tools, access keys, and delegations on this workspace stop\./i),
+    ).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Permanently close workspace' })).toBeInTheDocument()
   })
 
   it('U6: transfer candidate dropdown lists active members excluding incumbent owner', () => {
     useQuery.mockReturnValue(ownerWithMember)
     render(<WorkspaceDangerZone />)
+    openTransferPanel()
 
     const select = screen.getByRole('combobox', { name: 'New workspace owner' })
     const options = Array.from(select.querySelectorAll('option')).map((node) => node.textContent)
@@ -153,6 +191,7 @@ describe('WorkspaceDangerZone (W-14)', () => {
   it('U6b: transfer opens confirm dialog before mutation', () => {
     useQuery.mockReturnValue(ownerWithMember)
     render(<WorkspaceDangerZone />)
+    openTransferPanel()
 
     fireEvent.click(screen.getByRole('button', { name: 'Transfer ownership' }))
 
@@ -166,8 +205,11 @@ describe('WorkspaceDangerZone (W-14)', () => {
     render(<WorkspaceDangerZone />)
 
     expect(screen.getAllByText(/only the workspace owner/i)).toHaveLength(2)
+    expect(screen.getByText('Close workspace', { selector: 'summary' })).toBeInTheDocument()
+    expect(screen.getByText('Transfer ownership', { selector: 'summary' })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Close workspace' })).toBeNull()
     expect(screen.queryByRole('button', { name: 'Transfer ownership' })).toBeNull()
     expect(screen.queryByRole('combobox', { name: 'New workspace owner' })).toBeNull()
+    expect(screen.queryByRole('textbox', { name: 'Type workspace name to confirm' })).toBeNull()
   })
 })

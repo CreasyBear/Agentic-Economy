@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { cleanup, render, screen, within } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import {
   RouterContextProvider,
   createMemoryHistory,
@@ -8,32 +8,27 @@ import {
   createRoute,
   createRouter,
 } from '@tanstack/react-router'
-import { LayoutDashboardIcon, StoreIcon } from 'lucide-react'
 import { afterEach, describe, expect, it } from 'vitest'
 import '../../setup/jsdom-platform'
 
 import { AeOwnerMobileNavigation } from '@/components/ae/layout/AeOwnerMobileNavigation'
-import { roleHomeHref, roleLabel } from '@/lib/operator/roles'
+import { mobileNavigation } from '@/lib/navigation/app-navigation'
 
 afterEach(cleanup)
 
 function renderNavigation(pathname: string) {
   const root = createRootRoute()
-  const ownerNav = {
-    roles: ['owner'] as const,
-    group: 'Workspace',
-    groupOrder: 0,
-    order: 0,
-    icon: LayoutDashboardIcon,
-    tier: 'core' as const,
-  }
   const routeTree = root.addChildren([
-    createRoute({ getParentRoute: () => root, path: '/owner', staticData: { nav: { label: 'Overview', operator: { ...ownerNav, mobilePrimary: true, mobileOrder: 0 } } } }),
-    createRoute({ getParentRoute: () => root, path: '/owner/market', staticData: { nav: { label: 'Market', operator: { ...ownerNav, mobilePrimary: true, mobileOrder: 10, icon: StoreIcon } } } }),
-    createRoute({ getParentRoute: () => root, path: '/activity', staticData: { nav: { label: 'Calls', operator: { ...ownerNav, mobilePrimary: true, mobileOrder: 10 } } } }),
-    createRoute({ getParentRoute: () => root, path: '/owner/credit', staticData: { nav: { label: 'Balance', operator: ownerNav } } }),
-    createRoute({ getParentRoute: () => root, path: '/agent-access', staticData: { nav: { label: 'Agents', operator: { ...ownerNav, mobilePrimary: true, mobileOrder: 20 } } } }),
-    createRoute({ getParentRoute: () => root, path: '/owner/operations', staticData: { nav: { label: 'Tools', operator: { ...ownerNav, mobilePrimary: true, mobileOrder: 30 } } } }),
+    createRoute({ getParentRoute: () => root, path: '/market' }),
+    createRoute({ getParentRoute: () => root, path: '/t/new' }),
+    createRoute({ getParentRoute: () => root, path: '/agent-access' }),
+    createRoute({ getParentRoute: () => root, path: '/activity' }),
+    createRoute({ getParentRoute: () => root, path: '/owner/credit' }),
+    createRoute({ getParentRoute: () => root, path: '/owner/operations' }),
+    createRoute({ getParentRoute: () => root, path: '/owner/operations/new' }),
+    createRoute({ getParentRoute: () => root, path: '/owner/settings' }),
+    createRoute({ getParentRoute: () => root, path: '/support' }),
+    createRoute({ getParentRoute: () => root, path: '/status' }),
   ])
   const router = createRouter({ routeTree, history: createMemoryHistory({ initialEntries: [pathname] }) })
 
@@ -45,28 +40,37 @@ function renderNavigation(pathname: string) {
 }
 
 describe('owner primary navigation', () => {
-  it('uses Overview as the owner workspace home', () => {
-    expect(roleHomeHref.owner).toBe('/owner')
-    expect(roleLabel.owner).toBe('Workspace')
-  })
 
-  it('keeps the mobile progression to Overview, Market, Calls and Balance', () => {
-    renderNavigation('/owner/credit')
+  it('renders the canonical primary destinations without route metadata', () => {
+    renderNavigation('/activity')
 
+    const { primary } = mobileNavigation()
     const navigation = screen.getByRole('navigation', { name: 'Owner primary navigation' })
     const links = within(navigation).getAllByRole('link')
-    expect(links.map(link => link.textContent)).toEqual(['Overview', 'Market', 'Calls', 'Balance'])
-    expect(links.map(link => link.getAttribute('href'))).toEqual(['/owner', '/owner/market', '/activity', '/owner/credit'])
-    expect(links.filter(link => link.getAttribute('aria-current') === 'page').map(link => link.textContent)).toEqual(['Balance'])
-    expect(navigation.querySelectorAll('svg[aria-hidden="true"]')).toHaveLength(4)
+
+    expect(links.map(link => link.textContent)).toEqual(primary.map(destination => destination.label))
+    expect(links.map(link => link.getAttribute('href'))).toEqual(primary.map(destination => destination.to))
+    expect(links.filter(link => link.getAttribute('aria-current') === 'page').map(link => link.textContent)).toEqual(['Calls'])
+    expect(navigation.querySelectorAll('svg[aria-hidden="true"]')).toHaveLength(5)
   })
 
-  it('does not let Provider or Agent management displace purchase continuity', () => {
+  it('lists the remaining canonical destinations under Provider and Utilities', () => {
     renderNavigation('/owner/operations')
 
-    const navigation = screen.getByRole('navigation', { name: 'Owner primary navigation' })
-    expect(within(navigation).queryByRole('link', { name: 'Tools' })).toBeNull()
-    expect(within(navigation).queryByRole('link', { name: 'Agents' })).toBeNull()
-    expect(within(navigation).getAllByRole('link').some(link => link.hasAttribute('aria-current'))).toBe(false)
+    const moreButton = screen.getByRole('button', { name: 'More' })
+    expect(moreButton.getAttribute('aria-current')).toBe('page')
+    fireEvent.click(moreButton)
+
+    const { more } = mobileNavigation()
+    const sheet = screen.getByRole('dialog', { name: 'More' })
+    expect(within(sheet).getByRole('heading', { name: 'Provider' })).toBeTruthy()
+    expect(within(sheet).getByRole('heading', { name: 'Utilities' })).toBeTruthy()
+
+    const links = within(sheet).getAllByRole('link')
+    expect(links.map(link => link.textContent)).toEqual(more.map(destination => destination.label))
+    expect(links.map(link => link.getAttribute('href'))).toEqual(
+      more.map(destination => `${destination.to}${destination.hash ?? ''}`),
+    )
+    expect(within(sheet).getByRole('link', { name: 'Tools' }).getAttribute('aria-current')).toBe('page')
   })
 })

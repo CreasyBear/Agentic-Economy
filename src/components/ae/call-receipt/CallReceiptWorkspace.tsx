@@ -7,11 +7,13 @@ import { cn } from '@/lib/utils'
 
 export function CallReceiptWorkspace({
   callRef,
+  title = 'Call receipt',
   description,
   pending = false,
   children,
 }: Readonly<{
   callRef: string
+  title?: string
   description: string
   pending?: boolean
   children: ReactNode
@@ -19,17 +21,26 @@ export function CallReceiptWorkspace({
   return (
     <AeOperatorPage
       operatorRole="owner"
-      title="Call receipt"
+      title={title}
       description={description}
       currentPath={`/calls/${encodeURIComponent(callRef)}`}
       breadcrumbs={[{ label: 'Calls', href: '/activity' }, { label: 'Call receipt' }]}
       actions={(
-        <Link
-          to="/activity"
-          className={cn(buttonVariants({ variant: 'outline' }), 'min-h-touch')}
-        >
-          Back to Calls
-        </Link>
+        <div className="flex flex-wrap gap-intra">
+          <Link
+            to="/support"
+            search={{ callRef }}
+            className={cn(buttonVariants({ variant: 'ghost' }), 'min-h-touch')}
+          >
+            Get help
+          </Link>
+          <Link
+            to="/activity"
+            className={cn(buttonVariants({ variant: 'ghost' }), 'min-h-touch')}
+          >
+            Back to Calls
+          </Link>
+        </div>
       )}
       pending={pending}
     >

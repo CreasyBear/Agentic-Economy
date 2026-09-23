@@ -55,7 +55,7 @@ describe('privacy removal unknown outcomes', () => {
     fireEvent.change(screen.getByLabelText('What should change?'), {
       target: { value: 'Remove the duplicate supplier profile.' },
     })
-    fireEvent.click(screen.getByRole('button', { name: 'Send request' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Submit request' }))
 
     await waitFor(() => expect(routeMocks.openRemoval).toHaveBeenCalledTimes(1))
     expect(screen.getByRole('alert').textContent).toContain('The request outcome could not be confirmed.')
@@ -84,10 +84,34 @@ describe('privacy removal unknown outcomes', () => {
 
     fireEvent.change(screen.getByLabelText('Your email'), { target: { value: 'owner@example.com' } })
     fireEvent.change(screen.getByLabelText('What should change?'), { target: { value: 'Remove duplicate.' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Send request' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Submit request' }))
 
     expect(await screen.findByRole('button', { name: 'Outcome not confirmed' })).toHaveProperty('disabled', true)
     expect(screen.getByRole('alert').textContent).toContain('Contact support before submitting another request.')
     expect(routeMocks.openRemoval).toHaveBeenCalledTimes(1)
+  })
+
+  it('shows the request reference and status support path after submission', async () => {
+    routeMocks.openRemoval.mockResolvedValue({
+      kind: 'ok',
+      receipt: {
+        disputeId: 'dispute:test-reference',
+        status: 'opened',
+      },
+    })
+    const Component = PrivacyRemovalRoute.options.component
+    if (Component === undefined) throw new Error('privacy_removal_component_missing')
+    render(<Component />)
+
+    expect(screen.getByRole('button', { name: 'Submit request' })).toBeTruthy()
+    fireEvent.change(screen.getByLabelText('Provider slug'), { target: { value: 'example-provider' } })
+    fireEvent.change(screen.getByLabelText('Your email'), { target: { value: 'owner@example.com' } })
+    fireEvent.change(screen.getByLabelText('What should change?'), { target: { value: 'Remove duplicate.' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Submit request' }))
+
+    expect(await screen.findByText('Request recorded')).toBeTruthy()
+    const alert = screen.getByText('Request recorded').closest('[role="status"]')
+    expect(alert?.textContent).toContain('Request opened. Reference dispute:test-reference.')
+    expect(alert?.textContent).toContain('Quote this reference and status if you contact support.')
   })
 })

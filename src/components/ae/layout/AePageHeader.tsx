@@ -1,4 +1,4 @@
-import { useId, type ReactNode } from 'react'
+import { useEffect, useId, type ReactNode } from 'react'
 
 import { AeSiteEyebrow } from '@/components/ae/website/AeSiteType'
 
@@ -14,15 +14,9 @@ type AePageHeaderProps = {
    */
   meta?: ReactNode
   variant?: 'page' | 'market' | 'workspace'
+  /** When true, the h1 is programmatically focusable and focused after paint. */
+  focusTitle?: boolean
 }
-
-/** Public editorial statement: display face, wide page-level scale. */
-const PAGE_TITLE_CLASS =
-  'text-balance font-display text-3xl font-normal leading-[1.06] tracking-[-0.03em] text-foreground sm:text-4xl'
-
-/** Market terminal statement: sans, one shelf above the catalog section headings. */
-const MARKET_TITLE_CLASS =
-  'text-balance font-sans text-2xl font-semibold leading-tight tracking-tight text-foreground sm:text-3xl'
 
 export function AePageHeader({
   eyebrow,
@@ -31,9 +25,15 @@ export function AePageHeader({
   actions,
   meta,
   variant = 'page',
+  focusTitle = false,
 }: AePageHeaderProps) {
   const titleId = useId()
   const descriptionId = useId()
+
+  useEffect(() => {
+    if (!focusTitle) return
+    document.getElementById(titleId)?.focus()
+  }, [focusTitle, titleId, title])
 
   if (variant === 'workspace') {
     return (
@@ -47,7 +47,11 @@ export function AePageHeader({
           <div className="flex min-w-0 items-center gap-related">
             <div className="min-w-0 flex-1">
               <div className="flex min-w-0 items-baseline gap-intra">
-                <h1 id={titleId} className="truncate font-sans text-xl font-bold leading-tight tracking-tight text-foreground sm:text-2xl">
+                <h1
+                  id={titleId}
+                  {...(focusTitle ? { tabIndex: -1 as const } : {})}
+                  className="truncate font-sans text-xl font-medium leading-tight tracking-tight text-foreground sm:text-2xl"
+                >
                   {title}
                 </h1>
                 {eyebrow === undefined ? null : (
@@ -74,33 +78,27 @@ export function AePageHeader({
     )
   }
 
-  const isMarket = variant === 'market'
-  const headerProfile = isMarket ? 'market' : 'editorial'
-  const sectionPaddingClass = isMarket
-    ? 'py-related sm:py-section'
-    : 'py-section md:py-page'
+  const headerProfile = variant === 'market' ? 'market' : 'editorial'
 
   return (
     <section
       data-header-profile={headerProfile}
       aria-labelledby={titleId}
       aria-describedby={descriptionId}
-      className={`ae-rail w-full ${sectionPaddingClass}`}
+      className="ae-rail w-full py-16 md:py-24"
     >
       <div className="grid gap-related border-b border-border pb-section md:grid-cols-[minmax(0,1fr)_auto] md:items-end">
         <div className="grid max-w-4xl gap-related">
-          {eyebrow === undefined ? (
-            <h1 id={titleId} className={isMarket ? MARKET_TITLE_CLASS : PAGE_TITLE_CLASS}>
+          <div>
+            {eyebrow === undefined ? null : <AeSiteEyebrow>{eyebrow}</AeSiteEyebrow>}
+            <h1
+              id={titleId}
+              {...(focusTitle ? { tabIndex: -1 as const } : {})}
+              className="text-balance text-4xl font-extralight tracking-[-0.035em] text-foreground md:text-5xl lg:text-6xl"
+            >
               {title}
             </h1>
-          ) : (
-            <div className="grid gap-intra">
-              <AeSiteEyebrow>{eyebrow}</AeSiteEyebrow>
-              <h1 id={titleId} className={isMarket ? MARKET_TITLE_CLASS : PAGE_TITLE_CLASS}>
-                {title}
-              </h1>
-            </div>
-          )}
+          </div>
           <p id={descriptionId} className="max-w-prose text-pretty text-sm leading-6 text-muted-foreground">
             {description}
           </p>

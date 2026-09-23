@@ -18,11 +18,13 @@ import {
   isCanonicalCredentiallessX402ProviderConnection,
 } from '@/modules/capability-supply/provider-connection'
 import { toDomain, toRow } from './lib/providerConnections/lifecycle'
-import { publishCapabilityForSeed } from './capabilitySupplyPublish'
+import { publicationPorts, publishCapabilityForSeed } from './capabilitySupplyPublish'
 import { ensureOwnerIdentityForAuthenticatedIdentity } from './interactiveAuthority'
 import { resolveAndBindLegalCustomer } from './lib/moneyLegalCustomer'
 import { persistDevSeedCatalogState } from './devSeedStore'
+import { upsertProviderDirectoryRows } from './x402DirectoryIndexStore'
 import { canonicalDigest } from '../src/modules/common/canonical-digest'
+import { refreshCapabilityCommand } from '@/modules/capability-supply/public'
 import {
   MAX_ACCESS_PATHS_PER_OFFERING,
   type OfferingPrice,
@@ -32,6 +34,8 @@ import {
   readCatalogDescriptor,
   rebuildBusinessSupplyProjectionSnapshotCommand,
 } from './catalog'
+import { resolveDevSeedOwningAccountRef } from './lib/catalog/devSeedAuthority'
+import { upsertDevSeedSandboxAccessPath, upsertDevSeedSandboxProviderToolProjection } from './lib/catalog/devSeedAccessPath'
 import {
   admitDevSeedCatalogAuthority,
   DEV_SEED_CATALOG_ACCOUNT_NAME,
@@ -58,7 +62,6 @@ import {
   SANDBOX_TOOL_BUSINESS_SLUG,
   SANDBOX_TOOL_CAPABILITY_ID,
   SANDBOX_TOOL_NETWORK_ID,
-  SANDBOX_REFERENCE_SKIP_SITE_URL_MISSING,
   sandboxReferenceEndpointUrl,
   sandboxReferenceToolSpec,
   sandboxTestnetToolSpec,
@@ -77,7 +80,6 @@ import {
 
 export {
   DEV_SEED_PRICE_BY_SLUG,
-  SANDBOX_REFERENCE_SKIP_SITE_URL_MISSING,
   SANDBOX_TESTNET_SKIP_ORIGIN_MISSING,
   SANDBOX_TESTNET_SKIP_PAY_TO_MISSING,
 } from './devSeedFixtures'
@@ -313,8 +315,6 @@ export const seedDevCatalog = internalMutation({
   },
 })
 
-
-
 export const seedOfferingSupply = internalMutation({
   args: { cursor: v.union(v.string(), v.null()) },
   returns: v.object({
@@ -507,32 +507,18 @@ async function ensureSandboxToolCatalogOrigin(
     .withIndex('by_offeringRef', (query) => query.eq('offeringRef', offeringRef))
     .unique()
   if (offering === null) throw new Error('dev_seed_sandbox_tool_offering_missing')
-  const existingPath = await ctx.db.query('offeringAccessPaths')
-    .withIndex('by_accessPathRef', (query) => query.eq('accessPathRef', accessPathRef))
-    .unique()
-  if (existingPath === null
-    || existingPath.status !== 'published'
-    || existingPath.offeringRevision !== offering.currentRevision) {
-    const upserted = await upsertOfferingAccessPathCommand(ctx, {
-      businessId,
-      offeringRef,
-      accessPathRef,
-      expectedRevision: offering.currentRevision,
-      operationKey: `seed:sandbox-tool-access-path:${spec.businessSlug}:${offering.currentRevision}`,
-      descriptor: {
-        kind: 'external_operation',
-        name: spec.label,
-        summary: spec.accessPathSummary,
-        url: spec.endpointUrl,
-        method: spec.method,
-        authenticationSummary: spec.authenticationSummary,
-        provenance: 'business_declared',
-      },
-    }, now)
-    if (upserted.kind === 'error') {
-      throw new Error(`dev_seed_sandbox_tool_access_path_${upserted.code}`)
-    }
-  }
+  await upsertDevSeedSandboxAccessPath(ctx, {
+    businessId,
+    offeringRef,
+    accessPathRef,
+    offeringRevision: offering.currentRevision,
+    name: spec.label,
+    summary: spec.accessPathSummary,
+    url: spec.endpointUrl,
+    method: spec.method,
+    authenticationSummary: spec.authenticationSummary,
+    now,
+  })
 
   const [revision, accessPath] = await Promise.all([
     ctx.db.query('businessOfferingRevisions')
@@ -586,7 +572,6 @@ async function publishSeededSandboxTool(
   const evidenceRefs = [sandboxToolEvidenceRef(spec)]
   const { businessId, origin } = await ensureSandboxToolCatalogOrigin(ctx, spec, owningAccountRef, now)
   if (prepareBusiness !== undefined) await prepareBusiness(businessId)
-
   const existing = await ctx.db.query('capabilityPublications')
     .withIndex('by_publicationRef_and_revision', (query) => (
       query.eq('publicationRef', publicationRef).eq('revision', 1)
@@ -594,24 +579,282 @@ async function publishSeededSandboxTool(
     .unique()
 
   const target: SeededSandboxTool = existing !== null
-    ? {
-        created: false,
-        publicationRef: existing.publicationRef,
-        publicationRevision: existing.revision,
-        toolRef: existing.toolRef,
-      }
+    ? await refreshLegacySandboxTestnetPublication(ctx, spec, existing, origin, evidenceRefs, now)
     : await createSandboxToolPublication(ctx, spec, evidenceRefs, businessId, origin, now)
-
+  if (existing !== null) {
+    const current = await ctx.db.query('capabilityPublications')
+      .withIndex('by_publicationRef_and_revision', (query) => query
+        .eq('publicationRef', target.publicationRef)
+        .eq('revision', target.publicationRevision))
+      .unique()
+    if (current === null || current.disposition !== 'current') {
+      throw new Error('dev_seed_sandbox_tool_current_projection_missing')
+    }
+    await upsertDevSeedSandboxProviderToolProjection(ctx, current, origin.offeringRef, origin.offeringRevision, now)
+    await upsertProviderDirectoryRows(ctx, current)
+  }
   return target
+}
+
+async function refreshLegacySandboxTestnetPublication(
+  ctx: MutationCtx,
+  spec: SandboxToolSpec,
+  legacy: Doc<'capabilityPublications'>,
+  origin: SandboxToolCatalogOrigin,
+  evidenceRefs: readonly string[],
+  now: number,
+): Promise<SeededSandboxTool> {
+  if (spec.businessSlug !== SANDBOX_TESTNET_BUSINESS_SLUG) {
+    return {
+      created: false,
+      publicationRef: legacy.publicationRef,
+      publicationRevision: legacy.revision,
+      toolRef: legacy.toolRef,
+    }
+  }
+  const publications = await ctx.db.query('capabilityPublications')
+    .withIndex('by_publicationRef_and_revision', (query) => query
+      .eq('publicationRef', legacy.publicationRef))
+    .collect()
+  const current = publications.filter((publication) => publication.disposition === 'current')
+  if (current.length !== 1) throw new Error('dev_seed_sandbox_testnet_current_revision_conflict')
+  const active = current[0]
+  if (active === undefined) throw new Error('dev_seed_sandbox_testnet_current_revision_missing')
+  await assertExactSandboxTestnetPublicationMaterial(ctx, spec, active, legacy.businessId, origin)
+
+  const desiredDocumentJson = sandboxToolContractDocumentJson(spec, 2)
+  if (active.revision === 2) {
+    const desiredContract = await ctx.db.query('capabilityContractDocuments')
+      .withIndex('by_capabilityId_and_version', (query) => query
+        .eq('capabilityId', SANDBOX_TESTNET_CAPABILITY_ID)
+        .eq('version', 2))
+      .unique()
+    if (active.version !== 2
+      || desiredContract === null
+      || active.contractDigest !== desiredContract.contractDigest
+      || canonicalDigest(JSON.parse(desiredContract.documentJson)) !== canonicalDigest(JSON.parse(desiredDocumentJson))) {
+      throw new Error('dev_seed_sandbox_testnet_revision_two_drift')
+    }
+    await admitExactSandboxTestnetRevision(ctx, active, evidenceRefs, now)
+    return {
+      created: false,
+      publicationRef: active.publicationRef,
+      publicationRevision: active.revision,
+      toolRef: active.toolRef,
+    }
+  }
+  if (active._id !== legacy._id || active.revision !== 1 || active.version !== 1
+    || active.offeringId !== sandboxToolOfferingId(spec)
+    || active.bindingId !== sandboxToolBindingId(spec)) {
+    throw new Error('dev_seed_sandbox_testnet_legacy_material_drift')
+  }
+  const legacyContract = await ctx.db.query('capabilityContractDocuments')
+    .withIndex('by_capabilityId_and_version', (query) => query
+      .eq('capabilityId', SANDBOX_TESTNET_CAPABILITY_ID)
+      .eq('version', 1))
+    .unique()
+  if (legacyContract === null
+    || legacyContract.contractDigest !== active.contractDigest
+  ) {
+    throw new Error('dev_seed_sandbox_testnet_legacy_contract_drift')
+  }
+  if (canonicalDigest(JSON.parse(legacyContract.documentJson))
+    === canonicalDigest(JSON.parse(sandboxToolContractDocumentJson(spec, 1)))) {
+    return {
+      created: false,
+      publicationRef: active.publicationRef,
+      publicationRevision: active.revision,
+      toolRef: active.toolRef,
+    }
+  }
+  const { inputExamples: _inputExamples, ...legacySpec } = spec
+  if (canonicalDigest(JSON.parse(legacyContract.documentJson))
+      !== canonicalDigest(JSON.parse(sandboxToolContractDocumentJson(legacySpec, 1)))) {
+    throw new Error('dev_seed_sandbox_testnet_legacy_contract_drift')
+  }
+
+  const commercialRelationship = {
+    kind: 'none' as const,
+    summary: 'Sandbox fixture supply with no commercial influence.',
+    influencesEligibility: false,
+    influencesInclusion: false,
+    influencesOrder: false,
+    evidenceRefs: [...evidenceRefs],
+  }
+  const presentation = {
+    label: spec.label,
+    summary: spec.summary,
+    materialTerms: spec.materialTerms.map((term) => ({ ...term })),
+    commercialRelationship,
+  }
+  const publication = await publicationPorts(ctx).loadPublicationAtRevision(active.publicationRef, 1)
+  if (publication === null) throw new Error('dev_seed_sandbox_testnet_legacy_publication_missing')
+  const result = await refreshCapabilityCommand({
+    publication,
+    source: sandboxToolPublicationSource(spec, presentation, evidenceRefs, 2) as Parameters<
+      typeof refreshCapabilityCommand
+    >[0]['source'],
+    offering: {
+      offeringId: sandboxToolOfferingId(spec),
+      networkId: SANDBOX_TOOL_NETWORK_ID,
+      origin,
+      presentation,
+      searchTerms: [...spec.searchTerms],
+      registrationEvidenceRefs: [...evidenceRefs],
+    },
+    operationKey: `seed:sandbox-tool-refresh:${spec.businessSlug}:v2`,
+    correlationId: `seed:sandbox-tool:${spec.businessSlug}`,
+    reasonCode: 'dev_seed_sandbox_tool_contract_example',
+    evidenceRefs: [...evidenceRefs],
+    now,
+  }, publicationPorts(ctx))
+  if (result.kind !== 'refreshed' || result.revision !== 2 || result.disposition !== 'current') {
+    throw new Error(`dev_seed_sandbox_testnet_refresh_${result.kind === 'refused' ? result.reason : 'invalid'}`)
+  }
+  const refreshed = await ctx.db.query('capabilityPublications')
+    .withIndex('by_publicationRef_and_revision', (query) => query
+      .eq('publicationRef', active.publicationRef)
+      .eq('revision', 2))
+    .unique()
+  if (refreshed === null) throw new Error('dev_seed_sandbox_testnet_refresh_missing')
+  await admitExactSandboxTestnetRevision(ctx, refreshed, evidenceRefs, now)
+  return {
+    created: false,
+    publicationRef: refreshed.publicationRef,
+    publicationRevision: refreshed.revision,
+    toolRef: refreshed.toolRef,
+  }
+}
+
+async function admitExactSandboxTestnetRevision(
+  ctx: MutationCtx,
+  publication: Doc<'capabilityPublications'>,
+  evidenceRefs: readonly string[],
+  now: number,
+): Promise<void> {
+  const ports = publicationPorts(ctx)
+  const [offering, binding] = await Promise.all([
+    ports.loadOfferingByOfferingId(publication.offeringId),
+    ports.loadBindingByBindingId(publication.bindingId),
+  ])
+  if (offering === null || binding === null) {
+    throw new Error('dev_seed_sandbox_testnet_refresh_supply_missing')
+  }
+  if (offering.status === 'active'
+    && binding.admission === 'admitted'
+    && binding.conformance === 'conformant') return
+  const pristineEvidence = offering.admissionEvidenceRefs.length === 0
+    && binding.admissionEvidenceRefs.length === 0
+    && binding.conformanceEvidenceRefs.length === 0
+  if (offering.status !== 'inactive'
+    || binding.admission !== 'not_admitted'
+    || binding.conformance !== 'not_conformant'
+    || !pristineEvidence) {
+    throw new Error('dev_seed_sandbox_testnet_refresh_eligibility_not_pristine')
+  }
+  const admitted = await ports.setEligibility({
+    offeringId: offering.offeringId,
+    bindingId: binding.bindingId,
+    contractRef: {
+      capabilityId: publication.capabilityId,
+      version: publication.version,
+      contractDigest: publication.contractDigest,
+    },
+    decision: 'admit',
+    expectedOfferingRegistrationHash: offering.registrationHash,
+    expectedBindingRegistrationHash: binding.registrationHash,
+    admissionEvidenceRefs: [...evidenceRefs],
+    conformanceEvidenceRefs: [...evidenceRefs],
+  }, now)
+  if (admitted.kind !== 'eligible') {
+    throw new Error(`dev_seed_sandbox_testnet_refresh_admission_${
+      admitted.kind === 'refused' ? admitted.reason : admitted.kind
+    }`)
+  }
+}
+
+async function assertExactSandboxTestnetPublicationMaterial(
+  ctx: MutationCtx,
+  spec: SandboxToolSpec,
+  publication: Doc<'capabilityPublications'>,
+  expectedBusinessId: Id<'businesses'>,
+  origin: SandboxToolCatalogOrigin,
+): Promise<void> {
+  if (spec.source.kind !== 'x402'
+    || publication.capabilityId !== SANDBOX_TESTNET_CAPABILITY_ID
+    || publication.businessId !== expectedBusinessId
+    || publication.runtimeEnvironment !== 'sandbox'
+    || publication.sourceKind !== 'x402'
+    || publication.publisherRef !== 'system:dev-seed'
+    || publication.authorityMode !== 'ae_curated_external'
+    || publication.pricingConfigJson === undefined
+    || canonicalDigest(JSON.parse(publication.pricingConfigJson)) !== canonicalDigest(spec.pricingConfig)) {
+    throw new Error('dev_seed_sandbox_testnet_material_drift')
+  }
+  const [business, offering, binding] = await Promise.all([
+    ctx.db.get(publication.businessId),
+    ctx.db.query('capabilityOfferings')
+      .withIndex('by_offeringId', (query) => query.eq('offeringId', publication.offeringId)).unique(),
+    ctx.db.query('capabilityTransportBindings')
+      .withIndex('by_bindingId', (query) => query.eq('bindingId', publication.bindingId)).unique(),
+  ])
+  const expectedPresentation = {
+    label: spec.label,
+    summary: spec.summary,
+    materialTerms: spec.materialTerms.map((term) => ({ ...term })),
+    commercialRelationship: {
+      kind: 'none',
+      summary: 'Sandbox fixture supply with no commercial influence.',
+      influencesEligibility: false,
+      influencesInclusion: false,
+      influencesOrder: false,
+      evidenceRefs: [sandboxToolEvidenceRef(spec)],
+    },
+  }
+  if (business === null
+    || business.owningAccountRef !== DEV_SEED_CATALOG_ACCOUNT_REF
+    || offering === null
+    || offering.capabilityId !== publication.capabilityId
+    || offering.version !== publication.version
+    || offering.contractDigest !== publication.contractDigest
+    || offering.networkId !== SANDBOX_TOOL_NETWORK_ID
+    || canonicalDigest(offering.origin ?? null) !== canonicalDigest(origin)
+    || canonicalDigest(offering.presentation) !== canonicalDigest(expectedPresentation)
+    || canonicalDigest(offering.searchTerms) !== canonicalDigest(spec.searchTerms)
+    || binding === null
+    || binding.capabilityId !== publication.capabilityId
+    || binding.version !== publication.version
+    || binding.contractDigest !== publication.contractDigest
+    || binding.endpointUrl !== spec.endpointUrl
+    || binding.networkId !== SANDBOX_TOOL_NETWORK_ID
+    || binding.authority.kind !== 'provider_connection'
+    || binding.authority.connectionRef !== spec.source.connectionRef
+    || binding.authority.providerRef !== spec.source.providerRef
+    || binding.adapterId !== 'x402-fetch:v2') {
+    throw new Error('dev_seed_sandbox_testnet_supply_drift')
+  }
+  const config = JSON.parse(binding.configJson) as Record<string, unknown>
+  if (config.method !== spec.method
+    || config.network !== BASE_SEPOLIA_NETWORK
+    || config.asset !== BASE_SEPOLIA_USDC_ADDRESS
+    || config.payTo !== spec.source.payTo
+    || config.scheme !== 'exact'
+    || config.requestTimeoutMs !== spec.source.requestTimeoutMs
+    || config.routeAmountExponent !== spec.source.providerPrice.exponent
+    || config.assetAmountExponent !== spec.source.providerPrice.exponent
+    || typeof config.paymentRequiredJson !== 'string'
+    || canonicalDigest(JSON.parse(config.paymentRequiredJson))
+      !== canonicalDigest(spec.source.paymentRequired)) {
+    throw new Error('dev_seed_sandbox_testnet_transport_drift')
+  }
 }
 
 const seededSandboxToolValue = v.union(
   v.object({ capabilityId: v.string(), toolRef: v.string(), created: v.boolean() }),
   v.object({ capabilityId: v.string(), skipped: v.string() }),
 )
-
 export const publishSandboxTool = internalMutation({
-  args: {},
+  args: { owningAccountRef: v.optional(v.string()) },
   returns: v.object({
     created: v.boolean(),
     publicationId: v.string(),
@@ -620,35 +863,31 @@ export const publishSandboxTool = internalMutation({
     businessSlug: v.string(),
     tools: v.array(seededSandboxToolValue),
   }),
-  handler: async (ctx) => {
+  handler: async (ctx, args) => {
     // Same deployment guard the money seed uses: never seed sandbox supply into
     // a deployment whose bypass owner account already carries a production agent.
     await requireLocalE2EOwnerAuthority(ctx)
     await provisionDevSeedCatalogIdentityRows(ctx)
     const authority = await admitDevSeedCatalogAuthority(ctx, 'publishSandboxTool')
+    const owningAccountRef = await resolveDevSeedOwningAccountRef(ctx, args.owningAccountRef, authority.accountRef)
     const now = Date.now()
 
-    const referenceEndpointUrl = sandboxReferenceEndpointUrl()
-    const reference = referenceEndpointUrl === undefined
-      ? undefined
-      : await publishSeededSandboxTool(
-          ctx,
-          sandboxReferenceToolSpec(referenceEndpointUrl),
-          authority.accountRef,
-          now,
-        )
-    const testnet = await publishSeededSandboxTestnetTool(ctx, authority.accountRef, now)
+    const reference = await publishSeededSandboxTool(
+      ctx,
+      sandboxReferenceToolSpec(sandboxReferenceEndpointUrl()),
+      owningAccountRef,
+      now,
+    )
+    const testnet = await publishSeededSandboxTestnetTool(ctx, owningAccountRef, now)
 
     return {
-      created: reference?.created ?? false,
-      publicationId: reference?.publicationRef ?? '',
-      publicationRevision: reference?.publicationRevision ?? 0,
-      toolRef: reference?.toolRef ?? '',
+      created: reference.created,
+      publicationId: reference.publicationRef,
+      publicationRevision: reference.publicationRevision,
+      toolRef: reference.toolRef,
       businessSlug: SANDBOX_TOOL_BUSINESS_SLUG,
       tools: [
-        reference === undefined
-          ? { capabilityId: SANDBOX_TOOL_CAPABILITY_ID, skipped: SANDBOX_REFERENCE_SKIP_SITE_URL_MISSING }
-          : { capabilityId: SANDBOX_TOOL_CAPABILITY_ID, toolRef: reference.toolRef, created: reference.created },
+        { capabilityId: SANDBOX_TOOL_CAPABILITY_ID, toolRef: reference.toolRef, created: reference.created },
         testnet,
       ],
     }
@@ -842,12 +1081,13 @@ function sandboxToolPublicationSource(
   spec: SandboxToolSpec,
   presentation: Readonly<Record<string, unknown>>,
   evidenceRefs: readonly string[],
+  contractVersion = 1,
 ): unknown {
   const offeringId = sandboxToolOfferingId(spec)
   if (spec.source.kind === 'ae_envelope') {
     return {
       kind: 'ae_envelope',
-      documentJson: sandboxToolContractDocumentJson(spec),
+      documentJson: sandboxToolContractDocumentJson(spec, contractVersion),
       offering: {
         offeringId,
         networkId: SANDBOX_TOOL_NETWORK_ID,
@@ -876,7 +1116,7 @@ function sandboxToolPublicationSource(
       inputSchema: spec.inputSchema,
       outputSchema: spec.outputSchema,
     },
-    contract: sandboxToolContractMetadata(spec),
+    contract: sandboxToolContractMetadata(spec, contractVersion),
     commercial: {
       offering: {
         offeringId,

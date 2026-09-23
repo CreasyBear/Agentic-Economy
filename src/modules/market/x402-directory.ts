@@ -1,5 +1,6 @@
 import { z } from 'zod'
 
+import type { FacilitatorDiscoverySkipReason } from '@/modules/capability-supply/server'
 import { degradeBackend } from '@/lib/observability/degrade-backend'
 
 export type X402DirectoryField = Readonly<{
@@ -103,4 +104,15 @@ export const x402DirectoryInputSchema = x402DirectoryFilterSchema.extend({
 export const x402DirectoryResolveInputSchema = x402DirectoryInputSchema.extend({ resource: z.string().min(1).max(8192) })
 export type X402DirectoryInput = z.infer<typeof x402DirectoryInputSchema>
 export type X402DirectoryResolveInput = z.infer<typeof x402DirectoryResolveInputSchema>
-export type X402DirectoryResolution = Readonly<{ kind: 'ready'; toolRef: string }> | Readonly<{ kind: 'unavailable'; reason: string }>
+export type X402DirectoryResolutionReason =
+  | 'query_invalid'
+  | 'resource_filters_mismatch'
+  | 'resource_not_found'
+  | 'source_unavailable'
+  | 'admission_unavailable'
+  | 'tool_unavailable'
+  | FacilitatorDiscoverySkipReason
+
+export type X402DirectoryResolution =
+  | Readonly<{ kind: 'ready'; toolRef: string }>
+  | Readonly<{ kind: 'unavailable'; reason: X402DirectoryResolutionReason }>

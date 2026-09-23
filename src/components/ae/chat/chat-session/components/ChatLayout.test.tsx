@@ -8,7 +8,7 @@ vi.mock('@clerk/tanstack-react-start', () => ({
   SignInButton: ({ children }: { children: ReactNode }) => children,
 }))
 
-import { chatComposer } from '@/lib/public/chat-ia'
+import { chatComposer, chatHistory } from '@/lib/public/chat-ia'
 
 import type { ChatSessionModel } from '../chat-session.contracts'
 import { ChatLayout } from './ChatLayout'
@@ -52,5 +52,26 @@ describe('ChatLayout', () => {
     render(<ChatLayout model={buildModel()} />)
 
     expect(screen.getByRole('textbox', { name: chatComposer.promptLabel })).toBeTruthy()
+  })
+
+  it('opens history from one header control and has no conversation-history column', () => {
+    render(<ChatLayout model={buildModel({
+      showHistoryRail: true,
+      header: {
+        authenticated: true,
+        threadId: null,
+        busy: false,
+        sharePath: null,
+        copied: false,
+        onNewChat: vi.fn(),
+        onIssueShare: vi.fn(),
+        onRevokeShare: vi.fn(),
+        onCopyShare: vi.fn(),
+      },
+      createHistoryPanel: () => <p>Saved threads</p>,
+    })} />)
+
+    expect(screen.getAllByRole('button', { name: chatHistory.openHistory })).toHaveLength(1)
+    expect(screen.queryByRole('complementary', { name: 'Conversation history' })).toBeNull()
   })
 })

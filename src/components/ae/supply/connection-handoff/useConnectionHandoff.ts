@@ -61,7 +61,7 @@ export function useConnectionHandoff({ loaded }: AeConnectionHandoffProps) {
     try {
       const result = await cancel({ data: { attemptRef: attempt.attemptRef, idempotencyKey: `cancel:${crypto.randomUUID()}` } })
       if (result.kind === 'refused') {
-        setCancelError('AE could not confirm cancellation. Reload this connection request before taking another action.')
+        setCancelError('Agentic Economy could not confirm cancellation. Reload this connection request before taking another action.')
         return
       }
       const draftRef = attempt.draftRef ?? attempt.candidateDraftRef
@@ -71,7 +71,7 @@ export function useConnectionHandoff({ loaded }: AeConnectionHandoffProps) {
     } catch (cause) {
       if (!isReverificationCancelledError(cause)) {
         captureClientExceptionOnClient(cause)
-        setCancelError('AE could not confirm cancellation. Reload this connection request before taking another action.')
+        setCancelError('Agentic Economy could not confirm cancellation. Reload this connection request before taking another action.')
       }
     } finally { setBusy(false) }
   }
@@ -80,7 +80,12 @@ export function useConnectionHandoff({ loaded }: AeConnectionHandoffProps) {
     event.preventDefault()
     if (loaded.kind !== 'available' || loaded.attempt.state !== 'pending' || loaded.attempt.sourceKind === 'mcp_oauth') return
     const attempt = loaded.attempt
-    if (busy || credential.length === 0) return
+    if (busy) return
+    if (credential.length === 0) {
+      setHttpError('Enter the credential before connecting.')
+      document.getElementById('provider-connection-credential')?.focus()
+      return
+    }
     httpIdempotencyKeyRef.current ??= `provider-http:${attempt.attemptRef}`
     setBusy(true)
     setHttpError(undefined)
@@ -117,12 +122,12 @@ export function useConnectionHandoff({ loaded }: AeConnectionHandoffProps) {
             return
           }
           setHttpError(readback.kind === 'available' && readback.attempt.state === 'pending'
-            ? 'AE could not confirm whether the connection is still completing. Reload this request to check its status before submitting again.'
-            : 'AE could not confirm the connection. Reload this request to check its current status.')
+            ? 'Agentic Economy could not confirm whether the connection is still completing. Reload this request to check its status before submitting again.'
+            : 'Agentic Economy could not confirm the connection. Reload this request to check its current status.')
         } catch (readbackCause) {
           setHttpError(degrade(
             readbackCause,
-            'AE could not confirm the connection or read its current status. Reload this request before submitting again.',
+            'Agentic Economy could not confirm the connection or read its current status. Reload this request before submitting again.',
             { site: 'ownerProviderConnectionReadbackRetry', reason: 'source_unavailable' },
           ))
         }
@@ -163,7 +168,7 @@ export function useConnectionHandoff({ loaded }: AeConnectionHandoffProps) {
     } catch (cause) {
       if (!isReverificationCancelledError(cause)) {
         captureClientExceptionOnClient(cause)
-        setMcpError('AE could not start sign-in. Try again from this connection request.')
+        setMcpError('Agentic Economy could not start sign in. Try again from this connection request.')
       }
     } finally {
       setMcpBeginBusy(false)
@@ -213,7 +218,7 @@ function projectSurface(
         return {
           kind: 'consumed',
           title: 'Provider connected',
-          description: 'Return to Add Tool. AE will resume with the connected source.',
+          description: 'Return to Add Tool. Agentic Economy will resume with the connected source.',
           returnSearch,
         }
       }
@@ -234,7 +239,7 @@ function projectSurface(
       return {
         kind: 'consumed',
         title: 'Provider connected',
-        description: 'Return to Add Tool. AE will resume the saved Tool draft.',
+        description: 'Return to Add Tool. Agentic Economy will resume the saved Tool draft.',
         returnSearch,
       }
     }
@@ -251,6 +256,6 @@ function projectSurface(
     credentialLabel,
     credential: state.credential,
     busy: state.busy,
-    error: state.httpError,
+    error: state.httpError ?? state.cancelError,
   }
 }

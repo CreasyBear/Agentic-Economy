@@ -8,14 +8,28 @@ export const Route = createFileRoute('/onboarding')({
   staticData: { shellMode: 'minimal' },
   validateSearch: (search: Record<string, unknown>): OnboardingSearch => {
     const redirect = sanitizeAuthRedirectTarget(search.redirect)
-    if (redirect === undefined || redirect.startsWith('/onboarding')) {
-      return {}
+    const requestedStep = search.step === 2 || search.step === '2' ? 2 : undefined
+    const roleIntent =
+      search.roleIntent === 'buyer' || search.roleIntent === 'supplier'
+        ? search.roleIntent
+        : undefined
+    const step = requestedStep === 2 && roleIntent !== undefined ? 2 : undefined
+    const workspaceName =
+      step === 2 &&
+      typeof search.workspaceName === 'string' &&
+      search.workspaceName.length <= 200
+        ? search.workspaceName
+        : undefined
+    return {
+      ...(redirect === undefined || redirect.startsWith('/onboarding') ? {} : { redirect }),
+      ...(step === undefined ? {} : { step }),
+      ...(roleIntent === undefined ? {} : { roleIntent }),
+      ...(workspaceName === undefined ? {} : { workspaceName }),
     }
-    return { redirect }
   },
   head: () => ({
     meta: [
-      { title: 'Set up your workspace | Agentic Economy' },
+      { title: 'Finish workspace | Agentic Economy' },
       { name: 'robots', content: 'noindex' },
     ],
   }),
@@ -23,6 +37,5 @@ export const Route = createFileRoute('/onboarding')({
 })
 
 function OnboardingRoute() {
-  const { redirect } = Route.useSearch()
-  return <AeOnboardingPage {...(redirect === undefined ? {} : { redirect })} />
+  return <AeOnboardingPage {...Route.useSearch()} />
 }

@@ -1,4 +1,6 @@
 import { providerSafeActionToolName } from '@/modules/actions/tool-contract'
+import { chatClarifyInputSchema, storedClarifyAnswer } from '@/modules/chat/clarify-card'
+import { readBelowMatch, searchCardSurface } from '@/modules/chat/search-presentation'
 import { isRecord } from '@/modules/common/is-record'
 import { publicToolDisplayPriceSchema } from '@/modules/capability-supply/tool-schemas'
 import { isPublicToolRef } from '@/modules/capability-supply/public'
@@ -34,6 +36,7 @@ export const CHAT_TOOL_IDS = [
   'registry.tools.compare',
   'tool.quote',
   'tool.call',
+  'chat.clarify',
 ] as const
 
 export type ChatToolId = (typeof CHAT_TOOL_IDS)[number]
@@ -58,6 +61,7 @@ export const CHAT_TOOL_TITLES: Readonly<Record<ChatToolId, string>> = {
   'registry.tools.compare': 'Compare tools',
   'tool.quote': 'Confirm purchase terms',
   'tool.call': 'Call',
+  'chat.clarify': 'Preparing a question',
 }
 
 export type ToolChoiceRow = Readonly<{
@@ -68,6 +72,7 @@ export type ToolChoiceRow = Readonly<{
   priceValidUntil?: number
   readiness?: string
   access?: string
+  belowMatch?: boolean
 }>
 
 export type ToolFact = Readonly<{
@@ -77,14 +82,12 @@ export type ToolFact = Readonly<{
 
 export const INSPECT_ACCOUNT_AVAILABLE_LABEL = 'Account available'
 export const INSPECT_AGENT_MAXIMUM_LABEL = 'Agent maximum'
-
 const INSPECT_OWNER_FUNDING_FACT_LABELS = new Set<string>([
   INSPECT_ACCOUNT_AVAILABLE_LABEL,
   INSPECT_AGENT_MAXIMUM_LABEL,
 ])
 
 export type CallResultState = CallResult['kind']
-
 type CardChrome = Readonly<{
   toolId: ChatToolId
   title: string
@@ -92,7 +95,7 @@ type CardChrome = Readonly<{
 
 export type ToolCardProjection =
   | (CardChrome & { kind: 'working' })
-  | (CardChrome & { kind: 'status'; state: 'refused' | 'error'; summary: string })
+  | (CardChrome & { kind: 'status'; state: 'refused' | 'error' | 'attention'; summary: string })
   | (CardChrome & {
       kind: 'choices'
       state: 'complete'
@@ -100,6 +103,7 @@ export type ToolCardProjection =
       toolRefs: readonly string[]
       count?: number
       contrasts?: readonly ToolFact[]
+      surface?: 'compare' | 'describe'
     })
   | (CardChrome & {
       kind: 'inspect'
@@ -122,6 +126,12 @@ export type ToolCardProjection =
       nextAction?: string
       retryable?: boolean
       suggestedNextAction?: SuggestedNextAction
+    })
+  | (CardChrome & {
+      kind: 'clarify'
+      question: string
+      choices: readonly [string, string, string]
+      answer?: string
     })
 
 const REFUSAL_SUMMARIES: Readonly<Record<string, string>> = {
@@ -320,6 +330,7 @@ function projectStoredChoice(value: unknown): ToolChoiceRow | null {
     ...(price === undefined ? {} : { price }),
     ...(readiness === undefined ? {} : { readiness }),
     ...(access === undefined ? {} : { access }),
+    ...(value.belowMatch === true ? { belowMatch: true } : {}),
   }
 }
 
@@ -648,58 +659,61 @@ function providerToolName(part: Record<string, unknown>): string | undefined {
 }
 
 function outputRecord(part: Record<string, unknown>): Record<string, unknown> | undefined {
-  if (!isRecord(part.output)) return undefined
-  return part.output.type === 'json' && isRecord(part.output.value)
-    ? part.output.value
-    : part.output
+  let output: unknown = part.output
+  if (isRecord(output) && (output.type === 'json' || output.type === 'text')) output = output.value
+  if (typeof output === 'string') {
+    if (new TextEncoder().encode(output).byteLength > 64 * 1024) return undefined
+    try { output = JSON.parse(output) } catch { return undefined }
+  }
+  return isRecord(output) ? output : undefined
 }
 
-function statusCard(toolId: ChatToolId, state: 'refused' | 'error', summary: string): ToolCardProjection {
+function statusCard(toolId: ChatToolId, state: 'refused' | 'error' | 'attention', summary: string): ToolCardProjection {
   return { ...chrome(toolId), kind: 'status', state, summary }
+}
+
+function liveChoices(
+  toolId: ChatToolId,
+  output: Record<string, unknown>,
+  choices: readonly ToolChoiceRow[],
+  contrasts?: readonly ToolFact[],
+): ToolCardProjection {
+  const count = toolId === 'registry.tools.describe' ? undefined : matchedCount(output)
+  const surface = toolId === 'registry.tools.search' ? searchCardSurface(output.use) : undefined
+  return {
+    ...chrome(toolId),
+    kind: 'choices',
+    state: 'complete',
+    choices,
+    toolRefs: collectToolRefs(output, choices),
+    ...(count === undefined ? {} : { count }),
+    ...(surface === undefined ? {} : { surface, title: CHAT_TOOL_TITLES[surface === 'compare' ? 'registry.tools.compare' : 'registry.tools.describe'] }),
+    ...(contrasts === undefined || contrasts.length === 0 ? {} : { contrasts }),
+  }
 }
 
 function projectLiveBody(toolId: ChatToolId, output: Record<string, unknown>): ToolCardProjection {
   switch (toolId) {
     case 'registry.tools.list':
     case 'registry.tools.search': {
-      const choices = projectLiveChoices(output.items)
-      const count = matchedCount(output)
-      return {
-        ...chrome(toolId),
-        kind: 'choices',
-        state: 'complete',
-        choices,
-        toolRefs: collectToolRefs(output, choices),
-        ...(count === undefined ? {} : { count }),
+      if (toolId === 'registry.tools.search' && output.use === 'chat.clarify') {
+        return statusCard(toolId, 'attention', 'These Tools do not separate on this request.')
       }
+      const below = toolId === 'registry.tools.search' ? readBelowMatch(output.belowMatch) : []
+      const choices = projectLiveChoices(output.items).map((choice) => below.includes(choice.toolRef) ? { ...choice, belowMatch: true } : choice)
+      return liveChoices(toolId, output, choices)
     }
     case 'registry.tools.compare': {
       const choices = projectLiveChoices(output.tools)
-      const count = matchedCount(output)
-      const contrasts = projectCompareContrasts(output, choices)
-      return {
-        ...chrome(toolId),
-        kind: 'choices',
-        state: 'complete',
-        choices,
-        toolRefs: collectToolRefs(output, choices),
-        ...(count === undefined ? {} : { count }),
-        ...(contrasts.length === 0 ? {} : { contrasts }),
-      }
+      return liveChoices(toolId, output, choices, projectCompareContrasts(output, choices))
     }
     case 'registry.tools.describe': {
       const choice = projectLiveChoice(output.tool ?? output)
-      const choices = choice === null ? [] : [choice]
-      return {
-        ...chrome(toolId),
-        kind: 'choices',
-        state: 'complete',
-        choices,
-        toolRefs: collectToolRefs(output, choices),
-      }
+      return liveChoices(toolId, output, choice === null ? [] : [choice])
     }
     case 'tool.quote':
     case 'tool.call':
+    case 'chat.clarify':
       return statusCard(toolId, 'error', 'Tool unavailable')
     default: {
       const exhaustive: never = toolId
@@ -716,8 +730,9 @@ function projectStoredCard(part: Record<string, unknown>): ToolCardProjection | 
   if (!isChatToolId(part.toolId)) return null
   const toolId = part.toolId
   if (part.kind === 'working' || part.state === 'working') return { ...chrome(toolId), kind: 'working' }
+  if (part.kind === 'clarify' && toolId === 'chat.clarify') return projectStoredClarify(part)
   if (part.kind === 'status' || part.state === 'refused' || part.state === 'error') {
-    const state = part.state === 'refused' || part.state === 'error' ? part.state : 'error'
+    const state = part.state === 'refused' || part.state === 'error' || part.state === 'attention' ? part.state : 'error'
     return statusCard(toolId, state, stringField(part.summary) ?? (state === 'refused' ? 'Request refused' : 'Tool unavailable'))
   }
   const refs: string[] = []
@@ -767,14 +782,53 @@ function projectStoredCard(part: Record<string, unknown>): ToolCardProjection | 
     ? part.count
     : undefined
   const contrasts = projectStoredFacts(part.contrasts)
+  const title = stringField(part.title)
+  const surface = part.surface === 'compare' || part.surface === 'describe' ? part.surface : undefined
   return {
     ...chrome(toolId),
+    ...(title === undefined ? {} : { title }),
     kind: 'choices',
     state: 'complete',
     choices: projectStoredChoices(part.choices),
     toolRefs: refs,
     ...(count === undefined ? {} : { count }),
+    ...(surface === undefined ? {} : { surface }),
     ...(contrasts.length === 0 ? {} : { contrasts }),
+  }
+}
+
+function projectClarifyPart(part: Record<string, unknown>): ToolCardProjection {
+  if (isRecord(part.output) && part.output.kind === 'chat_tool_refused') {
+    const reason = typeof part.output.reason === 'string' ? REFUSAL_SUMMARIES[part.output.reason] : undefined
+    return statusCard('chat.clarify', 'refused', reason ?? 'Request refused')
+  }
+  const parsed = chatClarifyInputSchema.safeParse(part.input)
+  if (!parsed.success) {
+    return part.state === 'output-available'
+      ? statusCard('chat.clarify', 'error', 'Tool unavailable')
+      : { ...chrome('chat.clarify'), kind: 'working' }
+  }
+  return {
+    ...chrome('chat.clarify'),
+    kind: 'clarify',
+    question: parsed.data.question,
+    choices: parsed.data.choices,
+  }
+}
+
+function projectStoredClarify(part: Record<string, unknown>): ToolCardProjection {
+  const parsed = chatClarifyInputSchema.safeParse({
+    question: part.question,
+    choices: part.choices,
+  })
+  if (!parsed.success) return statusCard('chat.clarify', 'error', 'Tool unavailable')
+  const answer = storedClarifyAnswer(part.answer)
+  return {
+    ...chrome('chat.clarify'),
+    kind: 'clarify',
+    question: parsed.data.question,
+    choices: parsed.data.choices,
+    ...(answer === undefined ? {} : { answer }),
   }
 }
 
@@ -787,11 +841,16 @@ export function projectToolCard(part: unknown): ToolCardProjection | null {
   if (toolId === undefined) return null
   if (part.state === 'output-error') return statusCard(toolId, 'error', 'Tool unavailable')
   if (part.state === 'output-denied') return statusCard(toolId, 'refused', 'Request refused')
+  if (toolId === 'chat.clarify') return projectClarifyPart(part)
   if (part.state !== 'output-available') return { ...chrome(toolId), kind: 'working' }
 
   const output = outputRecord(part)
   const kind = output?.kind
   if (kind === 'error') return statusCard(toolId, 'error', 'Tool unavailable')
+  if (kind === 'no_candidates' && (toolId === 'registry.tools.search' || toolId === 'registry.tools.list')) {
+    return { ...chrome(toolId), kind: 'choices', state: 'complete', choices: [], toolRefs: [], count: 0 }
+  }
+  if (kind === 'unavailable') return statusCard(toolId, 'error', 'Tool unavailable')
   if (toolId === 'tool.call') {
     if (kind === 'chat_tool_refused') {
       const reason = typeof output?.reason === 'string' ? REFUSAL_SUMMARIES[output.reason] : undefined
@@ -816,11 +875,11 @@ export function projectToolCard(part: unknown): ToolCardProjection | null {
       : statusCard(
           toolId,
           'refused',
-          REFUSAL_SUMMARIES[result.data.code] ?? result.data.code.replaceAll('_', ' '),
+          result.data.requiredActions?.[0]?.description
+            ?? REFUSAL_SUMMARIES[result.data.code] ?? result.data.code.replaceAll('_', ' '),
         )
   }
   const refused = kind === 'refused'
-    || kind === 'unavailable'
     || kind === 'chat_tool_refused'
     || kind === 'no_candidates'
     || kind === 'not_found'
@@ -843,6 +902,16 @@ export function serializeToolCard(card: ToolCardProjection): Record<string, unkn
   switch (card.kind) {
     case 'working':
       return null
+    case 'clarify':
+      return {
+        type: 'tool-card',
+        kind: 'clarify',
+        toolId: card.toolId,
+        title: card.title,
+        question: card.question,
+        choices: [...card.choices],
+        ...(card.answer === undefined ? {} : { answer: card.answer }),
+      }
     case 'status':
       return {
         type: 'tool-card',
@@ -862,6 +931,7 @@ export function serializeToolCard(card: ToolCardProjection): Record<string, unkn
         toolRefs: [...card.toolRefs],
         choices: card.choices.map((choice) => ({ ...choice })),
         ...(card.count === undefined ? {} : { count: card.count }),
+        ...(card.surface === undefined ? {} : { surface: card.surface }),
         ...(card.contrasts === undefined || card.contrasts.length === 0
           ? {}
           : { contrasts: card.contrasts.map((fact) => ({ ...fact })) }),
@@ -908,6 +978,8 @@ export function toolCardState(
   switch (card.kind) {
     case 'working':
       return 'working'
+    case 'clarify':
+      return card.answer === undefined ? 'working' : 'complete'
     case 'status':
       return card.state
     case 'choices':

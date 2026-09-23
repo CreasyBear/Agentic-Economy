@@ -1,6 +1,7 @@
 /**
  * @vitest-environment jsdom
  */
+import type * as ConvexReactModule from 'convex/react'
 import type { ReactNode } from 'react'
 import { cleanup, render, screen, within } from '@testing-library/react'
 import {
@@ -16,12 +17,19 @@ import '../../setup/jsdom-platform'
 
 import { AeAppShell } from '@/components/ae/layout/AeAppShell'
 import { AeOwnerMobileNavigation } from '@/components/ae/layout/AeOwnerMobileNavigation'
-import { AeOperatorSidebar } from '@/components/ae/layout/AeOperatorSidebar'
+import { AeAppSidebar } from '@/components/ae/layout/app-shell/AeAppSidebar'
+import { OperatorChromeProvider } from '@/components/ae/layout/AeOperatorPage'
 import { AeSitePrimaryNav } from '@/components/ae/website/AeSiteNav'
 import { SidebarProvider } from '@/components/ui/sidebar'
 
 vi.mock('@/lib/observability/funnel-client', () => ({
   emitFunnelEventOnce: vi.fn(),
+}))
+
+// Vitest hoists the mock factory, so its shared helper must be loaded inside it.
+vi.mock('convex/react', async (importOriginal) => ({
+  ...(await importOriginal<typeof ConvexReactModule>()),
+  ...(await import('../../helpers/shell-convex-mock')).shellConvexMock,
 }))
 
 vi.mock('@/components/ae/command-panel', () => ({
@@ -31,6 +39,7 @@ vi.mock('@/components/ae/command-panel', () => ({
 
 vi.mock('@clerk/tanstack-react-start', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@clerk/tanstack-react-start')>()),
+  useAuth: () => ({ isSignedIn: false }),
   useUser: () => ({
     isLoaded: true,
     isSignedIn: true,
@@ -41,8 +50,11 @@ vi.mock('@clerk/tanstack-react-start', async (importOriginal) => ({
     },
     sessionId: 'session_test',
   }),
-  Show: ({ when, children, fallback }: { when: string; children: ReactNode; fallback?: ReactNode }) =>
-    when === 'signed-out' ? children : (fallback ?? null),
+  Show: ({ when, children, fallback }: { when: string; children?: ReactNode; fallback?: ReactNode }) => {
+    if (when === 'signed-out') return children ?? null
+    if (when === 'signed-in') return null
+    return fallback ?? null
+  },
   UserButton: () => <button type="button" aria-label="Account menu" />,
   OrganizationSwitcher: () => <div data-testid="organization-switcher" />,
 }))
@@ -78,10 +90,10 @@ describe('tactile navigation physics (S-09)', () => {
     expect(brand.className).not.toContain('transition-all')
   })
 
-  it('AeOperatorSidebar nav buttons include active scale and motion-reduction classes', () => {
+  it('AeAppSidebar nav buttons include active scale and motion-reduction classes', () => {
     renderOperatorSidebar('/owner/operations')
 
-    const sidebarNav = screen.getByRole('navigation', { name: 'Operator navigation' })
+    const sidebarNav = screen.getByRole('navigation', { name: 'App navigation' })
     const toolsLink = within(sidebarNav).getByRole('link', { name: 'Tools' })
     expectTactileNavLink(toolsLink.className)
     expect(toolsLink.className).not.toContain('transition-all')
@@ -97,7 +109,7 @@ describe('tactile navigation physics (S-09)', () => {
   })
 
   it('AeOwnerMobileNavigation links have active scale and motion-reduction classes', () => {
-    renderOwnerMobileNav('/owner/market')
+    renderOwnerMobileNav('/market')
 
     const navigation = screen.getByRole('navigation', { name: 'Owner primary navigation' })
     for (const link of within(navigation).getAllByRole('link')) {
@@ -114,22 +126,22 @@ function renderAppShell(): void {
     createRoute({
       getParentRoute: () => rootRoute,
       path: '/market',
-      staticData: { nav: { label: 'Market', header: { order: 0 } } },
+      staticData: { nav: { label: 'Market', header: { order: 0, audience: 'always' } } },
     }),
     createRoute({
       getParentRoute: () => rootRoute,
       path: '/for-agents',
-      staticData: { nav: { label: 'For agents', header: { order: 1 } } },
+      staticData: { nav: { label: 'For agents', header: { order: 1, audience: 'public' } } },
     }),
     createRoute({
       getParentRoute: () => rootRoute,
       path: '/for-providers',
-      staticData: { nav: { label: 'For providers', header: { order: 2 } } },
+      staticData: { nav: { label: 'For providers', header: { order: 2, audience: 'public' } } },
     }),
     createRoute({
       getParentRoute: () => rootRoute,
       path: '/activity',
-      staticData: { nav: { label: 'Calls', header: { order: 3 } } },
+      staticData: { nav: { label: 'Calls', header: { order: 2, audience: 'signed-in' } } },
     }),
     createRoute({ getParentRoute: () => rootRoute, path: '/sign-in/$' }),
   ])
@@ -153,22 +165,22 @@ function renderPublicPrimaryNav(): void {
     createRoute({
       getParentRoute: () => rootRoute,
       path: '/market',
-      staticData: { nav: { label: 'Market', header: { order: 0 } } },
+      staticData: { nav: { label: 'Market', header: { order: 0, audience: 'always' } } },
     }),
     createRoute({
       getParentRoute: () => rootRoute,
       path: '/for-agents',
-      staticData: { nav: { label: 'For agents', header: { order: 1 } } },
+      staticData: { nav: { label: 'For agents', header: { order: 1, audience: 'public' } } },
     }),
     createRoute({
       getParentRoute: () => rootRoute,
       path: '/for-providers',
-      staticData: { nav: { label: 'For providers', header: { order: 2 } } },
+      staticData: { nav: { label: 'For providers', header: { order: 2, audience: 'public' } } },
     }),
     createRoute({
       getParentRoute: () => rootRoute,
       path: '/activity',
-      staticData: { nav: { label: 'Calls', header: { order: 3 } } },
+      staticData: { nav: { label: 'Calls', header: { order: 2, audience: 'signed-in' } } },
     }),
   ])
   const router = createRouter({
@@ -215,7 +227,9 @@ function renderOperatorSidebar(pathname: string): void {
   render(
     <RouterContextProvider router={router}>
       <SidebarProvider>
-        <AeOperatorSidebar operatorRole="owner" currentPath={pathname} />
+        <OperatorChromeProvider>
+          <AeAppSidebar operatorRole="owner" pathname={pathname} hash="" />
+        </OperatorChromeProvider>
       </SidebarProvider>
     </RouterContextProvider>,
   )
@@ -234,23 +248,23 @@ function renderOwnerMobileNav(pathname: string): void {
   const routeTree = rootRoute.addChildren([
     createRoute({
       getParentRoute: () => rootRoute,
-      path: '/owner',
-      staticData: { nav: { label: 'Overview', operator: { ...ownerNav, mobilePrimary: true, mobileOrder: 0 } } },
+      path: '/market',
+      staticData: { nav: { label: 'Market', operator: { ...ownerNav, mobilePrimary: true, mobileOrder: 0 } } },
     }),
     createRoute({
       getParentRoute: () => rootRoute,
-      path: '/owner/market',
-      staticData: { nav: { label: 'Market', operator: { ...ownerNav, mobilePrimary: true, mobileOrder: 10 } } },
+      path: '/agent-access',
+      staticData: { nav: { label: 'Agents', operator: { ...ownerNav, mobilePrimary: true, mobileOrder: 10 } } },
     }),
     createRoute({
       getParentRoute: () => rootRoute,
       path: '/activity',
-      staticData: { nav: { label: 'Calls', operator: { ...ownerNav, mobilePrimary: true, mobileOrder: 10 } } },
+      staticData: { nav: { label: 'Calls', operator: { ...ownerNav, mobilePrimary: true, mobileOrder: 20 } } },
     }),
     createRoute({
       getParentRoute: () => rootRoute,
-      path: '/owner/credit',
-      staticData: { nav: { label: 'Balance', operator: ownerNav } },
+      path: '/owner/operations',
+      staticData: { nav: { label: 'Tools', operator: { ...ownerNav, mobilePrimary: true, mobileOrder: 30 } } },
     }),
   ])
   const router = createRouter({ routeTree, history: createMemoryHistory({ initialEntries: [pathname] }) })

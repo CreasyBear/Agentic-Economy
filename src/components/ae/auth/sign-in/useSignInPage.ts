@@ -1,9 +1,9 @@
 import type { AeSignInPageProps, UseSignInPageResult } from './sign-in.contracts'
-import { projectSignInCopy } from './sign-in.contracts'
+import { projectSignInCopy, resolveSignInRedirectTarget } from './sign-in.contracts'
 
 export function useSignInPage(input: AeSignInPageProps): UseSignInPageResult {
   const copy = projectSignInCopy(input.redirect)
-  const fallbackRedirectUrl = input.redirect ?? '/owner/settings'
+  const fallbackRedirectUrl = resolveSignInRedirectTarget(input.redirect)
   return {
     heading: copy.heading,
     body: copy.body,

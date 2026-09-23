@@ -27,13 +27,13 @@ import {
   reverseFormanceProviderSettlement,
   reserveFormanceManagedCall,
   settleFormanceManagedCall,
+  remedyFormancePaidCall,
   syncFormanceCapacity,
 } from '../src/modules/money/formance-workflows'
 import { internalAction } from './_generated/server'
-import { accountHistoryResultValue } from './moneyLedgerValues'
+import { accountHistoryResultValue, managedCallBookingArgs } from './moneyLedgerValues'
 import {
   spendingPeriodAdjustmentValue,
-  spendingPeriodsValue,
 } from '../src/modules/money/public'
 
 export type MoneyFormanceResult = FormanceMoneyResult
@@ -74,34 +74,6 @@ const capacityKind = v.union(
 )
 const balanceKind = v.union(v.literal('account_aud'), capacityKind)
 const periodKind = v.union(v.literal('day'), v.literal('month'))
-const managedCallBookingArgs = {
-  callRef: v.string(),
-  quoteRef: v.string(),
-  idempotencyKey: v.string(),
-  accountRef: v.string(),
-  principalRef: v.string(),
-  agentBudgetGeneration: v.number(),
-  legalCustomerRef: v.string(),
-  legalCustomerGeneration: v.number(),
-  treasuryRef: v.string(),
-  treasuryGeneration: v.number(),
-  toolRef: v.string(),
-  providerRef: v.string(),
-  authorityGeneration: v.number(),
-  policyGeneration: v.number(),
-  buyerAmountUnits: v.string(),
-  buyerRevenueUnits: v.string(),
-  buyerTaxUnits: v.string(),
-  providerAmountUnits: v.string(),
-  quoteDigest: v.string(),
-  inputDigest: v.string(),
-  policyDigest: v.string(),
-  rateEvidenceDigest: v.string(),
-  treasuryEvidenceDigest: v.string(),
-  x402RequirementDigest: v.string(),
-  spendingPeriods: v.optional(spendingPeriodsValue),
-}
-
 const spendingPeriodResult = v.union(
   v.object({
     kind: v.literal('available'),
@@ -479,6 +451,20 @@ export const releaseManagedCall = internalAction({
   },
 })
 
+/** Only called after canonical safe-block proof that the exact authorization expired unused. */
+export const releaseExpiredUnusedCall = internalAction({
+  args: { booking: v.object(managedCallBookingArgs), externalEvidenceDigest: v.string() },
+  returns: moneyResult,
+  handler: async (_ctx, args) => {
+    const context = configuredContext()
+    return context.kind === 'setup_required'
+      ? { kind: 'refused' as const, code: context.code, retryable: false as const }
+      : convexMoneyResult(await releaseFormanceManagedCall(context.context, {
+          ...args, authorizationProvenExpiredUnused: true,
+        }))
+  },
+})
+
 export const settleManagedCall = internalAction({
   args: { booking: v.object(managedCallBookingArgs), externalEvidenceDigest: v.string() },
   returns: moneyResult,
@@ -487,6 +473,17 @@ export const settleManagedCall = internalAction({
     return context.kind === 'setup_required'
       ? { kind: 'refused' as const, code: context.code, retryable: false as const }
       : convexMoneyResult(await settleFormanceManagedCall(context.context, args))
+  },
+})
+
+export const remedyPaidCall = internalAction({
+  args: { booking: v.object(managedCallBookingArgs), externalEvidenceDigest: v.string() },
+  returns: moneyResult,
+  handler: async (_ctx, args) => {
+    const context = configuredContext()
+    return context.kind === 'setup_required'
+      ? { kind: 'refused' as const, code: context.code, retryable: false as const }
+      : convexMoneyResult(await remedyFormancePaidCall(context.context, args))
   },
 })
 

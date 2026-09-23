@@ -33,16 +33,13 @@ export function getRouter() {
 }
 
 /**
- * Route tree as navigation registry: each route file's `staticData.nav`
- * declares where it appears in the public header, public footer, and/or
- * operator sidebar/mobile/utility nav, so the two nav files can eventually
- * read the tree instead of hand-listing destinations. Purely additive today
- * — nothing reads `staticData.nav` yet.
+ * Legacy route navigation metadata retained only for OWNER-locked routes.
+ * Navigation is declared by the shell while those routes migrate.
  */
 export type NavStaticData = {
   label: string
   search?: Record<string, string>
-  header?: { order: number }                                   // public primary nav
+  header?: { order: number; audience: 'public' | 'signed-in' | 'always' }
   footer?: { column: string; order: number }                   // public footer, internal links only
   operator?: {
     roles: ReadonlyArray<'owner' | 'admin' | 'developer'>
@@ -70,6 +67,7 @@ declare module '@tanstack/react-router' {
     router: ReturnType<typeof getRouter>
   }
   interface StaticDataRouteOption {
+    /** @deprecated dead since IA-1; removed as OWNER rows land */
     nav?: NavStaticData
     shell?: 'operator'
     shellMode?: 'standard' | 'minimal'

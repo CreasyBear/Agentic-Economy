@@ -39,18 +39,18 @@ describe('admin_membership authority family isolation through registered admin s
       const caller = await seededCase(backend, caseKind, slug)
       const before = await authorityState(backend)
 
-      const result = await caller.query(api.security.readAdminAuditEvents, {})
+      const access = await caller.query(api.adminConsoleAudit.readAdminAuditAccess, {})
+      const page = await caller.query(api.adminConsoleAudit.listAdminAuditEvents, {
+        filter: {},
+        paginationOpts: { numItems: 10, cursor: null },
+      })
 
       await expect(authorityState(backend)).resolves.toEqual(before)
+      expect(page).toMatchObject({ page: [], isDone: true })
       if (caseKind === 'owner') {
-        expect(result).toMatchObject({ kind: 'allowed', surface: 'audit_events', rows: [] })
+        expect(access).toEqual({ kind: 'allowed', role: 'owner_admin' })
       } else {
-        expect(result).toMatchObject({
-          kind: 'denied',
-          reason: 'missing_membership',
-          surface: 'audit_events',
-          rows: [],
-        })
+        expect(access).toEqual({ kind: 'refused', code: 'missing_membership' })
       }
     },
   )

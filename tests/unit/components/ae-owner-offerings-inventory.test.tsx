@@ -64,28 +64,28 @@ describe('AeOwnerOfferingsList (W-34)', () => {
     },
   ]
 
-  it('T1: renders tool name, status badges, protocol badges, pricing, and formatted usage', () => {
+  it('T1: renders Tool name, canonical status badges, pricing, and Calls', () => {
     render(<AeOwnerOfferingsList offerings={testTools} />)
 
     expect(screen.getAllByText('Australian Tax Calculator').length).toBeGreaterThan(0)
     expect(screen.getByText('Calculates exact PAYG withholding and Medicare levy.')).toBeInTheDocument()
     expect(screen.getAllByText('A$0.10 / call').length).toBeGreaterThan(0)
     expect(screen.getAllByText('OpenAPI').length).toBeGreaterThan(0)
-    expect(screen.getAllByText('Operational').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('Available').length).toBeGreaterThan(0)
     expect(screen.getAllByText('Published').length).toBeGreaterThan(0)
     expect(screen.queryByText('Protocol: OpenAPI')).not.toBeInTheDocument()
     expect(screen.queryByText('Catalog: Published')).not.toBeInTheDocument()
-    expect(screen.getAllByText('1,420 calls').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('1,420').length).toBeGreaterThan(0)
 
     expect(screen.getAllByText('AU Postcode Validator').length).toBeGreaterThan(0)
     expect(screen.getAllByText('A$0.02 / call').length).toBeGreaterThan(0)
     expect(screen.getAllByText('MCP').length).toBeGreaterThan(0)
-    expect(screen.getAllByText('Degraded').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('Unavailable').length).toBeGreaterThan(0)
     expect(screen.getAllByText('Draft').length).toBeGreaterThan(0)
-    expect(screen.getAllByText('0 calls').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('0').length).toBeGreaterThan(0)
   })
 
-  it('T2: falls back to access path count when callsCount is undefined', () => {
+  it('T2: shows an unknown Calls value when callsCount is undefined', () => {
     const withoutCalls: readonly OwnerOfferingSummary[] = [
       {
         offering: {
@@ -104,12 +104,13 @@ describe('AeOwnerOfferingsList (W-34)', () => {
     render(<AeOwnerOfferingsList offerings={withoutCalls} />)
 
     expect(screen.getAllByText('ABN Checker').length).toBeGreaterThan(0)
-    const usage = screen.getAllByText('3 access paths').find((node) =>
+    const calls = screen.getAllByText('—').find((node) =>
       node.className.includes('text-foreground'),
     )
-    expect(usage).toBeDefined()
-    expect(usage?.className).toContain('font-mono')
-    expect(usage?.className).toContain('tabular-nums')
+    expect(calls).toBeDefined()
+    expect(calls?.className).toContain('font-mono')
+    expect(calls?.className).toContain('tabular-nums')
+    expect(screen.queryByText('3 access paths')).not.toBeInTheDocument()
     expect(screen.getAllByText('—').length).toBeGreaterThan(0)
   })
 
@@ -128,19 +129,18 @@ describe('AeOwnerOfferingsList (W-34)', () => {
   it('T4: renders quick actions with accessible labels, links, and tactile press class', () => {
     render(<AeOwnerOfferingsList offerings={testTools} />)
 
-    const testRun = screen.getAllByRole('link', { name: 'Test Run for Australian Tax Calculator' })[0]
-    expect(testRun).toBeDefined()
-    expect(testRun?.getAttribute('href')).toBe('/owner/operations/tax-calculator')
-    expect(testRun?.className).toContain('active:scale-[0.98]')
+    const openTool = screen.getAllByRole('link', { name: 'Open Tool for Australian Tax Calculator' })[0]
+    expect(openTool).toBeDefined()
+    expect(openTool?.getAttribute('href')).toBe('/owner/operations/tax-calculator')
+    expect(openTool?.className).toContain('active:scale-[0.96]')
 
-    const activity = screen.getAllByRole('link', { name: 'View logs for Australian Tax Calculator' })[0]
-    expect(activity).toBeDefined()
-    expect(activity?.getAttribute('href')).toBe('/activity')
+    expect(screen.queryByRole('link', { name: 'Test Run for Australian Tax Calculator' })).toBeNull()
+    expect(screen.queryByRole('link', { name: 'View logs for Australian Tax Calculator' })).toBeNull()
 
     expect(TACTILE_PRESS_CLASS).toContain('motion-reduce:active:scale-100')
   })
 
-  it('T5: filters inventory by name, summary, protocol, and offering ref or slug', () => {
+  it('T5: filters inventory by name, summary, protocol, price, Calls, and references', () => {
     function FilterHarness({ initial }: { initial: string }) {
       const [filterValue, setFilterValue] = useState(initial)
       return (
@@ -156,6 +156,8 @@ describe('AeOwnerOfferingsList (W-34)', () => {
       { query: 'PAYG', visible: 'Australian Tax Calculator', hidden: 'AU Postcode Validator' },
       { query: 'OpenAPI', visible: 'Australian Tax Calculator', hidden: 'AU Postcode Validator' },
       { query: 'mcp', visible: 'AU Postcode Validator', hidden: 'Australian Tax Calculator' },
+      { query: 'A$0.02', visible: 'AU Postcode Validator', hidden: 'Australian Tax Calculator' },
+      { query: '1,420', visible: 'Australian Tax Calculator', hidden: 'AU Postcode Validator' },
       { query: 'tax-calculator', visible: 'Australian Tax Calculator', hidden: 'AU Postcode Validator' },
       { query: 'offering:postcode-lookup', visible: 'AU Postcode Validator', hidden: 'Australian Tax Calculator' },
     ]
@@ -192,7 +194,7 @@ describe('AeOwnerOfferingsList (W-34)', () => {
     expect(onFilterChange).toHaveBeenCalledWith('')
   })
 
-  it('T7: compact list shows badges, price, usage, and quick actions', () => {
+  it('T7: compact list shows canonical badges, price, Calls, and one row exit', () => {
     render(<AeOwnerOfferingsList offerings={testTools} />)
 
     const compactList = screen.getByTestId('provider-workspace-compact-list')
@@ -201,11 +203,12 @@ describe('AeOwnerOfferingsList (W-34)', () => {
     if (!firstRow) return
 
     expect(within(firstRow).getByText('Published')).toBeInTheDocument()
-    expect(within(firstRow).getByText('Operational')).toBeInTheDocument()
+    expect(within(firstRow).getByText('Available')).toBeInTheDocument()
     expect(within(firstRow).getByText('OpenAPI')).toBeInTheDocument()
     expect(within(firstRow).getByText('A$0.10 / call')).toBeInTheDocument()
-    expect(within(firstRow).getByText('1,420 calls')).toBeInTheDocument()
-    expect(within(firstRow).getByRole('link', { name: 'Test Run for Australian Tax Calculator' })).toBeInTheDocument()
-    expect(within(firstRow).getByRole('link', { name: 'View logs for Australian Tax Calculator' })).toBeInTheDocument()
+    expect(within(firstRow).getByText('1,420')).toBeInTheDocument()
+    expect(within(firstRow).getByRole('link', { name: 'Open Tool for Australian Tax Calculator' })).toBeInTheDocument()
+    expect(within(firstRow).queryByRole('link', { name: 'Test Run for Australian Tax Calculator' })).toBeNull()
+    expect(within(firstRow).queryByRole('link', { name: 'View logs for Australian Tax Calculator' })).toBeNull()
   })
 })

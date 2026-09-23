@@ -1,4 +1,6 @@
 import type { ProbeId, ProbeOutcome, StatusProbesResult } from '@/routes/-status.functions'
+import { aeStatusPresentation, getStatusPresentation } from '@/lib/ui/status-presentation'
+
 
 export type StatusCheckState = 'checking' | ProbeOutcome['state']
 
@@ -7,7 +9,11 @@ export type StatusCheckView = Readonly<{
   label: string
   state: StatusCheckState
   detail: string
-  badgeLabel: 'Operational' | 'Degraded' | 'Checking'
+  checkedAtLabel: string
+  badgeLabel:
+    | typeof aeStatusPresentation.operational.label
+    | typeof aeStatusPresentation.degraded.label
+    | 'Checking'
   badgeVariant: 'success' | 'destructive' | 'secondary'
   requestRef?: string
 }>
@@ -31,6 +37,7 @@ export type UseSystemStatusResult = Readonly<{
   refreshLabel: string
   checks: readonly StatusCheckView[]
   statusAnnouncement: string
+  lastUpdated: string
   onRefresh: () => void
   recovery?: StatusRecoveryGuidance
 }>
@@ -65,11 +72,15 @@ export const probeOrder: readonly ProbeId[] = [
 ]
 
 export const statusPageDescription =
-  'Live checks for the public site and shared agent interfaces. Individual Tool readiness is shown in the catalogue and on each Tool page.'
+  'Whether the platform is up. Tool readiness stays on Market and each Tool page.'
+
+export const statusCheckTimeLabel = 'Last checked'
+export const statusLastUpdatedLabel = 'Last checked'
 
 export function projectStatusChecks(
   outcomes: readonly ProbeOutcome[],
   isChecking: boolean,
+  relativeCheckedAt: string,
 ): readonly StatusCheckView[] {
   return probeOrder.map((id) => {
     const outcome = outcomes.find((candidate) => candidate.id === id)
@@ -78,8 +89,9 @@ export function projectStatusChecks(
         id,
         label: probeLabels[id],
         state: 'checking',
-        detail: 'Checking now…',
+        detail: '',
         badgeLabel: 'Checking',
+        checkedAtLabel: '',
         badgeVariant: 'secondary',
       }
     }
@@ -88,7 +100,8 @@ export function projectStatusChecks(
       label: probeLabels[id],
       state: outcome.state,
       detail: outcome.detail,
-      badgeLabel: outcome.state === 'operational' ? 'Operational' : 'Degraded',
+      checkedAtLabel: `${statusCheckTimeLabel} ${relativeCheckedAt}`,
+      badgeLabel: getStatusPresentation(outcome.state === 'operational' ? 'operational' : 'degraded').label,
       badgeVariant: outcome.state === 'operational' ? 'success' : 'destructive',
       ...(outcome.requestRef === undefined ? {} : { requestRef: outcome.requestRef }),
     }
@@ -96,26 +109,15 @@ export function projectStatusChecks(
 }
 
 export function recoveryGuidance(
-  checks: readonly StatusCheckView[],
+  _checks: readonly StatusCheckView[],
 ): StatusRecoveryGuidance {
-  const callSafetyAffected = checks.some(
-    (check) => check.id === 'market' || check.id === 'release',
-  )
-  return callSafetyAffected
-    ? {
-        title: 'Check existing calls before retrying',
-        description:
-          'Do not repeat an uncertain Call. Open Calls to inspect its current status or receipt.',
-        href: '/activity',
-        label: 'Open Calls',
-      }
-    : {
-        title: 'Retry after the affected system recovers',
-        description:
-          'Refresh status first. If the problem continues, report it with any request reference shown above.',
-        href: '/support',
-        label: 'Help',
-      }
+  return {
+    title: 'Retry after the affected system recovers',
+    description:
+      'Refresh status to retry the check. If the problem continues, report it with any request reference shown above.',
+    href: '/support',
+    label: 'Help',
+  }
 }
 
 export function statusPageTitle(isChecking: boolean, degraded: boolean): string {
@@ -123,7 +125,7 @@ export function statusPageTitle(isChecking: boolean, degraded: boolean): string 
     ? 'Checking system status.'
     : degraded
       ? 'Some systems are degraded.'
-      : 'All systems operational.'
+      : 'All systems operational'
 }
 
 export function statusAnnouncementText(

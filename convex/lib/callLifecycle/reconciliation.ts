@@ -249,18 +249,22 @@ export async function listDueAutomaticReconciliationCandidatesHandler(
   const limit = boundedCandidateLimit(args.limit)
   if (limit === 0) return []
 
-  // The index is partitioned by state, so keep each scan bounded and merge the
-  // bounded pages before applying the one total output limit. Refund candidates
+  // Partition by automatic disposition and reason before limiting: old manual
+  // cases must never hide due work. Each fixed partition remains bounded, then
+  // the merged candidates share one total output limit. Refund candidates
   // carry an explicit flag so the worker cannot widen them into ordinary
   // execution-authority recovery.
-  const [reconciliationRows, refusedRefundRows, cancelledRefundRows] = await Promise.all([
-    ctx.db.query('capabilityCalls')
-      .withIndex('by_state_and_reconciliation_nextAttemptAt', (q) => (
+  const [reconciliationPages, refusedRefundRows, cancelledRefundRows] = await Promise.all([
+    Promise.all([...RECONCILIATION_REASONS].map((reason) => ctx.db.query('capabilityCalls')
+      .withIndex('by_state_and_reconciliation_disposition_reason_nextAttemptAt', (q) => (
         q.eq('state', 'reconciliation_required')
+          .eq('reconciliation.disposition', 'automatic')
+          .eq('reconciliation.reason', reason)
+          .gte('reconciliation.nextAttemptAt', 0)
           .lte('reconciliation.nextAttemptAt', args.now)
       ))
       .order('asc')
-      .take(limit),
+      .take(limit))),
     ctx.db.query('capabilityCalls')
       .withIndex('by_state_and_reconciliation_disposition_reason_nextAttemptAt', (q) => (
         q.eq('state', 'refused')
@@ -282,7 +286,7 @@ export async function listDueAutomaticReconciliationCandidatesHandler(
       .order('asc')
       .take(limit),
   ])
-  const rows = [...reconciliationRows, ...refusedRefundRows, ...cancelledRefundRows]
+  const rows = [...reconciliationPages.flat(), ...refusedRefundRows, ...cancelledRefundRows]
     .filter((row) => hasClaimableReconciliation(row, args.now))
     .sort((left, right) => {
       const leftDue = left.reconciliation?.nextAttemptAt ?? Number.POSITIVE_INFINITY

@@ -1,97 +1,96 @@
 /** @vitest-environment jsdom */
-import type { ReactNode } from 'react'
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import '../../setup/jsdom-platform'
 
 const mocks = vi.hoisted(() => ({
-  review: vi.fn(),
-  search: {
-    publicationRef: 'publication:openapi',
-    expectedRevision: 3,
-    expectedSourceDigest: `sha256:${'a'.repeat(64)}`,
-    operationRef: `operation:v1:${'b'.repeat(64)}`,
-    sourceKind: 'openapi' as const,
-    sourceUrl: 'https://provider.example/openapi.json',
+  access: vi.fn(),
+  sheet: vi.fn(),
+}))
+
+vi.mock('convex/react', () => ({ useQuery: () => mocks.access() }))
+vi.mock('@/components/ae/admin/actions/AdminActionSheet', () => ({
+  AdminActionSheet: (props: AdminActionSheetProps) => {
+    mocks.sheet(props)
+    return props.open ? (
+      <section role="dialog" aria-label="Verify source authority">
+        <button type="button" onClick={() => props.onOpenChange(false)}>Close</button>
+      </section>
+    ) : null
   },
 }))
 
-vi.mock('@tanstack/react-router', () => ({
-  createFileRoute: () => (options: Record<string, unknown>) => ({
-    options,
-    useLoaderData: () => ({ readback: { kind: 'allowed', rows: [] } }),
-    useSearch: () => mocks.search,
-  }),
-}))
-vi.mock('@tanstack/react-start', () => ({
-  createServerFn: () => ({ handler: () => Symbol('admin-readback-server') }),
-  useServerFn: () => mocks.review,
-}))
-vi.mock('@/components/ae/layout/AeOperatorPage', () => ({
-  AeOperatorPage: ({ children }: { children: ReactNode }) => <main>{children}</main>,
-}))
-vi.mock('@/components/ae/readback/AeAdminReadbackPanel', () => ({
-  AeAdminReadbackPanel: () => <section>Catalog readback</section>,
-}))
-vi.mock('@/lib/operator/route-options', () => ({ operatorRouteOptions: {} }))
-vi.mock('@/modules/capability-supply/source-authority-review.functions', () => ({
-  reviewSourceAuthorityServer: Symbol('review-source-authority'),
-}))
+import type { AdminActionSheetProps } from '@/components/ae/admin/actions/actions.contracts'
+import type { SourceAuthorityReviewRequest } from '@/components/ae/admin/provider-object/source-authority-review.contracts'
 
-import { Route as AdminIndexHealthRoute } from '@/routes/_operator/admin.index-health'
+import { SourceAuthorityReviewPanel } from '@/components/ae/admin/provider-object/SourceAuthorityReviewPanel'
+
+const review: SourceAuthorityReviewRequest = {
+  publicationRef: 'publication:openapi',
+  expectedRevision: 3,
+  expectedSourceDigest: `sha256:${'a'.repeat(64)}`,
+  operationRef: `operation:v1:${'b'.repeat(64)}`,
+  sourceKind: 'openapi',
+  sourceUrl: 'https://provider.example/openapi.json',
+}
 
 afterEach(() => {
   cleanup()
-  mocks.review.mockReset()
+  mocks.access.mockReset()
+  mocks.sheet.mockReset()
 })
 
 describe('admin source authority review', () => {
-  it('confirms one exact publication and tells the operator to resume the same release run', async () => {
-    mocks.review.mockResolvedValue({
-      kind: 'verified',
-      publicationRef: mocks.search.publicationRef,
-      revision: mocks.search.expectedRevision,
-      operationRef: mocks.search.operationRef,
-      sourceAuthorityState: 'verified',
-    })
-    const Component = AdminIndexHealthRoute.options.component
-    if (Component === undefined) throw new Error('admin_index_health_component_missing')
-    render(<Component />)
+  it('shows the reviewed source and opens a sheet for that exact publication revision', () => {
+    mocks.access.mockReturnValue({ kind: 'allowed', role: 'owner_admin' })
+    render(<SourceAuthorityReviewPanel review={review} />)
 
     expect(screen.getByRole('heading', { name: 'Review source authority' })).toBeTruthy()
     expect(screen.getByText('Tool reference')).toBeTruthy()
     expect(screen.getByText(/Provider controls the source/u)).toBeTruthy()
-    expect(document.body.textContent).toContain(mocks.search.sourceUrl)
-    expect(document.body.textContent).toContain(mocks.search.expectedSourceDigest)
-    fireEvent.change(screen.getByLabelText('Authority evidence reference'), {
-      target: { value: 'review:source-control:ticket-123' },
-    })
-    fireEvent.click(screen.getByRole('button', { name: 'Confirm source authority' }))
+    expect(document.body.textContent).toContain(review.sourceUrl)
+    expect(document.body.textContent).toContain(review.expectedSourceDigest)
+    expect(document.body.textContent).toContain(review.publicationRef)
+    expect(document.body.textContent).toContain(String(review.expectedRevision))
+    expect(screen.queryByRole('dialog')).toBeNull()
 
-    await waitFor(() => expect(mocks.review).toHaveBeenCalledWith({
-      data: {
-        publicationRef: mocks.search.publicationRef,
-        expectedRevision: mocks.search.expectedRevision,
-        expectedSourceDigest: mocks.search.expectedSourceDigest,
-        evidenceRef: 'review:source-control:ticket-123',
+    fireEvent.click(screen.getByRole('button', { name: 'Verify source authority' }))
+
+    expect(screen.getByRole('dialog', { name: 'Verify source authority' })).toBeTruthy()
+    expect(mocks.sheet).toHaveBeenLastCalledWith(expect.objectContaining({
+      action: 'verify_capability_source_authority',
+      input: {
+        publicationRef: review.publicationRef,
+        expectedRevision: review.expectedRevision,
+        expectedSourceDigest: review.expectedSourceDigest,
       },
+      targetRefs: [
+        { label: 'Publication', value: review.publicationRef },
+        { label: 'Tool reference', value: review.operationRef },
+        { label: 'Source', value: review.sourceUrl },
+        { label: 'Source digest', value: review.expectedSourceDigest },
+      ],
+      open: true,
     }))
-    expect((await screen.findByRole('status')).textContent).toContain('Source authority confirmed')
-    expect(screen.getByRole('status').textContent).toContain('rerun the same Package 5 release task')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }))
+    expect(screen.queryByRole('dialog')).toBeNull()
   })
 
-  it('does not claim approval when the canonical review is refused', async () => {
-    mocks.review.mockResolvedValue({ kind: 'refused', reason: 'authorization_denied' })
-    const Component = AdminIndexHealthRoute.options.component
-    if (Component === undefined) throw new Error('admin_index_health_component_missing')
-    render(<Component />)
+  it.each(['support', 'reviewer'])('does not offer verification to %s', (role) => {
+    mocks.access.mockReturnValue({ kind: 'allowed', role })
+    render(<SourceAuthorityReviewPanel review={review} />)
 
-    fireEvent.change(screen.getByLabelText('Authority evidence reference'), {
-      target: { value: 'review:source-control:ticket-123' },
-    })
-    fireEvent.click(screen.getByRole('button', { name: 'Confirm source authority' }))
+    expect(screen.getByRole('heading', { name: 'Review source authority' })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Verify source authority' })).toBeNull()
+    expect(mocks.sheet).not.toHaveBeenCalled()
+  })
 
-    expect((await screen.findByRole('alert')).textContent).toContain('No source authority changed')
-    expect(screen.getByRole('alert').textContent).toContain('Ask an active AE reviewer to open this link')
+  it('does not offer verification when admin access is refused', () => {
+    mocks.access.mockReturnValue({ kind: 'refused', code: 'missing_membership' })
+    render(<SourceAuthorityReviewPanel review={review} />)
+
+    expect(screen.queryByRole('button', { name: 'Verify source authority' })).toBeNull()
+    expect(mocks.sheet).not.toHaveBeenCalled()
   })
 })

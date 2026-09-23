@@ -26,6 +26,10 @@ it('keeps an empty intermediate page traversable and hides next on the final pag
 })
 it('reports index failure without presenting a sampled complete list', () => {
   render(<DirectoryProvidersIndex result={{ kind: 'unavailable', reason: 'index_unavailable' }} />)
-  expect(screen.getByRole('status').textContent).toContain('catalogue is unavailable')
-  expect(screen.queryByRole('link')).toBeNull()
+  expect(screen.getByRole('heading', { name: 'Explore Providers' })).toBeTruthy()
+  expect(screen.getByText('The discovery service could not be reached. Try again.')).toBeTruthy()
+  const tryAgain = new URL(screen.getByRole('link', { name: 'Try again' }).getAttribute('href')!, 'https://aecon.ai')
+  expect(Object.fromEntries(tryAgain.searchParams)).toEqual({ view: 'providers' })
+  const browse = new URL(screen.getByRole('link', { name: 'Browse Tools' }).getAttribute('href')!, 'https://aecon.ai')
+  expect(Object.fromEntries(browse.searchParams)).toEqual({ view: 'tools' })
 })

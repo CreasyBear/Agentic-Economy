@@ -1,10 +1,9 @@
 import type { ReactNode } from 'react'
 
 import { cn } from '@/lib/utils'
-import { SiteMarker } from '@/components/ui/site-marker'
 
 import { AeMarkedDivider } from './AeSiteMarks'
-export type AeSiteHeadingLevel = 'h1' | 'h2' | 'h3'
+export type AeSiteHeadingLevel = 'h1' | 'h2' | 'h3' | 'h4'
 export type AeSiteHeadingSize = 'xl' | 'lg' | 'md' | 'sm' | 'xs'
 
 type AeSiteHeadingProps = {
@@ -15,12 +14,13 @@ type AeSiteHeadingProps = {
   className?: string
 }
 
+/** Discover display recipes. ExtraLight; no viewport-fluid weight jumps. */
 const sizeClass: Record<AeSiteHeadingSize, string> = {
-  xl: 'font-display text-6xl font-normal leading-[1.02] tracking-[-0.04em] sm:text-7xl',
-  lg: 'font-display text-5xl font-normal leading-[1.04] tracking-[-0.035em] sm:text-6xl',
-  md: 'font-display text-4xl font-normal leading-[1.06] tracking-[-0.03em] sm:text-5xl',
-  sm: 'font-display text-2xl font-normal leading-tight tracking-[-0.025em] sm:text-3xl',
-  xs: 'font-sans text-lg font-semibold leading-snug tracking-tight sm:text-xl',
+  xl: 'font-display max-w-xl text-display leading-[1.02] font-extralight tracking-display lg:text-6xl xl:text-7xl',
+  lg: 'text-4xl font-extralight tracking-[-0.035em] md:text-5xl lg:text-6xl',
+  md: 'text-4xl font-extralight tracking-[-0.035em]',
+  sm: 'font-sans text-title font-medium tracking-tight sm:text-title-lg',
+  xs: 'font-sans text-lg font-medium leading-snug tracking-tight sm:text-xl',
 }
 
 export function AeSiteHeading({
@@ -31,7 +31,10 @@ export function AeSiteHeading({
   className,
 }: AeSiteHeadingProps) {
   return (
-    <Tag id={id} className={cn('text-balance', sizeClass[size], className)}>
+    <Tag
+      id={id}
+      className={cn('text-balance', sizeClass[size], className)}
+    >
       {children}
     </Tag>
   )
@@ -52,7 +55,7 @@ export function AeSiteBody({ children, muted = false, size = 'md', id, className
       data-ae-muted={muted ? '' : undefined}
       className={cn(
         'ae-site-body max-w-[65ch] text-pretty',
-        size === 'md' ? 'text-lg leading-7 sm:text-xl sm:leading-8' : 'text-base leading-7 sm:text-lg sm:leading-8',
+        size === 'md' ? 'text-deck leading-relaxed lg:text-body' : 'text-deck leading-relaxed',
         muted ? 'text-muted-foreground' : 'text-foreground',
         className,
       )}
@@ -64,8 +67,7 @@ export function AeSiteBody({ children, muted = false, size = 'md', id, className
 
 export function AeSiteEyebrow({ children }: { children: string }) {
   return (
-    <p className="ae-site-eyebrow inline-flex items-center gap-2 font-sans text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-      <SiteMarker tone="info" visible dataMarker />
+    <p className="ae-site-eyebrow mb-3 block font-sans text-eyebrow font-eyebrow tracking-eyebrow text-muted-foreground uppercase">
       {children}
     </p>
   )
@@ -83,10 +85,10 @@ export function AeSiteStack({ children, className }: { children: ReactNode; clas
   return <div className={cn('grid [&>*+*]:mt-10 md:[&>*+*]:mt-20', className)}>{children}</div>
 }
 
-/** Centered display hero stack — Twenty HomeHero IntroStack (32px authored gap). */
+/** Left-split editorial hero. Centered is not the default. */
 export function AeSiteHeroIntro({ children, className }: { children: ReactNode; className?: string }) {
   return (
-    <div className={cn('flex w-full flex-col items-center text-center [&>*+*]:mt-8', className)}>
+    <div className={cn('grid w-full content-start gap-4 text-left lg:gap-6', className)}>
       {children}
     </div>
   )

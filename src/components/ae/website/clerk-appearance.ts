@@ -42,7 +42,7 @@ const clerkAuthInteractiveElements = {
   alertText: 'text-sm text-destructive',
   alert: 'border border-destructive bg-destructive/10 text-destructive',
   badge: 'bg-brand-muted text-info-foreground text-xs font-medium',
-  headerTitle: 'font-sans text-xl font-semibold tracking-tight',
+  headerTitle: 'font-sans text-xl font-medium tracking-tight',
   headerSubtitle: 'text-muted-foreground',
   footerActionLink: clerkFooterLinkClasses,
   logoBox: 'hidden',
@@ -66,6 +66,16 @@ export const clerkAppearance = {
   elements: clerkAuthInteractiveElements,
   options: {
     unsafe_disableDevelopmentModeWarnings: true,
+  },
+}
+
+/** Embedded profiles use the host page's h1; Clerk's profile controls remain unchanged. */
+export const clerkEmbeddedProfileAppearance = {
+  ...clerkAppearance,
+  elements: {
+    ...clerkAppearance.elements,
+    headerTitle: { display: 'none' },
+    navbar: { '& h1': { display: 'none' } },
   },
 }
 

@@ -8,10 +8,13 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { AePublicPage } from '@/components/ae/layout/AePublicPage'
 
 vi.mock('@tanstack/react-router', () => ({
-  Link: ({ children, to }: { children: ReactNode; to: string }) => <a href={to}>{children}</a>,
-  // AeSiteFooter reads the route table via useRouter(); an empty table is
-  // enough to render its (empty) columns.
-  useRouter: () => ({ routesByPath: {} }),
+  Link: ({
+    children,
+    to,
+  }: {
+    children: ReactNode
+    to: string
+  }) => <a href={to}>{children}</a>,
 }))
 
 afterEach(cleanup)
@@ -44,6 +47,37 @@ describe('AePublicPage', () => {
     expect(main.getByText('Legal')).toBeTruthy()
     expect(main.getByRole('heading', { level: 1, name: 'Privacy' })).toBeTruthy()
     expect(main.getByText('Document body')).toBeTruthy()
+  })
+
+  it('mounts one responsive footer with the canonical public link groups', () => {
+    render(
+      <AePublicPage>
+        <h1>About</h1>
+      </AePublicPage>,
+    )
+
+    const footer = screen.getByRole('contentinfo')
+    expect(screen.getAllByRole('contentinfo')).toHaveLength(1)
+    expect(
+      within(footer).getAllByRole('button').map((button) => button.textContent),
+    ).toEqual(['Resources links', 'Help links', 'Legal links', 'Machines links'])
+    for (const [label, href] of [
+      ['API reference', '/developers/api'],
+      ['Support', '/support'],
+      ['Status', '/status'],
+      ['Privacy', '/privacy'],
+      ['Terms', '/terms'],
+      ['Remove a listing', '/privacy/remove-business'],
+      ['llms.txt', '/llms.txt'],
+      ['SKILL.md', '/SKILL.md'],
+      ['.well-known/ucp', '/.well-known/ucp'],
+      ['glossary.md', '/glossary.md'],
+    ] as const) {
+      expect(
+        within(footer).getAllByRole('link', { name: label })
+          .every((link) => link.getAttribute('href') === href),
+      ).toBe(true)
+    }
   })
 
   it('promotes a workspace to the outer shell instead of nesting it in a document page', () => {

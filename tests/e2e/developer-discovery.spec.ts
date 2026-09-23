@@ -8,27 +8,41 @@ const privateFieldCopy =
   /inquiryBody|ownerReply|claimantContact|ownerNotes|notificationPayload|providerPayload|adminEvidence|sourceHash|rawContact(?!Excluded)|private:evidence|ownerId|clerk/i
 
 test.describe('developer discovery', () => {
-  test('page renders read-only discovery contracts without future authority copy', async ({ page }) => {
+  test('page shows each discovery artifact status, origin, and checked time', async ({ page }) => {
     await page.goto('/developers/discovery', { waitUntil: 'domcontentloaded' })
 
+    await expect(page).toHaveTitle('Discovery status | Agentic Economy')
     await expect(page.getByRole('main')).toBeVisible()
     await expect(page.locator('#main-content')).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Discovery status', level: 1 })).toBeVisible()
+    await expect(page.getByRole('link', { name: 'Open schema, Public catalog schema' })).toHaveAttribute(
+      'href',
+      /\/api\/discovery\/schema$/,
+    )
+    await expect(page.getByRole('link', { name: 'Open examples, Public catalog examples' })).toHaveAttribute(
+      'href',
+      /\/api\/discovery\/examples$/,
+    )
 
-    await expect(page.getByRole('heading', { name: /read-only public catalog files/i })).toBeVisible()
-    await expect(page.getByRole('link', { name: /download schema json/i })).toHaveAttribute('href', '/api/discovery/schema')
-    await expect(page.getByRole('link', { name: /download examples json/i })).toHaveAttribute('href', '/api/discovery/examples')
-    await expect(page.getByRole('link', { name: /download fixture bundle/i })).toHaveCount(0)
+    const schemaRow = page.getByRole('region', { name: 'Public catalog schema' })
+    const artifactLink = schemaRow.getByRole('link', { name: 'Open schema, Public catalog schema' })
+    const artifactHref = await artifactLink.getAttribute('href')
+    expect(artifactHref).not.toBeNull()
+    if (artifactHref === null) throw new Error('Expected schema artifact href.')
+    await expect(schemaRow.getByText(/^(?:Current|Stale|Unavailable)$/)).toBeVisible()
+    await expect(schemaRow.getByText(/^Checked /)).toBeVisible()
+    await expect(schemaRow.getByText(new URL(artifactHref).origin, { exact: true })).toBeVisible()
+    await expect(artifactLink).toHaveAttribute('href', /^https?:\/\//)
+
     await expect(page.getByText('Source-owned readback', { exact: true })).toBeVisible()
     await expect(page.getByText(/current public catalog facts/i)).toBeVisible()
-    await expect(page.getByRole('heading', { name: /not in this product/i })).toBeVisible()
-    await expect(page.getByText(/API keys/i)).toBeVisible()
     await expect(page.getByText(/read path status/i)).toBeVisible()
-    await expect(page.getByText(/HTTP/i).first()).toBeVisible()
-    await expect(page.getByText(/schema/i).first()).toBeVisible()
 
     const bodyText = await page.locator('body').innerText()
     expect(bodyText).not.toMatch(futureAuthorityCopy)
     expect(bodyText).not.toMatch(privateFieldCopy)
+    expect(bodyText).not.toMatch(/\blocalhost:3000\b/i)
+    expect(bodyText).not.toMatch(/\b(?:soon|roadmap|coming|we will|capacity)\b/i)
     await expectNoHorizontalOverflow(page)
   })
 

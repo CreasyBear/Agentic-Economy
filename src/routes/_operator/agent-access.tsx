@@ -23,6 +23,7 @@ export const Route = createFileRoute('/_operator/agent-access')({
   staticData: {
     nav: {
       label: 'Agents',
+      header: { order: 1, audience: 'signed-in' },
       operator: {
         roles: ['owner'],
         group: 'Buy',

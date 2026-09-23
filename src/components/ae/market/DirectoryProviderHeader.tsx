@@ -24,16 +24,16 @@ export function DirectoryProviderHeader({ provider, entries, totalTools }: Props
     return date !== undefined && Number.isFinite(Date.parse(date)) ? [Date.parse(date)] : []
   })
   const latestUpdate = updates.length === 0 ? undefined : new Date(Math.max(...updates)).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' })
-  return <section aria-label={`Provider ${provider}`} className="mb-8 overflow-hidden rounded-2xl border border-border bg-card">
+  return <section aria-label={`Provider ${provider}`} className="mb-8 overflow-hidden rounded-card border border-border bg-card">
     <div className="grid gap-8 p-6 sm:p-8 lg:grid-cols-[minmax(0,1fr)_minmax(16rem,0.65fr)]">
       <div className="flex flex-col items-start gap-4">
-        <p className="flex items-center gap-2 text-xs tracking-wide text-muted-foreground"><Globe2 className="size-4" />PROVIDER HOSTNAME</p>
+        <p className="flex items-center gap-2 text-caption font-medium uppercase tracking-caption text-muted-foreground"><Globe2 className="size-4" aria-hidden="true" />Provider hostname</p>
         <h2 className="break-all text-3xl font-medium tracking-tight sm:text-4xl">{provider}</h2>
         <p className="text-sm text-muted-foreground">{total === undefined ? `${tools.length} ${tools.length === 1 ? 'Tool' : 'Tools'} in these results` : `${total.toLocaleString()} ${total === 1 ? 'Tool' : 'Tools'} in the indexed catalogue`}</p>
         {labels.length > 0 && <div className="flex flex-wrap gap-2" aria-label="Provider-declared categories and tags">{labels.map(label => <Badge key={label} variant="secondary" className="rounded-full px-3 py-1">{label}</Badge>)}</div>}
         {validHost.success && <a href={`https://${validHost.data.provider}/`} target="_blank" rel="noopener noreferrer" className={cn(buttonVariants({ variant: 'outline' }), 'mt-1 rounded-full')}>Visit {provider}<ArrowUpRight className="size-4" /></a>}
       </div>
-      {tools.length > 0 && <div className="grid content-start gap-4 rounded-xl bg-muted/40 p-5">
+      {tools.length > 0 && <div className="grid content-start gap-4 rounded-card border border-border/70 p-5">
         <p className="text-xs font-medium text-muted-foreground">A few Tools from this hostname</p>
         <ul className="grid gap-4">{tools.slice(0, 3).map(tool => <li key={tool.resource} className="flex min-w-0 items-center gap-3">
           <Avatar className="size-12 shrink-0 rounded-xl border border-border bg-background">

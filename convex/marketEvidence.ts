@@ -60,3 +60,4 @@ export async function countMarketEvidence(
     bounds: { lower: { key: since, inclusive: true } },
   })) ?? 0
 }
+

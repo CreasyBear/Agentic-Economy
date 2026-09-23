@@ -37,7 +37,7 @@ export function AeToolTestPlayground({
 
   return (
     <AeSection
-      title="Interactive Test Playground"
+      title="Interactive test playground"
       description={`Zero-cost sandbox probe for ${toolName}. Validates input against the declared schema, calls the provider endpoint in simulation mode, and never creates Quotes, Charges, or buyer balance movements.`}
     >
       <div className="grid gap-4 rounded-xl border border-border bg-card p-4">
@@ -45,7 +45,7 @@ export function AeToolTestPlayground({
           role="status"
           className="flex items-center gap-2 rounded-lg border border-primary/20 bg-primary/5 px-3 py-2 text-xs text-foreground"
         >
-          Simulation Mode: Zero credit deducted. Sandbox dry-run probes never create Quotes, Charges,
+          Simulation mode: Zero credit deducted. Sandbox dry-run probes never create Quotes, Charges,
           or debits.
         </div>
 
@@ -62,11 +62,12 @@ export function AeToolTestPlayground({
         <div className="flex flex-wrap items-center gap-3">
           <Button
             type="button"
+            variant="outline"
             onClick={handleSend}
             disabled={isRunning}
             className={cn('min-h-touch', TACTILE)}
           >
-            {isRunning ? 'Sending invocation…' : 'Send Test Invocation'}
+            {isRunning ? 'Rechecking…' : 'Recheck source'}
           </Button>
           <div className="min-h-[1.75rem] flex items-center gap-2 text-xs">
             {response ? (

@@ -136,9 +136,17 @@ describe('readStatusProbesServer', () => {
 })
 
 describe('/status route', () => {
+  const checkedAt = 'Sep 21, 2026, 9:05 AM UTC'
+  it('uses the canonical Status document title while keeping the live health result as the H1', async () => {
+    const head = await Route.options.head?.({} as never)
+    expect(head?.meta).toEqual(expect.arrayContaining([
+      expect.objectContaining({ title: 'Status | Agentic Economy' }),
+    ]))
+  })
+
   it('renders every probe from the initial loader data with no client refetch', () => {
     renderRoute({
-      checkedAt: '9:05:06 AM',
+      checkedAt,
       checks: [
         { id: 'site', state: 'operational', detail: 'Public pages are responding.' },
         { id: 'market', state: 'operational', detail: 'Tool search and new Calls are ready.' },
@@ -147,15 +155,16 @@ describe('/status route', () => {
         { id: 'catalogue', state: 'operational', detail: 'The Tool catalogue was refreshed within the last 36 hours.' },
       ],
     })
-    expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('All systems operational.')
+    expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('All systems operational')
+    expect(screen.getAllByText(/^Last checked /).length).toBeGreaterThan(0)
     expect(screen.getAllByText('Operational')).toHaveLength(5)
-    expect(screen.getByRole('status').textContent).toBe('Status checked. All 5 systems are operational. Last checked 9:05:06 AM.')
+    expect(screen.getByRole('status').textContent).toBe(`Status checked. All 5 systems are operational. Last checked ${checkedAt}.`)
     expect(screen.getByRole('button', { name: 'Refresh status' })).toBeTruthy()
   })
 
   it('renders a degraded probe with its request reference and call-safety recovery guidance', () => {
     renderRoute({
-      checkedAt: '9:06:07 AM',
+      checkedAt,
       checks: [
         { id: 'site', state: 'operational', detail: 'Public pages are responding.' },
         { id: 'market', state: 'degraded', detail: 'New Calls may fail. Check existing Calls before retrying.', requestRef: 'corr_status_01' },
@@ -167,17 +176,17 @@ describe('/status route', () => {
     expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('Some systems are degraded.')
     expect(screen.getByText('Degraded')).toBeTruthy()
     expect(screen.getByText(
-      'Status checked. 1 of 5 systems needs attention: Tool API. Last checked 9:06:07 AM.',
+      `Status checked. 1 of 5 systems needs attention: Tool API. Last checked ${checkedAt}.`,
     ).getAttribute('role')).toBe('status')
     expect(screen.getByText('Request reference').textContent).toBe('Request reference')
     expect(screen.getByText('corr_status_01').tagName).toBe('CODE')
-    expect(screen.getByRole('heading', { level: 2, name: 'Check existing calls before retrying' })).toBeTruthy()
-    expect(screen.getByRole('link', { name: 'Open Calls' }).getAttribute('href')).toBe('/activity')
+    const region = screen.getByRole('region', { name: 'Retry after the affected system recovers' })
+    expect(within(region).getByRole('link', { name: 'Help' }).getAttribute('href')).toBe('/support')
   })
 
   it('routes non-call-safety degradations to the support recovery path', () => {
     renderRoute({
-      checkedAt: '9:07:08 AM',
+      checkedAt,
       checks: [
         { id: 'site', state: 'operational', detail: 'Public pages are responding.' },
         { id: 'market', state: 'operational', detail: 'Tool search and new Calls are ready.' },
@@ -192,7 +201,7 @@ describe('/status route', () => {
 
   it('copies a degraded probe request reference to the clipboard', async () => {
     renderRoute({
-      checkedAt: '9:08:09 AM',
+      checkedAt,
       checks: [
         { id: 'site', state: 'operational', detail: 'Public pages are responding.' },
         { id: 'market', state: 'degraded', detail: 'New Calls may fail. Check existing Calls before retrying.', requestRef: 'corr_status_03' },
@@ -211,7 +220,7 @@ describe('/status route', () => {
     let releaseInvalidate: () => void = () => {}
     mocks.invalidate.mockImplementation(() => new Promise<undefined>((resolve) => { releaseInvalidate = () => resolve(undefined) }))
     renderRoute({
-      checkedAt: '9:09:10 AM',
+      checkedAt,
       checks: [
         { id: 'site', state: 'operational', detail: 'Public pages are responding.' },
         { id: 'market', state: 'operational', detail: 'Tool search and new Calls are ready.' },

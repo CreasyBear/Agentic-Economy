@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 
-import type { ToolSearchResult } from '@/modules/capability-supply/public'
+import { deserializeToolSearchResult, serializeToolSearchResult, type ToolSearchResult } from '@/modules/capability-supply/public'
+import { projectToolSearchChoices, toolChoiceSearchOutputSchema } from '@/modules/registry/tool-choice-contracts'
 import * as decisionEngine from '@/modules/decision-engine/public'
 import { rerankToolSearchResult } from '@/modules/registry/tool-reranker'
 import {
@@ -126,6 +127,31 @@ describe('Jev x402 Tool Search Re-ranker (cookbooks/rerank_typesafe.md)', () => 
     })
   })
 
+  it('uses complete relevance answers without requiring a forced winner', async () => {
+    const fetchImpl = mockJevFetch({
+      match_0: { type: 'noul', noul: 0.1 },
+      match_1: { type: 'noul', noul: 0.9 },
+      match_2: { type: 'noul', noul: 0.2 },
+    })
+    const result = await rerankToolSearchResult(sampleOkResult, ERC20_QUERY, { openrouterApiKey: 'test-key', fetchImpl })
+    expect(result.kind).toBe('ok')
+    if (result.kind !== 'ok') return
+    expect(result.items.map(item => item.toolRef)).toEqual([TOOL_CRYPTO_TX.toolRef, TOOL_CURRENCY.toolRef, TOOL_TIMEZONE.toolRef])
+    expect(result.pagination).toEqual(sampleOkResult.pagination)
+    expect(result.items[0]).toBe(TOOL_CRYPTO_TX)
+  })
+
+  it.each([0, 0.5, 1])('preserves retrieval order for tied relevance %s without manufacturing a winner', async score => {
+    const result = await rerankToolSearchResult(sampleOkResult, ERC20_QUERY, {
+      openrouterApiKey: 'test-key',
+      fetchImpl: mockJevFetch(jevAnswersForTool(TOOL_CRYPTO_TX.toolRef, [score, score, score])),
+    })
+    expect(result.kind).toBe('ok')
+    if (result.kind !== 'ok') return
+    expect(result.items).toEqual(sampleOkResult.items)
+    expect(result.ranking.map(item => item.score)).toEqual([score, score, score])
+  })
+
   it('classifies every candidate and disables the frontier-LLM fallback', async () => {
     const gateway = vi.spyOn(decisionEngine, 'executeDecisionGateway').mockResolvedValue({
       tier: 'jev_system_one',
@@ -161,19 +187,12 @@ describe('Jev x402 Tool Search Re-ranker (cookbooks/rerank_typesafe.md)', () => 
     expect(request?.questions.match_0?.type).toBe('noul')
     expect(request?.questions.match_1?.type).toBe('noul')
     expect(request?.questions.match_2?.type).toBe('noul')
-    expect(request?.questions.best_match).toMatchObject({
-      type: 'choice',
-      criteria: {
-        'operation:v1:timezone_converter': expect.stringContaining('Timezone Converter'),
-        'operation:v1:crypto_tx_lookup': expect.stringContaining('ERC-20'),
-        'operation:v1:currency_exchange': expect.stringContaining('FX Currency Rates'),
-      },
-    })
+    expect(Object.keys(request?.questions ?? {})).toEqual(['match_0', 'match_1', 'match_2'])
     expect(gateway.mock.calls[0]?.[1]).toMatchObject({ disableSecondaryLlm: true })
     gateway.mockRestore()
   })
 
-  it('leaves candidates beyond maxCandidatesToScore in original tail order with score 0', async () => {
+  it('keeps unassessed tail candidates distinct from an observed zero through serialization and public projection', async () => {
     const fourItemResult: ToolSearchResult = {
       kind: 'ok',
       schemaVersion: 'registry-tools:v3',
@@ -192,7 +211,7 @@ describe('Jev x402 Tool Search Re-ranker (cookbooks/rerank_typesafe.md)', () => 
       maxCandidatesToScore: 2,
       openrouterApiKey: 'test-key',
       fetchImpl: mockJevFetch({
-        match_0: { type: 'noul', noul: 0.1 },
+        match_0: { type: 'noul', noul: 0 },
         match_1: { type: 'noul', noul: 0.9 },
         best_match: {
           type: 'choice',
@@ -211,16 +230,24 @@ describe('Jev x402 Tool Search Re-ranker (cookbooks/rerank_typesafe.md)', () => 
       'operation:v1:currency_exchange',
       'operation:v1:currency_exchange_overflow',
     ])
-    expect(reranked.ranking[2]).toEqual({
-      toolRef: 'operation:v1:currency_exchange',
-      rank: 3,
-      score: 0,
-    })
-    expect(reranked.ranking[3]).toEqual({
-      toolRef: 'operation:v1:currency_exchange_overflow',
-      rank: 4,
-      score: 0,
-    })
+    expect(reranked.ranking).toEqual([
+      { toolRef: TOOL_CRYPTO_TX.toolRef, rank: 1, score: 0.9 },
+      { toolRef: TOOL_TIMEZONE.toolRef, rank: 2, score: 0 },
+    ])
+    const roundTrip = deserializeToolSearchResult(serializeToolSearchResult(reranked))
+    expect(roundTrip).toEqual(reranked)
+    const publicResult = toolChoiceSearchOutputSchema.parse(projectToolSearchChoices(roundTrip))
+    expect(publicResult.kind).toBe('ok')
+    if (publicResult.kind !== 'ok') return
+    expect(publicResult.items.map(item => item.toolRef)).toEqual(reranked.items.map(item => item.toolRef))
+    expect(publicResult).not.toHaveProperty('ranking')
+  })
+
+  it('does not assess ambiguous duplicate Tool identities', async () => {
+    const duplicatePage = { ...sampleOkResult, items: [TOOL_TIMEZONE, TOOL_CRYPTO_TX, TOOL_TIMEZONE] }
+    const fetchImpl = mockJevFetch({})
+    await expect(rerankToolSearchResult(duplicatePage, ERC20_QUERY, { openrouterApiKey: 'test-key', fetchImpl })).resolves.toBe(duplicatePage)
+    expect(fetchImpl).not.toHaveBeenCalled()
   })
 
   it('preserves retriever order without calling a frontier LLM when Jev returns 500', async () => {

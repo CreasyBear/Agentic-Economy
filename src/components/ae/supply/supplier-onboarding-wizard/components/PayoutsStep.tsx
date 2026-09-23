@@ -4,11 +4,12 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 
+import { aeStatusToneVariants } from '@/lib/ui/status-presentation'
 import { TACTILE } from '../supplier-onboarding-wizard.contracts'
 import type { PayoutsStepProps } from '../supplier-onboarding-wizard.contracts'
 
 export function PayoutsStep({
-  payoutsConfigured,
+  payoutConnection,
   onConnectPayouts,
   onSkipForNow,
 }: PayoutsStepProps) {
@@ -26,35 +27,30 @@ export function PayoutsStep({
         <div className="flex items-center justify-between gap-3">
           <div className="grid gap-1">
             <div className="flex items-center gap-2 flex-wrap">
-              <span className="text-xs font-semibold text-foreground">Payout Status</span>
-              {payoutsConfigured ? (
-                <Badge variant="success" className="gap-1">
-                  <CheckCircle2Icon className="size-3" />
-                  Ready
-                </Badge>
-              ) : (
-                <Badge variant="warning" className="gap-1">
-                  <AlertCircleIcon className="size-3" />
-                  Action Required
-                </Badge>
-              )}
+              <span className="text-xs font-medium text-foreground">Payout Status</span>
+              <Badge variant={aeStatusToneVariants[payoutConnection.tone]} className="gap-1">
+                {payoutConnection.state === 'connected'
+                  ? <CheckCircle2Icon className="size-3" />
+                  : <AlertCircleIcon className="size-3" />}
+                {payoutConnection.label}
+              </Badge>
             </div>
             <span className="text-[11px] text-muted-foreground">
-              {payoutsConfigured
-                ? 'Bank account connected for monthly settlements.'
-                : 'Connect your Australian bank account or debit card for direct credit.'}
+              {payoutConnection.sentence}
             </span>
           </div>
         </div>
 
         <div className="flex items-center gap-2 pt-2 flex-wrap">
-          <Button
-            type="button"
-            onClick={onConnectPayouts}
-            className={`min-h-touch ${TACTILE}`}
-          >
-            Set up Payouts with Stripe
-          </Button>
+          {payoutConnection.action === undefined ? null : (
+            <Button
+              type="button"
+              onClick={onConnectPayouts}
+              className={`min-h-touch ${TACTILE}`}
+            >
+              {payoutConnection.action}
+            </Button>
+          )}
           <Button
             type="button"
             variant="outline"

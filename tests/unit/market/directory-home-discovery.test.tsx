@@ -26,9 +26,8 @@ function toolHref(name: string) { return new URL(screen.getByRole('link', { name
 it('orders editorial collections and preserves each source search in links and callbacks', () => {
   const { save, compare } = show()
   expect(screen.getAllByRole('heading', { level: 2 }).map(h => h.textContent)).toEqual(['Bring an idea into view', 'Find answers worth building on', 'Give your agent a workbench', 'Make sense of the markets', 'Find the right product', 'Know who you are working with'])
-  const href = screen.getByRole('link', { name: 'View Creative collection' }).getAttribute('href')!
-  const url = new URL(href, 'https://aecon.ai')
-  expect(url.searchParams.get('query')).toBe('image generation creative')
+  expect(screen.getByRole('link', { name: 'View collection: Creative' }).getAttribute('href')).toBe('#directory-collection-creative')
+  expect(screen.getByRole('link', { name: 'Create' }).getAttribute('href')).toBe('#directory-collection-creative')
   const toolUrl = toolHref(entry.title)
   expect(toolUrl.pathname).toBe(`/tools/${entry.provider}/${entry.slug}`)
   fireEvent.click(screen.getByRole('button', { name: `Save ${entry.title}` }))

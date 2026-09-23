@@ -5,7 +5,7 @@
  * - 402 Timezone Converter (402timezones.vercel.app from timezonePaymentRequired20260819Fixture)
  * - Onesource Ethereum Tx Lookup (api.onesource.io from onesourcePathRequest20260908Fixture)
  * - Onesource ERC20 Transfers (api.onesource.io from onesourceUnionRequest20260908Fixture)
- * - AEcon Sandbox Reference Tool (/api/v1/sandbox-reference from devSeedFixtures)
+ * - AEcon Sandbox FX Reference Tool (Frankfurter public keyless endpoint from devSeedFixtures)
  *
  * Invariants Enforced:
  * 1. Zero-Friction Semantic Ingest (Jev System One < 350ms)
@@ -24,8 +24,8 @@ import {
   onesourceUnionRequest20260908Fixture,
 } from '@/modules/capability-supply/public'
 import {
+  SANDBOX_TOOL_ENDPOINT_URL,
   SANDBOX_TOOL_LABEL,
-  SANDBOX_REFERENCE_ROUTE_PATH,
 } from '../../convex/devSeedFixtures'
 import {
   executeDecisionGateway,
@@ -86,11 +86,11 @@ export const REAL_APP_TOOLS: readonly RealAppTool[] = [
   {
     toolRef: 'operation:v1:sandbox_aecon_reference',
     name: SANDBOX_TOOL_LABEL,
-    description: 'Deterministic sandbox reference Tool that verifies signature, digest, and Quote admission.',
-    endpoint: SANDBOX_REFERENCE_ROUTE_PATH,
+    description: 'Current exchange rate for a currency pair from Frankfurter.',
+    endpoint: SANDBOX_TOOL_ENDPOINT_URL,
     priceAud: '1.000', // 1.00 AUD fixed sandbox reference price
-    inputContract: 'body_json',
-    sampleInput: { request: 'test-aecon-benchmark' },
+    inputContract: 'query_params',
+    sampleInput: { from: 'EUR', to: 'USD' },
   },
 ]
 
@@ -322,7 +322,8 @@ export class MagicalProcurementEngine {
       synthesizedParams.contract = '0xdac17f958d2ee523a2206206994597c13d831ec7' // USDT
       synthesizedParams.network = 'ethereum'
     } else if (tool.toolRef.includes('sandbox_aecon_reference')) {
-      synthesizedParams.request = need
+      synthesizedParams.from = 'EUR'
+      synthesizedParams.to = 'USD'
     }
 
     return {
@@ -379,7 +380,10 @@ export class MagicalProcurementEngine {
     return {
       status: 200,
       payload: {
-        result: `sandbox-reference:${params.request ?? 'executed'}`,
+        amount: 1,
+        base: String(params.from ?? 'EUR'),
+        date: '2026-09-22',
+        rates: { [String(params.to ?? 'USD')]: 1.18 },
       },
     }
   }

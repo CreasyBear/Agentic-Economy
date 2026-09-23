@@ -44,7 +44,7 @@ export function CallReceiptSkeleton() {
             <Skeleton className="h-4 w-full" />
           </div>
         ))}
-        <Skeleton className="h-10 w-full rounded-lg" />
+        <Skeleton className="h-10 w-full rounded-card" />
       </section>
 
       <section className="grid min-h-[13.5rem] gap-section" aria-hidden="true">

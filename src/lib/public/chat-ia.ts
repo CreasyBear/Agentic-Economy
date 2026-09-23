@@ -3,8 +3,18 @@
  * Destinations stay the five market tools; do not add harness prompts.
  */
 export const chatEmpty = {
-  title: 'Search the catalog.',
-  description: 'Name a job. Compare, inspect, then call. Price is on the card.',
+  title: 'Find Tools for an Agent.',
+  description: 'Compare and inspect. Then use one with your Agent. Price is on the card.',
+} as const
+
+export const chatLoading = 'Loading conversation…'
+
+export const chatThinking = 'Thinking…'
+
+export const chatClarify = {
+  otherLabel: 'Another answer',
+  otherPlaceholder: 'Type another answer…',
+  submitOther: 'Send answer',
 } as const
 
 export const chatSuggestions = [
@@ -29,11 +39,14 @@ export const chatComposer = {
   sending: 'Sending…',
   sendAria: 'Send message',
   sendingAria: 'Sending message',
+  stop: 'Stop',
+  stopAria: 'Stop generating',
+  newline: 'Enter sends. Shift+Enter inserts a newline.',
 } as const
 
 export const chatRecovery = {
   reference: 'Support reference',
-  browse: 'Browse Tools',
+  browse: 'Browse Market',
 } as const
 
 export const chatHandoffNotice = 'Signed in — messages from here are saved.'
@@ -44,7 +57,12 @@ export const chatShared = {
   loading: 'Loading conversation…',
   empty: 'No settled messages are available.',
   badge: 'Read-only',
+  loadMore: 'Load earlier messages',
+  loadingMore: 'Loading earlier messages…',
 } as const
+
+/** App-header slot filled by the chat thread controls on `/t/` and `/s/`. */
+export const chatHeaderActionsId = 'ae-chat-actions'
 
 export const chatHistory = {
   newChat: 'New chat',
@@ -93,7 +111,9 @@ export const chatToolStatus = {
   error: "Couldn't run",
 } as const
 
-export const chatBrowseMarket = 'Browse market'
+export const chatBrowseMarket = 'Browse Market'
+
+export const chatBelowMatch = 'Below a match'
 
 export function chatChoiceAction(readiness: string | undefined): 'Use' | 'Inspect' {
   return readiness === 'Ready now' ? 'Use' : 'Inspect'

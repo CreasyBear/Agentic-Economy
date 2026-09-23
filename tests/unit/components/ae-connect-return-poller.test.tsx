@@ -262,7 +262,7 @@ describe('AeConnectReturnPoller (W-33)', () => {
       />,
     )
     expect(screen.getByRole('link', { name: /add your first tool/i }).className).toContain(
-      'active:scale-[0.98]',
+      'active:scale-[0.96]',
     )
     ready.unmount()
 

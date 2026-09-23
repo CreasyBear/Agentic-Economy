@@ -3,13 +3,18 @@ import { describe, expect, it } from 'vitest'
 import { listActions } from '@/modules/actions'
 import { CHAT_TOOL_IDS } from '@/modules/chat/tool-card'
 
-const EXPECTED_CHAT_TOOL_IDS = [
+const EXPECTED_CHAT_ACTION_IDS = [
   'registry.tools.list',
   'registry.tools.search',
   'registry.tools.describe',
   'registry.tools.compare',
   'tool.quote',
   'tool.call',
+] as const
+
+const EXPECTED_CHAT_TOOL_IDS = [
+  ...EXPECTED_CHAT_ACTION_IDS,
+  'chat.clarify',
 ] as const
 
 describe('Tool chat prune boundary', () => {
@@ -33,7 +38,7 @@ describe('Tool chat prune boundary', () => {
 
     const chatActions = actions.filter(({ id }) => CHAT_TOOL_IDS.some((chatToolId) => chatToolId === id))
     const selectedIds = chatActions.map(({ id }) => id)
-    expect(selectedIds).toEqual(EXPECTED_CHAT_TOOL_IDS)
+    expect(selectedIds).toEqual([...EXPECTED_CHAT_ACTION_IDS])
     expect(selectedIds.filter((id) => excludedActionIds.includes(id))).toEqual([])
     const boundedCommercialIds = chatActions
       .filter(({ effect }) => effect.class === 'payment' || effect.spendExposure !== 'none')

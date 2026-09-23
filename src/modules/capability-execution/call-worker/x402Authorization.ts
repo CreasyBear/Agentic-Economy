@@ -19,6 +19,7 @@ import {
 } from '@/modules/capability-supply/server'
 import type {
   ProviderConnectionAuthorityValidator,
+  X402PaymentAuthorizationIdentity,
   X402PaymentSignatureRequest,
   X402PreparedAuthorization,
 } from '@/modules/capability-supply/route-transport-runtime'
@@ -62,6 +63,7 @@ export async function readX402Authorization(
     useCustodySigner?: boolean
     requestFingerprint?: string
     requestFingerprintContext?: CdpX402RequestFingerprintContext
+    authorityExpiresAt?: number
   }>,
 ): Promise<string | undefined> {
   const custodyConfiguration = expected.useCustodySigner === true
@@ -99,6 +101,7 @@ export async function readX402Authorization(
       requestFingerprint === undefined
       || material.requestFingerprint !== requestFingerprint
       || requestFingerprintContext === undefined
+      || expected.authorityExpiresAt === undefined
     ) return undefined
     return await readOrClaimManagedAuthorization(
       ctx,
@@ -107,6 +110,7 @@ export async function readX402Authorization(
       material,
       requestFingerprint,
       requestFingerprintContext,
+      expected.authorityExpiresAt,
     )
   }
   return await signAndRecordSandboxAuthorization(ctx, material)
@@ -173,6 +177,7 @@ async function signAndCommitManagedAuthorization(
   material: X402AttemptMaterial,
   requestFingerprint: string,
   requestFingerprintContext: CdpX402RequestFingerprintContext,
+  authorityExpiresAt: number,
   ownsSigningClaim = false,
 ): Promise<string | undefined> {
   const custodyConfiguration = currentManagedCustodyConfiguration(
@@ -240,6 +245,7 @@ async function signAndCommitManagedAuthorization(
   let committedIntent = persistedIntent
   const paymentSignature = await createCdpEvmX402PaymentSignature(request, {
     requestFingerprintContext,
+    authorityExpiresAt,
     ...(persistedIntent === undefined
       ? {
           onUnsignedMaterial: async (intent) => {
@@ -296,6 +302,7 @@ async function readOrClaimManagedAuthorization(
   material: X402AttemptMaterial,
   requestFingerprint: string,
   requestFingerprintContext: CdpX402RequestFingerprintContext,
+  authorityExpiresAt: number,
 ): Promise<string | undefined> {
   const custodyConfiguration = currentManagedCustodyConfiguration(
     material,
@@ -308,6 +315,7 @@ async function readOrClaimManagedAuthorization(
       material,
       requestFingerprint,
       requestFingerprintContext,
+      authorityExpiresAt,
     )
   }
 
@@ -337,6 +345,7 @@ async function readOrClaimManagedAuthorization(
         row,
         requestFingerprint,
         requestFingerprintContext,
+        authorityExpiresAt,
         isClaimWinner,
       )
     },
@@ -373,6 +382,9 @@ export function createX402PaymentCallbacks(
     onPaymentPossiblySubmitted?: () => void
   }>,
 ): X402PaymentCallbacks {
+  const authorityExpiresAt = input.dispatch.authority === undefined
+    ? undefined
+    : Date.parse(input.dispatch.authority.expiresAt)
   const managedBuyer = input.useCustodySigner === true
     && input.dispatch.sellerOnboardingCanary === undefined
   const managedCanary = input.useCustodySigner === true
@@ -556,6 +568,9 @@ export function createX402PaymentCallbacks(
           ? {}
           : { requestFingerprint: requestFingerprint ?? material.requestFingerprint }),
         ...(requestFingerprintContext === undefined ? {} : { requestFingerprintContext }),
+        ...(authorityExpiresAt === undefined || !Number.isSafeInteger(authorityExpiresAt)
+          ? {}
+          : { authorityExpiresAt }),
       } : {}),
     })
     if (signature === undefined || signature.length === 0) {
@@ -598,12 +613,22 @@ export function createX402PaymentCallbacks(
         ),
       })
     },
-    prepareX402PaymentAuthorization: async (request) => {
+    prepareX402PaymentAuthorization: async (
+      request: X402PaymentSignatureRequest
+        & X402PaymentAuthorizationIdentity
+        & Readonly<{ authorityExpiresAt: number }>,
+    ) => {
       if (!managedBuyer && !managedCanary) return undefined
       if (
         request.attemptRef !== input.durableAttemptRef
         || request.effectGeneration !== input.effectGeneration
         || request.paymentIdentifier !== input.operationKeyDigest
+      ) return undefined
+      if (request.authorityExpiresAt !== authorityExpiresAt) return undefined
+      if (
+        input.useCustodySigner !== true
+        && Date.now() + request.selectedRequirement.maxTimeoutSeconds * 1_000
+          > request.authorityExpiresAt
       ) return undefined
       const paymentCredentialRef = X402_MANAGED_CUSTODY_REF
       if (paymentCredentialRef === undefined || request.credential !== paymentCredentialRef) return undefined
@@ -718,6 +743,16 @@ export function createX402PaymentCallbacks(
         exponent: amount.exponent,
       })
       input.onPaymentPossiblySubmitted?.()
+    },
+    checkpointX402Response: async (response) => {
+      const { custodyRef: _custodyRef, authorizationDigest: _authorizationDigest, ...material } = response
+      await ctx.runMutation(internal.moneyX402PaymentAttempts.checkpointX402Response, {
+        dispatchRef: input.dispatch.callRef,
+        effectGeneration: input.effectGeneration,
+        toolRef: input.dispatch.toolRef,
+        inputDigest: input.dispatch.inputDigest,
+        ...material,
+      })
     },
     observeX402PaymentAttempt: async (event) => {
       const { amount, settlementEvidence, ...paymentEvent } = event

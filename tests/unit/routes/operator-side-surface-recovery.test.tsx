@@ -126,7 +126,7 @@ describe('Calls side-surface recovery', () => {
   })
 
   it('keeps Calls available with one actionable partial-state message when a summary fails', async () => {
-    const calls = { page: [], isDone: true, continueCursor: null }
+    const calls = { page: [callRow('kept', 'completed', 1)], isDone: true, continueCursor: '' }
     const spend = { kind: 'available', spendUnits: '0' }
     serverMocks.readCalls.mockResolvedValue(calls)
     serverMocks.readUsage.mockRejectedValue(new Error('usage offline'))
@@ -142,7 +142,8 @@ describe('Calls side-surface recovery', () => {
     })
     const { invalidate } = renderActivity(result as ActivityLoaderResult)
     expect(screen.getAllByText('Some summaries are unavailable')).toHaveLength(1)
-    expect(screen.getByText('No Calls yet')).toBeTruthy()
+    expect(screen.getByText('Tool kept')).toBeTruthy()
+    expect(screen.queryByText('No Calls yet')).toBeNull()
     expect(screen.queryByText('Usage unavailable')).toBeNull()
     const monthlySummary = screen.getByRole('region', { name: 'This month' })
     expect(within(monthlySummary).getByText('Some summaries are unavailable')).toBeTruthy()
@@ -161,7 +162,7 @@ describe('Calls side-surface recovery', () => {
     const recent = screen.getByRole('region', { name: 'Recent Calls' })
     const monthlySummary = screen.getByRole('region', { name: 'This month' })
     expect(within(attention).getByText('Tool attention')).toBeTruthy()
-    expect(within(attention).getByText('Open — outcome uncertain')).toBeTruthy()
+    expect(within(attention).getByText('Needs review')).toBeTruthy()
     expect(within(attention).queryByText('Tool routine')).toBeNull()
     expect(within(recent).getByText('Tool routine')).toBeTruthy()
     expect(within(recent).getByText('Resolved — delivered')).toBeTruthy()
@@ -181,7 +182,7 @@ describe('Calls side-surface recovery', () => {
 
     const attention = screen.getByRole('region', { name: 'Needs attention' })
     expect(within(attention).getByText('Tool contradictory')).toBeTruthy()
-    expect(within(attention).getByText('Open — outcome uncertain')).toBeTruthy()
+    expect(within(attention).getByText('Needs review')).toBeTruthy()
     expect(screen.getByRole('columnheader', { name: /Purchase status/u })).toBeTruthy()
   })
 
@@ -197,7 +198,7 @@ describe('Calls side-surface recovery', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Load more' }))
     const failure = await screen.findByRole('alert')
-    expect(failure.textContent).toContain('Could not load older calls.')
+    expect(failure.textContent).toContain('Could not load older Calls.')
     expect(failure.textContent).toContain('A$0.00 affected')
     expect(screen.getByText('Tool newer')).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Try loading more again' }))

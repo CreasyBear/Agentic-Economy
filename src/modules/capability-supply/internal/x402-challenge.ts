@@ -25,6 +25,10 @@ export type X402Challenge = Readonly<{
   extensions?: Readonly<Record<string, unknown>>
 }>
 
+// The installed x402 verifier rejects EIP-3009 authorizations with less than
+// six seconds remaining. Call authority must leave at least this usable window.
+export const X402_MIN_AUTHORIZATION_VALIDITY_SECONDS = 6
+
 export type X402PaymentSignatureRequest = Readonly<{
   challenge: X402Challenge
   /** Opaque server-only payer credential locator; resolve it only at signing. */

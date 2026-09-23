@@ -17,7 +17,7 @@ const CALLABLE_SEARCH_HREF = '/market?window=30d&query=Find+an+award+flight+with
 describe('shared suggested next-action projection', () => {
   it.each([
     ['routeable', false, false, 'Call Tool'],
-    ['routeable', true, false, 'Connect agent'],
+    ['routeable', true, false, 'Connect an Agent'],
     ['routeable', true, true, 'Call Tool'],
     ['setup_required', true, false, 'Find callable alternatives'],
     ['unavailable', true, false, 'Find callable alternatives'],
@@ -41,7 +41,7 @@ describe('shared suggested next-action projection', () => {
     ],
     [
       { subject: 'tool', state: 'connection_required', toolRef: TOOL_REF, searchQuery: SEARCH_QUERY },
-      { label: 'Connect agent', kind: 'navigate', command: 'ae connect', href: '/for-agents' },
+      { label: 'Connect an Agent', kind: 'navigate', command: 'ae connect', href: '/for-agents' },
     ],
     [
       { subject: 'tool', state: 'read_only', toolRef: TOOL_REF, searchQuery: SEARCH_QUERY },
@@ -93,7 +93,7 @@ describe('shared suggested next-action projection', () => {
     ],
     [
       { subject: 'connection', state: 'missing', actor: 'buyer' },
-      { label: 'Connect agent', kind: 'navigate', command: 'ae connect', href: '/for-agents' },
+      { label: 'Connect an Agent', kind: 'navigate', command: 'ae connect', href: '/for-agents' },
     ],
     [
       { subject: 'connection', state: 'missing', actor: 'provider' },

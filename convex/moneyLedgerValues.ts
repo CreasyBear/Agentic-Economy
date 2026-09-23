@@ -1,6 +1,7 @@
 import { v } from 'convex/values'
 
 import { sourceWriteArgs } from './sourceWriteAdmission'
+import { spendingPeriodsValue } from '@/modules/money/public'
 
 export const identifier = v.string()
 export const accountHistoryResultValue = v.union(
@@ -59,6 +60,35 @@ export const billingSourceArgs = {
   operationKey: identifier,
   correlationId: identifier,
   ...sourceWriteArgs,
+}
+
+/** The same managed Call booking shape is used by every Formance consequence. */
+export const managedCallBookingArgs = {
+  callRef: v.string(),
+  quoteRef: v.string(),
+  idempotencyKey: v.string(),
+  accountRef: v.string(),
+  principalRef: v.string(),
+  agentBudgetGeneration: v.number(),
+  legalCustomerRef: v.string(),
+  legalCustomerGeneration: v.number(),
+  treasuryRef: v.string(),
+  treasuryGeneration: v.number(),
+  toolRef: v.string(),
+  providerRef: v.string(),
+  authorityGeneration: v.number(),
+  policyGeneration: v.number(),
+  buyerAmountUnits: v.string(),
+  buyerRevenueUnits: v.string(),
+  buyerTaxUnits: v.string(),
+  providerAmountUnits: v.string(),
+  quoteDigest: v.string(),
+  inputDigest: v.string(),
+  policyDigest: v.string(),
+  rateEvidenceDigest: v.string(),
+  treasuryEvidenceDigest: v.string(),
+  x402RequirementDigest: v.string(),
+  spendingPeriods: v.optional(spendingPeriodsValue),
 }
 export const checkoutEventArg = v.object({
   kind: v.literal('checkout'),

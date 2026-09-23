@@ -5,6 +5,7 @@ export {
   PrincipalRegistryError,
   generatePrincipalRef,
   principalRef,
+  isPrincipalRef,
 } from './registry'
 export type {
   Principal,

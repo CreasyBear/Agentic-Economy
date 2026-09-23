@@ -4,6 +4,7 @@ import { degradeBackend } from '../../src/lib/observability/degrade-backend'
 import { canonicalDigest } from '../../src/modules/common/canonical-digest'
 import type { MutationCtx, QueryCtx } from '../_generated/server'
 import { recordMarketEvidenceFact } from '../marketEvidence'
+import { internal } from '../_generated/api'
 import {
   X402_PAYMENT_SIGNING_CLAIM_LEASE_MS,
   type AttemptRow,
@@ -428,13 +429,18 @@ export async function observeX402PaymentAttemptHandler(
     && row.paymentResponseDigest !== args.settlementDigest
   ) throw new Error('x402_payment_response_identity_conflict')
   const targetState = args.settlementStatus === 'unknown' ? 'reconciliation_required' : args.state
+  const evidenceRefs = [...new Set([
+    ...row.evidenceRefs.filter(ref => ref.startsWith(`chain:${row.network}:`)
+      || ref.startsWith('response-request:') || ref.startsWith('response-payment:')),
+    ...args.evidenceRefs,
+  ])]
   if (row.state === 'observed' || row.state === 'reconciliation_required') {
     const sameEvidence = (
       row.state === targetState
       && (row.settlementStatus ?? undefined) === args.settlementStatus
       && (row.paymentResponseDigest ?? undefined) === args.settlementDigest
-      && row.evidenceRefs.length === args.evidenceRefs.length
-      && row.evidenceRefs.every((ref, index) => ref === args.evidenceRefs[index])
+      && row.evidenceRefs.length === evidenceRefs.length
+      && row.evidenceRefs.every((ref, index) => ref === evidenceRefs[index])
     )
     if (sameEvidence) return null
     throw new Error('x402_payment_attempt_observation_state_invalid')
@@ -447,7 +453,7 @@ export async function observeX402PaymentAttemptHandler(
     ...(args.settlementStatus === undefined ? {} : { settlementStatus: args.settlementStatus }),
     ...(args.settlementDigest === undefined ? {} : { paymentResponseDigest: args.settlementDigest }),
     observedAt: Date.now(),
-    evidenceRefs: args.evidenceRefs,
+    evidenceRefs,
   })
   if (args.settlementStatus === 'settled') {
     await recordMarketEvidenceFact(ctx, 'ae_settlement', `${row.attemptRef}:${row.effectGeneration}`, Date.now())
@@ -455,6 +461,54 @@ export async function observeX402PaymentAttemptHandler(
   if (args.settlementStatus === 'unknown') {
     await recordMarketEvidenceFact(ctx, 'ae_reconciliation_required', `${row.attemptRef}:${row.effectGeneration}`, Date.now())
   }
+  return null
+}
+
+/** Retain response bytes without claiming payment or delivery has completed. */
+export async function checkpointX402ResponseHandler(
+  ctx: MutationCtx,
+  args: Readonly<{
+    dispatchRef: string; attemptRef: string; effectGeneration: number;
+    toolRef: string; inputDigest: string; paymentIdentifier: string;
+    responseDigest: string; outputJson: string;
+    settlementTransactionRef?: string;
+    requestDigest: string; paymentResponseDigest?: string;
+  }>,
+): Promise<null> {
+  const output = quarantinedOutputFromArgs({
+    settlementStatus: 'unknown', quarantinedResponseDigest: args.responseDigest,
+    quarantinedOutputJson: args.outputJson,
+  })
+  const row = await loadByAttempt(ctx, args.attemptRef, args.effectGeneration)
+  if (row === null || row.dispatchRef !== args.dispatchRef
+    || row.toolRef !== args.toolRef || row.inputDigest !== args.inputDigest
+    || row.paymentIdentifier !== args.paymentIdentifier
+    || !['possibly_submitted', 'observed', 'reconciliation_required'].includes(row.state)) {
+    throw new Error('x402_payment_observation_attribution_invalid')
+  }
+  const persisted = quarantinedOutputFromRow(row)
+  const txRef = args.settlementTransactionRef
+  if (!/^sha256:[0-9a-f]{64}$/.test(args.requestDigest)
+    || (args.paymentResponseDigest !== undefined && !/^sha256:[0-9a-f]{64}$/.test(args.paymentResponseDigest))) {
+    throw new Error('x402_payment_observation_attribution_invalid')
+  }
+  if (txRef !== undefined && (!txRef.startsWith(`chain:${row.network}:`)
+    || !/^chain:eip155:\d+:0x[0-9a-fA-F]{64}$/.test(txRef))) {
+    throw new Error('x402_payment_observation_attribution_invalid')
+  }
+  if (persisted !== undefined) {
+    if (!sameQuarantinedOutput(persisted, output)) throw new Error('x402_payment_quarantined_output_conflict')
+    return null
+  }
+  await ctx.db.patch(row._id, {
+    quarantinedResponseDigest: args.responseDigest, quarantinedOutputJson: args.outputJson,
+    evidenceRefs: [...new Set([...row.evidenceRefs, `response-request:${args.requestDigest}`,
+      ...(args.paymentResponseDigest === undefined ? [] : [`response-payment:${args.paymentResponseDigest}`]),
+      ...(txRef === undefined ? [] : [txRef])])],
+  })
+  if (txRef !== undefined) await ctx.scheduler.runAfter(60_000, internal.moneyX402PaymentAttempts.beginResponseRecovery, {
+    callRef: args.dispatchRef, attempt: 0,
+  })
   return null
 }
 
@@ -505,7 +559,7 @@ export async function recordX402PaymentObservationHandler(
     const missingObservationDigests = observationDigests.every((value) => value === undefined)
     if (missingObservationDigests) {
       if (
-        persistedQuarantinedOutput !== undefined
+        persistedQuarantinedOutput !== undefined && quarantinedOutput !== undefined
         && !sameQuarantinedOutput(persistedQuarantinedOutput, quarantinedOutput)
       ) throw new Error('x402_payment_quarantined_output_conflict')
       await ctx.db.patch(row._id, {
@@ -531,12 +585,13 @@ export async function recordX402PaymentObservationHandler(
       || row.transportObservationDigest !== args.transportObservationDigest
       || row.transportRequestDigest !== args.transportRequestDigest
     ) throw new Error('x402_payment_observation_attribution_invalid')
-    if (!sameQuarantinedOutput(persistedQuarantinedOutput, quarantinedOutput)) {
+    if (quarantinedOutput !== undefined && !sameQuarantinedOutput(persistedQuarantinedOutput, quarantinedOutput)) {
       throw new Error('x402_payment_quarantined_output_conflict')
     }
     return null
   }
-  if (persistedQuarantinedOutput !== undefined) {
+  if (persistedQuarantinedOutput !== undefined && quarantinedOutput !== undefined
+    && !sameQuarantinedOutput(persistedQuarantinedOutput, quarantinedOutput)) {
     throw new Error('x402_payment_quarantined_output_conflict')
   }
   await ctx.db.patch(row._id, {

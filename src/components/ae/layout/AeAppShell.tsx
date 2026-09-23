@@ -1,297 +1,101 @@
-import { Fragment, useEffect, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties, type ReactNode, type RefObject } from 'react'
-import { Link, useMatches, useMatchRoute, useRouter } from '@tanstack/react-router'
-import { Show, UserButton } from '@clerk/tanstack-react-start'
-import { ArrowLeftIcon, MenuIcon, XIcon } from 'lucide-react'
+import { useEffect, useRef, type CSSProperties, type ReactNode } from 'react'
 
-import { AeCommandPanel, CommandPanelProvider } from '@/components/ae/command-panel'
-import {
-  KeyboardShortcutsDialog,
-  useGlobalShortcuts,
-} from '@/components/ae/shortcuts/KeyboardShortcutsDialog'
-import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet'
-import { emitFunnelEventOnce } from '@/lib/observability/funnel-client'
-import { buttonVariants } from '@/components/ui/button-variants'
-import { AeSiteDrawerNav, AeSiteIconButton } from '@/components/ae/website/AeSiteNav'
-import { AeVerticalHairline } from '@/components/ae/website/AeSiteMarks'
-import { AECON_MARK_SRC, AECON_MOBILE_LOCKUP_SRC, aeconMarkClassName } from '@/content/brand-assets'
+import { AeOwnerMobileNavigation } from '@/components/ae/layout/AeOwnerMobileNavigation'
+import { OperatorChromeProvider } from '@/components/ae/layout/AeOperatorPage'
+import { KeyboardShortcutsDialog } from '@/components/ae/shortcuts/KeyboardShortcutsDialog'
+import { CommandPanelProvider } from '@/components/ae/command-panel'
+import { SidebarInset, SidebarProvider } from '@/components/ui/sidebar'
 import { cn } from '@/lib/utils'
-import { ThemeToggle } from '@/components/ae/layout/ThemeToggle'
-import {
-  AeNetworkHealthBanner,
-  AeNetworkHealthIndicator,
-} from '@/components/ae/layout/AeNetworkHealthIndicator'
 
-type HeaderNavItem = {
-  to: string
-  label: string
-  search?: Record<string, string>
-  order: number
-}
+import { AeAppHeader } from './app-shell/AeAppHeader'
+import { useAppShellState } from './app-shell/useAppShellState'
 
-function AeFunnelAttributionBoot() {
+function usePublicDocumentFocus(pathname: string) {
+  const previousPathRef = useRef<string | undefined>(undefined)
   useEffect(() => {
-    emitFunnelEventOnce({ eventType: 'visitor_attributed', stage: 'visitor', correlationPrefix: 'visitor' })
-  }, [])
-
-  return null
-}
-
-function AeSkipFocusBridge() {
-  useEffect(() => {
-    const focusTarget = () => {
-      const targetId = window.location.hash === '#ae-app-shell-main'
-        ? 'ae-app-shell-main'
-        : window.location.hash === '#main-content'
-          ? 'main-content'
-          : undefined
-      if (targetId === undefined) return
-
-      const main = document.getElementById(targetId)
-      if (main === null) return
-
-      main.setAttribute('tabindex', '-1')
-      main.focus({ preventScroll: true })
+    if (previousPathRef.current === undefined) {
+      previousPathRef.current = pathname
+      return
     }
-
-    window.addEventListener('hashchange', focusTarget)
-    focusTarget()
-    return () => window.removeEventListener('hashchange', focusTarget)
-  }, [])
-
-  return null
-}
-
-function useHeaderElevated(sentinelRef: RefObject<HTMLDivElement | null>): boolean {
-  const [elevated, setElevated] = useState(false)
-
-  useEffect(() => {
-    const sentinel = sentinelRef.current
-    if (typeof IntersectionObserver === 'undefined' || sentinel === null) return
-
-    // useState(false) is the synchronous at-rest init; the observer's own
-    // initial callback reconciles restored scroll positions against the
-    // same 8px threshold via the h-2 sentinel strip.
-    const observer = new IntersectionObserver((entries) => {
-      const entry = entries[0]
-      if (entry !== undefined) setElevated(!entry.isIntersecting)
+    if (previousPathRef.current === pathname) return
+    previousPathRef.current = pathname
+    const frame = window.requestAnimationFrame(() => {
+      document.querySelector<HTMLElement>('main#main-content[data-shell-mode]')?.focus()
     })
-    observer.observe(sentinel)
-    return () => observer.disconnect()
-  }, [sentinelRef])
-
-  return elevated
+    return () => window.cancelAnimationFrame(frame)
+  }, [pathname])
 }
-
-/**
- * The one persistent app frame, owned by the root route. Renders the sticky
- * header (brand, primary nav, command search, auth actions, mobile drawer)
- * exactly once so it never remounts between public market pages and the
- * owner console. Public pages render their own `<main>`/footer via
- * `AePublicPage`; the operator layout renders its `Sidebar` + `SidebarInset`
- * inside the flex row below the header.
- */
-const subscribeNever = () => () => {}
 
 export function AeAppShell({ children }: { children: ReactNode }) {
-  const [mobileNavOpen, setMobileNavOpen] = useState(false)
-  const [commandOpen, setCommandOpen] = useState(false)
-  const [shortcutsOpen, setShortcutsOpen] = useState(false)
-  const sentinelRef = useRef<HTMLDivElement>(null)
-  const elevated = useHeaderElevated(sentinelRef)
-  const matches = useMatches()
-  const operatorWorkspace = matches.some(match => match.staticData.shell === 'operator')
-  const isMinimalShell = matches.some(match => match.staticData?.shellMode === 'minimal')
+  const shell = useAppShellState()
+  usePublicDocumentFocus(shell.pathname)
+  const chatFrame = shell.pathname.startsWith('/t/') || shell.pathname.startsWith('/s/')
+  const contentClassName = cn(
+    'flex min-h-0 flex-1 flex-col',
+    chatFrame ? 'overflow-hidden' : null,
+    shell.hidePublicFooter ? '[&_footer]:hidden' : null,
+  )
 
-  useEffect(() => {
-    if (operatorWorkspace) setMobileNavOpen(false)
-  }, [operatorWorkspace])
-
-  function handleCommandOpenChange(open: boolean) {
-    if (open) setMobileNavOpen(false)
-    setCommandOpen(open)
-  }
-
-  useGlobalShortcuts({
-    onOpenShortcuts: () => setShortcutsOpen(true),
-    isShortcutsOpen: shortcutsOpen,
-  })
-
-  // False during SSR and hydration, true once React runs on the client: lets
-  // browser specs probe the frame only after the DOM is React's.
-  const hydrated = useSyncExternalStore(subscribeNever, () => true, () => false)
+  const header = (
+    <AeAppHeader
+      signedIn={shell.isSignedIn}
+      operatorRole={shell.operatorRole}
+      canAccessAdmin={shell.canAccessAdmin}
+      minimal={shell.isMinimalShell}
+      mobileNavOpen={shell.mobileNavOpen}
+      setMobileNavOpen={shell.setMobileNavOpen}
+      elevated={shell.elevated}
+      hydrated={shell.hydrated}
+      chatFrame={chatFrame}
+    />
+  )
 
   return (
-    <div className="flex min-h-svh flex-col" style={{ '--header-height': '4rem' } as CSSProperties}>
-      <AeFunnelAttributionBoot />
-      <AeSkipFocusBridge />
+    <div
+      className={cn('flex min-h-svh flex-col', chatFrame ? 'h-svh overflow-hidden' : null)}
+      style={{ '--header-height': '4rem' } as CSSProperties}
+    >
       <a
         data-testid="skip-to-content"
         href="#main-content"
-        className="sr-only focus:not-sr-only focus:absolute focus:start-gutter focus:top-gutter focus:z-20 focus:rounded-md focus:bg-container focus:px-gutter focus:py-intra focus:text-sm focus:font-medium focus:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+        className="sr-only focus:not-sr-only focus:absolute focus:start-gutter focus:top-gutter focus:z-30 focus:rounded-md focus:bg-container focus:px-gutter focus:py-intra focus:text-sm focus:font-medium focus:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
       >
         Skip to content
       </a>
-      <div ref={sentinelRef} aria-hidden="true" className="pointer-events-none absolute inset-x-0 top-0 h-2" />
-      <CommandPanelProvider open={commandOpen} onOpenChange={handleCommandOpenChange}>
-        <header
-          data-hydrated={hydrated ? 'true' : undefined}
-          data-shell="app-header"
-          className="sticky top-0 z-30 shrink-0 border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/85"
-        >
-          {isMinimalShell ? (
-            <div className="flex h-(--header-height) min-h-touch items-center justify-between px-gutter">
-              <BrandLink />
-              <div className="flex items-center gap-intra">
-                <AeNetworkHealthIndicator withBanner={false} />
-                <ThemeToggle />
-                <Link
-                  to="/market"
-                  className="inline-flex min-h-touch items-center gap-1 font-sans text-xs font-medium text-muted-foreground transition-colors hover:text-foreground active:scale-[0.98] motion-reduce:transition-none motion-reduce:active:scale-100"
-                >
-                  <ArrowLeftIcon aria-hidden="true" className="size-3.5" />
-                  Back to market
-                </Link>
-              </div>
-            </div>
-          ) : (
-            <Sheet open={mobileNavOpen} onOpenChange={setMobileNavOpen}>
-              <CloseDrawerOnDesktop onClose={setMobileNavOpen} />
-              <div
-                data-elevated={elevated ? '' : undefined}
-                className="ae-nav flex h-(--header-height) min-h-(--header-height) items-center gap-related px-1 shadow-none transition-shadow duration-200 ease-out data-[elevated]:shadow-soft motion-reduce:transition-none sm:px-2"
+      <div id="ae-app-shell-sentinel" aria-hidden="true" className="pointer-events-none absolute inset-x-0 top-0 h-2" />
+      <CommandPanelProvider open={shell.commandOpen} onOpenChange={shell.handleCommandOpenChange}>
+        {shell.isMinimalShell ? (
+          <>
+            {header}
+            <div className={contentClassName}>{children}</div>
+          </>
+        ) : (
+          // Keep the frame depth stable while Clerk resolves; swapping wrappers here remounts routed pages.
+          <SidebarProvider className="min-h-0 flex-1" defaultOpen>
+            <OperatorChromeProvider>
+              <SidebarInset
+                role="presentation"
+                className={cn(
+                  chatFrame ? 'h-full min-h-0 overflow-hidden' : 'min-h-svh',
+                  shell.isSignedIn
+                    ? 'pb-[calc(var(--ae-mobile-nav-height)+env(safe-area-inset-bottom,0px))] md:pb-0'
+                    : null,
+                )}
               >
-                <BrandLink />
-                {operatorWorkspace ? null : <AppHeaderNav />}
-                <div className="ms-auto flex items-center gap-intra">
-                  <AeNetworkHealthIndicator withBanner={false} />
-                  <AeCommandPanel />
-                  <ThemeToggle />
-                  <Show when="signed-out" fallback={<UserButton />}>
-                    <Link
-                      to="/sign-in/$"
-                      params={{ _splat: '' }}
-                      className={cn(buttonVariants({ variant: 'ghost' }), 'hidden lg:inline-flex')}
-                    >
-                      Sign in
-                    </Link>
-                  </Show>
-                  {operatorWorkspace ? null : (
-                    <SheetTrigger
-                      render={
-                        <AeSiteIconButton
-                          ariaLabel={mobileNavOpen ? 'Close public menu' : 'Open public menu'}
-                          className="md:hidden"
-                        >
-                          <MenuIcon aria-hidden="true" />
-                        </AeSiteIconButton>
-                      }
-                    />
-                  )}
-                </div>
-              </div>
-              <SheetContent side="left" className="w-80 max-w-[calc(100vw-2rem)] p-0" showCloseButton={false}>
-                <SheetHeader className="border-b border-border">
-                  <div className="flex items-center justify-between gap-3">
-                    <SheetTitle>Public navigation</SheetTitle>
-                    <AeSiteIconButton ariaLabel="Close public menu" onClick={() => setMobileNavOpen(false)}>
-                      <XIcon aria-hidden="true" />
-                    </AeSiteIconButton>
-                  </div>
-                  <SheetDescription className="sr-only">Choose where to go on Agentic Economy.</SheetDescription>
-                </SheetHeader>
-                <AeSiteDrawerNav onNavigate={() => setMobileNavOpen(false)} />
-                <div className="flex items-center justify-between border-t border-border p-gutter">
-                  <Show when="signed-out" fallback={<UserButton />}>
-                    <Link
-                      to="/sign-in/$"
-                      params={{ _splat: '' }}
-                      onClick={() => setMobileNavOpen(false)}
-                      className={buttonVariants({ variant: 'outline' })}
-                    >
-                      Sign in
-                    </Link>
-                  </Show>
-                  <ThemeToggle />
-                </div>
-              </SheetContent>
-            </Sheet>
-          )}
-          <AeNetworkHealthBanner />
-        </header>
-        <div className="flex flex-1 flex-col md:flex-row">{children}</div>
-        <KeyboardShortcutsDialog open={shortcutsOpen} onOpenChange={setShortcutsOpen} />
+                {header}
+                <div className={contentClassName}>{children}</div>
+                {shell.isSignedIn ? (
+                  <AeOwnerMobileNavigation
+                    currentPath={shell.pathname}
+                    canAccessAdmin={shell.canAccessAdmin}
+                  />
+                ) : null}
+              </SidebarInset>
+            </OperatorChromeProvider>
+          </SidebarProvider>
+        )}
+        <KeyboardShortcutsDialog open={shell.shortcutsOpen} onOpenChange={shell.setShortcutsOpen} />
       </CommandPanelProvider>
     </div>
-  )
-}
-
-function CloseDrawerOnDesktop({ onClose }: { onClose: (open: boolean) => void }) {
-  useEffect(() => {
-    const mediaQuery = window.matchMedia('(min-width: 1024px)')
-    const handleChange = () => {
-      if (mediaQuery.matches) onClose(false)
-    }
-    mediaQuery.addEventListener('change', handleChange)
-    return () => mediaQuery.removeEventListener('change', handleChange)
-  }, [onClose])
-
-  return null
-}
-
-function BrandLink() {
-  return (
-    <Link
-      to="/"
-      aria-label="Agentic Economy home"
-      className="flex min-h-touch min-w-touch items-center gap-related no-underline active:scale-[0.98] transition-transform duration-100 ease-out motion-reduce:transition-none motion-reduce:active:scale-100"
-    >
-      <img src={AECON_MARK_SRC} alt="" aria-hidden="true" className={cn(aeconMarkClassName.light, 'hidden sm:block')} />
-      <img src={AECON_MOBILE_LOCKUP_SRC} alt="" aria-hidden="true" className="h-7 w-auto max-w-32 sm:hidden" />
-    </Link>
-  )
-}
-
-function AppHeaderNav() {
-  const { routesByPath } = useRouter()
-  const items = useMemo(
-    () =>
-      Object.values(routesByPath)
-        .flatMap((route) => {
-          const nav = route.options.staticData?.nav
-          if (nav?.header === undefined) return []
-          return [{ to: route.to, label: nav.label, search: nav.search, order: nav.header.order }]
-        })
-        .sort((a, b) => a.order - b.order),
-    [routesByPath],
-  )
-
-  return (
-    <nav aria-label="Primary" className="hidden items-center md:flex">
-      {items.map((item, index) => (
-        <Fragment key={item.to}>
-          {index > 0 ? <AeVerticalHairline /> : null}
-          <AppHeaderNavLink item={item} />
-        </Fragment>
-      ))}
-    </nav>
-  )
-}
-
-function AppHeaderNavLink({ item }: { item: HeaderNavItem }) {
-  const matchRoute = useMatchRoute()
-  const active = matchRoute({ to: item.to, fuzzy: true, includeSearch: false }) !== false
-
-  return (
-    <Link
-      to={item.to}
-      {...(item.search === undefined ? {} : { search: item.search })}
-      aria-current={active ? 'page' : undefined}
-      className={cn(
-        'relative inline-flex min-h-touch items-center px-related font-sans text-sm font-medium tracking-tight text-foreground no-underline transition-[color,transform] duration-100 ease-out hover:text-info active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 motion-reduce:transition-none motion-reduce:active:scale-100',
-        active ? 'text-info after:absolute after:bottom-1 after:start-[40%] after:h-0.5 after:w-[20%] after:bg-info' : null,
-      )}
-    >
-      {item.label}
-    </Link>
   )
 }

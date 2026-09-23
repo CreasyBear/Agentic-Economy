@@ -22,6 +22,12 @@ export const INVALID_LIMIT_STRINGS = [
 /** Cursor a route never issued; well-formed as a string, garbage as a cursor. */
 export const MALFORMED_CURSOR = 'not-a-valid-cursor'
 
+/** `/api/v1/market-requests/withdraw` must reject extras and malformed identities. */
+export const INVALID_MARKET_REQUEST_WITHDRAW_BODIES = [
+  {}, { requestRef: '' }, { requestRef: 123 }, { requestRef: 'x'.repeat(301) },
+  { requestRef: 'market-request:one', ownerId: 'another-owner' },
+] as const
+
 /** One character past the shared 512-byte cursor ceiling used by these routes. */
 export const OVERSIZED_CURSOR = 'x'.repeat(513)
 

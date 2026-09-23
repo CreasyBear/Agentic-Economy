@@ -97,7 +97,7 @@ export function AeAccountFundingPanel({
       {port === undefined || (!constraintsLoading && constraints?.kind !== 'available') ? (
         <Alert>
           <AlertTitle>Account funding is unavailable</AlertTitle>
-          <AlertDescription>Funding limits could not be confirmed. No payment was started.</AlertDescription>
+          <AlertDescription>Funding limits could not be confirmed. No payment was made. Nothing was charged.</AlertDescription>
         </Alert>
       ) : null}
       {errorMessage !== undefined ? (
@@ -265,7 +265,7 @@ export function AeAccountFundingPanel({
       ) : null}
       <div className="flex flex-wrap gap-2">
         {checkoutResumable ? (
-          <Button type="button" disabled={checking || pending} onClick={resumeCheckout} className="min-h-touch">
+          <Button type="button" variant="secondary" disabled={checking || pending} onClick={resumeCheckout} className="min-h-touch">
             Continue secure payment
           </Button>
         ) : canStartAnotherPayment(paymentStatus, session) ? (

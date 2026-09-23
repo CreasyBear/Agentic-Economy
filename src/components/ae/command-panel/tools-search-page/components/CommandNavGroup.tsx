@@ -8,6 +8,7 @@ export type CommandNavGroupProps = Readonly<{
   isActive: boolean
   navItems: readonly CommandNavigationItem[]
   onNavigate?: (href: string) => void
+  onOpenSettings?: (scope: 'personal' | 'workspace') => void
   onClearPendingIntent: () => void
 }>
 
@@ -15,6 +16,7 @@ export function CommandNavGroup({
   isActive,
   navItems,
   onNavigate,
+  onOpenSettings,
   onClearPendingIntent,
 }: CommandNavGroupProps) {
   if (navItems.length === 0) return null
@@ -30,14 +32,17 @@ export function CommandNavGroup({
             disabled={!isActive}
             onSelect={() => {
               onClearPendingIntent()
-              onNavigate?.(item.href)
+              if (item.opensSettings !== undefined) onOpenSettings?.(item.opensSettings)
+              else onNavigate?.(item.href)
             }}
             className="min-h-touch gap-intra px-gutter py-intra"
           >
             <Icon aria-hidden="true" className="size-4 shrink-0 text-muted-foreground" />
             <span className="grid min-w-0 flex-1 gap-0.5">
               <span className="truncate text-sm font-medium text-foreground">{item.label}</span>
-              <span className="truncate font-mono text-xs text-muted-foreground">{item.href}</span>
+              <span className="truncate font-mono text-xs text-muted-foreground">
+                {item.opensSettings !== undefined ? 'Opens here · task unchanged' : item.href}
+              </span>
             </span>
           </CommandItem>
         )

@@ -1,7 +1,7 @@
 import { Link } from '@tanstack/react-router'
 
 import { AeCopyCommand } from '@/components/ae/data/AeCopyCommand'
-import { AeSection } from '@/components/ae/layout/AeSection'
+import { AeCollectionRail } from '@/components/ae/shared/AeCollectionRail'
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion'
 import { buttonVariants } from '@/components/ui/button-variants'
 import { cn } from '@/lib/utils'
@@ -10,11 +10,11 @@ import type { AgentConnectionSectionProps } from '../help.contracts'
 
 export function AgentConnectionSection({ diagnosticCommand }: AgentConnectionSectionProps) {
   return (
-    <AeSection
+    <AeCollectionRail
       title="Agent connection"
-      description="Use your client's account connection, then return to your task. Connection and spending permission are separate."
+      deck="Use your client's account connection, then return to your task. Connection and spending permission are separate."
     >
-      <Link to="/for-agents" className={cn(buttonVariants({ variant: 'outline' }), 'min-h-touch')}>Review agent setup</Link>
+      <Link to="/for-agents" className={cn(buttonVariants({ variant: 'outline' }), 'min-h-touch')}>Review Agent connection</Link>
       <Accordion type="single" collapsible className="mt-related">
         <AccordionItem value="diagnostics">
           <AccordionTrigger>Advanced connection diagnostics</AccordionTrigger>
@@ -24,6 +24,6 @@ export function AgentConnectionSection({ diagnosticCommand }: AgentConnectionSec
           </AccordionContent>
         </AccordionItem>
       </Accordion>
-    </AeSection>
+    </AeCollectionRail>
   )
 }

@@ -5,7 +5,7 @@ import { cva, type VariantProps } from "class-variance-authority"
 import { PanelLeftIcon } from "lucide-react"
 import { useRender } from "@base-ui/react/use-render"
 
-import { useIsMobile } from "@/hooks/use-mobile"
+import { useIsMobile, useViewportKind } from "@/hooks/use-mobile"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -70,6 +70,7 @@ function SidebarProvider({
   open?: boolean
   onOpenChange?: (open: boolean) => void
 }) {
+  const viewport = useViewportKind()
   const isMobile = useIsMobile()
   const [openMobile, setOpenMobile] = React.useState(false)
 
@@ -92,10 +93,29 @@ function SidebarProvider({
     [setOpenProp, open]
   )
 
-  // Helper to toggle the sidebar.
+  // Restore desktop open state from the cookie after paint. Do not write back.
+  React.useEffect(() => {
+    const match = document.cookie
+      .split("; ")
+      .find((row) => row.startsWith(`${SIDEBAR_COOKIE_NAME}=`))
+    if (match === undefined) {
+      return
+    }
+    const value = match.slice(SIDEBAR_COOKIE_NAME.length + 1)
+    if (value === "true") {
+      _setOpen(true)
+    } else if (value === "false") {
+      _setOpen(false)
+    }
+  }, [])
+
+  // Helper to toggle the sidebar. No-op while viewport kind is still pending.
   const toggleSidebar = React.useCallback(() => {
+    if (viewport === "unknown") {
+      return
+    }
     return isMobile ? setOpenMobile((open) => !open) : setOpen((open) => !open)
-  }, [isMobile, setOpen, setOpenMobile])
+  }, [viewport, isMobile, setOpen, setOpenMobile])
 
   // Adds a keyboard shortcut to toggle the sidebar.
   React.useEffect(() => {
@@ -167,7 +187,8 @@ function Sidebar({
   variant?: "sidebar" | "floating" | "inset"
   collapsible?: "offcanvas" | "icon" | "none"
 }) {
-  const { isMobile, state, openMobile, setOpenMobile } = useSidebar()
+  const { state, openMobile, setOpenMobile } = useSidebar()
+  const viewport = useViewportKind()
 
   if (collapsible === "none") {
     return (
@@ -184,7 +205,17 @@ function Sidebar({
     )
   }
 
-  if (isMobile) {
+  if (viewport === "unknown") {
+    return (
+      <div
+        aria-hidden
+        data-slot="sidebar-pending"
+        className="hidden w-(--sidebar-width) shrink-0 md:block"
+      />
+    )
+  }
+
+  if (viewport === "mobile") {
     return (
       <Sheet open={openMobile} onOpenChange={setOpenMobile} {...props}>
         <SheetContent
@@ -379,7 +410,7 @@ function SidebarContent({ className, ...props }: React.ComponentProps<"div">) {
       data-slot="sidebar-content"
       data-sidebar="content"
       className={cn(
-        "flex min-h-0 flex-1 flex-col gap-2 overflow-auto group-data-[collapsible=icon]:overflow-hidden",
+        "flex min-h-0 flex-1 flex-col gap-2 overflow-auto group-data-[collapsible=icon]:overflow-y-auto group-data-[collapsible=icon]:overflow-x-hidden",
         className
       )}
       {...props}

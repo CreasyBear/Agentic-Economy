@@ -26,6 +26,7 @@ import {
   createConvexDelegationContextPort,
   createConvexDelegationStore,
 } from '../delegationPersistence'
+import { resolveActiveAccountRefForPrincipal } from '../interactiveAuthority/accountResolution'
 
 export const DEV_SEED_CATALOG_PRINCIPAL_REF = 'prn_d2000000000000000000000000000001' as PrincipalRef
 export const DEV_SEED_CATALOG_ACCOUNT_REF = 'acc_d2000000000000000000000000000001' as AccountRef
@@ -155,6 +156,38 @@ function workloadActionContextFromRow(
     correlationRef: row.correlationRef,
     idempotencyRef: row.idempotencyRef,
   })
+}
+
+/**
+ * Resolves an opt-in local owner Account through the same active-account
+ * selection helper used by signed-in interactive surfaces. The caller remains
+ * responsible for the existing local-dev deployment guard.
+ */
+export async function resolveDevSeedOwningAccountRef(
+  ctx: MutationCtx,
+  requestedAccountRef: string | undefined,
+  fallbackAccountRef: string,
+): Promise<string> {
+  const candidate = requestedAccountRef?.trim()
+  if (candidate === undefined || candidate.length === 0) return fallbackAccountRef
+  const account = await ctx.db.query('accounts')
+    .withIndex('by_accountRef', (query) => query.eq('accountRef', candidate))
+    .unique()
+  if (account === null || account.lifecycle !== 'active') throw new DevSeedCatalogAuthorityError()
+  const ownership = await ctx.db.query('accountOwnerships')
+    .withIndex('by_ownershipRef', (query) => query.eq('ownershipRef', account.currentOwnershipRef))
+    .unique()
+  if (ownership === null || ownership.lifecycle !== 'active' || ownership.accountRef !== candidate) {
+    throw new DevSeedCatalogAuthorityError()
+  }
+  const resolved = await resolveActiveAccountRefForPrincipal(
+    ctx.db,
+    principalRef(ownership.ownerPrincipalRef),
+    undefined,
+    'require',
+  )
+  if (resolved.activeAccountRef !== candidate) throw new DevSeedCatalogAuthorityError()
+  return candidate
 }
 
 export async function admitDevSeedCatalogAuthority(

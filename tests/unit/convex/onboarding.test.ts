@@ -5,7 +5,6 @@ import {
   it,
 } from 'vitest'
 
-import { InteractiveAuthorityError } from '../../../convex/interactiveAuthority'
 import { samIdentity } from '../../helpers/interactive-authority-provisioning'
 import {
   collectAuthorityTables,
@@ -14,6 +13,7 @@ import {
 } from '../../helpers/interactive-authority-runtime'
 import {
   INTERACTIVE_ACCOUNT_REF as ACCOUNT_REF,
+  INTERACTIVE_PRINCIPAL_REF as PRINCIPAL_REF,
   INTERACTIVE_TOKEN_IDENTIFIER as TOKEN_IDENTIFIER,
   seedInteractiveAuthority as seedAuthority,
 } from '../../helpers/interactive-authority-seed'
@@ -132,6 +132,24 @@ async function listCompletionRows(backend: InteractiveAuthorityBackend): Promise
       .collect()))
 }
 
+async function seedCompletionRow(
+  backend: InteractiveAuthorityBackend,
+  roleIntent: OnboardingRoleIntent,
+  workspaceName: string,
+): Promise<void> {
+  await backend.run(async (ctx) => {
+    await ctx.db.insert('interactiveOnboardingCompletions', {
+      accountRef: ACCOUNT_REF,
+      principalRef: PRINCIPAL_REF,
+      roleIntent,
+      workspaceName,
+      revision: 1,
+      completedAt: 100,
+      correlationRef: correlationRef('seed'),
+    })
+  })
+}
+
 describe('interactiveOnboarding', () => {
   it('C1: unauthenticated complete refuses identity_invalid', async () => {
     const backend = createBackend()
@@ -147,18 +165,32 @@ describe('interactiveOnboarding', () => {
     )
   })
 
-  it('C2: seeded owner incomplete readState returns suggested workspace name', async () => {
+  it('C2: active owner account without a completion row is already complete', async () => {
     const backend = createBackend()
     await seedAuthority(backend)
 
     await expect(readOnboardingState(backend)).resolves.toEqual({
-      phase: 'incomplete',
+      phase: 'complete',
       accountRef: ACCOUNT_REF,
-      suggestedWorkspaceName: 'Canonical account',
+      roleIntent: 'buyer',
+      redirectPath: '/owner',
     })
   })
 
-  it('C3: buyer completion updates displayName and inserts one completion row', async () => {
+  it('C2b: active workspace membership without a completion row is already complete', async () => {
+    const backend = createBackend()
+    await seedAuthority(backend, { addMembershipToOwnership: true })
+
+    await expect(readOnboardingState(backend)).resolves.toEqual({
+      phase: 'complete',
+      accountRef: ACCOUNT_REF,
+      roleIntent: 'buyer',
+      redirectPath: '/owner',
+    })
+    expect(await listCompletionRows(backend)).toHaveLength(0)
+  })
+
+  it('C3: completing an active owner account is a no-op', async () => {
     const backend = createBackend()
     await seedAuthority(backend)
 
@@ -170,23 +202,18 @@ describe('interactiveOnboarding', () => {
 
     expect(result).toMatchObject({
       kind: 'completed',
+      accountRef: ACCOUNT_REF,
       roleIntent: 'buyer',
       redirectPath: '/owner',
     })
-    expect(await readAccountDisplayName(backend)).toBe('Acme Corp')
-    const rows = await listCompletionRows(backend)
-    expect(rows).toHaveLength(1)
-    expect(rows[0]).toMatchObject({
-      accountRef: ACCOUNT_REF,
-      roleIntent: 'buyer',
-      workspaceName: 'Acme Corp',
-      correlationRef: correlationRef('c3'),
-    })
+    expect(await readAccountDisplayName(backend)).toBe('Canonical account')
+    expect(await listCompletionRows(backend)).toHaveLength(0)
   })
 
-  it('C4: supplier completion redirects to owner operations', async () => {
+  it('C4: an existing supplier completion keeps its owner operations redirect', async () => {
     const backend = createBackend()
     await seedAuthority(backend)
+    await seedCompletionRow(backend, 'supplier', 'Tools Lab')
 
     const result = await completeOnboarding(backend, {
       roleIntent: 'supplier',
@@ -201,7 +228,7 @@ describe('interactiveOnboarding', () => {
     })
   })
 
-  it('C5: trims surrounding whitespace from workspace name', async () => {
+  it('C5: a valid padded workspace name leaves an active account unchanged', async () => {
     const backend = createBackend()
     await seedAuthority(backend)
 
@@ -211,7 +238,7 @@ describe('interactiveOnboarding', () => {
       correlationRef: correlationRef('c5'),
     })
 
-    expect(await readAccountDisplayName(backend)).toBe('Acme Corp')
+    expect(await readAccountDisplayName(backend)).toBe('Canonical account')
   })
 
   it.each([
@@ -248,7 +275,7 @@ describe('interactiveOnboarding', () => {
     )
   })
 
-  it('C8: replaying identical complete payload is idempotent', async () => {
+  it('C8: replaying complete for an active account is idempotent', async () => {
     const backend = createBackend()
     await seedAuthority(backend)
     const input = {
@@ -258,36 +285,28 @@ describe('interactiveOnboarding', () => {
     }
 
     const first = await completeOnboarding(backend, input)
-    const rowsAfterFirst = await listCompletionRows(backend)
     const second = await completeOnboarding(backend, input)
 
-    expect(second).toMatchObject({ kind: 'completed' })
-    const rowsAfterSecond = await listCompletionRows(backend)
-    expect(rowsAfterSecond).toHaveLength(1)
-    expect(rowsAfterSecond[0]?.revision).toBe(rowsAfterFirst[0]?.revision)
-    expect(first.redirectPath).toBe(second.redirectPath)
+    expect(second).toEqual(first)
+    expect(await readAccountDisplayName(backend)).toBe('Canonical account')
+    expect(await listCompletionRows(backend)).toHaveLength(0)
   })
 
-  it('C9: second complete with different roleIntent refuses onboarding_already_complete', async () => {
+  it('C9: changing an existing recorded completion refuses onboarding_already_complete', async () => {
     const backend = createBackend()
     await seedAuthority(backend)
-
-    await completeOnboarding(backend, {
-      roleIntent: 'buyer',
-      workspaceName: 'Acme Corp',
-      correlationRef: correlationRef('c9-first'),
-    })
+    await seedCompletionRow(backend, 'buyer', 'Acme Corp')
 
     await expectOnboardingRefusal(
       () => completeOnboarding(backend, {
         roleIntent: 'supplier',
         workspaceName: 'Acme Corp',
-        correlationRef: correlationRef('c9-second'),
+        correlationRef: correlationRef('c9'),
       }),
       'onboarding_already_complete',
     )
 
-    expect(await readAccountDisplayName(backend)).toBe('Acme Corp')
+    expect(await readAccountDisplayName(backend)).toBe('Canonical account')
   })
 
   it('C10: invalid correlationRef refuses correlation_ref_invalid', async () => {
@@ -304,24 +323,29 @@ describe('interactiveOnboarding', () => {
     )
   })
 
-  it('C11: membership-only caller cannot complete onboarding', async () => {
+  it('C11: completing an active member workspace is an idempotent no-op', async () => {
     const backend = createBackend()
     await seedAuthority(backend, { access: 'membership' })
 
-    try {
-      await completeOnboarding(backend, {
-        roleIntent: 'buyer',
-        workspaceName: 'Acme Corp',
-        correlationRef: correlationRef('c11'),
-      })
-      throw new Error('expected membership-only onboarding refusal')
-    } catch (error) {
-      expect(error).toBeInstanceOf(InteractiveAuthorityError)
-      expect(['account_access_missing', 'ownership_mismatch']).toContain(
-        (error as InteractiveAuthorityError).code,
-      )
-    }
+    const first = await completeOnboarding(backend, {
+      roleIntent: 'buyer',
+      workspaceName: 'Ignored workspace name',
+      correlationRef: correlationRef('c11-first'),
+    })
+    const second = await completeOnboarding(backend, {
+      roleIntent: 'supplier',
+      workspaceName: 'Also ignored',
+      correlationRef: correlationRef('c11-second'),
+    })
 
+    expect(first).toMatchObject({
+      kind: 'completed',
+      accountRef: ACCOUNT_REF,
+      roleIntent: 'buyer',
+      redirectPath: '/owner',
+    })
+    expect(second).toEqual(first)
+    expect(await readAccountDisplayName(backend)).toBe('Canonical account')
     expect(await listCompletionRows(backend)).toHaveLength(0)
   })
 
@@ -365,7 +389,7 @@ describe('interactiveOnboarding', () => {
     expect(afterComplete.bindings).toHaveLength(before.bindings.length)
     expect(afterComplete.principals).toHaveLength(before.principals.length)
     expect(afterComplete.ownerships).toHaveLength(before.ownerships.length)
-    expect(await listCompletionRows(backend)).toHaveLength(1)
+    expect(await listCompletionRows(backend)).toHaveLength(0)
   })
 
   it('C14: completion does not require or write pending_activation lifecycle', async () => {

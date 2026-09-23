@@ -41,6 +41,24 @@ The future supply side includes specialist businesses, data owners, professional
 contributors, machine operators and other agents, not only conventional API
 vendors. Managed x402 purchasing is the entry, not the limit of the vision.
 
+**Market formation clarified with Joel: 2026-09-21.** Building the Australian
+agentic economy is the reason for the product. Existing x402 supply provides
+the starting inventory while customers learn what their agents can buy. AUD
+access and a clear Australian billing relationship make that supply accessible;
+discovery and useful examples help customers recognise where it can contribute
+to their work. This addresses the initial supply gap without requiring Aecon to
+recruit a new Provider for every first use case. It does not establish demand
+or repeat use on its own.
+
+Do not prematurely constrain the market to one professional sector or service
+package. Property, audit, financial services and other specialist capabilities
+are directions to explore as usage reveals demand. Buyers becoming Providers,
+and Providers packaging expertise with purchased Tools, are paths to grow the
+market rather than prerequisites for the entry release. Look for customers
+discovering a useful capability, completing a purchase and returning, then for
+Providers reaching that demand. A narrow supported execution scope does not
+require a narrow sector thesis.
+
 Assess intelligence such as Jev by the friction it removes from these journeys:
 successful matching, fewer agent turns, time to usable results, Provider
 activation and useful repeat purchases. Delivery verification is a minor
@@ -54,6 +72,24 @@ does not become an additional managed-x402 release gate. AE supports procurement
 while the customer's harness retains the wider objective and plan.
 
 ### Reference products are the default
+
+**Experience baseline clarified with Joel: 2026-09-21.** The buyer workflow is
+the first design priority. Establish the customer's job, map the complete
+journey, and derive navigation from stable destinations before expanding the
+page inventory. Assess basic functionality and cohesion at site, page-group
+and individual-page levels. Every page must have a clear purpose, the facts
+needed for its decision, a state-appropriate primary action, a useful next
+destination, and understandable return, empty, error and completion behaviour.
+
+Customer-facing pages should lead with outcomes and actions. Keep technical
+detail and general caveats secondary; retain material cost, permission and
+consequence information at the decision where it matters. Shared components,
+backend capability and passing tests do not establish a coherent customer
+journey. First demonstrate find → inspect/compare → choose → use → result →
+return, with setup only when needed. Broader infrastructure and roadmap audits
+must not displace this basic experience review. The current page requirements
+are in the [buyer experience baseline](docs/designs/2026-09-21-platform-experience-audit.md)
+and [page checklist](docs/operations/platform-experience-register.md).
 
 - **Locus:** the reference for connecting agents, prepaid tool access, spending
   controls, usage and everyday account management.
@@ -202,6 +238,12 @@ need a service
 
 A **service request** records the bounded missing contribution and hard constraints
 without taking ownership of the larger project.
+
+For an explicitly retained missing need, matching stays active for 30 days from
+original creation (Joel's decision, 21 September 2026). Retries do not extend
+this window. Owner deletion or credential revocation stops matching immediately;
+a potential match never authorizes an automatic purchase. This is matching
+eligibility, not a policy for deleting historical records.
 
 A **service comparison** records the exact Tool versions considered, found viable
 or excluded, with their provenance and caller-specific reasons.

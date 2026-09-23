@@ -1,4 +1,4 @@
-import { SendIcon } from 'lucide-react'
+import { SendIcon, SquareIcon } from 'lucide-react'
 
 import { AeCopyReference } from '@/components/ae/data/AeCopyReference'
 import { Button } from '@/components/ui/button'
@@ -29,12 +29,13 @@ export function ChatComposer({
   anonymousMessageLimitReached,
   onPromptChange,
   onSubmit,
+  onStop,
 }: ChatComposerProps) {
   const promptLength = Array.from(prompt).length
   const invalid = error.length > 0
   return (
     <form
-      className="bg-background px-gutter pb-[max(var(--spacing-related),env(safe-area-inset-bottom))] pt-intra"
+      className="shrink-0 bg-background px-gutter pb-[max(var(--spacing-related),env(safe-area-inset-bottom))] pt-intra"
       action={onSubmit}
     >
       <FieldGroup className="mx-auto w-full max-w-3xl gap-intra">
@@ -55,23 +56,35 @@ export function ChatComposer({
               }}
               placeholder={chatComposer.placeholder}
               disabled={disabled}
-              aria-describedby="tool-chat-limit tool-chat-error"
+              aria-describedby="tool-chat-newline tool-chat-limit tool-chat-error"
               aria-invalid={invalid}
               className="max-h-40 min-h-touch"
               rows={1}
             />
             <InputGroupAddon align="inline-end">
-              <Button
-                type="submit"
-                className="min-h-touch min-w-touch"
-                disabled={disabled}
-                aria-label={busy ? chatComposer.sendingAria : chatComposer.sendAria}
-              >
-                {busy
-                  ? <Spinner data-icon="inline-start" aria-hidden="true" />
-                  : <SendIcon data-icon="inline-start" aria-hidden="true" />}
-                <span className="hidden sm:inline">{busy ? chatComposer.sending : chatComposer.send}</span>
-              </Button>
+              {busy && onStop !== undefined ? (
+                <Button
+                  type="button"
+                  className="min-h-touch min-w-touch"
+                  aria-label={chatComposer.stopAria}
+                  onClick={onStop}
+                >
+                  <SquareIcon data-icon="inline-start" aria-hidden="true" />
+                  <span className="hidden sm:inline">{chatComposer.stop}</span>
+                </Button>
+              ) : (
+                <Button
+                  type="submit"
+                  className="min-h-touch min-w-touch"
+                  disabled={disabled || prompt.trim().length === 0}
+                  aria-label={busy ? chatComposer.sendingAria : chatComposer.sendAria}
+                >
+                  {busy
+                    ? <Spinner data-icon="inline-start" aria-hidden="true" />
+                    : <SendIcon data-icon="inline-start" aria-hidden="true" />}
+                  <span className="hidden sm:inline">{busy ? chatComposer.sending : chatComposer.send}</span>
+                </Button>
+              )}
             </InputGroupAddon>
           </InputGroup>
           <div className="flex items-start justify-between gap-related">
@@ -102,6 +115,9 @@ export function ChatComposer({
                   {chatAnonymousCountLine(anonymousMessageCount, anonymousMessageLimitReached)}
                 </FieldDescription>
               )}
+              <FieldDescription id="tool-chat-newline">
+                {chatComposer.newline}
+              </FieldDescription>
             </div>
             <FieldDescription id="tool-chat-limit" className="shrink-0 tabular-nums">
               {promptLength >= 1_800 ? `${promptLength} / 2,000` : ''}

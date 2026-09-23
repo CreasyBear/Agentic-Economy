@@ -56,7 +56,7 @@ export function mapNetworkDiagnostic(): Rule4Diagnostic {
 
 export function mapUnexpectedDiagnostic(): Rule4Diagnostic {
   return {
-    whatHappened: 'Something went wrong',
+    whatHappened: 'The Agent could not be connected. Nothing was charged.',
     financialImpact: FINANCIAL_SAFE_NO_SECRET,
     nextStep: 'Try again. Contact support if the problem continues.',
   }

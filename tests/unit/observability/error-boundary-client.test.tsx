@@ -76,9 +76,9 @@ describe('AeObservabilityErrorBoundary', () => {
     expect(attemptViteStaleChunkReload).toHaveBeenCalledOnce()
     expect(attemptViteStaleChunkReload).toHaveBeenCalledWith(error)
     expect(screen.getByRole('alert')).not.toBeNull()
-    expect(screen.getByRole('heading', { name: 'Something went wrong' })).not.toBeNull()
-    expect(screen.getByText('The page stopped unexpectedly. Try loading it again, or continue from the Tool catalogue.')).not.toBeNull()
-    expect(screen.queryByText(/Nothing you sent was lost/u)).toBeNull()
+    expect(screen.getByText('This page could not be loaded')).not.toBeNull()
+    expect(screen.getByText('Nothing was charged.')).not.toBeNull()
+    expect(screen.queryByText(/Something went wrong/u)).toBeNull()
     const retryButton = screen.getByRole('button', { name: 'Try again' })
     const marketLink = screen.getByRole('link', { name: 'Browse Tools' })
 

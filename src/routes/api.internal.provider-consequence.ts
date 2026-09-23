@@ -458,6 +458,9 @@ function x402RuntimeFactory(
       observeX402PaymentAttempt: async (event) => {
         await x402Rpc(request, origin, 'observe_attempt', { ...event })
       },
+      checkpointX402Response: async (response) => {
+        await x402Rpc(request, origin, 'checkpoint_response', { ...response })
+      },
       verifyX402Settlement: async ({ response, requirement, paymentSignature }) => {
         const authorization = readX402PaymentPayerAndNonce(paymentSignature)
         if (authorization === undefined) return false

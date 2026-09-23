@@ -1,5 +1,3 @@
-export const methodsBlurb = 'Use email, Google, GitHub, or a passkey.'
-
 export type AeSignUpPageProps = Readonly<{
   redirect?: string
 }>
@@ -29,22 +27,39 @@ export type UseSignUpPageResult = Readonly<{
   switchSearch: SignUpSwitchSearch
 }>
 
+function isSupplyReturn(redirect: string): boolean {
+  return (
+    redirect === '/owner/operations' ||
+    redirect.startsWith('/owner/operations/') ||
+    redirect === '/owner/supply' ||
+    redirect.startsWith('/owner/supply/')
+  )
+}
+
 export function projectSignUpCopy(redirect: string | undefined): SignUpCopy {
-  const isAgentAccessFlow = redirect?.startsWith('/agent-access') ?? false
-  const isProviderFlow = redirect?.startsWith('/owner') ?? false
-  const heading = isAgentAccessFlow
-    ? 'Create an account to connect an agent'
-    : isProviderFlow
-      ? 'Create a Provider account'
-      : 'Create an account'
-  const body = isAgentAccessFlow
-    ? `${methodsBlurb} After you create your account, you’ll return to the agent connection you started.`
-    : isProviderFlow
-      ? `${methodsBlurb} After you create your account, you’ll continue to the Tool publishing workspace.`
-      : redirect === undefined
-        ? `${methodsBlurb} After you create your account, you’ll set up your workspace.`
-        : `${methodsBlurb} After you create your account, you’ll return to where you left off.`
-  return { heading, body }
+  const heading = 'Create an account'
+  if (redirect !== undefined && isSupplyReturn(redirect)) {
+    return {
+      heading,
+      body: 'After you create your account, you’ll continue to the Tool publishing Workspace.',
+    }
+  }
+  if (redirect?.startsWith('/agent-access') ?? false) {
+    return {
+      heading,
+      body: 'After you create your account, you’ll return to the Agent connection you started.',
+    }
+  }
+  if (redirect === undefined) {
+    return {
+      heading,
+      body: 'After you create your account, you’ll set up your Workspace.',
+    }
+  }
+  return {
+    heading,
+    body: 'After you create your account, you’ll return to where you left off.',
+  }
 }
 
 export function buildOnboardingRedirectUrl(redirect: string | undefined): string {

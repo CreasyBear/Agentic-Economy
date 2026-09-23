@@ -4,6 +4,8 @@
  * list, so a workload is added or retired in one place.
  */
 export type WorkloadInterval = Readonly<{ minutes: number }> | Readonly<{ hours: number }>
+export type WorkloadDaily = Readonly<{ hourUTC: number; minuteUTC: number }>
+
 
 export type ScheduledWorkload = Readonly<{
   name: string
@@ -11,6 +13,8 @@ export type ScheduledWorkload = Readonly<{
   handler: string
   /** Absent for workloads that run on demand rather than on a timer. */
   interval?: WorkloadInterval
+  /** Fixed UTC wall-clock cadence for civil-day jobs. */
+  daily?: WorkloadDaily
 }>
 
 export const SCHEDULED_WORKLOADS = [
@@ -28,6 +32,7 @@ export const SCHEDULED_WORKLOADS = [
   { name: 'reconcile business supply projections', workloadKind: 'reconciliation', handler: 'reconcileBusinessSupplyProjections', interval: { hours: 1 } },
   { name: 'cleanup expired source write nonces', workloadKind: 'cron', handler: 'cleanupExpiredSourceWriteNonces', interval: { hours: 1 } },
   { name: 'cleanup expired agent access oauth grants', workloadKind: 'cron', handler: 'cleanupExpiredAgentAccessOAuthGrants', interval: { hours: 1 } },
+  { name: 'snapshot marketplace metrics day', workloadKind: 'cron', handler: 'snapshotMarketplaceMetricsDay', daily: { hourUTC: 16, minuteUTC: 10 } },
   { name: 'observe x402 treasury', workloadKind: 'cron', handler: 'observeX402Treasury', interval: { minutes: 15 } },
 ] as const satisfies readonly ScheduledWorkload[]
 
@@ -43,4 +48,5 @@ export const SCHEDULED_WORKLOAD_JOB_NAMES = [
   'refresh Agentic Economy API registry',
   'refresh capability supply readiness',
   'refresh current market presence',
+  'snapshot marketplace metrics day',
 ] as const satisfies readonly ScheduledWorkloadName[]

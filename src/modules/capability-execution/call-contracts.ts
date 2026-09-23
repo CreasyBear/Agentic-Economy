@@ -1,5 +1,7 @@
 import { z } from 'zod'
 
+import { brandNonEmpty, type Brand } from '@/modules/common/ids'
+
 import type { AgentAccessPrincipal } from '@/modules/agent-access/agent-access'
 import { jsonValueSchema, type JsonValue } from '@/modules/capability-contract/public'
 import { idempotencyKeySchema } from '@/modules/common/action'
@@ -54,6 +56,29 @@ export const callRefusalCodeValues = [
   'source_unavailable',
 ] as const
 export const callRefusalCodeSchema = z.enum(callRefusalCodeValues)
+const callRefPattern = /^operation-invocation:v1:[0-9a-f]{64}$/u
+const quoteRefPattern = /^operation-commitment:v1:[0-9a-f]{64}$/u
+
+export type CallRef = Brand<string, 'CallRef'>
+export type QuoteRef = Brand<string, 'QuoteRef'>
+
+export function parseCallRef(value: string):
+  | Readonly<{ kind: 'valid'; ref: CallRef }>
+  | Readonly<{ kind: 'malformed' }> {
+  const ref = value.trim()
+  return callRefPattern.test(ref)
+    ? { kind: 'valid', ref: brandNonEmpty(ref, 'CallRef') }
+    : { kind: 'malformed' }
+}
+
+export function parseQuoteRef(value: string):
+  | Readonly<{ kind: 'valid'; ref: QuoteRef }>
+  | Readonly<{ kind: 'malformed' }> {
+  const ref = value.trim()
+  return quoteRefPattern.test(ref)
+    ? { kind: 'valid', ref: brandNonEmpty(ref, 'QuoteRef') }
+    : { kind: 'malformed' }
+}
 
 const callChargeStateSchema = z.enum([
   'free_tier',
@@ -64,12 +89,12 @@ const callChargeStateSchema = z.enum([
 ])
 
 export const callInputSchema: z.ZodType<CallInput> = z.strictObject({
-  quoteRef: z.string().regex(/^operation-commitment:v1:[0-9a-f]{64}$/u),
+  quoteRef: z.string().regex(quoteRefPattern),
   idempotencyKey: idempotencyKeySchema,
 })
 
 export const resolvedCallInputSchema: z.ZodType<ResolvedCallInput> = z.strictObject({
-  quoteRef: z.string().regex(/^operation-commitment:v1:[0-9a-f]{64}$/u),
+  quoteRef: z.string().regex(quoteRefPattern),
   decisionPrice: exactAmountSchema.exactOptional(),
   toolRef: z.string().trim().min(1).max(300),
   input: z.record(z.string(), jsonValueSchema),

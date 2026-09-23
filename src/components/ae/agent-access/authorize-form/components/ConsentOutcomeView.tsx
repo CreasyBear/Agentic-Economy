@@ -10,7 +10,7 @@ function ConnectionProblemAlert({ code, technicalReference }: Readonly<{ code: s
   const presentation = presentConnectionProblem({ code, ...(technicalReference === undefined ? {} : { instance: technicalReference }) })
   return (
     <Alert variant="destructive">
-      <AlertTitle>{presentation.heading}</AlertTitle>
+      <AlertTitle id="consent-outcome-heading" tabIndex={-1}>{presentation.heading}</AlertTitle>
       <AlertDescription className="grid gap-2">
         <p>{presentation.outcome}</p>
         <p>{presentation.nextAction}</p>
@@ -32,7 +32,10 @@ export function ConsentOutcomeView({
 }: ConsentOutcomeViewProps) {
   if (phase === 'approved') {
     return (
-      <Alert><AlertTitle>Connected to {clientName}</AlertTitle><AlertDescription>Return there to continue. This connection remains signed in until it expires or you disconnect it.</AlertDescription></Alert>
+      <Alert>
+        <AlertTitle id="consent-outcome-heading" tabIndex={-1}>Connected to {clientName}</AlertTitle>
+        <AlertDescription>Return there to continue. This connection remains signed in until it expires or you disconnect it.</AlertDescription>
+      </Alert>
     )
   }
   if (phase === 'denied') {
@@ -43,6 +46,7 @@ export function ConsentOutcomeView({
       <div className="grid gap-3">
         <ConnectionProblemAlert code="outcome_unknown" technicalReference={grantRef} />
         <Link
+          id="consent-outcome-recovery"
           to="/agent-access/authorize"
           search={authorizeRecoverySearch}
           reloadDocument

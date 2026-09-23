@@ -26,7 +26,8 @@ describe('Agent connection progression', () => {
       expect.stringContaining('Confirm the connection'),
     ])
     expect(screen.getByText(/Connection is complete only when it appears in Agents/u)).toBeTruthy()
-
+    expect(screen.queryByRole('link', { name: 'Open Agents' })).toBeNull()
+    expect(screen.queryByRole('link', { name: 'Review Spending policy' })).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: 'Check connection' }))
     expect(checkConnection).toHaveBeenCalledOnce()
   })

@@ -7,7 +7,7 @@ import { Input } from '@/components/ui/input'
 import { Spinner } from '@/components/ui/spinner'
 import { Textarea } from '@/components/ui/textarea'
 
-import { removalReasonOptions, type RemovalRequestFormProps } from '../remove-business.contracts'
+import { removalReasonOptions, removalRequestCopy, type RemovalRequestFormProps } from '../remove-business.contracts'
 
 export function RemovalRequestForm(props: RemovalRequestFormProps) {
   const {
@@ -34,9 +34,11 @@ export function RemovalRequestForm(props: RemovalRequestFormProps) {
     onEvidenceSummaryChange,
   } = props
 
+  const selectedReasonLabel = removalReasonOptions.find((option) => option.value === value.reasonCode)?.label
+
   return (
-    <form onSubmit={onSubmit} className="mx-auto grid w-full max-w-3xl gap-section" noValidate>
-      {error === undefined ? null : (
+    <form onSubmit={onSubmit} className="grid w-full gap-section" noValidate>
+      {error !== undefined && !contactInvalid && !evidenceInvalid ? (
         <Alert variant="destructive">
           <AlertTitle>Request needs attention</AlertTitle>
           <AlertDescription>
@@ -44,11 +46,14 @@ export function RemovalRequestForm(props: RemovalRequestFormProps) {
             {outcomeUnknown ? <> <Link to="/support" className="underline underline-offset-4">Open support</Link> with the Provider slug and your contact email.</> : null}
           </AlertDescription>
         </Alert>
-      )}
+      ) : null}
       {receipt === undefined ? null : (
-        <Alert>
+        <Alert role="status">
           <AlertTitle>Request recorded</AlertTitle>
-          <AlertDescription>{receipt}</AlertDescription>
+          <AlertDescription>
+            <span>{receipt}</span>
+            <span className="block">{removalRequestCopy.referenceSupport}</span>
+          </AlertDescription>
         </Alert>
       )}
       <FieldGroup>
@@ -73,6 +78,7 @@ export function RemovalRequestForm(props: RemovalRequestFormProps) {
             id="contactEmail"
             name="contactEmail"
             type="email"
+            autoComplete="email"
             aria-describedby={contactDescribedBy}
             aria-invalid={contactInvalid}
             ref={contactEmailRef}
@@ -101,7 +107,7 @@ export function RemovalRequestForm(props: RemovalRequestFormProps) {
             }}
           >
             <SelectTrigger id="reasonCode" className="min-h-touch w-full">
-              <SelectValue placeholder="Choose one" />
+              <SelectValue placeholder="Choose one">{selectedReasonLabel}</SelectValue>
             </SelectTrigger>
             <SelectContent>
               <SelectGroup>
@@ -135,7 +141,7 @@ export function RemovalRequestForm(props: RemovalRequestFormProps) {
       </FieldGroup>
       <Button type="submit" disabled={pending || outcomeUnknown} className="min-h-touch justify-self-start">
         {pending ? <Spinner /> : null}
-        {outcomeUnknown ? 'Outcome not confirmed' : 'Send request'}
+        {outcomeUnknown ? 'Outcome not confirmed' : removalRequestCopy.submit}
       </Button>
     </form>
   )

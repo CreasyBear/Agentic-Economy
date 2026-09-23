@@ -1,31 +1,42 @@
 import { Link } from '@tanstack/react-router'
-import { ArrowRightIcon } from 'lucide-react'
 
-import { buttonVariants } from '@/components/ui/button-variants'
-import { cn } from '@/lib/utils'
+import { AeSiteUtilityDocument } from '@/components/ae/website/AeSiteUtilityDocument'
 
-import { TermsCapabilityList } from './components/TermsCapabilityList'
-import { TermsPracticeAccordion } from './components/TermsPracticeAccordion'
-import { canDoItems, termsItems } from './terms.contracts'
+import {
+  termsAvailabilityLead,
+  termsAvailabilityLink,
+  termsClosingLead,
+  termsClosingLink,
+  termsDescription,
+  termsIntro,
+  termsLastUpdated,
+  termsSections,
+  termsTitle,
+} from './terms.contracts'
 
 export function AeTermsPage() {
   return (
-    <div className="ae-rail grid max-w-prose gap-page pb-page">
-      <TermsCapabilityList items={canDoItems} />
-
-      <section className="border-t border-border pt-section">
-        <h2 className="mb-related text-2xl font-semibold tracking-tight text-foreground">
-          What these terms mean in practice
-        </h2>
-        <TermsPracticeAccordion items={termsItems} />
-      </section>
-
-      <section className="flex flex-wrap gap-related border-t border-border pt-section">
-        <Link to="/market" className={cn(buttonVariants(), 'min-h-touch')}>Browse catalog</Link>
-        <Link to="/for-providers" className={cn(buttonVariants({ variant: 'secondary' }), 'min-h-touch')}>
-          Publish a Tool <ArrowRightIcon aria-hidden="true" />
-        </Link>
-      </section>
-    </div>
+    <AeSiteUtilityDocument
+      title={termsTitle}
+      description={termsDescription}
+      lastUpdated={termsLastUpdated}
+      sections={termsSections}
+      intro={(
+        <p>
+          {termsIntro} {termsAvailabilityLead}{' '}
+          <Link to="/status" className="text-primary underline underline-offset-4">
+            {termsAvailabilityLink}
+          </Link>.
+        </p>
+      )}
+      footer={(
+        <p>
+          {termsClosingLead}{' '}
+          <Link to="/privacy" className="text-primary underline underline-offset-4">
+            {termsClosingLink}
+          </Link>.
+        </p>
+      )}
+    />
   )
 }

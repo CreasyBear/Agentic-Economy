@@ -27,7 +27,7 @@ test.describe('app shell accessibility (S-19)', () => {
     await expect(focusTarget).toBeFocused()
     if (compact) {
       await focusTarget.press('Enter')
-      const publicNav = page.getByRole('navigation', { name: 'Public navigation' })
+      const publicNav = page.getByRole('dialog', { name: 'Public navigation' }).getByRole('navigation', { name: 'Primary' })
       await expect(publicNav).toBeVisible()
       const marketLink = publicNav.getByRole('link', { name: 'Market' })
       await marketLink.focus()
@@ -68,7 +68,7 @@ test.describe('app shell accessibility (S-19)', () => {
       const openMenu = page.getByRole('button', { name: 'Open public menu' })
       await openMenu.focus()
       await openMenu.press('Enter')
-      const publicNav = page.getByRole('navigation', { name: 'Public navigation' })
+      const publicNav = page.getByRole('dialog', { name: 'Public navigation' }).getByRole('navigation', { name: 'Primary' })
       await expect(publicNav).toBeVisible()
       await page.keyboard.press('Escape')
       await expect(publicNav).toHaveCount(0)

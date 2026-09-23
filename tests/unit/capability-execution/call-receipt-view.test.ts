@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
+import type { PurchaseResolutionRecord } from '@/modules/capability-execution/purchase-resolution'
 import type { CallReceipt } from '@/modules/capability-execution/call-contracts'
 import {
   outcomeRecordLabel,
@@ -29,7 +30,69 @@ const releasedReceipt: CallReceipt = {
   issuedAt: '2026-08-30T22:32:40.000Z',
 }
 
+const releasedResolution: PurchaseResolutionRecord = {
+  resolutionRef: 'resolution:released', recordDigest: `sha256:${'a'.repeat(64)}`,
+  callRef, quoteRef: 'quote:released', accountRef: 'account:buyer',
+  customerRef: 'customer:buyer', agentPrincipalRef: 'agent:buyer',
+  sellerRef: 'seller:ae', providerRef: 'provider:weather', paymentRecipientRef: 'recipient:weather',
+  terminalState: 'released', deliveryState: 'not_delivered', paymentState: 'released',
+  considerationAmount: { currency: 'AUD', units: '1403', exponent: 6 },
+  considerationNetUnits: '1403', considerationGstUnits: '0',
+  providerObligationAmount: { currency: 'USDC', units: '1000', exponent: 6 },
+  resolvedAt: 1_800_000_000_000,
+}
+
 describe('public Call receipt projection', () => {
+  it('uses recorded release facts instead of stale retryable execution state', () => {
+    const input = { kind: 'found' as const, version: 1, callRef, toolRef,
+      state: 'retryable' as const, purchaseResolution: releasedResolution }
+    const view = projectCallReceipt(input)
+    expect(purchaseStatusLabel(input)).toBe('Resolved — refunded')
+    expect(view.statusLabel).toBe('Credit released')
+    expect(view.issue?.moneyMovement).toBe('Reserved credit was released back to your balance.')
+    expect(view.issue?.userNext).not.toMatch(/retry/i)
+    expect(view.complete).toBe(false)
+  })
+
+  it('explains the expired-unused transport failure as no charge and restored credit', () => {
+    const view = projectCallReceipt({
+      kind: 'found', version: 1, callRef, toolRef, state: 'terminal',
+      purchaseResolution: releasedResolution,
+      result: { kind: 'refused', code: 'source_unavailable', retryable: false,
+        nextAction: 'The service did not complete and payment expired unused. Your credit has been restored. You can make a new request from the Tool page.',
+        receipt: { ...releasedReceipt, lossState: 'none' },
+      },
+    })
+    expect(view.statusLabel).toBe('Credit released')
+    expect(view.issue?.whatHappened).toBe('The service did not complete. You were not charged; your reserved credit has been restored.')
+    expect(view.issue?.userNext).toBe('Return to the Tool to review a new Quote.')
+    expect(view.complete).toBe(false)
+  })
+
+  it('keeps conflicting or disputed resolution facts uncertain', () => {
+    for (const resolution of [
+      { ...releasedResolution, terminalState: 'disputed' as const },
+      { ...releasedResolution, paymentState: 'unknown' as const },
+      { ...releasedResolution, callRef: 'another-call' },
+    ]) {
+      const input = { kind: 'found' as const, version: 1, callRef, toolRef,
+        state: 'terminal' as const, purchaseResolution: resolution }
+      expect(purchaseStatusLabel(input)).toBe('Open — outcome uncertain')
+      expect(projectCallReceipt(input).statusLabel).toBe('Needs review')
+    }
+  })
+
+  it('keeps a retryable refusal open while the original Call can continue', () => {
+    expect(purchaseStatusLabel({ kind: 'found', version: 1, callRef, toolRef, state: 'retryable',
+      result: { kind: 'refused', code: 'pre_release_failed', retryable: true },
+    })).toBe('Open — pending')
+  })
+
+  it('does not claim a zero charge when terminal money facts are missing', () => {
+    const view = projectCallReceipt({ kind: 'found', version: 1, callRef, toolRef, state: 'terminal' })
+    expect(view.issue?.moneyMovement).toBe('The charge has not been confirmed.')
+  })
+
   it.each([
     [{ state: 'completed', deliveryState: 'delivered', paymentState: 'settled' }, 'Resolved — delivered', false],
     [{ state: 'completed', deliveryState: 'delivered', paymentState: 'released' }, 'Resolved — refunded', false],
@@ -131,7 +194,7 @@ describe('public Call receipt projection', () => {
     })
 
     expect(view.complete).toBe(false)
-    expect(view.statusLabel).toBe('Provider call in progress')
+    expect(view.statusLabel).toBe('Provider Call in progress')
     expect(view.stages.find(({ id }) => id === 'reserved')).toMatchObject({ state: 'current' })
     expect(view.stages.find(({ id }) => id === 'submitted')).toMatchObject({ state: 'complete' })
     expect(view.stages.find(({ id }) => id === 'settled')).toMatchObject({ state: 'pending' })
@@ -185,9 +248,10 @@ describe('public Call receipt projection', () => {
     }
 
     const view = projectCallReceipt(input)
-    expect(view.statusLabel).toBe('Complete')
-    expect(view.complete).toBe(true)
+    expect(view.statusLabel).toBe('Needs review')
+    expect(view.complete).toBe(false)
     expect(purchaseStatusLabel(input)).toBe('Open — outcome uncertain')
+    expect(view.stages.find(({ id }) => id === 'settled')).toMatchObject({ state: 'attention' })
   })
 
   it('answers the five recovery questions for an uncertain paid outcome', () => {
@@ -209,11 +273,11 @@ describe('public Call receipt projection', () => {
     })
 
     expect(view.issue).toEqual({
-      title: 'The external outcome needs reconciliation',
-      whatHappened: 'The provider boundary may have been crossed, but the final external outcome is not conclusive.',
+      title: 'This Call needs review',
+      whatHappened: 'AE has not confirmed whether this Call completed. Its result and payment need review before another attempt.',
       moneyMovement: 'Money movement is not yet conclusive — do not assume a charge or refund.',
       automaticNext: 'No duplicate charge and no automatic retry.',
-      userNext: 'Submit reconciliation evidence for this Call before any retry.',
+      userNext: 'Get help with this Call to check its payment and result before another attempt.',
       retainedReference: callRef,
     })
     expect(view.stages.find(({ id }) => id === 'settled')).toMatchObject({ state: 'attention' })

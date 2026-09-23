@@ -47,6 +47,16 @@ function messageId(prefix: string): string {
   return `${prefix}-${globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random()}`}`
 }
 
+function assistantTurnStarted(messages: readonly TranscriptMessage[]): boolean {
+  const last = messages.at(-1)
+  if (last?.role !== 'assistant') return false
+  return last.parts.some((part) => {
+    if (typeof part !== 'object' || part === null || !('type' in part)) return false
+    const type = part.type
+    return type === 'text' || (typeof type === 'string' && type.startsWith('tool-'))
+  })
+}
+
 export function useChatSession({
   threadId,
   initialPrompt = '',
@@ -66,6 +76,7 @@ export function useChatSession({
   })
   const [anonymousMessages, setAnonymousMessages] = useState<TranscriptMessage[]>(initialHandoff.messages)
   const [busy, setBusy] = useState(false)
+  const [sending, setSending] = useState(false)
   const [error, setError] = useState('')
   const [errorReference, setErrorReference] = useState<string | undefined>()
   const [browseMarketOnError, setBrowseMarketOnError] = useState(false)
@@ -215,6 +226,7 @@ export function useChatSession({
     if (operationInFlightRef.current) return
     operationInFlightRef.current = true
     setBusy(true)
+    setSending(true)
     setError('')
     setErrorReference(undefined)
     setBrowseMarketOnError(false)
@@ -255,6 +267,7 @@ export function useChatSession({
     } finally {
       operationInFlightRef.current = false
       setBusy(false)
+      setSending(false)
     }
   }
 
@@ -373,6 +386,7 @@ export function useChatSession({
       status,
       ...(isAuthenticated ? {} : { anonymousMessageCount: anonymousMessages.length }),
       anonymousMessageLimitReached,
+      ...(isAuthenticated ? {} : { onStop: () => { abortRef.current?.abort() } }),
       onPromptChange: (value) => {
         setPrompt(boundPrompt(value))
         if (error.length > 0) {
@@ -385,6 +399,9 @@ export function useChatSession({
     },
     transcript: {
       messages: visibleMessages,
+      thinking: sending && !assistantTurnStarted(visibleMessages),
+      clarifyDisabled: composerDisabled,
+      onClarifyAnswer: (answer) => { void submit(false, answer) },
       ...(transcriptPending ? { pending: true } : {}),
       ...(isAuthenticated && anonymousMessages.length > 0
         ? { handoffAfter: anonymousMessages.length }

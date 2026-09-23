@@ -174,7 +174,7 @@ function DialogContent({
         data-slot="dialog-content"
         finalFocus={resolvedFinalFocus}
         className={cn(
-          "fixed top-[50%] left-[50%] z-50 grid w-full max-w-[calc(100%-2rem)] translate-x-[-50%] translate-y-[-50%] gap-4 overscroll-contain rounded-lg bg-popover p-6 text-popover-foreground shadow-overlay duration-base ease-emphasized outline-none data-closed:pointer-events-none data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95 data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 motion-reduce:animate-none sm:max-w-lg",
+          "fixed top-[50%] left-[50%] z-50 grid w-full max-w-[calc(100%-2rem)] translate-x-[-50%] translate-y-[-50%] gap-4 overscroll-contain rounded-xl bg-popover p-6 text-popover-foreground shadow-overlay duration-base ease-emphasized outline-none data-closed:pointer-events-none data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95 data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 motion-reduce:animate-none sm:max-w-lg",
           className
         )}
         {...props}
@@ -184,9 +184,9 @@ function DialogContent({
         {showCloseButton ? (
           <DialogPrimitive.Close
             data-slot="dialog-close"
-            className="absolute top-4 right-4 flex size-8 items-center justify-center rounded-xs opacity-70 transition-[color,background-color,opacity,transform] duration-fast ease-standard outline-none hover:opacity-100 active:scale-[0.96] disabled:active:scale-100 motion-reduce:active:scale-100 motion-reduce:transition-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand disabled:pointer-events-none data-open:bg-accent data-open:text-muted-foreground max-sm:min-h-touch max-sm:min-w-touch [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4"
+            className="absolute top-4 right-4 flex size-8 items-center justify-center rounded-md opacity-70 transition-[color,background-color,opacity,transform] duration-fast ease-standard outline-none hover:opacity-100 active:scale-[0.96] disabled:active:scale-100 motion-reduce:active:scale-100 motion-reduce:transition-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand disabled:pointer-events-none data-open:bg-accent data-open:text-muted-foreground max-sm:min-h-touch max-sm:min-w-touch [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4"
           >
-            <XIcon />
+            <XIcon aria-hidden="true" />
             <span className="sr-only">Close</span>
           </DialogPrimitive.Close>
         ) : null}
@@ -237,7 +237,7 @@ function DialogTitle({
   return (
     <DialogPrimitive.Title
       data-slot="dialog-title"
-      className={cn("text-lg leading-none font-semibold", className)}
+      className={cn("text-lg leading-none font-medium", className)}
       {...props}
     />
   )

@@ -137,7 +137,7 @@ export function ChatHistory({
                         type="button"
                         variant="ghost"
                         size="icon"
-                        className="min-h-touch min-w-touch opacity-100 lg:opacity-0 lg:group-hover:opacity-100 lg:group-focus-within:opacity-100"
+                        className="min-h-touch min-w-touch opacity-100 lg:opacity-0 lg:group-hover/item:opacity-100 lg:group-focus-within/item:opacity-100"
                         aria-label={`Rename ${thread.title}`}
                         onClick={() => setRenaming(thread.threadId)}
                       >
@@ -147,7 +147,7 @@ export function ChatHistory({
                         type="button"
                         variant="ghost"
                         size="icon"
-                        className="min-h-touch min-w-touch opacity-100 lg:opacity-0 lg:group-hover:opacity-100 lg:group-focus-within:opacity-100"
+                        className="min-h-touch min-w-touch opacity-100 lg:opacity-0 lg:group-hover/item:opacity-100 lg:group-focus-within/item:opacity-100"
                         aria-label={`Delete ${thread.title}`}
                         onClick={() => setConfirmDelete(thread.threadId)}
                       >

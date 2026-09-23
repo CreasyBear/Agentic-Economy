@@ -33,6 +33,7 @@ vi.mock('@tanstack/react-router', () => ({
 }))
 
 vi.mock('@clerk/tanstack-react-start', () => ({
+  useAuth: () => ({ isLoaded: true, isSignedIn: false }),
   SignIn: (props: Record<string, unknown>) => {
     routeState.signInProps = props
     return <div>clerk-sign-in</div>
@@ -62,9 +63,8 @@ describe('sign-in site stage', () => {
     if (Component === undefined || Component === null) throw new Error('Sign-in route was not captured.')
     render(<Component />)
 
-    expect(screen.getByRole('heading', { name: 'Sign in to connect an agent' })).toBeTruthy()
-    expect(screen.getByText(/Use email, Google, GitHub, or a passkey/)).toBeTruthy()
-    expect(screen.getByText(/return to the agent connection you started/)).toBeTruthy()
+    expect(screen.getByRole('heading', { name: 'Sign in to connect an Agent' })).toBeTruthy()
+    expect(screen.getByText(/return to the Agent connection you started/)).toBeTruthy()
     expect(document.querySelector('[data-slot="ae-site-browser"]')?.textContent).toContain('/sign-in')
     expect(screen.getByText('clerk-sign-in')).toBeTruthy()
     expect(document.querySelector('[data-slot="ae-site-auth-clerk-well"]')).toBeTruthy()
@@ -81,18 +81,19 @@ describe('sign-in site stage', () => {
     expect(container.querySelectorAll('.min-h-touch').length).toBeGreaterThanOrEqual(4)
   })
 
-  it('names supported auth methods for provider and default redirects', () => {
+  it('uses default copy for non-supply owner redirects and Market for no return', () => {
     routeState.search = { redirect: '/owner/settings' }
     const ProviderComponent = routeState.SignIn
     if (ProviderComponent === undefined || ProviderComponent === null) throw new Error('Sign-in route was not captured.')
     const { unmount } = render(<ProviderComponent />)
-    expect(screen.getByText(/Use email, Google, GitHub, or a passkey/)).toBeTruthy()
-    expect(screen.getByText(/return to your Provider workspace/)).toBeTruthy()
+    expect(screen.getByRole('heading', { name: 'Sign in' })).toBeTruthy()
+    expect(screen.queryByText(/return to your Provider Workspace/)).toBeNull()
+    expect(screen.getByText(/continue on Market/)).toBeTruthy()
     unmount()
 
     routeState.search = { redirect: undefined }
     render(<ProviderComponent />)
-    expect(screen.getByText(/return to where you left off/)).toBeTruthy()
+    expect(screen.getByText(/continue on Market/)).toBeTruthy()
   })
 
   it('autofocuses the first auth input on desktop when focus is still on body', async () => {

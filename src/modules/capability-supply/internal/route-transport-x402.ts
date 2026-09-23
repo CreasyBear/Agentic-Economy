@@ -72,7 +72,9 @@ export {
 export type X402RouteTransportRuntime = RouteTransportRuntime &
   Readonly<{
     prepareX402PaymentAuthorization: (
-      request: X402PaymentSignatureRequest & X402PaymentAuthorizationIdentity,
+      request: X402PaymentSignatureRequest & X402PaymentAuthorizationIdentity & Readonly<{
+        authorityExpiresAt: number
+      }>,
     ) => Promise<X402PreparedAuthorization | undefined>
     readX402PaymentAuthorization: (
       prepared: X402PreparedAuthorization,
@@ -162,6 +164,7 @@ export async function invokeX402(
   try {
     preparedAuthorization = await runtime.prepareX402PaymentAuthorization({
       challenge,
+      authorityExpiresAt: invocation.authority.expiresAt,
       credential: paymentCredentialRef,
       selectedRequirement: requirement,
       ...authorizationIdentity,
@@ -395,6 +398,37 @@ export async function invokeX402(
       containsSensitiveValue(providerReceiptHeader, sensitiveValues)
     const providerReceipt =
       verifiedOffer === undefined ? providerReceiptHeader : {}
+    const receiptVerification = verifiedOffer === undefined || paymentOutputContainsSensitive
+      ? undefined
+      : await verifyX402SignedReceipt({
+          response: new Response(null, { headers: toHeaderRecord(paid) }),
+          offer: verifiedOffer,
+          payer: paymentIdentity!.payer,
+          nowSeconds: Math.floor(Date.now() / 1_000),
+        })
+    const completeDelivery = normalized.disposition === 'succeeded'
+      && (verifiedOffer === undefined || receiptVerification?.kind === 'verified')
+    if (!paymentOutputContainsSensitive && normalized.outputJson !== undefined
+      && normalized.responseDigest !== undefined && completeDelivery) {
+      const paymentResponse = paymentProof.paymentProof === undefined
+        ? undefined : readX402PaymentResponseHeader(paymentProof.paymentProof)
+      await runtime.checkpointX402Response?.({
+        attemptRef: paymentEvent.attemptRef,
+        paymentIdentifier: paymentEvent.paymentIdentifier,
+        responseDigest: normalized.responseDigest,
+        outputJson: normalized.outputJson,
+        requestDigest,
+        custodyRef: paymentEvent.custodyRef,
+        authorizationDigest: paymentEvent.authorizationDigest,
+        ...(paymentResponse === undefined ? {} : {
+          paymentResponseDigest: canonicalDigest(paymentResponse as StableHashValue),
+        }),
+        ...(paymentResponse !== undefined && paymentResponse.network === requirement.network
+          && /^0x[0-9a-fA-F]{64}$/.test(paymentResponse.transaction)
+          ? { settlementTransactionRef: `chain:${paymentResponse.network}:${paymentResponse.transaction}` }
+          : {}),
+      })
+    }
     const settlement = paymentOutputContainsSensitive
       ? { status: 'unknown' as const, failureCode: 'response_output_invalid' }
       : await x402SettlementCheck(
@@ -464,7 +498,7 @@ export async function invokeX402(
       // can journal it while independent settlement evidence matures. The
       // `unknown` disposition and quote-delivery state are the quarantine
       // boundary: ordinary output validation must not treat it as delivered.
-      const quarantinedResponse = normalized.outputJson === undefined
+      const quarantinedResponse = !completeDelivery || normalized.outputJson === undefined
         || normalized.responseDigest === undefined
         ? {}
         : {
@@ -524,13 +558,7 @@ export async function invokeX402(
       }
     }
     if (verifiedOffer !== undefined) {
-      const receiptVerification = await verifyX402SignedReceipt({
-        response: new Response(null, { headers: toHeaderRecord(paid) }),
-        offer: verifiedOffer,
-        payer: paymentIdentity!.payer,
-        nowSeconds: Math.floor(Date.now() / 1_000),
-      })
-      if (receiptVerification.kind !== 'verified') {
+      if (receiptVerification?.kind !== 'verified') {
         const { outputJson: _outputJson, ...withoutOutput } = normalized
         return {
           ...withoutOutput,

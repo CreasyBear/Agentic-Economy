@@ -4,6 +4,7 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { AeConfirmDialog } from '@/components/ae/feedback/AeConfirmDialog'
 import { AeEmptyState } from '@/components/ae/feedback/AeEmptyState'
 import { AeCopyReference } from '@/components/ae/data/AeCopyReference'
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { buttonVariants } from '@/components/ui/button-variants'
 import { cn } from '@/lib/utils'
@@ -15,6 +16,7 @@ import {
   providerConnectionResource,
   providerConnectionStatus,
 } from './owner-provider-connections-model'
+import { OWNER_MCP_OAUTH_CALLBACK_COPY } from './owner-mcp-oauth-callback.contracts'
 
 export function AeProviderConnectionList({
   connections,
@@ -79,6 +81,11 @@ export function AeProviderConnectionList({
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div className="grid min-w-0 gap-1">
                   <p className="font-medium text-foreground">{providerConnectionStatus(connection)}</p>
+                  {connection.sourceEnvironment === undefined ? null : (
+                    <Badge variant="outline">
+                      {OWNER_MCP_OAUTH_CALLBACK_COPY.environment[connection.sourceEnvironment]}
+                    </Badge>
+                  )}
                   <p className="break-all text-sm text-muted-foreground">
                     {connection.x402Method ?? 'Method not recorded'} {providerConnectionResource(connection)}
                   </p>

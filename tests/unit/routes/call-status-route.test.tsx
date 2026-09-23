@@ -51,6 +51,7 @@ function renderWithRouter(result: CallStatusPageResult, actions?: CallStatusPage
     createRoute({ getParentRoute: () => rootRoute, path: '/tools/$toolRef' }),
     createRoute({ getParentRoute: () => rootRoute, path: '/calls/$callRef' }),
     createRoute({ getParentRoute: () => rootRoute, path: '/sign-in/$' }),
+    createRoute({ getParentRoute: () => rootRoute, path: '/support' }),
   ])
   const router = createRouter({ routeTree, history: createMemoryHistory({ initialEntries: ['/'] }) })
   return render(
@@ -133,13 +134,11 @@ describe('/calls/$callRef', () => {
       },
     })
 
-    expect(screen.getByRole('heading', { level: 1, name: 'Call receipt' })).toBeTruthy()
+    expect(screen.getByRole('region', { name: 'Call summary' })).toBeTruthy()
     expect(screen.getAllByText(callRef).length).toBeGreaterThan(0)
-    const toolLink = screen.getByRole('link', { name: 'Observe Perth weather' })
-    expect(toolLink.getAttribute('href')).toBe(`/tools/${encodeURIComponent(toolRef)}`)
-    expect(screen.getByText('provider:weather:one (name not recorded)')).toBeTruthy()
+    expect(screen.queryByRole('link', { name: 'Observe Perth weather' })).toBeNull()
     expect(screen.getByText('Weather assistant')).toBeTruthy()
-    expect(screen.getByText('Not recorded for this Call')).toBeTruthy()
+    expect(screen.queryByText('Not recorded for this Call')).toBeNull()
     expect(screen.getAllByText('Terminal').length).toBeGreaterThan(0)
     expect(screen.getAllByText('AUD 1.25').length).toBeGreaterThan(0)
     expect(screen.getByText('attempt:exact')).toBeTruthy()
@@ -175,16 +174,20 @@ describe('/calls/$callRef', () => {
 
     expect(screen.getByRole('main')).toBeTruthy()
     expect(screen.getByRole('link', { name: 'Back to Calls' }).getAttribute('href')).toBe('/activity')
-    expect(screen.getByRole('heading', { name: 'Call summary' })).toBeTruthy()
+    const helpLink = screen.getByRole('link', { name: 'Get help' })
+    const helpUrl = new URL(helpLink.getAttribute('href') ?? '', 'https://ae.example')
+    expect(helpUrl.pathname).toBe('/support')
+    expect(helpUrl.searchParams.get('callRef')).toBe(callRef)
+    expect(screen.getByRole('region', { name: 'Call summary' })).toBeTruthy()
     expect(screen.getByRole('heading', { name: 'Output' })).toBeTruthy()
 
-    const technical = screen.getByText('Technical record').closest('details')
+    const technical = screen.getByText('Technical details').closest('details')
     expect(technical).not.toBeNull()
     expect((technical as HTMLDetailsElement).open).toBe(false)
     expect(within(technical as HTMLElement).getAllByText(callRef).length).toBeGreaterThan(0)
     expect(within(technical as HTMLElement).getByText('attempt:exact')).toBeTruthy()
     expect(within(technical as HTMLElement).getByText('3')).toBeTruthy()
-    expect(within(technical as HTMLElement).getByRole('heading', { name: 'What happened', hidden: true })).toBeTruthy()
+    expect(within(technical as HTMLElement).getByText('Money before and after the call')).toBeTruthy()
   })
 
   it('presents a completed receipt as six recorded stages with money facts and reuse actions', () => {
@@ -274,12 +277,10 @@ describe('/calls/$callRef', () => {
     renderWithRouter({ kind: 'found', version: 1, callRef, toolRef, state: 'reconciliation_required' })
 
     expect(screen.getAllByText('Reconciliation required').length).toBeGreaterThan(0)
-    expect(screen.getByText('No canonical result is recorded yet. The state above remains authoritative.')).toBeTruthy()
+    expect(screen.queryByText('No result has been recorded yet.')).toBeNull()
     expect(screen.queryByText('Completed')).toBeNull()
-    expect(screen.getAllByText('What happened').length).toBeGreaterThan(0)
-    expect(screen.getByText('Financial impact')).toBeTruthy()
-    expect(screen.getByText('What happens automatically')).toBeTruthy()
-    expect(screen.getByText('What you can do')).toBeTruthy()
+    expect(screen.getAllByText('Needs review').length).toBeGreaterThan(0)
+    expect(screen.queryByText('What happens next')).toBeNull()
     expect(screen.queryByText('Reference kept')).toBeNull()
     expect(screen.getByText('The external effect may have started. Reconcile before retrying.')).toBeTruthy()
   })
@@ -297,7 +298,7 @@ describe('/calls/$callRef', () => {
       ownerContext,
     }, { onReconcile })
 
-    fireEvent.click(screen.getByRole('combobox', { name: 'Observed provider outcome' }))
+    fireEvent.click(screen.getByRole('combobox', { name: 'Observed Provider outcome' }))
     fireEvent.click(screen.getByRole('option', { name: 'Effect released' }))
     fireEvent.change(screen.getByLabelText('Evidence source'), { target: { value: 'Provider control plane' } })
     fireEvent.change(screen.getByLabelText('Evidence reference'), { target: { value: 'evt_123' } })
@@ -310,6 +311,29 @@ describe('/calls/$callRef', () => {
     })
   })
 
+  it('does not claim a zero charge when reconciliation binding facts are missing', () => {
+    renderWithRouter({
+      kind: 'found',
+      version: 1,
+      callRef,
+      toolRef,
+      state: 'reconciliation_required',
+      usage: {
+        usageRef: 'usage:outcome-unknown',
+        observedAt: Date.UTC(2026, 8, 22),
+        chargeState: 'outcome_unknown',
+        amount: { currency: 'AUD', units: '0', exponent: 2 },
+        priceDigest: 'sha256:uncertain-price',
+      },
+    })
+
+    expect(screen.getByRole('link', { name: 'Get help with this Call' })).toBeTruthy()
+    expect(screen.queryByLabelText('Evidence source')).toBeNull()
+    expect(screen.getByText('The charge has not been confirmed.')).toBeTruthy()
+    expect(within(screen.getByRole('region', { name: 'Call summary' })).queryByText('AUD 0.00')).toBeNull()
+    expect(screen.queryByText(/A\$0\.00 charged/)).toBeNull()
+  })
+
   it('does not expose evidence submission when the owner receipt context is absent', () => {
     renderWithRouter({
       kind: 'found',
@@ -320,13 +344,96 @@ describe('/calls/$callRef', () => {
       attemptRef: 'attempt:uncertain',
       effectGeneration: 2,
       ownerContext: null,
+      usage: {
+        usageRef: 'usage:permission-unknown',
+        observedAt: Date.UTC(2026, 8, 22),
+        chargeState: 'outcome_unknown',
+        amount: { currency: 'AUD', units: '0', exponent: 2 },
+        priceDigest: 'sha256:uncertain-price',
+      },
     }, { onReconcile: vi.fn(), onRefresh: vi.fn(async () => undefined) })
 
-    expect(screen.getByText('Evidence submission is unavailable')).toBeTruthy()
-    expect(screen.getByText(/Permission to submit Provider evidence could not be confirmed/)).toBeTruthy()
-    expect(screen.getByRole('button', { name: 'Refresh current status' })).toBeTruthy()
+    const help = screen.getByRole('link', { name: 'Get help with this Call' })
+    expect(new URL(help.getAttribute('href') ?? '', 'https://ae.example').searchParams.get('callRef')).toBe(callRef)
+    expect(screen.getByText(/Checking status only reads the latest record/)).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Check status' })).toBeTruthy()
     expect(screen.queryByRole('button', { name: 'Submit reconciliation evidence' })).toBeNull()
     expect(screen.queryByLabelText('Evidence source')).toBeNull()
+    expect(screen.getByText('The charge has not been confirmed.')).toBeTruthy()
+    expect(within(screen.getByRole('region', { name: 'Call summary' })).queryByText('AUD 0.00')).toBeNull()
+    expect(screen.queryByText(/A\$0\.00 charged/)).toBeNull()
+  })
+
+  it('keeps review available for terminal execution with unconfirmed payment and does not offer a new purchase', () => {
+    renderWithRouter({
+      kind: 'found', version: 1, callRef, toolRef, state: 'terminal',
+      result: {
+        kind: 'completed', callRef, toolRef, output: { temperature: 24 }, evidenceHash: 'sha256:output',
+        usage: { usageRef: 'usage:uncertain', observedAt: 1, chargeState: 'outcome_unknown',
+          amount: { currency: 'AUD', units: '0', exponent: 2 }, priceDigest: 'sha256:price' },
+      },
+    }, { onRefresh: vi.fn(), onCancel: vi.fn() })
+    expect(screen.getByRole('link', { name: 'Get help with this Call' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Copy output' })).toBeTruthy()
+    expect(screen.queryByRole('link', { name: 'Review Tool' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Cancel Call' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Check status' })).toBeNull()
+    expect(screen.getAllByText('Needs review').length).toBeGreaterThan(0)
+  })
+
+  it('keeps a retryable refusal on the original Call instead of offering a replacement', () => {
+    renderWithRouter({
+      kind: 'found', version: 1, callRef, toolRef, state: 'retryable',
+      result: { kind: 'refused', code: 'pre_release_failed', retryable: true },
+    }, { onRefresh: vi.fn(), onCancel: vi.fn() })
+    expect(screen.getByRole('button', { name: 'Check status' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Cancel Call' })).toBeTruthy()
+    expect(screen.queryByRole('link', { name: 'View Tool' })).toBeNull()
+    expect(screen.queryByRole('link', { name: 'Review Tool' })).toBeNull()
+  })
+
+  it('does not expose recovery actions when a refund outranks stale execution progress', () => {
+    renderWithRouter({
+      kind: 'found', version: 1, callRef, toolRef, state: 'reconciliation_required',
+      ownerContext, attemptRef: 'attempt:refunded', effectGeneration: 1,
+      usage: { usageRef: 'usage:refund', observedAt: 1, chargeState: 'refunded',
+        amount: { currency: 'AUD', units: '125', exponent: 2 }, priceDigest: 'sha256:price' },
+      purchaseResolution: {
+        resolutionRef: 'resolution:refund', recordDigest: 'sha256:refund', callRef,
+        quoteRef: 'quote:refund', accountRef: 'account:buyer', customerRef: 'customer:buyer',
+        agentPrincipalRef: 'agent:buyer', sellerRef: 'seller:ae', providerRef: 'provider:weather', paymentRecipientRef: 'recipient:weather',
+        terminalState: 'refunded', deliveryState: 'not_delivered', paymentState: 'released',
+        considerationAmount: { currency: 'AUD', units: '125', exponent: 2 }, considerationNetUnits: '125', considerationGstUnits: '0',
+        providerObligationAmount: { currency: 'USDC', units: '0', exponent: 6 }, resolvedAt: 1,
+      },
+    }, { onRefresh: vi.fn(), onCancel: vi.fn(), onReconcile: vi.fn() })
+    expect(screen.queryByRole('button', { name: 'Check status' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Cancel Call' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Submit reconciliation evidence' })).toBeNull()
+    expect(screen.getByRole('link', { name: 'View Tool' })).toBeTruthy()
+  })
+
+  it('shows no charge and restored credit in the visible receipt after unused payment expiry', () => {
+    const amount = { currency: 'AUD', units: '1408', exponent: 6 }
+    renderWithRouter({
+      kind: 'found', version: 1, callRef, toolRef, state: 'terminal', ownerContext,
+      result: { kind: 'refused', code: 'source_unavailable', retryable: false,
+        nextAction: 'The service did not complete and payment expired unused. Your credit has been restored. You can make a new request from the Tool page.',
+        receipt: {
+          commercialModel: 'account_aud', receiptRef: 'receipt:expired', state: 'refunded', refundState: 'released', lossState: 'none',
+          buyerCharge: amount, serviceFee: { ...amount, units: '0' }, totalBuyerCharge: amount,
+          providerObligation: { amount: { currency: 'USDC', units: '1000', exponent: 6 }, settlementMethod: 'managed_x402', payoutEligible: false },
+          providerSettlement: { network: 'eip155:84532', asset: '0x036CbD53842c5426634e7929541eC2318f3dCF7e', amount: { currency: 'USDC', units: '1000', exponent: 6 } },
+          priceDigest: 'sha256:price', evidenceHash: 'sha256:unused', issuedAt: '2026-09-22T09:00:00.000Z',
+        },
+      },
+    }, { onRefresh: vi.fn(), onCancel: vi.fn(), onReconcile: vi.fn() })
+    const explanation = screen.getByText('The service did not complete. You were not charged; your reserved credit has been restored.')
+    expect(explanation.closest('details')).toBeNull()
+    expect(screen.getAllByText('Credit released').length).toBeGreaterThan(0)
+    expect(screen.getByRole('link', { name: 'View Tool' })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Check status' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Submit reconciliation evidence' })).toBeNull()
   })
 
   it('requires explicit confirmation before requesting cancellation', async () => {
@@ -348,7 +455,7 @@ describe('/calls/$callRef', () => {
     expect(onCancel).not.toHaveBeenCalled()
 
     fireEvent.click(screen.getByRole('button', { name: 'Cancel Call' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Confirm cancellation' }))
+    fireEvent.click(within(screen.getByRole('alertdialog', { name: 'Cancel this Call?' })).getByRole('button', { name: 'Cancel Call' }))
     await waitFor(() => expect(onCancel).toHaveBeenCalledOnce())
 
     view.unmount()
@@ -372,7 +479,8 @@ describe('/calls/$callRef', () => {
       state: 'in_progress',
     }, { onRefresh })
 
-    fireEvent.click(screen.getByRole('button', { name: 'Refresh current status' }))
+    expect(screen.getByText(/Closing the page does not cancel it/)).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Check status' }))
     expect(onRefresh).toHaveBeenCalledOnce()
 
     unmount()
@@ -383,7 +491,7 @@ describe('/calls/$callRef', () => {
       toolRef,
       state: 'in_progress',
     }, { onRefresh, refreshPending: true })
-    expect(screen.getByRole('button', { name: 'Refreshing current status…' }).hasAttribute('disabled')).toBe(true)
+    expect(screen.getByRole('button', { name: 'Checking…' }).hasAttribute('disabled')).toBe(true)
 
     cleanup()
     renderWithRouter({
@@ -393,7 +501,7 @@ describe('/calls/$callRef', () => {
       toolRef,
       state: 'terminal',
     }, { onRefresh })
-    expect(screen.queryByRole('button', { name: 'Refresh current status' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Check status' })).toBeNull()
   })
 
   it('replaces a nonterminal displayed state with the current source status after refresh', async () => {
@@ -407,9 +515,9 @@ describe('/calls/$callRef', () => {
     })
     renderRouteComponent({ kind: 'found', version: 1, callRef, toolRef, state: 'in_progress' })
 
-    fireEvent.click(screen.getByRole('button', { name: 'Refresh current status' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Check status' }))
 
-    await waitFor(() => expect(screen.getAllByText('Resolved — failed').length).toBeGreaterThan(0))
+    await waitFor(() => expect(screen.getAllByText('Call finished').length).toBeGreaterThan(0))
     expect(readStatusMock).toHaveBeenCalledWith({ data: { callRef } })
     expect(screen.queryByText('In progress')).toBeNull()
     expect(screen.getByText('Current status refreshed. Purchase status: Resolved — failed.')).toBeTruthy()
@@ -434,11 +542,11 @@ describe('/calls/$callRef', () => {
       <RouterContextProvider router={router}>{createElement(Component)}</RouterContextProvider>,
     )
 
-    expect(screen.getByRole('link', { name: 'Recorded Tool name unavailable' }).getAttribute('href')).toContain(encodeURIComponent(toolRef))
+    expect(screen.getByRole('main')).toBeTruthy()
     loader.mockReturnValue(next)
     view.rerender(<RouterContextProvider router={router}>{createElement(Component)}</RouterContextProvider>)
 
-    expect(screen.getByRole('link', { name: 'Recorded Tool name unavailable' }).getAttribute('href')).toContain(encodeURIComponent(nextToolRef))
+    expect(screen.getByRole('main')).toBeTruthy()
     expect(screen.queryByText(callRef)).toBeNull()
   })
 
@@ -446,7 +554,7 @@ describe('/calls/$callRef', () => {
     readStatusMock.mockRejectedValue(new Error('offline'))
     renderRouteComponent({ kind: 'found', version: 1, callRef, toolRef, state: 'in_progress' })
 
-    fireEvent.click(screen.getByRole('button', { name: 'Refresh current status' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Check status' }))
 
     expect(await screen.findByText('The current status source is unavailable. The displayed state has not changed.')).toBeTruthy()
     expect(screen.getAllByText('In progress').length).toBeGreaterThan(0)
@@ -460,11 +568,11 @@ describe('/calls/$callRef', () => {
     renderRouteComponent({ kind: 'found', version: 1, callRef, toolRef, state: 'retryable' })
 
     fireEvent.click(screen.getByRole('button', { name: 'Cancel Call' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Confirm cancellation' }))
+    fireEvent.click(within(screen.getByRole('alertdialog', { name: 'Cancel this Call?' })).getByRole('button', { name: 'Cancel Call' }))
     expect(await screen.findByText('The cancellation source is unavailable. No new Call state is claimed.')).toBeTruthy()
 
     fireEvent.click(screen.getByRole('button', { name: 'Cancel Call' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Confirm cancellation' }))
+    fireEvent.click(within(screen.getByRole('alertdialog', { name: 'Cancel this Call?' })).getByRole('button', { name: 'Cancel Call' }))
     await waitFor(() => expect(cancelMock).toHaveBeenCalledTimes(2))
 
     const keys = cancelMock.mock.calls.map((call) => call[0]?.data?.idempotencyKey)
@@ -478,13 +586,13 @@ describe('/calls/$callRef', () => {
     const firstView = renderRouteComponent({ kind: 'found', version: 1, callRef, toolRef, state: 'retryable' })
 
     fireEvent.click(screen.getByRole('button', { name: 'Cancel Call' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Confirm cancellation' }))
+    fireEvent.click(within(screen.getByRole('alertdialog', { name: 'Cancel this Call?' })).getByRole('button', { name: 'Cancel Call' }))
     expect(await screen.findByText('The cancellation source is unavailable. No new Call state is claimed.')).toBeTruthy()
     firstView.unmount()
 
     renderRouteComponent({ kind: 'found', version: 1, callRef, toolRef, state: 'retryable' })
     fireEvent.click(screen.getByRole('button', { name: 'Cancel Call' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Confirm cancellation' }))
+    fireEvent.click(within(screen.getByRole('alertdialog', { name: 'Cancel this Call?' })).getByRole('button', { name: 'Cancel Call' }))
     await waitFor(() => expect(cancelMock).toHaveBeenCalledTimes(2))
 
     const keys = cancelMock.mock.calls.map((call) => call[0]?.data?.idempotencyKey)
@@ -539,7 +647,7 @@ describe('/calls/$callRef', () => {
     } as const
     const firstView = renderRouteComponent(result)
 
-    fireEvent.click(screen.getByRole('combobox', { name: 'Observed provider outcome' }))
+    fireEvent.click(screen.getByRole('combobox', { name: 'Observed Provider outcome' }))
     fireEvent.click(screen.getByRole('option', { name: 'Effect released' }))
     fireEvent.change(screen.getByLabelText('Evidence source'), { target: { value: 'Provider control plane' } })
     fireEvent.change(screen.getByLabelText('Evidence reference'), { target: { value: 'evt_123' } })
@@ -550,7 +658,7 @@ describe('/calls/$callRef', () => {
     renderRouteComponent(result)
     expect((screen.getByLabelText('Evidence source') as HTMLInputElement).value).toBe('Provider control plane')
     expect((screen.getByLabelText('Evidence reference') as HTMLInputElement).value).toBe('evt_123')
-    expect(screen.getByRole('combobox', { name: 'Observed provider outcome' }).textContent).toContain('Effect released')
+    expect(screen.getByRole('combobox', { name: 'Observed Provider outcome' }).textContent).toContain('Effect released')
     fireEvent.click(screen.getByRole('button', { name: 'Submit reconciliation evidence' }))
     await waitFor(() => expect(reconcileMock).toHaveBeenCalledTimes(2))
 
@@ -634,7 +742,7 @@ describe('/calls/$callRef', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Submit reconciliation evidence' }))
     expect(await screen.findByText('The reconciliation source is unavailable. No new Call state is claimed.')).toBeTruthy()
 
-    fireEvent.click(screen.getByRole('button', { name: 'Refresh current status' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Check status' }))
     await screen.findByText('Current status refreshed. Purchase status: Open — outcome uncertain.')
     expect((screen.getByLabelText('Evidence source') as HTMLInputElement).value).toBe('')
     expect((screen.getByLabelText('Evidence reference') as HTMLInputElement).value).toBe('')
@@ -725,7 +833,7 @@ describe('/calls/$callRef', () => {
       nextAction: 'Check the exact reference while signed in.',
     })
 
-    expect(screen.getByRole('heading', { level: 1, name: 'Call receipt' })).toBeTruthy()
+    expect(screen.getByRole('main')).toBeTruthy()
     expect(screen.getAllByText(/No current execution state is claimed/i).length).toBeGreaterThan(0)
     expect(screen.getByRole('link', { name: 'Back to Calls' }).getAttribute('href')).toBe('/activity')
     expect(screen.queryByRole('link', { name: 'Sign in to view current status' })).toBeNull()
@@ -746,12 +854,12 @@ describe('/calls/$callRef', () => {
       },
       heading: 'Call receipt',
     },
-  ])('offers refresh rather than sign-in for retryable $result.kind status unavailability', ({ result, heading }) => {
+  ])('offers refresh rather than sign-in for retryable $result.kind status unavailability', ({ result }) => {
     const onRefresh = vi.fn()
     renderWithRouter(result, { onRefresh })
 
-    expect(screen.getByRole('heading', { level: 1, name: heading })).toBeTruthy()
-    fireEvent.click(screen.getByRole('button', { name: 'Try again' }))
+    expect(screen.getByRole('main')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Check status' }))
     expect(onRefresh).toHaveBeenCalledOnce()
     expect(screen.queryByRole('link', { name: 'Sign in to view current status' })).toBeNull()
   })
@@ -769,7 +877,7 @@ describe('/calls/$callRef', () => {
     const refusal = screen.getByRole('heading', { level: 2, name: 'Refusal evidence' }).closest('section')
     expect(refusal).not.toBeNull()
     expect(within(refusal as HTMLElement).getByText('Use the Tool environment recorded at creation.')).toBeTruthy()
-    expect(screen.queryByRole('button', { name: 'Refresh current status' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Check status' })).toBeNull()
     expect(screen.queryByRole('link', { name: 'Sign in to view current status' })).toBeNull()
   })
 
@@ -791,8 +899,7 @@ describe('/calls/$callRef', () => {
       ownerContext,
     })
 
-    expect(screen.getByRole('heading', { level: 1, name: 'Call receipt' })).toBeTruthy()
-    expect(screen.getByRole('heading', { name: 'Call summary' })).toBeTruthy()
+    expect(screen.getByRole('region', { name: 'Call summary' })).toBeTruthy()
     expect(screen.queryByText('Complete')).toBeNull()
     expect(screen.getAllByText(/Cancelled/i).length).toBeGreaterThan(0)
     expect(screen.queryByRole('button', { name: /Reuse/i })).toBeNull()
@@ -814,13 +921,20 @@ describe('/calls/$callRef', () => {
         nextAction: 'Authorize the Call and retry.',
       },
       ownerContext,
+      usage: {
+        usageRef: 'usage:settled-zero',
+        observedAt: Date.UTC(2026, 8, 22),
+        chargeState: 'insufficient_credit',
+        amount: { currency: 'AUD', units: '0', exponent: 2 },
+        priceDigest: 'sha256:settled-zero-price',
+      },
     })
 
-    expect(screen.getByRole('heading', { level: 1, name: 'Call receipt' })).toBeTruthy()
-    expect(screen.getByRole('heading', { name: 'Call summary' })).toBeTruthy()
+    expect(screen.getByRole('region', { name: 'Call summary' })).toBeTruthy()
     expect(screen.queryByText('Complete')).toBeNull()
-    expect(screen.getAllByText(/Resolved — failed/i).length).toBeGreaterThan(0)
+    expect(screen.getAllByText(/Not completed/i).length).toBeGreaterThan(0)
     expect(screen.getAllByText('Authorize the Call and retry.').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('AUD 0.00').length).toBeGreaterThan(0)
     expect(screen.queryByRole('button', { name: /Reuse/i })).toBeNull()
     expect(screen.queryByRole('link', { name: 'Review Tool' })).toBeNull()
     expect(screen.queryByRole('heading', { level: 2, name: 'Output' })).toBeNull()

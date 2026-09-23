@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import { reconcileCall, reconcileOwnerCall } from '../../../convex/capabilityCalls'
+import { ownerCallStatusResultSchema } from '@/modules/capability-execution/call-recovery.actions'
 import type { AgentAccessPrincipal } from '@/modules/agent-access/agent-access'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import {
@@ -194,6 +195,57 @@ describe('capability operation recovery Convex adapters', () => {
     await expect(readOwnerCallStatusHandler(ctx, { callRef })).resolves.toMatchObject({
       kind: 'found', callRef, state: 'reconciliation_required', ownerContext: null,
     })
+  })
+
+  it('projects a recorded terminal refusal instead of a stale retryable kernel status', async () => {
+    const amount = { currency: 'AUD' as const, units: '1403', exponent: 6 as const }
+    const providerAmount = { currency: 'USDC' as const, units: '1000', exponent: 6 as const }
+    const receipt = {
+      receiptRef: 'receipt:terminal-refusal', state: 'refunded' as const,
+      priceDigest: 'sha256:price', transactionRef: 'formance:reservation',
+      accountingTransactionRefs: ['formance:reservation'], refundState: 'released' as const,
+      lossState: 'none' as const, evidenceHash: 'sha256:evidence',
+      issuedAt: '2026-09-22T06:46:37.107Z', commercialModel: 'account_aud' as const,
+      buyerCharge: amount, serviceFee: { ...amount, units: '0' }, totalBuyerCharge: amount,
+      providerObligation: { amount: providerAmount, settlementMethod: 'managed_x402' as const, payoutEligible: false as const },
+      providerSettlement: {
+        amount: providerAmount, network: 'eip155:84532' as const,
+        asset: '0x036CbD53842c5426634e7929541eC2318f3dCF7e' as const,
+      },
+    }
+    const result = {
+      kind: 'refused' as const, toolRef: row.toolRef,
+      code: 'payment_requirement_outside_authority', retryable: false, receipt,
+    }
+    const terminalRow = {
+      ...row, state: 'refused' as const, result,
+      usage: { ...freeTierUsage('usage:refunded', 2), chargeState: 'refunded' as const, amount },
+      evidenceHash: receipt.evidenceHash, updatedAt: 3,
+    }
+    const ctx = ownerRecoveryContext(ownerIdentity, foundWorkerResult('retryable'), terminalRow)
+
+    const projected = await readOwnerCallStatusHandler(ctx, { callRef })
+    expect(projected).toMatchObject({
+      kind: 'found', state: 'terminal', version: 3,
+      result: { ...result, code: 'pre_release_failed' }, receipt,
+      usage: { chargeState: 'refunded' }, evidenceHash: receipt.evidenceHash,
+    })
+    expect(ownerCallStatusResultSchema.parse(projected)).toEqual(projected)
+    expect(ctx.runAction).not.toHaveBeenCalled()
+  })
+
+  it('keeps a recorded retryable refusal on the canonical worker status path', async () => {
+    const retryableRow = {
+      ...row, state: 'refused' as const,
+      result: { kind: 'refused' as const, toolRef: row.toolRef, code: 'source_unavailable', retryable: true },
+      updatedAt: 3,
+    }
+    const ctx = ownerRecoveryContext(ownerIdentity, foundWorkerResult('retryable'), retryableRow)
+
+    await expect(readOwnerCallStatusHandler(ctx, { callRef })).resolves.toMatchObject({
+      kind: 'found', state: 'retryable',
+    })
+    expectOwnerRecoverAction(ctx, 'status')
   })
 
   it('returns not-found without recovery work for a foreign or unauthenticated Clerk session', async () => {

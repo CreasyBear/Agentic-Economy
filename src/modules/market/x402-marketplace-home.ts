@@ -1,6 +1,6 @@
 import type { X402DirectoryEntry, X402DirectoryInput } from './x402-directory'
 
-/** Editorial entry points, not popularity rankings or completeness claims. */
+/** Editorial searches. Bazaar call volume orders each result, then two Tools per Provider. */
 export const X402_MARKETPLACE_COLLECTIONS = [
   { id: 'research', title: 'Find answers worth building on', description: 'Search the web, crawl sources and turn pages into useful evidence.', query: 'web search crawling research', category: 'Research', icon: 'search' },
   { id: 'finance', title: 'Make sense of the markets', description: 'Explore market data, financial signals and onchain information.', query: 'financial market data prices', category: 'Finance', icon: 'chart' },

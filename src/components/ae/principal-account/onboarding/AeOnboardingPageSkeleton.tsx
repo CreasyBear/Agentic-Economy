@@ -8,7 +8,7 @@ export function AeOnboardingPageSkeleton() {
       <AeSiteAuthStage labelledBy="onboarding-context-heading" url="/onboarding">
         <AeSiteAuthPanel
           eyebrow="Account"
-          title="Set up your workspace"
+          title="Finish workspace"
           titleId="onboarding-context-heading"
           body="Choose how you’ll use Agentic Economy and name your workspace."
         >

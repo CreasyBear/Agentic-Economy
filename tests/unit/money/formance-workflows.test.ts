@@ -13,6 +13,8 @@ import {
   prepareFormanceManagedCallRelease,
   prepareFormanceManagedCallReservation,
   prepareFormanceManagedCallSettlement,
+  prepareFormanceCapacitySync,
+  syncFormanceCapacity,
   readFormanceSpendingPeriod,
   type FormanceManagedCallBooking,
 } from '@/modules/money/formance-workflows'
@@ -105,7 +107,9 @@ function contextForAdjustment() {
       return {
         v2TransactionsCursorResponse: {
           cursor: {
-            data: transaction === undefined ? [] : [{ id: 1n, ...transaction, postings: [] }],
+            data: transaction === undefined ? [] : [{ id: 1n, ...transaction,
+              postings: [] as Array<{ source: string; destination: string; asset: string; amount: bigint }>,
+            }],
           },
         },
       }
@@ -125,6 +129,44 @@ function contextForAdjustment() {
 }
 
 describe('native Formance spending-period workflows', () => {
+  it('reuses treasury initialization across wallet changes without issuing capacity again', async () => {
+    const input = {
+      commandRef: 'capacity:treasury:one:1', idempotencyKey: 'capacity:treasury:one:1',
+      kind: 'treasury_usdc' as const, subjectRef: 'treasury:one', generation: 1,
+      targetUnits: '10000', policyDigest: DIGEST_A, externalEvidenceDigest: DIGEST_A,
+    }
+    const prepared = prepareFormanceCapacitySync(input)
+    if (prepared.kind !== 'prepared') throw new Error(prepared.code)
+    if (prepared.command.variables.capacity === undefined) throw new Error('Missing capacity account')
+    const posting = {
+      source: 'world', destination: prepared.command.variables.capacity,
+      asset: 'USDC/6', amount: 10000n,
+    }
+    const transaction = {
+      id: 1n, reference: prepared.command.commandRef, template: prepared.command.template,
+      metadata: prepared.command.metadata, postings: [posting],
+    }
+    const { context, ledger, createTransaction } = contextForAdjustment()
+    ledger.listTransactions.mockImplementation(async () => ({
+      v2TransactionsCursorResponse: { cursor: { data: [transaction] } },
+    }))
+    // Payment decreases, deposits increase and evidence-only refreshes all reuse
+    // the original capacity; the caller reads the remaining native balance.
+    for (const targetUnits of ['9000', '20000', '10000']) {
+      await expect(syncFormanceCapacity(context, {
+        ...input, targetUnits, externalEvidenceDigest: DIGEST_B,
+      })).resolves.toMatchObject({ kind: 'completed', replayed: true })
+    }
+    await expect(syncFormanceCapacity(context, {
+      ...input, policyDigest: DIGEST_B,
+    })).resolves.toMatchObject({ kind: 'refused', code: 'formance_reference_conflict' })
+    posting.destination = 'treasury:wrong:available'
+    await expect(syncFormanceCapacity(context, input)).resolves.toMatchObject({
+      kind: 'refused', code: 'formance_reference_conflict',
+    })
+    expect(createTransaction).not.toHaveBeenCalled()
+  })
+
   it('keeps legacy command identities and adds both original periods to the same three reservations', () => {
     const legacy = prepareFormanceManagedCallReservation(managedCallBooking())
     expect(legacy.kind).toBe('prepared')

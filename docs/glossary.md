@@ -17,9 +17,14 @@ related catalogue fact but is not itself a callable Tool. See `CONTEXT.md`
 ("Tool").
 
 **Quote**: An expiring, customer-bound price-and-terms decision returned
-before a paid Call — it binds the Provider, Seller, exact or maximum AUD
-price, terms, data use and retry rule for one Tool version and input. A price
-estimate alone is not a Quote. See `CONTEXT.md` ("Quote").
+before a paid Call. It binds the Provider, exact or maximum AUD price, terms,
+data use and retry rule for one Tool version and input. A price estimate alone
+is not a Quote. See `CONTEXT.md` ("Quote").
+
+**ExactAmount**: The only machine-readable shape for a price or money amount:
+`ExactAmount { currency, units, exponent }`. `currency` is the asset code,
+`units` is a non-negative integer string and `exponent` is its decimal scale.
+See `src/modules/money/public.ts`.
 
 **Call**: One accepted use of a Tool version under a Quote. Its attempts,
 Provider observations, output, Charge, delivery and recovery are all views of
@@ -41,12 +46,11 @@ with current source and APIs").
 
 ## Authority and access
 
-**credential**: The bearer secret an agent or provider presents on each
-authenticated call, issued by AE and bound to one exact principal and
-account; it never returns the underlying secret on read. It is a distinct
-fact from the grant/authority it carries — rotating the credential does not
-reset spending history. See `src/modules/agent-access/account.actions.ts` and
-`src/modules/capability-supply/internal/server-credential.ts`.
+**Agent access key**: The bearer secret an Agent sends as
+`Authorization: Bearer <Agent access key>` on protected HTTP requests. It is
+issued by Agentic Economy and bound to one Agent and account. Reading the
+Agent never returns the secret; rotating the key does not reset spending
+history. See `src/modules/agent-access/account.actions.ts`.
 
 **grant**: The versioned, scoped, budgeted and expiring authorization
 (`DelegationGrant`) that lets one principal act for another — the record
@@ -106,10 +110,8 @@ tier 1 proves the full discovery-quoting-purchase loop once Stripe test mode
 and the x402 sandbox bundle are both configured. See
 `tools/ae/commands/doctor.ts` and `README.md` ("Run locally").
 
-**loading fee (5% service fee + GST)**: The disclosed fee AE charges when an
-Account adds prepaid credit (`fundingServiceFeeBps: 500`, plus GST on that
-fee) — it is additional to the requested credit and never reduces the amount
-credited to the Prepaid balance. The fee applies to loading an Account, never
-to a Quote or Call. See `src/modules/money/internal/commercial-policy.ts` and
-`src/modules/money/internal/aud-funding.ts`, and `CONTEXT.md` ("Top-up service
-fee").
+**Credit funding**: Adding prepaid Credit is separate from a Quote or Call.
+The current funding Quote is authoritative for the amount and tax treatment;
+the glossary does not publish a fee or payout figure. See
+`src/modules/money/internal/commercial-policy.ts` and
+`src/modules/money/internal/aud-funding.ts`.

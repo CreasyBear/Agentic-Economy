@@ -40,6 +40,33 @@ afterEach(() => {
 })
 
 describe('private market request CLI', () => {
+  it('withdraws only the specified private request and reports the receipt', async () => {
+    const requestRef = `market-request:v1:${'e'.repeat(64)}`
+    const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(responseJson({ kind: 'withdrawn', requestRef }))
+    vi.stubGlobal('fetch', fetchMock)
+    const output = captureStdout()
+    try { await runRequestCommand(['withdraw', requestRef], options) } finally { output.restore() }
+    expect(JSON.parse(output.read())).toEqual({ kind: 'withdrawn', requestRef })
+    expect(fetchMock).toHaveBeenCalledOnce()
+    const [url, init] = fetchMock.mock.calls[0]!
+    expect(url).toBe('https://market.example/api/v1/market-requests/withdraw')
+    expect(init?.method).toBe('POST')
+    expect(JSON.parse(String(init?.body))).toEqual({ requestRef })
+    expect(output.read()).not.toContain('hidden-buyer-key')
+  })
+  it('explains the active matching window without suggesting a purchase for a missing or expired request', async () => {
+    vi.stubGlobal('fetch', vi.fn<typeof fetch>().mockResolvedValue(responseJson({ kind: 'not_found' })))
+    const output = captureStdout()
+    try {
+      await runRequestCommand(['status', 'market-request:expired'], { ...options, json: false })
+    } finally {
+      output.restore()
+    }
+    expect(output.read()).toContain('Matching ends 30 days after creation.')
+    expect(output.read()).not.toContain('ae describe')
+    expect(output.read()).not.toContain('ae call')
+  })
+
   it('records a missing job and returns an exact status continuation without echoing retry identity', async () => {
     const requestRef = `market-request:v1:${'a'.repeat(64)}`
     const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(responseJson({

@@ -1,19 +1,13 @@
 import type { MutationCtx, QueryCtx } from './_generated/server'
 import type { Doc } from './_generated/dataModel'
-import {
-  readCurrentActiveAdminMembership as readCurrentActiveMembership,
-  resolveBusinessActor,
-} from './authz'
+import { resolveBusinessActor } from './authz'
 import { requireSourceWrite } from './sourceWriteAdmission'
 import {
   bootstrapOwnerAdmin as bootstrapOwnerAdminModule,
-  grantAdminMembership as grantAdminMembershipModule,
-  requireAdminAuthority,
-  revokeAdminMembership as revokeAdminMembershipModule,
 } from '../src/modules/security/public'
 import type {
   AdminMembership,
-  AdminRole,
+  AdminAuthorityMutationResult,
   AdminAuthorityState,
 } from '../src/modules/security/public'
 import {
@@ -31,28 +25,6 @@ type BootstrapOwnerAdminHandlerArgs = {
   sourceWriteRequest?: unknown
 }
 
-type GrantAdminMembershipHandlerArgs = {
-  targetClerkUserId: string
-  targetTokenIdentifier: string
-  role: AdminRole
-  reasonCode: string
-  evidenceRefs: string[]
-  operationKey: string
-  correlationId: string
-  sourceWrite?: unknown
-  sourceWriteRequest?: unknown
-}
-
-type RevokeAdminMembershipHandlerArgs = {
-  targetClerkUserId: string
-  targetTokenIdentifier?: string
-  reasonCode: string
-  evidenceRefs: string[]
-  operationKey: string
-  correlationId: string
-  sourceWrite?: unknown
-  sourceWriteRequest?: unknown
-}
 
 export async function bootstrapOwnerAdminHandler(ctx: MutationCtx, args: BootstrapOwnerAdminHandlerArgs) {
   const sourceWrite = await requireSourceWrite(ctx, args, 'admin_operator')
@@ -105,83 +77,6 @@ export async function bootstrapOwnerAdminHandler(ctx: MutationCtx, args: Bootstr
   return summarizeAdminMutation(result)
 }
 
-export async function grantAdminMembershipHandler(ctx: MutationCtx, args: GrantAdminMembershipHandlerArgs) {
-  const sourceWrite = await requireSourceWrite(ctx, args, 'admin_operator')
-  if (sourceWrite.kind === 'rejected') {
-    return adminSourceWriteDenied(sourceWrite.reason)
-  }
-
-  const [source, actorMembership] = await Promise.all([
-    loadAdminAuthoritySource(ctx.db, {
-      clerkUserIds: [args.targetClerkUserId],
-      tokenIdentifiers: [args.targetTokenIdentifier],
-    }),
-    readCurrentActiveMembership(ctx),
-  ])
-  const command = {
-    actorMembership,
-    targetClerkUserId: args.targetClerkUserId,
-    targetTokenIdentifier: args.targetTokenIdentifier,
-    role: args.role,
-    reasonCode: args.reasonCode,
-    evidenceRefs: args.evidenceRefs,
-    operationKey: args.operationKey,
-    correlationId: args.correlationId,
-    now: Date.now(),
-  }
-  if (requireAdminAuthority(actorMembership, 'manage_admin_membership').kind === 'denied') {
-    const result = grantAdminMembershipModule(adminAuthorityState(source), command)
-    await persistAdminAuthorityMutation(ctx.db, result)
-    return summarizeAdminMutation(result)
-  }
-  if (
-    typeof args.targetTokenIdentifier === 'string'
-    && args.targetTokenIdentifier.trim().length > 0
-    && hasAdminMembershipConflict(source.adminMemberships, {
-      clerkUserId: args.targetClerkUserId,
-      tokenIdentifier: args.targetTokenIdentifier,
-    })
-  ) {
-    return summarizeAdminMutation({
-      kind: 'error',
-      code: 'admin_action_denied',
-      retryable: false,
-      reason: 'membership_conflict',
-    })
-  }
-
-  const result = grantAdminMembershipModule(adminAuthorityState(source), command)
-  await persistAdminAuthorityMutation(ctx.db, result)
-  return summarizeAdminMutation(result)
-}
-
-export async function revokeAdminMembershipHandler(ctx: MutationCtx, args: RevokeAdminMembershipHandlerArgs) {
-  const sourceWrite = await requireSourceWrite(ctx, args, 'admin_operator')
-  if (sourceWrite.kind === 'rejected') {
-    return adminSourceWriteDenied(sourceWrite.reason)
-  }
-
-  const [source, actorMembership] = await Promise.all([
-    loadAdminAuthoritySource(ctx.db, {
-      clerkUserIds: [args.targetClerkUserId],
-      ...(args.targetTokenIdentifier === undefined ? {} : { tokenIdentifiers: [args.targetTokenIdentifier] }),
-    }),
-    readCurrentActiveMembership(ctx),
-  ])
-  const result = revokeAdminMembershipModule(adminAuthorityState(source), {
-    actorMembership,
-    targetClerkUserId: args.targetClerkUserId,
-    ...(args.targetTokenIdentifier === undefined ? {} : { targetTokenIdentifier: args.targetTokenIdentifier }),
-    reasonCode: args.reasonCode,
-    evidenceRefs: args.evidenceRefs,
-    operationKey: args.operationKey,
-    correlationId: args.correlationId,
-    now: Date.now(),
-  })
-
-  await persistAdminAuthorityMutation(ctx.db, result)
-  return summarizeAdminMutation(result)
-}
 
 type AdminAuthorityReadSource = {
   adminMemberships: Doc<'adminMemberships'>[]
@@ -273,9 +168,7 @@ function adminMembershipFromDocument(row: Doc<'adminMemberships'>): AdminMembers
   }
 }
 
-function summarizeAdminMutation(
-  result: ReturnType<typeof bootstrapOwnerAdminModule> | ReturnType<typeof grantAdminMembershipModule>
-) {
+function summarizeAdminMutation(result: AdminAuthorityMutationResult) {
   if (result.kind === 'ok') {
     return {
       kind: 'ok' as const,

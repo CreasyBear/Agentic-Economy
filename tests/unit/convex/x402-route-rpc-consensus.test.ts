@@ -70,7 +70,7 @@ describe('x402 RPC receipt consensus', () => {
     expect(mocks.readGuardedX402EvmReceipt).not.toHaveBeenCalled()
   })
 
-  it('requires two configured endpoints to return identical receipts', async () => {
+  it('requires two configured endpoints to agree on transaction evidence', async () => {
     setRpcConfig(['https://rpc.one.example', 'https://rpc.two.example'])
     mocks.readGuardedX402EvmReceipt.mockResolvedValue(receipt)
 
@@ -117,7 +117,6 @@ describe('x402 RPC receipt consensus', () => {
   it.each([
     ['block identity', { blockHash: `0x${'3'.repeat(64)}` }],
     ['block number', { blockNumber: 101n }],
-    ['observed block timestamp', { observedBlockTimestamp: 1_788_120_001n }],
     ['authorization state', { authorizationState: false }],
   ])('returns no receipt when endpoints disagree on %s', async (_label, difference) => {
     setRpcConfig(['https://rpc.one.example', 'https://rpc.two.example'])
@@ -135,6 +134,53 @@ describe('x402 RPC receipt consensus', () => {
       NONCE,
     )).resolves.toBeUndefined()
     expect(mocks.readGuardedX402EvmReceipt).toHaveBeenCalledTimes(2)
+  })
+
+  it('accepts ordinary RPC head skew using the lower confirmation count and timestamp', async () => {
+    setRpcConfig(['https://rpc.one.example', 'https://rpc.two.example'])
+    mocks.readGuardedX402EvmReceipt
+      .mockResolvedValueOnce({ ...receipt, confirmations: 13n, observedBlockTimestamp: receipt.observedBlockTimestamp + 2n })
+      .mockResolvedValueOnce(receipt)
+
+    await expect(readX402EvmReceipt(
+      NETWORK, ASSET, TRANSACTION_HASH, DISPATCHER, 'production', PAYER, NONCE,
+      { minimumConfirmations: 12, timeoutMs: 30_000 },
+    )).resolves.toEqual(receipt)
+  })
+
+  it('does not borrow confirmations from an ahead-of-peer RPC', async () => {
+    setRpcConfig(['https://rpc.one.example', 'https://rpc.two.example'])
+    mocks.readGuardedX402EvmReceipt
+      .mockResolvedValueOnce(receipt)
+      .mockResolvedValueOnce({ ...receipt, confirmations: 11n })
+
+    await expect(readX402EvmReceipt(
+      NETWORK, ASSET, TRANSACTION_HASH, DISPATCHER, 'production', PAYER, NONCE,
+      { minimumConfirmations: 12, timeoutMs: 30_000 },
+    )).resolves.toBeUndefined()
+  })
+
+  it('keeps the earliest observed time for expiry proofs of an unused reverted authorization', async () => {
+    setRpcConfig(['https://rpc.one.example', 'https://rpc.two.example'])
+    const reverted = { ...receipt, status: 'reverted', authorizationState: false }
+    mocks.readGuardedX402EvmReceipt
+      .mockResolvedValueOnce({ ...reverted, confirmations: 13n, observedBlockTimestamp: receipt.observedBlockTimestamp + 2n })
+      .mockResolvedValueOnce(reverted)
+
+    await expect(readX402EvmReceipt(
+      NETWORK, ASSET, TRANSACTION_HASH, DISPATCHER, 'production', PAYER, NONCE,
+    )).resolves.toEqual(reverted)
+  })
+
+  it('refuses a failure proof if an RPC observes the nonce consumed at a later head', async () => {
+    setRpcConfig(['https://rpc.one.example', 'https://rpc.two.example'])
+    mocks.readGuardedX402EvmReceipt
+      .mockResolvedValueOnce({ ...receipt, status: 'reverted', authorizationState: false })
+      .mockResolvedValueOnce({ ...receipt, status: 'reverted', confirmations: 13n, observedBlockTimestamp: receipt.observedBlockTimestamp + 2n })
+
+    await expect(readX402EvmReceipt(
+      NETWORK, ASSET, TRANSACTION_HASH, DISPATCHER, 'production', PAYER, NONCE,
+    )).resolves.toBeUndefined()
   })
 
   it.each([

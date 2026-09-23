@@ -16,6 +16,7 @@ const HANDLERS: Record<ScheduledWorkloadName, FunctionReference<'mutation' | 'ac
   'cleanup expired source write nonces': internal.workloadCron.cleanupExpiredSourceWriteNonces,
   'cleanup expired agent access oauth grants': internal.workloadCron.cleanupExpiredAgentAccessOAuthGrants,
   'observe x402 treasury': internal.workloadCron.observeX402Treasury,
+  'snapshot marketplace metrics day': internal.workloadCron.snapshotMarketplaceMetricsDay,
 }
 
 const crons = cronJobs()
@@ -35,9 +36,12 @@ if (scheduledWorkloadsEnabled !== undefined
 // https://docs.convex.dev/production/environment-variables
 if (scheduledWorkloadsEnabled !== 'false') {
   for (const workload of SCHEDULED_WORKLOADS) {
+    if ('daily' in workload && workload.daily !== undefined) {
+      crons.cron(workload.name, `${workload.daily.minuteUTC} ${workload.daily.hourUTC} * * *`, HANDLERS[workload.name], {})
+      continue
+    }
     if (!('interval' in workload) || workload.interval === undefined) continue
-    const interval = workload.interval
-    crons.interval(workload.name, interval, HANDLERS[workload.name], {})
+    crons.interval(workload.name, workload.interval, HANDLERS[workload.name], {})
   }
 }
 

@@ -214,8 +214,7 @@ type WorkerOptions = Readonly<{
   paymentAttemptRead?: 'missing' | 'throw'
   releaseBeforeSubmissionRefused?: boolean
   preparePaymentErrorState?: 'possibly_submitted'
-  invalidOutputTransitionResult?: 'accepted' | 'refused' | 'throw'
-  invalidOutputLossResult?: 'settled' | 'refused' | 'throw'
+  invalidResultRemedyResult?: 'completed' | 'refused' | 'throw'
   consumeLeaseResult?: Readonly<{ kind: 'applied' }> | Readonly<{ kind: 'duplicate' }> | Readonly<{ kind: 'refused'; code: string }>
   currentTool?: (operation: PublishedTool) => PublishedTool
   releaseCurrentOperation?: (operation: PublishedTool) => PublishedTool
@@ -919,6 +918,9 @@ export function createWorker(kind: WorkerKind, options: WorkerOptions = {}): { c
   mocks.guardedFetch.mockImplementation(async () => new Response('{}', { status: 200 }))
   mocks.invokePreparedRouteTransport.mockImplementation(async (_prepared: unknown, runtimeValue: unknown) => {
     const runtime = runtimeValue as X402RouteTransportRuntime
+    const preparedInvocation = _prepared as Readonly<{
+      invocation: Readonly<{ authority: Readonly<{ expiresAt: number }> }>
+    }>
     state.transportCalls += 1
     if (kind !== 'x402') {
       await runtime.send(new URL(operation.binding.endpointUrl), { method: 'POST' })
@@ -967,9 +969,12 @@ export function createWorker(kind: WorkerKind, options: WorkerOptions = {}): { c
         ? undefined
         : await runtime.readX402PaymentCredentialRef()
       if (paymentCredential === undefined) throw new Error('x402 payment credential locator missing')
-      const request: X402PaymentSignatureRequest & X402PaymentAuthorizationIdentity = {
+      const request: X402PaymentSignatureRequest & X402PaymentAuthorizationIdentity & Readonly<{
+        authorityExpiresAt: number
+      }> = {
         challenge,
         challengeDigest: canonicalDigest(challenge as StableHashValue),
+        authorityExpiresAt: preparedInvocation.invocation.authority.expiresAt,
         credential: paymentCredential,
         paymentIdentifier,
         selectedRequirement: challenge.accepts[0]!,
@@ -1148,6 +1153,10 @@ export function createWorker(kind: WorkerKind, options: WorkerOptions = {}): { c
                 : authorizationCurrentOperation,
           )
         case 'moneyLedger:readOperatorAccountVersion': return operatorAccountVersion
+        case 'moneyManagedCall:readBooking': return {
+          kind: 'available', financialState: managedCallState,
+          settlementRefs: ['formance:settle-buyer', 'formance:settle-provider'],
+        }
         case 'moneyManagedCallLifecycle:readReservation': return sellerCanary === undefined ? {
           ...managedCallReservation,
           state: managedCallState,
@@ -1435,6 +1444,11 @@ export function createWorker(kind: WorkerKind, options: WorkerOptions = {}): { c
           managedCallState = 'released'
           state.reconciliations.push(args)
           return { kind: 'settled' }
+        case 'moneyManagedCallRemedyActions:resolveInvalidResult':
+          if (options.invalidResultRemedyResult === 'throw') throw new Error('remedy interrupted')
+          return options.invalidResultRemedyResult === 'refused'
+            ? { kind: 'refused', code: 'credit_restoration_pending' }
+            : { kind: 'completed' }
         case 'moneyManagedCallLifecycle:settle':
           managedCallState = 'settled'
           return { kind: 'accepted', state: managedCallState, replayed: false }

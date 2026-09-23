@@ -1,5 +1,4 @@
 import { Outlet, createFileRoute, useLocation } from '@tanstack/react-router'
-import { Settings } from 'lucide-react'
 
 import { AccountSettingsSection } from '@/components/ae/settings/OwnerSettingsSections'
 import { OwnerSettingsShell } from '@/components/ae/settings/OwnerSettingsShell'
@@ -8,24 +7,11 @@ import { operatorRouteOptions } from '@/lib/operator/route-options'
 import { readAccountSecurityHistoryServer } from '@/modules/security/account-security.functions'
 
 export const Route = createFileRoute('/_operator/owner/settings')({
-  staticData: {
-    nav: {
-      label: 'Account & security',
-      operator: {
-        roles: ['owner'],
-        group: 'Account',
-        groupOrder: 2,
-        order: 0,
-        icon: Settings,
-        tier: 'core',
-      },
-    },
-  },
   ...operatorRouteOptions,
   loader: async () => await readAccountSecurityHistoryServer({ data: {} }),
   head: () => ({
     meta: [
-      { title: 'Account & security | Agentic Economy' },
+      { title: 'Settings | Agentic Economy' },
       { name: 'description', content: 'Manage your owner profile, active sessions, recovery, and security history.' },
       { name: 'robots', content: 'noindex' },
     ],

@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { ErrorsV2ErrorResponse } from '@formance/formance-sdk/sdk/models/ledger/errorsv2errorresponse.js'
 
 import {
   PACKAGE4_FORMANCE_SCHEMA,
@@ -7,9 +8,11 @@ import {
   canonicalFormanceUnits,
   createFormanceContext,
   executeFormanceMoneyBulk,
+  FORMANCE_SCHEMA,
   formanceMonetaryVariable,
   formanceSafeUnitsFromSdk,
   mapFormanceWriteError,
+  installPackage4FormanceSchema,
   readFormanceConfiguration,
   readFormanceHealth,
   readFormancePeriodSpend,
@@ -25,6 +28,7 @@ import {
   prepareFormanceManagedCallRelease,
   prepareFormanceManagedCallReservation,
   prepareFormanceManagedCallSettlement,
+  prepareFormancePaidCallRemedy,
   reverseFormanceProviderSettlement,
 } from '@/modules/money/formance-workflows'
 import { PACKAGE4_FORMANCE_REQUIREMENTS } from '@/modules/money/public'
@@ -55,6 +59,70 @@ describe('Package 4 official Formance boundary', () => {
       .toContain('source = @world')
     expect(PACKAGE4_FORMANCE_SCHEMA.transactions?.TREASURY_CAPACITY_SYNCED?.script)
       .toContain('destination = $capacity')
+  })
+
+  it('installs the current schema when SDK v7 reports the exact existing-ledger conflict', async () => {
+    let currentInstalled = false
+    const insertSchema = vi.fn(async () => { currentInstalled = true })
+    const context = {
+      configuration: { environment: 'sandbox', gatewayUrl: 'https://formance.example', ledger: 'existing-ledger', requestTimeoutMs: 10_000 },
+      sdk: { ledger: { v2: {
+        getSchema: vi.fn(async ({ version }: { version: string }) => {
+          if (version === 'v1.3.0') return { v2SchemaResponse: { data: { version, ...PACKAGE4_FORMANCE_SCHEMA } } }
+          if (currentInstalled) return { v2SchemaResponse: { data: { version, ...FORMANCE_SCHEMA } } }
+          throw Object.assign(new Error('schema absent'), { statusCode: 404 })
+        }),
+        createLedger: vi.fn(async () => {
+          throw new ErrorsV2ErrorResponse({
+            errorCode: 'LEDGER_ALREADY_EXISTS',
+            errorMessage: 'ledger already exists',
+          }, {
+            request: new Request('https://formance.example/api/ledger'),
+            response: new Response('', { status: 400 }),
+            body: '',
+          })
+        }),
+        insertSchema,
+      } } },
+    } as unknown as FormanceContext
+
+    await expect(installPackage4FormanceSchema(context)).resolves.toMatchObject({
+      kind: 'completed',
+      ledger: 'existing-ledger',
+      schemaVersion: 'v1.4.0',
+      replayed: false,
+    })
+    expect(insertSchema).toHaveBeenCalledTimes(1)
+  })
+
+  it('does not treat a different SDK v7 HTTP 400 as an existing ledger', async () => {
+    const insertSchema = vi.fn()
+    const context = {
+      configuration: { environment: 'sandbox', gatewayUrl: 'https://formance.example', ledger: 'existing-ledger', requestTimeoutMs: 10_000 },
+      sdk: { ledger: { v2: {
+        getSchema: vi.fn(async ({ version }: { version: string }) => {
+          if (version === 'v1.3.0') return { v2SchemaResponse: { data: { version, ...PACKAGE4_FORMANCE_SCHEMA } } }
+          throw Object.assign(new Error('schema absent'), { statusCode: 404 })
+        }),
+        createLedger: vi.fn(async () => {
+          throw new ErrorsV2ErrorResponse({
+            errorCode: 'VALIDATION',
+            errorMessage: 'different refusal',
+          }, {
+            request: new Request('https://formance.example/api/ledger'),
+            response: new Response('', { status: 400 }),
+            body: '',
+          })
+        }),
+        insertSchema,
+      } } },
+    } as unknown as FormanceContext
+
+    await expect(installPackage4FormanceSchema(context)).resolves.toEqual({
+      kind: 'unavailable',
+      code: 'formance_install_unavailable',
+    })
+    expect(insertSchema).not.toHaveBeenCalled()
   })
 
   it('maps one verified funding command to principal, fee, GST, and processor-total facts', () => {
@@ -164,6 +232,38 @@ describe('Package 4 official Formance boundary', () => {
       kind: 'prepared',
       bulk: { commands: [{ template: 'BUYER_SALE_SETTLED' }, { template: 'PROVIDER_SETTLED' }] },
     })
+  })
+
+  it('uses the original release commands for an authorization proven expired unused and refuses missing proof', () => {
+    const input = { booking: managedCallBooking(), externalEvidenceDigest: `sha256:${DIGEST_A}` }
+    const original = prepareFormanceManagedCallRelease({ ...input, submissionProvenAbsent: true })
+    const expired = prepareFormanceManagedCallRelease({ ...input, authorizationProvenExpiredUnused: true })
+    expect(expired).toEqual(original)
+    expect(prepareFormanceManagedCallRelease({ ...input, authorizationProvenExpiredUnused: true })).toEqual(expired)
+    expect(prepareFormanceManagedCallRelease(input as never)).toEqual({
+      kind: 'refused', code: 'formance_managed_call_input_invalid', retryable: false,
+    })
+    expect(prepareFormanceManagedCallRelease({ ...input, externalEvidenceDigest: 'not-proof', authorizationProvenExpiredUnused: true }).kind).toBe('refused')
+    if (expired.kind !== 'prepared') throw new Error(expired.code)
+    expect(expired.bulk.commands.map(command => command.template)).toEqual(['CALL_RELEASED_AUD', 'CALL_RELEASED_USDC'])
+    expect(expired.bulk.commands.map(command => validateFormanceMoneyCommand(command))).toEqual([undefined, undefined])
+  })
+
+  it('restores buyer credit while retaining the paid Provider expense, with stable replay identity', () => {
+    const input = { booking: managedCallBooking(), externalEvidenceDigest: `sha256:${DIGEST_A}` }
+    const prepared = prepareFormancePaidCallRemedy(input)
+    expect(prepared).toMatchObject({ kind: 'prepared', bulk: { commands: [
+      { template: 'CALL_RELEASED_AUD' }, { template: 'PROVIDER_SETTLED' },
+    ] } })
+    expect(prepareFormancePaidCallRemedy(input)).toEqual(prepared)
+    if (prepared.kind !== 'prepared') throw new Error(prepared.code)
+    const [buyer, provider] = prepared.bulk.commands
+    expect(buyer?.variables).toMatchObject({ buyer_amount: 'AUD/6 2' })
+    expect(provider?.variables.treasury_committed).toMatch(/:committed$/)
+    expect(provider?.variables.obligation_settled).toMatch(/:settled$/)
+    expect(provider?.variables).not.toHaveProperty('treasury_available')
+    expect(prepared.bulk.commands.map(command => validateFormanceMoneyCommand(command))).toEqual([undefined, undefined])
+    expect(prepareFormancePaidCallRemedy({ ...input, externalEvidenceDigest: 'invalid' }).kind).toBe('refused')
   })
 
   it('accepts zero Call tax through reservation, release and the existing settlement template', () => {

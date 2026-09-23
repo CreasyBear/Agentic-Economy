@@ -52,7 +52,7 @@ describe('interactive server session admission', () => {
   it('refuses authenticated access without canonical ownership or the requested surface', async () => {
     boundary.readContext.mockResolvedValueOnce({ kind: 'denied', reason: 'canonical_owner_required' })
     await expect(enter()).rejects.toBeInstanceOf(OperatorSurfaceForbiddenError)
-    await expect(requireOperatorBeforeLoad({ location: { href: '/admin/index-health' } }))
+    await expect(requireOperatorBeforeLoad({ location: { href: '/admin/providers' } }))
       .rejects.toBeInstanceOf(OperatorSurfaceForbiddenError)
   })
 

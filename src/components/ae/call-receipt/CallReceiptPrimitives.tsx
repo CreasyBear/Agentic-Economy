@@ -15,15 +15,17 @@ export const callReceiptTactilePressClassName =
 export type CallReceiptRefreshLabelMode = 'try_again' | 'refresh_status'
 
 export function callReceiptRefreshLabel(
-  mode: CallReceiptRefreshLabelMode,
+  _mode: CallReceiptRefreshLabelMode,
   pending: boolean,
 ): string {
-  if (pending) return mode === 'try_again' ? 'Trying again…' : 'Refreshing current status…'
-  return mode === 'try_again' ? 'Try again' : 'Refresh current status'
+  return pending ? 'Checking…' : 'Check status'
 }
 
-export function CallReceiptRef({ value }: Readonly<{ value: string }>) {
-  return <AeCopyReference label="Call reference" value={value} copyFeedbackMs={2_000} />
+export function CallReceiptRef({
+  value,
+  label = 'Call reference',
+}: Readonly<{ value: string; label?: string }>) {
+  return <AeCopyReference label={label} value={value} copyFeedbackMs={2_000} />
 }
 
 export function CallReceiptFact({ label, value, children }: Readonly<{ label: string; value?: string; children?: ReactNode }>) {
@@ -42,45 +44,30 @@ export function CallReceiptIssue({ issue }: Readonly<{ issue: CallIssueView }>) 
     <section
       role="alert"
       className="grid gap-related rounded-xl border border-border bg-card p-4"
-      aria-labelledby="call-receipt-playbook-title"
+      aria-labelledby="call-receipt-issue-title"
     >
-      <div className="flex flex-wrap items-start justify-between gap-intra">
-        <Badge variant="warning" className="w-fit">Diagnostic Playbook</Badge>
-        <CallReceiptRef value={issue.retainedReference} />
-      </div>
-      <h2 id="call-receipt-playbook-title" className="text-lg font-semibold tracking-tight text-foreground">
+      <Badge variant="warning" className="w-fit">Needs attention</Badge>
+      <h2 id="call-receipt-issue-title" className="text-base font-medium leading-snug tracking-tight text-foreground">
         {issue.title}
       </h2>
-      <div className="grid gap-related">
-        <PlaybookSection title="What happened" body={issue.whatHappened} />
-        <PlaybookSection
-          title="Financial impact"
-          body={(
-            <p
-              className={cn(
-                'rounded-lg border px-3 py-2 text-sm tabular-nums',
-                moneyTone === 'success' && 'border-success-ring bg-success-subtle text-success-foreground',
-                moneyTone === 'warning' && 'border-warning-ring bg-warning-subtle text-warning-foreground',
-                moneyTone === 'neutral' && 'border-border bg-muted/40 text-foreground',
-              )}
-            >
-              {issue.moneyMovement}
-            </p>
-          )}
-        />
-        <PlaybookSection title="What happens automatically" body={issue.automaticNext} />
-        <PlaybookSection title="What you can do" body={issue.userNext} />
-      </div>
+      <p className="text-sm text-foreground">{issue.whatHappened}</p>
+      <p
+        className={cn(
+          'rounded-card border px-3 py-2 text-sm tabular-nums',
+          moneyTone === 'success' && 'border-success-ring bg-success-subtle text-success-foreground',
+          moneyTone === 'warning' && 'border-warning-ring bg-warning-subtle text-warning-foreground',
+          moneyTone === 'neutral' && 'border-border bg-muted/40 text-foreground',
+        )}
+      >
+        {issue.moneyMovement}
+      </p>
+      <p className="text-sm text-muted-foreground">{issue.userNext}</p>
+      <details className="border-t border-border pt-intra">
+        <summary className="min-h-touch cursor-pointer text-xs font-medium text-muted-foreground">What happens next</summary>
+        <p className="pt-intra text-sm text-muted-foreground">{issue.automaticNext}</p>
+        <CallReceiptRef value={issue.retainedReference} />
+      </details>
     </section>
-  )
-}
-
-function PlaybookSection({ title, body }: Readonly<{ title: string; body: ReactNode }>) {
-  return (
-    <div className="grid gap-intra">
-      <h3 className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{title}</h3>
-      <div className="text-sm text-foreground">{body}</div>
-    </div>
   )
 }
 

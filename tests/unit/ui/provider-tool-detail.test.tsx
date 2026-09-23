@@ -60,7 +60,7 @@ it('shows one factual Published status and the existing withdraw correction with
   expect(screen.queryByRole('button', { name: /Promote/u })).toBeNull()
 
   fireEvent.click(screen.getByRole('button', { name: 'Withdraw' }))
-  fireEvent.click(screen.getByRole('button', { name: 'Confirm withdrawal' }))
+  fireEvent.click(screen.getByRole('button', { name: 'Withdraw Tool' }))
   await waitFor(() => expect(withdraw).toHaveBeenCalledTimes(1))
 })
 

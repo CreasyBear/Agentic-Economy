@@ -219,7 +219,6 @@ export function useAgentConsentDecision({
     : replacementMode === 'compromise'
       ? 'Revoke and replace credential'
       : 'Replace credential'
-  const approvalPendingLabel = connectionTarget === 'new_agent' ? 'Connecting…' : 'Replacing…'
 
   const showConnectionFieldset = !(agentTargets.length === 0 && agentTargetsError === undefined && agentTargetsNextCursor === undefined)
 
@@ -278,7 +277,16 @@ export function useAgentConsentDecision({
   }
 
   async function approve() {
-    if (approvalInFlightRef.current) return
+    if (approvalInFlightRef.current || agentTargetsUnavailable) return
+    if (approvedToolAccess === 'selected_tools' && approvedToolRefs.length === 0) {
+      const emptyField = document.getElementById('tool-search') ?? document.getElementById('tool-selection-empty')
+      emptyField?.focus()
+      return
+    }
+    if (connectionTarget === 'replace_credential' && replacementPrincipalRef === undefined) {
+      document.getElementById('replacement-agent')?.focus()
+      return
+    }
     const body = approvalBody()
     if (body === undefined) return
     approvalInFlightRef.current = true
@@ -358,7 +366,6 @@ export function useAgentConsentDecision({
     toolSearch,
     toolSelectionSummary,
     approvalLabel,
-    approvalPendingLabel,
     approveButtonRef,
     dispatch,
     findTools,

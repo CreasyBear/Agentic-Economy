@@ -1,47 +1,72 @@
 import { AeSection } from '@/components/ae/layout/AeSection'
-import { ProviderWorkspacePayoutPolicyPanel } from './ProviderWorkspacePayoutPolicyPanel'
-import { AeSupplyEarningsCard } from '@/components/ae/supply/earnings-card/AeSupplyEarningsCard'
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
-import type { OwnerProviderEarningsReadback } from '@/modules/capability-supply/supply-funnel.functions'
-import type { OwnerConnectReadinessReadback } from '@/modules/money/server'
-import { DeferredSection, SecondarySummary, SummaryCard, UnavailableSummary } from './ProviderWorkspaceSharedUi'
-import type { ProviderWorkspacePayoutResult } from './provider-workspace.functions'
+import { buttonVariants } from '@/components/ui/button-variants'
+import { aeStatusToneVariants } from '@/lib/ui/status-presentation'
+import { appDestination } from '@/lib/navigation/app-navigation'
+import { cn } from '@/lib/utils'
+import { UnavailableSummary } from './ProviderWorkspaceSharedUi'
+import {
+  PROVIDER_WORKSPACE_EARNINGS_COPY,
+  type ProviderWorkspaceEarningsSectionProps,
+} from './provider-workspace/provider-workspace.contracts'
 
 export function ProviderWorkspaceEarningsSection({
-  payouts,
+  payoutConnection,
   earningsOpen,
   earningsPending,
-  earningsDetail,
+  earningsDetailAvailable,
   onOpenEarnings,
+  onCloseEarnings,
   onRetryEarnings,
-  onStatusRefreshed,
-}: Readonly<{
-  payouts?: Promise<ProviderWorkspacePayoutResult>
-  earningsOpen: boolean
-  earningsPending: boolean
-  earningsDetail?: Readonly<{ earnings: OwnerProviderEarningsReadback; connect: OwnerConnectReadinessReadback }>
-  onOpenEarnings: () => void
-  onRetryEarnings: () => void
-  onStatusRefreshed: () => void
-}>) {
+}: ProviderWorkspaceEarningsSectionProps) {
   return (
-    <AeSection id="earnings" title="Earnings" description="Provider earnings and payout readiness.">
-      <DeferredSection promise={payouts} loadingLabel="Loading earnings" unavailableTitle="Earnings unavailable">
-        {(result) => result.kind === 'available' ? (
-          <SummaryCard title="Payout readiness" detail={`${result.value.readyAccounts} ready · ${result.value.needsAttention} need attention`} action="Manage earnings" onAction={onOpenEarnings} />
-        ) : <SecondarySummary result={result} subject="Payout readiness" notApplicableTitle="Payout readiness not configured" unavailableTitle="Earnings unavailable" />}
-      </DeferredSection>
-      {earningsOpen ? earningsPending ? <div aria-busy="true"><Skeleton className="h-24 w-full" /></div> : earningsDetail === undefined ? <UnavailableSummary title="Earnings controls unavailable" retryLabel="Try earnings again" onRetry={onRetryEarnings} /> : (
-        <div className="grid gap-6">
-          <AeSupplyEarningsCard readback={earningsDetail.earnings} connect={earningsDetail.connect} onStatusRefreshed={onStatusRefreshed} />
-          {earningsDetail.earnings.kind === 'available' && earningsDetail.connect.kind === 'available' && earningsDetail.connect.accounts.some((a) => a.account.state === 'ready') && (
-            <ProviderWorkspacePayoutPolicyPanel
-              businessId={earningsDetail.earnings.businessId}
-              currency="AUD"
-            />
-          )}
+    <AeSection id="earnings" title="Earnings" description={PROVIDER_WORKSPACE_EARNINGS_COPY.connectionTitle}>
+      <div className="grid gap-related rounded-card border border-border p-related">
+        <div className="grid gap-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <h3 className="font-medium">{PROVIDER_WORKSPACE_EARNINGS_COPY.connectionTitle}</h3>
+            <Badge variant={aeStatusToneVariants[payoutConnection.tone]}>{payoutConnection.label}</Badge>
+          </div>
+          <p className="text-sm text-muted-foreground">{payoutConnection.sentence}</p>
         </div>
-      ) : null}
+        {payoutConnection.action === undefined ? null : (
+          <Button type="button" variant="secondary" className="justify-self-start min-h-touch" onClick={onOpenEarnings}>
+            {payoutConnection.action}
+          </Button>
+        )}
+      </div>
+      <Sheet open={earningsOpen} onOpenChange={(open) => { if (!open) onCloseEarnings() }}>
+        <SheetContent className="overflow-y-auto sm:max-w-lg">
+          <SheetHeader>
+            <SheetTitle>Earnings</SheetTitle>
+            <SheetDescription>{PROVIDER_WORKSPACE_EARNINGS_COPY.connectionTitle}</SheetDescription>
+          </SheetHeader>
+          <div className="px-gutter pb-gutter">
+            {earningsOpen ? (
+              earningsPending
+                ? <div aria-busy="true"><Skeleton className="h-24 w-full" /></div>
+                : !earningsDetailAvailable
+                  ? <UnavailableSummary title={PROVIDER_WORKSPACE_EARNINGS_COPY.unavailable} retryLabel={PROVIDER_WORKSPACE_EARNINGS_COPY.retryAction} onRetry={onRetryEarnings} />
+                  : (
+                      <Alert>
+                        <AlertTitle>{payoutConnection.label}</AlertTitle>
+                        <AlertDescription>{payoutConnection.sentence}</AlertDescription>
+                      </Alert>
+                    )
+            ) : null}
+          </div>
+        </SheetContent>
+      </Sheet>
+      <a
+        href={appDestination('settings').to}
+        className={cn(buttonVariants({ variant: 'secondary' }), 'w-fit min-h-touch')}
+      >
+        Open Settings
+      </a>
     </AeSection>
   )
 }

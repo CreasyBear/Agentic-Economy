@@ -48,7 +48,7 @@ export function AeAgentSpendingLimitsForm({
     <div className="grid min-h-[24.5rem] gap-4 rounded-md border bg-muted/20 p-3">
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-2">
-          <span className="text-sm font-semibold text-foreground">Spending Policy</span>
+          <span className="text-sm font-medium text-foreground">Spending policy</span>
           {view.isPaused ? (
             <Badge variant="warning" className="gap-1">
               <ShieldAlertIcon className="size-3" />
@@ -70,7 +70,7 @@ export function AeAgentSpendingLimitsForm({
                 onTogglePause={hook.handleTogglePause}
               />
               <Button type="button" variant="outline" size="sm" onClick={hook.handleStartEdit} className="min-h-touch">
-                Edit Limits
+                Edit limits
               </Button>
             </>
           ) : (

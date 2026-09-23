@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest'
 import {
   clerkAppearance,
   clerkAuthSurfaceAppearance,
+  clerkEmbeddedProfileAppearance,
   clerkSignInSurfaceAppearance,
 } from '@/components/ae/website/clerk-appearance'
 
@@ -16,6 +17,13 @@ describe('Clerk sign-in appearance', () => {
 
     expect(clerkAppearance.cssLayerName).toBe('clerk')
     expect(globalStyles).toContain('@layer reset, theme, base, clerk, components, utilities;')
+  })
+
+  it('hides Clerk-owned h1 headings on embedded profile surfaces', () => {
+    expect(clerkEmbeddedProfileAppearance.elements).toMatchObject({
+      headerTitle: { display: 'none' },
+      navbar: { '& h1': { display: 'none' } },
+    })
   })
 
   it('keeps the sign-in account switch readable without exposing the sign-up footer', () => {

@@ -1,13 +1,22 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { api, internal } from '../../convex/_generated/api'
+import { makeFunctionReference } from 'convex/server'
+import type { AdminCommandArgs, AdminCommandReceipt } from '@/lib/operator/admin-console/contracts'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { prepareSupplyPublicationV2 } from '@/modules/capability-supply/supply-publication-v2'
-import { convexTestWithMarketComponents, ownerAdmin } from '../helpers/convex-fixtures'
+import { previewSupplySource } from '@/modules/capability-supply/source-preview'
+import { assessSupplySource } from '@/modules/capability-supply/server'
+import { convexTestWithMarketComponents, ownerAdmin, testConsequenceProof } from '../helpers/convex-fixtures'
 import { withSourceWrite, withoutSourceWrite } from '../helpers/source-write-admission'
 import { createPublishedBusinessOwner } from './capability-supply-owner-funnel-harness'
+const verifySourceAuthority = makeFunctionReference<
+  'mutation',
+  Record<string, unknown>,
+  AdminCommandReceipt<'verify_capability_source_authority'>
+>('capabilitySupply:verifyCapabilitySourceAuthority')
 
 describe('first native Tool admission', () => {
-  it('keeps a new Provider private until a current live validation and source authority review both pass', async () => {
+  it.each(['accepted', 'rejected'] as const)('keeps publication and discovery consistent when the Provider suggestion is %s', async (reviewDecision) => {
     const backend = convexTestWithMarketComponents()
     const { businessId, owner } = await createPublishedBusinessOwner(backend, 'native-admission')
     const { owner: otherOwner } = await createPublishedBusinessOwner(backend, 'native-foreign')
@@ -15,24 +24,40 @@ describe('first native Tool admission', () => {
     const document = {
       openapi: '3.0.3', info: { title: 'Echo', version: '1' }, servers: [{ url: 'https://provider.example' }],
       paths: { '/echo': { post: {
-        operationId: 'echo', summary: 'Echo',
+        operationId: 'echo', summary: 'Returns the supplied value.',
         requestBody: { required: true, content: { 'application/json': {
-          schema: { type: 'object', properties: { value: { type: 'string' } }, required: ['value'], additionalProperties: false },
+          schema: { type: 'object', properties: { value: { type: 'string', description: 'A quasar reference.' } }, required: ['value'], additionalProperties: false },
           example: { value: 'validation' },
         } } },
         responses: { '200': { description: 'Echo', content: { 'application/json': {
-          schema: { type: 'object', properties: { value: { type: 'string' } }, required: ['value'], additionalProperties: false },
+          schema: { type: 'object', properties: { value: { type: 'string', description: 'The matching reference.' } }, required: ['value'], additionalProperties: false },
         } } } },
       } } },
     }
     const sourceDigest = canonicalDigest(document)
     const sourceSelector = { serverUrl: 'https://provider.example/', path: '/echo', method: 'post' }
     const candidateRef = canonicalDigest({ sourceDigest, selector: sourceSelector })
+    const source = { kind: 'openapi' as const, definitionUrl: 'https://provider.example/openapi.json', environment: 'sandbox' as const }
+    const preview = await previewSupplySource(source, { loadOpenApi: async () => document })
+    if (preview.kind !== 'ready') throw new Error('source_preview_not_ready')
+    const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(Response.json({ model: 'jev-test', answers: {
+      summary: { type: 'choice', choice: 'excerpt_0', confidence: 0.9 },
+      input: { type: 'choice', choice: 'excerpt_1', confidence: 0.9 },
+      output: { type: 'choice', choice: 'excerpt_2', confidence: 0.9 },
+    } }))
+    const suggestion = await assessSupplySource(preview, candidateRef, { typesafeApiKey: 'ts-test', fetchImpl })
+    if (suggestion.kind !== 'suggested') throw new Error(`source_suggestion_${suggestion.kind}`)
+    expect(suggestion.description).toBe('Returns the supplied value.\nInput: value — A quasar reference.\nOutput: value — The matching reference.')
+    expect(fetchImpl).toHaveBeenCalledOnce()
+    const acceptedDescription = reviewDecision === 'accepted' ? suggestion.description : 'Returns the supplied value.'
+    const publicSummary = reviewDecision === 'accepted'
+      ? 'Returns the supplied value. Input: value — A quasar reference. Output: value — The matching reference.'
+      : 'Returns the supplied value.'
     const preparation = await prepareSupplyPublicationV2({
       businessRef: businessId,
-      source: { kind: 'openapi', definitionUrl: 'https://provider.example/openapi.json', environment: 'sandbox' },
+      source,
       candidateRef, expectedSourceDigest: sourceDigest,
-      presentation: { name: 'Echo', description: 'Returns the supplied value.', category: 'Developer tools' },
+      presentation: { name: 'Echo', description: acceptedDescription, category: 'Developer tools' },
       consequences: {
         effects: [{ class: 'data_release', authority: 'explicit', reversibility: 'not_applicable' }],
         dataUse: [{ inputPointer: '/value', classification: 'public', phase: 'execution', purposes: ['Echo input'] }],
@@ -44,7 +69,7 @@ describe('first native Tool admission', () => {
     if (preparation.kind !== 'prepared') throw new Error(preparation.reason)
     if (preparation.validationInputJson === undefined) throw new Error('native_validation_input_missing')
     const draft = await owner.mutation(api.capabilitySupplyOwnerFunnel.saveOwnerSupplyIntegrationDraft, await withSourceWrite('catalog_publish', {
-      businessId, title: 'Echo', description: 'Returns the supplied value.', category: 'Developer tools', sourceKind: 'openapi' as const,
+      businessId, title: 'Echo', description: acceptedDescription, category: 'Developer tools', sourceKind: 'openapi' as const,
       sourceDescriptorJson: preparation.sourceDescriptorJson, sourceDigest, sourceRevision: preparation.sourceRevision,
       candidateRef, sourceSelectorJson: preparation.sourceSelectorJson, validationInputJson: preparation.validationInputJson,
       operationKey: 'native:draft', correlationId: 'native:draft',
@@ -84,6 +109,12 @@ describe('first native Tool admission', () => {
     const publication = await owner.mutation(api.capabilitySupply.publishPreparedCapability,
       await withSourceWrite('catalog_publish', withoutSourceWrite(command)))
     if (publication.kind === 'refused') throw new Error(publication.reason)
+    await expect(owner.mutation(api.capabilitySupply.publishPreparedCapability,
+      await withSourceWrite('catalog_publish', withoutSourceWrite(command))))
+      .resolves.toMatchObject({ kind: 'replayed', publicationRef: publication.publicationRef })
+    expect(await backend.run(ctx => ctx.db.query('capabilityPublications').collect())).toHaveLength(1)
+    expect(await backend.query(api.capabilitySupplyTools.search, { query: 'quasar' }))
+      .toMatchObject({ kind: 'no_candidates' })
     const status = () => backend.run(async ctx => ({
       business: (await ctx.db.get(businessId))?.publicStatus,
       offering: (await ctx.db.query('businessOfferings').withIndex('by_offeringRef', q => q.eq('offeringRef', origin.offeringRef)).unique())?.status,
@@ -108,16 +139,27 @@ describe('first native Tool admission', () => {
     }
     expect(await recordProbe(true)).toMatchObject({ kind: 'observed', lifecycle: { state: 'inactive' } })
     expect(await status()).toEqual({ business: 'unpublished', offering: 'draft', path: 'draft' })
-    const review = await withSourceWrite('admin_operator', {
+    const input = {
       publicationRef: publication.publicationRef, expectedRevision: publication.publicationRevision,
-      expectedSourceDigest: publication.sourceDigest, evidenceRefs: ['test:verified-provider-control'],
+      expectedSourceDigest: publication.sourceDigest,
+    }
+    const evidenceRefs = ['test:verified-provider-control']
+    const action = 'verify_capability_source_authority'
+    const reasonCode = 'evidence_verified'
+    const digest = canonicalDigest({ scope: 'admin_operator', action, input, reasonCode, evidenceRefs })
+    const sourceReviewCommand = (subject: string): AdminCommandArgs<'verify_capability_source_authority'> => ({
+      action, input, reasonCode, evidenceRefs,
       operationKey: 'native:review', correlationId: 'native:review',
+      approval: { kind: 'execute' }, proof: testConsequenceProof({ subject }, digest),
     })
-    await expect(owner.mutation(api.capabilitySupply.verifyCapabilitySourceAuthority, review))
-      .resolves.toMatchObject({ kind: 'refused', reason: 'authorization_denied' })
-    const admin = await ownerAdmin(backend, 'user_native_admin')
-    await expect(admin.mutation(api.capabilitySupply.verifyCapabilitySourceAuthority,
-      await withSourceWrite('admin_operator', withoutSourceWrite(review)))).resolves.toMatchObject({ kind: 'verified' })
+    await expect(owner.mutation(verifySourceAuthority,
+      await withSourceWrite('admin_operator', sourceReviewCommand('user_native_owner'))))
+      .resolves.toMatchObject({ kind: 'refused' })
+    const adminSubject = 'user_native_admin'
+    const admin = await ownerAdmin(backend, adminSubject)
+    await expect(admin.mutation(verifySourceAuthority,
+      await withSourceWrite('admin_operator', sourceReviewCommand(adminSubject))))
+      .resolves.toMatchObject({ kind: 'completed', code: 'source_authority_verified' })
     expect(await recordProbe(false)).toMatchObject({ kind: 'observed', lifecycle: { state: 'inactive' } })
     expect(await status()).toEqual({ business: 'unpublished', offering: 'draft', path: 'draft' })
     expect(await recordProbe(true, async () => {
@@ -143,6 +185,22 @@ describe('first native Tool admission', () => {
     expect(await recordProbe(true)).toMatchObject({ kind: 'observed', lifecycle: { state: 'active' } })
     expect(await status()).toEqual({ business: 'published', offering: 'published', path: 'published' })
     expect(await recordProbe(true)).toMatchObject({ kind: 'observed', lifecycle: { state: 'active' } })
-    expect(await backend.query(api.capabilitySupplyTools.detail, { toolRef: publication.toolRef })).toMatchObject({ kind: 'found' })
+    const detail = await backend.query(api.capabilitySupplyTools.detail, { toolRef: publication.toolRef })
+    expect(detail).toMatchObject({ kind: 'found', tool: { summary: publicSummary,
+      transport: { method: 'POST', pathTemplate: '/echo' },
+      parameters: [{ name: 'value', required: true, type: 'string' }],
+    } })
+    const discovery = await backend.query(api.capabilitySupplyTools.search, { query: 'quasar' })
+    if (reviewDecision === 'accepted') {
+      expect(discovery).toMatchObject({ kind: 'ok', items: [{ toolRef: publication.toolRef, summary: publicSummary }] })
+    } else {
+      expect(discovery).toMatchObject({ kind: 'no_candidates' })
+    }
+    await expect(owner.mutation(api.capabilitySupplyOwnerFunnel.withdrawOwnerCapability, await withSourceWrite('catalog_publish', {
+      businessId, offeringRef: origin.offeringRef, offeringRevision: 1, offeringSourceHash: origin.offeringSourceHash,
+      publicationRef: publication.publicationRef, publicationRevision: publication.publicationRevision,
+      reasonCode: 'owner_withdrawal', evidenceRefs: ['test:withdrawal'], operationKey: 'native:withdraw', correlationId: 'native:withdraw',
+    }))).resolves.toMatchObject({ kind: 'withdrawn' })
+    expect(await backend.query(api.capabilitySupplyTools.search, { query: 'quasar' })).toMatchObject({ kind: 'no_candidates' })
   })
 })

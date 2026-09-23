@@ -19,35 +19,6 @@ import {
   publicationLifecycleValue,
 } from '../../capabilitySupplyShared'
 
-export const verifyCapabilitySourceAuthorityArgs = {
-  publicationRef: v.string(),
-  expectedRevision: v.number(),
-  expectedSourceDigest: v.string(),
-  evidenceRefs: v.array(v.string()),
-  operationKey: v.string(),
-  correlationId: v.string(),
-  ...sourceWriteArgs,
-} as const
-
-export const verifyCapabilitySourceAuthorityResultValue = v.union(
-  v.object({
-    kind: v.union(v.literal('verified'), v.literal('replayed')),
-    publicationRef: v.string(),
-    revision: v.number(),
-    toolRef: v.string(),
-    sourceAuthorityState: v.literal('verified'),
-  }),
-  v.object({
-    kind: v.literal('refused'),
-    reason: v.union(
-      v.literal('authorization_denied'),
-      v.literal('publication_not_found'),
-      v.literal('revision_changed'),
-      v.literal('source_changed'),
-      v.literal('evidence_invalid'),
-    ),
-  }),
-)
 
 const adapterConfigScalarValue = v.union(
   v.string(),

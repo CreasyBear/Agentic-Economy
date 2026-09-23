@@ -204,7 +204,7 @@ export const COMMANDS: Readonly<Record<string, RootCommandManifestEntry>> = {
   },
   request: {
     summary: 'Remember and revisit a private missing job after current Tools return no match.',
-    args: '<create|list|status>',
+    args: '<create|list|status|withdraw>',
     json: true,
     group: 'discover_compare',
     rootOrder: 5,
@@ -218,6 +218,7 @@ export const COMMANDS: Readonly<Record<string, RootCommandManifestEntry>> = {
       create: { ...deriveCliCommand(MARKET_REQUEST_ROUTE_CONTRACTS.create.actionId), args: '"<job>" [--idempotency-key <key>]' },
       list: { ...deriveCliCommand(MARKET_REQUEST_ROUTE_CONTRACTS.list.actionId) },
       status: { ...deriveCliCommand(MARKET_REQUEST_ROUTE_CONTRACTS.status.actionId) },
+      withdraw: { ...deriveCliCommand(MARKET_REQUEST_ROUTE_CONTRACTS.withdraw.actionId) },
     },
   },
   describe: {

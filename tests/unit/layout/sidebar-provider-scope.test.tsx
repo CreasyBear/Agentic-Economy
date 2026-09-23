@@ -1,8 +1,9 @@
 /**
  * @vitest-environment jsdom
  */
+import type * as ConvexReactModule from 'convex/react'
 import type { ReactNode } from 'react'
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { cleanup, render, screen } from '@testing-library/react'
 import {
   RouterContextProvider,
   createMemoryHistory,
@@ -15,19 +16,31 @@ import '../../setup/jsdom-platform'
 import '../../setup/jsdom-dialog'
 
 import { AeAppShell } from '@/components/ae/layout/AeAppShell'
-import { AeOperatorPage, OperatorChromeProvider } from '@/components/ae/layout/AeOperatorPage'
-import { AeOperatorSidebar } from '@/components/ae/layout/AeOperatorSidebar'
-import { SidebarProvider } from '@/components/ui/sidebar'
+import { AeOperatorPage } from '@/components/ae/layout/AeOperatorPage'
+
+const clerkSignedIn = vi.hoisted(() => ({ value: false }))
 
 vi.mock('@/lib/observability/funnel-client', () => ({
   emitFunnelEventOnce: vi.fn(),
 }))
 
+// Vitest hoists the mock factory, so its shared helper must be loaded inside it.
+vi.mock('convex/react', async (importOriginal) => ({
+  ...(await importOriginal<typeof ConvexReactModule>()),
+  ...(await import('../../helpers/shell-convex-mock')).shellConvexMock,
+}))
+
+vi.mock('@/components/ae/command-panel', () => ({
+  CommandPanelProvider: ({ children }: { children: ReactNode }) => children,
+  AeCommandPanel: () => null,
+}))
+
 vi.mock('@clerk/tanstack-react-start', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@clerk/tanstack-react-start')>()),
+  useAuth: () => ({ isSignedIn: clerkSignedIn.value }),
   useUser: () => ({
     isLoaded: true,
-    isSignedIn: true,
+    isSignedIn: clerkSignedIn.value,
     user: {
       id: 'user_test',
       fullName: 'Test User',
@@ -36,7 +49,9 @@ vi.mock('@clerk/tanstack-react-start', async (importOriginal) => ({
     sessionId: 'session_test',
   }),
   Show: ({ when, children, fallback }: { when: string; children: ReactNode; fallback?: ReactNode }) =>
-    when === 'signed-out' ? children : (fallback ?? null),
+    when === 'signed-out'
+      ? (clerkSignedIn.value ? (fallback ?? null) : children)
+      : (clerkSignedIn.value ? children : (fallback ?? null)),
   UserButton: () => <button type="button" aria-label="Account menu" />,
   OrganizationSwitcher: () => <div data-testid="organization-switcher" />,
 }))
@@ -44,24 +59,30 @@ vi.mock('@clerk/tanstack-react-start', async (importOriginal) => ({
 afterEach(() => {
   cleanup()
   document.cookie = 'sidebar_state=; max-age=0; path=/'
+  clerkSignedIn.value = false
 })
 
 describe('SidebarProvider scope (S-01)', () => {
-  it('does not mount sidebar wrapper on public AeAppShell', () => {
+  it('keeps the routed page under the same provider boundary across auth resolution', () => {
+    clerkSignedIn.value = false
     renderPublicShell()
+    const signedOutChain = pageWrapperChain(screen.getByText('Public page'))
 
-    expect(document.querySelector('[data-slot="sidebar-wrapper"]')).toBeNull()
+    cleanup()
+    clerkSignedIn.value = true
+    renderPublicShell()
+    const signedInChain = pageWrapperChain(screen.getByText('Public page'))
+
+    expect(signedOutChain).toEqual(signedInChain)
+    expect(signedOutChain).toMatchInlineSnapshot(`
+      [
+        "div",
+        "main[data-slot=sidebar-inset]",
+        "div[data-slot=sidebar-wrapper]",
+      ]
+    `)
   })
 
-  it('does not set sidebar_state cookie when Cmd+B is pressed on a public page', () => {
-    renderPublicShell()
-
-    const cookiesBefore = document.cookie
-    fireEvent.keyDown(window, { key: 'b', metaKey: true })
-
-    expect(document.cookie).toBe(cookiesBefore)
-    expect(document.cookie).not.toMatch(/sidebar_state=/)
-  })
 
   it('sets --header-height on the public app shell root', () => {
     renderPublicShell()
@@ -72,40 +93,13 @@ describe('SidebarProvider scope (S-01)', () => {
     expect(shellRoot?.style.getPropertyValue('--header-height')).toBe('4rem')
   })
 
-  it('mounts sidebar wrapper in the operator layout composition', () => {
-    const rootRoute = createRootRoute()
-    const routeTree = rootRoute.addChildren([
-      createRoute({
-        getParentRoute: () => rootRoute,
-        path: '/owner/operations',
-        staticData: { shell: 'operator' },
-      }),
-    ])
-    const router = createRouter({
-      routeTree,
-      history: createMemoryHistory({ initialEntries: ['/owner/operations'] }),
-    })
+  it('mounts one sidebar wrapper in the signed-in root frame', () => {
+    clerkSignedIn.value = true
+    renderPublicShell()
 
-    render(
-      <RouterContextProvider router={router}>
-        <SidebarProvider className="contents" defaultOpen>
-          <OperatorChromeProvider
-            sidebar={<AeOperatorSidebar operatorRole="owner" currentPath="/owner/operations" />}
-          >
-            <AeOperatorPage
-              operatorRole="owner"
-              title="Tools"
-              description="Publish tools."
-              currentPath="/owner/operations"
-            >
-              <div>Body</div>
-            </AeOperatorPage>
-          </OperatorChromeProvider>
-        </SidebarProvider>
-      </RouterContextProvider>,
-    )
-
-    expect(document.querySelector('[data-slot="sidebar-wrapper"]')).toBeTruthy()
+    expect(document.querySelectorAll('[data-slot="sidebar-wrapper"]')).toHaveLength(1)
+    expect(screen.getByRole('button', { name: 'Workspace menu' })).toBeTruthy()
+    expect(screen.queryByRole('navigation', { name: 'App navigation' })).toBeNull()
   })
 
   it('renders isolated AeOperatorPage without SidebarProvider', () => {
@@ -137,7 +131,7 @@ describe('SidebarProvider scope (S-01)', () => {
       ),
     ).not.toThrow()
 
-    expect(screen.getByRole('heading', { level: 1, name: 'Tools' })).toBeTruthy()
+    expect(screen.getByText('Publish the exact tools agents can inspect and call.')).toBeTruthy()
     expect(document.querySelector('[data-slot="sidebar-wrapper"]')).toBeNull()
   })
 })
@@ -159,4 +153,15 @@ function renderPublicShell(): void {
       <AeAppShell><p>Public page</p></AeAppShell>
     </RouterContextProvider>,
   )
+}
+
+function pageWrapperChain(page: HTMLElement): string[] {
+  const content = page.parentElement
+  const inset = content?.parentElement
+  const provider = inset?.parentElement
+  return [content, inset, provider].map(element => {
+    if (element === null || element === undefined) return 'missing'
+    const slot = element.dataset.slot
+    return `${element.tagName.toLowerCase()}${slot === undefined ? '' : `[data-slot=${slot}]`}`
+  })
 }

@@ -56,6 +56,10 @@ export type AdminAuthorityResult =
   | { kind: 'allowed'; membership: AdminMembership }
   | { kind: 'denied'; reason: 'missing_membership' | 'inactive_membership' | 'action_not_allowed' }
 
+export function canAdminRolePerformAction(role: AdminRole, action: AdminAction): boolean {
+  return AdminActionMatrix[role][action]
+}
+
 export function requireAdminAuthority(membership: AdminMembership | undefined, action: AdminAction): AdminAuthorityResult {
   if (membership === undefined) {
     return { kind: 'denied', reason: 'missing_membership' }
@@ -464,14 +468,14 @@ function countActiveOwnerAdmins(memberships: readonly AdminMembership[]): number
   return memberships.filter((membership) => membership.role === 'owner_admin' && membership.state === 'active').length
 }
 
-function validateReasonAndEvidence(
+export function validateReasonAndEvidence(
   reasonCode: string,
   evidenceRefs: readonly string[]
 ):
   | { kind: 'ok'; reasonCode: string; evidenceRef: string }
   | { kind: 'error'; code: 'admin_invalid_reason' | 'admin_missing_evidence'; retryable: false; reason: string } {
   const trimmedReason = reasonCode.trim()
-  if (trimmedReason.length === 0) {
+  if (trimmedReason.length === 0 || trimmedReason.length > 200) {
     return {
       kind: 'error',
       code: 'admin_invalid_reason',

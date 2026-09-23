@@ -19,6 +19,7 @@ import {
   refreshCurrentMarketPresenceHandler,
   refreshFacilitatorDiscoveryHandler,
   observeX402TreasuryHandler,
+  snapshotMarketplaceMetricsDayHandler,
   reconcileBusinessSupplyProjectionsHandler,
   dispatchWorkloadCronConsequenceHandler,
   type WorkloadCronSnapshot,
@@ -62,6 +63,7 @@ const EXPECTED_BINDINGS = {
   'refresh current market presence': 'workloadCron:refreshCurrentMarketPresence',
   'refresh facilitator discovery': 'workloadCron:refreshFacilitatorDiscovery',
   'observe x402 treasury': 'workloadCron:observeX402Treasury',
+  'snapshot marketplace metrics day': 'workloadCron:snapshotMarketplaceMetricsDay',
 } as const
 
 const ACTION_HANDLERS = [
@@ -69,6 +71,7 @@ const ACTION_HANDLERS = [
   refreshFacilitatorDiscoveryHandler,
   refreshAgenticEconomyApiRegistryHandler,
   observeX402TreasuryHandler,
+  snapshotMarketplaceMetricsDayHandler,
 ] as const
 
 const ACTION_HANDLER_WORKLOAD_NAMES = [
@@ -76,6 +79,7 @@ const ACTION_HANDLER_WORKLOAD_NAMES = [
   'refresh facilitator discovery',
   'refresh Agentic Economy API registry',
   'observe x402 treasury',
+  'snapshot marketplace metrics day',
 ] as const
 
 const MUTATION_HANDLERS = [
@@ -107,17 +111,21 @@ describe('System workload cron boundary', () => {
     vi.setSystemTime(new Date('2026-08-26T00:00:00.000Z'))
   })
 
-  it('binds the eight periodic registrations to workload admission wrappers, retaining on-demand facilitator authority', () => {
+  it('binds the nine periodic registrations to workload admission wrappers, retaining on-demand facilitator authority', () => {
     const periodicBindings = Object.fromEntries(Object.entries(EXPECTED_BINDINGS).filter(([name]) => name !== 'refresh facilitator discovery'))
     expect(Object.keys(convexCrons.crons).sort()).toEqual(Object.keys(periodicBindings).sort())
     expect(Object.fromEntries(
       Object.entries(convexCrons.crons).map(([name, job]) => [name, job.name]),
     )).toEqual(periodicBindings)
     expect(Object.values(convexCrons.crons).every((job) => JSON.stringify(job.args) === '[{}]')).toBe(true)
+    expect(convexCrons.crons['snapshot marketplace metrics day']?.schedule).toEqual({
+      type: 'cron',
+      cron: '10 16 * * *',
+    })
   })
 
   it('declares every cron as one canonical workload Principal and Account with no exemption', () => {
-    expect(WORKLOAD_CRON_DECLARATIONS).toHaveLength(9)
+    expect(WORKLOAD_CRON_DECLARATIONS).toHaveLength(10)
     expect(WORKLOAD_CRON_DECLARATIONS.map(({ name }) => name).sort()).toEqual(Object.keys(EXPECTED_BINDINGS).sort())
     expect(WORKLOAD_CRON_DECLARATIONS.every((declaration) => (
       declaration.authority === 'canonical_workload'
@@ -367,11 +375,10 @@ describe('System workload cron boundary', () => {
     for (const handler of MUTATION_HANDLERS) await expect(handler(context.mutation())).resolves.toBeNull()
 
     expect(context.admissions).toEqual([...ACTION_HANDLER_WORKLOAD_NAMES])
-    // 10, not 9: reconcileBusinessSupplyProjectionsHandler now dispatches two
-    // mutations - rebuildAllBusinessSupplyProjections and (Well 8 Lane C)
-    // x402DirectoryIndexStore.reconcileProviderDirectoryRows - under one admission.
-    expect(context.dispatches).toHaveLength(10)
-    expect([...context.db.queries].sort()).toEqual(Array.from({ length: 9 }, () => [...WORKLOAD_AUTHORITY_QUERY_CHAIN]).flat().sort())
+    // 11 dispatches: ten scheduled wrappers, with business projection
+    // reconciliation dispatching two mutations under one admission.
+    expect(context.dispatches).toHaveLength(11)
+    expect([...context.db.queries].sort()).toEqual(Array.from({ length: 10 }, () => [...WORKLOAD_AUTHORITY_QUERY_CHAIN]).flat().sort())
     expect(context.trace.every(([admission, dispatch]) => admission < dispatch)).toBe(true)
   })
 

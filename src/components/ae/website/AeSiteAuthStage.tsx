@@ -19,7 +19,7 @@ export function AeSiteAuthStage({ labelledBy, url, children }: AeSiteAuthStagePr
       {...(labelledBy === undefined ? {} : { labelledBy })}
     >
       <div className="mx-auto w-full max-w-md">
-        <AeSiteBrowser url={url}>{children}</AeSiteBrowser>
+        <AeSiteBrowser className="overflow-visible" url={url}>{children}</AeSiteBrowser>
       </div>
     </AeSiteSection>
   )

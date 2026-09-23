@@ -56,6 +56,7 @@ export const AuditTargetTypeValues = [
   'developer_discovery',
   'api_key',
   'protected_action',
+  'admin_approval_proposal',
   'protected_action_attempt',
   'billing',
   'billing_provider_event',
@@ -87,6 +88,8 @@ export const AuditEventTypeValues = [
   'admin.membership_revoked',
   'admin.break_glass_used',
   'admin.action_denied',
+  'admin.action_proposed',
+  'admin.proposal_approved',
   'capability_contract.registered',
   'capability_offering.registered',
   'capability_binding.registered',
@@ -222,6 +225,8 @@ const stateChangingEvents: Partial<Record<AuditEventType, true>> = {
   'admin.membership_bootstrapped': true,
   'admin.membership_granted': true,
   'admin.membership_revoked': true,
+  'admin.action_proposed': true,
+  'admin.proposal_approved': true,
   'capability_contract.registered': true,
   'capability_offering.registered': true,
   'capability_binding.registered': true,
@@ -321,7 +326,8 @@ export function validateAuditEvent(input: AuditEventInput): AuditValidationResul
   if (
     (package3AuditEventTypes.has(input.eventType)
       || input.eventType.startsWith('billing.')
-      || input.eventType.startsWith('api_key.'))
+      || input.eventType.startsWith('api_key.')
+      || input.eventType.startsWith('admin.'))
     && (containsSecretMaterial(input.redactedPayload) || input.evidenceRefs?.some((value) => secretValuePattern.test(value)) === true)
   ) {
     return { valid: false, reason: 'unsafe_security_evidence' }

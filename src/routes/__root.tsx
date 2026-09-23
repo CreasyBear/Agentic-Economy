@@ -1,18 +1,14 @@
 /// <reference types="vite/client" />
-import { ClerkProvider, useAuth } from '@clerk/tanstack-react-start'
-import { ConvexProviderWithClerk } from 'convex/react-clerk'
-import { ConvexReactClient, useConvexAuth, useMutation } from 'convex/react'
-import { ClientOnly, HeadContent, Link, Outlet, Scripts, createRootRoute, useRouter, useRouterState } from '@tanstack/react-router'
-import { useEffect, useState, type ReactNode } from 'react'
+import { ClerkProvider } from '@clerk/tanstack-react-start'
+import { ClientOnly, HeadContent, Outlet, Scripts, createRootRoute, useRouter, useRouterState } from '@tanstack/react-router'
+import { useEffect, type ReactNode } from 'react'
 import { Toaster } from 'sonner'
 
 import { AeAppShell } from '@/components/ae/layout/AeAppShell'
+import { ChatConvexProvider, SignedInConvexProvider, requiresChatProviders } from '@/components/ae/layout/AeConvexProviders'
 import { useIsMobile } from '@/hooks/use-mobile'
 import { ThemeProvider } from '@/components/ae/theme/ThemeProvider'
 import { RouteProgressBar } from '@/components/ae/layout/AeRouteProgressBar'
-import { AePageState } from '@/components/ae/layout/AePageState'
-import { buttonVariants } from '@/components/ui/button-variants'
-import { cn } from '@/lib/utils'
 import { SITE_THEME_COLOR_HEX } from '@/components/ui/theme-meta'
 
 import { AeObservabilityErrorBoundary } from '@/components/ae/feedback/AeObservabilityErrorBoundary'
@@ -21,7 +17,6 @@ import appCss from '../styles/globals.css?url'
 import { clerkAppearance } from '@/components/ae/website/clerk-appearance'
 import { HOME } from '@/content/brand-copy'
 import { AECON_MARK_SRC } from '@/content/brand-assets'
-import { api } from '../../convex/_generated/api'
 
 function AeObservabilityBoot() {
   const router = useRouter()
@@ -89,7 +84,7 @@ function RootDocument({ children }: { children: ReactNode }) {
   const chatProvidersRequired = requiresChatProviders(pathname)
   const content = (
     <ClerkProvider appearance={clerkAppearance}>
-      {chatProvidersRequired ? <ChatConvexProvider>{children}</ChatConvexProvider> : children}
+      {chatProvidersRequired ? <ChatConvexProvider>{children}</ChatConvexProvider> : <SignedInConvexProvider>{children}</SignedInConvexProvider>}
     </ClerkProvider>
   )
 
@@ -116,43 +111,3 @@ export function ResponsiveToaster() {
   return <Toaster ref={responsiveToasterRef} {...responsiveToasterProps(isMobile)} />
 }
 
-function ChatConvexProvider({ children }: { children: ReactNode }) {
-  const convexUrl = import.meta.env.VITE_CONVEX_URL?.trim()
-  if (!convexUrl) {
-    return (
-      <AePageState
-        title="Chat is unavailable"
-        description="Chat is not configured. The Tool catalogue remains available."
-        tone="warning"
-        action={(
-          <Link to="/market" className={cn(buttonVariants(), 'min-h-touch')}>
-            Browse Tools
-          </Link>
-        )}
-      />
-    )
-  }
-  return <ConfiguredChatConvexProvider convexUrl={convexUrl}>{children}</ConfiguredChatConvexProvider>
-}
-
-function ConfiguredChatConvexProvider({ convexUrl, children }: { convexUrl: string; children: ReactNode }) {
-  const [client] = useState(() => new ConvexReactClient(convexUrl))
-  return (
-    <ConvexProviderWithClerk client={client} useAuth={useAuth}>
-      <InteractiveAuthorityMaterializer>{children}</InteractiveAuthorityMaterializer>
-    </ConvexProviderWithClerk>
-  )
-}
-
-function InteractiveAuthorityMaterializer({ children }: { children: ReactNode }) {
-  const { isAuthenticated } = useConvexAuth()
-  const materialize = useMutation(api.interactiveAuthority.materializeCurrentInteractiveAuthority)
-  useEffect(() => {
-    if (isAuthenticated) void materialize({}).catch(() => undefined)
-  }, [isAuthenticated, materialize])
-  return children
-}
-
-export function requiresChatProviders(pathname: string): boolean {
-  return pathname === '/t/new' || pathname.startsWith('/t/') || pathname.startsWith('/s/')
-}

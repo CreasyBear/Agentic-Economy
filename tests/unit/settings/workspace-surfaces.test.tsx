@@ -38,7 +38,7 @@ describe('owner workspace settings surfaces', () => {
   it('saves a changed public provider name explicitly and reports success', async () => {
     const onRename = vi.fn(async () => ({ kind: 'updated' as const, businessId: catalog.businessId, slug: catalog.slug, name: 'Quote Works API' }))
     render(<AeWorkspaceGeneral result={{ kind: 'available', readback: buildPublicOwnerStatusReadback(catalog) }} onRename={onRename} />)
-    fireEvent.change(screen.getByRole('textbox', { name: 'Public provider name' }), { target: { value: 'Quote Works API' } })
+    fireEvent.change(screen.getByRole('textbox', { name: 'Public Provider name' }), { target: { value: 'Quote Works API' } })
     fireEvent.click(screen.getByRole('button', { name: 'Save public name' }))
     await waitFor(() => expect(screen.getByRole('status').textContent).toContain('Public name saved'))
     expect(onRename).toHaveBeenCalledWith(expect.objectContaining({ businessId: catalog.businessId, name: 'Quote Works API' }))
@@ -47,7 +47,7 @@ describe('owner workspace settings surfaces', () => {
   it('owns an unexpected rename rejection without losing the entered name', async () => {
     const onRename = vi.fn(async () => { throw new Error('private upstream detail') })
     render(<AeWorkspaceGeneral result={{ kind: 'available', readback: buildPublicOwnerStatusReadback(catalog) }} onRename={onRename} />)
-    fireEvent.change(screen.getByRole('textbox', { name: 'Public provider name' }), { target: { value: 'Name still here' } })
+    fireEvent.change(screen.getByRole('textbox', { name: 'Public Provider name' }), { target: { value: 'Name still here' } })
     fireEvent.click(screen.getByRole('button', { name: 'Save public name' }))
     await waitFor(() => expect(screen.getByRole('alert').textContent).toContain('existing public name is unchanged'))
     expect(screen.getByDisplayValue('Name still here')).toBeTruthy()
@@ -60,7 +60,7 @@ describe('owner workspace settings surfaces', () => {
       .mockResolvedValueOnce({ kind: 'refused', code: 'source_unavailable' })
       .mockResolvedValueOnce({ kind: 'updated', businessId: catalog.businessId, slug: catalog.slug, name: 'Quote Works Two' })
     render(<AeWorkspaceGeneral result={{ kind: 'available', readback: buildPublicOwnerStatusReadback(catalog) }} onRename={onRename} />)
-    const input = screen.getByRole('textbox', { name: 'Public provider name' })
+    const input = screen.getByRole('textbox', { name: 'Public Provider name' })
     fireEvent.change(input, { target: { value: 'Quote Works One' } })
     fireEvent.click(screen.getByRole('button', { name: 'Save public name' }))
     await waitFor(() => expect(onRename).toHaveBeenCalledTimes(1))
@@ -76,7 +76,17 @@ describe('owner workspace settings surfaces', () => {
 
   it('sends an unpublished workspace to provider setup', () => {
     render(<AeWorkspaceGeneral result={{ kind: 'not_found', reason: 'no_such_business' }} />)
-    expect(screen.getByRole('link', { name: 'Review provider setup' }).getAttribute('href')).toBe('/for-providers')
+    expect(screen.getByRole('link', { name: 'Review Provider setup' }).getAttribute('href')).toBe('/for-providers')
+  })
+
+  it('renders an unavailable Provider identity as an error alert', () => {
+    render(<AeWorkspaceGeneral result={{ kind: 'unavailable', reason: 'source_unavailable', retryable: true }} />)
+    const alert = screen.getByRole('alert')
+    expect(alert.getAttribute('data-slot')).toBe('alert')
+    expect(alert.textContent).toContain('Provider identity is unavailable')
+    expect(screen.getByRole('link', { name: 'Try again' }).getAttribute('href')).toBe(
+      '/owner/operations#provider-identity',
+    )
   })
 
 })

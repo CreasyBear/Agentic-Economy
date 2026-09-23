@@ -2,10 +2,7 @@ import { internalMutationGeneric, internalQueryGeneric } from 'convex/server'
 import { v, type Validator } from 'convex/values'
 
 import type { JsonValue } from '@/modules/capability-contract/public'
-import {
-  parseRouteTransportObservationJson,
-  type RouteTransportObservation,
-} from '@/modules/capability-supply/route-transport-runtime'
+import { parseRouteTransportObservationJson, type RouteTransportObservation } from '@/modules/capability-supply/route-transport-runtime'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { stableStringify, type StableHashValue } from '@/modules/common/stable-hash'
 import { beginLeaseEffectHandler } from './lib/providerConnections/leases'
@@ -837,6 +834,7 @@ const providerConsequenceX402Operation = v.union(
   v.literal('record_signature_digest'),
   v.literal('mark_possibly_submitted'),
   v.literal('observe_attempt'),
+  v.literal('checkpoint_response'),
 )
 
 type X402Operation =
@@ -846,6 +844,7 @@ type X402Operation =
   | 'record_signature_digest'
   | 'mark_possibly_submitted'
   | 'observe_attempt'
+  | 'checkpoint_response'
 
 const providerRpcJsonScalarValue: Validator<null | boolean | number | string> = v.union(
   v.null(),
@@ -931,7 +930,7 @@ export async function authorizeProviderConsequenceX402RpcHandler(
     || row.paymentSecretRef === undefined
     || row.journalTokenDigest !== input.journalTokenDigest
     || !matchingOptionalIdentity(args, row)) return { kind: 'unavailable' as const }
-  const postRelease = input.operation === 'observe_attempt'
+  const postRelease = input.operation === 'observe_attempt' || input.operation === 'checkpoint_response'
   if (!postRelease && Date.now() >= row.expiresAt) return { kind: 'unavailable' as const }
   const identityBoundOperations: readonly X402Operation[] = [
     'prepare_authorization',

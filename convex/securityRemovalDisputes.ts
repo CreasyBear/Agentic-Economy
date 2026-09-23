@@ -1,31 +1,21 @@
 import type { MutationCtx, QueryCtx } from './_generated/server'
 import type { Doc, Id } from './_generated/dataModel'
-import { readCurrentActiveAdminMembership as readCurrentActiveMembership } from './authz'
 import { admissionKey, assertAdmission } from './lib/rateLimit'
 import { requireSourceWrite } from './sourceWriteAdmission'
 import { brandNonEmpty } from '../src/modules/common/ids'
 import { canonicalDigest } from '../src/modules/common/canonical-digest'
-import { validateAuditEvent, type AuditEventContract } from '../src/modules/observability/public'
 import {
   RemovalDisputeReasonCodeValues,
   openRemovalDispute as openRemovalDisputeModule,
-  recordAdminActionDenied,
-  requireAdminAuthority,
 } from '../src/modules/security/public'
 import type {
-  AdminMembership,
   DisputeEvidenceInput,
   DisputeOpenResult,
   DisputeRecord,
   DisputeSourceState,
   RemovalDisputeReasonCode,
 } from '../src/modules/security/public'
-import {
-  persistAdminAuthorityMutation,
-  persistAuditEvent,
-  summarizeAudit,
-  summarizeMembershipAudit,
-} from './securityShared'
+import { persistAuditEvent } from './securityShared'
 
 type OpenRemovalDisputeHandlerArgs = {
   businessId: string
@@ -46,15 +36,6 @@ type OpenRemovalDisputeHandlerArgs = {
   sourceWriteRequest?: unknown
 }
 
-type CloseRemovalDisputeHandlerArgs = {
-  disputeId: string
-  reasonCode: string
-  evidenceRefs: string[]
-  operationKey: string
-  correlationId: string
-  sourceWrite?: unknown
-  sourceWriteRequest?: unknown
-}
 
 export async function openRemovalDisputeHandler(ctx: MutationCtx, args: OpenRemovalDisputeHandlerArgs) {
   const admission = await assertAdmission(ctx, {
@@ -116,98 +97,6 @@ export async function openRemovalDisputeHandler(ctx: MutationCtx, args: OpenRemo
     : result
 }
 
-export async function closeRemovalDisputeHandler(ctx: MutationCtx, args: CloseRemovalDisputeHandlerArgs) {
-  const sourceWrite = await requireSourceWrite(ctx, args, 'admin_operator')
-  if (sourceWrite.kind === 'rejected') {
-    return {
-      kind: 'error' as const,
-      code: 'admin_action_denied' as const,
-      retryable: false,
-      reason: sourceWrite.reason,
-    }
-  }
-
-  const operationKey = brandNonEmpty(args.operationKey, 'OperationKey')
-  const correlationId = brandNonEmpty(args.correlationId, 'CorrelationId')
-  const disputeSource = await loadDisputeByIdSource(ctx.db, args.disputeId)
-  const disputeState = disputeSourceState(disputeSource)
-  const actorMembership = await readCurrentActiveMembership(ctx)
-  const authority = requireAdminAuthority(actorMembership, 'close_dispute')
-  if (authority.kind === 'denied') {
-    const denied = recordAdminActionDenied(
-      { adminMemberships: [], adminMembershipAuditEvents: [], auditEvents: [] },
-      {
-        actorMembership,
-        action: 'close_dispute',
-        targetType: 'dispute',
-        targetRef: args.disputeId,
-        reasonCode: authority.reason,
-        evidenceRefs: args.evidenceRefs,
-        operationKey,
-        correlationId,
-        now: Date.now(),
-      }
-    )
-    await persistAdminAuthorityMutation(ctx.db, denied)
-    return {
-      kind: 'error' as const,
-      code: 'admin_action_denied' as const,
-      retryable: false,
-      reason: authority.reason,
-      auditEvent: summarizeAudit(denied.auditEvent),
-      membershipAuditEvent: summarizeMembershipAudit(denied.membershipAuditEvent),
-    }
-  }
-
-  const reasonCode = args.reasonCode.trim()
-  if (reasonCode.length === 0) {
-    return {
-      kind: 'error' as const,
-      code: 'admin_invalid_reason' as const,
-      retryable: false,
-      reason: 'admin_action_requires_reason',
-    }
-  }
-
-  if (!hasEvidence(args.evidenceRefs)) {
-    return {
-      kind: 'error' as const,
-      code: 'admin_missing_evidence' as const,
-      retryable: false,
-      reason: 'admin_action_requires_evidence',
-    }
-  }
-
-  const dispute = disputeState.disputes.find((candidate) => candidate.disputeId === args.disputeId)
-  if (dispute === undefined) {
-    return {
-      kind: 'error' as const,
-      code: 'dispute_not_found' as const,
-      retryable: false,
-      reason: 'dispute_not_found',
-    }
-  }
-
-  const beforeState = dispute.status
-  dispute.status = 'closed'
-  dispute.updatedAt = Date.now()
-  const auditEvent = recordDisputeClosedAudit(dispute, authority.membership, {
-    beforeState,
-    reasonCode,
-    evidenceRefs: args.evidenceRefs,
-    operationKey,
-    correlationId,
-    now: dispute.updatedAt,
-  })
-  await persistClosedDispute(ctx.db, dispute, auditEvent)
-
-  return {
-    kind: 'ok' as const,
-    code: 'dispute_closed' as const,
-    receipt: disputeReceipt(dispute),
-    auditEvent: summarizeAudit(auditEvent),
-  }
-}
 
 type DisputeReadSource = {
   disputes: Doc<'disputes'>[]
@@ -233,16 +122,6 @@ async function loadDisputeSource(
   return { disputes: [...disputes.values()] }
 }
 
-async function loadDisputeByIdSource(
-  db: QueryCtx['db'],
-  disputeId: string,
-): Promise<DisputeReadSource> {
-  const id = db.normalizeId('disputes', disputeId)
-  const dispute = id === null ? null : await db.get(id)
-  return {
-    disputes: dispute === null ? [] : [dispute],
-  }
-}
 
 async function persistOpenedDispute(
   db: MutationCtx['db'],
@@ -267,18 +146,6 @@ async function persistOpenedDispute(
   }
 }
 
-async function persistClosedDispute(
-  db: MutationCtx['db'],
-  dispute: DisputeRecord,
-  auditEvent: AuditEventContract,
-): Promise<void> {
-  const existing = await findDisputeDocument(db, dispute.operationKeys)
-  if (existing === null) {
-    throw new Error('dispute_persistence_missing')
-  }
-  await db.patch(existing._id, disputeDocument(db, dispute))
-  await persistAuditEvent(db, auditEvent)
-}
 
 async function findDisputeDocument(
   db: MutationCtx['db'],
@@ -352,62 +219,6 @@ function readRemovalDisputeReasonCode(value: string): RemovalDisputeReasonCode {
   return reasonCode
 }
 
-function recordDisputeClosedAudit(
-  dispute: DisputeRecord,
-  membership: AdminMembership,
-  input: {
-    beforeState: string
-    reasonCode: string
-    evidenceRefs: readonly string[]
-    operationKey: string
-    correlationId: string
-    now: number
-  }
-): AuditEventContract {
-  const redactedPayload = {
-    evidenceCount: input.evidenceRefs.length,
-    reasonCode: input.reasonCode,
-    requestCount: dispute.requestCount,
-    targetType: dispute.targetType,
-  }
-  const validation = validateAuditEvent({
-    eventId: brandNonEmpty(`audit:dispute.closed:${dispute.disputeId}:${input.operationKey}`, 'AuditEventId'),
-    eventType: 'dispute.closed',
-    actorKind: 'admin',
-    actorRef: membership.clerkUserId,
-    targetType: 'dispute',
-    targetRef: dispute.disputeId,
-    businessId: dispute.businessId,
-    idempotencyKey: brandNonEmpty(input.operationKey, 'OperationKey'),
-    correlationId: brandNonEmpty(input.correlationId, 'CorrelationId'),
-    beforeState: input.beforeState,
-    afterState: 'closed',
-    reasonCode: input.reasonCode,
-    evidenceRefs: input.evidenceRefs,
-    redactedPayload,
-    payloadHash: canonicalDigest(redactedPayload),
-    createdAt: input.now,
-  })
-
-  if (!validation.valid) {
-    throw new Error(`Invalid dispute close audit event: ${validation.reason}`)
-  }
-
-  return validation.event
-}
-
-function disputeReceipt(dispute: DisputeRecord) {
-  return {
-    disputeId: dispute.disputeId,
-    status: dispute.status,
-    targetType: dispute.targetType,
-    targetRef: dispute.targetRef,
-    reasonCode: dispute.reasonCode,
-    evidenceHash: dispute.evidenceHash,
-    requestCount: dispute.requestCount,
-    updatedAt: dispute.updatedAt,
-  }
-}
 
 function disputeRateLimitKey(args: {
   targetRef: string
@@ -423,9 +234,6 @@ function disputeRateLimitKey(args: {
   })}`
 }
 
-function hasEvidence(evidenceRefs: readonly string[]): boolean {
-  return evidenceRefs.some((evidenceRef) => evidenceRef.trim().length > 0)
-}
 
 function businessIdFromValue(db: MutationCtx['db'], value: string): Id<'businesses'> {
   const id = db.normalizeId('businesses', value)

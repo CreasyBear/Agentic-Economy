@@ -1,0 +1,142 @@
+import { aeStatusValues, getStatusPresentation } from '@/lib/ui/status-presentation'
+import type { AuditEventType } from '@/modules/observability/public'
+
+// Keep the object literal exhaustive: adding an AuditEventType must name its display label.
+export const AUDIT_EVENT_LABELS = {
+  'account.session.created': 'Account session created',
+  'account.session.ended': 'Account session ended',
+  'account.session.revoked': 'Account session revoked',
+  'account.security_profile.updated': 'Account security profile updated',
+  'account.workspace_profile.updated': 'Account workspace profile updated',
+  'account.workspace_invitation.created': 'Account workspace invitation created',
+  'account.workspace_invitation.revoked': 'Account workspace invitation revoked',
+  'account.workspace_membership.created': 'Account workspace membership created',
+  'account.workspace_membership.updated': 'Account workspace membership updated',
+  'account.workspace_membership.deleted': 'Account workspace membership deleted',
+  'account.workspace.closed': 'Account workspace closed',
+  'account.workspace.ownership_transferred': 'Account workspace ownership transferred',
+  'account.personal_account.retired': 'Account personal account retired',
+  'agent.created': 'Agent created',
+  'agent.renamed': 'Agent renamed',
+  'agent.policy_updated': 'Agent policy updated',
+  'agent.disconnected': 'Agent disconnected',
+  'agent.credential.authenticated': 'Agent credential authenticated',
+  'agent.credential.denied': 'Agent credential denied',
+  'agent.credential.replacement_prepared': 'Agent credential replacement prepared',
+  'agent.credential.replacement_promoted': 'Agent credential replacement promoted',
+  'agent.credential.replacement_cancelled': 'Agent credential replacement cancelled',
+  'agent.credential.revoked': 'Agent credential revoked',
+  'agent.credential.expired': 'Agent credential expired',
+  'connection.connected': 'Connection connected',
+  'connection.health_checked': 'Connection health checked',
+  'connection.reauthorized': 'Connection reauthorized',
+  'connection.revoked': 'Connection revoked',
+  'connection.cleanup_required': 'Connection cleanup required',
+  'consequence.admitted': 'Consequence admitted',
+  'consequence.refused': 'Consequence refused',
+  'consequence.proof_consumed': 'Consequence proof consumed',
+  'consequence.outcome_unknown': 'Consequence outcome unknown',
+  'consequence.succeeded': 'Consequence succeeded',
+  'dispute.opened': 'Dispute opened',
+  'dispute.updated': 'Dispute updated',
+  'dispute.closed': 'Dispute closed',
+  'business.suppressed': 'Business suppressed',
+  'business.unsuppressed': 'Business unsuppressed',
+  'registry.sync_queued': 'Registry sync queued',
+  'registry.sync_succeeded': 'Registry sync succeeded',
+  'registry.sync_failed': 'Registry sync failed',
+  'registry.sync_stale': 'Registry sync stale',
+  'discovery.generated': 'Discovery generated',
+  'discovery.degraded': 'Discovery degraded',
+  'discovery.unavailable': 'Discovery unavailable',
+  'admin.membership_bootstrapped': 'Admin membership bootstrapped',
+  'admin.membership_granted': 'Admin membership granted',
+  'admin.membership_revoked': 'Admin membership revoked',
+  'admin.break_glass_used': 'Admin break glass used',
+  'admin.action_denied': 'Admin action denied',
+  'admin.action_proposed': 'Admin action proposed',
+  'admin.proposal_approved': 'Admin proposal approved',
+  'capability_contract.registered': 'Capability contract registered',
+  'capability_offering.registered': 'Capability offering registered',
+  'capability_binding.registered': 'Capability binding registered',
+  'capability_binding.quarantined': 'Capability binding quarantined',
+  'capability_supply.eligibility_changed': 'Capability supply eligibility changed',
+  'capability_publication.published': 'Capability publication published',
+  'developer_discovery.generated': 'Developer discovery generated',
+  'developer_discovery.withheld': 'Developer discovery withheld',
+  'developer_discovery.degraded': 'Developer discovery degraded',
+  'developer_discovery.parity_failed': 'Developer discovery parity failed',
+  'developer_discovery.fetch_recorded': 'Developer discovery fetch recorded',
+  'developer_discovery.cache_invalidated': 'Developer discovery cache invalidated',
+  'api_key.created': 'Api key created',
+  'api_key.revealed': 'Api key revealed',
+  'api_key.used': 'Api key used',
+  'api_key.denied': 'Api key denied',
+  'api_key.rotated': 'Api key rotated',
+  'api_key.revoked': 'Api key revoked',
+  'protected_action.proposed': 'Protected action proposed',
+  'protected_action.proposal_rejected': 'Protected action proposal rejected',
+  'protected_action.policy_evaluated': 'Protected action policy evaluated',
+  'protected_action.approved': 'Protected action approved',
+  'protected_action.rejected': 'Protected action rejected',
+  'protected_action.expired': 'Protected action expired',
+  'protected_action.gateway_admitted': 'Protected action gateway admitted',
+  'protected_action.gateway_consumed': 'Protected action gateway consumed',
+  'protected_action.gateway_replay_rejected': 'Protected action gateway replay rejected',
+  'protected_action.attempted': 'Protected action attempted',
+  'protected_action.attempt_succeeded': 'Protected action attempt succeeded',
+  'protected_action.attempt_failed': 'Protected action attempt failed',
+  'protected_action.retry_attempted': 'Protected action retry attempted',
+  'protected_action.retry_exhausted': 'Protected action retry exhausted',
+  'protected_action.receipt_recorded': 'Protected action receipt recorded',
+  'protected_action.proof_gap_recorded': 'Protected action proof gap recorded',
+  'protected_action.no_repair_marked': 'Protected action no repair marked',
+  'protected_action.disputed': 'Protected action disputed',
+  'protected_action.reversed': 'Protected action reversed',
+  'protected_action.callback_received': 'Protected action callback received',
+  'protected_action.callback_rejected': 'Protected action callback rejected',
+  'billing.checkout_started': 'Billing checkout started',
+  'billing.portal_started': 'Billing portal started',
+  'billing.return_recorded': 'Billing return recorded',
+  'billing.cancel_returned': 'Billing cancel returned',
+  'billing.provider_event_ingested': 'Billing provider event ingested',
+  'billing.provider_event_duplicate': 'Billing provider event duplicate',
+  'billing.provider_event_rejected': 'Billing provider event rejected',
+  'billing.provider_event_held': 'Billing provider event held',
+  'billing.receipt_recorded': 'Billing receipt recorded',
+  'billing.paid_state_changed': 'Billing paid state changed',
+  'billing.refund_recorded': 'Billing refund recorded',
+  'billing.dispute_recorded': 'Billing dispute recorded',
+  'billing.chargeback_recorded': 'Billing chargeback recorded',
+  'billing.cancelled': 'Billing cancelled',
+  'billing.past_due_recorded': 'Billing past due recorded',
+  'billing.reconciliation_started': 'Billing reconciliation started',
+  'billing.reconciliation_mismatch': 'Billing reconciliation mismatch',
+  'billing.reconciliation_failed': 'Billing reconciliation failed',
+  'billing.reconciliation_repaired': 'Billing reconciliation repaired',
+  'billing.no_repair_marked': 'Billing no repair marked',
+  'billing.auto_recharge_configured': 'Billing auto recharge configured',
+  'billing.monthly_spend_ceiling_configured': 'Billing monthly spend ceiling configured',
+} satisfies Record<AuditEventType, string>
+const knownLabels: Readonly<Partial<Record<string, string>>> = AUDIT_EVENT_LABELS
+
+
+const outcomeLabels: Readonly<Partial<Record<string, string>>> = Object.fromEntries(
+  aeStatusValues.map((status) => [status, getStatusPresentation(status).label]),
+)
+
+export function auditOutcomeLabel(outcome: string | null): string {
+  if (outcome === null) return getStatusPresentation('unavailable').label
+  return outcomeLabels[outcome] ?? readableAuditLiteral(outcome)
+}
+
+function readableAuditLiteral(value: string): string {
+  const words = value.replace(/[._]/g, ' ')
+  return `${words.charAt(0).toUpperCase()}${words.slice(1)}`
+}
+
+export function auditEventLabel(eventType: string): string {
+  const known = knownLabels[eventType]
+  if (known !== undefined) return known
+  return readableAuditLiteral(eventType)
+}

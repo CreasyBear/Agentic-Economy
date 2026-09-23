@@ -25,6 +25,7 @@ describe('discovery files', () => {
     const serialized = `${llms.body}\n${sitemap.body}`
     expect(llms.body).not.toContain('/api/v1/registry')
     expect(llms.body).toContain('/api/v1/market-tools/search')
+    expect(llms.body).toContain('- OpenAPI: http://localhost:3000/openapi.json')
 
     expect(llms.body).not.toContain('slug=fremantle-heat-pump-repairs')
     expect(llms.body).toContain('Canonical catalogue:')
@@ -32,7 +33,7 @@ describe('discovery files', () => {
     expect(serialized).not.toContain('demo-listed-provider')
     expect(serialized).not.toMatch(/\.well-known\/ae-routing|\/v1\/route/)
     expect(serialized).not.toMatch(
-      /ownerId|clerkUserId|ownerClerkId|rawContact|private:evidence|admin|sourceHash|OpenAPI|callable=true|paymentRequired=true/i
+      /ownerId|clerkUserId|ownerClerkId|rawContact|private:evidence|admin|sourceHash|sourceKind["': ]+openapi|callable=true|paymentRequired=true/i
     )
   })
 

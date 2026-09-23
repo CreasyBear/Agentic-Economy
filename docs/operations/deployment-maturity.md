@@ -1,5 +1,60 @@
 # Deployment maturity and gaps
 
+## Base Sepolia pilot inventory — 22 September 2026
+
+Fresh read-only provider evidence supersedes the paused package-4 resource names
+for this pilot only. AWS account `197716152388` and the
+`Package4ReleaseOpenTofu` role are verified. `ae-alpha` EC2
+`i-073197e0346d83010` is running with SSM Online; RDS `ae-alpha-formance` is
+available on PostgreSQL 16.13 with Multi-AZ. The alpha Cloudflared, gateway,
+ledger and worker workloads are ready with zero restarts. Authenticated official
+SDK health at `https://formance-alpha.aecon.ai` returned true/HTTP 200 for the
+isolated `agentic-economy-alpha` ledger (id 1, ledger 2.4.12).
+The ledger's existing five accounts and one transaction are retained. The
+existing idempotent installer added v1.4.0 `spending_periods` and the two period
+adjustment templates beside exact v1.3.0. Exact readback matched the checked-in
+v1.4.0 digest; the pre/post account-volume and transaction-history digests and
+five-account/one-transaction census were unchanged.
+
+The existing CDP official-SDK preflight is also `VERIFIED` for the
+configured Base Sepolia account, exact applied account/project policies and
+digest, exact seller-canary policy, USDC asset and sufficient balance. It did
+not sign, submit, faucet or spend. The treasury observation workload ran, while
+the platform-canary readiness action returned `ae_canary_funding_not_ready`
+because no seller onboarding grant was supplied. The six alpha Formance values are bound process-locally to the local
+`anonymous-agent` Convex target, and the runtime Formance health/readback is
+ready; it is not fixture-only by mode. One authorized Stripe test-mode A$5
+top-up was durably booked and read back through Formance while the webhook
+listener was active for the successful retry; no paid Call or x402 payment has
+run. Nonsecret references are Checkout
+`cs_test_b1gn7FGdpl2oI1nzxy5a7S1DXaRcIsQxrbPWVrAYvZNzqWDtm7wVdhkmpX`, payment
+intent `pi_3UIMFy70N4UjLqHt0emsFcbs`, webhook event
+`evt_1UIMG070N4UjLqHt9KfsdMKJ`, and Formance transaction
+`ae-p4:5aef213042c0992b45b2f8a84c0603266c4741066c6b2842b24a09d3f1383e3f:funding`.
+It was authorized for Principal `prn_3c1758da42514dda85b966069103914a`,
+Account `acc_7f239ab318004bad8d41654b9e993ace`, scope `market_tools:call`, and
+sandbox policy A$1/Call, A$5/day, A$20/month, one concurrent call, 30/min,
+300/hour and seven days. The invoice readback showed A$0.48 GST against the
+A$5.28 Checkout total while the pre-Checkout quote showed A$0.03 GST; this
+discrepancy remains open. Calls/activity is empty and the month summary remains
+unavailable after refresh; those read-surface observations remain open. The
+existing AE reference
+Provider endpoint/payee and unpaid 402 are verified and seeded only into the
+local target; its deployed source revision remains `NOT VERIFIED`. The
+local target is not hosted proof, and no maturity state below advances. The
+bounded procedure and end conditions are in the
+[alpha validation plan](alpha-validation-plan.md#base-sepolia-brokered-x402-pilot).
+
+The seeded Tool's immutable revision 1 remains preserved and revision 2 is now
+admitted with the declared `x402-validation` input example. Its unpaid probe
+stops at `authority_stale` before HTTP because the revision's persisted binding
+authority snapshot is missing; this is a source repair condition, not readiness
+or Provider success. Fresh Clerk Agent authorization is pending. Stripe test-mode identity is verified (`livemode: false`), and the
+listener was active for the successful retry; the A$5 funding evidence came
+from the original event/recovery path. Credit reads now pause protected Convex queries during
+auth refresh, and paid Stripe evidence is not presented as spendable credit
+until the durable funding command is booked.
+
 ## Current operating override — 6 September 2026
 
 At Joel's request the synthetic AWS financial stack is paused for the
@@ -59,8 +114,8 @@ the requested operation. There is no averaged maturity score.
 | Cloudflare edge | `DECLARED` | Protected Tunnel remains proven; a separate validated OpenTofu root declares account-wide Tunnel-health and service-token-expiry alerts. | Create the narrow Notifications token, apply the two-policy plan, and prove delivered health alert plus connector recovery. |
 | AWS network and k3s | `VERIFIED` | MFA-backed `Package4ReleaseOpenTofu` role, private running `t4g.large`, no public IP, SSM Online, centralized 30-day logs, live memory/disk metrics, and four actionable host alarms. | Narrow the bootstrap `PowerUserAccess` policy after seven days of CloudTrail evidence. |
 | RDS PostgreSQL | `VERIFIED` | PostgreSQL 16.13, Multi-AZ, encrypted, private, deletion protection, seven-day PITR, four actionable alarms, completed isolated restore and exact schema/transaction/balance proof. RTO passed at 2,998 seconds; RPO missed by eight seconds at 308 seconds. | Repeat the drill at RPO <=300 seconds, then remove the retained drill after approval. |
-| Formance financial authority | `VERIFIED` | Community stack versions pinned; live hosted funding produced exact Formance-backed `AUD 5.000000`. | Remote restart/restore, managed x402 contention/recovery, daily close. |
-| CDP/x402 | `DECLARED` | Runtime variables and official package boundaries are deployed. | Deterministic live journey and separately reported Base Sepolia canary. |
+| Formance financial authority | `VERIFIED` | Current alpha gateway health is HTTP 200/true; isolated ledger `agentic-economy-alpha` is read back at v2.4.12 with v1.4.0 schema, five accounts and one retained transaction. | Managed x402 contention/recovery, daily close and the paid buyer journey. |
+| CDP/x402 | `PARTIAL` | Official SDK identity/policy/asset/balance preflight is ready and the treasury observation workload ran without payment; platform canary readiness is refused as `ae_canary_funding_not_ready` until a seller onboarding grant is supplied. | Fresh Agent authority, valid grant, exact publication revision/readiness, then deterministic Base Sepolia canary and buyer Call. |
 | Operations/alerting | `VERIFIED` | Confirmed SNS subscription to `joel@agentic-economy.ai`, one delivered test notification, eight actionable alarms with datapoints, backup-failure routing, and US$20/US$400 budgets. | Cost Explorer must finish ingestion and produce the observed monthly forecast. |
 | Backups/disaster recovery | `VERIFIED` | Completed Sydney backup and Melbourne copy; isolated PITR restored the current environment and Formance verified schema, transaction and balance digests plus idempotent replay. A fresh native Convex export of `dev:fastidious-barracuda-66` completed with archive integrity checks and file storage included. | Demonstrate isolated Convex restoration and repeat the infrastructure drill within the strict five-minute RPO; current RDS result was 5m08s. |
 | Human deployment access | `VERIFIED` | Named human login, MFA-backed role assumption, expected STS identity, root MFA, and zero root access keys were read live. | Reduce deployment permissions after CloudTrail supplies a seven-day usage trace. |

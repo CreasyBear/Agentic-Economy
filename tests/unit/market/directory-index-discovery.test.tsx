@@ -33,9 +33,9 @@ function linkSearch(name: string) { return new URL(screen.getByRole('link', { na
 
 it('preserves all source-ranked entries including repeated Providers and uses truthful ranked browse links', () => {
   show()
-  const popularShelf = screen.getByRole('region', { name: 'Popular Tools' })
+  const popularShelf = screen.getByRole('region', { name: 'Popular Tools carousel' })
   expect(within(popularShelf).getAllByRole('heading', { level: 3 }).map(node => node.textContent)).toEqual(popular.map(item => item.entry.title))
-  const updatedShelf = screen.getByRole('region', { name: 'Recently updated' })
+  const updatedShelf = screen.getByRole('region', { name: 'Recently updated carousel' })
   expect(within(updatedShelf).getAllByRole('heading', { level: 3 }).map(node => node.textContent)).toEqual(['Tool 23', 'Tool 22', 'Tool 21'])
   expect(within(updatedShelf).getAllByText('Updated 8 Sept 2026')).toHaveLength(3)
   expect(linkSearch('View all popular tools').get('sort')).toBe('popular')

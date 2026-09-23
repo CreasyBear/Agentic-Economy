@@ -1,6 +1,22 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import {
+  Activity,
+  CheckCircle2,
+  CircleHelp,
+  Compass,
+  CreditCard,
+  Key,
+  MessageSquare,
+  Settings,
+  WalletCards,
+  Wrench,
+  type LucideIcon,
+} from 'lucide-react'
+import { APP_NAVIGATION, type AppDestinationId } from '@/lib/navigation/app-navigation'
+
+import { getStatusPresentation } from '@/lib/ui/status-presentation'
 
 import {
   TOOL_SEARCH_RESULT_LIMIT,
@@ -10,19 +26,39 @@ import {
 } from '../market-tools-client'
 
 import {
+  type CommandNavigationItem,
   TOOLS_SEARCH_DEBOUNCE_MS,
   type MarketToolSearchStatus,
   type ToolSearchResultRowModel,
 } from './tools-search-page.contracts'
 
 type CatalogSearchItem = Extract<ToolChoiceSearchResult, { kind: 'ok' }>['items'][number]
+const navigationIcons: Readonly<Record<AppDestinationId, LucideIcon>> = {
+  market: Compass,
+  chat: MessageSquare,
+  agents: Key,
+  calls: Activity,
+  credit: CreditCard,
+  tools: Wrench,
+  earnings: WalletCards,
+  settings: Settings,
+  support: CircleHelp,
+  status: CheckCircle2,
+}
+
+const navigationItems: readonly CommandNavigationItem[] = APP_NAVIGATION.map((destination) => ({
+  href: `${destination.to}${destination.hash ?? ''}`,
+  label: destination.label,
+  keywords: destination.keywords,
+  icon: navigationIcons[destination.id],
+}))
 
 function mapCatalogSearchItemToRowModel(item: CatalogSearchItem): ToolSearchResultRowModel {
   const healthLabel =
     item.healthStatus === 'operational'
-      ? 'Operational'
+      ? getStatusPresentation('operational').label
       : item.healthStatus === 'degraded'
-        ? 'Degraded'
+        ? getStatusPresentation('degraded').label
         : 'Unverified'
   const row: ToolSearchResultRowModel = {
     toolRef: item.toolRef,
@@ -49,7 +85,10 @@ export function useMarketToolSearch({
   query,
   searchAttempt,
   searchTools = searchMarketTools,
-}: UseMarketToolSearchOptions): Readonly<{ status: MarketToolSearchStatus }> {
+}: UseMarketToolSearchOptions): Readonly<{
+  status: MarketToolSearchStatus
+  navigationItems: readonly CommandNavigationItem[]
+}> {
   const [status, setStatus] = useState<MarketToolSearchStatus>({ kind: 'idle' })
 
   useEffect(() => {
@@ -120,7 +159,7 @@ export function useMarketToolSearch({
     }
   }, [query, searchAttempt, searchTools])
 
-  return { status }
+  return { status, navigationItems }
 }
 
 export type { MarketToolSearchStatus } from './tools-search-page.contracts'

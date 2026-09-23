@@ -5,7 +5,7 @@ import {
   WorkloadContextError,
   createWorkloadContext,
   type WorkloadContextStore,
-} from '../../../../src/modules/principal-account/workload-context/public'
+} from '@/modules/principal-account/public'
 import {
   accountRef,
   membershipRef,

@@ -259,7 +259,7 @@ describe('source-native Provider start', () => {
     fireEvent.change(screen.getByLabelText('OpenAPI URL'), {
       target: { value: 'https://provider.example/openapi.yaml' },
     })
-    fireEvent.click(screen.getByRole('button', { name: 'Discover endpoints' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Find Tools' }))
     await screen.findByText('Reference lookup')
     expect(onPreview).toHaveBeenCalledWith(
       {
@@ -446,7 +446,7 @@ describe('source-native Provider start', () => {
     )
 
     fireEvent.click(screen.getByRole('button', { name: 'Edit Source' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Discover endpoints' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Find Tools' }))
 
     const action = await screen.findByRole('link', { name: 'Connect server' })
     expect(action.getAttribute('href')).toBe('/owner/supply/connections/new?attempt=pca_one')
@@ -504,7 +504,7 @@ describe('source-native Provider start', () => {
     )
 
     fireEvent.click(screen.getByRole('button', { name: 'Edit Source' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Discover endpoints' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Find Tools' }))
 
     expect(await screen.findByText('Select MCP server')).toBeTruthy()
     expect(onPreview).toHaveBeenNthCalledWith(1, {
@@ -524,6 +524,24 @@ describe('source-native Provider start', () => {
       remoteRef,
       environment: 'sandbox',
     }, expect.any(String))
+  })
+
+  it('labels required source fields and exposes the Find Tools action', () => {
+    render(
+      <AeSupplySourceNativeStart
+        businessRef="business:one"
+        onPreview={vi.fn()}
+        onConnect={vi.fn()}
+        onSelectCandidate={vi.fn()}
+        onPublish={vi.fn()}
+      />,
+    )
+
+    const resourceUrl = screen.getByLabelText('x402 resource URL') as HTMLInputElement
+    expect(resourceUrl.required).toBe(true)
+    expect(resourceUrl.placeholder).toBe('https://api.example.com/paid-operation')
+    expect(screen.getAllByText('Required')).toHaveLength(4)
+    expect(screen.getByRole('button', { name: 'Find Tools' })).toBeTruthy()
   })
 
   it('shows live OpenAPI URL preflight without clicking Discover', () => {
@@ -546,7 +564,7 @@ describe('source-native Provider start', () => {
     expect(screen.getByText('Insecure HTTP URL detected. Agentic Economy requires secure HTTPS endpoints.')).toBeTruthy()
 
     fireEvent.change(screen.getByLabelText('OpenAPI URL'), { target: { value: 'notaurl' } })
-    expect(screen.getByText('Enter a valid HTTPS URL (e.g. https://api.example.com/openapi.json).')).toBeTruthy()
+    expect(screen.getByText('Enter a valid HTTPS URL, for example https://api.example.com/openapi.json.')).toBeTruthy()
 
     fireEvent.change(screen.getByLabelText('OpenAPI URL'), {
       target: { value: 'https://api.example.com/openapi.json' },
@@ -599,11 +617,11 @@ describe('source-native Provider start', () => {
     fireEvent.change(screen.getByLabelText('OpenAPI URL'), {
       target: { value: 'http://insecure.example.com/openapi.json' },
     })
-    fireEvent.click(screen.getByRole('button', { name: 'Discover endpoints' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Find Tools' }))
 
-    expect(await screen.findByText('Insecure HTTP protocol.')).toBeTruthy()
-    expect(screen.getByText('A$0.00 affected — endpoint discovery blocked.')).toBeTruthy()
-    expect(screen.getByText('Provide an HTTPS URL to ensure encrypted capability invocation.')).toBeTruthy()
+    expect(await screen.findByText('The URL uses insecure HTTP.')).toBeTruthy()
+    expect(screen.getByText('A$0.00 affected. Tool discovery was blocked.')).toBeTruthy()
+    expect(screen.getByText('Replace http:// with https:// and try again.')).toBeTruthy()
     expect(onPreview).not.toHaveBeenCalled()
   })
 
@@ -627,11 +645,11 @@ describe('source-native Provider start', () => {
     await waitFor(() => {
       expect(screen.getByText('JSON syntax is invalid.')).toBeTruthy()
     })
-    fireEvent.click(screen.getByRole('button', { name: 'Discover endpoints' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Find Tools' }))
 
-    expect(await screen.findByText('Malformed JSON payload.')).toBeTruthy()
-    expect(screen.getByText('A$0.00 affected — plugin discovery blocked.')).toBeTruthy()
-    expect(screen.getByText('Ensure the JSON syntax is valid before discovering endpoints.')).toBeTruthy()
+    expect(await screen.findByText('JSON file syntax is invalid.')).toBeTruthy()
+    expect(screen.getByText('A$0.00 affected. Tool discovery was blocked.')).toBeTruthy()
+    expect(screen.getByText('Fix the JSON syntax, then choose the file again.')).toBeTruthy()
     expect(onPreview).not.toHaveBeenCalled()
   })
 
@@ -646,10 +664,10 @@ describe('source-native Provider start', () => {
       />,
     )
 
-    const tactile = 'active:scale-[0.98]'
+    const tactile = 'enabled:active:scale-[0.98]'
     expect(screen.getByRole('button', { name: /x402 recommended for alpha/i }).className).toContain(tactile)
     expect(screen.getByRole('button', { name: 'Other source types' }).className).toContain(tactile)
-    expect(screen.getByRole('button', { name: 'Discover endpoints' }).className).toContain(tactile)
+    expect(screen.getByRole('button', { name: 'Find Tools' }).className).toContain(tactile)
     expect(screen.getByRole('radio', { name: 'Sandbox' }).closest('label')?.className).toContain(tactile)
 
     fireEvent.click(screen.getByRole('button', { name: 'Other source types' }))
@@ -658,5 +676,82 @@ describe('source-native Provider start', () => {
 
     const slot = document.querySelector('.min-h-\\[2\\.5rem\\][aria-live="polite"]')
     expect(slot).toBeTruthy()
+  })
+})
+
+
+describe('Provider source suggestion review', () => {
+  const suggestion = { kind: 'suggested', sourceDigest: selectedOpenApiInitial.preview.sourceDigest,
+    sourceRevision: selectedOpenApiInitial.preview.sourceRevision, candidateRef: candidate.candidateRef,
+    description: 'A source-backed description.', evidence: [] }
+  const current = { kind: 'current', sourceDigest: suggestion.sourceDigest, sourceRevision: suggestion.sourceRevision, candidateRef: candidate.candidateRef }
+  function setup(onAssess = vi.fn().mockResolvedValueOnce(suggestion).mockResolvedValueOnce(current)) {
+    const onPublish = vi.fn()
+    const view = render(<AeSupplySourceNativeStart businessRef="business:one" initial={selectedOpenApiInitial}
+      onPreview={vi.fn()} onConnect={vi.fn()} onSelectCandidate={vi.fn()} onPublish={onPublish} onAssess={onAssess} />)
+    return { ...view, onAssess, onPublish }
+  }
+
+  it('requires explicit acceptance and a fresh source check before changing text', async () => {
+    const { onAssess, onPublish } = setup()
+    fireEvent.click(screen.getByRole('button', { name: 'Suggest from source' }))
+    await screen.findByRole('button', { name: 'Use description' })
+    expect((screen.getByLabelText('Description') as HTMLTextAreaElement).value).toBe(candidate.description)
+    expect(onPublish).not.toHaveBeenCalled()
+    fireEvent.click(screen.getByRole('button', { name: 'Use description' }))
+    await waitFor(() => expect((screen.getByLabelText('Description') as HTMLTextAreaElement).value).toBe(suggestion.description))
+    expect(onAssess.mock.calls.map(call => call[0].mode)).toEqual(['suggest', 'verify'])
+    expect(onPublish).not.toHaveBeenCalled()
+    onPublish.mockResolvedValue({ kind: 'refused', reason: 'source_unavailable' })
+    fireEvent.change(screen.getByLabelText('Category'), { target: { value: 'Research' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Continue to review' }))
+    fireEvent.click(screen.getByRole('checkbox', { name: 'I am authorised to publish this service' }))
+    fireEvent.click(screen.getByRole('checkbox', { name: 'The information is accurate' }))
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Publish after validation succeeds' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Submit for validation' }))
+    await waitFor(() => expect(onPublish).toHaveBeenCalledOnce())
+    expect(onPublish).toHaveBeenCalledWith(expect.objectContaining({
+      expectedSourceDigest: suggestion.sourceDigest,
+      candidateRef: suggestion.candidateRef,
+      presentation: expect.objectContaining({ description: suggestion.description }),
+    }))
+  })
+
+  it('keeps the existing description when dismissed', async () => {
+    const { onAssess } = setup()
+    fireEvent.click(screen.getByRole('button', { name: 'Suggest from source' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Keep current description' }))
+    expect((screen.getByLabelText('Description') as HTMLTextAreaElement).value).toBe(candidate.description)
+    expect(onAssess).toHaveBeenCalledTimes(1)
+  })
+
+  it('does not apply a suggestion after source verification fails', async () => {
+    setup(vi.fn().mockResolvedValueOnce(suggestion).mockResolvedValueOnce({ kind: 'unavailable', reason: 'source_changed' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Suggest from source' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Use description' }))
+    await screen.findByText(/No current suggestion is available/)
+    expect((screen.getByLabelText('Description') as HTMLTextAreaElement).value).toBe(candidate.description)
+  })
+
+  it('cancels an in-flight verification when the Provider edits the description', async () => {
+    const verification = deferred<typeof current>()
+    const { onAssess } = setup(vi.fn().mockResolvedValueOnce(suggestion).mockReturnValueOnce(verification.promise))
+    fireEvent.click(screen.getByRole('button', { name: 'Suggest from source' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Use description' }))
+    const signal = onAssess.mock.calls[1]?.[1] as AbortSignal
+    fireEvent.change(screen.getByLabelText('Description'), { target: { value: 'My newer description.' } })
+    expect(signal.aborted).toBe(true)
+    verification.resolve(current)
+    await waitFor(() => expect((screen.getByLabelText('Description') as HTMLTextAreaElement).value).toBe('My newer description.'))
+  })
+
+  it('aborts inference when leaving the source editor', async () => {
+    const pending = deferred<typeof suggestion>()
+    const { onAssess, unmount } = setup(vi.fn().mockReturnValue(pending.promise))
+    fireEvent.click(screen.getByRole('button', { name: 'Suggest from source' }))
+    const signal = onAssess.mock.calls[0]?.[1] as AbortSignal
+    unmount()
+    expect(signal.aborted).toBe(true)
+    pending.resolve(suggestion)
   })
 })

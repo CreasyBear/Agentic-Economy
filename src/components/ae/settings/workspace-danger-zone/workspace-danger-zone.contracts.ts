@@ -3,6 +3,9 @@ import type {
   WorkspaceTransferCandidate,
 } from '@/modules/principal-account/workspace-decommission.view-model'
 
+export const WORKSPACE_MFA_REVERIFICATION_COPY =
+  'Confirm with a fresh sign-in verification to continue.'
+
 export type WorkspaceDangerDiagnosticSlotProps = Readonly<{
   diagnostic: WorkspaceDangerDiagnostic | null
 }>

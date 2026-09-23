@@ -45,12 +45,15 @@ afterEach(() => {
 })
 
 describe('AeOrganizationSwitcher safe redirection (S-12)', () => {
-  it('points Clerk organization lifecycle URLs at /owner/operations', () => {
+  it('opens the Clerk organization profile as a modal and stays on the current dest', () => {
     render(<AeOrganizationSwitcher />)
 
-    expect(switcherState.lastProps?.afterSelectOrganizationUrl).toBe('/owner/operations')
-    expect(switcherState.lastProps?.afterCreateOrganizationUrl).toBe('/owner/operations')
-    expect(switcherState.lastProps?.afterLeaveOrganizationUrl).toBe('/owner/operations')
+    expect(switcherState.lastProps?.organizationProfileMode).toBe('modal')
+    expect(switcherState.lastProps?.createOrganizationMode).toBe('modal')
+    expect(switcherState.lastProps?.organizationProfileUrl).toBeUndefined()
+    expect(switcherState.lastProps?.afterSelectOrganizationUrl).toBeUndefined()
+    expect(switcherState.lastProps?.afterCreateOrganizationUrl).toBeUndefined()
+    expect(switcherState.lastProps?.afterLeaveOrganizationUrl).toBeUndefined()
   })
 })
 

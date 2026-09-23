@@ -1,21 +1,18 @@
 import {
-  Activity,
-  CheckCircle2,
-  Compass,
-  CreditCard,
-  Key,
-  Server,
-  Settings,
   SunMoon,
-  Wrench,
   type LucideIcon,
 } from 'lucide-react'
+
+import { aeStatusPresentation } from '@/lib/ui/status-presentation'
 
 export type ToolSearchResultRowModel = Readonly<{
   toolRef: string
   title: string
   providerLine: string
-  healthLabel: 'Operational' | 'Degraded' | 'Unverified'
+  healthLabel:
+    | typeof aeStatusPresentation.operational.label
+    | typeof aeStatusPresentation.degraded.label
+    | 'Unverified'
   priceLabel: string
   priceValidUntil?: number
 }>
@@ -48,6 +45,7 @@ export type CommandNavigationItem = Readonly<{
   label: string
   keywords: readonly string[]
   icon: LucideIcon
+  opensSettings?: 'personal' | 'workspace'
 }>
 
 export type CommandQuickAction = Readonly<{
@@ -59,51 +57,6 @@ export type CommandQuickAction = Readonly<{
   href?: string
 }>
 
-export const COMMAND_NAVIGATION_ITEMS: readonly CommandNavigationItem[] = [
-  {
-    href: '/market',
-    label: 'Tools Market',
-    keywords: ['market', 'catalogue', 'catalog', 'browse', 'tools'],
-    icon: Compass,
-  },
-  {
-    href: '/activity',
-    label: 'Calls & Activity',
-    keywords: ['activity', 'calls', 'history', 'runs', 'executions'],
-    icon: Activity,
-  },
-  {
-    href: '/owner/operations',
-    label: 'Tools Operations',
-    keywords: ['operations', 'supply', 'provider', 'offerings', 'publish'],
-    icon: Wrench,
-  },
-  {
-    href: '/owner/credit',
-    label: 'Balance & Credit',
-    keywords: ['credit', 'balance', 'billing', 'top up', 'funds', 'money'],
-    icon: CreditCard,
-  },
-  {
-    href: '/owner/settings',
-    label: 'Account & Settings',
-    keywords: ['settings', 'account', 'security', 'profile', 'keys', 'team'],
-    icon: Settings,
-  },
-  {
-    href: '/agent-access',
-    label: 'Agent Access & Keys',
-    keywords: ['agent', 'access', 'principal', 'tokens', 'keys', 'credentials'],
-    icon: Key,
-  },
-  {
-    href: '/for-providers',
-    label: 'Provider Workspace',
-    keywords: ['providers', 'host', 'api', 'monetize', 'seller'],
-    icon: Server,
-  },
-] as const
-
 export const COMMAND_QUICK_ACTIONS: readonly CommandQuickAction[] = [
   {
     id: 'toggle-theme',
@@ -111,14 +64,6 @@ export const COMMAND_QUICK_ACTIONS: readonly CommandQuickAction[] = [
     description: 'Switch between light and dark appearance',
     keywords: ['theme', 'dark', 'light', 'mode', 'appearance'],
     icon: SunMoon,
-  },
-  {
-    id: 'status',
-    label: 'Check System Status',
-    description: 'View platform health and uptime',
-    href: '/status',
-    keywords: ['status', 'health', 'uptime', 'operational'],
-    icon: CheckCircle2,
   },
 ] as const
 

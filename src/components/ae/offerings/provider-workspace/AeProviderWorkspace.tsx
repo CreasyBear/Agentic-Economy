@@ -24,12 +24,16 @@ export function AeProviderWorkspace(props: AeProviderWorkspaceProps) {
   })
   const sheets = useProviderWorkspaceSheets({ enabled: inventoryAvailable })
 
-  const actions = inventoryAvailable ? <AddToolAction /> : undefined
+  const toolCount =
+    props.inventory.kind === 'available' ? props.inventory.tools.length : 0
+  const actions = inventoryAvailable
+    ? <AddToolAction variant={toolCount === 0 ? 'outline' : 'default'} />
+    : undefined
   return (
     <AeOperatorPage
       operatorRole="owner"
       title="Tools"
-      description="Publish the exact tools agents can inspect and call."
+      description="Manage the Tools buyers can find and call."
       currentPath="/owner/operations"
       {...(actions === undefined ? {} : { actions })}
     >
@@ -50,7 +54,6 @@ function AvailableWorkspaceBody({
   inventory,
   lifecycle,
   connections,
-  payouts,
   publicStatus,
   offboarding,
   inventoryHook,
@@ -61,13 +64,13 @@ function AvailableWorkspaceBody({
   sheets: ReturnType<typeof useProviderWorkspaceSheets>
 }>) {
   const location = useLocation()
-  const payoutsConfiguredForWizard = sheets.connectPayoutsReady || inventoryHook.payoutSummaryReady
 
   const renderList = (rows: readonly ProviderWorkspaceProjectionRow[]) => (
     <AeOwnerOfferingsList
       offerings={rows.map(toOfferingSummary)}
       projectionState={inventory.projection === 'current' ? 'current' : 'projection_pending'}
       onRetryProjection={inventoryHook.refresh}
+      hideEmptyState={inventory.tools.length === 0}
       filterValue={inventoryHook.inventoryFilter}
       onFilterChange={(value) => {
         inventoryHook.setInventoryFilter(value)
@@ -92,16 +95,14 @@ function AvailableWorkspaceBody({
         />
       )}
       {inventory.tools.length === 0 && (
-        <div className="mb-2">
-          <AeSupplierOnboardingWizard
-            currentStep={payoutsConfiguredForWizard ? 'first_tool' : 'payouts'}
-            providerName={inventory.provider.name}
-            payoutsConfigured={payoutsConfiguredForWizard}
-            onConnectPayouts={() => {
-              sheets.openEarnings()
-            }}
-          />
-        </div>
+        <AeSupplierOnboardingWizard
+          currentStep={inventoryHook.payoutConnection.state === 'connected' ? 'first_tool' : 'payouts'}
+          providerName={inventory.provider.name}
+          payoutConnection={inventoryHook.payoutConnection}
+          onConnectPayouts={() => {
+            sheets.openEarnings()
+          }}
+        />
       )}
       <ProviderWorkspaceToolsSection
         inventory={inventory}
@@ -118,18 +119,19 @@ function AvailableWorkspaceBody({
         connectionTargetMissing={sheets.connectionTargetMissing}
         {...(sheets.x402Handoff === undefined ? {} : { x402Handoff: sheets.x402Handoff })}
         onOpenConnections={sheets.openConnections}
+        onCloseConnections={sheets.closeConnections}
         onRetryConnections={sheets.loadConnections}
       />
       <ProviderWorkspaceEarningsSection
-        {...(payouts === undefined ? {} : { payouts })}
+        payoutConnection={inventoryHook.payoutConnection}
         earningsOpen={sheets.earningsOpen}
         earningsPending={sheets.earningsPending}
-        {...(sheets.earningsDetail === undefined ? {} : { earningsDetail: sheets.earningsDetail })}
+        earningsDetailAvailable={sheets.earningsDetail !== undefined}
         onOpenEarnings={sheets.openEarnings}
+        onCloseEarnings={sheets.closeEarnings}
         onRetryEarnings={sheets.loadEarnings}
-        onStatusRefreshed={sheets.onStatusRefreshed}
       />
-      <details className="rounded-lg border border-border p-4" open={location.hash === 'provider-identity' || undefined}>
+      <details className="rounded-card border border-border p-4" open={location.hash === 'provider-identity' || undefined}>
         <summary className="cursor-pointer font-medium">Provider settings and administration</summary>
         <div className="mt-6 grid gap-section">
           <ProviderWorkspaceIdentitySection

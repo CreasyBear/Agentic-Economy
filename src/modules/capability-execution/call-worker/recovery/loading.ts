@@ -76,6 +76,17 @@ export async function loadRecoveryControl(
     || control.control.executionRef !== recovered.callRef
     || control.sourceRef !== `operation-invocation-source:${recovered.callRef}`
   ) return { kind: 'not_found' }
+  // A completed buyer remedy is terminal even when the execution record still
+  // retains an unknown Provider response. Never reopen or retry that purchase.
+  if (recovered.state === 'completed' && recovered.result?.kind === 'completed'
+    && control.control.control.state === 'terminal'
+    && recovered.result.receipt?.state === 'settled') {
+    return { kind: 'persisted', recovered }
+  }
+  if (recovered.state === 'refused' && recovered.result?.kind === 'refused'
+    && !recovered.result.retryable && recovered.result.receipt?.refundState === 'released') {
+    return { kind: 'persisted', recovered }
+  }
   return { kind: 'ready', recovered, port, control }
 }
 

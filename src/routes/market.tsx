@@ -3,7 +3,7 @@ import { AePageSkeleton, AePageState } from "@/components/ae/layout/AePageState"
 import { AeMarketPage } from "@/components/ae/market/AeMarketPage";
 import { Button } from "@/components/ui/button";
 import { readCanonicalBaseUrlServer } from "@/lib/server/canonical-url.functions";
-import { loadMarketRouteData, marketLoaderDeps, validateMarketSearch } from '@/modules/market/market.functions';
+import { loadMarketRouteData, marketDocumentTitle, marketLoaderDeps, validateMarketSearch } from '@/modules/market/market.functions';
 import { buildPublicPageHead, buildSiteJsonLd } from "@/modules/seo/public";
 
 export { parseMarketCompareRefs, validateMarketSearch } from '@/modules/market/market.functions'
@@ -14,7 +14,7 @@ export const Route = createFileRoute("/market")({
     nav: {
       label: 'Market',
       search: {},
-      header: { order: 0 },
+      header: { order: 0, audience: 'always' },
       footer: { column: 'Market', order: 0 },
     },
   },
@@ -39,10 +39,10 @@ export const Route = createFileRoute("/market")({
   pendingMinMs: 500,
   pendingComponent: MarketPending,
   errorComponent: MarketError,
-  head: ({ loaderData }) =>
+  head: ({ loaderData, match }) =>
     buildPublicPageHead({
       path: "/market",
-      title: "Agent tool market | Agentic Economy",
+      title: marketDocumentTitle(match.search.view),
       description:
         "Explore agent capabilities, compare published prices and adoption, and find Tools for your next task.",
       ...(loaderData?.canonicalBaseUrl === undefined ? {} : {

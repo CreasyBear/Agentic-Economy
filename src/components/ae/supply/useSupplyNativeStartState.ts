@@ -1,12 +1,14 @@
 import { useRef, useState } from 'react'
 
 import { captureClientExceptionOnClient } from '@/lib/observability/capture-client-exception'
+import { appDestination } from '@/lib/navigation/app-navigation'
 import type { SupplySourcePreview, SupplyToolCandidate } from '@/modules/capability-supply/source-preview'
 import {
   buildPublishInput,
   eligibleSupplyConnections,
   pricingInput,
   publicationError,
+  publicationInvalidFieldForMessage,
   publicationTermsValidationMessage,
   publicationValidationMessage,
   requiredAdapterIdForSourceKind,
@@ -15,10 +17,16 @@ import {
   type AttestationKey,
   type Environment,
   type SourceKind,
+  type SupplyJourneyContinuation,
   type SupplyNativeStartProps,
+  type SupplyPublicationInvalidField,
 } from './supply-source-native-start-presentation'
 
 export type { SupplyNativeStartProps } from './supply-source-native-start-presentation'
+const OPEN_TOOLS_CONTINUATION = {
+  label: 'Open Tools',
+  to: appDestination('tools').to,
+} as const satisfies SupplyJourneyContinuation
 
 /** Owns every piece of native-start form state plus the discover/select/connect/publish calls. */
 export function useSupplyNativeStartState({
@@ -65,10 +73,22 @@ export function useSupplyNativeStartState({
   })
   const [pending, setPending] = useState<'preview' | 'select' | 'connect' | 'publish'>()
   const [error, setError] = useState<string>()
+  const [invalidField, setInvalidField] = useState<SupplyPublicationInvalidField>()
   const [requiredAction, setRequiredAction] = useState<Extract<SupplySourcePreview, { kind: 'action_required' }>['requiredAction']>()
   const [success, setSuccess] = useState<string>()
+  const continuation = success === undefined ? undefined : OPEN_TOOLS_CONTINUATION
   const [reviewing, setReviewing] = useState(false)
   const [publicationLocked, setPublicationLocked] = useState(false)
+
+  function clearFieldError() {
+    setError(undefined)
+    setInvalidField(undefined)
+  }
+
+  function setFieldError(message: string) {
+    setError(message)
+    setInvalidField(publicationInvalidFieldForMessage(message))
+  }
   const operationInFlight = useRef(false)
   const publicationCommandLocked = useRef(false)
   const idempotencyKey = useRef(`owner-supply:${crypto.randomUUID()}`)
@@ -127,7 +147,7 @@ export function useSupplyNativeStartState({
     setPreview(undefined)
     resetDiscoveryOnSourceEdit()
     setSelectedRef('')
-    setError(undefined)
+    clearFieldError()
     setRequiredAction(undefined)
     setSuccess(undefined)
     setReviewing(false)
@@ -141,7 +161,7 @@ export function useSupplyNativeStartState({
     setSelectedRef('')
     setRequiredAction(undefined)
     setSuccess(undefined)
-    setError(undefined)
+    clearFieldError()
     setReviewing(false)
     clearAttestation()
   }
@@ -152,7 +172,7 @@ export function useSupplyNativeStartState({
     setConnectionRef('')
     setRequiredAction(undefined)
     setSuccess(undefined)
-    setError(undefined)
+    clearFieldError()
     setReviewing(false)
     clearAttestation()
   }
@@ -160,7 +180,7 @@ export function useSupplyNativeStartState({
   function editTerms() {
     if (operationInFlight.current || publicationCommandLocked.current) return
     setReviewing(false)
-    setError(undefined)
+    clearFieldError()
     clearAttestation()
   }
 
@@ -172,6 +192,7 @@ export function useSupplyNativeStartState({
           pluginJson, mcpJson, remoteRef: remoteRefOverride, resourceUrl, x402Method,
         })
     if (currentSource === undefined) {
+      clearFieldError()
       setError(sourceInputError(sourceKind, mcpLocator, {
         sourceKind, environment, definitionUrl, mcpLocator, serverUrl, registryName,
         pluginJson, mcpJson, remoteRef: remoteRefOverride ?? selectedRemoteRef, resourceUrl, x402Method,
@@ -179,7 +200,7 @@ export function useSupplyNativeStartState({
       return
     }
     if (!beginOperation('preview')) return
-    setError(undefined)
+    clearFieldError()
     setSuccess(undefined)
     try {
       const result = await onPreview(currentSource, previewIdempotencyKey.current)
@@ -200,10 +221,10 @@ export function useSupplyNativeStartState({
       setRemoteSelection(undefined)
       setPreview(result)
       setSelectedRef('')
-      if (result.candidates.length === 0) setError('No Tools were found in this source.')
+      if (result.candidates.length === 0) setError('No Tools were found in this source. Find Tools again.')
     } catch (cause) {
       captureClientExceptionOnClient(cause)
-      setError('AE could not inspect this source. Check the source and try again.')
+      setError('Agentic Economy could not inspect this source. Check the source and try again.')
     } finally {
       endOperation()
     }
@@ -211,7 +232,7 @@ export function useSupplyNativeStartState({
 
   async function selectCandidate(candidate: SupplyToolCandidate) {
     if (source === undefined || preview === undefined || !beginOperation('select')) return
-    setError(undefined)
+    clearFieldError()
     try {
       const saved = await onSelectCandidate({
         businessRef,
@@ -226,7 +247,7 @@ export function useSupplyNativeStartState({
         },
       })
       if (saved.kind === 'refused') {
-        setError('AE could not save this selection. Discover endpoints again, then select the current source candidate.')
+        setError('Agentic Economy could not save this selection. Find Tools again, then select the current source candidate.')
         return
       }
       setSelectedRef(candidate.candidateRef)
@@ -244,7 +265,7 @@ export function useSupplyNativeStartState({
       await onDraftSaved?.(candidate.candidateRef, nextConnectionRef === '' ? undefined : nextConnectionRef)
     } catch (cause) {
       captureClientExceptionOnClient(cause)
-      setError('AE could not save this selection. Discover endpoints again, then try again.')
+      setError('Agentic Economy could not save this selection. Find Tools again, then try again.')
     } finally {
       endOperation()
     }
@@ -259,16 +280,16 @@ export function useSupplyNativeStartState({
       connectionRef,
     })
     if (validationMessage !== undefined) {
-      setError(validationMessage)
+      setFieldError(validationMessage)
       return
     }
-    setError(undefined)
+    clearFieldError()
     setReviewing(true)
   }
 
   async function submit() {
     if (source === undefined || preview === undefined || selected === undefined) {
-      setError('Select one supported Tool before submitting it.')
+      setFieldError('Select one supported Tool before submitting it.')
       return
     }
     const pricing = pricingInput(pricingKind, price)
@@ -280,7 +301,7 @@ export function useSupplyNativeStartState({
       attestation,
     })
     if (validationMessage !== undefined) {
-      setError(validationMessage)
+      setFieldError(validationMessage)
       return
     }
     const input = buildPublishInput({
@@ -305,17 +326,17 @@ export function useSupplyNativeStartState({
     if (!beginOperation('publish')) return
     publicationCommandLocked.current = true
     setPublicationLocked(true)
-    setError(undefined)
+    clearFieldError()
     try {
       const result = await onPublish(input)
       if (result.kind === 'refused') {
         setError(`${publicationError(result.reason)} Open Tools to confirm the current status before starting a new publication command.`)
         return
       }
-      setSuccess('Tool submitted for validation. AE will publish it after the required checks pass.')
+      setSuccess('Tool submitted for validation. Agentic Economy will publish it after the required checks pass.')
     } catch (cause) {
       captureClientExceptionOnClient(cause)
-      setError('AE could not confirm submission. Reload Tools before trying again.')
+      setError('Agentic Economy could not confirm submission. Reload Tools before trying again.')
     } finally {
       endOperation()
     }
@@ -323,7 +344,7 @@ export function useSupplyNativeStartState({
 
   async function connectSelectedSource() {
     if (source === undefined || preview === undefined || selected === undefined || !beginOperation('connect')) return
-    setError(undefined)
+    clearFieldError()
     try {
       const result = await onConnect({
         businessId: businessRef,
@@ -333,13 +354,13 @@ export function useSupplyNativeStartState({
         idempotencyKey: connectionIdempotencyKey.current,
       })
       if (result.kind !== 'action_required') {
-        setError('This source no longer requires a connection. Discover endpoints again to continue with its current contract.')
+        setError('This source no longer requires a connection. Find Tools again to continue with its current contract.')
         return
       }
       setRequiredAction(result.requiredAction)
     } catch (cause) {
       captureClientExceptionOnClient(cause)
-      setError('AE could not start this connection. Discover endpoints again, then retry the current source.')
+      setError('Agentic Economy could not start this connection. Find Tools again, then retry the current source.')
     } finally {
       endOperation()
     }
@@ -350,7 +371,7 @@ export function useSupplyNativeStartState({
     resourceUrl, x402Method, preview, remoteSelection, selectedRemoteRef, selectedRef,
     name, description, category, serviceArea, availability,
     pricingKind, price, connectionRef, externalEffect, dataRelease, financialExposure, dataClassification, attestation,
-    pending, error, requiredAction, success, reviewing, publicationLocked,
+    pending, error, invalidField, requiredAction, success, continuation, reviewing, publicationLocked,
     source, selected, eligibleConnections,
     setEnvironment, setDefinitionUrl, setMcpLocator, setServerUrl, setRegistryName, setPluginJson, setMcpJson,
     setResourceUrl, setX402Method, setSelectedRemoteRef,

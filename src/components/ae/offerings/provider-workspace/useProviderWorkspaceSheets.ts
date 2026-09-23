@@ -69,6 +69,10 @@ export function useProviderWorkspaceSheets(input: UseProviderWorkspaceSheetsInpu
     if (connectionsDetail === undefined) loadConnections()
   }, [connectionsDetail, input.enabled, loadConnections])
 
+  const closeConnections = useCallback(() => {
+    setConnectionsOpen(false)
+  }, [])
+
   const loadEarnings = useCallback(() => {
     if (!input.enabled || earningsPending) return
     setEarningsPending(true)
@@ -87,6 +91,10 @@ export function useProviderWorkspaceSheets(input: UseProviderWorkspaceSheetsInpu
     setEarningsOpen(true)
     if (earningsDetail === undefined && !earningsUnavailable) loadEarnings()
   }, [earningsDetail, earningsUnavailable, input.enabled, loadEarnings])
+
+  const closeEarnings = useCallback(() => {
+    setEarningsOpen(false)
+  }, [])
 
   const loadIdentity = useCallback(() => {
     if (!input.enabled || identityPending) return
@@ -160,8 +168,10 @@ export function useProviderWorkspaceSheets(input: UseProviderWorkspaceSheetsInpu
     earningsPending,
     earningsDetail,
     openConnections,
+    closeConnections,
     loadConnections,
     openEarnings,
+    closeEarnings,
     loadEarnings,
     openIdentity,
     loadIdentity,

@@ -1,7 +1,6 @@
 import { makeFunctionReference, type UserIdentity } from 'convex/server'
 import { describe, expect, it } from 'vitest'
 
-import type { ClerkFactorEvidence } from '../../../convex/lib/consequenceProof'
 import { InteractiveAuthorityError } from '../../../convex/interactiveAuthority'
 import { resolveInteractiveAuthorityContext } from '../../../convex/interactiveAuthority'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
@@ -31,9 +30,9 @@ const DISPLAY_NAME = 'Canonical account'
 const ACCOUNT_REVISION = 4
 const OWNERSHIP_REVISION = 3
 
-const freshMfa: ClerkFactorEvidence = { firstFactorAgeMinutes: 1, secondFactorAgeMinutes: 1 }
-const noMfa: ClerkFactorEvidence = { firstFactorAgeMinutes: 1, secondFactorAgeMinutes: -1 }
-const staleMfa: ClerkFactorEvidence = { firstFactorAgeMinutes: 1, secondFactorAgeMinutes: 11 }
+const freshFva = [1, 1]
+const noMfaFva = [1, -1]
+const staleMfaFva = [1, 999]
 
 type WorkspaceFenceReason =
   | 'unsettled_provider_obligations'
@@ -59,11 +58,18 @@ type WorkspaceDecommissionEligibility = Readonly<{
   }>[]
 }>
 
+type MfaReverificationRefusal = Readonly<{
+  kind: 'refused'
+  code: 'mfa_reverification_required'
+}>
+
 type CloseWorkspaceReceipt =
+  | MfaReverificationRefusal
   | Readonly<{ kind: 'closed'; accountRef: string; accountRevision: number }>
   | Readonly<{ kind: 'replayed'; accountRef: string; accountRevision: number }>
 
 type TransferWorkspaceReceipt =
+  | MfaReverificationRefusal
   | Readonly<{
     kind: 'transferred'
     accountRef: string
@@ -87,7 +93,6 @@ const closeWorkspaceRef = makeFunctionReference<
     expectedOwnershipRevision: number
     correlationRef: string
     idempotencyRef: string
-    factorEvidence: ClerkFactorEvidence
   }>,
   CloseWorkspaceReceipt
 >('workspaceAccounts:closeWorkspace')
@@ -100,7 +105,6 @@ const transferWorkspaceOwnershipRef = makeFunctionReference<
     expectedOwnershipRevision: number
     correlationRef: string
     idempotencyRef: string
-    factorEvidence: ClerkFactorEvidence
   }>,
   TransferWorkspaceReceipt
 >('workspaceAccounts:transferWorkspaceOwnership')
@@ -112,9 +116,10 @@ const readDeletionEligibilityRef = makeFunctionReference<
 >('personalAccount:readDeletionEligibility')
 
 const identity = (overrides: Partial<UserIdentity> = {}) =>
-  samIdentity(TOKEN_IDENTIFIER, overrides)
+  samIdentity(TOKEN_IDENTIFIER, { fva: freshFva, ...overrides })
 
-const teammateIdentity = () => samIdentity(TEAMMATE_TOKEN_IDENTIFIER, { subject: 'user_teammate' })
+const teammateIdentity = () =>
+  samIdentity(TEAMMATE_TOKEN_IDENTIFIER, { subject: 'user_teammate', fva: freshFva })
 
 const correlationRef = (label: string) => `test:workspace-decommission:${label}`
 const idempotencyRef = (label: string) => `idem:workspace-decommission:${label}`
@@ -125,7 +130,6 @@ function closePayload(overrides: Partial<{
   expectedOwnershipRevision: number
   correlationRef: string
   idempotencyRef: string
-  factorEvidence: ClerkFactorEvidence
 }> = {}) {
   return {
     confirmationName: DISPLAY_NAME,
@@ -133,7 +137,6 @@ function closePayload(overrides: Partial<{
     expectedOwnershipRevision: OWNERSHIP_REVISION,
     correlationRef: correlationRef('close'),
     idempotencyRef: idempotencyRef('close'),
-    factorEvidence: freshMfa,
     ...overrides,
   }
 }
@@ -144,7 +147,6 @@ function transferPayload(overrides: Partial<{
   expectedOwnershipRevision: number
   correlationRef: string
   idempotencyRef: string
-  factorEvidence: ClerkFactorEvidence
 }> = {}) {
   return {
     successorPrincipalRef: TEAMMATE_PRINCIPAL_REF,
@@ -152,7 +154,6 @@ function transferPayload(overrides: Partial<{
     expectedOwnershipRevision: OWNERSHIP_REVISION,
     correlationRef: correlationRef('transfer'),
     idempotencyRef: idempotencyRef('transfer'),
-    factorEvidence: freshMfa,
     ...overrides,
   }
 }
@@ -593,17 +594,6 @@ async function countCalls(backend: InteractiveAuthorityBackend) {
   return await backend.run(async (ctx) => (await ctx.db.query('capabilityCalls').collect()).length)
 }
 
-async function enableWorkspaceMfaPolicy(backend: InteractiveAuthorityBackend): Promise<void> {
-  await backend.run(async (ctx) => {
-    await ctx.db.insert('accountSecurityPolicies', {
-      accountRef: ACCOUNT_REF,
-      requireMfaForMembers: true,
-      revision: 1,
-      updatedAt: NOW,
-      lastCorrelationRef: correlationRef('mfa-policy'),
-    })
-  })
-}
 
 describe('workspaceAccounts readWorkspaceDecommissionEligibility (W-14)', () => {
   it('E1: owner, empty workspace -> canClose true, canTransfer false, fences empty', async () => {
@@ -950,19 +940,36 @@ describe('workspaceAccounts closeWorkspace (W-14)', () => {
     )
   })
 
-  it('C14: step-up / MFA requirements refuse when policy enabled', async () => {
+  it.each([
+    ['absent', identity({ fva: undefined })],
+    ['malformed', identity({ fva: [1] })],
+    ['without a second factor', identity({ fva: noMfaFva })],
+    ['with stale factors', identity({ fva: staleMfaFva })],
+  ])('C14: signed fva %s refuses before any close write even when workspace MFA policy is off', async (
+    _label,
+    presentedIdentity,
+  ) => {
     const backend = createBackend()
     await seedAuthority(backend)
-    await enableWorkspaceMfaPolicy(backend)
 
-    await expectRefusal(
-      () => closeWorkspace(backend, closePayload({ factorEvidence: noMfa })),
-      'mfa_required',
-    )
-    await expectRefusal(
-      () => closeWorkspace(backend, closePayload({ factorEvidence: staleMfa })),
-      'step_up_required',
-    )
+    await expect(closeWorkspace(backend, closePayload(), presentedIdentity)).resolves.toEqual({
+      kind: 'refused',
+      code: 'mfa_reverification_required',
+    })
+    await expect(readAccount(backend)).resolves.toMatchObject({ lifecycle: 'active' })
+  })
+
+  it('C15: close validator rejects fabricated client factor evidence', async () => {
+    const backend = createBackend()
+    await seedAuthority(backend)
+    const forgedPayload = {
+      ...closePayload(),
+      factorEvidence: { firstFactorAgeMinutes: 1, secondFactorAgeMinutes: 1 },
+    }
+
+    await expect(
+      backend.withIdentity(identity()).mutation(closeWorkspaceRef, forgedPayload),
+    ).rejects.toThrow(/factorEvidence|extra field/i)
   })
 
   it('C16: already closed account refuses workspace_already_closed', async () => {
@@ -1188,5 +1195,19 @@ describe('workspaceAccounts transferWorkspaceOwnership (W-14)', () => {
 
     expect(await transferWorkspaceOwnership(backend, payload)).toMatchObject({ kind: 'transferred' })
     expect(await transferWorkspaceOwnership(backend, payload)).toEqual(expect.objectContaining({ kind: 'replayed' }))
+  })
+
+  it('T15: transfer validator rejects fabricated client factor evidence', async () => {
+    const backend = createBackend()
+    await seedAuthority(backend)
+    await seedTeammateMembership(backend)
+    const forgedPayload = {
+      ...transferPayload(),
+      factorEvidence: { firstFactorAgeMinutes: 1, secondFactorAgeMinutes: 1 },
+    }
+
+    await expect(
+      backend.withIdentity(identity()).mutation(transferWorkspaceOwnershipRef, forgedPayload),
+    ).rejects.toThrow(/factorEvidence|extra field/i)
   })
 })

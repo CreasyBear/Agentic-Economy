@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 
 export const TACTILE =
-  'enabled:active:scale-[0.98] transition-transform duration-100 ease-out motion-reduce:transition-none motion-reduce:active:scale-100'
+  'enabled:active:scale-[0.98] transition-transform duration-fast ease-out motion-reduce:transition-none motion-reduce:active:scale-100'
 
 export type AeEmptyStateRecipe = Readonly<{
   readonly id: string
@@ -24,6 +24,7 @@ export function AeEmptyState({
   financialReassurance,
   actionFeedback,
   compact = false,
+  titleAs = 'h2',
 }: {
   title: string
   description: string
@@ -34,8 +35,10 @@ export function AeEmptyState({
   financialReassurance?: string
   actionFeedback?: string
   compact?: boolean
+  titleAs?: 'h2' | 'p'
 }) {
   const resolvedRole = role ?? 'status'
+  const TitleTag = titleAs
 
   function runRecipe(recipe: AeEmptyStateRecipe) {
     recipe.onSelect()
@@ -76,7 +79,7 @@ export function AeEmptyState({
         {icon ?? <Inbox aria-hidden="true" />}
       </span>
       <div className="grid max-w-md gap-intra">
-        <h2 className="text-lg font-semibold tracking-tight text-foreground">{title}</h2>
+        <TitleTag className="text-lg font-medium tracking-tight text-foreground">{title}</TitleTag>
         <p className="text-pretty text-sm text-muted-foreground">{description}</p>
       </div>
       {financialReassurance === undefined ? (

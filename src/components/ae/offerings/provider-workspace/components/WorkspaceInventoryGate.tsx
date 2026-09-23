@@ -1,4 +1,3 @@
-import { AeEmptyState } from '@/components/ae/feedback/AeEmptyState'
 import { AeSupplierOnboardingWizard } from '@/components/ae/supply/supplier-onboarding-wizard/AeSupplierOnboardingWizard'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
@@ -24,15 +23,14 @@ export function WorkspaceInventoryGate(props: WorkspaceInventoryGateProps) {
     )
   }
   return (
-    <AeEmptyState
-      title="Tools did not load"
-      description="The Tool inventory is temporarily unavailable."
-      role="alert"
-      action={
+    <Alert variant="destructive">
+      <AlertTitle>Tools could not be loaded</AlertTitle>
+      <AlertDescription className="flex flex-wrap items-center gap-3">
+        <span>Nothing was charged.</span>
         <Button type="button" variant="secondary" disabled={props.refreshPending} onClick={props.onRefresh}>
           {props.refreshPending ? 'Trying again…' : 'Try again'}
         </Button>
-      }
-    />
+      </AlertDescription>
+    </Alert>
   )
 }

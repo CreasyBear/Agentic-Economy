@@ -1,23 +1,25 @@
 import { Link } from '@tanstack/react-router'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
+import { AeCollectionRail } from '@/components/ae/shared/AeCollectionRail'
 import {
   AeSiteBody,
+  AeSiteFaq,
   AeSiteButton,
   AeSiteEyebrow,
   AeSiteHeading,
   AeSiteHeadingPair,
   AeSiteHeroIntro,
   AeSiteSection,
-  AeSiteStack,
 } from '@/components/ae/website'
+import { PROVIDER_FAQ } from '@/content/provider-copy'
 
 import type { SupplyLandingTool } from '@/modules/capability-supply/supply-funnel.functions'
 import type { ToolCardViewModel } from '@/modules/market/tool-view-model'
 
 import { AeSupplyAgentProof } from './AeSupplyAgentProof'
 
-export const SUPPLY_OFFER_SENTENCE = 'List one Tool agents can inspect and call. You describe the price, access, effects, and evidence; Agentic Economy records it as a Tool.'
+export const SUPPLY_OFFER_SENTENCE = 'Connect a Tool you already run. Agentic Economy checks what agents can buy.'
 
 const SUPPLY_STEPS = [
   { number: '01', title: 'Choose one Tool', detail: 'Choose one bounded Tool with exact inputs and one usable outcome—not an entire app or account.' },
@@ -64,21 +66,23 @@ export function AeSupplyLanding({
       <AeSiteSection labelledBy="supply-hero" rhythm="hero" scheme="muted">
         <AeSiteHeroIntro>
           <AeSiteHeadingPair>
-            <div className="mx-auto grid w-full max-w-xl justify-items-center gap-3">
+            <div className="grid w-full max-w-xl justify-items-start gap-3">
               <AeSiteEyebrow>Providers</AeSiteEyebrow>
-              <AeSiteHeading as="h1" size="md" id="supply-hero">
-                List a Tool.
+              <AeSiteHeading as="h1" size="lg" id="supply-hero">
+                Add a Tool.
               </AeSiteHeading>
             </div>
-            <div className="mx-auto w-full max-w-lg">
-              <AeSiteBody muted size="sm" className="mx-auto">
+            <div className="w-full max-w-lg">
+              <AeSiteBody muted size="sm">
                 {SUPPLY_OFFER_SENTENCE}
               </AeSiteBody>
             </div>
           </AeSiteHeadingPair>
-          <AeSiteButton asChild>
-            <Link to="/owner/operations">List a Tool</Link>
-          </AeSiteButton>
+          <div className="flex flex-wrap items-center gap-related">
+            <AeSiteButton asChild>
+              <Link to="/owner/operations/new">Add Tool</Link>
+            </AeSiteButton>
+          </div>
         </AeSiteHeroIntro>
       </AeSiteSection>
       {sourceError === undefined ? null : (
@@ -100,7 +104,7 @@ export function AeSupplyLanding({
         <div className="grid max-w-3xl gap-page">
           <div className="grid gap-intra">
             <AeSiteEyebrow>Before you sign in</AeSiteEyebrow>
-            <AeSiteHeading as="h2" size="sm">Check whether your Tool is a fit.</AeSiteHeading>
+            <AeSiteHeading as="h2" size="md">Check whether your Tool is a fit.</AeSiteHeading>
             <AeSiteBody muted size="sm">
               List one Tool an agent can search, inspect, and call. Public sources need no provider secret. For a source that needs credentials, use an existing owner-controlled connection; this flow does not collect a raw provider key.
             </AeSiteBody>
@@ -114,40 +118,33 @@ export function AeSupplyLanding({
           <p className="text-sm text-muted-foreground">
             Creating the Provider business is an owner step. After that, an owner can approve a separate agent credential for maintenance. The source preview confirms the exact current contract.
           </p>
-          <div className="grid gap-related sm:grid-cols-3" aria-label="Supported source paths">
+          <ul className="m-0 grid list-none gap-0 p-0" aria-label="Supported source paths">
             {SUPPLY_SOURCE_FIT.map((source) => (
-              <article key={source.title} className="grid content-start gap-intra rounded-card border border-border bg-card p-gutter">
-                <h3 className="font-semibold text-foreground">{source.title}</h3>
+              <li key={source.title} className="grid gap-intra border-b border-border py-related last:border-b-0">
+                <h3 className="font-medium text-foreground">{source.title}</h3>
                 <p className="text-sm text-muted-foreground">{source.body}</p>
-              </article>
+              </li>
             ))}
-          </div>
+          </ul>
         </div>
       </AeSiteSection>
-      <AeSiteSection ariaLabel="How to publish a Tool" scheme="surface">
-        <AeSiteStack>
-          <ol className="m-0 grid list-none gap-page p-0">
+      <AeSiteSection scheme="surface">
+        <AeCollectionRail kicker="How to add" title="Steps to add a Tool" titleId="supply-publish-steps">
+          <ol className="m-0 grid gap-0 p-0">
             {SUPPLY_STEPS.map((step) => (
-              <li key={step.number} className="grid gap-intra border-b border-border pb-page last:border-b-0 last:pb-0">
-                <AeSiteEyebrow>{step.number}</AeSiteEyebrow>
-                <h2 className="font-display text-2xl font-medium tracking-tight sm:text-3xl">{step.title}</h2>
+              <li key={step.number} className="grid gap-intra border-b border-border py-related last:border-b-0">
+                <AeSiteHeading as="h3" size="sm">{step.title}</AeSiteHeading>
                 <AeSiteBody muted size="sm">{step.detail}</AeSiteBody>
               </li>
             ))}
           </ol>
-        </AeSiteStack>
+        </AeCollectionRail>
       </AeSiteSection>
       <AeSiteSection ariaLabel="Listing control" scheme="canvas">
         <div className="grid max-w-3xl gap-section">
           <AeSiteBody muted>
-            You control the listing and the source. Agents can inspect only the facts that are published. Publication means the current Tool passed Agentic Economy’s admission and readiness checks; it does not guarantee demand, payment, delivery, or payout. Setup and test calls do not create settled earnings or payouts.
+            You control the listing and the source. Agents can inspect only the facts that are published. Publication means the current Tool passed Agentic Economy’s admission and readiness checks; it does not guarantee demand, payment, delivery, or payout. Setup checks do not create settled earnings or payouts.
           </AeSiteBody>
-          <Link
-            to="/owner/operations"
-            className="inline-flex min-h-touch items-center justify-self-start text-sm font-medium underline underline-offset-4"
-          >
-            Manage listed Tools
-          </Link>
         </div>
       </AeSiteSection>
       {sourceError === undefined ? (
@@ -155,6 +152,11 @@ export function AeSupplyLanding({
           <AeSupplyAgentProof tools={tools} publishedTools={publishedTools} />
         </AeSiteSection>
       ) : null}
+      <AeSiteFaq
+        labelledBy="provider-faq-heading"
+        title={PROVIDER_FAQ.heading}
+        questions={PROVIDER_FAQ.questions}
+      />
     </>
   )
 }

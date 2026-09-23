@@ -23,5 +23,10 @@ export const businessTables = {
     .index('by_slug', ['slug'])
     .index('by_owningAccountRef_and_updatedAt', ['owningAccountRef', 'updatedAt'])
     .index('by_owningAccountRef_and_publicStatus', ['owningAccountRef', 'publicStatus'])
-    .index('by_publicStatus_slug', ['publicStatus', 'slug']),
+    .index('by_publicStatus_slug', ['publicStatus', 'slug'])
+    .index('by_businessContext_kind_and_slug', ['businessContext.kind', 'slug'])
+    .index('by_businessContext_kind_and_suppressedAt', [
+      'businessContext.kind',
+      'suppressedAt',
+    ]),
 } as const

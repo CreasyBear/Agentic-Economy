@@ -2,12 +2,14 @@ import { describe, expect, it } from 'vitest'
 
 import { brandNonEmpty } from '@/modules/common/ids'
 import {
-  aeStatusPresentation,
-  aeStatusValues,
   dispositionToAeStatus,
-  getStatusPresentation,
   offeringAccessToAeStatus,
   offeringSupportToAeStatus,
+} from '@/lib/ui/business-status-mapping'
+import {
+  aeStatusPresentation,
+  aeStatusValues,
+  getStatusPresentation,
 } from '@/lib/ui/status-presentation'
 
 
@@ -37,6 +39,27 @@ describe('getStatusPresentation', () => {
       expect(presentation.compactLabel.length).toBeGreaterThan(0)
       expect(['neutral', 'info', 'success', 'warning', 'danger']).toContain(presentation.tone)
       expect(['public', 'private']).toContain(presentation.publicness)
+    }
+  })
+
+  it('defines canonical public, connection, credential, and lifecycle labels', () => {
+    const expected = {
+      operational: { label: 'Operational', compactLabel: 'Operational', tone: 'success', audience: 'public', publicness: 'public' },
+      connected: { label: 'Connected', compactLabel: 'Connected', tone: 'success', audience: 'owner', publicness: 'private' },
+      disconnected: { label: 'Disconnected', compactLabel: 'Disconnected', tone: 'neutral', audience: 'owner', publicness: 'private' },
+      active: { label: 'Active', compactLabel: 'Active', tone: 'success', audience: 'owner', publicness: 'private' },
+      paused: { label: 'Paused', compactLabel: 'Paused', tone: 'warning', audience: 'owner', publicness: 'private' },
+      needs_attention: { label: 'Needs attention', compactLabel: 'Attention', tone: 'warning', audience: 'owner', publicness: 'private' },
+      ready_now: { label: 'Ready now', compactLabel: 'Ready', tone: 'success', audience: 'public', publicness: 'public' },
+      setup_required: { label: 'Setup required', compactLabel: 'Setup', tone: 'warning', audience: 'public', publicness: 'public' },
+      completed: { label: 'Completed', compactLabel: 'Completed', tone: 'success', audience: 'owner', publicness: 'private' },
+      credential_expired: { label: 'Expired', compactLabel: 'Expired', tone: 'warning', audience: 'owner', publicness: 'private' },
+      current: { label: 'Current', compactLabel: 'Current', tone: 'success', audience: 'owner', publicness: 'private' },
+      credential_revoked: { label: 'Revoked', compactLabel: 'Revoked', tone: 'danger', audience: 'owner', publicness: 'private' },
+    } as const
+
+    for (const [status, presentation] of Object.entries(expected)) {
+      expect(getStatusPresentation(status as keyof typeof expected)).toMatchObject(presentation)
     }
   })
 

@@ -104,7 +104,7 @@ describe('site brief markdown', () => {
     expect(about).toContain('https://ae.example/for-agents')
     expect(about).toContain('https://ae.example/for-providers')
     expect(about).toContain('https://ae.example/market')
-    expect(about).toContain('Providers publish the job')
+    expect(about).toContain('Agents buy Tools. Providers set prices and receive AUD payouts after completed Calls.')
     expect(about).not.toMatch(/\/api\/answer|\/api\/chat\/anonymous/u)
   })
 

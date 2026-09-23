@@ -1,13 +1,5 @@
-import type {
-  Account,
-  AccountOwnership,
-  AccountRef,
-  Membership,
-} from '../account/public'
-import type { Principal, PrincipalRef } from '../principal/public'
-
-const PRINCIPAL_REF_PATTERN = /^prn_[0-9a-f]{32}$/u
-const ACCOUNT_REF_PATTERN = /^acc_[0-9a-f]{32}$/u
+import { isAccountRef, type Account, type AccountOwnership, type AccountRef, type Membership } from '../account/public'
+import { isPrincipalRef, type Principal, type PrincipalRef } from '../principal/public'
 const OPAQUE_REF_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:/-]{0,199}$/u
 const ATTRIBUTION_MAX_LENGTH = 500
 
@@ -208,17 +200,17 @@ function workloadKindValue(value: unknown): WorkloadKind {
 }
 
 function principalRefValue(value: unknown): PrincipalRef {
-  if (typeof value !== 'string' || !PRINCIPAL_REF_PATTERN.test(value)) {
+  if (typeof value !== 'string' || !isPrincipalRef(value)) {
     throw new WorkloadContextError('workload_principal_ref_invalid')
   }
-  return value as PrincipalRef
+  return value
 }
 
 function accountRefValue(value: unknown): AccountRef {
-  if (typeof value !== 'string' || !ACCOUNT_REF_PATTERN.test(value)) {
+  if (typeof value !== 'string' || !isAccountRef(value)) {
     throw new WorkloadContextError('workload_account_ref_invalid')
   }
-  return value as AccountRef
+  return value
 }
 
 function opaqueRefValue(value: unknown, code: WorkloadContextErrorCode): string {

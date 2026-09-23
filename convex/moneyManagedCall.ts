@@ -1,15 +1,12 @@
 import { v } from 'convex/values'
-
 import { degradeBackend } from '@/lib/observability/degrade-backend'
 import type { Doc } from './_generated/dataModel'
 import { internalMutation, internalQuery, type MutationCtx } from './_generated/server'
 import { canonicalDigest } from '../src/modules/common/canonical-digest'
 import { currentUtcDayBounds, currentUtcMonthBounds } from '../src/modules/common/freshness'
 import {
-  PACKAGE4_FORMANCE_REQUIREMENTS,
-  spendingPeriodsValue,
-  validateExecutableRateEvidenceIntegrity,
-  type ExecutableRateEvidence,
+  PACKAGE4_FORMANCE_REQUIREMENTS, spendingPeriodsValue,
+  validateExecutableRateEvidenceIntegrity, type ExecutableRateEvidence,
 } from '../src/modules/money/public'
 import { parsePublishedToolSnapshot } from '../src/modules/capability-supply/public'
 
@@ -161,6 +158,7 @@ export const readBooking = internalQuery({
     releaseRefs: v.optional(transactionRefsValue),
     settlementRefs: v.optional(transactionRefsValue),
     entryRefusalCode: v.optional(v.literal('financial_scope_locked')),
+    remedyInProgress: v.optional(v.boolean()),
   }), v.object({ kind: v.literal('not_required') }), v.object({ kind: v.literal('not_found') })),
   handler: async (ctx, args) => {
     const call = await ctx.db.query('capabilityCalls')
@@ -201,6 +199,8 @@ export const readBooking = internalQuery({
     return {
       kind: 'available' as const,
       booking,
+      ...(call.reconciliation?.leaseOwner?.startsWith('expired-unused:')
+        || call.reconciliation?.leaseOwner?.startsWith('paid-result-loss:') ? { remedyInProgress: true } : {}),
       ...(financialScopeLocked ? { entryRefusalCode: 'financial_scope_locked' as const } : {}),
       ...(call.formanceFinancialState === undefined
         ? {}

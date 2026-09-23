@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
+import { handlePublicGlossaryRequest } from '@/routes/glossary[.]md'
+
 import {
   buildOfferingLlmsTxt,
   buildOfferingLlmsUrlsFromSlugs,
@@ -51,10 +53,22 @@ describe('Tool-first llms.txt index', () => {
 
     expect(body).toContain('Public: list, search, describe, and compare.')
     expect(body).toContain('Connect only when tool.quote returns the OAuth challenge.')
-    expect(body).toContain('The AE key identifies the caller.')
+    expect(body).toContain('Authorization: Bearer <Agent access key>')
+    expect(body).toContain('The Agent access key identifies the caller.')
     expect(body).toContain('Never infer fulfilment, payment, deployment, or a receipt')
     expect(body).toContain('Boundary:')
     expect(body).toContain(`- ${canonicalBaseUrl}/privacy/remove-business`)
+    expect(body).toContain(`- Glossary: ${canonicalBaseUrl}/glossary.md`)
+  })
+
+  it('publishes one Agent access header and one ExactAmount price shape', async () => {
+    const response = handlePublicGlossaryRequest()
+    const body = await response.text()
+
+    expect(response.status).toBe(200)
+    expect(body).toContain('Authorization: Bearer <Agent access key>')
+    expect(body.match(/ExactAmount \{ currency, units, exponent \}/gu)).toHaveLength(1)
+    expect(body).not.toMatch(/\bcents\b|maxSpendAud|totalAud|netAud|gstAud|fundingServiceFeeBps|5%/u)
   })
 })
 

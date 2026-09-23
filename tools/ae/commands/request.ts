@@ -1,8 +1,10 @@
 import {
   MARKET_REQUEST_ROUTE_CONTRACTS,
+  MARKET_REQUEST_ACTIVE_WINDOW_MS,
   marketRequestCreateAction,
   marketRequestListAction,
   marketRequestStatusAction,
+  marketRequestWithdrawAction,
 } from '@/modules/market-demand/market-demand.actions'
 
 import type { CliOptions } from '../lib/args'
@@ -13,6 +15,13 @@ import { toolLabel } from '../lib/tool-format'
 import { requireAgentAccessKey } from './status'
 
 export const MARKET_REQUEST_COMMAND_DESCRIPTORS = Object.freeze([
+  {
+    actionId: marketRequestWithdrawAction.id,
+    command: 'request',
+    subcommand: 'withdraw',
+    method: MARKET_REQUEST_ROUTE_CONTRACTS.withdraw.method,
+    path: MARKET_REQUEST_ROUTE_CONTRACTS.withdraw.path,
+  },
   {
     actionId: marketRequestCreateAction.id,
     command: 'request',
@@ -36,7 +45,7 @@ export const MARKET_REQUEST_COMMAND_DESCRIPTORS = Object.freeze([
   },
 ] as const)
 
-function descriptor(subcommand: 'create' | 'list' | 'status') {
+function descriptor(subcommand: 'create' | 'list' | 'status' | 'withdraw') {
   const found = MARKET_REQUEST_COMMAND_DESCRIPTORS.find((item) => item.subcommand === subcommand)
   if (found === undefined) throw new Error('market_request_command_descriptor_missing')
   return found
@@ -107,6 +116,7 @@ async function createRequest(args: readonly string[], options: CliOptions): Prom
     ['request', parsed.data.requestRef],
     ['job', parsed.data.query],
     ['recorded', new Date(parsed.data.createdAt).toISOString()],
+    ['matching ends', new Date(parsed.data.createdAt + MARKET_REQUEST_ACTIVE_WINDOW_MS).toISOString()],
   ])
   line(`Next: ${nextCommand}`)
 }
@@ -153,6 +163,7 @@ async function listRequests(args: readonly string[], options: CliOptions): Promi
       ['request', item.requestRef],
       ['job', item.query],
       ['recorded', new Date(item.createdAt).toISOString()],
+      ['matching ends', new Date(item.createdAt + MARKET_REQUEST_ACTIVE_WINDOW_MS).toISOString()],
       ['check', requestContinuation(options, ['ae', 'request', 'status', item.requestRef])],
     ])
     line()
@@ -187,7 +198,7 @@ async function requestStatus(args: readonly string[], options: CliOptions): Prom
   }
   heading('Market request status')
   if (parsed.data.kind === 'not_found') {
-    line('No private request with that reference belongs to this connection.')
+    line('No active private request with that reference is available to this connection. Matching ends 30 days after creation.')
     line(`Next: ${requestContinuation(options, ['ae', 'request', 'list'])}`)
     return
   }
@@ -214,8 +225,32 @@ async function requestStatus(args: readonly string[], options: CliOptions): Prom
 
 export async function runRequestCommand(args: readonly string[], options: CliOptions): Promise<void> {
   const subcommand = args[0]
+  if (subcommand === 'withdraw') return await withdrawRequest(args, options)
   if (subcommand === 'create') return await createRequest(args, options)
   if (subcommand === 'list') return await listRequests(args, options)
   if (subcommand === 'status') return await requestStatus(args, options)
   throw usageFailure('request', 'request-command-required')
+}
+
+async function withdrawRequest(args: readonly string[], options: CliOptions): Promise<void> {
+  const input = marketRequestWithdrawAction.schema.safeParse({ requestRef: args[1] })
+  if (!input.success || args.length !== 2) throw usageFailure('request withdraw', 'request-withdraw-usage')
+  const apiKey = requireAgentAccessKey('request withdraw', options)
+  const route = descriptor('withdraw')
+  const outcome = await callJson(options.baseUrl, route.path, {
+    method: route.method,
+    headers: { Authorization: `Bearer ${apiKey}` },
+    body: JSON.stringify(input.data),
+  })
+  const parsed = marketRequestWithdrawAction.outputSchema.safeParse(requireOk(outcome, route.path))
+  if (!parsed.success) throw new CliFailure('The server returned an invalid withdrawal result.', {
+    kind: 'UNAVAILABLE', code: 'market-request-withdraw-invalid',
+  })
+  if (parsed.data.kind === 'error') throw new CliFailure('The private request could not be withdrawn.', {
+    kind: parsed.data.code === 'unauthenticated' ? 'UNAUTHENTICATED' : 'UNAVAILABLE', code: parsed.data.code,
+  })
+  if (options.json) { printJson(parsed.data); return }
+  line(parsed.data.kind === 'withdrawn'
+    ? 'Request withdrawn. Matching has stopped and the saved job phrase has been erased.'
+    : 'No private request with that reference belongs to this connection.')
 }

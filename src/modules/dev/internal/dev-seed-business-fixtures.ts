@@ -27,6 +27,7 @@ export type DevSeedBusinessFixture = Readonly<{
   stateTerritory: string
   ownerMessage: string
   sourceLabel: string
+  allowLoopbackSource?: boolean
   publishedPhone?: string
   offerings: readonly DevSeedOfferingFixture[]
   photoUrl?: string

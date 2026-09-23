@@ -268,7 +268,8 @@ type QuarantinedOutput = Readonly<{
   outputJson: string
 }>
 
-export function quarantinedOutputFromArgs(args: RecordObservationArgs): QuarantinedOutput | undefined {
+export function quarantinedOutputFromArgs(args: Pick<RecordObservationArgs,
+  'settlementStatus' | 'quarantinedResponseDigest' | 'quarantinedOutputJson'>): QuarantinedOutput | undefined {
   const responseDigest = args.quarantinedResponseDigest
   const outputJson = args.quarantinedOutputJson
   if ((responseDigest === undefined) !== (outputJson === undefined)) {
@@ -276,7 +277,7 @@ export function quarantinedOutputFromArgs(args: RecordObservationArgs): Quaranti
   }
   if (responseDigest === undefined || outputJson === undefined) return undefined
   if (
-    args.settlementStatus !== 'unknown'
+    (args.settlementStatus !== 'unknown' && args.settlementStatus !== 'settled')
     || !isCanonicalDigest(responseDigest)
     || new TextEncoder().encode(outputJson).byteLength
       > MAX_QUARANTINED_OUTPUT_BYTES

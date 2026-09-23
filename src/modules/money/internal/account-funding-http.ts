@@ -397,9 +397,12 @@ export async function beginAccountFundingThroughSource(
     return await markFundingOutcomeUnknown(reserved.command, context)
   }
   const bound = await bindFundingEvidence(reserved.command.commandRef, payment.evidence, context)
-  return isMoneyRefusal(bound)
-    ? bound
-    : { kind: 'ok', commandRef: reserved.command.commandRef, session: payment }
+  if (isMoneyRefusal(bound)) return bound
+  if (payment.evidence.status === 'succeeded') {
+    if (bound.command.state === 'pending') return refusal('funding_pending', true)
+    if (bound.command.state !== 'succeeded') return refusal('funding_outcome_unknown', true)
+  }
+  return { kind: 'ok', commandRef: reserved.command.commandRef, session: payment }
 }
 
 export async function readAccountFundingThroughSource(
@@ -420,7 +423,11 @@ export async function readAccountFundingThroughSource(
   })
   if (isMoneyRefusal(payment)) return fundingProviderRefusal(payment)
   const bound = await bindFundingEvidence(command.command.commandRef, payment.evidence, context)
-  return isMoneyRefusal(bound) ? bound : payment
+  if (isMoneyRefusal(bound)) return bound
+  if (payment.evidence.status !== 'succeeded') return payment
+  if (bound.command.state === 'pending') return refusal('funding_pending', true)
+  if (bound.command.state !== 'succeeded') return refusal('funding_outcome_unknown', true)
+  return payment
 }
 
 async function bindFundingEvidence(

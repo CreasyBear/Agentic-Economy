@@ -18,8 +18,8 @@ export type RecoveryLocator =
 
 export type CreditPaymentStatus = CreditPaymentSession['evidence']['status']
 
-const FINANCIAL_UNCHANGED = 'A$0.00 deducted — your balance is unchanged.'
-const FINANCIAL_NO_PAYMENT = 'No payment started. Your balance is unchanged.'
+const FINANCIAL_UNCHANGED = 'Nothing was charged. Your balance is unchanged.'
+const FINANCIAL_NO_PAYMENT = 'No payment was made. Nothing was charged. Your balance is unchanged.'
 
 export function formatAustralianGstPercentLabel(taxOnServiceFeeBps: number): string {
   if (taxOnServiceFeeBps % 100 === 0) {
@@ -34,7 +34,7 @@ export function formatAudGstNote(taxUnits: bigint, taxOnServiceFeeBps: number): 
 
 export function topUpErrorCopy(result: MoneyRefusal | AccountFundingOutcomeUnknownResult): string {
   if (result.code === 'stripe_setup_required') {
-    return 'Account funding is unavailable right now. No payment started and your balance did not change. Try again later.'
+    return `Account funding is unavailable right now. ${FINANCIAL_NO_PAYMENT} Try again later.`
   }
   if (result.code === 'billing_identity_missing' || result.code === 'billing_identity_mismatch') {
     return `Your signed-in Account could not be confirmed. ${FINANCIAL_NO_PAYMENT} Refresh this page and sign in again.`
@@ -51,7 +51,7 @@ export function topUpErrorCopy(result: MoneyRefusal | AccountFundingOutcomeUnkno
   if (result.code === 'funding_pending' || result.code === 'funding_outcome_unknown') {
     return 'Payment is still being verified. Your balance will not change until confirmation. Do not start another payment. Choose Refresh payment status.'
   }
-  return `Account funding could not be started or read. No payment was confirmed. ${FINANCIAL_UNCHANGED} Refresh this payment, or try again.`
+  return `Account funding could not be started or read. ${FINANCIAL_UNCHANGED} Refresh this payment, or try again.`
 }
 
 export function fundingAmountErrorCopy(

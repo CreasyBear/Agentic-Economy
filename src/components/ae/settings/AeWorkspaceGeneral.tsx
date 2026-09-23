@@ -28,7 +28,7 @@ export function AeWorkspaceGeneral({
     return (
       <AeSection
         title="Provider identity"
-        description="The provider identity that owns these Tools. Publication status is read separately."
+        description="The Provider identity that owns these Tools. Publication status is read separately."
       >
         <AeFactList facts={[
           ...(onRename === undefined ? [{ label: 'Name', value: identity.name }] : []),
@@ -44,15 +44,15 @@ export function AeWorkspaceGeneral({
   if (result.kind === 'not_found') {
     return (
       <AeEmptyState
-        title="No provider identity yet"
-        description="A public provider listing is required before this workspace can show its catalog identity."
+        title="No Provider identity yet"
+        description="A public Provider listing is required before this Workspace can show its catalog identity."
         role="status"
         action={
           <Link
             to="/for-providers"
             className={cn(buttonVariants(), 'min-h-touch')}
           >
-            Review provider setup
+            Review Provider setup
           </Link>
         }
       />
@@ -61,11 +61,10 @@ export function AeWorkspaceGeneral({
 
   if (result.kind === 'unavailable') {
     return (
-      <AeEmptyState
-        title="Provider identity is unavailable"
-        description="Try again in a moment. If this keeps happening, open Help."
-        role="alert"
-        action={
+      <Alert variant="destructive">
+        <AlertTitle>Provider identity is unavailable</AlertTitle>
+        <AlertDescription className="flex flex-wrap items-center gap-3">
+          <span>Try again in a moment. If this keeps happening, open Help.</span>
           <Link
             to="/owner/operations"
             hash="provider-identity"
@@ -73,8 +72,8 @@ export function AeWorkspaceGeneral({
           >
             Try again
           </Link>
-        }
-      />
+        </AlertDescription>
+      </Alert>
     )
   }
 
@@ -87,7 +86,7 @@ export function AeWorkspaceGeneral({
     <>
       <AeSection
         title="Provider identity"
-        description="The public provider this workspace lists. Canonical principal and account refs are resolved when you sign in; they are not a separate list yet."
+        description="The public Provider this Workspace lists. Canonical principal and account refs are resolved when you sign in; they are not a separate list yet."
       >
         <AeFactList
           facts={[
@@ -131,7 +130,7 @@ function ProviderNameEditor({
   return (
     <div className="mt-section grid max-w-xl gap-related">
       <Field data-invalid={invalid || undefined}>
-        <FieldLabel htmlFor="provider-public-name">Public provider name</FieldLabel>
+        <FieldLabel htmlFor="provider-public-name">Public Provider name</FieldLabel>
         <Input
           id="provider-public-name"
           value={name}
@@ -145,9 +144,9 @@ function ProviderNameEditor({
           }}
         />
         <FieldDescription>
-          This name appears on the provider listing and every current Tool. Its public path and provider connection stay unchanged.
+          This name appears on the Provider listing and every current Tool. Its public path and Provider connection stay unchanged.
         </FieldDescription>
-        {invalid ? <FieldError>Enter a public provider name from 1 to 160 characters.</FieldError> : null}
+        {invalid ? <FieldError>Enter a public Provider name from 1 to 160 characters.</FieldError> : null}
       </Field>
       <Button
         type="button"
@@ -177,7 +176,7 @@ function ProviderNameEditor({
       {feedback?.kind === 'updated' || feedback?.kind === 'unchanged' ? (
         <Alert role="status">
           <AlertTitle>Public name saved</AlertTitle>
-          <AlertDescription>The provider listing and current Tools now use {feedback.name}.</AlertDescription>
+          <AlertDescription>The Provider listing and current Tools now use {feedback.name}.</AlertDescription>
         </Alert>
       ) : feedback?.kind === 'refused' ? (
         <Alert variant="destructive" role="alert">
@@ -194,8 +193,8 @@ function normalizeDisplayName(value: string): string {
 }
 
 function renameFailureMessage(code: Extract<RenameProviderDisplayNameResult, { kind: 'refused' }>['code']): string {
-  if (code === 'invalid_name') return 'Enter a public provider name from 1 to 160 characters.'
-  if (code === 'unauthenticated') return 'Sign in again before changing the public provider name.'
-  if (code === 'wrong_owner') return 'This account does not own that provider identity.'
+  if (code === 'invalid_name') return 'Enter a public Provider name from 1 to 160 characters.'
+  if (code === 'unauthenticated') return 'Sign in again before changing the public Provider name.'
+  if (code === 'wrong_owner') return 'This Business does not own that Provider identity.'
   return 'Try again. The existing public name is unchanged.'
 }

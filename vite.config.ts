@@ -80,6 +80,9 @@ export default defineConfig({
         "/SKILL.md": {
           handler: "./src/routes/SKILL[.]md.ts",
         },
+        "/glossary.md": {
+          handler: "./src/routes/glossary[.]md.ts",
+        },
       },
       preset: "vercel",
       vercel: {

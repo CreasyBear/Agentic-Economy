@@ -109,9 +109,12 @@ const durableTables = [
   'operationKeys',
   'sourceWriteNonces',
   'adminMemberships',
+  'adminApprovalProposals',
   'adminMembershipAuditEvents',
   'auditEvents',
   'registrySearchDocuments',
+  'marketplaceMetricDays',
+  'marketplaceEntityDays',
   'disputes',
   'chatThreads',
   'chatThreadShares',
@@ -199,7 +202,13 @@ const requiredIndexes = {
     'by_authorizationDigest',
     'by_paymentIdentifier',
   ],
-  moneyUsageEvents: ['by_principalId_and_credentialId_and_currency_and_observedAt', 'by_businessId_and_observedAt', 'by_callRef', 'by_usageRef'],
+  moneyUsageEvents: [
+    'by_principalId_and_credentialId_and_currency_and_observedAt',
+    'by_businessId_and_observedAt',
+    'by_callRef',
+    'by_usageRef',
+    'by_chargeState_and_observedAt',
+  ],
   moneyCommercialPolicies: ['by_policyRef', 'by_environment_and_family_and_lifecycle'],
   moneyReconciliationCases: ['by_caseRef', 'by_accountRef_and_createdAt', 'by_accountRef_and_status_and_createdAt', 'by_scopeType_and_scopeRef_and_status'],
   moneyDocuments: ['by_documentRef', 'by_accountRef_and_createdAt'],
@@ -223,6 +232,8 @@ const requiredIndexes = {
     'by_owningAccountRef_and_updatedAt',
     'by_owningAccountRef_and_publicStatus',
     'by_publicStatus_slug',
+    'by_businessContext_kind_and_slug',
+    'by_businessContext_kind_and_suppressedAt',
   ],
   businessOfferings: ['by_offeringRef', 'by_businessId_and_status', 'by_businessId_and_offeringRef'],
   businessOfferingRevisions: ['by_offeringRef_and_revision', 'by_businessId_and_createdAt'],
@@ -239,11 +250,34 @@ const requiredIndexes = {
     'by_tokenIdentifier_and_state',
     'by_state_and_role',
   ],
+  adminApprovalProposals: ['by_proposalRef', 'by_status_and_expiresAt'],
   adminMembershipAuditEvents: ['by_auditEventId'],
-  auditEvents: ['by_eventId'],
+  auditEvents: [
+    'by_eventId',
+    'by_createdAt',
+    'by_eventType_and_createdAt',
+    'by_actorRef_and_createdAt',
+    'by_targetType_and_targetRef_and_createdAt',
+    'by_correlationId_and_createdAt',
+  ],
+  marketplaceMetricDays: ['by_day'],
+  marketplaceEntityDays: [
+    'by_day_and_entityKind',
+    'by_entityKind_and_entityRef_and_day',
+  ],
   registrySearchDocuments: ['by_documentId', 'by_business', 'by_offering', 'by_publicStatus_updatedAt'],
-  disputes: ['by_business_status'],
-  capabilityCalls: ['by_callRef', 'by_principalId_and_idempotencyKey', 'by_credentialId_and_createdAt', 'by_credentialId_and_state', 'by_credentialId_and_state_and_grantExpiresAt', 'by_principalId_and_callRef', 'by_toolRef_and_state', 'by_ownerId_and_state_and_createdAt'],
+  disputes: ['by_business_status', 'by_status_and_updatedAt'],
+  capabilityCalls: [
+    'by_callRef',
+    'by_principalId_and_idempotencyKey',
+    'by_credentialId_and_createdAt',
+    'by_credentialId_and_state',
+    'by_credentialId_and_state_and_grantExpiresAt',
+    'by_principalId_and_callRef',
+    'by_toolRef_and_state',
+    'by_ownerId_and_state_and_createdAt',
+    'by_createdAt',
+  ],
   capabilityCallProjections: [
     'by_callRef',
     'by_accountRef_and_createdAt',
@@ -258,8 +292,14 @@ const requiredIndexes = {
     'by_callRef',
     'by_accountRef_and_resolvedAt',
     'by_customerRef_and_resolvedAt',
+    'by_resolvedAt',
   ],
-  capabilityQuotes: ['by_quoteRef', 'by_credentialId_and_createdAt', 'by_state_and_expiresAt'],
+  capabilityQuotes: [
+    'by_quoteRef',
+    'by_credentialId_and_createdAt',
+    'by_state_and_expiresAt',
+    'by_createdAt',
+  ],
   sellerOnboardingCanaryRearmAudits: ['by_auditRef', 'by_callRef', 'by_canaryRef'],
   providerConsequenceJournal: [
     'by_ticketRef',
@@ -318,6 +358,7 @@ const requiredIndexes = {
     'by_businessId_and_disposition',
     'by_bindingId_and_disposition',
     'by_sourceRouteRef_and_disposition',
+    'by_sourceAuthorityState_and_updatedAt',
   ],
   capabilitySupplyAdmissionCases: [
     'by_caseRef',
@@ -389,7 +430,7 @@ describe('Convex schema', () => {
   const exported = SchemaExport.parse(JSON.parse(String(exportSchema.call(schema))))
 
   it('contains exactly the source-owned durable tables', () => {
-    expect(durableTables).toHaveLength(100)
+    expect(durableTables).toHaveLength(103)
     expect(exported.tables.map((table) => table.tableName).sort()).toEqual([...durableTables].sort())
   })
 
@@ -443,6 +484,23 @@ describe('Convex schema', () => {
       {
         indexDescriptor: 'by_activeAccountRef_and_targetType_and_targetRef_and_createdAt',
         fields: ['activeAccountRef', 'targetType', 'targetRef', 'createdAt'],
+      },
+      { indexDescriptor: 'by_createdAt', fields: ['createdAt'] },
+      {
+        indexDescriptor: 'by_eventType_and_createdAt',
+        fields: ['eventType', 'createdAt'],
+      },
+      {
+        indexDescriptor: 'by_actorRef_and_createdAt',
+        fields: ['actorRef', 'createdAt'],
+      },
+      {
+        indexDescriptor: 'by_targetType_and_targetRef_and_createdAt',
+        fields: ['targetType', 'targetRef', 'createdAt'],
+      },
+      {
+        indexDescriptor: 'by_correlationId_and_createdAt',
+        fields: ['correlationId', 'createdAt'],
       },
     ])
     expect(auditEvents?.stagedDbIndexes).toEqual([])

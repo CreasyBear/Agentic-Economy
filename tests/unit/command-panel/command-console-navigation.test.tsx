@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import {
   RouterContextProvider,
   createMemoryHistory,
@@ -8,15 +8,34 @@ import {
   createRoute,
   createRouter,
 } from '@tanstack/react-router'
-import { useState } from 'react'
-import type { ReactElement } from 'react'
+import { useState, type ReactElement } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import '../../setup/resize-observer'
 import '../../setup/jsdom-platform'
 import '../../setup/jsdom-dialog'
 
+vi.mock('@tanstack/react-start', async (importOriginal) => ({
+  ...await importOriginal<typeof import('@tanstack/react-start')>(),
+  useServerFn: () =>
+    vi.fn(async () => ({
+      items: [],
+      page: { isDone: true, continueCursor: '' },
+    })),
+}))
+
+vi.mock('convex/react', () => ({
+  useQuery: () => undefined,
+}))
+
+vi.mock('@clerk/tanstack-react-start', () => ({
+  UserProfile: () => null,
+  SignOutButton: ({ children }: { children: React.ReactNode }) => children,
+  OrganizationProfile: Object.assign(() => null, { Page: () => null }),
+}))
+
 import { AeCommandPanel, CommandPanelProvider } from '@/components/ae/command-panel'
 import { ThemeProvider } from '@/components/ae/theme/ThemeProvider'
+import { APP_NAVIGATION } from '@/lib/navigation/app-navigation'
 
 afterEach(() => {
   cleanup()
@@ -25,30 +44,30 @@ afterEach(() => {
 })
 
 describe('command console navigation groups', () => {
-  it('shows Navigation and Quick Actions when the panel is open with an empty query', async () => {
+  it('projects canonical navigation and keeps only non-destination quick actions', async () => {
     renderCommandPanel({ openImmediately: true })
 
     expect(await screen.findByText('Navigation')).toBeTruthy()
     expect(screen.getByText('Quick Actions')).toBeTruthy()
-    expect(screen.getByRole('option', { name: /Tools Market/ })).toBeTruthy()
+    for (const destination of APP_NAVIGATION) {
+      const href = `${destination.to}${destination.hash ?? ''}`
+      const item = screen.getByRole('option', {
+        name: new RegExp(`^${destination.label}\\b`),
+      })
+      expect(item.getAttribute('data-value')).toBe(`ae-nav:${href}`)
+    }
     expect(screen.getByRole('option', { name: /Toggle Theme/ })).toBeTruthy()
+    expect(screen.queryByRole('option', { name: /Check System Status/ })).toBeNull()
   })
 
-  it('filters Navigation to Account & Settings for "settings" and navigates on select', async () => {
-    const router = renderCommandPanel({ openImmediately: true })
+  it('does not offer a second settings product from the command palette', async () => {
+    renderCommandPanel({ openImmediately: true })
 
     const input = screen.getByRole('combobox', { name: 'Search Tools' })
     fireEvent.change(input, { target: { value: 'settings' } })
 
-    expect(screen.queryByText('Navigation')).toBeTruthy()
-    expect(screen.queryByText('Quick Actions')).toBeNull()
-    const settingsItem = await screen.findByRole('option', { name: /Account & Settings/ })
-    fireEvent.click(settingsItem)
-
-    await waitFor(() => {
-      expect(router.state.location.pathname).toBe('/owner/settings')
-      expect(screen.queryByRole('dialog')).toBeNull()
-    })
+    expect(screen.queryByRole('option', { name: /Account & Settings/ })).toBeNull()
+    expect(screen.queryByRole('dialog', { name: 'Account & settings' })).toBeNull()
   })
 
   it('shows Toggle Theme in Quick Actions when the query is "theme"', async () => {
@@ -117,7 +136,7 @@ describe('command console navigation groups', () => {
 
     // Press Shift+Tab to jump back to the Navigation group
     fireEvent.keyDown(command!, { key: 'Tab', shiftKey: true })
-    const navItem = screen.getByRole('option', { name: /Tools Market/ })
+    const navItem = screen.getByRole('option', { name: /^Market\b/ })
     expect(navItem.getAttribute('data-value')).toBe('ae-nav:/market')
   })
 })

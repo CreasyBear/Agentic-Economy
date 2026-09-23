@@ -22,7 +22,7 @@ export function AeToolPrice({
   const currentPrice = useCurrentToolPrice(price, validUntil);
   return (
     <p className={cn("grid min-w-0 content-start gap-0.5", className)}>
-      <span className="text-[0.6875rem] font-medium uppercase tracking-wide text-muted-foreground">
+      <span className="text-caption font-medium uppercase tracking-wide text-muted-foreground">
         {label}
       </span>
       <span

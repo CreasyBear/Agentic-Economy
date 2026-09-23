@@ -10,7 +10,7 @@ export function OnboardingStepper({
   onGoToStep,
 }: OnboardingStepperProps) {
   return (
-    <nav aria-label="Supplier activation" className="grid grid-cols-1 sm:grid-cols-3 gap-3 border-b pb-4 mb-4">
+    <nav aria-label="Provider setup" className="grid grid-cols-1 sm:grid-cols-3 gap-3 border-b pb-4 mb-4">
       {STEP_META.map(({ id, label, duration, icon: Icon }) => {
         const active = step === id
         const completed = isCompleted(id)
@@ -23,7 +23,7 @@ export function OnboardingStepper({
             aria-current={active ? 'step' : undefined}
             onClick={() => onGoToStep(id)}
             className={`flex flex-col items-start gap-0.5 p-2 rounded-md text-left disabled:opacity-50 disabled:cursor-not-allowed ${TACTILE} ${
-              active ? 'bg-primary/10 text-primary font-semibold' : 'text-muted-foreground'
+              active ? 'bg-primary/10 text-primary font-medium' : 'text-muted-foreground'
             }`}
           >
             <span className="flex items-center gap-2 w-full">

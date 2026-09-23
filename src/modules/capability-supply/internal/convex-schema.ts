@@ -254,7 +254,8 @@ export const capabilitySupplyTables = {
       'readinessValidUntil',
     ])
     .index('by_bindingId_and_disposition', ['bindingId', 'disposition'])
-    .index('by_sourceRouteRef_and_disposition', ['sourceRouteRef', 'disposition']),
+    .index('by_sourceRouteRef_and_disposition', ['sourceRouteRef', 'disposition'])
+    .index('by_sourceAuthorityState_and_updatedAt', ['sourceAuthorityState', 'updatedAt']),
 
   capabilitySupplyAdmissionCases: defineTable({
     caseRef: v.string(),

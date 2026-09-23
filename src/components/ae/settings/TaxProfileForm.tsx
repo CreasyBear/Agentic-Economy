@@ -1,5 +1,5 @@
 import { Field as BaseField } from '@base-ui/react/field'
-import { useState, type FormEvent, type ReactElement } from 'react'
+import { useRef, useState, type FormEvent, type ReactElement } from 'react'
 
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -12,6 +12,7 @@ import {
   TAX_PROFILE_SUBMIT_FAILURE_DIAGNOSTIC,
   TAX_PROFILE_VALIDATION_DIAGNOSTIC,
   type TaxProfileInitialData,
+  type TaxProfileInvalidField,
   type TaxProfileSubmitPayload,
 } from '@/modules/money/tax-profile.view-model'
 
@@ -20,6 +21,8 @@ export type TaxProfileFormProps = Readonly<{
   onSubmit: (payload: TaxProfileSubmitPayload) => void | Promise<void>
   isSubmitting?: boolean
 }>
+
+const TAX_PROFILE_DIAGNOSTIC_ID = 'tax-profile-diagnostic'
 
 export function TaxProfileForm({
   initialData,
@@ -37,6 +40,11 @@ export function TaxProfileForm({
   const [postalCode, setPostalCode] = useState(isAvailable ? initialData.postalCode : '')
   const [internalSubmitting, setInternalSubmitting] = useState(false)
   const [submitDiagnostic, setSubmitDiagnostic] = useState<typeof TAX_PROFILE_SUBMIT_FAILURE_DIAGNOSTIC | null>(null)
+  const [invalidField, setInvalidField] = useState<TaxProfileInvalidField | null>(null)
+
+  const legalNameRef = useRef<HTMLInputElement>(null)
+  const abnRef = useRef<HTMLInputElement>(null)
+  const addressRef = useRef<HTMLInputElement>(null)
 
   const normalizedAbn = normalizeAbn(abn)
   const isAbnDirty = abn.trim().length > 0
@@ -55,24 +63,39 @@ export function TaxProfileForm({
     || locality.trim().length > 0
     || postalCode.trim().length > 0
 
-  const showValidationDiagnostic =
-    hasStarted
-    && !isSubmitting
-    && !internalSubmitting
-    && (!isLegalNameValid || !isAbnValid || !isAddressValid)
-
-  const canSave =
-    isLegalNameValid
-    && isAbnValid
-    && isAddressValid
-    && !isSubmitting
-    && !internalSubmitting
-
   const submitting = isSubmitting || internalSubmitting
+
+  const showValidationDiagnostic =
+    !submitting
+    && (
+      invalidField !== null
+      || (hasStarted && (!isLegalNameValid || !isAbnValid || !isAddressValid))
+    )
 
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
-    if (!canSave) return
+    if (submitting) return
+
+    if (!isLegalNameValid) {
+      setInvalidField('legalName')
+      setSubmitDiagnostic(null)
+      legalNameRef.current?.focus()
+      return
+    }
+    if (!isAbnValid) {
+      setInvalidField('abn')
+      setSubmitDiagnostic(null)
+      abnRef.current?.focus()
+      return
+    }
+    if (!isAddressValid) {
+      setInvalidField('address')
+      setSubmitDiagnostic(null)
+      addressRef.current?.focus()
+      return
+    }
+
+    setInvalidField(null)
 
     const payload: TaxProfileSubmitPayload = {
       abn: normalizedAbn,
@@ -103,6 +126,7 @@ export function TaxProfileForm({
   }
 
   const activeDiagnostic = submitDiagnostic ?? (showValidationDiagnostic ? TAX_PROFILE_VALIDATION_DIAGNOSTIC : null)
+  const describedBy = showValidationDiagnostic ? TAX_PROFILE_DIAGNOSTIC_ID : undefined
 
   return (
     <form onSubmit={handleSubmit} className="grid gap-4 max-w-lg">
@@ -111,15 +135,18 @@ export function TaxProfileForm({
           Legal business name
         </Label>
         <Input
+          ref={legalNameRef}
           id="tax-profile-legal-name"
           type="text"
           value={legalName}
           onChange={(event) => {
             setLegalName(event.target.value)
             setSubmitDiagnostic(null)
+            if (invalidField === 'legalName') setInvalidField(null)
           }}
           placeholder="Acme Technologies Pty Ltd"
-          className="text-xs"
+          aria-invalid={invalidField === 'legalName' || undefined}
+          aria-describedby={invalidField === 'legalName' ? describedBy : undefined}
         />
       </BaseField.Root>
 
@@ -128,6 +155,7 @@ export function TaxProfileForm({
           ABN
         </Label>
         <Input
+          ref={abnRef}
           id="tax-profile-abn"
           type="text"
           inputMode="numeric"
@@ -135,9 +163,12 @@ export function TaxProfileForm({
           onChange={(event) => {
             setAbn(formatAbnDisplay(event.target.value))
             setSubmitDiagnostic(null)
+            if (invalidField === 'abn') setInvalidField(null)
           }}
           placeholder="51 824 753 556"
-          className="font-mono text-xs tabular-nums"
+          className="font-mono tabular-nums"
+          aria-invalid={invalidField === 'abn' || undefined}
+          aria-describedby={invalidField === 'abn' ? describedBy : undefined}
         />
       </BaseField.Root>
 
@@ -146,15 +177,18 @@ export function TaxProfileForm({
           Address
         </Label>
         <Input
+          ref={addressRef}
           id="tax-profile-address"
           type="text"
           value={addressLine1}
           onChange={(event) => {
             setAddressLine1(event.target.value)
             setSubmitDiagnostic(null)
+            if (invalidField === 'address') setInvalidField(null)
           }}
           placeholder="1 Market Street"
-          className="text-xs"
+          aria-invalid={invalidField === 'address' || undefined}
+          aria-describedby={invalidField === 'address' ? describedBy : undefined}
         />
       </BaseField.Root>
 
@@ -171,7 +205,6 @@ export function TaxProfileForm({
             setSubmitDiagnostic(null)
           }}
           placeholder="Suite 400"
-          className="text-xs"
         />
       </BaseField.Root>
 
@@ -187,9 +220,9 @@ export function TaxProfileForm({
             onChange={(event) => {
               setLocality(event.target.value)
               setSubmitDiagnostic(null)
+              if (invalidField === 'address') setInvalidField(null)
             }}
             placeholder="Sydney"
-            className="text-xs"
           />
         </BaseField.Root>
 
@@ -206,7 +239,6 @@ export function TaxProfileForm({
               setSubmitDiagnostic(null)
             }}
             placeholder="NSW"
-            className="text-xs"
           />
         </BaseField.Root>
       </div>
@@ -223,9 +255,9 @@ export function TaxProfileForm({
             onChange={(event) => {
               setPostalCode(event.target.value)
               setSubmitDiagnostic(null)
+              if (invalidField === 'address') setInvalidField(null)
             }}
             placeholder="2000"
-            className="text-xs"
           />
         </BaseField.Root>
 
@@ -238,12 +270,17 @@ export function TaxProfileForm({
             type="text"
             value="AU"
             readOnly
-            className="bg-muted text-xs text-muted-foreground"
+            className="bg-muted text-muted-foreground"
           />
         </BaseField.Root>
       </div>
 
-      <div className="min-h-[2.5rem]" role="status" aria-live="polite">
+      <div
+        id={TAX_PROFILE_DIAGNOSTIC_ID}
+        className="min-h-[2.5rem]"
+        role="status"
+        aria-live="polite"
+      >
         {activeDiagnostic ? (
           <div className="grid gap-1 text-sm text-muted-foreground">
             <p>
@@ -262,10 +299,10 @@ export function TaxProfileForm({
       <div className="pt-2">
         <Button
           type="submit"
-          disabled={!canSave}
+          disabled={submitting}
           className={cn('min-h-touch text-xs', TACTILE)}
         >
-          {submitting ? 'Saving...' : 'Save'}
+          Save
         </Button>
       </div>
     </form>

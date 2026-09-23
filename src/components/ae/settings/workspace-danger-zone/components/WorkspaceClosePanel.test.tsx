@@ -22,6 +22,10 @@ const baseProps = {
   onConfirmClose: vi.fn(),
 }
 
+function openClosePanel() {
+  fireEvent.click(screen.getByText('Close workspace', { selector: 'summary' }))
+}
+
 afterEach(cleanup)
 
 describe('WorkspaceClosePanel', () => {
@@ -37,6 +41,7 @@ describe('WorkspaceClosePanel', () => {
         onConfirmClose={onConfirmClose}
       />,
     )
+    openClosePanel()
     fireEvent.click(screen.getByRole('button', { name: 'Close workspace' }))
     expect(onRequestClose).toHaveBeenCalled()
     expect(onConfirmClose).not.toHaveBeenCalled()
@@ -45,6 +50,7 @@ describe('WorkspaceClosePanel', () => {
   it('shows owner-only copy when caller is not owner', () => {
     render(<WorkspaceClosePanel {...baseProps} callerIsOwner={false} />)
     expect(screen.getByText(/only the workspace owner/i)).toBeInTheDocument()
+    expect(screen.getByText('Close workspace', { selector: 'summary' })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Close workspace' })).toBeNull()
   })
 })

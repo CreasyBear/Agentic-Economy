@@ -5,12 +5,6 @@ import { AeTermsPage } from '@/components/ae/legal/terms/AeTermsPage'
 import { buildPublicPageHead } from '@/modules/seo/public'
 
 export const Route = createFileRoute('/terms')({
-  staticData: {
-    nav: {
-      label: 'Terms',
-      footer: { column: 'Legal', order: 1 },
-    },
-  },
   head: () => buildPublicPageHead({
     path: '/terms',
     title: 'Terms | Agentic Economy',
@@ -21,12 +15,7 @@ export const Route = createFileRoute('/terms')({
 
 function TermsRoute() {
   return (
-    <AePublicPage
-      kind="document"
-      eyebrow="Legal"
-      title="Terms"
-      description="Use Agentic Economy to find, inspect, pay for, and call published Tools."
-    >
+    <AePublicPage>
       <AeTermsPage />
     </AePublicPage>
   )

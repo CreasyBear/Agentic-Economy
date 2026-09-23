@@ -86,7 +86,7 @@ export function AeToolCompactDecision({
               {isCopied ? 'Copied' : model.nextAction.label}
             </Button>
             <span role="status" aria-live="polite" className="text-xs text-muted-foreground">
-              {status === 'failed' ? 'Copy failed. Open Actions to copy the command manually.' : ''}
+              {status === 'failed' ? 'Copy failed. Open full Tool details to copy the request manually.' : ''}
             </span>
           </div>
         ) : null}
@@ -96,7 +96,7 @@ export function AeToolCompactDecision({
 }
 
 function decisionVariant(model: ToolInspectorModel): 'success' | 'warning' | 'outline' {
-  if (model.nextAction.label === 'Tool reference') return 'success'
+  if (model.nextAction.label === 'request for Agent') return 'success'
   if (model.availabilityPosture === 'setup_required') {
     return 'warning'
   }

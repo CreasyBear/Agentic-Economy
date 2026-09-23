@@ -2,8 +2,11 @@
 
 **Status:** active product design contract
 
-**Revised:** 2026-09-11
-Aligned to aecon brand guidelines (PDF, 2026-09).
+**Revised:** 2026-09-21
+Aligned to aecon brand guidelines (PDF, 2026-09). Lived visual law is
+`/market?view=discover` (`DirectoryHero.tsx`, `DirectoryHomeDiscovery.tsx`,
+`DirectoryToolCard.tsx`). Those three files are frozen. Every other surface is
+harvested onto that grammar (`docs/operations/design-system-maturity-protocol.md`).
 
 ## Current app and market direction
 
@@ -16,8 +19,10 @@ Discovery uses familiar Airbnb-style listing cards and responsive filters,
 with sourced MIT-licensed Spree Storefront patterns and installed UI components.
 Cards show useful service, Provider and price information; tables remain useful
 for comparison and operational records. This direction supersedes the older
-Twenty palette, typography, near-square shape and row-only market rules below.
-The requirements for truthful authority, money, provenance and recovery remain.
+Twenty palette, typography, near-square shape and row-only market rules.
+Twenty 2px radius and "delete the kicker" are leftover written law — they are
+not current. The requirements for truthful authority, money, provenance and
+recovery remain.
 
 Agentic Economy should look like the place where a consequential market decision
 can be inspected, made and recovered. The interface is a market terminal for one
@@ -29,11 +34,12 @@ allowed transitions. No dashboard may contain authority, recovery or money
 state that an authorised agent can discover only by screen-scraping or support
 intervention.
 
-The visual grammar follows the Twenty public site and owner product: white data
-surfaces on a neutral field, near-black actions, one forest accent,
-near-square radii, hairline structure, aligned numeric values and stepped
-grotesk type. Restraint matters because commercial state and provenance need to
-remain visible.
+The lived visual grammar is discover: chalk field, charcoal action, one forest
+accent, ExtraLight display, medium tracked uppercase eyebrow without a marker,
+website radius scale, hairline listing cards with hover lift, collection rails,
+aligned numeric values. Public editorial pages use that composition. Operator
+pages use the same tokens at compact density. Restraint matters because
+commercial state and provenance need to remain visible.
 
 ### Feel
 
@@ -59,14 +65,18 @@ relevant, but it must not replace the Seller or Provider.
 
 ## Product modes
 
-1. **Public.** The category and institutional argument. Generous composition,
-   one serif display line, mono uppercase actions and sparse construction marks.
-2. **Market.** Compact search, optional public detail/comparison and the
-   authenticated Tool Quote that creates a Quote. Use structural
-   rows, aligned numbers, progressive disclosure and visible provenance.
-3. **Operator.** Quiet work areas for Accounts, spending policies, Provider publication,
-   purchases, recovery and records. Use compact controls and persistent
-   navigation. Display type does not enter forms, tables or status views.
+Two dialects, one system. Tokens never fork.
+
+1. **Public / editorial-discover.** Generous composition: left ExtraLight
+   display, medium tracked uppercase eyebrow without a marker, collection rails,
+   listing cards. Mono uppercase actions remain the public-action exception.
+2. **Market.** Discover is the ideal. Search, compare, providers and saved use
+   the same card, pill and rail grammar. Comparison and operational records stay
+   tabular. Authenticated Tool Quote remains the caller-specific decision view.
+3. **Operator / compact-discover.** Quiet work areas for Accounts, spending
+   policies, Provider publication, purchases, recovery and records. Same tokens
+   at workbench scale: medium titles, muted decks, hairlines. Display type does
+   not enter forms, tables or status views. No 7xl hero. No second weight language.
 
 The same object retains the same name and state across all three modes. Public
 language may be shorter, but it must not invent a simpler commercial model.
@@ -74,30 +84,37 @@ language may be shorter, but it must not invent a simpler commercial model.
 ## Type
 
 - `font-sans` (Manrope, `--ae-font-sans`) carries interface text, prose,
-  headings, forms and controls, at ExtraLight 200, Regular 400 or Medium 500.
-  Hierarchy comes from weight and spacing, not from a separate display face.
+  headings, forms and controls at Regular 400 or Medium 500. Listing card titles
+  may use `font-semibold` (discover-legal). `font-bold` page titles are defects.
 - `font-mono` (`--ae-font-mono`) carries prices, amounts, identifiers,
   timestamps, code, keyboard hints and values whose alignment matters.
 - `font-display` (Manrope, `--ae-font-display`) carries one public display
-  statement per page and nothing else, set at ExtraLight 200 with -0.035em
-  tracking.
+  statement per editorial page, set ExtraLight 200 with discover tracking
+  (`-0.055em` on the hero). Values are the tokens copied from
+  `DirectoryHero.tsx`, not an older written scale.
 
-Type is stepped, not viewport-fluid. Headings use a line-height near 1.1 and
-body text uses 1.55. Headings use `text-wrap: balance`. Do not switch typefaces
-inside one heading. All interface copy is sentence case, including buttons,
-labels and headings; do not title-case.
+Type is stepped. Discover names the steps (caption, eyebrow, deck, title,
+display). Headings use `text-wrap: balance`. Do not switch typefaces inside one
+heading. Interface copy is sentence case, including buttons, labels and
+headings; do not title-case.
+
+**Discover-legal eyebrow.** Medium weight, tracked uppercase, no `SiteMarker`.
+`impeccable` craft-floor bans kickers; this contract overrides that ban. Do not
+delete legal eyebrows. The remaining ban is a marker-dot product eyebrow.
 
 ## Shape and structure
 
-- The base radius is 2px. Controls, buttons and rows are crisp and near-square.
-- The floating public navigation is the only persistent rounded shell.
-- Market rows and tables use alignment and hairline dividers instead of
-  individual cards.
-- Cards are reserved for objects that genuinely sit above the page or contain a
-  self-contained action, such as a modal, compare tray, Call evidence or recovery
-  panel.
+- Use the approved website radius scale in `globals.css`. Controls use
+  `--radius-md`. Cards use `--radius-card`. Filter and collection chips use
+  `rounded-full`. Twenty 2px is leftover and must not be restored.
+- The floating public navigation is the most rounded persistent shell.
+- Market discovery may use listing cards (hairline, optional hover lift).
+  Comparison, purchase state and operator records use rows, tables and hairlines.
+- Cards are for objects that sit above the page or contain a self-contained
+  action. A Tool listing is such an object. A table row is not.
 - Whitespace establishes the first level of grouping. A border is the second.
-  Elevation is the last.
+  Elevation is the last. Card lift uses `--shadow-float`, not generic
+  `shadow-md`.
 
 Never place a bordered card inside another bordered card merely to show
 hierarchy. The information model should create the hierarchy.
@@ -111,7 +128,7 @@ The brand palette (Brand guidelines, p.7):
 | Forest   | `#24543D` | Primary, artwork and identity, links, focus    | `--ae-brand` (`--ae-brand-strong`, `--ae-ring`, `--ae-info`) |
 | Charcoal | `#141414` | Primary dark surface, action colour            | `--ae-fg`                         |
 | Chalk    | `#E8E4DA` | Light surface, body text on dark               | `--ae-bg` (`--ae-on-brand`, `--ae-primary-fg`) |
-| Stone    | `#AAA89E` | Supporting                                     | no token                          |
+| Stone    | `#AAA89E` | Supporting; dark-mode muted text               | `--ae-muted-fg` in `.dark`        |
 | Gold     | `#E5AA35` | Logo endpoint only, restricted, never a UI accent | no token                       |
 
 Use three surface levels: canvas (`--ae-bg`), sunken work area

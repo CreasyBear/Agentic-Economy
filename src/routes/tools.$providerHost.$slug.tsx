@@ -16,16 +16,16 @@ export const Route = createFileRoute('/tools/$providerHost/$slug')({
       return { metadata: { kind: 'unavailable' as const, reason: 'query_invalid' }, admission: undefined }
     }
     const metadata = await readX402DirectoryCatalogueBySlugServer({ data: { providerKey: params.providerHost, slug: params.slug } })
-    if (metadata.kind !== 'found') return { metadata, admission: undefined }
+    if (metadata.kind !== 'found' && metadata.kind !== 'found_upstream') return { metadata, admission: undefined }
     // Not awaited: the directory metadata below (title, Provider, price,
     // description) already renders from `metadata`, and this promise is
     // consumed by `<Await>` so the admitted Tool detail swaps in once ready
     // (or ToolUnavailable, on refusal) without blocking first content.
-    const admission = resolveDirectoryToolDetail(metadata.item.entry.resource, metadata.item.toolRef)
+    const admission = resolveDirectoryToolDetail(metadata.item.entry.resource, metadata.kind === 'found' ? metadata.item.toolRef : undefined)
     return { metadata, admission }
   },
   head: ({ params, loaderData }) => {
-    if (loaderData?.metadata.kind !== 'found') {
+    if (loaderData?.metadata.kind !== 'found' && loaderData?.metadata.kind !== 'found_upstream') {
       return { meta: [{ title: 'Tool unavailable | Agentic Economy' }, { name: 'robots', content: 'noindex' }] }
     }
     const entry = loaderData.metadata.item.entry
@@ -36,7 +36,7 @@ export const Route = createFileRoute('/tools/$providerHost/$slug')({
     })
   },
   pendingComponent: () => <AePageSkeleton title="Loading this Tool…" description="Loading this Tool…" shape="detail" />,
-  errorComponent: () => <AePageState tone="warning" title="Tool details are unavailable" description="AE cannot verify the current descriptor right now." action={<MarketBackButton label="Browse current Tools" className="min-h-touch" />} />,
+  errorComponent: () => <AePageState tone="warning" title="Tool details are unavailable" description="Agentic Economy cannot verify this Tool right now." action={<MarketBackButton label="Browse Market" className="min-h-touch" />} />,
   component: DirectoryToolCanonicalRoute,
 })
 

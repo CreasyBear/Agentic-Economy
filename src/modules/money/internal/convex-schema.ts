@@ -597,7 +597,8 @@ export const moneyTables = {
     .index('by_principalId_and_credentialId_and_currency_and_observedAt', ['principalId', 'credentialId', 'currency', 'observedAt'])
     .index('by_businessId_and_observedAt', ['businessId', 'observedAt'])
     .index('by_callRef', ['callRef'])
-    .index('by_usageRef', ['usageRef']),
+    .index('by_usageRef', ['usageRef'])
+    .index('by_chargeState_and_observedAt', ['chargeState', 'observedAt']),
   moneyX402PaymentAttempts: defineTable({
     dispatchRef: identifier,
     attemptRef: identifier,

@@ -27,7 +27,7 @@ export function AeSection({ title, description, children, id, className, heading
           ref={headingRef}
           id={titleId}
           tabIndex={headingRef === undefined ? undefined : -1}
-          className="font-sans text-base font-semibold leading-snug tracking-tight text-foreground"
+          className="font-sans text-base font-medium leading-snug tracking-tight text-foreground"
         >
           {title}
         </h2>
@@ -41,7 +41,7 @@ export function AeSection({ title, description, children, id, className, heading
 }
 
 export function AeSettingsStack({ children, className }: { children: ReactNode; className?: string }) {
-  return <div className={cn('mx-auto grid w-full max-w-3xl gap-section pb-page', className)}>{children}</div>
+  return <div className={cn('grid w-full gap-section pb-page', className)}>{children}</div>
 }
 
 type AeSettingsRowProps = {

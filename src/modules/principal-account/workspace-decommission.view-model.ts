@@ -26,18 +26,12 @@ export type WorkspaceDecommissionEligibilityView = Readonly<{
   transferCandidates: readonly WorkspaceTransferCandidate[]
 }>
 
-export type WorkspaceFactorEvidence = Readonly<{
-  firstFactorAgeMinutes: number
-  secondFactorAgeMinutes: number
-}>
-
 export type WorkspaceCloseCommand = Readonly<{
   confirmationName: string
   expectedAccountRevision: number
   expectedOwnershipRevision: number
   correlationRef: string
   idempotencyRef: string
-  factorEvidence: WorkspaceFactorEvidence
 }>
 
 export type WorkspaceTransferCommand = Readonly<{
@@ -46,29 +40,63 @@ export type WorkspaceTransferCommand = Readonly<{
   expectedOwnershipRevision: number
   correlationRef: string
   idempotencyRef: string
-  factorEvidence: WorkspaceFactorEvidence
 }>
+
+export type WorkspaceMfaReverificationRefusal = Readonly<{
+  kind: 'refused'
+  code: 'mfa_reverification_required'
+}>
+
+export type WorkspaceCloseResult =
+  | WorkspaceMfaReverificationRefusal
+  | Readonly<{
+    kind: 'closed' | 'replayed'
+    accountRef: string
+    accountRevision: number
+  }>
+
+export type WorkspaceTransferResult =
+  | WorkspaceMfaReverificationRefusal
+  | Readonly<{
+    kind: 'transferred'
+    accountRef: string
+    previousOwnershipRef: string
+    currentOwnershipRef: string
+    accountRevision: number
+  }>
+  | Readonly<{
+    kind: 'replayed'
+    accountRef: string
+    currentOwnershipRef: string
+    accountRevision: number
+  }>
+
+export function isWorkspaceMfaReverificationRefusal(
+  value: WorkspaceCloseResult | WorkspaceTransferResult,
+): value is WorkspaceMfaReverificationRefusal {
+  return value.kind === 'refused'
+}
 
 export type WorkspaceDangerDiagnostic = Rule4Diagnostic
 
 export const FENCE_MESSAGES: Record<WorkspaceDecommissionFence, string> = {
-  unsettled_provider_obligations: 'Provider obligations are still unsettled.',
-  unwithdrawn_earnings: 'Provider earnings have not been withdrawn.',
-  open_calls: 'One or more Calls are still open.',
-  unreleased_call_holds: 'Call holds have not been released.',
-  in_flight_funding: 'A funding command is still in flight.',
-  open_reconciliation: 'A reconciliation case is still open.',
+  unsettled_provider_obligations: 'Provider obligations are still unsettled. Settle them before close.',
+  unwithdrawn_earnings: 'Provider earnings have not been withdrawn. Withdraw them before close.',
+  open_calls: 'One or more Calls are still open. Wait until they finish before close.',
+  unreleased_call_holds: 'Call holds have not been released. Release them before close.',
+  in_flight_funding: 'A funding command is still in flight. Wait until it finishes before close.',
+  open_reconciliation: 'A reconciliation case is still open. Resolve it before close.',
 }
 
 export const CLOSE_FAILURE_DIAGNOSTIC: WorkspaceDangerDiagnostic = {
   whatHappened: 'Workspace close did not complete.',
-  financialImpact: 'A$0.00 moved — prepaid credit and balances are unchanged.',
+  financialImpact: 'No balance is shown for this attempt.',
   nextStep: 'Resolve the listed blockers or try again in a moment.',
 }
 
 export const TRANSFER_FAILURE_DIAGNOSTIC: WorkspaceDangerDiagnostic = {
   whatHappened: 'Ownership transfer did not complete.',
-  financialImpact: 'A$0.00 moved — balances and Calls stayed on this workspace.',
+  financialImpact: 'No balance is shown for this attempt.',
   nextStep: 'Confirm the successor is still an active member and try again.',
 }
 

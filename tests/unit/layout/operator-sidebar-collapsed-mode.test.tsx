@@ -15,7 +15,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import '../../setup/jsdom-platform'
 import '../../setup/jsdom-dialog'
 
-import { AeOperatorSidebar } from '@/components/ae/layout/AeOperatorSidebar'
+import { AeAppSidebar } from '@/components/ae/layout/app-shell/AeAppSidebar'
+import { AeOperatorPage, OperatorChromeProvider } from '@/components/ae/layout/AeOperatorPage'
 import { Sidebar, SidebarRail, SidebarProvider } from '@/components/ui/sidebar'
 
 vi.mock('@/lib/observability/funnel-client', () => ({
@@ -63,10 +64,10 @@ describe('collapsed sidebar icon mode (S-14)', () => {
     expect(rail?.getAttribute('aria-label')).toBe(RAIL_TOGGLE_LABEL)
   })
 
-  it('operator nav buttons use a 3px leading active indicator', () => {
+  it('app nav buttons use a 3px leading active indicator', () => {
     renderOperatorSidebar({ pathname: '/owner/operations', defaultOpen: true })
 
-    const sidebarNav = screen.getByRole('navigation', { name: 'Operator navigation' })
+    const sidebarNav = screen.getByRole('navigation', { name: 'App navigation' })
     const toolsLink = within(sidebarNav).getByRole('link', { name: 'Tools' })
     expect(toolsLink.className).toContain('border-s-[3px]')
 
@@ -83,7 +84,7 @@ describe('collapsed sidebar icon mode (S-14)', () => {
       navBadges: { '/owner/operations': 4 },
     })
 
-    const sidebarNav = screen.getByRole('navigation', { name: 'Operator navigation' })
+    const sidebarNav = screen.getByRole('navigation', { name: 'App navigation' })
     const toolsLink = within(sidebarNav).getByRole('link', { name: 'Tools' })
     const toolsItem = toolsLink.closest('[data-slot="sidebar-menu-item"]')
     expect(toolsItem).toBeTruthy()
@@ -134,11 +135,18 @@ function renderOperatorSidebar(options: {
   render(
     <RouterContextProvider router={router}>
       <SidebarProvider defaultOpen={defaultOpen}>
-        <AeOperatorSidebar
-          operatorRole="owner"
-          currentPath={pathname}
-          {...(navBadges !== undefined ? { navBadges } : {})}
-        />
+        <OperatorChromeProvider>
+          <AeAppSidebar operatorRole="owner" pathname={pathname} hash="" />
+          <AeOperatorPage
+            operatorRole="owner"
+            title="Tools"
+            description="Manage Tools."
+            currentPath={pathname}
+            {...(navBadges === undefined ? {} : { navBadges })}
+          >
+            <div>Tools body</div>
+          </AeOperatorPage>
+        </OperatorChromeProvider>
       </SidebarProvider>
     </RouterContextProvider>,
   )

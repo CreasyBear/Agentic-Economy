@@ -2,6 +2,7 @@ import { Link } from '@tanstack/react-router'
 import { ArrowUpRight, BracesIcon } from 'lucide-react'
 import { useId } from 'react'
 
+import { AeCollectionRail } from '@/components/ae/shared/AeCollectionRail'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { buttonVariants } from '@/components/ui/button-variants'
 import { cn } from '@/lib/utils'
@@ -28,21 +29,25 @@ export function DirectoryIndexDiscovery({ overview, onSave, isSaved, onCompare, 
   const marketPath = useMarketPath()
   const id = useId()
   const shelves = [
-    { key: 'popular', title: 'Popular Tools', description: 'Most Calls reported in the last 30 days.', entries: overview.popular, sort: 'popular' },
-    { key: 'updated', title: 'Recently updated', description: 'Service details ordered by the Provider’s published update date.', entries: overview.recentlyUpdated, sort: 'updated' },
+    { key: 'popular', kicker: 'Adoption', title: 'Popular Tools', description: 'Most Calls reported in the last 30 days.', entries: overview.popular, sort: 'popular' },
+    { key: 'updated', kicker: 'Freshness', title: 'Recently updated', description: 'Service details ordered by the Provider’s published update date.', entries: overview.recentlyUpdated, sort: 'updated' },
   ] as const
 
   return <div className="grid min-w-0 gap-12 pb-10 sm:gap-16">
     {shelves.map(shelf => <section key={shelf.key} className="min-w-0">
-      <Carousel opts={{ align: 'start', loop: false }} aria-labelledby={`${id}-${shelf.key}`}>
-        <div className="mb-5 flex flex-wrap items-end justify-between gap-4">
-          <div className="max-w-2xl"><h2 id={`${id}-${shelf.key}`} className="text-2xl font-medium tracking-tight sm:text-3xl">{shelf.title}</h2><p className="mt-2 text-sm leading-relaxed text-muted-foreground">{shelf.description}</p></div>
-          <div className="flex shrink-0 items-center gap-2">
+      <Carousel opts={{ align: 'start', loop: false }} aria-label={`${shelf.title} carousel`}>
+        <AeCollectionRail
+          kicker={shelf.kicker}
+          title={shelf.title}
+          titleId={`${id}-${shelf.key}`}
+          deck={shelf.description}
+          action={<div className="flex shrink-0 items-center gap-2">
             <Link to={marketPath} search={{ view: 'tools', sort: shelf.sort }} aria-label={`View all ${shelf.title.toLowerCase()}`} className={cn(buttonVariants({ variant: 'ghost', size: 'sm' }), 'mr-1 min-h-touch rounded-full')}>View all<ArrowUpRight className="size-4" aria-hidden="true" /></Link>
             {shelf.entries.length === 0 ? null : <><CarouselPrevious className="static size-10 min-h-touch translate-y-0" aria-label={`Previous ${shelf.title}`} /><CarouselNext className="static size-10 min-h-touch translate-y-0" aria-label={`Next ${shelf.title}`} /></>}
-          </div>
-        </div>
-        {shelf.entries.length === 0 ? <p className="rounded-xl border border-dashed border-border px-5 py-8 text-sm text-muted-foreground">{shelf.key === 'popular' ? 'No reported Call activity is available for this selection yet.' : 'No published update dates are available for this selection yet.'}</p> : <CarouselContent className="-ml-4 py-1">
+          </div>}
+          className="mb-0"
+        />
+        {shelf.entries.length === 0 ? <p className="rounded-card border border-dashed border-border px-5 py-8 text-sm text-muted-foreground">{shelf.key === 'popular' ? 'No reported Call activity is available for this selection yet.' : 'No published update dates are available for this selection yet.'}</p> : <CarouselContent className="-ml-4 py-1">
           {shelf.entries.map(({ entry }) => {
             const item: SavedDirectoryTool = { entry, search: {} }
             return <CarouselItem key={entry.resource} className="basis-[85%] pl-4 sm:basis-1/2 lg:basis-1/3 xl:basis-1/4">
@@ -56,14 +61,16 @@ export function DirectoryIndexDiscovery({ overview, onSave, isSaved, onCompare, 
         </CarouselContent>}
       </Carousel>
     </section>)}
-    <section aria-labelledby={`${id}-providers`}>
-      <div className="mb-5 flex flex-wrap items-end justify-between gap-4">
-        <div><h2 id={`${id}-providers`} className="text-2xl font-medium tracking-tight sm:text-3xl">Explore Providers</h2><p className="mt-2 text-sm leading-relaxed text-muted-foreground">An A–Z selection, with catalogue-wide Tool counts.</p></div>
-        <Link to={marketPath} search={{ view: 'providers' }} className={cn(buttonVariants({ variant: 'ghost', size: 'sm' }), 'min-h-touch rounded-full')}>All Providers<ArrowUpRight className="size-4" aria-hidden="true" /></Link>
-      </div>
+    <AeCollectionRail
+      kicker="Providers"
+      title="Explore Providers"
+      titleId={`${id}-providers`}
+      deck="An A–Z selection, with catalogue-wide Tool counts."
+      action={<Link to={marketPath} search={{ view: 'providers' }} className={cn(buttonVariants({ variant: 'ghost', size: 'sm' }), 'min-h-touch rounded-full')}>All Providers<ArrowUpRight className="size-4" aria-hidden="true" /></Link>}
+    >
       {overview.providers.length === 0 ? <p className="text-sm text-muted-foreground">No Provider hostnames are available for this selection.</p> : <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
         {overview.providers.map(provider => <li key={provider.key} className="min-w-0">
-          <Card className="h-full gap-0 border-border/70 py-0 shadow-none"><CardContent className="p-0">
+          <Card discoverLift className="h-full gap-0 border-border/70 py-0 shadow-none"><CardContent className="p-0">
             <Link to={marketPath} search={{ view: 'tools', provider: provider.key }} aria-label={`View Tools from ${provider.label}`} className="flex min-w-0 items-center gap-3 rounded-card p-4 transition-colors hover:bg-muted/40 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
               <Avatar className="size-11 shrink-0 rounded-xl border border-border/60">
                 {provider.iconUrl === undefined ? null : <AvatarImage src={provider.iconUrl} alt="Published service icon" referrerPolicy="no-referrer" className="object-cover" />}
@@ -74,6 +81,6 @@ export function DirectoryIndexDiscovery({ overview, onSave, isSaved, onCompare, 
           </CardContent></Card>
         </li>)}
       </ul>}
-    </section>
+    </AeCollectionRail>
   </div>
 }

@@ -1,6 +1,6 @@
 import { useRouter } from '@tanstack/react-router'
 import { useServerFn } from '@tanstack/react-start'
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import {
@@ -45,6 +45,9 @@ export function useCallStatusRecovery(loadedResult: CallStatusPageResult): Reado
   const [cancelPending, setCancelPending] = useState(false)
   const [reconcilePending, setReconcilePending] = useState(false)
   const [feedback, setFeedback] = useState<CallStatusPageActions['feedback']>()
+  const [updateError, setUpdateError] = useState<string>()
+  const [pollPending, setPollPending] = useState(false)
+  const requestInFlight = useRef(false)
   const readStatus = useServerFn(readOwnerCallStatusServer)
   const cancel = useServerFn(cancelOwnerCallServer)
   const reconcile = useServerFn(reconcileOwnerCallServer)
@@ -57,8 +60,51 @@ export function useCallStatusRecovery(loadedResult: CallStatusPageResult): Reado
     setLocalStatus({ source: loadedResult, current })
   }
 
+  // Status observation is read-only. Keep the last useful result on an outage,
+  // pause in hidden tabs, and never overlap a read with a recovery command.
+  const autoRefresh = result.kind === 'found'
+    && ['authorized', 'leased', 'in_progress', 'reconciliation_required'].includes(result.state)
+  const observedState = result.kind === 'found' ? result.state : undefined
+  useEffect(() => {
+    if (!autoRefresh) return
+    let disposed = false
+    let nextReadAt = Date.now() + 5_000
+    let failures = 0
+    async function poll() {
+      if (disposed) return
+      if (document.visibilityState === 'hidden' || requestInFlight.current || Date.now() < nextReadAt) return
+      requestInFlight.current = true
+      setPollPending(true)
+      try {
+        const current = await readStatus({ data: { callRef: result.callRef } })
+        if (!disposed) {
+          failures = 0
+          setUpdateError(undefined)
+          if (current.kind !== 'unchanged') setLocalStatus({ source: loadedResult, current })
+        }
+      } catch (cause) {
+        captureClientExceptionOnClient(cause)
+        if (!disposed) {
+          failures += 1
+          setUpdateError('Updates are delayed. Your last recorded status is still shown; we will check again.')
+        }
+      } finally {
+        requestInFlight.current = false
+        setPollPending(false)
+        nextReadAt = Date.now() + Math.min(30_000, 5_000 * 2 ** failures)
+      }
+    }
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') { nextReadAt = 0; void poll() }
+    }
+    const timer = setInterval(() => { void poll() }, 5_000)
+    document.addEventListener('visibilitychange', onVisible)
+    return () => { disposed = true; clearInterval(timer); document.removeEventListener('visibilitychange', onVisible) }
+  }, [autoRefresh, loadedResult, readStatus, result.callRef, observedState])
+
   async function refreshCurrentStatus() {
-    if (refreshPending || cancelPending || reconcilePending || !canRefreshCallStatus(result)) return
+    if (requestInFlight.current || refreshPending || cancelPending || reconcilePending || !canRefreshCallStatus(result)) return
+    requestInFlight.current = true
     setRefreshPending(true)
     setFeedback(undefined)
     try {
@@ -70,12 +116,14 @@ export function useCallStatusRecovery(loadedResult: CallStatusPageResult): Reado
       captureClientExceptionOnClient(cause)
       setFeedback({ kind: 'error', message: 'The current status source is unavailable. The displayed state has not changed.' })
     } finally {
+      requestInFlight.current = false
       setRefreshPending(false)
     }
   }
 
   async function cancelCurrentCall() {
-    if (refreshPending || cancelPending || reconcilePending || result.kind !== 'found' || !(result.state === 'authorized' || result.state === 'retryable' || result.state === 'leased')) return
+    if (requestInFlight.current || refreshPending || cancelPending || reconcilePending || result.kind !== 'found' || !(result.state === 'authorized' || result.state === 'retryable' || result.state === 'leased')) return
+    requestInFlight.current = true
     setCancelPending(true)
     setFeedback(undefined)
     cancelIdempotencyKeyRef.current ??= readStoredCancellationKey(result.callRef) ?? crypto.randomUUID()
@@ -105,13 +153,15 @@ export function useCallStatusRecovery(loadedResult: CallStatusPageResult): Reado
       captureClientExceptionOnClient(cause)
       setFeedback({ kind: 'error', message: 'The cancellation source is unavailable. No new Call state is claimed.' })
     } finally {
+      requestInFlight.current = false
       setCancelPending(false)
     }
   }
 
   async function reconcileCurrentCall(input: CallReconciliationForm) {
     if (
-      refreshPending
+      requestInFlight.current
+      || refreshPending
       || cancelPending
       || reconcilePending
       || result.kind !== 'found'
@@ -127,6 +177,7 @@ export function useCallStatusRecovery(loadedResult: CallStatusPageResult): Reado
       return
     }
     setReconcilePending(true)
+    requestInFlight.current = true
     setFeedback(undefined)
     try {
       const draft = { resolution: input.resolution, source, evidenceRef }
@@ -182,6 +233,7 @@ export function useCallStatusRecovery(loadedResult: CallStatusPageResult): Reado
       captureClientExceptionOnClient(cause)
       setFeedback({ kind: 'error', message: 'The reconciliation source is unavailable. No new Call state is claimed.' })
     } finally {
+      requestInFlight.current = false
       setReconcilePending(false)
     }
   }
@@ -196,13 +248,14 @@ export function useCallStatusRecovery(loadedResult: CallStatusPageResult): Reado
     result,
     actions: {
       onRefresh: refreshCurrentStatus,
-      refreshPending,
+      refreshPending: refreshPending || pollPending,
+      autoRefresh,
       onCancel: cancelCurrentCall,
       cancelPending,
       onReconcile: (input) => { void reconcileCurrentCall(input) },
       reconcilePending,
       ...(retainedReconciliation === undefined ? {} : { reconciliationDraft: retainedReconciliation.draft }),
-      ...(feedback === undefined ? {} : { feedback }),
+      ...(feedback !== undefined ? { feedback } : updateError === undefined ? {} : { feedback: { kind: 'error' as const, message: updateError } }),
     },
   }
 }

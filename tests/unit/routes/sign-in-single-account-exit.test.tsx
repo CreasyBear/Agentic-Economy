@@ -2,7 +2,7 @@
  * @vitest-environment jsdom
  */
 import { cleanup, render, screen } from '@testing-library/react'
-import type { ComponentType } from 'react'
+import type { ComponentType, ReactNode } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import '../../setup/jsdom-platform'
 
@@ -21,12 +21,14 @@ vi.mock('@tanstack/react-router', () => ({
       useSearch: () => routeState.search,
     }
   },
+  Link: ({ children, to }: { children: ReactNode; to: string }) => <a href={to}>{children}</a>,
   // AePublicPage renders AeSiteFooter, which reads the route table via
   // useRouter(); an empty table is enough to render its (empty) columns.
   useRouter: () => ({ routesByPath: {} }),
 }))
 
 vi.mock('@clerk/tanstack-react-start', () => ({
+  useAuth: () => ({ isLoaded: true, isSignedIn: false }),
   SignIn: (props: Record<string, unknown>) => {
     routeState.clerkProps = props
     return (
@@ -46,20 +48,19 @@ afterEach(() => {
 })
 
 describe('sign-in account exit', () => {
-  it('returns an unqualified sign-in to wherever the visitor left off', () => {
+  it('returns an unqualified sign-in to Market', () => {
     const Component = routeState.SignIn
     if (Component === null) throw new Error('Sign-in route was not captured.')
 
     render(<Component />)
 
     expect(screen.getByRole('heading', { name: 'Sign in' })).toBeTruthy()
-    expect(screen.getByText(/Use email, Google, GitHub, or a passkey/)).toBeTruthy()
-    expect(screen.getByText(/return to where you left off/)).toBeTruthy()
+    expect(screen.getByText(/continue on Market/)).toBeTruthy()
     expect(document.body.textContent?.toLowerCase()).not.toContain('supplier')
     expect(document.body.textContent).not.toContain('manage Operations')
     expect(routeState.clerkProps).toMatchObject({
-      fallbackRedirectUrl: '/owner/settings',
-      signUpFallbackRedirectUrl: '/owner/settings',
+      fallbackRedirectUrl: '/market',
+      signUpFallbackRedirectUrl: '/market',
       signUpUrl: '/sign-up',
     })
   })
@@ -72,7 +73,7 @@ describe('sign-in account exit', () => {
     render(<Component />)
 
     expect(screen.getByRole('heading', { name: 'Sign in to manage Tools' })).toBeTruthy()
-    expect(screen.getByText(/return to your Provider workspace/)).toBeTruthy()
+    expect(screen.getByText(/return to your Provider Workspace/)).toBeTruthy()
     expect(screen.getAllByText(/Don’t have an account/)).toHaveLength(1)
     expect(screen.getByRole('link', { name: 'Sign up' }).getAttribute('href')).toBe('/sign-up')
     expect(screen.queryByRole('link', { name: 'Create one' })).toBeNull()
@@ -90,8 +91,8 @@ describe('sign-in account exit', () => {
 
     render(<Component />)
 
-    expect(screen.getByRole('heading', { name: 'Sign in to connect an agent' })).toBeTruthy()
-    expect(screen.getByText(/return to the agent connection you started/)).toBeTruthy()
+    expect(screen.getByRole('heading', { name: 'Sign in to connect an Agent' })).toBeTruthy()
+    expect(screen.getByText(/return to the Agent connection you started/)).toBeTruthy()
     expect(routeState.clerkProps).toMatchObject({
       fallbackRedirectUrl: '/agent-access',
       signUpFallbackRedirectUrl: '/agent-access',

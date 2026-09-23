@@ -1,5 +1,4 @@
 import { createFileRoute, Outlet, useLocation } from '@tanstack/react-router'
-import { Boxes } from 'lucide-react'
 
 import { AeProviderWorkspace } from '@/components/ae/offerings/provider-workspace/AeProviderWorkspace'
 import { AeProviderWorkspaceSkeleton } from '@/components/ae/offerings/provider-workspace/AeProviderWorkspaceSkeleton'
@@ -14,21 +13,6 @@ import { operatorRouteOptions } from '@/lib/operator/route-options'
 import { parseOwnerToolsCompatibilitySearch } from '@/lib/operator/supply-compatibility'
 
 export const Route = createFileRoute('/_operator/owner/operations')({
-  staticData: {
-    nav: {
-      label: 'Tools',
-      operator: {
-        roles: ['owner'],
-        group: 'Supply',
-        groupOrder: 1,
-        order: 0,
-        icon: Boxes,
-        tier: 'core',
-        mobilePrimary: true,
-        mobileOrder: 30,
-      },
-    },
-  },
   ...operatorRouteOptions,
   validateSearch: parseOwnerToolsCompatibilitySearch,
   loaderDeps: ({ search }) => ({ cursor: search.cursor }),

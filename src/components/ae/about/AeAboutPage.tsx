@@ -1,160 +1,85 @@
-import { Link } from '@tanstack/react-router'
-
 import {
-  AeCornerMarks,
-  AeSiteBody,
-  AeSiteButton,
-  AeSiteCover,
-  AeSiteEyebrow,
-  AeSiteHeading,
-  AeSiteHeadingPair,
-  AeSiteHeroIntro,
-  AeSiteIntro,
-  AeSiteResourceList,
-  AeSiteSection,
-  AeSiteSplitPair,
-  AeSiteStack,
+  AeSiteAboutHero,
+  AeSiteCtaBand,
+  AeSiteEditorial,
+  AeSiteFeatureGrid,
 } from '@/components/ae/website'
-import { ABOUT, AGENT_DOOR, BUSINESS_DOOR } from '@/content/brand-copy'
-import { AECON_MARK_SRC, aeconMarkClassName } from '@/content/brand-assets'
+import { AE_SITE_FOOTER } from '@/components/ae/website/AeSiteFooter.contracts'
+import { SUPPORT_EMAIL } from '@/components/ae/support/help/help.contracts'
+import { ABOUT } from '@/content/brand-copy'
 
-const MACHINE_FILES = [
-  { name: 'llms.txt', description: 'Public catalog index', href: '/llms.txt', letter: 'L' },
-  { name: 'SKILL.md', description: 'Assistant procedure', href: '/SKILL.md', letter: 'S' },
-  { name: '.well-known/ucp', description: 'Machine handshake', href: '/.well-known/ucp', letter: 'U' },
-] as const
+const SUPPORT_EMAIL_LABEL = SUPPORT_EMAIL.replace(/^mailto:/, '')
 
 export function AeAboutPage() {
   return (
     <>
-      <AeSiteSection labelledBy="about-hero" rhythm="hero" scheme="ink">
-        <AeSiteHeroIntro>
-          <AeSiteHeadingPair>
-            <AeSiteEyebrow>{ABOUT.eyebrow}</AeSiteEyebrow>
-            <div className="mx-auto w-full max-w-xl">
-              <AeSiteHeading as="h1" size="lg" id="about-hero">
-                {ABOUT.heading}
-              </AeSiteHeading>
-            </div>
-            <div className="mx-auto w-full max-w-lg">
-              <AeSiteBody muted size="sm" className="mx-auto">
-                {ABOUT.subhead}
-              </AeSiteBody>
-            </div>
-          </AeSiteHeadingPair>
-          <div className="flex flex-wrap items-center justify-center gap-related">
-            <AeSiteButton asChild>
-              <Link to="/for-agents">{AGENT_DOOR.cta}</Link>
-            </AeSiteButton>
-            <AeSiteButton asChild variant="outlined">
-              <Link to="/for-providers">{BUSINESS_DOOR.cta}</Link>
-            </AeSiteButton>
-          </div>
-        </AeSiteHeroIntro>
-        <div className="relative mx-auto mt-hero size-20">
-          <img src={AECON_MARK_SRC} alt="" aria-hidden="true" className={aeconMarkClassName.about} />
-        </div>
-      </AeSiteSection>
-      <AeSiteSection labelledBy="about-doors" scheme="surface">
-        <AeSiteStack>
-          <AeSiteIntro>
-            <AeSiteHeading as="h2" size="lg" id="about-doors">
-              {ABOUT.doorsHeading}
-            </AeSiteHeading>
-          </AeSiteIntro>
-          <AeSiteSplitPair
-            left={
-              <AboutDoor
-                headingId="about-agent-door"
-                heading={AGENT_DOOR.heading}
-                body={AGENT_DOOR.body}
-              />
-            }
-            right={
-              <AboutDoor
-                headingId="about-provider-door"
-                heading={BUSINESS_DOOR.heading}
-                body={BUSINESS_DOOR.body}
-              />
-            }
-          />
-        </AeSiteStack>
-      </AeSiteSection>
-      <AeSiteSection labelledBy="about-settlement" scheme="canvas">
-        <div className="grid max-w-3xl gap-related">
-          <AeSiteHeading as="h2" size="md" id="about-settlement">
-            {ABOUT.settlementHeading}
-          </AeSiteHeading>
-          <AeSiteBody muted>{ABOUT.settlementBody}</AeSiteBody>
-        </div>
-      </AeSiteSection>
-      <AeSiteSection labelledBy="about-suppliers" scheme="surface">
-        <AeSiteSplitPair
-          left={
-            <div className="grid content-start gap-section">
-              <div className="grid gap-related">
-                <AeSiteHeading as="h2" size="md" id="about-suppliers">
-                  {ABOUT.providersHeading}
-                </AeSiteHeading>
-                <AeSiteBody muted>{ABOUT.providersBody}</AeSiteBody>
-              </div>
-              <AeSiteButton asChild variant="outlined" className="w-fit">
-                <Link to="/market">
-                  Browse the live catalog
-                </Link>
-              </AeSiteButton>
-            </div>
-          }
-          right={
-            <AeSiteCover
-              className="max-w-none"
-              eyebrow="Catalog"
-              title="Market"
-              meta="Inspect before you call"
-              href="/market"
-            />
-          }
-        />
-      </AeSiteSection>
-      <AeSiteSection labelledBy="about-machines" scheme="muted">
-        <div className="relative max-w-3xl border border-border bg-container p-page">
-          <AeCornerMarks />
-          <div className="grid gap-section">
-            <div className="grid gap-related">
-              <AeSiteHeading as="h2" size="md" id="about-machines">
-                {ABOUT.machinesHeading}
-              </AeSiteHeading>
-              <AeSiteBody muted>{ABOUT.machinesBody}</AeSiteBody>
-            </div>
-            <nav aria-label="Machine-readable files">
-              <AeSiteResourceList items={MACHINE_FILES} />
-            </nav>
-          </div>
-        </div>
-      </AeSiteSection>
-    </>
-  )
-}
+      <AeSiteAboutHero
+        label={ABOUT.eyebrow}
+        title={ABOUT.heading}
+        description={ABOUT.subhead}
+        image={ABOUT.heroImage}
+      />
 
-function AboutDoor({
-  heading,
-  body,
-  headingId,
-}: Readonly<{
-  heading: string
-  body: string
-  headingId: string
-}>) {
-  return (
-    <div className="grid content-start gap-related">
-      <div className="grid gap-intra">
-        <h3 id={headingId} className="font-display text-2xl font-medium tracking-tight sm:text-3xl">
-          {heading}
-        </h3>
-        <AeSiteBody muted size="sm">
-          {body}
-        </AeSiteBody>
-      </div>
-    </div>
+      <AeSiteEditorial
+        label={ABOUT.editorialLabel}
+        title={ABOUT.editorialTitle}
+        description={ABOUT.editorialDescription}
+      >
+        <div className="flex flex-col gap-6">
+          {ABOUT.editorialParagraphs.map((paragraph) => (
+            <p key={paragraph} className="leading-relaxed text-muted-foreground">
+              {paragraph}
+            </p>
+          ))}
+          <div className="flex flex-wrap gap-x-6 gap-y-3">
+            {ABOUT.editorialLinks.map((link) => (
+              <a
+                key={link.href}
+                href={link.href}
+                className="inline-flex min-h-touch items-center font-medium text-primary underline-offset-4 hover:underline"
+              >
+                {link.label}
+              </a>
+            ))}
+          </div>
+        </div>
+      </AeSiteEditorial>
+
+      <AeSiteFeatureGrid
+        label={ABOUT.featuresLabel}
+        title={ABOUT.featuresHeading}
+        items={ABOUT.features}
+      />
+
+      <AeSiteCtaBand
+        title={ABOUT.ctaHeading}
+        description={(
+          <>
+            {ABOUT.ctaDescription}
+            <span className="mt-4 block text-sm">
+              {ABOUT.operatorLine.prefix}
+              {ABOUT.operatorLine.separator}
+              <a
+                href={AE_SITE_FOOTER.abn.href}
+                rel="noreferrer"
+                target="_blank"
+                aria-label={`${AE_SITE_FOOTER.abn.label} (opens in a new tab)`}
+                className="font-medium text-foreground underline underline-offset-4"
+              >
+                {AE_SITE_FOOTER.abn.label}
+              </a>
+              {ABOUT.operatorLine.separator}
+              <a
+                href={SUPPORT_EMAIL}
+                className="font-medium text-foreground underline underline-offset-4"
+              >
+                {SUPPORT_EMAIL_LABEL}
+              </a>
+            </span>
+          </>
+        )}
+        primary={{ label: ABOUT.ctaPrimary, to: '/market' }}
+      />
+    </>
   )
 }

@@ -2,44 +2,13 @@
 
 import { createContext, use, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
-import { useMatches } from '@tanstack/react-router'
 
-import { AeOperatorBreadcrumbs, type OperatorBreadcrumbItem } from '@/components/ae/layout/AeOperatorBreadcrumbs'
-import { AeOwnerMobileNavigation } from '@/components/ae/layout/AeOwnerMobileNavigation'
-import { AeRecordHeader } from '@/components/ae/layout/AeRecordHeader'
-import {
-  ownerWorkspaceOwnerForPath,
-  type OperatorNavBadges,
-  type OperatorRole,
+import type { OperatorBreadcrumbItem } from '@/components/ae/layout/AeOperatorBreadcrumbs'
+import type {
+  OperatorNavBadges,
+  OperatorRole,
 } from '@/lib/operator/roles'
 import type { OperatorContext } from '@/lib/operator/operator-context'
-
-/**
- * The "List" half of a shell-derived breadcrumb trail: the nearest sidebar
- * destination that is a strict ancestor of `currentPath`. Returns undefined
- * on a list page itself (top of its section, no trail needed) or when no
- * ancestor match carries a nav label. The terminal "Detail" crumb (the
- * page's own title) is appended by RootOperatorPage, so no per-route
- * breadcrumbs prop is needed.
- *
- * Owner routes under /owner/supply/* and /owner/settings/{connections,payouts}
- * are not route-tree descendants of the /owner/operations sidebar item that
- * owns them, so that one owner-specific mapping is preserved on top of the
- * useMatches() ancestor walk.
- */
-function useOperatorListCrumb(operatorRole: OperatorRole, currentPath: string): OperatorBreadcrumbItem | undefined {
-  const matches = useMatches()
-
-  return useMemo(() => {
-    if (operatorRole === 'owner' && ownerWorkspaceOwnerForPath(currentPath) === 'operations' && currentPath !== '/owner/operations') {
-      return { label: 'Tools', href: '/owner/operations' }
-    }
-
-    const ancestor = matches.slice(0, -1).findLast((match) => match.staticData.nav?.label !== undefined)
-    const label = ancestor?.staticData.nav?.label
-    return ancestor === undefined || label === undefined ? undefined : { label, href: ancestor.pathname }
-  }, [matches, operatorRole, currentPath])
-}
 
 type OperatorPageChrome = Omit<AeOperatorPageProps, 'children' | 'operatorContext'>
 
@@ -72,13 +41,6 @@ export function useOperatorSidebarChrome(): OperatorPageChrome | null {
   return use(OperatorSidebarChromeContext)?.chrome ?? null
 }
 
-// Carries the `/_operator` layout's mobile `SidebarTrigger` down into the
-// root AeOperatorPage's own header row (beside the breadcrumb), the same
-// way shadcn's `SidebarInset` header hosts the trigger next to its
-// breadcrumb. Defaults to null so tests that render AeOperatorPage without
-// a SidebarProvider ancestor (error/pending/not-found states) render no
-// trigger instead of throwing from `useSidebar`.
-const OperatorMobileTriggerContext = createContext<ReactNode | null>(null)
 
 export type AeOperatorPageProps = {
   operatorRole: OperatorRole
@@ -170,26 +132,14 @@ function RootOperatorPage(props: AeOperatorPageProps) {
   const currentChrome = registeredChrome ?? propsChrome
 
   const {
-    operatorRole,
-    title,
     description,
     actions,
     secondaryBar,
-    stickyHeader,
-    currentPath,
     mainContentId,
-    breadcrumbs: providedBreadcrumbs,
-    suppressSurfaceNavigation,
   } = currentChrome
-  const { children, operatorContext } = props
+  const { children } = props
   const resolvedMainContentId = mainContentId ?? 'main-content'
-
-  const listCrumb = useOperatorListCrumb(operatorRole, currentPath)
-  const breadcrumbs = useMemo<readonly OperatorBreadcrumbItem[]>(
-    () => providedBreadcrumbs ?? (listCrumb === undefined ? [] : [listCrumb, { label: title }]),
-    [listCrumb, providedBreadcrumbs, title],
-  )
-  const mobileTrigger = use(OperatorMobileTriggerContext)
+  const showDescriptionLine = description !== '' || actions !== undefined
 
   // Bubble the resolved chrome (in particular navBadges) up to the hoisted
   // sidebar bridge, when one is mounted above this route (see
@@ -208,72 +158,39 @@ function RootOperatorPage(props: AeOperatorPageProps) {
         id={resolvedMainContentId}
         tabIndex={-1}
         data-testid="operator-content"
-        className="ae-rail flex min-h-0 flex-1 flex-col pb-[calc(4.5rem+env(safe-area-inset-bottom,0px))] focus:outline-none md:pb-related"
+        className="ae-rail flex min-h-0 flex-1 flex-col outline-none focus:outline-solid focus:outline-2 focus:outline-offset-2 focus:outline-ring"
       >
-        {mobileTrigger === null && breadcrumbs.length === 0 ? null : (
-          <div className="flex min-h-touch shrink-0 items-center gap-related px-gutter pt-intra">
-            {mobileTrigger}
-            {breadcrumbs.length === 0 ? null : <AeOperatorBreadcrumbs items={breadcrumbs} />}
-          </div>
-        )}
-        {stickyHeader === true ? (
-          <div
-            data-testid="operator-sticky-shelf"
-            data-sticky-shelf="true"
-            className="sticky top-(--header-height) z-10 -mx-gutter px-gutter border-b border-border/80 bg-background/95 pb-intra backdrop-blur supports-[backdrop-filter]:bg-background/85"
-          >
-            <AeRecordHeader
-              title={title}
-              description={description}
-              {...(actions === undefined ? {} : { actions })}
-            />
-            {secondaryBar === undefined ? null : secondaryBar}
-          </div>
-        ) : (
-          <>
-            <AeRecordHeader
-              title={title}
-              description={description}
-              {...(secondaryBar === undefined ? {} : { className: 'pb-intra' })}
-              {...(actions === undefined ? {} : { actions })}
-            />
-            {secondaryBar === undefined ? null : secondaryBar}
-          </>
-        )}
         <div
           data-testid="operator-page-stack"
           className="grid min-h-0 flex-1 content-start gap-section pt-related"
         >
+          {showDescriptionLine ? (
+            <div className="flex flex-wrap items-center gap-related">
+              {description === '' ? null : (
+                <p className="max-w-[65ch] text-pretty text-sm leading-normal text-muted-foreground">
+                  {description}
+                </p>
+              )}
+              {actions}
+            </div>
+          ) : null}
+          {secondaryBar === undefined ? null : secondaryBar}
           {children}
         </div>
       </main>
-      {operatorRole === 'owner' && suppressSurfaceNavigation !== true
-        ? (
-            <AeOwnerMobileNavigation
-              {...(operatorContext === undefined ? {} : { operatorContext })}
-              currentPath={currentPath}
-            />
-          )
-        : null}
     </OperatorShellChromeContext.Provider>
   )
 }
 
 export type OperatorChromeProviderProps = {
-  sidebar?: ReactNode
-  /** The mobile `SidebarTrigger`, rendered in flow in the root AeOperatorPage's header row. */
-  mobileTrigger?: ReactNode
   children: ReactNode
 }
 
 /**
- * Mounted once by the `/_operator` layout route around the sidebar and
- * the content column beside the sidebar. Hosts the Tier B bridge so
- * `AeOperatorSidebar` (a sibling of the routed outlet, not a descendant of
- * any AeOperatorPage) can read the navBadges the current route's root
- * AeOperatorPage resolves.
+ * Root-frame bridge for current operator chrome. It keeps focus transitions
+ * and sidebar badges stable while route content changes.
  */
-export function OperatorChromeProvider({ sidebar, mobileTrigger, children }: OperatorChromeProviderProps) {
+export function OperatorChromeProvider({ children }: OperatorChromeProviderProps) {
   const [chrome, setRegisteredChrome] = useState<OperatorPageChrome | null>(null)
   const setChrome = useCallback((nextChrome: OperatorPageChrome) => {
     setRegisteredChrome(nextChrome)
@@ -319,10 +236,7 @@ export function OperatorChromeProvider({ sidebar, mobileTrigger, children }: Ope
 
   return (
     <OperatorSidebarChromeContext.Provider value={registration}>
-      <OperatorMobileTriggerContext.Provider value={mobileTrigger ?? null}>
-        {sidebar}
-        <div className="relative flex w-full flex-1 flex-col bg-background">{children}</div>
-      </OperatorMobileTriggerContext.Provider>
+      {children}
     </OperatorSidebarChromeContext.Provider>
   )
 }

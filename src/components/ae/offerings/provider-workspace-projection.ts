@@ -8,6 +8,7 @@ import {
   providerToolReasonPresentation,
 } from '@/modules/capability-supply/provider-tool-status'
 import type { ProviderToolStatus } from '@/modules/capability-supply/provider-tool-status'
+import { getStatusPresentation } from '@/lib/ui/status-presentation'
 import type { OfferingRef } from '@/modules/common/ids'
 import type {
   BusinessOfferingProjection,
@@ -52,9 +53,9 @@ export function ownerToolAvailabilityPresentation(availability: OwnerToolAvailab
   if (availability === undefined) return undefined
   switch (availability) {
     case 'available':
-      return { label: 'Operational', variant: 'success', hasDot: true }
+      return { label: getStatusPresentation('operational').label, variant: 'success', hasDot: true }
     case 'unavailable':
-      return { label: 'Degraded', variant: 'destructive', hasDot: true }
+      return { label: getStatusPresentation('degraded').label, variant: 'destructive', hasDot: true }
     case 'unknown':
       return { label: 'Checking', variant: 'warning', hasDot: false }
     default: {
@@ -74,6 +75,9 @@ export function ownerToolLifecycleVariant(
   if (lifecycle === 'Published') {
     return { label: 'Published', variant: 'success' }
   }
+  if (lifecycle === 'Paused') {
+    return { label: getStatusPresentation('paused').label, variant: 'warning' }
+  }
   if (
     lifecycle === 'Draft'
     || lifecycle === 'Needs setup'
@@ -83,8 +87,7 @@ export function ownerToolLifecycleVariant(
     return { label: lifecycle, variant: 'outline' }
   }
   if (
-    lifecycle === 'Paused'
-    || lifecycle === 'Action required'
+    lifecycle === 'Action required'
     || lifecycle === 'Updating'
     || lifecycle === 'Status unavailable'
   ) {

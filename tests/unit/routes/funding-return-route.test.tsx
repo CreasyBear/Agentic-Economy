@@ -50,8 +50,8 @@ function renderFundingReturn() {
   const rootRoute = createRootRoute()
   const routeTree = rootRoute.addChildren([
     createRoute({ getParentRoute: () => rootRoute, path: '/' }),
+    createRoute({ getParentRoute: () => rootRoute, path: '/agent-access' }),
     createRoute({ getParentRoute: () => rootRoute, path: '/owner/credit' }),
-    createRoute({ getParentRoute: () => rootRoute, path: '/market' }),
   ])
   const router = createRouter({ routeTree, history: createMemoryHistory({ initialEntries: ['/'] }) })
   render(<RouterContextProvider router={router}>{createElement(Component)}</RouterContextProvider>)
@@ -67,9 +67,9 @@ describe('public funding return', () => {
     expect(screen.getByText(/Do not start another payment/u)).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Check this payment' }))
 
-    expect(await screen.findByRole('heading', { name: 'Account credit added' })).toBeTruthy()
-    expect(screen.getByText(/Return to Research Agent/u)).toBeTruthy()
-    expect(screen.getByRole('link', { name: 'Open Balance' })).toBeTruthy()
+    expect(await screen.findByRole('heading', { name: 'Credit added' })).toBeTruthy()
+    expect(screen.getByText(/^Paid\. A\$10\.00 is now available/u)).toBeTruthy()
+    expect(screen.getByRole('link', { name: 'Open Agents' }).getAttribute('href')).toBe('/agent-access')
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2))
     expect(fetchMock.mock.calls.map(([url]) => url)).toEqual([
       '/api/v1/account/funding-sessions/public/cs_agent_one',
@@ -123,7 +123,7 @@ describe('public funding return', () => {
     renderFundingReturn()
 
     expect(await screen.findByRole('heading', { name: title })).toBeTruthy()
-    expect(screen.getByRole('link', { name: 'Open Balance' })).toBeTruthy()
+    expect(screen.getByRole('link', { name: 'Open Credit' })).toBeTruthy()
     expect(screen.queryByRole('button', { name: /Check/u })).toBeNull()
   })
 
@@ -132,25 +132,28 @@ describe('public funding return', () => {
 
     renderFundingReturn()
 
-    expect(await screen.findByRole('heading', { name: 'Funding link unavailable' })).toBeTruthy()
-    expect(screen.getByRole('link', { name: 'Open Market' })).toBeTruthy()
+    expect(await screen.findByRole('heading', { name: 'Invalid funding link' })).toBeTruthy()
+    expect(screen.getByRole('link', { name: 'Open Credit' }).getAttribute('href')).toBe('/owner/credit')
     expect(screen.queryByRole('button', { name: 'Try again' })).toBeNull()
   })
 })
 
 describe('AM-09 lost Checkout session cancel page', () => {
-  it('does not invite a new payment without a Checkout session', () => {
+  it('states that credit and authority are unchanged', () => {
     const Component = CancelledRoute.options.component
     if (Component === undefined) throw new Error('funding_cancelled_component_missing')
     const rootRoute = createRootRoute()
     const routeTree = rootRoute.addChildren([
       createRoute({ getParentRoute: () => rootRoute, path: '/' }),
-      createRoute({ getParentRoute: () => rootRoute, path: '/market' }),
+      createRoute({ getParentRoute: () => rootRoute, path: '/agent-access' }),
+      createRoute({ getParentRoute: () => rootRoute, path: '/owner/credit' }),
     ])
     const router = createRouter({ routeTree, history: createMemoryHistory({ initialEntries: ['/'] }) })
     render(<RouterContextProvider router={router}>{createElement(Component)}</RouterContextProvider>)
     expect(screen.getByRole('heading', { name: 'Payment cancelled' })).toBeTruthy()
+    expect(screen.getByText('No Account credit changed, and no authority changed.')).toBeTruthy()
+    expect(screen.getByRole('link', { name: 'Open Credit' }).getAttribute('href')).toBe('/owner/credit')
+    expect(screen.getByRole('link', { name: 'Open Agents' }).getAttribute('href')).toBe('/agent-access')
     expect(screen.queryByRole('link', { name: 'Try again' })).toBeNull()
-    expect(screen.getByRole('link', { name: 'Back to Market' })).toBeTruthy()
   })
 })

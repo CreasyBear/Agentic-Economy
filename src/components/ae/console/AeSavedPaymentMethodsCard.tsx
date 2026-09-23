@@ -95,8 +95,8 @@ function DiagnosticSlot({ showError }: { showError: boolean }) {
         <Alert variant="destructive">
           <AlertTitle className="text-sm font-medium">Could not open Stripe billing portal.</AlertTitle>
           <AlertDescription className="grid gap-1 text-xs">
-            <span>A$0.00 charged — your payment methods are unchanged.</span>
-            <span>Please check your network connection or try again in a few moments.</span>
+            <span>Nothing was charged. Your payment methods are unchanged.</span>
+            <span>Check your network connection or try again in a few moments.</span>
           </AlertDescription>
         </Alert>
       ) : null}
@@ -130,7 +130,7 @@ export function AeSavedPaymentMethodsCard({
       void cause
       setPortalDiagnostic(true)
       toast.error('Could not open Stripe billing portal.', {
-        description: 'Please check your network connection or try again in a few moments.',
+        description: 'Nothing was charged. Check your network connection or try again in a few moments.',
       })
     } finally {
       setManaging(false)
@@ -140,7 +140,7 @@ export function AeSavedPaymentMethodsCard({
   if (isLoading) {
     return (
       <div
-        className="grid gap-3 rounded-xl border border-border/70 p-4"
+        className="grid gap-3 border-t border-border pt-4"
         aria-busy="true"
         role="status"
         aria-label="Loading payment methods"
@@ -158,8 +158,8 @@ export function AeSavedPaymentMethodsCard({
   const ready = summary?.kind === 'ready' && summary.hasPaymentMethod
 
   return (
-    <div className="grid gap-3 rounded-xl border border-border/70 p-4">
-      <h3 className="font-medium">Payment methods</h3>
+    <div className="grid gap-3 border-t border-border pt-4">
+      <h3 className="text-sm font-medium">Payment methods</h3>
 
       <div className="min-h-[4.5rem]">
         {ready ? (
@@ -229,6 +229,7 @@ export function AeSavedPaymentMethodsCard({
       ) : (
         <Button
           type="button"
+          variant="secondary"
           disabled={managing}
           className={CTA_PRESS_CLASS}
           onClick={() => {

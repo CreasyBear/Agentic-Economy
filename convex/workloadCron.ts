@@ -94,12 +94,7 @@ type EnsurePlatformWorkloadIdentitiesResult = Readonly<{
   created: string[]
 }>
 
-// Self-healing bootstrap for the cron fleet's machine identity. Every scheduled
-// workload admits through WorkloadContextAdmission with fixed system refs,
-// which throws workload_principal_missing on any fresh deployment. This
-// internalMutation inserts the canonical rows (see convex/agentAccessOAuth.test.ts
-// and tests/integration/facilitator-discovery.test.ts fixtures) when absent and
-// leaves existing rows untouched, so it is safe to run on every stack bring-up.
+// Self-healing bootstrap keeps the cron fleet's fixed machine identity present.
 export async function ensurePlatformWorkloadIdentitiesHandler(
   ctx: MutationCtx,
 ): Promise<EnsurePlatformWorkloadIdentitiesResult> {
@@ -523,18 +518,11 @@ export async function refreshCapabilitySupplyReadinessHandler(ctx: WorkloadCronM
   return null
 }
 
-// `rebuildAllBusinessSupplyProjections` stays the permanent maintenance entry
-// point invoked directly by operators (`npx convex run
-// capabilitySupplyProjection:rebuildAllBusinessSupplyProjections '{}'`), so its
-// args shape is untouched here. This wrapper only admits the canonical cron
-// workload identity before calling it with no cursor, matching page 1; the
-// mutation self-chains through its own cursor exactly as it does today.
+// This wrapper admits the canonical workload before the paginated maintenance entry point.
 export async function reconcileBusinessSupplyProjectionsHandler(ctx: WorkloadCronMutationContext): Promise<null> {
   await admitWorkloadCron(ctx as Pick<QueryCtx, 'db'>, 'reconcile business supply projections')
   await ctx.runMutation(internal.capabilitySupplyProjection.rebuildAllBusinessSupplyProjections, {})
-  // Well 8 Lane C: the reconciling safety net for provider directory rows -
-  // the publish/withdraw command handlers keep rows in step immediately;
-  // this sweep catches any disposition change that bypasses those hooks.
+  // Reconcile provider directory rows that bypassed publish/withdraw hooks.
   await ctx.runMutation(internal.x402DirectoryIndexStore.reconcileProviderDirectoryRows, {})
   return null
 }
@@ -570,6 +558,12 @@ export async function observeX402TreasuryHandler(ctx: WorkloadCronActionContext)
     internal.moneyTreasuryObservation.observe,
     {},
   )
+}
+
+export async function snapshotMarketplaceMetricsDayHandler(ctx: WorkloadCronActionContext): Promise<null> {
+  await ctx.runQuery(internal.workloadCron.admit, { name: 'snapshot marketplace metrics day' })
+  await ctx.runAction(internal.adminConsoleMetrics.snapshotMarketplaceMetricsDay, {})
+  return null
 }
 
 export const reconcileDueFacilitatorInvocations = internalAction({
@@ -624,4 +618,10 @@ export const observeX402Treasury = internalAction({
   args: {},
   returns: v.null(),
   handler: observeX402TreasuryHandler,
+})
+
+export const snapshotMarketplaceMetricsDay = internalAction({
+  args: {},
+  returns: v.null(),
+  handler: snapshotMarketplaceMetricsDayHandler,
 })

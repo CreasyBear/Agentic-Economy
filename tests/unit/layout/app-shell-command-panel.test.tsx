@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 
+import type * as ConvexReactModule from 'convex/react'
 import type { ReactNode } from 'react'
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import {
@@ -19,16 +20,29 @@ vi.mock('@/lib/observability/funnel-client', () => ({
   emitFunnelEventOnce: vi.fn(),
 }))
 
+// Vitest hoists the mock factory, so its shared helper must be loaded inside it.
+vi.mock('convex/react', async (importOriginal) => ({
+  ...(await importOriginal<typeof ConvexReactModule>()),
+  ...(await import('../../helpers/shell-convex-mock')).shellConvexMock,
+}))
+const clerkSignedIn = vi.hoisted(() => ({ value: false }))
+
 vi.mock('@clerk/tanstack-react-start', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@clerk/tanstack-react-start')>()),
-  Show: ({ when, children, fallback }: { when: string; children: ReactNode; fallback?: ReactNode }) =>
-    when === 'signed-out' ? children : (fallback ?? null),
+  useAuth: () => ({ isSignedIn: clerkSignedIn.value }),
+  Show: ({ when, children, fallback }: { when: string; children?: ReactNode; fallback?: ReactNode }) => {
+    if (when === 'signed-out') return clerkSignedIn.value ? (fallback ?? null) : (children ?? null)
+    if (when === 'signed-in') return clerkSignedIn.value ? (children ?? null) : null
+    return children ?? null
+  },
   UserButton: () => <button type="button" aria-label="Account menu" />,
+  OrganizationSwitcher: () => null,
 }))
 
 afterEach(() => {
   cleanup()
   vi.clearAllMocks()
+  clerkSignedIn.value = false
 })
 
 describe('app shell command panel', () => {
@@ -106,13 +120,14 @@ describe('app shell command panel', () => {
   })
 
   it('keeps public navigation out of the authenticated workspace hierarchy', async () => {
+    clerkSignedIn.value = true
     const rootRoute = createRootRoute()
     const operatorRoute = createRoute({ getParentRoute: () => rootRoute, id: '_operator', staticData: { shell: 'operator' } })
     const ownerRoute = createRoute({ getParentRoute: () => operatorRoute, path: '/owner' })
     const marketRoute = createRoute({
       getParentRoute: () => rootRoute,
       path: '/market',
-      staticData: { nav: { label: 'Market', header: { order: 0 } } },
+      staticData: { nav: { label: 'Market', header: { order: 0, audience: 'always' } } },
     })
     const router = createRouter({
       routeTree: rootRoute.addChildren([operatorRoute.addChildren([ownerRoute]), marketRoute]),

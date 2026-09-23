@@ -7,6 +7,7 @@ import { ensureProviderBusinessServer } from '@/components/ae/offerings/provider
 import type { ProviderWorkspacePayoutResult } from '@/components/ae/offerings/provider-workspace.functions'
 import { captureClientExceptionOnClient } from '@/lib/observability/capture-client-exception'
 import type { AeProviderWorkspaceProps, OnboardingSaveResult } from './provider-workspace.contracts'
+import { providerWorkspacePayoutConnection } from './provider-workspace.view-model'
 
 type UseProviderWorkspaceInventoryInput = Readonly<{
   inventory: AeProviderWorkspaceProps['inventory']
@@ -62,6 +63,7 @@ export function useProviderWorkspaceInventory(input: UseProviderWorkspaceInvento
   const [payoutSummary, setPayoutSummary] = useState<ProviderWorkspacePayoutResult>()
 
   useEffect(() => {
+    setPayoutSummary(undefined)
     if (input.payouts === undefined) return
     void input.payouts
       .then(setPayoutSummary)
@@ -71,14 +73,16 @@ export function useProviderWorkspaceInventory(input: UseProviderWorkspaceInvento
       })
   }, [input.payouts])
 
-  const payoutSummaryReady =
-    payoutSummary?.kind === 'available' && payoutSummary.value.readyAccounts > 0
+  const payoutConnection = providerWorkspacePayoutConnection({
+    result: payoutSummary,
+    pending: input.payouts !== undefined && payoutSummary === undefined,
+  })
 
   return {
     refresh,
     refreshPending,
     onSaveProfile,
-    payoutSummaryReady,
+    payoutConnection,
     inventoryFilter,
     setInventoryFilter,
     inventorySorting,

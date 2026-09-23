@@ -16,7 +16,7 @@ export function HomeResumeToolSection({
     <AeSection
       title={title}
       description={description}
-      className="rounded-xl border border-border bg-card p-gutter shadow-soft"
+      className="rounded-xl border border-border bg-card p-gutter"
     >
       {showReturnLink ? (
         <Link

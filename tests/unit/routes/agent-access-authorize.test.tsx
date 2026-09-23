@@ -196,7 +196,7 @@ describe('/agent-access/authorize consent loading', () => {
     expect(screen.getByText(heading)).toBeTruthy()
     expect(screen.getByText(nextAction)).toBeTruthy()
     expect(screen.queryByRole('button', { name: 'Connect agent' })).toBeNull()
-    expect(screen.queryByText('Try loading it again')).toBeNull()
+    expect(screen.queryByText('Nothing was charged. Try again, or check system status.')).toBeNull()
   })
 
   it('keeps a temporary consent read failure on the generic retry boundary', async () => {
@@ -209,19 +209,18 @@ describe('/agent-access/authorize consent loading', () => {
     ) => Promise<unknown>)({ deps: { grantRef: 'grant-temporary-failure' } })).rejects.toThrow('authorization_unavailable')
 
     renderComponent(ErrorComponent)
-    expect(screen.getByText(/Try loading it again/u)).toBeTruthy()
+    expect(screen.getAllByText('Nothing was charged. Try again, or check system status.').length).toBeGreaterThan(0)
   })
 
   it('shows terminal recovery copy when the consent request is unavailable', async () => {
     renderComponent(PendingComponent)
 
-    expect(screen.getAllByText('Loading workspace').length).toBeGreaterThan(0)
+    expect(screen.getByLabelText('Loading workspace')).toBeTruthy()
     cleanup()
     renderComponent(ErrorComponent)
 
-    expect(screen.queryByText('Loading workspace')).toBeNull()
-    expect(screen.getAllByText('Couldn’t load this page').length).toBeGreaterThan(0)
-    expect(screen.getByText(/Try loading it again/)).toBeTruthy()
+    expect(screen.queryByLabelText('Loading workspace')).toBeNull()
+    expect(screen.getAllByText('Nothing was charged. Try again, or check system status.').length).toBeGreaterThan(0)
   })
 
   it('renders an issuing request as read-only recovery without approval or generic retry', async () => {
@@ -319,10 +318,10 @@ describe('/agent-access/authorize consent loading', () => {
 
     renderComponent()
 
-    expect(await screen.findByText('How much may this agent do without asking you?')).toBeTruthy()
+    expect(await screen.findByText('How much may this Agent do without asking you?')).toBeTruthy()
     expect(screen.getByText('Test assistant · Production')).toBeTruthy()
     expect(screen.getByText('Maximum daily spend: USD 5.00. Maximum calls per hour: 42.')).toBeTruthy()
-    expect(screen.getAllByText(/Access expires in 2 hours after issue/).length).toBeGreaterThan(0)
+    expect(screen.getAllByText(/Access expires 2 hours after issue/).length).toBeGreaterThan(0)
     expect(screen.queryByText(/\$1 each/)).toBeNull()
     expect(screen.getByRole('radio', { name: /Work within limits/ }).getAttribute('aria-checked')).toBe('true')
     fireEvent.click(screen.getByRole('button', { name: 'Connect agent' }))
@@ -397,11 +396,14 @@ describe('/agent-access/authorize consent loading', () => {
 
     const replace = await screen.findByRole('radio', { name: /Replace credential/ })
     fireEvent.click(replace)
-    expect(screen.getByRole('button', { name: 'Replace credential' }).hasAttribute('disabled')).toBe(true)
+    const replaceButton = screen.getByRole('button', { name: 'Replace credential' })
+    expect(replaceButton.hasAttribute('disabled')).toBe(false)
+    fireEvent.click(replaceButton)
+    expect(document.activeElement).toBe(document.getElementById('replacement-agent'))
     fireEvent.click(screen.getByRole('combobox', { name: 'Agent' }))
     fireEvent.click(await screen.findByRole('option', { name: 'Research agent' }))
-    expect(screen.getByRole('button', { name: 'Replace credential' }).hasAttribute('disabled')).toBe(false)
-    fireEvent.click(screen.getByRole('button', { name: 'Replace credential' }))
+    expect(replaceButton.hasAttribute('disabled')).toBe(false)
+    fireEvent.click(replaceButton)
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalledOnce())
     const request = fetchMock.mock.calls[0]?.[1]
@@ -448,7 +450,7 @@ describe('/agent-access/authorize consent loading', () => {
     renderComponent()
 
     expect((await screen.findByRole('radio', { name: /Replace credential/ })).getAttribute('aria-checked')).toBe('true')
-    expect(screen.getByRole('button', { name: 'Replace credential' }).hasAttribute('disabled')).toBe(true)
+    expect(screen.getByRole('button', { name: 'Replace credential' }).hasAttribute('disabled')).toBe(false)
   })
 
   it('makes compromise replacement explicit and binds it into the approval request', async () => {

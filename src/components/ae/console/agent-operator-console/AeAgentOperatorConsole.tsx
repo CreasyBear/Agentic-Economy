@@ -127,7 +127,7 @@ export function AeAgentOperatorConsole({
       >
         {onConnectNewAgent !== undefined && (
           <div className="flex justify-end">
-            <Button type="button" onClick={onConnectNewAgent} className="w-fit min-h-touch">+ Connect New Agent</Button>
+            <Button type="button" variant="outline" onClick={onConnectNewAgent} className="w-fit min-h-touch">Connect an Agent</Button>
           </div>
         )}
         <AeAgentDirectoryTable

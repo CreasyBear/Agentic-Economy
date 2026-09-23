@@ -284,7 +284,7 @@ describe('Package 5 Provider Operations release harness', () => {
       toolRef: toolRef(1),
     })
     const reviewUrl = new URL((firstFailure as { reviewUrl: string }).reviewUrl)
-    expect(`${reviewUrl.origin}${reviewUrl.pathname}`).toBe('https://staging.agentic-economy.example/admin/index-health')
+    expect(`${reviewUrl.origin}${reviewUrl.pathname}`).toBe('https://staging.agentic-economy.example/admin/providers')
     expect(Object.fromEntries(reviewUrl.searchParams)).toEqual({
       expectedRevision: '1',
       expectedSourceDigest: sha('1'),

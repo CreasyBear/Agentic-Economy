@@ -26,8 +26,12 @@ export const readMarketRouteServer = createServerFn({ method: "GET" })
 
 export {
   loadMarketRouteData,
+  marketDocumentTitle,
   marketLoaderDeps,
   validateMarketSearch,
   parseMarketCompareRefs,
+  toggleMarketCompareRef,
+  marketCompareParam,
+  carryMarketCompare,
   type MarketSearch,
 } from './market-route-data'

@@ -30,13 +30,16 @@ vi.mock('@/lib/operator/route-options', () => ({
   operatorRouteOptions: {},
 }))
 
-vi.mock('@/components/ae/website/clerk-appearance', () => ({
-  clerkAppearance: { cssLayerName: 'clerk' },
+vi.mock('@/components/ae/layout/AeOperatorPage', () => ({
+  AeOperatorPage: ({ children, title }: { children: ReactNode; title: string }) => (
+    <div data-testid="operator-page" data-title={title}>{children}</div>
+  ),
 }))
 
-vi.mock('@/components/ae/settings/TaxProfileFormSection', () => ({
-  TaxProfileFormSection: () => <div data-testid="tax-profile-form-section" />,
+vi.mock('@/components/ae/website/clerk-appearance', () => ({
+  clerkEmbeddedProfileAppearance: { cssLayerName: 'clerk' },
 }))
+
 
 vi.mock('@/components/ae/settings/workspace-danger-zone/WorkspaceDangerZone', () => ({
   WorkspaceDangerZone: () => <div data-testid="workspace-danger-zone" />,
@@ -88,17 +91,8 @@ describe('/owner/workspace route (W-12)', () => {
     expect(Route).toBeDefined()
   })
 
-  it('U2: staticData.nav uses Workspace core owner navigation', () => {
-    const nav = (routeState.routeOptions?.staticData as { nav?: Record<string, unknown> } | undefined)?.nav
-    expect(nav).toMatchObject({
-      label: 'Workspace',
-      operator: {
-        roles: ['owner'],
-        group: 'Workspace',
-        order: 1,
-        tier: 'core',
-      },
-    })
+  it('U2: Workspace remains a deep-link page, not a route-declared rail destination', () => {
+    expect(routeState.routeOptions?.staticData).toBeUndefined()
   })
 
   it('U3: renders OrganizationProfile from Clerk inside min-h-96 shell', () => {
@@ -111,7 +105,7 @@ describe('/owner/workspace route (W-12)', () => {
     renderWorkspaceRoute()
     const profile = screen.getByTestId('organization-profile')
     expect(profile.getAttribute('data-routing')).toBe('hash')
-    expect(profile.getAttribute('data-after-leave')).toBe('/owner')
+    expect(profile.getAttribute('data-after-leave')).toBe('/market')
   })
 
   it('U5: includes OrganizationProfile.Page label general', () => {
@@ -121,11 +115,12 @@ describe('/owner/workspace route (W-12)', () => {
     expect(page.getAttribute('data-label')).toBe('general')
   })
 
-  it('U6: composes billing tax and danger zone sections without hand-rolled Clerk profile fields', () => {
+  it('U6: keeps billing and Credit controls separate from Workspace settings', () => {
     renderWorkspaceRoute()
 
-    expect(screen.getByRole('heading', { name: 'Billing & tax' })).toBeTruthy()
-    expect(screen.getByTestId('tax-profile-form-section')).toBeTruthy()
+    expect(screen.queryByRole('heading', { name: 'Billing & tax' })).toBeNull()
+    expect(screen.queryByText(/Credit/i)).toBeNull()
+    expect(screen.queryByTestId('tax-profile-form-section')).toBeNull()
     expect(screen.getByRole('heading', { name: 'Danger zone' })).toBeTruthy()
     expect(screen.getByTestId('workspace-danger-zone')).toBeTruthy()
     expect(document.querySelector('.ae-owner-workspace.grid.gap-8')).toBeTruthy()

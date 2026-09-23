@@ -25,7 +25,7 @@ function projection(output: unknown) {
 }
 
 describe('Tool call handback', () => {
-  it('renders literal structured output, actual charge, stable call identity, evidence, and receipt navigation', () => {
+  it('renders one status line and a receipt handoff off Ask', () => {
     render(<ToolCard projection={projection({
       kind: 'completed',
       callRef: 'invocation:handback:1',
@@ -43,15 +43,14 @@ describe('Tool call handback', () => {
     })} />)
 
     expect(screen.getByText('Result ready')).toBeTruthy()
-    expect(screen.getByLabelText('Call result').textContent).toContain('"score": 91')
-    expect(screen.getByText('USD 1.25 · Paid')).toBeTruthy()
-    expect(screen.getByText('640 ms')).toBeTruthy()
-    expect(screen.getByText('invocation:handback:1')).toBeTruthy()
+    expect(screen.queryByLabelText('Call result')).toBeNull()
+    expect(screen.queryByText('USD 1.25 · Paid')).toBeNull()
+    expect(screen.queryByText('invocation:handback:1')).toBeNull()
     expect(screen.getByRole('link', { name: 'View receipt' }).getAttribute('href'))
       .toBe('/calls/invocation:handback:1')
   })
 
-  it('keeps an uncertain effect visibly unresolved and routes the caller to reconciliation', () => {
+  it('keeps an uncertain effect as one status line with a reconcile handoff', () => {
     render(<ToolCard projection={projection({
       kind: 'reconciliation_required',
       callRef: 'invocation:handback:2',
@@ -67,7 +66,7 @@ describe('Tool call handback', () => {
 
     expect(screen.getAllByText('Reconciliation required').length).toBeGreaterThan(0)
     expect(screen.getByText(/Do not retry this call/i)).toBeTruthy()
-    expect(screen.getByText('attempt:handback:2')).toBeTruthy()
+    expect(screen.queryByText('attempt:handback:2')).toBeNull()
     expect(screen.getByText('ae help recover')).toBeTruthy()
   })
 })

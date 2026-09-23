@@ -5,6 +5,8 @@ import { requireSourceWrite } from './sourceWriteAdmission'
 import { MARKET_TOOLS_CALL_SCOPE } from '../src/modules/agent-access/contract'
 import { DELEGATION_MAX_ANCESTRY_GRANTS } from '../src/modules/authority/delegation/public'
 
+export { persistedPaidCallConsequenceIsAdmitted } from './lib/callLifecycle/paidConsequenceAdmission'
+
 export type BillingSourceWriteArgs = {
   operationKey: string
   correlationId: string
@@ -24,11 +26,7 @@ export function principalAllowed(
 }
 
 export async function ownerPrincipalAllowed(
-  identity: {
-    issuer?: string
-    subject?: string
-    tokenIdentifier?: string
-  } | null,
+  identity: { issuer?: string; subject?: string; tokenIdentifier?: string } | null,
   principalId: string,
   loadPrincipal: () => Promise<Readonly<{
     ownerId: string
@@ -264,7 +262,9 @@ function grantAuthorityIsCurrent(
     grant.applicationRef === call.applicationRef,
     grant.environment === call.environment,
     grant.generation === call.grantGeneration,
-    grant.policyDigest === call.policyDigest,
+    // Current grants use spendingPolicyDigest; protected historical grants
+    // retain policyDigest. Admission records that same digest on the Call.
+    (grant.spendingPolicyDigest ?? grant.policyDigest) === call.policyDigest,
     grant.lifecycle === 'active',
     grant.expiresAt === call.grantExpiresAt,
     grant.expiresAt > now,

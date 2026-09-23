@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { plainFreshnessLabel } from '@/lib/ui/status-presentation'
+import { plainFreshnessLabel } from '@/lib/ui/provider-plain-labels'
 
 const DAY_MS = 24 * 60 * 60 * 1000
 

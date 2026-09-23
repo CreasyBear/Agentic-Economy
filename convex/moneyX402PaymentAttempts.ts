@@ -1,8 +1,10 @@
 import { internalMutation, internalQuery } from './_generated/server'
+import { v } from 'convex/values'
 import {
   claimX402PaymentAuthorizationArgs,
   claimX402PaymentAuthorizationHandler,
   claimX402PaymentAuthorizationReturns,
+  checkpointX402ResponseHandler,
   listExpiredPreparedX402PaymentAttemptsArgs,
   listExpiredPreparedX402PaymentAttemptsHandler,
   listExpiredPreparedX402PaymentAttemptsReturns,
@@ -41,7 +43,8 @@ import {
   recordX402PaymentSigningIntentReturns,
 } from './lib/x402PaymentAttempt'
 import { prepareSellerOnboardingCanaryPaymentAuthorizationHandler } from './lib/x402PaymentAttemptCanary'
-import { persistedCallAuthorityIsCurrent } from './moneyBillingAuthorization'
+import { beginResponseRecoveryHandler, responseRecoveryIsCurrentHandler } from './lib/x402ResponseRecovery'
+import { persistedCallAuthorityIsCurrent, persistedPaidCallConsequenceIsAdmitted } from './moneyBillingAuthorization'
 
 /** Platform validation uses the same durable signing attempt, without a buyer reservation. */
 export const prepareSellerOnboardingCanaryPaymentAuthorization = internalMutation({
@@ -122,6 +125,30 @@ export const recordX402PaymentObservation = internalMutation({
   handler: recordX402PaymentObservationHandler,
 })
 
+export const checkpointX402Response = internalMutation({
+  args: {
+    dispatchRef: v.string(), attemptRef: v.string(), effectGeneration: v.number(),
+    toolRef: v.string(), inputDigest: v.string(), paymentIdentifier: v.string(),
+    responseDigest: v.string(), outputJson: v.string(),
+    settlementTransactionRef: v.optional(v.string()),
+    requestDigest: v.string(), paymentResponseDigest: v.optional(v.string()),
+  },
+  returns: v.null(),
+  handler: checkpointX402ResponseHandler,
+})
+
+export const beginResponseRecovery = internalMutation({
+  args: { callRef: v.string(), attempt: v.number() },
+  returns: v.boolean(),
+  handler: beginResponseRecoveryHandler,
+})
+
+export const responseRecoveryIsCurrent = internalQuery({
+  args: { callRef: v.string(), attempt: v.number() },
+  returns: v.boolean(),
+  handler: responseRecoveryIsCurrentHandler,
+})
+
 export const reconcileX402PaymentAttempt = internalMutation({
   args: reconcileX402PaymentAttemptArgs,
   returns: reconcileX402PaymentAttemptReturns,
@@ -139,6 +166,7 @@ export const reconcileX402PaymentAttempt = internalMutation({
       attempt.dispatchRef !== args.dispatchRef ||
       attempt.toolRef !== args.toolRef ||
       attempt.inputDigest !== args.inputDigest ||
+      !(args.settlementStatus === 'settled' && await persistedPaidCallConsequenceIsAdmitted(ctx, attempt)) &&
       !(await persistedCallAuthorityIsCurrent(ctx, {
         callRef: attempt.dispatchRef,
         toolRef: attempt.toolRef,

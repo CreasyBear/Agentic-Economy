@@ -4,6 +4,7 @@ const mocks = vi.hoisted(() => ({
   callSourceMutation: vi.fn(),
   setResponseHeader: vi.fn(),
   sourceWriteAdmissionFromContext: vi.fn(),
+  requireStrictClerkConsequenceProof: vi.fn(),
   sourceWriteRequestFromAdmission: vi.fn(),
 }))
 
@@ -23,6 +24,9 @@ vi.mock('@/lib/server/source-write-admission', () => ({
   sourceWriteAdmissionFromContext: mocks.sourceWriteAdmissionFromContext,
   sourceWriteRequestFromAdmission: mocks.sourceWriteRequestFromAdmission,
 }))
+vi.mock('@/lib/server/clerk-consequence-proof', () => ({
+  requireStrictClerkConsequenceProof: mocks.requireStrictClerkConsequenceProof,
+}))
 
 import { reviewSourceAuthorityServer } from '@/modules/capability-supply/source-authority-review.functions'
 
@@ -41,32 +45,35 @@ describe('source authority review server boundary', () => {
   it('confirms one exact publication through the canonical admin mutation', async () => {
     mocks.sourceWriteAdmissionFromContext.mockResolvedValue({ signature: 'source-write' })
     mocks.sourceWriteRequestFromAdmission.mockReturnValue({ method: 'POST' })
+    mocks.requireStrictClerkConsequenceProof.mockResolvedValue({
+      reverificationId: 'test:source-review', firstFactorAgeMinutes: 0, secondFactorAgeMinutes: -1,
+    })
     mocks.callSourceMutation.mockResolvedValue({
-      kind: 'verified',
-      publicationRef: review.publicationRef,
-      revision: review.expectedRevision,
-      operationRef: `operation:v1:${'b'.repeat(64)}`,
-      sourceAuthorityState: 'verified',
+      kind: 'completed', action: 'verify_capability_source_authority',
+      code: 'source_authority_verified', effectRefs: [review.publicationRef],
+      auditEventRef: 'audit:source-review', correlationId: 'source-review:test',
     })
 
     await expect(reviewSourceAuthorityServer({ data: review }))
-      .resolves.toMatchObject({ kind: 'verified', publicationRef: review.publicationRef })
+      .resolves.toMatchObject({ kind: 'completed', code: 'source_authority_verified' })
     expect(mocks.setResponseHeader).toHaveBeenCalledWith('cache-control', 'private, no-store')
     expect(mocks.sourceWriteAdmissionFromContext).toHaveBeenCalledWith(expect.objectContaining({
       scope: 'admin_operator',
       command: expect.objectContaining({
-        publicationRef: review.publicationRef,
-        expectedRevision: review.expectedRevision,
-        expectedSourceDigest: review.expectedSourceDigest,
+        input: {
+          publicationRef: review.publicationRef,
+          expectedRevision: review.expectedRevision,
+          expectedSourceDigest: review.expectedSourceDigest,
+        },
         evidenceRefs: [review.evidenceRef],
       }),
     }))
     expect(mocks.callSourceMutation).toHaveBeenCalledWith(
       { name: 'capabilitySupply:verifyCapabilitySourceAuthority' },
       expect.objectContaining({
-        publicationRef: review.publicationRef,
-        expectedRevision: review.expectedRevision,
+        input: expect.objectContaining({ publicationRef: review.publicationRef, expectedRevision: review.expectedRevision }),
         evidenceRefs: [review.evidenceRef],
+        proof: expect.objectContaining({ reverificationId: 'test:source-review' }),
         sourceWrite: { signature: 'source-write' },
         sourceWriteRequest: { method: 'POST' },
       }),

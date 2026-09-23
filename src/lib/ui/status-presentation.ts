@@ -1,12 +1,35 @@
-import type { TrustTier } from '@/modules/business/public'
-import type { FirstRequestMode } from '@/modules/catalog/public'
-import type { PublicBusinessCatalogApiV2Dto } from '@/modules/registry/public'
-import { formatRelativeTime } from './format-time'
+
+import { aeCanonicalStatusPresentationRows, type AeTone, type AeStatusPresentation } from './status-presentation-rows'
 
 export const aeStatusValues = [
   'available',
   'claimed',
   'contact_confirmed',
+  'operational',
+  'connected',
+  'disconnected',
+  'active',
+  'paused',
+  'needs_attention',
+  'ready_now',
+  'setup_required',
+  'awaiting_second_approval',
+  'approved',
+  'expired',
+  'refused',
+  'completed',
+  'issued',
+  'consumed',
+  'current',
+  'withdrawn',
+  'incompatible',
+  'superseded',
+  'pending_activation',
+  'suspended',
+  'closed',
+  'credential_expired',
+  'revoked',
+  'credential_revoked',
   'degraded',
   'failed',
   'guarded',
@@ -58,21 +81,7 @@ export const aeStatusValues = [
 ] as const
 
 export type AeStatus = (typeof aeStatusValues)[number]
-export type AeTone = 'neutral' | 'info' | 'success' | 'warning' | 'danger'
-export type AeStatusAudience = 'public' | 'owner' | 'admin' | 'operator'
-export type AeStatusPublicness = 'public' | 'private'
-
-export type AeStatusPresentation = {
-  label: string
-  compactLabel: string
-  tone: AeTone
-  description: string
-  nextAction?: string
-  priority: 'low' | 'medium' | 'high'
-  audience: AeStatusAudience
-  publicness: AeStatusPublicness
-  disabledReason?: string
-}
+export type { AeTone, AeStatusAudience, AeStatusPublicness, AeStatusPresentation } from './status-presentation-rows'
 
 export const aeStatusPresentation = {
   available: {
@@ -101,6 +110,125 @@ export const aeStatusPresentation = {
     priority: 'medium',
     audience: 'public',
     publicness: 'public',
+  },
+  awaiting_second_approval: {
+    label: 'Awaiting second approval',
+    compactLabel: 'Awaiting approval',
+    tone: 'info',
+    description: 'This admin action is waiting for a second owner admin.',
+    nextAction: 'A different owner admin must approve the proposal before it expires.',
+    priority: 'medium',
+    audience: 'admin',
+    publicness: 'private',
+  },
+  approved: {
+    label: 'Approved',
+    compactLabel: 'Approved',
+    tone: 'success',
+    description: 'A second owner admin approved this proposal.',
+    priority: 'medium',
+    audience: 'admin',
+    publicness: 'private',
+  },
+  expired: {
+    label: 'Expired',
+    compactLabel: 'Expired',
+    tone: 'warning',
+    description: 'The proposal expired before a second approval.',
+    nextAction: 'Create a new proposal if the action is still required.',
+    priority: 'high',
+    audience: 'admin',
+    publicness: 'private',
+  },
+  refused: {
+    label: 'Refused',
+    compactLabel: 'Refused',
+    tone: 'neutral',
+    description: 'The admin action was refused before execution.',
+    priority: 'medium',
+    audience: 'admin',
+    publicness: 'private',
+  },
+  issued: {
+    label: 'Issued',
+    compactLabel: 'Issued',
+    tone: 'info',
+    description: 'The Quote has been issued and is ready to use.',
+    priority: 'medium',
+    audience: 'admin',
+    publicness: 'private',
+  },
+  consumed: {
+    label: 'Consumed',
+    compactLabel: 'Consumed',
+    tone: 'neutral',
+    description: 'The Quote was used for a Call.',
+    priority: 'low',
+    audience: 'admin',
+    publicness: 'private',
+  },
+  withdrawn: {
+    label: 'Withdrawn',
+    compactLabel: 'Withdrawn',
+    tone: 'neutral',
+    description: 'The Tool version was withdrawn.',
+    priority: 'medium',
+    audience: 'admin',
+    publicness: 'private',
+  },
+  incompatible: {
+    label: 'Incompatible',
+    compactLabel: 'Incompatible',
+    tone: 'warning',
+    description: 'The Tool version is incompatible with the current runtime.',
+    priority: 'high',
+    audience: 'admin',
+    publicness: 'private',
+  },
+  superseded: {
+    label: 'Superseded',
+    compactLabel: 'Superseded',
+    tone: 'neutral',
+    description: 'A newer Tool version replaced this record.',
+    priority: 'low',
+    audience: 'admin',
+    publicness: 'private',
+  },
+  pending_activation: {
+    label: 'Pending activation',
+    compactLabel: 'Pending',
+    tone: 'info',
+    description: 'The Workspace is waiting for activation.',
+    priority: 'medium',
+    audience: 'admin',
+    publicness: 'private',
+  },
+  suspended: {
+    label: 'Suspended',
+    compactLabel: 'Suspended',
+    tone: 'warning',
+    description: 'The Workspace is suspended.',
+    priority: 'high',
+    audience: 'admin',
+    publicness: 'private',
+  },
+  closed: {
+    label: 'Closed',
+    compactLabel: 'Closed',
+    tone: 'neutral',
+    description: 'The Workspace is closed.',
+    priority: 'low',
+    audience: 'admin',
+    publicness: 'private',
+  },
+  revoked: {
+    label: 'Revoked',
+    compactLabel: 'Revoked',
+    tone: 'danger',
+    description: 'The Agent credential was revoked.',
+    priority: 'high',
+    audience: 'admin',
+    publicness: 'private',
   },
   degraded: {
     label: 'Degraded',
@@ -224,6 +352,7 @@ export const aeStatusPresentation = {
     publicness: 'public',
     disabledReason: 'Availability has not been established.',
   },
+  ...aeCanonicalStatusPresentationRows,
   notification_bounced: {
     label: 'Notification bounced',
     compactLabel: 'Bounced',
@@ -586,199 +715,6 @@ export const aeStatusPresentation = {
 
 export function getStatusPresentation(status: AeStatus): AeStatusPresentation {
   return aeStatusPresentation[status]
-}
-
-export function dispositionToAeStatus(disposition: PublicBusinessCatalogApiV2Dto['disposition']): AeStatus {
-  if (disposition === 'stale') {
-    return 'stale'
-  }
-
-  if (disposition === 'partial') {
-    return 'degraded'
-  }
-
-  return 'available'
-}
-
-export function trustTierToAeStatus(trustTier: TrustTier): AeStatus {
-  if (trustTier === 'registry_verified') {
-    return 'registry_verified'
-  }
-
-  if (trustTier === 'contact_confirmed') {
-    return 'contact_confirmed'
-  }
-
-  if (trustTier === 'listed') {
-    return 'listed'
-  }
-
-  return 'claimed'
-}
-
-export function offeringSupportToAeStatus(
-  support: PublicBusinessCatalogApiV2Dto['offerings'][number]['support'],
-): AeStatus {
-  if (support.aeSupportedAction) {
-    return 'available'
-  }
-
-  return support.integrated ? 'guarded' : 'not_live'
-}
-
-export function offeringAccessToAeStatus(
-  accessPaths: PublicBusinessCatalogApiV2Dto['offerings'][number]['accessPaths'],
-): AeStatus {
-  return accessPaths.length > 0 ? 'listed' : 'not_queued'
-}
-
-/**
- * Plain, human-surface availability pill label for a provider. Derived ONLY from
- * real catalog fields. Never invents freshness, "available today", or a response
- * time. Google-Maps-clean: one short label, one meaning.
- */
-export type PlainAvailabilityInput = {
-  disposition: PublicBusinessCatalogApiV2Dto['disposition']
-  firstRequestMode: FirstRequestMode
-}
-
-export function plainAvailabilityLabel(input: PlainAvailabilityInput): string {
-  const { disposition, firstRequestMode } = input
-
-  if (disposition === 'partial' || disposition === 'stale') {
-    return 'Needs confirmation'
-  }
-
-  switch (firstRequestMode) {
-    case 'quote_request_available':
-      return 'Contact supplied'
-    case 'not_available_yet':
-      return 'No contact option yet'
-    default: {
-      const _exhaustive: never = firstRequestMode
-      void _exhaustive
-      return 'Listed'
-    }
-  }
-}
-
-
-const HOURS_META_LABELS = new Set([
-  'unknown',
-  'hours unknown',
-  'hours supplied by owner',
-  'owner supplied hours',
-  'owner confirmed hours are not listed yet',
-  'after-hours availability supplied by owner',
-])
-
-/**
- * Plain hours line. Echoes the real hours string when present; otherwise a plain
- * "Check hours" — never `null`, `N/A`, or invented certainty.
- */
-export function plainHoursLabel(hoursOrUnknown: string | undefined): string {
-  const trimmed = (hoursOrUnknown ?? '').trim()
-  if (trimmed.length === 0 || HOURS_META_LABELS.has(trimmed.toLowerCase())) {
-    return 'Check hours'
-  }
-
-  return trimmed
-}
-
-/**
- * Plain trust label. Only names a trust standard when one was actually met.
- * Empty string means "no trust label to show" — the caller renders nothing.
- */
-export function plainTrustLabel(trustTier: TrustTier): string {
-  switch (trustTier) {
-    case 'registry_verified':
-      return 'Checked'
-    case 'contact_confirmed':
-      return 'Contact confirmed'
-    case 'listed':
-    case 'claimed':
-      return ''
-    default: {
-      const _exhaustive: never = trustTier
-      void _exhaustive
-      return ''
-    }
-  }
-}
-
-/**
- * Plain next-step action label for a provider card / answer next step. Maps the
- * published first-request mode to one safe action. Never implies booking,
- * payment, or dispatch.
- */
-export function plainNextStepLabel(firstRequestMode: FirstRequestMode): string {
-  switch (firstRequestMode) {
-    case 'quote_request_available':
-      return 'View contact details'
-    case 'not_available_yet':
-      return 'View details'
-    default: {
-      const _exhaustive: never = firstRequestMode
-      void _exhaustive
-      return 'View details'
-    }
-  }
-}
-
-/** Plain response-time label for cards and listings. Empty when unknown. */
-export function plainResponseTimeLabel(minutes: number | undefined): string {
-  if (minutes === undefined || !Number.isFinite(minutes) || minutes <= 0) {
-    return ''
-  }
-
-  if (minutes < 60) {
-    return `Responds ~${Math.round(minutes)}m`
-  }
-
-  const hours = Math.round(minutes / 60)
-  return `Responds ~${hours}h`
-}
-
-/**
- * Plain freshness label from a record `updatedAt` timestamp. Honest wording:
- * "Updated {relative}" — never "Verified"/"Checked" (updatedAt is a record
- * update, not a passed check). Empty when unknown.
- */
-export function plainFreshnessLabel(updatedAtMs: number | undefined): string {
-  if (updatedAtMs === undefined || !Number.isFinite(updatedAtMs) || updatedAtMs <= 0) {
-    return ''
-  }
-  return `Updated ${formatRelativeTime(updatedAtMs)}`
-}
-
-/** Combines response time and trust into one card cue (DESIGN §9.2). */
-export function formatProviderTrustCue(input: {
-  responseTimeMinutes?: number
-  trustLabel: string
-}): string {
-  return [plainResponseTimeLabel(input.responseTimeMinutes), input.trustLabel].filter((part) => part.length > 0).join(' · ')
-}
-
-/** Category illustration fallback when no business photo is published. */
-export function categoryIllustrationPath(category: string): string {
-  const normalized = category.trim().toLowerCase()
-
-  const rules: readonly [RegExp, string][] = [
-    [/plumb/, '/images/illustration/cat-plumbing.png'],
-    [/electr/, '/images/illustration/cat-electrical.png'],
-    [/account|bookkeep|payroll|\btax\b/, '/images/illustration/cat-accounting.png'],
-    [/aged.?care|elder|senior/, '/images/illustration/cat-aged-care.png'],
-    [/dental|dentist|orthodont/, '/images/illustration/cat-dental.png'],
-    [/\blaw\b|legal|solicit|lawyer|conveyanc/, '/images/illustration/cat-family-law.png'],
-  ]
-
-  for (const [pattern, path] of rules) {
-    if (pattern.test(normalized)) {
-      return path
-    }
-  }
-
-  return '/images/illustration/cat-default.png'
 }
 
 /**

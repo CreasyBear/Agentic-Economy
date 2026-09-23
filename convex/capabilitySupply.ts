@@ -1,3 +1,9 @@
+import { runAdminCommand } from './lib/adminConsole/commandEnvelope'
+import {
+  sourceAuthorityArgs,
+  sourceAuthorityReceiptValue,
+  sourceAuthoritySpec,
+} from './lib/adminConsole/actions/sourceAuthority'
 import {
   internalMutationGeneric,
   internalQueryGeneric,
@@ -14,9 +20,6 @@ import {
   readCapabilityPublicationArgs,
   readCapabilityPublicationHandler,
   capabilityPublicationValue,
-  verifyCapabilitySourceAuthorityArgs,
-  verifyCapabilitySourceAuthorityHandler,
-  verifyCapabilitySourceAuthorityResultValue,
 } from './capabilitySupplyPublish'
 import {
   observeCapabilityReadinessArgs,
@@ -97,9 +100,9 @@ export const publishPreparedCapability = mutationGeneric({
 })
 
 export const verifyCapabilitySourceAuthority = mutationGeneric({
-  args: verifyCapabilitySourceAuthorityArgs,
-  returns: verifyCapabilitySourceAuthorityResultValue,
-  handler: verifyCapabilitySourceAuthorityHandler,
+  args: sourceAuthorityArgs,
+  returns: sourceAuthorityReceiptValue,
+  handler: (ctx, args) => runAdminCommand(ctx, args, sourceAuthoritySpec(ctx, args)),
 })
 
 export const stageOwnerX402Capability = mutationGeneric({

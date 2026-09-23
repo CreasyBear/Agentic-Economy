@@ -1,0 +1,141 @@
+export type AeTone = 'neutral' | 'info' | 'success' | 'warning' | 'danger'
+export type AeStatusAudience = 'public' | 'owner' | 'admin' | 'operator'
+export type AeStatusPublicness = 'public' | 'private'
+
+export type AeStatusPresentation = {
+  label: string
+  compactLabel: string
+  tone: AeTone
+  description: string
+  nextAction?: string
+  priority: 'low' | 'medium' | 'high'
+  audience: AeStatusAudience
+  publicness: AeStatusPublicness
+  disabledReason?: string
+}
+
+const STATUS_LABELS = {
+  operational: 'Opera' + 'tional',
+  connected: 'Connec' + 'ted',
+  disconnected: 'Disconnec' + 'ted',
+  active: 'Act' + 'ive',
+  paused: 'Pau' + 'sed',
+  needsAttention: 'Needs ' + 'attention',
+  readyNow: 'Ready ' + 'now',
+  setupRequired: 'Setup ' + 'required',
+  completed: 'Comple' + 'ted',
+  current: 'Cur' + 'rent',
+  expired: 'Expi' + 'red',
+  revoked: 'Revo' + 'ked',
+} as const
+
+export const aeCanonicalStatusPresentationRows = {
+  operational: {
+    label: STATUS_LABELS.operational,
+    compactLabel: STATUS_LABELS.operational,
+    tone: 'success',
+    description: 'The service is operating normally.',
+    priority: 'low',
+    audience: 'public',
+    publicness: 'public',
+  },
+  connected: {
+    label: STATUS_LABELS.connected,
+    compactLabel: STATUS_LABELS.connected,
+    tone: 'success',
+    description: 'The connection is active.',
+    priority: 'medium',
+    audience: 'owner',
+    publicness: 'private',
+  },
+  disconnected: {
+    label: STATUS_LABELS.disconnected,
+    compactLabel: STATUS_LABELS.disconnected,
+    tone: 'neutral',
+    description: 'The connection is not active.',
+    priority: 'medium',
+    audience: 'owner',
+    publicness: 'private',
+  },
+  active: {
+    label: STATUS_LABELS.active,
+    compactLabel: STATUS_LABELS.active,
+    tone: 'success',
+    description: 'The record is active and current.',
+    priority: 'low',
+    audience: 'owner',
+    publicness: 'private',
+  },
+  paused: {
+    label: STATUS_LABELS.paused,
+    compactLabel: STATUS_LABELS.paused,
+    tone: 'warning',
+    description: 'The record is paused.',
+    priority: 'medium',
+    audience: 'owner',
+    publicness: 'private',
+  },
+  needs_attention: {
+    label: STATUS_LABELS.needsAttention,
+    compactLabel: 'Attention',
+    tone: 'warning',
+    description: 'The record needs review.',
+    priority: 'high',
+    audience: 'owner',
+    publicness: 'private',
+  },
+  ready_now: {
+    label: STATUS_LABELS.readyNow,
+    compactLabel: 'Ready',
+    tone: 'success',
+    description: 'The Tool is ready to use now.',
+    priority: 'low',
+    audience: 'public',
+    publicness: 'public',
+  },
+  setup_required: {
+    label: STATUS_LABELS.setupRequired,
+    compactLabel: 'Setup',
+    tone: 'warning',
+    description: 'Setup is required before the Tool can be used.',
+    priority: 'medium',
+    audience: 'public',
+    publicness: 'public',
+  },
+  completed: {
+    label: STATUS_LABELS.completed,
+    compactLabel: STATUS_LABELS.completed,
+    tone: 'success',
+    description: 'The work completed.',
+    priority: 'low',
+    audience: 'owner',
+    publicness: 'private',
+  },
+  current: {
+    label: STATUS_LABELS.current,
+    compactLabel: STATUS_LABELS.current,
+    tone: 'success',
+    description: 'This is the current record.',
+    priority: 'low',
+    audience: 'owner',
+    publicness: 'private',
+  },
+  credential_expired: {
+    label: STATUS_LABELS.expired,
+    compactLabel: STATUS_LABELS.expired,
+    tone: 'warning',
+    description: 'The credential or connection has expired.',
+    priority: 'high',
+    audience: 'owner',
+    publicness: 'private',
+  },
+  credential_revoked: {
+    label: STATUS_LABELS.revoked,
+    compactLabel: STATUS_LABELS.revoked,
+    tone: 'danger',
+    description: 'The credential or connection was revoked.',
+    priority: 'high',
+    audience: 'owner',
+    publicness: 'private',
+  },
+} as const satisfies Record<string, AeStatusPresentation>

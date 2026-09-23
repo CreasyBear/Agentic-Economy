@@ -1,24 +1,37 @@
 import { createServerFn } from '@tanstack/react-start'
+import { getRequest } from '@tanstack/react-start/server'
 
-import type { DeveloperDiscoveryRouteReadback } from '@/modules/discovery/developer-discovery'
+import { resolveCanonicalBaseUrl } from '@/lib/server/canonical-url'
+import type {
+  DeveloperDiscoveryArtifactMetadata,
+  DeveloperDiscoveryRouteReadback,
+} from '@/modules/discovery/developer-discovery'
 
-export async function loadDeveloperDiscoveryRoute(): Promise<DeveloperDiscoveryRouteReadback> {
+export type DeveloperDiscoveryRoutePageReadback = Omit<DeveloperDiscoveryRouteReadback, 'artifacts'> & {
+  artifacts: readonly (DeveloperDiscoveryArtifactMetadata & Readonly<{ checkedAt: number }>)[]
+}
+
+export async function loadDeveloperDiscoveryRoute(
+  request: Request,
+  now = 0,
+): Promise<DeveloperDiscoveryRoutePageReadback> {
   const [{ readDeveloperDiscoveryRoute }, { buildDeveloperDiscoveryRouteSnapshot }] = await Promise.all([
     import('@/modules/discovery/developer-discovery'),
     import('@/routes/api.discovery.schema'),
   ])
-  const request = new Request('https://ae.example/developers/discovery')
-  const routeSnapshot = await buildDeveloperDiscoveryRouteSnapshot(request, {
-    canonicalBaseUrl: 'https://ae.example',
-    now: 0,
-  })
+  const canonicalBaseUrl = resolveCanonicalBaseUrl(request).baseUrl
+  const routeSnapshot = await buildDeveloperDiscoveryRouteSnapshot(request, { canonicalBaseUrl, now })
+  const readback = readDeveloperDiscoveryRoute(undefined, { canonicalBaseUrl, now, routeSnapshot })
 
-  return readDeveloperDiscoveryRoute(undefined, {
-    canonicalBaseUrl: 'https://ae.example',
-    now: 0,
-    routeSnapshot,
-  })
+  return {
+    ...readback,
+    artifacts: readback.artifacts.map((artifact) => ({ ...artifact, checkedAt: readback.generatedAt })),
+    copy: {
+      ...readback.copy,
+      title: 'Discovery status',
+    },
+  }
 }
 
 export const loadDeveloperDiscoveryRouteServer = createServerFn({ method: 'GET' })
-  .handler(loadDeveloperDiscoveryRoute)
+  .handler(() => loadDeveloperDiscoveryRoute(getRequest(), Date.now()))

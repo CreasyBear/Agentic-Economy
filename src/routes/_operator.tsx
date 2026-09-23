@@ -1,11 +1,8 @@
-import { Outlet, createFileRoute, useLocation } from '@tanstack/react-router'
+import { Outlet, createFileRoute } from '@tanstack/react-router'
 
-import { OperatorChromeProvider } from '@/components/ae/layout/AeOperatorPage'
-import { AeOperatorSidebar } from '@/components/ae/layout/AeOperatorSidebar'
+import { OperatorRouteForbidden } from '@/components/ae/layout/AeRouteError'
 import { WorkspaceTransitionBoundary } from '@/components/ae/layout/WorkspaceTransitionBoundary'
-import { SidebarProvider, SidebarTrigger } from '@/components/ui/sidebar'
 import { operatorLayoutRouteOptions } from '@/lib/operator/route-options'
-import { operatorSurfaceForPath } from '@/lib/operator/operator-context'
 
 export const Route = createFileRoute('/_operator')({
   staticData: { shell: 'operator' },
@@ -14,27 +11,14 @@ export const Route = createFileRoute('/_operator')({
 })
 
 function OperatorLayoutRoute() {
-  const { pathname } = useLocation()
   const operatorContext = Route.useRouteContext()
-  const operatorRole = operatorSurfaceForPath(pathname)
+  if (operatorContext.kind === 'forbidden') {
+    return <OperatorRouteForbidden surface={operatorContext.surface} />
+  }
 
   return (
-    <SidebarProvider className="contents" defaultOpen>
-      <OperatorChromeProvider
-        mobileTrigger={<SidebarTrigger aria-label="Open operator navigation" className="md:hidden" />}
-        sidebar={
-          <AeOperatorSidebar
-            operatorRole={operatorRole}
-            operatorContext={operatorContext}
-            currentPath={pathname}
-            className="top-(--header-height) h-[calc(100svh-var(--header-height))]!"
-          />
-        }
-      >
-        <WorkspaceTransitionBoundary>
-          <Outlet />
-        </WorkspaceTransitionBoundary>
-      </OperatorChromeProvider>
-    </SidebarProvider>
+    <WorkspaceTransitionBoundary>
+      <Outlet />
+    </WorkspaceTransitionBoundary>
   )
 }

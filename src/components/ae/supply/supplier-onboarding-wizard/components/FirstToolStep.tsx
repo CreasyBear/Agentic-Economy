@@ -21,7 +21,7 @@ export function FirstToolStep() {
       <div className="rounded-lg border bg-muted/20 p-6 flex flex-col items-center justify-center text-center gap-3">
         <WrenchIcon className="size-8 text-primary/80" />
         <div>
-          <h3 className="text-sm font-semibold text-foreground">Ready to connect supply</h3>
+          <h3 className="text-sm font-medium text-foreground">Ready to connect supply</h3>
           <p className="text-xs text-muted-foreground max-w-sm">
             AE provides instant schema validation, pricing config, and a zero-cost test console.
           </p>
@@ -30,7 +30,7 @@ export function FirstToolStep() {
           to="/owner/operations/new"
           className={cn(buttonVariants(), 'gap-2 min-h-touch mt-2', TACTILE)}
         >
-          <span>Import OpenAPI / MCP Tool</span>
+          <span>Add Tool</span>
           <ArrowRightIcon className="size-4" />
         </Link>
       </div>

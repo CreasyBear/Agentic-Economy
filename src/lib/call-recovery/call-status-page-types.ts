@@ -17,6 +17,7 @@ export type CallReconciliationForm = Readonly<{
 export type CallStatusPageActions = Readonly<{
   onRefresh?: () => void | Promise<void>
   refreshPending?: boolean
+  autoRefresh?: boolean
   onCancel?: () => void | Promise<void>
   cancelPending?: boolean
   onReconcile?: (input: CallReconciliationForm) => void

@@ -25,6 +25,7 @@ import {
   prepareFormanceManagedCallRelease,
   prepareFormanceManagedCallReservation,
   prepareFormanceManagedCallSettlement,
+  prepareFormancePaidCallRemedy,
   prepareFormanceProviderReversal,
   prepareFormanceSpendingPeriodAdjustment,
   spendingPeriodIdentity,
@@ -104,6 +105,13 @@ export async function settleFormanceManagedCall(
   return executePreparedBulk(context, prepareFormanceManagedCallSettlement(input))
 }
 
+export async function remedyFormancePaidCall(
+  context: FormanceContext,
+  input: FormanceManagedCallFinalization,
+): Promise<FormanceMoneyResult> {
+  return executePreparedBulk(context, prepareFormancePaidCallRemedy(input))
+}
+
 export async function reverseFormanceProviderSettlement(
   context: FormanceContext,
   input: FormanceProviderReversal,
@@ -133,6 +141,13 @@ export async function bookFormanceBuyerAdjustment(
   return executePrepared(context, prepareFormanceBuyerAdjustment(input))
 }
 
+/**
+ * Requires a validated capacity identity and current observation. Ensures each
+ * generation is funded once. Treasury observation refreshes reuse the original
+ * verified initialization; they never replenish spent or reserved capacity.
+ * Policy or posting mismatches remain conflicts. Quote admission separately
+ * caps native available capacity by the current wallet observation.
+ */
 export async function syncFormanceCapacity(
   context: FormanceContext,
   input: FormanceCapacitySync,
@@ -141,8 +156,23 @@ export async function syncFormanceCapacity(
   if (prepared.kind === 'refused') return prepared
   const existing = await readFormanceTransactionByReference(context, prepared.command.commandRef)
   if (existing.kind === 'found') {
+    // A wallet observation changes as payments settle. Reconstruct the original
+    // initialization from its evidence, rather than treating a refresh as funding.
+    const posting = existing.postings[0]
+    const original = input.kind === 'treasury_usdc'
+      && existing.postings.length === 1
+      && posting?.source === 'world'
+      && posting.destination === prepared.command.variables.capacity
+      && posting.asset === 'USDC/6'
+      ? prepareFormanceCapacitySync({
+          ...input,
+          targetUnits: posting.amountUnits,
+          externalEvidenceDigest: `sha256:${existing.metadata.external_evidence_digest}`,
+        })
+      : input.kind === 'treasury_usdc' ? undefined : prepared
     return existing.template === 'TREASURY_CAPACITY_SYNCED'
-      && existing.metadata.command_digest === prepared.command.metadata.command_digest
+      && original?.kind === 'prepared'
+      && existing.metadata.command_digest === original.command.metadata.command_digest
       && existing.metadata.idempotency_digest === prepared.command.metadata.idempotency_digest
       ? completed(prepared.command.commandRef, true)
       : refused('formance_reference_conflict')

@@ -5,6 +5,7 @@ import { internal } from '../../../convex/_generated/api'
 import { requireLocalE2EOwnerAuthority } from '../../../convex/devSeed'
 import { persistDevSeedCatalogState } from '../../../convex/devSeedStore'
 import schema from '../../../convex/schema'
+import { sandboxReferenceToolSpec, sandboxToolFixture } from '../../../convex/devSeedFixtures'
 import {
   DEV_SEED_BUSINESS_FIXTURES,
   buildDevSeedCatalogState,
@@ -76,6 +77,29 @@ describe('dev seed Convex store', () => {
       owningAccountRef,
     })
     expect(persisted.offerings).toHaveLength(bundle.state.offerings.length)
+  })
+
+  it('admits HTTP loopback only for sandbox-marked programmable fixtures', () => {
+    for (const endpointUrl of [
+      'http://127.0.0.1:3024/api/v1/sandbox-reference',
+      'http://localhost:3024/api/v1/sandbox-reference',
+    ]) {
+      const fixture = sandboxToolFixture(sandboxReferenceToolSpec(endpointUrl))
+      const bundle = buildDevSeedCatalogState([fixture], owningAccountRef)
+      expect(bundle.state.businesses[0]?.businessContext).toEqual({
+        kind: 'programmable_provider',
+        website: endpointUrl,
+        providerIdentifier: fixture.businessName,
+      })
+    }
+
+    const fixture = sandboxToolFixture(
+      sandboxReferenceToolSpec('http://127.0.0.1:3024/api/v1/sandbox-reference'),
+    )
+    expect(() => buildDevSeedCatalogState(
+      [{ ...fixture, allowLoopbackSource: false }],
+      owningAccountRef,
+    )).toThrow('Dev seed programmable provider source URL is required.')
   })
 })
 

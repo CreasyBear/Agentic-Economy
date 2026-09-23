@@ -72,7 +72,7 @@ export const revocationModeOptions: readonly Readonly<{
 }>[] = [
   {
     id: 'drain',
-    title: 'Graceful Drain',
+    title: 'Graceful drain',
     detail: 'New admissions stop now. In-flight Calls may finish within 30s.',
   },
   {

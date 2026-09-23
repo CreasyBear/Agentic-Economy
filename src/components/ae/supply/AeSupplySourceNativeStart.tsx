@@ -1,4 +1,5 @@
 import { CheckIcon } from 'lucide-react'
+import { useEffect, useRef } from 'react'
 
 import { AeInlineState } from '@/components/ae/feedback/AeInlineState'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
@@ -7,10 +8,16 @@ import { buttonVariants } from '@/components/ui/button-variants'
 import { cn } from '@/lib/utils'
 import type { SupplySourceInput } from '@/modules/capability-supply/source-preview'
 import { SupplyCandidateSection } from './SupplyCandidateSection'
+import { SupplySourceSuggestion } from './SupplySourceSuggestion'
 import { SupplyPublicationFlow } from './SupplyPublicationFlow'
 import { SupplyRemoteSelectionSection } from './SupplyRemoteSelectionSection'
 import { SupplySourceTypeSection } from './SupplySourceTypeSection'
-import { pricingInput, publicationPriceSummary } from './supply-source-native-start-presentation'
+import {
+  SUPPLY_PUBLICATION_ERROR_ID,
+  pricingInput,
+  publicationPriceSummary,
+} from './supply-source-native-start-presentation'
+import type { SupplyJourneyContinuation } from './supply-source-native-start-presentation'
 import { useSupplyNativeStartState, type SupplyNativeStartProps } from './useSupplyNativeStartState'
 
 type SupplyStage = 'source' | 'tool' | 'terms' | 'review'
@@ -20,11 +27,23 @@ export function AeSupplySourceNativeStart(props: SupplyNativeStartProps) {
   const stage: SupplyStage = vm.selected === undefined
     ? vm.preview === undefined ? 'source' : 'tool'
     : vm.reviewing ? 'review' : 'terms'
+  const stageHeadingRef = useRef<HTMLHeadingElement>(null)
+  const focusedStageRef = useRef<SupplyStage | null>(null)
+
+  useEffect(() => {
+    if (stage === 'source') {
+      focusedStageRef.current = stage
+      return
+    }
+    if (focusedStageRef.current === stage) return
+    focusedStageRef.current = stage
+    stageHeadingRef.current?.focus()
+  }, [stage])
 
   return (
     <div className="grid gap-section">
       <SupplyProgress current={stage} />
-      <SupplyFlowFeedback error={vm.error} requiredAction={vm.requiredAction} success={vm.success} publicationLocked={vm.publicationLocked} />
+      <SupplyFlowFeedback error={vm.error} requiredAction={vm.requiredAction} success={vm.success} continuation={vm.continuation} publicationLocked={vm.publicationLocked} />
 
       {stage === 'source' ? (
         <SupplySourceTypeSection
@@ -87,6 +106,7 @@ export function AeSupplySourceNativeStart(props: SupplyNativeStartProps) {
           remotes={vm.remoteSelection.remotes}
           value={vm.selectedRemoteRef}
           disabled={vm.pending !== undefined}
+          headingRef={stageHeadingRef}
           onChange={vm.setSelectedRemoteRef}
           onContinue={() => void vm.findTools(vm.selectedRemoteRef)}
         />
@@ -98,6 +118,9 @@ export function AeSupplySourceNativeStart(props: SupplyNativeStartProps) {
           <SupplyCandidateSection
             candidates={vm.preview.candidates}
             selectedRef={vm.selectedRef}
+            headingRef={stageHeadingRef}
+            {...(vm.invalidField === undefined ? {} : { invalidField: vm.invalidField })}
+            {...(vm.error === undefined ? {} : { fieldError: vm.error })}
             onSelect={(value) => {
               const candidate = vm.preview?.candidates.find(({ candidateRef }) => candidateRef === value)
               if (candidate !== undefined && candidate.disposition.kind === 'supported') void vm.selectCandidate(candidate)
@@ -108,7 +131,7 @@ export function AeSupplySourceNativeStart(props: SupplyNativeStartProps) {
 
       {vm.selected === undefined || (stage !== 'terms' && stage !== 'review') ? null : (
         <div className="grid gap-section">
-          <div className="sticky top-20 z-10 grid gap-intra rounded-xl border border-border bg-background/95 p-3 shadow-soft backdrop-blur supports-[backdrop-filter]:bg-background/85 sm:grid-cols-2">
+          <div className="sticky top-20 z-10 grid gap-intra rounded-xl border border-border bg-background/95 p-3 backdrop-blur supports-[backdrop-filter]:bg-background/85 sm:grid-cols-2">
             <CompletedStageSummary step="Source" detail={sourceSummary(vm.source)} disabled={vm.pending !== undefined || vm.publicationLocked} onEdit={vm.editSource} />
             <CompletedStageSummary step="Tool" detail={vm.selected.title} disabled={vm.pending !== undefined || vm.publicationLocked} onEdit={vm.editTool} />
             {stage === 'review' ? <CompletedStageSummary step="Terms" detail={termsSummary(vm)} disabled={vm.pending !== undefined || vm.publicationLocked} onEdit={vm.editTerms} /> : null}
@@ -117,6 +140,18 @@ export function AeSupplySourceNativeStart(props: SupplyNativeStartProps) {
             reviewing={stage === 'review'}
             name={vm.name}
             description={vm.description}
+            descriptionSuggestion={props.onAssess === undefined || vm.preview === undefined || vm.source === undefined ? undefined : (
+              <SupplySourceSuggestion
+                key={`${vm.preview.sourceDigest}:${vm.selected.candidateRef}:${vm.connectionRef}:${vm.description}:${vm.pending ?? ''}:${vm.publicationLocked}`}
+                input={{ businessId: props.businessRef, source: vm.source,
+                  expectedSourceDigest: vm.preview.sourceDigest, expectedSourceRevision: vm.preview.sourceRevision,
+                  candidateRef: vm.selected.candidateRef,
+                  ...(vm.connectionRef ? { connectionRef: vm.connectionRef } : {}) }}
+                disabled={vm.pending !== undefined || vm.publicationLocked}
+                onAssess={props.onAssess}
+                onUse={vm.setDescription}
+              />
+            )}
             category={vm.category}
             serviceArea={vm.serviceArea}
             availability={vm.availability}
@@ -133,6 +168,9 @@ export function AeSupplySourceNativeStart(props: SupplyNativeStartProps) {
             attestation={vm.attestation}
             saving={vm.pending === 'publish'}
             disabled={vm.pending !== undefined || vm.publicationLocked}
+            headingRef={stageHeadingRef}
+            {...(vm.invalidField === undefined ? {} : { invalidField: vm.invalidField })}
+            {...(vm.error === undefined ? {} : { fieldError: vm.error })}
             onNameChange={vm.setName}
             onDescriptionChange={vm.setDescription}
             onCategoryChange={vm.setCategory}
@@ -171,7 +209,7 @@ function SupplyProgress({ current }: Readonly<{ current: SupplyStage }>) {
           return (
             <li key={stage} aria-current={active ? 'step' : undefined} className={cn('grid min-w-0 gap-1 border-t-2 pt-2 text-xs capitalize', active ? 'border-foreground font-medium text-foreground' : complete ? 'border-brand text-foreground' : 'border-border text-muted-foreground')}>
               <span className="flex items-center gap-1.5">
-                <span className={cn('flex size-5 shrink-0 items-center justify-center rounded-full border font-mono text-[0.625rem]', complete && 'border-brand bg-brand text-brand-foreground', active && 'border-foreground')}>
+                <span className={cn('flex size-5 shrink-0 items-center justify-center rounded-full border font-mono text-[0.625rem]', complete && 'border-brand bg-brand text-on-brand', active && 'border-foreground')}>
                   {complete ? <CheckIcon aria-hidden="true" className="size-3" /> : index + 1}
                 </span>
                 <span className="truncate">{stage}</span>
@@ -189,22 +227,23 @@ function CompletedStageSummary({ step, detail, disabled, onEdit }: Readonly<{ st
     <div className="flex min-w-0 items-center justify-between gap-3 rounded-lg border border-border/70 bg-card px-3 py-2">
       <span className="grid min-w-0 gap-0.5">
         <span className="text-xs font-medium text-muted-foreground">{step} complete</span>
-        <span className="truncate text-sm text-foreground" title={detail}>{detail}</span>
+        <span className={cn('truncate text-sm text-foreground', step === 'Terms' && 'tabular-nums')} title={detail}>{detail}</span>
       </span>
       <Button type="button" size="sm" variant="ghost" className="min-h-touch shrink-0" disabled={disabled} onClick={onEdit}>Edit {step}</Button>
     </div>
   )
 }
 
-function SupplyFlowFeedback({ error, requiredAction, success, publicationLocked }: Readonly<{
+function SupplyFlowFeedback({ error, requiredAction, success, continuation, publicationLocked }: Readonly<{
   error: string | undefined
   requiredAction: ReturnType<typeof useSupplyNativeStartState>['requiredAction']
   success: string | undefined
+  continuation: SupplyJourneyContinuation | undefined
   publicationLocked: boolean
 }>) {
   return (
     <>
-      {error === undefined ? null : <Alert variant="destructive" role="alert"><AlertTitle>Action required</AlertTitle><AlertDescription><p>{error}</p>{publicationLocked ? <a href="/owner/operations" className={cn(buttonVariants({ variant: 'outline' }), 'mt-4 min-h-touch')}>Open Tools</a> : null}</AlertDescription></Alert>}
+      {error === undefined ? null : <Alert id={SUPPLY_PUBLICATION_ERROR_ID} variant="destructive" role="alert"><AlertTitle>Action required</AlertTitle><AlertDescription><p>{error}</p>{publicationLocked ? <a href="/owner/operations" className={cn(buttonVariants({ variant: 'outline' }), 'mt-4 min-h-touch')}>Open Tools</a> : null}</AlertDescription></Alert>}
       {requiredAction === undefined ? null : (
         <Alert role="status">
           <AlertTitle>{requiredAction.title}</AlertTitle>
@@ -226,12 +265,14 @@ function SupplyFlowFeedback({ error, requiredAction, success, publicationLocked 
           <AlertTitle>Submitted</AlertTitle>
           <AlertDescription className="grid gap-related">
             <p>{success}</p>
-            <a
-              href="/owner/operations"
-              className={cn(buttonVariants({ variant: 'secondary' }), 'w-fit min-h-touch')}
-            >
-              Open Tools
-            </a>
+            {continuation === undefined ? null : (
+              <a
+                href={continuation.to}
+                className={cn(buttonVariants({ variant: 'secondary' }), 'w-fit min-h-touch')}
+              >
+                {continuation.label}
+              </a>
+            )}
           </AlertDescription>
         </Alert>
       )}

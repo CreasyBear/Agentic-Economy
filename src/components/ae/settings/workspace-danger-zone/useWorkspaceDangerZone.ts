@@ -1,3 +1,5 @@
+import { reverificationError } from '@clerk/shared/authorization-errors'
+import { useReverification } from '@clerk/tanstack-react-start'
 import { makeFunctionReference } from 'convex/server'
 import { useMutation, useQuery } from 'convex/react'
 import { useMemo, useRef, useState } from 'react'
@@ -7,13 +9,19 @@ import {
   CLOSE_FAILURE_DIAGNOSTIC,
   TRANSFER_FAILURE_DIAGNOSTIC,
   fenceMessagesFor,
+  isWorkspaceMfaReverificationRefusal,
   type WorkspaceCloseCommand,
+  type WorkspaceCloseResult,
   type WorkspaceDangerDiagnostic,
   type WorkspaceDecommissionEligibilityView,
   type WorkspaceTransferCommand,
+  type WorkspaceTransferResult,
 } from '@/modules/principal-account/workspace-decommission.view-model'
 
-import type { UseWorkspaceDangerZoneResult } from './workspace-danger-zone.contracts'
+import {
+  WORKSPACE_MFA_REVERIFICATION_COPY,
+  type UseWorkspaceDangerZoneResult,
+} from './workspace-danger-zone.contracts'
 
 function correlationRef(label: string): string {
   return `ui:workspace-danger:${label}`
@@ -32,19 +40,55 @@ const readWorkspaceDecommissionEligibilityRef = makeFunctionReference<
 const closeWorkspaceRef = makeFunctionReference<
   'mutation',
   WorkspaceCloseCommand,
-  unknown
+  WorkspaceCloseResult
 >('workspaceAccounts:closeWorkspace')
 
 const transferWorkspaceOwnershipRef = makeFunctionReference<
   'mutation',
   WorkspaceTransferCommand,
-  unknown
+  WorkspaceTransferResult
 >('workspaceAccounts:transferWorkspaceOwnership')
+
+const CLOSE_MFA_DIAGNOSTIC: WorkspaceDangerDiagnostic = {
+  ...CLOSE_FAILURE_DIAGNOSTIC,
+  nextStep: WORKSPACE_MFA_REVERIFICATION_COPY,
+}
+
+const TRANSFER_MFA_DIAGNOSTIC: WorkspaceDangerDiagnostic = {
+  ...TRANSFER_FAILURE_DIAGNOSTIC,
+  nextStep: WORKSPACE_MFA_REVERIFICATION_COPY,
+}
 
 export function useWorkspaceDangerZone(): UseWorkspaceDangerZoneResult {
   const eligibility = useQuery(readWorkspaceDecommissionEligibilityRef)
   const closeWorkspaceMutation = useMutation(closeWorkspaceRef)
   const transferOwnershipMutation = useMutation(transferWorkspaceOwnershipRef)
+  const closeReverificationAttempted = useRef(false)
+  const transferReverificationAttempted = useRef(false)
+  const closeWorkspace = useReverification(async (command: WorkspaceCloseCommand) => {
+    const result = await closeWorkspaceMutation(command)
+    if (
+      isWorkspaceMfaReverificationRefusal(result)
+      && !closeReverificationAttempted.current
+    ) {
+      closeReverificationAttempted.current = true
+      return reverificationError('strict_mfa')
+    }
+    return result
+  })
+  const transferWorkspaceOwnership = useReverification(async (
+    command: WorkspaceTransferCommand,
+  ) => {
+    const result = await transferOwnershipMutation(command)
+    if (
+      isWorkspaceMfaReverificationRefusal(result)
+      && !transferReverificationAttempted.current
+    ) {
+      transferReverificationAttempted.current = true
+      return reverificationError('strict_mfa')
+    }
+    return result
+  })
 
   const [confirmationName, setConfirmationName] = useState('')
   const [successorPrincipalRef, setSuccessorPrincipalRef] = useState('')
@@ -116,15 +160,20 @@ export function useWorkspaceDangerZone(): UseWorkspaceDangerZoneResult {
         const attemptRef = closeAttemptIdempotencyRef.current ?? idempotencyRef(`close:${crypto.randomUUID()}`)
         setClosePending(true)
         setCloseDiagnostic(null)
+        closeReverificationAttempted.current = false
         try {
-          await closeWorkspaceMutation({
+          const result = await closeWorkspace({
             confirmationName,
             expectedAccountRevision: eligibility.accountRevision,
             expectedOwnershipRevision: eligibility.ownershipRevision,
             correlationRef: correlationRef('close'),
             idempotencyRef: attemptRef,
-            factorEvidence: { firstFactorAgeMinutes: 1, secondFactorAgeMinutes: 1 },
           })
+          if (isWorkspaceMfaReverificationRefusal(result)) {
+            setCloseDiagnostic(CLOSE_MFA_DIAGNOSTIC)
+            toast.error('Workspace was not closed')
+            return
+          }
           toast.success('Workspace closed')
           setShowCloseConfirmDialog(false)
         } catch (cause) {
@@ -160,15 +209,20 @@ export function useWorkspaceDangerZone(): UseWorkspaceDangerZoneResult {
           transferAttemptIdempotencyRef.current ?? idempotencyRef(`transfer:${crypto.randomUUID()}`)
         setTransferPending(true)
         setTransferDiagnostic(null)
+        transferReverificationAttempted.current = false
         try {
-          await transferOwnershipMutation({
+          const result = await transferWorkspaceOwnership({
             successorPrincipalRef: selectedSuccessor,
             expectedAccountRevision: eligibility.accountRevision,
             expectedOwnershipRevision: eligibility.ownershipRevision,
             correlationRef: correlationRef('transfer'),
             idempotencyRef: attemptRef,
-            factorEvidence: { firstFactorAgeMinutes: 1, secondFactorAgeMinutes: 1 },
           })
+          if (isWorkspaceMfaReverificationRefusal(result)) {
+            setTransferDiagnostic(TRANSFER_MFA_DIAGNOSTIC)
+            toast.error('Ownership was not transferred')
+            return
+          }
           toast.success('Workspace ownership transferred')
           setShowTransferConfirmDialog(false)
         } catch (cause) {

@@ -29,10 +29,7 @@ export const Route = createFileRoute('/SKILL.md')({
 
 export function handlePublicAgentSkillRequest(request: Request, head = false): Response {
   const { baseUrl } = resolveCanonicalBaseUrl(request)
-  const body = buildPublicAgentSkillMarkdown({
-    canonicalBaseUrl: baseUrl,
-    routingBaseUrl: process.env.AE_ROUTING_PUBLIC_BASE_URL?.trim() || baseUrl,
-  })
+  const body = buildPublicAgentSkillMarkdown({ canonicalBaseUrl: baseUrl })
   const response = discoveryTextResponse(body, 'text/markdown; charset=utf-8')
   return head ? new Response(null, { status: response.status, headers: response.headers }) : response
 }

@@ -12,11 +12,10 @@ export type ChatLayoutProps = Readonly<{
 export function ChatLayout({ model }: ChatLayoutProps) {
   return (
     <AeChatPage
-      {...model.showHistoryRail ? { rail: model.createHistoryPanel('desktop') } : {}}
       header={
         <ChatHeader
           {...model.header}
-          mobileHistory={model.createHistoryPanel('mobile')}
+          mobileHistory={model.showHistoryRail ? model.createHistoryPanel('history') : null}
         />
       }
       dock={

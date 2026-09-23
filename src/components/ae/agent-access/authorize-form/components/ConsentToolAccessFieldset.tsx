@@ -22,6 +22,13 @@ export function ConsentToolAccessFieldset({
   onAddApprovedTool,
   onRemoveApprovedTool,
 }: ConsentToolAccessFieldsetProps) {
+  const emptySelection = approvedToolRefs.length === 0
+  const searchFailed = toolSearch.error !== undefined
+  const searchDescribedBy = [
+    emptySelection ? 'tool-selection-empty' : undefined,
+    searchFailed ? 'tool-search-error' : undefined,
+  ].filter((value): value is string => value !== undefined).join(' ')
+
   return (
     <fieldset className="grid gap-3" disabled={pending}>
       <legend className="text-sm font-medium text-foreground">Tools</legend>
@@ -45,8 +52,11 @@ export function ConsentToolAccessFieldset({
       )}
       {approvedToolAccess === 'selected_tools' ? (
         <div className="grid gap-3">
-          {approvedToolRefs.length === 0 ? (
-            <Alert variant="destructive"><AlertTitle>Select at least one Tool</AlertTitle><AlertDescription>Selected access cannot be empty.</AlertDescription></Alert>
+          {emptySelection ? (
+            <Alert id="tool-selection-empty" tabIndex={-1} variant="destructive">
+              <AlertTitle>Select at least one Tool</AlertTitle>
+              <AlertDescription>Selected access cannot be empty.</AlertDescription>
+            </Alert>
           ) : (
             <ul className="grid gap-2" aria-label="Approved Tools">
               {approvedToolRefs.map((toolRef) => (
@@ -54,6 +64,7 @@ export function ConsentToolAccessFieldset({
                   <Link
                     to="/tools/$toolRef"
                     params={{ toolRef }}
+                    title={toolRef}
                     className="truncate font-mono text-sm underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                   >
                     {toolRef}
@@ -67,23 +78,41 @@ export function ConsentToolAccessFieldset({
             <div className="grid gap-2">
               <Label htmlFor="tool-search">Find an admitted Tool</Label>
               <div className="flex flex-col gap-2 sm:flex-row">
-                <Input id="tool-search" value={toolQuery} onChange={(event) => onToolQueryChange(event.target.value)} />
+                <Input
+                  id="tool-search"
+                  value={toolQuery}
+                  onChange={(event) => onToolQueryChange(event.target.value)}
+                  aria-invalid={emptySelection || searchFailed || undefined}
+                  {...(searchDescribedBy.length === 0 ? {} : { 'aria-describedby': searchDescribedBy })}
+                  onKeyDown={(event) => {
+                    if (event.key !== 'Enter') return
+                    event.preventDefault()
+                    void onFindTools()
+                  }}
+                />
                 <Button type="button" variant="secondary" disabled={toolSearch.pending || toolQuery.trim().length === 0} onClick={() => void onFindTools()}>
                   {toolSearch.pending ? 'Searching…' : 'Search Tools'}
                 </Button>
               </div>
-              {toolSearch.error === undefined ? null : <p role="alert" className="text-sm text-destructive">{toolSearch.error}</p>}
+              {toolSearch.error === undefined ? null : <p id="tool-search-error" role="alert" className="text-sm text-destructive">{toolSearch.error}</p>}
               {toolSearch.result?.kind === 'ok' ? (
-                <ul className="grid gap-2" aria-label="Tool search results">
-                  {toolSearch.result.items.map((item) => (
-                    <li key={item.toolRef} className="flex min-w-0 items-center justify-between gap-3 rounded-md border px-3 py-2">
-                      <span className="min-w-0"><span className="block truncate font-medium">{item.title}</span><span className="block truncate font-mono text-xs text-muted-foreground">{item.toolRef}</span></span>
-                      <Button type="button" variant="secondary" disabled={approvedToolRefSet.has(item.toolRef)} onClick={() => onAddApprovedTool(item.toolRef)}>
-                        {approvedToolRefSet.has(item.toolRef) ? 'Added' : 'Add'}
-                      </Button>
-                    </li>
-                  ))}
-                </ul>
+                toolSearch.result.items.length === 0 ? (
+                  <p role="status" className="text-sm text-muted-foreground">No Tools match the query</p>
+                ) : (
+                  <ul className="grid gap-2" aria-label="Tool search results">
+                    {toolSearch.result.items.map((item) => (
+                      <li key={item.toolRef} className="flex min-w-0 items-center justify-between gap-3 rounded-md border px-3 py-2">
+                        <span className="min-w-0">
+                          <span className="block truncate font-medium">{item.title}</span>
+                          <span className="block truncate font-mono text-xs text-muted-foreground" title={item.toolRef}>{item.toolRef}</span>
+                        </span>
+                        <Button type="button" variant="secondary" disabled={approvedToolRefSet.has(item.toolRef)} onClick={() => onAddApprovedTool(item.toolRef)}>
+                          {approvedToolRefSet.has(item.toolRef) ? 'Added' : 'Add'}
+                        </Button>
+                      </li>
+                    ))}
+                  </ul>
+                )
               ) : null}
             </div>
           ) : null}

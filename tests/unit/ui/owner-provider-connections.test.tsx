@@ -42,6 +42,7 @@ const connection = {
   providerRef: 'provider:x402:seller.example',
   providerAccountRef: 'x402:https://seller.example/paid',
   adapterId: 'x402-fetch:v2',
+  sourceEnvironment: 'sandbox' as const,
   grantedScopes: [],
   grantedResources: ['https://seller.example/paid'],
   authorityGeneration: 4,
@@ -70,6 +71,7 @@ describe('owner x402 connection controls', () => {
     render(<AeOwnerProviderConnections businessId="business:one" connections={[connection]} />)
 
     expect(screen.getByText('POST https://seller.example/paid')).toBeTruthy()
+    expect(screen.getByText('Sandbox')).toBeTruthy()
     expect(screen.getByText(/Permission: route x402 payment to 0x1111/)).toBeTruthy()
     expect(screen.getByText('Authority generation 4')).toBeTruthy()
     expect(screen.getByText('No scheduled authority expiry')).toBeTruthy()

@@ -1,27 +1,27 @@
+import { AeSection, AeSettingsRow } from '@/components/ae/layout/AeSection'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
-import { AeSettingsRow } from '@/components/ae/layout/AeSection'
 
-const recoveryChecks = [
+const recoveryChecks: ReadonlyArray<{
+  title: string
+  description: string
+  href?: string
+}> = [
   {
-    title: 'Review and revoke Clerk sessions',
-    description: 'In Clerk, revoke unfamiliar devices and review factors and recovery methods.',
-    href: '#clerk-account-security',
+    title: 'Review and revoke sessions',
+    description: 'Open Profile to revoke unfamiliar devices and review factors and recovery methods.',
   },
   {
     title: 'Rotate or disconnect Agents',
     description: 'Review Agent credentials; compromise rotation revokes the predecessor immediately.',
-    href: '/agent-access',
   },
   {
     title: 'Revoke or reauthorize Provider connections',
-    description: 'Review x402 wallet-control authority and its generation separately from Tool readiness.',
-    href: '/owner/operations#provider-connections',
+    description: 'Review wallet-control authority and its generation separately from Tool readiness.',
   },
   {
     title: 'Review Provider payout authority',
     description: 'Confirm the Stripe-hosted payout destination and readiness before another transfer.',
-    href: '/owner/operations#earnings',
   },
   {
     title: 'Retain evidence and contact support',
@@ -29,23 +29,16 @@ const recoveryChecks = [
       'Copy durable references from Security history — never tokens, signatures, recovery factors, or secrets.',
     href: '/support',
   },
-] as const
+]
 
 export function AeCompromiseRecoveryChecklist() {
   return (
-    <details id="compromise-recovery" className="rounded-lg border border-border p-gutter">
-      <summary
-        className="cursor-pointer marker:text-muted-foreground"
-        aria-label="If you suspect compromise"
-      >
-        <span className="ml-intra inline-grid gap-intra align-middle">
-          <span className="font-sans text-base font-semibold leading-snug tracking-tight text-foreground">If you suspect compromise</span>
-          <span className="text-sm font-normal text-muted-foreground">
-            Sessions, Agents, Provider connections, and payout authority — reviewing does not change them.
-          </span>
-        </span>
-      </summary>
-      <div className="mt-related grid gap-related">
+    <AeSection
+      id="compromise-recovery"
+      title="If you suspect compromise"
+      description="Sessions, Agents, Provider connections, and payout authority — reviewing does not change them."
+    >
+      <div className="grid gap-related">
         <Alert>
           <AlertTitle>This page does not mark the Account contained</AlertTitle>
           <AlertDescription>
@@ -62,13 +55,13 @@ export function AeCompromiseRecoveryChecklist() {
               <AeSettingsRow
                 title={check.title}
                 description={check.description}
-                href={check.href}
+                {...(check.href === undefined ? {} : { href: check.href })}
                 action={<Badge variant="secondary">Review at source</Badge>}
               />
             </li>
           ))}
         </ol>
       </div>
-    </details>
+    </AeSection>
   )
 }

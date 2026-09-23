@@ -41,6 +41,7 @@ export type RecoveryRow = Readonly<{
   dispatchState?: 'enqueued' | 'running' | 'completed' | 'failed' | 'reconciliation_required' | undefined
   toolJson: string
   inputJson: string
+  updatedAt?: number
 }>
 
 export const principal: AgentAccessPrincipal = {

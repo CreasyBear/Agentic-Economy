@@ -1,16 +1,6 @@
 export type OperatorRole = 'owner' | 'admin' | 'developer'
 
-export const roleHomeHref: Record<OperatorRole, string> = {
-  owner: '/owner',
-  admin: '/admin/index-health',
-  developer: '/developers/discovery',
-}
 
-export const roleLabel: Record<OperatorRole, string> = {
-  owner: 'Workspace',
-  admin: 'Administration',
-  developer: 'Developer tools',
-}
 
 /** Derives the operator role from a pathname prefix, for chrome (404, pending, error) that renders before a route's own operatorRole is known. */
 export function operatorRoleForPath(pathname: string): OperatorRole | undefined {
@@ -43,3 +33,4 @@ export function ownerWorkspaceOwnerForPath(pathname: string): OwnerWorkspaceOwne
 export type OperatorNavBadgeValue = number | string | null | undefined
 
 export type OperatorNavBadges = Partial<Record<string, OperatorNavBadgeValue>>
+

@@ -24,6 +24,14 @@ import {
   type StripeWebhookVerifier,
 } from './internal/stripe-webhook'
 import type { Environment } from './internal/payout-http-runtime'
+import { readFormanceConfiguration } from './internal/formance-config'
+
+export type FormancePresence = 'configured' | 'not_configured'
+
+/** Reports only whether the Formance ledger configuration parses; never exposes its values. */
+export function readFormancePresence(): FormancePresence {
+  return readFormanceConfiguration().kind === 'configured' ? 'configured' : 'not_configured'
+}
 
 export {
   beginAccountFundingThroughSource,

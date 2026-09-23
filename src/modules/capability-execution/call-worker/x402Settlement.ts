@@ -79,6 +79,11 @@ export function configuredX402RpcUrl(
   return configuredX402RpcUrls(network, environment)[0]
 }
 
+/**
+ * Requires valid observations from every configured RPC. Ensures immutable
+ * transaction evidence and nonce state agree, while maturity uses the least
+ * advanced observation. Missing or conflicting evidence remains unavailable.
+ */
 export async function readX402EvmReceipt(
   network: string,
   asset: string,
@@ -119,9 +124,17 @@ export async function readX402EvmReceipt(
 
   const first = receipts[0]
   if (first === undefined || !x402EvmReceiptsAgree(first, first)) return undefined
-  return receipts.slice(1).every((receipt) => receipt !== undefined && x402EvmReceiptsAgree(first, receipt))
-    ? first
-    : undefined
+  let confirmations = first.confirmations
+  let observedBlockTimestamp = first.observedBlockTimestamp
+  for (const receipt of receipts.slice(1)) {
+    if (receipt === undefined || !x402EvmReceiptsAgree(first, receipt)) return undefined
+    if (receipt.confirmations < confirmations) confirmations = receipt.confirmations
+    if (receipt.observedBlockTimestamp < observedBlockTimestamp) {
+      observedBlockTimestamp = receipt.observedBlockTimestamp
+    }
+  }
+  if (confirmations < BigInt(confirmation?.minimumConfirmations ?? 1)) return undefined
+  return { ...first, confirmations, observedBlockTimestamp }
 }
 
 function x402EvmReceiptsAgree(left: X402EvmReceipt, right: X402EvmReceipt): boolean {
@@ -158,10 +171,8 @@ function x402EvmReceiptsAgree(left: X402EvmReceipt, right: X402EvmReceipt): bool
   if (
     left.transactionHash !== right.transactionHash
     || left.status !== right.status
-    || left.confirmations !== right.confirmations
     || left.blockHash !== right.blockHash
     || left.blockNumber !== right.blockNumber
-    || left.observedBlockTimestamp !== right.observedBlockTimestamp
     || left.authorizationState !== right.authorizationState
     || left.transactionTo !== right.transactionTo
     || left.transactionInput !== right.transactionInput
@@ -204,11 +215,9 @@ export async function recordX402TransportObservation(
   }>,
 ): Promise<X402TransportObservationRecord> {
   const x402SettlementStatus = x402SettlementStatusForObservation(input.observation)
-  const settlementDigest =
-    input.observation.settlementEvidence?.kind === 'settled'
-    || input.observation.settlementEvidence?.kind === 'not_settled'
-      ? input.observation.settlementEvidence.digest
-      : undefined
+  const settlementDigest = input.observation.settlementEvidence?.kind !== 'not_submitted'
+    ? input.observation.settlementEvidence?.digest
+    : undefined
   const evidenceRefs = [
     ...input.operation.readiness.evidenceRefs,
     transportObservationDigest(input.observation),
@@ -232,7 +241,8 @@ export async function recordX402TransportObservation(
     ...(settlementDigest === undefined
       ? {}
       : { paymentResponseDigest: settlementDigest }),
-    ...(x402SettlementStatus === 'unknown'
+    ...((x402SettlementStatus === 'unknown'
+      || (x402SettlementStatus === 'settled' && input.observation.disposition === 'succeeded'))
       && input.observation.responseDigest !== undefined
       && input.observation.outputJson !== undefined
       ? {

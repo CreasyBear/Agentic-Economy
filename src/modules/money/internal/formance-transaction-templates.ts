@@ -106,9 +106,10 @@ export type FormanceManagedCallFinalization = Readonly<{
   externalEvidenceDigest: string
 }>
 
-export type FormanceManagedCallRelease = FormanceManagedCallFinalization & Readonly<{
-  submissionProvenAbsent: true
-}>
+export type FormanceManagedCallRelease = FormanceManagedCallFinalization & (
+  | Readonly<{ submissionProvenAbsent: true; authorizationProvenExpiredUnused?: never }>
+  | Readonly<{ authorizationProvenExpiredUnused: true; submissionProvenAbsent?: never }>
+)
 
 export type FormanceProviderReversal = Readonly<{
   booking: FormanceManagedCallBooking
@@ -179,7 +180,7 @@ export function prepareFormanceManagedCallRelease(
   const amounts = managedCallAmounts(input.booking)
   if (accounts === undefined
     || amounts === undefined
-    || input.submissionProvenAbsent !== true
+    || (input.submissionProvenAbsent !== true && input.authorizationProvenExpiredUnused !== true)
     || !SHA256.test(input.externalEvidenceDigest)) {
     return refused('formance_managed_call_input_invalid')
   }
@@ -232,6 +233,39 @@ export function prepareFormanceManagedCallSettlement(
       obligation_settled: accounts.obligationSettled,
       amount: amounts.provider,
     }, input.externalEvidenceDigest),
+  ])
+}
+
+/**
+ * Paid service, no recoverable buyer result: return the buyer's reservation,
+ * but consume treasury funds and settle the Provider obligation. The Provider
+ * expense remains AE's expense; this must never reverse the onchain payment.
+ * Requires independently verified payment before execution. Stable per-Call
+ * references and an atomic bulk make retries and competing finalizations safe.
+ */
+export function prepareFormancePaidCallRemedy(
+  input: FormanceManagedCallFinalization,
+): PreparedManagedCallBulk {
+  const accounts = managedCallAccounts(input.booking)
+  const amounts = managedCallAmounts(input.booking)
+  const settlement = prepareFormanceManagedCallSettlement(input)
+  if (accounts === undefined || amounts === undefined || settlement.kind === 'refused') {
+    return refused('formance_managed_call_input_invalid')
+  }
+  const provider = settlement.bulk.commands[1]
+  if (provider === undefined) return refused('formance_managed_call_input_invalid')
+  return preparedBulk([
+    managedCallCommand(input.booking, 'release-aud', 'CALL_RELEASED_AUD', {
+      account_available: accounts.accountAvailable,
+      call_reserved: accounts.callReserved,
+      legal_available: accounts.legalAvailable,
+      legal_reserved: accounts.legalReserved,
+      buyer_amount: amounts.buyer,
+      exposure_amount: amounts.buyer,
+      ...managedCallGenerationBudgetVariables(input.booking, accounts, amounts, 'release'),
+      ...managedCallPeriodVariables(input.booking, accounts, amounts, 'release'),
+    }, input.externalEvidenceDigest),
+    provider,
   ])
 }
 

@@ -6,6 +6,7 @@ export {
   AccountRegistryError,
   accountRef,
   generateAccountRef,
+  isAccountRef,
   generateMembershipRef,
   generateOwnershipRef,
   membershipRef,

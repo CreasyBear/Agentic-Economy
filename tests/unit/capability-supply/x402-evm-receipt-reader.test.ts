@@ -18,7 +18,9 @@ vi.mock('@/modules/network-guard/public', () => ({
   isPublicHttpTarget: mocks.isPublicHttpTarget,
 }))
 
-import { readGuardedX402EvmReceipt } from '@/modules/capability-supply/server'
+import { readGuardedX402EvmReceipt, readGuardedX402UnusedAuthorization } from '@/modules/capability-supply/server'
+import { decodeFunctionData } from 'viem'
+import { eip3009ABI } from '@x402/evm'
 
 const transactionHash = `0x${'1'.repeat(64)}`
 const blockHash = `0x${'2'.repeat(64)}`
@@ -110,6 +112,31 @@ describe('guarded x402 EVM receipt reader', () => {
   beforeEach(() => {
     mocks.fetch.mockReset()
     mocks.isPublicHttpTarget.mockClear()
+  })
+
+  it('reads the confirmation head after the receipt wait completes', async () => {
+    installSuccessfulRpc(BASE_SEPOLIA_USDC_ADDRESS)
+    const respond = mocks.fetch.getMockImplementation()!
+    let receiptReturned = false
+    mocks.fetch.mockImplementation(async (target: URL, init: RequestInit) => {
+      const request = JSON.parse(String(init.body)) as { method: string }
+      if (request.method === 'eth_getTransactionReceipt') {
+        await new Promise(resolve => setTimeout(resolve, 20))
+        receiptReturned = true
+      }
+      const response = await respond(target, init) as Response
+      if (request.method === 'eth_getBlockByNumber' && !receiptReturned) {
+        const body = await response.json() as { result: Record<string, unknown> }
+        return rpcResult({ ...body.result, number: '0x64' })
+      }
+      return response
+    })
+    await expect(readGuardedX402EvmReceipt({
+      target: new URL('https://rpc.example.test'), aeEnvironment: 'sandbox',
+      network: BASE_SEPOLIA_NETWORK, asset: BASE_SEPOLIA_USDC_ADDRESS,
+      transactionHash, payer, nonce, dispatcher: {} as never,
+      minimumConfirmations: 12, confirmationTimeoutMs: 1_000,
+    })).resolves.toMatchObject({ confirmations: 13n, authorizationState: true })
   })
 
   it.each([
@@ -211,5 +238,82 @@ describe('guarded x402 EVM receipt reader', () => {
     })).resolves.toBeUndefined()
     expect(mocks.fetch).not.toHaveBeenCalled()
     expect(mocks.isPublicHttpTarget).not.toHaveBeenCalled()
+  })
+})
+
+describe('expired unused x402 authorization proof', () => {
+  const input = {
+    target: new URL('https://rpc.example.test'), aeEnvironment: 'sandbox' as const,
+    network: BASE_SEPOLIA_NETWORK, asset: BASE_SEPOLIA_USDC_ADDRESS,
+    payer, nonce, dispatcher: {} as never, expiresAt: 1_788_120_000_000,
+  }
+  const block = { hash: blockHash, number: '0x70', timestamp: '0x6a948bc0' }
+
+  beforeEach(() => {
+    mocks.fetch.mockReset()
+    mocks.isPublicHttpTarget.mockResolvedValue(true)
+  })
+
+  it('proves an unused authorization at the exclusive expiry bound using the exact safe block hash', async () => {
+    mocks.fetch.mockResolvedValueOnce(rpcResult(block))
+      .mockResolvedValueOnce(rpcResult(`0x${'0'.repeat(64)}`))
+    await expect(readGuardedX402UnusedAuthorization(input)).resolves.toEqual({
+      blockHash, blockNumber: 112n, blockTimestamp: 1_788_120_000n, authorizationState: false,
+    })
+    const requests = mocks.fetch.mock.calls.map(([, init]) => JSON.parse(String((init as RequestInit).body)))
+    expect(requests[0]).toMatchObject({ method: 'eth_getBlockByNumber', params: ['safe', false] })
+    expect(requests[1]).toMatchObject({ method: 'eth_call', params: [
+      { to: BASE_SEPOLIA_USDC_ADDRESS }, { blockHash, requireCanonical: true },
+    ] })
+    expect(decodeFunctionData({ abi: eip3009ABI, data: requests[1].params[0].data })).toMatchObject({
+      functionName: 'authorizationState', args: [payer, nonce],
+    })
+  })
+
+  it('does not round a millisecond expiry down to an earlier safe block', async () => {
+    mocks.fetch.mockResolvedValueOnce(rpcResult(block))
+    await expect(readGuardedX402UnusedAuthorization({ ...input, expiresAt: input.expiresAt + 1 })).resolves.toBeUndefined()
+    expect(mocks.fetch).toHaveBeenCalledTimes(1)
+  })
+
+  it.each([
+    ['used nonce', `0x${'0'.repeat(63)}1`], ['invalid boolean', '0x00'],
+    ['missing state', null], ['non-boolean word', `0x${'0'.repeat(63)}2`],
+  ])('refuses %s', async (_label, state) => {
+    mocks.fetch.mockResolvedValueOnce(rpcResult(block)).mockResolvedValueOnce(rpcResult(state))
+    await expect(readGuardedX402UnusedAuthorization(input)).resolves.toBeUndefined()
+  })
+
+  it.each([
+    ['missing safe block', null], ['missing hash', { ...block, hash: null }],
+    ['invalid number', { ...block, number: '0x00' }], ['invalid timestamp', { ...block, timestamp: '-1' }],
+  ])('refuses %s without falling back to latest', async (_label, value) => {
+    mocks.fetch.mockResolvedValueOnce(rpcResult(value))
+    await expect(readGuardedX402UnusedAuthorization(input)).resolves.toBeUndefined()
+    expect(mocks.fetch).toHaveBeenCalledTimes(1)
+  })
+
+  it('refuses a block that loses canonical status before the nonce read', async () => {
+    mocks.fetch.mockResolvedValueOnce(rpcResult(block)).mockResolvedValueOnce(new Response(JSON.stringify({
+      jsonrpc: '2.0', id: 1, error: { code: -32000, message: 'block is not canonical' },
+    })))
+    await expect(readGuardedX402UnusedAuthorization(input)).resolves.toBeUndefined()
+    expect(mocks.fetch).toHaveBeenCalledTimes(2)
+  })
+
+  it.each([
+    ['wrong chain', { network: BASE_MAINNET_NETWORK }], ['wrong asset', { asset: BASE_MAINNET_USDC_ADDRESS }],
+    ['invalid payer', { payer: 'no' }], ['invalid nonce', { nonce: '0x12' }],
+    ['HTTP target', { target: new URL('http://rpc.example.test') }],
+    ['invalid expiry', { expiresAt: Number.NaN }],
+  ])('refuses %s before RPC', async (_label, change) => {
+    await expect(readGuardedX402UnusedAuthorization({ ...input, ...change })).resolves.toBeUndefined()
+    expect(mocks.fetch).not.toHaveBeenCalled()
+  })
+
+  it('refuses private network targets', async () => {
+    mocks.isPublicHttpTarget.mockResolvedValueOnce(false)
+    await expect(readGuardedX402UnusedAuthorization(input)).resolves.toBeUndefined()
+    expect(mocks.fetch).not.toHaveBeenCalled()
   })
 })

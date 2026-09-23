@@ -1,4 +1,3 @@
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -19,7 +18,7 @@ export function HttpCredentialForm({
     <form className="grid max-w-xl gap-5" onSubmit={(event) => void onSubmit(event)}>
       <div className="grid gap-2">
         <p className="text-sm text-muted-foreground">
-          Enter the credential for {sourceOriginLabel}. AE stores it in the Provider connection and will not show it again.
+          Enter the credential for {sourceOriginLabel}. Agentic Economy stores it in the Provider connection and will not show it again.
         </p>
       </div>
       <div className="grid gap-2">
@@ -31,22 +30,20 @@ export function HttpCredentialForm({
           autoComplete="off"
           autoCapitalize="none"
           spellCheck={false}
-          required
           maxLength={32_768}
           disabled={busy}
           aria-describedby={error === undefined ? undefined : 'provider-connection-error'}
           aria-invalid={error === undefined ? undefined : true}
           onChange={(event) => onCredentialChange(event.target.value)}
         />
+        {error === undefined ? null : (
+          <p id="provider-connection-error" className="text-sm text-destructive" role="alert">
+            {error}
+          </p>
+        )}
       </div>
-      {error === undefined ? null : (
-        <Alert id="provider-connection-error" variant="destructive" role="alert">
-          <AlertTitle>Provider not connected</AlertTitle>
-          <AlertDescription>{error}</AlertDescription>
-        </Alert>
-      )}
       <div className="flex flex-wrap gap-3">
-        <Button type="submit" disabled={busy || credential.length === 0}>
+        <Button type="submit" disabled={busy}>
           {busy ? 'Connecting…' : 'Connect Provider'}
         </Button>
         <Button type="button" variant="secondary" disabled={busy} onClick={() => void onCancel()}>

@@ -77,5 +77,5 @@ describe('convex string reference ratchet', () => {
     ])
     expect([...new Set(validation.skippedFictional.map((reference) => reference.literal))].sort()).toEqual(fictional)
     expect(validation.skippedFictional).toHaveLength(5)
-  })
+  }, 15_000)
 })

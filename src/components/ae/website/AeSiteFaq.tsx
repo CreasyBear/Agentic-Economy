@@ -1,3 +1,5 @@
+import { Link } from '@tanstack/react-router'
+
 import {
   Accordion,
   AccordionContent,
@@ -5,34 +7,64 @@ import {
   AccordionTrigger,
 } from '@/components/ui/accordion'
 
-type AeSiteFaqItem = {
-  question: string
-  answer: string
-}
+import { AeSiteSection } from './AeSiteSection'
+import { AeSiteHeading } from './AeSiteType'
 
+import type { AeSiteFaqProps } from './faq.contracts'
+
+/** Port of aecon.ai's Dusk FAQ 1 two-column accordion. */
 export function AeSiteFaq({
   labelledBy,
   questions,
-}: {
-  labelledBy: string
-  questions: readonly AeSiteFaqItem[]
-}) {
+  title,
+  statusLinkLead,
+  statusLinkLabel,
+}: AeSiteFaqProps) {
   return (
-    <Accordion type="single" collapsible className="w-full md:ml-auto md:w-2/3" aria-labelledby={labelledBy}>
-      {questions.map((item) => (
-        <AccordionItem
-          key={item.question}
-          value={item.question}
-          className="border-background/40"
-        >
-          <AccordionTrigger className="min-h-touch py-section text-start text-lg font-medium text-background hover:no-underline hover:text-background [&[data-panel-open]]:text-background [&>svg]:text-background/70">
-            {item.question}
-          </AccordionTrigger>
-          <AccordionContent className="text-pretty text-base leading-7 text-background/80 sm:text-lg sm:leading-8">
-            {item.answer}
-          </AccordionContent>
-        </AccordionItem>
-      ))}
-    </Accordion>
+    <AeSiteSection labelledBy={labelledBy} rhythm="section">
+      <div className="mx-auto w-full max-w-7xl">
+        <div className="grid gap-6 md:grid-cols-2 md:gap-6">
+          <div>
+            {title === undefined ? null : (
+              <AeSiteHeading
+                as="h2"
+                size="md"
+                id={labelledBy}
+                className="max-w-sm"
+              >
+                {title}
+              </AeSiteHeading>
+            )}
+          </div>
+          <div>
+            <Accordion type="single" collapsible className="w-full">
+              {questions.map((item) => (
+                <AccordionItem
+                  key={item.question}
+                  value={item.question}
+                  className="border-dashed"
+                >
+                  <AccordionTrigger className="cursor-pointer text-base hover:no-underline">
+                    {item.question}
+                  </AccordionTrigger>
+                  <AccordionContent>
+                    <p className="text-base text-muted-foreground">{item.answer}</p>
+                  </AccordionContent>
+                </AccordionItem>
+              ))}
+            </Accordion>
+
+            {statusLinkLabel === undefined ? null : (
+              <p className="mt-6 text-muted-foreground">
+                {statusLinkLead === undefined ? null : <>{statusLinkLead}{' '}</>}
+                <Link to="/status" className="font-medium text-primary hover:underline">
+                  {statusLinkLabel}
+                </Link>
+              </p>
+            )}
+          </div>
+        </div>
+      </div>
+    </AeSiteSection>
   )
 }
