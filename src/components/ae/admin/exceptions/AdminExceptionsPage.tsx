@@ -52,6 +52,7 @@ export function AdminExceptionsPage(props: AdminExceptionsPageProps) {
       >
         <ExceptionFilterChips
           selected={props.search.kind ?? null}
+          counts={exceptions.data.counts}
           onSelect={exceptions.onSelectKind}
           onClear={exceptions.onClear}
         />
@@ -64,6 +65,9 @@ export function AdminExceptionsPage(props: AdminExceptionsPageProps) {
       )}
       <ExceptionFeedTable
         rows={exceptions.data.rows}
+        total={exceptions.data.total}
+        truncated={exceptions.data.truncated}
+        unavailable={exceptions.data.unavailableLabels.length > 0}
         filtered={exceptions.filtered}
         onOpen={exceptions.onOpen}
       />

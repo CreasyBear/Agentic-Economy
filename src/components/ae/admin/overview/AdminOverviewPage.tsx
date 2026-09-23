@@ -36,7 +36,7 @@ export function AdminOverviewPage({ formance }: AdminOverviewPageProps) {
           <AeSection title={ADMIN_OVERVIEW_COPY.searchTitle} description={ADMIN_OVERVIEW_COPY.searchDescription}>
             <AdminObjectSearchForm state={search.state} onSubmit={(input) => void search.submit(input)} />
           </AeSection>
-          <OldestExceptions rows={data.exceptions} unavailable={data.exceptionsUnavailable} />
+          <OldestExceptions rows={data.exceptions} unavailable={data.exceptionsUnavailable} total={data.exceptionsTotal} />
           <HeadlineStrip headline={data.headline} />
           <RecentlyViewed rows={data.recent} />
         </div>

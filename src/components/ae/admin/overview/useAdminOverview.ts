@@ -11,6 +11,7 @@ import {
   adminObjectHref,
   adminRecentRefsSchema,
 } from '../object-search/object-search.contracts'
+import { ADMIN_METRICS_COPY } from '../metrics/metrics.contracts'
 import {
   ADMIN_OVERVIEW_COPY,
   exceptionKindLabel,
@@ -49,10 +50,11 @@ export function useAdminOverview(formance: AdminConfiguredState): AdminOverviewD
     configuration: { formance, ...overview },
     exceptions: exceptions.items.map(toExceptionRow).slice(0, 8),
     exceptionsUnavailable: exceptions.unavailable.length > 0,
+    exceptionsTotal: exceptions.total,
     headline: {
-      settledCallValue: metrics.headline.money === 'not_configured'
+      settledCallValue: metrics.headline.money === 'no_settled_usage'
         || metrics.headline.settledCallValue === null
-        ? ADMIN_OVERVIEW_COPY.notConfigured
+        ? ADMIN_METRICS_COPY.noSettledUsage
         : formatCurrencyAmount(metrics.headline.settledCallValue),
       settledCalls: numberFormatter.format(metrics.headline.settledCalls),
       successRate: metrics.headline.successRate === null

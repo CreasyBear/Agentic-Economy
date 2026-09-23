@@ -48,6 +48,9 @@ export type AdminResolutionRowModel = Readonly<{
 
 export type AdminExceptionsReadyState = Readonly<{
   kind: 'ready'
+  total: number
+  truncated: boolean
+  counts: Readonly<Record<AdminExceptionKind, number>>
   rows: readonly AdminExceptionRowModel[]
   resolutions: readonly AdminResolutionRowModel[]
   unavailableLabels: readonly string[]
@@ -66,11 +69,15 @@ export type AdminExceptionsPageProps = Readonly<{
 export type ExceptionFilterChipsProps = Readonly<{
   selected: AdminExceptionKind | null
   onSelect: (kind: AdminExceptionKind | null) => void
+  counts: Readonly<Record<AdminExceptionKind, number>>
   onClear: () => void
 }>
 
 export type ExceptionFeedTableProps = Readonly<{
   rows: readonly AdminExceptionRowModel[]
+  total: number
+  truncated: boolean
+  unavailable: boolean
   filtered: boolean
   onOpen: (row: AdminExceptionRowModel) => void
 }>
@@ -119,9 +126,13 @@ export const ADMIN_EXCEPTIONS_COPY = {
   noFilterMatches: 'No matches for these filters.',
   noRecentResolutions: 'No recent Purchase resolutions.',
   someUnavailable: 'Some sources are unavailable:',
-  viewEvidence: 'View evidence',
-  evidenceTitle: 'Exception evidence',
-  evidenceDescription: 'Recorded fields for this exception.',
+  viewDetails: 'View details',
+  detailsTitle: 'Exception details',
+  detailsDescription: 'Recorded fields for this exception.',
+  openObject: 'Open object record',
+  verifySourceAuthority: 'Next step: Verify source authority on the Tool version record.',
+  exceptionsUnavailable: 'Exception source unavailable.',
+  showingOldest: (total: number) => `Showing oldest 100 of ${total}`,
   unavailable: getStatusPresentation('unavailable').label,
   columnLabels: {
     kind: 'Kind',
@@ -142,5 +153,5 @@ export const ADMIN_EXCEPTIONS_COPY = {
 
 export function isAdminExceptionFeed(value: unknown): value is AdminExceptionFeed {
   if (typeof value !== 'object' || value === null) return false
-  return 'items' in value && 'unavailable' in value
+  return 'items' in value && 'unavailable' in value && 'total' in value && 'truncated' in value && 'counts' in value
 }

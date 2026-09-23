@@ -191,7 +191,7 @@ describe('admin object view redaction', () => {
         createdAt: NOW,
         updatedAt: NOW,
       })
-      await ctx.db.insert('capabilityPublications', {
+      const currentPublicationId = await ctx.db.insert('capabilityPublications', {
         publicationRef: 'publication:admin-view-test',
         toolRef: TOOL_REF,
         revision: 3,
@@ -218,6 +218,24 @@ describe('admin object view redaction', () => {
         registrationEvidenceRefs: [],
         createdAt: NOW,
         updatedAt: NOW,
+      })
+      const currentPublication = await ctx.db.get(currentPublicationId)
+      if (currentPublication === null) throw new Error('current_publication_fixture_missing')
+      const { _id, _creationTime, ...supersededPublication } = currentPublication
+      void _id
+      void _creationTime
+      await ctx.db.insert('capabilityPublications', {
+        ...supersededPublication,
+        publicationRef: 'publication:admin-view-superseded',
+        revision: 2,
+        disposition: 'superseded',
+        updatedAt: NOW - 1_000,
+      })
+      await ctx.db.insert('capabilityPublications', {
+        ...supersededPublication,
+        publicationRef: 'publication:admin-view-older-current',
+        revision: 1,
+        updatedAt: NOW + 1_000,
       })
       await ctx.db.insert('capabilitySupplyAdmissionCases', {
         caseRef: 'admission-case:admin-view-test',

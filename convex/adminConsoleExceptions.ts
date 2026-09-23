@@ -15,7 +15,13 @@ export const listAdminExceptions = defineAdminQuery({
   returns: adminExceptionFeedValue,
   handler: async (ctx, args) => {
     const feed = await readAdminExceptions(ctx, args.kind)
-    return { items: [...feed.items], unavailable: [...feed.unavailable] }
+    return {
+      items: [...feed.items],
+      total: feed.total,
+      truncated: feed.truncated,
+      counts: feed.counts,
+      unavailable: [...feed.unavailable],
+    }
   },
 })
 

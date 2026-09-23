@@ -30,6 +30,7 @@ export type AdminOverviewDataState =
       configuration: AdminOverviewConfiguration
       exceptions: readonly AdminOverviewExceptionRow[]
       exceptionsUnavailable: boolean
+      exceptionsTotal: number
       headline: AdminOverviewHeadline
       recent: readonly AdminOverviewRecentRow[]
     }>
@@ -57,7 +58,7 @@ export const ADMIN_OVERVIEW_COPY = {
   exceptionsDescription: 'The oldest unresolved items across every exception queue.',
   nothingNeedsAttention: 'Nothing needs attention.',
   exceptionsUnavailable: 'Some exception sources are unavailable.',
-  viewAll: 'View all',
+  viewAll: (total: number) => `View all (${total})`,
   metricsTitle: 'Last 7 days',
   settledCallValue: 'Settled Call value',
   settledCalls: 'Settled Calls',
@@ -79,7 +80,9 @@ const EXCEPTION_KIND_LABELS: Readonly<Record<AdminException['kind'], string>> = 
 }
 
 export function isAdminExceptionFeed(value: unknown): value is AdminExceptionFeed {
-  return typeof value === 'object' && value !== null && 'items' in value && 'unavailable' in value
+  return typeof value === 'object' && value !== null
+    && 'items' in value && 'unavailable' in value
+    && 'total' in value && 'truncated' in value && 'counts' in value
 }
 
 export function exceptionKindLabel(kind: AdminException['kind']): string {

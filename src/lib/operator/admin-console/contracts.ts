@@ -223,5 +223,8 @@ export type AdminException =
 export type AdminExceptionKind = AdminException['kind']
 export type AdminExceptionFeed = {
   readonly items: readonly AdminException[]
+  readonly total: number
+  readonly truncated: boolean
+  readonly counts: Readonly<Record<AdminExceptionKind, number>>
   readonly unavailable: readonly AdminExceptionKind[]
 }

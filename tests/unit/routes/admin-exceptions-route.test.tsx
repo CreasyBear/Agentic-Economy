@@ -1,4 +1,5 @@
 /** @vitest-environment jsdom */
+import { getFunctionName } from 'convex/server'
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import {
   RouterContextProvider,
@@ -15,6 +16,8 @@ vi.mock('convex/react', () => ({ useQuery: useQueryMock }))
 
 import { AdminExceptionsPage } from '@/components/ae/admin/exceptions/AdminExceptionsPage'
 import type { AdminExceptionFeed } from '@/lib/operator/admin-console/contracts'
+import type { AdminExceptionsSearch } from '@/components/ae/admin/exceptions/exceptions.contracts'
+import { isPublicToolRef } from '@/modules/capability-supply/public'
 import { parseBusinessSlug } from '@/modules/business/public'
 
 const parsedSlug = parseBusinessSlug('exception-provider')
@@ -22,12 +25,11 @@ if (parsedSlug.kind === 'malformed') throw new Error('admin_exception_fixture_sl
 
 function renderPage(
   feed: AdminExceptionFeed,
-  search: { kind?: 'removal_dispute' } = {},
+  search: AdminExceptionsSearch = {},
   onSearchChange = vi.fn(),
 ) {
-  useQueryMock
-    .mockReturnValueOnce(feed)
-    .mockReturnValueOnce([])
+  useQueryMock.mockImplementation((query) =>
+    getFunctionName(query) === 'adminConsoleExceptions:listAdminExceptions' ? feed : [])
   const rootRoute = createRootRoute()
   const routeTree = rootRoute.addChildren([
     createRoute({ getParentRoute: () => rootRoute, path: '/' }),
@@ -60,16 +62,45 @@ describe('/admin/exceptions', () => {
         since: Date.now() - 60_000,
       }],
       unavailable: [],
+      total: 1,
+      truncated: false,
+      counts: { uncertain_call: 0, removal_dispute: 1, source_authority_review: 0, admission_case: 0 },
     }, { kind: 'removal_dispute' })
 
-    expect(screen.getByText('dispute:route-test')).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Removal disputes (1)' })).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Clear all' }))
     expect(onSearchChange).toHaveBeenCalledWith({})
   })
 
   it('renders the unfiltered empty state', () => {
-    renderPage({ items: [], unavailable: [] })
+    renderPage({
+      items: [], total: 0, truncated: false,
+      counts: { uncertain_call: 0, removal_dispute: 0, source_authority_review: 0, admission_case: 0 },
+      unavailable: [],
+    })
 
     expect(screen.getByText('Nothing needs attention.')).toBeTruthy()
+  })
+
+  it('shows the oldest-100 cue and exact tab count, with a direct object link and review next step', () => {
+    const toolRef = `operation:v1:${'c'.repeat(64)}`
+    if (!isPublicToolRef(toolRef)) throw new Error('invalid_tool_ref_fixture')
+    renderPage({
+      items: [{
+        kind: 'source_authority_review',
+        publicationRef: toolRef,
+        businessSlug: parsedSlug.slug,
+        since: Date.now() - 60_000,
+      }],
+      total: 103,
+      truncated: true,
+      counts: { uncertain_call: 0, removal_dispute: 0, source_authority_review: 103, admission_case: 0 },
+      unavailable: [],
+    }, { kind: 'source_authority_review' })
+    expect(screen.getByText('Showing oldest 100 of 103')).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Source authority reviews (103)' })).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: `View details: ${toolRef}` }))
+    expect(screen.getByText('Next step: Verify source authority on the Tool version record.')).toBeTruthy()
+    expect(screen.getByRole('link', { name: 'Open object record' }).getAttribute('href')).toBe(`/admin/tools/${encodeURIComponent(toolRef)}`)
   })
 })

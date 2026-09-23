@@ -45,11 +45,11 @@ const columns: ColumnDef<AdminExceptionRowModel, unknown>[] = [
   },
 ]
 
-export function ExceptionFeedTable({ rows, filtered, onOpen }: ExceptionFeedTableProps) {
+export function ExceptionFeedTable({ rows, filtered, total, truncated, unavailable, onOpen }: ExceptionFeedTableProps) {
   return (
     <AeSection
       title={ADMIN_EXCEPTIONS_COPY.exceptionsTitle}
-      description={ADMIN_EXCEPTIONS_COPY.exceptionsDescription}
+      description={truncated ? ADMIN_EXCEPTIONS_COPY.showingOldest(total) : ADMIN_EXCEPTIONS_COPY.exceptionsDescription}
     >
       <AeRecordTable
         columns={columns}
@@ -57,14 +57,16 @@ export function ExceptionFeedTable({ rows, filtered, onOpen }: ExceptionFeedTabl
         getRowId={(row) => row.id}
         hideFilter
         caption={ADMIN_EXCEPTIONS_COPY.exceptionsTitle}
-        emptyMessage={filtered
-          ? ADMIN_EXCEPTIONS_COPY.noFilterMatches
-          : ADMIN_EXCEPTIONS_COPY.nothingNeedsAttention}
+        emptyMessage={unavailable && rows.length === 0
+          ? ADMIN_EXCEPTIONS_COPY.exceptionsUnavailable
+          : filtered
+            ? ADMIN_EXCEPTIONS_COPY.noFilterMatches
+            : ADMIN_EXCEPTIONS_COPY.nothingNeedsAttention}
         rowAction={{
           kind: 'button',
-          label: ADMIN_EXCEPTIONS_COPY.viewEvidence,
+          label: ADMIN_EXCEPTIONS_COPY.viewDetails,
           onOpen,
-          getAccessibleLabel: (row) => `${ADMIN_EXCEPTIONS_COPY.viewEvidence}: ${row.ref}`,
+          getAccessibleLabel: (row) => `${ADMIN_EXCEPTIONS_COPY.viewDetails}: ${row.ref}`,
         }}
       />
     </AeSection>

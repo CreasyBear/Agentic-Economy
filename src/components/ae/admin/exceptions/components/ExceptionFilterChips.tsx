@@ -5,7 +5,9 @@ import {
   type ExceptionFilterChipsProps,
 } from '../exceptions.contracts'
 
-export function ExceptionFilterChips({ selected, onSelect, onClear }: ExceptionFilterChipsProps) {
+export function ExceptionFilterChips({ selected, onSelect, onClear, counts }: ExceptionFilterChipsProps) {
+  const allCount = counts.uncertain_call + counts.removal_dispute
+    + counts.source_authority_review + counts.admission_case
   return (
     <div className="flex flex-wrap items-center gap-intra">
       {ADMIN_EXCEPTION_FILTERS.map((filter) => (
@@ -17,7 +19,7 @@ export function ExceptionFilterChips({ selected, onSelect, onClear }: ExceptionF
           aria-pressed={selected === filter.kind}
           onClick={() => onSelect(filter.kind)}
         >
-          {filter.label}
+          {filter.label} ({filter.kind === null ? allCount : counts[filter.kind]})
         </Button>
       ))}
       {selected === null ? null : (

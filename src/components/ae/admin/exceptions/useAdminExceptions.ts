@@ -37,6 +37,9 @@ export function useAdminExceptions({ search, onSearchChange }: AdminExceptionsPa
       ? { kind: 'refused' }
       : {
           kind: 'ready',
+          total: feed.total,
+          truncated: feed.truncated,
+          counts: feed.counts,
           rows: feed.items.map(toExceptionRowModel),
           resolutions: resolutions.map(toResolutionRowModel),
           unavailableLabels: feed.unavailable.map((kind) => ADMIN_EXCEPTION_KIND_LABELS[kind]),

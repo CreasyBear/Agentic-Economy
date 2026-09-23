@@ -34,10 +34,14 @@ export async function readAdminToolVersionView(
 ): Promise<AdminToolVersionView | { kind: 'object_not_found' }> {
   const publications = await ctx.db
     .query('capabilityPublications')
-    .withIndex('by_toolRef_and_disposition', (query) => query.eq('toolRef', ref))
-    .take(2)
-  if (publications.length !== 1) return { kind: 'object_not_found' }
-  const publication = publications[0]
+    .withIndex('by_toolRef_and_disposition', (query) => query
+      .eq('toolRef', ref)
+      .eq('disposition', 'current'))
+    .take(500)
+  const publication = publications.reduce<(typeof publications)[number] | undefined>(
+    (latest, candidate) => latest === undefined || candidate.revision > latest.revision ? candidate : latest,
+    undefined,
+  )
   if (publication === undefined) return { kind: 'object_not_found' }
 
   const [business, admissionCase] = await Promise.all([

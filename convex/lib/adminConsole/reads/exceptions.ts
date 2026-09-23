@@ -11,6 +11,9 @@ import type {
 import type { QueryCtx } from '../../../_generated/server'
 
 const UNCERTAIN_AGE_MS = 15 * 60 * 1_000
+// Per-source read ceiling. The feed exposes the oldest 100 within these bounded reads.
+const SOURCE_READ_LIMIT = 500
+const FEED_LIMIT = 100
 const OPEN_DISPUTE_STATUSES: readonly ('opened' | 'updated' | 'contested')[] = [
   'opened',
   'updated',
@@ -56,6 +59,14 @@ export const adminExceptionValue = v.union(
 
 export const adminExceptionFeedValue = v.object({
   items: v.array(adminExceptionValue),
+  total: v.number(),
+  truncated: v.boolean(),
+  counts: v.object({
+    uncertain_call: v.number(),
+    removal_dispute: v.number(),
+    source_authority_review: v.number(),
+    admission_case: v.number(),
+  }),
   unavailable: v.array(adminExceptionKindValue),
 })
 
@@ -99,15 +110,31 @@ export async function listAdminExceptions(
   ctx: QueryCtx,
   kind: AdminExceptionKind | null,
 ): Promise<AdminExceptionFeed> {
-  const kinds: readonly AdminExceptionKind[] = kind === null
-    ? ['uncertain_call', 'removal_dispute', 'source_authority_review', 'admission_case']
-    : [kind]
+  const kinds: readonly AdminExceptionKind[] = [
+    'uncertain_call', 'removal_dispute', 'source_authority_review', 'admission_case',
+  ]
   const sources = await Promise.all(kinds.map(async (sourceKind) =>
     await guardedAdminExceptionSource(sourceKind, async () => await readSource(ctx, sourceKind))))
-  const items = sources.flatMap((source) => 'items' in source ? source.items : [])
-    .sort((left, right) => left.since - right.since)
+  const all = sources.flatMap((source) => 'items' in source ? source.items : [])
+  const counts: Record<AdminExceptionKind, number> = {
+    uncertain_call: 0, removal_dispute: 0, source_authority_review: 0, admission_case: 0,
+  }
+  for (const item of all) counts[item.kind] += 1
+  const items = (kind === null ? all : all.filter((item) => item.kind === kind))
+    .sort((left, right) => left.since - right.since
+      || left.kind.localeCompare(right.kind)
+      || exceptionRef(left).localeCompare(exceptionRef(right)))
   const unavailable = sources.flatMap((source) => 'unavailable' in source ? [source.unavailable] : [])
-  return { items, unavailable }
+  return { items: items.slice(0, FEED_LIMIT), total: items.length, truncated: items.length > FEED_LIMIT, counts, unavailable }
+}
+
+function exceptionRef(item: AdminException): string {
+  switch (item.kind) {
+    case 'uncertain_call': return item.callRef
+    case 'removal_dispute': return item.disputeRef
+    case 'source_authority_review': return item.publicationRef
+    case 'admission_case': return item.caseRef
+  }
 }
 
 export async function listRecentPurchaseResolutionRows(
@@ -142,7 +169,7 @@ async function readUncertainCalls(ctx: QueryCtx): Promise<readonly AdminExceptio
     .withIndex('by_state_and_reconciliation_nextAttemptAt', (query) =>
       query.eq('state', 'reconciliation_required'))
     .filter((query) => query.lt(query.field('createdAt'), cutoff))
-    .take(50)
+    .take(SOURCE_READ_LIMIT)
   return rows.flatMap((row): AdminException[] => {
     const parsed = parseCallRef(row.callRef)
     return parsed.kind === 'valid'
@@ -156,8 +183,8 @@ async function readRemovalDisputes(ctx: QueryCtx): Promise<readonly AdminExcepti
     await ctx.db.query('disputes')
       .withIndex('by_status_and_updatedAt', (query) => query.eq('status', status))
       .order('asc')
-      .take(50)))
-  const rows = pages.flat().sort((left, right) => left.createdAt - right.createdAt).slice(0, 50)
+      .take(SOURCE_READ_LIMIT)))
+  const rows = pages.flat().sort((left, right) => left.createdAt - right.createdAt).slice(0, SOURCE_READ_LIMIT)
   const joined = await Promise.all(rows.map(async (row): Promise<AdminException | null> => {
     const business = await ctx.db.get(row.businessId)
     if (business === null) return null
@@ -175,8 +202,8 @@ async function readSourceAuthorityReviews(ctx: QueryCtx): Promise<readonly Admin
       .withIndex('by_sourceAuthorityState_and_updatedAt', (query) =>
         query.eq('sourceAuthorityState', state))
       .order('asc')
-      .take(50)))
-  const rows = pages.flat().sort((left, right) => left.updatedAt - right.updatedAt).slice(0, 50)
+      .take(SOURCE_READ_LIMIT)))
+  const rows = pages.flat().sort((left, right) => left.updatedAt - right.updatedAt).slice(0, SOURCE_READ_LIMIT)
   const joined = await Promise.all(rows.map(async (row): Promise<AdminException | null> => {
     if (!isPublicToolRef(row.toolRef)) return null
     const business = await ctx.db.get(row.businessId)
@@ -199,8 +226,8 @@ async function readAdmissionCases(ctx: QueryCtx): Promise<readonly AdminExceptio
     await ctx.db.query('capabilitySupplyAdmissionCases')
       .withIndex('by_state_and_updatedAt', (query) => query.eq('state', state))
       .order('asc')
-      .take(50)))
-  const rows = pages.flat().sort((left, right) => left.updatedAt - right.updatedAt).slice(0, 50)
+      .take(SOURCE_READ_LIMIT)))
+  const rows = pages.flat().sort((left, right) => left.updatedAt - right.updatedAt).slice(0, SOURCE_READ_LIMIT)
   const joined = await Promise.all(rows.map(async (row): Promise<AdminException | null> => {
     const business = await ctx.db.get(row.businessId)
     if (business === null) return null

@@ -162,6 +162,14 @@ describe('admin exception reads', () => {
       'source_authority_review',
       'admission_case',
     ])
+    expect(result.total).toBe(4)
+    expect(result.truncated).toBe(false)
+    expect(result.counts).toEqual({
+      uncertain_call: 1,
+      removal_dispute: 1,
+      source_authority_review: 1,
+      admission_case: 1,
+    })
     expect(result.items.some((item) => item.kind === 'uncertain_call' && item.callRef === FRESH_CALL_REF)).toBe(false)
   })
 
@@ -177,6 +185,74 @@ describe('admin exception reads', () => {
 
     expect(result.items).toHaveLength(1)
     expect(result.items[0]?.kind).toBe('removal_dispute')
+  })
+
+  it('counts every review across index partitions, returns the oldest 100, and orders equal timestamps by kind then ref', async () => {
+    const backend = convexTestWithMarketComponents()
+    await seedExceptions(backend)
+    await backend.run(async (ctx) => {
+      const base = await ctx.db.query('capabilityPublications')
+        .withIndex('by_toolRef_and_disposition', (q) => q.eq('toolRef', TOOL_REF))
+        .first()
+      if (base === null) throw new Error('missing_publication_fixture')
+      const { _id, _creationTime, sourceAuthorityState, ...publication } = base
+      void _id
+      void _creationTime
+      void sourceAuthorityState
+      const reviewRequired: Doc<'capabilityPublications'>['sourceAuthorityState'] = 'review_required'
+      for (let index = 0; index < 103; index += 1) {
+        await ctx.db.insert('capabilityPublications', {
+          ...publication,
+          publicationRef: `publication:review:${index}`,
+          toolRef: `operation:v1:${index.toString(16).padStart(64, '0')}`,
+          revision: index + 2,
+          ...(index < 52 ? {} : { sourceAuthorityState: reviewRequired }),
+          updatedAt: index < 52 ? NOW - 1_000_000 + index : NOW - 2_700_000 + index,
+        })
+      }
+    })
+    const caller = await ownerAdmin(backend, 'user_admin-exceptions-complete')
+    const result = await caller.query(api.adminConsoleExceptions.listAdminExceptions, { kind: null })
+    if ('kind' in result) throw new Error('admin_exception_fixture_unexpected_refusal')
+
+    expect(result.counts.source_authority_review).toBe(104)
+    expect(result.total).toBe(107)
+    expect(result.truncated).toBe(true)
+    expect(result.items).toHaveLength(100)
+    expect(result.items[0]).toMatchObject({ kind: 'uncertain_call' })
+    expect(result.items[1]).toMatchObject({ kind: 'removal_dispute' })
+    expect(result.items[2]).toMatchObject({ kind: 'source_authority_review', publicationRef: `operation:v1:${(52).toString(16).padStart(64, '0')}` })
+    const selected = await caller.query(api.adminConsoleExceptions.listAdminExceptions, { kind: 'source_authority_review' })
+    if ('kind' in selected) throw new Error('admin_exception_fixture_unexpected_refusal')
+    expect(selected.total).toBe(104)
+    expect(selected.items).toHaveLength(100)
+    expect(selected.counts).toEqual(result.counts)
+  })
+
+  it('breaks equal-time ties by kind then reference', async () => {
+    const backend = convexTestWithMarketComponents()
+    await seedExceptions(backend)
+    await backend.run(async (ctx) => {
+      const base = await ctx.db.query('capabilitySupplyAdmissionCases')
+        .withIndex('by_caseRef', (q) => q.eq('caseRef', 'admission-case:admin-exceptions'))
+        .unique()
+      if (base === null) throw new Error('missing_case_fixture')
+      const { _id, _creationTime, ...admissionCase } = base
+      void _id
+      void _creationTime
+      await ctx.db.insert('capabilitySupplyAdmissionCases', {
+        ...admissionCase,
+        caseRef: 'admission-case:a',
+        updatedAt: admissionCase.updatedAt,
+      })
+    })
+    const caller = await ownerAdmin(backend, 'user_admin-exceptions-ties')
+    const result = await caller.query(api.adminConsoleExceptions.listAdminExceptions, { kind: null })
+    if ('kind' in result) throw new Error('admin_exception_fixture_unexpected_refusal')
+    expect(result.items.slice(-2).map((item) => item.kind === 'admission_case' ? item.caseRef : '')).toEqual([
+      'admission-case:a',
+      'admission-case:admin-exceptions',
+    ])
   })
 
   it('marks a rejecting source unavailable without throwing', async () => {
