@@ -31,9 +31,9 @@ const clerkMocks = vi.hoisted(() => ({
 }))
 
 vi.mock('@clerk/tanstack-react-start', () => ({
-  useReverification: (
-    fetcher: (...args: never[]) => Promise<unknown>,
-  ) => async (...args: never[]) => {
+  useReverification: <T>(
+    fetcher: (...args: never[]) => Promise<T>,
+  ) => async (...args: never[]): Promise<T> => {
     const first = await fetcher(...args)
     if (
       typeof first === 'object'

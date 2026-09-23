@@ -15,6 +15,7 @@ import { Button } from '@/components/ui/button'
 import { buttonVariants } from '@/components/ui/button-variants'
 import { cn } from '@/lib/utils'
 import { toast } from '@/lib/ui/toast'
+import { getStatusPresentation } from '@/lib/ui/status-presentation'
 import type { OwnerConnectReadinessReadback } from '@/modules/money/server'
 
 import {
@@ -202,7 +203,7 @@ export function AeConnectReturnPoller({
           {status === 'verifying' && (
             <Badge variant="outline" className="gap-1.5 animate-pulse text-muted-foreground">
               <Loader2Icon className="size-3 animate-spin" />
-              {paused ? 'Paused' : 'Verifying with Stripe...'}
+              {paused ? getStatusPresentation('paused').label : 'Verifying with Stripe...'}
             </Badge>
           )}
           {status === 'ready' && (

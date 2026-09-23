@@ -10,6 +10,7 @@ import {
   recoveryArgs,
 } from './call-worker/recover'
 import { prepareCallRun } from './call-worker/runPreparation'
+import { loadReadyRecoveryWork, type RecoveryWorkContext } from './call-worker/recovery/loading'
 import { releaseCallRun } from './call-worker/runRelease'
 import type { WorkerResult } from './call-worker/charge'
 import { buildBrokeredX402Receipt } from './call-worker/brokeredX402'
@@ -58,6 +59,7 @@ export {
   createManagedX402PaymentCallbacks,
   expireAuthorizationRecovery,
   invokeProviderConsequenceViaVercel,
+  loadReadyRecoveryWork,
   prepareCallRun,
   providerConsequenceX402PaymentCustodyAvailable,
   readRecoveryStatus,
@@ -70,3 +72,4 @@ export {
   X402_MANAGED_CUSTODY_REF,
 }
 export type { WorkerResult }
+export type { RecoveryWorkContext }

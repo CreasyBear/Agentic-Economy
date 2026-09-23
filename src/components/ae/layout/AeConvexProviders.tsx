@@ -1,14 +1,24 @@
 import { useAuth } from '@clerk/tanstack-react-start'
 import { ConvexHttpClient } from 'convex/browser'
-import { ConvexReactClient } from 'convex/react'
+import { ConvexReactClient, useConvexAuth, useQuery } from 'convex/react'
 import { ConvexProviderWithClerk } from 'convex/react-clerk'
 import { Link } from '@tanstack/react-router'
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { createContext, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 
 import { AePageState } from '@/components/ae/layout/AePageState'
 import { buttonVariants } from '@/components/ui/button-variants'
+import { captureClientExceptionOnClient } from '@/lib/observability/capture-client-exception'
 import { cn } from '@/lib/utils'
 import { api } from '../../../../convex/_generated/api'
+
+export const OperatorEntitlementContext = createContext(false)
+
+function OperatorEntitlementBridge({ children }: { children: ReactNode }) {
+  const { isAuthenticated } = useConvexAuth()
+  const result = useQuery(api.operatorContext.readCurrent, isAuthenticated ? {} : 'skip')
+  const canAccessAdmin = isAuthenticated && result?.kind === 'authorized' && result.allowedSurfaces.includes('admin')
+  return <OperatorEntitlementContext.Provider value={canAccessAdmin}>{children}</OperatorEntitlementContext.Provider>
+}
 
 /**
  * Signed-in pages get a live Convex client without chat's identity gate: server-rendered content
@@ -40,7 +50,7 @@ export function SignedInConvexProvider({ children }: { children: ReactNode }) {
   // Keep this wrapper mounted while Clerk resolves auth; changing its depth remounts the shell and resets navigation state.
   return (
     <ConvexProviderWithClerk client={client} useAuth={useAuthWithFactorVerificationRefresh}>
-      {children}
+      <OperatorEntitlementBridge>{children}</OperatorEntitlementBridge>
     </ConvexProviderWithClerk>
   )
 }
@@ -95,7 +105,8 @@ function ConfiguredChatConvexProvider({ convexUrl, children }: { convexUrl: stri
         installedSession.current = ready ? { client: bootstrap, generation: requestGeneration } : null
         setInitialization({ identity, attempt, ready })
         return ready ? token : null
-      } catch {
+      } catch (cause) {
+        captureClientExceptionOnClient(cause)
         if (requestGeneration === generation.current) setInitialization({ identity, attempt, ready: false })
         return null
       }
@@ -131,7 +142,9 @@ function ConfiguredChatConvexProvider({ convexUrl, children }: { convexUrl: stri
     : null
   return (
     <ConvexProviderWithClerk client={client} useAuth={useInitializedAuth}>
-      {auth.isLoaded && !auth.isSignedIn ? children : current?.ready ? children : current === null ? (
+      {(auth.isLoaded && !auth.isSignedIn) || current?.ready ? (
+        <OperatorEntitlementBridge>{children}</OperatorEntitlementBridge>
+      ) : current === null ? (
         <AePageState title="Opening chat" description="Connecting to your account…" />
       ) : (
         <AePageState

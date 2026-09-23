@@ -8,7 +8,7 @@ import { readX402DirectoryCanonicalUrlForToolServer } from '@/modules/market/x40
 import {
   readPublicToolDetailRouteServer,
   type PublicToolDetailRouteResult,
-} from '@/modules/registry/tool-detail-route.functions'
+} from '@/modules/market/tool-detail-route.functions'
 
 export { PublicToolDetail } from '@/components/ae/market/public-tool-detail/PublicToolDetail'
 

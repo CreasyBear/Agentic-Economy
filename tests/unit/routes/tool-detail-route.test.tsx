@@ -29,7 +29,7 @@ const readDetailMock = vi.hoisted(() => vi.fn())
 const readCanonicalMock = vi.hoisted(() => vi.fn())
 const prepareDirectoryMock = vi.hoisted(() => vi.fn())
 
-vi.mock('@/modules/registry/tool-detail-route.functions', () => ({
+vi.mock('@/modules/market/tool-detail-route.functions', () => ({
   readPublicToolDetailRouteServer: readDetailMock,
 }))
 vi.mock('@/modules/market/x402-directory-index.functions', () => ({

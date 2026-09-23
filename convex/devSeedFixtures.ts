@@ -171,7 +171,7 @@ export const SANDBOX_TOOL_COMMERCIAL_FIXTURE = 'managed_x402_deterministic_v1'
 /*
  * The local owner sandbox uses Frankfurter's real public, keyless HTTPS
  * endpoint. It passes the same production transport and access-path admission
- * as any other Tool; no localhost or validator exception exists.
+ * like every other Tool; no localhost or validator exception exists.
  */
 export const SANDBOX_TOOL_ENDPOINT_URL = 'https://api.frankfurter.app/latest'
 

@@ -1,3 +1,5 @@
+import { getStatusPresentation } from '@/lib/ui/status-presentation'
+
 export type DeveloperDiscoveryBadgeVariant = 'outline' | 'info' | 'success' | 'warning' | 'destructive'
 
 export type DeveloperDiscoveryRow = Readonly<{
@@ -37,7 +39,7 @@ export const DEVELOPER_DISCOVERY_UI_COPY = Object.freeze({
     public_catalog_schema: 'Open schema',
     public_catalog_examples: 'Open examples',
   },
-  freshStatus: 'Current',
+  freshStatus: getStatusPresentation('current').label,
   checkedPrefix: 'Checked',
   summary: {
     freshness: 'Freshness',

@@ -5,7 +5,7 @@ import type { AdminCommandArgs, AdminCommandReceipt } from '@/lib/operator/admin
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { prepareSupplyPublicationV2 } from '@/modules/capability-supply/supply-publication-v2'
 import { previewSupplySource } from '@/modules/capability-supply/source-preview'
-import { assessSupplySource } from '@/modules/capability-supply/source-assessment'
+import { assessSupplySource } from '@/modules/capability-supply/server'
 import { convexTestWithMarketComponents, ownerAdmin, testConsequenceProof } from '../helpers/convex-fixtures'
 import { withSourceWrite, withoutSourceWrite } from '../helpers/source-write-admission'
 import { createPublishedBusinessOwner } from './capability-supply-owner-funnel-harness'

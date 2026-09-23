@@ -28,7 +28,8 @@ async function navigateHeaderToMarket(page: Page) {
   if (isCompact(page)) {
     await page.getByRole('button', { name: 'Open public menu' }).click()
     await page
-      .getByRole('navigation', { name: 'Public navigation' })
+      .getByRole('dialog', { name: 'Public navigation' })
+      .getByRole('navigation', { name: 'Primary' })
       .getByRole('link', { name: 'Market' })
       .click()
   } else {
@@ -59,7 +60,7 @@ test.describe('app shell persistence', () => {
     })
 
     await navigateMarketToForProviders(page)
-    await expect(page.getByRole('heading', { level: 1, name: 'List a Tool.' })).toBeVisible()
+    await expect(page.getByRole('heading', { level: 1, name: 'Add a Tool.' })).toBeVisible()
 
     const stillAlive = page.locator('[data-shell="app-header"][data-probe="alive"]')
     await expect(stillAlive).toHaveCount(1)

@@ -18,8 +18,7 @@ vi.mock('@/modules/network-guard/public', () => ({
   isPublicHttpTarget: mocks.isPublicHttpTarget,
 }))
 
-import { readGuardedX402EvmReceipt } from '@/modules/capability-supply/server'
-import { readGuardedX402UnusedAuthorization } from '@/modules/capability-supply/internal/x402-evm-receipt-reader'
+import { readGuardedX402EvmReceipt, readGuardedX402UnusedAuthorization } from '@/modules/capability-supply/server'
 import { decodeFunctionData } from 'viem'
 import { eip3009ABI } from '@x402/evm'
 

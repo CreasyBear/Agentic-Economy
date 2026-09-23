@@ -4,8 +4,8 @@ import { v } from 'convex/values'
 import { Agent } from 'undici'
 import { internal } from './_generated/api'
 import { internalAction } from './_generated/server'
-import { configuredX402RpcUrls } from '@/modules/capability-execution/call-worker/x402Settlement'
-import { readGuardedX402UnusedAuthorization } from '@/modules/capability-supply/internal/x402-evm-receipt-reader'
+import { configuredX402RpcUrls } from '@/modules/capability-execution/call-runtime'
+import { readGuardedX402UnusedAuthorization } from '@/modules/capability-supply/server'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { createGuardedLookup, defaultDnsResolver } from '@/modules/network-guard/public'
 import type { MoneyFormanceResult } from './moneyFormance'
@@ -32,8 +32,11 @@ export const recover = internalAction({
       const payment = await ctx.runQuery(internal.moneyX402PaymentAttempts.readX402PaymentAttempt, {
         dispatchRef: call.callRef, attemptRef, effectGeneration,
       })
-      if (payment === null || payment.paymentIdentityDigest === undefined || payment.paymentPayer === undefined || payment.paymentNonce === undefined
-        || payment.paymentAuthorizationExpiresAt === undefined || payment.toolRef !== call.toolRef
+      const payer = payment?.paymentPayer
+      const nonce = payment?.paymentNonce
+      const expiresAt = payment?.paymentAuthorizationExpiresAt
+      if (payment === null || payment.paymentIdentityDigest === undefined || payer === undefined || nonce === undefined
+        || expiresAt === undefined || payment.toolRef !== call.toolRef
         || payment.inputDigest !== call.inputDigest || payment.settlementStatus === 'settled'
         || payment.paymentResponseDigest !== undefined) return { kind: 'not_eligible' }
       const targets = configuredX402RpcUrls(payment.network, call.environment)
@@ -43,7 +46,7 @@ export const recover = internalAction({
       try {
         observations = await Promise.all(targets.map(target => readGuardedX402UnusedAuthorization({
           target, dispatcher, aeEnvironment: call.environment, network: payment.network, asset: payment.asset,
-          payer: payment.paymentPayer!, nonce: payment.paymentNonce!, expiresAt: payment.paymentAuthorizationExpiresAt!,
+          payer, nonce, expiresAt,
         })))
       } finally { await dispatcher.close() }
       if (observations.some(item => item === undefined)) return retry()
@@ -61,7 +64,7 @@ export const recover = internalAction({
         || material.booking.buyerAmountUnits !== call.result.receipt.totalBuyerCharge.units) return retry()
       const claimed = await ctx.runMutation(internal.moneyX402Expiry.claim, {
         callRef: call.callRef, attemptRef, effectGeneration, paymentIdentityDigest: payment.paymentIdentityDigest,
-        paymentNonce: payment.paymentNonce, evidenceDigest,
+        paymentNonce: nonce, evidenceDigest,
         evidenceRef: `chain:${payment.network}:${proofs.map(item => item.blockHash).join(':')}`,
       })
       if (claimed === null) return retry()

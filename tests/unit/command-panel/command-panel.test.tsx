@@ -35,7 +35,7 @@ import { toolDetailOutputSchema } from '@/modules/capability-supply/public'
 import type {
   PublicToolDescriptor,
 } from '@/modules/capability-supply/public'
-import type { PublicToolDetailRouteResult } from '@/modules/registry/tool-detail-route.functions'
+import type { PublicToolDetailRouteResult } from '@/modules/market/tool-detail-route.functions'
 
 afterEach(() => {
   cleanup()

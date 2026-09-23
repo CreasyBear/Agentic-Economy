@@ -335,7 +335,10 @@ function isReviewedTransportSdkImport(violation: ScanViolation): boolean {
     );
   }
   const reviewedCapabilityTransportFiles = new Set([
+    "src/modules/capability-supply/internal/cdp-x402-payment-authorization.ts",
+    "src/modules/capability-supply/internal/cdp-x402-payment-material.ts",
     "src/modules/capability-supply/internal/cdp-x402-payment-signer.ts",
+    "src/modules/capability-supply/internal/cdp-x402-payment-signing.ts",
     "src/modules/capability-supply/internal/readiness-probe-mcp.ts",
     "src/modules/capability-supply/internal/mcp-source-discovery.ts",
     "src/modules/capability-supply/internal/supply-funnel/provider-connection-handoff.ts",

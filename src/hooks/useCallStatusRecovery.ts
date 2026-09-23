@@ -82,7 +82,8 @@ export function useCallStatusRecovery(loadedResult: CallStatusPageResult): Reado
           setUpdateError(undefined)
           if (current.kind !== 'unchanged') setLocalStatus({ source: loadedResult, current })
         }
-      } catch {
+      } catch (cause) {
+        captureClientExceptionOnClient(cause)
         if (!disposed) {
           failures += 1
           setUpdateError('Updates are delayed. Your last recorded status is still shown; we will check again.')

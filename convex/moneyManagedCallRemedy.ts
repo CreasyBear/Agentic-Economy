@@ -1,4 +1,5 @@
 import { v } from 'convex/values'
+import { degradeBackend } from '@/lib/observability/degrade-backend'
 import { internalMutation } from './_generated/server'
 import { materializePurchaseResolutionRecord } from './lib/callLifecycle/purchaseResolutionMaterialize'
 import { upsertCallProjection } from './lib/callLifecycle/dispatch'
@@ -28,7 +29,9 @@ function responseEligibleForRemedy(call: Doc<'capabilityCalls'>, attempt: Doc<'m
     const output: unknown = JSON.parse(attempt.quarantinedOutputJson)
     // Only a definite contract failure is remedied here; corrupt metadata is not proof of failed delivery.
     return isBoundedJsonValue(output) && !descriptor.validateOutput(output)
-  } catch { return false }
+  } catch (cause) {
+    return degradeBackend(cause, false, { site: 'responseEligibleForRemedy', reason: 'invalid_response' })
+  }
 }
 
 /**

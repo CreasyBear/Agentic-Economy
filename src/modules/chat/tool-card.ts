@@ -82,14 +82,12 @@ export type ToolFact = Readonly<{
 
 export const INSPECT_ACCOUNT_AVAILABLE_LABEL = 'Account available'
 export const INSPECT_AGENT_MAXIMUM_LABEL = 'Agent maximum'
-
 const INSPECT_OWNER_FUNDING_FACT_LABELS = new Set<string>([
   INSPECT_ACCOUNT_AVAILABLE_LABEL,
   INSPECT_AGENT_MAXIMUM_LABEL,
 ])
 
 export type CallResultState = CallResult['kind']
-
 type CardChrome = Readonly<{
   toolId: ChatToolId
   title: string

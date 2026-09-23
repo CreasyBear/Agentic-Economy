@@ -1,4 +1,5 @@
 import Decimal from 'decimal.js'
+import { degradeBackend } from '@/lib/observability/degrade-backend'
 import type { AgentAccessPrincipal } from '@/modules/agent-access/agent-access'
 import type { JsonValue } from '@/modules/capability-contract/public'
 import type { CallService } from './call-authority'
@@ -104,8 +105,8 @@ export const defaultProductionCatalogSearcher: ToolCatalogSearcher = async (
       priceAud: tool.catalogPrice?.amount ?? tool.catalogPrice?.minAmount ?? '0.00',
       ...(tool.contract.inputJsonSchema !== undefined ? { inputSchema: tool.contract.inputJsonSchema as Record<string, unknown> } : {}),
     }))
-  } catch {
-    return []
+  } catch (cause) {
+    return degradeBackend(cause, [], { site: 'defaultProductionCatalogSearcher', reason: 'source_unavailable' })
   }
 }
 

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { assessSupplySource } from '@/modules/capability-supply/source-assessment'
+import { assessSupplySource } from '@/modules/capability-supply/server'
 import type { SupplySourcePreview } from '@/modules/capability-supply/source-preview'
 
 const preview: Extract<SupplySourcePreview, { kind: 'ready' }> = {

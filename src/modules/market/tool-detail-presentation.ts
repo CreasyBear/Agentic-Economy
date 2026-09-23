@@ -1,8 +1,8 @@
-import type { PublicToolDetailRouteResult } from '@/modules/registry/tool-detail-route.functions'
+import type { PublicToolDetailRouteResult } from '@/modules/market/tool-detail-route.functions'
 import type { MarketListingEvidenceProjection } from '@/modules/market/listing-evidence'
 import type { X402DirectoryResolution } from '@/modules/market/x402-directory'
 import { prepareX402DirectoryResourceServer } from '@/modules/market/x402-directory.functions'
-import { readPublicToolDetailRouteServer } from '@/modules/registry/tool-detail-route.functions'
+import { readPublicToolDetailRouteServer } from '@/modules/market/tool-detail-route.functions'
 
 export type ToolDetailPresentationResult =
   | PublicToolDetailRouteResult

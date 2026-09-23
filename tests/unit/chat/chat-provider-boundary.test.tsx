@@ -18,6 +18,7 @@ const runtime = vi.hoisted(() => ({
   getToken: vi.fn(async () => 'verified-token'),
   refresh: null as null | (() => Promise<string | null>),
   materialize: vi.fn(async () => true),
+  useQuery: vi.fn<(...args: unknown[]) => unknown>(() => undefined),
   renderClerkProvider: vi.fn(),
 }))
 
@@ -72,6 +73,7 @@ vi.mock('convex/react', () => ({
     }
   },
   useConvexAuth: () => ({ isAuthenticated: runtime.isAuthenticated }),
+  useQuery: (...args: unknown[]) => runtime.useQuery(...args),
   useMutation: () => runtime.materialize,
 }))
 
@@ -158,6 +160,8 @@ beforeEach(() => {
   runtime.setHttpAuth.mockReset()
   runtime.constructClient.mockReset()
   runtime.materialize.mockReset().mockResolvedValue(true)
+  runtime.useQuery.mockReset().mockReturnValue(undefined)
+  runtime.refresh = null
   runtime.renderClerkProvider.mockReset()
   vi.stubEnv('VITE_CONVEX_URL', 'https://runtime-authority.convex.test')
 })
