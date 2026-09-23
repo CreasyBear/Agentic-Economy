@@ -96,6 +96,7 @@ function renderCallPage() {
           setMobileNavOpen={() => undefined}
           elevated={false}
           hydrated
+          chatFrame={false}
         />
         <AdminCallObjectPage result={uncertainView} />
       </OperatorChromeProvider>

@@ -1,6 +1,7 @@
 import { useConvex, useQuery } from 'convex/react'
 import { LockKeyholeIcon } from 'lucide-react'
 import { useEffect, useState } from 'react'
+import { createPortal } from 'react-dom'
 
 import { api } from '../../../../convex/_generated/api'
 import { AeChatPage } from '@/components/ae/layout/AeChatPage'
@@ -11,6 +12,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { chatShared } from '@/lib/public/chat-ia'
 
 import { ChatTranscript } from './ChatTranscript'
+import { useChatHeaderSlot } from './chat-session/useChatHeaderSlot'
 import type { TranscriptMessage } from './presentation'
 
 const PAGE_SIZE = 20
@@ -55,6 +57,18 @@ export function SharedChat({ shareToken }: { shareToken: string }) {
     ? []
     : projectSharedPage(initial.page)
   const messages = [...olderMessages, ...baseMessages]
+  const slot = useChatHeaderSlot()
+  const title = initial?.title ?? chatShared.fallbackTitle
+  const sharedBar = (
+    <>
+      <LockKeyholeIcon aria-hidden="true" className="size-4 shrink-0 text-muted-foreground" />
+      <div className="min-w-0 flex-1">
+        <h1 className="truncate text-sm font-medium">{title}</h1>
+        <p className={slot === null ? 'text-xs text-muted-foreground' : 'sr-only'}>{chatShared.detail}</p>
+      </div>
+      <Badge variant="outline">{chatShared.badge}</Badge>
+    </>
+  )
 
   async function onLoadMore() {
     if (continueCursor === undefined || loadingMore) return
@@ -76,16 +90,11 @@ export function SharedChat({ shareToken }: { shareToken: string }) {
   return (
     <AeChatPage
       kind="shared"
-      header={
-        <header className="flex min-h-14 items-center gap-related border-b border-border px-gutter">
-          <LockKeyholeIcon aria-hidden="true" className="size-4 text-muted-foreground" />
-          <div className="min-w-0 flex-1">
-            <h1 className="truncate text-sm font-medium">{initial?.title ?? chatShared.fallbackTitle}</h1>
-            <p className="text-xs text-muted-foreground">{chatShared.detail}</p>
-          </div>
-          <Badge variant="outline">{chatShared.badge}</Badge>
+      header={slot === null ? (
+        <header className="flex min-h-14 shrink-0 items-center gap-related border-b border-border px-gutter">
+          {sharedBar}
         </header>
-      }
+      ) : createPortal(sharedBar, slot)}
     >
       {initial === undefined ? (
         <div className={`grid min-h-0 flex-1 content-start ${TRANSCRIPT_COLUMN}`} aria-busy="true">

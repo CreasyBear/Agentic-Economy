@@ -72,6 +72,20 @@ describe('AeAppShell', () => {
     )
     expect(screen.getByRole('link', { name: 'Sign in' }).className).toMatch(/md:inline-flex/)
     expect(screen.queryByRole('button', { name: 'Workspace menu' })).toBeNull()
+    expect(document.getElementById('ae-chat-actions')).toBeNull()
+  })
+
+  it('offers one app header slot for thread controls on chat', () => {
+    clerkSignedIn.value = false
+    renderAppShell('/t/new')
+
+    expect(document.querySelectorAll('header')).toHaveLength(1)
+    const slot = document.getElementById('ae-chat-actions')
+    const brand = screen.getByRole('link', { name: 'Agentic Economy home' })
+    expect(slot).not.toBeNull()
+    expect(brand.compareDocumentPosition(slot!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(slot!.parentElement?.className ?? '').not.toMatch(/ms-auto/)
+    expect(slot!.compareDocumentPosition(screen.getByRole('button', { name: 'Find Tools' })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
   })
 
   it('opens workspace destinations from the header menu when signed in', () => {
@@ -165,6 +179,7 @@ function renderAppShell(pathname = clerkSignedIn.value ? '/market' : '/'): void 
   const rootRoute = createRootRoute()
   const routeTree = rootRoute.addChildren([
     createRoute({ getParentRoute: () => rootRoute, path: '/' }),
+    createRoute({ getParentRoute: () => rootRoute, path: '/t/new' }),
     createRoute({
       getParentRoute: () => rootRoute,
       path: '/market',

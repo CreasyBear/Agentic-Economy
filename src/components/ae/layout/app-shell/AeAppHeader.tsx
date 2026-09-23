@@ -13,6 +13,7 @@ import { AeSiteDrawerNav, AeSiteIconButton, AeSitePrimaryNav } from '@/component
 import { buttonVariants } from '@/components/ui/button-variants'
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet'
 import { AECON_MARK_SRC, AECON_MOBILE_LOCKUP_SRC, aeconMarkClassName } from '@/content/brand-assets'
+import { chatHeaderActionsId } from '@/lib/public/chat-ia'
 import type { OperatorRole } from '@/lib/operator/roles'
 import { cn } from '@/lib/utils'
 
@@ -27,7 +28,13 @@ export type AeAppHeaderProps = Readonly<{
   setMobileNavOpen: (open: boolean) => void
   elevated: boolean
   hydrated: boolean
+  chatFrame: boolean
 }>
+
+function chatActionSlot(chatFrame: boolean) {
+  if (!chatFrame) return null
+  return <div id={chatHeaderActionsId} className="flex shrink-0 items-center gap-intra" />
+}
 
 function BrandLink() {
   return (
@@ -51,6 +58,7 @@ export function AeAppHeader({
   setMobileNavOpen,
   elevated,
   hydrated,
+  chatFrame,
 }: AeAppHeaderProps) {
   const title = useOperatorSidebarChrome()?.title
   const pageTitle = typeof title === 'string' && title !== '' ? title : null
@@ -63,7 +71,10 @@ export function AeAppHeader({
     >
       {minimal ? (
         <div className="flex h-(--header-height) min-h-touch items-center justify-between px-gutter">
-          <BrandLink />
+          <div className="flex items-center gap-intra">
+            <BrandLink />
+            {chatActionSlot(chatFrame)}
+          </div>
           <div className="flex items-center gap-intra">
             <div className="hidden sm:block"><AeNetworkHealthIndicator /></div>
             <ThemeToggle />
@@ -82,6 +93,7 @@ export function AeAppHeader({
           className="ae-nav flex h-(--header-height) min-h-(--header-height) items-center gap-1 px-1 shadow-none sm:gap-related transition-shadow duration-200 ease-out data-[elevated]:shadow-soft motion-reduce:transition-none sm:px-2"
         >
           <BrandLink />
+          {chatActionSlot(chatFrame)}
           {pageTitle === null ? null : (
             <h1 className="min-w-0 flex-1 truncate text-title" title={pageTitle}>
               {pageTitle}
@@ -103,6 +115,7 @@ export function AeAppHeader({
             className="ae-nav flex h-(--header-height) min-h-(--header-height) items-center gap-1 px-1 shadow-none sm:gap-related transition-shadow duration-200 ease-out data-[elevated]:shadow-soft motion-reduce:transition-none sm:px-2"
           >
             <BrandLink />
+            {chatActionSlot(chatFrame)}
             <AeSitePrimaryNav />
             <div className="ms-auto flex items-center gap-1 sm:gap-intra">
               <div className="hidden sm:block"><AeNetworkHealthIndicator /></div>

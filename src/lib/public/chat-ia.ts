@@ -61,6 +61,9 @@ export const chatShared = {
   loadingMore: 'Loading earlier messages…',
 } as const
 
+/** App-header slot filled by the chat thread controls on `/t/` and `/s/`. */
+export const chatHeaderActionsId = 'ae-chat-actions'
+
 export const chatHistory = {
   newChat: 'New chat',
   searchLabel: 'Search conversations',
