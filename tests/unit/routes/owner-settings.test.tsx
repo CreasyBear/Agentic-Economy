@@ -17,7 +17,6 @@ vi.mock('convex/react', () => ({
 }))
 
 vi.mock('@clerk/tanstack-react-start', () => ({
-  UserProfile: () => <div data-testid="user-profile" />,
   SignOutButton: ({ children }: { children: ReactNode }) => children,
 }))
 
@@ -123,6 +122,8 @@ describe('/owner/settings R-17', () => {
     ])
     expect(within(tabs).getByRole('tab', { name: 'Profile' }).getAttribute('aria-selected')).toBe('true')
     expect(screen.getByRole('heading', { level: 2, name: 'Profile' })).toBeTruthy()
+    expect(screen.getByRole('link', { name: /Update profile/ }).getAttribute('href')).toBe('/owner/settings/account')
+    expect(screen.queryByTestId('user-profile')).toBeNull()
     expect(screen.queryByRole('heading', { level: 2, name: 'Business' })).toBeNull()
   })
 

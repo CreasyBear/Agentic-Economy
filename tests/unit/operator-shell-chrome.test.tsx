@@ -444,7 +444,8 @@ describe('owner account identity', () => {
     expect(await screen.findByRole('button', { name: 'Account menu' })).toBeTruthy()
     expect(shellMocks.userButton).toHaveBeenCalled()
     expect(shellMocks.userButton.mock.calls[0]?.[0]).toMatchObject({
-      userProfileMode: 'modal',
+      userProfileMode: 'navigation',
+      userProfileUrl: '/owner/settings/account',
     })
     expect(screen.queryByRole('group', { name: /Signed in as/ })).toBeNull()
     expect(document.body.textContent).not.toContain('user_private_ada')

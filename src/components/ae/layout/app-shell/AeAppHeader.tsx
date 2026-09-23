@@ -105,7 +105,7 @@ export function AeAppHeader({
             <AeOrganizationSwitcher isCollapsed />
             <WorkspaceMenu operatorRole={operatorRole} canAccessAdmin={canAccessAdmin} />
             <ThemeToggle />
-            <UserButton userProfileMode="modal" />
+            <UserButton userProfileMode="navigation" userProfileUrl="/owner/settings/account" />
           </div>
         </div>
       ) : (

@@ -145,6 +145,7 @@ import { Route as ApiV1CallsCallRefCancelRouteImport } from './routes/api.v1.cal
 import { Route as ApiV1AccountFundingConfigRouteImport } from './routes/api.v1.account.funding.config'
 import { Route as ApiV1AccountFundingSessionsFundingSessionIdRouteImport } from './routes/api.v1.account.funding-sessions.$fundingSessionId'
 import { Route as OperatorOwnerSupplyConnectionsNewRouteImport } from './routes/_operator/owner.supply.connections.new'
+import { Route as OperatorOwnerSettingsAccountSplatRouteImport } from './routes/_operator/owner.settings.account.$'
 import { Route as ApiV1AccountFundingSessionsPublicFundingSessionIdRouteImport } from './routes/api.v1.account.funding-sessions.public.$fundingSessionId'
 import { Route as OperatorOwnerSupplyConnectionsOauthCallbackRouteImport } from './routes/_operator/owner.supply.connections.oauth.callback'
 
@@ -863,6 +864,12 @@ const OperatorOwnerSupplyConnectionsNewRoute =
     path: '/owner/supply/connections/new',
     getParentRoute: () => OperatorRoute,
   } as any)
+const OperatorOwnerSettingsAccountSplatRoute =
+  OperatorOwnerSettingsAccountSplatRouteImport.update({
+    id: '/account/$',
+    path: '/account/$',
+    getParentRoute: () => OperatorOwnerSettingsRoute,
+  } as any)
 const ApiV1AccountFundingSessionsPublicFundingSessionIdRoute =
   ApiV1AccountFundingSessionsPublicFundingSessionIdRouteImport.update({
     id: '/public/$fundingSessionId',
@@ -933,7 +940,7 @@ export interface FileRoutesByFullPath {
   '/owner/credit': typeof OperatorOwnerCreditRoute
   '/owner/market': typeof OperatorOwnerMarketRoute
   '/owner/operations': typeof OperatorOwnerOperationsRouteWithChildren
-  '/owner/settings': typeof OperatorOwnerSettingsRoute
+  '/owner/settings': typeof OperatorOwnerSettingsRouteWithChildren
   '/owner/team': typeof OperatorOwnerTeamRoute
   '/owner/workspace': typeof OperatorOwnerWorkspaceRoute
   '/api/admin/metrics-export': typeof ApiAdminMetricsExportRoute
@@ -998,6 +1005,7 @@ export interface FileRoutesByFullPath {
   '/api/v1/tools/procure': typeof ApiV1ToolsProcureRoute
   '/api/v1/tools/quote': typeof ApiV1ToolsQuoteRoute
   '/admin/providers/': typeof OperatorAdminProvidersIndexRoute
+  '/owner/settings/account/$': typeof OperatorOwnerSettingsAccountSplatRoute
   '/owner/supply/connections/new': typeof OperatorOwnerSupplyConnectionsNewRoute
   '/api/v1/account/funding-sessions/$fundingSessionId': typeof ApiV1AccountFundingSessionsFundingSessionIdRoute
   '/api/v1/account/funding/config': typeof ApiV1AccountFundingConfigRoute
@@ -1072,7 +1080,7 @@ export interface FileRoutesByTo {
   '/owner/credit': typeof OperatorOwnerCreditRoute
   '/owner/market': typeof OperatorOwnerMarketRoute
   '/owner/operations': typeof OperatorOwnerOperationsRouteWithChildren
-  '/owner/settings': typeof OperatorOwnerSettingsRoute
+  '/owner/settings': typeof OperatorOwnerSettingsRouteWithChildren
   '/owner/team': typeof OperatorOwnerTeamRoute
   '/owner/workspace': typeof OperatorOwnerWorkspaceRoute
   '/api/admin/metrics-export': typeof ApiAdminMetricsExportRoute
@@ -1137,6 +1145,7 @@ export interface FileRoutesByTo {
   '/api/v1/tools/procure': typeof ApiV1ToolsProcureRoute
   '/api/v1/tools/quote': typeof ApiV1ToolsQuoteRoute
   '/admin/providers': typeof OperatorAdminProvidersIndexRoute
+  '/owner/settings/account/$': typeof OperatorOwnerSettingsAccountSplatRoute
   '/owner/supply/connections/new': typeof OperatorOwnerSupplyConnectionsNewRoute
   '/api/v1/account/funding-sessions/$fundingSessionId': typeof ApiV1AccountFundingSessionsFundingSessionIdRoute
   '/api/v1/account/funding/config': typeof ApiV1AccountFundingConfigRoute
@@ -1213,7 +1222,7 @@ export interface FileRoutesById {
   '/_operator/owner/credit': typeof OperatorOwnerCreditRoute
   '/_operator/owner/market': typeof OperatorOwnerMarketRoute
   '/_operator/owner/operations': typeof OperatorOwnerOperationsRouteWithChildren
-  '/_operator/owner/settings': typeof OperatorOwnerSettingsRoute
+  '/_operator/owner/settings': typeof OperatorOwnerSettingsRouteWithChildren
   '/_operator/owner/team': typeof OperatorOwnerTeamRoute
   '/_operator/owner/workspace': typeof OperatorOwnerWorkspaceRoute
   '/api/admin/metrics-export': typeof ApiAdminMetricsExportRoute
@@ -1278,6 +1287,7 @@ export interface FileRoutesById {
   '/api/v1/tools/procure': typeof ApiV1ToolsProcureRoute
   '/api/v1/tools/quote': typeof ApiV1ToolsQuoteRoute
   '/_operator/admin/providers/': typeof OperatorAdminProvidersIndexRoute
+  '/_operator/owner/settings/account/$': typeof OperatorOwnerSettingsAccountSplatRoute
   '/_operator/owner/supply/connections/new': typeof OperatorOwnerSupplyConnectionsNewRoute
   '/api/v1/account/funding-sessions/$fundingSessionId': typeof ApiV1AccountFundingSessionsFundingSessionIdRoute
   '/api/v1/account/funding/config': typeof ApiV1AccountFundingConfigRoute
@@ -1419,6 +1429,7 @@ export interface FileRouteTypes {
     | '/api/v1/tools/procure'
     | '/api/v1/tools/quote'
     | '/admin/providers/'
+    | '/owner/settings/account/$'
     | '/owner/supply/connections/new'
     | '/api/v1/account/funding-sessions/$fundingSessionId'
     | '/api/v1/account/funding/config'
@@ -1558,6 +1569,7 @@ export interface FileRouteTypes {
     | '/api/v1/tools/procure'
     | '/api/v1/tools/quote'
     | '/admin/providers'
+    | '/owner/settings/account/$'
     | '/owner/supply/connections/new'
     | '/api/v1/account/funding-sessions/$fundingSessionId'
     | '/api/v1/account/funding/config'
@@ -1698,6 +1710,7 @@ export interface FileRouteTypes {
     | '/api/v1/tools/procure'
     | '/api/v1/tools/quote'
     | '/_operator/admin/providers/'
+    | '/_operator/owner/settings/account/$'
     | '/_operator/owner/supply/connections/new'
     | '/api/v1/account/funding-sessions/$fundingSessionId'
     | '/api/v1/account/funding/config'
@@ -2764,6 +2777,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof OperatorOwnerSupplyConnectionsNewRouteImport
       parentRoute: typeof OperatorRoute
     }
+    '/_operator/owner/settings/account/$': {
+      id: '/_operator/owner/settings/account/$'
+      path: '/account/$'
+      fullPath: '/owner/settings/account/$'
+      preLoaderRoute: typeof OperatorOwnerSettingsAccountSplatRouteImport
+      parentRoute: typeof OperatorOwnerSettingsRoute
+    }
     '/api/v1/account/funding-sessions/public/$fundingSessionId': {
       id: '/api/v1/account/funding-sessions/public/$fundingSessionId'
       path: '/public/$fundingSessionId'
@@ -2818,6 +2838,20 @@ const OperatorOwnerOperationsRouteWithChildren =
     OperatorOwnerOperationsRouteChildren,
   )
 
+interface OperatorOwnerSettingsRouteChildren {
+  OperatorOwnerSettingsAccountSplatRoute: typeof OperatorOwnerSettingsAccountSplatRoute
+}
+
+const OperatorOwnerSettingsRouteChildren: OperatorOwnerSettingsRouteChildren = {
+  OperatorOwnerSettingsAccountSplatRoute:
+    OperatorOwnerSettingsAccountSplatRoute,
+}
+
+const OperatorOwnerSettingsRouteWithChildren =
+  OperatorOwnerSettingsRoute._addFileChildren(
+    OperatorOwnerSettingsRouteChildren,
+  )
+
 interface OperatorRouteChildren {
   OperatorActivityRoute: typeof OperatorActivityRoute
   OperatorAgentAccessRoute: typeof OperatorAgentAccessRouteWithChildren
@@ -2829,7 +2863,7 @@ interface OperatorRouteChildren {
   OperatorOwnerCreditRoute: typeof OperatorOwnerCreditRoute
   OperatorOwnerMarketRoute: typeof OperatorOwnerMarketRoute
   OperatorOwnerOperationsRoute: typeof OperatorOwnerOperationsRouteWithChildren
-  OperatorOwnerSettingsRoute: typeof OperatorOwnerSettingsRoute
+  OperatorOwnerSettingsRoute: typeof OperatorOwnerSettingsRouteWithChildren
   OperatorOwnerTeamRoute: typeof OperatorOwnerTeamRoute
   OperatorOwnerWorkspaceRoute: typeof OperatorOwnerWorkspaceRoute
   OperatorAdminIndexRoute: typeof OperatorAdminIndexRoute
@@ -2856,7 +2890,7 @@ const OperatorRouteChildren: OperatorRouteChildren = {
   OperatorOwnerCreditRoute: OperatorOwnerCreditRoute,
   OperatorOwnerMarketRoute: OperatorOwnerMarketRoute,
   OperatorOwnerOperationsRoute: OperatorOwnerOperationsRouteWithChildren,
-  OperatorOwnerSettingsRoute: OperatorOwnerSettingsRoute,
+  OperatorOwnerSettingsRoute: OperatorOwnerSettingsRouteWithChildren,
   OperatorOwnerTeamRoute: OperatorOwnerTeamRoute,
   OperatorOwnerWorkspaceRoute: OperatorOwnerWorkspaceRoute,
   OperatorAdminIndexRoute: OperatorAdminIndexRoute,

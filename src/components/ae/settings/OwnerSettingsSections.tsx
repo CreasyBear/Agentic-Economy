@@ -1,4 +1,4 @@
-import { SignOutButton, UserProfile } from '@clerk/tanstack-react-start'
+import { SignOutButton } from '@clerk/tanstack-react-start'
 
 import { AeSection, AeSettingsRow } from '@/components/ae/layout/AeSection'
 import { AeAccountSecurityHistory } from '@/components/ae/settings/AeAccountSecurityHistory'
@@ -8,7 +8,6 @@ import { TaxProfileFormSection } from '@/components/ae/settings/TaxProfileFormSe
 import { AeSiteAuthSubmit, AeSiteBody } from '@/components/ae/website'
 import { buttonVariants } from '@/components/ui/button-variants'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { clerkEmbeddedProfileAppearance } from '@/components/ae/website/clerk-appearance'
 
 import {
   ownerSettingsBusinessSection,
@@ -31,11 +30,11 @@ export function AccountSettingsSection({ history }: AccountSettingsSectionProps)
   const defaultSection = sectionFromHash(typeof window === 'undefined' ? '' : window.location.hash)
 
   return (
-    <Tabs defaultValue={defaultSection} className="gap-section">
+    <Tabs defaultValue={defaultSection} className="min-w-0 max-w-full gap-section">
       <TabsList
         variant="line"
         aria-label="Account settings sections"
-        className="max-w-full justify-start overflow-x-auto overflow-y-hidden"
+        className="w-full min-w-0 max-w-full justify-start overflow-x-auto overflow-y-hidden"
       >
         {ownerSettingsSectionNavigation.map(({ id, label }) => (
           <TabsTrigger key={id} value={id}>{label}</TabsTrigger>
@@ -47,10 +46,12 @@ export function AccountSettingsSection({ history }: AccountSettingsSectionProps)
           title="Profile"
           description="Name, email, security, and active sessions for this owner."
         >
-          <div className="grid gap-section">
-            <div className="min-h-96 w-full">
-              <UserProfile appearance={clerkEmbeddedProfileAppearance} />
-            </div>
+          <div className="grid min-w-0 gap-section">
+            <AeSettingsRow
+              title="Update profile"
+              description="Manage your name, email, password, security, and active sessions."
+              href="/owner/settings/account"
+            />
             <div className="grid gap-related">
               <h3
                 id="owner-sign-out"
