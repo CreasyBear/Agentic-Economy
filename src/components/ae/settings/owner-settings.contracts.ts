@@ -50,10 +50,11 @@ export const ownerSettingsPrivacySection = {
 
 export const ownerSettingsSectionNavigation = [
   { id: 'clerk-account-security', label: 'Profile' },
+  { id: 'compromise-recovery', label: 'Recovery' },
+  { id: 'security-history', label: 'Security history' },
   { id: 'team', label: 'Team' },
+  { id: 'workspace', label: 'Workspace' },
   { id: ownerSettingsBusinessSection.id, label: ownerSettingsBusinessSection.title },
   { id: ownerSettingsPrivacySection.id, label: ownerSettingsPrivacySection.title },
-  { id: 'compromise-recovery', label: 'Recovery' },
   { id: 'notifications', label: 'Email alerts' },
-  { id: 'security-history', label: 'Security history' },
 ] as const

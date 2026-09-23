@@ -76,12 +76,8 @@ export type ConsentDecisionBarProps = Readonly<{
   pending: boolean
   connectionTarget: 'new_agent' | 'replace_credential'
   replacementMode: 'planned' | 'compromise'
-  replacementPrincipalRef?: string
   agentTargetsUnavailable: boolean
-  approvedToolAccess: 'all_admitted' | 'selected_tools'
-  approvedToolRefsCount: number
   approvalLabel: string
-  approvalPendingLabel: string
   onApprove: () => void
   onDeny: () => void
 }>

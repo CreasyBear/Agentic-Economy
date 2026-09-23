@@ -15,10 +15,13 @@ vi.mock('@convex-dev/agent/react', () => ({
 vi.mock('convex/react', () => ({
   useQuery: vi.fn(() => undefined),
   useMutation: () => vi.fn(async () => ({})),
+  useConvex: () => ({ query: vi.fn() }),
   useConvexAuth: () => ({ isAuthenticated: false, isLoading: false }),
 }))
 
 import { ChatTranscript } from '@/components/ae/chat/ChatTranscript'
+import { ToolCard } from '@/components/ae/chat/ToolCard'
+import { CHAT_TOOL_NAME_MAP } from '@/modules/chat/tool-card'
 import { Chat } from '@/components/ae/chat'
 import { ChatComposer } from '@/components/ae/chat/chat-session/components/ChatComposer'
 import { ChatHistory } from '@/components/ae/chat/chat-session/components/ChatHistory'
@@ -109,6 +112,8 @@ describe('ChatTranscript first-page gate', () => {
 
     expect(container.querySelector('[aria-busy="true"]')).not.toBeNull()
     expect(document.querySelectorAll('[data-slot="skeleton"]').length).toBeGreaterThan(0)
+    expect(screen.getByRole('status').textContent).toBe('Loading conversation…')
+    expect(screen.queryByText('Search the catalog.')).toBeNull()
     expect(screen.queryByRole('button')).toBeNull()
   })
 
@@ -118,6 +123,165 @@ describe('ChatTranscript first-page gate', () => {
     )
     resolved.unmount()
     expect(resolved.container.querySelector('[aria-busy="true"]')).toBeNull()
+  })
+
+  it('uses the Ask stage body sentence without a second title', () => {
+    render(<ChatTranscript messages={[]} />)
+
+    expect(screen.queryByRole('heading')).toBeNull()
+    expect(document.querySelector('[data-slot="empty-title"]')?.textContent).toBe('Find Tools for an Agent.')
+    expect(screen.getByText('Find Tools for an Agent.')).toBeTruthy()
+    expect(screen.getByText(
+      'Compare and inspect. Then use one with your Agent. Price is on the card.',
+    )).toBeTruthy()
+  })
+
+  it('renders assistant markdown and leaves the user bubble plain', () => {
+    render(<ChatTranscript messages={[
+      { id: 'user-1', role: 'user', parts: [{ type: 'text', text: '**not bold**' }] },
+      { id: 'assistant-1', role: 'assistant', parts: [{ type: 'text', text: '- Weather\n- Maps\n\n[Market](https://example.com/market)\n\n[bad](javascript:alert(1))' }] },
+    ]} />)
+
+    expect(screen.getByText('**not bold**')).toBeTruthy()
+    expect(screen.getByRole('list')).toBeTruthy()
+    expect(screen.getByRole('link', { name: 'Market' }).getAttribute('href')).toBe('https://example.com/market')
+    expect(screen.queryByRole('link', { name: 'bad' })).toBeNull()
+  })
+
+  it('names a working tool and shows Thinking only before the first assistant part', () => {
+    const waiting = render(<ChatTranscript
+      thinking
+      messages={[{ id: 'user-1', role: 'user', parts: [{ type: 'text', text: 'Find weather' }] }]}
+    />)
+    const thinking = screen.getByText('Thinking…')
+    expect(thinking.closest('[data-slot="message-scroller-item"]')).not.toBeNull()
+    waiting.unmount()
+
+    render(<ChatTranscript
+      messages={[{
+        id: 'assistant-1',
+        role: 'assistant',
+        parts: [{
+          type: `tool-${CHAT_TOOL_NAME_MAP.canonicalToProvider['registry.tools.search']}`,
+          state: 'input-available',
+        }],
+      }]}
+    />)
+
+    expect(screen.getByText('Search tools…')).toBeTruthy()
+    expect(document.querySelector('[data-tool-card="registry.tools.search"]')).toBeNull()
+    expect(screen.queryByText('Thinking…')).toBeNull()
+  })
+
+  it('places prose on either side of a tool and copies a fenced block', async () => {
+    const writeText = vi.fn(async () => undefined)
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText },
+    })
+    render(<ChatTranscript messages={[{
+      id: 'assistant-1',
+      role: 'assistant',
+      parts: [
+        { type: 'text', text: '   ' },
+        { type: 'text', text: 'Before the search.' },
+        {
+          type: `tool-${CHAT_TOOL_NAME_MAP.canonicalToProvider['registry.tools.search']}`,
+          state: 'input-available',
+        },
+        { type: 'text', text: 'After the search.\n\n```\ncurl example\n```' },
+      ],
+    }]} />)
+
+    const before = screen.getByText('Before the search.')
+    const tool = screen.getByText('Search tools…')
+    const after = screen.getByText('After the search.')
+    expect(before.compareDocumentPosition(tool) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(tool.compareDocumentPosition(after) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(screen.queryByText('   ')).toBeNull()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Copy code' }))
+    await waitFor(() => {
+      expect(writeText).toHaveBeenCalledWith('curl example')
+    })
+  })
+
+  it('pins one clarifying question and records the chosen words', () => {
+    const toolType = `tool-${CHAT_TOOL_NAME_MAP.canonicalToProvider['chat.clarify']}`
+    const question = {
+      type: toolType,
+      state: 'input-available',
+      input: { question: 'Which region?', choices: ['Australia', 'Singapore', 'Global'] },
+    }
+    const onClarifyAnswer = vi.fn()
+    const pending = render(<ChatTranscript
+      messages={[{ id: 'assistant-1', role: 'assistant', parts: [question] }]}
+      onClarifyAnswer={onClarifyAnswer}
+    />)
+    fireEvent.click(screen.getByRole('button', { name: 'Australia' }))
+    expect(onClarifyAnswer).toHaveBeenCalledWith('Australia')
+    pending.unmount()
+
+    render(<ChatTranscript messages={[
+      { id: 'assistant-1', role: 'assistant', parts: [question] },
+      { id: 'user-2', role: 'user', parts: [{ type: 'text', text: 'Australia' }] },
+    ]} />)
+    expect(screen.getByText('Which region?')).toBeTruthy()
+    expect(screen.getAllByText('Australia').length).toBeGreaterThan(0)
+    expect(screen.queryByRole('button', { name: 'Singapore' })).toBeNull()
+  })
+
+  it('places a search result inside one openui stack and compares Tools in a table', () => {
+    const toolRef = `operation:v1:${'a'.repeat(64)}`
+    render(<ChatTranscript messages={[{
+      id: 'assistant-1',
+      role: 'assistant',
+      parts: [
+        { type: 'text', text: [
+          'Two lookups match.',
+          '```openui',
+          'root = Stack([lead, found])',
+          'lead = TextContent("Two lookups match the request.")',
+          'found = ToolChoices("registry.tools.search")',
+          '```',
+        ].join('\n') },
+        {
+          type: `tool-${CHAT_TOOL_NAME_MAP.canonicalToProvider['registry.tools.search']}`,
+          state: 'output-available',
+          output: { kind: 'no_candidates', items: [], count: 0 },
+        },
+      ],
+    }]} />)
+
+    expect(screen.getByText('Two lookups match the request.')).toBeTruthy()
+    expect(document.querySelectorAll('[data-tool-card="registry.tools.search"]')).toHaveLength(1)
+    expect(screen.queryByText('```openui')).toBeNull()
+
+    cleanup()
+    render(<ToolCard projection={{
+      toolId: 'registry.tools.compare',
+      title: 'Compare tools',
+      kind: 'choices',
+      state: 'complete',
+      choices: [{ toolRef, title: 'Lookup A', provider: 'Acme', price: 'A$1.25', readiness: 'Ready now' }],
+      toolRefs: [toolRef],
+    }} />)
+    expect(screen.getByRole('table')).toBeTruthy()
+    expect(screen.getByRole('link', { name: 'Lookup A' }).getAttribute('href')).toBe(`/tools/${encodeURIComponent(toolRef)}`)
+
+    cleanup()
+    render(<ToolCard projection={{
+      toolId: 'registry.tools.search',
+      title: 'Compare tools',
+      kind: 'choices',
+      state: 'complete',
+      surface: 'compare',
+      choices: [{ toolRef, title: 'Lookup A', provider: 'Acme', price: 'A$1.25', readiness: 'Ready now', belowMatch: true }],
+      toolRefs: [toolRef],
+    }} />)
+    expect(screen.getByRole('table')).toBeTruthy()
+    expect(screen.getByText('Below a match')).toBeTruthy()
+    expect(document.querySelector('[data-tool-card="registry.tools.search"]')).toBeTruthy()
   })
 })
 
@@ -142,8 +306,49 @@ describe('ChatComposer recovery evidence', () => {
     expect(screen.getByDisplayValue('Find weather Operations')).toBeTruthy()
     expect(screen.getByText('chat-request-7')).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Copy chat support reference' })).toBeTruthy()
-    expect(screen.getByRole('link', { name: 'Browse Tools' }).getAttribute('href'))
+    expect(screen.getByRole('link', { name: 'Browse Market' }).getAttribute('href'))
       .toBe('/market')
+  })
+
+  it('keeps Send disabled until the message has text', () => {
+    render(
+      <ChatComposer
+        prompt="   "
+        busy={false}
+        disabled={false}
+        error=""
+        browseMarketOnError={false}
+        status=""
+        anonymousMessageCount={0}
+        anonymousMessageLimitReached={false}
+        onPromptChange={() => undefined}
+        onSubmit={() => undefined}
+      />,
+    )
+    expect((screen.getByRole('button', { name: 'Send message' }) as HTMLButtonElement).disabled).toBe(true)
+  })
+
+  it('swaps Send for Stop while an anonymous stream can be aborted', () => {
+    const onStop = vi.fn()
+    render(
+      <ChatComposer
+        prompt="Find weather"
+        busy
+        disabled
+        error=""
+        browseMarketOnError={false}
+        status=""
+        anonymousMessageCount={1}
+        anonymousMessageLimitReached={false}
+        onPromptChange={() => undefined}
+        onSubmit={() => undefined}
+        onStop={onStop}
+      />,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Stop generating' }))
+    expect(onStop).toHaveBeenCalledOnce()
+    expect(screen.queryByRole('button', { name: 'Sending message' })).toBeNull()
   })
 })
 
@@ -202,5 +407,21 @@ describe('SharedChat shared-thread gate', () => {
     render(<SharedChat shareToken="token-1" />)
 
     expect(document.querySelector('[data-slot="skeleton"]')).toBeNull()
+  })
+
+  it('shows a load-more cue when the first page of 20 is not the end', () => {
+    mockedUseQuery.mockImplementation(() => ({
+      title: 'Shared thread',
+      page: [{
+        id: 'msg-1',
+        role: 'user' as const,
+        parts: [{ type: 'text' as const, text: 'Hello' }],
+      }],
+      isDone: false,
+      continueCursor: 'cursor-2',
+    }) as never)
+    render(<SharedChat shareToken="token-1" />)
+
+    expect(screen.getByRole('button', { name: 'Load earlier messages' })).toBeTruthy()
   })
 })

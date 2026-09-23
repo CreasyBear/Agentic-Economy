@@ -11,7 +11,12 @@ afterEach(cleanup)
 function show(search: DirectoryExplorerFilterValues = {}) {
   const change = vi.fn(), reset = vi.fn()
   const rendered = render(<DirectoryExplorerFilters search={search} overview={overview} onChange={change} onReset={reset} />)
-  return { ...rendered, change, reset, filters: within(screen.getByRole('complementary', { name: 'Tool filters' })) }
+  const filterCount = ['directoryCategory', 'network', 'provider', 'minUsdPrice', 'maxUsdPrice', 'minPayers30d', 'maxPayers30d', 'priceBand', 'adoptionBand', 'curatedOnly', 'hasInputFields', 'hasOutputExample', 'hasInputSchema', 'hasOutputFields', 'hasOutputSchema', 'tags', 'bundleSlugs'].filter(key => {
+    const value = search[key as keyof DirectoryExplorerFilterValues]
+    return value !== undefined && value !== false
+  }).length
+  fireEvent.click(screen.getByRole('button', { name: filterCount > 0 ? `Filters ${filterCount}` : 'Filters' }))
+  return { ...rendered, change, reset, filters: within(screen.getByRole('dialog', { name: 'Refine Tools' })) }
 }
 it('searches global category facets without altering counts or filtering the supplied page', () => {
   const { filters, change } = show()
@@ -68,16 +73,14 @@ it('sends metadata, curation and payer filters with source meaning intact', () =
   fireEvent.click(filters.getByRole('button', { name: '100+ paying addresses' }))
   expect(change).toHaveBeenLastCalledWith({ minPayers30d: 100, maxPayers30d: undefined, adoptionBand: undefined })
   expect(filters.getByText('Distinct paying addresses per Tool, not people or Customers.')).toBeTruthy()
-  fireEvent.click(filters.getByRole('button', { name: 'Clear all' }))
+  fireEvent.click(filters.getByRole('button', { name: 'Clear filters' }))
   expect(reset).toHaveBeenCalledOnce()
 })
-it('provides the same filter actions in a scrollable mobile Sheet', async () => {
-  const { change } = show({ network: 'eip155:8453' })
-  fireEvent.click(screen.getByRole('button', { name: 'Filters 1' }))
-  const dialog = within(await screen.findByRole('dialog', { name: 'Refine Tools' }))
-  fireEvent.click(dialog.getByRole('button', { name: 'All networks' }))
+it('closes the filter Sheet after Show results', async () => {
+  const { change, filters } = show({ network: 'eip155:8453' })
+  fireEvent.click(filters.getByRole('button', { name: 'All networks' }))
   expect(change).toHaveBeenCalledWith({ network: undefined })
-  fireEvent.click(dialog.getByRole('button', { name: 'Show results' }))
+  fireEvent.click(filters.getByRole('button', { name: 'Show results' }))
   expect(screen.queryByRole('dialog')).toBeNull()
 })
 it('makes chart bands visible and replaces them when a price range or payer threshold is chosen', () => {
@@ -94,7 +97,8 @@ it('makes chart bands visible and replaces them when a price range or payer thre
 it('retains selected tags outside the shown facet sample and enforces the five-tag limit', () => {
   const change = vi.fn()
   render(<DirectoryExplorerFilters search={{ tags: ['one', 'two', 'three', 'four', 'five'] }} overview={{ ...overview, kind: 'ok', tags: [{ key: 'six', label: 'Six', count: 17 }], bundleSlugs: [{ key: 'developer-kit', label: 'Developer kit', count: 3 }] }} onChange={change} onReset={vi.fn()} />)
-  const filters = within(screen.getByRole('complementary', { name: 'Tool filters' }))
+  fireEvent.click(screen.getByRole('button', { name: 'Filters 1' }))
+  const filters = within(screen.getByRole('dialog', { name: 'Refine Tools' }))
   expect((filters.getByRole('checkbox', { name: 'Six 17' }) as HTMLButtonElement).disabled).toBe(true)
   fireEvent.click(filters.getByRole('button', { name: 'Remove tags: three' }))
   expect(change).toHaveBeenLastCalledWith({ tags: ['one', 'two', 'four', 'five'] })

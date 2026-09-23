@@ -22,7 +22,7 @@ export function AeSiteFaq({
 }: AeSiteFaqProps) {
   return (
     <AeSiteSection labelledBy={labelledBy} rhythm="section">
-      <div className="mx-auto max-w-7xl px-6">
+      <div className="mx-auto w-full max-w-7xl">
         <div className="grid gap-6 md:grid-cols-2 md:gap-6">
           <div>
             {title === undefined ? null : (

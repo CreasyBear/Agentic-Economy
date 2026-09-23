@@ -7,6 +7,7 @@ import {
   Ellipsis,
   HeartPulse,
   KeyRound,
+  MessageSquare,
   Settings,
   StoreIcon,
   type LucideIcon,
@@ -32,16 +33,16 @@ import {
   resolveAppDestination,
   type AppDestinationId,
 } from '@/lib/navigation/app-navigation'
-import type { OperatorRole } from '@/lib/operator/roles'
 import { cn } from '@/lib/utils'
 
 type AeOwnerMobileNavigationProps = {
   currentPath: string
-  operatorRole?: OperatorRole
+  canAccessAdmin?: boolean
 }
 
 const DESTINATION_ICONS: Record<AppDestinationId, LucideIcon> = {
   market: StoreIcon,
+  chat: MessageSquare,
   agents: KeyRound,
   calls: Activity,
   credit: CreditCard,
@@ -54,6 +55,11 @@ const DESTINATION_ICONS: Record<AppDestinationId, LucideIcon> = {
 
 const MOBILE_NAVIGATION = mobileNavigation()
 const MORE_GROUPS = [
+  {
+    id: 'main',
+    label: 'Main',
+    destinations: MOBILE_NAVIGATION.more.filter(destination => destination.group === 'primary'),
+  },
   {
     id: 'provider',
     label: 'Provider',
@@ -70,14 +76,15 @@ const primaryItemClassName = 'relative flex min-h-touch min-w-touch flex-col ite
 
 export function AeOwnerMobileNavigation({
   currentPath,
-  operatorRole = 'owner',
+  canAccessAdmin = false,
 }: AeOwnerMobileNavigationProps) {
   const { hash } = useLocation()
-  const activeAdminHref = operatorRole === 'admin'
+  const onAdminPath = currentPath === '/admin' || currentPath.startsWith('/admin/')
+  const activeAdminHref = canAccessAdmin && onAdminPath
     ? activeRoleNavigationHref(currentPath, ADMIN_NAVIGATION)
     : undefined
 
-  if (operatorRole === 'admin') {
+  if (canAccessAdmin && onAdminPath) {
     return (
       <nav
         aria-label="Admin primary navigation"
@@ -152,7 +159,7 @@ export function AeOwnerMobileNavigation({
           >
             <SheetHeader>
               <SheetTitle>More</SheetTitle>
-              <SheetDescription>Provider and utility destinations.</SheetDescription>
+              <SheetDescription>The rest of the workspace.</SheetDescription>
             </SheetHeader>
             <div className="grid gap-6 overflow-y-auto px-gutter pb-related">
               {MORE_GROUPS.map(group => (

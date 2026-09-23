@@ -159,7 +159,7 @@ export function AeSavedPaymentMethodsCard({
 
   return (
     <div className="grid gap-3 border-t border-border pt-4">
-      <h3 className="font-medium">Payment methods</h3>
+      <h3 className="text-sm font-medium">Payment methods</h3>
 
       <div className="min-h-[4.5rem]">
         {ready ? (
@@ -229,6 +229,7 @@ export function AeSavedPaymentMethodsCard({
       ) : (
         <Button
           type="button"
+          variant="secondary"
           disabled={managing}
           className={CTA_PRESS_CLASS}
           onClick={() => {

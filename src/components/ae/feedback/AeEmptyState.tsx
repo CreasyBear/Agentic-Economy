@@ -24,6 +24,7 @@ export function AeEmptyState({
   financialReassurance,
   actionFeedback,
   compact = false,
+  titleAs = 'h2',
 }: {
   title: string
   description: string
@@ -34,8 +35,10 @@ export function AeEmptyState({
   financialReassurance?: string
   actionFeedback?: string
   compact?: boolean
+  titleAs?: 'h2' | 'p'
 }) {
   const resolvedRole = role ?? 'status'
+  const TitleTag = titleAs
 
   function runRecipe(recipe: AeEmptyStateRecipe) {
     recipe.onSelect()
@@ -76,7 +79,7 @@ export function AeEmptyState({
         {icon ?? <Inbox aria-hidden="true" />}
       </span>
       <div className="grid max-w-md gap-intra">
-        <h2 className="text-lg font-medium tracking-tight text-foreground">{title}</h2>
+        <TitleTag className="text-lg font-medium tracking-tight text-foreground">{title}</TitleTag>
         <p className="text-pretty text-sm text-muted-foreground">{description}</p>
       </div>
       {financialReassurance === undefined ? (

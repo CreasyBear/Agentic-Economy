@@ -163,7 +163,7 @@ function UnavailableTool({ toolRef, unavailable }: Readonly<{ toolRef: string; u
     <AeOperatorPage
       operatorRole="owner"
       title="Tool status"
-      description="AE could not confirm this Tool."
+      description="Agentic Economy could not confirm this Tool."
       currentPath={`/owner/operations/${encodeURIComponent(toolRef)}`}
     >
       <div className="grid gap-related">
@@ -171,7 +171,7 @@ function UnavailableTool({ toolRef, unavailable }: Readonly<{ toolRef: string; u
           <AlertTitle>{unavailable ? 'Tool status unavailable' : 'Tool not found'}</AlertTitle>
           <AlertDescription>
             {unavailable
-              ? 'AE could not read the canonical lifecycle. No Tool was changed.'
+              ? 'Agentic Economy could not read the canonical lifecycle. No Tool was changed.'
               : 'This Tool is not part of the current Provider workspace.'}
           </AlertDescription>
         </Alert>
@@ -203,7 +203,7 @@ function maintenanceCommand(
 function correctionMessage(result: Exclude<OwnerSupplyCommandResult, { kind: 'refused' }>): string {
   if (result.kind === 'withdrawn') return 'The Tool is withdrawn and no longer accepts new work.'
   if (result.kind === 'republished') return 'The Tool was submitted for validation before returning to the market.'
-  return 'AE scheduled a fresh source and readiness check for this Tool.'
+  return 'Agentic Economy scheduled a fresh source and readiness check for this Tool.'
 }
 
 function correctionRefusal(reason: string): string {
@@ -211,9 +211,9 @@ function correctionRefusal(reason: string): string {
     return 'The Tool changed elsewhere. Reload its current status before trying again.'
   }
   if (reason === 'source_unavailable') {
-    return 'AE could not confirm the source. Reload this Tool before trying another action.'
+    return 'Agentic Economy could not confirm the source. Reload this Tool before trying another action.'
   }
-  return 'AE refused this change because the current Tool no longer satisfies its required preconditions.'
+  return 'Agentic Economy refused this change because the current Tool no longer satisfies its required preconditions.'
 }
 
 function sourceUnavailable(result: OwnerSupplyCommandResult): boolean {

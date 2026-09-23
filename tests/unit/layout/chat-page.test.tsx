@@ -9,7 +9,7 @@ import { AeChatPage } from '@/components/ae/layout/AeChatPage'
 afterEach(cleanup)
 
 describe('AeChatPage', () => {
-  it('keeps the composer dock on ask and omits a history rail until one is provided', () => {
+  it('keeps the composer dock on ask and has no conversation-history column', () => {
     render(
       <AeChatPage
         header={<p>Ask</p>}
@@ -19,7 +19,7 @@ describe('AeChatPage', () => {
       </AeChatPage>,
     )
 
-    expect(screen.getByRole('region', { name: 'Chat' })).toBeTruthy()
+    expect(screen.getByRole('main', { name: 'Chat' })).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Send message' })).toBeTruthy()
     expect(screen.queryByRole('complementary', { name: 'Conversation history' })).toBeNull()
   })
@@ -31,7 +31,7 @@ describe('AeChatPage', () => {
       </AeChatPage>,
     )
 
-    expect(screen.getByRole('region', { name: 'Shared chat' })).toBeTruthy()
+    expect(screen.getByRole('main', { name: 'Shared chat' })).toBeTruthy()
     expect(screen.getByRole('heading', { name: 'Shared weather chat' })).toBeTruthy()
     expect(screen.queryByRole('button', { name: /send/i })).toBeNull()
     expect(screen.queryByRole('textbox')).toBeNull()

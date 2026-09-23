@@ -14,6 +14,7 @@ const invalidPaidOutputObservation = {
   disposition: 'succeeded',
   releaseStarted: true,
   requestDigest: digest('i'),
+  responseDigest: digest('invalid-output-response'),
   outputJson: JSON.stringify({ unexpected: true }),
   paymentSubmissionStatus: 'observed',
   settlementEvidence: {
@@ -568,66 +569,30 @@ describe('capability operation invocation worker charge/x402', () => {
     expect(worker.state.unknownCharges).toHaveLength(1)
     expect(worker.state.records.at(-1)).toMatchObject({ state: 'reconciliation_required' })
   })
-  it('settles the Provider obligation while refusing invalid delivered output', async () => {
-    const worker = createWorker('x402', {
-      environment: 'production',
-      observation: invalidPaidOutputObservation,
-    })
-
+  it('routes verified paid invalid delivery to the buyer-credit remedy without capturing AUD', async () => {
+    const worker = createWorker('x402', { environment: 'production', observation: invalidPaidOutputObservation })
     await expect(handler(worker.ctx, { callRef: invocationRef })).resolves.toEqual({ kind: 'recorded' })
     const paths = worker.state.mutationCalls.map(({ path }) => path)
-    expect(paths).toContain('moneyManagedCallLifecycle:settle')
-    expect(paths).not.toContain('moneyLedger:reverseExternalInvocationSpendForInvalidOutput')
-    expect(paths).not.toContain('moneyLedger:recordBrokeredInvalidOutputLoss')
+    expect(paths).not.toContain('moneyManagedCallLifecycle:settle')
+    expect(paths).toContain('moneyManagedCallRemedyActions:resolveInvalidResult')
     expect(paths).not.toContain('qualifiedUse:recordQualifiedUse')
-    expect(worker.state.records.at(-1)).toMatchObject({
-      state: 'refused',
-      result: {
-        kind: 'refused',
-        code: 'provider_output_invalid',
-        receipt: {
-          commercialModel: 'account_aud',
-          state: 'settled',
-          refundState: 'not_applicable',
-          lossState: 'none',
-        },
-      },
-    })
+    expect(paths.indexOf('moneyManagedCallLifecycle:markOutcomeUnknown'))
+      .toBeLessThan(paths.indexOf('moneyManagedCallRemedyActions:resolveInvalidResult'))
+    expect(worker.state.records.at(-1)).toMatchObject({ state: 'reconciliation_required' })
+    expect(worker.state.transportCalls).toBe(1)
   })
-  it.each(['refused', 'throw'] as const)(
-    'retains the buyer reservation when invalid-output settlement transition %s',
-    async (invalidOutputTransitionResult) => {
-      const worker = createWorker('x402', {
-        environment: 'production',
-        observation: invalidPaidOutputObservation,
-        invalidOutputTransitionResult,
-      })
 
-      await expect(handler(worker.ctx, { callRef: invocationRef })).resolves.toEqual({ kind: 'recorded' })
-      const paths = worker.state.mutationCalls.map(({ path }) => path)
-      expect(paths).toContain('moneyManagedCallLifecycle:settle')
-      expect(paths).not.toContain('moneyLedger:reverseExternalInvocationSpendForInvalidOutput')
-      expect(worker.state.unknownCharges).toHaveLength(0)
-      expect(worker.state.records.at(-1)).toMatchObject({ state: 'refused' })
-    },
-  )
-  it.each(['refused', 'throw'] as const)(
-    'marks the buyer reservation unknown when invalid-output loss accounting %s',
-    async (invalidOutputLossResult) => {
-      const worker = createWorker('x402', {
-        environment: 'production',
-        observation: invalidPaidOutputObservation,
-        invalidOutputLossResult,
-      })
-
-      await expect(handler(worker.ctx, { callRef: invocationRef })).resolves.toEqual({ kind: 'recorded' })
-      const paths = worker.state.mutationCalls.map(({ path }) => path)
-      expect(paths).toContain('moneyManagedCallLifecycle:settle')
-      expect(paths).not.toContain('moneyLedger:recordBrokeredInvalidOutputLoss')
-      expect(worker.state.unknownCharges).toHaveLength(0)
-      expect(worker.state.records.at(-1)).toMatchObject({ state: 'refused' })
-    },
-  )
+  it.each(['refused', 'throw'] as const)('keeps invalid delivery uncharged when its remedy is %s', async (invalidResultRemedyResult) => {
+    const worker = createWorker('x402', { environment: 'production', observation: invalidPaidOutputObservation, invalidResultRemedyResult })
+    try { await handler(worker.ctx, { callRef: invocationRef }) } catch (error) {
+      expect(invalidResultRemedyResult).toBe('throw')
+      expect(error).toBeInstanceOf(Error)
+    }
+    const paths = worker.state.mutationCalls.map(({ path }) => path)
+    expect(paths).not.toContain('moneyManagedCallLifecycle:settle')
+    expect(worker.state.records.at(-1)).toMatchObject({ state: 'reconciliation_required' })
+    expect(worker.state.transportCalls).toBe(1)
+  })
   it('retains the managed reservation after any possible submission even when the Provider reports not settled', async () => {
     const worker = createWorker('x402', {
       environment: 'production',
@@ -707,12 +672,13 @@ describe('capability operation invocation worker charge/x402', () => {
     await expect(handler(worker.ctx, { callRef: invocationRef })).resolves.toEqual({ kind: 'recorded' })
     await expect(handler(worker.ctx, { callRef: invocationRef })).resolves.toEqual({ kind: 'none' })
     const settlementCalls = worker.state.mutationCalls.filter(({ path }) => path === 'moneyManagedCallLifecycle:settle')
-    expect(settlementCalls).toHaveLength(1)
+    expect(settlementCalls).toHaveLength(0)
+    expect(worker.state.mutationCalls.filter(({ path }) => path === 'moneyManagedCallRemedyActions:resolveInvalidResult')).toHaveLength(1)
     expect(worker.state.records[0]).toMatchObject({
       result: {
         receipt: {
           commercialModel: 'account_aud',
-          state: 'settled',
+          state: 'reconciliation_required',
         },
       },
     })

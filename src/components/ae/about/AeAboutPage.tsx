@@ -1,5 +1,3 @@
-import { Link } from '@tanstack/react-router'
-
 import {
   AeSiteAboutHero,
   AeSiteCtaBand,
@@ -8,7 +6,6 @@ import {
 } from '@/components/ae/website'
 import { AE_SITE_FOOTER } from '@/components/ae/website/AeSiteFooter.contracts'
 import { SUPPORT_EMAIL } from '@/components/ae/support/help/help.contracts'
-import { buttonVariants } from '@/components/ui/button-variants'
 import { ABOUT } from '@/content/brand-copy'
 
 const SUPPORT_EMAIL_LABEL = SUPPORT_EMAIL.replace(/^mailto:/, '')
@@ -21,14 +18,7 @@ export function AeAboutPage() {
         title={ABOUT.heading}
         description={ABOUT.subhead}
         image={ABOUT.heroImage}
-      >
-        <Link to="/market" className={buttonVariants({ size: 'lg' })}>
-          {ABOUT.heroPrimaryCta}
-        </Link>
-        <Link to="/for-providers" className={buttonVariants({ size: 'lg', variant: 'outline' })}>
-          {ABOUT.heroSecondaryCta}
-        </Link>
-      </AeSiteAboutHero>
+      />
 
       <AeSiteEditorial
         label={ABOUT.editorialLabel}
@@ -73,6 +63,7 @@ export function AeAboutPage() {
                 href={AE_SITE_FOOTER.abn.href}
                 rel="noreferrer"
                 target="_blank"
+                aria-label={`${AE_SITE_FOOTER.abn.label} (opens in a new tab)`}
                 className="font-medium text-foreground underline underline-offset-4"
               >
                 {AE_SITE_FOOTER.abn.label}
@@ -88,7 +79,6 @@ export function AeAboutPage() {
           </>
         )}
         primary={{ label: ABOUT.ctaPrimary, to: '/market' }}
-        secondary={{ label: ABOUT.ctaSecondary, to: '/for-providers' }}
       />
     </>
   )

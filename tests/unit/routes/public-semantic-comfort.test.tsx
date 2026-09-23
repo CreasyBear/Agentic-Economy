@@ -64,6 +64,11 @@ describe('public semantic comfort', () => {
     for (const link of within(company).getAllByRole('link')) {
       expect(link.classList.contains('min-h-touch')).toBe(true)
     }
+    expect(within(article).getByText(/an authorised Agent acts for that Customer/)).toBeTruthy()
+    expect(within(article).getByText(/which Tools it may use/)).toBeTruthy()
+    expect(within(article).getByText(/identifies the Provider, Agentic Economy’s role/)).toBeTruthy()
+    expect(within(article).queryByText(/supplying party/)).toBeNull()
+    expect(within(article).queryByText(/paid request/)).toBeNull()
   })
 
   it('keeps the Privacy outline sequential with working contents and correction links', () => {
@@ -79,6 +84,9 @@ describe('public semantic comfort', () => {
     }
     expect(within(article).getByRole('link', { name: 'Request a correction or removal' }).getAttribute('href'))
       .toBe('/privacy/remove-business')
+    expect(within(article).getByRole('link', { name: 'hello@aecon.ai' }).getAttribute('href'))
+      .toBe('mailto:hello@aecon.ai')
+    expect(within(article).queryByText(/Analytics preferences in the footer/)).toBeNull()
   })
 
   it('keeps About sequential and its actions comfortable', () => {
@@ -92,9 +100,13 @@ describe('public semantic comfort', () => {
     expect(screen.getByRole('heading', { level: 2, name: ABOUT.editorialTitle })).toBeTruthy()
     expect(screen.getByRole('heading', { level: 2, name: ABOUT.featuresHeading })).toBeTruthy()
     expect(screen.getByRole('heading', { level: 2, name: ABOUT.ctaHeading })).toBeTruthy()
-    expect(screen.getByRole('link', { name: ABOUT.ctaPrimary }).classList.contains('h-12')).toBe(true)
-    expect(about.getByRole('link', { name: 'ABN 98 700 838 115' }).getAttribute('href'))
-      .toBe('https://abr.business.gov.au/ABN/View?abn=98700838115')
+    const cta = about.getByRole('region', { name: ABOUT.ctaHeading })
+    expect(within(cta).getByRole('link', { name: ABOUT.ctaPrimary }).classList.contains('h-12')).toBe(true)
+    expect(within(cta).queryByRole('link', { name: 'Add Tool' })).toBeNull()
+    expect(about.queryByRole('link', { name: 'Add Tool' })).toBeNull()
+    expect(
+      about.getByRole('link', { name: 'ABN 98 700 838 115 (opens in a new tab)' }).getAttribute('href'),
+    ).toBe('https://abr.business.gov.au/ABN/View?abn=98700838115')
     expect(about.getByRole('link', { name: 'support@aecon.ai' }).getAttribute('href'))
       .toBe('mailto:support@aecon.ai')
   })

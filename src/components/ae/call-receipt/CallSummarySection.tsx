@@ -28,6 +28,9 @@ export function CallSummarySection({ result, receiptView: view }: Readonly<{
       <Badge className="w-fit" variant={purchase.kind === 'delivered' || purchase.kind === 'refunded'
         ? 'success' : purchase.kind === 'uncertain' ? 'warning' : 'secondary'}>{view.statusLabel}</Badge>
       <AeFactList facts={[
+        { label: 'Delivery', value: deliveryFactLabel(resolution?.deliveryState) },
+        { label: 'Payment', value: paymentFactLabel(resolution?.paymentState) },
+        { label: 'Purchase', value: view.statusLabel },
         ...(agent == null ? [] : [{ label: 'Agent', value: agent }]),
         ...(amount === undefined ? [] : [{ label: amountLabel, value: formatCurrencyAmount(amount) }]),
         ...(timestamp === undefined || !Number.isFinite(timestamp) ? [] : [{
@@ -38,12 +41,31 @@ export function CallSummarySection({ result, receiptView: view }: Readonly<{
       {amount === undefined && purchase.kind !== 'pending'
         ? <p className="text-sm text-muted-foreground">The charge has not been confirmed.</p> : null}
       {canReturnToTool ? (
-        <Link to="/tools/$toolRef" params={{ toolRef: result.toolRef }} className={buttonVariants({ className: 'min-h-touch w-fit' })}>
+        <Link
+          to="/tools/$toolRef"
+          params={{ toolRef: result.toolRef }}
+          className={buttonVariants({ variant: 'outline', className: 'min-h-touch w-fit' })}
+        >
           View Tool
         </Link>
       ) : null}
     </section>
   )
+}
+
+function deliveryFactLabel(state: 'delivered' | 'not_delivered' | 'unknown' | undefined): string {
+  if (state === 'delivered') return 'Delivered'
+  if (state === 'not_delivered') return 'Not delivered'
+  return 'Unknown'
+}
+
+function paymentFactLabel(
+  state: 'settled' | 'released' | 'unknown' | 'not_applicable' | undefined,
+): string {
+  if (state === 'settled') return 'Settled'
+  if (state === 'released') return 'Released'
+  if (state === 'not_applicable') return 'Not applicable'
+  return 'Unknown'
 }
 
 function receiptAmount(view: CallReceiptView) {

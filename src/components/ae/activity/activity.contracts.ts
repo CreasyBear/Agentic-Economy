@@ -86,10 +86,6 @@ export type ActivityFilterBarProps = Readonly<{
   filteredAgentShortId: string | undefined
   filtersActive: boolean
   onResetFilters: () => void
-  exportPreviewLabel: string
-  exportDisabled: boolean
-  onExportCsv: () => void
-  onExportJson: () => void
 }>
 
 export type ActivityCallQueueProps = Readonly<{

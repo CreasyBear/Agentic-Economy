@@ -6,6 +6,7 @@ import { degradeBackend } from '../../../src/lib/observability/degrade-backend'
 import type { ActionCtx, MutationCtx, QueryCtx } from '../../_generated/server'
 import type { Doc } from '../../_generated/dataModel'
 import { internal } from '../../_generated/api'
+import { recordMarketEvidenceFact } from '../../marketEvidence'
 import type { AgentAccessPrincipal } from '@/modules/agent-access/agent-access'
 import { isBoundedJsonValue, type JsonValue } from '@/modules/capability-contract/public'
 import { isRecord } from '@/modules/common/is-record'
@@ -669,10 +670,11 @@ export async function projectRecoveryHandler(
     if (row.result?.kind === 'completed') {
       let result = row.result
       const recordedReceipt = result.receipt
+      const settlementRef = row.formanceSettlementRefs?.[0]
       if (recordedReceipt?.commercialModel === 'account_aud' && recordedReceipt.state === 'settled'
-        && row.formanceFinancialState === 'settled' && row.formanceSettlementRefs?.length) {
-        const receipt = { ...recordedReceipt, transactionRef: row.formanceSettlementRefs[0]!,
-          accountingTransactionRefs: [...row.formanceSettlementRefs] }
+        && row.formanceFinancialState === 'settled' && settlementRef !== undefined) {
+        const receipt = { ...recordedReceipt, transactionRef: settlementRef,
+          accountingTransactionRefs: [...(row.formanceSettlementRefs ?? [])] }
         const usage = recoveredPaidUsage(row, receipt)
         if (usage) {
           result = { ...result, receipt, usage }
@@ -685,15 +687,18 @@ export async function projectRecoveryHandler(
       await upsertCallProjection(ctx, row, {
         state: 'completed', dispatchState: 'completed', result,
       }, row.updatedAt)
+      await recordRecoveredCompletion(ctx, row, row.updatedAt)
     }
     return { kind: 'recorded' as const }
   }
+  const attemptRef = args.attemptRef
   if (row.state === 'reconciliation_required' && args.state === 'completed'
     && args.result?.kind === 'completed' && row.formanceFinancialState === 'settled'
-    && row.formanceSettlementRefs?.length && args.attemptRef === row.attemptRef) {
+    && row.formanceSettlementRefs?.length && attemptRef !== undefined
+    && attemptRef === row.attemptRef) {
     const attempt = await ctx.db.query('moneyX402PaymentAttempts')
       .withIndex('by_attemptRef_and_effectGeneration', q => q
-        .eq('attemptRef', args.attemptRef!)
+        .eq('attemptRef', attemptRef)
         .eq('effectGeneration', row.result?.kind === 'reconciliation_required'
           ? row.result.evidence.effectGeneration : -1)).unique()
     if (attempt?.dispatchRef !== row.callRef || attempt.toolRef !== row.toolRef
@@ -720,9 +725,18 @@ export async function projectRecoveryHandler(
     await upsertCallProjection(ctx, row, {
       state: 'completed', dispatchState: 'completed', result: completed, usage,
     }, args.now)
+    await recordRecoveredCompletion(ctx, row, args.now)
     return { kind: 'recorded' as const }
   }
   if (!recoveryProjectionTransitionAllowed(row, args)) return { kind: 'recorded' as const }
   await ctx.db.patch(row._id, recoveryProjectionPatch(row, args))
   return { kind: 'recorded' as const }
+}
+
+/** Same Call identity and original completion time make repair/replay non-inflating. */
+async function recordRecoveredCompletion(ctx: MutationCtx, row: CallRow, completedAt: number): Promise<void> {
+  await recordMarketEvidenceFact(ctx, 'ae_invocation_completed', row.callRef, completedAt, {
+    toolRef: row.toolRef,
+    durationMs: Math.max(0, completedAt - row.createdAt),
+  })
 }

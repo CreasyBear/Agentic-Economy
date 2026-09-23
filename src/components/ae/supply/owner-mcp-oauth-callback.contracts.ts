@@ -1,7 +1,7 @@
 export const OWNER_MCP_OAUTH_CALLBACK_COPY = {
   pageTitle: 'Provider connection',
-  pageDescription: 'Return to Add Tool after the Provider confirms access.',
-  action: 'Return to Add Tool and retry',
+  pageDescription: 'This Provider connection was not completed. Return to Add Tool.',
+  action: 'Return to Add Tool',
   environment: {
     sandbox: 'Sandbox',
     production: 'Production',

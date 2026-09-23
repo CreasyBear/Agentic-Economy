@@ -1,20 +1,27 @@
+'use client'
+
 import { UserButton } from '@clerk/tanstack-react-start'
 import { ArrowLeftIcon, MenuIcon, XIcon } from 'lucide-react'
 import { Link } from '@tanstack/react-router'
 
 import { AeCommandPanel } from '@/components/ae/command-panel'
 import { AeNetworkHealthBanner, AeNetworkHealthIndicator } from '@/components/ae/layout/AeNetworkHealthIndicator'
+import { useOperatorSidebarChrome } from '@/components/ae/layout/AeOperatorPage'
 import { AeOrganizationSwitcher } from '@/components/ae/layout/AeOrganizationSwitcher'
 import { ThemeToggle } from '@/components/ae/layout/ThemeToggle'
 import { AeSiteDrawerNav, AeSiteIconButton, AeSitePrimaryNav } from '@/components/ae/website/AeSiteNav'
 import { buttonVariants } from '@/components/ui/button-variants'
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet'
-import { SidebarTrigger } from '@/components/ui/sidebar'
 import { AECON_MARK_SRC, AECON_MOBILE_LOCKUP_SRC, aeconMarkClassName } from '@/content/brand-assets'
+import type { OperatorRole } from '@/lib/operator/roles'
 import { cn } from '@/lib/utils'
+
+import { WorkspaceMenu } from './WorkspaceMenu'
 
 export type AeAppHeaderProps = Readonly<{
   signedIn: boolean
+  operatorRole: OperatorRole
+  canAccessAdmin: boolean
   minimal: boolean
   mobileNavOpen: boolean
   setMobileNavOpen: (open: boolean) => void
@@ -37,12 +44,17 @@ function BrandLink() {
 
 export function AeAppHeader({
   signedIn,
+  operatorRole,
+  canAccessAdmin,
   minimal,
   mobileNavOpen,
   setMobileNavOpen,
   elevated,
   hydrated,
 }: AeAppHeaderProps) {
+  const title = useOperatorSidebarChrome()?.title
+  const pageTitle = typeof title === 'string' && title !== '' ? title : null
+
   return (
     <header
       data-hydrated={hydrated ? 'true' : undefined}
@@ -69,12 +81,17 @@ export function AeAppHeader({
           data-elevated={elevated ? '' : undefined}
           className="ae-nav flex h-(--header-height) min-h-(--header-height) items-center gap-1 px-1 shadow-none sm:gap-related transition-shadow duration-200 ease-out data-[elevated]:shadow-soft motion-reduce:transition-none sm:px-2"
         >
-          <SidebarTrigger aria-label="Open app navigation" className="md:hidden" />
           <BrandLink />
+          {pageTitle === null ? null : (
+            <h1 className="min-w-0 flex-1 truncate text-title" title={pageTitle}>
+              {pageTitle}
+            </h1>
+          )}
           <div className="ms-auto flex items-center gap-1 sm:gap-intra">
             <div className="hidden sm:block"><AeNetworkHealthIndicator /></div>
             <AeCommandPanel />
-            <div className="hidden max-w-[12rem] min-w-0 md:block"><AeOrganizationSwitcher /></div>
+            <AeOrganizationSwitcher isCollapsed />
+            <WorkspaceMenu operatorRole={operatorRole} canAccessAdmin={canAccessAdmin} />
             <ThemeToggle />
             <UserButton userProfileMode="modal" />
           </div>

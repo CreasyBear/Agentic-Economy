@@ -10,7 +10,6 @@ import {
   ArrowRightIcon,
 } from 'lucide-react'
 
-import { Alert } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { buttonVariants } from '@/components/ui/button-variants'
@@ -63,28 +62,6 @@ function statusFromReadiness(readiness?: OwnerConnectReadinessReadback): PollerS
   return null
 }
 
-function ConnectRule4Playbook({
-  diagnostic,
-  variant = 'destructive',
-  children,
-}: Readonly<{
-  diagnostic: ConnectReturnDiagnostic
-  variant?: 'destructive' | 'default'
-  children?: ReactNode
-}>) {
-  return (
-    <Alert variant={variant} className="py-2.5">
-      <AlertTriangleIcon className="size-4" />
-      <div className="col-start-2 grid gap-related text-xs">
-        <PlaybookSection title="What happened" body={diagnostic.whatHappened} />
-        <PlaybookSection title="Financial impact" body={diagnostic.financialImpact} />
-        <PlaybookSection title="Next step" body={diagnostic.nextStep} />
-        {children}
-      </div>
-    </Alert>
-  )
-}
-
 function PlaybookSection({ title, body }: Readonly<{ title: string; body: ReactNode }>) {
   return (
     <div className="grid gap-intra">
@@ -92,6 +69,28 @@ function PlaybookSection({ title, body }: Readonly<{ title: string; body: ReactN
       <p className="text-xs text-foreground">{body}</p>
     </div>
   )
+}
+
+function statusCopy(status: PollerStatus): Readonly<{
+  title: string
+  description: string
+  diagnostic: ConnectReturnDiagnostic | undefined
+}> {
+  switch (status) {
+    case 'ready':
+      return { title: READY_TITLE, description: READY_DESCRIPTION, diagnostic: undefined }
+    case 'restricted':
+      return { title: '', description: '', diagnostic: RESTRICTED_DIAGNOSTIC }
+    case 'timeout':
+      return { title: '', description: '', diagnostic: TIMEOUT_DIAGNOSTIC }
+    case 'verifying':
+    case 'error':
+      return { title: VERIFYING_TITLE, description: VERIFYING_DESCRIPTION, diagnostic: undefined }
+    default: {
+      const _exhaustive: never = status
+      return _exhaustive
+    }
+  }
 }
 
 export function AeConnectReturnPoller({
@@ -110,6 +109,7 @@ export function AeConnectReturnPoller({
     if (derived) return derived
     return 'verifying'
   })
+  const [paused, setPaused] = useState(false)
 
   const startTimeRef = useRef<number | null>(null)
   const pollerRef = useRef<NodeJS.Timeout | null>(null)
@@ -143,6 +143,11 @@ export function AeConnectReturnPoller({
   }, [initialReadiness, status])
 
   useEffect(() => {
+    if (paused) {
+      if (pollerRef.current) clearTimeout(pollerRef.current)
+      return
+    }
+
     if (status === 'ready' || status === 'restricted' || status === 'timeout') {
       return
     }
@@ -184,9 +189,10 @@ export function AeConnectReturnPoller({
     return () => {
       if (pollerRef.current) clearTimeout(pollerRef.current)
     }
-  }, [maxPollTimeMs, onPollReadiness, onReadinessAchieved, pollIntervalMs, status])
+  }, [maxPollTimeMs, onPollReadiness, onReadinessAchieved, paused, pollIntervalMs, status])
 
   const shellClassName = cn('grid gap-3 rounded-lg border bg-card p-4 shadow-xs', SHELL)
+  const copy = statusCopy(status)
 
   return (
     <div className={shellClassName}>
@@ -196,7 +202,7 @@ export function AeConnectReturnPoller({
           {status === 'verifying' && (
             <Badge variant="outline" className="gap-1.5 animate-pulse text-muted-foreground">
               <Loader2Icon className="size-3 animate-spin" />
-              Verifying with Stripe...
+              {paused ? 'Paused' : 'Verifying with Stripe...'}
             </Badge>
           )}
           {status === 'ready' && (
@@ -217,32 +223,65 @@ export function AeConnectReturnPoller({
             </Badge>
           )}
         </div>
+        {status === 'verifying' ? (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className={cn('min-h-touch w-fit', TACTILE)}
+            onClick={() => setPaused((current) => !current)}
+          >
+            {paused ? 'Resume' : 'Pause'}
+          </Button>
+        ) : null}
       </div>
 
-      {status === 'verifying' && (
-        <div className="grid gap-2 rounded-lg border border-border bg-muted/30 p-3">
-          <div className="flex items-center gap-2">
-            <div className="relative flex size-2.5 items-center justify-center">
+      <div
+        role="status"
+        aria-live="polite"
+        className={cn(
+          'grid gap-2 rounded-lg border p-3',
+          status === 'ready' && 'border-success-ring bg-success-subtle',
+          status === 'restricted' && 'border-destructive/40 bg-destructive/5',
+          (status === 'verifying' || status === 'timeout' || status === 'error') &&
+            'border-border bg-muted/30',
+        )}
+      >
+        <div className="flex items-start gap-2">
+          {status === 'verifying' ? (
+            <div className="relative mt-1 flex size-2.5 shrink-0 items-center justify-center">
               <span
-                className="absolute inline-flex size-full animate-ping rounded-full bg-primary opacity-75 motion-reduce:animate-none"
+                className={cn(
+                  'absolute inline-flex size-full rounded-full bg-primary opacity-75',
+                  paused ? undefined : 'animate-ping motion-reduce:animate-none',
+                )}
               />
               <span className="relative inline-flex size-1.5 rounded-full bg-primary" />
             </div>
-            <h4 className="text-xs font-medium text-foreground">{VERIFYING_TITLE}</h4>
-          </div>
-          <p className="text-xs text-muted-foreground">{VERIFYING_DESCRIPTION}</p>
-        </div>
-      )}
-
-      {status === 'ready' && (
-        <div className="grid gap-2 rounded-lg border border-success-ring bg-success-subtle p-3">
-          <div className="flex items-start gap-2">
+          ) : null}
+          {status === 'ready' ? (
             <CheckCircle2Icon className="size-5 shrink-0 text-success" />
+          ) : null}
+          {(status === 'restricted' || status === 'timeout') ? (
+            <AlertTriangleIcon className="size-4 shrink-0" />
+          ) : null}
+          {copy.title.length > 0 ? (
             <div className="grid min-w-0 gap-1">
-              <h4 className="text-sm font-medium text-foreground">{READY_TITLE}</h4>
-              <p className="text-xs text-muted-foreground">{READY_DESCRIPTION}</p>
+              <h4 className="text-xs font-medium text-foreground sm:text-sm">{copy.title}</h4>
+              <p className="text-xs text-muted-foreground">{copy.description}</p>
             </div>
+          ) : null}
+        </div>
+
+        {copy.diagnostic === undefined ? null : (
+          <div className="grid gap-related text-xs">
+            <PlaybookSection title="What happened" body={copy.diagnostic.whatHappened} />
+            <PlaybookSection title="Financial impact" body={copy.diagnostic.financialImpact} />
+            <PlaybookSection title="Next step" body={copy.diagnostic.nextStep} />
           </div>
+        )}
+
+        {status === 'ready' ? (
           <Link
             to="/owner/operations/new"
             className={cn(buttonVariants({ size: 'sm' }), 'gap-1.5 min-h-touch w-fit', TACTILE)}
@@ -250,16 +289,14 @@ export function AeConnectReturnPoller({
             <span>Add your first Tool</span>
             <ArrowRightIcon className="size-3.5" />
           </Link>
-        </div>
-      )}
+        ) : null}
 
-      {status === 'restricted' && (
-        <ConnectRule4Playbook diagnostic={RESTRICTED_DIAGNOSTIC}>
+        {status === 'restricted' ? (
           <div className="pt-1">
             <Button
               type="button"
               size="sm"
-              className={cn('gap-1.5 min-h-touch', TACTILE)}
+              className={cn('gap-1.5 min-h-touch w-fit', TACTILE)}
               onClick={() => void onResumeVerification?.()}
             >
               <ExternalLinkIcon className="size-3.5" />
@@ -268,27 +305,26 @@ export function AeConnectReturnPoller({
               </span>
             </Button>
           </div>
-        </ConnectRule4Playbook>
-      )}
+        ) : null}
 
-      {status === 'timeout' && (
-        <ConnectRule4Playbook diagnostic={TIMEOUT_DIAGNOSTIC} variant="default">
+        {status === 'timeout' ? (
           <div className="pt-1">
             <Button
               type="button"
               variant="outline"
               size="sm"
-              className={cn('min-h-touch', TACTILE)}
+              className={cn('min-h-touch w-fit', TACTILE)}
               onClick={() => {
                 startTimeRef.current = Date.now()
+                setPaused(false)
                 setStatus('verifying')
               }}
             >
               Check again
             </Button>
           </div>
-        </ConnectRule4Playbook>
-      )}
+        ) : null}
+      </div>
     </div>
   )
 }

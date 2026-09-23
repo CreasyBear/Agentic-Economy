@@ -6,7 +6,7 @@ test.describe('developer discovery accessibility', () => {
     await gotoSettled(page, '/developers/discovery')
 
     await expect(page.getByRole('heading', { name: 'Discovery status', level: 1 })).toBeVisible()
-    await expect(page.getByRole('link', { name: 'View schema status' })).toBeVisible()
+    await expect(page.getByRole('link', { name: 'Open schema, Public catalog schema' })).toBeVisible()
     await expect(page.getByText(/read path status/i)).toBeVisible()
 
     const skipLink = page.getByRole('link', { name: /skip to content/i })
@@ -20,8 +20,8 @@ test.describe('developer discovery accessibility', () => {
     await page.keyboard.press('Enter')
     await expect(mainContent).toBeFocused()
 
-    await page.getByRole('link', { name: 'View schema status' }).focus()
-    await expect(page.getByRole('link', { name: 'View schema status' })).toBeFocused()
+    await page.getByRole('link', { name: 'Open schema, Public catalog schema' }).focus()
+    await expect(page.getByRole('link', { name: 'Open schema, Public catalog schema' })).toBeFocused()
     await expectNoHorizontalOverflow(page)
   })
 })

@@ -2,8 +2,13 @@
 
 import { cleanup, render, screen, within } from '@testing-library/react'
 import { RouterContextProvider, createMemoryHistory, createRootRoute, createRoute, createRouter } from '@tanstack/react-router'
-import { afterEach, expect, it } from 'vitest'
+import { afterEach, expect, it, vi } from 'vitest'
 import '../setup/jsdom-platform'
+
+vi.mock('@clerk/tanstack-react-start', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@clerk/tanstack-react-start')>()),
+  OrganizationSwitcher: () => <div data-testid="organization-switcher" />,
+}))
 
 import { AeAppSidebar } from '@/components/ae/layout/app-shell/AeAppSidebar'
 import { OperatorChromeProvider } from '@/components/ae/layout/AeOperatorPage'

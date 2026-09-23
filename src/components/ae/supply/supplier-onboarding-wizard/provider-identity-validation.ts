@@ -9,6 +9,13 @@ export const SAVE_FAILURE_DIAGNOSTIC: Rule4Diagnostic = {
   nextStep: 'Please check connection and try again.',
 }
 
+export type ProviderIdentityFieldId = 'name' | 'website' | 'abn'
+
+export type ProviderIdentityValidationIssue = Readonly<{
+  field: ProviderIdentityFieldId
+  diagnostic: Rule4Diagnostic
+}>
+
 function invalidHttpsWebsiteDiagnostic(): Rule4Diagnostic {
   return {
     whatHappened: 'Enter a valid HTTPS provider website.',
@@ -17,36 +24,50 @@ function invalidHttpsWebsiteDiagnostic(): Rule4Diagnostic {
   }
 }
 
-export function diagnosticForProfileValidation(
+export function profileValidationIssue(
   trimmedName: string,
   trimmedWebsite: string,
   cleanAbn: string,
-): Rule4Diagnostic | undefined {
+): ProviderIdentityValidationIssue | undefined {
   if (trimmedName.length === 0) {
     return {
-      whatHappened: 'Enter your supplier / brand name.',
-      financialImpact: FINANCIAL_NO_UPDATE,
-      nextStep: 'Enter the public name shown on Tool cards and invoices.',
+      field: 'name',
+      diagnostic: {
+        whatHappened: 'Enter your supplier / brand name.',
+        financialImpact: FINANCIAL_NO_UPDATE,
+        nextStep: 'Enter the public name shown on Tool cards and invoices.',
+      },
     }
   }
 
   try {
     const parsedUrl = new URL(trimmedWebsite)
     if (parsedUrl.protocol !== 'https:') {
-      return invalidHttpsWebsiteDiagnostic()
+      return { field: 'website', diagnostic: invalidHttpsWebsiteDiagnostic() }
     }
   } catch (cause) {
     void cause
-    return invalidHttpsWebsiteDiagnostic()
+    return { field: 'website', diagnostic: invalidHttpsWebsiteDiagnostic() }
   }
 
   if (!isValidAbn(cleanAbn)) {
     return {
-      whatHappened: 'Invalid Australian Business Number (ABN).',
-      financialImpact: FINANCIAL_NO_UPDATE,
-      nextStep: 'Enter an 11-digit ABN with valid ATO checksum or check ABN Lookup.',
+      field: 'abn',
+      diagnostic: {
+        whatHappened: 'Invalid Australian Business Number (ABN).',
+        financialImpact: FINANCIAL_NO_UPDATE,
+        nextStep: 'Enter an 11-digit ABN with valid ATO checksum or check ABN Lookup.',
+      },
     }
   }
 
   return undefined
+}
+
+export function diagnosticForProfileValidation(
+  trimmedName: string,
+  trimmedWebsite: string,
+  cleanAbn: string,
+): Rule4Diagnostic | undefined {
+  return profileValidationIssue(trimmedName, trimmedWebsite, cleanAbn)?.diagnostic
 }

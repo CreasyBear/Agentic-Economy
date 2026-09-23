@@ -19,7 +19,7 @@ function RemoveBusinessRoute() {
     <AePublicPage
       kind="document"
       eyebrow="Privacy"
-      title="Provider corrections"
+      title="Remove a Business"
       description="Send the Provider slug, your email, and the exact Tool or profile fact that should change."
     >
       <AeRemoveBusinessPage />

@@ -3,7 +3,6 @@ import { createFileRoute, redirect } from '@tanstack/react-router'
 import { AePageSkeleton } from '@/components/ae/layout/AePageState'
 import { PublicToolDetail } from '@/components/ae/market/public-tool-detail/PublicToolDetail'
 import { isPublicToolRef } from '@/modules/capability-supply/public'
-import { readToolListingEvidence } from '@/modules/market/server'
 import { toolDisplayTitle } from '@/modules/market/tool-view-model'
 import { readX402DirectoryCanonicalUrlForToolServer } from '@/modules/market/x402-directory-index.functions'
 import {
@@ -28,7 +27,7 @@ export const Route = createFileRoute('/tools/$toolRef')({
         throw redirect({ to: '/tools/$providerHost/$slug', params: canonical, replace: true })
       }
     }
-    const evidence = result.kind === 'found' ? await readToolListingEvidence(result.tool) : undefined
+    const evidence = result.kind === 'found' ? result.evidence : undefined
     return { result, evidence }
   },
   head: ({ loaderData }) => {
@@ -59,7 +58,7 @@ function ToolDetailRoute() {
 }
 
 function ToolDetailPending() {
-  return <AePageSkeleton title="Checking the current capability…" description="Checking the current capability…" shape="detail" />
+  return <AePageSkeleton title="Loading this Tool…" description="Loading this Tool…" shape="detail" />
 }
 
 function ToolDetailError() {

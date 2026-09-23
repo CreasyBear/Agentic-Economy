@@ -1,5 +1,5 @@
 import { useQuery } from 'convex/react'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useEffectEvent, useRef, useState } from 'react'
 
 import { api } from '../../../../../convex/_generated/api'
 import { ADMIN_ACTION_PERMISSION } from '@/lib/operator/admin-console/contracts'
@@ -30,8 +30,7 @@ export function useAdminActionSheet(props: AdminActionSheetProps): AdminActionSh
     error: null, approval: props.approval ?? { kind: 'execute' },
   })
 
-  useEffect(() => {
-    if (!props.open) return
+  const resetFromCurrentProps = useEffectEvent(() => {
     operationKey.current = createPrefixedRandomId('admin:')
     correlationId.current = createPrefixedRandomId('admin:correlation:')
     setState({
@@ -39,6 +38,10 @@ export function useAdminActionSheet(props: AdminActionSheetProps): AdminActionSh
       evidenceRefs: props.initialEvidenceRefs ?? [], typedEvidence: '', receipt: null,
       error: null, approval: props.approval ?? { kind: 'execute' },
     })
+  })
+
+  useEffect(() => {
+    if (props.open) resetFromCurrentProps()
   }, [props.open])
 
   function setReason(value: string) {

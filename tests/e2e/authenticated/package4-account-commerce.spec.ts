@@ -22,8 +22,9 @@ test.describe('Package 4 Account commerce', () => {
     await clerk.signIn({ page, emailAddress: environment.ownerEmail })
 
     await page.goto('/owner/credit')
-    await expect(page.getByRole('heading', { name: 'Balance', level: 1 })).toBeVisible()
-    await expect(page.getByRole('heading', { name: 'Account balance' })).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Credit', level: 1 })).toBeVisible()
+    await expect(page.locator('#fund').getByText('Available credit')).toBeVisible()
+    await expect(page.locator('#fund').getByRole('heading', { name: 'Add funds' })).toBeVisible()
     await expect(page.getByText(/Paid Calls reserve AUD from this Account/iu)).toBeVisible()
     await page.getByText('Accounting records and administration', { exact: true }).click()
     await expect(page.getByRole('heading', { name: 'Documents', exact: true })).toBeVisible()

@@ -47,7 +47,9 @@ export function AeOnboardingPage(props: AeOnboardingPageProps) {
             {surface.kind === 'role' ? (
               <OnboardingRoleStep
                 roleIntent={surface.roleIntent}
-                continueDisabled={surface.continueDisabled}
+                roleInvalid={surface.roleInvalid}
+                buyerRadioRef={model.buyerRadioRef}
+                supplierRadioRef={model.supplierRadioRef}
                 onRoleIntentChange={model.onRoleIntentChange}
                 onContinue={model.onContinue}
               />
@@ -55,13 +57,12 @@ export function AeOnboardingPage(props: AeOnboardingPageProps) {
               <OnboardingWorkspaceStep
                 workspaceName={surface.workspaceName}
                 finishDisabled={surface.finishDisabled}
-                skipDisabled={surface.skipDisabled}
                 submitting={surface.submitting}
+                nameInvalid={surface.nameInvalid}
                 completionDescription={surface.completionDescription}
                 workspaceInputRef={model.workspaceInputRef}
                 onWorkspaceNameChange={model.onWorkspaceNameChange}
                 onBack={model.onBack}
-                onSkip={model.onSkip}
                 onFinish={model.onFinish}
               />
             )}

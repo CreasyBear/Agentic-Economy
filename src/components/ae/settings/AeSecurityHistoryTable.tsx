@@ -104,27 +104,24 @@ function historyColumns(showActorAndTarget: boolean): ColumnDef<AccountSecurityH
       header: 'Evidence',
       enableSorting: false,
       cell: ({ row }) => (
-        <details className="min-w-48 text-xs text-muted-foreground">
-          <summary className="cursor-pointer font-medium text-foreground">Evidence details</summary>
-          <dl className="mt-2 grid gap-2">
-            {showActorAndTarget ? (
-              <>
-                <div className="grid gap-1">
-                  <dt>Actor · {actorLabel(row.original.actorKind)}</dt>
-                  <dd><AeCopyReference label="Actor reference" value={row.original.actorRef} /></dd>
-                </div>
-                <div className="grid gap-1">
-                  <dt>Target · {targetLabel(row.original.targetType)}</dt>
-                  <dd><AeCopyReference label="Target reference" value={row.original.targetRef} /></dd>
-                </div>
-              </>
-            ) : null}
-            <div className="grid gap-1">
-              <dt>Correlation reference</dt>
-              <dd><AeCopyReference label="Reference" value={row.original.correlationRef} /></dd>
-            </div>
-          </dl>
-        </details>
+        <dl className="grid min-w-48 gap-2 text-xs text-muted-foreground">
+          {showActorAndTarget ? (
+            <>
+              <div className="grid gap-1">
+                <dt>Actor · {actorLabel(row.original.actorKind)}</dt>
+                <dd><AeCopyReference label="Actor reference" value={row.original.actorRef} /></dd>
+              </div>
+              <div className="grid gap-1">
+                <dt>Target · {targetLabel(row.original.targetType)}</dt>
+                <dd><AeCopyReference label="Target reference" value={row.original.targetRef} /></dd>
+              </div>
+            </>
+          ) : null}
+          <div className="grid gap-1">
+            <dt>Correlation reference</dt>
+            <dd><AeCopyReference label="Reference" value={row.original.correlationRef} /></dd>
+          </div>
+        </dl>
       ),
     },
   ]

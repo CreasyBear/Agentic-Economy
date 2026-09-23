@@ -1,6 +1,6 @@
-import { useId, type ReactNode } from 'react'
+import { useEffect, useId, type ReactNode } from 'react'
 
-import { AeSiteEyebrow, AeSiteHeading } from '@/components/ae/website/AeSiteType'
+import { AeSiteEyebrow } from '@/components/ae/website/AeSiteType'
 
 type AePageHeaderProps = {
   eyebrow?: string
@@ -14,6 +14,8 @@ type AePageHeaderProps = {
    */
   meta?: ReactNode
   variant?: 'page' | 'market' | 'workspace'
+  /** When true, the h1 is programmatically focusable and focused after paint. */
+  focusTitle?: boolean
 }
 
 export function AePageHeader({
@@ -23,9 +25,15 @@ export function AePageHeader({
   actions,
   meta,
   variant = 'page',
+  focusTitle = false,
 }: AePageHeaderProps) {
   const titleId = useId()
   const descriptionId = useId()
+
+  useEffect(() => {
+    if (!focusTitle) return
+    document.getElementById(titleId)?.focus()
+  }, [focusTitle, titleId, title])
 
   if (variant === 'workspace') {
     return (
@@ -39,7 +47,11 @@ export function AePageHeader({
           <div className="flex min-w-0 items-center gap-related">
             <div className="min-w-0 flex-1">
               <div className="flex min-w-0 items-baseline gap-intra">
-                <h1 id={titleId} className="truncate font-sans text-xl font-medium leading-tight tracking-tight text-foreground sm:text-2xl">
+                <h1
+                  id={titleId}
+                  {...(focusTitle ? { tabIndex: -1 as const } : {})}
+                  className="truncate font-sans text-xl font-medium leading-tight tracking-tight text-foreground sm:text-2xl"
+                >
                   {title}
                 </h1>
                 {eyebrow === undefined ? null : (
@@ -79,9 +91,13 @@ export function AePageHeader({
         <div className="grid max-w-4xl gap-related">
           <div>
             {eyebrow === undefined ? null : <AeSiteEyebrow>{eyebrow}</AeSiteEyebrow>}
-            <AeSiteHeading as="h1" size="lg" id={titleId} className="text-foreground">
+            <h1
+              id={titleId}
+              {...(focusTitle ? { tabIndex: -1 as const } : {})}
+              className="text-balance text-4xl font-extralight tracking-[-0.035em] text-foreground md:text-5xl lg:text-6xl"
+            >
               {title}
-            </AeSiteHeading>
+            </h1>
           </div>
           <p id={descriptionId} className="max-w-prose text-pretty text-sm leading-6 text-muted-foreground">
             {description}

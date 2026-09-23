@@ -56,10 +56,10 @@ describe('AeSupplierOnboardingWizard (W-30)', () => {
       />,
     )
 
-    expect(screen.getByRole('navigation', { name: /supplier activation/i })).toBeInTheDocument()
-    expect(screen.getByText(/1\. Provider Identity/i)).toBeInTheDocument()
-    expect(screen.getByText(/2\. Payout Account \(Stripe\)/i)).toBeInTheDocument()
-    expect(screen.getByText(/3\. First Tool Publication/i)).toBeInTheDocument()
+    expect(screen.getByRole('navigation', { name: /provider setup/i })).toBeInTheDocument()
+    expect(screen.getByText(/1\. Provider identity/i)).toBeInTheDocument()
+    expect(screen.getByText(/2\. Payout account/i)).toBeInTheDocument()
+    expect(screen.getByText(/3\. First Tool/i)).toBeInTheDocument()
     expect(screen.getByText('~2 mins')).toBeInTheDocument()
     expect(screen.getByText('~3 mins')).toBeInTheDocument()
     expect(screen.getByText('~1 min')).toBeInTheDocument()
@@ -82,7 +82,7 @@ describe('AeSupplierOnboardingWizard (W-30)', () => {
       />,
     )
 
-    const nameInput = screen.getByLabelText(/supplier \/ brand name/i)
+    const nameInput = screen.getByLabelText(/provider or brand name/i)
     const websiteInput = screen.getByLabelText(/provider website/i)
     const abnInput = screen.getByLabelText(/australian business number/i)
     const continueBtn = screen.getByRole('button', { name: /continue to payouts/i })
@@ -122,7 +122,7 @@ describe('AeSupplierOnboardingWizard (W-30)', () => {
 
     const continueBtn = screen.getByRole('button', { name: /continue to payouts/i })
 
-    fireEvent.change(screen.getByLabelText(/supplier \/ brand name/i), { target: { value: '   ' } })
+    fireEvent.change(screen.getByLabelText(/provider or brand name/i), { target: { value: '   ' } })
     fireEvent.change(screen.getByLabelText(/provider website/i), { target: { value: 'https://acme.example.com' } })
     fireEvent.change(screen.getByLabelText(/australian business number/i), { target: { value: '51824753556' } })
     fireEvent.click(continueBtn)
@@ -133,7 +133,7 @@ describe('AeSupplierOnboardingWizard (W-30)', () => {
       expect(screen.getByText(/enter the public name shown on tool cards and invoices\./i)).toBeInTheDocument()
     })
 
-    fireEvent.change(screen.getByLabelText(/supplier \/ brand name/i), { target: { value: 'Acme' } })
+    fireEvent.change(screen.getByLabelText(/provider or brand name/i), { target: { value: 'Acme' } })
     fireEvent.change(screen.getByLabelText(/provider website/i), { target: { value: 'http://insecure.example.com' } })
     fireEvent.click(continueBtn)
 
@@ -153,21 +153,21 @@ describe('AeSupplierOnboardingWizard (W-30)', () => {
       />,
     )
 
-    fireEvent.change(screen.getByLabelText(/supplier \/ brand name/i), { target: { value: 'Acme AI Systems' } })
+    fireEvent.change(screen.getByLabelText(/provider or brand name/i), { target: { value: 'Acme AI Systems' } })
     fireEvent.change(screen.getByLabelText(/provider website/i), { target: { value: 'https://acme.example.com' } })
     fireEvent.change(screen.getByLabelText(/australian business number/i), { target: { value: '51824753556' } })
     fireEvent.click(screen.getByRole('button', { name: /continue to payouts/i }))
 
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: /set up payouts with stripe/i })).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: /connect stripe/i })).toBeInTheDocument()
     })
 
-    const nav = screen.getByRole('navigation', { name: /supplier activation/i })
+    const nav = screen.getByRole('navigation', { name: /provider setup/i })
     const profileTab = within(nav).getByRole('button', { name: /1\. provider identity/i })
     expect(profileTab.className).toContain(TACTILE)
     fireEvent.click(profileTab)
 
-    expect(screen.getByLabelText(/supplier \/ brand name/i)).toBeInTheDocument()
+    expect(screen.getByLabelText(/provider or brand name/i)).toBeInTheDocument()
   })
 
   it('T3: Step 2 renders Stripe Express reassurance and payout badges', () => {
@@ -215,7 +215,7 @@ describe('AeSupplierOnboardingWizard (W-30)', () => {
     )
 
     expect(screen.getByText(/add your first tool/i)).toBeInTheDocument()
-    const importLink = screen.getByRole('link', { name: /import openapi \/ mcp tool/i })
+    const importLink = screen.getByRole('link', { name: /^Add Tool$/i })
     expect(importLink).toHaveAttribute('href', '/owner/operations/new')
     expect(importLink.className).toContain(TACTILE)
   })

@@ -15,7 +15,7 @@ export function AeOrganizationSwitcher({ isCollapsed = false }: AeOrganizationSw
     <div
       role="group"
       aria-label="Workspace selection"
-      className="flex h-8 w-full min-w-0 items-center group-data-[collapsible=icon]:size-8 group-data-[collapsible=icon]:p-0"
+      className="flex h-8 w-full min-w-0 items-center group-data-[collapsible=icon]:size-8 group-data-[collapsible=icon]:overflow-hidden group-data-[collapsible=icon]:p-0"
     >
       <OrganizationSwitcher
         hidePersonal={false}

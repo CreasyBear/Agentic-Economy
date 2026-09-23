@@ -128,9 +128,9 @@ export function AeSupplyLanding({
           </ul>
         </div>
       </AeSiteSection>
-      <AeSiteSection ariaLabel="How to add a Tool" scheme="surface">
+      <AeSiteSection scheme="surface">
         <AeCollectionRail kicker="How to add" title="Steps to add a Tool" titleId="supply-publish-steps">
-          <ol className="m-0 grid list-none gap-0 p-0">
+          <ol className="m-0 grid gap-0 p-0">
             {SUPPLY_STEPS.map((step) => (
               <li key={step.number} className="grid gap-intra border-b border-border py-related last:border-b-0">
                 <AeSiteHeading as="h3" size="sm">{step.title}</AeSiteHeading>
@@ -143,14 +143,8 @@ export function AeSupplyLanding({
       <AeSiteSection ariaLabel="Listing control" scheme="canvas">
         <div className="grid max-w-3xl gap-section">
           <AeSiteBody muted>
-            You control the listing and the source. Agents can inspect only the facts that are published. Publication means the current Tool passed Agentic Economy’s admission and readiness checks; it does not guarantee demand, payment, delivery, or payout. Setup and test calls do not create settled earnings or payouts.
+            You control the listing and the source. Agents can inspect only the facts that are published. Publication means the current Tool passed Agentic Economy’s admission and readiness checks; it does not guarantee demand, payment, delivery, or payout. Setup checks do not create settled earnings or payouts.
           </AeSiteBody>
-          <Link
-            to="/owner/operations"
-            className="inline-flex min-h-touch items-center justify-self-start text-sm font-medium underline underline-offset-4"
-          >
-            Manage listed Tools
-          </Link>
         </div>
       </AeSiteSection>
       {sourceError === undefined ? (

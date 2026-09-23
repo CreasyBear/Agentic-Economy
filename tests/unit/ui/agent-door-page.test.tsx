@@ -37,7 +37,7 @@ describe('agent door page', () => {
     expect(screen.getByRole('heading', { level: 1, name: 'Connect your Agent.' })).toBeTruthy()
     expect(screen.getByText(AGENT_PAGE.subhead)).toBeTruthy()
     expect(screen.getByRole('heading', { name: 'Connect with Codex' })).toBeTruthy()
-    const connectAgent = screen.getByRole('link', { name: 'Connect an Agent' })
+    const connectAgent = screen.getByRole('link', { name: 'Start setup' })
     expect(connectAgent.getAttribute('href')).toBe('#agent-setup')
     expect(screen.getByRole('button', { name: 'Copy Codex MCP command' })).toBeTruthy()
     expect(screen.queryByRole('button', { name: 'Copy Claude Code MCP command' })).toBeNull()
@@ -45,9 +45,9 @@ describe('agent door page', () => {
     expect(screen.queryByRole('heading', { name: 'Six-step agent quickstart' })).toBeNull()
     expect(document.querySelector('[data-slot="ae-site-browser"]')).toBeNull()
     expect(screen.queryByRole('link', { name: 'Read the skill' })).toBeNull()
-    expect(screen.getByRole('link', { name: 'Open Agents' }).getAttribute('href')).toBe('/agent-access')
-    expect(screen.getByRole('heading', { name: 'Set a Spending policy' })).toBeTruthy()
-    expect(screen.getByRole('link', { name: 'Review Spending policy' }).getAttribute('href')).toBe('/agent-access')
+    expect(screen.queryByRole('link', { name: 'Open Agents' })).toBeNull()
+    expect(screen.queryByRole('heading', { name: 'Set a Spending policy' })).toBeNull()
+    expect(screen.queryByRole('link', { name: 'Review Spending policy' })).toBeNull()
     expect(screen.getByRole('heading', { name: AGENT_PAGE.faqHeading })).toBeTruthy()
     expect(screen.getByRole('button', { name: AGENT_PAGE.faqQuestions[0].question })).toBeTruthy()
 
@@ -64,8 +64,8 @@ describe('agent door page', () => {
     expect(writeText).toHaveBeenNthCalledWith(3, `cursor --add-mcp '{"name":"agentic-economy","url":"https://ae.example/mcp"}'`)
 
     const pageText = document.body.textContent ?? ''
-    expect(pageText).toContain('browse Tools before connecting')
-    expect(pageText).toContain('Account connection does not grant spending permission')
+    expect(pageText).not.toContain('browse Tools before connecting')
+    expect(pageText).toContain('Account connection does not set a Spending policy')
     expect(pageText).toContain('Enable agentic-economy in Cursor, then follow its OAuth prompt.')
     expect(pageText).not.toMatch(/whoami|Agent Principal|token exchange|bearer|api key|ae connect|npm install|add-mcp@/iu)
   })

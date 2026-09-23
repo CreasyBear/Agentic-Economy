@@ -1,4 +1,6 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { setPublicSourceTransportForTests } from "@/lib/server/convex-source";
+import { readToolListingEvidence } from "@/modules/market/server";
 
 import {
   emptyMarketListingEvidence,
@@ -109,5 +111,29 @@ describe("market listing evidence", () => {
         "post.oracle.gas",
       ).category.id,
     ).toBe("developer-tools");
+  });
+});
+
+
+describe("listing history read truth", () => {
+  afterEach(() => setPublicSourceTransportForTests(undefined));
+  const tool = {
+    toolRef: `operation:v1:${"d".repeat(64)}`,
+    summary: "Current weather",
+    listing: { label: "Weather", summary: "Current weather" },
+    contract: { capabilityId: "weather.current" },
+  } as Parameters<typeof readToolListingEvidence>[0];
+
+  it("distinguishes failed and missing reads from a successful zero count", async () => {
+    const query = vi.fn().mockRejectedValueOnce(new Error("offline"))
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([{ toolRef: tool.toolRef, ratingCount: 0,
+        ratingSum: 0, completedCalls: 0, latencySamplesMs: [] }]);
+    setPublicSourceTransportForTests({ query, mutation: vi.fn(), action: vi.fn() } as never);
+    await expect(readToolListingEvidence(tool)).resolves.toBeUndefined();
+    await expect(readToolListingEvidence(tool)).resolves.toBeUndefined();
+    await expect(readToolListingEvidence(tool)).resolves.toMatchObject({
+      popularity: { kind: "no_activity", completedCalls: 0 },
+    });
   });
 });

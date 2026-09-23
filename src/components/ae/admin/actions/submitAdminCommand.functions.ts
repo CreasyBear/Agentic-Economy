@@ -98,6 +98,6 @@ export const submitAdminCommandServer = createServerFn({ method: 'POST' })
       return receipt
     } catch (cause) {
       reportAdminInvariant(cause instanceof Error ? cause : new Error('Admin command failed', { cause }))
-      throw new Error('admin_command_outcome_unknown')
+      throw new Error('admin_command_outcome_unknown', { cause })
     }
   })

@@ -6,11 +6,17 @@ import type { ActionCtx } from '../../../convex/_generated/server'
 
 const loading = vi.hoisted(() => vi.fn())
 const reconcile = vi.hoisted(() => vi.fn())
+const parseOutput = vi.hoisted(() => vi.fn())
+vi.mock('../../../convex/capabilityCallProjection', async importOriginal => ({
+  ...(await importOriginal<typeof import('../../../convex/capabilityCallProjection')>()),
+  parseContractOutput: parseOutput,
+}))
 vi.mock('@/modules/capability-execution/call-worker/recovery/loading', () => ({ loadReadyRecoveryWork: loading }))
 vi.mock('@/modules/capability-execution/call-worker/recovery/reconciliation', () => ({ reconcileRecovery: reconcile }))
 
 function fixture() {
   const now = Date.now()
+  parseOutput.mockReset().mockReturnValue({ valid: true, output: { result: 'weather' } })
   const requestDigest = canonicalDigest('original-request')
   const paymentResponseDigest = canonicalDigest('original-payment-response')
   const transactionHash = `0x${'a'.repeat(64)}`
@@ -63,6 +69,37 @@ describe('automatic retained x402 response recovery', () => {
     const first = reconcile.mock.calls[0]![1]
     await expect(recoverRetainedResponse(ctx, 'call:one')).resolves.toEqual({ kind: 'completed' })
     expect(reconcile.mock.calls[1]![1]).toEqual(first)
+  })
+
+  it('routes contract-invalid paid output to the exact-Call remedy instead of capturing the buyer charge', async () => {
+    const { ctx, transactionHash } = fixture()
+    parseOutput.mockReturnValue({ valid: false })
+    vi.mocked(ctx.runAction).mockResolvedValue({ kind: 'completed' })
+    await expect(recoverRetainedResponse(ctx, 'call:one')).resolves.toEqual({ kind: 'completed' })
+    expect(getFunctionName(vi.mocked(ctx.runAction).mock.calls[0]![0])).toBe('moneyManagedCallRemedyActions:resolveInvalidResult')
+    expect(vi.mocked(ctx.runAction).mock.calls[0]![1]).toEqual({ callRef: 'call:one', transactionHash })
+    expect(reconcile).not.toHaveBeenCalled()
+  })
+
+  it('keeps invalid-output recovery pending when its financial remedy is not complete', async () => {
+    const { ctx } = fixture()
+    parseOutput.mockReturnValue({ valid: false })
+    vi.mocked(ctx.runAction).mockResolvedValue({ kind: 'refused', code: 'credit_restoration_pending' })
+    await expect(recoverRetainedResponse(ctx, 'call:one')).resolves.toEqual({ kind: 'pending' })
+    expect(reconcile).not.toHaveBeenCalled()
+  })
+
+  it('replays the same invalid-output remedy after a partial-ledger failure without capturing a buyer charge', async () => {
+    const { ctx, transactionHash } = fixture()
+    parseOutput.mockReturnValue({ valid: false })
+    vi.mocked(ctx.runAction).mockResolvedValueOnce({ kind: 'refused', code: 'credit_restoration_pending' })
+      .mockResolvedValueOnce({ kind: 'completed' })
+    await expect(recoverRetainedResponse(ctx, 'call:one')).resolves.toEqual({ kind: 'pending' })
+    await expect(recoverRetainedResponse(ctx, 'call:one')).resolves.toEqual({ kind: 'completed' })
+    expect(vi.mocked(ctx.runAction).mock.calls.map(([, args]) => args)).toEqual([
+      { callRef: 'call:one', transactionHash }, { callRef: 'call:one', transactionHash },
+    ])
+    expect(reconcile).not.toHaveBeenCalled()
   })
 
   it('does not recover a response without an original transaction locator', async () => {

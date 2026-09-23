@@ -1,7 +1,10 @@
 import type { ReactNode } from 'react'
+import { Link } from '@tanstack/react-router'
 import { AeOperatorPage } from '@/components/ae/layout/AeOperatorPage'
 import { AePageState } from '@/components/ae/layout/AePageState'
 import { AeSection } from '@/components/ae/layout/AeSection'
+import { buttonVariants } from '@/components/ui/button-variants'
+import { cn } from '@/lib/utils'
 import { AdminAuditPageSkeleton } from './AdminAuditPageSkeleton'
 import { AdminMembershipActions } from './AdminMembershipActions'
 import {
@@ -39,6 +42,14 @@ export function AdminAuditPage(props: AdminAuditPageProps) {
         title={AUDIT_COPY.accessDeniedTitle}
         description={AUDIT_COPY.accessDeniedDescription}
         tone="danger"
+        action={
+          <Link
+            to="/admin"
+            className={cn(buttonVariants({ variant: 'outline' }), 'min-h-touch')}
+          >
+            Return to Overview
+          </Link>
+        }
       />,
     )
   }

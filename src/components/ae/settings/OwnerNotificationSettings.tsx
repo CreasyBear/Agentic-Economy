@@ -1,6 +1,7 @@
 import { useState } from 'react'
 
 import { Label } from '@/components/ui/label'
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 import { Switch } from '@/components/ui/switch'
 import { toast } from '@/lib/ui/toast'
 import { cn } from '@/lib/utils'
@@ -98,40 +99,51 @@ export function OwnerNotificationSettings({
       </div>
       <div className="grid gap-2">
         <p className="text-sm font-medium">Low balance alert threshold</p>
-        <div
-          role="radiogroup"
+        <RadioGroup
+          value={String(preferences.lowCreditThresholdCents)}
+          onValueChange={(next) => {
+            const cents = Number(next)
+            if (
+              Number.isNaN(cents)
+              || preferences.lowCreditThresholdCents === cents
+              || thresholdControlsDisabled
+            ) {
+              return
+            }
+            void applyPatch({
+              lowCreditThresholdCents: cents,
+              expectedRevision: preferences.revision,
+            })
+          }}
+          disabled={thresholdControlsDisabled}
           aria-label="Low balance alert threshold"
           className="flex flex-wrap gap-2"
         >
           {THRESHOLD_OPTIONS.map(({ cents, label }) => {
             const selected = preferences.lowCreditThresholdCents === cents
+            const inputId = `low-balance-threshold-${cents}`
             return (
-              <button
+              <Label
                 key={cents}
-                type="button"
-                role="radio"
-                aria-checked={selected}
-                aria-label={label}
-                disabled={thresholdControlsDisabled}
+                htmlFor={inputId}
                 className={cn(
-                  'min-h-touch rounded-md border px-3 py-2 text-sm font-mono tabular-nums',
+                  'flex min-h-touch cursor-pointer items-center gap-2 rounded-md border px-3 py-2 text-sm font-mono tabular-nums',
                   selected ? 'border-foreground bg-muted' : 'border-border bg-container',
-                  thresholdControlsDisabled && 'opacity-50',
+                  thresholdControlsDisabled && 'opacity-50 cursor-not-allowed',
                   TACTILE,
                 )}
-                onClick={() => {
-                  if (selected || thresholdControlsDisabled) return
-                  void applyPatch({
-                    lowCreditThresholdCents: cents,
-                    expectedRevision: preferences.revision,
-                  })
-                }}
               >
+                <RadioGroupItem
+                  id={inputId}
+                  value={String(cents)}
+                  aria-label={label}
+                  disabled={thresholdControlsDisabled}
+                />
                 {label}
-              </button>
+              </Label>
             )
           })}
-        </div>
+        </RadioGroup>
         <div
           className="min-h-[2.5rem] font-mono text-sm tabular-nums text-muted-foreground"
           role="status"
@@ -157,7 +169,7 @@ export function OwnerNotificationSettings({
       </div>
       <p className="text-muted-foreground text-sm">
         Alerts are sent to the primary email verified in your Clerk profile. Update your email
-        address in the Profile section above.
+        address in Profile.
       </p>
     </div>
   )

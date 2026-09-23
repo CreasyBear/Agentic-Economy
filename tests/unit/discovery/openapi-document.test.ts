@@ -82,8 +82,9 @@ describe('openapi document', () => {
       }
     }
 
-    expect(page.operations).toHaveLength(collectOperationIds().length)
-    for (const operation of page.operations) {
+    const pageOperations = page.operationGroups.flatMap((group) => group.operations)
+    expect(pageOperations).toHaveLength(collectOperationIds().length)
+    for (const operation of pageOperations) {
       expect(operation.curl).toContain(`curl --request ${operation.method}`)
       expect(operation.curl).toContain(`${origin}${operation.path}`)
       expect(operation.curl).toContain('Authorization: Bearer <your key>')
@@ -131,7 +132,8 @@ describe('openapi document', () => {
       exampleOperation.requestBody.content['application/json'].example = { need: 'weather' }
     }
     expect(
-      createDevelopersApiViewModel(withExample).operations
+      createDevelopersApiViewModel(withExample).operationGroups
+        .flatMap((group) => group.operations)
         .find((operation) => operation.operationId === exampleOperation?.operationId)?.curl,
     ).toContain(`--data '{"need":"weather"}'`)
   })

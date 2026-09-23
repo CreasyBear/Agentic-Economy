@@ -35,7 +35,7 @@ export function DirectoryIndexDiscovery({ overview, onSave, isSaved, onCompare, 
 
   return <div className="grid min-w-0 gap-12 pb-10 sm:gap-16">
     {shelves.map(shelf => <section key={shelf.key} className="min-w-0">
-      <Carousel opts={{ align: 'start', loop: false }} aria-labelledby={`${id}-${shelf.key}`}>
+      <Carousel opts={{ align: 'start', loop: false }} aria-label={`${shelf.title} carousel`}>
         <AeCollectionRail
           kicker={shelf.kicker}
           title={shelf.title}

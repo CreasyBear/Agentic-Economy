@@ -1,5 +1,4 @@
 import type { ReactNode } from 'react'
-import { Link } from '@tanstack/react-router'
 
 import { AeCollectionRail } from '@/components/ae/shared/AeCollectionRail'
 import { Badge } from '@/components/ui/badge'
@@ -20,7 +19,7 @@ export function AeSupplyAgentProof({
     <AeCollectionRail
       kicker="Published facts"
       title="What agents can inspect"
-      deck="Provider profiles are business metadata. AE interface actions help agents inspect them; neither becomes callable supply until a Tool is admitted and published."
+      deck="Provider profiles are business metadata. Agentic Economy interface actions help agents inspect them; neither becomes callable supply until a Tool is admitted and published."
     >
       <div className="grid gap-8">
         <div className="grid gap-3">
@@ -37,13 +36,13 @@ export function AeSupplyAgentProof({
           )}
         </div>
         <div className="grid gap-3">
-          <h3 className="text-sm font-medium text-foreground">AE public inspection actions</h3>
+          <h3 className="text-sm font-medium text-foreground">Agentic Economy public inspection actions</h3>
           {tools.length === 0 ? (
-            <p className="text-sm text-muted-foreground">AE public inspection actions are temporarily unavailable.</p>
+            <p className="text-sm text-muted-foreground">Agentic Economy public inspection actions are temporarily unavailable.</p>
           ) : (
             <ProofList
               items={tools}
-              remainingLabel="more tools"
+              remainingLabel="more Tools"
               getKey={(tool) => tool.id}
               render={(tool) => <ToolProofRow tool={tool} />}
             />
@@ -109,13 +108,7 @@ function PublishedToolProofRow({ tool }: Readonly<{ tool: ToolCardViewModel }>) 
     <div className="grid gap-2">
       <div className="grid gap-1 sm:grid-cols-[1fr_auto] sm:items-start">
         <div>
-          <Link
-            to="/tools/$toolRef"
-            params={{ toolRef: tool.toolRef }}
-            className="font-medium text-foreground underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          >
-            {tool.title}
-          </Link>
+          <p className="font-medium text-foreground">{tool.title}</p>
           <p className="text-sm text-muted-foreground">{tool.providerName} · {tool.category.label}</p>
         </div>
         <div className="flex flex-wrap items-center gap-2 sm:justify-end">

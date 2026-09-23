@@ -6,5 +6,5 @@ export const OWNER_TOOL_DETAIL_COPY = {
   updatedLabel: 'Updated',
   missingValue: 'Not recorded',
   publicPreviewLabel: 'View public Tool page',
-  notFoundRecoveryLabel: 'Back to Tools',
+  notFoundRecoveryLabel: 'Return to Tools',
 } as const

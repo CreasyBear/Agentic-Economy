@@ -131,6 +131,6 @@ describe('owner Tool detail route', () => {
     }, 'not-a-ref')
 
     expect(screen.getByRole('heading', { level: 1, name: 'Page not found' })).toBeTruthy()
-    expect(screen.getByRole('link', { name: 'Back to Tools' }).getAttribute('href')).toBe('/owner/operations')
+    expect(screen.getByRole('link', { name: 'Return to Tools' }).getAttribute('href')).toBe('/owner/operations')
   })
 })

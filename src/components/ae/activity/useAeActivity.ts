@@ -66,7 +66,7 @@ function callStateStatusBadge(state: BuyerCallSummaryFacts['state']): ActivityBa
     case 'refused':
       return { variant: 'outline', label: 'Refused' }
     case 'outcome_unknown':
-      return { variant: 'outline', label: 'Needs Attention', warning: true }
+      return { variant: 'outline', label: 'Needs attention', warning: true }
     default: {
       const _exhaustive: never = state
       return _exhaustive
@@ -234,13 +234,14 @@ export function useAeActivity({
     if (s === 'all') return 'All'
     if (s === 'completed') return 'Completed'
     if (s === 'refused') return 'Refused'
-    return 'Needs Attention'
+    return 'Needs attention'
   }
 
   const dateChipLabel = (d: ActivityDateRangeFilter) => {
     if (d === 'all') return 'All time'
     if (d === 'today') return 'Today'
-    return d
+    if (d === '7d') return 'Last 7 days'
+    return 'Last 30 days'
   }
 
   const filteredAgentShortId = filteredAgent?.split(':').pop()

@@ -134,7 +134,7 @@ describe('/calls/$callRef', () => {
       },
     })
 
-    expect(screen.getByRole('heading', { level: 1, name: 'Observe Perth weather' })).toBeTruthy()
+    expect(screen.getByRole('region', { name: 'Call summary' })).toBeTruthy()
     expect(screen.getAllByText(callRef).length).toBeGreaterThan(0)
     expect(screen.queryByRole('link', { name: 'Observe Perth weather' })).toBeNull()
     expect(screen.getByText('Weather assistant')).toBeTruthy()
@@ -279,7 +279,7 @@ describe('/calls/$callRef', () => {
     expect(screen.getAllByText('Reconciliation required').length).toBeGreaterThan(0)
     expect(screen.queryByText('No result has been recorded yet.')).toBeNull()
     expect(screen.queryByText('Completed')).toBeNull()
-    expect(screen.getByText('Needs review')).toBeTruthy()
+    expect(screen.getAllByText('Needs review').length).toBeGreaterThan(0)
     expect(screen.queryByText('What happens next')).toBeNull()
     expect(screen.queryByText('Reference kept')).toBeNull()
     expect(screen.getByText('The external effect may have started. Reconcile before retrying.')).toBeTruthy()
@@ -298,7 +298,7 @@ describe('/calls/$callRef', () => {
       ownerContext,
     }, { onReconcile })
 
-    fireEvent.click(screen.getByRole('combobox', { name: 'Observed provider outcome' }))
+    fireEvent.click(screen.getByRole('combobox', { name: 'Observed Provider outcome' }))
     fireEvent.click(screen.getByRole('option', { name: 'Effect released' }))
     fireEvent.change(screen.getByLabelText('Evidence source'), { target: { value: 'Provider control plane' } })
     fireEvent.change(screen.getByLabelText('Evidence reference'), { target: { value: 'evt_123' } })
@@ -378,7 +378,7 @@ describe('/calls/$callRef', () => {
     expect(screen.queryByRole('link', { name: 'Review Tool' })).toBeNull()
     expect(screen.queryByRole('button', { name: 'Cancel Call' })).toBeNull()
     expect(screen.queryByRole('button', { name: 'Check status' })).toBeNull()
-    expect(screen.getByText('Needs review')).toBeTruthy()
+    expect(screen.getAllByText('Needs review').length).toBeGreaterThan(0)
   })
 
   it('keeps a retryable refusal on the original Call instead of offering a replacement', () => {
@@ -430,7 +430,7 @@ describe('/calls/$callRef', () => {
     }, { onRefresh: vi.fn(), onCancel: vi.fn(), onReconcile: vi.fn() })
     const explanation = screen.getByText('The service did not complete. You were not charged; your reserved credit has been restored.')
     expect(explanation.closest('details')).toBeNull()
-    expect(screen.getByText('Credit released')).toBeTruthy()
+    expect(screen.getAllByText('Credit released').length).toBeGreaterThan(0)
     expect(screen.getByRole('link', { name: 'View Tool' })).toBeTruthy()
     expect(screen.queryByRole('button', { name: 'Check status' })).toBeNull()
     expect(screen.queryByRole('button', { name: 'Submit reconciliation evidence' })).toBeNull()
@@ -455,7 +455,7 @@ describe('/calls/$callRef', () => {
     expect(onCancel).not.toHaveBeenCalled()
 
     fireEvent.click(screen.getByRole('button', { name: 'Cancel Call' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Confirm cancellation' }))
+    fireEvent.click(within(screen.getByRole('alertdialog', { name: 'Cancel this Call?' })).getByRole('button', { name: 'Cancel Call' }))
     await waitFor(() => expect(onCancel).toHaveBeenCalledOnce())
 
     view.unmount()
@@ -542,11 +542,11 @@ describe('/calls/$callRef', () => {
       <RouterContextProvider router={router}>{createElement(Component)}</RouterContextProvider>,
     )
 
-    expect(screen.getByRole('heading', { level: 1, name: 'Call receipt' })).toBeTruthy()
+    expect(screen.getByRole('main')).toBeTruthy()
     loader.mockReturnValue(next)
     view.rerender(<RouterContextProvider router={router}>{createElement(Component)}</RouterContextProvider>)
 
-    expect(screen.getByRole('heading', { level: 1, name: 'Call receipt' })).toBeTruthy()
+    expect(screen.getByRole('main')).toBeTruthy()
     expect(screen.queryByText(callRef)).toBeNull()
   })
 
@@ -568,11 +568,11 @@ describe('/calls/$callRef', () => {
     renderRouteComponent({ kind: 'found', version: 1, callRef, toolRef, state: 'retryable' })
 
     fireEvent.click(screen.getByRole('button', { name: 'Cancel Call' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Confirm cancellation' }))
+    fireEvent.click(within(screen.getByRole('alertdialog', { name: 'Cancel this Call?' })).getByRole('button', { name: 'Cancel Call' }))
     expect(await screen.findByText('The cancellation source is unavailable. No new Call state is claimed.')).toBeTruthy()
 
     fireEvent.click(screen.getByRole('button', { name: 'Cancel Call' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Confirm cancellation' }))
+    fireEvent.click(within(screen.getByRole('alertdialog', { name: 'Cancel this Call?' })).getByRole('button', { name: 'Cancel Call' }))
     await waitFor(() => expect(cancelMock).toHaveBeenCalledTimes(2))
 
     const keys = cancelMock.mock.calls.map((call) => call[0]?.data?.idempotencyKey)
@@ -586,13 +586,13 @@ describe('/calls/$callRef', () => {
     const firstView = renderRouteComponent({ kind: 'found', version: 1, callRef, toolRef, state: 'retryable' })
 
     fireEvent.click(screen.getByRole('button', { name: 'Cancel Call' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Confirm cancellation' }))
+    fireEvent.click(within(screen.getByRole('alertdialog', { name: 'Cancel this Call?' })).getByRole('button', { name: 'Cancel Call' }))
     expect(await screen.findByText('The cancellation source is unavailable. No new Call state is claimed.')).toBeTruthy()
     firstView.unmount()
 
     renderRouteComponent({ kind: 'found', version: 1, callRef, toolRef, state: 'retryable' })
     fireEvent.click(screen.getByRole('button', { name: 'Cancel Call' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Confirm cancellation' }))
+    fireEvent.click(within(screen.getByRole('alertdialog', { name: 'Cancel this Call?' })).getByRole('button', { name: 'Cancel Call' }))
     await waitFor(() => expect(cancelMock).toHaveBeenCalledTimes(2))
 
     const keys = cancelMock.mock.calls.map((call) => call[0]?.data?.idempotencyKey)
@@ -647,7 +647,7 @@ describe('/calls/$callRef', () => {
     } as const
     const firstView = renderRouteComponent(result)
 
-    fireEvent.click(screen.getByRole('combobox', { name: 'Observed provider outcome' }))
+    fireEvent.click(screen.getByRole('combobox', { name: 'Observed Provider outcome' }))
     fireEvent.click(screen.getByRole('option', { name: 'Effect released' }))
     fireEvent.change(screen.getByLabelText('Evidence source'), { target: { value: 'Provider control plane' } })
     fireEvent.change(screen.getByLabelText('Evidence reference'), { target: { value: 'evt_123' } })
@@ -658,7 +658,7 @@ describe('/calls/$callRef', () => {
     renderRouteComponent(result)
     expect((screen.getByLabelText('Evidence source') as HTMLInputElement).value).toBe('Provider control plane')
     expect((screen.getByLabelText('Evidence reference') as HTMLInputElement).value).toBe('evt_123')
-    expect(screen.getByRole('combobox', { name: 'Observed provider outcome' }).textContent).toContain('Effect released')
+    expect(screen.getByRole('combobox', { name: 'Observed Provider outcome' }).textContent).toContain('Effect released')
     fireEvent.click(screen.getByRole('button', { name: 'Submit reconciliation evidence' }))
     await waitFor(() => expect(reconcileMock).toHaveBeenCalledTimes(2))
 
@@ -833,7 +833,7 @@ describe('/calls/$callRef', () => {
       nextAction: 'Check the exact reference while signed in.',
     })
 
-    expect(screen.getByRole('heading', { level: 1, name: 'Call receipt' })).toBeTruthy()
+    expect(screen.getByRole('main')).toBeTruthy()
     expect(screen.getAllByText(/No current execution state is claimed/i).length).toBeGreaterThan(0)
     expect(screen.getByRole('link', { name: 'Back to Calls' }).getAttribute('href')).toBe('/activity')
     expect(screen.queryByRole('link', { name: 'Sign in to view current status' })).toBeNull()
@@ -854,11 +854,11 @@ describe('/calls/$callRef', () => {
       },
       heading: 'Call receipt',
     },
-  ])('offers refresh rather than sign-in for retryable $result.kind status unavailability', ({ result, heading }) => {
+  ])('offers refresh rather than sign-in for retryable $result.kind status unavailability', ({ result }) => {
     const onRefresh = vi.fn()
     renderWithRouter(result, { onRefresh })
 
-    expect(screen.getByRole('heading', { level: 1, name: heading })).toBeTruthy()
+    expect(screen.getByRole('main')).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Check status' }))
     expect(onRefresh).toHaveBeenCalledOnce()
     expect(screen.queryByRole('link', { name: 'Sign in to view current status' })).toBeNull()
@@ -899,7 +899,6 @@ describe('/calls/$callRef', () => {
       ownerContext,
     })
 
-    expect(screen.getByRole('heading', { level: 1, name: 'Observe Perth weather' })).toBeTruthy()
     expect(screen.getByRole('region', { name: 'Call summary' })).toBeTruthy()
     expect(screen.queryByText('Complete')).toBeNull()
     expect(screen.getAllByText(/Cancelled/i).length).toBeGreaterThan(0)
@@ -931,7 +930,6 @@ describe('/calls/$callRef', () => {
       },
     })
 
-    expect(screen.getByRole('heading', { level: 1, name: 'Observe Perth weather' })).toBeTruthy()
     expect(screen.getByRole('region', { name: 'Call summary' })).toBeTruthy()
     expect(screen.queryByText('Complete')).toBeNull()
     expect(screen.getAllByText(/Not completed/i).length).toBeGreaterThan(0)

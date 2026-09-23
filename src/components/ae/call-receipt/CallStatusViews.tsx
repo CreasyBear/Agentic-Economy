@@ -20,7 +20,8 @@ import { CallReceiptIssue, CallReceiptRefreshButton, CallReceiptRef, CallReceipt
 import { CallReceiptTimeline } from './CallReceiptTimeline'
 import { CallReceiptWorkspace } from './CallReceiptWorkspace'
 import { CallRecoveryPanel } from './CallRecoveryPanel'
-import { CallOutputSection, CallReuseActions, CallTechnicalRecord } from './CallTechnicalRecord'
+import { CallOutputSection, CallRequestSection, CallTechnicalRecord } from './CallTechnicalRecord'
+import { CallReuseActions } from './CallReuseActions'
 import { CallSummarySection } from './CallSummarySection'
 import { machineLabel } from './call-receipt-format'
 
@@ -82,6 +83,7 @@ export function CallStatusUnchangedView({
           <Button
             type="button"
             className={cn('min-h-touch w-fit', callReceiptTactilePressClassName)}
+            variant="outline"
             disabled={actions.refreshPending === true}
             onClick={() => { void actions.onRefresh?.() }}
           >
@@ -104,10 +106,11 @@ export function CallStatusFoundView({
     <CallReceiptWorkspace callRef={result.callRef} {...(receiptTitle === undefined ? {} : { title: receiptTitle })} description={receiptView.issue?.whatHappened ?? receiptView.statusDetail}>
       <CallSummarySection result={result} receiptView={receiptView} />
       <CallRecoveryPanel result={result} {...(actions === undefined ? {} : { actions })} />
+      <CallRequestSection input={result.previousInput} />
       {result.result === undefined ? null : <CallOutputSection result={result.result} />}
       {receiptView.complete ? (
         <CallReuseActions
-          key={receiptView.toolRef ?? receiptView.callRef}
+          key={receiptView.callRef}
           view={receiptView}
         />
       ) : null}

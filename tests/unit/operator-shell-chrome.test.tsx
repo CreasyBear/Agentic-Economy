@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 
+import type * as ConvexReactModule from 'convex/react'
 import { useMemo, useState, type ReactElement } from 'react'
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import {
@@ -15,7 +16,14 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { Boxes as NavIcon } from 'lucide-react'
 import '../setup/jsdom-platform'
 
+// Vitest hoists the mock factory, so its shared helper must be loaded inside it.
+vi.mock('convex/react', async (importOriginal) => ({
+  ...(await importOriginal<typeof ConvexReactModule>()),
+  ...(await import('../helpers/shell-convex-mock')).shellConvexMock,
+}))
+
 const shellMocks = vi.hoisted(() => ({
+  canAccessAdmin: false,
   readAgentKeys: vi.fn(async (): Promise<unknown[]> => []),
   useUser: vi.fn(() => ({
     isLoaded: true,
@@ -52,6 +60,9 @@ vi.mock('@/components/ae/command-panel', () => ({
   CommandPanelProvider: ({ children }: { children: ReactElement }) => children,
   AeCommandPanel: () => null,
 }))
+vi.mock('@/components/ae/layout/app-shell/useOperatorEntitlement', () => ({
+  useOperatorEntitlement: () => ({ canAccessAdmin: shellMocks.canAccessAdmin }),
+}))
 
 import { AeAppShell } from '@/components/ae/layout/AeAppShell'
 import { AeOperatorPage, OperatorChromeProvider } from '@/components/ae/layout/AeOperatorPage'
@@ -74,6 +85,7 @@ afterEach(() => {
   shellMocks.readAgentKeys.mockResolvedValue([])
   shellMocks.useUser.mockClear()
   shellMocks.userButton.mockClear()
+  shellMocks.canAccessAdmin = false
 })
 
 describe('operator shell nested chrome', () => {
@@ -82,15 +94,17 @@ describe('operator shell nested chrome', () => {
 
     const calls = await screen.findByRole('link', { name: 'Open Calls' })
     const main = screen.getByTestId('operator-content')
-    const titlesAtFocus: string[] = []
+    const descriptionsAtFocus: string[] = []
     main.addEventListener('focus', () => {
-      titlesAtFocus.push(screen.getByRole('heading', { level: 1 }).textContent ?? '')
+      descriptionsAtFocus.push(
+        within(screen.getByTestId('operator-page-stack')).getByText('Review calls.').textContent ?? '',
+      )
     })
     expect(document.activeElement).not.toBe(main)
     fireEvent.click(calls)
 
     await waitFor(() => expect(document.activeElement).toBe(main))
-    expect(titlesAtFocus).toEqual(['Calls'])
+    expect(descriptionsAtFocus).toEqual(['Review calls.'])
   })
 
   it('does not move focus for hash-only navigation', async () => {
@@ -108,15 +122,16 @@ describe('operator shell nested chrome', () => {
     renderAt(<OperatorShellHarness />, '/admin')
 
     expect(await screen.findByText('Action one')).toBeTruthy()
-    expect(screen.getAllByText('First crumb').length).toBeGreaterThan(0)
+    expect(screen.queryByRole('navigation', { name: 'Breadcrumb' })).toBeNull()
+    expect(screen.queryByText('First crumb')).toBeNull()
     expect(screen.getAllByText('2').length).toBeGreaterThan(0)
 
     fireEvent.click(screen.getByRole('button', { name: 'Update chrome' }))
 
     expect(await screen.findByText('Action two')).toBeTruthy()
     expect(screen.queryByText('Action one')).toBeNull()
-    expect(screen.getAllByText('Second crumb').length).toBeGreaterThan(0)
-    expect(screen.queryByText('First crumb')).toBeNull()
+    expect(screen.queryByRole('navigation', { name: 'Breadcrumb' })).toBeNull()
+    expect(screen.queryByText('Second crumb')).toBeNull()
     expect(screen.getAllByText('5').length).toBeGreaterThan(0)
   })
 
@@ -142,7 +157,8 @@ describe('operator shell nested chrome', () => {
     expect(screen.getAllByRole('heading', { level: 1 }).map(({ textContent }) => textContent)).toEqual(['Page not found'])
     expect(screen.getAllByRole('main')).toHaveLength(1)
     expect(screen.getAllByTestId('skip-to-content')).toHaveLength(1)
-    expect(screen.getAllByRole('navigation', { name: 'App navigation' })).toHaveLength(1)
+    expect(screen.getAllByRole('button', { name: 'Workspace menu' })).toHaveLength(1)
+    expect(screen.queryByRole('navigation', { name: 'App navigation' })).toBeNull()
     expect(screen.queryByRole('navigation', { name: 'Primary' })).toBeNull()
 
     const recovery = screen.getByRole('link', { name: 'Back to Agents' })
@@ -153,7 +169,7 @@ describe('operator shell nested chrome', () => {
     renderAt(
       <SidebarProvider>
         <OperatorChromeProvider>
-          <AeAppSidebar operatorRole="admin" pathname="/admin" hash="" />
+          <AeAppSidebar operatorRole="admin" canAccessAdmin pathname="/admin" hash="" />
           <AeOperatorPage
             operatorRole="admin"
             title="Administration"
@@ -187,8 +203,9 @@ describe('operator shell nested chrome', () => {
       '/owner/settings',
     )
 
-    const heading = await screen.findByRole('heading', { level: 1, name: 'Settings' })
-    expect(heading.parentElement?.previousElementSibling).toBeNull()
+    const stack = await screen.findByTestId('operator-page-stack')
+    expect(within(stack).getByText(ownerSettingsChrome.description)).toBeTruthy()
+    expect(within(stack).queryByRole('heading', { level: 1 })).toBeNull()
   })
 
   it('drops the record-header icon on operator lists', async () => {
@@ -204,8 +221,9 @@ describe('operator shell nested chrome', () => {
       '/owner/operations',
     )
 
-    const heading = await screen.findByRole('heading', { level: 1, name: 'Tools' })
-    expect(heading.parentElement?.previousElementSibling).toBeNull()
+    const stack = await screen.findByTestId('operator-page-stack')
+    expect(within(stack).getByText('Publish the exact tools agents can inspect and call.')).toBeTruthy()
+    expect(within(stack).queryByRole('heading', { level: 1 })).toBeNull()
     expect(screen.queryByRole('navigation', { name: 'Breadcrumb' })).toBeNull()
   })
 
@@ -222,11 +240,10 @@ describe('operator shell nested chrome', () => {
       '/owner/operations/new',
     )
 
-    expect(screen.getByRole('heading', { level: 1, name: 'Add Tool' })).toBeTruthy()
-    const breadcrumbs = screen.getByRole('navigation', { name: 'Breadcrumb' })
-    expect(within(breadcrumbs).getByRole('link', { name: 'Tools' }).getAttribute('href')).toBe('/owner/operations')
-    expect(within(breadcrumbs).getByText('New Tool')).toBeTruthy()
-    expect(within(breadcrumbs).queryByText('Add Tool')).toBeNull()
+    const stack = screen.getByTestId('operator-page-stack')
+    expect(within(stack).getByText('Connect a Tool.')).toBeTruthy()
+    expect(within(stack).queryByRole('heading', { level: 1 })).toBeNull()
+    expect(screen.queryByRole('navigation', { name: 'Breadcrumb' })).toBeNull()
   })
 
   it('keeps parent chrome while a nested pending state loads', async () => {
@@ -242,7 +259,8 @@ describe('operator shell nested chrome', () => {
       '/owner/settings/connections',
     )
 
-    expect(await screen.findByRole('heading', { level: 1, name: 'Tools' })).toBeTruthy()
+    const stack = await screen.findByTestId('operator-page-stack')
+    expect(within(stack).getByText('Publish the exact tools agents can inspect and call.')).toBeTruthy()
     expect(screen.queryByRole('heading', { name: 'Loading workspace' })).toBeNull()
     expect(screen.getByLabelText('Loading workspace')).toBeTruthy()
   })
@@ -260,7 +278,8 @@ describe('operator shell nested chrome', () => {
       '/owner/settings/connections',
     )
 
-    expect(await screen.findByRole('heading', { level: 1, name: 'Tools' })).toBeTruthy()
+    const stack = await screen.findByTestId('operator-page-stack')
+    expect(within(stack).getByText('Publish the exact tools agents can inspect and call.')).toBeTruthy()
     expect(screen.queryByRole('heading', { name: 'Couldn’t load this page' })).toBeNull()
     expect(screen.getByText('Couldn’t load this page')).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Try again' })).toBeTruthy()
@@ -290,9 +309,9 @@ describe('operator shell nested chrome', () => {
       '/admin/providers',
     )
 
-    expect(await screen.findByRole('heading', { level: 1, name: 'Admin access required' })).toBeTruthy()
-    expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1)
-    expect(screen.getByText('Your account does not have the Admin role for this page.')).toBeTruthy()
+    const stack = await screen.findByTestId('operator-page-stack')
+    expect(within(stack).getByText('Your account does not have the Admin role for this page.')).toBeTruthy()
+    expect(within(stack).queryByRole('heading', { level: 1 })).toBeNull()
     expect(screen.getByRole('link', { name: 'Ask an Admin for access' }).getAttribute('href')).toBe('/support')
     expect(screen.getByRole('link', { name: 'Browse Tools' }).getAttribute('href')).toBe('/market')
     expect(screen.getByRole('button', { name: 'Sign out' })).toBeTruthy()
@@ -306,7 +325,9 @@ describe('operator shell nested chrome', () => {
       '/admin/providers',
     )
 
-    expect(await screen.findByRole('heading', { level: 1, name: 'Admin access required' })).toBeTruthy()
+    const stack = await screen.findByTestId('operator-page-stack')
+    expect(within(stack).getByText('Your account does not have the Admin role for this page.')).toBeTruthy()
+    expect(within(stack).queryByRole('heading', { level: 1 })).toBeNull()
     expect(screen.queryByText('Couldn’t load this page')).toBeNull()
   })
 
@@ -316,7 +337,9 @@ describe('operator shell nested chrome', () => {
       '/admin/providers',
     )
 
-    expect(await screen.findByRole('heading', { level: 1, name: 'Admin access required' })).toBeTruthy()
+    const stack = await screen.findByTestId('operator-page-stack')
+    expect(within(stack).getByText('Your account does not have the Admin role for this page.')).toBeTruthy()
+    expect(within(stack).queryByRole('heading', { level: 1 })).toBeNull()
     expect(screen.getByRole('button', { name: 'Sign out' })).toBeTruthy()
     expect(screen.queryByRole('link', { name: 'Providers' })).toBeNull()
     expect(screen.queryByRole('link', { name: 'Audit' })).toBeNull()
@@ -363,20 +386,21 @@ describe('owner mobile navigation', () => {
     expect(within(settingsNav).getByRole('button', { name: 'More' }).getAttribute('aria-current')).toBe('page')
   })
 
-  it('keeps one app sidebar across owner resources, receipts, and admin pages', async () => {
+  it('keeps one workspace menu across owner resources, receipts, and admin pages', async () => {
     const owner = renderOperatorShell('owner', '/owner/operations')
-    let appNav = await screen.findByRole('navigation', { name: 'App navigation' })
-    expect(within(appNav).getByRole('link', { name: 'Tools' }).getAttribute('aria-current')).toBe('page')
+    fireEvent.click(await screen.findByRole('button', { name: 'Workspace menu' }))
+    expect(within(screen.getByRole('menu')).getByRole('menuitem', { name: 'Tools' }).getAttribute('aria-current')).toBe('page')
 
     owner.unmount()
     const receipt = renderOperatorShell('owner', '/calls/call_test_123')
-    appNav = await screen.findByRole('navigation', { name: 'App navigation' })
-    expect(within(appNav).getByRole('link', { name: 'Calls' }).getAttribute('aria-current')).toBe('page')
+    fireEvent.click(await screen.findByRole('button', { name: 'Workspace menu' }))
+    expect(within(screen.getByRole('menu')).getByRole('menuitem', { name: 'Calls' }).getAttribute('aria-current')).toBe('page')
     receipt.unmount()
 
+    shellMocks.canAccessAdmin = true
     renderOperatorShell('admin', '/admin')
-    appNav = await screen.findByRole('navigation', { name: 'App navigation' })
-    expect(within(appNav).getByText('Admin')).toBeTruthy()
+    fireEvent.click(await screen.findByRole('button', { name: 'Workspace menu' }))
+    expect(within(screen.getByRole('menu')).getByText('Admin')).toBeTruthy()
   })
 
   it('keeps mobile safe-area padding on the root inset', async () => {
@@ -455,7 +479,7 @@ function OperatorShellHarness() {
   return (
     <SidebarProvider>
       <OperatorChromeProvider>
-        <AeAppSidebar operatorRole="admin" pathname="/admin/audit-events" hash="" />
+        <AeAppSidebar operatorRole="admin" canAccessAdmin pathname="/admin/audit-events" hash="" />
         <AeOperatorPage
           operatorRole="admin"
           title="Outer shell"

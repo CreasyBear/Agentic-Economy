@@ -521,3 +521,41 @@ or hosted deployment is claimed. A concurrent admin module filename prevented
 local Convex loading; its mechanical camelCase rename restored successful
 compilation. Final completed-Call projection replay and readback confirmed
 both settlement references above and unchanged output, without another payment.
+
+### Follow-on buyer ergonomics and recovery — 22 September 2026
+
+Supersedes the revoked-authority and invalid-output source gaps above. Exact
+persisted admission now authorizes accounting of an already-submitted payment
+after credential expiry/revocation; it cannot authorize a new signature or Call.
+Retained invalid output is checked against the original Tool contract before
+buyer capture. Independently verified payment settles the Provider obligation
+and releases the still-held buyer reservation, using stable ledger keys. The
+production distinction between internal operation ID and canonical public Tool
+reference is explicit in tests, including forged-reference refusal.
+
+The response watchdog uses a mutation to commit both its action and successor.
+Tests cover crash before action entry, crash after remedy claim, partial ledger
+completion, stale steps, mismatched transactions and bounded exhaustion while
+retaining the money fence. Automatic reconciliation filtering precedes the queue
+limit. No new Provider request or signature occurs during recovery.
+
+Browser proof on the existing Perth Call: literal grouped output, full JSON and
+exact copy, collapsed request, editable repeat request with malformed-JSON refusal
+and successful copy, optional existing-Agent handoff on the Tool page. Tool now
+shows two completed Calls; recovered San Francisco evidence was projected once
+at its original timestamp without a financial action. Metrics describe time to
+result including recovery. Receipt verified at 390px and 320px; header collision
+fixed. Credit shows its balance and Add credit before optional monthly cap and
+payment-method settings. No new payment was made in this follow-on pass.
+
+20 focused suites passed 354 tests. Browser polling tests establish read-only
+observation, terminal stop, hidden-tab pause/resume, outage backoff, unmount
+cleanup and exclusion with manual actions. Repeat tests execute copied shell
+syntax against a stub curl to prove literal JSON survives quoting; no network
+request is made. React Doctor reports 90/100 and zero errors; its three remaining
+complexity warnings concern existing component branching. The status UI import
+cycle was removed. Concurrent admin work currently prevents a clean final
+whole-checkout typecheck; no full release gate is claimed. Hosted/mainnet and
+forced live-process interruption remain separate acceptance work. Already
+captured historical invalid-output purchases require a credit adjustment, not
+the still-held-reservation remedy implemented here.

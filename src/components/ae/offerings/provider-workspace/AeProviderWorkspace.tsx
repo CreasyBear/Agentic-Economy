@@ -24,7 +24,11 @@ export function AeProviderWorkspace(props: AeProviderWorkspaceProps) {
   })
   const sheets = useProviderWorkspaceSheets({ enabled: inventoryAvailable })
 
-  const actions = inventoryAvailable ? <AddToolAction /> : undefined
+  const toolCount =
+    props.inventory.kind === 'available' ? props.inventory.tools.length : 0
+  const actions = inventoryAvailable
+    ? <AddToolAction variant={toolCount === 0 ? 'outline' : 'default'} />
+    : undefined
   return (
     <AeOperatorPage
       operatorRole="owner"
@@ -50,7 +54,6 @@ function AvailableWorkspaceBody({
   inventory,
   lifecycle,
   connections,
-  payouts,
   publicStatus,
   offboarding,
   inventoryHook,
@@ -67,6 +70,7 @@ function AvailableWorkspaceBody({
       offerings={rows.map(toOfferingSummary)}
       projectionState={inventory.projection === 'current' ? 'current' : 'projection_pending'}
       onRetryProjection={inventoryHook.refresh}
+      hideEmptyState={inventory.tools.length === 0}
       filterValue={inventoryHook.inventoryFilter}
       onFilterChange={(value) => {
         inventoryHook.setInventoryFilter(value)
@@ -91,16 +95,14 @@ function AvailableWorkspaceBody({
         />
       )}
       {inventory.tools.length === 0 && (
-        <div className="mb-2">
-          <AeSupplierOnboardingWizard
-            currentStep={inventoryHook.payoutConnection.state === 'connected' ? 'first_tool' : 'payouts'}
-            providerName={inventory.provider.name}
-            payoutConnection={inventoryHook.payoutConnection}
-            onConnectPayouts={() => {
-              sheets.openEarnings()
-            }}
-          />
-        </div>
+        <AeSupplierOnboardingWizard
+          currentStep={inventoryHook.payoutConnection.state === 'connected' ? 'first_tool' : 'payouts'}
+          providerName={inventory.provider.name}
+          payoutConnection={inventoryHook.payoutConnection}
+          onConnectPayouts={() => {
+            sheets.openEarnings()
+          }}
+        />
       )}
       <ProviderWorkspaceToolsSection
         inventory={inventory}
@@ -117,6 +119,7 @@ function AvailableWorkspaceBody({
         connectionTargetMissing={sheets.connectionTargetMissing}
         {...(sheets.x402Handoff === undefined ? {} : { x402Handoff: sheets.x402Handoff })}
         onOpenConnections={sheets.openConnections}
+        onCloseConnections={sheets.closeConnections}
         onRetryConnections={sheets.loadConnections}
       />
       <ProviderWorkspaceEarningsSection
@@ -125,6 +128,7 @@ function AvailableWorkspaceBody({
         earningsPending={sheets.earningsPending}
         earningsDetailAvailable={sheets.earningsDetail !== undefined}
         onOpenEarnings={sheets.openEarnings}
+        onCloseEarnings={sheets.closeEarnings}
         onRetryEarnings={sheets.loadEarnings}
       />
       <details className="rounded-card border border-border p-4" open={location.hash === 'provider-identity' || undefined}>

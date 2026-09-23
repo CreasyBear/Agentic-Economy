@@ -6,7 +6,7 @@ import type { ReactNode } from 'react'
 import '../../setup/jsdom-platform'
 
 import { TACTILE } from '@/components/ae/feedback/AeConfirmDialog'
-import { AeOwnerCredit } from '@/components/ae/console/AeOwnerCredit'
+import { AeOwnerCredit } from '@/components/ae/console/owner-credit/AeOwnerCredit'
 import { AeAgentOperatorConsole } from '@/components/ae/console/agent-operator-console/AeAgentOperatorConsole'
 import { toast } from '@/lib/ui/toast'
 import type { AgentConnectionReadback } from '@/modules/agent-access/public'
@@ -186,10 +186,10 @@ describe('assistant access owner continuation anchors', () => {
     )
 
     expect(credit.querySelector('#fund')).not.toBeNull()
-    expect(credit.textContent).toContain('Add credit')
+    expect(credit.textContent).toContain('Add funds')
     expect(keys.querySelector('#revoke')).not.toBeNull()
     expect(keys.querySelector('#fund')).toBeNull()
-    expect(keys.querySelector('a[href="/for-agents"]')?.textContent).toBe('Connect agent')
+    expect(keys.querySelector('a[href="/for-agents"]')?.textContent).toBe('Connect an Agent')
     expect(keys.querySelector('a[href="/owner/credit"]')).toBeNull()
     expect(within(keys).queryByRole('heading', { name: 'Credit' })).toBeNull()
   })
@@ -238,7 +238,8 @@ describe('assistant access owner continuation anchors', () => {
     expect(confirmation.textContent).not.toContain(PRINCIPAL_ID)
     expect(confirmation.textContent).not.toContain('grantRef')
     const cancel = within(confirmation).getByRole('button', { name: 'Cancel' })
-    await waitFor(() => expect(document.activeElement).toBe(cancel))
+    const drainRadio = within(confirmation).getByRole('radio', { name: /Graceful drain/u })
+    await waitFor(() => expect(document.activeElement).toBe(drainRadio))
 
     fireEvent.click(cancel)
     await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull())
@@ -247,7 +248,7 @@ describe('assistant access owner continuation anchors', () => {
 
     fireEvent.click(trigger)
     await waitFor(() => expect(document.activeElement).toBe(
-      within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Cancel' }),
+      within(screen.getByRole('alertdialog')).getByRole('radio', { name: /Graceful drain/u }),
     ))
     fireEvent.keyDown(document, { key: 'Escape', code: 'Escape' })
     await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull())
@@ -457,7 +458,7 @@ describe('assistant access owner continuation anchors', () => {
     expect(screen.queryByRole('dialog')).toBeNull()
   })
 
-  it('W-28: defaults to Graceful Drain with financial disclosure and tactile confirm', () => {
+  it('W-28: defaults to Graceful drain with financial disclosure and tactile confirm', () => {
     render(
       <AeAgentOperatorConsole
         {...consoleProps()}
@@ -473,10 +474,10 @@ describe('assistant access owner continuation anchors', () => {
     fireEvent.click(trigger)
 
     const confirmation = screen.getByRole('alertdialog', { name: 'Remove Route assistant everywhere?' })
-    const drainCard = within(confirmation).getByRole('button', { name: /Graceful Drain/u })
-    const freezeCard = within(confirmation).getByRole('button', { name: /Immediate Freeze/u })
-    expect(drainCard.getAttribute('aria-pressed')).toBe('true')
-    expect(freezeCard.getAttribute('aria-pressed')).toBe('false')
+    const drainCard = within(confirmation).getByRole('radio', { name: /Graceful drain/u })
+    const freezeCard = within(confirmation).getByRole('radio', { name: /Immediate Freeze/u })
+    expect(drainCard.getAttribute('aria-checked')).toBe('true')
+    expect(freezeCard.getAttribute('aria-checked')).toBe('false')
     expect(confirmation.textContent).toContain(
       'A$0.00 unreleased holds remain protected — in-flight calls finish or release immediately',
     )
@@ -498,9 +499,9 @@ describe('assistant access owner continuation anchors', () => {
     fireEvent.click(within(dialog).getByRole('button', { name: 'Technical details' }))
     fireEvent.click(within(dialog).getByRole('button', { name: 'Remove agent everywhere' }))
     const confirmation = screen.getByRole('alertdialog', { name: 'Remove Route assistant everywhere?' })
-    fireEvent.click(within(confirmation).getByRole('button', { name: /Immediate Freeze/u }))
-    expect(within(confirmation).getByRole('button', { name: /Immediate Freeze/u }).getAttribute('aria-pressed')).toBe('true')
-    expect(within(confirmation).getByRole('button', { name: /Graceful Drain/u }).getAttribute('aria-pressed')).toBe('false')
+    fireEvent.click(within(confirmation).getByRole('radio', { name: /Immediate Freeze/u }))
+    expect(within(confirmation).getByRole('radio', { name: /Immediate Freeze/u }).getAttribute('aria-checked')).toBe('true')
+    expect(within(confirmation).getByRole('radio', { name: /Graceful drain/u }).getAttribute('aria-checked')).toBe('false')
     expect(within(confirmation).getByRole('button', { name: 'Remove immediately' })).toBeDefined()
   })
 

@@ -38,7 +38,7 @@ export function RemovalRequestForm(props: RemovalRequestFormProps) {
 
   return (
     <form onSubmit={onSubmit} className="grid w-full gap-section" noValidate>
-      {error === undefined ? null : (
+      {error !== undefined && !contactInvalid && !evidenceInvalid ? (
         <Alert variant="destructive">
           <AlertTitle>Request needs attention</AlertTitle>
           <AlertDescription>
@@ -46,9 +46,9 @@ export function RemovalRequestForm(props: RemovalRequestFormProps) {
             {outcomeUnknown ? <> <Link to="/support" className="underline underline-offset-4">Open support</Link> with the Provider slug and your contact email.</> : null}
           </AlertDescription>
         </Alert>
-      )}
+      ) : null}
       {receipt === undefined ? null : (
-        <Alert>
+        <Alert role="status">
           <AlertTitle>Request recorded</AlertTitle>
           <AlertDescription>
             <span>{receipt}</span>
@@ -78,6 +78,7 @@ export function RemovalRequestForm(props: RemovalRequestFormProps) {
             id="contactEmail"
             name="contactEmail"
             type="email"
+            autoComplete="email"
             aria-describedby={contactDescribedBy}
             aria-invalid={contactInvalid}
             ref={contactEmailRef}

@@ -23,6 +23,11 @@ export function SupplySourceTypeSection(props: SupplySourceTypeSectionProps) {
           disabled={props.disabled}
           onSourceKindChange={props.onSourceKindChange}
         />
+        <SupplySourceFields
+          {...props}
+          {...sourceFieldHandlers}
+          discoverDiagnostic={discoverDiagnostic}
+        />
         <Button
           type="button"
           className={cn('min-h-touch justify-self-start', TACTILE)}
@@ -32,11 +37,6 @@ export function SupplySourceTypeSection(props: SupplySourceTypeSectionProps) {
         >
           {props.discovering ? SUPPLY_SOURCE_TYPE_COPY.findingTools : SUPPLY_SOURCE_TYPE_COPY.findTools}
         </Button>
-        <SupplySourceFields
-          {...props}
-          {...sourceFieldHandlers}
-          discoverDiagnostic={discoverDiagnostic}
-        />
       </FieldGroup>
     </AeSection>
   )

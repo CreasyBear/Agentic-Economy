@@ -34,11 +34,10 @@ export type DeveloperDiscoveryViewModel = Readonly<{
 
 export const DEVELOPER_DISCOVERY_UI_COPY = Object.freeze({
   actions: {
-    public_catalog_schema: 'View schema status',
-    public_catalog_examples: 'View examples status',
-    artifact: 'View',
+    public_catalog_schema: 'Open schema',
+    public_catalog_examples: 'Open examples',
   },
-  freshStatus: 'Fresh',
+  freshStatus: 'Current',
   checkedPrefix: 'Checked',
   summary: {
     freshness: 'Freshness',

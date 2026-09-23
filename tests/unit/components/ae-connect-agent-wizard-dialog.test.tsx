@@ -29,7 +29,7 @@ describe('AeConnectAgentWizardDialog (W-26)', () => {
     expect(screen.getByRole('button', { name: /connect an agent/i })).toBeInTheDocument()
   })
 
-  it('T2: requires agent name and enforces max length of 80 characters', () => {
+  it('T2: marks an empty agent name on submit and enforces max length of 80 characters', () => {
     const onIssue = vi.fn()
     render(
       <AeConnectAgentWizardDialog
@@ -40,11 +40,14 @@ describe('AeConnectAgentWizardDialog (W-26)', () => {
     )
 
     const submitBtn = screen.getByRole('button', { name: /connect an agent/i })
-    expect(submitBtn).toBeDisabled()
+    expect(submitBtn).toBeEnabled()
+    fireEvent.click(submitBtn)
+    expect(screen.getByLabelText(/agent name/i)).toHaveAttribute('aria-invalid', 'true')
+    expect(onIssue).not.toHaveBeenCalled()
 
     const nameInput = screen.getByLabelText(/agent name/i)
     fireEvent.change(nameInput, { target: { value: '   ' } })
-    expect(submitBtn).toBeDisabled()
+    expect(submitBtn).toBeEnabled()
 
     fireEvent.change(nameInput, { target: { value: 'Valid Agent Name' } })
     expect(submitBtn).toBeEnabled()

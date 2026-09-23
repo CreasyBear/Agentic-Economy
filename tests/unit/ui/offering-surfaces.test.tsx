@@ -50,7 +50,6 @@ describe('Provider Tool directory', () => {
       'Status',
       'Price',
       'Calls',
-      'Quick actions',
       'Next action',
     ])
   })
@@ -74,8 +73,8 @@ describe('Provider Tool directory', () => {
     expect(within(row).getByText('Reconnect the provider')).toBeTruthy()
     expect(within(row).getByRole('link', { name: 'Manage connection for Blockchain data query' }).className)
       .toContain('w-full')
-    expect(within(row).getByRole('link', { name: 'Test Run for Blockchain data query' })).toBeTruthy()
-    expect(within(row).getByRole('link', { name: 'View logs for Blockchain data query' })).toBeTruthy()
+    expect(within(row).queryByRole('link', { name: 'Test Run for Blockchain data query' })).toBeNull()
+    expect(within(row).queryByRole('link', { name: 'View logs for Blockchain data query' })).toBeNull()
   })
 })
 

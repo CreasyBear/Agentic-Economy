@@ -86,6 +86,7 @@ async function invokeTool(
   toolId: ChatToolId,
   ctx: ToolCtx,
   input: unknown,
+  messages: ReadonlyArray<{ role: 'user'; content: string }> = [],
 ): Promise<unknown> {
   const providerToolName = CHAT_TOOL_NAME_MAP.canonicalToProvider[toolId]
   const tool = agent.options.tools?.[providerToolName]
@@ -95,7 +96,7 @@ async function invokeTool(
   const bound = { ...tool, ctx }
   return await Reflect.apply(tool.execute, bound, [
     input,
-    { toolCallId: `test:${toolId}`, messages: [] },
+    { toolCallId: `test:${toolId}`, messages },
   ])
 }
 
@@ -138,7 +139,7 @@ describe('Tool chat Agent tools', () => {
     })).toMatchObject({ state: 'complete', toolRefs: [OPERATION_REF] })
   })
 
-  it('exports exactly the six canonical tools and bounded Agent defaults', () => {
+  it('exports the canonical tools and bounded Agent defaults', () => {
     const agent = createChatAgent(mockModel(), AUTHORITY)
 
     expect(Object.keys(agent.options.tools ?? {})).toEqual(
@@ -177,9 +178,10 @@ describe('Tool chat Agent tools', () => {
 
   it('omits Tool execution from anonymous chat while preserving public reads', () => {
     const agent = createChatAgent(mockModel())
-    expect(Object.keys(agent.options.tools ?? {})).toEqual(
-      CHAT_TOOL_IDS.slice(0, 4).map((toolId) => CHAT_TOOL_NAME_MAP.canonicalToProvider[toolId]),
-    )
+    expect(Object.keys(agent.options.tools ?? {})).toEqual([
+      ...CHAT_TOOL_IDS.slice(0, 4).map((toolId) => CHAT_TOOL_NAME_MAP.canonicalToProvider[toolId]),
+      CHAT_TOOL_NAME_MAP.canonicalToProvider['chat.clarify'],
+    ])
     expect(agent.options.tools).not.toHaveProperty(
       CHAT_TOOL_NAME_MAP.canonicalToProvider['tool.call'],
     )
@@ -294,13 +296,13 @@ describe('Tool chat Agent tools', () => {
         { toolRef: TOOL_TIMEZONE.toolRef, rank: 3, score: 0.08 },
       ],
     })
-    const runAction = vi.fn(async (reference) => {
+    const runAction = vi.fn(async (reference, _args?: unknown) => {
       const name = getFunctionName(reference)
       if (name === getFunctionName(api.capabilityToolCatalog.search)) {
         return serializeToolSearchResult(source)
       }
-      if (name === getFunctionName(internal.capabilityToolCatalog.rerank)) {
-        return reranked
+      if (name === getFunctionName(internal.capabilityToolCatalog.presentSearch)) {
+        return { result: reranked, use: 'registry.tools.compare' as const }
       }
       throw new Error(`Unexpected action: ${name}`)
     })
@@ -312,13 +314,19 @@ describe('Tool chat Agent tools', () => {
       'registry.tools.search',
       ctx,
       { query: ERC20_QUERY },
-    ) as { kind: string; items: readonly { toolRef: string }[] }
+      [{ role: 'user', content: 'Compare two company-lookup tools' }],
+    ) as { kind: string; use?: string; items: readonly { toolRef: string }[] }
 
     expect(result.kind).toBe('ok')
+    expect(result.use).toBe('registry.tools.compare')
     expect(result.items[0]?.toolRef).toBe(TOOL_CRYPTO_TX.toolRef)
+    expect(runAction.mock.calls[1]?.[1]).toMatchObject({
+      query: ERC20_QUERY,
+      request: 'Compare two company-lookup tools',
+    })
     expect(runAction.mock.calls.map(([reference]) => getFunctionName(reference))).toEqual([
       getFunctionName(api.capabilityToolCatalog.search),
-      getFunctionName(internal.capabilityToolCatalog.rerank),
+      getFunctionName(internal.capabilityToolCatalog.presentSearch),
     ])
   })
 

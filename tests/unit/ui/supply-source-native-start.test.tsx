@@ -664,7 +664,7 @@ describe('source-native Provider start', () => {
       />,
     )
 
-    const tactile = 'active:scale-[0.98]'
+    const tactile = 'enabled:active:scale-[0.98]'
     expect(screen.getByRole('button', { name: /x402 recommended for alpha/i }).className).toContain(tactile)
     expect(screen.getByRole('button', { name: 'Other source types' }).className).toContain(tactile)
     expect(screen.getByRole('button', { name: 'Find Tools' }).className).toContain(tactile)

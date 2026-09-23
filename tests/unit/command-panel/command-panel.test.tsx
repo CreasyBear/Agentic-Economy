@@ -245,7 +245,8 @@ describe('operator command panel', () => {
     expect(screen.getByText(formatToolAuthentication(fixture.authentication))).toBeTruthy()
     expect(screen.getByText(formatToolReadiness(fixture.availability.posture))).toBeTruthy()
     expect(screen.getByText('Charged per call.')).toBeTruthy()
-    expect(screen.getByText(/Paste this reference into your existing agent client/)).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Copy request for Agent' })).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Actions' }))
     expect(screen.getAllByRole('button', { name: 'Copy Tool reference' }).length).toBeGreaterThan(0)
     expect(
       screen.getByRole('link', { name: /Open full Tool details/ }).getAttribute('href'),
@@ -530,10 +531,9 @@ describe('operator command panel', () => {
     fireEvent.change(input, { target: { value: 'weather' } })
     fireEvent.keyDown(await screen.findByRole('option', { name: /Weather forecast/ }), { key: 'Enter' })
 
-    expect(await screen.findByText(/Paste this reference into your existing agent client/)).toBeTruthy()
+    expect(await screen.findByRole('button', { name: 'Copy request for Agent' })).toBeTruthy()
     expect(screen.getByText(formatToolReadiness(detailFixture().availability.posture))).toBeTruthy()
     expect(screen.queryByText('Connection required')).toBeNull()
-    expect(screen.getAllByRole('button', { name: 'Copy Tool reference' }).length).toBeGreaterThan(0)
     expect(screen.queryByRole('link', { name: 'Connect agent' })).toBeNull()
     expect(screen.queryByText(/ae call/)).toBeNull()
     expect(screen.queryByText(/ae inspect/)).toBeNull()

@@ -205,7 +205,7 @@ export function AeKeyRevealDialog({
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent
         className={cn(
-          'sm:max-w-[620px] max-h-[90vh] overflow-y-auto',
+          'sm:max-w-[620px] max-h-[90vh]',
           dismissBlocked && 'ring-2 ring-warning-ring',
         )}
         data-slot="dialog-content"
@@ -223,7 +223,7 @@ export function AeKeyRevealDialog({
           </div>
         </DialogHeader>
 
-        <div className="grid gap-4 py-2">
+        <div className="grid gap-4 overflow-y-auto py-2">
           <Alert className="border-warning-ring bg-warning-subtle text-warning-foreground">
             <AlertTriangleIcon className="size-4" />
             <AlertTitle>This secret will never be shown again.</AlertTitle>
@@ -413,8 +413,8 @@ export function AeKeyRevealDialog({
             {connectionStatus === 'waiting' ? (
               <>
                 <span className="relative flex size-2 mt-1.5">
-                  <span className="absolute inline-flex size-full animate-ping rounded-full bg-warning-foreground opacity-75 motion-reduce:animate-none" />
-                  <span className="relative inline-flex size-2 rounded-full bg-warning-foreground" />
+                  <span className="absolute inline-flex size-full animate-ping rounded-full bg-warning opacity-75 motion-reduce:animate-none" />
+                  <span className="relative inline-flex size-2 rounded-full bg-warning" />
                 </span>
                 <div className="grid gap-0.5">
                   <p className="text-sm font-medium text-foreground">

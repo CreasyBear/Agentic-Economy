@@ -28,6 +28,44 @@ describe('search result state', () => {
     expect(projectToolCard(serializeToolCard(card))).toEqual(card)
   })
 
+  it('follows the tool Jev chose for the same search rows', () => {
+    const toolType = `tool-${CHAT_TOOL_NAME_MAP.canonicalToProvider['registry.tools.search']}`
+    const nearRef = `operation:v1:${'c'.repeat(64)}`
+    const items = [
+      { toolRef: TOOL_REF, title: 'Lookup A', provider: 'Acme', price: 'A$1.25', readiness: 'Ready now' },
+      { toolRef: nearRef, title: 'Lookup B', provider: 'Acme', price: 'A$1.25', readiness: 'Ready now' },
+    ]
+    const compared = projectToolCard({
+      type: toolType,
+      state: 'output-available',
+      output: { kind: 'ok', items, count: 2, use: 'registry.tools.compare', belowMatch: [nearRef] },
+    })
+    expect(compared).toMatchObject({
+      kind: 'choices',
+      surface: 'compare',
+      title: 'Compare tools',
+      choices: [{ title: 'Lookup A' }, { title: 'Lookup B', belowMatch: true }],
+    })
+    if (compared === null) throw new Error('missing_card')
+    expect(projectToolCard(serializeToolCard(compared))).toEqual(compared)
+
+    expect(projectToolCard({
+      type: toolType,
+      state: 'output-available',
+      output: { kind: 'ok', items: items.slice(0, 1), count: 1, use: 'registry.tools.describe' },
+    })).toMatchObject({ kind: 'choices', surface: 'describe', title: 'Tool details' })
+
+    expect(projectToolCard({
+      type: toolType,
+      state: 'output-available',
+      output: { kind: 'ok', items, count: 1, use: 'chat.clarify' },
+    })).toMatchObject({
+      kind: 'status',
+      state: 'attention',
+      summary: 'These Tools do not separate on this request.',
+    })
+  })
+
   it('keeps a source outage distinct from a successful empty search', () => {
     expect(projectToolCard({ type: `tool-${CHAT_TOOL_NAME_MAP.canonicalToProvider['registry.tools.search']}`,
       state: 'output-available', output: { kind: 'unavailable', reason: 'source_unavailable' } }))
@@ -137,6 +175,26 @@ describe('inspect Quote tool cards', () => {
   })
 })
 
+
+describe('clarifying question', () => {
+  it('pins a complete question and keeps an unfinished one as a status line', () => {
+    const toolType = `tool-${CHAT_TOOL_NAME_MAP.canonicalToProvider['chat.clarify']}`
+    const ready = projectToolCard({
+      type: toolType,
+      state: 'input-available',
+      input: { question: 'Which region?', choices: ['Australia', 'Singapore', 'Other'] },
+    })
+    expect(ready).toMatchObject({
+      kind: 'clarify',
+      question: 'Which region?',
+      choices: ['Australia', 'Singapore', 'Other'],
+    })
+    if (ready === null || ready.kind !== 'clarify') throw new Error('missing_clarify')
+    expect(projectToolCard(serializeToolCard(ready))).toEqual(ready)
+    expect(projectToolCard({ type: toolType, state: 'input-streaming', input: {} }))
+      .toMatchObject({ kind: 'working', title: 'Preparing a question' })
+  })
+})
 
 describe('chat JSON result decoding', () => {
   it.each(['invalid JSON', '[]', 'null', 'x'.repeat(65 * 1024)])('refuses invalid or oversized text (%#)', (output) => {

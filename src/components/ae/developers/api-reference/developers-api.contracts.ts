@@ -11,6 +11,18 @@ export type DevelopersApiOperation = Readonly<{
   curl: string
 }>
 
+export type DevelopersApiOperationGroupTag =
+  | 'Call gateway'
+  | 'Tool market'
+  | 'Funding'
+  | 'Businesses'
+  | 'Platform'
+
+export type DevelopersApiOperationGroup = Readonly<{
+  tag: DevelopersApiOperationGroupTag
+  operations: readonly DevelopersApiOperation[]
+}>
+
 export type DevelopersApiProblem = Readonly<{
   kind: DevelopersApiProblemKind
   type: string
@@ -22,7 +34,7 @@ export type DevelopersApiViewModel = Readonly<{
   authDescription: string
   documentVersion: string
   versionPolicy: string
-  operations: readonly DevelopersApiOperation[]
+  operationGroups: readonly DevelopersApiOperationGroup[]
   problems: readonly DevelopersApiProblem[]
   priceExample: Readonly<{
     shape: string
@@ -30,6 +42,14 @@ export type DevelopersApiViewModel = Readonly<{
     formatted: string
   }>
 }>
+
+export const DEVELOPERS_API_OPERATION_GROUP_TAGS = Object.freeze([
+  'Call gateway',
+  'Tool market',
+  'Funding',
+  'Businesses',
+  'Platform',
+] as const satisfies readonly DevelopersApiOperationGroupTag[])
 
 export const DEVELOPERS_API_COPY = Object.freeze({
   eyebrow: 'Developers',

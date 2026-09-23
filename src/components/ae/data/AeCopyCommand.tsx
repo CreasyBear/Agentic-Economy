@@ -8,7 +8,8 @@ import { cn } from '@/lib/utils'
 type AeCopyCommandProps = Readonly<{
   label: string
   code: string
-  copyText?: string
+  copyText?: string | (() => string)
+  resolveOrigin?: boolean
   className?: string
   compact?: boolean
   comfortable?: boolean
@@ -23,6 +24,7 @@ export function AeCopyCommand({
   label,
   code,
   copyText = code,
+  resolveOrigin = true,
   className,
   compact = false,
   comfortable = false,
@@ -30,8 +32,8 @@ export function AeCopyCommand({
   copiedHint,
 }: AeCopyCommandProps) {
   const resolveCopyText = useCallback(
-    () => copyText.replaceAll('$ORIGIN', window.location.origin),
-    [copyText],
+    () => resolveCommandCopyText(copyText, resolveOrigin),
+    [copyText, resolveOrigin],
   )
   const copyTimeout = copiedHint !== undefined ? 2_000 : 1_600
   const { status, isCopied: copied, copy } = useClipboardCopy(resolveCopyText, {
@@ -89,4 +91,9 @@ export function AeCopyCommand({
       </p>
     </div>
   )
+}
+
+function resolveCommandCopyText(copyText: string | (() => string), resolveOrigin: boolean): string {
+  const value = typeof copyText === 'function' ? copyText() : copyText
+  return resolveOrigin ? value.replaceAll('$ORIGIN', window.location.origin) : value
 }

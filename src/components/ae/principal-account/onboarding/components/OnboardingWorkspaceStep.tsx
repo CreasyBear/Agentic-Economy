@@ -1,24 +1,30 @@
 import { Button } from '@/components/ui/button'
-import { FieldDescription, FieldLabel } from '@/components/ui/field'
+import { FieldDescription, FieldError, FieldLabel } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
 
 import {
-  ONBOARDING_SKIP_HELPER,
+  ONBOARDING_NAME_REQUIRED,
   type OnboardingWorkspaceStepProps,
 } from '../onboarding.contracts'
+
+const COMPLETION_DESCRIPTION_ID = 'onboarding-workspace-completion'
+const NAME_ERROR_ID = 'onboarding-workspace-name-error'
 
 export function OnboardingWorkspaceStep({
   workspaceName,
   finishDisabled,
-  skipDisabled,
   submitting,
+  nameInvalid,
   completionDescription,
   workspaceInputRef,
   onWorkspaceNameChange,
   onBack,
-  onSkip,
   onFinish,
 }: OnboardingWorkspaceStepProps) {
+  const nameDescribedBy = nameInvalid
+    ? `${COMPLETION_DESCRIPTION_ID} ${NAME_ERROR_ID}`
+    : COMPLETION_DESCRIPTION_ID
+
   return (
     <div className="grid gap-section">
       <div className="grid gap-2">
@@ -27,6 +33,8 @@ export function OnboardingWorkspaceStep({
           ref={workspaceInputRef}
           id="onboarding-workspace-name"
           aria-label="Workspace name"
+          aria-describedby={nameDescribedBy}
+          aria-invalid={nameInvalid || undefined}
           value={workspaceName}
           onChange={(event) => onWorkspaceNameChange(event.currentTarget.value)}
           onKeyDown={(event) => {
@@ -39,7 +47,10 @@ export function OnboardingWorkspaceStep({
           maxLength={200}
         />
       </div>
-      <FieldDescription>{completionDescription}</FieldDescription>
+      <FieldDescription id={COMPLETION_DESCRIPTION_ID}>{completionDescription}</FieldDescription>
+      {nameInvalid ? (
+        <FieldError id={NAME_ERROR_ID}>{ONBOARDING_NAME_REQUIRED}</FieldError>
+      ) : null}
       <div className="grid gap-related sm:grid-cols-2">
         <Button
           type="button"
@@ -58,18 +69,6 @@ export function OnboardingWorkspaceStep({
         >
           {submitting ? 'Creating workspace...' : 'Create workspace'}
         </Button>
-      </div>
-      <div className="grid justify-items-center gap-1">
-        <Button
-          type="button"
-          variant="ghost"
-          className="min-h-touch"
-          disabled={skipDisabled}
-          onClick={() => void onSkip()}
-        >
-          Skip
-        </Button>
-        <FieldDescription>{ONBOARDING_SKIP_HELPER}</FieldDescription>
       </div>
     </div>
   )

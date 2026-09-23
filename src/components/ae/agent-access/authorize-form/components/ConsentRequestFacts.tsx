@@ -21,7 +21,7 @@ export function ConsentRequestFacts({
         { label: 'Application', value: `${clientName} · ${environment === 'sandbox' ? 'Sandbox' : 'Production'}` },
         { label: 'Tools', value: toolSelectionSummary },
         { label: 'Approved limits', value: accessSummary },
-        { label: 'Connection', value: `Stays signed in until ${formatConsentDuration(expiresInSeconds)} after approval, unless you disconnect it first.` },
+        { label: 'Connection', value: `Stays signed in for ${formatConsentDuration(expiresInSeconds)} after approval, unless you disconnect it first.` },
       ]} />
       <Collapsible>
         <CollapsibleTrigger

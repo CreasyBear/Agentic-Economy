@@ -22,8 +22,8 @@ describe('ListingFirstScreen', () => {
     const text = fragmentFrom(markup).textContent ?? ''
 
     expect(text).toContain('Emergency plumbing')
-    expect(text).toContain('Listed tools')
-    expect(text).toContain('Inspect the price, access path, and current readiness before calling.')
+    expect(text).toContain('Offerings')
+    expect(text).toContain('Inspect the price, access path, and current readiness before you open one.')
     expect(markup).not.toContain('Ask this business')
     expect(markup).not.toContain('href="/demo-plumbing/inquiry"')
   })
@@ -32,9 +32,9 @@ describe('ListingFirstScreen', () => {
     const markup = renderFirstScreen(catalogFixture())
 
     expect(markup).toContain('Plumber')
-    expect(markup).toContain('Tools')
-    expect(markup).toContain('Ready now')
     expect(markup).toContain('Last indexed')
+    expect(markup).not.toContain('Tools')
+    expect(markup).not.toContain('Ready now')
     expect(markup).not.toContain('href="tel:')
     expect(markup).not.toContain('Ask this business')
   })
@@ -48,7 +48,7 @@ describe('ListingFirstScreen', () => {
     )
 
     expect(markup).toContain('href="tel:0861112222"')
-    expect(markup).toContain('Call provider')
+    expect(markup).toContain('Phone provider')
     expect(markup).toContain('href="/market"')
   })
 

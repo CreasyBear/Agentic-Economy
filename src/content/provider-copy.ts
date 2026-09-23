@@ -14,7 +14,7 @@ export const PROVIDER_FAQ = {
     {
       question: 'Can I onboard my Tool today?',
       answer:
-        'Public Provider onboarding is not open yet. The launch page tracks access and the information Providers can prepare.',
+        'Add Tool starts the listing for one Tool. The requirements on this page are what that listing needs. Listing a Tool does not buy one.',
     },
   ],
 } as const

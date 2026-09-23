@@ -265,7 +265,7 @@ export function AeAccountFundingPanel({
       ) : null}
       <div className="flex flex-wrap gap-2">
         {checkoutResumable ? (
-          <Button type="button" disabled={checking || pending} onClick={resumeCheckout} className="min-h-touch">
+          <Button type="button" variant="secondary" disabled={checking || pending} onClick={resumeCheckout} className="min-h-touch">
             Continue secure payment
           </Button>
         ) : canStartAnotherPayment(paymentStatus, session) ? (

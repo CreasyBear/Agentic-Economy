@@ -31,7 +31,7 @@ export function useRemoveBusinessPage(): UseRemoveBusinessPageResult {
   const [pending, setPending] = useState(false)
   const [outcomeUnknown, setOutcomeUnknown] = useState(false)
   const contactInvalid = error?.includes('contact') === true
-  const evidenceInvalid = error?.includes('Evidence') === true
+  const evidenceInvalid = error === 'What should change? is required.'
   const contactEmailRef = useRef<HTMLInputElement>(null)
   const evidenceSummaryRef = useRef<HTMLTextAreaElement>(null)
   const slugDescriptionId = 'slug-description'
@@ -64,7 +64,7 @@ export function useRemoveBusinessPage(): UseRemoveBusinessPageResult {
     }
 
     if (nextValue.evidenceSummary.trim().length === 0) {
-      setError('Evidence summary is required.')
+      setError('What should change? is required.')
       focusField(evidenceSummaryRef)
       return
     }

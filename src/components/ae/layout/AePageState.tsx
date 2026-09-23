@@ -19,6 +19,7 @@ type AePageStateProps = ({
 }) & {
   tone?: AeUiStateTone
   action?: ReactNode
+  focusTitle?: boolean
 }
 
 function pageStateEyebrow(tone: AeUiStateTone): string | undefined {
@@ -43,7 +44,7 @@ function pageStateEyebrow(tone: AeUiStateTone): string | undefined {
  * public surfaces. The title is a real `<h1>` and the container carries the
  * semantic role (`status` for empty/unavailable, `alert` for failures).
  */
-export function AePageState({ state, title, description, tone, action }: AePageStateProps) {
+export function AePageState({ state, title, description, tone, action, focusTitle }: AePageStateProps) {
   const presentation = state === undefined ? undefined : getAeUiStatePresentation(state)
   const resolvedTitle = title ?? presentation?.title
   const resolvedDescription = description ?? presentation?.description
@@ -62,6 +63,7 @@ export function AePageState({ state, title, description, tone, action }: AePageS
       introRole={role}
       {...(eyebrow === undefined ? {} : { eyebrow })}
       {...(action === undefined ? {} : { actions: action })}
+      {...(focusTitle === true ? { focusTitle: true } : {})}
     />
   )
 }

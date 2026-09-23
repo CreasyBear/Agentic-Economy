@@ -18,7 +18,7 @@ export const privacySections = [
     body: [
       'This policy governs how Agentic Economy (AE, we, us) handles personal information across our website and platform. It covers customers, authorised users, agents acting for businesses, providers and people whose information appears in requests.',
       'The website offers an enquiry form and an optional email waitlist. It has no public accounts or payment inputs. The account, payment and service-request provisions apply when you use those services.',
-      'AE may handle information for its own account administration, billing, security and legal purposes, and process customer content on a business customer’s instructions. The applicable agreement sets out those roles. A provider may handle information independently or on instructions, depending on the service; the service offer explains that role before the customer sends data.',
+      'Agentic Economy may handle information for its own account administration, billing, security and legal purposes, and process Customer content on a business Customer’s instructions. The applicable agreement sets out those roles. A Provider may handle information independently or on instructions, depending on the Tool; the service offer explains that role before the Customer’s purchase.',
     ],
   },
   {
@@ -46,7 +46,7 @@ export const privacySections = [
     id: 'requests',
     heading: 'Prompts, files and provider delivery',
     body: [
-      'A paid request can require AE to forward relevant inputs to the selected provider and return its output. The customer should minimise personal information in prompts and files and have authority to disclose information about other people. An agent’s ability to send data is not evidence of consent from every person named in it.',
+      'A Call can require Agentic Economy to forward relevant inputs to the selected Provider and return its output. The Customer should minimise personal information in prompts and files and have authority to disclose information about other people. An Agent’s ability to send data is not evidence of consent from every person named in it.',
       'The service offer identifies the provider, material data categories, purposes, locations where practicable and applicable retention or training conditions. Provider terms are provided before purchase. The service offer discloses any differences between the provider’s data practices and AE’s commitments, including whether the provider uses inputs or outputs for training.',
       'Operational storage may be needed for delivery, recovery, support or disputes. Any payload retention and replay capability must be disclosed with its purpose and retention period. AE will separate transaction records from full payloads so that accounting needs do not justify keeping the underlying content indefinitely.',
     ],
@@ -85,7 +85,7 @@ export const privacySections = [
         ? 'This website uses Vercel Web Analytics to measure page visits, referral sources, approximate location, and browser and device types in aggregate. Vercel Speed Insights measures page loading, responsiveness and visual stability to help us improve website performance. These integrations do not use third-party tracking cookies. We remove query strings and fragments from measurement URLs and exclude the email confirmation page.'
         : 'Traffic analytics is disabled in this build. Vercel Web Analytics runs only on the production website.',
       ...(import.meta.env.VITE_GA4_MEASUREMENT_ID
-        ? ['If you choose Allow analytics, we load Google Analytics 4 and allow its first-party analytics cookies for up to six months. We use page visits, engagement and successful enquiry or waitlist completion events to understand website use. Google advertising personalisation and Google Signals are disabled. We exclude confirmation-page views and remove query strings and fragments from the pageview URLs we send. You can decline or withdraw permission through Analytics preferences in the footer. We remember your choice locally for six months. Google processes analytics data on its infrastructure, which may be outside Australia.']
+        ? ['If you choose Allow analytics, we load Google Analytics 4 and allow its first-party analytics cookies for up to six months. We use page visits, engagement and successful enquiry or waitlist completion events to understand website use. Google advertising personalisation and Google Signals are disabled. We exclude confirmation-page views and remove query strings and fragments from the pageview URLs we send. You can decline analytics when asked, or withdraw permission later. We remember your choice locally for six months. Google processes analytics data on its infrastructure, which may be outside Australia.']
         : []),
       ...(import.meta.env.VITE_META_PIXEL_ID
         ? ['If you choose Allow analytics, we also load the Meta Pixel. Meta receives page visits and successful enquiry or waitlist completion event types so we can measure website outcomes from Facebook and Instagram activity. We do not send form names, email addresses, subjects, messages or other form contents to Meta. Meta may set first-party measurement cookies and process analytics data outside Australia.']

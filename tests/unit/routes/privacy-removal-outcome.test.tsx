@@ -109,8 +109,9 @@ describe('privacy removal unknown outcomes', () => {
     fireEvent.change(screen.getByLabelText('What should change?'), { target: { value: 'Remove duplicate.' } })
     fireEvent.click(screen.getByRole('button', { name: 'Submit request' }))
 
-    const alert = await screen.findByRole('alert')
-    expect(alert.textContent).toContain('Request opened. Reference dispute:test-reference.')
-    expect(alert.textContent).toContain('Quote this reference and status if you contact support.')
+    expect(await screen.findByText('Request recorded')).toBeTruthy()
+    const alert = screen.getByText('Request recorded').closest('[role="status"]')
+    expect(alert?.textContent).toContain('Request opened. Reference dispute:test-reference.')
+    expect(alert?.textContent).toContain('Quote this reference and status if you contact support.')
   })
 })

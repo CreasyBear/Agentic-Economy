@@ -28,7 +28,9 @@ vi.mock('@tanstack/react-router', async () => {
       React.useEffect(() => { void promise.then(setValue) }, [promise])
       return value === undefined ? null : children(value)
     },
-    Link: ({ to, children }: { to: string; children: ReactNode }) => <a href={to}>{children}</a>,
+    Link: ({ to, children, className, ...props }: { to: string; children: ReactNode; className?: string }) => (
+      <a href={to} className={className} {...props}>{children}</a>
+    ),
     useLocation: () => routeState.location,
     useRouter: () => ({ invalidate: calls.invalidate }),
   }
@@ -70,10 +72,13 @@ describe('Tools management disclosure', () => {
       publicStatus={unavailable}
     />)
 
-    await screen.findByText('Add a source, then choose a Tool to publish.')
+    await screen.findByRole('heading', { name: 'Provider setup' })
+    expect(screen.queryByText('Add a source, then choose a Tool to publish.')).toBeNull()
     const addTool = screen.getAllByRole('link', { name: 'Add Tool' })
     expect(addTool).toHaveLength(1)
     expect(addTool[0]?.getAttribute('href')).toBe('/owner/operations/new')
+    expect(addTool[0]?.className).toContain('border')
+    expect(addTool[0]?.className).not.toContain('bg-primary')
 
     const setup = screen.getByRole('heading', { name: 'Provider setup' }).parentElement?.parentElement
     const earnings = screen.getByRole('heading', { name: 'Earnings' }).closest('section')
@@ -113,7 +118,9 @@ describe('Tools management disclosure', () => {
     expect(administration?.textContent).not.toContain('Earnings')
     fireEvent.click(await screen.findByRole('button', { name: 'Manage connections' }))
     await waitFor(() => expect(calls.connections).toHaveBeenCalledTimes(1))
+    expect(await screen.findByRole('dialog', { name: 'Connections' })).toBeTruthy()
     expect(await screen.findByTestId('connection-controls')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }))
 
     fireEvent.click(within(earningsHeading.closest('section') as HTMLElement).getByRole('button', { name: 'Connect Stripe' }))
     await waitFor(() => expect(calls.earnings).toHaveBeenCalledTimes(1))

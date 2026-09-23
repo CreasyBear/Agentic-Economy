@@ -11,7 +11,7 @@ vi.mock("@/lib/ui/toast", () => ({
   toast: { success: vi.fn(), error: vi.fn(), info: vi.fn(), warning: vi.fn() },
 }));
 
-const TACTILE_CLASS_FRAGMENT = "active:scale-[0.98]";
+const TACTILE_CLASS_FRAGMENT = "active:scale-[0.96]";
 
 function readyExpressConnect(
   stripeAccountId: string,

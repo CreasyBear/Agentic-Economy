@@ -13,7 +13,6 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import type { PublicToolDescriptor } from '@/modules/capability-supply/public'
 import {
-  emptyMarketListingEvidence,
   type MarketListingEvidenceProjection,
 } from '@/modules/market/listing-evidence'
 
@@ -43,11 +42,6 @@ export function AeToolInspector({
   variant: 'compact' | 'full'
 }>) {
   const model = toToolInspectorModel(tool)
-  const trackRecord = evidence ?? emptyMarketListingEvidence(
-    tool.toolRef,
-    tool.contract.capabilityId,
-    `${tool.listing.label} ${model.summary}`,
-  )
   const fullInspectorRef = useRef<HTMLElement>(null)
   const [technicalContractOpen, setTechnicalContractOpen] = useState(false)
 
@@ -104,7 +98,7 @@ export function AeToolInspector({
         className="min-w-0"
       >
         <AeToolDecision tool={tool} model={model} />
-        <AeToolTrackRecord evidence={trackRecord} />
+        <AeToolTrackRecord {...(evidence === undefined ? {} : { evidence })} />
         <AeToolFacts tool={tool} model={model} variant="full" />
       </TabsContent>
 
@@ -129,7 +123,7 @@ export function AeToolInspector({
       tabIndex={-1}
       aria-label={`${tool.listing.label} Tool details`}
       data-tool-inspector="full"
-      className="min-w-0 focus:outline-none"
+      className="min-w-0 outline-none focus:outline-solid focus:outline-2 focus:outline-offset-2 focus:outline-ring"
     >
       <div data-tool-layout="responsive" className="min-w-0">
         {researchPanel}

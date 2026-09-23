@@ -237,6 +237,7 @@ function expectNativeFilters(search: URLSearchParams) {
 describe('indexed x402 catalogue controls', () => {
   it('keeps the buyer-facing refinements visible and places provider metadata behind Advanced filters', () => {
     show({ view: 'tools' }, undefined, { page: indexedPage, catalogue: indexedCatalogue, overview })
+    fireEvent.click(screen.getByRole('button', { name: 'Filters' }))
 
     expect(screen.getByRole('group', { name: 'Provider category' })).toBeTruthy()
     expect(screen.getByText('Listed price')).toBeTruthy()
@@ -252,6 +253,7 @@ describe('indexed x402 catalogue controls', () => {
 
   it('opens Advanced filters when an advanced refinement is already active', () => {
     show({ view: 'tools', network: 'eip155:8453' }, undefined, { page: indexedPage, catalogue: indexedCatalogue, overview })
+    fireEvent.click(screen.getByRole('button', { name: 'Filters 1' }))
 
     expect(screen.getByRole('button', { name: 'Advanced filters 1 active' }).getAttribute('aria-expanded')).toBe('true')
     expect(screen.getByRole('group', { name: 'Network' })).toBeTruthy()
@@ -297,7 +299,7 @@ describe('indexed x402 catalogue controls', () => {
     expect(failure.className).not.toContain('text-destructive')
     expect(screen.getByText(/2 Tools loaded/)).toBeTruthy()
 
-    fireEvent.click(screen.getByRole('button', { name: 'Try loading more again' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Load more. Try again.' }))
     await waitFor(() => expect(screen.getByRole('link', { name: nextItems[0]!.title })).toBeTruthy())
     expect(readX402DirectoryCatalogueServer).toHaveBeenNthCalledWith(2, { data: { indexCursor: indexedCatalogue.indexCursor } })
     expect(screen.queryByRole('alert')).toBeNull()
@@ -323,6 +325,7 @@ describe('indexed x402 catalogue controls', () => {
   })
   it('changes category through its control while preserving filters, without ever adding a cursor', async () => {
     const { router } = show({ ...nativeFilters, query: 'weather', sort: 'relevance' }, undefined, { page: indexedPage, catalogue: indexedCatalogue, overview })
+    fireEvent.click(screen.getByRole('button', { name: /Filters \d+/u }))
     fireEvent.click(screen.getByRole('button', { name: 'Media 405' }))
     await waitFor(() => expect(router.state.location.search).toMatchObject({ ...nativeFilters, query: 'weather', sort: 'relevance', directoryCategory: 'media' }))
     expect(router.state.location.search).not.toHaveProperty('indexCursor')

@@ -48,15 +48,14 @@ afterEach(() => {
 })
 
 describe('sign-in account exit', () => {
-  it('returns an unqualified sign-in to wherever the visitor left off', () => {
+  it('returns an unqualified sign-in to Market', () => {
     const Component = routeState.SignIn
     if (Component === null) throw new Error('Sign-in route was not captured.')
 
     render(<Component />)
 
     expect(screen.getByRole('heading', { name: 'Sign in' })).toBeTruthy()
-    expect(screen.getByText(/Use email, Google, GitHub, or a passkey/)).toBeTruthy()
-    expect(screen.getByText(/return to where you left off/)).toBeTruthy()
+    expect(screen.getByText(/continue on Market/)).toBeTruthy()
     expect(document.body.textContent?.toLowerCase()).not.toContain('supplier')
     expect(document.body.textContent).not.toContain('manage Operations')
     expect(routeState.clerkProps).toMatchObject({

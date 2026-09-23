@@ -506,7 +506,7 @@ export async function checkpointX402ResponseHandler(
       ...(args.paymentResponseDigest === undefined ? [] : [`response-payment:${args.paymentResponseDigest}`]),
       ...(txRef === undefined ? [] : [txRef])])],
   })
-  if (txRef !== undefined) await ctx.scheduler.runAfter(60_000, internal.moneyX402ResponseActions.recover, {
+  if (txRef !== undefined) await ctx.scheduler.runAfter(60_000, internal.moneyX402PaymentAttempts.beginResponseRecovery, {
     callRef: args.dispatchRef, attempt: 0,
   })
   return null

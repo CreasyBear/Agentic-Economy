@@ -23,12 +23,12 @@ export function ChatHeader({
 }: ChatHeaderProps) {
   return (
     <>
-      <header className="flex min-h-14 items-center gap-related border-b border-border px-gutter">
+      <header className="flex min-h-14 shrink-0 items-center gap-related border-b border-border px-gutter">
         {authenticated ? (
           <Sheet>
             <SheetTrigger
               render={
-                <Button type="button" variant="ghost" size="icon" className="min-h-touch min-w-touch lg:hidden" aria-label={chatHistory.openHistory}>
+                <Button type="button" variant="ghost" size="icon" className="min-h-touch min-w-touch" aria-label={chatHistory.openHistory}>
                   <MenuIcon aria-hidden="true" />
                 </Button>
               }
@@ -43,7 +43,7 @@ export function ChatHeader({
           </Sheet>
         ) : null}
         <div className="min-w-0 flex-1">
-          <p className="truncate text-sm font-medium">{chatStageTitle(threadId)}</p>
+          <h1 className="truncate text-sm font-medium">{chatStageTitle(threadId)}</h1>
           <p className="text-xs text-muted-foreground">{chatStageDetail(authenticated)}</p>
         </div>
         <Button type="button" variant="ghost" size="icon" className="min-h-touch min-w-touch" aria-label={chatHistory.newChat} onClick={onNewChat}>
@@ -66,7 +66,7 @@ export function ChatHeader({
         <Field className="border-b border-border bg-muted px-gutter py-intra" role="status">
           <FieldLabel htmlFor="tool-chat-share-link">{chatHistory.shareLabel}</FieldLabel>
           <InputGroup>
-            <InputGroupInput id="tool-chat-share-link" value={sharePath} readOnly className="min-h-touch font-mono text-xs" />
+            <InputGroupInput id="tool-chat-share-link" value={sharePath} readOnly className="min-h-touch font-mono" />
             <InputGroupAddon align="inline-end">
               <Button type="button" variant="outline" className="min-h-touch" onClick={onCopyShare}>
                 {copied

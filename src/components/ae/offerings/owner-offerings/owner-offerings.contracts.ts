@@ -30,6 +30,8 @@ export type AeOwnerOfferingsListProps = Readonly<{
   projectionState?: 'current' | 'projection_pending'
   onRetryProjection?: () => void
   loading?: boolean
+  /** When true, empty inventory does not mount the empty-state Add Tool CTA. */
+  hideEmptyState?: boolean
   filterValue?: string
   onFilterChange?: (value: string) => void
   sorting?: SortingState

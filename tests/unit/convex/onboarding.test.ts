@@ -5,7 +5,6 @@ import {
   it,
 } from 'vitest'
 
-import { InteractiveAuthorityError } from '../../../convex/interactiveAuthority'
 import { samIdentity } from '../../helpers/interactive-authority-provisioning'
 import {
   collectAuthorityTables,

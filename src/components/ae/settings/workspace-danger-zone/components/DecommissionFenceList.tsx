@@ -7,8 +7,8 @@ export function DecommissionFenceList({ fenceMessages }: DecommissionFenceListPr
     <div className="grid gap-2">
       <div className="flex flex-wrap items-center gap-2">
         <Badge variant="destructive">Close blocked</Badge>
-        <span className="font-mono text-xs tabular-nums text-muted-foreground">
-          A$0.00 moved — close is refused until these clear.
+        <span className="text-sm text-muted-foreground">
+          Close stays blocked until these are resolved.
         </span>
       </div>
       <ul className="list-disc pl-5 text-sm text-muted-foreground">

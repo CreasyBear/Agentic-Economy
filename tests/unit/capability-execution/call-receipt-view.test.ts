@@ -194,7 +194,7 @@ describe('public Call receipt projection', () => {
     })
 
     expect(view.complete).toBe(false)
-    expect(view.statusLabel).toBe('Provider call in progress')
+    expect(view.statusLabel).toBe('Provider Call in progress')
     expect(view.stages.find(({ id }) => id === 'reserved')).toMatchObject({ state: 'current' })
     expect(view.stages.find(({ id }) => id === 'submitted')).toMatchObject({ state: 'complete' })
     expect(view.stages.find(({ id }) => id === 'settled')).toMatchObject({ state: 'pending' })
@@ -251,6 +251,7 @@ describe('public Call receipt projection', () => {
     expect(view.statusLabel).toBe('Needs review')
     expect(view.complete).toBe(false)
     expect(purchaseStatusLabel(input)).toBe('Open — outcome uncertain')
+    expect(view.stages.find(({ id }) => id === 'settled')).toMatchObject({ state: 'attention' })
   })
 
   it('answers the five recovery questions for an uncertain paid outcome', () => {

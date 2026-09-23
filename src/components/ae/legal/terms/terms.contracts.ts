@@ -15,7 +15,7 @@ export const termsSections = [
     id: 'agreement',
     heading: 'Scope and agreement',
     body: [
-      'These terms govern Agentic Economy’s website and platform: business accounts, agent access, service discovery, prepaid AUD credit, paid requests, usage records and provider services. ‘AE’, ‘we’ and ‘us’ mean Agentic Economy. The service agreement identifies the legal entity supplying your services. ‘Customer’ means the individual or organisation purchasing access or services; an authorised agent acts for that customer.',
+      'These terms govern Agentic Economy’s website and platform: business accounts, Agent access, Tool discovery, prepaid AUD Credit, Calls, usage records and Provider Tools. ‘AE’, ‘we’ and ‘us’ mean Agentic Economy. The service agreement identifies the legal entity supplying your Tools. ‘Customer’ means the individual or organisation purchasing access or Tools; an authorised Agent acts for that Customer.',
       'Visiting this website does not open an account or authorise a purchase. The platform provisions apply when the customer accepts these terms during onboarding or signs an order form. Features become available only as expressly offered; examples and roadmaps are not commitments to deliver a particular feature or integration.',
       'An accepted order form may specify the services, commercial arrangements and expressly agreed departures from these terms. A data-processing agreement governs conflicting provisions concerning customer personal information. Mandatory legal rights prevail over every document. Third-party conditions apply only where disclosed and agreed before the relevant purchase.',
     ],
@@ -32,7 +32,7 @@ export const termsSections = [
     id: 'agents',
     heading: 'Agent authority and spending controls',
     body: [
-      'The customer decides what work an agent may perform, which services it may use and how much it may spend. Adding credit does not grant an agent spending authority. Authorisation must come from the customer’s configured permissions or other expressly agreed Spending policy. The customer is responsible for configuring the Spending policy for its workflow and deciding the level of oversight its work requires.',
+      'The Customer decides what work an Agent may perform, which Tools it may use and how much it may spend. Adding Credit does not grant an Agent spending authority. Authorisation must come from the Customer’s configured permissions or other expressly agreed Spending policy. The Customer is responsible for configuring the Spending policy for its workflow and deciding the level of oversight its work requires.',
       'AE will apply the spending controls it has agreed to enforce. The control settings describe their scope, units, reset periods and treatment of reserved or concurrent spending. A budget is not a guarantee of output quality or a substitute for restrictions on the agent’s behaviour outside AE.',
       'Customers may revoke credentials or change permissions using the available controls. Revocation prevents new authorisations once effective in the service; it may not cancel requests already authorised or obligations already incurred. AE will identify that boundary and provide a way to report a control failure. Disputed or unauthorised charges are assessed on the evidence, including AE’s compliance with the Spending policy.',
     ],
@@ -41,7 +41,7 @@ export const termsSections = [
     id: 'services',
     heading: 'Discovery, providers and purchases',
     body: [
-      'Discovery records, including x402 Bazaar metadata, describe services that may be available in the ecosystem. A listing alone does not establish compatibility, verification, endorsement or availability through AE. Before a paid request, the service offer identifies the supplying party, AE’s role, the service description, price or pricing basis, relevant data handling and material restrictions.',
+      'Discovery records, including x402 Bazaar metadata, describe Tools that may be available in the ecosystem. A listing alone does not establish compatibility, verification, endorsement or availability through Agentic Economy. Before a purchase, the service offer identifies the Provider, Agentic Economy’s role, the Tool description, price or pricing basis, relevant data handling and material restrictions.',
       'AE may supply a service itself, resell a provider’s service or facilitate a direct purchase, as stated in the applicable offer. Where AE is the seller, AE remains accountable for its supply obligations. Where a provider contracts directly with the customer, the disclosed provider terms govern that supply without removing AE’s responsibility for its own service.',
       'A request may involve separate authorisation, payment, execution and delivery stages. A payment record does not by itself prove successful delivery, and an output does not by itself establish final payment status. Usage records must distinguish those facts. Customers should consult request status before retrying an uncertain purchase.',
     ],

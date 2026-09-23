@@ -14,7 +14,7 @@ export function SupportStatusSection({ callRef }: SupportStatusSectionProps) {
   return (
     <AeCollectionRail
       title="Continue from the current status"
-      deck="The original Call shows its current status and next action. If the result is uncertain, check that Call before trying again."
+      deck="Open the current status and follow the next action shown there."
       className="scroll-mt-anchor"
     >
       {callRef.kind === 'malformed' ? (
@@ -25,14 +25,14 @@ export function SupportStatusSection({ callRef }: SupportStatusSectionProps) {
           <Link
             to="/calls/$callRef"
             params={{ callRef: callRef.value }}
-            className={cn(buttonVariants(), 'min-h-touch w-full sm:w-auto')}
+            className={cn(buttonVariants({ variant: 'outline' }), 'min-h-touch')}
           >
             {OPEN_CALL_LABEL}
           </Link>
         ) : (
           <Link
             to="/activity"
-            className={cn(buttonVariants(), 'min-h-touch w-full sm:w-auto')}
+            className={cn(buttonVariants({ variant: 'outline' }), 'min-h-touch')}
           >
             {OPEN_CALLS_LABEL}
           </Link>

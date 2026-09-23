@@ -41,6 +41,24 @@ The future supply side includes specialist businesses, data owners, professional
 contributors, machine operators and other agents, not only conventional API
 vendors. Managed x402 purchasing is the entry, not the limit of the vision.
 
+**Market formation clarified with Joel: 2026-09-21.** Building the Australian
+agentic economy is the reason for the product. Existing x402 supply provides
+the starting inventory while customers learn what their agents can buy. AUD
+access and a clear Australian billing relationship make that supply accessible;
+discovery and useful examples help customers recognise where it can contribute
+to their work. This addresses the initial supply gap without requiring Aecon to
+recruit a new Provider for every first use case. It does not establish demand
+or repeat use on its own.
+
+Do not prematurely constrain the market to one professional sector or service
+package. Property, audit, financial services and other specialist capabilities
+are directions to explore as usage reveals demand. Buyers becoming Providers,
+and Providers packaging expertise with purchased Tools, are paths to grow the
+market rather than prerequisites for the entry release. Look for customers
+discovering a useful capability, completing a purchase and returning, then for
+Providers reaching that demand. A narrow supported execution scope does not
+require a narrow sector thesis.
+
 Assess intelligence such as Jev by the friction it removes from these journeys:
 successful matching, fewer agent turns, time to usable results, Provider
 activation and useful repeat purchases. Delivery verification is a minor

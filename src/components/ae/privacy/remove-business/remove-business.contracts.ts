@@ -1,11 +1,9 @@
 import type { FormEvent, RefObject } from 'react'
-import type { LucideIcon } from 'lucide-react'
-import { CopyXIcon, FileWarningIcon, StoreIcon } from 'lucide-react'
 
 import type { RemovalDisputeInput } from '@/modules/security/removal-dispute.functions'
 
 export const removalReasonOptions = [
-  { value: 'privacy_removal_requested', label: 'Remove Provider profile' },
+  { value: 'privacy_removal_requested', label: 'Remove Business' },
   { value: 'ownership_contested', label: 'Provider ownership issue' },
   { value: 'duplicate_or_impersonation', label: 'Duplicate or impersonation' },
   { value: 'unsafe_or_inaccurate', label: 'Incorrect Tool or Provider facts' },
@@ -16,37 +14,7 @@ export const removalRequestCopy = {
   referenceSupport: 'Quote this reference and status if you contact support.',
 } as const
 
-export const correctionPaths = [
-  {
-    icon: FileWarningIcon,
-    label: 'Details',
-    title: 'Fix published facts',
-    body: 'Wrong Tool, price, readiness, access, or Provider information.',
-  },
-  {
-    icon: StoreIcon,
-    label: 'Owner',
-    title: 'Resolve Provider ownership',
-    body: 'The profile is yours, contested, or attached to the wrong Provider.',
-  },
-  {
-    icon: CopyXIcon,
-    label: 'Remove',
-    title: 'Remove or merge',
-    body: 'Duplicate, impersonation, or a Provider profile that should come down.',
-  },
-] as const satisfies ReadonlyArray<{
-  icon: LucideIcon
-  label: string
-  title: string
-  body: string
-}>
-
 export type RemoveBusinessFormValue = RemovalDisputeInput
-
-export type CorrectionPathCardsProps = Readonly<{
-  paths: typeof correctionPaths
-}>
 
 export type RemovalRequestFormProps = Readonly<{
   value: RemoveBusinessFormValue

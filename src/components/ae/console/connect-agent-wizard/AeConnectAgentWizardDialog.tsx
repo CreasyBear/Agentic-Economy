@@ -68,6 +68,8 @@ export function AeConnectAgentWizardDialog({
             <AgentNameField
               value={view.name}
               disabled={view.isSubmitting}
+              invalid={view.nameInvalid}
+              inputRef={wizard.nameInputRef}
               onChange={wizard.handleNameChange}
             />
 
@@ -115,7 +117,7 @@ export function AeConnectAgentWizardDialog({
             >
               Cancel
             </Button>
-            <Button type="submit" disabled={!view.isNameValid || view.isSubmitting}>
+            <Button type="submit" disabled={view.isSubmitting}>
               {view.isSubmitting ? 'Connecting…' : 'Connect an Agent'}
             </Button>
           </DialogFooter>

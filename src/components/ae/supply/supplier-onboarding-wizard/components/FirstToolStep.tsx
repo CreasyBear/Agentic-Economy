@@ -30,7 +30,7 @@ export function FirstToolStep() {
           to="/owner/operations/new"
           className={cn(buttonVariants(), 'gap-2 min-h-touch mt-2', TACTILE)}
         >
-          <span>Import OpenAPI / MCP Tool</span>
+          <span>Add Tool</span>
           <ArrowRightIcon className="size-4" />
         </Link>
       </div>

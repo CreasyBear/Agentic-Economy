@@ -129,14 +129,13 @@ describe('AeOwnerOfferingsList (W-34)', () => {
   it('T4: renders quick actions with accessible labels, links, and tactile press class', () => {
     render(<AeOwnerOfferingsList offerings={testTools} />)
 
-    const testRun = screen.getAllByRole('link', { name: 'Test Run for Australian Tax Calculator' })[0]
-    expect(testRun).toBeDefined()
-    expect(testRun?.getAttribute('href')).toBe('/owner/operations/tax-calculator')
-    expect(testRun?.className).toContain('active:scale-[0.98]')
+    const openTool = screen.getAllByRole('link', { name: 'Open Tool for Australian Tax Calculator' })[0]
+    expect(openTool).toBeDefined()
+    expect(openTool?.getAttribute('href')).toBe('/owner/operations/tax-calculator')
+    expect(openTool?.className).toContain('active:scale-[0.96]')
 
-    const activity = screen.getAllByRole('link', { name: 'View logs for Australian Tax Calculator' })[0]
-    expect(activity).toBeDefined()
-    expect(activity?.getAttribute('href')).toBe('/activity')
+    expect(screen.queryByRole('link', { name: 'Test Run for Australian Tax Calculator' })).toBeNull()
+    expect(screen.queryByRole('link', { name: 'View logs for Australian Tax Calculator' })).toBeNull()
 
     expect(TACTILE_PRESS_CLASS).toContain('motion-reduce:active:scale-100')
   })
@@ -195,7 +194,7 @@ describe('AeOwnerOfferingsList (W-34)', () => {
     expect(onFilterChange).toHaveBeenCalledWith('')
   })
 
-  it('T7: compact list shows canonical badges, price, Calls, and quick actions', () => {
+  it('T7: compact list shows canonical badges, price, Calls, and one row exit', () => {
     render(<AeOwnerOfferingsList offerings={testTools} />)
 
     const compactList = screen.getByTestId('provider-workspace-compact-list')
@@ -208,7 +207,8 @@ describe('AeOwnerOfferingsList (W-34)', () => {
     expect(within(firstRow).getByText('OpenAPI')).toBeInTheDocument()
     expect(within(firstRow).getByText('A$0.10 / call')).toBeInTheDocument()
     expect(within(firstRow).getByText('1,420')).toBeInTheDocument()
-    expect(within(firstRow).getByRole('link', { name: 'Test Run for Australian Tax Calculator' })).toBeInTheDocument()
-    expect(within(firstRow).getByRole('link', { name: 'View logs for Australian Tax Calculator' })).toBeInTheDocument()
+    expect(within(firstRow).getByRole('link', { name: 'Open Tool for Australian Tax Calculator' })).toBeInTheDocument()
+    expect(within(firstRow).queryByRole('link', { name: 'Test Run for Australian Tax Calculator' })).toBeNull()
+    expect(within(firstRow).queryByRole('link', { name: 'View logs for Australian Tax Calculator' })).toBeNull()
   })
 })

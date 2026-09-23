@@ -71,8 +71,8 @@ describe('AeToolTestPlayground', () => {
     expect(screen.getByRole('heading', { name: /interactive test playground/i })).toBeTruthy()
     expect(screen.getByText(/zero-cost sandbox probe/i)).toBeTruthy()
     expect(screen.getByText(/never creates quotes, charges, or buyer balance movements/i)).toBeTruthy()
-    expect(screen.getByText(/Simulation Mode: Zero credit deducted/i)).toBeTruthy()
-    expect(screen.getByRole('button', { name: /send test call/i })).toBeTruthy()
+    expect(screen.getByText(/Simulation mode: Zero credit deducted/i)).toBeTruthy()
+    expect(screen.getByRole('button', { name: /recheck source/i })).toBeTruthy()
   })
 
   it('reserves diagnostic and response pane heights before send', () => {
@@ -99,11 +99,11 @@ describe('AeToolTestPlayground', () => {
 
     const loadButton = screen.getByRole('button', { name: /load example arguments/i })
     const resetButton = screen.getByRole('button', { name: /reset to defaults/i })
-    const sendButton = screen.getByRole('button', { name: /send test call/i })
+    const sendButton = screen.getByRole('button', { name: /recheck source/i })
 
-    expect(loadButton.className).toContain('active:scale-[0.98]')
-    expect(resetButton.className).toContain('active:scale-[0.98]')
-    expect(sendButton.className).toContain('active:scale-[0.98]')
+    expect(loadButton.className).toContain('active:scale-[0.96]')
+    expect(resetButton.className).toContain('active:scale-[0.96]')
+    expect(sendButton.className).toContain('active:scale-[0.96]')
     expect(TACTILE).toContain('motion-reduce:transition-none')
   })
 
@@ -124,7 +124,7 @@ describe('AeToolTestPlayground', () => {
       />,
     )
 
-    fireEvent.click(screen.getByRole('button', { name: /send test call/i }))
+    fireEvent.click(screen.getByRole('button', { name: /recheck source/i }))
 
     await waitFor(() => expect(onSendTestRequest).toHaveBeenCalledTimes(1))
     expect(await screen.findByText(/200 OK/i)).toBeTruthy()
@@ -152,7 +152,7 @@ describe('AeToolTestPlayground', () => {
       />,
     )
 
-    fireEvent.click(screen.getByRole('button', { name: /send test call/i }))
+    fireEvent.click(screen.getByRole('button', { name: /recheck source/i }))
 
     await waitFor(() => expect(onSendTestRequest).toHaveBeenCalledTimes(1))
     expect(await screen.findByText(/502 Bad Gateway/i)).toBeTruthy()
@@ -175,7 +175,7 @@ describe('AeToolTestPlayground', () => {
     fireEvent.change(screen.getByLabelText(/input parameters \(json\)/i), {
       target: { value: '{"includeTax": true}' },
     })
-    fireEvent.click(screen.getByRole('button', { name: /send test call/i }))
+    fireEvent.click(screen.getByRole('button', { name: /recheck source/i }))
 
     expect(await screen.findByText(/Payload does not match schema/i)).toBeTruthy()
     expect(screen.getByText(/A\$0\.00 affected — dry run probe blocked/i)).toBeTruthy()
@@ -199,7 +199,7 @@ describe('AeToolTestPlayground', () => {
     fireEvent.change(screen.getByLabelText(/input parameters \(json\)/i), {
       target: { value: '{not-json' },
     })
-    fireEvent.click(screen.getByRole('button', { name: /send test call/i }))
+    fireEvent.click(screen.getByRole('button', { name: /recheck source/i }))
 
     expect(await screen.findByText(/Invalid JSON format/i)).toBeTruthy()
     expect(screen.getByText(/A\$0\.00 affected — dry run probe blocked/i)).toBeTruthy()
@@ -257,7 +257,7 @@ describe('AeToolTestPlayground', () => {
       />,
     )
 
-    fireEvent.click(screen.getByRole('button', { name: /send test call/i }))
+    fireEvent.click(screen.getByRole('button', { name: /recheck source/i }))
 
     await waitFor(() => expect(onSendTestRequest).toHaveBeenCalledTimes(1))
     expect(await screen.findByText(/Provider endpoint simulation failed/i)).toBeTruthy()
@@ -280,7 +280,7 @@ describe('AeToolTestPlayground', () => {
       />,
     )
 
-    fireEvent.click(screen.getByRole('button', { name: /send test call/i }))
+    fireEvent.click(screen.getByRole('button', { name: /recheck source/i }))
     await waitFor(() => expect(onSendTestRequest).toHaveBeenCalledTimes(1))
 
     const copyButton = await screen.findByRole('button', { name: /copy response/i })

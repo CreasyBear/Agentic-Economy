@@ -12,20 +12,19 @@ export type OnboardingWizardStep = 1 | 2
 export const ONBOARDING_ROLE_COPY = {
   buyer: {
     label: 'Buy with an Agent',
-    description:
-      'Unlocks Market, Agents, Credit, and Call records. You can change this in Settings.',
+    description: 'Unlocks Market, Agents, Credit, and Call records.',
   },
   supplier: {
     label: 'Provide a Tool',
-    description:
-      'Unlocks Provider Operations to publish Tools and manage Calls. You can change this in Settings.',
+    description: 'Unlocks Provider Operations to publish Tools and manage Calls.',
   },
 } as const satisfies Record<
   OnboardingRoleIntent,
   Readonly<{ label: string; description: string }>
 >
 
-export const ONBOARDING_SKIP_HELPER = 'Skip: you can set this later in Settings'
+export const ONBOARDING_ROLE_REQUIRED = 'Choose a role to continue.'
+export const ONBOARDING_NAME_REQUIRED = 'Enter a workspace name.'
 
 export function onboardingCompletionDescription(
   redirect: string | undefined,
@@ -42,14 +41,14 @@ export type OnboardingSurface =
   | Readonly<{
       kind: 'role'
       roleIntent: OnboardingRoleIntent | null
-      continueDisabled: boolean
+      roleInvalid: boolean
     }>
   | Readonly<{
       kind: 'workspace'
       workspaceName: string
       finishDisabled: boolean
-      skipDisabled: boolean
       submitting: boolean
+      nameInvalid: boolean
       completionDescription: string
     }>
 
@@ -58,11 +57,12 @@ export type UseOnboardingPageInput = AeOnboardingPageProps
 export type UseOnboardingPageResult = Readonly<{
   surface: OnboardingSurface
   workspaceInputRef: RefObject<HTMLInputElement | null>
+  buyerRadioRef: RefObject<HTMLButtonElement | null>
+  supplierRadioRef: RefObject<HTMLButtonElement | null>
   onRoleIntentChange: (intent: OnboardingRoleIntent) => void
   onContinue: () => void
   onWorkspaceNameChange: (value: string) => void
   onBack: () => void
-  onSkip: () => void
   onFinish: () => void
 }>
 
@@ -72,7 +72,9 @@ export type OnboardingStepIndicatorProps = Readonly<{
 
 export type OnboardingRoleStepProps = Readonly<{
   roleIntent: OnboardingRoleIntent | null
-  continueDisabled: boolean
+  roleInvalid: boolean
+  buyerRadioRef: RefObject<HTMLButtonElement | null>
+  supplierRadioRef: RefObject<HTMLButtonElement | null>
   onRoleIntentChange: (intent: OnboardingRoleIntent) => void
   onContinue: () => void
 }>
@@ -80,12 +82,11 @@ export type OnboardingRoleStepProps = Readonly<{
 export type OnboardingWorkspaceStepProps = Readonly<{
   workspaceName: string
   finishDisabled: boolean
-  skipDisabled: boolean
   submitting: boolean
+  nameInvalid: boolean
   completionDescription: string
   workspaceInputRef: RefObject<HTMLInputElement | null>
   onWorkspaceNameChange: (value: string) => void
   onBack: () => void
-  onSkip: () => void
   onFinish: () => void
 }>

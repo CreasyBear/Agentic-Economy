@@ -40,7 +40,7 @@ export function AeProviderListingPage({
       <AePageHeader
         eyebrow="Provider"
         title={catalog.name}
-        description="Compare this provider’s listed tools, exact prices, and access paths."
+        description="Compare this provider’s listed offerings, exact prices, and access paths."
         actions={
           <nav aria-label="Breadcrumb">
             <ListingBackLink
@@ -52,22 +52,22 @@ export function AeProviderListingPage({
         meta={`${offerings.length} listed · ${readyCount} ready now`}
       />
       <article className="ae-rail grid gap-section">
-        <ListingFirstScreen catalog={catalog} offerings={offerings} />
+        <ListingFirstScreen catalog={catalog} />
 
         <div className="grid gap-section lg:grid-cols-[minmax(0,1fr)_18rem] lg:items-start">
           <section aria-labelledby="provider-tools-title" className="min-w-0 grid gap-related">
             <div className="grid gap-intra">
-              <h2 id="provider-tools-title" className="text-lg font-medium text-foreground">Listed tools</h2>
-              <p className="text-sm text-muted-foreground">Inspect the price, access path, and current readiness before calling.</p>
+              <h2 id="provider-tools-title" className="text-lg font-medium text-foreground">Offerings</h2>
+              <p className="text-sm text-muted-foreground">Inspect the price, access path, and current readiness before you open one.</p>
             </div>
 
           {offerings.length === 0 ? (
             <div className="grid gap-intra border-y border-border py-section">
-              <p className="font-medium text-foreground">No tools listed</p>
+              <p className="font-medium text-foreground">No offerings listed.</p>
               <p className="text-sm text-muted-foreground">This provider profile remains visible while its catalogue is prepared.</p>
             </div>
           ) : (
-            <ul className="m-0 divide-y divide-border border-y border-border p-0" aria-label={`${catalog.name} tools`}>
+            <ul className="m-0 divide-y divide-border border-y border-border p-0" aria-label={`${catalog.name} offerings`}>
               {offerings.map((offering) => (
                 <OperationRow key={offering.offeringRef} offering={offering} catalog={catalog} />
               ))}
@@ -107,7 +107,7 @@ export function AeProviderListingPage({
                 rel="noreferrer"
                 className={cn(buttonVariants({ variant: 'outline' }), 'min-h-touch w-full justify-between')}
               >
-                Provider website <ArrowUpRightIcon aria-hidden="true" />
+                Provider website (opens in a new tab) <ArrowUpRightIcon aria-hidden="true" />
               </a>
             )}
           </section>
@@ -137,21 +137,14 @@ export function AeProviderListingPage({
 
 export function ListingFirstScreen({
   catalog,
-  offerings = catalog.offerings,
 }: {
   catalog: PublicBusinessCatalogApiV2Dto
-  offerings?: readonly PublicListingDto[]
 }) {
-  const readyCount = offerings.filter((offering) => offering.support.aeSupportedAction).length
-
   return (
     <header className="grid gap-4" aria-label="Provider facts">
       <p className="text-sm text-muted-foreground">{catalog.category}</p>
       <AeFactList
-        className="sm:grid-cols-3"
         facts={[
-          { label: 'Tools', value: String(offerings.length), mono: true },
-          { label: getStatusPresentation('ready_now').label, value: String(readyCount), mono: true },
           {
             label: 'Last indexed',
             value: <time dateTime={timestampIso(catalog.observedAt)}>{formatTimestamp(catalog.observedAt)}</time>,
@@ -208,9 +201,9 @@ function OperationRow({ offering, catalog }: { offering: PublicListingDto; catal
             href={operationHref}
             target="_blank"
             rel="noreferrer"
-            className={cn(buttonVariants({ size: 'sm' }), 'min-h-touch justify-between')}
+            className={cn(buttonVariants({ variant: 'outline', size: 'sm' }), 'min-h-touch justify-between')}
           >
-            Open provider route <ArrowUpRightIcon aria-hidden="true" />
+            Open provider route for {offering.name} (opens in a new tab) <ArrowUpRightIcon aria-hidden="true" />
           </a>
         )}
         {operationHref !== undefined || webHref === undefined ? null : (
@@ -220,12 +213,12 @@ function OperationRow({ offering, catalog }: { offering: PublicListingDto; catal
             rel="noreferrer"
             className={cn(buttonVariants({ variant: 'outline', size: 'sm' }), 'min-h-touch justify-between')}
           >
-            Open website <Globe2Icon aria-hidden="true" />
+            Open website for {offering.name} (opens in a new tab) <Globe2Icon aria-hidden="true" />
           </a>
         )}
         {operationHref !== undefined || webHref !== undefined || phoneHref === undefined ? null : (
           <a href={phoneHref} className={cn(buttonVariants({ variant: 'outline', size: 'sm' }), 'min-h-touch justify-between')}>
-            Call provider <PhoneIcon aria-hidden="true" />
+            Phone provider <PhoneIcon aria-hidden="true" />
           </a>
         )}
         {operationHref !== undefined || webHref !== undefined || phoneHref !== undefined ? null : (
@@ -301,7 +294,7 @@ function ListingBackLink({ from, threadId }: { from?: 'thread'; threadId?: strin
       to="/market"
       className={cn(buttonVariants({ variant: 'ghost', size: 'sm' }), 'min-h-touch px-2')}
     >
-      <ArrowLeftIcon aria-hidden="true" /> Browse Tools
+      <ArrowLeftIcon aria-hidden="true" /> Browse Market
     </Link>
   )
 }

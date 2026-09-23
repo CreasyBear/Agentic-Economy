@@ -1,6 +1,7 @@
 /**
  * @vitest-environment jsdom
  */
+import type * as ConvexReactModule from 'convex/react'
 import type { ReactNode } from 'react'
 import { cleanup, render, screen } from '@testing-library/react'
 import {
@@ -21,6 +22,12 @@ const clerkSignedIn = vi.hoisted(() => ({ value: false }))
 
 vi.mock('@/lib/observability/funnel-client', () => ({
   emitFunnelEventOnce: vi.fn(),
+}))
+
+// Vitest hoists the mock factory, so its shared helper must be loaded inside it.
+vi.mock('convex/react', async (importOriginal) => ({
+  ...(await importOriginal<typeof ConvexReactModule>()),
+  ...(await import('../../helpers/shell-convex-mock')).shellConvexMock,
 }))
 
 vi.mock('@/components/ae/command-panel', () => ({
@@ -91,7 +98,8 @@ describe('SidebarProvider scope (S-01)', () => {
     renderPublicShell()
 
     expect(document.querySelectorAll('[data-slot="sidebar-wrapper"]')).toHaveLength(1)
-    expect(screen.getByRole('navigation', { name: 'App navigation' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Workspace menu' })).toBeTruthy()
+    expect(screen.queryByRole('navigation', { name: 'App navigation' })).toBeNull()
   })
 
   it('renders isolated AeOperatorPage without SidebarProvider', () => {
@@ -123,7 +131,7 @@ describe('SidebarProvider scope (S-01)', () => {
       ),
     ).not.toThrow()
 
-    expect(screen.getByRole('heading', { level: 1, name: 'Tools' })).toBeTruthy()
+    expect(screen.getByText('Publish the exact tools agents can inspect and call.')).toBeTruthy()
     expect(document.querySelector('[data-slot="sidebar-wrapper"]')).toBeNull()
   })
 })

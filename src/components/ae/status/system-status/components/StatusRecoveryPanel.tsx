@@ -19,7 +19,7 @@ export function StatusRecoveryPanel({ recovery }: StatusRecoveryPanelProps) {
       </div>
       <Link
         to={recovery.href}
-        className={cn(buttonVariants(), 'min-h-touch w-full sm:w-auto')}
+        className={cn(buttonVariants({ variant: 'outline' }), 'min-h-touch')}
       >
         {recovery.label}
       </Link>

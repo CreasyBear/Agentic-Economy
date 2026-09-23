@@ -18,6 +18,44 @@ export function DevelopersApiPage({ page }: DevelopersApiPageProps) {
       title={DEVELOPERS_API_COPY.title}
       description={DEVELOPERS_API_COPY.description}
     >
+      <AeSiteSection labelledBy="api-requests-heading" scheme="canvas">
+        <div className="grid gap-page">
+          <div className="grid gap-intra">
+            <AeSiteHeading as="h2" size="md" id="api-requests-heading">
+              {DEVELOPERS_API_COPY.operationsHeading}
+            </AeSiteHeading>
+            <AeSiteBody muted size="sm">{DEVELOPERS_API_COPY.operationsDescription}</AeSiteBody>
+          </div>
+          {page.operationGroups.map((group) => (
+            <div key={group.tag} className="grid gap-related">
+              <AeSiteHeading as="h3" size="sm">{group.tag}</AeSiteHeading>
+              <div className="grid gap-related xl:grid-cols-2">
+                {group.operations.map((operation) => (
+                  <Card key={operation.operationId} className="min-w-0">
+                    <CardContent className="grid min-w-0 gap-related">
+                      <div className="flex min-w-0 flex-wrap items-center gap-2">
+                        <Badge variant="outline">{operation.method}</Badge>
+                        <code className="min-w-0 break-all text-xs text-muted-foreground">{operation.path}</code>
+                      </div>
+                      <div className="grid gap-1">
+                        <AeSiteHeading as="h4" size="xs">{operation.summary}</AeSiteHeading>
+                        <code className="text-xs text-muted-foreground">{operation.operationId}</code>
+                      </div>
+                      <AeCopyCommand
+                        comfortable
+                        prompt={false}
+                        label={`${operation.method} ${operation.path} cURL`}
+                        code={operation.curl}
+                      />
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      </AeSiteSection>
+
       <AeSiteSection labelledBy="api-setup-heading" rhythm="flush" scheme="surface">
         <div className="grid gap-page py-10 md:grid-cols-[minmax(0,2fr)_minmax(16rem,1fr)] md:py-12">
           <div className="grid content-start gap-related">
@@ -47,39 +85,6 @@ export function DevelopersApiPage({ page }: DevelopersApiPageProps) {
               </dd>
             </div>
           </dl>
-        </div>
-      </AeSiteSection>
-
-      <AeSiteSection labelledBy="api-requests-heading" scheme="canvas">
-        <div className="grid gap-page">
-          <div className="grid gap-intra">
-            <AeSiteHeading as="h2" size="md" id="api-requests-heading">
-              {DEVELOPERS_API_COPY.operationsHeading}
-            </AeSiteHeading>
-            <AeSiteBody muted size="sm">{DEVELOPERS_API_COPY.operationsDescription}</AeSiteBody>
-          </div>
-          <div className="grid gap-related xl:grid-cols-2">
-            {page.operations.map((operation) => (
-              <Card key={operation.operationId} className="min-w-0">
-                <CardContent className="grid min-w-0 gap-related">
-                  <div className="flex min-w-0 flex-wrap items-center gap-2">
-                    <Badge variant="outline">{operation.method}</Badge>
-                    <code className="min-w-0 break-all text-xs text-muted-foreground">{operation.path}</code>
-                  </div>
-                  <div className="grid gap-1">
-                    <AeSiteHeading as="h3" size="xs">{operation.summary}</AeSiteHeading>
-                    <code className="text-xs text-muted-foreground">{operation.operationId}</code>
-                  </div>
-                  <AeCopyCommand
-                    comfortable
-                    prompt={false}
-                    label={`${operation.method} ${operation.path} cURL`}
-                    code={operation.curl}
-                  />
-                </CardContent>
-              </Card>
-            ))}
-          </div>
         </div>
       </AeSiteSection>
 

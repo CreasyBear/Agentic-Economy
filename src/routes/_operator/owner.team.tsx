@@ -30,7 +30,7 @@ function OwnerTeamRoute() {
       <div className="ae-owner-team grid min-w-0 gap-8">
         <section className="grid min-w-0 gap-4">
           <h2 className="text-base font-medium tracking-tight text-foreground">
-            Canonical directory
+            Team
           </h2>
           <AeTeamDirectoryTable {...(directory !== undefined ? { directory } : {})} />
         </section>

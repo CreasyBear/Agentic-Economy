@@ -1550,6 +1550,12 @@
   {
     "visibility": "internal",
     "module": "capabilityToolCatalog",
+    "method": "presentSearch",
+    "kind": "action"
+  },
+  {
+    "visibility": "internal",
+    "module": "capabilityToolCatalog",
     "method": "rerank",
     "kind": "action"
   },

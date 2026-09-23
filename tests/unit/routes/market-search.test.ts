@@ -45,7 +45,7 @@ describe("market entry metadata", () => {
     const buildHead = Route.options.head;
     if (typeof loader !== "function" || buildHead === undefined) throw new Error("market_metadata_missing");
     const loaderData = await loader({ deps: { ...filters } } as never);
-    const head = await buildHead({ loaderData } as never);
+    const head = await buildHead({ loaderData, match: { search: filters } } as never);
     expect(head).toMatchObject({
       links: [{ rel: "canonical", href: `${origin}/market` }],
       meta: expect.arrayContaining([{ property: "og:url", content: `${origin}/market` }]),

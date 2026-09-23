@@ -214,8 +214,7 @@ type WorkerOptions = Readonly<{
   paymentAttemptRead?: 'missing' | 'throw'
   releaseBeforeSubmissionRefused?: boolean
   preparePaymentErrorState?: 'possibly_submitted'
-  invalidOutputTransitionResult?: 'accepted' | 'refused' | 'throw'
-  invalidOutputLossResult?: 'settled' | 'refused' | 'throw'
+  invalidResultRemedyResult?: 'completed' | 'refused' | 'throw'
   consumeLeaseResult?: Readonly<{ kind: 'applied' }> | Readonly<{ kind: 'duplicate' }> | Readonly<{ kind: 'refused'; code: string }>
   currentTool?: (operation: PublishedTool) => PublishedTool
   releaseCurrentOperation?: (operation: PublishedTool) => PublishedTool
@@ -1445,6 +1444,11 @@ export function createWorker(kind: WorkerKind, options: WorkerOptions = {}): { c
           managedCallState = 'released'
           state.reconciliations.push(args)
           return { kind: 'settled' }
+        case 'moneyManagedCallRemedyActions:resolveInvalidResult':
+          if (options.invalidResultRemedyResult === 'throw') throw new Error('remedy interrupted')
+          return options.invalidResultRemedyResult === 'refused'
+            ? { kind: 'refused', code: 'credit_restoration_pending' }
+            : { kind: 'completed' }
         case 'moneyManagedCallLifecycle:settle':
           managedCallState = 'settled'
           return { kind: 'accepted', state: managedCallState, replayed: false }

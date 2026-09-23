@@ -126,7 +126,7 @@ describe('developer discovery route readback', () => {
 
     expect(readback.freshness).toMatchObject({
       state: 'current',
-      label: 'Discovery current',
+      label: 'Current',
     })
     expect(readback.publicFacts).toEqual([
       expect.objectContaining({
@@ -238,7 +238,7 @@ describe('developer discovery route readback', () => {
     expect(readback.catalogCount).toBe(1)
     expect(readback.freshness).toMatchObject({
       state: 'current',
-      label: 'Discovery current',
+      label: 'Current',
     })
     expect(readback.artifacts.every((artifact) => artifact.state === 'available')).toBe(true)
     expect(readback.routeHealth.every((route) => route.status === 'available' && route.freshness === 'current')).toBe(true)

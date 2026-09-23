@@ -1,3 +1,5 @@
+import type { Ref } from 'react'
+
 import type { Rule4Diagnostic } from '@/lib/ui/diagnostic'
 import type {
   AgentAccessKeyIssueResult,
@@ -25,6 +27,7 @@ export type ConnectAgentWizardViewState = Readonly<{
   name: string
   nameLength: number
   isNameValid: boolean
+  nameInvalid: boolean
   environment: ConnectAgentEnvironment
   authorityMode: ConnectAgentAuthorityMode
   perCallAmount: string
@@ -38,6 +41,8 @@ export type ConnectAgentWizardViewState = Readonly<{
 export type AgentNameFieldProps = Readonly<{
   value: string
   disabled: boolean
+  invalid?: boolean
+  inputRef?: Ref<HTMLInputElement>
   onChange: (value: string) => void
 }>
 

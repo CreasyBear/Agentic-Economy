@@ -30,12 +30,12 @@ export function DirectoryHero({ home, children, compact = false, compactTitle = 
     </div>
     <Link to={marketPath} search={{ query: creative?.query ?? 'image generation creative' }} className="group relative isolate flex min-h-44 flex-col justify-between overflow-hidden rounded-2xl bg-foreground p-5 text-background focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring md:min-h-80 md:p-6 lg:min-h-96 xl:min-h-[27rem] xl:p-8">
       {/* Approved aecon.ai editorial artwork represents a collection, not a Tool output. */}
-      <img src="/media/market/lunar-limb-medium.webp" width={800} height={800} alt="" className="absolute inset-0 -z-20 size-full object-cover transition-transform duration-700 group-hover:scale-105 motion-reduce:transition-none" />
+      <img src="/media/market/lunar-limb-medium.webp" width={800} height={800} alt="" className="absolute inset-0 -z-20 size-full object-cover transition-transform duration-700 motion-safe:group-hover:scale-105 motion-reduce:transition-none" />
       <div className="absolute inset-0 -z-10 bg-linear-to-t from-foreground/95 via-foreground/20 to-foreground/30" />
       <div className="flex items-start justify-between gap-4"><Badge variant="outline" className="border-background/40 text-background">Explore creative Tools</Badge><ArrowUpRightIcon className="size-6" aria-hidden="true" /></div>
       <div className="mt-5 grid gap-5 md:mt-12">
         <h2 className="max-w-xs text-2xl leading-tight font-light tracking-tight lg:text-3xl xl:text-4xl">From possibility<br />to something real.</h2>
-        <div className="hidden flex-wrap items-center justify-between gap-4 border-t border-background/25 pt-4 md:flex"><p className="max-w-56 text-sm leading-relaxed text-background/85">Image generation and creative services, one Call away.</p>{creative?.items.length ? <div className="flex gap-2" aria-label="Tools in this collection">{creative.items.filter(entry => entry.iconUrl !== undefined).slice(0, 3).map(entry => <DirectoryToolIdentity key={entry.resource} entry={entry} className="size-9 rounded-lg" />)}</div> : null}</div>
+        <div className="hidden flex-wrap items-center justify-between gap-4 border-t border-background/25 pt-4 md:flex"><p className="max-w-56 text-sm leading-relaxed text-background/85">Image generation and creative services from listed Tools.</p>{creative?.items.length ? <div className="flex gap-2" aria-label="Tools in this collection">{creative.items.filter(entry => entry.iconUrl !== undefined).slice(0, 3).map(entry => <DirectoryToolIdentity key={entry.resource} entry={entry} className="size-9 rounded-lg" />)}</div> : null}</div>
       </div>
     </Link>
   </section>

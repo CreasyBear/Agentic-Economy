@@ -1,13 +1,23 @@
+import { Field, FieldDescription, FieldLabel } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
 
 import type { AgentNameFieldProps } from '../connect-agent-wizard.contracts'
 
-export function AgentNameField({ value, disabled, onChange }: AgentNameFieldProps) {
+const HELPER_ID = 'agent-name-helper'
+const COUNT_ID = 'agent-name-count'
+
+export function AgentNameField({
+  value,
+  disabled,
+  invalid = false,
+  inputRef,
+  onChange,
+}: AgentNameFieldProps) {
   return (
-    <div className="grid gap-2">
-      <Label htmlFor="agent-name">Agent name</Label>
+    <Field className="grid gap-2">
+      <FieldLabel htmlFor="agent-name">Agent name</FieldLabel>
       <Input
+        ref={inputRef}
         id="agent-name"
         placeholder="e.g. Research Bot"
         value={value}
@@ -15,16 +25,18 @@ export function AgentNameField({ value, disabled, onChange }: AgentNameFieldProp
         autoFocus
         autoComplete="off"
         disabled={disabled}
+        aria-invalid={invalid || undefined}
+        aria-describedby={`${HELPER_ID} ${COUNT_ID}`}
         onChange={(e) => onChange(e.target.value)}
       />
       <div className="flex items-baseline justify-between gap-2">
-        <p className="text-xs text-muted-foreground">
+        <FieldDescription id={HELPER_ID} className="text-xs text-muted-foreground">
           Display name for your agent in directory and call activity logs.
-        </p>
-        <span className="shrink-0 text-xs text-muted-foreground tabular-nums">
+        </FieldDescription>
+        <span id={COUNT_ID} className="shrink-0 text-xs text-muted-foreground tabular-nums">
           {value.length}/80
         </span>
       </div>
-    </div>
+    </Field>
   )
 }

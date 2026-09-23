@@ -54,11 +54,13 @@ describe('TaxProfileForm', () => {
       expect(screen.getByText(/A\$0\.00 affected — tax profile not saved/i)).toBeTruthy()
     })
 
-    const saveButton = screen.getByRole('button', { name: /save/i })
-    expect(saveButton).toBeDisabled()
+    const saveButton = screen.getByRole('button', { name: /^save$/i })
+    expect(saveButton).not.toBeDisabled()
 
     fireEvent.click(saveButton)
     expect(onSubmit).not.toHaveBeenCalled()
+    expect(screen.getByLabelText(/^abn$/i)).toHaveAttribute('aria-invalid', 'true')
+    expect(screen.getByLabelText(/^abn$/i)).toHaveAttribute('aria-describedby', 'tax-profile-diagnostic')
   })
 
   it('U3: spaced valid ABN clears the validation diagnostic', async () => {
@@ -76,7 +78,7 @@ describe('TaxProfileForm', () => {
     })
   })
 
-  it('U4: empty legal name disables save', () => {
+  it('U4: empty legal name blocks submit without calling onSubmit', () => {
     const onSubmit = vi.fn()
     render(<TaxProfileForm initialData={{ kind: 'missing', revision: 0 }} onSubmit={onSubmit} />)
 
@@ -85,8 +87,15 @@ describe('TaxProfileForm', () => {
     fireEvent.change(screen.getByLabelText(/city\/locality/i), { target: { value: 'Sydney' } })
     fireEvent.change(screen.getByLabelText(/postal code/i), { target: { value: '2000' } })
 
-    expect(screen.getByRole('button', { name: /save/i })).toBeDisabled()
+    const saveButton = screen.getByRole('button', { name: /^save$/i })
+    expect(saveButton).not.toBeDisabled()
+    fireEvent.click(saveButton)
     expect(onSubmit).not.toHaveBeenCalled()
+    expect(screen.getByLabelText(/legal business name/i)).toHaveAttribute('aria-invalid', 'true')
+    expect(screen.getByLabelText(/legal business name/i)).toHaveAttribute(
+      'aria-describedby',
+      'tax-profile-diagnostic',
+    )
   })
 
   it('U5: valid submission calls onSubmit with normalized payload', async () => {

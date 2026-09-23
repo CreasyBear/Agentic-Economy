@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
@@ -83,6 +83,8 @@ export function AeMonthlySpendCeilingCard({
   )
   const [saving, setSaving] = useState(false)
   const [diagnostic, setDiagnostic] = useState<MonthlySpendCeilingDiagnostic | null>(null)
+  const [ceilingInvalid, setCeilingInvalid] = useState(false)
+  const ceilingInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     setEnabled(resolvedSettings.enabled)
@@ -123,10 +125,12 @@ export function AeMonthlySpendCeilingCard({
     setEnabled(resolvedSettings.enabled)
     setCeilingText(audInputTextFromUnits(BigInt(resolvedSettings.ceilingUnits)))
     setDiagnostic(null)
+    setCeilingInvalid(false)
   }
 
   function clearDiagnostic() {
     setDiagnostic(null)
+    setCeilingInvalid(false)
   }
 
   function applyPreset(presetId: MonthlySpendCeilingPresetId) {
@@ -181,7 +185,9 @@ export function AeMonthlySpendCeilingCard({
       if (nextUnits === undefined) {
         const diag = mapMonthlySpendCeilingDiagnostic('invalid_amount')
         setDiagnostic(diag)
+        setCeilingInvalid(true)
         toast.error(diag.whatHappened, { description: diag.nextStep })
+        ceilingInputRef.current?.focus()
         return
       }
     } else {
@@ -189,6 +195,7 @@ export function AeMonthlySpendCeilingCard({
     }
 
     setDiagnostic(null)
+    setCeilingInvalid(false)
     setSaving(true)
     try {
       await onSave({
@@ -218,9 +225,9 @@ export function AeMonthlySpendCeilingCard({
   }
 
   return (
-    <div className="grid gap-3 border-t border-border pt-4">
+    <div className="grid gap-3">
       <div>
-        <h3 className="font-medium">Organization monthly spending cap</h3>
+        <h3 className="text-sm font-medium">Organization monthly spending cap</h3>
       </div>
 
       <div className="min-h-[2.75rem]">
@@ -252,7 +259,7 @@ export function AeMonthlySpendCeilingCard({
             setDialogOpen(true)
           }}
         >
-          {resolvedSettings.enabled ? 'Edit Limit' : 'Set Limit'}
+          {resolvedSettings.enabled ? 'Edit limit' : 'Set limit'}
         </Button>
       </div>
 
@@ -293,33 +300,39 @@ export function AeMonthlySpendCeilingCard({
             </div>
           </fieldset>
 
-          <div className="flex items-center justify-between gap-4">
+          <button
+            type="button"
+            role="switch"
+            aria-checked={enabled}
+            aria-label="Monthly spending cap"
+            className={`flex min-h-touch w-full items-center justify-between gap-4 rounded-md text-left ${SWITCH_PRESS_CLASS}`}
+            data-state={enabled ? 'on' : 'off'}
+            onClick={() => {
+              setEnabled((current) => !current)
+              clearDiagnostic()
+            }}
+          >
             <span className="text-sm">Monthly spending cap</span>
-            <button
-              type="button"
-              role="switch"
-              aria-checked={enabled}
-              aria-label="Monthly spending cap"
-              className={`relative inline-flex h-6 w-11 shrink-0 rounded-full border border-input bg-muted transition-colors data-[state=on]:bg-primary ${SWITCH_PRESS_CLASS}`}
+            <span
+              className="relative inline-flex h-6 w-11 shrink-0 rounded-full border border-input bg-muted transition-colors data-[state=on]:bg-primary"
               data-state={enabled ? 'on' : 'off'}
-              onClick={() => {
-                setEnabled((current) => !current)
-                clearDiagnostic()
-              }}
+              aria-hidden="true"
             >
               <span
                 className="pointer-events-none block size-5 translate-x-0.5 rounded-full border border-border bg-background shadow-none transition-transform data-[state=on]:translate-x-[1.375rem]"
                 data-state={enabled ? 'on' : 'off'}
               />
-            </button>
-          </div>
+            </span>
+          </button>
 
           <div className="grid gap-2">
             <Label htmlFor="monthly-spend-ceiling-cap">Monthly cap (AUD)</Label>
             <Input
+              ref={ceilingInputRef}
               id="monthly-spend-ceiling-cap"
               inputMode="decimal"
               value={ceilingText}
+              aria-invalid={ceilingInvalid || undefined}
               onChange={(event) => {
                 setCeilingText(event.target.value)
                 clearDiagnostic()
@@ -337,6 +350,7 @@ export function AeMonthlySpendCeilingCard({
           <DialogFooter>
             <Button
               type="button"
+              variant="secondary"
               disabled={saving}
               className={PRIMARY_BUTTON_PRESS_CLASS}
               onClick={() => { void handleSave() }}

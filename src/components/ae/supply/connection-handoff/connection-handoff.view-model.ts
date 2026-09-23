@@ -11,7 +11,7 @@ export function projectConnectionHandoffPage(
   if (loaded.kind !== 'available') {
     return {
       title: CONNECTION_HANDOFF_COPY.pageTitle,
-      description: CONNECTION_HANDOFF_COPY.pageDescription,
+      description: CONNECTION_HANDOFF_COPY.unavailableDescription,
     }
   }
 

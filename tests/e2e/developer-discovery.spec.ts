@@ -15,15 +15,21 @@ test.describe('developer discovery', () => {
     await expect(page.getByRole('main')).toBeVisible()
     await expect(page.locator('#main-content')).toBeVisible()
     await expect(page.getByRole('heading', { name: 'Discovery status', level: 1 })).toBeVisible()
-    await expect(page.getByRole('link', { name: 'View schema status' })).toHaveAttribute('href', /\/api\/discovery\/schema$/)
-    await expect(page.getByRole('link', { name: 'View examples status' })).toHaveAttribute('href', /\/api\/discovery\/examples$/)
+    await expect(page.getByRole('link', { name: 'Open schema, Public catalog schema' })).toHaveAttribute(
+      'href',
+      /\/api\/discovery\/schema$/,
+    )
+    await expect(page.getByRole('link', { name: 'Open examples, Public catalog examples' })).toHaveAttribute(
+      'href',
+      /\/api\/discovery\/examples$/,
+    )
 
     const schemaRow = page.getByRole('region', { name: 'Public catalog schema' })
-    const artifactLink = schemaRow.getByRole('link', { name: 'View', exact: true })
+    const artifactLink = schemaRow.getByRole('link', { name: 'Open schema, Public catalog schema' })
     const artifactHref = await artifactLink.getAttribute('href')
     expect(artifactHref).not.toBeNull()
     if (artifactHref === null) throw new Error('Expected schema artifact href.')
-    await expect(schemaRow.getByText(/^(?:Fresh|Stale|Unavailable)$/)).toBeVisible()
+    await expect(schemaRow.getByText(/^(?:Current|Stale|Unavailable)$/)).toBeVisible()
     await expect(schemaRow.getByText(/^Checked /)).toBeVisible()
     await expect(schemaRow.getByText(new URL(artifactHref).origin, { exact: true })).toBeVisible()
     await expect(artifactLink).toHaveAttribute('href', /^https?:\/\//)

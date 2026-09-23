@@ -76,7 +76,7 @@ export function suggestNextAction(state: NextActionState): SuggestedNextAction {
   if (state.subject === 'provider') return providerNextAction(state)
   if (state.subject === 'connection') {
     return state.actor === 'buyer'
-      ? { label: 'Connect agent', kind: 'navigate', command: 'ae connect', href: '/for-agents' }
+      ? { label: 'Connect an Agent', kind: 'navigate', command: 'ae connect', href: '/for-agents' }
       : {
           label: 'Connect provider',
           kind: 'navigate',
@@ -122,7 +122,7 @@ function toolNextAction(
     }
   }
   if (state.state === 'connection_required') {
-    return { label: 'Connect agent', kind: 'navigate', command: 'ae connect', href: '/for-agents' }
+    return { label: 'Connect an Agent', kind: 'navigate', command: 'ae connect', href: '/for-agents' }
   }
   if (state.state === 'read_only') {
     return {

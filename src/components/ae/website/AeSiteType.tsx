@@ -3,7 +3,7 @@ import type { ReactNode } from 'react'
 import { cn } from '@/lib/utils'
 
 import { AeMarkedDivider } from './AeSiteMarks'
-export type AeSiteHeadingLevel = 'h1' | 'h2' | 'h3'
+export type AeSiteHeadingLevel = 'h1' | 'h2' | 'h3' | 'h4'
 export type AeSiteHeadingSize = 'xl' | 'lg' | 'md' | 'sm' | 'xs'
 
 type AeSiteHeadingProps = {
@@ -31,7 +31,10 @@ export function AeSiteHeading({
   className,
 }: AeSiteHeadingProps) {
   return (
-    <Tag id={id} className={cn('text-balance', sizeClass[size], className)}>
+    <Tag
+      id={id}
+      className={cn('text-balance', sizeClass[size], className)}
+    >
       {children}
     </Tag>
   )

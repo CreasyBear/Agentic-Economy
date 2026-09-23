@@ -29,9 +29,9 @@ export const CONNECTION_HANDOFF_COPY = {
     production: 'Production',
   },
   unavailableTitle: 'Connection link unavailable',
-  unavailableDescription: 'Return to Add Tool and reconnect.',
+  unavailableDescription: 'Return to Add Tool and start again.',
   expiredTitle: 'Connection link expired',
-  expiredDescription: 'Return to Add Tool and reconnect.',
+  expiredDescription: 'Return to Add Tool and start again.',
 } as const
 
 export type ConnectionHandoffSurface =
@@ -100,7 +100,7 @@ export function refusalCopy(code: string): string {
     case 'connection_conflict':
       return 'The Provider connection changed. Return to Add Tool and review the current connection.'
     default:
-      return 'AE could not confirm the connection. Try again.'
+      return 'Agentic Economy could not confirm the connection. Try again.'
   }
 }
 

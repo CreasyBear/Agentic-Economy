@@ -11,9 +11,10 @@ import {
   type SupplierOnboardingWizardViewState,
 } from './supplier-onboarding-wizard.contracts'
 import {
-  diagnosticForProfileValidation,
   FINANCIAL_NO_UPDATE,
+  profileValidationIssue,
   SAVE_FAILURE_DIAGNOSTIC,
+  type ProviderIdentityFieldId,
 } from './provider-identity-validation'
 
 export function useSupplierOnboardingWizard({
@@ -32,6 +33,7 @@ export function useSupplierOnboardingWizard({
   const [website, setWebsite] = useState('')
   const [abn, setAbn] = useState('')
   const [diagnostic, setDiagnostic] = useState<Rule4Diagnostic>()
+  const [invalidField, setInvalidField] = useState<ProviderIdentityFieldId>()
   const [pending, setPending] = useState(false)
   const [profileCompleted, setProfileCompleted] = useState(
     currentStep === 'payouts' || currentStep === 'first_tool',
@@ -65,6 +67,7 @@ export function useSupplierOnboardingWizard({
     setStep(stepId)
     if (stepId === 'first_tool') setFirstToolVisited(true)
     setDiagnostic(undefined)
+    setInvalidField(undefined)
   }
 
   const handleProfileSubmit = async (e: Pick<FormEvent, 'preventDefault'>) => {
@@ -73,9 +76,10 @@ export function useSupplierOnboardingWizard({
     const trimmedWebsite = website.trim()
     const cleanAbn = normalizeAbn(abn)
 
-    const validationError = diagnosticForProfileValidation(trimmedName, trimmedWebsite, cleanAbn)
-    if (validationError !== undefined) {
-      setDiagnostic(validationError)
+    const validationIssue = profileValidationIssue(trimmedName, trimmedWebsite, cleanAbn)
+    if (validationIssue !== undefined) {
+      setDiagnostic(validationIssue.diagnostic)
+      setInvalidField(validationIssue.field)
       return
     }
 
@@ -87,6 +91,7 @@ export function useSupplierOnboardingWizard({
 
     setPending(true)
     setDiagnostic(undefined)
+    setInvalidField(undefined)
     try {
       const result = await onSaveProfile({
         name: trimmedName,
@@ -103,10 +108,12 @@ export function useSupplierOnboardingWizard({
           financialImpact: FINANCIAL_NO_UPDATE,
           nextStep: SAVE_FAILURE_DIAGNOSTIC.nextStep,
         })
+        setInvalidField(undefined)
       }
     } catch (cause) {
       void cause
       setDiagnostic(SAVE_FAILURE_DIAGNOSTIC)
+      setInvalidField(undefined)
     } finally {
       setPending(false)
     }
@@ -115,17 +122,20 @@ export function useSupplierOnboardingWizard({
   const handleNameChange = (value: string) => {
     setName(value)
     setDiagnostic(undefined)
+    setInvalidField(undefined)
   }
 
   const handleWebsiteChange = (value: string) => {
     setWebsite(value)
     setDiagnostic(undefined)
+    setInvalidField(undefined)
   }
 
   const handleAbnChange = (value: string) => {
     const formatted = formatAbnDisplay(value)
     setAbn(formatted)
     setDiagnostic(undefined)
+    setInvalidField(undefined)
   }
 
   const handleConnectPayouts = () => {
@@ -143,6 +153,7 @@ export function useSupplierOnboardingWizard({
     website,
     abn,
     diagnostic,
+    invalidField,
     pending,
     payoutConnection: resolvedPayoutConnection,
   }

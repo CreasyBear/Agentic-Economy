@@ -9,6 +9,7 @@ import {
   HandCoinsIcon,
   InboxIcon,
   LayoutDashboardIcon,
+  MessageSquareIcon,
   ScrollTextIcon,
   SearchCodeIcon,
   SearchIcon,
@@ -28,6 +29,7 @@ export type AppSidebarItem = Readonly<{
 
 export const APP_NAVIGATION_ICONS: Readonly<Record<AppDestinationId, LucideIcon>> = {
   market: StoreIcon,
+  chat: MessageSquareIcon,
   agents: BotIcon,
   calls: ActivityIcon,
   credit: CreditCardIcon,
@@ -51,10 +53,11 @@ export const DEVELOPER_NAVIGATION: readonly AppSidebarItem[] = [
   { href: '/developers/discovery', label: 'Discovery', icon: SearchCodeIcon },
 ]
 
-export function roleNavigation(role: OperatorRole): readonly AppSidebarItem[] {
-  if (role === 'admin') return ADMIN_NAVIGATION
-  if (role === 'developer') return DEVELOPER_NAVIGATION
-  return []
+export function roleNavigation(role: OperatorRole, canAccessAdmin: boolean): readonly AppSidebarItem[] {
+  if (role === 'developer') {
+    return canAccessAdmin ? [...ADMIN_NAVIGATION, ...DEVELOPER_NAVIGATION] : DEVELOPER_NAVIGATION
+  }
+  return canAccessAdmin ? ADMIN_NAVIGATION : []
 }
 
 export function activeRoleNavigationHref(

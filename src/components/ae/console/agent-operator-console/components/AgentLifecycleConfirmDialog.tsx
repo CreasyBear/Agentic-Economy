@@ -1,4 +1,6 @@
 import { AeConfirmDialog, TACTILE } from '@/components/ae/feedback/AeConfirmDialog'
+import { Label } from '@/components/ui/label'
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 import { cn } from '@/lib/utils'
 
 import {
@@ -7,7 +9,7 @@ import {
   lifecycleDialogTitle,
   revocationModeOptions,
 } from '../agent-lifecycle-copy'
-import type { AgentLifecycleConfirmDialogProps } from '../agent-operator-console.contracts'
+import type { AgentLifecycleConfirmDialogProps, RevocationMode } from '../agent-operator-console.contracts'
 
 export function AgentLifecycleConfirmDialog({
   lifecycleTarget,
@@ -43,34 +45,36 @@ export function AgentLifecycleConfirmDialog({
             ),
             diagnostic: revokeDiagnostic,
             children: (
-              <div className="grid gap-2" role="group" aria-label="Revocation mode">
+              <RadioGroup
+                value={revocationMode}
+                onValueChange={(val) => onRevocationModeChange(val as RevocationMode)}
+                className="grid gap-2"
+                aria-label="Revocation mode"
+              >
                 {revocationModeOptions.map((option) => {
                   const selected = revocationMode === option.id
+                  const optionId = `revoke-mode-${option.id}`
                   return (
-                    <div
+                    <Label
                       key={option.id}
-                      role="button"
-                      tabIndex={-1}
-                      aria-pressed={selected}
+                      htmlFor={optionId}
                       className={cn(
                         'cursor-pointer rounded-md border p-3 text-left text-sm',
                         selected ? 'border-foreground bg-muted' : 'border-border bg-background',
                         TACTILE,
                       )}
-                      onClick={() => onRevocationModeChange(option.id)}
-                      onKeyDown={(event) => {
-                        if (event.key === 'Enter' || event.key === ' ') {
-                          event.preventDefault()
-                          onRevocationModeChange(option.id)
-                        }
-                      }}
                     >
-                      <p className="font-medium text-foreground">{option.title}</p>
-                      <p className="text-xs text-muted-foreground">{option.detail}</p>
-                    </div>
+                      <div className="grid grid-cols-[auto_minmax(0,1fr)] items-start gap-3">
+                        <RadioGroupItem value={option.id} id={optionId} className="mt-0.5" />
+                        <div className="grid gap-0.5">
+                          <p className="font-medium text-foreground">{option.title}</p>
+                          <p className="text-xs text-muted-foreground">{option.detail}</p>
+                        </div>
+                      </div>
+                    </Label>
                   )
                 })}
-              </div>
+              </RadioGroup>
             ),
           })}
     />

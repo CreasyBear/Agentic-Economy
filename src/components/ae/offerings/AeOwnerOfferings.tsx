@@ -20,6 +20,7 @@ export function AeOwnerOfferingsList({
   projectionState = 'current',
   onRetryProjection,
   loading = false,
+  hideEmptyState = false,
   filterValue,
   onFilterChange,
   sorting,
@@ -43,7 +44,7 @@ export function AeOwnerOfferingsList({
         {...(onRetryProjection === undefined ? {} : { onRetryProjection })}
       />
       {offerings.length === 0 && !loading ? (
-        <OwnerOfferingsEmptyState />
+        hideEmptyState ? null : <OwnerOfferingsEmptyState />
       ) : (
         <OwnerOfferingsTable
           offerings={offerings}

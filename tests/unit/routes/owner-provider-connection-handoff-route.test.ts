@@ -14,6 +14,7 @@ const mocks = vi.hoisted(() => ({
   readIdentity: vi.fn(),
   readConnections: vi.fn(),
   resumeDraft: vi.fn(),
+  assessSource: vi.fn(),
   sourceStart: vi.fn(),
 }))
 
@@ -25,6 +26,7 @@ vi.mock('@/modules/capability-supply/supply-funnel.functions', () => ({
   cancelOwnerProviderConnectionAttemptServer: mocks.cancel,
   readOwnerProviderConnectionsServer: mocks.readConnections,
   resumeOwnerSupplySourceDraftServer: mocks.resumeDraft,
+  assessOwnerSupplySourceServer: mocks.assessSource,
   filterOwnerSupplyAuthorityOptions: vi.fn(),
   previewOwnerSupplySourceServer: vi.fn(),
   publishOwnerSupplySourceServer: vi.fn(),
@@ -109,7 +111,7 @@ describe('Provider connection handoff route', () => {
 
     expect(screen.getByRole('heading', { level: 1, name: 'Connect Provider' })).toBeTruthy()
     expect(screen.getByText('Connection link unavailable')).toBeTruthy()
-    expect(screen.getByText('Return to Add Tool and reconnect.')).toBeTruthy()
+    expect(screen.getAllByText('Return to Add Tool and start again.').length).toBeGreaterThan(0)
   })
 
   it('preserves the requested environment when a saved draft navigation completes', async () => {
@@ -398,7 +400,7 @@ describe('Provider connection handoff route', () => {
     expect(screen.getByText('Sandbox')).toBeTruthy()
     expect(document.body.textContent).not.toContain('oauth-code-never-forwarded')
     expect(document.body.textContent).not.toContain('oauth-state-never-forwarded')
-    expect(screen.getByRole('link', { name: 'Return to Add Tool and retry' }).getAttribute('href'))
+    expect(screen.getByRole('link', { name: 'Return to Add Tool' }).getAttribute('href'))
       .toBe('/owner/operations/new?draft=sds_exact_source')
   })
 })

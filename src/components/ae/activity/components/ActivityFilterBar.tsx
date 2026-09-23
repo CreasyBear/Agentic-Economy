@@ -1,12 +1,10 @@
 import { Link } from '@tanstack/react-router'
-import { Download } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 import { buttonVariants } from '@/components/ui/button-variants'
 import { cn } from '@/lib/utils'
 
 import {
-  ACTIVITY_EXPORT_FORMAT_BUTTON_CLASS,
   ACTIVITY_FILTER_CHIP_CLASS,
   type ActivityFilterBarProps,
   type ActivityDateRangeFilter,
@@ -27,10 +25,6 @@ export function ActivityFilterBar({
   filteredAgentShortId,
   filtersActive,
   onResetFilters,
-  exportPreviewLabel,
-  exportDisabled,
-  onExportCsv,
-  onExportJson,
 }: ActivityFilterBarProps) {
   return (
     <div className="flex min-h-[3rem] flex-wrap items-center justify-between gap-3 gap-y-related border-b border-border pb-related">
@@ -91,47 +85,17 @@ export function ActivityFilterBar({
         ) : null}
       </div>
 
-      <div className="flex flex-wrap items-center gap-2">
-        {filtersActive ? (
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            className={cn('min-h-9 text-xs text-muted-foreground sm:min-h-8', ACTIVITY_FILTER_CHIP_CLASS)}
-            onClick={onResetFilters}
-          >
-            Reset filters
-          </Button>
-        ) : null}
-
-        <span className="min-w-[12rem] text-xs text-muted-foreground">
-          <span className="font-mono tabular-nums">
-            {exportPreviewLabel}
-          </span>
-        </span>
+      {filtersActive ? (
         <Button
           type="button"
-          variant="outline"
+          variant="ghost"
           size="sm"
-          className={`h-7 text-xs ${ACTIVITY_EXPORT_FORMAT_BUTTON_CLASS}`}
-          disabled={exportDisabled}
-          onClick={onExportCsv}
+          className={cn('min-h-9 text-xs text-muted-foreground sm:min-h-8', ACTIVITY_FILTER_CHIP_CLASS)}
+          onClick={onResetFilters}
         >
-          <Download className="size-3.5 shrink-0" aria-hidden="true" />
-          CSV
+          Reset filters
         </Button>
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          className={`h-7 text-xs ${ACTIVITY_EXPORT_FORMAT_BUTTON_CLASS}`}
-          disabled={exportDisabled}
-          onClick={onExportJson}
-        >
-          <Download className="size-3.5 shrink-0" aria-hidden="true" />
-          JSON
-        </Button>
-      </div>
+      ) : null}
     </div>
   )
 }

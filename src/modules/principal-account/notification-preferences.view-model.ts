@@ -52,11 +52,11 @@ export const PREFERENCE_SWITCHES: ReadonlyArray<{
   key: PreferenceSwitchKey
   label: string
 }> = [
-  { key: 'lowCreditBalance', label: 'Low credit balance' },
-  { key: 'spendCapWarning', label: 'Spend cap warning' },
-  { key: 'callFailureSpike', label: 'Repeated call failures' },
-  { key: 'invoiceReady', label: 'Tax invoice or statement ready' },
-  { key: 'teamMembershipChanged', label: 'Team membership changes' },
+  { key: 'lowCreditBalance', label: 'Email when credit balance is low' },
+  { key: 'spendCapWarning', label: 'Email when spend cap is reached' },
+  { key: 'callFailureSpike', label: 'Email when calls fail repeatedly' },
+  { key: 'invoiceReady', label: 'Email when a tax invoice or statement is ready' },
+  { key: 'teamMembershipChanged', label: 'Email when team membership changes' },
 ]
 
 export const THRESHOLD_OPTIONS: ReadonlyArray<{

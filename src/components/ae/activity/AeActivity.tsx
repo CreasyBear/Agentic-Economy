@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { Link, useRouter } from '@tanstack/react-router'
+import { Download } from 'lucide-react'
 
 import { AeEmptyState } from '@/components/ae/feedback/AeEmptyState'
 import { AeOperatorPage } from '@/components/ae/layout/AeOperatorPage'
@@ -9,7 +10,11 @@ import { cn } from '@/lib/utils'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { captureClientExceptionOnClient } from '@/lib/observability/capture-client-exception'
 
-import type { ActivityLoaderResult, AeActivityProps } from './activity.contracts'
+import {
+  ACTIVITY_EXPORT_FORMAT_BUTTON_CLASS,
+  type ActivityLoaderResult,
+  type AeActivityProps,
+} from './activity.contracts'
 import { ActivityCallQueue } from './components/ActivityCallQueue'
 import { ActivityFilterBar } from './components/ActivityFilterBar'
 import { ActivityMonthlySummary } from './components/ActivityMonthlySummary'
@@ -75,11 +80,38 @@ function AeActivityAvailable({
             filteredAgentShortId={vm.filteredAgentShortId}
             filtersActive={vm.filtersActive}
             onResetFilters={vm.resetFilters}
-            exportPreviewLabel={vm.exportPreviewLabel}
-            exportDisabled={vm.exportDisabled}
-            onExportCsv={vm.exportCsv}
-            onExportJson={vm.exportJson}
           />
+        ) : null}
+        {vm.showFilterBar ? (
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="min-w-[12rem] text-xs text-muted-foreground">
+              <span className="font-mono tabular-nums">
+                {vm.exportPreviewLabel}
+              </span>
+            </span>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className={`h-7 text-xs ${ACTIVITY_EXPORT_FORMAT_BUTTON_CLASS}`}
+              disabled={vm.exportDisabled}
+              onClick={vm.exportCsv}
+            >
+              <Download className="size-3.5 shrink-0" aria-hidden="true" />
+              CSV
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className={`h-7 text-xs ${ACTIVITY_EXPORT_FORMAT_BUTTON_CLASS}`}
+              disabled={vm.exportDisabled}
+              onClick={vm.exportJson}
+            >
+              <Download className="size-3.5 shrink-0" aria-hidden="true" />
+              JSON
+            </Button>
+          </div>
         ) : null}
         {vm.showEmptyNoCalls ? (
           <AeEmptyState
@@ -89,7 +121,7 @@ function AeActivityAvailable({
           />
         ) : vm.showEmptyNoMatch ? (
           <AeEmptyState
-            title="No calls match these filters"
+            title="No Calls match these filters"
             description="Active filters are hiding matching Calls."
             action={
               <Button type="button" className="min-h-touch" onClick={vm.resetFilters}>
@@ -115,12 +147,14 @@ function AeActivityAvailable({
             <ActivityPaginationControl pagination={vm.pagination} onLoadMore={vm.loadNextPage} />
           </>
         ) : null}
-        <ActivityMonthlySummary
-          periodStart={vm.periodStart}
-          monthly={vm.monthly}
-          retryPending={vm.summaryRetryPending}
-          onRetry={vm.retrySummaries}
-        />
+        {!vm.showEmptyNoCalls ? (
+          <ActivityMonthlySummary
+            periodStart={vm.periodStart}
+            monthly={vm.monthly}
+            retryPending={vm.summaryRetryPending}
+            onRetry={vm.retrySummaries}
+          />
+        ) : null}
       </div>
     </AeOperatorPage>
   )

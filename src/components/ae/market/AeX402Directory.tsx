@@ -16,7 +16,6 @@ import { MarketNavigationProvider, type MarketPath, useMarketPath } from './mark
 import { DirectoryExplorerFilters } from './DirectoryExplorerFilters'
 import type { DirectoryExplorerFilterPatch } from '@/modules/market/directory-filters.contracts'
 import { DirectoryHero } from './DirectoryHero'
-import { DirectoryIndexDiscovery } from './DirectoryIndexDiscovery'
 import { DirectoryHomeDiscovery } from './DirectoryHomeDiscovery'
 import { DirectoryProvidersIndex } from './DirectoryProvidersIndex'
 import { DirectoryProviderHeader } from './DirectoryProviderHeader'
@@ -179,7 +178,7 @@ function DirectoryMarketplace({ page, compareEntries, search, workspace = false,
   }
 
   const comparisonTray = comparison.length === 0 ? null : (
-    <div className="mt-8 flex w-fit max-w-full flex-wrap items-center gap-3 rounded-card border border-border bg-card px-4 py-3" aria-label="Selected comparison" data-compare-tray="flow">
+    <section className="mt-8 flex w-fit max-w-full flex-wrap items-center gap-3 rounded-card border border-border bg-card px-4 py-3" aria-label="Selected comparison" data-compare-tray="flow">
       <span className="text-sm">{comparison.length} of 4 selected</span>
       {comparison.map(item => <Badge key={item.resource} variant="outline" className="gap-1.5 text-muted-foreground">
         {item.entry?.title ?? ('missing' in item ? MARKET_COMPARE_MISSING_LABEL : MARKET_COMPARE_PENDING_LABEL)}
@@ -187,12 +186,12 @@ function DirectoryMarketplace({ page, compareEntries, search, workspace = false,
       </Badge>)}
       <Button ref={compareTrigger} onClick={() => setCompareOpen(true)} disabled={comparisonEntries.length < 2}>Compare Tools</Button>
       <Button size="icon-sm" variant="ghost" onClick={() => go({ ...search, compare: undefined })} aria-label="Clear comparison"><XIcon /></Button>
-    </div>
+    </section>
   )
 
   return (
     <div className="ae-rail pb-page">
-      <DirectoryHero {...(home === undefined ? {} : { home })} compact={workspace || view !== 'discover'} headingLevel={workspace ? 2 : 1} {...(view === 'tools' ? { compactTitle: 'Explore capabilities.' } : {})}>
+      <DirectoryHero {...(home === undefined ? {} : { home })} compact={workspace} headingLevel={workspace ? 2 : 1} {...(workspace && view === 'tools' ? { compactTitle: 'Explore capabilities.' } : {})}>
         <form action={marketPath} method="get" role="search" className="mt-1 flex w-full max-w-2xl gap-2" onSubmit={event => {
           event.preventDefault()
           const query = new FormData(event.currentTarget).get('query')?.toString().trim() ?? ''
@@ -226,28 +225,26 @@ function DirectoryMarketplace({ page, compareEntries, search, workspace = false,
       </DirectoryHero>
       <Tabs value={view} onValueChange={value => {
         if (value === 'discover' || value === 'tools' || value === 'providers' || value === 'saved') {
-          void navigate({ to: marketPath, search: carryMarketCompare(search, value === 'saved' || value === 'discover' || value === 'providers' ? { view: value } : {
+          void navigate({ to: marketPath, resetScroll: false, search: carryMarketCompare(search, value === 'saved' || value === 'discover' || value === 'providers' ? { view: value } : {
             ...indexedSearch(), view: value,
           }) })
         }
       }}>
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border pb-4">
           <TabsList variant="line" className="max-w-full shrink-0 justify-start overflow-x-auto overflow-y-hidden" aria-label="Browse the marketplace">
-            <TabsTrigger value="tools" className="px-3"><ListFilterIcon aria-hidden="true" />Tools</TabsTrigger>
             <TabsTrigger value="discover" className="px-3"><CompassIcon aria-hidden="true" />Collections</TabsTrigger>
+            <TabsTrigger value="tools" className="px-3"><ListFilterIcon aria-hidden="true" />Tools</TabsTrigger>
             <TabsTrigger value="providers" className="px-3"><StoreIcon aria-hidden="true" />Providers</TabsTrigger>
             <TabsTrigger value="saved" className="px-3"><HeartIcon aria-hidden="true" />Saved{saved.savedTools.length > 0 ? ` (${saved.savedTools.length})` : ''}</TabsTrigger>
           </TabsList>
           <div className="flex items-center gap-3">
-            {count === undefined || view === 'saved' ? null : <span className="text-xs text-muted-foreground">{count}</span>}
+            {count === undefined || view === 'saved' ? null : <p className="text-xs text-muted-foreground" role="status" aria-live="polite">{count}</p>}
             {view === 'saved' || view === 'discover' || indexed ? null : <DirectoryFilters search={search} onApply={applyFilters} />}
           </div>
         </div>
         {saved.saveError === undefined ? null : <p role="alert" className="py-3 text-sm text-destructive">{saved.saveError}</p>}
         <TabsContent value="discover" className="pt-7">
-          {overview?.kind === 'ok' ? <DirectoryIndexDiscovery overview={overview} onSave={saved.toggleSavedTool} isSaved={saved.isSaved} onCompare={toggleComparison}
-            isComparing={resource => compareRefs.includes(resource)} compareDisabled={resource => compareRefs.length >= 4 && !compareRefs.includes(resource)} /> : null}
-          {home === undefined ? <AeEmptyState title="Explore the Tool catalogue" description="Open All Tools to browse the current directory, or search for a service above." action={<Link to={marketPath} search={carryMarketCompare(search, { view: 'tools' })} className={cn(buttonVariants({ variant: 'outline' }))}>Browse all Tools</Link>} /> : <DirectoryHomeDiscovery home={home} onSave={saved.toggleSavedTool} isSaved={saved.isSaved} onCompare={toggleComparison}
+          {home === undefined ? <AeEmptyState title="Explore Tools" description="Browse the current directory, or search for a service above." action={<Link to={marketPath} search={carryMarketCompare(search, { view: 'tools' })} className={cn(buttonVariants({ variant: 'outline' }))}>See all Tools</Link>} /> : <DirectoryHomeDiscovery home={home} onSave={saved.toggleSavedTool} isSaved={saved.isSaved} onCompare={toggleComparison}
             isComparing={resource => compareRefs.includes(resource)} compareDisabled={resource => compareRefs.length >= 4 && !compareRefs.includes(resource)} />}
           {view === 'discover' ? comparisonTray : null}
         </TabsContent>
@@ -282,13 +279,13 @@ function DirectoryMarketplace({ page, compareEntries, search, workspace = false,
             : undefined,
         ].filter((line): line is string => line !== undefined).join(' · ') || undefined
         return <TabsContent key={tab} value={tab} className="pt-5">
-          {tab === 'providers' && providers !== undefined ? <DirectoryProvidersIndex result={providers} /> : <div className={indexed && tab === 'tools' ? 'grid min-w-0 items-start gap-5 md:grid-cols-[13rem_minmax(0,1fr)] lg:gap-7' : 'min-w-0'}>
-          {indexed && tab === 'tools' ? <DirectoryExplorerFilters search={search} {...(overview === undefined ? {} : { overview })} onChange={applyExplorerFilters} onReset={() => explore({})} /> : null}
+          {tab === 'providers' && providers !== undefined ? <DirectoryProvidersIndex result={providers} /> : <div className="min-w-0">
           <section className="min-w-0" aria-label="Tool results">
           {indexed ? <div className="mb-5 flex flex-wrap items-center justify-between gap-3" aria-label="Catalogue ordering and display">
             <Select value={search.query === undefined ? search.sort ?? 'adoption' : 'relevance'} onValueChange={value => { if (value === 'popular' || value === 'updated' || value === 'relevance' || value === 'adoption' || value === 'price_asc') void navigate({ to: marketPath, search: carryMarketCompare(search, { ...indexedSearch(), view: tab, sort: value }) }) }}>
               <SelectTrigger className="min-h-10 bg-card" aria-label="Sort Tools"><SelectValue /></SelectTrigger><SelectContent><SelectGroup>{search.query === undefined ? <><SelectItem value="adoption">Broader adoption · 30 days</SelectItem><SelectItem value="price_asc">Lowest listed price</SelectItem><SelectItem value="updated">Recently updated</SelectItem>{search.sort === 'popular' ? <SelectItem value="popular">Call volume · 30 days</SelectItem> : null}</> : <SelectItem value="relevance">Search relevance</SelectItem>}</SelectGroup></SelectContent>
             </Select>
+            {tab === 'tools' ? <DirectoryExplorerFilters search={search} {...(overview === undefined ? {} : { overview })} onChange={applyExplorerFilters} onReset={() => explore({})} /> : null}
           </div> : null}
           {search.provider !== undefined && page.kind === 'ok' ? <div className="mb-8"><DirectoryProviderHeader provider={search.provider} entries={page.items} /></div> : null}
           <AeCollectionRail
@@ -336,7 +333,7 @@ function DirectoryMarketplace({ page, compareEntries, search, workspace = false,
                 <span />
                 {loadMore.isDone ? null : <div className="flex flex-col items-end gap-2">
                 {loadMore.status === 'failed' ? <p role="alert" className="max-w-md text-right text-sm text-muted-foreground">More Tools could not be loaded. Your current results and filters are unchanged.</p> : null}
-                <Button type="button" variant="outline" onClick={() => void loadNextPage()} disabled={loadMore.status === 'loading'} aria-busy={loadMore.status === 'loading'} aria-label={loadMore.status === 'failed' ? 'Try loading more again' : 'Load more'}>
+                <Button type="button" variant="outline" onClick={() => void loadNextPage()} disabled={loadMore.status === 'loading'} aria-busy={loadMore.status === 'loading'} aria-label={loadMore.status === 'failed' ? 'Load more. Try again.' : 'Load more'}>
                   {loadMore.status === 'loading' ? <Loader2Icon className="animate-spin" /> : null}Load more<ArrowRightIcon />
                 </Button></div>}
               </> : <>

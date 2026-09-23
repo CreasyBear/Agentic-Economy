@@ -12,6 +12,7 @@ describe('app navigation', () => {
   it('keeps one ordered destination contract with unique labels and hrefs', () => {
     expect(APP_NAVIGATION.map(({ id }) => id)).toEqual([
       'market',
+      'chat',
       'agents',
       'calls',
       'credit',
@@ -38,6 +39,9 @@ describe('app navigation', () => {
 
   it.each([
     ['/market', undefined, 'market'],
+    ['/t/new', undefined, 'chat'],
+    ['/t/thread-1', undefined, 'chat'],
+    ['/s/share-token', undefined, null],
     ['/tools/blockrun.ai/x', undefined, 'market'],
     ['/agent-access', undefined, 'agents'],
     ['/agent-access/connect', undefined, 'agents'],
@@ -64,6 +68,6 @@ describe('app navigation', () => {
     const navigation = mobileNavigation()
 
     expect(navigation.primary.map(({ id }) => id)).toEqual(['market', 'agents', 'calls', 'credit'])
-    expect(navigation.more.map(({ id }) => id)).toEqual(['tools', 'earnings', 'settings', 'support', 'status'])
+    expect(navigation.more.map(({ id }) => id)).toEqual(['chat', 'tools', 'earnings', 'settings', 'support', 'status'])
   })
 })

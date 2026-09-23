@@ -20,7 +20,7 @@ export function JsonPayloadEditor({
     <div className="grid gap-2">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <Label htmlFor="test-input-json" className="text-sm font-semibold">
-          Input Parameters (JSON)
+          Input parameters (JSON)
         </Label>
         <div className="flex flex-wrap items-center gap-2">
           <Button
@@ -31,7 +31,7 @@ export function JsonPayloadEditor({
             onClick={onLoadExamples}
             disabled={isRunning}
           >
-            Load Example Arguments
+            Load example arguments
           </Button>
           <Button
             type="button"
@@ -50,9 +50,9 @@ export function JsonPayloadEditor({
         value={inputJson}
         onChange={(e) => onInputJsonChange(e.target.value)}
         rows={5}
-        className="font-mono text-xs leading-relaxed"
+        className="font-mono leading-relaxed"
         placeholder="{}"
-        aria-label="Input Parameters (JSON)"
+        aria-label="Input parameters (JSON)"
       />
       <div className="min-h-[2.5rem]" aria-live="polite" role="status">
         {diagnostic ? (

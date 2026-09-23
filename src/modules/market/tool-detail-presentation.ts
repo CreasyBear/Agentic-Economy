@@ -1,6 +1,5 @@
 import type { PublicToolDetailRouteResult } from '@/modules/registry/tool-detail-route.functions'
 import type { MarketListingEvidenceProjection } from '@/modules/market/listing-evidence'
-import { readToolListingEvidence } from '@/modules/market/server'
 import type { X402DirectoryResolution } from '@/modules/market/x402-directory'
 import { prepareX402DirectoryResourceServer } from '@/modules/market/x402-directory.functions'
 import { readPublicToolDetailRouteServer } from '@/modules/registry/tool-detail-route.functions'
@@ -39,6 +38,6 @@ export async function resolveDirectoryToolDetail(
   }
   const result = await readPublicToolDetailRouteServer({ data: { toolRef } })
     .catch((): PublicToolDetailRouteResult => ({ kind: 'source_unavailable', toolRef }))
-  const evidence = result.kind === 'found' ? await readToolListingEvidence(result.tool) : undefined
+  const evidence = result.kind === 'found' ? result.evidence : undefined
   return { result, ...(evidence === undefined ? {} : { evidence }) }
 }

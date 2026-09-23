@@ -21,8 +21,11 @@ export function callReceiptRefreshLabel(
   return pending ? 'Checking…' : 'Check status'
 }
 
-export function CallReceiptRef({ value }: Readonly<{ value: string }>) {
-  return <AeCopyReference label="Call reference" value={value} copyFeedbackMs={2_000} />
+export function CallReceiptRef({
+  value,
+  label = 'Call reference',
+}: Readonly<{ value: string; label?: string }>) {
+  return <AeCopyReference label={label} value={value} copyFeedbackMs={2_000} />
 }
 
 export function CallReceiptFact({ label, value, children }: Readonly<{ label: string; value?: string; children?: ReactNode }>) {

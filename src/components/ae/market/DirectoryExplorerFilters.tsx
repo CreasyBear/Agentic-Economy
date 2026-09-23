@@ -1,5 +1,5 @@
 import { ChevronDownIcon, SearchIcon, SlidersHorizontalIcon, XIcon } from 'lucide-react'
-import { useId, useState } from 'react'
+import { useId, useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
@@ -46,7 +46,7 @@ function MultipleFacets({ label, values, selected = [], onChange }: Readonly<{ l
     const next = selectedKeys.has(key) ? selected.filter(value => value !== key) : [...selected, key]
     onChange(next.length === 0 ? undefined : next)
   }
-  return <fieldset className="flex min-w-0 flex-col gap-3 border-t pt-5"><legend className="sr-only">{label}</legend><p className="text-sm font-semibold">{label}</p><Input value={query} aria-label={`Find shown ${label.toLowerCase()}`} onChange={event => setQuery(event.target.value)} placeholder={`Find ${label.toLowerCase()}…`} className="h-9 text-xs" /><div className="flex max-h-52 flex-col gap-1 overflow-y-auto overscroll-contain">
+  return <fieldset className="flex min-w-0 flex-col gap-3 border-t pt-5"><legend className="sr-only">{label}</legend><p className="text-sm font-semibold">{label}</p><Input value={query} aria-label={`Find shown ${label.toLowerCase()}`} onChange={event => setQuery(event.target.value)} placeholder={`Find ${label.toLowerCase()}…`} className="h-9" /><div className="flex max-h-52 flex-col gap-1 overflow-y-auto overscroll-contain">
     {visible.map(item => <Label key={item.key} className="min-h-10 justify-between gap-2 py-1 text-xs font-normal"><span className="flex min-w-0 items-center gap-2"><Checkbox aria-label={`${item.label} ${item.count.toLocaleString('en-AU')}`} checked={selectedKeys.has(item.key)} disabled={selected.length >= 5 && !selectedKeys.has(item.key)} onCheckedChange={() => toggle(item.key)} /><span className="break-words">{item.label}</span></span><span className="shrink-0 text-muted-foreground tabular-nums">{item.count.toLocaleString('en-AU')}</span></Label>)}
     {visible.length === 0 ? <p className="text-xs text-muted-foreground">No match in the shown {label.toLowerCase()}.</p> : null}
   </div>{unlistedSelected.map(key => <Button key={key} variant="outline" size="sm" className={cn('h-auto min-h-9 justify-between whitespace-normal', discoverFacetSelected)} onClick={() => toggle(key)} aria-label={`Remove ${label.toLowerCase()}: ${key}`}>{key}<XIcon className="size-3" /></Button>)}<p className="text-xs leading-relaxed text-muted-foreground">A selection from the catalogue. Choose up to five; Tools can match any selected {label === 'Tags' ? 'tag' : 'collection'}.</p></fieldset>
@@ -61,7 +61,7 @@ function Facets({ label, values, selected, onChange, searchable = false, allLabe
   const allText = allLabel ?? (label === 'Network' ? 'All networks' : 'All categories')
   return <fieldset className="min-w-0 flex flex-col gap-3">
     <legend className="mb-3 text-sm font-semibold">{label}</legend>
-    {searchable ? <div className="relative"><SearchIcon className="pointer-events-none absolute top-2.5 left-2.5 size-3.5 text-muted-foreground" /><Input aria-label={`Find ${label.toLowerCase()}`} value={query} onChange={event => setQuery(event.target.value)} placeholder={`Find ${label.toLowerCase()}…`} className="h-9 pl-8 text-xs" /></div> : null}
+    {searchable ? <div className="relative"><SearchIcon className="pointer-events-none absolute top-2.5 left-2.5 size-3.5 text-muted-foreground" /><Input aria-label={`Find ${label.toLowerCase()}`} value={query} onChange={event => setQuery(event.target.value)} placeholder={`Find ${label.toLowerCase()}…`} className="h-9 pl-8" /></div> : null}
     <div className="max-h-60 flex flex-col gap-0.5 overflow-y-auto overscroll-contain">
       <Button type="button" variant="ghost" onClick={() => onChange(undefined)} aria-pressed={selected === undefined} className={cn('h-auto min-h-10 w-full justify-start px-3 text-xs font-normal', selected === undefined ? discoverFacetSelected : 'rounded-full')}>{allText}</Button>
       {visible.map(item => <Button key={item.key} type="button" variant="ghost" aria-label={showCount ? `${item.label} ${item.count.toLocaleString('en-AU')}` : item.label} aria-pressed={selected === item.key} onClick={() => onChange(selected === item.key ? undefined : item.key)} className={cn('h-auto min-h-10 w-full justify-between gap-3 px-3 text-xs font-normal', selected === item.key ? discoverFacetSelected : 'rounded-full')}>
@@ -77,15 +77,16 @@ function ListedPriceFilter({ search, onChange }: Pick<DirectoryExplorerFiltersPr
   const id = useId()
   const [minimum, setMinimum] = useState(() => search.minUsdPrice?.toString() ?? '')
   const [maximum, setMaximum] = useState(() => search.maxUsdPrice?.toString() ?? '')
+  const minimumRef = useRef<HTMLInputElement>(null)
   const [priceError, setPriceError] = useState<string>()
   return <form className="flex flex-col gap-3 border-t pt-5" onSubmit={event => {
     event.preventDefault()
     const min = minimum.trim() === '' ? undefined : Number(minimum), max = maximum.trim() === '' ? undefined : Number(maximum)
-    if ((min !== undefined && (!Number.isFinite(min) || min < 0)) || (max !== undefined && (!Number.isFinite(max) || max < 0)) || (min !== undefined && max !== undefined && min > max)) { setPriceError('Enter a valid price range with the minimum no greater than the maximum.'); return }
+    if ((min !== undefined && (!Number.isFinite(min) || min < 0)) || (max !== undefined && (!Number.isFinite(max) || max < 0)) || (min !== undefined && max !== undefined && min > max)) { setPriceError('Enter a valid price range with the minimum no greater than the maximum.'); minimumRef.current?.focus(); return }
     setPriceError(undefined); onChange({ minUsdPrice: min, maxUsdPrice: max, priceBand: undefined })
   }}>
     <p className="text-sm font-semibold">Custom listed price</p>
-    <FieldGroup className="grid grid-cols-2 gap-2"><Field className="gap-2"><FieldLabel className="text-xs font-normal" htmlFor={`${id}-minimum`}>Min USDC</FieldLabel><Input id={`${id}-minimum`} type="number" min="0" step="any" inputMode="decimal" placeholder="0" value={minimum} aria-invalid={priceError !== undefined} aria-describedby={priceError === undefined ? undefined : `${id}-price-error`} onChange={event => setMinimum(event.target.value)} /></Field><Field className="gap-2"><FieldLabel className="text-xs font-normal" htmlFor={`${id}-maximum`}>Max USDC</FieldLabel><Input id={`${id}-maximum`} type="number" min="0" step="any" inputMode="decimal" placeholder="Any" value={maximum} aria-invalid={priceError !== undefined} aria-describedby={priceError === undefined ? undefined : `${id}-price-error`} onChange={event => setMaximum(event.target.value)} /></Field></FieldGroup>
+    <FieldGroup className="grid grid-cols-2 gap-2"><Field className="gap-2"><FieldLabel className="text-xs font-normal" htmlFor={`${id}-minimum`}>Min USDC</FieldLabel><Input ref={minimumRef} id={`${id}-minimum`} type="number" min="0" step="any" inputMode="decimal" placeholder="0" value={minimum} aria-invalid={priceError !== undefined} aria-describedby={priceError === undefined ? undefined : `${id}-price-error`} onChange={event => setMinimum(event.target.value)} /></Field><Field className="gap-2"><FieldLabel className="text-xs font-normal" htmlFor={`${id}-maximum`}>Max USDC</FieldLabel><Input id={`${id}-maximum`} type="number" min="0" step="any" inputMode="decimal" placeholder="Any" value={maximum} aria-invalid={priceError !== undefined} aria-describedby={priceError === undefined ? undefined : `${id}-price-error`} onChange={event => setMaximum(event.target.value)} /></Field></FieldGroup>
     <FieldError id={`${id}-price-error`} className="text-xs">{priceError}</FieldError>
     <p className="text-xs leading-relaxed text-muted-foreground">A custom USDC range. Applying it clears the listed-price band.</p><Button type="submit" variant="outline" size="sm" className="w-full">Apply price range</Button>
   </form>
@@ -94,13 +95,14 @@ function ListedPriceFilter({ search, onChange }: Pick<DirectoryExplorerFiltersPr
 function ProviderFilter({ search, onChange }: Pick<DirectoryExplorerFiltersProps, 'search' | 'onChange'>) {
   const id = useId()
   const [provider, setProvider] = useState(search.provider ?? '')
+  const providerRef = useRef<HTMLInputElement>(null)
   const [providerError, setProviderError] = useState<string>()
   return <form className="flex flex-col gap-3 border-t pt-5" onSubmit={event => {
       event.preventDefault()
       const parsed = x402DirectoryFilterSchema.safeParse(provider.trim() === '' ? {} : { provider })
-      if (!parsed.success) { setProviderError('Enter a Provider hostname, such as api.example.com.'); return }
+      if (!parsed.success) { setProviderError('Enter a Provider hostname, such as api.example.com.'); providerRef.current?.focus(); return }
       setProviderError(undefined); onChange({ provider: parsed.data.provider })
-    }}><Field><FieldLabel htmlFor={`${id}-provider`}>Provider</FieldLabel><Input id={`${id}-provider`} value={provider} onChange={event => setProvider(event.target.value)} placeholder="api.example.com" autoCapitalize="none" autoCorrect="off" spellCheck={false} aria-invalid={providerError !== undefined} aria-describedby={providerError === undefined ? undefined : `${id}-provider-error`} /><FieldError id={`${id}-provider-error`} className="text-xs">{providerError}</FieldError></Field><Button type="submit" variant="outline" size="sm" className="w-full">Apply Provider</Button></form>
+    }}><Field><FieldLabel htmlFor={`${id}-provider`}>Provider</FieldLabel><Input ref={providerRef} id={`${id}-provider`} value={provider} onChange={event => setProvider(event.target.value)} placeholder="api.example.com" autoCapitalize="none" autoCorrect="off" spellCheck={false} aria-invalid={providerError !== undefined} aria-describedby={providerError === undefined ? undefined : `${id}-provider-error`} /><FieldError id={`${id}-provider-error`} className="text-xs">{providerError}</FieldError></Field><Button type="submit" variant="outline" size="sm" className="w-full">Apply Provider</Button></form>
 }
 
 function PublishedDetailsFilter({ search, onChange }: Pick<DirectoryExplorerFiltersProps, 'search' | 'onChange'>) {
@@ -161,8 +163,5 @@ function FilterBody({ search, overview, onChange, onReset, showHeading = true }:
 export function DirectoryExplorerFilters(props: DirectoryExplorerFiltersProps) {
   const count = explorerFilterKeys.filter(key => props.search[key] !== undefined && props.search[key] !== false).length
   const key = JSON.stringify(props.search)
-  return <>
-    <aside aria-label="Tool filters" className="sticky top-24 hidden max-h-[calc(100dvh-7rem)] w-52 shrink-0 self-start overflow-y-auto overscroll-contain pr-4 md:block"><FilterBody key={key} {...props} /></aside>
-    <div className="md:hidden"><Sheet><SheetTrigger render={<Button variant="outline" size="sm" className="min-h-touch" aria-label={count > 0 ? `Filters ${count}` : 'Filters'}><SlidersHorizontalIcon />Filters{count > 0 ? <span className="rounded bg-muted px-1.5 tabular-nums">{count}</span> : null}</Button>} /><SheetContent side="left" className="w-full gap-0 sm:max-w-md"><SheetHeader className="border-b p-5 pr-12"><SheetTitle>Refine Tools</SheetTitle><SheetDescription>Filter the catalogue by price, Provider and published details.</SheetDescription></SheetHeader><div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-5"><FilterBody key={key} {...props} showHeading={false} /></div><SheetFooter className="flex flex-row items-stretch gap-3 border-t p-5"><Button type="button" variant="outline" className="min-h-touch flex-1" onClick={props.onReset}>Clear filters</Button><SheetClose render={<Button className="min-h-touch flex-1">Show results</Button>} /></SheetFooter></SheetContent></Sheet></div>
-  </>
+  return <Sheet><SheetTrigger render={<Button variant="outline" size="sm" className="min-h-touch" aria-label={count > 0 ? `Filters ${count}` : 'Filters'}><SlidersHorizontalIcon />Filters{count > 0 ? <span className="rounded bg-muted px-1.5 tabular-nums">{count}</span> : null}</Button>} /><SheetContent side="left" className="w-full gap-0 sm:max-w-md"><SheetHeader className="border-b p-5 pr-12"><SheetTitle>Refine Tools</SheetTitle><SheetDescription>Filter the catalogue by price, Provider and published details.</SheetDescription></SheetHeader><div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-5"><FilterBody key={key} {...props} showHeading={false} /></div><SheetFooter className="flex flex-row items-stretch gap-3 border-t p-5"><Button type="button" variant="outline" className="min-h-touch flex-1" onClick={props.onReset}>Clear filters</Button><SheetClose render={<Button className="min-h-touch flex-1">Show results</Button>} /></SheetFooter></SheetContent></Sheet>
 }

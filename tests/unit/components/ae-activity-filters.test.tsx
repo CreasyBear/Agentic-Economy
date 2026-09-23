@@ -166,7 +166,7 @@ describe('ActivityPage & Filtering (W-38)', () => {
     expect(screen.getByRole('button', { name: /All\s+2/u })).toBeTruthy()
     expect(screen.getByRole('button', { name: /Completed\s+1/u })).toBeTruthy()
     expect(screen.getByRole('button', { name: /Refused\s+1/u })).toBeTruthy()
-    expect(screen.getByRole('button', { name: /Needs Attention\s+0/u })).toBeTruthy()
+    expect(screen.getByRole('button', { name: /Needs attention\s+0/u })).toBeTruthy()
   })
 
   it('shows date range chips with labels and aria-pressed', () => {
@@ -174,8 +174,8 @@ describe('ActivityPage & Filtering (W-38)', () => {
 
     const allTime = screen.getByRole('button', { name: 'All time' })
     const today = screen.getByRole('button', { name: 'Today' })
-    const sevenDay = screen.getByRole('button', { name: '7d' })
-    const thirtyDay = screen.getByRole('button', { name: '30d' })
+    const sevenDay = screen.getByRole('button', { name: 'Last 7 days' })
+    const thirtyDay = screen.getByRole('button', { name: 'Last 30 days' })
 
     expect(allTime.getAttribute('aria-pressed')).toBe('true')
     expect(today.getAttribute('aria-pressed')).toBe('false')
@@ -260,7 +260,7 @@ describe('ActivityPage & Filtering (W-38)', () => {
   it('disables CSV and JSON export when no calls match filters', () => {
     renderActivity()
 
-    fireEvent.click(screen.getByRole('button', { name: /Needs Attention\s+0/u }))
+    fireEvent.click(screen.getByRole('button', { name: /Needs attention\s+0/u }))
 
     expect(screen.getByRole('button', { name: /^CSV$/u })).toHaveProperty('disabled', true)
     expect(screen.getByRole('button', { name: /^JSON$/u })).toHaveProperty('disabled', true)
@@ -289,13 +289,13 @@ describe('ActivityPage & Filtering (W-38)', () => {
   it('shows filter empty message when no calls match', () => {
     renderActivity()
 
-    fireEvent.click(screen.getByRole('button', { name: /Needs Attention\s+0/u }))
+    fireEvent.click(screen.getByRole('button', { name: /Needs attention\s+0/u }))
 
-    expect(screen.getByText('No calls match these filters')).toBeTruthy()
+    expect(screen.getByText('No Calls match these filters')).toBeTruthy()
     const emptyState = screen.getByText('Active filters are hiding matching Calls.').closest('[role="status"]') as HTMLElement
     expect(emptyState).toBeTruthy()
     fireEvent.click(within(emptyState).getByRole('button', { name: 'Reset filters' }))
-    expect(screen.queryByText('No calls match these filters')).toBeNull()
+    expect(screen.queryByText('No Calls match these filters')).toBeNull()
   })
 
   it('shows agent filter pill in the filter bar', () => {

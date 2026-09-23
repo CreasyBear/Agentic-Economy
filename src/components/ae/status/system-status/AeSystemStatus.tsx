@@ -24,7 +24,6 @@ export function AeSystemStatus({ loaded }: AeSystemStatusProps) {
       actions={
         <Button
           type="button"
-          variant="outline"
           className="min-h-touch"
           disabled={model.isChecking}
           aria-busy={model.isChecking}

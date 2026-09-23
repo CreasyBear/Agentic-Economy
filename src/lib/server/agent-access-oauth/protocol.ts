@@ -323,10 +323,10 @@ export function consentAccessSummary(requestedAccess: AgentAccessOAuthRequestedA
     controls.push(`Maximum concurrent Calls: ${access.maximumConcurrentCalls}.`)
   }
   if (access.maximumCallsPerMinute !== undefined) {
-    controls.push(`Maximum calls per minute: ${access.maximumCallsPerMinute}.`)
+    controls.push(`Maximum Calls per minute: ${access.maximumCallsPerMinute}.`)
   }
   if (access.maximumCallsPerHour !== undefined) {
-    controls.push(`Maximum calls per hour: ${access.maximumCallsPerHour}.`)
+    controls.push(`Maximum Calls per hour: ${access.maximumCallsPerHour}.`)
   }
   if (access.environment === 'production'
     && access.maximumSpendPerCall === undefined

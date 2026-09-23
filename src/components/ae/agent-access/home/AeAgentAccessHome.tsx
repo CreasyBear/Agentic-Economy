@@ -109,6 +109,7 @@ export function AeAgentAccessHome(props: AeAgentAccessHomeProps) {
               canonicalBaseUrl={vm.canonicalBaseUrl}
               checkingConnection={vm.loading}
               onCheckConnection={vm.onDirectoryRetry}
+              hideSelfLinks
               {...(search.resumeTool === undefined ? {} : { resumeToolRef: search.resumeTool })}
             />
           )}

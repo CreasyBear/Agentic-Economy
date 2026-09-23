@@ -4,7 +4,7 @@ import { useConvexAuth, useMutation, useQuery } from 'convex/react'
 
 import { api } from '../../../../../convex/_generated/api'
 
-import type { AeOwnerCreditProps } from '@/components/ae/console/AeOwnerCredit'
+import type { AeOwnerCreditProps } from '@/components/ae/console/owner-credit/owner-credit.contracts'
 import type { AccountFundingPort } from '@/modules/money/account-funding.contracts'
 import type { AccountHistoryPort } from '@/modules/money/account-history.contracts'
 import type { AeInvoiceHistoryRow } from '@/modules/money/invoice-history.view-model'

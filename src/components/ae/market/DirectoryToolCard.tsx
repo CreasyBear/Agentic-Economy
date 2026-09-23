@@ -52,7 +52,7 @@ export const DirectoryToolCard = memo(function DirectoryToolCard({ model, onSave
       </CardContent>
       <CardFooter className="flex-wrap justify-between gap-2 border-t border-border px-5 py-3">
         <div className="min-w-0">
-          <p className="text-[0.6875rem] font-medium uppercase tracking-wide text-muted-foreground">Provider-listed price</p>
+          <p className="text-caption font-medium uppercase tracking-wide text-muted-foreground">Provider-listed price</p>
           <p className="mt-0.5 break-words text-sm font-medium tabular-nums">{model.priceLabel}</p>
           <p className="mt-0.5 truncate text-xs text-muted-foreground">{model.priceContext}</p>
         </div>

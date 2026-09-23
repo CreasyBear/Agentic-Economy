@@ -73,7 +73,7 @@ describe('/support', () => {
     expect(screen.getByRole('link', { name: 'Open Calls' }).getAttribute('href')).toBe('/activity')
     expect(screen.getByRole('link', { name: 'Continue Provider setup' }).getAttribute('href')).toBe('/owner/operations')
     expect(screen.getByRole('link', { name: 'Review account credit' }).getAttribute('href')).toBe('/owner/credit')
-    expect(screen.getByText(/check that Call before trying again/)).toBeTruthy()
+    expect(screen.getByText('Open the current status and follow the next action shown there.')).toBeTruthy()
     expect(screen.queryByRole('button', { name: /retry/i })).toBeNull()
   })
 
@@ -104,7 +104,7 @@ describe('/support', () => {
     expect(screen.queryByRole('button', { name: 'Copy diagnostic command' })).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: 'Advanced connection diagnostics' }))
     expect(screen.getByText('ae doctor --base-url "https://ae.example"')).toBeTruthy()
-    expect(screen.getByRole('link', { name: 'Review agent setup' }).getAttribute('href')).toBe('/for-agents')
+    expect(screen.getByRole('link', { name: 'Review Agent connection' }).getAttribute('href')).toBe('/for-agents')
   })
 
   it('renders an absent Call reference with the general Calls handoff', () => {

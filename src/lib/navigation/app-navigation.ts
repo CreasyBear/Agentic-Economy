@@ -1,5 +1,6 @@
 export type AppDestinationId =
   | 'market'
+  | 'chat'
   | 'agents'
   | 'calls'
   | 'credit'
@@ -31,6 +32,14 @@ export const APP_NAVIGATION: readonly AppDestination[] = [
     mobileRank: 1,
     keywords: ['market', 'catalogue', 'catalog', 'browse', 'tools'],
     title: 'Market | Agentic Economy',
+  },
+  {
+    id: 'chat',
+    label: 'Chat',
+    to: '/t/new',
+    group: 'primary',
+    keywords: ['chat', 'ask', 'conversation', 'thread'],
+    title: 'Chat | Agentic Economy',
   },
   {
     id: 'agents',
@@ -131,6 +140,7 @@ export function resolveAppDestination(
   hash?: string,
 ): AppDestinationId | null {
   if (pathname === '/market' || ownsPath(pathname, '/tools')) return 'market'
+  if (pathname === '/t/new' || ownsPath(pathname, '/t')) return 'chat'
   if (ownsPath(pathname, '/agent-access')) return 'agents'
   if (ownsPath(pathname, '/activity') || ownsPath(pathname, '/calls')) return 'calls'
   if (ownsPath(pathname, '/owner/credit') || ownsPath(pathname, '/fund')) return 'credit'

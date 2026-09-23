@@ -382,7 +382,6 @@ export const DS_15_SOURCE_FILES = [
   'src/components/ae/legal/privacy/AePrivacyPage.tsx',
   'src/components/ae/privacy/remove-business/AeRemoveBusinessPage.tsx',
   'src/components/ae/privacy/remove-business/AeRemoveBusinessPageSkeleton.tsx',
-  'src/components/ae/privacy/remove-business/components/CorrectionPathCards.tsx',
   'src/components/ae/privacy/remove-business/components/RemovalRequestForm.tsx',
 ] as const
 

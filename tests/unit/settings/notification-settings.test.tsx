@@ -39,11 +39,11 @@ describe('OwnerNotificationSettings', () => {
     render(<OwnerNotificationSettings preferences={basePreferences} onUpdate={onUpdate} />)
 
     expect(screen.queryByRole('heading', { name: 'Email alerts' })).toBeNull()
-    expect(screen.getByRole('switch', { name: 'Low credit balance' })).toBeTruthy()
-    expect(screen.getByRole('switch', { name: 'Spend cap warning' })).toBeTruthy()
-    expect(screen.getByRole('switch', { name: 'Repeated call failures' })).toBeTruthy()
-    expect(screen.getByRole('switch', { name: 'Tax invoice or statement ready' })).toBeTruthy()
-    expect(screen.getByRole('switch', { name: 'Team membership changes' })).toBeTruthy()
+    expect(screen.getByRole('switch', { name: 'Email when credit balance is low' })).toBeTruthy()
+    expect(screen.getByRole('switch', { name: 'Email when spend cap is reached' })).toBeTruthy()
+    expect(screen.getByRole('switch', { name: 'Email when calls fail repeatedly' })).toBeTruthy()
+    expect(screen.getByRole('switch', { name: 'Email when a tax invoice or statement is ready' })).toBeTruthy()
+    expect(screen.getByRole('switch', { name: 'Email when team membership changes' })).toBeTruthy()
   })
 
   it('U2: renders low-balance threshold chips with A$25 (Default) selected', () => {
@@ -60,7 +60,7 @@ describe('OwnerNotificationSettings', () => {
     const onUpdate = vi.fn()
     render(<OwnerNotificationSettings preferences={basePreferences} onUpdate={onUpdate} />)
 
-    fireEvent.click(screen.getByRole('switch', { name: 'Spend cap warning' }))
+    fireEvent.click(screen.getByRole('switch', { name: 'Email when spend cap is reached' }))
 
     await waitFor(() => {
       expect(onUpdate).toHaveBeenCalledWith({
@@ -100,7 +100,7 @@ describe('OwnerNotificationSettings', () => {
     const onUpdate = vi.fn()
     render(<OwnerNotificationSettings preferences={basePreferences} onUpdate={onUpdate} />)
 
-    const switchButton = screen.getByRole('switch', { name: 'Low credit balance' })
+    const switchButton = screen.getByRole('switch', { name: 'Email when credit balance is low' })
     for (const token of TACTILE.split(/\s+/u)) {
       expect(switchButton.className).toContain(token)
     }
@@ -111,10 +111,11 @@ describe('OwnerNotificationSettings', () => {
     render(<OwnerNotificationSettings preferences={basePreferences} onUpdate={onUpdate} />)
 
     const chip = screen.getByRole('radio', { name: 'A$10.00' })
-    expect(chip.className).toContain('font-mono')
-    expect(chip.className).toContain('tabular-nums')
+    const chipLabel = chip.closest('label')
+    expect(chipLabel?.className).toContain('font-mono')
+    expect(chipLabel?.className).toContain('tabular-nums')
     for (const token of TACTILE.split(/\s+/u)) {
-      expect(chip.className).toContain(token)
+      expect(chipLabel?.className).toContain(token)
     }
   })
 
@@ -136,7 +137,7 @@ describe('OwnerNotificationSettings', () => {
     const onUpdate = vi.fn().mockResolvedValue(undefined)
     render(<OwnerNotificationSettings preferences={basePreferences} onUpdate={onUpdate} />)
 
-    fireEvent.click(screen.getByRole('switch', { name: 'Spend cap warning' }))
+    fireEvent.click(screen.getByRole('switch', { name: 'Email when spend cap is reached' }))
 
     await waitFor(() => {
       expect(toastSuccess).toHaveBeenCalledWith('Notification preferences updated')
@@ -147,7 +148,7 @@ describe('OwnerNotificationSettings', () => {
     const onUpdate = vi.fn().mockRejectedValue(new Error('network'))
     render(<OwnerNotificationSettings preferences={basePreferences} onUpdate={onUpdate} />)
 
-    fireEvent.click(screen.getByRole('switch', { name: 'Spend cap warning' }))
+    fireEvent.click(screen.getByRole('switch', { name: 'Email when spend cap is reached' }))
 
     await waitFor(() => {
       expect(toastError).toHaveBeenCalledWith(

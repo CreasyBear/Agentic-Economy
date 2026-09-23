@@ -8,6 +8,7 @@ import {
   Compass,
   CreditCard,
   Key,
+  MessageSquare,
   Settings,
   WalletCards,
   Wrench,
@@ -34,6 +35,7 @@ import {
 type CatalogSearchItem = Extract<ToolChoiceSearchResult, { kind: 'ok' }>['items'][number]
 const navigationIcons: Readonly<Record<AppDestinationId, LucideIcon>> = {
   market: Compass,
+  chat: MessageSquare,
   agents: Key,
   calls: Activity,
   credit: CreditCard,

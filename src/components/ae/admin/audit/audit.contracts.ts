@@ -119,15 +119,15 @@ export const ADMIN_APPROVAL_ACTION_LABELS = {
 
 export const AUDIT_COPY = {
   title: 'Audit',
-  description: 'Review Admin activity, approvals, and redacted evidence.',
+  description: 'Review security audit events.',
   breadcrumbs: {
     admin: 'Admin',
     audit: 'Audit',
   },
-  accessDeniedTitle: 'Admin access required',
+  accessDeniedTitle: 'Admin access is required',
   accessDeniedDescription: 'Your account does not have the Admin role for this action.',
   filtersTitle: 'Filters',
-  filtersDescription: 'Combine indexed filters to narrow the activity timeline.',
+  filtersDescription: 'Combine indexed filters to narrow the events.',
   addFilter: 'Add filter',
   noEventTypes: 'No event types found.',
   applyFilters: 'Apply filters',
@@ -155,9 +155,9 @@ export const AUDIT_COPY = {
   pendingApprovalsTitle: 'Pending approvals',
   pendingApprovalsDescription: 'Admin actions awaiting a second approval.',
   noPendingApprovals: 'No proposals awaiting approval.',
-  eventsTitle: 'Activity',
-  eventsDescription: 'Newest activity appears first. Times use Australia/Perth.',
-  nothingNeedsAttention: 'Nothing needs attention.',
+  eventsTitle: 'Audit events',
+  eventsDescription: 'Newest events appear first. Times use Australia/Perth.',
+  nothingNeedsAttention: 'No audit events',
   noFilterMatches: 'No matches for these filters.',
   loadMore: 'Load more',
   columnLabels: {

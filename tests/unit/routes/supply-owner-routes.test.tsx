@@ -107,7 +107,7 @@ describe('owner supply routes', () => {
     cleanup()
     renderDetail('business:other')
     expect(screen.getByRole('heading', { name: 'Page not found' })).toBeTruthy()
-    expect(screen.getByRole('link', { name: 'Back to Tools' }).getAttribute('href')).toBe('/owner/operations')
+    expect(screen.getByRole('link', { name: 'Return to Tools' }).getAttribute('href')).toBe('/owner/operations')
     expect(screen.queryByTestId('tool-detail')).toBeNull()
   })
 
@@ -129,7 +129,7 @@ describe('owner supply routes', () => {
     )
     expect(screen.getByText(title)).toBeTruthy()
     if (status.kind === 'not_found') {
-      expect(screen.getByRole('link', { name: 'Back to Tools' }).getAttribute('href')).toBe('/owner/operations')
+      expect(screen.getByRole('link', { name: 'Return to Tools' }).getAttribute('href')).toBe('/owner/operations')
     }
   })
 })

@@ -542,9 +542,9 @@ describe('green release baseline', () => {
     expect(cache?.with?.key).toContain('convex-backend-version.outputs.version')
   })
 
-  it('keeps React Doctor explicitly advisory', () => {
+  it('keeps React Doctor blocking new errors', () => {
     const workflow = readWorkflow('.github/workflows/react-doctor.yml')
     const doctor = workflowSteps(workflow).find((step) => step.uses?.startsWith('millionco/react-doctor@'))
-    expect(doctor?.with?.blocking).toBe('none')
+    expect(doctor?.with?.blocking).toBe('error')
   })
 })

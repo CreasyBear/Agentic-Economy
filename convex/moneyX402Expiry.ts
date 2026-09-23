@@ -44,7 +44,9 @@ export const claim = internalMutation({
     await ctx.db.patch(attempt._id, { reconciliationEvidenceDigest: args.evidenceDigest, reconciliationEvidenceRef: args.evidenceRef })
     await ctx.db.patch(call._id, { reconciliation: {
       disposition: 'automatic', reason: 'refund_pending', attemptCount: lease?.attemptCount ?? 0,
-      nextAttemptAt: Date.now(), leaseOwner, leaseExpiresAt: Number.MAX_SAFE_INTEGER,
+      // Dedicated scheduled recovery owns this permanent claim. Keep it out of
+      // the general due queue, where it could otherwise hide later candidates.
+      nextAttemptAt: Number.MAX_SAFE_INTEGER, leaseOwner, leaseExpiresAt: Number.MAX_SAFE_INTEGER,
     } })
     return { evidenceDigest: args.evidenceDigest }
   },
@@ -76,13 +78,15 @@ export const finish = internalMutation({
       || attempt.reconciliationEvidenceDigest !== args.evidenceDigest
       || attempt.paymentNonce === undefined || call.reconciliation.leaseOwner !== owner(attempt.paymentNonce)
       || attempt.settlementStatus === 'settled') return { kind: 'refused' as const }
+    const transactionRef = args.transactionRefs[0]
+    if (transactionRef === undefined) return { kind: 'refused' as const }
     const now = Date.now()
     const result = {
       kind: 'refused' as const, toolRef: call.toolRef, code: 'source_unavailable' as const, retryable: false,
       nextAction: 'The service did not complete and payment expired unused. Your credit has been restored. You can make a new request from the Tool page.',
       receipt: { ...call.result.receipt, state: 'refunded' as const, refundState: 'released' as const,
         lossState: 'none' as const, evidenceHash: args.evidenceDigest, issuedAt: new Date(now).toISOString(),
-        accountingTransactionRefs: [...args.transactionRefs], transactionRef: args.transactionRefs[0]!,
+        accountingTransactionRefs: [...args.transactionRefs], transactionRef,
       },
     }
     await ctx.db.patch(attempt._id, { state: 'observed', settlementStatus: 'not_settled', paymentUnsignedMaterialJson: undefined })

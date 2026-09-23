@@ -80,7 +80,7 @@ function UnavailableAccountHistory({
 }: Readonly<{ loading: boolean; onRefresh?: () => void | Promise<void> }>) {
   if (loading) {
     return (
-      <div className="grid gap-intra" aria-busy="true" aria-label="Loading balance history">
+      <div className="grid gap-intra" aria-busy="true" aria-label="Loading credit history">
         <Skeleton className="h-touch w-full" />
         <Skeleton className="h-touch w-full" />
       </div>
@@ -88,7 +88,7 @@ function UnavailableAccountHistory({
   }
   return (
     <Alert>
-      <AlertTitle>Balance history unavailable</AlertTitle>
+      <AlertTitle>Credit history unavailable</AlertTitle>
       <AlertDescription className="flex flex-wrap items-center gap-3">
         <span>Known Account balance remains visible. No missing transaction or amount is being inferred.</span>
         {onRefresh === undefined ? null : (
@@ -132,7 +132,7 @@ function HistoryRefreshWarning({
   if (!visible) return null
   return (
     <Alert>
-      <AlertTitle>Balance history could not be refreshed</AlertTitle>
+      <AlertTitle>Credit history could not be refreshed</AlertTitle>
       <AlertDescription className="flex flex-wrap items-center gap-3">
         <span>The last booked transactions remain visible. No later transaction or amount is being inferred.</span>
         {onRefresh === undefined ? null : (

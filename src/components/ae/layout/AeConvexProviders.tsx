@@ -99,6 +99,10 @@ function ConfiguredChatConvexProvider({ convexUrl, children }: { convexUrl: stri
         if (requestGeneration === generation.current) setInitialization({ identity, attempt, ready: false })
         return null
       }
+    // The memo factory changes on identity and retry. The nested hook must
+    // refresh its token callback with that factory, even though these values
+    // are outside the nested hook's own render scope.
+    // oxlint-disable-next-line react-hooks/exhaustive-deps
     }, [clerkGetToken, convexUrl, identity, attempt])
     return { ...clerk, getToken }
   }, [convexUrl, identity, attempt])

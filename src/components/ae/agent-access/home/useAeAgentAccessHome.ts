@@ -332,7 +332,7 @@ export function useAeAgentAccessHome({
       ? 'Try loading more Agents again'
       : 'Load more Agents'
 
-  const addAnotherToggleLabel = showSetup ? 'Hide setup' : 'Connect another Agent'
+  const addAnotherToggleLabel = showSetup ? 'Hide setup' : 'Connect an Agent'
 
   const directoryRetryLabel = loading ? 'Trying again…' : 'Try again'
 

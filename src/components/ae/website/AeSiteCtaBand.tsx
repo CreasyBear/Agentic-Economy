@@ -11,7 +11,7 @@ export type AeSiteCtaBandProps = Readonly<{
   title: string
   description: ReactNode
   primary: Readonly<{ label: string; to: '/market' | '/for-agents' }>
-  secondary: Readonly<{ label: string; to: '/for-providers' }>
+  secondary?: Readonly<{ label: string; to: '/for-providers' }>
 }>
 
 /** Port of aecon.ai's Dusk call-to-action-2 heading and action row. */
@@ -30,9 +30,11 @@ export function AeSiteCtaBand({ title, description, primary, secondary }: AeSite
             <Link to={primary.to} className={buttonVariants({ size: 'lg' })}>
               {primary.label}
             </Link>
-            <Link to={secondary.to} className={buttonVariants({ size: 'lg', variant: 'outline' })}>
-              {secondary.label}
-            </Link>
+            {secondary === undefined ? null : (
+              <Link to={secondary.to} className={buttonVariants({ size: 'lg', variant: 'outline' })}>
+                {secondary.label}
+              </Link>
+            )}
           </div>
         </div>
       </div>

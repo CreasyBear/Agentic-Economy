@@ -91,6 +91,8 @@ describe('expired unused authorization claims', () => {
     ])
     expect(claims[0]).not.toBeNull()
     expect(claims[1]).toEqual(claims[0])
+    const claimedCall = await backend.run(async ctx => await ctx.db.query('capabilityCalls').first())
+    expect(claimedCall?.reconciliation?.nextAttemptAt).toBe(Number.MAX_SAFE_INTEGER)
     expect(await backend.mutation(internal.moneyManagedCallLifecycle.finalizeSettlement, {
       callRef, transactionRefs: ['settle:buyer', 'settle:provider'], now,
     })).toEqual({ kind: 'refused', code: 'managed_call_remedy_in_progress' })

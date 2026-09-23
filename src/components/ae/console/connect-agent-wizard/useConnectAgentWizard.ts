@@ -85,8 +85,10 @@ export function useConnectAgentWizard({
 
   const [diagnostic, setDiagnostic] = useState<Rule4Diagnostic | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [nameInvalid, setNameInvalid] = useState(false)
 
   const idempotencyKeyRef = useRef<string | undefined>(undefined)
+  const nameInputRef = useRef<HTMLInputElement>(null)
 
   const handleOpenChange = useCallback(
     (nextOpen: boolean) => {
@@ -100,6 +102,7 @@ export function useConnectAgentWizard({
           setMonthlyAmount,
           setDiagnostic,
         })
+        setNameInvalid(false)
         idempotencyKeyRef.current = undefined
       }
       if (!isSubmitting) {
@@ -112,6 +115,7 @@ export function useConnectAgentWizard({
   const handleNameChange = useCallback(
     (value: string) => {
       setName(value)
+      setNameInvalid(false)
       if (diagnostic !== null) {
         setDiagnostic(null)
       }
@@ -130,13 +134,18 @@ export function useConnectAgentWizard({
 
     const trimmedName = name.trim()
     if (trimmedName.length === 0) {
+      setNameInvalid(true)
       setDiagnostic(mapValidationDiagnostic('Agent name is required.'))
+      nameInputRef.current?.focus()
       return
     }
     if (trimmedName.length > 80) {
+      setNameInvalid(true)
       setDiagnostic(mapValidationDiagnostic('Agent name cannot exceed 80 characters.'))
+      nameInputRef.current?.focus()
       return
     }
+    setNameInvalid(false)
 
     let perCallExact
     let dailyExact
@@ -250,6 +259,7 @@ export function useConnectAgentWizard({
     name,
     nameLength: name.length,
     isNameValid,
+    nameInvalid,
     environment,
     authorityMode,
     perCallAmount,
@@ -262,6 +272,7 @@ export function useConnectAgentWizard({
 
   return {
     view,
+    nameInputRef,
     handleOpenChange,
     handleSubmit,
     handleNameChange,

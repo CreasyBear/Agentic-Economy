@@ -65,7 +65,7 @@ export function AeProviderToolDetail({
     } catch (cause) {
       setFeedback(degrade(cause, {
         kind: 'refused',
-        message: 'AE could not confirm the result. Reload this Tool before trying another action.',
+        message: 'Agentic Economy could not confirm the result. Reload this Tool before trying another action.',
       }, { site: 'runProviderToolAction', reason: 'source_unavailable' }))
     } finally {
       setPending(false)
@@ -106,7 +106,7 @@ export function AeProviderToolDetail({
         />
       </section>
 
-      <AeSection title="Tool status" description="Current publication facts from AE’s canonical admission and routeability checks.">
+      <AeSection title="Tool status" description="Current publication facts from Agentic Economy’s canonical admission and routeability checks.">
         <AeFactList facts={[
           { label: 'Tool', value: name },
           { label: 'Source', value: sourceLabel(status.source.kind) },
@@ -165,8 +165,8 @@ export function AeProviderToolDetail({
         open={confirmation === 'withdraw'}
         onOpenChange={(open) => { if (!open && !pending) setConfirmation(undefined) }}
         title="Withdraw this Tool?"
-        description="The Tool will stop accepting new work. Existing Calls and evidence remain available, and this Tool can be republished after AE revalidates it."
-        confirmLabel="Confirm withdrawal"
+        description="The Tool will stop accepting new work. Existing Calls and evidence remain available, and this Tool can be republished after Agentic Economy revalidates it."
+        confirmLabel="Withdraw Tool"
         confirmVariant="destructive"
         pending={pending}
         onConfirm={() => run(onWithdraw)}
@@ -175,8 +175,8 @@ export function AeProviderToolDetail({
         open={confirmation === 'republish'}
         onOpenChange={(open) => { if (!open && !pending) setConfirmation(undefined) }}
         title="Republish this Tool?"
-        description="AE will revalidate the current source, authority and contract before making the Tool available to buyers again."
-        confirmLabel="Confirm republish"
+        description="Agentic Economy will revalidate the current source, authority and contract before making the Tool available to buyers again."
+        confirmLabel="Republish Tool"
         pending={pending}
         onConfirm={() => run(onRepublish)}
       />
@@ -253,7 +253,7 @@ function PrimaryAction({
               </Button>
             ) : null}
             {onWithdraw !== undefined ? (
-              <Button type="button" variant="secondary" className="min-h-touch w-fit" disabled={pending} onClick={onWithdraw}>
+              <Button type="button" className="min-h-touch w-fit" disabled={pending} onClick={onWithdraw}>
                 Withdraw
               </Button>
             ) : null}
@@ -268,11 +268,11 @@ function stateDescription(status: ProviderToolStatus): string {
   switch (status.state) {
     case 'Draft': return 'The source and Tool are saved. Continue setup when you are ready to submit.'
     case 'Needs setup': return 'Complete the source or connection requirement before submitting this Tool.'
-    case 'Submitted': return 'AE accepted this Tool and is preparing validation.'
-    case 'Under review': return 'AE is validating the exact source, authority and contract. No separate promotion step is required.'
+    case 'Submitted': return 'Agentic Economy accepted this Tool and is preparing validation.'
+    case 'Under review': return 'Agentic Economy is validating the exact source, authority and contract. No separate promotion step is required.'
     case 'Published': return 'This Tool is current and available for buyer inspection.'
     case 'Paused': return 'This Tool is not accepting new work. Existing evidence remains available.'
-    case 'Action required': return 'AE stopped new work because one current requirement needs attention.'
+    case 'Action required': return 'Agentic Economy stopped new work because one current requirement needs attention.'
     case 'Retired': return 'This Tool is retired and no longer accepts new work.'
   }
 }

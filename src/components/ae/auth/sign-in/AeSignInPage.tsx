@@ -28,7 +28,7 @@ export function AeSignInPage(props: AeSignInPageProps) {
   }
 
   return (
-    <AePublicPage>
+    <AePublicPage hideFooterCloser>
       <AeSiteAuthStage labelledBy={model.labelledBy} url={model.stageUrl}>
         <AeSiteAuthPanel
           eyebrow="Account"

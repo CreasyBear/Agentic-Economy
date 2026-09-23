@@ -18,28 +18,7 @@ export function AeSiteUtilityDocument({
   className,
 }: AeSiteUtilityDocumentProps) {
   return (
-    <div className={cn('mx-auto grid max-w-6xl gap-8 px-6 py-12 md:py-20 lg:grid-cols-[180px_minmax(0,1fr)] lg:gap-12', className)}>
-      <nav aria-label="Company and website" className="h-fit">
-        <p className="mb-3 px-3 text-xs font-medium uppercase tracking-wider text-muted-foreground">
-          Agentic Economy
-        </p>
-        <div className="flex flex-wrap gap-1 rounded-xl border border-border p-1.5 lg:flex-col">
-          {utilityDocumentNavigation.map(({ to, label }) => (
-            <Link
-              key={to}
-              to={to}
-              activeProps={{
-                'aria-current': 'page',
-                className: 'bg-muted font-medium text-foreground',
-              }}
-              className="min-h-touch rounded-lg px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-solid focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
-            >
-              {label}
-            </Link>
-          ))}
-        </div>
-      </nav>
-
+    <div className={cn('mx-auto grid max-w-6xl gap-8 px-6 py-12 md:py-20 lg:grid-cols-[minmax(0,1fr)_180px] lg:gap-12', className)}>
       <article className="flex min-w-0 w-full max-w-[900px] flex-col gap-8 pb-8">
         <header className="border-b border-border pb-8">
           <p className="mb-3 text-sm text-muted-foreground">
@@ -79,10 +58,12 @@ export function AeSiteUtilityDocument({
         <div className="grid max-w-[70ch] gap-10 text-base leading-7 text-foreground">
           {sections.map(({ id, heading, body }, index) => (
             <section key={id} aria-labelledby={id} className="grid scroll-mt-anchor gap-4">
-              <h2 id={id} className="text-2xl font-medium tracking-tight text-foreground">
+              <h2 id={id} tabIndex={-1} className="text-2xl font-medium tracking-tight text-foreground outline-none focus-visible:outline-solid focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
                 {index + 1}. {heading}
               </h2>
-              {body.map((paragraph) => <p key={paragraph}>{paragraph}</p>)}
+              {body.map((paragraph, paragraphIndex) => (
+                <p key={typeof paragraph === 'string' ? paragraph : paragraphIndex}>{paragraph}</p>
+              ))}
             </section>
           ))}
         </div>
@@ -93,6 +74,26 @@ export function AeSiteUtilityDocument({
           </div>
         )}
       </article>
+      <nav aria-label="Company and website" className="h-fit">
+        <p className="mb-3 px-3 text-xs font-medium uppercase tracking-wider text-muted-foreground">
+          Agentic Economy
+        </p>
+        <div className="flex flex-wrap gap-1 rounded-xl border border-border p-1.5 lg:flex-col">
+          {utilityDocumentNavigation.map(({ to, label }) => (
+            <Link
+              key={to}
+              to={to}
+              activeProps={{
+                'aria-current': 'page',
+                className: 'bg-muted font-medium text-foreground',
+              }}
+              className="min-h-touch rounded-lg px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-solid focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+            >
+              {label}
+            </Link>
+          ))}
+        </div>
+      </nav>
     </div>
   )
 }

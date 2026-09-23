@@ -55,17 +55,13 @@ export const AGENT_DOOR = {
 
 /** Agent/Runtime landing (`/for-agents`) — setup for named harnesses, then the market. */
 export const AGENT_PAGE = {
-  metaTitle: 'Connect your agent | Agentic Economy',
+  metaTitle: 'Connect your Agent | Agentic Economy',
   metaDescription:
     'Find an outside service, compare its terms, and connect Codex, Claude Code or Cursor to make an authorized Call.',
   eyebrow: 'Connections',
   heading: 'Connect your Agent.',
-  subhead: 'We’re building one AUD account for your agents’ paid tools, with spending limits and purchase records.',
-  primaryCta: 'Connect an Agent',
-  openAgentsCta: 'Open Agents',
-  spendingPolicyStepHeading: 'Set a Spending policy',
-  spendingPolicyStepBody: 'Set limits for each Agent before it makes paid Calls.',
-  spendingPolicyCta: 'Review Spending policy',
+  subhead: 'We’re building one AUD account for your Agent’s paid Tools, with a Spending policy and purchase records.',
+  primaryCta: 'Start setup',
   faqHeading: 'Before you connect',
   faqQuestions: [
     {
@@ -114,16 +110,14 @@ export const ABOUT = {
   machinesHeading: 'Files for agents',
   machinesBody: 'The same facts the site shows: an index, a skill file, and a handshake.',
   heroImage: '/website/terrace-forest.webp',
-  heroPrimaryCta: 'Browse Tools',
-  heroSecondaryCta: 'Add Tool',
   editorialLabel: 'Meet the founder',
   editorialTitle: 'Joel Chan',
   editorialDescription:
-    'Joel is building Agentic Economy to help Australian businesses sell their expertise to a new kind of customer: AI agents.',
+    'Joel is building Agentic Economy so Australian businesses can offer Tools that Agents call on behalf of their Customers.',
   editorialParagraphs: [
-    'His focus is on making that shift practical—giving businesses a way to make their services discoverable, deliver work and get paid as more purchasing moves into the hands of software acting on people’s behalf.',
+    'His focus is on making that shift practical—giving businesses a way to make their Tools discoverable, deliver work and get paid as more purchasing moves into the hands of Agents acting for Customers.',
     'Joel is part of the 2026 AI Founder Sprint in Perth, delivered by Plus Eight in partnership with Superteam Australia and Solana.',
-    'Joel also writes about how AI agents are reshaping commerce, accountability and the institutions built around human decisions.',
+    'Joel also writes about how Agents are reshaping commerce, accountability and the institutions built around human decisions.',
   ],
   editorialLinks: [
     { label: 'Spacecubed’s founder cohort', href: 'https://blog.spacecubed.com/meet-the-12-exciting-founders-taking-part-in-our-superteam-ai-founder-sprint' },
@@ -135,10 +129,10 @@ export const ABOUT = {
   features: [
     {
       title: 'Permission before spending',
-      description: 'Your business chooses what an agent may buy and how much it may spend. Available Credit does not grant authority.',
+      description: 'Your business chooses what an Agent may buy and how much it may spend. Available Credit does not grant authority.',
     },
     {
-      title: 'Evidence after the request',
+      title: 'Evidence after the Call',
       description: 'Keep the price, delivered result and next step together. A successful charge alone does not prove delivery.',
     },
     {
@@ -146,8 +140,8 @@ export const ABOUT = {
       description: 'AUD Credit, explicit spending controls and understandable usage records shape the experience we’re building for Australian businesses.',
     },
     {
-      title: 'Your agent. Your way of working.',
-      description: 'Your chosen agent, apps and frameworks keep the surrounding task. Agentic Economy focuses on finding, buying and recording the outside service.',
+      title: 'Your Agent. Your way of working.',
+      description: 'Your chosen Agent, apps and frameworks keep the surrounding task. Agentic Economy focuses on finding, buying and recording the Tool.',
     },
   ],
   ctaHeading: 'Building it. Sharing the journey.',
@@ -157,7 +151,6 @@ export const ABOUT = {
     separator: ' · ',
   },
   ctaPrimary: 'Browse Tools',
-  ctaSecondary: 'Add Tool',
 } as const
 
 /** Public footer wordmark line. */

@@ -32,12 +32,15 @@ export function ActivityCallQueue({
   const columns = useMemo<ColumnDef<ActivityCallRowView, unknown>[]>(
     () => [
       {
-        id: 'task',
-        accessorFn: (item) => item.toolLabel,
-        header: ({ column }) => <AeOperatorSortableHeader label="Task" column={column} />,
+        id: 'call',
+        accessorKey: 'callRef',
+        header: ({ column }) => <AeOperatorSortableHeader label="Call" column={column} />,
         cell: ({ row }) => (
-          <span className="font-medium text-foreground">
-            {row.original.toolLabel}
+          <span
+            className="font-mono text-xs text-muted-foreground truncate max-w-[120px] block"
+            title={row.original.callRef}
+          >
+            {row.original.callRef}
           </span>
         ),
       },
@@ -48,6 +51,16 @@ export function ActivityCallQueue({
         cell: ({ row }) => (
           <span className="font-mono text-xs text-muted-foreground truncate max-w-[120px] block" title={row.original.agentTitle}>
             {row.original.agentShortId}
+          </span>
+        ),
+      },
+      {
+        id: 'tool',
+        accessorFn: (item) => item.toolLabel,
+        header: ({ column }) => <AeOperatorSortableHeader label="Tool" column={column} />,
+        cell: ({ row }) => (
+          <span className="font-medium text-foreground">
+            {row.original.toolLabel}
           </span>
         ),
       },
@@ -108,7 +121,7 @@ export function ActivityCallQueue({
     <AeSection title={title} description={description}>
       {rows.length === 0 ? (
         <AeTableEmptyState
-          title={attention ? 'No calls need attention' : 'No calls in history'}
+          title={attention ? 'No Calls need attention' : 'No Calls in history'}
           description={emptyMessage}
         />
       ) : (
@@ -118,7 +131,7 @@ export function ActivityCallQueue({
           caption={title}
           countLabel={attention ? 'Calls needing attention' : 'recent Calls'}
           filterPlaceholder={attention ? 'Filter attention queue…' : 'Filter recent Calls…'}
-          hideFilter={rows.length <= 1}
+          hideFilter
           getRowId={(item) => item.callRef}
           rowAction={{
             kind: 'link',

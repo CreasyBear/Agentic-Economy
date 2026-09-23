@@ -3,6 +3,7 @@
 import { Link } from '@tanstack/react-router'
 
 import { useOperatorSidebarChrome } from '@/components/ae/layout/AeOperatorPage'
+import { AeOrganizationSwitcher } from '@/components/ae/layout/AeOrganizationSwitcher'
 import { Badge } from '@/components/ui/badge'
 import {
   Sidebar,
@@ -29,6 +30,7 @@ import {
 
 export type AeAppSidebarProps = Readonly<{
   operatorRole: OperatorRole
+  canAccessAdmin?: boolean
   pathname: string
   hash: string
 }>
@@ -51,9 +53,9 @@ function formatNavBadge(value: OperatorNavBadgeValue): string | undefined {
   return trimmed.length === 0 ? undefined : trimmed
 }
 
-export function AeAppSidebar({ operatorRole, pathname, hash }: AeAppSidebarProps) {
+export function AeAppSidebar({ operatorRole, canAccessAdmin = false, pathname, hash }: AeAppSidebarProps) {
   const activeDestinationId = resolveAppDestination(pathname, hash)
-  const roleItems = roleNavigation(operatorRole)
+  const roleItems = roleNavigation(operatorRole, canAccessAdmin)
   const activeRoleHref = activeDestinationId === null
     ? activeRoleNavigationHref(pathname, roleItems)
     : undefined
@@ -70,7 +72,7 @@ export function AeAppSidebar({ operatorRole, pathname, hash }: AeAppSidebarProps
       <nav id="app-sidebar-navigation" aria-label="App navigation" className="flex h-full min-h-0 flex-1 flex-col">
         <SidebarContent>
           {(['primary', 'provider'] as const).map((group) => (
-            <SidebarGroup key={group} className="gap-related px-related py-related">
+            <SidebarGroup key={group} className="gap-related px-related py-related group-data-[collapsible=icon]:p-2">
               <SidebarGroupLabel className="h-6 rounded-none px-2 font-sans text-xs font-medium text-muted-foreground" render={<span />}>
                 {GROUP_LABEL[group]}
               </SidebarGroupLabel>
@@ -110,7 +112,7 @@ export function AeAppSidebar({ operatorRole, pathname, hash }: AeAppSidebarProps
             </SidebarGroup>
           ))}
           {roleItems.length === 0 ? null : (
-            <SidebarGroup className="gap-related px-related py-related">
+            <SidebarGroup className="gap-related px-related py-related group-data-[collapsible=icon]:p-2">
               <SidebarGroupLabel className="h-6 rounded-none px-2 font-sans text-xs font-medium text-muted-foreground" render={<span />}>
                 {operatorRole === 'admin' ? 'Admin' : 'Developer'}
               </SidebarGroupLabel>
@@ -141,7 +143,7 @@ export function AeAppSidebar({ operatorRole, pathname, hash }: AeAppSidebarProps
             </SidebarGroup>
           )}
         </SidebarContent>
-        <SidebarFooter className="mt-auto gap-related border-t border-sidebar-border px-related py-related">
+        <SidebarFooter className="mt-auto gap-related border-t border-sidebar-border px-related py-related group-data-[collapsible=icon]:p-2">
           <SidebarGroupLabel className="h-6 rounded-none px-2 font-sans text-xs font-medium text-muted-foreground" render={<span />}>
             {GROUP_LABEL.utility}
           </SidebarGroupLabel>
@@ -163,6 +165,7 @@ export function AeAppSidebar({ operatorRole, pathname, hash }: AeAppSidebarProps
               )
             })}
           </SidebarMenu>
+          <AeOrganizationSwitcher isCollapsed={collapsed} />
         </SidebarFooter>
       </nav>
       <SidebarRail

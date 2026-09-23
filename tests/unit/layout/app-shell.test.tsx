@@ -1,8 +1,9 @@
 /**
  * @vitest-environment jsdom
  */
+import { getFunctionName, type FunctionReference } from 'convex/server'
 import type { ReactNode } from 'react'
-import { cleanup, render, screen, within } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import {
   RouterContextProvider,
   createMemoryHistory,
@@ -14,6 +15,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import '../../setup/jsdom-platform'
 import '../../setup/jsdom-dialog'
 
+import type { OperatorSurface } from '@/lib/operator/operator-context'
 import { AeAppShell } from '@/components/ae/layout/AeAppShell'
 
 vi.mock('@/lib/observability/funnel-client', () => ({
@@ -21,6 +23,22 @@ vi.mock('@/lib/observability/funnel-client', () => ({
 }))
 
 const clerkSignedIn = vi.hoisted(() => ({ value: false }))
+const entitlement = vi.hoisted<{
+  isAuthenticated: boolean
+  result: { kind: 'authorized'; allowedSurfaces: readonly OperatorSurface[] } | { kind: 'denied' } | undefined
+}>(() => ({
+  isAuthenticated: false,
+  result: undefined,
+}))
+
+vi.mock('convex/react', () => ({
+  useConvexAuth: () => ({ isAuthenticated: entitlement.isAuthenticated }),
+  useQuery: (query: FunctionReference<'query'>, args: unknown) => {
+    if (args === 'skip') return undefined
+    if (getFunctionName(query) !== 'operatorContext:readCurrent') throw new Error('Unexpected query')
+    return entitlement.result
+  },
+}))
 
 vi.mock('@clerk/tanstack-react-start', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@clerk/tanstack-react-start')>()),
@@ -34,7 +52,11 @@ vi.mock('@clerk/tanstack-react-start', async (importOriginal) => ({
   OrganizationSwitcher: () => <div data-testid="org-switcher" />,
 }))
 
-afterEach(cleanup)
+afterEach(() => {
+  cleanup()
+  entitlement.isAuthenticated = false
+  entitlement.result = undefined
+})
 
 describe('AeAppShell', () => {
   it('renders exactly one persistent app header with the skip link and public primary nav', () => {
@@ -49,16 +71,21 @@ describe('AeAppShell', () => {
       Array.from(nav.querySelectorAll('a')).map((link) => link.textContent),
     )
     expect(screen.getByRole('link', { name: 'Sign in' }).className).toMatch(/md:inline-flex/)
+    expect(screen.queryByRole('button', { name: 'Workspace menu' })).toBeNull()
   })
 
-  it('renders the canonical sidebar and no destination row when signed in', () => {
+  it('opens workspace destinations from the header menu when signed in', () => {
     clerkSignedIn.value = true
+    entitlement.isAuthenticated = true
     renderAppShell()
 
     expect(screen.queryByRole('navigation', { name: 'Primary' })).toBeNull()
-    const nav = screen.getByRole('navigation', { name: 'App navigation' })
-    expect(Array.from(nav.querySelectorAll('a')).map((link) => link.textContent)).toEqual([
+    expect(screen.queryByRole('navigation', { name: 'App navigation' })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Workspace menu' }))
+    const menu = screen.getByRole('menu')
+    expect(Array.from(menu.querySelectorAll('a')).map((link) => link.textContent)).toEqual([
       'Market',
+      'Chat',
       'Agents',
       'Calls',
       'Credit',
@@ -68,22 +95,69 @@ describe('AeAppShell', () => {
       'Support',
       'Status',
     ])
-    expect(nav.querySelectorAll('[aria-current="page"]')).toHaveLength(1)
-    expect(within(nav).getByRole('link', { name: 'Market' }).getAttribute('aria-current')).toBe('page')
+    expect(within(menu).getByRole('menuitem', { name: 'Market' }).getAttribute('aria-current')).toBe('page')
     expect(screen.getByTestId('org-switcher')).toBeTruthy()
     expect(screen.queryByRole('link', { name: 'Sign in' })).toBeNull()
   })
 
-  it('shows every admin destination and marks only the longest route match', () => {
+  it('shows one Admin group on an owner page for an active admin session', () => {
     clerkSignedIn.value = true
+    entitlement.isAuthenticated = true
+    entitlement.result = { kind: 'authorized', allowedSurfaces: ['owner', 'admin'] }
+    renderAppShell('/owner/operations')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Workspace menu' }))
+    const menu = screen.getByRole('menu')
+    expect(within(menu).getAllByText('Admin')).toHaveLength(1)
+    expect(['Overview', 'Search', 'Exceptions', 'Providers', 'Metrics', 'Audit'].map(label =>
+      within(menu).getByRole('menuitem', { name: label }).textContent
+    )).toEqual(['Overview', 'Search', 'Exceptions', 'Providers', 'Metrics', 'Audit'])
+    expect(within(screen.getByRole('navigation', { name: 'Owner primary navigation' })).queryByRole('link', { name: 'Admin' })).toBeNull()
+  })
+
+  it('shows Admin navigation with the longest route active for an entitled session', () => {
+    clerkSignedIn.value = true
+    entitlement.isAuthenticated = true
+    entitlement.result = { kind: 'authorized', allowedSurfaces: ['owner', 'admin'] }
     renderAppShell('/admin/metrics')
 
     const nav = screen.getByRole('navigation', { name: 'Admin primary navigation' })
     expect(Array.from(nav.querySelectorAll('a')).map(link => link.textContent)).toEqual([
-      'Overview', 'Search', 'Exceptions', 'Providers', 'Metrics', 'Audit',
+      'Home', 'Search', 'Queue', 'Providers', 'Metrics', 'Audit',
     ])
-    expect(nav.querySelectorAll('[aria-current=\"page\"]')).toHaveLength(1)
+    expect(nav.querySelectorAll('[aria-current="page"]')).toHaveLength(1)
     expect(within(nav).getByRole('link', { name: 'Metrics' }).getAttribute('aria-current')).toBe('page')
+    fireEvent.click(screen.getByRole('button', { name: 'Workspace menu' }))
+    const menu = screen.getByRole('menu')
+    expect(within(menu).getAllByText('Admin')).toHaveLength(1)
+    expect(within(menu).getByRole('menuitem', { name: 'Metrics' }).getAttribute('aria-current')).toBe('page')
+    expect(within(menu).getByRole('menuitem', { name: 'Overview' }).getAttribute('aria-current')).toBeNull()
+  })
+
+  it('keeps Developer navigation alongside one Admin group for an entitled developer path', () => {
+    clerkSignedIn.value = true
+    entitlement.isAuthenticated = true
+    entitlement.result = { kind: 'authorized', allowedSurfaces: ['owner', 'admin', 'developer'] }
+    renderAppShell('/developers/discovery')
+    fireEvent.click(screen.getByRole('button', { name: 'Workspace menu' }))
+    const menu = screen.getByRole('menu')
+    expect(within(menu).getAllByText('Admin')).toHaveLength(1)
+    expect(within(menu).getAllByText('Developer')).toHaveLength(1)
+    expect(within(menu).getByRole('menuitem', { name: 'Discovery' })).toBeTruthy()
+  })
+
+  const deniedContexts: { pathname: string; result: typeof entitlement.result }[] = [
+    { pathname: '/admin/search', result: { kind: 'authorized', allowedSurfaces: ['owner'] } },
+    { pathname: '/admin/search', result: undefined },
+  ]
+  it.each(deniedContexts)('does not disclose Admin navigation without a resolved admin entitlement at $pathname', ({ pathname, result }) => {
+    clerkSignedIn.value = true
+    entitlement.isAuthenticated = true
+    entitlement.result = result
+    renderAppShell(pathname)
+    expect(screen.queryByRole('navigation', { name: 'Admin primary navigation' })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Workspace menu' }))
+    expect(within(screen.getByRole('menu')).queryByText('Admin')).toBeNull()
   })
 })
 
@@ -121,6 +195,7 @@ function renderAppShell(pathname = clerkSignedIn.value ? '/market' : '/'): void 
       path: '/owner/operations',
       staticData: { nav: { label: 'Tools', header: { order: 3, audience: 'signed-in' } } },
     }),
+    createRoute({ getParentRoute: () => rootRoute, path: '/developers/discovery' }),
     createRoute({ getParentRoute: () => rootRoute, path: '/sign-in/$' }),
     createRoute({ getParentRoute: () => rootRoute, path: '/admin' }),
     createRoute({ getParentRoute: () => rootRoute, path: '/admin/search' }),

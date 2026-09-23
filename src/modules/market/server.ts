@@ -84,7 +84,7 @@ export type MarketCatalogQuery = Readonly<{
 export async function readToolListingEvidence(
   tool: PublicToolDescriptor,
   window: MarketWindow = "30d",
-): Promise<MarketListingEvidenceProjection> {
+): Promise<MarketListingEvidenceProjection | undefined> {
   const summary = catalogJobSummary(
     tool.summary || tool.listing.summary,
   );
@@ -99,11 +99,7 @@ export async function readToolListingEvidence(
       since: Date.now() - windowMilliseconds(window),
     });
     return source === undefined
-      ? emptyMarketListingEvidence(
-          tool.toolRef,
-          tool.contract.capabilityId,
-          catalogText,
-        )
+      ? undefined
       : projectMarketListingEvidence(
           source,
           tool.contract.capabilityId,
@@ -112,11 +108,7 @@ export async function readToolListingEvidence(
   } catch (cause) {
     return degrade(
       cause,
-      emptyMarketListingEvidence(
-        tool.toolRef,
-        tool.contract.capabilityId,
-        catalogText,
-      ),
+      undefined,
       { site: "readToolListingEvidence", reason: "source_unavailable" },
     );
   }

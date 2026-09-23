@@ -56,6 +56,43 @@ export type SourceKind = SupplySourceInput['kind']
 export type Environment = SupplySourceInput['environment']
 export type AttestationKey = keyof PublishSupplyToolV2Input['attestation']
 export type SupplyJourneyContinuation = Readonly<{ label: string; to: string }>
+export type SupplyPublicationInvalidField =
+  | 'category'
+  | 'price'
+  | 'connection'
+  | 'attestation'
+  | 'candidate'
+
+export const SUPPLY_PUBLICATION_ERROR_ID = 'supply-publication-error'
+
+export const SUPPLY_PUBLICATION_FIELD_IDS = {
+  category: 'supply-native-category',
+  priceGroup: 'supply-native-price-group',
+  priceAud: 'supply-native-price-aud',
+  connection: 'supply-native-connection',
+  attestation: 'supply-attest-authorised',
+  candidate: 'supply-candidate-group',
+} as const
+
+/** Maps the existing validation copy to the control that message names. */
+export function publicationInvalidFieldForMessage(
+  message: string,
+): SupplyPublicationInvalidField | undefined {
+  switch (message) {
+    case 'Enter a category before submitting this Tool.':
+      return 'category'
+    case 'Enter a valid AUD price, or choose Free.':
+      return 'price'
+    case 'Choose a connected source before submitting this Tool.':
+      return 'connection'
+    case 'Confirm all three publication statements before submitting.':
+      return 'attestation'
+    case 'Select one supported Tool before submitting it.':
+      return 'candidate'
+    default:
+      return undefined
+  }
+}
 
 export type SupplyNativeStartProps = Readonly<{
   businessRef: string

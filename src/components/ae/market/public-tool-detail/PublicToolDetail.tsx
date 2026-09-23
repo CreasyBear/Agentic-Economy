@@ -46,22 +46,22 @@ export function toolUnavailablePresentation(
       tone: 'neutral',
       title: 'This Tool reference is invalid',
       description: 'The reference is malformed, so AE did not query the catalog or show commercial facts and Call steps.',
-      action: { label: 'Browse current Tools', to: '/market' },
+      action: { label: 'Browse Market', to: '/market' },
     }
   }
   if (result.kind === 'not_found') {
     return {
       tone: 'neutral',
       title: 'This exact Tool is unknown or no longer current',
-      description: 'AE has no current descriptor for this reference, so no historical terms, price, or Call steps are shown.',
-      action: { label: 'Browse current Tools', to: '/market' },
+      description: 'Agentic Economy has no current record for this Tool, so no historical terms, price, or Call steps are shown.',
+      action: { label: 'Browse Market', to: '/market' },
     }
   }
   return {
     tone: 'warning',
     title: 'This Tool is not currently available',
     description: `${REASON_COPY[result.reason] ?? REASON_COPY_FALLBACK} No commercial facts or Call steps are shown.`,
-    action: { label: 'Browse current Tools', to: '/market' },
+    action: { label: 'Browse Market', to: '/market' },
   }
 }
 
@@ -84,18 +84,20 @@ function CurrentToolDetail({
 }: CurrentToolDetailProps) {
   return (
     <AePublicPage>
-      <div className="ae-rail grid gap-section pb-page">
+      <div className="grid gap-section pb-page">
         <AePageHeader
           eyebrow="Tool"
           title={toolDisplayTitle(tool)}
           description={`${tool.business.name} · ${tool.contract.capabilityId}`}
-          actions={<MarketBackButton label="Catalog" className="min-h-touch" variant="ghost" />}
+          actions={<MarketBackButton label="Browse Market" className="min-h-touch" variant="ghost" />}
         />
-        <AeToolInspector
-          tool={tool}
-          {...(evidence === undefined ? {} : { evidence })}
-          variant="full"
-        />
+        <div className="ae-rail">
+          <AeToolInspector
+            tool={tool}
+            {...(evidence === undefined ? {} : { evidence })}
+            variant="full"
+          />
+        </div>
       </div>
     </AePublicPage>
   )

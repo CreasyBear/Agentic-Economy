@@ -1,5 +1,6 @@
 import { AeSection } from '@/components/ae/layout/AeSection'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -19,6 +20,7 @@ export function ProviderWorkspaceEarningsSection({
   earningsPending,
   earningsDetailAvailable,
   onOpenEarnings,
+  onCloseEarnings,
   onRetryEarnings,
 }: ProviderWorkspaceEarningsSectionProps) {
   return (
@@ -37,18 +39,28 @@ export function ProviderWorkspaceEarningsSection({
           </Button>
         )}
       </div>
-      {earningsOpen
-        ? earningsPending
-          ? <div aria-busy="true"><Skeleton className="h-24 w-full" /></div>
-          : !earningsDetailAvailable
-            ? <UnavailableSummary title={PROVIDER_WORKSPACE_EARNINGS_COPY.unavailable} retryLabel={PROVIDER_WORKSPACE_EARNINGS_COPY.retryAction} onRetry={onRetryEarnings} />
-            : (
-                <Alert>
-                  <AlertTitle>{payoutConnection.label}</AlertTitle>
-                  <AlertDescription>{payoutConnection.sentence}</AlertDescription>
-                </Alert>
-              )
-        : null}
+      <Sheet open={earningsOpen} onOpenChange={(open) => { if (!open) onCloseEarnings() }}>
+        <SheetContent className="overflow-y-auto sm:max-w-lg">
+          <SheetHeader>
+            <SheetTitle>Earnings</SheetTitle>
+            <SheetDescription>{PROVIDER_WORKSPACE_EARNINGS_COPY.connectionTitle}</SheetDescription>
+          </SheetHeader>
+          <div className="px-gutter pb-gutter">
+            {earningsOpen ? (
+              earningsPending
+                ? <div aria-busy="true"><Skeleton className="h-24 w-full" /></div>
+                : !earningsDetailAvailable
+                  ? <UnavailableSummary title={PROVIDER_WORKSPACE_EARNINGS_COPY.unavailable} retryLabel={PROVIDER_WORKSPACE_EARNINGS_COPY.retryAction} onRetry={onRetryEarnings} />
+                  : (
+                      <Alert>
+                        <AlertTitle>{payoutConnection.label}</AlertTitle>
+                        <AlertDescription>{payoutConnection.sentence}</AlertDescription>
+                      </Alert>
+                    )
+            ) : null}
+          </div>
+        </SheetContent>
+      </Sheet>
       <a
         href={appDestination('settings').to}
         className={cn(buttonVariants({ variant: 'secondary' }), 'w-fit min-h-touch')}

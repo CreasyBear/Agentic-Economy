@@ -39,30 +39,34 @@ export function AeDirectoryToolCanonicalPage({ data }: AeDirectoryToolCanonicalP
 function DirectoryEntrySummaryPage({ entry, upstream, readiness }: DirectoryEntrySummaryPageProps) {
   return (
     <AePublicPage>
-      <div className="ae-rail grid gap-section pb-page">
+      <div className="grid gap-section pb-page">
         <AePageHeader
           eyebrow="Tool"
           title={directoryTitle(entry)}
           description={entry.provider}
-          actions={<MarketBackButton label="Catalog" className="min-h-touch" variant="ghost" />}
+          actions={<MarketBackButton label="Browse Market" className="min-h-touch" variant="ghost" />}
         />
-        {upstream ? <p className="text-sm text-muted-foreground">Listed by the Provider directory; not yet verified in AE&apos;s index.</p> : null}
-        <div className="grid max-w-2xl gap-related">
-          <p className="text-sm leading-relaxed text-muted-foreground">{entry.description}</p>
+        <div className="ae-rail grid max-w-2xl gap-related">
+          {upstream ? <p className="text-sm text-muted-foreground">Listed by the Provider directory; not yet verified in Agentic Economy&apos;s index.</p> : null}
           <div>
-            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Provider-listed price</p>
+            <p className="text-caption font-medium uppercase tracking-wide text-muted-foreground">Provider-listed price</p>
             <p className="text-lg font-semibold tabular-nums">{directoryPrice(entry)}</p>
-            <p className="mt-0.5 text-xs text-muted-foreground">{directoryPriceContext(entry)}</p>
+            <p className="mt-0.5 text-caption text-muted-foreground">{directoryPriceContext(entry)}</p>
           </div>
-          {readiness === undefined
-            ? <p role="status" className="text-sm text-muted-foreground">Checking whether this Tool is ready to call…</p>
-            : <div role="status" className="grid gap-1 text-sm">
-                <p className="font-medium">{readiness.title}</p>
-                <p className="text-muted-foreground">{readiness.description}</p>
+          <p className="text-sm leading-relaxed text-muted-foreground">{entry.description}</p>
+          <div role="status" className="grid gap-1 text-sm text-muted-foreground">
+            {readiness === undefined ? (
+              <p>Checking whether this Tool is ready to call…</p>
+            ) : (
+              <>
+                <p className="font-medium text-foreground">{readiness.title}</p>
+                <p>{readiness.description}</p>
                 <Link to={readiness.action.to} className="text-sm underline underline-offset-4">
                   {readiness.action.label}
                 </Link>
-              </div>}
+              </>
+            )}
+          </div>
         </div>
       </div>
     </AePublicPage>

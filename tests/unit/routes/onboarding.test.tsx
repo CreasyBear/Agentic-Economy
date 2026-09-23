@@ -111,7 +111,7 @@ afterEach(() => {
 })
 
 describe('onboarding route', () => {
-  it('R1: incomplete state renders role intent step with Continue disabled', () => {
+  it('R1: incomplete state renders role intent step with Continue enabled', () => {
     renderOnboarding()
 
     expect(screen.getByRole('heading', { name: 'Finish workspace' })).toBeTruthy()
@@ -119,12 +119,13 @@ describe('onboarding route', () => {
     expect(screen.getByRole('radiogroup')).toBeTruthy()
     expect(screen.getByRole('radio', { name: 'Buy with an Agent' })).toBeTruthy()
     expect(screen.getByRole('radio', { name: 'Provide a Tool' })).toBeTruthy()
-    expect(screen.getByText('Unlocks Market, Agents, Credit, and Call records. You can change this in Settings.')).toBeTruthy()
-    expect(screen.getByText('Unlocks Provider Operations to publish Tools and manage Calls. You can change this in Settings.')).toBeTruthy()
-    expect(screen.getByRole('button', { name: 'Continue' })).toHaveProperty('disabled', true)
+    expect(screen.getByText('Unlocks Market, Agents, Credit, and Call records.')).toBeTruthy()
+    expect(screen.getByText('Unlocks Provider Operations to publish Tools and manage Calls.')).toBeTruthy()
+    expect(screen.queryByText(/You can change this in Settings/)).toBeNull()
+    expect(screen.getByRole('button', { name: 'Continue' })).toHaveProperty('disabled', false)
   })
 
-  it('R2: selecting a role enables Continue and opens the workspace name step', () => {
+  it('R2: selecting a role opens the workspace name step', () => {
     renderOnboarding()
 
     selectRole('Buy with an Agent')
@@ -149,12 +150,13 @@ describe('onboarding route', () => {
       },
     })
     expect(screen.getByText('Create workspace opens Workspace overview.')).toBeTruthy()
-    expect(screen.getByText('Skip: you can set this later in Settings')).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Skip' })).toBeNull()
+    expect(screen.queryByText('Skip: you can set this later in Settings')).toBeNull()
     expect(screen.getByRole('button', { name: 'Back' })).toBeTruthy()
   })
 
 
-  it('R2c: agent-access redirect preselects buyer and enables Continue', () => {
+  it('R2c: agent-access redirect preselects buyer and Continue stays enabled', () => {
     routeState.search = { redirect: '/agent-access' }
     renderOnboarding()
 
@@ -178,7 +180,7 @@ describe('onboarding route', () => {
     expect(screen.getByRole('textbox', { name: 'Workspace name' })).toHaveProperty('value', 'Acme')
   })
 
-  it('R3: empty workspace name blocks finish and does not call complete', async () => {
+  it('R3: empty workspace name keeps Create enabled and does not call complete', async () => {
     renderOnboarding()
     selectRole('Buy with an Agent')
     advanceToWorkspaceStep()
@@ -187,8 +189,10 @@ describe('onboarding route', () => {
     fireEvent.change(nameInput, { target: { value: '   ' } })
 
     const finishButton = screen.getByRole('button', { name: 'Create workspace' })
-    expect(finishButton).toHaveProperty('disabled', true)
+    expect(finishButton).toHaveProperty('disabled', false)
     fireEvent.click(finishButton)
+    expect(screen.getByText('Enter a workspace name.')).toBeTruthy()
+    expect(nameInput.getAttribute('aria-invalid')).toBe('true')
     await waitFor(() => {
       expect(routeState.completeMutation).not.toHaveBeenCalled()
     })
@@ -210,23 +214,20 @@ describe('onboarding route', () => {
     expect(screen.getByText('Create workspace opens Provider Operations.')).toBeTruthy()
   })
 
-  it('R3c: Skip creates the workspace with the suggested name', async () => {
+  it('R3c: Create with an empty name does not call the completion mutation', async () => {
     renderOnboarding()
     selectRole('Buy with an Agent')
     advanceToWorkspaceStep()
     fireEvent.change(screen.getByRole('textbox', { name: 'Workspace name' }), {
-      target: { value: 'Discard this edit' },
+      target: { value: '   ' },
     })
-    fireEvent.click(screen.getByRole('button', { name: 'Skip' }))
+    expect(screen.queryByRole('button', { name: 'Skip' })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Create workspace' }))
 
     await waitFor(() => {
-      expect(routeState.completeMutation).toHaveBeenCalledWith(
-        expect.objectContaining({
-          roleIntent: 'buyer',
-          workspaceName: SUGGESTED_NAME,
-        }),
-      )
+      expect(routeState.completeMutation).not.toHaveBeenCalled()
     })
+    expect(screen.getByText('Enter a workspace name.')).toBeTruthy()
   })
 
   it('R4: valid submit calls complete with roleIntent, workspaceName, and correlationRef', async () => {

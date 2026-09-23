@@ -210,8 +210,8 @@ function TaxInvoiceAction({
           <Download className="size-3.5 shrink-0" aria-hidden="true" />
           <span>Download Tax Invoice</span>
         </Button>
-        <a href="/owner/workspace" className="text-xs text-primary underline-offset-4 hover:underline">
-          Tax details missing — Add ABN in Workspace Settings to generate ATO-compliant invoices
+        <a href="/owner/settings#business" className="text-xs text-primary underline-offset-4 hover:underline">
+          Tax details missing — Add an ABN in Business settings to generate ATO-compliant invoices
         </a>
       </div>
     )

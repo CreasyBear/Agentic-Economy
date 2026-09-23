@@ -59,7 +59,7 @@ test('exact staging revision supports anonymous, durable, and shared Tool chat',
 
   const ownerChat = ownerPage.getByRole('region', { name: 'Chat' })
   await expect(ownerChat.getByText('Saved to your account', { exact: true })).toBeVisible()
-  await expect(ownerChat.getByRole('complementary', { name: 'Conversation history' })).toBeVisible()
+  await expect(ownerChat.getByRole('button', { name: 'Open conversation history' })).toBeVisible()
   await expect(ownerChat.getByRole('button', { name: 'New chat' }).first()).toBeVisible()
 
   const ownerPrompt = `Use registry.tools.search exactly once for weather. Do not execute. Summarize without implementation jargon. ${Date.now()}`

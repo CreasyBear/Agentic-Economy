@@ -82,14 +82,14 @@ export function projectCallReceipt(input: PublicCallStatusRead): CallReceiptView
       version: 'ae.public-invocation-receipt:v1',
       callRef: input.callRef,
       statusLabel: 'Receipt unavailable',
-      statusDetail: 'The current owner-scoped Call record could not be read.',
+      statusDetail: 'The current Call record could not be read.',
       stages: pendingStages('No stage is claimed while the receipt source is unavailable.'),
       issue: {
         title: 'The receipt could not be read',
-        whatHappened: 'Agentic Economy could not read the current owner-scoped Call record for this reference.',
+        whatHappened: 'Agentic Economy could not read the current Call record for this reference.',
         moneyMovement: 'Money movement cannot be confirmed while this receipt is unavailable. Do not assume A$0.00 or a charge.',
         automaticNext: 'No duplicate charge and no automatic retry.',
-        userNext: 'Wait, then Try again on this same receipt. Do not start a new Call while the outcome is unknown.',
+        userNext: 'Wait, then Check status on this same Call. Do not start a new Call while the outcome is unknown.',
         retainedReference: input.callRef,
       },
       complete: false,
@@ -102,7 +102,7 @@ export function projectCallReceipt(input: PublicCallStatusRead): CallReceiptView
       version: 'ae.public-invocation-receipt:v1',
       callRef: input.callRef,
       statusLabel: refusalLabel(input.code),
-      statusDetail: 'The owner-scoped status read was refused; no current execution state is claimed.',
+      statusDetail: 'The status read was refused; no current execution state is claimed.',
       stages: stagesFromReceipt(receipt, undefined, undefined, 'attention'),
       ...(receipt === undefined ? {} : { receipt }),
       issue: {
@@ -110,7 +110,7 @@ export function projectCallReceipt(input: PublicCallStatusRead): CallReceiptView
         whatHappened: refusalExplanation(input.code),
         moneyMovement: moneyMovement(undefined, receipt),
         automaticNext: 'No duplicate charge and no automatic retry.',
-        userNext: input.nextAction ?? (input.retryable ? 'Check status on this receipt for an update.' : 'Keep this reference and contact the owner or operator.'),
+        userNext: input.nextAction ?? (input.retryable ? 'Check status on this same Call.' : 'Keep this reference and contact the owner or operator.'),
         retainedReference: input.callRef,
       },
       complete: false,
@@ -274,7 +274,12 @@ function stagesFromFound(
   receipt: CallReceipt | undefined,
 ): readonly CallReceiptStageView[] {
   if (result?.kind === 'completed') {
-    return stageOrder().map((id) => stage(id, 'complete', completedStageDetail(id, usage, receipt)))
+    const settlementUncertain = projectFoundCallPurchaseStatus(input).kind === 'uncertain'
+    return stageOrder().map((id) => stage(
+      id,
+      id === 'settled' && settlementUncertain ? 'attention' : 'complete',
+      completedStageDetail(id, usage, receipt),
+    ))
   }
 
   const state = input.state
@@ -330,7 +335,7 @@ function issueFromFound(
     : input.state === 'reconciliation_required' || result?.kind === 'reconciliation_required'
       ? 'Get help with this Call to check its payment and result before another attempt.'
       : input.state === 'retryable'
-        ? 'Check status on this receipt for an update.'
+        ? 'Check status on this same Call.'
         : 'Keep this receipt reference; start a new Call only from the Tool page with fresh input and identity.'
 
   return {
@@ -340,7 +345,7 @@ function issueFromFound(
       ? 'A$0.00 charged — your prepaid balance is unaffected.'
       : moneyMovement(usage, receipt),
     automaticNext: input.state === 'retryable'
-      ? 'The original Call remains available for an explicit safe retry; no replacement Call was created.'
+      ? 'The original Call remains available. Check status on this same Call; no replacement Call was created.'
       : 'No duplicate charge and no automatic retry.',
     userNext: next,
     retainedReference: input.callRef,
@@ -357,7 +362,7 @@ function moneyMovement(usage: CallUsageSummary | undefined, receipt: CallReceipt
       : 'A refund is recorded — reserved credit was returned to your prepaid balance.'
   }
   if (usage?.chargeState === 'paid' || receipt?.state === 'settled') {
-    return 'Settlement is recorded; consult the exact post-call amount below.'
+    return 'Settlement is recorded; consult the exact post-Call amount below.'
   }
   if (usage?.chargeState === 'free_tier') {
     return 'A$0.00 charged — this Call used the free tier. Your prepaid balance is unaffected.'
@@ -439,8 +444,8 @@ function foundStatusLabel(state: string, result: CallResult | undefined): string
     gathering_information: 'Preparing request',
     awaiting_authority: 'Waiting for approval',
     authorized: 'Authorized',
-    leased: 'Preparing provider call',
-    in_progress: 'Provider call in progress',
+    leased: 'Preparing Provider Call',
+    in_progress: 'Provider Call in progress',
     retryable: 'Not completed',
     reconciliation_required: 'Reconciliation required',
     terminal: 'Call finished',
@@ -484,13 +489,13 @@ function refusalExplanation(code: string): string {
   }
   if (normalized === 'tool_not_found') return 'The Tool referenced by this Call is not available to the current owner.'
   if (normalized === 'rate_limited') {
-    return 'The provider endpoint rejected this request because call volume or concurrency limits were exceeded.'
+    return 'The Provider endpoint rejected this request because call volume or concurrency limits were exceeded.'
   }
   if (normalized === 'input_invalid') {
     return 'The arguments sent to the Tool did not match the published input schema.'
   }
   if (normalized === 'provider_timeout' || normalized === 'upstream_timeout' || normalized === 'gateway_timeout') {
-    return 'The provider endpoint did not respond within the maximum execution window.'
+    return 'The Provider endpoint did not respond within the maximum execution window.'
   }
   return 'The receipt read was refused before any execution state could be claimed.'
 }
@@ -498,10 +503,10 @@ function refusalExplanation(code: string): string {
 function issueTitle(code: string): string {
   const normalized = normalizeDiagnosticCode(code)
   if (normalized === 'reconciliation_required') return 'This Call needs review'
-  if (normalized === 'retryable') return 'The Call can be retried safely'
+  if (normalized === 'retryable') return 'Check status on this same Call'
   if (normalized === 'cancelled') return 'The Call was cancelled'
   if (normalized === 'invalidated') return 'The Call is no longer valid'
-  if (normalized === 'provider_output_invalid') return 'The provider output was invalid'
+  if (normalized === 'provider_output_invalid') return 'The Provider output was invalid'
   if (normalized === 'provider_timeout' || normalized === 'upstream_timeout' || normalized === 'gateway_timeout') {
     return 'Provider timed out'
   }
@@ -525,24 +530,24 @@ function foundIssueExplanation(code: string): string {
     return 'AE has not confirmed whether this Call completed. Its result and payment need review before another attempt.'
   }
   if (normalized === 'retryable') {
-    return 'The recorded attempt did not complete and the same Call is eligible for an explicit safe retry.'
+    return 'The recorded attempt did not complete. Check status on this same Call.'
   }
   if (normalized === 'cancelled') return 'Cancellation was recorded before a completed result.'
   if (normalized === 'invalidated') return 'The Call can no longer continue under its recorded authority or generation.'
   if (normalized === 'provider_output_invalid') {
-    return 'The provider returned data that did not satisfy the Tool output contract.'
+    return 'The Provider returned data that did not satisfy the Tool output contract.'
   }
   if (normalized === 'provider_timeout' || normalized === 'upstream_timeout' || normalized === 'gateway_timeout') {
-    return 'The provider endpoint did not respond within the maximum execution window. Check endpoint availability, then retry with backoff.'
+    return 'The Provider endpoint did not respond within the maximum execution window. Check status on this same Call.'
   }
   if (normalized === 'rate_limited' || normalized === 'provider_rate_limited') {
-    return 'The provider endpoint rejected this request because call volume or concurrency limits were exceeded. Reduce call frequency, then retry.'
+    return 'The Provider endpoint rejected this request because call volume or concurrency limits were exceeded. Check status on this same Call.'
   }
   if (normalized === 'input_invalid' || normalized === 'schema_mismatch' || normalized === 'input_schema_invalid') {
     return 'The arguments sent to the Tool did not match the published input schema. Check the Tool documentation and update the payload.'
   }
   if (normalized === 'insufficient_balance') {
-    return 'This Call stopped because prepaid credit was insufficient for the quoted amount. Add credit before retrying.'
+    return 'This Call stopped because prepaid credit was insufficient for the quoted amount. Add credit, then Check status on this same Call.'
   }
   if (normalized === 'tool_not_found') {
     return 'The Tool referenced by this Call is not available to the current owner.'

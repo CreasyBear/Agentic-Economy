@@ -14,7 +14,7 @@ import { AeAssistantInstallFunnel } from '@/components/ae/console/AeAssistantIns
 import { toast } from '@/lib/ui/toast'
 import { AeAccountFundingPanel } from '@/components/ae/console/AeCreditTopUpPanel'
 import type { AccountFundingPort } from '@/modules/money/account-funding.contracts'
-import { AeOwnerCredit } from '@/components/ae/console/AeOwnerCredit'
+import { AeOwnerCredit } from '@/components/ae/console/owner-credit/AeOwnerCredit'
 import type { AccountHistoryResult, CreditPaymentSession } from '@/modules/money/public'
 import type { AccountFundingBalance, AccountFundingBeginInput, AccountFundingConstraints } from '@/modules/money/server'
 
@@ -148,12 +148,17 @@ afterEach(() => {
   window.history.replaceState(null, '', '/')
 })
 
+function openLedger() {
+  fireEvent.click(screen.getByRole('tab', { name: 'Ledger' }))
+}
+
 describe('owner credit target', () => {
   it('renders booked Account transactions instead of Agent activity approximations', () => {
     render(<AeOwnerCredit
       accountBalance={accountBalance}
       accountHistory={emptyAccountHistory}
     />)
+    openLedger()
 
     expect(screen.queryByText('Weather lookup')).toBeNull()
     expect(screen.getByText('No booked Account transactions yet')).toBeTruthy()
@@ -179,6 +184,7 @@ describe('owner credit target', () => {
         }],
       }}
     />)
+    openLedger()
 
     expect(screen.getByText('Call purchase')).toBeTruthy()
     expect(screen.getByText('−A$0.50')).toBeTruthy()
@@ -391,6 +397,7 @@ describe('owner credit target', () => {
       }}
       accountHistoryPort={{ read }}
     />)
+    openLedger()
 
     expect(screen.queryByText('Some transaction attribution is incomplete')).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: 'Load more' }))
@@ -422,6 +429,7 @@ describe('owner credit target', () => {
       accountHistory={{ ...emptyAccountHistory, continueCursor: 'cursor:retry', isDone: false }}
       accountHistoryPort={{ read }}
     />)
+    openLedger()
 
     fireEvent.click(screen.getByRole('button', { name: 'Load more' }))
     await waitFor(() => expect(screen.getByText('More history could not be loaded')).toBeTruthy())
@@ -442,6 +450,7 @@ describe('owner credit target', () => {
       accountHistory={{ ...emptyAccountHistory, snapshotAt: 1, continueCursor: 'cursor:old', isDone: false }}
       accountHistoryPort={{ read }}
     />)
+    openLedger()
     fireEvent.click(screen.getByRole('button', { name: 'Load more' }))
     await waitFor(() => expect(read).toHaveBeenCalledOnce())
 
@@ -474,7 +483,7 @@ describe('owner credit target', () => {
 
   it('never renders an unavailable balance as zero', () => {
     render(<AeOwnerCredit accountHistory={emptyAccountHistory} />)
-    expect(screen.getByText('Balance unavailable')).toBeTruthy()
+    expect(screen.getByText('Credit unavailable')).toBeTruthy()
     expect(document.body.textContent).not.toContain('A$0.00')
   })
 
@@ -494,7 +503,8 @@ describe('owner credit target', () => {
 
     expect(screen.getByText('A$12.50')).toBeTruthy()
     expect(screen.getByText('Balance could not be refreshed')).toBeTruthy()
-    expect(screen.getByText('Balance history could not be refreshed')).toBeTruthy()
+    openLedger()
+    expect(screen.getByText('Credit history could not be refreshed')).toBeTruthy()
     expect(screen.getByText('Credit added')).toBeTruthy()
   })
 })
@@ -508,7 +518,7 @@ describe('assistant access components', () => {
     expect(screen.getByRole('heading', { name: 'Connect with Codex' })).toBeTruthy()
     expect(document.body.textContent).toContain('codex mcp add agentic-economy --url "https://ae.example/mcp"')
     expect(document.body.textContent).toContain('codex mcp login agentic-economy')
-    expect(screen.getByText(/browse Tools before connecting/u)).toBeTruthy()
+    expect(screen.getByText(/Connection is complete only when it appears in Agents/u)).toBeTruthy()
     expect(screen.getByText(/A live result confirms the connection; installing it alone does not/u)).toBeTruthy()
     expect(screen.queryByText('claude mcp add --transport http --scope user agentic-economy "https://ae.example/mcp"')).toBeNull()
 
@@ -1097,9 +1107,10 @@ describe('assistant access components', () => {
         onCreditRefresh={onCreditRefresh}
       />,
     )
-    expect(screen.getByText('Balance history unavailable')).toBeTruthy()
-    expect(screen.getByText(/No missing transaction or amount is being inferred/)).toBeTruthy()
     expect(screen.getByText('A$12.50')).toBeTruthy()
+    openLedger()
+    expect(screen.getByText('Credit history unavailable')).toBeTruthy()
+    expect(screen.getByText(/No missing transaction or amount is being inferred/)).toBeTruthy()
     expect(screen.queryByText('No booked Account transactions yet')).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: 'Try again' }))
     expect(onCreditRefresh).toHaveBeenCalledTimes(1)

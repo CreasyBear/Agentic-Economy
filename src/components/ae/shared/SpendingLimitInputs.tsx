@@ -66,7 +66,7 @@ export function SpendingLimitInputs({
           onChange={(e) => onPerCallChange(e.target.value)}
           disabled={disabled}
           {...(placeholders?.perCall !== undefined ? { placeholder: placeholders.perCall } : {})}
-          className="font-mono text-sm tabular-nums"
+          className="font-mono tabular-nums"
         />
       </div>
 
@@ -82,7 +82,7 @@ export function SpendingLimitInputs({
           onChange={(e) => onDailyChange(e.target.value)}
           disabled={disabled}
           {...(placeholders?.daily !== undefined ? { placeholder: placeholders.daily } : {})}
-          className="font-mono text-sm tabular-nums"
+          className="font-mono tabular-nums"
         />
       </div>
 
@@ -98,7 +98,7 @@ export function SpendingLimitInputs({
           onChange={(e) => onMonthlyChange(e.target.value)}
           disabled={disabled}
           {...(placeholders?.monthly !== undefined ? { placeholder: placeholders.monthly } : {})}
-          className="font-mono text-sm tabular-nums"
+          className="font-mono tabular-nums"
         />
       </div>
     </div>

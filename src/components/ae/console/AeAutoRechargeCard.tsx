@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -58,6 +58,10 @@ export function AeAutoRechargeCard({
   )
   const [saving, setSaving] = useState(false)
   const [diagnostic, setDiagnostic] = useState<AutoRechargeDiagnostic | null>(null)
+  const [thresholdInvalid, setThresholdInvalid] = useState(false)
+  const [rechargeInvalid, setRechargeInvalid] = useState(false)
+  const thresholdInputRef = useRef<HTMLInputElement>(null)
+  const rechargeInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     setEnabled(settings.enabled)
@@ -87,10 +91,14 @@ export function AeAutoRechargeCard({
     setThresholdText(audInputTextFromUnits(BigInt(preset.thresholdUnits)))
     setRechargeText(audInputTextFromUnits(BigInt(preset.rechargeUnits)))
     setDiagnostic(null)
+    setThresholdInvalid(false)
+    setRechargeInvalid(false)
   }
 
   function clearDiagnostic() {
     setDiagnostic(null)
+    setThresholdInvalid(false)
+    setRechargeInvalid(false)
   }
 
   async function handleSave() {
@@ -98,22 +106,36 @@ export function AeAutoRechargeCard({
     const rechargeAmountUnits = canonicalAudUnits(rechargeText)
 
     if (thresholdUnits === undefined || rechargeAmountUnits === undefined) {
+      const nextThresholdInvalid = thresholdUnits === undefined
+      const nextRechargeInvalid = rechargeAmountUnits === undefined
+      setThresholdInvalid(nextThresholdInvalid)
+      setRechargeInvalid(nextRechargeInvalid)
       setDiagnostic(mapAutoRechargeDiagnostic('invalid_amount'))
       setSaving(false)
+      const focusTarget = nextThresholdInvalid ? thresholdInputRef.current : rechargeInputRef.current
+      focusTarget?.focus()
       return
     }
     if (thresholdUnits < 0n) {
+      setThresholdInvalid(true)
+      setRechargeInvalid(false)
       setDiagnostic(mapAutoRechargeDiagnostic('auto_recharge_units_invalid'))
       setSaving(false)
+      thresholdInputRef.current?.focus()
       return
     }
     if (rechargeAmountUnits < MIN_RECHARGE_UNITS || rechargeAmountUnits > MAX_RECHARGE_UNITS) {
+      setThresholdInvalid(false)
+      setRechargeInvalid(true)
       setDiagnostic(mapAutoRechargeDiagnostic('funding_amount_invalid'))
       setSaving(false)
+      rechargeInputRef.current?.focus()
       return
     }
 
     setDiagnostic(null)
+    setThresholdInvalid(false)
+    setRechargeInvalid(false)
     setSaving(true)
     try {
       await onSave({
@@ -201,7 +223,7 @@ export function AeAutoRechargeCard({
   return (
     <div className="grid gap-3 border-t border-border pt-4">
       <div>
-        <h3 className="font-medium">Auto-recharge</h3>
+        <h3 className="text-sm font-medium">Auto-recharge</h3>
         <p className="text-sm text-muted-foreground">
           When balance falls below the threshold, automatically add credit using the default payment method.
         </p>
@@ -236,35 +258,41 @@ export function AeAutoRechargeCard({
         </div>
       </fieldset>
 
-      <div className="flex items-center justify-between gap-4">
+      <button
+        type="button"
+        role="switch"
+        aria-checked={enabled}
+        aria-label="Auto-recharge"
+        disabled={switchDisabled}
+        className={`flex min-h-touch w-full items-center justify-between gap-4 rounded-md text-left disabled:cursor-not-allowed disabled:opacity-50 ${SWITCH_PRESS_CLASS}`}
+        data-state={enabled ? 'on' : 'off'}
+        onClick={() => {
+          if (switchDisabled) return
+          setEnabled((current) => !current)
+          clearDiagnostic()
+        }}
+      >
         <span className="text-sm">Auto-recharge</span>
-        <button
-          type="button"
-          role="switch"
-          aria-checked={enabled}
-          aria-label="Auto-recharge"
-          disabled={switchDisabled}
-          className={`relative inline-flex h-6 w-11 shrink-0 rounded-full border border-input bg-muted transition-colors disabled:cursor-not-allowed disabled:opacity-50 data-[state=on]:bg-primary ${SWITCH_PRESS_CLASS}`}
+        <span
+          className="relative inline-flex h-6 w-11 shrink-0 rounded-full border border-input bg-muted transition-colors data-[state=on]:bg-primary"
           data-state={enabled ? 'on' : 'off'}
-          onClick={() => {
-            if (switchDisabled) return
-            setEnabled((current) => !current)
-            clearDiagnostic()
-          }}
+          aria-hidden="true"
         >
           <span
             className="pointer-events-none block size-5 translate-x-0.5 rounded-full border border-border bg-background shadow-none transition-transform data-[state=on]:translate-x-[1.375rem]"
             data-state={enabled ? 'on' : 'off'}
           />
-        </button>
-      </div>
+        </span>
+      </button>
 
       <div className="grid gap-2">
         <Label htmlFor="auto-recharge-threshold">Low balance threshold (AUD)</Label>
         <Input
+          ref={thresholdInputRef}
           id="auto-recharge-threshold"
           inputMode="decimal"
           value={thresholdText}
+          aria-invalid={thresholdInvalid || undefined}
           onChange={(event) => {
             setThresholdText(event.target.value)
             clearDiagnostic()
@@ -276,9 +304,11 @@ export function AeAutoRechargeCard({
       <div className="grid gap-2">
         <Label htmlFor="auto-recharge-amount">Recharge amount (AUD)</Label>
         <Input
+          ref={rechargeInputRef}
           id="auto-recharge-amount"
           inputMode="decimal"
           value={rechargeText}
+          aria-invalid={rechargeInvalid || undefined}
           onChange={(event) => {
             setRechargeText(event.target.value)
             clearDiagnostic()
@@ -293,7 +323,7 @@ export function AeAutoRechargeCard({
 
       <div className="min-h-[5.5rem]">{renderStatusSlot()}</div>
 
-      <Button type="button" disabled={saving} onClick={() => { void handleSave() }}>
+      <Button type="button" variant="secondary" disabled={saving} onClick={() => { void handleSave() }}>
         {saving ? 'Saving…' : 'Save'}
       </Button>
     </div>

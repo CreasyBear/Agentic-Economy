@@ -98,7 +98,7 @@ describe('anonymous operation chat transport', () => {
     })
     expect(calls).toHaveBeenCalledTimes(6)
     expect(JSON.stringify(calls.mock.calls[0]?.[0].prompt)).toContain('Use the returned priceLabel as an indicative price.')
-    expect(JSON.stringify(calls.mock.calls[5]?.[0].prompt)).toContain('This chat displays plain text.')
+    expect(JSON.stringify(calls.mock.calls[5]?.[0].prompt)).toContain('Write concise Markdown:')
     expect(calls.mock.calls[5]?.[0].toolChoice).toEqual({ type: 'none' })
     expect(body).toContain('"delta":"No"')
     expect(body).toContain('"delta":" fit"')

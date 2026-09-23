@@ -9,14 +9,14 @@ import { degradeBackend } from '@/lib/observability/degrade-backend'
 import { loadReadyRecoveryWork, type RecoveryWorkContext } from '@/modules/capability-execution/call-worker/recovery/loading'
 import { reconcileRecovery } from '@/modules/capability-execution/call-worker/recovery/reconciliation'
 import { readPublicExecutionStatus } from '@/modules/action-execution/runtime'
-import { projectRecoveryOuter, reconciliationResult } from './capabilityCallProjection'
+import { parseContractOutput, projectRecoveryOuter, reconciliationResult } from './capabilityCallProjection'
 
 /** Recover the already-paid response; never call the Provider or create a payment. */
 export const recover = internalAction({
   args: { callRef: v.string(), attempt: v.number() },
   returns: v.object({ kind: v.union(v.literal('completed'), v.literal('pending'), v.literal('stopped')) }),
   handler: async (ctx, args): Promise<{ kind: 'completed' | 'pending' | 'stopped' }> => {
-    if (!await ctx.runMutation(internal.moneyX402PaymentAttempts.beginResponseRecovery, args)) return { kind: 'stopped' }
+    if (!await ctx.runQuery(internal.moneyX402PaymentAttempts.responseRecoveryIsCurrent, args)) return { kind: 'stopped' }
     try {
       return await recoverRetainedResponse(ctx, args.callRef)
     } catch (cause) {
@@ -61,12 +61,24 @@ export async function recoverRetainedResponse(ctx: ActionCtx, callRef: string): 
   if (requiredAt === undefined || Date.parse(requiredAt) > Date.now()) return { kind: 'pending' }
   const evidence = await retainedResponseEvidence(ctx, work, requiredAt)
   if (evidence === undefined) return { kind: 'stopped' }
+  const delivery = parseContractOutput({ transport: 'x402', disposition: 'succeeded', releaseStarted: true,
+    requestDigest: evidence.requestDigest, outputJson: attempt.quarantinedOutputJson,
+    responseDigest: attempt.quarantinedResponseDigest }, work.descriptor)
+  if (!delivery.valid) {
+    // The remedy action verifies payment and invalid delivery independently;
+    // recording a response or a transaction locator does not authorize charging.
+    const remedy = await ctx.runAction(internal.moneyManagedCallRemedyActions.resolveInvalidResult, {
+      callRef, transactionHash: evidence.transactionHash,
+    })
+    return { kind: remedy.kind === 'completed' ? 'completed' : 'pending' }
+  }
   const result = await reconcileRecovery(ctx, { ...identity, evidence })
   return { kind: result.kind === 'found' && result.result?.kind === 'completed' ? 'completed' : 'pending' }
 }
 
 async function retainedResponseEvidence(ctx: ActionCtx, work: RecoveryWorkContext, requiredAt: string) {
-  const attempt = work.x402Attempt!
+  const attempt = work.x402Attempt
+  if (attempt === null || attempt.quarantinedResponseDigest === undefined) return undefined
   const txPrefix = `chain:${attempt.network}:`
   const transactionHash = attempt.evidenceRefs.find(ref => ref.startsWith(txPrefix))?.slice(txPrefix.length)
   const requestDigest = attempt.transportRequestDigest
@@ -78,7 +90,7 @@ async function retainedResponseEvidence(ctx: ActionCtx, work: RecoveryWorkContex
     || work.operation.binding.authority.kind !== 'provider_connection') return undefined
   // If the worker died before final observation, bind its retained response to this exact payment.
   const transportObservationDigest = attempt.transportObservationDigest ?? canonicalDigest({
-    kind: 'retained_x402_response:v1', requestDigest, responseDigest: attempt.quarantinedResponseDigest!, transactionHash,
+    kind: 'retained_x402_response:v1', requestDigest, responseDigest: attempt.quarantinedResponseDigest, transactionHash,
   })
   const paymentObservationDigest = attempt.paymentObservationDigest ?? canonicalDigest({
     kind: 'retained_x402_payment:v1', paymentIdentifier: attempt.paymentIdentifier, paymentResponseDigest, transactionHash,

@@ -22,7 +22,7 @@ describe('CLI suggested next-action adapter', () => {
       requiresBuyerCredential: true,
       hasBuyerCredential: false,
     })).toEqual({
-      label: 'Connect agent',
+      label: 'Connect an Agent',
       kind: 'navigate',
       command: 'ae connect',
       href: '/for-agents',

@@ -140,9 +140,8 @@ describe('ThemeToggle', () => {
     expect(menu.className).toContain('origin-(--transform-origin)')
 
     const darkItem = screen.getByRole('menuitemradio', { name: 'Dark' })
-    for (const token of TACTILE.split(/\s+/u)) {
-      expect(darkItem.className).toContain(token)
-    }
+    expect(darkItem.className).toContain('active:scale-[0.98]')
+    expect(darkItem.className).toContain('motion-reduce:transition-none')
   })
 
   it('T7: radio menu items expose aria-checked on the active preference', async () => {

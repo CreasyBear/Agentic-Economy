@@ -176,12 +176,8 @@ describe('AeTeamDirectoryTable (W-15)', () => {
 
     render(<AeTeamDirectoryTable directory={directoryFixture} />)
 
-    const copyButtons = screen.getAllByRole('button', { name: 'Copy email' })
-    const firstCopy = copyButtons[0]
-    expect(firstCopy).toBeDefined()
-    if (firstCopy) {
-      fireEvent.click(firstCopy)
-    }
+    const firstCopy = screen.getByRole('button', { name: 'Copy email for Joel Chan' })
+    fireEvent.click(firstCopy)
     await vi.waitFor(() => {
       expect(writeText).toHaveBeenCalledWith('joel@example.test')
       expect(toast.success).toHaveBeenCalledWith('Copied email to clipboard')

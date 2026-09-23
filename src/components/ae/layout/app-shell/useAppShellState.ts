@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useSyncExternalStore, type RefObject } from 'react'
+import { useEffect, useState, useSyncExternalStore } from 'react'
 import { useAuth } from '@clerk/tanstack-react-start'
 import { useLocation, useMatches } from '@tanstack/react-router'
 
@@ -7,6 +7,8 @@ import { PUBLIC_NAVIGATION } from '@/lib/navigation/app-navigation'
 import { emitFunnelEventOnce } from '@/lib/observability/funnel-client'
 import { operatorSurfaceForPath } from '@/lib/operator/operator-context'
 import type { OperatorRole } from '@/lib/operator/roles'
+import { useOperatorEntitlement } from './useOperatorEntitlement'
+
 const subscribeNever = () => () => {}
 
 // Public doors come from PUBLIC_NAVIGATION; Market is deliberately omitted
@@ -31,6 +33,7 @@ export type AppShellState = Readonly<{
   pathname: string
   hash: string
   operatorRole: OperatorRole
+  canAccessAdmin: boolean
   isSignedIn: boolean
   isMinimalShell: boolean
   hidePublicFooter: boolean
@@ -40,7 +43,6 @@ export type AppShellState = Readonly<{
   handleCommandOpenChange: (open: boolean) => void
   shortcutsOpen: boolean
   setShortcutsOpen: (open: boolean) => void
-  sentinelRef: RefObject<HTMLDivElement | null>
   elevated: boolean
   hydrated: boolean
 }>
@@ -50,12 +52,12 @@ export function useAppShellState(): AppShellState {
   const { pathname, hash } = useLocation()
   const matches = useMatches()
   const isSignedIn = clerkIsSignedIn === true
+  const { canAccessAdmin } = useOperatorEntitlement()
   const isMinimalShell = matches.some((match) => match.staticData?.shellMode === 'minimal')
   const [mobileNavOpen, setMobileNavOpen] = useState(false)
   const [commandOpen, setCommandOpen] = useState(false)
   const [shortcutsOpen, setShortcutsOpen] = useState(false)
   const [elevated, setElevated] = useState(false)
-  const sentinelRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     emitFunnelEventOnce({ eventType: 'visitor_attributed', stage: 'visitor', correlationPrefix: 'visitor' })
@@ -79,7 +81,7 @@ export function useAppShellState(): AppShellState {
   }, [])
 
   useEffect(() => {
-    const sentinel = sentinelRef.current
+    const sentinel = document.getElementById('ae-app-shell-sentinel')
     if (typeof IntersectionObserver === 'undefined' || sentinel === null) return
     const observer = new IntersectionObserver(([entry]) => setElevated(entry?.isIntersecting === false))
     observer.observe(sentinel)
@@ -104,6 +106,7 @@ export function useAppShellState(): AppShellState {
     pathname,
     hash,
     operatorRole: operatorSurfaceForPath(pathname),
+    canAccessAdmin,
     isSignedIn,
     isMinimalShell,
     hidePublicFooter: isSignedIn && !isPublicMarketingPath(pathname),
@@ -116,7 +119,6 @@ export function useAppShellState(): AppShellState {
     },
     shortcutsOpen,
     setShortcutsOpen,
-    sentinelRef,
     elevated,
     hydrated: useSyncExternalStore(subscribeNever, () => true, () => false),
   }

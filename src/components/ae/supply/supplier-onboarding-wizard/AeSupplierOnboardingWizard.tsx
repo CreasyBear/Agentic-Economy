@@ -7,7 +7,7 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { FirstToolStep } from './components/FirstToolStep'
 import { OnboardingStepper } from './components/OnboardingStepper'
 import { PayoutsStep } from './components/PayoutsStep'
-import { ProviderIdentityFields } from './components/ProviderIdentityFields'
+import { ProviderIdentityFields, SUPPLIER_IDENTITY_ERROR_ID } from './components/ProviderIdentityFields'
 import type { AeSupplierOnboardingWizardProps } from './supplier-onboarding-wizard.contracts'
 import { SHELL, SLOT } from './supplier-onboarding-wizard.contracts'
 import { useSupplierOnboardingWizard } from './useSupplierOnboardingWizard'
@@ -33,7 +33,7 @@ export function AeSupplierOnboardingWizard({
   const diagnosticSlot = (
     <div className={SLOT} aria-live="polite">
       {view.diagnostic !== undefined ? (
-        <Alert variant="destructive" className="py-2">
+        <Alert id={SUPPLIER_IDENTITY_ERROR_ID} variant="destructive" className="py-2">
           <AlertCircleIcon className="size-4" />
           <AlertTitle className="text-xs">{view.diagnostic.whatHappened}</AlertTitle>
           <AlertDescription className="text-xs grid gap-0.5">
@@ -71,6 +71,8 @@ export function AeSupplierOnboardingWizard({
           website={view.website}
           abn={view.abn}
           pending={view.pending}
+          {...(view.invalidField === undefined ? {} : { invalidField: view.invalidField })}
+          {...(view.diagnostic === undefined ? {} : { fieldError: view.diagnostic.whatHappened })}
           onNameChange={wizard.handleNameChange}
           onWebsiteChange={wizard.handleWebsiteChange}
           onAbnChange={wizard.handleAbnChange}

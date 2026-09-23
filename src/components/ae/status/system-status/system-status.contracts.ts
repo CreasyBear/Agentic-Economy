@@ -72,10 +72,10 @@ export const probeOrder: readonly ProbeId[] = [
 ]
 
 export const statusPageDescription =
-  'Live checks for the public site and shared agent interfaces. Individual Tool readiness is shown in the catalogue and on each Tool page.'
+  'Whether the platform is up. Tool readiness stays on Market and each Tool page.'
 
-export const statusCheckTimeLabel = 'Checked'
-export const statusLastUpdatedLabel = 'Last updated'
+export const statusCheckTimeLabel = 'Last checked'
+export const statusLastUpdatedLabel = 'Last checked'
 
 export function projectStatusChecks(
   outcomes: readonly ProbeOutcome[],
@@ -89,9 +89,9 @@ export function projectStatusChecks(
         id,
         label: probeLabels[id],
         state: 'checking',
-        detail: 'Checking now…',
+        detail: '',
         badgeLabel: 'Checking',
-        checkedAtLabel: 'Checking now…',
+        checkedAtLabel: '',
         badgeVariant: 'secondary',
       }
     }
@@ -109,26 +109,15 @@ export function projectStatusChecks(
 }
 
 export function recoveryGuidance(
-  checks: readonly StatusCheckView[],
+  _checks: readonly StatusCheckView[],
 ): StatusRecoveryGuidance {
-  const callSafetyAffected = checks.some(
-    (check) => check.id === 'market' || check.id === 'release',
-  )
-  return callSafetyAffected
-    ? {
-        title: 'Check existing calls before retrying',
-        description:
-          'Do not repeat an uncertain Call. Open Calls to inspect its current status or receipt.',
-        href: '/activity',
-        label: 'Open Calls',
-      }
-    : {
-        title: 'Retry after the affected system recovers',
-        description:
-          'Refresh status first. If the problem continues, report it with any request reference shown above.',
-        href: '/support',
-        label: 'Help',
-      }
+  return {
+    title: 'Retry after the affected system recovers',
+    description:
+      'Refresh status to retry the check. If the problem continues, report it with any request reference shown above.',
+    href: '/support',
+    label: 'Help',
+  }
 }
 
 export function statusPageTitle(isChecking: boolean, degraded: boolean): string {

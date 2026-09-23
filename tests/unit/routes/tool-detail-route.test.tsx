@@ -238,10 +238,18 @@ describe('/tools/$toolRef', () => {
     expect(within(trackRecord).getByText('4.5')).toBeTruthy()
     expect(within(trackRecord).getByText('120 ms')).toBeTruthy()
     expect(within(trackRecord).getByText('140 ms')).toBeTruthy()
-    const latencyChart = within(trackRecord).getByRole('region', { name: 'Latency by completed call' })
+    const latencyChart = within(trackRecord).getByRole('region', { name: 'Time to result' })
     expect(latencyChart).toBeTruthy()
     expect(within(latencyChart).getByText('5 timed calls')).toBeTruthy()
     expect(within(trackRecord).queryByText(/No completed AE calls/)).toBeNull()
+  })
+
+  it('shows unavailable evidence without claiming zero calls or timed samples', () => {
+    renderInspectorWithRouter('full')
+    const history = screen.getByRole('region', { name: '30-day track record' })
+    expect(within(history).getByText(/Performance history is unavailable/)).toBeTruthy()
+    expect(within(history).queryByText('0')).toBeNull()
+    expect(within(history).queryByText('0/5 samples')).toBeNull()
   })
 
   it('keeps compact and full inspectors on the same decision, facts, and continuation', () => {
@@ -251,7 +259,7 @@ describe('/tools/$toolRef', () => {
     if (!(compact instanceof HTMLElement)) throw new Error('compact_inspector_missing')
     const compactView = within(compact)
     const compactDecision = compactView.getByRole('region', { name: 'Operational' })
-    expect(within(compactDecision).getByRole('button', { name: 'Copy Tool reference' })).toBeTruthy()
+    expect(within(compactDecision).getByRole('button', { name: 'Copy request for Agent' })).toBeTruthy()
     expect(compactView.queryByRole('region', { name: 'What you can do next' })).toBeNull()
     for (const fact of ['USD 1.25', 'API key connection', 'Ready now', 'Per accepted extraction']) {
       expect(compactView.getAllByText(fact).length).toBeGreaterThan(0)
@@ -279,9 +287,8 @@ describe('/tools/$toolRef', () => {
     expect(fullView.getByRole('region', { name: 'Operational' })).toBeTruthy()
     expect(fullView.getByRole('complementary', { name: 'What you can do next' })).toBeTruthy()
     expect(fullView.getByRole('region', { name: '30-day track record' })).toBeTruthy()
-    expect(fullView.getByText('Waiting for timed calls')).toBeTruthy()
-    expect(fullView.getByText('Up to 48 timed calls')).toBeTruthy()
-    expect(fullView.getByRole('button', { name: 'Copy Tool reference' })).toBeTruthy()
+    expect(fullView.getByText(/Performance history is unavailable/)).toBeTruthy()
+    expect(fullView.getByRole('button', { name: 'Copy Continue with your Agent' })).toBeTruthy()
     for (const fact of ['USD 1.25', 'API key connection', 'Ready now']) {
       expect(fullView.getAllByText(fact).length).toBeGreaterThan(0)
     }
@@ -369,10 +376,10 @@ describe('/tools/$toolRef', () => {
     }))
   })
 
-  it('offers a plain Catalog link back when there is no prior history entry to go back to', () => {
+  it('offers a plain Market link back when there is no prior history entry to go back to', () => {
     renderWithRouter({ kind: 'found', schemaVersion: PublicToolRegistrySchemaVersion, tool })
 
-    const back = screen.getByRole('link', { name: 'Catalog' })
+    const back = screen.getByRole('link', { name: 'Browse Market' })
     expect(new URL(back.getAttribute('href')!, 'https://market.example').pathname).toBe('/market')
   })
 
@@ -400,9 +407,9 @@ describe('/tools/$toolRef', () => {
     expect(screen.getByRole('button', { name: 'Open schemas and references' })).toBeTruthy()
 
     const execution = screen.getByRole('complementary', { name: 'What you can do next' })
-    expect(within(execution).getByText(/Paste this reference into your existing agent client/i)).toBeTruthy()
-    expect(within(execution).getByText(/exact buyer amount in AUD/i)).toBeTruthy()
-    expect(within(execution).getByRole('button', { name: 'Copy Tool reference' })).toBeTruthy()
+    expect(within(execution).getByText(/Copy this request into your connected Agent/i)).toBeTruthy()
+    expect(within(execution).getByText(/exact AUD price/i)).toBeTruthy()
+    expect(within(execution).getByRole('button', { name: 'Copy Continue with your Agent' })).toBeTruthy()
     expect(within(execution).queryByText(/ae connect/)).toBeNull()
     expect(within(execution).queryByText(/ae call/)).toBeNull()
     expect(within(execution).queryByText(/https:\/\/docs\.example\/invoice\.pdf/)).toBeNull()
@@ -442,7 +449,7 @@ describe('/tools/$toolRef', () => {
     }, true)
 
     const execution = screen.getByRole('complementary', { name: 'What you can do next' })
-    expect(within(execution).getByRole('button', { name: 'Copy Tool reference' })).toBeTruthy()
+    expect(within(execution).getByRole('button', { name: 'Copy Continue with your Agent' })).toBeTruthy()
     expect(within(execution).queryByText(/ae call/)).toBeNull()
     expect(within(execution).queryByText(/idempotencyKey=/)).toBeNull()
     expect(within(execution).queryByText(/npm run -s ae -- recover/)).toBeNull()
@@ -477,11 +484,11 @@ describe('/tools/$toolRef', () => {
     })
 
     const continuation = screen.getByRole('complementary', { name: 'What you can do next' })
-    expect(within(continuation).getByRole('button', { name: 'Copy Tool reference' })).toBeTruthy()
-    expect(within(continuation).getByRole('link', { name: 'Connect an Agent first' }).getAttribute('href'))
+    expect(within(continuation).getByRole('button', { name: 'Copy Continue with your Agent' })).toBeTruthy()
+    expect(within(continuation).getByRole('link', { name: 'Need to connect an Agent?' }).getAttribute('href'))
       .toBe(`/agent-access?resumeTool=${encodeURIComponent(tool.toolRef)}`)
     expect(screen.getByRole('region', { name: 'Operational' })).toBeTruthy()
-    expect(screen.queryByText(/connected/i)).toBeNull()
+    expect(screen.queryByText(/Agent connected$/i)).toBeNull()
   })
 
   it('keeps a setup-required descriptor inspectable without implying it can be invoked', () => {
@@ -526,7 +533,7 @@ describe('/tools/$toolRef', () => {
     const continuation = screen.getByRole('complementary', { name: 'What you can do next' })
     expect(within(continuation).getByRole('link', { name: 'Find Tool alternatives' })).toBeTruthy()
     expect(within(continuation).getByText(/not operational/i)).toBeTruthy()
-    expect(within(continuation).queryByText(/exact buyer amount in AUD/i)).toBeNull()
+    expect(within(continuation).queryByText(/exact AUD price/i)).toBeNull()
   })
 
   it('fails closed when a stale source sends a non-canonical availability posture', () => {
@@ -547,7 +554,7 @@ describe('/tools/$toolRef', () => {
     const continuation = screen.getByRole('complementary', { name: 'What you can do next' })
     expect(within(continuation).getByRole('heading', { name: 'Find an operational alternative' })).toBeTruthy()
     expect(within(continuation).getByRole('link', { name: 'Find Tool alternatives' })).toBeTruthy()
-    expect(within(continuation).queryByRole('button', { name: 'Copy Tool reference' })).toBeNull()
+    expect(within(continuation).queryByRole('button', { name: 'Copy Continue with your Agent' })).toBeNull()
   })
 
   it.each([
@@ -557,13 +564,13 @@ describe('/tools/$toolRef', () => {
       toolRef: tool.toolRef,
       navigation: [],
       expectedTitle: /unknown or no longer current/i,
-      expectedAction: 'Browse current Tools',
+      expectedAction: 'Browse Market',
     },
     {
       kind: 'source_unavailable' as const,
       toolRef: tool.toolRef,
       expectedTitle: /details are unavailable/i,
-      expectedAction: 'Check Status',
+      expectedAction: 'Check status',
     },
   ])('keeps the truth ceiling for $kind', ({ expectedTitle, expectedAction, ...result }) => {
     renderWithRouter(result)
@@ -593,7 +600,7 @@ describe('/tools/$toolRef', () => {
 
     const main = screen.getByRole('main')
     expect(within(main).getByText(/Try again/)).toBeTruthy()
-    expect(within(main).getByRole('link', { name: 'Check Status' })).toBeTruthy()
+    expect(within(main).getByRole('link', { name: 'Check status' })).toBeTruthy()
   })
 
   it('names a permanent Provider listing refusal without offering retry', () => {
@@ -601,7 +608,7 @@ describe('/tools/$toolRef', () => {
 
     const main = screen.getByRole('main')
     expect(within(main).getByText(/This Tool cannot be called through Agentic Economy yet:.*required schema.*Provider must update the listing/i)).toBeTruthy()
-    expect(within(main).getByRole('link', { name: 'Browse Tools' })).toBeTruthy()
+    expect(within(main).getByRole('link', { name: 'Browse Market' })).toBeTruthy()
     expect(within(main).queryByText(/Try again/)).toBeNull()
   })
 
@@ -610,7 +617,7 @@ describe('/tools/$toolRef', () => {
 
     const main = screen.getByRole('main')
     expect(within(main).getByText(/^This Tool is no longer listed\./)).toBeTruthy()
-    expect(within(main).getByRole('link', { name: 'Browse Tools' })).toBeTruthy()
+    expect(within(main).getByRole('link', { name: 'Browse Market' })).toBeTruthy()
   })
 
   it('explains an invalid directory link', () => {
@@ -618,14 +625,14 @@ describe('/tools/$toolRef', () => {
 
     const main = screen.getByRole('main')
     expect(within(main).getByText(/^This link is not valid\./)).toBeTruthy()
-    expect(within(main).getByRole('link', { name: 'Browse Tools' })).toBeTruthy()
+    expect(within(main).getByRole('link', { name: 'Browse Market' })).toBeTruthy()
   })
 
   it('renders malformed references distinctly and offers a plain way back', () => {
     renderWithRouter({ kind: 'invalid_ref', toolRef: 'not-an-tool' })
 
     expect(screen.getByRole('heading', { name: /reference is invalid/i })).toBeTruthy()
-    const back = screen.getByRole('link', { name: 'Browse current Tools' })
+    const back = screen.getByRole('link', { name: 'Browse Market' })
     expect(new URL(back.getAttribute('href')!, 'https://market.example').pathname).toBe('/market')
     expect(screen.queryByText('USD 1.25')).toBeNull()
     expect(screen.queryByRole('complementary', { name: 'What you can do next' })).toBeNull()
@@ -653,6 +660,17 @@ describe('/tools/$toolRef', () => {
       evidence: undefined,
     })
     expect(readDetailMock).toHaveBeenCalledWith({ data: { toolRef: tool.toolRef } })
+  })
+
+  it('carries server-observed history through both browser detail loaders', async () => {
+    const evidence = projectMarketListingEvidence({ toolRef: tool.toolRef, ratingCount: 0,
+      ratingSum: 0, completedCalls: 2, latencySamplesMs: [35060, 42000] }, tool.contract.capabilityId)
+    readDetailMock.mockResolvedValue({ kind: 'found', schemaVersion: PublicToolRegistrySchemaVersion, tool, evidence })
+    readCanonicalMock.mockResolvedValue(null)
+    const loader = Route.options.loader as (input: { params: { toolRef: string } }) => Promise<unknown>
+    await expect(loader({ params: { toolRef: tool.toolRef } })).resolves.toMatchObject({ evidence })
+    await expect(resolveDirectoryToolDetail('https://provider.example/tool', tool.toolRef))
+      .resolves.toMatchObject({ evidence })
   })
 
   it('redirects agent-facing operation:v1: refs to the canonical URL once this Tool has one', async () => {
@@ -698,7 +716,9 @@ describe('selected-request inspection presentation', () => {
     })
     expect(model.readinessLabel).toBe('Checked when quoting')
     expect(model.availabilityPosture).toBe('setup_required')
-    expect(model.nextAction.command).toBe(tool.toolRef)
+    expect(model.nextAction.command).toContain(tool.toolRef)
+    expect(model.nextAction.command).toContain('get a fresh Quote')
+    expect(model.nextAction.command).toContain('resume that Call instead of creating another purchase')
     expect(model.nextAction.warning).toBeUndefined()
   })
 })

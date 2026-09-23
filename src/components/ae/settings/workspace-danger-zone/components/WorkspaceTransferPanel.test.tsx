@@ -27,11 +27,16 @@ const baseProps = {
   onConfirmTransfer: vi.fn(),
 }
 
+function openTransferPanel() {
+  fireEvent.click(screen.getByText('Transfer ownership', { selector: 'summary' }))
+}
+
 afterEach(cleanup)
 
 describe('WorkspaceTransferPanel', () => {
   it('uses native select combobox for successor', () => {
     render(<WorkspaceTransferPanel {...baseProps} />)
+    openTransferPanel()
     expect(screen.getByRole('combobox', { name: 'New workspace owner' })).toBeInTheDocument()
   })
 
@@ -45,6 +50,7 @@ describe('WorkspaceTransferPanel', () => {
         onConfirmTransfer={onConfirmTransfer}
       />,
     )
+    openTransferPanel()
     fireEvent.click(screen.getByRole('button', { name: 'Transfer ownership' }))
     expect(onRequestTransfer).toHaveBeenCalled()
     expect(onConfirmTransfer).not.toHaveBeenCalled()

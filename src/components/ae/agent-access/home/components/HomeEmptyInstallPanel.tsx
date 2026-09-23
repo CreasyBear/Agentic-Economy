@@ -14,13 +14,14 @@ export function HomeEmptyInstallPanel({
     <div className="grid gap-4">
       <div className="flex justify-end">
         <Button type="button" onClick={onConnectNewAgent} className="w-fit min-h-touch">
-          + Connect New Agent
+          Connect an Agent
         </Button>
       </div>
       <AeAssistantInstallFunnel
         canonicalBaseUrl={canonicalBaseUrl}
         checkingConnection={checkingConnection}
         onCheckConnection={onCheckConnection}
+        hideSelfLinks
         {...(resumeToolRef === undefined ? {} : { resumeToolRef })}
       />
     </div>

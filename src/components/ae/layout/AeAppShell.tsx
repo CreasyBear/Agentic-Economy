@@ -1,4 +1,4 @@
-import type { CSSProperties, ReactNode } from 'react'
+import { useEffect, useRef, type CSSProperties, type ReactNode } from 'react'
 
 import { AeOwnerMobileNavigation } from '@/components/ae/layout/AeOwnerMobileNavigation'
 import { OperatorChromeProvider } from '@/components/ae/layout/AeOperatorPage'
@@ -8,40 +8,61 @@ import { SidebarInset, SidebarProvider } from '@/components/ui/sidebar'
 import { cn } from '@/lib/utils'
 
 import { AeAppHeader } from './app-shell/AeAppHeader'
-import { AeAppSidebar } from './app-shell/AeAppSidebar'
 import { useAppShellState } from './app-shell/useAppShellState'
+
+function usePublicDocumentFocus(pathname: string) {
+  const previousPathRef = useRef<string | undefined>(undefined)
+  useEffect(() => {
+    if (previousPathRef.current === undefined) {
+      previousPathRef.current = pathname
+      return
+    }
+    if (previousPathRef.current === pathname) return
+    previousPathRef.current = pathname
+    const frame = window.requestAnimationFrame(() => {
+      document.querySelector<HTMLElement>('main#main-content[data-shell-mode]')?.focus()
+    })
+    return () => window.cancelAnimationFrame(frame)
+  }, [pathname])
+}
 
 export function AeAppShell({ children }: { children: ReactNode }) {
   const shell = useAppShellState()
+  usePublicDocumentFocus(shell.pathname)
+  const chatFrame = shell.pathname.startsWith('/t/') || shell.pathname.startsWith('/s/')
   const contentClassName = cn(
     'flex min-h-0 flex-1 flex-col',
+    chatFrame ? 'overflow-hidden' : null,
     shell.hidePublicFooter ? '[&_footer]:hidden' : null,
   )
 
   const header = (
     <AeAppHeader
       signedIn={shell.isSignedIn}
+      operatorRole={shell.operatorRole}
+      canAccessAdmin={shell.canAccessAdmin}
       minimal={shell.isMinimalShell}
       mobileNavOpen={shell.mobileNavOpen}
       setMobileNavOpen={shell.setMobileNavOpen}
       elevated={shell.elevated}
       hydrated={shell.hydrated}
+      chatFrame={chatFrame}
     />
   )
 
   return (
     <div
-      className="flex min-h-svh flex-col"
+      className={cn('flex min-h-svh flex-col', chatFrame ? 'h-svh overflow-hidden' : null)}
       style={{ '--header-height': '4rem' } as CSSProperties}
     >
       <a
         data-testid="skip-to-content"
         href="#main-content"
-        className="sr-only focus:not-sr-only focus:absolute focus:start-gutter focus:top-gutter focus:z-40 focus:rounded-md focus:bg-container focus:px-gutter focus:py-intra focus:text-sm focus:font-medium focus:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+        className="sr-only focus:not-sr-only focus:absolute focus:start-gutter focus:top-gutter focus:z-30 focus:rounded-md focus:bg-container focus:px-gutter focus:py-intra focus:text-sm focus:font-medium focus:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
       >
         Skip to content
       </a>
-      <div ref={shell.sentinelRef} aria-hidden="true" className="pointer-events-none absolute inset-x-0 top-0 h-2" />
+      <div id="ae-app-shell-sentinel" aria-hidden="true" className="pointer-events-none absolute inset-x-0 top-0 h-2" />
       <CommandPanelProvider open={shell.commandOpen} onOpenChange={shell.handleCommandOpenChange}>
         {shell.isMinimalShell ? (
           <>
@@ -52,17 +73,10 @@ export function AeAppShell({ children }: { children: ReactNode }) {
           // Keep the frame depth stable while Clerk resolves; swapping wrappers here remounts routed pages.
           <SidebarProvider className="min-h-0 flex-1" defaultOpen>
             <OperatorChromeProvider>
-              {shell.isSignedIn ? (
-                <AeAppSidebar
-                  operatorRole={shell.operatorRole}
-                  pathname={shell.pathname}
-                  hash={shell.hash}
-                />
-              ) : null}
               <SidebarInset
                 role="presentation"
                 className={cn(
-                  'min-h-svh',
+                  chatFrame ? 'h-full min-h-0 overflow-hidden' : 'min-h-svh',
                   shell.isSignedIn
                     ? 'pb-[calc(var(--ae-mobile-nav-height)+env(safe-area-inset-bottom,0px))] md:pb-0'
                     : null,
@@ -73,7 +87,7 @@ export function AeAppShell({ children }: { children: ReactNode }) {
                 {shell.isSignedIn ? (
                   <AeOwnerMobileNavigation
                     currentPath={shell.pathname}
-                    operatorRole={shell.operatorRole}
+                    canAccessAdmin={shell.canAccessAdmin}
                   />
                 ) : null}
               </SidebarInset>

@@ -37,7 +37,7 @@ describe('ocr accepted set', () => {
     expect(REACT_DOCTOR_SHA).toMatch(/^[0-9a-f]{40}$/u)
     expect(reactDoctor).toContain(`millionco/react-doctor@${REACT_DOCTOR_SHA}`)
     expect(reactDoctor).not.toMatch(/react-doctor@v2(?:\s|$)/u)
-    expect(reactDoctor).toContain('blocking: none')
+    expect(reactDoctor).toContain('blocking: error')
     expect(reactDoctor).toContain('actions/checkout@v5')
     expect(reactDoctor).toContain('timeout-minutes: 15')
 

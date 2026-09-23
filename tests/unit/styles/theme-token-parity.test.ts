@@ -275,7 +275,7 @@ describe('AE theme token parity (src/styles/globals.css)', () => {
   it('(b4) public type scale values match the marketing canon', () => {
     const rootByName = new Map(rootDecls.map((d) => [d.name, d.value]))
     const expected: ReadonlyArray<readonly [string, string]> = [
-      ['--ae-text-caption', '0.625rem'],
+      ['--ae-text-caption', '0.75rem'],
       ['--ae-text-eyebrow', '0.75rem'],
       ['--ae-text-deck', '0.875rem'],
       ['--ae-text-body', '1rem'],

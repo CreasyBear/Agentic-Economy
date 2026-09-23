@@ -29,6 +29,8 @@ const RECONCILIATION_RESOLUTIONS = [
   { value: 'released', label: 'Effect released' },
 ] as const
 
+const RECONCILIATION_FORM_ID = 'call-reconciliation-evidence'
+
 type CallRecoveryAvailability = Readonly<{
   needsReview: boolean
   canCancelNow: boolean
@@ -81,6 +83,7 @@ export function CallRecoveryPanel({
     <section className="grid gap-related border-t border-border pt-section" aria-labelledby="recovery-actions-title">
       <h2 id="recovery-actions-title" className="sr-only">Call actions</h2>
       <CallReceiptStatusFeedback feedback={actions?.feedback} callRef={result.callRef} />
+      {actions?.autoRefresh ? <p className="text-sm text-muted-foreground" role="status">Status updates automatically while this page is visible.</p> : null}
       {availability.needsReview ? (
         <p className="text-sm text-muted-foreground">
           This Call is saved in Calls. Get help to check its payment and result. Checking status only reads the latest record; it does not run or pay for the service again.
@@ -109,22 +112,27 @@ function RecoveryPrimaryActions({
 }: Readonly<{ callRef: string; availability: CallRecoveryAvailability; actions?: CallStatusPageActions }>) {
   const [cancelDialogOpen, setCancelDialogOpen] = useState(false)
   const canCancel = availability.canCancelNow && actions?.onCancel !== undefined
+  const canReconcile = availability.canReconcileNow
   const refreshLabelMode = 'refresh_status' as const
-  if (!availability.needsReview && !availability.canRefreshNow && !canCancel) return null
+  if (!availability.needsReview && !availability.canRefreshNow && !canCancel && !canReconcile) return null
 
   return (
     <>
       <div className="flex flex-wrap gap-intra">
         {availability.needsReview ? (
-          <Link to="/support" search={{ callRef }} className={buttonVariants({ className: 'min-h-touch' })}>
+          <Link
+            to="/support"
+            search={{ callRef }}
+            className={buttonVariants({ variant: 'outline', className: 'min-h-touch w-fit' })}
+          >
             Get help with this Call
           </Link>
         ) : null}
         {availability.canRefreshNow ? (
           <Button
             type="button"
-            variant={availability.needsReview ? 'outline' : 'default'}
-            className={cn('min-h-touch', callReceiptTactilePressClassName)}
+            variant="outline"
+            className={cn('min-h-touch w-fit', callReceiptTactilePressClassName)}
             disabled={availability.recoveryPending}
             onClick={() => { void actions?.onRefresh?.() }}
           >
@@ -134,12 +142,22 @@ function RecoveryPrimaryActions({
         {canCancel ? (
           <Button
             type="button"
-            variant="secondary"
-            className={cn('min-h-touch', callReceiptTactilePressClassName)}
+            variant={canReconcile ? 'secondary' : 'default'}
+            className={cn('min-h-touch w-fit', callReceiptTactilePressClassName)}
             disabled={availability.recoveryPending}
             onClick={() => setCancelDialogOpen(true)}
           >
             Cancel Call
+          </Button>
+        ) : null}
+        {canReconcile ? (
+          <Button
+            type="submit"
+            form={RECONCILIATION_FORM_ID}
+            className={cn('min-h-touch w-fit', callReceiptTactilePressClassName)}
+            disabled={availability.recoveryPending}
+          >
+            {actions?.reconcilePending === true ? 'Reconciling Call…' : 'Submit reconciliation evidence'}
           </Button>
         ) : null}
       </div>
@@ -148,7 +166,7 @@ function RecoveryPrimaryActions({
         onOpenChange={setCancelDialogOpen}
         title="Cancel this Call?"
         description="Cancel this Call before the service starts. If the service has already started, check its result and payment instead."
-        confirmLabel="Confirm cancellation"
+        confirmLabel="Cancel Call"
         cancelLabel="Keep Call"
         confirmVariant="destructive"
         pending={actions?.cancelPending === true}
@@ -174,12 +192,12 @@ function AdvancedReconciliation({
   }
 
   return (
-    <details className="border-t border-border pt-related">
-      <summary className="flex min-h-touch cursor-pointer items-center text-sm font-medium text-foreground">Advanced evidence reconciliation</summary>
-      <form className="pt-related" onSubmit={submitReconciliation}>
-        <FieldGroup className="max-w-xl">
+    <form id={RECONCILIATION_FORM_ID} className="border-t border-border pt-related" onSubmit={submitReconciliation}>
+      <details>
+        <summary className="flex min-h-touch cursor-pointer items-center text-sm font-medium text-foreground">Advanced evidence reconciliation</summary>
+        <FieldGroup className="max-w-xl pt-related">
           <Field data-disabled={actions?.reconcilePending || undefined}>
-            <FieldLabel htmlFor="reconciliation-resolution">Observed provider outcome</FieldLabel>
+            <FieldLabel htmlFor="reconciliation-resolution">Observed Provider outcome</FieldLabel>
             <Select
               value={resolution}
               onValueChange={(value) => { if (value != null) setResolution(value as CallReconciliationForm['resolution']) }}
@@ -224,13 +242,8 @@ function AdvancedReconciliation({
               className="min-h-touch"
             />
           </Field>
-          <Field orientation="horizontal">
-            <Button type="submit" className={cn('min-h-touch', callReceiptTactilePressClassName)} disabled={recoveryPending}>
-              {actions?.reconcilePending === true ? 'Reconciling Call…' : 'Submit reconciliation evidence'}
-            </Button>
-          </Field>
         </FieldGroup>
-      </form>
-    </details>
+      </details>
+    </form>
   )
 }

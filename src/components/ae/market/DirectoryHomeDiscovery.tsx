@@ -1,13 +1,11 @@
-import { Link } from '@tanstack/react-router'
 import { ArrowUpRight, Code2, Image, Search, ShoppingBag, ShieldCheck, TrendingUp } from 'lucide-react'
 import { buttonVariants } from '@/components/ui/button-variants'
 import { cn } from '@/lib/utils'
 import { Carousel, CarouselContent, CarouselItem, CarouselNext, CarouselPrevious } from '@/components/ui/carousel'
-import type { X402MarketplaceHome, X402MarketplaceRail } from '@/modules/market/x402-marketplace-home'
+import type { X402MarketplaceHome } from '@/modules/market/x402-marketplace-home'
 import { toDirectoryToolCardModel } from '@/modules/market/directory-card.view-model'
 import type { SavedDirectoryTool } from '@/modules/market/saved-tools.contracts'
 import { DirectoryToolCard } from './DirectoryToolCard'
-import { useMarketPath } from './market-navigation-context'
 
 type Props = Readonly<{
   home: X402MarketplaceHome
@@ -25,24 +23,15 @@ const navigation = {
   commerce: { label: 'Commerce', icon: ShoppingBag }, identity: { label: 'Identity', icon: ShieldCheck },
 } as const
 
-function collectionSearch(rail: X402MarketplaceRail) {
-  const { network, provider, maxUsdPrice, offset } = rail.search
-  return { query: rail.search.query ?? rail.query,
-    ...(network === undefined ? {} : { network }), ...(provider === undefined ? {} : { provider }),
-    ...(maxUsdPrice === undefined ? {} : { maxUsdPrice }), ...(offset === undefined ? {} : { offset }),
-  }
-}
-
 /** Editorial collections of live directory matches, using the installed Embla carousel. */
 export function DirectoryHomeDiscovery({ home, onSave, isSaved, onCompare, isComparing, compareDisabled }: Props) {
-  const marketPath = useMarketPath()
   const rails = editorialOrder.flatMap(id => home.rails.filter(rail => rail.id === id))
   return <div className="pb-8">
     <nav aria-label="Discover Tools by job" className="mb-10 flex gap-2 overflow-x-auto border-b border-border pb-5 sm:justify-center sm:gap-3">
       {rails.map(rail => {
         const item = navigation[rail.id]
         const Icon = item.icon
-        return <Link key={rail.id} to={marketPath} search={collectionSearch(rail)} className={cn(buttonVariants({ variant: 'outline' }), 'shrink-0 gap-2 rounded-full border-border/70 bg-card px-4 sm:px-5')}><Icon className="size-4" aria-hidden="true" />{item.label}</Link>
+        return <a key={rail.id} href={`#directory-collection-${rail.id}`} className={cn(buttonVariants({ variant: 'outline' }), 'shrink-0 gap-2 rounded-full border-border/70 bg-card px-4 sm:px-5')}><Icon className="size-4" aria-hidden="true" />{item.label}</a>
       })}
     </nav>
     <div className="grid gap-12 sm:gap-16">
@@ -50,20 +39,20 @@ export function DirectoryHomeDiscovery({ home, onSave, isSaved, onCompare, isCom
         <Carousel opts={{ align: 'start', loop: false }} aria-label={`${rail.category} Tools`}>
           <div className="mb-5 flex flex-wrap items-end justify-between gap-4">
             <div className="max-w-2xl">
-              <p className="mb-2 text-[10px] font-medium uppercase tracking-[0.14em] text-muted-foreground">{rail.category}</p>
+              <p className="mb-2 text-caption font-medium uppercase tracking-[0.14em] text-muted-foreground">{rail.category}</p>
               <h2 id={`directory-collection-${rail.id}`} className="text-2xl font-medium tracking-tight sm:text-3xl">{rail.title}</h2>
               <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{rail.description}</p>
             </div>
             <div className="flex shrink-0 items-center gap-2">
-              <Link to={marketPath} search={collectionSearch(rail)} aria-label={`View ${rail.category} collection`} className={cn(buttonVariants({ variant: 'ghost', size: 'sm' }), 'mr-1 min-h-touch rounded-full')}>View collection<ArrowUpRight className="size-4" aria-hidden="true" /></Link>
+              <a href={`#directory-collection-${rail.id}`} aria-label={`View collection: ${rail.category}`} className={cn(buttonVariants({ variant: 'ghost', size: 'sm' }), 'mr-1 min-h-touch rounded-full')}>View collection<ArrowUpRight className="size-4" aria-hidden="true" /></a>
               {rail.kind === 'ok' && rail.items.length > 0 ? <>
                 <CarouselPrevious className="static size-10 min-h-touch translate-y-0" aria-label={`Previous ${rail.category} Tools`} />
                 <CarouselNext className="static size-10 min-h-touch translate-y-0" aria-label={`Next ${rail.category} Tools`} />
               </> : null}
             </div>
           </div>
-          {rail.kind === 'unavailable' ? <p role="status" className="rounded-xl border border-border bg-muted/30 px-5 py-8 text-sm text-muted-foreground">This collection could not be loaded. You can still explore the other collections or open this search.</p>
-            : rail.items.length === 0 ? <p className="rounded-xl border border-border bg-muted/30 px-5 py-8 text-sm text-muted-foreground">No matches were returned for this collection. Open the search to explore further.</p>
+          {rail.kind === 'unavailable' ? <p role="status" className="rounded-xl border border-border bg-muted/30 px-5 py-8 text-sm text-muted-foreground">This collection could not be loaded. See all Tools to keep looking.</p>
+            : rail.items.length === 0 ? <p className="rounded-xl border border-border bg-muted/30 px-5 py-8 text-sm text-muted-foreground">No matches were returned for this collection. See all Tools to keep looking.</p>
             : <CarouselContent className="-ml-4 py-1">
               {rail.items.slice(0, 8).map(entry => {
                 const item = { entry, search: rail.search }

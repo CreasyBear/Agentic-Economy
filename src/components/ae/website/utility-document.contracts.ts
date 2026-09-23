@@ -3,7 +3,7 @@ import type { ReactNode } from 'react'
 export type AeSiteUtilityDocumentSection = Readonly<{
   id: string
   heading: string
-  body: ReadonlyArray<string>
+  body: ReadonlyArray<ReactNode>
 }>
 
 export type AeSiteUtilityDocumentProps = Readonly<{

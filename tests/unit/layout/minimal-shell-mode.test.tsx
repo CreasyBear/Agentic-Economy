@@ -1,6 +1,7 @@
 /**
  * @vitest-environment jsdom
  */
+import type * as ConvexReactModule from 'convex/react'
 import type { ReactNode } from 'react'
 import { cleanup, render, screen } from '@testing-library/react'
 import {
@@ -18,6 +19,12 @@ import { AeAppShell } from '@/components/ae/layout/AeAppShell'
 
 vi.mock('@/lib/observability/funnel-client', () => ({
   emitFunnelEventOnce: vi.fn(),
+}))
+
+// Vitest hoists the mock factory, so its shared helper must be loaded inside it.
+vi.mock('convex/react', async (importOriginal) => ({
+  ...(await importOriginal<typeof ConvexReactModule>()),
+  ...(await import('../../helpers/shell-convex-mock')).shellConvexMock,
 }))
 
 vi.mock('@clerk/tanstack-react-start', async (importOriginal) => ({

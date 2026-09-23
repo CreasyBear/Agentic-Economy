@@ -1,4 +1,3 @@
-import { Link } from '@tanstack/react-router'
 import type { ColumnDef } from '@tanstack/react-table'
 import { useMemo } from 'react'
 
@@ -91,42 +90,6 @@ export function OwnerOfferingsTable({
         </span>
       ),
     },
-    {
-      id: 'quickActions',
-      enableSorting: false,
-      enableGlobalFilter: false,
-      header: () => <span className="sr-only">Quick actions</span>,
-      cell: ({ row }) => {
-        const item = row.original
-        const testRunHref = `/owner/operations/${encodeURIComponent(item.slug ?? item.offering.offeringRef)}`
-        return (
-          <div className="flex items-center gap-1">
-            <Link
-              to={testRunHref}
-              aria-label={`Test Run for ${item.offering.name}`}
-              className={cn(
-                buttonVariants({ variant: 'ghost', size: 'sm' }),
-                'min-h-touch items-center px-2 text-xs sm:min-h-8',
-                TACTILE_PRESS_CLASS,
-              )}
-            >
-              Test Run
-            </Link>
-            <Link
-              to="/activity"
-              aria-label={`View logs for ${item.offering.name}`}
-              className={cn(
-                buttonVariants({ variant: 'ghost', size: 'sm' }),
-                'min-h-touch items-center px-2 text-xs sm:min-h-8',
-                TACTILE_PRESS_CLASS,
-              )}
-            >
-              Activity
-            </Link>
-          </div>
-        )
-      },
-    },
   ], [])
 
   return (
@@ -169,7 +132,6 @@ export function OwnerOfferingsTable({
                 label: 'Open Tool',
                 href: `/owner/operations/${encodeURIComponent(item.slug ?? item.offering.offeringRef)}`,
               }
-              const testRunHref = `/owner/operations/${encodeURIComponent(item.slug ?? item.offering.offeringRef)}`
               return (
                 <li key={item.offering.offeringRef} className="grid min-w-0 gap-related py-related">
                   <div className="grid gap-2">
@@ -197,22 +159,6 @@ export function OwnerOfferingsTable({
                   >
                     {action.label}
                   </a>
-                  <div className="flex gap-2">
-                    <Link
-                      to={testRunHref}
-                      aria-label={`Test Run for ${item.offering.name}`}
-                      className={cn(buttonVariants({ variant: 'outline', size: 'sm' }), TACTILE_PRESS_CLASS)}
-                    >
-                      Test Run
-                    </Link>
-                    <Link
-                      to="/activity"
-                      aria-label={`View logs for ${item.offering.name}`}
-                      className={cn(buttonVariants({ variant: 'outline', size: 'sm' }), TACTILE_PRESS_CLASS)}
-                    >
-                      Activity
-                    </Link>
-                  </div>
                 </li>
               )
             })}

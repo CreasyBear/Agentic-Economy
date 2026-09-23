@@ -36,7 +36,7 @@ export const Route = createFileRoute('/tools/$providerHost/$slug')({
     })
   },
   pendingComponent: () => <AePageSkeleton title="Loading this Tool…" description="Loading this Tool…" shape="detail" />,
-  errorComponent: () => <AePageState tone="warning" title="Tool details are unavailable" description="AE cannot verify the current descriptor right now." action={<MarketBackButton label="Browse current Tools" className="min-h-touch" />} />,
+  errorComponent: () => <AePageState tone="warning" title="Tool details are unavailable" description="Agentic Economy cannot verify this Tool right now." action={<MarketBackButton label="Browse Market" className="min-h-touch" />} />,
   component: DirectoryToolCanonicalRoute,
 })
 

@@ -14,7 +14,7 @@ export function AgentConnectionSection({ diagnosticCommand }: AgentConnectionSec
       title="Agent connection"
       deck="Use your client's account connection, then return to your task. Connection and spending permission are separate."
     >
-      <Link to="/for-agents" className={cn(buttonVariants({ variant: 'outline' }), 'min-h-touch')}>Review agent setup</Link>
+      <Link to="/for-agents" className={cn(buttonVariants({ variant: 'outline' }), 'min-h-touch')}>Review Agent connection</Link>
       <Accordion type="single" collapsible className="mt-related">
         <AccordionItem value="diagnostics">
           <AccordionTrigger>Advanced connection diagnostics</AccordionTrigger>

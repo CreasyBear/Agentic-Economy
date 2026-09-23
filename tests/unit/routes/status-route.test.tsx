@@ -156,7 +156,7 @@ describe('/status route', () => {
       ],
     })
     expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('All systems operational')
-    expect(screen.getByText(/^Last updated /)).toBeTruthy()
+    expect(screen.getAllByText(/^Last checked /).length).toBeGreaterThan(0)
     expect(screen.getAllByText('Operational')).toHaveLength(5)
     expect(screen.getByRole('status').textContent).toBe(`Status checked. All 5 systems are operational. Last checked ${checkedAt}.`)
     expect(screen.getByRole('button', { name: 'Refresh status' })).toBeTruthy()
@@ -180,8 +180,8 @@ describe('/status route', () => {
     ).getAttribute('role')).toBe('status')
     expect(screen.getByText('Request reference').textContent).toBe('Request reference')
     expect(screen.getByText('corr_status_01').tagName).toBe('CODE')
-    expect(screen.getByRole('heading', { level: 2, name: 'Check existing calls before retrying' })).toBeTruthy()
-    expect(screen.getByRole('link', { name: 'Open Calls' }).getAttribute('href')).toBe('/activity')
+    const region = screen.getByRole('region', { name: 'Retry after the affected system recovers' })
+    expect(within(region).getByRole('link', { name: 'Help' }).getAttribute('href')).toBe('/support')
   })
 
   it('routes non-call-safety degradations to the support recovery path', () => {

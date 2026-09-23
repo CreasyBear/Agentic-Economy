@@ -22,20 +22,7 @@ vi.mock('@clerk/tanstack-react-start', () => ({
 }))
 
 vi.mock('@/components/ae/website', () => ({
-  AeSiteAuthPanel: ({
-    children,
-    eyebrow,
-    title,
-  }: {
-    children: ReactNode
-    eyebrow?: string
-    title: string
-  }) => (
-    <section aria-label={title}>
-      {eyebrow ? <p>{eyebrow}</p> : null}
-      {children}
-    </section>
-  ),
+  AeSiteBody: ({ children }: { children: ReactNode }) => <p>{children}</p>,
   AeSiteAuthSubmit: ({ children }: { children: ReactNode }) => <button type="button">{children}</button>,
 }))
 
@@ -58,9 +45,7 @@ vi.mock('@/components/ae/settings/AeAccountSecurityHistory', () => ({
 
 vi.mock('@/components/ae/layout/AeOperatorPage', () => ({
   AeOperatorPage: ({
-    title,
     secondaryBar,
-    stickyHeader,
     children,
   }: {
     title: string
@@ -68,8 +53,7 @@ vi.mock('@/components/ae/layout/AeOperatorPage', () => ({
     stickyHeader?: boolean
     children: ReactNode
   }) => (
-    <main data-sticky-header={String(stickyHeader)}>
-      <h1>{title}</h1>
+    <main>
       {secondaryBar}
       {children}
     </main>
@@ -117,45 +101,59 @@ afterEach(() => {
 })
 
 describe('/owner/settings R-17', () => {
-  it('renders sticky in-page navigation to every settings section', () => {
+  it('renders one settings tab for every section and shows Profile first', () => {
+    mockSettingsQueries()
     render(
       <OwnerSettingsShell>
-        <div />
+        <AccountSettingsSection history={history} />
       </OwnerSettingsShell>,
     )
 
-    const nav = screen.getByRole('navigation', { name: 'Account settings sections' })
-    expect(nav.closest('main')?.getAttribute('data-sticky-header')).toBe('true')
-    expect(screen.getByRole('heading', { level: 1, name: 'Settings' })).toBeTruthy()
-    expect(within(nav).getByRole('link', { name: 'Profile' }).getAttribute('href')).toBe('#clerk-account-security')
-    expect(within(nav).getByRole('link', { name: 'Team' }).getAttribute('href')).toBe('#team')
-    expect(within(nav).getByRole('link', { name: 'Business' }).getAttribute('href')).toBe('#business')
-    expect(within(nav).getByRole('link', { name: 'Privacy' }).getAttribute('href')).toBe('#privacy')
-    expect(within(nav).getByRole('link', { name: 'Email alerts' }).getAttribute('href')).toBe('#notifications')
-    expect(within(nav).getByRole('link', { name: 'Security history' }).getAttribute('href')).toBe('#security-history')
-  })
-
-  it('keeps Profile and Team as separate labelled sections and links Team to its page', () => {
-    mockSettingsQueries()
-    render(<AccountSettingsSection history={history} />)
-
-    const headings = screen.getAllByRole('heading', { level: 2 }).map((heading) => heading.textContent)
-    expect(headings).toEqual([
+    const tabs = screen.getByRole('tablist', { name: 'Account settings sections' })
+    expect(tabs.closest('[data-slot="tabs"]')?.getAttribute('data-orientation')).toBe('horizontal')
+    expect(within(tabs).getAllByRole('tab').map((tab) => tab.textContent)).toEqual([
       'Profile',
+      'Recovery',
+      'Security history',
       'Team',
+      'Workspace',
       'Business',
       'Privacy',
       'Email alerts',
-      'Security history',
     ])
+    expect(within(tabs).getByRole('tab', { name: 'Profile' }).getAttribute('aria-selected')).toBe('true')
+    expect(screen.getByRole('heading', { level: 2, name: 'Profile' })).toBeTruthy()
+    expect(screen.queryByRole('heading', { level: 2, name: 'Business' })).toBeNull()
+  })
+
+  it('shows one settings section at a time and links Team to its page', () => {
+    mockSettingsQueries()
+    render(<AccountSettingsSection history={history} />)
+
+    expect(screen.getByRole('heading', { level: 2, name: 'Profile' })).toBeTruthy()
+    expect(screen.queryByRole('textbox', { name: 'ABN' })).toBeNull()
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Business' }))
     expect(screen.getByRole('textbox', { name: 'ABN' })).toBeTruthy()
     expect(screen.getByText('ABN and GST facts used on your tax invoices.')).toBeTruthy()
+    expect(screen.queryByRole('heading', { level: 2, name: 'Profile' })).toBeNull()
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Team' }))
     expect(screen.getByRole('link', { name: /Manage Team/ }).getAttribute('href')).toBe('/owner/team')
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Workspace' }))
+    expect(screen.getByRole('link', { name: /Workspace profile/ }).getAttribute('href')).toBe('/owner/workspace')
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Privacy' }))
     expect(screen.getByText('Download a copy of the data Agentic Economy holds for this Account.')).toBeTruthy()
     const exportLink = screen.getByRole('link', { name: 'Download your data (JSON)' })
     expect(exportLink.getAttribute('href')).toBe('/api/owner/data-export')
     expect(exportLink.hasAttribute('download')).toBe(true)
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Email alerts' }))
     expect(screen.getByText(/Saved for this Account\./)).toBeTruthy()
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Security history' }))
     expect(screen.getByRole('textbox', { name: 'Filter security history' })).toBeTruthy()
     expect(screen.queryByText('Session', { exact: true })).toBeNull()
   })
@@ -164,8 +162,9 @@ describe('/owner/settings R-17', () => {
     mockSettingsQueries()
     convexMocks.updatePreferences.mockResolvedValue({ kind: 'updated', revision: 5 })
     render(<AccountSettingsSection history={history} />)
+    fireEvent.click(screen.getByRole('tab', { name: 'Email alerts' }))
 
-    const lowCredit = screen.getByRole('switch', { name: 'Low credit balance' })
+    const lowCredit = screen.getByRole('switch', { name: 'Email when credit balance is low' })
     expect(lowCredit.getAttribute('aria-checked')).toBe('false')
     fireEvent.click(lowCredit)
 

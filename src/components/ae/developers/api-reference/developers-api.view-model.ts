@@ -4,8 +4,12 @@ import type { OpenApiDocument } from '@/modules/discovery/public'
 
 import {
   DEVELOPERS_API_COPY,
+  DEVELOPERS_API_OPERATION_GROUP_TAGS,
   DEVELOPERS_API_PRICE_EXAMPLE,
   DEVELOPERS_API_PROBLEM_NEXT_STEPS,
+  type DevelopersApiOperation,
+  type DevelopersApiOperationGroup,
+  type DevelopersApiOperationGroupTag,
   type DevelopersApiProblemKind,
   type DevelopersApiViewModel,
 } from './developers-api.contracts'
@@ -18,6 +22,13 @@ const HTTP_METHODS: Readonly<Record<string, true>> = {
   post: true,
   put: true,
 }
+const OPERATION_GROUP_TAG_SET: Readonly<Record<DevelopersApiOperationGroupTag, true>> = {
+  'Call gateway': true,
+  'Tool market': true,
+  Funding: true,
+  Businesses: true,
+  Platform: true,
+}
 
 export function createDevelopersApiViewModel(document: OpenApiDocument): DevelopersApiViewModel {
   const root = record(document, 'document')
@@ -29,25 +40,36 @@ export function createDevelopersApiViewModel(document: OpenApiDocument): Develop
   const agentAccessKey = recordAt(securitySchemes, 'agentAccessKey', 'document.components.securitySchemes')
   const authDescription = stringAt(agentAccessKey, 'description', 'document.components.securitySchemes.agentAccessKey')
   const paths = recordAt(root, 'paths', 'document')
-  const operations = Object.entries(paths).flatMap(([path, pathValue]) => {
+  const buckets: Record<DevelopersApiOperationGroupTag, DevelopersApiOperation[]> = {
+    'Call gateway': [],
+    'Tool market': [],
+    Funding: [],
+    Businesses: [],
+    Platform: [],
+  }
+  for (const [path, pathValue] of Object.entries(paths)) {
     const methods = record(pathValue, `document.paths.${path}`)
-    return Object.entries(methods)
-      .filter(([method]) => HTTP_METHODS[method] === true)
-      .map(([method, operationValue]) => {
-        const operation = record(operationValue, `document.paths.${path}.${method}`)
-        const operationId = stringAt(operation, 'operationId', `document.paths.${path}.${method}`)
-        const summary = stringAt(operation, 'summary', `document.paths.${path}.${method}`)
-        const requestExample = readRequestExample(operation)
-        const hasRequestBody = operation.requestBody !== undefined
-        return {
-          operationId,
-          method: method.toUpperCase(),
-          path,
-          summary,
-          curl: curlFor({ serverUrl, method: method.toUpperCase(), path, hasRequestBody, requestExample }),
-        }
+    for (const [method, operationValue] of Object.entries(methods)) {
+      if (HTTP_METHODS[method] !== true) continue
+      const operation = record(operationValue, `document.paths.${path}.${method}`)
+      const site = `document.paths.${path}.${method}`
+      const operationId = stringAt(operation, 'operationId', site)
+      const summary = stringAt(operation, 'summary', site)
+      const tag = operationGroupTagAt(operation, site)
+      const requestExample = readRequestExample(operation)
+      const hasRequestBody = operation.requestBody !== undefined
+      buckets[tag].push({
+        operationId,
+        method: method.toUpperCase(),
+        path,
+        summary,
+        curl: curlFor({ serverUrl, method: method.toUpperCase(), path, hasRequestBody, requestExample }),
       })
-  })
+    }
+  }
+  const operationGroups: DevelopersApiOperationGroup[] = DEVELOPERS_API_OPERATION_GROUP_TAGS
+    .map((tag) => ({ tag, operations: buckets[tag] }))
+    .filter((group) => group.operations.length > 0)
   const problemSchema = resolveProblemSchema(root, components, paths)
   const properties = recordAt(problemSchema, 'properties', 'Problem')
   const typeSchema = recordAt(properties, 'type', 'Problem.properties')
@@ -74,7 +96,7 @@ export function createDevelopersApiViewModel(document: OpenApiDocument): Develop
     authDescription,
     documentVersion,
     versionPolicy: DEVELOPERS_API_COPY.versionPolicy(documentVersion),
-    operations,
+    operationGroups,
     problems,
     priceExample: {
       shape: 'ExactAmount { currency, units, exponent }',
@@ -82,6 +104,15 @@ export function createDevelopersApiViewModel(document: OpenApiDocument): Develop
       formatted: formatDisplayAmount(priceExample),
     },
   }
+}
+
+function operationGroupTagAt(operation: JsonRecord, site: string): DevelopersApiOperationGroupTag {
+  const tags = arrayAt(operation, 'tags', site)
+  const tag = tags[0]
+  if (tags.length !== 1 || typeof tag !== 'string' || OPERATION_GROUP_TAG_SET[tag as DevelopersApiOperationGroupTag] !== true) {
+    throw new Error(`developers_api_document_invalid:${site}.tags`)
+  }
+  return tag as DevelopersApiOperationGroupTag
 }
 
 function readRequestExample(operation: JsonRecord): unknown {

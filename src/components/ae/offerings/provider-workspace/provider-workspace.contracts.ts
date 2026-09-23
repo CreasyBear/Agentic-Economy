@@ -13,7 +13,7 @@ import type {
 import type { ProviderWorkspaceProjectionRow } from '@/components/ae/offerings/provider-workspace-projection'
 
 export const PROVIDER_WORKSPACE_EARNINGS_COPY = {
-  connectionTitle: 'Stripe payout connection',
+  connectionTitle: 'Provider earnings and payout readiness.',
   connectAction: 'Connect Stripe',
   connectedSentence: 'Stripe is connected for payouts.',
   disconnectedSentence: 'Connect Stripe to receive payouts.',
@@ -42,6 +42,7 @@ export type ProviderWorkspaceEarningsSectionProps = Readonly<{
   earningsPending: boolean
   earningsDetailAvailable: boolean
   onOpenEarnings: () => void
+  onCloseEarnings: () => void
   onRetryEarnings: () => void
 }>
 

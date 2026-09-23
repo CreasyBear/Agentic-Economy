@@ -7,7 +7,7 @@ import type { X402EvmReceipt } from '@/modules/capability-supply/server'
 
 const rpc = vi.hoisted(() => vi.fn())
 vi.mock('@/modules/capability-execution/call-runtime', () => ({ readX402EvmReceipt: rpc }))
-import { resolveLostResult } from '../../../convex/moneyManagedCallRemedyActions'
+import { resolveLostResult, resolveInvalidResult } from '../../../convex/moneyManagedCallRemedyActions'
 
 const payer = '0x1111111111111111111111111111111111111111'
 const payTo = '0x2222222222222222222222222222222222222222'
@@ -35,17 +35,19 @@ const handler = (resolveLostResult as unknown as {
   _handler: (ctx: ActionCtx, input: typeof args) => Promise<unknown>
 })._handler
 
-function context() {
+function context(invalid = false, financialState = 'outcome_unknown') {
+  const retainedAttempt = invalid ? { ...attempt, quarantinedOutputJson: '{"unexpected":true}',
+    quarantinedResponseDigest: `sha256:${'f'.repeat(64)}` } : attempt
   const runQuery = vi.fn(async (ref: never) => {
     const name = getFunctionName(ref)
     if (name === 'capabilityCalls:readOwnerRecovery') return call
-    if (name === 'moneyX402PaymentAttempts:readX402PaymentAttempt') return attempt
-    if (name === 'moneyManagedCall:readBooking') return { kind: 'available', booking: { providerAmountUnits: '1000', buyerAmountUnits: '1404' } }
+    if (name === 'moneyX402PaymentAttempts:readX402PaymentAttempt') return retainedAttempt
+    if (name === 'moneyManagedCall:readBooking') return { kind: 'available', financialState, booking: { providerAmountUnits: '1000', buyerAmountUnits: '1404' } }
     throw new Error(name)
   })
   const runMutation = vi.fn(async (ref: never) => {
     const name = getFunctionName(ref)
-    if (name === 'moneyManagedCallRemedy:claim') return { kind: 'claimed', call, attempt }
+    if (name === 'moneyManagedCallRemedy:claim') return { kind: 'claimed', call, attempt: retainedAttempt }
     if (name === 'moneyManagedCallRemedy:finish') return { kind: 'completed' }
     throw new Error(name)
   })
@@ -89,5 +91,42 @@ describe('operator recovery for a paid Call with a lost response', () => {
     await expect(handler(ctx as unknown as ActionCtx, args)).rejects.toThrow('connection interrupted')
     expect(await handler(ctx as unknown as ActionCtx, args)).toEqual({ kind: 'completed' })
     expect(ctx.runAction.mock.calls[1]).toEqual(ctx.runAction.mock.calls[0])
+  })
+})
+
+
+describe('verified paid invalid delivery action', () => {
+  const resolve = (resolveInvalidResult as unknown as {
+    _handler: (ctx: ActionCtx, input: typeof args) => Promise<unknown>
+  })._handler
+  it('requires original transaction proof and a still-held booking before the buyer release recipe', async () => {
+    const captured = context(true, 'settled')
+    expect(await resolve(captured as unknown as ActionCtx, args)).toEqual({ kind: 'refused', code: 'booking_unavailable' })
+    expect(captured.runAction).not.toHaveBeenCalled()
+    rpc.mockResolvedValue({ ...receipt, confirmations: 0n })
+    const unverified = context(true)
+    expect(await resolve(unverified as unknown as ActionCtx, args)).toEqual({ kind: 'refused', code: 'payment_not_verified' })
+    expect(unverified.runMutation).not.toHaveBeenCalled()
+    expect(unverified.runAction).not.toHaveBeenCalled()
+  })
+  it.each(['ledger', 'receipt'] as const)('resumes the identical remedy after interrupted %s finalization', async boundary => {
+    const ctx = context(true)
+    if (boundary === 'ledger') ctx.runAction.mockRejectedValueOnce(new Error('interrupted'))
+    else {
+      const mutation = ctx.runMutation.getMockImplementation()!
+      let first = true
+      ctx.runMutation.mockImplementation(async ref => {
+        if (getFunctionName(ref) === 'moneyManagedCallRemedy:finish' && first) {
+          first = false
+          throw new Error('interrupted')
+        }
+        return mutation(ref)
+      })
+    }
+    await expect(resolve(ctx as unknown as ActionCtx, args)).rejects.toThrow('interrupted')
+    expect(await resolve(ctx as unknown as ActionCtx, args)).toEqual({ kind: 'completed' })
+    expect(ctx.runAction.mock.calls[1]).toEqual(ctx.runAction.mock.calls[0])
+    expect(getFunctionName(ctx.runAction.mock.calls[0]![0] as never)).toBe('moneyFormance:remedyPaidCall')
+    expect(ctx.runMutation).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ failureKind: 'invalid_output' }))
   })
 })

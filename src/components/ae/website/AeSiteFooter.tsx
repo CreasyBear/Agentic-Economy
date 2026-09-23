@@ -13,7 +13,11 @@ import { FOOTER } from '@/content/brand-copy'
 import { AE_SITE_FOOTER, FOOTER_NAVIGATION } from './AeSiteFooter.contracts'
 import { AeSiteHeading } from './AeSiteType'
 
-export function AeSiteFooter() {
+export type AeSiteFooterProps = Readonly<{
+  hideCloser?: boolean
+}>
+
+export function AeSiteFooter({ hideCloser = false }: AeSiteFooterProps = {}) {
   return (
     <footer className="relative isolate mt-auto overflow-hidden border-t border-border bg-background text-foreground">
       <div className="pointer-events-none absolute inset-0 -z-10 overflow-hidden opacity-15 mix-blend-luminosity dark:opacity-25">
@@ -29,49 +33,51 @@ export function AeSiteFooter() {
       </div>
 
       <div className="ae-rail pt-6 pb-8 md:pt-16 md:pb-16">
-        <div className="relative mb-12 overflow-hidden rounded-3xl border border-white/15 shadow-overlay ring-1 ring-white/10 md:mb-16">
-          <img
-            src={AE_SITE_FOOTER.images.closer.src}
-            srcSet={AE_SITE_FOOTER.images.closer.srcSet}
-            sizes="(max-width: 1280px) 100vw, 1280px"
-            alt=""
-            loading="lazy"
-            className="absolute inset-0 size-full object-cover object-center brightness-[0.82] contrast-[1.05]"
-          />
-          <div className="absolute inset-0 bg-linear-to-t from-black/85 via-black/40 to-black/20" />
-          <div className="relative z-10 flex min-h-[320px] flex-col items-center justify-center p-8 text-center md:min-h-[380px] md:p-14">
-            <span className="mb-3 inline-block rounded-full border border-white/20 bg-[var(--ae-overlay-scrim)] px-3.5 py-1 text-xs font-medium tracking-widest text-white/90 uppercase backdrop-blur-md">
-              {AE_SITE_FOOTER.closer.eyebrow}
-            </span>
-            <AeSiteHeading as="h2" size="md" className="max-w-2xl text-white">
-              {AE_SITE_FOOTER.closer.heading}
-            </AeSiteHeading>
-            <p className="mt-4 max-w-xl text-balance text-base text-white/80 drop-shadow-xs md:text-lg">
-              {AE_SITE_FOOTER.closer.description}
-            </p>
-            <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
-              <Link
-                to="/market"
-                className={buttonVariants({
-                  size: 'lg',
-                  className: 'rounded-full bg-white px-6 font-semibold text-zinc-950 shadow-float-dark hover:bg-zinc-100 hover:text-black',
-                })}
-              >
-                {AE_SITE_FOOTER.closer.primaryAction}
-              </Link>
-              <Link
-                to="/status"
-                className={buttonVariants({
-                  variant: 'outline',
-                  size: 'lg',
-                  className: 'rounded-full border-white/30 bg-[var(--ae-overlay-scrim)] px-6 text-white backdrop-blur-md hover:bg-white/10 hover:text-white',
-                })}
-              >
-                {AE_SITE_FOOTER.closer.secondaryAction}
-              </Link>
+        {hideCloser ? null : (
+          <div className="relative mb-12 overflow-hidden rounded-3xl border border-white/15 shadow-overlay ring-1 ring-white/10 md:mb-16">
+            <img
+              src={AE_SITE_FOOTER.images.closer.src}
+              srcSet={AE_SITE_FOOTER.images.closer.srcSet}
+              sizes="(max-width: 1280px) 100vw, 1280px"
+              alt=""
+              loading="lazy"
+              className="absolute inset-0 size-full object-cover object-center brightness-[0.82] contrast-[1.05]"
+            />
+            <div className="absolute inset-0 bg-linear-to-t from-black/85 via-black/40 to-black/20" />
+            <div className="relative z-10 flex min-h-[320px] flex-col items-center justify-center p-8 text-center md:min-h-[380px] md:p-14">
+              <span className="mb-3 inline-block rounded-full border border-white/20 bg-[var(--ae-overlay-scrim)] px-3.5 py-1 text-xs font-medium tracking-widest text-white/90 uppercase backdrop-blur-md">
+                {AE_SITE_FOOTER.closer.eyebrow}
+              </span>
+              <AeSiteHeading as="h2" size="md" className="max-w-2xl text-white">
+                {AE_SITE_FOOTER.closer.heading}
+              </AeSiteHeading>
+              <p className="mt-4 max-w-xl text-balance text-base text-white/80 drop-shadow-xs md:text-lg">
+                {AE_SITE_FOOTER.closer.description}
+              </p>
+              <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
+                <Link
+                  to="/market"
+                  className={buttonVariants({
+                    size: 'lg',
+                    className: 'rounded-full bg-white px-6 font-semibold text-zinc-950 shadow-float-dark hover:bg-zinc-100 hover:text-black',
+                  })}
+                >
+                  {AE_SITE_FOOTER.closer.primaryAction}
+                </Link>
+                <Link
+                  to="/status"
+                  className={buttonVariants({
+                    variant: 'outline',
+                    size: 'lg',
+                    className: 'rounded-full border-white/30 bg-[var(--ae-overlay-scrim)] px-6 text-white backdrop-blur-md hover:bg-white/10 hover:text-white',
+                  })}
+                >
+                  {AE_SITE_FOOTER.closer.secondaryAction}
+                </Link>
+              </div>
             </div>
           </div>
-        </div>
+        )}
 
         <div className="grid grid-cols-2 gap-x-6 gap-y-8 sm:grid-cols-4 lg:grid-cols-6">
           <div className="col-span-full grid gap-4 lg:col-span-2">

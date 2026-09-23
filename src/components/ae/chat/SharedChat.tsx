@@ -1,9 +1,11 @@
-import { useQuery } from 'convex/react'
+import { useConvex, useQuery } from 'convex/react'
 import { LockKeyholeIcon } from 'lucide-react'
+import { useEffect, useState } from 'react'
 
 import { api } from '../../../../convex/_generated/api'
 import { AeChatPage } from '@/components/ae/layout/AeChatPage'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import { Empty, EmptyDescription, EmptyHeader } from '@/components/ui/empty'
 import { Skeleton } from '@/components/ui/skeleton'
 import { chatShared } from '@/lib/public/chat-ia'
@@ -11,16 +13,65 @@ import { chatShared } from '@/lib/public/chat-ia'
 import { ChatTranscript } from './ChatTranscript'
 import type { TranscriptMessage } from './presentation'
 
-export function SharedChat({ shareToken }: { shareToken: string }) {
-  const result = useQuery(api.chatShares.listSharedMessages, {
-    shareToken,
-    paginationOpts: { cursor: null, numItems: 20 },
-  })
-  const messages: TranscriptMessage[] = [...(result?.page ?? [])].reverse().map((message) => ({
+const PAGE_SIZE = 20
+const TRANSCRIPT_COLUMN = 'mx-auto w-full max-w-3xl gap-section px-gutter py-section'
+
+function projectSharedPage(
+  page: readonly { id: string; role: 'user' | 'assistant'; parts: TranscriptMessage['parts'] }[],
+): TranscriptMessage[] {
+  return [...page].reverse().map((message) => ({
     id: message.id,
     role: message.role,
     parts: message.parts,
-  })) ?? []
+  }))
+}
+
+export function SharedChat({ shareToken }: { shareToken: string }) {
+  const convex = useConvex()
+  const initial = useQuery(api.chatShares.listSharedMessages, {
+    shareToken,
+    paginationOpts: { cursor: null, numItems: PAGE_SIZE },
+  })
+  const [olderMessages, setOlderMessages] = useState<TranscriptMessage[]>([])
+  const [continueCursor, setContinueCursor] = useState<string | undefined>()
+  const [isDone, setIsDone] = useState(true)
+  const [loadingMore, setLoadingMore] = useState(false)
+
+  useEffect(() => {
+    setOlderMessages([])
+    setContinueCursor(undefined)
+    setIsDone(true)
+    setLoadingMore(false)
+  }, [shareToken])
+
+  useEffect(() => {
+    if (initial === undefined) return
+    if (olderMessages.length > 0) return
+    setIsDone(initial.isDone)
+    setContinueCursor(initial.isDone ? undefined : initial.continueCursor)
+  }, [initial, olderMessages.length])
+
+  const baseMessages: TranscriptMessage[] = initial === undefined
+    ? []
+    : projectSharedPage(initial.page)
+  const messages = [...olderMessages, ...baseMessages]
+
+  async function onLoadMore() {
+    if (continueCursor === undefined || loadingMore) return
+    const cursor = continueCursor
+    setLoadingMore(true)
+    try {
+      const next = await convex.query(api.chatShares.listSharedMessages, {
+        shareToken,
+        paginationOpts: { cursor, numItems: PAGE_SIZE },
+      })
+      setOlderMessages((current) => [...projectSharedPage(next.page), ...current])
+      setIsDone(next.isDone)
+      setContinueCursor(next.isDone ? undefined : next.continueCursor)
+    } finally {
+      setLoadingMore(false)
+    }
+  }
 
   return (
     <AeChatPage
@@ -29,15 +80,15 @@ export function SharedChat({ shareToken }: { shareToken: string }) {
         <header className="flex min-h-14 items-center gap-related border-b border-border px-gutter">
           <LockKeyholeIcon aria-hidden="true" className="size-4 text-muted-foreground" />
           <div className="min-w-0 flex-1">
-            <h1 className="truncate text-sm font-medium">{result?.title ?? chatShared.fallbackTitle}</h1>
+            <h1 className="truncate text-sm font-medium">{initial?.title ?? chatShared.fallbackTitle}</h1>
             <p className="text-xs text-muted-foreground">{chatShared.detail}</p>
           </div>
           <Badge variant="outline">{chatShared.badge}</Badge>
         </header>
       }
     >
-      {result === undefined ? (
-        <div className="grid min-h-0 flex-1 content-start gap-intra p-gutter" aria-busy="true">
+      {initial === undefined ? (
+        <div className={`grid min-h-0 flex-1 content-start ${TRANSCRIPT_COLUMN}`} aria-busy="true">
           <p className="sr-only" role="status">{chatShared.loading}</p>
           <Skeleton className="h-16 w-full max-w-prose" />
           <Skeleton className="ml-auto h-16 w-full max-w-prose" />
@@ -50,7 +101,22 @@ export function SharedChat({ shareToken }: { shareToken: string }) {
           </EmptyHeader>
         </Empty>
       ) : (
-        <ChatTranscript messages={messages} />
+        <div className="flex min-h-0 flex-1 flex-col">
+          <ChatTranscript messages={messages} />
+          {isDone ? null : (
+            <div className={`flex shrink-0 justify-center ${TRANSCRIPT_COLUMN}`}>
+              <Button
+                type="button"
+                variant="secondary"
+                className="min-h-touch"
+                disabled={loadingMore}
+                onClick={() => void onLoadMore()}
+              >
+                {loadingMore ? chatShared.loadingMore : chatShared.loadMore}
+              </Button>
+            </div>
+          )}
+        </div>
       )}
     </AeChatPage>
   )

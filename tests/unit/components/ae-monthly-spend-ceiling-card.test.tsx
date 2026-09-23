@@ -42,7 +42,7 @@ const disabledSettings: AeMonthlySpendCeilingCardProps['settings'] = {
 afterEach(cleanup)
 
 describe('AeMonthlySpendCeilingCard (W-23)', () => {
-  it('U1: disabled shows reassurance and Set Limit', () => {
+  it('U1: disabled shows reassurance and Set limit', () => {
     const onSave = vi.fn()
     render(
       <AeMonthlySpendCeilingCard
@@ -56,7 +56,7 @@ describe('AeMonthlySpendCeilingCard (W-23)', () => {
     expect(
       screen.getByText(/monthly spending cap is disabled/i),
     ).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Set Limit' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Set limit' })).toBeInTheDocument()
     expect(screen.queryByText(/approaching monthly limit/i)).not.toBeInTheDocument()
     expect(screen.queryByText(/monthly spending limit reached/i)).not.toBeInTheDocument()
   })
@@ -105,7 +105,7 @@ describe('AeMonthlySpendCeilingCard (W-23)', () => {
     expect(screen.getByText('Monthly spending limit reached')).toBeInTheDocument()
   })
 
-  it('U5: Edit Limit opens dialog with switch, input, and preset chips', async () => {
+  it('U5: Edit limit opens dialog with switch, input, and preset chips', async () => {
     const onSave = vi.fn()
     render(
       <AeMonthlySpendCeilingCard
@@ -115,7 +115,7 @@ describe('AeMonthlySpendCeilingCard (W-23)', () => {
       />,
     )
 
-    fireEvent.click(screen.getByRole('button', { name: 'Edit Limit' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Edit limit' }))
 
     const dialog = await screen.findByRole('dialog')
     expect(within(dialog).getByRole('switch', { name: /monthly spending cap/i })).toBeInTheDocument()
@@ -136,7 +136,7 @@ describe('AeMonthlySpendCeilingCard (W-23)', () => {
       />,
     )
 
-    fireEvent.click(screen.getByRole('button', { name: 'Edit Limit' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Edit limit' }))
     const dialog = await screen.findByRole('dialog')
     const capInput = within(dialog).getByLabelText(/monthly cap/i)
     fireEvent.change(capInput, { target: { value: '250' } })
@@ -161,7 +161,7 @@ describe('AeMonthlySpendCeilingCard (W-23)', () => {
       />,
     )
 
-    fireEvent.click(screen.getByRole('button', { name: 'Edit Limit' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Edit limit' }))
     const dialog = await screen.findByRole('dialog')
     fireEvent.click(within(dialog).getByRole('switch', { name: /monthly spending cap/i }))
     fireEvent.click(within(dialog).getByRole('button', { name: /save/i }))
@@ -185,7 +185,7 @@ describe('AeMonthlySpendCeilingCard (W-23)', () => {
       />,
     )
 
-    fireEvent.click(screen.getByRole('button', { name: 'Edit Limit' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Edit limit' }))
     const dialog = await screen.findByRole('dialog')
     const chip250 = within(dialog).getByRole('button', { name: 'A$250' })
     fireEvent.click(chip250)
@@ -204,7 +204,7 @@ describe('AeMonthlySpendCeilingCard (W-23)', () => {
       />,
     )
 
-    fireEvent.click(screen.getByRole('button', { name: 'Edit Limit' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Edit limit' }))
     const dialog = await screen.findByRole('dialog')
     fireEvent.change(within(dialog).getByLabelText(/monthly cap/i), { target: { value: 'not-valid' } })
     fireEvent.click(within(dialog).getByRole('button', { name: /save/i }))
@@ -229,7 +229,7 @@ describe('AeMonthlySpendCeilingCard (W-23)', () => {
       />,
     )
 
-    fireEvent.click(screen.getByRole('button', { name: 'Edit Limit' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Edit limit' }))
     let dialog = await screen.findByRole('dialog')
     fireEvent.change(within(dialog).getByLabelText(/monthly cap/i), { target: { value: '250' } })
     fireEvent.click(within(dialog).getByRole('button', { name: /save/i }))
@@ -238,7 +238,7 @@ describe('AeMonthlySpendCeilingCard (W-23)', () => {
       expect(toast.success).toHaveBeenCalledWith('Monthly spending cap updated: A$250.00')
     })
 
-    fireEvent.click(screen.getByRole('button', { name: 'Edit Limit' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Edit limit' }))
     dialog = await screen.findByRole('dialog')
     fireEvent.click(within(dialog).getByRole('switch', { name: /monthly spending cap/i }))
     fireEvent.click(within(dialog).getByRole('button', { name: /save/i }))
@@ -258,7 +258,7 @@ describe('AeMonthlySpendCeilingCard (W-23)', () => {
       />,
     )
 
-    fireEvent.click(screen.getByRole('button', { name: 'Edit Limit' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Edit limit' }))
     const dialog = await screen.findByRole('dialog')
     fireEvent.click(within(dialog).getByRole('button', { name: /save/i }))
 

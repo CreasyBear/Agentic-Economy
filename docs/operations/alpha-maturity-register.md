@@ -1567,3 +1567,56 @@ and remedy for paid contract-invalid output. Forced live process termination
 and hosted/mainnet acceptance remain unverified. The repository dependency gate
 is still blocked by one existing status-presentation UI import cycle outside
 this change; its ceiling was not raised.
+
+### Buyer continuity and blind-spot pass — 22 September 2026
+
+Continue the bounded Call package: result comprehension, repeat through the
+existing Agent, waiting/return and recovery queue progress. Browser findings:
+returning buyer was told to connect first; Tool showed zero completions despite
+paid receipts; pending receipt required manual refresh. Avoid building a second
+browser purchasing channel during this pass.
+
+Contracts: status observation requires an owner-visible nonterminal Call,
+ensures bounded read-only updates while visible, preserves the last useful
+record on outage, never overlaps recovery commands, and stops after resolution
+or unmount. Repeat preparation requires bounded object JSON, ensures an editable
+handoff with current-quote/new-purchase instructions; it neither executes a Call
+nor changes the original. Shell examples must preserve literal input. Invalid
+JSON disables handoff. Output presentation preserves exact recorded values and
+copy data; bounded previews disclose omissions and expose full JSON.
+
+Structural decision: isolate the repeat editor from receipt diagnostics so its
+local draft/copy state has one owner; one small component replaces the existing
+reuse function, no dependency, storage or execution abstraction. Existing output
+renderer owns bounded presentation; no service-specific inference. Queue and
+historical recovery changes retain exact payment attribution and never grant
+new signing/spending authority. Tests and browser readback must establish these
+contracts before closeout; unresolved policy work stays explicit.
+
+Outcome: readable bounded output with exact JSON/copy, collapsed request and
+diagnostics, editable repeat handoff through the existing Agent, automatic
+visible-page status updates with outage backoff and command exclusion. Tool
+evidence now loads at the server boundary; recovered completion contributes once
+at its original timestamp. Local browser shows two completed Calls, working
+repeat-copy validation and a usable receipt at 320/390 pixels. Add credit now
+follows the balance, ahead of optional settings.
+
+Recovery closes the two source gaps recorded above: an exact already-submitted
+payment can finish accounting after original credential expiry/revocation,
+without new spending authority; independently verified payment with retained
+contract-invalid output releases still-held buyer credit while preserving the
+Provider settlement. The canonical public Tool reference is derived from the
+snapshot, not compared with its internal operation ID. A transactional scheduler
+step commits both effect and successor, including continuation after a remedy
+claim/crash. Permanent money fences survive retry exhaustion. Automatic queue
+filtering occurs before bounding results, so manual cases cannot starve it.
+
+Combined validation: 20 focused suites, 354 tests passed; the corrected scheduler
+test context also passed all 110 payment-attempt tests. React Doctor: 90/100,
+zero errors, three existing component-complexity warnings retained after review.
+The UI dependency cycle is removed without changing runtime semantics. Latest
+whole-checkout typecheck is affected by concurrent admin-console work; Call test
+context errors were corrected. This closes the bounded local improvement pass,
+not launch acceptance. Forced live process termination, hosted recovery and Base
+mainnet acceptance remain open; historical already-captured invalid output needs
+the distinct credit-adjustment path rather than reservation release.

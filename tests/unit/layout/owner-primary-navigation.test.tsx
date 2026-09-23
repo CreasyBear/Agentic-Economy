@@ -20,6 +20,7 @@ function renderNavigation(pathname: string) {
   const root = createRootRoute()
   const routeTree = root.addChildren([
     createRoute({ getParentRoute: () => root, path: '/market' }),
+    createRoute({ getParentRoute: () => root, path: '/t/new' }),
     createRoute({ getParentRoute: () => root, path: '/agent-access' }),
     createRoute({ getParentRoute: () => root, path: '/activity' }),
     createRoute({ getParentRoute: () => root, path: '/owner/credit' }),

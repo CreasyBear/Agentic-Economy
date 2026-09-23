@@ -13,6 +13,25 @@ import { readX402MarketplaceHomeServer } from '@/modules/market/x402-marketplace
 export type MarketSearch = MarketReturnSearch
 export type MarketView = NonNullable<MarketSearch['view']>
 
+export function marketDocumentTitle(view: MarketView | undefined): string {
+  switch (view) {
+    case 'discover':
+      return 'Collections | Agentic Economy'
+    case 'tools':
+      return 'Tools | Agentic Economy'
+    case 'providers':
+      return 'Providers | Agentic Economy'
+    case 'saved':
+      return 'Saved Tools | Agentic Economy'
+    case undefined:
+      return 'Agent tool market | Agentic Economy'
+    default: {
+      const exhaustive: never = view
+      return exhaustive
+    }
+  }
+}
+
 export type MarketCompareEntry =
   | Readonly<{ resource: string; entry: X402DirectoryEntry; missing?: never }>
   | Readonly<{ resource: string; missing: true; entry?: never }>
@@ -44,7 +63,7 @@ export function carryMarketCompare<const T extends Record<string, unknown>>(
   from: Readonly<{ compare?: string }>,
   to: T,
 ): T {
-  if (Object.prototype.hasOwnProperty.call(to, 'compare')) {
+  if (Object.hasOwn(to, 'compare')) {
     const compare = to.compare
     if (typeof compare !== 'string') {
       const { compare: _compare, ...rest } = to

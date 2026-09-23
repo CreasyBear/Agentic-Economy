@@ -49,9 +49,9 @@ export function toToolInspectorModel(
       : 'unavailable'
   const nextAction: SuggestedNextAction = availabilityPosture === 'routeable' || inspectionRequired
     ? {
-        label: 'Tool reference',
+        label: 'request for Agent',
         kind: 'copy_command',
-        command: tool.toolRef,
+        command: `Use this Tool through Agentic Economy: ${tool.toolRef}. Ask me for any required inputs, then get a fresh Quote. Use my existing Agent and spending policy. If the Quote is within that authority, make one Call and return its result. If the Call is pending, resume that Call instead of creating another purchase.`,
       }
     : {
         label: 'Find Tool alternatives',
@@ -95,8 +95,8 @@ export function toolLabel(value: string): string {
 
 function nextActionDescription(nextAction: SuggestedNextAction): string {
   if (nextAction.warning !== undefined) return nextAction.warning
-  if (nextAction.label === 'Tool reference') {
-    return 'Paste this reference into your existing agent client. It will inspect exact terms and request access only when needed.'
+  if (nextAction.label === 'request for Agent') {
+    return 'Copy this request into your connected Agent. It will ask for inputs and check the exact AUD price before purchasing within your spending policy.'
   }
   return 'This Tool cannot be called from AE right now. Browse the catalog for another route.'
 }
