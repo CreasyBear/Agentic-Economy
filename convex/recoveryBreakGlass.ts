@@ -36,6 +36,7 @@ import {
   type DelegationContextPort,
 } from '../src/modules/authority/delegation/public'
 import { createConvexDelegationStore } from './lib/delegationPersistence'
+import { resolveAdminAuthority } from './authz'
 
 const submitRecoveryApprovalArgs = {
   approvalRef: v.string(),
@@ -138,6 +139,10 @@ async function resolveRecoveryOperator(
   const identity = await ctx.auth.getUserIdentity()
   if (identity === null || typeof identity.tokenIdentifier !== 'string'
     || identity.tokenIdentifier.length === 0) {
+    throw new RecoveryError('recovery_approval_unavailable')
+  }
+  const adminAuthority = await resolveAdminAuthority(ctx, 'use_break_glass')
+  if (adminAuthority.kind !== 'allowed') {
     throw new RecoveryError('recovery_approval_unavailable')
   }
   const selected = accountRef(selectedAccountRef)

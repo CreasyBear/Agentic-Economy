@@ -274,6 +274,14 @@ export async function seedRecoveryDriver(backend: RecoveryDriverBackend) {
         principalRef: operator,
         tokenIdentifier: `recovery|operator:${suffix}`,
       })
+      await ctx.db.insert('adminMemberships', {
+        clerkUserId: `operator:${suffix}`,
+        tokenIdentifier: `recovery|operator:${suffix}`,
+        role: 'owner_admin',
+        state: 'active',
+        grantedBy: 'recovery-driver-test',
+        grantedAt: 900,
+      })
     }
     await ctx.db.insert('authorityDelegationGrants', {
       grantRef: RECOVERY_DRIVER_GRANT,

@@ -157,6 +157,53 @@ describe('recovery break-glass Convex driver', () => {
     })
   })
 
+  it.each(['missing', 'support', 'revoked'] as const)(
+    'rejects both public recovery mutations when the operator admin membership is %s',
+    async (adminState) => {
+      mockRecoveryClock()
+      const backend = createRecoveryDriverBackend()
+      await seed(backend)
+      await seedTrustedApprovals(backend)
+      await backend.run(async (ctx) => {
+        const admin = await ctx.db.query('adminMemberships')
+          .withIndex('by_tokenIdentifier_and_state', (query) => query
+            .eq('tokenIdentifier', identity('41').tokenIdentifier)
+            .eq('state', 'active'))
+          .unique()
+        if (admin === null) throw new Error('seeded_admin_missing')
+        if (adminState === 'missing') await ctx.db.delete(admin._id)
+        else if (adminState === 'support') await ctx.db.patch(admin._id, { role: 'support' })
+        else await ctx.db.patch(admin._id, { state: 'revoked', revokedBy: 'test', revokedAt: NOW })
+      })
+
+      const before = await queryConsequenceState(backend, 'production')
+      await expect(backend.withIdentity(identity('41')).mutation(
+        api.recoveryBreakGlass.submitRecoveryApproval,
+        { approvalRef: `approval:denied:${adminState}`, accountRef: ACCOUNT, action: 'isolate' },
+      )).rejects.toMatchObject({ code: 'recovery_approval_unavailable' })
+      await expect(runRegisteredRecovery(backend, 'isolate', `denied:${adminState}`))
+        .rejects.toMatchObject({ code: 'recovery_approval_unavailable' })
+      await expect(queryConsequenceState(backend, 'production')).resolves.toEqual(before)
+    },
+  )
+
+  it('still requires workspace membership when admin permission is present', async () => {
+    mockRecoveryClock()
+    const backend = createRecoveryDriverBackend()
+    await seed(backend)
+    await seedTrustedApprovals(backend)
+    await removeOperatorOneMembership(backend)
+    const before = await queryConsequenceState(backend, 'production')
+
+    await expect(backend.withIdentity(identity('41')).mutation(
+      api.recoveryBreakGlass.submitRecoveryApproval,
+      { approvalRef: 'approval:admin-without-workspace', accountRef: ACCOUNT, action: 'isolate' },
+    )).rejects.toMatchObject({ code: 'recovery_approval_unavailable' })
+    await expect(runRegisteredRecovery(backend, 'isolate', 'admin-without-workspace'))
+      .rejects.toMatchObject({ code: 'recovery_approval_unavailable' })
+    await expect(queryConsequenceState(backend, 'production')).resolves.toEqual(before)
+  })
+
   it.each([
     ['owner', false, { subject: 'protected-owner', issuer: 'https://recovery.test', tokenIdentifier: 'recovery|owner' }, ACCOUNT, 4, 'owner'],
     ['member', true, identity('41'), ACCOUNT, 4, null],

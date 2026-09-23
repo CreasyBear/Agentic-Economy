@@ -25,7 +25,7 @@ performed.
 AE production remains `DECLARED`: the production foundation gate is open and
 there is no verified AE production Clerk/Convex identity pair to bootstrap.
 The production Clerk template and admin membership were not changed. See the
-admin console register for R-44's pending authority decision.
+admin console register for R-44's implemented authority gate and remaining audit event gap.
 
 ## Base Sepolia pilot inventory — 22 September 2026
 
