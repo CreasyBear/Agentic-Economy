@@ -9,7 +9,7 @@ const runtime = vi.hoisted((): {
   routes: Record<string, ComponentType>
   search: { filter?: 'all' | 'suppressed' }
   slug: string
-  access: { kind: 'allowed' } | { kind: 'refused'; code: string }
+  access: { kind: 'allowed'; role: 'owner_admin' | 'support' | 'reviewer' } | { kind: 'refused'; code: string }
   providers: unknown[]
   providerView: unknown
   paginationStatus: string
@@ -19,7 +19,7 @@ const runtime = vi.hoisted((): {
   routes: {},
   search: {},
   slug: 'provider-one',
-  access: { kind: 'allowed' },
+  access: { kind: 'allowed', role: 'owner_admin' },
   providers: [],
   providerView: undefined,
   paginationStatus: 'Exhausted',
@@ -54,8 +54,8 @@ vi.mock('convex/react', () => ({
 }))
 vi.mock('@/lib/operator/route-options', () => ({ operatorRouteOptions: {} }))
 vi.mock('@/components/ae/layout/AeOperatorPage', () => ({
-  AeOperatorPage: ({ title, children }: { title: string; children: ReactNode }) => (
-    <main><h1>{title}</h1>{children}</main>
+  AeOperatorPage: ({ title, children, actions }: { title: string; children: ReactNode; actions?: ReactNode }) => (
+    <main><h1>{title}</h1>{actions}{children}</main>
   ),
 }))
 vi.mock('@/components/ae/layout/AeRouteNotFound', () => ({
@@ -66,6 +66,9 @@ vi.mock('@/components/ae/layout/AeRouteNotFound', () => ({
 }))
 vi.mock('@/components/ae/admin/catalog-health/SourceAuthorityReviewPanel', () => ({
   SourceAuthorityReviewPanel: () => <section>Source authority review</section>,
+}))
+vi.mock('@/components/ae/admin/actions/AdminActionSheet', () => ({
+  AdminActionSheet: () => null,
 }))
 
 import '@/routes/_operator/admin.providers'
@@ -80,7 +83,7 @@ function renderRoute(path: string) {
 beforeEach(() => {
   runtime.search = {}
   runtime.slug = 'provider-one'
-  runtime.access = { kind: 'allowed' }
+  runtime.access = { kind: 'allowed', role: 'owner_admin' }
   runtime.providers = []
   runtime.providerView = undefined
   runtime.paginationStatus = 'Exhausted'
@@ -112,19 +115,28 @@ describe('admin Provider routes', () => {
     runtime.providerView = {
       kind: 'provider',
       slug: 'provider-one',
+      businessId: 'business-id:provider-one',
       publicStatus: 'published',
       trustTier: 'listed',
       suppressedAt: null,
       publications: [],
       connections: [],
       admissionCases: [],
-      removalDisputes: [],
+      removalDisputes: [{ disputeRef: 'dispute:provider-one', status: 'opened', updatedAt: Date.UTC(2026, 8, 22) }],
       payout: 'unavailable',
     }
 
     renderRoute('/_operator/admin/providers/$slug')
 
     expect(screen.getByRole('heading', { level: 1 }).textContent).toContain('provider-one')
+    expect(screen.getByRole('button', { name: 'Suppress' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Close dispute' })).toBeTruthy()
+
+    cleanup()
+    runtime.access = { kind: 'allowed', role: 'support' }
+    renderRoute('/_operator/admin/providers/$slug')
+    expect(screen.queryByRole('button', { name: 'Suppress' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Close dispute' })).toBeNull()
   })
 
   it('mounts source authority review when the view carries safe review material', () => {
@@ -132,6 +144,7 @@ describe('admin Provider routes', () => {
       kind: 'provider',
       slug: 'provider-one',
       publicStatus: 'published',
+      businessId: 'business-id:provider-one',
       trustTier: 'listed',
       suppressedAt: null,
       publications: [{

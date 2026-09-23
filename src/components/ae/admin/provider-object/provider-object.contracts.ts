@@ -24,6 +24,12 @@ export type ProviderAdmissionCasesTableProps = Readonly<{
 }>
 export type ProviderRemovalDisputesTableProps = Readonly<{
   rows: AdminProviderView['removalDisputes']
+  onCloseDispute?: (dispute: ProviderRemovalDisputeRow) => void
+}>
+
+export type ProviderDisputeActionProps = Readonly<{
+  dispute: ProviderRemovalDisputeRow
+  onClose: ((dispute: ProviderRemovalDisputeRow) => void) | undefined
 }>
 
 export const PROVIDER_OBJECT_COPY = {
@@ -37,6 +43,9 @@ export const PROVIDER_OBJECT_COPY = {
   trustTier: 'Trust tier',
   payout: 'Payout',
   suppressedSince: 'Suppressed since',
+  businessId: 'Business ID',
+  suppress: 'Suppress',
+  liftSuppression: 'Lift suppression',
   toolVersionsTitle: 'Tool versions',
   noToolVersions: 'No Tool versions for this Provider.',
   connectionsTitle: 'Connections',
@@ -45,6 +54,7 @@ export const PROVIDER_OBJECT_COPY = {
   noAdmissionCases: 'No admission cases.',
   removalDisputesTitle: 'Removal disputes',
   noRemovalDisputes: 'No removal disputes.',
+  closeDispute: 'Close dispute',
   sourceAuthorityReviewTitle: 'Source authority review',
   columns: {
     toolVersion: 'Tool version',

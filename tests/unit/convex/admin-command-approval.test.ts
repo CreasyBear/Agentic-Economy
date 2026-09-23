@@ -6,7 +6,7 @@ import {
   resolveApprovalIntent,
   type ApprovalResolution,
 } from '../../../convex/lib/adminConsole/approvals'
-import type { AdminApprovalIntent } from '@/lib/operator/admin-console/contracts'
+import type { AdminActionInput, AdminApprovalIntent } from '@/lib/operator/admin-console/contracts'
 import {
   convexTestWithMarketComponents,
   ownerAdmin,
@@ -18,6 +18,10 @@ const ACTION = 'set_business_suppression'
 const COMMAND_DIGEST = 'sha256:approval-command'
 const NOW = 1_800_000_000_000
 const DAY_MS = 24 * 60 * 60 * 1_000
+const COMMAND_INPUT = { businessId: 'business:approval-test', intent: 'suppress' } satisfies AdminActionInput[typeof ACTION]
+const COMMAND_REASON = 'policy_violation'
+const COMMAND_EVIDENCE = ['evidence:approval-test']
+const EXPECTED_STATE_DIGEST = 'sha256:before-approval'
 const ISSUER = 'https://identity.example'
 
 describe('admin command second approval', () => {
@@ -85,11 +89,26 @@ describe('admin command second approval', () => {
     expect(stored.proposals).toEqual([{
       proposalRef: result.receipt.proposalRef,
       action: ACTION,
+      commandJson: JSON.stringify({
+        input: COMMAND_INPUT,
+        reasonCode: COMMAND_REASON,
+        evidenceRefs: COMMAND_EVIDENCE,
+        expectedStateDigest: EXPECTED_STATE_DIGEST,
+      }),
       proposerRef: 'token_proposer',
       createdAt: NOW,
       expiresAt: NOW + DAY_MS,
     }])
     expect(stored.rows).toHaveLength(1)
+    expect(stored.rows[0]?.commandJson).toBe(stored.proposals[0]?.commandJson)
+    expect(JSON.parse(stored.proposals[0]?.commandJson ?? '{}')).toEqual({
+      input: COMMAND_INPUT,
+      reasonCode: COMMAND_REASON,
+      evidenceRefs: COMMAND_EVIDENCE,
+      expectedStateDigest: EXPECTED_STATE_DIGEST,
+    })
+    expect(stored.proposals[0]?.commandJson).not.toContain('secret-proof-reverification')
+    expect(stored.proposals[0]?.commandJson).not.toContain('secret-source-write-signature')
     expect(stored.audits).toHaveLength(1)
     expect(stored.audits[0]).toMatchObject({
       eventType: 'admin.action_proposed',
@@ -196,23 +215,31 @@ describe('admin command second approval', () => {
     const decisions = await caller.run(async (ctx) => {
       const authority = await resolveAdminAuthority(ctx, 'manage_admin_membership')
       if (authority.kind !== 'allowed') throw new Error('allowed_admin_authority_expected')
-      const common = { approval: { kind: 'execute' } satisfies AdminApprovalIntent, correlationId: 'corr:approval-membership' }
+      const common = {
+        approval: { kind: 'execute' } satisfies AdminApprovalIntent,
+        correlationId: 'corr:approval-membership',
+        evidenceRefs: COMMAND_EVIDENCE,
+      }
       return await Promise.all([
         resolveApprovalIntent(ctx, authority, {
           ...common, action: 'grant_admin_membership',
           input: { targetClerkUserId: 'user_new', targetTokenIdentifier: 'token_new', role: 'owner_admin' },
+          reasonCode: 'onboarding',
         }, COMMAND_DIGEST, NOW),
         resolveApprovalIntent(ctx, authority, {
           ...common, action: 'grant_admin_membership',
           input: { targetClerkUserId: 'user_new', targetTokenIdentifier: 'token_new', role: 'support' },
+          reasonCode: 'onboarding',
         }, COMMAND_DIGEST, NOW),
         resolveApprovalIntent(ctx, authority, {
           ...common, action: 'revoke_admin_membership',
           input: { targetClerkUserId: 'user_approver' },
+          reasonCode: 'offboarding',
         }, COMMAND_DIGEST, NOW),
         resolveApprovalIntent(ctx, authority, {
           ...common, action: 'revoke_admin_membership',
           input: { targetClerkUserId: 'user_support-target' },
+          reasonCode: 'offboarding',
         }, COMMAND_DIGEST, NOW),
       ])
     })
@@ -241,12 +268,22 @@ async function runResolution(
   return await caller.run(async (ctx) => {
     const authority = await resolveAdminAuthority(ctx, 'suppress_business')
     if (authority.kind !== 'allowed') throw new Error('allowed_admin_authority_expected')
-    return await resolveApprovalIntent(ctx, authority, {
+    const commandWithSecrets = {
       action: ACTION,
-      input: { businessId: 'business:approval-test', intent: 'suppress' },
+      input: COMMAND_INPUT,
+      reasonCode: COMMAND_REASON,
+      evidenceRefs: COMMAND_EVIDENCE,
+      expectedStateDigest: EXPECTED_STATE_DIGEST,
       correlationId: 'corr:approval-test',
       approval,
-    }, commandDigest, now)
+      proof: {
+        reverificationId: 'secret-proof-reverification',
+        firstFactorAgeMinutes: 0,
+        secondFactorAgeMinutes: 0,
+      },
+      sourceWrite: { signature: 'secret-source-write-signature' },
+    } as const
+    return await resolveApprovalIntent(ctx, authority, commandWithSecrets, commandDigest, now)
   })
 }
 

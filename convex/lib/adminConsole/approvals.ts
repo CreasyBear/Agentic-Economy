@@ -6,6 +6,7 @@ import type {
   AdminCommandAction,
   AdminCommandReceipt,
   AdminProposableAction,
+  AdminReasonCodeByAction,
   AllowedAdminAuthority,
 } from '@/lib/operator/admin-console/contracts'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
@@ -40,6 +41,9 @@ export async function resolveApprovalIntent<A extends AdminCommandAction>(
   args: Readonly<{
     action: A
     input: AdminActionInput[A]
+    reasonCode: AdminReasonCodeByAction[A]
+    evidenceRefs: readonly string[]
+    expectedStateDigest?: string
     correlationId: string
     approval: AdminApprovalIntent
   }>,
@@ -74,6 +78,14 @@ export async function resolveApprovalIntent<A extends AdminCommandAction>(
       proposalRef,
       action: args.action,
       commandDigest,
+      commandJson: JSON.stringify({
+        input: args.input,
+        reasonCode: args.reasonCode,
+        evidenceRefs: args.evidenceRefs,
+        ...(args.expectedStateDigest === undefined
+          ? {}
+          : { expectedStateDigest: args.expectedStateDigest }),
+      }),
       proposerRef: actorRef,
       status: 'awaiting_second_approval',
       createdAt,
@@ -154,6 +166,7 @@ export async function listOpenApprovalProposals(
 ): Promise<readonly {
   proposalRef: string
   action: AdminProposableAction
+  commandJson: string
   proposerRef: string
   createdAt: number
   expiresAt: number
@@ -164,9 +177,10 @@ export async function listOpenApprovalProposals(
       query.eq('status', 'awaiting_second_approval'))
     .order('asc')
     .take(50)
-  return proposals.map(({ proposalRef, action, proposerRef, createdAt, expiresAt }) => ({
+  return proposals.map(({ proposalRef, action, commandJson, proposerRef, createdAt, expiresAt }) => ({
     proposalRef,
     action,
+    commandJson,
     proposerRef,
     createdAt,
     expiresAt,

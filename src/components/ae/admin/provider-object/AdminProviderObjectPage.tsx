@@ -1,11 +1,19 @@
+import { useQuery } from 'convex/react'
+import { useState } from 'react'
+
+import { api } from '../../../../../convex/_generated/api'
+import { AdminActionSheet } from '@/components/ae/admin/actions/AdminActionSheet'
 import { SourceAuthorityReviewPanel } from '@/components/ae/admin/catalog-health/SourceAuthorityReviewPanel'
 import { AeFactList } from '@/components/ae/data/AeFactList'
 import { AeOperatorPage } from '@/components/ae/layout/AeOperatorPage'
 import { AePageState } from '@/components/ae/layout/AePageState'
 import { OperatorRouteNotFoundRecovery } from '@/components/ae/layout/AeRouteNotFound'
 import { AeSection } from '@/components/ae/layout/AeSection'
+import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { aeStatusToneVariants } from '@/lib/ui/status-presentation'
+import { ADMIN_ACTION_PERMISSION } from '@/lib/operator/admin-console/contracts'
+import { canAdminRolePerformAction } from '@/modules/security/public'
 import { AdminProviderObjectSkeleton } from './AdminProviderObjectSkeleton'
 import { ProviderAdmissionCasesTable } from './components/ProviderAdmissionCasesTable'
 import { ProviderConnectionsTable } from './components/ProviderConnectionsTable'
@@ -14,6 +22,7 @@ import { ProviderToolVersionsTable } from './components/ProviderToolVersionsTabl
 import {
   PROVIDER_OBJECT_COPY,
   type AdminProviderObjectPageProps,
+  type ProviderRemovalDisputeRow,
 } from './provider-object.contracts'
 import {
   providerPayoutLabel,
@@ -24,6 +33,9 @@ import {
 import { useAdminProviderObject } from './useAdminProviderObject'
 
 export function AdminProviderObjectPage(props: AdminProviderObjectPageProps) {
+  const access = useQuery(api.adminConsoleAudit.readAdminAuditAccess, {})
+  const [suppressionOpen, setSuppressionOpen] = useState(false)
+  const [selectedDispute, setSelectedDispute] = useState<ProviderRemovalDisputeRow | null>(null)
   const view = useAdminProviderObject(props)
   if (view === undefined) return <AdminProviderObjectSkeleton slug={props.slug} />
   if (view.kind === 'object_not_found') {
@@ -46,9 +58,9 @@ export function AdminProviderObjectPage(props: AdminProviderObjectPageProps) {
 
   const status = providerStatusPresentation(view.publicStatus)
   const suppressedAt = view.suppressedAt === null ? null : providerTimestamp(view.suppressedAt)
-  const sourceAuthorityReview = view.publications.find(
-    (publication) => publication.sourceAuthorityReview !== null,
-  )?.sourceAuthorityReview ?? null
+  const canSuppress = access?.kind === 'allowed'
+    && canAdminRolePerformAction(access.role, ADMIN_ACTION_PERMISSION.set_business_suppression)
+  const suppressionIntent = view.suppressedAt === null ? 'suppress' : 'unsuppress'
 
   return (
     <AeOperatorPage
@@ -71,6 +83,11 @@ export function AdminProviderObjectPage(props: AdminProviderObjectPageProps) {
               {PROVIDER_OBJECT_COPY.suppressedSince} <time dateTime={suppressedAt.iso}>{suppressedAt.label}</time>
             </Badge>
           )}
+          {canSuppress ? (
+            <Button type="button" variant="outline" className="min-h-touch" onClick={() => setSuppressionOpen(true)}>
+              {suppressionIntent === 'suppress' ? PROVIDER_OBJECT_COPY.suppress : PROVIDER_OBJECT_COPY.liftSuppression}
+            </Button>
+          ) : null}
         </>
       )}
       stickyHeader
@@ -85,11 +102,40 @@ export function AdminProviderObjectPage(props: AdminProviderObjectPageProps) {
         <ProviderToolVersionsTable rows={view.publications} />
         <ProviderConnectionsTable rows={view.connections} />
         <ProviderAdmissionCasesTable rows={view.admissionCases} />
-        <ProviderRemovalDisputesTable rows={view.removalDisputes} />
-        {sourceAuthorityReview === null ? null : (
-          <SourceAuthorityReviewPanel review={sourceAuthorityReview} />
-        )}
+        <ProviderRemovalDisputesTable
+          rows={view.removalDisputes}
+          {...(access?.kind === 'allowed' && canAdminRolePerformAction(access.role, ADMIN_ACTION_PERMISSION.close_removal_dispute)
+            ? { onCloseDispute: setSelectedDispute } : {})}
+        />
+        {view.publications.map((publication) => publication.sourceAuthorityReview === null ? null : (
+          <SourceAuthorityReviewPanel
+            key={publication.ref}
+            review={publication.sourceAuthorityReview}
+          />
+        ))}
       </div>
+      {canSuppress ? (
+        <AdminActionSheet
+          action="set_business_suppression"
+          input={{ businessId: view.businessId, intent: suppressionIntent }}
+          targetRefs={[
+            { label: PROVIDER_OBJECT_COPY.title, value: view.slug },
+            { label: PROVIDER_OBJECT_COPY.businessId, value: view.businessId },
+          ]}
+          open={suppressionOpen}
+          onOpenChange={setSuppressionOpen}
+          {...(suppressionIntent === 'unsuppress' ? { initialReasonCode: 'suppression_lifted_after_review' } : {})}
+        />
+      ) : null}
+      {selectedDispute === null ? null : (
+        <AdminActionSheet
+          action="close_removal_dispute"
+          input={{ disputeId: selectedDispute.disputeRef }}
+          targetRefs={[{ label: PROVIDER_OBJECT_COPY.columns.removalDispute, value: selectedDispute.disputeRef }]}
+          open
+          onOpenChange={(open) => { if (!open) setSelectedDispute(null) }}
+        />
+      )}
     </AeOperatorPage>
   )
 }

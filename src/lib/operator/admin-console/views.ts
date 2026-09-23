@@ -78,6 +78,7 @@ export type AdminToolVersionView = {
 
 export type AdminProviderView = {
   kind: 'provider'
+  businessId: string
   slug: Slug
   publicStatus: 'unpublished' | 'published' | 'suppressed'
   trustTier: 'claimed' | 'contact_confirmed' | 'listed' | 'registry_verified'

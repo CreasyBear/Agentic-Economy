@@ -55,6 +55,7 @@ const sourceAuthorityReviewValue = v.object({
 
 export const adminProviderViewValue = v.object({
   kind: v.literal('provider'),
+  businessId: v.string(),
   slug: v.string(),
   publicStatus: publicStatusValue,
   trustTier: trustTierValue,
@@ -127,6 +128,7 @@ export async function readAdminProviderView(
 
   return {
     kind: 'provider',
+    businessId: String(business._id),
     slug,
     publicStatus: business.publicStatus,
     trustTier: business.trustTier,

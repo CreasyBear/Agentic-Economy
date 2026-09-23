@@ -9,8 +9,9 @@ import {
   type ProviderRemovalDisputesTableProps,
 } from '../provider-object.contracts'
 import { providerStatusLabel, providerTimestamp } from '../provider-object.view-model'
+import { ProviderDisputeAction } from './ProviderDisputeAction'
 
-const columns: ColumnDef<ProviderRemovalDisputeRow, unknown>[] = [
+function disputeColumns(onCloseDispute?: ProviderRemovalDisputesTableProps['onCloseDispute']): ColumnDef<ProviderRemovalDisputeRow, unknown>[] { return [
   {
     accessorKey: 'disputeRef',
     header: PROVIDER_OBJECT_COPY.columns.removalDispute,
@@ -31,13 +32,18 @@ const columns: ColumnDef<ProviderRemovalDisputeRow, unknown>[] = [
       return <time dateTime={updatedAt.iso}>{updatedAt.label}</time>
     },
   },
+  {
+    id: 'actions',
+    header: PROVIDER_OBJECT_COPY.closeDispute,
+    cell: ({ row }) => <ProviderDisputeAction dispute={row.original} onClose={onCloseDispute} />,
+  },
 ]
-
-export function ProviderRemovalDisputesTable({ rows }: ProviderRemovalDisputesTableProps) {
+}
+export function ProviderRemovalDisputesTable({ rows, onCloseDispute }: ProviderRemovalDisputesTableProps) {
   return (
     <AeSection title={PROVIDER_OBJECT_COPY.removalDisputesTitle}>
       <AeRecordTable
-        columns={columns}
+        columns={disputeColumns(onCloseDispute)}
         data={rows}
         getRowId={(row) => row.disputeRef}
         hideFilter

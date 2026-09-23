@@ -6,7 +6,6 @@ import type {
   AdminObjectKind,
 } from '@/lib/operator/admin-console/contracts'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
-import type { PrincipalRef } from '@/modules/principal-account/principal/public'
 import type { AdminAction } from '@/modules/security/public'
 
 type AdminCommandEventProperties = Readonly<{
@@ -85,11 +84,11 @@ export function buildAdminEventProperties(
 }
 
 export function captureAdminEvent(
-  actorPrincipalRef: PrincipalRef,
+  actorRef: string,
   event: 'admin_command' | 'admin_lookup' | 'admin_queue_view',
   props: AdminEventProperties,
 ): void {
-  const distinctId = `admin:${canonicalDigest(actorPrincipalRef)}`
+  const distinctId = `admin:${canonicalDigest(actorRef)}`
   captureServerEvent(distinctId, event, props)
 }
 

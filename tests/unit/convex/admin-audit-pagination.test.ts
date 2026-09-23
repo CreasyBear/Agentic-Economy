@@ -76,6 +76,8 @@ describe('admin audit pagination', () => {
   it('keeps cursor pages duplicate-free when a newer event arrives', async () => {
     const backend = convexTest(schema, convexModules)
     const admin = await ownerAdmin(backend, 'user_admin-audit-reader')
+    await expect(admin.query(api.adminConsoleAudit.readAdminAuditAccess, {}))
+      .resolves.toEqual({ kind: 'allowed', role: 'owner_admin' })
     const originalIds = await seedAuditEvents(backend)
 
     const first = await admin.query(api.adminConsoleAudit.listAdminAuditEvents, {

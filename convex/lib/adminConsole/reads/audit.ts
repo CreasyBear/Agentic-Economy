@@ -45,6 +45,7 @@ export const adminApprovalProposalValue = v.object({
     v.literal('grant_admin_membership'),
     v.literal('revoke_admin_membership'),
   ),
+  commandJson: v.string(),
   proposerRef: v.string(),
   createdAt: v.number(),
   expiresAt: v.number(),

@@ -36,6 +36,7 @@ export const securityTables = {
       v.literal('revoke_admin_membership'),
     ),
     commandDigest: v.string(),
+    commandJson: v.string(),
     proposerRef: v.string(),
     status: v.union(
       v.literal('awaiting_second_approval'),

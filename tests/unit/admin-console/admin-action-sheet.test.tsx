@@ -1,0 +1,88 @@
+/** @vitest-environment jsdom */
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import type { ReactNode } from 'react'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import '../../setup/jsdom-platform'
+
+const mocks = vi.hoisted(() => ({
+  access: vi.fn(),
+  execute: vi.fn(),
+}))
+vi.mock('convex/react', () => ({ useQuery: () => mocks.access() }))
+vi.mock('@/components/ae/admin/actions/useAdminCommandProof', () => ({
+  useAdminCommandProof: () => mocks.execute,
+}))
+vi.mock('@/components/ae/layout/AeRecordSheet', () => ({
+  AeRecordSheet: ({ open, title, children, action }: { open: boolean; title: string; children: ReactNode; action: ReactNode }) =>
+    open ? <section aria-label={title}>{children}{action}</section> : null,
+}))
+
+import { AdminActionSheet } from '@/components/ae/admin/actions/AdminActionSheet'
+
+const props = {
+  action: 'verify_capability_source_authority',
+  input: { publicationRef: 'publication:1', expectedRevision: 3, expectedSourceDigest: 'digest:3' },
+  targetRefs: [{ label: 'Publication', value: 'publication:1' }],
+  initialReasonCode: 'evidence_verified',
+  open: true,
+  onOpenChange: vi.fn(),
+} satisfies Parameters<typeof AdminActionSheet>[0]
+
+afterEach(() => {
+  cleanup()
+  mocks.access.mockReset()
+  mocks.execute.mockReset()
+})
+
+function toPreview() {
+  fireEvent.click(screen.getByRole('button', { name: 'Continue' }))
+  fireEvent.change(screen.getByLabelText('Other evidence reference'), {
+    target: { value: 'review:ticket-123' },
+  })
+  fireEvent.click(screen.getByRole('button', { name: 'Continue' }))
+  fireEvent.click(screen.getByRole('button', { name: 'Continue' }))
+}
+
+describe('Admin action sheet', () => {
+  it.each(['support', 'reviewer'])('does not offer a submit action to %s', (role) => {
+    mocks.access.mockReturnValue({ kind: 'allowed', role })
+    render(<AdminActionSheet {...props} />)
+    expect(screen.queryByRole('button', { name: 'Submit command' })).toBeNull()
+    expect(screen.getByText('Your account does not have the Admin role for this action.')).toBeTruthy()
+  })
+
+  it('preserves typed evidence and shows the refusal copy and next step', async () => {
+    mocks.access.mockReturnValue({ kind: 'allowed', role: 'owner_admin' })
+    mocks.execute.mockResolvedValue({ kind: 'refused', action: props.action, code: 'mfa_reverification_required', correlationId: 'correlation:1' })
+    render(<AdminActionSheet {...props} />)
+    toPreview()
+    fireEvent.click(screen.getByRole('button', { name: 'Submit command' }))
+    await waitFor(() => expect(screen.getByText('Reverify before making this change.')).toBeTruthy())
+    expect(screen.getByText('Complete Clerk reverification, then resubmit.')).toBeTruthy()
+    expect(screen.getByLabelText<HTMLInputElement>('Other evidence reference').value).toBe('review:ticket-123')
+    expect(mocks.execute).toHaveBeenCalledWith(expect.objectContaining({ evidenceRefs: ['review:ticket-123'] }))
+  })
+
+  it('renders a proposed receipt with the Perth expiry', async () => {
+    mocks.access.mockReturnValue({ kind: 'allowed', role: 'owner_admin' })
+    mocks.execute.mockResolvedValue({ kind: 'proposed', action: props.action, proposalRef: 'admin-proposal:1', expiresAt: 1_800_000_000_000, correlationId: 'correlation:1' })
+    render(<AdminActionSheet {...props} />)
+    toPreview()
+    fireEvent.click(screen.getByRole('button', { name: 'Submit command' }))
+    expect(await screen.findByText('Awaiting second approval')).toBeTruthy()
+    expect(screen.getByText(/Perth time/u)).toBeTruthy()
+  })
+
+  it('offers proposal submission when a second approval is required', async () => {
+    mocks.access.mockReturnValue({ kind: 'allowed', role: 'owner_admin' })
+    mocks.execute.mockResolvedValueOnce({ kind: 'refused', action: props.action, code: 'approval_required', correlationId: 'correlation:1' })
+      .mockResolvedValueOnce({ kind: 'proposed', action: props.action, proposalRef: 'admin-proposal:1', expiresAt: 1_800_000_000_000, correlationId: 'correlation:2' })
+    render(<AdminActionSheet {...props} />)
+    toPreview()
+    fireEvent.click(screen.getByRole('button', { name: 'Submit command' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Propose instead' }))
+    await waitFor(() => expect(mocks.execute).toHaveBeenCalledTimes(2))
+    expect(mocks.execute.mock.calls[1]?.[0].approval).toEqual({ kind: 'propose' })
+    expect(mocks.execute.mock.calls[1]?.[0].operationKey).not.toBe(mocks.execute.mock.calls[0]?.[0].operationKey)
+  })
+})

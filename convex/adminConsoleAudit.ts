@@ -1,6 +1,7 @@
 import { query } from './_generated/server'
 import { paginationOptsValidator, paginationResultValidator } from 'convex/server'
 import { v } from 'convex/values'
+import type { AdminRole } from '@/modules/security/public'
 
 import { listOpenApprovalProposals } from './lib/adminConsole/approvals'
 import { resolveAdminAuthority } from './authz'
@@ -11,6 +12,12 @@ import {
   adminAuditRowValue,
   listAdminAuditEventsPage,
 } from './lib/adminConsole/reads/audit'
+
+const adminRoleValue = v.union(
+  v.literal('owner_admin'),
+  v.literal('support'),
+  v.literal('reviewer'),
+)
 
 export const listAdminAuditEvents = query({
   args: {
@@ -39,8 +46,8 @@ export const listAdminAuditEvents = query({
 export const readAdminAuditAccess = defineAdminQuery({
   action: 'read_admin_readbacks',
   args: {},
-  returns: v.object({ kind: v.literal('allowed') }),
-  handler: async (): Promise<{ kind: 'allowed' }> => ({ kind: 'allowed' }),
+  returns: v.object({ kind: v.literal('allowed'), role: adminRoleValue }),
+  handler: async (ctx): Promise<{ kind: 'allowed'; role: AdminRole }> => ({ kind: 'allowed', role: ctx.admin.membership.role }),
 })
 
 export const listAdminApprovalProposals = defineAdminQuery({

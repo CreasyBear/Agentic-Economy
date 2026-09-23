@@ -56,6 +56,10 @@ export type AdminAuthorityResult =
   | { kind: 'allowed'; membership: AdminMembership }
   | { kind: 'denied'; reason: 'missing_membership' | 'inactive_membership' | 'action_not_allowed' }
 
+export function canAdminRolePerformAction(role: AdminRole, action: AdminAction): boolean {
+  return AdminActionMatrix[role][action]
+}
+
 export function requireAdminAuthority(membership: AdminMembership | undefined, action: AdminAction): AdminAuthorityResult {
   if (membership === undefined) {
     return { kind: 'denied', reason: 'missing_membership' }

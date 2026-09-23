@@ -22,6 +22,8 @@ import type {
   AdminGrantMembershipCommand,
   AdminRevokeMembershipCommand,
 } from './internal/admin-authority'
+export { canAdminRolePerformAction } from './internal/admin-authority'
+
 
 export { AdminRoleValues, AdminRoleSchema } from './internal/validators'
 export {
