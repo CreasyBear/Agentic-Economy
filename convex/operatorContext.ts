@@ -41,9 +41,6 @@ export const readCurrent = query({
       resolveBusinessActor(ctx),
       readCurrentActiveAdminMembership(ctx),
     ])
-    if (actor.kind !== 'authenticated_owner' && adminMembership === undefined) {
-      return { kind: 'denied' as const, reason: 'canonical_owner_required' as const }
-    }
 
     if (actor.kind === 'authenticated_owner') {
       const allowedSurfaces = adminMembership === undefined
@@ -65,22 +62,59 @@ export const readCurrent = query({
         .eq('providerNamespace', 'clerk/user')
         .eq('providerIdentifier', identity.tokenIdentifier))
       .unique()
-    if (binding === null || binding.lifecycle !== 'active') {
-      return { kind: 'denied' as const, reason: 'canonical_owner_required' as const }
-    }
-    const principal = await ctx.db
-      .query('principals')
-      .withIndex('by_principalRef', (query) => query.eq('principalRef', binding.principalRef))
-      .unique()
-    if (principal === null || principal.kind !== 'human' || principal.lifecycle !== 'active') {
-      return { kind: 'denied' as const, reason: 'canonical_owner_required' as const }
+    if (binding !== null && binding.lifecycle === 'active') {
+      const principal = await ctx.db
+        .query('principals')
+        .withIndex('by_principalRef', (query) => query.eq('principalRef', binding.principalRef))
+        .unique()
+      if (principal !== null && principal.kind === 'human' && principal.lifecycle === 'active') {
+        const [ownership, membership] = await Promise.all([
+          ctx.db
+            .query('accountOwnerships')
+            .withIndex('by_ownerPrincipalRef_and_lifecycle', (query) =>
+              query.eq('ownerPrincipalRef', principal.principalRef).eq('lifecycle', 'active'))
+            .first(),
+          ctx.db
+            .query('memberships')
+            .withIndex('by_memberPrincipalRef_and_lifecycle', (query) =>
+              query.eq('memberPrincipalRef', principal.principalRef).eq('lifecycle', 'active'))
+            .first(),
+        ])
+        const hasAccountAccess = ownership !== null || membership !== null
+
+        if (hasAccountAccess) {
+          const allowedSurfaces = adminMembership === undefined
+            ? ['owner', 'developer'] as const
+            : ['owner', 'admin', 'developer'] as const
+
+          return {
+            kind: 'authorized' as const,
+            userId: identity.subject,
+            principalRef: principal.principalRef,
+            allowedSurfaces: [...allowedSurfaces],
+          }
+        }
+
+        if (adminMembership !== undefined) {
+          return {
+            kind: 'authorized' as const,
+            userId: identity.subject,
+            principalRef: principal.principalRef,
+            allowedSurfaces: [...(['admin', 'developer'] as const)],
+          }
+        }
+      }
     }
 
-    return {
-      kind: 'authorized' as const,
-      userId: identity.subject,
-      principalRef: principal.principalRef,
-      allowedSurfaces: [...(['admin', 'developer'] as const)],
+    if (adminMembership !== undefined) {
+      return {
+        kind: 'authorized' as const,
+        userId: identity.subject,
+        principalRef: identity.tokenIdentifier,
+        allowedSurfaces: [...(['admin', 'developer'] as const)],
+      }
     }
+
+    return { kind: 'denied' as const, reason: 'canonical_owner_required' as const }
   },
 })

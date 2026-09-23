@@ -4,7 +4,7 @@ import { RouterContextProvider, createMemoryHistory, createRootRoute, createRout
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import '../../setup/jsdom-platform'
 import { AeX402Directory } from '@/components/ae/market/AeX402Directory'
-import { DIRECTORY_SAVED_TOOLS_STORAGE_KEY } from '@/components/ae/market/DirectorySavedTools'
+import { DIRECTORY_SAVED_TOOLS_STORAGE_KEY } from '@/modules/market/saved-tools.contracts'
 import type { ComponentProps } from 'react'
 import type { X402DirectoryEntry } from '@/modules/market/x402-directory'
 
@@ -22,8 +22,9 @@ function show(search: Props['search'] = { offset: 20 }, items = entries, extra: 
   const root = createRootRoute()
   const router = createRouter({ routeTree: root.addChildren([
     createRoute({ getParentRoute: () => root, path: '/market' }),
+    createRoute({ getParentRoute: () => root, path: '/owner/market' }),
     createRoute({ getParentRoute: () => root, path: '/tools/$providerHost/$slug' }),
-  ]), history: createMemoryHistory({ initialEntries: ['/market'] }) })
+  ]), history: createMemoryHistory({ initialEntries: [extra.marketPath ?? '/market'] }) })
   const result = render(<RouterContextProvider router={router}><AeX402Directory
     page={{ kind: 'ok', items, total: 14455, offset: 20, limit: 20, nextOffset: 40, previousOffset: 0 }}
     {...extra} search={search} /></RouterContextProvider>)
@@ -34,6 +35,9 @@ function show(search: Props['search'] = { offset: 20 }, items = entries, extra: 
     result.rerender(<RouterContextProvider router={router}><AeX402Directory
       page={{ kind: 'ok', items, total: 14455, offset: 20, limit: 20, nextOffset: 40, previousOffset: 0 }}
       {...extra} search={nextSearch} /></RouterContextProvider>)
+  }, updateCatalogue(nextSearch: Props['search'], nextPage: Props['page'], nextCatalogue: NonNullable<Props['catalogue']>) {
+    result.rerender(<RouterContextProvider router={router}><AeX402Directory
+      {...extra} page={nextPage} catalogue={nextCatalogue} search={nextSearch} /></RouterContextProvider>)
   } }
 }
 // Every place that used to open the retired Tool detail dialog now navigates
@@ -78,11 +82,39 @@ it('compares published facts and links straight to the one canonical Tool detail
   fireEvent.click(screen.getByRole('button', { name: 'Add Tool 1 to comparison' }))
   fireEvent.click(screen.getByRole('button', { name: 'Compare Tools' }))
   const comparison = screen.getByRole('dialog', { name: 'Compare Tools' })
+  expect(within(comparison).getByText('Preliminary comparison.')).toBeTruthy()
   expect(within(comparison).getByText('1 USDC')).toBeTruthy()
   expect(within(comparison).getByText('2 USDC')).toBeTruthy()
   expect(within(comparison).getByText('Output 0')).toBeTruthy()
+  expect(within(comparison).getByText('Category')).toBeTruthy()
+  expect(within(comparison).getByText('Provider-listed price')).toBeTruthy()
+  expect(within(comparison).queryByText('Base')).toBeNull()
   const inspect = within(comparison).getAllByRole('link', { name: 'Inspect Tool' })[0]!
   expect(toolHref(inspect).pathname).toBe(`/tools/${priced[0]!.provider}/${priced[0]!.slug}`)
+  expect(inspect.closest('th')).not.toBeNull()
+  expect(within(comparison).getByRole('columnheader', { name: 'Fact' }).className).toContain('left-0')
+  expect(within(comparison).getAllByRole('row')).toHaveLength(8)
+})
+it('labels the card comparison control visibly and preserves its pressed state', () => {
+  show(undefined, entries)
+
+  const compare = screen.getByRole('button', { name: 'Add Tool 0 to comparison' })
+  expect(compare.textContent).toContain('Compare')
+  expect(compare.getAttribute('aria-pressed')).toBe('false')
+  fireEvent.click(compare)
+
+  const selected = screen.getByRole('button', { name: 'Remove Tool 0 from comparison' })
+  expect(selected.textContent).toContain('Compare')
+  expect(selected.getAttribute('aria-pressed')).toBe('true')
+})
+it('keeps Provider price evidence secondary and settlement networks off Tool cards', () => {
+  const priced = entries.map((entry, index) => ({ ...entry, prices: [{ network: 'eip155:8453', networkLabel: 'Base', scheme: 'exact', amount: `${index + 1} USDC`, decimalAmount: String(index + 1), symbol: 'USDC' }] }))
+  show(undefined, priced)
+
+  expect(screen.getAllByText('Provider-listed price')).toHaveLength(priced.length)
+  expect(screen.getAllByText('Provider price per Call')).toHaveLength(priced.length)
+  expect(screen.getByText('1 USDC')).toBeTruthy()
+  expect(screen.queryByText('Base')).toBeNull()
 })
 it('groups the provider view by exact hostname and opens that provider filter', async () => {
   const { router } = show({ view: 'providers', query: 'research', network: 'eip155:8453', maxUsdPrice: 0.01 }, entries.map((entry, index) => ({ ...entry, provider: index === 19 ? 'other.example.com' : entry.provider })))
@@ -113,6 +145,17 @@ it('keeps comparison choices when a new search is submitted and results refresh'
   expect(within(comparison).getByText('Tool 0')).toBeTruthy()
   expect(within(comparison).getByText('Tool 1')).toBeTruthy()
 })
+it('keeps workspace searches and pagination inside the authenticated Market route', async () => {
+  const { router } = show({ offset: 20 }, entries, { workspace: true, marketPath: '/owner/market' })
+  expect(screen.getByRole('heading', { level: 2, name: 'Explore capabilities.' })).toBeTruthy()
+  expect(screen.getByRole('link', { name: 'Next page' }).getAttribute('href')).toContain('/owner/market')
+
+  fireEvent.change(screen.getByRole('searchbox', { name: 'Search Tools' }), { target: { value: 'new research' } })
+  fireEvent.submit(screen.getByRole('search'))
+
+  await waitFor(() => expect(router.state.location.pathname).toBe('/owner/market'))
+  expect(router.state.location.search).toMatchObject({ query: 'new research', view: 'tools' })
+})
 it('returns focus to Compare after dismissing the comparison dialog', async () => {
   show()
   fireEvent.click(screen.getByRole('button', { name: 'Add Tool 0 to comparison' }))
@@ -127,7 +170,7 @@ it('returns focus to Compare after dismissing the comparison dialog', async () =
 const coverage = { source: 'coinbase' as const, generation: 'generation-1', indexedTotal: 14455, reportedTotal: 14455, reportedTotalAtStart: 14455, sourceChangedDuringScan: false, duplicateObservations: 0, pagesFetched: 145, startedAt: 1, completedAt: 2, completeness: 'completed_observed_scan' as const }
 const indexedPage = { kind: 'ok' as const, items: entries.slice(0, 2), offset: 0, limit: 20 }
 const indexedCatalogue = { kind: 'ok' as const, source: 'index' as const, page: indexedPage, coverage, searchMethod: 'native_index' as const, indexCursor: 'generation-1:next/page+cursor', isDone: false }
-const overview = { kind: 'ok' as const, coverage, categories: [{ key: 'research', label: 'Research', count: 201 }, { key: 'media', label: 'Media', count: 405 }], providers: [], networks: [], popular: [], recentlyUpdated: [] }
+const overview = { kind: 'ok' as const, coverage, categories: [{ key: 'research', label: 'Research', count: 201 }, { key: 'media', label: 'Media', count: 405 }], providers: [], networks: [{ key: 'eip155:8453', label: 'Base', count: 14455 }], popular: [], recentlyUpdated: [] }
 const nativeFilters = { view: 'tools' as const, network: 'eip155:8453', provider: 'example.com', maxUsdPrice: 0.005, directoryCategory: 'research' }
 function pageLinkSearch(name: string) { return new URL(screen.getByRole('link', { name }).getAttribute('href')!, 'https://aecon.ai').searchParams }
 function expectNativeFilters(search: URLSearchParams) {
@@ -135,6 +178,28 @@ function expectNativeFilters(search: URLSearchParams) {
 }
 
 describe('indexed x402 catalogue controls', () => {
+  it('keeps the buyer-facing refinements visible and places provider metadata behind Advanced filters', () => {
+    show({ view: 'tools' }, undefined, { page: indexedPage, catalogue: indexedCatalogue, overview })
+
+    expect(screen.getByRole('group', { name: 'Provider category' })).toBeTruthy()
+    expect(screen.getByText('Listed price')).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Advanced filters' }).getAttribute('aria-expanded')).toBe('false')
+    expect(screen.queryByRole('group', { name: 'Network' })).toBeNull()
+    expect(screen.queryByLabelText('Provider')).toBeNull()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Advanced filters' }))
+    expect(screen.getByRole('group', { name: 'Network' })).toBeTruthy()
+    expect(screen.getByLabelText('Provider')).toBeTruthy()
+    expect(screen.getByText('Published details')).toBeTruthy()
+  })
+
+  it('opens Advanced filters when an advanced refinement is already active', () => {
+    show({ view: 'tools', network: 'eip155:8453' }, undefined, { page: indexedPage, catalogue: indexedCatalogue, overview })
+
+    expect(screen.getByRole('button', { name: 'Advanced filters 1 active' }).getAttribute('aria-expanded')).toBe('true')
+    expect(screen.getByRole('group', { name: 'Network' })).toBeTruthy()
+  })
+
   it('never puts the Convex page cursor in the market URL and offers Load more instead', () => {
     show({ ...nativeFilters, sort: 'relevance', query: 'weather' }, undefined, { page: indexedPage, catalogue: indexedCatalogue, overview })
     expect(screen.queryByRole('link', { name: 'Next page' })).toBeNull()
@@ -157,6 +222,47 @@ describe('indexed x402 catalogue controls', () => {
     expect(screen.getByText('4 Tools loaded')).toBeTruthy()
     // The server reported isDone this time, so Load more is gone.
     expect(screen.queryByRole('button', { name: 'Load more' })).toBeNull()
+  })
+  it('keeps loaded Tools and the cursor available when Load more fails, then retries the same continuation', async () => {
+    const nextItems = entries.slice(2, 4)
+    readX402DirectoryCatalogueServer
+      .mockResolvedValueOnce({ kind: 'unavailable', reason: 'source_unavailable' })
+      .mockResolvedValueOnce({
+        kind: 'ok', source: 'index', coverage, searchMethod: 'native_index',
+        page: { kind: 'ok', items: nextItems, offset: 0, limit: 20 }, isDone: true,
+      })
+    show({ view: 'tools' }, undefined, { page: indexedPage, catalogue: indexedCatalogue, overview })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Load more' }))
+    const failure = await screen.findByRole('alert')
+    expect(failure.textContent).toContain('More Tools could not be loaded')
+    expect(failure.className).toContain('text-muted-foreground')
+    expect(failure.className).not.toContain('text-destructive')
+    expect(screen.getByText('2 Tools loaded')).toBeTruthy()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Try loading more again' }))
+    await waitFor(() => expect(screen.getByRole('link', { name: nextItems[0]!.title })).toBeTruthy())
+    expect(readX402DirectoryCatalogueServer).toHaveBeenNthCalledWith(2, { data: { indexCursor: indexedCatalogue.indexCursor } })
+    expect(screen.queryByRole('alert')).toBeNull()
+    expect(screen.getByText('4 Tools loaded')).toBeTruthy()
+  })
+  it('ignores a stale Load more response after a new search has supplied an authoritative first page', async () => {
+    let resolveContinuation: (value: unknown) => void = () => undefined
+    readX402DirectoryCatalogueServer.mockImplementation(() => new Promise(resolve => { resolveContinuation = resolve }))
+    const { updateCatalogue } = show({ view: 'tools' }, undefined, { page: indexedPage, catalogue: indexedCatalogue, overview })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Load more' }))
+    const replacementPage = { ...indexedPage, items: entries.slice(4, 6) }
+    const replacementCatalogue = { ...indexedCatalogue, page: replacementPage, indexCursor: 'generation-1:new-search-cursor' }
+    updateCatalogue({ view: 'tools', query: 'replacement' }, replacementPage, replacementCatalogue)
+    expect(await screen.findByRole('link', { name: 'Tool 4' })).toBeTruthy()
+
+    resolveContinuation({
+      kind: 'ok', source: 'index', coverage, searchMethod: 'native_index',
+      page: { ...indexedPage, items: entries.slice(2, 4) }, isDone: true,
+    })
+    await waitFor(() => expect(screen.queryByRole('link', { name: 'Tool 2' })).toBeNull())
+    expect(screen.getByRole('link', { name: 'Tool 4' })).toBeTruthy()
   })
   it('changes category through its control while preserving filters, without ever adding a cursor', async () => {
     const { router } = show({ ...nativeFilters, query: 'weather', sort: 'relevance' }, undefined, { page: indexedPage, catalogue: indexedCatalogue, overview })

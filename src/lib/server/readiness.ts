@@ -1,11 +1,12 @@
-import { degrade } from '@/lib/observability/degrade'
-import { readTrimmedEnv, type StringEnvironment } from '@/lib/server/read-trimmed-env'
-import { readStripeMoneyProviderConfig } from '@/lib/server/stripe-money-provider-config'
+import { resolveDeploymentMode } from '@/lib/deployment/environment'
 import {
   DEPLOYMENT_MANIFEST,
   validateDeploymentManifest,
   type DeploymentEnvironment,
 } from '@/lib/deployment/manifest'
+import { degrade } from '@/lib/observability/degrade'
+import { readTrimmedEnv, type StringEnvironment } from '@/lib/server/read-trimmed-env'
+import { readStripeMoneyProviderConfig } from '@/lib/server/stripe-money-provider-config'
 import { cdpX402CustodyConfigurationFromEnvironment } from '@/modules/capability-supply/server'
 import { readCapabilityToolSearch } from '@/modules/capability-supply/tool-source'
 import type { SourceFreshnessState } from '@/modules/common/freshness'
@@ -324,17 +325,6 @@ function readDeploymentConfig(env: StringEnvironment, nodeMajor?: number): Deplo
   return { kind: 'ready', convexUrl: convexUrl.href }
 }
 
-function resolveDeploymentMode(env: StringEnvironment): DeploymentEnvironment {
-  const nodeEnvironment = readTrimmedEnv(env, 'NODE_ENV')
-  const vercelEnvironment = readTrimmedEnv(env, 'VERCEL_ENV')
-  if (vercelEnvironment === 'production') return 'production'
-  if (vercelEnvironment === 'preview' || readTrimmedEnv(env, 'CF_PAGES_BRANCH') !== undefined) return 'preview'
-  if (nodeEnvironment === 'test') return 'test'
-  if (nodeEnvironment === 'production') return 'production'
-  if (nodeEnvironment === 'preview') return 'preview'
-  if (nodeEnvironment === 'development') return 'development'
-  return 'production'
-}
 async function probeConvex(
   convexUrl: string,
   fetchImpl: typeof globalThis.fetch,

@@ -21,11 +21,8 @@ import {
 } from '@/lib/server/clerk-consequence-proof'
 import { createRuntimeId } from '@/modules/common/runtime-id'
 import { sourceWriteRequestFromAdmission } from '@/modules/security/source-write-admission'
-import {
-  isMoneyRefusal,
-  type MoneyRefusal,
-  type PayoutStatusView,
-} from '../public'
+import { isMoneyRefusal, type MoneyRefusal } from './money-types'
+import type { PayoutStatusView } from './money-query-views'
 import type { StripeMoneyClient, StripeMoneyMode, StripeMoneyProviderConfig } from '@/lib/server/stripe-money-provider'
 import type {
   StripeAccountUpdatedWebhookEvent,
@@ -527,6 +524,71 @@ export async function createOwnerOnboardingLinkThroughSource(
     url: link.url,
   }
 }
+
+export type OwnerExpressLoginLinkInput = Readonly<{
+  businessId: string
+  currency: string
+}>
+
+export type OwnerExpressLoginLinkResult =
+  | Readonly<{
+      kind: 'ok'
+      url: string
+    }>
+  | MoneyRefusal
+
+export async function createOwnerExpressLoginLinkThroughSource(
+  input: OwnerExpressLoginLinkInput,
+  context?: unknown,
+  runtime: OwnerMoneyServerRuntime = {},
+): Promise<OwnerExpressLoginLinkResult> {
+  const owner = await ownerBusiness(input.businessId, context)
+  if (owner.kind === 'refused') return owner
+  const currency = ownerCurrency(owner.value, input.currency)
+  if (currency === undefined) {
+    return { kind: 'refused', code: 'payout_not_ready', retryable: false }
+  }
+  const storedBinding = await callSourceQuery(readOwnerPayoutAccountQuery, {
+    businessId: input.businessId,
+    currency: input.currency,
+  })
+  const binding =
+    storedBinding ??
+    accountFromPayout(
+      input.businessId,
+      input.currency,
+      currency.earnings.providerNet.exponent,
+      currency.payout,
+    )
+  const stripeAccountId = binding.stripeAccountId
+  if (!stripeAccountId || binding.state !== 'ready') {
+    return { kind: 'refused', code: 'payout_not_ready', retryable: false }
+  }
+  const providerResult = payoutProvider(runtime)
+  if (isMoneyRefusal(providerResult)) return providerResult
+  if (!providerResult.provider.createExpressLoginLink) {
+    return { kind: 'refused', code: 'stripe_setup_required', retryable: true }
+  }
+  const link = await providerResult.provider.createExpressLoginLink({
+    stripeAccountId,
+  })
+  if (isMoneyRefusal(link)) return link
+  return {
+    kind: 'ok',
+    url: link.url,
+  }
+}
+
+export const createOwnerExpressLoginLinkServer = createServerFn({ method: 'POST' })
+  .validator((data: unknown) =>
+    z.strictObject({
+      businessId: z.string().trim().min(1).max(240),
+      currency: z.string().trim().length(3),
+    }).parse(data),
+  )
+  .handler(async ({ data }): Promise<OwnerExpressLoginLinkResult> => {
+    return await createOwnerExpressLoginLinkThroughSource(data)
+  })
 
 export async function updateOwnerPayoutAuthorityThroughSource(
   input: OwnerPayoutAuthorityUpdateInput,

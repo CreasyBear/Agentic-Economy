@@ -147,7 +147,9 @@ export async function persistAuditEvent(
       targetType: event.targetType,
       targetRef: event.targetRef,
       ...(event.beforeState === undefined ? {} : { beforeState: event.beforeState }),
-      ...(event.afterState === undefined ? {} : { afterState: event.afterState }),
+      ...(event.afterState === undefined
+        ? {}
+        : { afterState: event.afterState, outcome: event.afterState }),
       idempotencyKey: event.idempotencyKey,
       correlationId: event.correlationId,
       ...(event.reasonCode === undefined ? {} : { reasonCode: event.reasonCode }),
@@ -175,7 +177,9 @@ export function summarizeAudit(event: AuditEventContract) {
       | 'admin.membership_granted'
       | 'admin.membership_revoked'
       | 'admin.action_denied'
-      | 'dispute.closed',
+      | 'dispute.closed'
+      | 'business.suppressed'
+      | 'business.unsuppressed',
     actorRef: event.actorRef,
     targetRef: event.targetRef,
     ...(event.beforeState === undefined ? {} : { beforeState: event.beforeState }),

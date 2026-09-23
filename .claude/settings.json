@@ -10,6 +10,28 @@
           }
         ]
       }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo 'Before acting on a request that changes code, pick a sluice channel and state which one.'; if [ -f \"$CLAUDE_PROJECT_DIR/.claude/skills/sluice/scripts/session-start.sh\" ]; then bash \"$CLAUDE_PROJECT_DIR/.claude/skills/sluice/scripts/session-start.sh\"; fi",
+            "skill": "sluice"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "if [ -f \"$CLAUDE_PROJECT_DIR/.claude/skills/sluice/scripts/stop-guard.sh\" ]; then bash \"$CLAUDE_PROJECT_DIR/.claude/skills/sluice/scripts/stop-guard.sh\"; fi",
+            "skill": "sluice"
+          }
+        ]
+      }
     ]
   }
 }

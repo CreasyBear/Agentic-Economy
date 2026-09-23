@@ -4,7 +4,13 @@ import { degradeBackend } from '@/lib/observability/degrade-backend'
 import type { Doc } from './_generated/dataModel'
 import { internalMutation, internalQuery, type MutationCtx } from './_generated/server'
 import { canonicalDigest } from '../src/modules/common/canonical-digest'
-import { PACKAGE4_FORMANCE_REQUIREMENTS, validateExecutableRateEvidenceIntegrity, type ExecutableRateEvidence } from '../src/modules/money/public'
+import { currentUtcDayBounds, currentUtcMonthBounds } from '../src/modules/common/freshness'
+import {
+  PACKAGE4_FORMANCE_REQUIREMENTS,
+  spendingPeriodsValue,
+  validateExecutableRateEvidenceIntegrity,
+  type ExecutableRateEvidence,
+} from '../src/modules/money/public'
 import { parsePublishedToolSnapshot } from '../src/modules/capability-supply/public'
 
 const transactionRefsValue = v.array(v.string())
@@ -33,19 +39,57 @@ const bookingValue = v.object({
   rateEvidenceDigest: v.string(),
   treasuryEvidenceDigest: v.string(),
   x402RequirementDigest: v.string(),
+  spendingPeriods: v.optional(spendingPeriodsValue),
 })
+
+function validStoredSpendingPeriods(
+  periods: Doc<'capabilityQuotes'>['spendingPeriods'],
+): boolean {
+  if (periods === undefined || periods.version !== 'ae.spending-periods:v1') return periods === undefined
+  const valid = (
+    period: typeof periods.daily,
+    kind: 'day' | 'month',
+  ): boolean => {
+    if (!Number.isSafeInteger(period.periodStartAt)
+      || !Number.isSafeInteger(period.periodEndAt)
+      || period.periodStartAt < 0
+      || period.periodEndAt <= period.periodStartAt
+      || !Number.isSafeInteger(period.revision)
+      || period.revision <= 0
+      || !/^(?:0|[1-9]\d{0,15})$/u.test(period.limitUnits)) return false
+    try {
+      if (BigInt(period.limitUnits) > BigInt(PACKAGE4_FORMANCE_REQUIREMENTS.maximumSdkIntegerUnits)) return false
+      const expected = kind === 'day'
+        ? currentUtcDayBounds(period.periodStartAt)
+        : currentUtcMonthBounds(period.periodStartAt)
+      return expected.periodStartAt === period.periodStartAt
+        && expected.periodEndAt === period.periodEndAt
+    } catch (cause) {
+      void cause;
+      return false
+    }
+  }
+  return valid(periods.daily, 'day')
+    && valid(periods.monthly, 'month')
+    && periods.daily.periodStartAt >= periods.monthly.periodStartAt
+    && periods.daily.periodEndAt <= periods.monthly.periodEndAt
+}
 
 function bookingFromRows(
   call: Doc<'capabilityCalls'>,
   quote: Doc<'capabilityQuotes'>,
 ) {
   const tool = parsePublishedToolSnapshot(quote.toolJson)
+  const periodAware = quote.spendingPeriods !== undefined
   if (tool === undefined
+    || !validStoredSpendingPeriods(quote.spendingPeriods)
     || call.quoteRef !== quote.quoteRef
     || call.ownerId !== quote.accountRef
     || call.principalId !== quote.principalId
     || call.toolRef !== quote.toolRef
-    || quote.formanceSchemaVersion !== PACKAGE4_FORMANCE_REQUIREMENTS.schemaVersion
+    || (periodAware
+      ? quote.formanceSchemaVersion !== PACKAGE4_FORMANCE_REQUIREMENTS.schemaVersion
+      : quote.formanceSchemaVersion !== 'v1.3.0')
     || quote.sourceUsdcUnits === undefined
     || quote.x402RequirementDigest === undefined
     || quote.rateEvidenceDigest === undefined
@@ -84,6 +128,7 @@ function bookingFromRows(
     rateEvidenceDigest: quote.rateEvidenceDigest,
     treasuryEvidenceDigest: quote.treasuryEvidenceDigest,
     x402RequirementDigest: quote.x402RequirementDigest,
+    ...(quote.spendingPeriods === undefined ? {} : { spendingPeriods: quote.spendingPeriods }),
   }
 }
 

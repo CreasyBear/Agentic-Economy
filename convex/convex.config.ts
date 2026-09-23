@@ -12,6 +12,7 @@ const app = defineApp({
   // Everything else is environment-specific (Clerk/Stripe/CDP/OpenRouter/x402/feature flags), stays optional, and is surfaced by `ae doctor`.
   env: {
     OPENROUTER_API_KEY: v.optional(v.string()),
+    AE_JEV_DISCOVERY_ENABLED: v.optional(v.union(v.literal('true'), v.literal('false'))),
     AE_LLM_MODEL: v.optional(v.string()),
     AE_OPENROUTER_API_BASE_URL: v.optional(v.string()),
     SITE_URL: v.optional(v.string()),
@@ -20,6 +21,8 @@ const app = defineApp({
     AE_CHAT_PROXY_SECRET: v.optional(v.string()),
     AE_SITE_URL: v.optional(v.string()),
     AE_RELEASE_SOURCE_REVISION: v.optional(v.string()),
+    AE_SERVICE_MODE: v.optional(v.literal('hosted_alpha')),
+    AE_SCHEDULED_WORKLOADS_ENABLED: v.optional(v.union(v.literal('true'), v.literal('false'))),
     CLERK_JWT_ISSUER_DOMAIN: v.optional(v.string()),
     AE_CONVEX_SERVER_FUNCTION_TOKEN: v.optional(v.string()),
     AE_SECRET_LIFECYCLE_RPC_TOKEN: v.optional(v.string()),

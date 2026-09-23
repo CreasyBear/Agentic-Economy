@@ -58,9 +58,10 @@ type Row = {
   reconciliation?: Reconciliation
   [key: string]: unknown
 }
-type Predicate = { field: string; operator: 'eq' | 'lte'; value: unknown }
+type Predicate = { field: string; operator: 'eq' | 'gte' | 'lte'; value: unknown }
 type QueryBuilder = {
   eq: (field: string, value: unknown) => QueryBuilder
+  gte: (field: string, value: unknown) => QueryBuilder
   lte: (field: string, value: unknown) => QueryBuilder
 }
 
@@ -84,6 +85,10 @@ class MemoryQuery {
         this.predicates.push({ field, operator: 'eq', value })
         return builder
       },
+      gte: (field, value) => {
+        this.predicates.push({ field, operator: 'gte', value })
+        return builder
+      },
       lte: (field, value) => {
         this.predicates.push({ field, operator: 'lte', value })
         return builder
@@ -98,7 +103,7 @@ class MemoryQuery {
       this.source.sort((left, right) => {
         const leftValue = readField(left, 'reconciliation.nextAttemptAt')
         const rightValue = readField(right, 'reconciliation.nextAttemptAt')
-        const difference = Number(leftValue) - Number(rightValue)
+        const difference = (leftValue === undefined ? -Infinity : Number(leftValue)) - (rightValue === undefined ? -Infinity : Number(rightValue))
         return direction === 'asc' ? difference : -difference
       })
     }
@@ -111,7 +116,9 @@ class MemoryQuery {
         const actual = readField(row, field)
         return operator === 'eq'
           ? actual === value
-          : typeof actual === 'number' && typeof value === 'number' && actual <= value
+          : operator === 'gte'
+            ? typeof actual === 'number' && typeof value === 'number' && actual >= value
+            : actual === undefined || (typeof actual === 'number' && typeof value === 'number' && actual <= value)
       }))
       .slice(0, limit)
   }
@@ -224,6 +231,53 @@ describe('scheduled capability invocation reconciliation primitives', () => {
     expect(JSON.stringify(candidates)).not.toContain('inputJson')
     expect(JSON.stringify(candidates)).not.toContain('authority')
     expect(JSON.stringify(candidates)).not.toContain('secret')
+  })
+
+  it.each(['refused', 'cancelled'])('selects a due %s refund despite older terminal rows without reconciliation', async (state) => {
+    const old = row('already-refused')
+    old.state = state
+    delete old.reconciliation
+    const refund = row('refund', { attemptCount: 0, nextAttemptAt: 1_000, disposition: 'automatic', reason: 'refund_pending' })
+    refund.state = state
+    const db = new MemoryDb([old, refund])
+    expect(await listHandler({ db }, { now: 2_000, limit: 1 })).toEqual([
+      { callRef: 'refund', attemptCount: 0, nextAttemptAt: 1_000, preClaimRefund: true },
+    ])
+  })
+
+  it.each(['refused', 'cancelled'])('reaches a due automatic %s refund after a full older page awaiting manual review', async (state) => {
+    const blocked = Array.from({ length: 25 }, (_, index) => ({
+      ...row(`manual:${index}`, { attemptCount: 5, nextAttemptAt: 1_000, disposition: 'manual_review', reason: 'refund_pending' }),
+      state,
+    }))
+    const refund = {
+      ...row('automatic-refund', { attemptCount: 0, nextAttemptAt: 2_000, disposition: 'automatic', reason: 'refund_pending' }),
+      state,
+    }
+    const db = new MemoryDb([...blocked, refund])
+    expect(await listHandler({ db }, { now: 3_000, limit: 25 })).toEqual([
+      { callRef: 'automatic-refund', attemptCount: 0, nextAttemptAt: 2_000, preClaimRefund: true },
+    ])
+    expect(blocked.every((item) => item.reconciliation?.disposition === 'manual_review')).toBe(true)
+  })
+
+  it.each(['refused', 'cancelled'])('retains the %s refund until durable release, including errors and lease takeover', async (state) => {
+    const refund = row('refund', { attemptCount: 0, nextAttemptAt: 1_000, disposition: 'automatic', reason: 'refund_pending' })
+    refund.state = state
+    refund.formanceFinancialState = 'reserved'
+    const db = new MemoryDb([refund])
+    await claimHandler({ db }, { callRef: 'refund', leaseOwner: 'interrupted', now: 1_000 })
+    expect(await claimHandler({ db }, { callRef: 'refund', leaseOwner: 'retry', now: 61_001 })).toMatchObject({ kind: 'claimed' })
+    expect(await finishHandler({ db }, { callRef: 'refund', leaseOwner: 'retry', now: 61_002, outcome: 'success' })).toMatchObject({ kind: 'retried' })
+    expect(refund.reconciliation).toMatchObject({ attemptCount: 1, disposition: 'automatic', reason: 'refund_pending' })
+    await claimHandler({ db }, { callRef: 'refund', leaseOwner: 'retry2', now: 121_003 })
+    expect(await finishHandler({ db }, { callRef: 'refund', leaseOwner: 'retry2', now: 121_004, outcome: 'error' })).toMatchObject({ kind: 'retried' })
+    expect(refund.reconciliation).toMatchObject({ attemptCount: 2, reason: 'refund_pending' })
+    refund.formanceFinancialState = 'released'
+    await claimHandler({ db }, { callRef: 'refund', leaseOwner: 'complete', now: 421_005 })
+    expect(await finishHandler({ db }, { callRef: 'refund', leaseOwner: 'complete', now: 421_006, outcome: 'success' })).toEqual({ kind: 'completed' })
+    expect(refund.reconciliation).toBeUndefined()
+    expect(refund.state).toBe(state)
   })
 
   it('wins the first lease, blocks a live lease, rejects stale finishes, and permits takeover after expiry', async () => {

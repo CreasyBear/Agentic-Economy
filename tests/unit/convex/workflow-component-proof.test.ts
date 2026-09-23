@@ -1,8 +1,10 @@
 import { register as registerWorkflow } from '@convex-dev/workflow/test'
 import { convexTest } from 'convex-test'
 import { defineSchema, defineTable, makeFunctionReference } from 'convex/server'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { v } from 'convex/values'
+import * as workflowProofModule from '../../fixtures/convex-workflow-proof'
+import { preloadWorkflowComponentModules } from '../../helpers/convex-fixtures'
 
 const schema = defineSchema({
   workflowProofEntries: defineTable({
@@ -14,7 +16,7 @@ const schema = defineSchema({
 })
 
 const modules = {
-  './workflowProof.ts': () => import('../../fixtures/convex-workflow-proof'),
+  './workflowProof.ts': async () => workflowProofModule,
   './_generated/api.js': async () => ({}),
 }
 
@@ -39,6 +41,10 @@ async function settle(value: ReturnType<typeof backend>) {
 }
 
 describe('official workflow component proof', () => {
+  beforeAll(async () => {
+    await preloadWorkflowComponentModules()
+  })
+
   beforeEach(() => {
     vi.useFakeTimers()
   })

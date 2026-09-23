@@ -1,16 +1,14 @@
 import { degradeBackend } from '@/lib/observability/degrade-backend'
 import { sameCapabilityContractRef } from '@/modules/capability-contract/public'
+import { isPublicToolRef, type PublicToolRef } from '@/modules/common/tool-ref'
+import { capabilityToolId, createPublicToolRef } from '../public-tool-ref'
 import {
-  admitRegisteredTransport,
   capabilityBindingEligibilityHash,
   capabilityBindingRegistrationHash,
-  capabilityToolId,
-  createPublicToolRef,
   defineCapabilityTransportBindingRegistration,
-  isPublicToolRef,
   type CapabilityTransportBindingRegistration,
-  type PublicToolRef,
-} from '@/modules/capability-supply/public'
+} from '../registration-schema'
+import { admitRegisteredTransport } from '../transport-adapters'
 
 import { isProviderConnectionAuthorityCurrent, type ProviderConnection } from '../../provider-connection'
 import {

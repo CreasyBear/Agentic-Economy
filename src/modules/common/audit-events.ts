@@ -9,6 +9,15 @@ export const Package3AuditEventTypeValues = [
   'account.session.ended',
   'account.session.revoked',
   'account.security_profile.updated',
+  'account.workspace_profile.updated',
+  'account.workspace_invitation.created',
+  'account.workspace_invitation.revoked',
+  'account.workspace_membership.created',
+  'account.workspace_membership.updated',
+  'account.workspace_membership.deleted',
+  'account.workspace.closed',
+  'account.workspace.ownership_transferred',
+  'account.personal_account.retired',
   'agent.created',
   'agent.renamed',
   'agent.policy_updated',
@@ -64,6 +73,8 @@ export const AuditEventTypeValues = [
   'dispute.opened',
   'dispute.updated',
   'dispute.closed',
+  'business.suppressed',
+  'business.unsuppressed',
   'registry.sync_queued',
   'registry.sync_succeeded',
   'registry.sync_failed',
@@ -135,6 +146,8 @@ export const AuditEventTypeValues = [
   'billing.reconciliation_failed',
   'billing.reconciliation_repaired',
   'billing.no_repair_marked',
+  'billing.auto_recharge_configured',
+  'billing.monthly_spend_ceiling_configured',
   ...Package3AuditEventTypeValues,
 ] as const
 
@@ -201,14 +214,18 @@ export type AuditEventSink = {
 }
 
 const stateChangingEvents: Partial<Record<AuditEventType, true>> = {
+  'dispute.opened': true,
   'dispute.updated': true,
   'dispute.closed': true,
+  'business.suppressed': true,
+  'business.unsuppressed': true,
   'admin.membership_bootstrapped': true,
   'admin.membership_granted': true,
   'admin.membership_revoked': true,
   'capability_contract.registered': true,
   'capability_offering.registered': true,
   'capability_binding.registered': true,
+  'capability_binding.quarantined': true,
   'capability_supply.eligibility_changed': true,
   'capability_publication.published': true,
   'developer_discovery.generated': true,
@@ -261,6 +278,8 @@ const stateChangingEvents: Partial<Record<AuditEventType, true>> = {
   'billing.reconciliation_failed': true,
   'billing.reconciliation_repaired': true,
   'billing.no_repair_marked': true,
+  'billing.auto_recharge_configured': true,
+  'billing.monthly_spend_ceiling_configured': true,
 }
 
 const auditEventTypes = new Set<string>(AuditEventTypeValues)
@@ -297,9 +316,15 @@ export function validateAuditEvent(input: AuditEventInput): AuditValidationResul
     ) {
       return { valid: false, reason: 'missing_security_context' }
     }
-    if (containsSecretMaterial(input.redactedPayload) || input.evidenceRefs?.some((value) => secretValuePattern.test(value)) === true) {
-      return { valid: false, reason: 'unsafe_security_evidence' }
-    }
+  }
+
+  if (
+    (package3AuditEventTypes.has(input.eventType)
+      || input.eventType.startsWith('billing.')
+      || input.eventType.startsWith('api_key.'))
+    && (containsSecretMaterial(input.redactedPayload) || input.evidenceRefs?.some((value) => secretValuePattern.test(value)) === true)
+  ) {
+    return { valid: false, reason: 'unsafe_security_evidence' }
   }
 
   if (stateChangingEvents[input.eventType] === true && (input.beforeState === undefined || input.afterState === undefined)) {

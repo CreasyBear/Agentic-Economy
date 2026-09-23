@@ -1,4 +1,5 @@
-import type { ExactAmount, MoneyRefusal } from '../public'
+import type { ExactAmount } from './exact-amount'
+import type { MoneyRefusal } from './money-types'
 
 export type CreditPaymentRequest = Readonly<{
   commandRef: string
@@ -93,6 +94,7 @@ export type ConnectAccountEvidence = Readonly<{
 export type ConnectAccountPort = Readonly<{
   createOrRecoverConnectAccount: (input: ConnectAccountRequest) => Promise<Readonly<{ provider: 'stripe'; stripeAccountId: string; evidenceRef: string }> | MoneyRefusal>
   createOnboardingLink: (input: OnboardingLinkRequest) => Promise<Readonly<{ provider: 'stripe'; url: string; evidenceRef: string }> | MoneyRefusal>
+  createExpressLoginLink?: (input: Readonly<{ stripeAccountId: string }>) => Promise<Readonly<{ provider: 'stripe'; url: string }> | MoneyRefusal>
   readConnectAccount: (input: Readonly<{ businessId: string; currency: string; stripeAccountId: string }>) => Promise<ConnectAccountEvidence | MoneyRefusal>
 }>
  

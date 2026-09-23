@@ -8,7 +8,7 @@ import type {
   AdminMembership,
   AdminMembershipAuditEventType,
   AdminRole,
-} from '@/modules/security/public'
+} from './security-types'
 
 const AdminActionMatrix = {
   owner_admin: {
@@ -22,6 +22,7 @@ const AdminActionMatrix = {
     register_capability_supply: true,
     control_kernel_incidents: true,
     manage_commercial_policy: true,
+    suppress_business: true,
   },
   support: {
     read_admin_readbacks: true,
@@ -34,6 +35,7 @@ const AdminActionMatrix = {
     register_capability_supply: false,
     control_kernel_incidents: false,
     manage_commercial_policy: false,
+    suppress_business: false,
   },
   reviewer: {
     read_admin_readbacks: true,
@@ -46,6 +48,7 @@ const AdminActionMatrix = {
     register_capability_supply: false,
     control_kernel_incidents: false,
     manage_commercial_policy: false,
+    suppress_business: false,
   },
 } satisfies Record<AdminRole, Record<AdminAction, boolean>>
 

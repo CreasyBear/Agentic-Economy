@@ -437,6 +437,26 @@ describe('operation recovery HTTP adapters', () => {
     expect(executor.readCallStatus).not.toHaveBeenCalled()
   })
 
+  it('refuses duplicate and unknown query keys before reading Call status', async () => {
+    const executor = service()
+    const duplicate = await handleCallStatusGet(
+      new Request(`https://ae.example/api/v1/calls/${callRef}?afterVersion=1&afterVersion=2`),
+      callRef,
+      { authenticate, resolvePrincipal: resolveCanonicalPrincipal, callService: executor },
+    )
+    expect(duplicate.status).toBe(400)
+    await expect(duplicate.json()).resolves.toMatchObject({ code: 'invalid_query_parameter' })
+
+    const unknown = await handleCallStatusGet(
+      new Request(`https://ae.example/api/v1/calls/${callRef}?unexpected=1`),
+      callRef,
+      { authenticate, resolvePrincipal: resolveCanonicalPrincipal, callService: executor },
+    )
+    expect(unknown.status).toBe(400)
+    await expect(unknown.json()).resolves.toMatchObject({ code: 'invalid_query_parameter' })
+    expect(executor.readCallStatus).not.toHaveBeenCalled()
+  })
+
   it('projects status and cancellation through one principal and correlation', async () => {
     const executor = service()
     const statusResponse = await handleCallStatusGet(
@@ -585,5 +605,164 @@ describe('operation recovery HTTP adapters', () => {
       callRef,
       idempotencyKey: 'body:two',
     }))
+  })
+})
+
+describe('interrupted buyer Call resumption across fresh processes', () => {
+  const foreignPrincipal = {
+    ...principal,
+    principalId: `prn_${'9'.repeat(32)}`,
+    ownerId: `acc_${'8'.repeat(32)}`,
+  }
+  const resolveForeignPrincipal: AgentAccessPrincipalResolver = async () => foreignPrincipal
+
+  it('resumes Call status by call reference from a fresh process without prior session state', async () => {
+    for (const state of [
+      'in_progress',
+      'reconciliation_required',
+      'terminal',
+      'cancelled',
+    ] as const) {
+      const executor = service()
+      vi.mocked(executor.readCallStatus).mockResolvedValue({
+        kind: 'found',
+        callRef,
+        version: 1,
+        toolRef,
+        state,
+      })
+      const response = await handleCallStatusGet(
+        new Request(`https://ae.example/api/v1/calls/${callRef}`),
+        callRef,
+        {
+          authenticate,
+          resolvePrincipal: resolveCanonicalPrincipal,
+          callService: executor,
+        },
+      )
+
+      expect(response.status).toBe(200)
+      await expect(response.json()).resolves.toMatchObject({ kind: 'found', callRef, state })
+      expect(executor.readCallStatus).toHaveBeenCalledWith({
+        callRef,
+        principal,
+        correlationId: expect.any(String),
+      })
+    }
+
+    const unauthenticatedResponse = await handleCallStatusGet(
+      new Request(`https://ae.example/api/v1/calls/${callRef}`),
+      callRef,
+      { authenticate: unauthenticated, resolvePrincipal: resolveCanonicalPrincipal, callService: service() },
+    )
+    expect(unauthenticatedResponse.status).toBe(401)
+
+    const foreignExecutor = service()
+    vi.mocked(foreignExecutor.readCallStatus).mockResolvedValue({
+      kind: 'refused',
+      callRef,
+      code: 'invocation_not_found',
+      retryable: false,
+    })
+    const foreignResponse = await handleCallStatusGet(
+      new Request(`https://ae.example/api/v1/calls/${callRef}`),
+      callRef,
+      {
+        authenticate,
+        resolvePrincipal: resolveForeignPrincipal,
+        callService: foreignExecutor,
+      },
+    )
+    expect(foreignResponse.status).toBe(404)
+    expect(foreignResponse.headers.get('content-type')).toContain('application/problem+json')
+    await expect(foreignResponse.json()).resolves.toMatchObject({
+      kind: 'NOT_FOUND',
+      code: 'invocation_not_found',
+      retryable: false,
+      detail: 'The Call was not found.',
+    })
+    expect(foreignExecutor.readCallStatus).toHaveBeenCalledWith({
+      callRef,
+      principal: foreignPrincipal,
+      correlationId: expect.any(String),
+    })
+  })
+
+  it('projects status read refusals to RFC 9457 problems with accurate telemetry', async () => {
+    const record = vi.fn()
+    const executor = service()
+    vi.mocked(executor.readCallStatus).mockResolvedValue({
+      kind: 'refused',
+      callRef,
+      code: 'invocation_not_found',
+      retryable: false,
+    })
+    const response = await handleCallStatusGet(
+      new Request(`https://ae.example/api/v1/calls/${callRef}`),
+      callRef,
+      { authenticate, resolvePrincipal: resolveCanonicalPrincipal, callService: executor, timing: { record } },
+    )
+    expect(response.status).toBe(404)
+    expect(response.headers.get('content-type')).toContain('application/problem+json')
+    await expect(response.json()).resolves.toMatchObject({
+      kind: 'NOT_FOUND',
+      code: 'invocation_not_found',
+      retryable: false,
+      detail: 'The Call was not found.',
+    })
+    expect(record).toHaveBeenCalledWith('gateway.operation', expect.any(Number), expect.objectContaining({
+      outcome: 'refused',
+      refusalCode: 'invocation_not_found',
+      invocationRef: callRef,
+    }))
+  })
+
+  it('preserves uncertain state on cancellation attempt after possible submission without premature hold release', async () => {
+    const uncertainExecutor = service()
+    vi.mocked(uncertainExecutor.cancelCall).mockResolvedValue({
+      kind: 'reconciliation_required',
+      callRef,
+      toolRef,
+      evidence: {
+        attemptRef: 'attempt:one',
+        effectGeneration: 1,
+        requiredAt: '2026-08-09T00:00:00.000Z',
+        retry: 'reconcile_before_retry',
+        evidenceSource: 'provider:one',
+      },
+    })
+    const uncertainResponse = await handleCallCancelPost(
+      recoveryPost(`/api/v1/calls/${callRef}/cancel`, { idempotencyKey: 'cancel:uncertain' }, 'application/json'),
+      callRef,
+      {
+        authenticate,
+        resolvePrincipal: resolveCanonicalPrincipal,
+        callService: uncertainExecutor,
+      },
+    )
+
+    expect(uncertainResponse.status).toBe(200)
+    await expect(uncertainResponse.json()).resolves.toMatchObject({ kind: 'reconciliation_required' })
+
+    const preClaimExecutor = service()
+    vi.mocked(preClaimExecutor.cancelCall).mockResolvedValue({
+      kind: 'found',
+      callRef,
+      version: 2,
+      toolRef,
+      state: 'cancelled',
+    })
+    const preClaimResponse = await handleCallCancelPost(
+      recoveryPost(`/api/v1/calls/${callRef}/cancel`, { idempotencyKey: 'cancel:pre-claim' }, 'application/json'),
+      callRef,
+      {
+        authenticate,
+        resolvePrincipal: resolveCanonicalPrincipal,
+        callService: preClaimExecutor,
+      },
+    )
+
+    expect(preClaimResponse.status).toBe(200)
+    await expect(preClaimResponse.json()).resolves.toMatchObject({ kind: 'found', state: 'cancelled' })
   })
 })

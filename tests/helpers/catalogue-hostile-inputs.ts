@@ -1,4 +1,4 @@
-import { expect } from 'vitest'
+import { expectProblem, type ExpectedProblem } from './http'
 
 /**
  * Shared hostile-input fixtures for the catalogue read routes
@@ -32,11 +32,7 @@ export const OVERSIZED_CURSOR = 'x'.repeat(513)
  */
 export const EMOJI_QUERY_300 = '\u{1F600}'.repeat(150)
 
-export type ExpectedProblem = Readonly<{
-  status: number
-  kind?: string
-  code?: string
-}>
+export type { ExpectedProblem }
 
 /**
  * Assert a response is an RFC 9457 `application/problem+json` body carrying
@@ -47,14 +43,5 @@ export async function expectProblemJson(
   response: Response,
   expected: ExpectedProblem,
 ): Promise<Record<string, unknown>> {
-  expect(response.status).toBe(expected.status)
-  expect(response.headers.get('content-type')).toContain('application/problem+json')
-  const body = (await response.json()) as Record<string, unknown>
-  expect(body).toMatchObject({
-    status: expected.status,
-    ...(expected.kind === undefined ? {} : { kind: expected.kind }),
-    ...(expected.code === undefined ? {} : { code: expected.code }),
-  })
-  expect(typeof body.detail === 'string' && body.detail.length > 0).toBe(true)
-  return body
+  return await expectProblem(response, expected)
 }

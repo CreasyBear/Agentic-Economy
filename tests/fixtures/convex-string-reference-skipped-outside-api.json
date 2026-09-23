@@ -1,0 +1,62 @@
+[
+  {
+    "file": "tests/unit/convex/workflow-component-proof.test.ts",
+    "line": 23,
+    "literal": "workflowProof:begin",
+    "helper": "makeFunctionReference"
+  },
+  {
+    "file": "tests/unit/convex/workflow-component-proof.test.ts",
+    "line": 24,
+    "literal": "workflowProof:permit",
+    "helper": "makeFunctionReference"
+  },
+  {
+    "file": "tests/unit/convex/workflow-component-proof.test.ts",
+    "line": 25,
+    "literal": "workflowProof:retry",
+    "helper": "makeFunctionReference"
+  },
+  {
+    "file": "tests/unit/convex/workflow-component-proof.test.ts",
+    "line": 26,
+    "literal": "workflowProof:resume",
+    "helper": "makeFunctionReference"
+  },
+  {
+    "file": "tests/unit/convex/workflow-component-proof.test.ts",
+    "line": 27,
+    "literal": "workflowProof:stop",
+    "helper": "makeFunctionReference"
+  },
+  {
+    "file": "tests/unit/convex/workflow-component-proof.test.ts",
+    "line": 28,
+    "literal": "workflowProof:inspect",
+    "helper": "makeFunctionReference"
+  },
+  {
+    "file": "tests/unit/server/convex-source-seam.test.ts",
+    "line": 172,
+    "literal": "test:publicMutation",
+    "helper": "sourceMutation"
+  },
+  {
+    "file": "tests/unit/server/convex-source-seam.test.ts",
+    "line": 192,
+    "literal": "customerRequestApplication:resume",
+    "helper": "sourceAction"
+  },
+  {
+    "file": "tests/unit/server/convex-source-seam.test.ts",
+    "line": 208,
+    "literal": "test:public-query",
+    "helper": "sourceQuery"
+  },
+  {
+    "file": "tests/unit/server/convex-source-seam.test.ts",
+    "line": 228,
+    "literal": "test:authenticated-mutation",
+    "helper": "sourceMutation"
+  }
+]

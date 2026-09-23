@@ -12,6 +12,7 @@ import {
   stripeCreditRequestDigest,
 } from "./stripe-checkout-evidence";
 import {
+  createExpressLoginLink,
   createOnboardingLink,
   createOrRecoverConnectAccount,
   readConnectAccount,
@@ -87,6 +88,8 @@ export function createStripeMoneyProvider(
       createOrRecoverConnectAccount(context.client, context.config, request),
     createOnboardingLink: async (request) =>
       createOnboardingLink(context.client, context.config, request),
+    createExpressLoginLink: async (request) =>
+      createExpressLoginLink(context.client, request),
     readConnectAccount: async (request) =>
       readConnectAccount(context.client, context.config, request),
     createOrRecoverTransfer: async (request) =>

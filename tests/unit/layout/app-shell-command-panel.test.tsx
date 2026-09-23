@@ -66,7 +66,9 @@ describe('app shell command panel', () => {
     expect(trigger.getAttribute('aria-controls')).toBe(dialog.id)
     expect(dialog.id).not.toBe('')
     expect(trigger.getAttribute('aria-label')).toBe('Close public menu')
-    expect(dialog.contains(document.activeElement)).toBe(true)
+    await waitFor(() => {
+      expect(dialog.contains(document.activeElement)).toBe(true)
+    })
 
     fireEvent.keyDown(document.activeElement ?? document, { key: 'Escape' })
     await waitFor(() => {
@@ -101,6 +103,34 @@ describe('app shell command panel', () => {
     await waitFor(() => {
       expect(screen.queryByRole('dialog', { name: 'Public navigation' })).toBeNull()
     })
+  })
+
+  it('keeps public navigation out of the authenticated workspace hierarchy', async () => {
+    const rootRoute = createRootRoute()
+    const operatorRoute = createRoute({ getParentRoute: () => rootRoute, id: '_operator', staticData: { shell: 'operator' } })
+    const ownerRoute = createRoute({ getParentRoute: () => operatorRoute, path: '/owner' })
+    const marketRoute = createRoute({
+      getParentRoute: () => rootRoute,
+      path: '/market',
+      staticData: { nav: { label: 'Market', header: { order: 0 } } },
+    })
+    const router = createRouter({
+      routeTree: rootRoute.addChildren([operatorRoute.addChildren([ownerRoute]), marketRoute]),
+      history: createMemoryHistory({ initialEntries: ['/owner'] }),
+    })
+    await router.load()
+
+    render(
+      <RouterContextProvider router={router}>
+        <AeAppShell><p>Owner workspace</p></AeAppShell>
+      </RouterContextProvider>,
+    )
+
+    await waitFor(() => {
+      expect(screen.queryByRole('navigation', { name: 'Primary' })).toBeNull()
+      expect(screen.queryByRole('button', { name: 'Open public menu' })).toBeNull()
+    })
+    expect(screen.getByRole('button', { name: 'Find Tools' })).toBeTruthy()
   })
 })
 

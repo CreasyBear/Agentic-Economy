@@ -5,6 +5,8 @@ import { AeConfirmDialog } from '@/components/ae/feedback/AeConfirmDialog'
 import { AeEmptyState } from '@/components/ae/feedback/AeEmptyState'
 import { AeCopyReference } from '@/components/ae/data/AeCopyReference'
 import { Button } from '@/components/ui/button'
+import { buttonVariants } from '@/components/ui/button-variants'
+import { cn } from '@/lib/utils'
 import type { OwnerProviderConnection } from '@/modules/capability-supply/supply-funnel.functions'
 import { formatRelativeTime, formatTimestamp, timestampIso } from '@/lib/ui/format-time'
 import { providerConnectionTargetId } from './provider-connection-target'
@@ -136,14 +138,13 @@ export function AeProviderConnectionList({
                     <AlertTitle>Authority refreshed</AlertTitle>
                     <AlertDescription className="grid gap-3">
                       Re-admit {rebindOfferingRef} now so this Tool binds to the refreshed authority snapshot.
-                      <Button asChild className="min-h-touch justify-self-start">
-                        <a
-                          ref={rebindLinkRef}
-                          href={`/owner/operations/${encodeURIComponent(rebindOfferingRef)}#provider`}
-                        >
-                          Re-admit Tool
-                        </a>
-                      </Button>
+                      <a
+                        ref={rebindLinkRef}
+                        href={`/owner/operations/${encodeURIComponent(rebindOfferingRef)}#provider`}
+                        className={cn(buttonVariants(), 'min-h-touch justify-self-start')}
+                      >
+                        Re-admit Tool
+                      </a>
                     </AlertDescription>
                   </Alert>
                 ) : (

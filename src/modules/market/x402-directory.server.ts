@@ -9,6 +9,7 @@ import { isRecord } from '@/modules/common/is-record'
 import { x402DirectoryInputSchema, type X402DirectoryContract, type X402DirectoryField, type X402DirectoryFilters, type X402DirectoryInput, type X402DirectoryEntry, type X402DirectoryPage } from './x402-directory'
 
 import { x402DirectoryFunctionalTitle } from './x402-directory-title'
+import { rerankX402DirectoryPage } from './x402-directory-reranker'
 
 const PAGE_SIZE = 20
 
@@ -253,5 +254,5 @@ export function projectX402DirectoryEntry(resource: Resource | Readonly<Record<s
 
 export async function readX402Directory(input: X402DirectoryInput): Promise<X402DirectoryPage> {
   const page = await readX402DirectoryRawPage(input)
-  return page.kind === 'unavailable' ? page : { ...page, items: page.items.map(projectX402DirectoryEntry) }
+  return page.kind === 'unavailable' ? page : await rerankX402DirectoryPage({ ...page, items: page.items.map(projectX402DirectoryEntry) }, input.query)
 }

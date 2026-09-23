@@ -1,5 +1,6 @@
 import type { OperationKey, SourceHash } from '@/modules/common/ids'
-import type { ActorKind, OperationKeyRecord } from '@/modules/observability/public'
+import type { ActorKind } from './audit'
+import type { OperationKeyRecord } from './contracts'
 
 export type OperationKeyInput = {
   scope: string

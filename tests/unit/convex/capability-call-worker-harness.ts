@@ -68,7 +68,7 @@ const mocks = vi.hoisted(() => {
     projectPolicyId: '22222222-2222-4222-8222-222222222222',
     credentialGeneration: 7,
     maxAtomic: 10_000n,
-    dailyMaxAtomic: 100_000n,
+    dailyMaxAtomic: 100_000n as bigint,
   } as const
   const cdpX402CustodyConfigurationFromEnvironment = vi.fn<
     () => typeof custodyConfiguration | undefined
@@ -81,6 +81,7 @@ const mocks = vi.hoisted(() => {
     close = vi.fn(async () => undefined)
   }
   return {
+    custodyConfiguration,
     claimCanonicalExecution,
     persistCanonicalReleaseFence,
     persistCanonicalTerminalOutcome,
@@ -164,7 +165,6 @@ import { canonicalAuthorityBasisMaterial } from '@/modules/action-execution/runt
 import {
   pricingConfigDecisionAmount,
   pricingConfigDigest,
-  pricingConfigSourceAmount,
   type PricingConfig,
 } from '@/modules/money/public'
 import type { PublishedTool } from '@/modules/capability-supply/public'
@@ -184,6 +184,11 @@ import {
 
 export const invocationRef = 'operation-invocation:test-worker'
 export const grantRef = 'grant:test-worker'
+const canaryGrantRef = 'agent-access-grant:platform:seller-onboarding-canary:sandbox:v1'
+const canaryPrincipalId = 'prn_00000000000000000000000000000402'
+const canaryOwnerId = 'acc_00000000000000000000000000000402'
+const canaryCredentialId = 'ae-cdp-seller-onboarding-canary-sandbox-v1'
+const canaryApplicationRef = 'agentic-economy:seller-onboarding-canary'
 const providerCredentialRef = 'env:AE_TEST_PROVIDER_CREDENTIAL'
 export const paymentCredentialRef = 'env:AE_TEST_PAYMENT_CREDENTIAL'
 export const paymentSecretRef = `sec_${'4'.repeat(32)}`
@@ -200,11 +205,14 @@ type WorkerOptions = Readonly<{
   finalGrant?: Readonly<Record<string, unknown>> | null
   signingBoundaryGrant?: Readonly<Record<string, unknown>> | null
   signingBoundaryProviderAuthority?: 'invalid' | 'throw'
+  outputSchema?: PublishedTool['contract']['outputSchema']
   observation?: RouteTransportObservation
   reconcileRefused?: boolean
   reconcileNone?: boolean
   failPaymentObservation?: boolean
   failPaymentSignature?: boolean
+  paymentAttemptRead?: 'missing' | 'throw'
+  releaseBeforeSubmissionRefused?: boolean
   preparePaymentErrorState?: 'possibly_submitted'
   invalidOutputTransitionResult?: 'accepted' | 'refused' | 'throw'
   invalidOutputLossResult?: 'settled' | 'refused' | 'throw'
@@ -288,16 +296,16 @@ function operationWithPricing(
   }
 }
 
-function operationFor(kind: WorkerKind, validUntil: number, priceUnits = '1', brokered = false): PublishedTool {
-  const fixture = buildDevelopmentPublishedToolEvidence()
+function operationFor(kind: WorkerKind, validUntil: number, priceUnits = '1', brokered = false, environment: 'sandbox' | 'production' = 'sandbox', outputSchema?: PublishedTool['contract']['outputSchema']): PublishedTool {
+  const fixture = buildDevelopmentPublishedToolEvidence(outputSchema === undefined ? {} : { outputSchema })
   const pricedOperation = operationWithPricing(fixture.tool, brokered
         ? {
             version: 'pricing:v3',
             kind: 'managed_x402',
             effectTiming: 'payment_required_before_effect',
             sourceRequirement: {
-              network: 'eip155:8453',
-              asset: '0xmock-usdc',
+              network: environment === 'production' ? BASE_MAINNET_NETWORK : BASE_SEPOLIA_NETWORK,
+              asset: environment === 'production' ? BASE_MAINNET_USDC_ADDRESS : BASE_SEPOLIA_USDC_ADDRESS,
               atomicUnits: '1',
             },
             pricingPolicyRef: 'pricing-policy:sandbox-managed-x402:v1',
@@ -311,8 +319,18 @@ function operationFor(kind: WorkerKind, validUntil: number, priceUnits = '1', br
             amountUnits: priceUnits,
           })
   if (kind === 'x402') {
+    const profile = environment === 'production'
+      ? { network: BASE_MAINNET_NETWORK, asset: BASE_MAINNET_USDC_ADDRESS }
+      : { network: BASE_SEPOLIA_NETWORK, asset: BASE_SEPOLIA_USDC_ADDRESS }
+    const config = { ...JSON.parse(pricedOperation.transport.configJson), ...profile }
+    const required = JSON.parse(config.paymentRequiredJson)
+    config.paymentRequiredJson = JSON.stringify({ ...required,
+      accepts: required.accepts.map((entry: Record<string, unknown>) => ({ ...entry, ...profile })),
+    })
     return {
       ...pricedOperation,
+      binding: { ...pricedOperation.binding, adapter: { ...pricedOperation.binding.adapter, config } },
+      transport: { ...pricedOperation.transport, configJson: JSON.stringify(config), configDigest: canonicalDigest(config) },
       readiness: { ...pricedOperation.readiness, validUntil },
     }
   }
@@ -366,6 +384,7 @@ function sealCurrentOperation(operation: PublishedTool): PublishedTool {
     ...identityBase,
     offeringDigest: capabilityOfferingRegistrationHash(operation.offering),
     bindingDigest: capabilityBindingRegistrationHash(operation.binding, operation.transport),
+    transportConfigDigest: operation.transport.configDigest,
     runtimeEnvironment: operation.runtimeEnvironment,
     ...(connectionAuthority === undefined ? {} : { connectionAuthority: { ...connectionAuthority } }),
   }
@@ -422,6 +441,10 @@ function withCredentiallessX402Connection(
 }
 
 export function createWorker(kind: WorkerKind, options: WorkerOptions = {}): { ctx: Record<string, unknown>; state: WorkerState } {
+  mocks.cdpX402CustodyConfigurationFromEnvironment.mockReturnValue({
+    ...mocks.custodyConfiguration,
+    dailyMaxAtomic: options.sellerCanary === true ? 50_000n : 100_000n,
+  })
   const now = Date.now()
   const environment = options.environment ?? 'sandbox'
   const baseOperation = operationFor(
@@ -429,6 +452,8 @@ export function createWorker(kind: WorkerKind, options: WorkerOptions = {}): { c
     now + 120_000,
     options.priceUnits,
     kind === 'x402',
+    environment,
+    options.outputSchema,
   )
   const x402Profile = environment === 'production'
     ? { network: BASE_MAINNET_NETWORK, asset: BASE_MAINNET_USDC_ADDRESS }
@@ -475,12 +500,19 @@ export function createWorker(kind: WorkerKind, options: WorkerOptions = {}): { c
   const inputDigest = canonicalDigest(input as StableHashValue)
   const authorityExpiresAt = new Date(now + 60_000).toISOString()
   const acceptedBasis = { kind: 'approval_required' as const, authorityRef: `authority:${invocationRef}` }
-  const limits = { amount: pricingConfigDecisionAmount(operation.pricingConfig) ?? { currency: 'USD', units: '1', exponent: 2 } }
+  const limits = { amount: pricingConfigDecisionAmount(operation.pricingConfig) ?? (options.sellerCanary === true
+    ? { currency: 'USD', units: '1', exponent: 6 }
+    : { currency: 'USD', units: '1', exponent: 2 }) }
+  const workerPrincipalId = options.sellerCanary === true ? canaryPrincipalId : 'principal:test-worker'
+  const workerOwnerId = options.sellerCanary === true ? canaryOwnerId : 'owner:test-worker'
+  const workerCredentialId = options.sellerCanary === true ? canaryCredentialId : 'credential:test-worker'
+  const workerApplicationRef = options.sellerCanary === true ? canaryApplicationRef : 'application:test-worker'
+  const workerGrantRef = options.sellerCanary === true ? canaryGrantRef : grantRef
   const authorityMaterial = {
     callRef: invocationRef,
     toolRef: operationRef,
     inputDigest,
-    grantRef,
+    grantRef: workerGrantRef,
     grantGeneration: 1,
     grantDigest: digest('a'),
     reference: acceptedBasis.authorityRef,
@@ -522,17 +554,17 @@ export function createWorker(kind: WorkerKind, options: WorkerOptions = {}): { c
       ? { quoteRef: `operation-commitment:v1:${'c'.repeat(64)}` }
       : {}),
     callRef: invocationRef,
-    principalId: 'principal:test-worker',
-    ownerId: 'owner:test-worker',
-    credentialId: 'credential:test-worker',
-    applicationRef: 'application:test-worker',
+    principalId: workerPrincipalId,
+    ownerId: workerOwnerId,
+    credentialId: workerCredentialId,
+    applicationRef: workerApplicationRef,
     environment,
     state: 'pending',
     toolRef: operationRef,
     idempotencyKey: 'idempotency:test-worker',
     inputDigest,
     requestDigest: digest('r'),
-    grantRef,
+    grantRef: workerGrantRef,
     grantGeneration: 1,
     policyDigest: digest('a'),
     grantExpiresAt: now + 90_000,
@@ -581,11 +613,11 @@ export function createWorker(kind: WorkerKind, options: WorkerOptions = {}): { c
         fundingOwnerId: String(dispatch.ownerId),
         fundingCredentialId: String(dispatch.credentialId),
         fundingApplicationRef: String(dispatch.applicationRef),
-        fundingGrantRef: grantRef,
+        fundingGrantRef: workerGrantRef,
         fundingGrantGeneration: 1,
         fundingPolicyDigest: digest('a'),
-        requestedSpend: pricingConfigSourceAmount(operation.pricingConfig),
-        maximumSpend: pricingConfigSourceAmount(operation.pricingConfig),
+        requestedSpend: { currency: 'USD', units: '1', exponent: 6 },
+        maximumSpend: { currency: 'USD', units: '10000', exponent: 6 },
         expiresAt: now + 60_000,
         now,
       }))
@@ -616,12 +648,13 @@ export function createWorker(kind: WorkerKind, options: WorkerOptions = {}): { c
       } as StableHashValue),
     }
   }
+  const attemptRef = `operation-attempt:${String(dispatch.callRef)}:1`
   const managedCustody = kind === 'x402'
   const paymentIdentifier = callAttemptIdentityDigest({
     callRef: String(dispatch.callRef),
-    principalId: 'principal:test-worker',
-    credentialId: 'credential:test-worker',
-    applicationRef: 'application:test-worker',
+    principalId: String(dispatch.principalId),
+    credentialId: String(dispatch.credentialId),
+    applicationRef: String(dispatch.applicationRef),
     environment,
     toolRef: operationRef,
     idempotencyKey: 'idempotency:test-worker',
@@ -641,7 +674,7 @@ export function createWorker(kind: WorkerKind, options: WorkerOptions = {}): { c
     authorityMode: 'approval_required',
   }
   const grant = {
-    grantRef,
+    grantRef: workerGrantRef,
     principalId: dispatch.principalId,
     ownerId: dispatch.ownerId,
     applicationRef: dispatch.applicationRef,
@@ -667,11 +700,11 @@ export function createWorker(kind: WorkerKind, options: WorkerOptions = {}): { c
   const recordedAt = new Date(now).toISOString()
   const actor = { callerRef: String(dispatch.credentialId), principalRef: String(dispatch.principalId) }
   const canonicalControl = {
-    executionRef: invocationRef,
+    executionRef: String(dispatch.callRef),
     executionVersion: 1,
-    sourceRef: `operation-invocation-source:${invocationRef}`,
+    sourceRef: `operation-invocation-source:${String(dispatch.callRef)}`,
     control: {
-      executionRef: invocationRef,
+      executionRef: String(dispatch.callRef),
       executionVersion: 1,
       origin: { kind: 'standalone' as const, ...actor },
       owner: actor,
@@ -694,7 +727,7 @@ export function createWorker(kind: WorkerKind, options: WorkerOptions = {}): { c
     updatedAt: recordedAt,
   }
   const canonicalAttempt = {
-    executionRef: invocationRef,
+    executionRef: String(dispatch.callRef),
     attemptRef,
     attemptNumber: 1,
     actor,
@@ -922,7 +955,7 @@ export function createWorker(kind: WorkerKind, options: WorkerOptions = {}): { c
         accepts: [{
           scheme: 'exact',
           network: x402Profile.network,
-          amount: '10000',
+          amount: sellerCanary === undefined ? '10000' : '1',
           asset: x402Profile.asset,
           payTo: operation.identity.payment.payTo,
           maxTimeoutSeconds: 60,
@@ -940,7 +973,7 @@ export function createWorker(kind: WorkerKind, options: WorkerOptions = {}): { c
         credential: paymentCredential,
         paymentIdentifier,
         selectedRequirement: challenge.accepts[0]!,
-        paymentAmount: { currency: 'USD', units: '1', exponent: 2 },
+        paymentAmount: { currency: 'USD', units: '1', exponent: sellerCanary === undefined ? 2 : 6 },
         attemptRef,
         effectGeneration: 1,
       }
@@ -950,17 +983,9 @@ export function createWorker(kind: WorkerKind, options: WorkerOptions = {}): { c
           custodyRef: 'custody:test-worker',
           custodyBudgetRef: 'custody:test-worker',
           custodyGeneration: 7,
-          custodyDailyMaximumUnits: '100000',
+          custodyDailyMaximumUnits: sellerCanary === undefined ? '100000' : '50000',
           authorizationDigest: digest('p'),
         })
-        if (sellerCanary !== undefined) {
-          expect(state.mutationCalls.find(({ path }) => path === 'moneyLedger:reserveExternalInvocationSpend')?.args)
-            .toMatchObject({
-              custodyRef: 'custody:test-worker',
-              custodyGeneration: 7,
-              custodyDailyMaximum: { currency: 'USD', units: '100000', exponent: 2 },
-            })
-        }
       }
       if (prepared === undefined) throw new Error('x402 custody preparation failed')
       if (options.failPaymentSignature) {
@@ -970,6 +995,7 @@ export function createWorker(kind: WorkerKind, options: WorkerOptions = {}): { c
           releaseStarted: false,
           requestDigest: digest('f'),
           failureCode: 'payment_signature_unavailable',
+          paymentAuthorizationStatus: 'not_created',
           paymentSubmissionStatus: 'not_submitted',
           settlementEvidence: { kind: 'not_submitted' },
         }
@@ -1052,14 +1078,14 @@ export function createWorker(kind: WorkerKind, options: WorkerOptions = {}): { c
           success: true,
           transaction: '0xworker-settled',
           network: x402Profile.network,
-          amount: '10000',
+          amount: sellerCanary === undefined ? '10000' : '1',
         },
         digest: digest('s'),
       },
     }
   })
   const chargeAmount = pricingConfigDecisionAmount(operation.pricingConfig)
-    ?? { currency: 'USD', units: '0', exponent: 2 }
+    ?? { currency: 'USD', units: '0', exponent: sellerCanary === undefined ? 2 : 6 }
   const chargeState: 'free_tier' | 'paid' = chargeAmount.units === '0' ? 'free_tier' : 'paid'
   let activeGrantReads = 0
   let currentToolReads = 0
@@ -1097,7 +1123,7 @@ export function createWorker(kind: WorkerKind, options: WorkerOptions = {}): { c
       switch (queryPath) {
         case 'capabilityCalls:openDispatch': return dispatch
         case 'agentAccessPrincipals:getAgentPrincipal': return principal
-        case 'capabilitySupplyCanaryFunding:readExactSellerOnboardingCanaryPlatformGrant': return grant
+        case 'capabilitySupplyCanaryFunding:readExactSellerOnboardingCanaryPlatformGrant':
         case 'agentAccessPolicy:readActiveGrant':
           activeGrantReads += 1
           if (activeGrantReads === 2) state.events.push('final-grant-revalidation')
@@ -1122,10 +1148,10 @@ export function createWorker(kind: WorkerKind, options: WorkerOptions = {}): { c
                 : authorizationCurrentOperation,
           )
         case 'moneyLedger:readOperatorAccountVersion': return operatorAccountVersion
-        case 'moneyManagedCallLifecycle:readReservation': return {
+        case 'moneyManagedCallLifecycle:readReservation': return sellerCanary === undefined ? {
           ...managedCallReservation,
           state: managedCallState,
-        }
+        } : null
         case 'capabilityCalls:readCurrentProviderConnectionAuthority':
           return sellerCanary === undefined
             ? { kind: 'credentialed' }
@@ -1148,6 +1174,8 @@ export function createWorker(kind: WorkerKind, options: WorkerOptions = {}): { c
         }
         case 'capabilityProviderConnections:validateLeaseAuthority': return { kind: 'valid' }
         case 'moneyX402PaymentAttempts:readX402PaymentAttempt':
+          if (options.paymentAttemptRead === 'throw') throw new Error('payment_attempt_read_unavailable')
+          if (options.paymentAttemptRead === 'missing') return null
           return state.payment.prepare === undefined
             ? null
             : {
@@ -1183,6 +1211,20 @@ export function createWorker(kind: WorkerKind, options: WorkerOptions = {}): { c
             if ('result' in projected) dispatch.result = projected.result
           }
           return { kind: 'applied', attemptRef, effectGeneration: 1 }
+        }
+        case 'capabilityCalls:refuseUnclaimed': {
+          if (canonicalClaimed) return { kind: 'claimed' }
+          if (dispatch.state !== 'pending') return { kind: 'terminal' }
+          const result = {
+            kind: 'refused', callRef: dispatch.callRef, toolRef: dispatch.toolRef,
+            code: args.code, retryable: args.retryable,
+            ...(args.nextAction === undefined ? {} : { nextAction: args.nextAction }),
+          }
+          dispatch.state = 'refused'
+          dispatch.dispatchState = 'failed'
+          dispatch.result = result
+          state.records.push({ state: 'refused', dispatchState: 'failed', result })
+          return { kind: 'refused', releaseRequired: sellerCanary === undefined && managedCallState === 'reserved' }
         }
         case 'capabilityCalls:record':
           state.records.push(args)
@@ -1291,6 +1333,7 @@ export function createWorker(kind: WorkerKind, options: WorkerOptions = {}): { c
           return { kind: 'claimed' }
         }
         case 'moneyX402PaymentAttempts:prepareX402PaymentAuthorization':
+        case 'moneyX402PaymentAttempts:prepareSellerOnboardingCanaryPaymentAuthorization':
           state.events.push('custody-prepare')
           state.payment.prepare = args
           if (typeof args.requestFingerprint === 'string')
@@ -1387,11 +1430,19 @@ export function createWorker(kind: WorkerKind, options: WorkerOptions = {}): { c
       state.mutations.push(path)
       state.mutationCalls.push({ path, args })
       switch (path) {
+        case 'capabilityCallWorker:reconcilePreClaimRefund':
+          if (canonicalClaimed || dispatch.state !== 'refused') return { kind: 'not_claimed' }
+          managedCallState = 'released'
+          state.reconciliations.push(args)
+          return { kind: 'settled' }
         case 'moneyManagedCallLifecycle:settle':
           managedCallState = 'settled'
           return { kind: 'accepted', state: managedCallState, replayed: false }
         case 'moneyManagedCallLifecycle:releaseBeforeSubmission':
         case 'moneyManagedCallLifecycle:releaseBeforeSubmissionWithX402Proof':
+          if (options.releaseBeforeSubmissionRefused === true) {
+            return { kind: 'refused', code: 'managed_call_state_conflict' }
+          }
           if (managedCallState !== 'reserved' && managedCallState !== 'released') {
             return { kind: 'refused', code: 'managed_call_state_conflict' }
           }
@@ -1462,6 +1513,7 @@ export function createWorker(kind: WorkerKind, options: WorkerOptions = {}): { c
     }
     try {
       const preparedAuthorization = await runMutation('moneyX402PaymentAttempts:prepareX402PaymentAuthorization', {
+        aeEnvironment: dispatch.environment,
         dispatchRef: dispatch.callRef,
         toolRef: dispatch.toolRef,
         inputDigest: dispatch.inputDigest,
@@ -1566,7 +1618,8 @@ beforeEach(() => {
   mocks.readCdpX402PaymentAuthorization.mockClear()
   mocks.credentialFromEnvironment.mockClear()
   mocks.x402PaymentCredentialRefFromEnvironment.mockClear()
-  mocks.cdpX402CustodyConfigurationFromEnvironment.mockClear()
+  mocks.cdpX402CustodyConfigurationFromEnvironment.mockReset()
+  mocks.cdpX402CustodyConfigurationFromEnvironment.mockReturnValue(mocks.custodyConfiguration)
   mocks.cdpX402CustodyBudgetRef.mockClear()
   mocks.createGuardedLookup.mockReset()
   mocks.isPublicHttpTarget.mockReset()

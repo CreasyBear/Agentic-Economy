@@ -3,37 +3,18 @@ import {
   claimX402PaymentAuthorizationArgs,
   claimX402PaymentAuthorizationHandler,
   claimX402PaymentAuthorizationReturns,
-  markX402PaymentPossiblySubmittedArgs,
-  markX402PaymentPossiblySubmittedHandler,
-  markX402PaymentPossiblySubmittedReturns,
-  prepareX402PaymentAuthorizationArgs,
-  prepareX402PaymentAuthorizationHandler,
-  prepareX402PaymentAuthorizationReturns,
-  recordX402PaymentSignatureDigestArgs,
-  recordX402PaymentSignatureDigestHandler,
-  recordX402PaymentSignatureDigestReturns,
-  recordX402PaymentAuthorizationFailureArgs,
-  recordX402PaymentAuthorizationFailureHandler,
-  recordX402PaymentAuthorizationFailureReturns,
-  recordX402PaymentSigningIntentArgs,
-  recordX402PaymentSigningIntentHandler,
-  recordX402PaymentSigningIntentReturns,
-} from './moneyX402PaymentAuthorization'
-import {
-  observeX402PaymentAttemptArgs,
-  observeX402PaymentAttemptHandler,
-  observeX402PaymentAttemptReturns,
-  recordX402PaymentObservationArgs,
-  recordX402PaymentObservationHandler,
-  recordX402PaymentObservationReturns,
-  reconcileX402PaymentAttemptArgs,
-  reconcileX402PaymentAttemptHandler,
-  reconcileX402PaymentAttemptReturns,
-} from './moneyX402PaymentObservation'
-import {
   listExpiredPreparedX402PaymentAttemptsArgs,
   listExpiredPreparedX402PaymentAttemptsHandler,
   listExpiredPreparedX402PaymentAttemptsReturns,
+  markX402PaymentPossiblySubmittedArgs,
+  markX402PaymentPossiblySubmittedHandler,
+  markX402PaymentPossiblySubmittedReturns,
+  observeX402PaymentAttemptArgs,
+  observeX402PaymentAttemptHandler,
+  observeX402PaymentAttemptReturns,
+  prepareX402PaymentAuthorizationArgs,
+  prepareX402PaymentAuthorizationHandler,
+  prepareX402PaymentAuthorizationReturns,
   readX402PaymentAttemptArgs,
   readX402PaymentAttemptHandler,
   readX402PaymentAttemptReturns,
@@ -43,8 +24,31 @@ import {
   readX402PaymentAuthorizationByDigestReturns,
   readX402PaymentAuthorizationHandler,
   readX402PaymentAuthorizationReturns,
-} from './moneyX402PaymentRead'
+  reconcileX402PaymentAttemptArgs,
+  reconcileX402PaymentAttemptHandler,
+  reconcileX402PaymentAttemptReturns,
+  recordX402PaymentAuthorizationFailureArgs,
+  recordX402PaymentAuthorizationFailureHandler,
+  recordX402PaymentAuthorizationFailureReturns,
+  recordX402PaymentObservationArgs,
+  recordX402PaymentObservationHandler,
+  recordX402PaymentObservationReturns,
+  recordX402PaymentSignatureDigestArgs,
+  recordX402PaymentSignatureDigestHandler,
+  recordX402PaymentSignatureDigestReturns,
+  recordX402PaymentSigningIntentArgs,
+  recordX402PaymentSigningIntentHandler,
+  recordX402PaymentSigningIntentReturns,
+} from './lib/x402PaymentAttempt'
+import { prepareSellerOnboardingCanaryPaymentAuthorizationHandler } from './lib/x402PaymentAttemptCanary'
 import { persistedCallAuthorityIsCurrent } from './moneyBillingAuthorization'
+
+/** Platform validation uses the same durable signing attempt, without a buyer reservation. */
+export const prepareSellerOnboardingCanaryPaymentAuthorization = internalMutation({
+  args: prepareX402PaymentAuthorizationArgs,
+  returns: prepareX402PaymentAuthorizationReturns,
+  handler: prepareSellerOnboardingCanaryPaymentAuthorizationHandler,
+})
 
 export const prepareX402PaymentAuthorization = internalMutation({
   args: prepareX402PaymentAuthorizationArgs,

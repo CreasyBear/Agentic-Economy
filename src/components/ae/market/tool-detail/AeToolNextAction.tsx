@@ -2,7 +2,7 @@ import { Link } from '@tanstack/react-router'
 
 import { AeCopyCommand } from '@/components/ae/data/AeCopyCommand'
 import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
+import { buttonVariants } from '@/components/ui/button-variants'
 import {
   Card,
   CardContent,
@@ -54,9 +54,12 @@ export function AeToolNextAction({
         </dl>
 
         {nextAction.kind === 'navigate' && nextAction.href !== undefined ? (
-          <Button asChild variant="secondary" className="min-h-touch w-full">
-            <Link to={nextAction.href}>{nextAction.label}</Link>
-          </Button>
+          <Link
+            to={nextAction.href}
+            className={cn(buttonVariants({ variant: 'secondary' }), 'min-h-touch w-full')}
+          >
+            {nextAction.label}
+          </Link>
         ) : code !== undefined ? (
           <AeCopyCommand
             comfortable
@@ -66,9 +69,22 @@ export function AeToolNextAction({
           />
         ) : null}
 
-        <p className="text-xs leading-5 text-background/55">
-          Your agent confirms exact price, authority, balance, and availability through tool.quote before it can call.
-        </p>
+        {nextAction.label === 'Tool reference' ? (
+          <div className="grid gap-3">
+            <p className="text-xs leading-5 text-background/75">
+              Your agent confirms the exact buyer amount in AUD, authority, balance, and availability through tool.quote before it can Call.
+            </p>
+            <a
+              href={agentSetupHref(model.toolRef)}
+              className={cn(
+                buttonVariants({ variant: 'outline' }),
+                'min-h-touch w-full border-background/30 bg-transparent text-background hover:bg-background/10 hover:text-background',
+              )}
+            >
+              Connect an Agent first
+            </a>
+          </div>
+        ) : null}
       </aside>
     )
   }
@@ -84,15 +100,14 @@ export function AeToolNextAction({
         </CardTitle>
         <CardDescription>{model.nextActionDescription}</CardDescription>
       </CardHeader>
-      <CardContent>
+      <CardContent className="grid gap-3">
         {nextAction.kind === 'navigate' && nextAction.href !== undefined ? (
-          <Button
-            asChild
-            size="sm"
-            className="min-h-touch"
+          <Link
+            to={nextAction.href}
+            className={cn(buttonVariants({ size: 'sm' }), 'min-h-touch')}
           >
-            <Link to={nextAction.href}>{nextAction.label}</Link>
-          </Button>
+            {nextAction.label}
+          </Link>
         ) : code !== undefined ? (
           <AeCopyCommand
             compact
@@ -100,9 +115,21 @@ export function AeToolNextAction({
             code={code}
           />
         ) : null}
+        {nextAction.label === 'Tool reference' ? (
+          <a
+            href={agentSetupHref(model.toolRef)}
+            className={cn(buttonVariants({ variant: 'outline', size: 'sm' }), 'min-h-touch')}
+          >
+            Connect an Agent first
+          </a>
+        ) : null}
       </CardContent>
     </Card>
   )
+}
+
+function agentSetupHref(toolRef: string): string {
+  return `/agent-access?resumeTool=${encodeURIComponent(toolRef)}`
 }
 
 function TicketFact({
@@ -113,7 +140,7 @@ function TicketFact({
 }: Readonly<{ label: string; value: string; mono?: boolean; className?: string }>) {
   return (
     <div className={cn('grid min-w-0 gap-1 py-3', className)}>
-      <dt className="text-xs font-medium text-background/55">
+      <dt className="text-xs font-medium text-background/75">
         {label}
       </dt>
       <dd className={cn(

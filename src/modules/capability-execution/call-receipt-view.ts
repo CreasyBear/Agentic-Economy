@@ -4,6 +4,7 @@ import type {
   CallUsageSummary,
 } from './call-contracts'
 import type { CallStatusResult } from './call-recovery-contracts'
+import type { PurchaseResolutionRecord } from './purchase-resolution'
 import type { JsonValue } from '@/modules/capability-contract/public'
 
 export type PublicCallStatusRead = CallStatusResult | Readonly<{
@@ -50,7 +51,20 @@ export type CallReceiptView = Readonly<{
   resultKind?: CallResult['kind']
   evidenceHash?: string
   issue?: CallIssueView
+  purchaseResolution?: PurchaseResolutionRecord
   complete: boolean
+}>
+
+export type BuyerCallPurchaseStatus = Readonly<{
+  kind: 'pending' | 'uncertain' | 'delivered' | 'refunded' | 'failed'
+  label: 'Open — pending' | 'Open — outcome uncertain' | 'Resolved — delivered' | 'Resolved — refunded' | 'Resolved — failed'
+  attention: boolean
+}>
+
+export type BuyerCallSummaryFacts = Readonly<{
+  state: 'completed' | 'refused' | 'outcome_unknown'
+  deliveryState: 'delivered' | 'not_delivered' | 'unknown'
+  paymentState: 'settled' | 'released' | 'unknown' | 'not_applicable'
 }>
 
 const stageLabels: Readonly<Record<CallReceiptStageId, string>> = {
@@ -72,10 +86,10 @@ export function projectCallReceipt(input: PublicCallStatusRead): CallReceiptView
       stages: pendingStages('No stage is claimed while the receipt source is unavailable.'),
       issue: {
         title: 'The receipt could not be read',
-        whatHappened: 'Agentic Economy could not read the current owner-scoped Call record.',
-        moneyMovement: 'No money movement can be determined from this unavailable record.',
-        automaticNext: 'No automatic retry or replacement Call has been started.',
-        userNext: 'Reload this same receipt. Do not create a new Call while the outcome is unknown.',
+        whatHappened: 'Agentic Economy could not read the current owner-scoped Call record for this reference.',
+        moneyMovement: 'Money movement cannot be confirmed while this receipt is unavailable. Do not assume A$0.00 or a charge.',
+        automaticNext: 'No duplicate charge and no automatic retry.',
+        userNext: 'Wait, then Try again on this same receipt. Do not start a new Call while the outcome is unknown.',
         retainedReference: input.callRef,
       },
       complete: false,
@@ -95,8 +109,8 @@ export function projectCallReceipt(input: PublicCallStatusRead): CallReceiptView
         title: 'The receipt request was refused',
         whatHappened: refusalExplanation(input.code),
         moneyMovement: moneyMovement(undefined, receipt),
-        automaticNext: 'No automatic retry or replacement Call has been started.',
-        userNext: input.nextAction ?? (input.retryable ? 'Retry this same owner-scoped status read.' : 'Keep the reference and contact the owner or operator.'),
+        automaticNext: 'No duplicate charge and no automatic retry.',
+        userNext: input.nextAction ?? (input.retryable ? 'Wait, then Try again on this same receipt.' : 'Keep this reference and contact the owner or operator.'),
         retainedReference: input.callRef,
       },
       complete: false,
@@ -120,6 +134,7 @@ export function projectCallReceipt(input: PublicCallStatusRead): CallReceiptView
   const usage = input.usage ?? (result?.kind === 'completed' ? result.usage : undefined)
   const completed = result?.kind === 'completed'
   const issue = issueFromFound(input, result, usage, receipt)
+  const purchaseResolution = input.purchaseResolution
   return {
     version: 'ae.public-invocation-receipt:v1',
     callRef: input.callRef,
@@ -133,6 +148,7 @@ export function projectCallReceipt(input: PublicCallStatusRead): CallReceiptView
     ...(result === undefined ? {} : { resultKind: result.kind }),
     ...(input.evidenceHash === undefined ? {} : { evidenceHash: input.evidenceHash }),
     ...(issue === undefined ? {} : { issue }),
+    ...(purchaseResolution === undefined ? {} : { purchaseResolution }),
     complete: completed,
   }
 }
@@ -142,20 +158,54 @@ export function projectCallReceipt(input: PublicCallStatusRead): CallReceiptView
  * presentation only; it does not add a purchase record or state machine.
  */
 export function purchaseStatusLabel(input: Extract<CallStatusResult, { kind: 'found' }>): string {
+  return projectFoundCallPurchaseStatus(input).label
+}
+
+export function projectFoundCallPurchaseStatus(
+  input: Extract<CallStatusResult, { kind: 'found' }>,
+): BuyerCallPurchaseStatus {
   const receipt = input.receipt ?? (input.result !== undefined && 'receipt' in input.result ? input.result.receipt : undefined)
   const usage = input.usage ?? (input.result?.kind === 'completed' ? input.result.usage : undefined)
   if (input.state === 'reconciliation_required'
     || input.result?.kind === 'reconciliation_required'
     || usage?.chargeState === 'outcome_unknown'
-    || receipt?.state === 'reconciliation_required') return 'Open — outcome uncertain'
+    || receipt?.state === 'reconciliation_required') return buyerPurchaseStatus('uncertain')
   if (receipt?.state === 'refunded' || receipt?.refundState === 'released' || usage?.chargeState === 'refunded') {
-    return 'Resolved — refunded'
+    return buyerPurchaseStatus('refunded')
   }
-  if (input.result?.kind === 'completed') return 'Resolved — delivered'
+  if (input.result?.kind === 'completed') return buyerPurchaseStatus('delivered')
   if (input.state === 'terminal' || input.state === 'cancelled' || input.state === 'invalidated' || input.result?.kind === 'refused') {
-    return 'Resolved — failed'
+    return buyerPurchaseStatus('failed')
   }
-  return 'Open — pending'
+  return buyerPurchaseStatus('pending')
+}
+
+/**
+ * Uses only the coarser Account Calls projection. Contradictory or unknown
+ * delivery/payment facts stay open instead of being smoothed into resolution.
+ */
+export function projectCallSummaryPurchaseStatus(input: BuyerCallSummaryFacts): BuyerCallPurchaseStatus {
+  if (input.state === 'outcome_unknown'
+    || input.deliveryState === 'unknown'
+    || input.paymentState === 'unknown') return buyerPurchaseStatus('uncertain')
+  if (input.paymentState === 'released') return buyerPurchaseStatus('refunded')
+  if (input.state === 'completed'
+    && input.deliveryState === 'delivered'
+    && (input.paymentState === 'settled' || input.paymentState === 'not_applicable')) {
+    return buyerPurchaseStatus('delivered')
+  }
+  if (input.state === 'refused'
+    && input.deliveryState === 'not_delivered'
+    && input.paymentState === 'not_applicable') return buyerPurchaseStatus('failed')
+  return buyerPurchaseStatus('uncertain')
+}
+
+function buyerPurchaseStatus(kind: BuyerCallPurchaseStatus['kind']): BuyerCallPurchaseStatus {
+  if (kind === 'pending') return { kind, label: 'Open — pending', attention: false }
+  if (kind === 'uncertain') return { kind, label: 'Open — outcome uncertain', attention: true }
+  if (kind === 'delivered') return { kind, label: 'Resolved — delivered', attention: false }
+  if (kind === 'refunded') return { kind, label: 'Resolved — refunded', attention: false }
+  return { kind, label: 'Resolved — failed', attention: false }
 }
 
 /** Derives the existing outcome evidence posture without reclassifying money or delivery facts. */
@@ -231,17 +281,18 @@ function issueFromFound(
   const next = result?.kind === 'refused' && result.nextAction !== undefined
     ? result.nextAction
     : input.state === 'reconciliation_required' || result?.kind === 'reconciliation_required'
-      ? 'Submit evidence for this same Call before any retry.'
+      ? 'Submit reconciliation evidence for this Call before any retry.'
       : input.state === 'retryable'
-        ? 'Refresh this receipt, then retry only if the current status permits it.'
-        : 'Keep this receipt reference; start a new call only from the Tool page with fresh input and identity.'
+        ? 'Wait, then Try again on this same receipt.'
+        : 'Keep this receipt reference; start a new Call only from the Tool page with fresh input and identity.'
+
   return {
-    title: issueTitle(code),
+    title: issueTitle(normalizeDiagnosticCode(code)),
     whatHappened: foundIssueExplanation(code),
     moneyMovement: moneyMovement(usage, receipt),
     automaticNext: input.state === 'retryable'
       ? 'The original Call remains available for an explicit safe retry; no replacement Call was created.'
-      : 'No automatic retry or replacement Call has been started.',
+      : 'No duplicate charge and no automatic retry.',
     userNext: next,
     retainedReference: input.callRef,
   }
@@ -249,19 +300,31 @@ function issueFromFound(
 
 function moneyMovement(usage: CallUsageSummary | undefined, receipt: CallReceipt | undefined): string {
   if (receipt?.state === 'reconciliation_required' || usage?.chargeState === 'outcome_unknown') {
-    return 'Money movement is not yet conclusive; reconciliation is required.'
+    return 'Money movement is not yet conclusive — do not assume a charge or refund.'
   }
   if (receipt?.state === 'refunded' || usage?.chargeState === 'refunded') {
     return receipt?.refundState === 'released'
-      ? 'The receipt records that the reserved authorization was released.'
-      : 'A refund is recorded; consult the exact post-call money facts below.'
+      ? 'Reserved credit was released back to your balance.'
+      : 'A refund is recorded — reserved credit was returned to your prepaid balance.'
   }
   if (usage?.chargeState === 'paid' || receipt?.state === 'settled') {
     return 'Settlement is recorded; consult the exact post-call amount below.'
   }
-  if (usage?.chargeState === 'free_tier') return 'The Call is recorded as free tier; no paid amount was charged.'
-  if (usage?.chargeState === 'insufficient_credit') return 'No settled charge is recorded; the Call encountered insufficient credit.'
-  return 'No money movement is recorded in the available receipt facts.'
+  if (usage?.chargeState === 'free_tier') {
+    return 'A$0.00 charged — this Call used the free tier. Your prepaid balance is unaffected.'
+  }
+  if (usage?.chargeState === 'insufficient_credit') {
+    return 'A$0.00 charged — your prepaid balance is unaffected.'
+  }
+  return 'A$0.00 charged — your prepaid balance is unaffected.'
+}
+
+function normalizeDiagnosticCode(code: string): string {
+  if (code === 'insufficient_funds' || code === 'insufficient_credit') return 'insufficient_balance'
+  if (code === 'rate_limit_exceeded') return 'rate_limited'
+  if (code === 'operation_not_found') return 'tool_not_found'
+  if (code === 'parameter_invalid') return 'input_invalid'
+  return code
 }
 
 function stage(id: CallReceiptStageId, state: CallReceiptStageState, detail: string): CallReceiptStageView {
@@ -354,33 +417,83 @@ function refusalLabel(code: string): string {
 }
 
 function refusalExplanation(code: string): string {
-  if (code === 'invocation_not_found') return 'No owner-visible Call was found for this reference, or the current viewer is not its owner.'
-  if (code === 'environment_mismatch') return 'The caller credential belongs to a different runtime environment from this Call.'
-  if (code === 'grant_revoked') return 'The access grant used for this Call has been revoked.'
-  if (code === 'grant_expired') return 'The access grant used for this Call has expired.'
-  if (code === 'grant_generation_stale') return 'The access grant changed after this Call was created.'
-  if (code === 'invocation_runtime_unavailable') return 'The Call runtime could not answer the status read.'
-  return `The receipt read was refused with ${humanize(code)}.`
+  const normalized = normalizeDiagnosticCode(code)
+  if (normalized === 'invocation_not_found') {
+    return 'No owner-visible Call was found for this reference, or the current viewer is not its owner.'
+  }
+  if (normalized === 'environment_mismatch') {
+    return 'The caller credential belongs to a different runtime environment from this Call.'
+  }
+  if (normalized === 'grant_revoked') return 'The access grant used for this Call has been revoked.'
+  if (normalized === 'grant_expired') return 'The access grant used for this Call has expired.'
+  if (normalized === 'grant_generation_stale') return 'The access grant changed after this Call was created.'
+  if (normalized === 'invocation_runtime_unavailable') return 'The Call runtime could not answer the status read.'
+  if (normalized === 'insufficient_balance') {
+    return 'This Call could not proceed because prepaid credit was insufficient for the quoted amount.'
+  }
+  if (normalized === 'tool_not_found') return 'The Tool referenced by this Call is not available to the current owner.'
+  if (normalized === 'rate_limited') {
+    return 'The provider endpoint rejected this request because call volume or concurrency limits were exceeded.'
+  }
+  if (normalized === 'input_invalid') {
+    return 'The arguments sent to the Tool did not match the published input schema.'
+  }
+  if (normalized === 'provider_timeout' || normalized === 'upstream_timeout' || normalized === 'gateway_timeout') {
+    return 'The provider endpoint did not respond within the maximum execution window.'
+  }
+  return 'The receipt read was refused before any execution state could be claimed.'
 }
 
 function issueTitle(code: string): string {
-  if (code === 'reconciliation_required') return 'The external outcome needs reconciliation'
-  if (code === 'retryable') return 'The Call can be retried safely'
-  if (code === 'cancelled') return 'The Call was cancelled'
-  if (code === 'invalidated') return 'The Call is no longer valid'
-  if (code === 'provider_output_invalid') return 'The provider output was invalid'
-  if (code === 'terminal') return 'The Call ended without a completed result'
+  const normalized = normalizeDiagnosticCode(code)
+  if (normalized === 'reconciliation_required') return 'The external outcome needs reconciliation'
+  if (normalized === 'retryable') return 'The Call can be retried safely'
+  if (normalized === 'cancelled') return 'The Call was cancelled'
+  if (normalized === 'invalidated') return 'The Call is no longer valid'
+  if (normalized === 'provider_output_invalid') return 'The provider output was invalid'
+  if (normalized === 'provider_timeout' || normalized === 'upstream_timeout' || normalized === 'gateway_timeout') {
+    return 'Provider timed out'
+  }
+  if (normalized === 'rate_limited' || normalized === 'provider_rate_limited') return 'Provider rate limit exceeded'
+  if (normalized === 'input_invalid' || normalized === 'schema_mismatch' || normalized === 'input_schema_invalid') {
+    return 'Tool argument schema mismatch'
+  }
+  if (normalized === 'insufficient_balance') return 'Insufficient prepaid credit'
+  if (normalized === 'tool_not_found') return 'Tool not found'
+  if (normalized === 'terminal') return 'The Call ended without a completed result'
   return 'The Call did not complete'
 }
 
 function foundIssueExplanation(code: string): string {
-  if (code === 'reconciliation_required') return 'The provider boundary may have been crossed, but the final external outcome is not conclusive.'
-  if (code === 'retryable') return 'The recorded attempt did not complete and the same Call is eligible for an explicit safe retry.'
-  if (code === 'cancelled') return 'Cancellation was recorded before a completed result.'
-  if (code === 'invalidated') return 'The Call can no longer continue under its recorded authority or generation.'
-  if (code === 'provider_output_invalid') return 'The provider returned data that did not satisfy the Tool output contract.'
-  if (code === 'terminal') return 'The Call reached a terminal state, but no canonical completed result is recorded.'
-  return `The Call ended with ${humanize(code)} and no completed result is claimed.`
+  const normalized = normalizeDiagnosticCode(code)
+  if (normalized === 'reconciliation_required') {
+    return 'The provider boundary may have been crossed, but the final external outcome is not conclusive.'
+  }
+  if (normalized === 'retryable') {
+    return 'The recorded attempt did not complete and the same Call is eligible for an explicit safe retry.'
+  }
+  if (normalized === 'cancelled') return 'Cancellation was recorded before a completed result.'
+  if (normalized === 'invalidated') return 'The Call can no longer continue under its recorded authority or generation.'
+  if (normalized === 'provider_output_invalid') {
+    return 'The provider returned data that did not satisfy the Tool output contract.'
+  }
+  if (normalized === 'provider_timeout' || normalized === 'upstream_timeout' || normalized === 'gateway_timeout') {
+    return 'The provider endpoint did not respond within the maximum execution window. Check endpoint availability, then retry with backoff.'
+  }
+  if (normalized === 'rate_limited' || normalized === 'provider_rate_limited') {
+    return 'The provider endpoint rejected this request because call volume or concurrency limits were exceeded. Reduce call frequency, then retry.'
+  }
+  if (normalized === 'input_invalid' || normalized === 'schema_mismatch' || normalized === 'input_schema_invalid') {
+    return 'The arguments sent to the Tool did not match the published input schema. Check the Tool documentation and update the payload.'
+  }
+  if (normalized === 'insufficient_balance') {
+    return 'This Call stopped because prepaid credit was insufficient for the quoted amount. Add credit before retrying.'
+  }
+  if (normalized === 'tool_not_found') {
+    return 'The Tool referenced by this Call is not available to the current owner.'
+  }
+  if (normalized === 'terminal') return 'The Call reached a terminal state, but no canonical completed result is recorded.'
+  return 'The Call ended before a completed result was recorded.'
 }
 
 function humanize(value: string): string {

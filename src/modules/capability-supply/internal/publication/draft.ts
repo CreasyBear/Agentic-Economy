@@ -6,19 +6,20 @@ import { isCanonicalDigest } from '@/modules/common/canonical-digest'
 import { degradeBackend } from '@/lib/observability/degrade-backend'
 import { stableStringify, type StableHashValue } from '@/modules/common/stable-hash'
 import {
-  admitRegisteredTransport,
   defineCapabilityOfferingRegistration,
   defineCapabilityTransportBindingRegistration,
   type CapabilityOfferingOrigin,
   type CapabilityOfferingRegistration,
+  type CapabilityTransportBindingRegistration,
+} from '../registration-schema'
+import { admitRegisteredTransport, type TransportAdmissionResult } from '../transport-adapters'
+import {
   type CapabilityPublicationBindingDraft,
   type CapabilityPublicationImport,
   type CapabilityPublicationOfferingDraft,
   type CapabilityPublicationSourceSelector,
-  type CapabilityTransportBindingRegistration,
   type CanonicalCapabilityPublicationDraft,
-  type TransportAdmissionResult,
-} from '@/modules/capability-supply/public'
+} from '../publication-importer-types'
 import {
   compareExactAmounts,
   displayPriceFromPricingConfig,

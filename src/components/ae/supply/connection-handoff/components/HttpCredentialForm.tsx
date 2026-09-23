@@ -1,0 +1,58 @@
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+
+import type { HttpCredentialFormProps } from '../connection-handoff.contracts'
+
+export function HttpCredentialForm({
+  sourceOriginLabel,
+  credentialLabel,
+  credential,
+  busy,
+  error,
+  onCredentialChange,
+  onSubmit,
+  onCancel,
+}: HttpCredentialFormProps) {
+  return (
+    <form className="grid max-w-xl gap-5" onSubmit={(event) => void onSubmit(event)}>
+      <div className="grid gap-2">
+        <p className="text-sm text-muted-foreground">
+          Enter the credential for {sourceOriginLabel}. AE stores it in the Provider connection and will not show it again.
+        </p>
+      </div>
+      <div className="grid gap-2">
+        <Label htmlFor="provider-connection-credential">{credentialLabel}</Label>
+        <Input
+          id="provider-connection-credential"
+          type="password"
+          value={credential}
+          autoComplete="off"
+          autoCapitalize="none"
+          spellCheck={false}
+          required
+          maxLength={32_768}
+          disabled={busy}
+          aria-describedby={error === undefined ? undefined : 'provider-connection-error'}
+          aria-invalid={error === undefined ? undefined : true}
+          onChange={(event) => onCredentialChange(event.target.value)}
+        />
+      </div>
+      {error === undefined ? null : (
+        <Alert id="provider-connection-error" variant="destructive" role="alert">
+          <AlertTitle>Provider not connected</AlertTitle>
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
+      )}
+      <div className="flex flex-wrap gap-3">
+        <Button type="submit" disabled={busy || credential.length === 0}>
+          {busy ? 'Connecting…' : 'Connect Provider'}
+        </Button>
+        <Button type="button" variant="secondary" disabled={busy} onClick={() => void onCancel()}>
+          Cancel
+        </Button>
+      </div>
+    </form>
+  )
+}

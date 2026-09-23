@@ -4,8 +4,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => ({
   callPublicSourceAction: vi.fn(),
-  callPublicSourceMutation: vi.fn(),
-  sourceMutation: vi.fn((name: string) => ({ name })),
+  callPublicSourceQuery: vi.fn(),
+  sourceQuery: vi.fn((name: string) => ({ name })),
   sourceWriteAdmissionFromRequest: vi.fn(),
   sourceWriteRequestFromAdmission: vi.fn(),
 }))
@@ -13,8 +13,8 @@ const mocks = vi.hoisted(() => ({
 vi.mock('@/lib/server/convex-source', async (importOriginal) => ({
   ...(await importOriginal<typeof ConvexSourceModule>()),
   callPublicSourceAction: mocks.callPublicSourceAction,
-  callPublicSourceMutation: mocks.callPublicSourceMutation,
-  sourceMutation: mocks.sourceMutation,
+  callPublicSourceQuery: mocks.callPublicSourceQuery,
+  sourceQuery: mocks.sourceQuery,
 }))
 vi.mock('@/lib/server/source-write-admission', async (importOriginal) => ({
   ...(await importOriginal<typeof SourceWriteAdmissionModule>()),
@@ -35,7 +35,7 @@ const principal: AgentAccessPrincipal = {
 describe('account management action service', () => {
   beforeEach(() => {
     mocks.callPublicSourceAction.mockReset()
-    mocks.callPublicSourceMutation.mockReset()
+    mocks.callPublicSourceQuery.mockReset()
     mocks.sourceWriteAdmissionFromRequest.mockReset().mockResolvedValue({ operationKey: 'signed' })
     mocks.sourceWriteRequestFromAdmission.mockReset().mockReturnValue({ method: 'POST' })
   })
@@ -62,7 +62,7 @@ describe('account management action service', () => {
   })
 
   it('projects native pagination without leaking backend pagination metadata', async () => {
-    mocks.callPublicSourceMutation.mockResolvedValue({
+    mocks.callPublicSourceQuery.mockResolvedValue({
       kind: 'available',
       activity: {
         page: [{

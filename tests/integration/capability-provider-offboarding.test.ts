@@ -1,7 +1,7 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { api, internal } from '../../convex/_generated/api'
-import { convexTestWithMarketComponents } from '../helpers/convex-fixtures'
+import { convexTestWithMarketComponents, preloadWorkflowComponentModules } from '../helpers/convex-fixtures'
 import { withSourceWrite } from '../helpers/source-write-admission'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { stableStringify } from '@/modules/common/stable-hash'
@@ -14,6 +14,7 @@ import {
 } from './capability-supply-owner-funnel-harness'
 
 describe('durable Provider offboarding', () => {
+  beforeAll(preloadWorkflowComponentModules)
   beforeEach(() => vi.useFakeTimers())
   afterEach(() => vi.useRealTimers())
 
@@ -149,11 +150,11 @@ describe('durable Provider offboarding', () => {
       operationKey: 'provider-offboarding:agent-status',
       correlationId: 'provider-offboarding:agent-status',
     }
-    await expect(backend.mutation(
+    await expect(backend.query(
       api.capabilityProviderOffboarding.readAgentStatus,
       await withSourceWrite('catalog_publish', { ...readCommand, agentPrincipal: principal }),
     )).resolves.toMatchObject({ kind: 'available', status: { businessRef: String(fixture.businessId) } })
-    await expect(backend.mutation(
+    await expect(backend.query(
       api.capabilityProviderOffboarding.readAgentStatus,
       await withSourceWrite('catalog_publish', { ...readCommand, agentPrincipal: foreignPrincipal }),
     )).resolves.toEqual({ kind: 'not_found' })

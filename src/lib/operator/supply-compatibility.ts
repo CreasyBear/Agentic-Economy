@@ -28,8 +28,8 @@ export function parseOwnerToolsCompatibilitySearch(
 ): OwnerToolsCompatibilitySearch {
   const x402 = parseOwnerToolsX402ConnectionSearch(search)
   if (x402 !== undefined) return x402
-  if ((search.connect === 'return' || search.connect === 'refresh') && Object.keys(search).length === 1) {
-    return { connect: search.connect }
+  if ((search.connect === 'return' || search.connect === 'refresh' || search.onboarding === 'return') && (Object.keys(search).length === 1 || (search.onboarding === 'return' && Object.keys(search).length <= 2))) {
+    return { connect: search.connect === 'refresh' ? 'refresh' : 'return' }
   }
   if (typeof search.rebind === 'string' && isSafeReference(search.rebind) && Object.keys(search).length === 1) {
     return { rebind: search.rebind }

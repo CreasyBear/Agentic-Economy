@@ -2,11 +2,42 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const sdk = vi.hoisted(() => ({ list: vi.fn(), search: vi.fn() }))
 vi.mock('@coinbase/cdp-sdk', async (original) => ({ ...await original<typeof import('@coinbase/cdp-sdk')>(), listX402DiscoveryResources: sdk.list, searchX402Resources: sdk.search }))
-import { fetchCatalogPage } from '../../../convex/capabilityToolCatalog'
+import { fetchCatalogPage, rerank } from '../../../convex/capabilityToolCatalog'
+
+import { serializeToolSearchResult, type ToolSearchWireResult } from '@/modules/capability-supply/public'
+import { ERC20_QUERY, misorderedSearchResult } from '../../helpers/tool-search-rerank-fixtures'
+
+const rerankHandler = (rerank as unknown as { _handler: (ctx: unknown, args: { result: ToolSearchWireResult; query: string }) => Promise<ToolSearchWireResult> })._handler
 
 describe('SDK-backed catalogue discovery', () => {
   beforeEach(() => { vi.clearAllMocks() })
-  afterEach(() => { vi.unstubAllGlobals() })
+  afterEach(() => { vi.unstubAllGlobals(); vi.unstubAllEnvs() })
+
+  it('returns the original wire page without inference when discovery is disabled', async () => {
+    vi.stubEnv('AE_JEV_DISCOVERY_ENABLED', 'false')
+    vi.stubEnv('OPENROUTER_API_KEY', 'sk-or-test')
+    const fetcher = vi.fn<typeof fetch>()
+    vi.stubGlobal('fetch', fetcher)
+    const result = serializeToolSearchResult(misorderedSearchResult(ERC20_QUERY))
+    await expect(rerankHandler(null, { result, query: ERC20_QUERY })).resolves.toEqual(result)
+    expect(fetcher).not.toHaveBeenCalled()
+  })
+
+  it('bounds a remote Node inference attempt even without a caller signal', async () => {
+    vi.stubEnv('OPENROUTER_API_KEY', 'sk-or-test')
+    let signal: AbortSignal | null | undefined
+    const fetcher = vi.fn<typeof fetch>().mockImplementation(async (_url, init) => {
+      signal = init?.signal
+      return new Promise((_resolve, reject) => signal?.addEventListener('abort', () => reject(signal?.reason), { once: true }))
+    })
+    vi.stubGlobal('fetch', fetcher)
+    const result = serializeToolSearchResult(misorderedSearchResult(ERC20_QUERY))
+    const startedAt = Date.now()
+    await expect(rerankHandler(null, { result, query: ERC20_QUERY })).resolves.toEqual(result)
+    expect(Date.now() - startedAt).toBeLessThan(2000)
+    expect(signal?.aborted).toBe(true)
+    expect(fetcher).toHaveBeenCalledTimes(1)
+  })
 
   it('uses Coinbase search and preserves its truncation without inventing a continuation', async () => {
     sdk.search.mockResolvedValue({ resources: [{ resource: 'https://provider.test/tool' }], partialResults: true, x402Version: 2 })

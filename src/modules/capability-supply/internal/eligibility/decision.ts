@@ -1,7 +1,5 @@
 import { isCanonicalDigest } from '@/modules/common/canonical-digest'
-import {
-  capabilitySupplyEligibilityHash,
-} from '@/modules/capability-supply/public'
+import { capabilitySupplyEligibilityHash } from '../registration-schema'
 
 import {
   MAX_CONTEXT_VALUE_LENGTH,

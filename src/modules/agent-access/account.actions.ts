@@ -2,9 +2,9 @@ import { z } from 'zod'
 
 import {
   callPublicSourceAction,
-  callPublicSourceMutation,
+  callPublicSourceQuery,
   sourceAction,
-  sourceMutation,
+  sourceQuery,
 } from '@/lib/server/convex-source'
 import { sourceWriteAdmissionFromRequest, sourceWriteRequestFromAdmission } from '@/lib/server/source-write-admission'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
@@ -139,11 +139,11 @@ export type AccountManagementService = Readonly<{
 }>
 
 const balanceAction = sourceAction<Record<string, unknown>, unknown>('agentMoneyReads:balance')
-const activityMutation = sourceMutation<Record<string, unknown>, unknown>('agentMoneyReads:activity')
+const activityQuery = sourceQuery<Record<string, unknown>, unknown>('agentMoneyReads:activity')
 
 export function createAccountManagementService(request: Request, bodyText: string): AccountManagementService {
-  async function mutate<T>(
-    reference: Parameters<typeof callPublicSourceMutation>[0],
+  async function queryActivity<T>(
+    reference: Parameters<typeof callPublicSourceQuery>[0],
     command: Record<string, unknown>,
     operationKey: string,
     correlationId: string,
@@ -156,7 +156,7 @@ export function createAccountManagementService(request: Request, bodyText: strin
       operationKey,
       correlationId,
     })
-    return await callPublicSourceMutation(reference, {
+    return await callPublicSourceQuery(reference, {
       ...command,
       sourceWriteRequest: sourceWriteRequestFromAdmission(sourceWrite),
       sourceWrite,
@@ -203,7 +203,7 @@ export function createAccountManagementService(request: Request, bodyText: strin
         limit: input.limit,
         correlationId,
       })
-      const result = await mutate<unknown>(activityMutation, {
+      const result = await queryActivity<unknown>(activityQuery, {
         currency: input.currency,
         paginationOpts: {
           numItems: input.limit,

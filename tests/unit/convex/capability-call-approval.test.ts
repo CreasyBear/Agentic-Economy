@@ -287,6 +287,35 @@ function invocation(overrides: Record<string, unknown> = {}): Row {
   }
 }
 
+function acceptedQuote(overrides: Record<string, unknown> = {}): Row {
+  const row = invocation()
+  return {
+    _id: 'capabilityQuotes:approval', quoteRef,
+    state: 'consumed', consumedCallRef: row.callRef,
+    accountRef: row.ownerId, principalId: row.principalId,
+    credentialId: row.credentialId, applicationRef: row.applicationRef,
+    environment: row.environment, grantRef: row.grantRef,
+    grantGeneration: row.grantGeneration, grantPolicyDigest: row.policyDigest,
+    grantExpiresAt: row.grantExpiresAt, toolRef, toolJson: row.toolJson,
+    normalizedInputJson: row.inputJson, inputDigest: row.inputDigest,
+    toolMaterialDigest: operation.materialDigest,
+    toolVersion: operation.identity.publicationRevision,
+    // Accepted AUD consideration deliberately differs from the upstream price.
+    decisionAudUnits: '7654321', expiresAt: now - 1,
+    ...overrides,
+  }
+}
+
+function seedAgentIdentity(db: MemoryDb, overrides: Record<string, unknown> = {}) {
+  db.seed('principals', { _id: 'principals:approval', principalRef: principal.principalId,
+    kind: 'agent', lifecycle: 'active', displayName: 'Research assistant' })
+  db.seed('memberships', { _id: 'memberships:approval', accountRef: owner,
+    memberPrincipalRef: principal.principalId, lifecycle: 'active' })
+  db.seed('agentAccessPrincipals', { _id: 'agentAccessPrincipals:approval',
+    principalId: principal.principalId, ownerId: owner, applicationRef: principal.applicationRef,
+    environment: principal.environment, ...overrides })
+}
+
 function context(options: Readonly<{
   identity?: AuthIdentity | string | null
   invocation?: Row
@@ -350,7 +379,97 @@ describe('capability operation approval Convex handlers', () => {
       expect.objectContaining({ callRef: 'operation-invocation:v1:older', createdAt: 90 }),
     ])
     expect(JSON.stringify(result)).not.toContain('must-not-project')
-    expect((result as Array<Record<string, unknown>>).every((item) => Object.keys(item).sort().join(',') === 'authorityRequest,callRef,createdAt,toolRef')).toBe(true)
+    expect((result as Array<Record<string, unknown>>).every((item) => Object.keys(item).sort().join(',') === 'authorityRequest,callRef,createdAt,decisionContext,toolRef')).toBe(true)
+  })
+
+  it('projects accepted Quote facts after expiry, with current Agent label and explicit unrecorded facts', async () => {
+    const ctx = context({ invocation: invocation() })
+    ctx.db.seed('capabilityQuotes', acceptedQuote())
+    seedAgentIdentity(ctx.db)
+    mocks.readCurrentPublishedTool.mockClear()
+
+    const result = await listHandler(ctx, {})
+
+    expect(result).toMatchObject([{ decisionContext: {
+      agent: { principalRef: principal.principalId, applicationRef: principal.applicationRef, currentDisplayName: 'Research assistant' },
+      purpose: null,
+      acceptedQuote: {
+        kind: 'available', quoteRef,
+        tool: { name: operation.contract.name, description: operation.contract.description },
+        provider: { ref: operation.identity.businessId, name: null },
+        maximumSpend: { currency: 'AUD', units: '7654321', exponent: 6 },
+        dataUse: operation.contract.dataUse, effects: operation.contract.effects,
+      },
+    } }])
+    expect(mocks.readCurrentPublishedTool).not.toHaveBeenCalled()
+    expect(JSON.stringify(result)).not.toContain('inputJson')
+    expect(JSON.stringify(result)).not.toContain('credential:approval')
+    expect(ctx.db.rows('capabilityQuotes')).toEqual([acceptedQuote()])
+  })
+
+  it.each([quoteRef, undefined])('keeps a pending approval visible when its Quote or reference is missing: %s', async (reference) => {
+    const ctx = context({ invocation: invocation({ quoteRef: reference }) })
+    const query = vi.spyOn(ctx.db, 'query')
+    await expect(listHandler(ctx, {})).resolves.toMatchObject([{ decisionContext: {
+      agent: { currentDisplayName: null }, purpose: null,
+      acceptedQuote: { kind: 'unavailable', reason: 'quote_missing' },
+    } }])
+    if (reference === undefined) expect(query).not.toHaveBeenCalledWith('capabilityQuotes')
+  })
+
+  it.each([
+    { state: 'issued' }, { consumedCallRef: 'call:other' }, { accountRef: 'account:other' },
+    { principalId: 'agent:other' }, { credentialId: 'credential:other' }, { applicationRef: 'app:other' },
+    { environment: 'production' }, { grantRef: 'grant:other' }, { grantGeneration: 2 },
+    { grantPolicyDigest: 'sha256:other' }, { grantExpiresAt: grantExpiresAt + 1 },
+    { toolRef: 'tool:other' }, { inputDigest: 'sha256:other' },
+    { normalizedInputJson: '{"secret":"other-account-input"}' }, { toolJson: '{}' },
+  ])('does not project facts from a Quote whose accepted linkage differs: %j', async (overrides) => {
+    const ctx = context({ invocation: invocation() })
+    ctx.db.seed('capabilityQuotes', acceptedQuote(overrides))
+    const result = await listHandler(ctx, {})
+    expect(result).toMatchObject([{ decisionContext: { acceptedQuote: { kind: 'unavailable', reason: 'quote_mismatch' } } }])
+    expect(JSON.stringify(result)).not.toContain('other-account-input')
+  })
+
+  it.each([
+    { decisionAudUnits: '-1' }, { decisionAudUnits: 'NaN' },
+    { toolMaterialDigest: 'sha256:other' }, { toolVersion: operation.identity.publicationRevision + 1 },
+  ])('marks malformed accepted decision material unavailable: %j', async (overrides) => {
+    const ctx = context({ invocation: invocation() })
+    ctx.db.seed('capabilityQuotes', acceptedQuote(overrides))
+    await expect(listHandler(ctx, {})).resolves.toMatchObject([{ decisionContext: {
+      acceptedQuote: { kind: 'unavailable', reason: 'material_invalid' },
+    } }])
+  })
+
+  it('does not endorse an authority request that disagrees with the retained Tool contract', async () => {
+    const ctx = context({ invocation: invocation({ result: {
+      ...needsAuthorityResult(String(invocation().callRef)),
+      authorityRequest: { ...authorityRequest(), dataFields: ['/invented'] },
+    } }) })
+    ctx.db.seed('capabilityQuotes', acceptedQuote())
+    await expect(listHandler(ctx, {})).resolves.toMatchObject([{ decisionContext: {
+      acceptedQuote: { kind: 'unavailable', reason: 'material_invalid' },
+    } }])
+  })
+
+  it.each([{ ownerId: 'account:other' }, { applicationRef: 'app:other' }, { environment: 'production' }])(
+    'does not project another Account or application Agent label: %j', async (overrides) => {
+      const ctx = context({ invocation: invocation() })
+      seedAgentIdentity(ctx.db, overrides)
+      await expect(listHandler(ctx, {})).resolves.toMatchObject([{ decisionContext: { agent: { currentDisplayName: null } } }])
+    },
+  )
+
+  it('removes the current Agent label after membership revocation without replacing accepted Tool facts', async () => {
+    const ctx = context({ invocation: invocation() })
+    ctx.db.seed('capabilityQuotes', acceptedQuote())
+    seedAgentIdentity(ctx.db)
+    await ctx.db.patch('memberships:approval', { lifecycle: 'revoked' })
+    await expect(listHandler(ctx, {})).resolves.toMatchObject([{ decisionContext: {
+      agent: { currentDisplayName: null }, acceptedQuote: { kind: 'available', tool: { name: operation.contract.name } },
+    } }])
   })
 
   it('approves the exact persisted row, dispatches once, and replays approval', async () => {
@@ -443,6 +562,7 @@ describe('capability operation approval Convex handlers', () => {
       inputDigest: nextInputDigest,
       toolJson: JSON.stringify(operation),
       normalizedInputJson: JSON.stringify(nextInput),
+      decisionAudUnits: '0',
     })
     const next = await reserveHandler(ctx, {
       quoteRef,
@@ -462,7 +582,7 @@ describe('capability operation approval Convex handlers', () => {
       grantExpiresAt,
       toolJson: JSON.stringify(operation),
       inputJson: JSON.stringify(nextInput),
-      now: 1_500_000,
+      now: now + 1_000,
     })
     expect(next).toMatchObject({ kind: 'reserved' })
   })
@@ -524,6 +644,8 @@ describe('bounded mandate invocation dispatch', () => {
             return activeGrant
           case 'moneyManagedCall:readBooking':
             return { kind: 'not_required' }
+          case 'moneyMonthlySpendBudget:readOrganizationMonthlySpendBudgetForAccount':
+            return { enabled: false, ceilingUnits: '0' }
           default:
             throw new Error(`unexpected_query:${functionPath(reference)}`)
         }
@@ -617,6 +739,8 @@ describe('invocation admission after an empty pending replay', () => {
             return { toolRef, state: 'pending' }
           case 'moneyManagedCall:readBooking':
             return { kind: 'not_required' }
+          case 'moneyMonthlySpendBudget:readOrganizationMonthlySpendBudgetForAccount':
+            return { enabled: false, ceilingUnits: '0' }
           default:
             throw new Error(`unexpected_query:${functionPath(reference)}`)
         }

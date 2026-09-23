@@ -11,7 +11,7 @@ export type X402ExecutionContext =
     }>
   | Readonly<{
       kind: 'seller_onboarding_canary'
-      paymentProfile: 'base-sepolia-usdc-exact'
+      paymentProfile: 'base-usdc-exact' | 'base-sepolia-usdc-exact'
       canaryRef: string
       canaryCommitmentDigest: string
       fundingBudgetRef: string
@@ -55,9 +55,9 @@ export function economicRailForCall(input: Readonly<{
  * between buyer and provider outside AE's ledger and forfeits all three, so the Operation worker
  * always selects the brokered lane. Non-production keeps the lower-level direct rail admitted for
  * host-parity and provider-conformance tests; it is not a public Operation execution lane.
- * The one managed non-production exception is an explicit seller-onboarding
- * canary on AE sandbox, which maps to CDP's `environment: "development"` and
- * the Base Sepolia profile used by its maintained x402 spend-control example.
+ * The managed exception is an explicit platform-funded seller-onboarding
+ * canary, bound to the exact sandbox or production payment profile selected
+ * by the staged publication.
  */
 export function paymentLaneAdmission(
   input: Readonly<{
@@ -100,7 +100,7 @@ export function paymentLaneAdmission(
     case 'brokered_x402':
       return { kind: 'admitted', lane: 'brokered' }
     case 'managed_testnet_canary':
-      return input.environment === 'sandbox'
+      return (input.environment === 'sandbox' || input.environment === 'production')
         && explicitContext !== undefined
         && resolvedContext?.kind === 'seller_onboarding_canary'
         ? { kind: 'admitted', lane: 'managed_testnet_canary' }
@@ -167,7 +167,6 @@ function x402ExecutionContextForFacts(input: Readonly<{
   }
   if (
     context.kind !== 'seller_onboarding_canary'
-    || input.environment !== 'sandbox'
     || !hasExactKeys(context, [
       'kind',
       'paymentProfile',
@@ -175,7 +174,9 @@ function x402ExecutionContextForFacts(input: Readonly<{
       'canaryCommitmentDigest',
       'fundingBudgetRef',
     ])
-    || context.paymentProfile !== 'base-sepolia-usdc-exact'
+    || context.paymentProfile !== (input.environment === 'production'
+      ? 'base-usdc-exact'
+      : 'base-sepolia-usdc-exact')
     || !boundedRef(context.canaryRef)
     || typeof context.canaryCommitmentDigest !== 'string'
     || !isCanonicalDigest(context.canaryCommitmentDigest)
@@ -183,7 +184,9 @@ function x402ExecutionContextForFacts(input: Readonly<{
   ) return undefined
   return {
     kind: 'seller_onboarding_canary',
-    paymentProfile: 'base-sepolia-usdc-exact',
+    paymentProfile: input.environment === 'production'
+      ? 'base-usdc-exact'
+      : 'base-sepolia-usdc-exact',
     canaryRef: context.canaryRef,
     canaryCommitmentDigest: context.canaryCommitmentDigest,
     fundingBudgetRef: context.fundingBudgetRef,

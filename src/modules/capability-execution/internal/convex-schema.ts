@@ -4,6 +4,8 @@ import {
   acceptedAuthorityValue,
   type CanonicalClaimAuthority,
 } from '@/modules/action-execution/runtime'
+import { spendingPeriodsValue } from '@/modules/money/public'
+import { purchaseResolutionRecordValidator } from '@/modules/capability-execution/purchase-resolution'
 
 export type CallPersistedAuthority = CanonicalClaimAuthority & Readonly<{
   format: 'operation-invoke-authority:v1'
@@ -243,6 +245,7 @@ export const statusResultValue = v.union(
     previousInput: v.optional(jsonObject),
     usage: v.optional(usageValue), evidenceHash: v.optional(v.string()), attemptRef: v.optional(v.string()),
     effectGeneration: v.optional(v.number()), result: v.optional(callResultValue), receipt: v.optional(callReceiptValue),
+    purchaseResolution: v.optional(purchaseResolutionRecordValidator),
   }),
   v.object({
     kind: v.literal('unchanged'), callRef: v.string(), version: v.number(), retryAfterMs: v.number(),
@@ -284,6 +287,13 @@ const providerConsequenceJournalStateValue = v.union(
 
 
 export const capabilityCallTables = {
+  purchaseResolutionRecords: defineTable({
+    ...purchaseResolutionRecordValidator.fields,
+    createdAt: v.number(),
+  })
+    .index('by_callRef', ['callRef'])
+    .index('by_accountRef_and_resolvedAt', ['accountRef', 'resolvedAt'])
+    .index('by_customerRef_and_resolvedAt', ['customerRef', 'resolvedAt']),
   capabilityCallProjections: defineTable({
     callRef: v.string(),
     accountRef: v.string(),
@@ -363,6 +373,13 @@ export const capabilityCallTables = {
     buyerTaxUnits: v.string(),
     accountAvailableUnits: v.string(),
     budgetAvailableUnits: v.string(),
+    // Period identities and native readbacks are immutable Quote evidence.
+    // They are optional only for historical periodless rows.
+    spendingPeriods: v.optional(spendingPeriodsValue),
+    dailyPeriodAvailableUnits: v.optional(v.string()),
+    monthlyPeriodAvailableUnits: v.optional(v.string()),
+    dailyPeriodObservedAt: v.optional(v.number()),
+    monthlyPeriodObservedAt: v.optional(v.number()),
     legalExposureAvailableUnits: v.string(),
     balanceUnits: v.string(),
     treasuryCustodyRef: v.optional(v.string()),
@@ -450,6 +467,7 @@ export const capabilityCallTables = {
     // Idempotency is keyed by the stable Principal, never by the rotating
     // credential: a replaced credential must replay, not mint a second Call.
     .index('by_principalId_and_idempotencyKey', ['principalId', 'idempotencyKey'])
+    .index('by_principalId_and_formanceFinancialState', ['principalId', 'formanceFinancialState'])
     .index('by_credentialId_and_createdAt', ['credentialId', 'createdAt'])
     .index('by_credentialId_and_state', ['credentialId', 'state'])
     .index('by_credentialId_and_state_and_grantExpiresAt', ['credentialId', 'state', 'grantExpiresAt'])
@@ -459,7 +477,10 @@ export const capabilityCallTables = {
     .index('by_toolRef_and_state', ['toolRef', 'state'])
     .index('by_toolRef_and_createdAt', ['toolRef', 'createdAt'])
     .index('by_ownerId_and_state_and_createdAt', ['ownerId', 'state', 'createdAt'])
-    .index('by_state_and_reconciliation_nextAttemptAt', ['state', 'reconciliation.nextAttemptAt']),
+    .index('by_state_and_reconciliation_nextAttemptAt', ['state', 'reconciliation.nextAttemptAt'])
+    .index('by_state_and_reconciliation_disposition_reason_nextAttemptAt', [
+      'state', 'reconciliation.disposition', 'reconciliation.reason', 'reconciliation.nextAttemptAt',
+    ]),
   // Append-only proof that a seller canary was re-armed only after either a
   // durable pre-claim refusal with no canonical attempt, or an exact canonical
   // safe-before-release attempt whose durable ledgers prove it ended unpaid.

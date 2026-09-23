@@ -1,7 +1,8 @@
 import { Link, type NotFoundRouteProps } from '@tanstack/react-router'
 
 import { AePageState } from '@/components/ae/layout/AePageState'
-import { Button } from '@/components/ui/button'
+import { buttonVariants } from '@/components/ui/button-variants'
+import { cn } from '@/lib/utils'
 import type { PublicBusinessPageNotFoundReason } from '@/modules/catalog/public'
 
 export function PublicBusinessNotFound({ data }: NotFoundRouteProps) {
@@ -17,8 +18,8 @@ export function PublicBusinessNotFound({ data }: NotFoundRouteProps) {
         description="This provider is not published in the catalogue right now."
         action={
           <div className="flex flex-col gap-3 sm:flex-row">
-            <Button asChild variant="default" className="min-h-touch"><Link to="/for-providers">Publish a Tool</Link></Button>
-            <Button asChild variant="secondary" className="min-h-touch"><Link to="/market">Back to catalog</Link></Button>
+            <Link to="/for-providers" className={cn(buttonVariants({ variant: 'default' }), 'min-h-touch')}>Publish a Tool</Link>
+            <Link to="/market" className={cn(buttonVariants({ variant: 'secondary' }), 'min-h-touch')}>Back to catalog</Link>
           </div>
         }
       />
@@ -31,8 +32,8 @@ export function PublicBusinessNotFound({ data }: NotFoundRouteProps) {
       description="Nothing is published here. Check the address, or browse the catalogue."
       action={
         <div className="flex flex-col gap-3 sm:flex-row">
-          <Button asChild variant="default" className="min-h-touch"><Link to="/market">Browse catalog</Link></Button>
-          <Button asChild variant="secondary" className="min-h-touch"><Link to="/for-providers">Publish a Tool</Link></Button>
+          <Link to="/market" className={cn(buttonVariants({ variant: 'default' }), 'min-h-touch')}>Browse catalog</Link>
+          <Link to="/for-providers" className={cn(buttonVariants({ variant: 'secondary' }), 'min-h-touch')}>Publish a Tool</Link>
         </div>
       }
     />

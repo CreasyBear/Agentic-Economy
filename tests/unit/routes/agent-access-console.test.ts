@@ -8,6 +8,7 @@ import {
   readAgentCredentialSources,
 } from '@/modules/agent-access/agent-access-console'
 import type { AgentCredentialSource, AgentOwnerReadback } from '@/modules/agent-access/agent-operator-view-model'
+import type { AgentAccessOwnerGrantReadback } from '@/modules/agent-access/policy'
 import { canonicalAgentRecord } from '../../helpers/agent-directory-fixture'
 
 const transport = vi.hoisted(() => ({ query: vi.fn(), action: vi.fn(), keys: vi.fn() }))
@@ -150,5 +151,120 @@ describe('owner Agent projection', () => {
     expect(directory.accountBalance?.kind).toBe('refused')
     expect(directory.details[0]).toMatchObject({ dataState: 'unavailable', activity: [] })
     expect(directory.details[0]).not.toHaveProperty('usage')
+  })
+
+  describe('W-25: Agent directory spend vs limit projection', () => {
+    const testGrant: AgentAccessOwnerGrantReadback = {
+      principalId: principalRef,
+      credentialId: 'key:one',
+      applicationRef: 'app:one',
+      environment: 'sandbox',
+      authorityMode: 'read_only',
+      toolAccess: 'all_admitted',
+      toolRefs: [],
+      lifecycle: 'active',
+      expiresAt: period.periodEndAt + 1000,
+      budget: {
+        maximumSpendPerCall: { currency: 'AUD', exponent: 6, units: '10000000' },
+        maximumDailySpend: { currency: 'AUD', exponent: 6, units: '50000000' },
+        maximumMonthlySpend: { currency: 'AUD', exponent: 6, units: '100000000' },
+        maximumConcurrentCalls: 5,
+      },
+      rate: {
+        maximumCallsPerMinute: 60,
+        maximumCallsPerHour: 3600,
+      },
+    }
+
+    it('P1: lifts complete spend and grant limit onto list item and detail', async () => {
+      const credentials = await readAgentCredentialSources([source.key], [testGrant])
+      const directory = projectAgentDirectory(credentials, [canonical], [], [owner])
+
+      expect(directory.items).toHaveLength(1)
+      const item = directory.items[0]
+      expect(item).toMatchObject({
+        monthlySettledSpend: { currency: 'AUD', exponent: 6, units: '9007199254740993' },
+        monthlyLimit: { currency: 'AUD', exponent: 6, units: '100000000' },
+        monthlySpendCoverage: 'complete',
+      })
+      expect(directory.details[0]?.agent).toMatchObject({
+        monthlySettledSpend: { currency: 'AUD', exponent: 6, units: '9007199254740993' },
+        monthlyLimit: { currency: 'AUD', exponent: 6, units: '100000000' },
+        monthlySpendCoverage: 'complete',
+      })
+    })
+
+    it('P2: empty usage projects spend 0, keeps limit', async () => {
+      const credentials = await readAgentCredentialSources([source.key], [testGrant])
+      const emptyOwner: AgentOwnerReadback = {
+        principalRef,
+        activity: [],
+        activityIsDone: true,
+        usage: {
+          ...period,
+          callCount: 0,
+          completedCallCount: 0,
+          outcomeUnknownCallCount: 0,
+          settledSpend: { currency: 'AUD', exponent: 6, units: '0' },
+          amountCoverage: 'complete',
+          updatedAt: period.periodStartAt,
+        },
+        dataState: 'empty',
+      }
+      const directory = projectAgentDirectory(credentials, [canonical], [], [emptyOwner])
+
+      expect(directory.items[0]).toMatchObject({
+        monthlySettledSpend: { currency: 'AUD', exponent: 6, units: '0' },
+        monthlyLimit: { currency: 'AUD', exponent: 6, units: '100000000' },
+        monthlySpendCoverage: 'complete',
+      })
+    })
+
+    it('P3: unavailable usage does not invent spend', async () => {
+      const credentials = await readAgentCredentialSources([source.key], [testGrant])
+      const unavailOwner: AgentOwnerReadback = {
+        principalRef,
+        activity: [],
+        activityIsDone: true,
+        dataState: 'unavailable',
+      }
+      const directory = projectAgentDirectory(credentials, [canonical], [], [unavailOwner])
+
+      expect(directory.items[0]?.monthlyLimit).toEqual({ currency: 'AUD', exponent: 6, units: '100000000' })
+      expect(directory.items[0]?.monthlySettledSpend).toBeUndefined()
+      expect(directory.items[0]?.monthlySpendCoverage).toBeUndefined()
+    })
+
+    it('P4: incomplete coverage does not invent settled spend', async () => {
+      const credentials = await readAgentCredentialSources([source.key], [testGrant])
+      const incompleteOwner: AgentOwnerReadback = {
+        principalRef,
+        activity: [call],
+        activityIsDone: false,
+        usage: {
+          ...period,
+          callCount: 5,
+          completedCallCount: 5,
+          outcomeUnknownCallCount: 0,
+          amountCoverage: 'incomplete',
+          updatedAt: call.updatedAt,
+        },
+        dataState: 'partial',
+      }
+      const directory = projectAgentDirectory(credentials, [canonical], [], [incompleteOwner])
+
+      expect(directory.items[0]?.monthlyLimit).toEqual({ currency: 'AUD', exponent: 6, units: '100000000' })
+      expect(directory.items[0]?.monthlySettledSpend).toBeUndefined()
+      expect(directory.items[0]?.monthlySpendCoverage).toBe('incomplete')
+    })
+
+    it('P5: no grant leaves monthlyLimit undefined', async () => {
+      const credentials = await readAgentCredentialSources([source.key], [])
+      const directory = projectAgentDirectory(credentials, [canonical], [], [owner])
+
+      expect(directory.items[0]?.monthlyLimit).toBeUndefined()
+      expect(directory.items[0]?.monthlySettledSpend).toEqual({ currency: 'AUD', exponent: 6, units: '9007199254740993' })
+      expect(directory.items[0]?.monthlySpendCoverage).toBe('complete')
+    })
   })
 })

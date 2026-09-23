@@ -101,6 +101,52 @@ describe('canonical base URL resolution', () => {
       )
     })
   })
+
+  it('uses the Vercel Preview host when NODE_ENV is production', async () => {
+    await withCanonicalEnv(
+      {
+        NODE_ENV: 'production',
+        VERCEL_ENV: 'preview',
+        VERCEL_URL: 'agentic-economy-cenm1yked-creasybears-projects.vercel.app',
+      },
+      () => {
+        expect(resolveCanonicalBaseUrl()).toEqual({
+          kind: 'preview-origin',
+          baseUrl: 'https://agentic-economy-cenm1yked-creasybears-projects.vercel.app',
+        })
+        expect(
+          resolveCanonicalBaseUrl(
+            new Request('https://agentic-economy-cenm1yked-creasybears-projects.vercel.app/'),
+          ),
+        ).toEqual({
+          kind: 'preview-origin',
+          baseUrl: 'https://agentic-economy-cenm1yked-creasybears-projects.vercel.app',
+        })
+      },
+    )
+  })
+
+  it('does not take a spoofed Host header on Vercel Preview', async () => {
+    await withCanonicalEnv(
+      {
+        NODE_ENV: 'production',
+        VERCEL_ENV: 'preview',
+        VERCEL_URL: 'agentic-economy-cenm1yked-creasybears-projects.vercel.app',
+      },
+      () => {
+        expect(resolveCanonicalBaseUrl(new Request('https://spoofed.example/robots.txt'))).toEqual({
+          kind: 'preview-origin',
+          baseUrl: 'https://agentic-economy-cenm1yked-creasybears-projects.vercel.app',
+        })
+      },
+    )
+  })
+
+  it('still fails closed on Vercel production without a configured origin', async () => {
+    await withCanonicalEnv({ NODE_ENV: 'production', VERCEL_ENV: 'production' }, () => {
+      expect(() => resolveCanonicalBaseUrl()).toThrow('canonical_base_url_configuration_required')
+    })
+  })
 })
 
 describe('canonical base URL route outputs', () => {
@@ -179,22 +225,32 @@ type CanonicalEnv = {
   AE_CANONICAL_BASE_URL?: string
   AE_CANONICAL_HOST_ALLOWLIST?: string
   NODE_ENV?: string
+  VERCEL_ENV?: string
+  VERCEL_URL?: string
 }
 
 async function withCanonicalEnv<T>(env: CanonicalEnv, run: () => T | Promise<T>): Promise<T> {
-  const previousBaseUrl = process.env.AE_CANONICAL_BASE_URL
-  const previousAllowlist = process.env.AE_CANONICAL_HOST_ALLOWLIST
-  const previousNodeEnv = process.env.NODE_ENV
+  const previous = {
+    AE_CANONICAL_BASE_URL: process.env.AE_CANONICAL_BASE_URL,
+    AE_CANONICAL_HOST_ALLOWLIST: process.env.AE_CANONICAL_HOST_ALLOWLIST,
+    NODE_ENV: process.env.NODE_ENV,
+    VERCEL_ENV: process.env.VERCEL_ENV,
+    VERCEL_URL: process.env.VERCEL_URL,
+  }
   setOptionalEnv('AE_CANONICAL_BASE_URL', env.AE_CANONICAL_BASE_URL)
   setOptionalEnv('AE_CANONICAL_HOST_ALLOWLIST', env.AE_CANONICAL_HOST_ALLOWLIST)
-  setOptionalEnv('NODE_ENV', env.NODE_ENV ?? previousNodeEnv)
+  setOptionalEnv('NODE_ENV', env.NODE_ENV ?? previous.NODE_ENV)
+  setOptionalEnv('VERCEL_ENV', env.VERCEL_ENV)
+  setOptionalEnv('VERCEL_URL', env.VERCEL_URL)
 
   try {
     return await run()
   } finally {
-    setOptionalEnv('AE_CANONICAL_BASE_URL', previousBaseUrl)
-    setOptionalEnv('AE_CANONICAL_HOST_ALLOWLIST', previousAllowlist)
-    setOptionalEnv('NODE_ENV', previousNodeEnv)
+    setOptionalEnv('AE_CANONICAL_BASE_URL', previous.AE_CANONICAL_BASE_URL)
+    setOptionalEnv('AE_CANONICAL_HOST_ALLOWLIST', previous.AE_CANONICAL_HOST_ALLOWLIST)
+    setOptionalEnv('NODE_ENV', previous.NODE_ENV)
+    setOptionalEnv('VERCEL_ENV', previous.VERCEL_ENV)
+    setOptionalEnv('VERCEL_URL', previous.VERCEL_URL)
   }
 }
 

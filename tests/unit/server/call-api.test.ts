@@ -6,6 +6,7 @@ import {
   type CallHandlerOptions,
 } from '@/lib/server/call-api'
 import type { AgentAccessPrincipalResolver } from '@/lib/server/agent-access-auth'
+import { setHttpRateLimitAdmissionForTests } from '@/lib/server/rate-limit'
 import { toolQuoteResultSchema } from '@/modules/capability-execution/quote'
 import { callMachineResultSchema } from '@/modules/capability-execution/call-contracts'
 import { callStatusResultSchema } from '@/modules/capability-execution/call-recovery.actions'
@@ -76,10 +77,10 @@ function invokeBody(idempotencyKey = 'key-12345') {
 
 describe('operation.invoke HTTP adapter', () => {
   it.each([
-    ['missing', undefined],
-    ['text/plain', 'text/plain'],
-    ['malformed', 'application/json nonsense'],
-  ] as const)('rejects $0 media for Tool Call before service dispatch', async (_label, contentType) => {
+    { label: 'missing', contentType: undefined },
+    { label: 'text/plain', contentType: 'text/plain' },
+    { label: 'malformed', contentType: 'application/json nonsense' },
+  ] as const)('rejects $label media for Tool Call before service dispatch', async ({ contentType }) => {
     const executor = service({ kind: 'completed' })
     const response = await handleCallPostImpl(
       postWithContentType(invokeBody(), '/api/v1/tools/call', contentType),
@@ -140,10 +141,10 @@ describe('operation.invoke HTTP adapter', () => {
   })
 
   it.each([
-    ['missing', undefined],
-    ['text/plain', 'text/plain'],
-    ['malformed', 'application/json nonsense'],
-  ] as const)('rejects $0 media for Tool Quote before service dispatch', async (_label, contentType) => {
+    { label: 'missing', contentType: undefined },
+    { label: 'text/plain', contentType: 'text/plain' },
+    { label: 'malformed', contentType: 'application/json nonsense' },
+  ] as const)('rejects $label media for Tool Quote before service dispatch', async ({ contentType }) => {
     const executor = service({ kind: 'completed' })
     const response = await handleToolQuotePost(
       postWithContentType({ toolRef: operationRef, input: {} }, '/api/v1/tools/quote', contentType),
@@ -155,6 +156,18 @@ describe('operation.invoke HTTP adapter', () => {
       kind: 'UNSUPPORTED_MEDIA_TYPE',
       code: 'invalid_content_type',
     })
+    expect(executor.quoteTool).not.toHaveBeenCalled()
+  })
+
+  it('rate-limits Tool Quote before service dispatch when admission is denied', async () => {
+    setHttpRateLimitAdmissionForTests(async () => ({ ok: false, retryAfter: 5_000 }))
+    const executor = service({ kind: 'completed' })
+    const response = await handleToolQuotePost(
+      postWithContentType({ toolRef: operationRef, input: {} }, '/api/v1/tools/quote', 'application/json'),
+      { authenticate, resolvePrincipal: resolveCanonicalPrincipal, callService: executor },
+    )
+
+    expect(response.status).toBe(429)
     expect(executor.quoteTool).not.toHaveBeenCalled()
   })
 
@@ -305,12 +318,12 @@ describe('operation.invoke HTTP adapter', () => {
   })
 
   it.each([
-    { kind: 'pending', callRef: 'invocation:test', toolRef: operationRef, retryAfterMs: 1000 },
-    { kind: 'needs_authority', callRef: 'invocation:test', toolRef: operationRef, authorityRequest: { kind: 'approval_required', toolRef: operationRef, consequence: 'external_effect', retryClass: 'reconcile_before_retry', dataFields: [] } },
-    { kind: 'reconciliation_required', callRef: 'invocation:test', toolRef: operationRef, evidence: { attemptRef: 'attempt:test', effectGeneration: 1, requiredAt: '2026-01-01T00:00:00.000Z', retry: 'reconcile_before_retry', evidenceSource: 'ae' } },
-    { kind: 'refused', toolRef: operationRef, code: 'authority_required', retryable: false },
-  ] as const)('keeps $kind as a typed domain response', async (result) => {
-    const executor = service(result)
+    { label: 'pending', kind: 'pending' as const, callRef: 'invocation:test', toolRef: operationRef, retryAfterMs: 1000 },
+    { label: 'needs_authority', kind: 'needs_authority' as const, callRef: 'invocation:test', toolRef: operationRef, authorityRequest: { kind: 'approval_required' as const, toolRef: operationRef, consequence: 'external_effect' as const, retryClass: 'reconcile_before_retry' as const, dataFields: [] } },
+    { label: 'reconciliation_required', kind: 'reconciliation_required' as const, callRef: 'invocation:test', toolRef: operationRef, evidence: { attemptRef: 'attempt:test', effectGeneration: 1, requiredAt: '2026-01-01T00:00:00.000Z', retry: 'reconcile_before_retry' as const, evidenceSource: 'ae' } },
+    { label: 'refused', kind: 'refused' as const, toolRef: operationRef, code: 'authority_required' as const, retryable: false },
+  ])('keeps $label as a typed domain response', async ({ label: _label, ...domainResult }) => {
+    const executor = service(domainResult as Parameters<typeof service>[0])
     const response = await handleCallPost(post(invokeBody()), {
       authenticate,
       callService: executor,
@@ -318,13 +331,13 @@ describe('operation.invoke HTTP adapter', () => {
     expect(response.status).toBe(200)
     const body = await response.json() as Record<string, unknown>
     expect(body).toMatchObject({
-      kind: result.kind === 'needs_authority'
+      kind: domainResult.kind === 'needs_authority'
         ? 'refused'
-        : result.kind === 'reconciliation_required'
+        : domainResult.kind === 'reconciliation_required'
           ? 'outcome_unknown'
-          : result.kind,
+          : domainResult.kind,
     })
-    if (result.kind === 'needs_authority') {
+    if (domainResult.kind === 'needs_authority') {
       expect(body).toMatchObject({
         code: 'authority_required',
         retryable: false,

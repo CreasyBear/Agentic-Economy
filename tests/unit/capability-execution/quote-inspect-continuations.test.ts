@@ -4,7 +4,6 @@ import {
   toolQuoteAction,
 } from '@/modules/capability-execution/quote.actions'
 import {
-  COMMERCIAL_POLICY_ADMIN_SURFACE,
   toolQuoteResultSchema,
   projectToolQuoteRefusal,
   type ToolQuoteRefusalCode,
@@ -44,6 +43,23 @@ describe('tool.quote continuations', () => {
     expect(result.continuation?.action).toBe(action)
     expect(result.requiredActions?.[0]?.title).toBe(requiredTitle)
     expect(Number(result.continuation !== undefined) + Number(result.requiredActions !== undefined)).toBe(1)
+  })
+
+  it('directs ambiguous earlier spending to support without an automatic retry loop', () => {
+    const result = projectToolQuoteRefusal({ toolRef, input, code: 'inspection_unavailable', retryable: true,
+      correlationRef: 'request:history', reason: 'spending_period_legacy_history_requires_support' })
+    expect(result).toMatchObject({ retryable: false, requiredActions: [{ cta: '/support',
+      title: 'Verify earlier spending', description: expect.stringContaining('earlier spending') }] })
+    expect(result.continuation).toBeUndefined()
+    expect(toolQuoteResultSchema.safeParse(result).success).toBe(true)
+  })
+
+  it.each(['daily_limit_exhausted', 'monthly_limit_exhausted'])('discloses UTC for %s without funding advice', reason => {
+    const result = projectToolQuoteRefusal({ toolRef, input, code: 'budget_exceeded', retryable: false,
+      correlationRef: 'request:period', reason })
+    expect(result.requiredActions?.[0]).toMatchObject({ cta: '/agent-access', description: expect.stringContaining('UTC') })
+    expect(result.continuation).toBeUndefined()
+    expect(toolQuoteResultSchema.safeParse(result).success).toBe(true)
   })
 
   it('rejects legacy operation refusal labels at the Tool Quote boundary', () => {
@@ -106,16 +122,16 @@ describe('tool.quote commercial policy refusal reasons', () => {
 
   it.each<readonly [CommercialPolicyRefusalReason, string, string, string]>([
     ['legal_customer_required', 'funding.handoff.config', 'review_account_legal_customer', 'legal customer'],
-    ['commercial_policy_fixture_required', 'tool.quote', 'set_sandbox_deployment_profile', 'AE_PACKAGE4_SANDBOX_DEPLOYMENT_PROFILE'],
-    ['commercial_policy_deployment_profile_invalid', 'tool.quote', 'set_sandbox_deployment_profile', 'AE_PACKAGE4_SANDBOX_DEPLOYMENT_PROFILE'],
-    ['commercial_policy_missing', 'tool.quote', 'activate_commercial_policy', COMMERCIAL_POLICY_ADMIN_SURFACE],
-    ['commercial_policy_not_effective', 'tool.quote', 'activate_commercial_policy', COMMERCIAL_POLICY_ADMIN_SURFACE],
-    ['commercial_policy_expired', 'tool.quote', 'activate_commercial_policy', COMMERCIAL_POLICY_ADMIN_SURFACE],
-    ['commercial_policy_suspended', 'tool.quote', 'activate_commercial_policy', COMMERCIAL_POLICY_ADMIN_SURFACE],
-    ['commercial_policy_superseded', 'tool.quote', 'activate_commercial_policy', COMMERCIAL_POLICY_ADMIN_SURFACE],
-    ['commercial_policy_environment_mismatch', 'tool.quote', 'activate_commercial_policy', COMMERCIAL_POLICY_ADMIN_SURFACE],
-    ['commercial_policy_conflict', 'tool.quote', 'activate_commercial_policy', COMMERCIAL_POLICY_ADMIN_SURFACE],
-  ])('gives %s a machine continuation and a named operator action', (reason, action, operatorAction, marker) => {
+    ['commercial_policy_fixture_required', 'tool.quote', 'contact_support', 'AE could not establish'],
+    ['commercial_policy_deployment_profile_invalid', 'tool.quote', 'contact_support', 'AE could not establish'],
+    ['commercial_policy_missing', 'tool.quote', 'contact_support', 'AE could not establish'],
+    ['commercial_policy_not_effective', 'tool.quote', 'contact_support', 'AE could not establish'],
+    ['commercial_policy_expired', 'tool.quote', 'contact_support', 'AE could not establish'],
+    ['commercial_policy_suspended', 'tool.quote', 'contact_support', 'AE could not establish'],
+    ['commercial_policy_superseded', 'tool.quote', 'contact_support', 'AE could not establish'],
+    ['commercial_policy_environment_mismatch', 'tool.quote', 'contact_support', 'AE could not establish'],
+    ['commercial_policy_conflict', 'tool.quote', 'contact_support', 'AE could not establish'],
+  ])('gives %s a safe recheck and the responsible customer action', (reason, action, operatorAction, marker) => {
     const result = refuse(reason)
 
     expect(toolQuoteResultSchema.safeParse(result).success).toBe(true)
@@ -125,6 +141,7 @@ describe('tool.quote commercial policy refusal reasons', () => {
       requiredActions: [{ action: operatorAction }],
     })
     expect(result.requiredActions?.[0]?.description).toContain(marker)
+    expect(JSON.stringify(result.requiredActions)).not.toMatch(/PACKAGE4|local_ci|synthetic_vps_fixture|moneyCommercialPolicy|activate_commercial_policy|set_sandbox_deployment_profile/u)
   })
 
   it('covers every enumerated reason', () => {

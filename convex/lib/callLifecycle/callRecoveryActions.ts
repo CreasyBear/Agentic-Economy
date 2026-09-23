@@ -1,0 +1,612 @@
+import type { Infer } from 'convex/values'
+import type { PaginationOptions } from 'convex/server'
+import { degradeBackend } from '../../../src/lib/observability/degrade-backend'
+import type { ActionCtx, MutationCtx, QueryCtx } from '../../_generated/server'
+import type { Doc } from '../../_generated/dataModel'
+import { internal } from '../../_generated/api'
+import type { AgentAccessPrincipal } from '@/modules/agent-access/agent-access'
+import { isBoundedJsonValue, type JsonValue } from '@/modules/capability-contract/public'
+import { isRecord } from '@/modules/common/is-record'
+import { canonicalDigest } from '@/modules/common/canonical-digest'
+import type { OwnerCallContext } from '@/modules/capability-execution/call-recovery-contracts'
+import type { ownerCallStatusResultValue } from './contracts'
+import {
+  callResultValue,
+  reconciliationEvidenceValue,
+  recoveryResultValue,
+  statusResultValue,
+  usageValue,
+  x402PaymentReconciliationEvidenceValue,
+} from '@/modules/capability-execution/convex'
+import {
+  sourceWriteAdmissionArg,
+  sourceWriteRequestArg,
+} from '../../sourceWriteAdmission'
+import {
+  createPublicToolRef,
+  parsePublishedToolSnapshot,
+  type SellerOnboardingCanaryExecutionEnvelope,
+} from '@/modules/capability-supply/public'
+import { type CallPrincipal } from './admission'
+import {
+  assertCallResultJson,
+  callIdentity,
+  callIdentityMatches,
+} from './callIdentity'
+
+type CallRow = Doc<'capabilityCalls'>
+type CallResultValue = Infer<typeof callResultValue>
+type Usage = Infer<typeof usageValue>
+type CallListState = CallRow['state']
+type DispatchState = 'enqueued' | 'running' | 'completed' | 'failed' | 'reconciliation_required'
+
+function receiptRefFromResult(result: CallResultValue | undefined): string | undefined {
+  return result !== undefined && 'receipt' in result ? result.receipt?.receiptRef : undefined
+}
+
+export async function listAgentCallSummariesHandler(
+  ctx: QueryCtx,
+  args: Readonly<{
+    principalId: string
+    ownerId: string
+    credentialId: string
+    applicationRef: string
+    environment: 'sandbox' | 'production'
+    state?: CallListState
+    paginationOpts: PaginationOptions
+  }>,
+) {
+  const state = args.state
+  const source = state === undefined
+    ? ctx.db.query('capabilityCalls')
+        .withIndex('by_principalId_and_createdAt', (query) => query.eq('principalId', args.principalId))
+        .order('desc')
+    : ctx.db.query('capabilityCalls')
+        .withIndex('by_principalId_and_state', (query) => query.eq('principalId', args.principalId).eq('state', state))
+        .order('desc')
+  const page = await source.paginate(args.paginationOpts)
+  return {
+    ...page,
+    page: page.page
+      .filter((row) => row.principalId === args.principalId
+        && row.ownerId === args.ownerId
+        && row.applicationRef === args.applicationRef
+        && row.environment === args.environment)
+      .map((row) => {
+        const receiptRef = receiptRefFromResult(row.result)
+        return {
+          callRef: row.callRef,
+          toolRef: row.toolRef,
+          state: row.state,
+          ...(row.result === undefined ? {} : { resultKind: row.result.kind }),
+          ...(row.usage === undefined ? {} : { usage: row.usage }),
+          ...(receiptRef === undefined ? {} : { receiptRef }),
+          ...(row.evidenceHash === undefined ? {} : { evidenceHash: row.evidenceHash }),
+          createdAt: row.createdAt,
+          updatedAt: row.updatedAt,
+        }
+      }),
+  }
+}
+
+export type RecoveryRow = Readonly<{
+  quoteRef?: string
+  callRef: string
+  principalId: string
+  ownerId: string
+  credentialId: string
+  applicationRef: string
+  environment: 'sandbox' | 'production'
+  state: 'pending' | 'completed' | 'refused' | 'reconciliation_required' | 'cancelled'
+  toolRef: string
+  sellerOnboardingCanary?: SellerOnboardingCanaryExecutionEnvelope
+  inputDigest: string
+  requestDigest: string
+  grantGeneration: number
+  grantRef: string
+  toolJson: string
+  inputJson: string
+  result?: CallResultValue
+  usage?: Usage
+  evidenceHash?: string
+  attemptRef?: string
+  updatedAt: number
+}>
+
+export type ReplayRow = Readonly<{
+  toolRef: string
+  state: 'pending' | 'completed' | 'refused' | 'reconciliation_required' | 'cancelled'
+  result?: CallResultValue
+  usage?: Usage
+  evidenceHash?: string
+  attemptRef?: string
+}>
+
+function projectRecoveryRow(row: CallRow): RecoveryRow | null {
+  if (row.toolJson === undefined || row.inputJson === undefined) return null
+  if (row.result !== undefined) assertCallResultJson(row.result)
+  return {
+    ...(row.quoteRef === undefined ? {} : { quoteRef: row.quoteRef }),
+    callRef: row.callRef,
+    principalId: row.principalId,
+    ownerId: row.ownerId,
+    credentialId: row.credentialId,
+    applicationRef: row.applicationRef,
+    environment: row.environment,
+    state: row.state,
+    toolRef: row.toolRef,
+    ...(row.sellerOnboardingCanary === undefined
+      ? {}
+      : { sellerOnboardingCanary: structuredClone(row.sellerOnboardingCanary) }),
+    inputDigest: row.inputDigest,
+    requestDigest: row.requestDigest,
+    grantGeneration: row.grantGeneration,
+    grantRef: row.grantRef,
+    toolJson: row.toolJson,
+    inputJson: row.inputJson,
+    ...(row.result === undefined ? {} : { result: row.result }),
+    ...(row.usage === undefined ? {} : { usage: row.usage }),
+    ...(row.evidenceHash === undefined ? {} : { evidenceHash: row.evidenceHash }),
+    ...(row.attemptRef === undefined ? {} : { attemptRef: row.attemptRef }),
+    updatedAt: row.updatedAt,
+  }
+}
+
+type RecoveryAdmission =
+  | Readonly<{ kind: 'authorized'; row: RecoveryRow }>
+  | Readonly<{ kind: 'not_found' }>
+
+function recoveryNotFound(callRef: string): Infer<typeof recoveryResultValue> {
+  return { kind: 'refused', callRef, code: 'invocation_not_found', retryable: false }
+}
+
+function projectStatusRecoveryResult(
+  result: Infer<typeof recoveryResultValue>,
+): Infer<typeof statusResultValue> {
+  if (result.kind !== 'reconciliation_required') return result
+  return {
+    kind: 'found',
+    callRef: result.callRef,
+    version: Date.now(),
+    toolRef: result.toolRef,
+    state: 'reconciliation_required',
+    attemptRef: result.evidence.attemptRef,
+    effectGeneration: result.evidence.effectGeneration,
+  }
+}
+
+async function attachPurchaseResolutionToStatus(
+  ctx: ActionCtx,
+  result: Infer<typeof statusResultValue>,
+): Promise<Infer<typeof statusResultValue>> {
+  if (result.kind !== 'found') return result
+  try {
+    const purchaseResolution = await ctx.runQuery(internal.capabilityCalls.readPurchaseResolution, {
+      callRef: result.callRef,
+    })
+    return purchaseResolution === null
+      ? result
+      : { ...result, purchaseResolution }
+  } catch (cause) {
+    void cause;
+    return result
+  }
+}
+
+async function authorizeRecovery(
+  ctx: ActionCtx,
+  callRef: string,
+  principal: AgentAccessPrincipal,
+): Promise<RecoveryAdmission> {
+  // The outer authority boundary authenticates the current credential. A Call
+  // retains its original credential as effect evidence after replacement.
+  const row = await ctx.runQuery(internal.capabilityCalls.readOwnerRecovery, { callRef })
+  if (!callIdentityMatches(row, callIdentity(principal))) return { kind: 'not_found' }
+  return { kind: 'authorized', row }
+}
+
+async function authorizeOwnerRecovery(
+  ctx: ActionCtx,
+  callRef: string,
+  idempotencyKey?: string,
+): Promise<RecoveryRow | null> {
+  const identity = await ctx.auth.getUserIdentity()
+  if (
+    identity === null
+    || identity.tokenIdentifier.trim().length === 0
+    || (idempotencyKey !== undefined && idempotencyKey.trim().length === 0)
+  ) return null
+  const row = await ctx.runQuery(internal.capabilityCalls.readOwnerRecovery, { callRef })
+  return row === null || row.ownerId !== identity.tokenIdentifier ? null : row
+}
+
+type RecoveryActionArgs = {
+  operationKey: string
+  correlationId: string
+  sourceWrite?: Infer<typeof sourceWriteAdmissionArg>
+  sourceWriteRequest?: Infer<typeof sourceWriteRequestArg>
+  principal: CallPrincipal
+  callRef: string
+  afterVersion?: number
+  idempotencyKey?: string
+}
+
+export async function listAgentCallsHandler(
+  ctx: ActionCtx,
+  args: Omit<RecoveryActionArgs, 'callRef'> & Readonly<{ state?: CallListState; paginationOpts: PaginationOptions }>,
+) {
+  await ctx.runMutation(internal.capabilityCalls.admit, {
+    operationKey: args.operationKey,
+    correlationId: args.correlationId,
+    ...(args.sourceWrite === undefined ? {} : { sourceWrite: args.sourceWrite }),
+    ...(args.sourceWriteRequest === undefined ? {} : { sourceWriteRequest: args.sourceWriteRequest }),
+    principal: args.principal,
+    toolRef: '',
+    input: {},
+    idempotencyKey: `list:${args.state ?? 'all'}:${args.paginationOpts.cursor ?? 'start'}:${args.paginationOpts.numItems}`,
+  })
+  return await ctx.runQuery(internal.capabilityCalls.listAgentCallSummaries, {
+    principalId: args.principal.principalId,
+    ownerId: args.principal.ownerId,
+    credentialId: args.principal.credentialId,
+    applicationRef: args.principal.applicationRef,
+    environment: args.principal.environment,
+    ...(args.state === undefined ? {} : { state: args.state }),
+    paginationOpts: args.paginationOpts,
+  })
+}
+
+type RecoveryEvidence =
+  | Infer<typeof reconciliationEvidenceValue>
+  | Infer<typeof x402PaymentReconciliationEvidenceValue>
+
+export async function readCallStatusHandler(
+  ctx: ActionCtx,
+  args: RecoveryActionArgs,
+): Promise<Infer<typeof statusResultValue>> {
+  await ctx.runMutation(internal.capabilityCalls.admit, {
+    operationKey: args.operationKey,
+    correlationId: args.correlationId,
+    ...(args.sourceWrite === undefined ? {} : { sourceWrite: args.sourceWrite }),
+    ...(args.sourceWriteRequest === undefined ? {} : { sourceWriteRequest: args.sourceWriteRequest }),
+    principal: args.principal,
+    toolRef: '',
+    input: {},
+    idempotencyKey: `status:${args.callRef}`,
+  })
+  const admission = await authorizeRecovery(ctx, args.callRef, args.principal)
+  if (admission.kind !== 'authorized') {
+    return recoveryNotFound(args.callRef) as Infer<typeof statusResultValue>
+  }
+  const result = await ctx.runAction(internal.capabilityCallWorker.recover, {
+    callRef: args.callRef,
+    principalId: admission.row.principalId,
+    credentialId: admission.row.credentialId,
+    recoveryPrincipal: args.principal,
+    mode: 'status',
+  })
+  const projected = projectStatusRecoveryResult(result)
+  const withPurchaseResolution = await attachPurchaseResolutionToStatus(ctx, projected)
+  return withPurchaseResolution.kind === 'found'
+    && args.afterVersion !== undefined
+    && withPurchaseResolution.version <= args.afterVersion
+    ? {
+        kind: 'unchanged' as const,
+        callRef: withPurchaseResolution.callRef,
+        version: withPurchaseResolution.version,
+        retryAfterMs: 1_000,
+      }
+    : withPurchaseResolution
+}
+
+export async function cancelCallHandler(
+  ctx: ActionCtx,
+  args: RecoveryActionArgs & { idempotencyKey: string },
+): Promise<Infer<typeof recoveryResultValue>> {
+  await ctx.runMutation(internal.capabilityCalls.admit, {
+    operationKey: args.operationKey,
+    correlationId: args.correlationId,
+    ...(args.sourceWrite === undefined ? {} : { sourceWrite: args.sourceWrite }),
+    ...(args.sourceWriteRequest === undefined ? {} : { sourceWriteRequest: args.sourceWriteRequest }),
+    principal: args.principal,
+    toolRef: '',
+    input: {},
+    idempotencyKey: `cancel:${args.idempotencyKey}`,
+  })
+  const admission = await authorizeRecovery(ctx, args.callRef, args.principal)
+  if (admission.kind !== 'authorized') return recoveryNotFound(args.callRef)
+  return await ctx.runAction(internal.capabilityCallWorker.recover, {
+    callRef: args.callRef,
+    principalId: admission.row.principalId,
+    credentialId: admission.row.credentialId,
+    recoveryPrincipal: args.principal,
+    mode: 'cancel',
+    idempotencyKey: args.idempotencyKey,
+  })
+}
+
+export async function reconcileCallHandler(
+  ctx: ActionCtx,
+  args: RecoveryActionArgs & { idempotencyKey: string; evidence: RecoveryEvidence },
+): Promise<Infer<typeof recoveryResultValue>> {
+  await ctx.runMutation(internal.capabilityCalls.admit, {
+    operationKey: args.operationKey,
+    correlationId: args.correlationId,
+    ...(args.sourceWrite === undefined ? {} : { sourceWrite: args.sourceWrite }),
+    ...(args.sourceWriteRequest === undefined ? {} : { sourceWriteRequest: args.sourceWriteRequest }),
+    principal: args.principal,
+    toolRef: '',
+    input: {},
+    idempotencyKey: `reconcile:${args.idempotencyKey}`,
+  })
+  const admission = await authorizeRecovery(ctx, args.callRef, args.principal)
+  if (admission.kind !== 'authorized') return recoveryNotFound(args.callRef)
+  return await ctx.runAction(internal.capabilityCallWorker.recover, {
+    callRef: args.callRef,
+    principalId: admission.row.principalId,
+    credentialId: admission.row.credentialId,
+    recoveryPrincipal: args.principal,
+    mode: 'reconcile',
+    evidence: args.evidence,
+  })
+}
+
+export async function readOwnerCallStatusHandler(
+  ctx: ActionCtx,
+  args: { callRef: string },
+): Promise<Infer<typeof ownerCallStatusResultValue>> {
+  const row = await authorizeOwnerRecovery(ctx, args.callRef)
+  if (row === null) return recoveryNotFound(args.callRef) as Infer<typeof statusResultValue>
+  const result = await ctx.runAction(internal.capabilityCallWorker.recover, {
+    callRef: args.callRef,
+    principalId: row.principalId,
+    credentialId: row.credentialId,
+    recoverAsOwner: true,
+    mode: 'status',
+  })
+  const projected = projectStatusRecoveryResult(result)
+  if (projected.kind !== 'found') return projected
+  const withPurchaseResolution = await attachPurchaseResolutionToStatus(ctx, projected)
+  if (withPurchaseResolution.kind !== 'found') return withPurchaseResolution
+  const previousInput = parseOwnerPreviousInput(row.inputJson)
+  let ownerContext: OwnerCallContext | null
+  try {
+    ownerContext = await ctx.runQuery(internal.capabilityCalls.readOwnerReceiptContext, {
+      callRef: row.callRef, ownerId: row.ownerId, toolRef: projected.toolRef,
+    })
+  } catch (cause) {
+    // Optional identity/capability metadata must not erase a readable receipt.
+    ownerContext = degradeBackend(cause, null, { site: 'readOwnerCallStatusHandler', reason: 'source_unavailable' })
+  }
+  return {
+    ...withPurchaseResolution,
+    ...(previousInput === undefined ? {} : { previousInput }),
+    ownerContext,
+  }
+}
+
+export async function readOwnerReceiptContextHandler(
+  ctx: QueryCtx,
+  args: { callRef: string; ownerId: string; toolRef: string },
+): Promise<OwnerCallContext | null> {
+  // Internal owner read only, called after the same authorization used by
+  // reconcileOwnerCall. Re-check linkage before reading any identity metadata.
+  const row = await ctx.db.query('capabilityCalls')
+    .withIndex('by_callRef', (q) => q.eq('callRef', args.callRef)).unique()
+  if (row === null || row.ownerId !== args.ownerId || row.toolRef !== args.toolRef) return null
+  const [principal, admission, membership] = await Promise.all([
+    ctx.db.query('principals').withIndex('by_principalRef', (q) => q.eq('principalRef', row.principalId)).unique(),
+    ctx.db.query('agentAccessPrincipals').withIndex('by_principalId', (q) => q.eq('principalId', row.principalId)).unique(),
+    ctx.db.query('memberships').withIndex('by_accountRef_and_memberPrincipalRef_and_lifecycle', (q) => q
+      .eq('accountRef', row.ownerId).eq('memberPrincipalRef', row.principalId).eq('lifecycle', 'active')).first(),
+  ])
+  const currentDisplayName = principal?.kind === 'agent' && principal.lifecycle === 'active'
+    && membership !== null && admission !== null
+    && admission.ownerId === row.ownerId && admission.applicationRef === row.applicationRef
+    && admission.environment === row.environment ? principal.displayName : null
+  return {
+    purpose: null,
+    agent: { principalRef: row.principalId, applicationRef: row.applicationRef, currentDisplayName },
+    recordedTool: recordedReceiptTool(row),
+    reconciliation: { canSubmitEvidence: true, permissionBasis: 'account_owner', requiresVerifiedEvidence: true },
+  }
+}
+
+function recordedReceiptTool(row: CallRow): OwnerCallContext['recordedTool'] {
+  const unavailable = { kind: 'unavailable' } as const
+  if (row.toolJson === undefined || row.inputJson === undefined) return unavailable
+  const tool = parsePublishedToolSnapshot(row.toolJson)
+  const input = parseOwnerPreviousInput(row.inputJson)
+  if (tool === undefined || input === undefined) return unavailable
+  const toolRef = createPublicToolRef({
+    operationId: tool.operationId, publicationRef: tool.identity.publicationRef,
+    publicationRevision: tool.identity.publicationRevision, contractRef: tool.contract.ref,
+  })
+  if (toolRef !== row.toolRef || tool.runtimeEnvironment !== row.environment
+    || canonicalDigest(input) !== row.inputDigest
+    || canonicalDigest({ toolRef: row.toolRef, input }) !== row.requestDigest) return unavailable
+  return {
+    kind: 'available', basis: 'call_snapshot', name: tool.contract.name,
+    providerRef: tool.identity.businessId, providerName: null,
+  }
+}
+
+function parseOwnerPreviousInput(inputJson: string): Record<string, JsonValue> | undefined {
+  try {
+    const value: unknown = JSON.parse(inputJson)
+    return isRecord(value) && isBoundedJsonValue(value)
+      ? value as Record<string, JsonValue>
+      : undefined
+  } catch (cause) {
+    return degradeBackend(cause, undefined, { site: 'parseOwnerPreviousInput', reason: 'invalid_response' })
+  }
+}
+
+export async function cancelOwnerCallHandler(
+  ctx: ActionCtx,
+  args: { callRef: string; idempotencyKey: string },
+): Promise<Infer<typeof recoveryResultValue>> {
+  const row = await authorizeOwnerRecovery(ctx, args.callRef, args.idempotencyKey)
+  if (row === null) return recoveryNotFound(args.callRef)
+  return await ctx.runAction(internal.capabilityCallWorker.recover, {
+    callRef: args.callRef,
+    principalId: row.principalId,
+    credentialId: row.credentialId,
+    recoverAsOwner: true,
+    mode: 'cancel',
+    idempotencyKey: args.idempotencyKey,
+  })
+}
+
+export async function reconcileOwnerCallHandler(
+  ctx: ActionCtx,
+  args: { callRef: string; idempotencyKey: string; evidence: RecoveryEvidence },
+): Promise<Infer<typeof recoveryResultValue>> {
+  const row = await authorizeOwnerRecovery(ctx, args.callRef, args.idempotencyKey)
+  if (row === null) return recoveryNotFound(args.callRef)
+  return await ctx.runAction(internal.capabilityCallWorker.recover, {
+    callRef: args.callRef,
+    principalId: row.principalId,
+    credentialId: row.credentialId,
+    recoverAsOwner: true,
+    mode: 'reconcile',
+    evidence: args.evidence,
+  })
+}
+
+export async function readRecoveryHandler(
+  ctx: QueryCtx,
+  args: { callRef: string; principalId: string },
+): Promise<RecoveryRow | null> {
+  const row = await ctx.db.query('capabilityCalls')
+    .withIndex('by_callRef', (query) => query.eq('callRef', args.callRef)).unique()
+  if (row === null || row.principalId !== args.principalId) return null
+  return projectRecoveryRow(row)
+}
+
+export async function readOwnerRecoveryHandler(
+  ctx: QueryCtx,
+  args: { callRef: string },
+): Promise<RecoveryRow | null> {
+  const row = await ctx.db.query('capabilityCalls')
+    .withIndex('by_callRef', (query) => query.eq('callRef', args.callRef)).unique()
+  return row === null ? null : projectRecoveryRow(row)
+}
+
+export async function recordHandler(
+  ctx: MutationCtx,
+  args: {
+    callRef: string
+    principalId: string
+    state: 'pending' | 'completed' | 'refused' | 'reconciliation_required' | 'cancelled'
+    result?: CallResultValue
+    usage?: Usage
+    evidenceHash?: string
+    attemptRef?: string
+    dispatchState?: DispatchState
+    now: number
+  },
+): Promise<{ kind: 'recorded' }> {
+  if (args.result !== undefined) assertCallResultJson(args.result)
+  const row = await ctx.db.query('capabilityCalls')
+    .withIndex('by_callRef', (query) => query.eq('callRef', args.callRef)).unique()
+  if (row === null || row.principalId !== args.principalId) throw new Error('operation_invoke_identity_refused')
+  if (
+    row.state !== 'pending'
+    && args.state !== row.state
+  ) return { kind: 'recorded' as const }
+  await ctx.db.patch(row._id, recordPatch(args))
+  return { kind: 'recorded' as const }
+}
+
+type RecordArgs = Parameters<typeof recordHandler>[1]
+
+function recordPatch(args: RecordArgs): Partial<CallRow> {
+  return {
+    state: args.state,
+    ...(args.result === undefined ? {} : { result: args.result }),
+    ...(args.usage === undefined ? {} : { usage: args.usage }),
+    ...(args.evidenceHash === undefined ? {} : { evidenceHash: args.evidenceHash }),
+    ...(args.attemptRef === undefined ? {} : { attemptRef: args.attemptRef }),
+    ...(args.dispatchState === undefined ? {} : { dispatchState: args.dispatchState }),
+    updatedAt: args.now,
+  }
+}
+
+type ProjectRecoveryArgs = Parameters<typeof projectRecoveryHandler>[1]
+
+function recoveryProjectionIdentityMatches(row: CallRow | null, args: ProjectRecoveryArgs): row is CallRow {
+  // The stored credential is effect evidence, never the projection gate: a
+  // replaced credential must still project onto the original Call.
+  return row !== null && row.principalId === args.principalId
+}
+
+function isCompletedProjection(row: CallRow): boolean {
+  return row.state === 'completed' && row.result?.kind === 'completed'
+}
+
+function resetsPendingRecovery(row: CallRow, args: ProjectRecoveryArgs): boolean {
+  return [
+    row.state === 'reconciliation_required',
+    args.state === 'pending',
+    args.clearResult,
+    args.clearWorkId,
+    args.clearAttemptRef,
+    args.clearEvidenceHash,
+    args.clearDispatchState,
+  ].every(Boolean)
+}
+
+function recoveryProjectionTransitionAllowed(row: CallRow, args: ProjectRecoveryArgs): boolean {
+  return row.state === 'pending'
+    || args.state === row.state
+    || resetsPendingRecovery(row, args)
+}
+
+type CallPatch = {
+  [Property in keyof CallRow]?: undefined extends CallRow[Property]
+    ? CallRow[Property] | undefined
+    : CallRow[Property]
+}
+
+function recoveryProjectionPatch(row: CallRow, args: ProjectRecoveryArgs): CallPatch {
+  return {
+    state: args.state,
+    ...(args.clearResult ? { result: undefined } : args.result === undefined ? {} : { result: args.result }),
+    ...(args.clearWorkId ? { workId: undefined } : {}),
+    ...(args.clearAttemptRef ? { attemptRef: undefined } : args.attemptRef === undefined ? {} : { attemptRef: args.attemptRef }),
+    ...(args.clearEvidenceHash ? { evidenceHash: undefined } : {}),
+    ...(args.clearDispatchState ? { dispatchState: undefined } : args.dispatchState === undefined ? {} : { dispatchState: args.dispatchState }),
+    ...(resetsPendingRecovery(row, args) ? { reconciliation: undefined } : {}),
+    updatedAt: args.now,
+  }
+}
+
+export async function projectRecoveryHandler(
+  ctx: MutationCtx,
+  args: {
+    callRef: string
+    principalId: string
+    state: 'pending' | 'completed' | 'refused' | 'reconciliation_required' | 'cancelled'
+    result?: CallResultValue
+    attemptRef?: string
+    dispatchState?: DispatchState
+    clearResult: boolean
+    clearWorkId: boolean
+    clearAttemptRef: boolean
+    clearEvidenceHash: boolean
+    clearDispatchState: boolean
+    now: number
+  },
+): Promise<{ kind: 'recorded' }> {
+  if (args.result !== undefined) assertCallResultJson(args.result)
+  const row = await ctx.db.query('capabilityCalls')
+    .withIndex('by_callRef', (query) => query.eq('callRef', args.callRef)).unique()
+  if (!recoveryProjectionIdentityMatches(row, args)) {
+    throw new Error('operation_invoke_identity_refused')
+  }
+  if (isCompletedProjection(row)) return { kind: 'recorded' as const }
+  if (!recoveryProjectionTransitionAllowed(row, args)) return { kind: 'recorded' as const }
+  await ctx.db.patch(row._id, recoveryProjectionPatch(row, args))
+  return { kind: 'recorded' as const }
+}

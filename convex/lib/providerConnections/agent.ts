@@ -1,8 +1,8 @@
 import { v, type Infer } from 'convex/values'
 
-import type { MutationCtx } from '../../_generated/server'
+import type { MutationCtx, QueryCtx } from '../../_generated/server'
 import { agentAccessPrincipalValue, verifySupplyAgentPrincipal } from '../../agentAccessPrincipals'
-import { requireSourceWrite, sourceWriteArgs } from '../../sourceWriteAdmission'
+import { requireSourceRead, requireSourceWrite, sourceWriteArgs } from '../../sourceWriteAdmission'
 import {
   connectX402ProviderConnectionForActor,
   listProviderConnectionsForActor,
@@ -117,11 +117,27 @@ async function agentActor(
     : null
 }
 
+async function agentActorForRead(
+  ctx: QueryCtx,
+  args: AgentRequest,
+  requireMandate: boolean,
+): Promise<ProviderConnectionActor | null> {
+  if ((await requireSourceRead(args, 'catalog_publish')).kind === 'rejected') return null
+  const admission = await verifySupplyAgentPrincipal(ctx, args.agentPrincipal, requireMandate)
+  return admission.kind === 'allowed'
+    ? {
+        canonicalPrincipalRef: admission.principalId,
+        canonicalAccountRef: admission.ownerId,
+        authorityGrantRef: admission.grantRef,
+      }
+    : null
+}
+
 export async function listAgentHandler(
-  ctx: MutationCtx,
+  ctx: QueryCtx,
   args: Infer<typeof listAgentArgsValue>,
 ) {
-  const actor = await agentActor(ctx, args, false)
+  const actor = await agentActorForRead(ctx, args, false)
   if (actor === null) return { kind: 'error' as const, code: 'unauthenticated' as const }
   if (!Number.isSafeInteger(args.limit) || args.limit < 1 || args.limit > 100) {
     return { kind: 'not_found' as const }
@@ -133,10 +149,10 @@ export async function listAgentHandler(
 }
 
 export async function readAgentHandler(
-  ctx: MutationCtx,
+  ctx: QueryCtx,
   args: Infer<typeof readAgentArgsValue>,
 ) {
-  const actor = await agentActor(ctx, args, false)
+  const actor = await agentActorForRead(ctx, args, false)
   if (actor === null) return { kind: 'error' as const, code: 'unauthenticated' as const }
   const owned = await readProviderConnectionForActor(ctx, args.connectionRef, actor, false)
   return owned === null

@@ -1,12 +1,39 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { mockJevFetch } from '../../helpers/tool-search-rerank-fixtures'
 const { query, upstream } = vi.hoisted(() => ({ query: vi.fn(), upstream: vi.fn() }))
 vi.mock('@/lib/server/convex-source', () => ({ sourceQuery: (name: string) => name, callPublicSourceQuery: query }))
 vi.mock('@/modules/market/x402-directory.server', () => ({ readX402Directory: upstream }))
 import { readX402DirectoryAnalytics, readX402DirectoryCatalogue, readX402DirectoryCatalogueOverview, readX402DirectoryCatalogueResource } from '@/modules/market/x402-directory-index.server'
 import { x402DirectoryCatalogueInputSchema } from '@/modules/market/x402-directory-catalogue'
+import { decodeOpaqueCursor, encodeOpaqueCursor } from '@/modules/registry/opaque-cursor'
 
 beforeEach(() => { query.mockReset(); upstream.mockReset() })
+afterEach(() => { vi.unstubAllGlobals(); vi.unstubAllEnvs() })
 describe('indexed catalogue server boundary', () => {
+  it('uses Jev for query ordering without changing index filters, coverage or cursors', async () => {
+    vi.stubEnv('TYPESAFE_API_KEY', '')
+    vi.stubEnv('OPENROUTER_API_KEY', 'test-key')
+    const fetchImpl = mockJevFetch({ match_0: { type: 'noul', noul: 0.1 }, match_1: { type: 'noul', noul: 0.9 } })
+    vi.stubGlobal('fetch', fetchImpl)
+    const entries = ['Weather forecasts', 'Image background removal'].map((description, index) => ({
+      resource: `https://example.com/${index}`, title: description, description,
+      protocol: 'http', provider: 'example.com', prices: [], metadataJson: '{}',
+    }))
+    const coverage = { indexedTotal: 4000, generation: 'gen-1' }
+    query.mockResolvedValue({ kind: 'ok', coverage, searchMethod: 'native_full_text', page: entries.map(entry => ({ entry })), continueCursor: 'next', isDone: false })
+    const result = await readX402DirectoryCatalogue({ query: 'transparent images', network: 'base', maxUsdPrice: 0.1 })
+    expect(result).toMatchObject({ kind: 'ok', source: 'index', coverage, searchMethod: 'native_full_text', isDone: false, page: {
+      items: [entries[1], entries[0]], appliedFilters: { network: 'base', maxUsdPrice: 0.1 },
+    } })
+    expect(query).toHaveBeenCalledWith('x402DirectoryIndex:browse', {
+      query: 'transparent images', network: 'base', maxUsdPrice: 0.1,
+      paginationOpts: { numItems: 24, cursor: null, maximumRowsRead: 512 },
+    })
+    if (result.kind !== 'ok') throw new Error('expected catalogue')
+    expect(decodeOpaqueCursor(result.indexCursor ?? '', { kind: 'x402-directory', scope: 'gen-1' })).toBe('next')
+    expect(fetchImpl).toHaveBeenCalledOnce()
+    expect(upstream).not.toHaveBeenCalled()
+  })
   it('validates source-only inputs and rejects incompatible search sorting', async () => {
     for (const input of [{ provider: 'https://example.com' }, { indexCursor: '' }, { query: 'image', sort: 'popular' }, { directoryCategory: '' }, { indexCursor: 'cursor', offset: 20 }, { executable: 'anything' }]) {
       expect(x402DirectoryCatalogueInputSchema.safeParse(input).success).toBe(false)
@@ -16,13 +43,36 @@ describe('indexed catalogue server boundary', () => {
   })
   it('preserves native pagination and keeps unfiltered coverage distinct from result counts', async () => {
     const entry = { resource: 'https://example.com/tool', title: 'Tool' }
-    const coverage = { indexedTotal: 4000 }
-    query.mockResolvedValue({ kind: 'ok', coverage, searchMethod: 'native_index', page: [{ entry }], continueCursor: 'next', isDone: false, pageStatus: 'SplitRecommended', splitCursor: 'split' })
-    const result = await readX402DirectoryCatalogue({ directoryCategory: 'CREATIVE', provider: 'EXAMPLE.com', indexCursor: 'previous' })
+    const coverage = { indexedTotal: 4000, generation: 'gen-1' }
+    query.mockImplementation(async (name: string) => {
+      if (name === 'x402DirectoryIndex:status') return { kind: 'ready', coverage: { generation: 'gen-1', completedAt: 1 } }
+      return { kind: 'ok', coverage, searchMethod: 'native_index', page: [{ entry }], continueCursor: 'next', isDone: false, pageStatus: 'SplitRecommended', splitCursor: 'split' }
+    })
+    const result = await readX402DirectoryCatalogue({
+      directoryCategory: 'CREATIVE',
+      provider: 'EXAMPLE.com',
+      indexCursor: encodeOpaqueCursor({ kind: 'x402-directory', scope: 'gen-1', cursor: 'previous' }),
+    })
     expect(query).toHaveBeenCalledWith('x402DirectoryIndex:browse', { category: 'creative', provider: 'example.com', paginationOpts: { numItems: 24, cursor: 'previous', maximumRowsRead: 512 } })
-    expect(result).toMatchObject({ kind: 'ok', source: 'index', coverage, page: { items: [entry] }, indexCursor: 'next', isDone: false, splitCursor: 'split' })
-    if (result.kind === 'ok') expect(result.page.total).toBeUndefined()
+    expect(result).toMatchObject({ kind: 'ok', source: 'index', coverage, page: { items: [entry] }, isDone: false, splitCursor: 'split' })
+    if (result.kind === 'ok') {
+      expect(result.page.total).toBeUndefined()
+      expect(result.indexCursor).toBe(encodeOpaqueCursor({ kind: 'x402-directory', scope: 'gen-1', cursor: 'next' }))
+      expect(decodeOpaqueCursor(result.indexCursor ?? '', { kind: 'x402-directory', scope: 'gen-1' })).toBe('next')
+    }
     expect(upstream).not.toHaveBeenCalled()
+  })
+  it('does not forward a raw index cursor to the engine', async () => {
+    query.mockImplementation(async (name: string) => {
+      if (name === 'x402DirectoryIndex:status') return { kind: 'ready', coverage: { generation: 'gen-1', completedAt: 1 } }
+      return { kind: 'ok', coverage: { indexedTotal: 4000, generation: 'gen-1' }, searchMethod: 'native_index', page: [], continueCursor: 'next', isDone: false }
+    })
+    const result = await readX402DirectoryCatalogue({ indexCursor: 'previous' })
+    expect(result).toEqual({ kind: 'unavailable', reason: 'query_invalid' })
+    expect(query.mock.calls.some((call) => {
+      const args = call[1] as { paginationOpts?: { cursor?: string | null } } | undefined
+      return args?.paginationOpts?.cursor === 'previous'
+    })).toBe(false)
   })
   it('falls back only when the index explicitly has no active generation', async () => {
     query.mockResolvedValue({ kind: 'unavailable', reason: 'index_unavailable' })

@@ -4,6 +4,8 @@ import { CheckIcon, CopyIcon } from 'lucide-react'
 import { AeToolPrice } from '@/components/ae/market/AeToolPrice'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { buttonVariants } from '@/components/ui/button-variants'
+import { cn } from '@/lib/utils'
 import { Item, ItemContent, ItemDescription, ItemTitle } from '@/components/ui/item'
 import { Separator } from '@/components/ui/separator'
 import { useClipboardCopy } from '@/hooks/use-clipboard-copy'
@@ -58,15 +60,19 @@ export function AeToolCompactDecision({
         <AeToolFacts tool={tool} model={model} variant="compact" />
 
         {model.nextAction.kind === 'navigate' && model.nextAction.href !== undefined ? (
-          <Button asChild size="sm" className="min-h-touch justify-self-start">
-            <Link to={model.nextAction.href} onClick={onNavigate}>{model.nextAction.label}</Link>
-          </Button>
+          <Link
+            to={model.nextAction.href}
+            onClick={onNavigate}
+            className={cn(buttonVariants({ size: 'sm' }), 'min-h-touch w-fit self-start justify-self-start')}
+          >
+            {model.nextAction.label}
+          </Link>
         ) : code !== undefined ? (
           <div className="flex items-center gap-intra">
             <Button
               type="button"
               size="sm"
-              className="min-h-touch"
+              className="min-h-touch w-fit self-start"
               aria-label={isCopied
                 ? `${model.nextAction.label} copied`
                 : `Copy ${model.nextAction.label}`}

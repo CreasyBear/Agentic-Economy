@@ -1,0 +1,8 @@
+
+> agentic-economy@0.1.0 deps:check
+> node tools/dev/deps-ratchet.ts
+
+rule                                    count  ceiling  status
+no-circular                                 0        0  ok
+no-circular-capability-supply-internal     34       34  ok
+no-circular-via-barrel                    258      258  ok

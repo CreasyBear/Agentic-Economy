@@ -76,7 +76,7 @@ function PublicNavLink({
       {...(onNavigate === undefined ? {} : { onClick: onNavigate })}
       aria-current={active ? 'page' : undefined}
       className={cn(
-        'relative font-sans font-medium tracking-tight text-foreground no-underline transition-colors duration-200 ease-out hover:text-info focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring motion-reduce:transition-none',
+        'relative font-sans font-medium tracking-tight text-foreground no-underline transition-[color,transform] duration-100 ease-out hover:text-info active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring motion-reduce:transition-none motion-reduce:active:scale-100',
         drawer
           ? 'flex min-h-touch items-center text-3xl font-light'
           : 'inline-flex min-h-touch items-center px-related text-sm',

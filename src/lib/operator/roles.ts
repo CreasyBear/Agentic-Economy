@@ -1,13 +1,13 @@
 export type OperatorRole = 'owner' | 'admin' | 'developer'
 
 export const roleHomeHref: Record<OperatorRole, string> = {
-  owner: '/owner/operations',
+  owner: '/owner',
   admin: '/admin/index-health',
   developer: '/developers/discovery',
 }
 
 export const roleLabel: Record<OperatorRole, string> = {
-  owner: 'Buy and supply',
+  owner: 'Workspace',
   admin: 'Administration',
   developer: 'Developer tools',
 }
@@ -29,11 +29,13 @@ export function operatorRoleForPath(pathname: string): OperatorRole | undefined 
   return undefined
 }
 
-export type OwnerWorkspaceOwner = 'operations' | 'account' | undefined
+export type OwnerWorkspaceOwner = 'operations' | 'account' | 'workspace' | 'team' | undefined
 
 export function ownerWorkspaceOwnerForPath(pathname: string): OwnerWorkspaceOwner {
   if (pathname === '/owner/operations' || pathname.startsWith('/owner/operations/')) return 'operations'
   if (pathname === '/owner/supply' || pathname.startsWith('/owner/supply/')) return 'operations'
+  if (pathname === '/owner/workspace' || pathname.startsWith('/owner/workspace/')) return 'workspace'
+  if (pathname === '/owner/team' || pathname.startsWith('/owner/team/')) return 'team'
   if (pathname === '/owner/settings') return 'account'
   return undefined
 }

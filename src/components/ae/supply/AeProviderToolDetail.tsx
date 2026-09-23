@@ -4,47 +4,56 @@ import { AeFactList } from '@/components/ae/data/AeFactList'
 import { degrade } from '@/lib/observability/degrade'
 import { AeConfirmDialog } from '@/components/ae/feedback/AeConfirmDialog'
 import { AeSection } from '@/components/ae/layout/AeSection'
+import { AePriceUpdateModal } from './price-update-modal/AePriceUpdateModal'
+import { AeToolTestPlayground } from './tool-test-playground/AeToolTestPlayground'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { buttonVariants } from '@/components/ui/button-variants'
+import { cn } from '@/lib/utils'
 import { formatTimestamp } from '@/lib/ui/format-time'
 import {
   providerToolReasonPresentation,
   type ProviderToolStatus,
 } from '@/modules/capability-supply/provider-tool-status'
+import type {
+  ProviderToolAction,
+  ProviderToolActionOutcome,
+} from '@/modules/capability-supply/provider-tool-actions.contracts'
 
-export type ProviderToolActionOutcome = Readonly<{
-  kind: 'applied' | 'refused'
-  message: string
+export type AeProviderToolDetailProps = Readonly<{
+  name: string
+  status: ProviderToolStatus
+  resumeHref?: string
+  currentPrice?: string
+  onRefresh?: ProviderToolAction
+  onRecheck?: ProviderToolAction
+  onWithdraw?: ProviderToolAction
+  onRepublish?: ProviderToolAction
+  onUpdatePrice?: (newPriceAud: string) => Promise<ProviderToolActionOutcome>
+  showTestPlayground?: boolean
 }>
-
-type ToolAction = () => Promise<ProviderToolActionOutcome>
 
 export function AeProviderToolDetail({
   name,
   status,
   resumeHref,
+  currentPrice,
   onRefresh,
   onRecheck,
   onWithdraw,
   onRepublish,
-}: Readonly<{
-  name: string
-  status: ProviderToolStatus
-  resumeHref?: string
-  onRefresh?: ToolAction
-  onRecheck?: ToolAction
-  onWithdraw?: ToolAction
-  onRepublish?: ToolAction
-}>) {
+  onUpdatePrice,
+  showTestPlayground = false,
+}: AeProviderToolDetailProps) {
   const [pending, setPending] = useState(false)
-  const [confirmation, setConfirmation] = useState<'withdraw' | 'republish'>()
+  const [confirmation, setConfirmation] = useState<'withdraw' | 'republish' | 'price'>()
   const [feedback, setFeedback] = useState<ProviderToolActionOutcome>()
   const firstReason = status.reasonCodes[0] === undefined
     ? undefined
     : providerToolReasonPresentation(status.reasonCodes[0])
 
-  async function run(action: ToolAction | undefined) {
+  async function run(action: ProviderToolAction | undefined) {
     if (action === undefined || pending) return
     setPending(true)
     setFeedback(undefined)
@@ -92,6 +101,7 @@ export function AeProviderToolDetail({
           {...(onRecheck === undefined ? {} : { onRecheck: () => run(onRecheck) })}
           {...(onWithdraw === undefined ? {} : { onWithdraw: () => setConfirmation('withdraw') })}
           {...(onRepublish === undefined ? {} : { onRepublish: () => setConfirmation('republish') })}
+          {...(onUpdatePrice === undefined ? {} : { onUpdatePrice: () => setConfirmation('price') })}
         />
       </section>
 
@@ -128,6 +138,28 @@ export function AeProviderToolDetail({
         ]} />
       </details>
 
+      {showTestPlayground ? (
+        <AeToolTestPlayground
+          toolName={name}
+          onSendTestRequest={async () => {
+            const start = Date.now()
+            if (onRecheck) {
+              await onRecheck()
+            }
+            return {
+              status: 200,
+              latencyMs: Math.max(1, Date.now() - start),
+              data: {
+                toolRef: status.toolRef,
+                state: status.state,
+                routeable: status.routeability.available,
+                verifiedAt: new Date().toISOString(),
+              },
+            }
+          }}
+        />
+      ) : null}
+
       <AeConfirmDialog
         open={confirmation === 'withdraw'}
         onOpenChange={(open) => { if (!open && !pending) setConfirmation(undefined) }}
@@ -147,6 +179,19 @@ export function AeProviderToolDetail({
         pending={pending}
         onConfirm={() => run(onRepublish)}
       />
+
+      <AePriceUpdateModal
+        open={confirmation === 'price'}
+        onOpenChange={(open) => { if (!open && !pending) setConfirmation(undefined) }}
+        toolName={name}
+        {...(currentPrice === undefined ? {} : { currentPrice })}
+        onUpdatePrice={async (newPrice) => {
+          if (!onUpdatePrice) return { kind: 'refused', message: 'Price update unavailable' }
+          const res = await onUpdatePrice(newPrice)
+          setFeedback(res)
+          return res
+        }}
+      />
     </div>
   )
 }
@@ -159,6 +204,7 @@ function PrimaryAction({
   onRecheck,
   onWithdraw,
   onRepublish,
+  onUpdatePrice,
 }: Readonly<{
   status: ProviderToolStatus
   pending: boolean
@@ -167,13 +213,28 @@ function PrimaryAction({
   onRecheck?: () => void
   onWithdraw?: () => void
   onRepublish?: () => void
+  onUpdatePrice?: () => void
 }>) {
   if (status.ownerHandoff !== undefined) {
-    return <Button asChild className="min-h-touch w-fit"><a href={status.ownerHandoff.cta}>{status.ownerHandoff.ctaLabel}</a></Button>
+    return (
+      <a
+        href={status.ownerHandoff.cta}
+        className={cn(buttonVariants(), 'min-h-touch w-fit')}
+      >
+        {status.ownerHandoff.ctaLabel}
+      </a>
+    )
   }
   switch (status.continuation?.action) {
     case 'supply.source.preview':
-      return <Button asChild className="min-h-touch w-fit"><a href={resumeHref ?? '/owner/operations/new'}>Continue setup</a></Button>
+      return (
+        <a
+          href={resumeHref ?? '/owner/operations/new'}
+          className={cn(buttonVariants(), 'min-h-touch w-fit')}
+        >
+          Continue setup
+        </a>
+      )
     case 'supply.status':
     case 'supply.offboarding.status':
       return onRefresh === undefined ? null : <Button type="button" className="min-h-touch w-fit" disabled={pending} onClick={onRefresh}>{pending ? 'Refreshing…' : 'Refresh status'}</Button>
@@ -182,9 +243,23 @@ function PrimaryAction({
     case 'supply.republish':
       return onRepublish === undefined ? null : <Button type="button" className="min-h-touch w-fit" disabled={pending} onClick={onRepublish}>Republish</Button>
     default:
-      return status.state === 'Published' && onWithdraw !== undefined
-        ? <Button type="button" variant="secondary" className="min-h-touch w-fit" disabled={pending} onClick={onWithdraw}>Withdraw</Button>
-        : null
+      if (status.state === 'Published') {
+        return (
+          <div className="flex flex-wrap items-center gap-2">
+            {onUpdatePrice !== undefined ? (
+              <Button type="button" variant="outline" className="min-h-touch w-fit" disabled={pending} onClick={onUpdatePrice}>
+                Update Price
+              </Button>
+            ) : null}
+            {onWithdraw !== undefined ? (
+              <Button type="button" variant="secondary" className="min-h-touch w-fit" disabled={pending} onClick={onWithdraw}>
+                Withdraw
+              </Button>
+            ) : null}
+          </div>
+        )
+      }
+      return null
   }
 }
 

@@ -5,10 +5,11 @@ import { AeAgentJsonAffordance } from '@/components/ae/landing/AeAgentJsonAfford
 import { AeFactList } from '@/components/ae/data/AeFactList'
 import { AePageHeader } from '@/components/ae/layout/AePageHeader'
 import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
+import { buttonVariants } from '@/components/ui/button-variants'
+import { cn } from '@/lib/utils'
 import { formatTimestamp, timestampIso } from '@/lib/ui/format-time'
 import { telUri } from '@/lib/ui/tel-uri'
-import { formatOfferingPrice } from '@/modules/catalog/public'
+import { formatOfferingPrice, isPublicHttpsUrl } from '@/modules/catalog/public'
 import type { PublicBusinessCatalogApiV2Dto, PublicListingDto } from '@/modules/registry/public'
 import type { PublicOfferingSupplyView } from '@/components/ae/offerings/offering-presentation'
 
@@ -29,6 +30,9 @@ export function AeProviderListingPage({
 }: AeProviderListingPageProps) {
   const offerings = supply === undefined ? catalog.offerings : supply.offerings.map(supplyOfferingToDto)
   const readyCount = offerings.filter((offering) => offering.support.aeSupportedAction).length
+  const websiteHref = catalog.businessContext.kind === 'programmable_provider'
+    ? publicHttpsHref(catalog.businessContext.website)
+    : undefined
 
   return (
     <div className="grid gap-section pb-page">
@@ -95,12 +99,15 @@ export function AeProviderListingPage({
                   : [{ label: 'Location', value: `${catalog.businessContext.suburb}, ${catalog.businessContext.stateTerritory}` }]),
               ]}
             />
-            {catalog.businessContext.kind !== 'programmable_provider' ? null : (
-              <Button asChild variant="outline" className="min-h-touch w-full justify-between">
-                <a href={catalog.businessContext.website} target="_blank" rel="noreferrer">
-                  Provider website <ArrowUpRightIcon aria-hidden="true" />
-                </a>
-              </Button>
+            {websiteHref === undefined ? null : (
+              <a
+                href={websiteHref}
+                target="_blank"
+                rel="noreferrer"
+                className={cn(buttonVariants({ variant: 'outline' }), 'min-h-touch w-full justify-between')}
+              >
+                Provider website <ArrowUpRightIcon aria-hidden="true" />
+              </a>
             )}
           </section>
 
@@ -157,6 +164,10 @@ export function ListingFirstScreen({
 function OperationRow({ offering, catalog }: { offering: PublicListingDto; catalog: PublicBusinessCatalogApiV2Dto }) {
   const operationPath = offering.accessPaths.find((path) => path.kind === 'external_operation')
   const webPath = offering.accessPaths.find((path) => path.kind === 'human_request' && path.channel === 'website' && path.url !== undefined)
+  const operationHref = operationPath === undefined
+    ? undefined
+    : publicHttpsHref(operationPath.documentationUrl) ?? publicHttpsHref(operationPath.url)
+  const webHref = operationHref === undefined ? publicHttpsHref(webPath?.url) : undefined
   const phone = catalog.businessContext.kind === 'local_human' ? catalog.businessContext.publishedPhone : undefined
   const phoneHref = phone === undefined ? undefined : telUri(phone)
   const accessNote = offering.accessPaths.find((path) => path.kind === 'human_request')?.disclosure
@@ -187,31 +198,41 @@ function OperationRow({ offering, catalog }: { offering: PublicListingDto; catal
         {accessNote === undefined ? null : <p className="text-xs text-muted-foreground">{accessNote}</p>}
       </div>
       <div className="grid content-start gap-intra sm:self-center">
-        {operationPath === undefined ? null : (
-          <Button asChild size="sm" className="min-h-touch justify-between">
-            <a href={operationPath.documentationUrl ?? operationPath.url} target="_blank" rel="noreferrer">
-              Open provider route <ArrowUpRightIcon aria-hidden="true" />
-            </a>
-          </Button>
+        {operationHref === undefined ? null : (
+          <a
+            href={operationHref}
+            target="_blank"
+            rel="noreferrer"
+            className={cn(buttonVariants({ size: 'sm' }), 'min-h-touch justify-between')}
+          >
+            Open provider route <ArrowUpRightIcon aria-hidden="true" />
+          </a>
         )}
-        {operationPath !== undefined || webPath === undefined ? null : (
-          <Button asChild variant="outline" size="sm" className="min-h-touch justify-between">
-            <a href={webPath.url} target="_blank" rel="noreferrer">
-              Open website <Globe2Icon aria-hidden="true" />
-            </a>
-          </Button>
+        {operationHref !== undefined || webHref === undefined ? null : (
+          <a
+            href={webHref}
+            target="_blank"
+            rel="noreferrer"
+            className={cn(buttonVariants({ variant: 'outline', size: 'sm' }), 'min-h-touch justify-between')}
+          >
+            Open website <Globe2Icon aria-hidden="true" />
+          </a>
         )}
-        {operationPath !== undefined || webPath !== undefined || phoneHref === undefined ? null : (
-          <Button asChild variant="outline" size="sm" className="min-h-touch justify-between">
-            <a href={phoneHref}>Call provider <PhoneIcon aria-hidden="true" /></a>
-          </Button>
+        {operationHref !== undefined || webHref !== undefined || phoneHref === undefined ? null : (
+          <a href={phoneHref} className={cn(buttonVariants({ variant: 'outline', size: 'sm' }), 'min-h-touch justify-between')}>
+            Call provider <PhoneIcon aria-hidden="true" />
+          </a>
         )}
-        {operationPath !== undefined || webPath !== undefined || phoneHref !== undefined ? null : (
+        {operationHref !== undefined || webHref !== undefined || phoneHref !== undefined ? null : (
           <p className="text-sm text-muted-foreground">No public call path</p>
         )}
       </div>
     </li>
   )
+}
+
+function publicHttpsHref(value: string | undefined): string | undefined {
+  return value !== undefined && isPublicHttpsUrl(value) ? value : undefined
 }
 
 function supplyOfferingToDto(item: PublicOfferingSupplyView['offerings'][number]): PublicListingDto {
@@ -260,15 +281,22 @@ function supplyOfferingToDto(item: PublicOfferingSupplyView['offerings'][number]
 function ListingBackLink({ from, threadId }: { from?: 'thread'; threadId?: string }) {
   if (from === 'thread' && threadId !== undefined) {
     return (
-      <Button asChild variant="ghost" size="sm" className="min-h-touch px-2">
-        <Link to="/t/$threadId" params={{ threadId }}><ArrowLeftIcon aria-hidden="true" /> Back to result</Link>
-      </Button>
+      <Link
+        to="/t/$threadId"
+        params={{ threadId }}
+        className={cn(buttonVariants({ variant: 'ghost', size: 'sm' }), 'min-h-touch px-2')}
+      >
+        <ArrowLeftIcon aria-hidden="true" /> Back to result
+      </Link>
     )
   }
 
   return (
-    <Button asChild variant="ghost" size="sm" className="min-h-touch px-2">
-      <Link to="/market"><ArrowLeftIcon aria-hidden="true" /> Back to catalog</Link>
-    </Button>
+    <Link
+      to="/market"
+      className={cn(buttonVariants({ variant: 'ghost', size: 'sm' }), 'min-h-touch px-2')}
+    >
+      <ArrowLeftIcon aria-hidden="true" /> Back to catalog
+    </Link>
   )
 }

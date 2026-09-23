@@ -4,7 +4,7 @@ import {
   capabilityOfferingRegistrationHash,
   defineCapabilityOfferingRegistration,
   type CapabilityOfferingRegistration,
-} from '@/modules/capability-supply/public'
+} from '../registration-schema'
 
 import { offeringIntegrityIsValid } from './integrity'
 import {

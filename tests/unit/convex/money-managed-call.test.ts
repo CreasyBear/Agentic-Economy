@@ -6,7 +6,7 @@ import schema from '../../../convex/schema'
 import { internal } from '../../../convex/_generated/api'
 import { buildDevelopmentPublishedToolEvidence } from '../../../tools/dev/fixtures/capability-supply/development-published-tool-evidence'
 import { canonicalDigest } from '../../../src/modules/common/canonical-digest'
-import { PACKAGE4_FORMANCE_REQUIREMENTS, quoteManagedX402BuyerAud } from '../../../src/modules/money/public'
+import { quoteManagedX402BuyerAud } from '../../../src/modules/money/public'
 import { convexTestWithMarketComponents, publishedBusinessOwner } from '../../helpers/convex-fixtures'
 import { withSourceWrite } from '../../helpers/source-write-admission'
 
@@ -59,7 +59,9 @@ function commitment() {
     budgetPolicyRef: 'budget:managed-call',
     budgetGeneration: 1,
     maximumSpendPerCallUnits: '6000000',
-    formanceSchemaVersion: PACKAGE4_FORMANCE_REQUIREMENTS.schemaVersion,
+    // This fixture represents a historical accepted periodless Call. New
+    // paid bookings select v1.4.0 and carry both immutable periods.
+    formanceSchemaVersion: 'v1.3.0',
     policyGeneration: 1,
     legalCustomerRef: 'principal:legal-customer',
     legalCustomerGeneration: 1,
@@ -242,6 +244,73 @@ describe('Formance managed Call evidence', () => {
     }))).resolves.toMatchObject({
       invocation: { formanceFinancialState: 'released', formanceReleaseRefs: releaseRefs },
       obligation: { state: 'reversed' },
+    })
+  })
+
+  it('replays pre-submission release idempotently and rejects conflicting release references', async () => {
+    const backend = convexTest(schema, convexModules)
+    await seedReservationFixture(backend)
+    await expect(backend.mutation(internal.moneyManagedCallLifecycle.finalizeRelease, {
+      callRef,
+      transactionRefs: releaseRefs,
+      now: now + 1,
+    })).resolves.toEqual({ kind: 'accepted', state: 'released', replayed: false })
+    await expect(backend.mutation(internal.moneyManagedCallLifecycle.finalizeRelease, {
+      callRef,
+      transactionRefs: releaseRefs,
+      now: now + 2,
+    })).resolves.toEqual({ kind: 'accepted', state: 'released', replayed: true })
+    await expect(backend.mutation(internal.moneyManagedCallLifecycle.finalizeRelease, {
+      callRef,
+      transactionRefs: ['formance:other-1', 'formance:other-2'],
+      now: now + 3,
+    })).resolves.toEqual({ kind: 'refused', code: 'managed_call_release_conflict' })
+
+    const releaseBooking = await backend.query(internal.moneyManagedCall.readBooking, { callRef })
+    expect(releaseBooking).toMatchObject({
+      kind: 'available',
+      financialState: 'released',
+      reservationRefs,
+      releaseRefs,
+    })
+    expect(releaseBooking).not.toHaveProperty('settlementRefs')
+
+    await expect(backend.run(async (ctx) => ({
+      invocation: await ctx.db.query('capabilityCalls')
+        .withIndex('by_callRef', (query) => query.eq('callRef', callRef)).unique(),
+      obligation: await ctx.db.query('moneyProviderObligations')
+        .withIndex('by_callRef', (query) => query.eq('callRef', callRef)).unique(),
+      obligationCount: (await ctx.db.query('moneyProviderObligations').collect()).length,
+    }))).resolves.toEqual({
+      invocation: expect.objectContaining({
+        state: 'pending',
+        formanceFinancialState: 'released',
+        formanceReservationRefs: reservationRefs,
+        formanceReleaseRefs: releaseRefs,
+        updatedAt: now + 1,
+      }),
+      obligation: {
+        _id: expect.any(String),
+        _creationTime: expect.any(Number),
+        obligationRef: `provider-obligation:${callRef}`,
+        callRef,
+        toolRef,
+        providerRef: operation.identity.businessId,
+        buyerAccountRef: accountRef,
+        buyerAsset: 'AUD',
+        buyerExponent: 6,
+        buyerAmountUnits: '6000000',
+        providerAsset: 'USDC',
+        providerExponent: 6,
+        providerAmountUnits: '5000000',
+        settlementMethod: 'managed_x402',
+        payoutEligibility: 'ineligible_x402',
+        state: 'reversed',
+        evidenceRefs: [quoteRef, ...reservationRefs],
+        createdAt: expect.any(Number),
+        updatedAt: now + 1,
+      },
+      obligationCount: 1,
     })
   })
 

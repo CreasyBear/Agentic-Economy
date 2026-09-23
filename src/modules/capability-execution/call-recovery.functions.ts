@@ -5,7 +5,7 @@ import { callSourceAction, sourceAction } from '@/lib/server/convex-source'
 import {
   callCancelInputSchema,
   callRecoveryResultSchema,
-  callStatusResultSchema,
+  ownerCallStatusResultSchema,
   callReconcileInputSchema,
   callStatusInputSchema,
   type CallCancelActionInput,
@@ -14,7 +14,7 @@ import {
 } from './call-recovery.actions'
 import type {
   CallRecoveryResult,
-  CallStatusResult,
+  OwnerCallStatusResult,
 } from './call-recovery-contracts'
 
 const owner = async (): Promise<{ userId: string } | undefined> => {
@@ -29,7 +29,7 @@ const invocationNotFound = (callRef: string) => ({
   retryable: false,
 })
 
-const readOwnerCallStatusSourceAction = sourceAction<CallStatusActionInput, CallStatusResult>(
+const readOwnerCallStatusSourceAction = sourceAction<CallStatusActionInput, OwnerCallStatusResult>(
   'capabilityCalls:readOwnerCallStatus',
 )
 const cancelOwnerCallSourceAction = sourceAction<CallCancelActionInput, CallRecoveryResult>(
@@ -41,9 +41,9 @@ const reconcileOwnerCallSourceAction = sourceAction<CallReconcileActionInput, Ca
 
 export const readOwnerCallStatusServer = createServerFn({ method: 'GET' })
   .validator((data) => callStatusInputSchema.parse(data))
-  .handler(async ({ data }): Promise<CallStatusResult> => {
+  .handler(async ({ data }): Promise<OwnerCallStatusResult> => {
     if (await owner() === undefined) return invocationNotFound(data.callRef)
-    return callStatusResultSchema.parse(await callSourceAction(readOwnerCallStatusSourceAction, data))
+    return ownerCallStatusResultSchema.parse(await callSourceAction(readOwnerCallStatusSourceAction, data))
   })
 
 export const cancelOwnerCallServer = createServerFn({ method: 'POST' })

@@ -463,7 +463,7 @@ describe('interactive consequence authority', () => {
     await expect(handler(ctx, ownerSupplyArgs())).resolves.toMatchObject({
       step: 'test',
       state: 'completed',
-      message: expect.stringContaining('queued on Base Sepolia'),
+      message: expect.stringContaining('queued on its selected x402 network'),
     })
     expect(authorityReads).toBe(1)
     expect(externalProbe).not.toHaveBeenCalled()

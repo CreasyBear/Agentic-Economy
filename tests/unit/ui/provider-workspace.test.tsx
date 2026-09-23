@@ -44,12 +44,12 @@ vi.mock('@/modules/money/money.functions', () => ({ readOwnerConnectReadinessSer
 vi.mock('@/components/ae/layout/AeOperatorPage', () => ({ AeOperatorPage: ({ children }: { children: ReactNode }) => <main>{children}</main> }))
 vi.mock('@/components/ae/offerings/AeOwnerOfferings', () => ({ AeOwnerOfferingsList: () => <div data-testid="tools-list" /> }))
 vi.mock('@/components/ae/supply/AeOwnerProviderConnections', () => ({ AeOwnerProviderConnections: (props: unknown) => { rendered.connections(props); return <div data-testid="connection-controls" /> } }))
-vi.mock('@/components/ae/supply/AeSupplyEarningsCard', () => ({ AeSupplyEarningsCard: () => <div data-testid="earnings-controls" /> }))
+vi.mock('@/components/ae/supply/earnings-card/AeSupplyEarningsCard', () => ({ AeSupplyEarningsCard: () => <div data-testid="earnings-controls" /> }))
 vi.mock('@/components/ae/status/AeStatusCard', () => ({ AeStatusCard: (props: unknown) => { rendered.status(props); return <div data-testid="provider-status-card" /> } }))
 vi.mock('@/components/ae/status/AeCapabilityList', () => ({ AeCapabilityList: (props: unknown) => { rendered.capabilities(props); return <div data-testid="provider-capability-list" /> } }))
 vi.mock('@/components/ae/settings/AeWorkspaceGeneral', () => ({ AeWorkspaceGeneral: (props: unknown) => { rendered.identity(props); return <div data-testid="provider-identity-controls" /> } }))
 
-import { AeProviderWorkspace } from '@/components/ae/offerings/AeProviderWorkspace'
+import { AeProviderWorkspace } from '@/components/ae/offerings/provider-workspace/AeProviderWorkspace'
 
 const inventory = { kind: 'available', provider: { name: 'Provider' }, tools: [], projection: 'current', isDone: true, continueCursor: '' } as const
 const unavailable = Promise.resolve({ kind: 'not_applicable' as const })
@@ -79,6 +79,11 @@ describe('Tools management disclosure', () => {
 
     expect(calls.connections).not.toHaveBeenCalled()
     expect(calls.earnings).not.toHaveBeenCalled()
+    const earningsHeading = screen.getByRole('heading', { name: 'Earnings' })
+    expect(earningsHeading.closest('details')).toBeNull()
+    const administration = screen.getByText('Provider settings and administration').closest('details')
+    expect(administration?.textContent).toContain('Provider identity')
+    expect(administration?.textContent).not.toContain('Earnings')
     fireEvent.click(await screen.findByRole('button', { name: 'Manage connections' }))
     await waitFor(() => expect(calls.connections).toHaveBeenCalledTimes(1))
     expect(await screen.findByTestId('connection-controls')).toBeTruthy()
@@ -146,7 +151,8 @@ describe('Tools management disclosure', () => {
     render(<AeProviderWorkspace inventory={inventory} lifecycle={unavailable} connections={unavailable} payouts={unavailable} publicStatus={unavailable} />)
 
     fireEvent.click(screen.getByRole('button', { name: 'Manage provider identity' }))
-    expect(await screen.findByText('Provider identity controls unavailable')).toBeTruthy()
+    const unavailableTitle = await screen.findByText('Provider identity controls unavailable')
+    expect(unavailableTitle.closest('[data-slot="alert"]')?.className).not.toContain('text-destructive')
     fireEvent.click(screen.getByRole('button', { name: 'Try provider identity again' }))
 
     expect(await screen.findByTestId('provider-identity-controls')).toBeTruthy()
@@ -161,6 +167,8 @@ describe('Tools management disclosure', () => {
     expect(screen.getAllByTestId('provider-capability-list')).toHaveLength(1)
     expect(rendered.status).toHaveBeenCalledWith({ readback })
     expect(rendered.capabilities).toHaveBeenCalledWith({ catalog: readback.catalog })
+    expect(screen.getByRole('heading', { name: 'Tool availability' })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Review public status' })).toBeNull()
   })
 
   it('opens authoritative earnings readback for a Connect return', async () => {

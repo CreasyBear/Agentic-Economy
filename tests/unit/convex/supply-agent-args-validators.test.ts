@@ -41,7 +41,7 @@ describe('supply agent mutation argument validators', () => {
   it('accepts the exact args shape supply-actions.ts builds for capabilityProviderTools:listAgent', async () => {
     const backend = convexTestWithMarketComponents()
     const { businessId } = await publishedBusinessOwner(backend, 'supply-args-tools')
-    await expect(backend.mutation(api.capabilityProviderTools.listAgent, {
+    await expect(backend.query(api.capabilityProviderTools.listAgent, {
       businessId,
       paginationOpts: { numItems: 20, cursor: null },
       agentPrincipal: agentPrincipal(),
@@ -53,7 +53,7 @@ describe('supply agent mutation argument validators', () => {
   it('accepts the exact args shape supply-actions.ts builds for capabilityProviderConnectionAgents:list', async () => {
     const backend = convexTestWithMarketComponents()
     const { businessId } = await publishedBusinessOwner(backend, 'supply-args-connections')
-    await expect(backend.mutation(api.capabilityProviderConnectionAgents.list, {
+    await expect(backend.query(api.capabilityProviderConnectionAgents.list, {
       businessId,
       limit: 20,
       agentPrincipal: agentPrincipal(),

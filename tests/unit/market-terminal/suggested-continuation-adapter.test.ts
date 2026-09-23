@@ -7,7 +7,7 @@ import {
   toolNextActionForCli,
   providerNextActionForCli,
 } from '../../../tools/ae/lib/suggested-continuation-adapter'
-import { suggestNextAction } from '@/modules/market/suggested-next-action'
+import { nextActionForCallStatus, suggestNextAction } from '@/modules/market/suggested-next-action'
 
 describe('CLI suggested next-action adapter', () => {
   const toolRef = `operation:v1:${'a'.repeat(64)}`
@@ -113,4 +113,52 @@ describe('CLI suggested next-action adapter', () => {
       state: 'insufficient',
     }))
   })
+})
+
+describe('continuation parity across client surfaces for uncertain and non-terminal calls', () => {
+  const callRef = `invocation:v1:${'c'.repeat(64)}`
+
+  const nonTerminalStates = [
+    'gathering_information',
+    'awaiting_authority',
+    'in_progress',
+    'authorized',
+    'leased',
+    'retryable',
+    'reconciliation_required',
+  ] as const
+
+  it.each(nonTerminalStates)('aligns CLI continuation with shared call status presentation for %s', (state) => {
+    const cli = callNextActionForCli({
+      kind: 'found',
+      callRef,
+      state,
+    })
+    const shared = nextActionForCallStatus({ callRef, state })
+    expect(cli).toEqual(shared)
+    expect(cli?.command).not.toMatch(/^ae call /u)
+    if (state === 'reconciliation_required') {
+      expect(cli?.kind).toBe('reconcile')
+      expect(cli?.command).toBe('ae help recover')
+    } else if (state === 'retryable') {
+      expect(cli?.kind).toBe('retry')
+    } else {
+      expect(cli?.kind).not.toBe('retry')
+    }
+  })
+
+  it.each(['terminal', 'cancelled', 'invalidated'] as const)(
+    'suppresses CLI continuation for %s while shared presentation directs to status inspect',
+    (state) => {
+      expect(callNextActionForCli({
+        kind: 'found',
+        callRef,
+        state,
+      })).toBeUndefined()
+
+      const shared = nextActionForCallStatus({ callRef, state })
+      expect(shared.command).toBe(`ae status ${callRef}`)
+      expect(shared.command).not.toMatch(/^ae call /u)
+    },
+  )
 })

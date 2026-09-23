@@ -7,6 +7,7 @@ import { apiRequestBoundaryResponse } from '@/lib/server/api-request-boundary'
 
 import { negotiateAgentPage } from '@/lib/http/agent-content-negotiation'
 import { respondWithAgentPageMarkdown } from '@/lib/server/agent-page-markdown'
+import { clerkMiddlewareConfigured } from '@/lib/deployment/environment'
 import { resolveCanonicalBaseUrl, resolveCanonicalOrigin } from '@/lib/server/canonical-url'
 import { sanitizeTelemetryError, sanitizeTelemetryValue } from '@/lib/observability/private-route-safety'
 
@@ -108,6 +109,13 @@ export const startInstance = createStart(() => ({
     agentContentNegotiationMiddleware,
     csrfMiddleware,
     sourceWriteAdmissionMiddleware,
+    ...clerkPreviewOrProductionMiddleware(),
+  ],
+}))
+
+function clerkPreviewOrProductionMiddleware() {
+  if (!clerkMiddlewareConfigured(process.env)) return []
+  return [
     clerkMiddleware(() => {
       // Clerk recommends the authorized-party allowlist for public origins.
       // Backend-API session tokens (local `connect:local`) carry no `azp`
@@ -116,5 +124,5 @@ export const startInstance = createStart(() => ({
       const origin = resolveCanonicalOrigin()
       return origin.startsWith('https://') ? { authorizedParties: [origin] } : {}
     }),
-  ],
-}))
+  ]
+}

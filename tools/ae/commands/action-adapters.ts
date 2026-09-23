@@ -1,5 +1,6 @@
 import { AGENT_ACCOUNT_SELF_ROUTE_CONTRACT } from '@/modules/agent-access/account.actions'
 import { CALL_ROUTE_CONTRACT } from '@/modules/capability-execution/call-entry'
+import { TOOL_PROCURE_ROUTE_CONTRACT } from '@/modules/capability-execution/procure.actions'
 import { TOOL_QUOTE_ROUTE_CONTRACT } from '@/modules/capability-execution/quote.actions'
 
 import { ACCOUNT_COMMAND_DESCRIPTORS, accountCommandDescriptor } from './account'
@@ -54,6 +55,12 @@ export const CLI_ACTION_ADAPTERS: readonly CliActionAdapterDescriptor[] = Object
     command: 'call',
     method: TOOL_QUOTE_ROUTE_CONTRACT.method,
     path: TOOL_QUOTE_ROUTE_CONTRACT.path,
+  },
+  {
+    actionId: TOOL_PROCURE_ROUTE_CONTRACT.actionId,
+    command: 'procure',
+    method: TOOL_PROCURE_ROUTE_CONTRACT.method,
+    path: TOOL_PROCURE_ROUTE_CONTRACT.path,
   },
   {
     actionId: callCommandDescriptor.actionId,

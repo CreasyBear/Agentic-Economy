@@ -6,7 +6,12 @@ import { degradeBackend } from '@/lib/observability/degrade-backend'
 import { jsonValueSchema, type JsonValue } from '@/modules/capability-contract/public'
 
 import { dereferenceOpenApiSchema } from './internal/schema-deref'
-export { discoverMcpSource } from './internal/mcp-source-discovery'
+import {
+  discoverMcpSource,
+  type McpSourceDiscovery,
+} from './internal/mcp-source-discovery'
+
+export { discoverMcpSource, type McpSourceDiscovery }
 import { resolveOpenApiCredential } from './internal/openapi-import/credentials'
 import { resolveOpenApiRecord } from './internal/openapi-import/document'
 import {
@@ -143,39 +148,6 @@ export type SupplySourcePreviewDependencies = Readonly<{
   }>) => Promise<McpSourceDiscovery>
   mcpAuthentication?: Extract<SourceAuthenticationRequirement, { kind: 'public' | 'mcp_oauth' }>
 }>
-
-export type McpSourceDiscovery =
-  | Readonly<{
-      kind: 'ready'
-      serverUrl: string
-      registryName?: string
-      verifiedNamespace?: boolean
-      protocolVersion: string
-      sourceDigest: string
-      tools: readonly Readonly<{
-        name: string
-        title?: string
-        description?: string
-        inputSchema: Readonly<Record<string, JsonValue>>
-        outputSchema?: Readonly<Record<string, JsonValue>>
-      }>[]
-    }>
-  | Readonly<{
-      kind: 'authentication_required'
-      authenticationUrl: string
-      serverUrl: string
-    }>
-  | Readonly<{
-      kind: 'remote_selection_required'
-      registryName: string
-      sourceDigest: string
-      sourceRevision: string
-      remotes: readonly SupplyMcpRemote[]
-    }>
-  | Readonly<{
-      kind: 'refused'
-      reason: string
-    }>
 
 const transportJsonObjectSchema = z.record(z.string(), z.unknown()) as z.ZodType<Readonly<Record<string, JsonValue>>>
 

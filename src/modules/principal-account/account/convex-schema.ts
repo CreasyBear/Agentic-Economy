@@ -72,12 +72,109 @@ export const membershipValue = v.object({
   membershipRef: v.string(),
   accountRef: v.string(),
   memberPrincipalRef: v.string(),
+  role: v.optional(v.union(v.literal('org:admin'), v.literal('org:member'))),
   lifecycle: membershipLifecycleValue,
   revision: v.number(),
   createdAt: v.number(),
   createdBy: accountActionContextValue,
   endedAt: v.optional(v.number()),
   endedBy: v.optional(accountActionContextValue),
+})
+
+export const interactiveSessionSelectionValue = v.object({
+  principalRef: v.string(),
+  activeAccountRef: v.string(),
+  revision: v.number(),
+  selectedAt: v.number(),
+  lastCorrelationRef: v.string(),
+})
+
+export const interactiveOnboardingCompletionValue = v.object({
+  accountRef: v.string(),
+  principalRef: v.string(),
+  roleIntent: v.union(v.literal('buyer'), v.literal('supplier')),
+  workspaceName: v.string(),
+  revision: v.number(),
+  completedAt: v.number(),
+  correlationRef: v.string(),
+})
+
+export const accountSecurityPolicyValue = v.object({
+  accountRef: v.string(),
+  requireMfaForMembers: v.boolean(),
+  revision: v.number(),
+  updatedAt: v.number(),
+  lastCorrelationRef: v.string(),
+})
+
+export const lowCreditThresholdCentsValue = v.union(
+  v.literal(1000),
+  v.literal(2500),
+  v.literal(5000),
+)
+
+export const userNotificationPreferenceValue = v.object({
+  principalRef: v.string(),
+  accountRef: v.string(),
+  lowCreditBalance: v.boolean(),
+  lowCreditThresholdCents: lowCreditThresholdCentsValue,
+  spendCapWarning: v.boolean(),
+  callFailureSpike: v.boolean(),
+  invoiceReady: v.boolean(),
+  teamMembershipChanged: v.boolean(),
+  revision: v.number(),
+  updatedAt: v.number(),
+  lastCorrelationRef: v.string(),
+  deliveryEmail: v.optional(v.string()),
+})
+
+export const notificationEventKindValue = v.union(
+  v.literal('low_credit_balance'),
+  v.literal('spend_cap_warning'),
+  v.literal('spend_cap_exceeded'),
+  v.literal('call_failure_spike'),
+  v.literal('invoice_ready'),
+  v.literal('team_membership_changed'),
+)
+
+export const notificationDeliveryStateValue = v.union(
+  v.literal('pending'),
+  v.literal('sent'),
+  v.literal('failed'),
+  v.literal('suppressed'),
+)
+
+export const notificationDeliveryValue = v.object({
+  deliveryRef: v.string(),
+  recipientPrincipalRef: v.string(),
+  accountRef: v.string(),
+  eventKind: notificationEventKindValue,
+  sourceEventRef: v.string(),
+  state: notificationDeliveryStateValue,
+  suppressCode: v.optional(v.string()),
+  vendorMessageId: v.optional(v.string()),
+  vendorCode: v.optional(v.string()),
+  createdAt: v.number(),
+  updatedAt: v.number(),
+})
+
+export const principalNotificationEmailValue = v.object({
+  principalRef: v.string(),
+  email: v.string(),
+  revision: v.number(),
+  observedAt: v.number(),
+  sourceRef: v.string(),
+})
+
+export const accountExternalOrganizationBindingValue = v.object({
+  bindingRef: v.string(),
+  accountRef: v.string(),
+  providerNamespace: v.literal('clerk/organization'),
+  providerIdentifier: v.string(),
+  lifecycle: v.union(v.literal('active'), v.literal('revoked')),
+  revision: v.number(),
+  createdAt: v.number(),
+  updatedAt: v.number(),
 })
 
 export const verifiedRecoveryParticipantApprovalValue = v.object({
@@ -146,4 +243,28 @@ export const accountTables = {
     .index('by_accountRef_and_lifecycle', ['accountRef', 'lifecycle'])
     .index('by_memberPrincipalRef_and_lifecycle', ['memberPrincipalRef', 'lifecycle'])
     .index('by_accountRef_and_memberPrincipalRef_and_lifecycle', ['accountRef', 'memberPrincipalRef', 'lifecycle']),
+  interactiveSessionSelections: defineTable(interactiveSessionSelectionValue)
+    .index('by_principalRef', ['principalRef'])
+    .index('by_principalRef_and_activeAccountRef', ['principalRef', 'activeAccountRef']),
+  interactiveOnboardingCompletions: defineTable(interactiveOnboardingCompletionValue)
+    .index('by_accountRef', ['accountRef'])
+    .index('by_principalRef', ['principalRef']),
+  accountExternalOrganizationBindings: defineTable(accountExternalOrganizationBindingValue)
+    .index('by_providerNamespace_and_providerIdentifier', ['providerNamespace', 'providerIdentifier'])
+    .index('by_accountRef_and_lifecycle', ['accountRef', 'lifecycle']),
+  accountSecurityPolicies: defineTable(accountSecurityPolicyValue)
+    .index('by_accountRef', ['accountRef']),
+  userNotificationPreferences: defineTable(userNotificationPreferenceValue)
+    .index('by_principalRef_and_accountRef', ['principalRef', 'accountRef'])
+    .index('by_accountRef', ['accountRef']),
+  notificationDeliveries: defineTable(notificationDeliveryValue)
+    .index('by_recipient_account_event_source', [
+      'recipientPrincipalRef',
+      'accountRef',
+      'eventKind',
+      'sourceEventRef',
+    ])
+    .index('by_accountRef_and_createdAt', ['accountRef', 'createdAt']),
+  principalNotificationEmails: defineTable(principalNotificationEmailValue)
+    .index('by_principalRef', ['principalRef']),
 } as const

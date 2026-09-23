@@ -1,10 +1,13 @@
 import type {
   ToolCompareResult,
   ToolDetailResult,
-  ToolSearchResult,
+} from "./tool-detail-compare";
+import type { ToolSearchResult } from "./tool-search";
+import { listingTier } from "./publication/provenance";
+import type {
   PublicToolDescriptor,
   PublicToolNavigationRelation,
-} from "../tool-projection";
+} from "./tool-projection-types";
 import { decodePublicSchema } from "./tool-projection-wire-schema";
 import type {
   ToolCompareWireResult,
@@ -17,6 +20,10 @@ import type {
 export function deserializeToolDescriptor(
   tool: ToolSurfaceWireDescriptor,
 ): PublicToolDescriptor {
+  const expectedListingTier = listingTier(tool.provenance.publisher);
+  if (tool.listingTier !== expectedListingTier) {
+    throw new Error("tool_listing_tier_mismatch");
+  }
   return {
     toolRef: tool.toolRef,
     toolId: tool.toolId,
@@ -83,7 +90,16 @@ export function deserializeToolDescriptor(
     ...(tool.catalogPrice === undefined
       ? {}
       : { catalogPrice: tool.catalogPrice }),
-  };
+    ...(tool.canonical === undefined
+      ? {}
+      : {
+          canonical: {
+            providerHost: tool.canonical.providerHost,
+            slug: tool.canonical.slug,
+            path: tool.canonical.path,
+          },
+        }),
+  } satisfies PublicToolDescriptor;
 }
 
 export function deserializeToolSearchResult(

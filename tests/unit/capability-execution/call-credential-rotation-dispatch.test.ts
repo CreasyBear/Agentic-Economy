@@ -17,6 +17,7 @@ const SUCCESSOR_GRANT_REF = 'grant:test-worker-successor'
 type Row = Record<string, unknown>
 type Worker = ReturnType<typeof createWorker>
 type RunQuery = (reference: unknown, args?: Row) => Promise<unknown>
+type RunMutation = (reference: unknown, args: Row) => Promise<unknown>
 
 function functionPath(reference: unknown): string {
   return typeof reference === 'string' ? reference : getFunctionName(reference as never)
@@ -57,6 +58,21 @@ function rotate(
       return readActiveGrant(grants, args ?? {})
     }
     return current
+  }
+}
+
+/** The production fallback is a strict recovery read: this fixture models the
+ * revoked-original-grant response without permitting it to revive the Call. */
+function rejectAcceptedGrantRecovery(worker: Worker): void {
+  const base = worker.ctx.runMutation as RunMutation
+  worker.ctx.runMutation = async (reference: unknown, args: Row) => {
+    const path = functionPath(reference)
+    if (path === 'capabilityCalls:readAcceptedCallGrantAfterLimitUpdate') {
+      worker.state.mutations.push(path)
+      worker.state.mutationCalls.push({ path, args })
+      return null
+    }
+    return await base(reference, args)
   }
 }
 
@@ -137,10 +153,14 @@ describe('call dispatch across a credential rotation', () => {
         successorGrant(callGrant),
       ],
     })
+    rejectAcceptedGrantRecovery(worker)
 
     await expect(prepare(worker)).resolves.toEqual({ kind: 'recorded' })
 
     expect(refusal(worker)).toMatchObject({ kind: 'refused', code: 'grant_not_found' })
+    expect(worker.state.mutationCalls.filter(({ path }) => path === 'capabilityCalls:readAcceptedCallGrantAfterLimitUpdate'))
+      .toEqual([{ path: 'capabilityCalls:readAcceptedCallGrantAfterLimitUpdate', args: { callRef: 'operation-invocation:test-worker' } }])
+    expect(worker.state.dispatch.state).toBe('refused')
     expect(claimActors(worker)).toEqual([])
   })
 

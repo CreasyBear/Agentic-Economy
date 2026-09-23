@@ -1,6 +1,6 @@
 import { expect, it } from 'vitest'
 import { x402DirectoryFunctionalTitle } from '@/modules/market/x402-directory-title'
-import { directoryNetworkLabel, directoryPrice, directoryTitle } from '@/components/ae/market/directory-presentation'
+import { directoryNetworkLabel, directoryPrice, directoryPriceContext, directoryTitle } from '@/components/ae/market/directory-presentation'
 import type { X402DirectoryEntry } from '@/modules/market/x402-directory'
 const entry: X402DirectoryEntry = { resource: 'https://example.com/exa', provider: 'example.com', title: 'StableEnrich', serviceName: 'StableEnrich', description: 'Search with Exa; returns matching documents.', protocol: 'http', prices: [], metadataJson: '{}' }
 it('repairs stale umbrella titles from the declared job while preserving explicit operation titles', () => {
@@ -18,6 +18,18 @@ it('keeps exact known denominations and defers unknown atomic amounts to payment
   expect(unknown.prices[0]?.amount).toBe('20000 atomic units (unknown-mint)')
   expect(directoryPrice({ ...entry, prices: [{ network: 'eip155:8453', scheme: 'exact', amount: '0.02 USDC', decimalAmount: '0.020000', symbol: 'USDC' }] })).toBe('0.02 USDC')
   expect(directoryPrice(entry)).toBe('Price on request')
+})
+
+it('labels directory prices as Provider evidence before AE admission', () => {
+  expect(directoryPriceContext(entry)).toBe('No Provider price published')
+  expect(directoryPriceContext({ ...entry, prices: [{ network: 'eip155:8453', scheme: 'exact', amount: '0.02 USDC' }] })).toBe('Provider price per Call')
+  expect(directoryPriceContext({
+    ...entry,
+    prices: [
+      { network: 'eip155:8453', scheme: 'exact', amount: '0.02 USDC' },
+      { network: 'solana:mainnet', scheme: 'exact', amount: '0.02 USDC' },
+    ],
+  })).toBe('2 Provider payment options')
 })
 
 it('skips empty declared titles before selecting a useful source description', () => {

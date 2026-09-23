@@ -26,6 +26,9 @@ const origin = 'https://ae.example'
 const validDeepLink = '/owner/settings/connections?tab=credentials#provider-x402-resource-url'
 const redirectCases = [
   [validDeepLink, validDeepLink, `${origin}${validDeepLink}`],
+  ['/\t/evil.example', undefined, undefined],
+  ['/\n/evil.example', undefined, undefined],
+  ['/\r/evil.example', undefined, undefined],
   ['https://evil.example/owner/settings', undefined, undefined],
   ['https://owner:secret@evil.example/owner/settings', undefined, undefined],
   ['//evil.example/owner/settings', undefined, undefined],
@@ -33,6 +36,11 @@ const redirectCases = [
   ['/\\evil', undefined, undefined],
   ['/\\/evil', undefined, undefined],
   ['/objects\\..\\evil', undefined, undefined],
+  ['/sign-in', undefined, undefined],
+  ['/sign-up/', undefined, undefined],
+  ['/settings/../sign-in?return=/owner/settings#resume', undefined, undefined],
+  ['/settings/%2e%2e/sign-up#resume', undefined, undefined],
+  ['/settings/..//evil.example', undefined, undefined],
 ] as const
 
 type RouteWithSearchValidator = Readonly<{
@@ -56,6 +64,8 @@ describe('auth redirect sanitizer', () => {
     const validateSearch = (route as RouteWithSearchValidator).options.validateSearch
 
     expect(validateSearch({ redirect: validDeepLink })).toEqual({ redirect: validDeepLink })
+    expect(validateSearch({})).toEqual({})
+    expect(validateSearch({ redirect: undefined })).toEqual({})
     for (const [unsafe] of redirectCases.slice(1)) {
       expect(validateSearch({ redirect: unsafe })).toEqual({})
     }

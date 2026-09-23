@@ -4,11 +4,6 @@ import { FileCode2Icon } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 import {
-  ResizableHandle,
-  ResizablePanel,
-  ResizablePanelGroup,
-} from '@/components/ui/resizable'
-import {
   Sheet,
   SheetContent,
   SheetDescription,
@@ -16,7 +11,6 @@ import {
   SheetTitle,
 } from '@/components/ui/sheet'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { cn } from '@/lib/utils'
 import type { PublicToolDescriptor } from '@/modules/capability-supply/public'
 import {
   emptyMarketListingEvidence,
@@ -56,20 +50,10 @@ export function AeToolInspector({
   )
   const fullInspectorRef = useRef<HTMLElement>(null)
   const [technicalContractOpen, setTechnicalContractOpen] = useState(false)
-  const [isDesktop, setIsDesktop] = useState(false)
 
   useEffect(() => {
     if (variant === 'full') fullInspectorRef.current?.focus()
   }, [tool.toolRef, variant])
-
-  useEffect(() => {
-    if (variant !== 'full') return
-    const mediaQuery = window.matchMedia('(min-width: 1024px)')
-    const syncViewport = () => setIsDesktop(mediaQuery.matches)
-    syncViewport()
-    mediaQuery.addEventListener('change', syncViewport)
-    return () => mediaQuery.removeEventListener('change', syncViewport)
-  }, [variant])
 
   if (variant === 'compact') {
     return (
@@ -97,10 +81,7 @@ export function AeToolInspector({
   const researchPanel = (
     <Tabs
       defaultValue="overview"
-      className={cn(
-        'flex min-h-0 min-w-0 flex-col gap-0 bg-card',
-        isDesktop ? 'h-full' : 'h-auto',
-      )}
+      className="flex min-h-0 min-w-0 flex-col gap-0 bg-card lg:h-full"
     >
       <div className="flex min-h-12 shrink-0 items-center justify-between gap-3 border-b border-border px-gutter">
         <TabsList variant="line" aria-label="Tool views" className="h-12 p-0 max-sm:!h-12">
@@ -122,7 +103,7 @@ export function AeToolInspector({
 
       <TabsContent
         value="overview"
-        className={cn('min-h-0 overscroll-contain', isDesktop && 'overflow-y-auto')}
+        className="min-h-0 overscroll-contain lg:overflow-y-auto"
       >
         <AeToolDecision tool={tool} model={model} />
         <AeToolTrackRecord evidence={trackRecord} />
@@ -131,10 +112,7 @@ export function AeToolInspector({
 
       <TabsContent
         value="contract"
-        className={cn(
-          'min-h-0 overscroll-contain px-gutter py-6',
-          isDesktop && 'overflow-y-auto',
-        )}
+        className="min-h-0 overscroll-contain px-gutter py-6 lg:overflow-y-auto"
       >
         <AeToolContractSections
           tool={tool}
@@ -153,32 +131,17 @@ export function AeToolInspector({
       data-tool-inspector="full"
       className="ae-nav flex min-h-0 w-full flex-1 flex-col overflow-hidden pb-3 focus:outline-none"
     >
-      {isDesktop ? (
-        <ResizablePanelGroup
-          orientation="horizontal"
-          className="min-h-0 flex-1 overflow-hidden bg-card"
-        >
-          <ResizablePanel defaultSize="70%" minSize="52%">
-            {researchPanel}
-          </ResizablePanel>
-          <ResizableHandle
-            withHandle
-            className="[&>div]:h-7 [&>div]:w-3.5 [&>div]:rounded-sm [&>div]:border-border-strong [&>div]:bg-card [&>div]:text-muted-foreground [&>div]:shadow-soft [&>div>svg]:size-3"
-          />
-          <ResizablePanel defaultSize="30%" minSize="22%" maxSize="42%">
-            <div className="h-full overflow-y-auto overscroll-contain">
-              {runTicket}
-            </div>
-          </ResizablePanel>
-        </ResizablePanelGroup>
-      ) : (
-        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain bg-card">
-          <div className="border-b border-border">
-            {runTicket}
-          </div>
+      <div
+        data-tool-layout="responsive"
+        className="grid min-h-0 flex-1 grid-cols-1 overflow-y-auto overscroll-contain bg-card lg:grid-cols-[minmax(0,7fr)_minmax(18rem,3fr)] lg:overflow-hidden"
+      >
+        <div className="order-2 min-h-0 lg:order-1 lg:overflow-hidden">
           {researchPanel}
         </div>
-      )}
+        <div className="order-1 border-b border-border lg:order-2 lg:min-h-0 lg:overflow-y-auto lg:border-b-0 lg:border-l">
+          {runTicket}
+        </div>
+      </div>
 
       <Sheet open={technicalContractOpen} onOpenChange={setTechnicalContractOpen}>
         <SheetContent

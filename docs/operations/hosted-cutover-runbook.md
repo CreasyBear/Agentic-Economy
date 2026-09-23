@@ -45,13 +45,34 @@ was deleted by decision).
 ## Well 3: Rebuild business supply projections
 
 Rebuild search documents to ensure hosted business search matches CLI/describe
-results immediately:
+results immediately. This full-table sweep is the one-time catch-up after
+deploy; the hourly `reconcile business supply projections` cron
+(`workloadCron:reconcileBusinessSupplyProjections`) keeps ongoing projections
+healthy without operator action.
+
+The sweep intentionally scans **all** businesses (published, unpublished, and
+suppressed) so stale `registrySearchDocuments` rows retract when a business is
+no longer eligible for search.
+
+Optional dry-run (no writes; reports what would rebuild):
+
+```sh
+npx convex run --prod capabilitySupplyProjection:rebuildAllBusinessSupplyProjections '{"dryRun": true}'
+```
+
+Expect `processed === rebuilt + skipped` and no table writes.
+
+Apply the sweep (self-schedules continuation pages until `isDone` is true):
 
 ```sh
 npx convex run --prod capabilitySupplyProjection:rebuildAllBusinessSupplyProjections '{}'
 ```
 
-Run this exactly once after deploy.
+Each invocation processes up to 25 businesses. If the first page returns
+`isDone: false`, the mutation schedules the next page automatically; wait for
+scheduled runs to finish (or re-invoke with the returned `continueCursor` only
+if you are debugging). Run the apply command exactly once after deploy unless
+you are recovering from a partial sweep.
 
 ## Well 3: Sandbox deployment profile
 

@@ -2,7 +2,9 @@ import { degrade } from '@/lib/observability/degrade'
 import { callPublicSourceQuery, sourceQuery } from '@/lib/server/convex-source'
 import { CATALOGUE_STALE_AFTER_MS, sourceFreshnessState, type SourceFreshnessState } from '@/modules/common/freshness'
 import { readX402Directory } from './x402-directory.server'
+import { rerankX402DirectoryPage } from './x402-directory-reranker'
 import type { X402DirectoryIndexCoverage, X402DirectoryIndexInput, X402IndexedDirectoryEntry } from './x402-directory-index'
+import { decodeOpaqueCursor, encodeOpaqueCursor } from '@/modules/registry/opaque-cursor'
 import {
   x402DirectoryProvidersInputSchema, type X402DirectoryProvidersInput, type X402DirectoryProvidersPage,
   x402DirectoryCatalogueInputSchema, x402DirectoryCatalogueResourceInputSchema,
@@ -99,9 +101,19 @@ export async function readX402DirectoryCatalogue(input: X402DirectoryCatalogueIn
   if (!parsed.success) return { kind: 'unavailable', reason: 'query_invalid' }
   const { directoryCategory, indexCursor, offset, ...filters } = parsed.data
   try {
+    let engineCursor: string | null = null
+    let cursorScope = 'current'
+    if (indexCursor !== undefined) {
+      const directoryStatus = await callPublicSourceQuery(status, {})
+      if (directoryStatus.kind === 'unavailable') return { kind: 'unavailable', reason: 'index_unavailable' }
+      cursorScope = directoryStatus.coverage?.generation ?? 'current'
+      const decoded = decodeOpaqueCursor(indexCursor, { kind: 'x402-directory', scope: cursorScope })
+      if (decoded === undefined) return { kind: 'unavailable', reason: 'query_invalid' }
+      engineCursor = decoded
+    }
     const result = await callPublicSourceQuery(browse, {
       ...filters, ...(directoryCategory === undefined ? {} : { category: directoryCategory }),
-      paginationOpts: { numItems: 24, cursor: indexCursor ?? null, maximumRowsRead: 512 },
+      paginationOpts: { numItems: 24, cursor: engineCursor, maximumRowsRead: 512 },
     })
     if (result.kind === 'unavailable') {
       if (result.reason !== 'index_unavailable') return result
@@ -119,11 +131,11 @@ export async function readX402DirectoryCatalogue(input: X402DirectoryCatalogueIn
     const { network, provider, maxUsdPrice } = filters
     return {
       kind: 'ok', source: 'index', coverage: result.coverage, searchMethod: result.searchMethod,
-      page: { kind: 'ok', items: result.page.map(item => item.entry), offset: 0, limit: 24,
+      page: await rerankX402DirectoryPage({ kind: 'ok', items: result.page.map(item => item.entry), offset: 0, limit: 24,
         mode: filters.query ? 'search' : 'browse',
         appliedFilters: { ...(network === undefined ? {} : { network }), ...(provider === undefined ? {} : { provider }), ...(maxUsdPrice === undefined ? {} : { maxUsdPrice }) },
-      },
-      isDone: result.isDone, ...(result.isDone ? {} : { indexCursor: result.continueCursor }),
+      }, filters.query),
+      isDone: result.isDone, ...(result.isDone ? {} : { indexCursor: encodeOpaqueCursor({ kind: 'x402-directory', scope: result.coverage.generation ?? cursorScope, cursor: result.continueCursor }) }),
       ...(result.pageStatus === undefined ? {} : { pageStatus: result.pageStatus }),
       ...(result.splitCursor === undefined ? {} : { splitCursor: result.splitCursor }),
     }

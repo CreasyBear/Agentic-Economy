@@ -58,6 +58,10 @@ import {
 } from '@/modules/capability-execution/call-recovery.actions'
 import { callAction } from '@/modules/capability-execution/call.actions'
 import {
+  toolProcureAction,
+  TOOL_PROCURE_ROUTE_CONTRACT,
+} from '@/modules/capability-execution/procure.actions'
+import {
   toolQuoteAction,
   TOOL_QUOTE_ROUTE_CONTRACT,
 } from '@/modules/capability-execution/quote.actions'
@@ -98,6 +102,7 @@ const registeredActions: readonly AnyAction[] = [
   marketRequestListAction,
   marketRequestStatusAction,
   toolQuoteAction,
+  toolProcureAction,
   callAction,
   callListAction,
   callStatusAction,
@@ -161,6 +166,7 @@ export function listMcpActionDescriptors(): readonly PublicMcpActionDescriptor[]
 
 const toolCallRouteContracts = [
   TOOL_QUOTE_ROUTE_CONTRACT,
+  TOOL_PROCURE_ROUTE_CONTRACT,
   CALL_ROUTE_CONTRACT.call,
   CALL_ROUTE_CONTRACT.list,
   CALL_ROUTE_CONTRACT.status,

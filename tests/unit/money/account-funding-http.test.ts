@@ -5,12 +5,14 @@ import { canonicalDigest } from '@/modules/common/canonical-digest'
 import {
   beginAccountFundingThroughSource,
   ingestVerifiedStripeEventThroughSource,
+  readAccountFundingConstraintsThroughSource,
   readAccountFundingThroughSource,
 } from '@/modules/money/server'
 import { createFundingHandoffService } from '@/lib/server/funding-handoff-api'
 
 const input = {
   amount: { currency: 'AUD', units: '5000000', exponent: 6 },
+  expectedPolicyDigest: `sha256:${'1'.repeat(64)}`,
   idempotencyKey: 'account-funding:test-one',
 } as const
 
@@ -38,6 +40,7 @@ function command(overrides: Record<string, unknown> = {}) {
       format: 'ae.account-funding-input:v1',
       ownerId: 'owner-1',
       amount: input.amount,
+      expectedPolicyDigest: input.expectedPolicyDigest,
       idempotencyKey: input.idempotencyKey,
     }),
     successReturnRef: 'https://ae.test/owner/credit?funding={CHECKOUT_SESSION_ID}',
@@ -52,6 +55,41 @@ function command(overrides: Record<string, unknown> = {}) {
 }
 
 describe('Account AUD funding HTTP boundary', () => {
+  it('refuses live Stripe configuration when deployment is hosted_alpha', async () => {
+    await expect(readAccountFundingConstraintsThroughSource({
+      env: {
+        AE_SERVICE_MODE: 'hosted_alpha',
+        STRIPE_SECRET_KEY: 'sk_live_secret_key_material',
+        STRIPE_WEBHOOK_SECRET: 'whsec_secret',
+      },
+    })).resolves.toMatchObject({
+      kind: 'refused',
+      code: 'stripe_setup_required',
+      retryable: false,
+    })
+  })
+
+  it('reads display constraints from the same environment selected for funding admission', async () => {
+    const constraints = {
+      kind: 'available' as const,
+      environment: 'production' as const,
+      currency: 'AUD' as const,
+      exponent: 6 as const,
+      minimumPrincipalUnits: '5000000',
+      maximumPrincipalUnits: '25000000000',
+      incrementUnits: '10000',
+      serviceFeeBps: 500,
+      taxOnServiceFeeBps: 1000,
+      legalCustomerMaximumAccessibleUnits: '4999999999',
+      policyDigest: `sha256:${'a'.repeat(64)}`,
+    }
+    sourceMocks.callSourceQuery.mockResolvedValueOnce(constraints)
+    const provider = { createOrRecoverCreditPayment: vi.fn(), readCreditPayment: vi.fn() }
+
+    await expect(readAccountFundingConstraintsThroughSource({ provider, mode: 'live' })).resolves.toEqual(constraints)
+    expect(sourceMocks.callSourceQuery).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ environment: 'production' }))
+  })
+
   it('returns one direct hosted Checkout handoff after durable reserve and evidence bind', async () => {
     sourceMocks.sourceWriteAdmissionFromRequest.mockResolvedValue({
       version: 'source-write:v2', keyId: 'test', scope: 'billing', operationKey: 'test',
@@ -115,6 +153,9 @@ describe('Account AUD funding HTTP boundary', () => {
     const bindArgs = sourceMocks.callPublicSourceMutation.mock.calls[1]?.[1]
     expect(bindArgs).not.toHaveProperty('checkoutUrl')
     expect(JSON.stringify(bindArgs)).not.toContain('logical-attempt-one')
+    const reserveArgs = sourceMocks.callPublicSourceMutation.mock.calls[0]?.[1]
+    expect(reserveArgs?.successReturnRef).toMatch(/\/fund\/\{CHECKOUT_SESSION_ID\}$/u)
+    expect(reserveArgs?.cancelReturnRef).toBe(reserveArgs?.successReturnRef)
   })
 
   it('reserves the authenticated Account before creating one Stripe checkout', async () => {
@@ -159,9 +200,16 @@ describe('Account AUD funding HTTP boundary', () => {
     expect(sourceMocks.callSourceMutation.mock.calls[0]?.[1]).toMatchObject({
       amountUnits: '5000000',
       environment: 'sandbox',
+      expectedPolicyDigest: input.expectedPolicyDigest,
       commandRef: durable.commandRef,
       inputDigest: durable.inputDigest,
     })
+    expect(sourceMocks.callSourceMutation.mock.calls[0]?.[1]).toMatchObject({
+      successReturnRef: expect.stringMatching(/\/owner\/credit\?funding=\{CHECKOUT_SESSION_ID\}$/u),
+      cancelReturnRef: expect.stringMatching(/\/owner\/credit\?funding=\{CHECKOUT_SESSION_ID\}$/u),
+    })
+    expect(sourceMocks.callSourceMutation.mock.calls[0]?.[1].cancelReturnRef)
+      .toBe(sourceMocks.callSourceMutation.mock.calls[0]?.[1].successReturnRef)
     expect(createOrRecoverCreditPayment).toHaveBeenCalledWith(expect.objectContaining({
       commandRef: durable.commandRef,
       principalId: durable.actorPrincipalRef,
@@ -196,7 +244,7 @@ describe('Account AUD funding HTTP boundary', () => {
     expect(provider.createOrRecoverCreditPayment).not.toHaveBeenCalled()
   })
 
-  it('reads an uncertain command without creating another payment', async () => {
+  it('AM-09 reads an uncertain command without creating another payment', async () => {
     const durable = command({ state: 'outcome_unknown' as const })
     sourceMocks.callSourceQuery.mockResolvedValueOnce({ kind: 'accepted', command: durable })
     const provider = {

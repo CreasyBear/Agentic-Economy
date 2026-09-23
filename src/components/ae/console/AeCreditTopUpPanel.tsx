@@ -1,270 +1,279 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useRef } from 'react'
 
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Skeleton } from '@/components/ui/skeleton'
 import { Spinner } from '@/components/ui/spinner'
+import { toast } from '@/lib/ui/toast'
+import { formatDisplayAmount } from '@/modules/money/public'
+import type { AccountFundingBalance, AccountFundingConstraints } from '@/modules/money/server'
 import {
-  AUD_EXPONENT,
-  audFundingPolicyFromCommercialControls,
-  canonicalAudUnits,
-  formatExactAmount,
-  isMoneyRefusal,
-  quoteAudAccountFunding,
-  SANDBOX_COMMERCIAL_POLICY_CONTROLS,
-  type CreditPaymentSession,
-  type MoneyRefusal,
-} from '@/modules/money/public'
-import type {
-  AccountFundingBeginInput,
-  AccountFundingOutcomeUnknownResult,
-  AccountFundingReadInput,
-  AccountFundingStartResult,
-} from '@/modules/money/server'
-import { captureClientExceptionOnClient } from '@/lib/observability/capture-client-exception'
-import { captureRouteException } from '@/lib/observability/capture-route-exception'
-import { degrade } from '@/lib/observability/degrade'
+  audInputTextFromUnits,
+  canStartAnotherPayment,
+  formatAudAmountString,
+  formatAudGstNote,
+  formatAudUnits,
+  formatAustralianGstPercentLabel,
+} from './credit-top-up-format'
+import { defaultCheckoutRedirect } from './credit-top-up-storage'
+import type { AccountFundingPort } from '@/modules/money/account-funding.contracts'
+import {
+  useAccountFunding,
+} from './use-account-funding'
 
-export type AccountFundingPort = Readonly<{
-  begin: (input: AccountFundingBeginInput) => Promise<AccountFundingStartResult>
-  read: (input: AccountFundingReadInput) => Promise<CreditPaymentSession | MoneyRefusal>
-}>
+const DENOMINATION_CHIP_CLASS =
+  'inline-flex min-h-touch items-center rounded-full border px-3 py-1.5 font-mono text-xs font-medium tabular-nums enabled:active:scale-[0.98] transition-transform duration-100 ease-out motion-reduce:transition-none motion-reduce:active:scale-100'
+
+const QUOTE_SHELL_CLASS =
+  'grid min-h-[13.5rem] gap-3 rounded-lg border border-border/70 bg-muted/30 p-3 text-sm'
 
 export type AeAccountFundingPanelProps = Readonly<{
   port?: AccountFundingPort
+  constraints?: AccountFundingConstraints
+  constraintsLoading?: boolean
+  accountBalance?: AccountFundingBalance
   onRefresh?: () => void | Promise<void>
   redirectToCheckout?: (url: string) => void
 }>
 
-type RecoveryLocator =
-  | Readonly<{ externalRef: string; idempotencyKey?: string }>
-  | Readonly<{ commandRef: string; idempotencyKey: string }>
-
-type CreditPaymentStatus = CreditPaymentSession['evidence']['status']
-
-const recoveryStorageKey = 'ae.account-funding.recovery.v1'
-
 export function AeAccountFundingPanel({
   port,
+  constraints,
+  constraintsLoading = false,
+  accountBalance,
   onRefresh,
   redirectToCheckout = defaultCheckoutRedirect,
 }: AeAccountFundingPanelProps) {
-  const [pending, setPending] = useState(false)
-  const [checking, setChecking] = useState(false)
-  const [amountText, setAmountText] = useState('')
-  const [amountInvalid, setAmountInvalid] = useState(false)
-  const [session, setSession] = useState<CreditPaymentSession>()
-  const [paymentStatus, setPaymentStatus] = useState<CreditPaymentStatus>()
-  const [errorMessage, setErrorMessage] = useState<string>()
-  const [recovery, setRecovery] = useState<RecoveryLocator>()
-  const idempotencyKey = useRef<string | undefined>(undefined)
-  const recoveryAttempted = useRef(false)
-  const preview = useMemo(() => {
-    const units = canonicalAudUnits(amountText)
-    return units === undefined
-      ? undefined
-      : quoteAudAccountFunding(
-          units,
-          audFundingPolicyFromCommercialControls(SANDBOX_COMMERCIAL_POLICY_CONTROLS),
-        )
-  }, [amountText])
+  const {
+    state,
+    dispatch,
+    pending,
+    checking,
+    preview,
+    suggestedPrincipalUnits,
+    selectedPrincipalUnits,
+    quoteRefreshRequired,
+    checkoutResumable,
+    handleAmountChange,
+    handleAmountBlur,
+    beginTopUp,
+    startAnotherPayment,
+    refreshPayment,
+    resumeCheckout,
+    refreshFundingQuote,
+  } = useAccountFunding({ port, constraints, onRefresh, redirectToCheckout })
 
-  const readCanonicalPayment = useCallback(async (locator: RecoveryLocator) => {
-    if (port === undefined) return
-    setChecking(true)
-    setErrorMessage(undefined)
-    try {
-      const result = await port.read(locator)
-      if (isMoneyRefusal(result)) {
-        setPaymentStatus(result.code === 'funding_pending' ? 'pending' : result.code === 'funding_outcome_unknown' ? 'outcome_unknown' : undefined)
-        setErrorMessage(topUpErrorCopy(result))
-        return
-      }
-      setSession(result)
-      setPaymentStatus(result.evidence.status)
-      if (result.evidence.status === 'failed') setErrorMessage('The provider did not complete this payment. No Account funds were added.')
-      if (result.evidence.status === 'outcome_unknown') setErrorMessage('Payment status is still being verified. No Account funds were added by this browser return.')
-      setRecovery(locator)
-      persistRecovery(locator)
-      try {
-        await onRefresh?.()
-      } catch (cause) {
-        setErrorMessage(degrade(cause, 'Payment was read back, but the canonical Account balance is temporarily unavailable.', { site: 'readCanonicalPayment.onRefresh', reason: 'source_unavailable' }))
-      }
-    } catch (cause) {
-      captureClientExceptionOnClient(cause)
-      setPaymentStatus('outcome_unknown')
-      setErrorMessage('Payment status is still being checked. Your Account balance has not been updated by this browser return.')
-    } finally {
-      setChecking(false)
-    }
-  }, [onRefresh, port])
+  const {
+    amountErrorMessage,
+    amountInvalid,
+    amountText,
+    errorMessage,
+    paymentStatus,
+    recovery,
+    session,
+  } = state
 
+  const succeededToastFired = useRef(false)
   useEffect(() => {
-    if (port === undefined || recoveryAttempted.current) return
-    const stored = readStoredRecovery()
-    const returnedExternalRef = readReturnedExternalRef()
-    const locator = returnedExternalRef === undefined
-      ? stored
-      : { externalRef: returnedExternalRef }
-    if (locator === undefined) return
-    recoveryAttempted.current = true
-    idempotencyKey.current = locator.idempotencyKey
-    setRecovery(locator)
-    void readCanonicalPayment(locator)
-  }, [port, readCanonicalPayment])
-
-  async function beginTopUp() {
-    if (pending || port === undefined) return
-    const units = canonicalAudUnits(amountText)
-    if (units === undefined) {
-      setAmountInvalid(true)
+    if (paymentStatus !== 'succeeded') {
+      succeededToastFired.current = false
       return
     }
-    const nextIdempotencyKey = idempotencyKey.current ?? `account-funding:${randomId()}`
-    idempotencyKey.current = nextIdempotencyKey
-    setPending(true)
-    setErrorMessage(undefined)
-    try {
-      const result = await port.begin({
-        amount: { currency: 'AUD', units: units.toString(), exponent: AUD_EXPONENT },
-        idempotencyKey: nextIdempotencyKey,
-      })
-      if (result.kind === 'outcome_unknown') {
-        const locator = { commandRef: result.commandRef, idempotencyKey: nextIdempotencyKey }
-        setPaymentStatus('outcome_unknown')
-        setRecovery(locator)
-        persistRecovery(locator)
-        setErrorMessage(topUpErrorCopy(result))
-        return
-      }
-      if (result.kind === 'refused') {
-        setErrorMessage(topUpErrorCopy(result))
-        return
-      }
-      const locator = { externalRef: result.session.evidence.externalRef, idempotencyKey: nextIdempotencyKey }
-      setSession(result.session)
-      setRecovery(locator)
-      persistRecovery(locator)
-      if (result.session.kind === 'hosted_redirect' && result.session.checkoutUrl !== undefined) {
-        redirectToCheckout(result.session.checkoutUrl)
-      }
-    } catch (cause) {
-      captureClientExceptionOnClient(cause)
-      setErrorMessage('Account funding could not be started. No payment was confirmed; try again.')
-    } finally {
-      setPending(false)
-    }
-  }
+    if (succeededToastFired.current) return
+    succeededToastFired.current = true
+    const balance = accountBalance?.kind === 'available' ? accountBalance.balance : undefined
+    const description = balance !== undefined
+      ? `Available credit is now ${formatDisplayAmount(balance)}. Paid Calls can use it immediately.`
+      : 'Credit will show in Available credit above. Your card charge is confirmed.'
+    toast.success('Payment received', { description })
+  }, [accountBalance, paymentStatus])
 
-  function startAnotherPayment() {
-    if (pending || checking || (paymentStatus !== 'succeeded' && paymentStatus !== 'failed')) return
-    idempotencyKey.current = undefined
-    setSession(undefined)
-    setRecovery(undefined)
-    setPaymentStatus(undefined)
-    setErrorMessage(undefined)
-    setAmountText('')
-    setAmountInvalid(false)
-    try {
-      window.sessionStorage.removeItem(recoveryStorageKey)
-      const url = new URL(window.location.href)
-      for (const key of ['funding', 'checkout_session_id', 'session_id']) url.searchParams.delete(key)
-      window.history.replaceState(window.history.state, '', url)
-    } catch (cause) {
-      // The current render can start a new payment even when browser storage is unavailable.
-      captureRouteException(cause, { site: 'startAnotherPayment' }, 'warning')
-    }
-  }
-
-  async function refreshPayment() {
-    if (recovery === undefined || pending || checking) return
-    await readCanonicalPayment(recovery)
-  }
+  const taxOnServiceFeeBps = constraints?.kind === 'available' ? constraints.taxOnServiceFeeBps : 1000
 
   return (
     <div className="grid gap-3">
-        {port === undefined ? (
-          <Alert>
-            <AlertTitle>Account funding is unavailable</AlertTitle>
-            <AlertDescription>Your authenticated Account could not be loaded. No payment was started.</AlertDescription>
-          </Alert>
-        ) : null}
-        {errorMessage !== undefined ? (
-          <Alert variant={paymentStatus === 'failed' ? 'destructive' : 'default'}>
-            <AlertTitle>{paymentStatus === 'failed' ? 'Payment did not complete' : 'Payment status'}</AlertTitle>
-            <AlertDescription>{errorMessage}</AlertDescription>
-          </Alert>
-        ) : null}
-        {checking ? <p className="text-sm text-muted-foreground" role="status">Checking the canonical payment readback…</p> : null}
-        {paymentStatus === 'pending' ? <p className="text-sm text-muted-foreground" role="status">Payment is pending canonical server readback; the browser has not changed your Account balance.</p> : null}
-        {paymentStatus === 'outcome_unknown' ? (
-          <Alert>
-            <AlertTitle>Payment is still being verified</AlertTitle>
-            <AlertDescription>Do not retry with a new payment. The authenticated server is reconciling this payment before any Account balance change.</AlertDescription>
-          </Alert>
-        ) : null}
-        {paymentStatus === 'succeeded' ? (
-          <Alert>
-            <AlertTitle>Payment verified</AlertTitle>
-            <AlertDescription>Your Account balance changes only after the canonical journal readback. The browser return did not grant funds.</AlertDescription>
-          </Alert>
-        ) : null}
-        {session === undefined && recovery === undefined && port !== undefined ? (
-          <div className="grid gap-2">
-            <Label htmlFor="account-funding-amount">Account funding amount (AUD)</Label>
+      {port === undefined || (!constraintsLoading && constraints?.kind !== 'available') ? (
+        <Alert>
+          <AlertTitle>Account funding is unavailable</AlertTitle>
+          <AlertDescription>Funding limits could not be confirmed. No payment was started.</AlertDescription>
+        </Alert>
+      ) : null}
+      {errorMessage !== undefined ? (
+        <Alert variant={paymentStatus === 'failed' ? 'destructive' : 'default'}>
+          <AlertTitle>
+            {paymentStatus === 'failed'
+              ? 'Payment did not complete'
+              : session?.evidence.checkoutStatus === 'expired' && paymentStatus !== 'succeeded'
+                ? 'Checkout expired'
+                : quoteRefreshRequired
+                  ? 'Funding quote changed'
+                  : errorMessage.includes('Secure checkout could not be opened')
+                    ? 'Secure checkout could not be opened'
+                    : paymentStatus === 'outcome_unknown'
+                      ? 'Payment is still being verified'
+                      : 'Payment status'}
+          </AlertTitle>
+          <AlertDescription>
+            <span>{errorMessage}</span>
+            {quoteRefreshRequired && onRefresh !== undefined ? (
+              <Button type="button" variant="secondary" disabled={pending || checking} onClick={() => void refreshFundingQuote()}>
+                Refresh funding quote
+              </Button>
+            ) : null}
+          </AlertDescription>
+        </Alert>
+      ) : null}
+      {checking ? <p className="text-sm text-muted-foreground" role="status">Checking payment status…</p> : null}
+      {paymentStatus === 'pending' && session?.evidence.checkoutStatus !== 'expired' ? (
+        <p className="text-sm text-muted-foreground" role="status">
+          {checkoutResumable
+            ? 'Secure checkout is ready. Continue this payment, or refresh its status if checkout was already completed.'
+            : 'Payment is still processing. A$0.00 has been added until this payment is confirmed.'}
+        </p>
+      ) : null}
+      {paymentStatus === 'outcome_unknown' ? (
+        <Alert>
+          <AlertTitle>Payment is still being verified</AlertTitle>
+          <AlertDescription>
+            Do not start another payment. Your balance will not change until confirmation. Choose Refresh payment status.
+          </AlertDescription>
+        </Alert>
+      ) : null}
+      {paymentStatus === 'succeeded' ? (
+        <Alert>
+          <AlertTitle>Payment received</AlertTitle>
+          <AlertDescription>
+            Your payment was confirmed. Credit is available in your balance above and ready for Calls.
+          </AlertDescription>
+        </Alert>
+      ) : null}
+      {constraintsLoading && port !== undefined ? (
+        <div className="grid gap-2" aria-busy="true" aria-label="Loading funding amounts">
+          <div className="flex flex-wrap gap-2">
+            <Skeleton className="h-8 w-[4.5rem] rounded-full" />
+            <Skeleton className="h-8 w-[4.5rem] rounded-full" />
+            <Skeleton className="h-8 w-[4.5rem] rounded-full" />
+          </div>
+          <Skeleton className="h-9 w-full" />
+          <Skeleton className="min-h-[13.5rem] w-full rounded-lg" />
+        </div>
+      ) : null}
+      {session === undefined && recovery === undefined && port !== undefined && constraints?.kind === 'available' ? (
+        <div className="grid gap-2">
+          {suggestedPrincipalUnits.length > 0 ? (
+            <fieldset className="grid gap-2">
+              <legend className="text-sm font-medium">Choose a credit amount</legend>
+              <div className="flex flex-wrap gap-2">
+                {suggestedPrincipalUnits.map((units) => {
+                  const selected = selectedPrincipalUnits === units
+                  return (
+                    <Button
+                      key={units.toString()}
+                      type="button"
+                      size="sm"
+                      variant="ghost"
+                      aria-pressed={selected}
+                      disabled={pending || checking}
+                      onClick={() => {
+                        dispatch({
+                          type: 'amount_changed',
+                          amountText: audInputTextFromUnits(units),
+                          valid: true,
+                        })
+                      }}
+                      className={
+                        selected
+                          ? `${DENOMINATION_CHIP_CLASS} border-foreground bg-muted hover:bg-muted`
+                          : `${DENOMINATION_CHIP_CLASS} border-border bg-container hover:bg-muted/60`
+                      }
+                    >
+                      +{formatAudUnits(units)}
+                    </Button>
+                  )
+                })}
+              </div>
+            </fieldset>
+          ) : null}
+          <div className="grid gap-1.5">
+            <Label htmlFor="account-funding-amount">Other amount (AUD)</Label>
             <Input
               id="account-funding-amount"
               inputMode="decimal"
               autoComplete="off"
               value={amountText}
-              onChange={(event) => {
-                setAmountText(event.target.value)
-                if (canonicalAudUnits(event.target.value) !== undefined) setAmountInvalid(false)
-              }}
+              onChange={(event) => handleAmountChange(event.target.value)}
+              onBlur={handleAmountBlur}
               disabled={pending || checking}
               placeholder="10.00"
               aria-invalid={amountInvalid}
               aria-describedby={amountInvalid ? 'account-funding-amount-help account-funding-amount-error' : 'account-funding-amount-help'}
+              className="font-mono tabular-nums"
             />
-            <p id="account-funding-amount-help" className="text-xs text-muted-foreground">The configured minimum and maximum are enforced by the authenticated server.</p>
-            {amountInvalid ? <p id="account-funding-amount-error" className="text-sm text-destructive" role="alert">Enter a valid AUD funding amount before starting payment.</p> : null}
-            {preview === undefined ? null : (
-              <div className="grid gap-2 rounded-lg border border-border/70 bg-muted/30 p-3 text-sm">
-                <p className="m-0 text-muted-foreground">
-                  Your signed-in Account receives the requested AUD principal after Stripe confirms the full payment.
-                </p>
-              <dl className="grid grid-cols-[1fr_auto] gap-x-4 gap-y-1" aria-label="Funding quote">
-                <dt className="text-muted-foreground">Account principal</dt>
-                <dd className="font-mono">AUD {formatAudUnits(preview.principalUnits)}</dd>
-                <dt className="text-muted-foreground">Service fee</dt>
-                <dd className="font-mono">AUD {formatAudUnits(preview.serviceFeeUnits)}</dd>
-                <dt className="text-muted-foreground">Tax on service fee</dt>
-                <dd className="font-mono">AUD {formatAudUnits(preview.taxUnits)}</dd>
-                <dt className="font-medium">Total payment</dt>
-                <dd className="font-mono font-medium">AUD {formatAudUnits(preview.totalUnits)}</dd>
-              </dl>
-              </div>
-            )}
+            <p id="account-funding-amount-help" className="text-xs text-muted-foreground">
+              Add {formatAudAmountString(constraints.minimumPrincipalUnits)} to {formatAudAmountString(constraints.maximumPrincipalUnits)} in {formatAudAmountString(constraints.incrementUnits)} increments.
+            </p>
+            {amountInvalid ? <p id="account-funding-amount-error" className="text-sm text-destructive" role="alert">{amountErrorMessage ?? 'Enter an amount within the displayed limits and increments.'}</p> : null}
+            <div className={QUOTE_SHELL_CLASS} role="group" aria-label="Funding quote and payment">
+              {preview === undefined ? (
+                <>
+                  <p className="m-0 text-muted-foreground">
+                    Enter or choose an amount to see credit, fee, GST, and total.
+                  </p>
+                  <div className="mt-auto border-t border-border/70 pt-3">
+                    <Button type="button" disabled className="min-h-touch w-full sm:w-auto">
+                      Choose an amount to continue
+                    </Button>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <dl className="grid grid-cols-[1fr_auto] gap-x-4 gap-y-1" aria-label="Funding quote">
+                    <dt className="text-muted-foreground">Credit added</dt>
+                    <dd className="font-mono tabular-nums">{formatAudUnits(preview.principalUnits)}</dd>
+                    <dt className="text-muted-foreground">Platform fee</dt>
+                    <dd className="font-mono tabular-nums">{formatAudUnits(preview.serviceFeeUnits)}</dd>
+                    <dt className="text-muted-foreground">{formatAustralianGstPercentLabel(taxOnServiceFeeBps)}</dt>
+                    <dd className="font-mono tabular-nums">{formatAudUnits(preview.taxUnits)}</dd>
+                    <dt className="font-medium">Total payable</dt>
+                    <dd className="font-mono font-medium tabular-nums">{formatAudUnits(preview.totalUnits)}</dd>
+                  </dl>
+                  <p className="m-0 text-xs text-muted-foreground">
+                    {formatAudGstNote(preview.taxUnits, taxOnServiceFeeBps)}
+                  </p>
+                  <p className="m-0 text-muted-foreground">
+                    Your Account receives the full {formatAudUnits(preview.principalUnits)} after payment is confirmed.
+                  </p>
+                  <div className="border-t border-border/70 pt-3">
+                    <Button
+                      disabled={pending || checking || quoteRefreshRequired}
+                      onClick={() => void beginTopUp()}
+                      className="min-h-touch"
+                    >
+                      {pending ? <Spinner data-icon="inline-start" /> : null}
+                      {pending
+                        ? 'Preparing secure payment…'
+                        : `Pay ${formatAudUnits(preview.totalUnits)} and add ${formatAudUnits(preview.principalUnits)}`}
+                    </Button>
+                  </div>
+                </>
+              )}
+            </div>
           </div>
-        ) : null}
+        </div>
+      ) : null}
       <div className="flex flex-wrap gap-2">
-        {session === undefined && recovery === undefined ? (
-          <Button
-            variant="secondary"
-            disabled={pending || checking || port === undefined}
-            onClick={() => void beginTopUp()}
-            className="min-h-touch"
-          >
-            {pending ? <Spinner data-icon="inline-start" /> : null}
-            {pending ? 'Preparing secure payment…' : 'Continue to Stripe'}
+        {checkoutResumable ? (
+          <Button type="button" disabled={checking || pending} onClick={resumeCheckout} className="min-h-touch">
+            Continue secure payment
           </Button>
-        ) : paymentStatus === 'succeeded' || paymentStatus === 'failed' ? (
+        ) : canStartAnotherPayment(paymentStatus, session) ? (
           <Button type="button" variant="secondary" disabled={checking || pending} onClick={startAnotherPayment} className="min-h-touch">
             Add more credit
           </Button>
-        ) : recovery !== undefined && (paymentStatus === 'pending' || paymentStatus === 'outcome_unknown') ? (
+        ) : null}
+        {recovery !== undefined && paymentStatus !== 'succeeded' && paymentStatus !== 'failed' ? (
           <Button type="button" variant="ghost" disabled={checking || pending} onClick={() => void refreshPayment()} className="min-h-touch">
             {checking ? <Spinner data-icon="inline-start" /> : null}
             {checking ? 'Checking payment…' : 'Refresh payment status'}
@@ -273,66 +282,4 @@ export function AeAccountFundingPanel({
       </div>
     </div>
   )
-}
-
-function topUpErrorCopy(result: MoneyRefusal | AccountFundingOutcomeUnknownResult): string {
-  if (result.code === 'stripe_setup_required') return 'Account funding is unavailable right now. No payment started and your balance did not change. Try again later.'
-  if (result.code === 'billing_identity_missing' || result.code === 'billing_identity_mismatch') return 'Your authenticated Account is unavailable. No payment started.'
-  if (result.code === 'funding_amount_invalid') return 'That AUD principal is outside the configured limits. No payment started.'
-  if (result.code === 'commercial_policy_required') return 'Production funding is not enabled because the required commercial approvals are not current. No payment started.'
-  if (result.code === 'funding_pending' || result.code === 'funding_outcome_unknown') return 'Payment is still being verified. Your Account balance will not change until the canonical server readback completes.'
-  return 'Account funding could not be started. No payment was confirmed; try again.'
-}
-
-function formatAudUnits(units: bigint): string {
-  return formatExactAmount({ currency: 'AUD', units: units.toString(), exponent: AUD_EXPONENT }) ?? '—'
-}
-
-function randomId(): string {
-  if (typeof globalThis.crypto?.randomUUID === 'function') return globalThis.crypto.randomUUID()
-  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`
-}
-
-function persistRecovery(locator: RecoveryLocator): void {
-  if (typeof window === 'undefined') return
-  try {
-    window.sessionStorage.setItem(recoveryStorageKey, JSON.stringify(locator))
-  } catch (cause) {
-    // Browser storage is optional; the in-memory locator still protects this render.
-    captureRouteException(cause, { site: 'persistRecovery' }, 'warning')
-  }
-}
-
-function readStoredRecovery(): RecoveryLocator | undefined {
-  if (typeof window === 'undefined') return undefined
-  try {
-    const raw = window.sessionStorage.getItem(recoveryStorageKey)
-    if (raw === null) return undefined
-    const parsed: unknown = JSON.parse(raw)
-    if (!isRecoveryLocator(parsed)) return undefined
-    return parsed
-  } catch (cause) {
-    return degrade(cause, undefined, { site: 'readStoredRecovery', reason: 'invalid_response' })
-  }
-}
-
-function readReturnedExternalRef(): string | undefined {
-  if (typeof window === 'undefined') return undefined
-  const params = new URLSearchParams(window.location.search)
-  const value = params.get('funding') ?? params.get('checkout_session_id') ?? params.get('session_id')
-  return value === null || value.trim().length === 0 ? undefined : value
-}
-
-function isRecoveryLocator(value: unknown): value is RecoveryLocator {
-  if (typeof value !== 'object' || value === null) return false
-  const candidate = value as Record<string, unknown>
-  const hasIdempotencyKey = typeof candidate.idempotencyKey === 'string' && candidate.idempotencyKey.length > 0
-  const hasExternalRef = typeof candidate.externalRef === 'string' && candidate.externalRef.length > 0
-  const hasCommandRef = typeof candidate.commandRef === 'string' && candidate.commandRef.length > 0
-  return (hasExternalRef && !hasCommandRef)
-    || (hasCommandRef && !hasExternalRef && hasIdempotencyKey)
-}
-
-function defaultCheckoutRedirect(url: string): void {
-  window.location.assign(url)
 }

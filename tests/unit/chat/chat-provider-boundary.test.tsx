@@ -59,6 +59,7 @@ vi.mock('@tanstack/react-router', () => ({
   },
   Outlet: () => null,
   Scripts: () => null,
+  ScriptOnce: ({ children }: { children?: ReactNode }) => children ?? null,
   createRootRoute: (options: unknown) => ({ options }),
   useRouter: () => ({}),
   useRouterState: ({ select }: { select: (state: unknown) => unknown }) => select({

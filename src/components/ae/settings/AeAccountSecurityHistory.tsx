@@ -8,57 +8,107 @@ import { Button } from '@/components/ui/button'
 import {
   readAccountSecurityHistoryServer,
 } from '@/modules/security/account-security.functions'
-import type {
-  AccountSecurityHistoryResult,
+import {
+  appendAccountSecurityHistoryPage,
+  type AccountSecurityHistoryResult,
 } from '@/modules/security/account-security'
 import { degrade } from '@/lib/observability/degrade'
+
+type AccountSecurityHistoryState = Readonly<{
+  source: AccountSecurityHistoryResult
+  result: AccountSecurityHistoryResult
+  status: 'idle' | 'loading' | 'failed'
+}>
+
+function initialSecurityHistoryState(source: AccountSecurityHistoryResult): AccountSecurityHistoryState {
+  return { source, result: source, status: 'idle' }
+}
 
 export function AeAccountSecurityHistory({
   initialResult,
 }: Readonly<{ initialResult: AccountSecurityHistoryResult }>) {
   const readHistory = useServerFn(readAccountSecurityHistoryServer)
-  const [result, setResult] = useState(initialResult)
-  const [loading, setLoading] = useState(false)
+  const [state, setState] = useState(() => initialSecurityHistoryState(initialResult))
+
+  if (state.source !== initialResult) {
+    setState(initialSecurityHistoryState(initialResult))
+  }
+
+  const current = state.source === initialResult ? state : initialSecurityHistoryState(initialResult)
 
   const load = async (cursor: string | null) => {
-    setLoading(true)
+    const source = current.source
+    const requestMatches = (candidate: AccountSecurityHistoryState) => candidate.source === source
+      && (cursor === null
+        || (candidate.result.kind === 'available' && candidate.result.page.continueCursor === cursor))
+
+    setState((candidate) => requestMatches(candidate)
+      ? { ...candidate, status: 'loading' }
+      : candidate)
     try {
       const next = await readHistory({ data: cursor === null ? {} : { cursor } })
-      if (next.kind === 'available' && result.kind === 'available' && cursor !== null) {
-        setResult({
-          kind: 'available',
-          page: {
-            ...next.page,
-            items: [...result.page.items, ...next.page.items],
+      setState((candidate) => {
+        if (!requestMatches(candidate)) return candidate
+        if (cursor === null) return { source, result: next, status: 'idle' }
+        if (candidate.result.kind !== 'available' || next.kind !== 'available') {
+          return { ...candidate, status: 'failed' }
+        }
+        return {
+          source,
+          result: {
+            kind: 'available',
+            page: {
+              ...next.page,
+              items: appendAccountSecurityHistoryPage(candidate.result.page, next.page).items,
+            },
           },
-        })
-      } else {
-        setResult(next)
-      }
+          status: 'idle',
+        }
+      })
     } catch (cause) {
-      setResult(degrade(cause, { kind: 'unavailable', reason: 'source_unavailable' } as const, {
+      const unavailable = degrade(cause, { kind: 'unavailable', reason: 'source_unavailable' } as const, {
         site: 'loadAccountSecurityHistory',
         reason: 'source_unavailable',
-      }))
-    } finally {
-      setLoading(false)
+      })
+      setState((candidate) => {
+        if (!requestMatches(candidate)) return candidate
+        return cursor !== null && candidate.result.kind === 'available'
+          ? { ...candidate, status: 'failed' }
+          : { source, result: unavailable, status: 'idle' }
+      })
     }
   }
 
+  const result = current.result
+  const loading = current.status === 'loading'
   const rows = result.kind === 'available' ? result.page.items : []
 
   return (
     <AeSection
       id="security-history"
       title="Security history"
-      description="Account-scoped session, security, agent, connection, and consequential-action evidence recorded since history activation."
+      description="Evidence of session, Agent, connection, and account actions. Revoke devices in Profile above. Rotate credentials from the compromise checklist."
     >
       {result.kind === 'unavailable' ? (
         <Alert variant="destructive">
-          <AlertTitle>Security history unavailable</AlertTitle>
-          <AlertDescription>
-            <p>No newer security state is being claimed. Your Clerk profile and session controls remain available above.</p>
-            <Button type="button" variant="secondary" disabled={loading} onClick={() => void load(null)}>
+          <AlertTitle>Security history is temporarily unavailable.</AlertTitle>
+          <AlertDescription className="grid gap-1">
+            <p>
+              <strong>What happened:</strong> Security history is temporarily unavailable.
+            </p>
+            <p className="font-mono text-xs tabular-nums">
+              <strong>Financial impact:</strong> A$0.00 affected — Profile, sessions, and the compromise checklist remain available above.
+            </p>
+            <p>
+              <strong>Next step:</strong> Check your connection and try again.
+            </p>
+            <Button
+              type="button"
+              variant="secondary"
+              disabled={loading}
+              className="mt-2 min-w-[8.5rem] enabled:active:scale-[0.98] transition-transform duration-100 ease-out motion-reduce:transition-none motion-reduce:active:scale-100"
+              onClick={() => void load(null)}
+            >
               {loading ? 'Trying again…' : 'Try again'}
             </Button>
           </AlertDescription>
@@ -70,6 +120,7 @@ export function AeAccountSecurityHistory({
           emptyMessage="No security events have been recorded since history activation."
           isDone={result.page.isDone}
           loading={loading}
+          loadFailed={current.status === 'failed'}
           onLoadMore={() => void load(result.page.continueCursor)}
         />
       )}

@@ -1,9 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 
-import {
-  handleFundingHandoffAction,
-  publicFundingHandoffResponse,
-} from '@/lib/server/funding-handoff-api'
+import { handleFundingHandoffAction, publicFundingHandoffResponse } from '@/lib/server/funding-handoff-api'
+import { setHttpRateLimitAdmissionForTests } from '@/lib/server/rate-limit'
 import type { FundingHandoffService } from '@/modules/money/funding-handoff.actions'
 import type { AgentAccessPrincipalResolver } from '@/lib/server/agent-access-auth'
 
@@ -50,6 +48,22 @@ function service(overrides: Partial<FundingHandoffService> = {}): FundingHandoff
 }
 
 describe('agent funding handoff HTTP boundary', () => {
+  it('rate-limits funding handoff before dispatch when admission is denied', async () => {
+    setHttpRateLimitAdmissionForTests(async () => ({ ok: false, retryAfter: 5_000 }))
+    const funding = service()
+    const result = await handleFundingHandoffAction(
+      new Request('https://ae.example/api/v1/account/funding-sessions', {
+        method: 'POST',
+        headers: { Authorization: 'Bearer hidden', 'Content-Type': 'application/json', 'Idempotency-Key': 'logical-attempt-one' },
+        body: JSON.stringify({ principalAmount: { currency: 'AUD', exponent: 6, units: '5000000' } }),
+      }),
+      'create', undefined,
+      { authenticate, resolvePrincipal, service: funding },
+    )
+    expect(result.status).toBe(429)
+    expect(funding.create).not.toHaveBeenCalled()
+  })
+
   it('requires a connected buyer agent', async () => {
     const result = await handleFundingHandoffAction(
       new Request('https://ae.example/api/v1/account/funding/config'),
@@ -81,6 +95,28 @@ describe('agent funding handoff HTTP boundary', () => {
     await expect(result.json()).resolves.toMatchObject({
       fundingSessionId: 'cs_agent_one', checkoutUrl: 'https://checkout.stripe.com/c/pay/cs_agent_one',
     })
+  })
+
+  it.each([
+    ['advisory estimate', { quoteRef: `sha256:${'1'.repeat(64)}`, expiresAt: 1 }],
+    ['caller-priced total', { totalPaymentAmount: { currency: 'AUD', exponent: 6, units: '1' } }],
+  ] as const)('refuses %s material before creating a funding Session', async (_label, extra) => {
+    const funding = service()
+    const result = await handleFundingHandoffAction(
+      new Request('https://ae.example/api/v1/account/funding-sessions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Idempotency-Key': 'untrusted-quote-material' },
+        body: JSON.stringify({
+          principalAmount: { currency: 'AUD', exponent: 6, units: '5000000' },
+          ...extra,
+        }),
+      }),
+      'create', undefined,
+      { authenticate, resolvePrincipal, service: funding },
+    )
+    expect(result.status).toBe(400)
+    await expect(result.json()).resolves.toMatchObject({ code: 'invalid_request' })
+    expect(funding.create).not.toHaveBeenCalled()
   })
 
   it('makes malformed session references indistinguishable from missing sessions', async () => {

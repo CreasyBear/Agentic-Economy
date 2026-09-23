@@ -1,3 +1,6 @@
+import { createServerFn } from '@tanstack/react-start'
+import { z } from 'zod'
+
 import {
   callPublicSourceMutation,
   callPublicSourceQuery,
@@ -22,6 +25,22 @@ export type RemovalDisputeInput = {
   reasonCode: RemovalDisputeReasonCode
   evidenceSummary: string
 }
+
+export const removalSchema = z.object({
+  slug: z.string(),
+  contactEmail: z.email(),
+  reasonCode: z.enum([
+    'privacy_removal_requested',
+    'ownership_contested',
+    'duplicate_or_impersonation',
+    'unsafe_or_inaccurate',
+  ]),
+  evidenceSummary: z.string(),
+})
+
+export const openRemovalServer = createServerFn({ method: 'POST' })
+  .validator((data) => removalSchema.parse(data))
+  .handler(async ({ data, context }) => openRemovalDisputeThroughSource(data, context))
 
 type PublicBusinessCatalogReadResult =
   | { kind: 'available'; catalog: Readonly<{ businessId: string; slug: string }> }

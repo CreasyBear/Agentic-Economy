@@ -1,5 +1,7 @@
-import { useCurrentToolPrice } from "./AeToolPrice";
 import { Link } from "@tanstack/react-router";
+
+import { cn } from "@/lib/utils";
+import { useCurrentToolPrice } from "./AeToolPrice";
 
 import {
   Item,
@@ -28,30 +30,33 @@ export function AeCapabilityTile({
 
   return (
     <Item
-      asChild
-      className="group h-full rounded-none border-0 border-t border-border bg-transparent px-0 py-related hover:bg-transparent"
-    >
-      <Link
-        to="/market"
-        search={{ query: group.label }}
-        aria-label={`${group.label}, ${listingFact}, ${price}`}
-      >
-        <ItemContent>
-          <ItemHeader>
-            <ItemTitle className="text-base font-semibold transition-colors duration-fast ease-standard group-hover:text-brand-strong">
-              {group.label}
-            </ItemTitle>
-            <span className="shrink-0 text-xs text-muted-foreground">
-              {group.category.label}
-            </span>
-          </ItemHeader>
-          <ItemDescription>{group.tools[0]?.summary}</ItemDescription>
-          <ItemFooter className="pt-intra text-sm">
-            <span className="text-muted-foreground">{listingFact}</span>
-            <span className="font-mono text-foreground tabular-nums">{price}</span>
-          </ItemFooter>
-        </ItemContent>
-      </Link>
-    </Item>
+      className="group h-full rounded-none border-0 border-t border-border bg-transparent px-0 py-related"
+      render={
+        <Link
+          to="/market"
+          search={{ query: group.label }}
+          aria-label={`${group.label}, ${listingFact}, ${price}`}
+          className={cn(
+            "block rounded-md transition-colors hover:bg-muted/40 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring",
+          )}
+        >
+          <ItemContent>
+            <ItemHeader>
+              <ItemTitle className="text-base font-semibold transition-colors duration-fast ease-standard group-hover:text-brand-strong">
+                {group.label}
+              </ItemTitle>
+              <span className="shrink-0 text-xs text-muted-foreground">
+                {group.category.label}
+              </span>
+            </ItemHeader>
+            <ItemDescription>{group.tools[0]?.summary}</ItemDescription>
+            <ItemFooter className="pt-intra text-sm">
+              <span className="text-muted-foreground">{listingFact}</span>
+              <span className="font-mono text-foreground tabular-nums">{price}</span>
+            </ItemFooter>
+          </ItemContent>
+        </Link>
+      }
+    />
   );
 }

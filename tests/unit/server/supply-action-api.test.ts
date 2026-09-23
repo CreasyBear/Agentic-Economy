@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 
+import { setHttpRateLimitAdmissionForTests } from '@/lib/server/rate-limit'
 import { handleSupplyActionPost } from '@/lib/server/supply-action-api'
 import type { SupplyManagementService } from '@/modules/capability-supply/supply-actions'
 
@@ -47,6 +48,23 @@ const resolvePrincipal = async () => ({
 })
 
 describe('Provider action HTTP adapter', () => {
+  it('rate-limits Provider actions before service dispatch when admission is denied', async () => {
+    setHttpRateLimitAdmissionForTests(async () => ({ ok: false, retryAfter: 5_000 }))
+    const status = vi.fn().mockResolvedValue({ kind: 'not_found' })
+    const response = await handleSupplyActionPost(
+      new Request('https://ae.example/api/v1/supply/status', {
+        method: 'POST',
+        headers: { Authorization: 'Bearer hidden-provider-secret' },
+        body: JSON.stringify({ businessRef: 'business:one', toolRef: 'operation:one' }),
+      }),
+      'status',
+      { authenticate, resolvePrincipal, supplyManagementService: service({ status }) },
+    )
+
+    expect(response.status).toBe(429)
+    expect(status).not.toHaveBeenCalled()
+  })
+
   it('dispatches native source preview through the same authenticated read boundary', async () => {
     const sourcePreview = vi.fn().mockResolvedValue({
       kind: 'ready',

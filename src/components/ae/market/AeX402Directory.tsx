@@ -5,11 +5,15 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { AeEmptyState } from '@/components/ae/feedback/AeEmptyState'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { buttonVariants } from '@/components/ui/button-variants'
+import { cn } from '@/lib/utils'
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput } from '@/components/ui/input-group'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import type { MarketReturnSearch } from './market-return-context'
-import { DirectoryExplorerFilters, type DirectoryExplorerFilterPatch } from './DirectoryExplorerFilters'
+import { MarketNavigationProvider, type MarketPath, useMarketPath } from './market-navigation-context'
+import { DirectoryExplorerFilters } from './DirectoryExplorerFilters'
+import type { DirectoryExplorerFilterPatch } from '@/modules/market/directory-filters.contracts'
 import { DirectoryHero } from './DirectoryHero'
 import { DirectoryIndexDiscovery } from './DirectoryIndexDiscovery'
 import { DirectoryHomeDiscovery } from './DirectoryHomeDiscovery'
@@ -23,16 +27,60 @@ import type { X402MarketplaceHome } from '@/modules/market/x402-marketplace-home
 import { DirectoryComparison } from './DirectoryComparison'
 import { DirectoryFilters } from './DirectoryFilters'
 import { DirectoryProviderCards } from './DirectoryProviderCards'
-import { DirectorySavedToolsProvider, useDirectorySavedTools, type SavedDirectoryTool } from './DirectorySavedTools'
+import { DirectorySavedToolsProvider, useDirectorySavedTools } from './DirectorySavedTools'
+import { toDirectoryToolCardModel } from '@/modules/market/directory-card.view-model'
+import type { SavedDirectoryTool } from '@/modules/market/saved-tools.contracts'
 import { DirectoryToolCard } from './DirectoryToolCard'
 import type { X402DirectoryEntry, X402DirectoryFilters, X402DirectoryInput, X402DirectoryPage } from '@/modules/market/x402-directory'
 
 type DirectorySearch = MarketReturnSearch
 
-type DirectoryProps = Readonly<{ page: X402DirectoryPage; search: DirectorySearch; home?: X402MarketplaceHome; catalogue?: X402DirectoryCatalogue; overview?: X402DirectoryCatalogueOverview; providers?: X402DirectoryProvidersPage }>
+type AeX402DirectoryProps = Readonly<{ page: X402DirectoryPage; search: DirectorySearch; marketPath?: MarketPath; workspace?: boolean; activeView?: NonNullable<DirectorySearch['view']>; home?: X402MarketplaceHome; catalogue?: X402DirectoryCatalogue; overview?: X402DirectoryCatalogueOverview; providers?: X402DirectoryProvidersPage }>
+type IndexedPaginationState = Readonly<{
+  source: X402DirectoryCatalogue | undefined
+  items: readonly X402DirectoryEntry[]
+  cursor: string | undefined
+  isDone: boolean
+  status: 'idle' | 'loading' | 'failed'
+}>
 
-export function AeX402Directory(props: DirectoryProps) {
-  return <DirectorySavedToolsProvider><DirectoryMarketplace {...props} /></DirectorySavedToolsProvider>
+function indexedPaginationState(indexed: boolean, catalogue: X402DirectoryCatalogue | undefined): IndexedPaginationState {
+  return indexed && catalogue?.kind === 'ok'
+    ? { source: catalogue, items: catalogue.page.items, cursor: catalogue.indexCursor, isDone: catalogue.isDone, status: 'idle' }
+    : { source: catalogue, items: [], cursor: undefined, isDone: true, status: 'idle' }
+}
+
+function useIndexedPagination(indexed: boolean, catalogue: X402DirectoryCatalogue | undefined, filters: X402DirectoryCatalogueInput) {
+  const [state, setState] = useState(() => indexedPaginationState(indexed, catalogue))
+  useEffect(() => {
+    setState(indexedPaginationState(indexed, catalogue))
+  }, [catalogue, indexed])
+  async function loadNextPage() {
+    if (state.cursor === undefined || state.status === 'loading') return
+    const cursor = state.cursor
+    const source = catalogue
+    setState(current => current.source === source && current.cursor === cursor ? { ...current, status: 'loading' } : current)
+    try {
+      const { indexCursor: _cursor, offset: _offset, ...query } = filters
+      const result = await readX402DirectoryCatalogueServer({ data: { ...query, indexCursor: cursor } })
+      if (result.kind !== 'ok' || result.source !== 'index') {
+        setState(current => current.source === source && current.cursor === cursor ? { ...current, status: 'failed' } : current)
+        return
+      }
+      setState(current => current.source === source && current.cursor === cursor
+        ? { source, items: [...current.items, ...result.page.items], cursor: result.indexCursor, isDone: result.isDone, status: 'idle' }
+        : current)
+    } catch (cause) {
+      void cause;
+      setState(current => current.source === source && current.cursor === cursor ? { ...current, status: 'failed' } : current)
+    }
+  }
+  return { state, loadNextPage }
+}
+
+export function AeX402Directory(props: AeX402DirectoryProps) {
+  const marketPath = props.marketPath ?? '/market'
+  return <MarketNavigationProvider path={marketPath}><DirectorySavedToolsProvider><DirectoryMarketplace {...props} /></DirectorySavedToolsProvider></MarketNavigationProvider>
 }
 
 function directoryInput(search: X402DirectoryInput) {
@@ -45,14 +93,15 @@ function directoryInput(search: X402DirectoryInput) {
   }
 }
 
-function DirectoryMarketplace({ page, search, home, catalogue, overview, providers }: DirectoryProps) {
+function DirectoryMarketplace({ page, search, workspace = false, activeView, home, catalogue, overview, providers }: AeX402DirectoryProps) {
   const navigate = useNavigate()
+  const marketPath = useMarketPath()
   const [comparison, setComparison] = useState<readonly SavedDirectoryTool[]>([])
   const [compareOpen, setCompareOpen] = useState(false)
   const searchInput = useRef<HTMLInputElement>(null)
   const compareTrigger = useRef<HTMLButtonElement>(null)
   const saved = useDirectorySavedTools()
-  const view = search.view ?? (home === undefined ? 'tools' : 'discover')
+  const view = activeView ?? search.view ?? (home === undefined ? 'tools' : 'discover')
   const { query, offset, network, provider, maxUsdPrice } = search
   const sourceInput = useMemo(() => directoryInput({ query, offset, network, provider, maxUsdPrice }), [query, offset, network, provider, maxUsdPrice])
   const coverage = catalogue?.kind === 'ok' ? catalogue.coverage : overview?.kind === 'ok' ? overview.coverage : undefined
@@ -65,28 +114,7 @@ function DirectoryMarketplace({ page, search, home, catalogue, overview, provide
   // model). Reset whenever the server loader hands back a new first page
   // (a real filter/sort/query navigation), never by this component's own
   // appends.
-  const [loadMore, setLoadMore] = useState(() => indexed && catalogue?.kind === 'ok'
-    ? { items: catalogue.page.items, cursor: catalogue.indexCursor, isDone: catalogue.isDone }
-    : { items: [] as X402DirectoryEntry[], cursor: undefined as string | undefined, isDone: true })
-  const [loadingMore, setLoadingMore] = useState(false)
-  useEffect(() => {
-    setLoadMore(indexed && catalogue?.kind === 'ok'
-      ? { items: catalogue.page.items, cursor: catalogue.indexCursor, isDone: catalogue.isDone }
-      : { items: [], cursor: undefined, isDone: true })
-  }, [catalogue, indexed])
-  async function loadMoreResults() {
-    if (loadMore.cursor === undefined || loadingMore) return
-    setLoadingMore(true)
-    try {
-      const { indexCursor: _cursor, offset: _offset, ...filters } = filterValues
-      const result = await readX402DirectoryCatalogueServer({ data: { ...filters, indexCursor: loadMore.cursor } })
-      setLoadMore(current => result.kind === 'ok' && result.source === 'index'
-        ? { items: [...current.items, ...result.page.items], cursor: result.indexCursor, isDone: result.isDone }
-        : { ...current, isDone: true })
-    } finally {
-      setLoadingMore(false)
-    }
-  }
+  const { state: loadMore, loadNextPage } = useIndexedPagination(indexed, catalogue, filterValues)
   // Legacy `?compare=` links (from the retired capability-catalog tree, or
   // shared before it was removed) carry resource identifiers rather than a
   // selection made in this component's own state. Resolve them against
@@ -110,7 +138,7 @@ function DirectoryMarketplace({ page, search, home, catalogue, overview, provide
       setCompareOpen(true)
     }
     const { compare: _compare, ...rest } = search
-    void navigate({ to: '/market', search: rest, replace: true, resetScroll: false })
+    void navigate({ to: marketPath, search: rest, replace: true, resetScroll: false })
     // Runs once per `compare` value that appears in the URL; the navigate
     // call above clears it, so re-including the loaded pool here would only
     // re-trigger on unrelated data refreshes.
@@ -129,11 +157,11 @@ function DirectoryMarketplace({ page, search, home, catalogue, overview, provide
       : undefined
     : coverage !== undefined ? `${coverage.indexedTotal.toLocaleString()} Tools in the catalogue` : page.kind === 'ok' && page.total !== undefined ? `${page.total.toLocaleString()} Tools` : undefined
 
-  // Filter changes stay on `/market` and only narrow the same list the user
+  // Filter changes stay on the current Market route and only narrow the same list the user
   // is already looking at, so they keep the current scroll position instead
   // of resetting to the top the way a real page navigation would.
   function applyFilters(filters: X402DirectoryFilters) {
-    void navigate({ to: '/market', resetScroll: false, search: {
+    void navigate({ to: marketPath, resetScroll: false, search: {
       ...(search.query === undefined ? {} : { query: search.query }),
       view: view === 'providers' ? 'providers' : 'tools',
       ...(search.directoryCategory === undefined ? {} : { directoryCategory: search.directoryCategory }),
@@ -148,12 +176,12 @@ function DirectoryMarketplace({ page, search, home, catalogue, overview, provide
     return { ...filters }
   }
   function explore(filters: X402DirectoryCatalogueInput) {
-    void navigate({ to: '/market', resetScroll: false, search: { ...filters, view: 'tools' } })
+    void navigate({ to: marketPath, resetScroll: false, search: { ...filters, view: 'tools' } })
   }
   function applyExplorerFilters(patch: DirectoryExplorerFilterPatch) {
     const next = { ...indexedSearch(), ...patch, view: 'tools' as const }
     for (const key of Object.keys(next)) if (next[key as keyof typeof next] === undefined) delete next[key as keyof typeof next]
-    void navigate({ to: '/market', resetScroll: false, search: next })
+    void navigate({ to: marketPath, resetScroll: false, search: next })
   }
   function toggleComparison(item: SavedDirectoryTool) {
     setComparison(current => current.some(other => other.entry.resource === item.entry.resource)
@@ -163,7 +191,7 @@ function DirectoryMarketplace({ page, search, home, catalogue, overview, provide
   function toolGrid(items: readonly SavedDirectoryTool[]) {
     return <ul className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
       {items.map(item => <li key={item.entry.resource} className="min-w-0">
-        <DirectoryToolCard entry={item.entry} onSave={() => saved.toggleSavedTool(item)} saved={saved.isSaved(item.entry.resource)}
+        <DirectoryToolCard model={toDirectoryToolCardModel(item.entry)} onSave={() => saved.toggleSavedTool(item)} saved={saved.isSaved(item.entry.resource)}
           onCompare={() => toggleComparison(item)} comparing={comparison.some(other => other.entry.resource === item.entry.resource)} compareDisabled={comparison.length >= 4 && !comparison.some(other => other.entry.resource === item.entry.resource)} />
       </li>)}
     </ul>
@@ -171,12 +199,12 @@ function DirectoryMarketplace({ page, search, home, catalogue, overview, provide
 
   return (
     <div className="ae-rail pb-page">
-      <DirectoryHero {...(home === undefined ? {} : { home })} compact={view !== 'discover'} {...(view === 'tools' ? { compactTitle: 'Explore capabilities.' } : {})}>
-        <form action="/market" method="get" role="search" className="mt-1 flex w-full max-w-2xl gap-2" onSubmit={event => {
+      <DirectoryHero {...(home === undefined ? {} : { home })} compact={workspace || view !== 'discover'} headingLevel={workspace ? 2 : 1} {...(view === 'tools' ? { compactTitle: 'Explore capabilities.' } : {})}>
+        <form action={marketPath} method="get" role="search" className="mt-1 flex w-full max-w-2xl gap-2" onSubmit={event => {
           event.preventDefault()
           const query = new FormData(event.currentTarget).get('query')?.toString().trim() ?? ''
           const { query: _query, sort: _sort, ...filters } = indexedSearch()
-          void navigate({ to: '/market', search: {
+          void navigate({ to: marketPath, search: {
             ...filters,
             ...(query === '' ? {} : { query }),
             view: 'tools',
@@ -195,7 +223,7 @@ function DirectoryMarketplace({ page, search, home, catalogue, overview, provide
               {search.query === undefined ? null : <InputGroupButton type="button" size="icon-sm" variant="ghost" aria-label="Clear search" onClick={() => {
                 if (searchInput.current) searchInput.current.value = ''
                 const { query: _query, sort: _sort, ...filters } = indexedSearch()
-                void navigate({ to: '/market', resetScroll: false, search: { ...filters, view: 'tools' } })
+                void navigate({ to: marketPath, resetScroll: false, search: { ...filters, view: 'tools' } })
               }}><XIcon aria-hidden="true" /></InputGroupButton>}
               <Button type="submit" className="mr-1 rounded-full" aria-label="Search Tools"><SearchIcon aria-hidden="true" /><span className="hidden sm:inline">Search</span></Button>
             </InputGroupAddon>
@@ -204,7 +232,7 @@ function DirectoryMarketplace({ page, search, home, catalogue, overview, provide
       </DirectoryHero>
       <Tabs value={view} onValueChange={value => {
         if (value === 'discover' || value === 'tools' || value === 'providers' || value === 'saved') {
-          void navigate({ to: '/market', search: value === 'saved' || value === 'discover' || value === 'providers' ? { view: value } : {
+          void navigate({ to: marketPath, search: value === 'saved' || value === 'discover' || value === 'providers' ? { view: value } : {
             ...indexedSearch(), view: value,
           } })
         }
@@ -225,7 +253,7 @@ function DirectoryMarketplace({ page, search, home, catalogue, overview, provide
         <TabsContent value="discover" className="pt-7">
           {overview?.kind === 'ok' ? <DirectoryIndexDiscovery overview={overview} onSave={saved.toggleSavedTool} isSaved={saved.isSaved} onCompare={toggleComparison}
             isComparing={resource => comparison.some(item => item.entry.resource === resource)} compareDisabled={resource => comparison.length >= 4 && !comparison.some(item => item.entry.resource === resource)} /> : null}
-          {home === undefined ? <AeEmptyState title="Explore the Tool catalogue" description="Open All Tools to browse the current directory, or search for a service above." action={<Button asChild variant="outline"><Link to="/market" search={{ view: 'tools' }}>Browse all Tools</Link></Button>} /> : <DirectoryHomeDiscovery home={home} onSave={saved.toggleSavedTool} isSaved={saved.isSaved} onCompare={toggleComparison}
+          {home === undefined ? <AeEmptyState title="Explore the Tool catalogue" description="Open All Tools to browse the current directory, or search for a service above." action={<Link to={marketPath} search={{ view: 'tools' }} className={cn(buttonVariants({ variant: 'outline' }))}>Browse all Tools</Link>} /> : <DirectoryHomeDiscovery home={home} onSave={saved.toggleSavedTool} isSaved={saved.isSaved} onCompare={toggleComparison}
             isComparing={resource => comparison.some(item => item.entry.resource === resource)} compareDisabled={resource => comparison.length >= 4 && !comparison.some(item => item.entry.resource === resource)} />}
         </TabsContent>
         <TabsContent value="saved" className="pt-5">
@@ -246,7 +274,7 @@ function DirectoryMarketplace({ page, search, home, catalogue, overview, provide
           {indexed && tab === 'tools' ? <DirectoryExplorerFilters search={search} {...(overview === undefined ? {} : { overview })} onChange={applyExplorerFilters} onReset={() => explore({})} /> : null}
           <section className="min-w-0" aria-label="Tool results">
           {indexed ? <div className="mb-5 flex flex-wrap items-center justify-between gap-3" aria-label="Catalogue ordering and display">
-            <Select value={search.query === undefined ? search.sort ?? 'adoption' : 'relevance'} onValueChange={value => { if (value === 'popular' || value === 'updated' || value === 'relevance' || value === 'adoption' || value === 'price_asc') void navigate({ to: '/market', search: { ...indexedSearch(), view: tab, sort: value } }) }}>
+            <Select value={search.query === undefined ? search.sort ?? 'adoption' : 'relevance'} onValueChange={value => { if (value === 'popular' || value === 'updated' || value === 'relevance' || value === 'adoption' || value === 'price_asc') void navigate({ to: marketPath, search: { ...indexedSearch(), view: tab, sort: value } }) }}>
               <SelectTrigger className="min-h-10 bg-card" aria-label="Sort Tools"><SelectValue /></SelectTrigger><SelectContent><SelectGroup>{search.query === undefined ? <><SelectItem value="adoption">Broader adoption · 30 days</SelectItem><SelectItem value="price_asc">Lowest listed price</SelectItem><SelectItem value="updated">Recently updated</SelectItem>{search.sort === 'popular' ? <SelectItem value="popular">Call volume · 30 days</SelectItem> : null}</> : <SelectItem value="relevance">Search relevance</SelectItem>}</SelectGroup></SelectContent>
             </Select>
           </div> : null}
@@ -257,25 +285,27 @@ function DirectoryMarketplace({ page, search, home, catalogue, overview, provide
               {indexed && search.query !== undefined ? <p className="mt-1 text-xs text-muted-foreground">Keyword search across the catalogue</p> : null}
               {page.kind === 'ok' && tabItems.length > 0 ? <p className="mt-1 text-xs text-muted-foreground">{indexed ? `${tabItems.length.toLocaleString()} Tools loaded` : page.mode === 'search' || !browse ? `${page.items.length} matching Tools` : `Showing ${page.offset + 1}–${page.offset + page.items.length}${page.total === undefined ? '' : ` of ${page.total.toLocaleString()}`}`}</p> : null}
             </div>
-            {!browse ? <Button asChild variant="ghost" size="sm"><Link to="/market" search={{ view: tab }}><XIcon />Clear search & filters</Link></Button> : null}
+            {!browse ? <Link to={marketPath} search={{ view: tab }} className={cn(buttonVariants({ variant: 'ghost', size: 'sm' }))}><XIcon />Clear search & filters</Link> : null}
           </div>
           {search.network !== undefined || search.maxUsdPrice !== undefined ? <div className="mb-4 flex flex-wrap gap-2">{search.network === undefined ? null : <Badge variant="outline">Network: {overview?.kind === 'ok' ? overview.networks.find(item => item.key === search.network)?.label ?? search.network : search.network}</Badge>}{search.maxUsdPrice === undefined ? null : <Badge variant="outline">Up to {search.maxUsdPrice} USDC</Badge>}</div> : null}
           {page.kind === 'unavailable' ? <AeEmptyState icon={<SearchIcon />} title={page.reason === 'query_invalid' ? 'Check your search' : 'Catalogue temporarily unavailable'}
             description={page.reason === 'query_invalid' ? 'Use a service description without personal identifiers.' : search.indexCursor !== undefined ? 'This catalogue page could not be loaded. Refresh results to start again with the same search and filters.' : 'The discovery service could not be reached. Try again.'}
-            action={<Button asChild variant="outline"><Link to="/market" reloadDocument search={search.indexCursor === undefined ? search : { ...indexedSearch(), view: tab }}>{search.indexCursor === undefined ? "Try again" : "Refresh results"}</Link></Button>} /> : <>
+            action={<Link to={marketPath} reloadDocument search={search.indexCursor === undefined ? search : { ...indexedSearch(), view: tab }} className={cn(buttonVariants({ variant: 'outline' }))}>{search.indexCursor === undefined ? "Try again" : "Refresh results"}</Link>} /> : <>
             {page.partialResults === true ? <p role="status" className="mb-4 text-sm text-muted-foreground">Coinbase returned its top matches. Refine your search to find more Tools.</p> : null}
             {tabItems.length === 0 ? <AeEmptyState title={indexed && catalogue.kind === 'ok' && !catalogue.isDone ? 'More of the catalogue remains' : 'No matching Tools'} description={indexed && catalogue.kind === 'ok' && !catalogue.isDone ? 'No matches in this portion. Continue to the next page to check the remaining Tools.' : 'Try a different description or broaden your filters.'} /> : tab === 'providers'
-              ? <DirectoryProviderCards entries={tabItems} onSelect={provider => { void navigate({ to: '/market', search: { ...sourceInput, provider, offset: 0 } }) }} />
+              ? <DirectoryProviderCards entries={tabItems} onSelect={provider => { void navigate({ to: marketPath, search: { ...sourceInput, provider, offset: 0 } }) }} />
               : toolGrid(tabItems.map(entry => ({ entry, search: sourceInput })))}
             <nav aria-label="Catalogue pages" className="mt-8 flex justify-between gap-4 border-t border-border pt-5">
               {tab === 'tools' && indexed ? <>
                 <span />
-                {loadMore.isDone ? null : <Button type="button" variant="outline" onClick={() => void loadMoreResults()} disabled={loadingMore} aria-busy={loadingMore}>
-                  {loadingMore ? <Loader2Icon className="animate-spin" /> : null}Load more<ArrowRightIcon />
-                </Button>}
+                {loadMore.isDone ? null : <div className="flex flex-col items-end gap-2">
+                {loadMore.status === 'failed' ? <p role="alert" className="max-w-md text-right text-sm text-muted-foreground">More Tools could not be loaded. Your current results and filters are unchanged.</p> : null}
+                <Button type="button" variant="outline" onClick={() => void loadNextPage()} disabled={loadMore.status === 'loading'} aria-busy={loadMore.status === 'loading'} aria-label={loadMore.status === 'failed' ? 'Try loading more again' : 'Load more'}>
+                  {loadMore.status === 'loading' ? <Loader2Icon className="animate-spin" /> : null}Load more<ArrowRightIcon />
+                </Button></div>}
               </> : <>
-              <span>{page.previousOffset === undefined ? null : <Button asChild variant="outline"><Link to="/market" search={{ ...sourceInput, view: tab, offset: page.previousOffset }}><ArrowLeftIcon />Previous page</Link></Button>}</span>
-              {page.nextOffset === undefined ? null : <Button asChild variant="outline"><Link to="/market" search={{ ...sourceInput, view: tab, offset: page.nextOffset }}>Next page<ArrowRightIcon /></Link></Button>}
+              <span>{page.previousOffset === undefined ? null : <Link to={marketPath} search={{ ...sourceInput, view: tab, offset: page.previousOffset }} className={cn(buttonVariants({ variant: 'outline' }))}><ArrowLeftIcon />Previous page</Link>}</span>
+              {page.nextOffset === undefined ? null : <Link to={marketPath} search={{ ...sourceInput, view: tab, offset: page.nextOffset }} className={cn(buttonVariants({ variant: 'outline' }))}>Next page<ArrowRightIcon /></Link>}
             </>}
             </nav>
             <p className="mt-4 text-xs text-muted-foreground">Directory: Coinbase Bazaar. Descriptions and payment requirements are published by providers.</p>
@@ -300,5 +330,5 @@ function DirectoryMarketplace({ page, search, home, catalogue, overview, provide
 }
 
 export function X402DirectoryCards({ entries }: Readonly<{ entries: readonly X402DirectoryEntry[] }>) {
-  return <ul className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">{entries.map((entry, index) => <li key={`${entry.resource}:${index}`} className="min-w-0"><DirectoryToolCard entry={entry} /></li>)}</ul>
+  return <ul className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">{entries.map(entry => <li key={entry.resource} className="min-w-0"><DirectoryToolCard model={toDirectoryToolCardModel(entry)} /></li>)}</ul>
 }

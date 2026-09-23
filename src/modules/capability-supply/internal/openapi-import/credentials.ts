@@ -1,6 +1,6 @@
 import { isRecord } from '@/modules/common/is-record'
 
-import type { AdmitCredentialSpec } from '../admit-provider-schema'
+import type { AdmitCredentialSpec } from '../admit-provider-schema-types'
 import { publicationMaterialContainsCredential } from '../publication/source'
 import { MAX_TOOL_NAME_LENGTH, boundedTrimmed } from '../publication-importer-types'
 

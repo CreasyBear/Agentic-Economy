@@ -3,12 +3,12 @@ import { v } from 'convex/values'
 
 import { VisibilityTargetTypeValues } from '@/modules/business/public'
 import { literalUnion } from '@/modules/common/convex-literals'
+import { AdminRoleValues } from './validators'
 import {
   AdminMembershipAuditEventTypeValues,
   AdminMembershipStateValues,
-  AdminRoleValues,
   DisputeStatusValues,
-} from '@/modules/security/public'
+} from './security-types'
 import { SourceWriteAdmissionScopeValues } from '@/modules/security/source-write-admission'
 
 export const securityTables = {

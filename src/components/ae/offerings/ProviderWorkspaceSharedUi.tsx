@@ -30,7 +30,7 @@ export function UnavailableSummary({ title, retryLabel, onRetry }: Readonly<{
   onRetry?: () => void
 }>) {
   return (
-    <Alert variant="destructive">
+    <Alert>
       <AlertTitle>{title}</AlertTitle>
       <AlertDescription>
         <p>This section could not be confirmed. The rest of Tools remains available.</p>

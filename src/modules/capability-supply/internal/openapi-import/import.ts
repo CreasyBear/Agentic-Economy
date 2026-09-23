@@ -1,10 +1,8 @@
 import type { JsonValue } from '@/modules/capability-contract/public'
 import { isRecord } from '@/modules/common/is-record'
 
-import {
-  admitProviderSchema,
-  type SchemaDereferencer,
-} from '../admit-provider-schema'
+import { admitProviderSchema } from '../admit-provider-schema'
+import type { SchemaDereferencer } from '../admit-provider-schema-types'
 import { publicationMaterialContainsCredential } from '../publication/source'
 import {
   inspectSource,

@@ -2,23 +2,15 @@ import { createFileRoute } from '@tanstack/react-router'
 
 import { withHttpRateLimit } from '@/lib/server/rate-limit'
 import { problem } from '@/lib/server/problem'
-import { methodNotAllowed } from '@/lib/server/method-guard'
+import { defineRouteHandlers } from '@/lib/server/gateway-json-route'
 import { registryServicesDetailAction } from '@/modules/registry/registry.actions'
 import { jsonResponse } from './api.businesses'
 
 export const Route = createFileRoute('/api/v1/businesses/$businessId')({
   server: {
-    handlers: {
+    handlers: defineRouteHandlers<{ businessId: string }>({
       GET: ({ params, request }) => withHttpRateLimit(request, 'public-read', () => handleDurableServiceDetailRequest(params.businessId, request)),
-      POST: () => methodNotAllowed(['GET']),
-      PUT: () => methodNotAllowed(['GET']),
-      PATCH: () => methodNotAllowed(['GET']),
-      DELETE: () => methodNotAllowed(['GET']),
-      HEAD: () => methodNotAllowed(['GET']),
-      OPTIONS: () => methodNotAllowed(['GET']),
-      TRACE: () => methodNotAllowed(['GET']),
-      CONNECT: () => methodNotAllowed(['GET']),
-    },
+    }),
   },
 })
 

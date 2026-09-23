@@ -1,10 +1,13 @@
 import { Link } from '@tanstack/react-router'
 import { ArrowUpRight, Code2, Image, Search, ShoppingBag, ShieldCheck, TrendingUp } from 'lucide-react'
-import { Button } from '@/components/ui/button'
+import { buttonVariants } from '@/components/ui/button-variants'
+import { cn } from '@/lib/utils'
 import { Carousel, CarouselContent, CarouselItem, CarouselNext, CarouselPrevious } from '@/components/ui/carousel'
 import type { X402MarketplaceHome, X402MarketplaceRail } from '@/modules/market/x402-marketplace-home'
-import type { SavedDirectoryTool } from './DirectorySavedTools'
+import { toDirectoryToolCardModel } from '@/modules/market/directory-card.view-model'
+import type { SavedDirectoryTool } from '@/modules/market/saved-tools.contracts'
 import { DirectoryToolCard } from './DirectoryToolCard'
+import { useMarketPath } from './market-navigation-context'
 
 type Props = Readonly<{
   home: X402MarketplaceHome
@@ -32,19 +35,16 @@ function collectionSearch(rail: X402MarketplaceRail) {
 
 /** Editorial collections of live directory matches, using the installed Embla carousel. */
 export function DirectoryHomeDiscovery({ home, onSave, isSaved, onCompare, isComparing, compareDisabled }: Props) {
+  const marketPath = useMarketPath()
   const rails = editorialOrder.flatMap(id => home.rails.filter(rail => rail.id === id))
   return <div className="pb-8">
     <nav aria-label="Discover Tools by job" className="mb-10 flex gap-2 overflow-x-auto border-b border-border pb-5 sm:justify-center sm:gap-3">
       {rails.map(rail => {
         const item = navigation[rail.id]
         const Icon = item.icon
-        return <Button key={rail.id} asChild variant="outline" className="shrink-0 gap-2 rounded-full border-border/70 bg-card px-4 sm:px-5"><Link to="/market" search={collectionSearch(rail)}><Icon className="size-4" aria-hidden="true" />{item.label}</Link></Button>
+        return <Link key={rail.id} to={marketPath} search={collectionSearch(rail)} className={cn(buttonVariants({ variant: 'outline' }), 'shrink-0 gap-2 rounded-full border-border/70 bg-card px-4 sm:px-5')}><Icon className="size-4" aria-hidden="true" />{item.label}</Link>
       })}
     </nav>
-    <div className="mb-8 flex items-baseline justify-between gap-3">
-      <p className="text-xs tracking-wide text-muted-foreground">Selections from the live directory</p>
-      <span className="hidden text-xs text-muted-foreground sm:block">A little inspiration for the next step</span>
-    </div>
     <div className="grid gap-12 sm:gap-16">
       {rails.map(rail => <section key={rail.id} className="min-w-0" aria-labelledby={`directory-collection-${rail.id}`}>
         <Carousel opts={{ align: 'start', loop: false }} aria-label={`${rail.category} Tools`}>
@@ -55,10 +55,10 @@ export function DirectoryHomeDiscovery({ home, onSave, isSaved, onCompare, isCom
               <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{rail.description}</p>
             </div>
             <div className="flex shrink-0 items-center gap-2">
-              <Button asChild variant="ghost" size="sm" className="mr-1 rounded-full"><Link to="/market" search={collectionSearch(rail)} aria-label={`View ${rail.category} collection`}>View collection<ArrowUpRight className="size-4" /></Link></Button>
+              <Link to={marketPath} search={collectionSearch(rail)} aria-label={`View ${rail.category} collection`} className={cn(buttonVariants({ variant: 'ghost', size: 'sm' }), 'mr-1 min-h-touch rounded-full')}>View collection<ArrowUpRight className="size-4" aria-hidden="true" /></Link>
               {rail.kind === 'ok' && rail.items.length > 0 ? <>
-                <CarouselPrevious className="static size-9 translate-y-0" aria-label={`Previous ${rail.category} Tools`} />
-                <CarouselNext className="static size-9 translate-y-0" aria-label={`Next ${rail.category} Tools`} />
+                <CarouselPrevious className="static size-10 min-h-touch translate-y-0" aria-label={`Previous ${rail.category} Tools`} />
+                <CarouselNext className="static size-10 min-h-touch translate-y-0" aria-label={`Next ${rail.category} Tools`} />
               </> : null}
             </div>
           </div>
@@ -68,7 +68,7 @@ export function DirectoryHomeDiscovery({ home, onSave, isSaved, onCompare, isCom
               {rail.items.slice(0, 8).map(entry => {
                 const item = { entry, search: rail.search }
                 return <CarouselItem key={entry.resource} className="basis-[85%] pl-4 sm:basis-1/2 lg:basis-1/3 xl:basis-1/4">
-                  <DirectoryToolCard entry={entry} onSave={() => onSave(item)} saved={isSaved(entry.resource)}
+                  <DirectoryToolCard model={toDirectoryToolCardModel(entry)} onSave={() => onSave(item)} saved={isSaved(entry.resource)}
                     onCompare={() => onCompare(item)} comparing={isComparing(entry.resource)} compareDisabled={compareDisabled(entry.resource)} />
                 </CarouselItem>
               })}

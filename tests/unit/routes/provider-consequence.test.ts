@@ -4,6 +4,10 @@ import { encodePaymentRequiredHeader } from '@x402/core/http'
 import { declarePaymentIdentifierExtension } from '@x402/extensions/payment-identifier'
 
 import type { RouteTransportInvocation } from '@/modules/capability-supply/route-transport-runtime'
+import {
+  createTestProviderInvocation,
+  type ProviderInvocation,
+} from '../../helpers/route-transport-fixtures'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import type { StableHashValue } from '@/modules/common/stable-hash'
 import {
@@ -58,53 +62,6 @@ const PAYMENT_SECRET = `0x${'22'.repeat(32)}`
 const SIGNING_KEY = 'platform-ticket-signing-key-at-least-32-bytes'
 const JOURNAL_TOKEN = 'a'.repeat(43)
 
-type ProviderInvocation = Extract<
-  RouteTransportInvocation,
-  Readonly<{ binding: Readonly<{ authority: Readonly<{ kind: 'provider_connection' }> }> }>
->
-
-function invocation(): ProviderInvocation {
-  const config = {
-    method: 'POST' as const,
-    requestTimeoutMs: 5_000,
-    credential: { kind: 'bearer' as const },
-  }
-  return {
-    binding: {
-      adapterId: 'http-json:v1',
-      endpointUrl: 'https://provider.example/run',
-      authority: {
-        kind: 'provider_connection',
-        connectionRef: 'connection:test',
-        providerRef: 'provider:test',
-      },
-      configJson: JSON.stringify(config),
-      configDigest: canonicalDigest(config),
-    },
-    authority: {
-      attemptRef: 'attempt:test',
-      effectGeneration: 1,
-      operationKeyDigest: DIGEST('3'),
-      mandateDigest: DIGEST('4'),
-      grantDigest: DIGEST('5'),
-      capabilityContractDigest: DIGEST('6'),
-      maximumSpend: { currency: 'USD', units: '0', exponent: 2 },
-      expiresAt: NOW + 120_000,
-      callIdentity: { keyId: 'route-calls:test', signature: 'hmac-sha256:test' },
-      authorityGeneration: 7,
-      authorityDigest: DIGEST('7'),
-      leaseRef: 'lease:test',
-      callRef: 'call:test',
-      toolRef: 'tool:test',
-      grantedScopes: ['provider:invoke'],
-      grantedResources: ['tool:test'],
-      readinessValidUntil: NOW + 120_000,
-      readinessDigest: DIGEST('8'),
-    },
-    inputJson: JSON.stringify({ destination: 'PER' }),
-  }
-}
-
 function x402Challenge() {
   return {
     x402Version: 2 as const,
@@ -127,7 +84,7 @@ function x402Challenge() {
 }
 
 function x402Invocation(): ProviderInvocation {
-  const base = invocation()
+  const base = createTestProviderInvocation({ now: NOW })
   const challenge = x402Challenge()
   const requirement = challenge.accepts[0]
   if (requirement === undefined) throw new Error('x402_requirement_fixture_missing')
@@ -173,7 +130,7 @@ function requestDigest(routeInvocation: RouteTransportInvocation): string {
   } as StableHashValue)
 }
 
-function ticket(routeInvocation = invocation()): CanonicalProviderConsequenceTicket {
+function ticket(routeInvocation = createTestProviderInvocation({ now: NOW })): CanonicalProviderConsequenceTicket {
   const invocationDigest = providerConsequenceInvocationDigest(routeInvocation)
   if (invocationDigest === undefined) throw new Error('test_fixture_invalid')
   const readinessValidUntil = routeInvocation.authority.readinessValidUntil
@@ -259,7 +216,7 @@ function consequenceRequest(
     },
     journalToken: JOURNAL_TOKEN,
     signedTicket: signedTicketFor(canonicalTicket),
-    invocation: invocation(),
+    invocation: createTestProviderInvocation({ now: NOW }),
     ...overrides,
   }
   return new Request('https://agentic-economy.example/api/internal/provider-consequence', {
@@ -416,7 +373,7 @@ describe('internal provider consequence route', () => {
       transport: 'http',
       disposition: 'succeeded',
       releaseStarted: true,
-      requestDigest: requestDigest(invocation()),
+      requestDigest: requestDigest(createTestProviderInvocation({ now: NOW })),
     })
     expect(mocks.guardedFetch).toHaveBeenCalledOnce()
     expect(mocks.guardedFetch.mock.calls[0]?.[1]?.headers).toMatchObject({

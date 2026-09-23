@@ -25,7 +25,7 @@ export function AeSiteFaq({
           value={item.question}
           className="border-background/40"
         >
-          <AccordionTrigger className="min-h-touch py-section text-start text-lg font-medium text-background hover:no-underline hover:text-background [&[data-state=open]]:text-background [&>svg]:text-background/70">
+          <AccordionTrigger className="min-h-touch py-section text-start text-lg font-medium text-background hover:no-underline hover:text-background [&[data-panel-open]]:text-background [&>svg]:text-background/70">
             {item.question}
           </AccordionTrigger>
           <AccordionContent className="text-pretty text-base leading-7 text-background/80 sm:text-lg sm:leading-8">

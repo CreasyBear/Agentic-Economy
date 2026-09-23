@@ -50,10 +50,10 @@ const registerBinding = makeFunctionReference<'mutation', Record<string, unknown
 const connectX402 = makeFunctionReference<'mutation', Record<string, unknown>, Record<string, unknown>>(
   'capabilityProviderConnectionAgents:connectX402',
 )
-const listConnections = makeFunctionReference<'mutation', Record<string, unknown>, Record<string, unknown>>(
+const listConnections = makeFunctionReference<'query', Record<string, unknown>, Record<string, unknown>>(
   'capabilityProviderConnectionAgents:list',
 )
-const readConnection = makeFunctionReference<'mutation', Record<string, unknown>, Record<string, unknown>>(
+const readConnection = makeFunctionReference<'query', Record<string, unknown>, Record<string, unknown>>(
   'capabilityProviderConnectionAgents:read',
 )
 const reconnectConnection = makeFunctionReference<'mutation', Record<string, unknown>, Record<string, unknown>>(
@@ -127,6 +127,14 @@ async function agentCommand(
   return await backend.mutation(reference, await withSourceWrite('catalog_publish', input as never))
 }
 
+async function agentQuery(
+  backend: ConvexFixtureBackend,
+  reference: typeof listConnections,
+  input: Record<string, unknown>,
+) {
+  return await backend.query(reference, await withSourceWrite('catalog_publish', input as never))
+}
+
 describe('supplier-agent provider connection lifecycle', () => {
   const previousServiceKey = process.env.AE_CONVEX_SERVER_FUNCTION_TOKEN
 
@@ -177,7 +185,7 @@ describe('supplier-agent provider connection lifecycle', () => {
     })).resolves.toEqual({ kind: 'refused', code: 'invalid_identity' })
 
     const listOperationKey = 'supplier-connection:list:one'
-    await expect(agentCommand(backend, listConnections, {
+    await expect(agentQuery(backend, listConnections, {
       ...base,
       businessId: fixture.businessId,
       limit: 100,
@@ -189,7 +197,7 @@ describe('supplier-agent provider connection lifecycle', () => {
     })
 
     const readOperationKey = 'supplier-connection:read:one'
-    await expect(agentCommand(backend, readConnection, {
+    await expect(agentQuery(backend, readConnection, {
       ...base,
       connectionRef,
       operationKey: readOperationKey,
@@ -237,7 +245,7 @@ describe('supplier-agent provider connection lifecycle', () => {
     expect(revoked).toMatchObject({ kind: 'applied', connection: { connectionRef, lifecycle: 'revocation_pending', available: false } })
 
     const recoveryReadKey = 'supplier-connection:read:recovery'
-    await expect(agentCommand(backend, readConnection, {
+    await expect(agentQuery(backend, readConnection, {
       ...base,
       connectionRef,
       operationKey: recoveryReadKey,
@@ -269,13 +277,13 @@ describe('supplier-agent provider connection lifecycle', () => {
       operationKey: 'supplier-connection:list:unsigned',
       correlationId: 'supplier-connection:list:unsigned',
     }
-    await expect(backend.mutation(listConnections, unsigned)).resolves.toEqual({
+    await expect(backend.query(listConnections, unsigned)).resolves.toEqual({
       kind: 'error',
       code: 'unauthenticated',
     })
 
     const siblingOperationKey = 'supplier-connection:list:sibling'
-    await expect(agentCommand(backend, listConnections, {
+    await expect(agentQuery(backend, listConnections, {
       ...unsigned,
       businessId: sibling.businessId,
       operationKey: siblingOperationKey,

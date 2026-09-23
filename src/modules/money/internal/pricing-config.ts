@@ -8,7 +8,8 @@ import {
 } from './exact-amount'
 import { pricingConfigSchema } from './pricing-contract'
 import type { ExactAmount } from './exact-amount'
-import type { PricingConfig, PricingResolution, RakeConfig, RakeSplit } from '../public'
+import type { PricingConfig } from './pricing-contract'
+import type { PricingResolution, RakeConfig, RakeSplit } from './money-types'
 
 export type NormalizePricingConfigResult =
   | Readonly<{ kind: 'valid'; config: PricingConfig }>

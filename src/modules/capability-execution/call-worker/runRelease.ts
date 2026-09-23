@@ -6,53 +6,33 @@ import type { StableHashValue } from '@/modules/common/stable-hash'
 import { Agent, fetch as guardedFetch } from 'undici'
 import { persistCanonicalReleaseFence, type CanonicalClaimSnapshot } from '@/modules/action-execution/runtime'
 import { invokePreparedRouteTransport, prepareRegisteredRouteTransportInvocation, type RouteTransportFetch, type RouteTransportObservation, type RouteTransportRuntime } from '@/modules/capability-supply/route-transport-runtime'
-import { parsePublishedToolSnapshot } from '@/modules/capability-supply/public'
-import { currentToolQuotesMatch } from '../current-tool-quote'
+import { parseAdmittedX402CatalogPayment } from '@/modules/capability-supply/public'
 import { chargeSettlementOutcome, credentialFromEnvironment, x402PaymentCredentialRefFromEnvironment } from '@/modules/capability-supply/server'
-import { pricingConfigSourceAmount } from '@/modules/money/public'
+import { pricingConfigSourceAmount, type ExactAmount } from '@/modules/money/public'
 import { createGuardedLookup, defaultDnsResolver, isPublicHttpTarget } from '@/modules/network-guard/public'
 import { internal } from '../../../../convex/_generated/api'
 import type { ActionCtx } from '../../../../convex/_generated/server'
 import { type ChargeSettlementResult, parseContractOutput, projectOuterResult, projectSellerOnboardingCanaryResult, readCanonicalSnapshot } from '../../../../convex/capabilityCallProjection'
 import { convergePreRelease, type WorkerResult } from './charge'
-import { brokeredProviderAuthorityValidator, createBrokeredX402PaymentCallbacks, credentiallessX402ConnectionAuthorityValidator, routeInvocation, X402_MANAGED_CUSTODY_REF } from './x402Route'
+import { brokeredProviderAuthorityValidator, createBrokeredX402PaymentCallbacks, createManagedX402PaymentCallbacks, credentiallessX402ConnectionAuthorityValidator, recordX402TransportObservation, routeInvocation, X402_MANAGED_CUSTODY_REF } from './x402Route'
 import { issueProviderLease, providerCredentialReader, providerLeaseAuthorityValidator, settleProviderLease, type ProviderLeaseAuthority } from './lease'
 import { runCommittedManagedX402Transport } from './brokeredX402'
-import { exactSellerCanarySnapshotMatches, type CallPreparation, type SellerCanaryOperationSnapshot } from './runPreparation'
+import { type CallPreparation } from './runPreparation'
+import {
+  gateGrantValidityBeforeRelease,
+  gateSellerCanarySnapshotBeforeRelease,
+  readGrantStillValidForRelease,
+  sellerCanaryReleaseFenceSnapshotMatches,
+  type GrantValidityExpectation,
+  type SellerCanaryOperationSnapshot,
+} from './call-execution-gates'
+import { parsePublishedToolSnapshot } from '@/modules/capability-supply/public'
 import {
   invokeProviderConsequenceViaVercel,
   providerConsequenceX402PaymentCustodyAvailable,
 } from './providerConsequenceBridge'
 
 type PreparedExecutionRun = Extract<CallPreparation, { kind: 'prepared' }>
-
-type GrantValidityExpectation = Readonly<{
-  grantRef: string
-  ownerId: string
-  credentialId: string
-  principalId: string
-  applicationRef: string
-  environment: 'sandbox' | 'production'
-  generation: number
-  policyDigest: string
-}>
-
-function activeGrantMatches(
-  candidate: unknown,
-  expected: GrantValidityExpectation,
-): boolean {
-  if (candidate === null || typeof candidate !== 'object') return false
-  const grant = candidate as Record<string, unknown>
-  return grant.grantRef === expected.grantRef
-    && grant.ownerId === expected.ownerId
-    && grant.credentialId === expected.credentialId
-    && grant.principalId === expected.principalId
-    && grant.applicationRef === expected.applicationRef
-    && grant.environment === expected.environment
-    && grant.generation === expected.generation
-    && grant.spendingPolicyDigest === expected.policyDigest
-    && grant.lifecycle === 'active'
-}
 
 export async function releaseCallRun(
   ctx: ActionCtx,
@@ -89,7 +69,7 @@ export async function releaseCallRun(
   if (beforeLease === undefined) return { kind: 'none' }
   if (beforeLease.control.control.control.state === 'cancelled') return { kind: 'none' }
   if (beforeLease.control.control.control.state === 'reconciliation_required') return { kind: 'none' }
-  if (isManagedCanary || (isX402 && economicRail !== 'brokered_x402')) {
+  if (isX402 && economicRail !== 'brokered_x402' && !isManagedCanary) {
     return await convergePreRelease(
       ctx,
       dispatch,
@@ -115,6 +95,24 @@ export async function releaseCallRun(
     leaseAuthority = lease.leaseAuthority
   }
 
+  let paymentMaximumSpend: ExactAmount | undefined = isManagedCanary
+    ? dispatch.sellerOnboardingCanary?.funding.requestedSpend
+    : undefined
+  if (economicRail === 'brokered_x402') {
+    const payment = parseAdmittedX402CatalogPayment(baseBinding.adapterId, baseBinding.configJson)
+    if (payment === undefined || pricingConfig.kind !== 'managed_x402'
+      || payment.assetAmountExponent !== 6
+      || payment.network !== pricingConfig.sourceRequirement.network
+      || payment.asset.toLowerCase() !== pricingConfig.sourceRequirement.asset.toLowerCase()) {
+      return await convergePreRelease(ctx, dispatch, claimed, 'pre_release_failed', false, 'payment_authority_invalid')
+    }
+    // Transport amounts use the admitted route denomination. Keep the exact
+    // committed token units; buyer AUD authority and ledger amounts stay separate.
+    paymentMaximumSpend = {
+      currency: payment.currency, exponent: payment.assetAmountExponent,
+      units: dispatch.sourceUsdcUnits ?? pricingConfigSourceAmount(pricingConfig).units,
+    }
+  }
   const invocation = routeInvocation(
     baseBinding,
     input,
@@ -136,11 +134,7 @@ export async function releaseCallRun(
     operation.readiness.validUntil,
     operation.readiness.qualificationDigest,
     connectionAuthority,
-    economicRail === 'brokered_x402'
-      ? (dispatch.sourceUsdcUnits === undefined ? pricingConfigSourceAmount(pricingConfig) : { currency: 'USDC', exponent: 6, units: dispatch.sourceUsdcUnits })
-      : isManagedCanary
-        ? dispatch.sellerOnboardingCanary?.funding.requestedSpend
-        : undefined,
+    paymentMaximumSpend,
     dispatch.committedPaymentRequiredJson,
   )
   const preparation = prepareRegisteredRouteTransportInvocation(
@@ -173,7 +167,7 @@ export async function releaseCallRun(
   let fenced: CanonicalClaimSnapshot | undefined
   const persistBrokeredReleaseFence = async (): Promise<boolean> => {
     try {
-      if (dispatch.sellerOnboardingCanary !== undefined) {
+        if (dispatch.sellerOnboardingCanary !== undefined) {
         if (dispatch.sellerOnboardingCanary.expiresAt <= Date.now()) return false
         const exactSnapshot = await ctx.runQuery(
           internal.capabilitySupplyCurrentTool.readExactSellerCanaryOperationSnapshot,
@@ -185,15 +179,9 @@ export async function releaseCallRun(
         const exactOperation = exactSnapshot === null
           ? undefined
           : parsePublishedToolSnapshot(exactSnapshot.toolJson)
-        if (
-          exactSnapshot === null
-          || exactOperation === undefined
-          || !exactSellerCanarySnapshotMatches({
-            dispatch,
-            snapshot: exactSnapshot as SellerCanaryOperationSnapshot,
-            operation: exactOperation,
-          })
-        ) return false
+        if (!sellerCanaryReleaseFenceSnapshotMatches(dispatch, exactSnapshot as SellerCanaryOperationSnapshot | null, exactOperation)) {
+          return false
+        }
       }
       if (fenced !== undefined) return true
       const fencedResult = await persistCanonicalReleaseFence(
@@ -263,24 +251,8 @@ export async function releaseCallRun(
     generation: dispatch.grantGeneration,
     policyDigest: grant.spendingPolicyDigest,
   }
-  const isGrantStillValid = async (): Promise<boolean> => {
-    let currentGrant: unknown
-    try {
-      currentGrant = await ctx.runQuery(internal.agentAccessPolicy.readActiveGrant, {
-        grantRef: grantValidityExpectation.grantRef,
-        ownerId: grantValidityExpectation.ownerId,
-        credentialId: grantValidityExpectation.credentialId,
-        principalId: grantValidityExpectation.principalId,
-        applicationRef: grantValidityExpectation.applicationRef,
-        environment: grantValidityExpectation.environment,
-        generation: grantValidityExpectation.generation,
-        now: Date.now(),
-      })
-    } catch (cause) {
-      return degradeBackend(cause, false, { site: 'isGrantStillValid', reason: 'source_unavailable' })
-    }
-    return activeGrantMatches(currentGrant, grantValidityExpectation)
-  }
+  const isGrantStillValid = async (): Promise<boolean> =>
+    readGrantStillValidForRelease(ctx, dispatch, grantValidityExpectation)
   let brokeredPaymentPossiblySubmitted = false
   const paymentCallbacks = connectionAuthority === undefined
     || economicRail === 'ae_internal'
@@ -301,7 +273,19 @@ export async function releaseCallRun(
             brokeredPaymentPossiblySubmitted = true
           },
         })
-      : undefined
+      : isManagedCanary
+        ? createManagedX402PaymentCallbacks(ctx, {
+            dispatch,
+            operation,
+            connectionAuthority,
+            durableAttemptRef,
+            effectGeneration: claimed.attempt.effectGeneration,
+            operationKeyDigest,
+            dispatcher,
+            isGrantStillValid,
+            validateProviderAuthority,
+          })
+        : undefined
   const runtime: RouteTransportRuntime = {
     send,
     resolveCredential: economicRail === 'brokered_x402' || isManagedCanary
@@ -321,96 +305,25 @@ export async function releaseCallRun(
       ? { beforeX402PaymentAuthorizationRead: persistBrokeredReleaseFence }
       : {}),
   }
-  let finalGrant
-  try {
-    finalGrant = await ctx.runQuery(internal.agentAccessPolicy.readActiveGrant, {
-      grantRef: persistedAuthority.grantRef,
-      ownerId: dispatch.ownerId,
-      credentialId: dispatch.credentialId,
-      environment: dispatch.environment,
-      principalId: dispatch.principalId,
-      applicationRef: dispatch.applicationRef,
-      generation: dispatch.grantGeneration,
-      now: Date.now(),
-    })
-  } catch (cause) {
+  const grantValidityRefusal = await gateGrantValidityBeforeRelease(ctx, {
+    dispatch,
+    claimed,
+    grantValidityExpectation,
+  })
+  if (grantValidityRefusal !== null) {
     await settleProviderLease(ctx, dispatch, operation, leaseRef, leaseAuthority, false, durableAttemptRef, durableEffectGeneration)
     await closeDispatcher()
-    return degradeBackend(
-      cause,
-      await convergePreRelease(
-        ctx,
-        dispatch,
-        claimed,
-        'pre_release_failed',
-        true,
-        'Grant authority could not be revalidated before release.',
-      ),
-      { site: 'releaseCallRun', reason: 'source_unavailable' },
-    )
+    return grantValidityRefusal
   }
-  if (!activeGrantMatches(finalGrant, grantValidityExpectation)) {
+  const currentOperationResult = await gateSellerCanarySnapshotBeforeRelease(ctx, {
+    dispatch,
+    claimed,
+    pinnedOperation: operation,
+  })
+  if (currentOperationResult.kind === 'recorded' || currentOperationResult.kind === 'none') {
     await settleProviderLease(ctx, dispatch, operation, leaseRef, leaseAuthority, false, durableAttemptRef, durableEffectGeneration)
     await closeDispatcher()
-    return await convergePreRelease(
-      ctx,
-      dispatch,
-      claimed,
-      'grant_generation_stale',
-      false,
-      'Refresh the agent grant and retry.',
-    )
-  }
-  let currentOperation
-  try {
-    const currentSnapshot = dispatch.sellerOnboardingCanary === undefined
-      ? await ctx.runQuery(
-          internal.capabilitySupplyTools.readCurrentPublishedToolSnapshot,
-          { toolRef: dispatch.toolRef },
-        )
-      : await ctx.runQuery(
-          internal.capabilitySupplyCurrentTool.readExactSellerCanaryOperationSnapshot,
-          {
-            publicationRef: dispatch.sellerOnboardingCanary.publicationRef,
-            revision: dispatch.sellerOnboardingCanary.publicationRevision,
-          },
-        )
-    currentOperation = currentSnapshot === null
-      ? undefined
-      : parsePublishedToolSnapshot(currentSnapshot.toolJson)
-    if (
-      currentOperation !== undefined
-      && dispatch.sellerOnboardingCanary !== undefined
-      && !exactSellerCanarySnapshotMatches({
-        dispatch,
-        snapshot: currentSnapshot as SellerCanaryOperationSnapshot,
-        operation: currentOperation,
-      })
-    ) currentOperation = undefined
-  } catch (cause) {
-    currentOperation = degradeBackend(cause, undefined, { site: 'releaseCallRun', reason: 'source_unavailable' })
-  }
-  if (
-    currentOperation === undefined
-    || (
-      dispatch.sellerOnboardingCanary === undefined
-      && !currentToolQuotesMatch({
-        toolRef: dispatch.toolRef,
-        pinned: operation,
-        current: currentOperation,
-      })
-    )
-  ) {
-    await settleProviderLease(ctx, dispatch, operation, leaseRef, leaseAuthority, false, durableAttemptRef, durableEffectGeneration)
-    await closeDispatcher()
-    return await convergePreRelease(
-      ctx,
-      dispatch,
-      claimed,
-      'pre_release_failed',
-      false,
-      'The operation publication or price binding changed before release.',
-    )
+    return currentOperationResult
   }
   if (economicRail === 'ae_internal') {
     if (authorityMaximumSpend.units !== '0') {
@@ -551,7 +464,6 @@ export async function releaseCallRun(
         durableAttemptRef,
         durableEffectGeneration,
         operationKeyDigest,
-        fenced: fenced ?? claimed,
       })
       await settleProviderLease(ctx, dispatch, operation, leaseRef, leaseAuthority, observation.releaseStarted, durableAttemptRef, durableEffectGeneration)
       finalizationStarted = true
@@ -574,11 +486,38 @@ export async function releaseCallRun(
         failureCode: `operation_transport_${errorName(error)}`,
       }
     }
+    const recordedX402Observation = isManagedCanary
+      ? await recordX402TransportObservation(ctx, {
+          dispatch,
+          operation,
+          observation,
+          durableAttemptRef,
+          durableEffectGeneration,
+          operationKeyDigest,
+        })
+      : undefined
+    // Delivery and payment consequences use the declared contract; semantic suspicion is advisory.
     const outputValidation = parseContractOutput(observation, descriptor)
     const deliveryOutcome = chargeSettlementOutcome(observation, economicRail, outputValidation.valid)
+    const settledPayment = isManagedCanary
+      && recordedX402Observation?.settlementStatus === 'settled'
+      && recordedX402Observation.settlementRef !== undefined
+      ? {
+          paymentIdentifier: operationKeyDigest,
+          externalSettlementRef: recordedX402Observation.settlementRef,
+          settlementTransactionHash: recordedX402Observation.settlementRef,
+        }
+      : {}
     const settlement = deliveryOutcome === 'unknown'
-        ? { kind: 'reconciliation_required' as const }
-        : { kind: 'settled' as const, outcome: deliveryOutcome }
+      ? {
+          kind: 'reconciliation_required' as const,
+          ...(isManagedCanary ? { paymentIdentifier: operationKeyDigest } : {}),
+        }
+      : {
+          kind: 'settled' as const,
+          outcome: deliveryOutcome,
+          ...settledPayment,
+        }
     await settleProviderLease(ctx, dispatch, operation, leaseRef, leaseAuthority, observation.releaseStarted, durableAttemptRef, durableEffectGeneration)
     const recordedAt = new Date().toISOString()
     finalizationStarted = true

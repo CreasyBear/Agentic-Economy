@@ -179,7 +179,7 @@ describe('Provider source integration draft', () => {
       operationKey: 'supplier-operations:list:one',
       correlationId: 'supplier-operations:list:one',
     }
-    const directory = await backend.mutation(
+    const directory = await backend.query(
       api.capabilityProviderTools.listAgent,
       await withSourceWrite('catalog_publish', directoryCommand),
     )
@@ -191,7 +191,7 @@ describe('Provider source integration draft', () => {
       toolRef: resumed.offeringRef,
       state: 'Draft',
     }])
-    const exact = await backend.mutation(
+    const exact = await backend.query(
       api.capabilityProviderTools.readAgent,
       await withSourceWrite('catalog_publish', {
         businessId,
@@ -214,6 +214,16 @@ describe('Provider source integration draft', () => {
       schemaVersion: 'provider_tools:v1',
       toolRef: resumed.offeringRef,
       state: 'Draft',
+      source: {
+        kind: 'openapi',
+        revision: `openapi:${sourceDigest}`,
+        digest: sourceDigest,
+      },
+      health: {
+        connection: 'not_required',
+        freshness: 'current',
+        publication: 'not_published',
+      },
     })
     expect(ownerExact).toMatchObject({ kind: 'available', resumeCandidateRef: candidateRef })
     const ownerDirectory = await owner.query(
@@ -230,7 +240,7 @@ describe('Provider source integration draft', () => {
       }],
     })
     expect(ownerDirectory.kind === 'available' ? JSON.parse(ownerDirectory.page[0]!.statusJson) : ownerDirectory)
-      .toMatchObject({ schemaVersion: 'provider_tools:v1', state: 'Draft' })
+      .toMatchObject({ schemaVersion: 'provider_tools:v1', state: 'Draft', source: { kind: 'openapi' } })
     await expect(foreignOwner.query(
       api.capabilityProviderTools.readOwner,
       { businessId, offeringRef: resumed.offeringRef, now: 1_000 },
@@ -247,7 +257,7 @@ describe('Provider source integration draft', () => {
       internal.capabilityProviderTools.backfillDraftPage,
       { paginationOpts: { numItems: 100, cursor: null } },
     )).resolves.toMatchObject({ processed: 1, isDone: true })
-    const restored = await backend.mutation(
+    const restored = await backend.query(
       api.capabilityProviderTools.listAgent,
       await withSourceWrite('catalog_publish', { ...directoryCommand, operationKey: 'supplier-operations:list:restored' }),
     )

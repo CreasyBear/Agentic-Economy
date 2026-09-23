@@ -3,7 +3,8 @@ import { Suspense, type ReactNode } from 'react'
 
 import { AeSection } from '@/components/ae/layout/AeSection'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
-import { Button } from '@/components/ui/button'
+import { buttonVariants } from '@/components/ui/button-variants'
+import { cn } from '@/lib/utils'
 import { projectProviderWorkspace, type ProviderWorkspaceProjectionRow } from './provider-workspace-projection'
 import type {
   ProviderWorkspaceInventoryResult,
@@ -77,14 +78,20 @@ export function ProviderWorkspaceToolsSection({ inventory, lifecycle, compatibil
       {inventory.isDone && compatibilityCursor === undefined ? null : (
         <nav aria-label="Tool pages" className="flex flex-wrap gap-intra">
           {compatibilityCursor === undefined ? null : (
-            <Button asChild variant="secondary" className="min-h-touch">
-              <a href="/owner/operations">First 50 Tools</a>
-            </Button>
+            <a
+              href="/owner/operations"
+              className={cn(buttonVariants({ variant: 'secondary' }), 'min-h-touch')}
+            >
+              First 50 Tools
+            </a>
           )}
           {inventory.isDone ? null : (
-            <Button asChild variant="secondary" className="min-h-touch">
-              <a href={`/owner/operations?cursor=${encodeURIComponent(inventory.continueCursor)}`}>Next 50 Tools</a>
-            </Button>
+            <a
+              href={`/owner/operations?cursor=${encodeURIComponent(inventory.continueCursor)}`}
+              className={cn(buttonVariants({ variant: 'secondary' }), 'min-h-touch')}
+            >
+              Next 50 Tools
+            </a>
           )}
         </nav>
       )}

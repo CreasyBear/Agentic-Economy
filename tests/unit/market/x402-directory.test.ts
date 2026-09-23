@@ -1,4 +1,5 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { mockJevFetch } from '../../helpers/tool-search-rerank-fixtures'
 
 const sdk = vi.hoisted(() => ({ list: vi.fn(), search: vi.fn() }))
 vi.mock('@coinbase/cdp-sdk', () => ({ listX402DiscoveryResources: sdk.list, searchX402Resources: sdk.search }))
@@ -12,8 +13,26 @@ const resources = Array.from({ length: 20 }, (_, index) => ({
   accepts: [{ network: 'unfamiliar:network', scheme: 'unfamiliar-scheme', amount: '123', asset: 'asset-id' }],
 }))
 
+afterEach(() => { vi.unstubAllGlobals(); vi.unstubAllEnvs() })
+
 describe('native x402 directory browsing', () => {
   beforeEach(() => vi.clearAllMocks())
+
+  it('reranks projected upstream search results while retaining every result and partial status', async () => {
+    vi.stubEnv('TYPESAFE_API_KEY', '')
+    vi.stubEnv('OPENROUTER_API_KEY', 'test-key')
+    const fetchImpl = mockJevFetch({ match_0: { type: 'noul', noul: 0.1 }, match_1: { type: 'noul', noul: 0.9 } })
+    vi.stubGlobal('fetch', fetchImpl)
+    sdk.search.mockResolvedValue({ resources: resources.slice(0, 2), partialResults: true })
+    const page = await readX402Directory({ query: 'image', network: 'base', maxUsdPrice: 0.1 })
+    expect(sdk.search).toHaveBeenCalledExactlyOnceWith({ query: 'image', network: 'base', maxUsdPrice: '0.1', limit: 20 })
+    expect(page).toMatchObject({ kind: 'ok', partialResults: true, appliedFilters: { network: 'base', maxUsdPrice: 0.1 } })
+    if (page.kind !== 'ok') throw new Error('expected directory')
+    expect(page.items.map(item => item.resource)).toEqual([resources[1]!.resource, resources[0]!.resource])
+    expect(JSON.parse(page.items[0]!.metadataJson)).toEqual(resources[1])
+    expect(fetchImpl).toHaveBeenCalledOnce()
+    expect(page).not.toHaveProperty('nextOffset')
+  })
 
   it('shows every native item, including unsupported protocols and payment schemes', async () => {
     sdk.list.mockResolvedValue({ items: resources, pagination: { limit: 20, offset: 20, total: 14445 } })
@@ -74,7 +93,7 @@ describe('native x402 directory browsing', () => {
     expect(sdk.search).toHaveBeenCalledExactlyOnceWith({ query: 'weather', network: 'eip155:8453', urlSubstring: '://api.example.com/', maxUsdPrice: '0.0000001', limit: 20 })
     expect(sdk.list).not.toHaveBeenCalled()
     expect(page).toMatchObject({ mode: 'search', partialResults: true, appliedFilters: { network: 'eip155:8453', provider: 'api.example.com', maxUsdPrice: 0.0000001 } })
-    // Results remain the source's whole returned page, not a locally ranked or filtered subset.
+    // Semantic ordering must retain the source's whole returned page, not filter it.
     expect(page.kind === 'ok' && page.items.length).toBe(20)
     expect(page).not.toHaveProperty('nextOffset')
     expect(page).not.toHaveProperty('total')

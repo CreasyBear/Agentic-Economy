@@ -175,6 +175,13 @@ const publicDescriptor = v.object({
   availability: publicAvailability,
   navigation: v.array(publicNavigation),
   listingTier: v.union(v.literal('reviewed'), v.literal('listed')),
+  canonical: v.optional(
+    v.object({
+      providerHost: v.string(),
+      slug: v.string(),
+      path: v.string(),
+    }),
+  ),
   parameters: v.optional(v.array(v.object({
     group: v.union(v.literal('body'), v.literal('path'), v.literal('query'), v.literal('header')),
     name: v.string(), type: v.string(),

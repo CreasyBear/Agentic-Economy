@@ -1,3 +1,4 @@
+import { spendingPeriodAdjustmentValue } from './spending-period-values'
 import { defineTable } from 'convex/server'
 import { v } from 'convex/values'
 
@@ -169,6 +170,21 @@ export const x402PaymentAuthorizationFailureDetailValue = v.union(
   v.literal('authority_read_failed'),
 )
 export const moneyTables = {
+  // Applied configuration and one durable external command; never a spend counter.
+  agentSpendingPeriods: defineTable({
+    principalRef: v.string(),
+    periodKind: v.union(v.literal('day'), v.literal('month')),
+    periodStartAt: v.number(),
+    periodEndAt: v.number(),
+    appliedRevision: v.number(),
+    appliedLimitUnits: v.string(),
+    pending: v.optional(spendingPeriodAdjustmentValue),
+    appliedCommandDigest: v.optional(v.string()),
+    transactionRefs: v.optional(v.array(v.string())),
+    cutover: v.literal('clean_period'),
+  }).index('by_principalRef_and_periodKind_and_periodStartAt', [
+    'principalRef', 'periodKind', 'periodStartAt',
+  ]),
   moneyStripeWebhookInbox: defineTable({
     stripeEventId: identifier,
     eventType: identifier,
@@ -344,7 +360,11 @@ export const moneyTables = {
     inputDigest: identifier,
     successReturnRef: identifier,
     providerRecoveryDeadlineAt: v.number(),
-    initiationKind: v.optional(v.union(v.literal('owner_top_up'), v.literal('agent_handoff'))),
+    initiationKind: v.optional(v.union(
+      v.literal('owner_top_up'),
+      v.literal('agent_handoff'),
+      v.literal('auto_recharge'),
+    )),
     checkoutMode: v.optional(v.literal('hosted_page')),
     checkoutExpiresAt: v.optional(v.number()),
     cancelReturnRef: v.optional(identifier),
@@ -412,6 +432,82 @@ export const moneyTables = {
   })
     .index('by_accountRef', ['accountRef'])
     .index('by_legalCustomerRef_and_state', ['legalCustomerRef', 'state']),
+  moneyCustomerTaxFacts: defineTable({
+    accountRef: identifier,
+    abn: v.string(),
+    gstRegistered: v.boolean(),
+    legalCustomerRef: identifier,
+    legalName: v.optional(v.string()),
+    addressLine1: v.optional(v.string()),
+    addressLine2: v.optional(v.string()),
+    locality: v.optional(v.string()),
+    region: v.optional(v.string()),
+    postalCode: v.optional(v.string()),
+    country: v.optional(v.literal('AU')),
+    revision: v.optional(v.number()),
+    lastCorrelationRef: v.optional(v.string()),
+    effectiveAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index('by_accountRef', ['accountRef']),
+  moneyAutoRechargeSettings: defineTable({
+    accountRef: identifier,
+    enabled: v.boolean(),
+    currency: v.literal('AUD'),
+    exponent: v.literal(6),
+    thresholdUnits: units,
+    rechargeAmountUnits: units,
+    revision: v.number(),
+    lastTriggeredAt: v.optional(v.number()),
+    inFlightCommandRef: v.optional(identifier),
+    chargesUtcDate: v.optional(v.string()),
+    chargesOnUtcDate: v.optional(v.number()),
+    lastFailureCode: v.optional(identifier),
+    lastCorrelationRef: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  }).index('by_accountRef', ['accountRef']),
+
+  moneyMonthlySpendBudgets: defineTable({
+    accountRef: identifier,
+    enabled: v.boolean(),
+    currency: v.literal('AUD'),
+    exponent: v.literal(6),
+    ceilingUnits: units,
+    revision: v.number(),
+    lastCorrelationRef: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  }).index('by_accountRef', ['accountRef']),
+
+  moneySupplierPreferences: defineTable({
+    businessId: identifier,
+    currency: v.string(),
+    minimumPayoutUnits: units,
+    schedule: v.union(v.literal('monthly'), v.literal('weekly'), v.literal('manual')),
+    revision: v.number(),
+    lastCorrelationRef: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  }).index('by_businessId_and_currency', ['businessId', 'currency']),
+
+  moneyStripeCustomerBindings: defineTable({
+    accountRef: identifier,
+    legalCustomerRef: identifier,
+    stripeCustomerId: identifier,
+    mandateState: v.union(
+      v.literal('missing'),
+      v.literal('ready'),
+      v.literal('authentication_required'),
+      v.literal('failed'),
+    ),
+    setupExternalRef: v.optional(identifier),
+    revision: v.number(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index('by_accountRef', ['accountRef'])
+    .index('by_stripeCustomerId', ['stripeCustomerId']),
   moneyTreasuryObservations: defineTable({
     observationRef: identifier,
     environment: v.union(v.literal('sandbox'), v.literal('production')),

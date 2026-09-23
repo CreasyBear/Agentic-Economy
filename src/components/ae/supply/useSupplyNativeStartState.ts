@@ -7,6 +7,7 @@ import {
   eligibleSupplyConnections,
   pricingInput,
   publicationError,
+  publicationTermsValidationMessage,
   publicationValidationMessage,
   requiredAdapterIdForSourceKind,
   sourceInput,
@@ -31,7 +32,7 @@ export function useSupplyNativeStartState({
   onPublish,
 }: SupplyNativeStartProps) {
   const initialCandidate = initial?.preview?.candidates.find(({ candidateRef }) => candidateRef === initial.candidateRef)
-  const [sourceKind, setSourceKind] = useState<SourceKind>(initial?.source.kind ?? 'openapi')
+  const [sourceKind, setSourceKind] = useState<SourceKind>(initial?.source.kind ?? 'x402')
   const [environment, setEnvironment] = useState<Environment>(initial?.source.environment ?? 'sandbox')
   const [definitionUrl, setDefinitionUrl] = useState(initial?.source.kind === 'openapi' ? initial.source.definitionUrl : '')
   const [mcpLocator, setMcpLocator] = useState<'url' | 'registry'>(initial?.source.kind === 'mcp' && initial.source.registryName !== undefined ? 'registry' : 'url')
@@ -66,6 +67,10 @@ export function useSupplyNativeStartState({
   const [error, setError] = useState<string>()
   const [requiredAction, setRequiredAction] = useState<Extract<SupplySourcePreview, { kind: 'action_required' }>['requiredAction']>()
   const [success, setSuccess] = useState<string>()
+  const [reviewing, setReviewing] = useState(false)
+  const [publicationLocked, setPublicationLocked] = useState(false)
+  const operationInFlight = useRef(false)
+  const publicationCommandLocked = useRef(false)
   const idempotencyKey = useRef(`owner-supply:${crypto.randomUUID()}`)
   const previewIdempotencyKey = useRef(`owner-supply-preview:${crypto.randomUUID()}`)
   const connectionIdempotencyKey = useRef(`owner-supply-connection:${crypto.randomUUID()}`)
@@ -91,12 +96,33 @@ export function useSupplyNativeStartState({
     businessRef,
   })
 
+  function beginOperation(next: NonNullable<typeof pending>): boolean {
+    if (operationInFlight.current || publicationCommandLocked.current) return false
+    operationInFlight.current = true
+    setPending(next)
+    return true
+  }
+
+  function endOperation() {
+    operationInFlight.current = false
+    setPending(undefined)
+  }
+
+  function clearAttestation() {
+    setAttestation({
+      authorisedToPublish: false,
+      informationAccurate: false,
+      publishAfterSuccessfulValidation: false,
+    })
+  }
+
   function resetDiscoveryOnSourceEdit() {
     setRemoteSelection(undefined)
     setSelectedRemoteRef('')
   }
 
   function changeSourceKind(next: string) {
+    if (operationInFlight.current || publicationCommandLocked.current) return
     setSourceKind(next as SourceKind)
     setPreview(undefined)
     resetDiscoveryOnSourceEdit()
@@ -104,6 +130,38 @@ export function useSupplyNativeStartState({
     setError(undefined)
     setRequiredAction(undefined)
     setSuccess(undefined)
+    setReviewing(false)
+  }
+
+  function editSource() {
+    if (operationInFlight.current || publicationCommandLocked.current) return
+    setPreview(undefined)
+    setRemoteSelection(undefined)
+    setSelectedRemoteRef('')
+    setSelectedRef('')
+    setRequiredAction(undefined)
+    setSuccess(undefined)
+    setError(undefined)
+    setReviewing(false)
+    clearAttestation()
+  }
+
+  function editTool() {
+    if (operationInFlight.current || publicationCommandLocked.current) return
+    setSelectedRef('')
+    setConnectionRef('')
+    setRequiredAction(undefined)
+    setSuccess(undefined)
+    setError(undefined)
+    setReviewing(false)
+    clearAttestation()
+  }
+
+  function editTerms() {
+    if (operationInFlight.current || publicationCommandLocked.current) return
+    setReviewing(false)
+    setError(undefined)
+    clearAttestation()
   }
 
   async function findTools(remoteRefOverride?: string) {
@@ -114,10 +172,13 @@ export function useSupplyNativeStartState({
           pluginJson, mcpJson, remoteRef: remoteRefOverride, resourceUrl, x402Method,
         })
     if (currentSource === undefined) {
-      setError(sourceInputError(sourceKind, mcpLocator))
+      setError(sourceInputError(sourceKind, mcpLocator, {
+        sourceKind, environment, definitionUrl, mcpLocator, serverUrl, registryName,
+        pluginJson, mcpJson, remoteRef: remoteRefOverride ?? selectedRemoteRef, resourceUrl, x402Method,
+      }))
       return
     }
-    setPending('preview')
+    if (!beginOperation('preview')) return
     setError(undefined)
     setSuccess(undefined)
     try {
@@ -144,13 +205,12 @@ export function useSupplyNativeStartState({
       captureClientExceptionOnClient(cause)
       setError('AE could not inspect this source. Check the source and try again.')
     } finally {
-      setPending(undefined)
+      endOperation()
     }
   }
 
   async function selectCandidate(candidate: SupplyToolCandidate) {
-    if (source === undefined || preview === undefined || pending !== undefined) return
-    setPending('select')
+    if (source === undefined || preview === undefined || !beginOperation('select')) return
     setError(undefined)
     try {
       const saved = await onSelectCandidate({
@@ -172,20 +232,38 @@ export function useSupplyNativeStartState({
       setSelectedRef(candidate.candidateRef)
       setName(candidate.title)
       setDescription(candidate.description)
-      setConnectionRef((current) => connections.some((connection) => (
-        connection.connectionRef === current
+      const nextConnectionRef = connections.some((connection) => (
+        connection.connectionRef === connectionRef
         && connection.available
         && connection.businessId === businessRef
         && connection.adapterId === requiredAdapterId
-      )) ? current : '')
+      )) ? connectionRef : ''
+      setConnectionRef(nextConnectionRef)
       setPricingKind(candidate.x402 === undefined ? 'free' : 'source_x402')
-      await onDraftSaved?.(candidate.candidateRef, connectionRef === '' ? undefined : connectionRef)
+      setReviewing(false)
+      await onDraftSaved?.(candidate.candidateRef, nextConnectionRef === '' ? undefined : nextConnectionRef)
     } catch (cause) {
       captureClientExceptionOnClient(cause)
       setError('AE could not save this selection. Discover endpoints again, then try again.')
     } finally {
-      setPending(undefined)
+      endOperation()
     }
+  }
+
+  function continueToReview() {
+    if (selected === undefined || operationInFlight.current || publicationCommandLocked.current) return
+    const validationMessage = publicationTermsValidationMessage({
+      category,
+      pricing: pricingInput(pricingKind, price),
+      requiresConnection: selected.authentication.kind !== 'public',
+      connectionRef,
+    })
+    if (validationMessage !== undefined) {
+      setError(validationMessage)
+      return
+    }
+    setError(undefined)
+    setReviewing(true)
   }
 
   async function submit() {
@@ -224,26 +302,27 @@ export function useSupplyNativeStartState({
       environment,
       idempotencyKey: idempotencyKey.current,
     })
-    setPending('publish')
+    if (!beginOperation('publish')) return
+    publicationCommandLocked.current = true
+    setPublicationLocked(true)
     setError(undefined)
     try {
       const result = await onPublish(input)
       if (result.kind === 'refused') {
-        setError(publicationError(result.reason))
+        setError(`${publicationError(result.reason)} Open Tools to confirm the current status before starting a new publication command.`)
         return
       }
-      setSuccess(`Tool submitted for validation. AE will publish it after the required checks pass. Reference: ${result.toolRef}`)
+      setSuccess('Tool submitted for validation. AE will publish it after the required checks pass.')
     } catch (cause) {
       captureClientExceptionOnClient(cause)
       setError('AE could not confirm submission. Reload Tools before trying again.')
     } finally {
-      setPending(undefined)
+      endOperation()
     }
   }
 
   async function connectSelectedSource() {
-    if (source === undefined || preview === undefined || selected === undefined || pending !== undefined) return
-    setPending('connect')
+    if (source === undefined || preview === undefined || selected === undefined || !beginOperation('connect')) return
     setError(undefined)
     try {
       const result = await onConnect({
@@ -262,7 +341,7 @@ export function useSupplyNativeStartState({
       captureClientExceptionOnClient(cause)
       setError('AE could not start this connection. Discover endpoints again, then retry the current source.')
     } finally {
-      setPending(undefined)
+      endOperation()
     }
   }
 
@@ -271,13 +350,14 @@ export function useSupplyNativeStartState({
     resourceUrl, x402Method, preview, remoteSelection, selectedRemoteRef, selectedRef,
     name, description, category, serviceArea, availability,
     pricingKind, price, connectionRef, externalEffect, dataRelease, financialExposure, dataClassification, attestation,
-    pending, error, requiredAction, success,
-    selected, eligibleConnections,
+    pending, error, requiredAction, success, reviewing, publicationLocked,
+    source, selected, eligibleConnections,
     setEnvironment, setDefinitionUrl, setMcpLocator, setServerUrl, setRegistryName, setPluginJson, setMcpJson,
     setResourceUrl, setX402Method, setSelectedRemoteRef,
     setName, setDescription, setCategory, setServiceArea, setAvailability,
     setPricingKind, setPrice, setConnectionRef, setExternalEffect, setDataRelease, setFinancialExposure, setDataClassification,
     setAttestation, setError,
-    resetDiscoveryOnSourceEdit, changeSourceKind, findTools, selectCandidate, submit, connectSelectedSource,
+    resetDiscoveryOnSourceEdit, changeSourceKind, editSource, editTool, editTerms, continueToReview,
+    findTools, selectCandidate, submit, connectSelectedSource,
   }
 }

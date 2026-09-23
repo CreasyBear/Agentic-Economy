@@ -50,7 +50,7 @@ const original = {
 // derived callRef (canonicalCallRef mixes credentialId and grantGeneration in).
 const rotated = {
   ...original,
-  quoteRef: 'operation-commitment:v1:rotation-successor',
+  // Replay keeps the original Quote; only credential/grant-derived identity changes.
   callRef: 'operation-invocation:v1:rotation-successor',
   credentialId: 'credential:rotation-b',
   grantRef: 'grant:rotation-b',
@@ -146,6 +146,11 @@ describe('call idempotency across a credential rotation', () => {
       },
     })
 
+    await expect(backend.mutation(
+      internal.capabilityCalls.reserve,
+      reserveArgs({ quoteRef: 'operation-commitment:v1:rotation-divergent' }) as never,
+    )).resolves.toEqual({ kind: 'conflict' })
+
     const rows = await calls(backend)
     expect(rows).toHaveLength(1)
     expect(rows[0]).toMatchObject({
@@ -156,7 +161,12 @@ describe('call idempotency across a credential rotation', () => {
     })
     const obligations = await backend.run(async (ctx) =>
       await ctx.db.query('moneyProviderObligations').take(10))
-    expect(obligations.map((row) => row.callRef)).toEqual([CALL_REF])
+    expect(obligations).toEqual([
+      expect.objectContaining({
+        callRef: CALL_REF,
+        obligationRef: `provider-obligation:${CALL_REF}`,
+      }),
+    ])
   })
 
   it('finds the Call for replay and recovery reads made under the rotated credential', async () => {

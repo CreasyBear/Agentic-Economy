@@ -14,6 +14,7 @@ export function AeSecurityHistoryTable({
   emptyMessage,
   isDone,
   loading,
+  loadFailed = false,
   onLoadMore,
   showActorAndTarget = true,
 }: Readonly<{
@@ -22,6 +23,7 @@ export function AeSecurityHistoryTable({
   emptyMessage: string
   isDone: boolean
   loading: boolean
+  loadFailed?: boolean
   onLoadMore(): void
   showActorAndTarget?: boolean
 }>) {
@@ -38,15 +40,30 @@ export function AeSecurityHistoryTable({
         emptyMessage={emptyMessage}
         maxHeight="32rem"
       />
+      <div className="min-h-[2.5rem]" role="status" aria-live="polite">
+        {loadFailed ? (
+          <div className="grid gap-1 text-sm text-muted-foreground">
+            <p>
+              <strong>What happened:</strong> Older security events could not be loaded.
+            </p>
+            <p className="font-mono text-xs tabular-nums">
+              <strong>Financial impact:</strong> A$0.00 affected — known security history remains visible.
+            </p>
+            <p>
+              <strong>Next step:</strong> Check your connection and retry older events.
+            </p>
+          </div>
+        ) : null}
+      </div>
       {isDone ? null : (
         <Button
           type="button"
           variant="secondary"
-          className="justify-self-start"
+          className="min-h-touch min-w-[11rem] justify-self-start enabled:active:scale-[0.98] transition-transform duration-100 ease-out motion-reduce:transition-none motion-reduce:active:scale-100"
           disabled={loading}
           onClick={onLoadMore}
         >
-          {loading ? 'Loading…' : 'Load older events'}
+          {loading ? 'Loading…' : loadFailed ? 'Retry older events' : 'Load older events'}
         </Button>
       )}
     </div>
@@ -55,6 +72,17 @@ export function AeSecurityHistoryTable({
 
 function historyColumns(showActorAndTarget: boolean): ColumnDef<AccountSecurityHistoryItem, unknown>[] {
   return [
+    {
+      id: 'activity',
+      header: 'Activity',
+      accessorFn: (row) => `${row.eventType} ${row.outcome}`,
+      cell: ({ row }) => (
+        <span className="grid gap-1">
+          <span className="font-medium text-foreground">{eventLabel(row.original.eventType)}</span>
+          <Badge variant="secondary" className="w-fit">{humanize(row.original.outcome)}</Badge>
+        </span>
+      ),
+    },
     {
       id: 'time',
       header: 'Time',
@@ -67,45 +95,37 @@ function historyColumns(showActorAndTarget: boolean): ColumnDef<AccountSecurityH
       ),
     },
     {
-      accessorKey: 'eventType',
-      header: 'Event',
-      cell: ({ row }) => eventLabel(row.original.eventType),
-    },
-    ...(showActorAndTarget ? [{
-      id: 'actor',
-      header: 'Actor',
-      accessorFn: (row: AccountSecurityHistoryItem) => `${row.actorKind} ${row.actorRef}`,
-      cell: ({ row }: { row: { original: AccountSecurityHistoryItem } }) => (
-        <span className="grid min-w-0 gap-1">
-          <span>{actorLabel(row.original.actorKind)}</span>
-          <AeCopyReference label="Actor reference" value={row.original.actorRef} />
-        </span>
-      ),
-    }, {
-      id: 'target',
-      header: 'Target',
-      accessorFn: (row: AccountSecurityHistoryItem) => `${row.targetType} ${row.targetRef}`,
-      cell: ({ row }: { row: { original: AccountSecurityHistoryItem } }) => (
-        <span className="grid min-w-0 gap-1">
-          <span>{targetLabel(row.original.targetType)}</span>
-          <AeCopyReference label="Target reference" value={row.original.targetRef} />
-        </span>
-      ),
-    }] satisfies ColumnDef<AccountSecurityHistoryItem, unknown>[] : []),
-    {
-      accessorKey: 'outcome',
-      header: 'Outcome',
-      cell: ({ row }) => <Badge variant="secondary">{humanize(row.original.outcome)}</Badge>,
-    },
-    {
       accessorKey: 'sourceSystem',
       header: 'Source',
       cell: ({ row }) => sourceLabel(row.original.sourceSystem),
     },
     {
-      accessorKey: 'correlationRef',
-      header: 'Reference',
-      cell: ({ row }) => <AeCopyReference label="Reference" value={row.original.correlationRef} />,
+      id: 'evidence',
+      header: 'Evidence',
+      enableSorting: false,
+      cell: ({ row }) => (
+        <details className="min-w-48 text-xs text-muted-foreground">
+          <summary className="cursor-pointer font-medium text-foreground">Evidence details</summary>
+          <dl className="mt-2 grid gap-2">
+            {showActorAndTarget ? (
+              <>
+                <div className="grid gap-1">
+                  <dt>Actor · {actorLabel(row.original.actorKind)}</dt>
+                  <dd><AeCopyReference label="Actor reference" value={row.original.actorRef} /></dd>
+                </div>
+                <div className="grid gap-1">
+                  <dt>Target · {targetLabel(row.original.targetType)}</dt>
+                  <dd><AeCopyReference label="Target reference" value={row.original.targetRef} /></dd>
+                </div>
+              </>
+            ) : null}
+            <div className="grid gap-1">
+              <dt>Correlation reference</dt>
+              <dd><AeCopyReference label="Reference" value={row.original.correlationRef} /></dd>
+            </div>
+          </dl>
+        </details>
+      ),
     },
   ]
 }

@@ -8,7 +8,10 @@ import {
   audFundingPolicyFromCommercialControls,
   quoteAudAccountFunding,
 } from './aud-funding'
-import { SANDBOX_COMMERCIAL_POLICY_CONTROLS } from './commercial-policy'
+import {
+  SANDBOX_COMMERCIAL_POLICY_CONTROLS,
+  type CommercialPolicyControls,
+} from './commercial-policy'
 
 export const FUNDING_QUOTE_CONTRACT_VERSION = 'ae-funding-quote:v3' as const
 export const FUNDING_QUOTE_VALIDITY_MS = 5 * 60 * 1_000
@@ -80,8 +83,39 @@ export const FUNDING_PREFLIGHT_ROUTE_CONTRACTS = Object.freeze([
   },
 ] as const)
 
-export function readFundingConstraints(): FundingConstraints {
-  const policy = audFundingPolicyFromCommercialControls(SANDBOX_COMMERCIAL_POLICY_CONTROLS)
+export function commercialPolicyControlsFromFundingProjection(input: Readonly<{
+  minimumPrincipalUnits: string
+  maximumPrincipalUnits: string
+  incrementUnits: string
+  serviceFeeBps: number
+  taxOnServiceFeeBps: number
+  legalCustomerMaximumAccessibleUnits?: string
+}>): CommercialPolicyControls {
+  return {
+    ...SANDBOX_COMMERCIAL_POLICY_CONTROLS,
+    tax: {
+      ...SANDBOX_COMMERCIAL_POLICY_CONTROLS.tax,
+      serviceFeeTaxBps: input.taxOnServiceFeeBps,
+    },
+    accounting_client_money: {
+      ...SANDBOX_COMMERCIAL_POLICY_CONTROLS.accounting_client_money,
+      minimumFundingPrincipalUnits: input.minimumPrincipalUnits,
+      maximumFundingPrincipalUnits: input.maximumPrincipalUnits,
+      fundingIncrementUnits: input.incrementUnits,
+      legalCustomerMaximumAccessibleUnits: input.legalCustomerMaximumAccessibleUnits
+        ?? SANDBOX_COMMERCIAL_POLICY_CONTROLS.accounting_client_money.legalCustomerMaximumAccessibleUnits,
+    },
+    operations: {
+      ...SANDBOX_COMMERCIAL_POLICY_CONTROLS.operations,
+      fundingServiceFeeBps: input.serviceFeeBps,
+    },
+  }
+}
+
+export function readFundingConstraints(
+  controls: CommercialPolicyControls = SANDBOX_COMMERCIAL_POLICY_CONTROLS,
+): FundingConstraints {
+  const policy = audFundingPolicyFromCommercialControls(controls)
   return {
     kind: 'funding_constraints',
     contractVersion: FUNDING_QUOTE_CONTRACT_VERSION,
@@ -99,15 +133,17 @@ export function readFundingConstraints(): FundingConstraints {
 export function quoteFunding(input: Readonly<{
   amount: ExactAmount
   now: number
+  controls?: CommercialPolicyControls
 }>): FundingQuote | undefined {
-  const constraints = readFundingConstraints()
+  const controls = input.controls ?? SANDBOX_COMMERCIAL_POLICY_CONTROLS
+  const constraints = readFundingConstraints(controls)
   if (!Number.isSafeInteger(input.now)
     || input.now < 0
     || input.amount.currency !== 'AUD'
     || input.amount.exponent !== AUD_EXPONENT) return undefined
   const financials = quoteAudAccountFunding(
     BigInt(input.amount.units),
-    audFundingPolicyFromCommercialControls(SANDBOX_COMMERCIAL_POLICY_CONTROLS),
+    audFundingPolicyFromCommercialControls(controls),
   )
   if (financials === undefined) return undefined
   const generatedAt = input.now

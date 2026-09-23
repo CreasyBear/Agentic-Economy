@@ -1,8 +1,9 @@
-import type { BuildDiscoveryFileOptions, DiscoveryFileBuildResult } from '@/modules/discovery/public'
+import type { BuildDiscoveryFileOptions, DiscoveryFileBuildResult } from './discovery-contracts'
 import { trimTrailingSlashes } from '@/modules/common/trim-trailing-slashes'
 import type { PublicBusinessCatalogApiV2Dto } from '@/modules/registry/public'
 import { CALL_ROUTE_CONTRACT } from '@/modules/capability-execution/call-entry'
 import { TOOL_QUOTE_PATH } from '@/modules/capability-execution/quote'
+import { TOOL_PROCURE_PATH } from '@/modules/capability-execution/procure'
 import {
   TOOL_MARKET_COMPARE_PATH,
   TOOL_MARKET_DESCRIBE_PATH,
@@ -28,6 +29,7 @@ export const DiscoveryPublicSurfacePaths = [
   TOOL_MARKET_LIST_PATH,
   TOOL_MARKET_DESCRIBE_PATH,
   TOOL_MARKET_COMPARE_PATH,
+  TOOL_PROCURE_PATH,
 ] as const
 
 /** Supporting provider facts never become executable merely because they are published. */

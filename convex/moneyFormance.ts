@@ -6,6 +6,7 @@ import {
   createFormanceContext,
   installPackage4FormanceSchema,
   readFormanceAccount,
+  readFormanceAccountHistory,
   readFormanceConfiguration,
   readFormanceHealth,
   readFormancePeriodSpend,
@@ -14,11 +15,13 @@ import {
   type FormanceMoneyResult,
 } from '../src/modules/money/formance'
 import {
+  adjustFormanceSpendingPeriod,
   bookFormanceFundingReversal,
   bookFormanceFundingSettlement,
   bookFormanceBuyerAdjustment,
   canRebindFormanceLegalCustomer,
   formanceAccountMetadataDigest,
+  readFormanceSpendingPeriod,
   readFormanceDisplayBalance,
   releaseFormanceManagedCall,
   reverseFormanceProviderSettlement,
@@ -27,6 +30,11 @@ import {
   syncFormanceCapacity,
 } from '../src/modules/money/formance-workflows'
 import { internalAction } from './_generated/server'
+import { accountHistoryResultValue } from './moneyLedgerValues'
+import {
+  spendingPeriodAdjustmentValue,
+  spendingPeriodsValue,
+} from '../src/modules/money/public'
 
 export type MoneyFormanceResult = FormanceMoneyResult
 export type MoneyFormanceManagedCallBooking = import('../src/modules/money/formance-workflows').FormanceManagedCallBooking
@@ -65,6 +73,7 @@ const capacityKind = v.union(
   v.literal('treasury_usdc'),
 )
 const balanceKind = v.union(v.literal('account_aud'), capacityKind)
+const periodKind = v.union(v.literal('day'), v.literal('month'))
 const managedCallBookingArgs = {
   callRef: v.string(),
   quoteRef: v.string(),
@@ -90,7 +99,24 @@ const managedCallBookingArgs = {
   rateEvidenceDigest: v.string(),
   treasuryEvidenceDigest: v.string(),
   x402RequirementDigest: v.string(),
+  spendingPeriods: v.optional(spendingPeriodsValue),
 }
+
+const spendingPeriodResult = v.union(
+  v.object({
+    kind: v.literal('available'),
+    balanceKind: v.literal('agent_budget'),
+    subjectRef: v.string(),
+    currency: v.literal('AUD'),
+    exponent: v.literal(6),
+    units: v.string(),
+    observedAt: v.number(),
+    source: v.literal('formance_live_read'),
+    authoritativeForConsequences: v.literal(false),
+  }),
+  setupRequired,
+  unavailable,
+)
 
 const healthResult = v.union(
   v.object({
@@ -183,23 +209,13 @@ const statementPageResult = v.union(
 export const health = internalAction({
   args: {},
   returns: healthResult,
-  handler: async () => {
-    const context = configuredContext()
-    return context.kind === 'setup_required'
-      ? context
-      : await readFormanceHealth(context.context)
-  },
+  handler: async () => await withFormanceContext((context) => readFormanceHealth(context)),
 })
 
 export const installSchema = internalAction({
   args: {},
   returns: installationResult,
-  handler: async () => {
-    const context = configuredContext()
-    return context.kind === 'setup_required'
-      ? context
-      : await installPackage4FormanceSchema(context.context)
-  },
+  handler: async () => await withFormanceContext((context) => installPackage4FormanceSchema(context)),
 })
 
 export const readAccount = internalAction({
@@ -251,6 +267,22 @@ export const readPeriodSpend = internalAction({
           periodStartAt: args.periodStartAt,
           periodEndAt: args.periodEndAt,
         })
+  },
+})
+
+export const readAccountHistory = internalAction({
+  args: { accountRef: v.string(), cursor: v.optional(v.string()) },
+  returns: accountHistoryResultValue,
+  handler: async (_ctx, args) => {
+    const accountDigest = formanceAccountMetadataDigest(args.accountRef)
+    const cursorKey = process.env.AE_CONVEX_SERVER_FUNCTION_TOKEN?.trim()
+    if (accountDigest === undefined || cursorKey === undefined || cursorKey.length < 32) {
+      return { kind: 'setup_required' as const, code: 'formance_history_configuration_invalid' }
+    }
+    const context = configuredContext()
+    return context.kind === 'setup_required' ? context : await readFormanceAccountHistory(context.context, {
+      accountDigest, cursorKey, ...(args.cursor === undefined ? {} : { cursor: args.cursor }),
+    })
   },
 })
 
@@ -340,6 +372,35 @@ export const syncCapacity = internalAction({
     return context.kind === 'setup_required'
       ? { kind: 'refused' as const, code: context.code, retryable: false as const }
       : convexMoneyResult(await syncFormanceCapacity(context.context, args))
+  },
+})
+
+export const adjustSpendingPeriod = internalAction({
+  args: spendingPeriodAdjustmentValue,
+  returns: moneyResult,
+  handler: async (_ctx, args) => {
+    const context = configuredContext()
+    return context.kind === 'setup_required'
+      ? { kind: 'refused' as const, code: context.code, retryable: false as const }
+      : convexMoneyResult(await adjustFormanceSpendingPeriod(context.context, args))
+  },
+})
+
+export const readSpendingPeriod = internalAction({
+  args: {
+    principalRef: v.string(),
+    periodKind,
+    periodStartAt: v.number(),
+    periodEndAt: v.number(),
+  },
+  returns: spendingPeriodResult,
+  handler: async (_ctx, args) => {
+    const context = configuredContext()
+    if (context.kind === 'setup_required') return context
+    const result = await readFormanceSpendingPeriod(context.context, args)
+    return result.kind === 'available'
+      ? { ...result, balanceKind: 'agent_budget' as const }
+      : result
   },
 })
 
@@ -449,6 +510,13 @@ function configuredContext() {
   return result.kind === 'setup_required'
     ? result
     : Object.freeze({ kind: 'configured' as const, context: createFormanceContext(result.configuration) })
+}
+
+async function withFormanceContext<T>(
+  run: (context: ReturnType<typeof createFormanceContext>) => Promise<T>,
+): Promise<T | { kind: 'setup_required'; code: string }> {
+  const context = configuredContext()
+  return context.kind === 'setup_required' ? context : await run(context.context)
 }
 
 function convexMoneyResult(result: FormanceMoneyResult) {

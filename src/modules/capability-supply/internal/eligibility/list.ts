@@ -1,12 +1,12 @@
 import { degradeBackend } from '@/lib/observability/degrade-backend'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
+import type { PublicToolRef } from '@/modules/common/tool-ref'
 import {
   capabilityToolId,
   createAdmittedToolRef,
   createPublicToolRef,
   type AdmittedToolRef,
-  type PublicToolRef,
-} from '@/modules/capability-supply/public'
+} from '../public-tool-ref'
 import type { CapabilityConnectionAuthoritySnapshot } from '../binding/registration'
 import { bindingIntegrityIsValid } from '../binding/integrity'
 import { offeringIntegrityIsValid } from '../offering/integrity'

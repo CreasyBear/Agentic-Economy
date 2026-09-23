@@ -1,4 +1,4 @@
-import type { MoneyPayoutAccount, PayoutAccountState } from '../../public'
+import type { MoneyPayoutAccount, PayoutAccountState } from '../money-types'
 import type { PayoutAccountTransitionInput, PayoutPolicyResult } from './contracts'
 
 type StatusEvent = Extract<PayoutAccountTransitionInput['event'], { kind: 'status' }>

@@ -19,9 +19,6 @@ import { idempotencyKeySchema } from '@/modules/common/action'
 
 export const TOOL_QUOTE_ACTION_ID = 'tool.quote' as const
 export const TOOL_QUOTE_PATH = '/api/v1/tools/quote' as const
-/** Operator command that activates or replaces a commercial policy approval. */
-export const COMMERCIAL_POLICY_ADMIN_SURFACE = 'moneyCommercialPolicy.change' as const
-
 export const toolQuoteInputSchema = z.strictObject({
   toolRef: z.string().regex(/^operation:v1:[0-9a-f]{64}$/u),
   input: z.record(z.string(), jsonValueSchema),
@@ -132,6 +129,11 @@ export const toolQuoteResultSchema = z.union([
     }),
     policyRefs: z.array(z.string()),
     evidenceDigest: z.string(),
+    parties: z.strictObject({
+      seller: z.string(),
+      provider: z.string(),
+      paymentRecipient: z.string(),
+    }).optional(),
     continuation: callContinuationSchema,
   }),
   z.strictObject({
@@ -215,6 +217,14 @@ export function projectToolQuoteRefusal(input: Readonly<{
     case 'tool_not_ready':
       return { ...base, continuation: inspect(5000) }
     case 'inspection_unavailable':
+      if (input.reason === 'spending_period_legacy_history_requires_support') {
+        return { ...base, retryable: false, requiredActions: [operatorAction(
+          'review_spending_history',
+          'Verify earlier spending',
+          'AE support must verify this Agent’s earlier spending before it can authorize new purchases.',
+          '/support',
+        )] }
+      }
       return input.retryable
         ? { ...base, continuation: inspect(5000) }
         : { ...base, requiredActions: [requiredAction(true)] }
@@ -240,8 +250,25 @@ export function projectToolQuoteRefusal(input: Readonly<{
             },
           }
     case 'grant_not_found':
-    case 'budget_exceeded':
       return { ...base, requiredActions: [requiredAction(false)] }
+    case 'budget_exceeded': {
+      if (input.reason === 'account_limit') return { ...base, requiredActions: [operatorAction(
+        'review_account_exposure',
+        'Account purchase capacity is in use',
+        'Wait for existing purchases to resolve or contact support to review the Account’s purchase capacity. Adding credit does not increase this limit.',
+        '/support',
+      )] }
+      const period = input.reason === 'daily_limit_exhausted' ? 'day'
+        : input.reason === 'monthly_limit_exhausted' ? 'month' : undefined
+      return period === undefined
+        ? { ...base, requiredActions: [requiredAction(false)] }
+        : { ...base, requiredActions: [operatorAction(
+            'review_agent_access',
+            `Spending allowance for this ${period} is in use`,
+            `Wait for spending capacity to become available or ask the owner to review this Agent’s limit. ${period === 'day' ? 'Daily limits reset at midnight UTC.' : 'Monthly limits reset on the first day of each month at midnight UTC.'}`,
+            '/agent-access',
+          )] }
+    }
     case 'commercial_policy_unavailable': {
       const parsed = commercialPolicyRefusalReasonSchema.safeParse(input.reason)
       if (!parsed.success) return { ...base, requiredActions: [requiredAction(true)] }
@@ -266,12 +293,7 @@ export function projectToolQuoteRefusal(input: Readonly<{
           return {
             ...base,
             continuation: inspect(30000),
-            requiredActions: [operatorAction(
-              'set_sandbox_deployment_profile',
-              'Contact support',
-              'An AE operator must set AE_PACKAGE4_SANDBOX_DEPLOYMENT_PROFILE to local_ci or synthetic_vps_fixture before this Tool can be quoted.',
-              '/support',
-            )],
+            requiredActions: [requiredAction(true)],
           }
         case 'commercial_policy_missing':
         case 'commercial_policy_environment_mismatch':
@@ -283,12 +305,7 @@ export function projectToolQuoteRefusal(input: Readonly<{
           return {
             ...base,
             continuation: inspect(30000),
-            requiredActions: [operatorAction(
-              'activate_commercial_policy',
-              'Contact support',
-              `An AE operator must resolve ${reason} on the ${COMMERCIAL_POLICY_ADMIN_SURFACE} admin surface before this Tool can be quoted.`,
-              '/support',
-            )],
+            requiredActions: [requiredAction(true)],
           }
         default: {
           const unreachable: never = reason

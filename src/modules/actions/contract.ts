@@ -2,6 +2,7 @@ import type { AgentAccessPrincipal } from '@/modules/agent-access/agent-access'
 import type { AccountManagementService } from '@/modules/agent-access/account.actions'
 import { CALL_ROUTE_CONTRACT } from '@/modules/capability-execution/call-entry'
 import type { CallService } from '@/modules/capability-execution/call-authority'
+import type { ToolCatalogSearcher } from '@/modules/capability-execution/procure-engine'
 import type { ToolProjectionNavigationContract } from '@/modules/capability-supply/tool-projection'
 import type { SupplyManagementService } from '@/modules/capability-supply/supply-actions'
 import { toolMarketNavigation } from '@/modules/registry/tool-entry'
@@ -36,6 +37,8 @@ declare module '@/modules/common/action' {
     callService?: CallService
     /** One injected supply-management service shared by authenticated MCP and CLI adapters. */
     supplyManagementService?: SupplyManagementService
+    /** Injected catalog searcher for capability procurement. */
+    catalogSearcher?: ToolCatalogSearcher
     /** One injected account read service shared by authenticated HTTP, MCP, and CLI adapters. */
     accountManagementService?: AccountManagementService
     /** Private market-demand memory shared by authenticated HTTP, MCP, and CLI adapters. */

@@ -23,7 +23,7 @@ describe('module surface and dependency manifest', () => {
   it('enforces every current runtime module import through the target DAG or one bounded exception', () => {
     const result = scanModuleBoundaries({ manifest: MODULE_BOUNDARY_MANIFEST })
     expect(result.violations).toEqual([])
-    expect(result.moduleCount).toBe(26)
+    expect(result.moduleCount).toBe(29)
     expect(result.cycles).toEqual([])
     expect(result.usedRuntimeExceptionIds).toHaveLength(
       MODULE_BOUNDARY_MANIFEST.temporaryRuntimeExceptions.filter(
@@ -72,7 +72,10 @@ describe('module surface and dependency manifest', () => {
     const sources = files.map((file) => [file, readFileSync(file, 'utf8')] as const)
     expect(sources
       .filter(([, source]) => source.includes("from '@formance/formance-sdk'"))
-      .map(([file]) => file)).toEqual(['src/modules/money/formance.ts'])
+      .map(([file]) => file)).toEqual([
+        'src/modules/money/internal/formance-config.ts',
+        'src/modules/money/internal/formance-reads.ts',
+      ])
     expect(sources
       .filter(([, source]) => source.includes('modules/money/formance'))
       .map(([file]) => file)).toEqual(['convex/moneyFormance.ts'])

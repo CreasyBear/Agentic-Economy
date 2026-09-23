@@ -49,7 +49,7 @@ describe('directory Tool playground', () => {
       expect(playgroundValidator.isValid(parsed, { query: 'no' }, parsed)).toBe(false)
     } finally { vi.unstubAllGlobals() }
     render(<DirectoryToolPlayground entry={entry} toolRef={canonical.toolRef} inputSchemaJson={referenceSchema} inputExampleJson='{"query":"hello"}' />)
-    expect((screen.getByRole('tab', { name: 'Form' }) as HTMLButtonElement).disabled).toBe(true)
+    expect(screen.getByRole('tab', { name: 'Form' }).getAttribute('aria-disabled') === 'true' || (screen.getByRole('tab', { name: 'Form' }) as HTMLButtonElement).disabled).toBe(true)
     expect(screen.getByRole('textbox', { name: 'Request JSON' })).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Copy prepared call command' })).toBeTruthy()
   })
@@ -83,7 +83,7 @@ describe('directory Tool playground', () => {
   it('keeps a canonical typeless request body editable as JSON instead of rendering an unsupported RJSF field', async () => {
     const inputSchemaJson = JSON.stringify({ type: 'object', required: ['body'], properties: { body: { $schema: 'https://json-schema.org/draft/2020-12/schema' } } })
     render(<DirectoryToolPlayground entry={entry} toolRef="tool:v1:exa-search" inputSchemaJson={inputSchemaJson} />)
-    expect((screen.getByRole('tab', { name: 'Form' }) as HTMLButtonElement).disabled).toBe(true)
+    expect(screen.getByRole('tab', { name: 'Form' }).getAttribute('aria-disabled') === 'true' || (screen.getByRole('tab', { name: 'Form' }) as HTMLButtonElement).disabled).toBe(true)
     expect(screen.queryByText(/Unsupported field|Unknown field type/iu)).toBeNull()
     expect(screen.queryByRole('button', { name: 'Copy prepared call command' })).toBeNull()
     fireEvent.change(screen.getByRole('textbox', { name: 'Request JSON' }), { target: { value: '{"body":{"query":"research"}}' } })

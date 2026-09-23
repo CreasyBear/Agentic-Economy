@@ -6,7 +6,6 @@ import { AeStatusCard } from '@/components/ae/status/AeStatusCard'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Skeleton } from '@/components/ui/skeleton'
 import type { OwnerToolsX402ConnectionIntent } from '@/lib/operator/supply-compatibility'
-import { focusSection } from './provider-workspace-projection'
 import { DeferredSection, OwnershipConflict, SecondarySummary, SummaryCard, UnavailableSummary } from './ProviderWorkspaceSharedUi'
 import type {
   ProviderWorkspaceConnectionsDetailResult,
@@ -36,17 +35,12 @@ export function ProviderWorkspaceReadinessSection({
   onRetryConnections: () => void
 }>) {
   return (
-    <AeSection id="provider-connections" title="Provider readiness" description="Provider connections and current public availability.">
-      <div className="grid gap-related md:grid-cols-2">
+    <AeSection id="provider-connections" title="Tool availability" description="The connection needed to operate your Tools and their current buyer availability.">
+      <div className="grid gap-related">
         <DeferredSection promise={connections} loadingLabel="Loading connections" unavailableTitle="Connections unavailable">
           {(result) => result.kind === 'available' ? (
             <SummaryCard title="Connections" detail={`${result.value.available} of ${result.value.total} available`} action="Manage connections" onAction={onOpenConnections} />
           ) : <SecondarySummary result={result} subject="Connections" notApplicableTitle="No connections configured" unavailableTitle="Connections unavailable" />}
-        </DeferredSection>
-        <DeferredSection promise={publicStatus} loadingLabel="Loading public status" unavailableTitle="Public status unavailable">
-          {(result) => result.kind === 'available' ? (
-            <SummaryCard title="Public status" detail={`${result.value.catalog.offerings.length} public Tools`} action="Review public status" onAction={() => focusSection('provider-status')} />
-          ) : <SecondarySummary result={result} subject="Public status" notApplicableTitle="Public status not published" unavailableTitle="Public status unavailable" />}
         </DeferredSection>
       </div>
       {connectionsOpen ? (
@@ -72,7 +66,9 @@ export function ProviderWorkspaceReadinessSection({
               <AeStatusCard readback={result.value} />
               <AeCapabilityList catalog={result.value.catalog} />
             </div>
-          ) : <SecondarySummary result={result} subject="Public status" notApplicableTitle="Public status not published" unavailableTitle="Public status unavailable" />}
+          ) : result.kind === 'not_applicable' ? (
+            <AeEmptyState title="No public Tools yet" description="Draft Tools remain private. Finish and publish a Tool when you are ready." />
+          ) : <SecondarySummary result={result} subject="Public status" notApplicableTitle="No public Tools yet" unavailableTitle="Public status unavailable" />}
         </DeferredSection>
       </div>
     </AeSection>

@@ -252,13 +252,16 @@ function sanitizeAccessPaths(value: unknown): PublicAccessPath[] {
     const sourceHash = 'sourceHash' in valuePath ? valuePath.sourceHash : undefined
     const descriptor = 'descriptor' in valuePath ? valuePath.descriptor : undefined
     if (
-      typeof offeringRevision !== 'number'
+      typeof accessPathRef !== 'string'
+      || accessPathRef.trim().length === 0
+      || typeof offeringRevision !== 'number'
       || !Number.isSafeInteger(offeringRevision)
       || offeringRevision < 0
       || typeof offeringSourceHash !== 'string'
       || offeringSourceHash.trim().length === 0
       || typeof sourceHash !== 'string'
       || sourceHash.trim().length === 0
+      || descriptor === null
       || typeof descriptor !== 'object'
       || !('kind' in descriptor)
       || descriptor.kind !== 'human_request' && descriptor.kind !== 'external_operation'

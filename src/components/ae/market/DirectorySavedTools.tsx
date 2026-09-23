@@ -4,17 +4,18 @@
 // Source and copyright notice: docs/licenses/shadcnspace.txt.
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { z } from 'zod'
-import { x402DirectoryInputSchema, type X402DirectoryEntry, type X402DirectoryInput } from '@/modules/market/x402-directory'
+import { x402DirectoryInputSchema, type X402DirectoryEntry } from '@/modules/market/x402-directory'
+import {
+  DIRECTORY_SAVED_TOOLS_LIMIT,
+  DIRECTORY_SAVED_TOOLS_STORAGE_KEY,
+  type SavedDirectoryTool,
+  type StorageState,
+} from '@/modules/market/saved-tools.contracts'
 import { degrade } from '@/lib/observability/degrade'
 import { captureRouteException } from '@/lib/observability/capture-route-exception'
 
-export const DIRECTORY_SAVED_TOOLS_STORAGE_KEY = 'ae:directory:saved-tools:v1'
-export const DIRECTORY_SAVED_TOOLS_LIMIT = 100
 const MAX_STORAGE_BYTES = 2 * 1024 * 1024
 const STORAGE_READ_ERROR = 'Saved Tools could not be loaded. New saves last for this session only; existing browser data was left unchanged.'
-
-export type SavedDirectoryTool = Readonly<{ entry: X402DirectoryEntry; search: X402DirectoryInput }>
-type StorageState = 'checking' | 'browser' | 'session'
 type SavedToolsContextValue = Readonly<{
   savedTools: readonly SavedDirectoryTool[]
   toggleSavedTool: (tool: SavedDirectoryTool) => void

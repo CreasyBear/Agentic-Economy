@@ -43,8 +43,16 @@ describe('Provider Tool directory', () => {
 
     expect(screen.getByText('Your public page is still updating')).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Refresh public status' })).toBeTruthy()
-    expect(screen.getByRole('link', { name: 'Open Blockchain data query' }).getAttribute('href'))
+    expect(screen.getByRole('link', { name: 'Open Tool for Blockchain data query' }).getAttribute('href'))
       .toBe('/owner/operations/offering%3Ablockchain-query')
+    expect(within(screen.getByRole('table')).getAllByRole('columnheader').map((header) => header.textContent)).toEqual([
+      'Tool',
+      'Status',
+      'Price',
+      'Usage',
+      'Quick actions',
+      'Next action',
+    ])
   })
 
   it('orders compact rows as Tool, lifecycle, blocker, and one continuation', () => {
@@ -60,13 +68,14 @@ describe('Provider Tool directory', () => {
 
     const compactList = screen.getByTestId('provider-workspace-compact-list')
     const row = within(compactList).getByRole('listitem')
-    expect(Array.from(row.children).map((child) => child.textContent)).toEqual([
-      'Blockchain data queryPublished / Available',
-      'Reconnect the provider',
-      'Manage connection',
-    ])
+    expect(within(row).getByRole('heading', { name: 'Blockchain data query' })).toBeTruthy()
+    expect(within(row).getByText('Published')).toBeTruthy()
+    expect(within(row).getByText('Operational')).toBeTruthy()
+    expect(within(row).getByText('Reconnect the provider')).toBeTruthy()
     expect(within(row).getByRole('link', { name: 'Manage connection for Blockchain data query' }).className)
       .toContain('w-full')
+    expect(within(row).getByRole('link', { name: 'Test Run for Blockchain data query' })).toBeTruthy()
+    expect(within(row).getByRole('link', { name: 'View logs for Blockchain data query' })).toBeTruthy()
   })
 })
 

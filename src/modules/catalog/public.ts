@@ -10,6 +10,7 @@ export {
   PublicSupportReasonValues,
   buildBusinessSupplyProjection,
   buildPublicOfferingSupplyProjection,
+  isPublicHttpsUrl,
   validateOfferingAccessPath,
 } from './internal/offering-supply'
 

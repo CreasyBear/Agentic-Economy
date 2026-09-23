@@ -1,12 +1,12 @@
 import { paginationOptsValidator, paginationResultValidator } from 'convex/server'
 import { v, type Infer } from 'convex/values'
 
-import { mutation } from './_generated/server'
+import { mutation, query, type MutationCtx } from './_generated/server'
 import {
   agentAccessPrincipalValue,
   verifyMarketAgentPrincipal,
 } from './agentAccessPrincipals'
-import { requireSourceWrite, sourceWriteArgs } from './sourceWriteAdmission'
+import { requireSourceRead, requireSourceWrite, sourceWriteArgs } from './sourceWriteAdmission'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 
 const demandSignalValue = v.object({
@@ -67,12 +67,21 @@ const readResultValue = v.union(
   v.object({ kind: v.literal('error'), code: v.literal('unauthenticated') }),
 )
 
-async function admit(
-  ctx: Parameters<typeof verifyMarketAgentPrincipal>[0],
-  args: Infer<typeof recordArgsValue> | Infer<typeof listArgsValue> | Infer<typeof readArgsValue>,
+async function admitForWrite(
+  ctx: MutationCtx,
+  args: Infer<typeof recordArgsValue>,
 ) {
   const source = await requireSourceWrite(ctx, args, 'protected_action')
   if (source.kind === 'rejected') return null
+  const principal = await verifyMarketAgentPrincipal(ctx, args.agentPrincipal)
+  return principal.kind === 'allowed' ? principal : null
+}
+
+async function admitForRead(
+  ctx: Parameters<typeof verifyMarketAgentPrincipal>[0],
+  args: Infer<typeof listArgsValue> | Infer<typeof readArgsValue>,
+) {
+  if ((await requireSourceRead(args, 'protected_action')).kind === 'rejected') return null
   const principal = await verifyMarketAgentPrincipal(ctx, args.agentPrincipal)
   return principal.kind === 'allowed' ? principal : null
 }
@@ -81,7 +90,7 @@ export const record = mutation({
   args: recordArgsValue.fields,
   returns: recordResultValue,
   handler: async (ctx, args): Promise<Infer<typeof recordResultValue>> => {
-    const principal = await admit(ctx, args)
+    const principal = await admitForWrite(ctx, args)
     if (principal === null) return { kind: 'refused', code: 'unauthenticated' }
     const query = args.query.trim()
     const idempotencyKey = args.idempotencyKey.trim()
@@ -130,11 +139,11 @@ export const record = mutation({
   },
 })
 
-export const list = mutation({
+export const list = query({
   args: listArgsValue.fields,
   returns: listResultValue,
   handler: async (ctx, args): Promise<Infer<typeof listResultValue>> => {
-    const principal = await admit(ctx, args)
+    const principal = await admitForRead(ctx, args)
     if (principal === null) return { kind: 'error', code: 'unauthenticated' }
     if (args.paginationOpts.numItems < 1 || args.paginationOpts.numItems > 100) {
       return { kind: 'error', code: 'source_unavailable' }
@@ -160,11 +169,11 @@ export const list = mutation({
   },
 })
 
-export const read = mutation({
+export const read = query({
   args: readArgsValue.fields,
   returns: readResultValue,
   handler: async (ctx, args): Promise<Infer<typeof readResultValue>> => {
-    const principal = await admit(ctx, args)
+    const principal = await admitForRead(ctx, args)
     if (principal === null) return { kind: 'error', code: 'unauthenticated' }
     const rows = await ctx.db.query('marketDemandSignals')
       .withIndex('by_requestRef', (index) => index.eq('requestRef', args.requestRef))

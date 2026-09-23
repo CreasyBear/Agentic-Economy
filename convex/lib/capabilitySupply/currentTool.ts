@@ -98,7 +98,7 @@ export async function readCurrentPublishedTool(
 }
 
 /**
- * Internal-only exact staging read for one seller-owned Base Sepolia canary.
+ * Internal-only exact staging read for one seller-owned x402 canary.
  * It never participates in discovery and only relaxes the business-publication
  * routeability gate; every contract, catalog, binding, claim, pricing, and
  * fresh-readiness anchor remains exact.
@@ -116,18 +116,15 @@ export async function readExactSellerCanaryOperationSnapshotHandler(
   if (
     publication === null
     || publication.disposition !== 'current'
-    || publication.runtimeEnvironment !== 'sandbox'
+    || (publication.runtimeEnvironment !== 'sandbox' && publication.runtimeEnvironment !== 'production')
     || publication.sourceKind !== 'x402'
     || publication.readinessObservedAt === undefined
     || publication.readinessValidUntil === undefined
     || publication.readinessValidUntil <= now
   ) return null
   const business = await ctx.db.get(publication.businessId as Id<'businesses'>)
-  if (
-    business === null
-    || business.publicStatus === 'published'
-    || business.suppressedAt !== undefined
-  ) return null
+  if (business === null || business.suppressedAt !== undefined) return null
+  const unpublished = business.publicStatus !== 'published'
   const [offeringDoc, bindingDoc] = await Promise.all([
     ctx.db.query('capabilityOfferings')
       .withIndex('by_offeringId', (query) => query.eq('offeringId', publication.offeringId))
@@ -175,7 +172,7 @@ export async function readExactSellerCanaryOperationSnapshotHandler(
   if (binding.adapter.adapterId !== 'x402-fetch:v2' || binding.authority.kind !== 'provider_connection') return null
   const connectionRef = binding.authority.connectionRef
   const x402 = parseX402FetchTransportConfiguration(binding.adapter.config)
-  const profile = x402PaymentProfileForEnvironment('sandbox')
+  const profile = x402PaymentProfileForEnvironment(publication.runtimeEnvironment)
   if (
     x402 === undefined
     || profile === undefined
@@ -220,10 +217,18 @@ export async function readExactSellerCanaryOperationSnapshotHandler(
     'business_not_currently_published',
     'seller_canary_admission_required',
   ])
-  if (
-    !blocked.reasons.includes('business_not_currently_published')
-    || !blocked.reasons.includes('seller_canary_admission_required')
-    || blocked.reasons.some((reason) => !stagingOnlyReasons.has(reason))
+  const publishedCanaryReasons = new Set([
+    'seller_canary_admission_required',
+  ])
+  if (unpublished) {
+    if (
+      !blocked.reasons.includes('business_not_currently_published')
+      || !blocked.reasons.includes('seller_canary_admission_required')
+      || blocked.reasons.some((reason) => !stagingOnlyReasons.has(reason))
+    ) return null
+  } else if (
+    !blocked.reasons.includes('seller_canary_admission_required')
+    || blocked.reasons.some((reason) => !publishedCanaryReasons.has(reason))
   ) return null
   const futurePublishedBusiness = {
     businessId: String(business._id),
@@ -241,19 +246,25 @@ export async function readExactSellerCanaryOperationSnapshotHandler(
       evidenceRefs: [] as string[],
     },
   ].sort((left, right) => left.kind.localeCompare(right.kind) || left.ref.localeCompare(right.ref))
-  const qualification: SuppliedCandidateQualification = {
-    ...blocked,
-    status: 'eligible',
-    reasons: [],
-    qualificationDigest: canonicalDigest({
-      purpose: 'seller_onboarding_canary_staging:v1',
-      candidate,
-      observedAt: blocked.observedAt,
-      validUntil: blocked.validUntil ?? null,
-      sources: futureSources,
-    }),
-    sources: futureSources,
-  }
+  const qualification: SuppliedCandidateQualification = unpublished
+    ? {
+        ...blocked,
+        status: 'eligible',
+        reasons: [],
+        qualificationDigest: canonicalDigest({
+          purpose: 'seller_onboarding_canary_staging:v1',
+          candidate,
+          observedAt: blocked.observedAt,
+          validUntil: blocked.validUntil ?? null,
+          sources: futureSources,
+        }),
+        sources: futureSources,
+      }
+    : {
+        ...blocked,
+        status: 'eligible',
+        reasons: [],
+      }
   try {
     const operation = materializePublishedTool({
       publication: {

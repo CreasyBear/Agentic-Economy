@@ -185,6 +185,8 @@ describe('supply.publish:v2 preparation', () => {
         },
       },
     })
+    if (result.kind !== 'prepared') throw new Error(result.reason)
+    expect(result.prepared.offering.presentation).not.toHaveProperty('price')
     expect(loadOpenApi).toHaveBeenCalledOnce()
     expect(JSON.stringify(result)).not.toContain('Bearer ')
     expect(JSON.stringify(result)).not.toContain('apiKeyValue')

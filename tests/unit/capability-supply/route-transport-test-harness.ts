@@ -242,7 +242,7 @@ export function preparedX402Custody(
       authorizationDigest,
     }) => {
       const prepared = custody.get(custodyRef)
-      return prepared?.authorizationDigest === authorizationDigest
+      return prepared !== undefined && prepared.authorizationDigest === authorizationDigest
         ? prepared.paymentSignature
         : undefined
     },
@@ -251,7 +251,7 @@ export function preparedX402Custody(
       authorizationDigest,
     }) => {
       const prepared = custody.get(custodyRef)
-      return prepared?.authorizationDigest === authorizationDigest
+      return prepared !== undefined && prepared.authorizationDigest === authorizationDigest
         ? prepared.paymentSignature
         : undefined
     },

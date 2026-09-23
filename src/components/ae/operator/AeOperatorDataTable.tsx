@@ -13,13 +13,15 @@ import {
   type SortingState,
   type Table as TanStackTable,
 } from '@tanstack/react-table'
-import * as RovingFocusGroup from '@radix-ui/react-roving-focus'
+import * as RovingFocusGroup from '@/components/ui/roving-focus'
 import { Link } from '@tanstack/react-router'
-import { ArrowUpDownIcon } from 'lucide-react'
+import { ArrowDownIcon, ArrowUpDownIcon, ArrowUpIcon } from 'lucide-react'
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import { AeViewBar } from '@/components/ae/data/AeViewBar'
 import { Button } from '@/components/ui/button'
+import { buttonVariants } from '@/components/ui/button-variants'
+import { cn } from '@/lib/utils'
 import { Checkbox } from '@/components/ui/checkbox'
 import { useFirstLoadPending } from '@/components/ui/data-state'
 import {
@@ -44,12 +46,14 @@ export type AeRecordTableRowAction<TData> =
   | Readonly<{
       kind: 'link'
       label: string
+      getLabel?: (row: TData) => string
       getHref: (row: TData) => string
       getAccessibleLabel: (row: TData) => string
     }>
   | Readonly<{
       kind: 'button'
       label: string
+      getLabel?: (row: TData) => string
       onOpen: (row: TData) => void
       getAccessibleLabel: (row: TData) => string
     }>
@@ -157,7 +161,7 @@ export function AeRecordTable<TData>({
               />
             ),
             cell: ({ row }) => (
-              <Checkbox
+              <SelectionCheckbox
                 checked={row.getIsSelected()}
                 disabled={!row.getCanSelect()}
                 onCheckedChange={(checked) => row.toggleSelected(checked === true)}
@@ -176,14 +180,14 @@ export function AeRecordTable<TData>({
             id: '__ae_action',
             enableSorting: false,
             enableHiding: false,
-            header: () => <span className="sr-only">{rowAction.label}</span>,
+            header: () => rowAction.label,
             cell: ({ row }) => <RecordTableAction row={row} action={rowAction} />,
           },
     [rowAction],
   )
 
   const resolvedColumns = useMemo(
-    () => [selectionColumn, actionColumn, ...columns].filter(
+    () => [selectionColumn, ...columns, actionColumn].filter(
       (column): column is ColumnDef<TData, unknown> => column !== undefined,
     ),
     [actionColumn, columns, selectionColumn],
@@ -285,7 +289,7 @@ export function AeRecordTable<TData>({
                   <TableHead
                     key={header.id}
                     scope="col"
-                    className="sticky top-0 z-10 bg-container"
+                    className="sticky top-0 z-10 bg-container px-3 py-2.5"
                     aria-sort={
                       !header.column.getCanSort()
                         ? undefined
@@ -385,7 +389,7 @@ function RecordTableRow<TData>({
       className={`has-[:focus-visible]:bg-muted/50 has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-inset has-[:focus-visible]:ring-ring${row.getIsSelected() && selectedRowClassName !== undefined ? ` ${selectedRowClassName}` : ''}`}
     >
       {row.getVisibleCells().map((cell) => (
-        <TableCell key={cell.id} className="whitespace-normal">
+        <TableCell key={cell.id} className="whitespace-normal align-middle">
           {flexRender(cell.column.columnDef.cell, cell.getContext())}
         </TableCell>
       ))}
@@ -401,19 +405,20 @@ function RecordTableAction<TData>({
   action: AeRecordTableRowAction<TData>
 }) {
   const accessibleLabel = action.getAccessibleLabel(row.original)
+  const label = action.getLabel?.(row.original) ?? action.label
   const control =
     action.kind === 'link' ? (
-      <Button
-        asChild
-        variant="ghost"
-        size="sm"
-        className="min-h-touch sm:min-h-8"
+      <Link
+        to={action.getHref(row.original)}
+        aria-label={accessibleLabel}
         data-ae-row-action-id={row.id}
+        className={cn(
+          buttonVariants({ variant: 'ghost', size: 'sm' }),
+          'min-h-touch sm:min-h-8',
+        )}
       >
-        <Link to={action.getHref(row.original)} aria-label={accessibleLabel}>
-          {action.label}
-        </Link>
-      </Button>
+        {label}
+      </Link>
     ) : (
       <Button
         type="button"
@@ -424,14 +429,38 @@ function RecordTableAction<TData>({
         data-ae-row-action-id={row.id}
         onClick={() => action.onOpen(row.original)}
       >
-        {action.label}
+        {label}
       </Button>
     )
 
   return (
-    <RovingFocusGroup.Item asChild tabStopId={row.id}>
-      {control}
-    </RovingFocusGroup.Item>
+    <div className="flex items-center">
+      <RovingFocusGroup.Item render={control} tabStopId={row.id} />
+    </div>
+  )
+}
+
+function SelectionCheckbox({
+  checked,
+  disabled,
+  onCheckedChange,
+  'aria-label': ariaLabel,
+}: Readonly<{
+  checked: boolean | 'indeterminate'
+  disabled?: boolean
+  onCheckedChange: (checked: boolean) => void
+  'aria-label': string
+}>) {
+  return (
+    <div className="flex size-9 min-h-touch min-w-touch items-center justify-center">
+      <Checkbox
+        className="size-4"
+        checked={checked}
+        disabled={disabled}
+        onCheckedChange={(value) => onCheckedChange(value === true)}
+        aria-label={ariaLabel}
+      />
+    </div>
   )
 }
 
@@ -449,17 +478,17 @@ function RecordTableBody({
   const body = <TableBody>{children}</TableBody>
   return roving ? (
     <RovingFocusGroup.Root
-      asChild
+      render={body}
       orientation="vertical"
       loop={false}
       {...(onCurrentTabStopChange === undefined
         ? {}
         : { onCurrentTabStopChange })}
-      {...(defaultTabStopId === undefined ? {} : { defaultCurrentTabStopId: defaultTabStopId })}
-    >
-      {body}
-    </RovingFocusGroup.Root>
-  ) : body
+      {...(defaultTabStopId === undefined ? {} : { defaultTabStopId })}
+    />
+  ) : (
+    body
+  )
 }
 
 function TableSelectionHeader<TData>({
@@ -474,7 +503,7 @@ function TableSelectionHeader<TData>({
   if (showSelectAll === false) return <span className="sr-only">Select</span>
 
   return (
-    <Checkbox
+    <SelectionCheckbox
       checked={
         table.getIsAllPageRowsSelected()
           ? true
@@ -483,7 +512,7 @@ function TableSelectionHeader<TData>({
             : false
       }
       disabled={!table.getRowModel().rows.some((row) => row.getCanSelect())}
-      onCheckedChange={(checked) => table.toggleAllPageRowsSelected(checked === true)}
+      onCheckedChange={(checked) => table.toggleAllPageRowsSelected(checked)}
       aria-label={`Select all ${caption}`}
     />
   )
@@ -500,17 +529,27 @@ export function AeOperatorSortableHeader({
   label: string
   column: { toggleSorting: (desc?: boolean) => void; getIsSorted: () => false | 'asc' | 'desc' }
 }) {
+  const sorted = column.getIsSorted()
+  const SortIcon =
+    sorted === 'asc' ? ArrowUpIcon : sorted === 'desc' ? ArrowDownIcon : ArrowUpDownIcon
+
   return (
     <Button
       type="button"
       variant="ghost"
       size="sm"
-      className="-ms-2 h-8 min-h-8 px-2"
-      onClick={() => column.toggleSorting(column.getIsSorted() === 'asc')}
-      aria-label={`Sort by ${label}`}
+      className={cn(
+        '-ms-2 h-9 min-h-9 gap-1.5 px-3',
+        sorted ? 'text-foreground' : 'text-muted-foreground',
+      )}
+      onClick={() => column.toggleSorting(sorted === 'asc')}
+      aria-label={`Sort by ${label}${sorted ? `, ${sorted === 'asc' ? 'ascending' : 'descending'}` : ''}`}
     >
       <span>{label}</span>
-      <ArrowUpDownIcon aria-hidden="true" className="size-3.5" />
+      <SortIcon
+        aria-hidden="true"
+        className={cn('size-3.5 shrink-0', sorted ? 'text-foreground' : 'opacity-50')}
+      />
     </Button>
   )
 }

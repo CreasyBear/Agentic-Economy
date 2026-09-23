@@ -38,6 +38,7 @@ export function AePageHeader({
   if (variant === 'workspace') {
     return (
       <section
+        data-header-profile="workspace"
         aria-labelledby={titleId}
         aria-describedby={descriptionId}
         className="ae-nav w-full shrink-0 px-gutter py-3"
@@ -73,18 +74,29 @@ export function AePageHeader({
     )
   }
 
+  const isMarket = variant === 'market'
+  const headerProfile = isMarket ? 'market' : 'editorial'
+  const sectionPaddingClass = isMarket
+    ? 'py-related sm:py-section'
+    : 'py-section md:py-page'
+
   return (
-    <section aria-labelledby={titleId} aria-describedby={descriptionId} className="ae-rail w-full py-section md:py-page">
+    <section
+      data-header-profile={headerProfile}
+      aria-labelledby={titleId}
+      aria-describedby={descriptionId}
+      className={`ae-rail w-full ${sectionPaddingClass}`}
+    >
       <div className="grid gap-related border-b border-border pb-section md:grid-cols-[minmax(0,1fr)_auto] md:items-end">
         <div className="grid max-w-4xl gap-related">
           {eyebrow === undefined ? (
-            <h1 id={titleId} className={variant === 'market' ? MARKET_TITLE_CLASS : PAGE_TITLE_CLASS}>
+            <h1 id={titleId} className={isMarket ? MARKET_TITLE_CLASS : PAGE_TITLE_CLASS}>
               {title}
             </h1>
           ) : (
             <div className="grid gap-intra">
               <AeSiteEyebrow>{eyebrow}</AeSiteEyebrow>
-              <h1 id={titleId} className={variant === 'market' ? MARKET_TITLE_CLASS : PAGE_TITLE_CLASS}>
+              <h1 id={titleId} className={isMarket ? MARKET_TITLE_CLASS : PAGE_TITLE_CLASS}>
                 {title}
               </h1>
             </div>

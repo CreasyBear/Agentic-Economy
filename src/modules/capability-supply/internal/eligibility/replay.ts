@@ -1,7 +1,7 @@
 import {
   capabilityBindingEligibilityHash,
   capabilityOfferingEligibilityHash,
-} from '@/modules/capability-supply/public'
+} from '../registration-schema'
 
 import type { RegistrationContext, SupplyAuditInput, SupplyCommandActor } from '../shared'
 import type { DesiredEligibility, EligibilityInput } from './decision'

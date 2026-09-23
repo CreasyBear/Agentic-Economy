@@ -199,6 +199,28 @@ describe("capability publication importers", () => {
     });
   });
 
+  it("admits x402 when resource.price matches PaymentRequired and offering.presentation.price is absent", async () => {
+    const base = matchingX402Import();
+    const { price: _omitted, ...presentation } = base.commercial.offering.presentation;
+    const result = await importX402Capability({
+      ...base,
+      commercial: {
+        ...base.commercial,
+        offering: {
+          ...base.commercial.offering,
+          presentation,
+        },
+      },
+    });
+
+    expect(result).toMatchObject({
+      kind: "normalized",
+      draft: { binding: { adapter: { adapterId: "x402-fetch:v2" } } },
+    });
+    if (result.kind !== "normalized") throw new Error("x402_without_presentation_price_not_admitted");
+    expect(result.draft.offering.presentation.price).toBeUndefined();
+  });
+
   it("rejects a V1 claim as an invalid PaymentRequired document", async () => {
     const base = matchingX402Import();
     const result = await importX402Capability({

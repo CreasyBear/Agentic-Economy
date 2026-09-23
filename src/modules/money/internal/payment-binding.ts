@@ -2,7 +2,7 @@ import { z } from 'zod'
 
 import { exactAmountSchema, compareExactAmounts } from './exact-amount'
 import { moneyRefSchema } from './pricing-contract'
-import type { MoneyRefusal } from '../public'
+import type { MoneyRefusal } from './money-types'
 
 export const paymentBindingSchema = z.strictObject({
   amount: exactAmountSchema,

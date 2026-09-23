@@ -96,7 +96,7 @@ describe('operator command panel', () => {
     expect(dialog.getAttribute('data-slot')).toBe('dialog-content')
     expect(dialog.className).toContain('sm:max-w-3xl')
     expect(dialog.querySelector('[data-slot="command"]')).toBeTruthy()
-    expect(document.querySelector('[data-slot="dialog-overlay"]')).toBeTruthy()
+    expect(document.querySelector('[data-slot="dialog-backdrop"], [data-slot="dialog-overlay"]')).toBeTruthy()
     expect(document.querySelector('[data-slot="sheet-content"]')).toBeNull()
     expect(trigger.getAttribute('aria-expanded')).toBe('true')
 
@@ -149,7 +149,7 @@ describe('operator command panel', () => {
     fireEvent.click(trigger)
     expect(await screen.findByRole('dialog', { name: 'Command console' })).toBeTruthy()
 
-    const overlay = document.querySelector('[data-slot="dialog-overlay"]')
+    const overlay = document.querySelector('[data-slot="dialog-backdrop"], [data-slot="dialog-overlay"]')
     if (!(overlay instanceof HTMLElement)) throw new Error('dialog_overlay_missing')
     fireEvent.pointerDown(overlay)
     fireEvent.click(overlay)

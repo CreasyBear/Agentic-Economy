@@ -6,7 +6,7 @@ import type {
   OwnerProviderConnection,
 } from '@/modules/capability-supply/supply-funnel.functions'
 import type { OwnerToolsX402ConnectionIntent } from '@/lib/operator/supply-compatibility'
-import type { ProviderConnectionInspection } from './AeProviderConnectionForm'
+import type { ProviderConnectionInspection } from '@/modules/capability-supply/provider-connection.contracts'
 import {
   HEALTH_CHECK_UNCONFIRMED_TEXTS,
   PROVIDER_CONNECTION_UNCONFIRMED_TEXTS,

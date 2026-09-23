@@ -1,13 +1,18 @@
 import { convexTest, type TestConvex } from 'convex-test'
-import { register as registerWorkpool } from '@convex-dev/workpool/test'
+import workpoolTest, { register as registerWorkpool } from '@convex-dev/workpool/test'
 import { register as registerRateLimiter } from '@convex-dev/rate-limiter/test'
 import { register as registerAggregate } from '@convex-dev/aggregate/test'
-import { register as registerWorkflow } from '@convex-dev/workflow/test'
+import workflowTest, { register as registerWorkflow } from '@convex-dev/workflow/test'
+import batchWorkerTest from '@convex-dev/batch-worker/test'
 import agentTest from '@convex-dev/agent/test'
-import { api, components } from '../../convex/_generated/api'
+import { api, components, internal } from '../../convex/_generated/api'
 import type { Id } from '../../convex/_generated/dataModel'
 import schema from '../../convex/schema'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
+import {
+  buildAgentAccessPolicy,
+  createAgentAccessGrant,
+} from '@/modules/agent-access/policy'
 import {
   decodeConvexPublicationSource,
   preparePublicationDraft,
@@ -30,6 +35,25 @@ export const convexModules = Object.fromEntries(
 export type ConvexTestWithWorkersOptions = Readonly<{
   pauseWorkpool?: boolean
 }>
+
+async function preloadRuntimeComponentModules(moduleMap: Record<string, () => Promise<unknown>>) {
+  // Workflow removes Node globals for deterministic execution. Cache component
+  // modules first so nested Workpool calls avoid Vite's process-dependent lazy RPC.
+  const runtimeModules = Object.entries(moduleMap)
+    .filter(([path]) => !path.includes('/_generated/') && !path.endsWith('.test.ts') && !path.endsWith('/convex.config.ts'))
+  await Promise.all(runtimeModules.map(async ([path, loadModule]) => {
+    const loaded = await loadModule()
+    moduleMap[path] = async () => loaded
+  }))
+}
+
+export async function preloadWorkflowComponentModules() {
+  await Promise.all([
+    preloadRuntimeComponentModules(workflowTest.modules),
+    preloadRuntimeComponentModules(workpoolTest.modules),
+    preloadRuntimeComponentModules(batchWorkerTest.modules),
+  ])
+}
 
 export function convexTestWithMarketComponents() {
   const backend = convexTest(schema, convexModules)
@@ -602,4 +626,204 @@ export async function prepareCapabilityPublicationMutation(
     reasonCode: input.reasonCode,
     evidenceRefs: [...input.evidenceRefs],
   }
+}
+
+export type TestAgentPrincipalOptions = Readonly<{
+  ownerId?: string
+  environment?: 'production' | 'sandbox'
+  scopes?: readonly string[]
+  resourceRefs?: readonly string[]
+  spendUnits?: string
+  currency?: string
+  exponent?: number
+  maximumConcurrentCalls?: number
+}>
+
+export type TestAgentPrincipalResult = Readonly<{
+  principal: {
+    principalId: string
+    ownerId: string
+    credentialId: string
+    applicationRef: string
+    environment: 'production' | 'sandbox'
+    scopes: string[]
+    authorityMode: 'spending_policy'
+  }
+  grantRef: string
+  ownerId: string
+  principalId: string
+}>
+
+export async function createTestAgentPrincipal(
+  backend: ConvexFixtureBackend,
+  suffix: string,
+  options: TestAgentPrincipalOptions = {},
+): Promise<TestAgentPrincipalResult> {
+  const ref = (kind: 'prn' | 'acc' | 'grt' | 'eid' | 'crd' | 'own', material: string) =>
+    `${kind}_${canonicalDigest({ kind, material }).slice(7, 39)}`
+  const principalId = ref('prn', suffix)
+  const ownerId = options.ownerId ?? ref('acc', suffix)
+  const credentialId = `credential:test-agent:${suffix}`
+  const environment = options.environment ?? 'production'
+  const currency = options.currency ?? 'AUD'
+  const exponent = options.exponent ?? (currency === 'USD' ? 2 : 6)
+  const principal = {
+    principalId,
+    ownerId,
+    credentialId,
+    applicationRef: 'agentic-economy',
+    environment,
+    scopes: [...(options.scopes ?? ['market_tools:call'])],
+    authorityMode: 'spending_policy' as const,
+  }
+  const grantRef = ref('grt', suffix)
+  const amount = { currency, units: options.spendUnits ?? '0', exponent }
+  const now = Date.now()
+  const basePolicy = buildAgentAccessPolicy({
+    environment,
+    currency,
+    exponent,
+    maximumSpendPerCall: amount,
+    maximumDailySpend: amount,
+    maximumMonthlySpend: amount,
+  })
+  const policy = {
+    ...basePolicy,
+    budget: {
+      ...basePolicy.budget,
+      maximumConcurrentCalls: options.maximumConcurrentCalls ?? basePolicy.budget.maximumConcurrentCalls,
+    },
+  }
+  const expiresAt = now + 7 * 24 * 60 * 60 * 1_000
+  const grantDecision = createAgentAccessGrant({
+    grantRef,
+    principalId: principal.principalId,
+    ownerId: principal.ownerId,
+    applicationRef: principal.applicationRef,
+    credentialId: principal.credentialId,
+    environment: principal.environment,
+    toolAccess: 'all_admitted',
+    toolRefs: [],
+    authorityMode: principal.authorityMode,
+    spendingPolicy: policy,
+    lifecycle: 'active',
+    generation: 1,
+    createdAt: now,
+    updatedAt: now,
+    expiresAt,
+  })
+  if (grantDecision.kind !== 'accepted') {
+    throw new Error(`test_agent_grant_refused:${grantDecision.code}`)
+  }
+  const grant = grantDecision.grant
+  const bindingRef = ref('eid', suffix)
+  const canonicalCredentialRef = ref('crd', suffix)
+  const ownershipRef = ref('own', suffix)
+  const action = {
+    actorPrincipalRef: principalId,
+    activeAccountRef: ownerId,
+    correlationRef: `correlation:test-agent:${suffix}`,
+    idempotencyRef: `idempotency:test-agent:${suffix}`,
+  }
+  await backend.run(async (ctx) => {
+    await ctx.db.insert('externalIdentityBindings', {
+      bindingRef,
+      principalRef: principalId,
+      providerNamespace: 'clerk/api-key',
+      providerIdentifier: credentialId,
+      providerState: { kind: 'known', value: 'active' },
+      lifecycle: 'active',
+      credentialGeneration: 1,
+      bindIdempotencyRef: `bind:test-agent:${suffix}`,
+      revision: 1,
+      createdAt: now,
+      updatedAt: now,
+    })
+    await ctx.db.insert('credentials', {
+      credentialRef: canonicalCredentialRef,
+      bindingRef,
+      principalRef: principalId,
+      type: 'api_key',
+      lifecycle: 'active',
+      generation: 1,
+      issueIdempotencyRef: `issue:test-agent:${suffix}`,
+      revision: 1,
+      issuedAt: now,
+      expiresAt: grant.expiresAt,
+      updatedAt: now,
+    })
+    await ctx.db.insert('principals', {
+      principalRef: principalId,
+      kind: 'agent',
+      displayName: `Test agent ${suffix}`,
+      lifecycle: 'active',
+      revision: 1,
+      createdAt: now,
+      updatedAt: now,
+    })
+    if (options.ownerId === undefined) {
+      await ctx.db.insert('accounts', {
+        accountRef: ownerId,
+        displayName: `Test agent account ${suffix}`,
+        lifecycle: 'active',
+        recoveryPolicy: { kind: 'no_transfer', revision: 1 },
+        creationActorPrincipalRef: principalId,
+        creationIdempotencyRef: `account:test-agent:${suffix}`,
+        initialOwnershipRef: ownershipRef,
+        currentOwnershipRef: ownershipRef,
+        revision: 1,
+        createdAt: now,
+        updatedAt: now,
+        lastAction: action,
+      })
+      await ctx.db.insert('accountOwnerships', {
+        ownershipRef,
+        accountRef: ownerId,
+        ownerPrincipalRef: principalId,
+        lifecycle: 'active',
+        changeKind: 'creation',
+        revision: 1,
+        createdAt: now,
+        createdBy: action,
+      })
+    }
+    await ctx.db.insert('authorityDelegationGrants', {
+      grantRef,
+      accountRef: ownerId,
+      actorPrincipalRef: principalId,
+      subjectPrincipalRef: principalId,
+      scopes: [...principal.scopes].sort(),
+      resourceRefs: options.resourceRefs !== undefined ? [...options.resourceRefs] : ['*'],
+      budgetLimit: 1,
+      budgetUsed: 0,
+      expiresAt: grant.expiresAt,
+      lifecycle: 'active',
+      generation: 1,
+      revision: 1,
+      createdAt: now,
+      createdBy: action,
+    })
+  })
+
+  const recordedPrincipal = await backend.mutation(internal.agentAccessPrincipals.recordAgentPrincipal, {
+    ...principal,
+    scopes: [...principal.scopes],
+    ownerTokenIdentifier: `token:test-agent:${suffix}`,
+    grantGeneration: 1,
+    spendingPolicyDigest: grant.spendingPolicyDigest,
+    lifecycle: 'active',
+    seenAt: now,
+  })
+  if (recordedPrincipal.kind !== 'recorded') throw new Error(`principal fixture failed: ${recordedPrincipal.kind}`)
+  const recordedGrant = await backend.mutation(internal.agentAccessPolicy.upsertGrant, { grant })
+  if (recordedGrant.kind !== 'recorded') throw new Error(`grant fixture failed: ${recordedGrant.kind}`)
+
+  return { principal, grantRef, ownerId, principalId }
+}
+
+export async function createTestHumanOwner(
+  backend: ConvexFixtureBackend,
+  subject: string,
+) {
+  return ownerAdmin(backend, subject)
 }

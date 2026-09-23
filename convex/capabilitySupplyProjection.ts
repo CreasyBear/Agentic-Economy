@@ -405,15 +405,15 @@ export async function deriveBusinessOfferingSupportFromCapabilitySupply(
   }
   for (const { offeringRef, supply } of catalogOfferings) {
     if (result[offeringRef] !== undefined) continue
-    const bindingRows = await db.query('capabilityTransportBindings')
+    const binding = await db.query('capabilityTransportBindings')
       .withIndex('by_offeringId_and_admission_and_conformance', (query) => query
         .eq('offeringId', supply.offeringId)
         .eq('admission', 'admitted')
         .eq('conformance', 'conformant'))
       .take(1)
-    result[offeringRef] = bindingRows.length === 0
-      ? { integrated: false, routeable: false, reasons: ['not_integrated'], observedAt: now }
-      : { integrated: true, routeable: false, reasons: ['readiness_unavailable'], observedAt: now }
+    result[offeringRef] = binding.length > 0
+      ? { integrated: true, routeable: false, reasons: ['readiness_unavailable'], observedAt: now }
+      : { integrated: false, routeable: false, reasons: ['not_integrated'], observedAt: now }
   }
   return result
 }

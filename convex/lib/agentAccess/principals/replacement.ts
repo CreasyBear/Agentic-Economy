@@ -5,8 +5,10 @@ import type { Doc } from '../../../_generated/dataModel'
 import { internal } from '../../../_generated/api'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import {
+  agentAccessPolicyDigest,
   createAgentAccessGrant,
   normalizeAgentAccessToolSelection,
+  normalizeStoredAgentAccessPolicy,
   normalizeStoredAgentAccessGrant,
 } from '@/modules/agent-access/policy'
 import type {
@@ -126,7 +128,9 @@ export async function prepareCredentialReplacementCore(
   if (membership === null || principal?.kind !== 'agent' || principal.lifecycle !== 'active'
     || current === null || current.ownerId !== owner.accountRef || current.lifecycle !== 'active'
     || current.environment !== input.environment
-    || current.scopes.includes(MARKET_SUPPLY_MANAGE_SCOPE) !== scopes.includes(MARKET_SUPPLY_MANAGE_SCOPE)) {
+    || current.authorityMode !== input.authorityMode
+    || current.scopes.length !== scopes.length
+    || uniqueSorted(current.scopes).some((scope, index) => scope !== scopes[index])) {
     return { kind: 'conflict' as const }
   }
   const currentBinding = await ctx.db.query('externalIdentityBindings')
@@ -146,7 +150,40 @@ export async function prepareCredentialReplacementCore(
       .eq('lifecycle', expectedPredecessorLifecycle))
     .unique()
   if (predecessor === null || predecessor.principalRef !== input.principalRef) return { kind: 'conflict' as const }
+  const predecessorGrants = await ctx.db.query('agentAccessGrants')
+    .withIndex('by_credentialId_and_environment_and_lifecycle', (query) => query
+      .eq('credentialId', current.credentialId)
+      .eq('environment', input.environment)
+      .eq('lifecycle', expectedPredecessorLifecycle))
+    .filter((query) => query.eq(query.field('generation'), current.grantGeneration))
+    .take(2)
+  if (predecessorGrants.length !== 1) return { kind: 'conflict' as const }
+  const predecessorGrantRow = predecessorGrants[0]
+  if (predecessorGrantRow === undefined) return { kind: 'conflict' as const }
+  let predecessorGrant: ReturnType<typeof normalizeStoredAgentAccessGrant>
+  try {
+    predecessorGrant = normalizeStoredAgentAccessGrant(predecessorGrantRow)
+  } catch (cause) {
+    return degradeBackend(cause, { kind: 'conflict' as const }, { site: 'prepareCredentialReplacementCore', reason: 'invalid_response' })
+  }
+  const authoritativePolicy = normalizeStoredAgentAccessPolicy(predecessorGrant.spendingPolicy)
+  const requestedPolicy = normalizeStoredAgentAccessPolicy(input.spendingPolicy)
+  if (authoritativePolicy === undefined
+    || requestedPolicy === undefined
+    || predecessorGrant.principalId !== input.principalRef
+    || predecessorGrant.ownerId !== owner.accountRef
+    || predecessorGrant.applicationRef !== current.applicationRef
+    || predecessorGrant.credentialId !== current.credentialId
+    || predecessorGrant.environment !== input.environment
+    || predecessorGrant.lifecycle !== expectedPredecessorLifecycle
+    || predecessorGrant.authorityMode !== current.authorityMode
+    || current.grantGeneration !== predecessorGrant.generation
+    || current.spendingPolicyDigest !== predecessorGrant.spendingPolicyDigest
+    || agentAccessPolicyDigest(requestedPolicy) !== agentAccessPolicyDigest(authoritativePolicy)) {
+    return { kind: 'conflict' as const }
+  }
   const generation = predecessor.generation + 1
+  const grantGeneration = predecessorGrant.generation + 1
   const refs = replacementAgentCanonicalRefs({
     principalRef: input.principalRef,
     credentialId: input.credentialId,
@@ -155,6 +192,7 @@ export async function prepareCredentialReplacementCore(
   })
   const pendingSuccessors = await ctx.db.query('credentials')
     .withIndex('by_predecessorCredentialRef', (query) => query.eq('predecessorCredentialRef', predecessor.credentialRef))
+    .filter((query) => query.eq(query.field('lifecycle'), 'active'))
     .take(2)
   if (pendingSuccessors.some((candidate) => (
     candidate.lifecycle === 'active'
@@ -170,12 +208,32 @@ export async function prepareCredentialReplacementCore(
   const replaying = existingBinding !== null || existingCredential !== null
   if ((existingBinding !== null && (existingBinding.bindingRef !== refs.bindingRef
       || existingBinding.principalRef !== input.principalRef
-      || existingBinding.credentialGeneration !== generation))
+      || existingBinding.credentialGeneration !== generation
+      || existingBinding.lifecycle !== 'active'))
     || (existingCredential !== null && (existingCredential.bindingRef !== refs.bindingRef
       || existingCredential.principalRef !== input.principalRef
       || existingCredential.generation !== generation
       || existingCredential.predecessorCredentialRef !== predecessor.credentialRef
       || existingCredential.lifecycle !== 'active'))) return { kind: 'conflict' as const }
+
+  const grantDecision = createAgentAccessGrant({
+    grantRef: input.grantRef,
+    principalId: input.principalRef,
+    ownerId: owner.accountRef,
+    applicationRef: current.applicationRef,
+    credentialId: input.credentialId,
+    environment: input.environment,
+    toolAccess: toolSelection.toolAccess,
+    toolRefs: toolSelection.toolRefs,
+    authorityMode: input.authorityMode,
+    spendingPolicy: authoritativePolicy,
+    lifecycle: 'active',
+    generation: grantGeneration,
+    createdAt: input.createdAt,
+    updatedAt: now,
+    expiresAt: input.expiresAt,
+  })
+  if (grantDecision.kind === 'refused') return { kind: 'conflict' as const }
 
   const action = {
     actorPrincipalRef: owner.principalRef,
@@ -210,28 +268,6 @@ export async function prepareCredentialReplacementCore(
     updatedAt: now,
     predecessorCredentialRef: predecessor.credentialRef,
   })
-  const grantDecision = createAgentAccessGrant({
-    grantRef: input.grantRef,
-    principalId: input.principalRef,
-    ownerId: owner.accountRef,
-    applicationRef: current.applicationRef,
-    credentialId: input.credentialId,
-    environment: input.environment,
-    toolAccess: toolSelection.toolAccess,
-    toolRefs: toolSelection.toolRefs,
-    authorityMode: input.authorityMode,
-    spendingPolicy: {
-      ...input.spendingPolicy,
-      budget: { ...input.spendingPolicy.budget, generation },
-      rate: { ...input.spendingPolicy.rate, generation },
-    },
-    lifecycle: 'active',
-    generation,
-    createdAt: input.createdAt,
-    updatedAt: now,
-    expiresAt: input.expiresAt,
-  })
-  if (grantDecision.kind === 'refused') return { kind: 'conflict' as const }
   const delegation = await new DelegationService(
     createConvexDelegationStore(ctx),
     createConvexDelegationContextPort(ctx, principalRef(owner.principalRef)),
@@ -255,7 +291,7 @@ export async function prepareCredentialReplacementCore(
     credentialRef: refs.credentialRef,
     correlationRef: action.correlationRef,
     idempotencyRef: action.idempotencyRef,
-    authorityGeneration: generation,
+    authorityGeneration: grantGeneration,
     beforeState: 'predecessor_active',
     outcome: 'replacement_prepared',
     occurredAt: now,
@@ -324,7 +360,7 @@ export async function transitionCredentialReplacementCore(
       credentialRef: successor.credentialRef,
       correlationRef: canonicalDigest({ format: 'agent-credential-replacement-cancel:v1', successorGrantRef: input.successorGrantRef } as never),
       idempotencyRef: `agent-credential-replacement-cancel:${input.successorGrantRef}`,
-      authorityGeneration: successor.generation,
+      authorityGeneration: normalizedSuccessorGrant.generation,
       beforeState: 'replacement_prepared',
       outcome: 'replacement_cancelled',
       occurredAt: now,
@@ -337,6 +373,13 @@ export async function transitionCredentialReplacementCore(
       ? { kind: 'conflict' as const }
       : { kind: 'replayed' as const, providerCredentialId: predecessor.binding.providerIdentifier }
   }
+  if (successor.lifecycle !== 'active'
+    || successorBinding.lifecycle !== 'active'
+    || normalizedSuccessorGrant.lifecycle !== 'active'
+    || !Number.isFinite(successor.expiresAt)
+    || successor.expiresAt <= now
+    || !Number.isFinite(normalizedSuccessorGrant.expiresAt)
+    || normalizedSuccessorGrant.expiresAt <= now) return { kind: 'conflict' as const }
   const predecessor = await predecessorMaterial(ctx, successor)
   if (predecessor === null || predecessor.binding.providerIdentifier !== current.credentialId) return { kind: 'conflict' as const }
   await revokeReplacementMaterial(ctx, predecessor.credential, predecessor.binding, predecessor.grant, owner, now, 'predecessor_replaced')
@@ -361,7 +404,7 @@ export async function transitionCredentialReplacementCore(
     credentialRef: successor.credentialRef,
     correlationRef: canonicalDigest({ format: 'agent-credential-replacement-promote:v1', successorGrantRef: input.successorGrantRef } as never),
     idempotencyRef: `agent-credential-replacement-promote:${input.successorGrantRef}`,
-    authorityGeneration: successor.generation,
+    authorityGeneration: normalizedSuccessorGrant.generation,
     beforeState: 'replacement_prepared',
     outcome: 'replacement_promoted',
     occurredAt: now,

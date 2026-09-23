@@ -9,6 +9,8 @@ import { AeOperatorPage, useOperatorShellChrome } from '@/components/ae/layout/A
 import { AePageSkeleton, AePageState } from '@/components/ae/layout/AePageState'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
+import { buttonVariants } from '@/components/ui/button-variants'
+import { cn } from '@/lib/utils'
 import { Skeleton } from '@/components/ui/skeleton'
 import { captureClientExceptionOnClient } from '@/lib/observability/capture-client-exception'
 import { operatorRoleForPath, roleHomeHref } from '@/lib/operator/roles'
@@ -36,16 +38,162 @@ export function RoutePending({
   return <AePageSkeleton title={title} description={description} />
 }
 
-export function OperatorRoutePending() {
-  const { pathname } = useLocation()
-  const parentShell = useOperatorShellChrome()
+export type OperatorRouteSkeletonPreset =
+  | 'default'
+  | 'table'
+  | 'overview-cards'
+  | 'split-console'
+  | 'form-record'
 
-  const body = (
-    <div className="grid gap-intra" aria-busy="true" aria-label="Loading workspace">
+const OVERVIEW_CARD_PATHS = new Set(['/owner', '/owner/workspace', '/owner/market'])
+
+export function inferOperatorSkeletonPreset(pathname: string): OperatorRouteSkeletonPreset {
+  if (OVERVIEW_CARD_PATHS.has(pathname)) return 'overview-cards'
+
+  if (pathname.includes('/settings') || pathname.endsWith('/new')) return 'form-record'
+
+  if (
+    pathname.includes('/activity')
+    || (pathname.includes('/operations') && !pathname.includes('/new'))
+    || pathname.includes('/credit')
+    || pathname.includes('/table')
+  ) {
+    return 'table'
+  }
+
+  if (pathname.includes('/console') || pathname.includes('/t/')) return 'split-console'
+
+  return 'default'
+}
+
+function TableSkeleton() {
+  return (
+    <div className="grid gap-related">
+      <Skeleton className="h-8 w-48" />
+      <Skeleton className="h-10 w-full rounded-md" />
+      <div
+        data-testid="skeleton-table"
+        className="min-h-[14rem] overflow-hidden rounded-lg border border-border bg-card/40"
+      >
+        <div className="grid grid-cols-4 gap-gutter border-b border-border p-4">
+          {Array.from({ length: 4 }, (_, index) => (
+            <Skeleton key={`header-${index}`} className="h-4 w-full" />
+          ))}
+        </div>
+        {Array.from({ length: 5 }, (_, rowIndex) => (
+          <div
+            key={rowIndex}
+            data-testid="skeleton-table-row"
+            className="grid grid-cols-4 gap-gutter border-b border-border p-4 last:border-b-0"
+          >
+            {Array.from({ length: 4 }, (_, colIndex) => (
+              <Skeleton
+                key={`${rowIndex}-${colIndex}`}
+                className="h-touch w-full"
+                data-testid="skeleton-table-cell"
+              />
+            ))}
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function OverviewCardsSkeleton() {
+  return (
+    <div className="grid gap-related">
+      <div className="grid gap-intra">
+        <Skeleton className="h-8 w-40" />
+        <Skeleton className="h-4 w-60" />
+      </div>
+      <div className="grid grid-cols-1 gap-gutter sm:grid-cols-2 lg:grid-cols-3">
+        {Array.from({ length: 3 }, (_, index) => (
+          <div
+            key={index}
+            data-testid="skeleton-metric-card"
+            className="h-32 rounded-xl border border-border bg-card/60 p-4"
+          >
+            <Skeleton className="mb-3 h-4 w-24" />
+            <Skeleton className="h-8 w-20" />
+          </div>
+        ))}
+      </div>
+      <div
+        data-testid="skeleton-overview-primary"
+        className="h-64 rounded-xl border border-border bg-card/40"
+      />
+    </div>
+  )
+}
+
+function SplitConsoleSkeleton() {
+  return (
+    <div className="grid grid-cols-1 gap-gutter lg:grid-cols-[20rem_minmax(0,1fr)]">
+      <div
+        data-testid="skeleton-split-rail"
+        className="h-96 rounded-xl border border-border p-4"
+      >
+        <Skeleton className="mb-3 h-4 w-32" />
+        <Skeleton className="h-touch w-full" />
+        <Skeleton className="mt-intra h-touch w-full" />
+      </div>
+      <div
+        data-testid="skeleton-split-panel"
+        className="h-96 rounded-xl border border-border p-6"
+      >
+        <Skeleton className="mb-4 h-8 w-48" />
+        <Skeleton className="h-32 w-full" />
+        <Skeleton className="mt-intra h-touch w-full" />
+      </div>
+    </div>
+  )
+}
+
+function FormRecordSkeleton() {
+  return (
+    <div className="grid max-w-2xl gap-section">
+      {Array.from({ length: 4 }, (_, index) => (
+        <div key={index} data-testid="skeleton-form-field" className="grid gap-intra">
+          <Skeleton className="h-4 w-28" />
+          <Skeleton className="h-10 w-full rounded-md" />
+        </div>
+      ))}
+      <Skeleton data-testid="skeleton-form-action" className="h-10 w-32 rounded-md" />
+    </div>
+  )
+}
+
+function DefaultSkeleton() {
+  return (
+    <div data-testid="skeleton-default-body" className="grid gap-related">
       <Skeleton className="h-10 w-full" />
       {Array.from({ length: 6 }, (_, index) => (
         <Skeleton key={index} className="h-touch w-full" />
       ))}
+    </div>
+  )
+}
+
+export function OperatorRoutePending({
+  preset,
+}: { preset?: OperatorRouteSkeletonPreset } = {}) {
+  const { pathname } = useLocation()
+  const parentShell = useOperatorShellChrome()
+  const resolvedPreset = preset ?? inferOperatorSkeletonPreset(pathname)
+
+  const body = (
+    <div
+      className="grid gap-related"
+      aria-busy="true"
+      aria-label="Loading workspace"
+      data-skeleton-preset={resolvedPreset}
+    >
+      {resolvedPreset === 'table' && <TableSkeleton />}
+      {resolvedPreset === 'overview-cards' && <OverviewCardsSkeleton />}
+      {resolvedPreset === 'split-console' && <SplitConsoleSkeleton />}
+      {resolvedPreset === 'form-record' && <FormRecordSkeleton />}
+      {resolvedPreset === 'default' && <DefaultSkeleton />}
     </div>
   )
 
@@ -110,9 +258,12 @@ function RouteErrorState({ error, operator }: { error: unknown; operator: boolea
           >
             {retryPending ? 'Trying again…' : 'Try again'}
           </Button>
-          <Button asChild variant="secondary" className="min-h-touch w-full sm:w-auto">
-            <Link to="/status">Check system status</Link>
-          </Button>
+          <Link
+            to="/status"
+            className={cn(buttonVariants({ variant: 'secondary' }), 'min-h-touch w-full sm:w-auto')}
+          >
+            Check system status
+          </Link>
         </div>
         {correlationRef === undefined ? null : (
           <div className="grid gap-1 text-sm text-muted-foreground">
@@ -158,9 +309,12 @@ function RouteErrorState({ error, operator }: { error: unknown; operator: boolea
           >
             {retryPending ? 'Trying again…' : 'Try again'}
           </Button>
-          <Button asChild variant="secondary" className="min-h-touch">
-            <Link to="/status">Check system status</Link>
-          </Button>
+          <Link
+            to="/status"
+            className={cn(buttonVariants({ variant: 'secondary' }), 'min-h-touch')}
+          >
+            Check system status
+          </Link>
         </div>
       </AlertDescription>
     </Alert>
@@ -206,12 +360,12 @@ function OperatorForbiddenBody() {
       <AlertDescription>
         <p>Use the account that owns this workspace, or return to the public market.</p>
         <div className="flex w-full flex-wrap gap-intra">
-          <Button asChild type="button" className="min-h-touch">
-            <Link to="/market">Return to market</Link>
-          </Button>
-          <Button asChild variant="secondary" className="min-h-touch">
-            <Link to="/support">Help</Link>
-          </Button>
+          <Link to="/market" className={cn(buttonVariants(), 'min-h-touch')}>
+            Return to market
+          </Link>
+          <Link to="/support" className={cn(buttonVariants({ variant: 'secondary' }), 'min-h-touch')}>
+            Help
+          </Link>
           <SignOutButton redirectUrl="/">
             <Button type="button" variant="outline" className="min-h-touch">Sign out</Button>
           </SignOutButton>
@@ -246,12 +400,13 @@ export function OperatorRouteNotFound() {
       description="This page may have moved, or your account may not have access."
       currentPath={pathname}
     >
-      <Button asChild variant="secondary" className="min-h-touch w-fit">
-        <Link to={recoveryHref}>
-          <ArrowLeftIcon data-icon="inline-start" aria-hidden="true" />
-          {recoveryLabel}
-        </Link>
-      </Button>
+      <Link
+        to={recoveryHref}
+        className={cn(buttonVariants({ variant: 'secondary' }), 'min-h-touch w-fit')}
+      >
+        <ArrowLeftIcon data-icon="inline-start" aria-hidden="true" />
+        {recoveryLabel}
+      </Link>
     </AeOperatorPage>
   )
 }

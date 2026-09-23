@@ -169,10 +169,52 @@ function extractMappedIpv4Address(value: string): string | undefined {
   } catch (cause) {
     return degradeBackend(cause, undefined, { site: 'extractMappedIpv4Address', reason: 'invalid_response' })
   }
-  if (parsed === undefined || parsed.family !== 'ipv6' || !parsed.address.startsWith('::ffff:')) {
+  if (parsed === undefined || parsed.family !== 'ipv6') {
     return undefined
   }
-  const mappedIpv4 = parsed.address.slice('::ffff:'.length)
-  return isIP(mappedIpv4) === 4 ? mappedIpv4 : undefined
+  if (parsed.address.startsWith('::ffff:')) {
+    const mappedIpv4 = parsed.address.slice('::ffff:'.length)
+    return isIP(mappedIpv4) === 4 ? mappedIpv4 : undefined
+  }
+  const bytes = parseIpv6Bytes(parsed.address)
+  if (bytes === undefined) return undefined
+  if (bytes[0] === 0x20 && bytes[1] === 0x02) {
+    return `${bytes[2]}.${bytes[3]}.${bytes[4]}.${bytes[5]}`
+  }
+  if (
+    bytes[0] === 0x00
+    && bytes[1] === 0x64
+    && bytes[2] === 0xff
+    && bytes[3] === 0x9b
+    && bytes[4] === 0
+    && bytes[5] === 0
+    && bytes[6] === 0
+    && bytes[7] === 0
+    && bytes[8] === 0
+    && bytes[9] === 0
+    && bytes[10] === 0
+    && bytes[11] === 0
+  ) {
+    return `${bytes[12]}.${bytes[13]}.${bytes[14]}.${bytes[15]}`
+  }
+  return undefined
+}
+
+function parseIpv6Bytes(value: string): Uint8Array | undefined {
+  const [head, tail] = value.split('::')
+  const headParts = head === undefined || head.length === 0 ? [] : head.split(':')
+  const tailParts = tail === undefined || tail.length === 0 ? [] : tail.split(':')
+  if (tail !== undefined && headParts.length + tailParts.length > 8) return undefined
+  const missing = tail === undefined ? 0 : 8 - headParts.length - tailParts.length
+  const parts = tail === undefined ? headParts : [...headParts, ...Array.from({ length: missing }, () => '0'), ...tailParts]
+  if (parts.length !== 8) return undefined
+  const bytes = new Uint8Array(16)
+  for (let index = 0; index < 8; index += 1) {
+    const n = Number.parseInt(parts[index] ?? '', 16)
+    if (!Number.isInteger(n) || n < 0 || n > 0xffff) return undefined
+    bytes[index * 2] = (n >> 8) & 0xff
+    bytes[index * 2 + 1] = n & 0xff
+  }
+  return bytes
 }
 

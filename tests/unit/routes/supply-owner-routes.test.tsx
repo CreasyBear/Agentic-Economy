@@ -40,6 +40,7 @@ vi.mock('@tanstack/react-router', async (importOriginal) => {
 })
 
 import { Route as OwnerSupplyDetailRoute } from '@/routes/_operator/owner.operations.$toolRef'
+import { Route as OwnerSupplyIndexRoute } from '@/routes/_operator/owner.operations'
 
 afterEach(() => {
   cleanup()
@@ -59,6 +60,13 @@ function createTestRouter() {
 }
 
 describe('owner supply routes', () => {
+  it('uses Tools as the Provider navigation identity', () => {
+    expect(OwnerSupplyIndexRoute.options.staticData?.nav?.label).toBe('Tools')
+    expect(OwnerSupplyIndexRoute.options.head?.({} as never)).toEqual({
+      meta: [{ title: 'Tools | Agentic Economy' }, { name: 'robots', content: 'noindex' }],
+    })
+  })
+
   it('exports the authenticated publisher host', () => {
     expect(OwnerSupplyDetailRoute).toBeDefined()
   })

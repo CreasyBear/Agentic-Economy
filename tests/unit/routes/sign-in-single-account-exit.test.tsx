@@ -53,11 +53,13 @@ describe('sign-in account exit', () => {
     render(<Component />)
 
     expect(screen.getByRole('heading', { name: 'Sign in' })).toBeTruthy()
-    expect(screen.getByText('After you sign in, you’ll return to where you left off.')).toBeTruthy()
+    expect(screen.getByText(/Use email, Google, GitHub, or a passkey/)).toBeTruthy()
+    expect(screen.getByText(/return to where you left off/)).toBeTruthy()
     expect(document.body.textContent?.toLowerCase()).not.toContain('supplier')
     expect(document.body.textContent).not.toContain('manage Operations')
     expect(routeState.clerkProps).toMatchObject({
       fallbackRedirectUrl: '/owner/settings',
+      signUpFallbackRedirectUrl: '/owner/settings',
       signUpUrl: '/sign-up',
     })
   })
@@ -76,6 +78,7 @@ describe('sign-in account exit', () => {
     expect(screen.queryByRole('link', { name: 'Create one' })).toBeNull()
     expect(routeState.clerkProps).toMatchObject({
       fallbackRedirectUrl: '/owner/supply',
+      signUpFallbackRedirectUrl: '/owner/supply',
       signUpUrl: '/sign-up',
     })
   })
@@ -88,9 +91,10 @@ describe('sign-in account exit', () => {
     render(<Component />)
 
     expect(screen.getByRole('heading', { name: 'Sign in to connect an agent' })).toBeTruthy()
-    expect(screen.getByText('After you sign in, you’ll return to the agent connection you started.')).toBeTruthy()
+    expect(screen.getByText(/return to the agent connection you started/)).toBeTruthy()
     expect(routeState.clerkProps).toMatchObject({
       fallbackRedirectUrl: '/agent-access',
+      signUpFallbackRedirectUrl: '/agent-access',
       signUpUrl: '/sign-up',
     })
   })

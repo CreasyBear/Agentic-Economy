@@ -2,7 +2,6 @@ import { CALL_ROUTE_CONTRACT } from '@/modules/capability-execution/call-entry'
 import {
   callRecoveryResultSchema,
   callReconcileInputSchema,
-  callReconciliationEvidenceSchema,
 } from '@/modules/capability-execution/call-recovery.actions'
 
 import type { CliOptions } from '../lib/args'
@@ -43,13 +42,13 @@ export async function runRecoverCommand(args: readonly string[], options: CliOpt
       code: 'recover-evidence',
     })
   }
-  const parsedEvidence = callReconciliationEvidenceSchema.safeParse(evidence)
   const parsedInput = callReconcileInputSchema.safeParse({ callRef, evidence, idempotencyKey })
-  const identityMatchesEvidence = parsedEvidence.success && parsedEvidence.data.invocationRef === callRef
-  if (!parsedEvidence.success || !parsedInput.success || !identityMatchesEvidence) {
+  const identityMatchesEvidence = parsedInput.success && parsedInput.data.evidence.invocationRef === callRef
+  if (!parsedInput.success || !identityMatchesEvidence) {
+    const invalidEvidence = !parsedInput.success && parsedInput.error.issues.some((issue) => issue.path[0] === 'evidence')
     throw new CliFailure('Recovery evidence or identity does not match call.reconcile:v1.', {
       kind: 'INVALID_ARGUMENT',
-      code: parsedEvidence.success ? 'recover-input' : 'recover-evidence',
+      code: invalidEvidence ? 'recover-evidence' : 'recover-input',
     })
   }
 
@@ -64,7 +63,7 @@ export async function runRecoverCommand(args: readonly string[], options: CliOpt
       },
       body: JSON.stringify({
         idempotencyKey: parsedInput.data.idempotencyKey,
-        evidence: parsedEvidence.data,
+        evidence: parsedInput.data.evidence,
       }),
     })
   } catch (error) {

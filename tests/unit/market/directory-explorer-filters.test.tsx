@@ -2,7 +2,8 @@
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { afterEach, expect, it, vi } from 'vitest'
 import '../../setup/jsdom-platform'
-import { DirectoryExplorerFilters, type DirectoryExplorerFilterValues } from '@/components/ae/market/DirectoryExplorerFilters'
+import { DirectoryExplorerFilters } from '@/components/ae/market/DirectoryExplorerFilters'
+import type { DirectoryExplorerFilterValues } from '@/modules/market/directory-filters.contracts'
 import type { X402DirectoryCatalogueOverview } from '@/modules/market/x402-directory-catalogue'
 
 const overview: X402DirectoryCatalogueOverview = { kind: 'ok', coverage: { source: 'coinbase', generation: 'test', indexedTotal: 14000, reportedTotal: 14000, reportedTotalAtStart: 14000, sourceChangedDuringScan: false, duplicateObservations: 0, pagesFetched: 140, startedAt: 1, completedAt: 2, completeness: 'completed_observed_scan' }, categories: [{ key: 'search', label: 'Search', count: 500 }, { key: 'unclassified', label: 'Unclassified', count: 13000 }], networks: [{ key: 'eip155:8453', label: 'Base', count: 4000 }], providers: [], popular: [], recentlyUpdated: [] }
@@ -45,6 +46,7 @@ it('validates Provider hostnames and permits explicitly clearing a constraint', 
 })
 it('sends metadata, curation and payer filters with source meaning intact', () => {
   const { filters, change, reset } = show()
+  fireEvent.click(filters.getByRole('button', { name: 'Advanced filters' }))
   fireEvent.click(filters.getByRole('checkbox', { name: 'Request fields' }))
   expect(change).toHaveBeenLastCalledWith({ hasInputFields: true })
   fireEvent.click(filters.getByRole('checkbox', { name: 'Output example' }))

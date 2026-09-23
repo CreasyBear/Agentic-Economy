@@ -5,14 +5,20 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { ReactNode } from 'react'
 import '../../setup/jsdom-platform'
 
+import { TACTILE } from '@/components/ae/feedback/AeConfirmDialog'
 import { AeOwnerCredit } from '@/components/ae/console/AeOwnerCredit'
-import { AeAgentOperatorConsole } from '@/components/ae/console/AeAgentOperatorConsole'
+import { AeAgentOperatorConsole } from '@/components/ae/console/agent-operator-console/AeAgentOperatorConsole'
+import { toast } from '@/lib/ui/toast'
 import type { AgentConnectionReadback } from '@/modules/agent-access/public'
 import type { AgentCredentialSource, AgentDirectoryProjection } from '@/modules/agent-access/agent-operator-view-model'
 import { projectAgentDirectory } from '@/modules/agent-access/agent-access-console'
 import { canonicalAgentRecord } from '../../helpers/agent-directory-fixture'
 
 const routerNavigate = vi.hoisted(() => vi.fn())
+
+vi.mock('@/lib/ui/toast', () => ({
+  toast: { success: vi.fn(), error: vi.fn(), info: vi.fn() },
+}))
 
 vi.mock('@tanstack/react-router', () => ({
   useRouter: () => ({ navigate: routerNavigate }),
@@ -119,6 +125,8 @@ function consoleProps() {
 afterEach(() => {
   cleanup()
   routerNavigate.mockReset()
+  vi.mocked(toast.success).mockReset()
+  vi.mocked(toast.error).mockReset()
 })
 
 describe('assistant access owner continuation anchors', () => {
@@ -143,14 +151,13 @@ describe('assistant access owner continuation anchors', () => {
     fireEvent.click(trigger)
     const confirmation = screen.getByRole('alertdialog', { name: 'Disconnect Codex from Route assistant?' })
     expect(confirmation.textContent).toContain('Other connections for Route assistant remain usable')
-    fireEvent.click(within(confirmation).getByRole('button', { name: 'Disconnect' }))
+    fireEvent.click(within(confirmation).getByRole('button', { name: 'Drain then disconnect' }))
     await waitFor(() => expect(onDisconnectConnection).toHaveBeenCalledWith('connection_safe_reference', 2))
   })
 
   it('keeps funding on Credit and revocation on Keys', () => {
     const { container: credit } = render(
       <AeOwnerCredit
-        directory={emptyDirectory}
         accountBalance={{
           kind: 'available',
           accountRef: 'account:test-owner',
@@ -158,7 +165,11 @@ describe('assistant access owner continuation anchors', () => {
           locked: false,
           version: 0,
         }}
-        loading={false}
+        accountHistory={{
+          kind: 'available', entries: [], snapshotAt: 1, continueCursor: '', isDone: true,
+          coverage: 'complete', sourceLinkCoverage: 'unavailable', source: 'formance_transaction_cursor',
+          ordering: 'recorded_transaction_sequence_desc',
+        }}
       />,
     )
     const { container: keys } = render(
@@ -175,10 +186,12 @@ describe('assistant access owner continuation anchors', () => {
     )
 
     expect(credit.querySelector('#fund')).not.toBeNull()
-    expect(credit.querySelector('a[href="/market"]')?.textContent).toBe('Search Tools')
+    expect(credit.textContent).toContain('Add credit')
     expect(keys.querySelector('#revoke')).not.toBeNull()
     expect(keys.querySelector('#fund')).toBeNull()
     expect(keys.querySelector('a[href="/for-agents"]')?.textContent).toBe('Connect agent')
+    expect(keys.querySelector('a[href="/owner/credit"]')).toBeNull()
+    expect(within(keys).queryByRole('heading', { name: 'Credit' })).toBeNull()
   })
 
   it('confirms only the exact route-selected caller without exposing locator or key canaries', async () => {
@@ -197,6 +210,7 @@ describe('assistant access owner continuation anchors', () => {
 
     const dialog = screen.getByRole('dialog', { name: 'Route assistant' })
     fireEvent.click(within(dialog).getByRole('button', { name: 'Technical details' }))
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Tool access' }))
     expect(dialog.textContent).toContain('•••• 12345678')
     expect(dialog.textContent).not.toContain(KEY_ID_CANARY)
     expect(dialog.textContent).not.toContain(PRINCIPAL_ID)
@@ -294,6 +308,31 @@ describe('assistant access owner continuation anchors', () => {
     expect(dialog.textContent).toContain('Last used')
   })
 
+  it('keeps the Agent decision summary compact and discloses supporting facts by task', () => {
+    render(
+      <AeAgentOperatorConsole
+        {...consoleProps()}
+        selectedPrincipalId={PRINCIPAL_ID}
+        getAgentHref={(principalRef) => `/agent-access?caller=${principalRef}`}
+      />,
+    )
+
+    const dialog = screen.getByRole('dialog', { name: 'Route assistant' })
+    expect(within(dialog).getByText('Authority', { selector: 'dt' })).toBeTruthy()
+    expect(within(dialog).getByText('Monthly limit', { selector: 'dt' })).toBeTruthy()
+    expect(within(dialog).getByText('Recent Calls', { selector: 'dt' })).toBeTruthy()
+    expect(within(dialog).getByText('Last used', { selector: 'dt' })).toBeTruthy()
+    expect(within(dialog).queryByText('Daily budget', { selector: 'dt' })).toBeNull()
+
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Spending policy' }))
+    expect(within(dialog).getByText('Daily budget', { selector: 'dt' })).toBeTruthy()
+    expect(within(dialog).getByText('Concurrency', { selector: 'dt' })).toBeTruthy()
+
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Activity' }))
+    expect(within(dialog).getByText('Settled charges', { selector: 'dt' })).toBeTruthy()
+    expect(within(dialog).getByText('Usage data', { selector: 'dt' })).toBeTruthy()
+  })
+
   it('shows the exact selected Tool authority', () => {
     const toolRefs = [
       `operation:v1:${'1'.repeat(64)}`,
@@ -314,6 +353,7 @@ describe('assistant access owner continuation anchors', () => {
     )
 
     const dialog = screen.getByRole('dialog', { name: 'Route assistant' })
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Tool access' }))
     for (const toolRef of toolRefs) {
       const link = within(dialog).getByRole('link', { name: toolRef })
       expect(link.getAttribute('href')).toBe(`/tools/${encodeURIComponent(toolRef)}`)
@@ -354,7 +394,7 @@ describe('assistant access owner continuation anchors', () => {
     const trigger = screen.getByRole('button', { name: 'Revoke' })
     fireEvent.click(trigger)
     const confirm = within(screen.getByRole('alertdialog')).getByRole('button', {
-      name: 'Revoke credential',
+      name: 'Drain then revoke',
     })
     fireEvent.click(confirm)
     await waitFor(() => expect(onRevoke).toHaveBeenCalledOnce())
@@ -415,5 +455,96 @@ describe('assistant access owner continuation anchors', () => {
     expect(open.getAttribute('href')).toBe(`/agent-access?caller=${PRINCIPAL_ID}`)
     expect(within(row).getAllByRole('link')).toHaveLength(1)
     expect(screen.queryByRole('dialog')).toBeNull()
+  })
+
+  it('W-28: defaults to Graceful Drain with financial disclosure and tactile confirm', () => {
+    render(
+      <AeAgentOperatorConsole
+        {...consoleProps()}
+        selectedPrincipalId={PRINCIPAL_ID}
+        getAgentHref={(principalId) => `/agent-access?caller=${principalId}`}
+      />,
+    )
+
+    const dialog = screen.getByRole('dialog', { name: 'Route assistant' })
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Technical details' }))
+    const trigger = within(dialog).getByRole('button', { name: 'Remove agent everywhere' })
+    expect(trigger.className).toContain('enabled:active:scale-[0.98]')
+    fireEvent.click(trigger)
+
+    const confirmation = screen.getByRole('alertdialog', { name: 'Remove Route assistant everywhere?' })
+    const drainCard = within(confirmation).getByRole('button', { name: /Graceful Drain/u })
+    const freezeCard = within(confirmation).getByRole('button', { name: /Immediate Freeze/u })
+    expect(drainCard.getAttribute('aria-pressed')).toBe('true')
+    expect(freezeCard.getAttribute('aria-pressed')).toBe('false')
+    expect(confirmation.textContent).toContain(
+      'A$0.00 unreleased holds remain protected — in-flight calls finish or release immediately',
+    )
+
+    const confirm = within(confirmation).getByRole('button', { name: 'Drain then remove' })
+    expect(confirm.className).toContain(TACTILE.split(' ')[0])
+  })
+
+  it('W-28: Immediate Freeze updates confirm label to Remove immediately', () => {
+    render(
+      <AeAgentOperatorConsole
+        {...consoleProps()}
+        selectedPrincipalId={PRINCIPAL_ID}
+        getAgentHref={(principalId) => `/agent-access?caller=${principalId}`}
+      />,
+    )
+
+    const dialog = screen.getByRole('dialog', { name: 'Route assistant' })
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Technical details' }))
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Remove agent everywhere' }))
+    const confirmation = screen.getByRole('alertdialog', { name: 'Remove Route assistant everywhere?' })
+    fireEvent.click(within(confirmation).getByRole('button', { name: /Immediate Freeze/u }))
+    expect(within(confirmation).getByRole('button', { name: /Immediate Freeze/u }).getAttribute('aria-pressed')).toBe('true')
+    expect(within(confirmation).getByRole('button', { name: /Graceful Drain/u }).getAttribute('aria-pressed')).toBe('false')
+    expect(within(confirmation).getByRole('button', { name: 'Remove immediately' })).toBeDefined()
+  })
+
+  it('W-28: successful agent disconnect toasts and closes dialog', async () => {
+    const onDisconnect = vi.fn(async () => undefined)
+    render(
+      <AeAgentOperatorConsole
+        {...consoleProps()}
+        onDisconnectAgent={onDisconnect}
+        selectedPrincipalId={PRINCIPAL_ID}
+        getAgentHref={(principalId) => `/agent-access?caller=${principalId}`}
+      />,
+    )
+
+    const dialog = screen.getByRole('dialog', { name: 'Route assistant' })
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Technical details' }))
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Remove agent everywhere' }))
+    fireEvent.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Drain then remove' }))
+    await waitFor(() => expect(onDisconnect).toHaveBeenCalledWith(PRINCIPAL_ID))
+    expect(toast.success).toHaveBeenCalledWith('Agent access revoked')
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull())
+  })
+
+  it('W-28: failed revoke keeps dialog open with Rule 4 triplet and error toast', async () => {
+    const onDisconnect = vi.fn(async () => {
+      throw new Error('revoke_failed')
+    })
+    render(
+      <AeAgentOperatorConsole
+        {...consoleProps()}
+        onDisconnectAgent={onDisconnect}
+        selectedPrincipalId={PRINCIPAL_ID}
+        getAgentHref={(principalId) => `/agent-access?caller=${principalId}`}
+      />,
+    )
+
+    const dialog = screen.getByRole('dialog', { name: 'Route assistant' })
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Technical details' }))
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Remove agent everywhere' }))
+    fireEvent.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Drain then remove' }))
+    await waitFor(() => expect(onDisconnect).toHaveBeenCalled())
+    expect(toast.error).toHaveBeenCalledWith('Could not revoke agent access.')
+    const confirmation = screen.getByRole('alertdialog')
+    expect(confirmation.textContent).toContain('A$0.00 affected — agent remains active')
+    expect(confirmation.textContent).toContain('Try again. If this persists, refresh the directory and retry.')
   })
 })

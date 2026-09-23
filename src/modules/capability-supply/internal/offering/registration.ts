@@ -1,7 +1,7 @@
 import {
   defineCapabilityOfferingRegistration,
   type CapabilityOfferingRegistration,
-} from '@/modules/capability-supply/public'
+} from '../registration-schema'
 
 export type CapabilityContractRef = Readonly<{
   capabilityId: string

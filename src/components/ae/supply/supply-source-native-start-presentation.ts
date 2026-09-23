@@ -5,7 +5,61 @@ import type { ProviderConnectionOwnerProjection } from '@/modules/capability-sup
 import type { SupplySourceInput, SupplySourcePreview, SupplyToolCandidate } from '@/modules/capability-supply/source-preview'
 import type { PublishSupplyToolV2Input } from '@/modules/capability-supply/supply-publication-v2'
 import type { SupplyPublishResult } from '@/modules/capability-supply/supply-actions'
-import { parseDecimalExactAmount, rescaleExactAmount } from '@/modules/money/public'
+import {
+  displayPriceFromPricingConfig,
+  fixedAudPricingConfig,
+  formatCurrencyAmount,
+  parseDecimalExactAmount,
+  rescaleExactAmount,
+} from '@/modules/money/public'
+
+export const TACTILE =
+  'enabled:active:scale-[0.98] transition-transform duration-100 ease-out motion-reduce:transition-none motion-reduce:active:scale-100'
+
+export type HttpsUrlPreflight = 'empty' | 'invalid' | 'insecure' | 'valid'
+export type JsonPreflight = 'empty' | 'invalid' | 'not_object' | 'missing_fields' | 'valid'
+
+export function inspectHttpsUrl(value: string): HttpsUrlPreflight {
+  const trimmed = value.trim()
+  if (trimmed === '') return 'empty'
+  try {
+    const u = new URL(trimmed)
+    return u.protocol === 'https:' ? 'valid' : 'insecure'
+  } catch (cause) {
+    void cause
+    return 'invalid'
+  }
+}
+
+export function inspectJsonPayload(value: string, requiredKeys: readonly string[]): JsonPreflight {
+  const trimmed = value.trim()
+  if (trimmed === '') return 'empty'
+  try {
+    const parsed: unknown = JSON.parse(trimmed)
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return 'not_object'
+    const rec = parsed as Record<string, unknown>
+    const hasAll = requiredKeys.every((k) => k in rec && rec[k] !== undefined && rec[k] !== null)
+    return hasAll ? 'valid' : 'missing_fields'
+  } catch (cause) {
+    void cause
+    return 'invalid'
+  }
+}
+
+export const INSECURE_URL_DIAGNOSTIC = {
+  whatHappened: 'Insecure HTTP protocol.',
+  financialImpact: 'A$0.00 affected — endpoint discovery blocked.',
+  nextStep: 'Provide an HTTPS URL to ensure encrypted capability invocation.',
+} as const
+
+export const MALFORMED_JSON_DIAGNOSTIC = {
+  whatHappened: 'Malformed JSON payload.',
+  financialImpact: 'A$0.00 affected — plugin discovery blocked.',
+  nextStep: 'Ensure the JSON syntax is valid before discovering endpoints.',
+} as const
+
+export const PLUGIN_JSON_REQUIRED_KEYS = ['$schema', 'name'] as const
+export const MCP_JSON_REQUIRED_KEYS = ['$schema', 'mcpServers'] as const
 
 export type SourceKind = SupplySourceInput['kind']
 export type Environment = SupplySourceInput['environment']
@@ -77,9 +131,31 @@ export type SourceFieldState = Readonly<{
 }>
 
 export function sourceInput(value: SourceFieldState): SupplySourceInput | undefined {
-  if (value.sourceKind === 'openapi') return value.definitionUrl.trim() === '' ? undefined : { kind: 'openapi', definitionUrl: value.definitionUrl.trim(), environment: value.environment }
+  if (value.sourceKind === 'openapi') {
+    const trimmed = value.definitionUrl.trim()
+    if (trimmed === '') return undefined
+    try {
+      const u = new URL(trimmed)
+      if (u.protocol !== 'https:') return undefined
+    } catch (cause) {
+      void cause
+      return undefined
+    }
+    return { kind: 'openapi', definitionUrl: trimmed, environment: value.environment }
+  }
   if (value.sourceKind === 'mcp') {
-    if (value.mcpLocator === 'url') return value.serverUrl.trim() === '' ? undefined : { kind: 'mcp', serverUrl: value.serverUrl.trim(), environment: value.environment }
+    if (value.mcpLocator === 'url') {
+      const trimmed = value.serverUrl.trim()
+      if (trimmed === '') return undefined
+      try {
+        const u = new URL(trimmed)
+        if (u.protocol !== 'https:') return undefined
+      } catch (cause) {
+        void cause
+        return undefined
+      }
+      return { kind: 'mcp', serverUrl: trimmed, environment: value.environment }
+    }
     return value.registryName.trim() === '' ? undefined : {
       kind: 'mcp',
       registryName: value.registryName.trim(),
@@ -98,13 +174,56 @@ export function sourceInput(value: SourceFieldState): SupplySourceInput | undefi
       environment: value.environment,
     }
   }
-  return value.resourceUrl.trim() === '' ? undefined : { kind: 'x402', resourceUrl: value.resourceUrl.trim(), method: value.x402Method, environment: value.environment }
+  const trimmedResource = value.resourceUrl.trim()
+  if (trimmedResource === '') return undefined
+  try {
+    const u = new URL(trimmedResource)
+    if (u.protocol !== 'https:') return undefined
+  } catch (cause) {
+    void cause
+    return undefined
+  }
+  return { kind: 'x402', resourceUrl: trimmedResource, method: value.x402Method, environment: value.environment }
 }
 
-export function sourceInputError(kind: SourceKind, locator: 'url' | 'registry'): string {
-  if (kind === 'openapi') return 'Enter the public HTTPS URL for the OpenAPI document.'
-  if (kind === 'mcp') return locator === 'url' ? 'Enter the MCP server URL.' : 'Enter its MCP Registry name.'
+export function sourceInputError(kind: SourceKind, locator: 'url' | 'registry', value?: SourceFieldState): string {
+  if (kind === 'openapi') {
+    if (value?.definitionUrl) {
+      try {
+        const u = new URL(value.definitionUrl.trim())
+        if (u.protocol !== 'https:') return 'OpenAPI URL must be a public HTTPS endpoint.'
+      } catch (cause) {
+        void cause
+        return 'Enter a valid HTTPS URL for the OpenAPI document.'
+      }
+    }
+    return 'Enter the public HTTPS URL for the OpenAPI document.'
+  }
+  if (kind === 'mcp') {
+    if (locator === 'url') {
+      if (value?.serverUrl) {
+        try {
+          const u = new URL(value.serverUrl.trim())
+          if (u.protocol !== 'https:') return 'MCP server URL must use HTTPS.'
+        } catch (cause) {
+          void cause
+          return 'Enter a valid HTTPS URL for the MCP server.'
+        }
+      }
+      return 'Enter the MCP server URL.'
+    }
+    return 'Enter its MCP Registry name.'
+  }
   if (kind === 'agent_plugin') return 'Provide valid plugin.json and mcp.json documents.'
+  if (value?.resourceUrl) {
+    try {
+      const u = new URL(value.resourceUrl.trim())
+      if (u.protocol !== 'https:') return 'x402 resource URL must use HTTPS.'
+    } catch (cause) {
+      void cause
+      return 'Enter a valid HTTPS x402 resource URL.'
+    }
+  }
   return 'Enter the x402 resource URL.'
 }
 
@@ -133,6 +252,18 @@ export function pricingInput(
   return amount === undefined ? undefined : { kind: 'fixed_aud', amount }
 }
 
+export function publicationPriceSummary(pricing: PublishSupplyToolV2Input['pricing'] | undefined): string {
+  if (pricing === undefined) return 'Price needed'
+  if (pricing.kind === 'free') return 'Free'
+  if (pricing.kind === 'source_x402') return 'Provider source payment'
+  const config = fixedAudPricingConfig(pricing.amount)
+  if (config === undefined) return 'Price needed'
+  const display = displayPriceFromPricingConfig(config)
+  if (display.kind !== 'fixed') return 'Price confirmed at inspection'
+  const amount = rescaleExactAmount(display.amount, 2) ?? display.amount
+  return formatCurrencyAmount(amount)
+}
+
 export function publicationError(reason: string): string {
   return REASON_COPY[reason] ?? REASON_COPY_FALLBACK
 }
@@ -145,10 +276,21 @@ export function publicationValidationMessage(input: Readonly<{
   connectionRef: string
   attestation: Record<AttestationKey, boolean>
 }>): string | undefined {
+  const termsMessage = publicationTermsValidationMessage(input)
+  if (termsMessage !== undefined) return termsMessage
+  if (!Object.values(input.attestation).every(Boolean)) return 'Confirm all three publication statements before submitting.'
+  return undefined
+}
+
+export function publicationTermsValidationMessage(input: Readonly<{
+  category: string
+  pricing: PublishSupplyToolV2Input['pricing'] | undefined
+  requiresConnection: boolean
+  connectionRef: string
+}>): string | undefined {
   if (input.category.trim() === '') return 'Enter a category before submitting this Tool.'
   if (input.pricing === undefined) return 'Enter a valid AUD price, or choose Free.'
   if (input.requiresConnection && input.connectionRef === '') return 'Choose a connected source before submitting this Tool.'
-  if (!Object.values(input.attestation).every(Boolean)) return 'Confirm all three publication statements before submitting.'
   return undefined
 }
 

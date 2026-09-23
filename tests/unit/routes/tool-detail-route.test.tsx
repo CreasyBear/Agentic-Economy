@@ -35,11 +35,8 @@ vi.mock('@/modules/market/x402-directory-index.functions', () => ({
   readX402DirectoryCanonicalUrlForToolServer: readCanonicalMock,
 }))
 
-import {
-  PublicToolDetail,
-  Route,
-  type ToolDetailPresentationResult,
-} from '@/routes/tools.$toolRef'
+import { PublicToolDetail, Route } from '@/routes/tools.$toolRef'
+import type { ToolDetailPresentationResult } from '@/modules/market/tool-detail-presentation'
 
 const sourceRecord = {
   operationId: 'operation:invoice.extract',
@@ -330,11 +327,12 @@ describe('/tools/$toolRef', () => {
     )
   })
 
-  it('keeps one safe continuation beside switchable research views and focuses each full record', () => {
+  it('keeps one CSS-responsive continuation beside switchable research views and focuses each full record', () => {
     const rendered = renderInspectorWithRouter('full')
     const inspector = screen.getByRole('article', {
       name: 'Invoice line-item extraction Tool details',
     })
+    expect(inspector.querySelectorAll('[data-tool-layout="responsive"]')).toHaveLength(1)
     expect(within(inspector).getAllByRole('complementary', {
       name: 'What you can do next',
     })).toHaveLength(1)
@@ -395,6 +393,7 @@ describe('/tools/$toolRef', () => {
 
     const execution = screen.getByRole('complementary', { name: 'What you can do next' })
     expect(within(execution).getByText(/Paste this reference into your existing agent client/i)).toBeTruthy()
+    expect(within(execution).getByText(/exact buyer amount in AUD/i)).toBeTruthy()
     expect(within(execution).getByRole('button', { name: 'Copy Tool reference' })).toBeTruthy()
     expect(within(execution).queryByText(/ae connect/)).toBeNull()
     expect(within(execution).queryByText(/ae call/)).toBeNull()
@@ -422,7 +421,7 @@ describe('/tools/$toolRef', () => {
   })
 
   it('keeps x402 details public without advertising browser execution', () => {
-const x402Tool = projectCapabilityTool({
+    const x402Tool = projectCapabilityTool({
       ...sourceRecord,
       authentication: { kind: 'x402' },
       provenance: { ...sourceRecord.provenance, sourceKind: 'x402' },
@@ -441,6 +440,27 @@ const x402Tool = projectCapabilityTool({
     expect(within(execution).queryByText(/npm run -s ae -- recover/)).toBeNull()
   })
 
+  it('shows 0% Call fee on x402 Tool detail and does not show the Account loading fee', () => {
+    const x402Tool = projectCapabilityTool({
+      ...sourceRecord,
+      authentication: { kind: 'x402' },
+      provenance: { ...sourceRecord.provenance, sourceKind: 'x402' },
+    }, 2_000)
+
+    renderWithRouter({
+      kind: 'found',
+      schemaVersion: PublicToolRegistrySchemaVersion,
+      tool: x402Tool,
+    }, true)
+
+    const economics = screen.getByRole('region', { name: 'Price and market evidence' })
+    expect(within(economics).getByText('Call fee')).toBeTruthy()
+    expect(within(economics).getByText('0%')).toBeTruthy()
+    expect(within(economics).queryByText('Top-up fee')).toBeNull()
+    expect(within(economics).queryByText('5% fee + GST on the fee')).toBeNull()
+    expect(within(economics).queryByText('2.5% fee + GST on the fee')).toBeNull()
+  })
+
   it('does not infer caller readiness from browser credentials', () => {
     renderWithRouter({
       kind: 'found',
@@ -450,6 +470,8 @@ const x402Tool = projectCapabilityTool({
 
     const continuation = screen.getByRole('complementary', { name: 'What you can do next' })
     expect(within(continuation).getByRole('button', { name: 'Copy Tool reference' })).toBeTruthy()
+    expect(within(continuation).getByRole('link', { name: 'Connect an Agent first' }).getAttribute('href'))
+      .toBe(`/agent-access?resumeTool=${encodeURIComponent(tool.toolRef)}`)
     expect(screen.getByRole('region', { name: 'Operational' })).toBeTruthy()
     expect(screen.queryByText(/connected/i)).toBeNull()
   })
@@ -496,6 +518,7 @@ const x402Tool = projectCapabilityTool({
     const continuation = screen.getByRole('complementary', { name: 'What you can do next' })
     expect(within(continuation).getByRole('link', { name: 'Find Tool alternatives' })).toBeTruthy()
     expect(within(continuation).getByText(/not operational/i)).toBeTruthy()
+    expect(within(continuation).queryByText(/exact buyer amount in AUD/i)).toBeNull()
   })
 
   it('fails closed when a stale source sends a non-canonical availability posture', () => {

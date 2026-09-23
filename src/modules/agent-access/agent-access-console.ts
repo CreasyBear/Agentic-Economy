@@ -4,6 +4,7 @@ import { listAgentAccessKeysServer } from '@/modules/agent-access/agent-access.f
 import type { AgentAccessKeyInventoryItem } from '@/modules/agent-access/agent-access'
 import type { AgentAccessOwnerGrantReadback } from '@/modules/agent-access/policy'
 import type { AgentConnectionReadback } from '@/modules/agent-access/agent-connection'
+import { currentUtcMonthBounds } from '@/modules/common/freshness'
 import type { AccountFundingBalance } from '@/modules/money/server'
 import type {
   AgentActivityView,
@@ -119,6 +120,9 @@ type OwnerAgentReadback = Readonly<{
   }>
   usage: OwnerAgentUsageReadback
 }>
+
+export { currentUtcMonthBounds }
+
 const readOwnerAgentReadbackQuery = sourceQuery<Readonly<{
   principalRef: string
   periodStartAt: number
@@ -198,18 +202,6 @@ export async function loadAgentDirectoryReadback(
   return canonicalAgents.isDone
     ? withAccount
     : { ...withAccount, nextCursor: canonicalAgents.continueCursor }
-}
-
-export function currentUtcMonthBounds(now: number = Date.now()): Readonly<{
-  periodStartAt: number
-  periodEndAt: number
-}> {
-  const date = new Date(now)
-  const periodStartAt = Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), 1)
-  return {
-    periodStartAt,
-    periodEndAt: Date.UTC(date.getUTCFullYear(), date.getUTCMonth() + 1, 1),
-  }
 }
 
 function mapOwnerAgentReadback(
@@ -372,6 +364,7 @@ function projectAgentDetail(
     ...activity.map(({ updatedAt }) => updatedAt),
     0,
   )
+  const usage = ownerReadback === undefined ? ordered.find(({ usage }) => usage !== undefined)?.usage : ownerReadback.usage
   const agent: AgentDirectoryItem = {
     principalRef: canonical.principalRef,
     principalRevision: canonical.principalRevision,
@@ -387,8 +380,10 @@ function projectAgentDetail(
     connectionCount: connections.length,
     connectorDisplayNames: [...new Set(connections.map(({ connectorDisplayName }) => connectorDisplayName))],
     authorityMode: current?.key.authorityMode ?? canonical.authorityMode,
+    ...(usage?.settledSpend !== undefined ? { monthlySettledSpend: usage.settledSpend } : {}),
+    ...(current?.grant !== undefined ? { monthlyLimit: current.grant.budget.maximumMonthlySpend } : {}),
+    ...(usage?.amountCoverage !== undefined ? { monthlySpendCoverage: usage.amountCoverage } : {}),
   }
-  const usage = ownerReadback === undefined ? ordered.find(({ usage }) => usage !== undefined)?.usage : ownerReadback.usage
   const dataState = ownerReadback === undefined
     ? ordered.length === 0 || allUnavailable
       ? 'unavailable' as const

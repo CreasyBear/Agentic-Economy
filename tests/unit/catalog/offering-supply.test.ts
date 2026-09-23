@@ -167,6 +167,24 @@ describe('integrated Offering supply projection', () => {
       kind: 'external_operation', name: 'Mapped', summary: 'Do not publish this.', url: 'https://[::ffff:7f00:1]/admin', provenance: 'business_declared',
     })).toEqual({ kind: 'invalid', reason: 'external_operation_url_invalid' })
   })
+
+  it('admits fc2.com and fdic.gov as public HTTPS and refuses unique-local or RFC1918-mapped 6to4/NAT64', () => {
+    expect(validateOfferingAccessPath({
+      kind: 'external_operation', name: 'Fc2', summary: 'Public HTTPS host.', url: 'https://fc2.com/docs', provenance: 'business_declared',
+    }).kind).toBe('valid')
+    expect(validateOfferingAccessPath({
+      kind: 'external_operation', name: 'Fdic', summary: 'Public HTTPS host.', url: 'https://fdic.gov/tools', provenance: 'business_declared',
+    }).kind).toBe('valid')
+    expect(validateOfferingAccessPath({
+      kind: 'external_operation', name: 'Ula', summary: 'Unique local.', url: 'https://[fd12:3456:789a::1]/admin', provenance: 'business_declared',
+    })).toEqual({ kind: 'invalid', reason: 'external_operation_url_invalid' })
+    expect(validateOfferingAccessPath({
+      kind: 'external_operation', name: 'SixToFour', summary: 'Private 6to4.', url: 'https://[2002:c0a8:101::1]/admin', provenance: 'business_declared',
+    })).toEqual({ kind: 'invalid', reason: 'external_operation_url_invalid' })
+    expect(validateOfferingAccessPath({
+      kind: 'external_operation', name: 'Nat64', summary: 'Private NAT64.', url: 'https://[64:ff9b::c0a8:101]/admin', provenance: 'business_declared',
+    })).toEqual({ kind: 'invalid', reason: 'external_operation_url_invalid' })
+  })
 })
 
 function humanPath(): OfferingAccessPathRecord {

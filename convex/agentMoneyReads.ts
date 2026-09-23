@@ -1,4 +1,4 @@
-import { actionGeneric, internalMutationGeneric, mutationGeneric } from 'convex/server'
+import { actionGeneric, internalMutationGeneric, queryGeneric } from 'convex/server'
 import type { Infer } from 'convex/values'
 
 import {
@@ -59,7 +59,7 @@ export const balance = actionGeneric({
   },
 })
 
-export const activity = mutationGeneric({
+export const activity = queryGeneric({
   args: agentActivityArgs,
   returns: agentActivityResult,
   handler: listAgentActivityHandler,

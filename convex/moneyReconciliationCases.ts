@@ -3,6 +3,7 @@ import { v } from 'convex/values'
 
 import { mutation, query } from './_generated/server'
 import { resolveBusinessActor } from './authz'
+import { requireSourceWrite, sourceWriteArgs } from './sourceWriteAdmission'
 
 const caseKind = v.union(
   v.literal('projection_mismatch'),
@@ -75,6 +76,9 @@ export const resolveOwnerCase = mutation({
     caseRef: v.string(),
     confirmation: v.string(),
     resolutionEvidenceRef: v.string(),
+    operationKey: v.optional(v.string()),
+    correlationId: v.optional(v.string()),
+    ...sourceWriteArgs,
   },
   returns: v.union(
     v.object({ kind: v.literal('resolved'), caseRef: v.string() }),
@@ -95,6 +99,10 @@ export const resolveOwnerCase = mutation({
       || args.resolutionEvidenceRef !== args.resolutionEvidenceRef.trim()
       || !/^[\u0020-\u007e]{1,500}$/u.test(args.resolutionEvidenceRef)) {
       return { kind: 'refused' as const, code: 'money_case_resolution_invalid' }
+    }
+    if (row.kind === 'processor_difference') {
+      const sourceWrite = await requireSourceWrite(ctx, args, 'billing')
+      if (sourceWrite.kind === 'rejected') return { kind: 'refused' as const, code: 'source_write_denied' }
     }
     const now = Date.now()
     await ctx.db.patch(row._id, {

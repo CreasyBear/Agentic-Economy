@@ -1,13 +1,16 @@
 import { describe, expect, it } from 'vitest'
 
 import { api, internal } from '../../convex/_generated/api'
+import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { convexTestWithWorkers } from '../helpers/convex-fixtures'
 import { withoutSourceWrite, withSourceWrite } from '../helpers/source-write-admission'
 import {
   createPublishedBusinessOwner,
   openApiSource,
   prepareOwnerPublicationCommand,
+  publishOwnerOpenApiCapability,
   seedCatalogOffering,
+  seedPaidX402Publication,
   seedSupplyAgentPrincipal,
 } from './capability-supply-owner-funnel-harness'
 
@@ -28,33 +31,21 @@ describe('owner capability withdraw and republish', () => {
       1,
       sourceHash,
     )
-    const prepared = await prepareOwnerPublicationCommand(
+    const { prepared, published: first } = await publishOwnerOpenApiCapability({
       backend,
       businessId,
+      owner,
       offeringRef,
-      1,
       sourceHash,
-      openApiSource('owner.test.revision'),
-      'owner-supply:owner-test-revision:r1',
-      {
+      capabilityId: 'owner.test.revision',
+      operationKey: 'owner-supply:owner-test-revision:r1',
+      catalogOrigin: {
         kind: 'catalog_offering',
         offeringRef,
         offeringRevision: 1,
         offeringSourceHash: sourceHash,
       },
-    )
-    if (prepared.kind === 'refused')
-      throw new Error(
-        `owner_test_publication_prepare_failed:${prepared.reason}`,
-      )
-    const first = await owner.mutation(
-      api.capabilitySupply.publishPreparedCapability,
-      prepared.command,
-    )
-    if (first.kind === 'refused')
-      throw new Error(`owner_test_publication_failed:${first.reason}`)
-    if (first.kind !== 'published')
-      throw new Error('owner_test_publication_replayed_unexpectedly')
+    })
 
     const observeReadiness = async (
       publicationRef: string,
@@ -457,6 +448,399 @@ describe('owner capability withdraw and republish', () => {
       ))).toBe(true)
     }
     expect(evidence.proofUses).toEqual([])
+  })
+
+  it('refuses late canary promotion after publication withdrawal', async () => {
+    const backend = convexTestWithWorkers({ pauseWorkpool: true })
+    const slug = 'withdrawn-canary-late-promotion'
+    const {
+      businessId,
+      owner,
+      canonicalAccountRef,
+      offeringRef,
+      sourceHash,
+      published,
+    } = await seedPaidX402Publication(backend, slug)
+
+    await backend.mutation(
+      internal.capabilitySupplyCanaryFunding.provisionSellerOnboardingCanaryFunding,
+      { now: Date.now() },
+    )
+
+    const canaryRequested = await backend.mutation(
+      internal.capabilitySupplyOwnerCanary.requestSellerOnboardingCanaryForAdmittedPublication,
+      {
+        publicationRef: published.publicationRef,
+        publicationRevision: published.publicationRevision,
+        operationKey: `seller-canary:${slug}`,
+        correlationId: `seller-canary:${slug}`,
+      },
+    )
+    if (canaryRequested.kind !== 'enqueued' && canaryRequested.kind !== 'replayed') {
+      throw new Error(
+        `seller_canary_request_failed:${canaryRequested.kind === 'refused'
+          ? canaryRequested.code
+          : canaryRequested.kind}`,
+      )
+    }
+    const pendingCall = await backend.run(async (ctx) => await ctx.db
+      .query('capabilityCalls')
+      .withIndex('by_callRef', (query) => query.eq('callRef', canaryRequested.callRef))
+      .unique())
+    expect(pendingCall).toMatchObject({
+      callRef: canaryRequested.callRef,
+      toolRef: published.toolRef,
+      state: 'pending',
+      sellerOnboardingCanary: { canaryRef: canaryRequested.canaryRef },
+    })
+
+    const maintenanceBase = {
+      businessId,
+      offeringRef,
+      offeringRevision: 1,
+      offeringSourceHash: sourceHash,
+      publicationRef: published.publicationRef,
+      publicationRevision: published.publicationRevision,
+      reasonCode: 'lifecycle_withdraw',
+      evidenceRefs: ['lifecycle:withdraw'],
+    }
+    await expect(
+      owner.mutation(
+        api.capabilitySupplyOwnerFunnel.withdrawOwnerCapability,
+        await withSourceWrite('catalog_publish', {
+          ...maintenanceBase,
+          operationKey: 'lifecycle-withdraw',
+          correlationId: 'lifecycle-withdraw',
+        }),
+      ),
+    ).resolves.toMatchObject({ kind: 'withdrawn', revision: published.publicationRevision })
+
+    const withdrawnPublication = await backend.run(async (ctx) => await ctx.db
+      .query('capabilityPublications')
+      .withIndex('by_publicationRef_and_revision', (query) => (
+        query.eq('publicationRef', published.publicationRef)
+          .eq('revision', published.publicationRevision)
+      ))
+      .unique())
+    expect(withdrawnPublication?.disposition).toBe('withdrawn')
+
+    const lateCompletedAt = Date.now()
+    await backend.run(async (ctx) => {
+      if (pendingCall === null) throw new Error('pending_canary_call_missing')
+      await ctx.db.patch(pendingCall._id, {
+        state: 'completed',
+        dispatchState: 'completed',
+        updatedAt: lateCompletedAt,
+      })
+    })
+
+    const completedCall = await backend.run(async (ctx) => await ctx.db
+      .query('capabilityCalls')
+      .withIndex('by_callRef', (query) => query.eq('callRef', canaryRequested.callRef))
+      .unique())
+    expect(completedCall).toMatchObject({
+      callRef: canaryRequested.callRef,
+      state: 'completed',
+      toolRef: published.toolRef,
+      sellerOnboardingCanary: { canaryRef: canaryRequested.canaryRef },
+    })
+
+    await expect(
+      backend.mutation(internal.catalogOfferingMutations.promoteAdmittedSellerCanary, {
+        canaryRef: canaryRequested.canaryRef,
+      }),
+    ).resolves.toEqual({ kind: 'refused', code: 'target_drift' })
+
+    const stillWithdrawn = await backend.run(async (ctx) => await ctx.db
+      .query('capabilityPublications')
+      .withIndex('by_publicationRef_and_revision', (query) => (
+        query.eq('publicationRef', published.publicationRef)
+          .eq('revision', published.publicationRevision)
+      ))
+      .unique())
+    expect(stillWithdrawn?.disposition).toBe('withdrawn')
+
+    const promotionKey = await backend.run(async (ctx) =>
+      ctx.db.query('operationKeys')
+        .withIndex('by_actor_operation_key', (query) =>
+          query.eq('actorRef', canonicalAccountRef)
+            .eq('operationName', 'promoteX402SellerCanary')
+            .eq('key', canaryRequested.canaryRef))
+        .unique())
+    expect(promotionKey).toBeNull()
+
+    const admissionCase = await backend.run(async (ctx) =>
+      ctx.db.query('capabilitySupplyAdmissionCases')
+        .withIndex('by_publicationRef_and_revision', (query) =>
+          query.eq('publicationRef', published.publicationRef)
+            .eq('publicationRevision', published.publicationRevision))
+        .unique())
+    expect(admissionCase?.terminalDecision).not.toBe('published')
+  })
+
+  it('refuses seller-canary promotion while provider routeability is frozen', async () => {
+    const freezeBackend = convexTestWithWorkers({ pauseWorkpool: true })
+    const freezeSlug = 'offboarding-freeze-canary'
+    const freezeEndpoint = 'https://provider.example/offboarding-freeze-lookup'
+    const freezeIdentity = await seedPaidX402Publication(freezeBackend, freezeSlug, {
+      endpoint: freezeEndpoint,
+      providerRef: `provider:x402:${freezeSlug}`,
+    })
+    const freezePublished = freezeIdentity.published
+    await freezeBackend.mutation(
+      internal.capabilitySupplyCanaryFunding.provisionSellerOnboardingCanaryFunding,
+      { now: Date.now() },
+    )
+    const freezeCanary = await freezeBackend.mutation(
+      internal.capabilitySupplyOwnerCanary.requestSellerOnboardingCanaryForAdmittedPublication,
+      {
+        publicationRef: freezePublished.publicationRef,
+        publicationRevision: freezePublished.publicationRevision,
+        operationKey: `freeze-canary:${freezeSlug}`,
+        correlationId: `freeze-canary:${freezeSlug}`,
+      },
+    )
+    if (freezeCanary.kind !== 'enqueued' && freezeCanary.kind !== 'replayed') {
+      throw new Error(`freeze_canary_request_failed:${freezeCanary.kind}`)
+    }
+    const offboardingStarted = await freezeIdentity.owner.mutation(
+      api.capabilityProviderOffboarding.startCase,
+      await withSourceWrite('catalog_publish', {
+        businessId: freezeIdentity.businessId,
+        idempotencyKey: 'offboarding-freeze:start',
+        operationKey: 'offboarding-freeze:start',
+        correlationId: 'offboarding-freeze:start',
+        retentionPolicyVersion: 'retention-policy:2026-09',
+        proof: {
+          reverificationId: 'rev_offboarding_freeze_start',
+          firstFactorAgeMinutes: 0,
+          secondFactorAgeMinutes: -1,
+        },
+      }),
+    )
+    if (offboardingStarted.kind !== 'available') {
+      throw new Error('offboarding_start_failed')
+    }
+    await freezeBackend.mutation(internal.capabilityProviderOffboarding.freezeRouteability, {
+      caseRef: offboardingStarted.status.caseRef,
+    })
+    const frozenPromotion = await freezeBackend.mutation(
+      internal.catalogOfferingMutations.promoteAdmittedSellerCanary,
+      { canaryRef: freezeCanary.canaryRef },
+    )
+    expect(frozenPromotion).toMatchObject({ kind: 'refused', code: 'target_drift' })
+
+    const frozenPub = await freezeBackend.run(async (ctx) => {
+      const publication = await ctx.db.query('capabilityPublications')
+        .withIndex('by_publicationRef_and_revision', (query) =>
+          query.eq('publicationRef', freezePublished.publicationRef)
+            .eq('revision', freezePublished.publicationRevision))
+        .unique()
+      if (publication === null) return null
+      return await ctx.db.query('capabilityOfferings')
+        .withIndex('by_offeringId', (query) => query.eq('offeringId', publication.offeringId))
+        .unique()
+    })
+    expect(frozenPub?.status).toBe('active')
+
+    const frozenCanary = await freezeBackend.run(async (ctx) =>
+      ctx.db.query('capabilityCalls')
+        .withIndex('by_callRef', (query) => query.eq('callRef', freezeCanary.callRef))
+        .unique())
+    expect(['pending', 'refused']).toContain(frozenCanary?.state)
+  })
+
+  it('isolates accepted Calls across republish revisions and rejects material drift', async () => {
+    const backend = convexTestWithWorkers()
+    const { businessId, owner } = await createPublishedBusinessOwner(
+      backend,
+      'publication-republish-isolation',
+    )
+    const offeringRef = 'catalog-offering:publication-republish-isolation'
+    const sourceHash = 'catalog-source:publication-republish-isolation:v1'
+    await seedCatalogOffering(
+      backend,
+      businessId,
+      offeringRef,
+      1,
+      1,
+      sourceHash,
+    )
+    const { published: first } = await publishOwnerOpenApiCapability({
+      backend,
+      businessId,
+      owner,
+      offeringRef,
+      sourceHash,
+      capabilityId: 'publication.republish.isolation',
+      operationKey: 'owner-supply:publication-r1',
+      catalogOrigin: {
+        kind: 'catalog_offering',
+        offeringRef,
+        offeringRevision: 1,
+        offeringSourceHash: sourceHash,
+      },
+      observeReadiness: {
+        operationKey: 'readiness-probe-r1',
+        correlationId: 'readiness-probe-r1',
+        evidenceRef: 'readiness:probe:r1',
+      },
+    })
+
+    const acceptedCallRef = 'operation-invocation:publication-r1-accepted'
+    const acceptedAt = Date.now()
+    await backend.run(async (ctx) => {
+      await ctx.db.insert('capabilityCalls', {
+        quoteRef: 'operation-commitment:publication-r1-accepted',
+        callRef: acceptedCallRef,
+        principalId: 'principal:buyer-account',
+        ownerId: 'account:buyer-account',
+        credentialId: 'credential:buyer-account',
+        applicationRef: 'agentic-economy',
+        toolRef: first.toolRef,
+        idempotencyKey: 'purchase:publication-r1-accepted',
+        environment: 'production',
+        grantRef: 'grant:publication-r1',
+        grantGeneration: 1,
+        policyDigest: canonicalDigest({ policy: 'publication-r1' }),
+        grantExpiresAt: acceptedAt + 600_000,
+        toolJson: '{}',
+        inputJson: '{"request":"republish-isolation"}',
+        inputDigest: canonicalDigest({ request: 'republish-isolation' }),
+        requestDigest: canonicalDigest({ request: 'republish-isolation', toolRef: first.toolRef }),
+        state: 'completed',
+        createdAt: acceptedAt - 1_000,
+        updatedAt: acceptedAt,
+        result: {
+          kind: 'completed',
+          callRef: acceptedCallRef,
+          toolRef: first.toolRef,
+          output: { result: 'accepted-r1' },
+          evidenceHash: canonicalDigest({ result: 'accepted-r1' }),
+        },
+      })
+    })
+
+    const maintenanceBase = {
+      businessId,
+      offeringRef,
+      offeringRevision: 1,
+      offeringSourceHash: sourceHash,
+      publicationRef: first.publicationRef,
+      publicationRevision: first.publicationRevision,
+      reasonCode: 'lifecycle_withdraw',
+      evidenceRefs: ['lifecycle:withdraw'],
+    }
+    await owner.mutation(
+      api.capabilitySupplyOwnerFunnel.withdrawOwnerCapability,
+      await withSourceWrite('catalog_publish', {
+        ...maintenanceBase,
+        operationKey: 'lifecycle-withdraw',
+        correlationId: 'lifecycle-withdraw',
+      }),
+    )
+
+    const publicationRow = await backend.run(async (ctx) => await ctx.db
+      .query('capabilityPublications')
+      .withIndex('by_publicationRef_and_revision', (query) => (
+        query.eq('publicationRef', first.publicationRef)
+          .eq('revision', first.publicationRevision)
+      ))
+      .unique())
+    if (publicationRow === null) throw new Error('publication_missing')
+    const originalPriceDigest = publicationRow.priceDigest
+    const originalSourceDescriptor = publicationRow.sourceDescriptorJson
+
+    await backend.run(async (ctx) => {
+      await ctx.db.patch(publicationRow._id, {
+        priceDigest: `sha256:${'b'.repeat(64)}`,
+      })
+    })
+    await expect(
+      owner.mutation(
+        api.capabilitySupplyOwnerFunnel.republishOwnerCapability,
+        await withSourceWrite('catalog_publish', {
+          ...maintenanceBase,
+          operationKey: 'publication-republish-drift',
+          correlationId: 'publication-republish-drift',
+          proof: {
+            reverificationId: 'test:publication-republish-drift',
+            firstFactorAgeMinutes: 0,
+            secondFactorAgeMinutes: -1,
+          },
+        }),
+      ),
+    ).resolves.toEqual({ kind: 'refused', reason: 'pricing_config_invalid' })
+
+    await backend.run(async (ctx) => {
+      await ctx.db.patch(publicationRow._id, {
+        priceDigest: originalPriceDigest,
+        sourceDescriptorJson: `${originalSourceDescriptor} `,
+      })
+    })
+    await expect(
+      owner.mutation(
+        api.capabilitySupplyOwnerFunnel.republishOwnerCapability,
+        await withSourceWrite('catalog_publish', {
+          ...maintenanceBase,
+          operationKey: 'publication-republish-source-drift',
+          correlationId: 'publication-republish-source-drift',
+          proof: {
+            reverificationId: 'test:publication-republish-source-drift',
+            firstFactorAgeMinutes: 0,
+            secondFactorAgeMinutes: -1,
+          },
+        }),
+      ),
+    ).resolves.toEqual({ kind: 'refused', reason: 'source_invalid' })
+
+    await backend.run(async (ctx) => {
+      await ctx.db.patch(publicationRow._id, {
+        sourceDescriptorJson: originalSourceDescriptor,
+      })
+    })
+    const republished = await owner.mutation(
+      api.capabilitySupplyOwnerFunnel.republishOwnerCapability,
+      await withSourceWrite('catalog_publish', {
+        ...maintenanceBase,
+        operationKey: 'lifecycle-republish',
+        correlationId: 'lifecycle-republish',
+        proof: {
+          reverificationId: 'test:lifecycle-republish',
+          firstFactorAgeMinutes: 0,
+          secondFactorAgeMinutes: -1,
+        },
+      }),
+    )
+    if (republished.kind !== 'republished') {
+      throw new Error(`lifecycle_republish_failed:${republished.kind}`)
+    }
+    expect(republished.revision).toBe(2)
+    expect(republished.toolRef).not.toBe(first.toolRef)
+
+    const r1Call = await backend.run(async (ctx) => await ctx.db
+      .query('capabilityCalls')
+      .withIndex('by_callRef', (query) => query.eq('callRef', acceptedCallRef))
+      .unique())
+    expect(r1Call).toMatchObject({
+      callRef: acceptedCallRef,
+      toolRef: first.toolRef,
+      state: 'completed',
+      result: {
+        kind: 'completed',
+        toolRef: first.toolRef,
+      },
+    })
+    expect(r1Call?.toolRef).not.toBe(republished.toolRef)
+
+    const r2Publication = await backend.run(async (ctx) => await ctx.db
+      .query('capabilityPublications')
+      .withIndex('by_publicationRef_and_revision', (query) => (
+        query.eq('publicationRef', first.publicationRef).eq('revision', 2)
+      ))
+      .unique())
+    expect(r2Publication?.disposition).toBe('current')
+    expect(r2Publication?.toolRef).toBe(republished.toolRef)
   })
 })
 

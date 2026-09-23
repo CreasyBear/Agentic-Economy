@@ -3,18 +3,19 @@ import { degradeBackend } from '@/lib/observability/degrade-backend'
 import { normalizePricingConfig, pricingConfigDigest, type PricingConfig } from '@/modules/money/public'
 import type { StableHashValue } from '@/modules/common/stable-hash'
 import {
-  capabilityToolId,
-  capabilityOfferingRegistrationHash,
   capabilityBindingRegistrationHash,
+  capabilityOfferingRegistrationHash,
   defineCapabilityOfferingRegistration,
   defineCapabilityTransportBindingRegistration,
-  admitRegisteredTransport,
-  createPublicToolRef,
   type CapabilityOfferingRegistration,
   type CapabilityTransportBindingRegistration,
-  type CapabilityPublicationBindingDraft,
-  type CapabilityPublicationOfferingDraft,
-} from '@/modules/capability-supply/public'
+} from '../registration-schema'
+import { capabilityToolId, createPublicToolRef } from '../public-tool-ref'
+import { admitRegisteredTransport } from '../transport-adapters'
+import type {
+  CapabilityPublicationBindingDraft,
+  CapabilityPublicationOfferingDraft,
+} from '../publication-importer-types'
 import { contractRefFromRow } from '../offering/registration'
 import type { CapabilityPublicationImport } from '../publication-importers'
 import type { RegistrationContext } from '../shared/command-envelope'

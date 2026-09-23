@@ -1,5 +1,9 @@
 # Planning workspace
 
+Local-only. Maps under this directory (including `codebase/CONCERNS.md`) are
+gitignored and **not a current work queue**. Quality campaigns 1–3 closed
+21 September 2026; use the [Campaign 3 programme re-audit](../docs/operations/code-quality-campaign-3-register.md).
+
 The previous planning snapshots, benchmark corpora and completed campaign records
 were [archived for rebaseline preparation](../docs/archive/README.md#planning-snapshots).
 They do not define the next delivery queue.

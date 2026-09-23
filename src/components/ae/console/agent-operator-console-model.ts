@@ -1,6 +1,6 @@
 import type { AeFact } from '@/components/ae/data/AeFactList'
 import { formatTimestamp } from '@/lib/ui/format-time'
-import { formatCurrencyAmount, type ExactAmount } from '@/modules/money/public'
+import { formatCurrencyAmount, formatDisplayAmount, type ExactAmount } from '@/modules/money/public'
 import type {
   AgentDetail,
   AgentDirectoryItem,
@@ -9,23 +9,132 @@ import type { PendingCallApproval } from '@/modules/capability-execution/call-ap
 import type { AgentConnectionReadback } from '@/modules/agent-access/public'
 import { NATIVE_MCP_CLIENTS } from '@/lib/cli-distribution'
 
+type AcceptedApprovalQuote = Extract<NonNullable<PendingCallApproval['decisionContext']>['acceptedQuote'], { kind: 'available' }>
+
 export function approvalFacts(approval: PendingCallApproval): readonly AeFact[] {
+  const context = approval.decisionContext
+  const acceptedQuote = context?.acceptedQuote.kind === 'available' ? context.acceptedQuote : undefined
   const facts: AeFact[] = [
-    { label: 'Consequence', value: consequenceLabel(approval.authorityRequest.consequence) },
+    {
+      label: 'Agent',
+      value: context === undefined
+        ? 'Agent details unavailable'
+        : context.agent.currentDisplayName === null
+          ? 'Current Agent name not available'
+          : `${context.agent.currentDisplayName} (current account label)`,
+    },
+    { label: 'Purpose', value: 'Not recorded for this Call' },
+    {
+      label: 'Provider',
+      value: acceptedQuote === undefined
+        ? 'Accepted Provider details unavailable'
+        : acceptedQuote.provider.name ?? `${acceptedQuote.provider.ref} (name not recorded)`,
+    },
+    {
+      label: 'Maximum AUD spend',
+      value: acceptedQuote === undefined ? 'Accepted Quote unavailable' : formatCurrencyAmount(acceptedQuote.maximumSpend),
+      mono: acceptedQuote !== undefined,
+    },
+    { label: 'Action class', value: consequenceLabel(approval.authorityRequest.consequence) },
+    {
+      label: 'Declared effects',
+      value: acceptedQuote === undefined ? 'Accepted Tool contract unavailable' : approvalEffectsLabel(acceptedQuote.effects),
+    },
+    {
+      label: 'Declared data release',
+      value: acceptedQuote === undefined ? 'Accepted Tool contract unavailable' : approvalDataUseLabel(acceptedQuote.dataUse),
+    },
   ]
-  if (approval.authorityRequest.maximumSpend !== undefined) {
-    facts.push({ label: 'Maximum spend', value: formatCurrencyAmount(approval.authorityRequest.maximumSpend), mono: true})
-  }
-  facts.push({
-    label: 'Data fields',
-    value: approval.authorityRequest.dataFields.length === 0
-      ? 'None'
-      : approval.authorityRequest.dataFields.join(', '),
-  })
   return facts
 }
 
+export function approvalCanApprove(approval: PendingCallApproval): boolean {
+  return approval.decisionContext?.acceptedQuote.kind === 'available'
+}
+
+export function approvalToolName(approval: PendingCallApproval): string {
+  return approval.decisionContext?.acceptedQuote.kind === 'available'
+    ? approval.decisionContext.acceptedQuote.tool.name
+    : 'Tool details unavailable'
+}
+
+export function approvalToolDescription(approval: PendingCallApproval): string {
+  return approval.decisionContext?.acceptedQuote.kind === 'available'
+    ? approval.decisionContext.acceptedQuote.tool.description
+    : 'The accepted Quote could not be read from this approval source.'
+}
+
+function approvalEffectsLabel(effects: AcceptedApprovalQuote['effects']): string {
+  if (effects.length === 0) return 'None declared in the accepted Tool contract; this is not a guarantee of no effects.'
+  return effects.map(effect => `${effectClassLabel(effect.class)} · ${reversibilityLabel(effect.reversibility)}`).join('; ')
+}
+
+function approvalDataUseLabel(dataUse: AcceptedApprovalQuote['dataUse']): string {
+  if (dataUse.length === 0) return 'None declared in the accepted Tool contract; this is not a guarantee of no disclosure.'
+  return dataUse.map(declaration => {
+    const field = declaration.inputPointer.slice(1).replaceAll('~1', '/').replaceAll('~0', '~').replaceAll('/', '.')
+    const recipient = declaration.recipient.kind === 'candidate_binding'
+      ? 'candidate Provider'
+      : declaration.recipient.kind === 'selected_binding'
+        ? 'selected Provider'
+        : `named recipient ${declaration.recipient.recipientId}`
+    const purposes = declaration.purposes.map(humanizeIdentifier).join(', ')
+    return `${dataClassificationLabel(declaration.classification)} ${field} to ${recipient} during ${declaration.phase} for ${purposes}`
+  }).join('; ')
+}
+
+function effectClassLabel(effectClass: 'data_release' | 'financial_exposure' | 'external_state_change'): string {
+  if (effectClass === 'data_release') return 'Releases data'
+  if (effectClass === 'financial_exposure') return 'Creates financial exposure'
+  return 'Changes external state'
+}
+
+function reversibilityLabel(reversibility: 'not_applicable' | 'reversible' | 'conditional' | 'irreversible'): string {
+  if (reversibility === 'not_applicable') return 'reversibility not applicable'
+  if (reversibility === 'conditional') return 'reversibility depends on conditions'
+  return reversibility
+}
+
+function dataClassificationLabel(classification: 'public' | 'personal' | 'sensitive' | 'credential'): string {
+  if (classification === 'public') return 'Public data:'
+  if (classification === 'personal') return 'Personal data:'
+  if (classification === 'sensitive') return 'Sensitive data:'
+  return 'Credential:'
+}
+
+function humanizeIdentifier(value: string): string {
+  return value.replaceAll(/[._-]+/gu, ' ')
+}
+
 export function agentFacts(detail: AgentDetail): readonly AeFact[] {
+  const usage = detail.usage
+  const calls = usage === undefined
+    ? 'Unavailable'
+    : `${usage.callCount} this month · ${usage.outcomeUnknownCallCount === 0
+      ? 'none need checking'
+      : `${usage.outcomeUnknownCallCount} ${usage.outcomeUnknownCallCount === 1 ? 'needs' : 'need'} checking`}`
+  return [
+    { label: 'Authority', value: scopeLabel(detail.authorityMode) },
+    { label: 'Monthly limit', value: formatAmount(detail.grant?.budget.maximumMonthlySpend), mono: true },
+    { label: 'Recent Calls', value: calls },
+    { label: 'Last used', value: detail.agent.lastSeenAt === undefined
+      ? 'No activity recorded'
+      : formatTimestamp(detail.agent.lastSeenAt),
+      mono: true },
+  ]
+}
+
+export function agentSpendingPolicyFacts(detail: AgentDetail): readonly AeFact[] {
+  return [
+    { label: 'Per Call', value: formatAmount(detail.grant?.budget.maximumSpendPerCall), mono: true },
+    { label: 'Daily budget', value: formatAmount(detail.grant?.budget.maximumDailySpend), mono: true },
+    { label: 'Monthly budget', value: formatAmount(detail.grant?.budget.maximumMonthlySpend), mono: true },
+    { label: 'Rate', value: detail.grant === undefined ? 'Unavailable' : `${detail.grant.rate.maximumCallsPerMinute}/min · ${detail.grant.rate.maximumCallsPerHour}/hour`, mono: true },
+    { label: 'Concurrency', value: detail.grant === undefined ? 'Unavailable' : String(detail.grant.budget.maximumConcurrentCalls), mono: true },
+  ]
+}
+
+export function agentActivityFacts(detail: AgentDetail): readonly AeFact[] {
   const usage = detail.usage
   const settledCharges = usage === undefined
     ? 'Unavailable'
@@ -33,24 +142,20 @@ export function agentFacts(detail: AgentDetail): readonly AeFact[] {
       ? formatAmount(usage.settledSpend)
       : 'Amount coverage incomplete'
   return [
-    { label: 'Environment', value: environmentLabel(detail.agent.environment) },
-    { label: 'Last used', value: detail.agent.lastSeenAt === undefined
-      ? 'No activity recorded'
-      : formatTimestamp(detail.agent.lastSeenAt),
-      mono: true },
-    { label: 'Per call', value: formatAmount(detail.grant?.budget.maximumSpendPerCall), mono: true},
-    { label: 'Daily budget', value: formatAmount(detail.grant?.budget.maximumDailySpend), mono: true},
-    { label: 'Monthly budget', value: formatAmount(detail.grant?.budget.maximumMonthlySpend), mono: true},
-    { label: 'Rate', value: detail.grant === undefined ? 'Unavailable' : `${detail.grant.rate.maximumCallsPerMinute}/min · ${detail.grant.rate.maximumCallsPerHour}/hour`, mono: true},
-    { label: 'Concurrency', value: detail.grant === undefined ? 'Unavailable' : String(detail.grant.budget.maximumConcurrentCalls), mono: true},
-    { label: 'Authority', value: scopeLabel(detail.authorityMode) },
-    { label: 'Tools', value: toolAccessLabel(detail) },
     { label: 'Calls this month', value: usage === undefined ? 'Unavailable' : String(usage.callCount), mono: true },
     { label: 'Completed', value: usage === undefined ? 'Unavailable' : String(usage.completedCallCount), mono: true },
     { label: 'Needs checking', value: usage === undefined ? 'Unavailable' : String(usage.outcomeUnknownCallCount) },
     { label: 'Settled charges', value: settledCharges, mono: true },
     { label: 'Amount coverage', value: usage === undefined ? 'Unavailable' : usage.amountCoverage === 'complete' ? 'Complete' : 'Incomplete' },
     { label: 'Usage data', value: dataLabel(detail.dataState), muted: true },
+  ]
+}
+
+export function agentAccessFacts(detail: AgentDetail): readonly AeFact[] {
+  return [
+    { label: 'Environment', value: environmentLabel(detail.agent.environment) },
+    { label: 'Authority', value: scopeLabel(detail.authorityMode) },
+    { label: 'Tools', value: toolAccessLabel(detail) },
   ]
 }
 
@@ -75,6 +180,52 @@ export function agentStatusLabel(status: AgentDirectoryItem['status']): 'Connect
   if (status === 'attention') return 'Needs attention'
   if (status === 'expired') return 'Expired'
   return 'Disconnected'
+}
+
+export function agentStatusBadgeVariant(
+  status: AgentDirectoryItem['status'],
+): 'success' | 'warning' | 'destructive' | 'outline' {
+  switch (status) {
+    case 'connected':
+      return 'success'
+    case 'attention':
+      return 'warning'
+    case 'expired':
+      return 'destructive'
+    case 'disconnected':
+      return 'outline'
+    default: {
+      const exhaustive: never = status
+      return exhaustive
+    }
+  }
+}
+
+export function monthlySpendLabel(item: AgentDirectoryItem): string {
+  if (item.monthlyLimit !== undefined) {
+    if (item.monthlySpendCoverage === 'incomplete' || item.monthlySettledSpend === undefined) {
+      return `Unavailable / ${formatDisplayAmount(item.monthlyLimit)}`
+    }
+    return `${formatDisplayAmount(item.monthlySettledSpend)} / ${formatDisplayAmount(item.monthlyLimit)}`
+  }
+  if (item.monthlySettledSpend !== undefined) {
+    return `${formatDisplayAmount(item.monthlySettledSpend)} / No limit`
+  }
+  return '—'
+}
+
+export function monthlyUtilizationPercent(item: AgentDirectoryItem): number | undefined {
+  if (item.monthlyLimit === undefined || item.monthlySpendCoverage === 'incomplete') return undefined
+  if (item.monthlySettledSpend === undefined) return undefined
+  if (item.monthlyLimit.currency !== item.monthlySettledSpend.currency) return undefined
+
+  const spendUnits = BigInt(item.monthlySettledSpend.units)
+  const ceilingUnits = BigInt(item.monthlyLimit.units)
+  if (ceilingUnits <= 0n) return spendUnits > 0n ? 100 : 0
+  const basisPoints = (spendUnits * 10_000n) / ceilingUnits
+  const wholePercent = Number(basisPoints / 100n)
+  const fraction = Number(basisPoints % 100n)
+  return fraction >= 50 ? Math.min(100, wholePercent + 1) : Math.min(100, wholePercent)
 }
 
 export function agentRecoveryCopy(detail: AgentDetail): string | undefined {

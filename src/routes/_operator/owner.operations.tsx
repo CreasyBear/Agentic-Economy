@@ -1,8 +1,8 @@
 import { createFileRoute, Outlet, useLocation } from '@tanstack/react-router'
 import { Boxes } from 'lucide-react'
 
-import { AeProviderWorkspace } from '@/components/ae/offerings/AeProviderWorkspace'
-import { AeOwnerOfferingsList } from '@/components/ae/offerings/AeOwnerOfferings'
+import { AeProviderWorkspace } from '@/components/ae/offerings/provider-workspace/AeProviderWorkspace'
+import { AeProviderWorkspaceSkeleton } from '@/components/ae/offerings/provider-workspace/AeProviderWorkspaceSkeleton'
 import {
   readProviderWorkspaceConnectionsSummaryServer,
   readProviderWorkspacePageServer,
@@ -10,14 +10,13 @@ import {
   readProviderWorkspacePublicStatusServer,
   readOwnerProviderOffboardingServer,
 } from '@/components/ae/offerings/provider-workspace.functions'
-import { AeOperatorPage } from '@/components/ae/layout/AeOperatorPage'
 import { operatorRouteOptions } from '@/lib/operator/route-options'
 import { parseOwnerToolsCompatibilitySearch } from '@/lib/operator/supply-compatibility'
 
 export const Route = createFileRoute('/_operator/owner/operations')({
   staticData: {
     nav: {
-      label: 'Operations',
+      label: 'Tools',
       operator: {
         roles: ['owner'],
         group: 'Supply',
@@ -33,7 +32,7 @@ export const Route = createFileRoute('/_operator/owner/operations')({
   ...operatorRouteOptions,
   validateSearch: parseOwnerToolsCompatibilitySearch,
   loaderDeps: ({ search }) => ({ cursor: search.cursor }),
-  pendingComponent: OwnerOfferingsPending,
+  pendingComponent: AeProviderWorkspaceSkeleton,
   loader: async ({ deps }) => {
     const page = await readProviderWorkspacePageServer({ data: deps.cursor === undefined ? {} : { cursor: deps.cursor } })
     const inventory = page.inventory
@@ -47,7 +46,7 @@ export const Route = createFileRoute('/_operator/owner/operations')({
       offboarding: readOwnerProviderOffboardingServer().catch(() => ({ kind: 'unavailable' as const })),
     }
   },
-  head: () => ({ meta: [{ title: 'Operations | Agentic Economy' }, { name: 'robots', content: 'noindex' }] }),
+  head: () => ({ meta: [{ title: 'Tools | Agentic Economy' }, { name: 'robots', content: 'noindex' }] }),
   component: OwnerOfferingsRoute,
 })
 
@@ -58,15 +57,3 @@ function OwnerOfferingsRoute() {
   return <AeProviderWorkspace {...data} />
 }
 
-function OwnerOfferingsPending() {
-  return (
-    <AeOperatorPage
-      operatorRole="owner"
-      title="Operations"
-      description="Publish the exact tools agents can inspect and call."
-      currentPath="/owner/operations"
-    >
-      <AeOwnerOfferingsList offerings={[]} loading />
-    </AeOperatorPage>
-  )
-}

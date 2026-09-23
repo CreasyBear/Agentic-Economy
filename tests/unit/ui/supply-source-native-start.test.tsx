@@ -23,6 +23,37 @@ const candidate = {
   disposition: { kind: 'supported' as const },
 }
 
+function deferred<T>() {
+  let resolve: (value: T) => void = () => undefined
+  let reject: (reason: unknown) => void = () => undefined
+  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise
+    reject = rejectPromise
+  })
+  return { promise, resolve, reject }
+}
+
+const selectedOpenApiInitial = {
+  source: {
+    kind: 'openapi' as const,
+    definitionUrl: 'https://provider.example/openapi.yaml',
+    environment: 'sandbox' as const,
+  },
+  preview: {
+    kind: 'ready' as const,
+    sourceDigest: `sha256:${'b'.repeat(64)}`,
+    sourceRevision: `openapi:sha256:${'b'.repeat(64)}`,
+    provenance: {
+      sourceKind: 'openapi' as const,
+      sourceUrl: 'https://provider.example/openapi.yaml',
+      authority: 'unverified_public' as const,
+    },
+    authentication: [{ kind: 'public' as const }],
+    candidates: [candidate],
+  },
+  candidateRef: candidate.candidateRef,
+}
+
 describe('source-native Provider start', () => {
   it('hands the selected protected source directly to its durable connection ceremony', async () => {
     const protectedCandidate = {
@@ -175,9 +206,9 @@ describe('source-native Provider start', () => {
       />,
     )
 
-    expect((screen.getByLabelText('OpenAPI URL') as HTMLInputElement).value).toBe('https://provider.example/openapi.yaml')
-    expect(screen.getByLabelText('Production').getAttribute('aria-checked')).toBe('true')
-    expect(screen.getByRole('radio', { name: /Reference lookup/i }).getAttribute('aria-checked')).toBe('true')
+    expect(screen.getByText('Source complete')).toBeTruthy()
+    expect(screen.getByText('OpenAPI · https://provider.example/openapi.yaml · Production')).toBeTruthy()
+    expect(screen.getByText('Tool complete')).toBeTruthy()
     expect((screen.getByLabelText('Tool name') as HTMLInputElement).value).toBe('Reference lookup')
     expect((screen.getByLabelText('Description') as HTMLTextAreaElement).value).toBe('Looks up one public reference.')
     expect(onPreview).not.toHaveBeenCalled()
@@ -221,6 +252,10 @@ describe('source-native Provider start', () => {
     expect(screen.queryByLabelText(/tool definition/i)).toBeNull()
     expect(screen.queryByLabelText(/source revision/i)).toBeNull()
 
+    expect(screen.getByRole('button', { name: /x402 recommended for alpha/i }).getAttribute('aria-pressed')).toBe('true')
+    fireEvent.click(screen.getByRole('button', { name: 'Other source types' }))
+    fireEvent.mouseDown(screen.getByRole('tab', { name: 'OpenAPI' }))
+
     fireEvent.change(screen.getByLabelText('OpenAPI URL'), {
       target: { value: 'https://provider.example/openapi.yaml' },
     })
@@ -241,11 +276,13 @@ describe('source-native Provider start', () => {
       businessRef: 'business:one',
       candidate: expect.objectContaining({ candidateRef: candidate.candidateRef }),
     }))
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Send input data to the Provider' }))
+    fireEvent.click(screen.getByRole('radio', { name: 'Personal data' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Continue to review' }))
+    expect(screen.getByRole('group', { name: 'Tool publication decision' })).toBeTruthy()
     fireEvent.click(screen.getByRole('checkbox', { name: 'I am authorised to publish this service' }))
     fireEvent.click(screen.getByRole('checkbox', { name: 'The information is accurate' }))
     fireEvent.click(screen.getByRole('checkbox', { name: 'Publish after validation succeeds' }))
-    fireEvent.click(screen.getByRole('checkbox', { name: 'Send input data to the Provider' }))
-    fireEvent.click(screen.getByRole('radio', { name: 'Personal data' }))
     fireEvent.click(screen.getByRole('button', { name: 'Submit for validation' }))
 
     await waitFor(() => expect(onPublish).toHaveBeenCalledOnce())
@@ -279,6 +316,98 @@ describe('source-native Provider start', () => {
       },
     }))
     expect(await screen.findByText(/submitted for validation/i)).toBeTruthy()
+    expect(screen.queryByText('tool:lookup')).toBeNull()
+    expect(screen.getByRole('link', { name: 'Open Tools' }).getAttribute('href')).toBe('/owner/operations')
+  })
+
+  it('does not let an edit overtake a deferred Tool selection', async () => {
+    const selection = deferred<{ kind: 'saved' }>()
+    render(
+      <AeSupplySourceNativeStart
+        businessRef="business:one"
+        initial={{ ...selectedOpenApiInitial, candidateRef: '' }}
+        onPreview={vi.fn()}
+        onConnect={vi.fn()}
+        onSelectCandidate={vi.fn(() => selection.promise)}
+        onPublish={vi.fn()}
+      />,
+    )
+
+    fireEvent.click(screen.getByRole('radio', { name: /Reference lookup/i }))
+    const editSource = screen.getByRole('button', { name: 'Edit Source' }) as HTMLButtonElement
+    expect(editSource.disabled).toBe(true)
+    fireEvent.click(editSource)
+    expect(screen.queryByRole('heading', { name: 'Source' })).toBeNull()
+
+    selection.resolve({ kind: 'saved' })
+    expect(await screen.findByRole('heading', { name: 'Terms' })).toBeTruthy()
+    expect((screen.getByLabelText('Tool name') as HTMLInputElement).value).toBe('Reference lookup')
+  })
+
+  it('locks an uncertain publication command and keeps its attested facts immutable', async () => {
+    const publication = deferred<never>()
+    const onPublish = vi.fn(() => publication.promise)
+    render(
+      <AeSupplySourceNativeStart
+        businessRef="business:one"
+        initial={selectedOpenApiInitial}
+        onPreview={vi.fn()}
+        onConnect={vi.fn()}
+        onSelectCandidate={vi.fn()}
+        onPublish={onPublish}
+      />,
+    )
+
+    fireEvent.change(screen.getByLabelText('Category'), { target: { value: 'Research' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Continue to review' }))
+    for (const name of [
+      'I am authorised to publish this service',
+      'The information is accurate',
+      'Publish after validation succeeds',
+    ]) fireEvent.click(screen.getByRole('checkbox', { name }))
+    fireEvent.click(screen.getByRole('button', { name: 'Submit for validation' }))
+
+    expect((screen.getByRole('button', { name: 'Edit Source' }) as HTMLButtonElement).disabled).toBe(true)
+    expect((screen.getByRole('button', { name: 'Edit Tool' }) as HTMLButtonElement).disabled).toBe(true)
+    expect((screen.getByRole('button', { name: 'Edit Terms' }) as HTMLButtonElement).disabled).toBe(true)
+    expect((screen.getByRole('button', { name: 'Edit terms' }) as HTMLButtonElement).disabled).toBe(true)
+    expect((screen.getByRole('checkbox', { name: 'The information is accurate' }) as HTMLButtonElement).disabled).toBe(true)
+
+    publication.reject(new Error('response lost'))
+    expect(await screen.findByText(/could not confirm submission/i)).toBeTruthy()
+    expect((screen.getByRole('button', { name: 'Submit for validation' }) as HTMLButtonElement).disabled).toBe(true)
+    expect(screen.getByRole('link', { name: 'Open Tools' }).getAttribute('href')).toBe('/owner/operations')
+    expect(onPublish).toHaveBeenCalledOnce()
+  })
+
+  it('requires fresh publication statements after terms are reopened', () => {
+    render(
+      <AeSupplySourceNativeStart
+        businessRef="business:one"
+        initial={selectedOpenApiInitial}
+        onPreview={vi.fn()}
+        onConnect={vi.fn()}
+        onSelectCandidate={vi.fn()}
+        onPublish={vi.fn()}
+      />,
+    )
+
+    fireEvent.change(screen.getByLabelText('Category'), { target: { value: 'Research' } })
+    fireEvent.click(screen.getByRole('radio', { name: 'Fixed AUD price' }))
+    fireEvent.change(screen.getByLabelText('AUD price'), { target: { value: '12.30' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Continue to review' }))
+    expect(screen.getAllByText('AUD 12.30').length).toBeGreaterThan(0)
+    for (const name of [
+      'I am authorised to publish this service',
+      'The information is accurate',
+      'Publish after validation succeeds',
+    ]) fireEvent.click(screen.getByRole('checkbox', { name }))
+
+    fireEvent.click(screen.getByRole('button', { name: 'Edit terms' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Continue to review' }))
+    expect(screen.getByRole('checkbox', { name: 'I am authorised to publish this service' }).getAttribute('aria-checked')).toBe('false')
+    expect(screen.getByRole('checkbox', { name: 'The information is accurate' }).getAttribute('aria-checked')).toBe('false')
+    expect(screen.getByRole('checkbox', { name: 'Publish after validation succeeds' }).getAttribute('aria-checked')).toBe('false')
   })
 
   it('renders one direct hosted action when protected discovery requires connection', async () => {
@@ -316,6 +445,7 @@ describe('source-native Provider start', () => {
       />,
     )
 
+    fireEvent.click(screen.getByRole('button', { name: 'Edit Source' }))
     fireEvent.click(screen.getByRole('button', { name: 'Discover endpoints' }))
 
     const action = await screen.findByRole('link', { name: 'Connect server' })
@@ -373,6 +503,7 @@ describe('source-native Provider start', () => {
       />,
     )
 
+    fireEvent.click(screen.getByRole('button', { name: 'Edit Source' }))
     fireEvent.click(screen.getByRole('button', { name: 'Discover endpoints' }))
 
     expect(await screen.findByText('Select MCP server')).toBeTruthy()
@@ -393,5 +524,139 @@ describe('source-native Provider start', () => {
       remoteRef,
       environment: 'sandbox',
     }, expect.any(String))
+  })
+
+  it('shows live OpenAPI URL preflight without clicking Discover', () => {
+    render(
+      <AeSupplySourceNativeStart
+        businessRef="business:one"
+        onPreview={vi.fn()}
+        onConnect={vi.fn()}
+        onSelectCandidate={vi.fn()}
+        onPublish={vi.fn()}
+      />,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Other source types' }))
+    fireEvent.mouseDown(screen.getByRole('tab', { name: 'OpenAPI' }))
+
+    fireEvent.change(screen.getByLabelText('OpenAPI URL'), {
+      target: { value: 'http://insecure.example.com/openapi.json' },
+    })
+    expect(screen.getByText('Insecure HTTP URL detected. Agentic Economy requires secure HTTPS endpoints.')).toBeTruthy()
+
+    fireEvent.change(screen.getByLabelText('OpenAPI URL'), { target: { value: 'notaurl' } })
+    expect(screen.getByText('Enter a valid HTTPS URL (e.g. https://api.example.com/openapi.json).')).toBeTruthy()
+
+    fireEvent.change(screen.getByLabelText('OpenAPI URL'), {
+      target: { value: 'https://api.example.com/openapi.json' },
+    })
+    expect(screen.getByText('Valid HTTPS endpoint format')).toBeTruthy()
+  })
+
+  it('shows live MCP and x402 URL preflight badges', () => {
+    const onPreview = vi.fn()
+    render(
+      <AeSupplySourceNativeStart
+        businessRef="business:one"
+        onPreview={onPreview}
+        onConnect={vi.fn()}
+        onSelectCandidate={vi.fn()}
+        onPublish={vi.fn()}
+      />,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Other source types' }))
+    fireEvent.mouseDown(screen.getByRole('tab', { name: 'MCP' }))
+    fireEvent.change(screen.getByLabelText('MCP server URL'), {
+      target: { value: 'https://mcp.example.com/sse' },
+    })
+    expect(screen.getByText('Valid HTTPS endpoint format')).toBeTruthy()
+
+    fireEvent.click(screen.getByRole('button', { name: /x402 recommended for alpha/i }))
+
+    fireEvent.change(screen.getByLabelText('x402 resource URL'), {
+      target: { value: 'http://insecure.example.com/paid' },
+    })
+    expect(screen.getByText('Insecure HTTP URL detected. Agentic Economy requires secure HTTPS endpoints.')).toBeTruthy()
+    expect(onPreview).not.toHaveBeenCalled()
+  })
+
+  it('blocks Discover on insecure URLs with Rule 4 diagnostic and skips preview', async () => {
+    const onPreview = vi.fn()
+    render(
+      <AeSupplySourceNativeStart
+        businessRef="business:one"
+        onPreview={onPreview}
+        onConnect={vi.fn()}
+        onSelectCandidate={vi.fn()}
+        onPublish={vi.fn()}
+      />,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Other source types' }))
+    fireEvent.mouseDown(screen.getByRole('tab', { name: 'OpenAPI' }))
+    fireEvent.change(screen.getByLabelText('OpenAPI URL'), {
+      target: { value: 'http://insecure.example.com/openapi.json' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Discover endpoints' }))
+
+    expect(await screen.findByText('Insecure HTTP protocol.')).toBeTruthy()
+    expect(screen.getByText('A$0.00 affected — endpoint discovery blocked.')).toBeTruthy()
+    expect(screen.getByText('Provide an HTTPS URL to ensure encrypted capability invocation.')).toBeTruthy()
+    expect(onPreview).not.toHaveBeenCalled()
+  })
+
+  it('blocks Discover on malformed plugin JSON with Rule 4 diagnostic', async () => {
+    const onPreview = vi.fn()
+    render(
+      <AeSupplySourceNativeStart
+        businessRef="business:one"
+        onPreview={onPreview}
+        onConnect={vi.fn()}
+        onSelectCandidate={vi.fn()}
+        onPublish={vi.fn()}
+      />,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Other source types' }))
+    fireEvent.mouseDown(screen.getByRole('tab', { name: 'Agent Plugin' }))
+
+    const malformed = new File(['{not-json'], 'plugin.json', { type: 'application/json' })
+    fireEvent.change(screen.getByLabelText('plugin.json'), { target: { files: [malformed] } })
+    await waitFor(() => {
+      expect(screen.getByText('JSON syntax is invalid.')).toBeTruthy()
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Discover endpoints' }))
+
+    expect(await screen.findByText('Malformed JSON payload.')).toBeTruthy()
+    expect(screen.getByText('A$0.00 affected — plugin discovery blocked.')).toBeTruthy()
+    expect(screen.getByText('Ensure the JSON syntax is valid before discovering endpoints.')).toBeTruthy()
+    expect(onPreview).not.toHaveBeenCalled()
+  })
+
+  it('reserves preflight height and applies tactile physics to source controls', () => {
+    render(
+      <AeSupplySourceNativeStart
+        businessRef="business:one"
+        onPreview={vi.fn()}
+        onConnect={vi.fn()}
+        onSelectCandidate={vi.fn()}
+        onPublish={vi.fn()}
+      />,
+    )
+
+    const tactile = 'active:scale-[0.98]'
+    expect(screen.getByRole('button', { name: /x402 recommended for alpha/i }).className).toContain(tactile)
+    expect(screen.getByRole('button', { name: 'Other source types' }).className).toContain(tactile)
+    expect(screen.getByRole('button', { name: 'Discover endpoints' }).className).toContain(tactile)
+    expect(screen.getByRole('radio', { name: 'Sandbox' }).closest('label')?.className).toContain(tactile)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Other source types' }))
+    fireEvent.mouseDown(screen.getByRole('tab', { name: 'OpenAPI' }))
+    fireEvent.change(screen.getByLabelText('OpenAPI URL'), { target: { value: 'notaurl' } })
+
+    const slot = document.querySelector('.min-h-\\[2\\.5rem\\][aria-live="polite"]')
+    expect(slot).toBeTruthy()
   })
 })

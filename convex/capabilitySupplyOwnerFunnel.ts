@@ -36,7 +36,7 @@ export const readOwnerSupplyFunnel = queryGeneric({
   handler: readOwnerSupplyFunnelHandler,
 })
 
-export const readAgentOwnerSupplyFunnel = mutationGeneric({
+export const readAgentOwnerSupplyFunnel = queryGeneric({
   args: agentOwnerSupplyFunnelReadArgs,
   returns: ownerSupplyFunnelResultValue,
   handler: readAgentOwnerSupplyFunnelHandler,

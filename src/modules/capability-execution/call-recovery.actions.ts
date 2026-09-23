@@ -14,13 +14,16 @@ import {
   callStatusStateSchema,
   type CallRecoveryResult,
   type CallStatusResult,
+  ownerCallContextSchema,
+  type OwnerCallStatusResult,
 } from './call-recovery-contracts'
+import { purchaseResolutionRecordSchema } from './purchase-resolution'
 import type { ReconciliationEvidence } from '@/modules/action-execution/runtime'
 import { CALL_ROUTE_CONTRACT } from './call-entry'
 
 const boundedText = (maximum: number) => z.string().trim().min(1).max(maximum)
 
-export const callStatusResultSchema: z.ZodType<CallStatusResult> = z.discriminatedUnion('kind', [
+const callStatusVariants = [
   z.strictObject({
     kind: z.literal('found'),
     callRef: boundedText(300),
@@ -34,6 +37,7 @@ export const callStatusResultSchema: z.ZodType<CallStatusResult> = z.discriminat
     effectGeneration: z.number().int().positive().exactOptional(),
     result: callResultSchema.exactOptional(),
     receipt: callReceiptSchema.exactOptional(),
+    purchaseResolution: purchaseResolutionRecordSchema.exactOptional(),
   }),
   z.strictObject({
     kind: z.literal('unchanged'),
@@ -49,6 +53,13 @@ export const callStatusResultSchema: z.ZodType<CallStatusResult> = z.discriminat
     nextAction: boundedText(300).exactOptional(),
     receipt: callReceiptSchema.exactOptional(),
   }),
+] as const
+
+export const callStatusResultSchema: z.ZodType<CallStatusResult> = z.discriminatedUnion('kind', callStatusVariants)
+export const ownerCallStatusResultSchema: z.ZodType<OwnerCallStatusResult> = z.discriminatedUnion('kind', [
+  callStatusVariants[0].extend({ ownerContext: ownerCallContextSchema.nullable().exactOptional() }),
+  callStatusVariants[1],
+  callStatusVariants[2],
 ])
 
 const publicReconciliationStateSchema = z.strictObject({

@@ -54,6 +54,12 @@ import { defaultSandboxAgentAccessPolicy } from './sandbox-policy'
 import { exactAmountSchema } from '@/modules/money/public'
 import { issuedAgentGrantRef } from './issued-agent-binding'
 import type { OwnerConnectionLifecycleResult } from './agent-connection'
+import {
+  agentSpendingLimitsUpdateSchema,
+  type AgentSpendingLimitsReadResult,
+  type AgentSpendingLimitsResult,
+  type AgentSpendingLimitsUpdate,
+} from './spending-policy-update'
 
 const issueInputSchema = z.strictObject({
   name: z.string().trim().min(1).max(80),
@@ -228,6 +234,13 @@ export type RenameAgentResult =
   | Readonly<{ kind: 'refused'; code: 'authentication_required' | 'source_unavailable'; correlationRef: string }>
 const renameAgentMutation = sourceMutation<RenameAgentCommand, Exclude<RenameAgentResult, { kind: 'refused'; code: 'source_unavailable' }>>(
   'agentAccessPrincipals:renameAgentForServer',
+)
+type AgentSpendingLimitsUpdateCommand = AgentSpendingLimitsUpdate & Readonly<{ correlationRef: string }>
+const updateAgentSpendingLimitsMutation = sourceMutation<AgentSpendingLimitsUpdateCommand, AgentSpendingLimitsResult>(
+  'agentSpendingPolicy:updateForServer',
+)
+const readAgentSpendingLimitsQuery = sourceQuery<Readonly<{ principalRef: string }>, AgentSpendingLimitsReadResult>(
+  'agentSpendingPolicy:readCurrent',
 )
 type ProviderRevocationCommand = Readonly<{
   principalRef: string
@@ -585,5 +598,55 @@ export const renameAgentServer = createServerFn({ method: 'POST' })
       return await callSourceMutation(renameAgentMutation, { ...data, correlationRef })
     } catch (cause) {
       return degrade(cause, { kind: 'refused', code: 'source_unavailable', correlationRef } as const, { site: 'renameAgentServer', reason: 'source_unavailable' })
+    }
+  })
+
+/**
+ * Requires: authenticated owner authority and a complete, strictly validated
+ * spending-limit update with a caller-supplied idempotency key.
+ * Ensures: one source mutation receives every validated field unchanged plus
+ * one correlation reference, and its canonical result is returned unchanged.
+ * Invariant: this boundary never derives a prior generation or replaces the
+ * idempotency key, and it performs no provider-side effects.
+ * On violation: source transport failures become a typed source_unavailable
+ * refusal carrying the same correlation reference.
+ */
+export const updateAgentSpendingLimitsServer = createServerFn({ method: 'POST' })
+  .validator((data) => agentSpendingLimitsUpdateSchema.parse(data))
+  .handler(async ({ data }): Promise<AgentSpendingLimitsResult> => {
+    const correlationRef = lifecycleCorrelationRef()
+    try {
+      await requireCanonicalOwnerAuthorityServer()
+      return await callSourceMutation(updateAgentSpendingLimitsMutation, { ...data, correlationRef })
+    } catch (cause) {
+      return degrade(cause, { kind: 'refused', code: 'source_unavailable', correlationRef } as const, {
+        site: 'updateAgentSpendingLimitsServer',
+        reason: 'source_unavailable',
+      })
+    }
+  })
+
+/**
+ * Requires: an authenticated owner and one strictly validated principal
+ * reference.
+ * Ensures: the current policy is read from the canonical source for that
+ * principal and the source result is returned without local reconstruction.
+ * Invariant: this boundary does not infer policy state from a request or from
+ * any provider-side balance.
+ * On violation: source transport failures become a typed unavailable result.
+ */
+export const readAgentSpendingLimitsServer = createServerFn({ method: 'GET' })
+  .validator((data) => z.strictObject({
+    principalRef: z.string().trim().min(1).max(300),
+  }).parse(data))
+  .handler(async ({ data }): Promise<AgentSpendingLimitsReadResult> => {
+    try {
+      await requireCanonicalOwnerAuthorityServer()
+      return await callSourceQuery(readAgentSpendingLimitsQuery, data)
+    } catch (cause) {
+      return degrade(cause, { kind: 'refused', code: 'source_unavailable' } as const, {
+        site: 'readAgentSpendingLimitsServer',
+        reason: 'source_unavailable',
+      })
     }
   })

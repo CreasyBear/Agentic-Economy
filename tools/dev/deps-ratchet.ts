@@ -27,8 +27,8 @@ type DepcruiseReport = { summary: { violations: Violation[] } }
 // error-on-any-violation behaviour for that rule).
 const RATCHET: Record<string, number> = {
   'no-circular': 0,
-  'no-circular-via-barrel': 258,
-  'no-circular-capability-supply-internal': 34,
+  'no-circular-via-barrel': 0,
+  'no-circular-capability-supply-internal': 0,
 }
 
 function runDepcruise(): DepcruiseReport {

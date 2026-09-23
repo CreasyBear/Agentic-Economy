@@ -2,9 +2,8 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { StrictMode } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import {
-  DIRECTORY_SAVED_TOOLS_STORAGE_KEY, DirectorySavedToolsProvider, useDirectorySavedTools, type SavedDirectoryTool,
-} from '@/components/ae/market/DirectorySavedTools'
+import { DirectorySavedToolsProvider, useDirectorySavedTools } from '@/components/ae/market/DirectorySavedTools'
+import { DIRECTORY_SAVED_TOOLS_STORAGE_KEY, type SavedDirectoryTool } from '@/modules/market/saved-tools.contracts'
 
 function tool(id: number): SavedDirectoryTool {
   return { entry: {

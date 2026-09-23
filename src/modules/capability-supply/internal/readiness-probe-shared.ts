@@ -1,4 +1,4 @@
-import type { CapabilityTransportBindingRegistration } from "@/modules/capability-supply/public";
+import type { CapabilityTransportBindingRegistration } from './registration-schema'
 import { degradeBackend } from "@/lib/observability/degrade-backend";
 import type {
   HttpJsonTransportConfiguration,

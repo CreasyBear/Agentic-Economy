@@ -100,7 +100,13 @@ const listCasesQuery = sourceQuery<{
   paginationOpts: { numItems: number; cursor: string | null }
 }, Page<MoneyReconciliationCaseView>>('moneyReconciliationCases:listOwnerCases')
 const resolveCaseMutation = sourceMutation<{
-  caseRef: string; confirmation: string; resolutionEvidenceRef: string
+  caseRef: string
+  confirmation: string
+  resolutionEvidenceRef: string
+  operationKey: string
+  correlationId: string
+  sourceWrite: Awaited<ReturnType<typeof sourceWriteAdmissionFromContext>>
+  sourceWriteRequest: ReturnType<typeof sourceWriteRequestFromAdmission>
 }, { kind: 'resolved' | 'replayed'; caseRef: string } | { kind: 'refused'; code: string }>(
   'moneyReconciliationCases:resolveOwnerCase',
 )
@@ -204,10 +210,28 @@ export const signOwnerDailyCloseServer = createServerFn({ method: 'POST' })
 
 export const resolveOwnerMoneyCaseServer = createServerFn({ method: 'POST' })
   .validator((data) => resolveCaseInput.parse(data))
-  .handler(async ({ data }) => await callSourceMutation(resolveCaseMutation, {
-    ...data,
-    confirmation: data.caseRef,
-  }))
+  .handler(async ({ data, context }) => {
+    const operationKey = 'moneyReconciliationCases:resolveOwnerCase'
+    const correlationId = data.caseRef
+    const command = {
+      ...data,
+      confirmation: data.caseRef,
+      operationKey,
+      correlationId,
+    }
+    const sourceWrite = await sourceWriteAdmissionFromContext({
+      context,
+      command,
+      scope: 'billing',
+      operationKey,
+      correlationId,
+    })
+    return await callSourceMutation(resolveCaseMutation, {
+      ...command,
+      sourceWrite,
+      sourceWriteRequest: sourceWriteRequestFromAdmission(sourceWrite),
+    })
+  })
 
 export const reverseOwnerProviderSettlementServer = createServerFn({ method: 'POST' })
   .validator((data) => reverseProviderSettlementInput.parse(data))

@@ -1,6 +1,6 @@
 import { z } from 'zod'
 
-import { callPublicSourceMutation, sourceMutation } from '@/lib/server/convex-source'
+import { callPublicSourceMutation, callPublicSourceQuery, sourceMutation, sourceQuery } from '@/lib/server/convex-source'
 import { sourceWriteAdmissionFromRequest, sourceWriteRequestFromAdmission } from '@/lib/server/source-write-admission'
 import { MARKET_TOOLS_CALL_SCOPE } from '@/modules/agent-access/contract'
 import type { AgentAccessPrincipal } from '@/modules/agent-access/agent-access'
@@ -8,6 +8,7 @@ import { defineAction, idempotencyKeySchema } from '@/modules/common/action'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { publicToolChoiceSchema } from '@/modules/registry/tool-choice-contracts'
 import { registryToolsSearchAction } from '@/modules/registry/tools.actions'
+import { decodeOpaqueCursor, encodeOpaqueCursor } from '@/modules/registry/opaque-cursor'
 
 export const MARKET_REQUEST_CREATE_ACTION_ID = 'marketDemand.record' as const
 export const MARKET_REQUEST_LIST_ACTION_ID = 'marketDemand.list' as const
@@ -83,7 +84,7 @@ export const marketRequestListResultSchema = z.discriminatedUnion('kind', [
     hasMore: z.boolean(),
     nextCursor: z.string().min(1).max(2_000).optional(),
   }),
-  z.strictObject({ kind: z.literal('error'), code: z.enum(['unauthenticated', 'source_unavailable']) }),
+  z.strictObject({ kind: z.literal('error'), code: z.enum(['unauthenticated', 'source_unavailable', 'invalid_cursor']) }),
 ])
 
 export const marketRequestStatusInputSchema = z.strictObject({
@@ -130,8 +131,9 @@ export type MarketDemandService = Readonly<{
 }>
 
 const recordMutation = sourceMutation<Record<string, unknown>, unknown>('marketDemandSignals:record')
-const listMutation = sourceMutation<Record<string, unknown>, unknown>('marketDemandSignals:list')
-const readMutation = sourceMutation<Record<string, unknown>, unknown>('marketDemandSignals:read')
+const listQuery = sourceQuery<Record<string, unknown>, unknown>('marketDemandSignals:list')
+const readQuery = sourceQuery<Record<string, unknown>, unknown>('marketDemandSignals:read')
+const MARKET_DEMAND_CURSOR = { kind: 'market-demand' as const, scope: 'v1' }
 
 export function createMarketDemandService(request: Request, bodyText: string): MarketDemandService {
   async function mutate<T>(
@@ -149,6 +151,27 @@ export function createMarketDemandService(request: Request, bodyText: string): M
       correlationId,
     })
     return await callPublicSourceMutation(reference, {
+      ...command,
+      sourceWriteRequest: sourceWriteRequestFromAdmission(sourceWrite),
+      sourceWrite,
+    }) as T
+  }
+
+  async function querySource<T>(
+    reference: Parameters<typeof callPublicSourceQuery>[0],
+    command: Record<string, unknown>,
+    operationKey: string,
+    correlationId: string,
+  ): Promise<T> {
+    const sourceWrite = await sourceWriteAdmissionFromRequest({
+      request,
+      command,
+      body: bodyText,
+      scope: 'protected_action',
+      operationKey,
+      correlationId,
+    })
+    return await callPublicSourceQuery(reference, {
       ...command,
       sourceWriteRequest: sourceWriteRequestFromAdmission(sourceWrite),
       sourceWrite,
@@ -180,6 +203,12 @@ export function createMarketDemandService(request: Request, bodyText: string): M
       return parsed.success ? parsed.data : { kind: 'refused', code: 'source_unavailable' }
     },
     list: async ({ input, principal, correlationId }) => {
+      const engineCursor = input.cursor === undefined
+        ? null
+        : decodeOpaqueCursor(input.cursor, MARKET_DEMAND_CURSOR)
+      if (input.cursor !== undefined && engineCursor === undefined) {
+        return { kind: 'error', code: 'invalid_cursor' }
+      }
       const operationKey = canonicalDigest({
         action: MARKET_REQUEST_ROUTE_CONTRACTS.list.actionId,
         principalId: principal.principalId,
@@ -188,8 +217,8 @@ export function createMarketDemandService(request: Request, bodyText: string): M
         limit: input.limit,
         correlationId,
       })
-      const result = await mutate<unknown>(listMutation, {
-        paginationOpts: { numItems: input.limit, cursor: input.cursor ?? null },
+      const result = await querySource<unknown>(listQuery, {
+        paginationOpts: { numItems: input.limit, cursor: engineCursor },
         agentPrincipal: principal,
         operationKey,
         correlationId,
@@ -210,7 +239,7 @@ export function createMarketDemandService(request: Request, bodyText: string): M
         items: requests.page,
         hasMore: requests.isDone === false,
         ...(requests.isDone === false && typeof requests.continueCursor === 'string'
-          ? { nextCursor: requests.continueCursor }
+          ? { nextCursor: encodeOpaqueCursor({ ...MARKET_DEMAND_CURSOR, cursor: requests.continueCursor }) }
           : {}),
       }
       const parsed = marketRequestListResultSchema.safeParse(projected)
@@ -224,7 +253,7 @@ export function createMarketDemandService(request: Request, bodyText: string): M
         requestRef: input.requestRef,
         correlationId,
       })
-      const raw = await mutate<unknown>(readMutation, {
+      const raw = await querySource<unknown>(readQuery, {
         requestRef: input.requestRef,
         agentPrincipal: principal,
         operationKey,

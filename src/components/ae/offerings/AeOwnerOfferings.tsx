@@ -1,40 +1,60 @@
 import { Link } from '@tanstack/react-router'
 import type { ColumnDef, OnChangeFn, SortingState } from '@tanstack/react-table'
-import { BotIcon, Link2Icon } from 'lucide-react'
 import { useEffect, useMemo, useRef } from 'react'
 
 import { AeEmptyState } from '@/components/ae/feedback/AeEmptyState'
 import { AeOperatorSortableHeader, AeRecordTable } from '@/components/ae/operator/AeOperatorDataTable'
+import {
+  ownerToolAvailabilityPresentation,
+  ownerToolLifecycleVariant,
+  ownerToolProtocolBadgeVariant,
+  type OwnerOfferingSummary,
+} from '@/components/ae/offerings/provider-workspace-projection'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { buttonVariants } from '@/components/ui/button-variants'
+import { cn } from '@/lib/utils'
 import type {
   BusinessOfferingProjection,
   BusinessOfferingStatus,
   PublicOfferingSupplyProjection,
 } from '@/modules/catalog/public'
 
-export type OwnerOfferingSummary = Readonly<{
-  offering: BusinessOfferingProjection
-  status: BusinessOfferingStatus
-  accessPathCount: number
-  support?: PublicOfferingSupplyProjection['support']
-  lifecycleLabel?: string
-  availability?: 'available' | 'unavailable' | 'unknown'
-  blocker?: string
-  continuation?: Readonly<{ label: string; href: string }>
-  lifecyclePending?: boolean
-}>
+export const TACTILE_PRESS_CLASS =
+  'enabled:active:scale-[0.98] transition-transform duration-100 ease-out motion-reduce:transition-none motion-reduce:active:scale-100'
+
+export type { OwnerOfferingSummary } from '@/components/ae/offerings/provider-workspace-projection'
+
+export function matchesOwnerOfferingInventory(item: OwnerOfferingSummary, query: string): boolean {
+  const normalized = query.trim().toLocaleLowerCase()
+  if (normalized.length === 0) return true
+  const availabilityPresentation = ownerToolAvailabilityPresentation(item.availability)
+  const candidates = [
+    item.offering.name,
+    item.offering.summary,
+    item.protocolLabel,
+    item.offering.offeringRef,
+    item.slug,
+    item.lifecycleLabel,
+    availabilityPresentation?.label,
+    item.availability,
+    item.blocker,
+  ]
+  return candidates.some((value) => value?.toLocaleLowerCase().includes(normalized) === true)
+}
 
 export function toOwnerOfferingSummary(
   projection: PublicOfferingSupplyProjection,
   status: BusinessOfferingStatus = 'published',
 ): OwnerOfferingSummary {
+  const offeringWithSlug = projection.offering as BusinessOfferingProjection & { slug?: string }
   return {
     offering: projection.offering,
     status,
     accessPathCount: projection.accessPaths.length,
     support: projection.support,
+    ...(offeringWithSlug.slug === undefined ? {} : { slug: offeringWithSlug.slug }),
   }
 }
 
@@ -65,17 +85,11 @@ export function AeOwnerOfferingsList({
 }) {
   const compactRootRef = useRef<HTMLUListElement>(null)
   const hasLifecyclePresentation = offerings.some((item) => item.lifecycleLabel !== undefined)
+  const trimmedFilter = filterValue?.trim() ?? ''
   const compactOfferings = useMemo(() => {
-    const query = filterValue?.trim().toLocaleLowerCase() ?? ''
-    const filtered = query.length === 0
+    const filtered = trimmedFilter.length === 0
       ? [...offerings]
-      : offerings.filter((item) => [
-          item.offering.name,
-          item.offering.summary,
-          item.lifecycleLabel,
-          item.availability,
-          item.blocker,
-        ].some((value) => value?.toLocaleLowerCase().includes(query) === true))
+      : offerings.filter((item) => matchesOwnerOfferingInventory(item, trimmedFilter))
     const rule = sorting?.[0]
     if (rule === undefined) return filtered
     return filtered.sort((left, right) => {
@@ -86,7 +100,7 @@ export function AeOwnerOfferingsList({
       )
       return rule.desc ? -comparison : comparison
     })
-  }, [filterValue, offerings, sorting])
+  }, [offerings, sorting, trimmedFilter])
 
   useEffect(() => {
     if (!hasLifecyclePresentation || !restoreRowActionFocus || activeRowActionId === undefined) return
@@ -101,6 +115,9 @@ export function AeOwnerOfferingsList({
     {
       id: 'name',
       accessorFn: (item) => item.offering.name,
+      enableGlobalFilter: true,
+      filterFn: (row, _columnId, filterVal) =>
+        matchesOwnerOfferingInventory(row.original, String(filterVal)),
       header: ({ column }) => <AeOperatorSortableHeader label="Tool" column={column} />,
       cell: ({ row }) => (
         <div className="grid min-w-[12rem] gap-0.5">
@@ -112,57 +129,73 @@ export function AeOwnerOfferingsList({
     {
       id: 'status',
       accessorFn: (item) => item.lifecycleLabel ?? statusLabel(item.status),
-      header: ({ column }) => <AeOperatorSortableHeader label="Lifecycle" column={column} />,
+      enableGlobalFilter: false,
+      header: ({ column }) => <AeOperatorSortableHeader label="Status" column={column} />,
+      cell: ({ row }) => <OwnerOfferingStatusCluster item={row.original} showBlocker />,
+    },
+    {
+      id: 'price',
+      accessorFn: (item) => item.pricingLabel ?? '—',
+      enableGlobalFilter: false,
+      header: ({ column }) => <AeOperatorSortableHeader label="Price" column={column} />,
       cell: ({ row }) => (
-        <div className="grid gap-1">
-          <Badge variant="outline">
-            {row.original.lifecyclePending ? 'Loading…' : row.original.lifecycleLabel ?? statusLabel(row.original.status)}
-          </Badge>
-          {row.original.availability === undefined ? null : (
-            <span className="text-xs text-muted-foreground">{availabilityLabel(row.original.availability)}</span>
-          )}
-        </div>
-      ),
-    },
-    {
-      id: 'blocker',
-      accessorFn: (item) => item.blocker ?? '',
-      header: 'Blocker',
-      cell: ({ row }) => <span className="text-xs text-muted-foreground">{row.original.blocker ?? '—'}</span>,
-    },
-    {
-      id: 'continuation',
-      header: 'Next action',
-      cell: ({ row }) => row.original.continuation === undefined ? null : (
-        <Button asChild size="sm" variant="secondary" className="min-h-touch w-full whitespace-normal sm:w-auto">
-          <a href={row.original.continuation.href}>{row.original.continuation.label}</a>
-        </Button>
-      ),
-    },
-    {
-      id: 'routes',
-      accessorFn: (item) => item.accessPathCount,
-      header: 'Access',
-      cell: ({ row }) => (
-        <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
-          <Link2Icon className="size-3.5" aria-hidden="true" />
-          {row.original.accessPathCount === 0
-            ? 'No access route'
-            : `${row.original.accessPathCount} ${row.original.accessPathCount === 1 ? 'route' : 'routes'}`}
+        <span className="font-mono text-xs tabular-nums text-foreground">
+          {row.original.pricingLabel ?? '—'}
         </span>
       ),
     },
     {
-      id: 'ready',
-      accessorFn: (item) => item.support?.routeable === true,
-      header: 'Readiness',
-      cell: ({ row }) => row.original.support?.routeable === true ? (
-        <span className="inline-flex items-center gap-1.5 text-xs">
-          <BotIcon className="size-3.5" aria-hidden="true" /> Ready now
+      id: 'activity',
+      accessorFn: (item) => item.callsCount ?? 0,
+      enableGlobalFilter: false,
+      header: ({ column }) => <AeOperatorSortableHeader label="Usage" column={column} />,
+      cell: ({ row }) => (
+        <span className="font-mono text-xs tabular-nums text-foreground">
+          {formatOwnerOfferingUsage(row.original)}
         </span>
-      ) : <span className="text-xs text-muted-foreground">—</span>,
+      ),
+    },
+    {
+      id: 'quickActions',
+      enableSorting: false,
+      enableGlobalFilter: false,
+      header: () => <span className="sr-only">Quick actions</span>,
+      cell: ({ row }) => {
+        const item = row.original
+        const testRunHref = `/owner/operations/${encodeURIComponent(item.slug ?? item.offering.offeringRef)}`
+        return (
+          <div className="flex items-center gap-1">
+            <Link
+              to={testRunHref}
+              aria-label={`Test Run for ${item.offering.name}`}
+              className={cn(
+                buttonVariants({ variant: 'ghost', size: 'sm' }),
+                'min-h-touch items-center px-2 text-xs sm:min-h-8',
+                TACTILE_PRESS_CLASS,
+              )}
+            >
+              Test Run
+            </Link>
+            <Link
+              to="/activity"
+              aria-label={`View logs for ${item.offering.name}`}
+              className={cn(
+                buttonVariants({ variant: 'ghost', size: 'sm' }),
+                'min-h-touch items-center px-2 text-xs sm:min-h-8',
+                TACTILE_PRESS_CLASS,
+              )}
+            >
+              Activity
+            </Link>
+          </div>
+        )
+      },
     },
   ], [])
+
+  const filterEmptyMessage = trimmedFilter.length > 0
+    ? `No tools match '${trimmedFilter}'`
+    : undefined
 
   return (
     <div className="grid gap-4">
@@ -183,7 +216,14 @@ export function AeOwnerOfferingsList({
         <AeEmptyState
           title="No Tools yet"
           description="Connect a source and choose the exact Tool AE should validate."
-          action={<Button asChild className="min-h-touch"><Link to="/owner/operations/new">Add Tool</Link></Button>}
+          action={
+            <Link
+              to="/owner/operations/new"
+              className={cn(buttonVariants(), 'min-h-touch')}
+            >
+              Add Tool
+            </Link>
+          }
         />
       ) : (
         <AeRecordTable
@@ -191,7 +231,8 @@ export function AeOwnerOfferingsList({
           data={offerings}
           caption="Tools"
           countLabel="Tools"
-          filterPlaceholder="Filter Tools…"
+          filterPlaceholder="Search name, protocol, or ID…"
+          {...(filterEmptyMessage === undefined ? {} : { emptyMessage: filterEmptyMessage })}
           getRowId={(item) => item.offering.offeringRef}
           loading={loading}
           {...(filterValue === undefined ? {} : { filterValue })}
@@ -204,32 +245,70 @@ export function AeOwnerOfferingsList({
             restore: restoreRowActionFocus,
           }}
           {...(hasLifecyclePresentation ? {
-            compactContent: (
+            compactContent: compactOfferings.length === 0 && trimmedFilter.length > 0 ? (
+              <div className="flex min-h-24 flex-col items-center justify-center gap-2 p-6 text-center text-sm text-muted-foreground">
+                <span>No tools match &apos;{trimmedFilter}&apos;</span>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className={TACTILE_PRESS_CLASS}
+                  onClick={() => onFilterChange?.('')}
+                >
+                  Reset filter
+                </Button>
+              </div>
+            ) : (
               <ul ref={compactRootRef} className="m-0 list-none divide-y divide-border p-0" data-testid="provider-workspace-compact-list">
                 {compactOfferings.map((item) => {
                   const action = item.continuation ?? {
                     label: 'Open Tool',
-                    href: `/owner/operations/${encodeURIComponent(item.offering.offeringRef)}`,
+                    href: `/owner/operations/${encodeURIComponent(item.slug ?? item.offering.offeringRef)}`,
                   }
+                  const testRunHref = `/owner/operations/${encodeURIComponent(item.slug ?? item.offering.offeringRef)}`
                   return (
                     <li key={item.offering.offeringRef} className="grid min-w-0 gap-related py-related">
-                      <div className="grid gap-1">
+                      <div className="grid gap-2">
                         <h3 className="break-words font-semibold">{item.offering.name}</h3>
-                        <p className="text-sm text-muted-foreground">
-                          {item.lifecyclePending ? 'Loading lifecycle' : item.lifecycleLabel} / {item.availability === undefined ? 'Availability unknown' : availabilityLabel(item.availability)}
-                        </p>
+                        <OwnerOfferingStatusCluster item={item} />
+                        <div className="flex items-center gap-2 font-mono text-xs tabular-nums text-muted-foreground">
+                          <span>{item.pricingLabel ?? '—'}</span>
+                          <span>·</span>
+                          <span>{formatOwnerOfferingUsage(item)}</span>
+                        </div>
+                        {item.blocker === undefined ? null : (
+                          <span className="text-xs text-muted-foreground">{item.blocker}</span>
+                        )}
                       </div>
-                      <p className="text-sm text-muted-foreground">{item.blocker ?? 'No blocker'}</p>
-                      <Button asChild variant="secondary" className="min-h-touch w-full whitespace-normal">
-                        <a
-                          href={action.href}
-                          data-ae-row-action-id={item.offering.offeringRef}
-                          aria-label={`${action.label} for ${item.offering.name}`}
-                          onFocus={() => onActiveRowActionIdChange?.(item.offering.offeringRef)}
+                      <a
+                        href={action.href}
+                        data-ae-row-action-id={item.offering.offeringRef}
+                        aria-label={`${action.label} for ${item.offering.name}`}
+                        onFocus={() => onActiveRowActionIdChange?.(item.offering.offeringRef)}
+                        className={cn(
+                          buttonVariants({ variant: 'secondary' }),
+                          'min-h-touch w-full whitespace-normal',
+                          TACTILE_PRESS_CLASS,
+                        )}
+                      >
+                        {action.label}
+                      </a>
+                      <div className="flex gap-2">
+                        <Link
+                          to={testRunHref}
+                          aria-label={`Test Run for ${item.offering.name}`}
+                          className={cn(buttonVariants({ variant: 'outline', size: 'sm' }), TACTILE_PRESS_CLASS)}
                         >
-                          {action.label}
-                        </a>
-                      </Button>
+                          Test Run
+                        </Link>
+                        <Link
+                          to="/activity"
+                          aria-label={`View logs for ${item.offering.name}`}
+                          className={cn(buttonVariants({ variant: 'outline', size: 'sm' }), TACTILE_PRESS_CLASS)}
+                        >
+                          Activity
+                        </Link>
+                      </div>
                     </li>
                   )
                 })}
@@ -238,13 +317,10 @@ export function AeOwnerOfferingsList({
           } : {})}
           rowAction={{
             kind: 'link',
-            label: 'Open',
-            // Well 8 Lane C: prefer the slug-resolved continuation href when
-            // this row came through the provider workspace projection - it
-            // is more precise than reconstructing one from offeringRef alone
-            // (which the route still accepts for pre-publish Tools).
-            getHref: (item) => item.continuation?.href ?? `/owner/operations/${encodeURIComponent(item.offering.offeringRef)}`,
-            getAccessibleLabel: (item) => `Open ${item.offering.name}`,
+            label: 'Next action',
+            getLabel: (item) => item.continuation?.label ?? 'Open Tool',
+            getHref: (item) => item.continuation?.href ?? `/owner/operations/${encodeURIComponent(item.slug ?? item.offering.offeringRef)}`,
+            getAccessibleLabel: (item) => `${item.continuation?.label ?? 'Open Tool'} for ${item.offering.name}`,
           }}
         />
       )}
@@ -252,21 +328,56 @@ export function AeOwnerOfferingsList({
   )
 }
 
-function statusLabel(status: BusinessOfferingStatus): string {
-  return status[0]?.toUpperCase() + status.slice(1)
+function OwnerOfferingStatusCluster({
+  item,
+  showBlocker = false,
+}: {
+  item: OwnerOfferingSummary
+  showBlocker?: boolean
+}) {
+  const lifecycle = ownerToolLifecycleVariant(
+    item.lifecycleLabel ?? statusLabel(item.status),
+    item.lifecyclePending,
+  )
+  const availability = ownerToolAvailabilityPresentation(item.availability)
+  return (
+    <div className="flex flex-wrap items-center gap-1.5">
+      <Badge variant={lifecycle.variant}>{lifecycle.label}</Badge>
+      {availability === undefined ? null : (
+        <Badge variant={availability.variant} className="gap-1.5">
+          {availability.hasDot ? (
+            <span
+              className={`size-1.5 rounded-full ${availability.variant === 'success' ? 'bg-success' : 'bg-destructive'}`}
+            />
+          ) : null}
+          {availability.label}
+        </Badge>
+      )}
+      {item.protocolLabel === undefined ? null : (
+        <Badge variant={ownerToolProtocolBadgeVariant(item.protocolLabel)}>{item.protocolLabel}</Badge>
+      )}
+      {showBlocker && item.blocker !== undefined ? (
+        <span className="text-xs text-muted-foreground">{item.blocker}</span>
+      ) : null}
+    </div>
+  )
 }
 
-function availabilityLabel(value: 'available' | 'unavailable' | 'unknown'): string {
-  if (value === 'available') return 'Available'
-  if (value === 'unavailable') return 'Unavailable'
-  return 'Availability unknown'
+function formatOwnerOfferingUsage(item: OwnerOfferingSummary): string {
+  if (item.callsCount !== undefined) {
+    return `${item.callsCount.toLocaleString('en-AU')} calls`
+  }
+  return `${item.accessPathCount.toLocaleString('en-AU')} access path${item.accessPathCount === 1 ? '' : 's'}`
+}
+
+function statusLabel(status: BusinessOfferingStatus): string {
+  return status[0]?.toUpperCase() + status.slice(1)
 }
 
 function compactSortValue(item: OwnerOfferingSummary, id: string): string {
   if (id === 'name') return item.offering.name
   if (id === 'status') return item.lifecycleLabel ?? statusLabel(item.status)
-  if (id === 'blocker') return item.blocker ?? ''
-  if (id === 'routes') return String(item.accessPathCount)
-  if (id === 'ready') return String(item.support?.routeable === true)
+  if (id === 'price') return item.pricingLabel ?? ''
+  if (id === 'activity') return String(item.callsCount ?? item.accessPathCount)
   return item.offering.name
 }

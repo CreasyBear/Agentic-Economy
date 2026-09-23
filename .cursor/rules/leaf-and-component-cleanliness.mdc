@@ -1,0 +1,107 @@
+---
+name: leaf-and-component-cleanliness
+description: Enforce pure leaf components, component type quarantine, container-presenter separation, and file size ceilings. Use when creating or editing React components, UI surfaces, and TypeScript models.
+alwaysApply: true
+---
+
+# Leaf & Component Cleanliness: Architectural Discipline
+
+**Authority:** Clean Architecture on Frontend, Martin Fowler (Presentation-Domain Layering), Bulletproof React, Dan Abramov, Emil Kowalski.
+
+## 1. The Component Type Quarantine Rule (Absolute Prohibition)
+
+**`.tsx` files must NEVER define, export, or house domain models, database schema types, API payloads, or complex state unions.**
+
+- **Allowed in `.tsx`:** Exactly ONE props definition strictly matching `<ComponentName>Props` (e.g. `export type AeTeamDirectoryTableProps = Readonly<{ ... }>`).
+- **Forbidden in `.tsx`:**
+  - Domain entities (e.g., `DirectoryOwner`, `TaxProfileData`, `SavedPaymentMethod`).
+  - API / Mutation request or response payloads (e.g., `TaxProfileSubmitPayload`, `IssuedAgentAccessReveal`).
+  - State machine unions or diagnostic types (e.g., `WizardDiagnostic`, `SpendingPresetId`).
+  - Re-exports of domain ports or types from UI files.
+- **Where types belong:**
+  - Domain models & DTOs: `src/modules/<domain>/contracts.ts` or `src/modules/<domain>/internal/*.ts`.
+  - View-specific projections: `src/modules/<domain>/*.view-model.ts` (e.g., `team.view-model.ts`, `owner-overview.view-model.ts`).
+  - Shared UI diagnostics: `src/lib/ui/diagnostic.ts`.
+
+## 2. The Pure Leaf Component Invariant
+
+A **Pure Leaf Component** is a pure, deterministic projection of its props:
+1. **Zero Data Fetching or Mutations:** Never call `useQuery`, `useMutation`, `useAction`, `useServerFn`, or `fetch()` inside a leaf component.
+2. **Callbacks Only:** Leaf components emit user intent strictly via explicit callback props (`onSelect`, `onSubmit`, `onToggle`, `onDismiss`).
+3. **Zero Business Calculations:**
+   - No `ExactAmount` currency parsing, rescaling, or BigInt math inside render.
+   - No Australian GST splits (`calculateAudGstSplit`) calculated inline inside JSX.
+   - No ABN checksum validation (`isValidAbn`) or URL scheme validation inside JSX.
+   - All display values arrive pre-formatted in the view-model prop.
+4. **Trivially Testable:** Must render cleanly in Storybook or isolated unit tests with plain static fixtures without mocking backend contexts.
+
+## 3. Container vs. Presenter Separation
+
+- **Smart Containers / Routes:** Responsible for calling Convex queries/mutations, managing URL search parameters, coordinating hooks, and mapping backend DTOs into view-models.
+- **Custom Hooks (`use*.ts`):** Encapsulate interaction state machines, debounce timers, clipboard actions, and toast dispatches.
+- **Dumb Leaf Components (`.tsx`):** Receive view-models and primitive callbacks; render accessible, tactile markup with zero side-effects.
+
+## 4. File Size Limits & Single Responsibility
+
+- **Soft Limit:** Components should stay under **300 lines**.
+- **Warning Limit:** Any component or module crossing **500 lines** must be evaluated for immediate decomposition.
+- **Hard Ceiling (The 1,000-Line Rule):** **No file in `src/` or `convex/` may exceed 1,000 lines.** Files crossing this threshold must be split into focused domain submodules (e.g., `lib/<domain>/<responsibility>.ts`).
+
+## 5. Command-Query Separation (CQS)
+
+- **Queries are Read-Only:** Queries must never execute side-effects, insert nonces, or mutate records.
+- **No Nonce Burning on Reads:** Agent read operations must use query semantics (`requireSourceRead`), not mutations consuming `sourceWriteNonces`.
+- **Internal Modules Never Import Own Barrel:** No file under `src/modules/<domain>/internal/` may import from `src/modules/<domain>/public.ts`.
+
+## 6. Component Folder Encapsulation (Compound Directory Pattern)
+
+**Never scatter decomposed container, hooks, leaf components, and skeletons as loose files across flat feature directories.**
+
+When any component decomposes into more than a single file (Container + Leaves + Hook), it must be encapsulated in its own dedicated kebab-case compound folder:
+
+```text
+src/components/ae/<domain>/<feature-name>/
+  ├── <ComponentName>.tsx          # Smart Container / Orchestrator (<150 lines)
+  ├── use<ComponentName>.ts        # State, calculations & mutations hook
+  ├── <feature-name>.contracts.ts  # View-model contracts & pure leaf props
+  ├── <ComponentName>Skeleton.tsx  # Colocated zero-CLS loading skeleton
+  └── components/                  # Pure Leaf Presenters (<150 lines each)
+        ├── <SubSectionOne>.tsx
+        └── <SubSectionTwo>.tsx
+```
+
+- **Consumer Stability:** External consumers import only `<ComponentName>.tsx`.
+- **Leaf Privacy:** Components under `components/` are internal to the compound feature and are not directly imported by unrelated features.
+
+## 7. Three-Tier Component Hierarchy & Boundaries
+
+Every UI component in the codebase belongs strictly to one of three tiers:
+
+| Tier | Directory | Rules & Boundaries | Example |
+| :--- | :--- | :--- | :--- |
+| **Tier 1: Atomic Primitives** | `src/components/ui/` | Zero business logic. Zero imports from `@/modules/*`. Pure Radix/Base-UI primitives styled with Tailwind. | `button.tsx`, `dialog.tsx`, `input.tsx` |
+| **Tier 2: Shared Domain Primitives** | `src/components/ae/shared/` | Reusable across multiple AE domains. Pure leaves only; display formatting only. May import from `@/modules/money` or `@/modules/common`. | `AeToolRefBadge.tsx`, `AeGstBreakdown.tsx`, `AeCopyReference.tsx` |
+| **Tier 3: Feature Compounds** | `src/components/ae/<domain>/<feature-name>/` | Specific to one product feature or workflow. Container + Hook + Dumb Leaves. | `earnings-card/`, `spending-limits-form/` |
+
+## 8. Convex Façade Router Pattern (Zero-Breakage RPC)
+
+When decomposing a Convex RPC module:
+1. **The root file `convex/<name>.ts` must remain as a thin Façade (<200 lines).** It defines only the public `query`, `mutation`, and `action` entry points and parameter validation schemas.
+2. **Logic moves to `convex/lib/<domain>/` (<400 lines each).** Never `convex/<name>/` — that breaks `api.<name>.<method>`.
+3. **Root helpers (0 RPC)** may exist beside the host façade as re-export shells. They are not façade violations.
+4. **Zero RPC Breakage:** generated Convex API paths (`api.<name>.<method>`) remain 100% unchanged for clients and tests.
+
+## 9. Ultra-Thin Route Controller Invariant
+
+Route files in `src/routes/` must act strictly as Route Controllers:
+- Validate URL params and search queries via `zod` (or a typed validator). Search types live in existing `.ts` contract modules, not the route `.tsx`.
+- Declare route loader/prefetching.
+- Render the corresponding Page Container component from `src/components/ae/`.
+- **Hard Ceiling:** Route files must not exceed **80 lines** (≤80). Zero inline modal state or complex layout markup inside route files.
+
+## 10. Colocated Zero-CLS Skeletons & Test Topology
+
+- **Skeletons:** Every compound with an asynchronous loading boundary must colocate `<ComponentName>Skeleton.tsx` mirroring identical layout dimensions, flex/grid properties, and border radiuses to guarantee zero Cumulative Layout Shift (CLS).
+- **Static-page N/A:** Synchronous pages with no pending/loader (privacy, terms, help) do **not** require a skeleton. Record the exception; do not add a fake one.
+- **Test Colocation:** Unit tests for pure leaf components and container hooks are colocated with their source (`<name>.test.tsx`, `use<Name>.test.ts`) when a behavioural gap warrants them. Integration and route tests remain in `tests/unit/routes/` and `tests/integration/`.
+

@@ -1,0 +1,67 @@
+import type { MarketReturnSearch } from '@/components/ae/market/market-return-context'
+import {
+  readX402DirectoryCatalogueOverviewServer,
+  readX402DirectoryCatalogueServer,
+  readX402DirectoryProvidersServer,
+} from '@/modules/market/x402-directory-index.functions'
+import { x402DirectoryCatalogueInputSchema } from '@/modules/market/x402-directory-catalogue'
+import { directoryCatalogueSearchValues } from '@/modules/market/x402-directory-navigation'
+import { readX402MarketplaceHomeServer } from '@/modules/market/x402-marketplace-home.functions'
+
+export type MarketSearch = MarketReturnSearch
+export type MarketView = NonNullable<MarketSearch['view']>
+
+export function parseMarketCompareRefs(value: unknown): readonly string[] | undefined {
+  if (typeof value !== 'string' || value.length === 0 || value.length > 20_000) return undefined
+  const refs = [...new Set(value.split(',').map((part) => part.trim()).filter((part) => part.length > 0 && part.length <= 8_192))]
+  if (refs.length === 0 || refs.length > 4) return undefined
+  return refs
+}
+
+export function validateMarketSearch(search: Record<string, unknown>): MarketSearch {
+  const directory = x402DirectoryCatalogueInputSchema.parse(directoryCatalogueSearchValues(search))
+  if (search.providerCursor !== undefined && (typeof search.providerCursor !== 'string' || search.providerCursor.length === 0 || search.providerCursor.length > 16_384)) {
+    throw new Error('Invalid Provider catalogue cursor')
+  }
+  const compareRefs = parseMarketCompareRefs(search.compare)
+  return {
+    ...directory,
+    ...(typeof search.providerCursor === 'string' ? { providerCursor: search.providerCursor } : {}),
+    ...(search.view === 'discover' || search.view === 'tools' || search.view === 'providers' || search.view === 'saved' ? { view: search.view } : {}),
+    ...(compareRefs === undefined ? {} : { compare: compareRefs.join(',') }),
+    ...(typeof search.resource === 'string' && search.resource.length > 0 && search.resource.length <= 8_192 ? { resource: search.resource } : {}),
+  }
+}
+
+export function marketLoaderDeps(search: MarketSearch) {
+  return {
+    ...directoryCatalogueSearchValues(search),
+    ...(search.providerCursor === undefined ? {} : { providerCursor: search.providerCursor }),
+    ...(search.view === undefined ? {} : { view: search.view }),
+  }
+}
+
+function resolveMarketView(search: MarketSearch): MarketView {
+  if (search.view !== undefined) return search.view
+  if (search.providerCursor !== undefined) return 'providers'
+  if (search.compare !== undefined || search.resource !== undefined || Object.keys(directoryCatalogueSearchValues(search)).length > 0) return 'tools'
+  return 'discover'
+}
+
+export async function loadMarketRouteData(deps: MarketSearch) {
+  const catalogueInput = x402DirectoryCatalogueInputSchema.parse(directoryCatalogueSearchValues(deps))
+  const view = resolveMarketView(deps)
+  const showHome = view === 'discover'
+  const [catalogue, home, overview, providers] = await Promise.all([
+    readX402DirectoryCatalogueServer({ data: { ...catalogueInput, ...(catalogueInput.query || catalogueInput.sort ? {} : { sort: 'adoption' }) } }),
+    showHome ? readX402MarketplaceHomeServer().catch(() => undefined) : Promise.resolve(undefined),
+    readX402DirectoryCatalogueOverviewServer(),
+    view === 'providers' && deps.query === undefined && deps.network === undefined && deps.provider === undefined && deps.maxUsdPrice === undefined && deps.directoryCategory === undefined
+      ? readX402DirectoryProvidersServer({ data: { ...(deps.providerCursor === undefined ? {} : { providerCursor: deps.providerCursor }) } })
+      : Promise.resolve(undefined),
+  ])
+  const page = catalogue?.kind === 'ok'
+    ? catalogue.page
+    : { kind: 'unavailable' as const, reason: catalogue?.reason === 'query_invalid' ? 'query_invalid' as const : 'source_unavailable' as const }
+  return { page, catalogue, overview, home, providers, view }
+}

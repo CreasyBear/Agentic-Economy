@@ -221,9 +221,9 @@ export const upsertGrant = internalMutation({
       || (grant.environment === 'production' && grant.authorityMode === 'unrestricted_test_only')
       || grant.spendingPolicy.budget.budgetPolicyRef !== grant.budgetPolicyRef
       || grant.spendingPolicy.rate.ratePolicyRef !== grant.ratePolicyRef
+      // Grant identity may rotate while budget/rate account generations remain
+      // stable so credential replacement shares the principal's capacity.
       || grant.generation < 1
-      || grant.spendingPolicy.budget.generation !== grant.generation
-      || grant.spendingPolicy.rate.generation !== grant.generation
       || grant.expiresAt <= grant.createdAt
       || agentAccessPolicyDigest(grant.spendingPolicy) !== grant.spendingPolicyDigest) {
       return { kind: 'conflict' as const, code: 'grant_material_invalid' as const }

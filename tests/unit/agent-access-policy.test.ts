@@ -54,6 +54,7 @@ function grant(overrides: Partial<AgentAccessGrantInput> = {}): AgentAccessGrant
 }
 
 const toolRef = (value: string) => `operation:v1:${value.repeat(64)}`
+const underSandboxSpend = { currency: 'USD', units: '1', exponent: 2 } as const
 
 function selectedGrantInput(toolRefs: readonly string[]): AgentAccessGrantInput {
   const base = defaultSandboxAgentAccessPolicy({ currency: 'USD', exponent: 2 })
@@ -164,7 +165,7 @@ describe('agent access grant policy', () => {
     const accepted = evaluateAgentAccessTool({
       grant: current,
       principal: { principalId: 'principal-1', applicationRef: 'app-1', environment: 'sandbox', grantGeneration: 1, spendingPolicyDigest: current.spendingPolicyDigest },
-      tool: { toolRef: toolRef('a') },
+      tool: { toolRef: toolRef('a'), spend: underSandboxSpend },
       now: 100,
     })
     expect(accepted).toEqual({ kind: 'accepted', grantRef: 'grant-1', generation: 1 })
@@ -174,6 +175,33 @@ describe('agent access grant policy', () => {
       tool: { toolRef: toolRef('a') },
       now: 100,
     })).toEqual({ kind: 'refused', code: 'grant_generation_stale' })
+  })
+
+  it('refuses a selected_tools grant for a tool that is not on the grant', () => {
+    const allowed = toolRef('a')
+    const created = createAgentAccessGrant(selectedGrantInput([allowed]))
+    if (created.kind !== 'accepted') throw new Error(created.code)
+    expect(evaluateAgentAccessTool({
+      grant: created.grant,
+      principal: { principalId: 'principal-1', applicationRef: 'app-1', environment: 'sandbox' },
+      tool: { toolRef: allowed, spend: underSandboxSpend },
+      now: 100,
+    })).toEqual({ kind: 'accepted', grantRef: 'grant-1', generation: 1 })
+    expect(evaluateAgentAccessTool({
+      grant: created.grant,
+      principal: { principalId: 'principal-1', applicationRef: 'app-1', environment: 'sandbox' },
+      tool: { toolRef: toolRef('c'), spend: underSandboxSpend },
+      now: 100,
+    })).toEqual({ kind: 'refused', code: 'tool_not_allowed' })
+  })
+
+  it('refuses a Call with no spend fact when the grant has a per-call maximum', () => {
+    expect(evaluateAgentAccessTool({
+      grant: grant(),
+      principal: { principalId: 'principal-1', applicationRef: 'app-1', environment: 'sandbox' },
+      tool: { toolRef: toolRef('a') },
+      now: 100,
+    })).toEqual({ kind: 'refused', code: 'grant_material_invalid' })
   })
 
   it('fails closed for revoked, expired, and environment-mismatched grants', () => {

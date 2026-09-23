@@ -4,8 +4,11 @@ import type {
   JsonValue,
 } from "@/modules/capability-contract/public";
 import type { ExactAmount } from "@/modules/money/public";
-import type { PublicToolRef } from "../public";
+import type { PublicToolRef } from '@/modules/common/tool-ref'
 import type { X402CatalogPayment } from "./transport-adapters";
+
+export const LISTING_TIERS = ["reviewed", "listed"] as const;
+export type ListingTier = (typeof LISTING_TIERS)[number];
 
 export const CURRENT_TOOL_CALL_VIA = "/api/v1/tools/call" as const;
 export const PublicToolRegistrySchemaVersion =
@@ -278,7 +281,7 @@ export type PublicToolDescriptor = Readonly<{
    * (never stored): 1P direct and AE-curated 3P are `reviewed`;
    * gateway-mediated and merely observed 3P are `listed`.
    */
-  listingTier: "reviewed" | "listed";
+  listingTier: ListingTier;
   canonical?: PublicToolCanonical;
 }>;
 export type PublicToolParameterMapping = Readonly<{

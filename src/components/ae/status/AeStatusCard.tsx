@@ -4,7 +4,8 @@ import { AeFactList } from '@/components/ae/data/AeFactList'
 import { AeCopyPublicUrlButton } from '@/components/ae/forms/AeCopyPublicUrlButton'
 import { AeStatusBadge } from '@/components/ae/status/AeStatusBadge'
 import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
+import { buttonVariants } from '@/components/ui/button-variants'
+import { cn } from '@/lib/utils'
 import { readPublicCatalogActivationRef } from '@/modules/catalog/public'
 import type { PublicOwnerStatusRouteReadback } from '@/modules/catalog/public'
 import type { PublicBusinessCatalogApiV2Dto } from '@/modules/registry/public'
@@ -56,12 +57,10 @@ export function AeStatusCard({ readback }: AeStatusCardProps) {
               size="sm"
             />
           )}
-          <Button asChild variant="secondary" className="min-h-touch">
-            <a href={readback.publicUrl}>
-              <ExternalLinkIcon aria-hidden="true" />
-              {isPreview ? 'Open preview' : 'Open page'}
-            </a>
-          </Button>
+          <a href={readback.publicUrl} className={cn(buttonVariants({ variant: 'secondary' }), 'min-h-touch')}>
+            <ExternalLinkIcon aria-hidden="true" />
+            {isPreview ? 'Open preview' : 'Open page'}
+          </a>
         </div>
       </div>
       <AeFactList

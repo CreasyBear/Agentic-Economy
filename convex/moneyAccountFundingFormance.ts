@@ -61,6 +61,7 @@ const balanceResult = v.union(
     version: v.number(),
     updatedAt: v.optional(v.number()),
     lastTransactionRef: v.optional(v.string()),
+    pendingTopup: v.optional(v.object({ commandRef: v.string() })),
   }),
   v.object({ kind: v.literal('refused'), code: v.string(), retryable: v.boolean() }),
 )
@@ -144,6 +145,9 @@ export const readBalance = action({
     if (balance.kind !== 'available') {
       return { kind: 'refused' as const, code: balance.code, retryable: true }
     }
+    const moneyFacts = await ctx.runQuery(internal.moneyLedger.readCreditAccountMoneyFacts, {
+      accountRef: subject.accountRef,
+    })
     return {
       kind: 'available' as const,
       accountRef: subject.accountRef,
@@ -151,6 +155,9 @@ export const readBalance = action({
       locked: subject.locked,
       version: balance.observedAt,
       updatedAt: balance.observedAt,
+      ...(moneyFacts.pendingTopup === undefined
+        ? {}
+        : { pendingTopup: { commandRef: moneyFacts.pendingTopup.commandRef } }),
     }
   },
 })

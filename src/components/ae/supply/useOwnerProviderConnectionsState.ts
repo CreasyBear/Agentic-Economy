@@ -14,7 +14,7 @@ import { suggestNextAction } from '@/modules/market/suggested-next-action'
 import { captureClientExceptionOnClient } from '@/lib/observability/capture-client-exception'
 import { captureRouteException } from '@/lib/observability/capture-route-exception'
 import type { OwnerToolsX402ConnectionIntent } from '@/lib/operator/supply-compatibility'
-import type { ProviderConnectionInspection } from './AeProviderConnectionForm'
+import type { ProviderConnectionInspection } from '@/modules/capability-supply/provider-connection.contracts'
 import {
   connectionRefFromHash,
   sameX402Handoff,

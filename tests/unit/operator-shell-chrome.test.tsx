@@ -41,6 +41,7 @@ vi.mock('@clerk/tanstack-react-start', async (importOriginal) => ({
     shellMocks.userButton(props)
     return <button type="button" aria-label="Account menu" />
   },
+  OrganizationSwitcher: () => <div data-testid="organization-switcher" />,
   SignOutButton: ({ children }: { children: ReactElement }) => children,
   Show: ({ when, children, fallback }: { when: string; children: ReactElement; fallback?: ReactElement }) =>
     when === 'signed-out' ? (shellMocks.useUser().isSignedIn ? (fallback ?? null) : children)
@@ -124,18 +125,20 @@ describe('operator shell nested chrome', () => {
 
     renderAt(
       <AeAppShell>
-        <OperatorChromeProvider
-          sidebar={<AeOperatorSidebar operatorRole="owner" currentPath="/agent-access/unknown" />}
-        >
-          <AeOperatorPage
-            operatorRole="owner"
-            title="Operator workspace"
-            description="Loading the latest operator view."
-            currentPath="/agent-access/unknown"
+        <SidebarProvider className="contents" defaultOpen>
+          <OperatorChromeProvider
+            sidebar={<AeOperatorSidebar operatorRole="owner" currentPath="/agent-access/unknown" />}
           >
-            <OperatorRouteNotFound />
-          </AeOperatorPage>
-        </OperatorChromeProvider>
+            <AeOperatorPage
+              operatorRole="owner"
+              title="Operator workspace"
+              description="Loading the latest operator view."
+              currentPath="/agent-access/unknown"
+            >
+              <OperatorRouteNotFound />
+            </AeOperatorPage>
+          </OperatorChromeProvider>
+        </SidebarProvider>
       </AeAppShell>,
       '/agent-access/unknown',
     )
@@ -182,8 +185,8 @@ describe('operator shell nested chrome', () => {
     // The frame header owns the brand mark and wordmark; the rail names the mode only.
     expect(screen.queryByText('AECON')).toBeNull()
     expect(document.querySelectorAll(`img[src="${AECON_MARK_SRC}"]`).length).toBe(0)
-    expect(screen.getByRole('link', { name: 'Tools home' })).toBeTruthy()
-    expect(screen.getAllByText('Buy and supply').length).toBeGreaterThan(0)
+    expect(screen.getByRole('link', { name: 'Workspace home' })).toBeTruthy()
+    expect(screen.getAllByText('Workspace').length).toBeGreaterThan(0)
   })
 
   it('drops the record-header icon on operator lists', async () => {
@@ -313,15 +316,16 @@ describe('owner mobile navigation', () => {
     const mobileNav = await screen.findByRole('navigation', { name: 'Owner primary navigation' })
     const links = within(mobileNav).getAllByRole('link')
 
-    expect(links.map((link) => link.textContent)).toEqual(['Calls', 'Agents', 'Operations'])
+    expect(links.map((link) => link.textContent)).toEqual(['Overview', 'Market', 'Calls', 'Balance'])
     expect(links.map((link) => link.getAttribute('href'))).toEqual([
+      '/owner',
+      '/owner/market',
       '/activity',
-      '/agent-access',
-      '/owner/operations',
+      '/owner/credit',
     ])
     expect(links.filter((link) => link.getAttribute('aria-current') === 'page').map((link) => link.textContent))
-      .toEqual(['Operations'])
-    expect(mobileNav.querySelectorAll('svg[aria-hidden="true"]')).toHaveLength(3)
+      .toEqual([])
+    expect(mobileNav.querySelectorAll('svg[aria-hidden="true"]')).toHaveLength(4)
   })
 
   it('does not mislabel secondary owner routes as a buyer shortcut', async () => {
@@ -331,7 +335,7 @@ describe('owner mobile navigation', () => {
     expect(within(descendantNav).getAllByRole('link')
       .filter((link) => link.getAttribute('aria-current') === 'page')
       .map((link) => link.textContent))
-      .toEqual(['Operations'])
+      .toEqual([])
 
     descendant.unmount()
     renderOperatorShell('owner', '/owner/settings')
@@ -346,12 +350,13 @@ describe('owner mobile navigation', () => {
     const owner = renderOperatorShell('owner', '/owner/operations')
     const sidebarNav = await screen.findByRole('navigation', { name: 'Operator navigation' })
 
-    expect(within(sidebarNav).getByRole('link', { name: 'Operations' })).toBeTruthy()
+    expect(within(sidebarNav).getByRole('link', { name: 'Tools' })).toBeTruthy()
     expect(within(sidebarNav).getByRole('link', { name: 'Calls' })).toBeTruthy()
     expect(within(sidebarNav).getByRole('link', { name: 'Agents' })).toBeTruthy()
-    expect(within(sidebarNav).getByRole('link', { name: 'Credit' })).toBeTruthy()
+    expect(within(sidebarNav).getByRole('link', { name: 'Balance' })).toBeTruthy()
     expect(within(sidebarNav).queryByRole('link', { name: 'Provider' })).toBeNull()
     expect(within(sidebarNav).queryByRole('link', { name: 'Publish' })).toBeNull()
+    expect(within(sidebarNav).getByRole('link', { name: 'Workspace' })).toBeTruthy()
     expect(within(sidebarNav).getByRole('link', { name: 'Account & security' })).toBeTruthy()
 
     owner.unmount()
@@ -370,11 +375,18 @@ describe('owner mobile navigation', () => {
     expect(mobileNav.classList.contains('md:hidden')).toBe(true)
     expect(mobileNav.classList.contains('pb-[env(safe-area-inset-bottom,0px)]')).toBe(true)
     expect(
+      mobileNav.classList.contains('h-[calc(3.5rem+env(safe-area-inset-bottom,0px))]'),
+    ).toBe(true)
+    expect(
       content.classList.contains(
-        'pb-[calc(var(--spacing-touch)+env(safe-area-inset-bottom,0px))]',
+        'pb-[calc(4.5rem+env(safe-area-inset-bottom,0px))]',
       ),
     ).toBe(true)
     expect(content.classList.contains('md:pb-related')).toBe(true)
+    expect(content.classList.contains('ae-rail')).toBe(true)
+    const pageStack = screen.getByTestId('operator-page-stack')
+    expect(pageStack.classList.contains('gap-section')).toBe(true)
+    expect(pageStack.classList.contains('content-start')).toBe(true)
     for (const link of within(mobileNav).getAllByRole('link')) {
       expect(link.classList.contains('min-h-touch')).toBe(true)
       expect(link.classList.contains('min-w-touch')).toBe(true)
@@ -557,11 +569,31 @@ function renderAt(ui: ReactElement, pathname: string) {
       staticData: { nav: { label: 'Agents', operator: { roles: ['owner'], group: 'Buy', groupOrder: 0, order: 1, icon: NavIcon, tier: 'core', mobilePrimary: true, mobileOrder: 20 } } },
     }),
     createRoute({ getParentRoute: () => rootRoute, path: '/agent-access/$' }),
+    createRoute({
+      getParentRoute: () => rootRoute,
+      path: '/owner',
+      staticData: { nav: { label: 'Overview', operator: { roles: ['owner'], group: 'Workspace', groupOrder: -1, order: 0, icon: NavIcon, tier: 'core', mobilePrimary: true, mobileOrder: 0 } } },
+    }),
+    createRoute({
+      getParentRoute: () => rootRoute,
+      path: '/owner/market',
+      staticData: { nav: { label: 'Market', operator: { roles: ['owner'], group: 'Buy', groupOrder: 0, order: 0, icon: NavIcon, tier: 'core', mobilePrimary: true, mobileOrder: 10 } } },
+    }),
     createRoute({ getParentRoute: () => rootRoute, path: '/owner/operations/new' }),
     createRoute({
       getParentRoute: () => rootRoute,
       path: '/owner/operations',
-      staticData: { nav: { label: 'Operations', operator: { roles: ['owner'], group: 'Supply', groupOrder: 1, order: 0, icon: NavIcon, tier: 'core', mobilePrimary: true, mobileOrder: 30 } } },
+      staticData: { nav: { label: 'Tools', operator: { roles: ['owner'], group: 'Supply', groupOrder: 1, order: 0, icon: NavIcon, tier: 'core', mobilePrimary: true, mobileOrder: 30 } } },
+    }),
+    createRoute({
+      getParentRoute: () => rootRoute,
+      path: '/owner/workspace',
+      staticData: { nav: { label: 'Workspace', operator: { roles: ['owner'], group: 'Workspace', groupOrder: 0, order: 1, icon: NavIcon, tier: 'core' } } },
+    }),
+    createRoute({
+      getParentRoute: () => rootRoute,
+      path: '/owner/team',
+      staticData: { nav: { label: 'Team', operator: { roles: ['owner'], group: 'Workspace', groupOrder: 0, order: 2, icon: NavIcon, tier: 'core' } } },
     }),
     createRoute({
       getParentRoute: () => rootRoute,
@@ -573,7 +605,7 @@ function renderAt(ui: ReactElement, pathname: string) {
     createRoute({
       getParentRoute: () => rootRoute,
       path: '/owner/credit',
-      staticData: { nav: { label: 'Credit', operator: { roles: ['owner'], group: 'Buy', groupOrder: 0, order: 2, icon: NavIcon, tier: 'core' } } },
+      staticData: { nav: { label: 'Balance', operator: { roles: ['owner'], group: 'Buy', groupOrder: 0, order: 2, icon: NavIcon, tier: 'core' } } },
     }),
     createRoute({
       getParentRoute: () => rootRoute,

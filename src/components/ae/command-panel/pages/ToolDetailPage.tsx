@@ -4,7 +4,8 @@ import { useEffect, useRef, useState } from 'react'
 import { Link } from '@tanstack/react-router'
 
 import { AeToolInspector } from '@/components/ae/market/tool-detail'
-import { Button } from '@/components/ui/button'
+import { buttonVariants } from '@/components/ui/button-variants'
+import { cn } from '@/lib/utils'
 import type { PublicToolDescriptor } from '@/modules/capability-supply/public'
 import { captureClientExceptionOnClient } from '@/lib/observability/capture-client-exception'
 
@@ -76,14 +77,13 @@ export function ToolDetailPage({
           <p className="text-sm text-muted-foreground">
             “{state.toolRef}” could not be inspected right now.
           </p>
-          <Button asChild size="sm" className="min-h-touch justify-self-start">
-            <Link
-              to="/market"
-              onClick={onNavigate}
-            >
-              Browse current Tools
-            </Link>
-          </Button>
+          <Link
+            to="/market"
+            onClick={onNavigate}
+            className={cn(buttonVariants({ size: 'sm' }), 'min-h-touch justify-self-start')}
+          >
+            Browse current Tools
+          </Link>
         </div>
       ) : null}
       {state.kind === 'found' ? (

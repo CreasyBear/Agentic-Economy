@@ -1,4 +1,5 @@
 import { v } from 'convex/values'
+import { normalizedAgentAccessGrantValue } from '@/modules/agent-access/public'
 import { paginationOptsValidator } from 'convex/server'
 import { action, internalMutation, internalQuery, mutation, query } from './_generated/server'
 import {
@@ -15,6 +16,8 @@ import {
   callDispatchMutationArgs,
   callDispatchMutationResult,
   pendingApprovalView,
+  ownerCallContextValue,
+  ownerCallStatusResultValue,
   callState,
   callSummaryPageValue,
   principalAndSourceArgs,
@@ -30,6 +33,8 @@ import {
   reserveResult,
   workCompletionArgs,
 } from './lib/callLifecycle/contracts'
+import { purchaseResolutionRecordValidator } from '@/modules/capability-execution/purchase-resolution'
+import { readPurchaseResolutionByCallRef } from './lib/callLifecycle/purchaseResolutionMaterialize'
 import {
   reconciliationCandidateValue,
   reconciliationClaimResult,
@@ -58,6 +63,7 @@ import {
   canonicalOwnerReconcileHandler,
   canonicalOwnerStatusHandler,
   reconcileCallWorkloadAuthorityHandler,
+  readAcceptedCallGrantAfterLimitUpdateHandler,
   resolveCallAgentAuthorityHandler,
 } from './lib/callLifecycle/authorityHandlers'
 import {
@@ -68,9 +74,15 @@ import {
 import {
   dispatchHandler,
   openDispatchHandler,
+  readPreClaimRefundHandler,
+  readPreClaimRefundArgs,
+  refuseUnclaimedArgs,
+  refuseUnclaimedHandler,
+  refuseUnclaimedResult,
 } from './lib/callLifecycle/dispatch'
 import {
   readOwnerRecoveryHandler,
+  readOwnerReceiptContextHandler,
   listAgentCallSummariesHandler,
   readCurrentProviderConnectionAuthorityHandler,
   readProviderLeaseAuthorityHandler,
@@ -105,6 +117,12 @@ export const reconcileCallWorkloadAuthority = internalMutation({
   args: { callRef: v.string() },
   returns: reconciledCallAuthorityResult,
   handler: reconcileCallWorkloadAuthorityHandler,
+})
+
+export const readAcceptedCallGrantAfterLimitUpdate = internalMutation({
+  args: { callRef: v.string() },
+  returns: v.union(normalizedAgentAccessGrantValue, v.null()),
+  handler: readAcceptedCallGrantAfterLimitUpdateHandler,
 })
 
 export const admit = internalMutation({
@@ -149,6 +167,12 @@ export const cancelBeforeClaim = internalMutation({
   handler: cancelBeforeClaimWithReconciliationInitialization,
 })
 
+export const refuseUnclaimed = internalMutation({
+  args: refuseUnclaimedArgs,
+  returns: refuseUnclaimedResult,
+  handler: refuseUnclaimedHandler,
+})
+
 export const listPendingCallApprovals = query({
   args: {},
   returns: v.array(pendingApprovalView),
@@ -165,6 +189,12 @@ export const openDispatch = internalQuery({
   args: { callRef: v.string() },
   returns: v.union(openDispatchValue, v.null()),
   handler: openDispatchHandler,
+})
+
+export const readPreClaimRefund = internalQuery({
+  args: readPreClaimRefundArgs,
+  returns: v.boolean(),
+  handler: readPreClaimRefundHandler,
 })
 
 export const readReplay = internalQuery({
@@ -189,6 +219,18 @@ export const readOwnerRecovery = internalQuery({
   args: { callRef: v.string() },
   returns: v.union(recoveryValue, v.null()),
   handler: readOwnerRecoveryHandler,
+})
+
+export const readOwnerReceiptContext = internalQuery({
+  args: { callRef: v.string(), ownerId: v.string(), toolRef: v.string() },
+  returns: v.union(ownerCallContextValue, v.null()),
+  handler: readOwnerReceiptContextHandler,
+})
+
+export const readPurchaseResolution = internalQuery({
+  args: { callRef: v.string() },
+  returns: v.union(purchaseResolutionRecordValidator, v.null()),
+  handler: async (ctx, args) => await readPurchaseResolutionByCallRef(ctx, args.callRef),
 })
 
 export const record = internalMutation({
@@ -303,7 +345,7 @@ export const reconcileCall = action({
 
 export const readOwnerCallStatus = action({
   args: { callRef: v.string() },
-  returns: statusResultValue,
+  returns: ownerCallStatusResultValue,
   handler: canonicalOwnerStatusHandler,
 })
 

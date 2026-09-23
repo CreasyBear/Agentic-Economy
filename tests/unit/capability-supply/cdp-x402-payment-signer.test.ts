@@ -104,6 +104,34 @@ const POLICY_RULES_DIGEST = canonicalDigest({
     rules: PROJECT_POLICY_RULES,
   },
 })
+const PRODUCTION_ACCOUNT_POLICY_RULES = [{
+  ...ACCOUNT_POLICY_RULES[0],
+  criteria: ACCOUNT_POLICY_RULES[0].criteria.map((criterion) => (
+    criterion.type === 'evmTypedDataVerifyingContract'
+      ? { ...criterion, addresses: [BASE_MAINNET_USDC_ADDRESS] }
+      : criterion
+  )),
+}] as const
+const PRODUCTION_PROJECT_POLICY_RULES = [{
+  ...PROJECT_POLICY_RULES[0],
+  criteria: PROJECT_POLICY_RULES[0].criteria.map((criterion) => ({
+    ...criterion,
+    addresses: [BASE_MAINNET_USDC_ADDRESS],
+  })),
+}, PROJECT_POLICY_RULES[1]] as const
+const PRODUCTION_POLICY_RULES_DIGEST = canonicalDigest({
+  kind: 'ae.x402.cdp-policy-rules:v1',
+  accountPolicy: {
+    id: ACCOUNT_POLICY_ID,
+    scope: 'account',
+    rules: PRODUCTION_ACCOUNT_POLICY_RULES,
+  },
+  projectPolicy: {
+    id: PROJECT_POLICY_ID,
+    scope: 'project',
+    rules: PRODUCTION_PROJECT_POLICY_RULES,
+  },
+})
 const requirement = {
   scheme: 'exact',
   network: BASE_MAINNET_NETWORK,
@@ -162,10 +190,13 @@ function makeDependencies(options: Readonly<{
   getAccount: ReturnType<typeof vi.fn>
   signTypedData: ReturnType<typeof vi.fn>
 }> {
+  const production = options.aeEnvironment !== 'sandbox'
+  const accountRules = production ? PRODUCTION_ACCOUNT_POLICY_RULES : ACCOUNT_POLICY_RULES
+  const projectRules = production ? PRODUCTION_PROJECT_POLICY_RULES : PROJECT_POLICY_RULES
   const getPolicy = options.getPolicy ?? ((id: string) => ({
     id,
     scope: id === ACCOUNT_POLICY_ID ? 'account' as const : 'project' as const,
-    rules: id === ACCOUNT_POLICY_ID ? ACCOUNT_POLICY_RULES : PROJECT_POLICY_RULES,
+    rules: id === ACCOUNT_POLICY_ID ? accountRules : projectRules,
   }))
   const signTypedData = vi.fn(async (_input: SignTypedDataInput) => ({ signature: SIGNATURE }))
   const getAccount = vi.fn(async () => ({
@@ -194,7 +225,9 @@ function makeDependencies(options: Readonly<{
         AE_X402_CDP_EXPECTED_EVM_ADDRESS: account.address,
         AE_X402_CDP_ACCOUNT_POLICY_ID: ACCOUNT_POLICY_ID,
         AE_X402_CDP_PROJECT_POLICY_ID: PROJECT_POLICY_ID,
-        AE_X402_CDP_POLICY_RULES_DIGEST: POLICY_RULES_DIGEST,
+        AE_X402_CDP_POLICY_RULES_DIGEST: production
+          ? PRODUCTION_POLICY_RULES_DIGEST
+          : POLICY_RULES_DIGEST,
         AE_X402_CDP_CREDENTIAL_GENERATION: '7',
         ...options.environment,
       },
@@ -708,6 +741,20 @@ describe('CDP x402 custody signer', () => {
   })
 
   it('rejects mismatched policy and account custody bindings', async () => {
+    const crossedEnvironmentPolicy = makeDependencies({
+      aeEnvironment: 'production',
+      getPolicy: (id) => ({
+        id,
+        scope: id === ACCOUNT_POLICY_ID ? 'account' : 'project',
+        rules: id === ACCOUNT_POLICY_ID ? ACCOUNT_POLICY_RULES : PROJECT_POLICY_RULES,
+      }),
+    })
+    expect(await createCdpEvmX402PaymentSignature(request, {
+      ...crossedEnvironmentPolicy.dependencies,
+      requestFingerprintContext: { ...fingerprintContext, aeEnvironment: 'production' },
+    })).toBeUndefined()
+    expect(crossedEnvironmentPolicy.signTypedData).not.toHaveBeenCalled()
+
     const wrongPolicy = makeDependencies({
       getPolicy: (id) => ({
         id,

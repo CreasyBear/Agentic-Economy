@@ -78,6 +78,7 @@ const admitAnonymousEdge = makeFunctionReference<'mutation', {
 const admitHttp = makeFunctionReference<'mutation', {
   name: string
   key: string
+  serviceAuth: CustomerRequestServiceAssertion
 }, Readonly<{ ok: boolean; retryAfter?: number }>>('rateLimit:admitHttp')
 
 describe('anonymous operation chat transport', () => {
@@ -138,8 +139,31 @@ describe('anonymous operation chat transport', () => {
     const key = `ip:sha256:${'a'.repeat(64)}:sha256:${'b'.repeat(64)}`
     try {
       for (const name of ['chat-submit', 'chat-anonymous', 'chat-anonymous-edge']) {
-        await expect(backend.mutation(admitHttp, { name, key })).rejects.toThrow()
+        await expect(backend.mutation(admitHttp, { name, key } as never)).rejects.toThrow()
       }
+      const unsignedHttp = {
+        principalId: 'ae:server-function',
+        ownerId: 'ae:server-function',
+        credentialId: 'ae:server-function',
+        scopes: ['rate_limit:admit_http'],
+        issuedAt: Date.now(),
+        signature: 'unsigned',
+      }
+      await expect(backend.mutation(admitHttp, {
+        name: 'public-read',
+        key,
+        serviceAuth: unsignedHttp,
+      })).rejects.toThrow(/authentication_required/)
+      const httpAuth = await createConvexServerFunctionAssertion({
+        operation: 'rateLimit.admitHttp',
+        scope: 'rate_limit:admit_http',
+        command: { name: 'public-read', key },
+      })
+      await expect(backend.mutation(admitHttp, {
+        name: 'public-read',
+        key,
+        serviceAuth: httpAuth,
+      })).resolves.toMatchObject({ ok: true })
       const unsigned = {
         principalId: 'ae:server-function',
         ownerId: 'ae:server-function',

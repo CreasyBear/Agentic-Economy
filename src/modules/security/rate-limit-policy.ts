@@ -46,9 +46,10 @@ export const RATE_LIMIT_POLICY: Record<RateLimitName, RateLimitPolicyConfig> = {
 }
 
 /**
- * The scopes admitted through the public `rateLimit:admitHttp` mutation and
- * reported on HTTP responses as `RateLimit-*` headers. All of today's
- * HTTP-facing scopes are token buckets (see `RATE_LIMIT_POLICY` above).
+ * The scopes admitted through the public `rateLimit:admitHttp` mutation (only
+ * with a server-function assertion) and reported on HTTP responses as
+ * `RateLimit-*` headers. All of today's HTTP-facing scopes are token buckets
+ * (see `RATE_LIMIT_POLICY` above).
  */
 export const HTTP_RATE_LIMIT_NAMES = [
   'public-read',

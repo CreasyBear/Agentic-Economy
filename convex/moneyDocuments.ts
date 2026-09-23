@@ -3,13 +3,27 @@ import { makeFunctionReference, paginationOptsValidator, paginationResultValidat
 import { v } from 'convex/values'
 
 import type { Id } from './_generated/dataModel'
-import { internalAction, internalMutation, internalQuery, mutation, query, type MutationCtx } from './_generated/server'
+import {
+  internalAction,
+  internalMutation,
+  internalQuery,
+  mutation,
+  query,
+  type MutationCtx,
+  type QueryCtx,
+} from './_generated/server'
 import { resolveBusinessActor } from './authz'
 import { marketDispatchWorkpool } from './marketDispatchWorkpool'
 import { readCommercialPolicyGate } from './moneyCommercialPolicy'
 import { canonicalDigest } from '../src/modules/common/canonical-digest'
 import { stableStringify, type StableHashValue } from '../src/modules/common/stable-hash'
-import { roundAudStatementTotal } from '../src/modules/money/public'
+import {
+  admitTaxInvoiceIssuance,
+  AUD_EXPONENT,
+  calculateAudGstSplit,
+  roundAudStatementTotal,
+  type CustomerTaxFacts,
+} from '../src/modules/money/public'
 
 const documentKind = v.union(
   v.literal('funding_receipt'),
@@ -102,6 +116,121 @@ const bookBuyerAdjustmentRef = makeFunctionReference<'action', {
 const queueStatementRenderRef = makeFunctionReference<'mutation', {
   documentRef: string; adjustmentTransactionRefs: string[]
 }, { kind: 'advanced' | 'replayed' | 'refused' }>('moneyDocuments:queueStatementRender')
+
+export async function readCustomerTaxFactsForAccount(
+  ctx: QueryCtx,
+  accountRef: string,
+): Promise<CustomerTaxFacts | undefined> {
+  const row = await ctx.db.query('moneyCustomerTaxFacts')
+    .withIndex('by_accountRef', (index) => index.eq('accountRef', accountRef))
+    .unique()
+  if (row === null) return undefined
+  return Object.freeze({
+    abn: row.abn,
+    gstRegistered: row.gstRegistered,
+    legalCustomerRef: row.legalCustomerRef,
+    effectiveAt: row.effectiveAt,
+  })
+}
+
+export const createOwnerTaxInvoice = mutation({
+  args: {
+    environment: documentEnvironment,
+    grossUnits: v.string(),
+    sourceTransactionRef: v.string(),
+  },
+  returns: v.union(
+    v.object({ kind: v.literal('created'), documentRef: v.string() }),
+    v.object({ kind: v.literal('replayed'), documentRef: v.string() }),
+    v.object({
+      kind: v.literal('refused'),
+      code: v.literal('tax_invoice_withheld'),
+      reason: v.string(),
+    }),
+    v.object({ kind: v.literal('refused'), code: v.string() }),
+  ),
+  handler: async (ctx, args) => {
+    const actor = await resolveBusinessActor(ctx)
+    if (actor.kind !== 'authenticated_owner') {
+      return { kind: 'refused' as const, code: 'authentication_required' }
+    }
+    if (!/^(?:0|[1-9]\d{0,77})$/u.test(args.grossUnits)
+      || args.sourceTransactionRef.trim().length === 0) {
+      return { kind: 'refused' as const, code: 'tax_invoice_input_invalid' }
+    }
+    const policy = await readCommercialPolicyGate(ctx.db, {
+      environment: args.environment,
+      now: Date.now(),
+      ...(args.environment === 'sandbox'
+        ? { sandboxFixture: 'managed_x402_deterministic_v1' as const }
+        : {}),
+    })
+    if (policy.kind === 'refused') return { kind: 'refused' as const, code: policy.code }
+    const customerTaxFacts = await readCustomerTaxFactsForAccount(ctx, actor.canonicalAccountRef)
+    const admission = admitTaxInvoiceIssuance({
+      taxControl: policy.controls.tax,
+      ...(customerTaxFacts === undefined ? {} : { customerTaxFacts }),
+    })
+    if (admission.kind === 'withheld' || customerTaxFacts === undefined) {
+      return {
+        kind: 'refused' as const,
+        code: 'tax_invoice_withheld',
+        reason: admission.kind === 'withheld' ? admission.reason : 'customer_tax_facts_missing',
+      }
+    }
+    const gstSplit = calculateAudGstSplit(args.grossUnits, policy.controls.tax.serviceFeeTaxBps)
+    if (gstSplit === undefined) {
+      return { kind: 'refused' as const, code: 'tax_invoice_amount_invalid' }
+    }
+    const documentRef = `money-document:tax_invoice:${args.sourceTransactionRef}`
+    const existing = await ctx.db.query('moneyDocuments')
+      .withIndex('by_documentRef', (index) => index.eq('documentRef', documentRef))
+      .unique()
+    if (existing !== null) return { kind: 'replayed' as const, documentRef }
+    const occurredAt = Date.now()
+    const renderInput = {
+      format: 'ae.money-document-render-input:v2',
+      documentRef,
+      accountRef: actor.canonicalAccountRef,
+      kind: 'tax_invoice' as const,
+      currency: 'AUD',
+      exponent: AUD_EXPONENT,
+      grossUnits: gstSplit.grossUnits,
+      netUnits: gstSplit.netUnits,
+      gstUnits: gstSplit.gstUnits,
+      gstBps: policy.controls.tax.serviceFeeTaxBps,
+      abn: customerTaxFacts.abn,
+      legalCustomerRef: customerTaxFacts.legalCustomerRef,
+      transactionRef: args.sourceTransactionRef,
+      occurredAt,
+      policyRefs: policy.policyRefs,
+      policyDigest: policy.policyDigest,
+    } as const satisfies StableHashValue
+    const renderInputJson = stableStringify(renderInput)
+    const renderInputDigest = canonicalDigest(renderInput)
+    const documentId = await ctx.db.insert('moneyDocuments', {
+      documentRef,
+      accountRef: actor.canonicalAccountRef,
+      kind: 'tax_invoice',
+      sourceTransactionRefs: [args.sourceTransactionRef],
+      amountUnits: gstSplit.grossUnits,
+      residualUnits: '0',
+      policyRefs: [...policy.policyRefs],
+      policyDigest: policy.policyDigest,
+      templateVersion: 'ae.money-document:html:v1',
+      renderInputJson,
+      renderInputDigest,
+      state: 'rendering',
+      environment: args.environment,
+      sourceCount: 1,
+      snapshotDigest: renderInputDigest,
+      createdAt: occurredAt,
+    })
+    const workId = await enqueueDocumentRender(ctx, documentRef)
+    await ctx.db.patch(documentId, { workId })
+    return { kind: 'created' as const, documentRef }
+  },
+})
 
 async function enqueueStatementPage(
   ctx: MutationCtx,

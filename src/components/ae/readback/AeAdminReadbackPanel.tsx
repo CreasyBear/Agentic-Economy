@@ -162,15 +162,17 @@ function useAdminReadbackColumns(surface: AdminReadbackSurface): ColumnDef<Admin
 function RefDisclosure({ raw }: { raw: string }) {
   return (
     <Collapsible className="grid gap-1">
-      <CollapsibleTrigger asChild>
-        <button
-          type="button"
-          className="inline-flex items-center gap-1 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground"
-        >
-          View reference
-          <ChevronDown aria-hidden="true" className="size-3 text-muted-foreground" />
-        </button>
-      </CollapsibleTrigger>
+      <CollapsibleTrigger
+        render={
+          <button
+            type="button"
+            className="inline-flex items-center gap-1 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground"
+          >
+            View reference
+            <ChevronDown aria-hidden="true" className="size-3 text-muted-foreground" />
+          </button>
+        }
+      />
       <CollapsibleContent>
         <code className="block whitespace-normal break-words font-mono text-xs leading-5 text-muted-foreground">
           {raw}

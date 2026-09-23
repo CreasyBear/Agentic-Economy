@@ -1,9 +1,10 @@
 import { makeFunctionReference } from 'convex/server'
 import type { Infer } from 'convex/values'
 import { degradeBackend } from '../../../src/lib/observability/degrade-backend'
+import { resolveServiceMode, serviceModeAllowsEnvironment } from '@/lib/deployment/service-mode'
 import type { Doc } from '../../_generated/dataModel'
 import { internal } from '../../_generated/api'
-import type { ActionCtx, MutationCtx, QueryCtx } from '../../_generated/server'
+import { env, type ActionCtx, type MutationCtx, type QueryCtx } from '../../_generated/server'
 import { resolveBusinessActor } from '../../authz'
 import { MARKET_TOOLS_CALL_SCOPE } from '@/modules/agent-access/contract'
 import {
@@ -11,6 +12,7 @@ import {
 } from '@/modules/agent-access/policy'
 import { isPublicToolRef } from '@/modules/capability-supply/public'
 import { uniqueSorted } from '@/modules/common/unique-sorted'
+import { canonicalDigest } from '@/modules/common/canonical-digest'
 import {
   callResultValue,
   recoveryResultValue,
@@ -145,7 +147,7 @@ export async function reconcileCallWorkloadAuthorityHandler(
     ? await reconcilePersistedCallAuthority(ctx, args.callRef, now)
     : sellerCanaryAuthority
   if (authority === null) {
-    await refuseCallBeforeEffectForInvalidAuthority(ctx, args.callRef, now)
+    await refuseCallBeforeEffectForInvalidAuthority(ctx, args.callRef)
     return { kind: 'refused' }
   }
   return { kind: 'authorized', authority }
@@ -156,7 +158,7 @@ function sellerCanaryDispatchAuthorityMatches(
   canary: NonNullable<Doc<'capabilityCalls'>['sellerOnboardingCanary']>,
 ): boolean {
   return [
-    row.environment === 'sandbox',
+    row.environment === 'sandbox' || row.environment === 'production',
     canary.funding.grantRef === row.grantRef,
     canary.funding.principalId === row.principalId,
     canary.funding.ownerId === row.ownerId,
@@ -195,7 +197,7 @@ async function reconcilePersistedSellerCanaryAuthority(
       ownerId: row.ownerId,
       credentialId: row.credentialId,
       applicationRef: row.applicationRef,
-      environment: 'sandbox',
+      environment: row.environment,
       generation: row.grantGeneration,
       spendingPolicyDigest: row.policyDigest,
       expiresAt: row.grantExpiresAt,
@@ -445,6 +447,99 @@ export async function validatePersistedCallDelegation(
   }) !== null
 }
 
+/**
+ * Requires a previously accepted unresolved Call and live current authority for
+ * the same credential. Ensures a monetary-only policy revision cannot rewrite or
+ * strand that purchase's original authority. Both original and current canonical
+ * delegations must still permit the Tool. Credential, scope, mode, rate/concurrency
+ * or expiry changes never enter this exception. Invalid evidence returns null.
+ */
+async function reconcileAcceptedCallAfterLimitUpdate(
+  ctx: MutationCtx,
+  row: Doc<'capabilityCalls'>,
+  current: CurrentAgentAuthority,
+  now: number,
+): Promise<ReconciledCallAuthority | null> {
+  if ((row.state !== 'pending' && row.state !== 'reconciliation_required')
+    || row.quoteRef === undefined
+    || row.principalId !== current.principal.principalId
+    || row.ownerId !== current.principal.ownerId
+    || row.credentialId !== current.principal.credentialId
+    || row.applicationRef !== current.principal.applicationRef
+    || row.environment !== current.principal.environment
+    || current.principal.authorityMode !== 'spending_policy'
+    || current.grantGeneration <= row.grantGeneration
+    || current.expiresAt !== row.grantExpiresAt) return null
+  const quoteRef = row.quoteRef
+  const [oldRow, currentRow, quote, delegation, currentDelegation] = await Promise.all([
+    ctx.db.query('agentAccessGrants').withIndex('by_grantRef', q => q.eq('grantRef', row.grantRef)).unique(),
+    ctx.db.query('agentAccessGrants').withIndex('by_grantRef', q => q.eq('grantRef', current.grantRef)).unique(),
+    quoteRef === undefined
+      ? Promise.resolve(null)
+      : ctx.db.query('capabilityQuotes').withIndex('by_quoteRef', q => q.eq('quoteRef', quoteRef)).unique(),
+    ctx.db.query('authorityDelegationGrants').withIndex('by_grantRef', q => q.eq('grantRef', row.grantRef)).unique(),
+    ctx.db.query('authorityDelegationGrants').withIndex('by_grantRef', q => q.eq('grantRef', current.grantRef)).unique(),
+  ])
+  if (oldRow === null || currentRow === null || delegation === null || currentDelegation === null
+    || quote?.state !== 'consumed' || quote.consumedCallRef !== row.callRef
+    || quote.grantRef !== row.grantRef || quote.grantPolicyDigest !== row.policyDigest
+    || oldRow.lifecycle !== 'revoked' || currentRow.lifecycle !== 'active') return null
+  if (canonicalDigest(uniqueSorted(delegation.scopes)) !== canonicalDigest(uniqueSorted(currentDelegation.scopes))
+    || canonicalDigest(uniqueSorted(delegation.resourceRefs)) !== canonicalDigest(uniqueSorted(currentDelegation.resourceRefs))
+    || delegation.budgetLimit !== currentDelegation.budgetLimit
+    || delegation.expiresAt !== currentDelegation.expiresAt) return null
+  let original: ReturnType<typeof normalizeStoredAgentAccessGrant>
+  let latest: ReturnType<typeof normalizeStoredAgentAccessGrant>
+  try {
+    original = normalizeStoredAgentAccessGrant(oldRow)
+    latest = normalizeStoredAgentAccessGrant(currentRow)
+  } catch (cause) {
+    return degradeBackend(cause, null, { site: 'reconcileAcceptedCallAfterLimitUpdate', reason: 'invalid_response' })
+  }
+  if (original.format !== 'ae.agent-access-grant:v2' || latest.format !== 'ae.agent-access-grant:v2'
+    || original.principalId !== row.principalId || original.ownerId !== row.ownerId
+    || original.credentialId !== row.credentialId || original.applicationRef !== row.applicationRef
+    || original.environment !== row.environment || original.generation !== row.grantGeneration
+    || original.spendingPolicyDigest !== row.policyDigest || original.expiresAt !== row.grantExpiresAt
+    || latest.spendingPolicyDigest !== current.policyDigest) return null
+  const nonMonetary = (grant: typeof original) => ({
+    authorityMode: grant.authorityMode, environment: grant.environment,
+    toolAccess: grant.toolAccess, toolRefs: grant.toolRefs,
+    budgetPolicyRef: grant.spendingPolicy.budget.budgetPolicyRef,
+    currency: grant.spendingPolicy.budget.currency, exponent: grant.spendingPolicy.budget.exponent,
+    maximumConcurrentCalls: grant.spendingPolicy.budget.maximumConcurrentCalls,
+    rate: grant.spendingPolicy.rate,
+  })
+  if (canonicalDigest(nonMonetary(original)) !== canonicalDigest(nonMonetary(latest))) return null
+  const originalDelegation = await validateCanonicalAgentDelegation(ctx, {
+    evidenceKind: 'accepted-call-policy-update-recovery', evidenceRef: row.callRef,
+    principalRef: row.principalId, accountRef: row.ownerId, grantRef: row.grantRef,
+    grantGeneration: delegation.generation, requiredScopes: [MARKET_TOOLS_CALL_SCOPE],
+    resourceRefs: [row.toolRef], now,
+  })
+  return originalDelegation === null ? null : {
+    principalId: row.principalId, accountRef: row.ownerId, credentialId: row.credentialId,
+    grantRef: row.grantRef, grantGeneration: row.grantGeneration,
+    policyDigest: row.policyDigest, expiresAt: row.grantExpiresAt,
+  }
+}
+
+/** Return original grant material only when the accepted purchase remains
+ * authorized under the narrow monetary-update contract. This never makes a
+ * superseded grant active or authorizes a new purchase. Each effect check reads
+ * current canonical authority again in this transaction. */
+export async function readAcceptedCallGrantAfterLimitUpdateHandler(
+  ctx: MutationCtx,
+  args: Readonly<{ callRef: string }>,
+): Promise<ReturnType<typeof normalizeStoredAgentAccessGrant> | null> {
+  const authority = await reconcilePersistedCallAuthority(ctx, args.callRef, Date.now())
+  if (authority === null) return null
+  const row = await ctx.db.query('agentAccessGrants')
+    .withIndex('by_grantRef', q => q.eq('grantRef', authority.grantRef)).unique()
+  if (row === null || row.lifecycle !== 'revoked') return null
+  return normalizeStoredAgentAccessGrant(row)
+}
+
 export async function reconcilePersistedCallAuthority(
   ctx: MutationCtx,
   callRef: string,
@@ -468,7 +563,9 @@ export async function reconcilePersistedCallAuthority(
     authorityMode: storedAgent.authorityMode,
   }, now, { kind: 'persisted_invocation', toolRef: row.toolRef })
   if (current === null) return null
-  if (!callMatchesCurrentAuthority(row, current)) return null
+  if (!callMatchesCurrentAuthority(row, current)) {
+    return await reconcileAcceptedCallAfterLimitUpdate(ctx, row, current, now)
+  }
   const delegationIsCurrent = await validatePersistedCallDelegation(ctx, {
     callRef: row.callRef,
     toolRef: row.toolRef,
@@ -492,28 +589,21 @@ export async function reconcilePersistedCallAuthority(
 export async function refuseCallBeforeEffectForInvalidAuthority(
   ctx: MutationCtx,
   callRef: string,
-  now: number,
 ): Promise<void> {
-  const [row, control] = await Promise.all([
-    ctx.db.query('capabilityCalls')
-      .withIndex('by_callRef', (query) => query.eq('callRef', callRef))
-      .unique(),
-    ctx.db.query('actionExecutionControls')
-      .withIndex('by_executionRef', (query) => query.eq('executionRef', callRef))
-      .unique(),
-  ])
-  if (row === null || row.state !== 'pending' || control !== null) return
-  await ctx.db.patch(row._id, {
-    state: 'refused',
-    dispatchState: 'failed',
-    result: {
-      kind: 'refused',
-      toolRef: row.toolRef,
-      code: 'grant_not_found',
-      retryable: false,
-      nextAction: 'Refresh the agent grant and retry.',
-    },
-    updatedAt: now,
+  const row = await ctx.db.query('capabilityCalls')
+    .withIndex('by_callRef', (query) => query.eq('callRef', callRef))
+    .unique()
+  if (row === null || row.state !== 'pending') return
+  // The same transactional exclusion and durable refund intent applies when
+  // workload authority refuses before the worker's own preparation gates.
+  await ctx.runMutation(internal.capabilityCalls.refuseUnclaimed, {
+    callRef: row.callRef,
+    principalId: row.principalId,
+    credentialId: row.credentialId,
+    idempotencyKey: row.idempotencyKey,
+    code: 'grant_not_found',
+    retryable: false,
+    nextAction: 'Refresh the agent grant and retry.',
   })
 }
 
@@ -573,6 +663,9 @@ export async function canonicalAgentCallHandler(
     if (replay === null) return { kind: 'refused', code: 'operation_not_current', retryable: false }
     if (replay.result !== undefined) return projectCallResult(callResultSchema.parse(replay.result))
     return { kind: 'pending', callRef: material.consumedCallRef, toolRef: material.toolRef, retryAfterMs: 1_000 }
+  }
+  if (!serviceModeAllowsEnvironment(resolveServiceMode(env), principal.environment)) {
+    return { kind: 'refused', toolRef: material.toolRef, code: 'environment_mismatch', retryable: false }
   }
   if (material.x402RequirementDigest !== undefined) {
     const live = await ctx.runAction(inspectLiveX402RequirementRef, {

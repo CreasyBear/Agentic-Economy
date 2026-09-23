@@ -2,9 +2,14 @@
 
 import { useState } from 'react'
 
+import { useRouter } from '@tanstack/react-router'
 import { ArrowLeftIcon, SearchIcon, XIcon } from 'lucide-react'
 
+import { useAppearance } from '@/components/ae/theme/ThemeProvider'
+
+import { TACTILE } from '@/components/ae/feedback/AeEmptyState'
 import { Button } from '@/components/ui/button'
+import { cn } from '@/lib/utils'
 import {
   Dialog,
   DialogClose,
@@ -15,7 +20,7 @@ import {
 } from '@/components/ui/dialog'
 
 import { useCommandPanel } from './CommandPanelProvider'
-import { ToolsSearchPage } from './pages/ToolsSearchPage'
+import { ToolsSearchPage } from './tools-search-page/ToolsSearchPage'
 import { ToolDetailPage } from './pages/ToolDetailPage'
 import { useCommandPanelHotKeys } from './useCommandPanelHotKeys'
 
@@ -28,6 +33,8 @@ const PANEL_CONTENT_ID = 'ae-command-panel-content'
  */
 export function AeCommandPanel() {
   const panel = useCommandPanel()
+  const router = useRouter()
+  const { setPreference, preference } = useAppearance()
   const [searchQuery, setSearchQuery] = useState('')
   const updateSearchQuery = (nextQuery: string) => {
     setSearchQuery(nextQuery)
@@ -53,26 +60,31 @@ export function AeCommandPanel() {
       open={panel.isOpen}
       onOpenChange={(nextOpen) => (nextOpen ? panel.open() : panel.close())}
     >
-      <DialogTrigger asChild>
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          className="min-h-touch justify-start rounded-full px-3 shadow-none sm:min-w-40"
-          aria-label="Find Tools"
-          aria-controls={PANEL_CONTENT_ID}
-        >
-          <SearchIcon aria-hidden="true" />
-          <span className="hidden text-sm font-medium sm:inline">Find Tools</span>
-          <kbd className="ms-auto hidden border-s border-border ps-2 font-mono text-[0.6875rem] text-muted-foreground sm:inline">
-            ⌘K
-          </kbd>
-        </Button>
-      </DialogTrigger>
+      <DialogTrigger
+        render={
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className={cn(
+              'min-h-touch justify-start rounded-full px-3 shadow-none sm:min-w-40',
+              TACTILE,
+            )}
+            aria-label="Find Tools"
+            aria-controls={PANEL_CONTENT_ID}
+          >
+            <SearchIcon aria-hidden="true" />
+            <span className="hidden text-sm font-medium sm:inline">Find Tools</span>
+            <kbd className="ms-auto hidden border-s border-border ps-2 font-mono text-[0.6875rem] text-muted-foreground sm:inline">
+              ⌘K
+            </kbd>
+          </Button>
+        }
+      />
       <DialogContent
         id={PANEL_CONTENT_ID}
         showCloseButton={panel.pageCount === 1}
-        className="flex h-[calc(100dvh-1rem)] w-[calc(100%-1rem)] max-w-none flex-col gap-0 overflow-hidden rounded-lg p-0 duration-base ease-emphasized motion-reduce:animate-none motion-reduce:duration-0 sm:h-[min(42rem,calc(100dvh-3rem))] sm:w-full sm:max-w-3xl"
+        className="flex h-[calc(100dvh-1rem)] w-[calc(100%-1rem)] max-w-none flex-col gap-0 overflow-hidden rounded-lg p-0 duration-150 ease-standard motion-reduce:animate-none motion-reduce:duration-0 sm:h-[min(42rem,calc(100dvh-3rem))] sm:w-full sm:max-w-3xl"
         onKeyDown={(event) => {
           if (
             event.key === '/' &&
@@ -94,12 +106,14 @@ export function AeCommandPanel() {
               <ArrowLeftIcon data-icon="inline-start" aria-hidden="true" />
               Back
             </Button>
-            <DialogClose asChild>
-              <Button type="button" variant="ghost" size="sm" className="min-h-touch">
-                <XIcon data-icon="inline-start" aria-hidden="true" />
-                Close
-              </Button>
-            </DialogClose>
+            <DialogClose
+              render={
+                <Button type="button" variant="ghost" size="sm" className="min-h-touch">
+                  <XIcon data-icon="inline-start" aria-hidden="true" />
+                  Close
+                </Button>
+              }
+            />
           </div>
         ) : null}
         <div className="flex min-h-0 flex-1 flex-col" data-testid="command-panel-body">
@@ -113,6 +127,13 @@ export function AeCommandPanel() {
               query={searchQuery}
               onQueryChange={updateSearchQuery}
               onSelectTool={panel.pushToolDetail}
+              onNavigate={(href) => {
+                completeNavigation()
+                void router.navigate({ to: href })
+              }}
+              onToggleTheme={() => {
+                setPreference(preference === 'dark' ? 'light' : 'dark')
+              }}
             />
           </div>
           {panel.topPage.kind === 'tool-detail' ? (
@@ -122,9 +143,37 @@ export function AeCommandPanel() {
             />
           ) : null}
         </div>
-        <p className="shrink-0 border-t border-border px-gutter py-intra text-xs text-muted-foreground">
-          Esc pops a layer · Enter inspects
-        </p>
+        <footer
+          aria-label="Keyboard shortcuts"
+          className="flex shrink-0 flex-wrap items-center justify-between gap-y-1 border-t border-border px-gutter py-intra text-xs text-foreground/80"
+        >
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+            <span className="inline-flex items-center gap-1">
+              <kbd className="rounded border border-border bg-muted px-1.5 py-0.5 font-mono text-[10px] text-foreground/70">
+                ↑↓
+              </kbd>
+              <span>Navigate</span>
+            </span>
+            <span className="inline-flex items-center gap-1">
+              <kbd className="rounded border border-border bg-muted px-1.5 py-0.5 font-mono text-[10px] text-foreground/70">
+                ↵
+              </kbd>
+              <span>Select</span>
+            </span>
+            <span className="inline-flex items-center gap-1">
+              <kbd className="rounded border border-border bg-muted px-1.5 py-0.5 font-mono text-[10px] text-foreground/70">
+                esc
+              </kbd>
+              <span>Back / Close</span>
+            </span>
+          </div>
+          <span className="hidden sm:inline-flex items-center gap-1">
+            <kbd className="rounded border border-border bg-muted px-1.5 py-0.5 font-mono text-[10px] text-foreground/70">
+              /
+            </kbd>
+            <span>Search</span>
+          </span>
+        </footer>
       </DialogContent>
     </Dialog>
   )

@@ -2,6 +2,7 @@ import { createFileRoute } from '@tanstack/react-router'
 
 import { degrade } from '@/lib/observability/degrade'
 import { methodNotAllowed } from '@/lib/server/method-guard'
+import { withHttpRateLimit } from '@/lib/server/rate-limit'
 import { resolveCanonicalBaseUrl } from '@/lib/server/canonical-url'
 import { readDirectoryFreshnessField, type X402DirectoryFreshnessField } from '@/modules/market/x402-directory-index.server'
 import {
@@ -54,11 +55,13 @@ export async function handleDeveloperDiscoverySchemaRequest(
   state?: DiscoverySourceState,
   options: ReadDeveloperDiscoveryRouteOptions = {}
 ): Promise<Response> {
+  return await withHttpRateLimit(request, 'public-read', async () => {
   const routeOptions = await readDeveloperDiscoveryRuntimeOptions(request, state, options)
   const artifact = generateDeveloperDiscoverySchema(state, routeOptions)
   const fetchReadback = readDeveloperDiscoveryFetchReadback('schema', '/api/discovery/schema', artifact, routeOptions.now ?? 0)
 
   return developerDiscoveryJsonResponse(await withDirectoryFreshness(artifact), fetchReadback)
+  })
 }
 
 /**
