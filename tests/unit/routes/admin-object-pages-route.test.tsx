@@ -52,6 +52,7 @@ const quoteCase = {
   path: '/_operator/admin/quotes/$quoteRef',
   param: 'quoteRef',
   ref: quoteRef,
+  heading: 'Quote',
   view: {
     kind: 'quote', state: 'issued', ref: quoteRef, toolRef: null, workspaceRef: null,
     agentRef: null, createdAt: Date.UTC(2026, 8, 22), expiresAt: null, consumedCallRef: null,
@@ -64,6 +65,7 @@ const cases = [
     path: '/_operator/admin/tools/$toolRef',
     param: 'toolRef',
     ref: toolRef,
+    heading: 'Tool version',
     view: {
       kind: 'tool_version', ref: toolRef, publicationRef: 'publication:one', revision: null,
       disposition: 'current', businessSlug: 'provider-one', sourceAuthorityState: 'verified',
@@ -74,6 +76,7 @@ const cases = [
     path: '/_operator/admin/workspaces/$accountRef',
     param: 'accountRef',
     ref: accountRef,
+    heading: 'Workspace',
     view: {
       kind: 'workspace', ref: accountRef, lifecycle: 'active', ownerCount: 1, memberCount: 2,
       createdAt: Date.UTC(2026, 8, 22), externalOrganizationBound: true,
@@ -84,6 +87,7 @@ const cases = [
     path: '/_operator/admin/agents/$principalRef',
     param: 'principalRef',
     ref: principalRef,
+    heading: 'Agent',
     view: {
       kind: 'agent', ref: principalRef, workspaceRef: accountRef, credentialLifecycle: 'active',
       spendingPolicyRef: null, recentCallRefs: [],
@@ -106,9 +110,10 @@ afterEach(() => {
 })
 
 describe('admin object page routes', () => {
-  it.each(cases)('renders the $view.kind header reference', ({ path, param, ref, view }) => {
+  it.each(cases)('renders the $view.kind identity and copyable reference', ({ path, param, ref, view, heading }) => {
     renderRoute(path, param, ref, view)
-    expect(screen.getByRole('heading', { level: 1 }).textContent).toContain(ref)
+    expect(screen.getByRole('heading', { level: 1, name: heading })).toBeTruthy()
+    expect(screen.getByText(ref)).toBeTruthy()
   })
 
   it('recovers to Search when the object does not exist', () => {

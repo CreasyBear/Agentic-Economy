@@ -36,6 +36,7 @@ export const PROVIDER_OBJECT_COPY = {
   title: 'Provider',
   description: 'Inspect Provider publication, connection, admission, and removal facts.',
   breadcrumbs: { admin: 'Admin', providers: 'Providers' },
+  referenceLabel: 'Reference',
   backToSearch: 'Back to Search',
   refusedTitle: 'Admin access required',
   refusedDescription: 'Your account does not have the Admin role for this action.',

@@ -3,6 +3,7 @@ import { useState } from 'react'
 
 import { api } from '../../../../../convex/_generated/api'
 import { AdminActionSheet } from '@/components/ae/admin/actions/AdminActionSheet'
+import { AeCopyReference } from '@/components/ae/data/AeCopyReference'
 import { SourceAuthorityReviewPanel } from '@/components/ae/admin/catalog-health/SourceAuthorityReviewPanel'
 import { AeFactList } from '@/components/ae/data/AeFactList'
 import { AeOperatorPage } from '@/components/ae/layout/AeOperatorPage'
@@ -92,6 +93,10 @@ export function AdminProviderObjectPage(props: AdminProviderObjectPageProps) {
       )}
       stickyHeader
     >
+      <div className="flex min-w-0 flex-wrap items-center gap-intra text-sm text-muted-foreground">
+        <span>{PROVIDER_OBJECT_COPY.referenceLabel}</span>
+        <AeCopyReference label={PROVIDER_OBJECT_COPY.referenceLabel} value={view.slug} />
+      </div>
       <div className="grid gap-section pb-page">
         <AeSection title={PROVIDER_OBJECT_COPY.detailsTitle}>
           <AeFactList facts={[

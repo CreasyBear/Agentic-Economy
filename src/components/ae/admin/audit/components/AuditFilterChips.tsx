@@ -1,22 +1,28 @@
+import { useState } from 'react'
 import { XIcon } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
+import {
+  CommandDialog, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList,
+} from '@/components/ui/command'
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem, DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import {
-  AUDIT_COPY,
-  AUDIT_EVENT_TYPES,
-  type AuditFilterChipsProps,
-} from '../audit.contracts'
+import { AUDIT_COPY, AUDIT_EVENT_TYPES, type AuditFilterChipsProps, type AdminAuditFilterDraft } from '../audit.contracts'
+import { auditEventLabel } from './audit-labels'
+
+const filterFields = [
+  'eventType', 'actorRef', 'targetType', 'targetRef', 'correlationId', 'from', 'to',
+] as const satisfies readonly (keyof AdminAuditFilterDraft)[]
 
 export function AuditFilterChips({
-  chips,
-  draft,
-  onDraftChange,
-  onApply,
-  onRemove,
-  onClear,
+  chips, draft, onDraftChange, onApply, onRemove, onClear,
 }: AuditFilterChipsProps) {
+  const [activeField, setActiveField] = useState<keyof AdminAuditFilterDraft | null>(null)
+  const [eventPickerOpen, setEventPickerOpen] = useState(false)
+
   return (
     <div className="grid gap-related">
       {chips.length === 0 ? null : (
@@ -30,7 +36,7 @@ export function AuditFilterChips({
               className="inline-flex min-h-10 items-center gap-2 rounded-full border border-border bg-muted/40 px-3 py-1 text-sm text-foreground transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
               <span className="font-medium">{chip.label}</span>
-              <span className="max-w-64 truncate text-muted-foreground">{chip.value}</span>
+              <span className="max-w-64 truncate text-muted-foreground">{chip.key === 'eventType' ? auditEventLabel(chip.value) : chip.value}</span>
               <XIcon aria-hidden="true" className="size-4" />
             </button>
           ))}
@@ -38,54 +44,84 @@ export function AuditFilterChips({
         </div>
       )}
 
-      <form
-        className="grid gap-related rounded-lg border border-border p-gutter md:grid-cols-2 xl:grid-cols-4"
-        onSubmit={(event) => {
-          event.preventDefault()
-          onApply()
-        }}
-      >
-        <div className="grid gap-intra">
-          <Label htmlFor="audit-event-type">{AUDIT_COPY.fieldLabels.eventType}</Label>
-          <select
-            id="audit-event-type"
-            name="eventType"
-            value={draft.eventType}
-            onChange={(event) => onDraftChange('eventType', event.target.value)}
-            className="h-11 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring md:h-9"
-          >
-            <option value="">{AUDIT_COPY.anyEventType}</option>
-            {AUDIT_EVENT_TYPES.map((eventType) => (
-              <option key={eventType} value={eventType}>{eventType}</option>
+      <DropdownMenu>
+        <DropdownMenuTrigger render={<Button type="button" variant="outline" className="w-fit min-h-touch" />}>
+          {AUDIT_COPY.addFilter}
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="start">
+          <DropdownMenuGroup>
+            {filterFields.map((field) => (
+              <DropdownMenuItem
+                key={field}
+                onClick={() => {
+                  setActiveField(field)
+                  if (field === 'eventType') setEventPickerOpen(true)
+                }}
+              >
+                {AUDIT_COPY.fieldLabels[field]}
+              </DropdownMenuItem>
             ))}
-          </select>
-        </div>
-        <div className="grid gap-intra">
-          <Label htmlFor="audit-actor-ref">{AUDIT_COPY.fieldLabels.actorRef}</Label>
-          <Input id="audit-actor-ref" name="actorRef" value={draft.actorRef} onChange={(event) => onDraftChange('actorRef', event.target.value)} autoComplete="off" spellCheck={false} />
-        </div>
-        <div className="grid gap-intra">
-          <Label htmlFor="audit-target-type">{AUDIT_COPY.fieldLabels.targetType}</Label>
-          <Input id="audit-target-type" name="targetType" value={draft.targetType} onChange={(event) => onDraftChange('targetType', event.target.value)} autoComplete="off" spellCheck={false} />
-        </div>
-        <div className="grid gap-intra">
-          <Label htmlFor="audit-target-ref">{AUDIT_COPY.fieldLabels.targetRef}</Label>
-          <Input id="audit-target-ref" name="targetRef" value={draft.targetRef} onChange={(event) => onDraftChange('targetRef', event.target.value)} autoComplete="off" spellCheck={false} />
-        </div>
-        <div className="grid gap-intra">
-          <Label htmlFor="audit-correlation-id">{AUDIT_COPY.fieldLabels.correlationId}</Label>
-          <Input id="audit-correlation-id" name="correlationId" value={draft.correlationId} onChange={(event) => onDraftChange('correlationId', event.target.value)} autoComplete="off" spellCheck={false} />
-        </div>
-        <div className="grid gap-intra">
-          <Label htmlFor="audit-from">{AUDIT_COPY.fieldLabels.from}</Label>
-          <Input id="audit-from" name="from" type="date" value={draft.from} onChange={(event) => onDraftChange('from', event.target.value)} autoComplete="off" />
-        </div>
-        <div className="grid gap-intra">
-          <Label htmlFor="audit-to">{AUDIT_COPY.fieldLabels.to}</Label>
-          <Input id="audit-to" name="to" type="date" value={draft.to} onChange={(event) => onDraftChange('to', event.target.value)} autoComplete="off" />
-        </div>
-        <Button type="submit" className="self-end">{AUDIT_COPY.applyFilters}</Button>
-      </form>
+          </DropdownMenuGroup>
+        </DropdownMenuContent>
+      </DropdownMenu>
+
+      {activeField === null ? null : (
+        <form
+          className="flex flex-wrap items-end gap-related rounded-lg border border-border p-gutter"
+          onSubmit={(event) => {
+            event.preventDefault()
+            onApply()
+            setActiveField(null)
+          }}
+        >
+          <div className="grid min-w-48 flex-1 gap-intra">
+            <Label htmlFor={`audit-${activeField}`}>{AUDIT_COPY.fieldLabels[activeField]}</Label>
+            {activeField === 'eventType' ? (
+              <Button id="audit-eventType" type="button" variant="outline" className="w-full justify-start" onClick={() => setEventPickerOpen(true)}>
+                {draft.eventType === '' ? AUDIT_COPY.anyEventType : auditEventLabel(draft.eventType)}
+              </Button>
+            ) : (
+              <Input
+                id={`audit-${activeField}`}
+                name={activeField}
+                type={activeField === 'from' || activeField === 'to' ? 'date' : 'text'}
+                value={draft[activeField]}
+                onChange={(event) => onDraftChange(activeField, event.target.value)}
+                autoComplete="off"
+                spellCheck={false}
+              />
+            )}
+          </div>
+          <Button type="submit">{AUDIT_COPY.applyFilters}</Button>
+        </form>
+      )}
+
+      <CommandDialog
+        open={eventPickerOpen}
+        onOpenChange={setEventPickerOpen}
+        title={AUDIT_COPY.fieldLabels.eventType}
+        description={AUDIT_COPY.filtersDescription}
+      >
+        <CommandInput aria-label={AUDIT_COPY.fieldLabels.eventType} placeholder={AUDIT_COPY.fieldLabels.eventType} />
+        <CommandList>
+          <CommandEmpty>{AUDIT_COPY.noEventTypes}</CommandEmpty>
+          <CommandGroup>
+            <CommandItem value={AUDIT_COPY.anyEventType} onSelect={() => {
+              onDraftChange('eventType', '')
+              setEventPickerOpen(false)
+            }}>{AUDIT_COPY.anyEventType}</CommandItem>
+            {AUDIT_EVENT_TYPES.map((eventType) => (
+              <CommandItem key={eventType} value={`${auditEventLabel(eventType)} ${eventType}`} onSelect={() => {
+                onDraftChange('eventType', eventType)
+                setEventPickerOpen(false)
+              }}>
+                <span>{auditEventLabel(eventType)}</span>
+                <code className="ml-auto font-mono text-xs text-muted-foreground">{eventType}</code>
+              </CommandItem>
+            ))}
+          </CommandGroup>
+        </CommandList>
+      </CommandDialog>
     </div>
   )
 }

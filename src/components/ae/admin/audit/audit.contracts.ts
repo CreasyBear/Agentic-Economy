@@ -62,8 +62,10 @@ export type AdminAuditRowModel = Readonly<{
   eventType: string
   actorRef: string
   targetLabel: string
+  targetType: string | null
+  targetRef: string | null
   targetHref: string | null
-  outcomeLabel: string
+  outcomeRaw: string | null
   correlationId: string
   admin: AdminAuditRow['admin']
 }>
@@ -126,6 +128,8 @@ export const AUDIT_COPY = {
   accessDeniedDescription: 'Your account does not have the Admin role for this action.',
   filtersTitle: 'Filters',
   filtersDescription: 'Combine indexed filters to narrow the activity timeline.',
+  addFilter: 'Add filter',
+  noEventTypes: 'No event types found.',
   applyFilters: 'Apply filters',
   clearAll: 'Clear all',
   removeFilter: 'Remove filter',

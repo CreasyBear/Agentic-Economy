@@ -128,7 +128,8 @@ describe('admin Provider routes', () => {
 
     renderRoute('/_operator/admin/providers/$slug')
 
-    expect(screen.getByRole('heading', { level: 1 }).textContent).toContain('provider-one')
+    expect(screen.getByRole('heading', { level: 1, name: 'Provider provider-one' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Copy Reference' })).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Suppress' })).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Close dispute' })).toBeTruthy()
 

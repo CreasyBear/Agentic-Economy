@@ -112,9 +112,11 @@ describe('/admin/calls/$callRef', () => {
     expect(container.textContent).not.toContain('A$0.00')
   })
 
-  it('shows the exact Call reference in the identity header', () => {
+  it('shows Call as the identity heading with the exact copyable reference beneath it', () => {
     renderCallPage()
 
-    expect(screen.getByRole('heading', { level: 1, name: callRefText })).toBeTruthy()
+    expect(screen.getByRole('heading', { level: 1, name: 'Call' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Copy Reference' })).toBeTruthy()
+    expect(screen.getByText(callRefText)).toBeTruthy()
   })
 })

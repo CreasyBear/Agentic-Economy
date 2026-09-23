@@ -1,3 +1,4 @@
+import { AeCopyReference } from '@/components/ae/data/AeCopyReference'
 import { AeFactList } from '@/components/ae/data/AeFactList'
 import { AeOperatorPage } from '@/components/ae/layout/AeOperatorPage'
 import { AeSection } from '@/components/ae/layout/AeSection'
@@ -17,7 +18,7 @@ export function WorkspaceObjectView({ view }: WorkspaceObjectViewProps) {
     <AeOperatorPage
       operatorRole="admin"
       currentPath={`/admin/workspaces/${view.ref}`}
-      title={`${copy.title} ${view.ref}`}
+      title={copy.title}
       description={copy.description}
       breadcrumbs={[
         { label: ADMIN_OBJECT_PAGE_COPY.adminBreadcrumb, href: '/admin' },
@@ -27,6 +28,10 @@ export function WorkspaceObjectView({ view }: WorkspaceObjectViewProps) {
       actions={<Badge variant={aeStatusToneVariants[status.tone]}>{status.label}</Badge>}
       stickyHeader
     >
+      <div className="flex min-w-0 flex-wrap items-center gap-intra text-sm text-muted-foreground">
+        <span>{ADMIN_OBJECT_PAGE_COPY.referenceLabel}</span>
+        <AeCopyReference label={ADMIN_OBJECT_PAGE_COPY.referenceLabel} value={view.ref} />
+      </div>
       <div className="grid gap-section pb-page lg:grid-cols-[minmax(0,1fr)_20rem]">
         <AeSection title={ADMIN_OBJECT_PAGE_COPY.detailsTitle}>
           <AeFactList facts={[

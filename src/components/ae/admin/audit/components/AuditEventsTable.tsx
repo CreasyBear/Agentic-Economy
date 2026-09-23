@@ -10,6 +10,7 @@ import {
   type AdminAuditRowModel,
   type AuditEventsTableProps,
 } from '../audit.contracts'
+import { auditEventLabel, auditOutcomeLabel } from './audit-labels'
 
 const columns: ColumnDef<AdminAuditRowModel, unknown>[] = [
   {
@@ -26,7 +27,8 @@ const columns: ColumnDef<AdminAuditRowModel, unknown>[] = [
       const admin = row.original.admin
       return (
         <div className="grid min-w-64 gap-intra">
-          <span className="font-medium text-foreground">{row.original.eventType}</span>
+          <span className="font-medium text-foreground">{auditEventLabel(row.original.eventType)}</span>
+          <code className="font-mono text-xs text-muted-foreground">{row.original.eventType}</code>
           {admin === null ? null : (
             <dl className="grid gap-1 border-l border-border pl-3 text-xs text-muted-foreground">
               <div className="flex flex-wrap gap-1">
@@ -53,20 +55,32 @@ const columns: ColumnDef<AdminAuditRowModel, unknown>[] = [
     accessorKey: 'actorRef',
     header: AUDIT_COPY.columnLabels.actor,
     cell: ({ row }) => (
-      <AeCopyReference label={AUDIT_COPY.columnLabels.actor} value={row.original.actorRef} />
+      <AeCopyReference label={AUDIT_COPY.columnLabels.actor} value={row.original.actorRef} className="[&_code]:inline-block [&_code]:max-w-40 [&_code]:truncate" />
     ),
   },
   {
     accessorKey: 'targetLabel',
     header: AUDIT_COPY.columnLabels.target,
-    cell: ({ row }) => row.original.targetHref === null
+    cell: ({ row }) => row.original.targetRef === null || row.original.targetType === null
       ? row.original.targetLabel
-      : <a className="font-medium text-foreground underline-offset-4 hover:underline" href={row.original.targetHref}>{row.original.targetLabel}</a>,
+      : (
+          <div className="grid gap-1">
+            {row.original.targetHref === null
+              ? <span className="text-xs text-muted-foreground">{row.original.targetType}</span>
+              : <a className="text-xs font-medium text-foreground underline-offset-4 hover:underline" href={row.original.targetHref}>{row.original.targetType}</a>}
+            <AeCopyReference label={AUDIT_COPY.columnLabels.target} value={row.original.targetRef} className="[&_code]:inline-block [&_code]:max-w-40 [&_code]:truncate" />
+          </div>
+        ),
   },
   {
-    accessorKey: 'outcomeLabel',
+    accessorKey: 'outcomeRaw',
     header: AUDIT_COPY.columnLabels.outcome,
-    cell: ({ row }) => <Badge variant="outline">{row.original.outcomeLabel}</Badge>,
+    cell: ({ row }) => (
+      <div className="grid gap-1">
+        <Badge variant="outline">{auditOutcomeLabel(row.original.outcomeRaw)}</Badge>
+        {row.original.outcomeRaw === null ? null : <code className="font-mono text-xs text-muted-foreground">{row.original.outcomeRaw}</code>}
+      </div>
+    ),
   },
   {
     accessorKey: 'correlationId',
@@ -80,7 +94,7 @@ const columns: ColumnDef<AdminAuditRowModel, unknown>[] = [
 export function AuditEventsTable({ rows, filtered, paginationStatus, onLoadMore }: AuditEventsTableProps) {
   const emptyMessage = filtered ? AUDIT_COPY.noFilterMatches : AUDIT_COPY.nothingNeedsAttention
   return (
-    <AeSection title={AUDIT_COPY.eventsTitle} description={AUDIT_COPY.eventsDescription}>
+    <AeSection title={AUDIT_COPY.eventsTitle} description={AUDIT_COPY.eventsDescription} className="order-first md:order-last">
       <AeRecordTable
         columns={columns}
         data={rows}

@@ -19,6 +19,7 @@ export type AdminObjectPageView =
 
 export const ADMIN_OBJECT_PAGE_COPY = {
   adminBreadcrumb: 'Admin',
+  referenceLabel: 'Reference',
   detailsTitle: 'Details',
   relatedTitle: 'Related references',
   noRelatedReferences: 'No related references.',

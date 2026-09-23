@@ -62,7 +62,9 @@ export const ADMIN_CALL_STATUS: Readonly<Record<AdminCallObjectView['state'], Ae
 export const ADMIN_CALL_OBJECT_COPY = {
   description: 'Inspect the recorded Call facts, related references, and activity.',
   adminBreadcrumb: 'Admin',
+  title: 'Call',
   callsBreadcrumb: 'Calls',
+  referenceLabel: 'Reference',
   backToSearch: 'Back to Search',
   refusedTitle: 'Admin access required',
   refusedDescription: 'Your account does not have the Admin role for this action.',

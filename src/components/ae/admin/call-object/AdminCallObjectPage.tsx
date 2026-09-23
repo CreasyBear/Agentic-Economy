@@ -1,3 +1,4 @@
+import { AeCopyReference } from '@/components/ae/data/AeCopyReference'
 import { Badge } from '@/components/ui/badge'
 import { AeOperatorBreadcrumbs } from '@/components/ae/layout/AeOperatorBreadcrumbs'
 import { AeOperatorPage } from '@/components/ae/layout/AeOperatorPage'
@@ -44,7 +45,7 @@ function AdminCallObjectFound({ view }: AdminCallObjectFoundProps) {
   return (
     <AeOperatorPage
       operatorRole="admin"
-      title={view.ref}
+      title={ADMIN_CALL_OBJECT_COPY.title}
       description={ADMIN_CALL_OBJECT_COPY.description}
       currentPath={`/admin/calls/${encodeURIComponent(view.ref)}`}
       stickyHeader
@@ -61,6 +62,10 @@ function AdminCallObjectFound({ view }: AdminCallObjectFoundProps) {
         ]} />
       )}
     >
+      <div className="flex min-w-0 flex-wrap items-center gap-intra text-sm text-muted-foreground">
+        <span>{ADMIN_CALL_OBJECT_COPY.referenceLabel}</span>
+        <AeCopyReference label={ADMIN_CALL_OBJECT_COPY.referenceLabel} value={view.ref} />
+      </div>
       <div className="grid gap-section lg:grid-cols-[minmax(0,1fr)_20rem]">
         <AdminCallEvidence model={model} />
         <AdminCallReferences refs={model.relatedRefs} />
