@@ -389,3 +389,16 @@ Each row stays in review until its named behaviour assertion passes. The Convex 
 3. **PII search scope.** Default: canonical refs only. Add Provider/Tool name search later; defer email, Clerk and Stripe identifiers until access, logging and retention policy are approved.
 4. **Two-person actions.** Default: require a distinct second owner_admin only for Business suppression and commercial-policy replacement/suspension. No Purchase-resolution action exists in this RFC. Keep these actions disabled while Joel is the only owner.
 5. **Purchase-resolution outcomes.** Default: `uphold`, `refuse` and `request_evidence`. Show age without "late" until an SLA exists. Refund remains unavailable until a real refund command and live money rail exist.
+
+## 19. Implementation deltas
+
+Evaluation round 2026-09-23, after Wave F. These describe the shipped alpha surface rather than revising the earlier design.
+
+- Object refs and parsers are split across `contracts.ts` and `ref-parsers.ts`, with public account/principal predicates reused rather than an admin-only ref grammar (`src/lib/operator/admin-console/contracts.ts:14-47`; `src/lib/operator/admin-console/ref-parsers.ts:1-53`).
+- Exceptions comprise uncertain Calls, removal disputes, source-authority reviews and admission cases. There is no `purchase_resolution` exception kind; Purchase resolutions are terminal read-only history (`convex/lib/adminConsole/reads/exceptions.ts:33-86`).
+- Membership grant/revoke can be proposed when the affected target is an `owner_admin`; single-owner eligible actions record `approval: not_required` in the audit material (`src/lib/operator/admin-console/contracts.ts:66-70`; `convex/lib/adminConsole/approvals.ts:54-73,202-219`; `convex/lib/adminConsole/commandEnvelope.ts:184-192`).
+- The receipt union is `completed | proposed | refused`, with refusal as a value for expected denials and missing/stale reverification (`src/lib/operator/admin-console/contracts.ts:201-225`; `src/components/ae/admin/actions/submitAdminCommand.functions.ts:48-66`).
+- Audit pages use native Convex `paginationOptsValidator`/`paginationResultValidator`, not a filter-bound custom cursor (`convex/adminConsoleAudit.ts:22-33`).
+- The audit read extracts admin permission and reason from the redacted payload marker, including domain event types beyond `admin.*` (`convex/lib/adminConsole/reads/audit.ts:161-185`).
+- Money labels are `settled_only` or `no_settled_usage`; the paid Call cohort supplies the numerator, legacy `not_configured` is read-mapped, and incomplete days are reported separately (`convex/lib/adminConsole/metrics/collect.ts:28-52,111-145`; `convex/lib/adminConsole/metrics/read.ts:90-92,200-203`).
+- The action sheet submits via a TanStack server-function dispatcher because source-write material and strict Clerk proof are server-only (`src/components/ae/admin/actions/submitAdminCommand.functions.ts:39-101`).
