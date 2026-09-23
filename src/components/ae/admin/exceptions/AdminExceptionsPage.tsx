@@ -67,7 +67,7 @@ export function AdminExceptionsPage(props: AdminExceptionsPageProps) {
         rows={exceptions.data.rows}
         total={exceptions.data.total}
         truncated={exceptions.data.truncated}
-        unavailable={exceptions.data.unavailableLabels.length > 0}
+        unavailable={exceptions.data.selectedSourceUnavailable}
         filtered={exceptions.filtered}
         onOpen={exceptions.onOpen}
       />

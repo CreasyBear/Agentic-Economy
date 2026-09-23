@@ -53,6 +53,7 @@ export type AdminExceptionsReadyState = Readonly<{
   counts: Readonly<Record<AdminExceptionKind, number>>
   rows: readonly AdminExceptionRowModel[]
   resolutions: readonly AdminResolutionRowModel[]
+  selectedSourceUnavailable: boolean
   unavailableLabels: readonly string[]
 }>
 

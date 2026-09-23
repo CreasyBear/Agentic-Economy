@@ -82,6 +82,16 @@ describe('/admin/exceptions', () => {
     expect(screen.getByText('Nothing needs attention.')).toBeTruthy()
   })
 
+  it('does not mistake another unavailable source for an empty selected queue', () => {
+    renderPage({
+      items: [], total: 0, truncated: false,
+      counts: { uncertain_call: 0, removal_dispute: 0, source_authority_review: 0, admission_case: 0 },
+      unavailable: ['admission_case'],
+    }, { kind: 'removal_dispute' })
+    expect(screen.getByText('No matches for these filters.')).toBeTruthy()
+    expect(screen.queryByText('Exception source unavailable.')).toBeNull()
+  })
+
   it('shows the oldest-100 cue and exact tab count, with a direct object link and review next step', () => {
     const toolRef = `operation:v1:${'c'.repeat(64)}`
     if (!isPublicToolRef(toolRef)) throw new Error('invalid_tool_ref_fixture')

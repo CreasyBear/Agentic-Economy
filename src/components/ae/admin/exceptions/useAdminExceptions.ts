@@ -42,6 +42,9 @@ export function useAdminExceptions({ search, onSearchChange }: AdminExceptionsPa
           counts: feed.counts,
           rows: feed.items.map(toExceptionRowModel),
           resolutions: resolutions.map(toResolutionRowModel),
+          selectedSourceUnavailable: search.kind === undefined
+            ? feed.unavailable.length > 0
+            : feed.unavailable.includes(search.kind),
           unavailableLabels: feed.unavailable.map((kind) => ADMIN_EXCEPTION_KIND_LABELS[kind]),
         }
 
