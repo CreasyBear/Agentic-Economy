@@ -162,14 +162,14 @@ afterEach(() => {
 })
 
 describe('recovery break-glass private adapter defenses', () => {
-  it('fails before trusting approval identity when canonical account facts are absent', async () => {
+  it('refuses unauthenticated approval before disclosing absent account facts', async () => {
     adapterProbe.mode = 'record-unavailable'
     const backend = await seededBackend()
     const { submitRecoveryApprovalHandler } = await import('../../../convex/recoveryBreakGlass')
 
     await expect(backend.run(async (ctx) =>
       await submitRecoveryApprovalHandler(ctx, approvalIntent)))
-      .rejects.toMatchObject({ code: 'recovery_account_facts_invalid' })
+      .rejects.toMatchObject({ code: 'recovery_approval_unavailable' })
   })
 
   it.each([
