@@ -45,7 +45,7 @@ export type AdminCommandSpec<A extends AdminCommandAction> = Readonly<{
     | {
         kind: 'applied'
         code: AdminSuccessCodeByAction[A]
-        effectRefs: readonly string[]
+        effectRefs: string[]
         beforeState: string
         afterState: string
       }

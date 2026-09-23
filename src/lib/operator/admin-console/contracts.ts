@@ -191,7 +191,7 @@ export type AdminCommandReceipt<A extends AdminCommandAction> =
       kind: 'completed'
       action: A
       code: AdminSuccessCodeByAction[A]
-      effectRefs: readonly string[]
+      effectRefs: string[]
       auditEventRef: string
       correlationId: string
     }
