@@ -40,7 +40,7 @@ export function adminCommandArgsValue<
     evidenceRefs: v.array(v.string()),
     expectedStateDigest: v.optional(v.string()),
     approval: approvalIntentValue,
-    proof: clerkConsequenceProofValue,
+    proof: v.optional(clerkConsequenceProofValue),
   })
 }
 

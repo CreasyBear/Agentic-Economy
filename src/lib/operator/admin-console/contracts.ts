@@ -183,7 +183,7 @@ export type AdminCommandArgs<A extends AdminCommandAction> = Readonly<{
   evidenceRefs: readonly string[]
   expectedStateDigest?: string
   approval: AdminApprovalIntent
-  proof: ClerkConsequenceProof
+  proof?: ClerkConsequenceProof
 }>
 
 export type AdminCommandReceipt<A extends AdminCommandAction> =
