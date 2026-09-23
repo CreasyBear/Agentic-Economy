@@ -17,6 +17,7 @@ import '../../setup/jsdom-dialog'
 
 import type { OperatorSurface } from '@/lib/operator/operator-context'
 import { AeAppShell } from '@/components/ae/layout/AeAppShell'
+import { OperatorEntitlementContext } from '@/components/ae/layout/AeConvexProviders'
 
 vi.mock('@/lib/observability/funnel-client', () => ({
   emitFunnelEventOnce: vi.fn(),
@@ -226,7 +227,9 @@ function renderAppShell(pathname = clerkSignedIn.value ? '/market' : '/'): void 
 
   render(
     <RouterContextProvider router={router}>
-      <AeAppShell><p>Page content</p></AeAppShell>
+      <OperatorEntitlementContext.Provider value={entitlement.isAuthenticated && entitlement.result?.kind === 'authorized' && entitlement.result.allowedSurfaces.includes('admin')}>
+        <AeAppShell><p>Page content</p></AeAppShell>
+      </OperatorEntitlementContext.Provider>
     </RouterContextProvider>,
   )
 }
