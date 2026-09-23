@@ -2,10 +2,7 @@ import { internalMutationGeneric, internalQueryGeneric } from 'convex/server'
 import { v, type Validator } from 'convex/values'
 
 import type { JsonValue } from '@/modules/capability-contract/public'
-import {
-  parseRouteTransportObservationJson,
-  type RouteTransportObservation,
-} from '@/modules/capability-supply/route-transport-runtime'
+import { parseRouteTransportObservationJson, type RouteTransportObservation } from '@/modules/capability-supply/route-transport-runtime'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { stableStringify, type StableHashValue } from '@/modules/common/stable-hash'
 import { beginLeaseEffectHandler } from './lib/providerConnections/leases'

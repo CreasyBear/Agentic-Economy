@@ -160,6 +160,7 @@ import type * as lib_callLifecycle_callReservationActions from "../lib/callLifec
 import type * as lib_callLifecycle_contracts from "../lib/callLifecycle/contracts.js";
 import type * as lib_callLifecycle_dispatch from "../lib/callLifecycle/dispatch.js";
 import type * as lib_callLifecycle_dispatchSellerCanary from "../lib/callLifecycle/dispatchSellerCanary.js";
+import type * as lib_callLifecycle_paidConsequenceAdmission from "../lib/callLifecycle/paidConsequenceAdmission.js";
 import type * as lib_callLifecycle_purchaseResolutionMaterialize from "../lib/callLifecycle/purchaseResolutionMaterialize.js";
 import type * as lib_callLifecycle_reconciliation from "../lib/callLifecycle/reconciliation.js";
 import type * as lib_callLifecycle_supplyCallsListing from "../lib/callLifecycle/supplyCallsListing.js";
@@ -531,6 +532,7 @@ declare const fullApi: ApiFromModules<{
   "lib/callLifecycle/contracts": typeof lib_callLifecycle_contracts;
   "lib/callLifecycle/dispatch": typeof lib_callLifecycle_dispatch;
   "lib/callLifecycle/dispatchSellerCanary": typeof lib_callLifecycle_dispatchSellerCanary;
+  "lib/callLifecycle/paidConsequenceAdmission": typeof lib_callLifecycle_paidConsequenceAdmission;
   "lib/callLifecycle/purchaseResolutionMaterialize": typeof lib_callLifecycle_purchaseResolutionMaterialize;
   "lib/callLifecycle/reconciliation": typeof lib_callLifecycle_reconciliation;
   "lib/callLifecycle/supplyCallsListing": typeof lib_callLifecycle_supplyCallsListing;

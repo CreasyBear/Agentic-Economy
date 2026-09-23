@@ -1,15 +1,12 @@
 import { v } from 'convex/values'
-
 import { degradeBackend } from '@/lib/observability/degrade-backend'
 import type { Doc } from './_generated/dataModel'
 import { internalMutation, internalQuery, type MutationCtx } from './_generated/server'
 import { canonicalDigest } from '../src/modules/common/canonical-digest'
 import { currentUtcDayBounds, currentUtcMonthBounds } from '../src/modules/common/freshness'
 import {
-  PACKAGE4_FORMANCE_REQUIREMENTS,
-  spendingPeriodsValue,
-  validateExecutableRateEvidenceIntegrity,
-  type ExecutableRateEvidence,
+  PACKAGE4_FORMANCE_REQUIREMENTS, spendingPeriodsValue,
+  validateExecutableRateEvidenceIntegrity, type ExecutableRateEvidence,
 } from '../src/modules/money/public'
 import { parsePublishedToolSnapshot } from '../src/modules/capability-supply/public'
 

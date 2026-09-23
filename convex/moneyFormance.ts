@@ -31,10 +31,9 @@ import {
   syncFormanceCapacity,
 } from '../src/modules/money/formance-workflows'
 import { internalAction } from './_generated/server'
-import { accountHistoryResultValue } from './moneyLedgerValues'
+import { accountHistoryResultValue, managedCallBookingArgs } from './moneyLedgerValues'
 import {
   spendingPeriodAdjustmentValue,
-  spendingPeriodsValue,
 } from '../src/modules/money/public'
 
 export type MoneyFormanceResult = FormanceMoneyResult
@@ -75,34 +74,6 @@ const capacityKind = v.union(
 )
 const balanceKind = v.union(v.literal('account_aud'), capacityKind)
 const periodKind = v.union(v.literal('day'), v.literal('month'))
-const managedCallBookingArgs = {
-  callRef: v.string(),
-  quoteRef: v.string(),
-  idempotencyKey: v.string(),
-  accountRef: v.string(),
-  principalRef: v.string(),
-  agentBudgetGeneration: v.number(),
-  legalCustomerRef: v.string(),
-  legalCustomerGeneration: v.number(),
-  treasuryRef: v.string(),
-  treasuryGeneration: v.number(),
-  toolRef: v.string(),
-  providerRef: v.string(),
-  authorityGeneration: v.number(),
-  policyGeneration: v.number(),
-  buyerAmountUnits: v.string(),
-  buyerRevenueUnits: v.string(),
-  buyerTaxUnits: v.string(),
-  providerAmountUnits: v.string(),
-  quoteDigest: v.string(),
-  inputDigest: v.string(),
-  policyDigest: v.string(),
-  rateEvidenceDigest: v.string(),
-  treasuryEvidenceDigest: v.string(),
-  x402RequirementDigest: v.string(),
-  spendingPeriods: v.optional(spendingPeriodsValue),
-}
-
 const spendingPeriodResult = v.union(
   v.object({
     kind: v.literal('available'),

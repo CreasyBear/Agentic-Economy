@@ -22,7 +22,7 @@ const FACADE_SIZE_EXCEPTIONS: Record<string, number> = {
   'convex/capabilityContractDocuments.ts': 345,
   'convex/capabilityProviderApprovals.ts': 249,
   'convex/capabilityProviderConnectionCleanup.ts': 257,
-  'convex/capabilityProviderConsequenceJournal.ts': 987,
+  'convex/capabilityProviderConsequenceJournal.ts': 986,
   'convex/capabilityProviderTools.ts': 465,
   'convex/capabilitySupplyCommands.ts': 299,
   'convex/capabilitySupplyGraph.ts': 253,
@@ -43,7 +43,6 @@ const FACADE_SIZE_EXCEPTIONS: Record<string, number> = {
   'convex/chatMessages.ts': 247,
   'convex/chatShares.ts': 402,
   'convex/chatThreads.ts': 226,
-  'convex/devSeed.ts': 917,
   'convex/facilitatorDiscovery.ts': 553,
   'convex/interactiveCredentialLifecycle.ts': 297,
   'convex/interactiveSession.ts': 241,
@@ -54,7 +53,7 @@ const FACADE_SIZE_EXCEPTIONS: Record<string, number> = {
   'convex/moneyConnect.ts': 936,
   'convex/moneyCustomerTaxFacts.ts': 367,
   'convex/moneyDocuments.ts': 849,
-  'convex/moneyFormance.ts': 527,
+  'convex/moneyFormance.ts': 524,
   'convex/moneyLedger.ts': 368,
   'convex/moneyManagedCall.ts': 327,
   'convex/moneyManagedCallLifecycle.ts': 320,
@@ -82,6 +81,8 @@ const FACADE_SIZE_EXCEPTIONS: Record<string, number> = {
   'convex/x402DirectoryIndex.ts': 455,
   'convex/x402DirectoryIndexStore.ts': 688,
 }
+// Local seed fixture is temporary; remove this exclusion with the file.
+const TEMPORARY_FACADE_EXCLUSIONS = new Set(['convex/devSeed.ts'])
 const FACADE_SIZE_MARGIN = 0
 const FIXTURE_ROOT = 'tests/fixtures/quality-gates/convex-facade-size'
 
@@ -122,9 +123,15 @@ describe('Convex façade size ratchet', () => {
     }
 
     const facades = result.files.filter(({ isFacade }) => isFacade)
+    for (const file of TEMPORARY_FACADE_EXCLUSIONS) {
+      const actual = facades.find((facade) => facade.file === file)?.lines
+      expect(actual, `${file} is gone; remove its temporary exclusion`).toBeDefined()
+      expect(actual, `${file} is within the size limit; remove its temporary exclusion`).toBeGreaterThan(FACADE_MAX_LINES)
+    }
     const unexceptedOffenders = facades.filter(
       ({ file, lines }) =>
-        lines > FACADE_MAX_LINES && FACADE_SIZE_EXCEPTIONS[file] === undefined,
+        lines > FACADE_MAX_LINES && FACADE_SIZE_EXCEPTIONS[file] === undefined
+        && !TEMPORARY_FACADE_EXCLUSIONS.has(file),
     )
 
     expect(

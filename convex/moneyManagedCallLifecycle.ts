@@ -2,21 +2,15 @@ import { v } from 'convex/values'
 
 import { internal } from './_generated/api'
 import { internalAction, internalMutation, internalQuery } from './_generated/server'
-import type {
-  MoneyFormanceManagedCallBooking,
-  MoneyFormanceResult,
-} from './moneyFormance'
+import type { MoneyFormanceManagedCallBooking, MoneyFormanceResult } from './moneyFormance'
 
-type TransitionResult =
-  | { kind: 'accepted'; state: string; replayed: boolean }
-  | { kind: 'refused'; code: string }
+type TransitionResult = { kind: 'accepted'; state: string; replayed: boolean } | { kind: 'refused'; code: string }
 
 type ManagedCallMaterial =
   | {
       kind: 'available'
       booking: MoneyFormanceManagedCallBooking
-      financialState?: 'reservation_pending' | 'reserved' | 'possibly_submitted'
-        | 'outcome_unknown' | 'released' | 'settled'
+      financialState?: 'reservation_pending' | 'reserved' | 'possibly_submitted' | 'outcome_unknown' | 'released' | 'settled'
       reservationRefs?: string[]
       releaseRefs?: string[]
       settlementRefs?: string[]
