@@ -55,7 +55,7 @@ export function AdminObjectSearchForm({
             }}
           >
             <SelectTrigger id="admin-object-kind" className="min-h-touch w-full">
-              <SelectValue />
+              <SelectValue>{ADMIN_OBJECT_KIND_OPTIONS.find((option) => option.value === kind)?.label}</SelectValue>
             </SelectTrigger>
             <SelectContent>
               <SelectGroup>

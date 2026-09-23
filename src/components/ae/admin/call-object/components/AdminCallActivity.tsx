@@ -41,15 +41,18 @@ export function AdminCallActivity({ rows }: AdminCallActivityProps) {
     <AeSection
       title={ADMIN_CALL_OBJECT_COPY.activityTitle}
       description={ADMIN_CALL_OBJECT_COPY.activityDescription}
+      className="min-w-0"
     >
-      <AeRecordTable
-        columns={columns}
-        data={rows}
-        getRowId={(row) => row.id}
-        caption={ADMIN_CALL_OBJECT_COPY.activityTitle}
-        emptyMessage={ADMIN_CALL_OBJECT_COPY.noActivity}
-        hideFilter
-      />
+      <div className="min-w-0 max-w-full overflow-x-auto">
+        <AeRecordTable
+          columns={columns}
+          data={rows}
+          getRowId={(row) => row.id}
+          caption={ADMIN_CALL_OBJECT_COPY.activityTitle}
+          emptyMessage={ADMIN_CALL_OBJECT_COPY.noActivity}
+          hideFilter
+        />
+      </div>
     </AeSection>
   )
 }

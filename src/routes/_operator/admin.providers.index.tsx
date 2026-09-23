@@ -8,7 +8,7 @@ import {
 } from '@/components/ae/admin/providers-list/providers-list.contracts'
 import { operatorRouteOptions } from '@/lib/operator/route-options'
 
-export const Route = createFileRoute('/_operator/admin/providers')({
+export const Route = createFileRoute('/_operator/admin/providers/')({
   ...operatorRouteOptions,
   validateSearch: adminProvidersSearchSchema,
   pendingComponent: AdminProvidersListSkeleton,

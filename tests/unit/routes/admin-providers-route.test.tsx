@@ -71,7 +71,7 @@ vi.mock('@/components/ae/admin/actions/AdminActionSheet', () => ({
   AdminActionSheet: () => null,
 }))
 
-import '@/routes/_operator/admin.providers'
+import '@/routes/_operator/admin.providers.index'
 import '@/routes/_operator/admin.providers.$slug'
 
 function renderRoute(path: string) {
@@ -105,7 +105,7 @@ describe('admin Provider routes', () => {
       updatedAt: Date.UTC(2026, 8, 22),
     }]
 
-    renderRoute('/_operator/admin/providers')
+    renderRoute('/_operator/admin/providers/')
 
     expect(screen.getByRole('link', { name: 'provider-one' }).getAttribute('href'))
       .toBe('/admin/providers/provider-one')

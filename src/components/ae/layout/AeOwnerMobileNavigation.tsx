@@ -26,12 +26,14 @@ import {
   activeRoleNavigationHref,
   ADMIN_NAVIGATION,
 } from '@/components/ae/layout/app-shell/app-shell.contracts'
+import { ADMIN_MOBILE_LABELS } from '@/components/ae/layout/mobile-navigation.contracts'
 import {
   mobileNavigation,
   resolveAppDestination,
   type AppDestinationId,
 } from '@/lib/navigation/app-navigation'
 import type { OperatorRole } from '@/lib/operator/roles'
+import { cn } from '@/lib/utils'
 
 type AeOwnerMobileNavigationProps = {
   currentPath: string
@@ -81,7 +83,7 @@ export function AeOwnerMobileNavigation({
         aria-label="Admin primary navigation"
         className="fixed inset-x-0 bottom-0 z-20 h-[calc(var(--ae-mobile-nav-height)+env(safe-area-inset-bottom,0px))] border-t border-border bg-background/95 pb-[env(safe-area-inset-bottom,0px)] backdrop-blur supports-[backdrop-filter]:bg-background/85 md:hidden"
       >
-        <div className="grid h-14 grid-cols-2 px-gutter">
+        <div className="grid h-full grid-cols-6 px-1">
           {ADMIN_NAVIGATION.map((destination) => {
             const Icon = destination.icon
             const current = destination.href === activeAdminHref
@@ -90,12 +92,14 @@ export function AeOwnerMobileNavigation({
               <Link
                 key={destination.href}
                 to={destination.href}
+                title={destination.label}
+                aria-label={destination.label}
                 activeOptions={{ exact: true }}
                 aria-current={current ? 'page' : undefined}
-                className={primaryItemClassName}
+                className={cn(primaryItemClassName, 'min-w-0 px-0.5')}
               >
                 <Icon aria-hidden="true" className="size-5" />
-                <span>{destination.label}</span>
+                <span className="max-w-full truncate">{ADMIN_MOBILE_LABELS[destination.href] ?? destination.label}</span>
               </Link>
             )
           })}
