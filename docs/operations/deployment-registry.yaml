@@ -9,6 +9,7 @@ captureWorkingTree: dirty_preserved_user_and_infrastructure_changes
 localClerkAdminMfa20260923:
   observedAt: "2026-09-23T08:21:00Z"
   authority: local_development
+  applicationId: app_3FlYUN4Gx0gEhuuDMp4gxDSfnNA
   instanceId: ins_3FlYUMGVJfMaeiW1b9UaQhEeFeY
   issuerHost: composed-stallion-40.clerk.accounts.dev
   environmentType: development
@@ -20,6 +21,20 @@ localClerkAdminMfa20260923:
   templateReadback: verified
   liveSessionClaim: not_verified
   productionAdmin: not_configured_production_foundation_gate_open
+
+# Joel selected the normal Agentic Economy Clerk application for admin setup.
+# The Package 4 Release app below remains a separate legacy synthetic fixture;
+# this selection does not migrate or delete it.
+adminIdentityTarget20260923:
+  applicationId: app_3FlYUN4Gx0gEhuuDMp4gxDSfnNA
+  applicationName: Agentic Economy
+  developmentInstanceId: ins_3FlYUMGVJfMaeiW1b9UaQhEeFeY
+  productionInstanceId: ins_3JEJtsKq3rdCZG94s6tAkkut9Y7
+  productionConvexTemplateId: jtmp_3JEJtpW6fJTLIPSKWghhXhE6NBO
+  productionConvexClaims: [aud]
+  productionTemplateMutation: none_foundation_gate_open
+  productionUserReadback: one_Joel_account
+  package4ReleaseIdentityTreatment: legacy_duplicate_candidate_unchanged
 
 # Current alpha pilot inventory; this supersedes the package4 resource identities
 # only for the Base Sepolia pilot. It does not mutate the dated baseline below.

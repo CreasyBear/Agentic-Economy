@@ -13,10 +13,19 @@ This verifies the local template configuration, not a freshly reverified
 session's claim or a successful guarded command. The synthetic release Clerk
 instance is separate and was not changed.
 
+Joel selected the normal Agentic Economy Clerk application
+(`app_3FlYUN4Gx0gEhuuDMp4gxDSfnNA`) as the admin identity target. Dashboard
+readback confirmed its development instance is the one updated above. Its
+production instance (`ins_3JEJtsKq3rdCZG94s6tAkkut9Y7`) has an existing
+`convex` template (`jtmp_3JEJtpW6fJTLIPSKWghhXhE6NBO`) with only
+`aud: "convex"`, and one Joel account. The separate Package 4 Release Clerk
+application is a legacy duplicate candidate; no migration or deletion was
+performed.
+
 AE production remains `DECLARED`: the production foundation gate is open and
 there is no verified AE production Clerk/Convex identity pair to bootstrap.
-No production admin was created. See the admin console register for R-44's
-pending authority decision.
+The production Clerk template and admin membership were not changed. See the
+admin console register for R-44's pending authority decision.
 
 ## Base Sepolia pilot inventory — 22 September 2026
 

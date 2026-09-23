@@ -1369,4 +1369,6 @@ ORCHESTRATOR EXCEPTION: fixes 2–5 touched OWNER-LOCKED paths (call-receipt/**,
 
 **Local Clerk configuration, 2026-09-23:** the development instance's `convex` JWT template now has `fva: "{{session.factor_verification_age}}"`; Clerk readback confirmed `aud: "convex"` and unchanged token lifetime/skew. A live reverified token and guarded-action success remain unverified, so missing or stale proof still refuses safely. This does not configure the separate synthetic release Clerk instance or create a production admin.
 
+**Identity target readback, 2026-09-23:** Joel selected the normal Agentic Economy Clerk application over the separate Package 4 Release test app for admin setup. Its development instance matches the configured local template. Its production instance has a `convex` template with `aud` only and one Joel account; production template and admin membership remain unchanged while the AE production foundation gate is open.
+
 Shared-index sweep: 7cb685492 captured FixHelpCallHandoff's test edits (recorded, not amended).
