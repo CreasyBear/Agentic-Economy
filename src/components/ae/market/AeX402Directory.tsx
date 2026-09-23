@@ -170,7 +170,7 @@ function DirectoryMarketplace({ page, compareEntries, search, workspace = false,
   }
   function toolGrid(items: readonly SavedDirectoryTool[]) {
     return <ul className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-      {items.map(item => <li key={item.entry.resource} className="min-w-0">
+      {items.map(item => <li key={item.entry.resource} className="h-full min-w-0">
         <DirectoryToolCard model={toDirectoryToolCardModel(item.entry)} onSave={() => saved.toggleSavedTool(item)} saved={saved.isSaved(item.entry.resource)}
           onCompare={() => toggleComparison(item)} comparing={comparison.some(other => other.resource === item.entry.resource)} compareDisabled={comparison.length >= 4 && !comparison.some(other => other.resource === item.entry.resource)} />
       </li>)}
@@ -358,5 +358,5 @@ function DirectoryMarketplace({ page, compareEntries, search, workspace = false,
 }
 
 export function X402DirectoryCards({ entries }: Readonly<{ entries: readonly X402DirectoryEntry[] }>) {
-  return <ul className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">{entries.map(entry => <li key={entry.resource} className="min-w-0"><DirectoryToolCard model={toDirectoryToolCardModel(entry)} /></li>)}</ul>
+  return <ul className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">{entries.map(entry => <li key={entry.resource} className="h-full min-w-0"><DirectoryToolCard model={toDirectoryToolCardModel(entry)} /></li>)}</ul>
 }

@@ -56,7 +56,7 @@ export function DirectoryHomeDiscovery({ home, onSave, isSaved, onCompare, isCom
             : <CarouselContent className="-ml-4 py-1">
               {rail.items.slice(0, 8).map(entry => {
                 const item = { entry, search: rail.search }
-                return <CarouselItem key={entry.resource} className="basis-[85%] pl-4 sm:basis-1/2 lg:basis-1/3 xl:basis-1/4">
+                return <CarouselItem key={entry.resource} className="h-full basis-[85%] pl-4 sm:basis-1/2 lg:basis-1/3 xl:basis-1/4">
                   <DirectoryToolCard model={toDirectoryToolCardModel(entry)} onSave={() => onSave(item)} saved={isSaved(entry.resource)}
                     onCompare={() => onCompare(item)} comparing={isComparing(entry.resource)} compareDisabled={compareDisabled(entry.resource)} />
                 </CarouselItem>

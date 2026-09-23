@@ -117,7 +117,7 @@ it('keeps Provider price evidence secondary and settlement networks off Tool car
   const priced = entries.map((entry, index) => ({ ...entry, prices: [{ network: 'eip155:8453', networkLabel: 'Base', scheme: 'exact', amount: `${index + 1} USDC`, decimalAmount: String(index + 1), symbol: 'USDC' }] }))
   show(undefined, priced)
 
-  expect(screen.getAllByText('Provider-listed price')).toHaveLength(priced.length)
+  expect(screen.queryByText('Provider-listed price')).toBeNull()
   expect(screen.getAllByText('Provider price per Call')).toHaveLength(priced.length)
   expect(screen.getByText('1 USDC')).toBeTruthy()
   expect(screen.queryByText('Base')).toBeNull()
