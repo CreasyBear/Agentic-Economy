@@ -183,6 +183,16 @@ describe('recovery break-glass Convex driver', () => {
       )).rejects.toMatchObject({ code: 'recovery_approval_unavailable' })
       await expect(runRegisteredRecovery(backend, 'isolate', `denied:${adminState}`))
         .rejects.toMatchObject({ code: 'recovery_approval_unavailable' })
+      if (adminState === 'missing') {
+        const unknownAccount = accountRef('acc_00000000000040008000000000000999')
+        await expect(backend.withIdentity(identity('41')).mutation(
+          api.recoveryBreakGlass.submitRecoveryApproval,
+          { approvalRef: 'approval:unknown-account', accountRef: unknownAccount, action: 'isolate' },
+        )).rejects.toMatchObject({ code: 'recovery_approval_unavailable' })
+        await expect(runRegisteredRecovery(backend, 'isolate', 'unknown-account', {
+          accountRef: unknownAccount,
+        })).rejects.toMatchObject({ code: 'recovery_approval_unavailable' })
+      }
       await expect(queryConsequenceState(backend, 'production')).resolves.toEqual(before)
     },
   )

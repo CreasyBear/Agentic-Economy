@@ -59,8 +59,9 @@ export async function submitRecoveryApprovalHandler(
   intent: RecoveryApprovalIntent,
 ): Promise<VerifiedBreakGlassApproval> {
   const now = Date.now()
-  const facts = await resolveRecoveryAccountFacts(ctx, intent.accountRef)
+  // Check authority before reading account facts so callers cannot probe recovery targets.
   const operator = await resolveRecoveryOperator(ctx, intent.accountRef, now)
+  const facts = await resolveRecoveryAccountFacts(ctx, intent.accountRef)
   return await new ProductionRecoveryService({
     persistence: createConvexRecoveryPersistence(ctx),
     accountFacts: { resolve: async () => facts },
@@ -424,10 +425,8 @@ export const authorizeRecoveryOperation = mutation({
   handler: async (ctx, args) => {
     const selectedAccountRef = accountRef(args.accountRef)
     const now = Date.now()
-    const [operator, facts] = await Promise.all([
-      resolveRecoveryOperator(ctx, selectedAccountRef, now),
-      resolveRecoveryAccountFacts(ctx, selectedAccountRef),
-    ])
+    const operator = await resolveRecoveryOperator(ctx, selectedAccountRef, now)
+    const facts = await resolveRecoveryAccountFacts(ctx, selectedAccountRef)
     const admission = await authorizeRecoveryHandler(ctx, {
       action: args.action,
       accountRef: selectedAccountRef,
