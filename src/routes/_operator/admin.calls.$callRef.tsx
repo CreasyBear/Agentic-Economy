@@ -24,15 +24,16 @@ const readAdminCallServer = createServerFn()
     const parsed = parseAdminObjectRef('call', data.callRef)
     if (parsed.kind === 'malformed') return { kind: 'malformed' }
     const session = await readOperatorContextThroughSource()
+    if (session.kind !== 'authorized' || !session.allowedSurfaces.includes('admin')) {
+      return { kind: 'refused', code: 'missing_membership' }
+    }
     const source = await createAuthenticatedSourceTransport()
     const result = await source.query(api.adminConsoleObjects.readAdminObject, { ref: parsed.ref })
-    if (session.kind === 'authorized') {
-      captureAdminEvent(
-        principalRef(session.principalRef),
-        'admin_lookup',
-        buildAdminEventProperties('admin_lookup', { refKind: 'call', found: result.kind === 'call' }),
-      )
-    }
+    captureAdminEvent(
+      principalRef(session.principalRef),
+      'admin_lookup',
+      buildAdminEventProperties('admin_lookup', { refKind: 'call', found: result.kind === 'call' }),
+    )
     if (result.kind === 'call' || result.kind === 'object_not_found' || result.kind === 'refused') {
       return result
     }

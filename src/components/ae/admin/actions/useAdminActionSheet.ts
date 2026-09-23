@@ -17,6 +17,8 @@ import { useAdminCommandProof } from './useAdminCommandProof'
 
 export function useAdminActionSheet(props: AdminActionSheetProps): AdminActionSheetController {
   const access = useQuery(api.adminConsoleAudit.readAdminAuditAccess, {})
+  const overview = useQuery(api.adminConsoleOverview.readAdminOverview, {})
+  const clerkFvaAbsent = overview !== undefined && 'clerkFva' in overview && overview.clerkFva === 'absent'
   const role = access?.kind === 'allowed' ? access.role : null
   const allowed = role !== null && canAdminRolePerformAction(role, ADMIN_ACTION_PERMISSION[props.action])
   const execute = useAdminCommandProof()
@@ -129,7 +131,7 @@ export function useAdminActionSheet(props: AdminActionSheetProps): AdminActionSh
   }
 
   return {
-    ...state, role, allowed, setReason, setEvidence,
+    ...state, role, allowed, clerkFvaAbsent, setReason, setEvidence,
     setTypedEvidence: (value) => setState((previous) => ({ ...previous, typedEvidence: value })),
     next, back, submit, retry, edit,
   }

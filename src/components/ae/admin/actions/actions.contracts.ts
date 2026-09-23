@@ -40,6 +40,7 @@ export type AdminActionSheetState = Readonly<{
 export type AdminActionSheetController = AdminActionSheetState & Readonly<{
   role: AdminRole | null
   allowed: boolean
+  clerkFvaAbsent: boolean
   setReason: (value: string) => void
   setEvidence: (value: string, selected: boolean) => void
   setTypedEvidence: (value: string) => void
@@ -188,6 +189,7 @@ export const ADMIN_ACTION_SHEET_COPY = {
   selectReason: 'Select a reason',
   confirmEffect: 'This command cannot be undone from this page. Check the target before confirming.',
   proofNotice: 'Clerk will request reverification if your session needs it.',
+  fvaUnavailable: 'Reverification is not configured for this deployment. Guarded actions will refuse until it is.',
   noEvidence: 'Add a verified evidence reference before continuing.',
   proposalUnavailable: 'This proposal cannot be reviewed because its command material is unavailable.',
   evidence: 'Evidence references',

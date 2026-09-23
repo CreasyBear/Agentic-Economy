@@ -20,7 +20,7 @@ const captureAdminQueueViewServer = createServerFn()
   .validator((data: { kind: AdminExceptionKind | null }) => data)
   .handler(async ({ data }): Promise<null> => {
     const session = await readOperatorContextThroughSource()
-    if (session.kind === 'authorized') {
+    if (session.kind === 'authorized' && session.allowedSurfaces.includes('admin')) {
       const properties = buildAdminEventProperties('admin_queue_view', { kind: data.kind ?? 'all' })
       captureAdminEvent(principalRef(session.principalRef), 'admin_queue_view', properties)
     }

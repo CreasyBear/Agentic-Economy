@@ -6,9 +6,11 @@ import '../../setup/jsdom-platform'
 
 const mocks = vi.hoisted(() => ({
   access: vi.fn(),
+  overview: vi.fn(),
   execute: vi.fn(),
+  query: vi.fn(),
 }))
-vi.mock('convex/react', () => ({ useQuery: () => mocks.access() }))
+vi.mock('convex/react', () => ({ useQuery: (query: unknown) => mocks.query(query) }))
 vi.mock('@/components/ae/admin/actions/useAdminCommandProof', () => ({
   useAdminCommandProof: () => mocks.execute,
 }))
@@ -18,6 +20,9 @@ vi.mock('@/components/ae/layout/AeRecordSheet', () => ({
 }))
 
 import { AdminActionSheet } from '@/components/ae/admin/actions/AdminActionSheet'
+let queryIndex = 0
+mocks.query.mockImplementation(() =>
+  ++queryIndex % 2 === 0 ? mocks.overview() : mocks.access())
 
 const props = {
   action: 'verify_capability_source_authority',
@@ -32,6 +37,8 @@ afterEach(() => {
   cleanup()
   mocks.access.mockReset()
   mocks.execute.mockReset()
+  mocks.overview.mockReset()
+  queryIndex = 0
 })
 
 function toPreview() {
@@ -61,6 +68,20 @@ describe('Admin action sheet', () => {
     expect(screen.getByText('Complete Clerk reverification, then resubmit.')).toBeTruthy()
     expect(screen.getByLabelText<HTMLInputElement>('Other evidence reference').value).toBe('review:ticket-123')
     expect(mocks.execute).toHaveBeenCalledWith(expect.objectContaining({ evidenceRefs: ['review:ticket-123'] }))
+  })
+
+  it('warns that FVA is absent while keeping submit enabled and preserving the MFA refusal', async () => {
+    mocks.access.mockReturnValue({ kind: 'allowed', role: 'owner_admin' })
+    mocks.overview.mockReturnValue({ convex: 'ok', clerkFva: 'absent', x402Custody: 'not_configured' })
+    mocks.execute.mockResolvedValue({ kind: 'refused', action: props.action, code: 'mfa_reverification_required', correlationId: 'correlation:1' })
+    render(<AdminActionSheet {...props} />)
+    toPreview()
+    expect(screen.getByText('Reverification is not configured for this deployment. Guarded actions will refuse until it is.')).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Submit command' }).hasAttribute('disabled')).toBe(false)
+    fireEvent.click(screen.getByRole('button', { name: 'Submit command' }))
+    expect(await screen.findByText('Reverify before making this change.')).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Propose instead' })).toBeNull()
+    expect(screen.getByLabelText<HTMLInputElement>('Other evidence reference').value).toBe('review:ticket-123')
   })
 
   it('renders a proposed receipt with the Perth expiry', async () => {

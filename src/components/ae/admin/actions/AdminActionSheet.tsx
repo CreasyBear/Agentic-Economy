@@ -44,6 +44,9 @@ export function AdminActionSheet(props: AdminActionSheetProps) {
     >
       <div className="flex flex-col gap-4 py-4">
         {command.allowed ? null : <Alert role="status"><AlertDescription>{ADMIN_ACTION_SHEET_COPY.permission}</AlertDescription></Alert>}
+        {command.clerkFvaAbsent && (command.phase === 'preview' || command.phase === 'confirm')
+          ? <Alert role="status"><AlertDescription>{ADMIN_ACTION_SHEET_COPY.fvaUnavailable}</AlertDescription></Alert>
+          : null}
         {command.error === null ? null : <Alert role="alert" variant="destructive"><AlertDescription>{command.error}</AlertDescription></Alert>}
         {command.phase === 'reason' ? (
           <ReasonSelect action={props.action} value={command.reasonCode} onChange={command.setReason} />
