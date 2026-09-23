@@ -21,5 +21,19 @@ The [audit outcome](2026-09-23-agent-experience-audit.md#15-outcome) closes Wave
 | 15. Retire pre-existing `ds-grammar` failures and the 88-diagnostic TypeScript HEAD baseline | These debts are not Wave 1 regressions; track them separately from the 7,608 passing tests. | L | Ownership of the baseline and failure set. |
 | 16. Blind cold re-test with fresh agents after publish | A fresh user must find and run the published package, not rely on an in-repo CLI. D9 is still blocked on Joel's npm login and `aecon` organisation. | M | D9 publish, then independent fresh-agent test. |
 | 17. Fix Convex Agent streaming vendor bug | `@convex-dev/agent` `streamText.js:114-120` calls `markFinishedExternally` before save; `streaming.js:167-174` then drops later chunks in `DeltaStreamer.addParts`. Persisted streams lack text, including at HEAD; signed-in web chat shows text only at completion. Interim: a turn-scoped persisted-answer fallback in the chat read path. Upgrade or patch the vendor, then remove the fallback. | M | Vendor fix or upgrade; keep the fallback until native text deltas are proven persisted. |
+| 18. Self-serve sandbox/test agent credential | A headless agent needs a first successful call without human approval. Keep owner approval for real money. | M | Sandbox-only authority design; no relaxation of paid-call gates. |
+| 19. Rank Tools by caller readiness | Weather Current was recommended but Quote returned `tool_unsupported` with unverified health; the degraded testnet Tool quoted. Never recommend a Tool the caller cannot Quote. | M | Quote eligibility and health in the discovery projection. |
+| 20. Cut the OpenAPI token tax | The complete document is 372 KB, about 93,000 tokens. Publish per-tag documents or a compact agent profile, with links from `llms.txt`. | S | Existing complete OpenAPI document and `llms.txt`. |
+| 21. Make `noMatch` scope and near misses honest | `scope:page` and `hasMore` forced repeated searches. Exhaust the candidate set or clearly signal page-local `noMatch`; treat 'forecast' versus 'current' phrasing as a useful near miss rather than an overly strict miss. | S | Search pagination and Wave 1 `noMatch` envelope. |
+| 22. Describe buy/account tools at anonymous MCP initialise | An unconnected agent needs to plan the payment path before it can list authenticated tools. Describe the buy and account toolsets in the anonymous initialise instructions. | S | Existing MCP role-toolset definitions. |
+| 23. Make `ae doctor` probe any routeable sandbox Tool | The Quote probe is tied to the D18 sandbox FX Tool and reports failure despite a working Quote. Select a routeable sandbox Tool instead. | S | D18 awareness and routeability query. |
 
 North star: A2A-ready invariants in audit §10 remain binding.
+
+## Blind re-test (2026-09-23, post-commit 290de2751)
+
+| Surface | Outcome |
+|---|---|
+| CLI | Completed Quote, stored credential, honest FX `noMatch`, streamed chat and status. Only npm E404 blocked the published-package path. |
+| MCP and HTTP | Completed discovery, honest `noMatch` and actionable 401 connect. Credentials blocked completion because the device flow needs human owner approval. |
+| Baseline | Zero completions before this programme. |
