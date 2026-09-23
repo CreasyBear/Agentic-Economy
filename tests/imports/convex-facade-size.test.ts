@@ -63,7 +63,7 @@ const FACADE_SIZE_EXCEPTIONS: Record<string, number> = {
   'convex/notifications.ts': 471,
   'convex/personalAccount.ts': 652,
   'convex/qualifiedUse.ts': 248,
-  'convex/recoveryBreakGlass.ts': 482,
+  'convex/recoveryBreakGlass.ts': 386,
   'convex/registry.ts': 445,
   'convex/securityAccountHistory.ts': 565,
   'convex/securityAdminMembership.ts': 216,
