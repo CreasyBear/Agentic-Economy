@@ -4,7 +4,7 @@ import type { DirectoryEntry } from './contracts'
 
 /**
  * Digest over listing-identity fields ONLY - resource, method, description,
- * accepts (scheme/network/asset/price), metadata flags, category, tags,
+ * accepts (scheme/network/asset/price/payTo), metadata flags, category, tags,
  * bundleSlugs, curated. Deliberately excludes calls30d/payers30d/lastCalledAt
  * (and anything else derived from them) so an upstream activity-only change
  * (the common case every run) never trips the "listing changed" branch in
@@ -13,7 +13,7 @@ import type { DirectoryEntry } from './contracts'
  */
 export function listingIdentityDigest(entry: DirectoryEntry, category: string): string {
   const accepts = [...entry.prices]
-    .map(price => ({ scheme: price.scheme, network: price.network, asset: price.asset ?? null, price: price.amount }))
+    .map(price => ({ scheme: price.scheme, network: price.network, asset: price.asset ?? null, price: price.amount, payTo: price.payTo ?? null }))
     .sort((a, b) => (a.network + a.scheme + a.asset).localeCompare(b.network + b.scheme + b.asset))
   return canonicalDigest({
     resource: entry.resource,

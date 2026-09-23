@@ -62,6 +62,21 @@ describe('indexed catalogue server boundary', () => {
     }
     expect(upstream).not.toHaveBeenCalled()
   })
+  it('accepts a directory continuation whose envelope is longer than 512 characters', async () => {
+    const scope = 'coinbase-1789987469211-986ab911-c7d4-41b2-93ea-b1c1033c1ce9'
+    const inner = 'a'.repeat(500)
+    const indexCursor = encodeOpaqueCursor({ kind: 'x402-directory', scope, cursor: inner })
+    expect(indexCursor.length).toBeGreaterThan(512)
+    query.mockImplementation(async (name: string) => {
+      if (name === 'x402DirectoryIndex:status') return { kind: 'ready', coverage: { generation: scope, completedAt: 1 } }
+      return { kind: 'ok', coverage: { indexedTotal: 4000, generation: scope }, searchMethod: 'native_index', page: [], continueCursor: 'next', isDone: false }
+    })
+    const result = await readX402DirectoryCatalogue({ indexCursor })
+    expect(result.kind).toBe('ok')
+    expect(query).toHaveBeenCalledWith('x402DirectoryIndex:browse', expect.objectContaining({
+      paginationOpts: { numItems: 24, cursor: inner, maximumRowsRead: 512 },
+    }))
+  })
   it('does not forward a raw index cursor to the engine', async () => {
     query.mockImplementation(async (name: string) => {
       if (name === 'x402DirectoryIndex:status') return { kind: 'ready', coverage: { generation: 'gen-1', completedAt: 1 } }

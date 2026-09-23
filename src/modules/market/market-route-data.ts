@@ -4,11 +4,12 @@ import {
   readX402DirectoryCatalogueOverviewServer,
   readX402DirectoryCatalogueResourceServer,
   readX402DirectoryCatalogueServer,
-  readX402DirectoryProvidersServer,
 } from '@/modules/market/x402-directory-index.functions'
 import { x402DirectoryCatalogueInputSchema } from '@/modules/market/x402-directory-catalogue'
 import { directoryCatalogueSearchValues } from '@/modules/market/x402-directory-navigation'
 import { readX402MarketplaceHomeServer } from '@/modules/market/x402-marketplace-home.functions'
+import { readMarketFlowRankServer } from '@/modules/market/market-flow.functions'
+import { directoryBasePayTo } from '@/modules/market/x402-directory-index'
 
 export type MarketSearch = MarketReturnSearch
 export type MarketView = NonNullable<MarketSearch['view']>
@@ -128,17 +129,21 @@ export async function loadMarketRouteData(deps: MarketSearch) {
   const view = resolveMarketView(deps)
   const showHome = view === 'discover'
   const compareRefs = parseMarketCompareRefs(deps.compare) ?? []
-  const [catalogue, home, overview, providers, compareEntries] = await Promise.all([
-    readX402DirectoryCatalogueServer({ data: { ...catalogueInput, ...(catalogueInput.query || catalogueInput.sort ? {} : { sort: 'adoption' }) } }),
+  const [catalogue, home, overview, compareEntries] = await Promise.all([
+    readX402DirectoryCatalogueServer({ data: { ...catalogueInput, ...(catalogueInput.query || catalogueInput.sort ? {} : { sort: view === 'tools' || view === 'providers' ? 'popular' as const : 'adoption' as const }) } }),
     showHome ? readX402MarketplaceHomeServer().catch(() => undefined) : Promise.resolve(undefined),
     readX402DirectoryCatalogueOverviewServer(),
-    view === 'providers' && deps.query === undefined && deps.network === undefined && deps.provider === undefined && deps.maxUsdPrice === undefined && deps.directoryCategory === undefined
-      ? readX402DirectoryProvidersServer({ data: { ...(deps.providerCursor === undefined ? {} : { providerCursor: deps.providerCursor }) } })
-      : Promise.resolve(undefined),
     Promise.all(compareRefs.map(resolveMarketCompareEntry)),
   ])
   const page = catalogue?.kind === 'ok'
     ? catalogue.page
     : { kind: 'unavailable' as const, reason: catalogue?.reason === 'query_invalid' ? 'query_invalid' as const : 'source_unavailable' as const }
-  return { page, catalogue, overview, home, providers, compareEntries, view }
+  const payTos = view === 'tools' && page.kind === 'ok'
+    ? [...new Set(page.items.flatMap(entry => {
+      const payTo = directoryBasePayTo(entry)
+      return payTo === undefined ? [] : [payTo]
+    }))]
+    : []
+  const flow = view === 'tools' ? await readMarketFlowRankServer({ data: { payTos } }).catch(() => undefined) : undefined
+  return { page, catalogue, overview, home, providers: undefined, compareEntries, view, ...(flow === undefined ? {} : { flow }) }
 }

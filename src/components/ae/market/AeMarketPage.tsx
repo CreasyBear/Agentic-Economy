@@ -9,6 +9,7 @@ import type {
   X402DirectoryProvidersPage,
 } from "@/modules/market/x402-directory-catalogue";
 import type { X402MarketplaceHome } from "@/modules/market/x402-marketplace-home";
+import type { MarketFlowView } from "@/modules/market/flow-tape";
 
 export type AeMarketPageProps = Readonly<{
   data: Readonly<{
@@ -19,6 +20,7 @@ export type AeMarketPageProps = Readonly<{
     overview: X402DirectoryCatalogueOverview;
     providers: X402DirectoryProvidersPage | undefined;
     home: X402MarketplaceHome | undefined;
+    flow?: MarketFlowView;
   }>;
   search: MarketSearch;
 }>;
@@ -36,6 +38,7 @@ export function AeMarketPage({ data, search }: AeMarketPageProps) {
         overview={data.overview}
         {...(data.providers === undefined ? {} : { providers: data.providers })}
         {...(data.home === undefined ? {} : { home: data.home })}
+        {...(data.flow === undefined ? {} : { flow: data.flow })}
       />
     </AePublicPage>
   );

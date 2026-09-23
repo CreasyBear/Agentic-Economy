@@ -19,7 +19,7 @@ export type ScheduledWorkload = Readonly<{
 
 export const SCHEDULED_WORKLOADS = [
   { name: 'reconcile due facilitator invocations', workloadKind: 'reconciliation', handler: 'reconcileDueFacilitatorInvocations', interval: { minutes: 15 } },
-  { name: 'refresh facilitator discovery', workloadKind: 'cron', handler: 'refreshFacilitatorDiscovery' },
+  { name: 'refresh facilitator discovery', workloadKind: 'cron', handler: 'refreshFacilitatorDiscovery', interval: { hours: 6 } },
   // 7 days (168h), not 24h: refreshAgenticEconomyApiRegistry rewrites ~14,541
   // resources when it actually runs (~225,000 function calls - see cost
   // comment in convex/x402DirectoryIndexRefresh.ts:start). Daily was
@@ -33,6 +33,7 @@ export const SCHEDULED_WORKLOADS = [
   { name: 'cleanup expired source write nonces', workloadKind: 'cron', handler: 'cleanupExpiredSourceWriteNonces', interval: { hours: 1 } },
   { name: 'cleanup expired agent access oauth grants', workloadKind: 'cron', handler: 'cleanupExpiredAgentAccessOAuthGrants', interval: { hours: 1 } },
   { name: 'snapshot marketplace metrics day', workloadKind: 'cron', handler: 'snapshotMarketplaceMetricsDay', daily: { hourUTC: 16, minuteUTC: 10 } },
+  { name: 'refresh market flow', workloadKind: 'cron', handler: 'refreshMarketFlow', daily: { hourUTC: 1, minuteUTC: 15 } },
   { name: 'observe x402 treasury', workloadKind: 'cron', handler: 'observeX402Treasury', interval: { minutes: 15 } },
 ] as const satisfies readonly ScheduledWorkload[]
 
@@ -48,5 +49,7 @@ export const SCHEDULED_WORKLOAD_JOB_NAMES = [
   'refresh Agentic Economy API registry',
   'refresh capability supply readiness',
   'refresh current market presence',
+  'refresh facilitator discovery',
+  'refresh market flow',
   'snapshot marketplace metrics day',
 ] as const satisfies readonly ScheduledWorkloadName[]

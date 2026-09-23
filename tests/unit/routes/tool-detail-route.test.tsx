@@ -607,7 +607,7 @@ describe('/tools/$toolRef', () => {
     renderWithRouter({ kind: 'unavailable', reason: 'schema_missing' })
 
     const main = screen.getByRole('main')
-    expect(within(main).getByText(/This Tool cannot be called through Agentic Economy yet:.*required schema.*Provider must update the listing/i)).toBeTruthy()
+    expect(within(main).getByText(/has not published the input an agent would send/i)).toBeTruthy()
     expect(within(main).getByRole('link', { name: 'Browse Market' })).toBeTruthy()
     expect(within(main).queryByText(/Try again/)).toBeNull()
   })

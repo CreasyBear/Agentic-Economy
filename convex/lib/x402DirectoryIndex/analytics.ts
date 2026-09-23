@@ -1,5 +1,5 @@
 import Decimal from 'decimal.js'
-import { directoryAdoptionBand, directoryPriceBand, minimumDirectoryUsdPrice, type DirectoryDepthBand, type DirectoryRecencyBand } from '@/modules/market/x402-directory-index'
+import { directoryAdoptionBand, directoryBasePayTo, directoryPriceBand, minimumDirectoryUsdPrice, type DirectoryDepthBand, type DirectoryRecencyBand } from '@/modules/market/x402-directory-index'
 import { directoryMetadataFlags } from '@/modules/market/x402-directory-metadata'
 import type { X402DirectoryEntry } from '@/modules/market/x402-directory'
 import type { MutationCtx } from '../../_generated/server'
@@ -46,7 +46,12 @@ export function searchAnalytics(entry: X402DirectoryEntry, network: string, now 
     depthBand: directoryDepthBand(calls, payers),
     ...(lastActivatedAt === undefined || !Number.isFinite(lastActivatedAt) ? {} : { lastActivatedAt }),
     lastCalledBand: directoryRecencyBand(lastCalledAt, now),
+    ...(network === '*' ? basePayToField(entry) : {}),
   }
+}
+function basePayToField(entry: X402DirectoryEntry): { basePayTo: string } | Record<string, never> {
+  const basePayTo = directoryBasePayTo(entry)
+  return basePayTo === undefined ? {} : { basePayTo }
 }
 function directoryPayerDepth(calls: number | undefined, payers: number | undefined): number | undefined {
   if (calls === undefined || payers === undefined || !Number.isSafeInteger(calls) || !Number.isSafeInteger(payers) || payers <= 0) return undefined

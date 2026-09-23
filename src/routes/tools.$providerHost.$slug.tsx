@@ -5,7 +5,7 @@ import { AeDirectoryToolCanonicalPage } from '@/components/ae/market/public-tool
 import { MarketBackButton } from '@/components/ae/market/public-tool-detail/MarketBackButton'
 import { directoryTitle } from '@/modules/market/directory-card.view-model'
 import { resolveDirectoryToolDetail } from '@/modules/market/tool-detail-presentation'
-import { readX402DirectoryCatalogueBySlugServer } from '@/modules/market/x402-directory-index.functions'
+import { readX402DirectoryCatalogueBySlugServer, readX402DirectoryCatalogueServer } from '@/modules/market/x402-directory-index.functions'
 import { buildPublicPageHead } from '@/modules/seo/public'
 
 const providerHostPattern = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)*$/u
@@ -22,7 +22,8 @@ export const Route = createFileRoute('/tools/$providerHost/$slug')({
     // consumed by `<Await>` so the admitted Tool detail swaps in once ready
     // (or ToolUnavailable, on refusal) without blocking first content.
     const admission = resolveDirectoryToolDetail(metadata.item.entry.resource, metadata.kind === 'found' ? metadata.item.toolRef : undefined)
-    return { metadata, admission }
+    const endpoints = await readProviderEndpoints(params.providerHost)
+    return { metadata, admission, endpoints }
   },
   head: ({ params, loaderData }) => {
     if (loaderData?.metadata.kind !== 'found' && loaderData?.metadata.kind !== 'found_upstream') {
@@ -43,4 +44,15 @@ export const Route = createFileRoute('/tools/$providerHost/$slug')({
 function DirectoryToolCanonicalRoute() {
   const data = Route.useLoaderData()
   return <AeDirectoryToolCanonicalPage data={data} />
+}
+
+async function readProviderEndpoints(provider: string) {
+  try {
+    const catalogue = await readX402DirectoryCatalogueServer({ data: { provider, sort: 'popular' } })
+    if (catalogue.kind !== 'ok') return { entries: [], truncated: false }
+    return { entries: catalogue.page.items, truncated: !catalogue.isDone }
+  } catch (cause) {
+    console.error('[tools] provider endpoints unavailable', { cause })
+    return { entries: [], truncated: false }
+  }
 }

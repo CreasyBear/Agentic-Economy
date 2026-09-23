@@ -20,6 +20,7 @@ vi.mock("@/modules/market/x402-directory-index.functions", () => ({
   readX402DirectoryCatalogueResourceServer: reads.resource,
 }));
 vi.mock("@/modules/market/x402-marketplace-home.functions", () => ({ readX402MarketplaceHomeServer: reads.home }));
+vi.mock("@/modules/market/market-flow.functions", () => ({ readMarketFlowRankServer: async () => undefined }));
 vi.mock("@/modules/market/x402-directory.functions", () => ({
   readX402DirectoryServer: async () => ({ kind: "ok", items: [], offset: 0, limit: 20 }),
   prepareX402DirectoryResourceServer: vi.fn(),
@@ -210,12 +211,17 @@ describe('indexed directory route', () => {
     }
   });
 
-  it('keeps the adoption default for filtered Tool views', async () => {
+  it('requests popular for a Tools view with no sort', async () => {
     const loader = Route.options.loader;
     if (typeof loader !== 'function') throw new Error('loader_missing');
     const filters = { priceBand: '0_01_to_0_03', adoptionBand: '0', tags: ['search', 'a&b'], hasInputSchema: false, minPayers30d: 0, maxPayers30d: 4 };
     await loader({ deps: validateMarketSearch({ view: 'tools', ...filters }) } as never);
-    expect(reads.catalogue).toHaveBeenLastCalledWith({ data: { ...filters, sort: 'adoption' } });
+    expect(reads.catalogue).toHaveBeenLastCalledWith({ data: { ...filters, sort: 'popular' } });
+    await loader({ deps: validateMarketSearch({ view: 'tools' }) } as never);
+    expect(reads.catalogue).toHaveBeenLastCalledWith({ data: { sort: 'popular' } });
+    await loader({ deps: validateMarketSearch({ view: 'providers' }) } as never);
+    expect(reads.catalogue).toHaveBeenLastCalledWith({ data: { sort: 'popular' } });
+    expect(reads.providers).not.toHaveBeenCalled();
   });
 });
 

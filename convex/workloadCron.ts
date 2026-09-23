@@ -560,6 +560,10 @@ export async function observeX402TreasuryHandler(ctx: WorkloadCronActionContext)
   )
 }
 
+export async function refreshMarketFlowHandler(ctx: WorkloadCronActionContext): Promise<null> {
+  return await runAdmittedAction(ctx, 'refresh market flow', internal.marketFlowRefresh.run, {})
+}
+
 export async function snapshotMarketplaceMetricsDayHandler(ctx: WorkloadCronActionContext): Promise<null> {
   await ctx.runQuery(internal.workloadCron.admit, { name: 'snapshot marketplace metrics day' })
   await ctx.runAction(internal.adminConsoleMetrics.snapshotMarketplaceMetricsDay, {})
@@ -618,6 +622,12 @@ export const observeX402Treasury = internalAction({
   args: {},
   returns: v.null(),
   handler: observeX402TreasuryHandler,
+})
+
+export const refreshMarketFlow = internalAction({
+  args: {},
+  returns: v.null(),
+  handler: refreshMarketFlowHandler,
 })
 
 export const snapshotMarketplaceMetricsDay = internalAction({

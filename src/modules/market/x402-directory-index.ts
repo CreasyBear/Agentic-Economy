@@ -90,6 +90,54 @@ export function minimumDirectoryUsdPrice(entry: X402DirectoryEntry, network?: st
   return minimum?.toFixed()
 }
 
+const BASE_USDC_ASSET = '0x833589fcd6edb6e08f4c7c32d4f71b54bda02913'
+
+function metadataPayToAt(metadataJson: string, index: number): string | undefined {
+  try {
+    const parsed: unknown = JSON.parse(metadataJson)
+    if (typeof parsed !== 'object' || parsed === null || !('accepts' in parsed) || !Array.isArray(parsed.accepts)) return undefined
+    const accept: unknown = parsed.accepts[index]
+    if (typeof accept !== 'object' || accept === null || !('payTo' in accept) || typeof accept.payTo !== 'string') return undefined
+    return /^0x[a-fA-F0-9]{40}$/u.test(accept.payTo) ? accept.payTo.toLowerCase() : undefined
+  } catch (cause) {
+    return degradeBackend(cause, undefined, { site: 'metadataPayToAt', reason: 'invalid_response' })
+  }
+}
+
+/** Payee of the lowest exact Base USDC price. Shared payees repeat one volume figure. */
+export function directoryBasePayTo(entry: X402DirectoryEntry): string | undefined {
+  let best: { amount: Decimal; payTo: string } | undefined
+  entry.prices.forEach((price, index) => {
+    const payTo = price.payTo ?? metadataPayToAt(entry.metadataJson, index)
+    if (price.scheme !== 'exact' || payTo === undefined || price.decimalAmount === undefined) return
+    if (directoryNetwork(price.network) !== 'eip155:8453') return
+    if (price.symbol !== 'USDC' && price.asset?.toLowerCase() !== BASE_USDC_ASSET) return
+    if (!/^0x[a-f0-9]{40}$/u.test(payTo)) return
+    try {
+      const amount = new Decimal(price.decimalAmount)
+      if (!amount.isFinite() || amount.isNegative()) return
+      if (best === undefined || amount.lt(best.amount)) best = { amount, payTo }
+    } catch (cause) { degradeBackend(cause, undefined, { site: 'directoryBasePayTo', reason: 'invalid_response' }) }
+  })
+  return best?.payTo
+}
+
+/** Volume is requested for the tools on the first three catalogue pages. */
+export const DIRECTORY_VOLUME_TOOL_CAP = 36
+
+export function directoryVolumePayTos(
+  entries: readonly X402DirectoryEntry[],
+  known: Readonly<Record<string, string>> = {},
+): string[] {
+  const payTos: string[] = []
+  for (const entry of entries.slice(0, DIRECTORY_VOLUME_TOOL_CAP)) {
+    const payTo = directoryBasePayTo(entry)
+    if (payTo === undefined || known[payTo] !== undefined || payTos.includes(payTo)) continue
+    payTos.push(payTo)
+  }
+  return payTos.slice(0, 48)
+}
+
 export function directoryEntryMatchesFilters(entry: X402DirectoryEntry, filters: X402DirectoryFilters): boolean {
   if (filters.provider !== undefined && entry.provider.toLowerCase() !== filters.provider.toLowerCase()) return false
   const network = filters.network

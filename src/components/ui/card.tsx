@@ -15,7 +15,7 @@ function Card({ className, discoverLift = false, ...props }: CardProps) {
       className={cn(
         "flex flex-col gap-4 rounded-card border border-border/70 bg-card py-4 text-card-foreground shadow-none",
         discoverLift &&
-          "transition-[box-shadow,transform] duration-base ease-standard hover:-translate-y-1 hover:shadow-float motion-reduce:transition-none motion-reduce:hover:translate-y-0",
+          "transition-[box-shadow,border-color] duration-fast ease-standard hover:border-foreground/20 hover:shadow-float motion-reduce:transition-none",
         className
       )}
       {...props}

@@ -8,7 +8,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { buttonVariants } from '@/components/ui/button-variants'
 import { cn } from '@/lib/utils'
-import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger } from '@/components/ui/select'
 import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput } from '@/components/ui/input-group'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import type { MarketReturnSearch } from './market-return-context'
@@ -17,7 +17,6 @@ import { DirectoryExplorerFilters } from './DirectoryExplorerFilters'
 import type { DirectoryExplorerFilterPatch } from '@/modules/market/directory-filters.contracts'
 import { DirectoryHero } from './DirectoryHero'
 import { DirectoryHomeDiscovery } from './DirectoryHomeDiscovery'
-import { DirectoryProvidersIndex } from './DirectoryProvidersIndex'
 import { DirectoryProviderHeader } from './DirectoryProviderHeader'
 import type { X402DirectoryCatalogue, X402DirectoryCatalogueInput, X402DirectoryCatalogueOverview, X402DirectoryProvidersPage } from '@/modules/market/x402-directory-catalogue'
 import { readX402DirectoryCatalogueServer } from '@/modules/market/x402-directory-index.functions'
@@ -27,30 +26,84 @@ import { directoryDate } from './directory-presentation'
 import type { X402MarketplaceHome } from '@/modules/market/x402-marketplace-home'
 import { DirectoryComparison } from './DirectoryComparison'
 import { DirectoryFilters } from './DirectoryFilters'
-import { DirectoryProviderCards } from './DirectoryProviderCards'
+import { DirectoryProviderList } from './DirectoryProviderList'
+import { useProviderCataloguePages } from './useProviderCataloguePages'
 import { DirectorySavedToolsProvider, useDirectorySavedTools } from './DirectorySavedTools'
 import { toDirectoryToolCardModel } from '@/modules/market/directory-card.view-model'
 import type { SavedDirectoryTool } from '@/modules/market/saved-tools.contracts'
 import { DirectoryToolCard } from './DirectoryToolCard'
+import { DirectoryRecipientRank } from './DirectoryRecipientRank'
+import { formatUsdcAtomic, type MarketFlowView } from '@/modules/market/flow-tape'
+import { readMarketFlowCachedVolumesServer, readMarketFlowVolumesServer } from '@/modules/market/market-flow.functions'
+import { directoryVolumePayTos } from '@/modules/market/x402-directory-index'
+import { DirectoryToolList } from './DirectoryToolList'
 import type { X402DirectoryEntry, X402DirectoryFilters, X402DirectoryInput, X402DirectoryPage } from '@/modules/market/x402-directory'
 import { MARKET_COMPARE_MISSING_LABEL, MARKET_COMPARE_PENDING_LABEL } from './compare/compare.contracts'
 import { useMarketCompare } from './compare/useMarketCompare'
 
 type DirectorySearch = MarketReturnSearch
 
-type AeX402DirectoryProps = Readonly<{ page: X402DirectoryPage; compareEntries: readonly MarketCompareEntry[]; search: DirectorySearch; marketPath?: MarketPath; workspace?: boolean; activeView?: NonNullable<DirectorySearch['view']>; home?: X402MarketplaceHome; catalogue?: X402DirectoryCatalogue; overview?: X402DirectoryCatalogueOverview; providers?: X402DirectoryProvidersPage }>
+type AeX402DirectoryProps = Readonly<{ page: X402DirectoryPage; compareEntries: readonly MarketCompareEntry[]; search: DirectorySearch; marketPath?: MarketPath; workspace?: boolean; activeView?: NonNullable<DirectorySearch['view']>; home?: X402MarketplaceHome; catalogue?: X402DirectoryCatalogue; overview?: X402DirectoryCatalogueOverview; providers?: X402DirectoryProvidersPage; flow?: MarketFlowView }>
+type IndexedPage = Readonly<{ items: readonly X402DirectoryEntry[]; cursor: string | undefined; isDone: boolean }>
 type IndexedPaginationState = Readonly<{
   source: X402DirectoryCatalogue | undefined
-  items: readonly X402DirectoryEntry[]
-  cursor: string | undefined
-  isDone: boolean
+  pages: readonly IndexedPage[]
+  index: number
   status: 'idle' | 'loading' | 'failed'
 }>
 
 function indexedPaginationState(indexed: boolean, catalogue: X402DirectoryCatalogue | undefined): IndexedPaginationState {
   return indexed && catalogue?.kind === 'ok'
-    ? { source: catalogue, items: catalogue.page.items, cursor: catalogue.indexCursor, isDone: catalogue.isDone, status: 'idle' }
-    : { source: catalogue, items: [], cursor: undefined, isDone: true, status: 'idle' }
+    ? { source: catalogue, pages: [{ items: catalogue.page.items, cursor: catalogue.indexCursor, isDone: catalogue.isDone }], index: 0, status: 'idle' }
+    : { source: catalogue, pages: [], index: 0, status: 'idle' }
+}
+
+const EMPTY_VOLUMES: Readonly<Record<string, string>> = {}
+
+function useOnDemandDirectoryVolume(
+  enabled: boolean,
+  entries: readonly X402DirectoryEntry[],
+  seeded: Readonly<Record<string, string>>,
+) {
+  const [loaded, setLoaded] = useState<Readonly<Record<string, string>>>(EMPTY_VOLUMES)
+  const requested = useRef(new Set<string>())
+  const firstPageKey = entries.slice(0, 12).map(entry => entry.resource).join('\n')
+  useEffect(() => {
+    requested.current = new Set()
+    setLoaded(EMPTY_VOLUMES)
+  }, [firstPageKey])
+  function paintVolumes(rows: readonly Readonly<{ payTo: string; amountAtomic: string }>[]) {
+    const next: Record<string, string> = {}
+    for (const row of rows) {
+      const label = formatUsdcAtomic(row.amountAtomic)
+      if (label !== undefined) next[row.payTo] = label
+    }
+    if (Object.keys(next).length === 0) return
+    setLoaded(current => ({ ...current, ...next }))
+  }
+  useEffect(() => {
+    if (!enabled) return
+    const payTos = directoryVolumePayTos(entries, seeded).filter(payTo => !requested.current.has(payTo))
+    if (payTos.length === 0) return
+    for (const payTo of payTos) requested.current.add(payTo)
+    let cancelled = false
+    void readMarketFlowCachedVolumesServer({ data: { payTos } }).then(async cached => {
+      if (cancelled) return
+      paintVolumes(cached)
+      const found = new Set(cached.map(row => row.payTo))
+      const missing = payTos.filter(payTo => !found.has(payTo))
+      if (missing.length === 0) return
+      const filled = await readMarketFlowVolumesServer({ data: { payTos: missing } })
+      if (!cancelled) paintVolumes(filled)
+    }).catch(() => {
+      for (const payTo of payTos) requested.current.delete(payTo)
+    })
+    return () => {
+      cancelled = true
+      for (const payTo of payTos) requested.current.delete(payTo)
+    }
+  }, [enabled, entries, seeded])
+  return loaded
 }
 
 function useIndexedPagination(indexed: boolean, catalogue: X402DirectoryCatalogue | undefined, filters: X402DirectoryCatalogueInput) {
@@ -58,32 +111,82 @@ function useIndexedPagination(indexed: boolean, catalogue: X402DirectoryCatalogu
   useEffect(() => {
     setState(indexedPaginationState(indexed, catalogue))
   }, [catalogue, indexed])
+  const current = state.pages[state.index]
+  function showPreviousPage() {
+    setState(currentState => currentState.index === 0 || currentState.status === 'loading' ? currentState : { ...currentState, index: currentState.index - 1, status: 'idle' })
+  }
   async function loadNextPage() {
-    if (state.cursor === undefined || state.status === 'loading') return
-    const cursor = state.cursor
+    if (state.status === 'loading') return
+    const nextIndex = state.index + 1
+    if (nextIndex < state.pages.length) {
+      setState(currentState => ({ ...currentState, index: nextIndex, status: 'idle' }))
+      return
+    }
+    const cursor = current?.cursor
+    if (cursor === undefined || current?.isDone === true) return
     const source = catalogue
-    setState(current => current.source === source && current.cursor === cursor ? { ...current, status: 'loading' } : current)
+    const index = state.index
+    setState(currentState => currentState.source === source && currentState.index === index ? { ...currentState, status: 'loading' } : currentState)
     try {
       const { indexCursor: _cursor, offset: _offset, ...query } = filters
       const result = await readX402DirectoryCatalogueServer({ data: { ...query, indexCursor: cursor } })
       if (result.kind !== 'ok' || result.source !== 'index') {
-        setState(current => current.source === source && current.cursor === cursor ? { ...current, status: 'failed' } : current)
+        setState(currentState => currentState.source === source && currentState.index === index ? { ...currentState, status: 'failed' } : currentState)
         return
       }
-      setState(current => current.source === source && current.cursor === cursor
-        ? { source, items: [...current.items, ...result.page.items], cursor: result.indexCursor, isDone: result.isDone, status: 'idle' }
-        : current)
+      setState(currentState => {
+        if (currentState.source !== source || currentState.index !== index) return currentState
+        const pages = [...currentState.pages, { items: result.page.items, cursor: result.indexCursor, isDone: result.isDone }]
+        return { source, pages, index: pages.length - 1, status: 'idle' }
+      })
     } catch (cause) {
-      void cause;
-      setState(current => current.source === source && current.cursor === cursor ? { ...current, status: 'failed' } : current)
+      void cause
+      setState(currentState => currentState.source === source && currentState.index === index ? { ...currentState, status: 'failed' } : currentState)
     }
   }
-  return { state, loadNextPage }
+  return {
+    state: {
+      items: current?.items ?? [],
+      isDone: current?.isDone ?? true,
+      status: state.status,
+      hasPrevious: state.index > 0,
+      pageNumber: state.pages.length === 0 ? 0 : state.index + 1,
+    },
+    loadNextPage,
+    showPreviousPage,
+  }
 }
 
 export function AeX402Directory(props: AeX402DirectoryProps) {
   const marketPath = props.marketPath ?? '/market'
   return <MarketNavigationProvider path={marketPath}><DirectorySavedToolsProvider><DirectoryMarketplace {...props} /></DirectorySavedToolsProvider></MarketNavigationProvider>
+}
+
+const CATALOGUE_SORT_LABELS = {
+  popular: 'Calls · 30 days',
+  adoption: 'Payers · 30 days',
+  price_asc: 'Lowest listed price',
+  updated: 'Recently updated',
+  relevance: 'Search relevance',
+} as const
+
+function catalogueSortLabel(_tab: 'tools' | 'providers', search: DirectorySearch): string {
+  if (search.query !== undefined) return CATALOGUE_SORT_LABELS.relevance
+  const sort = search.sort ?? 'popular'
+  switch (sort) {
+    case 'popular':
+    case 'adoption':
+    case 'price_asc':
+    case 'updated':
+    case 'relevance':
+      return CATALOGUE_SORT_LABELS[sort]
+    case 'momentum':
+      return 'Momentum'
+    default: {
+      const exhaustive: never = sort
+      return exhaustive
+    }
+  }
 }
 
 function directoryInput(search: X402DirectoryInput) {
@@ -96,7 +199,7 @@ function directoryInput(search: X402DirectoryInput) {
   }
 }
 
-function DirectoryMarketplace({ page, compareEntries, search, workspace = false, activeView, home, catalogue, overview, providers }: AeX402DirectoryProps) {
+function DirectoryMarketplace({ page, compareEntries, search, workspace = false, activeView, home, catalogue, overview, flow }: AeX402DirectoryProps) {
   const navigate = useNavigate()
   const marketPath = useMarketPath()
   const [compareOpen, setCompareOpen] = useState(false)
@@ -110,13 +213,16 @@ function DirectoryMarketplace({ page, compareEntries, search, workspace = false,
   const indexed = catalogue?.kind === 'ok' && catalogue.source === 'index'
   const filterValues = directoryCatalogueSearchValues(search)
   const browse = !Object.entries(filterValues).some(([key, value]) => !['sort', 'indexCursor', 'offset'].includes(key) && value !== undefined && value !== false)
-  // "Load more" appends pages in component state instead of putting Convex's
-  // cursor in the URL (Convex pagination is cursor-based, so there is no
-  // offset URL to link to - this mirrors Convex's own usePaginatedQuery
-  // model). Reset whenever the server loader hands back a new first page
-  // (a real filter/sort/query navigation), never by this component's own
-  // appends.
-  const { state: loadMore, loadNextPage } = useIndexedPagination(indexed, catalogue, filterValues)
+  // Pages stay in component state. Convex pagination is cursor-based, and that
+  // cursor is too large for the market URL, so Previous returns to a page
+  // already fetched and Next asks for the following cursor. A new first page
+  // from the loader (filter, sort, or query) drops the stack.
+  const { state: loadMore, loadNextPage, showPreviousPage } = useIndexedPagination(indexed, catalogue, filterValues)
+  const providerPages = useProviderCataloguePages(indexed && view === 'providers', catalogue, filterValues)
+  const seededVolumes = flow?.volumeByPayTo ?? EMPTY_VOLUMES
+  const listedEntries = view === 'providers' ? providerPages.items : loadMore.items
+  const onDemandVolumes = useOnDemandDirectoryVolume(indexed && (view === 'tools' || view === 'providers'), listedEntries, seededVolumes)
+  const volumeByPayTo = { ...onDemandVolumes, ...seededVolumes }
   const comparisonPool = useMemo(() => [
     ...loadMore.items,
     ...(page.kind === 'ok' ? page.items : []),
@@ -158,10 +264,10 @@ function DirectoryMarketplace({ page, compareEntries, search, workspace = false,
     return { ...filters }
   }
   function explore(filters: X402DirectoryCatalogueInput) {
-    void navigate({ to: marketPath, resetScroll: false, search: carryMarketCompare(search, { ...filters, view: 'tools' }) })
+    void navigate({ to: marketPath, resetScroll: false, search: carryMarketCompare(search, { ...filters, view: view === 'providers' ? 'providers' : 'tools' }) })
   }
   function applyExplorerFilters(patch: DirectoryExplorerFilterPatch) {
-    const next = { ...indexedSearch(), ...patch, view: 'tools' as const }
+    const next = { ...indexedSearch(), ...patch, view: view === 'providers' ? 'providers' as const : 'tools' as const }
     for (const key of Object.keys(next)) if (next[key as keyof typeof next] === undefined) delete next[key as keyof typeof next]
     void navigate({ to: marketPath, resetScroll: false, search: carryMarketCompare(search, next) })
   }
@@ -225,19 +331,19 @@ function DirectoryMarketplace({ page, compareEntries, search, workspace = false,
       </DirectoryHero>
       <Tabs value={view} onValueChange={value => {
         if (value === 'discover' || value === 'tools' || value === 'providers' || value === 'saved') {
-          void navigate({ to: marketPath, resetScroll: false, search: carryMarketCompare(search, value === 'saved' || value === 'discover' || value === 'providers' ? { view: value } : {
+          void navigate({ to: marketPath, resetScroll: false, search: carryMarketCompare(search, value === 'saved' || value === 'discover' ? { view: value } : {
             ...indexedSearch(), view: value,
           }) })
         }
       }}>
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border pb-4">
+        <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-related border-b border-border pb-related">
           <TabsList variant="line" className="max-w-full shrink-0 justify-start overflow-x-auto overflow-y-hidden" aria-label="Browse the marketplace">
-            <TabsTrigger value="discover" className="px-3"><CompassIcon aria-hidden="true" />Collections</TabsTrigger>
-            <TabsTrigger value="tools" className="px-3"><ListFilterIcon aria-hidden="true" />Tools</TabsTrigger>
-            <TabsTrigger value="providers" className="px-3"><StoreIcon aria-hidden="true" />Providers</TabsTrigger>
-            <TabsTrigger value="saved" className="px-3"><HeartIcon aria-hidden="true" />Saved{saved.savedTools.length > 0 ? ` (${saved.savedTools.length})` : ''}</TabsTrigger>
+            <TabsTrigger value="discover" className="px-3 enabled:active:scale-100"><CompassIcon aria-hidden="true" />Collections</TabsTrigger>
+            <TabsTrigger value="providers" className="px-3 enabled:active:scale-100"><StoreIcon aria-hidden="true" />Providers</TabsTrigger>
+            <TabsTrigger value="tools" className="px-3 enabled:active:scale-100"><ListFilterIcon aria-hidden="true" />Tools</TabsTrigger>
+            <TabsTrigger value="saved" className="px-3 enabled:active:scale-100"><HeartIcon aria-hidden="true" />Saved{saved.savedTools.length > 0 ? ` (${saved.savedTools.length})` : ''}</TabsTrigger>
           </TabsList>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-related">
             {count === undefined || view === 'saved' ? null : <p className="text-xs text-muted-foreground" role="status" aria-live="polite">{count}</p>}
             {view === 'saved' || view === 'discover' || indexed ? null : <DirectoryFilters search={search} onApply={applyFilters} />}
           </div>
@@ -263,29 +369,31 @@ function DirectoryMarketplace({ page, compareEntries, search, workspace = false,
           {view === 'saved' ? comparisonTray : null}
         </TabsContent>
         {(['tools', 'providers'] as const).map(tab => {
-        // Only the indexed "tools" tab accumulates via "Load more" - the
-        // Providers fallback (no `providers` prop) keeps offset pagination.
+        // Indexed Tools and Providers show one catalogue page at a time.
         // (An unavailable page never reaches the code below that reads
         // `tabItems`; the `[]` fallback here only satisfies the type.)
-        const tabItems: readonly X402DirectoryEntry[] = tab === 'tools' && indexed ? loadMore.items : page.kind === 'ok' ? page.items : []
+        const activePages = tab === 'providers' ? providerPages : loadMore
+        const tabItems: readonly X402DirectoryEntry[] = (tab === 'tools' || tab === 'providers') && indexed ? activePages.items : page.kind === 'ok' ? page.items : []
         const railDeck = [
           indexed && search.query !== undefined ? 'Keyword search across the catalogue' : undefined,
           page.kind === 'ok' && tabItems.length > 0
-            ? indexed
-              ? `${tabItems.length.toLocaleString()} Tools loaded`
-              : page.mode === 'search' || !browse
-                ? `${page.items.length} matching Tools`
-                : `Showing ${page.offset + 1}–${page.offset + page.items.length}${page.total === undefined ? '' : ` of ${page.total.toLocaleString()}`}`
+            ? tab === 'providers'
+              ? `${new Set(tabItems.map(entry => entry.provider)).size.toLocaleString()} Providers on this page`
+              : indexed
+                ? `${tabItems.length.toLocaleString()} Tools on this page`
+                : page.mode === 'search' || !browse
+                  ? `${page.items.length} matching Tools`
+                  : `Showing ${page.offset + 1}–${page.offset + page.items.length}${page.total === undefined ? '' : ` of ${page.total.toLocaleString()}`}`
             : undefined,
         ].filter((line): line is string => line !== undefined).join(' · ') || undefined
         return <TabsContent key={tab} value={tab} className="pt-5">
-          {tab === 'providers' && providers !== undefined ? <DirectoryProvidersIndex result={providers} /> : <div className="min-w-0">
+          <div className="min-w-0">
           <section className="min-w-0" aria-label="Tool results">
-          {indexed ? <div className="mb-5 flex flex-wrap items-center justify-between gap-3" aria-label="Catalogue ordering and display">
-            <Select value={search.query === undefined ? search.sort ?? 'adoption' : 'relevance'} onValueChange={value => { if (value === 'popular' || value === 'updated' || value === 'relevance' || value === 'adoption' || value === 'price_asc') void navigate({ to: marketPath, search: carryMarketCompare(search, { ...indexedSearch(), view: tab, sort: value }) }) }}>
-              <SelectTrigger className="min-h-10 bg-card" aria-label="Sort Tools"><SelectValue /></SelectTrigger><SelectContent><SelectGroup>{search.query === undefined ? <><SelectItem value="adoption">Broader adoption · 30 days</SelectItem><SelectItem value="price_asc">Lowest listed price</SelectItem><SelectItem value="updated">Recently updated</SelectItem>{search.sort === 'popular' ? <SelectItem value="popular">Call volume · 30 days</SelectItem> : null}</> : <SelectItem value="relevance">Search relevance</SelectItem>}</SelectGroup></SelectContent>
+          {indexed ? <div className="sticky top-(--header-height) z-10 mb-related grid h-14 grid-cols-[minmax(0,1fr)_auto] items-center gap-related bg-background" role="group" aria-label="Catalogue ordering and display">
+            <Select value={search.query === undefined ? search.sort ?? 'popular' : 'relevance'} onValueChange={value => { if (value === 'popular' || value === 'updated' || value === 'relevance' || value === 'adoption' || value === 'price_asc') void navigate({ to: marketPath, search: carryMarketCompare(search, { ...indexedSearch(), view: tab, sort: value }) }) }}>
+              <SelectTrigger className="h-11! w-full max-w-64 bg-card transition-[background-color,border-color,box-shadow] duration-fast ease-standard enabled:active:scale-100" aria-label={tab === 'providers' ? 'Sort Providers' : 'Sort Tools'}><span className="line-clamp-1">{catalogueSortLabel(tab, search)}</span></SelectTrigger><SelectContent><SelectGroup>{search.query === undefined ? <><SelectItem value="popular">Calls · 30 days</SelectItem><SelectItem value="adoption">Payers · 30 days</SelectItem><SelectItem value="price_asc">Lowest listed price</SelectItem><SelectItem value="updated">Recently updated</SelectItem></> : <SelectItem value="relevance">Search relevance</SelectItem>}</SelectGroup></SelectContent>
             </Select>
-            {tab === 'tools' ? <DirectoryExplorerFilters search={search} {...(overview === undefined ? {} : { overview })} onChange={applyExplorerFilters} onReset={() => explore({})} /> : null}
+            {tab === 'tools' || tab === 'providers' ? <DirectoryExplorerFilters search={search} {...(overview === undefined ? {} : { overview })} onChange={applyExplorerFilters} onReset={() => explore({})} /> : null}
           </div> : null}
           {search.provider !== undefined && page.kind === 'ok' ? <div className="mb-8"><DirectoryProviderHeader provider={search.provider} entries={page.items} /></div> : null}
           <AeCollectionRail
@@ -324,28 +432,30 @@ function DirectoryMarketplace({ page, compareEntries, search, workspace = false,
             description={page.reason === 'query_invalid' ? 'Use a service description without personal identifiers.' : search.indexCursor !== undefined ? 'This catalogue page could not be loaded. Refresh results to start again with the same search and filters.' : 'The discovery service could not be reached. Try again.'}
             action={<Link to={marketPath} reloadDocument search={carryMarketCompare(search, search.indexCursor === undefined ? search : { ...indexedSearch(), view: tab })} className={cn(buttonVariants({ variant: 'outline' }))}>{search.indexCursor === undefined ? "Try again" : "Refresh results"}</Link>} /> : <>
             {page.partialResults === true ? <p role="status" className="mb-4 text-sm text-muted-foreground">Coinbase returned its top matches. Refine your search to find more Tools.</p> : null}
+            {tab === 'tools' && flow?.ready === true ? <DirectoryRecipientRank digest={flow.facilitatorSetDigest} recipients={flow.recipients} /> : null}
             {tabItems.length === 0 ? <AeEmptyState title={indexed && catalogue.kind === 'ok' && !catalogue.isDone ? 'More of the catalogue remains' : 'No matching Tools'} description={indexed && catalogue.kind === 'ok' && !catalogue.isDone ? 'No matches in this portion. Continue to the next page to check the remaining Tools.' : 'Try a different description or broaden your filters.'} /> : tab === 'providers'
-              ? <DirectoryProviderCards entries={tabItems} onSelect={provider => { void navigate({ to: marketPath, search: carryMarketCompare(search, { ...sourceInput, provider, offset: 0 }) }) }} />
-              : toolGrid(tabItems.map(entry => ({ entry, search: sourceInput })))}
+              ? <DirectoryProviderList entries={tabItems} {...(Object.keys(volumeByPayTo).length === 0 ? {} : { volumeByPayTo })} onSelect={provider => { void navigate({ to: marketPath, search: carryMarketCompare(search, { ...indexedSearch(), view: 'tools', provider }) }) }} />
+              : <DirectoryToolList items={tabItems.map(entry => ({ entry, search: sourceInput }))} {...(Object.keys(volumeByPayTo).length === 0 ? {} : { volumeByPayTo })} onSave={saved.toggleSavedTool} isSaved={saved.isSaved} onCompare={toggleComparison} isComparing={resource => compareRefs.includes(resource)} compareDisabled={resource => compareRefs.length >= 4 && !compareRefs.includes(resource)} />}
             {tab === 'tools' && view === 'tools' ? comparisonTray : null}
-            <nav aria-label="Catalogue pages" className="mt-8 flex justify-between gap-4 border-t border-border pt-5">
-              {tab === 'tools' && indexed ? <>
-                <span />
-                {loadMore.isDone ? null : <div className="flex flex-col items-end gap-2">
-                {loadMore.status === 'failed' ? <p role="alert" className="max-w-md text-right text-sm text-muted-foreground">More Tools could not be loaded. Your current results and filters are unchanged.</p> : null}
-                <Button type="button" variant="outline" onClick={() => void loadNextPage()} disabled={loadMore.status === 'loading'} aria-busy={loadMore.status === 'loading'} aria-label={loadMore.status === 'failed' ? 'Load more. Try again.' : 'Load more'}>
-                  {loadMore.status === 'loading' ? <Loader2Icon className="animate-spin" /> : null}Load more<ArrowRightIcon />
-                </Button></div>}
+            {activePages.status === 'failed' && (tab === 'tools' || tab === 'providers') && indexed ? <p role="alert" className="mt-section text-right text-sm text-muted-foreground">The next page could not be loaded. This page is unchanged.</p> : null}
+            <nav aria-label="Catalogue pages" className="mt-section grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-related border-t border-border pt-related">
+              {(tab === 'tools' || tab === 'providers') && indexed ? <>
+                <span className="justify-self-start">{activePages.hasPrevious ? <Button type="button" variant="outline" className="h-11 active:scale-100" onClick={tab === 'providers' ? providerPages.showPreviousPage : showPreviousPage} disabled={activePages.status === 'loading'}><ArrowLeftIcon />Previous page</Button> : null}</span>
+                {activePages.pageNumber > 0 ? <p className="text-sm tabular-nums text-muted-foreground">Page {activePages.pageNumber}</p> : <span />}
+                <span className="justify-self-end">{activePages.isDone ? null : <Button type="button" variant="outline" className="h-11 active:scale-100" onClick={() => void (tab === 'providers' ? providerPages.loadNextPage() : loadNextPage())} disabled={activePages.status === 'loading'} aria-busy={activePages.status === 'loading'} aria-label={activePages.status === 'failed' ? 'Next page. Try again.' : 'Next page'}>
+                  {activePages.status === 'loading' ? <Loader2Icon className="animate-spin" /> : null}Next page<ArrowRightIcon />
+                </Button>}</span>
               </> : <>
-              <span>{page.previousOffset === undefined ? null : <Link to={marketPath} search={carryMarketCompare(search, { ...sourceInput, view: tab, offset: page.previousOffset })} className={cn(buttonVariants({ variant: 'outline' }))}><ArrowLeftIcon />Previous page</Link>}</span>
-              {page.nextOffset === undefined ? null : <Link to={marketPath} search={carryMarketCompare(search, { ...sourceInput, view: tab, offset: page.nextOffset })} className={cn(buttonVariants({ variant: 'outline' }))}>Next page<ArrowRightIcon /></Link>}
+              <span className="justify-self-start">{page.previousOffset === undefined ? null : <Link to={marketPath} search={carryMarketCompare(search, { ...sourceInput, view: tab, offset: page.previousOffset })} className={cn(buttonVariants({ variant: 'outline' }), 'h-11 active:scale-100')}><ArrowLeftIcon />Previous page</Link>}</span>
+              <span />
+              <span className="justify-self-end">{page.nextOffset === undefined ? null : <Link to={marketPath} search={carryMarketCompare(search, { ...sourceInput, view: tab, offset: page.nextOffset })} className={cn(buttonVariants({ variant: 'outline' }), 'h-11 active:scale-100')}>Next page<ArrowRightIcon /></Link>}</span>
             </>}
             </nav>
             <p className="mt-4 text-xs text-muted-foreground">Directory: Coinbase Bazaar. Descriptions and payment requirements are published by providers.</p>
             {coverage === undefined ? null : <p className="mt-2 text-xs leading-relaxed text-muted-foreground">{coverage.indexedTotal.toLocaleString()} Tools indexed · refreshed {directoryDate(new Date(coverage.completedAt).toISOString())}. {coverage.sourceChangedDuringScan ? 'The upstream directory changed during this refresh; counts reflect the Tools observed.' : 'Prices and service details can change after this refresh.'}</p>}
           </>}
           </section>
-        </div>}
+        </div>
         </TabsContent>
         })}
       </Tabs>

@@ -69,6 +69,14 @@ function text(value: unknown, max = 240): string | undefined {
   return trimmed.length > max ? `${trimmed.slice(0, max - 1).trimEnd()}…` : trimmed
 }
 
+function payToFact(value: unknown): string | undefined {
+  const raw = text(value, 128)
+  if (raw === undefined) return undefined
+  if (/^0x[a-fA-F0-9]{40}$/u.test(raw)) return raw.toLowerCase()
+  if (/^[1-9A-HJ-NP-Za-km-z]{32,44}$/u.test(raw)) return raw
+  return undefined
+}
+
 function priceFacts(price: Readonly<Record<string, unknown>>) {
   const units = text(price.amount ?? price.maxAmountRequired, 128)
   const assetId = text(price.asset, 160)
@@ -76,10 +84,12 @@ function priceFacts(price: Readonly<Record<string, unknown>>) {
   if (units === undefined || assetId === undefined || network === undefined || !/^\d+$/u.test(units)) return { amount: 'Price not supplied' }
   const asset = x402DefaultAssetFacts(assetId, network)
   const formatted = asset === undefined ? undefined : formatExactAmount({ currency: asset.symbol, units, exponent: asset.decimals })
+  const payTo = payToFact(price.payTo)
   return {
     amount: formatted === undefined ? `${units} atomic units (${assetId})` : `${formatted} ${asset?.symbol}`,
     asset: assetId,
     ...(formatted === undefined || asset === undefined ? {} : { symbol: asset.symbol, decimalAmount: formatted }),
+    ...(payTo === undefined ? {} : { payTo }),
   }
 }
 

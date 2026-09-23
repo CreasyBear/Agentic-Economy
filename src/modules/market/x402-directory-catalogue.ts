@@ -22,7 +22,11 @@ export type X402DirectoryCatalogue = X402DirectoryCatalogueUnavailable | Readonl
   pageStatus?: 'SplitRecommended' | 'SplitRequired' | null
   splitCursor?: string | null
 }>
-export type X402DirectoryFacet = Readonly<{ key: string; label: string; count: number; iconUrl?: string }>
+export type X402DirectoryFacet = Readonly<{
+  key: string; label: string; count: number; iconUrl?: string
+  /** Busiest Tool on this host. Absent when that Tool has no reported calls. */
+  leadCalls?: number; leadPayers?: number; leadTitle?: string; leadPrice?: string; leadSlug?: string
+}>
 export type X402DirectoryCatalogueOverview = X402DirectoryCatalogueUnavailable | Readonly<{
   kind: 'ok'; coverage: X402DirectoryIndexCoverage
   categories: readonly X402DirectoryFacet[]; providers: readonly X402DirectoryFacet[]; networks: readonly X402DirectoryFacet[]

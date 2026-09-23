@@ -228,6 +228,7 @@ import type * as lib_interactiveAuthority_scheduledReconcile from "../lib/intera
 import type * as lib_interactiveAuthority_shared from "../lib/interactiveAuthority/shared.js";
 import type * as lib_interactiveAuthority_validators from "../lib/interactiveAuthority/validators.js";
 import type * as lib_liveX402RequirementRef from "../lib/liveX402RequirementRef.js";
+import type * as lib_marketFlow_store from "../lib/marketFlow/store.js";
 import type * as lib_money_accountFundingValidators from "../lib/money/accountFundingValidators.js";
 import type * as lib_money_agentFundingHandoff from "../lib/money/agentFundingHandoff.js";
 import type * as lib_money_fundingBalanceSubject from "../lib/money/fundingBalanceSubject.js";
@@ -289,6 +290,7 @@ import type * as lib_x402DirectoryIndex_categoryStats from "../lib/x402Directory
 import type * as lib_x402DirectoryIndex_contracts from "../lib/x402DirectoryIndex/contracts.js";
 import type * as lib_x402DirectoryIndex_facets from "../lib/x402DirectoryIndex/facets.js";
 import type * as lib_x402DirectoryIndex_listingDigest from "../lib/x402DirectoryIndex/listingDigest.js";
+import type * as lib_x402DirectoryIndex_providerLead from "../lib/x402DirectoryIndex/providerLead.js";
 import type * as lib_x402DirectoryIndex_rows from "../lib/x402DirectoryIndex/rows.js";
 import type * as lib_x402PaymentAttempt from "../lib/x402PaymentAttempt.js";
 import type * as lib_x402PaymentAttemptCanary from "../lib/x402PaymentAttemptCanary.js";
@@ -298,6 +300,8 @@ import type * as lib_x402ResponseRecovery from "../lib/x402ResponseRecovery.js";
 import type * as marketDemandSignals from "../marketDemandSignals.js";
 import type * as marketDispatchWorkpool from "../marketDispatchWorkpool.js";
 import type * as marketEvidence from "../marketEvidence.js";
+import type * as marketFlow from "../marketFlow.js";
+import type * as marketFlowRefresh from "../marketFlowRefresh.js";
 import type * as marketListingEvidence from "../marketListingEvidence.js";
 import type * as marketMetrics from "../marketMetrics.js";
 import type * as marketPresence from "../marketPresence.js";
@@ -369,6 +373,7 @@ import type * as x402Directory from "../x402Directory.js";
 import type * as x402DirectoryIndex from "../x402DirectoryIndex.js";
 import type * as x402DirectoryIndexBackfill from "../x402DirectoryIndexBackfill.js";
 import type * as x402DirectoryIndexCategoryStats from "../x402DirectoryIndexCategoryStats.js";
+import type * as x402DirectoryIndexProviderLead from "../x402DirectoryIndexProviderLead.js";
 import type * as x402DirectoryIndexRefresh from "../x402DirectoryIndexRefresh.js";
 import type * as x402DirectoryIndexSource from "../x402DirectoryIndexSource.js";
 import type * as x402DirectoryIndexStore from "../x402DirectoryIndexStore.js";
@@ -600,6 +605,7 @@ declare const fullApi: ApiFromModules<{
   "lib/interactiveAuthority/shared": typeof lib_interactiveAuthority_shared;
   "lib/interactiveAuthority/validators": typeof lib_interactiveAuthority_validators;
   "lib/liveX402RequirementRef": typeof lib_liveX402RequirementRef;
+  "lib/marketFlow/store": typeof lib_marketFlow_store;
   "lib/money/accountFundingValidators": typeof lib_money_accountFundingValidators;
   "lib/money/agentFundingHandoff": typeof lib_money_agentFundingHandoff;
   "lib/money/fundingBalanceSubject": typeof lib_money_fundingBalanceSubject;
@@ -661,6 +667,7 @@ declare const fullApi: ApiFromModules<{
   "lib/x402DirectoryIndex/contracts": typeof lib_x402DirectoryIndex_contracts;
   "lib/x402DirectoryIndex/facets": typeof lib_x402DirectoryIndex_facets;
   "lib/x402DirectoryIndex/listingDigest": typeof lib_x402DirectoryIndex_listingDigest;
+  "lib/x402DirectoryIndex/providerLead": typeof lib_x402DirectoryIndex_providerLead;
   "lib/x402DirectoryIndex/rows": typeof lib_x402DirectoryIndex_rows;
   "lib/x402PaymentAttempt": typeof lib_x402PaymentAttempt;
   "lib/x402PaymentAttemptCanary": typeof lib_x402PaymentAttemptCanary;
@@ -670,6 +677,8 @@ declare const fullApi: ApiFromModules<{
   marketDemandSignals: typeof marketDemandSignals;
   marketDispatchWorkpool: typeof marketDispatchWorkpool;
   marketEvidence: typeof marketEvidence;
+  marketFlow: typeof marketFlow;
+  marketFlowRefresh: typeof marketFlowRefresh;
   marketListingEvidence: typeof marketListingEvidence;
   marketMetrics: typeof marketMetrics;
   marketPresence: typeof marketPresence;
@@ -741,6 +750,7 @@ declare const fullApi: ApiFromModules<{
   x402DirectoryIndex: typeof x402DirectoryIndex;
   x402DirectoryIndexBackfill: typeof x402DirectoryIndexBackfill;
   x402DirectoryIndexCategoryStats: typeof x402DirectoryIndexCategoryStats;
+  x402DirectoryIndexProviderLead: typeof x402DirectoryIndexProviderLead;
   x402DirectoryIndexRefresh: typeof x402DirectoryIndexRefresh;
   x402DirectoryIndexSource: typeof x402DirectoryIndexSource;
   x402DirectoryIndexStore: typeof x402DirectoryIndexStore;

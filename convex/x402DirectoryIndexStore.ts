@@ -20,6 +20,7 @@ import { directoryFacets } from './lib/x402DirectoryIndex/facets'
 import { ANALYTICS_VERSION, deleteAnalyticsMembership, eligibleFacetsNamespace, searchAnalytics, writeAnalytics } from './lib/x402DirectoryIndex/analytics'
 import { directoryGeneration, directoryState, storedDirectoryEntry, activeDirectoryGeneration } from './lib/x402DirectoryIndex/rows'
 import { listingIdentityDigest } from './lib/x402DirectoryIndex/listingDigest'
+import { refreshProviderLead } from './lib/x402DirectoryIndex/providerLead'
 
 export const DIRECTORY_INDEX_PAGE_SIZE = 100
 const MAX_ENTRY_BYTES = 768 * 1024
@@ -231,6 +232,7 @@ async function writeSource(ctx: MutationCtx, generation: string, item: IndexedSo
       }
     }
     await toggleEligibleFacetMembership(ctx, generation, item.resource, category, entry.provider, networks, eligible, previousEligible)
+    await refreshProviderLead(ctx, generation, entry.provider)
     return 'activity_patched'
   }
 
@@ -300,6 +302,7 @@ async function writeSource(ctx: MutationCtx, generation: string, item: IndexedSo
   }
   await writeFacetMembership(ctx, generation, item.resource, item, category, networks, eligible, previous, previousEligible)
   await writeAnalytics(ctx, generation, item.resource, entry, previous === null ? undefined : storedDirectoryEntry(previous))
+  await refreshProviderLead(ctx, generation, entry.provider)
   return previous === null ? 'inserted' : 'rewritten'
 }
 
@@ -412,6 +415,7 @@ async function absorbCoinbaseRowAtRoute(ctx: MutationCtx, generation: string, ro
   }
   await deleteAnalyticsMembership(ctx, generation, resource, storedDirectoryEntry(entryDoc))
   for (const row of searchRows) await ctx.db.delete(row._id)
+  await refreshProviderLead(ctx, generation, entryDoc.provider)
   await ctx.db.delete(entryDoc._id)
 }
 
@@ -431,6 +435,7 @@ async function removeProviderDirectoryRow(ctx: MutationCtx, generation: string, 
   }
   await deleteAnalyticsMembership(ctx, generation, resource, storedDirectoryEntry(entryDoc))
   for (const row of searchRows) await ctx.db.delete(row._id)
+  await refreshProviderLead(ctx, generation, entryDoc.provider)
   await ctx.db.delete(entryDoc._id)
 }
 
@@ -519,6 +524,7 @@ export async function upsertProviderDirectoryRows(
   const asIndexedSource: IndexedSource = { resource, entry, sourceJson: row.directorySourceJson, sourceDigest }
   await writeFacetMembership(ctx, generation.generation, resource, asIndexedSource, category, [publication.networkId], true, existing, previousEligible)
   await writeAnalytics(ctx, generation.generation, resource, entry, existing === null ? undefined : storedDirectoryEntry(existing))
+  await refreshProviderLead(ctx, generation.generation, providerKey)
 }
 
 const PROVIDER_DIRECTORY_RECONCILE_PAGE_SIZE = 50
@@ -675,6 +681,7 @@ export const cleanup = internalMutation({
       }
       await deleteAnalyticsMembership(ctx, args.generation, endpointUrl, storedDirectoryEntry(row))
       for (const searchRow of searchRows) await ctx.db.delete(searchRow._id)
+      await refreshProviderLead(ctx, args.generation, row.provider)
       await ctx.db.delete(row._id)
       deleted += 1
       keyBudget += keys.length

@@ -252,7 +252,11 @@ export const selectedSource = internalQuery({
   },
 })
 
-const facetValue = v.object({ key: v.string(), label: v.string(), count: v.number(), iconUrl: v.optional(v.string()) })
+const facetValue = v.object({
+  key: v.string(), label: v.string(), count: v.number(), iconUrl: v.optional(v.string()),
+  leadCalls: v.optional(v.number()), leadPayers: v.optional(v.number()),
+  leadTitle: v.optional(v.string()), leadPrice: v.optional(v.string()), leadSlug: v.optional(v.string()),
+})
 
 /**
  * Category/provider/network counts default to the eligible-only namespace
@@ -281,8 +285,13 @@ export const facets = query({
     if (!Number.isSafeInteger(args.paginationOpts.numItems) || args.paginationOpts.numItems < 1 || args.paginationOpts.numItems > 50) return { kind: 'unavailable' as const, reason: 'query_invalid' }
     const generation = await activeDirectoryGeneration(ctx)
     if (generation === null) return { kind: 'unavailable' as const, reason: 'index_unavailable' }
-    const page = await ctx.db.query('marketDirectoryFacets').withIndex('by_generation_and_kind_and_key', q => q.eq('generation', generation.generation).eq('kind', args.kind))
-      .paginate({ ...args.paginationOpts, numItems: Math.min(args.paginationOpts.numItems, 24) })
+    const paginationOpts = { ...args.paginationOpts, numItems: Math.min(args.paginationOpts.numItems, 24) }
+    const byKey = () => ctx.db.query('marketDirectoryFacets').withIndex('by_generation_and_kind_and_key', q => q.eq('generation', generation.generation).eq('kind', args.kind)).paginate(paginationOpts)
+    const ranked = args.kind === 'provider'
+      ? await ctx.db.query('marketDirectoryFacets').withIndex('by_generation_and_kind_and_leadCalls', q => q.eq('generation', generation.generation).eq('kind', 'provider')).order('desc').paginate(paginationOpts)
+      : null
+    // Until the lead is noted, the key order still lists every host.
+    const page = ranked !== null && (ranked.page.length > 0 || args.paginationOpts.cursor !== null) ? ranked : await byKey()
     // No provider argument on this query: category/provider/network are always eligible-only.
     const namespace = args.kind === 'tag' || args.kind === 'bundle' ? analyticsNamespace(generation.generation) : eligibleFacetsNamespace(generation.generation)
     const counts = await directoryFacets.countBatch(ctx, page.page.map(row => ({ namespace, bounds: { prefix: [args.kind, row.key] } })))
@@ -290,7 +299,17 @@ export const facets = query({
       kind: 'ok' as const, coverage: directoryCoverage(generation), ...page,
       page: page.page.flatMap((row, index) => {
         const count = counts[index] ?? 0
-        return count === 0 ? [] : [{ key: row.key, label: row.label, count, ...(row.iconUrl === undefined ? {} : { iconUrl: row.iconUrl }) }]
+        const leadCalls = row.kind === 'provider' ? row.leadCalls : undefined
+        return count === 0 ? [] : [{
+          key: row.key, label: row.label, count, ...(row.iconUrl === undefined ? {} : { iconUrl: row.iconUrl }),
+          ...(leadCalls === undefined || leadCalls < 0 ? {} : {
+            leadCalls,
+            ...(row.leadPayers === undefined ? {} : { leadPayers: row.leadPayers }),
+            ...(row.leadTitle === undefined ? {} : { leadTitle: row.leadTitle }),
+            ...(row.leadPrice === undefined ? {} : { leadPrice: row.leadPrice }),
+            ...(row.leadSlug === undefined ? {} : { leadSlug: row.leadSlug }),
+          }),
+        }]
       }),
     }
   },

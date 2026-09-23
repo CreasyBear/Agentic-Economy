@@ -25,6 +25,7 @@ export const directoryEntryValue = v.object({
   prices: v.array(v.object({
     network: v.string(), networkLabel: v.optional(v.string()), scheme: v.string(), amount: v.string(),
     asset: v.optional(v.string()), symbol: v.optional(v.string()), decimalAmount: v.optional(v.string()),
+    payTo: v.optional(v.string()),
   })),
 })
 export type DirectoryEntry = Infer<typeof directoryEntryValue>

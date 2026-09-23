@@ -25,8 +25,8 @@ const adoptionBandLabels = { missing: 'Payers not reported', '0': '0 paying addr
 const advancedFilterKeys = ['network', 'minUsdPrice', 'maxUsdPrice', 'minPayers30d', 'maxPayers30d', 'adoptionBand', 'curatedOnly', 'hasInputFields', 'hasOutputExample', 'hasInputSchema', 'hasOutputFields', 'hasOutputSchema', 'tags', 'bundleSlugs'] as const
 const explorerFilterKeys = ['directoryCategory', 'network', 'provider', 'minUsdPrice', 'maxUsdPrice', 'minPayers30d', 'maxPayers30d', 'priceBand', 'adoptionBand', 'curatedOnly', 'hasInputFields', 'hasOutputExample', 'hasInputSchema', 'hasOutputFields', 'hasOutputSchema', 'tags', 'bundleSlugs'] as const
 
-const discoverFacetPill = 'rounded-full border border-border/70 bg-card'
-const discoverFacetSelected = cn(discoverFacetPill, 'font-medium')
+const discoverFacetPill = 'rounded-full border border-transparent transition-[background-color,border-color,color] duration-fast ease-standard active:scale-100'
+const discoverFacetSelected = cn(discoverFacetPill, 'border-border/70 bg-card')
 
 function activeAdvancedFilterCount(search: DirectoryExplorerFilterValues) {
   return advancedFilterKeys.filter(key => {
@@ -63,8 +63,8 @@ function Facets({ label, values, selected, onChange, searchable = false, allLabe
     <legend className="mb-3 text-sm font-semibold">{label}</legend>
     {searchable ? <div className="relative"><SearchIcon className="pointer-events-none absolute top-2.5 left-2.5 size-3.5 text-muted-foreground" /><Input aria-label={`Find ${label.toLowerCase()}`} value={query} onChange={event => setQuery(event.target.value)} placeholder={`Find ${label.toLowerCase()}…`} className="h-9 pl-8" /></div> : null}
     <div className="max-h-60 flex flex-col gap-0.5 overflow-y-auto overscroll-contain">
-      <Button type="button" variant="ghost" onClick={() => onChange(undefined)} aria-pressed={selected === undefined} className={cn('h-auto min-h-10 w-full justify-start px-3 text-xs font-normal', selected === undefined ? discoverFacetSelected : 'rounded-full')}>{allText}</Button>
-      {visible.map(item => <Button key={item.key} type="button" variant="ghost" aria-label={showCount ? `${item.label} ${item.count.toLocaleString('en-AU')}` : item.label} aria-pressed={selected === item.key} onClick={() => onChange(selected === item.key ? undefined : item.key)} className={cn('h-auto min-h-10 w-full justify-between gap-3 px-3 text-xs font-normal', selected === item.key ? discoverFacetSelected : 'rounded-full')}>
+      <Button type="button" variant="ghost" onClick={() => onChange(undefined)} aria-pressed={selected === undefined} className={cn('h-auto min-h-10 w-full justify-start px-3 text-xs font-normal', selected === undefined ? discoverFacetSelected : discoverFacetPill)}>{allText}</Button>
+      {visible.map(item => <Button key={item.key} type="button" variant="ghost" aria-label={showCount ? `${item.label} ${item.count.toLocaleString('en-AU')}` : item.label} aria-pressed={selected === item.key} onClick={() => onChange(selected === item.key ? undefined : item.key)} className={cn('h-auto min-h-10 w-full justify-between gap-3 px-3 text-xs font-normal', selected === item.key ? discoverFacetSelected : discoverFacetPill)}>
         <span className="min-w-0 break-words text-left whitespace-normal">{item.label}</span>{showCount ? <span className="shrink-0 text-muted-foreground tabular-nums">{item.count.toLocaleString('en-AU')}</span> : null}
       </Button>)}
       {visible.length === 0 ? <p className="px-2 py-2 text-xs text-muted-foreground">No matching {label.toLowerCase()}.</p> : null}
@@ -118,7 +118,7 @@ function PayerBreadthFilter({ search, onChange }: Pick<DirectoryExplorerFiltersP
       {search.maxPayers30d === undefined ? null : <Button type="button" variant="outline" className={cn('h-auto min-h-9 justify-between gap-2 text-xs whitespace-normal', discoverFacetSelected)} aria-label="Remove maximum payer count" onClick={() => onChange({ maxPayers30d: undefined })}>At most {search.maxPayers30d.toLocaleString('en-AU')} paying addresses<XIcon className="size-3" /></Button>}
       {[{ label: 'Any payer count', value: undefined }, { label: '10+ paying addresses', value: 10 }, { label: '100+ paying addresses', value: 100 }, { label: '1,000+ paying addresses', value: 1000 }].map(option => {
         const selected = search.minPayers30d === option.value && search.adoptionBand === undefined && search.maxPayers30d === undefined
-        return <Button key={option.label} type="button" variant="ghost" aria-pressed={selected} className={cn('h-auto min-h-10 w-full justify-start px-3 text-xs font-normal', selected ? discoverFacetSelected : 'rounded-full')} onClick={() => onChange({ minPayers30d: option.value, maxPayers30d: undefined, adoptionBand: undefined })}>{option.label}</Button>
+        return <Button key={option.label} type="button" variant="ghost" aria-pressed={selected} className={cn('h-auto min-h-10 w-full justify-start px-3 text-xs font-normal', selected ? discoverFacetSelected : discoverFacetPill)} onClick={() => onChange({ minPayers30d: option.value, maxPayers30d: undefined, adoptionBand: undefined })}>{option.label}</Button>
       })}
       <p className="text-xs leading-relaxed text-muted-foreground">Distinct paying addresses per Tool, not people or Customers.</p>
     </fieldset>
@@ -129,7 +129,7 @@ function AdvancedFilters({ search, overview, onChange }: Pick<DirectoryExplorerF
   const activeCount = activeAdvancedFilterCount(search)
   const [open, setOpen] = useState(activeCount > 0)
   return <Collapsible open={open} onOpenChange={setOpen} className="border-t pt-3">
-      <CollapsibleTrigger render={<Button type="button" variant="ghost" className="h-auto min-h-10 w-full justify-between px-2" aria-label={activeCount > 0 ? `Advanced filters ${activeCount} active` : 'Advanced filters'}>
+      <CollapsibleTrigger render={<Button type="button" variant="ghost" className="h-auto min-h-10 w-full justify-between px-2 active:scale-100" aria-label={activeCount > 0 ? `Advanced filters ${activeCount} active` : 'Advanced filters'}>
         <span>Advanced filters{activeCount > 0 ? <span className="ml-2 rounded bg-muted px-1.5 text-xs tabular-nums">{activeCount}</span> : null}</span>
         <ChevronDownIcon className={cn('transition-transform', open && 'rotate-180')} aria-hidden="true" />
       </Button>} />
@@ -163,5 +163,5 @@ function FilterBody({ search, overview, onChange, onReset, showHeading = true }:
 export function DirectoryExplorerFilters(props: DirectoryExplorerFiltersProps) {
   const count = explorerFilterKeys.filter(key => props.search[key] !== undefined && props.search[key] !== false).length
   const key = JSON.stringify(props.search)
-  return <Sheet><SheetTrigger render={<Button variant="outline" size="sm" className="min-h-touch" aria-label={count > 0 ? `Filters ${count}` : 'Filters'}><SlidersHorizontalIcon />Filters{count > 0 ? <span className="rounded bg-muted px-1.5 tabular-nums">{count}</span> : null}</Button>} /><SheetContent side="left" className="w-full gap-0 sm:max-w-md"><SheetHeader className="border-b p-5 pr-12"><SheetTitle>Refine Tools</SheetTitle><SheetDescription>Filter the catalogue by price, Provider and published details.</SheetDescription></SheetHeader><div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-5"><FilterBody key={key} {...props} showHeading={false} /></div><SheetFooter className="flex flex-row items-stretch gap-3 border-t p-5"><Button type="button" variant="outline" className="min-h-touch flex-1" onClick={props.onReset}>Clear filters</Button><SheetClose render={<Button className="min-h-touch flex-1">Show results</Button>} /></SheetFooter></SheetContent></Sheet>
+  return <Sheet><SheetTrigger render={<Button variant="outline" className="h-11 w-32 justify-between px-3 active:scale-100" aria-label={count > 0 ? `Filters ${count}` : 'Filters'}><span className="inline-flex items-center gap-2"><SlidersHorizontalIcon />Filters</span><span className={cn('min-w-5 rounded px-1 text-center text-xs tabular-nums', count > 0 ? 'bg-muted' : 'invisible')} aria-hidden="true">{count > 0 ? count : 1}</span></Button>} /><SheetContent side="left" className="w-full gap-0 sm:max-w-md"><SheetHeader className="border-b p-5 pr-12"><SheetTitle>Refine Tools</SheetTitle><SheetDescription>Filter the catalogue by price, Provider and published details.</SheetDescription></SheetHeader><div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-5"><FilterBody key={key} {...props} showHeading={false} /></div><SheetFooter className="flex flex-row items-stretch gap-3 border-t p-5"><Button type="button" variant="outline" className="min-h-touch flex-1 active:scale-100" onClick={props.onReset}>Clear filters</Button><SheetClose render={<Button className="min-h-touch flex-1 active:scale-100">Show results</Button>} /></SheetFooter></SheetContent></Sheet>
 }
