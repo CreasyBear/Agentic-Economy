@@ -4,16 +4,12 @@ import { v } from 'convex/values'
 import { sourceWriteArgs } from './sourceWriteAdmission'
 import { literalUnion } from '../src/modules/common/convex-literals'
 import { RemovalDisputeReasonCodeValues } from '../src/modules/security/public'
-import {
-  bootstrapOwnerAdminHandler,
-  grantAdminMembershipHandler,
-  revokeAdminMembershipHandler,
-} from './securityAdminMembership'
-import {
-  closeRemovalDisputeHandler,
-  openRemovalDisputeHandler,
-} from './securityRemovalDisputes'
-
+import { adminCommandArgsValue, adminCommandReceiptValue } from './lib/adminConsole/validators'
+import { runAdminCommand } from './lib/adminConsole/commandEnvelope'
+import { grantAdminMembershipSpec, revokeAdminMembershipSpec } from './lib/adminConsole/actions/adminMembership'
+import { removalDisputeSpec } from './lib/adminConsole/actions/removalDispute'
+import { bootstrapOwnerAdminHandler } from './securityAdminMembership'
+import { openRemovalDisputeHandler } from './securityRemovalDisputes'
 const adminRole = v.union(v.literal('owner_admin'), v.literal('support'), v.literal('reviewer'))
 const adminMembershipState = v.union(v.literal('active'), v.literal('revoked'), v.literal('suspended'))
 const visibilityTargetType = v.union(v.literal('business'), v.literal('service'), v.literal('capability'))
@@ -127,27 +123,6 @@ const openDisputeResult = v.union(
   })
 )
 
-const closeDisputeResult = v.union(
-  v.object({
-    kind: v.literal('ok'),
-    code: v.literal('dispute_closed'),
-    receipt: disputeReceiptResult,
-    auditEvent: auditSummaryResult,
-  }),
-  v.object({
-    kind: v.literal('error'),
-    code: v.union(
-      v.literal('admin_action_denied'),
-      v.literal('admin_invalid_reason'),
-      v.literal('admin_missing_evidence'),
-      v.literal('dispute_not_found')
-    ),
-    retryable: v.boolean(),
-    reason: v.string(),
-    auditEvent: v.optional(auditSummaryResult),
-    membershipAuditEvent: v.optional(membershipAuditSummaryResult),
-  })
-)
 
 export const bootstrapOwnerAdmin = mutationGeneric({
   args: {
@@ -162,32 +137,32 @@ export const bootstrapOwnerAdmin = mutationGeneric({
 })
 
 export const grantAdminMembership = mutationGeneric({
-  args: {
-    targetClerkUserId: v.string(),
-    targetTokenIdentifier: v.string(),
-    role: adminRole,
-    reasonCode: v.string(),
-    evidenceRefs: v.array(v.string()),
-    ...sourceWriteArgs,
-    operationKey: v.string(),
-    correlationId: v.string(),
-  },
-  returns: adminMutationResult,
-  handler: grantAdminMembershipHandler,
+  args: adminCommandArgsValue(
+    v.literal('grant_admin_membership'),
+    v.object({
+      targetClerkUserId: v.string(),
+      targetTokenIdentifier: v.string(),
+      role: adminRole,
+    }),
+    v.union(v.literal('onboarding'), v.literal('role_change')),
+  ).fields,
+  returns: adminCommandReceiptValue(v.literal('grant_admin_membership'), v.literal('membership_granted'), v.string()),
+  handler: async (ctx, args) =>
+    await runAdminCommand(ctx, args, grantAdminMembershipSpec(ctx, args.input)),
 })
 
 export const revokeAdminMembership = mutationGeneric({
-  args: {
-    targetClerkUserId: v.string(),
-    targetTokenIdentifier: v.optional(v.string()),
-    reasonCode: v.string(),
-    evidenceRefs: v.array(v.string()),
-    ...sourceWriteArgs,
-    operationKey: v.string(),
-    correlationId: v.string(),
-  },
-  returns: adminMutationResult,
-  handler: revokeAdminMembershipHandler,
+  args: adminCommandArgsValue(
+    v.literal('revoke_admin_membership'),
+    v.object({
+      targetClerkUserId: v.string(),
+      targetTokenIdentifier: v.optional(v.string()),
+    }),
+    v.union(v.literal('offboarding'), v.literal('role_change'), v.literal('compromise_suspected')),
+  ).fields,
+  returns: adminCommandReceiptValue(v.literal('revoke_admin_membership'), v.literal('membership_revoked'), v.string()),
+  handler: async (ctx, args) =>
+    await runAdminCommand(ctx, args, revokeAdminMembershipSpec(ctx, args.input)),
 })
 
 
@@ -227,16 +202,14 @@ export const openRemovalDispute = mutationGeneric({
 })
 
 export const closeRemovalDispute = mutationGeneric({
-  args: {
-    disputeId: v.string(),
-    reasonCode: v.string(),
-    evidenceRefs: v.array(v.string()),
-    ...sourceWriteArgs,
-    operationKey: v.string(),
-    correlationId: v.string(),
-  },
-  returns: closeDisputeResult,
-  handler: closeRemovalDisputeHandler,
+  args: adminCommandArgsValue(
+    v.literal('close_removal_dispute'),
+    v.object({ disputeId: v.string() }),
+    v.union(v.literal('upheld'), v.literal('refused'), v.literal('withdrawn_by_requester')),
+  ).fields,
+  returns: adminCommandReceiptValue(v.literal('close_removal_dispute'), v.literal('dispute_closed'), v.string()),
+  handler: async (ctx, args) =>
+    await runAdminCommand(ctx, args, removalDisputeSpec(ctx, args.input)),
 })
 
 export type {

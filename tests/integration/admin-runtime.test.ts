@@ -56,13 +56,14 @@ type AdminBootstrapArgs = {
 }
 
 type GrantArgs = {
-  targetClerkUserId: string
-  targetTokenIdentifier: string
-  role: 'owner_admin' | 'support' | 'reviewer'
-  reasonCode: string
+  action: 'grant_admin_membership'
+  input: { targetClerkUserId: string; targetTokenIdentifier: string; role: 'owner_admin' | 'support' | 'reviewer' }
+  reasonCode: 'onboarding' | 'role_change'
   evidenceRefs: string[]
   operationKey: string
   correlationId: string
+  approval: { kind: 'execute' }
+  proof: { reverificationId: string; firstFactorAgeMinutes: number; secondFactorAgeMinutes: number }
   sourceWriteRequest: SourceWriteAdmissionRequest
   sourceWrite: SourceWriteAdmission
 }
@@ -107,70 +108,38 @@ describe('admin Convex runtime controls', () => {
 
   it('lets owner_admin grant support', async () => {
     const db = seededAdminDb()
-
-    const grant = await grantHandler(
-      authCtx(db, ownerAdmin()),
-      await withSourceWrite('admin_operator', {
-        targetClerkUserId: 'user_new_support',
-        targetTokenIdentifier: 'clerk|user_new_support',
-        role: 'support',
-        reasonCode: 'support_queue_access',
-        evidenceRefs: ['private:evidence:grant'],
-        operationKey: 'op:admin:grant:new-support',
-        correlationId: 'corr:admin:grant:new-support',
-      })
-    )
-    expect(grant).toMatchObject({ kind: 'ok', code: 'admin_membership_granted' })
+    authCtx(db, { subject: 'user_new_support', tokenIdentifier: 'clerk|user_new_support', issuer: 'https://clerk.example.test' })
+    const grant = await grantHandler(authCtx(db, ownerAdmin()), await signedGrant({
+      targetClerkUserId: 'user_new_support', targetTokenIdentifier: 'clerk|user_new_support',
+      role: 'support', operationKey: 'op:admin:grant:new-support',
+    }, 'nonce:admin:grant:new-support'))
+    expect(grant).toMatchObject({ kind: 'completed', code: 'membership_granted' })
   })
 
   it('replays an authorized grant without duplicating membership or audit effects', async () => {
     const db = seededAdminDb()
-    const command = {
+    authCtx(db, { subject: 'user_replayed_support', tokenIdentifier: 'clerk|user_replayed_support', issuer: 'https://clerk.example.test' })
+    const input = {
       targetClerkUserId: 'user_replayed_support',
       targetTokenIdentifier: 'clerk|user_replayed_support',
       role: 'support' as const,
-      reasonCode: 'support_queue_access',
-      evidenceRefs: ['private:evidence:replay'],
       operationKey: 'op:admin:grant:replay',
-      correlationId: 'corr:admin:grant:replay',
     }
-
-    const first = await grantHandler(authCtx(db, ownerAdmin()), await withSourceWrite('admin_operator', command))
-    const second = await grantHandler(authCtx(db, ownerAdmin()), await withSourceWrite('admin_operator', command))
-
-    expect(first).toMatchObject({
-      kind: 'ok',
-      code: 'admin_membership_granted',
-      membership: {
-        clerkUserId: command.targetClerkUserId,
-        tokenIdentifier: command.targetTokenIdentifier,
-        role: command.role,
-        state: 'active',
-      },
-    })
-    expect(second).toMatchObject({
-      kind: 'ok',
-      code: 'admin_membership_granted',
-      membership: {
-        clerkUserId: command.targetClerkUserId,
-        tokenIdentifier: command.targetTokenIdentifier,
-        role: command.role,
-        state: 'active',
-      },
-    })
+    const first = await grantHandler(authCtx(db, ownerAdmin()), await signedGrant(input, 'nonce:admin:grant:replay:1'))
+    const second = await grantHandler(authCtx(db, ownerAdmin()), await signedGrant(input, 'nonce:admin:grant:replay:2'))
+    expect(first).toMatchObject({ kind: 'completed', code: 'membership_granted', effectRefs: [input.targetClerkUserId] })
+    expect(JSON.stringify(second)).toBe(JSON.stringify(first))
     expect(db.dump('adminMemberships').filter((row) => (
-      row.clerkUserId === command.targetClerkUserId && row.state === 'active'
+      row.clerkUserId === input.targetClerkUserId && row.state === 'active'
     ))).toHaveLength(1)
     expect(db.dump('auditEvents').filter((row) => (
-      row.eventType === 'admin.membership_granted' && row.targetRef === command.targetClerkUserId
-    ))).toHaveLength(1)
-    expect(db.dump('adminMembershipAuditEvents').filter((row) => (
-      row.eventType === 'membership_granted' && row.targetRef === command.targetClerkUserId
+      row.eventType === 'admin.membership_granted' && row.targetRef === input.targetClerkUserId
     ))).toHaveLength(1)
   })
 
   it('refuses grant when target is already bound to a different active token', async () => {
     const db = seededAdminDb()
+    authCtx(db, { subject: 'target_support', tokenIdentifier: 'clerk|target_support', issuer: 'https://clerk.example.test' })
     db.seed('adminMemberships', {
       _id: 'adminMemberships:other-support-token',
       _creationTime: 7,
@@ -182,26 +151,11 @@ describe('admin Convex runtime controls', () => {
       grantedAt: 1,
     })
     const before = db.dump('adminMemberships')
-
-    const result = await grantHandler(
-      authCtx(db, ownerAdmin()),
-      await withSourceWrite('admin_operator', {
-        targetClerkUserId: 'target_support',
-        targetTokenIdentifier: 'clerk|target_support',
-        role: 'support',
-        reasonCode: 'support_queue_access',
-        evidenceRefs: ['private:evidence:token-conflict'],
-        operationKey: 'op:admin:grant:token-conflict',
-        correlationId: 'corr:admin:grant:token-conflict',
-      })
-    )
-
-    expect(result).toEqual({
-      kind: 'error',
-      code: 'admin_action_denied',
-      retryable: false,
-      reason: 'membership_conflict',
-    })
+    const result = await grantHandler(authCtx(db, ownerAdmin()), await signedGrant({
+      targetClerkUserId: 'target_support', targetTokenIdentifier: 'clerk|target_support',
+      role: 'support', operationKey: 'op:admin:grant:token-conflict',
+    }, 'nonce:admin:grant:token-conflict'))
+    expect(result).toMatchObject({ kind: 'refused', code: 'membership_already_active' })
     expect(db.dump('adminMemberships')).toEqual(before)
   })
 
@@ -241,28 +195,14 @@ describe('admin Convex runtime controls', () => {
     }
   })
 
-  it('denies malformed grant token identifiers without creating membership rows', async () => {
+  it('denies unknown grant token identifiers without creating membership rows', async () => {
     const db = seededAdminDb()
     const before = db.dump('adminMemberships')
-
-    const result = await grantHandler(
-      authCtx(db, ownerAdmin()),
-      await withSourceWrite('admin_operator', {
-        targetClerkUserId: 'malformed_target',
-        targetTokenIdentifier: '   ',
-        role: 'support',
-        reasonCode: 'support_queue_access',
-        evidenceRefs: ['private:evidence:malformed-token'],
-        operationKey: 'op:admin:grant:malformed-token',
-        correlationId: 'corr:admin:grant:malformed-token',
-      })
-    )
-
-    expect(result).toMatchObject({
-      kind: 'error',
-      code: 'admin_action_denied',
-      reason: 'malformed_token_identifier',
-    })
+    const result = await grantHandler(authCtx(db, ownerAdmin()), await signedGrant({
+      targetClerkUserId: 'malformed_target', targetTokenIdentifier: '   ',
+      role: 'support', operationKey: 'op:admin:grant:malformed-token',
+    }, 'nonce:admin:grant:malformed-token'))
+    expect(result).toMatchObject({ kind: 'refused', code: 'principal_not_found' })
     expect(db.dump('adminMemberships')).toEqual(before)
   })
 
@@ -584,4 +524,35 @@ async function bootstrapArgs(key: string): Promise<AdminBootstrapArgs> {
     operationKey: `op:admin:bootstrap:${key}`,
     correlationId: `corr:admin:bootstrap:${key}`,
   })
+}
+
+async function signedGrant(
+  input: GrantArgs['input'] & { operationKey: string },
+  nonce: string,
+): Promise<GrantArgs> {
+  const { operationKey, ...target } = input
+  const args = {
+    action: 'grant_admin_membership' as const,
+    input: target,
+    reasonCode: 'onboarding' as const,
+    evidenceRefs: ['private:evidence:grant'],
+    operationKey,
+    correlationId: `corr:${operationKey}`,
+    approval: { kind: 'execute' as const },
+  }
+  const commandDigest = canonicalDigest({
+    scope: 'admin_operator',
+    action: args.action,
+    input: args.input,
+    reasonCode: args.reasonCode,
+    evidenceRefs: args.evidenceRefs,
+  })
+  return await withSourceWrite('admin_operator', {
+    ...args,
+    proof: {
+      reverificationId: `test:${canonicalDigest({ subject: 'user_owner', commandDigest })}`,
+      firstFactorAgeMinutes: 0,
+      secondFactorAgeMinutes: -1,
+    },
+  }, { nonce })
 }

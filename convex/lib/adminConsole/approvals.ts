@@ -1,5 +1,6 @@
 import type { MutationCtx, QueryCtx } from '../../_generated/server'
 import type {
+  AdminActionInput,
   AdminApprovalIntent,
   AdminApprovalRefusalCode,
   AdminCommandAction,
@@ -38,6 +39,7 @@ export async function resolveApprovalIntent<A extends AdminCommandAction>(
   actor: AllowedAdminAuthority,
   args: Readonly<{
     action: A
+    input: AdminActionInput[A]
     correlationId: string
     approval: AdminApprovalIntent
   }>,
@@ -52,7 +54,7 @@ export async function resolveApprovalIntent<A extends AdminCommandAction>(
       .take(3)
   ).length
 
-  if (!isProposableAction(args.action) || ownerAdminCountAtDecision < 2) {
+  if (!isProposableAction(args.action) || !await needsSecondApproval(ctx, args) || ownerAdminCountAtDecision < 2) {
     return { kind: 'execute', approval: 'not_required', ownerAdminCountAtDecision }
   }
   if (args.approval.kind === 'execute') {
@@ -169,6 +171,24 @@ export async function listOpenApprovalProposals(
     createdAt,
     expiresAt,
   }))
+}
+
+async function needsSecondApproval(
+  ctx: MutationCtx,
+  args: Readonly<{ action: AdminCommandAction; input: AdminActionInput[AdminCommandAction] }>,
+): Promise<boolean> {
+  if (!isProposableAction(args.action)) return false
+  if (args.action === 'grant_admin_membership') {
+    return 'role' in args.input && args.input.role === 'owner_admin'
+  }
+  if (args.action !== 'revoke_admin_membership') return true
+  if (!('targetClerkUserId' in args.input)) return true
+  const targetClerkUserId = args.input.targetClerkUserId
+  const membership = await ctx.db.query('adminMemberships')
+    .withIndex('by_clerkUserId_and_state', (query) =>
+      query.eq('clerkUserId', targetClerkUserId).eq('state', 'active'))
+    .first()
+  return membership === null || membership.role === 'owner_admin'
 }
 
 function isProposableAction(action: AdminCommandAction): action is AdminProposableAction {

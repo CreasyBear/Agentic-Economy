@@ -10,6 +10,7 @@ import type { AdminApprovalIntent } from '@/lib/operator/admin-console/contracts
 import {
   convexTestWithMarketComponents,
   ownerAdmin,
+  supportAdmin,
   type ConvexFixtureBackend,
 } from '../../helpers/convex-fixtures'
 
@@ -183,6 +184,41 @@ describe('admin command second approval', () => {
         .collect())
     expect(audits).toHaveLength(1)
   })
+  it('requires a second owner only for owner-admin membership changes', async () => {
+    const backend = convexTestWithMarketComponents()
+    await seedOwner(backend, 'user_proposer')
+    await seedOwner(backend, 'user_approver')
+    await supportAdmin(backend, 'user_support-target')
+    const caller = backend.withIdentity({
+      subject: 'user_proposer', issuer: ISSUER,
+      tokenIdentifier: 'token_proposer', exp: Math.floor(Date.now() / 1_000) + 86_400,
+    })
+    const decisions = await caller.run(async (ctx) => {
+      const authority = await resolveAdminAuthority(ctx, 'manage_admin_membership')
+      if (authority.kind !== 'allowed') throw new Error('allowed_admin_authority_expected')
+      const common = { approval: { kind: 'execute' } satisfies AdminApprovalIntent, correlationId: 'corr:approval-membership' }
+      return await Promise.all([
+        resolveApprovalIntent(ctx, authority, {
+          ...common, action: 'grant_admin_membership',
+          input: { targetClerkUserId: 'user_new', targetTokenIdentifier: 'token_new', role: 'owner_admin' },
+        }, COMMAND_DIGEST, NOW),
+        resolveApprovalIntent(ctx, authority, {
+          ...common, action: 'grant_admin_membership',
+          input: { targetClerkUserId: 'user_new', targetTokenIdentifier: 'token_new', role: 'support' },
+        }, COMMAND_DIGEST, NOW),
+        resolveApprovalIntent(ctx, authority, {
+          ...common, action: 'revoke_admin_membership',
+          input: { targetClerkUserId: 'user_approver' },
+        }, COMMAND_DIGEST, NOW),
+        resolveApprovalIntent(ctx, authority, {
+          ...common, action: 'revoke_admin_membership',
+          input: { targetClerkUserId: 'user_support-target' },
+        }, COMMAND_DIGEST, NOW),
+      ])
+    })
+    expect(decisions.map((decision) => decision.kind === 'refused' ? decision.code : decision.kind === 'execute' ? decision.approval : 'proposed'))
+      .toEqual(['approval_required', 'not_required', 'approval_required', 'not_required'])
+  })
 })
 
 async function seedOwner(backend: ConvexFixtureBackend, subject: string): Promise<void> {
@@ -207,6 +243,7 @@ async function runResolution(
     if (authority.kind !== 'allowed') throw new Error('allowed_admin_authority_expected')
     return await resolveApprovalIntent(ctx, authority, {
       action: ACTION,
+      input: { businessId: 'business:approval-test', intent: 'suppress' },
       correlationId: 'corr:approval-test',
       approval,
     }, commandDigest, now)
