@@ -1,4 +1,4 @@
-import type { AnyAdminRefusalCode } from './contracts'
+import { ADMIN_ACCESS_REFUSED_COPY, type AnyAdminRefusalCode } from './contracts'
 
 type AdminRefusalPresentation = Readonly<{
   certainty: 'not_applied' | 'unknown'
@@ -22,7 +22,7 @@ const invalidAuthorization: AdminRefusalPresentation = {
 const noAuthority: AdminRefusalPresentation = {
   certainty: 'not_applied',
   retry: 'no',
-  copy: 'Your account does not have the Admin role for this action.',
+  copy: ADMIN_ACCESS_REFUSED_COPY,
   nextStep: 'Ask an Admin owner for access.',
 }
 const reverify: AdminRefusalPresentation = {

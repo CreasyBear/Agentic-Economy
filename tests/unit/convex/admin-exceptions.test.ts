@@ -1,5 +1,5 @@
 /// <reference types="vite/client" />
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { api } from '../../../convex/_generated/api'
 import type { Doc } from '../../../convex/_generated/dataModel'
@@ -16,7 +16,7 @@ import {
 const CALL_REF = `operation-invocation:v1:${'a'.repeat(64)}`
 const FRESH_CALL_REF = `operation-invocation:v1:${'b'.repeat(64)}`
 const TOOL_REF = `operation:v1:${'c'.repeat(64)}`
-const NOW = Date.now()
+const NOW = Date.UTC(2026, 8, 22, 12)
 
 async function seedExceptions(backend: ConvexFixtureBackend): Promise<void> {
   await backend.run(async (ctx) => {
@@ -147,6 +147,11 @@ async function seedExceptions(backend: ConvexFixtureBackend): Promise<void> {
 }
 
 describe('admin exception reads', () => {
+  beforeEach(() => vi.setSystemTime(NOW))
+  afterEach(() => {
+    vi.useRealTimers()
+    vi.restoreAllMocks()
+  })
   it('merges four exception sources oldest first and excludes fresh uncertain Calls', async () => {
     const backend = convexTestWithMarketComponents()
     await seedExceptions(backend)
@@ -263,7 +268,6 @@ describe('admin exception reads', () => {
 
     expect(result).toEqual({ unavailable: 'admission_case' })
     expect(warning).toHaveBeenCalledWith('admin_exception_source_unavailable', 'admission_case')
-    warning.mockRestore()
   })
 
   it('returns recent Purchase resolutions newest first', async () => {

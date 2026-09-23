@@ -18,6 +18,21 @@ const utcTimestampFormatter = new Intl.DateTimeFormat('en-US', {
   timeStyle: 'short',
   timeZone: 'UTC',
 })
+const perthTimestampFormatter = new Intl.DateTimeFormat(TIMESTAMP_LOCALE, {
+  dateStyle: 'medium',
+  timeStyle: 'short',
+  timeZone: 'Australia/Perth',
+})
+const perthDateFormatter = new Intl.DateTimeFormat(TIMESTAMP_LOCALE, {
+  dateStyle: 'medium',
+  timeZone: 'Australia/Perth',
+})
+const countFormatter = new Intl.NumberFormat(TIMESTAMP_LOCALE)
+const percentFormatter = new Intl.NumberFormat(TIMESTAMP_LOCALE, {
+  style: 'percent',
+  maximumFractionDigits: 1,
+})
+
 const relativeFormatter = new Intl.RelativeTimeFormat(TIMESTAMP_LOCALE, { numeric: 'auto' })
 
 const RELATIVE_UNITS: readonly { unit: Intl.RelativeTimeFormatUnit; ms: number }[] = [
@@ -46,6 +61,22 @@ export function formatDate(value: number | string | Date): string {
 /** UTC timestamp for surfaces whose product contract explicitly uses UTC. */
 export function formatUtcTimestamp(value: number | string | Date): string {
   return utcTimestampFormatter.format(toDate(value))
+}
+
+export function formatPerthTimestamp(ms: number): string {
+  return perthTimestampFormatter.format(ms)
+}
+
+export function formatPerthDate(value: number): string {
+  return perthDateFormatter.format(value)
+}
+
+export function formatCount(value: number): string {
+  return countFormatter.format(value)
+}
+
+export function formatPercent(value: number): string {
+  return percentFormatter.format(value)
 }
 
 /** ISO-8601 for the `dateTime` attribute of a `<time>` element. */

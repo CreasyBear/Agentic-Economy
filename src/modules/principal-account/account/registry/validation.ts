@@ -26,11 +26,15 @@ const OPAQUE_REF_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/u
 const DISPLAY_NAME_MAX_LENGTH = 200
 
 const all = (facts: readonly boolean[]): boolean => facts.every(Boolean)
+export function isAccountRef(value: string): value is AccountRef {
+  return ACCOUNT_REF_PATTERN.test(value)
+}
+
 
 
 export function accountRef(value: string): AccountRef {
-  if (!ACCOUNT_REF_PATTERN.test(value)) throw new AccountRegistryError('account_ref_invalid')
-  return value as AccountRef
+  if (!isAccountRef(value)) throw new AccountRegistryError('account_ref_invalid')
+  return value
 }
 
 export function ownershipRef(value: string): OwnershipRef {

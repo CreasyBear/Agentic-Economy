@@ -3,6 +3,7 @@ import { useConvex } from 'convex/react'
 import { useState } from 'react'
 
 import { api } from '../../../../../convex/_generated/api'
+import { adminObjectHref } from '@/lib/operator/admin-console/contracts'
 import { parseAdminObjectRef } from '@/lib/operator/admin-console/ref-parsers'
 import type { AdminObjectSearchInput, AdminObjectSearchState, AdminRecentRef } from './object-search.contracts'
 import {
@@ -10,7 +11,6 @@ import {
   ADMIN_PARSE_ERROR_COPY,
   ADMIN_RECENT_REFS_LIMIT,
   ADMIN_RECENT_REFS_STORAGE_KEY,
-  adminObjectHref,
   adminParseErrorCodeSchema,
   adminRecentRefsSchema,
 } from './object-search.contracts'

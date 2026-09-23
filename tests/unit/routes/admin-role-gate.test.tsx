@@ -41,7 +41,7 @@ vi.mock('@tanstack/react-router', () => ({
   Link: ({ children, to, ...props }: { children: ReactNode; to: string }) => (
     <a href={to} {...props}>{children}</a>
   ),
-  useLocation: () => ({ pathname: '/admin/index-health' }),
+  useLocation: () => ({ pathname: '/admin/search' }),
   useRouter: () => ({ invalidate: vi.fn() }),
 }))
 vi.mock('@/components/ae/layout/AeOperatorPage', () => ({
@@ -86,7 +86,7 @@ describe('admin role gate', () => {
   it('returns an expected forbidden route context instead of throwing', async () => {
     mocks.requireOperatorBeforeLoad.mockRejectedValueOnce(new OperatorSurfaceForbiddenError('admin'))
 
-    await expect(operatorLayoutRouteOptions.beforeLoad({ location: { href: '/admin/index-health' } }))
+    await expect(operatorLayoutRouteOptions.beforeLoad({ location: { href: '/admin/search' } }))
       .resolves.toEqual({ kind: 'forbidden', surface: 'admin' })
   })
 
@@ -94,7 +94,7 @@ describe('admin role gate', () => {
     const failure = new Error('operator source unavailable')
     mocks.requireOperatorBeforeLoad.mockRejectedValueOnce(failure)
 
-    await expect(operatorLayoutRouteOptions.beforeLoad({ location: { href: '/admin/index-health' } }))
+    await expect(operatorLayoutRouteOptions.beforeLoad({ location: { href: '/admin/search' } }))
       .rejects.toBe(failure)
   })
 })

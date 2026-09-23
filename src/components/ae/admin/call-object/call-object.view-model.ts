@@ -1,3 +1,9 @@
+import { adminObjectHref } from '@/lib/operator/admin-console/contracts'
+import { formatPerthTimestamp } from '@/lib/ui/format-time'
+import { parseCallRef, parseQuoteRef } from '@/modules/capability-execution/call-contracts'
+import { isPublicToolRef } from '@/modules/capability-supply/public'
+import { isAccountRef } from '@/modules/principal-account/account/public'
+import { isPrincipalRef } from '@/modules/principal-account/principal/public'
 import { getStatusPresentation } from '@/lib/ui/status-presentation'
 import {
   ADMIN_CALL_OBJECT_COPY,
@@ -6,13 +12,26 @@ import {
   type AdminCallObjectViewModel,
   type AdminCallRelatedRef,
   type AdminCallObjectView,
+  type AdminCallWireView,
 } from './call-object.contracts'
 
-const perthTimestamp = new Intl.DateTimeFormat('en-AU', {
-  dateStyle: 'medium',
-  timeStyle: 'short',
-  timeZone: 'Australia/Perth',
-})
+
+export function toAdminCallObjectView(view: AdminCallWireView): AdminCallObjectView | null {
+  const call = parseCallRef(view.ref)
+  const quote = view.quoteRef === null ? null : parseQuoteRef(view.quoteRef)
+  if (call.kind !== 'valid' || quote?.kind === 'malformed'
+    || (view.toolRef !== null && !isPublicToolRef(view.toolRef))
+    || (view.workspaceRef !== null && !isAccountRef(view.workspaceRef))
+    || (view.agentRef !== null && !isPrincipalRef(view.agentRef))) return null
+  return {
+    ...view,
+    ref: call.ref,
+    quoteRef: quote?.ref ?? null,
+    toolRef: view.toolRef,
+    workspaceRef: view.workspaceRef,
+    agentRef: view.agentRef,
+  }
+}
 
 export function buildAdminCallObjectViewModel(view: AdminCallObjectView): AdminCallObjectViewModel {
   const facts: AdminCallFact[] = [
@@ -36,7 +55,7 @@ export function buildAdminCallObjectViewModel(view: AdminCallObjectView): AdminC
     })
     facts.push({
       label: ADMIN_CALL_OBJECT_COPY.resolvedAtLabel,
-      value: perthTimestamp.format(new Date(view.resolution.resolvedAt)),
+      value: formatPerthTimestamp(view.resolution.resolvedAt),
     })
   }
 
@@ -51,7 +70,7 @@ export function buildAdminCallObjectViewModel(view: AdminCallObjectView): AdminC
     activity: view.timeline
       .map((entry, index) => ({
         id: `${entry.at}:${index}:${entry.eventType}`,
-        at: perthTimestamp.format(new Date(entry.at)),
+        at: formatPerthTimestamp(entry.at),
         eventType: entry.eventType,
         actorRef: entry.actorRef ?? ADMIN_CALL_OBJECT_COPY.notRecorded,
         outcome: entry.outcome ?? ADMIN_CALL_OBJECT_COPY.notRecorded,
@@ -67,22 +86,22 @@ function relatedRefs(view: AdminCallObjectView): readonly AdminCallRelatedRef[] 
   if (view.quoteRef !== null) refs.push({
     label: ADMIN_CALL_OBJECT_COPY.quoteLabel,
     value: view.quoteRef,
-    href: `/admin/quotes/${encodeURIComponent(view.quoteRef)}`,
+    href: adminObjectHref({ kind: 'quote', ref: view.quoteRef }),
   })
   if (view.toolRef !== null) refs.push({
     label: ADMIN_CALL_OBJECT_COPY.toolLabel,
     value: view.toolRef,
-    href: `/admin/tools/${encodeURIComponent(view.toolRef)}`,
+    href: adminObjectHref({ kind: 'tool_version', ref: view.toolRef }),
   })
   if (view.workspaceRef !== null) refs.push({
     label: ADMIN_CALL_OBJECT_COPY.workspaceLabel,
     value: view.workspaceRef,
-    href: `/admin/workspaces/${encodeURIComponent(view.workspaceRef)}`,
+    href: adminObjectHref({ kind: 'workspace', ref: view.workspaceRef }),
   })
   if (view.agentRef !== null) refs.push({
     label: ADMIN_CALL_OBJECT_COPY.agentLabel,
     value: view.agentRef,
-    href: `/admin/agents/${encodeURIComponent(view.agentRef)}`,
+    href: adminObjectHref({ kind: 'agent', ref: view.agentRef }),
   })
   if (view.correlationId !== null) refs.push({
     label: ADMIN_CALL_OBJECT_COPY.correlationLabel,

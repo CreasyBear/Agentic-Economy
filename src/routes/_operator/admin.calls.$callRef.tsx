@@ -8,6 +8,7 @@ import {
   ADMIN_CALL_OBJECT_COPY,
   type AdminCallLoaderResult,
 } from '@/components/ae/admin/call-object/call-object.contracts'
+import { toAdminCallObjectView } from '@/components/ae/admin/call-object/call-object.view-model'
 import {
   buildAdminEventProperties,
   captureAdminEvent,
@@ -34,9 +35,10 @@ const readAdminCallServer = createServerFn()
       'admin_lookup',
       buildAdminEventProperties('admin_lookup', { refKind: 'call', found: result.kind === 'call' }),
     )
-    if (result.kind === 'call' || result.kind === 'object_not_found' || result.kind === 'refused') {
-      return result
+    if (result.kind === 'call') {
+      return toAdminCallObjectView(result) ?? { kind: 'object_not_found' }
     }
+    if (result.kind === 'object_not_found' || result.kind === 'refused') return result
     return { kind: 'object_not_found' }
   })
 

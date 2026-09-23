@@ -8,7 +8,7 @@ import {
   type ProviderConnectionRow,
   type ProviderConnectionsTableProps,
 } from '../provider-object.contracts'
-import { providerStatusLabel } from '../provider-object.view-model'
+import { providerStatusLabel } from '@/lib/operator/admin-console/status-adapter'
 
 const columns: ColumnDef<ProviderConnectionRow, unknown>[] = [
   {

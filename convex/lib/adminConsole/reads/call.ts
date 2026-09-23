@@ -21,7 +21,7 @@ import { readPurchaseResolutionByCallRef } from '../../callLifecycle/purchaseRes
 type FoundCallStatus = Extract<CallStatusResult, { kind: 'found' }>
 type CallRow = Doc<'capabilityCalls'>
 
-export type ShapeAdminCallViewInput = Readonly<
+type ShapeAdminCallViewInput = Readonly<
   Omit<AdminCallView, 'kind' | 'purchase' | 'receipt'> & {
     status: FoundCallStatus
   }

@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/button'
 import { ADMIN_ACTION_PERMISSION } from '@/lib/operator/admin-console/contracts'
 import { canAdminRolePerformAction } from '@/modules/security/public'
 
-import type { SourceAuthorityReviewPanelProps } from './catalog-health.contracts'
+import type { SourceAuthorityReviewPanelProps } from './source-authority-review.contracts'
 
 export function SourceAuthorityReviewPanel({ review }: SourceAuthorityReviewPanelProps) {
   const access = useQuery(api.adminConsoleAudit.readAdminAuditAccess, {})

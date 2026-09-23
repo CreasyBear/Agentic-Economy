@@ -21,9 +21,9 @@ vi.mock('@/components/ae/admin/actions/AdminActionSheet', () => ({
 }))
 
 import type { AdminActionSheetProps } from '@/components/ae/admin/actions/actions.contracts'
-import type { SourceAuthorityReviewRequest } from '@/components/ae/admin/catalog-health/catalog-health.contracts'
+import type { SourceAuthorityReviewRequest } from '@/components/ae/admin/provider-object/source-authority-review.contracts'
 
-import { SourceAuthorityReviewPanel } from '@/components/ae/admin/catalog-health/SourceAuthorityReviewPanel'
+import { SourceAuthorityReviewPanel } from '@/components/ae/admin/provider-object/SourceAuthorityReviewPanel'
 
 const review: SourceAuthorityReviewRequest = {
   publicationRef: 'publication:openapi',

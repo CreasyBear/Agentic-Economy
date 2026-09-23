@@ -2,12 +2,10 @@ import { AeCopyReference } from '@/components/ae/data/AeCopyReference'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { ADMIN_REFUSAL_PRESENTATION } from '@/lib/operator/admin-console/refusal-presentation'
+import { formatPerthTimestamp } from '@/lib/ui/format-time'
 import { getStatusPresentation } from '@/lib/ui/status-presentation'
 import { ADMIN_ACTION_SHEET_COPY, ADMIN_SUCCESS_COPY, type ReceiptViewProps } from '../actions.contracts'
 
-const perthTime = new Intl.DateTimeFormat('en-AU', {
-  dateStyle: 'medium', timeStyle: 'short', timeZone: 'Australia/Perth',
-})
 
 export function ReceiptView({ receipt, onPropose, onRetry, onEdit, allowEdit }: ReceiptViewProps) {
   if (receipt.kind === 'completed') return (
@@ -24,7 +22,7 @@ export function ReceiptView({ receipt, onPropose, onRetry, onEdit, allowEdit }: 
       <AlertTitle>{getStatusPresentation('awaiting_second_approval').label}</AlertTitle>
       <AlertDescription className="flex flex-col gap-2">
         <AeCopyReference label={ADMIN_ACTION_SHEET_COPY.proposalReference} value={receipt.proposalRef} />
-        <span>{ADMIN_ACTION_SHEET_COPY.proposalExpiry(perthTime.format(new Date(receipt.expiresAt)))}</span>
+        <span>{ADMIN_ACTION_SHEET_COPY.proposalExpiry(formatPerthTimestamp(receipt.expiresAt))}</span>
       </AlertDescription>
     </Alert>
   )

@@ -1,9 +1,9 @@
 import { z } from 'zod'
 
-import type {
-  AdminObjectKind,
-  AdminObjectRef,
-  AdminParseErrorCode,
+import {
+  ADMIN_ACCESS_REFUSED_COPY,
+  type AdminObjectKind,
+  type AdminParseErrorCode,
 } from '@/lib/operator/admin-console/contracts'
 
 export const adminObjectKindSchema = z.enum([
@@ -75,21 +75,9 @@ export const ADMIN_OBJECT_SEARCH_COPY = {
   submit: 'Search',
   searching: 'Searching…',
   notFound: 'No object with that reference.',
-  refused: 'Your account does not have the Admin role for this action.',
+  refused: ADMIN_ACCESS_REFUSED_COPY,
   unavailable: 'Search is unavailable. Try again.',
 }
 
 export const ADMIN_RECENT_REFS_STORAGE_KEY = 'ae.admin.recentRefs'
 export const ADMIN_RECENT_REFS_LIMIT = 8
-
-export function adminObjectHref(ref: AdminObjectRef): string {
-  const value = encodeURIComponent(ref.ref)
-  switch (ref.kind) {
-    case 'call': return `/admin/calls/${value}`
-    case 'quote': return `/admin/quotes/${value}`
-    case 'tool_version': return `/admin/tools/${value}`
-    case 'workspace': return `/admin/workspaces/${value}`
-    case 'agent': return `/admin/agents/${value}`
-    case 'provider': return `/admin/providers/${value}`
-  }
-}

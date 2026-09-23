@@ -4,7 +4,6 @@ import { useState } from 'react'
 import { api } from '../../../../../convex/_generated/api'
 import { AdminActionSheet } from '@/components/ae/admin/actions/AdminActionSheet'
 import { AeCopyReference } from '@/components/ae/data/AeCopyReference'
-import { SourceAuthorityReviewPanel } from '@/components/ae/admin/catalog-health/SourceAuthorityReviewPanel'
 import { AeFactList } from '@/components/ae/data/AeFactList'
 import { AeOperatorPage } from '@/components/ae/layout/AeOperatorPage'
 import { AePageState } from '@/components/ae/layout/AePageState'
@@ -14,6 +13,7 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { aeStatusToneVariants } from '@/lib/ui/status-presentation'
 import { ADMIN_ACTION_PERMISSION } from '@/lib/operator/admin-console/contracts'
+import { providerPayoutLabel, providerStatusLabel, providerStatusPresentation } from '@/lib/operator/admin-console/status-adapter'
 import { canAdminRolePerformAction } from '@/modules/security/public'
 import { AdminProviderObjectSkeleton } from './AdminProviderObjectSkeleton'
 import { ProviderAdmissionCasesTable } from './components/ProviderAdmissionCasesTable'
@@ -25,12 +25,8 @@ import {
   type AdminProviderObjectPageProps,
   type ProviderRemovalDisputeRow,
 } from './provider-object.contracts'
-import {
-  providerPayoutLabel,
-  providerStatusLabel,
-  providerStatusPresentation,
-  providerTimestamp,
-} from './provider-object.view-model'
+import { providerTimestamp } from './provider-object.view-model'
+import { SourceAuthorityReviewPanel } from './SourceAuthorityReviewPanel'
 import { useAdminProviderObject } from './useAdminProviderObject'
 
 export function AdminProviderObjectPage(props: AdminProviderObjectPageProps) {

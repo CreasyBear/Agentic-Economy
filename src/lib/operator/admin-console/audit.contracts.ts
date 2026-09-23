@@ -1,3 +1,5 @@
+import type { AuditEventType, AuditTargetType } from '@/modules/common/audit-events'
+
 export type AdminAuditFilter = {
   eventType?: string
   actorRef?: string
@@ -10,9 +12,9 @@ export type AdminAuditFilter = {
 export type AdminAuditRow = {
   id: string
   createdAt: number
-  eventType: string
+  eventType: AuditEventType
   actorRef: string | null
-  targetType: string | null
+  targetType: AuditTargetType | null
   targetRef: string | null
   outcome: string | null
   correlationId: string | null

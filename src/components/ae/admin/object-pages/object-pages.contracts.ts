@@ -1,4 +1,4 @@
-import type { AdminObjectRef } from '@/lib/operator/admin-console/contracts'
+import { ADMIN_ACCESS_REFUSED_COPY, type AdminObjectRef } from '@/lib/operator/admin-console/contracts'
 import type {
   AdminAgentView,
   AdminQuoteView,
@@ -28,7 +28,7 @@ export const ADMIN_OBJECT_PAGE_COPY = {
   no: 'No',
   backToSearch: 'Back to Search',
   refusedTitle: 'Admin access required',
-  refusedDescription: 'Your account does not have the Admin role for this action.',
+  refusedDescription: ADMIN_ACCESS_REFUSED_COPY,
   loadingTitle: 'Loading admin object',
   loadingDescription: 'Loading the current object details.',
   quote: {

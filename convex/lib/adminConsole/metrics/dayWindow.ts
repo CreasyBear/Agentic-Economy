@@ -2,7 +2,7 @@ const PERTH_OFFSET_MS = 8 * 60 * 60_000
 const DAY_MS = 24 * 60 * 60_000
 const DAY_PATTERN = /^(\d{4})-(\d{2})-(\d{2})$/u
 
-export type PerthDayWindowResult =
+type PerthDayWindowResult =
   | Readonly<{ kind: 'valid'; from: number; toExclusive: number }>
   | Readonly<{ kind: 'refused'; code: 'malformed_day' }>
 

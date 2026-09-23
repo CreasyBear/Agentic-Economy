@@ -6,6 +6,7 @@ import type {
   MarketplaceMetricsRange,
   MarketplaceMetricsReport,
 } from '@/lib/operator/admin-console/metrics.contracts'
+import { formatCount, formatPercent } from '@/lib/ui/format-time'
 import { formatCurrencyAmount } from '@/modules/money/public'
 import {
   ADMIN_METRICS_COPY,
@@ -13,11 +14,6 @@ import {
   type AdminMetricsDataState,
 } from './metrics.contracts'
 
-const numberFormatter = new Intl.NumberFormat('en-AU')
-const percentFormatter = new Intl.NumberFormat('en-AU', {
-  style: 'percent',
-  maximumFractionDigits: 1,
-})
 const signedPercentFormatter = new Intl.NumberFormat('en-AU', {
   style: 'percent',
   maximumFractionDigits: 1,
@@ -38,7 +34,7 @@ export function useAdminMetrics(range: MarketplaceMetricsRange): AdminMetricsDat
       },
       {
         label: ADMIN_METRICS_COPY.settledCalls,
-        value: numberFormatter.format(report.headline.settledCalls),
+        value: formatCount(report.headline.settledCalls),
         delta: deltaLabel(report.wow.settledCalls),
       },
       {
@@ -48,7 +44,7 @@ export function useAdminMetrics(range: MarketplaceMetricsRange): AdminMetricsDat
       },
       {
         label: ADMIN_METRICS_COPY.transactingWorkspaces,
-        value: numberFormatter.format(report.headline.transactingWorkspaces),
+        value: formatCount(report.headline.transactingWorkspaces),
         delta: deltaLabel(report.wow.transactingWorkspaces),
       },
     ],
@@ -73,7 +69,7 @@ function moneyLabel(
 }
 
 function ratioLabel(value: number | null): string {
-  return value === null ? ADMIN_METRICS_COPY.notAvailable : percentFormatter.format(value)
+  return value === null ? ADMIN_METRICS_COPY.notAvailable : formatPercent(value)
 }
 
 function deltaLabel(value: number | null): string {
@@ -85,18 +81,18 @@ function toDayRow(day: MarketplaceMetricDay): AdminMetricDayRow {
     day: day.day,
     settledCallValue: moneyLabel(day.money, day.settledCallValue),
     money: day.money === 'settled_only' ? ADMIN_METRICS_COPY.settledOnly : ADMIN_METRICS_COPY.noSettledUsage,
-    settledCalls: numberFormatter.format(day.settledCalls),
-    attemptedCalls: numberFormatter.format(day.attemptedCalls),
-    completedCalls: numberFormatter.format(day.completedCalls),
-    uncertainCalls: numberFormatter.format(day.uncertainCalls),
-    quotesCreated: numberFormatter.format(day.quotesCreated),
-    quotesConvertedAtClose: numberFormatter.format(day.quotesConvertedAtClose),
-    transactingWorkspaces: numberFormatter.format(day.transactingWorkspaces),
-    transactingAgents: numberFormatter.format(day.transactingAgents),
-    transactingProviders: numberFormatter.format(day.transactingProviders),
-    transactingTools: numberFormatter.format(day.transactingTools),
-    returningWorkspaces: numberFormatter.format(day.returningWorkspaces),
-    terminalCalls: numberFormatter.format(day.terminalCalls),
-    terminalCallsWithResolution: numberFormatter.format(day.terminalCallsWithResolution),
+    settledCalls: formatCount(day.settledCalls),
+    attemptedCalls: formatCount(day.attemptedCalls),
+    completedCalls: formatCount(day.completedCalls),
+    uncertainCalls: formatCount(day.uncertainCalls),
+    quotesCreated: formatCount(day.quotesCreated),
+    quotesConvertedAtClose: formatCount(day.quotesConvertedAtClose),
+    transactingWorkspaces: formatCount(day.transactingWorkspaces),
+    transactingAgents: formatCount(day.transactingAgents),
+    transactingProviders: formatCount(day.transactingProviders),
+    transactingTools: formatCount(day.transactingTools),
+    returningWorkspaces: formatCount(day.returningWorkspaces),
+    terminalCalls: formatCount(day.terminalCalls),
+    terminalCallsWithResolution: formatCount(day.terminalCallsWithResolution),
   }
 }

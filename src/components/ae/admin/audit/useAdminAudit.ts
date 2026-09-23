@@ -2,42 +2,22 @@ import { useEffect, useState } from 'react'
 import { usePaginatedQuery, useQuery } from 'convex/react'
 
 import { api } from '../../../../../convex/_generated/api'
-import type { AdminAuditRow } from '@/lib/operator/admin-console/audit.contracts'
-import { aeStatusValues, getStatusPresentation, type AeStatus } from '@/lib/ui/status-presentation'
-import { timestampIso } from '@/lib/ui/format-time'
 import {
-  ADMIN_APPROVAL_ACTION_LABELS,
-  AUDIT_COPY,
+  draftToSearch,
+  filterChips,
+  hasFilters,
+  searchToDraft,
+  toApprovalRowModel,
+  toAuditRowModel,
+  withoutFilter,
+} from './audit.view-model'
+import {
   auditSearchToFilter,
   type AdminAuditDataState,
-  type AdminAuditFilterChip,
   type AdminAuditFilterDraft,
   type AdminAuditFilterKey,
   type AdminAuditPageProps,
-  type AdminAuditRowModel,
-  type AdminAuditSearch,
-  type AdminApprovalProposal,
-  type AdminApprovalRowModel,
 } from './audit.contracts'
-const statusByValue: Partial<Record<string, AeStatus>> = Object.fromEntries(
-  aeStatusValues.map((status) => [status, status]),
-)
-const PERTH_DAY_MS = 24 * 60 * 60 * 1_000
-const perthTimestampFormatter = new Intl.DateTimeFormat('en-AU', {
-  dateStyle: 'medium',
-  timeStyle: 'short',
-  timeZone: 'Australia/Perth',
-})
-const perthDateFormatter = new Intl.DateTimeFormat('en-AU', {
-  dateStyle: 'medium',
-  timeZone: 'Australia/Perth',
-})
-const perthDateInputFormatter = new Intl.DateTimeFormat('en-CA', {
-  year: 'numeric',
-  month: '2-digit',
-  day: '2-digit',
-  timeZone: 'Australia/Perth',
-})
 
 export function useAdminAudit({ search, onSearchChange }: AdminAuditPageProps) {
   const [draft, setDraft] = useState<AdminAuditFilterDraft>(() => searchToDraft(search))
@@ -83,127 +63,4 @@ export function useAdminAudit({ search, onSearchChange }: AdminAuditPageProps) {
     onRemove: (key: AdminAuditFilterKey) => onSearchChange(withoutFilter(search, key)),
     onClear: () => onSearchChange({}),
   }
-}
-
-function toAuditRowModel(row: AdminAuditRow): AdminAuditRowModel {
-  const targetLabel = row.targetType === null || row.targetRef === null
-    ? AUDIT_COPY.unavailable
-    : `${row.targetType}: ${row.targetRef}`
-  const outcomeStatus = row.outcome === null ? null : statusByValue[row.outcome] ?? null
-  return {
-    id: row.id,
-    createdAtLabel: perthTimestampFormatter.format(row.createdAt),
-    createdAtIso: timestampIso(row.createdAt),
-    eventType: row.eventType,
-    actorRef: row.actorRef ?? AUDIT_COPY.unavailable,
-    targetLabel,
-    targetHref: row.targetType === null || row.targetRef === null
-      ? null
-      : adminObjectHref(row.targetType, row.targetRef),
-    outcomeLabel: row.outcome === null
-      ? AUDIT_COPY.unavailable
-      : outcomeStatus === null
-        ? row.outcome
-        : getStatusPresentation(outcomeStatus).label,
-    correlationId: row.correlationId ?? AUDIT_COPY.unavailable,
-    admin: row.admin,
-  }
-}
-
-function toApprovalRowModel(proposal: AdminApprovalProposal): AdminApprovalRowModel {
-  return {
-    proposalRef: proposal.proposalRef,
-    actionLabel: ADMIN_APPROVAL_ACTION_LABELS[proposal.action],
-    proposerRef: proposal.proposerRef,
-    createdAtLabel: perthTimestampFormatter.format(proposal.createdAt),
-    createdAtIso: timestampIso(proposal.createdAt),
-    expiresAtLabel: perthTimestampFormatter.format(proposal.expiresAt),
-    expiresAtIso: timestampIso(proposal.expiresAt),
-  }
-}
-
-function adminObjectHref(targetType: string, targetRef: string): string | null {
-  const ref = encodeURIComponent(targetRef)
-  switch (targetType) {
-    case 'call': return `/admin/calls/${ref}`
-    case 'quote': return `/admin/quotes/${ref}`
-    case 'tool': return `/admin/tools/${ref}`
-    case 'workspace': return `/admin/workspaces/${ref}`
-    case 'agent': return `/admin/agents/${ref}`
-    case 'business': return `/admin/providers/${ref}`
-    default: return null
-  }
-}
-
-function searchToDraft(search: AdminAuditSearch): AdminAuditFilterDraft {
-  return {
-    eventType: search.eventType ?? '',
-    actorRef: search.actorRef ?? '',
-    targetType: search.targetType ?? '',
-    targetRef: search.targetRef ?? '',
-    correlationId: search.correlationId ?? '',
-    from: search.from === undefined ? '' : timestampToPerthDate(search.from),
-    to: search.to === undefined ? '' : timestampToPerthDate(search.to - 1),
-  }
-}
-
-function draftToSearch(draft: AdminAuditFilterDraft): AdminAuditSearch {
-  const from = perthDayStart(draft.from)
-  const toStart = perthDayStart(draft.to)
-  return {
-    ...(draft.eventType === '' ? {} : { eventType: draft.eventType }),
-    ...(draft.actorRef.trim() === '' ? {} : { actorRef: draft.actorRef.trim() }),
-    ...(draft.targetType.trim() === '' ? {} : { targetType: draft.targetType.trim() }),
-    ...(draft.targetRef.trim() === '' ? {} : { targetRef: draft.targetRef.trim() }),
-    ...(draft.correlationId.trim() === '' ? {} : { correlationId: draft.correlationId.trim() }),
-    ...(from === null ? {} : { from }),
-    ...(toStart === null ? {} : { to: toStart + PERTH_DAY_MS }),
-  }
-}
-
-function filterChips(search: AdminAuditSearch): readonly AdminAuditFilterChip[] {
-  const chips: AdminAuditFilterChip[] = []
-  if (search.eventType !== undefined) chips.push({ key: 'eventType', label: AUDIT_COPY.filterLabels.eventType, value: search.eventType })
-  if (search.actorRef !== undefined) chips.push({ key: 'actorRef', label: AUDIT_COPY.filterLabels.actorRef, value: search.actorRef })
-  if (search.targetType !== undefined || search.targetRef !== undefined) {
-    chips.push({ key: 'targetRef', label: AUDIT_COPY.filterLabels.targetRef, value: [search.targetType, search.targetRef].filter(Boolean).join(': ') })
-  }
-  if (search.correlationId !== undefined) chips.push({ key: 'correlationId', label: AUDIT_COPY.filterLabels.correlationId, value: search.correlationId })
-  if (search.from !== undefined) chips.push({ key: 'from', label: AUDIT_COPY.filterLabels.from, value: perthDateFormatter.format(search.from) })
-  if (search.to !== undefined) chips.push({ key: 'to', label: AUDIT_COPY.filterLabels.to, value: perthDateFormatter.format(search.to - 1) })
-  return chips
-}
-
-function withoutFilter(search: AdminAuditSearch, key: AdminAuditFilterKey): AdminAuditSearch {
-  if (key === 'targetType' || key === 'targetRef') {
-    const { targetType: _targetType, targetRef: _targetRef, ...remaining } = search
-    return remaining
-  }
-  const remaining = { ...search }
-  delete remaining[key]
-  return remaining
-}
-
-function hasFilters(search: AdminAuditSearch): boolean {
-  return search.eventType !== undefined
-    || search.actorRef !== undefined
-    || search.targetType !== undefined
-    || search.targetRef !== undefined
-    || search.correlationId !== undefined
-    || search.from !== undefined
-    || search.to !== undefined
-}
-
-function perthDayStart(value: string): number | null {
-  if (value === '') return null
-  const timestamp = Date.parse(`${value}T00:00:00+08:00`)
-  return Number.isFinite(timestamp) ? timestamp : null
-}
-
-function timestampToPerthDate(timestamp: number): string {
-  const parts = perthDateInputFormatter.formatToParts(timestamp)
-  const year = parts.find((part) => part.type === 'year')?.value ?? ''
-  const month = parts.find((part) => part.type === 'month')?.value ?? ''
-  const day = parts.find((part) => part.type === 'day')?.value ?? ''
-  return `${year}-${month}-${day}`
 }

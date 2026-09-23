@@ -7,7 +7,9 @@ import type {
   AdminException,
   AdminExceptionFeed,
   AdminExceptionKind,
+  AdminResolutionRow,
 } from '@/lib/operator/admin-console/contracts'
+import { exceptionRef } from '@/lib/operator/admin-console/exception-projection'
 import type { QueryCtx } from '../../../_generated/server'
 
 const UNCERTAIN_AGE_MS = 15 * 60 * 1_000
@@ -83,11 +85,6 @@ export const adminResolutionRowValue = v.object({
   resolvedAt: v.number(),
 })
 
-export type AdminResolutionRow = Readonly<{
-  callRef: string
-  terminalState: 'completed' | 'refunded' | 'released' | 'disputed'
-  resolvedAt: number
-}>
 
 type GuardedAdminExceptionSource =
   | Readonly<{ items: readonly AdminException[] }>
@@ -128,14 +125,6 @@ export async function listAdminExceptions(
   return { items: items.slice(0, FEED_LIMIT), total: items.length, truncated: items.length > FEED_LIMIT, counts, unavailable }
 }
 
-function exceptionRef(item: AdminException): string {
-  switch (item.kind) {
-    case 'uncertain_call': return item.callRef
-    case 'removal_dispute': return item.disputeRef
-    case 'source_authority_review': return item.publicationRef
-    case 'admission_case': return item.caseRef
-  }
-}
 
 export async function listRecentPurchaseResolutionRows(
   ctx: QueryCtx,
@@ -184,7 +173,7 @@ async function readRemovalDisputes(ctx: QueryCtx): Promise<readonly AdminExcepti
       .withIndex('by_status_and_updatedAt', (query) => query.eq('status', status))
       .order('asc')
       .take(SOURCE_READ_LIMIT)))
-  const rows = pages.flat().sort((left, right) => left.createdAt - right.createdAt).slice(0, SOURCE_READ_LIMIT)
+  const rows = mergeOldest(pages, (row) => row.createdAt)
   const joined = await Promise.all(rows.map(async (row): Promise<AdminException | null> => {
     const business = await ctx.db.get(row.businessId)
     if (business === null) return null
@@ -203,7 +192,7 @@ async function readSourceAuthorityReviews(ctx: QueryCtx): Promise<readonly Admin
         query.eq('sourceAuthorityState', state))
       .order('asc')
       .take(SOURCE_READ_LIMIT)))
-  const rows = pages.flat().sort((left, right) => left.updatedAt - right.updatedAt).slice(0, SOURCE_READ_LIMIT)
+  const rows = mergeOldest(pages, (row) => row.updatedAt)
   const joined = await Promise.all(rows.map(async (row): Promise<AdminException | null> => {
     if (!isPublicToolRef(row.toolRef)) return null
     const business = await ctx.db.get(row.businessId)
@@ -227,7 +216,7 @@ async function readAdmissionCases(ctx: QueryCtx): Promise<readonly AdminExceptio
       .withIndex('by_state_and_updatedAt', (query) => query.eq('state', state))
       .order('asc')
       .take(SOURCE_READ_LIMIT)))
-  const rows = pages.flat().sort((left, right) => left.updatedAt - right.updatedAt).slice(0, SOURCE_READ_LIMIT)
+  const rows = mergeOldest(pages, (row) => row.updatedAt)
   const joined = await Promise.all(rows.map(async (row): Promise<AdminException | null> => {
     const business = await ctx.db.get(row.businessId)
     if (business === null) return null
@@ -237,4 +226,8 @@ async function readAdmissionCases(ctx: QueryCtx): Promise<readonly AdminExceptio
       : null
   }))
   return joined.filter((item) => item !== null)
+}
+
+function mergeOldest<T>(pages: readonly (readonly T[])[], since: (row: T) => number): T[] {
+  return pages.flat().sort((left, right) => since(left) - since(right)).slice(0, SOURCE_READ_LIMIT)
 }

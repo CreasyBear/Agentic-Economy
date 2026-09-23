@@ -8,7 +8,8 @@ import {
   type ProviderAdmissionCaseRow,
   type ProviderAdmissionCasesTableProps,
 } from '../provider-object.contracts'
-import { providerStatusLabel, providerTimestamp } from '../provider-object.view-model'
+import { providerStatusLabel } from '@/lib/operator/admin-console/status-adapter'
+import { providerTimestamp } from '../provider-object.view-model'
 
 const columns: ColumnDef<ProviderAdmissionCaseRow, unknown>[] = [
   {

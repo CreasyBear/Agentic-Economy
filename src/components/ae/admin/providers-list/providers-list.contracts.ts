@@ -1,6 +1,7 @@
 import { z } from 'zod'
 
 import type { PublicStatus, TrustTier } from '@/modules/business/public'
+import { ADMIN_ACCESS_REFUSED_COPY } from '@/lib/operator/admin-console/contracts'
 
 export const adminProvidersSearchSchema = z.strictObject({
   filter: z.enum(['all', 'suppressed']).optional(),
@@ -60,7 +61,7 @@ export const PROVIDERS_LIST_COPY = {
   description: 'Inspect programmable Providers and their current public state.',
   breadcrumbs: { admin: 'Admin', providers: 'Providers' },
   accessDeniedTitle: 'Admin access required',
-  accessDeniedDescription: 'Your account does not have the Admin role for this action.',
+  accessDeniedDescription: ADMIN_ACCESS_REFUSED_COPY,
   filterTitle: 'Filters',
   filterDescription: 'Show every Provider or only suppressed Providers.',
   suppressed: 'Suppressed',

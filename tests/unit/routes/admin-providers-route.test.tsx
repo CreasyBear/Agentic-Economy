@@ -64,7 +64,7 @@ vi.mock('@/components/ae/layout/AeRouteNotFound', () => ({
     recoveryLabel: string
   }) => <a href={recoveryHref}>{recoveryLabel}</a>,
 }))
-vi.mock('@/components/ae/admin/catalog-health/SourceAuthorityReviewPanel', () => ({
+vi.mock('@/components/ae/admin/provider-object/SourceAuthorityReviewPanel', () => ({
   SourceAuthorityReviewPanel: () => <section>Source authority review</section>,
 }))
 vi.mock('@/components/ae/admin/actions/AdminActionSheet', () => ({

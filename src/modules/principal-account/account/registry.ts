@@ -57,6 +57,7 @@ import {
 export * from './registry/contracts'
 export {
   accountRef,
+  isAccountRef,
   ownershipRef,
   membershipRef,
   generateAccountRef,

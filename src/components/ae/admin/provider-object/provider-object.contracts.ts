@@ -1,3 +1,4 @@
+import { ADMIN_ACCESS_REFUSED_COPY } from '@/lib/operator/admin-console/contracts'
 import type { Slug } from '@/modules/common/ids'
 import type { AdminProviderView } from '@/lib/operator/admin-console/views'
 
@@ -39,7 +40,7 @@ export const PROVIDER_OBJECT_COPY = {
   referenceLabel: 'Reference',
   backToSearch: 'Back to Search',
   refusedTitle: 'Admin access required',
-  refusedDescription: 'Your account does not have the Admin role for this action.',
+  refusedDescription: ADMIN_ACCESS_REFUSED_COPY,
   detailsTitle: 'Provider facts',
   trustTier: 'Trust tier',
   payout: 'Payout',

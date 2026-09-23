@@ -1,4 +1,4 @@
-import type { AdminException, AdminExceptionFeed } from '@/lib/operator/admin-console/contracts'
+import { ADMIN_ACCESS_REFUSED_COPY, type AdminException } from '@/lib/operator/admin-console/contracts'
 import type { AdminRecentRef } from '../object-search/object-search.contracts'
 
 export type AdminConfiguredState = 'configured' | 'not_configured'
@@ -69,7 +69,7 @@ export const ADMIN_OVERVIEW_COPY = {
   recentlyViewedDescription: 'Exact references opened on this device.',
   noRecentlyViewed: 'No recently viewed references.',
   accessDeniedTitle: 'Admin access required',
-  accessDeniedDescription: 'Your account does not have the Admin role for this action.',
+  accessDeniedDescription: ADMIN_ACCESS_REFUSED_COPY,
 } as const
 
 const EXCEPTION_KIND_LABELS: Readonly<Record<AdminException['kind'], string>> = {
@@ -79,11 +79,6 @@ const EXCEPTION_KIND_LABELS: Readonly<Record<AdminException['kind'], string>> = 
   admission_case: 'Admission case',
 }
 
-export function isAdminExceptionFeed(value: unknown): value is AdminExceptionFeed {
-  return typeof value === 'object' && value !== null
-    && 'items' in value && 'unavailable' in value
-    && 'total' in value && 'truncated' in value && 'counts' in value
-}
 
 export function exceptionKindLabel(kind: AdminException['kind']): string {
   return EXCEPTION_KIND_LABELS[kind]

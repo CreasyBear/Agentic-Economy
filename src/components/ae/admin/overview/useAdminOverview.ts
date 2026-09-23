@@ -2,36 +2,26 @@ import { useQuery } from 'convex/react'
 import { useState } from 'react'
 
 import { api } from '../../../../../convex/_generated/api'
-import type { AdminException } from '@/lib/operator/admin-console/contracts'
+import { adminObjectHref, isAdminExceptionFeed, type AdminException } from '@/lib/operator/admin-console/contracts'
+import { exceptionHref, exceptionRef } from '@/lib/operator/admin-console/exception-projection'
+import { formatCount, formatPercent, formatPerthTimestamp } from '@/lib/ui/format-time'
 import { formatCurrencyAmount } from '@/modules/money/public'
 import { parseAdminObjectRef } from '@/lib/operator/admin-console/ref-parsers'
 import {
   ADMIN_OBJECT_KIND_OPTIONS,
   ADMIN_RECENT_REFS_STORAGE_KEY,
-  adminObjectHref,
   adminRecentRefsSchema,
 } from '../object-search/object-search.contracts'
 import { ADMIN_METRICS_COPY } from '../metrics/metrics.contracts'
 import {
   ADMIN_OVERVIEW_COPY,
   exceptionKindLabel,
-  isAdminExceptionFeed,
   type AdminConfiguredState,
   type AdminOverviewDataState,
   type AdminOverviewExceptionRow,
   type AdminOverviewRecentRow,
 } from './overview.contracts'
 
-const perthDateTime = new Intl.DateTimeFormat('en-AU', {
-  dateStyle: 'medium',
-  timeStyle: 'short',
-  timeZone: 'Australia/Perth',
-})
-const numberFormatter = new Intl.NumberFormat('en-AU')
-const percentFormatter = new Intl.NumberFormat('en-AU', {
-  style: 'percent',
-  maximumFractionDigits: 1,
-})
 
 export function useAdminOverview(formance: AdminConfiguredState): AdminOverviewDataState {
   const overview = useQuery(api.adminConsoleOverview.readAdminOverview, {})
@@ -56,11 +46,11 @@ export function useAdminOverview(formance: AdminConfiguredState): AdminOverviewD
         || metrics.headline.settledCallValue === null
         ? ADMIN_METRICS_COPY.noSettledUsage
         : formatCurrencyAmount(metrics.headline.settledCallValue),
-      settledCalls: numberFormatter.format(metrics.headline.settledCalls),
+      settledCalls: formatCount(metrics.headline.settledCalls),
       successRate: metrics.headline.successRate === null
         ? ADMIN_OVERVIEW_COPY.notAvailable
-        : percentFormatter.format(metrics.headline.successRate),
-      transactingWorkspaces: numberFormatter.format(metrics.headline.transactingWorkspaces),
+        : formatPercent(metrics.headline.successRate),
+      transactingWorkspaces: formatCount(metrics.headline.transactingWorkspaces),
     },
     recent,
   }
@@ -92,24 +82,6 @@ function toExceptionRow(exception: AdminException): AdminOverviewExceptionRow {
     label: exceptionKindLabel(exception.kind),
     ref,
     href: exceptionHref(exception),
-    since: perthDateTime.format(exception.since),
-  }
-}
-
-function exceptionRef(exception: AdminException): string {
-  switch (exception.kind) {
-    case 'uncertain_call': return exception.callRef
-    case 'removal_dispute': return exception.disputeRef
-    case 'source_authority_review': return exception.publicationRef
-    case 'admission_case': return exception.caseRef
-  }
-}
-
-function exceptionHref(exception: AdminException): string {
-  switch (exception.kind) {
-    case 'uncertain_call': return `/admin/calls/${encodeURIComponent(exception.callRef)}`
-    case 'source_authority_review': return `/admin/tools/${encodeURIComponent(exception.publicationRef)}`
-    case 'removal_dispute':
-    case 'admission_case': return `/admin/providers/${encodeURIComponent(exception.businessSlug)}`
+    since: formatPerthTimestamp(exception.since),
   }
 }

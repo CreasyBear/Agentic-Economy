@@ -83,14 +83,21 @@ describe('admin observability boundary', () => {
     server.mint.mockReset()
     server.mutate.mockReset()
   })
-  it.each([
-    ['command', commandProperties],
-    ['lookup', lookupProperties],
-    ['queue', queueProperties],
-  ])('keeps %s event properties free of references and email addresses', (_name, properties) => {
-    const values = Object.values(properties).join(' ')
-    expect(values).not.toContain('operation-invocation:')
-    expect(values).not.toContain('@')
+  it('excludes secret-looking fields from every event projection', () => {
+    const secret = `operator@example.com:operation-invocation:v1:${'a'.repeat(64)}`
+    const injected = { reason: secret, ref: secret, token: secret }
+    const properties = [
+      buildAdminEventProperties('admin_command', {
+        ...injected,
+        action: 'set_business_suppression',
+        permission: 'suppress_business',
+        outcome: 'completed',
+      }),
+      buildAdminEventProperties('admin_lookup', { ...injected, refKind: 'call', found: true }),
+      buildAdminEventProperties('admin_queue_view', { ...injected, kind: 'uncertain_call' }),
+    ]
+    expect(properties).toEqual([commandProperties, lookupProperties, queueProperties])
+    expect(JSON.stringify(properties)).not.toContain(secret)
   })
 
   it('redacts admin object references from telemetry paths', () => {

@@ -1,6 +1,7 @@
 import { z } from 'zod'
 
 import type { MarketplaceMetricsRange } from '@/lib/operator/admin-console/metrics.contracts'
+import { ADMIN_ACCESS_REFUSED_COPY } from '@/lib/operator/admin-console/contracts'
 
 export const adminMetricsSearchSchema = z.strictObject({
   range: z.enum(['last_7', 'last_30', 'last_90']).optional(),
@@ -73,7 +74,7 @@ export const ADMIN_METRICS_COPY = {
   settledOnly: 'Settled only',
   snapshotIncomplete: (day: string) => `Snapshot incomplete for ${day}`,
   accessDeniedTitle: 'Admin access required',
-  accessDeniedDescription: 'Your account does not have the Admin role for this action.',
+  accessDeniedDescription: ADMIN_ACCESS_REFUSED_COPY,
   columns: {
     day: 'Day',
     settledValue: 'Settled value',

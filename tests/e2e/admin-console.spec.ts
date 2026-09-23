@@ -22,12 +22,18 @@ test.describe('Admin console operator', () => {
 
     const roleGate = page.getByRole('heading', { name: 'Admin access required' })
     const searchForm = page.locator('form').filter({ has: page.getByRole('searchbox', { name: 'Reference' }) })
-    await expect(roleGate.or(searchForm)).toBeVisible()
-    if (!adminConfigured) await expect(roleGate).toBeVisible()
+    if (adminConfigured) {
+      await expect(searchForm).toBeVisible()
+    } else {
+      await expect(roleGate).toBeVisible()
+    }
 
     await page.goto('/admin/audit-events')
-    await expect(page.getByRole('table').or(page.getByRole('heading', { name: 'Admin access required' }))).toBeVisible()
-    if (!adminConfigured) await expect(page.getByRole('heading', { name: 'Admin access required' })).toBeVisible()
+    if (adminConfigured) {
+      await expect(page.getByRole('table')).toBeVisible()
+    } else {
+      await expect(page.getByRole('heading', { name: 'Admin access required' })).toBeVisible()
+    }
   })
 
   test('admin search distinguishes malformed and missing Call references', async ({ page }) => {

@@ -14,20 +14,21 @@ import {
 
 const FIRST_DAY = '2026-09-20'
 const SECOND_DAY = '2026-09-21'
+const FIRST_DAY_UTC_START = Date.parse('2026-09-19T16:00:00.000Z')
+const SECOND_DAY_UTC_START = Date.parse('2026-09-20T16:00:00.000Z')
 
-function timestampFor(day: string, offsetMs = 60_000): number {
-  const window = perthDayWindow(day)
-  if (window.kind === 'refused') throw new Error('invalid test day')
-  return window.from + offsetMs
+const DAY_UTC_START = {
+  [FIRST_DAY]: FIRST_DAY_UTC_START,
+  [SECOND_DAY]: SECOND_DAY_UTC_START,
 }
 
 async function seedDay(
   backend: ConvexFixtureBackend,
-  day: string,
+  day: typeof FIRST_DAY | typeof SECOND_DAY,
   workspaces: readonly string[],
   includeUsage: boolean,
+  createdAt = DAY_UTC_START[day] + 60_000,
 ): Promise<void> {
-  const createdAt = timestampFor(day)
   await backend.run(async (ctx) => {
     for (const [index, workspaceRef] of workspaces.entries()) {
       const callRef = `call:${day}:${index}`
@@ -165,10 +166,28 @@ describe('admin marketplace metrics', () => {
   beforeEach(() => vi.setSystemTime(new Date('2026-09-22T04:00:00.000Z')))
   afterEach(() => vi.useRealTimers())
 
+  it('assigns Calls on either side of Perth midnight to their respective days', async () => {
+    expect(perthDayWindow(FIRST_DAY)).toEqual({
+      kind: 'valid', from: FIRST_DAY_UTC_START, toExclusive: SECOND_DAY_UTC_START,
+    })
+    const backend = convexTestWithMarketComponents()
+    await seedDay(backend, FIRST_DAY, ['workspace:before-midnight'], false, SECOND_DAY_UTC_START - 1)
+    await seedDay(backend, SECOND_DAY, ['workspace:at-midnight'], false, SECOND_DAY_UTC_START)
+
+    await snapshot(backend, FIRST_DAY)
+    await snapshot(backend, SECOND_DAY)
+    const days = await backend.run(async (ctx) => await ctx.db.query('marketplaceMetricDays').collect())
+    expect(days.map(({ day, attemptedCalls, quotesCreated }) => ({ day, attemptedCalls, quotesCreated })))
+      .toEqual([
+        { day: FIRST_DAY, attemptedCalls: 1, quotesCreated: 1 },
+        { day: SECOND_DAY, attemptedCalls: 1, quotesCreated: 1 },
+      ])
+  })
+
   it('writes exact daily metrics and replaces the same day idempotently', async () => {
     const backend = convexTestWithMarketComponents()
     await seedDay(backend, FIRST_DAY, ['workspace:one', 'workspace:two'], true)
-    await backend.run(async (ctx) => await recordMarketEvidenceFact(ctx, 'ae_invocation', 'orphan', timestampFor(FIRST_DAY)))
+    await backend.run(async (ctx) => await recordMarketEvidenceFact(ctx, 'ae_invocation', 'orphan', FIRST_DAY_UTC_START + 60_000))
 
     await expect(snapshot(backend, FIRST_DAY)).resolves.toEqual({ kind: 'written', day: FIRST_DAY })
     await expect(snapshot(backend, FIRST_DAY)).resolves.toEqual({ kind: 'written', day: FIRST_DAY })

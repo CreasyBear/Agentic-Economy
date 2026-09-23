@@ -34,7 +34,7 @@ export const adminObjectRefValue = v.union(
   v.object({ kind: v.literal('provider'), ref: v.string() }),
 )
 
-export const adminTimelineEntryValue = v.object({
+const adminTimelineEntryValue = v.object({
   at: v.number(),
   eventType: v.string(),
   actorRef: v.union(v.string(), v.null()),

@@ -20,6 +20,18 @@ export type AdminObjectRef =
   | { kind: 'provider'; ref: Slug }
 
 export type AdminObjectKind = AdminObjectRef['kind']
+export function adminObjectHref(ref: AdminObjectRef): string {
+  const value = encodeURIComponent(ref.ref)
+  switch (ref.kind) {
+    case 'call': return `/admin/calls/${value}`
+    case 'quote': return `/admin/quotes/${value}`
+    case 'tool_version': return `/admin/tools/${value}`
+    case 'workspace': return `/admin/workspaces/${value}`
+    case 'agent': return `/admin/agents/${value}`
+    case 'provider': return `/admin/providers/${value}`
+  }
+}
+
 
 export type AdminParseErrorCode =
   | 'empty'
@@ -227,4 +239,18 @@ export type AdminExceptionFeed = {
   readonly truncated: boolean
   readonly counts: Readonly<Record<AdminExceptionKind, number>>
   readonly unavailable: readonly AdminExceptionKind[]
+}
+
+export type AdminResolutionRow = Readonly<{
+  callRef: string
+  terminalState: 'completed' | 'refunded' | 'released' | 'disputed'
+  resolvedAt: number
+}>
+
+export const ADMIN_ACCESS_REFUSED_COPY = 'Your account does not have the Admin role for this action.'
+
+export function isAdminExceptionFeed(value: unknown): value is AdminExceptionFeed {
+  return typeof value === 'object' && value !== null
+    && 'items' in value && 'unavailable' in value
+    && 'total' in value && 'truncated' in value && 'counts' in value
 }

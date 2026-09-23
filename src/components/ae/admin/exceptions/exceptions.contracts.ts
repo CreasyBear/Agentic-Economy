@@ -1,9 +1,9 @@
 import { z } from 'zod'
 
-import type {
-  AdminException,
-  AdminExceptionFeed,
-  AdminExceptionKind,
+import {
+  ADMIN_ACCESS_REFUSED_COPY,
+  type AdminException,
+  type AdminExceptionKind,
 } from '@/lib/operator/admin-console/contracts'
 import { getStatusPresentation } from '@/lib/ui/status-presentation'
 
@@ -18,11 +18,6 @@ export const adminExceptionsSearchSchema = z.object({
 
 export type AdminExceptionsSearch = z.infer<typeof adminExceptionsSearchSchema>
 
-export type AdminResolutionRow = Readonly<{
-  callRef: string
-  terminalState: 'completed' | 'refunded' | 'released' | 'disputed'
-  resolvedAt: number
-}>
 
 export type AdminExceptionRowModel = Readonly<{
   id: string
@@ -115,7 +110,7 @@ export const ADMIN_EXCEPTIONS_COPY = {
   description: 'Review the oldest operational exceptions and recent Purchase resolutions.',
   breadcrumbs: { admin: 'Admin', exceptions: 'Exceptions' },
   accessDeniedTitle: 'Admin access required',
-  accessDeniedDescription: 'Your account does not have the Admin role for this action.',
+  accessDeniedDescription: ADMIN_ACCESS_REFUSED_COPY,
   filtersTitle: 'Exception type',
   filtersDescription: 'Narrow the queue to one exception type.',
   clearAll: 'Clear all',
@@ -150,9 +145,4 @@ export const ADMIN_EXCEPTIONS_COPY = {
     business: 'Business',
     since: 'Since',
   },
-}
-
-export function isAdminExceptionFeed(value: unknown): value is AdminExceptionFeed {
-  if (typeof value !== 'object' || value === null) return false
-  return 'items' in value && 'unavailable' in value && 'total' in value && 'truncated' in value && 'counts' in value
 }

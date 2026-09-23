@@ -8,7 +8,8 @@ import {
   type ProviderRemovalDisputeRow,
   type ProviderRemovalDisputesTableProps,
 } from '../provider-object.contracts'
-import { providerStatusLabel, providerTimestamp } from '../provider-object.view-model'
+import { providerStatusLabel } from '@/lib/operator/admin-console/status-adapter'
+import { providerTimestamp } from '../provider-object.view-model'
 import { ProviderDisputeAction } from './ProviderDisputeAction'
 
 function disputeColumns(onCloseDispute?: ProviderRemovalDisputesTableProps['onCloseDispute']): ColumnDef<ProviderRemovalDisputeRow, unknown>[] { return [

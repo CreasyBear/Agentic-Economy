@@ -5,7 +5,7 @@ import { cdpX402CustodyConfigurationFromEnvironment } from '@/modules/capability
 import { env, type QueryCtx } from '../../../_generated/server'
 
 
-export const configuredValue = v.union(
+const configuredValue = v.union(
   v.literal('configured'),
   v.literal('not_configured'),
 )
@@ -16,7 +16,7 @@ export const adminOverviewValue = v.object({
   convex: v.literal('ok'),
 })
 
-export type AdminOverviewView = Infer<typeof adminOverviewValue>
+type AdminOverviewView = Infer<typeof adminOverviewValue>
 
 export function readAdminOverviewView(
   ctx: QueryCtx,

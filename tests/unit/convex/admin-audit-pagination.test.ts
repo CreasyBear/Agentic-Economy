@@ -54,9 +54,9 @@ async function seedAuditEvents(backend: ConvexFixtureBackend): Promise<readonly 
   })
 }
 
-async function insertNewestAuditEvent(backend: ConvexFixtureBackend): Promise<void> {
-  await backend.run(async (ctx) => {
-    await ctx.db.insert('auditEvents', {
+async function insertNewestAuditEvent(backend: ConvexFixtureBackend): Promise<string> {
+  return await backend.run(async (ctx) => {
+    const id = await ctx.db.insert('auditEvents', {
       eventId: 'audit:admin-page:newest',
       eventType: 'account.session.created',
       actorKind: 'owner',
@@ -70,6 +70,7 @@ async function insertNewestAuditEvent(backend: ConvexFixtureBackend): Promise<vo
       payloadHash: canonicalDigest({ newest: true }),
       createdAt: 2_000,
     })
+    return String(id)
   })
 }
 
@@ -85,7 +86,12 @@ describe('admin audit pagination', () => {
       filter: {},
       paginationOpts: { numItems: PAGE_SIZE, cursor: null },
     })
-    await insertNewestAuditEvent(backend)
+    const newestId = await insertNewestAuditEvent(backend)
+    const refreshed = await admin.query(api.adminConsoleAudit.listAdminAuditEvents, {
+      filter: {},
+      paginationOpts: { numItems: PAGE_SIZE, cursor: null },
+    })
+    expect(refreshed.page[0]?.id).toBe(newestId)
     const second = await admin.query(api.adminConsoleAudit.listAdminAuditEvents, {
       filter: {},
       paginationOpts: { numItems: PAGE_SIZE, cursor: first.continueCursor },
@@ -95,10 +101,13 @@ describe('admin audit pagination', () => {
       paginationOpts: { numItems: PAGE_SIZE, cursor: second.continueCursor },
     })
 
+    expect(first.page.map(({ id }) => id)).toEqual(originalIds.slice(20).reverse())
+    expect(second.page.map(({ id }) => id)).toEqual(originalIds.slice(10, 20).reverse())
+    expect(third.page.map(({ id }) => id)).toEqual(originalIds.slice(0, 10).reverse())
     const rows = [...first.page, ...second.page, ...third.page]
     const seenIds = rows.map(({ id }) => id)
+    expect(seenIds).not.toContain(newestId)
     expect(new Set(seenIds).size).toBe(seenIds.length)
-    expect(originalIds.every((id) => seenIds.includes(id))).toBe(true)
 
     const adminRow = rows.find(({ eventType }) => eventType === 'business.suppressed')
     const nonAdminRow = rows.find(({ eventType }) => eventType === 'account.session.created')

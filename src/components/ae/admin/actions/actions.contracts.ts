@@ -1,12 +1,13 @@
 import { z } from 'zod'
 
-import type {
-  AdminActionInput,
-  AdminApprovalIntent,
-  AdminCommandAction,
-  AdminCommandReceipt,
-  AdminSuccessCodeByAction,
-  AdminReasonCodeByAction,
+import {
+  ADMIN_ACCESS_REFUSED_COPY,
+  type AdminActionInput,
+  type AdminApprovalIntent,
+  type AdminCommandAction,
+  type AdminCommandReceipt,
+  type AdminSuccessCodeByAction,
+  type AdminReasonCodeByAction,
 } from '@/lib/operator/admin-console/contracts'
 import type { AdminRole } from '@/modules/security/public'
 
@@ -151,7 +152,8 @@ export function parseAdminProposalCommand(action: AdminCommandAction, commandJso
   let command: unknown
   try {
     command = JSON.parse(commandJson)
-  } catch {
+  } catch (cause) {
+    void cause
     return null
   }
   const material = z.strictObject({
@@ -205,7 +207,7 @@ export const ADMIN_ACTION_SHEET_COPY = {
   retry: 'Retry',
   edit: 'Edit command',
   propose: 'Propose instead',
-  permission: 'Your account does not have the Admin role for this action.',
+  permission: ADMIN_ACCESS_REFUSED_COPY,
   unavailable: 'Command outcome could not be confirmed. Review the current record before retrying.',
   approval: 'Approval intent',
   operation: 'Operation',
@@ -240,7 +242,7 @@ export const ADMIN_AUDIT_ACTION_COPY = {
   revoke: 'Revoke Admin membership',
   approve: 'Approve',
   approvalLoading: 'Loading pending approvals…',
-  approvalDenied: 'Your account does not have the Admin role for this action.',
+  approvalDenied: ADMIN_ACCESS_REFUSED_COPY,
   proposal: 'Proposal',
   approvalUnavailable: 'Pending approvals could not be loaded. Try again later.',
   targetLabels: { businessId: 'Business ID', policyRef: 'Policy reference' },

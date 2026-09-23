@@ -109,7 +109,8 @@ export function useAdminActionSheet(props: AdminActionSheetProps): AdminActionSh
     try {
       const receipt = await execute(validated.data)
       setState((previous) => ({ ...previous, phase: 'receipt', receipt }))
-    } catch {
+    } catch (cause) {
+      void cause
       setState((previous) => ({ ...previous, phase: 'preview', error: 'Command outcome could not be confirmed. Review the current record before retrying.' }))
     }
   }

@@ -2,27 +2,22 @@ import { useState } from 'react'
 import { useQuery } from 'convex/react'
 
 import { api } from '../../../../../convex/_generated/api'
-import type { AdminException } from '@/lib/operator/admin-console/contracts'
+import { parseCallRef } from '@/modules/capability-execution/call-contracts'
+import { adminObjectHref, isAdminExceptionFeed, type AdminException, type AdminResolutionRow } from '@/lib/operator/admin-console/contracts'
+import { exceptionHref, exceptionRef } from '@/lib/operator/admin-console/exception-projection'
 import {
   aeStatusValues,
   getStatusPresentation,
 } from '@/lib/ui/status-presentation'
-import { formatRelativeTime, timestampIso } from '@/lib/ui/format-time'
+import { formatPerthTimestamp, formatRelativeTime, timestampIso } from '@/lib/ui/format-time'
 import {
   ADMIN_EXCEPTION_KIND_LABELS,
-  isAdminExceptionFeed,
   type AdminExceptionRowModel,
   type AdminExceptionsDataState,
   type AdminExceptionsPageProps,
-  type AdminResolutionRow,
   type AdminResolutionRowModel,
 } from './exceptions.contracts'
 
-const perthTimestampFormatter = new Intl.DateTimeFormat('en-AU', {
-  dateStyle: 'medium',
-  timeStyle: 'short',
-  timeZone: 'Australia/Perth',
-})
 
 export function useAdminExceptions({ search, onSearchChange }: AdminExceptionsPageProps) {
   const [selectedRow, setSelectedRow] = useState<AdminExceptionRowModel | null>(null)
@@ -75,8 +70,8 @@ function toExceptionRowModel(exception: AdminException): AdminExceptionRowModel 
     businessSlug,
     businessHref: businessSlug === null
       ? null
-      : `/admin/providers/${encodeURIComponent(businessSlug)}`,
-    sinceLabel: perthTimestampFormatter.format(exception.since),
+      : adminObjectHref({ kind: 'provider', ref: businessSlug }),
+    sinceLabel: formatPerthTimestamp(exception.since),
     sinceRelativeLabel: formatRelativeTime(exception.since),
     sinceIso: timestampIso(exception.since),
     exception,
@@ -85,31 +80,16 @@ function toExceptionRowModel(exception: AdminException): AdminExceptionRowModel 
 
 function toResolutionRowModel(row: AdminResolutionRow): AdminResolutionRowModel {
   const status = aeStatusValues.find((candidate) => candidate === row.terminalState)
+  const parsed = parseCallRef(row.callRef)
   return {
     callRef: row.callRef,
-    href: `/admin/calls/${encodeURIComponent(row.callRef)}`,
+    href: parsed.kind === 'valid'
+      ? adminObjectHref({ kind: 'call', ref: parsed.ref })
+      : `/admin/calls/${encodeURIComponent(row.callRef)}`,
     terminalStateLabel: status === undefined
       ? row.terminalState
       : getStatusPresentation(status).label,
-    resolvedAtLabel: perthTimestampFormatter.format(row.resolvedAt),
+    resolvedAtLabel: formatPerthTimestamp(row.resolvedAt),
     resolvedAtIso: timestampIso(row.resolvedAt),
-  }
-}
-
-function exceptionRef(exception: AdminException): string {
-  switch (exception.kind) {
-    case 'uncertain_call': return exception.callRef
-    case 'removal_dispute': return exception.disputeRef
-    case 'source_authority_review': return exception.publicationRef
-    case 'admission_case': return exception.caseRef
-  }
-}
-
-function exceptionHref(exception: AdminException): string {
-  switch (exception.kind) {
-    case 'uncertain_call': return `/admin/calls/${encodeURIComponent(exception.callRef)}`
-    case 'source_authority_review': return `/admin/tools/${encodeURIComponent(exception.publicationRef)}`
-    case 'removal_dispute':
-    case 'admission_case': return `/admin/providers/${encodeURIComponent(exception.businessSlug)}`
   }
 }

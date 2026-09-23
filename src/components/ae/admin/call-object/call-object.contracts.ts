@@ -1,7 +1,9 @@
+import { ADMIN_ACCESS_REFUSED_COPY } from '@/lib/operator/admin-console/contracts'
 import type { AeStatus, AeStatusPresentation } from '@/lib/ui/status-presentation'
 import type { AdminCallView } from '@/lib/operator/admin-console/views'
 
-export type AdminCallObjectView = Omit<
+export type AdminCallObjectView = AdminCallView
+export type AdminCallWireView = Omit<
   AdminCallView,
   'ref' | 'quoteRef' | 'toolRef' | 'workspaceRef' | 'agentRef'
 > & Readonly<{
@@ -11,6 +13,7 @@ export type AdminCallObjectView = Omit<
   workspaceRef: string | null
   agentRef: string | null
 }>
+
 
 export type AdminCallLoaderResult =
   | AdminCallObjectView
@@ -67,7 +70,7 @@ export const ADMIN_CALL_OBJECT_COPY = {
   referenceLabel: 'Reference',
   backToSearch: 'Back to Search',
   refusedTitle: 'Admin access required',
-  refusedDescription: 'Your account does not have the Admin role for this action.',
+  refusedDescription: ADMIN_ACCESS_REFUSED_COPY,
   factsTitle: 'Call facts',
   factsDescription: 'Recorded evidence only. Missing facts stay missing.',
   statusDetailLabel: 'Recorded status detail',

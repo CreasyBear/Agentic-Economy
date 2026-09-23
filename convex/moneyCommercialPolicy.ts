@@ -60,7 +60,7 @@ const commercialPolicyChangeKindValue = v.union(
   v.literal('suspend'),
 )
 
-export const commercialPolicyChangeArgs = adminCommandArgsValue(
+const commercialPolicyChangeArgs = adminCommandArgsValue(
   v.literal('change_commercial_policy'),
   v.object({
     changeKind: commercialPolicyChangeKindValue,

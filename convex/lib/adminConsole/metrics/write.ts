@@ -3,7 +3,7 @@ import type { MarketplaceMetricDay } from '@/lib/operator/admin-console/metrics.
 
 import type { MutationCtx } from '../../../_generated/server'
 
-export const marketplaceEntityKindValue = v.union(
+const marketplaceEntityKindValue = v.union(
   v.literal('workspace'),
   v.literal('agent'),
   v.literal('provider'),

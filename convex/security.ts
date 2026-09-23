@@ -2,9 +2,8 @@ import { mutationGeneric } from 'convex/server'
 import { v } from 'convex/values'
 
 import { sourceWriteArgs } from './sourceWriteAdmission'
-import { literalUnion } from '../src/modules/common/convex-literals'
-import { RemovalDisputeReasonCodeValues } from '../src/modules/security/public'
 import { adminCommandArgsValue, adminCommandReceiptValue } from './lib/adminConsole/validators'
+import { openRemovalDisputeArgsValue, removalReason, visibilityTargetType } from './lib/security/adminArgs'
 import { runAdminCommand } from './lib/adminConsole/commandEnvelope'
 import { grantAdminMembershipSpec, revokeAdminMembershipSpec } from './lib/adminConsole/actions/adminMembership'
 import { removalDisputeSpec } from './lib/adminConsole/actions/removalDispute'
@@ -12,8 +11,6 @@ import { bootstrapOwnerAdminHandler } from './securityAdminMembership'
 import { openRemovalDisputeHandler } from './securityRemovalDisputes'
 const adminRole = v.union(v.literal('owner_admin'), v.literal('support'), v.literal('reviewer'))
 const adminMembershipState = v.union(v.literal('active'), v.literal('revoked'), v.literal('suspended'))
-const visibilityTargetType = v.union(v.literal('business'), v.literal('service'), v.literal('capability'))
-const removalReason = literalUnion(RemovalDisputeReasonCodeValues)
 const disputeStatus = v.union(v.literal('opened'), v.literal('updated'), v.literal('closed'), v.literal('contested'))
 
 const adminMembershipResult = v.object({
@@ -168,35 +165,7 @@ export const revokeAdminMembership = mutationGeneric({
 
 
 export const openRemovalDispute = mutationGeneric({
-  args: {
-    businessId: v.string(),
-    targetType: visibilityTargetType,
-    targetRef: v.string(),
-    reasonCode: removalReason,
-    contactEmail: v.optional(v.string()),
-    contactPhone: v.optional(v.string()),
-    contactName: v.optional(v.string()),
-    evidence: v.array(
-      v.object({
-        label: v.string(),
-        mediaType: v.union(
-          v.literal('text/plain'),
-          v.literal('image/jpeg'),
-          v.literal('image/png'),
-          v.literal('application/pdf')
-        ),
-        byteLength: v.number(),
-        privateRef: v.string(),
-      })
-    ),
-    publicMessage: v.optional(v.string()),
-    csrfToken: v.optional(v.string()),
-    csrfCookie: v.optional(v.string()),
-    origin: v.optional(v.string()),
-    ...sourceWriteArgs,
-    operationKey: v.string(),
-    correlationId: v.string(),
-  },
+  args: openRemovalDisputeArgsValue.fields,
   returns: openDisputeResult,
   handler: openRemovalDisputeHandler,
 })
@@ -211,14 +180,3 @@ export const closeRemovalDispute = mutationGeneric({
   handler: async (ctx, args) =>
     await runAdminCommand(ctx, args, removalDisputeSpec(ctx, args.input)),
 })
-
-export type {
-  AdminAction,
-  AdminAuthorityState,
-  AdminDecisionAudit,
-  AdminMembership,
-  AdminRole,
-  DisputeOpenCommand,
-  DisputeRecord,
-  DisputeSourceState,
-} from '../src/modules/security/public'

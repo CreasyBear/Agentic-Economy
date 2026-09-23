@@ -21,9 +21,9 @@ export const metricCallRowValue = v.object({
 export const metricQuoteRowValue = v.object({ consumed: v.boolean() })
 export const metricResolutionRowValue = v.object({ callRef: v.string() })
 
-export type MetricCallRow = Infer<typeof metricCallRowValue>
-export type MetricQuoteRow = Infer<typeof metricQuoteRowValue>
-export type MetricResolutionRow = Infer<typeof metricResolutionRowValue>
+type MetricCallRow = Infer<typeof metricCallRowValue>
+type MetricQuoteRow = Infer<typeof metricQuoteRowValue>
+type MetricResolutionRow = Infer<typeof metricResolutionRowValue>
 
 export async function pageCallsForWindowHandler(
   ctx: QueryCtx,
