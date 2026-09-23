@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { api, internal } from '../../../convex/_generated/api'
 import { perthDayWindow } from '../../../convex/lib/adminConsole/metrics/dayWindow'
+import type { MarketplaceMetricCounts } from '../../../convex/lib/adminConsole/metrics/write'
 import { recordMarketEvidenceFact } from '../../../convex/marketEvidence'
 import {
   convexTestWithMarketComponents,
@@ -93,6 +94,13 @@ async function seedDay(
         inputDigest: `digest:input:${day}:${index}`,
         requestDigest: `digest:request:${day}:${index}`,
         state: 'completed',
+        ...(includeUsage ? { usage: {
+          usageRef: `usage:${day}:${index}`,
+          observedAt: createdAt + index,
+          chargeState: 'paid',
+          amount: { units: index === 0 ? '1500' : '2500', exponent: 2, currency: 'AUD' },
+          priceDigest: `digest:price:${day}:${index}`,
+        } } : {}),
         createdAt: createdAt + index,
         updatedAt: createdAt + index,
       })
@@ -115,26 +123,6 @@ async function seedDay(
       await recordMarketEvidenceFact(ctx, 'ae_invocation', callRef, createdAt + index)
       await recordMarketEvidenceFact(ctx, 'ae_invocation_completed', callRef, createdAt + index)
       await recordMarketEvidenceFact(ctx, 'ae_settlement', callRef, createdAt + index)
-      if (includeUsage) {
-        await ctx.db.insert('moneyUsageEvents', {
-          usageRef: `usage:${day}:${index}`,
-          principalId: principalRef,
-          accountId: workspaceRef,
-          credentialId: `credential:${day}:${index}`,
-          currency: 'AUD',
-          exponent: 2,
-          serviceRef: `service:${day}:${index}`,
-          offeringRef: toolRef,
-          businessId: `provider:${day}:${index}`,
-          callRef,
-          attemptRef: `attempt:${day}:${index}`,
-          operationKey: `operation:${day}:${index}`,
-          priceDigest: `digest:price:${day}:${index}`,
-          chargeState: 'paid',
-          amountUnits: index === 0 ? '1500' : '2500',
-          observedAt: createdAt + index,
-        })
-      }
     }
     if (workspaces.length === 2) {
       const callRef = `call:${day}:uncertain`
@@ -180,6 +168,7 @@ describe('admin marketplace metrics', () => {
   it('writes exact daily metrics and replaces the same day idempotently', async () => {
     const backend = convexTestWithMarketComponents()
     await seedDay(backend, FIRST_DAY, ['workspace:one', 'workspace:two'], true)
+    await backend.run(async (ctx) => await recordMarketEvidenceFact(ctx, 'ae_invocation', 'orphan', timestampFor(FIRST_DAY)))
 
     await expect(snapshot(backend, FIRST_DAY)).resolves.toEqual({ kind: 'written', day: FIRST_DAY })
     await expect(snapshot(backend, FIRST_DAY)).resolves.toEqual({ kind: 'written', day: FIRST_DAY })
@@ -190,9 +179,14 @@ describe('admin marketplace metrics', () => {
     }))
     expect(state.days).toHaveLength(1)
     expect(state.days[0]).toMatchObject({
+      complete: true,
       settledCallValue: { units: '4000', exponent: 2, currency: 'AUD' },
+      settledCalls: 2,
+      attemptedCalls: 3,
       completedCalls: 2,
       uncertainCalls: 1,
+      uncertainCallsOpenAtClose: 1,
+      terminalCalls: 3,
       quotesCreated: 2,
       quotesConvertedAtClose: 1,
       transactingWorkspaces: 2,
@@ -200,12 +194,17 @@ describe('admin marketplace metrics', () => {
     expect(state.entities).toHaveLength(8)
   })
 
-  it('records not_configured when no paid usage exists', async () => {
+  it('records no_settled_usage when no paid Call usage exists', async () => {
     const backend = convexTestWithMarketComponents()
     await seedDay(backend, FIRST_DAY, ['workspace:one'], false)
     await snapshot(backend, FIRST_DAY)
     const row = await backend.run(async (ctx) => await ctx.db.query('marketplaceMetricDays').first())
-    expect(row).toMatchObject({ settledCallValue: null, money: 'not_configured' })
+    expect(row).toMatchObject({ complete: true, settledCallValue: null, money: 'no_settled_usage' })
+    if (row === null) throw new Error('metrics fixture missing')
+    await backend.run(async (ctx) => await ctx.db.patch(row._id, { complete: undefined, money: 'not_configured' }))
+    const admin = await ownerAdmin(backend, 'user_admin-metrics-legacy')
+    expect(await admin.query(api.adminConsoleMetrics.readMarketplaceMetrics, { range: 'last_7' }))
+      .toMatchObject({ days: [{ complete: true, money: 'no_settled_usage' }], partialDays: [] })
   })
 
   it('refuses malformed days, mixed scales and unsupported currency before writing', async () => {
@@ -216,11 +215,10 @@ describe('admin marketplace metrics', () => {
     })
     await seedDay(backend, FIRST_DAY, ['workspace:one', 'workspace:two'], true)
     await backend.run(async (ctx) => {
-      const row = await ctx.db.query('moneyUsageEvents')
-        .withIndex('by_usageRef', (query) => query.eq('usageRef', `usage:${FIRST_DAY}:1`))
-        .unique()
-      if (row === null) throw new Error('usage fixture missing')
-      await ctx.db.patch(row._id, { exponent: 6 })
+      const row = await ctx.db.query('capabilityCalls')
+        .withIndex('by_callRef', (query) => query.eq('callRef', `call:${FIRST_DAY}:1`)).unique()
+      if (row?.usage === undefined) throw new Error('usage fixture missing')
+      await ctx.db.patch(row._id, { usage: { ...row.usage, amount: { ...row.usage.amount, exponent: 6 } } })
     })
     await expect(snapshot(backend, FIRST_DAY)).resolves.toEqual({
       kind: 'refused',
@@ -228,11 +226,10 @@ describe('admin marketplace metrics', () => {
     })
     await backend.run(async (ctx) => {
       for (const index of [0, 1]) {
-        const row = await ctx.db.query('moneyUsageEvents')
-          .withIndex('by_usageRef', (query) => query.eq('usageRef', `usage:${FIRST_DAY}:${index}`))
-          .unique()
-        if (row === null) throw new Error('usage fixture missing')
-        await ctx.db.patch(row._id, { currency: 'USD', exponent: 2 })
+        const row = await ctx.db.query('capabilityCalls')
+          .withIndex('by_callRef', (query) => query.eq('callRef', `call:${FIRST_DAY}:${index}`)).unique()
+        if (row?.usage === undefined) throw new Error('usage fixture missing')
+        await ctx.db.patch(row._id, { usage: { ...row.usage, amount: { ...row.usage.amount, currency: 'USD', exponent: 2 } } })
       }
     })
     await expect(snapshot(backend, FIRST_DAY)).resolves.toEqual({
@@ -254,6 +251,46 @@ describe('admin marketplace metrics', () => {
     expect(row).toMatchObject({ returningWorkspaces: 1, newTransactingWorkspaces: 0 })
   })
 
+  it('hides incomplete snapshots, then reveals them only after the final write', async () => {
+    const backend = convexTestWithMarketComponents()
+    const admin = await ownerAdmin(backend, 'user_admin-metrics-partial')
+    const counts: MarketplaceMetricCounts = {
+      settledCallValue: null, money: 'no_settled_usage',
+      settledCalls: 0, attemptedCalls: 0, completedCalls: 0, uncertainCalls: 0,
+      uncertainCallsOpenAtClose: 0, quotesCreated: 0, quotesConvertedAtClose: 0,
+      transactingWorkspaces: 0, transactingAgents: 0, transactingProviders: 0,
+      transactingTools: 0, terminalCalls: 0, terminalCallsWithResolution: 0,
+    }
+    await backend.mutation(internal.adminConsoleMetrics.writeMarketplaceMetricsDay, {
+      day: FIRST_DAY, counts, entities: [], replace: true, complete: false,
+    })
+    const partial = await admin.query(api.adminConsoleMetrics.readMarketplaceMetrics, { range: 'last_7' })
+    expect(partial).toMatchObject({ days: [], partialDays: [FIRST_DAY], latestDay: null })
+    await backend.mutation(internal.adminConsoleMetrics.writeMarketplaceMetricsDay, {
+      day: FIRST_DAY, entities: [], replace: false, complete: true,
+    })
+    const complete = await admin.query(api.adminConsoleMetrics.readMarketplaceMetrics, { range: 'last_7' })
+    expect(complete).toMatchObject({ days: [{ complete: true, day: FIRST_DAY }], partialDays: [] })
+  })
+
+  it('clears more than 1000 stale entity rows in bounded batches on resnapshot', async () => {
+    const backend = convexTestWithMarketComponents()
+    await backend.run(async (ctx) => {
+      for (let index = 0; index < 1001; index += 1) {
+        await ctx.db.insert('marketplaceEntityDays', {
+          day: FIRST_DAY, entityKind: 'workspace', entityRef: `stale:${index}`,
+        })
+      }
+    })
+    await expect(snapshot(backend, FIRST_DAY)).resolves.toEqual({ kind: 'written', day: FIRST_DAY })
+    const state = await backend.run(async (ctx) => ({
+      rows: await ctx.db.query('marketplaceEntityDays').collect(),
+      metric: await ctx.db.query('marketplaceMetricDays').first(),
+    }))
+    expect(state.rows).toEqual([])
+    expect(state.metric).toMatchObject({ complete: true, attemptedCalls: 0 })
+  })
+
   it('returns ratios to an owner admin and refuses a non-admin', async () => {
     const backend = convexTestWithMarketComponents()
     await seedDay(backend, FIRST_DAY, ['workspace:one', 'workspace:two'], true)
@@ -261,7 +298,7 @@ describe('admin marketplace metrics', () => {
     const admin = await ownerAdmin(backend, 'user_admin-metrics-owner')
     const outsider = await nonAdmin(backend, 'user_admin-metrics-outsider')
     const report = await admin.query(api.adminConsoleMetrics.readMarketplaceMetrics, { range: 'last_7' })
-    expect(report).toMatchObject({ headline: { settledCalls: 2 }, ratios: { takeRate: null } })
+    expect(report).toMatchObject({ headline: { settledCalls: 2 }, ratios: { successRate: 2 / 3 }, partialDays: [] })
     await expect(outsider.query(api.adminConsoleMetrics.readMarketplaceMetrics, { range: 'last_7' }))
       .resolves.toEqual({ kind: 'refused', code: 'missing_membership' })
   })

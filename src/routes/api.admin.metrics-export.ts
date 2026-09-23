@@ -2,9 +2,9 @@ import { createFileRoute } from '@tanstack/react-router'
 import { z } from 'zod'
 
 import { api } from '../../convex/_generated/api'
-import { formatCsvRow } from '@/lib/export/csv-export'
 import { kindForStatus } from '@/lib/errors'
-import type { MarketplaceMetricDay } from '@/lib/operator/admin-console/metrics.contracts'
+import { ADMIN_METRICS_CSV_HEADER, metricsCsvRow } from '@/lib/operator/admin-console/metrics-csv'
+import { reportAdminInvariant } from '@/lib/observability/admin-event-props'
 import {
   ConvexSourceError,
   createAuthenticatedSourceTransport,
@@ -16,15 +16,6 @@ import {
 import { problem } from '@/lib/server/problem'
 
 const rangeSchema = z.enum(['last_7', 'last_30', 'last_90'])
-const CSV_HEADERS = [
-  'day', 'settledCallValueUnits', 'settledCallValueExponent',
-  'settledCallValueCurrency', 'money', 'settledCalls', 'attemptedCalls',
-  'completedCalls', 'uncertainCalls', 'quotesCreated',
-  'quotesConvertedAtClose', 'transactingWorkspaces', 'transactingAgents',
-  'transactingProviders', 'transactingTools', 'returningWorkspaces',
-  'terminalCalls', 'terminalCallsWithResolution',
-] as const
-export const ADMIN_METRICS_CSV_HEADER = formatCsvRow(CSV_HEADERS)
 
 export const Route = createFileRoute('/api/admin/metrics-export')({
   server: {
@@ -76,32 +67,11 @@ export async function handleAdminMetricsExportRequest(request: Request): Promise
   )
 }
 
-function metricsCsvRow(day: MarketplaceMetricDay): string {
-  return formatCsvRow([
-    day.day,
-    day.settledCallValue?.units ?? 'Not configured',
-    day.settledCallValue?.exponent,
-    day.settledCallValue?.currency,
-    day.money,
-    day.settledCalls,
-    day.attemptedCalls,
-    day.completedCalls,
-    day.uncertainCalls,
-    day.quotesCreated,
-    day.quotesConvertedAtClose,
-    day.transactingWorkspaces,
-    day.transactingAgents,
-    day.transactingProviders,
-    day.transactingTools,
-    day.returningWorkspaces,
-    day.terminalCalls,
-    day.terminalCallsWithResolution,
-  ])
-}
 
 function adminMetricsExportError(error: unknown): Response {
   if (error instanceof ConvexSourceError) {
     return problem({ status: error.status, kind: kindForStatus(error.status), code: error.code })
   }
+  reportAdminInvariant(error instanceof Error ? error : new Error(String(error)))
   return problem({ status: 503, kind: 'UNAVAILABLE', code: 'admin_metrics_export_unavailable' })
 }

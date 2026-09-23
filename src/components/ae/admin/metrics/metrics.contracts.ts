@@ -33,6 +33,7 @@ export type AdminMetricsDataState =
       kind: 'ready'
       cards: readonly AdminMetricCard[]
       ratios: readonly AdminMetricRatio[]
+      partialDays: readonly string[]
       days: readonly AdminMetricDayRow[]
     }>
 export type AdminMetricsPageProps = Readonly<{
@@ -64,13 +65,13 @@ export const ADMIN_METRICS_COPY = {
   quoteConversion: 'Quote conversion',
   returningWorkspaceRate: 'Returning Workspace rate',
   resolutionCoverage: 'Purchase resolution coverage',
-  takeRate: 'Take rate',
   dailyTitle: 'Daily metrics',
   noDays: 'No metrics days recorded yet.',
   noComparison: 'No prior comparison',
-  notConfigured: 'Not configured',
+  noSettledUsage: 'No settled usage',
   notAvailable: 'Not available',
   settledOnly: 'Settled only',
+  snapshotIncomplete: (day: string) => `Snapshot incomplete for ${day}`,
   accessDeniedTitle: 'Admin access required',
   accessDeniedDescription: 'Your account does not have the Admin role for this action.',
   columns: {

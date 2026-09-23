@@ -3,21 +3,18 @@ import { v } from 'convex/values'
 
 import { defineAdminQuery } from './lib/adminConsole/registrars'
 import {
-  countEvidenceForWindowHandler,
-  countOpenUncertainCallsHandler,
   metricCallRowValue,
   metricQuoteRowValue,
   metricResolutionRowValue,
-  metricUsageRowValue,
   pageCallsForWindowHandler,
   pageQuotesForWindowHandler,
   pageResolutionsForWindowHandler,
-  pageUsageForWindowHandler,
   snapshotMarketplaceMetricsDayHandler,
 } from './lib/adminConsole/metrics/collect'
 import {
   marketplaceMetricsRangeValue,
   marketplaceMetricsReportValue,
+  pageWorkspacesForDayHandler,
   readMarketplaceMetricsRange,
 } from './lib/adminConsole/metrics/read'
 import {
@@ -31,13 +28,6 @@ import {
   internalQuery,
 } from './_generated/server'
 
-const evidenceKindValue = v.union(
-  v.literal('ae_invocation'),
-  v.literal('ae_invocation_completed'),
-  v.literal('ae_settlement'),
-  v.literal('ae_qualified_use'),
-  v.literal('ae_reconciliation_required'),
-)
 const windowArgs = {
   from: v.number(),
   toExclusive: v.number(),
@@ -60,11 +50,6 @@ export const snapshotMarketplaceMetricsDay = internalAction({
   handler: snapshotMarketplaceMetricsDayHandler,
 })
 
-export const countEvidenceForWindow = internalQuery({
-  args: { kind: evidenceKindValue, from: v.number(), toExclusive: v.number() },
-  returns: v.number(),
-  handler: countEvidenceForWindowHandler,
-})
 
 export const pageCallsForWindow = internalQuery({
   args: windowArgs,
@@ -78,11 +63,6 @@ export const pageQuotesForWindow = internalQuery({
   handler: pageQuotesForWindowHandler,
 })
 
-export const pageUsageForWindow = internalQuery({
-  args: windowArgs,
-  returns: paginationResultValidator(metricUsageRowValue),
-  handler: pageUsageForWindowHandler,
-})
 
 export const pageResolutionsForWindow = internalQuery({
   args: windowArgs,
@@ -90,11 +70,6 @@ export const pageResolutionsForWindow = internalQuery({
   handler: pageResolutionsForWindowHandler,
 })
 
-export const countOpenUncertainCalls = internalQuery({
-  args: {},
-  returns: v.number(),
-  handler: countOpenUncertainCallsHandler,
-})
 
 export const writeMarketplaceMetricsDay = internalMutation({
   args: {
@@ -102,9 +77,16 @@ export const writeMarketplaceMetricsDay = internalMutation({
     entities: v.array(marketplaceEntityValue),
     counts: v.optional(marketplaceMetricCountsValue),
     replace: v.boolean(),
+    complete: v.boolean(),
   },
-  returns: v.null(),
+  returns: v.boolean(),
   handler: writeMarketplaceMetricsDayHandler,
+})
+
+export const pageWorkspacesForDay = internalQuery({
+  args: { day: v.string(), paginationOpts: paginationOptsValidator },
+  returns: paginationResultValidator(v.string()),
+  handler: pageWorkspacesForDayHandler,
 })
 
 export const readMarketplaceMetrics = defineAdminQuery({

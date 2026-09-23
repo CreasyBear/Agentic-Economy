@@ -5,33 +5,25 @@ import type { MarketplaceMetricsSnapshotRefusalCode } from '@/lib/operator/admin
 import { addExactAmounts, amountFromParts, type ExactAmount } from '@/modules/money/public'
 import { internal } from '../../../_generated/api'
 import type { ActionCtx, QueryCtx } from '../../../_generated/server'
-import { countMarketEvidenceBetween, type MarketEvidenceKind } from '../../../marketEvidence'
 import { perthDayWindow, previousPerthDay } from './dayWindow'
 import type { MarketplaceEntity, MarketplaceMetricCounts } from './write'
 
 export const metricCallRowValue = v.object({
   callRef: v.string(),
   state: v.union(v.literal('completed'), v.literal('refused'), v.literal('outcome_unknown'), v.null()),
+  openAtSnapshot: v.boolean(),
+  paidAmount: v.union(v.null(), v.object({ currency: v.string(), exponent: v.number(), units: v.string() })),
   workspaceRef: v.string(),
   agentRef: v.string(),
   providerRef: v.union(v.string(), v.null()),
   toolRef: v.string(),
 })
 export const metricQuoteRowValue = v.object({ consumed: v.boolean() })
-export const metricUsageRowValue = v.object({ currency: v.string(), exponent: v.number(), units: v.string() })
 export const metricResolutionRowValue = v.object({ callRef: v.string() })
 
 export type MetricCallRow = Infer<typeof metricCallRowValue>
 export type MetricQuoteRow = Infer<typeof metricQuoteRowValue>
-export type MetricUsageRow = Infer<typeof metricUsageRowValue>
 export type MetricResolutionRow = Infer<typeof metricResolutionRowValue>
-
-export async function countEvidenceForWindowHandler(
-  ctx: QueryCtx,
-  args: Readonly<{ kind: MarketEvidenceKind; from: number; toExclusive: number }>,
-): Promise<number> {
-  return await countMarketEvidenceBetween(ctx, args.kind, args.from, args.toExclusive)
-}
 
 export async function pageCallsForWindowHandler(
   ctx: QueryCtx,
@@ -51,6 +43,8 @@ export async function pageCallsForWindowHandler(
     return {
       callRef: row.callRef,
       state,
+      openAtSnapshot: row.state === 'reconciliation_required',
+      paidAmount: row.usage?.chargeState === 'paid' ? row.usage.amount : null,
       workspaceRef: row.ownerId,
       agentRef: row.principalId,
       providerRef: state === 'completed' ? projection?.providerRef ?? null : null,
@@ -70,23 +64,6 @@ export async function pageQuotesForWindowHandler(
   return { ...result, page: result.page.map((row) => ({ consumed: row.consumedCallRef !== undefined })) }
 }
 
-export async function pageUsageForWindowHandler(
-  ctx: QueryCtx,
-  args: Readonly<{ from: number; toExclusive: number; paginationOpts: PaginationOptions }>,
-): Promise<PaginationResult<MetricUsageRow>> {
-  const result = await ctx.db.query('moneyUsageEvents')
-    .withIndex('by_chargeState_and_observedAt', (query) => query
-      .eq('chargeState', 'paid')
-      .gte('observedAt', args.from)
-      .lt('observedAt', args.toExclusive))
-    .paginate(args.paginationOpts)
-  return { ...result, page: result.page.map((row) => ({
-    currency: row.currency,
-    exponent: row.exponent,
-    units: row.amountUnits,
-  })) }
-}
-
 export async function pageResolutionsForWindowHandler(
   ctx: QueryCtx,
   args: Readonly<{ from: number; toExclusive: number; paginationOpts: PaginationOptions }>,
@@ -97,26 +74,19 @@ export async function pageResolutionsForWindowHandler(
   return { ...result, page: result.page.map((row) => ({ callRef: row.callRef })) }
 }
 
-export async function countOpenUncertainCallsHandler(ctx: QueryCtx): Promise<number> {
-  return (await ctx.db.query('capabilityCalls')
-    .withIndex('by_state_and_reconciliation_nextAttemptAt', (query) => query.eq('state', 'reconciliation_required'))
-    .take(1_001)).length
-}
-
 function addEntity(target: Map<string, MarketplaceEntity>, entityKind: MarketplaceEntity['entityKind'], entityRef: string | null) {
   if (entityRef !== null) target.set(`${entityKind}:${entityRef}`, { entityKind, entityRef })
 }
 
-function sumPaidUsage(rows: readonly MetricUsageRow[]): ExactAmount | 'multiple_currencies' | 'unsupported_currency' | null {
-  if (rows.length === 0) return null
-  if (rows.some((row) => row.currency !== 'AUD')) return 'unsupported_currency'
-  const scales = new Set(rows.map((row) => `${row.currency}:${row.exponent}`))
-  if (scales.size !== 1) return 'multiple_currencies'
-  let total = amountFromParts(rows[0]?.currency, '0', rows[0]?.exponent)
+function sumPaidUsage(rows: readonly MetricCallRow[]): ExactAmount | 'multiple_currencies' | 'unsupported_currency' | null {
+  const paid = rows.flatMap((row) => row.paidAmount === null ? [] : [row.paidAmount])
+  if (paid.length === 0) return null
+  if (paid.some((amount) => amount.currency !== 'AUD')) return 'unsupported_currency'
+  if (new Set(paid.map((amount) => `${amount.currency}:${amount.exponent}`)).size !== 1) return 'multiple_currencies'
+  let total = amountFromParts(paid[0]?.currency, '0', paid[0]?.exponent)
   if (total === undefined) throw new Error('marketplace_metrics_money_invalid')
-  for (const row of rows) {
-    const amount = amountFromParts(row.currency, row.units, row.exponent)
-    const next = addExactAmounts(total, amount)
+  for (const row of paid) {
+    const next = addExactAmounts(total, amountFromParts(row.currency, row.units, row.exponent))
     if (next === undefined) throw new Error('marketplace_metrics_money_invalid')
     total = next
   }
@@ -146,18 +116,13 @@ export async function snapshotMarketplaceMetricsDayHandler(
   const window = perthDayWindow(day)
   if (window.kind === 'refused') return window
   const range = { from: window.from, toExclusive: window.toExclusive }
-  const [attemptedCalls, completedCalls, uncertainCalls, settledCalls, calls, quotes, usage, resolutions, uncertainCallsOpenAtClose] = await Promise.all([
-    ctx.runQuery(internal.adminConsoleMetrics.countEvidenceForWindow, { kind: 'ae_invocation', ...range }),
-    ctx.runQuery(internal.adminConsoleMetrics.countEvidenceForWindow, { kind: 'ae_invocation_completed', ...range }),
-    ctx.runQuery(internal.adminConsoleMetrics.countEvidenceForWindow, { kind: 'ae_reconciliation_required', ...range }),
-    ctx.runQuery(internal.adminConsoleMetrics.countEvidenceForWindow, { kind: 'ae_settlement', ...range }),
+  const [callRows, quotes, resolutions] = await Promise.all([
     collectPages(async (paginationOpts) => await ctx.runQuery(internal.adminConsoleMetrics.pageCallsForWindow, { ...range, paginationOpts })),
     collectPages(async (paginationOpts) => await ctx.runQuery(internal.adminConsoleMetrics.pageQuotesForWindow, { ...range, paginationOpts })),
-    collectPages(async (paginationOpts) => await ctx.runQuery(internal.adminConsoleMetrics.pageUsageForWindow, { ...range, paginationOpts })),
     collectPages(async (paginationOpts) => await ctx.runQuery(internal.adminConsoleMetrics.pageResolutionsForWindow, { ...range, paginationOpts })),
-    ctx.runQuery(internal.adminConsoleMetrics.countOpenUncertainCalls, {}),
   ])
-  const settledCallValue = sumPaidUsage(usage)
+  const calls = [...new Map(callRows.map((call) => [call.callRef, call])).values()]
+  const settledCallValue = sumPaidUsage(calls)
   if (settledCallValue === 'multiple_currencies' || settledCallValue === 'unsupported_currency') {
     return { kind: 'refused', code: settledCallValue }
   }
@@ -174,12 +139,13 @@ export async function snapshotMarketplaceMetricsDayHandler(
   const entityRows = [...entities.values()]
   const counts: MarketplaceMetricCounts = {
     settledCallValue,
-    money: settledCallValue === null ? 'not_configured' : 'settled_only',
-    settledCalls,
-    attemptedCalls,
-    completedCalls,
-    uncertainCalls,
-    uncertainCallsOpenAtClose,
+    money: settledCallValue === null ? 'no_settled_usage' : 'settled_only',
+    settledCalls: calls.filter((call) => call.paidAmount !== null).length,
+    attemptedCalls: calls.length,
+    completedCalls: calls.filter((call) => call.state === 'completed').length,
+    uncertainCalls: calls.filter((call) => call.state === 'outcome_unknown').length,
+    // This is open at snapshot, not historical open-at-day-close.
+    uncertainCallsOpenAtClose: calls.filter((call) => call.openAtSnapshot).length,
     quotesCreated: quotes.length,
     quotesConvertedAtClose: quotes.filter((quote) => quote.consumed).length,
     transactingWorkspaces: entityRows.filter((entity) => entity.entityKind === 'workspace').length,
@@ -189,14 +155,19 @@ export async function snapshotMarketplaceMetricsDayHandler(
     terminalCalls: terminalCallRefs.size,
     terminalCallsWithResolution: new Set(resolutions.filter((row) => terminalCallRefs.has(row.callRef)).map((row) => row.callRef)).size,
   }
+  const pendingClear = await ctx.runMutation(internal.adminConsoleMetrics.writeMarketplaceMetricsDay, {
+    day, entities: [], counts, replace: true, complete: false,
+  })
+  let remaining = pendingClear
+  while (remaining) {
+    remaining = await ctx.runMutation(internal.adminConsoleMetrics.writeMarketplaceMetricsDay, {
+      day, entities: [], replace: true, complete: false,
+    })
+  }
   const batches = entityRows.length === 0 ? [[]] : Array.from({ length: Math.ceil(entityRows.length / 500) }, (_, index) => entityRows.slice(index * 500, (index + 1) * 500))
   for (const [index, batch] of batches.entries()) {
-    const final = index === batches.length - 1
     await ctx.runMutation(internal.adminConsoleMetrics.writeMarketplaceMetricsDay, {
-      day,
-      entities: batch,
-      replace: index === 0,
-      ...(final ? { counts } : {}),
+      day, entities: batch, replace: false, complete: index === batches.length - 1,
     })
   }
   return { kind: 'written', day }

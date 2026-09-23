@@ -32,6 +32,9 @@ export function AdminMetricsPage({ range, onRangeChange }: AdminMetricsPageProps
         />
       ) : (
         <div className="grid gap-section">
+          {data.partialDays.map((day) => (
+            <p key={day} role="status" className="text-sm text-muted-foreground">{ADMIN_METRICS_COPY.snapshotIncomplete(day)}</p>
+          ))}
           <MetricsHeadline cards={data.cards} />
           <MetricsRatios ratios={data.ratios} />
           <MetricsDayTable rows={data.days} />

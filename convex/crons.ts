@@ -37,7 +37,7 @@ if (scheduledWorkloadsEnabled !== undefined
 if (scheduledWorkloadsEnabled !== 'false') {
   for (const workload of SCHEDULED_WORKLOADS) {
     if ('daily' in workload && workload.daily !== undefined) {
-      crons.daily(workload.name, workload.daily, HANDLERS[workload.name], {})
+      crons.cron(workload.name, `${workload.daily.minuteUTC} ${workload.daily.hourUTC} * * *`, HANDLERS[workload.name], {})
       continue
     }
     if (!('interval' in workload) || workload.interval === undefined) continue

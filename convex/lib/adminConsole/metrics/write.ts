@@ -23,7 +23,7 @@ const exactAmountOrNullValue = v.union(v.null(), v.object({
 
 export const marketplaceMetricCountsValue = v.object({
   settledCallValue: exactAmountOrNullValue,
-  money: v.union(v.literal('settled_only'), v.literal('not_configured')),
+  money: v.union(v.literal('settled_only'), v.literal('no_settled_usage')),
   settledCalls: v.number(),
   attemptedCalls: v.number(),
   completedCalls: v.number(),
@@ -43,18 +43,19 @@ export type MarketplaceEntity = Infer<typeof marketplaceEntityValue>
 export type MarketplaceMetricCounts = Infer<typeof marketplaceMetricCountsValue>
 
 const ENTITY_KINDS: readonly MarketplaceEntity['entityKind'][] = ['workspace', 'agent', 'provider', 'tool']
-const ENTITY_DAY_LIMIT = 1_000
+const BATCH_SIZE = 500
 
-async function rowsForDay(
-  ctx: MutationCtx,
-  day: string,
-  entityKind: MarketplaceEntity['entityKind'],
-) {
-  const rows = await ctx.db.query('marketplaceEntityDays')
-    .withIndex('by_day_and_entityKind', (query) => query.eq('day', day).eq('entityKind', entityKind))
-    .take(ENTITY_DAY_LIMIT + 1)
-  if (rows.length > ENTITY_DAY_LIMIT) throw new Error('marketplace_entity_day_limit_exceeded')
-  return rows
+async function clearEntityBatch(ctx: MutationCtx, day: string): Promise<boolean> {
+  let deleted = 0
+  for (const kind of ENTITY_KINDS) {
+    const rows = await ctx.db.query('marketplaceEntityDays')
+      .withIndex('by_day_and_entityKind', (query) => query.eq('day', day).eq('entityKind', kind))
+      .take(BATCH_SIZE - deleted)
+    for (const row of rows) await ctx.db.delete(row._id)
+    deleted += rows.length
+    if (deleted === BATCH_SIZE) return true
+  }
+  return false
 }
 
 async function hadPriorActivity(
@@ -78,44 +79,46 @@ export async function writeMarketplaceMetricsDayHandler(
     entities: readonly MarketplaceEntity[]
     counts?: MarketplaceMetricCounts
     replace: boolean
+    complete: boolean
   }>,
-): Promise<null> {
+): Promise<boolean> {
   if (args.replace) {
-    const existingByKind = await Promise.all(ENTITY_KINDS.map(async (kind) => await rowsForDay(ctx, args.day, kind)))
-    for (const rows of existingByKind) {
-      for (const row of rows) await ctx.db.delete(row._id)
+    if (args.counts !== undefined) {
+      const metric: MarketplaceMetricDay = {
+        day: args.day,
+        computedAt: Date.now(),
+        version: 1,
+        complete: false,
+        ...args.counts,
+        returningWorkspaces: 0,
+        newTransactingWorkspaces: 0,
+        newTransactingProviders: 0,
+      }
+      const existing = await ctx.db.query('marketplaceMetricDays')
+        .withIndex('by_day', (query) => query.eq('day', args.day)).unique()
+      if (existing === null) await ctx.db.insert('marketplaceMetricDays', metric)
+      else await ctx.db.replace(existing._id, metric)
     }
+    return await clearEntityBatch(ctx, args.day)
   }
+  const metric = await ctx.db.query('marketplaceMetricDays')
+    .withIndex('by_day', (query) => query.eq('day', args.day)).unique()
+  if (metric === null || metric.complete) throw new Error('marketplace_metrics_snapshot_not_in_progress')
+  const returning = await Promise.all(args.entities.map(async (entity) =>
+    entity.entityKind === 'workspace' || entity.entityKind === 'provider'
+      ? await hadPriorActivity(ctx, args.day, entity.entityKind, entity.entityRef)
+      : false))
   for (const entity of args.entities) {
     await ctx.db.insert('marketplaceEntityDays', { day: args.day, ...entity })
   }
-  if (args.counts === undefined) return null
-
-  const [workspaces, providers] = await Promise.all([
-    rowsForDay(ctx, args.day, 'workspace'),
-    rowsForDay(ctx, args.day, 'provider'),
-  ])
-  const workspacePrior = await Promise.all(workspaces.map(async (row) => (
-    await hadPriorActivity(ctx, args.day, 'workspace', row.entityRef)
-  )))
-  const providerPrior = await Promise.all(providers.map(async (row) => (
-    await hadPriorActivity(ctx, args.day, 'provider', row.entityRef)
-  )))
-  const returningWorkspaces = workspacePrior.filter(Boolean).length
-  const newTransactingProviders = providerPrior.filter((prior) => !prior).length
-  const existing = await ctx.db.query('marketplaceMetricDays')
-    .withIndex('by_day', (query) => query.eq('day', args.day))
-    .unique()
-  const metric: MarketplaceMetricDay = {
-    day: args.day,
-    computedAt: Date.now(),
-    version: 1,
-    ...args.counts,
-    returningWorkspaces,
-    newTransactingWorkspaces: workspaces.length - returningWorkspaces,
-    newTransactingProviders,
-  }
-  if (existing === null) await ctx.db.insert('marketplaceMetricDays', metric)
-  else await ctx.db.replace(existing._id, metric)
-  return null
+  const returningWorkspaces = args.entities.filter((entity, index) => entity.entityKind === 'workspace' && returning[index]).length
+  await ctx.db.patch(metric._id, {
+    complete: args.complete,
+    returningWorkspaces: metric.returningWorkspaces + returningWorkspaces,
+    newTransactingWorkspaces: metric.newTransactingWorkspaces
+      + args.entities.filter((entity) => entity.entityKind === 'workspace').length - returningWorkspaces,
+    newTransactingProviders: metric.newTransactingProviders
+      + args.entities.filter((entity, index) => entity.entityKind === 'provider' && !returning[index]).length,
+  })
+  return false
 }

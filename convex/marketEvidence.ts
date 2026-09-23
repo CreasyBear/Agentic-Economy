@@ -61,17 +61,3 @@ export async function countMarketEvidence(
   })) ?? 0
 }
 
-export async function countMarketEvidenceBetween(
-  ctx: QueryCtx,
-  kind: MarketEvidenceKind,
-  from: number,
-  toExclusive: number,
-): Promise<number> {
-  return (await marketEvidence.count(ctx, {
-    namespace: kind,
-    bounds: {
-      lower: { key: from, inclusive: true },
-      upper: { key: toExclusive, inclusive: false },
-    },
-  })) ?? 0
-}

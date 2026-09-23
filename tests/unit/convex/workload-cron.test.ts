@@ -119,9 +119,8 @@ describe('System workload cron boundary', () => {
     )).toEqual(periodicBindings)
     expect(Object.values(convexCrons.crons).every((job) => JSON.stringify(job.args) === '[{}]')).toBe(true)
     expect(convexCrons.crons['snapshot marketplace metrics day']?.schedule).toEqual({
-      type: 'daily',
-      hourUTC: 16,
-      minuteUTC: 10,
+      type: 'cron',
+      cron: '10 16 * * *',
     })
   })
 

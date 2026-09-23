@@ -78,6 +78,8 @@ export const observabilityTables = {
     day: v.string(),
     computedAt: v.number(),
     version: v.literal(1),
+    // Legacy snapshots lack this field; every new snapshot writes it.
+    complete: v.optional(v.boolean()),
     settledCallValue: v.union(
       v.null(),
       v.object({
@@ -86,7 +88,8 @@ export const observabilityTables = {
         currency: v.string(),
       }),
     ),
-    money: v.union(v.literal('settled_only'), v.literal('not_configured')),
+    // Legacy rows say not_configured; new snapshots never emit it.
+    money: v.union(v.literal('settled_only'), v.literal('no_settled_usage'), v.literal('not_configured')),
     settledCalls: v.number(),
     attemptedCalls: v.number(),
     completedCalls: v.number(),

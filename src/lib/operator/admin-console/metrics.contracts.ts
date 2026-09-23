@@ -10,8 +10,9 @@ export type MarketplaceMetricDay = Readonly<{
   day: string
   computedAt: number
   version: 1
+  complete: boolean
   settledCallValue: ExactAmount | null
-  money: 'settled_only' | 'not_configured'
+  money: 'settled_only' | 'no_settled_usage'
   settledCalls: number
   attemptedCalls: number
   completedCalls: number
@@ -32,10 +33,11 @@ export type MarketplaceMetricDay = Readonly<{
 
 export type MarketplaceMetricsReport = Readonly<{
   days: MarketplaceMetricDay[]
+  partialDays: string[]
   latestDay: string | null
   headline: Readonly<{
     settledCallValue: ExactAmount | null
-    money: 'settled_only' | 'not_configured'
+    money: 'settled_only' | 'no_settled_usage'
     settledCalls: number
     successRate: number | null
     transactingWorkspaces: number
@@ -45,7 +47,6 @@ export type MarketplaceMetricsReport = Readonly<{
     quoteConversion: number | null
     returningWorkspaceRate: number | null
     resolutionCoverage: number | null
-    takeRate: null
   }>
   wow: Readonly<Record<
     'settledCalls' | 'attemptedCalls' | 'completedCalls' | 'transactingWorkspaces' | 'quotesCreated',

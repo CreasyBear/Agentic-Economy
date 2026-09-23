@@ -2,25 +2,28 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => ({
   createTransport: vi.fn(),
+  reportInvariant: vi.fn(),
 }))
 
 vi.mock('@/lib/server/convex-source', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/server/convex-source')>()),
   createAuthenticatedSourceTransport: mocks.createTransport,
 }))
+vi.mock('@/lib/observability/admin-event-props', () => ({
+  reportAdminInvariant: mocks.reportInvariant,
+}))
 
-import {
-  ADMIN_METRICS_CSV_HEADER,
-  handleAdminMetricsExportRequest,
-} from '@/routes/api.admin.metrics-export'
+import { ADMIN_METRICS_CSV_HEADER } from '@/lib/operator/admin-console/metrics-csv'
+import { handleAdminMetricsExportRequest } from '@/routes/api.admin.metrics-export'
 
 const EMPTY_REPORT = {
   days: [{
     day: '2026-09-21',
     computedAt: 1,
+    complete: true,
     version: 1 as const,
     settledCallValue: null,
-    money: 'not_configured' as const,
+    money: 'no_settled_usage' as const,
     settledCalls: 0,
     attemptedCalls: 0,
     completedCalls: 0,
@@ -38,10 +41,11 @@ const EMPTY_REPORT = {
     terminalCalls: 0,
     terminalCallsWithResolution: 0,
   }],
+  partialDays: [],
   latestDay: '2026-09-21',
   headline: {
     settledCallValue: null,
-    money: 'not_configured' as const,
+    money: 'no_settled_usage' as const,
     settledCalls: 0,
     successRate: null,
     transactingWorkspaces: 0,
@@ -51,7 +55,6 @@ const EMPTY_REPORT = {
     quoteConversion: null,
     returningWorkspaceRate: null,
     resolutionCoverage: null,
-    takeRate: null,
   },
   wow: {
     settledCalls: null,
@@ -90,7 +93,7 @@ describe('admin metrics CSV export', () => {
     expect(response.status).toBe(200)
     expect(response.headers.get('content-type')).toBe('text/csv; charset=utf-8')
     expect(header).toBe(ADMIN_METRICS_CSV_HEADER)
-    expect(row?.split(',')[1]).toBe('Not configured')
+    expect(row?.split(',').slice(1, 4)).toEqual(['', '', ''])
   })
 
   it('rejects an invalid range', async () => {
@@ -101,5 +104,15 @@ describe('admin metrics CSV export', () => {
     expect(response.status).toBe(400)
     expect(response.headers.get('content-type')).toBe('application/problem+json')
     expect(mocks.createTransport).not.toHaveBeenCalled()
+  })
+
+  it('reports unexpected source failure before returning a 503 problem', async () => {
+    const failure = new Error('broken source')
+    mocks.createTransport.mockRejectedValue(failure)
+    const response = await handleAdminMetricsExportRequest(
+      new Request('http://ae.test/api/admin/metrics-export?range=last_7'),
+    )
+    expect(response.status).toBe(503)
+    expect(mocks.reportInvariant).toHaveBeenCalledWith(failure)
   })
 })

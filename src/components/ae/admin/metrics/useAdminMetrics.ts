@@ -57,9 +57,9 @@ export function useAdminMetrics(range: MarketplaceMetricsRange): AdminMetricsDat
       { label: ADMIN_METRICS_COPY.quoteConversion, value: ratioLabel(report.ratios.quoteConversion) },
       { label: ADMIN_METRICS_COPY.returningWorkspaceRate, value: ratioLabel(report.ratios.returningWorkspaceRate) },
       { label: ADMIN_METRICS_COPY.resolutionCoverage, value: ratioLabel(report.ratios.resolutionCoverage) },
-      { label: ADMIN_METRICS_COPY.takeRate, value: ADMIN_METRICS_COPY.notConfigured },
     ],
     days: report.days.map(toDayRow),
+    partialDays: report.partialDays,
   }
 }
 
@@ -67,8 +67,8 @@ function moneyLabel(
   money: MarketplaceMetricsReport['headline']['money'],
   amount: MarketplaceMetricsReport['headline']['settledCallValue'],
 ): string {
-  return money === 'not_configured' || amount === null
-    ? ADMIN_METRICS_COPY.notConfigured
+  return money === 'no_settled_usage' || amount === null
+    ? ADMIN_METRICS_COPY.noSettledUsage
     : formatCurrencyAmount(amount)
 }
 
@@ -84,7 +84,7 @@ function toDayRow(day: MarketplaceMetricDay): AdminMetricDayRow {
   return {
     day: day.day,
     settledCallValue: moneyLabel(day.money, day.settledCallValue),
-    money: day.money === 'settled_only' ? ADMIN_METRICS_COPY.settledOnly : ADMIN_METRICS_COPY.notConfigured,
+    money: day.money === 'settled_only' ? ADMIN_METRICS_COPY.settledOnly : ADMIN_METRICS_COPY.noSettledUsage,
     settledCalls: numberFormatter.format(day.settledCalls),
     attemptedCalls: numberFormatter.format(day.attemptedCalls),
     completedCalls: numberFormatter.format(day.completedCalls),
