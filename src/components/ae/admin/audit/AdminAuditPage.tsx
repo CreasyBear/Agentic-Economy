@@ -3,6 +3,7 @@ import { AeOperatorPage } from '@/components/ae/layout/AeOperatorPage'
 import { AePageState } from '@/components/ae/layout/AePageState'
 import { AeSection } from '@/components/ae/layout/AeSection'
 import { AdminAuditPageSkeleton } from './AdminAuditPageSkeleton'
+import { AdminMembershipActions } from './AdminMembershipActions'
 import {
   AUDIT_COPY,
   type AdminAuditPageProps,
@@ -55,6 +56,7 @@ export function AdminAuditPage(props: AdminAuditPageProps) {
         />
       </AeSection>
       <PendingApprovalsPanel rows={audit.data.proposals} />
+      <AdminMembershipActions />
       <AuditEventsTable
         rows={audit.data.events}
         filtered={audit.filtered}

@@ -15,7 +15,7 @@ const mocks = vi.hoisted((): {
   onSearchChange: Mock
 } => ({
   requireOperatorBeforeLoad: vi.fn(),
-  auditAccess: { kind: 'allowed' },
+  auditAccess: { kind: 'allowed', role: 'owner_admin' },
   proposals: [],
   events: [],
   paginationStatus: 'Exhausted',
@@ -60,7 +60,7 @@ import { OperatorSurfaceForbiddenError } from '@/lib/operator/operator-context'
 import { operatorLayoutRouteOptions } from '@/lib/operator/route-options'
 
 beforeEach(() => {
-  mocks.auditAccess = { kind: 'allowed' }
+  mocks.auditAccess = { kind: 'allowed', role: 'owner_admin' }
   mocks.proposals = []
   mocks.events = []
   mocks.paginationStatus = 'Exhausted'
