@@ -109,18 +109,18 @@ function reviewOutcomePresentation(result: SourceAuthorityReviewResult): Readonl
     }
   }
   if (result.kind === 'refused') {
-    if (result.reason === 'authorization_denied') {
+    if (result.code === 'missing_membership' || result.code === 'action_not_allowed') {
       return {
         success: false,
         title: 'No source authority changed',
         description: 'Ask an active AE reviewer to open this link and complete the review.',
       }
     }
-    if (result.reason === 'evidence_invalid') {
+    if (result.code === 'mfa_reverification_required') {
       return {
         success: false,
-        title: 'No source authority changed',
-        description: 'Enter one current evidence reference for the independent source-control check.',
+        title: 'Reverification required',
+        description: 'Verify your identity again before confirming source authority.',
       }
     }
     return {
@@ -130,8 +130,10 @@ function reviewOutcomePresentation(result: SourceAuthorityReviewResult): Readonl
     }
   }
   return {
-    success: true,
-    title: 'Source authority confirmed',
-    description: 'The exact publication is verified. Return to the release task and rerun the same Package 5 release task; it will resume from authoritative state.',
+    success: result.kind === 'completed',
+    title: result.kind === 'completed' ? 'Source authority confirmed' : 'Review pending',
+    description: result.kind === 'completed'
+      ? 'The exact publication is verified. Return to the release task and rerun the same Package 5 release task; it will resume from authoritative state.'
+      : 'This review needs another administrator.',
   }
 }

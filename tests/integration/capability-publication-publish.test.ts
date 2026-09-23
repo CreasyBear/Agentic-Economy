@@ -1,6 +1,9 @@
 import { convexTest } from 'convex-test'
 import { describe, expect, it } from 'vitest'
 import { validatePaymentRequired } from '@x402/core/schemas'
+import { makeFunctionReference } from 'convex/server'
+import { canonicalDigest } from '@/modules/common/canonical-digest'
+import type { AdminCommandArgs, AdminCommandReceipt } from '@/lib/operator/admin-console/contracts'
 
 import { api } from '../../convex/_generated/api'
 import schema from '../../convex/schema'
@@ -10,6 +13,7 @@ import {
   convexModules as modules,
   ownerAdmin,
   publishedBusinessOwner,
+  testConsequenceProof,
 } from '../helpers/convex-fixtures'
 import { withSourceWrite } from '../helpers/source-write-admission'
 import {
@@ -21,6 +25,11 @@ import {
   registerProviderConnection,
   seedCatalogOffering,
 } from './capability-publication-harness'
+const verifySourceAuthority = makeFunctionReference<
+  'mutation',
+  Record<string, unknown>,
+  AdminCommandReceipt<'verify_capability_source_authority'>
+>('capabilitySupply:verifyCapabilitySourceAuthority')
 
 describe('capability publication publish', () => {
   it('keeps public source authority under review until an exact admin decision', async () => {
@@ -45,35 +54,35 @@ describe('capability publication publish', () => {
         .eq('revision', published.publicationRevision))
       .unique())
     if (publicationBefore === null) throw new Error('authority_review_publication_missing')
-    const authorityReviewInput = {
+    const input = {
       publicationRef: published.publicationRef,
       expectedRevision: published.publicationRevision,
       expectedSourceDigest: publicationBefore.sourceDigest,
-      evidenceRefs: ['review:source-control:verified'],
-      correlationId: 'authority-review:verify',
     }
-    const deniedCommand = await withSourceWrite('admin_operator', {
-      ...authorityReviewInput,
-      operationKey: 'authority-review:unauthorized',
+    const reasonCode = 'evidence_verified'
+    const action = 'verify_capability_source_authority'
+    const evidenceRefs = ['review:source-control:verified']
+    const digest = canonicalDigest({ scope: 'admin_operator', action, input, reasonCode, evidenceRefs })
+    const command = (subject: string, operationKey: string): AdminCommandArgs<'verify_capability_source_authority'> => ({
+      action, input, reasonCode, evidenceRefs,
+      operationKey, correlationId: operationKey,
+      approval: { kind: 'execute' },
+      proof: testConsequenceProof({ subject }, digest),
     })
+    await expect(owner.mutation(verifySourceAuthority, await withSourceWrite(
+      'admin_operator', command('user_authority_review', 'authority-review:unauthorized'),
+    ))).resolves.toMatchObject({ kind: 'refused' })
 
-    await expect(owner.mutation(api.capabilitySupply.verifyCapabilitySourceAuthority, deniedCommand))
-      .resolves.toEqual({ kind: 'refused', reason: 'authorization_denied' })
-
-    const admin = await ownerAdmin(backend, 'user_authority_review_admin')
-    const adminCommand = await withSourceWrite('admin_operator', {
-      ...authorityReviewInput,
-      operationKey: 'authority-review:verify',
-    })
-    const verified = await admin.mutation(api.capabilitySupply.verifyCapabilitySourceAuthority, adminCommand)
-    if (verified.kind === 'refused') throw new Error(`authority_review_verify_failed:${verified.reason}`)
+    const adminSubject = 'user_authority_review_admin'
+    const admin = await ownerAdmin(backend, adminSubject)
+    const verified = await admin.mutation(verifySourceAuthority, await withSourceWrite(
+      'admin_operator', command(adminSubject, 'authority-review:verify'),
+    ))
+    if (verified.kind === 'refused') throw new Error(`authority_review_verify_failed:${verified.code}`)
     expect(verified).toMatchObject({
-        kind: 'verified',
-        publicationRef: published.publicationRef,
-        revision: published.publicationRevision,
-        toolRef: published.toolRef,
-        sourceAuthorityState: 'verified',
-      })
+      kind: 'completed', code: 'source_authority_verified',
+      effectRefs: expect.arrayContaining([published.publicationRef, published.toolRef]),
+    })
     const persisted = await backend.run(async (ctx) => ({
       publication: await ctx.db.query('capabilityPublications')
         .withIndex('by_publicationRef_and_revision', (query) => query

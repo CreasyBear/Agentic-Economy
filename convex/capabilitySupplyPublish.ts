@@ -1,6 +1,4 @@
 export {
-  verifyCapabilitySourceAuthorityArgs,
-  verifyCapabilitySourceAuthorityResultValue,
   capabilityPublicationOfferingValue,
   capabilityPublicationBindingValue,
   preparedPublicationMaterialValue,
@@ -9,7 +7,6 @@ export {
   publishPreparedCapabilityArgs,
   readCapabilityPublicationArgs,
 } from './lib/capabilitySupply/publicationValues'
-export { verifyCapabilitySourceAuthorityHandler } from './lib/capabilitySupply/sourceAuthority'
 export {
   publicationPorts,
   publishPreparedCapabilityHandler,

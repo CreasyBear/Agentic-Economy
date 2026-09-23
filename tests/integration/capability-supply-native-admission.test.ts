@@ -1,12 +1,19 @@
 import { describe, expect, it, vi } from 'vitest'
 import { api, internal } from '../../convex/_generated/api'
+import { makeFunctionReference } from 'convex/server'
+import type { AdminCommandArgs, AdminCommandReceipt } from '@/lib/operator/admin-console/contracts'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { prepareSupplyPublicationV2 } from '@/modules/capability-supply/supply-publication-v2'
 import { previewSupplySource } from '@/modules/capability-supply/source-preview'
 import { assessSupplySource } from '@/modules/capability-supply/source-assessment'
-import { convexTestWithMarketComponents, ownerAdmin } from '../helpers/convex-fixtures'
+import { convexTestWithMarketComponents, ownerAdmin, testConsequenceProof } from '../helpers/convex-fixtures'
 import { withSourceWrite, withoutSourceWrite } from '../helpers/source-write-admission'
 import { createPublishedBusinessOwner } from './capability-supply-owner-funnel-harness'
+const verifySourceAuthority = makeFunctionReference<
+  'mutation',
+  Record<string, unknown>,
+  AdminCommandReceipt<'verify_capability_source_authority'>
+>('capabilitySupply:verifyCapabilitySourceAuthority')
 
 describe('first native Tool admission', () => {
   it.each(['accepted', 'rejected'] as const)('keeps publication and discovery consistent when the Provider suggestion is %s', async (reviewDecision) => {
@@ -132,16 +139,27 @@ describe('first native Tool admission', () => {
     }
     expect(await recordProbe(true)).toMatchObject({ kind: 'observed', lifecycle: { state: 'inactive' } })
     expect(await status()).toEqual({ business: 'unpublished', offering: 'draft', path: 'draft' })
-    const review = await withSourceWrite('admin_operator', {
+    const input = {
       publicationRef: publication.publicationRef, expectedRevision: publication.publicationRevision,
-      expectedSourceDigest: publication.sourceDigest, evidenceRefs: ['test:verified-provider-control'],
+      expectedSourceDigest: publication.sourceDigest,
+    }
+    const evidenceRefs = ['test:verified-provider-control']
+    const action = 'verify_capability_source_authority'
+    const reasonCode = 'evidence_verified'
+    const digest = canonicalDigest({ scope: 'admin_operator', action, input, reasonCode, evidenceRefs })
+    const sourceReviewCommand = (subject: string): AdminCommandArgs<'verify_capability_source_authority'> => ({
+      action, input, reasonCode, evidenceRefs,
       operationKey: 'native:review', correlationId: 'native:review',
+      approval: { kind: 'execute' }, proof: testConsequenceProof({ subject }, digest),
     })
-    await expect(owner.mutation(api.capabilitySupply.verifyCapabilitySourceAuthority, review))
-      .resolves.toMatchObject({ kind: 'refused', reason: 'authorization_denied' })
-    const admin = await ownerAdmin(backend, 'user_native_admin')
-    await expect(admin.mutation(api.capabilitySupply.verifyCapabilitySourceAuthority,
-      await withSourceWrite('admin_operator', withoutSourceWrite(review)))).resolves.toMatchObject({ kind: 'verified' })
+    await expect(owner.mutation(verifySourceAuthority,
+      await withSourceWrite('admin_operator', sourceReviewCommand('user_native_owner'))))
+      .resolves.toMatchObject({ kind: 'refused' })
+    const adminSubject = 'user_native_admin'
+    const admin = await ownerAdmin(backend, adminSubject)
+    await expect(admin.mutation(verifySourceAuthority,
+      await withSourceWrite('admin_operator', sourceReviewCommand(adminSubject))))
+      .resolves.toMatchObject({ kind: 'completed', code: 'source_authority_verified' })
     expect(await recordProbe(false)).toMatchObject({ kind: 'observed', lifecycle: { state: 'inactive' } })
     expect(await status()).toEqual({ business: 'unpublished', offering: 'draft', path: 'draft' })
     expect(await recordProbe(true, async () => {

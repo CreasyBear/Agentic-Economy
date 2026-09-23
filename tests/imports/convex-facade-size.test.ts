@@ -51,7 +51,6 @@ const FACADE_SIZE_EXCEPTIONS: Record<string, number> = {
   'convex/moneyAccountFunding.ts': 223,
   'convex/moneyAutoRecharge.ts': 346,
   'convex/moneyBillingAuthorization.ts': 606,
-  'convex/moneyCommercialPolicy.ts': 465,
   'convex/moneyConnect.ts': 936,
   'convex/moneyCustomerTaxFacts.ts': 367,
   'convex/moneyDocuments.ts': 849,
