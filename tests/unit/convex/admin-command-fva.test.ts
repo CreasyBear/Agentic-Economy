@@ -108,7 +108,6 @@ describe('admin command fresh-verification and authority gates', () => {
     const args = await withSourceWrite('admin_operator', unsigned)
 
     const receipt = await admin.run(async (ctx) => {
-      // @ts-expect-error Exercises defense in depth below the required wire validator.
       return await runAdminCommand(ctx, args, spec(ctx, 'missing-proof'))
     })
 
