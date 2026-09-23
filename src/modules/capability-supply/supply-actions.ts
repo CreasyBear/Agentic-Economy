@@ -319,7 +319,7 @@ export const supplyPublishAction = defineAction<SupplyPublishInput, SupplyPublis
   readOnly: false,
   effect: { class: 'external_state_change', reversible: true, recipientKind: 'business', dataClasses: ['operation_input'], spendExposure: 'none', approval: 'policy_eligible' },
   surfaces: supplySurfaces,
-  mcp: { idempotent: true, openWorld: true, destructive: false },
+  mcp: { idempotent: true, openWorld: true, destructive: true },
   credentialAdmission: supplyCredentialAdmission,
   invocationContract: { version: SUPPLY_ACTION_ROUTE_CONTRACTS.publish.contractVersion, consequenceClass: 'external_effect', materialInputPaths: ['businessRef', 'source', 'candidateRef', 'expectedSourceDigest', 'connectionRef', 'presentation', 'consequences', 'pricing', 'validationInput', 'environment', 'idempotencyKey', 'attestation'], authorityRequirement: 'principal', retryClass: 'replayable', expectedEvidence: ['source_publication', 'publication_identity'], safeContinuations: ['supply.status'], invalidationConditions: ['source_changed', 'candidate_changed', 'connection_changed', 'idempotency_key_changed'] },
   run: async ({ data, context }) => {
@@ -382,7 +382,7 @@ export const supplyRepublishAction = defineAction<SupplyRepublishInput, SupplyRe
   readOnly: false,
   effect: { class: 'external_state_change', reversible: true, recipientKind: 'business', dataClasses: ['operation_input'], spendExposure: 'none', approval: 'policy_eligible' },
   surfaces: supplySurfaces,
-  mcp: { idempotent: true, openWorld: true, destructive: false },
+  mcp: { idempotent: true, openWorld: true, destructive: true },
   credentialAdmission: supplyCredentialAdmission,
   invocationContract: { version: SUPPLY_ACTION_ROUTE_CONTRACTS.republish.contractVersion, consequenceClass: 'external_effect', materialInputPaths: ['businessId', 'offeringRef', 'offeringRevision', 'offeringSourceHash', 'publicationRef', 'publicationRevision', 'idempotencyKey'], authorityRequirement: 'principal', retryClass: 'replayable', expectedEvidence: ['publication_identity'], safeContinuations: ['supply.status'], invalidationConditions: ['publication_ref_changed', 'publication_revision_changed', 'idempotency_key_changed'] },
   run: async ({ data, context }) => {

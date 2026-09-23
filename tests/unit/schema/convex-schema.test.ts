@@ -117,6 +117,7 @@ const durableTables = [
   'marketplaceEntityDays',
   'disputes',
   'chatThreads',
+  'chatTurns',
   'chatThreadShares',
   'actionExecutionControls',
   'actionExecutionAttempts',
@@ -434,7 +435,7 @@ describe('Convex schema', () => {
   const exported = SchemaExport.parse(JSON.parse(String(exportSchema.call(schema))))
 
   it('contains exactly the source-owned durable tables', () => {
-    expect(durableTables).toHaveLength(107)
+    expect(durableTables).toHaveLength(108)
     expect(exported.tables.map((table) => table.tableName).sort()).toEqual([...durableTables].sort())
   })
 

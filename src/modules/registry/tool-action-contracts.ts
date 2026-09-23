@@ -57,6 +57,7 @@ const searchParameters = [
   parameter(toolCatalogSearchInputSchema, 'source', 'Current AE inventory by default. Coinbase supports intent search up to 20 results; refine partial results. PayAI supports browsing only.'),
   parameter(toolCatalogSearchInputSchema, 'query', 'Capability phrase from 1 to 256 characters.'),
   parameter(toolCatalogSearchInputSchema, 'limit', 'Maximum 20 compact Tools; defaults to 10.'),
+  parameter(toolCatalogSearchInputSchema, 'detail', 'Concise cards by default; full includes provider and capability detail.'),
   parameter(toolCatalogSearchInputSchema, 'cursor', 'Opaque cursor from the previous page.'),
   parameter(toolCatalogSearchInputSchema, 'filters', 'Allowlisted Tool filters; Operational supply and admitted Tools checked when quoting are shown by default.'),
 ] as const
@@ -84,7 +85,7 @@ export const registryToolsSearchContract = {
   name: 'Search Tools', summary: 'Search compact current Tool supply with what you need.',
   boundaries, outputSchema: toolChoiceSearchOutputSchema, parameters: searchParameters, readOnly: true, effect: readOnlyEffect,
   invocationContract: {
-    version: 'registry.tools.search:v3', consequenceClass: 'read_only', materialInputPaths: ['source', 'query', 'limit', 'cursor', 'filters'],
+    version: 'registry.tools.search:v4', consequenceClass: 'read_only', materialInputPaths: ['source', 'query', 'limit', 'cursor', 'filters', 'detail'],
     authorityRequirement: 'none', retryClass: 'replayable', expectedEvidence: ['public_tool_search_result'],
     safeContinuations: ['registry.tools.describe'],
     invalidationConditions: ['action_contract_version_changed', 'query_changed', 'filters_changed', 'cursor_changed'],

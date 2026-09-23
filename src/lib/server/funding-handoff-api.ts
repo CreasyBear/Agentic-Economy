@@ -1,7 +1,6 @@
-import { bearerChallenge } from '@/lib/http/oauth-challenge'
 import { gatewayFailureToProblem } from '@/lib/errors'
 import { degrade } from '@/lib/observability/degrade'
-import { authenticateAgentAccess, resolveAgentAccessPrincipal, type AgentAccessAuthenticationOptions, type AgentAccessPrincipalResolver } from '@/lib/server/agent-access-auth'
+import { authRefusalProblem, authenticateAgentAccess, resolveAgentAccessPrincipal, type AgentAccessAuthenticationOptions, type AgentAccessPrincipalResolver } from '@/lib/server/agent-access-auth'
 import { readBoundedRequestText } from '@/lib/server/bounded-request-body'
 import { resolveCanonicalBaseUrl } from '@/lib/server/canonical-url'
 import { callPublicSourceMutation, callSourceQuery, sourceMutation, sourceQuery } from '@/lib/server/convex-source'
@@ -254,10 +253,7 @@ export async function handleFundingHandoffAction(
       consequenceResource: `surface:http:funding-handoff-${actionName}`,
     })
     if (admitted.kind !== 'authenticated') {
-      const failure = gatewayFailureToProblem({ kind: 'refused', code: admitted.reason, retryable: false })
-      return withRequestCorrelationHeader(problem({ ...failure, status: admitted.status, detail: 'Connect a buyer agent before creating or reading a funding handoff.' }, {
-        Vary: 'Authorization', 'WWW-Authenticate': bearerChallenge(resolveCanonicalBaseUrl(request).baseUrl, MARKET_TOOLS_CALL_SCOPE),
-      }), correlationId)
+      return authRefusalProblem(request, admitted, MARKET_TOOLS_CALL_SCOPE, undefined, correlationId)
     }
     let raw: unknown = {}
     if (actionName !== 'config') {

@@ -310,7 +310,7 @@ export const reserveArgs = {
   quoteRef: v.string(), callRef: v.string(), principalId: v.string(), ownerId: v.string(), credentialId: v.string(),
   applicationRef: v.string(), grantRef: v.string(), environment, toolRef: v.string(), idempotencyKey: v.string(),
   inputDigest: v.string(), requestDigest: v.string(), grantGeneration: v.number(), policyDigest: v.string(), grantExpiresAt: v.number(),
-  toolJson: v.optional(v.string()), inputJson: v.optional(v.string()), now: v.number(),
+  toolJson: v.optional(v.string()), inputJson: v.optional(v.string()), now: v.number(), turnRef: v.optional(v.string()),
   sellerOnboardingCanary: v.optional(sellerOnboardingCanaryExecutionEnvelopeValue),
   organizationMonthlySpend: v.optional(v.object({
     enabled: v.boolean(),
@@ -358,6 +358,7 @@ export const abandonArgs = {
   quoteRef: v.string(), callRef: v.string(), principalId: v.string(), ownerId: v.string(), credentialId: v.string(),
   applicationRef: v.string(), grantRef: v.string(), environment, toolRef: v.string(), idempotencyKey: v.string(),
   inputDigest: v.string(), requestDigest: v.string(), grantGeneration: v.number(), policyDigest: v.string(), grantExpiresAt: v.number(),
+  turnRef: v.optional(v.string()),
 } as const
 export const abandonResult = v.union(
   v.object({ kind: v.literal('abandoned') }),

@@ -87,22 +87,28 @@ describe('command console navigation groups', () => {
       vi.fn(async () =>
         new Response(
           JSON.stringify({
-            kind: 'ok',
+            kind: 'matched',
             schemaVersion: 'registry-tools:v3',
             query: 'custom-api-tool',
-            items: [
-              {
-                toolRef: `operation:v1:${'d'.repeat(64)}`,
+            partialResults: false,
+            results: [{
+              toolRef: `operation:v1:${'d'.repeat(64)}`,
+              title: 'Custom API Tool',
+              summary: 'A bespoke API integration.',
+              matchReason: 'Capability text overlap.',
+              readiness: 'ready',
+              entitlement: 'requires_auth',
+              price: { kind: 'indicative', label: 'Price confirmed at inspection' },
+              details: {
                 capabilityId: 'custom.api.tool',
-                title: 'Custom API Tool',
-                description: 'A bespoke API integration.',
                 provider: { name: 'Acme', slug: 'acme' },
-                priceLabel: 'Price confirmed at inspection',
-                healthStatus: 'operational',
+                description: 'A bespoke API integration.',
                 listingTier: 'reviewed',
               },
-            ],
-            count: 1,
+              next: [{ action: 'describe', args: { toolRef: `operation:v1:${'d'.repeat(64)}` }, authority: 'public' }],
+            }],
+            recommendation: { mode: 'fast', engine: 'jev_system_one', text: 'Inspect Custom API Tool before use.', citations: [] },
+            next: [],
             pagination: { limit: 12, hasMore: false },
           }),
           { status: 200, headers: { 'content-type': 'application/json' } },

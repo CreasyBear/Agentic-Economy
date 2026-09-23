@@ -28,6 +28,7 @@ import {
 } from './provenance'
 import { sourceRouteRef } from '../source-route-identity'
 import type { CapabilityPublicationImportRefusal } from '../publication-importers'
+import type { CapabilityPublicationQualityNext } from './input-quality'
 import {
   admitPublicationDraft,
   type AdmittedPublicationDraft,
@@ -97,7 +98,7 @@ export type PublishPreparedCapabilityCommandResult =
       provenanceDigest: string
       lifecycle: PublicationLifecycle
     }>
-  | Readonly<{ kind: 'refused'; reason: PublishPreparedCapabilityRefusal }>
+  | Readonly<{ kind: 'refused'; reason: PublishPreparedCapabilityRefusal; next?: readonly CapabilityPublicationQualityNext[] }>
 
 export type RepublishPreparedCapabilityCommandInput = RegistrationContext & Readonly<{
   businessId: string
@@ -111,7 +112,7 @@ export type RepublishPreparedCapabilityCommandInput = RegistrationContext & Read
 export type RepublishPreparedCapabilityRefusal = PublishPreparedCapabilityRefusal | 'revision_changed'
 export type RepublishPreparedCapabilityCommandResult =
   | Exclude<PublishPreparedCapabilityCommandResult, { kind: 'refused'; reason: PublishPreparedCapabilityRefusal }>
-  | Readonly<{ kind: 'refused'; reason: RepublishPreparedCapabilityRefusal }>
+  | Readonly<{ kind: 'refused'; reason: RepublishPreparedCapabilityRefusal; next?: readonly CapabilityPublicationQualityNext[] }>
 
 type PreparedPublicationCommitInput = PublishPreparedCapabilityCommandInput & Readonly<{
   revision: number
@@ -580,7 +581,11 @@ async function commitPreparedPublicationCommand(
     businessId: input.businessId,
     origin: input.origin,
   })
-  if (admitted.kind === 'refused') return { kind: 'refused', reason: mapAdmissionRefusal(admitted.reason) }
+  if (admitted.kind === 'refused') return {
+    kind: 'refused',
+    reason: mapAdmissionRefusal(admitted.reason),
+    ...(admitted.next === undefined ? {} : { next: admitted.next }),
+  }
   const { encoded, offering } = admitted
   const sourceRevision = prepared.sourceRevision
   const sourceDigest = prepared.sourceDigest

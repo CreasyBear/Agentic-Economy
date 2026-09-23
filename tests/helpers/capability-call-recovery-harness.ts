@@ -8,11 +8,11 @@ import {
   cancelCall,
   cancelOwnerCall,
   projectRecovery,
-  readCallStatus,
   readOwnerCallStatus,
   reconcileCall,
   reconcileOwnerCall,
 } from '../../convex/capabilityCalls'
+import { readCallStatus } from '../../convex/capabilityCallsStatus'
 import type { AgentAccessPrincipal } from '@/modules/agent-access/agent-access'
 import { recover } from '../../convex/capabilityCallWorker'
 
@@ -267,12 +267,14 @@ export function recoveryContext(options: Readonly<{
   row: RecoveryRow | null
   grant: Readonly<{ generation: number }> | null
   workerResult: Record<string, unknown>
+  control?: unknown
 }>) {
   const runAction = vi.fn(async (_reference: unknown, _args: unknown) => options.workerResult)
   const runQuery = vi.fn(async (reference: unknown, queryArgs: unknown) => {
     switch (functionPath(reference)) {
       case 'capabilityCalls:readOwnerRecovery': return options.row
       case 'capabilityCalls:readPurchaseResolution': return null
+      case 'actionExecutionControl:readControl': return options.control ?? null
       case 'agentAccessPolicy:readActiveGrant': {
         const requestedGeneration = typeof queryArgs === 'object'
           && queryArgs !== null
@@ -289,7 +291,26 @@ export function recoveryContext(options: Readonly<{
     if (functionPath(reference) === 'capabilityCalls:resolveCallAgentAuthority') return args.principal
     return { kind: 'accepted' }
   })
-  return { runAction, runQuery, runMutation }
+  const db = {
+    query: (table: string) => {
+      let callRef: unknown
+      const query = {
+        withIndex: (_index: string, build: (builder: { eq: (field: string, value: unknown) => unknown }) => unknown) => {
+          const builder = { eq: (field: string, value: unknown) => {
+            if (field === 'callRef') callRef = value
+            return builder
+          } }
+          build(builder)
+          return query
+        },
+        unique: async () => table === 'capabilityCalls' && options.row?.callRef === callRef
+          ? { ...options.row, updatedAt: options.row.updatedAt ?? 1 }
+          : null,
+      }
+      return query
+    },
+  }
+  return { db, runAction, runQuery, runMutation }
 }
 
 export function recoveryArgs(overrides: Record<string, unknown> = {}): Record<string, unknown> {

@@ -227,7 +227,15 @@ export function useAgentConsentDecision({
     if (query.length === 0 || toolSearch.pending) return
     setToolSearch({ pending: true })
     try {
-      setToolSearch({ pending: false, result: await searchMarketTools({ query, limit: 8 }) })
+      const result = await searchMarketTools({ query, limit: 8 })
+      if (result.kind === 'matched' || result.kind === 'degraded') {
+        setToolSearch({ pending: false, results: result.results.map(({ toolRef, title }) => ({ toolRef, title })) })
+      } else if (result.kind === 'noMatch') {
+        const nearMisses = result.nearMisses.map(({ title }) => title).join(', ')
+        setToolSearch({ pending: false, noMatchMessage: `No suitable Tools found.${nearMisses.length === 0 ? '' : ` Near misses (not matches): ${nearMisses}.`}` })
+      } else {
+        setToolSearch({ pending: false, error: 'Tool search is temporarily unavailable. Try again.' })
+      }
     } catch (cause) {
       setToolSearch(degrade(cause, { pending: false, error: 'Tool search is temporarily unavailable. Try again.' }, { site: 'findTools', reason: 'source_unavailable' }))
     }

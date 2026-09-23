@@ -19,6 +19,7 @@ import { principalValue } from '../callLifecycle/contracts'
 import { resolveCurrentAgentAuthority } from '../callLifecycle/authorityHandlers'
 import { sourceWriteArgs } from '../../sourceWriteAdmission'
 import { toolProviderRouteabilityIsFrozen } from '../providerOffboardingFreeze'
+import { activeChatTurnForMoney } from '../chat/threadOwnership'
 import {
   quoteEvidenceMaterial,
   quoteExpiresAt,
@@ -48,6 +49,7 @@ export const issueQuoteArgs = {
   principal: principalValue,
   toolRef: v.string(),
   input: jsonObject,
+  turnRef: v.optional(v.string()),
   liveX402Requirement: v.optional(liveX402RequirementValue),
   referenceRate: v.optional(referenceRateValue),
   formance: formanceFinancialSnapshot,
@@ -57,7 +59,7 @@ export const issueQuoteResult = quoteResult
 
 export async function issueQuoteHandler(
   ctx: MutationCtx,
-  args: QuoteArgs & Readonly<{ formance: Infer<typeof formanceFinancialSnapshot> }>,
+  args: QuoteArgs & Readonly<{ turnRef?: string; formance: Infer<typeof formanceFinancialSnapshot> }>,
 ): Promise<QuoteResult> {
   // The coordinating action has already consumed this source-write admission in
   // prepareFinancialSubjects. Internal mutations must not consume the same nonce twice.
@@ -69,6 +71,20 @@ export async function issueQuoteHandler(
     { kind: 'new_operation', toolRef: args.toolRef },
   )
   if (authority === null) return refuse(args, 'grant_not_found', false)
+  const turnRef = args.turnRef
+  if (turnRef !== undefined) {
+    const turn = await ctx.db.query('chatTurns')
+      .withIndex('by_turnRef', (query) => query.eq('turnRef', turnRef))
+      .unique()
+    if (turn === null || turn.principalKind !== 'agent_key'
+      || turn.principalRef !== authority.principal.principalId
+      || turn.accountRef !== authority.principal.ownerId
+      || turn.credentialLocator !== authority.principal.credentialId
+      || turn.grantRef !== authority.grantRef
+      || !await activeChatTurnForMoney(ctx, turn)) {
+      return refuse(args, 'grant_not_found', false)
+    }
+  }
   if (!serviceModeAllowsEnvironment(resolveServiceMode(env), authority.principal.environment)) {
     return refuse(args, 'tool_unsupported', false, { reason: 'This deployment does not admit purchases in this environment.' })
   }

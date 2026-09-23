@@ -1,4 +1,4 @@
-import type { MutationCtx, QueryCtx } from '../_generated/server'
+import type { QueryCtx } from '../_generated/server'
 import { degradeBackend } from '../../src/lib/observability/degrade-backend'
 import { canonicalDigest } from '../../src/modules/common/canonical-digest'
 import type { StableHashValue } from '../../src/modules/common/stable-hash'
@@ -6,12 +6,11 @@ import {
   DelegationService,
   delegationGrantRef,
   type DelegationAuthoritySnapshot,
-  type DelegationStore,
 } from '../../src/modules/authority/delegation/public'
 import { accountRef, principalRef } from '../../src/modules/principal-account/public'
 import {
   createConvexDelegationContextPort,
-  createConvexDelegationStore,
+  createConvexDelegationReadStore,
 } from './delegationPersistence'
 
 export type CanonicalAgentContext = Readonly<{
@@ -143,22 +142,12 @@ export async function resolveCanonicalAgentContext(
 
 /** Validate the complete live delegation ancestry without committing a snapshot. */
 export async function validateCanonicalAgentDelegation(
-  ctx: MutationCtx,
+  ctx: Pick<QueryCtx, 'db'>,
   input: CanonicalAgentDelegationInput,
 ): Promise<DelegationAuthoritySnapshot | null> {
   if (!Number.isSafeInteger(input.now) || input.now < 0) return null
   try {
-    const baseStore = createConvexDelegationStore(ctx)
-    const readOnlyStore: DelegationStore = {
-      transact: async (operation) => await baseStore.transact(
-        async (transaction) => await operation({
-          ...transaction,
-          getSnapshotByAdmissionIdempotency: async () => undefined,
-          getSnapshot: async () => undefined,
-          commit: async () => undefined,
-        }),
-      ),
-    }
+    const readOnlyStore = createConvexDelegationReadStore(ctx)
     const authorityEvidenceRef = canonicalDigest({
       format: 'canonical-agent-delegation-validation:v1',
       evidenceKind: input.evidenceKind,

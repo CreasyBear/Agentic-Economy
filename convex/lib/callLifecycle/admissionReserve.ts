@@ -2,6 +2,7 @@ import { degradeBackend } from '../../../src/lib/observability/degrade-backend'
 import type { Doc } from '../../_generated/dataModel'
 import type { MutationCtx } from '../../_generated/server'
 import { assertAgentAccessRateAdmission } from '../rateLimit'
+import { activeChatTurnForMoney } from '../chat/threadOwnership'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { evaluateOrganizationMonthlySpendFence } from '@/modules/money/public'
 import {
@@ -445,10 +446,30 @@ async function persistReservedCall(
   }
 }
 
+async function attachCallToTurn(ctx: MutationCtx, turn: Doc<'chatTurns'>, callRef: string): Promise<void> {
+  const refs = turn.inFlightCallRefs ?? []
+  if (!refs.includes(callRef)) {
+    await ctx.db.patch(turn._id, { inFlightCallRefs: [...refs, callRef] })
+  }
+}
+
 export async function reserveHandler(
   ctx: MutationCtx,
   args: ReserveArgs,
 ): Promise<ReserveResult> {
+  const turnRef = args.turnRef
+  const turn = turnRef === undefined ? null : await ctx.db.query('chatTurns')
+    .withIndex('by_turnRef', (query) => query.eq('turnRef', turnRef))
+    .unique()
+  if (turnRef !== undefined && (turn === null
+    || turn.principalKind !== 'agent_key'
+    || turn.principalRef !== args.principalId
+    || turn.accountRef !== args.ownerId
+    || turn.credentialLocator !== args.credentialId
+    || turn.grantRef !== args.grantRef
+    || !await activeChatTurnForMoney(ctx, turn))) {
+    return missingGrant()
+  }
   if (!canaryEnvelopeMatchesReservation(args)) return { kind: 'conflict' }
   // Keyed by the stable Principal: a rotated credential replays the original
   // reservation instead of minting a second Call under the same key.
@@ -458,7 +479,13 @@ export async function reserveHandler(
   if (existing.length > 1) return { kind: 'conflict' }
   const reservation = reservationFromArgs(args)
   const replay = existing[0]
-  if (replay !== undefined) return await replayExistingReservation(ctx, replay, args)
+  if (replay !== undefined) {
+    const result = await replayExistingReservation(ctx, replay, args)
+    if (result.kind === 'replayed' && turn !== null) {
+      await attachCallToTurn(ctx, turn, result.reservation.callRef)
+    }
+    return result
+  }
   if (await toolProviderRouteabilityIsFrozen(ctx, args.toolRef)) {
     return {
       kind: 'refused',
@@ -493,6 +520,7 @@ export async function reserveHandler(
     commitment,
     paidPeriodAwareCall ? 'reservation_pending' : undefined,
   )
+  if (turn !== null) await attachCallToTurn(ctx, turn, reservation.callRef)
   await recordMarketEvidenceFact(ctx, 'ae_invocation', reservation.callRef, args.now, {
     toolRef: reservation.toolRef,
   })
@@ -513,6 +541,24 @@ export async function abandonHandler(
     .withIndex('by_quoteRef', (query) => query.eq('quoteRef', args.quoteRef))
     .unique()
   await ctx.db.delete(row._id)
+  const turnRef = args.turnRef
+  if (turnRef !== undefined) {
+    const turn = await ctx.db.query('chatTurns')
+      .withIndex('by_turnRef', (query) => query.eq('turnRef', turnRef))
+      .unique()
+    if (turn !== null
+      && turn.principalKind === 'agent_key'
+      && turn.principalRef === row.principalId
+      && turn.accountRef === row.ownerId
+      && turn.credentialLocator === row.credentialId
+      && turn.grantRef === row.grantRef
+      && turn.inFlightCallRefs?.includes(row.callRef)) {
+      await ctx.db.patch(turn._id, {
+        inFlightCallRefs: turn.inFlightCallRefs.filter(ref => ref !== row.callRef),
+        updatedAt: Date.now(),
+      })
+    }
+  }
   if (commitment !== null
     && commitment.state === 'consumed'
     && commitment.consumedCallRef === row.callRef

@@ -18,6 +18,7 @@ import type {
 } from './registration-schema'
 import type { AdmitProviderSchemaRefusal } from "./admit-provider-schema-types";
 import { validPublicHttpsEndpoint } from "./transport-adapters";
+import { publicationInputQuality, type CapabilityPublicationQualityNext } from "./publication/input-quality";
 
 export const MAX_PROTOCOL_VERSION_LENGTH = 64;
 export const MAX_TOOL_NAME_LENGTH = 200;
@@ -165,15 +166,18 @@ export type CapabilityPublicationImportRefusal =
   | "openapi_response_status_unsupported"
   | "openapi_operation_unsupported"
   | AdmitProviderSchemaRefusal
+  | "opaque_input_without_valid_example"
   | "transport_unsupported"
   | "commercial_metadata_inconsistent"
   | "payment_execution_unsupported"
   | "payment_required_invalid"
   | "bazaar_discovery_invalid";
 
+
 export type CapabilityPublicationImportResult =
   | Readonly<{ kind: "normalized"; draft: CanonicalCapabilityPublicationDraft }>
-  | Readonly<{ kind: "refused"; reason: CapabilityPublicationImportRefusal }>;
+  | Readonly<{ kind: "refused"; reason: CapabilityPublicationImportRefusal; next?: readonly CapabilityPublicationQualityNext[] }>;
+
 
 export type OpenApiOperationPreflightOutcome =
   | Readonly<{
@@ -353,6 +357,8 @@ export function normalizeDirectEnvelope(
       reason: mapCapabilityContractRefusal(error, contractSchemas(parsed)),
     };
   }
+  const quality = publicationInputQuality(contract);
+  if (quality !== undefined) return quality;
   const { ref: _ref, ...document } = contract;
   return {
     kind: "normalized",
@@ -397,6 +403,8 @@ export function normalizedFromSchemas(
       ]),
     };
   }
+  const quality = publicationInputQuality(contract);
+  if (quality !== undefined) return quality;
   const { ref: _ref, ...document } = contract;
   return {
     kind: "normalized",

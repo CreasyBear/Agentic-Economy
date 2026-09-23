@@ -12,6 +12,7 @@ import type {
 import { issuedAgentCanonicalRefs, issuedAgentGrantRef } from '../src/modules/agent-access/issued-agent-binding'
 import { defaultSandboxAgentAccessPolicy } from '../src/modules/agent-access/sandbox-policy'
 import { normalizeStoredAgentAccessGrant } from '../src/modules/agent-access/policy'
+import type { CanonicalAgentDirectoryRecord } from '../src/modules/agent-access/agent-access-console'
 import schema from './schema'
 import { api, internal } from './_generated/api'
 import { withSourceWriteCommand } from '../tests/helpers/source-write-admission'
@@ -546,16 +547,13 @@ describe('issued agent binding', () => {
     })).resolves.toEqual(successor)
     const status = async (principal = successor) => {
       const args = { principal, callRef, operationKey: `status:${principal.credentialId}`, correlationId: 'credential-continuity' }
-      return await backend.action(api.capabilityCalls.readCallStatus, await withSourceWriteCommand('protected_action', args, {
-        operationKey: args.operationKey, correlationId: args.correlationId, principal,
-        toolRef: '', input: {}, idempotencyKey: `status:${callRef}`,
-      }))
+      return await backend.query(api.capabilityCallsStatus.readCallStatus,
+        await withSourceWriteCommand('protected_action', args, args))
     }
     await expect(status()).resolves.toMatchObject({
       kind: 'found', callRef, state: 'terminal', result: original.result,
     })
-    // A terminal result is replayed through the real worker without changing
-    // original credential, grant, input, or effect evidence.
+    // Repeated readback preserves the original credential, grant, input, and effect evidence.
     await expect(status()).resolves.toMatchObject({ kind: 'found', callRef, result: original.result })
     const listArgs = {
       principal: successor, operationKey: 'list:credential-continuity', correlationId: 'credential-continuity',
@@ -943,7 +941,7 @@ describe('issued agent binding', () => {
     await owner.mutation(registerIssuedBinding, { ...agentA, serviceAuth: await assertion(agentA) })
     await owner.mutation(registerIssuedBinding, { ...agentB, serviceAuth: await assertion(agentB) })
 
-    const connected = await owner.query(api.agentDirectory.listOwned, { now: NOW })
+    const connected: readonly CanonicalAgentDirectoryRecord[] = await owner.query(api.agentDirectory.listOwned, { now: NOW })
     expect(connected).toEqual(expect.arrayContaining([
       expect.objectContaining({ displayName: 'Agent A', status: 'connected' }),
       expect.objectContaining({ displayName: 'Agent B', status: 'connected' }),
@@ -1115,7 +1113,7 @@ describe('issued agent binding', () => {
     }
     await owner.mutation(registerIssuedBinding, { ...agentA, serviceAuth: await assertion(agentA) })
     await owner.mutation(registerIssuedBinding, { ...agentB, serviceAuth: await assertion(agentB) })
-    const rows = await owner.query(api.agentDirectory.listOwned, { now: NOW })
+    const rows: readonly CanonicalAgentDirectoryRecord[] = await owner.query(api.agentDirectory.listOwned, { now: NOW })
     const principalA = rows.find((row) => row.currentProviderCredentialId === agentA.credentialId)?.principalRef
     const principalB = rows.find((row) => row.currentProviderCredentialId === agentB.credentialId)?.principalRef
     if (principalA === undefined || principalB === undefined) throw new Error('agent principal missing')

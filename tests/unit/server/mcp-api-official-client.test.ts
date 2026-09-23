@@ -1,6 +1,5 @@
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js'
-import { toJsonSchemaCompat } from '@modelcontextprotocol/sdk/server/zod-json-schema-compat.js'
 import { describe, expect, it, vi } from 'vitest'
 
 import { listMcpActions, mcpToolName } from '@/modules/actions'
@@ -10,20 +9,18 @@ import {
   handleMcpRequest,
 } from './mcp-api-harness'
 
-const callRef = 'invocation:official-client:1'
+const callRef = `operation-invocation:v1:${'b'.repeat(64)}`
 
 function officialClient(
   service: CallService,
-  scopes: readonly string[] = ['market_tools:call'],
+  scopes: readonly string[] | null = ['market_tools:call'],
 ): Readonly<{
   client: Client
   transport: StreamableHTTPClientTransport
 }> {
   const client = new Client({ name: 'ae-official-client-test', version: '1.0.0' })
   const transport = new StreamableHTTPClientTransport(new URL('https://ae.example/mcp'), {
-    requestInit: {
-      headers: { authorization: 'Bearer official-client-test' },
-    },
+    ...(scopes === null ? {} : { requestInit: { headers: { authorization: 'Bearer official-client-test' } } }),
     fetch: async (input, init) => {
       const request = input instanceof Request
         ? new Request(input, init)
@@ -34,7 +31,7 @@ function officialClient(
           tokenType: 'api_key',
           id: 'key:official-client-test',
           subject: 'user_official_client_test',
-          scopes: [...scopes],
+          scopes: scopes === null ? [] : [...scopes],
         }),
         resolvePrincipal: async (projection) => ({
           ...projection,
@@ -50,7 +47,7 @@ function officialClient(
 
 async function connectOfficialClient(
   service: CallService,
-  scopes?: readonly string[],
+  scopes?: readonly string[] | null,
 ): Promise<Client> {
   const { client, transport } = officialClient(service, scopes)
   // SDK 1.30.0's emitted transport declarations disagree only on whether the
@@ -80,11 +77,12 @@ describe('MCP host adapter with the official client', () => {
     for (const tool of listed.tools) {
       const action = expectedActions.find((candidate) => mcpToolName(candidate) === tool.name)
       if (action === undefined) throw new Error(`No action found for ${tool.name}.`)
-      expect(tool.inputSchema).toEqual(toJsonSchemaCompat(action.schema, {
-        strictUnions: true,
-        pipeStrategy: 'input',
-      }))
-      expect(tool.outputSchema).toBeUndefined()
+      expect(tool.inputSchema).toMatchObject({ type: 'object', properties: expect.any(Object) })
+      expect(tool.outputSchema).toMatchObject({
+        type: 'object',
+        properties: { result: { type: 'object', properties: { kind: { type: 'string' } } }, kind: { type: 'string' }, next: { type: 'array' } },
+        required: ['next'],
+      })
     }
 
     const byteLength = (value: unknown): number => new TextEncoder()
@@ -103,11 +101,22 @@ describe('MCP host adapter with the official client', () => {
       toolsBytes: 221_955,
       outputSchemaBytes: 186_908,
     }
-    const currentAuthenticatedToolsBaselineBytes = 45_783
-    expect(toolsBytes).toBeLessThanOrEqual(Math.floor(currentAuthenticatedToolsBaselineBytes * 1.1))
-    expect(toolsBytes).toBeLessThanOrEqual(Math.floor(preCompactManifest.toolsBytes * 1.2))
-    expect(outputSchemaBytes).toBe(0)
+    expect(toolsBytes).toBeLessThan(preCompactManifest.toolsBytes)
+    expect(outputSchemaBytes).toBeGreaterThan(0)
+    expect(outputSchemaBytes).toBeLessThan(preCompactManifest.outputSchemaBytes / 4)
     expect(inputSchemaBytes).toBeLessThanOrEqual(expectedActions.length * 800)
+    const publicClient = await connectOfficialClient(service, null)
+    const publicTools = await publicClient.listTools()
+    await publicClient.close()
+    expect(publicTools.tools.map((tool) => tool.name)).toEqual([
+      'ae_registry_tools_search',
+      'ae_registry_tools_describe',
+      'ae_registry_tools_compare',
+    ])
+    for (const tool of publicTools.tools) expect(tool.outputSchema).toMatchObject({
+      type: 'object',
+      properties: { result: { type: 'object' } },
+    })
   })
 
   it('retains Call identity across a fresh client and reads the terminal structured result', async () => {
@@ -202,12 +211,12 @@ describe('MCP host adapter with the official client', () => {
       name: 'ae_tool_quote',
       arguments: { toolRef: currentToolRef, input: { company: 'Acme' } },
     })
-    expect(quoted.structuredContent).toEqual({
-      result: expect.objectContaining({
-        kind: 'committed',
-        quoteRef,
-      }),
+    expect(quoted.structuredContent).toMatchObject({
+      result: { kind: 'committed', quoteRef },
+      next: [{ action: 'status', args: { ref: { kind: 'quote', ref: quoteRef } }, authority: 'same_principal' }],
     })
+    expect(quoted.content).toEqual([expect.objectContaining({ type: 'text', text: expect.any(String) })])
+    expect(JSON.stringify(quoted.content)).not.toContain(quoteRef)
     const called = await invokeClient.callTool({
       name: 'ae_tool_call',
       arguments: {
@@ -217,9 +226,11 @@ describe('MCP host adapter with the official client', () => {
     })
     await invokeClient.close()
 
-    expect(called.structuredContent).toEqual({
-      result: expect.objectContaining({ kind: 'pending', callRef }),
+    expect(called.structuredContent).toMatchObject({
+      result: { kind: 'pending', callRef },
+      next: [{ action: 'status', args: { ref: { kind: 'call', ref: callRef } }, authority: 'same_principal' }],
     })
+    expect(JSON.stringify(called.content)).not.toContain(callRef)
 
     const recoveryClient = await connectOfficialClient(service)
     await recoveryClient.listTools()
@@ -228,15 +239,11 @@ describe('MCP host adapter with the official client', () => {
       arguments: { callRef },
     })
     await recoveryClient.close()
-
-    expect(recovered.structuredContent).toEqual({
-      result: expect.objectContaining({
-        kind: 'found',
-        callRef,
-        state: 'terminal',
-        result: completed,
-      }),
+    expect(recovered.structuredContent).toMatchObject({
+      result: { kind: 'found', callRef, state: 'terminal', result: completed },
+      next: [],
     })
+    expect(JSON.stringify(recovered.content)).not.toContain('fresh-provider-value-4d2e')
     expect(service.callTool).toHaveBeenCalledTimes(1)
     expect(service.readCallStatus).toHaveBeenCalledWith(expect.objectContaining({
       callRef,

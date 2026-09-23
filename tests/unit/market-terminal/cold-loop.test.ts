@@ -66,6 +66,7 @@ import {
 } from './cold-loop-harness'
 
 const CURRENT_OPERATION_REF = operationRef('d')
+const CURRENT_CALL_REF = `operation-invocation:v1:${'c'.repeat(64)}`
 const options: CliOptions = {
   baseUrl: 'https://market.example',
   json: true,
@@ -138,96 +139,42 @@ describe('external-agent Market Tool cold loop', () => {
     await runSearchCommand(['extract invoices'], options)
     expectAnonymousPost(fetchMock, options.baseUrl, '/api/v1/market-tools/search', { query: 'extract invoices', limit: 10 })
   })
-  it('gives empty search results private demand memory plus a safe browse fallback', async () => {
+  it('returns a noMatch envelope without inventing a purchase or demand continuation', async () => {
     const result = projectToolSearchChoices(toolSearchOutputSchema.parse({
-      kind: 'no_candidates',
-      schemaVersion: 'registry-tools:v3',
-      query: 'invoice extraction',
-      appliedFilters: {},
-      matchedCount: 0,
-      ranking: [],
-      navigation: [],
+      kind: 'no_candidates', schemaVersion: 'registry-tools:v3',
+      query: 'invoice extraction', appliedFilters: {}, matchedCount: 0,
+      ranking: [], navigation: [],
     }))
     stubFetchResolved(result)
-    const jsonText = await withStdout(() => runSearchCommand(['invoice extraction'], options))
-    expect(parseJson(jsonText)).toMatchObject({
-      kind: 'no_candidates',
-      nextCommand: "ae request create 'invoice extraction' --json",
-      browseCommand: 'ae list --json',
-      nextHref: 'https://market.example/market',
-    })
-
-    const humanText = await withStdout(() =>
-      runSearchCommand(['invoice extraction'], { ...options, json: false }))
-    expect(humanText).toContain('No current Tools match this job.')
-    expect(humanText).toContain("Remember this missing job: ae request create 'invoice extraction'")
-    expect(humanText).toContain('Browse all: ae list')
-    expect(humanText).toContain('https://market.example/market')
-
-    const technicalText = await withStdout(() => runSearchCommand(['invoice extraction'], {
-      ...options,
-      technical: true,
-      filters: JSON.stringify({ healthStatus: ['degraded'] }),
-    }))
-    const technicalResult = parseJson(technicalText) as {
-      browseCommand: string
-      nextCommand: string
-    }
-    expect(technicalResult).toMatchObject({
-      nextCommand: 'ae list --filters \'{"healthStatus":["degraded"]}\' --json --technical',
-      browseCommand: 'ae list --json --technical',
-    })
-    expect(technicalResult.nextCommand).not.toContain('request create')
-    expect(technicalResult.browseCommand).not.toContain('--filters')
-
-    const filteredHumanText = await withStdout(() => runSearchCommand(['invoice extraction'], {
-      ...options,
-      json: false,
-      filters: JSON.stringify({ healthStatus: ['degraded'] }),
-    }))
-    expect(filteredHumanText).toContain('No current Tools match these filters.')
-    expect(filteredHumanText).toContain('Browse matching filters: ae list --filters \'{"healthStatus":["degraded"]}\'')
-    expect(filteredHumanText).not.toContain('Remember this missing job')
+    const output = parseJson(await withStdout(() => runSearchCommand(['invoice extraction'], options)))
+    expect(output).toMatchObject({ kind: 'noMatch', scope: 'exhausted', results: [], nearMisses: [],
+      next: [{ action: 'broaden', authority: 'public', args: { query: 'invoice extraction' } }] })
+    expect(output).not.toHaveProperty('nextCommand')
+    const human = await withStdout(() => runSearchCommand(['invoice extraction'], { ...options, json: false }))
+    expect(human).toContain('No suitable Tools')
+    expect(human).not.toContain('request create')
   })
-  it('qualifies filtered no-candidate pages and keeps exhausted notes health-neutral', async () => {
+  it('keeps page and exhausted noMatch distinct when a health filter hides a candidate', async () => {
     const toolRef = operationRef('c')
     const rawPage = toolSearchOutputSchema.parse({
-      kind: 'ok',
-      schemaVersion: 'registry-tools:v3',
-      query: 'reference lookup',
-      items: [operationDescriptor(toolRef)],
-      matchedCount: 2,
+      kind: 'ok', schemaVersion: 'registry-tools:v3', query: 'reference lookup',
+      items: [operationDescriptor(toolRef)], matchedCount: 2,
       ranking: [{ toolRef, rank: 1, score: 1 }],
-      pagination: { limit: 1, nextCursor: 'opaque-page-cursor', hasMore: true },
-      navigation: [],
+      pagination: { limit: 1, nextCursor: 'opaque-page-cursor', hasMore: true }, navigation: [],
     })
-    const rawExhausted = toolSearchOutputSchema.parse({
-      ...rawPage,
-      pagination: { limit: 1, hasMore: false },
-    })
-    const pageResult = projectToolSearchChoices(rawPage, { healthStatus: ['degraded'] })
-    const exhaustedResult = projectToolSearchChoices(rawExhausted, { healthStatus: ['degraded'] })
-
-    expect(pageResult).toMatchObject({
-      kind: 'no_candidates',
-      note: 'No Tools match this search on this page.',
-      pagination: { hasMore: true, nextCursor: 'opaque-page-cursor' },
-    })
-    expect(exhaustedResult).toMatchObject({
-      kind: 'no_candidates',
-      note: 'No Tools match this search.',
-      pagination: { hasMore: false },
-    })
-
-    stubFetchResolved(pageResult)
-    const outputText = await withStdout(() => runSearchCommand(['reference lookup'], {
-      ...options,
-      json: false,
-      filters: JSON.stringify({ healthStatus: ['degraded'] }),
-    }))
-    expect(outputText).toContain('No matching Tools on this page.')
-    expect(outputText).not.toContain('No current Tools match')
-    expect(outputText).toContain('More results:')
+    if (rawPage.kind !== 'ok') throw new Error('search_page_fixture_invalid')
+    const page = projectToolSearchChoices(rawPage, { healthStatus: ['degraded'] })
+    const exhausted = projectToolSearchChoices(
+      { ...rawPage, pagination: { limit: 1, hasMore: false } }, { healthStatus: ['degraded'] })
+    expect(page).toMatchObject({ kind: 'noMatch', scope: 'page', results: [], next: [
+      { action: 'next-page', args: { cursor: 'opaque-page-cursor' } },
+    ] })
+    expect(exhausted).toMatchObject({ kind: 'noMatch', scope: 'exhausted', results: [] })
+    stubFetchResolved(page)
+    const output = parseJson(await withStdout(() => runSearchCommand(['reference lookup'], {
+      ...options, filters: JSON.stringify({ healthStatus: ['degraded'] }),
+    })))
+    expect(output.nextPageCommand).toContain('--cursor opaque-page-cursor')
   })
 
   it('browses all current Tools when no job is supplied', async () => {
@@ -260,56 +207,37 @@ describe('external-agent Market Tool cold loop', () => {
     )
   })
 
-  it('sends canonical pagination/filter inputs and preserves the response cursor fields', async () => {
+  it('sends full-detail and pagination inputs, then derives a page command from validated next[]', async () => {
     const toolRef = operationRef('d')
     const result = {
       ...operationSearchResult('reference lookup', [operationDescriptor(toolRef)]),
       pagination: { limit: 3, nextCursor: 'opaque-next-cursor', hasMore: true },
+      next: [{ action: 'next-page', authority: 'public', args: { query: 'reference lookup', cursor: 'opaque-next-cursor' } }],
     }
     const fetchMock = stubFetchJsonResponse(result)
-    const outputText = await withStdout(() => runSearchCommand(['reference lookup'], {
-      ...options,
-      technical: true,
-      source: 'current',
-      limit: '3',
-      cursor: 'opaque-prior-cursor',
+    const output = parseJson(await withStdout(() => runSearchCommand(['reference lookup'], {
+      ...options, technical: true, source: 'current', limit: '3', cursor: 'opaque-prior-cursor',
       filters: JSON.stringify({ healthStatus: ['operational'] }),
-    }))
-    expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).toEqual({
-      query: 'reference lookup',
-      source: 'current',
-      limit: 3,
-      cursor: 'opaque-prior-cursor',
-      filters: { healthStatus: ['operational'] },
-    })
-    expect(parseJson(outputText)).toEqual({
-      ...result,
-      nextCommand: `ae describe ${toolRef} --json --technical`,
-      nextPageCommand: `ae search 'reference lookup' --limit 3 --source current --filters '{"healthStatus":["operational"]}' --cursor opaque-next-cursor --json --technical`,
-    })
-  })
-  it('returns decision-sized JSON by default and keeps the full contract behind technical mode', async () => {
-    const toolRefs = [operationRef('e'), operationRef('f')]
-    const projectedResult = operationSearchResult('reference lookup', toolRefs.map((toolRef, index) => ({
-      ...operationDescriptor(toolRef, `Reference lookup ${index + 1}`),
-      navigation: SEARCH_ITEM_NAVIGATION,
     })))
-    if (projectedResult.kind !== 'ok') throw new Error('Expected a successful search fixture')
-    const result = projectedResult
+    expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).toEqual({
+      query: 'reference lookup', detail: 'full', source: 'current', limit: 3,
+      cursor: 'opaque-prior-cursor', filters: { healthStatus: ['operational'] },
+    })
+    expect(output).toMatchObject({ kind: 'matched', results: [{ toolRef }],
+      nextPageCommand: `ae search 'reference lookup' --limit 3 --source current --filters '{"healthStatus":["operational"]}' --cursor opaque-next-cursor --json --technical` })
+    expect(output).not.toHaveProperty('nextCommand')
+  })
+
+  it('returns a concise matched envelope with typed describe next[]', async () => {
+    const refs = [operationRef('e'), operationRef('f')]
+    const result = operationSearchResult('reference lookup', refs.map((ref) => operationDescriptor(ref)))
     stubFetchJsonResponse(result)
-
-    const defaultSerialized = await withStdout(() => runSearchCommand(['reference lookup'], options))
-    const defaultResult = parseJson(defaultSerialized) as typeof result
-    const expectedDefault = { ...result, nextCommand: `ae compare ${toolRefs.join(' ')} --json` }
-    expect(defaultSerialized).toBe(`${JSON.stringify(expectedDefault, undefined, 2)}\n`)
-    expect(defaultResult.items.map((item) => item.toolRef)).toEqual(toolRefs)
-
-    const technicalSerialized = await withStdout(() =>
-      runSearchCommand(['reference lookup'], { ...options, technical: true }))
-    const expectedTechnical = { ...result, nextCommand: `ae compare ${toolRefs.join(' ')} --json --technical` }
-    expect(technicalSerialized).toBe(`${JSON.stringify(expectedTechnical, undefined, 2)}\n`)
-    expect(parseJson(technicalSerialized)).toEqual(expectedTechnical)
-    expect(new TextEncoder().encode(defaultSerialized).length).toBeLessThanOrEqual(3 * 1024)
+    const output = parseJson(await withStdout(() => runSearchCommand(['reference lookup'], options)))
+    expect(output).toMatchObject({ kind: 'matched', results: [
+      { toolRef: refs[0], next: [{ action: 'describe', args: { toolRef: refs[0] } }] },
+      { toolRef: refs[1], next: [{ action: 'describe', args: { toolRef: refs[1] } }] },
+    ] })
+    expect(output).not.toHaveProperty('nextCommand')
   })
   it('rejects an out-of-range search limit before network work', async () => {
     const fetchMock = vi.fn<typeof fetch>()
@@ -445,7 +373,7 @@ describe('external-agent Market Tool cold loop', () => {
   it('completes the anonymous-to-authenticated Tool lifecycle with durable replay', async () => {
     const toolRef = operationRef('a')
     const comparisonToolRef = operationRef('b')
-    const callRef = `invocation:v1:${'c'.repeat(64)}`
+    const callRef = CURRENT_CALL_REF
     const idempotencyKey = 'cold-loop-idempotency'
     const initialInput = { query: 'bitcoin price' }
     const changedInput = { query: 'ethereum price' }
@@ -563,13 +491,14 @@ describe('external-agent Market Tool cold loop', () => {
           retryAfterMs: 100,
         })
       }
-      if (route === `/api/v1/calls/${encodeURIComponent(callRef)}`) {
+      if (route === `/api/v1/status/${encodeURIComponent(callRef)}` ||
+        route === `/api/v1/calls/${encodeURIComponent(callRef)}`) {
         if (authorization !== 'Bearer ae-test-caller-key') {
           throw new Error('status must be authenticated')
         }
         const existing = durableCalls.get(idempotencyKey)
         if (existing === undefined) throw new Error('status read before call')
-        return jsonResponse({
+        const recovery = {
           kind: 'found',
           callRef,
           version: 1,
@@ -577,6 +506,15 @@ describe('external-agent Market Tool cold loop', () => {
           state: 'terminal',
           evidenceHash: existing.result.evidenceHash,
           result: existing.result,
+        }
+        if (route.startsWith('/api/v1/calls/')) return jsonResponse(recovery)
+        return jsonResponse({
+          kind: 'call',
+          ref: callRef,
+          principalRef: `prn_${'b'.repeat(32)}`,
+          recovery,
+          workState: 'completed',
+          next: [],
         })
       }
       throw new Error(`Unexpected CLI route: ${method} ${url}`)
@@ -613,11 +551,12 @@ describe('external-agent Market Tool cold loop', () => {
 
     const status = await readJsonOutput(() => runStatusCommand([callRef], invokeOptions))
     expect(status).toMatchObject({
-      kind: 'found',
-      callRef,
-      toolRef,
-      state: 'terminal',
-      result: completedResult,
+      kind: 'call',
+      ref: callRef,
+      principalRef: `prn_${'b'.repeat(32)}`,
+      workState: 'completed',
+      next: [],
+      recovery: { kind: 'found', callRef, toolRef, state: 'terminal', result: completedResult },
     })
 
     const replay = await readJsonOutput(() => runCallCommand(
@@ -625,7 +564,6 @@ describe('external-agent Market Tool cold loop', () => {
       { ...invokeOptions, input: JSON.stringify(initialInput) },
     ))
     expect(replay).toEqual({ ...completedResult, recoveryRef: pending.recoveryRef })
-    expect(status.result).toEqual(completedResult)
 
     await expect(runCallCommand(
       [toolRef],
@@ -642,7 +580,7 @@ describe('external-agent Market Tool cold loop', () => {
       { method: 'POST', url: 'https://market.example/api/v1/market-tools/compare' },
       { method: 'POST', url: `https://market.example${TOOL_QUOTE_PATH}` },
       { method: 'POST', url: 'https://market.example/api/v1/tools/call' },
-      { method: 'GET', url: `https://market.example/api/v1/calls/${encodeURIComponent(callRef)}` },
+      { method: 'GET', url: `https://market.example/api/v1/status/${encodeURIComponent(callRef)}` },
       { method: 'GET', url: 'https://market.example/api/v1/account' },
       { method: 'GET', url: `https://market.example/api/v1/calls/${encodeURIComponent(callRef)}` },
     ])
@@ -673,7 +611,7 @@ describe('external-agent Market Tool cold loop', () => {
     const fetchMock = vi.fn<typeof fetch>()
       .mockResolvedValueOnce(responseJson(operationInspection(CURRENT_OPERATION_REF, {})))
       .mockResolvedValueOnce(responseJson({
-        kind: 'pending', callRef: 'invocation:generated', toolRef: CURRENT_OPERATION_REF, retryAfterMs: 100,
+        kind: 'pending', callRef: CURRENT_CALL_REF, toolRef: CURRENT_OPERATION_REF, retryAfterMs: 100,
       }))
     vi.stubGlobal('fetch', fetchMock)
 
@@ -691,7 +629,7 @@ describe('external-agent Market Tool cold loop', () => {
       .mockResolvedValueOnce(responseJson(operationInspection(CURRENT_OPERATION_REF, {})))
       .mockResolvedValueOnce(responseJson({
         kind: 'pending',
-        callRef: 'invocation:current',
+        callRef: CURRENT_CALL_REF,
         toolRef: CURRENT_OPERATION_REF,
         retryAfterMs: 100,
       }))
@@ -713,10 +651,10 @@ describe('external-agent Market Tool cold loop', () => {
     }
     expect(printed).toEqual({
       kind: 'pending',
-      callRef: 'invocation:current',
+      callRef: CURRENT_CALL_REF,
       toolRef: CURRENT_OPERATION_REF,
       retryAfterMs: 100,
-      nextCommand: 'ae status invocation:current --base-url https://market.example --json',
+      nextCommand: `ae status ${CURRENT_CALL_REF} --base-url https://market.example --json`,
       recoveryRef: expect.stringMatching(/^[0-9a-f-]{36}$/u),
     })
     expect(outputText).not.toContain('idem-stable')
@@ -726,22 +664,26 @@ describe('external-agent Market Tool cold loop', () => {
   it('reads status through the authenticated canonical route', async () => {
     setApiKey('ae-test-caller-key')
     const statusBody = {
-      kind: 'found',
-      callRef: 'invocation:current',
-      version: 1,
-      toolRef: CURRENT_OPERATION_REF,
-      state: 'in_progress',
+      kind: 'call',
+      ref: CURRENT_CALL_REF,
+      principalRef: `prn_${'b'.repeat(32)}`,
+      recovery: {
+        kind: 'found',
+        callRef: CURRENT_CALL_REF,
+        version: 1,
+        toolRef: CURRENT_OPERATION_REF,
+        state: 'in_progress',
+      },
+      workState: 'working',
+      next: [{ action: 'status', args: { ref: { kind: 'call', ref: CURRENT_CALL_REF } }, authority: 'same_principal' }],
     }
     const fetchMock = stubFetchJsonResponse(statusBody)
-    const outputText = await withStdout(async () => { await runStatusCommand(['invocation:current'], options) })
+    const outputText = await withStdout(async () => { await runStatusCommand([CURRENT_CALL_REF], options) })
     const [url, init] = fetchMock.mock.calls[0]!
-    expect(url).toBe('https://market.example/api/v1/calls/invocation%3Acurrent')
+    expect(url).toBe(`https://market.example/api/v1/status/${encodeURIComponent(CURRENT_CALL_REF)}`)
     expect(init?.method).toBe('GET')
     expect(new Headers(init?.headers).get('Authorization')).toBe('Bearer ae-test-caller-key')
-    expect(parseJson(outputText)).toMatchObject({
-      state: 'in_progress',
-      nextCommand: 'ae status invocation:current --json',
-    })
+    expect(parseJson(outputText)).toEqual(statusBody)
   })
 
   it('refuses a missing API key origin before any credentialed fetch', async () => {
@@ -750,7 +692,7 @@ describe('external-agent Market Tool cold loop', () => {
     const fetchMock = vi.fn<typeof fetch>()
     vi.stubGlobal('fetch', fetchMock)
     await expectCliFailure(
-      () => runStatusCommand(['invocation:current'], options),
+      () => runStatusCommand([CURRENT_CALL_REF], options),
       { kind: 'INVALID_ARGUMENT', code: 'agent_access_key_origin_required' },
       fetchMock,
     )
@@ -763,7 +705,7 @@ describe('external-agent Market Tool cold loop', () => {
     vi.stubGlobal('fetch', fetchMock)
     for (const baseUrl of ['https://attacker.example', 'http://attacker.example']) {
       await expectCliFailure(
-        () => runStatusCommand(['invocation:current'], { ...options, baseUrl }),
+        () => runStatusCommand([CURRENT_CALL_REF], { ...options, baseUrl }),
         { kind: 'INVALID_ARGUMENT', code: 'agent_access_key_origin_mismatch' },
       )
     }
@@ -773,20 +715,26 @@ describe('external-agent Market Tool cold loop', () => {
   it('allows matching loopback HTTP development credentials', async () => {
     const loopbackOptions = { ...options, baseUrl: 'http://127.0.0.1:3210', baseUrlSource: 'flag' as const }
     setApiKey('ae-test-caller-key', loopbackOptions.baseUrl)
-    const fetchMock = stubFetchJsonResponse({
-      kind: 'found',
-      callRef: 'invocation:current',
-      version: 1,
-      toolRef: CURRENT_OPERATION_REF,
-      state: 'in_progress',
-    })
-    const outputText = await withStdout(async () => { await runStatusCommand(['invocation:current'], loopbackOptions) })
+    const statusBody = {
+      kind: 'call',
+      ref: CURRENT_CALL_REF,
+      principalRef: `prn_${'b'.repeat(32)}`,
+      recovery: {
+        kind: 'found',
+        callRef: CURRENT_CALL_REF,
+        version: 1,
+        toolRef: CURRENT_OPERATION_REF,
+        state: 'in_progress',
+      },
+      workState: 'working',
+      next: [{ action: 'status', args: { ref: { kind: 'call', ref: CURRENT_CALL_REF } }, authority: 'same_principal' }],
+    }
+    const fetchMock = stubFetchJsonResponse(statusBody)
+    const outputText = await withStdout(async () => { await runStatusCommand([CURRENT_CALL_REF], loopbackOptions) })
     const [url, init] = fetchMock.mock.calls[0]!
-    expect(url).toBe('http://127.0.0.1:3210/api/v1/calls/invocation%3Acurrent')
+    expect(url).toBe(`http://127.0.0.1:3210/api/v1/status/${encodeURIComponent(CURRENT_CALL_REF)}`)
     expect(new Headers(init?.headers).get('Authorization')).toBe('Bearer ae-test-caller-key')
-    expect(parseJson(outputText)).toMatchObject({
-      nextCommand: 'ae status invocation:current --base-url http://127.0.0.1:3210 --json',
-    })
+    expect(parseJson(outputText)).toEqual(statusBody)
   })
 
   it.each([false, true])('resumes an approval after the CLI wait; expired=%s creates a fresh request', async (expired) => {
@@ -1422,10 +1370,10 @@ describe('external-agent Market Tool cold loop', () => {
       const searchCommand = connected.nextCommand
       const search = await runFreshShell(searchCommand, childEnvironment)
       expect(search).toMatchObject({ exitCode: 0, signal: null, stderr: '' })
-      const searched = JSON.parse(search.stdout) as { kind: string; query: string; items: Array<{ toolRef: string }> }
-      expect(searched).toMatchObject({ kind: 'ok', query: 'what you need' })
-      expect(searched.items).toHaveLength(1)
-      const selectedToolRef = searched.items[0]?.toolRef
+      const searched = JSON.parse(search.stdout) as { kind: string; query: string; results: Array<{ toolRef: string }> }
+      expect(searched).toMatchObject({ kind: 'matched', query: 'what you need' })
+      expect(searched.results).toHaveLength(1)
+      const selectedToolRef = searched.results[0]?.toolRef
       expect(selectedToolRef).toBe(toolRef)
 
       const quoteCommand = `ae quote ${selectedToolRef} --input '${JSON.stringify(input)}' --base-url '${selectedOrigin}' --json`

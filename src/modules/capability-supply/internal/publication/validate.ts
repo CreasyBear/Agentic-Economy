@@ -5,6 +5,7 @@ import {
   type CapabilityPublicationImport,
   type CapabilityPublicationImportRefusal,
 } from '../publication-importers'
+import type { CapabilityPublicationQualityNext } from './input-quality'
 import type { SchemaDereferencer } from '../admit-provider-schema'
 import type { CapabilityPublicationAdmissionSource } from './admit'
 import {
@@ -38,6 +39,7 @@ export type CapabilityPublicationValidation =
       reason: CapabilityPublicationImportRefusal
       /** Actionable, per-rule fix a human/agent can apply before re-validating. */
       fix: string
+      next?: readonly CapabilityPublicationQualityNext[]
     }>
 
 /**
@@ -65,6 +67,7 @@ export async function validateCapabilityPublication(
       kind: 'refused',
       reason: normalized.reason,
       fix: publicationValidationFix(normalized.reason),
+      ...(normalized.next === undefined ? {} : { next: normalized.next }),
     }
   }
   try {
@@ -142,6 +145,8 @@ export function publicationValidationFix(reason: CapabilityPublicationImportRefu
       return 'The schema needs reference expansion that this runtime cannot perform. Submit an already-dereferenced (self-contained) schema, or use the owner supply funnel which runs the dereferencer.'
     case 'admit_output_no_guaranteed_field':
       return 'The output schema has no guaranteed (always-present required) field to serve as completion evidence. Restructure the output under a required key that is always present.'
+    case 'opaque_input_without_valid_example':
+      return 'The executable input contains an opaque object without a schema-valid, non-empty example. Publish a real source-verified inputExamples instance for this contract version, or name its accepted fields in the input schema, then re-validate.'
     case 'transport_unsupported':
       return 'The transport is unsupported or the endpoint is invalid. Use a single public https endpoint for the operation.'
     case 'commercial_metadata_inconsistent':

@@ -25,6 +25,7 @@ import { internal } from '../../../../../convex/_generated/api'
 import {
   canonicalPort,
 } from '../../../../../convex/capabilityCallProjection'
+import { recoveryControlMatchesCall, recoveryControlUsesPersistedResult } from '../../../../../convex/lib/callLifecycle/statusControl'
 import { buildBrokeredX402Receipt } from '../brokeredX402'
 import { buildSellerOnboardingCanaryReceipt } from '../sellerCanaryReceipt'
 import type { RecoveredCall, RecoveryIdentity } from './contracts'
@@ -67,26 +68,8 @@ export async function loadRecoveryControl(
   const port = canonicalPort(ctx)
   const control = await port.readControl(recovered.callRef)
   if (control === undefined) return { kind: 'persisted', recovered }
-  if (
-    control.control.owner.principalRef !== recovered.principalId
-    || control.control.owner.callerRef !== recovered.credentialId
-    || control.control.origin.kind !== 'standalone'
-    || control.control.origin.principalRef !== recovered.principalId
-    || control.control.origin.callerRef !== recovered.credentialId
-    || control.control.executionRef !== recovered.callRef
-    || control.sourceRef !== `operation-invocation-source:${recovered.callRef}`
-  ) return { kind: 'not_found' }
-  // A completed buyer remedy is terminal even when the execution record still
-  // retains an unknown Provider response. Never reopen or retry that purchase.
-  if (recovered.state === 'completed' && recovered.result?.kind === 'completed'
-    && control.control.control.state === 'terminal'
-    && recovered.result.receipt?.state === 'settled') {
-    return { kind: 'persisted', recovered }
-  }
-  if (recovered.state === 'refused' && recovered.result?.kind === 'refused'
-    && !recovered.result.retryable && recovered.result.receipt?.refundState === 'released') {
-    return { kind: 'persisted', recovered }
-  }
+  if (!recoveryControlMatchesCall(recovered, control)) return { kind: 'not_found' }
+  if (recoveryControlUsesPersistedResult(recovered, control)) return { kind: 'persisted', recovered }
   return { kind: 'ready', recovered, port, control }
 }
 

@@ -27,7 +27,7 @@ export type MarketToolSearchStatus =
       items: readonly ToolSearchResultRowModel[]
       count: number
     }>
-  | Readonly<{ kind: 'empty'; query: string; count: number }>
+  | Readonly<{ kind: 'empty'; query: string; count: number; message: string }>
   | Readonly<{
       kind: 'error'
       query: string
@@ -140,5 +140,5 @@ export function toolSearchStatusMessage(
   if (status.kind === 'success') {
     return `${status.count} Tools matched. Showing ${status.items.length}.`
   }
-  return `${status.count} Tools matched. Showing 0.`
+  return status.message
 }

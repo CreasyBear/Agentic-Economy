@@ -1,15 +1,14 @@
-import { bearerChallenge } from '@/lib/http/oauth-challenge'
 import { gatewayFailureToProblem, operationInvokeResultToProblem } from '@/lib/errors'
 import { readBoundedRequestText } from '@/lib/server/bounded-request-body'
 import { isJsonContentType } from '@/lib/server/json-content-type'
 import {
+  authRefusalProblem,
   authenticateAgentAccess,
   resolveAgentAccessPrincipal,
   type AgentAccessPrincipal,
   type AgentAccessPrincipalResolver,
 } from '@/lib/server/agent-access-auth'
-import { resolveCanonicalBaseUrl } from '@/lib/server/canonical-url'
-import { ConvexSourceError, callPublicSourceAction, sourceAction } from '@/lib/server/convex-source'
+import { ConvexSourceError, callPublicSourceAction, callPublicSourceQuery, sourceAction, sourceQuery } from '@/lib/server/convex-source'
 import { problem, duplicateQueryParameterProblem } from '@/lib/server/problem'
 import { withHttpRateLimit } from '@/lib/server/rate-limit'
 import { runWithRequestCorrelation, withRequestCorrelationHeader } from '@/lib/server/request-correlation'
@@ -69,7 +68,7 @@ const MAX_CALL_BODY_BYTES = 256 * 1024
 const callSourceAction = sourceAction<Record<string, unknown>, unknown>('capabilityCalls:call')
 const toolQuoteSourceAction = sourceAction<Record<string, unknown>, unknown>('capabilityQuotes:quote')
 const callListSourceAction = sourceAction<Record<string, unknown>, unknown>('capabilityCalls:listCalls')
-const callStatusSourceAction = sourceAction<Record<string, unknown>, unknown>('capabilityCalls:readCallStatus')
+const callStatusSourceQuery = sourceQuery<Record<string, unknown>, unknown>('capabilityCallsStatus:readCallStatus')
 const callCancelSourceAction = sourceAction<Record<string, unknown>, unknown>('capabilityCalls:cancelCall')
 const callReconcileSourceAction = sourceAction<Record<string, unknown>, unknown>('capabilityCalls:reconcileCall')
 
@@ -199,9 +198,8 @@ export function createCallService(
   const readCallStatus = async (input: CallRecoveryRequest) => {
     const operationKey = operationKeyFor(input.callRef, input.principal.principalId, input.principal.credentialId, input.principal.applicationRef, input.principal.environment)
     const command = {
-      toolRef: '',
-      input: {},
-      idempotencyKey: `status:${input.callRef}`,
+      callRef: input.callRef,
+      ...(input.afterVersion === undefined ? {} : { afterVersion: input.afterVersion }),
       correlationId: input.correlationId,
       operationKey,
       principal: input.principal,
@@ -214,7 +212,7 @@ export function createCallService(
       operationKey,
       correlationId: input.correlationId,
     })
-    const result = await callPublicSourceAction(callStatusSourceAction, {
+    const result = await callPublicSourceQuery(callStatusSourceQuery, {
       callRef: input.callRef,
       ...(input.afterVersion === undefined ? {} : { afterVersion: input.afterVersion }),
       correlationId: input.correlationId,
@@ -347,13 +345,7 @@ export async function authenticateCallGateway(
     requiredScope: CALL_SCOPE,
   })
   if (admitted.kind === 'authenticated') return { kind: admitted.kind, principal: admitted.principal }
-  const challenge = bearerChallenge(resolveCanonicalBaseUrl(request).baseUrl, CALL_SCOPE)
-  const failure = gatewayFailureToProblem({ code: admitted.reason, kind: 'refused', retryable: false })
-  return withRequestCorrelationHeader(problem({
-    ...failure,
-    status: admitted.status,
-    detail: gatewayDetail(admitted.reason),
-  }, { Vary: 'Authorization', 'WWW-Authenticate': challenge }), correlationId)
+  return authRefusalProblem(request, admitted, CALL_SCOPE, undefined, correlationId)
 }
 
 const CALL_LIST_QUERY_KEYS = new Set(['limit', 'cursor', 'state'])

@@ -2,6 +2,7 @@ import { defineAction, type ActionParameter } from '@/modules/common/action'
 import { MARKET_TOOLS_CALL_SCOPE } from '@/modules/agent-access/contract'
 import {
   CapabilityProcurementEngine,
+  createProcureIdentityPort,
   defaultProductionCatalogSearcher,
 } from './procure-engine'
 import {
@@ -24,27 +25,52 @@ export {
 
 const parameters: readonly ActionParameter[] = [
   {
+    name: 'kind',
+    type: 'enum',
+    enum: ['need', 'exact'],
+    description: 'Search from a need or procure the exact published Tool reference.',
+    required: true,
+  },
+  {
     name: 'need',
     type: 'string',
     description: 'Natural language capability need or goal to resolve and procure in one turn.',
-    required: true,
+    required: false,
+  },
+  {
+    name: 'toolRef',
+    type: 'string',
+    description: 'Exact published Tool reference when kind is exact.',
+    required: false,
+  },
+  {
+    name: 'input',
+    type: 'object',
+    description: 'Validated Tool arguments when kind is exact.',
+    required: false,
   },
   {
     name: 'maxSpendAud',
     type: 'string',
-    description: 'Optional maximum total spending budget in decimal AUD for this capability call.',
-    required: false,
+    description: 'Required maximum total spending budget in decimal AUD for this capability call.',
+    required: true,
+  },
+  {
+    name: 'idempotencyKey',
+    type: 'string',
+    description: 'Caller-owned durable key; reuse unchanged after an uncertain response.',
+    required: true,
   },
 ]
 
 export const toolProcureAction = defineAction<ToolProcureInput, ToolProcureResult>({
   id: TOOL_PROCURE_ACTION_ID,
   name: 'Procure a Tool capability',
-  summary: 'Resolve a capability gap, extract contract arguments, bind Quote, execute Provider, and autonomously remedy stealth failures in one turn.',
+  summary: 'Find or select a published Tool, obtain a Quote, enforce the spending ceiling, and make a native Call using a caller-owned replay key.',
   boundaries: [
     'Enforces caller-specific authority and exact Australian GST itemization.',
-    'Guarantees A$0.00 net deduction on upstream provider failure via autonomous remedy.',
-    'Preserves deterministic IceInVein budget barriers before any ledger reservation.',
+    'Provider failure is not proof of a refund; inspect the original Call for its authoritative outcome.',
+    'Returns the original Quote and Call references for recovery without a second purchase.',
   ],
   schema: toolProcureInputSchema,
   outputSchema: toolProcureResultSchema,
@@ -52,14 +78,14 @@ export const toolProcureAction = defineAction<ToolProcureInput, ToolProcureResul
   readOnly: false,
   effect: {
     class: 'payment',
-    reversible: true,
+    reversible: false,
     recipientKind: 'business',
     dataClasses: ['operation_input'],
     spendExposure: 'bounded',
     approval: 'policy_eligible',
   },
-  surfaces: ['http', 'mcp', 'cli', 'chat'],
-  mcp: { idempotent: false, openWorld: false, destructive: false },
+  surfaces: ['http', 'mcp', 'cli'],
+  mcp: { idempotent: true, openWorld: true, destructive: true },
   credentialAdmission: {
     scope: MARKET_TOOLS_CALL_SCOPE,
     authority: 'descriptor_classified',
@@ -67,7 +93,7 @@ export const toolProcureAction = defineAction<ToolProcureInput, ToolProcureResul
   invocationContract: {
     version: 'tool.procure:v1',
     consequenceClass: 'external_effect',
-    materialInputPaths: ['need'],
+    materialInputPaths: ['kind', 'need', 'toolRef', 'input', 'maxSpendAud'],
     authorityRequirement: 'principal',
     retryClass: 'reconcile_before_retry',
     expectedEvidence: ['operation_commitment', 'purchase_receipt'],
@@ -76,12 +102,14 @@ export const toolProcureAction = defineAction<ToolProcureInput, ToolProcureResul
   },
   run: async ({ data, context }) => {
     if (context.agentAccessPrincipal === undefined) throw new Error('agent_access_context_missing')
-    if (context.callService === undefined) throw new Error('call_service_unavailable')
+    if (context.callService === undefined || context.request === undefined) throw new Error('call_service_unavailable')
+    const correlationId = context.correlationId ?? globalThis.crypto.randomUUID()
     const engine = new CapabilityProcurementEngine({
       catalogSearcher: context.catalogSearcher ?? defaultProductionCatalogSearcher,
       callService: context.callService,
       principal: context.agentAccessPrincipal,
-      ...(context.correlationId !== undefined ? { correlationId: context.correlationId } : {}),
+      identity: createProcureIdentityPort(context.request, JSON.stringify(data), correlationId),
+      correlationId,
     })
     return await engine.procure(data)
   },

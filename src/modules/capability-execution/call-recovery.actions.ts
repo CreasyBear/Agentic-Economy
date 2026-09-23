@@ -327,7 +327,7 @@ export const callReconcileAction = defineAction<CallReconcileActionInput, CallRe
     approval: 'none',
   },
   surfaces: ['http', 'mcp', 'cli'],
-  mcp: { idempotent: true, openWorld: false, destructive: false },
+  mcp: { idempotent: true, openWorld: false, destructive: true },
   credentialAdmission,
   invocationContract: {
     version: CALL_ROUTE_CONTRACT.reconcile.contractVersion,

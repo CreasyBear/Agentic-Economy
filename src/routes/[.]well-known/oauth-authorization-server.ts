@@ -4,5 +4,18 @@ import { oauthAuthorizationServerResponse } from '@/lib/server/agent-access-oaut
 import { methodNotAllowed } from '@/lib/server/method-guard'
 
 export const Route = createFileRoute('/.well-known/oauth-authorization-server')({
-  server: { handlers: { GET: ({ request }) => oauthAuthorizationServerResponse(request), POST: () => methodNotAllowed(['GET']), PUT: () => methodNotAllowed(['GET']), PATCH: () => methodNotAllowed(['GET']), DELETE: () => methodNotAllowed(['GET']), HEAD: () => methodNotAllowed(['GET']), OPTIONS: () => methodNotAllowed(['GET']), TRACE: () => methodNotAllowed(['GET']), CONNECT: () => methodNotAllowed(['GET']) } },
+  server: { handlers: {
+    GET: ({ request }) => oauthAuthorizationServerResponse(request),
+    HEAD: ({ request }) => {
+      const response = oauthAuthorizationServerResponse(request)
+      return new Response(null, { status: response.status, headers: response.headers })
+    },
+    POST: () => methodNotAllowed(['GET', 'HEAD']),
+    PUT: () => methodNotAllowed(['GET', 'HEAD']),
+    PATCH: () => methodNotAllowed(['GET', 'HEAD']),
+    DELETE: () => methodNotAllowed(['GET', 'HEAD']),
+    OPTIONS: () => methodNotAllowed(['GET', 'HEAD']),
+    TRACE: () => methodNotAllowed(['GET', 'HEAD']),
+    CONNECT: () => methodNotAllowed(['GET', 'HEAD']),
+  } },
 })

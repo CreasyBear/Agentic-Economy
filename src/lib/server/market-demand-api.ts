@@ -1,14 +1,13 @@
-import { bearerChallenge } from '@/lib/http/oauth-challenge'
 import { gatewayFailureToProblem } from '@/lib/errors'
 import { degrade } from '@/lib/observability/degrade'
 import {
+  authRefusalProblem,
   authenticateAgentAccess,
   resolveAgentAccessPrincipal,
   type AgentAccessAuthenticationOptions,
   type AgentAccessPrincipalResolver,
 } from '@/lib/server/agent-access-auth'
 import { readBoundedRequestText } from '@/lib/server/bounded-request-body'
-import { resolveCanonicalBaseUrl } from '@/lib/server/canonical-url'
 import { response } from '@/lib/server/no-store-response'
 import { problem } from '@/lib/server/problem'
 import { withHttpRateLimit } from '@/lib/server/rate-limit'
@@ -76,17 +75,7 @@ export async function handleMarketRequestPost(
       consequenceResource: `surface:http:market-request-${actionName}`,
     })
     if (admitted.kind !== 'authenticated') {
-      const failure = gatewayFailureToProblem({ code: admitted.reason, kind: 'refused', retryable: false })
-      return withRequestCorrelationHeader(problem({
-        ...failure,
-        status: admitted.status,
-        detail: admitted.reason === 'scope_required'
-          ? 'The current agent credential does not grant buyer market access.'
-          : 'Connect a buyer agent credential before using private market requests.',
-      }, {
-        Vary: 'Authorization',
-        'WWW-Authenticate': bearerChallenge(resolveCanonicalBaseUrl(request).baseUrl, contract.scope),
-      }), correlationId)
+      return authRefusalProblem(request, admitted, contract.scope, undefined, correlationId)
     }
 
     const rateLimited = await withHttpRateLimit(request, rateLimitScopeByAction[actionName], async () => {

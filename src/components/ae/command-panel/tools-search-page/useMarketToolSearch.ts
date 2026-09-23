@@ -17,7 +17,6 @@ import {
 import { APP_NAVIGATION, type AppDestinationId } from '@/lib/navigation/app-navigation'
 
 import { getStatusPresentation } from '@/lib/ui/status-presentation'
-
 import {
   TOOL_SEARCH_RESULT_LIMIT,
   searchMarketTools,
@@ -32,7 +31,7 @@ import {
   type ToolSearchResultRowModel,
 } from './tools-search-page.contracts'
 
-type CatalogSearchItem = Extract<ToolChoiceSearchResult, { kind: 'ok' }>['items'][number]
+type CatalogSearchItem = Extract<ToolChoiceSearchResult, { kind: 'matched' }>['results'][number]
 const navigationIcons: Readonly<Record<AppDestinationId, LucideIcon>> = {
   market: Compass,
   chat: MessageSquare,
@@ -55,22 +54,19 @@ const navigationItems: readonly CommandNavigationItem[] = APP_NAVIGATION.map((de
 
 function mapCatalogSearchItemToRowModel(item: CatalogSearchItem): ToolSearchResultRowModel {
   const healthLabel =
-    item.healthStatus === 'operational'
+    item.readiness === 'ready'
       ? getStatusPresentation('operational').label
-      : item.healthStatus === 'degraded'
+      : item.readiness === 'unavailable'
         ? getStatusPresentation('degraded').label
         : 'Unverified'
-  const row: ToolSearchResultRowModel = {
+  return {
     toolRef: item.toolRef,
     title: item.title,
-    providerLine: `${item.provider.name} · ${item.capabilityId}`,
+    providerLine: item.details === undefined
+      ? item.summary : `${item.details.provider.name} · ${item.details.capabilityId}`,
     healthLabel,
-    priceLabel: item.priceLabel,
+    priceLabel: item.price.label,
   }
-  if (item.displayPrice?.kind === 'indicative') {
-    return { ...row, priceValidUntil: item.displayPrice.validUntil }
-  }
-  return row
 }
 
 type UseMarketToolSearchOptions = Readonly<{
@@ -119,24 +115,21 @@ export function useMarketToolSearch({
             })
             return
           }
-          if (result.kind !== 'ok') {
+          if (result.kind === 'noMatch') {
+            const nearMisses = result.nearMisses.map((item) => item.title).join(', ')
             setStatus({
-              kind: 'error',
+              kind: 'empty',
               query: trimmed,
-              tone: 'recovery',
-              message: `No Tools matched “${query}”.`,
+              count: 0,
+              message: `${result.scope === 'page' ? 'No suitable Tools on this page' : 'No suitable Tools found'}.${nearMisses.length === 0 ? '' : ` Near misses (not matches): ${nearMisses}.`}`,
             })
-            return
-          }
-          if (result.items.length === 0) {
-            setStatus({ kind: 'empty', query: trimmed, count: result.count })
             return
           }
           setStatus({
             kind: 'success',
             query: trimmed,
-            count: result.count,
-            items: result.items.map(mapCatalogSearchItemToRowModel),
+            count: result.results.length,
+            items: result.results.map(mapCatalogSearchItemToRowModel),
           })
         } catch (error) {
           if (!current) return

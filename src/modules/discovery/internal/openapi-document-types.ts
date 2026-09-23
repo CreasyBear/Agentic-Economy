@@ -23,11 +23,13 @@ export type NormalizedOperation = Readonly<{
   operationId: string
   summary: string
   tags: readonly string[]
-  method: 'GET' | 'POST'
+  description?: string
+  method: 'GET' | 'POST' | 'HEAD' | 'DELETE'
   path: string
   security: 'none' | Readonly<{ scope: string }>
   pathParams: readonly NormalizedParam[]
   queryParams: readonly NormalizedParam[]
+  headerParams?: readonly NormalizedParam[]
   requestBodySchema?: JSONSchema
   responses: readonly NormalizedResponse[]
 }>

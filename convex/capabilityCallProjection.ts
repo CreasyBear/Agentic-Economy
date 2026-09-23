@@ -215,7 +215,7 @@ export function recoveryNotFound(callRef: string): WorkerRecoveryResult {
 export function projectPureCallStatus(
   row: RecoveryRow,
   status: PublicExecutionStatus,
-): WorkerRecoveryResult {
+): Extract<WorkerRecoveryResult, { kind: 'found' }> {
   const latestAttempt = status.attempts.at(-1)
   const attemptRef = latestAttempt?.attemptRef ?? row.attemptRef
   const effectGeneration = latestAttempt?.effectGeneration
@@ -279,7 +279,7 @@ export function retryableRecoveryResult(
 export function projectPersistedRecovery(
   row: RecoveryRow,
   state = row.state,
-): WorkerRecoveryResult {
+): Extract<WorkerRecoveryResult, { kind: 'found' }> {
   const effectGeneration = row.result?.kind === 'reconciliation_required'
     ? row.result.evidence.effectGeneration
     : undefined

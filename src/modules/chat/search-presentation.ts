@@ -13,13 +13,6 @@ export function chatSearchUse(value: unknown): ChatSearchUse | null {
     : null
 }
 
-export type ChatSearchSurface = 'compare' | 'describe'
-
-export function searchCardSurface(use: unknown): ChatSearchSurface | undefined {
-  if (use === 'registry.tools.compare') return 'compare'
-  if (use === 'registry.tools.describe') return 'describe'
-  return undefined
-}
 
 export function readBelowMatch(value: unknown): readonly string[] {
   if (!Array.isArray(value)) return []
@@ -32,18 +25,3 @@ export function readBelowMatch(value: unknown): readonly string[] {
   return refs
 }
 
-export function attachChatSearchUse<T>(
-  output: T,
-  use: ChatSearchUse | null,
-  belowMatch: readonly string[] = [],
-): T {
-  if (typeof output !== 'object' || output === null || Array.isArray(output)) return output
-  if (!('kind' in output) || output.kind !== 'ok') return output
-  const marked = readBelowMatch(belowMatch)
-  if (use === null && marked.length === 0) return output
-  return {
-    ...output,
-    ...(use === null ? {} : { use }),
-    ...(marked.length === 0 ? {} : { belowMatch: marked }),
-  }
-}

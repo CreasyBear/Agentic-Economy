@@ -205,7 +205,7 @@ describe('capability Tool search ranking', () => {
   it.each([
     'foriegn exchagne rats EUR AUD',
     '為替レート EUR AUD 💱',
-  ])('keeps a typed currency pair discoverable through noisy capability prose: %s', (query) => {
+  ])('does not infer unsupported currency pair legs from provider branding: %s', (query) => {
     const ranked = rankToolSearchText(query, [
       {
         value: 'fx',
@@ -219,7 +219,18 @@ describe('capability Tool search ranking', () => {
       },
     ])
 
-    expect(ranked).toEqual(['fx'])
+    expect(ranked).toEqual([])
+  })
+
+  it('matches both currency codes only when explicitly present as whole tokens', () => {
+    const ref = 'operation:v1:' + 'a'.repeat(64)
+    expect(rankToolSearchText('AUD USD exchange rate', [
+      { value: 'crypto', toolRef: ref, searchText: ['USDC exchange rate AUD'] },
+      { value: 'fiat', toolRef: 'operation:v1:' + 'b'.repeat(64), searchText: ['AUD USD foreign exchange rate'] },
+    ])).toEqual(['fiat'])
+    expect(rankToolSearchText('AUD USD exchange rate', [
+      { value: 'crypto', toolRef: ref, searchText: ['USDC exchange rate AUD'] },
+    ])).toEqual([])
   })
 
   it('fails closed when a long unsupported request shares only one generic token', () => {

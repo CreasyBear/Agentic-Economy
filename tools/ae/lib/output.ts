@@ -1,7 +1,10 @@
 import { isRecord } from '@/modules/common/is-record'
 import { ConvexSourceError } from '@/lib/server/convex-source'
-import { remoteProblemToProblem, type ProblemKind } from '@/lib/errors'
-import { safeOriginForDiagnostics } from './args'
+import { buildProblem, remoteProblemToProblem, type ProblemKind } from '@/lib/errors'
+import { HOSTED_DEFAULT_BASE_URL, safeOriginForDiagnostics } from './args'
+import { authContinuation } from '@/lib/http/auth-continuation'
+import { projectCliJourneyProblem, validateJourneyNext, type JourneyNext } from '@/modules/actions'
+import { journeyNextCommand } from './journey-next-command'
 
 const REDACTED_FAILURE_VALUE = '<redacted>'
 /**
@@ -16,7 +19,10 @@ const SENSITIVE_FAILURE_TEXT = /\b(?:authorization|access[_-]?token|api[_-]?key|
 
 function sanitizeFailureText(value: string): string {
   return value
-    .replace(URL_IN_FAILURE_TEXT, (url) => safeOriginForDiagnostics(url))
+    .replace(URL_IN_FAILURE_TEXT, (url) => {
+      const trailing = url.match(/[.,;!?]+$/u)?.[0] ?? ''
+      return `${safeOriginForDiagnostics(url.slice(0, url.length - trailing.length))}${trailing}`
+    })
     .replace(/\bBearer\s+\S+/giu, 'Bearer <redacted>')
     .replace(SENSITIVE_FAILURE_TEXT, (field) => `${field.slice(0, field.search(/[:=]/u) + 1)}${REDACTED_FAILURE_VALUE}`)
 }
@@ -44,6 +50,10 @@ export type CliFailureOptions = {
   exitCode?: number
   kind?: ProblemKind
   code?: string
+  status?: number
+  instance?: string
+  requestId?: string
+  next?: readonly JourneyNext[]
   detail?: unknown
   retryable?: boolean
   retryAfter?: string
@@ -55,6 +65,10 @@ export class CliFailure extends Error {
   readonly exitCode: number
   readonly kind: ProblemKind
   readonly code: string | undefined
+  readonly status: number | undefined
+  readonly instance: string | undefined
+  readonly requestId: string | undefined
+  readonly next: CliFailureOptions['next']
   readonly detail: unknown | undefined
   readonly retryable: boolean | undefined
   readonly retryAfter: string | undefined
@@ -67,6 +81,10 @@ export class CliFailure extends Error {
     this.exitCode = options.exitCode ?? 1
     this.kind = options.kind ?? 'INTERNAL'
     this.code = options.code
+    this.status = options.status
+    this.instance = options.instance
+    this.requestId = options.requestId
+    this.next = options.next
     this.detail = options.detail === undefined ? undefined : sanitizeFailureValue(options.detail)
     this.retryable = options.retryable
     this.retryAfter = options.retryAfter
@@ -86,12 +104,62 @@ export function sourceErrorToCliFailure(error: unknown): CliFailure | undefined 
   })
 }
 
+
+/** Local CLI failures and validated remote problems share one JSON boundary. */
+export function cliFailureToProblem(
+  failure: CliFailure,
+  presentation: Readonly<{ suggestion?: string; nextCommand?: string; origin?: string }> = {},
+): Record<string, unknown> {
+  const detail = typeof failure.detail === 'string' ? failure.detail : failure.message
+  const next = [
+    ...(failure.kind === 'UNAUTHENTICATED' && failure.nextCommand === undefined ? authContinuation() : []),
+    ...(failure.next ?? []),
+  ]
+  const refs = isRecord(failure.detail)
+    ? Object.fromEntries(Object.entries(failure.detail)
+      .filter(([key, value]) => /^(?:callRef|quoteRef|recoveryRef|toolRef|idempotencyKey|identityPreserved)$/u.test(key)
+        && (typeof value === 'string' || typeof value === 'boolean')))
+    : {}
+  const projected = projectCliJourneyProblem({
+    ...buildProblem({
+      kind: failure.kind, code: failure.code ?? 'cli_failure',
+      ...(failure.status === undefined ? {} : { status: failure.status }),
+      detail,
+      instance: failure.instance ?? '/cli',
+      retryable: failure.retryable ?? false,
+    }),
+    ...(failure.requestId === undefined ? {} : { requestId: failure.requestId }),
+    next,
+    ...(Object.keys(refs).length === 0 ? {} : { refs }),
+  }, {
+    source: failure.requestId === undefined ? 'local' : 'remote',
+    origin: presentation.origin ?? HOSTED_DEFAULT_BASE_URL,
+    exitCode: failure.exitCode,
+  })
+  const explicitAuthCommand = failure.kind === 'UNAUTHENTICATED'
+    ? presentation.nextCommand ?? failure.nextCommand
+    : undefined
+  const nextCommand = explicitAuthCommand ?? (next.length > 0
+    ? projected.next.map((action) => journeyNextCommand(action, {
+      baseUrl: presentation.origin ?? HOSTED_DEFAULT_BASE_URL, json: false,
+    })).find((command) => command !== undefined)
+    : presentation.nextCommand ?? failure.nextCommand)
+  return {
+    ...projected,
+    message: failure.message,
+    ...(failure.retryAfter === undefined ? {} : { retryAfter: failure.retryAfter }),
+    ...((presentation.suggestion ?? failure.suggestion) === undefined ? {} : { suggestion: presentation.suggestion ?? failure.suggestion }),
+    ...(nextCommand === undefined ? {} : { nextCommand }),
+  }
+}
+
 export type HttpOutcome = {
   status: number
   ok: boolean
   durationMs: number
   headers: Headers
   body: unknown
+  baseUrl?: string
   bodyText: string
 }
 
@@ -110,7 +178,7 @@ export async function callJson(
       ...init.headers,
     },
   })
-  return readHttpOutcome(response, startedAt)
+  return { ...await readHttpOutcome(response, startedAt), baseUrl }
 }
 
 export async function readHttpOutcome(response: Response, startedAt: number): Promise<HttpOutcome> {
@@ -138,15 +206,18 @@ export function requireOk(outcome: HttpOutcome, path: string): unknown {
   const status = outcome.status
   const contentType = (outcome.headers.get('content-type') ?? '').toLowerCase()
   if (isStructuredFailureBody(outcome.body, contentType)) {
-    const problem = remoteProblemToProblem({ status, body: outcome.body })
+    const problem = remoteProblemToProblem({ status, body: outcome.body, ...(outcome.baseUrl === undefined ? {} : { baseUrl: outcome.baseUrl }) })
     const retryAfter = outcome.headers.get('retry-after')?.trim()
     // One clean actionable line for humans; the canonical kind/code and
     // retry fields ride the CliFailure for --json.
     throw new CliFailure(`${path} returned ${status}: ${problem.title}`, {
       exitCode: 1,
       kind: problem.kind,
+      status: problem.status,
+      ...(typeof problem.instance === 'string' ? { instance: problem.instance } : {}),
+      ...(Array.isArray(outcome.body.next) ? { next: validateJourneyNext(outcome.body.next, { origin: outcome.baseUrl ?? HOSTED_DEFAULT_BASE_URL }) } : {}),
+      ...(outcome.headers.get('x-ae-request-id')?.match(/^[a-zA-Z0-9_-]{1,128}$/u) ? { requestId: outcome.headers.get('x-ae-request-id')! } : {}),
       code: problem.code,
-      ...(problem.detail === undefined ? {} : { detail: problem.detail }),
       ...(problem.retryable === undefined ? {} : { retryable: problem.retryable }),
       ...(retryAfter === undefined || retryAfter.length === 0 ? {} : { retryAfter }),
     })

@@ -142,7 +142,10 @@ export function exactOwnerX402Environment(
 export function convexStagingResult(
   result: PublishPreparedCapabilityCommandResult,
 ): StageOwnerX402CapabilityResult {
-  if (result.kind === 'refused') return result
+  if (result.kind === 'refused') {
+    const { next, ...refusal } = result
+    return next === undefined ? refusal : { ...refusal, next: next.map((action) => ({ ...action })) }
+  }
   return {
     kind: result.kind,
     ...(result.operationId === undefined ? {} : { operationId: result.operationId }),

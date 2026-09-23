@@ -5,6 +5,7 @@ import {
   type CapabilityPublicationImportRefusal,
   type CapabilityPublicationImportResult,
 } from '../publication-importers'
+import type { CapabilityPublicationQualityNext } from './input-quality'
 import { preparePublicationDraft, pricingConfigForOffering, type AdmitPublicationDraftRefusal } from './draft'
 import {
   publishPreparedCapabilityCommand,
@@ -84,6 +85,7 @@ export type AdmitCapabilityPublicationResult =
   | Readonly<{
       kind: 'refused'
       reason: CapabilityPublicationAdmissionRefusal
+      next?: readonly CapabilityPublicationQualityNext[]
     }>
 
 export async function admitCapabilityPublicationCommand(
@@ -111,7 +113,7 @@ export async function admitCapabilityPublicationCommand(
   } catch (cause) {
     return degradeBackend(cause, { kind: 'refused' as const, reason: 'source_invalid' as const }, { site: 'admitCapabilityPublicationCommand', reason: 'invalid_response' })
   }
-  if (normalized.kind === 'refused') return { kind: 'refused', reason: normalized.reason }
+  if (normalized.kind === 'refused') return normalized
 
   const origin = normalized.draft.offering.origin
   if (origin === undefined
@@ -132,7 +134,11 @@ export async function admitCapabilityPublicationCommand(
     derefSchema: dereferenceLocalSchema,
   }).catch(() => undefined)
   if (prepared === undefined) return { kind: 'refused', reason: 'source_invalid' }
-  if (prepared.kind === 'refused') return { kind: 'refused', reason: prepared.reason }
+  if (prepared.kind === 'refused') return {
+    kind: 'refused',
+    reason: prepared.reason,
+    ...(prepared.next === undefined ? {} : { next: prepared.next }),
+  }
 
   const preparedOrigin = prepared.draft.offering.origin
   if (preparedOrigin === undefined
@@ -169,7 +175,11 @@ export async function admitCapabilityPublicationCommand(
     now: input.now,
   }, ports)
   if (published.kind === 'refused') {
-    return { kind: 'refused', reason: mapPublishRefusal(published.reason) }
+    return {
+      kind: 'refused',
+      reason: mapPublishRefusal(published.reason),
+      ...(published.next === undefined ? {} : { next: published.next }),
+    }
   }
   return {
     kind: published.kind,

@@ -15,20 +15,25 @@ export const Route = createFileRoute('/.well-known/api-catalog')({
   server: {
     handlers: {
       GET: ({ request }) => handleApiCatalogRequest(request),
-      POST: () => methodNotAllowed(['GET']),
-      PUT: () => methodNotAllowed(['GET']),
-      PATCH: () => methodNotAllowed(['GET']),
-      DELETE: () => methodNotAllowed(['GET']),
-      HEAD: () => methodNotAllowed(['GET']),
-      OPTIONS: () => methodNotAllowed(['GET']),
-      TRACE: () => methodNotAllowed(['GET']),
-      CONNECT: () => methodNotAllowed(['GET']),
+      POST: () => methodNotAllowed(['GET', 'HEAD']),
+      PUT: () => methodNotAllowed(['GET', 'HEAD']),
+      PATCH: () => methodNotAllowed(['GET', 'HEAD']),
+      DELETE: () => methodNotAllowed(['GET', 'HEAD']),
+      HEAD: ({ request }) => {
+        const response = handleApiCatalogRequest(request)
+        return new Response(null, { status: response.status, headers: response.headers })
+      },
+      OPTIONS: () => methodNotAllowed(['GET', 'HEAD']),
+      TRACE: () => methodNotAllowed(['GET', 'HEAD']),
+      CONNECT: () => methodNotAllowed(['GET', 'HEAD']),
     },
   },
 })
 
 export function handleApiCatalogRequest(request: Request): Response {
-  return discoveryLinksetJsonResponse(
+  const response = discoveryLinksetJsonResponse(
     buildApiCatalogDocument({ canonicalBaseUrl: resolveCanonicalBaseUrl(request).baseUrl }),
   )
+  response.headers.set('Link', '</.well-known/api-catalog>; rel="api-catalog"')
+  return response
 }

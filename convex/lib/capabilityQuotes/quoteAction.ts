@@ -26,6 +26,16 @@ export async function quoteActionHandler(
     internal.capabilityQuotes.prepareFinancialSubjects,
     args,
   )
+  return await quoteActionCore(ctx, args, subjects)
+}
+
+/** Shared public and trusted-chat Quote path after transactional admission. */
+export async function quoteActionCore(
+  ctx: ActionCtx,
+  args: QuoteArgs,
+  subjects: FinancialSubjectsResult,
+  turnRef?: string,
+): Promise<QuoteResult> {
   if (subjects.kind === 'refused') return refuse(args, subjects.code, subjects.code !== 'input_invalid' && subjects.code !== 'grant_not_found' && subjects.code !== 'tool_unsupported'
     && (subjects.code !== 'inspection_unavailable' || spendingPeriodPreparationIsRetryable(subjects.reason)), {
     ...(subjects.reason === undefined ? {} : { reason: subjects.reason }),
@@ -81,6 +91,7 @@ export async function quoteActionHandler(
     const organizationMonthlySpend = await readOrganizationMonthlySpendSnapshotForQuote(ctx, subjects)
     return await ctx.runMutation(internal.capabilityQuotes.issueQuote, {
       ...args,
+      ...(turnRef === undefined ? {} : { turnRef }),
       formance: {
         policyDigest: subjects.policyDigest,
         accountRef: subjects.accountRef,
@@ -180,6 +191,7 @@ export async function quoteActionHandler(
     internal.capabilityQuotes.issueQuote,
     {
       ...args,
+      ...(turnRef === undefined ? {} : { turnRef }),
       ...(live.kind === 'observed' ? { liveX402Requirement: live.requirement } : {}),
       ...(referenceRate === undefined ? {} : { referenceRate }),
       formance: {

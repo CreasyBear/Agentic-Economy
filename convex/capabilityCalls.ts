@@ -56,7 +56,6 @@ import {
   canonicalAgentCallHandler,
   canonicalAgentListHandler,
   canonicalAgentReconcileHandler,
-  canonicalAgentStatusHandler,
   canonicalOwnerApprovalDecisionHandler,
   canonicalOwnerApprovalListHandler,
   canonicalOwnerCancelHandler,
@@ -94,7 +93,6 @@ import {
   callResultValue,
   reconciliationEvidenceValue,
   recoveryResultValue,
-  statusResultValue,
   x402PaymentReconciliationEvidenceValue,
 } from '@/modules/capability-execution/convex'
 
@@ -301,11 +299,6 @@ export const call = action({
   handler: canonicalAgentCallHandler,
 })
 
-export const readCallStatus = action({
-  args: { ...principalAndSourceArgs, callRef: v.string(), afterVersion: v.optional(v.number()) },
-  returns: statusResultValue,
-  handler: canonicalAgentStatusHandler,
-})
 
 export const listAgentCallSummaries = internalQuery({
   args: {

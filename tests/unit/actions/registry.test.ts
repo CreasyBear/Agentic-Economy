@@ -5,6 +5,7 @@ import {
   findAction,
   listActions,
   listMcpActions,
+  mcpToolsetAdmitted,
   mcpToolName,
 } from '@/modules/actions'
 import { projectPublicServicesPage, type PublicBusinessCatalogApiV2Page } from '@/modules/registry/public'
@@ -82,7 +83,7 @@ describe('action registry', () => {
   })
 
 
-  it('exposes exactly the bounded Tool actions to chat', () => {
+  it('limits chat to discovery, Quote, and Call actions', () => {
     const exposed = listActions().filter((action) => action.surfaces.includes('chat')).map((action) => action.id)
     expect(exposed).toEqual([
       'registry.tools.list',
@@ -90,70 +91,45 @@ describe('action registry', () => {
       'registry.tools.describe',
       'registry.tools.compare',
       'tool.quote',
-      'tool.procure',
       'tool.call',
     ])
+    expect(exposed).not.toContain('tool.procure')
   })
 
-  it('does not expose retired web discovery', () => {
-    expect(findAction('web.discover')).toBeUndefined()
-  })
-
-  it('exposes MCP actions and keeps the anonymous tier read-only', () => {
+  it('exposes role-scoped MCP workflows without granting anonymous purchase authority', () => {
     const exposed = listMcpActions()
-    expect(exposed.map((action) => action.id)).toEqual([
-      'registry.tools.list', 'registry.tools.search',
-      'registry.tools.describe', 'registry.tools.compare',
-      'agentAccess.whoami',
-      'agentAccess.balance', 'agentAccess.activity',
-      'funding.handoff.config', 'funding.handoff.create', 'funding.handoff.status',
-      'marketDemand.record', 'marketDemand.list', 'marketDemand.status', 'marketDemand.withdraw',
-      'tool.quote', 'tool.procure', 'tool.call', 'call.list', 'call.status',
-      'call.cancel', 'call.reconcile',
-      'supply.source.preview', 'supply.tools.list', 'supply.status', 'supply.publish', 'supply.withdraw',
-      'supply.recheck', 'supply.republish', 'supply.earnings', 'supply.calls',
-      'supply.connection.list', 'supply.connection.detail',
-      'supply.connection.connect', 'supply.connection.reconnect',
-      'supply.connection.revoke',
-      'supply.offboarding.status',
-    ])
-    expect(exposed.slice(-15).every((action) =>
-      action.credentialAdmission?.scope === 'market_supply:manage'
-      && action.surfaces.includes('mcp'))).toBe(true)
-    expect(exposed.slice(-15).every((action) => action.surfaces.includes('cli'))).toBe(true)
-    const anonymous = exposed.filter((action) => action.readOnly && action.credentialAdmission === undefined)
-    expect(anonymous.map((action) => action.id)).toEqual([
-      'registry.tools.list', 'registry.tools.search',
-      'registry.tools.describe', 'registry.tools.compare',
-    ])
-    for (const action of anonymous) {
-      expect(action.readOnly).toBe(true)
+    const ids = exposed.map((action) => action.id)
+    expect(ids).not.toContain('registry.tools.list')
+    expect(ids).toEqual(expect.arrayContaining([
+      'registry.tools.search', 'registry.tools.describe', 'registry.tools.compare',
+      'tool.quote', 'tool.procure', 'tool.call', 'call.status', 'journey.status',
+      'supply.publish',
+    ]))
+    expect(new Set(ids).size).toBe(ids.length)
+    expect(exposed.every((action) => action.surfaces.includes('mcp'))).toBe(true)
+
+    const anonymous = { scopes: [], authenticated: false, readOnly: true }
+    const buyer = { scopes: ['market_tools:call'], authenticated: true, readOnly: false }
+    const readOnlyBuyer = { ...buyer, readOnly: true }
+    const provider = { scopes: ['market_supply:manage'], authenticated: true, readOnly: false }
+    expect(exposed.filter((action) => mcpToolsetAdmitted(action, anonymous)).map((action) => action.id).sort())
+      .toEqual(['registry.tools.compare', 'registry.tools.describe', 'registry.tools.search'])
+    for (const id of ['tool.quote', 'tool.procure', 'tool.call']) {
+      const action = findAction(id)
+      if (action === undefined) throw new Error(`Missing ${id}`)
+      expect(action.readOnly).toBe(false)
+      expect(mcpToolsetAdmitted(action, anonymous)).toBe(false)
+      expect(mcpToolsetAdmitted(action, readOnlyBuyer)).toBe(false)
+      expect(mcpToolsetAdmitted(action, buyer)).toBe(true)
+      expect(mcpToolName(action)).toBe(`ae_${id.replaceAll('.', '_')}`)
     }
-    expect(exposed.find((action) => action.id === 'tool.call')?.readOnly).toBe(false)
-    expect(exposed.find((action) => action.id === 'call.status')?.readOnly).toBe(true)
-    expect(exposed.find((action) => action.id === 'call.cancel')?.readOnly).toBe(false)
-    expect(exposed.find((action) => action.id === 'call.reconcile')?.readOnly).toBe(false)
-    for (const id of ['tool.procure', 'tool.call', 'call.status', 'call.cancel', 'call.reconcile']) {
-      expect(exposed.find((action) => action.id === id)?.surfaces).toEqual(
-        id === 'tool.procure' || id === 'tool.call' ? ['http', 'mcp', 'cli', 'chat'] : ['http', 'mcp', 'cli'],
-      )
-    }
-    expect(exposed.map((action) => mcpToolName(action))).toEqual([
-      'ae_registry_tools_list', 'ae_registry_tools_search',
-      'ae_registry_tools_describe', 'ae_registry_tools_compare',
-      'ae_agentAccess_whoami',
-      'ae_agentAccess_balance', 'ae_agentAccess_activity',
-      'ae_funding_handoff_config', 'ae_funding_handoff_create', 'ae_funding_handoff_status',
-      'ae_marketDemand_record', 'ae_marketDemand_list', 'ae_marketDemand_status', 'ae_marketDemand_withdraw',
-      'ae_tool_quote', 'ae_tool_procure', 'ae_tool_call', 'ae_call_list', 'ae_call_status',
-      'ae_call_cancel', 'ae_call_reconcile',
-      'ae_supply_source_preview', 'ae_supply_tools_list', 'ae_supply_status', 'ae_supply_publish', 'ae_supply_withdraw',
-      'ae_supply_recheck', 'ae_supply_republish', 'ae_supply_earnings', 'ae_supply_calls',
-      'ae_supply_connection_list', 'ae_supply_connection_detail',
-      'ae_supply_connection_connect', 'ae_supply_connection_reconnect',
-      'ae_supply_connection_revoke',
-      'ae_supply_offboarding_status',
-    ])
+    const status = findAction('call.status')
+    const publish = findAction('supply.publish')
+    if (status === undefined || publish === undefined) throw new Error('MCP status or provider action missing')
+    expect(status.readOnly).toBe(true)
+    expect(mcpToolsetAdmitted(status, buyer)).toBe(true)
+    expect(mcpToolsetAdmitted(publish, buyer)).toBe(false)
+    expect(mcpToolsetAdmitted(publish, provider)).toBe(true)
   })
   it('exposes current agent identity without exposing bearer material', async () => {
     const action = findAction('agentAccess.whoami')

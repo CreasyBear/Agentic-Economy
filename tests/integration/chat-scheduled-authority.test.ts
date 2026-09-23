@@ -272,17 +272,17 @@ describe('scheduled chat consequence authority', () => {
         }
       })
 
-      // The registered action always performs its narrow recovery cleanup by
-      // clearing the active-generation marker, including after authority denial.
-      await expect(published.owner.query(api.chatThreads.getThread, {
+      // Recovery clears the active-generation marker for the originating
+      // principal, including after authority denial.
+      await expect(sender.query(api.chatThreads.getThread, {
         threadId: sent.threadId,
         now: Date.now(),
       })).resolves.toMatchObject({ busy: false })
-      const messages = await published.owner.query(api.chatMessages.listMessages, {
+      const messages = await sender.query(api.chatMessages.listMessages, {
         threadId: sent.threadId,
         paginationOpts: { cursor: null, numItems: 20 },
       })
-      expect(messages.page.map(({ role }) => role)).toEqual(
+      expect(messages.page.map(({ role }: { role: string }) => role)).toEqual(
         allowed ? ['user', 'assistant'] : ['user'],
       )
     },
@@ -556,8 +556,8 @@ describe('scheduled chat consequence authority', () => {
       threadId: sent.threadId,
       paginationOpts: { cursor: null, numItems: 20 },
     })
-    expect(admittedMessages.page.map(({ role }) => role)).toEqual(['user', 'assistant'])
-    expect(admittedMessages.page.find(({ role }) => role === 'assistant')?.text)
+    expect(admittedMessages.page.map(({ role }: { role: string }) => role)).toEqual(['user', 'assistant'])
+    expect(admittedMessages.page.find(({ role }: { role: string }) => role === 'assistant')?.text)
       .toContain('current keyless Operation')
     const admittedAuthority = await readAuthority(admittedBackend, 'chat-runtime-generation')
     const modelCallsAfterSettledGeneration = gatewayProbe.modelCalls.mock.calls.length
@@ -571,7 +571,7 @@ describe('scheduled chat consequence authority', () => {
       threadId: sent.threadId,
       paginationOpts: { cursor: null, numItems: 20 },
     })
-    expect(replayMessages.page.map(({ role }) => role)).toEqual(['user', 'assistant'])
+    expect(replayMessages.page.map(({ role }: { role: string }) => role)).toEqual(['user', 'assistant'])
 
     const deniedBackend = convexTestWithMarketComponents()
     const { owner: deniedOwner } = await publishedBusinessOwner(deniedBackend, 'chat-runtime-denied')

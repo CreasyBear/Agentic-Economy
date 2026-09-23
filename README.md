@@ -47,9 +47,9 @@ Status and recovery appear only when needed. Public detail, comparison, whoami
 and balance are optional reads. Agents do not coordinate treasury, calculate
 foreign exchange, write ledger entries or guess whether payment can be retried.
 
-The source cutover is accepted in the checkout and its focused receipts. That
-source evidence does not establish a hosted deployment or installed-package
-compatibility; both remain separate release gates.
+The source cutover is accepted in the checkout and its focused receipts. The CLI
+tarball has local installed-package verification; a hosted deployment and npm
+publication remain separate release gates.
 
 ## Current stage
 
@@ -64,7 +64,7 @@ explicit production record. Source and tests remain the authority for current
 behaviour.
 
 Source-tree code-quality campaigns 1–3 are closed (21 September 2026). That is
-not hosted GitHub `main`, installed-package compatibility, or a production sale.
+not hosted GitHub `main`, npm publication, or a production sale.
 See [Campaign 3 programme re-audit](./docs/operations/code-quality-campaign-3-register.md).
 
 ## Current source entrances
@@ -77,7 +77,8 @@ See [Campaign 3 programme re-audit](./docs/operations/code-quality-campaign-3-re
 - `/mcp`, `/llms.txt` and `/SKILL.md` are the accepted source discovery/plugin
   surfaces; this does not claim that they are hosted.
 - The CLI source supports search, `describe`, `call`, `history`, status, wait,
-  cancel and `recover`; installed-package compatibility remains pending.
+  cancel and `recover`. The packaged CLI is locally verified; npm publication
+  is pending, so `npx -y @aecon/cli` is not yet an external install path.
 - `/for-providers` admits and publishes Provider Tools in source.
 
 Chat exposes only search, detail, comparison, description and eligible keyless

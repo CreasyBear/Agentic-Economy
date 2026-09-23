@@ -57,6 +57,14 @@ export async function prepareFinancialSubjectsHandler(
 ): Promise<FinancialSubjectsResult> {
   const sourceWrite = await requireSourceWrite(ctx, args, 'protected_action')
   if (sourceWrite.kind === 'rejected') return { kind: 'refused', code: 'inspection_unavailable', reason: sourceWrite.reason }
+  return await prepareFinancialSubjectsCore(ctx, args)
+}
+
+/** Called only after the public source-write gate or the trusted chat mutation's live turn/grant check. */
+export async function prepareFinancialSubjectsCore(
+  ctx: MutationCtx,
+  args: QuoteArgs,
+): Promise<FinancialSubjectsResult> {
   const now = Date.now()
   const authority = await resolveCurrentAgentAuthority(
     ctx,

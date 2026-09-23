@@ -9,7 +9,7 @@ import { CALL_ROUTE_CONTRACT } from '@/modules/capability-execution/call-entry'
 import { TOOL_QUOTE_ROUTE_CONTRACT } from '@/modules/capability-execution/quote.actions'
 import { canonicalDigest, schemaDescriptorDigest } from '@/modules/common/canonical-digest'
 import type { StableHashValue } from '@/modules/common/stable-hash'
-import { buildSiteDiscoveryManifest, projectCompactSiteDiscoveryManifest } from '@/modules/discovery/public'
+import { buildOpenApiDocument, buildSiteDiscoveryManifest, projectCompactSiteDiscoveryManifest } from '@/modules/discovery/public'
 import { handleSiteDiscoveryManifestRequest } from '@/routes/[.]well-known/ucp'
 import { FUNDING_QUOTE_CONTRACT_VERSION } from '@/modules/money/public'
 
@@ -127,9 +127,27 @@ describe('Site discovery manifest', () => {
     expect(manifest).not.toHaveProperty('businessTools')
     expect(pathsByKind.get('site_entry_point')).toEqual(['/.well-known/ucp'])
     expect(JSON.stringify(manifest)).not.toMatch(/\/api\/answer|answer_turn|\/api\/chat\/anonymous/u)
-    expect(JSON.stringify(manifest)).not.toMatch(
-      /tool\.procure|maxSpendAud|totalAud|netAud|gstAud|refundedAmountAud|netChargeAud/u,
-    )
+  })
+
+  it('documents procurement and status in OpenAPI without granting authority through discovery', () => {
+    const paths = buildOpenApiDocument({ canonicalBaseUrl: `${origin}/` }).paths as Record<string, Record<string, unknown>>
+    expect(paths['/api/v1/tools/procure']).toMatchObject({
+      post: {
+        operationId: 'tool.procure',
+        security: [{ agentAccessKey: [] }],
+        description: expect.stringContaining('market_tools:call scope'),
+      },
+    })
+    expect(paths['/api/v1/calls/{callRef}']).toMatchObject({
+      get: {
+        operationId: 'call.status',
+        security: [{ agentAccessKey: [] }],
+        description: expect.stringContaining('market_tools:call scope'),
+      },
+    })
+    expect(manifest.endpoints.find((endpoint) => endpoint.path === '/api/v1/tools/procure')).toBeUndefined()
+    expect(manifest.unsupportedCapabilities.find((capability) => capability.label === 'Commercial or owner-action authority')?.reason)
+      .toContain('This discovery surface grants no mutation')
   })
 
   it('classifies the generated Quote endpoint as quote in full and compact projections', () => {
@@ -170,6 +188,13 @@ describe('Site discovery manifest', () => {
         Authorization: 'required',
         'Content-Type': 'required',
       },
+    })
+    expect(manifest.endpoints.find((endpoint) => endpoint.path === CALL_ROUTE_CONTRACT.status.path)).toMatchObject({
+      kind: 'call_status',
+      method: 'GET',
+      authentication: 'Authorization: Bearer <Agent access key>',
+      requiredScope: 'market_tools:call',
+      requiredHeaders: { Authorization: 'required' },
     })
     expect(manifest.toolGateway).toMatchObject({
       contract: 'tool.call:v1',

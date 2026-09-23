@@ -55,6 +55,8 @@ export const AGENT_ACCESS_OAUTH_TOKEN_ENDPOINT_AUTH_METHODS = Object.freeze(['no
 export const AGENT_ACCESS_OAUTH_CODE_CHALLENGE_METHODS = Object.freeze(['S256'] as const)
 export const AGENT_ACCESS_OAUTH_ERROR_VALUES = Object.freeze([
   'invalid_client',
+  'invalid_redirect_uri',
+  'invalid_client_metadata',
   'invalid_scope',
   'invalid_request',
   'authorization_pending',
@@ -68,6 +70,8 @@ export const AGENT_ACCESS_OAUTH_ERROR_VALUES = Object.freeze([
 export type AgentAccessOAuthErrorCode = typeof AGENT_ACCESS_OAUTH_ERROR_VALUES[number]
 export const AGENT_ACCESS_OAUTH_ERROR_DESCRIPTIONS: Readonly<Record<AgentAccessOAuthErrorCode, string>> = Object.freeze({
   invalid_client: 'The OAuth client is invalid.',
+  invalid_redirect_uri: 'The redirect_uris client metadata is missing or invalid.',
+  invalid_client_metadata: 'The OAuth client metadata is missing or invalid.',
   invalid_scope: 'The requested scope is invalid.',
   invalid_request: 'The OAuth request is invalid.',
   authorization_pending: 'Authorization is still pending.',

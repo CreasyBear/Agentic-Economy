@@ -415,11 +415,13 @@ async function proveFixture(
 
   const searchResponse = await post(config, TOOL_MARKET_SEARCH_PATH, {
     query: fixture.presentation.name,
-    limit: 20,
+    limit: 20, detail: 'full',
   })
   const search = toolChoiceSearchOutputSchema.safeParse(requireSuccess(searchResponse, `package5_${fixture.kind}_search_failed`))
-  if (!search.success || search.data.kind !== 'ok') throw new Error(`package5_${fixture.kind}_search_invalid`)
-  exactTool(search.data.items, published.data.toolRef, `package5_${fixture.kind}_search_identity_mismatch`)
+  if (!search.success) throw new Error(`package5_${fixture.kind}_search_invalid`)
+  if (search.data.kind === 'noMatch') throw new Error(`package5_${fixture.kind}_search_no_match`)
+  if (search.data.kind !== 'matched') throw new Error(`package5_${fixture.kind}_search_invalid`)
+  exactTool(search.data.results, published.data.toolRef, `package5_${fixture.kind}_search_identity_mismatch`)
 
   const describeResponse = await post(config, TOOL_MARKET_DESCRIBE_PATH, {
     toolRef: published.data.toolRef,

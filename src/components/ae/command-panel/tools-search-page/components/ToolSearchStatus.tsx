@@ -61,7 +61,7 @@ export function ToolSearchStatus({
   if (status.kind === 'empty' && status.query === query.trim()) {
     return (
       <SearchRecovery
-        message={`No Tools matched “${query}”.`}
+        message={status.message}
         onRetry={onRetry}
         onClear={() => onQueryChange('')}
       />

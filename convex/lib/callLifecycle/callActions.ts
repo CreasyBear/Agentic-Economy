@@ -7,7 +7,6 @@ export { projectCallResult, callHandler, readReplayHandler } from './callReserva
 export {
   listAgentCallSummariesHandler,
   listAgentCallsHandler,
-  readCallStatusHandler,
   cancelCallHandler,
   reconcileCallHandler,
   readOwnerCallStatusHandler,

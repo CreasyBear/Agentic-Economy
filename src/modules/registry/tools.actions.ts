@@ -22,7 +22,7 @@ import {
   type SupplyProjectionFreshness,
   type ToolCompareResolution,
 } from './tool-choice-contracts'
-import { rerankToolSearchResult } from './tool-reranker'
+import { rankToolSearchForRegistry } from './tool-reranker'
 
 // `market-tools/list` and `market-tools/search` read `registrySearchDocuments`,
 // kept current by the hourly "reconcile business supply projections" workload
@@ -131,13 +131,14 @@ export const registryToolsSearchAction = defineAction({
       ...(cursor === undefined ? {} : { cursor }),
       ...(filters === undefined ? {} : { filters }),
     })
-    const rerankedResult = await rerankToolSearchResult(searchResult, data.query, {
+    const assessment = await rankToolSearchForRegistry(searchResult, data.query, {
       ...(context.request === undefined ? {} : { signal: context.request.signal }),
     })
-    const projected = projectToolSearchChoices(rerankedResult, data.filters)
-    return projected.kind === 'unavailable'
-      ? projected
-      : { ...projected, pagination: opaquePagination(projected.pagination, scope), freshness }
+    const ranked = assessment.result
+    const paged = ranked.kind === 'ok'
+      ? { ...ranked, pagination: opaquePagination(ranked.pagination, scope) }
+      : ranked
+    return projectToolSearchChoices(paged, data.filters, assessment, freshness, data.detail)
   },
 })
 

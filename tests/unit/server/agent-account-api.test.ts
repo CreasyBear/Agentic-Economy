@@ -79,10 +79,20 @@ describe('agent account HTTP adapter', () => {
     expect(response.status).toBe(401)
     expect(response.headers.get('content-type')).toContain('application/problem+json')
     expect(response.headers.get('www-authenticate')).toContain('Bearer')
-    await expect(response.json()).resolves.toMatchObject({
+    const resourceMetadata = response.headers.get('www-authenticate')?.match(/resource_metadata="([^"]+)"/u)?.[1]
+    expect(resourceMetadata).toBeTruthy()
+    const body = await response.json()
+    expect(body).toMatchObject({
       kind: 'UNAUTHENTICATED',
       code: 'authentication_required',
+      requestId: response.headers.get('x-ae-request-id'),
+      next: [
+        { action: 'connect', args: { via: 'cli', command: 'ae connect' }, authority: 'human_owner' },
+        { action: 'connect', args: { via: 'oauth_device', url: resourceMetadata }, authority: 'human_owner' },
+        { action: 'connect', args: { via: 'oauth_device', url: `${new URL(resourceMetadata!).origin}/oauth/device_authorization` }, authority: 'human_owner' },
+      ],
     })
+    expect(body.detail).toContain('ae connect')
   })
 
   it('refuses a credential without the account inspection scope', async () => {
@@ -95,6 +105,23 @@ describe('agent account HTTP adapter', () => {
     await expect(response.json()).resolves.toMatchObject({
       kind: 'PERMISSION_DENIED',
       code: 'scope_required',
+    })
+  })
+
+  it('returns retryable UNAVAILABLE when principal resolution fails, not an authentication refusal', async () => {
+    const response = await handleAgentAccountGet(
+      new Request('https://ae.example/api/v1/account'),
+      {
+        authenticate,
+        resolvePrincipal: async () => { throw new Error('principal store offline') },
+      },
+    )
+
+    expect(response.status).toBe(503)
+    expect(response.headers.get('retry-after')).toBe('5')
+    expect(response.headers.get('www-authenticate')).toBeNull()
+    await expect(response.json()).resolves.toMatchObject({
+      status: 503, kind: 'UNAVAILABLE', code: 'source_unavailable', retryable: true,
     })
   })
 

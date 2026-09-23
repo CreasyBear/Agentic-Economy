@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 
 import * as decisionEngine from '@/modules/decision-engine/public'
 import { projectToolCard, CHAT_TOOL_NAME_MAP, serializeToolCard } from '@/modules/chat/tool-card'
-import { attachChatSearchUse, chatSearchUse } from '@/modules/chat/search-presentation'
+import { chatSearchUse } from '@/modules/chat/search-presentation'
 import { presentToolSearch, TOOL_SEARCH_USE } from '@/modules/registry/tool-reranker'
 import type { ToolSearchResult } from '@/modules/capability-supply/public'
 import {
@@ -63,13 +63,13 @@ describe('Jev search presentation stress', () => {
   })
 
   it.each([
-    { scores: [0.1, 0.2, 0.49] as const, choice: TOOL_SEARCH_USE.compare, use: TOOL_SEARCH_USE.clarify, items: ['operation:v1:currency_exchange', 'operation:v1:crypto_tx_lookup', TOOL_TIMEZONE.toolRef] },
-    { scores: [0.5, 0.49, 0.1] as const, choice: TOOL_SEARCH_USE.compare, use: TOOL_SEARCH_USE.compare, items: [TOOL_TIMEZONE.toolRef, 'operation:v1:crypto_tx_lookup'] },
-    { scores: [0.5, 0.5, 0.1] as const, choice: TOOL_SEARCH_USE.search, use: TOOL_SEARCH_USE.search, items: [TOOL_TIMEZONE.toolRef, 'operation:v1:crypto_tx_lookup'] },
-    { scores: [0.2, 0.9, 0.8] as const, choice: TOOL_SEARCH_USE.describe, use: TOOL_SEARCH_USE.describe, items: ['operation:v1:crypto_tx_lookup'] },
-    { scores: [0.9, 0.8, 0.7] as const, choice: TOOL_SEARCH_USE.clarify, use: TOOL_SEARCH_USE.clarify, items: [TOOL_TIMEZONE.toolRef, 'operation:v1:crypto_tx_lookup', 'operation:v1:currency_exchange'] },
+    { scores: [0.1, 0.2, 0.49] as const, choice: TOOL_SEARCH_USE.compare, use: TOOL_SEARCH_USE.clarify, items: ['operation:v1:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc', 'operation:v1:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', TOOL_TIMEZONE.toolRef] },
+    { scores: [0.5, 0.49, 0.1] as const, choice: TOOL_SEARCH_USE.compare, use: TOOL_SEARCH_USE.compare, items: [TOOL_TIMEZONE.toolRef, 'operation:v1:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'] },
+    { scores: [0.5, 0.5, 0.1] as const, choice: TOOL_SEARCH_USE.search, use: TOOL_SEARCH_USE.search, items: [TOOL_TIMEZONE.toolRef, 'operation:v1:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'] },
+    { scores: [0.2, 0.9, 0.8] as const, choice: TOOL_SEARCH_USE.describe, use: TOOL_SEARCH_USE.describe, items: ['operation:v1:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'] },
+    { scores: [0.9, 0.8, 0.7] as const, choice: TOOL_SEARCH_USE.clarify, use: TOOL_SEARCH_USE.clarify, items: [TOOL_TIMEZONE.toolRef, 'operation:v1:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', 'operation:v1:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc'] },
     { scores: [0.9, 0.1, 0.2] as const, choice: TOOL_SEARCH_USE.search, confidence: 0.5, use: TOOL_SEARCH_USE.describe, items: [TOOL_TIMEZONE.toolRef] },
-    { scores: [0.9, 0.8, 0.1] as const, choice: TOOL_SEARCH_USE.compare, confidence: 0.499, use: TOOL_SEARCH_USE.search, items: [TOOL_TIMEZONE.toolRef, 'operation:v1:crypto_tx_lookup'] },
+    { scores: [0.9, 0.8, 0.1] as const, choice: TOOL_SEARCH_USE.compare, confidence: 0.499, use: TOOL_SEARCH_USE.search, items: [TOOL_TIMEZONE.toolRef, 'operation:v1:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'] },
   ])('fits $choice at confidence $confidence to $use', async ({ scores, choice, confidence, use, items }) => {
     const presented = await present(scores, choice, confidence ?? 0.9)
     expect(presented.use).toBe(use)
@@ -161,41 +161,34 @@ describe('Jev search presentation stress', () => {
     expect(presented.filter((entry) => entry.use === TOOL_SEARCH_USE.compare).every((entry) => entry.belowMatch.length === 1)).toBe(true)
     expect(page.items.map((item) => item.toolRef)).toEqual([
       TOOL_TIMEZONE.toolRef,
-      'operation:v1:crypto_tx_lookup',
-      'operation:v1:currency_exchange',
+      'operation:v1:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+      'operation:v1:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc',
     ])
   })
 
-  it('projects only a real Jev tool onto the search card', () => {
+  it('renders only matched results as matches and distinguishes near misses', () => {
     const toolType = `tool-${CHAT_TOOL_NAME_MAP.canonicalToProvider['registry.tools.search']}`
-    const items = Array.from({ length: 6 }, (_, index) => ({
+    const results = Array.from({ length: 6 }, (_, index) => ({
       toolRef: `operation:v1:${index.toString(16).padStart(64, 'a')}`,
       title: `Lookup ${index}`,
+      price: { kind: 'indicative', label: 'A$0.01' },
     }))
-    const compared = projectToolCard({
+    const matched = projectToolCard({
       type: toolType,
       state: 'output-available',
-      output: { kind: 'ok', items, count: 6, use: TOOL_SEARCH_USE.compare },
+      output: { kind: 'matched', results },
     })
-    expect(compared).toMatchObject({ surface: 'compare', title: 'Compare tools' })
-    if (compared === null || compared.kind !== 'choices') return
-    expect(compared.choices).toHaveLength(4)
-    expect(projectToolCard(serializeToolCard(compared))).toEqual(compared)
+    expect(matched).toMatchObject({ kind: 'choices', count: 6 })
+    if (matched === null || matched.kind !== 'choices') return
+    expect(matched.choices).toHaveLength(4)
+    expect(projectToolCard(serializeToolCard(matched))).toEqual(matched)
 
-    const unknown = projectToolCard({
+    const noMatch = projectToolCard({
       type: toolType,
       state: 'output-available',
-      output: { kind: 'ok', items: items.slice(0, 1), count: 1, use: 'registry.tools.quote' },
+      output: { kind: 'noMatch', results: [], nearMisses: results.slice(0, 1), scope: 'exhausted' },
     })
-    expect(unknown).toMatchObject({ kind: 'choices' })
-    expect(unknown !== null && 'surface' in unknown).toBe(false)
-
+    expect(noMatch).toMatchObject({ kind: 'choices', count: 0, choices: [{ belowMatch: true }] })
     expect(chatSearchUse('registry.tools.quote')).toBeNull()
-    expect(attachChatSearchUse({ kind: 'no_candidates' }, TOOL_SEARCH_USE.compare)).toEqual({ kind: 'no_candidates' })
-    expect(attachChatSearchUse({ kind: 'ok', items: [] }, TOOL_SEARCH_USE.compare)).toMatchObject({ use: TOOL_SEARCH_USE.compare })
-    expect(attachChatSearchUse({ kind: 'ok', items: [] }, TOOL_SEARCH_USE.compare, ['operation:v1:near'])).toMatchObject({
-      use: TOOL_SEARCH_USE.compare,
-      belowMatch: ['operation:v1:near'],
-    })
   })
 })

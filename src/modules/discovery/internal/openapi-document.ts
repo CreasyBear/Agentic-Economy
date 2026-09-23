@@ -1,9 +1,7 @@
 /**
- * OpenAPI 3.1 document builder (Well 8 Lane E). A pure projection: every
- * operation is data already owned by an existing contract source
- * (`listCallRouteDescriptors`, `TOOL_MARKET_ACTION_ENTRIES`,
- * `FUNDING_PREFLIGHT_ROUTE_CONTRACTS`, `OPENAPI_SUPPLEMENTAL_ROUTES`) - no
- * raw OpenAPI path is hand-written here.
+ * OpenAPI 3.1 document builder. Projects every public api.v1 route from the
+ * registered action schemas and route contracts, including payer-safe funding
+ * status and HEAD variants. The route-source parity test prevents omissions.
  */
 
 export { buildOpenApiDocument, buildOpenApiDocumentWithMetrics } from './openapi-document-builder'

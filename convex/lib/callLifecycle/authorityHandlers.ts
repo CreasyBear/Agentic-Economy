@@ -7,6 +7,7 @@ import { internal } from '../../_generated/api'
 import { env, type ActionCtx, type MutationCtx, type QueryCtx } from '../../_generated/server'
 import { resolveBusinessActor } from '../../authz'
 import { MARKET_TOOLS_CALL_SCOPE } from '@/modules/agent-access/contract'
+import type { TrustedChatAuthority } from '@/modules/chat/agent-turn.contracts'
 import {
   normalizeStoredAgentAccessGrant,
 } from '@/modules/agent-access/policy'
@@ -22,6 +23,7 @@ import {
   resolveCanonicalAgentContext,
   validateCanonicalAgentDelegation,
 } from '../canonicalAgentAuthority'
+import { chatThreadBelongsToPrincipal } from '../chat/threadOwnership'
 import {
   decideCallApprovalHandler,
   listPendingCallApprovalsHandler,
@@ -32,7 +34,6 @@ import {
   callHandler,
   projectCallResult,
   listAgentCallsHandler,
-  readCallStatusHandler,
   readOwnerCallStatusHandler,
   reconcileCallHandler,
   reconcileOwnerCallHandler,
@@ -53,6 +54,11 @@ export const resolveCallAgentAuthorityRef = makeFunctionReference<
   { principal: CallPrincipal; toolRef?: string; callRef?: string; receiptList?: true },
   CallPrincipal | null
 >('capabilityCalls:resolveCallAgentAuthority')
+export const authorizeChatCallRef = makeFunctionReference<
+  'mutation',
+  { authority: TrustedChatAuthority; quoteRef: string },
+  CallPrincipal | null
+>('chatCall:authorize')
 
 type CurrentAuthorityPurpose =
   | Readonly<{ kind: 'new_operation'; toolRef: string }>
@@ -82,7 +88,7 @@ function callMatchesCurrentAuthority(
 }
 
 async function resolveCallAuthorityTarget(
-  ctx: MutationCtx,
+  ctx: Pick<QueryCtx, 'db'>,
   args: Readonly<{ toolRef?: string; callRef?: string; receiptList?: true }>,
 ): Promise<CallAuthorityTarget | null> {
   const targetCount = Number(args.toolRef !== undefined)
@@ -109,7 +115,7 @@ async function resolveCallAuthorityTarget(
 }
 
 export async function resolveCallAgentAuthorityHandler(
-  ctx: MutationCtx,
+  ctx: Pick<QueryCtx, 'db'>,
   args: Readonly<{ principal: CallPrincipal; toolRef?: string; callRef?: string; receiptList?: true }>,
 ): Promise<CallPrincipal | null> {
   const target = await resolveCallAuthorityTarget(ctx, args)
@@ -271,7 +277,7 @@ function storedAgentMatches(
 }
 
 async function loadCurrentStoredAgent(
-  ctx: MutationCtx,
+  ctx: Pick<QueryCtx, 'db'>,
   candidate: CallPrincipal,
   canonical: CanonicalAgentContext,
   now: number,
@@ -305,7 +311,7 @@ function activeGrantMatches(
 }
 
 async function loadCurrentActiveGrant(
-  ctx: MutationCtx,
+  ctx: Pick<QueryCtx, 'db'>,
   stored: StoredAgent,
   canonical: CanonicalAgentContext,
   now: number,
@@ -352,7 +358,7 @@ function delegationResourceForPurpose(
 }
 
 export async function resolveCurrentAgentAuthority(
-  ctx: MutationCtx,
+  ctx: Pick<QueryCtx, 'db'>,
   candidate: CallPrincipal,
   now: number,
   purpose: CurrentAuthorityPurpose,
@@ -409,6 +415,59 @@ export async function resolveCurrentAgentAuthority(
     policyDigest: grant.spendingPolicyDigest,
     expiresAt: grant.expiresAt,
   })
+}
+/**
+ * Internal chat admission: trust no authority supplied by a model or caller.
+ * The turn, live credential, active grant and delegation must all still agree.
+ * A cancellation fence denies new payable effects without changing any Call.
+ */
+export async function resolveTrustedChatAuthority(
+  ctx: Pick<QueryCtx, 'db'>,
+  input: TrustedChatAuthority,
+  toolRef: string,
+): Promise<CallPrincipal | null> {
+  if (input.kind !== 'agent_key' || !isPublicToolRef(toolRef)) return null
+  const turn = await ctx.db.query('chatTurns')
+    .withIndex('by_turnRef', (query) => query.eq('turnRef', input.turnRef))
+    .unique()
+  if (turn === null || turn.principalKind !== 'agent_key'
+    || turn.credentialLocator !== input.credentialLocator
+    || turn.grantRef !== input.grantRef
+    || turn.cancelRequestedAt !== undefined
+    || turn.state === 'canceled' || turn.state === 'failed'
+    || turn.state === 'completed' || turn.state === 'rejected') return null
+  if (turn.threadId === undefined || turn.promptMessageId === undefined) return null
+  const threadId = turn.threadId
+  const thread = await ctx.db.query('chatThreads')
+    .withIndex('by_threadId', (query) => query.eq('threadId', threadId))
+    .unique()
+  if (thread === null || !chatThreadBelongsToPrincipal(
+    thread, turn.accountRef, 'agent_key', turn.principalRef,
+  ) || thread.activePromptMessageId !== turn.promptMessageId) return null
+  const canonical = await resolveCanonicalAgentContext(ctx, input.credentialLocator, Date.now())
+  if (canonical === null || canonical.principalRef !== turn.principalRef
+    || canonical.accountRef !== turn.accountRef) return null
+  const stored = await ctx.db.query('agentAccessPrincipals')
+    .withIndex('by_credentialId', (query) => query.eq('credentialId', input.credentialLocator))
+    .unique()
+  if (stored === null || stored.lifecycle !== 'active'
+    || stored.principalId !== canonical.principalRef || stored.ownerId !== canonical.accountRef
+    || stored.applicationRef !== input.applicationRef
+    || stored.environment !== input.environment
+    || stored.scopes.length !== input.scopes.length) return null
+  const requestedScopes = uniqueSorted(input.scopes)
+  if (requestedScopes.length !== input.scopes.length
+    || uniqueSorted(stored.scopes).some((scope, index) => scope !== requestedScopes[index])) return null
+  const current = await resolveCurrentAgentAuthority(ctx, {
+    principalId: canonical.principalRef,
+    ownerId: canonical.accountRef,
+    credentialId: input.credentialLocator,
+    applicationRef: input.applicationRef,
+    environment: input.environment,
+    scopes: requestedScopes,
+    authorityMode: stored.authorityMode,
+  }, Date.now(), { kind: 'new_operation', toolRef })
+  return current?.grantRef === input.grantRef ? current.principal : null
 }
 
 export async function validatePersistedCallDelegation(
@@ -615,17 +674,19 @@ export function agentStatusNotFound(callRef: string): Infer<typeof statusResultV
   return { kind: 'refused', callRef, code: 'invocation_not_found', retryable: false }
 }
 
+type CanonicalCallArgs = Readonly<{
+  operationKey: string
+  correlationId: string
+  sourceWrite?: unknown
+  sourceWriteRequest?: unknown
+  principal: CallPrincipal
+  quoteRef: string
+  idempotencyKey: string
+}>
+
 export async function canonicalAgentCallHandler(
   ctx: ActionCtx,
-  args: Readonly<{
-    operationKey: string
-    correlationId: string
-    sourceWrite?: unknown
-    sourceWriteRequest?: unknown
-    principal: CallPrincipal
-    quoteRef: string
-    idempotencyKey: string
-  }>,
+  args: CanonicalCallArgs,
 ): Promise<Infer<typeof callResultValue>> {
   const sourceAdmitted = await ctx.runMutation(
     internal.capabilityQuotes.admitCall,
@@ -634,6 +695,15 @@ export async function canonicalAgentCallHandler(
   if (!sourceAdmitted) {
     return { kind: 'refused', code: 'invocation_runtime_unavailable', retryable: true }
   }
+  return await canonicalAgentCallCore(ctx, args)
+}
+
+/** Shared Call body: public admission is upstream; trusted chat rechecks its turn fence. */
+export async function canonicalAgentCallCore(
+  ctx: ActionCtx,
+  args: CanonicalCallArgs,
+  trustedChat?: TrustedChatAuthority,
+): Promise<Infer<typeof callResultValue>> {
   const material = await ctx.runQuery(internal.capabilityQuotes.readForCall, {
     principal: args.principal,
     quoteRef: args.quoteRef,
@@ -643,10 +713,12 @@ export async function canonicalAgentCallHandler(
   if (material === null) {
     return { kind: 'refused', code: 'operation_not_current', retryable: false }
   }
-  const principal = await canonicalAgentPrincipal(ctx, args.principal,
-    material.consumedCallRef === undefined
-      ? { toolRef: material.toolRef }
-      : { callRef: material.consumedCallRef })
+  const principal = trustedChat === undefined
+    ? await canonicalAgentPrincipal(ctx, args.principal,
+      material.consumedCallRef === undefined
+        ? { toolRef: material.toolRef }
+        : { callRef: material.consumedCallRef })
+    : await ctx.runMutation(authorizeChatCallRef, { authority: trustedChat, quoteRef: args.quoteRef })
   if (principal === null) {
     return { kind: 'refused', toolRef: material.toolRef, code: 'grant_not_found', retryable: false }
   }
@@ -684,16 +756,23 @@ export async function canonicalAgentCallHandler(
       }
     }
   }
+  const admitted = trustedChat === undefined
+    ? principal
+    : await ctx.runMutation(authorizeChatCallRef, { authority: trustedChat, quoteRef: args.quoteRef })
+  if (admitted === null || admitted.principalId !== principal.principalId
+    || admitted.credentialId !== principal.credentialId) {
+    return { kind: 'refused', toolRef: material.toolRef, code: 'grant_not_found', retryable: false }
+  }
   return await callHandler(ctx, {
     quoteRef: material.quoteRef,
     operationKey: args.operationKey,
     correlationId: args.correlationId,
-    principal,
+    principal: admitted,
     toolRef: material.toolRef,
     input: material.input,
     decisionPrice: material.decisionPrice,
     idempotencyKey: args.idempotencyKey,
-  }, true)
+  }, true, trustedChat?.turnRef)
 }
 
 export async function canonicalAgentListHandler(
@@ -705,14 +784,6 @@ export async function canonicalAgentListHandler(
   return await listAgentCallsHandler(ctx, { ...args, principal })
 }
 
-export async function canonicalAgentStatusHandler(
-  ctx: ActionCtx,
-  args: Parameters<typeof readCallStatusHandler>[1],
-): Promise<Infer<typeof statusResultValue>> {
-  const principal = await canonicalAgentPrincipal(ctx, args.principal, { callRef: args.callRef })
-  if (principal === null) return agentStatusNotFound(args.callRef)
-  return await readCallStatusHandler(ctx, { ...args, principal })
-}
 
 export async function canonicalAgentCancelHandler(
   ctx: ActionCtx,

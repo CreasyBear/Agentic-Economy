@@ -298,44 +298,6 @@ type RecoveryEvidence =
   | Infer<typeof reconciliationEvidenceValue>
   | Infer<typeof x402PaymentReconciliationEvidenceValue>
 
-export async function readCallStatusHandler(
-  ctx: ActionCtx,
-  args: RecoveryActionArgs,
-): Promise<Infer<typeof statusResultValue>> {
-  await ctx.runMutation(internal.capabilityCalls.admit, {
-    operationKey: args.operationKey,
-    correlationId: args.correlationId,
-    ...(args.sourceWrite === undefined ? {} : { sourceWrite: args.sourceWrite }),
-    ...(args.sourceWriteRequest === undefined ? {} : { sourceWriteRequest: args.sourceWriteRequest }),
-    principal: args.principal,
-    toolRef: '',
-    input: {},
-    idempotencyKey: `status:${args.callRef}`,
-  })
-  const admission = await authorizeRecovery(ctx, args.callRef, args.principal)
-  if (admission.kind !== 'authorized') {
-    return recoveryNotFound(args.callRef) as Infer<typeof statusResultValue>
-  }
-  const result = await ctx.runAction(internal.capabilityCallWorker.recover, {
-    callRef: args.callRef,
-    principalId: admission.row.principalId,
-    credentialId: admission.row.credentialId,
-    recoveryPrincipal: args.principal,
-    mode: 'status',
-  })
-  const projected = projectStatusRecoveryResult(result)
-  const withPurchaseResolution = await attachPurchaseResolutionToStatus(ctx, projected)
-  return withPurchaseResolution.kind === 'found'
-    && args.afterVersion !== undefined
-    && withPurchaseResolution.version <= args.afterVersion
-    ? {
-        kind: 'unchanged' as const,
-        callRef: withPurchaseResolution.callRef,
-        version: withPurchaseResolution.version,
-        retryAfterMs: 1_000,
-      }
-    : withPurchaseResolution
-}
 
 export async function cancelCallHandler(
   ctx: ActionCtx,

@@ -5,18 +5,30 @@ import {
   registryToolsDescribeAction,
   registryToolsSearchAction,
 } from '@/modules/registry/tools.actions'
+import type { RegistryNextAction } from '@/modules/registry/tool-choice-contracts'
+
+function noMatch(
+  next: readonly RegistryNextAction[],
+  pagination: { limit: number; hasMore: boolean; nextCursor?: string } = { limit: 10, hasMore: false },
+) {
+  return {
+    kind: 'noMatch' as const,
+    schemaVersion: 'registry-tools:v3' as const,
+    query: 'plumbing',
+    scope: pagination.hasMore ? 'page' as const : 'exhausted' as const,
+    reason: 'No suitable Tools found.',
+    results: [] as const,
+    nearMisses: [],
+    suggestions: [],
+    partialResults: false,
+    pagination,
+    next,
+  }
+}
 
 describe('MCP host adapter registry', () => {
   it('calls the registered registry search action with MCP attribution', async () => {
-    const run = vi.spyOn(registryToolsSearchAction, 'run').mockResolvedValue({
-      kind: 'no_candidates',
-      schemaVersion: 'registry-tools:v3',
-      query: 'plumbing',
-      count: 0,
-      items: [],
-      note: 'No operational Tools matched this search.',
-      pagination: { limit: 10, hasMore: false },
-    })
+    const run = vi.spyOn(registryToolsSearchAction, 'run').mockResolvedValue(noMatch([]))
 
     const response = await postMcp({
       jsonrpc: '2.0',
@@ -36,25 +48,18 @@ describe('MCP host adapter registry', () => {
       context: expect.objectContaining({ caller: 'mcp' }),
     })
     expect((result.structuredContent as { result?: unknown } | undefined)?.result).toMatchObject({
-      kind: 'no_candidates',
+      kind: 'noMatch',
+      scope: 'exhausted',
+      next: [],
     })
-    expect((result.structuredContent as { nextAction?: unknown } | undefined)?.nextAction).toEqual({
-      kind: 'request',
-      query: 'plumbing',
-    })
+    expect(JSON.stringify(result.content)).not.toContain('"results"')
     run.mockRestore()
   })
 
   it('carries a broaden nextAction when a filtered search is exhausted', async () => {
-    const run = vi.spyOn(registryToolsSearchAction, 'run').mockResolvedValue({
-      kind: 'no_candidates',
-      schemaVersion: 'registry-tools:v3',
-      query: 'plumbing',
-      count: 0,
-      items: [],
-      note: 'No Tools match this search.',
-      pagination: { limit: 10, hasMore: false },
-    })
+    const run = vi.spyOn(registryToolsSearchAction, 'run').mockResolvedValue(noMatch([
+      { action: 'broaden', args: { query: 'plumbing' }, authority: 'public' },
+    ]))
 
     const response = await postMcp({
       jsonrpc: '2.0',
@@ -69,22 +74,16 @@ describe('MCP host adapter registry', () => {
     expect(response.status).toBe(200)
     const body = await readMcpBody(response)
     const result = body.result as Record<string, unknown>
-    expect((result.structuredContent as { nextAction?: unknown } | undefined)?.nextAction).toEqual({
-      kind: 'broaden',
-    })
+    expect((result.structuredContent as { result?: { next: unknown } } | undefined)?.result?.next).toEqual([
+      { action: 'broaden', args: { query: 'plumbing' }, authority: 'public' },
+    ])
     run.mockRestore()
   })
 
   it('carries a next_page nextAction ahead of a request or broaden decision', async () => {
-    const run = vi.spyOn(registryToolsSearchAction, 'run').mockResolvedValue({
-      kind: 'no_candidates',
-      schemaVersion: 'registry-tools:v3',
-      query: 'plumbing',
-      count: 0,
-      items: [],
-      note: 'No Tools match this search on this page.',
-      pagination: { limit: 10, hasMore: true, nextCursor: 'cursor-1' },
-    })
+    const run = vi.spyOn(registryToolsSearchAction, 'run').mockResolvedValue(noMatch([
+      { action: 'next-page', args: { query: 'plumbing', cursor: 'cursor-1' }, authority: 'public' },
+    ], { limit: 10, hasMore: true, nextCursor: 'cursor-1' }))
 
     const response = await postMcp({
       jsonrpc: '2.0',
@@ -99,10 +98,9 @@ describe('MCP host adapter registry', () => {
     expect(response.status).toBe(200)
     const body = await readMcpBody(response)
     const result = body.result as Record<string, unknown>
-    expect((result.structuredContent as { nextAction?: unknown } | undefined)?.nextAction).toEqual({
-      kind: 'next_page',
-      cursor: 'cursor-1',
-    })
+    expect((result.structuredContent as { result?: { next: unknown } } | undefined)?.result?.next).toEqual([
+      { action: 'next-page', args: { query: 'plumbing', cursor: 'cursor-1' }, authority: 'public' },
+    ])
     run.mockRestore()
   })
 

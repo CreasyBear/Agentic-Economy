@@ -86,13 +86,10 @@ function rankToolSearchCandidates<T>(
   // non-empty query whose only words are generic search verbs has no usable
   // relevance signal and must not become the same browse operation by accident.
   if (query.trim().length > 0 && tokens.length === 0) return [];
-  // Agent-authored tasks contain runtime constraints (cities, names, symbols)
-  // that should shape the eventual call, not exclude an otherwise obvious
-  // capability. Keep only tokens with evidence somewhere in the current
-  // catalogue, then continue to require those capability tokens to cohere on
-  // one candidate. This retains fail-closed behavior for mixed unsupported
-  // requests while avoiding a catalogue-wide alias or runtime-value registry.
+  // Runtime values need not all appear in the catalogue, but currency codes
+  // are explicit capability constraints: never drop an unsupported pair leg.
   const relevantTokens = tokens.filter((token) =>
+    SEARCH_CURRENCY_CODES.has(token) ||
     candidates.some(({ searchText }) =>
       searchableText(searchText).some(
         (term) => searchTermMatchScore(term, token) > 0,
@@ -116,13 +113,11 @@ function rankToolSearchCandidates<T>(
           const matchedTokens = relevantTokens.filter((token) =>
             terms.some((term) => searchTermMatchScore(term, token) > 0),
           ).length;
-          const currencyTokenCount = relevantTokens.filter((token) =>
-            SEARCH_CURRENCY_CODES.has(token),
-          ).length;
-          const minimumMatches = currencyTokenCount >= 2
-            ? 1
-            : Math.max(2, Math.ceil(relevantTokens.length / 2));
-          return matchedTokens >= minimumMatches;
+          const minimumMatches = Math.max(2, Math.ceil(relevantTokens.length / 2));
+          return matchedTokens >= minimumMatches
+            && relevantTokens.filter((token) => SEARCH_CURRENCY_CODES.has(token)).every(
+              (token) => terms.some((term) => searchTermMatchScore(term, token) > 0),
+            );
         });
   return matches
     .map((candidate) => ({
@@ -580,9 +575,8 @@ function searchTokens(query: string): string[] {
     !isRuntimeConstraintToken(token, tokens[index - 1]),
   );
 }
-function isRuntimeConstraintToken(token: string, previous: string | undefined): boolean {
-  if (/^\d+$/.test(token) || SEARCH_MONTHS.has(token)) return true;
-  return token.length === 3 && (previous === "from" || previous === "to");
+function isRuntimeConstraintToken(token: string, _previous: string | undefined): boolean {
+  return /^\d+$/.test(token) || SEARCH_MONTHS.has(token);
 }
 function searchableText(searchText: readonly string[]): string[] {
   return (
@@ -604,10 +598,7 @@ function toolSearchText(
     tool.business.name,
     tool.listing.label,
     tool.listing.summary,
-    ...tool.contract.customerAnnotations.map(
-      (annotation) => annotation.label,
-    ),
-    ...searchTerms,
+    ...searchTerms.filter((term) => !/\brate[\s_-]?limit\b/i.test(term)),
   ];
 }
 function scoreSearchText(
@@ -626,7 +617,7 @@ function scoreSearchText(
 }
 function searchTermMatchScore(term: string, token: string): number {
   if (term === token) return 4;
-  if (SEARCH_CURRENCY_CODES.has(token) && term.startsWith(token)) return 2;
+  if (SEARCH_CURRENCY_CODES.has(token)) return 0;
   if (
     Math.min(term.length, token.length) >= 4
     && (term.startsWith(token) || token.startsWith(term))

@@ -1,4 +1,4 @@
-import type { MutationCtx } from '../_generated/server'
+import type { MutationCtx, QueryCtx } from '../_generated/server'
 import type { Doc } from '../_generated/dataModel'
 import {
   DELEGATION_MAX_ANCESTRY_GRANTS,
@@ -27,38 +27,57 @@ type GrantDocument = Awaited<ReturnType<typeof getGrantDocument>>
 export function createConvexDelegationStore(ctx: MutationCtx): DelegationStore {
   return {
     transact: async (operation) => await operation({
-      getGrant: async (ref) => grantFromDocument(await getGrantDocument(ctx, ref)),
-      getGrantByCreationIdempotency: async (account, actor, idempotencyRef) => {
-        const document = await ctx.db.query('authorityDelegationGrants')
-          .withIndex('by_accountRef_and_actorPrincipalRef_and_createdBy_idempotencyRef', (query) => query
-            .eq('accountRef', account)
-            .eq('actorPrincipalRef', actor)
-            .eq('createdBy.idempotencyRef', idempotencyRef))
-          .unique()
-        return grantFromDocument(document)
-      },
-      getSnapshotByAdmissionIdempotency: async (account, actor, idempotencyRef) => {
-        const document = await ctx.db.query('authorityDelegationSnapshots')
-          .withIndex('by_accountRef_and_actorPrincipalRef_and_idempotencyRef', (query) => query
-            .eq('accountRef', account)
-            .eq('actorPrincipalRef', actor)
-            .eq('idempotencyRef', idempotencyRef))
-          .unique()
-        return document === null ? undefined : await snapshotFromDocument(ctx, document)
-      },
-      getSnapshot: async (ref) => {
-        const document = await ctx.db.query('authorityDelegationSnapshots')
-          .withIndex('by_snapshotRef', (query) => query.eq('snapshotRef', ref))
-          .unique()
-        return document === null ? undefined : await snapshotFromDocument(ctx, document)
-      },
+      ...delegationReads(ctx),
       commit: async (change) => await commitDelegation(ctx, change),
     }),
   }
 }
 
+export function createConvexDelegationReadStore(ctx: Pick<QueryCtx, 'db'>): DelegationStore {
+  return {
+    transact: async (operation) => await operation({
+      ...delegationReads(ctx),
+      getSnapshotByAdmissionIdempotency: async () => undefined,
+      getSnapshot: async () => undefined,
+      commit: async () => undefined,
+    }),
+  }
+}
+
+type DelegationTransaction = Parameters<Parameters<DelegationStore['transact']>[0]>[0]
+
+function delegationReads(ctx: Pick<QueryCtx, 'db'>): Omit<DelegationTransaction, 'commit'> {
+  return {
+    getGrant: async (ref: DelegationGrantRef) => grantFromDocument(await getGrantDocument(ctx, ref)),
+    getGrantByCreationIdempotency: async (account, actor, idempotencyRef) => {
+      const document = await ctx.db.query('authorityDelegationGrants')
+        .withIndex('by_accountRef_and_actorPrincipalRef_and_createdBy_idempotencyRef', (query) => query
+          .eq('accountRef', account)
+          .eq('actorPrincipalRef', actor)
+          .eq('createdBy.idempotencyRef', idempotencyRef))
+        .unique()
+      return grantFromDocument(document)
+    },
+    getSnapshotByAdmissionIdempotency: async (account, actor, idempotencyRef) => {
+      const document = await ctx.db.query('authorityDelegationSnapshots')
+        .withIndex('by_accountRef_and_actorPrincipalRef_and_idempotencyRef', (query) => query
+          .eq('accountRef', account)
+          .eq('actorPrincipalRef', actor)
+          .eq('idempotencyRef', idempotencyRef))
+        .unique()
+      return document === null ? undefined : await snapshotFromDocument(ctx, document)
+    },
+    getSnapshot: async (ref) => {
+      const document = await ctx.db.query('authorityDelegationSnapshots')
+        .withIndex('by_snapshotRef', (query) => query.eq('snapshotRef', ref))
+        .unique()
+      return document === null ? undefined : await snapshotFromDocument(ctx, document)
+    },
+  }
+}
+
 export function createConvexDelegationContextPort(
-  ctx: MutationCtx,
+  ctx: Pick<QueryCtx, 'db'>,
   trustedPrincipalRef: PrincipalRef,
 ): DelegationContextPort {
   const trusted = principalRef(trustedPrincipalRef)
@@ -76,7 +95,7 @@ export function createConvexDelegationContextPort(
 }
 
 async function resolveContext(
-  ctx: MutationCtx,
+  ctx: Pick<QueryCtx, 'db'>,
   trusted: PrincipalRef,
   candidate: AccountActionContext,
   ownerOnly: boolean,
@@ -130,7 +149,7 @@ async function resolveContext(
   })
 }
 
-async function getGrantDocument(ctx: MutationCtx, ref: DelegationGrantRef) {
+async function getGrantDocument(ctx: Pick<QueryCtx, 'db'>, ref: DelegationGrantRef) {
   return await ctx.db.query('authorityDelegationGrants')
     .withIndex('by_grantRef', (query) => query.eq('grantRef', ref))
     .unique()
@@ -142,7 +161,7 @@ function grantFromDocument(document: GrantDocument): DelegationGrant | undefined
 }
 
 async function snapshotFromDocument(
-  ctx: MutationCtx,
+  ctx: Pick<QueryCtx, 'db'>,
   document: Doc<'authorityDelegationSnapshots'>,
 ): Promise<DelegationAuthoritySnapshot> {
   const header = document

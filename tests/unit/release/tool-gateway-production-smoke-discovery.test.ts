@@ -29,7 +29,7 @@ function selectedTool() {
     toolRef,
     businessId: "business:provider",
     offeringRef: tool.listing.listingRef,
-    search: publicToolSearchResponse().items[0]!,
+    search: publicToolSearchResponse().results[0]!,
     description: publicToolDescribeResponse().tool,
     quote: committedQuote(),
     authorityMode: "provider_owned" as const,
@@ -124,7 +124,7 @@ describe("hosted Tool gateway smoke discovery", () => {
     expect(requests).toEqual([
       {
         url: "https://gateway.example/api/v1/market-tools/search",
-        body: { query: "paid", limit: 20 },
+        body: { query: "paid", limit: 20, detail: "full" },
       },
       {
         url: "https://gateway.example/api/v1/market-tools/describe",

@@ -15,7 +15,7 @@ import { runCancelCommand } from '../../../tools/ae/commands/cancel'
 import { runCallCommand } from '../../../tools/ae/commands/call'
 import { runManifestCommand } from '../../../tools/ae/commands/manifest'
 import { runRecoverCommand } from '../../../tools/ae/commands/recover'
-import { requireAgentAccessKey } from '../../../tools/ae/commands/status'
+import { renderStatusResult, requireAgentAccessKey, runStatusCommand } from '../../../tools/ae/commands/status'
 import type { CliOptions } from '../../../tools/ae/lib/args'
 import { CliFailure } from '../../../tools/ae/lib/output'
 import { runCliInProcess } from './cli-errors-harness'
@@ -37,6 +37,7 @@ const baseOptions: CliOptions = {
 
 const OPERATION_REF = `operation:v1:${'a'.repeat(64)}`
 const COMMITMENT_REF = `operation-commitment:v1:${'b'.repeat(64)}`
+const CALL_REF = `operation-invocation:v1:${'c'.repeat(64)}`
 let testConfigDirectory: string
 beforeEach(() => {
   testConfigDirectory = mkdtempSync(join(tmpdir(), 'ae-recovery-test-'))
@@ -131,19 +132,16 @@ afterEach(() => {
 })
 
 describe('CLI Call recovery projections', () => {
-
-  it('inspects existing connections before authorizing a recovery identity', () => {
-    for (const [scope, nextCommand] of [
-      [MARKET_TOOLS_CALL_SCOPE, 'ae account connections'],
-      [MARKET_SUPPLY_MANAGE_SCOPE, 'ae account connections'],
-    ] as const) {
+  it('refuses recovery commands without a credential for either required scope', () => {
+    for (const scope of [MARKET_TOOLS_CALL_SCOPE, MARKET_SUPPLY_MANAGE_SCOPE]) {
+      let thrown: unknown
       try {
         requireAgentAccessKey('account status', baseOptions, scope)
-        throw new Error('missing_credential_should_refuse')
       } catch (error) {
-        expect(error).toBeInstanceOf(CliFailure)
-        expect((error as CliFailure).nextCommand).toBe(nextCommand)
+        thrown = error
       }
+      expect(thrown).toBeInstanceOf(CliFailure)
+      expect(thrown).toMatchObject({ kind: 'UNAUTHENTICATED', code: 'agent_access_key_required' })
     }
   })
 
@@ -334,68 +332,83 @@ describe('CLI Call recovery projections', () => {
     expect(JSON.parse(output.read())).toMatchObject({ kind: 'found', state: 'cancelled' })
   })
 
-  it.each(['terminal', 'cancelled', 'invalidated'] as const)(
-    'does not render a circular status continuation for a found %s status',
+  it.each(['terminal', 'cancelled'] as const)(
+    'does not continue a finished %s Call in Journey status',
     async (state) => {
       setApiKey('ae-test-caller-key')
       const output = capture(process.stdout)
-      const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({
+      const recovery = {
         kind: 'found',
-        callRef: 'invocation:one',
+        callRef: CALL_REF,
         version: 1,
         toolRef: OPERATION_REF,
         state,
         ...(state === 'terminal' ? { result: completed } : {}),
+      }
+      const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({
+        kind: 'call',
+        ref: CALL_REF,
+        principalRef: `prn_${'a'.repeat(32)}`,
+        recovery,
+        workState: state === 'terminal' ? 'completed' : 'canceled',
+        next: [],
       }), { status: 200, headers: { 'content-type': 'application/json' } }))
       vi.stubGlobal('fetch', fetchMock)
 
       try {
-        const { runStatusCommand } = await import('../../../tools/ae/commands/status')
-        await runStatusCommand(['invocation:one'], { ...baseOptions, json: false })
+        await runStatusCommand([CALL_REF], baseOptions)
       } finally {
         output.restore()
       }
 
-      expect(output.read()).not.toContain('next: ae status invocation:one')
+      expect(JSON.parse(output.read())).toMatchObject({
+        kind: 'call', ref: CALL_REF, recovery, next: [],
+      })
+      const [url, init] = fetchMock.mock.calls[0]!
+      expect(url).toBe(`https://market.example/api/v1/status/${encodeURIComponent(CALL_REF)}`)
+      expect(init?.method).toBe('GET')
+      expect(new Headers(init?.headers).get('Authorization')).toBe('Bearer ae-test-caller-key')
     },
   )
 
-  it('keeps terminal JSON canonical without adding a circular next command', async () => {
+  it('preserves a canonical Journey status snapshot in JSON without a circular continuation', async () => {
     setApiKey('ae-test-caller-key')
     const output = capture(process.stdout)
-    vi.stubGlobal('fetch', vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({
+    const recovery = {
       kind: 'found',
-      callRef: 'invocation:one',
+      callRef: CALL_REF,
       version: 1,
       toolRef: OPERATION_REF,
       state: 'terminal',
       result: completed,
-    }), { status: 200, headers: { 'content-type': 'application/json' } })))
+    }
+    const snapshot = {
+      kind: 'call',
+      ref: CALL_REF,
+      principalRef: `prn_${'a'.repeat(32)}`,
+      recovery,
+      workState: 'completed',
+      next: [],
+    }
+    vi.stubGlobal('fetch', vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify(snapshot), {
+      status: 200, headers: { 'content-type': 'application/json' },
+    })))
 
     try {
-      const { runStatusCommand } = await import('../../../tools/ae/commands/status')
-      await runStatusCommand(['invocation:one'], baseOptions)
+      await runStatusCommand([CALL_REF], baseOptions)
     } finally {
       output.restore()
     }
 
-    expect(JSON.parse(output.read())).not.toHaveProperty('nextCommand')
+    expect(JSON.parse(output.read())).toEqual(snapshot)
   })
 
-  it('returns one safe reconciliation review command in machine output', async () => {
-    setApiKey('ae-test-caller-key')
+  it('keeps legacy Call reconciliation review safe in machine output', () => {
     const output = capture(process.stdout)
-    vi.stubGlobal('fetch', vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({
-      kind: 'found',
-      callRef: 'invocation:one',
-      version: 1,
-      toolRef: OPERATION_REF,
-      state: 'reconciliation_required',
-    }), { status: 200, headers: { 'content-type': 'application/json' } })))
-
     try {
-      const { runStatusCommand } = await import('../../../tools/ae/commands/status')
-      await runStatusCommand(['invocation:one'], baseOptions)
+      renderStatusResult('Call status', CALL_REF, {
+        kind: 'found', callRef: CALL_REF, version: 1, toolRef: OPERATION_REF, state: 'reconciliation_required',
+      }, baseOptions)
     } finally {
       output.restore()
     }
@@ -407,111 +420,71 @@ describe('CLI Call recovery projections', () => {
     })
   })
 
-  it('returns the funding command for insufficient credit in machine output', async () => {
-    setApiKey('ae-test-caller-key')
+  it('keeps the legacy funding continuation for insufficient credit', () => {
     const output = capture(process.stdout)
-    vi.stubGlobal('fetch', vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({
-      kind: 'found',
-      callRef: 'invocation:one',
-      version: 1,
-      toolRef: OPERATION_REF,
-      state: 'terminal',
-      usage: {
-        usageRef: 'usage:credit',
-        observedAt: 100,
-        chargeState: 'insufficient_credit',
-        amount: { currency: 'USD', units: '100', exponent: 2 },
-        priceDigest: 'sha256:price',
-      },
-    }), { status: 200, headers: { 'content-type': 'application/json' } })))
-
     try {
-      const { runStatusCommand } = await import('../../../tools/ae/commands/status')
-      await runStatusCommand(['invocation:one'], baseOptions)
+      renderStatusResult('Call status', CALL_REF, {
+        kind: 'found', callRef: CALL_REF, version: 1, toolRef: OPERATION_REF, state: 'terminal',
+        usage: {
+          usageRef: 'usage:credit', observedAt: 100, chargeState: 'insufficient_credit',
+          amount: { currency: 'USD', units: '100', exponent: 2 }, priceDigest: 'sha256:price',
+        },
+      }, baseOptions)
     } finally {
       output.restore()
     }
 
-    expect(JSON.parse(output.read())).toMatchObject({
-      nextCommand: 'ae account balance --json',
-    })
+    expect(JSON.parse(output.read())).toMatchObject({ nextCommand: 'ae account balance --json' })
   })
 
-  it('fails an unknown Call and points status at history instead of itself', async () => {
-    setApiKey('ae-test-caller-key')
+  it('fails an unknown legacy Call and points at history instead of itself', () => {
     const output = capture(process.stdout)
-    vi.stubGlobal('fetch', vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({
-      kind: 'refused',
-      callRef: 'invocation:missing',
-      code: 'invocation_not_found',
-      retryable: false,
-    }), { status: 200, headers: { 'content-type': 'application/json' } })))
-
     let exitCode: number
     try {
-      const { runStatusCommand } = await import('../../../tools/ae/commands/status')
-      exitCode = await runStatusCommand(['invocation:missing'], baseOptions)
+      exitCode = renderStatusResult('Call status', CALL_REF, {
+        kind: 'refused', callRef: CALL_REF, code: 'invocation_not_found', retryable: false,
+      }, baseOptions)
     } finally {
       output.restore()
     }
 
     expect(exitCode).toBe(1)
     expect(JSON.parse(output.read())).toMatchObject({
-      kind: 'refused',
-      code: 'invocation_not_found',
-      nextCommand: 'ae history --json',
+      kind: 'refused', code: 'invocation_not_found', nextCommand: 'ae history --json',
     })
   })
 
-  it('names the exact call ref shape and points a missing status argument at history', async () => {
-    const { runStatusCommand } = await import('../../../tools/ae/commands/status')
-
+  it('points a missing status argument at command help', async () => {
     await expect(runStatusCommand([], baseOptions)).rejects.toMatchObject({
-      kind: 'INVALID_ARGUMENT',
-      code: 'status-usage',
-      message: expect.stringContaining('operation-invocation:v1:<64 lowercase hex characters>'),
-      nextCommand: 'ae history --json',
+      kind: 'INVALID_ARGUMENT', code: 'status-usage', nextCommand: 'ae help status',
     } satisfies Partial<CliFailure>)
   })
 
-  it('names the exact call ref shape when the argument fails to parse', async () => {
-    const { runStatusCommand } = await import('../../../tools/ae/commands/status')
-
-    await expect(runStatusCommand([''], baseOptions)).rejects.toMatchObject({
-      kind: 'INVALID_ARGUMENT',
-      code: 'status-usage',
-      message: expect.stringContaining('operation-invocation:v1:<64 lowercase hex characters>'),
-      nextCommand: 'ae history --json',
+  it('refuses a malformed Call ref before requesting status', async () => {
+    const fetchMock = vi.fn<typeof fetch>()
+    vi.stubGlobal('fetch', fetchMock)
+    await expect(runStatusCommand(['invocation:one'], baseOptions)).rejects.toMatchObject({
+      kind: 'INVALID_ARGUMENT', code: 'status-usage', nextCommand: 'ae history --json',
     } satisfies Partial<CliFailure>)
+    expect(fetchMock).not.toHaveBeenCalled()
   })
 
-  it('uses top-level status usage to point insufficient credit at account funding', async () => {
-    setApiKey('ae-test-caller-key')
+  it('shows the legacy funding continuation without circular status polling', () => {
     const output = capture(process.stdout)
-    vi.stubGlobal('fetch', vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({
-      kind: 'found',
-      callRef: 'invocation:one',
-      version: 1,
-      toolRef: OPERATION_REF,
-      state: 'terminal',
-      usage: {
-        usageRef: 'usage:credit',
-        observedAt: 100,
-        chargeState: 'insufficient_credit',
-        amount: { currency: 'USD', units: '100', exponent: 2 },
-        priceDigest: 'sha256:price',
-      },
-    }), { status: 200, headers: { 'content-type': 'application/json' } })))
-
     try {
-      const { runStatusCommand } = await import('../../../tools/ae/commands/status')
-      await runStatusCommand(['invocation:one'], { ...baseOptions, json: false })
+      renderStatusResult('Call status', CALL_REF, {
+        kind: 'found', callRef: CALL_REF, version: 1, toolRef: OPERATION_REF, state: 'terminal',
+        usage: {
+          usageRef: 'usage:credit', observedAt: 100, chargeState: 'insufficient_credit',
+          amount: { currency: 'USD', units: '100', exponent: 2 }, priceDigest: 'sha256:price',
+        },
+      }, { ...baseOptions, json: false })
     } finally {
       output.restore()
     }
 
     expect(output.read()).toContain('next: ae account balance')
-    expect(output.read()).not.toContain('next: ae status invocation:one')
+    expect(output.read()).not.toContain(`next: ae status ${CALL_REF}`)
   })
 
 

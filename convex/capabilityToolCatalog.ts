@@ -6,7 +6,6 @@ import { degradeBackend } from '@/lib/observability/degrade-backend'
 import { readBoundedRequestJson } from '@/lib/server/bounded-request-body'
 import { CURRENT_TOOL_PROJECTION_NAVIGATION } from '@/modules/actions/contract'
 import { isRecord } from '@/modules/common/is-record'
-import { admitFacilitatorDiscoveryItems } from '@/modules/capability-supply/server'
 import {
   deserializeToolDetailResult, deserializeToolSearchResult, serializeToolSearchResult,
   deserializeToolCompareResult, serializeToolDetailResult, serializeToolCompareResult,
@@ -20,10 +19,9 @@ import { quoteManagedX402BuyerAud } from '@/modules/money/public'
 import { TOOL_SEARCH_USE } from '@/modules/registry/tool-reranker'
 import { api, internal } from './_generated/api'
 import { action, internalAction, type ActionCtx } from './_generated/server'
-import { reconcileReadyItems } from './capabilitySupplyShared'
 import { publicSearchReturns, searchArgs, publicDetailReturns, publicCompareReturns, toolRefArgs, compareArgs } from './capabilitySupplyToolQueries'
-import { bindWorkloadCronActionContext } from './workloadCron'
 import { presentSearch as presentSearchDecision, rerankSearch } from './lib/capabilityToolCatalogPresentation'
+import { facilitatorDiscoverySnapshotCandidates } from '@/modules/capability-supply/server'
 
 const PAGE_LIMIT = 20
 const TIMEOUT_MS = 10_000
@@ -106,29 +104,16 @@ export const search = action({
     if (input.cursor !== undefined && (!/^(0|[1-9]\d*)$/u.test(input.cursor) || !Number.isSafeInteger(Number(input.cursor)))) return serializeToolSearchResult(unavailable('query_invalid'))
     let page: Awaited<ReturnType<typeof fetchCatalogPage>>
     try { page = await fetchCatalogPage(input) } catch (cause) { return degradeBackend(cause, serializeToolSearchResult(unavailable('source_unavailable')), { site: 'search', reason: 'source_unavailable' }) }
-    const workload = await ctx.runQuery(internal.workloadCron.admit, { name: 'refresh facilitator discovery' })
-    const authorized = bindWorkloadCronActionContext(ctx, { name: 'refresh facilitator discovery', snapshot: workload })
-    const refs = new Set<string>()
-    // Isolate invalid candidates: one refused publication never discards its page.
-    for (const candidate of page.items.slice(0, PAGE_LIMIT)) {
-      try {
-        const admission = await admitFacilitatorDiscoveryItems([candidate])
-        if (admission.admitted.length === 0) continue
-        const result = await authorized.runMutation(internal.facilitatorDiscovery.reconcile, { items: [...structuredClone(reconcileReadyItems(admission.admitted))], complete: false, deadlineAt: Date.now() + TIMEOUT_MS, workload })
-        for (const ref of result.toolRefs) refs.add(ref)
-      } catch (cause) {
-        // Candidate failure may be isolated; revoked workload authority may not.
-        degradeBackend(cause, undefined, { site: 'search', reason: 'source_unavailable' })
-        await ctx.runQuery(internal.workloadCron.reconcile, { name: 'refresh facilitator discovery', snapshot: workload })
-      }
-    }
-    const selectedRefs = input.filters?.networkId === undefined ? [...refs] : await ctx.runQuery(internal.capabilityToolCatalogData.filterNetwork, { toolRefs: [...refs], networkId: input.filters.networkId })
+    const candidates = await facilitatorDiscoverySnapshotCandidates(page.items)
+    const snapshot = await ctx.runQuery(internal.capabilityToolCatalogData.sourceSnapshot, { candidates })
+    const refs = [...new Set(snapshot.toolRefs)]
+    const selectedRefs = input.filters?.networkId === undefined ? refs : await ctx.runQuery(internal.capabilityToolCatalogData.filterNetwork, { toolRefs: refs, networkId: input.filters.networkId })
     const details = await Promise.all(selectedRefs.map((toolRef) => ctx.runQuery(api.capabilitySupplyTools.detail, { toolRef })))
     const items = details.flatMap((wire) => {
       const detail = deserializeToolDetailResult(wire)
       return detail.kind === 'found' && matchesToolFilters(detail.tool, input.filters ?? {}) ? [detail.tool] : []
     })
-    return serializeToolSearchResult(await decorate(ctx, { kind: 'ok', schemaVersion: 'registry-tools:v3', query: input.query, items, ranking: [], pagination: { limit: page.limit, hasMore: page.nextCursor !== undefined, ...(page.nextCursor === undefined ? {} : { nextCursor: page.nextCursor }) }, ...(page.partialResults === undefined ? {} : { partialResults: page.partialResults }), navigation }))
+    return serializeToolSearchResult(await decorate(ctx, { kind: 'ok', schemaVersion: 'registry-tools:v3', query: input.query, items, ranking: [], pagination: { limit: page.limit, hasMore: page.nextCursor !== undefined, ...(page.nextCursor === undefined ? {} : { nextCursor: page.nextCursor }) }, ...(page.partialResults || snapshot.incomplete || candidates.length < page.items.length ? { partialResults: true } : {}), navigation }))
   },
 })
 

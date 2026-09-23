@@ -143,10 +143,17 @@ function successfulFetch(requests: Request[]): typeof globalThis.fetch {
     }
     if (path.endsWith('/market-tools/search')) {
       const index = sourceKinds.findIndex((sourceKind) => String(body.query).includes(sourceKind))
+      const ref = toolRef(index + 1)
       return json({
-        kind: 'ok', schemaVersion: 'registry-tools:v3', query: body.query, count: 1,
-        items: [{ toolRef: toolRef(index + 1), capabilityId: `fixture.${sourceKinds[index]}`, title: String(body.query), description: 'fixture', provider: { name: 'Fixture', slug: 'fixture' }, priceLabel: 'Free', healthStatus: 'operational', listingTier: 'reviewed' }],
-        pagination: { limit: 20, hasMore: false },
+        kind: 'matched', schemaVersion: 'registry-tools:v3', query: body.query,
+        results: [{
+          toolRef: ref, title: String(body.query), summary: 'fixture', matchReason: 'Text overlap',
+          readiness: 'ready', entitlement: 'requires_auth', price: { kind: 'indicative', label: 'Free' },
+          details: { capabilityId: `fixture.${sourceKinds[index]}`, provider: { name: 'Fixture', slug: 'fixture' }, description: 'fixture', listingTier: 'reviewed' },
+          next: [{ action: 'describe', args: { toolRef: ref }, authority: 'public' }],
+        }],
+        recommendation: { mode: 'fast', engine: 'jev_system_one', text: `Inspect ${String(body.query)} before use.`, citations: [{ toolRef: ref, span: { start: 8, end: 8 + String(body.query).length } }] },
+        partialResults: false, pagination: { limit: 20, hasMore: false }, next: [],
       })
     }
     if (path.endsWith('/market-tools/describe')) {
@@ -228,6 +235,29 @@ describe('Package 5 Provider Operations release harness', () => {
       .map(async (request) => JSON.parse(await request.clone().text())))
     expect(invokeBodies.filter((body) => 'quoteRef' in body)).toHaveLength(4)
     expect(invokeBodies.filter((body) => 'quoteRef' in body).every((body) => Object.keys(body).sort().join(',') === 'idempotencyKey,quoteRef')).toBe(true)
+  })
+
+  it('rejects a valid noMatch search before buyer invocation', async () => {
+    const requests: Request[] = []
+    const baseFetch = successfulFetch(requests)
+    const fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const request = new Request(input, init)
+      if (new URL(request.url).pathname === '/api/v1/market-tools/search') {
+        requests.push(request)
+        const { query } = JSON.parse(await request.clone().text()) as { query: string }
+        return json({
+          kind: 'noMatch', schemaVersion: 'registry-tools:v3', query, scope: 'exhausted',
+          results: [], nearMisses: [], reason: 'No suitable Tool found in the searched supply.',
+          suggestions: ['Broaden the capability request or try the next page.'],
+          partialResults: false, pagination: { limit: 20, hasMore: false }, next: [],
+        })
+      }
+      return await baseFetch(input, init)
+    }) as typeof globalThis.fetch
+
+    await expect(runPackage5ProviderOperationsRelease(config(fetch)))
+      .rejects.toThrow('package5_openapi_search_no_match')
+    expect(new URL(requests.at(-1)!.url).pathname).toBe('/api/v1/market-tools/search')
   })
 
   it('fails the release when the public gateway accepts the obsolete call shape', async () => {

@@ -2,7 +2,6 @@ import type { ReactNode, RefObject } from 'react'
 
 import { agentAuthorityModeAllows, type AgentAccessAuthorityMode } from '@/modules/agent-access/contract'
 import type { AgentConsentTarget } from '@/modules/agent-access/consent-read-model'
-import type { ToolChoiceSearchResult } from '@/components/ae/command-panel/market-tools-client'
 import { cn } from '@/lib/utils'
 
 export const AUTHORIZE_RADIO_CARD_CLASS = cn(
@@ -52,7 +51,8 @@ export type AuthorityModeRadioGroupProps = Readonly<{
 
 export type ConsentToolSearchView = Readonly<{
   pending: boolean
-  result?: ToolChoiceSearchResult
+  results?: readonly Readonly<{ toolRef: string; title: string }>[]
+  noMatchMessage?: string
   error?: string
 }>
 

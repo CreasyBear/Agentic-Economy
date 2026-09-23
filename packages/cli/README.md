@@ -4,7 +4,9 @@ Search and describe public Tools, connect one origin-bound caller key, make a
 Call, follow its durable receipt, and privately revisit jobs the market
 cannot satisfy yet.
 
-After installing the pinned archive from your Agentic Economy deployment:
+`@aecon/cli` is verified as a locally installed tarball. It is not yet
+published to npm; install a pinned archive from a verified Agentic Economy
+deployment before running these commands:
 
 ```sh
 ae --version

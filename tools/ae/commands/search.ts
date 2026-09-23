@@ -1,6 +1,5 @@
 import { toolCatalogSearchInputSchema, toolChoiceSearchOutputSchema } from '@/modules/registry/tool-choice-contracts'
 import { TOOL_MARKET_SEARCH_PATH } from '@/modules/registry/tool-entry'
-import { nextAction } from '@/modules/registry/next-action'
 
 import type { CliOptions } from '../lib/args'
 import { CliFailure, callJson, heading, line, printJson, requireOk } from '../lib/output'
@@ -22,6 +21,7 @@ export async function runSearchCommand(args: readonly string[], options: CliOpti
   const input = {
     query,
     ...(options.source === undefined ? {} : { source: options.source }),
+    ...(options.technical ? { detail: 'full' } : {}),
     ...(options.limit === undefined ? {} : { limit: parseSearchLimit(options.limit) }),
     ...(options.cursor === undefined ? {} : { cursor: options.cursor }),
     ...(options.filters === undefined ? {} : { filters: parseSearchFilters(options.filters) }),
@@ -50,7 +50,7 @@ export async function runSearchCommand(args: readonly string[], options: CliOpti
   const result = parsedResult.data
   if (result.kind === 'unavailable') {
     throwToolReadFailure({
-      reason: result.reason,
+      reason: result.reason === 'capacity_exceeded' ? 'source_capacity_exceeded' : 'source_unavailable',
       cursorProvided: parsedInput.data.cursor !== undefined,
     })
   }
@@ -63,116 +63,39 @@ export async function runSearchCommand(args: readonly string[], options: CliOpti
     ? []
     : ['--filters', JSON.stringify(parsedInput.data.filters)]
   const sourceContinuation = parsedInput.data.source === undefined ? [] : ['--source', parsedInput.data.source]
-  const pagination = result.pagination
-  const nextPageCommand = pagination?.hasMore === true && pagination.nextCursor !== undefined
+  const nextPage = result.next.find(action => action.action === 'next-page')
+  const nextPageCommand = nextPage?.action === 'next-page'
     ? continuationCommand([
-        'ae', 'search', result.query,
+        'ae', 'search', nextPage.args.query,
         ...(options.limit === undefined ? [] : ['--limit', options.limit]),
         ...sourceContinuation,
         ...filtersContinuation,
-        '--cursor', pagination.nextCursor,
+        '--cursor', nextPage.args.cursor,
         ...originContinuation,
         ...outputContinuation,
         ...technicalContinuation,
       ])
-    : undefined
-  const nextActionCommand = result.kind === 'ok' && result.items.length > 0
-    ? result.items.length === 1
-      ? continuationCommand([
-          'ae', 'describe', result.items[0]?.toolRef,
-          ...originContinuation,
-          ...outputContinuation,
-          ...technicalContinuation,
-        ])
-      : continuationCommand([
-          'ae', 'compare', ...result.items.slice(0, 4).map(({ toolRef }) => toolRef),
-          ...originContinuation,
-          ...outputContinuation,
-          ...technicalContinuation,
-        ])
-    : undefined
-  const browseCommand = continuationCommand([
-    'ae', 'list',
-    ...sourceContinuation,
-    ...(options.limit === undefined ? [] : ['--limit', options.limit]),
-    ...originContinuation,
-    ...outputContinuation,
-    ...technicalContinuation,
-  ])
-  const hasSearchFilters = options.filters !== undefined
-  const decision = nextAction({
-    kind: result.kind,
-    query: result.query,
-    pagination: {
-      hasMore: pagination?.hasMore ?? false,
-      ...(pagination?.nextCursor === undefined ? {} : { nextCursor: pagination.nextCursor }),
-    },
-    hasFilters: hasSearchFilters,
-  })
-  const requestCommand = decision.kind === 'request'
-    ? continuationCommand([
-        'ae', 'request', 'create', decision.query,
-        ...originContinuation,
-        ...outputContinuation,
-      ])
-    : undefined
-  const broadenSearchCommand = decision.kind === 'broaden'
-    ? continuationCommand([
-        'ae', 'list',
-        ...sourceContinuation,
-        ...filtersContinuation,
-        ...originContinuation,
-        ...outputContinuation,
-        ...technicalContinuation,
-      ])
-    : undefined
-  const nextHref = result.kind === 'no_candidates'
-    ? new URL('/market', options.baseUrl).toString()
     : undefined
   if (options.json) {
-    const jsonResult = result
-    const nextCommand = result.kind === 'no_candidates'
-      ? nextPageCommand ?? requestCommand ?? broadenSearchCommand
-      : requestCommand ?? broadenSearchCommand ?? nextActionCommand
-    printJson({
-      ...jsonResult,
-      ...(nextCommand === undefined
-        ? {}
-        : { nextCommand }),
-      ...(nextPageCommand === undefined ? {} : { nextPageCommand }),
-      ...(result.kind === 'no_candidates' ? { browseCommand } : {}),
-      ...(nextHref === undefined ? {} : { nextHref }),
-    })
+    printJson({ ...result, ...(nextPageCommand === undefined ? {} : { nextPageCommand }) })
     return
   }
-
   heading(`Market Tools for "${result.query}" (${outcome.durationMs}ms)`)
-  if (result.kind === 'no_candidates') {
-    line(pagination?.hasMore === true
-      ? '  No matching Tools on this page.'
-      : hasSearchFilters
-        ? '  No current Tools match these filters.'
-        : '  No current Tools match this job.')
+  if (result.kind === 'noMatch') {
+    line(`  No suitable Tools on this ${result.scope === 'page' ? 'page' : 'search'}.`)
+    if (result.partialResults) line('  Supply coverage is incomplete.')
+    for (const tool of result.nearMisses) line(`  Near miss: ${tool.title} (${tool.toolRef})`)
     if (nextPageCommand !== undefined) line(`  More results: ${nextPageCommand}`)
-    if (requestCommand !== undefined) line(`  Remember this missing job: ${requestCommand}`)
-    if (broadenSearchCommand !== undefined) line(`  Browse matching filters: ${broadenSearchCommand}`)
-    line(`  Browse all: ${browseCommand}`)
-    line(`  Browser: ${nextHref}`)
     return
   }
-
-  line(`  ${result.count} match${result.count === 1 ? '' : 'es'}`)
-  for (const [index, tool] of result.items.entries()) {
-    line(`  ${index + 1}. ${tool.provider.name} — ${tool.title}`)
+  if (result.kind === 'degraded') line(`  Unverified matches: ${result.reason}`)
+  else line(`  ${result.recommendation.text}`)
+  for (const [index, tool] of result.results.entries()) {
+    line(`  ${index + 1}. ${tool.title}`)
     line(`     ref: ${tool.toolRef}`)
-    line(
-      `     ${tool.healthStatus} · ${tool.priceLabel}`,
-    )
+    line(`     ${tool.readiness} · ${tool.price.label}`)
   }
-  if (nextActionCommand !== undefined) line(`  Next: ${nextActionCommand}`)
-  line(result.pagination.hasMore
-    ? `  More results: ${nextPageCommand ?? 'ae search --cursor <cursor>'}`
-    : '  End of results.')
+  if (nextPageCommand !== undefined) line(`  More results: ${nextPageCommand}`)
 }
 
 function parseSearchLimit(value: string | number): number {

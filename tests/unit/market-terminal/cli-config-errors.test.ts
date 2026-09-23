@@ -39,10 +39,7 @@ describe('AE CLI malformed configuration failures', () => {
         kind: 'FAILED_PRECONDITION',
         code: 'cli_config_invalid_json',
         message: `AE CLI configuration at ${path} is not valid JSON.`,
-        detail: {
-          configPath: path,
-          reason: 'invalid_json',
-        },
+        detail: expect.any(String),
         exitCode: 1,
         suggestion: 'Repair or move the configuration file; AE left it unchanged and did not discard stored connections.',
         nextCommand: 'ae config --json',

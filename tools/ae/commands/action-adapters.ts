@@ -76,9 +76,15 @@ export const CLI_ACTION_ADAPTERS: readonly CliActionAdapterDescriptor[] = Object
   },
   {
     actionId: CALL_ROUTE_CONTRACT.status.actionId,
-    command: 'status',
+    command: 'wait',
     method: CALL_ROUTE_CONTRACT.status.method,
     path: CALL_ROUTE_CONTRACT.status.path,
+  },
+  {
+    actionId: 'journey.status',
+    command: 'status',
+    method: 'GET',
+    path: '/api/v1/status/{ref}',
   },
   {
     actionId: CALL_ROUTE_CONTRACT.cancel.actionId,

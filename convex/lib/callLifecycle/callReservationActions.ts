@@ -166,10 +166,12 @@ async function abandonFinancialReservation(
   principal: AgentAccessPrincipal,
   reservation: CallIdempotencyReservation,
   retryable: boolean,
+  turnRef?: string,
 ): Promise<CallPortRefusal> {
   await ctx.runMutation(internal.capabilityCalls.abandon, {
     ...reservation,
     ownerId: principal.ownerId,
+    ...(turnRef === undefined ? {} : { turnRef }),
   })
   return {
     kind: 'refused',
@@ -184,6 +186,7 @@ async function attachFormanceReservation(
   principal: AgentAccessPrincipal,
   result: ReservedCall,
   booking: Parameters<typeof ctx.runAction>[1],
+  turnRef?: string,
 ): Promise<ReservationResult> {
   const booked = await ctx.runAction(internal.moneyFormance.reserveManagedCall, booking)
   if (booked.kind === 'completed') {
@@ -212,6 +215,7 @@ async function attachFormanceReservation(
     principal,
     result.reservation,
     booked.kind === 'unavailable',
+    turnRef,
   )
 }
 
@@ -221,6 +225,7 @@ async function reserveFormanceBackedInvocation(
   reservation: CallIdempotencyReservation,
   toolJson: string | undefined,
   input: Record<string, unknown>,
+  turnRef?: string,
 ): Promise<ReservationResult> {
   const organizationMonthlySpend = await readOrganizationMonthlySpendForReserve(ctx, principal.ownerId)
   const result = await ctx.runMutation(internal.capabilityCalls.reserve, {
@@ -229,6 +234,7 @@ async function reserveFormanceBackedInvocation(
     ...(toolJson === undefined ? {} : { toolJson }),
     inputJson: JSON.stringify(input),
     now: Date.now(),
+    ...(turnRef === undefined ? {} : { turnRef }),
     ...(organizationMonthlySpend === undefined ? {} : { organizationMonthlySpend }),
   })
   if (result.kind !== 'reserved' && result.kind !== 'replayed') return result
@@ -237,19 +243,20 @@ async function reserveFormanceBackedInvocation(
   })
   if (material.kind === 'not_required') return result
   if (material.kind === 'not_found' || material.entryRefusalCode === 'financial_scope_locked') {
-    return await abandonFinancialReservation(ctx, principal, result.reservation, false)
+    return await abandonFinancialReservation(ctx, principal, result.reservation, false, turnRef)
   }
   if (material.financialState === 'outcome_unknown') {
     return { kind: 'replayed', reservation: result.reservation }
   }
   if (material.financialState === 'reserved') return result
-  return await attachFormanceReservation(ctx, principal, result, material.booking)
+  return await attachFormanceReservation(ctx, principal, result, material.booking, turnRef)
 }
 
 export async function callHandler(
   ctx: ActionCtx,
   args: CallArgs,
   sourceAlreadyAdmitted = false,
+  turnRef?: string,
 ): Promise<Infer<typeof callResultValue>> {
   if (!sourceAlreadyAdmitted) {
     await ctx.runMutation(internal.capabilityCalls.admit, args)
@@ -369,6 +376,7 @@ export async function callHandler(
           reservation,
           current.kind === 'valid' ? current.toolJson : undefined,
           args.input,
+          turnRef,
         )
         if (result.kind !== 'reserved' && result.kind !== 'replayed') return result
         reservedCallRef = result.reservation.callRef
@@ -378,7 +386,10 @@ export async function callHandler(
       },
       abandon: async (abandonment) => {
         try {
-          const result = await ctx.runMutation(internal.capabilityCalls.abandon, abandonment)
+          const result = await ctx.runMutation(internal.capabilityCalls.abandon, {
+            ...abandonment,
+            ...(turnRef === undefined ? {} : { turnRef }),
+          })
           reservationCleanup = result.kind === 'abandoned' ? 'abandoned' : 'failed'
           return result
         } catch (error) {

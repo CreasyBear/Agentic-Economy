@@ -204,6 +204,28 @@ describe.sequential('durable Tool chat messaging and shares', () => {
     )
     expect(activeStreams).toEqual([])
   })
+  it('halts at clarification and reports an input-required stream outcome', async () => {
+    const backend = convexTestWithMarketComponents()
+    const { owner, canonicalAccountRef } = await publishedBusinessOwner(backend, 'chat-clarify-owner')
+    const created = await owner.mutation(api.chatThreads.createThread, { title: 'Clarification' })
+    const { messageId } = await backend.run(ctx => saveMessage(ctx, components.agent, {
+      threadId: created.threadId, userId: canonicalAccountRef, prompt: 'Find something suitable',
+    }))
+    const model = mockModel({
+      contentSteps: [[{
+        type: 'tool-call', toolCallId: 'clarify-1', toolName: 'chat_clarify',
+        input: JSON.stringify({ question: 'Which region?', choices: ['AU', 'US', 'Other'] }),
+      }]],
+    })
+    const clarificationRequested = await backend.action(ctx => streamDurableChatResponse(ctx, {
+      threadId: created.threadId, ownerId: canonicalAccountRef, promptMessageId: messageId,
+    }, model))
+    expect(clarificationRequested).toBe(true)
+    const messages = await backend.run(ctx => listUIMessages(ctx, components.agent, {
+      threadId: created.threadId, paginationOpts: { cursor: null, numItems: 20 },
+    }))
+    expect(messages.page.some(message => JSON.stringify(message.parts).includes('awaiting_answer'))).toBe(true)
+  })
 
   it('records a safe recovery message when durable generation is unavailable', async () => {
     const previousApiKey = process.env.OPENROUTER_API_KEY
@@ -220,8 +242,8 @@ describe.sequential('durable Tool chat messaging and shares', () => {
         threadId: sent.threadId,
         paginationOpts: { cursor: null, numItems: 20 },
       })
-      expect(messages.page.map((message) => message.role)).toEqual(['user', 'assistant'])
-      const recovery = messages.page.find((message) => message.role === 'assistant')?.text ?? ''
+      expect(messages.page.map((message: { role: string }) => message.role)).toEqual(['user', 'assistant'])
+      const recovery = messages.page.find((message: { role: string; text: string }) => message.role === 'assistant')?.text ?? ''
       expect(recovery).toMatch(/before a final response was recorded/i)
       expect(recovery).toMatch(/call card or receipt/i)
       expect(recovery).not.toContain('agent_unavailable')
@@ -403,19 +425,28 @@ describe.sequential('durable Tool chat messaging and shares', () => {
                 output: {
                   type: 'json',
                   value: {
-                    kind: 'ok',
+                    kind: 'matched',
                     schemaVersion: 'registry-tools:v3',
                     query: 'current',
-                    count: toolRefs.length,
-                    items: toolRefs.map((ref, index) => ({
+                    partialResults: false,
+                    results: toolRefs.map((ref, index) => ({
                       toolRef: ref,
-                      capabilityId: `capability:tool:${index + 1}`,
                       title: `Tool ${index + 1}`,
-                      description: 'Current Tool result.',
-                      provider: { name: 'Provider', slug: 'provider' },
-                      priceLabel: 'AUD 0.00',
-                      healthStatus: 'operational',
+                      summary: 'Current Tool result.',
+                      matchReason: 'Matches the query.',
+                      readiness: 'ready',
+                      entitlement: 'public',
+                      price: { kind: 'indicative', label: 'AUD 0.00' },
+                      details: {
+                        capabilityId: `capability:tool:${index + 1}`,
+                        provider: { name: 'Provider', slug: 'provider' },
+                        description: 'Current Tool result.',
+                        listingTier: 'reviewed',
+                      },
+                      next: [],
                     })),
+                    recommendation: { mode: 'fast', engine: 'test', text: 'Five matching Tools.', citations: [] },
+                    next: [],
                     pagination: { limit: 10, hasMore: false },
                     rawOutput: 'RAW_OUTPUT_SECRET',
                     metadata: { trace: 'OUTPUT_METADATA_SECRET' },
@@ -505,7 +536,11 @@ describe.sequential('durable Tool chat messaging and shares', () => {
     expect(JSON.stringify(shared)).not.toMatch(
       /SECRET|rawOutput|metadata|reasoning|model|usage|errorText|input|arbitrary_internal_tool/u,
     )
-    const publicParts = shared.page.flatMap((message) => message.parts)
+    type SharedPart =
+      | { type: 'text'; text: string }
+      | { type: 'tool-card'; kind: 'status'; summary: string }
+      | { type: 'tool-card'; kind: 'choices' }
+    const publicParts: SharedPart[] = shared.page.flatMap((message: { parts: SharedPart[] }) => message.parts)
     const boundedText = publicParts.find((part) => part.type === 'text' && part.text.startsWith('😀'))
     expect(boundedText?.type).toBe('text')
     expect(Array.from(boundedText?.type === 'text' ? boundedText.text : '')).toHaveLength(8_000)
@@ -513,7 +548,7 @@ describe.sequential('durable Tool chat messaging and shares', () => {
       if (part.type !== 'tool-card') continue
       if (part.kind === 'status') expect(Array.from(part.summary).length).toBeLessThanOrEqual(240)
     }
-    expect(shared.page.every((message) => Object.keys(message).sort().join(',') === 'id,parts,role'))
+    expect(shared.page.every((message: { id: string; role: string; parts: unknown[] }) => Object.keys(message).sort().join(',') === 'id,parts,role'))
       .toBe(true)
   })
 })

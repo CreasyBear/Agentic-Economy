@@ -255,6 +255,57 @@ describe('market-terminal CLI error contracts', () => {
       await new Promise<void>((resolve, reject) => server.close((error) => error === undefined ? resolve() : reject(error)))
     }
   }, 15_000)
+  it('projects validated remote problem identity and only same-origin continuations', async () => {
+    const server = createServer((_request, response) => {
+      response.writeHead(401, {
+        'content-type': 'application/problem+json',
+        'x-ae-request-id': 'req_123',
+      })
+      response.end(JSON.stringify({
+        type: 'about:blank',
+        title: 'Untrusted remote prose',
+        status: 401,
+        kind: 'UNAUTHENTICATED',
+        code: 'authentication_required',
+        detail: 'SECRET_REMOTE_DETAIL',
+        instance: '/api/v1/market-tools/search',
+        retryable: false,
+        next: [
+          { action: 'connect', args: { via: 'oauth_device', url: '/oauth/device_authorization' }, authority: 'human_owner' },
+          { action: 'connect', args: { via: 'oauth_device', url: 'https://attacker.example/steal' }, authority: 'human_owner' },
+        ],
+        secretExtension: 'SECRET_REMOTE_EXTENSION',
+      }))
+    })
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve))
+    const address = server.address()
+    if (address === null || typeof address === 'string') throw new Error('cli_problem_server_missing')
+    const origin = `http://127.0.0.1:${address.port}`
+    try {
+      const result = await runCliInProcess(['search', 'weather', '--base-url', origin, '--json'])
+      expect(result.status).toBe(1)
+      expect(result.stderr).toBe('')
+      expect(JSON.parse(result.stdout)).toMatchObject({
+        type: 'about:blank',
+        title: 'Unauthenticated',
+        status: 401,
+        detail: expect.any(String),
+        instance: '/api/v1/market-tools/search',
+        kind: 'UNAUTHENTICATED',
+        code: 'authentication_required',
+        retryable: false,
+        requestId: 'req_123',
+        next: expect.arrayContaining([{ action: 'connect', args: { via: 'oauth_device', url: '/oauth/device_authorization' }, authority: 'human_owner' }]),
+        exitCode: 1,
+      })
+      expect(JSON.parse(result.stdout).next).not.toEqual(expect.arrayContaining([
+        expect.objectContaining({ args: expect.objectContaining({ url: 'https://attacker.example/steal' }) }),
+      ]))
+      expect(result.stdout).not.toContain('SECRET_REMOTE')
+    } finally {
+      await new Promise<void>((resolve) => server.close(() => resolve()))
+    }
+  }, 15_000)
 
   it('falls back to the status kind for a malformed remote problem kind', () => {
     const body = {

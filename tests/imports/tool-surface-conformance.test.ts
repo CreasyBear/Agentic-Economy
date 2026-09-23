@@ -7,6 +7,8 @@ import {
   listCallRouteDescriptors,
 } from '@/modules/actions'
 import { TOOL_MARKET_ACTION_ENTRIES } from '@/modules/registry/tool-entry'
+import { CHAT_TOOL_IDS, CHAT_TOOL_NAME_MAP } from '@/modules/chat/tool-card'
+import { COMMANDS } from '../../tools/ae/commands/manifest'
 import { MARKET_TOOL_COMMAND_DESCRIPTORS } from '../../tools/ae/commands/market-tools'
 import { runCompareCommand } from '../../tools/ae/commands/compare'
 import { runDescribeCommand } from '../../tools/ae/commands/describe'
@@ -36,15 +38,6 @@ const toolMarketCliRunners = [
   runCompareCommand,
 ] as const
 
-const chatActionIds = [
-  'registry.tools.list',
-  'registry.tools.search',
-  'registry.tools.describe',
-  'registry.tools.compare',
-  'tool.quote',
-  'tool.procure',
-  'tool.call',
-] as const
 
 describe('Tool surface conformance', () => {
   it('requires one concrete CLI adapter for every action declaring the CLI surface', () => {
@@ -117,7 +110,7 @@ describe('Tool surface conformance', () => {
       command,
       path,
     }))).toEqual(toolMarketCliCommands)
-    expect(chatActionIds.slice(0, 4)).toEqual(marketEntryIds)
+    expect(CHAT_TOOL_IDS.filter((id) => id.startsWith('registry.tools.'))).toEqual(marketEntryIds)
 
     for (const [index, descriptor] of MARKET_TOOL_COMMAND_DESCRIPTORS.entries()) {
       const entry = TOOL_MARKET_ACTION_ENTRIES[index]
@@ -135,7 +128,7 @@ describe('Tool surface conformance', () => {
       expect(action.surfaces).toEqual(
         expect.arrayContaining(['http', 'agentJson', 'chat', 'cli', 'mcp']),
       )
-      expect(listMcpActions().map((candidate) => candidate.id)).toContain(action.id)
+      if (descriptor.actionId !== 'registry.tools.list') expect(listMcpActions().map((candidate) => candidate.id)).toContain(action.id)
     }
   })
 
@@ -165,10 +158,19 @@ describe('Tool surface conformance', () => {
     expect(callCommandDescriptor.run).toBe(runCallCommand)
 
     const chatActions = listActions().filter((action) => action.surfaces.includes('chat'))
-    expect(chatActions.map(({ id }) => id)).toEqual(chatActionIds)
+    expect(chatActions.map(({ id }) => id)).toEqual(CHAT_TOOL_IDS.filter((id) => id !== 'chat.clarify'))
     for (const action of chatActions) {
-      expect(action.surfaces).toContain('mcp')
-      if (action.id.startsWith('registry.tools.')) expect(action.surfaces).toContain('cli')
+      expect(CHAT_TOOL_NAME_MAP.canonicalToProvider[action.id as keyof typeof CHAT_TOOL_NAME_MAP.canonicalToProvider]).toBeDefined()
+      if (action.id !== 'registry.tools.list') expect(action.surfaces).toContain('mcp')
     }
+  })
+  it('wires journey status to GET, CLI and MCP rather than declaring an absent adapter', () => {
+    const status = findAction('journey.status')
+    expect(status?.surfaces).toEqual(['mcp', 'http', 'cli'])
+    expect(listMcpActions().map(({ id }) => id)).toContain('journey.status')
+    expect(COMMANDS.status?.args).toBe('<ref>')
+    expect(CLI_ACTION_ADAPTERS).toContainEqual({
+      actionId: 'journey.status', command: 'status', method: 'GET', path: '/api/v1/status/{ref}',
+    })
   })
 })

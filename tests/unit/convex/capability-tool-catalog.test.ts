@@ -1,13 +1,16 @@
+import { getFunctionName } from 'convex/server'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const sdk = vi.hoisted(() => ({ list: vi.fn(), search: vi.fn() }))
 vi.mock('@coinbase/cdp-sdk', async (original) => ({ ...await original<typeof import('@coinbase/cdp-sdk')>(), listX402DiscoveryResources: sdk.list, searchX402Resources: sdk.search }))
-import { fetchCatalogPage, rerank } from '../../../convex/capabilityToolCatalog'
+import { fetchCatalogPage, rerank, search } from '../../../convex/capabilityToolCatalog'
 
 import { serializeToolSearchResult, type ToolSearchWireResult } from '@/modules/capability-supply/public'
 import { ERC20_QUERY, jevSystemOneResponse, misorderedSearchResult } from '../../helpers/tool-search-rerank-fixtures'
+import { timezonePaymentRequired20260819Fixture } from '@/modules/capability-supply/public'
 
 const rerankHandler = (rerank as unknown as { _handler: (ctx: unknown, args: { result: ToolSearchWireResult; query: string }) => Promise<ToolSearchWireResult> })._handler
+const searchHandler = (search as unknown as { _handler: (ctx: unknown, args: { source: 'coinbase'; query: string }) => Promise<ToolSearchWireResult> })._handler
 
 describe('SDK-backed catalogue discovery', () => {
   beforeEach(() => { vi.clearAllMocks() })
@@ -58,6 +61,26 @@ describe('SDK-backed catalogue discovery', () => {
     expect(reranked.ranking.every(entry => entry.score === 0)).toBe(true)
     expect(reranked.ranking.some(entry => entry.toolRef === items[20]!.toolRef)).toBe(false)
     expect(fetcher).toHaveBeenCalledTimes(1)
+  })
+
+  it('reads source results from the ingested snapshot without a reconciliation mutation', async () => {
+    sdk.list.mockResolvedValue({
+      items: [structuredClone(timezonePaymentRequired20260819Fixture.paymentRequired)],
+      pagination: { offset: 0, total: 1 },
+    })
+    const runMutation = vi.fn().mockResolvedValue({ toolRefs: [] })
+    const runQuery = vi.fn(async (reference: unknown) => {
+      if (getFunctionName(reference as never) === 'capabilityToolCatalogData:sourceSnapshot') {
+        return { toolRefs: [], incomplete: true }
+      }
+      return { name: 'refresh facilitator discovery' }
+    })
+    const result = await searchHandler({ runQuery, runMutation }, { source: 'coinbase', query: '' })
+    expect(runQuery).toHaveBeenCalledWith(expect.anything(), {
+      candidates: [expect.objectContaining({ sourceRouteRef: expect.any(String) })],
+    })
+    expect(runMutation).not.toHaveBeenCalled()
+    expect(result).toMatchObject({ kind: 'ok', items: [], partialResults: true })
   })
 
   it('uses Coinbase search and preserves its truncation without inventing a continuation', async () => {

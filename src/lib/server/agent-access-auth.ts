@@ -1,5 +1,12 @@
 import { auth, clerkClient } from '@clerk/tanstack-react-start/server'
 
+import { authContinuation } from '@/lib/http/auth-continuation'
+import { bearerChallenge, bearerModeChallenge } from '@/lib/http/oauth-challenge'
+import { gatewayFailureToProblem } from '@/lib/errors'
+import { resolveCanonicalBaseUrl } from '@/lib/server/canonical-url'
+import { canonicalResolvedPrincipal } from '@/lib/server/agent-access-principal'
+import { problem } from '@/lib/server/problem'
+import { currentRequestCorrelationId, readRequestCorrelationId, withRequestCorrelationHeader } from '@/lib/server/request-correlation'
 import { callPublicSourceMutation, sourceMutation } from '@/lib/server/convex-source'
 import {
   sourceWriteAdmissionFromRequest,
@@ -15,7 +22,6 @@ import {
   type AgentAccessPrincipal,
 } from '@/modules/agent-access/agent-access'
 import type { AgentAccessAuthorityMode } from '@/modules/agent-access/contract'
-import { accountRef, principalRef } from '@/modules/principal-account/public'
 import type { SourceWriteAdmission, SourceWriteAdmissionRequest } from '@/modules/security/source-write-admission'
 import { degrade } from '@/lib/observability/degrade'
 export type { AgentAccessPrincipal }
@@ -78,38 +84,72 @@ export function resolveAgentAccessPrincipal(
   options: Readonly<{ env?: Record<string, string | undefined> }> = {},
 ): AgentAccessPrincipalResolver {
   return async (projection, requiredScopes, consequenceResource) => {
-    try {
-      const operationKey = canonicalConsequenceResource(consequenceResource)
-      if (operationKey === undefined) return null
-      const bindingRequiredScopes = requiredScopes.length === 0 ? projection.scopes : requiredScopes
-      const command = {
-        credentialId: projection.credentialId,
-        applicationRef: projection.applicationRef,
-        environment: projection.environment,
-        scopes: [...projection.scopes],
-        requiredScopes: [...bindingRequiredScopes],
-        authorityMode: projection.authorityMode,
-        operationKey,
-        correlationId,
-      }
-      const sourceWrite = await sourceWriteAdmissionFromRequest({
-        request,
-        command,
-        body,
-        scope: 'agent_identity',
-        operationKey,
-        correlationId,
-        ...(options.env === undefined ? {} : { env: options.env }),
-      })
-      return await callPublicSourceMutation(resolveAgentPrincipalMutation, {
-        ...command,
-        sourceWriteRequest: sourceWriteRequestFromAdmission(sourceWrite),
-        sourceWrite,
-      })
-    } catch (cause) {
-      return degrade(cause, null, { site: 'resolveAgentAccessPrincipal', reason: 'source_unavailable' })
+    const operationKey = canonicalConsequenceResource(consequenceResource)
+    if (operationKey === undefined) return null
+    const bindingRequiredScopes = requiredScopes.length === 0 ? projection.scopes : requiredScopes
+    const command = {
+      credentialId: projection.credentialId,
+      applicationRef: projection.applicationRef,
+      environment: projection.environment,
+      scopes: [...projection.scopes],
+      requiredScopes: [...bindingRequiredScopes],
+      authorityMode: projection.authorityMode,
+      operationKey,
+      correlationId,
     }
+    const sourceWrite = await sourceWriteAdmissionFromRequest({
+      request,
+      command,
+      body,
+      scope: 'agent_identity',
+      operationKey,
+      correlationId,
+      ...(options.env === undefined ? {} : { env: options.env }),
+    })
+    return await callPublicSourceMutation(resolveAgentPrincipalMutation, {
+      ...command,
+      sourceWriteRequest: sourceWriteRequestFromAdmission(sourceWrite),
+      sourceWrite,
+    })
   }
+}
+
+export type AgentAccessRefusal = Readonly<
+  | { kind: 'refused'; status: 401 | 403; reason: 'authentication_required' | 'scope_required' }
+  | { kind: 'refused'; status: 503; reason: 'source_unavailable'; retryable: true }
+>
+
+const AUTH_SOURCE_UNAVAILABLE = {
+  kind: 'refused', status: 503, reason: 'source_unavailable', retryable: true,
+} as const satisfies AgentAccessRefusal
+
+/** Authentication failures carry recovery, while source outages never masquerade as bad keys. */
+export function authRefusalProblem(request: Request, refusal: AgentAccessRefusal, requiredScope?: string, requiredMode?: AgentAccessAuthorityMode, correlationId?: string): Response {
+  const base = resolveCanonicalBaseUrl(request).baseUrl
+  const requestId = correlationId ?? currentRequestCorrelationId() ?? readRequestCorrelationId(request)
+  const unavailable = refusal.status === 503
+  const failure = gatewayFailureToProblem({
+    code: refusal.reason,
+    kind: unavailable ? 'error' : 'refused',
+    retryable: unavailable,
+  })
+  const detail = unavailable
+    ? 'Agent credential verification is temporarily unavailable. Retry after 5 seconds.'
+    : refusal.reason === 'scope_required'
+      ? `This agent key lacks the required scope. Run \`ae connect\` for an owner-approved credential or complete OAuth device authorization at ${base}/oauth/device_authorization.`
+      : `Connect an agent key: run \`ae connect\` or complete OAuth device authorization at ${base}/oauth/device_authorization.`
+  return withRequestCorrelationHeader(problem({
+    ...failure,
+    status: refusal.status,
+    detail,
+    retryable: unavailable,
+    extras: {
+      requestId,
+      next: unavailable ? [] : authContinuation(base),
+    },
+  }, unavailable
+    ? { 'Retry-After': '5', Vary: 'Authorization' }
+    : { 'WWW-Authenticate': requiredMode === undefined ? bearerChallenge(base, requiredScope) : bearerModeChallenge(base, requiredMode), Vary: 'Authorization' }), requestId)
 }
 
 export type AgentAccessAuthenticationOptions = Readonly<{
@@ -125,11 +165,7 @@ export type AgentAccessAuthenticationOptions = Readonly<{
 
 export async function authenticateAgentAccess(
   options: AgentAccessAuthenticationOptions = {},
-): Promise<Readonly<{ kind: 'authenticated'; principal: AgentAccessPrincipal }> | Readonly<{
-  kind: 'refused'
-  status: 401 | 403
-  reason: 'authentication_required' | 'scope_required'
-}>> {
+): Promise<Readonly<{ kind: 'authenticated'; principal: AgentAccessPrincipal }> | AgentAccessRefusal> {
   const requiredScope = options.requiredScope === undefined ? MARKET_TOOLS_CALL_SCOPE : options.requiredScope
   const requiredScopes = Object.freeze([...new Set(
     options.requiredScopes ?? (requiredScope === null ? [] : [requiredScope]),
@@ -141,7 +177,7 @@ export async function authenticateAgentAccess(
       ? await options.authenticate()
       : await auth({ acceptsToken: 'api_key' }) as AgentAccessApiKeyAuth
   } catch (cause) {
-    return degrade(cause, { kind: 'refused', status: 401, reason: 'authentication_required' } as const, { site: 'authenticateAgentAccess', reason: 'source_unavailable' })
+    return degrade(cause, AUTH_SOURCE_UNAVAILABLE, { site: 'authenticateAgentAccess', reason: 'source_unavailable' })
   }
   if (!candidate.isAuthenticated || candidate.tokenType !== 'api_key' || candidate.id === null || candidate.subject === null || candidate.scopes === null) {
     return { kind: 'refused', status: 401, reason: 'authentication_required' }
@@ -179,7 +215,7 @@ export async function authenticateAgentAccess(
       admittedScopes = current.scopes
       claims = current.claims
     } catch (cause) {
-      return degrade(cause, { kind: 'refused', status: 401, reason: 'authentication_required' } as const, { site: 'authenticateAgentAccess', reason: 'source_unavailable' })
+      return degrade(cause, AUTH_SOURCE_UNAVAILABLE, { site: 'authenticateAgentAccess', reason: 'source_unavailable' })
     }
   }
   const authorityMode = agentAuthorityModeForScopes(admittedScopes, { allowCustomerDefault: true })
@@ -214,7 +250,7 @@ export async function authenticateAgentAccess(
       }
       return { kind: 'authenticated', principal: stored }
     } catch (cause) {
-      return degrade(cause, { kind: 'refused', status: 401, reason: 'authentication_required' } as const, { site: 'authenticateAgentAccess', reason: 'source_unavailable' })
+      return degrade(cause, AUTH_SOURCE_UNAVAILABLE, { site: 'authenticateAgentAccess', reason: 'source_unavailable' })
     }
   }
   return { kind: 'refused', status: 401, reason: 'authentication_required' }
@@ -223,45 +259,6 @@ export async function authenticateAgentAccess(
 function canonicalConsequenceResource(value: string | undefined): string | undefined {
   if (value === undefined || value !== value.trim()) return undefined
   return /^surface:[a-z0-9][a-z0-9:._/-]{0,199}$/.test(value) ? value : undefined
-}
-
-function canonicalResolvedPrincipal(
-  value: AgentAccessPrincipal | null,
-  projection: AgentAccessCredentialProjection,
-  requiredScopes: readonly string[],
-): AgentAccessPrincipal | undefined {
-  if (value === null) return undefined
-  try {
-    const principalId = principalRef(value.principalId)
-    const ownerId = accountRef(value.ownerId)
-    const credentialId = value.credentialId
-    const applicationRef = value.applicationRef
-    const environment = value.environment
-    const authorityMode = value.authorityMode
-    const scopeValues = value.scopes
-    if (!Array.isArray(scopeValues)
-      || scopeValues.length === 0
-      || scopeValues.some((scope) => typeof scope !== 'string')
-      || new Set(scopeValues).size !== scopeValues.length) return undefined
-    const scopes = Object.freeze([...scopeValues].sort())
-    if (credentialId !== projection.credentialId
-      || applicationRef !== projection.applicationRef
-      || environment !== projection.environment
-      || authorityMode !== projection.authorityMode
-      || scopes.some((scope) => !projection.scopes.includes(scope))
-      || requiredScopes.some((scope) => !scopes.includes(scope))) return undefined
-    return Object.freeze({
-      principalId,
-      ownerId,
-      credentialId,
-      applicationRef,
-      environment,
-      scopes,
-      authorityMode,
-    })
-  } catch (cause) {
-    return degrade(cause, undefined, { site: 'canonicalResolvedPrincipal', reason: 'invalid_response' })
-  }
 }
 
 function claimString(claims: Readonly<Record<string, unknown>> | null | undefined, name: string): string | undefined {

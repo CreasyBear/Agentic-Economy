@@ -60,13 +60,17 @@ describe('public market Tool routes', () => {
     expect(response.status).toBe(200)
     expect(response.headers.get('x-ae-request-id')).toBe('route-test')
     await expect(response.json()).resolves.toEqual({
-      kind: 'no_candidates',
+      kind: 'noMatch',
       schemaVersion: 'registry-tools:v3',
       query: 'reference lookup',
-      count: 0,
-      items: [],
-      note: 'No Tools match this search.',
+      scope: 'exhausted',
+      results: [],
+      nearMisses: [],
+      reason: 'No suitable Tool found in the searched supply.',
+      suggestions: ['Broaden the capability request or try the next page.'],
+      partialResults: false,
       pagination: { limit: 10, hasMore: false },
+      next: [{ action: 'broaden', args: { query: 'reference lookup' }, authority: 'public' }],
       // No Convex transport is stubbed for this route in this suite, so the
       // supply-projection freshness lookup degrades to 'absent' rather than
       // failing the search itself (review issue 4A / C16).

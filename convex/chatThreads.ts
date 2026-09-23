@@ -15,11 +15,14 @@ import type { QueryCtx } from './_generated/server'
 import { resolveBusinessActor } from './authz'
 import type { BusinessActor } from '../src/modules/business/public'
 import { deleteChatThreadShares } from '../src/modules/chat-sharing/convex'
-
-const DEFAULT_PAGE_SIZE = 20
-const MAX_PAGE_SIZE = 50
-export const MAX_CHAT_THREAD_TITLE_LENGTH = 80
-export const ACTIVE_CHAT_GENERATION_MS = 10 * 60 * 1_000
+import { readPrincipalChatThread } from './lib/chat/threadOwnership'
+import {
+  isChatThreadBusy, listChatThreads, normalizeChatThreadTitle, projectThread,
+  searchChatThreads, ACTIVE_CHAT_GENERATION_MS, MAX_CHAT_THREAD_TITLE_LENGTH,
+} from './lib/chat/threadListing'
+export {
+  isChatThreadBusy, normalizeChatThreadTitle, ACTIVE_CHAT_GENERATION_MS, MAX_CHAT_THREAD_TITLE_LENGTH,
+}
 
 const threadSummary = v.object({
   threadId: v.string(),
@@ -30,10 +33,6 @@ const threadSummary = v.object({
 })
 
 type ThreadContext = Pick<QueryCtx, 'auth' | 'db'>
-
-export async function requireChatOwnerId(ctx: ThreadContext): Promise<string> {
-  return (await requireChatOwner(ctx)).canonicalAccountRef
-}
 
 export async function requireChatOwner(
   ctx: ThreadContext,
@@ -49,21 +48,10 @@ export async function requireOwnedChatThread(
   ctx: ThreadContext,
   threadId: string,
 ): Promise<Doc<'chatThreads'>> {
-  const ownerId = await requireChatOwnerId(ctx)
-  const row = await ctx.db
-    .query('chatThreads')
-    .withIndex('by_threadId', (index) => index.eq('threadId', threadId))
-    .unique()
-  if (row === null || row.ownerId !== ownerId) {
-    throw new Error('thread_not_found')
-  }
-  return row
-}
-
-export function normalizeChatThreadTitle(title: string): string {
-  return Array.from(title.trim().replace(/\s+/gu, ' '))
-    .slice(0, MAX_CHAT_THREAD_TITLE_LENGTH)
-    .join('')
+  const actor = await requireChatOwner(ctx)
+  return await readPrincipalChatThread(
+    ctx, threadId, actor.canonicalAccountRef, 'clerk_owner', actor.canonicalPrincipalRef,
+  )
 }
 
 function createTitle(title: string | undefined): string {
@@ -77,41 +65,12 @@ function renameTitle(title: string): string {
   return normalized
 }
 
-export function isChatThreadBusy(row: Doc<'chatThreads'>, now: number): boolean {
-  return row.activePromptMessageId !== undefined
-    && row.activeStartedAt !== undefined
-    && row.activeStartedAt > now - ACTIVE_CHAT_GENERATION_MS
-}
-
-function projectThread(row: Doc<'chatThreads'>, now: number) {
-  return {
-    threadId: row.threadId,
-    title: row.title,
-    createdAt: row._creationTime,
-    updatedAt: row.updatedAt,
-    busy: isChatThreadBusy(row, now),
-  }
-}
-
-function paginationOpts(
-  value: typeof paginationOptsValidator.type | undefined,
-): typeof paginationOptsValidator.type {
-  const resolved = value ?? { cursor: null, numItems: DEFAULT_PAGE_SIZE }
-  if (
-    !Number.isInteger(resolved.numItems)
-    || resolved.numItems < 1
-    || resolved.numItems > MAX_PAGE_SIZE
-  ) {
-    throw new Error('chat_thread_page_size_invalid')
-  }
-  return resolved
-}
-
 export const createThread = mutation({
   args: { title: v.optional(v.string()) },
   returns: threadSummary,
   handler: async (ctx, args) => {
-    const ownerId = await requireChatOwnerId(ctx)
+    const actor = await requireChatOwner(ctx)
+    const ownerId = actor.canonicalAccountRef
     const title = createTitle(args.title)
     const now = Date.now()
     const threadId = await createAgentThread(ctx, components.agent, {
@@ -120,6 +79,8 @@ export const createThread = mutation({
     })
     const rowId = await ctx.db.insert('chatThreads', {
       threadId,
+      principalKind: 'clerk_owner',
+      principalRef: actor.canonicalPrincipalRef,
       ownerId,
       title,
       updatedAt: now,
@@ -145,18 +106,8 @@ export const listThreads = query({
     now: v.number(),
   },
   returns: paginationResultValidator(threadSummary),
-  handler: async (ctx, args) => {
-    const ownerId = await requireChatOwnerId(ctx)
-    const page = await ctx.db
-      .query('chatThreads')
-      .withIndex('by_ownerId_and_updatedAt', (index) => index.eq('ownerId', ownerId))
-      .order('desc')
-      .paginate(paginationOpts(args.paginationOpts))
-    return {
-      ...page,
-      page: page.page.map((row) => projectThread(row, args.now)),
-    }
-  },
+  handler: async (ctx, args) =>
+    listChatThreads(ctx, await requireChatOwner(ctx), args),
 })
 
 export const searchThreads = query({
@@ -166,30 +117,8 @@ export const searchThreads = query({
     now: v.number(),
   },
   returns: paginationResultValidator(threadSummary),
-  handler: async (ctx, args) => {
-    const ownerId = await requireChatOwnerId(ctx)
-    const search = normalizeChatThreadTitle(args.query)
-    if (search.length === 0) {
-      const page = await ctx.db
-        .query('chatThreads')
-        .withIndex('by_ownerId_and_updatedAt', (index) => index.eq('ownerId', ownerId))
-        .order('desc')
-        .paginate(paginationOpts(args.paginationOpts))
-      return {
-        ...page,
-        page: page.page.map((row) => projectThread(row, args.now)),
-      }
-    }
-    const page = await ctx.db
-      .query('chatThreads')
-      .withSearchIndex('search_title_by_ownerId', (index) =>
-        index.search('title', search).eq('ownerId', ownerId))
-      .paginate(paginationOpts(args.paginationOpts))
-    return {
-      ...page,
-      page: page.page.map((row) => projectThread(row, args.now)),
-    }
-  },
+  handler: async (ctx, args) =>
+    searchChatThreads(ctx, await requireChatOwner(ctx), args),
 })
 
 export const renameThread = mutation({

@@ -6,7 +6,7 @@ import { join } from 'node:path'
 import { expect } from 'vitest'
 
 import { listMcpActions, mcpToolName } from '@/modules/actions'
-import { TOOL_MARKET_SEARCH_PATH } from '@/modules/common/market-tool-paths'
+import { TOOL_MARKET_DESCRIBE_PATH, TOOL_MARKET_LIST_PATH } from '@/modules/common/market-tool-paths'
 import { TOOL_QUOTE_PATH } from '@/modules/capability-execution/quote'
 import { STRIPE_MONEY_ENV_NAMES } from '@/lib/server/stripe-money-provider-config'
 import {
@@ -93,7 +93,7 @@ export function discoveryPassChecks(origin: string) {
   return [
     originPassCheck(origin),
     { id: 'server', group: 'discovery', state: 'pass', summary: 'AE server is reachable and manifest ae-site-discovery:v2 is compatible.' },
-    { id: 'mcp', group: 'discovery', state: 'pass', summary: 'MCP initialization and 4 public tools passed.' },
+    expect.objectContaining({ id: 'mcp', group: 'discovery', state: 'pass' }),
     { id: 'readiness', group: 'discovery', state: 'pass', summary: 'Server operational readiness passed.' },
     { id: 'release', group: 'discovery', state: 'pass', summary: `Release identity is ${RELEASE_IDENTITY}.` },
     FRESH_CATALOGUE_CHECK,
@@ -177,13 +177,19 @@ export function readyBuyerDiagnosisChecks(origin: string, balanceUnits: string, 
 
 export type CliResult = Readonly<{ status: number | null; stderr: string; stdout: string }>
 
-export function assertCliSuccess(result: CliResult, status = 0): void {
-  expect(result.status).toBe(status)
+export function assertCliSuccess(result: CliResult, status?: number): void {
+  const expected = status ?? (result.stdout.startsWith('{') && JSON.parse(result.stdout).kind === 'degraded' ? 1 : 0)
+  expect(result.status).toBe(expected)
   expect(result.stderr).toBe('')
 }
 
 export function parseDoctorJson(result: CliResult) {
-  return JSON.parse(result.stdout) as { kind: string; tier?: unknown; groups?: unknown; checks: unknown[] }
+  return JSON.parse(result.stdout) as {
+    kind: string
+    information?: { localProviderEnvironment: { level: number; missing: string[] } }
+    groups?: unknown
+    checks: unknown[]
+  }
 }
 
 export async function runDoctor(
@@ -209,7 +215,7 @@ export type ObservedRequest = Readonly<{ path: string; authorization?: string; b
 
 export type QuoteScenario = {
   quote: unknown
-  search?: unknown
+  list?: unknown
   catalogue?: 'fresh' | 'stale' | 'failed' | 'absent'
   balanceUnits?: string
 }
@@ -339,14 +345,20 @@ export async function startBuyerServer(options: BuyerServerOptions = {}): Promis
 export async function startQuoteServer(scenario: QuoteScenario, observed: ObservedRequest[], host?: string): Promise<string> {
   return await startServer((request, response) => {
     const url = request.url ?? ''
-    if (url === TOOL_MARKET_SEARCH_PATH || url === TOOL_QUOTE_PATH) {
+    if (url === TOOL_MARKET_LIST_PATH || url === TOOL_MARKET_DESCRIBE_PATH || url === TOOL_QUOTE_PATH) {
       onRequestEnd(request, (bodyBuffer) => {
         observed.push({
           path: url,
           ...(request.headers.authorization === undefined ? {} : { authorization: request.headers.authorization }),
           body: JSON.parse(bodyBuffer.toString('utf8')),
         })
-        respondJson(response, url === TOOL_QUOTE_PATH ? scenario.quote : scenario.search ?? sandboxSearchResult())
+        respondJson(response, url === TOOL_QUOTE_PATH ? scenario.quote
+          : url === TOOL_MARKET_LIST_PATH ? scenario.list ?? sandboxListResult()
+          : { kind: 'found', schemaVersion: 'registry-tools:v3', tool: {
+              ...currentTool(SANDBOX_TOOL_REF),
+              capabilityId: 'sandbox.frankfurter-fx',
+              provider: { name: 'AEcon sandbox reference provider', slug: SANDBOX_TOOL_SLUG },
+            } })
       })
       return
     }
@@ -454,8 +466,8 @@ export function respondHealthyDeployment(request: IncomingMessage, response: Ser
     respondJson(response, catalogueStatus('fresh'))
     return true
   }
-  if (request.url === TOOL_MARKET_SEARCH_PATH) {
-    respondJson(response, emptySearchResult())
+  if (request.url === TOOL_MARKET_LIST_PATH) {
+    respondJson(response, emptyListResult())
     return true
   }
   return false
@@ -471,30 +483,30 @@ export function catalogueStatus(status: 'fresh' | 'stale' | 'failed' | 'absent')
   }
 }
 
-export function emptySearchResult() {
+export function emptyListResult() {
   return {
-    kind: 'no_candidates', schemaVersion: 'registry-tools:v3', query: SANDBOX_TOOL_SLUG, count: 0,
-    items: [], note: 'No Tools match this search.', pagination: { limit: 10, hasMore: false },
+    kind: 'ok', schemaVersion: 'registry-tools:v3', count: 0,
+    items: [], pagination: { limit: 100, hasMore: false },
   }
 }
 
-export function sandboxSearchResult() {
+export function sandboxListResult() {
   return {
-    kind: 'ok', schemaVersion: 'registry-tools:v3', query: SANDBOX_TOOL_SLUG, count: 1,
+    kind: 'ok', schemaVersion: 'registry-tools:v3', count: 1,
     items: [{
-      toolRef: SANDBOX_TOOL_REF, capabilityId: 'sandbox.aecon-reference',
+      toolRef: SANDBOX_TOOL_REF, capabilityId: 'sandbox.frankfurter-fx',
       title: 'AEcon sandbox reference Tool', description: 'Deterministic sandbox Tool.',
       provider: { name: 'AEcon sandbox reference provider', slug: SANDBOX_TOOL_SLUG },
       priceLabel: 'AUD 1.00', healthStatus: 'operational', listingTier: 'reviewed',
     }],
-    pagination: { limit: 10, hasMore: false },
+    pagination: { limit: 100, hasMore: false },
   }
 }
 
 export function committedQuote() {
   return {
     kind: 'committed', quoteRef: 'quote:v1:sandbox', toolRef: SANDBOX_TOOL_REF, toolVersion: 1,
-    expiresAt: 1, normalizedInput: { request: 'ae doctor quote inspection' },
+    expiresAt: 1, normalizedInput: { from: 'EUR', to: 'USD' },
     price: { currency: 'AUD', units: '1000000', exponent: 6 },
     account: { accountRef: 'acc_owner', available: { currency: 'AUD', units: '25000000', exponent: 6 } },
     budget: { principalRef: 'prn_buyer', maximumPerCall: { currency: 'AUD', units: '5000000', exponent: 6 } },

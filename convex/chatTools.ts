@@ -1,14 +1,13 @@
 import { Agent, createTool, type ToolCtx } from '@convex-dev/agent'
 import type { LanguageModelV4 } from '@ai-sdk/provider'
 import { hasToolCall, stepCountIs, type ModelMessage } from 'ai'
-import type { FunctionArgs } from 'convex/server'
+import { makeFunctionReference, type FunctionArgs } from 'convex/server'
 import { convexToJson, type Value } from 'convex/values'
 import { z } from 'zod'
 
 import { degradeBackend } from '@/lib/observability/degrade-backend'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import type { StableHashValue } from '@/modules/common/stable-hash'
-import { MARKET_TOOLS_CALL_SCOPE } from '@/modules/agent-access/contract'
 import {
   callInputSchema,
   callResultSchema,
@@ -30,8 +29,11 @@ import {
 import {
   chatClarifyInputSchema,
   chatClarifyOutputSchema,
-} from '@/modules/chat/clarify-card'
-import { attachChatSearchUse, chatSearchUse, readBelowMatch } from '@/modules/chat/search-presentation'
+} from '@/modules/chat/agent-turn.contracts'
+import type { TrustedChatAuthority } from '@/modules/chat/agent-turn.contracts'
+import type { QuoteResult } from './lib/capabilityQuotes/validators'
+import type { CallResult } from '@/modules/capability-execution/call-contracts'
+import { chatSearchUse, readBelowMatch } from '@/modules/chat/search-presentation'
 import {
   CHAT_TOOL_IDS,
   CHAT_TOOL_NAME_MAP,
@@ -49,9 +51,19 @@ import {
   registryToolsListContract,
   registryToolsSearchContract,
 } from '@/modules/registry/tool-action-contracts'
-import type { InteractiveBusinessAuthorityContext } from '@/modules/business/public'
 
 import { api, components, internal } from './_generated/api'
+const quoteRef = makeFunctionReference<'action', {
+  authority: TrustedChatAuthority; operationKey: string; correlationId: string;
+  toolRef: string; input: Record<string, Value>
+}, QuoteResult>('chatQuote:quote')
+const callRef = makeFunctionReference<'action', {
+  authority: TrustedChatAuthority; operationKey: string; correlationId: string;
+  quoteRef: string; idempotencyKey: string
+}, CallResult>('chatCall:call')
+const payableAdmissionRef = makeFunctionReference<'query', {
+  authority: TrustedChatAuthority; toolRef: string
+}, boolean>('chatTurns:authorizePayableTool')
 
 export {
   CHAT_TOOL_IDS,
@@ -78,6 +90,7 @@ const chatToolFailureReasons = [
   'result_too_large',
   'tool_limit',
   'execute_limit',
+  'turn_stopped',
 ] as const
 
 export type ChatToolFailure = Readonly<{
@@ -212,8 +225,8 @@ function modelFacingOutput<Output>(
   try {
     convexToJson(reparsed.data as Value)
     return reparsed.data
-  } catch {
-    return serialized
+  } catch (cause) {
+    return degradeBackend(cause, serialized, { site: 'modelFacingOutput.convexSerialization', reason: 'invalid_response' })
   }
 }
 
@@ -252,7 +265,7 @@ function messageText(content: ModelMessage['content']): string {
  */
 export function createChatAgent(
   languageModel: LanguageModelV4,
-  authority?: InteractiveBusinessAuthorityContext,
+  authority?: TrustedChatAuthority,
 ) {
   let toolCalls = 0
   let executeCalls = 0
@@ -274,15 +287,6 @@ export function createChatAgent(
   const compareContract = registryToolsCompareContract
   const toolQuoteContract = contractFor('tool.quote')
   const callContract = contractFor('tool.call')
-  const principal = authority === undefined ? undefined : {
-    principalId: authority.principalRef,
-    ownerId: authority.accountRef,
-    credentialId: authority.principalRef,
-    applicationRef: 'interactive-chat',
-    environment: 'sandbox' as const,
-    scopes: [MARKET_TOOLS_CALL_SCOPE],
-    authorityMode: 'approval_required' as const,
-  }
 
   const tools = {
     [CHAT_TOOL_NAME_MAP.canonicalToProvider['registry.tools.list']]: createTool({
@@ -328,7 +332,7 @@ export function createChatAgent(
         )
         try {
           const source = deserializeToolSearchResult(result)
-          const presented = source.kind === 'ok' && source.items.length > 1
+          const presented = source.kind === 'ok' && source.items.length > 0
             ? await ctx.runAction(internal.capabilityToolCatalog.presentSearch, {
                 result,
                 query: data.query,
@@ -346,15 +350,21 @@ export function createChatAgent(
                 belowMatch: [] as const,
               }))
             : { result: source, use: null, belowMatch: [] as const }
-          return attachChatSearchUse(projectedModelFacingOutput(
+          const scores = presented.result.kind === 'ok' ? presented.result.ranking : []
+          const suitable = new Set(scores.filter(({ score }) => score >= 0.5).map(({ toolRef }) => toolRef))
+          const assessment = scores.length === 0 ? { verdict: 'degraded' as const, nearMisses: [] }
+            : suitable.size === 0 ? { verdict: 'noMatch' as const, nearMisses: source.kind === 'ok' ? source.items.slice(0, 3) : [] }
+              : { verdict: 'matched' as const, nearMisses: [] }
+          const narrowed = presented.result.kind === 'ok' && suitable.size > 0
+            ? { ...presented.result, items: presented.result.items.filter(({ toolRef }) => suitable.has(toolRef)) } : presented.result
+          return projectedModelFacingOutput(
             'registry.tools.search',
             searchContract.outputSchema,
-            () => projectToolSearchChoices(presented.result, data.filters),
-          ), presented.use, presented.belowMatch)
+            () => projectToolSearchChoices(narrowed, data.filters, assessment),
+          )
         } catch (cause) {
           return degradeBackend(cause, failure('registry.tools.search', 'source_output_invalid'), {
-            site: 'chatToolSearch',
-            reason: 'invalid_response',
+            site: 'chatToolSearch', reason: 'invalid_response',
           })
         }
       },
@@ -390,24 +400,28 @@ export function createChatAgent(
         )
       },
     }),
-    ...(authority === undefined || principal === undefined ? {} : {
+    ...(authority?.kind !== 'agent_key' ? {} : {
       [CHAT_TOOL_NAME_MAP.canonicalToProvider['tool.quote']]: createTool({
         description: descriptionFor(toolQuoteContract),
         inputSchema: toolQuoteContract.schema as z.ZodType<ToolQuoteInput>,
         execute: async (ctx: ToolCtx, input: ToolQuoteInput) => {
           const denied = reserve('tool.quote')
           if (denied !== null) return denied
+          if (!await ctx.runQuery(payableAdmissionRef, { authority, toolRef: input.toolRef })) {
+            return failure('tool.quote', 'turn_stopped')
+          }
           const commandDigest = canonicalDigest({
-            principalId: authority.principalRef,
+            turnRef: authority.turnRef,
+            credentialId: authority.credentialLocator,
             operationRef: input.toolRef,
             input: input.input,
           } as StableHashValue)
-          const result = await ctx.runAction(api.capabilityQuotes.quote, {
+          const result = await ctx.runAction(quoteRef, {
+            authority,
             operationKey: commandDigest,
             correlationId: `chat-inspect-corr:${commandDigest}`,
-            principal,
             toolRef: input.toolRef,
-            input: structuredClone(input.input),
+            input: structuredClone(input.input) as Record<string, Value>,
           })
           return projectedModelFacingOutput(
             'tool.quote',
@@ -425,14 +439,15 @@ export function createChatAgent(
           const denied = reserve('tool.call')
           if (denied !== null) return denied
           const commandDigest = canonicalDigest({
-            principalId: authority.principalRef,
+            turnRef: authority.turnRef,
+            credentialId: authority.credentialLocator,
             commitmentRef: input.quoteRef,
           } as StableHashValue)
           const idempotencyKey = `chat-invoke:${commandDigest}`
-          const result = await ctx.runAction(api.capabilityCalls.call, {
+          const result = await ctx.runAction(callRef, {
+            authority,
             operationKey: input.quoteRef,
             correlationId: `chat-invoke-corr:${commandDigest}`,
-            principal,
             quoteRef: input.quoteRef,
             idempotencyKey,
           })
@@ -471,7 +486,7 @@ export function createChatAgent(
       'For a refused Quote, report the returned reason, retryable flag and required action accurately. An AE admission, authority or configuration failure does not establish a Provider outage. Never invent a cause or advise retry when retryable is false.',
       'After a Tool Call, preserve the canonical result kind and Call reference. For completed Calls, report the literal returned output. For pending, authority, refusal, or reconciliation states, name that state exactly and never suggest a blind retry.',
       authority === undefined
-        ? 'This anonymous chat cannot Call Tools or invoke consequential work.'
+        ? 'This chat has no admitted key-backed purchase authority. It cannot Quote, Call, or invoke consequential work.'
         : 'This chat can run only eligible bounded Tools. It cannot grant approval, manage supply, recover work, or authorize payment.',
     ].join(' '),
     languageModel,

@@ -1,21 +1,16 @@
+import { readFileSync, readdirSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
+
 import { validate } from '@scalar/openapi-parser'
 import { describe, expect, it } from 'vitest'
 
+import { CALL_ROUTE_CONTRACT } from '@/modules/capability-execution/call-entry'
+import { AGENT_ACCOUNT_SELF_ROUTE_CONTRACT } from '@/modules/agent-access/account.actions'
 import { createDevelopersApiViewModel } from '@/components/ae/developers/api-reference/developers-api.view-model'
 
-import {
-  buildOpenApiDocumentWithMetrics,
-  listOpenApiOperationIds,
-} from '@/modules/discovery/public'
+import { buildOpenApiDocumentWithMetrics } from '@/modules/discovery/public'
 
-/**
- * The OpenAPI document is a pure projection of the same contract lists that
- * govern the Call gateway, the Tool market reads, funding preflight, and the
- * business/utility routes. If any of those silently dropped out of the
- * document, an agent reading `/openapi.json` (or a human on
- * `/developers/api`) would see an API surface that has quietly drifted from
- * what the platform actually serves.
- */
+/** Route source, not OpenAPI declarations, is the parity authority. */
 
 const origin = 'https://ae.test'
 const result = buildOpenApiDocumentWithMetrics({ canonicalBaseUrl: `${origin}/` })
@@ -32,6 +27,37 @@ function collectOperationIds(): readonly string[] {
   }
   return ids
 }
+function actualRouteMethods(): string[] {
+  const routesDirectory = fileURLToPath(new URL('../../../src/routes/', import.meta.url))
+  return readdirSync(routesDirectory)
+    .filter((name) => /^api\.v1\..+\.ts$/u.test(name) || /^api\.businesses(?:\..+)?\.ts$/u.test(name))
+    .flatMap((name) => {
+      const source = readFileSync(`${routesDirectory}/${name}`, 'utf8')
+      const routerPath = /createFileRoute\('([^']+)'\)/u.exec(source)?.[1]
+      if (routerPath === undefined) throw new Error(`Missing route path in ${name}`)
+      const methods = [...source.matchAll(/\b(GET|HEAD|POST|PUT|PATCH|DELETE|OPTIONS|TRACE|CONNECT):[^\n]*/gu)]
+        .filter(([handler]) => !handler.includes('methodNotAllowed('))
+        .map((match) => match[1])
+      if (source.includes('postOnlyRoute(')) methods.push('POST')
+      if (source.includes('[routeContract.method]')) {
+        const contract = /const routeContract = CALL_ROUTE_CONTRACT\.(\w+)/u.exec(source)?.[1]
+        if (contract === undefined) {
+          if (!source.includes('AGENT_ACCOUNT_SELF_ROUTE_CONTRACT')) throw new Error(`Unknown route contract: ${name}`)
+          methods.push(AGENT_ACCOUNT_SELF_ROUTE_CONTRACT.method)
+        } else {
+          const callContracts = CALL_ROUTE_CONTRACT as Record<string, unknown>
+          const entry = callContracts[contract]
+          if (typeof entry !== 'object' || entry === null || !('method' in entry) || typeof entry.method !== 'string') {
+            throw new Error(`Unknown call route contract: ${name}`)
+          }
+          methods.push(entry.method)
+        }
+      }
+      if (methods.length === 0) throw new Error(`Missing handler method in ${name}`)
+      const path = routerPath.replace(/\$([^/]+)/gu, '{$1}')
+      return methods.map((method) => `${method} ${path}`)
+    }).sort()
+}
 
 describe('openapi document', () => {
   it('validates as a well-formed OpenAPI 3.1 document', async () => {
@@ -45,12 +71,38 @@ describe('openapi document', () => {
     expect(document.servers).toEqual([{ url: origin }])
   })
 
-  it('exposes exactly the declared operations, once each (parity guard)', () => {
-    const expected = listOpenApiOperationIds()
-    const actual = collectOperationIds()
-    expect(new Set(actual).size).toBe(actual.length)
-    expect([...actual].sort()).toEqual([...expected].sort())
+  it('matches every live v1 route method and has no orphan paths', () => {
+    const documented = Object.entries(document.paths).flatMap(([path, methods]) =>
+      Object.keys(methods).map((method) => `${method.toUpperCase()} ${path}`)).sort()
+    expect(documented).toEqual(actualRouteMethods())
+    expect(document.paths['/api/v1/account/funding-sessions']?.post).toBeDefined()
   })
+  it('documents funding header idempotency and complete Call/procure body contracts', () => {
+    const paths = document.paths as unknown as Record<string, Record<string, {
+      requestBody?: { content: { 'application/json': { schema: { $ref?: string; properties?: Record<string, unknown>; oneOf?: readonly unknown[] } } } }
+      parameters?: readonly { name: string; in: string; required: boolean }[]
+      responses: Record<string, { content?: Record<string, unknown> }>
+      security: readonly Record<string, readonly string[]>[]
+    }>>
+    const schemaDocument = result.document as { components: { schemas: Record<string, { properties?: Record<string, unknown>; oneOf?: readonly unknown[] }> } }
+    const schemas = schemaDocument.components.schemas
+    const resolveBody = (path: string) => {
+      const body = paths[path]?.post?.requestBody?.content['application/json'].schema
+      if (body === undefined) throw new Error(`Missing JSON request body: ${path}`)
+      return body.$ref === undefined ? body : schemas[body.$ref.slice('#/components/schemas/'.length)]
+    }
+    const funding = paths['/api/v1/account/funding-sessions']?.post
+    if (funding === undefined) throw new Error('Missing funding create')
+    expect(funding.parameters).toContainEqual(expect.objectContaining({ name: 'Idempotency-Key', in: 'header', required: true }))
+    expect(Object.keys(resolveBody('/api/v1/account/funding-sessions')?.properties ?? {})).toEqual(['principalAmount'])
+    expect(funding.responses['201']?.content?.['application/json']).toBeDefined()
+    expect(funding.responses['400']?.content?.['application/problem+json']).toBeDefined()
+    expect(funding.security).toEqual([{ agentAccessKey: [] }])
+    expect(resolveBody('/api/v1/tools/call')?.properties).toHaveProperty('idempotencyKey')
+    expect(resolveBody('/api/v1/tools/procure')?.oneOf).toHaveLength(2)
+    expect(paths['/api/v1/account/funding-sessions/public/{fundingSessionId}']?.get?.security).toEqual([])
+  })
+
 
   it('measures the document both inline and by $ref, and records which shape it serves', () => {
     expect(result.refBytes).toBeGreaterThan(0)
@@ -87,12 +139,15 @@ describe('openapi document', () => {
     for (const operation of pageOperations) {
       expect(operation.curl).toContain(`curl --request ${operation.method}`)
       expect(operation.curl).toContain(`${origin}${operation.path}`)
-      expect(operation.curl).toContain('Authorization: Bearer <your key>')
+      const wire = document.paths[operation.path]?.[operation.method.toLowerCase()] as { security?: unknown[] }
+      if (wire.security?.length) expect(operation.curl).toContain('Authorization: Bearer <your key>')
+      else expect(operation.curl).not.toContain('Authorization: Bearer')
       if (operation.method === 'POST') {
         expect(operation.curl).toContain('Content-Type: application/json')
         expect(operation.curl).toContain('--data ')
       }
     }
+    expect(pageOperations.find((operation) => operation.path === '/api/v1/account/funding-sessions')?.curl).toContain('Idempotency-Key: <stable-key>')
     expect(page.authDescription).toBe(rawDocument.components.securitySchemes.agentAccessKey.description)
     expect(page.problems.map((problem) => problem.kind)).toEqual(
       rawDocument.components.schemas.Problem.properties.kind.enum,
@@ -111,12 +166,6 @@ describe('openapi document', () => {
       json: '{"currency":"AUD","units":"1250000","exponent":6}',
       formatted: 'A$1.25',
     })
-    expect(JSON.stringify(result.document)).not.toMatch(
-      /"tool\.procure"|"maxSpendAud"|"totalAud"|"netAud"|"gstAud"|"refundedAmountAud"|"netChargeAud"/u,
-    )
-    expect(page.versionPolicy).toBe(
-      `Breaking changes ship as a new version; current version ${rawDocument.info.version}.`,
-    )
 
     const withExample = structuredClone(result.document) as {
       paths: Record<string, Record<string, {

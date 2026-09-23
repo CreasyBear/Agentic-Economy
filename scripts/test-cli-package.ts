@@ -107,7 +107,7 @@ try {
       [
         "pack",
         "--workspace",
-        "@agentic-economy/cli",
+        "@aecon/cli",
         "--json",
         "--pack-destination",
         temporary,
@@ -145,7 +145,7 @@ try {
       [
         "pack",
         "--workspace",
-        "@agentic-economy/cli",
+        "@aecon/cli",
         "--json",
         "--pack-destination",
         reproDir,
@@ -168,7 +168,7 @@ try {
     maxBuffer: 10 * 1024 * 1024,
   });
 
-  const installedRoot = join(consumer, "node_modules", "@agentic-economy", "cli");
+  const installedRoot = join(consumer, "node_modules", "@aecon", "cli");
   const packageFiles = await listPackageFiles(installedRoot);
   assert(
     JSON.stringify(packageFiles) === JSON.stringify(expectedFiles),
@@ -197,7 +197,7 @@ try {
   );
 
   const importProbe = [
-    "const specifiers = ['@agentic-economy/cli', '@agentic-economy/cli/dist/ae.js'];",
+    "const specifiers = ['@aecon/cli', '@aecon/cli/dist/ae.js'];",
     "for (const specifier of specifiers) {",
     "  try { await import(specifier); process.exitCode = 1; }",
     "  catch (error) { if (error?.code !== 'ERR_PACKAGE_PATH_NOT_EXPORTED') throw error; }",

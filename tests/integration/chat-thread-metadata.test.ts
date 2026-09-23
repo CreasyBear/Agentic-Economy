@@ -64,6 +64,35 @@ describe('durable chat thread metadata', () => {
     })).rejects.toThrow('thread_not_found')
   })
 
+  it('does not list an agent-key thread under another principal on the same account', async () => {
+    const backend = convexTestWithMarketComponents()
+    const { owner, canonicalAccountRef } = await publishedBusinessOwner(backend, 'chat-shared-account')
+    const own = await owner.mutation(api.chatThreads.createThread, { title: 'Private market search' })
+    const keyThreadId = 'thread:key-on-shared-account'
+    await backend.run(async (ctx) => {
+      await ctx.db.insert('chatThreads', {
+        threadId: keyThreadId,
+        ownerId: canonicalAccountRef,
+        principalKind: 'agent_key',
+        principalRef: `prn_${'a'.repeat(32)}`,
+        title: 'Private key search',
+        updatedAt: Date.now() + 1,
+      })
+    })
+
+    const listed = await owner.query(api.chatThreads.listThreads, { now: Date.now() })
+    expect(listed.page.map((thread: { threadId: string }) => thread.threadId)).toEqual([own.threadId])
+    const searched = await owner.query(api.chatThreads.searchThreads, {
+      query: 'Private',
+      now: Date.now(),
+    })
+    expect(searched.page.map((thread: { threadId: string }) => thread.threadId)).toEqual([own.threadId])
+    await expect(owner.query(api.chatThreads.getThread, {
+      threadId: keyThreadId,
+      now: Date.now(),
+    })).rejects.toThrow('thread_not_found')
+  })
+
   it.each(['expired credential', 'revoked binding'] as const)(
     'fails closed when canonical chat authority is %s',
     async (mode) => {
@@ -125,12 +154,12 @@ describe('durable chat thread metadata', () => {
       now: 1_000,
       paginationOpts: { cursor: null, numItems: 2 },
     })
-    expect(firstPage.page.map((thread) => thread.title)).toEqual(['Second', 'Third'])
+    expect(firstPage.page.map((thread: { title: string }) => thread.title)).toEqual(['Second', 'Third'])
     const secondPage = await owner.query(api.chatThreads.listThreads, {
       now: 1_000,
       paginationOpts: { cursor: firstPage.continueCursor, numItems: 2 },
     })
-    expect(secondPage.page.map((thread) => thread.title)).toEqual(['First'])
+    expect(secondPage.page.map((thread: { title: string }) => thread.title)).toEqual(['First'])
 
     await expect(owner.query(api.chatThreads.listThreads, {
       now: 1_000,
@@ -156,7 +185,7 @@ describe('durable chat thread metadata', () => {
       query: '  Alpha  ',
       now: Date.now(),
     })
-    expect(result.page.map((thread) => thread.title)).toEqual(['Alpha accounting helper'])
+    expect(result.page.map((thread: { title: string }) => thread.title)).toEqual(['Alpha accounting helper'])
   })
 
   it('renames app and component metadata together and rejects an empty title', async () => {

@@ -18,6 +18,8 @@ import { Route as SkillRoute } from '@/routes/SKILL[.]md'
 import { Route as SiteUcpRoute } from '@/routes/[.]well-known/ucp'
 import { Route as LlmsRoute } from '@/routes/llms[.]txt'
 import { Route as RobotsRoute } from '@/routes/robots[.]txt'
+import { Route as WellKnownFallbackRoute } from '@/routes/[.]well-known/$'
+import { Route as ApiFallbackRoute } from '@/routes/api.$'
 
 type Method = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE' | 'HEAD' | 'OPTIONS' | 'TRACE' | 'CONNECT'
 type RouteContext = { request: Request; params: Record<string, string> }
@@ -94,6 +96,19 @@ describe('public route method contracts', () => {
         const response = await handler({ request, params: routeCase.params ?? {} })
         await assertMethodNotAllowed(response, routeCase.allowed)
       }
+    }
+  })
+})
+
+describe('unknown machine paths', () => {
+  it('returns a compact problem response for unknown well-known and API resources', async () => {
+    for (const [route, path] of [[WellKnownFallbackRoute, '/.well-known/unknown'], [ApiFallbackRoute, '/api/unknown']] as const) {
+      const get = routeHandlers(route).GET
+      if (get === undefined) throw new Error('machine path fallback GET handler missing')
+      const response = await get({ request: new Request(`https://ae.example${path}`), params: {} })
+      expect(response.status).toBe(404)
+      expect(response.headers.get('content-type')).toBe('application/problem+json')
+      expect((await response.text()).length).toBeLessThan(1_024)
     }
   })
 })

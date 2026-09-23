@@ -1,3 +1,5 @@
+import { degradeBackend } from '@/lib/observability/degrade-backend'
+
 /**
  * Canonical error model for Agentic-Economy, anchored to RFC 9457 (Problem
  * Details for HTTP APIs) and the Google API canonical error codes
@@ -278,28 +280,42 @@ function publicGatewayCode(code: string | undefined, fallback: GatewayProblemCod
   return code !== undefined && PUBLIC_STABLE_CODE_PATTERN.test(code) ? code : fallback
 }
 
-/**
- * Project an untrusted remote problem body (another deployment, a proxy, or a
- * hostile `--base-url`) onto the shared model. Only the stable `code`, the
- * canonical `kind`, and retryability cross the boundary: remote `title` and
- * `detail` are arbitrary backend prose and are never copied, for the same
- * reason {@link gatewayFailureToProblem} does not copy provider text. Human
- * text is rebuilt locally from the kind. `NO_DATA` is an ok-outcome kind and
- * is never accepted from a failure body.
- */
+/** Accept stable remote problem facts; URL-bearing next actions are validated by the shared journey projector. */
 export function remoteProblemToProblem(input: {
   status: number
   body: Readonly<Record<string, unknown>>
+  baseUrl?: string
 }): ProblemDetails {
   const declaredKind = PROBLEM_KINDS.find(
     (candidate) => candidate !== 'NO_DATA' && candidate === input.body.kind,
   )
   const retryable = input.body.retryable
+  const sameOriginPath = (value: unknown): string | undefined => {
+    if (typeof value !== 'string' || value.length > 2048 || value.startsWith('//')) return undefined
+    if (value.startsWith('/') && !value.includes('\\')) {
+      const url = new URL(value, 'https://relative.invalid')
+      return url.search === '' && url.hash === '' ? value : undefined
+    }
+    if (input.baseUrl === undefined) return undefined
+    try {
+      const url = new URL(value)
+      return (url.protocol === 'https:' || url.protocol === 'http:')
+        && url.origin === new URL(input.baseUrl).origin
+        && url.username === '' && url.password === ''
+        && url.search === '' && url.hash === '' ? value : undefined
+    } catch (cause) {
+      return degradeBackend(cause, undefined, { site: 'remoteProblemToProblem.sameOriginPath', reason: 'invalid_response' })
+    }
+  }
+  
   return buildProblem({
     kind: declaredKind ?? kindForStatus(input.status),
     code: isStableProblemCode(input.body.code) ? input.body.code : String(input.status),
     status: input.status,
     ...(typeof retryable === 'boolean' ? { retryable } : {}),
+    extras: {
+      ...(sameOriginPath(input.body.instance) === undefined ? {} : { instance: sameOriginPath(input.body.instance) }),
+    },
   })
 }
 

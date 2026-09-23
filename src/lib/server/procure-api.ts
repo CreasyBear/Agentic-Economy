@@ -1,3 +1,4 @@
+import { degrade } from '@/lib/observability/degrade'
 import { readBoundedRequestText } from '@/lib/server/bounded-request-body'
 import { isJsonContentType } from '@/lib/server/json-content-type'
 import { problem } from '@/lib/server/problem'
@@ -12,9 +13,14 @@ import {
 import {
   toolProcureAction,
 } from '@/modules/capability-execution/procure.actions'
+import { projectProcureNext } from '@/modules/actions/contract'
 import {
   CapabilityProcurementEngine,
+  createProcureIdentityPort,
   defaultProductionCatalogSearcher,
+  ProcureAuthorityError,
+  ProcureConflictError,
+  ProcureInProgressError,
   type ProcurementEngineDependencies,
 } from '@/modules/capability-execution/procure-engine'
 
@@ -24,15 +30,9 @@ const procureResponseHeaders = {
 } as const
 
 export function createProcurementEngine(
-  deps?: Partial<ProcurementEngineDependencies>,
+  deps: ProcurementEngineDependencies,
 ): CapabilityProcurementEngine {
-  return new CapabilityProcurementEngine({
-    catalogSearcher: deps?.catalogSearcher ?? defaultProductionCatalogSearcher,
-    ...(deps?.callExecutor !== undefined ? { callExecutor: deps.callExecutor } : {}),
-    ...(deps?.callService !== undefined ? { callService: deps.callService } : {}),
-    ...(deps?.principal !== undefined ? { principal: deps.principal } : {}),
-    ...(deps?.correlationId !== undefined ? { correlationId: deps.correlationId } : {}),
-  })
+  return new CapabilityProcurementEngine(deps)
 }
 
 export async function handleToolProcurePost(
@@ -74,8 +74,8 @@ export async function handleToolProcurePost(
       let rawBody: unknown
       try {
         rawBody = JSON.parse(bounded.text)
-      } catch {
-        return withRequestCorrelationHeader(
+      } catch (cause) {
+        return degrade(cause, withRequestCorrelationHeader(
           problem({
             status: 400,
             kind: 'INVALID_ARGUMENT',
@@ -83,7 +83,7 @@ export async function handleToolProcurePost(
             detail: 'The request body must be valid JSON.',
           }),
           correlationId,
-        )
+        ), { site: 'handleToolProcurePost', reason: 'invalid_response' })
       }
 
       const parsed = toolProcureAction.schema.safeParse(rawBody)
@@ -111,22 +111,48 @@ export async function handleToolProcurePost(
             callService,
             principal: admitted.principal,
             correlationId,
+            identity: createProcureIdentityPort(request, bounded.text, correlationId),
           })
         }
 
         const result = await procurementEngine.procure(parsed.data)
         const projected = toolProcureAction.outputSchema.parse(result)
+        const next = projectProcureNext(projected)
+        if (projected.status === 'refused' && projected.code === 'budget_exceeded') {
+          return withRequestCorrelationHeader(
+            problem({
+              kind: 'RESOURCE_EXHAUSTED',
+              code: projected.code,
+              detail: projected.detail,
+              retryable: projected.retryable,
+              extras: {
+                requestId: correlationId,
+                next,
+                refs: {
+                  idempotencyKey: projected.idempotencyKey,
+                  ...(projected.quoteRef === undefined ? {} : { quoteRef: projected.quoteRef }),
+                },
+              },
+            }),
+            correlationId,
+          )
+        }
         return withRequestCorrelationHeader(
-          response(projected, 200, procureResponseHeaders),
+          response({ ...projected, next }, 200, procureResponseHeaders),
           correlationId,
         )
       } catch (error) {
+        const known = error instanceof ProcureConflictError
+          ? { status: 409, kind: 'ALREADY_EXISTS' as const, code: 'idempotency_conflict' }
+          : error instanceof ProcureInProgressError
+            ? { status: 503, kind: 'UNAVAILABLE' as const, code: 'procurement_in_progress' }
+            : error instanceof ProcureAuthorityError
+              ? { status: 403, kind: 'PERMISSION_DENIED' as const, code: 'principal_denied' }
+              : { status: 500, kind: 'INTERNAL' as const, code: 'procurement_failed' }
         return withRequestCorrelationHeader(
           problem({
-            status: 500,
-            kind: 'INTERNAL',
-            code: 'procurement_failed',
-            detail: error instanceof Error ? error.message : 'Capability procurement failed unexpectedly.',
+            ...known,
+            detail: known.status === 500 ? 'Capability procurement failed unexpectedly.' : error instanceof Error ? error.message : 'Procurement refused.',
           }),
           correlationId,
         )

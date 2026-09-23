@@ -95,12 +95,10 @@ export function ConsentToolAccessFieldset({
                 </Button>
               </div>
               {toolSearch.error === undefined ? null : <p id="tool-search-error" role="alert" className="text-sm text-destructive">{toolSearch.error}</p>}
-              {toolSearch.result?.kind === 'ok' ? (
-                toolSearch.result.items.length === 0 ? (
-                  <p role="status" className="text-sm text-muted-foreground">No Tools match the query</p>
-                ) : (
-                  <ul className="grid gap-2" aria-label="Tool search results">
-                    {toolSearch.result.items.map((item) => (
+              {toolSearch.noMatchMessage === undefined ? null : <p role="status" className="text-sm text-muted-foreground">{toolSearch.noMatchMessage}</p>}
+              {toolSearch.results === undefined ? null : (
+                <ul className="grid gap-2" aria-label="Tool search results">
+                  {toolSearch.results.map((item) => (
                       <li key={item.toolRef} className="flex min-w-0 items-center justify-between gap-3 rounded-md border px-3 py-2">
                         <span className="min-w-0">
                           <span className="block truncate font-medium">{item.title}</span>
@@ -111,9 +109,8 @@ export function ConsentToolAccessFieldset({
                         </Button>
                       </li>
                     ))}
-                  </ul>
-                )
-              ) : null}
+                </ul>
+              )}
             </div>
           ) : null}
         </div>

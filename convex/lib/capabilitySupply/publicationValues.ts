@@ -98,6 +98,7 @@ const preparedPublicationRefusalValue = v.union(
   v.literal('tool_not_found'),
   v.literal('schema_missing'),
   v.literal('schema_profile_unsupported'),
+  v.literal('opaque_input_without_valid_example'),
   v.literal('openapi_query_parameter_definition_unsupported'),
   v.literal('openapi_query_parameter_serialization_unsupported'),
   v.literal('openapi_query_parameter_schema_unsupported'),
@@ -170,6 +171,11 @@ export const preparedPublicationResultValue = v.union(
   v.object({
     kind: v.literal('refused'),
     reason: preparedPublicationRefusalValue,
+    next: v.optional(v.array(v.object({
+      action: v.literal('revise-publication'),
+      field: v.string(),
+      instruction: v.string(),
+    }))),
   }),
 )
 export const capabilityPublicationValue = v.object({
@@ -184,7 +190,10 @@ type PreparedPublicationResult = Infer<typeof preparedPublicationResultValue>
 export function convexPreparedPublicationResult(
   result: PublishPreparedCapabilityCommandResult,
 ): PreparedPublicationResult {
-  if (result.kind === 'refused') return result
+  if (result.kind === 'refused') {
+    const { next, ...refusal } = result
+    return next === undefined ? refusal : { ...refusal, next: next.map((action) => ({ ...action })) }
+  }
   return {
     kind: result.kind,
     ...(result.operationId === undefined

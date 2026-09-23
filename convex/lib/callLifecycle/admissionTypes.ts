@@ -33,6 +33,7 @@ export type AdmitArgs = {
 export type ReserveArgs = Readonly<{
   quoteRef: string
   callRef: string
+  turnRef?: string
   principalId: string
   ownerId: string
   credentialId: string

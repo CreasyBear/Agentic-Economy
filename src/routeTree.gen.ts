@@ -55,6 +55,7 @@ import { Route as DotwellKnownOauthProtectedResourceRouteImport } from './routes
 import { Route as DotwellKnownOauthAuthorizationServerRouteImport } from './routes/[.]well-known/oauth-authorization-server'
 import { Route as DotwellKnownHttpMessageSignaturesDirectoryRouteImport } from './routes/[.]well-known/http-message-signatures-directory'
 import { Route as DotwellKnownApiCatalogRouteImport } from './routes/[.]well-known/api-catalog'
+import { Route as DotwellKnownSplatRouteImport } from './routes/[.]well-known/$'
 import { Route as SlugUcpRouteImport } from './routes/$slug.ucp'
 import { Route as OperatorOwnerIndexRouteImport } from './routes/_operator/owner.index'
 import { Route as OperatorAdminIndexRouteImport } from './routes/_operator/admin.index'
@@ -104,6 +105,7 @@ import { Route as ApiV1SupplyRecheckRouteImport } from './routes/api.v1.supply.r
 import { Route as ApiV1SupplyPublishRouteImport } from './routes/api.v1.supply.publish'
 import { Route as ApiV1SupplyEarningsRouteImport } from './routes/api.v1.supply.earnings'
 import { Route as ApiV1SupplyCallsRouteImport } from './routes/api.v1.supply.calls'
+import { Route as ApiV1StatusRefRouteImport } from './routes/api.v1.status.$ref'
 import { Route as ApiV1MarketToolsSearchRouteImport } from './routes/api.v1.market-tools.search'
 import { Route as ApiV1MarketToolsListRouteImport } from './routes/api.v1.market-tools.list'
 import { Route as ApiV1MarketToolsDescribeRouteImport } from './routes/api.v1.market-tools.describe'
@@ -113,6 +115,7 @@ import { Route as ApiV1MarketRequestsStatusRouteImport } from './routes/api.v1.m
 import { Route as ApiV1MarketRequestsListRouteImport } from './routes/api.v1.market-requests.list'
 import { Route as ApiV1FundingQuoteRouteImport } from './routes/api.v1.funding.quote'
 import { Route as ApiV1FundingConstraintsRouteImport } from './routes/api.v1.funding.constraints'
+import { Route as ApiV1ChatTurnsRouteImport } from './routes/api.v1.chat.turns'
 import { Route as ApiV1CallsCallRefRouteImport } from './routes/api.v1.calls.$callRef'
 import { Route as ApiV1BusinessesSearchRouteImport } from './routes/api.v1.businesses.search'
 import { Route as ApiV1BusinessesBusinessIdRouteImport } from './routes/api.v1.businesses.$businessId'
@@ -136,6 +139,7 @@ import { Route as ApiV1SupplyConnectionsReconnectRouteImport } from './routes/ap
 import { Route as ApiV1SupplyConnectionsListRouteImport } from './routes/api.v1.supply.connections.list'
 import { Route as ApiV1SupplyConnectionsDetailRouteImport } from './routes/api.v1.supply.connections.detail'
 import { Route as ApiV1SupplyConnectionsConnectRouteImport } from './routes/api.v1.supply.connections.connect'
+import { Route as ApiV1ChatTurnsTurnRefRouteImport } from './routes/api.v1.chat.turns.$turnRef'
 import { Route as ApiV1CallsCallRefReconcileRouteImport } from './routes/api.v1.calls.$callRef.reconcile'
 import { Route as ApiV1CallsCallRefCancelRouteImport } from './routes/api.v1.calls.$callRef.cancel'
 import { Route as ApiV1AccountFundingConfigRouteImport } from './routes/api.v1.account.funding.config'
@@ -375,6 +379,11 @@ const DotwellKnownHttpMessageSignaturesDirectoryRoute =
 const DotwellKnownApiCatalogRoute = DotwellKnownApiCatalogRouteImport.update({
   id: '/.well-known/api-catalog',
   path: '/.well-known/api-catalog',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DotwellKnownSplatRoute = DotwellKnownSplatRouteImport.update({
+  id: '/.well-known/$',
+  path: '/.well-known/$',
   getParentRoute: () => rootRouteImport,
 } as any)
 const SlugUcpRoute = SlugUcpRouteImport.update({
@@ -629,6 +638,11 @@ const ApiV1SupplyCallsRoute = ApiV1SupplyCallsRouteImport.update({
   path: '/api/v1/supply/calls',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiV1StatusRefRoute = ApiV1StatusRefRouteImport.update({
+  id: '/api/v1/status/$ref',
+  path: '/api/v1/status/$ref',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiV1MarketToolsSearchRoute = ApiV1MarketToolsSearchRouteImport.update({
   id: '/api/v1/market-tools/search',
   path: '/api/v1/market-tools/search',
@@ -675,6 +689,11 @@ const ApiV1FundingQuoteRoute = ApiV1FundingQuoteRouteImport.update({
 const ApiV1FundingConstraintsRoute = ApiV1FundingConstraintsRouteImport.update({
   id: '/api/v1/funding/constraints',
   path: '/api/v1/funding/constraints',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiV1ChatTurnsRoute = ApiV1ChatTurnsRouteImport.update({
+  id: '/api/v1/chat/turns',
+  path: '/api/v1/chat/turns',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiV1CallsCallRefRoute = ApiV1CallsCallRefRouteImport.update({
@@ -810,6 +829,11 @@ const ApiV1SupplyConnectionsConnectRoute =
     path: '/api/v1/supply/connections/connect',
     getParentRoute: () => rootRouteImport,
   } as any)
+const ApiV1ChatTurnsTurnRefRoute = ApiV1ChatTurnsTurnRefRouteImport.update({
+  id: '/$turnRef',
+  path: '/$turnRef',
+  getParentRoute: () => ApiV1ChatTurnsRoute,
+} as any)
 const ApiV1CallsCallRefReconcileRoute =
   ApiV1CallsCallRefReconcileRouteImport.update({
     id: '/reconcile',
@@ -872,6 +896,7 @@ export interface FileRoutesByFullPath {
   '/support': typeof SupportRoute
   '/terms': typeof TermsRoute
   '/$slug/ucp': typeof SlugUcpRoute
+  '/.well-known/$': typeof DotwellKnownSplatRoute
   '/.well-known/api-catalog': typeof DotwellKnownApiCatalogRoute
   '/.well-known/http-message-signatures-directory': typeof DotwellKnownHttpMessageSignaturesDirectoryRoute
   '/.well-known/oauth-authorization-server': typeof DotwellKnownOauthAuthorizationServerRoute
@@ -951,6 +976,7 @@ export interface FileRoutesByFullPath {
   '/api/v1/businesses/$businessId': typeof ApiV1BusinessesBusinessIdRoute
   '/api/v1/businesses/search': typeof ApiV1BusinessesSearchRoute
   '/api/v1/calls/$callRef': typeof ApiV1CallsCallRefRouteWithChildren
+  '/api/v1/chat/turns': typeof ApiV1ChatTurnsRouteWithChildren
   '/api/v1/funding/constraints': typeof ApiV1FundingConstraintsRoute
   '/api/v1/funding/quote': typeof ApiV1FundingQuoteRoute
   '/api/v1/market-requests/list': typeof ApiV1MarketRequestsListRoute
@@ -960,6 +986,7 @@ export interface FileRoutesByFullPath {
   '/api/v1/market-tools/describe': typeof ApiV1MarketToolsDescribeRoute
   '/api/v1/market-tools/list': typeof ApiV1MarketToolsListRoute
   '/api/v1/market-tools/search': typeof ApiV1MarketToolsSearchRoute
+  '/api/v1/status/$ref': typeof ApiV1StatusRefRoute
   '/api/v1/supply/calls': typeof ApiV1SupplyCallsRoute
   '/api/v1/supply/earnings': typeof ApiV1SupplyEarningsRoute
   '/api/v1/supply/publish': typeof ApiV1SupplyPublishRoute
@@ -976,6 +1003,7 @@ export interface FileRoutesByFullPath {
   '/api/v1/account/funding/config': typeof ApiV1AccountFundingConfigRoute
   '/api/v1/calls/$callRef/cancel': typeof ApiV1CallsCallRefCancelRoute
   '/api/v1/calls/$callRef/reconcile': typeof ApiV1CallsCallRefReconcileRoute
+  '/api/v1/chat/turns/$turnRef': typeof ApiV1ChatTurnsTurnRefRoute
   '/api/v1/supply/connections/connect': typeof ApiV1SupplyConnectionsConnectRoute
   '/api/v1/supply/connections/detail': typeof ApiV1SupplyConnectionsDetailRoute
   '/api/v1/supply/connections/list': typeof ApiV1SupplyConnectionsListRoute
@@ -1007,6 +1035,7 @@ export interface FileRoutesByTo {
   '/support': typeof SupportRoute
   '/terms': typeof TermsRoute
   '/$slug/ucp': typeof SlugUcpRoute
+  '/.well-known/$': typeof DotwellKnownSplatRoute
   '/.well-known/api-catalog': typeof DotwellKnownApiCatalogRoute
   '/.well-known/http-message-signatures-directory': typeof DotwellKnownHttpMessageSignaturesDirectoryRoute
   '/.well-known/oauth-authorization-server': typeof DotwellKnownOauthAuthorizationServerRoute
@@ -1086,6 +1115,7 @@ export interface FileRoutesByTo {
   '/api/v1/businesses/$businessId': typeof ApiV1BusinessesBusinessIdRoute
   '/api/v1/businesses/search': typeof ApiV1BusinessesSearchRoute
   '/api/v1/calls/$callRef': typeof ApiV1CallsCallRefRouteWithChildren
+  '/api/v1/chat/turns': typeof ApiV1ChatTurnsRouteWithChildren
   '/api/v1/funding/constraints': typeof ApiV1FundingConstraintsRoute
   '/api/v1/funding/quote': typeof ApiV1FundingQuoteRoute
   '/api/v1/market-requests/list': typeof ApiV1MarketRequestsListRoute
@@ -1095,6 +1125,7 @@ export interface FileRoutesByTo {
   '/api/v1/market-tools/describe': typeof ApiV1MarketToolsDescribeRoute
   '/api/v1/market-tools/list': typeof ApiV1MarketToolsListRoute
   '/api/v1/market-tools/search': typeof ApiV1MarketToolsSearchRoute
+  '/api/v1/status/$ref': typeof ApiV1StatusRefRoute
   '/api/v1/supply/calls': typeof ApiV1SupplyCallsRoute
   '/api/v1/supply/earnings': typeof ApiV1SupplyEarningsRoute
   '/api/v1/supply/publish': typeof ApiV1SupplyPublishRoute
@@ -1111,6 +1142,7 @@ export interface FileRoutesByTo {
   '/api/v1/account/funding/config': typeof ApiV1AccountFundingConfigRoute
   '/api/v1/calls/$callRef/cancel': typeof ApiV1CallsCallRefCancelRoute
   '/api/v1/calls/$callRef/reconcile': typeof ApiV1CallsCallRefReconcileRoute
+  '/api/v1/chat/turns/$turnRef': typeof ApiV1ChatTurnsTurnRefRoute
   '/api/v1/supply/connections/connect': typeof ApiV1SupplyConnectionsConnectRoute
   '/api/v1/supply/connections/detail': typeof ApiV1SupplyConnectionsDetailRoute
   '/api/v1/supply/connections/list': typeof ApiV1SupplyConnectionsListRoute
@@ -1144,6 +1176,7 @@ export interface FileRoutesById {
   '/support': typeof SupportRoute
   '/terms': typeof TermsRoute
   '/$slug/ucp': typeof SlugUcpRoute
+  '/.well-known/$': typeof DotwellKnownSplatRoute
   '/.well-known/api-catalog': typeof DotwellKnownApiCatalogRoute
   '/.well-known/http-message-signatures-directory': typeof DotwellKnownHttpMessageSignaturesDirectoryRoute
   '/.well-known/oauth-authorization-server': typeof DotwellKnownOauthAuthorizationServerRoute
@@ -1223,6 +1256,7 @@ export interface FileRoutesById {
   '/api/v1/businesses/$businessId': typeof ApiV1BusinessesBusinessIdRoute
   '/api/v1/businesses/search': typeof ApiV1BusinessesSearchRoute
   '/api/v1/calls/$callRef': typeof ApiV1CallsCallRefRouteWithChildren
+  '/api/v1/chat/turns': typeof ApiV1ChatTurnsRouteWithChildren
   '/api/v1/funding/constraints': typeof ApiV1FundingConstraintsRoute
   '/api/v1/funding/quote': typeof ApiV1FundingQuoteRoute
   '/api/v1/market-requests/list': typeof ApiV1MarketRequestsListRoute
@@ -1232,6 +1266,7 @@ export interface FileRoutesById {
   '/api/v1/market-tools/describe': typeof ApiV1MarketToolsDescribeRoute
   '/api/v1/market-tools/list': typeof ApiV1MarketToolsListRoute
   '/api/v1/market-tools/search': typeof ApiV1MarketToolsSearchRoute
+  '/api/v1/status/$ref': typeof ApiV1StatusRefRoute
   '/api/v1/supply/calls': typeof ApiV1SupplyCallsRoute
   '/api/v1/supply/earnings': typeof ApiV1SupplyEarningsRoute
   '/api/v1/supply/publish': typeof ApiV1SupplyPublishRoute
@@ -1248,6 +1283,7 @@ export interface FileRoutesById {
   '/api/v1/account/funding/config': typeof ApiV1AccountFundingConfigRoute
   '/api/v1/calls/$callRef/cancel': typeof ApiV1CallsCallRefCancelRoute
   '/api/v1/calls/$callRef/reconcile': typeof ApiV1CallsCallRefReconcileRoute
+  '/api/v1/chat/turns/$turnRef': typeof ApiV1ChatTurnsTurnRefRoute
   '/api/v1/supply/connections/connect': typeof ApiV1SupplyConnectionsConnectRoute
   '/api/v1/supply/connections/detail': typeof ApiV1SupplyConnectionsDetailRoute
   '/api/v1/supply/connections/list': typeof ApiV1SupplyConnectionsListRoute
@@ -1281,6 +1317,7 @@ export interface FileRouteTypes {
     | '/support'
     | '/terms'
     | '/$slug/ucp'
+    | '/.well-known/$'
     | '/.well-known/api-catalog'
     | '/.well-known/http-message-signatures-directory'
     | '/.well-known/oauth-authorization-server'
@@ -1360,6 +1397,7 @@ export interface FileRouteTypes {
     | '/api/v1/businesses/$businessId'
     | '/api/v1/businesses/search'
     | '/api/v1/calls/$callRef'
+    | '/api/v1/chat/turns'
     | '/api/v1/funding/constraints'
     | '/api/v1/funding/quote'
     | '/api/v1/market-requests/list'
@@ -1369,6 +1407,7 @@ export interface FileRouteTypes {
     | '/api/v1/market-tools/describe'
     | '/api/v1/market-tools/list'
     | '/api/v1/market-tools/search'
+    | '/api/v1/status/$ref'
     | '/api/v1/supply/calls'
     | '/api/v1/supply/earnings'
     | '/api/v1/supply/publish'
@@ -1385,6 +1424,7 @@ export interface FileRouteTypes {
     | '/api/v1/account/funding/config'
     | '/api/v1/calls/$callRef/cancel'
     | '/api/v1/calls/$callRef/reconcile'
+    | '/api/v1/chat/turns/$turnRef'
     | '/api/v1/supply/connections/connect'
     | '/api/v1/supply/connections/detail'
     | '/api/v1/supply/connections/list'
@@ -1416,6 +1456,7 @@ export interface FileRouteTypes {
     | '/support'
     | '/terms'
     | '/$slug/ucp'
+    | '/.well-known/$'
     | '/.well-known/api-catalog'
     | '/.well-known/http-message-signatures-directory'
     | '/.well-known/oauth-authorization-server'
@@ -1495,6 +1536,7 @@ export interface FileRouteTypes {
     | '/api/v1/businesses/$businessId'
     | '/api/v1/businesses/search'
     | '/api/v1/calls/$callRef'
+    | '/api/v1/chat/turns'
     | '/api/v1/funding/constraints'
     | '/api/v1/funding/quote'
     | '/api/v1/market-requests/list'
@@ -1504,6 +1546,7 @@ export interface FileRouteTypes {
     | '/api/v1/market-tools/describe'
     | '/api/v1/market-tools/list'
     | '/api/v1/market-tools/search'
+    | '/api/v1/status/$ref'
     | '/api/v1/supply/calls'
     | '/api/v1/supply/earnings'
     | '/api/v1/supply/publish'
@@ -1520,6 +1563,7 @@ export interface FileRouteTypes {
     | '/api/v1/account/funding/config'
     | '/api/v1/calls/$callRef/cancel'
     | '/api/v1/calls/$callRef/reconcile'
+    | '/api/v1/chat/turns/$turnRef'
     | '/api/v1/supply/connections/connect'
     | '/api/v1/supply/connections/detail'
     | '/api/v1/supply/connections/list'
@@ -1552,6 +1596,7 @@ export interface FileRouteTypes {
     | '/support'
     | '/terms'
     | '/$slug/ucp'
+    | '/.well-known/$'
     | '/.well-known/api-catalog'
     | '/.well-known/http-message-signatures-directory'
     | '/.well-known/oauth-authorization-server'
@@ -1631,6 +1676,7 @@ export interface FileRouteTypes {
     | '/api/v1/businesses/$businessId'
     | '/api/v1/businesses/search'
     | '/api/v1/calls/$callRef'
+    | '/api/v1/chat/turns'
     | '/api/v1/funding/constraints'
     | '/api/v1/funding/quote'
     | '/api/v1/market-requests/list'
@@ -1640,6 +1686,7 @@ export interface FileRouteTypes {
     | '/api/v1/market-tools/describe'
     | '/api/v1/market-tools/list'
     | '/api/v1/market-tools/search'
+    | '/api/v1/status/$ref'
     | '/api/v1/supply/calls'
     | '/api/v1/supply/earnings'
     | '/api/v1/supply/publish'
@@ -1656,6 +1703,7 @@ export interface FileRouteTypes {
     | '/api/v1/account/funding/config'
     | '/api/v1/calls/$callRef/cancel'
     | '/api/v1/calls/$callRef/reconcile'
+    | '/api/v1/chat/turns/$turnRef'
     | '/api/v1/supply/connections/connect'
     | '/api/v1/supply/connections/detail'
     | '/api/v1/supply/connections/list'
@@ -1688,6 +1736,7 @@ export interface RootRouteChildren {
   StatusRoute: typeof StatusRoute
   SupportRoute: typeof SupportRoute
   TermsRoute: typeof TermsRoute
+  DotwellKnownSplatRoute: typeof DotwellKnownSplatRoute
   DotwellKnownApiCatalogRoute: typeof DotwellKnownApiCatalogRoute
   DotwellKnownHttpMessageSignaturesDirectoryRoute: typeof DotwellKnownHttpMessageSignaturesDirectoryRoute
   DotwellKnownOauthAuthorizationServerRoute: typeof DotwellKnownOauthAuthorizationServerRoute
@@ -1733,12 +1782,14 @@ export interface RootRouteChildren {
   ApiV1ReleaseRoute: typeof ApiV1ReleaseRoute
   ApiV1SandboxReferenceRoute: typeof ApiV1SandboxReferenceRoute
   ToolsProviderHostSlugRoute: typeof ToolsProviderHostSlugRoute
+  ApiV1ChatTurnsRoute: typeof ApiV1ChatTurnsRouteWithChildren
   ApiV1FundingConstraintsRoute: typeof ApiV1FundingConstraintsRoute
   ApiV1FundingQuoteRoute: typeof ApiV1FundingQuoteRoute
   ApiV1MarketToolsCompareRoute: typeof ApiV1MarketToolsCompareRoute
   ApiV1MarketToolsDescribeRoute: typeof ApiV1MarketToolsDescribeRoute
   ApiV1MarketToolsListRoute: typeof ApiV1MarketToolsListRoute
   ApiV1MarketToolsSearchRoute: typeof ApiV1MarketToolsSearchRoute
+  ApiV1StatusRefRoute: typeof ApiV1StatusRefRoute
   ApiV1SupplyCallsRoute: typeof ApiV1SupplyCallsRoute
   ApiV1SupplyEarningsRoute: typeof ApiV1SupplyEarningsRoute
   ApiV1SupplyPublishRoute: typeof ApiV1SupplyPublishRoute
@@ -2081,6 +2132,13 @@ declare module '@tanstack/react-router' {
       path: '/.well-known/api-catalog'
       fullPath: '/.well-known/api-catalog'
       preLoaderRoute: typeof DotwellKnownApiCatalogRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/.well-known/$': {
+      id: '/.well-known/$'
+      path: '/.well-known/$'
+      fullPath: '/.well-known/$'
+      preLoaderRoute: typeof DotwellKnownSplatRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/$slug/ucp': {
@@ -2426,6 +2484,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiV1SupplyCallsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/v1/status/$ref': {
+      id: '/api/v1/status/$ref'
+      path: '/api/v1/status/$ref'
+      fullPath: '/api/v1/status/$ref'
+      preLoaderRoute: typeof ApiV1StatusRefRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/v1/market-tools/search': {
       id: '/api/v1/market-tools/search'
       path: '/api/v1/market-tools/search'
@@ -2487,6 +2552,13 @@ declare module '@tanstack/react-router' {
       path: '/api/v1/funding/constraints'
       fullPath: '/api/v1/funding/constraints'
       preLoaderRoute: typeof ApiV1FundingConstraintsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/v1/chat/turns': {
+      id: '/api/v1/chat/turns'
+      path: '/api/v1/chat/turns'
+      fullPath: '/api/v1/chat/turns'
+      preLoaderRoute: typeof ApiV1ChatTurnsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/v1/calls/$callRef': {
@@ -2649,6 +2721,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/api/v1/supply/connections/connect'
       preLoaderRoute: typeof ApiV1SupplyConnectionsConnectRouteImport
       parentRoute: typeof rootRouteImport
+    }
+    '/api/v1/chat/turns/$turnRef': {
+      id: '/api/v1/chat/turns/$turnRef'
+      path: '/$turnRef'
+      fullPath: '/api/v1/chat/turns/$turnRef'
+      preLoaderRoute: typeof ApiV1ChatTurnsTurnRefRouteImport
+      parentRoute: typeof ApiV1ChatTurnsRoute
     }
     '/api/v1/calls/$callRef/reconcile': {
       id: '/api/v1/calls/$callRef/reconcile'
@@ -2927,6 +3006,18 @@ const ApiV1MarketRequestsRouteChildren: ApiV1MarketRequestsRouteChildren = {
 const ApiV1MarketRequestsRouteWithChildren =
   ApiV1MarketRequestsRoute._addFileChildren(ApiV1MarketRequestsRouteChildren)
 
+interface ApiV1ChatTurnsRouteChildren {
+  ApiV1ChatTurnsTurnRefRoute: typeof ApiV1ChatTurnsTurnRefRoute
+}
+
+const ApiV1ChatTurnsRouteChildren: ApiV1ChatTurnsRouteChildren = {
+  ApiV1ChatTurnsTurnRefRoute: ApiV1ChatTurnsTurnRefRoute,
+}
+
+const ApiV1ChatTurnsRouteWithChildren = ApiV1ChatTurnsRoute._addFileChildren(
+  ApiV1ChatTurnsRouteChildren,
+)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   SlugRoute: SlugRouteWithChildren,
@@ -2947,6 +3038,7 @@ const rootRouteChildren: RootRouteChildren = {
   StatusRoute: StatusRoute,
   SupportRoute: SupportRoute,
   TermsRoute: TermsRoute,
+  DotwellKnownSplatRoute: DotwellKnownSplatRoute,
   DotwellKnownApiCatalogRoute: DotwellKnownApiCatalogRoute,
   DotwellKnownHttpMessageSignaturesDirectoryRoute:
     DotwellKnownHttpMessageSignaturesDirectoryRoute,
@@ -2996,12 +3088,14 @@ const rootRouteChildren: RootRouteChildren = {
   ApiV1ReleaseRoute: ApiV1ReleaseRoute,
   ApiV1SandboxReferenceRoute: ApiV1SandboxReferenceRoute,
   ToolsProviderHostSlugRoute: ToolsProviderHostSlugRoute,
+  ApiV1ChatTurnsRoute: ApiV1ChatTurnsRouteWithChildren,
   ApiV1FundingConstraintsRoute: ApiV1FundingConstraintsRoute,
   ApiV1FundingQuoteRoute: ApiV1FundingQuoteRoute,
   ApiV1MarketToolsCompareRoute: ApiV1MarketToolsCompareRoute,
   ApiV1MarketToolsDescribeRoute: ApiV1MarketToolsDescribeRoute,
   ApiV1MarketToolsListRoute: ApiV1MarketToolsListRoute,
   ApiV1MarketToolsSearchRoute: ApiV1MarketToolsSearchRoute,
+  ApiV1StatusRefRoute: ApiV1StatusRefRoute,
   ApiV1SupplyCallsRoute: ApiV1SupplyCallsRoute,
   ApiV1SupplyEarningsRoute: ApiV1SupplyEarningsRoute,
   ApiV1SupplyPublishRoute: ApiV1SupplyPublishRoute,

@@ -528,12 +528,6 @@
     "kind": "mutation"
   },
   {
-    "visibility": "public",
-    "module": "capabilityCalls",
-    "method": "readCallStatus",
-    "kind": "action"
-  },
-  {
     "visibility": "internal",
     "module": "capabilityCalls",
     "method": "readCurrentProviderConnectionAuthority",
@@ -630,6 +624,12 @@
     "kind": "mutation"
   },
   {
+    "visibility": "public",
+    "module": "capabilityCallsStatus",
+    "method": "readCallStatus",
+    "kind": "query"
+  },
+  {
     "visibility": "internal",
     "module": "capabilityCallWorker",
     "method": "reconcilePreClaimRefund",
@@ -669,6 +669,24 @@
     "visibility": "public",
     "module": "capabilityContractDocuments",
     "method": "register",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "public",
+    "module": "capabilityProcure",
+    "method": "checkpointQuote",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "public",
+    "module": "capabilityProcure",
+    "method": "complete",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "public",
+    "module": "capabilityProcure",
+    "method": "reserve",
     "kind": "mutation"
   },
   {
@@ -1230,6 +1248,12 @@
     "kind": "query"
   },
   {
+    "visibility": "public",
+    "module": "capabilityQuotesStatus",
+    "method": "readQuoteStatus",
+    "kind": "query"
+  },
+  {
     "visibility": "internal",
     "module": "capabilitySupply",
     "method": "authorizeOwnerSupplyAction",
@@ -1578,6 +1602,12 @@
     "kind": "query"
   },
   {
+    "visibility": "internal",
+    "module": "capabilityToolCatalogData",
+    "method": "sourceSnapshot",
+    "kind": "query"
+  },
+  {
     "visibility": "public",
     "module": "catalog",
     "method": "authorizeProviderBusiness",
@@ -1627,6 +1657,24 @@
   },
   {
     "visibility": "internal",
+    "module": "chatCall",
+    "method": "authorize",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "chatCall",
+    "method": "call",
+    "kind": "action"
+  },
+  {
+    "visibility": "internal",
+    "module": "chatCall",
+    "method": "readTurnEffects",
+    "kind": "query"
+  },
+  {
+    "visibility": "internal",
     "module": "chatGenerate",
     "method": "generate",
     "kind": "action"
@@ -1653,6 +1701,18 @@
     "visibility": "public",
     "module": "chatMessages",
     "method": "sendMessage",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "chatQuote",
+    "method": "quote",
+    "kind": "action"
+  },
+  {
+    "visibility": "internal",
+    "module": "chatQuoteAdmission",
+    "method": "prepare",
     "kind": "mutation"
   },
   {
@@ -1714,6 +1774,48 @@
     "module": "chatThreads",
     "method": "searchThreads",
     "kind": "query"
+  },
+  {
+    "visibility": "internal",
+    "module": "chatTurns",
+    "method": "authorizeKeyGeneration",
+    "kind": "query"
+  },
+  {
+    "visibility": "internal",
+    "module": "chatTurns",
+    "method": "authorizePayableTool",
+    "kind": "query"
+  },
+  {
+    "visibility": "public",
+    "module": "chatTurns",
+    "method": "cancelTurn",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "chatTurns",
+    "method": "finishTurn",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "public",
+    "module": "chatTurns",
+    "method": "readDeltas",
+    "kind": "query"
+  },
+  {
+    "visibility": "public",
+    "module": "chatTurns",
+    "method": "readTurn",
+    "kind": "query"
+  },
+  {
+    "visibility": "public",
+    "module": "chatTurns",
+    "method": "startTurn",
+    "kind": "mutation"
   },
   {
     "visibility": "internal",
@@ -3056,6 +3158,12 @@
   {
     "visibility": "internal",
     "module": "workloadCron",
+    "method": "refreshMarketFlow",
+    "kind": "action"
+  },
+  {
+    "visibility": "internal",
+    "module": "workloadCron",
     "method": "snapshotMarketplaceMetricsDay",
     "kind": "action"
   },
@@ -3231,6 +3339,12 @@
     "visibility": "internal",
     "module": "x402DirectoryIndexCategoryStats",
     "method": "finalize",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "x402DirectoryIndexProviderLead",
+    "method": "backfill",
     "kind": "mutation"
   },
   {

@@ -55,6 +55,17 @@ vi.mock('../../../convex/authz', async (importOriginal) => ({
   }),
 }))
 
+vi.mock('../../../convex/sourceWriteAdmission', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../../convex/sourceWriteAdmission')>()),
+  requireSourceRead: vi.fn(async () => ({ kind: 'accepted' })),
+}))
+
+vi.mock('../../../convex/lib/callLifecycle/authorityHandlers', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../../convex/lib/callLifecycle/authorityHandlers')>()),
+  resolveCallAgentAuthorityHandler: vi.fn(async (_ctx: unknown, args: { principal: AgentAccessPrincipal }) =>
+    args.principal.scopes.includes('market_tools:call') ? args.principal : null),
+}))
+
 const x402EvidenceFields = [
   'amount',
   'attemptRef',
@@ -98,7 +109,7 @@ describe('capability operation recovery Convex adapters', () => {
     }
   })
 
-  it('hands status and remedies to the worker with original effect identity after credential replacement', async () => {
+  it('reads status without recovery work and sends remedies with original effect identity after credential replacement', async () => {
     const successor = { ...principal, credentialId: 'credential:successor' }
     const cases = [
       {
@@ -142,12 +153,15 @@ describe('capability operation recovery Convex adapters', () => {
         context,
         recoveryArgs({ principal: successor, ...testCase.args }),
       )).resolves.toMatchObject(testCase.expected)
-      expectAgentRecoverWorkerAction(context, testCase.mode, successor, testCase.actionExtra)
-      expect(context.runMutation).toHaveBeenCalledTimes(2)
-    }
-
-    for (const { context } of contexts) {
-      expectReadOwnerRecoveryQuery(context)
+      if (testCase.mode === 'status') {
+        expect(context.runMutation).not.toHaveBeenCalled()
+        expect(context.runAction).not.toHaveBeenCalled()
+        expect(context.runQuery).toHaveBeenCalledWith(expect.anything(), { executionRef: callRef })
+      } else {
+        expectAgentRecoverWorkerAction(context, testCase.mode, successor, testCase.actionExtra)
+        expect(context.runMutation).toHaveBeenCalledTimes(2)
+        expectReadOwnerRecoveryQuery(context)
+      }
     }
   })
 
@@ -260,7 +274,9 @@ describe('capability operation recovery Convex adapters', () => {
 
   it('projects reconciliation-required status without hiding the invocation', async () => {
     const context = recoveryContext({
-      row,
+      row: { ...row, state: 'reconciliation_required', result: {
+        kind: 'reconciliation_required', callRef, toolRef: row.toolRef, evidence,
+      }, attemptRef: evidence.attemptRef, updatedAt: 1 },
       grant: null,
       workerResult: { kind: 'reconciliation_required', callRef, toolRef: row.toolRef, evidence },
     })
@@ -273,14 +289,17 @@ describe('capability operation recovery Convex adapters', () => {
       effectGeneration: evidence.effectGeneration,
       version: expect.any(Number),
     })
+    expect(context.runAction).not.toHaveBeenCalled()
+    expect(context.runMutation).not.toHaveBeenCalled()
   })
 
-  it('keeps another Agent, Account, application, or environment indistinguishable from not-found', async () => {
+  it('keeps another Agent, Account, application, environment, or unscoped caller indistinguishable from not-found', async () => {
     const wrongPrincipals: readonly AgentAccessPrincipal[] = [
       { ...principal, principalId: 'principal:other' },
       { ...principal, ownerId: 'account:other' },
       { ...principal, applicationRef: 'application:other' },
       { ...principal, environment: 'production' },
+      { ...principal, scopes: [] },
     ]
     for (const wrongPrincipal of wrongPrincipals) {
       const context = recoveryContext({
@@ -293,7 +312,7 @@ describe('capability operation recovery Convex adapters', () => {
         principal: wrongPrincipal,
       }))).resolves.toEqual(invocationNotFound)
       expect(context.runAction).not.toHaveBeenCalled()
-      expectReadOwnerRecoveryQuery(context)
+      expect(context.runMutation).not.toHaveBeenCalled()
     }
   })
 

@@ -20,6 +20,7 @@ const connectionSchema = z.object({
 const configSchema = z.object({
   version: z.literal(1),
   connections: z.record(z.string(), connectionSchema),
+  lastThreadIds: z.record(z.string(), z.string().min(1)).default({}),
 })
 
 export type AgentConfigReadFailureReason = 'unreadable' | 'invalid_json' | 'invalid_shape'
@@ -101,7 +102,7 @@ export function mcpConfigPath(): string {
 }
 
 function emptyConfig(): z.infer<typeof configSchema> {
-  return { version: 1, connections: {} }
+  return { version: 1, connections: {}, lastThreadIds: {} }
 }
 
 function readConfig(): z.infer<typeof configSchema> {
@@ -172,6 +173,19 @@ export function readStoredConnection(baseUrl: string, profile: StoredConnectionP
   return readConfig().connections[connectionKey(new URL(baseUrl).origin, profile)]
 }
 
+/** One non-secret continuation handle per exact AE origin. */
+export function lastChatThread(baseUrl: string): string | undefined {
+  return readConfig().lastThreadIds[new URL(baseUrl).origin]
+}
+
+export function rememberChatThread(baseUrl: string, threadId: string): void {
+  const current = readConfig()
+  writeConfig({
+    ...current,
+    lastThreadIds: { ...current.lastThreadIds, [new URL(baseUrl).origin]: threadId },
+  })
+}
+
 /** Safe local inventory: never returns bearer material. */
 export function listStoredConnections(): readonly StoredConnectionSummary[] {
   return Object.entries(readConfig().connections)
@@ -238,7 +252,7 @@ export function removeStoredConnection(baseUrl: string, profile?: StoredConnecti
   }
   const connections = { ...current.connections }
   for (const key of keys) delete connections[key]
-  const writtenAt = writeConfig({ version: 1, connections })
+  const writtenAt = writeConfig({ ...current, connections })
   return { origin, removed: true, configPath: writtenAt }
 }
 
@@ -254,6 +268,7 @@ export function storeConnection(input: Readonly<{
   const profile = input.profile ?? profileForScope(input.scope)
   const next = {
     version: 1 as const,
+    lastThreadIds: current.lastThreadIds,
     connections: {
       ...current.connections,
       [connectionKey(origin, profile)]: {

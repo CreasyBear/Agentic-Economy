@@ -182,20 +182,24 @@ describe('transcript projector', () => {
           type: `tool-${providerSafeActionToolName('registry.tools.search')}`,
           state: 'output-available',
           output: {
-            kind: 'ok',
+            kind: 'matched',
             schemaVersion: 'registry-tools:v3',
             query: 'weather',
-            count: 12,
-            items: [{
+            partialResults: false,
+            results: [{
               toolRef: searchRef,
-              capabilityId: 'weather.forecast',
               title: 'Weather finder',
-              description: 'Look up forecasts',
-              provider: { name: 'Sky Co', slug: 'sky-co' },
-              priceLabel: 'USD 0.50',
-              healthStatus: 'operational',
+              summary: 'Look up forecasts',
+              matchReason: 'Weather lookup',
+              readiness: 'ready',
+              entitlement: 'public',
+              price: { kind: 'indicative', label: 'USD 0.50' },
+              details: { capabilityId: 'weather.forecast', provider: { name: 'Sky Co', slug: 'sky-co' }, description: 'Look up forecasts', listingTier: 'listed' },
+              next: [{ action: 'describe', args: { toolRef: searchRef }, authority: 'public' }],
             }],
+            recommendation: { mode: 'fast', engine: 'jev_system_one', text: 'Inspect Weather finder before use.', citations: [{ toolRef: searchRef, span: { start: 8, end: 22 } }] },
             pagination: { limit: 10, hasMore: true, nextCursor: 'next' },
+            next: [{ action: 'next-page', args: { query: 'weather', cursor: 'next' }, authority: 'public' }],
           },
         },
         {
@@ -258,7 +262,7 @@ describe('transcript projector', () => {
       price: 'USD 0.50',
       readiness: 'Operational',
     }])
-    expect(search?.kind === 'choices' ? search.count : undefined).toBe(12)
+    expect(search?.kind === 'choices' ? search.count : undefined).toBe(1)
     expect(inspection?.kind === 'inspect' ? inspection.facts : undefined).toEqual([
       { label: 'Decision price', value: 'USD 1.99' },
       { label: 'Account available', value: 'USD 5.00' },
@@ -598,21 +602,24 @@ describe('transcript projector', () => {
         type: `tool-${providerSafeActionToolName('registry.tools.search')}`,
         state: 'output-available',
         output: {
-          kind: 'ok',
+          kind: 'matched',
           schemaVersion: 'registry-tools:v3',
           query: 'weather',
-          count: 1,
-          items: [{
+          partialResults: false,
+          results: [{
             toolRef: searchRef,
-            capabilityId: 'weather.forecast',
             title: 'Weather finder',
-            description: 'Look up forecasts',
-            provider: { name: 'Sky Co', slug: 'sky-co' },
-            priceLabel: 'USD 0.50',
-            healthStatus: 'operational',
-            raw: 'HANDOFF_RAW_SECRET',
+            summary: 'Look up forecasts',
+            matchReason: 'Weather lookup',
+            readiness: 'ready',
+            entitlement: 'public',
+            price: { kind: 'indicative', label: 'USD 0.50' },
+            details: { capabilityId: 'weather.forecast', provider: { name: 'Sky Co', slug: 'sky-co' }, description: 'Look up forecasts', listingTier: 'listed', raw: 'HANDOFF_RAW_SECRET' },
+            next: [{ action: 'describe', args: { toolRef: searchRef }, authority: 'public' }],
           }],
+          recommendation: { mode: 'fast', engine: 'jev_system_one', text: 'Inspect Weather finder before use.', citations: [{ toolRef: searchRef, span: { start: 8, end: 22 } }] },
           pagination: { limit: 10, hasMore: false },
+          next: [{ action: 'broaden', args: { query: 'weather' }, authority: 'public' }],
         },
       }],
     }])

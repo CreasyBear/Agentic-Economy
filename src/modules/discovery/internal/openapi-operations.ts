@@ -1,15 +1,24 @@
 import type { JSONSchema } from '@tanstack/ai'
 
 import { CALL_ROUTE_CONTRACT } from '@/modules/capability-execution/call-entry'
-import { DEFAULT_STATUS, type ProblemKind } from '@/lib/errors'
-import { describeActionForAgent, findAction, type PublicCallRouteDescriptor } from '@/modules/actions'
+import { TOOL_PROCURE_ACTION_ID } from '@/modules/capability-execution/procure.actions'
+import { type ProblemKind } from '@/lib/errors'
+import { describeActionForAgent, findAction, listCallRouteDescriptors, type PublicCallRouteDescriptor } from '@/modules/actions'
 import { FUNDING_PREFLIGHT_ROUTE_CONTRACTS } from '@/modules/money/public'
 import { TOOL_MARKET_ACTION_ENTRIES } from '@/modules/registry/tool-entry'
 
 import { OPENAPI_SUPPLEMENTAL_ROUTES } from './openapi-utility-routes'
-import { jsonSchemaOf, PROBLEM_JSON_SCHEMA } from './openapi-document-schema'
-import { listDocumentedCallRouteDescriptors } from './tool-contract'
-import type { NormalizedOperation, NormalizedParam, NormalizedResponse } from './openapi-document-types'
+import { jsonSchemaOf, problemResponses } from './openapi-document-schema'
+import { agentApiOperations } from './openapi-agent-routes'
+import type { NormalizedOperation, NormalizedParam } from './openapi-document-types'
+export { agentApiOperations } from './openapi-agent-routes'
+export const HEAD_ROUTE_PATHS: Readonly<Record<string, true>> = {
+  '/api/v1/catalogue-status': true,
+  '/api/v1/funding/constraints': true,
+  '/api/v1/market-metrics': true,
+  '/api/v1/registry': true,
+  '/api/v1/release': true,
+}
 
 /** `{name}` segments of an OpenAPI path template, in order. */
 function pathParamNames(path: string): readonly string[] {
@@ -56,6 +65,9 @@ function splitActionSchemaForTransport(
       })),
     }
   }
+  if (remainingEntries.length === 0 && names.length === 0 && inputJsonSchema !== undefined && inputJsonSchema.properties === undefined) {
+    return { pathParams: [], queryParams: [], requestBodySchema: inputJsonSchema }
+  }
   if (remainingEntries.length === 0) return { pathParams, queryParams: [] }
   return {
     pathParams,
@@ -74,6 +86,10 @@ const CALL_ROUTE_FACTS: Readonly<Record<string, Readonly<{ summary: string; prob
   [TOOL_QUOTE_ACTION_ID]: {
     summary: 'Resolve one expiring, caller-bound Quote for a Tool purchase.',
     problemKinds: ['UNAUTHENTICATED', 'PERMISSION_DENIED', 'INVALID_ARGUMENT', 'FAILED_PRECONDITION', 'RESOURCE_EXHAUSTED', 'UNAVAILABLE'],
+  },
+  [TOOL_PROCURE_ACTION_ID]: {
+    summary: 'Procure the exact published Tool within an authorised budget.',
+    problemKinds: ['UNAUTHENTICATED', 'PERMISSION_DENIED', 'INVALID_ARGUMENT', 'FAILED_PRECONDITION', 'ALREADY_EXISTS', 'RESOURCE_EXHAUSTED', 'UNAVAILABLE', 'INTERNAL'],
   },
   [CALL_ROUTE_CONTRACT.call.actionId]: {
     summary: 'Execute a Tool Call against a returned Quote.',
@@ -97,15 +113,8 @@ const CALL_ROUTE_FACTS: Readonly<Record<string, Readonly<{ summary: string; prob
   },
 }
 
-function problemResponses(kinds: readonly ProblemKind[]): readonly NormalizedResponse[] {
-  const statuses = new Set(kinds.map((kind) => DEFAULT_STATUS[kind]))
-  return [...statuses].sort((a, b) => a - b).map((status) => ({
-    status, schema: PROBLEM_JSON_SCHEMA, mediaType: 'application/problem+json', description: 'Problem Details (RFC 9457).',
-  }))
-}
-
 export function callRouteOperations(): readonly NormalizedOperation[] {
-  return listDocumentedCallRouteDescriptors().map((descriptor: PublicCallRouteDescriptor) => {
+  return listCallRouteDescriptors().map((descriptor: PublicCallRouteDescriptor) => {
     const facts = CALL_ROUTE_FACTS[descriptor.actionId]
     if (facts === undefined) throw new Error(`openapi_call_route_facts_missing:${descriptor.actionId}`)
     const method = descriptor.method as 'GET' | 'POST'
@@ -115,6 +124,9 @@ export function callRouteOperations(): readonly NormalizedOperation[] {
       operationId: descriptor.actionId,
       summary: facts.summary,
       tags: ['Call gateway'],
+      ...(method === 'POST' && (descriptor.actionId === TOOL_PROCURE_ACTION_ID || descriptor.inputJsonSchema?.properties?.idempotencyKey !== undefined)
+        ? { description: 'Retry the same logical operation with the same idempotencyKey in the JSON body; a changed payload conflicts.' }
+        : {}),
       method,
       path: descriptor.path,
       security: { scope: CALL_ROUTE_CONTRACT.scope },
@@ -205,12 +217,17 @@ function requireAction(actionId: string) {
   return action
 }
 
-/** Every operation id the built document must expose - the parity guard's source of truth. */
+/** Every operation id the built document must expose; route-file parity is checked separately. */
 export function listOpenApiOperationIds(): readonly string[] {
   return [
-    ...listDocumentedCallRouteDescriptors().map((descriptor) => descriptor.actionId),
+    ...listCallRouteDescriptors().map((descriptor) => descriptor.actionId),
     ...TOOL_MARKET_ACTION_ENTRIES.map((entry) => entry.actionId),
     ...FUNDING_PREFLIGHT_ROUTE_CONTRACTS.map((route) => `funding.${route.method === 'GET' ? 'constraints' : 'quote'}`),
     ...OPENAPI_SUPPLEMENTAL_ROUTES.map((route) => route.operationId),
+    ...agentApiOperations().map((route) => route.operationId),
+    ...OPENAPI_SUPPLEMENTAL_ROUTES.filter((route) => HEAD_ROUTE_PATHS[route.path]).map((route) => `${route.operationId}.head`),
+    ...FUNDING_PREFLIGHT_ROUTE_CONTRACTS
+      .filter((route) => HEAD_ROUTE_PATHS[route.path])
+      .map(() => 'funding.constraints.head'),
   ]
 }

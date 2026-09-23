@@ -5,6 +5,7 @@ import type {
   ToolDetailResult,
   ToolSearchResult,
   PublicToolDescriptor,
+  PublicToolRef,
 } from '@/modules/capability-supply/public'
 import {
   PublicToolRegistrySchemaVersion,
@@ -18,6 +19,7 @@ import {
   projectToolHealth,
   type ToolHealthStatus,
 } from '@/modules/capability-supply/tool-health'
+import { searchNextActions } from './next-action'
 
 export type { ToolHealthStatus } from '@/modules/capability-supply/tool-health'
 
@@ -48,6 +50,7 @@ export const toolCatalogSearchInputSchema = z.strictObject({
   query: z.string().trim().min(1).max(256),
   limit: z.number().int().min(1).max(20).default(10),
   cursor: z.string().max(8192).optional(),
+  detail: z.enum(['concise', 'full']).optional(),
   filters: toolCatalogFiltersSchema.optional(),
 })
 export const toolDescribeInputSchema = z.strictObject({
@@ -70,6 +73,40 @@ export const supplyProjectionFreshnessSchema = z.strictObject({
   staleAfterMs: z.number(),
 })
 export type SupplyProjectionFreshness = z.infer<typeof supplyProjectionFreshnessSchema>
+export type RegistryNextAction =
+  | Readonly<{ action: 'describe'; args: { toolRef: PublicToolRef }; authority: 'public' }>
+  | Readonly<{ action: 'next-page'; args: { query: string; cursor: string }; authority: 'public' }>
+  | Readonly<{ action: 'broaden'; args: { query: string }; authority: 'public' }>
+export const registryNextActionSchema = z.discriminatedUnion('action', [
+  z.strictObject({ action: z.literal('describe'), args: z.strictObject({ toolRef: z.string().regex(/^operation:v1:[0-9a-f]{64}$/).transform((ref) => ref as PublicToolRef) }), authority: z.literal('public') }),
+  z.strictObject({ action: z.literal('next-page'), args: z.strictObject({ query: z.string(), cursor: z.string() }), authority: z.literal('public') }),
+  z.strictObject({ action: z.literal('broaden'), args: z.strictObject({ query: z.string() }), authority: z.literal('public') }),
+])
+
+export type SearchResult = Readonly<{
+  toolRef: PublicToolRef
+  title: string
+  summary: string
+  matchReason: string
+  readiness: 'ready' | 'unverified' | 'unavailable'
+  entitlement: 'public' | 'requires_auth' | 'not_entitled'
+  price: { kind: 'indicative'; label: string }
+  details?: Readonly<{ capabilityId: string; provider: { name: string; slug: string }; description: string; listingTier: 'reviewed' | 'listed' }> | undefined
+  next: readonly RegistryNextAction[]
+}>
+export type SearchMeta = Readonly<{
+  schemaVersion: typeof PublicToolRegistrySchemaVersion
+  partialResults: boolean
+  freshness?: SupplyProjectionFreshness | undefined
+  pagination: z.infer<typeof toolCatalogPaginationSchema>
+  next: readonly RegistryNextAction[]
+}>
+
+export type SearchEnvelope =
+  | (SearchMeta & Readonly<{ kind: 'matched'; query: string; results: readonly [SearchResult, ...SearchResult[]]; recommendation: { mode: 'fast' | 'deep'; engine: string; text: string; citations: readonly { toolRef: PublicToolRef; span: { start: number; end: number } }[] } }>)
+  | (SearchMeta & Readonly<{ kind: 'degraded'; query: string; reason: string; results: readonly [SearchResult, ...SearchResult[]] }>)
+  | (SearchMeta & Readonly<{ kind: 'noMatch'; query: string; scope: 'page' | 'exhausted'; results: readonly []; nearMisses: readonly SearchResult[]; reason: string; suggestions: readonly string[] }>)
+  | (SearchMeta & Readonly<{ kind: 'unavailable'; reason: 'source_unavailable' | 'capacity_exceeded'; results: readonly [] }>)
 
 export const listingTierSchema = z.enum(['reviewed', 'listed'])
 
@@ -114,28 +151,37 @@ export const toolChoiceListOutputSchema = z.union([
   }),
   catalogUnavailableSchema,
 ])
-export const toolChoiceSearchOutputSchema = z.union([
+const publicToolRefSchema = z.string().regex(/^operation:v1:[0-9a-f]{64}$/).transform((ref) => ref as PublicToolRef)
+const searchResultSchema = z.strictObject({
+  toolRef: publicToolRefSchema,
+  title: z.string(),
+  summary: z.string(),
+  matchReason: z.string(),
+  readiness: z.enum(['ready', 'unverified', 'unavailable']),
+  entitlement: z.enum(['public', 'requires_auth', 'not_entitled']),
+  price: z.strictObject({ kind: z.literal('indicative'), label: z.string() }),
+  details: z.strictObject({ capabilityId: z.string(), provider: z.strictObject({ name: z.string(), slug: z.string() }), description: z.string(), listingTier: listingTierSchema }).optional(),
+  next: z.array(registryNextActionSchema),
+})
+const searchMetaSchema = {
+  schemaVersion: z.literal(PublicToolRegistrySchemaVersion),
+  partialResults: z.boolean(),
+  freshness: supplyProjectionFreshnessSchema.optional(),
+  pagination: toolCatalogPaginationSchema,
+  next: z.array(registryNextActionSchema),
+}
+export const toolChoiceSearchOutputSchema = z.discriminatedUnion('kind', [
   z.strictObject({
-    kind: z.literal('ok'),
-    schemaVersion: z.literal(PublicToolRegistrySchemaVersion),
-    query: z.string(),
-    count: z.number().int().nonnegative(),
-    partialResults: z.boolean().optional(),
-    items: z.array(compactToolCandidateSchema).max(20),
-    pagination: toolCatalogPaginationSchema,
-    freshness: supplyProjectionFreshnessSchema.optional(),
+    ...searchMetaSchema, kind: z.literal('matched'), query: z.string(),
+    results: z.tuple([searchResultSchema], searchResultSchema),
+    recommendation: z.strictObject({
+      mode: z.enum(['fast', 'deep']), engine: z.string(), text: z.string(),
+      citations: z.array(z.strictObject({ toolRef: publicToolRefSchema, span: z.strictObject({ start: z.number().int().nonnegative(), end: z.number().int().nonnegative() }) })),
+    }),
   }),
-  z.strictObject({
-    kind: z.literal('no_candidates'),
-    schemaVersion: z.literal(PublicToolRegistrySchemaVersion),
-    query: z.string(),
-    count: z.literal(0),
-    items: z.tuple([]),
-    note: z.string(),
-    pagination: toolCatalogPaginationSchema,
-    freshness: supplyProjectionFreshnessSchema.optional(),
-  }),
-  catalogUnavailableSchema,
+  z.strictObject({ ...searchMetaSchema, kind: z.literal('degraded'), query: z.string(), reason: z.string(), results: z.array(searchResultSchema).min(1) }),
+  z.strictObject({ ...searchMetaSchema, kind: z.literal('noMatch'), query: z.string(), scope: z.enum(['page', 'exhausted']), reason: z.string(), results: z.tuple([]), nearMisses: z.array(searchResultSchema).max(3), suggestions: z.array(z.string()) }),
+  z.strictObject({ ...searchMetaSchema, kind: z.literal('unavailable'), reason: z.enum(['source_unavailable', 'capacity_exceeded']), results: z.tuple([]) }),
 ])
 
 const toolDescriptionSchema = z.strictObject({
@@ -276,35 +322,74 @@ export function projectToolListChoices(result: ToolSearchResult, filters?: unkno
   })
 }
 
-export function projectToolSearchChoices(result: ToolSearchResult, filters?: unknown) {
+export function projectToolSearchChoices(
+  result: ToolSearchResult,
+  filters?: unknown,
+  assessment?: Readonly<{ verdict: 'matched' | 'degraded' | 'noMatch'; reason?: string; nearMisses: readonly PublicToolDescriptor[] }>,
+  freshness?: SupplyProjectionFreshness,
+  detail: 'concise' | 'full' = 'concise',
+): z.output<typeof toolChoiceSearchOutputSchema> {
+  const pagination = result.kind === 'ok' ? result.pagination : { limit: 10, hasMore: false }
+  const meta = {
+    schemaVersion: PublicToolRegistrySchemaVersion,
+    partialResults: result.kind === 'ok' ? result.partialResults === true : false,
+    ...(freshness === undefined ? {} : { freshness }),
+    pagination,
+    next: result.kind === 'unavailable' ? [] : searchNextActions(result.query, pagination),
+  }
   if (result.kind === 'unavailable') {
     return toolChoiceSearchOutputSchema.parse({
-      kind: 'unavailable', schemaVersion: PublicToolRegistrySchemaVersion, reason: result.reason,
+      ...meta, kind: 'unavailable',
+      reason: result.reason === 'source_capacity_exceeded' ? 'capacity_exceeded' : 'source_unavailable',
+      results: [],
     })
   }
-  const items = result.kind === 'ok' ? visibleTools(result.items, filters) : []
-  if (result.kind === 'no_candidates' || items.length === 0) {
-    const hasMore = result.kind === 'ok' && result.pagination.hasMore
+  const project = (tool: PublicToolDescriptor): SearchResult => ({
+    toolRef: tool.toolRef,
+    title: detail === 'full' ? tool.listing.label : tool.listing.label.slice(0, 64),
+    summary: tool.summary.slice(0, detail === 'full' ? undefined : 40),
+    matchReason: 'Text overlap',
+    readiness: tool.availability.posture === 'routeable' ? 'ready' : tool.availability.posture === 'setup_required' ? 'unverified' : 'unavailable',
+    entitlement: tool.authentication.kind === 'unknown' ? 'not_entitled' : tool.authentication.kind === 'x402' ? 'public' : 'requires_auth',
+    price: { kind: 'indicative', label: priceLabel(tool) },
+    next: [{ action: 'describe', args: { toolRef: tool.toolRef }, authority: 'public' }],
+    ...(detail === 'full' ? { details: {
+      capabilityId: tool.contract.capabilityId,
+      provider: { name: tool.business.name, slug: tool.business.slug },
+      description: tool.summary,
+      listingTier: tool.listingTier,
+    } } : {}),
+  })
+  const admitted = admittedHealth(filters)
+  const parsedFilters = toolCatalogFiltersSchema.safeParse(filters)
+  const explicitHealthFilter = parsedFilters.success && parsedFilters.data.healthStatus !== undefined
+  const visible = (tool: PublicToolDescriptor) => admitted.has(projectToolHealth(tool.availability, Date.now()).healthStatus)
+    || (!explicitHealthFilter && tool.availability.reason === 'inspection_required')
+  const results = result.kind === 'ok' ? result.items.filter(visible).map(project) : []
+  const nearMisses = (assessment?.nearMisses ?? []).filter(visible).slice(0, 3).map(project)
+  if (results.length === 0 || assessment?.verdict === 'noMatch') {
     return toolChoiceSearchOutputSchema.parse({
-      kind: 'no_candidates',
-      schemaVersion: PublicToolRegistrySchemaVersion,
-      query: result.query,
-      count: 0,
-      items: [],
-      note: hasMore
-        ? 'No Tools match this search on this page.'
-        : 'No Tools match this search.',
-      pagination: result.kind === 'ok' ? result.pagination : { limit: 10, hasMore: false },
+      ...meta, kind: 'noMatch', query: result.query, scope: pagination.hasMore ? 'page' : 'exhausted',
+      results: [], nearMisses, reason: meta.partialResults
+        ? 'No suitable Tool on this incomplete supply page.'
+        : 'No suitable Tool found in the searched supply.',
+      suggestions: ['Broaden the capability request or try the next page.'],
     })
   }
+  if (assessment?.verdict !== 'matched') {
+    return toolChoiceSearchOutputSchema.parse({
+      ...meta, kind: 'degraded', query: result.query,
+      reason: assessment?.reason ?? 'Suitability ranking is temporarily unavailable.',
+      results,
+    })
+  }
+  const lead = results[0]
+  if (lead === undefined) throw new Error('matched_search_without_result')
+  const text = `Inspect ${lead.title} before use.`
   return toolChoiceSearchOutputSchema.parse({
-    kind: 'ok',
-    schemaVersion: PublicToolRegistrySchemaVersion,
-    query: result.query,
-    count: items.length,
-    ...(result.partialResults === undefined ? {} : { partialResults: result.partialResults }),
-    items,
-    pagination: result.pagination,
+    ...meta, kind: 'matched', query: result.query, results,
+    recommendation: { mode: 'fast', engine: 'jev_system_one', text,
+      citations: [{ toolRef: lead.toolRef, span: { start: 8, end: 8 + lead.title.length } }] },
   })
 }
 
