@@ -1,5 +1,6 @@
 /** @vitest-environment jsdom */
 import { cleanup, render, screen } from '@testing-library/react'
+import type * as ClerkModule from '@clerk/tanstack-react-start'
 import {
   RouterContextProvider,
   createMemoryHistory,
@@ -7,9 +8,29 @@ import {
   createRoute,
   createRouter,
 } from '@tanstack/react-router'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import '../../setup/jsdom-platform'
 
+vi.mock('@clerk/tanstack-react-start', async (importOriginal) => ({
+  ...(await importOriginal<typeof ClerkModule>()),
+  UserButton: () => null,
+}))
+vi.mock('@/components/ae/command-panel', () => ({ AeCommandPanel: () => null }))
+vi.mock('@/components/ae/layout/AeNetworkHealthIndicator', () => ({
+  AeNetworkHealthBanner: () => null,
+  AeNetworkHealthIndicator: () => null,
+}))
+vi.mock('@/components/ae/layout/AeOrganizationSwitcher', () => ({ AeOrganizationSwitcher: () => null }))
+vi.mock('@/components/ae/layout/ThemeToggle', () => ({ ThemeToggle: () => null }))
+vi.mock('@/components/ae/layout/app-shell/WorkspaceMenu', () => ({ WorkspaceMenu: () => null }))
+vi.mock('@/components/ae/website/AeSiteNav', () => ({
+  AeSiteDrawerNav: () => null,
+  AeSiteIconButton: () => null,
+  AeSitePrimaryNav: () => null,
+}))
+
+import { AeAppHeader } from '@/components/ae/layout/app-shell/AeAppHeader'
+import { OperatorChromeProvider } from '@/components/ae/layout/AeOperatorPage'
 import { AdminCallObjectPage } from '@/components/ae/admin/call-object/AdminCallObjectPage'
 import { parseCallRef } from '@/modules/capability-execution/call-contracts'
 import type { CallStatusResult } from '@/modules/capability-execution/call-recovery-contracts'
@@ -65,7 +86,18 @@ function renderCallPage() {
   const router = createRouter({ routeTree, history: createMemoryHistory({ initialEntries: ['/'] }) })
   return render(
     <RouterContextProvider router={router}>
-      <AdminCallObjectPage result={uncertainView} />
+      <OperatorChromeProvider>
+        <AeAppHeader
+          signedIn
+          operatorRole="admin"
+          minimal={false}
+          mobileNavOpen={false}
+          setMobileNavOpen={() => undefined}
+          elevated={false}
+          hydrated
+        />
+        <AdminCallObjectPage result={uncertainView} />
+      </OperatorChromeProvider>
     </RouterContextProvider>,
   )
 }

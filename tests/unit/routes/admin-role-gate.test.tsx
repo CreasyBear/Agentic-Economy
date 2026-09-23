@@ -7,7 +7,7 @@ import '../../setup/jsdom-platform'
 
 const mocks = vi.hoisted((): {
   requireOperatorBeforeLoad: Mock
-  auditAccess: { kind: string; code?: string }
+  auditAccess: { kind: string; code?: string; role?: string }
   proposals: unknown[]
   events: unknown[]
   paginationStatus: string
