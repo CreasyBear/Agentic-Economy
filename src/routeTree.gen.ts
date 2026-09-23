@@ -90,10 +90,10 @@ import { Route as OperatorOwnerCreditRouteImport } from './routes/_operator/owne
 import { Route as OperatorCallsCallRefRouteImport } from './routes/_operator/calls.$callRef'
 import { Route as OperatorAgentAccessAuthorizeRouteImport } from './routes/_operator/agent-access.authorize'
 import { Route as OperatorAdminSearchRouteImport } from './routes/_operator/admin.search'
-import { Route as OperatorAdminProvidersRouteImport } from './routes/_operator/admin.providers'
 import { Route as OperatorAdminMetricsRouteImport } from './routes/_operator/admin.metrics'
 import { Route as OperatorAdminExceptionsRouteImport } from './routes/_operator/admin.exceptions'
 import { Route as OperatorAdminAuditEventsRouteImport } from './routes/_operator/admin.audit-events'
+import { Route as OperatorAdminProvidersIndexRouteImport } from './routes/_operator/admin.providers.index'
 import { Route as ApiV1ToolsQuoteRouteImport } from './routes/api.v1.tools.quote'
 import { Route as ApiV1ToolsProcureRouteImport } from './routes/api.v1.tools.procure'
 import { Route as ApiV1ToolsCallRouteImport } from './routes/api.v1.tools.call'
@@ -557,11 +557,6 @@ const OperatorAdminSearchRoute = OperatorAdminSearchRouteImport.update({
   path: '/admin/search',
   getParentRoute: () => OperatorRoute,
 } as any)
-const OperatorAdminProvidersRoute = OperatorAdminProvidersRouteImport.update({
-  id: '/admin/providers',
-  path: '/admin/providers',
-  getParentRoute: () => OperatorRoute,
-} as any)
 const OperatorAdminMetricsRoute = OperatorAdminMetricsRouteImport.update({
   id: '/admin/metrics',
   path: '/admin/metrics',
@@ -576,6 +571,12 @@ const OperatorAdminAuditEventsRoute =
   OperatorAdminAuditEventsRouteImport.update({
     id: '/admin/audit-events',
     path: '/admin/audit-events',
+    getParentRoute: () => OperatorRoute,
+  } as any)
+const OperatorAdminProvidersIndexRoute =
+  OperatorAdminProvidersIndexRouteImport.update({
+    id: '/admin/providers/',
+    path: '/admin/providers/',
     getParentRoute: () => OperatorRoute,
   } as any)
 const ApiV1ToolsQuoteRoute = ApiV1ToolsQuoteRouteImport.update({
@@ -746,9 +747,9 @@ const OperatorAdminQuotesQuoteRefRoute =
   } as any)
 const OperatorAdminProvidersSlugRoute =
   OperatorAdminProvidersSlugRouteImport.update({
-    id: '/$slug',
-    path: '/$slug',
-    getParentRoute: () => OperatorAdminProvidersRoute,
+    id: '/admin/providers/$slug',
+    path: '/admin/providers/$slug',
+    getParentRoute: () => OperatorRoute,
   } as any)
 const OperatorAdminCallsCallRefRoute =
   OperatorAdminCallsCallRefRouteImport.update({
@@ -901,7 +902,6 @@ export interface FileRoutesByFullPath {
   '/admin/audit-events': typeof OperatorAdminAuditEventsRoute
   '/admin/exceptions': typeof OperatorAdminExceptionsRoute
   '/admin/metrics': typeof OperatorAdminMetricsRoute
-  '/admin/providers': typeof OperatorAdminProvidersRouteWithChildren
   '/admin/search': typeof OperatorAdminSearchRoute
   '/agent-access/authorize': typeof OperatorAgentAccessAuthorizeRoute
   '/calls/$callRef': typeof OperatorCallsCallRefRoute
@@ -970,6 +970,7 @@ export interface FileRoutesByFullPath {
   '/api/v1/tools/call': typeof ApiV1ToolsCallRoute
   '/api/v1/tools/procure': typeof ApiV1ToolsProcureRoute
   '/api/v1/tools/quote': typeof ApiV1ToolsQuoteRoute
+  '/admin/providers/': typeof OperatorAdminProvidersIndexRoute
   '/owner/supply/connections/new': typeof OperatorOwnerSupplyConnectionsNewRoute
   '/api/v1/account/funding-sessions/$fundingSessionId': typeof ApiV1AccountFundingSessionsFundingSessionIdRoute
   '/api/v1/account/funding/config': typeof ApiV1AccountFundingConfigRoute
@@ -1036,7 +1037,6 @@ export interface FileRoutesByTo {
   '/admin/audit-events': typeof OperatorAdminAuditEventsRoute
   '/admin/exceptions': typeof OperatorAdminExceptionsRoute
   '/admin/metrics': typeof OperatorAdminMetricsRoute
-  '/admin/providers': typeof OperatorAdminProvidersRouteWithChildren
   '/admin/search': typeof OperatorAdminSearchRoute
   '/agent-access/authorize': typeof OperatorAgentAccessAuthorizeRoute
   '/calls/$callRef': typeof OperatorCallsCallRefRoute
@@ -1105,6 +1105,7 @@ export interface FileRoutesByTo {
   '/api/v1/tools/call': typeof ApiV1ToolsCallRoute
   '/api/v1/tools/procure': typeof ApiV1ToolsProcureRoute
   '/api/v1/tools/quote': typeof ApiV1ToolsQuoteRoute
+  '/admin/providers': typeof OperatorAdminProvidersIndexRoute
   '/owner/supply/connections/new': typeof OperatorOwnerSupplyConnectionsNewRoute
   '/api/v1/account/funding-sessions/$fundingSessionId': typeof ApiV1AccountFundingSessionsFundingSessionIdRoute
   '/api/v1/account/funding/config': typeof ApiV1AccountFundingConfigRoute
@@ -1173,7 +1174,6 @@ export interface FileRoutesById {
   '/_operator/admin/audit-events': typeof OperatorAdminAuditEventsRoute
   '/_operator/admin/exceptions': typeof OperatorAdminExceptionsRoute
   '/_operator/admin/metrics': typeof OperatorAdminMetricsRoute
-  '/_operator/admin/providers': typeof OperatorAdminProvidersRouteWithChildren
   '/_operator/admin/search': typeof OperatorAdminSearchRoute
   '/_operator/agent-access/authorize': typeof OperatorAgentAccessAuthorizeRoute
   '/_operator/calls/$callRef': typeof OperatorCallsCallRefRoute
@@ -1242,6 +1242,7 @@ export interface FileRoutesById {
   '/api/v1/tools/call': typeof ApiV1ToolsCallRoute
   '/api/v1/tools/procure': typeof ApiV1ToolsProcureRoute
   '/api/v1/tools/quote': typeof ApiV1ToolsQuoteRoute
+  '/_operator/admin/providers/': typeof OperatorAdminProvidersIndexRoute
   '/_operator/owner/supply/connections/new': typeof OperatorOwnerSupplyConnectionsNewRoute
   '/api/v1/account/funding-sessions/$fundingSessionId': typeof ApiV1AccountFundingSessionsFundingSessionIdRoute
   '/api/v1/account/funding/config': typeof ApiV1AccountFundingConfigRoute
@@ -1310,7 +1311,6 @@ export interface FileRouteTypes {
     | '/admin/audit-events'
     | '/admin/exceptions'
     | '/admin/metrics'
-    | '/admin/providers'
     | '/admin/search'
     | '/agent-access/authorize'
     | '/calls/$callRef'
@@ -1379,6 +1379,7 @@ export interface FileRouteTypes {
     | '/api/v1/tools/call'
     | '/api/v1/tools/procure'
     | '/api/v1/tools/quote'
+    | '/admin/providers/'
     | '/owner/supply/connections/new'
     | '/api/v1/account/funding-sessions/$fundingSessionId'
     | '/api/v1/account/funding/config'
@@ -1445,7 +1446,6 @@ export interface FileRouteTypes {
     | '/admin/audit-events'
     | '/admin/exceptions'
     | '/admin/metrics'
-    | '/admin/providers'
     | '/admin/search'
     | '/agent-access/authorize'
     | '/calls/$callRef'
@@ -1514,6 +1514,7 @@ export interface FileRouteTypes {
     | '/api/v1/tools/call'
     | '/api/v1/tools/procure'
     | '/api/v1/tools/quote'
+    | '/admin/providers'
     | '/owner/supply/connections/new'
     | '/api/v1/account/funding-sessions/$fundingSessionId'
     | '/api/v1/account/funding/config'
@@ -1581,7 +1582,6 @@ export interface FileRouteTypes {
     | '/_operator/admin/audit-events'
     | '/_operator/admin/exceptions'
     | '/_operator/admin/metrics'
-    | '/_operator/admin/providers'
     | '/_operator/admin/search'
     | '/_operator/agent-access/authorize'
     | '/_operator/calls/$callRef'
@@ -1650,6 +1650,7 @@ export interface FileRouteTypes {
     | '/api/v1/tools/call'
     | '/api/v1/tools/procure'
     | '/api/v1/tools/quote'
+    | '/_operator/admin/providers/'
     | '/_operator/owner/supply/connections/new'
     | '/api/v1/account/funding-sessions/$fundingSessionId'
     | '/api/v1/account/funding/config'
@@ -2327,13 +2328,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof OperatorAdminSearchRouteImport
       parentRoute: typeof OperatorRoute
     }
-    '/_operator/admin/providers': {
-      id: '/_operator/admin/providers'
-      path: '/admin/providers'
-      fullPath: '/admin/providers'
-      preLoaderRoute: typeof OperatorAdminProvidersRouteImport
-      parentRoute: typeof OperatorRoute
-    }
     '/_operator/admin/metrics': {
       id: '/_operator/admin/metrics'
       path: '/admin/metrics'
@@ -2353,6 +2347,13 @@ declare module '@tanstack/react-router' {
       path: '/admin/audit-events'
       fullPath: '/admin/audit-events'
       preLoaderRoute: typeof OperatorAdminAuditEventsRouteImport
+      parentRoute: typeof OperatorRoute
+    }
+    '/_operator/admin/providers/': {
+      id: '/_operator/admin/providers/'
+      path: '/admin/providers'
+      fullPath: '/admin/providers/'
+      preLoaderRoute: typeof OperatorAdminProvidersIndexRouteImport
       parentRoute: typeof OperatorRoute
     }
     '/api/v1/tools/quote': {
@@ -2574,10 +2575,10 @@ declare module '@tanstack/react-router' {
     }
     '/_operator/admin/providers/$slug': {
       id: '/_operator/admin/providers/$slug'
-      path: '/$slug'
+      path: '/admin/providers/$slug'
       fullPath: '/admin/providers/$slug'
       preLoaderRoute: typeof OperatorAdminProvidersSlugRouteImport
-      parentRoute: typeof OperatorAdminProvidersRoute
+      parentRoute: typeof OperatorRoute
     }
     '/_operator/admin/calls/$callRef': {
       id: '/_operator/admin/calls/$callRef'
@@ -2722,20 +2723,6 @@ const OperatorAgentAccessRouteChildren: OperatorAgentAccessRouteChildren = {
 const OperatorAgentAccessRouteWithChildren =
   OperatorAgentAccessRoute._addFileChildren(OperatorAgentAccessRouteChildren)
 
-interface OperatorAdminProvidersRouteChildren {
-  OperatorAdminProvidersSlugRoute: typeof OperatorAdminProvidersSlugRoute
-}
-
-const OperatorAdminProvidersRouteChildren: OperatorAdminProvidersRouteChildren =
-  {
-    OperatorAdminProvidersSlugRoute: OperatorAdminProvidersSlugRoute,
-  }
-
-const OperatorAdminProvidersRouteWithChildren =
-  OperatorAdminProvidersRoute._addFileChildren(
-    OperatorAdminProvidersRouteChildren,
-  )
-
 interface OperatorOwnerOperationsRouteChildren {
   OperatorOwnerOperationsToolRefRoute: typeof OperatorOwnerOperationsToolRefRoute
   OperatorOwnerOperationsNewRoute: typeof OperatorOwnerOperationsNewRoute
@@ -2758,7 +2745,6 @@ interface OperatorRouteChildren {
   OperatorAdminAuditEventsRoute: typeof OperatorAdminAuditEventsRoute
   OperatorAdminExceptionsRoute: typeof OperatorAdminExceptionsRoute
   OperatorAdminMetricsRoute: typeof OperatorAdminMetricsRoute
-  OperatorAdminProvidersRoute: typeof OperatorAdminProvidersRouteWithChildren
   OperatorAdminSearchRoute: typeof OperatorAdminSearchRoute
   OperatorCallsCallRefRoute: typeof OperatorCallsCallRefRoute
   OperatorOwnerCreditRoute: typeof OperatorOwnerCreditRoute
@@ -2771,9 +2757,11 @@ interface OperatorRouteChildren {
   OperatorOwnerIndexRoute: typeof OperatorOwnerIndexRoute
   OperatorAdminAgentsPrincipalRefRoute: typeof OperatorAdminAgentsPrincipalRefRoute
   OperatorAdminCallsCallRefRoute: typeof OperatorAdminCallsCallRefRoute
+  OperatorAdminProvidersSlugRoute: typeof OperatorAdminProvidersSlugRoute
   OperatorAdminQuotesQuoteRefRoute: typeof OperatorAdminQuotesQuoteRefRoute
   OperatorAdminToolsToolRefRoute: typeof OperatorAdminToolsToolRefRoute
   OperatorAdminWorkspacesAccountRefRoute: typeof OperatorAdminWorkspacesAccountRefRoute
+  OperatorAdminProvidersIndexRoute: typeof OperatorAdminProvidersIndexRoute
   OperatorOwnerSupplyConnectionsNewRoute: typeof OperatorOwnerSupplyConnectionsNewRoute
   OperatorOwnerSupplyConnectionsOauthCallbackRoute: typeof OperatorOwnerSupplyConnectionsOauthCallbackRoute
 }
@@ -2784,7 +2772,6 @@ const OperatorRouteChildren: OperatorRouteChildren = {
   OperatorAdminAuditEventsRoute: OperatorAdminAuditEventsRoute,
   OperatorAdminExceptionsRoute: OperatorAdminExceptionsRoute,
   OperatorAdminMetricsRoute: OperatorAdminMetricsRoute,
-  OperatorAdminProvidersRoute: OperatorAdminProvidersRouteWithChildren,
   OperatorAdminSearchRoute: OperatorAdminSearchRoute,
   OperatorCallsCallRefRoute: OperatorCallsCallRefRoute,
   OperatorOwnerCreditRoute: OperatorOwnerCreditRoute,
@@ -2797,10 +2784,12 @@ const OperatorRouteChildren: OperatorRouteChildren = {
   OperatorOwnerIndexRoute: OperatorOwnerIndexRoute,
   OperatorAdminAgentsPrincipalRefRoute: OperatorAdminAgentsPrincipalRefRoute,
   OperatorAdminCallsCallRefRoute: OperatorAdminCallsCallRefRoute,
+  OperatorAdminProvidersSlugRoute: OperatorAdminProvidersSlugRoute,
   OperatorAdminQuotesQuoteRefRoute: OperatorAdminQuotesQuoteRefRoute,
   OperatorAdminToolsToolRefRoute: OperatorAdminToolsToolRefRoute,
   OperatorAdminWorkspacesAccountRefRoute:
     OperatorAdminWorkspacesAccountRefRoute,
+  OperatorAdminProvidersIndexRoute: OperatorAdminProvidersIndexRoute,
   OperatorOwnerSupplyConnectionsNewRoute:
     OperatorOwnerSupplyConnectionsNewRoute,
   OperatorOwnerSupplyConnectionsOauthCallbackRoute:

@@ -62,18 +62,6 @@
   {
     "visibility": "internal",
     "module": "adminConsoleMetrics",
-    "method": "countEvidenceForWindow",
-    "kind": "query"
-  },
-  {
-    "visibility": "internal",
-    "module": "adminConsoleMetrics",
-    "method": "countOpenUncertainCalls",
-    "kind": "query"
-  },
-  {
-    "visibility": "internal",
-    "module": "adminConsoleMetrics",
     "method": "pageCallsForWindow",
     "kind": "query"
   },
@@ -92,7 +80,7 @@
   {
     "visibility": "internal",
     "module": "adminConsoleMetrics",
-    "method": "pageUsageForWindow",
+    "method": "pageWorkspacesForDay",
     "kind": "query"
   },
   {
