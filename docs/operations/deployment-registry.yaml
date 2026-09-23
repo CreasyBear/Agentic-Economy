@@ -4,6 +4,23 @@ capturedAt: "2026-09-04T08:48:02Z"
 capturedFromRevision: "8621ef3f3017a0e2ebe19c6277da98f7d5488909"
 captureWorkingTree: dirty_preserved_user_and_infrastructure_changes
 
+# Exact local development identity readback on 2026-09-23. This does not update
+# the dated synthetic release inventory or establish an AE production instance.
+localClerkAdminMfa20260923:
+  observedAt: "2026-09-23T08:21:00Z"
+  authority: local_development
+  instanceId: ins_3FlYUMGVJfMaeiW1b9UaQhEeFeY
+  issuerHost: composed-stallion-40.clerk.accounts.dev
+  environmentType: development
+  convexDeployment: anonymous:anonymous-agent
+  jwtTemplateId: jtmp_3Flimtcrmez7QXC1ykoWC7P6sJt
+  jwtTemplateName: convex
+  claims: [aud, fva]
+  fvaShortcode: "{{session.factor_verification_age}}"
+  templateReadback: verified
+  liveSessionClaim: not_verified
+  productionAdmin: not_configured_production_foundation_gate_open
+
 # Current alpha pilot inventory; this supersedes the package4 resource identities
 # only for the Base Sepolia pilot. It does not mutate the dated baseline below.
 pilotInventory20260922:

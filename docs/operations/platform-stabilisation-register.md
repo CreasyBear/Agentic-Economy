@@ -1367,6 +1367,6 @@ Label contract (`docs/designs/2026-09-21-ia-untangle.md` §4): destination label
 
 ORCHESTRATOR EXCEPTION: fixes 2–5 touched OWNER-LOCKED paths (call-receipt/**, market/**, src/modules/market/**, support/**) — authorised as minimal correctness/money-truth fixes, not core-flow design; record the exception explicitly so Joel can review.
 
-**Joel action:** add `{{session.factor_verification_age}}` as the `fva` claim in Clerk → JWT templates → `convex`; until then workspace close and ownership transfer refuse safely.
+**Local Clerk configuration, 2026-09-23:** the development instance's `convex` JWT template now has `fva: "{{session.factor_verification_age}}"`; Clerk readback confirmed `aud: "convex"` and unchanged token lifetime/skew. A live reverified token and guarded-action success remain unverified, so missing or stale proof still refuses safely. This does not configure the separate synthetic release Clerk instance or create a production admin.
 
 Shared-index sweep: 7cb685492 captured FixHelpCallHandoff's test edits (recorded, not amended).

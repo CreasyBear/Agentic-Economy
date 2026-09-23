@@ -1,5 +1,23 @@
 # Deployment maturity and gaps
 
+## Local admin MFA configuration — 23 September 2026
+
+Clerk Backend API readback identified development instance
+`ins_3FlYUMGVJfMaeiW1b9UaQhEeFeY` with issuer
+`composed-stallion-40.clerk.accounts.dev`, matching the local application's
+configured issuer and `anonymous:anonymous-agent` Convex selector. Its existing
+`convex` JWT template (`jtmp_3Flimtcrmez7QXC1ykoWC7P6sJt`) now includes
+`fva: "{{session.factor_verification_age}}"`; a second API readback verified
+that `aud: "convex"`, the 60-second lifetime and five-second skew are unchanged.
+This verifies the local template configuration, not a freshly reverified
+session's claim or a successful guarded command. The synthetic release Clerk
+instance is separate and was not changed.
+
+AE production remains `DECLARED`: the production foundation gate is open and
+there is no verified AE production Clerk/Convex identity pair to bootstrap.
+No production admin was created. See the admin console register for R-44's
+pending authority decision.
+
 ## Base Sepolia pilot inventory — 22 September 2026
 
 Fresh read-only provider evidence supersedes the paused package-4 resource names
