@@ -45,7 +45,7 @@ export const adminApprovalProposalValue = v.object({
     v.literal('grant_admin_membership'),
     v.literal('revoke_admin_membership'),
   ),
-  commandJson: v.string(),
+  commandJson: v.union(v.string(), v.null()),
   proposerRef: v.string(),
   createdAt: v.number(),
   expiresAt: v.number(),
@@ -173,10 +173,11 @@ function toAdminAuditRow(row: Doc<'auditEvents'>): AdminAuditRow {
 }
 
 function adminDetails(row: Doc<'auditEvents'>): AdminAuditRow['admin'] {
-  if (!row.eventType.startsWith('admin.')) return null
   const payload: unknown = JSON.parse(row.redactedPayloadJson)
+  const permission = readString(payload, 'permission')
+  if (permission === undefined) return null
   return {
-    permission: readString(payload, 'permission') ?? '',
+    permission,
     reasonCode: readString(payload, 'reasonCode') ?? row.reasonCode ?? '',
     evidenceRefs: readStringArray(payload, 'evidenceRefs') ?? row.evidenceRefs,
     beforeState: row.beforeState ?? null,

@@ -6,7 +6,9 @@ import {
   resolveApprovalIntent,
   type ApprovalResolution,
 } from '../../../convex/lib/adminConsole/approvals'
-import type { AdminActionInput, AdminApprovalIntent } from '@/lib/operator/admin-console/contracts'
+import { parseAdminProposalCommand } from '@/components/ae/admin/actions/actions.contracts'
+import { canonicalDigest } from '@/modules/common/canonical-digest'
+import type { AdminActionInput, AdminApprovalIntent, AdminReasonCodeByAction } from '@/lib/operator/admin-console/contracts'
 import {
   convexTestWithMarketComponents,
   ownerAdmin,
@@ -15,7 +17,12 @@ import {
 } from '../../helpers/convex-fixtures'
 
 const ACTION = 'set_business_suppression'
-const COMMAND_DIGEST = 'sha256:approval-command'
+const COMMAND_DIGEST = canonicalDigest({
+  scope: 'admin_operator', action: 'set_business_suppression',
+  input: { businessId: 'business:approval-test', intent: 'suppress' },
+  reasonCode: 'policy_violation', evidenceRefs: ['evidence:approval-test'],
+  expectedStateDigest: 'sha256:before-approval',
+})
 const NOW = 1_800_000_000_000
 const DAY_MS = 24 * 60 * 60 * 1_000
 const COMMAND_INPUT = { businessId: 'business:approval-test', intent: 'suppress' } satisfies AdminActionInput[typeof ACTION]
@@ -78,7 +85,7 @@ describe('admin command second approval', () => {
     expect(result.receipt.proposalRef).toMatch(/^admin-proposal:/u)
 
     const stored = await backend.run(async (ctx) => ({
-      proposals: await listOpenApprovalProposals(ctx),
+      proposals: await listOpenApprovalProposals(ctx, true),
       rows: await ctx.db.query('adminApprovalProposals').collect(),
       audits: await ctx.db
         .query('auditEvents')
@@ -100,13 +107,6 @@ describe('admin command second approval', () => {
       expiresAt: NOW + DAY_MS,
     }])
     expect(stored.rows).toHaveLength(1)
-    expect(stored.rows[0]?.commandJson).toBe(stored.proposals[0]?.commandJson)
-    expect(JSON.parse(stored.proposals[0]?.commandJson ?? '{}')).toEqual({
-      input: COMMAND_INPUT,
-      reasonCode: COMMAND_REASON,
-      evidenceRefs: COMMAND_EVIDENCE,
-      expectedStateDigest: EXPECTED_STATE_DIGEST,
-    })
     expect(stored.proposals[0]?.commandJson).not.toContain('secret-proof-reverification')
     expect(stored.proposals[0]?.commandJson).not.toContain('secret-source-write-signature')
     expect(stored.audits).toHaveLength(1)
@@ -115,6 +115,28 @@ describe('admin command second approval', () => {
       targetType: 'admin_approval_proposal',
       targetRef: result.receipt.proposalRef,
     })
+    const parsed = parseAdminProposalCommand(ACTION, stored.rows[0]?.commandJson ?? '')
+    expect(parsed).toMatchObject({
+      action: ACTION,
+      input: COMMAND_INPUT,
+      reasonCode: COMMAND_REASON,
+      evidenceRefs: COMMAND_EVIDENCE,
+      expectedStateDigest: EXPECTED_STATE_DIGEST,
+    })
+    if (parsed === null || parsed.action !== ACTION) throw new Error('proposal_material_expected')
+    const second = await runResolutionWithCommand(
+      backend, 'user_approver', { kind: 'approve', proposalRef: result.receipt.proposalRef },
+      canonicalDigest({ scope: 'admin_operator', action: ACTION, input: parsed.input,
+        reasonCode: parsed.reasonCode, evidenceRefs: parsed.evidenceRefs,
+        ...(parsed.expectedStateDigest === undefined ? {} : { expectedStateDigest: parsed.expectedStateDigest }) }),
+      NOW + 1, {
+        input: parsed.input,
+        reasonCode: parsed.reasonCode,
+        evidenceRefs: parsed.evidenceRefs,
+        ...(parsed.expectedStateDigest === undefined ? {} : { expectedStateDigest: parsed.expectedStateDigest }),
+      },
+    )
+    expect(second).toMatchObject({ kind: 'execute', approval: 'second_approved' })
   })
 
   it('refuses approval by the proposer', async () => {
@@ -232,6 +254,11 @@ describe('admin command second approval', () => {
           reasonCode: 'onboarding',
         }, COMMAND_DIGEST, NOW),
         resolveApprovalIntent(ctx, authority, {
+          ...common, action: 'grant_admin_membership',
+          input: { targetClerkUserId: 'user_approver', targetTokenIdentifier: 'token_approver', role: 'support' },
+          reasonCode: 'role_change',
+        }, COMMAND_DIGEST, NOW),
+        resolveApprovalIntent(ctx, authority, {
           ...common, action: 'revoke_admin_membership',
           input: { targetClerkUserId: 'user_approver' },
           reasonCode: 'offboarding',
@@ -244,7 +271,7 @@ describe('admin command second approval', () => {
       ])
     })
     expect(decisions.map((decision) => decision.kind === 'refused' ? decision.code : decision.kind === 'execute' ? decision.approval : 'proposed'))
-      .toEqual(['approval_required', 'not_required', 'approval_required', 'not_required'])
+      .toEqual(['approval_required', 'not_required', 'approval_required', 'approval_required', 'not_required'])
   })
 })
 
@@ -259,6 +286,20 @@ async function runResolution(
   commandDigest: string,
   now: number,
 ): Promise<ApprovalResolution<typeof ACTION>> {
+  return await runResolutionWithCommand(backend, subject, approval, commandDigest, now)
+}
+
+async function runResolutionWithCommand(
+  backend: ConvexFixtureBackend,
+  subject: string,
+  approval: AdminApprovalIntent,
+  commandDigest: string,
+  now: number,
+  material: Readonly<{ input: AdminActionInput[typeof ACTION]; reasonCode: AdminReasonCodeByAction[typeof ACTION]; evidenceRefs: readonly string[]; expectedStateDigest?: string }> = {
+    input: COMMAND_INPUT, reasonCode: COMMAND_REASON, evidenceRefs: COMMAND_EVIDENCE,
+    expectedStateDigest: EXPECTED_STATE_DIGEST,
+  },
+): Promise<ApprovalResolution<typeof ACTION>> {
   const caller = backend.withIdentity({
     subject,
     issuer: ISSUER,
@@ -268,22 +309,9 @@ async function runResolution(
   return await caller.run(async (ctx) => {
     const authority = await resolveAdminAuthority(ctx, 'suppress_business')
     if (authority.kind !== 'allowed') throw new Error('allowed_admin_authority_expected')
-    const commandWithSecrets = {
-      action: ACTION,
-      input: COMMAND_INPUT,
-      reasonCode: COMMAND_REASON,
-      evidenceRefs: COMMAND_EVIDENCE,
-      expectedStateDigest: EXPECTED_STATE_DIGEST,
-      correlationId: 'corr:approval-test',
-      approval,
-      proof: {
-        reverificationId: 'secret-proof-reverification',
-        firstFactorAgeMinutes: 0,
-        secondFactorAgeMinutes: 0,
-      },
-      sourceWrite: { signature: 'secret-source-write-signature' },
-    } as const
-    return await resolveApprovalIntent(ctx, authority, commandWithSecrets, commandDigest, now)
+    return await resolveApprovalIntent(ctx, authority, {
+      action: ACTION, ...material, correlationId: 'corr:approval-test', approval,
+    }, commandDigest, now)
   })
 }
 

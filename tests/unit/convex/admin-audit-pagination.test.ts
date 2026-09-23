@@ -9,6 +9,7 @@ import {
   convexModules,
   nonAdmin,
   ownerAdmin,
+  reviewerAdmin,
   type ConvexFixtureBackend,
 } from '../../helpers/convex-fixtures'
 
@@ -21,7 +22,7 @@ async function seedAuditEvents(backend: ConvexFixtureBackend): Promise<readonly 
       const isAdmin = index === 0
       const id = await ctx.db.insert('auditEvents', {
         eventId: `audit:admin-page:${index}`,
-        eventType: isAdmin ? 'admin.action_denied' : 'account.session.created',
+        eventType: isAdmin ? 'business.suppressed' : 'account.session.created',
         actorKind: isAdmin ? 'admin' : 'owner',
         actorRef: isAdmin ? 'user_admin-audit-reader' : `user_audit-${index % 3}`,
         targetType: isAdmin ? 'business' : 'session',
@@ -99,7 +100,7 @@ describe('admin audit pagination', () => {
     expect(new Set(seenIds).size).toBe(seenIds.length)
     expect(originalIds.every((id) => seenIds.includes(id))).toBe(true)
 
-    const adminRow = rows.find(({ eventType }) => eventType === 'admin.action_denied')
+    const adminRow = rows.find(({ eventType }) => eventType === 'business.suppressed')
     const nonAdminRow = rows.find(({ eventType }) => eventType === 'account.session.created')
     expect(adminRow?.admin).toEqual({
       permission: 'suppress_business',
@@ -117,10 +118,10 @@ describe('admin audit pagination', () => {
     await seedAuditEvents(backend)
 
     const byEvent = await admin.query(api.adminConsoleAudit.listAdminAuditEvents, {
-      filter: { eventType: 'admin.action_denied' },
+      filter: { eventType: 'business.suppressed' },
       paginationOpts: { numItems: 50, cursor: null },
     })
-    expect(byEvent.page.every(({ eventType }) => eventType === 'admin.action_denied')).toBe(true)
+    expect(byEvent.page.every(({ eventType }) => eventType === 'business.suppressed')).toBe(true)
 
     const byWindow = await admin.query(api.adminConsoleAudit.listAdminAuditEvents, {
       filter: { from: 1_005, to: 1_010 },
@@ -133,6 +134,30 @@ describe('admin audit pagination', () => {
       1_006,
       1_005,
     ])
+  })
+
+  it('redacts approval command material from reviewer readbacks', async () => {
+    const backend = convexTest(schema, convexModules)
+    const owner = await ownerAdmin(backend, 'user_admin-audit-owner')
+    const reviewer = await reviewerAdmin(backend, 'user_admin-audit-reviewer')
+    await backend.run((ctx) => ctx.db.insert('adminApprovalProposals', {
+      proposalRef: 'admin-proposal:reviewer-redaction',
+      action: 'set_business_suppression',
+      commandDigest: 'sha256:reviewer-redaction',
+      commandJson: JSON.stringify({
+        input: { businessId: 'business:secret', intent: 'suppress' },
+        reasonCode: 'policy_violation', evidenceRefs: ['evidence:secret'],
+      }),
+      proposerRef: 'owner-token',
+      status: 'awaiting_second_approval',
+      createdAt: Date.now(),
+      expiresAt: Date.now() + 60_000,
+    }))
+    const ownerProposals = await owner.query(api.adminConsoleAudit.listAdminApprovalProposals, {})
+    const reviewerProposals = await reviewer.query(api.adminConsoleAudit.listAdminApprovalProposals, {})
+    if ('kind' in ownerProposals || 'kind' in reviewerProposals) throw new Error('approval_readback_denied')
+    expect(ownerProposals[0]?.commandJson).toContain('business:secret')
+    expect(reviewerProposals).toEqual([{ ...ownerProposals[0], commandJson: null }])
   })
 
   it('returns an empty page plus an explicit access refusal for a non-admin caller', async () => {

@@ -3,7 +3,6 @@ import type {
   AdminActionRefusalCodes,
   AdminCommandAction,
   AdminCommandReceipt,
-  AdminRefusalCode,
   AdminSuccessCodeByAction,
   AllowedAdminAuthority,
 } from '@/lib/operator/admin-console/contracts'
@@ -11,12 +10,7 @@ import { ADMIN_ACTION_PERMISSION } from '@/lib/operator/admin-console/contracts'
 import { validEvidenceRefs } from '@/modules/capability-supply/public'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { brandNonEmpty } from '@/modules/common/ids'
-import {
-  AuditTargetTypeValues,
-  validateAuditEvent,
-  type AuditEventType,
-  type AuditTargetType,
-} from '@/modules/observability/public'
+import { validateAuditEvent, type AuditEventType } from '@/modules/observability/public'
 import {
   recordAdminActionDenied,
   validateReasonAndEvidence,
@@ -30,12 +24,11 @@ import {
 import { persistAdminAuthorityMutation, persistAuditEvent } from '../../securityShared'
 import { requireSourceRead, requireSourceWrite } from '../../sourceWriteAdmission'
 import { resolveApprovalIntent } from './approvals'
+import { parseAdminOperationReceipt, readAdminOperationKey } from './idempotency'
 import {
-  parseAdminOperationReceipt,
-  readAdminOperationKey,
-  writeAdminOperationKey,
-} from './idempotency'
-import type { AdminCommandWireArgs } from './validators'
+  persistReceipt, persistTerminalRefusal, proofFailure, refused, requireAuditTargetType,
+} from './commandEnvelopeSteps'
+import { ADMIN_OPAQUE_REF_PATTERN, type AdminCommandWireArgs } from './validators'
 export type AdminCommandSpec<A extends AdminCommandAction> = Readonly<{
   targetType: string
   targetRef: string
@@ -61,6 +54,25 @@ export async function runAdminCommand<A extends AdminCommandAction>(
 ): Promise<AdminCommandReceipt<A>> {
   const operationName = `admin:${args.action}`
   const targetType = requireAuditTargetType(spec.targetType)
+  if (!ADMIN_OPAQUE_REF_PATTERN.test(args.operationKey)) {
+    return refused(args, 'source_write_operation_mismatch')
+  }
+  if (!ADMIN_OPAQUE_REF_PATTERN.test(args.correlationId)) {
+    return refused(args, 'source_write_correlation_mismatch')
+  }
+  if (args.evidenceRefs.length > 8
+    || args.evidenceRefs.some((ref) => ref.length < 1 || ref.length > 200)) {
+    return refused(args, 'admin_missing_evidence')
+  }
+  const sourceRead = await requireSourceRead(args, 'admin_operator')
+  if (sourceRead.kind === 'rejected') {
+    return refused(
+      args,
+      sourceRead.reason === 'source_write_nonce_replayed'
+        ? 'idempotency_conflict'
+        : sourceRead.reason,
+    )
+  }
   const authority = await resolveAdminAuthority(ctx, ADMIN_ACTION_PERMISSION[args.action])
   if (authority.kind === 'denied') {
     const denied = recordAdminActionDenied(
@@ -79,15 +91,6 @@ export async function runAdminCommand<A extends AdminCommandAction>(
     )
     await persistAdminAuthorityMutation(ctx.db, denied)
     return refused(args, authority.reason)
-  }
-  const sourceRead = await requireSourceRead(args, 'admin_operator')
-  if (sourceRead.kind === 'rejected') {
-    return refused(
-      args,
-      sourceRead.reason === 'source_write_nonce_replayed'
-        ? 'idempotency_conflict'
-        : sourceRead.reason,
-    )
   }
 
   const commandDigest = canonicalDigest({
@@ -140,6 +143,17 @@ export async function runAdminCommand<A extends AdminCommandAction>(
   if (args.proof === undefined) return refused(args, 'mfa_reverification_required')
   const proof = deriveStrictConsequenceProof({ ...args.proof, now: Date.now() })
   if (proof.kind === 'refused') return refused(args, proofFailure(args.action, proof.code))
+  if (
+    args.expectedStateDigest !== undefined
+    && args.expectedStateDigest !== await spec.currentStateDigest()
+  ) {
+    return await persistTerminalRefusal(ctx, args, actorRef, operationName, requestHash, 'target_changed')
+  }
+  const decisionNow = Date.now()
+  const preflight = await resolveApprovalIntent(ctx, authority, args, commandDigest, decisionNow, true)
+  if (preflight.kind === 'refused') {
+    return await persistTerminalRefusal(ctx, args, actorRef, operationName, requestHash, preflight.code)
+  }
   const consumed = await consumeConsequenceProof(ctx, {
     reverificationId: args.proof.reverificationId,
     actorPrincipalRef: actorRef,
@@ -152,15 +166,7 @@ export async function runAdminCommand<A extends AdminCommandAction>(
   if (consumed.kind === 'refused') {
     return refused(args, proofFailure(args.action, consumed.code))
   }
-
-  if (
-    args.expectedStateDigest !== undefined
-    && args.expectedStateDigest !== await spec.currentStateDigest()
-  ) {
-    return await persistTerminalRefusal(ctx, args, actorRef, operationName, requestHash, 'target_changed')
-  }
-
-  const approval = await resolveApprovalIntent(ctx, authority, args, commandDigest)
+  const approval = await resolveApprovalIntent(ctx, authority, args, commandDigest, decisionNow)
   if (approval.kind === 'proposed') {
     await persistReceipt(ctx, actorRef, operationName, args.operationKey, requestHash, 'succeeded', approval.receipt)
     return approval.receipt
@@ -168,6 +174,7 @@ export async function runAdminCommand<A extends AdminCommandAction>(
   if (approval.kind === 'refused') {
     return await persistTerminalRefusal(ctx, args, actorRef, operationName, requestHash, approval.code)
   }
+
 
   const applied = await spec.apply(authority)
   if (applied.kind === 'refused') {
@@ -217,84 +224,5 @@ export async function runAdminCommand<A extends AdminCommandAction>(
   }
   await persistReceipt(ctx, actorRef, operationName, args.operationKey, requestHash, 'succeeded', receipt)
   return receipt
-}
-
-function refused<A extends AdminCommandAction>(
-  args: Pick<AdminCommandWireArgs<A>, 'action' | 'correlationId'>,
-  code: AdminRefusalCode<A>,
-): Extract<AdminCommandReceipt<A>, { kind: 'refused' }> {
-  return { kind: 'refused', action: args.action, code, correlationId: args.correlationId }
-}
-
-async function persistTerminalRefusal<A extends AdminCommandAction>(
-  ctx: MutationCtx,
-  args: AdminCommandWireArgs<A>,
-  actorRef: string,
-  operationName: string,
-  requestHash: string,
-  code: AdminRefusalCode<A>,
-): Promise<Extract<AdminCommandReceipt<A>, { kind: 'refused' }>> {
-  const receipt = refused(args, code)
-  await persistReceipt(ctx, actorRef, operationName, args.operationKey, requestHash, 'failed_terminal', receipt)
-  return receipt
-}
-
-async function persistReceipt<A extends AdminCommandAction>(
-  ctx: MutationCtx,
-  actorRef: string,
-  operationName: string,
-  key: string,
-  requestHash: string,
-  status: 'succeeded' | 'failed_terminal',
-  receipt: AdminCommandReceipt<A>,
-): Promise<void> {
-  await writeAdminOperationKey(ctx, {
-    actorRef,
-    operationName,
-    key,
-    requestHash,
-    status,
-    resultJson: JSON.stringify(receipt),
-    resultHash: canonicalDigest(receipt),
-  })
-}
-
-type ProofFailureCode = 'reauthentication_required' | 'proof_stale' | 'proof_replayed' | 'command_changed'
-const MFA_PROOF_FAILURES: Record<ProofFailureCode, 'mfa_reverification_required'> = {
-  reauthentication_required: 'mfa_reverification_required',
-  proof_stale: 'mfa_reverification_required',
-  proof_replayed: 'mfa_reverification_required',
-  command_changed: 'mfa_reverification_required',
-}
-const PROOF_FAILURE_BY_ACTION: {
-  [A in AdminCommandAction]: Record<ProofFailureCode, AdminRefusalCode<A>>
-} = {
-  set_business_suppression: MFA_PROOF_FAILURES,
-  close_removal_dispute: MFA_PROOF_FAILURES,
-  grant_admin_membership: MFA_PROOF_FAILURES,
-  revoke_admin_membership: MFA_PROOF_FAILURES,
-  verify_capability_source_authority: MFA_PROOF_FAILURES,
-  change_commercial_policy: {
-    reauthentication_required: 'mfa_reverification_required',
-    proof_stale: 'proof_stale',
-    proof_replayed: 'proof_replayed',
-    command_changed: 'authority_mismatch',
-  },
-}
-
-function proofFailure<A extends AdminCommandAction>(
-  action: A,
-  code: ProofFailureCode,
-): AdminRefusalCode<A> {
-  return PROOF_FAILURE_BY_ACTION[action][code]
-}
-
-function requireAuditTargetType(value: string): AuditTargetType {
-  if (isAuditTargetType(value)) return value
-  throw new Error(`invalid_admin_audit_target_type:${value}`)
-}
-
-function isAuditTargetType(value: string): value is AuditTargetType {
-  return AuditTargetTypeValues.some((candidate) => candidate === value)
 }
 

@@ -6,6 +6,7 @@ import type {
 } from '@/lib/operator/admin-console/contracts'
 import { clerkConsequenceProofValue } from '../consequenceProof'
 import { sourceWriteArgs } from '../../sourceWriteAdmission'
+export const ADMIN_OPAQUE_REF_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/u
 
 export const adminRefusalValue = v.object({
   kind: v.literal('refused'),

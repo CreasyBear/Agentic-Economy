@@ -49,6 +49,7 @@ export async function resolveApprovalIntent<A extends AdminCommandAction>(
   }>,
   commandDigest: string,
   now: number = Date.now(),
+  preflight = false,
 ): Promise<ApprovalResolution<A>> {
   const ownerAdminCountAtDecision = (
     await ctx.db
@@ -58,11 +59,18 @@ export async function resolveApprovalIntent<A extends AdminCommandAction>(
       .take(3)
   ).length
 
-  if (!isProposableAction(args.action) || !await needsSecondApproval(ctx, args) || ownerAdminCountAtDecision < 2) {
+  if (!isProposableAction(args.action)) {
+    return { kind: 'execute', approval: 'not_required', ownerAdminCountAtDecision }
+  }
+  if (args.approval.kind !== 'approve'
+    && (!await needsSecondApproval(ctx, args) || ownerAdminCountAtDecision < 2)) {
     return { kind: 'execute', approval: 'not_required', ownerAdminCountAtDecision }
   }
   if (args.approval.kind === 'execute') {
     return { kind: 'refused', code: 'approval_required' }
+  }
+  if (preflight && args.approval.kind === 'propose') {
+    return { kind: 'execute', approval: 'not_required', ownerAdminCountAtDecision }
   }
 
   const actorRef = actor.membership.tokenIdentifier
@@ -125,7 +133,7 @@ export async function resolveApprovalIntent<A extends AdminCommandAction>(
     return { kind: 'refused', code: 'approval_already_resolved' }
   }
   if (proposal.expiresAt < now) {
-    await ctx.db.patch(proposal._id, { status: 'expired', resolvedAt: now })
+    if (!preflight) await ctx.db.patch(proposal._id, { status: 'expired', resolvedAt: now })
     return { kind: 'refused', code: 'approval_expired' }
   }
   if (proposal.commandDigest !== commandDigest) {
@@ -136,6 +144,9 @@ export async function resolveApprovalIntent<A extends AdminCommandAction>(
   }
   if (actor.membership.role !== 'owner_admin') {
     return { kind: 'refused', code: 'approval_actor_not_owner_admin' }
+  }
+  if (preflight) {
+    return { kind: 'execute', approval: 'second_approved', ownerAdminCountAtDecision }
   }
 
   await ctx.db.patch(proposal._id, {
@@ -163,10 +174,11 @@ export async function resolveApprovalIntent<A extends AdminCommandAction>(
 
 export async function listOpenApprovalProposals(
   ctx: QueryCtx,
+  includeCommand: boolean,
 ): Promise<readonly {
   proposalRef: string
   action: AdminProposableAction
-  commandJson: string
+  commandJson: string | null
   proposerRef: string
   createdAt: number
   expiresAt: number
@@ -180,7 +192,7 @@ export async function listOpenApprovalProposals(
   return proposals.map(({ proposalRef, action, commandJson, proposerRef, createdAt, expiresAt }) => ({
     proposalRef,
     action,
-    commandJson,
+    commandJson: includeCommand ? commandJson : null,
     proposerRef,
     createdAt,
     expiresAt,
@@ -192,17 +204,18 @@ async function needsSecondApproval(
   args: Readonly<{ action: AdminCommandAction; input: AdminActionInput[AdminCommandAction] }>,
 ): Promise<boolean> {
   if (!isProposableAction(args.action)) return false
-  if (args.action === 'grant_admin_membership') {
-    return 'role' in args.input && args.input.role === 'owner_admin'
-  }
-  if (args.action !== 'revoke_admin_membership') return true
+  if (args.action === 'grant_admin_membership' && 'role' in args.input
+    && args.input.role === 'owner_admin') return true
+  if (args.action !== 'grant_admin_membership' && args.action !== 'revoke_admin_membership') return true
   if (!('targetClerkUserId' in args.input)) return true
   const targetClerkUserId = args.input.targetClerkUserId
   const membership = await ctx.db.query('adminMemberships')
     .withIndex('by_clerkUserId_and_state', (query) =>
       query.eq('clerkUserId', targetClerkUserId).eq('state', 'active'))
     .first()
-  return membership === null || membership.role === 'owner_admin'
+  return membership === null
+    ? args.action === 'revoke_admin_membership'
+    : membership.role === 'owner_admin'
 }
 
 function isProposableAction(action: AdminCommandAction): action is AdminProposableAction {

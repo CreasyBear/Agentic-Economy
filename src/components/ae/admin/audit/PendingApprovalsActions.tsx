@@ -14,19 +14,20 @@ import { AeCopyReference } from '@/components/ae/data/AeCopyReference'
 import { AeSection } from '@/components/ae/layout/AeSection'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
-import { ADMIN_ACTION_PERMISSION } from '@/lib/operator/admin-console/contracts'
-import { canAdminRolePerformAction } from '@/modules/security/public'
 import { AUDIT_COPY } from './audit.contracts'
 
 export function PendingApprovalsActions() {
   const access = useQuery(api.adminConsoleAudit.readAdminAuditAccess, {})
-  const allowed = access?.kind === 'allowed' && canAdminRolePerformAction(access.role, ADMIN_ACTION_PERMISSION.grant_admin_membership)
+  const allowed = access?.kind === 'allowed'
+  const canApprove = allowed && access.role === 'owner_admin'
   const proposals = useQuery(api.adminConsoleAudit.listAdminApprovalProposals, allowed ? {} : 'skip')
   const [selectedRef, setSelectedRef] = useState<string | null>(null)
 
   if (!allowed) return null
   const selected = Array.isArray(proposals) ? proposals.find((row) => row.proposalRef === selectedRef) : undefined
-  const command = selected === undefined ? null : parseAdminProposalCommand(selected.action, selected.commandJson)
+  const command = selected?.commandJson === null || selected === undefined
+    ? null
+    : parseAdminProposalCommand(selected.action, selected.commandJson)
   const onOpenChange = (open: boolean) => { if (!open) setSelectedRef(null) }
 
   return (
@@ -37,7 +38,9 @@ export function PendingApprovalsActions() {
         ) : proposals.length === 0 ? <p>{AUDIT_COPY.noPendingApprovals}</p> : (
           <ul className="grid gap-intra">
             {proposals.map((proposal) => {
-              const material = parseAdminProposalCommand(proposal.action, proposal.commandJson)
+              const material = proposal.commandJson === null
+                ? null
+                : parseAdminProposalCommand(proposal.action, proposal.commandJson)
               return (
                 <li key={proposal.proposalRef} className="flex flex-wrap items-center justify-between gap-intra rounded-lg border border-border p-gutter">
                   <div className="grid gap-1">
@@ -45,19 +48,19 @@ export function PendingApprovalsActions() {
                     <AeCopyReference label={ADMIN_AUDIT_ACTION_COPY.proposal} value={proposal.proposalRef} />
                     <AeCopyReference label={AUDIT_COPY.columnLabels.proposer} value={proposal.proposerRef} />
                   </div>
-                  {material === null ? (
+                  {canApprove && material === null ? (
                     <Alert role="alert" variant="destructive"><AlertDescription>{ADMIN_ACTION_SHEET_COPY.proposalUnavailable}</AlertDescription></Alert>
-                  ) : (
+                  ) : canApprove && material !== null ? (
                     <Button type="button" variant="outline" className="min-h-touch" onClick={() => setSelectedRef(proposal.proposalRef)}>
                       {ADMIN_AUDIT_ACTION_COPY.approve}
                     </Button>
-                  )}
+                  ) : null}
                 </li>
               )
             })}
           </ul>
         )}
-      {selected !== undefined && command !== null ? approvalSheet(command, selected.proposalRef, onOpenChange) : null}
+      {canApprove && selected !== undefined && command !== null ? approvalSheet(command, selected.proposalRef, onOpenChange) : null}
     </AeSection>
   )
 }

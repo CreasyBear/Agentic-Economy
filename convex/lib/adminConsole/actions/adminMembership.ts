@@ -54,7 +54,8 @@ export function grantAdminMembershipSpec(
           .eq('providerNamespace', 'clerk/user')
           .eq('providerIdentifier', input.targetTokenIdentifier))
         .unique()
-      if (binding === null || binding.lifecycle !== 'active' || input.targetClerkUserId.trim() === '') {
+      if (binding === null || binding.lifecycle !== 'active'
+        || !input.targetTokenIdentifier.endsWith(`|${input.targetClerkUserId}`)) {
         return { kind: 'refused', code: 'principal_not_found' }
       }
       const principal = await ctx.db.query('principals')

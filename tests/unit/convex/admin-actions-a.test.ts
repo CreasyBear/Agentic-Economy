@@ -57,6 +57,7 @@ async function auditRows(backend: ConvexFixtureBackend) {
 }
 
 async function setup() {
+
   const backend = convexTest(schema, convexModules)
   const { businessId } = await publishedBusinessOwner(backend, 'admin-actions-a')
   const disputeId = await backend.run((ctx) => ctx.db.insert('disputes', {
@@ -70,7 +71,27 @@ async function setup() {
   return { backend, businessId, disputeId }
 }
 
+async function bindRealClerkTarget(backend: ConvexFixtureBackend, subject: string): Promise<string> {
+  const syntheticToken = subject.replace(/^user_/u, 'token_')
+  const tokenIdentifier = `https://identity.example|${subject}`
+  await backend.run(async (ctx) => {
+    const membership = await ctx.db.query('adminMemberships')
+      .withIndex('by_clerkUserId_and_state', (query) =>
+        query.eq('clerkUserId', subject).eq('state', 'active'))
+      .unique()
+    const binding = await ctx.db.query('externalIdentityBindings')
+      .withIndex('by_providerNamespace_and_providerIdentifier', (query) =>
+        query.eq('providerNamespace', 'clerk/user').eq('providerIdentifier', syntheticToken))
+      .unique()
+    if (membership === null || binding === null) throw new Error('target_fixture_missing')
+    await ctx.db.patch(membership._id, { tokenIdentifier })
+    await ctx.db.patch(binding._id, { providerIdentifier: tokenIdentifier })
+  })
+  return tokenIdentifier
+}
+
 describe('admin actions on the common command envelope', () => {
+
   it('enforces authority, proof, replay, conflict and target state on each action', async () => {
     const { backend, businessId, disputeId } = await setup()
     const owner = await ownerAdmin(backend, 'user_admin-a-owner')
@@ -78,6 +99,7 @@ describe('admin actions on the common command envelope', () => {
     const reviewer = await reviewerAdmin(backend, 'user_admin-a-reviewer')
     const outsider = await nonAdmin(backend, 'user_admin-a-outsider')
     await reviewerAdmin(backend, 'user_admin-a-target')
+    const targetTokenIdentifier = await bindRealClerkTarget(backend, 'user_admin-a-target')
     const cases = [
       {
         ref: suppression,
@@ -93,7 +115,7 @@ describe('admin actions on the common command envelope', () => {
       },
       {
         ref: grant,
-        base: command('grant_admin_membership', { targetClerkUserId: 'user_admin-a-target', targetTokenIdentifier: 'token_admin-a-target', role: 'support' }, 'role_change', 'a:roles:grant'),
+        base: command('grant_admin_membership', { targetClerkUserId: 'user_admin-a-target', targetTokenIdentifier, role: 'support' }, 'role_change', 'a:roles:grant'),
         alternateReason: 'onboarding' satisfies AdminCommandArgs<'grant_admin_membership'>['reasonCode'],
         success: 'membership_granted',
       },
@@ -195,8 +217,9 @@ describe('admin actions on the common command envelope', () => {
     const { backend } = await setup()
     const subject = 'user_admin-a-membership'
     const admin = await ownerAdmin(backend, subject)
-    await ownerAdmin(backend, 'user_admin-a-known')
-    const grantBase = command('grant_admin_membership', { targetClerkUserId: 'user_admin-a-known', targetTokenIdentifier: 'token_admin-a-known', role: 'support' }, 'role_change', 'a:grant')
+    await supportAdmin(backend, 'user_admin-a-known')
+    const targetTokenIdentifier = await bindRealClerkTarget(backend, 'user_admin-a-known')
+    const grantBase = command('grant_admin_membership', { targetClerkUserId: 'user_admin-a-known', targetTokenIdentifier, role: 'reviewer' }, 'role_change', 'a:grant')
     expect(await admin.mutation(grant, await signed(subject, grantBase, 'nonce:a:grant')))
       .toMatchObject({ kind: 'completed', code: 'membership_granted' })
     const active = command('grant_admin_membership', grantBase.input, 'role_change', 'a:grant-again')
@@ -204,6 +227,13 @@ describe('admin actions on the common command envelope', () => {
       .toMatchObject({ kind: 'refused', code: 'membership_already_active' })
     const unknown = command('grant_admin_membership', { targetClerkUserId: 'user_unknown', targetTokenIdentifier: 'token_unknown', role: 'support' }, 'onboarding', 'a:unknown')
     expect(await admin.mutation(grant, await signed(subject, unknown, 'nonce:a:unknown')))
+      .toMatchObject({ kind: 'refused', code: 'principal_not_found' })
+    const mismatched = command('grant_admin_membership', {
+      targetClerkUserId: 'user_admin-a-other',
+      targetTokenIdentifier,
+      role: 'support',
+    }, 'onboarding', 'a:identity-mismatch')
+    expect(await admin.mutation(grant, await signed(subject, mismatched, 'nonce:a:identity-mismatch')))
       .toMatchObject({ kind: 'refused', code: 'principal_not_found' })
     const revokeBase = command('revoke_admin_membership', { targetClerkUserId: 'user_admin-a-known' }, 'offboarding', 'a:revoke')
     expect(await admin.mutation(revoke, await signed(subject, revokeBase, 'nonce:a:revoke')))
@@ -239,7 +269,16 @@ describe('admin actions on the common command envelope', () => {
     const ownerGrant = command('grant_admin_membership', { targetClerkUserId: 'user_admin-a-third', targetTokenIdentifier: 'token_admin-a-third', role: 'owner_admin' }, 'role_change', 'a:approval:owner')
     expect(await admin.mutation(grant, await signed(subject, ownerGrant, 'nonce:a:approval:owner')))
       .toMatchObject({ kind: 'refused', code: 'approval_required' })
-    const supportGrant = command('grant_admin_membership', { targetClerkUserId: 'user_admin-a-third', targetTokenIdentifier: 'token_admin-a-third', role: 'support' }, 'role_change', 'a:approval:support')
+    const ownerDemotion = command('grant_admin_membership', {
+      targetClerkUserId: 'user_admin-a-third',
+      targetTokenIdentifier: 'token_admin-a-third',
+      role: 'support',
+    }, 'role_change', 'a:approval:demotion')
+    expect(await admin.mutation(grant, await signed(subject, ownerDemotion, 'nonce:a:approval:demotion')))
+      .toMatchObject({ kind: 'refused', code: 'approval_required' })
+    await supportAdmin(backend, 'user_admin-a-support-target')
+    const supportTargetToken = await bindRealClerkTarget(backend, 'user_admin-a-support-target')
+    const supportGrant = command('grant_admin_membership', { targetClerkUserId: 'user_admin-a-support-target', targetTokenIdentifier: supportTargetToken, role: 'reviewer' }, 'role_change', 'a:approval:support')
     expect(await admin.mutation(grant, await signed(subject, supportGrant, 'nonce:a:approval:support')))
       .toMatchObject({ kind: 'completed', code: 'membership_granted' })
     const audit = (await auditRows(backend)).find((row) => row.eventType === 'admin.membership_granted')

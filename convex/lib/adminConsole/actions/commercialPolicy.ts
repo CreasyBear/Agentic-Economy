@@ -4,7 +4,7 @@ import type { MutationCtx } from '../../../_generated/server'
 import { env } from '../../../_generated/server'
 import { resolveBusinessActor } from '../../../authz'
 import type { AdminCommandSpec } from '../commandEnvelope'
-import type { AdminCommandWireArgs } from '../validators'
+import { ADMIN_OPAQUE_REF_PATTERN, type AdminCommandWireArgs } from '../validators'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import {
   COMMERCIAL_POLICY_FAMILIES,
@@ -18,15 +18,14 @@ import {
   type Package4SandboxDeploymentProfile,
 } from '@/modules/money/public'
 
-const OPAQUE_REF_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/u
 
 function validChange(args: AdminCommandWireArgs<'change_commercial_policy'>): boolean {
   const input = args.input
-  return OPAQUE_REF_PATTERN.test(input.policyRef)
+  return ADMIN_OPAQUE_REF_PATTERN.test(input.policyRef)
     && (input.expectedCurrentPolicyRef === undefined
-      || OPAQUE_REF_PATTERN.test(input.expectedCurrentPolicyRef))
-    && OPAQUE_REF_PATTERN.test(args.operationKey)
-    && OPAQUE_REF_PATTERN.test(args.correlationId)
+      || ADMIN_OPAQUE_REF_PATTERN.test(input.expectedCurrentPolicyRef))
+    && ADMIN_OPAQUE_REF_PATTERN.test(args.operationKey)
+    && ADMIN_OPAQUE_REF_PATTERN.test(args.correlationId)
     && Number.isSafeInteger(input.revision)
     && input.revision >= 1
     && Number.isSafeInteger(input.effectiveAt)

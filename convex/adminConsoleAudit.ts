@@ -54,5 +54,5 @@ export const listAdminApprovalProposals = defineAdminQuery({
   action: 'read_admin_readbacks',
   args: {},
   returns: v.array(adminApprovalProposalValue),
-  handler: async (ctx) => [...await listOpenApprovalProposals(ctx)],
+  handler: async (ctx) => [...await listOpenApprovalProposals(ctx, ctx.admin.membership.role === 'owner_admin')],
 })
