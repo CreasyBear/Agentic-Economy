@@ -6,7 +6,7 @@ import { describe, expect, it, vi } from 'vitest'
 
 import { components, internal } from '../../convex/_generated/api'
 import type { ActionCtx } from '../../convex/_generated/server'
-import { streamAnonymousChatResponse } from '../../convex/chatAnonymous'
+import { streamAnonymousChatResponse } from '../../convex/lib/chat/anonymous/stream'
 import { createConvexServerFunctionAssertion } from '../../src/lib/server/convex-source'
 import type { CustomerRequestServiceAssertion } from '../../src/modules/agent-access/service-auth-envelope'
 import type * as ModelGatewayPublic from '@/modules/model-gateway/public'
