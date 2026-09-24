@@ -5,7 +5,7 @@
 - [glossary.md](glossary.md) — shared terminology.
 - [adr/](adr/) — architecture decision records.
 - [licenses/](licenses/) — third-party licence notices.
-- [strategy/](strategy/) — business strategy and pitch material.
+- [strategy/](strategy/) — retained strategy, application material and pitch deck source.
 - [design/reference/](design/reference/) — design references.
 - [operations/convex-root-protocol.md](operations/convex-root-protocol.md) — Convex root layout protocol.
 - [operations/local-stripe-test-mode.md](operations/local-stripe-test-mode.md) — local Stripe test-mode instructions.
