@@ -130,7 +130,7 @@ export type ToolCardProjection =
   | (CardChrome & {
       kind: 'clarify'
       question: string
-      choices: readonly [string, string, string]
+      choices: readonly string[]
       answer?: string
     })
 
@@ -676,10 +676,7 @@ function projectLiveBody(toolId: ChatToolId, output: Record<string, unknown>): T
     case 'registry.tools.list':
     case 'registry.tools.search': {
       if (toolId === 'registry.tools.search') {
-        if (output.kind === 'noMatch') {
-          const nearMisses = projectLiveChoices(output.nearMisses).map(choice => ({ ...choice, belowMatch: true }))
-          return liveChoices(toolId, { ...output, count: 0 }, nearMisses)
-        }
+        if (output.kind === 'noMatch') return liveChoices(toolId, { count: 0 }, [])
         return liveChoices(toolId, output, projectLiveChoices(output.results))
       }
       return liveChoices(toolId, output, projectLiveChoices(output.items))

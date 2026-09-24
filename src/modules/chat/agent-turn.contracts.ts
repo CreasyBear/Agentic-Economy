@@ -53,7 +53,7 @@ const clarifyChoice = z.string().trim().min(1).max(80)
 
 export const chatClarifyInputSchema = z.strictObject({
   question: z.string().trim().min(1).max(200),
-  choices: z.tuple([clarifyChoice, clarifyChoice, clarifyChoice]),
+  choices: z.array(clarifyChoice).length(3),
 })
 
 export const chatClarifyOutputSchema = z.strictObject({

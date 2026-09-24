@@ -1,16 +1,20 @@
 import { mockModel, type ToolCtx } from '@convex-dev/agent'
 import { generateText, type ToolSet } from 'ai'
 import { getFunctionName } from 'convex/server'
+import { z } from 'zod'
 import { convexToJson, type Value } from 'convex/values'
 import { projectToolCard } from '@/modules/chat/tool-card'
+import { chatClarifyInputSchema } from '@/modules/chat/agent-turn.contracts'
 import { describe, expect, it, vi } from 'vitest'
 
 import {
   CHAT_TOOL_IDS,
   CHAT_TOOL_NAME_MAP,
   createChatAgent,
+  chatNoMatchSearchCount,
   MAX_CHAT_TOOL_CALLS,
   MAX_CHAT_TOOL_RESULT_BYTES,
+  prepareChatToolStep,
   type ChatToolId,
 } from '../../../convex/chatTools'
 import { api, internal } from '../../../convex/_generated/api'
@@ -105,6 +109,28 @@ function nativeReadResult(functionName: string): unknown {
 }
 
 describe('Tool chat Agent tools', () => {
+  it('offers the clarification choices as a provider-representable three-item array', () => {
+    const schema = z.toJSONSchema(chatClarifyInputSchema, { io: 'input' })
+    expect(schema.properties?.choices).toMatchObject({
+      type: 'array',
+      items: { type: 'string' },
+      minItems: 3,
+      maxItems: 3,
+    })
+  })
+  it('uses the second search for a distinct attempt, but never erases a later match', () => {
+    const search = CHAT_TOOL_NAME_MAP.canonicalToProvider['registry.tools.search']
+    const noMatch = { toolResults: [{ toolName: search, output: { kind: 'noMatch' } }] }
+    const matched = { toolResults: [{ toolName: search, output: { kind: 'matched' } }] }
+    expect(prepareChatToolStep({ stepNumber: 0, steps: [] }).toolChoice).toBe('required')
+    expect(prepareChatToolStep({ stepNumber: 1, steps: [noMatch] })).toEqual({
+      toolChoice: 'required', activeTools: [search],
+    })
+    expect(chatNoMatchSearchCount([noMatch, noMatch])).toBe(2)
+    expect(chatNoMatchSearchCount([noMatch, matched])).toBe(0)
+    expect(prepareChatToolStep({ stepNumber: 2, steps: [noMatch, matched] }).toolChoice).toBe('auto')
+  })
+
   it('persists schema-bearing detail output losslessly and renders its completed card', async () => {
     const inputJsonSchema = {
       $schema: 'https://json-schema.org/draft/2020-12/schema',
@@ -412,30 +438,35 @@ describe('Tool chat Agent tools', () => {
     })
   })
 
-  it('enforces eight total tool calls per Agent factory invocation', async () => {
+  it('deduplicates near-identical searches and caps distinct lookups at two', async () => {
     const runAction = vi.fn(async () => noCandidates)
     const agent = createChatAgent(mockModel())
     const ctx = toolCtx({ runAction: runAction as ToolCtx['runAction'] })
-
-    for (let index = 0; index < MAX_CHAT_TOOL_CALLS; index += 1) {
-      await expect(invokeTool(
-        agent,
-        'registry.tools.search',
-        ctx,
-        { query: 'weather' },
-      )).resolves.toMatchObject({ kind: 'noMatch', results: [] })
-    }
-    await expect(invokeTool(
-      agent,
-      'registry.tools.search',
-      ctx,
-      { query: 'weather' },
-    )).resolves.toEqual({
-      kind: 'chat_tool_refused',
-      toolId: 'registry.tools.search',
-      reason: 'tool_limit',
+    expect(await invokeTool(agent, 'registry.tools.search', ctx, { query: 'Sydney weather APIs' })).toMatchObject({ kind: 'noMatch' })
+    expect(await invokeTool(agent, 'registry.tools.search', ctx, { query: 'Weather API for Sydney' })).toMatchObject({
+      kind: 'chat_tool_refused', reason: 'search_repeated',
     })
-    expect(runAction).toHaveBeenCalledTimes(MAX_CHAT_TOOL_CALLS)
+    expect(await invokeTool(agent, 'registry.tools.search', ctx, { query: 'forecast data NSW' })).toMatchObject({ kind: 'noMatch' })
+    expect(await invokeTool(agent, 'registry.tools.search', ctx, { query: 'climate history NSW' })).toMatchObject({
+      kind: 'chat_tool_refused', reason: 'search_limit',
+    })
+    expect(runAction).toHaveBeenCalledTimes(2)
+  })
+
+  it('does not crawl search pages unless the person asks for another page', async () => {
+    const runAction = vi.fn(async () => noCandidates)
+    const ctx = toolCtx({ runAction: runAction as ToolCtx['runAction'] })
+    const agent = createChatAgent(mockModel())
+    expect(await invokeTool(agent, 'registry.tools.search', ctx,
+      { query: 'weather', cursor: 'next' }, [{ role: 'user', content: 'Find weather APIs' }])).toMatchObject({
+      kind: 'chat_tool_refused', reason: 'paging_not_requested',
+    })
+    expect(runAction).not.toHaveBeenCalled()
+    expect(await invokeTool(agent, 'registry.tools.search', ctx,
+      { query: 'weather', cursor: 'next' }, [{ role: 'user', content: 'Show the next page of weather APIs' }])).toMatchObject({
+      kind: 'noMatch',
+    })
+    expect(runAction).toHaveBeenCalledTimes(1)
   })
 
   it('lets a shortlist journey reach comparison after two searches and three detail reads', async () => {
@@ -586,7 +617,7 @@ describe('Tool chat Agent tools', () => {
     const agent = createChatAgent(mockModel(), AUTHORITY)
     const ctx = toolCtx({ runAction: runAction as ToolCtx['runAction'] })
     for (let index = 0; index < MAX_CHAT_TOOL_CALLS; index += 1) {
-      await invokeTool(agent, 'registry.tools.search', ctx, { query: 'weather' })
+      await invokeTool(agent, 'registry.tools.describe', ctx, { toolRef: OPERATION_REF })
     }
     for (const [toolId, input] of [
       ['registry.tools.list', {}],

@@ -28,7 +28,7 @@ describe('search result state', () => {
     expect(projectToolCard(serializeToolCard(card))).toEqual(card)
   })
 
-  it('shows only the suitable result and labels near misses without selecting them', () => {
+  it('shows suitable results but no option cards or source refs for a no-match envelope', () => {
     const toolType = `tool-${CHAT_TOOL_NAME_MAP.canonicalToProvider['registry.tools.search']}`
     const nearRef = `operation:v1:${'c'.repeat(64)}`
     const items = [
@@ -46,7 +46,7 @@ describe('search result state', () => {
       type: toolType, state: 'output-available', output: { kind: 'noMatch', results: [], nearMisses: [items[1]] },
     })
     expect(noMatch).toMatchObject({
-      kind: 'choices', state: 'complete', count: 0, choices: [{ title: 'Lookup B', belowMatch: true }],
+      kind: 'choices', state: 'complete', count: 0, choices: [], toolRefs: [],
     })
   })
 

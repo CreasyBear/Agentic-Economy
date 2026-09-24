@@ -14,7 +14,7 @@ import {
 import { components, internal } from './_generated/api'
 import { env, internalAction } from './_generated/server'
 import type { ActionCtx } from './_generated/server'
-import { CHAT_TOOL_NAME_MAP, createChatAgent, prepareChatStep } from './chatTools'
+import { CHAT_NO_RESULT_ANSWER, CHAT_TOOL_NAME_MAP, chatNoMatchSearchCount, createChatAgent, prepareChatToolStep } from './chatTools'
 import { interactiveAuthorityContextValue } from './interactiveAuthority'
 import type { InteractiveBusinessAuthorityContext } from '../src/modules/business/public'
 import type { TrustedChatAuthority } from '../src/modules/chat/agent-turn.contracts'
@@ -63,12 +63,12 @@ export async function streamDurableChatResponse(
   const agent = createChatAgent(languageModel, args.trustedChatAuthority)
   let clarificationRequested = false
   let ownerApprovalPending = false
-  await agent.streamText(
+  const result = await agent.streamText(
     ctx,
     { threadId: args.threadId, userId: args.ownerId },
     {
       promptMessageId: args.promptMessageId,
-      prepareStep: prepareChatStep,
+      prepareStep: prepareChatToolStep,
       onStepEnd: (step) => {
         if (step.toolResults.some(result =>
           result.toolName === CHAT_TOOL_NAME_MAP.canonicalToProvider['chat.clarify']
@@ -86,12 +86,35 @@ export async function streamDurableChatResponse(
     },
     {
       storageOptions: { saveMessages: 'promptAndOutput' },
-      saveStreamDeltas: {
-        chunking: 'word',
-        throttleMs: 100,
-      },
+      saveStreamDeltas: { chunking: 'word', throttleMs: 100 },
     },
   )
+  const steps = await result.steps
+  if (steps.every(step => step.toolResults.length === 0) || chatNoMatchSearchCount(steps) > 0) {
+    await saveMessages(ctx, components.agent, {
+      threadId: args.threadId,
+      userId: args.ownerId,
+      promptMessageId: args.promptMessageId,
+      messages: [{ role: 'assistant', content: CHAT_NO_RESULT_ANSWER }],
+      agentName: 'Agentic Economy Tool Market',
+      failPendingSteps: true,
+    })
+    return false
+  }
+  const last = steps.at(-1)
+  if (!clarificationRequested && (last?.text.trim().length === 0 || last?.toolCalls.length
+    || !/[.!?…)"']$/u.test(last?.text.trim() ?? '')
+    || /\b(?:let me|i(?:'ll| will) (?:check|search|look)|next page)\b/iu.test(last?.text ?? ''))) {
+    const final = await agent.streamText(ctx, { threadId: args.threadId, userId: args.ownerId }, {
+      promptMessageId: args.promptMessageId,
+      tools: {},
+      instructions: `${agent.options.instructions} The tools are closed. Answer directly from completed tool results, not earlier narration. Open with a bold supported answer, use bullets for one Tool and a table only for two to four distinct Tools, name a material gap once, and finish with one "Next: ..." action. Do not promise another search.`,
+    }, {
+      storageOptions: { saveMessages: 'promptAndOutput' },
+      saveStreamDeltas: { chunking: 'word', throttleMs: 100 },
+    })
+    await final.text
+  }
   return clarificationRequested || ownerApprovalPending
 }
 
