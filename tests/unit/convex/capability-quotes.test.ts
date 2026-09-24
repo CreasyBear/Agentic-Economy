@@ -32,6 +32,7 @@ import {
   seedCommercialPolicies,
   seedAgent,
   prepareSubjects,
+  type QuotePrincipal,
   formanceSnapshot,
 } from '../../helpers/quote-fixtures'
 
@@ -226,8 +227,9 @@ describe('trusted chat Quote cancellation fence', () => {
     await observeHealthyReadiness(backend, fixture, suffix)
     const input = { request: 'Perth' }
     const subjects = await prepareSubjects(backend, agent, fixture.toolRef, input, suffix)
+    const principal: QuotePrincipal & { kind: 'agent_key' } = { kind: 'agent_key', ...agent.principal }
     const turn = await backend.mutation(api.chatTurns.startTurn, await withSourceWrite('protected_action', {
-      principal: { kind: 'agent_key', ...agent.principal }, clientTurnId: suffix, prompt: 'Quote a Tool',
+      principal, clientTurnId: suffix, prompt: 'Quote a Tool',
       operationKey: `turn:start:${suffix}`, correlationId: `turn:start:${suffix}`,
     }))
     expect(await backend.mutation(internal.chatTurns.finishTurn, {

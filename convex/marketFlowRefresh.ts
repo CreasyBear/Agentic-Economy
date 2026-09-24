@@ -83,7 +83,7 @@ function positiveVolumes(rows: readonly Readonly<{ recipient: string; amountAtom
 export const lookupVolumes = action({
   args: { payTos: v.array(v.string()) },
   returns: v.array(v.object({ payTo: v.string(), amountAtomic: v.string() })),
-  handler: async (ctx, args) => {
+  handler: async (ctx, args): Promise<{ payTo: string; amountAtomic: string }[]> => {
     const payTos = [...new Set(args.payTos.map(payTo => payTo.toLowerCase()))].filter(payTo => /^0x[a-f0-9]{40}$/u.test(payTo)).slice(0, 48)
     if (payTos.length === 0) return []
     const windowEnd = shiftUtcDay(flowPayeeWindow(Date.now()).end, -1)
