@@ -3,12 +3,12 @@ import { describe, expect, it } from 'vitest'
 
 import schema from '../../convex/schema'
 import { internal } from '../../convex/_generated/api'
-import { DEV_SEED_CATALOG_ACCOUNT_REF, DEV_SEED_CATALOG_PRINCIPAL_REF } from '../../convex/lib/catalog/devSeed/authority'
+import { DEV_SEED_CATALOG_ACCOUNT_REF, DEV_SEED_CATALOG_PRINCIPAL_REF } from '../../convex/lib/dev/seed/authority'
 import {
   reviseBusinessOfferingCommand,
   withdrawOfferingAccessPathCommand,
 } from '../../convex/lib/catalog/offerings/commands'
-import { seedBusinessOfferings } from '../../convex/devSeed'
+import { seedBusinessOfferings } from '../../convex/lib/dev/seed/catalog'
 import type { Id } from '../../convex/_generated/dataModel'
 import { canonicalDigest } from '../../src/modules/common/canonical-digest'
 import { convexModules as modules } from '../helpers/convex-fixtures'

@@ -30,6 +30,7 @@ import { resolveActiveAccountRefForPrincipal } from '../../principalAccount/inte
 
 export const DEV_SEED_CATALOG_PRINCIPAL_REF = 'prn_d2000000000000000000000000000001' as PrincipalRef
 export const DEV_SEED_CATALOG_ACCOUNT_REF = 'acc_d2000000000000000000000000000001' as AccountRef
+export const DEV_SEED_CATALOG_GRANT_REF = 'grt_d2000000000000000000000000000001'
 export const DEV_SEED_CATALOG_SCOPE = 'catalog:dev_seed' as const
 export const DEV_SEED_CATALOG_RESOURCE = 'catalog:dev-seed' as const
 export const DEV_SEED_CATALOG_PRINCIPAL_NAME = 'Agentic Economy development catalog seed workload'

@@ -2,10 +2,11 @@ import { convexTest } from 'convex-test'
 import { describe, expect, it } from 'vitest'
 
 import { internal } from '../../../convex/_generated/api'
-import { requireLocalE2EOwnerAuthority } from '../../../convex/devSeed'
+import { requireLocalE2EOwnerAuthority } from '../../../convex/lib/dev/seed/identity'
 import { persistDevSeedCatalogState } from '../../../convex/devSeedStore'
 import schema from '../../../convex/schema'
-import { sandboxReferenceToolSpec, sandboxToolFixture } from '../../../convex/devSeedFixtures'
+import { sandboxReferenceToolSpec } from '../../../convex/lib/dev/seed/sandboxReference'
+import { sandboxToolFixture } from '../../../convex/lib/dev/seed/sandboxFixture'
 import {
   DEV_SEED_BUSINESS_FIXTURES,
   buildDevSeedCatalogState,

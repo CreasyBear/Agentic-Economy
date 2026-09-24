@@ -5,7 +5,7 @@
  * - 402 Timezone Converter (402timezones.vercel.app from timezonePaymentRequired20260819Fixture)
  * - Onesource Ethereum Tx Lookup (api.onesource.io from onesourcePathRequest20260908Fixture)
  * - Onesource ERC20 Transfers (api.onesource.io from onesourceUnionRequest20260908Fixture)
- * - AEcon Sandbox FX Reference Tool (Frankfurter public keyless endpoint from devSeedFixtures)
+ * - AEcon Sandbox FX Reference Tool (Frankfurter public keyless endpoint from sandboxReference)
  *
  * Invariants Enforced:
  * 1. Zero-Friction Semantic Ingest (Jev System One < 350ms)
@@ -26,7 +26,7 @@ import {
 import {
   SANDBOX_TOOL_ENDPOINT_URL,
   SANDBOX_TOOL_LABEL,
-} from '../../convex/devSeedFixtures'
+} from '../../convex/lib/dev/seed/sandboxReference'
 import {
   executeDecisionGateway,
   type DecisionGatewayResponse,
