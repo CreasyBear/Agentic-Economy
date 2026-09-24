@@ -1,3 +1,6 @@
+// Root coverage and ratchet policy: docs/operations/convex-root-protocol.md.
+import { readdirSync } from 'node:fs'
+
 import { describe, expect, it } from 'vitest'
 
 import {
@@ -8,21 +11,21 @@ import {
 import { fixtureTargets, isFixtureMode } from './scan-targets'
 
 const FACADE_MAX_LINES = 200
-// pinned 2026-09-21 from first run; may only decrease
+// Pinned debt only; roots above 200 lines remain visible and pins may only decrease.
 const FACADE_SIZE_EXCEPTIONS: Record<string, number> = {
   'convex/actionExecutionControl.ts': 388,
   'convex/agentAccessPolicy.ts': 329,
   'convex/agentSpendingPolicy.ts': 542,
   'convex/authorityBoundary.ts': 438,
-  'convex/capabilityCallProjection.ts': 874,
-  'convex/capabilityCallProjections.ts': 406,
+  'convex/businessSupplyProjectionSnapshot.ts': 424,
+  'convex/capabilityCallProjections.ts': 405,
   'convex/capabilityCalls.ts': 356,
-  'convex/capabilityCallWorker.ts': 365,
+  'convex/capabilityCallWorker.ts': 363,
   'convex/capabilityCallX402AuthorizationExpiry.ts': 231,
   'convex/capabilityContractDocuments.ts': 345,
   'convex/capabilityProviderApprovals.ts': 249,
   'convex/capabilityProviderConnectionCleanup.ts': 257,
-  'convex/capabilityProviderConsequenceJournal.ts': 986,
+  'convex/capabilityProviderConnections.ts': 277,
   'convex/capabilityProviderTools.ts': 465,
   'convex/capabilitySupplyCommands.ts': 299,
   'convex/capabilitySupplyGraph.ts': 253,
@@ -34,13 +37,18 @@ const FACADE_SIZE_EXCEPTIONS: Record<string, number> = {
   'convex/capabilitySupplyProjection.ts': 734,
   'convex/capabilitySupplyPublicationPorts.ts': 247,
   'convex/capabilitySupplyReadiness.ts': 314,
+  'convex/capabilitySupplyShared.ts': 253,
   'convex/capabilitySupplyToolOriginMap.ts': 227,
   'convex/capabilitySupplyToolQueries.ts': 451,
   'convex/capabilitySupplyToolShared.ts': 470,
   'convex/catalogOfferingMutations.ts': 490,
   'convex/catalogPublicReads.ts': 368,
   'convex/chatAnonymous.ts': 213,
+  'convex/chatGenerate.ts': 217,
   'convex/chatShares.ts': 402,
+  'convex/chatTools.ts': 529,
+  'convex/devSeed.ts': 1177,
+  'convex/devSeedFixtures.ts': 503,
   'convex/facilitatorDiscovery.ts': 553,
   'convex/interactiveCredentialLifecycle.ts': 297,
   'convex/interactiveSession.ts': 241,
@@ -48,11 +56,8 @@ const FACADE_SIZE_EXCEPTIONS: Record<string, number> = {
   'convex/moneyAccountFunding.ts': 223,
   'convex/moneyAutoRecharge.ts': 346,
   'convex/moneyBillingAuthorization.ts': 606,
-  'convex/moneyConnect.ts': 936,
   'convex/moneyCustomerTaxFacts.ts': 367,
-  'convex/moneyDocuments.ts': 849,
   'convex/moneyFormance.ts': 524,
-  'convex/moneyLedger.ts': 368,
   'convex/moneyManagedCall.ts': 327,
   'convex/moneyManagedCallLifecycle.ts': 320,
   'convex/moneyMonthlySpendBudget.ts': 318,
@@ -60,9 +65,11 @@ const FACADE_SIZE_EXCEPTIONS: Record<string, number> = {
   'convex/moneyStripeCustomer.ts': 360,
   'convex/notifications.ts': 471,
   'convex/personalAccount.ts': 652,
+  'convex/providerConsequenceHttp.ts': 322,
   'convex/qualifiedUse.ts': 248,
   'convex/recoveryBreakGlass.ts': 482,
   'convex/registry.ts': 445,
+  'convex/secretLifecycleHttp.ts': 216,
   'convex/securityAccountHistory.ts': 565,
   'convex/securityAdminMembership.ts': 216,
   'convex/securityRemovalDisputes.ts': 245,
@@ -79,8 +86,6 @@ const FACADE_SIZE_EXCEPTIONS: Record<string, number> = {
   'convex/x402DirectoryIndex.ts': 455,
   'convex/x402DirectoryIndexStore.ts': 688,
 }
-// Local seed fixture is temporary; remove this exclusion with the file.
-const TEMPORARY_FACADE_EXCLUSIONS = new Set(['convex/devSeed.ts'])
 const FACADE_SIZE_MARGIN = 0
 const FIXTURE_ROOT = 'tests/fixtures/quality-gates/convex-facade-size'
 
@@ -95,7 +100,7 @@ function formatFiles(files: readonly ConvexFacadeFile[]): string {
 }
 
 describe('Convex façade size ratchet', () => {
-  it('keeps depth-one RPC façades within the size limit', () => {
+  it('keeps every depth-one Convex root within the size limit', () => {
     const result = scanConvexFacadeSizes(
       isFixtureMode() ? fixtureTargets(FIXTURE_ROOT) : cleanTargets(),
       FACADE_MAX_LINES,
@@ -105,7 +110,6 @@ describe('Convex façade size ratchet', () => {
       expect(result.files).toContainEqual(
         expect.objectContaining({
           file: `${FIXTURE_ROOT}/oversized.fixture`,
-          isFacade: true,
         }),
       )
       expect(result.violations).toContainEqual(
@@ -114,34 +118,34 @@ describe('Convex façade size ratchet', () => {
           rule: 'convex-facade-size',
         }),
       )
-      expect(result.files.find(({ isFacade }) => isFacade)?.lines).toBeGreaterThan(
+      expect(result.files.find(({ file }) => file === `${FIXTURE_ROOT}/oversized.fixture`)?.lines).toBeGreaterThan(
         FACADE_MAX_LINES,
       )
       return
     }
 
-    const facades = result.files.filter(({ isFacade }) => isFacade)
-    for (const file of TEMPORARY_FACADE_EXCLUSIONS) {
-      const actual = facades.find((facade) => facade.file === file)?.lines
-      expect(actual, `${file} is gone; remove its temporary exclusion`).toBeDefined()
-      expect(actual, `${file} is within the size limit; remove its temporary exclusion`).toBeGreaterThan(FACADE_MAX_LINES)
-    }
-    const unexceptedOffenders = facades.filter(
+    const roots = result.files
+    expect(roots.map(({ file }) => file)).toEqual(
+      readdirSync('convex', { withFileTypes: true })
+        .filter((entry) => entry.isFile() && entry.name.endsWith('.ts') && !entry.name.endsWith('.test.ts'))
+        .map((entry) => `convex/${entry.name}`)
+        .sort((left, right) => left.localeCompare(right)),
+    )
+    const unexceptedOffenders = roots.filter(
       ({ file, lines }) =>
-        lines > FACADE_MAX_LINES && FACADE_SIZE_EXCEPTIONS[file] === undefined
-        && !TEMPORARY_FACADE_EXCLUSIONS.has(file),
+        lines > FACADE_MAX_LINES && FACADE_SIZE_EXCEPTIONS[file] === undefined,
     )
 
     expect(
       unexceptedOffenders,
-      `Found non-exception Convex façades over ${FACADE_MAX_LINES} lines:\n` +
+      `Found non-exception Convex roots over ${FACADE_MAX_LINES} lines:\n` +
         formatFiles(unexceptedOffenders),
     ).toEqual([])
 
     for (const [file, ceiling] of Object.entries(FACADE_SIZE_EXCEPTIONS)) {
-      const actual = facades.find((facade) => facade.file === file)?.lines
+      const actual = roots.find((root) => root.file === file)?.lines
 
-      expect(actual, `${file} is no longer a Convex façade; remove it from FACADE_SIZE_EXCEPTIONS`).toBeDefined()
+      expect(actual, `${file} is no longer a Convex root; remove it from FACADE_SIZE_EXCEPTIONS`).toBeDefined()
       expect(
         actual,
         `${file} grew ${ceiling}→${actual ?? 'missing'}`,

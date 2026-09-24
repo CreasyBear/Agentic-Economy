@@ -1,7 +1,5 @@
 import { readFileSync } from 'node:fs'
-import { basename, relative, sep } from 'node:path'
-
-import ts from 'typescript'
+import { relative, sep } from 'node:path'
 
 import {
   findFiles,
@@ -12,7 +10,6 @@ import {
 export type ConvexFacadeFile = Readonly<{
   file: string
   lines: number
-  isFacade: boolean
 }>
 
 export type ConvexFacadeSizeScanResult = Readonly<{
@@ -35,7 +32,6 @@ export function scanConvexFacadeSizes(
       filesByPath.set(normalizedFile, {
         file: normalizedFile,
         lines: contents.split('\n').length,
-        isFacade: importsConvexServer(file, contents) && containsRpcDefinition(contents),
       })
     }
   }
@@ -47,12 +43,12 @@ export function scanConvexFacadeSizes(
   return {
     files,
     violations: files
-      .filter(({ isFacade, lines }) => isFacade && lines > maxLines)
+      .filter(({ lines }) => lines > maxLines)
       .map(({ file, lines }) => ({
         file,
         line: 1,
         rule: 'convex-facade-size',
-        message: `${file} has ${lines} lines; façade maximum is ${maxLines}`,
+        message: `${file} has ${lines} lines; Convex root maximum is ${maxLines}`,
         excerpt: `${lines} lines`,
       })),
   }
@@ -60,36 +56,13 @@ export function scanConvexFacadeSizes(
 
 function isEligibleDepthOneFile(file: string, root: string): boolean {
   const relativeToRoot = relative(root, file).split(sep).join('/')
-  const name = basename(file)
 
+  // Generated modules live below _generated/; depth-one excludes that category.
+  // Test files are fixtures, not maintained Convex roots.
   return (
     relativeToRoot !== '' &&
     !relativeToRoot.includes('/') &&
     !file.split(sep).includes('_generated') &&
-    !name.endsWith('.test.ts') &&
-    name !== 'convex.config.ts'
-  )
-}
-
-function importsConvexServer(file: string, contents: string): boolean {
-  const sourceFile = ts.createSourceFile(
-    file,
-    contents,
-    ts.ScriptTarget.Latest,
-    true,
-    ts.ScriptKind.TS,
-  )
-
-  return sourceFile.statements.some(
-    (statement) =>
-      ts.isImportDeclaration(statement) &&
-      ts.isStringLiteral(statement.moduleSpecifier) &&
-      statement.moduleSpecifier.text === './_generated/server',
-  )
-}
-
-function containsRpcDefinition(contents: string): boolean {
-  return /\b(?:query|mutation|action|internalQuery|internalMutation|internalAction|httpAction)\s*\(/.test(
-    contents,
+    !/\.test\.tsx?$/.test(file)
   )
 }

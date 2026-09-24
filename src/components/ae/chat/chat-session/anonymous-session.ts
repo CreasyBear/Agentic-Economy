@@ -65,7 +65,8 @@ export function readAnonymousSession(storage: Storage): AnonymousSession {
             })),
           }
         }
-      } catch {
+      } catch (error: unknown) {
+        if (!(error instanceof SyntaxError)) throw error
         // A corrupt tab transcript is not conversation history.
       }
     }
