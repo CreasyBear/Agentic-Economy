@@ -1,10 +1,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { api } from '../../../convex/_generated/api'
-import {
-  authorizeRecoveryHandler,
-  createConvexRecoveryPersistence,
-} from '../../../convex/recoveryBreakGlass'
+import { authorizeRecoveryHandler } from '../../../convex/lib/authority/breakGlass/authorization'
+import { createConvexRecoveryPersistence } from '../../../convex/lib/authority/breakGlass/persistence'
 import { accountRef } from '../../../src/modules/principal-account/public'
 import {
   recoveryAdmissionRef,

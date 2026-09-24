@@ -3,10 +3,8 @@ import { vi } from 'vitest'
 
 import { api } from '../../convex/_generated/api'
 import schema from '../../convex/schema'
-import {
-  authorizeRecoveryHandler,
-  createConvexRecoveryPersistence,
-} from '../../convex/recoveryBreakGlass'
+import { authorizeRecoveryHandler } from '../../convex/lib/authority/breakGlass/authorization'
+import { createConvexRecoveryPersistence } from '../../convex/lib/authority/breakGlass/persistence'
 import {
   accountRef,
   principalRef,
