@@ -90,11 +90,23 @@ Work the highest score first. Churn decides ties, because the ergonomics payoff 
 | 2026-09-24 | moneyManagedCall.ts + moneyManagedCallLifecycle.ts | 327 + 320 lines | 21 + 59 lines | 1eb4a9c13 |
 | 2026-09-24 | agentAccessPolicy.ts + authorityBoundary.ts | 329 + 438 lines | 43 + 9 lines | 982fe879e |
 | 2026-09-24 | workspaceAccounts.ts + workspaceTeam.ts | 758 + 279 lines | 37 + 16 lines | 5413a9b1f |
+| 2026-09-24 | moneyBillingAuthorization.ts | 606 lines, zero RPCs | deleted; lib/money/billingAuthorization/{sourceWrite,persistedCall,delegation} | 9ce990cea, ee831d3a3 |
+| 2026-09-24 | capabilitySupplyOwnerFunnelCommands.ts + OwnerFunnelProjection.ts | 768 lines + dir, zero RPCs | deleted; lib/capabilitySupply/ownerFunnel/; registration root capabilitySupplyOwnerFunnel.ts is 88 lines | ed97cfeec, ee831d3a3 |
+| 2026-09-24 | capabilitySupplyProjection.ts | 734 lines | 24 lines, lib/capabilitySupply/projection | ba30b98d5 |
+| 2026-09-24 | catalogOfferingMutations.ts | 490 lines | 13 lines, lib/catalog/offerings | bad64ce45 |
+| 2026-09-24 | lib/money layout | 17 loose files | money/{funding,credit,earnings}/ | 2716ecda2 |
+| 2026-09-24 | dead code | 13 RPCs, 7 empty roots, 10 src files | deleted (-737 src lines; about -2,400 convex lines) | 3509f0ed9, ee831d3a3 |
 
 ### Follow-ups recorded
 - **Connect type drift:** `payout-connect-http.ts` `accountFromPayout` fabricates a binding that lacks `requirementsDigest`, `createdAt` and `updatedAt`, and its refusal and authority envelopes differ. This needs a behaviour decision before the shapes can be unified.
 - **Empty shell:** `moneyConnect.ts` is a 2-line shell with zero RPCs. Delete it in the next wave that is allowed to change the generated API.
 - **Pure file in lib:** `convex/lib/callLifecycle/terminalProjection.ts` is pure but lives in lib. Move it to the domain in an API-changing wave.
+- **Hyphenated filenames broke the push (fixed in ee831d3a3).** Convex rejects hyphenated module paths. Wave 1's kebab-case Connect files silently stopped the local dev push and froze `_generated`. §10's camelCase rule is a hard requirement for this reason.
+- **Security decision pending:** `catalogOriginIsCurrent` checks businessId on the graph path but not in capabilitySupplyEligiblePorts.
+- **Contract home decision:** src `OwnerSupplyCommandResult` (supply-funnel/types.ts:262-291) is deeply readonly, while the Convex validator infers mutable arrays.
+- **Operator RPCs kept:** 7 were retained pending an operator decision (migration/backfill/health/installSchema/resolveLostResult/reconcileScheduledInteractiveAuthority/x402 backfill start).
+- **40 RPCs referenced only by tests remain.** The largest are the workspaceMemberships `*ForServer` handlers. Verify whether they are called through string refs (for example from the Clerk webhook) before treating them as dead.
+- **Next layout wave:** catalog/sellerCanary.ts (772 lines, loose); publication-admit pair (12 days old); 17 unwired skeletons (product decision). Layout map: `docs/reviews/2026-09-24-codebase-health/quote-standard/layout-map.md`.
 - **Typecheck:** 2199c986b made `api` collapse to `any` (marketFlowRefresh self-inference, via `ctx.runQuery(internal…)` with no return type). 727b5f2bc fixed it, taking errors from 89 to 16. The remaining 16 are 12 from chat/search work in a parallel session plus 4 needing guards: recovery-harness:307, api-catalog-route.test:51-52 and start-observability.test:74. **Rule: an action or handler that calls `ctx.run*(internal.*)` must declare its return type.**
 - **Empty supply shells:** `capabilitySupplyPublicationPorts.ts` and `capabilitySupplyGraphPorts.ts` are empty shells; delete them in an API-changing wave.
 - **Catalog authority gap:** `catalogOriginIsCurrent` in `graphPorts` checks `path.businessId === offering.businessId`, but `capabilitySupplyEligiblePorts` does not. This needs a security decision.
@@ -109,3 +121,25 @@ Work the highest score first. Churn decides ties, because the ergonomics payoff 
 - **Shared entry files get one owner.** Each domain's declared Convex consumer entry (e.g. `src/modules/capability-execution/convex.ts`) is owned by exactly one agent per wave. Other agents send it their lines.
 - **No root files are created or deleted in move waves**, and nobody edits `convex/_generated`.
 - **Commits run serially, with explicit pathspecs.** Another session may be committing in the same checkout, and parallel `git commit` calls collide on `index.lock`.
+
+## 10. Relocation layout (binding from wave 3)
+Moving code is fine only if every moved line lands where the next reader would look for it first.
+
+- **Domain = the module that owns the feature's primary aggregate.** The primary aggregate is the table the feature's RPCs command or read. Table ownership is set in the module schema files composed by `convex/schema.ts`. A workflow that also writes another module's tables stays whole in its primary domain; never scatter one workflow across folders by table. A cross-domain write is allowed when it is visible: it goes through that domain's lib helper, not a raw `ctx.db` call on a foreign table, where such a helper exists. The folder name is the module name in camelCase: `money`, `capabilitySupply`, `capabilityExecution`, `catalog`, `agentAccess`, `authority`, `principalAccount`, `market`, and so on.
+- **Feature is a subfolder.** Path: `convex/lib/<domain>/<feature>/`. The feature name is the root name with the domain prefix removed: `moneyConnect` becomes `money/connect`, `moneyBillingAuthorization` becomes `money/billingAuthorization`. Go at most two levels deep.
+- **Files inside a feature folder:**
+  - `contracts.ts` holds validators and `Infer` types shared by two or more files. It is the only allowed name: never `validators.ts`, `types.ts`, `*Validators.ts` or `*Contracts.ts`.
+  - Every other file is named for one concern (`issue.ts`, `reads.ts`, `reserve.ts`, `stripeEvent.ts`).
+  - A test sits next to its concern as `<concern>.test.ts`.
+- **RPC symbol naming follows Quote:** `<rpcName>Args`, `<rpcName>Result`, `<rpcName>Handler`. The root line then reads `export const x = mutation({ args: xArgs, returns: xResult, handler: xHandler })`.
+- **Files are camelCase.** No kebab-case, and no `index.ts` barrels. Import the concern file directly.
+- **No loose files directly in `convex/lib/`.** Each one gets a domain home. Genuinely cross-domain infrastructure (rate limiting, for example) goes in `convex/lib/platform/`.
+- **Pure code that `src/` needs** goes to `src/modules/<domain>/`, as in §3.
+
+Existing folders that break this layout are moved in dedicated layout waves, one domain at a time, following the mapping in `docs/reviews/2026-09-24-codebase-health/quote-standard/layout-map.md`.
+
+## 11. Pass gates (binding from wave 3; tightens §6)
+- **Deletion gate (step 1).** Before moving anything, list every export and RPC in the root. Each one gets a reference with path:line or is deleted. Report the delete count.
+- **Evidence for check 4.** Give path:line of the shared core for each caller (HTTP, MCP, chat, cron), or name the duplicate and record it as a follow-up. A bare "pass" does not count.
+- **Net lines.** Report `git diff --shortstat` for the pass. Relocation overhead (imports) is acceptable. Growth beyond roughly 10% of the moved lines must be explained.
+- **Codegen.** Only the wave's designated owner runs `npx convex codegen`, and only in waves that change the API. After it runs, `.env.local` must still contain `CONVEX_DEPLOYMENT=anonymous:anonymous-agent`.
