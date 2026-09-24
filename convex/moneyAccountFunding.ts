@@ -1,35 +1,19 @@
-import { v } from 'convex/values'
-
 import { internalMutation, internalQuery, mutation, query } from './_generated/server'
+import { finalizeFundingEventHandler, finalizeFundingRefundHandler } from './lib/money/fundingStripeEventPipeline'
 import {
-  finalizeFundingEventHandler,
-  finalizeFundingRefundHandler,
-  markFundingBookingUnknownHandler,
-  markFundingReversalUnknownHandler,
-} from './lib/money/fundingStripeEventPipeline'
+  markFundingBookingUnknownArgs, markFundingBookingUnknownHandler,
+  markFundingReversalUnknownArgs, markFundingReversalUnknownHandler, markFundingUnknownResult,
+} from './lib/money/fundingUnknown'
 import {
-  applyFundingEventArgsValue,
-  applyFundingEventResultValue,
-  trustedApplyFundingEventArgsValue,
+  applyFundingEventResultValue, finalizeFundingEventArgsValue, trustedFinalizeFundingEventArgsValue,
 } from './lib/money/accountFundingValidators'
 import {
-  bindAgentHandoffArgs,
-  bindAgentHandoffHandler,
-  bindAgentHandoffResult,
-  readAgentHandoffArgs,
-  readAgentHandoffHandler,
-  readAgentHandoffResult,
-  readPayerSafeHandoffHandler,
-  readPayerSafeHandoffResult,
-  reserveAgentHandoffArgs,
-  reserveAgentHandoffHandler,
-  reserveAgentHandoffResult,
+  bindAgentHandoffArgs, bindAgentHandoffHandler, bindAgentHandoffResult,
+  readAgentHandoffArgs, readAgentHandoffHandler, readAgentHandoffResult,
+  readPayerSafeHandoffArgs, readPayerSafeHandoffHandler, readPayerSafeHandoffResult,
+  reserveAgentHandoffArgs, reserveAgentHandoffHandler, reserveAgentHandoffResult,
 } from './lib/money/agentFundingHandoff'
-import {
-  readBalanceSubjectArgs,
-  readBalanceSubjectHandler,
-  readBalanceSubjectResult,
-} from './lib/money/fundingBalanceSubject'
+import { readBalanceSubjectArgs, readBalanceSubjectHandler, readBalanceSubjectResult } from './lib/money/fundingBalanceSubject'
 import {
   prepareVerifiedEventArgs,
   prepareVerifiedEventFromInboxArgs,
@@ -71,9 +55,6 @@ import {
 import { readArgs, readHandler, readResult } from './lib/money/ownerFundingRead'
 import { reserveArgs, reserveHandler, reserveResult } from './lib/money/ownerFundingReserve'
 
-// -- Registrations only. Validators, handler bodies, and DB logic live under --
-// -- convex/lib/money/*, grouped by concern. -----------------------------------
-
 export const reserve = mutation({
   args: reserveArgs.fields,
   returns: reserveResult,
@@ -111,7 +92,7 @@ export const readAgentHandoff = query({
 })
 
 export const readPayerSafeHandoff = query({
-  args: { externalRef: v.string() },
+  args: readPayerSafeHandoffArgs,
   returns: readPayerSafeHandoffResult,
   handler: readPayerSafeHandoffHandler,
 })
@@ -177,46 +158,37 @@ export const prepareVerifiedEventFromInbox = internalMutation({
 })
 
 export const finalizeVerifiedEvent = internalMutation({
-  args: { ...applyFundingEventArgsValue.fields, formanceTransactionRef: v.string() },
+  args: finalizeFundingEventArgsValue.fields,
   returns: applyFundingEventResultValue,
   handler: finalizeFundingEventHandler,
 })
 
 export const finalizeVerifiedEventFromInbox = internalMutation({
-  args: { ...trustedApplyFundingEventArgsValue.fields, formanceTransactionRef: v.string() },
+  args: trustedFinalizeFundingEventArgsValue.fields,
   returns: applyFundingEventResultValue,
   handler: finalizeFundingEventHandler,
 })
 
 export const finalizeVerifiedRefund = internalMutation({
-  args: { ...applyFundingEventArgsValue.fields, formanceTransactionRef: v.string() },
+  args: finalizeFundingEventArgsValue.fields,
   returns: applyFundingEventResultValue,
   handler: finalizeFundingRefundHandler,
 })
 
 export const finalizeVerifiedRefundFromInbox = internalMutation({
-  args: { ...trustedApplyFundingEventArgsValue.fields, formanceTransactionRef: v.string() },
+  args: trustedFinalizeFundingEventArgsValue.fields,
   returns: applyFundingEventResultValue,
   handler: finalizeFundingRefundHandler,
 })
 
 export const markFundingBookingUnknown = internalMutation({
-  args: { commandRef: v.string(), stripeEventId: v.string(), observedAt: v.number() },
-  returns: v.null(),
-  handler: async (ctx, args) => {
-    await markFundingBookingUnknownHandler(ctx, args)
-    return null
-  },
+  args: markFundingBookingUnknownArgs,
+  returns: markFundingUnknownResult,
+  handler: markFundingBookingUnknownHandler,
 })
 
 export const markFundingReversalUnknown = internalMutation({
-  args: {
-    paymentId: v.string(), refundId: v.string(), stripeEventId: v.string(),
-    statusRef: v.string(), observedAt: v.number(),
-  },
-  returns: v.null(),
-  handler: async (ctx, args) => {
-    await markFundingReversalUnknownHandler(ctx, args)
-    return null
-  },
+  args: markFundingReversalUnknownArgs,
+  returns: markFundingUnknownResult,
+  handler: markFundingReversalUnknownHandler,
 })

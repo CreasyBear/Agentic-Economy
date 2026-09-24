@@ -8,7 +8,7 @@ import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { verifyExactEvmX402Settlement } from '@/modules/capability-supply/server'
 import { createGuardedLookup, defaultDnsResolver } from '@/modules/network-guard/public'
 import { readX402EvmReceipt } from '@/modules/capability-execution/call-runtime'
-import type { MoneyFormanceResult } from './moneyFormance'
+import type { FormanceMoneyResult as MoneyFormanceResult } from '@/modules/money/public'
 
 /**
  * Requires: an existing stopped Call whose response was lost, and the original

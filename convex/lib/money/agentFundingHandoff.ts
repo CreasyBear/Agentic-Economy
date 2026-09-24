@@ -1,5 +1,5 @@
 import { resolveServiceMode, serviceModeAllowsEnvironment } from '@/lib/deployment/service-mode'
-import type { Infer } from 'convex/values'
+import { v, type Infer } from 'convex/values'
 
 import type { Doc } from '../../_generated/dataModel'
 import type { MutationCtx, QueryCtx } from '../../_generated/server'
@@ -38,6 +38,7 @@ export const bindAgentHandoffResult = fundingResultValue
 export const readAgentHandoffArgs = readAgentHandoffArgsValue
 export const readAgentHandoffResult = fundingResultValue
 export const readPayerSafeHandoffResult = publicFundingHandoffValue
+export const readPayerSafeHandoffArgs = { externalRef: v.string() }
 
 function agentHandoffIdempotencyRef(
   admission: Readonly<{ ownerId: string; principalId: string }>,

@@ -7,7 +7,7 @@ import { resolveBusinessActor } from './authz'
 import { clerkConsequenceProofValue } from './lib/consequenceProof'
 import { admitInteractiveOwnerConsequence } from './lib/ownerConsequence'
 import { requireSourceWrite, sourceWriteArgs } from './sourceWriteAdmission'
-import type { MoneyFormanceManagedCallBooking, MoneyFormanceResult } from './moneyFormance'
+import type { FormanceManagedCallBooking as MoneyFormanceManagedCallBooking, FormanceMoneyResult as MoneyFormanceResult } from '@/modules/money/public'
 
 const obligationValue = v.object({
   obligationRef: v.string(),

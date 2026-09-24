@@ -8,7 +8,7 @@ import { configuredX402RpcUrls } from '@/modules/capability-execution/call-runti
 import { readGuardedX402UnusedAuthorization } from '@/modules/capability-supply/server'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { createGuardedLookup, defaultDnsResolver } from '@/modules/network-guard/public'
-import type { MoneyFormanceResult } from './moneyFormance'
+import type { FormanceMoneyResult as MoneyFormanceResult } from '@/modules/money/public'
 
 /** Exact expired-unused nonce recovery. No signing, Provider call, or replacement purchase. */
 export const recover = internalAction({

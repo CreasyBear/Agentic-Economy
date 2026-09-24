@@ -1,5 +1,7 @@
 import { z } from "zod";
 import type { PaginationOptions } from "convex/server";
+export type { FormanceMoneyResult } from './formance'
+export type { FormanceManagedCallBooking } from './formance-workflows'
 import { exactAmountSchema, type ExactAmount } from "./internal/exact-amount";
 import {
   moneyRefSchema,

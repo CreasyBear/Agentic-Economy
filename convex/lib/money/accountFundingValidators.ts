@@ -136,6 +136,12 @@ export const trustedApplyFundingEventArgsValue = applyFundingEventArgsValue.omit
   'sourceWrite',
   'sourceWriteRequest',
 )
+export const finalizeFundingEventArgsValue = applyFundingEventArgsValue.extend({
+  formanceTransactionRef: v.string(),
+})
+export const trustedFinalizeFundingEventArgsValue = trustedApplyFundingEventArgsValue.extend({
+  formanceTransactionRef: v.string(),
+})
 export const readFundingArgsValue = v.object({
   commandRef: v.optional(v.string()),
   externalRef: v.optional(v.string()),
