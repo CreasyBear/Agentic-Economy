@@ -3,11 +3,8 @@ import { generateText, stepCountIs, type ToolSet } from 'ai'
 import { describe, expect, it, vi } from 'vitest'
 import type { ToolCtx } from '@convex-dev/agent'
 
-import {
-  CHAT_TOOL_IDS,
-  CHAT_TOOL_NAME_MAP,
-  createChatAgent,
-} from '../../../convex/chatTools'
+import { CHAT_TOOL_IDS, CHAT_TOOL_NAME_MAP } from '@/modules/chat/tool-card'
+import { createChatAgent } from '../../../convex/lib/chat/tools/agent'
 import {
   openRouterGatewayConfig,
   openRouterModel,

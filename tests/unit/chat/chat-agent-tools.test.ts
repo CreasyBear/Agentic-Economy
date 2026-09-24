@@ -7,16 +7,14 @@ import { projectToolCard } from '@/modules/chat/tool-card'
 import { chatClarifyInputSchema } from '@/modules/chat/agent-turn.contracts'
 import { describe, expect, it, vi } from 'vitest'
 
+import { CHAT_TOOL_IDS, CHAT_TOOL_NAME_MAP, type ChatToolId } from '@/modules/chat/tool-card'
+import { createChatAgent } from '../../../convex/lib/chat/tools/agent'
 import {
-  CHAT_TOOL_IDS,
-  CHAT_TOOL_NAME_MAP,
-  createChatAgent,
   chatNoMatchSearchCount,
   MAX_CHAT_TOOL_CALLS,
   MAX_CHAT_TOOL_RESULT_BYTES,
   prepareChatToolStep,
-  type ChatToolId,
-} from '../../../convex/chatTools'
+} from '../../../convex/lib/chat/tools/step'
 import { api, internal } from '../../../convex/_generated/api'
 import type { TrustedChatAuthority } from '@/modules/chat/agent-turn.contracts'
 import { serializeToolSearchResult, serializeToolDetailResult } from '@/modules/capability-supply/public'
