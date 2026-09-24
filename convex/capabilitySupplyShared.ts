@@ -2,10 +2,8 @@ import type { admitFacilitatorDiscoveryItems } from '@/modules/capability-supply
 import type { PublicationLifecycle } from '@/modules/capability-supply/public'
 import { v, type Infer } from 'convex/values'
 
-import {
-  deriveBusinessOfferingSupportFromCapabilitySupply,
-  rebuildBusinessSupplyProjectionSnapshotCommand,
-} from './capabilitySupplyProjection'
+import { deriveBusinessOfferingSupportFromCapabilitySupply } from './lib/capabilitySupply/projection/support'
+import { rebuildBusinessSupplyProjectionSnapshotCommand } from './lib/capabilitySupply/projection/snapshot'
 import type { Id } from './_generated/dataModel'
 import type { MutationCtx, QueryCtx } from './_generated/server'
 import { resolveBusinessActor } from './authz'

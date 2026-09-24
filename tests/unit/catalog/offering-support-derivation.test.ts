@@ -1,6 +1,7 @@
 import { convexTest } from 'convex-test'
 import { describe, expect, it } from 'vitest'
-import { deriveBusinessOfferingSupportFromCapabilitySupply, rebuildBusinessSupplyProjectionSnapshotCommand } from '../../../convex/capabilitySupplyProjection'
+import { deriveBusinessOfferingSupportFromCapabilitySupply } from '../../../convex/lib/capabilitySupply/projection/support'
+import { rebuildBusinessSupplyProjectionSnapshotCommand } from '../../../convex/lib/capabilitySupply/projection/snapshot'
 import schema from '../../../convex/schema'
 import { defineCapabilityContract } from '../../../src/modules/capability-contract/public'
 import { encodeCapabilityContractDocument } from '../../../src/modules/capability-contract-registry/public'

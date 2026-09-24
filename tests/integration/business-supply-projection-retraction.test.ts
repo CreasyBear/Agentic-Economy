@@ -2,10 +2,8 @@ import { convexTest } from 'convex-test'
 import { describe, expect, it } from 'vitest'
 
 import { publishCapabilityForSeed } from '../../convex/capabilitySupply'
-import {
-  deriveBusinessOfferingSupportFromCapabilitySupply,
-  rebuildBusinessSupplyProjectionSnapshotCommand,
-} from '../../convex/capabilitySupplyProjection'
+import { deriveBusinessOfferingSupportFromCapabilitySupply } from '../../convex/lib/capabilitySupply/projection/support'
+import { rebuildBusinessSupplyProjectionSnapshotCommand } from '../../convex/lib/capabilitySupply/projection/snapshot'
 import type { Id } from '../../convex/_generated/dataModel'
 import schema from '../../convex/schema'
 import {

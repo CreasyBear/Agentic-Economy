@@ -13,10 +13,8 @@ import {
 } from '../src/modules/registry/public'
 import { normalizeSlug } from '../src/modules/common/normalize-slug'
 import { SEARCH_STOP_WORDS, normalizeSearchText } from '../src/modules/common/normalize-search-text'
-import {
-  deriveBusinessOfferingSupportFromCapabilitySupply,
-  readLiveBusinessSupplyProjection,
-} from './capabilitySupplyProjection'
+import { deriveBusinessOfferingSupportFromCapabilitySupply } from './lib/capabilitySupply/projection/support'
+import { readLiveBusinessSupplyProjection } from './lib/capabilitySupply/projection/reads'
 
 const exactAmountDto = v.object({
   currency: v.string(), units: v.string(), exponent: v.number(),

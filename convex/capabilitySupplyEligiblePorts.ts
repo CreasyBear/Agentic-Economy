@@ -7,15 +7,14 @@ import {
   type EligiblePublishedBusiness,
   type EligibleSupplyPorts,
 } from '@/modules/capability-supply/public'
-import type { ProviderConnection } from '@/modules/capability-supply/provider-connection'
 import { normalizePricingConfig, pricingConfigDigest } from '@/modules/money/public'
 
 import type { Doc, Id } from './_generated/dataModel'
 import type { QueryCtx } from './_generated/server'
 import { capabilitySupplyGraphPorts } from './lib/capabilitySupply/graphPorts/ports'
+import { loadProviderConnection } from './lib/capabilitySupply/graphPorts/providerConnection'
 import { getActiveExactCapabilityContract } from './capabilityContractDocuments'
 import { toCapabilityBindingRow, toCapabilityOfferingRow } from './capabilitySupplyRowMappers'
-import { toDomain as providerConnectionDomain } from './lib/providerConnections/codecs'
 export function eligibleSupplyPorts(db: QueryCtx['db']): EligibleSupplyPorts {
   return {
     listAdmittedConformantBindingsByNetwork: async (networkId, take) => {
@@ -44,11 +43,7 @@ export function eligibleSupplyPorts(db: QueryCtx['db']): EligibleSupplyPorts {
         ? toPublishedBusiness(business)
         : null
     },
-    loadProviderConnection: async (connectionRef): Promise<ProviderConnection | undefined> => {
-      const row = await db.query('capabilityProviderConnections')
-        .withIndex('by_connectionRef', (query) => query.eq('connectionRef', connectionRef)).unique()
-      return row === null ? undefined : providerConnectionDomain(row)
-    },
+    loadProviderConnection: (connectionRef) => loadProviderConnection(db, connectionRef),
     catalogOriginIsCurrent: async (origin, businessId) => {
       const offering = await db.query('businessOfferings')
         .withIndex('by_offeringRef', (query) => query.eq('offeringRef', origin.offeringRef)).unique()
