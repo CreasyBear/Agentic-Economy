@@ -99,7 +99,6 @@ Work the highest score first. Churn decides ties, because the ergonomics payoff 
 
 ### Follow-ups recorded
 - **Connect type drift:** `payout-connect-http.ts` `accountFromPayout` fabricates a binding that lacks `requirementsDigest`, `createdAt` and `updatedAt`, and its refusal and authority envelopes differ. This needs a behaviour decision before the shapes can be unified.
-- **Empty shell:** `moneyConnect.ts` is a 2-line shell with zero RPCs. Delete it in the next wave that is allowed to change the generated API.
 - **Pure file in lib:** `convex/lib/callLifecycle/terminalProjection.ts` is pure but lives in lib. Move it to the domain in an API-changing wave.
 - **Hyphenated filenames broke the push (fixed in ee831d3a3).** Convex rejects hyphenated module paths. Wave 1's kebab-case Connect files silently stopped the local dev push and froze `_generated`. §10's camelCase rule is a hard requirement for this reason.
 - **Security decision pending:** `catalogOriginIsCurrent` checks businessId on the graph path but not in capabilitySupplyEligiblePorts.
@@ -108,7 +107,6 @@ Work the highest score first. Churn decides ties, because the ergonomics payoff 
 - **40 RPCs referenced only by tests remain.** The largest are the workspaceMemberships `*ForServer` handlers. Verify whether they are called through string refs (for example from the Clerk webhook) before treating them as dead.
 - **Next layout wave:** catalog/sellerCanary.ts (772 lines, loose); publication-admit pair (12 days old); 17 unwired skeletons (product decision). Layout map: `docs/reviews/2026-09-24-codebase-health/quote-standard/layout-map.md`.
 - **Typecheck:** 2199c986b made `api` collapse to `any` (marketFlowRefresh self-inference, via `ctx.runQuery(internal…)` with no return type). 727b5f2bc fixed it, taking errors from 89 to 16. The remaining 16 are 12 from chat/search work in a parallel session plus 4 needing guards: recovery-harness:307, api-catalog-route.test:51-52 and start-observability.test:74. **Rule: an action or handler that calls `ctx.run*(internal.*)` must declare its return type.**
-- **Empty supply shells:** `capabilitySupplyPublicationPorts.ts` and `capabilitySupplyGraphPorts.ts` are empty shells; delete them in an API-changing wave.
 - **Catalog authority gap:** `catalogOriginIsCurrent` in `graphPorts` checks `path.businessId === offering.businessId`, but `capabilitySupplyEligiblePorts` does not. This needs a security decision.
 - **Duplicate provider loader:** `loadProviderConnection` is duplicated in `graphPorts` and `capabilitySupplyEligiblePorts`.
 - **Principal refusals:** Account and directory principal resolvers use different missing-principal refusal codes; keep them distinct.
