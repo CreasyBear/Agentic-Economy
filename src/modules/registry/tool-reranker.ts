@@ -10,7 +10,6 @@ import type {
   ToolSearchResult,
   ToolSearchRanking,
 } from '@/modules/capability-supply/public'
-import { projectToolHealth } from '@/modules/capability-supply/tool-health'
 
 export type ToolRerankerOptions = Readonly<
   DecisionGatewayOptions & {
@@ -62,7 +61,6 @@ type SearchPage = Extract<ToolSearchResult, { kind: 'ok' }>
 type ScoredCandidate = Readonly<{
   item: SearchPage['items'][number]
   originalIndex: number
-  operational: boolean
   score: number
 }>
 type ScoreOutcome =
@@ -321,7 +319,6 @@ async function scoreToolSearch(
   }
 
   if (decision.tier !== 'jev_system_one') return { kind: 'original', result, reason: 'unavailable' }
-  const now = Date.now()
   const scoredCandidates = candidatesToScore.map((item, index) => {
     const noulAns = decision.answers[`match_${index}`]
     if (
@@ -335,7 +332,6 @@ async function scoreToolSearch(
     return {
       item,
       originalIndex: index,
-      operational: projectToolHealth(item.availability, now).healthStatus === 'operational',
       score: Math.round(noulAns.noul * 1000) / 1000,
     }
   })
@@ -343,8 +339,6 @@ async function scoreToolSearch(
   const scored = scoredCandidates.filter(
     (candidate): candidate is ScoredCandidate => candidate !== undefined,
   )
-  scored.sort((a, b) => b.score - a.score
-    || Number(b.operational) - Number(a.operational)
-    || a.originalIndex - b.originalIndex)
+  scored.sort((a, b) => b.score - a.score || a.originalIndex - b.originalIndex)
   return { kind: 'scored', result, scored, remaining, answers: decision.answers }
 }

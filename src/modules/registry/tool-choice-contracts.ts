@@ -327,7 +327,7 @@ function admittedHealth(filters: unknown): Set<ToolHealthStatus> {
   const parsed = toolCatalogFiltersSchema.safeParse(filters)
   return new Set(parsed.success && parsed.data.healthStatus !== undefined
     ? parsed.data.healthStatus
-    : ['operational', 'unverified'])
+    : ['operational'])
 }
 
 function visibleTools(tools: readonly PublicToolDescriptor[], filters: unknown) {

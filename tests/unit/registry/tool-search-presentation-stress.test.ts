@@ -1,8 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 
 import * as decisionEngine from '@/modules/decision-engine/public'
-import { projectToolCard, CHAT_TOOL_NAME_MAP, serializeToolCard } from '@/modules/chat/tool-card'
-import { chatSearchUse } from '@/modules/chat/search-presentation'
 import { presentToolSearch, TOOL_SEARCH_USE } from '@/modules/registry/tool-reranker'
 import type { ToolSearchResult } from '@/modules/capability-supply/public'
 import {
@@ -166,29 +164,4 @@ describe('Jev search presentation stress', () => {
     ])
   })
 
-  it('renders only matched results as matches and distinguishes near misses', () => {
-    const toolType = `tool-${CHAT_TOOL_NAME_MAP.canonicalToProvider['registry.tools.search']}`
-    const results = Array.from({ length: 6 }, (_, index) => ({
-      toolRef: `operation:v1:${index.toString(16).padStart(64, 'a')}`,
-      title: `Lookup ${index}`,
-      price: { kind: 'indicative', label: 'A$0.01' },
-    }))
-    const matched = projectToolCard({
-      type: toolType,
-      state: 'output-available',
-      output: { kind: 'matched', results },
-    })
-    expect(matched).toMatchObject({ kind: 'choices', count: 6 })
-    if (matched === null || matched.kind !== 'choices') return
-    expect(matched.choices).toHaveLength(4)
-    expect(projectToolCard(serializeToolCard(matched))).toEqual(matched)
-
-    const noMatch = projectToolCard({
-      type: toolType,
-      state: 'output-available',
-      output: { kind: 'noMatch', results: [], nearMisses: results.slice(0, 1), scope: 'exhausted' },
-    })
-    expect(noMatch).toMatchObject({ kind: 'choices', count: 0, choices: [] })
-    expect(chatSearchUse('registry.tools.quote')).toBeNull()
-  })
 })

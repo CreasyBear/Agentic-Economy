@@ -37,33 +37,6 @@ describe('Jev x402 Tool Search Re-ranker (cookbooks/rerank_typesafe.md)', () => 
     expect(output).not.toHaveProperty('recommendation')
   })
 
-  it('shows an unverified matching Tool honestly without treating it as buyable or verified', () => {
-    const tool = { ...TOOL_CURRENCY, availability: { posture: 'setup_required' as const, reason: 'setup_required' as const } }
-    const page = {
-      kind: 'ok' as const, schemaVersion: 'registry-tools:v3' as const, query: 'EUR USD exchange rate',
-      items: [tool], ranking: [{ toolRef: tool.toolRef, rank: 1, score: 0.85 }],
-      pagination: { limit: 10, hasMore: false }, navigation: [],
-    }
-    const output = projectToolSearchChoices(page, undefined, { verdict: 'matched', nearMisses: [] })
-    expect(output.kind).toBe('degraded')
-    expect(output.results).toMatchObject([{ toolRef: tool.toolRef, healthStatus: 'unverified', verification: 'not_verified', readiness: 'unverified' }])
-    expect(output).not.toHaveProperty('recommendation')
-    const explicitlyOperational = projectToolSearchChoices(page, { healthStatus: ['operational'] }, { verdict: 'matched', nearMisses: [] })
-    expect(explicitlyOperational.kind).toBe('noMatch')
-  })
-
-  it('orders operational ahead of unverified Tools at equal relevance', async () => {
-    const unverified = { ...TOOL_CURRENCY, availability: { posture: 'setup_required' as const, reason: 'setup_required' as const } }
-    const page = { ...misorderedSearchResult('currency rates'), items: [unverified, TOOL_CRYPTO_TX] }
-    const ranked = await rerankToolSearchResult(page, page.query, {
-      openrouterApiKey: 'test-key',
-      fetchImpl: mockJevFetch({ match_0: { type: 'noul', noul: 0.85 }, match_1: { type: 'noul', noul: 0.85 } }),
-    })
-    expect(ranked.kind).toBe('ok')
-    if (ranked.kind !== 'ok') return
-    expect(ranked.items.map(item => item.toolRef)).toEqual([TOOL_CRYPTO_TX.toolRef, unverified.toolRef])
-  })
-
   it('preserves search result untouched when query is empty, whitespace, disabled, or items <= 1', async () => {
     await expect(rerankToolSearchResult(sampleOkResult, '')).resolves.toBe(sampleOkResult)
     await expect(rerankToolSearchResult(sampleOkResult, '   ')).resolves.toBe(sampleOkResult)
