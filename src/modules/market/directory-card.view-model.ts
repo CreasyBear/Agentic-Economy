@@ -325,7 +325,7 @@ export type DirectoryToolPageModel = Readonly<{
   payments: readonly Readonly<{ network: string; amount: string }>[]
 }>
 
-function useLine(calls: string, payers: string, lastCalled: string): string | undefined {
+function directoryActivityLine(calls: string, payers: string, lastCalled: string): string | undefined {
   const parts = [
     ...(calls === '—' ? [] : [`${calls} ${calls === '1' ? 'call' : 'calls'} in 30 days`]),
     ...(payers === '—' ? [] : [`${payers} ${payers === '1' ? 'payer' : 'payers'}`]),
@@ -383,7 +383,7 @@ export function toDirectoryToolPageModel(entry: X402DirectoryEntry): DirectoryTo
   const callsLabel = countLabel(entry.activity?.calls30d) ?? '—'
   const payersLabel = countLabel(entry.activity?.payers30d) ?? '—'
   const lastCalledLabel = lastCalled ?? '—'
-  const line = useLine(callsLabel, payersLabel, lastCalledLabel)
+  const line = directoryActivityLine(callsLabel, payersLabel, lastCalledLabel)
   return {
     description: serviceDescription(entry, title),
     providerLine,

@@ -1,4 +1,4 @@
-import { degradeBackend } from '@/lib/observability/degrade-backend'
+import { degradeBackend, type DegradedReason } from '@/lib/observability/degrade-backend'
 
 /**
  * Canonical error model for Agentic-Economy, anchored to RFC 9457 (Problem
@@ -72,7 +72,7 @@ export function kindForStatus(status: number): ProblemKind {
 }
 
 /** Canonical reasons a degraded (fallback-served) result can occur. */
-export type DegradedReason = 'source_unavailable' | 'timeout' | 'not_found' | 'forbidden' | 'invalid_response'
+export type { DegradedReason } from '@/lib/observability/degrade-backend'
 
 /**
  * Canonical degraded-result marker. Modules that fall back to a stale/default

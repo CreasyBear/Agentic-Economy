@@ -4,7 +4,7 @@ import { authContinuation } from '@/lib/http/auth-continuation'
 import { bearerChallenge, bearerModeChallenge } from '@/lib/http/oauth-challenge'
 import { gatewayFailureToProblem } from '@/lib/errors'
 import { resolveCanonicalBaseUrl } from '@/lib/server/canonical-url'
-import { canonicalResolvedPrincipal } from '@/lib/server/agent-access-principal'
+import { canonicalResolvedPrincipal, type AgentAccessCredentialProjection } from '@/lib/server/agent-access-principal'
 import { problem } from '@/lib/server/problem'
 import { currentRequestCorrelationId, readRequestCorrelationId, withRequestCorrelationHeader } from '@/lib/server/request-correlation'
 import { callPublicSourceMutation, sourceMutation } from '@/lib/server/convex-source'
@@ -63,13 +63,6 @@ const resolveAgentPrincipalMutation = sourceMutation<ResolveAgentPrincipalArgs, 
   'authorityBoundary:resolveAgentBinding',
 )
 
-export type AgentAccessCredentialProjection = Readonly<{
-  credentialId: string
-  applicationRef: string
-  environment: AgentAccessEnvironment
-  scopes: readonly string[]
-  authorityMode: AgentAccessAuthorityMode
-}>
 
 export type AgentAccessPrincipalResolver = (
   projection: AgentAccessCredentialProjection,

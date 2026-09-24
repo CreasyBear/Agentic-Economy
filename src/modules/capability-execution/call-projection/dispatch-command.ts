@@ -1,4 +1,4 @@
-import type { DurableActionExecutionPort } from '@/modules/capability-execution/convex'
+import type { DurableActionExecutionPort } from '@/modules/action-execution/runtime'
 import type { CallResult } from '@/modules/capability-execution/call-contracts'
 
 export function toCallDispatchCommand(

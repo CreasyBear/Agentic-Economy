@@ -1,5 +1,5 @@
 import type { Doc } from '../../../_generated/dataModel'
-import type { OfferingSupplyDto } from './reads'
+import type { OfferingSupplyDto } from './contracts'
 import { SEARCH_STOP_WORDS, normalizeSearchText } from '../../../../src/modules/common/normalize-search-text'
 
 export function matchesOfferingSupply(item: OfferingSupplyDto, tokens: readonly string[], locationKey: string | undefined): boolean {

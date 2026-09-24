@@ -1,5 +1,5 @@
 import { type Infer } from 'convex/values'
-import type { OfferingPage, OfferingSupplyDto } from './reads'
+import type { OfferingPage, OfferingSupplyDto } from './contracts'
 import { offeringBusinessDto } from './contracts'
 
 type ConvexOfferingAccessPathDto = Infer<typeof offeringBusinessDto>['offerings'][number]['accessPaths'][number]

@@ -8,7 +8,7 @@ import { continuationCommand } from '../../lib/continuation-command'
 import { journeyNextCommand } from '../../lib/journey-next-command'
 import { callJson } from '../../lib/output'
 import { listCommandDescriptor } from '../list'
-import { doctorContinuation, originFlags, type DoctorCheckDraft } from './shared'
+import { originFlags, type DoctorCheckDraft } from './shared'
 
 const QUOTE_CHECK_TIMEOUT_MS = 5_000
 // The Tool `npm run dev:local` (stage sandbox-tool) seeds and publishes.

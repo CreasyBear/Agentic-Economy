@@ -17,8 +17,8 @@ import {
 import { exactAmountSchema, formatExactAmount, formatDisplayPrice } from '@/modules/money/public'
 import { projectToolHealth, type ToolHealthStatus } from '@/modules/capability-supply/tool-health'
 import { projectToolChoiceEvidence } from './tool-choice-evidence'
-import { searchNextActions } from './next-action'
-import type { ListingSearchGroups } from './tool-entry'
+import { searchNextActions, type RegistryNextAction } from './next-action'
+import type { ListingSearchGroups } from './internal/listing-projection'
 
 export type { ToolHealthStatus } from '@/modules/capability-supply/tool-health'
 
@@ -73,10 +73,7 @@ export const supplyProjectionFreshnessSchema = z.strictObject({
   staleAfterMs: z.number(),
 })
 export type SupplyProjectionFreshness = z.infer<typeof supplyProjectionFreshnessSchema>
-export type RegistryNextAction =
-  | Readonly<{ action: 'describe'; args: { toolRef: PublicToolRef }; authority: 'public' }>
-  | Readonly<{ action: 'next-page'; args: { query: string; cursor: string }; authority: 'public' }>
-  | Readonly<{ action: 'broaden'; args: { query: string }; authority: 'public' }>
+export type { RegistryNextAction } from './next-action'
 export const registryNextActionSchema = z.discriminatedUnion('action', [
   z.strictObject({ action: z.literal('describe'), args: z.strictObject({ toolRef: z.string().regex(/^operation:v1:[0-9a-f]{64}$/).transform((ref) => ref as PublicToolRef) }), authority: z.literal('public') }),
   z.strictObject({ action: z.literal('next-page'), args: z.strictObject({ query: z.string(), cursor: z.string() }), authority: z.literal('public') }),

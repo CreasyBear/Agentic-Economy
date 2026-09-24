@@ -563,6 +563,38 @@ async function preparePublicationTarget(input: Readonly<{
   return { kind: 'valid', publicationRef, targetPublication, toolRef }
 }
 
+function hasConflictingSourceRoute(
+  publications: readonly PublicationCommandRow[],
+  offeringId: string,
+  authorityMode: CapabilityPublicationAuthorityMode,
+): boolean {
+  return publications.some((publication) => {
+    if (publication.publicationRef === offeringId) return false
+    if (authorityMode === 'provider_owned') return publication.authorityMode === 'provider_owned'
+    return publication.authorityMode === 'provider_owned' || publication.authorityMode === authorityMode
+  })
+}
+async function validatePublicationSourceRoute(
+  command: PreparedPublicationCommitInput,
+  ports: PublicationCommandPorts,
+  offeringId: string,
+  metadata: CapabilityPublicationProvenance,
+): Promise<Readonly<{ kind: 'refused'; reason: 'source_invalid' | 'source_route_conflict' }> | undefined> {
+  if (!publicationMetadataMatches({
+    metadata,
+    actor: command.actor,
+    sourceRevision: command.prepared.sourceRevision,
+    sourceDigest: command.prepared.sourceDigest,
+  })) return { kind: 'refused', reason: 'source_invalid' }
+
+  const publications = await ports.loadCurrentPublicationsBySourceRoute?.(command.prepared.sourceRouteRef) ?? []
+  if (hasConflictingSourceRoute(publications, offeringId, metadata.authorityMode)) {
+    return { kind: 'refused', reason: 'source_route_conflict' }
+  }
+  return undefined
+}
+
+
 async function commitPreparedPublicationCommand(
   input: PreparedPublicationCommitInput,
   ports: PublicationCommandPorts,
@@ -599,29 +631,8 @@ async function commitPreparedPublicationCommand(
         sourceDigest,
       })
     : input.publicationMetadata
-  if (!publicationMetadataMatches({
-    metadata: publicationMetadata,
-    actor: input.actor,
-    sourceRevision,
-    sourceDigest,
-  })) {
-    return { kind: 'refused', reason: 'source_invalid' }
-  }
-
-  const currentRoutePublications = await ports.loadCurrentPublicationsBySourceRoute?.(
-    prepared.sourceRouteRef,
-  ) ?? []
-  const conflictingRoute = currentRoutePublications.find((publication) => {
-    if (publication.publicationRef === offering.offeringId) return false
-    if (publicationMetadata.authorityMode === 'provider_owned') {
-      return publication.authorityMode === 'provider_owned'
-    }
-    return publication.authorityMode === 'provider_owned'
-      || publication.authorityMode === publicationMetadata.authorityMode
-  })
-  if (conflictingRoute !== undefined) {
-    return { kind: 'refused', reason: 'source_route_conflict' }
-  }
+  const sourceRouteRefusal = await validatePublicationSourceRoute(input, ports, offering.offeringId, publicationMetadata)
+  if (sourceRouteRefusal !== undefined) return sourceRouteRefusal
 
   const contractRefusal = await validatePublicationContractContinuity(
     input,

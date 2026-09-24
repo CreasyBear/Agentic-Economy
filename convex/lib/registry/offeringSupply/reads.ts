@@ -6,11 +6,9 @@ import { deriveBusinessOfferingSupportFromCapabilitySupply } from '../../capabil
 import { readLiveBusinessSupplyProjection } from '../../capabilitySupply/projection/reads'
 import { paginationOptsValidator } from 'convex/server'
 import { type Infer } from 'convex/values'
-import { listPublicBusinessOfferingSupplyResult, getPublicBusinessOfferingSupplyBySlugResult } from './contracts'
+import { listPublicBusinessOfferingSupplyResult, getPublicBusinessOfferingSupplyBySlugResult, type OfferingPage, type OfferingSupplyDto } from './contracts'
 import { nativeOfferingPageResultValue, toConvexOfferingBusiness } from './projection'
 
-export type OfferingSupplyDto = ReturnType<typeof projectBusinessSupplyToPublicApi>
-export type OfferingPage = { items: OfferingSupplyDto[]; isDone: boolean; continueCursor: string }
 type NativePaginationOpts = typeof paginationOptsValidator['type']
 
 export type OfferingSupplyBusiness = Readonly<{

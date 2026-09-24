@@ -12,8 +12,7 @@ import { components } from './_generated/api'
 import type { Doc } from './_generated/dataModel'
 import { mutation, query } from './_generated/server'
 import type { QueryCtx } from './_generated/server'
-import { resolveBusinessActor } from './authz'
-import type { BusinessActor } from '../src/modules/business/public'
+import { requireChatOwner } from './lib/chat/threadListing'
 import { deleteChatThreadShares } from '../src/modules/chat-sharing/convex'
 import { chatThreadBelongsToPrincipal } from './lib/chat/threadOwnership'
 import {
@@ -35,15 +34,7 @@ const threadSummary = v.object({
 
 type ThreadContext = Pick<QueryCtx, 'auth' | 'db'>
 
-export async function requireChatOwner(
-  ctx: ThreadContext,
-): Promise<Extract<BusinessActor, { kind: 'authenticated_owner' }>> {
-  const actor = await resolveBusinessActor(ctx)
-  if (actor.kind !== 'authenticated_owner') {
-    throw new Error('unauthenticated')
-  }
-  return actor
-}
+export { requireChatOwner } from './lib/chat/threadListing'
 
 export async function requireOwnedChatThread(
   ctx: ThreadContext,

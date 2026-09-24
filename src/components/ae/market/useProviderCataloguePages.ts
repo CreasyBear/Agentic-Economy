@@ -78,9 +78,9 @@ function hostsBefore(pages: readonly ProviderPage[], index: number): Set<string>
 /** Providers paginate by host. A page keeps reading the sorted Tool list until it has 12 hosts, or the list ends. */
 export function useProviderCataloguePages(enabled: boolean, catalogue: X402DirectoryCatalogue | undefined, filters: X402DirectoryCatalogueInput) {
   const filtersRef = useRef(filters)
-  filtersRef.current = filters
   const generation = useRef(0)
   const [state, setState] = useState(() => initialProviderPages(enabled, catalogue))
+  useEffect(() => { filtersRef.current = filters }, [filters])
 
   useEffect(() => {
     const nextGeneration = generation.current + 1

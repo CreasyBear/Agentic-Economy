@@ -25,6 +25,7 @@ export function useBillingPaymentMethods() {
   const readSummary = useServerFn(readSavedPaymentMethodSummaryServer)
   const createPortalSession = useServerFn(createStripeCustomerPortalSessionServer)
   const [summary, setSummary] = useState<SavedPaymentMethodsSummary>()
+  const [summaryReadAt, setSummaryReadAt] = useState(0)
   const [isLoading, setLoading] = useState(true)
   const [unavailable, setUnavailable] = useState(false)
   const refresh = useCallback(async () => {
@@ -32,6 +33,7 @@ export function useBillingPaymentMethods() {
     setUnavailable(false)
     try {
       const result = await readSummary()
+      setSummaryReadAt(Date.now())
       if (result.kind === 'refused') {
         setSummary(undefined)
         setUnavailable(true)
@@ -51,7 +53,7 @@ export function useBillingPaymentMethods() {
   useEffect(() => { if (authenticated) void refresh() }, [authenticated, refresh])
   return {
     summary,
-    expiryKind: summary?.kind === 'ready' ? paymentCardExpiryKind(summary.card, Date.now()) : null,
+    expiryKind: summary?.kind === 'ready' ? paymentCardExpiryKind(summary.card, summaryReadAt) : null,
     isLoading,
     unavailable,
     refresh,

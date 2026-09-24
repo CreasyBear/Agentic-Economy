@@ -2,8 +2,9 @@ import type { StableHashValue } from '@/modules/common/stable-hash'
 import type { Infer } from 'convex/values'
 import type { ExactAmount, MoneyAcceptedCallCharge } from '@/modules/money/public'
 import type { SellerOnboardingCanaryExecutionEnvelope } from '@/modules/capability-execution'
-import type { CallPersistedAuthority, DurableActionExecutionPort } from '@/modules/capability-execution/convex'
-import { callResultValue, recoveryResultValue, usageValue } from '@/modules/capability-execution/convex'
+import type { CallPersistedAuthority } from '../internal/convex-schema'
+import { callResultValue, recoveryResultValue, usageValue } from '../internal/convex-schema'
+import type { DurableActionExecutionPort } from '@/modules/action-execution/runtime'
 import type { CallResult } from '@/modules/capability-execution/call-contracts'
 
 export type OpenDispatch = Readonly<{

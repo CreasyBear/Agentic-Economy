@@ -98,8 +98,8 @@ describe('journey contract projections', () => {
 
 })
 
-// These assignments are compile-time contracts; the branch never runs.
-if (false) {
+// These assignments are compile-time contracts; the function is never called.
+function checkJourneyTypes() {
   // @ts-expect-error A Call event without its own payment state is not a Call event.
   const missingPayment: CallEvent = { kind: 'call', eventId: 'e1', correlationId: 'c1', sequence: 1, state: 'working', callRef }
   // @ts-expect-error A Turn cannot claim a payment state.
@@ -115,3 +115,4 @@ if (false) {
   const preDispatchWithCall: ToolProcureResult = { schemaVersion: 'tool.procure:v1', kind: 'refused', status: 'refused', code: 'budget_exceeded', detail: 'Too high', idempotencyKey: 'purchase-1', callRef }
   void [quoteWork, pendingWithoutCall, preDispatchWithCall]
 }
+void checkJourneyTypes

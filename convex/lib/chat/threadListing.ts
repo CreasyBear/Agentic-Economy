@@ -1,13 +1,21 @@
 import { paginationOptsValidator, type PaginationResult } from 'convex/server'
 import type { Doc } from '../../_generated/dataModel'
 import type { QueryCtx } from '../../_generated/server'
-import type { BusinessActor } from '../../../src/modules/business/public'
+import type { BusinessActor, InteractiveBusinessAuthorityContext } from '../../../src/modules/business/public'
 import type { MutationCtx } from '../../_generated/server'
 import { resolveBusinessActor } from '../../authz'
 import { resolveCurrentAgentAuthority } from '../capabilityExecution/callLifecycle/agentCallAuthority'
 import { resolveCanonicalAgentContext } from '../authority/canonicalAgent/authority'
-import type { TurnActor } from './turnHandlers'
 import { chatThreadBelongsToPrincipal } from './threadOwnership'
+export type TurnActor = Readonly<{
+  kind: 'clerk_owner' | 'agent_key'
+  principalRef: string
+  accountRef: string
+  credentialLocator?: string
+  grantRef?: string
+  origin?: 'owner_chat'
+  authority?: InteractiveBusinessAuthorityContext
+}>
 
 const MAX_PAGE_SIZE = 50
 export const MAX_CHAT_THREAD_TITLE_LENGTH = 80
@@ -27,6 +35,13 @@ export type ChatThreadSummary = Readonly<{
   busy: boolean
 }>
 
+export async function requireChatOwner(
+  ctx: Pick<QueryCtx, 'auth' | 'db'>,
+): Promise<Owner> {
+  const actor = await resolveBusinessActor(ctx)
+  if (actor.kind !== 'authenticated_owner') throw new Error('unauthenticated')
+  return actor
+}
 
 export function normalizeChatThreadTitle(title: string): string {
   return Array.from(title.trim().replace(/\s+/gu, ' '))

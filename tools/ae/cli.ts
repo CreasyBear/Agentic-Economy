@@ -546,9 +546,6 @@ async function main(argv: readonly string[] = process.argv.slice(2)): Promise<nu
     let message: string
     let kind: ProblemKind = 'INTERNAL'
     let code: string | undefined
-    let detail: unknown
-    let retryable: boolean | undefined
-    let retryAfter: string | undefined
     let suggestion: string | undefined
     let nextCommand: string | undefined
     const mappedFailure = error instanceof CliFailure ? error : sourceErrorToCliFailure(error)
@@ -557,9 +554,6 @@ async function main(argv: readonly string[] = process.argv.slice(2)): Promise<nu
       message = mappedFailure.message
       kind = mappedFailure.kind
       code = mappedFailure.code
-      detail = mappedFailure.detail
-      retryable = mappedFailure.retryable
-      retryAfter = mappedFailure.retryAfter
       suggestion = mappedFailure.suggestion
       nextCommand = mappedFailure.nextCommand
       const publicReadContinuation = suggestion === undefined && nextCommand === undefined

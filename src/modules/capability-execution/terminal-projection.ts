@@ -1,6 +1,6 @@
 import type { RouteTransportObservation } from '@/modules/capability-supply/route-transport-runtime'
 import { transportObservationDigest } from '@/modules/capability-supply/public'
-import type { CanonicalTerminalOutcome } from '@/modules/capability-execution/convex'
+import type { CanonicalTerminalOutcome } from '@/modules/action-execution/runtime'
 
 type TerminalOutcomeContext = Readonly<{
   observation: RouteTransportObservation

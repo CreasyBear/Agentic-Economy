@@ -1,4 +1,3 @@
-import { gatewayFailureToProblem } from '@/lib/errors'
 import { degrade } from '@/lib/observability/degrade'
 import { authRefusalProblem, authenticateAgentAccess, resolveAgentAccessPrincipal, type AgentAccessAuthenticationOptions, type AgentAccessPrincipalResolver } from '@/lib/server/agent-access-auth'
 import { readBoundedRequestText } from '@/lib/server/bounded-request-body'

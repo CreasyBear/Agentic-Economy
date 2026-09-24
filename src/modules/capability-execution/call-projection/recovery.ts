@@ -1,5 +1,6 @@
 import type { Infer } from 'convex/values'
-import { callReceiptValue, type PublicExecutionStatus } from '@/modules/capability-execution/convex'
+import { callReceiptValue } from '../internal/convex-schema'
+import type { PublicExecutionStatus } from '@/modules/action-execution/runtime'
 import type { RecoveryAttempt, RecoveryRow, WorkerRecoveryResult } from './contracts'
 
 export function recoveryNotFound(callRef: string): WorkerRecoveryResult {

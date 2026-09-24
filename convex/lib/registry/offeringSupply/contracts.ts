@@ -2,6 +2,10 @@ import { paginationOptsValidator } from 'convex/server'
 import { v } from 'convex/values'
 
 import { businessContext as businessContextDto } from '../../../../src/modules/business/public'
+import type { PublicBusinessCatalogApiV2Dto } from '../../../../src/modules/registry/public'
+
+export type OfferingSupplyDto = PublicBusinessCatalogApiV2Dto
+export type OfferingPage = { items: OfferingSupplyDto[]; isDone: boolean; continueCursor: string }
 
 export const exactAmountDto = v.object({
   currency: v.string(), units: v.string(), exponent: v.number(),

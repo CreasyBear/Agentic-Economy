@@ -1,5 +1,13 @@
 import { degrade } from '@/lib/observability/degrade'
-import type { AgentAccessCredentialProjection } from '@/lib/server/agent-access-auth'
+import type { AgentAccessEnvironment } from '@/modules/agent-access/agent-access'
+import type { AgentAccessAuthorityMode } from '@/modules/agent-access/contract'
+export type AgentAccessCredentialProjection = Readonly<{
+  credentialId: string
+  applicationRef: string
+  environment: AgentAccessEnvironment
+  scopes: readonly string[]
+  authorityMode: AgentAccessAuthorityMode
+}>
 import type { AgentAccessPrincipal } from '@/modules/agent-access/agent-access'
 import { accountRef, principalRef } from '@/modules/principal-account/public'
 

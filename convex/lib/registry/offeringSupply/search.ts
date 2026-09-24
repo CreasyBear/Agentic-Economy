@@ -5,7 +5,8 @@ import { compareExactAmounts, type ExactAmount } from '../../../../src/modules/m
 import { registrySearchTokens } from '../../../../src/modules/registry/public'
 import { normalizeSearchText } from '../../../../src/modules/common/normalize-search-text'
 import { searchPublicBusinessOfferingSupplyResult } from './contracts'
-import { createOfferingSupplyReadPort, readOfferingSupplyForBusiness, type OfferingSupplyDto } from './reads'
+import { createOfferingSupplyReadPort, readOfferingSupplyForBusiness } from './reads'
+import type { OfferingSupplyDto } from './contracts'
 import { toConvexOfferingBusiness } from './projection'
 import { matchesOfferingSupply, matchesSearchDocument, uniqueBusinessSlugs, resolveSearchLocationKey } from './matching'
 

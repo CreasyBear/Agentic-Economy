@@ -44,7 +44,7 @@ describe('MCP role toolsets', () => {
     expect(names(body)).not.toContain('ae_tool_call')
     expect(names(body).some((name) => name.startsWith('ae_operation_'))).toBe(false)
     expect(bytes(body.result?.tools)).toBeLessThan(8192)
-    for (const tool of body.result?.tools as Array<Record<string, unknown>>) {
+    for (const tool of (body.result?.tools ?? []) as Array<Record<string, unknown>>) {
       expect(tool.inputSchema).toMatchObject({ type: 'object', properties: expect.any(Object) })
       expect(tool.outputSchema).toMatchObject({
         type: 'object',
