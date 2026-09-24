@@ -1668,6 +1668,12 @@
     "kind": "action"
   },
   {
+    "visibility": "public",
+    "module": "chatCall",
+    "method": "readOwnerChatCards",
+    "kind": "query"
+  },
+  {
     "visibility": "internal",
     "module": "chatCall",
     "method": "readTurnEffects",
@@ -1802,6 +1808,12 @@
   {
     "visibility": "public",
     "module": "chatTurns",
+    "method": "ownerChatGrantStatus",
+    "kind": "query"
+  },
+  {
+    "visibility": "public",
+    "module": "chatTurns",
     "method": "readDeltas",
     "kind": "query"
   },
@@ -1810,6 +1822,12 @@
     "module": "chatTurns",
     "method": "readTurn",
     "kind": "query"
+  },
+  {
+    "visibility": "internal",
+    "module": "chatTurns",
+    "method": "recordOwnerChatCall",
+    "kind": "mutation"
   },
   {
     "visibility": "public",
@@ -1960,6 +1978,78 @@
     "module": "marketDemandSignals",
     "method": "withdraw",
     "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "marketFlow",
+    "method": "addChunk",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "marketFlow",
+    "method": "advance",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "marketFlow",
+    "method": "checkpoint",
+    "kind": "query"
+  },
+  {
+    "visibility": "internal",
+    "module": "marketFlow",
+    "method": "expireChunk",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "marketFlow",
+    "method": "fail",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "marketFlow",
+    "method": "noteWindow",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "marketFlow",
+    "method": "payeeVolumes",
+    "kind": "query"
+  },
+  {
+    "visibility": "public",
+    "module": "marketFlow",
+    "method": "rank",
+    "kind": "query"
+  },
+  {
+    "visibility": "internal",
+    "module": "marketFlow",
+    "method": "savePayeeVolumes",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "public",
+    "module": "marketFlow",
+    "method": "visibleVolumes",
+    "kind": "query"
+  },
+  {
+    "visibility": "public",
+    "module": "marketFlowRefresh",
+    "method": "lookupVolumes",
+    "kind": "action"
+  },
+  {
+    "visibility": "internal",
+    "module": "marketFlowRefresh",
+    "method": "run",
+    "kind": "action"
   },
   {
     "visibility": "internal",
@@ -3182,6 +3272,18 @@
   {
     "visibility": "public",
     "module": "workspaceAccounts",
+    "method": "readWorkspaceOrganizationBinding",
+    "kind": "query"
+  },
+  {
+    "visibility": "public",
+    "module": "workspaceAccounts",
+    "method": "renameUnboundWorkspace",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "public",
+    "module": "workspaceAccounts",
     "method": "transferWorkspaceOwnership",
     "kind": "mutation"
   },
@@ -3244,6 +3346,12 @@
     "module": "workspaceSecurity",
     "method": "updatePolicy",
     "kind": "mutation"
+  },
+  {
+    "visibility": "public",
+    "module": "workspaceTeam",
+    "method": "invitationContext",
+    "kind": "query"
   },
   {
     "visibility": "public",

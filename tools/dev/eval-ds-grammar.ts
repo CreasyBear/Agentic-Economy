@@ -249,7 +249,7 @@ export function journeyCases(): readonly DsJourneyCase[] {
 /** DS-18 harvest budget — public tool detail + provider listing. */
 export const DS_18_SOURCE_FILES = [
   'src/components/ae/market/public-tool-detail/PublicToolDetail.tsx',
-  'src/components/ae/market/public-tool-detail/AeDirectoryToolCanonicalPage.tsx',
+  'src/components/ae/market/public-tool-detail/DirectoryToolPage.tsx',
   'src/components/ae/market/public-tool-detail/MarketBackButton.tsx',
   'src/components/ae/market/tool-detail/AeToolInspector.tsx',
   'src/components/ae/market/tool-detail/AeToolIdentity.tsx',
@@ -271,7 +271,7 @@ function readRepoFile(relativePath: string): string {
 export function ds18PublicToolWorkspaceKindViolations(): readonly string[] {
   const detailFiles = [
     'src/components/ae/market/public-tool-detail/PublicToolDetail.tsx',
-    'src/components/ae/market/public-tool-detail/AeDirectoryToolCanonicalPage.tsx',
+    'src/components/ae/market/public-tool-detail/DirectoryToolPage.tsx',
   ] as const
   const violations: string[] = []
   for (const file of detailFiles) {
@@ -584,25 +584,17 @@ function countOccurrences(source: string, needle: string): number {
 
 /** DS-35: inventory duplicate global chrome (listing only; no ratchet). */
 export function ds35FrameOwnershipInventory(): Readonly<{
-  appShell: { userButton: number; themeToggle: number; brandMark: number; organizationSwitcher: number }
-  operatorSidebar: { userButton: number; themeToggle: number; brandMark: number; organizationSwitcher: number }
+  appHeader: { userButton: number; themeToggle: number; brandMark: number; organizationSwitcher: number }
   chatHeader: { brandMark: number; signInButton: number; userButton: number; themeToggle: number }
 }> {
-  const appShell = readRepoFile('src/components/ae/layout/AeAppShell.tsx')
-  const operatorSidebar = readRepoFile('src/components/ae/layout/AeOperatorSidebar.tsx')
+  const appHeader = readRepoFile('src/components/ae/layout/app-shell/AeAppHeader.tsx')
   const chatHeader = readRepoFile('src/components/ae/chat/chat-session/components/ChatHeader.tsx')
   return {
-    appShell: {
-      userButton: countOccurrences(appShell, '<UserButton'),
-      themeToggle: countOccurrences(appShell, '<ThemeToggle'),
-      brandMark: countOccurrences(appShell, 'AECON_MARK_SRC'),
-      organizationSwitcher: countOccurrences(appShell, 'AeOrganizationSwitcher'),
-    },
-    operatorSidebar: {
-      userButton: countOccurrences(operatorSidebar, '<UserButton'),
-      themeToggle: countOccurrences(operatorSidebar, '<ThemeToggle'),
-      brandMark: countOccurrences(operatorSidebar, 'SiteMarker'),
-      organizationSwitcher: countOccurrences(operatorSidebar, 'AeOrganizationSwitcher'),
+    appHeader: {
+      userButton: countOccurrences(appHeader, '<UserButton'),
+      themeToggle: countOccurrences(appHeader, '<ThemeToggle'),
+      brandMark: countOccurrences(appHeader, 'AECON_MARK_SRC'),
+      organizationSwitcher: countOccurrences(appHeader, 'AeOrganizationSwitcher'),
     },
     chatHeader: {
       brandMark: countOccurrences(chatHeader, 'AECON_MARK_SRC'),

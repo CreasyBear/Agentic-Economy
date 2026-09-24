@@ -17,7 +17,7 @@ import { CALL_ROUTE_CONTRACT } from "../../../src/modules/capability-execution/c
 import {
   projectToolDescription,
   projectToolSearchChoices,
-  type SearchEnvelope,
+  type ToolChoiceSearchOutput,
 } from "../../../src/modules/registry/tool-choice-contracts";
 import { registryDetailAction } from "../../../src/modules/registry/registry.actions";
 import type { GatewayToolQuote } from "../../../tools/release/tool-gateway-production-smoke-call";
@@ -141,7 +141,7 @@ function currentProjectionTool(): PublicToolDescriptor {
 
 export function publicToolSearchResponse(
   query = "paid",
-): Extract<SearchEnvelope, { kind: "matched" }> {
+): Extract<ToolChoiceSearchOutput, { kind: "matched" }> {
   const source: ToolSearchResult = {
     kind: "ok",
     schemaVersion: "registry-tools:v3",
