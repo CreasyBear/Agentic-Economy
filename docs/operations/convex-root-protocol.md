@@ -82,12 +82,27 @@ Work the highest score first. Churn decides ties, because the ergonomics payoff 
 | 2026-09-24 | capabilityCallProjection.ts | 873 lines, checks 4 only | 8 lines, checks 1-4 pass | 70f34603c |
 | 2026-09-24 | moneyConnect.ts + moneyLedger.ts | 935 + 367 lines, check 3 only | 2-line shell + 131 lines; checks 1-3 pass, check 4 partial (Connect type drift is semantic) | 3945f4283 |
 | 2026-09-24 | moneyDocuments.ts | 848 lines, check 3 only | 100 lines, checks 1-4 pass | faafb3aed |
+| 2026-09-24 | x402DirectoryIndexStore.ts + x402DirectoryIndex.ts | 695 + 474 lines | 12 + 17 scanner lines, checks 1-4 pass | 81de5b0a6 |
+| 2026-09-24 | capabilitySupplyReadiness.ts + capabilitySupplyPublicationPorts.ts + capabilitySupplyGraphPorts.ts | 314 + 247 + 239 lines | 33 lines + two 2-line empty shells | 6729cdb3a |
+| 2026-09-24 | workloadCron.ts | 638 lines | 118 lines | 3640ec590 |
+| 2026-09-24 | facilitatorDiscovery.ts | 552 lines | 9 lines | d3a419779 |
+| 2026-09-24 | moneyFormance.ts + moneyAccountFunding.ts | 524 + 223 lines | 84 + 194 lines; one Node Formance gateway (`convex/lib/money/formance/gateway.ts`) | 85775bb67 |
+| 2026-09-24 | moneyManagedCall.ts + moneyManagedCallLifecycle.ts | 327 + 320 lines | 21 + 59 lines | 1eb4a9c13 |
+| 2026-09-24 | agentAccessPolicy.ts + authorityBoundary.ts | 329 + 438 lines | 43 + 9 lines | 982fe879e |
+| 2026-09-24 | workspaceAccounts.ts + workspaceTeam.ts | 758 + 279 lines | 37 + 16 lines | 5413a9b1f |
 
 ### Follow-ups recorded
 - **Connect type drift:** `payout-connect-http.ts` `accountFromPayout` fabricates a binding that lacks `requirementsDigest`, `createdAt` and `updatedAt`, and its refusal and authority envelopes differ. This needs a behaviour decision before the shapes can be unified.
 - **Empty shell:** `moneyConnect.ts` is a 2-line shell with zero RPCs. Delete it in the next wave that is allowed to change the generated API.
 - **Pure file in lib:** `convex/lib/callLifecycle/terminalProjection.ts` is pure but lives in lib. Move it to the domain in an API-changing wave.
 - **Typecheck:** 2199c986b made `api` collapse to `any` (marketFlowRefresh self-inference, via `ctx.runQuery(internal…)` with no return type). 727b5f2bc fixed it, taking errors from 89 to 16. The remaining 16 are 12 from chat/search work in a parallel session plus 4 needing guards: recovery-harness:307, api-catalog-route.test:51-52 and start-observability.test:74. **Rule: an action or handler that calls `ctx.run*(internal.*)` must declare its return type.**
+- **Empty supply shells:** `capabilitySupplyPublicationPorts.ts` and `capabilitySupplyGraphPorts.ts` are empty shells; delete them in an API-changing wave.
+- **Catalog authority gap:** `catalogOriginIsCurrent` in `graphPorts` checks `path.businessId === offering.businessId`, but `capabilitySupplyEligiblePorts` does not. This needs a security decision.
+- **Duplicate provider loader:** `loadProviderConnection` is duplicated in `graphPorts` and `capabilitySupplyEligiblePorts`.
+- **Principal refusals:** Account and directory principal resolvers use different missing-principal refusal codes; keep them distinct.
+- **Managed-Call remedy:** Remedy transitions resemble finalize transitions but differ semantically; keep them distinct.
+- **Provider-row test location:** Move `convex/x402DirectoryIndexStoreProviderRows.test.ts` beside `lib/x402DirectoryIndex/providerRows`.
+- **Typecheck baseline:** 12 errors remain, all owned by the parallel chat session.
 
 ## 9. Wave rules learned (binding from wave 2)
 - **Baseline first.** Record `npx tsc --noEmit --pretty false` and `npm run test:imports` at HEAD before dispatching the wave. Attribute errors by diffing against that baseline, not by guessing.
