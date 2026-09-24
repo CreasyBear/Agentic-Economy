@@ -13,6 +13,7 @@ import type { FormanceMoneyResult as MoneyFormanceResult } from '@/modules/money
 /** Exact expired-unused nonce recovery. No signing, Provider call, or replacement purchase. */
 export const recover = internalAction({
   args: { callRef: v.string(), attempt: v.optional(v.number()) },
+  returns: v.object({ kind: v.union(v.literal('completed'), v.literal('pending'), v.literal('not_eligible')) }),
   handler: async (ctx, args): Promise<{ kind: 'completed' | 'pending' | 'not_eligible' }> => {
     // Arm the successor before RPC or ledger work. An action crash cannot skip
     // the recovery of a financial effect that this attempt is about to perform.

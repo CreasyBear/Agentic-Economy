@@ -17,6 +17,7 @@ async function readCall(ctx: Pick<QueryCtx, 'db'>, callRef: string) {
 /** Called only with independently verified safe-block proof; pins evidence across crash/replay. */
 export const claim = internalMutation({
   args: proof,
+  returns: v.union(v.null(), v.object({ evidenceDigest: v.string() })),
   handler: async (ctx, args) => {
     const call = await readCall(ctx, args.callRef)
     if (call === null || call.state !== 'reconciliation_required'
@@ -54,6 +55,7 @@ export const claim = internalMutation({
 
 export const finish = internalMutation({
   args: { callRef: v.string(), evidenceDigest: v.string(), transactionRefs: v.array(v.string()) },
+  returns: v.object({ kind: v.union(v.literal('completed'), v.literal('refused')) }),
   handler: async (ctx, args) => {
     const call = await readCall(ctx, args.callRef)
     if (call?.formanceFinancialState === 'released' && call.result?.kind === 'refused'
@@ -105,6 +107,7 @@ export const finish = internalMutation({
 /** Scheduled independently of the browser; retries read the same payment only. */
 export const schedule = internalMutation({
   args: { callRef: v.string(), runAt: v.number(), attempt: v.optional(v.number()) },
+  returns: v.boolean(),
   handler: async (ctx, args) => {
     const call = await readCall(ctx, args.callRef)
     if (call?.state !== 'reconciliation_required') return false
