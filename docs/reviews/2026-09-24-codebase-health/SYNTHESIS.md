@@ -29,3 +29,19 @@ Every finding here is observation only; nothing in source has been changed. The 
 2. Bring Call projection up to the Quote standard (fails checks 1 and 3).
 3. Delete the dead code: 26 files (1,748 LOC), the 774-LOC publication-admit pair, charge-contract (306), and 20 Convex RPCs that nothing references.
 4. Make the gates honest again: bare catches are 20 against a ceiling of 19, plus the façade ratchet holes and overshoots.
+
+## Status 2026-09-24 (end of day)
+
+The tables and original queue above are the opening audit, not the current state.
+- Both HIGH bugs are fixed: caller-rotatable rate-limit buckets (`3d4ba6672`) and stalled unfinished-purchase replay (`68d692b38`).
+- Quote-standard §8 records 22 live roots processed across 14 ledger entries (including the partial Connect type-unification pass); this is not a claim that all four checks pass for every root. See the [current queue](quote-standard/queue.md) for remaining oversized roots.
+- Dead code removed: `3509f0ed9` deleted 10 orphaned `src/` files (−737 lines); `ee831d3a3` deleted 13 RPCs and seven empty Convex roots.
+- Typecheck went from 92 errors to 12 remaining chat-owned errors (protocol §8); no non-chat green claim is implied.
+
+Open decisions and follow-ups from protocol §8:
+- Connect's fabricated payout binding and differing authority/refusal envelopes require a behaviour decision before type unification.
+- Decide whether `catalogOriginIsCurrent` on the eligible-ports path must check businessId as the graph path does; reconcile the readonly `OwnerSupplyCommandResult` with the mutable Convex-validator shape.
+- Seven operator RPCs remain pending operator decisions; investigate 40 test-only RPC references (especially Clerk webhook string references) before deletion.
+- Keep principal missing-identity refusal codes and Managed-Call remedy/finalize transitions distinct unless their semantics are deliberately changed.
+- Move pure `callLifecycle/terminalProjection.ts` into the domain in an API-changing wave; relocate the provider-row test beside its concern.
+- Layout follow-ups: loose `catalog/sellerCanary.ts`, the publication-admit pair and 17 unwired skeletons (product decision). Hyphenated Connect modules were already fixed in `ee831d3a3`.
