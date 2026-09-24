@@ -1,5 +1,5 @@
-import { brandNonEmpty } from '../src/modules/common/ids'
-import { isRecord } from '../src/modules/common/is-record'
+import { readRecord, readString, readOptionalString, readNumber, readOptionalNumber, readBoolean, readArray, readLiteral } from './snapshotFields'
+import { brandNonEmpty } from '@/modules/common/ids'
 import {
   ExternalOperationProvenanceValues,
   HumanRequestChannelValues,
@@ -7,18 +7,18 @@ import {
   OfferingPriceTaxTreatmentValues,
   OfferingPriceUnitValues,
   PublicSupportReasonValues,
-} from '../src/modules/catalog/convex'
+} from '@/modules/catalog/convex'
 import type {
   BusinessSupplyProjection,
   OfferingAccessPathDescriptor,
   OfferingPrice,
-} from '../src/modules/catalog/public'
-import type { BusinessContext } from '../src/modules/business/public'
-import { compareExactAmounts, exactAmountSchema } from '../src/modules/money/public'
+} from '@/modules/catalog/public'
+import type { BusinessContext } from '@/modules/business/public'
+import { compareExactAmounts, exactAmountSchema } from '@/modules/money/public'
 
-export type BusinessSupplyProjectionErrorPrefix = 'catalog' | 'registry'
+type BusinessSupplyProjectionErrorPrefix = 'catalog' | 'registry'
 
-export type BusinessSupplyProjectionSnapshotEnvelope = Readonly<{
+type BusinessSupplyProjectionSnapshotEnvelope = Readonly<{
   businessId?: string
   sourceRevision?: number
   sourceDigest?: string
@@ -384,40 +384,3 @@ function priceRangeError(context: DecoderContext): string {
   return 'invalid_registry_price_range'
 }
 
-function readRecord(value: unknown, error: string): Record<string, unknown> {
-  if (!isRecord(value)) throw new Error(error)
-  return value
-}
-
-function readString(value: unknown, error: string, nonEmpty = false): string {
-  if (typeof value !== 'string' || (nonEmpty && value.trim().length === 0)) throw new Error(error)
-  return value
-}
-
-function readOptionalString(value: unknown, error: string): string | undefined {
-  return value === undefined ? undefined : readString(value, error)
-}
-
-function readNumber(value: unknown, error: string): number {
-  if (typeof value !== 'number' || !Number.isFinite(value)) throw new Error(error)
-  return value
-}
-
-function readOptionalNumber(value: unknown, error: string): number | undefined {
-  return value === undefined ? undefined : readNumber(value, error)
-}
-
-function readBoolean(value: unknown, error: string): boolean {
-  if (typeof value !== 'boolean') throw new Error(error)
-  return value
-}
-
-function readArray(value: unknown, error: string): unknown[] {
-  if (!Array.isArray(value)) throw new Error(error)
-  return value
-}
-
-function readLiteral<Value extends string>(value: unknown, values: readonly Value[], error: string): Value {
-  if (!values.includes(value as Value)) throw new Error(error)
-  return value as Value
-}

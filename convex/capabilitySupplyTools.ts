@@ -11,9 +11,10 @@ import {
 } from './lib/capabilitySupply/tool/contracts'
 import { compareHandler, detailHandler, searchHandler } from './lib/capabilitySupply/tool/reads'
 import {
+  offeringToolMapArgs,
   offeringToolMapHandler,
-  offeringToolMapReturns,
-} from './capabilitySupplyToolOriginMap'
+  offeringToolMapResult,
+} from './lib/capabilitySupply/tool/originMap'
 import {
   publishedOperationSnapshotReturns,
   sellerCanaryOperationSnapshotReturns,
@@ -38,9 +39,26 @@ export const compare = queryGeneric({
   returns: publicCompareReturns,
   handler: compareHandler,
 })
+
+// The catalog action must call the same read model via an internal target.
+export const searchInternal = internalQueryGeneric({
+  args: searchArgs,
+  returns: publicSearchReturns,
+  handler: searchHandler,
+})
+export const detailInternal = internalQueryGeneric({
+  args: toolRefArgs,
+  returns: publicDetailReturns,
+  handler: detailHandler,
+})
+export const compareInternal = internalQueryGeneric({
+  args: compareArgs,
+  returns: publicCompareReturns,
+  handler: compareHandler,
+})
 export const offeringToolMap = queryGeneric({
-  args: { businessIds: v.array(v.string()) },
-  returns: offeringToolMapReturns,
+  args: offeringToolMapArgs,
+  returns: offeringToolMapResult,
   handler: offeringToolMapHandler,
 })
 

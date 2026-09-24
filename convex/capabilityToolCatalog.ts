@@ -17,7 +17,7 @@ import { defaultDnsResolver, isPublicHttpTarget } from '@/modules/network-guard/
 import { fetchCoinbaseReferenceRate } from '@/modules/money/reference-rate'
 import { quoteManagedX402BuyerAud } from '@/modules/money/public'
 import { TOOL_SEARCH_USE } from '@/modules/registry/tool-reranker'
-import { api, internal } from './_generated/api'
+import { internal } from './_generated/api'
 import { action, internalAction, type ActionCtx } from './_generated/server'
 import { publicSearchReturns, searchArgs, publicDetailReturns, publicCompareReturns, toolRefArgs, compareArgs } from './lib/capabilitySupply/tool/contracts'
 import { presentSearch as presentSearchDecision } from './lib/capabilitySupply/toolCatalog/presentation'
@@ -97,7 +97,7 @@ export const search = action({
     if (normalized === undefined) return serializeToolSearchResult(unavailable('query_invalid'))
     const input: ToolSearchInput = { ...args, ...normalized }
     if (input.source === undefined || input.source === 'current') {
-      const result: ToolSearchWireResult = await ctx.runQuery(api.capabilitySupplyTools.search, args)
+      const result: ToolSearchWireResult = await ctx.runQuery(internal.capabilitySupplyTools.searchInternal, args)
       return serializeToolSearchResult(await decorate(ctx, deserializeToolSearchResult(result)))
     }
     if ((input.source === 'payai' && input.query.trim().length > 0) || (input.query.trim().length > 0 && input.cursor !== undefined)) return serializeToolSearchResult(unavailable('query_invalid'))
@@ -108,7 +108,7 @@ export const search = action({
     const snapshot = await ctx.runQuery(internal.capabilityToolCatalogData.sourceSnapshot, { candidates })
     const refs = [...new Set(snapshot.toolRefs)]
     const selectedRefs = input.filters?.networkId === undefined ? refs : await ctx.runQuery(internal.capabilityToolCatalogData.filterNetwork, { toolRefs: refs, networkId: input.filters.networkId })
-    const details = await Promise.all(selectedRefs.map((toolRef) => ctx.runQuery(api.capabilitySupplyTools.detail, { toolRef })))
+    const details = await Promise.all(selectedRefs.map((toolRef) => ctx.runQuery(internal.capabilitySupplyTools.detailInternal, { toolRef })))
     const items = details.flatMap((wire) => {
       const detail = deserializeToolDetailResult(wire)
       return detail.kind === 'found' && matchesToolFilters(detail.tool, input.filters ?? {}) ? [detail.tool] : []
@@ -149,7 +149,7 @@ export const detail = action({
   args: toolRefArgs,
   returns: publicDetailReturns,
   handler: async (ctx, args): Promise<ToolDetailWireResult> => {
-    const wire: ToolDetailWireResult = await ctx.runQuery(api.capabilitySupplyTools.detail, args)
+    const wire: ToolDetailWireResult = await ctx.runQuery(internal.capabilitySupplyTools.detailInternal, args)
     const result = deserializeToolDetailResult(wire)
     if (result.kind !== 'found') return wire
     const [tool] = await decorateTools(ctx, [result.tool])
@@ -161,7 +161,7 @@ export const compare = action({
   args: compareArgs,
   returns: publicCompareReturns,
   handler: async (ctx, args): Promise<ToolCompareWireResult> => {
-    const wire: ToolCompareWireResult = await ctx.runQuery(api.capabilitySupplyTools.compare, args)
+    const wire: ToolCompareWireResult = await ctx.runQuery(internal.capabilitySupplyTools.compareInternal, args)
     const result = deserializeToolCompareResult(wire)
     if (result.kind !== 'ok') return wire
     return serializeToolCompareResult({ ...result, tools: await decorateTools(ctx, result.tools) })

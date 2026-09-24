@@ -1,7 +1,7 @@
 import { convexTest } from 'convex-test'
 import { describe, expect, it } from 'vitest'
 
-import { readBusinessSupplyProjectionSnapshot } from '../../convex/businessSupplyProjectionSnapshot'
+import { readBusinessSupplyProjectionSnapshot } from '../../convex/lib/capabilitySupply/projection/snapshotDecode'
 import { deriveBusinessOfferingSupportFromCapabilitySupply } from '../../convex/lib/capabilitySupply/projection/support'
 import { readLiveBusinessSupplyProjection } from '../../convex/lib/capabilitySupply/projection/reads'
 import { api, internal } from '../../convex/_generated/api'

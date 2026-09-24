@@ -10,11 +10,11 @@ import {
   type CatalogOfferingToolMapEntry,
 } from '@/modules/capability-supply/public'
 
-import type { Id } from './_generated/dataModel'
-import type { QueryCtx } from './_generated/server'
-import { publicAuthentication } from './lib/capabilitySupply/tool/contracts'
-import { toolRecord } from './lib/capabilitySupply/tool/projection'
-import { publicAuthenticationFor } from './lib/capabilitySupply/tool/transport'
+import type { Id } from '../../../_generated/dataModel'
+import type { QueryCtx } from '../../../_generated/server'
+import { publicAuthentication } from './contracts'
+import { toolRecord } from './projection'
+import { publicAuthenticationFor } from './transport'
 
 /**
  * W1 origin seam: one exact admitted capability-Tool entry per catalog
@@ -51,7 +51,8 @@ const publicReadiness = v.object({
   observedAt: v.optional(v.number()),
   validUntil: v.optional(v.number()),
 })
-export const offeringToolMapReturns = v.array(v.object({
+export const offeringToolMapArgs = { businessIds: v.array(v.string()) }
+export const offeringToolMapResult = v.array(v.object({
   offeringRef: v.string(),
   offeringRevision: v.number(),
   offeringSourceHash: v.string(),
