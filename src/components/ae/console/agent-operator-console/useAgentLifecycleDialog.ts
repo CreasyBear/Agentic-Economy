@@ -17,7 +17,6 @@ import type {
 } from './agent-operator-console.contracts'
 
 export function useAgentLifecycleDialog({
-  onRevokeCredential,
   onDisconnectAgent,
   onDisconnectConnection,
 }: UseAgentLifecycleDialogParams): UseAgentLifecycleDialogResult {
@@ -33,16 +32,6 @@ export function useAgentLifecycleDialog({
     setRevokeDiagnostic(null)
   }
 
-  function requestCredentialRevoke(
-    item: AgentDetail,
-    credentialRef: string,
-    generation: number,
-    trigger: HTMLButtonElement,
-  ) {
-    revokeTriggerRef.current = trigger
-    resetRevocationDialogState()
-    setLifecycleTarget({ kind: 'credential', credentialRef, generation, name: item.agent.displayName })
-  }
 
   function requestDisconnect(item: AgentDetail, trigger: HTMLButtonElement) {
     revokeTriggerRef.current = trigger
@@ -79,8 +68,7 @@ export function useAgentLifecycleDialog({
     setRevokePending(true)
     setRevokeDiagnostic(null)
     try {
-      if (lifecycleTarget.kind === 'credential') await onRevokeCredential(lifecycleTarget.credentialRef)
-      else if (lifecycleTarget.kind === 'connection') {
+      if (lifecycleTarget.kind === 'connection') {
         await onDisconnectConnection?.(lifecycleTarget.connectionRef, lifecycleTarget.revision)
       } else await onDisconnectAgent(lifecycleTarget.principalRef)
 
@@ -105,7 +93,6 @@ export function useAgentLifecycleDialog({
     revokePending,
     revokeDiagnostic,
     revokeTriggerRef,
-    requestCredentialRevoke,
     requestDisconnect,
     requestConnectionDisconnect,
     confirmLifecycle,

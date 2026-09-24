@@ -1,15 +1,10 @@
 import { AeEmptyState } from '@/components/ae/feedback/AeEmptyState'
 import { AeSection } from '@/components/ae/layout/AeSection'
-import { AeOwnerProviderConnections } from '@/components/ae/supply/AeOwnerProviderConnections'
 import { AeCapabilityList } from '@/components/ae/status/AeCapabilityList'
 import { AeStatusCard } from '@/components/ae/status/AeStatusCard'
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
-import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet'
-import { Skeleton } from '@/components/ui/skeleton'
 import type { OwnerToolsX402ConnectionIntent } from '@/lib/operator/supply-compatibility'
-import { DeferredSection, OwnershipConflict, SecondarySummary, SummaryCard, UnavailableSummary } from './ProviderWorkspaceSharedUi'
+import { DeferredSection, SecondarySummary } from './ProviderWorkspaceSharedUi'
 import type {
-  ProviderWorkspaceConnectionsDetailResult,
   ProviderWorkspaceConnectionsResult,
   ProviderWorkspacePublicStatusResult,
 } from './provider-workspace.functions'
@@ -17,61 +12,32 @@ import type {
 export function ProviderWorkspaceReadinessSection({
   connections,
   publicStatus,
-  connectionsOpen,
-  connectionsPending,
-  connectionsDetail,
-  connectionTargetMissing,
   x402Handoff,
-  onOpenConnections,
-  onCloseConnections,
-  onRetryConnections,
+  rebindOfferingRef,
+  connectionHash,
 }: Readonly<{
   connections?: Promise<ProviderWorkspaceConnectionsResult>
   publicStatus?: Promise<ProviderWorkspacePublicStatusResult>
-  connectionsOpen: boolean
-  connectionsPending: boolean
-  connectionsDetail?: ProviderWorkspaceConnectionsDetailResult
-  connectionTargetMissing: boolean
   x402Handoff?: OwnerToolsX402ConnectionIntent
-  onOpenConnections: () => void
-  onCloseConnections: () => void
-  onRetryConnections: () => void
+  rebindOfferingRef?: string
+  connectionHash?: string
 }>) {
+  const search = x402Handoff ?? (rebindOfferingRef === undefined ? undefined : { rebind: rebindOfferingRef })
+  const connectionHref = `/owner/settings/integrations${search === undefined ? '' : `?${new URLSearchParams(Object.entries(search)).toString()}`}${connectionHash ?? ''}`
   return (
     <AeSection id="provider-connections" title="Tool availability" description="The connection needed to operate your Tools and their current buyer availability.">
       <div className="grid gap-related">
         <DeferredSection promise={connections} loadingLabel="Loading connections" unavailableTitle="Connections unavailable">
           {(result) => result.kind === 'available' ? (
-            <SummaryCard title="Connections" detail={`${result.value.available} of ${result.value.total} available`} action="Manage connections" onAction={onOpenConnections} />
+            <div className="grid gap-related rounded-card border border-border p-related">
+              <div><h3 className="font-medium">Connections</h3><p className="text-sm text-muted-foreground">{result.value.available} of {result.value.total} available</p></div>
+            </div>
           ) : <SecondarySummary result={result} subject="Connections" notApplicableTitle="No connections configured" unavailableTitle="Connections unavailable" />}
         </DeferredSection>
+        <a href={connectionHref} className="min-h-touch justify-self-start text-sm font-medium underline underline-offset-4 focus-visible:outline-solid focus-visible:outline-2 focus-visible:outline-brand">
+          Manage connections
+        </a>
       </div>
-      <Sheet open={connectionsOpen} onOpenChange={(open) => { if (!open) onCloseConnections() }}>
-        <SheetContent className="overflow-y-auto sm:max-w-lg">
-          <SheetHeader>
-            <SheetTitle>Connections</SheetTitle>
-            <SheetDescription>The connection needed to operate your Tools.</SheetDescription>
-          </SheetHeader>
-          <div className="grid gap-related px-gutter pb-gutter">
-            {connectionsOpen ? (
-              <>
-                {connectionTargetMissing ? <Alert variant="destructive"><AlertTitle>Connection target unavailable</AlertTitle><AlertDescription>The requested connection is not in the current provider readback. No connection was changed.</AlertDescription></Alert> : null}
-                {connectionsPending ? <div aria-busy="true"><Skeleton className="h-24 w-full" /></div> : connectionsDetail?.kind === 'available' ? (
-                  <AeOwnerProviderConnections
-                    businessId={connectionsDetail.businessId}
-                    connections={connectionsDetail.connections}
-                    {...(x402Handoff === undefined ? {} : { x402Handoff })}
-                  />
-                ) : connectionsDetail?.kind === 'conflict' ? (
-                  <OwnershipConflict title="Connection ownership conflict" />
-                ) : connectionsDetail?.kind === 'not_applicable' ? (
-                  <AeEmptyState title="No connection controls configured" description="Connect a provider from Tool preparation when one is required." />
-                ) : <UnavailableSummary title="Connection controls unavailable" retryLabel="Try connections again" onRetry={onRetryConnections} />}
-              </>
-            ) : null}
-          </div>
-        </SheetContent>
-      </Sheet>
       <div id="provider-status" className="scroll-mt-anchor">
         <DeferredSection promise={publicStatus} loadingLabel="Loading public provider status" unavailableTitle="Public status unavailable">
           {(result) => result.kind === 'available' ? (

@@ -88,7 +88,7 @@ function AccordionTrigger({
       <AccordionPrimitive.Trigger
         data-slot="accordion-trigger"
         className={cn(
-          "flex flex-1 items-start justify-between gap-4 rounded-md py-4 text-left text-sm font-medium transition-[color,background-color,border-color,box-shadow,transform] duration-fast ease-standard outline-none enabled:active:scale-[0.98] motion-reduce:transition-none motion-reduce:active:scale-100 hover:underline focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:pointer-events-none disabled:opacity-50 max-sm:min-h-touch [&[data-panel-open]>svg]:rotate-180",
+          "flex flex-1 items-start justify-between gap-4 rounded-md py-4 text-left text-sm font-medium transition-[color,background-color,border-color,box-shadow] duration-fast ease-standard outline-none enabled:active:scale-100 motion-reduce:transition-none hover:underline focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:pointer-events-none disabled:opacity-50 max-sm:min-h-touch [&[data-panel-open]>svg]:rotate-180",
           className
         )}
         {...props}
@@ -108,7 +108,7 @@ function AccordionContent({
   return (
     <AccordionPrimitive.Panel
       data-slot="accordion-content"
-      className="overflow-hidden text-sm data-closed:animate-accordion-up data-open:animate-accordion-down"
+      className="h-(--accordion-panel-height) overflow-hidden text-sm transition-[height] duration-base ease-emphasized data-ending-style:h-0 data-starting-style:h-0 motion-reduce:transition-none"
       {...props}
     >
       <div className={cn("pt-0 pb-4", className)}>{children}</div>

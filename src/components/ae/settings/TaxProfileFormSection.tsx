@@ -3,6 +3,7 @@ import { useMutation, useQuery } from 'convex/react'
 import { useRef } from 'react'
 
 import { Skeleton } from '@/components/ui/skeleton'
+import { SettingsPage } from '@/components/ae/settings/settings-shell/components/SettingsSections'
 
 import { TaxProfileForm } from '@/components/ae/settings/TaxProfileForm'
 import {
@@ -30,12 +31,13 @@ export function TaxProfileFormSection() {
   const saveIdempotencyRef = useRef(`idem:tax-profile:${crypto.randomUUID()}`)
 
   if (facts === undefined) {
-    return <Skeleton className="min-h-[28rem] w-full max-w-lg" aria-busy="true" />
+    return <SettingsPage title="Tax" description="Keep your Australian business and billing details current."><Skeleton className="min-h-[28rem] w-full" aria-busy="true" /></SettingsPage>
   }
 
   const handleSubmit = async (payload: TaxProfileSubmitPayload) => {
     await upsertCustomerTaxFacts({
       abn: payload.abn,
+      gstRegistered: payload.gstRegistered,
       legalName: payload.legalName,
       addressLine1: payload.addressLine1,
       ...(payload.addressLine2 !== undefined ? { addressLine2: payload.addressLine2 } : {}),

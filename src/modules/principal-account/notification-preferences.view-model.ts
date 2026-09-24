@@ -51,12 +51,13 @@ export const UPDATE_FAILED_DIAGNOSTIC: NotificationUpdateDiagnostic = {
 export const PREFERENCE_SWITCHES: ReadonlyArray<{
   key: PreferenceSwitchKey
   label: string
+  description: string
 }> = [
-  { key: 'lowCreditBalance', label: 'Email when credit balance is low' },
-  { key: 'spendCapWarning', label: 'Email when spend cap is reached' },
-  { key: 'callFailureSpike', label: 'Email when calls fail repeatedly' },
-  { key: 'invoiceReady', label: 'Email when a tax invoice or statement is ready' },
-  { key: 'teamMembershipChanged', label: 'Email when team membership changes' },
+  { key: 'lowCreditBalance', label: 'Email when credit balance is low', description: 'Know when your balance reaches the threshold below.' },
+  { key: 'spendCapWarning', label: 'Email when spend cap is reached', description: 'Get a notice when an Agent reaches its spending limit.' },
+  { key: 'callFailureSpike', label: 'Email when calls fail repeatedly', description: 'Catch repeated Tool failures before they interrupt work.' },
+  { key: 'invoiceReady', label: 'Email when a tax invoice or statement is ready', description: 'Receive a notice when a new billing document is available.' },
+  { key: 'teamMembershipChanged', label: 'Email when team membership changes', description: 'Keep track of invitations and role changes.' },
 ]
 
 export const THRESHOLD_OPTIONS: ReadonlyArray<{

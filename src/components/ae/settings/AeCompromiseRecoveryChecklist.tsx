@@ -1,6 +1,6 @@
-import { AeSection, AeSettingsRow } from '@/components/ae/layout/AeSection'
+import { SettingsGroup, SettingsRow } from '@/components/ae/settings/settings-shell/components/SettingsSections'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
-import { Badge } from '@/components/ui/badge'
+import { buttonVariants } from '@/components/ui/button-variants'
 
 const recoveryChecks: ReadonlyArray<{
   title: string
@@ -10,10 +10,12 @@ const recoveryChecks: ReadonlyArray<{
   {
     title: 'Review and revoke sessions',
     description: 'Open Profile to revoke unfamiliar devices and review factors and recovery methods.',
+    href: '/owner/settings/account',
   },
   {
     title: 'Rotate or disconnect Agents',
     description: 'Review Agent credentials; compromise rotation revokes the predecessor immediately.',
+    href: '/owner/settings/agent-keys',
   },
   {
     title: 'Revoke or reauthorize Provider connections',
@@ -33,35 +35,33 @@ const recoveryChecks: ReadonlyArray<{
 
 export function AeCompromiseRecoveryChecklist() {
   return (
-    <AeSection
-      id="compromise-recovery"
+    <SettingsGroup
       title="If you suspect compromise"
-      description="Sessions, Agents, Provider connections, and payout authority — reviewing does not change them."
+      description="Review independent sources. Opening this checklist does not revoke access."
     >
-      <div className="grid gap-related">
-        <Alert>
-          <AlertTitle>This page does not mark the Account contained</AlertTitle>
-          <AlertDescription>
-            Resetting MFA alone does not revoke existing sessions, Agent credentials, Provider connection authority, or Provider payout authority.
-            <p className="mt-1 font-mono text-xs tabular-nums text-muted-foreground">
-              A$0.00 affected — opening this list does not revoke sessions, Agents, or payouts.
-            </p>
-          </AlertDescription>
-        </Alert>
-        <p className="text-sm text-muted-foreground">Containment spans independent systems. Review each source and rely on the state it reports.</p>
-        <ol className="grid gap-intra" aria-label="Compromise recovery checks">
-          {recoveryChecks.map((check) => (
-            <li key={check.title}>
-              <AeSettingsRow
-                title={check.title}
-                description={check.description}
-                {...(check.href === undefined ? {} : { href: check.href })}
-                action={<Badge variant="secondary">Review at source</Badge>}
-              />
-            </li>
-          ))}
-        </ol>
-      </div>
-    </AeSection>
+      <Alert className="my-4">
+        <AlertTitle>This page does not mark the account contained</AlertTitle>
+        <AlertDescription>
+          Resetting MFA alone does not revoke existing sessions, Agent credentials,
+          Provider connection authority, or Provider payout authority.
+          <p className="mt-1 text-xs text-muted-foreground">
+            A$0.00 affected — opening this list does not revoke sessions, Agents, or payouts.
+          </p>
+        </AlertDescription>
+      </Alert>
+      <ol aria-label="Compromise recovery checks">
+        {recoveryChecks.map((check) => (
+          <li key={check.title}>
+            <SettingsRow label={check.title} description={check.description}>
+              {check.href ? (
+                <a href={check.href} className={buttonVariants({ variant: 'outline', size: 'sm' })}>
+                  {check.href === '/support' ? 'Contact support' : 'Review'}
+                </a>
+              ) : <span className="text-muted-foreground">Review separately</span>}
+            </SettingsRow>
+          </li>
+        ))}
+      </ol>
+    </SettingsGroup>
   )
 }

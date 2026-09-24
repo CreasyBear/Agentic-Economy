@@ -39,19 +39,17 @@ describe('account security history', () => {
 
     expect(screen.getByRole('heading', { name: 'If you suspect compromise' })).toBeTruthy()
     expect(document.querySelector('details')).toBeNull()
-    expect(screen.getByText('This page does not mark the Account contained')).toBeTruthy()
+    expect(screen.getByText('This page does not mark the account contained')).toBeTruthy()
     expect(screen.getByText(/Resetting MFA alone does not revoke existing sessions/u)).toBeTruthy()
     expect(screen.getByText(/A\$0\.00 affected — opening this list does not revoke sessions, Agents, or payouts\./u))
       .toBeTruthy()
-    expect(screen.getByText(/reviewing does not change them/u)).toBeTruthy()
-    expect(screen.getAllByText('Review at source')).toHaveLength(5)
-    expect(screen.getByText('Review and revoke sessions').closest('a')).toBeNull()
-    expect(screen.getByText('Rotate or disconnect Agents').closest('a')).toBeNull()
-    expect(screen.getByText('Revoke or reauthorize Provider connections').closest('a')).toBeNull()
+    expect(screen.getByText(/Opening this checklist does not revoke access/u)).toBeTruthy()
+    expect(screen.getAllByRole('link', { name: 'Review' }).map((link) => link.getAttribute('href')))
+      .toEqual(['/owner/settings/account', '/owner/settings/agent-keys'])
     expect(screen.getByText('Review Provider payout authority').closest('a')).toBeNull()
     expect(screen.getByText(/Review wallet-control authority and its generation separately from Tool readiness\./u))
       .toBeTruthy()
-    expect(screen.getByRole('link', { name: /Retain evidence and contact support/u }).getAttribute('href'))
+    expect(screen.getByRole('link', { name: 'Contact support' }).getAttribute('href'))
       .toBe('/support')
     expect(document.body.textContent).not.toContain('Contained')
   })
@@ -60,7 +58,7 @@ describe('account security history', () => {
     render(<AeAccountSecurityHistory initialResult={available()} />)
 
     const table = screen.getByRole('table', { name: 'Account security history' })
-    expect(screen.getByRole('heading', { name: 'Security history' })).toBeTruthy()
+    expect(screen.getByRole('heading', { name: 'Recorded activity' })).toBeTruthy()
     expect(within(table).getAllByRole('columnheader').map((header) => header.textContent)).toEqual([
       'Activity',
       'Time',
@@ -70,7 +68,7 @@ describe('account security history', () => {
     expect(screen.getByText('Session revoked')).toBeTruthy()
     expect(screen.getByText('Revoked')).toBeTruthy()
     expect(screen.getByText('Clerk observed')).toBeTruthy()
-    expect(screen.getByText(/Recorded/u)).toBeTruthy()
+    expect(within(table).getByText(/^Recorded /u)).toBeTruthy()
     expect(screen.queryByText('Evidence details')).toBeNull()
     expect(document.querySelector('details')).toBeNull()
     expect(screen.getByText('clerk:delivery-hash')).toBeTruthy()
@@ -135,7 +133,7 @@ describe('account security history', () => {
     }} />)
 
     expect(screen.getByText('Observed time unavailable')).toBeTruthy()
-    expect(screen.getByText(/Recorded/u)).toBeTruthy()
+    expect(within(screen.getByRole('table', { name: 'Account security history' })).getByText(/^Recorded /u)).toBeTruthy()
   })
 
   it('appends the next native page without replacing newer evidence', async () => {

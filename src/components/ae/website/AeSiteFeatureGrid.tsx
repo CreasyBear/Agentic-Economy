@@ -19,6 +19,7 @@ export function AeSiteFeatureGrid({ label, title, items }: AeSiteFeatureGridProp
       labelledBy="about-features"
       rhythm="section"
       className="border-y bg-card/40"
+      enter
     >
       <div className="mx-auto max-w-7xl px-6">
         <AeSiteEyebrow>{label}</AeSiteEyebrow>

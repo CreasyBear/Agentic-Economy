@@ -1,7 +1,5 @@
-import { AeAutoRechargeCard } from '@/components/ae/console/AeAutoRechargeCard'
+import { Link } from '@tanstack/react-router'
 import { AeAccountFundingPanel } from '@/components/ae/console/AeCreditTopUpPanel'
-import { AeMonthlySpendCeilingCard } from '@/components/ae/console/AeMonthlySpendCeilingCard'
-import { AeSavedPaymentMethodsCard } from '@/components/ae/console/AeSavedPaymentMethodsCard'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -18,16 +16,6 @@ export type CreditFundPanelProps = Pick<
   | 'fundingConstraints'
   | 'onCreditRefresh'
   | 'unavailable'
-  | 'autoRechargeSettings'
-  | 'autoRechargeMandateState'
-  | 'autoRechargePendingTopup'
-  | 'onSaveAutoRecharge'
-  | 'monthlySpendCeilingSettings'
-  | 'monthlySpendMonthSpend'
-  | 'onSaveMonthlySpendCeiling'
-  | 'savedPaymentMethodsSummary'
-  | 'savedPaymentMethodsLoading'
-  | 'onManageSavedPaymentMethods'
 >
 
 export function CreditFundPanel({
@@ -38,16 +26,6 @@ export function CreditFundPanel({
   fundingConstraints,
   onCreditRefresh,
   unavailable = {},
-  autoRechargeSettings,
-  autoRechargeMandateState = 'missing',
-  autoRechargePendingTopup,
-  onSaveAutoRecharge,
-  monthlySpendCeilingSettings,
-  monthlySpendMonthSpend,
-  onSaveMonthlySpendCeiling,
-  savedPaymentMethodsSummary,
-  savedPaymentMethodsLoading = false,
-  onManageSavedPaymentMethods,
 }: CreditFundPanelProps) {
   const balance = accountBalance?.kind === 'available' ? accountBalance.balance : undefined
   const balanceUnavailable = accountBalance === undefined || accountBalance.kind === 'refused'
@@ -116,55 +94,11 @@ export function CreditFundPanel({
           {...(onCreditRefresh === undefined ? {} : { onRefresh: onCreditRefresh })}
         />
       </div>
-      {onManageSavedPaymentMethods !== undefined ? (
-        <AeSavedPaymentMethodsCard
-          {...(savedPaymentMethodsSummary === undefined ? {} : { summary: savedPaymentMethodsSummary })}
-          isLoading={savedPaymentMethodsLoading}
-          onManage={onManageSavedPaymentMethods}
-        />
-      ) : null}
-      {onSaveAutoRecharge !== undefined ? (
-        autoRechargeSettings !== undefined ? (
-          <AeAutoRechargeCard
-            settings={autoRechargeSettings}
-            mandateState={autoRechargeMandateState}
-            {...(autoRechargePendingTopup === undefined ? {} : { pendingTopup: autoRechargePendingTopup })}
-            onSave={onSaveAutoRecharge}
-          />
-        ) : (
-          <div className="grid gap-intra" aria-busy="true" aria-label="Loading auto-recharge settings">
-            <Skeleton className="h-5 w-32" />
-            <Skeleton className="min-h-[2.75rem] w-full" />
-            <div className="flex flex-wrap gap-intra">
-              <Skeleton className="h-8 w-40 rounded-full" />
-              <Skeleton className="h-8 w-36 rounded-full" />
-              <Skeleton className="h-8 w-40 rounded-full" />
-            </div>
-            <Skeleton className="h-6 w-full max-w-xs" />
-            <Skeleton className="h-9 w-full" />
-            <Skeleton className="h-9 w-full" />
-            <Skeleton className="min-h-[5.5rem] w-full" />
-            <Skeleton className="h-9 w-20" />
-          </div>
-        )
-      ) : null}
-      {onSaveMonthlySpendCeiling !== undefined ? (
-        monthlySpendCeilingSettings !== undefined ? (
-          <AeMonthlySpendCeilingCard
-            settings={monthlySpendCeilingSettings}
-            {...(monthlySpendMonthSpend === undefined ? {} : { monthSpend: monthlySpendMonthSpend })}
-            onSave={onSaveMonthlySpendCeiling}
-          />
-        ) : (
-          <div className="grid gap-intra" aria-busy="true" aria-label="Loading monthly spending cap">
-            <Skeleton className="h-5 w-56" />
-            <Skeleton className="min-h-[2.75rem] w-full" />
-            <Skeleton className="h-2 w-full" />
-            <Skeleton className="min-h-[5.5rem] w-full" />
-            <Skeleton className="h-9 w-24" />
-          </div>
-        )
-      ) : null}
+      <div className="flex flex-wrap gap-4 text-sm">
+        <Link className="text-primary underline-offset-4 hover:underline" to="/owner/settings/payment-methods">Manage payment methods</Link>
+        <Link className="text-primary underline-offset-4 hover:underline" to="/owner/settings/spending">Configure spending defaults</Link>
+        <Link className="text-primary underline-offset-4 hover:underline" to="/owner/settings/receipts">View receipts &amp; invoices</Link>
+      </div>
     </div>
   )
 }

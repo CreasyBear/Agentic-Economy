@@ -25,7 +25,7 @@ export function AeSiteAboutHero({
         <div>
           <AeSiteEyebrow>{label}</AeSiteEyebrow>
           <div className="mt-3 flex max-w-xl flex-col gap-6 md:mt-6">
-            <AeSiteHeading as="h1" size="lg" id="about-hero">
+            <AeSiteHeading as="h1" size="lg" id="about-hero" enter>
               {title}
             </AeSiteHeading>
             <p className="max-w-md text-lg leading-relaxed text-muted-foreground">

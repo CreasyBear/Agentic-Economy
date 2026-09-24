@@ -13,7 +13,7 @@ export type AeSiteEditorialProps = Readonly<{
 /** Port of aecon.ai's Tailark content-4 split editorial composition. */
 export function AeSiteEditorial({ label, title, description, children }: AeSiteEditorialProps) {
   return (
-    <AeSiteSection labelledBy="about-editorial" rhythm="section">
+    <AeSiteSection labelledBy="about-editorial" rhythm="section" enter>
       <div className="mx-auto max-w-7xl px-6">
         <div className="grid gap-4 md:grid-cols-2 md:gap-6 lg:gap-12">
           <div>

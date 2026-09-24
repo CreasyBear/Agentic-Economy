@@ -126,15 +126,21 @@ function DialogClose({
 
 function DialogBackdrop({
   className,
+  instant = false,
   ...props
-}: React.ComponentProps<typeof DialogPrimitive.Backdrop>) {
+}: React.ComponentProps<typeof DialogPrimitive.Backdrop> & {
+  instant?: boolean
+}) {
   return (
     <DialogPrimitive.Backdrop
       data-slot="dialog-backdrop"
       data-dialog-overlay="true"
       className={cn(
-        "fixed inset-0 z-50 bg-[var(--ae-overlay-scrim)] backdrop-blur-sm duration-base ease-standard data-closed:pointer-events-none data-closed:animate-out data-closed:fade-out-0 data-open:animate-in data-open:fade-in-0 motion-reduce:animate-none",
-        className
+        "fixed inset-0 z-50 bg-[var(--ae-overlay-scrim)] backdrop-blur-sm ease-standard data-closed:pointer-events-none motion-reduce:animate-none",
+        className,
+        !instant &&
+          "duration-base data-closed:animate-out data-closed:fade-out-0 data-open:animate-in data-open:fade-in-0",
+        instant && "animate-none duration-0",
       )}
       {...props}
     />
@@ -145,6 +151,7 @@ function DialogContent({
   className,
   children,
   showCloseButton = true,
+  instant = false,
   onCloseAutoFocus,
   onPointerDownOutside,
   onEscapeKeyDown,
@@ -152,6 +159,7 @@ function DialogContent({
   ...props
 }: React.ComponentProps<typeof DialogPrimitive.Popup> & {
   showCloseButton?: boolean
+  instant?: boolean
   onCloseAutoFocus?: (event: Event) => void
   onPointerDownOutside?: (event: Event) => void
   onEscapeKeyDown?: (event: Event) => void
@@ -169,13 +177,16 @@ function DialogContent({
           {...(onEscapeKeyDown !== undefined ? { onEscapeKeyDown } : {})}
         />
       ) : null}
-      <DialogBackdrop />
+      <DialogBackdrop instant={instant} />
       <DialogPrimitive.Popup
         data-slot="dialog-content"
         finalFocus={resolvedFinalFocus}
         className={cn(
-          "fixed top-[50%] left-[50%] z-50 grid w-full max-w-[calc(100%-2rem)] translate-x-[-50%] translate-y-[-50%] gap-4 overscroll-contain rounded-xl bg-popover p-6 text-popover-foreground shadow-overlay duration-base ease-emphasized outline-none data-closed:pointer-events-none data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95 data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 motion-reduce:animate-none sm:max-w-lg",
-          className
+          "fixed top-[50%] left-[50%] z-50 grid w-full max-w-[calc(100%-2rem)] translate-x-[-50%] translate-y-[-50%] gap-4 overscroll-contain rounded-xl bg-popover p-6 text-popover-foreground shadow-overlay ease-emphasized outline-none data-closed:pointer-events-none motion-reduce:animate-none sm:max-w-lg",
+          className,
+          !instant &&
+            "duration-base data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95 data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95",
+          instant && "animate-none duration-0",
         )}
         {...props}
         aria-modal="true"

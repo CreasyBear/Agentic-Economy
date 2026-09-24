@@ -13,7 +13,7 @@ import {
 import { suggestNextAction } from '@/modules/market/suggested-next-action'
 import { captureClientExceptionOnClient } from '@/lib/observability/capture-client-exception'
 import { captureRouteException } from '@/lib/observability/capture-route-exception'
-import type { OwnerToolsX402ConnectionIntent } from '@/lib/operator/supply-compatibility'
+import { parseOwnerToolsCompatibilitySearch, type OwnerToolsX402ConnectionIntent } from '@/lib/operator/supply-compatibility'
 import type { ProviderConnectionInspection } from '@/modules/capability-supply/provider-connection.contracts'
 import {
   connectionRefFromHash,
@@ -107,8 +107,8 @@ export function useOwnerProviderConnectionsState({
     }
     window.addEventListener('hashchange', focusHashTarget)
     focusHashTarget()
-    const requestedRebind = new URLSearchParams(window.location.search).get('rebind')?.trim()
-    if (requestedRebind !== undefined && requestedRebind.length > 0 && requestedRebind.length <= 300) {
+    const requestedRebind = parseOwnerToolsCompatibilitySearch(Object.fromEntries(new URLSearchParams(window.location.search))).rebind
+    if (requestedRebind !== undefined) {
       setRebindOfferingRef(requestedRebind)
       setRebindConnectionRef(connectionRefFromHash())
     }

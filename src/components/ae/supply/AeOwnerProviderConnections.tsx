@@ -1,4 +1,4 @@
-import { AeSection } from '@/components/ae/layout/AeSection'
+import { SettingsGroup, SettingsPage } from '@/components/ae/settings/settings-shell/components/SettingsSections'
 import type { OwnerProviderConnection } from '@/modules/capability-supply/supply-funnel.functions'
 import type { OwnerToolsX402ConnectionIntent } from '@/lib/operator/supply-compatibility'
 import { AeProviderConnectionList } from './AeProviderConnectionList'
@@ -27,12 +27,13 @@ export function AeOwnerProviderConnections({
     <div
       id="provider-connections"
       tabIndex={-1}
-      className="scroll-mt-6 outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
+      className="min-w-0 scroll-mt-6 outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
     >
-      <AeSection
+      <SettingsPage
         title="Provider connections"
-        description="Connect a hosted x402 endpoint so Agentic Economy can route paid calls without collecting an API key or wallet secret. Then open a Tool and select this connection as its access authority."
+        description="Connect a hosted x402 endpoint so Agentic Economy can route paid calls without collecting an API key or wallet secret. Select the connection as a Tool's access authority."
       >
+        <SettingsGroup title="Connections" description="Inspect authority and health for each endpoint. Tool readiness is checked separately.">
         <AeProviderConnectionList
           connections={connections}
           readOnly={readOnly}
@@ -53,6 +54,8 @@ export function AeOwnerProviderConnections({
           onRevokeOpenChange={vm.closeRevokeDialog}
           onConfirmRevoke={() => void vm.confirmRevoke()}
         />
+        </SettingsGroup>
+        <SettingsGroup title="Connect an endpoint" description="Inspect the live payment lane and prove control of its payee before connecting.">
         <AeProviderConnectionForm
           canConnect={vm.canConnect}
           readOnly={readOnly}
@@ -75,7 +78,8 @@ export function AeOwnerProviderConnections({
           {...(vm.notice === undefined ? {} : { notice: vm.notice })}
           onRefresh={() => void vm.refresh()}
         />
-      </AeSection>
+        </SettingsGroup>
+      </SettingsPage>
     </div>
   )
 }

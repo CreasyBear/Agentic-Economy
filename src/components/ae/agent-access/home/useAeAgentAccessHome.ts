@@ -12,7 +12,6 @@ import type {
   LifecycleIssue,
 } from '@/modules/agent-access/agent-lifecycle.view-model'
 import type { OwnerConnectionLifecycleResult } from '@/modules/agent-access/public'
-import type { IssuedAgentAccessReveal } from '@/modules/agent-access/issue-key.contracts'
 import type {
   AgentSpendingLimitsReadResult,
   AgentSpendingLimitsResult,
@@ -29,7 +28,6 @@ import {
   disconnectAgentServer,
   readAgentSpendingLimitsServer,
   renameAgentServer,
-  revokeAgentCredentialServer,
   revokeOwnerConnectionServer,
   updateAgentSpendingLimitsServer,
 } from '@/modules/agent-access/agent-access.functions'
@@ -55,7 +53,6 @@ export function useAeAgentAccessHome({
   const navigate = useNavigate()
   const readDirectory = useServerFn(readAgentDirectoryServer)
   const readDirectoryPage = useServerFn(readAgentDirectoryPageServer)
-  const revokeCredential = useServerFn(revokeAgentCredentialServer)
   const disconnectAgent = useServerFn(disconnectAgentServer)
   const disconnectConnection = useServerFn(revokeOwnerConnectionServer)
   const renameAgent = useServerFn(renameAgentServer)
@@ -67,8 +64,6 @@ export function useAeAgentAccessHome({
   const [directory, setDirectory] = useState<AgentDirectoryProjection>(initialDirectory)
   const [loading, setLoading] = useState(false)
   const [loadingMore, setLoadingMore] = useState(false)
-  const [wizardOpen, setWizardOpen] = useState(false)
-  const [reveal, setReveal] = useState<IssuedAgentAccessReveal>()
   const [directoryError, setDirectoryError] = useState<string>()
   const [directoryPaginationIssue, setDirectoryPaginationIssue] = useState<DirectoryPaginationIssue>()
   const [lifecycleIssue, setLifecycleIssue] = useState<LifecycleIssue>()
@@ -198,27 +193,22 @@ export function useAeAgentAccessHome({
   const runLifecycle = useCallback(async (command: LifecycleCommand) => {
     setLifecyclePending(command)
     try {
-      const result = command.kind === 'credential'
-        ? await revokeCredential({ data: { credentialRef: command.ref } })
-        : command.kind === 'connection'
-          ? await disconnectConnection({ data: { connectionRef: command.ref, expectedRevision: command.expectedRevision } })
-          : await disconnectAgent({ data: { principalRef: command.ref } })
+      const result = command.kind === 'connection'
+        ? await disconnectConnection({ data: { connectionRef: command.ref, expectedRevision: command.expectedRevision } })
+        : await disconnectAgent({ data: { principalRef: command.ref } })
       await finishLifecycle(result, command)
     } catch (cause) {
       captureClientExceptionOnClient(cause)
       setLifecycleIssue({
-        title: command.kind === 'credential' ? 'Credential revocation unavailable' : 'Agent disconnection unavailable',
+        title: 'Agent disconnection unavailable',
         message: 'The access service did not confirm the change. Retry the same request before taking another action.',
         retry: command,
       })
     } finally {
       setLifecyclePending(undefined)
     }
-  }, [disconnectAgent, disconnectConnection, finishLifecycle, revokeCredential])
+  }, [disconnectAgent, disconnectConnection, finishLifecycle])
 
-  const revoke = useCallback((credentialRef: string) => {
-    return runLifecycle({ kind: 'credential', ref: credentialRef })
-  }, [runLifecycle])
 
   const disconnect = useCallback((principalRef: string) => {
     return runLifecycle({ kind: 'agent', ref: principalRef })
@@ -343,14 +333,6 @@ export function useAeAgentAccessHome({
     if (retry !== undefined) void runLifecycle(retry)
   }, [lifecycleIssue?.retry, runLifecycle])
 
-  const onRevealSuccess = useCallback((issued: IssuedAgentAccessReveal) => {
-    setReveal(issued)
-    void load()
-  }, [load])
-
-  const onRevealOpenChange = useCallback((next: boolean) => {
-    if (!next) setReveal(undefined)
-  }, [])
 
   const agentHistoryPrincipalRef = useMemo(() => {
     if (search.caller === undefined) return undefined
@@ -365,11 +347,6 @@ export function useAeAgentAccessHome({
     directory,
     loading,
     loadingMore,
-    wizardOpen,
-    setWizardOpen,
-    reveal,
-    onRevealSuccess,
-    onRevealOpenChange,
     directoryError,
     directoryAlertTitle,
     onDirectoryRetry: () => void load(),
@@ -385,13 +362,12 @@ export function useAeAgentAccessHome({
     resumeSectionDescription,
     getAgentHref,
     clearSelectedPrincipal,
-    onRevokeCredential: revoke,
     onDisconnectAgent: disconnect,
     onDisconnectConnection: disconnectOneConnection,
     onRenameAgent: rename,
     onUpdateSpendingLimits: updateSpendingLimitsHandler,
     onReadSpendingLimits: readSpendingLimitsHandler,
-    onConnectNewAgent: () => setWizardOpen(true),
+    onConnectNewAgent: () => void navigate({ to: '/owner/settings/agent-keys' }),
     accessUnavailable: directoryError !== undefined && directory.items.length === 0,
     approvals,
     approvalsLoading,

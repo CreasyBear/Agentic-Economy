@@ -91,7 +91,7 @@ describe('AeAutoRechargeCard (W-21)', () => {
 
     const toggle = screen.getByRole('switch', { name: /auto-recharge/i })
     expect(toggle).toBeDisabled()
-    expect(screen.getByRole('link', { name: /add payment method/i })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /add a payment method/i })).toHaveAttribute('href', '/owner/settings/payment-methods')
 
     fireEvent.click(toggle)
     expect(toggle).not.toBeChecked()
@@ -229,7 +229,7 @@ describe('AeAutoRechargeCard (W-21)', () => {
 
     expect(screen.getByRole('switch', { name: /auto-recharge/i })).toBeDisabled()
     expect(screen.getByText(/bank authentication required/i)).toBeInTheDocument()
-    expect(screen.getByText(/finish authentication via payment methods/i)).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /authenticate the saved card/i })).toHaveAttribute('href', '/owner/settings/payment-methods')
   })
 
   it('U12: money inputs use monospace tabular styling', () => {

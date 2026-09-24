@@ -10,7 +10,6 @@ import type {
 import type { AgentConnectionReadback } from '@/modules/agent-access/public'
 
 export type LifecycleTarget =
-  | Readonly<{ kind: 'credential'; credentialRef: string; generation: number; name: string }>
   | Readonly<{ kind: 'connection'; connectionRef: string; revision: number; connectorName: string; name: string }>
   | Readonly<{ kind: 'agent'; principalRef: string; name: string }>
 
@@ -33,7 +32,6 @@ export type UseAgentSelectionResult = Readonly<{
 }>
 
 export type UseAgentLifecycleDialogParams = Readonly<{
-  onRevokeCredential: (credentialRef: string) => void | Promise<void>
   onDisconnectAgent: (principalRef: string) => void | Promise<void>
   onDisconnectConnection?: (connectionRef: string, expectedRevision: number) => void | Promise<void>
 }>
@@ -44,12 +42,6 @@ export type UseAgentLifecycleDialogResult = Readonly<{
   revokePending: boolean
   revokeDiagnostic: Rule4Diagnostic | null
   revokeTriggerRef: RefObject<HTMLButtonElement | null>
-  requestCredentialRevoke: (
-    item: AgentDetail,
-    credentialRef: string,
-    generation: number,
-    trigger: HTMLButtonElement,
-  ) => void
   requestDisconnect: (item: AgentDetail, trigger: HTMLButtonElement) => void
   requestConnectionDisconnect: (
     item: AgentDetail,

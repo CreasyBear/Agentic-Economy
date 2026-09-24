@@ -34,6 +34,7 @@ import { Route as TThreadIdRouteImport } from './routes/t.$threadId'
 import { Route as SignUpSplatRouteImport } from './routes/sign-up.$'
 import { Route as SignInSplatRouteImport } from './routes/sign-in.$'
 import { Route as SShareTokenRouteImport } from './routes/s.$shareToken'
+import { Route as ProvidersProviderHostRouteImport } from './routes/providers.$providerHost'
 import { Route as PrivacyRemoveBusinessRouteImport } from './routes/privacy.remove-business'
 import { Route as OauthTokenRouteImport } from './routes/oauth.token'
 import { Route as OauthRevokeRouteImport } from './routes/oauth.revoke'
@@ -123,6 +124,17 @@ import { Route as ApiV1AccountFundingSessionsRouteImport } from './routes/api.v1
 import { Route as ApiV1AccountBalanceRouteImport } from './routes/api.v1.account.balance'
 import { Route as ApiV1AccountActivityRouteImport } from './routes/api.v1.account.activity'
 import { Route as ApiStripeWebhookAccountsV2RouteImport } from './routes/api.stripe.webhook.accounts-v2'
+import { Route as OperatorOwnerSettingsWorkspaceRouteImport } from './routes/_operator/owner.settings.workspace'
+import { Route as OperatorOwnerSettingsTeamRouteImport } from './routes/_operator/owner.settings.team'
+import { Route as OperatorOwnerSettingsTaxRouteImport } from './routes/_operator/owner.settings.tax'
+import { Route as OperatorOwnerSettingsSpendingRouteImport } from './routes/_operator/owner.settings.spending'
+import { Route as OperatorOwnerSettingsSecurityActivityRouteImport } from './routes/_operator/owner.settings.security-activity'
+import { Route as OperatorOwnerSettingsReceiptsRouteImport } from './routes/_operator/owner.settings.receipts'
+import { Route as OperatorOwnerSettingsPrivacyRouteImport } from './routes/_operator/owner.settings.privacy'
+import { Route as OperatorOwnerSettingsPaymentMethodsRouteImport } from './routes/_operator/owner.settings.payment-methods'
+import { Route as OperatorOwnerSettingsNotificationsRouteImport } from './routes/_operator/owner.settings.notifications'
+import { Route as OperatorOwnerSettingsIntegrationsRouteImport } from './routes/_operator/owner.settings.integrations'
+import { Route as OperatorOwnerSettingsAgentKeysRouteImport } from './routes/_operator/owner.settings.agent-keys'
 import { Route as OperatorOwnerOperationsNewRouteImport } from './routes/_operator/owner.operations.new'
 import { Route as OperatorOwnerOperationsToolRefRouteImport } from './routes/_operator/owner.operations.$toolRef'
 import { Route as OperatorAdminWorkspacesAccountRefRouteImport } from './routes/_operator/admin.workspaces.$accountRef'
@@ -271,6 +283,11 @@ const SignInSplatRoute = SignInSplatRouteImport.update({
 const SShareTokenRoute = SShareTokenRouteImport.update({
   id: '/s/$shareToken',
   path: '/s/$shareToken',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ProvidersProviderHostRoute = ProvidersProviderHostRouteImport.update({
+  id: '/providers/$providerHost',
+  path: '/providers/$providerHost',
   getParentRoute: () => rootRouteImport,
 } as any)
 const PrivacyRemoveBusinessRoute = PrivacyRemoveBusinessRouteImport.update({
@@ -735,6 +752,72 @@ const ApiStripeWebhookAccountsV2Route =
     path: '/accounts-v2',
     getParentRoute: () => ApiStripeWebhookRoute,
   } as any)
+const OperatorOwnerSettingsWorkspaceRoute =
+  OperatorOwnerSettingsWorkspaceRouteImport.update({
+    id: '/workspace',
+    path: '/workspace',
+    getParentRoute: () => OperatorOwnerSettingsRoute,
+  } as any)
+const OperatorOwnerSettingsTeamRoute =
+  OperatorOwnerSettingsTeamRouteImport.update({
+    id: '/team',
+    path: '/team',
+    getParentRoute: () => OperatorOwnerSettingsRoute,
+  } as any)
+const OperatorOwnerSettingsTaxRoute =
+  OperatorOwnerSettingsTaxRouteImport.update({
+    id: '/tax',
+    path: '/tax',
+    getParentRoute: () => OperatorOwnerSettingsRoute,
+  } as any)
+const OperatorOwnerSettingsSpendingRoute =
+  OperatorOwnerSettingsSpendingRouteImport.update({
+    id: '/spending',
+    path: '/spending',
+    getParentRoute: () => OperatorOwnerSettingsRoute,
+  } as any)
+const OperatorOwnerSettingsSecurityActivityRoute =
+  OperatorOwnerSettingsSecurityActivityRouteImport.update({
+    id: '/security-activity',
+    path: '/security-activity',
+    getParentRoute: () => OperatorOwnerSettingsRoute,
+  } as any)
+const OperatorOwnerSettingsReceiptsRoute =
+  OperatorOwnerSettingsReceiptsRouteImport.update({
+    id: '/receipts',
+    path: '/receipts',
+    getParentRoute: () => OperatorOwnerSettingsRoute,
+  } as any)
+const OperatorOwnerSettingsPrivacyRoute =
+  OperatorOwnerSettingsPrivacyRouteImport.update({
+    id: '/privacy',
+    path: '/privacy',
+    getParentRoute: () => OperatorOwnerSettingsRoute,
+  } as any)
+const OperatorOwnerSettingsPaymentMethodsRoute =
+  OperatorOwnerSettingsPaymentMethodsRouteImport.update({
+    id: '/payment-methods',
+    path: '/payment-methods',
+    getParentRoute: () => OperatorOwnerSettingsRoute,
+  } as any)
+const OperatorOwnerSettingsNotificationsRoute =
+  OperatorOwnerSettingsNotificationsRouteImport.update({
+    id: '/notifications',
+    path: '/notifications',
+    getParentRoute: () => OperatorOwnerSettingsRoute,
+  } as any)
+const OperatorOwnerSettingsIntegrationsRoute =
+  OperatorOwnerSettingsIntegrationsRouteImport.update({
+    id: '/integrations',
+    path: '/integrations',
+    getParentRoute: () => OperatorOwnerSettingsRoute,
+  } as any)
+const OperatorOwnerSettingsAgentKeysRoute =
+  OperatorOwnerSettingsAgentKeysRouteImport.update({
+    id: '/agent-keys',
+    path: '/agent-keys',
+    getParentRoute: () => OperatorOwnerSettingsRoute,
+  } as any)
 const OperatorOwnerOperationsNewRoute =
   OperatorOwnerOperationsNewRouteImport.update({
     id: '/new',
@@ -925,6 +1008,7 @@ export interface FileRoutesByFullPath {
   '/oauth/revoke': typeof OauthRevokeRoute
   '/oauth/token': typeof OauthTokenRoute
   '/privacy/remove-business': typeof PrivacyRemoveBusinessRoute
+  '/providers/$providerHost': typeof ProvidersProviderHostRoute
   '/s/$shareToken': typeof SShareTokenRoute
   '/sign-in/$': typeof SignInSplatRoute
   '/sign-up/$': typeof SignUpSplatRoute
@@ -976,6 +1060,17 @@ export interface FileRoutesByFullPath {
   '/admin/workspaces/$accountRef': typeof OperatorAdminWorkspacesAccountRefRoute
   '/owner/operations/$toolRef': typeof OperatorOwnerOperationsToolRefRoute
   '/owner/operations/new': typeof OperatorOwnerOperationsNewRoute
+  '/owner/settings/agent-keys': typeof OperatorOwnerSettingsAgentKeysRoute
+  '/owner/settings/integrations': typeof OperatorOwnerSettingsIntegrationsRoute
+  '/owner/settings/notifications': typeof OperatorOwnerSettingsNotificationsRoute
+  '/owner/settings/payment-methods': typeof OperatorOwnerSettingsPaymentMethodsRoute
+  '/owner/settings/privacy': typeof OperatorOwnerSettingsPrivacyRoute
+  '/owner/settings/receipts': typeof OperatorOwnerSettingsReceiptsRoute
+  '/owner/settings/security-activity': typeof OperatorOwnerSettingsSecurityActivityRoute
+  '/owner/settings/spending': typeof OperatorOwnerSettingsSpendingRoute
+  '/owner/settings/tax': typeof OperatorOwnerSettingsTaxRoute
+  '/owner/settings/team': typeof OperatorOwnerSettingsTeamRoute
+  '/owner/settings/workspace': typeof OperatorOwnerSettingsWorkspaceRoute
   '/api/stripe/webhook/accounts-v2': typeof ApiStripeWebhookAccountsV2Route
   '/api/v1/account/activity': typeof ApiV1AccountActivityRoute
   '/api/v1/account/balance': typeof ApiV1AccountBalanceRoute
@@ -1065,6 +1160,7 @@ export interface FileRoutesByTo {
   '/oauth/revoke': typeof OauthRevokeRoute
   '/oauth/token': typeof OauthTokenRoute
   '/privacy/remove-business': typeof PrivacyRemoveBusinessRoute
+  '/providers/$providerHost': typeof ProvidersProviderHostRoute
   '/s/$shareToken': typeof SShareTokenRoute
   '/sign-in/$': typeof SignInSplatRoute
   '/sign-up/$': typeof SignUpSplatRoute
@@ -1116,6 +1212,17 @@ export interface FileRoutesByTo {
   '/admin/workspaces/$accountRef': typeof OperatorAdminWorkspacesAccountRefRoute
   '/owner/operations/$toolRef': typeof OperatorOwnerOperationsToolRefRoute
   '/owner/operations/new': typeof OperatorOwnerOperationsNewRoute
+  '/owner/settings/agent-keys': typeof OperatorOwnerSettingsAgentKeysRoute
+  '/owner/settings/integrations': typeof OperatorOwnerSettingsIntegrationsRoute
+  '/owner/settings/notifications': typeof OperatorOwnerSettingsNotificationsRoute
+  '/owner/settings/payment-methods': typeof OperatorOwnerSettingsPaymentMethodsRoute
+  '/owner/settings/privacy': typeof OperatorOwnerSettingsPrivacyRoute
+  '/owner/settings/receipts': typeof OperatorOwnerSettingsReceiptsRoute
+  '/owner/settings/security-activity': typeof OperatorOwnerSettingsSecurityActivityRoute
+  '/owner/settings/spending': typeof OperatorOwnerSettingsSpendingRoute
+  '/owner/settings/tax': typeof OperatorOwnerSettingsTaxRoute
+  '/owner/settings/team': typeof OperatorOwnerSettingsTeamRoute
+  '/owner/settings/workspace': typeof OperatorOwnerSettingsWorkspaceRoute
   '/api/stripe/webhook/accounts-v2': typeof ApiStripeWebhookAccountsV2Route
   '/api/v1/account/activity': typeof ApiV1AccountActivityRoute
   '/api/v1/account/balance': typeof ApiV1AccountBalanceRoute
@@ -1207,6 +1314,7 @@ export interface FileRoutesById {
   '/oauth/revoke': typeof OauthRevokeRoute
   '/oauth/token': typeof OauthTokenRoute
   '/privacy/remove-business': typeof PrivacyRemoveBusinessRoute
+  '/providers/$providerHost': typeof ProvidersProviderHostRoute
   '/s/$shareToken': typeof SShareTokenRoute
   '/sign-in/$': typeof SignInSplatRoute
   '/sign-up/$': typeof SignUpSplatRoute
@@ -1258,6 +1366,17 @@ export interface FileRoutesById {
   '/_operator/admin/workspaces/$accountRef': typeof OperatorAdminWorkspacesAccountRefRoute
   '/_operator/owner/operations/$toolRef': typeof OperatorOwnerOperationsToolRefRoute
   '/_operator/owner/operations/new': typeof OperatorOwnerOperationsNewRoute
+  '/_operator/owner/settings/agent-keys': typeof OperatorOwnerSettingsAgentKeysRoute
+  '/_operator/owner/settings/integrations': typeof OperatorOwnerSettingsIntegrationsRoute
+  '/_operator/owner/settings/notifications': typeof OperatorOwnerSettingsNotificationsRoute
+  '/_operator/owner/settings/payment-methods': typeof OperatorOwnerSettingsPaymentMethodsRoute
+  '/_operator/owner/settings/privacy': typeof OperatorOwnerSettingsPrivacyRoute
+  '/_operator/owner/settings/receipts': typeof OperatorOwnerSettingsReceiptsRoute
+  '/_operator/owner/settings/security-activity': typeof OperatorOwnerSettingsSecurityActivityRoute
+  '/_operator/owner/settings/spending': typeof OperatorOwnerSettingsSpendingRoute
+  '/_operator/owner/settings/tax': typeof OperatorOwnerSettingsTaxRoute
+  '/_operator/owner/settings/team': typeof OperatorOwnerSettingsTeamRoute
+  '/_operator/owner/settings/workspace': typeof OperatorOwnerSettingsWorkspaceRoute
   '/api/stripe/webhook/accounts-v2': typeof ApiStripeWebhookAccountsV2Route
   '/api/v1/account/activity': typeof ApiV1AccountActivityRoute
   '/api/v1/account/balance': typeof ApiV1AccountBalanceRoute
@@ -1349,6 +1468,7 @@ export interface FileRouteTypes {
     | '/oauth/revoke'
     | '/oauth/token'
     | '/privacy/remove-business'
+    | '/providers/$providerHost'
     | '/s/$shareToken'
     | '/sign-in/$'
     | '/sign-up/$'
@@ -1400,6 +1520,17 @@ export interface FileRouteTypes {
     | '/admin/workspaces/$accountRef'
     | '/owner/operations/$toolRef'
     | '/owner/operations/new'
+    | '/owner/settings/agent-keys'
+    | '/owner/settings/integrations'
+    | '/owner/settings/notifications'
+    | '/owner/settings/payment-methods'
+    | '/owner/settings/privacy'
+    | '/owner/settings/receipts'
+    | '/owner/settings/security-activity'
+    | '/owner/settings/spending'
+    | '/owner/settings/tax'
+    | '/owner/settings/team'
+    | '/owner/settings/workspace'
     | '/api/stripe/webhook/accounts-v2'
     | '/api/v1/account/activity'
     | '/api/v1/account/balance'
@@ -1489,6 +1620,7 @@ export interface FileRouteTypes {
     | '/oauth/revoke'
     | '/oauth/token'
     | '/privacy/remove-business'
+    | '/providers/$providerHost'
     | '/s/$shareToken'
     | '/sign-in/$'
     | '/sign-up/$'
@@ -1540,6 +1672,17 @@ export interface FileRouteTypes {
     | '/admin/workspaces/$accountRef'
     | '/owner/operations/$toolRef'
     | '/owner/operations/new'
+    | '/owner/settings/agent-keys'
+    | '/owner/settings/integrations'
+    | '/owner/settings/notifications'
+    | '/owner/settings/payment-methods'
+    | '/owner/settings/privacy'
+    | '/owner/settings/receipts'
+    | '/owner/settings/security-activity'
+    | '/owner/settings/spending'
+    | '/owner/settings/tax'
+    | '/owner/settings/team'
+    | '/owner/settings/workspace'
     | '/api/stripe/webhook/accounts-v2'
     | '/api/v1/account/activity'
     | '/api/v1/account/balance'
@@ -1630,6 +1773,7 @@ export interface FileRouteTypes {
     | '/oauth/revoke'
     | '/oauth/token'
     | '/privacy/remove-business'
+    | '/providers/$providerHost'
     | '/s/$shareToken'
     | '/sign-in/$'
     | '/sign-up/$'
@@ -1681,6 +1825,17 @@ export interface FileRouteTypes {
     | '/_operator/admin/workspaces/$accountRef'
     | '/_operator/owner/operations/$toolRef'
     | '/_operator/owner/operations/new'
+    | '/_operator/owner/settings/agent-keys'
+    | '/_operator/owner/settings/integrations'
+    | '/_operator/owner/settings/notifications'
+    | '/_operator/owner/settings/payment-methods'
+    | '/_operator/owner/settings/privacy'
+    | '/_operator/owner/settings/receipts'
+    | '/_operator/owner/settings/security-activity'
+    | '/_operator/owner/settings/spending'
+    | '/_operator/owner/settings/tax'
+    | '/_operator/owner/settings/team'
+    | '/_operator/owner/settings/workspace'
     | '/api/stripe/webhook/accounts-v2'
     | '/api/v1/account/activity'
     | '/api/v1/account/balance'
@@ -1768,6 +1923,7 @@ export interface RootRouteChildren {
   OauthRegisterRoute: typeof OauthRegisterRoute
   OauthRevokeRoute: typeof OauthRevokeRoute
   OauthTokenRoute: typeof OauthTokenRoute
+  ProvidersProviderHostRoute: typeof ProvidersProviderHostRoute
   SShareTokenRoute: typeof SShareTokenRoute
   SignInSplatRoute: typeof SignInSplatRoute
   SignUpSplatRoute: typeof SignUpSplatRoute
@@ -1998,6 +2154,13 @@ declare module '@tanstack/react-router' {
       path: '/s/$shareToken'
       fullPath: '/s/$shareToken'
       preLoaderRoute: typeof SShareTokenRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/providers/$providerHost': {
+      id: '/providers/$providerHost'
+      path: '/providers/$providerHost'
+      fullPath: '/providers/$providerHost'
+      preLoaderRoute: typeof ProvidersProviderHostRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/privacy/remove-business': {
@@ -2623,6 +2786,83 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiStripeWebhookAccountsV2RouteImport
       parentRoute: typeof ApiStripeWebhookRoute
     }
+    '/_operator/owner/settings/workspace': {
+      id: '/_operator/owner/settings/workspace'
+      path: '/workspace'
+      fullPath: '/owner/settings/workspace'
+      preLoaderRoute: typeof OperatorOwnerSettingsWorkspaceRouteImport
+      parentRoute: typeof OperatorOwnerSettingsRoute
+    }
+    '/_operator/owner/settings/team': {
+      id: '/_operator/owner/settings/team'
+      path: '/team'
+      fullPath: '/owner/settings/team'
+      preLoaderRoute: typeof OperatorOwnerSettingsTeamRouteImport
+      parentRoute: typeof OperatorOwnerSettingsRoute
+    }
+    '/_operator/owner/settings/tax': {
+      id: '/_operator/owner/settings/tax'
+      path: '/tax'
+      fullPath: '/owner/settings/tax'
+      preLoaderRoute: typeof OperatorOwnerSettingsTaxRouteImport
+      parentRoute: typeof OperatorOwnerSettingsRoute
+    }
+    '/_operator/owner/settings/spending': {
+      id: '/_operator/owner/settings/spending'
+      path: '/spending'
+      fullPath: '/owner/settings/spending'
+      preLoaderRoute: typeof OperatorOwnerSettingsSpendingRouteImport
+      parentRoute: typeof OperatorOwnerSettingsRoute
+    }
+    '/_operator/owner/settings/security-activity': {
+      id: '/_operator/owner/settings/security-activity'
+      path: '/security-activity'
+      fullPath: '/owner/settings/security-activity'
+      preLoaderRoute: typeof OperatorOwnerSettingsSecurityActivityRouteImport
+      parentRoute: typeof OperatorOwnerSettingsRoute
+    }
+    '/_operator/owner/settings/receipts': {
+      id: '/_operator/owner/settings/receipts'
+      path: '/receipts'
+      fullPath: '/owner/settings/receipts'
+      preLoaderRoute: typeof OperatorOwnerSettingsReceiptsRouteImport
+      parentRoute: typeof OperatorOwnerSettingsRoute
+    }
+    '/_operator/owner/settings/privacy': {
+      id: '/_operator/owner/settings/privacy'
+      path: '/privacy'
+      fullPath: '/owner/settings/privacy'
+      preLoaderRoute: typeof OperatorOwnerSettingsPrivacyRouteImport
+      parentRoute: typeof OperatorOwnerSettingsRoute
+    }
+    '/_operator/owner/settings/payment-methods': {
+      id: '/_operator/owner/settings/payment-methods'
+      path: '/payment-methods'
+      fullPath: '/owner/settings/payment-methods'
+      preLoaderRoute: typeof OperatorOwnerSettingsPaymentMethodsRouteImport
+      parentRoute: typeof OperatorOwnerSettingsRoute
+    }
+    '/_operator/owner/settings/notifications': {
+      id: '/_operator/owner/settings/notifications'
+      path: '/notifications'
+      fullPath: '/owner/settings/notifications'
+      preLoaderRoute: typeof OperatorOwnerSettingsNotificationsRouteImport
+      parentRoute: typeof OperatorOwnerSettingsRoute
+    }
+    '/_operator/owner/settings/integrations': {
+      id: '/_operator/owner/settings/integrations'
+      path: '/integrations'
+      fullPath: '/owner/settings/integrations'
+      preLoaderRoute: typeof OperatorOwnerSettingsIntegrationsRouteImport
+      parentRoute: typeof OperatorOwnerSettingsRoute
+    }
+    '/_operator/owner/settings/agent-keys': {
+      id: '/_operator/owner/settings/agent-keys'
+      path: '/agent-keys'
+      fullPath: '/owner/settings/agent-keys'
+      preLoaderRoute: typeof OperatorOwnerSettingsAgentKeysRouteImport
+      parentRoute: typeof OperatorOwnerSettingsRoute
+    }
     '/_operator/owner/operations/new': {
       id: '/_operator/owner/operations/new'
       path: '/new'
@@ -2839,10 +3079,36 @@ const OperatorOwnerOperationsRouteWithChildren =
   )
 
 interface OperatorOwnerSettingsRouteChildren {
+  OperatorOwnerSettingsAgentKeysRoute: typeof OperatorOwnerSettingsAgentKeysRoute
+  OperatorOwnerSettingsIntegrationsRoute: typeof OperatorOwnerSettingsIntegrationsRoute
+  OperatorOwnerSettingsNotificationsRoute: typeof OperatorOwnerSettingsNotificationsRoute
+  OperatorOwnerSettingsPaymentMethodsRoute: typeof OperatorOwnerSettingsPaymentMethodsRoute
+  OperatorOwnerSettingsPrivacyRoute: typeof OperatorOwnerSettingsPrivacyRoute
+  OperatorOwnerSettingsReceiptsRoute: typeof OperatorOwnerSettingsReceiptsRoute
+  OperatorOwnerSettingsSecurityActivityRoute: typeof OperatorOwnerSettingsSecurityActivityRoute
+  OperatorOwnerSettingsSpendingRoute: typeof OperatorOwnerSettingsSpendingRoute
+  OperatorOwnerSettingsTaxRoute: typeof OperatorOwnerSettingsTaxRoute
+  OperatorOwnerSettingsTeamRoute: typeof OperatorOwnerSettingsTeamRoute
+  OperatorOwnerSettingsWorkspaceRoute: typeof OperatorOwnerSettingsWorkspaceRoute
   OperatorOwnerSettingsAccountSplatRoute: typeof OperatorOwnerSettingsAccountSplatRoute
 }
 
 const OperatorOwnerSettingsRouteChildren: OperatorOwnerSettingsRouteChildren = {
+  OperatorOwnerSettingsAgentKeysRoute: OperatorOwnerSettingsAgentKeysRoute,
+  OperatorOwnerSettingsIntegrationsRoute:
+    OperatorOwnerSettingsIntegrationsRoute,
+  OperatorOwnerSettingsNotificationsRoute:
+    OperatorOwnerSettingsNotificationsRoute,
+  OperatorOwnerSettingsPaymentMethodsRoute:
+    OperatorOwnerSettingsPaymentMethodsRoute,
+  OperatorOwnerSettingsPrivacyRoute: OperatorOwnerSettingsPrivacyRoute,
+  OperatorOwnerSettingsReceiptsRoute: OperatorOwnerSettingsReceiptsRoute,
+  OperatorOwnerSettingsSecurityActivityRoute:
+    OperatorOwnerSettingsSecurityActivityRoute,
+  OperatorOwnerSettingsSpendingRoute: OperatorOwnerSettingsSpendingRoute,
+  OperatorOwnerSettingsTaxRoute: OperatorOwnerSettingsTaxRoute,
+  OperatorOwnerSettingsTeamRoute: OperatorOwnerSettingsTeamRoute,
+  OperatorOwnerSettingsWorkspaceRoute: OperatorOwnerSettingsWorkspaceRoute,
   OperatorOwnerSettingsAccountSplatRoute:
     OperatorOwnerSettingsAccountSplatRoute,
 }
@@ -3094,6 +3360,7 @@ const rootRouteChildren: RootRouteChildren = {
   OauthRegisterRoute: OauthRegisterRoute,
   OauthRevokeRoute: OauthRevokeRoute,
   OauthTokenRoute: OauthTokenRoute,
+  ProvidersProviderHostRoute: ProvidersProviderHostRoute,
   SShareTokenRoute: SShareTokenRoute,
   SignInSplatRoute: SignInSplatRoute,
   SignUpSplatRoute: SignUpSplatRoute,

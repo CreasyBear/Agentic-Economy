@@ -21,7 +21,6 @@ import { useAgentSelection } from './useAgentSelection'
 export type AeAgentOperatorConsoleProps = Readonly<{
   directory: AgentDirectoryProjection
   loading: boolean
-  onRevokeCredential: (credentialRef: string) => void | Promise<void>
   onDisconnectAgent: (principalRef: string) => void | Promise<void>
   onDisconnectConnection?: (connectionRef: string, expectedRevision: number) => void | Promise<void>
   onRenameAgent?: (principalRef: string, expectedRevision: number, displayName: string) => Promise<boolean>
@@ -52,7 +51,6 @@ export type AeAgentOperatorConsoleProps = Readonly<{
 export function AeAgentOperatorConsole({
   directory,
   loading,
-  onRevokeCredential,
   onDisconnectAgent,
   onDisconnectConnection,
   onRenameAgent,
@@ -81,7 +79,6 @@ export function AeAgentOperatorConsole({
     ...(onClearSelectedPrincipal === undefined ? {} : { onClearSelectedPrincipal }),
   })
   const lifecycle = useAgentLifecycleDialog({
-    onRevokeCredential,
     onDisconnectAgent,
     ...(onDisconnectConnection === undefined ? {} : { onDisconnectConnection }),
   })

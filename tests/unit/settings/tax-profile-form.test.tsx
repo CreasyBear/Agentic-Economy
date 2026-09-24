@@ -113,6 +113,7 @@ describe('TaxProfileForm', () => {
 
     await waitFor(() => {
       expect(onSubmit).toHaveBeenCalledWith({
+        gstRegistered: true,
         abn: '51824753556',
         legalName: 'Acme Technologies Pty Ltd',
         addressLine1: '1 Market Street',
@@ -160,6 +161,19 @@ describe('TaxProfileForm', () => {
 
     fireEvent.change(abnInput, { target: { value: '51824753556' } })
     expect(abnInput).toHaveValue('51 824 753 556')
+  })
+
+  it('saves a disabled GST registration rather than silently defaulting to true', async () => {
+    const onSubmit = vi.fn().mockResolvedValue(undefined)
+    render(<TaxProfileForm initialData={{ kind: 'missing', revision: 0 }} onSubmit={onSubmit} />)
+    fireEvent.change(screen.getByLabelText(/legal business name/i), { target: { value: 'Acme Pty Ltd' } })
+    fireEvent.change(screen.getByLabelText(/^abn$/i), { target: { value: '51 824 753 556' } })
+    fireEvent.change(screen.getByLabelText(/^address$/i), { target: { value: '1 Market Street' } })
+    fireEvent.change(screen.getByLabelText(/city\/locality/i), { target: { value: 'Sydney' } })
+    fireEvent.change(screen.getByLabelText(/postal code/i), { target: { value: '2000' } })
+    fireEvent.click(screen.getByRole('checkbox', { name: 'GST registered' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({ gstRegistered: false })))
   })
 
   it('U8: async submit failure shows Rule 4 triplet and toast.error', async () => {

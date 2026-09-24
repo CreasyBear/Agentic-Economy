@@ -10,6 +10,7 @@ import {
   requireAccessFactForAccount,
   resolveActiveAccountRefForPrincipal,
 } from './interactiveAuthority'
+import { CLERK_ORGANIZATION_PROVIDER_NAMESPACE } from './workspaceProvisioning'
 
 const CLERK_USER_PROVIDER_NAMESPACE = 'clerk/user' as const
 
@@ -18,6 +19,7 @@ const directoryOwnerValue = v.object({
   principalRef: v.string(),
   displayName: v.string(),
   email: v.union(v.string(), v.null()),
+  clerkUserId: v.union(v.string(), v.null()),
   ownershipRef: v.string(),
   joinedAt: v.number(),
 })
@@ -27,6 +29,7 @@ const directoryMemberValue = v.object({
   principalRef: v.string(),
   displayName: v.string(),
   email: v.union(v.string(), v.null()),
+  clerkUserId: v.union(v.string(), v.null()),
   membershipRef: v.string(),
   role: v.union(v.literal('admin'), v.literal('member')),
   lifecycle: v.literal('active'),
@@ -44,6 +47,7 @@ type DirectoryOwner = {
   principalRef: string
   displayName: string
   email: string | null
+  clerkUserId: string | null
   ownershipRef: string
   joinedAt: number
 }
@@ -53,6 +57,7 @@ type DirectoryMember = {
   principalRef: string
   displayName: string
   email: string | null
+  clerkUserId: string | null
   membershipRef: string
   role: 'admin' | 'member'
   lifecycle: 'active'
@@ -118,6 +123,15 @@ async function resolveEmailForPrincipal(
     return emailRow.email.trim()
   }
   return null
+}
+
+async function resolveClerkUserIdForPrincipal(db: WorkspaceDb, targetPrincipalRef: string): Promise<string | null> {
+  const bindings = await db.query('externalIdentityBindings')
+    .withIndex('by_principalRef_and_lifecycle', (q) => q.eq('principalRef', targetPrincipalRef).eq('lifecycle', 'active'))
+    .take(20)
+  const binding = bindings.find(row => row.providerNamespace === CLERK_USER_PROVIDER_NAMESPACE)
+  const userId = binding?.providerIdentifier.split('|').at(-1)
+  return userId?.startsWith('user_') ? userId : null
 }
 
 export const listDirectory = query({
@@ -186,6 +200,7 @@ export const listDirectory = query({
       principalRef: ownerPrincipal.principalRef,
       displayName: ownerPrincipal.displayName,
       email: ownerEmail,
+      clerkUserId: await resolveClerkUserIdForPrincipal(ctx.db, ownerPrincipal.principalRef),
       ownershipRef: currentOwnership.ownershipRef,
       joinedAt: currentOwnership.createdAt,
     }
@@ -224,6 +239,7 @@ export const listDirectory = query({
         kind: 'member',
         principalRef: memberPrincipal.principalRef,
         displayName: memberPrincipal.displayName,
+        clerkUserId: await resolveClerkUserIdForPrincipal(ctx.db, memberPrincipal.principalRef),
         email: memberEmail,
         membershipRef: membership.membershipRef,
         role: membership.role === 'org:admin' ? 'admin' : 'member',
@@ -237,5 +253,26 @@ export const listDirectory = query({
       owner,
       members,
     }
+  },
+})
+
+export const invitationContext = query({
+  args: {},
+  returns: v.union(v.null(), v.object({ organizationId: v.string() })),
+  handler: async (ctx): Promise<{ organizationId: string } | null> => {
+    const identity = await ctx.auth.getUserIdentity()
+    if (identity === null) throw new InteractiveAuthorityError('identity_invalid')
+    const principal = await requireInteractiveHumanPrincipal(ctx.db, identity)
+    const canonicalPrincipalRef = principalRef(principal.principalRef)
+    const { activeAccountRef } = await resolveActiveAccountRefForPrincipal(
+      ctx.db, canonicalPrincipalRef, identity, 'require',
+    )
+    const access = await requireAccessFactForAccount(ctx.db, canonicalPrincipalRef, accountRef(activeAccountRef))
+    if (access.kind !== 'ownership' && access.row.role !== 'org:admin') return null
+    const bindings = await ctx.db.query('accountExternalOrganizationBindings')
+      .withIndex('by_accountRef_and_lifecycle', (q) => q.eq('accountRef', activeAccountRef).eq('lifecycle', 'active'))
+      .take(2)
+    if (bindings.length !== 1 || bindings[0]?.providerNamespace !== CLERK_ORGANIZATION_PROVIDER_NAMESPACE) return null
+    return { organizationId: bindings[0].providerIdentifier }
   },
 })

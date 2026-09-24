@@ -239,7 +239,7 @@ async function loadTransferCandidates(
 async function recordWorkspaceAuditEvent(
   db: Parameters<typeof persistAuditEvent>[0],
   input: Readonly<{
-    eventType: 'account.workspace.closed' | 'account.workspace.ownership_transferred'
+    eventType: 'account.workspace.closed' | 'account.workspace.ownership_transferred' | 'account.workspace_profile.updated'
     actorPrincipalRef: string
     activeAccountRef: string
     correlationRef: string
@@ -309,6 +309,116 @@ export const readWorkspaceDecommissionEligibility = query({
       fences,
       transferCandidates,
     }
+  },
+})
+/** The active Clerk organisation bound to the caller's AE workspace. */
+export const readWorkspaceOrganizationBinding = query({
+  args: {},
+  returns: v.object({
+    accountRef: v.string(),
+    displayName: v.string(),
+    accountRevision: v.number(),
+    callerIsOwner: v.boolean(),
+    clerkOrgId: v.union(v.string(), v.null()),
+    ownerDisplayName: v.string(),
+    ownerClerkUserId: v.union(v.string(), v.null()),
+  }),
+  handler: async (ctx) => {
+    const identity = await ctx.auth.getUserIdentity()
+    if (identity === null) throw new InteractiveAuthorityError('identity_invalid')
+    const { canonicalAccountRef, canonicalPrincipalRef, account } =
+      await requireAuthenticatedAccountContext(ctx.db, identity)
+    const bindings = await ctx.db
+      .query('accountExternalOrganizationBindings')
+      .withIndex('by_accountRef_and_lifecycle', (query) => query
+        .eq('accountRef', canonicalAccountRef)
+        .eq('lifecycle', 'active'))
+      .collect()
+    const organizations = bindings.filter((binding) => binding.providerNamespace === 'clerk/organization')
+    if (organizations.length > 1) throw new InteractiveAuthorityError('ownership_mismatch')
+    const ownership = await requireCurrentOwnership(ctx.db, account)
+    const owner = await ctx.db.query('principals')
+      .withIndex('by_principalRef', (query) => query.eq('principalRef', ownership.ownerPrincipalRef))
+      .unique()
+    if (owner === null || owner.lifecycle !== 'active') throw new InteractiveAuthorityError('ownership_mismatch')
+    const ownerBindings = await ctx.db.query('externalIdentityBindings')
+      .withIndex('by_principalRef_and_lifecycle', (query) => query
+        .eq('principalRef', ownership.ownerPrincipalRef)
+        .eq('lifecycle', 'active'))
+      .collect()
+    const clerkUserBinding = ownerBindings.find((binding) => binding.providerNamespace === CLERK_USER_PROVIDER_NAMESPACE)
+    const ownerClerkUserId = clerkUserBinding?.providerIdentifier.split('|').at(-1) ?? null
+    return {
+      accountRef: canonicalAccountRef,
+      displayName: account.displayName,
+      accountRevision: account.revision,
+      callerIsOwner: await callerIsAccountOwner(ctx.db, account, canonicalPrincipalRef),
+      clerkOrgId: organizations[0]?.providerIdentifier ?? null,
+      ownerDisplayName: owner.displayName,
+      ownerClerkUserId: ownerClerkUserId?.startsWith('user_') ? ownerClerkUserId : null,
+    }
+  },
+})
+/** Only an unbound personal workspace may take a direct AE name write. */
+export const renameUnboundWorkspace = mutation({
+  args: {
+    name: v.string(),
+    expectedRevision: v.number(),
+    correlationRef: v.string(),
+    idempotencyRef: v.string(),
+  },
+  returns: v.object({
+    kind: v.union(v.literal('updated'), v.literal('replayed'), v.literal('unchanged')),
+    name: v.string(),
+  }),
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity()
+    if (identity === null) throw new InteractiveAuthorityError('identity_invalid')
+    const { canonicalPrincipalRef, canonicalAccountRef, account } =
+      await requireAuthenticatedAccountContext(ctx.db, identity)
+    const access = await requireAccessFactForAccount(ctx.db, canonicalPrincipalRef, canonicalAccountRef)
+    if (access.kind !== 'ownership') throw new InteractiveAuthorityError('ownership_mismatch')
+    const bindings = await ctx.db.query('accountExternalOrganizationBindings')
+      .withIndex('by_accountRef_and_lifecycle', (query) => query
+        .eq('accountRef', canonicalAccountRef)
+        .eq('lifecycle', 'active'))
+      .collect()
+    if (bindings.some((binding) => binding.providerNamespace === 'clerk/organization')) {
+      throw new InteractiveAuthorityError('ownership_mismatch')
+    }
+    const name = args.name.trim()
+    if (name.length === 0 || name.length > 200 || !/^[\p{L}\p{N}\p{P}\p{S}\p{Zs}]+$/u.test(name)) {
+      throw new InteractiveAuthorityError('workspace_confirmation_mismatch')
+    }
+    if (account.lastAction.idempotencyRef === args.idempotencyRef) {
+      if (account.displayName !== name) throw new InteractiveAuthorityError('idempotency_conflict')
+      return { kind: 'replayed' as const, name }
+    }
+    if (account.revision !== args.expectedRevision) throw new InteractiveAuthorityError('account_revision_conflict')
+    if (account.displayName === name) return { kind: 'unchanged' as const, name }
+    const now = Date.now()
+    await ctx.db.patch(account._id, {
+      displayName: name,
+      revision: account.revision + 1,
+      updatedAt: now,
+      lastAction: {
+        actorPrincipalRef: canonicalPrincipalRef,
+        activeAccountRef: canonicalAccountRef,
+        correlationRef: args.correlationRef,
+        idempotencyRef: args.idempotencyRef,
+      },
+    })
+    await recordWorkspaceAuditEvent(ctx.db, {
+      eventType: 'account.workspace_profile.updated',
+      actorPrincipalRef: canonicalPrincipalRef,
+      activeAccountRef: canonicalAccountRef,
+      correlationRef: args.correlationRef,
+      idempotencyRef: args.idempotencyRef,
+      beforeState: account.displayName,
+      outcome: name,
+      createdAt: now,
+    })
+    return { kind: 'updated' as const, name }
   },
 })
 

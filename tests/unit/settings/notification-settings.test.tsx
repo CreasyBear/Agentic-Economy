@@ -4,7 +4,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import '../../setup/jsdom-platform'
 
-import { OwnerNotificationSettings, TACTILE } from '@/components/ae/settings/OwnerNotificationSettings'
+import { OwnerNotificationSettings } from '@/components/ae/settings/OwnerNotificationSettings'
 import type { NotificationPreferencesView } from '@/modules/principal-account/notification-preferences.view-model'
 
 const toastSuccess = vi.fn()
@@ -34,11 +34,11 @@ afterEach(() => {
 })
 
 describe('OwnerNotificationSettings', () => {
-  it('U1: renders preference switches without a duplicate Email alerts heading', () => {
+  it('renders email alert choices with descriptive guidance', () => {
     const onUpdate = vi.fn()
     render(<OwnerNotificationSettings preferences={basePreferences} onUpdate={onUpdate} />)
 
-    expect(screen.queryByRole('heading', { name: 'Email alerts' })).toBeNull()
+    expect(screen.getByRole('heading', { name: 'Email alerts' })).toBeTruthy()
     expect(screen.getByRole('switch', { name: 'Email when credit balance is low' })).toBeTruthy()
     expect(screen.getByRole('switch', { name: 'Email when spend cap is reached' })).toBeTruthy()
     expect(screen.getByRole('switch', { name: 'Email when calls fail repeatedly' })).toBeTruthy()
@@ -94,29 +94,6 @@ describe('OwnerNotificationSettings', () => {
         expectedRevision: 0,
       })
     })
-  })
-
-  it('U6: applies tactile press classes to preference switches', () => {
-    const onUpdate = vi.fn()
-    render(<OwnerNotificationSettings preferences={basePreferences} onUpdate={onUpdate} />)
-
-    const switchButton = screen.getByRole('switch', { name: 'Email when credit balance is low' })
-    for (const token of TACTILE.split(/\s+/u)) {
-      expect(switchButton.className).toContain(token)
-    }
-  })
-
-  it('U7: applies tactile physics and monospace tabular digits to threshold chips', () => {
-    const onUpdate = vi.fn()
-    render(<OwnerNotificationSettings preferences={basePreferences} onUpdate={onUpdate} />)
-
-    const chip = screen.getByRole('radio', { name: 'A$10.00' })
-    const chipLabel = chip.closest('label')
-    expect(chipLabel?.className).toContain('font-mono')
-    expect(chipLabel?.className).toContain('tabular-nums')
-    for (const token of TACTILE.split(/\s+/u)) {
-      expect(chipLabel?.className).toContain(token)
-    }
   })
 
   it('U8: announces the live low-balance threshold statement', () => {

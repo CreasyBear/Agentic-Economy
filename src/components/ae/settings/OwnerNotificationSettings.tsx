@@ -1,5 +1,6 @@
 import { useState } from 'react'
 
+import { SettingsGroup, SettingsRow } from '@/components/ae/settings/settings-shell/components/SettingsSections'
 import { Label } from '@/components/ui/label'
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 import { Switch } from '@/components/ui/switch'
@@ -26,24 +27,22 @@ export const TACTILE =
 function PreferenceSwitch({
   id,
   label,
+  description,
   checked,
   disabled,
   onToggle,
 }: PreferenceSwitchProps) {
   return (
-    <div className="flex items-center justify-between gap-4">
-      <Label htmlFor={id} className="cursor-pointer text-sm font-normal text-foreground">
-        {label}
-      </Label>
+    <SettingsRow label={label} description={description}>
       <Switch
         id={id}
         aria-label={label}
         checked={checked}
         disabled={disabled}
         className={TACTILE}
-        onCheckedChange={() => onToggle()}
+        onCheckedChange={onToggle}
       />
-    </div>
+    </SettingsRow>
   )
 }
 
@@ -79,13 +78,14 @@ export function OwnerNotificationSettings({
   const thresholdStatement = lowCreditThresholdStatement(preferences)
 
   return (
-    <div className="grid gap-section">
-      <div className="grid gap-4">
-        {PREFERENCE_SWITCHES.map(({ key, label }) => (
+    <div className="grid min-w-0 gap-6">
+      <SettingsGroup title="Email alerts" description="Sent to the primary email verified in your Profile.">
+        {PREFERENCE_SWITCHES.map(({ key, label, description }) => (
           <PreferenceSwitch
             key={key}
             id={`preference-${key}`}
             label={label}
+            description={description}
             checked={preferences[key]}
             disabled={controlsDisabled}
             onToggle={() => {
@@ -96,62 +96,59 @@ export function OwnerNotificationSettings({
             }}
           />
         ))}
-      </div>
-      <div className="grid gap-2">
-        <p className="text-sm font-medium">Low balance alert threshold</p>
-        <RadioGroup
-          value={String(preferences.lowCreditThresholdCents)}
-          onValueChange={(next) => {
-            const cents = Number(next)
-            if (
-              Number.isNaN(cents)
-              || preferences.lowCreditThresholdCents === cents
-              || thresholdControlsDisabled
-            ) {
-              return
-            }
-            void applyPatch({
-              lowCreditThresholdCents: cents,
-              expectedRevision: preferences.revision,
-            })
-          }}
-          disabled={thresholdControlsDisabled}
-          aria-label="Low balance alert threshold"
-          className="flex flex-wrap gap-2"
-        >
-          {THRESHOLD_OPTIONS.map(({ cents, label }) => {
-            const selected = preferences.lowCreditThresholdCents === cents
-            const inputId = `low-balance-threshold-${cents}`
-            return (
-              <Label
-                key={cents}
-                htmlFor={inputId}
-                className={cn(
-                  'flex min-h-touch cursor-pointer items-center gap-2 rounded-md border px-3 py-2 text-sm font-mono tabular-nums',
-                  selected ? 'border-foreground bg-muted' : 'border-border bg-container',
-                  thresholdControlsDisabled && 'opacity-50 cursor-not-allowed',
-                  TACTILE,
-                )}
-              >
-                <RadioGroupItem
-                  id={inputId}
-                  value={String(cents)}
-                  aria-label={label}
-                  disabled={thresholdControlsDisabled}
-                />
-                {label}
-              </Label>
-            )
-          })}
-        </RadioGroup>
-        <div
-          className="min-h-[2.5rem] font-mono text-sm tabular-nums text-muted-foreground"
-          role="status"
-          aria-live="polite"
-        >
-          {thresholdStatement}
-        </div>
-      </div>
+      </SettingsGroup>
+      <SettingsGroup title="Credit balance alert">
+        <SettingsRow label="Low balance threshold" description="Choose the balance at which an email is sent.">
+          <div className="grid min-w-0 gap-2 sm:justify-items-end">
+            <RadioGroup
+              value={String(preferences.lowCreditThresholdCents)}
+              onValueChange={(next) => {
+                const cents = Number(next)
+                if (
+                  Number.isNaN(cents)
+                  || preferences.lowCreditThresholdCents === cents
+                  || thresholdControlsDisabled
+                ) return
+                void applyPatch({
+                  lowCreditThresholdCents: cents,
+                  expectedRevision: preferences.revision,
+                })
+              }}
+              disabled={thresholdControlsDisabled}
+              aria-label="Low balance alert threshold"
+              className="flex flex-wrap gap-2"
+            >
+              {THRESHOLD_OPTIONS.map(({ cents, label }) => {
+                const selected = preferences.lowCreditThresholdCents === cents
+                const inputId = `low-balance-threshold-${cents}`
+                return (
+                  <Label
+                    key={cents}
+                    htmlFor={inputId}
+                    className={cn(
+                      'flex min-h-touch cursor-pointer items-center gap-2 rounded-md border px-3 py-2 text-sm font-mono tabular-nums',
+                      selected ? 'border-foreground bg-muted' : 'border-border bg-container',
+                      thresholdControlsDisabled && 'opacity-50 cursor-not-allowed',
+                      TACTILE,
+                    )}
+                  >
+                    <RadioGroupItem
+                      id={inputId}
+                      value={String(cents)}
+                      aria-label={label}
+                      disabled={thresholdControlsDisabled}
+                    />
+                    {label}
+                  </Label>
+                )
+              })}
+            </RadioGroup>
+            <div className="text-sm text-muted-foreground" role="status" aria-live="polite">
+              {thresholdStatement}
+            </div>
+          </div>
+        </SettingsRow>
+      </SettingsGroup>
       <div className="min-h-[2.5rem]" role="status" aria-live="polite">
         {updateDiagnostic ? (
           <div className="grid gap-1 text-sm text-muted-foreground">
@@ -167,10 +164,6 @@ export function OwnerNotificationSettings({
           </div>
         ) : null}
       </div>
-      <p className="text-muted-foreground text-sm">
-        Alerts are sent to the primary email verified in your Clerk profile. Update your email
-        address in Profile.
-      </p>
     </div>
   )
 }
