@@ -106,9 +106,8 @@ Work the highest score first. Churn decides ties, because the ergonomics payoff 
 - **Operator RPCs kept:** 7 were retained pending an operator decision (migration/backfill/health/installSchema/resolveLostResult/reconcileScheduledInteractiveAuthority/x402 backfill start).
 - **40 RPCs referenced only by tests remain.** The largest are the workspaceMemberships `*ForServer` handlers. Verify whether they are called through string refs (for example from the Clerk webhook) before treating them as dead.
 - **Next layout wave:** catalog/sellerCanary.ts (772 lines, loose); publication-admit pair (12 days old); 17 unwired skeletons (product decision). Layout map: `docs/reviews/2026-09-24-codebase-health/quote-standard/layout-map.md`.
-- **Typecheck:** 2199c986b made `api` collapse to `any` (marketFlowRefresh self-inference, via `ctx.runQuery(internal…)` with no return type). 727b5f2bc fixed it, taking errors from 89 to 16. The remaining 16 are 12 from chat/search work in a parallel session plus 4 needing guards: recovery-harness:307, api-catalog-route.test:51-52 and start-observability.test:74. **Rule: an action or handler that calls `ctx.run*(internal.*)` must declare its return type.**
+- **Typecheck:** 2199c986b made `api` collapse to `any` (marketFlowRefresh self-inference). 727b5f2bc fixed it, and b31a477a3 fixed the 4 residual test errors. The 12 remaining errors belong to the chat session. **Rule: an action or handler that calls `ctx.run*(internal.*)` must declare its return type.**
 - **Catalog authority gap:** `catalogOriginIsCurrent` in `graphPorts` checks `path.businessId === offering.businessId`, but `capabilitySupplyEligiblePorts` does not. This needs a security decision.
-- **Duplicate provider loader:** `loadProviderConnection` is duplicated in `graphPorts` and `capabilitySupplyEligiblePorts`.
 - **Principal refusals:** Account and directory principal resolvers use different missing-principal refusal codes; keep them distinct.
 - **Managed-Call remedy:** Remedy transitions resemble finalize transitions but differ semantically; keep them distinct.
 - **Provider-row test location:** Move `convex/x402DirectoryIndexStoreProviderRows.test.ts` beside `lib/x402DirectoryIndex/providerRows`.
@@ -141,3 +140,15 @@ Existing folders that break this layout are moved in dedicated layout waves, one
 - **Evidence for check 4.** Give path:line of the shared core for each caller (HTTP, MCP, chat, cron), or name the duplicate and record it as a follow-up. A bare "pass" does not count.
 - **Net lines.** Report `git diff --shortstat` for the pass. Relocation overhead (imports) is acceptable. Growth beyond roughly 10% of the moved lines must be explained.
 - **Codegen.** Only the wave's designated owner runs `npx convex codegen`, and only in waves that change the API. After it runs, `.env.local` must still contain `CONVEX_DEPLOYMENT=anonymous:anonymous-agent`.
+
+### §10 decisions for the wave 4 layout moves (orchestrator, 2026-09-24)
+- **`capabilityExecution/`:** callLifecycle, callProjection, providerConsequence, `quotes` (formerly capabilityQuotes), liveX402Requirement.
+- **`market/`:** `directoryIndex` (formerly x402DirectoryIndex), `flow` (formerly marketFlow).
+- **`principalAccount/`:** workspace (absorbs workspaceDecommissionFences), workspaceSecurity, onboarding, interactiveAuthority.
+- **`platform/`:** workloadCron (cron workload identity is shared infrastructure), and `rateLimit.ts`. A single-file concern in `platform/` may sit directly under `platform/`.
+- **`capabilitySupply/`:** providerConnections, providerOffboarding (absorbs providerOffboardingFreeze), facilitatorDiscovery, toolCatalog (the presentation helper). Its loose concern files are grouped into feature subfolders.
+- **`money/`:** x402PaymentAttempt (the 5 attempt files plus x402ResponseRecovery), agentReads, spendingPeriods, legalCustomer, qualifiedUsePayout (no barrel).
+- **`authority/`:** boundary (the wave 2 loose files), delegation, consequence (owner, proof, publication), canonicalAgent. `agentAccess/policy/` takes the wave 2 grant files.
+- **`secrets/`:** pointer, lifecycle.
+- **`catalog/`:** sellerCanary (split by concern), devSeed.
+- **Exception:** `adminConsole/` stays a top-level folder. It is the operator console across domains, and nesting it would exceed depth 2. Only its naming gets fixed.
