@@ -13,8 +13,9 @@ import { z } from 'zod'
 
 import { TOOL_MARKET_SEARCH_PATH } from '@/modules/registry/tool-paths'
 import { toolChoiceSearchOutputSchema } from '@/modules/registry/tool-choice-contracts'
+import type { ListingSearchGroups } from '@/modules/registry/public'
 
-export type ToolChoiceSearchResult = z.infer<typeof toolChoiceSearchOutputSchema>
+export type ToolChoiceSearchResult = z.infer<typeof toolChoiceSearchOutputSchema> & Readonly<{ groups?: ListingSearchGroups }>
 
 export type MarketToolSearchInput = Readonly<{
   query: string
@@ -38,5 +39,5 @@ export async function searchMarketTools(
 
   const parsed = toolChoiceSearchOutputSchema.safeParse(await response.json())
   if (!parsed.success) throw new Error('catalog_search_result_invalid')
-  return parsed.data
+  return parsed.data as ToolChoiceSearchResult
 }

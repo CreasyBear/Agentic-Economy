@@ -1,16 +1,7 @@
-import type { PublicToolDescriptor } from '@/modules/capability-supply/public'
-import type { MarketListingEvidenceProjection } from '@/modules/market/listing-evidence'
-import type {
-  ToolDetailPresentation,
-  ToolDetailPresentationResult,
-} from '@/modules/market/tool-detail-presentation'
-import type {
-  X402DirectoryEntry,
-  X402DirectoryResolutionReason,
-} from '@/modules/market/x402-directory'
-import type { X402DirectoryCatalogueResource } from '@/modules/market/x402-directory-catalogue'
+import type { PublicToolDetailRouteResult } from '@/modules/market/tool-detail-route.functions'
+import type { X402DirectoryResolutionReason } from '@/modules/market/x402-directory'
 
-export type PublicToolDetailProps = ToolDetailPresentation
+export type PublicToolDetailProps = Readonly<{ result: PublicToolDetailRouteResult | Readonly<{ kind: 'invalid_ref'; toolRef: string }> }>
 
 export type MarketBackButtonProps = Readonly<{
   label: string
@@ -18,13 +9,8 @@ export type MarketBackButtonProps = Readonly<{
   variant?: 'ghost'
 }>
 
-export type CurrentToolDetailProps = Readonly<{
-  tool: PublicToolDescriptor
-  evidence?: MarketListingEvidenceProjection
-}>
-
 export type ToolUnavailableProps = Readonly<{
-  result: Exclude<ToolDetailPresentationResult, { kind: 'found' }>
+  result: Exclude<PublicToolDetailProps['result'], { kind: 'found' }>
 }>
 
 export type ToolUnavailableCopy = Readonly<{
@@ -101,25 +87,4 @@ export type ToolUnavailablePresentation = Readonly<{
   title: string
   description: string
   action: ToolUnavailableCopy['action']
-}>
-
-export type DirectoryEntrySummaryPageProps = Readonly<{
-  entry: X402DirectoryEntry
-  upstream: boolean
-  readiness?: ToolUnavailablePresentation
-  endpoints?: Readonly<{ entries: readonly X402DirectoryEntry[]; truncated: boolean }>
-}>
-
-export type DirectoryEntryUnavailableProps = Readonly<{
-  metadata: Exclude<X402DirectoryCatalogueResource, { kind: 'found' } | { kind: 'found_upstream' }>
-}>
-
-export type DirectoryToolCanonicalLoaderData = Readonly<{
-  metadata: X402DirectoryCatalogueResource
-  admission?: Promise<ToolDetailPresentation> | undefined
-  endpoints?: Readonly<{ entries: readonly X402DirectoryEntry[]; truncated: boolean }>
-}>
-
-export type AeDirectoryToolCanonicalPageProps = Readonly<{
-  data: DirectoryToolCanonicalLoaderData
 }>

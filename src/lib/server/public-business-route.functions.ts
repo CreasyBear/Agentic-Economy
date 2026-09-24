@@ -10,6 +10,8 @@ import {
 } from '@/lib/server/owner-status.functions'
 import { readPublicOfferingRegistryBusinessDetail } from '@/modules/registry/registry.functions'
 import { buildPublicBusinessRouteSeo } from '@/modules/seo/public-route'
+import { registryServicesDetailAction } from '@/modules/registry/registry.actions'
+import type { ServiceDto } from '@/modules/registry/public'
 import type { PublicBusinessSeoContract } from '@/modules/seo/public'
 
 type PublicBusinessRouteData = Readonly<{
@@ -17,6 +19,7 @@ type PublicBusinessRouteData = Readonly<{
   page: Extract<PublicBusinessPageRouteReadbackResult, { kind: 'available' }>
   seo: PublicBusinessSeoContract
   supply: PublicOfferingSupplyView
+  service?: ServiceDto
 }>
 
 export type PublicBusinessRouteDataResult =
@@ -35,11 +38,16 @@ export const readPublicBusinessRouteServer = createServerFn()
       const offeringDetail = await readPublicOfferingRegistryBusinessDetail({ slug: data.slug })
       if (offeringDetail.kind === 'not_found') return { kind: 'not_found', reason: 'not_public' }
       const seo = buildPublicBusinessRouteSeo(page.catalog, await readCanonicalBaseUrlServer())
+      const serviceResult = await registryServicesDetailAction.run({
+        data: { slug: data.slug },
+        context: { caller: 'ui' },
+      })
       return {
         kind: 'available',
         page,
         seo,
         supply: offeringApiDtoToSupplyView(offeringDetail.business),
+        ...(serviceResult.kind === 'found' ? { service: serviceResult.service } : {}),
       }
     } catch (cause) {
       return degrade(cause, { kind: 'unavailable', reason: 'source_unavailable', retryable: true } as const, {

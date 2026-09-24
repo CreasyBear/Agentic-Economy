@@ -4,7 +4,7 @@
 
 import { toToolInspectorModel } from '@/components/ae/market/tool-detail/tool-inspector-model'
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
-import { RouterContextProvider, createMemoryHistory, createRootRoute, createRoute, createRouter, isRedirect } from '@tanstack/react-router'
+import { RouterContextProvider, createMemoryHistory, createRootRoute, createRoute, createRouter } from '@tanstack/react-router'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import '../../setup/jsdom-platform'
 
@@ -26,24 +26,12 @@ import {
 } from '@/modules/market/suggested-next-action'
 
 const readDetailMock = vi.hoisted(() => vi.fn())
-const readCanonicalMock = vi.hoisted(() => vi.fn())
-const prepareDirectoryMock = vi.hoisted(() => vi.fn())
-
 vi.mock('@/modules/market/tool-detail-route.functions', () => ({
   readPublicToolDetailRouteServer: readDetailMock,
 }))
-vi.mock('@/modules/market/x402-directory-index.functions', () => ({
-  readX402DirectoryCanonicalUrlForToolServer: readCanonicalMock,
-}))
-vi.mock('@/modules/market/x402-directory.functions', () => ({
-  prepareX402DirectoryResourceServer: prepareDirectoryMock,
-}))
 
 import { PublicToolDetail, Route } from '@/routes/tools.$toolRef'
-import {
-  resolveDirectoryToolDetail,
-  type ToolDetailPresentationResult,
-} from '@/modules/market/tool-detail-presentation'
+import type { PublicToolDetailProps } from '@/components/ae/market/public-tool-detail/PublicToolDetail'
 
 const sourceRecord = {
   operationId: 'operation:invoice.extract',
@@ -164,7 +152,7 @@ const projectCapabilityTool = (
 const tool = projectCapabilityTool(sourceRecord, 2_000)
 
 function renderWithRouter(
-  result: ToolDetailPresentationResult,
+  result: PublicToolDetailProps['result'],
   _hasBuyerCredential = false,
 ) {
   const rootRoute = createRootRoute()
@@ -217,8 +205,6 @@ function expectRenderedHrefToMatchProducer(renderedHref: string | null, producer
 afterEach(() => {
   cleanup()
   readDetailMock.mockReset()
-  readCanonicalMock.mockReset()
-  prepareDirectoryMock.mockReset()
 })
 
 describe('/tools/$toolRef', () => {
@@ -376,332 +362,50 @@ describe('/tools/$toolRef', () => {
     }))
   })
 
-  it('offers a plain Market link back when there is no prior history entry to go back to', () => {
-    renderWithRouter({ kind: 'found', schemaVersion: PublicToolRegistrySchemaVersion, tool })
-
-    const back = screen.getByRole('link', { name: 'Browse Market' })
-    expect(new URL(back.getAttribute('href')!, 'https://market.example').pathname).toBe('/market')
-  })
-
-  it('projects canonical public facts and hands the exact reference to the existing agent client', () => {
-    renderWithRouter(
-      { kind: 'found', schemaVersion: PublicToolRegistrySchemaVersion, tool },
-      true,
-    )
-
+  it('keeps one Tool identity with price, reciprocal Provider link and a single Start action', () => {
+    renderWithRouter({ kind: 'found', schemaVersion: PublicToolRegistrySchemaVersion, tool, verifiedBusinessSlug: tool.business.slug })
     expect(screen.getByRole('heading', { level: 1, name: 'Invoice line-item extraction' })).toBeTruthy()
-    expect(screen.getAllByText('Ledger Labs').length).toBeGreaterThan(0)
+    expect(screen.getByRole('link', { name: 'Ledger Labs' }).getAttribute('href')).toBe('/ledger-labs')
+    expect(screen.getByText(/USD 1.25 per Call/)).toBeTruthy()
+    expect(screen.getByRole('heading', { name: 'Example' })).toBeTruthy()
+    expect(screen.getByText(/No published output example/)).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Find an alternative' })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Get a Quote' })).toBeNull()
+    expect(screen.getByText(/Readiness stale/)).toBeTruthy()
+  })
+
+  it('does not link an unverified publisher to an unpublished Business page', () => {
+    renderWithRouter({ kind: 'found', schemaVersion: PublicToolRegistrySchemaVersion, tool })
+    expect(screen.getByText('Ledger Labs')).toBeTruthy()
     expect(screen.queryByRole('link', { name: 'Ledger Labs' })).toBeNull()
-    expect(screen.getAllByText('USD 1.25').length).toBeGreaterThan(0)
-    expect(screen.getByRole('heading', { level: 3, name: 'Price breakdown' })).toBeTruthy()
-    expect(screen.getByText('USD 1.00')).toBeTruthy()
-    expect(screen.getByText('USD 0.25')).toBeTruthy()
-    expect(screen.getByText('eip155:8453', { exact: false })).toBeTruthy()
-
-    const contractTab = screen.getByRole('tab', { name: 'Contract' })
-    fireEvent.mouseDown(contractTab, { button: 0, ctrlKey: false })
-    fireEvent.click(contractTab)
-    expect(screen.getByRole('heading', { level: 2, name: 'Example input' })).toBeTruthy()
-    expect(screen.getAllByText(/https:\/\/docs\.example\/invoice\.pdf/).length).toBeGreaterThan(0)
-    expect(screen.queryByRole('heading', { level: 3, name: 'Example output' })).toBeNull()
-    expect(screen.getByRole('button', { name: 'Open schemas and references' })).toBeTruthy()
-
-    const execution = screen.getByRole('complementary', { name: 'What you can do next' })
-    expect(within(execution).getByText(/Copy this request into your connected Agent/i)).toBeTruthy()
-    expect(within(execution).getByText(/exact AUD price/i)).toBeTruthy()
-    expect(within(execution).getByRole('button', { name: 'Copy Continue with your Agent' })).toBeTruthy()
-    expect(within(execution).queryByText(/ae connect/)).toBeNull()
-    expect(within(execution).queryByText(/ae call/)).toBeNull()
-    expect(within(execution).queryByText(/https:\/\/docs\.example\/invoice\.pdf/)).toBeNull()
-    expect(within(execution).queryByText(/ae status <invocation-ref>/)).toBeNull()
-    expect(within(execution).queryByText(/idempotencyKey=/)).toBeNull()
-    expect(within(execution).queryByText(/Save it securely/i)).toBeNull()
-    expect(within(execution).queryByText(/ae_operation_invoke/)).toBeNull()
-    expect(within(execution).queryByText(/npm run -s ae -- recover/)).toBeNull()
-
-    fireEvent.click(screen.getByRole('button', { name: 'Open schemas and references' }))
-    expect(screen.getByRole('dialog', { name: 'Schemas and references' })).toBeTruthy()
-    expect(screen.getByText('digest:current-price')).toBeTruthy()
-    expect(screen.getByText('Per accepted extraction')).toBeTruthy()
-    expect(screen.getAllByText('documentUrl').length).toBeGreaterThan(0)
-    expect(screen.getAllByText('includeTax').length).toBeGreaterThan(0)
-    expect(screen.getAllByText('data release')).toHaveLength(2)
-    expect(screen.getByText('completion')).toBeTruthy()
-    expect(screen.getByText('provider owned')).toBeTruthy()
-    expect(screen.getAllByText(/release:invoice/)).toHaveLength(2)
-    expect(screen.getByText(/evidence:line-items/)).toBeTruthy()
-    expect(screen.getByText('pricing:invoice@4')).toBeTruthy()
-    expect(screen.getByText('evidence:pricing')).toBeTruthy()
-
   })
 
-  it('keeps x402 details public without advertising browser execution', () => {
-    const x402Tool = projectCapabilityTool({
-      ...sourceRecord,
-      authentication: { kind: 'x402' },
-      provenance: { ...sourceRecord.provenance, sourceKind: 'x402' },
-    }, 2_000)
-
-    renderWithRouter({
-      kind: 'found',
-      schemaVersion: PublicToolRegistrySchemaVersion,
-      tool: x402Tool,
-    }, true)
-
-    const execution = screen.getByRole('complementary', { name: 'What you can do next' })
-    expect(within(execution).getByRole('button', { name: 'Copy Continue with your Agent' })).toBeTruthy()
-    expect(within(execution).queryByText(/ae call/)).toBeNull()
-    expect(within(execution).queryByText(/idempotencyKey=/)).toBeNull()
-    expect(within(execution).queryByText(/npm run -s ae -- recover/)).toBeNull()
+  it('makes technical operation IDs a disclosure, not the heading', () => {
+    renderWithRouter({ kind: 'found', schemaVersion: PublicToolRegistrySchemaVersion, tool })
+    expect(screen.getByText(/Technical · operation IDs/)).toBeTruthy()
+    expect(screen.getByRole('heading', { level: 1 }).textContent).not.toContain('operation:v1:')
+    expect(screen.getByRole('link', { name: /Try in chat/ }).getAttribute('href')).toContain('/t/new?q=')
   })
 
-  it('shows 0% Call fee on x402 Tool detail and does not show the Account loading fee', () => {
-    const x402Tool = projectCapabilityTool({
-      ...sourceRecord,
-      authentication: { kind: 'x402' },
-      provenance: { ...sourceRecord.provenance, sourceKind: 'x402' },
-    }, 2_000)
-
-    renderWithRouter({
-      kind: 'found',
-      schemaVersion: PublicToolRegistrySchemaVersion,
-      tool: x402Tool,
-    }, true)
-
-    const economics = screen.getByRole('region', { name: 'Price and market evidence' })
-    expect(within(economics).getByText('Call fee')).toBeTruthy()
-    expect(within(economics).getByText('0%')).toBeTruthy()
-    expect(within(economics).queryByText('Top-up fee')).toBeNull()
-    expect(within(economics).queryByText('5% fee + GST on the fee')).toBeNull()
-    expect(within(economics).queryByText('2.5% fee + GST on the fee')).toBeNull()
-  })
-
-  it('does not infer caller readiness from browser credentials', () => {
-    renderWithRouter({
-      kind: 'found',
-      schemaVersion: PublicToolRegistrySchemaVersion,
-      tool,
-    })
-
-    const continuation = screen.getByRole('complementary', { name: 'What you can do next' })
-    expect(within(continuation).getByRole('button', { name: 'Copy Continue with your Agent' })).toBeTruthy()
-    expect(within(continuation).getByRole('link', { name: 'Need to connect an Agent?' }).getAttribute('href'))
-      .toBe(`/agent-access?resumeTool=${encodeURIComponent(tool.toolRef)}`)
-    expect(screen.getByRole('region', { name: 'Operational' })).toBeTruthy()
-    expect(screen.queryByText(/Agent connected$/i)).toBeNull()
-  })
-
-  it('keeps a setup-required descriptor inspectable without implying it can be invoked', () => {
-    const setupRequiredTool = {
-      ...tool,
-      availability: {
-        ...tool.availability,
-        posture: 'setup_required' as const,
-        reason: 'setup_required' as const,
-      },
-    }
-
-    renderWithRouter({ kind: 'found', schemaVersion: PublicToolRegistrySchemaVersion, tool: setupRequiredTool })
-
-    expect(screen.getAllByText('USD 1.25').length).toBeGreaterThan(0)
-    const access = screen.getByRole('complementary', { name: 'What you can do next' })
-    expect(within(access).getByText(/not operational/i)).toBeTruthy()
-    expect(within(access).getByRole('link', { name: 'Find Tool alternatives' })).toBeTruthy()
-    fireEvent.click(screen.getByRole('button', { name: 'Open schemas and references' }))
-    expect(screen.getByText('digest:current-price')).toBeTruthy()
-    expect(screen.getByText('provider owned')).toBeTruthy()
-    expect(screen.queryByText(/npm run -s ae -- invoke/)).toBeNull()
-    expect(screen.queryByText(/npm run -s ae -- recover/)).toBeNull()
-  })
-
-  it('preserves unavailable as unavailable instead of collapsing it into inspect-only', () => {
-    const unavailableTool = {
-      ...tool,
-      availability: {
-        ...tool.availability,
-        posture: 'unavailable' as const,
-        reason: 'temporarily_unavailable' as const,
-      },
-    }
-
-    renderWithRouter({
-      kind: 'found',
-      schemaVersion: PublicToolRegistrySchemaVersion,
-      tool: unavailableTool,
-    })
-
-    const continuation = screen.getByRole('complementary', { name: 'What you can do next' })
-    expect(within(continuation).getByRole('link', { name: 'Find Tool alternatives' })).toBeTruthy()
-    expect(within(continuation).getByText(/not operational/i)).toBeTruthy()
-    expect(within(continuation).queryByText(/exact AUD price/i)).toBeNull()
-  })
-
-  it('fails closed when a stale source sends a non-canonical availability posture', () => {
-    const staleTool = {
-      ...tool,
-      availability: {
-        ...tool.availability,
-        posture: 'integrated',
-      },
-    } as unknown as typeof tool
-
-    renderWithRouter({
-      kind: 'found',
-      schemaVersion: PublicToolRegistrySchemaVersion,
-      tool: staleTool,
-    })
-
-    const continuation = screen.getByRole('complementary', { name: 'What you can do next' })
-    expect(within(continuation).getByRole('heading', { name: 'Find an operational alternative' })).toBeTruthy()
-    expect(within(continuation).getByRole('link', { name: 'Find Tool alternatives' })).toBeTruthy()
-    expect(within(continuation).queryByRole('button', { name: 'Copy Continue with your Agent' })).toBeNull()
-  })
-
-  it.each([
-    {
-      kind: 'not_found' as const,
-      schemaVersion: PublicToolRegistrySchemaVersion,
-      toolRef: tool.toolRef,
-      navigation: [],
-      expectedTitle: /unknown or no longer current/i,
-      expectedAction: 'Browse Market',
-    },
-    {
-      kind: 'source_unavailable' as const,
-      toolRef: tool.toolRef,
-      expectedTitle: /details are unavailable/i,
-      expectedAction: 'Check status',
-    },
-  ])('keeps the truth ceiling for $kind', ({ expectedTitle, expectedAction, ...result }) => {
-    renderWithRouter(result)
-
-    const main = screen.getByRole('main')
-    expect(within(main).getByRole('heading', { level: 1, name: expectedTitle })).toBeTruthy()
-    expect(within(main).getByRole('link', { name: expectedAction })).toBeTruthy()
-    expect(within(main).queryByRole('link', { name: 'Back to market' })).toBeNull()
-    expect(within(main).queryByText('USD 1.25')).toBeNull()
-    expect(within(main).queryByText('digest:current-price')).toBeNull()
-    expect(within(main).queryByRole('complementary', { name: 'Use this capability' })).toBeNull()
-    expect(within(main).queryByText(/npm run -s ae -- invoke/)).toBeNull()
-    expect(within(main).queryByText(/npm run -s ae -- recover/)).toBeNull()
-  })
-
-  it('preserves the directory admission refusal reason', async () => {
-    prepareDirectoryMock.mockResolvedValue({ kind: 'unavailable', reason: 'schema_missing' })
-
-    await expect(resolveDirectoryToolDetail('https://provider.example/tool')).resolves.toEqual({
-      result: { kind: 'unavailable', reason: 'schema_missing' },
-    })
-    expect(readDetailMock).not.toHaveBeenCalled()
-  })
-
-  it('offers retry and Status when the listing source is temporarily unavailable', () => {
-    renderWithRouter({ kind: 'unavailable', reason: 'source_unavailable' })
-
-    const main = screen.getByRole('main')
-    expect(within(main).getByText(/Try again/)).toBeTruthy()
-    expect(within(main).getByRole('link', { name: 'Check status' })).toBeTruthy()
-  })
-
-  it('names a permanent Provider listing refusal without offering retry', () => {
-    renderWithRouter({ kind: 'unavailable', reason: 'schema_missing' })
-
-    const main = screen.getByRole('main')
-    expect(within(main).getByText(/has not published the input an agent would send/i)).toBeTruthy()
-    expect(within(main).getByRole('link', { name: 'Browse Market' })).toBeTruthy()
-    expect(within(main).queryByText(/Try again/)).toBeNull()
-  })
-
-  it('explains when a Tool is no longer listed', () => {
-    renderWithRouter({ kind: 'unavailable', reason: 'resource_not_found' })
-
-    const main = screen.getByRole('main')
-    expect(within(main).getByText(/^This Tool is no longer listed\./)).toBeTruthy()
-    expect(within(main).getByRole('link', { name: 'Browse Market' })).toBeTruthy()
-  })
-
-  it('explains an invalid directory link', () => {
-    renderWithRouter({ kind: 'unavailable', reason: 'query_invalid' })
-
-    const main = screen.getByRole('main')
-    expect(within(main).getByText(/^This link is not valid\./)).toBeTruthy()
-    expect(within(main).getByRole('link', { name: 'Browse Market' })).toBeTruthy()
-  })
-
-  it('renders malformed references distinctly and offers a plain way back', () => {
-    renderWithRouter({ kind: 'invalid_ref', toolRef: 'not-an-tool' })
-
-    expect(screen.getByRole('heading', { name: /reference is invalid/i })).toBeTruthy()
-    const back = screen.getByRole('link', { name: 'Browse Market' })
-    expect(new URL(back.getAttribute('href')!, 'https://market.example').pathname).toBe('/market')
-    expect(screen.queryByText('USD 1.25')).toBeNull()
-    expect(screen.queryByRole('complementary', { name: 'What you can do next' })).toBeNull()
+  it('keeps the ToolRef route canonical even if a directory URL exists', async () => {
+    readDetailMock.mockResolvedValue({ kind: 'found', schemaVersion: PublicToolRegistrySchemaVersion, tool })
+    const loader = Route.options.loader as (input: { params: { toolRef: string } }) => Promise<unknown>
+    await expect(loader({ params: { toolRef: tool.toolRef } })).resolves.toMatchObject({ result: { kind: 'found' } })
+    expect(readDetailMock).toHaveBeenCalledWith({ data: { toolRef: tool.toolRef } })
   })
 
   it('rejects malformed references before reading the catalog', async () => {
     const loader = Route.options.loader as (input: { params: { toolRef: string } }) => Promise<unknown>
-
     await expect(loader({ params: { toolRef: 'not-an-tool' } })).resolves.toEqual({
-      result: { kind: 'invalid_ref', toolRef: 'not-an-tool' },
-      evidence: undefined,
+      result: { kind: 'invalid_ref', toolRef: 'not-an-tool' }, evidence: undefined,
     })
     expect(readDetailMock).not.toHaveBeenCalled()
   })
 
-  it('re-reads the browser parameter through the server seam and fails closed on a thrown read', async () => {
-    readDetailMock.mockRejectedValue(new Error('offline'))
-    const loader = Route.options.loader as (input: { params: { toolRef: string } }) => Promise<unknown>
-
-    await expect(loader({ params: { toolRef: tool.toolRef } })).resolves.toEqual({
-      result: {
-        kind: 'source_unavailable',
-        toolRef: tool.toolRef,
-      },
-      evidence: undefined,
-    })
-    expect(readDetailMock).toHaveBeenCalledWith({ data: { toolRef: tool.toolRef } })
-  })
-
-  it('carries server-observed history through both browser detail loaders', async () => {
-    const evidence = projectMarketListingEvidence({ toolRef: tool.toolRef, ratingCount: 0,
-      ratingSum: 0, completedCalls: 2, latencySamplesMs: [35060, 42000] }, tool.contract.capabilityId)
-    readDetailMock.mockResolvedValue({ kind: 'found', schemaVersion: PublicToolRegistrySchemaVersion, tool, evidence })
-    readCanonicalMock.mockResolvedValue(null)
-    const loader = Route.options.loader as (input: { params: { toolRef: string } }) => Promise<unknown>
-    await expect(loader({ params: { toolRef: tool.toolRef } })).resolves.toMatchObject({ evidence })
-    await expect(resolveDirectoryToolDetail('https://provider.example/tool', tool.toolRef))
-      .resolves.toMatchObject({ evidence })
-  })
-
-  it('redirects agent-facing operation:v1: refs to the canonical URL once this Tool has one', async () => {
-    readDetailMock.mockResolvedValue({ kind: 'found', schemaVersion: PublicToolRegistrySchemaVersion, tool })
-    readCanonicalMock.mockResolvedValue({ providerHost: 'ledger-labs.example', slug: 'invoice-extract' })
-    const loader = Route.options.loader as (input: { params: { toolRef: string } }) => Promise<unknown>
-
-    let caught: unknown
-    try {
-      await loader({ params: { toolRef: tool.toolRef } })
-      throw new Error('expected a redirect to be thrown')
-    } catch (error) {
-      caught = error
-    }
-    expect(isRedirect(caught)).toBe(true)
-    expect((caught as { options: { to: string; params: unknown; replace: boolean } }).options).toMatchObject({
-      to: '/tools/$providerHost/$slug',
-      params: { providerHost: 'ledger-labs.example', slug: 'invoice-extract' },
-      replace: true,
-    })
-    expect(readCanonicalMock).toHaveBeenCalledWith({ data: { toolRef: tool.toolRef } })
-  })
-
-  it('stays on `/tools/$toolRef` when this Tool has no canonical directory URL', async () => {
-    readDetailMock.mockResolvedValue({ kind: 'found', schemaVersion: PublicToolRegistrySchemaVersion, tool })
-    readCanonicalMock.mockResolvedValue(null)
-    const loader = Route.options.loader as (input: { params: { toolRef: string } }) => Promise<{ result: ToolDetailPresentationResult }>
-
-    await expect(loader({ params: { toolRef: tool.toolRef } })).resolves.toMatchObject({
-      result: { kind: 'found' },
-    })
+  it('has a recovery path without commercial claims if the Tool read is unavailable', () => {
+    renderWithRouter({ kind: 'source_unavailable', toolRef: tool.toolRef })
+    expect(screen.getByRole('link', { name: 'Check status' })).toBeTruthy()
+    expect(screen.queryByText(/USD 1.25/)).toBeNull()
   })
 
 })

@@ -801,7 +801,7 @@ function x402ConnectionCta(input: Readonly<{
     method: input.method,
     environment: input.environment,
   })
-  return `/owner/operations?${search.toString()}`
+  return `/owner/settings/integrations?${search.toString()}`
 }
 
 function canonicalResourceUrl(resourceUrl: string): string {

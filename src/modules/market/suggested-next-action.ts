@@ -80,7 +80,7 @@ export function suggestNextAction(state: NextActionState): SuggestedNextAction {
       : {
           label: 'Connect provider',
           kind: 'navigate',
-          href: '/owner/operations#provider-connections',
+          href: '/owner/settings/integrations#provider-connections',
         }
   }
   return { label: 'Add credit', kind: 'navigate', command: 'ae account balance', href: '/owner/credit#fund' }

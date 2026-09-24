@@ -22,8 +22,8 @@ describe('ListingFirstScreen', () => {
     const text = fragmentFrom(markup).textContent ?? ''
 
     expect(text).toContain('Emergency plumbing')
-    expect(text).toContain('Offerings')
-    expect(text).toContain('Inspect the price, access path, and current readiness before you open one.')
+    expect(text).toContain('Tools and offerings')
+    expect(text).toContain('Human-request offering · not an admitted Tool')
     expect(markup).not.toContain('Ask this business')
     expect(markup).not.toContain('href="/demo-plumbing/inquiry"')
   })

@@ -105,7 +105,7 @@ describe('owner source-first resumption', () => {
       kind: 'action_required',
       requiredAction: {
         title: 'Connect service',
-        cta: `/owner/operations?${query.toString()}`,
+        cta: `/owner/settings/integrations?${query.toString()}`,
       },
     })
     expect(mocks.callSourceQuery).toHaveBeenCalledTimes(1)

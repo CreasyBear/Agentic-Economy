@@ -19,9 +19,11 @@ import {
   projectToolDescription,
   projectToolListChoices,
   projectToolSearchChoices,
+  toolChoiceSearchOutputSchema,
   type SupplyProjectionFreshness,
   type ToolCompareResolution,
 } from './tool-choice-contracts'
+import { readListingSearchGroups } from './internal/listing-search'
 import { rankToolSearchForRegistry } from './tool-reranker'
 
 // `market-tools/list` and `market-tools/search` read `registrySearchDocuments`,
@@ -138,7 +140,15 @@ export const registryToolsSearchAction = defineAction({
     const paged = ranked.kind === 'ok'
       ? { ...ranked, pagination: opaquePagination(ranked.pagination, scope) }
       : ranked
-    return projectToolSearchChoices(paged, data.filters, assessment, freshness, data.detail)
+    const projected = projectToolSearchChoices(paged, data.filters, assessment, freshness, data.detail)
+    const visibleRefs = new Set(projected.results.map(item => item.toolRef))
+    const admitted = ranked.kind === 'ok' ? ranked.items.filter(item => visibleRefs.has(item.toolRef)) : []
+    const listings = await readListingSearchGroups(data.query, admitted, data.limit)
+    return toolChoiceSearchOutputSchema.parse({
+      ...projected,
+      partialResults: projected.partialResults || listings.partialResults,
+      groups: listings.groups,
+    })
   },
 })
 

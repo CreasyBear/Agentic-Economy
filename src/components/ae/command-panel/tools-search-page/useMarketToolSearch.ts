@@ -15,6 +15,7 @@ import {
   type LucideIcon,
 } from 'lucide-react'
 import { APP_NAVIGATION, type AppDestinationId } from '@/lib/navigation/app-navigation'
+import type { ListingSearchItem } from '@/modules/registry/public'
 
 import { getStatusPresentation } from '@/lib/ui/status-presentation'
 import {
@@ -68,6 +69,35 @@ function mapCatalogSearchItemToRowModel(item: CatalogSearchItem): ToolSearchResu
     priceLabel: item.price.label,
   }
 }
+function mapListingToRow(item: ListingSearchItem): ToolSearchResultRowModel {
+  const { listing } = item
+  const sourceKind = listing.sources[0].kind
+  const identity = listing.identity
+  const price = listing.facts.price
+  const priceLabel = price.kind === 'absent' ? 'Price not provided'
+    : price.value.kind === 'quote_required' ? 'Quote required'
+      : price.value.kind === 'range' ? `${price.value.currency} ${price.value.minimum}–${price.value.maximum} / Call`
+        : `${price.value.currency} ${price.value.amount} / Call`
+  const host = identity.hostName.kind === 'present' ? identity.hostName.value : 'Unattributed host'
+  const provider = identity.providerName.kind === 'present' ? identity.providerName.value : 'Unattributed Provider'
+  return {
+    toolRef: listing.canonicalToolRef.kind === 'present' ? listing.canonicalToolRef.value : item.href,
+    title: identity.title.kind === 'present' ? identity.title.value : 'Untitled listing',
+    providerLine: sourceKind === 'directory' ? `Host: ${host} · Coinbase Bazaar`
+      : sourceKind === 'business_catalogue' ? `Provider: ${provider} · Business catalogue`
+        : `${listing.providerPage.kind === 'present' ? 'Provider' : 'Publisher'}: ${provider} · AE admitted`,
+    healthLabel: sourceKind === 'admitted'
+      ? listing.facts.readiness.kind === 'present' && listing.facts.readiness.value.posture === 'routeable'
+        ? getStatusPresentation('operational').label
+        : 'Readiness unknown'
+      : sourceKind === 'directory'
+        ? 'Directory listing, not callable through AE'
+        : 'Catalogue endpoint, not callable through AE',
+    sourceKind,
+    priceLabel,
+  }
+}
+
 
 type UseMarketToolSearchOptions = Readonly<{
   query: string
@@ -105,6 +135,18 @@ export function useMarketToolSearch({
             limit: TOOL_SEARCH_RESULT_LIMIT,
           })
           if (!current) return
+          if (result.groups !== undefined) {
+            const groups = result.groups
+            const items = [...groups.buyThroughAe.items, ...groups.listedElsewhere.items].map(mapListingToRow)
+            setStatus(groups.total === 0 ? {
+              kind: 'empty', query: trimmed, count: 0,
+              message: 'No matching listings in the searched source pages. Try different wording.',
+            } : {
+              kind: 'success', query: trimmed, count: groups.total, items,
+              groups: { buyThroughAe: groups.buyThroughAe.count, listedElsewhere: groups.listedElsewhere.count },
+            })
+            return
+          }
           if (result.kind === 'unavailable') {
             setStatus({
               kind: 'error',

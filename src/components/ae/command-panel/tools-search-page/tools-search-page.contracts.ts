@@ -3,16 +3,13 @@ import {
   type LucideIcon,
 } from 'lucide-react'
 
-import { aeStatusPresentation } from '@/lib/ui/status-presentation'
 
 export type ToolSearchResultRowModel = Readonly<{
   toolRef: string
   title: string
   providerLine: string
-  healthLabel:
-    | typeof aeStatusPresentation.operational.label
-    | typeof aeStatusPresentation.degraded.label
-    | 'Unverified'
+  healthLabel: string
+  sourceKind?: 'admitted' | 'directory' | 'business_catalogue'
   priceLabel: string
   priceValidUntil?: number
 }>
@@ -26,6 +23,7 @@ export type MarketToolSearchStatus =
       query: string
       items: readonly ToolSearchResultRowModel[]
       count: number
+      groups?: Readonly<{ buyThroughAe: number; listedElsewhere: number }>
     }>
   | Readonly<{ kind: 'empty'; query: string; count: number; message: string }>
   | Readonly<{

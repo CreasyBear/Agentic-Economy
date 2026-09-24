@@ -4,25 +4,28 @@ import { act, renderHook } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import type { ToolChoiceSearchResult } from '../market-tools-client'
-import { toolChoiceSearchOutputSchema } from '@/modules/registry/tool-choice-contracts'
+import { isPublicToolRef } from '@/modules/capability-supply/public'
 
 import { TOOLS_SEARCH_DEBOUNCE_MS } from './tools-search-page.contracts'
 import { useMarketToolSearch } from './useMarketToolSearch'
 
-const okPayload = (): ToolChoiceSearchResult => toolChoiceSearchOutputSchema.parse({
+const alphaRef = `operation:v1:${'a'.repeat(64)}`
+if (!isPublicToolRef(alphaRef)) throw new Error('test_tool_ref_invalid')
+
+const okPayload = (): ToolChoiceSearchResult => ({
   kind: 'matched',
   schemaVersion: 'registry-tools:v3',
   query: 'alpha',
   partialResults: false,
   results: [{
-    toolRef: `operation:v1:${'a'.repeat(64)}`,
+    toolRef: alphaRef,
     title: 'Alpha Tool',
     summary: 'desc',
     matchReason: 'Capability text overlap.',
     readiness: 'ready',
     entitlement: 'requires_auth',
     price: { kind: 'indicative', label: '$1.00' },
-    next: [{ action: 'describe', args: { toolRef: `operation:v1:${'a'.repeat(64)}` }, authority: 'public' }],
+    next: [{ action: 'describe', args: { toolRef: alphaRef }, authority: 'public' }],
     details: { capabilityId: 'cap.one', provider: { name: 'Prov', slug: 'prov' }, description: 'desc', listingTier: 'reviewed' },
   }],
   recommendation: { mode: 'fast', engine: 'jev_system_one', text: 'Inspect Alpha Tool before use.', citations: [] },
@@ -156,9 +159,9 @@ describe('useMarketToolSearch', () => {
     vi.useFakeTimers()
     const matched = okPayload()
     if (matched.kind !== 'matched') throw new Error('fixture_expected_match')
-    const searchTools = vi.fn(async (): Promise<ToolChoiceSearchResult> => toolChoiceSearchOutputSchema.parse({
+    const searchTools = vi.fn(async (): Promise<ToolChoiceSearchResult> => ({
       kind: 'noMatch', schemaVersion: matched.schemaVersion, query: 'AUD USD exchange rate',
-      scope: 'exhausted', results: [], nearMisses: matched.results,
+      scope: 'exhausted', results: [], nearMisses: [...matched.results],
       reason: 'No suitable Tool found in the searched supply.', suggestions: [],
       partialResults: false, pagination: matched.pagination, next: matched.next,
     }))

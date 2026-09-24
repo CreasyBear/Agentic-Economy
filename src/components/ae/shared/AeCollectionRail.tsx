@@ -36,7 +36,7 @@ export function AeCollectionRail({
             <p className="mt-2 text-deck leading-relaxed text-muted-foreground">{deck}</p>
           )}
         </div>
-        {action === undefined ? null : <div className="flex shrink-0 items-center gap-2">{action}</div>}
+        {action === undefined ? null : <div className="flex min-w-0 flex-wrap items-center gap-2">{action}</div>}
       </div>
       {children}
     </section>

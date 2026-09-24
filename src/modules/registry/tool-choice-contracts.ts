@@ -20,6 +20,7 @@ import {
   type ToolHealthStatus,
 } from '@/modules/capability-supply/tool-health'
 import { searchNextActions } from './next-action'
+import type { ListingSearchGroups } from './tool-entry'
 
 export type { ToolHealthStatus } from '@/modules/capability-supply/tool-health'
 
@@ -99,6 +100,7 @@ export type SearchMeta = Readonly<{
   partialResults: boolean
   freshness?: SupplyProjectionFreshness | undefined
   pagination: z.infer<typeof toolCatalogPaginationSchema>
+  groups?: ListingSearchGroups
   next: readonly RegistryNextAction[]
 }>
 
@@ -163,11 +165,46 @@ const searchResultSchema = z.strictObject({
   details: z.strictObject({ capabilityId: z.string(), provider: z.strictObject({ name: z.string(), slug: z.string() }), description: z.string(), listingTier: listingTierSchema }).optional(),
   next: z.array(registryNextActionSchema),
 })
+const listingFactSchema = z.looseObject({
+  kind: z.enum(['present', 'absent']),
+  sourceRef: z.string(),
+  provenance: z.enum(['directory_reported', 'provider_declared', 'ae_observed', 'business_published']),
+  scope: z.enum(['directory_resource', 'admitted_tool', 'catalogue_endpoint', 'business']),
+})
+const listingItemSchema = z.strictObject({
+  href: z.string(),
+  listing: z.looseObject({
+    sources: z.array(z.looseObject({ kind: z.enum(['directory', 'admitted', 'business_catalogue']) })).min(1),
+    canonicalToolRef: listingFactSchema,
+    identity: z.looseObject({
+      title: listingFactSchema, summary: listingFactSchema, providerName: listingFactSchema,
+      hostName: listingFactSchema, businessSlug: listingFactSchema,
+    }),
+    facts: z.looseObject({
+      price: listingFactSchema, readiness: listingFactSchema, payment: listingFactSchema,
+      authentication: listingFactSchema, completedCalls: listingFactSchema,
+      rating: listingFactSchema, latency: listingFactSchema,
+    }),
+    providerPage: listingFactSchema,
+    hostPage: listingFactSchema,
+    technical: z.looseObject({ operationId: listingFactSchema, endpoint: listingFactSchema }),
+  }),
+})
+const listingGroupsSchema = z.strictObject({
+  buyThroughAe: z.strictObject({ items: z.array(listingItemSchema), count: z.number().int().nonnegative() }),
+  listedElsewhere: z.strictObject({ items: z.array(listingItemSchema), count: z.number().int().nonnegative() }),
+  total: z.number().int().nonnegative(),
+  displayed: z.number().int().nonnegative(),
+  scope: z.literal('page'),
+  hasMore: z.boolean(),
+})
+
 const searchMetaSchema = {
   schemaVersion: z.literal(PublicToolRegistrySchemaVersion),
   partialResults: z.boolean(),
   freshness: supplyProjectionFreshnessSchema.optional(),
   pagination: toolCatalogPaginationSchema,
+  groups: listingGroupsSchema.optional(),
   next: z.array(registryNextActionSchema),
 }
 export const toolChoiceSearchOutputSchema = z.discriminatedUnion('kind', [
@@ -183,6 +220,7 @@ export const toolChoiceSearchOutputSchema = z.discriminatedUnion('kind', [
   z.strictObject({ ...searchMetaSchema, kind: z.literal('noMatch'), query: z.string(), scope: z.enum(['page', 'exhausted']), reason: z.string(), results: z.tuple([]), nearMisses: z.array(searchResultSchema).max(3), suggestions: z.array(z.string()) }),
   z.strictObject({ ...searchMetaSchema, kind: z.literal('unavailable'), reason: z.enum(['source_unavailable', 'capacity_exceeded']), results: z.tuple([]) }),
 ])
+export type ToolChoiceSearchOutput = z.output<typeof toolChoiceSearchOutputSchema>
 
 const toolDescriptionSchema = z.strictObject({
   toolRef: z.string(),

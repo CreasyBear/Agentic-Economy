@@ -13,6 +13,21 @@ import {
   TOOL_MARKET_LIST_PATH,
   TOOL_MARKET_SEARCH_PATH,
 } from './tool-paths'
+export {
+  projectAdmittedListing,
+  projectDirectoryListing,
+  projectCatalogueEndpointListing,
+} from './internal/listing-projection'
+export type {
+  ListingFact,
+  ListingPrice,
+  ListingSource,
+  ListingProjection,
+  ListingSearchItem,
+  ListingSearchGroups,
+  DirectoryListingInput,
+} from './internal/listing-projection'
+
 
 export {
   TOOL_MARKET_COMPARE_PATH,
