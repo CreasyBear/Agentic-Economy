@@ -345,7 +345,8 @@ export async function callHandler(
           expiresAt: new Date(authorityExpiresAt).toISOString(),
         }
         const fixedPriceAmount = pricingConfigDecisionAmount(operation.pricingConfig)
-        const freeRead = descriptor.consequenceClass === 'read_only'
+        const freeRead = principal.applicationRef !== 'ae-owner-chat'
+          && descriptor.consequenceClass === 'read_only'
           && descriptor.authorityRequirement === 'none'
           && fixedPriceAmount !== undefined
           && fixedPriceAmount.units === '0'

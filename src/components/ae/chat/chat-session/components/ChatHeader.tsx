@@ -17,6 +17,9 @@ export function ChatHeader({
   shareState,
   sharePath,
   copied,
+  ownerChatEnabled,
+  enableProblem,
+  onEnableSpending,
   mobileHistory,
   onNewChat,
   onIssueShare,
@@ -79,6 +82,18 @@ export function ChatHeader({
           {controls}
         </header>
       ) : createPortal(controls, slot)}
+      {authenticated && onEnableSpending !== undefined && !ownerChatEnabled ? (
+        <div className="min-w-0 border-b border-border px-gutter py-intra">
+          <Button type="button" variant="outline" className="min-h-touch h-auto max-w-full whitespace-normal break-words py-intra text-left" disabled={busy}
+            onClick={onEnableSpending}>Enable approval-only chat spending</Button>
+        </div>
+      ) : null}
+      {enableProblem ? (
+        <p className="border-b border-border px-gutter py-intra text-sm text-destructive" role="alert">
+          {enableProblem}{' '}
+          <a href="/owner/settings/account/security" className="underline underline-offset-4 focus-visible:outline-2">Verify it is you</a>
+        </p>
+      ) : null}
       {sharePath === null ? null : (
         <Field className="border-b border-border bg-muted px-gutter py-intra" role="status">
           <FieldLabel htmlFor="tool-chat-share-link">{chatHistory.shareLabel}</FieldLabel>

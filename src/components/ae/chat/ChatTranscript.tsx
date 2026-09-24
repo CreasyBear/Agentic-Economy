@@ -26,6 +26,7 @@ import { ChatAssistantText } from './ChatAssistantText'
 import { ChatOpenUiBundle } from './ChatOpenUiBundle'
 import { ChatClarifyPrompt } from './ChatClarifyPrompt'
 import type { ChatTranscriptViewProps } from './chat-session/chat-session.contracts'
+import { ChatApprovalCards } from './chat-session/components/ChatApprovalCards'
 import { ToolCard } from './ToolCard'
 import { projectTranscriptTurns, type TranscriptTurn } from './presentation'
 
@@ -86,6 +87,11 @@ export function ChatTranscript({
   handoffAfter,
   onSuggest,
   onClarifyAnswer,
+  ownerChatCards = [],
+  approvalProblem,
+  onApproveCall,
+  onDenyCall,
+  onFreshQuote,
   thinking = false,
   clarifyDisabled = false,
   pending = false,
@@ -237,6 +243,16 @@ export function ChatTranscript({
               </MessageScrollerItem>
               )
             })}
+            {ownerChatCards.some(card => card.kind === 'pending') ? (
+              <a href="#owner-chat-pending" className="w-fit text-sm underline underline-offset-4 focus-visible:outline-2">
+                Review pending Call
+              </a>
+            ) : null}
+            {onApproveCall && onDenyCall && onFreshQuote ? (
+              <ChatApprovalCards cards={ownerChatCards}
+                {...(approvalProblem === undefined ? {} : { problem: approvalProblem })}
+                onApprove={onApproveCall} onDeny={onDenyCall} onFreshQuote={onFreshQuote} />
+            ) : null}
             {thinking ? (
               <MessageScrollerItem messageId="thinking">
                 <p className="text-sm text-muted-foreground" role="status">{chatThinking}</p>

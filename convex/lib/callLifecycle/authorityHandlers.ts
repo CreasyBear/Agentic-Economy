@@ -47,6 +47,7 @@ import {
 } from './contracts'
 import { readExactSellerOnboardingCanaryPlatformGrantHandler } from '../../capabilitySupplyCanaryFunding'
 import { inspectLiveX402RequirementRef } from '../liveX402RequirementRef'
+import { hasFreshMfaFactorVerification } from '../workspaceSecurity/factorVerification'
 import { callResultSchema } from '@/modules/capability-execution/call-contracts'
 
 export const resolveCallAgentAuthorityRef = makeFunctionReference<
@@ -436,6 +437,7 @@ export async function resolveTrustedChatAuthority(
     || turn.cancelRequestedAt !== undefined
     || turn.state === 'canceled' || turn.state === 'failed'
     || turn.state === 'completed' || turn.state === 'rejected') return null
+  if ((input.applicationRef === 'ae-owner-chat') !== (turn.origin === 'owner_chat')) return null
   if (turn.threadId === undefined || turn.promptMessageId === undefined) return null
   const threadId = turn.threadId
   const thread = await ctx.db.query('chatThreads')
@@ -847,9 +849,19 @@ export async function canonicalOwnerApprovalDecisionHandler(
   args: Parameters<typeof decideCallApprovalHandler>[1],
 ) {
   const canonical = await canonicalOwnerActor(ctx)
-  return canonical === null
-    ? { kind: 'refused' as const, code: 'authentication_required' as const }
-    : await decideCallApprovalHandler(canonical.ctx, args)
+  if (canonical === null) return { kind: 'refused' as const, code: 'authentication_required' as const }
+  if (args.decision === 'approve') {
+    const row = await canonical.ctx.db.query('capabilityCalls')
+      .withIndex('by_callRef', q => q.eq('callRef', args.callRef)).unique()
+    if (row?.ownerId === canonical.actor.canonicalAccountRef
+      && row.applicationRef === 'ae-owner-chat') {
+      const identity = await ctx.auth.getUserIdentity()
+      if (!hasFreshMfaFactorVerification(identity?.fva)) {
+        return { kind: 'refused' as const, code: 'mfa_reverification_required' as const }
+      }
+    }
+  }
+  return await decideCallApprovalHandler(canonical.ctx, args)
 }
 
 export async function canonicalOwnerStatusHandler(

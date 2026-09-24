@@ -88,29 +88,36 @@ function ChoiceRow({ choice }: { choice: ToolChoiceRow }) {
 
 function CompareTable({ choices }: { choices: readonly ToolChoiceRow[] }) {
   return (
-    <Table>
-      <TableHeader>
-        <TableRow>
-          <TableHead>Tool</TableHead>
-          <TableHead>Provider</TableHead>
-          <TableHead>Price</TableHead>
-          <TableHead>Readiness</TableHead>
-        </TableRow>
-      </TableHeader>
-      <TableBody>
-        {choices.map((choice) => (
-          <TableRow key={choice.toolRef}>
-            <TableCell>
-              <a href={inspectHref(choice.toolRef)}>{choice.title}</a>
-              {choice.belowMatch === true ? <p className="text-sm text-muted-foreground">{chatBelowMatch}</p> : null}
-            </TableCell>
-            <TableCell>{choice.provider ?? ''}</TableCell>
-            <TableCell>{choice.price ?? ''}</TableCell>
-            <TableCell>{choice.readiness ?? ''}</TableCell>
-          </TableRow>
-        ))}
-      </TableBody>
-    </Table>
+    <>
+      <div className="min-w-0 md:hidden">
+        <ChoiceList choices={choices} />
+      </div>
+      <div className="hidden min-w-0 overflow-x-auto md:block">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Tool</TableHead>
+              <TableHead>Provider</TableHead>
+              <TableHead>Price</TableHead>
+              <TableHead>Readiness</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {choices.map((choice) => (
+              <TableRow key={choice.toolRef}>
+                <TableCell>
+                  <a href={inspectHref(choice.toolRef)}>{choice.title}</a>
+                  {choice.belowMatch === true ? <p className="text-sm text-muted-foreground">{chatBelowMatch}</p> : null}
+                </TableCell>
+                <TableCell>{choice.provider ?? ''}</TableCell>
+                <TableCell>{choice.price ?? ''}</TableCell>
+                <TableCell>{choice.readiness ?? ''}</TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </div>
+    </>
   )
 }
 

@@ -492,8 +492,8 @@ export function createChatAgent(
     languageModel,
     tools,
     contextOptions: { recentMessages: 20 },
-    stopWhen: (options) =>
-      stepCountIs(MAX_CHAT_STEPS)(options)
-      || hasToolCall(CHAT_TOOL_NAME_MAP.canonicalToProvider['chat.clarify'])(options),
+    stopWhen: options => stepCountIs(MAX_CHAT_STEPS)(options)
+      || hasToolCall(CHAT_TOOL_NAME_MAP.canonicalToProvider['chat.clarify'])(options)
+      || (authority?.applicationRef === 'ae-owner-chat' && hasToolCall(CHAT_TOOL_NAME_MAP.canonicalToProvider['tool.call'])(options)),
   })
 }

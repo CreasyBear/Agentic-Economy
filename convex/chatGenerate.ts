@@ -62,6 +62,7 @@ export async function streamDurableChatResponse(
 ): Promise<boolean> {
   const agent = createChatAgent(languageModel, args.trustedChatAuthority)
   let clarificationRequested = false
+  let ownerApprovalPending = false
   await agent.streamText(
     ctx,
     { threadId: args.threadId, userId: args.ownerId },
@@ -75,6 +76,12 @@ export async function streamDurableChatResponse(
           && 'status' in result.output && result.output.status === 'awaiting_answer')) {
           clarificationRequested = true
         }
+        if (args.trustedChatAuthority?.applicationRef === 'ae-owner-chat'
+          && step.toolResults.some(result => result.toolName === CHAT_TOOL_NAME_MAP.canonicalToProvider['tool.call']
+            && typeof result.output === 'object' && result.output !== null
+            && 'kind' in result.output && result.output.kind === 'needs_authority')) {
+          ownerApprovalPending = true
+        }
       },
     },
     {
@@ -85,7 +92,7 @@ export async function streamDurableChatResponse(
       },
     },
   )
-  return clarificationRequested
+  return clarificationRequested || ownerApprovalPending
 }
 
 export const generate = internalAction({

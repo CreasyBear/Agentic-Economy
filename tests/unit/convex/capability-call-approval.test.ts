@@ -40,6 +40,7 @@ import {
   listPendingCallApprovals,
   reserve,
 } from '../../../convex/capabilityCalls'
+import { canonicalOwnerApprovalDecisionHandler } from '../../../convex/lib/callLifecycle/authorityHandlers'
 import { buildDevelopmentPublishedToolEvidence } from '../../../tools/dev/fixtures/capability-supply/development-published-tool-evidence'
 import {
   createPublicToolRef,
@@ -149,7 +150,7 @@ class MemoryDb {
 }
 
 type Handler = (ctx: unknown, args: Record<string, unknown>) => Promise<unknown>
-type AuthIdentity = Readonly<{ subject: string; tokenIdentifier: string }>
+type AuthIdentity = Readonly<{ subject: string; tokenIdentifier: string; fva?: number[] }>
 const approvalHandler = (decideCallApproval as unknown as { _handler: Handler })._handler
 const listHandler = (listPendingCallApprovals as unknown as { _handler: Handler })._handler
 const callHandler = (call as unknown as { _handler: Handler })._handler
@@ -493,6 +494,40 @@ describe('capability operation approval Convex handlers', () => {
         reference: `owner-approval:${canonicalDigest({ callRef: row.callRef, ownerId: row.ownerId }).slice(7)}`,
       },
     })
+  })
+
+  it('never dispatches an owner-chat Call when the owner session lacks fresh factor verification', async () => {
+    mocks.enqueueAction.mockClear()
+    const row = invocation({ applicationRef: 'ae-owner-chat' })
+    const ctx = context({ invocation: row, grant: grant({ applicationRef: 'ae-owner-chat' }) })
+    const result = await canonicalOwnerApprovalDecisionHandler(ctx as never, {
+      callRef: String(row.callRef), decision: 'approve',
+    })
+    expect(result).toEqual({ kind: 'refused', code: 'mfa_reverification_required' })
+    expect(ctx.db.row('capabilityCalls', row._id)).toMatchObject({ state: 'pending', dispatchState: 'pending' })
+    expect(mocks.enqueueAction).not.toHaveBeenCalled()
+  })
+
+  it('dispatches only the exact fresh owner-chat Quote and Call with verified owner factors', async () => {
+    mocks.enqueueAction.mockClear()
+    const row = invocation({ applicationRef: 'ae-owner-chat' })
+    const identity = { ...ownerIdentity, fva: [1, 1] }
+    const ctx = context({ identity, invocation: row, grant: grant({ applicationRef: 'ae-owner-chat' }) })
+    ctx.db.seed('capabilityQuotes', acceptedQuote({
+      applicationRef: 'ae-owner-chat', expiresAt: now + 60_000,
+      maximumSpendPerCallUnits: '10000000', dailyPeriodAvailableUnits: '100000000',
+      monthlyPeriodAvailableUnits: '100000000',
+      consumedCallRef: 'operation-invocation:v1:other',
+    }))
+    expect(await canonicalOwnerApprovalDecisionHandler(ctx as never, {
+      callRef: String(row.callRef), decision: 'approve',
+    })).toEqual({ kind: 'refused', code: 'invocation_invalid' })
+    expect(mocks.enqueueAction).not.toHaveBeenCalled()
+    await ctx.db.patch('capabilityQuotes:approval', { consumedCallRef: row.callRef })
+    expect(await canonicalOwnerApprovalDecisionHandler(ctx as never, {
+      callRef: String(row.callRef), decision: 'approve',
+    })).toEqual({ kind: 'approved', callRef: row.callRef })
+    expect(mocks.enqueueAction).toHaveBeenCalledTimes(1)
   })
 
   it('does not enumerate a cross-owner invocation', async () => {

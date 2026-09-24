@@ -26,6 +26,7 @@ export const chatTables = {
     accountRef: v.string(),
     credentialLocator: v.optional(v.string()),
     grantRef: v.optional(v.string()),
+    origin: v.optional(v.literal('owner_chat')),
     clientTurnId: v.string(),
     materialDigest: v.string(),
     state: v.union(
@@ -37,6 +38,7 @@ export const chatTables = {
     promptMessageId: v.optional(v.string()),
     cancelRequestedAt: v.optional(v.number()),
     inFlightCallRefs: v.optional(v.array(v.string())),
+    callRefs: v.optional(v.array(v.string())),
     createdAt: v.number(),
     updatedAt: v.number(),
   })

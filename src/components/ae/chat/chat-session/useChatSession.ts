@@ -1,13 +1,17 @@
 import { useUIMessages } from '@convex-dev/agent/react'
 import { DefaultChatTransport, readUIMessageStream, type UIMessage } from 'ai'
+import { useServerFn } from '@tanstack/react-start'
 import { useConvexAuth, useMutation, useQuery } from 'convex/react'
 import { createElement, useEffect, useEffectEvent, useMemo, useRef, useState, type ReactNode } from 'react'
 
 import { api } from '../../../../../convex/_generated/api'
+import { enableOwnerChatSpendingServer } from '@/modules/agent-access/agent-access.functions'
 
 import { useStickyRows } from '@/components/ui/data-state'
+import { captureClientExceptionOnClient } from '@/lib/observability/capture-client-exception'
 
-import type { ChatProps, ChatSessionModel } from './chat-session.contracts'
+import type { ChatProps, ChatHistoryThread, ChatSessionModel } from './chat-session.contracts'
+import { projectOwnerChatCards } from './owner-chat-cards'
 import { ChatHistory } from './components/ChatHistory'
 import {
   anonymousRequestSize,
@@ -85,6 +89,9 @@ export function useChatSession({
   const [sharePath, setSharePath] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
   const [now, setNow] = useState(() => Date.now())
+  const [approvalBusy, setApprovalBusy] = useState(false)
+  const [approvalProblem, setApprovalProblem] = useState('')
+  const [enableProblem, setEnableProblem] = useState('')
   const abortRef = useRef<AbortController | null>(null)
   const operationInFlightRef = useRef(false)
   const mountedRef = useRef(false)
@@ -112,7 +119,12 @@ export function useChatSession({
     api.chatShares.getShareState,
     isAuthenticated && threadId !== null ? { threadId } : 'skip',
   )
-  const sendMessage = useMutation(api.chatMessages.sendMessage)
+  const startTurn = useMutation(api.chatTurns.startTurn)
+  const decideApproval = useMutation(api.capabilityCalls.decideCallApproval)
+  const enableOwnerChat = useServerFn(enableOwnerChatSpendingServer)
+  const grantStatus = useQuery(api.chatTurns.ownerChatGrantStatus, isAuthenticated ? {} : 'skip')
+  const serverCards = useQuery(api.chatCall.readOwnerChatCards,
+    isAuthenticated && threadId !== null ? { threadId } : 'skip')
   const renameThread = useMutation(api.chatThreads.renameThread)
   const deleteThread = useMutation(api.chatThreads.deleteThread)
   const issueShare = useMutation(api.chatShares.issueShare)
@@ -158,7 +170,12 @@ export function useChatSession({
   const visibleMessages = isAuthenticated
     ? [...anonymousMessages, ...durableMessages]
     : anonymousMessages
-  const threadsPage = useStickyRows((searchedThreads ?? listedThreads)?.page)
+  const threadRows: readonly ChatHistoryThread[] | undefined = (searchedThreads ?? listedThreads)?.page?.filter((row: unknown): row is ChatHistoryThread =>
+    typeof row === 'object' && row !== null
+    && 'threadId' in row && typeof row.threadId === 'string'
+    && 'title' in row && typeof row.title === 'string'
+    && 'busy' in row && typeof row.busy === 'boolean')
+  const threadsPage = useStickyRows(threadRows)
   const historyPending = isAuthenticated && !threadsPage.everCached
   const threads = threadsPage.shown
   const transcriptPending = isAuthenticated
@@ -233,8 +250,9 @@ export function useChatSession({
     setStatus(isAuthenticated ? 'Sending message…' : 'Getting a response…')
     try {
       if (isAuthenticated) {
-        const result = await sendMessage({
-          prompt: nextPrompt,
+        const result = await startTurn({
+          principal: { kind: 'clerk' }, prompt: nextPrompt,
+          clientTurnId: globalThis.crypto.randomUUID(),
           ...(threadId === null || forceNewThread ? {} : { threadId }),
         })
         setPrompt('')
@@ -353,6 +371,30 @@ export function useChatSession({
     })
   }
 
+  const ownerChatCards = projectOwnerChatCards(serverCards, now, approvalBusy)
+
+  async function decideOwnerCall(callRef: string, decision: 'approve' | 'deny'): Promise<void> {
+    if (approvalBusy) return
+    setApprovalBusy(true)
+    setApprovalProblem('')
+    try {
+      const result = await decideApproval({ callRef, decision })
+      if (result.kind === 'refused') {
+        setApprovalProblem(result.code === 'mfa_reverification_required'
+          ? 'Verify it is you in Account security, then approve this Call again.'
+          : `Call decision refused: ${result.code}. Request a fresh Quote or check Call status.`)
+        return
+      }
+      setStatus(decision === 'approve' ? 'Call approved. Checking its result.' : 'Call declined; it was not dispatched.')
+      if (decision === 'deny') document.getElementById('tool-chat-prompt')?.focus()
+    } catch (cause) {
+      captureClientExceptionOnClient(cause)
+      setApprovalProblem('Could not decide this Call. Check its status before trying again.')
+    } finally {
+      setApprovalBusy(false)
+    }
+  }
+
   return {
     showHistoryRail: isAuthenticated,
     createHistoryPanel,
@@ -361,6 +403,27 @@ export function useChatSession({
       threadId,
       busy,
       ...(shareState === undefined ? {} : { shareState: shareState.state }),
+      ownerChatEnabled: grantStatus?.enabled === true,
+      enableProblem,
+      onEnableSpending: () => {
+        if (busy) return
+        setBusy(true)
+        setEnableProblem('')
+        void enableOwnerChat().then(result => {
+          if (result.kind === 'enabled') {
+            setStatus('Approval-only chat spending enabled. Start a new conversation to use it.')
+            onNewChat()
+          } else {
+            setEnableProblem(result.code === 'mfa_reverification_required'
+              ? 'Verify it is you in Account security before enabling chat spending.'
+              : `Could not enable approval-only chat: ${result.code}.`)
+          }
+        }).catch((cause: unknown) => {
+          captureClientExceptionOnClient(cause)
+          setEnableProblem('Could not enable chat spending. Try again after checking your session.')
+        })
+          .finally(() => setBusy(false))
+      },
       sharePath,
       copied,
       onNewChat: startNewChat,
@@ -399,6 +462,20 @@ export function useChatSession({
     },
     transcript: {
       messages: visibleMessages,
+      ownerChatCards,
+      approvalProblem,
+      onApproveCall: (callRef) => { void decideOwnerCall(callRef, 'approve') },
+      onDenyCall: (callRef) => { void decideOwnerCall(callRef, 'deny') },
+      onFreshQuote: (callRef) => {
+        const card = ownerChatCards.find(value => value.kind === 'pending'
+          ? value.view.callRef === callRef : value.kind === 'unavailable' && value.callRef === callRef)
+        if (card?.kind === 'pending' || card?.kind === 'unavailable') {
+          const toolName = card.kind === 'pending' ? card.view.toolName : card.toolName
+          const inputSummary = card.kind === 'pending' ? card.view.inputSummary : card.inputSummary
+          setPrompt(boundPrompt(`Get a fresh Quote for ${toolName} with input ${inputSummary}`))
+          document.getElementById('tool-chat-prompt')?.focus()
+        }
+      },
       thinking: sending && !assistantTurnStarted(visibleMessages),
       clarifyDisabled: composerDisabled,
       onClarifyAnswer: (answer) => { void submit(false, answer) },

@@ -28,6 +28,9 @@ export type ChatStatus =
   | 'Share link revoked.'
   | 'New chat ready.'
   | 'Share link copied.'
+  | 'Call approved. Checking its result.'
+  | 'Call declined; it was not dispatched.'
+  | 'Approval-only chat spending enabled. Start a new conversation to use it.'
 
 export type ChatFailurePresentation = Readonly<{
   message: string

@@ -134,6 +134,7 @@ export const approvalDecisionResult = v.union(
     kind: v.literal('refused'),
     code: v.union(
       v.literal('authentication_required'),
+      v.literal('mfa_reverification_required'),
       v.literal('invocation_not_found'),
       v.literal('authority_not_pending'),
       v.literal('grant_not_current'),

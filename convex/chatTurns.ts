@@ -2,11 +2,12 @@ import { vStreamArgs } from '@convex-dev/agent'
 import { vStreamDelta, vStreamMessage } from '@convex-dev/agent/validators'
 import { v } from 'convex/values'
 import { internalMutation, internalQuery, mutation, query } from './_generated/server'
-import { resolveCurrentAgentAuthority, resolveTrustedChatAuthority } from './lib/callLifecycle/authorityHandlers'
-import { resolveCanonicalAgentContext } from './lib/canonicalAgentAuthority'
+import { resolveTrustedChatAuthority } from './lib/callLifecycle/authorityHandlers'
 import {
-  requirePrincipalTurn, reserveAndStartTurn, resolveTurnActor, readTurnStreams, unresolvedTurnCallRefs,
+  authorizeKeyTurnGeneration, ownerReadableActor, requirePrincipalTurn, reserveAndStartTurn,
+  resolveTurnActor, readTurnStreams, unresolvedTurnCallRefs,
 } from './lib/chat/turnHandlers'
+import { resolveOwnerChatActor } from './lib/chat/threadListing'
 import { publicChatTurn } from './lib/chat/publicTurnErrors'
 import { chatThreadBelongsToPrincipal } from './lib/chat/threadOwnership'
 import { sourceWriteArgs } from './sourceWriteAdmission'
@@ -46,6 +47,13 @@ export const trustedChatAuthorityValue = v.object({
   scopes: v.array(v.string()), grantRef: v.string(),
 })
 
+
+export const ownerChatGrantStatus = query({
+  args: {},
+  returns: v.object({ enabled: v.boolean() }),
+  handler: async (ctx) => ({ enabled: await resolveOwnerChatActor(ctx) !== null }),
+})
+
 export const startTurn = mutation({
   args: {
     principal: turnPrincipalValue, threadId: v.optional(v.string()),
@@ -53,8 +61,19 @@ export const startTurn = mutation({
   },
   returns: startValue,
   handler: async (ctx, args) => publicChatTurn(async () => {
-    const actor = await resolveTurnActor(ctx, args.principal, args, true)
-    return await reserveAndStartTurn(ctx, { actor, threadId: args.threadId,
+    const actor = args.principal.kind === 'clerk'
+      ? await resolveOwnerChatActor(ctx) ?? await resolveTurnActor(ctx, args.principal, args, true)
+      : await resolveTurnActor(ctx, args.principal, args, true)
+    let selectedThread = args.threadId
+    const threadRef = selectedThread
+    if (actor.origin === 'owner_chat' && threadRef !== undefined) {
+      const row = await ctx.db.query('chatThreads')
+        .withIndex('by_threadId', q => q.eq('threadId', threadRef)).unique()
+      if (row === null || !chatThreadBelongsToPrincipal(row, actor.accountRef, 'agent_key', actor.principalRef)) {
+        selectedThread = undefined
+      }
+    }
+    return await reserveAndStartTurn(ctx, { actor, threadId: selectedThread,
       prompt: args.prompt, clientTurnId: args.clientTurnId })
   }),
 })
@@ -68,7 +87,7 @@ export const cancelTurn = mutation({
       inFlightEffects: v.array(v.object({ callRef: v.string() })) }),
   ),
   handler: async (ctx, args) => publicChatTurn(async () => {
-    const actor = await resolveTurnActor(ctx, args.principal, args, true)
+    const actor = await ownerReadableActor(ctx, args.principal, args.turnRef, args, true)
     const turn = await requirePrincipalTurn(ctx, args.turnRef, actor)
     if (turn.cancelRequestedAt === undefined) {
       const now = Date.now()
@@ -91,7 +110,7 @@ export const readTurn = query({
   args: turnReadArgs,
   returns: turnSnapshotValue,
   handler: async (ctx, args) => publicChatTurn(async () => {
-    const actor = await resolveTurnActor(ctx, args.principal, args, false)
+    const actor = await ownerReadableActor(ctx, args.principal, args.turnRef, args, false)
     const turn = await requirePrincipalTurn(ctx, args.turnRef, actor)
     if (turn.threadId === undefined || turn.promptMessageId === undefined || turn.sequence === undefined) {
       throw new Error('turn_reservation_incomplete')
@@ -100,7 +119,7 @@ export const readTurn = query({
       threadId: turn.threadId, turnRef: turn.turnRef, promptMessageId: turn.promptMessageId,
       state: turn.state, sequence: turn.sequence,
       ...(turn.cancelRequestedAt === undefined ? {} : { cancelRequestedAt: turn.cancelRequestedAt }),
-      callRefs: turn.inFlightCallRefs ?? [],
+      callRefs: [...new Set([...(turn.callRefs ?? []), ...(turn.inFlightCallRefs ?? [])])],
       inFlightCallRefs: await unresolvedTurnCallRefs(ctx, turn.inFlightCallRefs ?? []),
     }
   }),
@@ -116,7 +135,7 @@ export const readDeltas = query({
     ),
   }),
   handler: async (ctx, args) => publicChatTurn(async () => {
-    const actor = await resolveTurnActor(ctx, args.principal, args, false)
+    const actor = await ownerReadableActor(ctx, args.principal, args.turnRef, args, false)
     const turn = await requirePrincipalTurn(ctx, args.turnRef, actor)
     if (turn.threadId === undefined || turn.sequence === undefined
       || turn.promptMessageId === undefined) throw new Error('turn_reservation_incomplete')
@@ -129,38 +148,31 @@ export const readDeltas = query({
 export const authorizeKeyGeneration = internalQuery({
   args: { turnRef: v.string(), threadId: v.string(), promptMessageId: v.string() },
   returns: v.union(v.object({ ownerId: v.string(), authority: trustedChatAuthorityValue }), v.null()),
-  handler: async (ctx, args) => {
-    const turn = await ctx.db.query('chatTurns').withIndex('by_turnRef', q => q.eq('turnRef', args.turnRef)).unique()
-    if (turn === null || turn.principalKind !== 'agent_key' || turn.threadId !== args.threadId
-      || turn.promptMessageId !== args.promptMessageId || turn.credentialLocator === undefined
-      || turn.grantRef === undefined || turn.cancelRequestedAt !== undefined
-      || turn.state === 'canceled' || turn.state === 'failed'
-      || turn.state === 'completed' || turn.state === 'rejected') return null
-    const row = await ctx.db.query('chatThreads')
-      .withIndex('by_threadId', q => q.eq('threadId', args.threadId)).unique()
-    if (row === null || !chatThreadBelongsToPrincipal(row, turn.accountRef, 'agent_key', turn.principalRef)
-      || row.activePromptMessageId !== args.promptMessageId) return null
-    const canonical = await resolveCanonicalAgentContext(ctx, turn.credentialLocator, Date.now())
-    if (canonical === null || canonical.principalRef !== turn.principalRef
-      || canonical.accountRef !== turn.accountRef) return null
-    const stored = await ctx.db.query('agentAccessPrincipals')
-      .withIndex('by_credentialId', q => q.eq('credentialId', canonical.credentialLocator)).unique()
-    if (stored === null || stored.lifecycle !== 'active' || stored.principalId !== turn.principalRef
-      || stored.ownerId !== turn.accountRef) return null
-    const candidate = {
-      principalId: canonical.principalRef, ownerId: canonical.accountRef,
-      credentialId: turn.credentialLocator, applicationRef: stored.applicationRef,
-      environment: stored.environment, scopes: stored.scopes, authorityMode: stored.authorityMode,
+  handler: authorizeKeyTurnGeneration,
+})
+export const recordOwnerChatCall = internalMutation({
+  args: { authority: trustedChatAuthorityValue, quoteRef: v.string(), callRef: v.string() },
+  returns: v.boolean(),
+  handler: async (ctx, { authority, quoteRef, callRef }) => {
+    if (authority.applicationRef !== 'ae-owner-chat') return false
+    const turn = await ctx.db.query('chatTurns')
+      .withIndex('by_turnRef', q => q.eq('turnRef', authority.turnRef)).unique()
+    const call = await ctx.db.query('capabilityCalls')
+      .withIndex('by_callRef', q => q.eq('callRef', callRef)).unique()
+    if (turn?.origin !== 'owner_chat' || turn.credentialLocator !== authority.credentialLocator
+      || turn.grantRef !== authority.grantRef || call?.quoteRef !== quoteRef
+      || call.ownerId !== turn.accountRef || call.principalId !== turn.principalRef
+      || call.credentialId !== turn.credentialLocator || call.grantRef !== turn.grantRef
+      || call.applicationRef !== 'ae-owner-chat'
+      || !turn.inFlightCallRefs?.includes(callRef)
+      || call.state !== 'pending' || call.result?.kind !== 'needs_authority') return false
+    if (!turn.callRefs?.includes(callRef)) {
+      await ctx.db.patch(turn._id, { callRefs: [...(turn.callRefs ?? []), callRef], updatedAt: Date.now() })
     }
-    const current = await resolveCurrentAgentAuthority(ctx, candidate, Date.now(), { kind: 'receipt_list' })
-    if (current === null || current.grantRef !== turn.grantRef) return null
-    return { ownerId: turn.accountRef, authority: {
-      kind: 'agent_key' as const, turnRef: turn.turnRef, credentialLocator: turn.credentialLocator,
-      applicationRef: stored.applicationRef, environment: stored.environment,
-      scopes: current.principal.scopes, grantRef: current.grantRef,
-    } }
+    return true
   },
 })
+
 
 export const authorizePayableTool = internalQuery({
   args: { authority: trustedChatAuthorityValue, toolRef: v.string() },

@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react'
 
 import type { ChatStatus, TranscriptMessage } from '../presentation'
+import type { QuoteConfirmationView, CallOutcomeView } from '@/components/ae/shared/object-family.contracts'
 
 export type ChatProps = Readonly<{
   threadId: string | null
@@ -38,6 +39,9 @@ export type ChatHeaderProps = Readonly<{
   shareState?: 'none' | 'active' | 'revoked'
   sharePath: string | null
   copied: boolean
+  ownerChatEnabled?: boolean
+  enableProblem?: string
+  onEnableSpending?: () => void
   mobileHistory: ReactNode
   onNewChat(): void
   onIssueShare(): void
@@ -60,6 +64,11 @@ export type ChatComposerProps = Readonly<{
   onStop?: () => void
 }>
 
+export type OwnerChatCard =
+  | Readonly<{ kind: 'pending'; turnRef: string; view: QuoteConfirmationView }>
+  | Readonly<{ kind: 'result'; turnRef: string; view: CallOutcomeView }>
+  | Readonly<{ kind: 'unavailable'; turnRef: string; callRef: string; toolName: string; inputSummary: string; quoteLabel: string; reason: string }>
+
 export type ChatTranscriptViewProps = Readonly<{
   messages: readonly TranscriptMessage[]
   pending?: boolean
@@ -68,6 +77,11 @@ export type ChatTranscriptViewProps = Readonly<{
   clarifyDisabled?: boolean
   onSuggest?: (prompt: string) => void
   onClarifyAnswer?: (answer: string) => void
+  approvalProblem?: string
+  ownerChatCards?: readonly OwnerChatCard[]
+  onApproveCall?: (callRef: string) => void
+  onDenyCall?: (callRef: string) => void
+  onFreshQuote?: (callRef: string) => void
 }>
 
 export type ChatHeaderViewProps = Omit<ChatHeaderProps, 'mobileHistory'>

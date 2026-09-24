@@ -15,10 +15,11 @@ import type { QueryCtx } from './_generated/server'
 import { resolveBusinessActor } from './authz'
 import type { BusinessActor } from '../src/modules/business/public'
 import { deleteChatThreadShares } from '../src/modules/chat-sharing/convex'
-import { readPrincipalChatThread } from './lib/chat/threadOwnership'
+import { chatThreadBelongsToPrincipal } from './lib/chat/threadOwnership'
 import {
-  isChatThreadBusy, listChatThreads, normalizeChatThreadTitle, projectThread,
-  searchChatThreads, ACTIVE_CHAT_GENERATION_MS, MAX_CHAT_THREAD_TITLE_LENGTH,
+  isChatThreadBusy, listChatThreads, normalizeChatThreadTitle,
+  resolveOwnerChatActor, projectThread, searchChatThreads,
+  ACTIVE_CHAT_GENERATION_MS, MAX_CHAT_THREAD_TITLE_LENGTH,
 } from './lib/chat/threadListing'
 export {
   isChatThreadBusy, normalizeChatThreadTitle, ACTIVE_CHAT_GENERATION_MS, MAX_CHAT_THREAD_TITLE_LENGTH,
@@ -49,9 +50,18 @@ export async function requireOwnedChatThread(
   threadId: string,
 ): Promise<Doc<'chatThreads'>> {
   const actor = await requireChatOwner(ctx)
-  return await readPrincipalChatThread(
-    ctx, threadId, actor.canonicalAccountRef, 'clerk_owner', actor.canonicalPrincipalRef,
-  )
+  const row = await ctx.db.query('chatThreads')
+    .withIndex('by_threadId', index => index.eq('threadId', threadId)).unique()
+  if (row === null) throw new Error('thread_not_found')
+  if (chatThreadBelongsToPrincipal(row, actor.canonicalAccountRef, 'clerk_owner', actor.canonicalPrincipalRef)) {
+    return row
+  }
+  const ownerChat = await resolveOwnerChatActor(ctx)
+  if (ownerChat === null
+    || !chatThreadBelongsToPrincipal(row, actor.canonicalAccountRef, 'agent_key', ownerChat.principalRef)) {
+    throw new Error('thread_not_found')
+  }
+  return row
 }
 
 function createTitle(title: string | undefined): string {

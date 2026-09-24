@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 
+import { getFunctionName } from 'convex/server'
 import { isValidElement } from 'react'
 import { act, renderHook, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -67,12 +68,18 @@ const baseProps = {
   onNewChat: vi.fn(),
 }
 
+function latestQueryArgs(calls: unknown[][], name: string): unknown {
+  return calls.findLast(([reference]) =>
+    getFunctionName(reference as Parameters<typeof getFunctionName>[0]) === name,
+  )?.[1]
+}
+
 function latestListThreadArgs(calls: unknown[][]): unknown {
-  return calls.at(-3)?.[1]
+  return latestQueryArgs(calls, 'chatThreads:listThreads')
 }
 
 function latestSearchThreadArgs(calls: unknown[][]): unknown {
-  return calls.at(-2)?.[1]
+  return latestQueryArgs(calls, 'chatThreads:searchThreads')
 }
 
 async function* threeChunkStream() {

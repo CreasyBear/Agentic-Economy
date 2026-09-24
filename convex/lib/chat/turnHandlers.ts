@@ -5,12 +5,13 @@ import { MARKET_TOOLS_CALL_SCOPE } from '../../../src/modules/agent-access/contr
 import type { InteractiveBusinessAuthorityContext } from '../../../src/modules/business/public'
 import { components, internal } from '../../_generated/api'
 import type { Doc } from '../../_generated/dataModel'
+import { resolveOwnerChatActor } from './threadListing'
 import type { MutationCtx, QueryCtx } from '../../_generated/server'
 import { resolveCurrentAgentAuthority } from '../callLifecycle/authorityHandlers'
 import { resolveCanonicalAgentContext } from '../canonicalAgentAuthority'
 import { requireSourceRead, requireSourceWrite, type SourceWriteArgs } from '../../sourceWriteAdmission'
 import { isChatThreadBusy, normalizeChatThreadTitle, requireChatOwner } from '../../chatThreads'
-import { readPrincipalChatThread } from './threadOwnership'
+import { chatThreadBelongsToPrincipal, readPrincipalChatThread } from './threadOwnership'
 import { assertAdmission } from '../rateLimit'
 
 export type TurnActor = Readonly<{
@@ -19,6 +20,7 @@ export type TurnActor = Readonly<{
   accountRef: string
   credentialLocator?: string
   grantRef?: string
+  origin?: 'owner_chat'
   authority?: InteractiveBusinessAuthorityContext
 }>
 
@@ -64,6 +66,61 @@ export async function resolveTurnActor(
   }
 }
 
+export async function ownerReadableActor(
+  ctx: QueryCtx | MutationCtx,
+  principal: PublicTurnPrincipal,
+  turnRef: string,
+  proof: Partial<KeyTurnProof>,
+  write: boolean,
+): Promise<TurnActor> {
+  if (principal.kind !== 'clerk') return await resolveTurnActor(ctx, principal, proof, write)
+  const row = await ctx.db.query('chatTurns')
+    .withIndex('by_turnRef', q => q.eq('turnRef', turnRef)).unique()
+  if (row?.origin !== 'owner_chat') return await resolveTurnActor(ctx, principal, proof, write)
+  const actor = await resolveOwnerChatActor(ctx)
+  if (actor === null || row.credentialLocator !== actor.credentialLocator
+    || row.grantRef !== actor.grantRef) throw new Error('turn_not_found')
+  return actor
+}
+
+export async function authorizeKeyTurnGeneration(
+  ctx: QueryCtx,
+  args: Readonly<{ turnRef: string; threadId: string; promptMessageId: string }>,
+) {
+  const turn = await ctx.db.query('chatTurns').withIndex('by_turnRef', q => q.eq('turnRef', args.turnRef)).unique()
+  if (turn === null || turn.principalKind !== 'agent_key' || turn.threadId !== args.threadId
+    || turn.promptMessageId !== args.promptMessageId || turn.credentialLocator === undefined
+    || turn.grantRef === undefined || turn.cancelRequestedAt !== undefined
+    || turn.state === 'canceled' || turn.state === 'failed'
+    || turn.state === 'completed' || turn.state === 'rejected') return null
+  const row = await ctx.db.query('chatThreads')
+    .withIndex('by_threadId', q => q.eq('threadId', args.threadId)).unique()
+  if (row === null || !chatThreadBelongsToPrincipal(row, turn.accountRef, 'agent_key', turn.principalRef)
+    || row.activePromptMessageId !== args.promptMessageId) return null
+  const canonical = await resolveCanonicalAgentContext(ctx, turn.credentialLocator, Date.now())
+  if (canonical === null || canonical.principalRef !== turn.principalRef
+    || canonical.accountRef !== turn.accountRef) return null
+  const stored = await ctx.db.query('agentAccessPrincipals')
+    .withIndex('by_credentialId', q => q.eq('credentialId', canonical.credentialLocator)).unique()
+  if (stored === null || stored.lifecycle !== 'active' || stored.principalId !== turn.principalRef
+    || stored.ownerId !== turn.accountRef) return null
+  if ((turn.origin === 'owner_chat') !== (stored.applicationRef === 'ae-owner-chat')
+    || (turn.origin === 'owner_chat' && stored.authorityMode !== 'approval_required')) return null
+  const candidate = {
+    principalId: canonical.principalRef, ownerId: canonical.accountRef,
+    credentialId: turn.credentialLocator, applicationRef: stored.applicationRef,
+    environment: stored.environment, scopes: stored.scopes, authorityMode: stored.authorityMode,
+  }
+  const current = await resolveCurrentAgentAuthority(ctx, candidate, Date.now(), { kind: 'receipt_list' })
+  if (current === null || current.grantRef !== turn.grantRef) return null
+  return { ownerId: turn.accountRef, authority: {
+    kind: 'agent_key' as const, turnRef: turn.turnRef, credentialLocator: turn.credentialLocator,
+    applicationRef: stored.applicationRef, environment: stored.environment,
+    scopes: current.principal.scopes, grantRef: current.grantRef,
+  } }
+}
+
+
 const DEFAULT_CHAT_TITLE = 'New conversation'
 const MAX_PROMPT_LENGTH = 2_000
 
@@ -86,6 +143,7 @@ export async function authenticateKeyTurn(
     : await requireSourceRead(proof, 'protected_action')
   if (admitted.kind !== 'accepted') throw new Error('unauthenticated')
   if (!principal.scopes.includes(MARKET_TOOLS_CALL_SCOPE)) throw new Error('permission_denied')
+  if (principal.applicationRef === 'ae-owner-chat') throw new Error('permission_denied')
   const current = await resolveCurrentAgentAuthority(ctx, principal, Date.now(), { kind: 'receipt_list' })
   const canonical = await resolveCanonicalAgentContext(ctx, principal.credentialId, Date.now())
   if (current === null || canonical === null
@@ -155,6 +213,7 @@ export async function reserveAndStartTurn(
     turnRef, principalKind: input.actor.kind, principalRef: input.actor.principalRef,
     accountRef: input.actor.accountRef,
     ...(input.actor.credentialLocator === undefined ? {} : { credentialLocator: input.actor.credentialLocator }),
+    ...(input.actor.origin === undefined ? {} : { origin: input.actor.origin }),
     ...(input.actor.grantRef === undefined ? {} : { grantRef: input.actor.grantRef }),
     clientTurnId: input.clientTurnId, materialDigest,
     state: 'submitted', createdAt: now, updatedAt: now,

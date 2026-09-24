@@ -379,6 +379,21 @@ export async function decideCallApprovalHandler(
   if (!pendingApprovalRow(row)) return { kind: 'refused', code: 'authority_not_pending' }
   if (!pendingApprovalIsClean(row)) return { kind: 'refused', code: 'invocation_invalid' }
   if (args.decision === 'deny') return await denyPendingApproval(ctx, row)
+  if (row.applicationRef === 'ae-owner-chat') {
+    const quoteRef = row.quoteRef
+    const quote = quoteRef === undefined ? null : await ctx.db.query('capabilityQuotes')
+      .withIndex('by_quoteRef', q => q.eq('quoteRef', quoteRef)).unique()
+    const budget = await ctx.db.query('moneyMonthlySpendBudgets')
+      .withIndex('by_accountRef', q => q.eq('accountRef', row.ownerId)).unique()
+    const capUnits = [quote?.maximumSpendPerCallUnits,
+      quote?.dailyPeriodAvailableUnits, quote?.monthlyPeriodAvailableUnits]
+    if (quote === null || quote.consumedCallRef !== row.callRef || quote.expiresAt <= Date.now()
+      || budget?.enabled || !/^\d+$/u.test(quote.decisionAudUnits)
+      || capUnits.some(units => units === undefined || !/^\d+$/u.test(units)
+        || BigInt(units) < BigInt(quote.decisionAudUnits))) {
+      return { kind: 'refused', code: 'invocation_invalid' }
+    }
+  }
   const material = loadApprovalMaterial(row)
   if (material === null) return { kind: 'refused', code: 'invocation_invalid' }
   const now = Date.now()
