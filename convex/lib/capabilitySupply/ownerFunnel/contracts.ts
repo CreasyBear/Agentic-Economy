@@ -1,4 +1,5 @@
 import { v, type Infer } from 'convex/values'
+import { ownerSupplyCommandResultValue } from '@/modules/capability-supply/convex'
 import { agentAccessPrincipalValue } from '../../../agentAccessPrincipals'
 import { sourceWriteArgs } from '../../../sourceWriteAdmission'
 import { clerkConsequenceProofValue } from '../../authority/consequence/proof'
@@ -338,45 +339,9 @@ export const ownerSupplyCommandArgsValue = v.object({
   agentPrincipal: v.optional(agentAccessPrincipalValue),
   ...sourceWriteArgs,
 })
-export const ownerSupplyCommandResultValue = v.union(
-  v.object({
-    kind: v.literal('withdrawn'),
-    publicationRef: v.string(),
-    revision: v.number(),
-    lifecycle: v.object({
-      state: v.literal('withdrawn'),
-      reasons: v.array(v.string()),
-    }),
-  }),
-  v.object({
-    kind: v.literal('refreshed'),
-    publicationRef: v.string(),
-    revision: v.number(),
-    disposition: v.union(v.literal('current'), v.literal('incompatible')),
-    lifecycle: v.object({
-      state: v.union(
-        v.literal('active'),
-        v.literal('inactive'),
-        v.literal('incompatible'),
-      ),
-      reasons: v.array(v.string()),
-    }),
-  }),
-  v.object({
-    kind: v.literal('republished'),
-    publicationRef: v.string(),
-    revision: v.number(),
-    toolRef: v.string(),
-    bindingId: v.string(),
-    lifecycle: v.object({
-      state: v.union(v.literal('active'), v.literal('inactive')),
-      reasons: v.array(v.string()),
-    }),
-  }),
-  v.object({ kind: v.literal('refused'), reason: v.string() }),
-)
+export { ownerSupplyCommandResultValue }
 export type OwnerSupplyCommandArgs = Infer<typeof ownerSupplyCommandArgsValue>
-export type OwnerSupplyCommandResult = Infer<typeof ownerSupplyCommandResultValue>
+export type { OwnerSupplyCommandWireResult as OwnerSupplyCommandResult } from '@/modules/capability-supply/convex'
 export const ownerPublishReservationArgsValue = v.object({
   businessId: v.id('businesses'),
   offeringRef: v.string(),
