@@ -7,10 +7,18 @@ import {
   SYSTEM_WORKLOAD_ACCOUNT_REF,
   SYSTEM_WORKLOAD_PRINCIPAL_REF,
   WORKLOAD_CRON_DECLARATIONS,
-  admitWorkloadCronHandler,
-  bindWorkloadCronActionContext,
   parseWorkloadCronSnapshot,
+  type WorkloadCronSnapshot,
+} from '../../../convex/lib/workloadCron/context'
+import {
+  admitWorkloadCronHandler,
   reconcileWorkloadCronSnapshotHandler,
+} from '../../../convex/lib/workloadCron/admission'
+import {
+  bindWorkloadCronActionContext,
+  dispatchWorkloadCronConsequenceHandler,
+} from '../../../convex/lib/workloadCron/consequence'
+import {
   cleanupExpiredAgentAccessOAuthGrantsHandler,
   cleanupExpiredSourceWriteNoncesHandler,
   reconcileDueFacilitatorInvocationsHandler,
@@ -22,9 +30,7 @@ import {
   refreshMarketFlowHandler,
   snapshotMarketplaceMetricsDayHandler,
   reconcileBusinessSupplyProjectionsHandler,
-  dispatchWorkloadCronConsequenceHandler,
-  type WorkloadCronSnapshot,
-} from '../../../convex/workloadCron'
+} from '../../../convex/lib/workloadCron/scheduled'
 import {
   CANONICAL_ADMISSION,
   CANONICAL_WORKLOAD,

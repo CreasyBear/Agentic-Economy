@@ -6,17 +6,18 @@ import { readPreClaimRefundHandler } from '../../../convex/lib/callLifecycle/dis
 import {
   SYSTEM_WORKLOAD_ACCOUNT_REF,
   SYSTEM_WORKLOAD_PRINCIPAL_REF,
-  admitWorkloadCron,
-  dispatchWorkloadCronConsequenceHandler,
   parseWorkloadCronSnapshot,
-  reconcile,
-  reconcileWorkloadCronResourceAccount,
-  reconcileWorkloadCronSnapshot,
-  refreshCapabilitySupplyReadiness,
   type WorkloadCronActionContext,
   type WorkloadCronMutationContext,
   type WorkloadCronSnapshot,
-} from '../../../convex/workloadCron'
+} from '../../../convex/lib/workloadCron/context'
+import {
+  admitWorkloadCron,
+  reconcileWorkloadCronResourceAccount,
+  reconcileWorkloadCronSnapshot,
+} from '../../../convex/lib/workloadCron/admission'
+import { dispatchWorkloadCronConsequenceHandler } from '../../../convex/lib/workloadCron/consequence'
+import { reconcile, refreshCapabilitySupplyReadiness } from '../../../convex/workloadCron'
 
 export type RegisteredRuntimeHandler = (ctx: unknown, args: Record<string, unknown>) => Promise<unknown>
 

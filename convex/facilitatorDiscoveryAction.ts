@@ -11,12 +11,12 @@ import {
 import { internal } from './_generated/api'
 import { internalAction } from './_generated/server'
 import { reconcileReadyItems } from './capabilitySupplyShared'
+import { bindWorkloadCronActionContext } from './lib/workloadCron/consequence'
 import {
-  bindWorkloadCronActionContext,
   parseWorkloadCronSnapshot,
   workloadCronSnapshotValue,
   type WorkloadCronSnapshot,
-} from './workloadCron'
+} from './lib/workloadCron/context'
 
 export { admitFacilitatorDiscoveryItems }
 

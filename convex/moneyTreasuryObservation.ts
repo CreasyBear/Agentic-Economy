@@ -19,12 +19,12 @@ import {
   type CdpUsdcBalanceReader,
   type CdpUsdcNetwork,
 } from './capabilitySupplyCanaryFundingPreflight'
+import { bindWorkloadCronActionContext } from './lib/workloadCron/consequence'
 import {
-  bindWorkloadCronActionContext,
   parseWorkloadCronSnapshot,
   workloadCronSnapshotValue,
   type WorkloadCronSnapshot,
-} from './workloadCron'
+} from './lib/workloadCron/context'
 
 const WORKLOAD_NAME = 'observe x402 treasury' as const
 

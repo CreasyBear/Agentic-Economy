@@ -8,7 +8,7 @@ import { buildFlowDaySql, buildFlowPayeeWindowSql, chunkRows, daysToIngest, flow
 
 import { internal } from './_generated/api'
 import { action, internalAction, type ActionCtx } from './_generated/server'
-import { parseWorkloadCronSnapshot, workloadCronSnapshotValue } from './workloadCron'
+import { parseWorkloadCronSnapshot, workloadCronSnapshotValue } from './lib/workloadCron/context'
 
 const HOST = 'api.cdp.coinbase.com'
 const PATH = '/platform/v2/data/query/run'

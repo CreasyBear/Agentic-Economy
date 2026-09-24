@@ -2,10 +2,8 @@ import { filter } from 'convex-helpers/server/filter'
 import { usesSelectedRequestReadiness } from '@/modules/capability-supply/convex'
 import type { MutationCtx } from '../../_generated/server'
 import { internal } from '../../_generated/api'
-import {
-  parseWorkloadCronSnapshot,
-  reconcileWorkloadCronSnapshot,
-} from '../../workloadCron'
+import { parseWorkloadCronSnapshot } from '../workloadCron/context'
+import { reconcileWorkloadCronSnapshot } from '../workloadCron/admission'
 
 const READINESS_REFRESH_LEAD_MS = 30 * 60_000
 const MAX_READINESS_REFRESH_BATCH = 20

@@ -12,7 +12,7 @@ import {
   SYSTEM_WORKLOAD_ACCOUNT_REF,
   SYSTEM_WORKLOAD_PRINCIPAL_REF,
   type WorkloadCronSnapshot,
-} from '../../convex/workloadCron'
+} from '../../convex/lib/workloadCron/context'
 
 async function seedFacilitatorDiscoveryWorkload(backend: ReturnType<typeof convexTest>): Promise<WorkloadCronSnapshot> {
   const admittedAt = Date.now()

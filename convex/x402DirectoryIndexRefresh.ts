@@ -5,7 +5,7 @@ import { isRecord } from '@/modules/common/is-record'
 import { components, internal, api } from './_generated/api'
 import { internalAction, internalMutation } from './_generated/server'
 import { marketDispatchWorkpool } from './marketDispatchWorkpool'
-import { parseWorkloadCronSnapshot, workloadCronSnapshotValue } from './workloadCron'
+import { parseWorkloadCronSnapshot, workloadCronSnapshotValue } from './lib/workloadCron/context'
 import type { IndexProgress } from './lib/x402DirectoryIndex/contracts'
 
 const workflow = new WorkflowManager(components.workflow)

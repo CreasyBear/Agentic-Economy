@@ -8,7 +8,7 @@ import { isRecord } from '@/modules/common/is-record'
 import { projectX402DirectoryEntry } from '@/modules/market/x402-directory.server'
 import { internal } from './_generated/api'
 import { internalAction } from './_generated/server'
-import { parseWorkloadCronSnapshot, workloadCronSnapshotValue } from './workloadCron'
+import { parseWorkloadCronSnapshot, workloadCronSnapshotValue } from './lib/workloadCron/context'
 import { progressValue, type IndexedSource, type IndexProgress } from './lib/x402DirectoryIndex/contracts'
 
 const PAGE_SIZE = 100

@@ -17,12 +17,12 @@ import { internal } from './_generated/api'
 import { internalAction, type ActionCtx } from './_generated/server'
 import { principalValue } from './lib/callLifecycle/contracts'
 import { resolveBusinessActor } from './authz'
+import { bindWorkloadCronActionContext } from './lib/workloadCron/consequence'
 import {
-  bindWorkloadCronActionContext,
   parseWorkloadCronSnapshot,
   workloadCronSnapshotValue,
   type WorkloadCronSnapshot,
-} from './workloadCron'
+} from './lib/workloadCron/context'
 
 export {
   callAttemptIdentityDigest,

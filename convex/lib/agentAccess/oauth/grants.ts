@@ -5,11 +5,8 @@ import { internal } from '../../../_generated/api'
 import type { MutationCtx, QueryCtx } from '../../../_generated/server'
 import type { DataModel, Doc } from '../../../_generated/dataModel'
 import { sourceWriteArgs } from '../../../sourceWriteAdmission'
-import {
-  parseWorkloadCronSnapshot,
-  reconcileWorkloadCronSnapshot,
-  workloadCronSnapshotValue,
-} from '../../../workloadCron'
+import { parseWorkloadCronSnapshot, workloadCronSnapshotValue } from '../../workloadCron/context'
+import { reconcileWorkloadCronSnapshot } from '../../workloadCron/admission'
 import { requireOAuthSourceRead, requireOAuthSourceWrite, sameStringArray } from './shared'
 
 const flow = v.union(v.literal('device_code'), v.literal('authorization_code'))
