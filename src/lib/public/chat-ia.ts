@@ -18,10 +18,10 @@ export const chatClarify = {
 } as const
 
 export const chatSuggestions = [
-  { title: 'Find a weather API', label: 'for Sydney', prompt: 'Find a weather API for Sydney' },
-  { title: 'Compare translation APIs', label: 'cheapest first', prompt: 'Compare translation APIs cheapest first' },
-  { title: 'What can I get', label: 'for under 1¢ a call?', prompt: 'What can I get for under 1¢ a call?' },
-  { title: 'Show me tools', label: 'for reading PDFs', prompt: 'Show me tools for reading PDFs' },
+  { title: 'Convert a time zone', label: '3:30pm New York to Tokyo', prompt: 'Convert a time zone 3:30pm New York to Tokyo' },
+  { title: 'Look up an Ethereum transaction', label: 'from its hash', prompt: 'Look up an Ethereum transaction from its hash' },
+  { title: 'Track token transfers', label: 'for a wallet address', prompt: 'Track token transfers for a wallet address' },
+  { title: 'Check a transaction fee', label: 'gas paid, from its hash', prompt: 'Check a transaction fee: gas paid, from its hash' },
 ] as const
 
 export const chatComposer = {
