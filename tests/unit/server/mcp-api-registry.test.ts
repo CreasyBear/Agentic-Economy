@@ -17,12 +17,12 @@ function noMatch(
     query: 'plumbing',
     scope: pagination.hasMore ? 'page' as const : 'exhausted' as const,
     reason: 'No suitable Tools found.',
-    results: [] as const,
+    results: [] as [],
     nearMisses: [],
     suggestions: [],
     partialResults: false,
     pagination,
-    next,
+    next: [...next],
   }
 }
 

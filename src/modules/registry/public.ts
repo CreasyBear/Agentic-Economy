@@ -98,6 +98,7 @@ export {
   projectPublicServicesSearchPage,
 } from './internal/services-api-projection'
 export { registrySearchTokens } from './internal/search-documents'
+export { isProductionToolChoice } from './tool-choice-evidence'
 export type {
   PublicServicesApiPage,
   PublicServicesSearchPage,
