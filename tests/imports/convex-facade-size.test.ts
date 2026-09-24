@@ -13,32 +13,12 @@ import { fixtureTargets, isFixtureMode } from './scan-targets'
 const FACADE_MAX_LINES = 200
 // Pinned debt only; roots above 200 lines remain visible and pins may only decrease.
 const FACADE_SIZE_EXCEPTIONS: Record<string, number> = {
-  'convex/businessSupplyProjectionSnapshot.ts': 424,
-  'convex/capabilityCallProjections.ts': 405,
-  'convex/capabilityCallX402AuthorizationExpiry.ts': 231,
   'convex/capabilityProviderConnections.ts': 277,
-  'convex/capabilitySupplyToolOriginMap.ts': 225,
   'convex/chatAnonymous.ts': 213,
   'convex/chatGenerate.ts': 217,
   'convex/chatShares.ts': 402,
   'convex/chatTools.ts': 529,
-  'convex/devSeed.ts': 1162,
-  'convex/devSeedFixtures.ts': 503,
-  'convex/interactiveCredentialLifecycle.ts': 270,
-  'convex/moneyAutoRecharge.ts': 346,
-  'convex/moneyCustomerTaxFacts.ts': 367,
-  'convex/moneyMonthlySpendBudget.ts': 318,
-  'convex/moneyStripeCustomer.ts': 360,
-  'convex/notifications.ts': 322,
-  'convex/personalAccount.ts': 652,
   'convex/registry.ts': 443,
-  'convex/secretLifecycleHttp.ts': 216,
-  'convex/securityAdminMembership.ts': 212,
-  'convex/securityRemovalDisputes.ts': 245,
-  'convex/workspaceInvitations.ts': 382,
-  'convex/workspaceMemberships.ts': 693,
-  'convex/workspaceProvisioning.ts': 330,
-  'convex/workspaceSecurity.ts': 295,
 }
 const FACADE_SIZE_MARGIN = 0
 const FIXTURE_ROOT = 'tests/fixtures/quality-gates/convex-facade-size'

@@ -66,7 +66,7 @@ describe('capability supply boundaries', () => {
   })
 
   it('keeps the development seed on current catalog commands and out of retired claim paths', () => {
-    const seed = readFileSync('convex/devSeed.ts', 'utf8')
+    const seed = readFileSync('convex/lib/dev/seed/catalog.ts', 'utf8')
 
     expect(seed).toContain('persistDevSeedCatalogState')
     expect(seed).toContain('rebuildBusinessSupplyProjectionSnapshotCommand')

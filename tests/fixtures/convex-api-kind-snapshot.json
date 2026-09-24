@@ -1476,9 +1476,21 @@
     "kind": "query"
   },
   {
+    "visibility": "internal",
+    "module": "capabilitySupplyTools",
+    "method": "compareInternal",
+    "kind": "query"
+  },
+  {
     "visibility": "public",
     "module": "capabilitySupplyTools",
     "method": "detail",
+    "kind": "query"
+  },
+  {
+    "visibility": "internal",
+    "module": "capabilitySupplyTools",
+    "method": "detailInternal",
     "kind": "query"
   },
   {
@@ -1503,6 +1515,12 @@
     "visibility": "public",
     "module": "capabilitySupplyTools",
     "method": "search",
+    "kind": "query"
+  },
+  {
+    "visibility": "internal",
+    "module": "capabilitySupplyTools",
+    "method": "searchInternal",
     "kind": "query"
   },
   {

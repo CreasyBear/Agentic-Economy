@@ -33,7 +33,6 @@ const forbiddenImportSelectors = [
 const deployableAllowlist = new Set([
   'convex/devSeed.ts',
   'convex/devSeedStore.ts',
-  'convex/devSeedFixtures.ts',
   'convex/curatedProviders.ts',
 ])
 
@@ -42,7 +41,7 @@ function deployableFiles(): readonly string[] {
     .flatMap((pattern) => globSync(pattern))
     .filter((path) => !path.includes('/_generated/'))
     .filter((path) => !path.endsWith('.test.ts'))
-    .filter((path) => !deployableAllowlist.has(path))
+    .filter((path) => !deployableAllowlist.has(path) && !path.startsWith('convex/lib/dev/seed/'))
     .sort()
 }
 

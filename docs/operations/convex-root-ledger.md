@@ -44,6 +44,23 @@
 | 2026-09-24 | recoveryBreakGlass.ts | 482 lines | 20 lines | pending |
 | 2026-09-24 | actionExecutionControl.ts | 317 lines | 67 lines | pending |
 | 2026-09-24 | capabilityCalls.ts | 347 lines | 155 lines; callLifecycle split by role (authorityHandlers and dispatch removed; largest file 399 lines) | pending |
+| 2026-09-24 | moneyCustomerTaxFacts.ts | 367 lines | 15 lines; money/customer | pending |
+| 2026-09-24 | moneyStripeCustomer.ts | 360 lines | 29 lines; money/customer | pending |
+| 2026-09-24 | moneyAutoRecharge.ts | 346 lines | 15 lines; money/autoRecharge | pending |
+| 2026-09-24 | moneyMonthlySpendBudget.ts | 318 lines | 22 lines; money/monthlySpendBudget; eight registrations gained returns | pending |
+| 2026-09-24 | workspaceMemberships.ts | 693 lines | 30 lines; principalAccount/workspace | pending |
+| 2026-09-24 | workspaceInvitations.ts | 382 lines | 21 lines; principalAccount/workspace | pending |
+| 2026-09-24 | personalAccount.ts | 652 lines | 34 lines; principalAccount/personalAccount | pending |
+| 2026-09-24 | workspaceProvisioning.ts | 330 lines | 12 lines; principalAccount/provisioning | pending |
+| 2026-09-24 | workspaceSecurity.ts | 295 lines | 21 lines; principalAccount/workspaceSecurity | pending |
+| 2026-09-24 | interactiveCredentialLifecycle.ts | 270 lines | 21 lines; principalAccount/interactiveAuthority | pending |
+| 2026-09-24 | securityRemovalDisputes.ts + securityAdminMembership.ts | 245 + 212 lines, zero RPCs | deleted; live RPCs remain in security.ts | pending |
+| 2026-09-24 | capabilityCallProjections.ts | 405 lines | 36 lines; capabilityExecution/callProjection | pending |
+| 2026-09-24 | capabilityCallX402AuthorizationExpiry.ts | 231 lines | 12 lines; capabilityExecution/liveX402Requirement | pending |
+| 2026-09-24 | businessSupplyProjectionSnapshot.ts + capabilitySupplyToolOriginMap.ts | 424 + 225 lines, zero RPCs | deleted; capabilityToolCatalog uses internal twins | pending |
+| 2026-09-24 | secretLifecycleHttp.ts | 216 lines | 5 lines; secrets/lifecycle | pending |
+| 2026-09-24 | notifications.ts | 322 lines | 21 lines; principalAccount/notifications | pending |
+| 2026-09-24 | devSeed.ts + devSeedFixtures.ts | 1162 + 503 lines, fixture root zero RPCs | 43 lines + deleted fixture root; lib/dev/seed | pending |
 
 ### Decisions applied 2026-09-24
 - **D1, catalog origin:** eligible-ports admission now checks the business ID and fails closed, as the graph path does (`34ccfe8f7`).
