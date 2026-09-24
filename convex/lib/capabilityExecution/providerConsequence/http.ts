@@ -1,6 +1,7 @@
+import type { GenericActionCtx, GenericDataModel } from 'convex/server'
+
 import { degradeBackend } from '@/lib/observability/degrade-backend'
 import { internal } from '../../../_generated/api'
-import type { ActionCtx } from '../../../_generated/server'
 
 const MAX_BODY_BYTES = 128 * 1024
 const JOURNAL_TOKEN = /^[A-Za-z0-9_-]{43,128}$/u
@@ -57,7 +58,7 @@ function canonicalDigest(value: unknown): value is string {
   return typeof value === 'string' && DIGEST.test(value)
 }
 
-export async function beginProviderConsequenceJournalHandler(ctx: ActionCtx, request: Request): Promise<Response> {
+export async function beginProviderConsequenceJournalHandler(ctx: GenericActionCtx<GenericDataModel>, request: Request): Promise<Response> {
   const token = bearer(request)
   const body = await boundedJson(request)
   if (token === undefined || body === undefined || !exactKeys(body, [
@@ -85,7 +86,7 @@ export async function beginProviderConsequenceJournalHandler(ctx: ActionCtx, req
   }
 }
 
-export async function attestProviderConsequenceTicketHandler(ctx: ActionCtx, request: Request): Promise<Response> {
+export async function attestProviderConsequenceTicketHandler(ctx: GenericActionCtx<GenericDataModel>, request: Request): Promise<Response> {
   const token = bearer(request)
   const body = await boundedJson(request)
   if (token === undefined || body === undefined || !exactKeys(body, [
@@ -120,7 +121,7 @@ export async function attestProviderConsequenceTicketHandler(ctx: ActionCtx, req
   }
 }
 
-export async function completeProviderConsequenceJournalHandler(ctx: ActionCtx, request: Request): Promise<Response> {
+export async function completeProviderConsequenceJournalHandler(ctx: GenericActionCtx<GenericDataModel>, request: Request): Promise<Response> {
   const token = bearer(request)
   const body = await boundedJson(request)
   if (token === undefined || body === undefined || !exactKeys(body, ['ticketRef', 'claimRef', 'observation'])) {
@@ -148,7 +149,7 @@ export async function completeProviderConsequenceJournalHandler(ctx: ActionCtx, 
   }
 }
 
-export async function abortProviderConsequenceJournalHandler(ctx: ActionCtx, request: Request): Promise<Response> {
+export async function abortProviderConsequenceJournalHandler(ctx: GenericActionCtx<GenericDataModel>, request: Request): Promise<Response> {
   const token = bearer(request)
   const body = await boundedJson(request)
   if (token === undefined || body === undefined || !exactKeys(body, ['ticketRef', 'claimRef'])) {

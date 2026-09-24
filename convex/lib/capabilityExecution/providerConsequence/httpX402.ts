@@ -1,8 +1,8 @@
+import type { GenericActionCtx, GenericDataModel } from 'convex/server'
 import type { Infer } from 'convex/values'
 
 import { degradeBackend } from '@/lib/observability/degrade-backend'
 import { internal } from '../../../_generated/api'
-import type { ActionCtx } from '../../../_generated/server'
 import { prepareX402PaymentAuthorizationReturns } from '../../money/x402PaymentAttempt/reserve'
 import {
   readX402PaymentAuthorizationByDigestReturns,
@@ -28,7 +28,7 @@ type X402OperationResult =
   | null
 
 async function runX402Operation(
-  ctx: Pick<ActionCtx, 'runMutation' | 'runQuery'>,
+  ctx: Pick<GenericActionCtx<GenericDataModel>, 'runMutation' | 'runQuery'>,
   operation: X402Operation,
   args: Record<string, unknown>,
 ): Promise<X402OperationResult> {
@@ -116,7 +116,7 @@ function canonicalX402Args(
   return supplied
 }
 
-export async function providerConsequenceX402RpcHandler(ctx: ActionCtx, request: Request): Promise<Response> {
+export async function providerConsequenceX402RpcHandler(ctx: GenericActionCtx<GenericDataModel>, request: Request): Promise<Response> {
   const token = bearer(request)
   // The checkpoint can carry a 512 KiB normalized JSON response inside a JSON string.
   const body = await boundedJson(request, 1024 * 1024 + 16 * 1024)
