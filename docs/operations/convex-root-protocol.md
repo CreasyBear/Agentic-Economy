@@ -87,7 +87,7 @@ Work the highest score first. Churn decides ties, because the ergonomics payoff 
 - **Connect type drift:** `payout-connect-http.ts` `accountFromPayout` fabricates a binding that lacks `requirementsDigest`, `createdAt` and `updatedAt`, and its refusal and authority envelopes differ. This needs a behaviour decision before the shapes can be unified.
 - **Empty shell:** `moneyConnect.ts` is a 2-line shell with zero RPCs. Delete it in the next wave that is allowed to change the generated API.
 - **Pure file in lib:** `convex/lib/callLifecycle/terminalProjection.ts` is pure but lives in lib. Move it to the domain in an API-changing wave.
-- **Typecheck baseline is red:** the tree had 92 diagnostics before this wave (the `api` type collapses to `any`), and the wave added 0 and removed 3. See the TypeFix result for the commit that introduced the collapse.
+- **Typecheck:** 2199c986b made `api` collapse to `any` (marketFlowRefresh self-inference, via `ctx.runQuery(internal…)` with no return type). 727b5f2bc fixed it, taking errors from 89 to 16. The remaining 16 are 12 from chat/search work in a parallel session plus 4 needing guards: recovery-harness:307, api-catalog-route.test:51-52 and start-observability.test:74. **Rule: an action or handler that calls `ctx.run*(internal.*)` must declare its return type.**
 
 ## 9. Wave rules learned (binding from wave 2)
 - **Baseline first.** Record `npx tsc --noEmit --pretty false` and `npm run test:imports` at HEAD before dispatching the wave. Attribute errors by diffing against that baseline, not by guessing.
