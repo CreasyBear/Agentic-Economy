@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import type { Doc } from '../../../convex/_generated/dataModel'
+import type { Doc } from '../../../_generated/dataModel'
 import {
   ownerSupplyAuthority,
   ownerSupplyPublicationDetails,
-} from '../../../convex/capabilitySupplyOwnerFunnelProjection/offering_projection'
+} from './offeringProjection'
 
 describe('owner supply funnel projection', () => {
   it('retains the exact bound connection reference independently of provider host identity', () => {

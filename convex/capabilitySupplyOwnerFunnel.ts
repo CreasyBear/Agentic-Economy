@@ -5,18 +5,18 @@ import {
   agentOwnerSupplyFunnelReadArgs,
   readAgentOwnerSupplyFunnelHandler,
 } from './capabilitySupplyOwnerFunnelAgentRead'
-import { ownerSupplyFunnelResultValue } from './capabilitySupplyOwnerFunnelProjection'
-import { readOwnerSupplyFunnelHandler } from './capabilitySupplyOwnerFunnelRead'
 import {
   ownerPublishReservationArgsValue,
   ownerPublishReservationResultValue,
   ownerSupplyCommandArgsValue,
   ownerSupplyCommandResultValue,
-  refreshOwnerCapabilityHandler,
-  republishOwnerCapabilityHandler,
-  reserveOwnerCapabilityPublicationHandler,
-  withdrawOwnerCapabilityHandler,
-} from './capabilitySupplyOwnerFunnelCommands'
+  ownerSupplyFunnelResultValue,
+} from './lib/capabilitySupply/ownerFunnel/contracts'
+import { readOwnerSupplyFunnelHandler } from './capabilitySupplyOwnerFunnelRead'
+import { reserveOwnerCapabilityPublicationHandler } from './lib/capabilitySupply/ownerFunnel/reserve'
+import { withdrawOwnerCapabilityHandler } from './lib/capabilitySupply/ownerFunnel/withdraw'
+import { republishOwnerCapabilityHandler } from './lib/capabilitySupply/ownerFunnel/republish'
+import { refreshOwnerCapabilityHandler } from './lib/capabilitySupply/ownerFunnel/refresh'
 import {
   readOwnerSupplyIntegrationDraftHandler,
   readOwnerSupplyIntegrationDraftResultValue,

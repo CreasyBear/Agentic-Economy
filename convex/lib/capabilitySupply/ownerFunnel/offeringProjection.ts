@@ -5,16 +5,10 @@ import {
   ownerSupplyLiteral,
   ownerSupplyStringArray,
 } from '@/modules/capability-supply/owner-supply-validators'
-import type { Doc } from '../_generated/dataModel'
-import type { OwnerSupplyFunnelResult } from './contracts'
+import type { Doc } from '../../../_generated/dataModel'
+import type { OwnerSupplyOffering, OwnerSupplyPublication } from './contracts'
 import { projectProviderManagementStatus } from '@/modules/capability-supply/tool-health'
 
-type OwnerSupplyAvailable = Extract<
-  OwnerSupplyFunnelResult,
-  { kind: 'available' }
->
-export type OwnerSupplyOffering = OwnerSupplyAvailable['offerings'][number]
-export type OwnerSupplyPublication = NonNullable<OwnerSupplyOffering['publication']>
 type OwnerSupplyPricing = NonNullable<OwnerSupplyPublication['pricing']>
 type OwnerSupplyReadiness = OwnerSupplyPublication['readiness']
 type OwnerSupplyLifecycle = OwnerSupplyPublication['lifecycle']

@@ -3,10 +3,8 @@ import { v, type Infer } from 'convex/values'
 import type { Id } from './_generated/dataModel'
 import type { QueryCtx } from './_generated/server'
 import { agentAccessPrincipalValue, verifySupplyAgentPrincipal } from './agentAccessPrincipals'
-import {
-  readOwnerSupplyFunnelProjection,
-  type OwnerSupplyFunnelResult,
-} from './capabilitySupplyOwnerFunnelProjection'
+import { readOwnerSupplyFunnelProjection } from './lib/capabilitySupply/ownerFunnel/reads'
+import type { OwnerSupplyFunnelResult } from './lib/capabilitySupply/ownerFunnel/contracts'
 import {
   requireSourceRead,
   sourceWriteAdmissionArg,

@@ -1,11 +1,14 @@
 import { v, type Infer } from 'convex/values'
+import { agentAccessPrincipalValue } from '../../../agentAccessPrincipals'
+import { sourceWriteArgs } from '../../../sourceWriteAdmission'
+import { clerkConsequenceProofValue } from '../../consequenceProof'
 import {
   capabilityPublicationSourceSelectorValue,
   pricingConfigValue,
   readinessOutcomeValue,
 } from '@/modules/capability-supply/public'
 import { ownerSupplyAccessPathDescriptorValue } from '@/modules/capability-supply/owner-supply-validators'
-import { preparedPublicationMaterialValue } from '../capabilitySupplyPublish'
+import { preparedPublicationMaterialValue } from '../../../capabilitySupplyPublish'
 
 const ownerSupplyLifecycleReasonValue = v.union(
   v.literal('admission_unproven'),
@@ -316,3 +319,79 @@ export const ownerSupplyFunnelResultValue = v.union(
   }),
 )
 export type OwnerSupplyFunnelResult = Infer<typeof ownerSupplyFunnelResultValue>
+export type OwnerSupplyAvailable = Extract<OwnerSupplyFunnelResult, { kind: 'available' }>
+export type OwnerSupplyOffering = OwnerSupplyAvailable['offerings'][number]
+export type OwnerSupplyPublication = NonNullable<OwnerSupplyOffering['publication']>
+
+export const ownerSupplyCommandArgsValue = v.object({
+  businessId: v.id('businesses'),
+  offeringRef: v.string(),
+  offeringRevision: v.number(),
+  offeringSourceHash: v.string(),
+  publicationRef: v.string(),
+  publicationRevision: v.number(),
+  operationKey: v.string(),
+  correlationId: v.string(),
+  reasonCode: v.string(),
+  evidenceRefs: v.array(v.string()),
+  proof: v.optional(clerkConsequenceProofValue),
+  agentPrincipal: v.optional(agentAccessPrincipalValue),
+  ...sourceWriteArgs,
+})
+export const ownerSupplyCommandResultValue = v.union(
+  v.object({
+    kind: v.literal('withdrawn'),
+    publicationRef: v.string(),
+    revision: v.number(),
+    lifecycle: v.object({
+      state: v.literal('withdrawn'),
+      reasons: v.array(v.string()),
+    }),
+  }),
+  v.object({
+    kind: v.literal('refreshed'),
+    publicationRef: v.string(),
+    revision: v.number(),
+    disposition: v.union(v.literal('current'), v.literal('incompatible')),
+    lifecycle: v.object({
+      state: v.union(
+        v.literal('active'),
+        v.literal('inactive'),
+        v.literal('incompatible'),
+      ),
+      reasons: v.array(v.string()),
+    }),
+  }),
+  v.object({
+    kind: v.literal('republished'),
+    publicationRef: v.string(),
+    revision: v.number(),
+    toolRef: v.string(),
+    bindingId: v.string(),
+    lifecycle: v.object({
+      state: v.union(v.literal('active'), v.literal('inactive')),
+      reasons: v.array(v.string()),
+    }),
+  }),
+  v.object({ kind: v.literal('refused'), reason: v.string() }),
+)
+export type OwnerSupplyCommandArgs = Infer<typeof ownerSupplyCommandArgsValue>
+export type OwnerSupplyCommandResult = Infer<typeof ownerSupplyCommandResultValue>
+export const ownerPublishReservationArgsValue = v.object({
+  businessId: v.id('businesses'),
+  offeringRef: v.string(),
+  offeringRevision: v.number(),
+  offeringSourceHash: v.string(),
+  materialDigest: v.string(),
+  operationKey: v.string(),
+  correlationId: v.string(),
+  reasonCode: v.string(),
+  evidenceRefs: v.array(v.string()),
+  agentPrincipal: v.optional(agentAccessPrincipalValue),
+  ...sourceWriteArgs,
+})
+export const ownerPublishReservationResultValue = v.union(
+  v.object({ kind: v.literal('reserved') }),
+  v.object({ kind: v.literal('replayed') }),
+  v.object({ kind: v.literal('refused'), reason: v.string() }),
+)
