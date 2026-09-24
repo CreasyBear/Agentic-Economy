@@ -1,9 +1,6 @@
 import { v } from 'convex/values'
 import type { Id } from '../../../_generated/dataModel'
-import type {
-  ProviderConnection,
-  ProviderConnectionCallLease,
-} from '../../../../src/modules/capability-supply/provider-connection'
+import type { ProviderConnection } from '../../../../src/modules/capability-supply/provider-connection'
 
 export const lifecycle = v.union(
   v.literal('active'),

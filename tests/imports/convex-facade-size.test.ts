@@ -14,11 +14,6 @@ const FACADE_MAX_LINES = 200
 // Pinned debt only; roots above 200 lines remain visible and pins may only decrease.
 const FACADE_SIZE_EXCEPTIONS: Record<string, number> = {
   'convex/capabilityProviderConnections.ts': 277,
-  'convex/chatAnonymous.ts': 213,
-  'convex/chatGenerate.ts': 217,
-  'convex/chatShares.ts': 402,
-  'convex/chatTools.ts': 529,
-  'convex/registry.ts': 443,
 }
 const FACADE_SIZE_MARGIN = 0
 const FIXTURE_ROOT = 'tests/fixtures/quality-gates/convex-facade-size'

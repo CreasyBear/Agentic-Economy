@@ -6,7 +6,6 @@ import { verifyCustomerRequestServiceAssertion, type CustomerRequestServiceAsser
 import { createPackage3AuditEvent } from '../../../../src/modules/observability/public'
 import { CLERK_USER_PROVIDER_NAMESPACE } from '../../../../src/modules/principal-account/external-identity/public'
 import { env, type MutationCtx } from '../../../_generated/server'
-import { serviceAssertion } from '../../../serviceAssertion'
 import { persistAuditEvent } from '../audit/persistence'
 import { observationArgs, type ObservationResult } from './contracts'
 import { revokeMachineAgentsForCreatorObservation } from './machineCascade'

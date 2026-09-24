@@ -1,7 +1,7 @@
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { sourceRouteRef } from '@/modules/capability-supply/public'
 import { directoryNetwork, directoryProviderKey, isDirectoryEntryEligible } from '@/modules/market/x402-directory-index'
-import type { Doc, Id } from '../../../_generated/dataModel'
+import type { Id } from '../../../_generated/dataModel'
 import type { MutationCtx } from '../../../_generated/server'
 import { searchAnalytics, writeAnalytics } from './analytics'
 import type { IndexedSource } from './contracts'

@@ -31,7 +31,6 @@ type CallRow = Doc<'capabilityCalls'>
 type CallResultValue = Infer<typeof callResultValue>
 type Usage = Infer<typeof usageValue>
 type CallListState = CallRow['state']
-type DispatchState = 'enqueued' | 'running' | 'completed' | 'failed' | 'reconciliation_required'
 
 function receiptRefFromResult(result: CallResultValue | undefined): string | undefined {
   return result !== undefined && 'receipt' in result ? result.receipt?.receiptRef : undefined

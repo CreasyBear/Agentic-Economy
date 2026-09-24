@@ -5,8 +5,6 @@ const OPAQUE_REF = /^[A-Za-z0-9][A-Za-z0-9._:/-]{0,199}$/u
 const DIGEST = /^sha256:[0-9a-f]{64}$/u
 const SECRET_REF = /^sec_[0-9a-f]{32}$/u
 export const SECRET_GENERATION = /^sgn_[0-9a-f]{32}$/u
-const MAX_TICKET_LIFETIME_MS = 30_000
-const MIN_TICKET_LIFETIME_MS = 500
 
 export type IssueArgs = {
   ticketRef: string

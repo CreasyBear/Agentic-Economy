@@ -61,6 +61,13 @@
 | 2026-09-24 | secretLifecycleHttp.ts | 216 lines | 5 lines; secrets/lifecycle | pending |
 | 2026-09-24 | notifications.ts | 322 lines | 21 lines; principalAccount/notifications | pending |
 | 2026-09-24 | devSeed.ts + devSeedFixtures.ts | 1162 + 503 lines, fixture root zero RPCs | 43 lines + deleted fixture root; lib/dev/seed | pending |
+| 2026-09-24 | chatTools.ts | 529 lines, zero RPCs at HEAD | deleted; `lib/chat/tools/` | pending (wave 8) |
+| 2026-09-24 | chatAnonymous.ts | 290 lines | 4 lines; `lib/chat/anonymous/` | pending (wave 8) |
+| 2026-09-24 | chatGenerate.ts | 217 lines | 11 lines; `lib/chat/generate/` | pending (wave 8) |
+| 2026-09-24 | chatShares.ts | 402 lines | 41 lines; `lib/chat/shares/` | pending (wave 8) |
+| 2026-09-24 | registry.ts | 442 lines | 33 lines; `lib/registry/` | pending (wave 8) |
+
+Wave 8 fixed the known 12 typecheck diagnostics, 3 import-gate failures and 33 unit failures. Closeout: typecheck, import, unit, integration and build gates pass; the API snapshot retains every RPC triple. Lint remains red on 14 diagnostics outside campaign-changed files after six touched-file warnings were fixed. Dependency cycles: 13 now versus 6 at `3d4ba6672^` (7 newly introduced, not a passing gate). Campaign complete: **1** depth-one non-test Convex root exceeds 200 scanner lines, registration-only `capabilityProviderConnections.ts` (277, 29 RPCs, pinned).
 
 ### Decisions applied 2026-09-24
 - **D1, catalog origin:** eligible-ports admission now checks the business ID and fails closed, as the graph path does (`34ccfe8f7`).
@@ -77,8 +84,8 @@
 - Connect's differing refusal and authority envelopes are semantic; do not unify them as a type-only move.
 - `convex/lib/money/x402PaymentAttempt/identity.ts` (412 lines) remains oversized; `convex/moneyX402PaymentAttempts.ts` still has an inline reconcile handler.
 - `convex/capabilityToolCatalog.ts:100,111,152,164` uses public `api.*` targets for `ctx.runQuery`; convert to internal references in a separate behaviour-reviewed pass.
-- `convex/capabilityProviderConnections.ts` remains a 276-scanner-line registration-only exception for 29 RPCs (276 physical lines).
-- Chat-session gates remain: `chatAnonymous.ts` 290 against pin 213; the `chatTools` registry entry; status vocabulary 20 against 17; and 12 chat-owned typecheck errors. Principal refusal codes and Managed-Call remedy transitions remain deliberately distinct.
+- `convex/capabilityProviderConnections.ts` remains a 277-scanner-line registration-only exception for 29 RPCs (276 physical lines).
+- The chat-session typecheck, import and unit failures were fixed in wave 8; its empty `chatTools.ts` root is deleted. Principal refusal codes and Managed-Call remedy transitions remain deliberately distinct.
 
 ### §10 decisions for the wave 4 layout moves (orchestrator, 2026-09-24)
 - **`capabilityExecution/`:** callLifecycle, callProjection, providerConsequence, `quotes` (formerly capabilityQuotes), liveX402Requirement.
