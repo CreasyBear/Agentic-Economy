@@ -1,6 +1,5 @@
 import { internalAction, internalMutation, internalQuery, mutation, query } from './_generated/server'
 
-import { createOwnerTaxInvoiceArgs, createOwnerTaxInvoiceResult, createOwnerTaxInvoiceHandler } from './lib/money/documents/issue'
 import { createOwnerStatementArgs, createOwnerStatementResult, createOwnerStatementHandler } from './lib/money/documents/statement'
 import { readStatementPageArgs, readStatementPageResult, readStatementPageHandler, applyStatementPageArgs, applyStatementPageResult, applyStatementPageHandler, runStatementPageArgs, runStatementPageResult, runStatementPageHandler } from './lib/money/documents/statementPage'
 import { readStatementFinalizationArgs, readStatementFinalizationResult, readStatementFinalizationHandler, queueStatementRenderArgs, queueStatementRenderResult, queueStatementRenderHandler, finalizeStatementArgs, finalizeStatementResult, finalizeStatementHandler } from './lib/money/documents/statementFinalization'
@@ -9,11 +8,6 @@ import { listOwnerDocumentsArgs, listOwnerDocumentsResult, listOwnerDocumentsHan
 import { attachRenderedFileArgs, attachRenderedFileResult, attachRenderedFileHandler } from './lib/money/documents/attachment'
 import { signOwnerDailyCloseArgs, signOwnerDailyCloseResult, signOwnerDailyCloseHandler } from './lib/money/documents/signing'
 
-export const createOwnerTaxInvoice = mutation({
-  args: createOwnerTaxInvoiceArgs,
-  returns: createOwnerTaxInvoiceResult,
-  handler: createOwnerTaxInvoiceHandler,
-})
 
 export const createOwnerStatement = mutation({
   args: createOwnerStatementArgs,

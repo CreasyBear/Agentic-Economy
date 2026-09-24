@@ -19,7 +19,7 @@ import {
 } from '@/modules/capability-supply/public'
 import type { Id } from '../../../_generated/dataModel'
 import type { MutationCtx } from '../../../_generated/server'
-import { rebuildCapabilityOriginSupplyProjection } from '../../../capabilitySupplyShared'
+import { rebuildCapabilityOriginSupplyProjection } from '../projection/rebuild'
 import { upsertProviderDirectoryRows } from '../../market/directoryIndex/providerRows'
 import {
   publicationPorts,

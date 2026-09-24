@@ -24,12 +24,8 @@ import {
   normalizeStoredAgentAccessGrant,
   type NormalizedStoredAgentAccessGrant,
 } from '@/modules/agent-access/policy'
-import type {
-  ApprovalDecisionResult,
-  CallRow,
-  GrantRow,
-  PendingApprovalView,
-} from './admissionTypes'
+import type { ApprovalDecisionResult, PendingApprovalView } from './admissionApproval'
+import type { CallRow, GrantRow } from './contracts'
 
 function parseJsonObject(value: string): Record<string, unknown> | undefined {
   try {

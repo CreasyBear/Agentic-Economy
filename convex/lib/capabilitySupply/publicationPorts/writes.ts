@@ -3,8 +3,9 @@ import { usesSelectedRequestReadiness } from '@/modules/capability-supply/convex
 import { internal } from '../../../_generated/api'
 import type { Id } from '../../../_generated/dataModel'
 import type { MutationCtx } from '../../../_generated/server'
-import { getExactRegisteredCapabilityContract, registerCapabilityContractDocument } from '../../../capabilityContractDocuments'
-import { rebuildCapabilityOriginSupplyProjection } from '../../../capabilitySupplyShared'
+import { getExactRegisteredCapabilityContract } from '../../capabilityContract/documents/reads'
+import { registerCapabilityContractDocument } from '../../capabilityContract/documents/registration'
+import { rebuildCapabilityOriginSupplyProjection } from '../projection/rebuild'
 import { syncMarketToolPresence } from '../../../marketPresence'
 
 export function publicationWritePorts(ctx: MutationCtx): Pick<PublicationCommandPorts, 'insertPublication' | 'patchPublicationSuperseded' | 'patchPublicationWithdrawn' | 'registerContractDocument' | 'getExactRegisteredContract' | 'scheduleReadinessProbe'> {

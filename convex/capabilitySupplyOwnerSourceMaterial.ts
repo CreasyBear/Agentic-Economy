@@ -11,7 +11,7 @@ import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { stableStringify, type StableHashValue } from '@/modules/common/stable-hash'
 
 import type { QueryCtx, MutationCtx } from './_generated/server'
-import { getExactRegisteredCapabilityContract } from './capabilityContractDocuments'
+import { getExactRegisteredCapabilityContract } from './lib/capabilityContract/documents/reads'
 import {
   toCapabilityBindingRow,
   toCapabilityOfferingRow,

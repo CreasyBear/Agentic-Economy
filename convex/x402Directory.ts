@@ -10,7 +10,7 @@ import { directoryEntryMatchesFilters, isDirectoryEntryEligible } from '@/module
 import { directoryMetadataFlags } from '@/modules/market/x402-directory-metadata'
 import { api, internal } from './_generated/api'
 import { action } from './_generated/server'
-import { reconcileReadyItems } from './capabilitySupplyShared'
+import { reconcileReadyItems } from './lib/capabilitySupply/facilitatorDiscovery/readyItems'
 import { bindWorkloadCronActionContext } from './lib/platform/workloadCron/consequence'
 
 /**

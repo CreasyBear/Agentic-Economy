@@ -14,7 +14,7 @@ beforeEach(() => {
 })
 
 import { abandon, reserve } from '../../../convex/capabilityCalls'
-import { callArgs } from '../../../convex/lib/capabilityExecution/callLifecycle/contracts'
+import { callArgs } from '../../../convex/lib/capabilityExecution/callLifecycle/admission'
 import { buildDevelopmentPublishedToolEvidence } from '../../../tools/dev/fixtures/capability-supply/development-published-tool-evidence'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { convexTestWithMarketComponents } from '../../helpers/convex-fixtures'

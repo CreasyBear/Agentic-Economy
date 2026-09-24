@@ -9,7 +9,7 @@ import type { RouteTransportObservation } from '@/modules/capability-supply/rout
 import type { PublishedTool, RuntimePublishedToolDescriptor } from '@/modules/capability-supply/public'
 import { parseContractOutput } from '@/modules/capability-execution/convex'
 import type { OpenDispatch, WorkerAcceptedCharge, ChargeSettlementResult, ContractOutputValidation } from '@/modules/capability-execution/convex'
-import { canonicalTerminalOutcome } from '../callLifecycle/terminalProjection'
+import { canonicalTerminalOutcome } from '@/modules/capability-execution/convex'
 import { canonicalPort, readCanonicalSnapshot } from './port'
 import { finalizeCallDispatch } from './dispatch'
 

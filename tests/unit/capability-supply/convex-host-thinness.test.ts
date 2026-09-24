@@ -7,8 +7,9 @@ import { listTsFiles } from '../../helpers/source-files'
 const convexHost = readFileSync('convex/capabilitySupply.ts', 'utf8')
 const convexSupply = [
   convexHost,
-  readFileSync('convex/capabilitySupplyShared.ts', 'utf8'),
+  readFileSync('convex/lib/capabilitySupply/publish/ownership.ts', 'utf8'),
   readFileSync('convex/lib/capabilitySupply/publish/prepared.ts', 'utf8'),
+  readFileSync('convex/lib/capabilitySupply/publish/readPublication.ts', 'utf8'),
   readFileSync('convex/lib/capabilitySupply/publish/bootstrap.ts', 'utf8'),
   readFileSync('convex/capabilitySupplyProbes.ts', 'utf8'),
   readFileSync('convex/capabilitySupplyGraph.ts', 'utf8'),

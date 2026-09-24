@@ -44,7 +44,6 @@ type WorkspaceProvisionErrorCode =
   | 'creator_principal_inactive'
   | 'display_name_invalid'
   | 'clerk_org_id_invalid'
-  | 'active_organization_mismatch'
 
 const provisionOrganizationWorkspaceForServerRef = makeFunctionReference<
   'mutation',
@@ -58,15 +57,6 @@ const provisionOrganizationWorkspaceForServerRef = makeFunctionReference<
   WorkspaceProvisionSuccess
 >('workspaceProvisioning:provisionOrganizationWorkspaceForServer')
 
-const claimCreatedWorkspaceRef = makeFunctionReference<
-  'mutation',
-  Readonly<{
-    clerkOrgId: string
-    displayName?: string
-    correlationRef: string
-  }>,
-  WorkspaceProvisionSuccess
->('workspaceProvisioning:claimCreatedWorkspace')
 
 const correlationRef = (label: string) => `test:workspace-provision:${label}`
 
@@ -131,18 +121,6 @@ async function provisionOrganizationWorkspaceForServer(
   })
 }
 
-async function claimCreatedWorkspace(
-  backend: InteractiveAuthorityBackend,
-  presentedIdentity: UserIdentity,
-  input: Readonly<{
-    clerkOrgId: string
-    displayName?: string
-    correlationRef: string
-  }>,
-): Promise<WorkspaceProvisionSuccess> {
-  const session = backend.withIdentity(presentedIdentity)
-  return await session.mutation(claimCreatedWorkspaceRef, input)
-}
 
 async function countOrgBindings(backend: InteractiveAuthorityBackend): Promise<number> {
   return await backend.run(async (ctx) =>
@@ -474,47 +452,6 @@ describe('workspace provisioning (W-11)', () => {
     })
   })
 
-  describe('claimCreatedWorkspace', () => {
-    it('P11: matching JWT org_id claims and provisions the workspace account', async () => {
-      const backend = createBackend()
-      await seedCreatorWithPersonalAccount(backend)
-
-      const result = await claimCreatedWorkspace(
-        backend,
-        identity({ org_id: CLERK_ORG_ID }),
-        {
-          clerkOrgId: CLERK_ORG_ID,
-          displayName: WORKSPACE_DISPLAY_NAME,
-          correlationRef: correlationRef('p11'),
-        },
-      )
-
-      expect(result.kind).toBe('created')
-      expect(await readOrgBindingForClerkOrg(backend, CLERK_ORG_ID)).toMatchObject({
-        accountRef: result.accountRef,
-      })
-      expect(await readSessionSelection(backend)).toMatchObject({
-        activeAccountRef: result.accountRef,
-      })
-    })
-
-    it.each([
-      ['org_id mismatch', identity({ org_id: 'org_other_workspace' })],
-      ['missing org_id', identity()],
-    ] as const)('P12: claim refuses active_organization_mismatch when %s', async (_label, presented) => {
-      const backend = createBackend()
-      await seedCreatorWithPersonalAccount(backend)
-
-      await expectWorkspaceProvisionFailure(
-        () => claimCreatedWorkspace(backend, presented, {
-          clerkOrgId: CLERK_ORG_ID,
-          displayName: WORKSPACE_DISPLAY_NAME,
-          correlationRef: correlationRef(`p12-${_label}`),
-        }),
-        'active_organization_mismatch',
-      )
-    })
-  })
 
   describe('post-provision active account resolution', () => {
     it('P13: org_id resolves to the provisioned account after binding exists (inverts W-10 C3)', async () => {

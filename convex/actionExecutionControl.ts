@@ -1,11 +1,6 @@
-import { ConvexError, v, type Infer, type ObjectType } from 'convex/values'
-import { internalMutation, internalQuery, mutation, query, type MutationCtx, type QueryCtx } from './_generated/server'
+import { v, type Infer, type ObjectType } from 'convex/values'
+import { internalMutation, internalQuery, type MutationCtx, type QueryCtx } from './_generated/server'
 import { canonicalDigest } from '../src/modules/common/canonical-digest'
-import {
-  requireSourceWrite,
-  requireSourceRead,
-  sourceWriteArgs,
-} from './sourceWriteAdmission'
 import {
   attemptTransitionValue,
   attemptReleaseValue,
@@ -191,21 +186,6 @@ const readExecutionAttemptsArgs = { executionRef: v.string(), limit: v.number() 
 const readExecutionAttemptArgs = { executionRef: v.string(), attemptRef: v.string() }
 const readExecutionHistoryArgs = { executionRef: v.string(), afterVersion: v.number(), limit: v.number() }
 const readExecutionHistoryCommandArgs = { executionRef: v.string(), commandId: v.string() }
-const ownerReadArgs = {
-  executionRef: v.string(),
-  callerRef: v.string(),
-  principalRef: v.string(),
-  operationKey: v.string(),
-  correlationId: v.string(),
-  ...sourceWriteArgs,
-}
-const lateObservationSourceArgs = {
-  ...lateObservationArgs,
-  operationKey: v.string(),
-  correlationId: v.string(),
-  ...sourceWriteArgs,
-}
-type OwnerReadArgs = ObjectType<typeof ownerReadArgs>
 
 function withoutSystemFields<Row extends { _id: string; _creationTime: number }>(
   row: Row,
@@ -225,17 +205,6 @@ async function readControlHandler(ctx: QueryCtx, args: ObjectType<typeof executi
   return row === null ? null : withoutSystemFields(row)
 }
 
-async function readOwnedControl(
-  ctx: QueryCtx,
-  args: Pick<OwnerReadArgs, 'executionRef' | 'callerRef' | 'principalRef'>,
-) {
-  const row = await ctx.db.query('actionExecutionControls')
-    .withIndex('by_control_owner_principalRef_and_executionRef', (q) => (
-      q.eq('control.owner.principalRef', args.principalRef).eq('executionRef', args.executionRef)
-    ))
-    .unique()
-  return row === null || row.control.owner.callerRef !== args.callerRef ? null : row
-}
 
 async function readAttemptsHandler(ctx: QueryCtx, args: ObjectType<typeof readExecutionAttemptsArgs>) {
   const rows = await ctx.db.query('actionExecutionAttempts')
@@ -305,30 +274,7 @@ async function recordLateObservationHandler(
   return { kind: 'applied' as const, executionVersion: current.executionVersion }
 }
 
-async function requireActionExecutionSourceWrite(
-  ctx: { db: unknown },
-  args: {
-    operationKey: string
-    correlationId: string
-    sourceWrite?: unknown
-    sourceWriteRequest?: unknown
-  },
-): Promise<void> {
-  const result = await requireSourceWrite(ctx, args, 'protected_action')
-  if (result.kind === 'rejected') {
-    throw new Error(`action_execution_source_write_rejected:${result.reason}`)
-  }
-}
 
-async function requireActionExecutionSourceRead(args: OwnerReadArgs): Promise<void> {
-  const verification = await requireSourceRead(args, 'protected_action')
-  if (verification.kind === 'rejected') {
-    throw new ConvexError({
-      code: 'action_execution_source_read_rejected',
-      reason: verification.reason,
-    })
-  }
-}
 
 export const readControl = internalQuery({
   args: executionRefArgs,
@@ -366,22 +312,5 @@ export const readHistoryCommand = internalQuery({
   handler: readHistoryCommandHandler,
 })
 
-export const recordLateObservationSource = mutation({
-  args: lateObservationSourceArgs,
-  returns: persistControlResult,
-  handler: async (ctx, args) => {
-    await requireActionExecutionSourceWrite(ctx, args)
-    return recordLateObservationHandler(ctx, args)
-  },
-})
 
-export const readControlSource = query({
-  args: ownerReadArgs,
-  returns: v.union(controlRow, v.null()),
-  handler: async (ctx, args) => {
-    await requireActionExecutionSourceRead(args)
-    const row = await readOwnedControl(ctx, args)
-    return row === null ? null : withoutSystemFields(row)
-  },
-})
 

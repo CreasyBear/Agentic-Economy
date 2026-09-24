@@ -4,10 +4,8 @@ import {
   publicationProjection,
 } from '@/modules/capability-supply/public'
 import type { QueryCtx } from '../../../_generated/server'
-import {
-  convexPublicationLifecycle,
-  ownsPublishedBusiness,
-} from '../../../capabilitySupplyShared'
+import { convexPublicationLifecycle } from './contracts'
+import { ownsPublishedBusiness } from './ownership'
 
 export async function readCapabilityPublicationHandler(
   ctx: QueryCtx,

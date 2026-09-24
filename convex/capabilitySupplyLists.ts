@@ -21,7 +21,7 @@ import {
   offeringOriginValue,
   presentationValue,
   type ContractRef,
-} from './capabilitySupplyShared'
+} from './lib/capabilitySupply/publish/contracts'
 
 export const eligibleSupplyValue = v.object({
   offering: v.object({

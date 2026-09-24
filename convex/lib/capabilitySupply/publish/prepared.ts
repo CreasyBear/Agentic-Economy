@@ -30,8 +30,8 @@ import { upsertProviderDirectoryRows } from '../../market/directoryIndex/provide
 import {
   ownsPublishedBusiness,
   ownsPublishedBusinessForOwnerId,
-  rebuildCapabilityOriginSupplyProjection,
-} from '../../../capabilitySupplyShared'
+} from './ownership'
+import { rebuildCapabilityOriginSupplyProjection } from '../projection/rebuild'
 import { requireSourceWrite } from '../../../sourceWriteAdmission'
 import { clerkConsequenceProofValue } from '../../authority/consequence/proof'
 import {

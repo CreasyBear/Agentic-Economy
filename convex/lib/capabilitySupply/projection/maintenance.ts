@@ -57,9 +57,9 @@ export async function rebuildAllBusinessSupplyProjectionsHandler(ctx: MutationCt
     let skipped = 0
     for (const business of page.page) {
       // A frozen provider must not be re-published into search; same guard
-      // `rebuildCapabilityOriginSupplyProjection` applies. That wrapper lives in
-      // `capabilitySupplyShared`, which imports this module, so calling it from
-      // here would close an import cycle.
+      // `rebuildCapabilityOriginSupplyProjection` applies. The publish-path
+      // wrapper lives in `projection/rebuild.ts`; this paginated maintenance
+      // path derives and writes each page directly.
       if (await providerRouteabilityIsFrozen(ctx, business._id)) {
         skipped += 1
         continue

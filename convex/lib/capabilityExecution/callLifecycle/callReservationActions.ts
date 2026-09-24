@@ -21,7 +21,8 @@ import {
   type PublishedTool,
 } from '@/modules/capability-supply/public'
 import { isPublicToolRef } from '@/modules/capability-supply/public'
-import { type AdmitArgs, type ReserveArgs } from './admission'
+import type { AdmitArgs } from './admission'
+import type { ReserveArgs } from './admissionReservation'
 import {
   assertCallResultJson,
   callIdentity,

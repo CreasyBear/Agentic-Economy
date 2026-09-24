@@ -9,7 +9,6 @@ import {
   resolveActiveAccountRefForPrincipal,
 } from '../../../interactiveAuthority'
 import { readCommercialPolicyGate } from '../../../moneyCommercialPolicy'
-import { readCustomerTaxFactsForAccount } from '../documents/issue'
 import { CLERK_USER_PROVIDER_NAMESPACE } from '../../../workspaceProvisioning'
 import { accountRef } from '../../../../src/modules/principal-account/account/public'
 import { principalRef } from '../../../../src/modules/principal-account/principal/public'
@@ -141,8 +140,10 @@ async function resolveFundingCommandTaxInvoice(
     }
   }
 
-  const customerTaxFacts = await readCustomerTaxFactsForAccount(ctx, input.accountRef)
-  if (customerTaxFacts === undefined) {
+  const customerTaxFacts = await ctx.db.query('moneyCustomerTaxFacts')
+    .withIndex('by_accountRef', (index) => index.eq('accountRef', input.accountRef))
+    .unique()
+  if (customerTaxFacts === null) {
     return { kind: 'withheld', reason: 'customer_tax_facts_missing' }
   }
 

@@ -50,22 +50,6 @@ const setActiveWorkspaceRef = makeFunctionReference<
   { principalRef: string; activeAccountRef: string; revision: number; selectedAt: number }
 >('interactiveSession:setActiveWorkspace')
 
-const listUserWorkspacesRef = makeFunctionReference<
-  'query',
-  Record<string, never>,
-  {
-    principalRef: string
-    activeAccountRef: string | null
-    selectionState: 'unique' | 'selected' | 'org_bound' | 'selection_required'
-    workspaces: Array<{
-      accountRef: string
-      displayName: string
-      accessKind: 'ownership' | 'membership'
-      isActive: boolean
-      clerkOrganizationId?: string
-    }>
-  }
->('interactiveSession:listUserWorkspaces')
 
 type RunCtx = Parameters<Parameters<InteractiveAuthorityBackend['run']>[0]>[0]
 type SessionSelectionRow = Doc<'interactiveSessionSelections'>
@@ -582,65 +566,4 @@ describe('interactive authority tenancy (W-10)', () => {
     })
   })
 
-  describe('Section F: listUserWorkspaces', () => {
-    it('F1: owned plus member workspaces mark only the selected workspace active', async () => {
-      const backend = createBackend()
-      await seedCanonicalWithMemberB(backend)
-      await insertSessionSelection(backend, ACCOUNT_A)
-      const session = backend.withIdentity(identity())
-
-      const listed = await session.query(listUserWorkspacesRef, {})
-
-      expect(listed.workspaces).toHaveLength(2)
-      expect(listed.activeAccountRef).toBe(ACCOUNT_A)
-      expect(listed.workspaces.find((row) => row.accountRef === ACCOUNT_A)).toMatchObject({
-        accessKind: 'ownership',
-        isActive: true,
-      })
-      expect(listed.workspaces.find((row) => row.accountRef === ACCOUNT_B)).toMatchObject({
-        accessKind: 'membership',
-        isActive: false,
-      })
-    })
-
-    it('F2: single Account without selection reports one active workspace', async () => {
-      const backend = await seededBackend()
-      const session = backend.withIdentity(identity())
-
-      const listed = await session.query(listUserWorkspacesRef, {})
-
-      expect(listed.workspaces).toHaveLength(1)
-      expect(listed.activeAccountRef).toBe(ACCOUNT_A)
-      expect(listed.workspaces[0]).toMatchObject({
-        accountRef: ACCOUNT_A,
-        isActive: true,
-      })
-      expect(listed.selectionState).toBe('unique')
-    })
-
-    it('F3: two Accounts without selection reports selection_required', async () => {
-      const backend = createBackend()
-      await seedCanonicalWithExtraOwnedB(backend)
-      const session = backend.withIdentity(identity())
-
-      const listed = await session.query(listUserWorkspacesRef, {})
-
-      expect(listed.activeAccountRef).toBeNull()
-      expect(listed.selectionState).toBe('selection_required')
-      expect(listed.workspaces).toHaveLength(2)
-      expect(listed.workspaces.every((row) => row.isActive === false)).toBe(true)
-    })
-
-    it('F4: listUserWorkspaces does not insert a selection row', async () => {
-      const backend = createBackend()
-      await seedCanonicalWithExtraOwnedB(backend)
-      const session = backend.withIdentity(identity())
-      const before = await countSessionSelections(backend)
-
-      await session.query(listUserWorkspacesRef, {})
-      await session.query(listUserWorkspacesRef, {})
-
-      expect(await countSessionSelections(backend)).toBe(before)
-    })
-  })
 })

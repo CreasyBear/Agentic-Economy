@@ -72,11 +72,8 @@ export {
   publishCuratedCapability,
   withdrawCuratedCapability,
 } from './capabilitySupplyPublish'
-export {
-  ownsPublishedBusiness,
-  ownsPublishedBusinessForOwnerId,
-  rebuildCapabilityOriginSupplyProjection,
-} from './capabilitySupplyShared'
+export { ownsPublishedBusiness, ownsPublishedBusinessForOwnerId } from './lib/capabilitySupply/publish/ownership'
+export { rebuildCapabilityOriginSupplyProjection } from './lib/capabilitySupply/projection/rebuild'
 export {
   registerCuratedMapping,
   registerCapabilityOffering,

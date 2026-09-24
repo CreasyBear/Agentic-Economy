@@ -5,7 +5,6 @@ import {
   it,
 } from 'vitest'
 
-import { InteractiveAuthorityError } from '../../../convex/interactiveAuthority'
 import { samIdentity } from '../../helpers/interactive-authority-provisioning'
 import {
   createInteractiveAuthorityBackend as createBackend,
@@ -21,14 +20,6 @@ import {
 
 const ACCOUNT_B = `acc_${'b'.repeat(32)}`
 const OWNERSHIP_B = `own_${'b'.repeat(32)}`
-
-type NotificationEventKind =
-  | 'low_credit_balance'
-  | 'spend_cap_warning'
-  | 'spend_cap_exceeded'
-  | 'call_failure_spike'
-  | 'invoice_ready'
-  | 'team_membership_changed'
 
 type PreferencesView = Readonly<{
   accountRef: string
@@ -61,20 +52,6 @@ type UpdatePreferencesInput = Readonly<{
   idempotencyRef: string
 }>
 
-type DispatchNotificationInput = Readonly<{
-  accountRef: string
-  recipientPrincipalRef: string
-  eventKind: NotificationEventKind | string
-  sourceEventRef: string
-  correlationRef: string
-}>
-
-type DispatchNotificationResult = Readonly<
-  | { kind: 'accepted' }
-  | { kind: 'replayed' }
-  | { kind: 'suppressed'; code: 'preference_disabled' | 'recipient_email_missing' }
-  | { kind: 'refused'; code: 'event_kind_invalid' }
->
 
 type PreferenceRow = Readonly<{
   accountRef: string
@@ -89,14 +66,6 @@ type PreferenceRow = Readonly<{
   idempotencyRef?: string
 }>
 
-type DeliveryRow = Readonly<{
-  accountRef: string
-  recipientPrincipalRef: string
-  eventKind: string
-  sourceEventRef: string
-  state: 'pending' | 'sent' | 'suppressed' | 'failed'
-}>
-
 const readPreferencesRef = makeFunctionReference<
   'query',
   Record<string, never>,
@@ -109,11 +78,6 @@ const updatePreferencesRef = makeFunctionReference<
   PreferenceUpdateReceipt
 >('notifications:updatePreferences')
 
-const dispatchNotificationInternalRef = makeFunctionReference<
-  'mutation',
-  DispatchNotificationInput,
-  DispatchNotificationResult
->('notifications:dispatchNotificationInternal')
 
 const setActiveWorkspaceRef = makeFunctionReference<
   'mutation',
@@ -157,12 +121,6 @@ async function updatePreferences(
   return await session.mutation(updatePreferencesRef, input)
 }
 
-async function dispatchNotification(
-  backend: InteractiveAuthorityBackend,
-  input: DispatchNotificationInput,
-): Promise<DispatchNotificationResult> {
-  return await backend.mutation(dispatchNotificationInternalRef, input)
-}
 
 async function expectNotificationRefusal(
   run: () => Promise<unknown>,
@@ -181,12 +139,6 @@ async function listPreferenceRows(backend: InteractiveAuthorityBackend): Promise
       .collect()))
 }
 
-async function listDeliveryRows(backend: InteractiveAuthorityBackend): Promise<DeliveryRow[]> {
-  return await backend.run(async (ctx) =>
-    (await (ctx.db as { query: (table: string) => { collect: () => Promise<DeliveryRow[]> } })
-      .query('notificationDeliveries')
-      .collect()))
-}
 
 async function seedSecondOwnedAccount(backend: InteractiveAuthorityBackend): Promise<void> {
   await backend.run(async (ctx) => {
@@ -257,35 +209,9 @@ function updatePayload(
   }
 }
 
-function dispatchPayload(
-  overrides: Partial<DispatchNotificationInput> = {},
-): DispatchNotificationInput {
-  return {
-    accountRef: ACCOUNT_REF,
-    recipientPrincipalRef: PRINCIPAL_REF,
-    eventKind: 'low_credit_balance',
-    sourceEventRef: 'evt:low-credit:1',
-    correlationRef: correlationRef('dispatch'),
-    ...overrides,
-  }
-}
 
-async function seedNotificationRecipientEmail(
-  backend: InteractiveAuthorityBackend,
-  email = 'operator@example.test',
-): Promise<void> {
-  await backend.run(async (ctx) => {
-    await ctx.db.insert('principalNotificationEmails', {
-      principalRef: PRINCIPAL_REF,
-      email,
-      revision: 1,
-      observedAt: NOW,
-      sourceRef: 'test:fixture',
-    })
-  })
-}
 
-describe('notifications preferences and dispatcher', () => {
+describe('notification preferences', () => {
   it('N1: unauthenticated readPreferences refuses identity_invalid', async () => {
     const backend = createBackend()
     await seedAuthority(backend)
@@ -511,107 +437,4 @@ describe('notifications preferences and dispatcher', () => {
     expect(await listPreferenceRows(backend)).toHaveLength(1)
   })
 
-  it('N19: dispatch low_credit_balance with enabled preference accepts delivery', async () => {
-    const backend = createBackend()
-    await seedAuthority(backend)
-    await seedNotificationRecipientEmail(backend)
-
-    const result = await dispatchNotification(backend, dispatchPayload({
-      sourceEventRef: 'evt:low-credit:n19',
-      correlationRef: correlationRef('n19'),
-    }))
-
-    expect(result).toEqual({ kind: 'accepted' })
-    const deliveries = await listDeliveryRows(backend)
-    expect(deliveries).toHaveLength(1)
-    expect(['pending', 'sent']).toContain(deliveries[0]?.state)
-  })
-
-  it('N20: replaying identical sourceEventRef is idempotent', async () => {
-    const backend = createBackend()
-    await seedAuthority(backend)
-    await seedNotificationRecipientEmail(backend)
-    const payload = dispatchPayload({
-      sourceEventRef: 'evt:low-credit:n20',
-      correlationRef: correlationRef('n20'),
-    })
-
-    await dispatchNotification(backend, payload)
-    const replay = await dispatchNotification(backend, payload)
-
-    expect(replay).toEqual({ kind: 'replayed' })
-    expect(await listDeliveryRows(backend)).toHaveLength(1)
-  })
-
-  it('N21: disabled lowCreditBalance suppresses low_credit_balance dispatch', async () => {
-    const backend = createBackend()
-    await seedAuthority(backend)
-    await seedNotificationRecipientEmail(backend)
-
-    await updatePreferences(backend, updatePayload({
-      lowCreditBalance: false,
-      correlationRef: correlationRef('n21'),
-      idempotencyRef: idempotencyRef('n21'),
-    }))
-
-    const result = await dispatchNotification(backend, dispatchPayload({
-      sourceEventRef: 'evt:low-credit:n21',
-      correlationRef: correlationRef('n21-dispatch'),
-    }))
-
-    expect(result).toEqual({ kind: 'suppressed', code: 'preference_disabled' })
-  })
-
-  it('N22: spendCapWarning false suppresses spend cap warning and exceeded events', async () => {
-    const backend = createBackend()
-    await seedAuthority(backend)
-    await seedNotificationRecipientEmail(backend)
-
-    await updatePreferences(backend, updatePayload({
-      spendCapWarning: false,
-      correlationRef: correlationRef('n22'),
-      idempotencyRef: idempotencyRef('n22'),
-    }))
-
-    for (const eventKind of ['spend_cap_warning', 'spend_cap_exceeded'] as const) {
-      const result = await dispatchNotification(backend, dispatchPayload({
-        eventKind,
-        sourceEventRef: `evt:${eventKind}:n22`,
-        correlationRef: correlationRef(`n22-${eventKind}`),
-      }))
-      expect(result).toEqual({ kind: 'suppressed', code: 'preference_disabled' })
-    }
-  })
-
-  it('N24: missing recipient email suppresses dispatch', async () => {
-    const backend = createBackend()
-    await seedAuthority(backend)
-
-    const result = await dispatchNotification(backend, dispatchPayload({
-      sourceEventRef: 'evt:low-credit:n24',
-      correlationRef: correlationRef('n24'),
-    }))
-
-    expect(result).toEqual({ kind: 'suppressed', code: 'recipient_email_missing' })
-  })
-
-  it('N27: unknown eventKind is refused', async () => {
-    const backend = createBackend()
-    await seedAuthority(backend)
-    await seedNotificationRecipientEmail(backend)
-
-    const run = () => dispatchNotification(backend, dispatchPayload({
-      eventKind: 'not_a_real_event',
-      sourceEventRef: 'evt:unknown:n27',
-      correlationRef: correlationRef('n27'),
-    }))
-
-    try {
-      const result = await run()
-      expect(result).toEqual({ kind: 'refused', code: 'event_kind_invalid' })
-    } catch (error) {
-      expect(error).toBeInstanceOf(InteractiveAuthorityError)
-      expect((error as InteractiveAuthorityError).code).toBe('event_kind_invalid')
-    }
-  })
 })

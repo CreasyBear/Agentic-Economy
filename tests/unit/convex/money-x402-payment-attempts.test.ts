@@ -35,7 +35,7 @@ import {
   recordX402PaymentSigningIntent,
 } from '../../../convex/moneyX402PaymentAttempts'
 import { queueExpiredX402Authorization } from '../../../convex/capabilityCallX402AuthorizationExpiry'
-import { X402_PAYMENT_SIGNING_CLAIM_LEASE_MS } from '../../../convex/moneyX402PaymentAuthorization'
+import { X402_PAYMENT_SIGNING_CLAIM_LEASE_MS } from '../../../convex/lib/money/x402PaymentAttempt/contracts'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import {
   actionControlRow,

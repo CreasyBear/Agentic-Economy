@@ -159,29 +159,3 @@ export const complete = internalMutation({
   },
 })
 
-export const readHealth = internalQuery({
-  args: { staleBefore: v.number() },
-  returns: v.object({
-    stalled: v.number(),
-    failed: v.number(),
-    reconciliationRequired: v.number(),
-  }),
-  handler: async (ctx, args) => {
-    const [stalled, failed, reconciliationRequired] = await Promise.all([
-      ctx.db.query('moneyStripeWebhookInbox')
-        .withIndex('by_state_and_receivedAt', (index) => index.eq('state', 'queued').lt('receivedAt', args.staleBefore))
-        .take(100),
-      ctx.db.query('moneyStripeWebhookInbox')
-        .withIndex('by_state_and_receivedAt', (index) => index.eq('state', 'failed'))
-        .take(100),
-      ctx.db.query('moneyStripeWebhookInbox')
-        .withIndex('by_state_and_receivedAt', (index) => index.eq('state', 'reconciliation_required'))
-        .take(100),
-    ])
-    return {
-      stalled: stalled.length,
-      failed: failed.length,
-      reconciliationRequired: reconciliationRequired.length,
-    }
-  },
-})

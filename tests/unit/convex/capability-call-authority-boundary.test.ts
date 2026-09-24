@@ -61,8 +61,7 @@ vi.mock('../../../convex/lib/capabilityExecution/callLifecycle/callActions', asy
   reconcileOwnerCallHandler: mocks.reconcileOwner,
 }))
 
-vi.mock('../../../convex/lib/capabilityExecution/callLifecycle/admission', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('../../../convex/lib/capabilityExecution/callLifecycle/admission')>()),
+vi.mock('../../../convex/lib/capabilityExecution/callLifecycle/admissionApprovals', () => ({
   listPendingCallApprovalsHandler: mocks.listApprovals,
   decideCallApprovalHandler: mocks.decideApproval,
 }))

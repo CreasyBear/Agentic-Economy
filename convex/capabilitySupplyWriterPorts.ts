@@ -9,7 +9,7 @@ import type {
 import type { ProviderConnection } from '@/modules/capability-supply/provider-connection'
 import type { Id } from './_generated/dataModel'
 import type { MutationCtx } from './_generated/server'
-import { getActiveExactCapabilityContract } from './capabilityContractDocuments'
+import { getActiveExactCapabilityContract } from './lib/capabilityContract/documents/reads'
 import { toCapabilityBindingRow, toCapabilityOfferingRow } from './capabilitySupplyRowMappers'
 import { toDomain as providerConnectionDomain } from './lib/capabilitySupply/providerConnections/codecs'
 

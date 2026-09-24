@@ -27,7 +27,7 @@ import { chatThreadBelongsToPrincipal } from '../../chat/threadOwnership'
 import {
   decideCallApprovalHandler,
   listPendingCallApprovalsHandler,
-} from './admission'
+} from './admissionApprovals'
 import {
   cancelCallHandler,
   cancelOwnerCallHandler,

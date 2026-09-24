@@ -1,8 +1,7 @@
 /// <reference types="vite/client" />
 import { describe, expect, it } from 'vitest'
-import type { WorkId } from '@convex-dev/workpool'
 
-import { api, internal } from '../../../convex/_generated/api'
+import { api } from '../../../convex/_generated/api'
 import { stripeWebhookWorkpool } from '../../../convex/stripeWebhookWorkpool'
 import { convexTestWithWorkers } from '../../helpers/convex-fixtures'
 import { withSourceWrite } from '../../helpers/source-write-admission'
@@ -89,26 +88,4 @@ describe('Stripe webhook durable inbox', () => {
       .resolves.toHaveLength(0)
   })
 
-  it('keeps exhausted work visible to the deployment gate', async () => {
-    const backend = convexTestWithWorkers({ pauseWorkpool: true })
-    const command = {
-      destination: 'snapshot' as const,
-      event: checkoutEvent(),
-      operationKey: 'moneyStripeWebhookInbox:ingest',
-      correlationId: 'evt_inbox_one',
-    }
-    await backend.mutation(ingest, await withSourceWrite('billing', command))
-    const row = await backend.run(async (ctx) => ctx.db.query('moneyStripeWebhookInbox').unique())
-    if (row?.workId === undefined) throw new Error('work_not_queued')
-
-    await backend.mutation(internal.moneyStripeWebhookInbox.complete, {
-      workId: row.workId as WorkId,
-      context: { stripeEventId: command.event.stripeEventId },
-      result: { kind: 'failed', error: 'retry attempts exhausted' },
-    })
-
-    await expect(backend.query(internal.moneyStripeWebhookInbox.readHealth, {
-      staleBefore: Date.now() + 1,
-    })).resolves.toEqual({ stalled: 0, failed: 1, reconciliationRequired: 0 })
-  })
 })

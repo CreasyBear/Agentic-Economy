@@ -18,14 +18,16 @@ import { withdrawOwnerCapabilityHandler } from './lib/capabilitySupply/ownerFunn
 import { republishOwnerCapabilityHandler } from './lib/capabilitySupply/ownerFunnel/republish'
 import { refreshOwnerCapabilityHandler } from './lib/capabilitySupply/ownerFunnel/refresh'
 import {
-  readOwnerSupplyIntegrationDraftHandler,
-  readOwnerSupplyIntegrationDraftResultValue,
-  saveAgentSupplyIntegrationDraftArgsValue,
+  readOwnerSupplyIntegrationDraftResult,
+  saveAgentSupplyIntegrationDraftArgs,
+  saveOwnerSupplyIntegrationDraftArgs,
+  saveSupplyIntegrationDraftResult,
+} from './lib/capabilitySupply/integrationDrafts/contracts'
+import { readOwnerSupplyIntegrationDraftHandler } from './lib/capabilitySupply/integrationDrafts/read'
+import {
   saveAgentSupplyIntegrationDraftHandler,
-  saveAgentSupplyIntegrationDraftResultValue,
-  saveOwnerSupplyIntegrationDraftArgsValue,
   saveOwnerSupplyIntegrationDraftHandler,
-} from './capabilitySupplyIntegrationDrafts'
+} from './lib/capabilitySupply/integrationDrafts/save'
 
 export const readOwnerSupplyFunnel = queryGeneric({
   args: {
@@ -49,14 +51,14 @@ export const reserveOwnerCapabilityPublication = mutationGeneric({
 })
 
 export const saveAgentSupplyIntegrationDraft = mutationGeneric({
-  args: saveAgentSupplyIntegrationDraftArgsValue.fields,
-  returns: saveAgentSupplyIntegrationDraftResultValue,
+  args: saveAgentSupplyIntegrationDraftArgs.fields,
+  returns: saveSupplyIntegrationDraftResult,
   handler: saveAgentSupplyIntegrationDraftHandler,
 })
 
 export const saveOwnerSupplyIntegrationDraft = mutationGeneric({
-  args: saveOwnerSupplyIntegrationDraftArgsValue.fields,
-  returns: saveAgentSupplyIntegrationDraftResultValue,
+  args: saveOwnerSupplyIntegrationDraftArgs.fields,
+  returns: saveSupplyIntegrationDraftResult,
   handler: saveOwnerSupplyIntegrationDraftHandler,
 })
 
@@ -65,7 +67,7 @@ export const readOwnerSupplyIntegrationDraft = queryGeneric({
     businessId: v.id('businesses'),
     candidateRef: v.string(),
   },
-  returns: readOwnerSupplyIntegrationDraftResultValue,
+  returns: readOwnerSupplyIntegrationDraftResult,
   handler: readOwnerSupplyIntegrationDraftHandler,
 })
 

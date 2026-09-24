@@ -19,7 +19,7 @@ import {
 import { readExactSellerCanaryOperationSnapshotHandler } from '../../../capabilitySupplyCurrentTool'
 import type { MutationCtx } from '../../../_generated/server'
 import { requireSourceWrite } from '../../../sourceWriteAdmission'
-import { reserveHandler } from '../../capabilityExecution/callLifecycle/admission'
+import { reserveHandler } from '../../capabilityExecution/callLifecycle/admissionReserve'
 import {
   enqueueCallDispatch,
   enqueueKnownUnpaidSellerCanaryRearm,

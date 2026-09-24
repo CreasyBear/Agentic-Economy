@@ -11,7 +11,7 @@ import {
   convexPublicationLifecycle,
   contextFields,
   publicationLifecycleValue,
-} from '../../../capabilitySupplyShared'
+} from '../publish/contracts'
 import { syncMarketToolPresence } from '../../../marketPresence'
 import { publishValidatedNativeDraft } from '../../../capabilitySupplyNativeAdmission'
 import { capabilityProbeAuthorityValue } from './authority'

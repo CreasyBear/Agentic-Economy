@@ -1,3 +1,6 @@
+import { degradeBackend } from '@/lib/observability/degrade-backend'
+import { isRecord } from '../../../../src/modules/common/is-record'
+import { isCleanupResult, readCurrentCleanupTarget, unknownResult, type CompleteWorkArgs } from './cleanupWork'
 import { marketDispatchWorkpool } from '../../../marketDispatchWorkpool'
 import { internal } from '../../../_generated/api'
 import type { MutationCtx } from '../../../_generated/server'
@@ -139,3 +142,41 @@ export async function advanceLeaseDrainHandler(ctx: MutationCtx, args: AdvanceLe
 }
 
 
+export async function completeWorkHandler(
+  ctx: MutationCtx,
+  { workId, context, result }: CompleteWorkArgs,
+): Promise<null> {
+  try {
+    if (await readCurrentCleanupTarget(ctx, context) === null) return null
+    if (context.workKind === 'lease_drain' && result.kind === 'success' && isRecord(result.returnValue) && result.returnValue.kind === 'lease_drain') {
+      await ctx.runMutation(internal.capabilityProviderConnections.advanceLeaseDrain, {
+        ...context,
+        workId,
+        now: Date.now(),
+        resourceAuthority: context.resourceAuthority,
+      })
+      return null
+    }
+    const cleanup = result.kind === 'success' && isRecord(result.returnValue) && result.returnValue.kind === 'cleanup' && isCleanupResult(result.returnValue.result)
+      ? result.returnValue.result
+      : unknownResult('cleanup_action_failed')
+    await ctx.runMutation(internal.capabilityProviderConnections.recordCleanupResult, {
+      connectionRef: context.connectionRef,
+      commandId: context.commandId,
+      expectedAuthorityGeneration: context.expectedAuthorityGeneration,
+      expectedAuthorityDigest: context.expectedAuthorityDigest,
+      cleanupAttempt: context.cleanupAttempt,
+      workId,
+      requestDigest: context.requestDigest,
+      outcome: cleanup.outcome,
+      ...(cleanup.responseDigest === undefined ? {} : { responseDigest: cleanup.responseDigest }),
+      ...(cleanup.reasonCode === undefined ? {} : { reasonCode: cleanup.reasonCode }),
+      evidenceRefs: [...cleanup.evidenceRefs],
+      now: Date.now(),
+      resourceAuthority: context.resourceAuthority,
+    })
+  } catch (cause) {
+    return degradeBackend(cause, null, { site: 'completeWork', reason: 'source_unavailable' })
+  }
+  return null
+}

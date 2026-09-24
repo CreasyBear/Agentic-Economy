@@ -3,7 +3,8 @@ import { getFunctionName } from 'convex/server'
 
 import { toolEnvironmentMismatchNextAction } from '@/modules/capability-execution/call-contracts'
 import type { AgentAccessPrincipal } from '@/modules/agent-access/agent-access'
-import { projectOuterResult, run } from '../../../convex/capabilityCallWorker'
+import { run } from '../../../convex/capabilityCallWorker'
+import { projectOuterResult } from '../../../convex/lib/capabilityExecution/callProjection/outerResult'
 import {
   canonicalProjectionSnapshot,
   fixture,

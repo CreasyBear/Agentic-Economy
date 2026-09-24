@@ -7,7 +7,7 @@ import { listTsFiles } from '../../helpers/source-files'
 const convexHost = readFileSync('convex/capabilitySupply.ts', 'utf8')
 const listsSource = readFileSync('convex/capabilitySupplyLists.ts', 'utf8')
 const commandsSource = readFileSync('convex/capabilitySupplyCommands.ts', 'utf8')
-const sharedSource = readFileSync('convex/capabilitySupplyShared.ts', 'utf8')
+const sharedSource = readFileSync('convex/lib/capabilitySupply/publish/ownership.ts', 'utf8')
 const convexSupply = [convexHost, listsSource, commandsSource, sharedSource].join('\n')
 const moduleRoot = 'src/modules/capability-supply/internal/eligibility'
 

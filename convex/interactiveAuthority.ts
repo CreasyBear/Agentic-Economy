@@ -38,7 +38,7 @@ import {
 import { interactiveAuthorityContextValue } from './lib/principalAccount/interactiveAuthority/contracts'
 
 // -- Registrations only. Validators, handler bodies, and DB logic live under --
-// -- convex/lib/interactiveAuthority/*, grouped by concern. Re-exports below --
+// -- convex/lib/principalAccount/interactiveAuthority/*, grouped by concern. --
 // -- preserve existing import paths for convex modules, tests, and src. --------
 
 export type { InteractiveAccountSelectionState }

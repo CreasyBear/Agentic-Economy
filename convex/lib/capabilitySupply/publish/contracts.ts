@@ -1,25 +1,128 @@
 import { v, type Infer } from 'convex/values'
 import {
   capabilityPublicationSourceSelectorValue,
+  type PublicationLifecycle,
   type PublishPreparedCapabilityCommandResult,
 } from '@/modules/capability-supply/public'
 import { agentAccessPrincipalValue } from '../../../agentAccessPrincipals'
 import { sourceWriteArgs } from '../../../sourceWriteAdmission'
 import { clerkConsequenceProofValue } from '../../authority/consequence/proof'
-import {
-  authorityValue,
-  cancellationValue,
-  continuationValue,
-  contextFields,
-  contractRefValue,
-  evidenceRefsValue,
-  offeringOriginValue,
-  presentationValue,
-  publicationAuthorityModeValue,
-  publicationLifecycleValue,
-} from '../../../capabilitySupplyShared'
 
 
+export const contractRefValue = v.object({
+  capabilityId: v.string(),
+  version: v.number(),
+  contractDigest: v.string(),
+})
+export type ContractRef = Infer<typeof contractRefValue>
+
+export const evidenceRefsValue = v.array(v.string())
+export const commercialRelationshipValue = v.object({
+  kind: v.union(
+    v.literal('none'),
+    v.literal('direct'),
+    v.literal('affiliate'),
+    v.literal('ownership'),
+  ),
+  summary: v.string(),
+  influencesEligibility: v.boolean(),
+  influencesInclusion: v.boolean(),
+  influencesOrder: v.boolean(),
+  evidenceRefs: evidenceRefsValue,
+})
+export const exactAmountValue = v.object({
+  currency: v.string(),
+  units: v.string(),
+  exponent: v.number(),
+})
+export const priceValue = v.union(
+  v.object({ kind: v.literal('fixed'), amount: exactAmountValue }),
+  v.object({
+    kind: v.literal('range'),
+    minimum: exactAmountValue,
+    maximum: exactAmountValue,
+  }),
+  v.object({ kind: v.literal('on_request') }),
+)
+export const presentationValue = v.object({
+  label: v.string(),
+  summary: v.string(),
+  price: v.optional(priceValue),
+  materialTerms: v.array(
+    v.object({ termId: v.string(), label: v.string(), value: v.string() }),
+  ),
+  commercialRelationship: commercialRelationshipValue,
+})
+export const offeringOriginValue = v.union(
+  v.object({
+    kind: v.literal('catalog_offering'),
+    offeringRef: v.string(),
+    offeringRevision: v.number(),
+    offeringSourceHash: v.string(),
+    declaredAccessPathRef: v.optional(v.string()),
+    accessPathSourceHash: v.optional(v.string()),
+  }),
+  v.object({ kind: v.literal('standalone') }),
+)
+export const continuationValue = v.object({
+  kind: v.union(v.literal('single_response'), v.literal('adapter_managed')),
+  evidenceRefs: evidenceRefsValue,
+})
+export const cancellationValue = v.object({
+  kind: v.union(v.literal('unsupported'), v.literal('adapter_managed')),
+  evidenceRefs: evidenceRefsValue,
+})
+export const publicUpstreamAuthorityValue = v.object({ kind: v.literal('public_upstream') })
+export const providerConnectionAuthorityValue = v.object({
+  kind: v.literal('provider_connection'),
+  connectionRef: v.string(),
+  providerRef: v.string(),
+})
+export const authorityValue = v.union(
+  publicUpstreamAuthorityValue,
+  providerConnectionAuthorityValue,
+)
+export const publicationAuthorityModeValue = v.union(
+  v.literal('provider_owned'),
+  v.literal('ae_curated_external'),
+  v.literal('third_party_gateway'),
+  v.literal('observed_external'),
+)
+export const contextFields = {
+  operationKey: v.string(),
+  correlationId: v.string(),
+  reasonCode: v.string(),
+  evidenceRefs: evidenceRefsValue,
+}
+export const publicationLifecycleValue = v.object({
+  state: v.union(
+    v.literal('inactive'),
+    v.literal('active'),
+    v.literal('withdrawn'),
+    v.literal('incompatible'),
+  ),
+  reasons: v.array(
+    v.union(
+      v.literal('admission_unproven'),
+      v.literal('conformance_unproven'),
+      v.literal('credential_readiness_unobserved'),
+      v.literal('health_unobserved'),
+      v.literal('credential_unavailable'),
+      v.literal('health_unhealthy'),
+      v.literal('health_stale'),
+      v.literal('withdrawn'),
+      v.literal('incompatible_revision'),
+      v.literal('eligibility_integrity_failure'),
+      v.literal('provider_authority_unverified'),
+    ),
+  ),
+})
+
+export function convexPublicationLifecycle(
+  lifecycle: PublicationLifecycle,
+): Infer<typeof publicationLifecycleValue> {
+  return { state: lifecycle.state, reasons: [...lifecycle.reasons] }
+}
 const adapterConfigScalarValue = v.union(
   v.string(),
   v.number(),

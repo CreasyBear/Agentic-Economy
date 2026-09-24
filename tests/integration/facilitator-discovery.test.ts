@@ -5,7 +5,7 @@ import { admitFacilitatorDiscoveryItems } from '../../convex/facilitatorDiscover
 import { api, internal } from '../../convex/_generated/api'
 import schema from '../../convex/schema'
 import { toolRecordProjection } from '../../convex/capabilitySupplyToolShared'
-import { reconcileReadyItems } from '../../convex/capabilitySupplyShared'
+import { reconcileReadyItems } from '../../convex/lib/capabilitySupply/facilitatorDiscovery/readyItems'
 import { timezonePaymentRequired20260819Fixture as timezoneFixture } from '@/modules/capability-supply/public'
 import { convexModules } from '../helpers/convex-fixtures'
 import {

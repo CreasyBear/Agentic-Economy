@@ -28,7 +28,7 @@ import {
 
 import type { Doc } from './_generated/dataModel'
 import type { QueryCtx } from './_generated/server'
-import { getExactRegisteredCapabilityContract } from './capabilityContractDocuments'
+import { getExactRegisteredCapabilityContract } from './lib/capabilityContract/documents/reads'
 import { capabilitySupplyGraphPorts } from './lib/capabilitySupply/graphPorts/ports'
 import { readManagedX402InspectionTargetForQualifiedCandidate } from './capabilitySupplyCurrentTool'
 import { toolProviderRouteabilityIsFrozen } from './lib/capabilitySupply/providerOffboarding/freeze'

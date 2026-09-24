@@ -216,7 +216,7 @@ export async function provisionDevSeedCatalogIdentityRows(ctx: MutationCtx): Pro
  *     above), so there is no fixed local credential to pre-bind.
  * The previous fabricated `clerk_api_key:ak_local_e2e_owner` principal could
  * never be admitted anyway: `candidateMatchesCanonical`
- * (convex/lib/callLifecycle/authorityHandlers.ts) requires
+ * (convex/lib/capabilityExecution/callLifecycle/authorityHandlers.ts) requires
  * `principalId === canonical.principalRef`, and a principalRef must match the
  * `prn_...` pattern.
  *
@@ -1133,7 +1133,7 @@ function sandboxToolPublicationSource(
  * account's money identity, so this seeds exactly that - the
  * moneyLegalCustomerBindings row `capabilityQuotes.prepareFinancialSubjects`
  * reads - through its own command (`resolveAndBindLegalCustomer`,
- * convex/lib/moneyLegalCustomer.ts). Nothing behind that command is patched,
+ * convex/lib/money/legalCustomer/binding.ts). Nothing behind that command is patched,
  * and no secret material is written.
  */
 export const seedSandboxSpendingPolicy = internalMutation({

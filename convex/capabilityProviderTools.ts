@@ -430,35 +430,3 @@ export const backfillDraftPage = internalMutation({
   },
 })
 
-export const backfillAdmissionPage = internalMutation({
-  args: { paginationOpts: paginationOptsValidator },
-  returns: backfillResultValue,
-  handler: async (ctx, args) => {
-    const rows = await ctx.db.query('capabilitySupplyAdmissionCases').paginate(args.paginationOpts)
-    let processed = 0
-    for (const admission of rows.page) {
-      const publication = await ctx.db.query('capabilityPublications')
-        .withIndex('by_publicationRef_and_revision', (query) => query.eq('publicationRef', admission.publicationRef).eq('revision', admission.publicationRevision))
-        .unique()
-      const canonicalOffering = publication === null
-        ? null
-        : await ctx.db.query('capabilityOfferings').withIndex('by_offeringId', (query) => query.eq('offeringId', publication.offeringId)).unique()
-      const origin = canonicalOffering?.origin
-      if (publication === null || canonicalOffering === null || origin?.kind !== 'catalog_offering') continue
-      await upsertProviderToolIdentity(ctx, {
-        businessId: admission.businessId,
-        providerRef: admission.providerRef,
-        toolRef: admission.toolRef,
-        offeringRef: origin.offeringRef,
-        offeringRevision: origin.offeringRevision,
-        publicationRef: admission.publicationRef,
-        publicationRevision: admission.publicationRevision,
-        offeringId: publication.offeringId,
-        bindingId: publication.bindingId,
-        updatedAt: admission.updatedAt,
-      })
-      processed += 1
-    }
-    return { processed, isDone: rows.isDone, continueCursor: rows.continueCursor }
-  },
-})

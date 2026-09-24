@@ -16,7 +16,7 @@ import {
   workerResult,
   type CleanupResult,
   type CleanupTarget,
-} from './capabilityProviderConnectionCleanup'
+} from './lib/capabilitySupply/providerConnections/cleanupWork'
 
 function cleanupEndpoint(): string | undefined {
   const raw = env.AE_SITE_URL?.trim()

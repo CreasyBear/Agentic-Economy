@@ -10,7 +10,7 @@ import {
 
 import { internal } from './_generated/api'
 import { internalAction } from './_generated/server'
-import { reconcileReadyItems } from './capabilitySupplyShared'
+import { reconcileReadyItems } from './lib/capabilitySupply/facilitatorDiscovery/readyItems'
 import { bindWorkloadCronActionContext } from './lib/platform/workloadCron/consequence'
 import {
   parseWorkloadCronSnapshot,

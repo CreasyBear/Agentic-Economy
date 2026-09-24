@@ -22,11 +22,11 @@ import {
 
 import { registeredToolMappingValue } from './capabilitySupplyValues'
 import { toRegisteredToolMapping } from './capabilitySupplyRowMappers'
-import { getActiveExactCapabilityContract } from './capabilityContractDocuments'
+import { getActiveExactCapabilityContract } from './lib/capabilityContract/documents/reads'
 import { capabilitySupplyToolPorts } from './capabilitySupplyToolPorts'
 import { capabilitySupplyWriterPorts } from './capabilitySupplyWriterPorts'
 import type { MutationCtx } from './_generated/server'
-import { publicationAuthorityModeValue } from './capabilitySupplyShared'
+import { publicationAuthorityModeValue } from './lib/capabilitySupply/publish/contracts'
 
 type RegisteredToolMappingInput = Infer<
   typeof registeredToolMappingValue

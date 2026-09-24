@@ -12,7 +12,7 @@ import {
 
 import type { Doc } from './_generated/dataModel'
 import { internalQuery, internalMutation, type QueryCtx } from './_generated/server'
-import { getExactRegisteredCapabilityContract } from './capabilityContractDocuments'
+import { getExactRegisteredCapabilityContract } from './lib/capabilityContract/documents/reads'
 import { capabilitySupplyGraphPorts } from './lib/capabilitySupply/graphPorts/ports'
 import { toolProviderRouteabilityIsFrozen } from './lib/capabilitySupply/providerOffboarding/freeze'
 import { observeCapabilityReadinessHandler } from './capabilitySupplyProbes'

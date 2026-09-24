@@ -18,12 +18,6 @@
     "kind": "query"
   },
   {
-    "visibility": "public",
-    "module": "actionExecutionControl",
-    "method": "readControlSource",
-    "kind": "query"
-  },
-  {
     "visibility": "internal",
     "module": "actionExecutionControl",
     "method": "readHistory",
@@ -39,12 +33,6 @@
     "visibility": "internal",
     "module": "actionExecutionControl",
     "method": "recordLateObservation",
-    "kind": "mutation"
-  },
-  {
-    "visibility": "public",
-    "module": "actionExecutionControl",
-    "method": "recordLateObservationSource",
     "kind": "mutation"
   },
   {
@@ -660,12 +648,6 @@
     "kind": "mutation"
   },
   {
-    "visibility": "internal",
-    "module": "capabilityContractDocuments",
-    "method": "getActiveExactInternal",
-    "kind": "query"
-  },
-  {
     "visibility": "public",
     "module": "capabilityContractDocuments",
     "method": "register",
@@ -802,12 +784,6 @@
     "module": "capabilityProviderConnectionCleanupAction",
     "method": "perform",
     "kind": "action"
-  },
-  {
-    "visibility": "internal",
-    "module": "capabilityProviderConnectionMigration",
-    "method": "backfillFacilitatorDiscoveryAuthority",
-    "kind": "mutation"
   },
   {
     "visibility": "internal",
@@ -1143,12 +1119,6 @@
     "visibility": "internal",
     "module": "capabilityProviderOffboarding",
     "method": "withdrawToolTargetsPage",
-    "kind": "mutation"
-  },
-  {
-    "visibility": "internal",
-    "module": "capabilityProviderTools",
-    "method": "backfillAdmissionPage",
     "kind": "mutation"
   },
   {
@@ -1904,12 +1874,6 @@
   {
     "visibility": "public",
     "module": "interactiveSession",
-    "method": "listUserWorkspaces",
-    "kind": "query"
-  },
-  {
-    "visibility": "public",
-    "module": "interactiveSession",
     "method": "setActiveWorkspace",
     "kind": "mutation"
   },
@@ -2265,12 +2229,6 @@
     "visibility": "public",
     "module": "moneyDocuments",
     "method": "createOwnerStatement",
-    "kind": "mutation"
-  },
-  {
-    "visibility": "public",
-    "module": "moneyDocuments",
-    "method": "createOwnerTaxInvoice",
     "kind": "mutation"
   },
   {
@@ -2749,12 +2707,6 @@
   },
   {
     "visibility": "internal",
-    "module": "moneyStripeWebhookInbox",
-    "method": "readHealth",
-    "kind": "query"
-  },
-  {
-    "visibility": "internal",
     "module": "moneyStripeWebhookWorker",
     "method": "process",
     "kind": "action"
@@ -2902,12 +2854,6 @@
     "module": "moneyX402ResponseActions",
     "method": "recover",
     "kind": "action"
-  },
-  {
-    "visibility": "internal",
-    "module": "notifications",
-    "method": "dispatchNotificationInternal",
-    "kind": "mutation"
   },
   {
     "visibility": "public",
@@ -3237,18 +3183,6 @@
     "visibility": "public",
     "module": "workspaceMemberships",
     "method": "recordOrganizationMembershipUpdatedForServer",
-    "kind": "mutation"
-  },
-  {
-    "visibility": "public",
-    "module": "workspaceProfile",
-    "method": "syncOrganizationDisplayNameForServer",
-    "kind": "mutation"
-  },
-  {
-    "visibility": "public",
-    "module": "workspaceProvisioning",
-    "method": "claimCreatedWorkspace",
     "kind": "mutation"
   },
   {

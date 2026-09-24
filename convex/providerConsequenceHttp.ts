@@ -4,11 +4,11 @@ import type { Infer } from 'convex/values'
 import { degradeBackend } from '@/lib/observability/degrade-backend'
 import { internal } from './_generated/api'
 import type { ActionCtx } from './_generated/server'
-import { prepareX402PaymentAuthorizationReturns } from './moneyX402PaymentAuthorization'
+import { prepareX402PaymentAuthorizationReturns } from './lib/money/x402PaymentAttempt/reserve'
 import {
   readX402PaymentAuthorizationByDigestReturns,
   readX402PaymentAuthorizationReturns,
-} from './moneyX402PaymentRead'
+} from './lib/money/x402PaymentAttempt/read'
 
 const MAX_BODY_BYTES = 128 * 1024
 const JOURNAL_TOKEN = /^[A-Za-z0-9_-]{43,128}$/u

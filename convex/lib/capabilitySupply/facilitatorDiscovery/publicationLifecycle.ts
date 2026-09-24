@@ -4,7 +4,7 @@ import { pricingConfigDigest, type PricingConfig } from '@/modules/money/public'
 import { stableStringify, type StableHashValue } from '@/modules/common/stable-hash'
 import type { MutationCtx } from '../../../_generated/server'
 import { publicationPorts, publishBootstrapCapability } from '../../../capabilitySupplyPublish'
-import { rebuildCapabilityOriginSupplyProjection } from '../../../capabilitySupplyShared'
+import { rebuildCapabilityOriginSupplyProjection } from '../projection/rebuild'
 import { SOURCE_EVIDENCE } from './contracts'
 
 export async function publishFacilitatorDiscoveryCapability(

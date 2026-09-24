@@ -30,7 +30,7 @@ import { normalizePricingConfig, pricingConfigDigest, type PricingConfig } from 
 
 import type { Doc, Id } from '../../../_generated/dataModel'
 import type { QueryCtx } from '../../../_generated/server'
-import { getExactRegisteredCapabilityContract } from '../../../capabilityContractDocuments'
+import { getExactRegisteredCapabilityContract } from '../../capabilityContract/documents/reads'
 import { capabilitySupplyGraphPorts } from '../graphPorts/ports'
 import { toCapabilityOfferingRow } from '../../../capabilitySupplyRowMappers'
 

@@ -49,3 +49,4 @@ export type {
 } from './call-projection/contracts'
 export { providerConsequenceTicketClaimsDigest } from './provider-consequence-digest'
 export { toCallDispatchCommand } from './call-projection/dispatch-command'
+export { canonicalTerminalOutcome } from './terminal-projection'

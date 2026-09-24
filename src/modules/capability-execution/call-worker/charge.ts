@@ -3,7 +3,7 @@ import type { RouteTransportObservation } from '@/modules/capability-supply/rout
 import type { ActionCtx } from '../../../../convex/_generated/server'
 import { internal } from '../../../../convex/_generated/api'
 import { canonicalPort } from '../../../../convex/lib/capabilityExecution/callProjection/port'
-import { canonicalTerminalOutcome } from '../../../../convex/lib/capabilityExecution/callLifecycle/terminalProjection'
+import { canonicalTerminalOutcome } from '@/modules/capability-execution/terminal-projection'
 import { finalizeCallDispatch } from '../../../../convex/lib/capabilityExecution/callProjection/dispatch'
 import type { ChargeSettlementResult, OpenDispatch } from '@/modules/capability-execution/call-projection/contracts'
 

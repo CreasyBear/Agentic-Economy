@@ -6,7 +6,7 @@ import type { MutationCtx, QueryCtx } from '../../../_generated/server'
 import {
   publicUpstreamAuthorityValue,
   providerConnectionAuthorityValue,
-} from '../../../capabilitySupplyShared'
+} from '../publish/contracts'
 import {
   capabilityProbeAuthorityValue,
   nativeDraftProbeBusinessIsAllowed,

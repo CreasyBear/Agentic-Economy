@@ -5,11 +5,6 @@ import {
   it,
 } from 'vitest'
 
-import { readCustomerTaxFactsForAccount } from '../../../convex/lib/money/documents/issue'
-import {
-  admitTaxInvoiceIssuance,
-  SANDBOX_COMMERCIAL_POLICY_CONTROLS,
-} from '../../../src/modules/money/public'
 import { samIdentity } from '../../helpers/interactive-authority-provisioning'
 import {
   createInteractiveAuthorityBackend as createBackend,
@@ -26,10 +21,6 @@ import {
 const ACCOUNT_B = `acc_${'b'.repeat(32)}`
 const OWNERSHIP_B = `own_${'b'.repeat(32)}`
 
-const enabledTaxControl = Object.freeze({
-  ...SANDBOX_COMMERCIAL_POLICY_CONTROLS.tax,
-  taxInvoiceIssuance: 'enabled' as const,
-})
 
 type CustomerTaxFactsRead =
   | Readonly<{
@@ -531,23 +522,4 @@ describe('moneyCustomerTaxFacts', () => {
     })
   })
 
-  it('C16: persisted facts admit tax invoice issuance when policy is enabled', async () => {
-    const backend = createBackend()
-    await seedAuthority(backend)
-
-    await upsertCustomerTaxFacts(backend, upsertPayload({
-      correlationRef: correlationRef('c16'),
-      idempotencyRef: idempotencyRef('c16'),
-    }))
-
-    const customerTaxFacts = await backend.run(async (ctx) =>
-      readCustomerTaxFactsForAccount(ctx, ACCOUNT_REF))
-
-    expect(customerTaxFacts).toBeDefined()
-    if (customerTaxFacts === undefined) throw new Error('expected customerTaxFacts')
-    expect(admitTaxInvoiceIssuance({
-      taxControl: enabledTaxControl,
-      customerTaxFacts,
-    })).toEqual({ kind: 'admitted' })
-  })
 })

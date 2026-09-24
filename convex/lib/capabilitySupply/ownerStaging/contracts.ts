@@ -5,7 +5,7 @@ import {
   preparedPublicationMaterialValue,
   preparedPublicationResultValue,
 } from '../../../capabilitySupplyPublish'
-import { contextFields } from '../../../capabilitySupplyShared'
+import { contextFields } from '../publish/contracts'
 import { sourceWriteArgs } from '../../../sourceWriteAdmission'
 
 export const sellerClaimValue = v.object({

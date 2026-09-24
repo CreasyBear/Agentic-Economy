@@ -1,7 +1,7 @@
 import { convexTest } from 'convex-test'
 import { describe, expect, it } from 'vitest'
 
-import { api, internal } from '../../../convex/_generated/api'
+import { api } from '../../../convex/_generated/api'
 import { interactiveCredentialExpiryNonce } from '../../../convex/interactiveCredentialLifecycle'
 import schema from '../../../convex/schema'
 import { encodeCapabilityContractDocument } from '@/modules/capability-contract-registry/public'
@@ -110,42 +110,6 @@ describe('V2 capability contract Convex registry', () => {
     expect(contracts).toHaveLength(1)
   })
 
-  it('resolves only an active, intact exact reference', async () => {
-    const backend = convexTest(schema, modules)
-    const owner = await ownerAdmin(backend, 'user_capability_admin')
-    const registered = await owner.mutation(
-      api.capabilityContractDocuments.register,
-      publicArgs(JSON.stringify(capabilityContractV2())),
-    )
-    if (registered.kind !== 'registered') throw new Error('capability contract registration failed')
-
-    await expect(backend.query(internal.capabilityContractDocuments.getActiveExactInternal, registered.ref))
-      .resolves.toMatchObject({
-        kind: 'found', ref: registered.ref, registeredAt: expect.any(Number),
-      })
-    await expect(backend.query(internal.capabilityContractDocuments.getActiveExactInternal, {
-      ...registered.ref, version: 2,
-    })).resolves.toEqual({
-      kind: 'unavailable', reason: 'not_found',
-    })
-    await expect(backend.query(internal.capabilityContractDocuments.getActiveExactInternal, {
-      ...registered.ref, contractDigest: `sha256:${'0'.repeat(64)}`,
-    })).resolves.toEqual({ kind: 'unavailable', reason: 'not_found' })
-
-    await backend.run(async (ctx) => {
-      const row = await ctx.db.query('capabilityContractDocuments')
-        .withIndex('by_capabilityId_and_version', (query) => (
-          query.eq('capabilityId', registered.ref.capabilityId).eq('version', registered.ref.version)
-        ))
-        .unique()
-      if (row === null) throw new Error('capability contract row missing')
-      await ctx.db.patch(row._id, { documentJson: '{' })
-    })
-    await expect(backend.query(internal.capabilityContractDocuments.getActiveExactInternal, registered.ref))
-      .resolves.toEqual({
-        kind: 'unavailable', reason: 'integrity_failure',
-      })
-  })
 
   it('stores the canonical document, not caller formatting or a derived ref', async () => {
     const backend = convexTest(schema, modules)

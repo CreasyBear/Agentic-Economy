@@ -4,7 +4,7 @@ import { v } from 'convex/values'
 import { accountRef } from '../src/modules/principal-account/account/public'
 import { principalRef } from '../src/modules/principal-account/principal/public'
 import type { DataModel, Doc } from './_generated/dataModel'
-import { internalMutation, mutation, query } from './_generated/server'
+import { mutation, query } from './_generated/server'
 import {
   InteractiveAuthorityError,
   requireAccessFactForAccount,
@@ -16,16 +16,6 @@ const CORRELATION_REF_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/u
 
 const LEGAL_LOW_CREDIT_THRESHOLDS = new Set([1000, 2500, 5000])
 
-const NOTIFICATION_EVENT_KINDS = [
-  'low_credit_balance',
-  'spend_cap_warning',
-  'spend_cap_exceeded',
-  'call_failure_spike',
-  'invoice_ready',
-  'team_membership_changed',
-] as const
-
-type NotificationEventKind = (typeof NOTIFICATION_EVENT_KINDS)[number]
 
 type NotificationsDb = GenericDatabaseReader<DataModel>
 
@@ -48,15 +38,6 @@ const preferenceUpdateReceiptValue = v.object({
   revision: v.number(),
 })
 
-const dispatchResultValue = v.union(
-  v.object({ kind: v.literal('accepted') }),
-  v.object({ kind: v.literal('replayed') }),
-  v.object({
-    kind: v.literal('suppressed'),
-    code: v.union(v.literal('preference_disabled'), v.literal('recipient_email_missing')),
-  }),
-  v.object({ kind: v.literal('refused'), code: v.literal('event_kind_invalid') }),
-)
 
 type PreferenceFields = Readonly<{
   lowCreditBalance: boolean
@@ -82,9 +63,6 @@ function validateCorrelationRef(value: string): void {
   }
 }
 
-function isNotificationEventKind(value: string): value is NotificationEventKind {
-  return (NOTIFICATION_EVENT_KINDS as readonly string[]).includes(value)
-}
 
 async function requireInteractiveHumanPrincipal(
   db: NotificationsDb,
@@ -221,67 +199,8 @@ function mergePreferencePatch(
   }
 }
 
-async function resolvePreferenceFields(
-  db: NotificationsDb,
-  recipientPrincipalRef: string,
-  accountRefValue: string,
-): Promise<PreferenceFields & { deliveryEmail?: string }> {
-  const row = await db
-    .query('userNotificationPreferences')
-    .withIndex('by_principalRef_and_accountRef', (query) => query
-      .eq('principalRef', recipientPrincipalRef)
-      .eq('accountRef', accountRefValue))
-    .unique()
-  if (row === null) {
-    return VIRTUAL_DEFAULT_PREFERENCE_FIELDS
-  }
-  const base = preferenceFieldsFromRow(row)
-  return row.deliveryEmail !== undefined
-    ? { ...base, deliveryEmail: row.deliveryEmail }
-    : base
-}
 
-function eventKindEnabled(
-  eventKind: NotificationEventKind,
-  prefs: PreferenceFields,
-): boolean {
-  switch (eventKind) {
-    case 'low_credit_balance':
-      return prefs.lowCreditBalance
-    case 'spend_cap_warning':
-    case 'spend_cap_exceeded':
-      return prefs.spendCapWarning
-    case 'call_failure_spike':
-      return prefs.callFailureSpike
-    case 'invoice_ready':
-      return prefs.invoiceReady
-    case 'team_membership_changed':
-      return prefs.teamMembershipChanged
-    default: {
-      const _exhaustive: never = eventKind
-      return _exhaustive
-    }
-  }
-}
 
-async function resolveRecipientEmail(
-  db: NotificationsDb,
-  recipientPrincipalRef: string,
-  prefs: Readonly<{ deliveryEmail?: string }>,
-  recipientEmail?: string,
-): Promise<string | null> {
-  const fromArg = recipientEmail?.trim()
-  if (fromArg !== undefined && fromArg.length > 0) return fromArg
-  const fromPrefs = prefs.deliveryEmail?.trim()
-  if (fromPrefs !== undefined && fromPrefs.length > 0) return fromPrefs
-  const observed = await db
-    .query('principalNotificationEmails')
-    .withIndex('by_principalRef', (query) => query.eq('principalRef', recipientPrincipalRef))
-    .unique()
-  const observedEmail = observed?.email.trim()
-  if (observedEmail !== undefined && observedEmail.length > 0) return observedEmail
-  return null
-}
 
 export const readPreferences = query({
   args: {},
@@ -400,71 +319,3 @@ export const updatePreferences = mutation({
   },
 })
 
-export const dispatchNotificationInternal = internalMutation({
-  args: {
-    recipientPrincipalRef: v.string(),
-    accountRef: v.string(),
-    eventKind: v.string(),
-    sourceEventRef: v.string(),
-    payload: v.optional(v.string()),
-    recipientEmail: v.optional(v.string()),
-    correlationRef: v.string(),
-  },
-  returns: dispatchResultValue,
-  handler: async (ctx, args) => {
-    if (!isNotificationEventKind(args.eventKind)) {
-      return { kind: 'refused' as const, code: 'event_kind_invalid' as const }
-    }
-
-    const canonicalAccountRef = accountRef(args.accountRef)
-    const eventKind = args.eventKind as NotificationEventKind
-    const existingDelivery = await ctx.db
-      .query('notificationDeliveries')
-      .withIndex(
-        'by_recipient_account_event_source',
-        (query) => query
-          .eq('recipientPrincipalRef', args.recipientPrincipalRef)
-          .eq('accountRef', canonicalAccountRef)
-          .eq('eventKind', eventKind)
-          .eq('sourceEventRef', args.sourceEventRef),
-      )
-      .unique()
-    if (existingDelivery !== null) {
-      return { kind: 'replayed' as const }
-    }
-
-    const prefs = await resolvePreferenceFields(
-      ctx.db,
-      args.recipientPrincipalRef,
-      canonicalAccountRef,
-    )
-    if (!eventKindEnabled(args.eventKind, prefs)) {
-      return { kind: 'suppressed' as const, code: 'preference_disabled' as const }
-    }
-
-    const email = await resolveRecipientEmail(
-      ctx.db,
-      args.recipientPrincipalRef,
-      prefs,
-      args.recipientEmail,
-    )
-    if (email === null) {
-      return { kind: 'suppressed' as const, code: 'recipient_email_missing' as const }
-    }
-
-    const now = Date.now()
-    const deliveryRef = `del_${crypto.randomUUID().replace(/-/g, '')}`
-    await ctx.db.insert('notificationDeliveries', {
-      deliveryRef,
-      recipientPrincipalRef: args.recipientPrincipalRef,
-      accountRef: canonicalAccountRef,
-      eventKind: args.eventKind,
-      sourceEventRef: args.sourceEventRef,
-      state: 'pending',
-      createdAt: now,
-      updatedAt: now,
-    })
-
-    return { kind: 'accepted' as const }
-  },
-})

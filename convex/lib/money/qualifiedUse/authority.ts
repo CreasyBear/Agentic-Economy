@@ -2,40 +2,10 @@ import type { Doc } from '../../../_generated/dataModel'
 import type { MutationCtx } from '../../../_generated/server'
 import { canonicalDigest } from '../../../../src/modules/common/canonical-digest'
 import type { StableHashValue } from '../../../../src/modules/common/stable-hash'
-import { DELEGATION_MAX_RESOURCES, delegationGrantRef, DelegationService, type DelegationStore } from '../../../../src/modules/authority/delegation/public'
+import { delegationGrantRef, DelegationService, type DelegationStore } from '../../../../src/modules/authority/delegation/public'
 import { accountRef, principalRef } from '../../../../src/modules/principal-account/public'
 import { createConvexDelegationContextPort, createConvexDelegationStore } from '../../authority/delegation/persistence'
-import { ACCOUNT_REF_PATTERN, DAILY_PAYOUT_ALLOCATION_READ_LIMIT, qualifiedUseAuthorityFailure, type CanonicalPayoutAuthority, type CanonicalPayoutSettlementAuthority, type CanonicalQualifiedUseAuthority, type PinnedAuthorityFields, type PinnedResourceFields } from './contracts'
-
-export function pinnedAuthorityFromRow(
-  row: PinnedAuthorityFields,
-): CanonicalPayoutAuthority | undefined {
-  return typeof row.owningAccountRef === 'string' &&
-    /^acc_[0-9a-f]{32}$/u.test(row.owningAccountRef) &&
-    typeof row.authorityPrincipalRef === 'string' &&
-    /^prn_[0-9a-f]{32}$/u.test(row.authorityPrincipalRef) &&
-    typeof row.authorityGrantRef === 'string' &&
-    /^grt_[0-9a-f]{32}$/u.test(row.authorityGrantRef) &&
-    Number.isSafeInteger(row.authorityGrantGeneration) &&
-    (row.authorityGrantGeneration ?? -1) >= 0
-    ? {
-        owningAccountRef: row.owningAccountRef,
-        authorityPrincipalRef: row.authorityPrincipalRef,
-        authorityGrantRef: row.authorityGrantRef,
-        authorityGrantGeneration: row.authorityGrantGeneration as number,
-      }
-    : undefined
-}
-
-export function samePinnedAuthority(
-  row: PinnedAuthorityFields,
-  authority: CanonicalPayoutAuthority,
-): boolean {
-  return row.owningAccountRef === authority.owningAccountRef &&
-    row.authorityPrincipalRef === authority.authorityPrincipalRef &&
-    row.authorityGrantRef === authority.authorityGrantRef &&
-    row.authorityGrantGeneration === authority.authorityGrantGeneration
-}
+import { ACCOUNT_REF_PATTERN, qualifiedUseAuthorityFailure, type CanonicalPayoutAuthority, type CanonicalQualifiedUseAuthority } from './contracts'
 
 function activeGrantMatchesRequest(
   grant: Doc<'authorityDelegationGrants'>,
@@ -189,60 +159,4 @@ export async function resolveCanonicalCallAuthority(
     ...authority,
     authorityResourceRef: call.toolRef,
   }))
-}
-
-/**
- * Consequence-time seam for payout settlement. Legacy rows and mixed authority
- * compositions are held instead of becoming transferable.
- */
-export async function requireCanonicalPayoutAuthority(
-  ctx: MutationCtx,
-  payout: Pick<Doc<'moneyPayouts'>, '_id' | 'payoutRef'> &
-    PinnedAuthorityFields & PinnedResourceFields,
-): Promise<CanonicalPayoutSettlementAuthority> {
-  const pinned = pinnedAuthorityFromRow(payout)
-  if (pinned === undefined) return qualifiedUseAuthorityFailure()
-  const allocations = await ctx.db
-    .query('moneyPayoutAllocations')
-    .withIndex('by_payoutRef_and_qualifiedAt', (query) =>
-      query.eq('payoutRef', payout.payoutRef),
-    )
-    .take(DAILY_PAYOUT_ALLOCATION_READ_LIMIT + 1)
-  const resourceRefs = canonicalAuthorityResourceRefs(
-    allocations.map((allocation) =>
-      (allocation as typeof allocation & PinnedResourceFields)
-        .authorityResourceRef,
-    ),
-  )
-  const pinnedResourceRefs = canonicalAuthorityResourceRefs(
-    payout.authorityResourceRefs ?? [],
-  )
-  if (allocations.length === 0 ||
-    allocations.length > DAILY_PAYOUT_ALLOCATION_READ_LIMIT ||
-    resourceRefs === undefined || pinnedResourceRefs === undefined ||
-    resourceRefs.length !== pinnedResourceRefs.length ||
-    resourceRefs.some((resourceRef, index) =>
-      resourceRef !== pinnedResourceRefs[index]) ||
-    allocations.some((allocation) => !samePinnedAuthority(
-      allocation as typeof allocation & PinnedAuthorityFields,
-      pinned,
-    ))) return qualifiedUseAuthorityFailure()
-  const authority = await resolveCurrentGrantAuthority(ctx, {
-    grantRef: pinned.authorityGrantRef,
-    generation: pinned.authorityGrantGeneration,
-    expectedAccountRef: pinned.owningAccountRef,
-    expectedPrincipalRef: pinned.authorityPrincipalRef,
-    requiredResourceRefs: resourceRefs,
-  })
-  return { ...authority, authorityResourceRefs: resourceRefs }
-}
-
-export function canonicalAuthorityResourceRefs(
-  values: readonly unknown[],
-): readonly string[] | undefined {
-  if (values.length === 0 || values.length > DELEGATION_MAX_RESOURCES ||
-    values.some((value) => typeof value !== 'string' ||
-      !/^[A-Za-z0-9*][A-Za-z0-9._:/*-]{0,199}$/u.test(value))) return undefined
-  const sorted = [...new Set(values as readonly string[])].sort()
-  return sorted.length === values.length ? sorted : undefined
 }

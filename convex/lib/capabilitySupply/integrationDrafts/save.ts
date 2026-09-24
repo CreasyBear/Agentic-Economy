@@ -1,122 +1,25 @@
-import { v, type Infer } from 'convex/values'
-
-import {
-  normalizeSupplyIntegrationDraft,
-  supplyIntegrationDraftRefs,
-} from '@/modules/capability-supply/integration-draft'
-import {
-  beginOperation,
-  replayOperationResult,
-  succeedOperation,
-} from '@/modules/capability-supply/public'
+import { normalizeSupplyIntegrationDraft, supplyIntegrationDraftRefs } from '@/modules/capability-supply/integration-draft'
+import { beginOperation, replayOperationResult, succeedOperation } from '@/modules/capability-supply/public'
 import { brandNonEmpty } from '@/modules/common/ids'
-import {
-  createOfferingInState,
-  upsertAccessPathInState,
-} from '@/modules/catalog/public'
-import type { MutationCtx, QueryCtx } from './_generated/server'
-import { agentAccessPrincipalValue, verifySupplyAgentPrincipal } from './agentAccessPrincipals'
-import { resolveBusinessActor } from './authz'
-import { publicationPorts } from './capabilitySupply'
-import { nativeSubmissionBusiness } from './capabilitySupplyNativeAdmission'
-import {
-  loadExactOfferingSourceState,
-  persistOfferingSourceState,
-} from './lib/catalog/offerings/persistence'
-import { requireSourceWrite, sourceWriteArgs } from './sourceWriteAdmission'
-import { upsertProviderToolIdentity } from './capabilityProviderToolProjection'
-
-const sourceKindValue = v.union(
-  v.literal('openapi'),
-  v.literal('mcp'),
-  v.literal('agent_plugin'),
-  v.literal('x402'),
-)
-const integrationDraftValue = v.object({
-  sourceKind: sourceKindValue,
-  sourceDescriptorJson: v.string(),
-  sourceDigest: v.string(),
-  sourceRevision: v.string(),
-  candidateRef: v.string(),
-  sourceSelectorJson: v.string(),
-  connectionRef: v.optional(v.string()),
-  validationInputJson: v.optional(v.string()),
-  updatedAt: v.number(),
-})
-
-export const saveAgentSupplyIntegrationDraftArgsValue = v.object({
-  businessId: v.id('businesses'),
-  title: v.string(),
-  description: v.string(),
-  category: v.string(),
-  sourceKind: sourceKindValue,
-  sourceDescriptorJson: v.string(),
-  sourceDigest: v.string(),
-  sourceRevision: v.string(),
-  candidateRef: v.string(),
-  sourceSelectorJson: v.string(),
-  connectionRef: v.optional(v.string()),
-  validationInputJson: v.optional(v.string()),
-  operationKey: v.string(),
-  correlationId: v.string(),
-  agentPrincipal: agentAccessPrincipalValue,
-  ...sourceWriteArgs,
-})
-export const saveOwnerSupplyIntegrationDraftArgsValue = v.object({
-  businessId: v.id('businesses'),
-  title: v.string(),
-  description: v.string(),
-  category: v.string(),
-  sourceKind: sourceKindValue,
-  sourceDescriptorJson: v.string(),
-  sourceDigest: v.string(),
-  sourceRevision: v.string(),
-  candidateRef: v.string(),
-  sourceSelectorJson: v.string(),
-  connectionRef: v.optional(v.string()),
-  validationInputJson: v.optional(v.string()),
-  operationKey: v.string(),
-  correlationId: v.string(),
-  ...sourceWriteArgs,
-})
-export const saveAgentSupplyIntegrationDraftResultValue = v.union(
-  v.object({
-    kind: v.union(v.literal('saved'), v.literal('replayed')),
-    offeringRef: v.string(),
-    accessPathRef: v.string(),
-    candidateRef: v.string(),
-    sourceDigest: v.string(),
-  }),
-  v.object({
-    kind: v.literal('refused'),
-    reason: v.union(
-      v.literal('authorization_denied'),
-      v.literal('draft_invalid'),
-      v.literal('source_contains_credential'),
-      v.literal('candidate_changed'),
-      v.literal('operation_key_conflict'),
-      v.literal('draft_unavailable'),
-    ),
-  }),
-)
-export const readOwnerSupplyIntegrationDraftResultValue = v.union(
-  v.object({ kind: v.literal('not_found') }),
-  v.object({
-    kind: v.literal('available'),
-    offeringRef: v.string(),
-    accessPathRef: v.string(),
-    draft: integrationDraftValue,
-  }),
-)
-
-type SaveArgs = Infer<typeof saveAgentSupplyIntegrationDraftArgsValue>
-type OwnerSaveArgs = Infer<typeof saveOwnerSupplyIntegrationDraftArgsValue>
-type SaveResult = Infer<typeof saveAgentSupplyIntegrationDraftResultValue>
+import { createOfferingInState, upsertAccessPathInState } from '@/modules/catalog/public'
+import type { MutationCtx } from '../../../_generated/server'
+import { verifySupplyAgentPrincipal } from '../../../agentAccessPrincipals'
+import { resolveBusinessActor } from '../../../authz'
+import { publicationPorts } from '../../../capabilitySupply'
+import { nativeSubmissionBusiness } from '../../../capabilitySupplyNativeAdmission'
+import { loadExactOfferingSourceState, persistOfferingSourceState } from '../../catalog/offerings/persistence'
+import { requireSourceWrite } from '../../../sourceWriteAdmission'
+import { upsertProviderToolIdentity } from '../../../capabilityProviderToolProjection'
+import type {
+  SaveAgentSupplyIntegrationDraftArgs,
+  SaveOwnerSupplyIntegrationDraftArgs,
+  SaveSupplyIntegrationDraftResult,
+} from './contracts'
 
 export async function saveAgentSupplyIntegrationDraftHandler(
   ctx: MutationCtx,
-  args: SaveArgs,
-): Promise<SaveResult> {
+  args: SaveAgentSupplyIntegrationDraftArgs,
+): Promise<SaveSupplyIntegrationDraftResult> {
   const sourceWrite = await requireSourceWrite(ctx, args, 'catalog_publish')
   if (sourceWrite.kind === 'rejected') return { kind: 'refused', reason: 'authorization_denied' }
   const admission = await verifySupplyAgentPrincipal(ctx, args.agentPrincipal, true)
@@ -132,8 +35,8 @@ export async function saveAgentSupplyIntegrationDraftHandler(
 
 export async function saveOwnerSupplyIntegrationDraftHandler(
   ctx: MutationCtx,
-  args: OwnerSaveArgs,
-): Promise<SaveResult> {
+  args: SaveOwnerSupplyIntegrationDraftArgs,
+): Promise<SaveSupplyIntegrationDraftResult> {
   const sourceWrite = await requireSourceWrite(ctx, args, 'catalog_publish')
   if (sourceWrite.kind === 'rejected') return { kind: 'refused', reason: 'authorization_denied' }
   const actor = await resolveBusinessActor(ctx)
@@ -151,10 +54,9 @@ export async function saveOwnerSupplyIntegrationDraftHandler(
 
 async function saveSupplyIntegrationDraft(
   ctx: MutationCtx,
-  args: SaveArgs | OwnerSaveArgs,
+  args: SaveAgentSupplyIntegrationDraftArgs | SaveOwnerSupplyIntegrationDraftArgs,
   actorPrincipalRef: string,
-): Promise<SaveResult> {
-
+): Promise<SaveSupplyIntegrationDraftResult> {
   const now = Date.now()
   const normalized = normalizeSupplyIntegrationDraft({
     sourceKind: args.sourceKind,
@@ -283,27 +185,4 @@ async function saveSupplyIntegrationDraft(
   })
   await succeedOperation(publicationPorts(ctx), operation.operationId, expected, [refs.offeringRef, refs.accessPathRef], now)
   return expected
-}
-
-export async function readOwnerSupplyIntegrationDraftHandler(
-  ctx: QueryCtx,
-  args: Readonly<{ businessId: SaveArgs['businessId']; candidateRef: string }>,
-): Promise<Infer<typeof readOwnerSupplyIntegrationDraftResultValue>> {
-  const actor = await resolveBusinessActor(ctx)
-  if (actor.kind !== 'authenticated_owner') return { kind: 'not_found' }
-  const business = await ctx.db.get(args.businessId)
-  if (business === null || business.owningAccountRef !== actor.canonicalAccountRef) return { kind: 'not_found' }
-  const refs = supplyIntegrationDraftRefs(String(args.businessId), args.candidateRef)
-  const path = await ctx.db.query('offeringAccessPaths')
-    .withIndex('by_accessPathRef', (query) => query.eq('accessPathRef', refs.accessPathRef))
-    .unique()
-  if (path === null || path.businessId !== args.businessId || path.integrationDraft === undefined) {
-    return { kind: 'not_found' }
-  }
-  return {
-    kind: 'available',
-    offeringRef: refs.offeringRef,
-    accessPathRef: refs.accessPathRef,
-    draft: path.integrationDraft,
-  }
 }

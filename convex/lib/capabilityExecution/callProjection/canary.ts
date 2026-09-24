@@ -6,7 +6,7 @@ import { pricingConfigDecisionAmount } from '@/modules/money/public'
 import { buildSellerOnboardingCanaryReceipt, type CanonicalClaimSnapshot } from '@/modules/capability-execution/convex'
 import { callReceiptPaymentProfile } from '@/modules/capability-execution/call-contracts'
 import type { OpenDispatch, ChargeSettlementResult, ContractOutputValidation } from '@/modules/capability-execution/convex'
-import { canonicalTerminalOutcome } from '../callLifecycle/terminalProjection'
+import { canonicalTerminalOutcome } from '@/modules/capability-execution/convex'
 import { finalizeCallDispatch } from './dispatch'
 
 /**

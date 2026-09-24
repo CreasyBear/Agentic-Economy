@@ -4,11 +4,79 @@ import type {
   ProviderConnectionCommandResult,
   ProviderConnectionCallLease,
 } from '../../../../src/modules/capability-supply/provider-connection'
-import type {
-  ProviderConnectionLeaseRow,
-  ProviderConnectionRow,
-} from './contracts'
 
+import type { CleanupWorkKind } from './contracts'
+
+type ProviderConnectionRow = {
+  connectionRef: string
+  owningAccountRef: string
+  installedByPrincipalRef: string
+  authorityGrantRef: string
+  authorityGrantGeneration: number
+  secretRef?: string
+  businessId: Id<'businesses'>
+  providerRef: string
+  providerAccountRef: string
+  adapterId: string
+  credentialRef: string | null
+  sourceOrigin?: string
+  sourceEnvironment?: NonNullable<ProviderConnection['sourceEnvironment']>
+  sourceAuthentication?: NonNullable<ProviderConnection['sourceAuthentication']>
+  grantedScopes: string[]
+  grantedResources: string[]
+  authorityGeneration: number
+  authorityDigest: string
+  lifecycle: ProviderConnection['lifecycle']
+  observedAt: number
+  expiresAt?: number
+  revokedAt?: number
+  reasonCode?: string
+  evidenceRefs: string[]
+  createdAt: number
+  updatedAt: number
+  lastCommandId: string
+  lastCommandDigest: string
+  revocationRef?: string
+  cleanupAttempt?: number
+  cleanupWorkId?: string
+  cleanupWorkKind?: CleanupWorkKind
+  cleanupCommandId?: string
+  cleanupRequestDigest?: string
+  cleanupCallbackGraceUntil?: number
+}
+
+type ProviderConnectionLeaseRow = {
+  leaseRef: string
+  owningAccountRef: string
+  activeAccountRef: string
+  actorPrincipalRef: string
+  grantRef: string
+  grantGeneration: number
+  callRef: string
+  toolRef: string
+  connectionRef: string
+  providerRef: string
+  providerAccountRef: string
+  adapterId: string
+  authorityGeneration: number
+  authorityDigest: string
+  grantedScopes: string[]
+  grantedResources: string[]
+  approvalDecisionRef: string
+  approvalDecisionDigest: string
+  readinessValidUntil: number
+  readinessDigest?: string
+  state: ProviderConnectionCallLease['state']
+  issuedAt: number
+  expiresAt: number
+  consumedAt?: number
+  invalidatedAt?: number
+  evidenceRefs: string[]
+  createdAt: number
+  updatedAt: number
+  lastCommandId: string
+  lastCommandDigest: string
+}
 export type ProviderConnectionAuthorityCompatibilityRow = Omit<
   ProviderConnectionRow,
   'owningAccountRef' | 'installedByPrincipalRef' | 'authorityGrantRef' | 'authorityGrantGeneration'

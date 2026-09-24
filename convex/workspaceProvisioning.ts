@@ -1,4 +1,4 @@
-import type { GenericDatabaseReader, UserIdentity } from 'convex/server'
+import type { GenericDatabaseReader } from 'convex/server'
 import { v } from 'convex/values'
 
 import {
@@ -14,7 +14,6 @@ import { principalRef } from '../src/modules/principal-account/principal/public'
 
 import type { DataModel, Doc } from './_generated/dataModel'
 import { env, mutation, type MutationCtx } from './_generated/server'
-import { clerkActiveOrganizationId } from './interactiveAuthority'
 import { serviceAssertion } from './serviceAssertion'
 
 export const PROVISION_OPERATION = 'workspaceProvisioning.provisionOrganizationWorkspaceForServer'
@@ -311,30 +310,7 @@ async function verifyProvisionServiceAuth(
   }
 }
 
-async function requireInteractiveHumanPrincipal(
-  db: GenericDatabaseReader<DataModel>,
-  identity: UserIdentity,
-): Promise<Doc<'principals'>> {
-  const tokenIdentifier = identity.tokenIdentifier
-  if (typeof tokenIdentifier !== 'string' || tokenIdentifier.trim().length === 0) {
-    throw new WorkspaceProvisioningError('identity_invalid')
-  }
-  return await resolveCreatorPrincipal(db, tokenIdentifier)
-}
 
-function displayNameFromClaim(
-  identity: UserIdentity,
-  displayName: string | undefined,
-): string {
-  if (displayName !== undefined) {
-    return displayName
-  }
-  const orgName = identity.org_name
-  if (typeof orgName === 'string' && orgName.trim().length > 0) {
-    return orgName.trim()
-  }
-  return 'Workspace'
-}
 
 export const provisionOrganizationWorkspaceForServer = mutation({
   args: {
@@ -351,42 +327,3 @@ export const provisionOrganizationWorkspaceForServer = mutation({
   },
 })
 
-export const claimCreatedWorkspace = mutation({
-  args: {
-    clerkOrgId: v.string(),
-    displayName: v.optional(v.string()),
-    correlationRef: v.string(),
-  },
-  returns: provisionSuccessValue,
-  handler: async (ctx, args): Promise<ProvisionSuccess> => {
-    const identity = await ctx.auth.getUserIdentity()
-    if (identity === null) {
-      throw new WorkspaceProvisioningError('identity_invalid')
-    }
-
-    const activeOrgId = clerkActiveOrganizationId(identity)
-    if (activeOrgId === null || activeOrgId !== args.clerkOrgId) {
-      throw new WorkspaceProvisioningError('active_organization_mismatch')
-    }
-
-    validateClerkOrgId(args.clerkOrgId)
-    validateCorrelationRef(args.correlationRef)
-
-    await requireInteractiveHumanPrincipal(ctx.db, identity)
-    const resolvedDisplayName = validateDisplayName(
-      displayNameFromClaim(identity, args.displayName),
-    )
-
-    const tokenIdentifier = identity.tokenIdentifier
-    if (typeof tokenIdentifier !== 'string' || tokenIdentifier.trim().length === 0) {
-      throw new WorkspaceProvisioningError('identity_invalid')
-    }
-
-    return await provisionOrganizationWorkspace(ctx, {
-      clerkOrgId: args.clerkOrgId,
-      displayName: resolvedDisplayName,
-      creatorTokenIdentifier: tokenIdentifier,
-      correlationRef: args.correlationRef,
-    })
-  },
-})

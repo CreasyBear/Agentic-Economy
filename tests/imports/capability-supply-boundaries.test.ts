@@ -7,7 +7,6 @@ const neutralSources = [
   'src/modules/capability-supply/public.ts',
   'src/modules/capability-supply/internal/convex-schema.ts',
   'convex/capabilitySupply.ts',
-  'convex/capabilitySupplyShared.ts',
   'convex/capabilitySupplyPublish.ts',
   'convex/lib/capabilitySupply/publish/contracts.ts',
   'convex/lib/capabilitySupply/admission/sourceAuthority.ts',

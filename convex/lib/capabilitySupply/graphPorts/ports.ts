@@ -1,7 +1,7 @@
 import type { CapabilityGraphPorts, GraphCatalogAccessPath } from '@/modules/capability-supply/public'
 import type { Id } from '../../../_generated/dataModel'
 import type { MutationCtx, QueryCtx } from '../../../_generated/server'
-import { getActiveExactCapabilityContract, getExactRegisteredCapabilityContract } from '../../../capabilityContractDocuments'
+import { getActiveExactCapabilityContract, getExactRegisteredCapabilityContract } from '../../capabilityContract/documents/reads'
 import { toCapabilityBindingRow, toCapabilityOfferingRow } from '../../../capabilitySupplyRowMappers'
 import { loadProviderConnection } from './providerConnection'
 import { toCatalogAccessPath, toPublicationRow, toPublishedBusiness } from './rows'

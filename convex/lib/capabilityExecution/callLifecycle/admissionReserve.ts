@@ -20,14 +20,8 @@ import {
 } from '@/modules/agent-access/policy'
 import { toolProviderRouteabilityIsFrozen } from '../../capabilitySupply/providerOffboarding/freeze'
 import { spendingPeriodsAreCurrent } from '../../money/spendingPeriods/periods'
-import type {
-  AbandonArgs,
-  AbandonResult,
-  CallRow,
-  GrantRow,
-  ReserveArgs,
-  ReserveResult,
-} from './admissionTypes'
+import type { AbandonArgs, AbandonResult, ReserveArgs, ReserveResult } from './admissionReservation'
+import type { CallRow, GrantRow } from './contracts'
 
 function reservationFromArgs(args: ReserveArgs): CallIdempotencyReservation {
   return {

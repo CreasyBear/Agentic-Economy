@@ -16,11 +16,8 @@ import {
   readExactSellerOnboardingCanaryPlatformGrantHandler,
   SELLER_ONBOARDING_CANARY_MAXIMUM_DAILY_ATOMIC,
 } from '../../../capabilitySupplyCanaryFunding'
-import { prepareX402PaymentAuthorizationHandler } from './attempt'
-import {
-  type PrepareArgs,
-  prepareX402PaymentAuthorizationReturns,
-} from './contracts'
+import { prepareX402PaymentAuthorizationHandler, prepareX402PaymentAuthorizationReturns } from './reserve'
+import { type PrepareArgs } from './contracts'
 
 export async function prepareSellerOnboardingCanaryPaymentAuthorizationHandler(
   ctx: MutationCtx,

@@ -11,7 +11,7 @@ import {
   commercialRelationshipValue,
   contractRefValue,
   priceValue,
-} from './capabilitySupplyShared'
+} from './lib/capabilitySupply/publish/contracts'
 
 export const bindingControlStateValue = v.union(
   v.object({

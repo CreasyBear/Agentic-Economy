@@ -8,7 +8,7 @@ import { type Infer } from 'convex/values'
 import type { Id } from './_generated/dataModel'
 import type { MutationCtx, QueryCtx } from './_generated/server'
 import { capabilitySupplyGraphPorts } from './lib/capabilitySupply/graphPorts/ports'
-import { convexPublicationLifecycle } from './capabilitySupplyShared'
+import { convexPublicationLifecycle } from './lib/capabilitySupply/publish/contracts'
 import {
   capabilityProbeAuthorityMatches,
   readCurrentCapabilityProbeAuthority,
