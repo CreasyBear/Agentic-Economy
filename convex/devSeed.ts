@@ -22,7 +22,7 @@ import { publicationPorts, publishCapabilityForSeed } from './capabilitySupplyPu
 import { ensureOwnerIdentityForAuthenticatedIdentity } from './interactiveAuthority'
 import { resolveAndBindLegalCustomer } from './lib/moneyLegalCustomer'
 import { persistDevSeedCatalogState } from './devSeedStore'
-import { upsertProviderDirectoryRows } from './x402DirectoryIndexStore'
+import { upsertProviderDirectoryRows } from './lib/x402DirectoryIndex/providerRows'
 import { canonicalDigest } from '../src/modules/common/canonical-digest'
 import { refreshCapabilityCommand } from '@/modules/capability-supply/public'
 import {

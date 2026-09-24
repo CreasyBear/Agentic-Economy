@@ -20,7 +20,7 @@ import {
 import type { Id } from '../../_generated/dataModel'
 import type { MutationCtx } from '../../_generated/server'
 import { rebuildCapabilityOriginSupplyProjection } from '../../capabilitySupplyShared'
-import { upsertProviderDirectoryRows } from '../../x402DirectoryIndexStore'
+import { upsertProviderDirectoryRows } from '../x402DirectoryIndex/providerRows'
 import {
   publicationPorts,
   syncProviderDirectoryRowsAfterPublish,

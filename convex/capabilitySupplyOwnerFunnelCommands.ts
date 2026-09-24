@@ -29,7 +29,7 @@ import {
   publicationPorts,
   rebuildCapabilityOriginSupplyProjection,
 } from './capabilitySupply'
-import { upsertProviderDirectoryRows } from './x402DirectoryIndexStore'
+import { upsertProviderDirectoryRows } from './lib/x402DirectoryIndex/providerRows'
 import { agentAccessPrincipalValue, verifySupplyAgentPrincipal } from './agentAccessPrincipals'
 import { requireSourceWrite, sourceWriteArgs } from './sourceWriteAdmission'
 import { resolveBusinessActor } from './authz'

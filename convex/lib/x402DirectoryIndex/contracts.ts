@@ -81,3 +81,9 @@ export const progressValue = v.object({
   generation: v.string(), nextOffset: v.number(), indexedTotal: v.number(),
 })
 export type IndexProgress = Infer<typeof progressValue>
+
+export const facetValue = v.object({
+  key: v.string(), label: v.string(), count: v.number(), iconUrl: v.optional(v.string()),
+  leadCalls: v.optional(v.number()), leadPayers: v.optional(v.number()),
+  leadTitle: v.optional(v.string()), leadPrice: v.optional(v.string()), leadSlug: v.optional(v.string()),
+})

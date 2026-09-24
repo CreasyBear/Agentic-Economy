@@ -4,7 +4,7 @@ import { convexTest } from 'convex-test'
 import { describe, expect, it } from 'vitest'
 
 import { api } from './_generated/api'
-import { upsertProviderDirectoryRows } from './x402DirectoryIndexStore'
+import { upsertProviderDirectoryRows } from './lib/x402DirectoryIndex/providerRows'
 import { ANALYTICS_VERSION } from './lib/x402DirectoryIndex/analytics'
 import { directoryFacets } from './lib/x402DirectoryIndex/facets'
 import schema from './schema'
