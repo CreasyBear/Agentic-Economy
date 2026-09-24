@@ -303,7 +303,7 @@ export function recoveryContext(options: Readonly<{
           build(builder)
           return query
         },
-        unique: async () => table === 'capabilityCalls' && options.row?.callRef === callRef
+        unique: async () => table === 'capabilityCalls' && options.row !== null && options.row.callRef === callRef
           ? { ...options.row, updatedAt: options.row.updatedAt ?? 1 }
           : null,
       }

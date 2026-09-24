@@ -40,16 +40,30 @@ describe('api-catalog route handler', () => {
   })
 
   it('serves HEAD with the GET status and representation headers but no body', async () => {
-    for (const [route, path] of [
-      [ApiCatalogRoute, '/.well-known/api-catalog'],
-      [UcpRoute, '/.well-known/ucp'],
-      [OAuthProtectedResourceRoute, '/.well-known/oauth-protected-resource'],
-      [OAuthAuthorizationServerRoute, '/.well-known/oauth-authorization-server'],
-    ] as const) {
+    for (const { route, path } of [
+      { route: ApiCatalogRoute, path: '/.well-known/api-catalog' },
+      { route: UcpRoute, path: '/.well-known/ucp' },
+      { route: OAuthProtectedResourceRoute, path: '/.well-known/oauth-protected-resource' },
+      { route: OAuthAuthorizationServerRoute, path: '/.well-known/oauth-authorization-server' },
+    ]) {
       const handlers = route.options.server?.handlers
-      if (handlers === undefined) throw new Error(`${path} handlers missing`)
-      const get = await handlers.GET({ request: new Request(`https://ae.example${path}`) } as never)
-      const head = await handlers.HEAD({ request: new Request(`https://ae.example${path}`, { method: 'HEAD' }) } as never)
+      const getHandler: unknown = handlers && Reflect.get(handlers, 'GET')
+      const headHandler: unknown = handlers && Reflect.get(handlers, 'HEAD')
+      if (typeof getHandler !== 'function' || typeof headHandler !== 'function') {
+        throw new Error(`${path} GET/HEAD handlers missing`)
+      }
+      const ctx = (method: 'GET' | 'HEAD') => ({
+        request: new Request(`https://ae.example${path}`, { method }),
+        pathname: path,
+        params: {},
+        context: {},
+        next: () => { throw new Error(`unexpected next from ${path}`) },
+      })
+      const get: unknown = await getHandler(ctx('GET'))
+      const head: unknown = await headHandler(ctx('HEAD'))
+      if (!(get instanceof Response) || !(head instanceof Response)) {
+        throw new Error(`${path} GET/HEAD did not return a Response`)
+      }
       expect(head.status, path).toBe(get.status)
       expect(head.headers.get('content-type'), path).toBe(get.headers.get('content-type'))
       expect(head.headers.get('cache-control'), path).toBe(get.headers.get('cache-control'))
@@ -62,8 +76,9 @@ describe('api-catalog route handler', () => {
     const handlers = ApiCatalogRoute.options.server?.handlers
     if (handlers === undefined || typeof handlers !== 'object' || handlers === null)
       throw new Error('api-catalog handlers missing')
-    const postHandler = Reflect.get(handlers, 'POST') as () => Response
-    const wrongMethod = postHandler()
+    const postHandler: unknown = Reflect.get(handlers, 'POST')
+    if (typeof postHandler !== 'function') throw new Error('POST handler missing')
+    const wrongMethod: unknown = postHandler()
     if (!(wrongMethod instanceof Response)) throw new Error('POST handler did not return a Response')
 
     expect(wrongMethod.status).toBe(405)

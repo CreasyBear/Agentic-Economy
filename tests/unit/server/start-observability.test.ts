@@ -61,16 +61,21 @@ describe('root machine discovery', () => {
     if (typeof server !== 'function') throw new Error('security headers middleware missing')
     for (const path of ['/', '/about']) {
       const request = new Request(`https://ae.example${path}`)
-      const options = {
+      const next: RequestServerNextFn<Record<string, never>, undefined> = vi.fn().mockResolvedValue({
+        request,
+        pathname: path,
+        context: undefined,
+        response: new Response('<html></html>', { headers: { 'content-type': 'text/html' } }),
+      })
+      const options: RequestServerOptions<Record<string, never>, undefined> = {
         request,
         pathname: path,
         context: undefined,
         handlerType: 'router',
-        next: async () => ({
-          response: new Response('<html></html>', { headers: { 'content-type': 'text/html' } }),
-        }),
-      } as unknown as RequestServerOptions<Record<string, never>, undefined>
+        next,
+      }
       const result = await server(options)
+      if (result instanceof Response) throw new Error('security headers middleware returned a bare response')
       expect(result.response.headers.get('Link')).toBe(path === '/'
         ? '</llms.txt>; rel="describedby"; type="text/plain", </.well-known/api-catalog>; rel="api-catalog"'
         : null)
