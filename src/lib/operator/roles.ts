@@ -29,8 +29,3 @@ export function ownerWorkspaceOwnerForPath(pathname: string): OwnerWorkspaceOwne
   if (pathname === '/owner/settings') return 'account'
   return undefined
 }
-
-export type OperatorNavBadgeValue = number | string | null | undefined
-
-export type OperatorNavBadges = Partial<Record<string, OperatorNavBadgeValue>>
-

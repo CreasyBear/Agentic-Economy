@@ -43,7 +43,8 @@ vi.mock('convex/react', () => ({
 
 vi.mock('@clerk/tanstack-react-start', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@clerk/tanstack-react-start')>()),
-  useAuth: () => ({ isSignedIn: clerkSignedIn.value }),
+  useAuth: () => ({ isSignedIn: clerkSignedIn.value, isLoaded: false, orgId: null }),
+  useUser: () => ({ user: null }),
   Show: ({ when, children, fallback }: { when: string; children?: ReactNode; fallback?: ReactNode }) => {
     if (when === 'signed-out') return clerkSignedIn.value ? (fallback ?? null) : (children ?? null)
     if (when === 'signed-in') return clerkSignedIn.value ? (children ?? null) : null
@@ -99,20 +100,24 @@ describe('AeAppShell', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Workspace menu' }))
     const menu = screen.getByRole('menu')
     expect(Array.from(menu.querySelectorAll('a')).map((link) => link.textContent)).toEqual([
-      'Market',
-      'Chat',
-      'Agents',
-      'Calls',
-      'Credit',
-      'Tools',
-      'Earnings',
-      'Settings',
-      'Support',
-      'Status',
+      'Market', 'Ask', 'Agents', 'Activity', 'Credit', 'Earnings', 'Tools', 'Settings', 'Support', 'Status',
     ])
+    const settings = within(menu).getByRole('menuitem', { name: 'Settings' })
+    expect(settings.getAttribute('href')).toBe('/owner/settings')
+    expect(settings.getAttribute('aria-current')).toBeNull()
     expect(within(menu).getByRole('menuitem', { name: 'Market' }).getAttribute('aria-current')).toBe('page')
-    expect(screen.getByTestId('org-switcher')).toBeTruthy()
+    expect(screen.getAllByLabelText('Workspace: Workspace').length).toBeGreaterThan(0)
     expect(screen.queryByRole('link', { name: 'Sign in' })).toBeNull()
+  })
+
+  it('marks Settings as the active menu item on settings pages', () => {
+    clerkSignedIn.value = true
+    entitlement.isAuthenticated = true
+    renderAppShell('/owner/settings')
+    fireEvent.click(screen.getByRole('button', { name: 'Workspace menu' }))
+    const settings = within(screen.getByRole('menu')).getByRole('menuitem', { name: 'Settings' })
+    expect(settings.getAttribute('href')).toBe('/owner/settings')
+    expect(settings.getAttribute('aria-current')).toBe('page')
   })
 
   it('shows one Admin group on an owner page for an active admin session', () => {
@@ -130,18 +135,13 @@ describe('AeAppShell', () => {
     expect(within(screen.getByRole('navigation', { name: 'Owner primary navigation' })).queryByRole('link', { name: 'Admin' })).toBeNull()
   })
 
-  it('shows Admin navigation with the longest route active for an entitled session', () => {
+  it('keeps Admin destinations in the header for an entitled session', () => {
     clerkSignedIn.value = true
     entitlement.isAuthenticated = true
     entitlement.result = { kind: 'authorized', allowedSurfaces: ['owner', 'admin'] }
     renderAppShell('/admin/metrics')
 
-    const nav = screen.getByRole('navigation', { name: 'Admin primary navigation' })
-    expect(Array.from(nav.querySelectorAll('a')).map(link => link.textContent)).toEqual([
-      'Home', 'Search', 'Queue', 'Providers', 'Metrics', 'Audit',
-    ])
-    expect(nav.querySelectorAll('[aria-current="page"]')).toHaveLength(1)
-    expect(within(nav).getByRole('link', { name: 'Metrics' }).getAttribute('aria-current')).toBe('page')
+    expect(screen.queryByRole('navigation', { name: 'Admin primary navigation' })).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: 'Workspace menu' }))
     const menu = screen.getByRole('menu')
     expect(within(menu).getAllByText('Admin')).toHaveLength(1)
@@ -211,6 +211,7 @@ function renderAppShell(pathname = clerkSignedIn.value ? '/market' : '/'): void 
       path: '/owner/operations',
       staticData: { nav: { label: 'Tools', header: { order: 3, audience: 'signed-in' } } },
     }),
+    createRoute({ getParentRoute: () => rootRoute, path: '/owner/settings' }),
     createRoute({ getParentRoute: () => rootRoute, path: '/developers/discovery' }),
     createRoute({ getParentRoute: () => rootRoute, path: '/sign-in/$' }),
     createRoute({ getParentRoute: () => rootRoute, path: '/admin' }),

@@ -29,7 +29,8 @@ const clerkSignedIn = vi.hoisted(() => ({ value: false }))
 
 vi.mock('@clerk/tanstack-react-start', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@clerk/tanstack-react-start')>()),
-  useAuth: () => ({ isSignedIn: clerkSignedIn.value }),
+  useAuth: () => ({ isSignedIn: clerkSignedIn.value, isLoaded: true, orgId: null }),
+  useUser: () => ({ user: null }),
   Show: ({ when, children, fallback }: { when: string; children?: ReactNode; fallback?: ReactNode }) => {
     if (when === 'signed-out') return clerkSignedIn.value ? (fallback ?? null) : (children ?? null)
     if (when === 'signed-in') return clerkSignedIn.value ? (children ?? null) : null

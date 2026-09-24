@@ -10,7 +10,7 @@ export type AppDestinationId =
   | 'support'
   | 'status'
 
-export type AppNavGroup = 'primary' | 'provider' | 'utility'
+export type AppNavGroup = 'market' | 'ask' | 'activity' | 'workspace'
 
 export type AppDestination = Readonly<{
   id: AppDestinationId
@@ -18,7 +18,8 @@ export type AppDestination = Readonly<{
   to: string
   hash?: string
   group: AppNavGroup
-  mobileRank?: number
+  /** The destination shared by the dropdown section and mobile bar. */
+  topLevel?: true
   keywords: readonly string[]
   title: string
 }>
@@ -28,43 +29,42 @@ export const APP_NAVIGATION: readonly AppDestination[] = [
     id: 'market',
     label: 'Market',
     to: '/market',
-    group: 'primary',
-    mobileRank: 1,
+    group: 'market',
+    topLevel: true,
     keywords: ['market', 'catalogue', 'catalog', 'browse', 'tools'],
     title: 'Market | Agentic Economy',
   },
   {
     id: 'chat',
-    label: 'Chat',
+    label: 'Ask',
     to: '/t/new',
-    group: 'primary',
+    group: 'ask',
+    topLevel: true,
     keywords: ['chat', 'ask', 'conversation', 'thread'],
-    title: 'Chat | Agentic Economy',
+    title: 'Ask | Agentic Economy',
   },
   {
     id: 'agents',
     label: 'Agents',
     to: '/agent-access',
-    group: 'primary',
-    mobileRank: 2,
+    group: 'ask',
     keywords: ['agent', 'access', 'principal', 'tokens', 'keys', 'credentials'],
     title: 'Agents | Agentic Economy',
   },
   {
     id: 'calls',
-    label: 'Calls',
+    label: 'Activity',
     to: '/activity',
-    group: 'primary',
-    mobileRank: 3,
+    group: 'activity',
+    topLevel: true,
     keywords: ['activity', 'calls', 'history', 'runs', 'executions'],
-    title: 'Calls | Agentic Economy',
+    title: 'Activity | Agentic Economy',
   },
   {
     id: 'credit',
     label: 'Credit',
     to: '/owner/credit',
-    group: 'primary',
-    mobileRank: 4,
+    group: 'activity',
     keywords: ['credit', 'balance', 'billing', 'top up', 'funds', 'money'],
     title: 'Credit | Agentic Economy',
   },
@@ -72,7 +72,7 @@ export const APP_NAVIGATION: readonly AppDestination[] = [
     id: 'tools',
     label: 'Tools',
     to: '/owner/operations',
-    group: 'provider',
+    group: 'workspace',
     keywords: ['operations', 'supply', 'provider', 'providers', 'offerings', 'publish', 'host', 'api', 'monetize', 'seller'],
     title: 'Tools | Agentic Economy',
   },
@@ -81,7 +81,7 @@ export const APP_NAVIGATION: readonly AppDestination[] = [
     label: 'Earnings',
     to: '/owner/operations',
     hash: '#earnings',
-    group: 'provider',
+    group: 'activity',
     keywords: ['earnings', 'payouts', 'revenue', 'income'],
     title: 'Earnings | Agentic Economy',
   },
@@ -89,7 +89,8 @@ export const APP_NAVIGATION: readonly AppDestination[] = [
     id: 'settings',
     label: 'Settings',
     to: '/owner/settings',
-    group: 'utility',
+    group: 'workspace',
+    topLevel: true,
     keywords: ['settings', 'account', 'team', 'workspace', 'security'],
     title: 'Settings | Agentic Economy',
   },
@@ -97,7 +98,7 @@ export const APP_NAVIGATION: readonly AppDestination[] = [
     id: 'support',
     label: 'Support',
     to: '/support',
-    group: 'utility',
+    group: 'workspace',
     keywords: ['support', 'help'],
     title: 'Support | Agentic Economy',
   },
@@ -105,7 +106,7 @@ export const APP_NAVIGATION: readonly AppDestination[] = [
     id: 'status',
     label: 'Status',
     to: '/status',
-    group: 'utility',
+    group: 'workspace',
     keywords: ['status', 'health', 'uptime', 'operational'],
     title: 'Status | Agentic Economy',
   },
@@ -156,14 +157,13 @@ export function resolveAppDestination(
   return null
 }
 
-export function mobileNavigation(): {
-  primary: readonly AppDestination[]
-  more: readonly AppDestination[]
-} {
-  return {
-    primary: APP_NAVIGATION
-      .filter((destination) => destination.mobileRank !== undefined)
-      .sort((left, right) => (left.mobileRank ?? 0) - (right.mobileRank ?? 0)),
-    more: APP_NAVIGATION.filter((destination) => destination.mobileRank === undefined),
-  }
+export const APP_NAV_GROUPS: readonly Readonly<{
+  id: AppNavGroup
+  destination: AppDestination
+}>[] = APP_NAVIGATION
+  .filter((destination) => destination.topLevel)
+  .map((destination) => ({ id: destination.group, destination }))
+
+export function mobileNavigation(): readonly AppDestination[] {
+  return APP_NAV_GROUPS.map(({ destination }) => destination)
 }

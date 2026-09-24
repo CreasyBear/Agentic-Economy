@@ -19,14 +19,6 @@ describe('Route view transition isolation (S-20)', () => {
     )
   })
 
-  it('assigns ae-operator-sidebar to the operator rail and freezes its transition group', () => {
-    expect(GLOBALS_CSS).toMatch(
-      /\[data-slot="sidebar"\]\s*\{\s*view-transition-name:\s*ae-operator-sidebar;\s*\}/,
-    )
-    expect(GLOBALS_CSS).toMatch(
-      /::view-transition-group\(ae-operator-sidebar\)\s*\{\s*animation:\s*none;\s*\}/,
-    )
-  })
 
   it('cross-fades only the root content region when motion is allowed', () => {
     const noPreferenceBlock = GLOBALS_CSS.match(

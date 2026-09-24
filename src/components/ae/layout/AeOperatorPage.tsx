@@ -4,10 +4,7 @@ import { createContext, use, useCallback, useEffect, useLayoutEffect, useMemo, u
 import type { ReactNode } from 'react'
 
 import type { OperatorBreadcrumbItem } from '@/components/ae/layout/AeOperatorBreadcrumbs'
-import type {
-  OperatorNavBadges,
-  OperatorRole,
-} from '@/lib/operator/roles'
+import type { OperatorRole } from '@/lib/operator/roles'
 import type { OperatorContext } from '@/lib/operator/operator-context'
 
 type OperatorPageChrome = Omit<AeOperatorPageProps, 'children' | 'operatorContext'>
@@ -29,16 +26,14 @@ export function useOperatorShellChrome(): OperatorShellChromeRegistration | null
   return use(OperatorShellChromeContext)
 }
 
-// Tier B: hoisted at the `/_operator` layout, above the sidebar and the
-// routed outlet, so the sidebar (a sibling of the outlet, not a descendant
-// of any AeOperatorPage) can read the navBadges the *root* AeOperatorPage
-// resolves for the current route.
-type OperatorSidebarChromeState = OperatorShellChromeRegistration & { chrome: OperatorPageChrome | null }
+// Root-frame chrome bridge makes the current title available to the header
+// and moves focus only after the new route's content has committed.
+type OperatorFrameChromeState = OperatorShellChromeRegistration & { chrome: OperatorPageChrome | null }
 
-const OperatorSidebarChromeContext = createContext<OperatorSidebarChromeState | null>(null)
+const OperatorFrameChromeContext = createContext<OperatorFrameChromeState | null>(null)
 
-export function useOperatorSidebarChrome(): OperatorPageChrome | null {
-  return use(OperatorSidebarChromeContext)?.chrome ?? null
+export function useOperatorFrameChrome(): OperatorPageChrome | null {
+  return use(OperatorFrameChromeContext)?.chrome ?? null
 }
 
 
@@ -53,7 +48,6 @@ export type AeOperatorPageProps = {
   currentPath: string
   mainContentId?: string
   breadcrumbs?: readonly OperatorBreadcrumbItem[]
-  navBadges?: OperatorNavBadges
   suppressSurfaceNavigation?: boolean
   /** A loading placeholder for the route; focus management waits for the real page. */
   pending?: boolean
@@ -61,11 +55,11 @@ export type AeOperatorPageProps = {
 }
 
 type OperatorPageChromeInput = Pick<AeOperatorPageProps, 'operatorRole' | 'title' | 'description' | 'currentPath'> & {
-  [K in 'actions' | 'secondaryBar' | 'stickyHeader' | 'mainContentId' | 'breadcrumbs' | 'navBadges' | 'suppressSurfaceNavigation' | 'pending']?: AeOperatorPageProps[K] | undefined
+  [K in 'actions' | 'secondaryBar' | 'stickyHeader' | 'mainContentId' | 'breadcrumbs' | 'suppressSurfaceNavigation' | 'pending']?: AeOperatorPageProps[K] | undefined
 }
 
 function chromeFromProps(props: OperatorPageChromeInput): OperatorPageChrome {
-  const { operatorRole, title, description, actions, secondaryBar, stickyHeader, currentPath, mainContentId, breadcrumbs, navBadges, suppressSurfaceNavigation, pending } = props
+  const { operatorRole, title, description, actions, secondaryBar, stickyHeader, currentPath, mainContentId, breadcrumbs, suppressSurfaceNavigation, pending } = props
   return {
     operatorRole,
     title,
@@ -76,17 +70,16 @@ function chromeFromProps(props: OperatorPageChromeInput): OperatorPageChrome {
     ...(stickyHeader === undefined ? {} : { stickyHeader }),
     ...(mainContentId === undefined ? {} : { mainContentId }),
     ...(breadcrumbs === undefined ? {} : { breadcrumbs }),
-    ...(navBadges === undefined ? {} : { navBadges }),
     ...(suppressSurfaceNavigation === undefined ? {} : { suppressSurfaceNavigation }),
     ...(pending === undefined ? {} : { pending }),
   }
 }
 
 function useChromeFromProps(props: Omit<AeOperatorPageProps, 'children'>): OperatorPageChrome {
-  const { operatorRole, title, description, actions, secondaryBar, stickyHeader, currentPath, mainContentId, breadcrumbs, navBadges, suppressSurfaceNavigation, pending } = props
+  const { operatorRole, title, description, actions, secondaryBar, stickyHeader, currentPath, mainContentId, breadcrumbs, suppressSurfaceNavigation, pending } = props
   return useMemo<OperatorPageChrome>(
-    () => chromeFromProps({ operatorRole, title, description, actions, secondaryBar, stickyHeader, currentPath, mainContentId, breadcrumbs, navBadges, suppressSurfaceNavigation, pending }),
-    [operatorRole, title, description, actions, secondaryBar, stickyHeader, currentPath, mainContentId, breadcrumbs, navBadges, suppressSurfaceNavigation, pending],
+    () => chromeFromProps({ operatorRole, title, description, actions, secondaryBar, stickyHeader, currentPath, mainContentId, breadcrumbs, suppressSurfaceNavigation, pending }),
+    [operatorRole, title, description, actions, secondaryBar, stickyHeader, currentPath, mainContentId, breadcrumbs, suppressSurfaceNavigation, pending],
   )
 }
 
@@ -141,16 +134,13 @@ function RootOperatorPage(props: AeOperatorPageProps) {
   const resolvedMainContentId = mainContentId ?? 'main-content'
   const showDescriptionLine = description !== '' || actions !== undefined
 
-  // Bubble the resolved chrome (in particular navBadges) up to the hoisted
-  // sidebar bridge, when one is mounted above this route (see
-  // OperatorChromeProvider). Reuses the exact setChrome/clearChrome
-  // registration shape nested AeOperatorPage instances already use.
-  const sidebarBridge = use(OperatorSidebarChromeContext)
+  // Publish the committed route's title and path to the persistent frame.
+  const frameBridge = use(OperatorFrameChromeContext)
   useLayoutEffect(() => {
-    if (sidebarBridge === null) return
-    sidebarBridge.setChrome(currentChrome)
-    return () => sidebarBridge.clearChrome(currentChrome)
-  }, [sidebarBridge, currentChrome])
+    if (frameBridge === null) return
+    frameBridge.setChrome(currentChrome)
+    return () => frameBridge.clearChrome(currentChrome)
+  }, [frameBridge, currentChrome])
 
   return (
     <OperatorShellChromeContext.Provider value={registration}>
@@ -186,10 +176,7 @@ export type OperatorChromeProviderProps = {
   children: ReactNode
 }
 
-/**
- * Root-frame bridge for current operator chrome. It keeps focus transitions
- * and sidebar badges stable while route content changes.
- */
+/** Persistent frame bridge for header title and committed-route focus. */
 export function OperatorChromeProvider({ children }: OperatorChromeProviderProps) {
   const [chrome, setRegisteredChrome] = useState<OperatorPageChrome | null>(null)
   const setChrome = useCallback((nextChrome: OperatorPageChrome) => {
@@ -198,7 +185,7 @@ export function OperatorChromeProvider({ children }: OperatorChromeProviderProps
   const clearChrome = useCallback((nextChrome: OperatorPageChrome) => {
     setRegisteredChrome((currentChrome) => (currentChrome === nextChrome ? null : currentChrome))
   }, [])
-  const registration = useMemo<OperatorSidebarChromeState>(
+  const registration = useMemo<OperatorFrameChromeState>(
     () => ({ chrome, setChrome, clearChrome }),
     [chrome, clearChrome, setChrome],
   )
@@ -235,8 +222,8 @@ export function OperatorChromeProvider({ children }: OperatorChromeProviderProps
   }, [committedPath, committedPending, resolvedMainContentId])
 
   return (
-    <OperatorSidebarChromeContext.Provider value={registration}>
+    <OperatorFrameChromeContext.Provider value={registration}>
       {children}
-    </OperatorSidebarChromeContext.Provider>
+    </OperatorFrameChromeContext.Provider>
   )
 }

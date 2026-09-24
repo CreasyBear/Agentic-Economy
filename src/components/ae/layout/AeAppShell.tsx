@@ -4,7 +4,6 @@ import { AeOwnerMobileNavigation } from '@/components/ae/layout/AeOwnerMobileNav
 import { OperatorChromeProvider } from '@/components/ae/layout/AeOperatorPage'
 import { KeyboardShortcutsDialog } from '@/components/ae/shortcuts/KeyboardShortcutsDialog'
 import { CommandPanelProvider } from '@/components/ae/command-panel'
-import { SidebarInset, SidebarProvider } from '@/components/ui/sidebar'
 import { cn } from '@/lib/utils'
 
 import { AeAppHeader } from './app-shell/AeAppHeader'
@@ -70,29 +69,23 @@ export function AeAppShell({ children }: { children: ReactNode }) {
             <div className={contentClassName}>{children}</div>
           </>
         ) : (
-          // Keep the frame depth stable while Clerk resolves; swapping wrappers here remounts routed pages.
-          <SidebarProvider className="min-h-0 flex-1" defaultOpen>
-            <OperatorChromeProvider>
-              <SidebarInset
-                role="presentation"
-                className={cn(
-                  chatFrame ? 'h-full min-h-0 overflow-hidden' : 'min-h-svh',
-                  shell.isSignedIn
-                    ? 'pb-[calc(var(--ae-mobile-nav-height)+env(safe-area-inset-bottom,0px))] md:pb-0'
-                    : null,
-                )}
-              >
-                {header}
-                <div className={contentClassName}>{children}</div>
-                {shell.isSignedIn ? (
-                  <AeOwnerMobileNavigation
-                    currentPath={shell.pathname}
-                    canAccessAdmin={shell.canAccessAdmin}
-                  />
-                ) : null}
-              </SidebarInset>
-            </OperatorChromeProvider>
-          </SidebarProvider>
+          // Keep this frame stable while Clerk resolves, so routed pages do not remount.
+          <OperatorChromeProvider>
+            <div
+              data-shell="app-content"
+              className={cn(
+                'flex min-h-0 w-full flex-1 flex-col',
+                chatFrame ? 'overflow-hidden' : 'min-h-svh',
+                shell.isSignedIn
+                  ? 'pb-[calc(var(--ae-mobile-nav-height)+env(safe-area-inset-bottom,0px))] md:pb-0'
+                  : null,
+              )}
+            >
+              {header}
+              <div className={contentClassName}>{children}</div>
+              {shell.isSignedIn ? <AeOwnerMobileNavigation currentPath={shell.pathname} /> : null}
+            </div>
+          </OperatorChromeProvider>
         )}
         <KeyboardShortcutsDialog open={shell.shortcutsOpen} onOpenChange={shell.setShortcutsOpen} />
       </CommandPanelProvider>

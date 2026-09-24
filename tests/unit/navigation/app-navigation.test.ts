@@ -64,10 +64,13 @@ describe('app navigation', () => {
     expect(resolveAppDestination(pathname, hash)).toBe(destinationId)
   })
 
-  it('uses Market, Agents, Calls and Credit as mobile primary destinations', () => {
-    const navigation = mobileNavigation()
-
-    expect(navigation.primary.map(({ id }) => id)).toEqual(['market', 'agents', 'calls', 'credit'])
-    expect(navigation.more.map(({ id }) => id)).toEqual(['chat', 'tools', 'earnings', 'settings', 'support', 'status'])
+  it('uses the same top-level destinations for every dropdown group and the mobile bar', () => {
+    expect(mobileNavigation().map(({ label, to }) => [label, to])).toEqual([
+      ['Market', '/market'],
+      ['Ask', '/t/new'],
+      ['Activity', '/activity'],
+      ['Settings', '/owner/settings'],
+    ])
+    expect(new Set(mobileNavigation().map(({ group }) => group)).size).toBe(4)
   })
 })
