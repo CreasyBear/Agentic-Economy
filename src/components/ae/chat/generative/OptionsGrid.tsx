@@ -1,4 +1,5 @@
 import { Button } from '@/components/ui/button'
+import { getStatusPresentation } from '@/lib/ui/status-presentation'
 import type { OptionsGridProps } from './generative.contracts'
 
 export function OptionsGrid({ view, onSelect, onCompare }: OptionsGridProps) {
@@ -19,7 +20,7 @@ export function OptionsGrid({ view, onSelect, onCompare }: OptionsGridProps) {
                 <p className="tabular-nums">{option.price}</p>
                 <p className="flex items-center gap-1.5 text-muted-foreground">
                   <span aria-hidden="true" className={option.readiness === 'ready' ? 'size-1.5 rounded-full bg-success' : 'size-1.5 rounded-full bg-warning'} />
-                  {option.readiness === 'ready' ? 'Ready to use' : option.readiness === 'unavailable' ? 'Unavailable' : 'Not yet verified'}
+                  {option.readiness === 'ready' ? 'Ready to use' : option.readiness === 'unavailable' ? getStatusPresentation('unavailable').label : 'Not yet verified'}
                 </p>
                 {option.usage ? <p className="line-clamp-2 text-muted-foreground">{option.usage}</p> : null}
                 {option.seller ? <p className="truncate text-muted-foreground">{option.seller.kind === 'provider' ? 'Sold by' : 'Listed on'} {option.seller.name}</p> : null}

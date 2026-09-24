@@ -311,7 +311,7 @@ describe('scheduled chat consequence authority', () => {
       api.interactiveAuthority.materializeCurrentInteractiveAuthority,
       {},
     )).resolves.toBe(true)
-    await expect(owner.query(api.chatThreads.listThreads, { now: 1 }))
+    await expect(owner.query(api.chatThreads.listThreads, { now: 1, paginationOpts: { cursor: null, numItems: 20 } }))
       .resolves.toMatchObject({ page: [] })
     const credential = await backend.run((ctx) => ctx.db.query('credentials').first())
     expect(credential?.expiryMaterialization).toMatchObject({
@@ -485,6 +485,7 @@ describe('scheduled chat consequence authority', () => {
     )).resolves.toEqual({ kind: 'expired' })
     await expect(expiringOwner.query(api.chatThreads.listThreads, {
       now: expiresAt,
+      paginationOpts: { cursor: null, numItems: 20 },
     })).rejects.toThrow('unauthenticated')
 
     vi.useRealTimers()
@@ -497,6 +498,7 @@ describe('scheduled chat consequence authority', () => {
     })
     await expect(revokedOwner.query(api.chatThreads.listThreads, {
       now: Date.now(),
+      paginationOpts: { cursor: null, numItems: 20 },
     })).rejects.toThrow('unauthenticated')
 
     const crossAccountBackend = convexTestWithMarketComponents()
@@ -686,7 +688,7 @@ describe('scheduled chat consequence authority', () => {
       threadId: titledThread.threadId,
       now: Date.now(),
     })).resolves.toMatchObject({ threadId: titledThread.threadId, busy: false })
-    await expect(owner.query(api.chatThreads.listThreads, { now: Date.now() }))
+    await expect(owner.query(api.chatThreads.listThreads, { now: Date.now(), paginationOpts: { cursor: null, numItems: 20 } }))
       .resolves.toMatchObject({ page: expect.arrayContaining([
         expect.objectContaining({ threadId: defaultThread.threadId }),
         expect.objectContaining({ threadId: emptyThread.threadId }),
@@ -707,6 +709,7 @@ describe('scheduled chat consequence authority', () => {
     await expect(owner.query(api.chatThreads.searchThreads, {
       query: '   ',
       now: Date.now(),
+      paginationOpts: { cursor: null, numItems: 20 },
     })).resolves.toMatchObject({ page: expect.any(Array) })
     await expect(owner.query(api.chatThreads.searchThreads, {
       query: 'aaaa',

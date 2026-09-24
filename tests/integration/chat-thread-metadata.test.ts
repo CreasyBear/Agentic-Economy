@@ -80,11 +80,12 @@ describe('durable chat thread metadata', () => {
       })
     })
 
-    const listed = await owner.query(api.chatThreads.listThreads, { now: Date.now() })
+    const listed = await owner.query(api.chatThreads.listThreads, { now: Date.now(), paginationOpts: { cursor: null, numItems: 20 } })
     expect(listed.page.map((thread: { threadId: string }) => thread.threadId)).toEqual([own.threadId])
     const searched = await owner.query(api.chatThreads.searchThreads, {
       query: 'Private',
       now: Date.now(),
+      paginationOpts: { cursor: null, numItems: 20 },
     })
     expect(searched.page.map((thread: { threadId: string }) => thread.threadId)).toEqual([own.threadId])
     await expect(owner.query(api.chatThreads.getThread, {
@@ -122,7 +123,7 @@ describe('durable chat thread metadata', () => {
         threadId: created.threadId,
         now: Date.now(),
       })).rejects.toThrow('unauthenticated')
-      await expect(owner.query(api.chatThreads.listThreads, { now: Date.now() }))
+      await expect(owner.query(api.chatThreads.listThreads, { now: Date.now(), paginationOpts: { cursor: null, numItems: 20 } }))
         .rejects.toThrow('unauthenticated')
     },
   )
@@ -169,7 +170,7 @@ describe('durable chat thread metadata', () => {
     for (let index = 0; index < 18; index += 1) {
       await owner.mutation(api.chatThreads.createThread, { title: `Extra ${index}` })
     }
-    const defaultPage = await owner.query(api.chatThreads.listThreads, { now: 1_000 })
+    const defaultPage = await owner.query(api.chatThreads.listThreads, { now: 1_000, paginationOpts: { cursor: null, numItems: 20 } })
     expect(defaultPage.page).toHaveLength(20)
   })
 
@@ -184,6 +185,7 @@ describe('durable chat thread metadata', () => {
     const result = await owner.query(api.chatThreads.searchThreads, {
       query: '  Alpha  ',
       now: Date.now(),
+      paginationOpts: { cursor: null, numItems: 20 },
     })
     expect(result.page.map((thread: { title: string }) => thread.title)).toEqual(['Alpha accounting helper'])
   })

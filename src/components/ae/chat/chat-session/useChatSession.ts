@@ -10,7 +10,7 @@ import { enableOwnerChatSpendingServer } from '@/modules/agent-access/agent-acce
 import { useStickyRows } from '@/components/ui/data-state'
 import { captureClientExceptionOnClient } from '@/lib/observability/capture-client-exception'
 
-import type { ChatProps, ChatHistoryThread, ChatSessionModel } from './chat-session.contracts'
+import type { ChatProps, ChatSessionModel } from './chat-session.contracts'
 import { projectOwnerChatCards } from './owner-chat-cards'
 import { ChatHistory } from './components/ChatHistory'
 import {
@@ -170,10 +170,7 @@ export function useChatSession({
     ? [...anonymousMessages, ...durableMessages]
     : anonymousMessages
   const historyPage = historySearch.trim().length > 0 ? searchedThreads : listedThreads
-  const threadRows: readonly ChatHistoryThread[] = historyPage.results.filter((row): row is ChatHistoryThread =>
-    typeof row.threadId === 'string' && typeof row.title === 'string'
-    && typeof row.createdAt === 'number' && typeof row.busy === 'boolean')
-  const threadsPage = useStickyRows(threadRows)
+  const threadsPage = useStickyRows(historyPage.results)
   const historyPending = isAuthenticated && !threadsPage.everCached
   const threads = threadsPage.shown
   const savedTitle = activeThread?.title ?? (threadId === null ? null : threads.find((thread) => thread.threadId === threadId)?.title)

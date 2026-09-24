@@ -97,6 +97,10 @@ describe('command console navigation groups', () => {
               summary: 'A bespoke API integration.',
               matchReason: 'Capability text overlap.',
               readiness: 'ready',
+              healthStatus: 'operational',
+              verification: 'verified',
+              network: 'mainnet',
+              claimSource: 'provider',
               entitlement: 'requires_auth',
               price: { kind: 'indicative', label: 'Price confirmed at inspection' },
               details: {

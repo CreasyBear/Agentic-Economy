@@ -1,3 +1,4 @@
+import { getStatusPresentation } from '@/lib/ui/status-presentation'
 import type { ToolObjectView } from '@/components/ae/shared/object-family.contracts'
 import { toolCardState, type ToolCardProjection } from '@/modules/chat/tool-card'
 import type {
@@ -29,7 +30,7 @@ export function projectOptionsFromCard(
       const displayedPrice = currentPrice ? object?.price?.label ?? choice.price : price === undefined && (choice.priceValidUntil === undefined || choice.priceValidUntil > nowMs) ? choice.price : undefined
       if (currentPrice && displayedPrice !== undefined) facts.Price = { value: displayedPrice, source: sourceLabel(price.provenance) }
       if (readiness?.kind === 'present' && (readiness.value.validUntil === undefined || readiness.value.validUntil > nowMs)) {
-        facts.Readiness = { value: ready ? 'Ready to use' : unavailable ? 'Unavailable' : 'Setup required', source: sourceLabel(readiness.provenance) }
+        facts.Readiness = { value: ready ? 'Ready to use' : unavailable ? getStatusPresentation('unavailable').label : getStatusPresentation('setup_required').label, source: sourceLabel(readiness.provenance) }
       }
       if (usage?.kind === 'present') facts.Usage = { value: `${usage.value.count.toLocaleString()} uses ${usage.value.window}`, source: sourceLabel(usage.provenance) }
       const identity = object?.identity

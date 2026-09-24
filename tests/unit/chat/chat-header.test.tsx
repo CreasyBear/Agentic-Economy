@@ -16,6 +16,7 @@ describe('ChatHeader', () => {
       <ChatHeader
         authenticated={false}
         threadId={null}
+        threadTitle={null}
         busy={false}
         sharePath={null}
         copied={false}
@@ -44,6 +45,7 @@ describe('ChatHeader', () => {
         <ChatHeader
           authenticated={false}
           threadId={null}
+          threadTitle={null}
           busy={false}
           sharePath={null}
           copied={false}

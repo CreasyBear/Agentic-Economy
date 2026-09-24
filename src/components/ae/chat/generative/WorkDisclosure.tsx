@@ -1,4 +1,5 @@
 import { CheckIcon, ChevronRightIcon, LoaderCircleIcon } from 'lucide-react'
+import { getStatusPresentation } from '@/lib/ui/status-presentation'
 import type { WorkDisclosureProps } from './generative.contracts'
 
 export function WorkDisclosure({ view }: WorkDisclosureProps) {
@@ -15,7 +16,7 @@ export function WorkDisclosure({ view }: WorkDisclosureProps) {
         {view.steps.map((step) => (
           <li key={step.id} className="flex min-w-0 items-start gap-2">
             <span className="min-w-0 flex-1 wrap-break-word">{step.label}</span>
-            <span className="shrink-0">{step.status === 'working' ? 'Working' : step.status === 'attention' ? 'Needs attention' : 'Done'}</span>
+            <span className="shrink-0">{step.status === 'working' ? 'Working' : step.status === 'attention' ? getStatusPresentation('needs_attention').label : 'Done'}</span>
           </li>
         ))}
       </ol>

@@ -793,6 +793,10 @@ function operationSearchPayload(authentication?: unknown) {
         summary: 'Forecast by coordinates.',
         matchReason: 'Capability text overlap.',
         readiness: 'ready',
+        healthStatus: 'operational',
+        verification: 'verified',
+        network: 'mainnet',
+        claimSource: 'provider',
         entitlement: 'requires_auth',
         price: { kind: 'indicative', label: 'Price confirmed at inspection' },
         details: {

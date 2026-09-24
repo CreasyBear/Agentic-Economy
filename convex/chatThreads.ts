@@ -112,7 +112,7 @@ export const getThread = query({
 
 export const listThreads = query({
   args: {
-    paginationOpts: v.optional(paginationOptsValidator),
+    paginationOpts: paginationOptsValidator,
     now: v.number(),
   },
   returns: paginationResultValidator(threadSummary),
@@ -123,7 +123,7 @@ export const listThreads = query({
 export const searchThreads = query({
   args: {
     query: v.string(),
-    paginationOpts: v.optional(paginationOptsValidator),
+    paginationOpts: paginationOptsValidator,
     now: v.number(),
   },
   returns: paginationResultValidator(threadSummary),
