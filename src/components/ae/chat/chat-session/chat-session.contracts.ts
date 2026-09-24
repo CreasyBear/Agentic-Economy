@@ -14,6 +14,7 @@ export type ChatProps = Readonly<{
 export type ChatHistoryThread = Readonly<{
   threadId: string
   title: string
+  createdAt: number
   busy: boolean
 }>
 
@@ -23,6 +24,9 @@ export type ChatHistoryProps = Readonly<{
   threads: readonly ChatHistoryThread[]
   search: string
   busy: boolean
+  hasMore?: boolean
+  loadingMore?: boolean
+  onLoadMore?(): void
   /** True while the thread list's first page loads with nothing cached yet. */
   historyPending?: boolean
   onSearch(value: string): void
@@ -44,6 +48,9 @@ export type ChatHeaderProps = Readonly<{
   enableProblem?: string
   onEnableSpending?: () => void
   mobileHistory: ReactNode
+  mobileOpen: boolean
+  onMobileOpenChange(open: boolean): void
+  onToggleHistory(): void
   onNewChat(): void
   onIssueShare(): void
   onRevokeShare(): void
@@ -91,11 +98,10 @@ export type ChatTranscriptViewProps = Readonly<{
   onFreshQuote?: (callRef: string) => void
 }>
 
-export type ChatHeaderViewProps = Omit<ChatHeaderProps, 'mobileHistory'>
-
+export type ChatHeaderViewProps = Omit<ChatHeaderProps, 'mobileHistory' | 'mobileOpen' | 'onMobileOpenChange' | 'onToggleHistory'>
 export type ChatSessionModel = Readonly<{
   showHistoryRail: boolean
-  createHistoryPanel(idPrefix: string): ReactNode
+  createHistoryPanel(idPrefix: string, onNavigate?: () => void): ReactNode
   header: ChatHeaderViewProps
   composer: ChatComposerProps
   transcript: ChatTranscriptViewProps

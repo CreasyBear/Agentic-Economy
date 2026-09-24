@@ -14,6 +14,7 @@ vi.mock('@convex-dev/agent/react', () => ({
 
 vi.mock('convex/react', () => ({
   useQuery: vi.fn(() => undefined),
+  usePaginatedQuery: () => ({ results: [], status: 'Exhausted', loadMore: vi.fn() }),
   useMutation: () => vi.fn(async () => ({})),
   useConvex: () => ({ query: vi.fn() }),
   useConvexAuth: () => ({ isAuthenticated: false, isLoading: false }),
@@ -38,8 +39,8 @@ afterEach(() => {
   vi.unstubAllGlobals()
 })
 
-const threads: readonly { threadId: string; title: string; busy: boolean }[] = [
-  { threadId: 'thread-1', title: 'Weather operations', busy: false },
+const threads: readonly { threadId: string; title: string; createdAt: number; busy: boolean }[] = [
+  { threadId: 'thread-1', title: 'Weather operations', createdAt: Date.now(), busy: false },
 ]
 
 describe('ChatHistory first-load gate', () => {
@@ -60,7 +61,7 @@ describe('ChatHistory first-load gate', () => {
       />,
     )
 
-    expect(screen.getByLabelText('Conversations')).toBeTruthy()
+    expect(document.querySelector('[aria-busy="true"][aria-label="Conversations"]')).not.toBeNull()
     expect(document.querySelectorAll('[data-slot="skeleton"]').length).toBeGreaterThan(0)
   })
 
@@ -81,7 +82,7 @@ describe('ChatHistory first-load gate', () => {
     )
 
     expect(document.querySelector('[data-slot="skeleton"]')).toBeNull()
-    expect(screen.getByText(chatHistory.empty)).toBeTruthy()
+    expect(screen.getByText('Your chats will appear here.')).toBeTruthy()
   })
 
   it('renders resolved conversations without pending or empty-state UI', () => {
@@ -102,7 +103,22 @@ describe('ChatHistory first-load gate', () => {
 
     expect(screen.getByText('Weather operations')).toBeTruthy()
     expect(document.querySelector('[data-slot="skeleton"]')).toBeNull()
+    expect(screen.getByText('Today')).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Weather operations' }).getAttribute('aria-current')).toBe('page')
     expect(screen.queryByText(chatHistory.empty)).toBeNull()
+  })
+
+  it('groups saved chats by local calendar day and the older date ranges', () => {
+    const today = new Date()
+    const midnight = new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime()
+    const day = 86_400_000
+    render(<ChatHistory idPrefix="groups" activeThreadId={null} search="" busy={false}
+      threads={[midnight + 1, midnight - day / 2, midnight - 4 * day, midnight - 20 * day, midnight - 40 * day]
+        .map((createdAt, index) => ({ threadId: `thread-${index}`, title: `Chat ${index}`, createdAt, busy: false }))}
+      onSearch={() => undefined} onOpen={() => undefined} onRename={async () => true}
+      onDelete={async () => true} onNewChat={() => undefined} />)
+    expect(screen.getAllByRole('listitem').map(section => section.textContent))
+      .toEqual(['TodayChat 0', 'YesterdayChat 1', 'Previous 7 daysChat 2', 'Previous 30 daysChat 3', 'OlderChat 4'])
   })
 })
 

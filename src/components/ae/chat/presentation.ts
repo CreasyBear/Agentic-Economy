@@ -199,9 +199,9 @@ export function projectGenerativeTurn(turn: TranscriptTurn): Readonly<{
     sources: projectSourcesFromCards(turn.tools),
     options,
     comparison: comparedOptions.length > 1 ? projectComparison(comparedOptions) : null,
-    followUps: { suggestions: turn.text.trim().length === 0 ? [] : options.options.length > 0 || comparedOptions.length > 0
-      ? ['Which of these is ready to use?', 'What will each one cost?', 'Which fits my use case best?']
-      : ['Can you show me the options?', 'What should I consider next?'] },
+    followUps: { suggestions: turn.text.trim().length === 0 || (options.options.length === 0 && comparedOptions.length === 0)
+      ? []
+      : ['Which of these is ready to use?', 'What will each one cost?', 'Which fits my use case best?'] },
   }
 }
 

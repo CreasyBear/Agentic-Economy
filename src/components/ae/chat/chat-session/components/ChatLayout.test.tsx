@@ -67,7 +67,7 @@ describe('ChatLayout', () => {
     expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('Find a weather API for Sydney')
   })
 
-  it('opens history from one header control and has no conversation-history column', () => {
+  it('opens the desktop history rail by default and collapses it with the header control', () => {
     render(<ChatLayout model={buildModel({
       showHistoryRail: true,
       header: {
@@ -85,8 +85,13 @@ describe('ChatLayout', () => {
       createHistoryPanel: () => <p>Saved threads</p>,
     })} />)
 
-    expect(screen.getAllByRole('button', { name: chatHistory.openHistory })).toHaveLength(1)
-    expect(screen.queryByRole('complementary', { name: 'Conversation history' })).toBeNull()
+    const rail = screen.getByRole('complementary', { name: 'Conversation history', hidden: true })
+    expect(rail.textContent).toContain('Saved threads')
+    const toggle = screen.getByRole('button', { name: 'Toggle conversation history' })
+    fireEvent.click(toggle)
+    expect(rail.textContent).not.toContain('Saved threads')
+    expect(within(rail).getByRole('button', { name: chatHistory.newChat })).toBeTruthy()
+    expect(document.cookie).toContain('chat_sidebar_state=false')
   })
 
   it('sends the full prompt from an empty-state starter', () => {
@@ -96,6 +101,21 @@ describe('ChatLayout', () => {
     })} />)
     fireEvent.click(within(container).getByRole('button', { name: chatSuggestions[0].prompt }))
     expect(onStarter).toHaveBeenCalledWith(chatSuggestions[0].prompt)
+  })
+
+  it('does not suggest options after a completed zero-result search', () => {
+    render(<ChatLayout model={buildModel({ transcript: {
+      messages: [
+        { id: 'ask', role: 'user', parts: [{ type: 'text', text: 'Find a non-existent Tool' }] },
+        { id: 'reply', role: 'assistant', parts: [
+          { type: `tool-${providerSafeActionToolName('registry.tools.search')}`, state: 'output-available', output: { kind: 'noMatch', results: [], nearMisses: [], scope: 'exhausted' } },
+          { type: 'text', text: 'No match for that yet.' },
+        ] },
+      ],
+      onSuggest: vi.fn(),
+    } })} />)
+    expect(screen.getByRole('region', { name: 'Answer' }).textContent).toContain('No match for that yet.')
+    expect(screen.queryByRole('region', { name: 'Related questions' })).toBeNull()
   })
 
   it('shows one collapsed work line, answer, choices and compare actions without repeated search cards', () => {

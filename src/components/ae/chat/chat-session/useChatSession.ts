@@ -1,7 +1,7 @@
 import { useUIMessages } from '@convex-dev/agent/react'
 import { DefaultChatTransport, readUIMessageStream, type UIMessage } from 'ai'
 import { useServerFn } from '@tanstack/react-start'
-import { useConvexAuth, useMutation, useQuery } from 'convex/react'
+import { useConvexAuth, useMutation, usePaginatedQuery, useQuery } from 'convex/react'
 import { createElement, useEffect, useEffectEvent, useMemo, useRef, useState, type ReactNode } from 'react'
 
 import { api } from '../../../../../convex/_generated/api'
@@ -84,17 +84,15 @@ export function useChatSession({
     api.chatThreads.getThread,
     isAuthenticated && threadId !== null ? { threadId, now } : 'skip',
   )
-  const listedThreads = useQuery(
+  const listedThreads = usePaginatedQuery(
     api.chatThreads.listThreads,
-    isAuthenticated && historySearch.trim().length === 0
-      ? { paginationOpts: { cursor: null, numItems: PAGE_SIZE }, now }
-      : 'skip',
+    isAuthenticated && historySearch.trim().length === 0 ? { now } : 'skip',
+    { initialNumItems: PAGE_SIZE },
   )
-  const searchedThreads = useQuery(
+  const searchedThreads = usePaginatedQuery(
     api.chatThreads.searchThreads,
-    isAuthenticated && historySearch.trim().length > 0
-      ? { query: historySearch, paginationOpts: { cursor: null, numItems: PAGE_SIZE }, now }
-      : 'skip',
+    isAuthenticated && historySearch.trim().length > 0 ? { query: historySearch, now } : 'skip',
+    { initialNumItems: PAGE_SIZE },
   )
   const shareState = useQuery(
     api.chatShares.getShareState,
@@ -171,11 +169,10 @@ export function useChatSession({
   const visibleMessages = isAuthenticated
     ? [...anonymousMessages, ...durableMessages]
     : anonymousMessages
-  const threadRows: readonly ChatHistoryThread[] | undefined = (searchedThreads ?? listedThreads)?.page?.filter((row: unknown): row is ChatHistoryThread =>
-    typeof row === 'object' && row !== null
-    && 'threadId' in row && typeof row.threadId === 'string'
-    && 'title' in row && typeof row.title === 'string'
-    && 'busy' in row && typeof row.busy === 'boolean')
+  const historyPage = historySearch.trim().length > 0 ? searchedThreads : listedThreads
+  const threadRows: readonly ChatHistoryThread[] = historyPage.results.filter((row): row is ChatHistoryThread =>
+    typeof row.threadId === 'string' && typeof row.title === 'string'
+    && typeof row.createdAt === 'number' && typeof row.busy === 'boolean')
   const threadsPage = useStickyRows(threadRows)
   const historyPending = isAuthenticated && !threadsPage.everCached
   const threads = threadsPage.shown
@@ -358,7 +355,7 @@ export function useChatSession({
     })
   }
 
-  function createHistoryPanel(idPrefix: string): ReactNode {
+  function createHistoryPanel(idPrefix: string, onNavigate?: () => void): ReactNode {
     return createElement(ChatHistory, {
       idPrefix,
       activeThreadId: threadId,
@@ -366,9 +363,12 @@ export function useChatSession({
       search: historySearch,
       busy,
       ...(historyPending ? { historyPending: true } : {}),
+      hasMore: historyPage.status === 'CanLoadMore' || historyPage.status === 'LoadingMore',
+      loadingMore: historyPage.status === 'LoadingMore',
+      onLoadMore: () => { if (historyPage.status === 'CanLoadMore') historyPage.loadMore(PAGE_SIZE) },
       onSearch: setHistorySearch,
-      onOpen: onOpenThread,
-      onNewChat: startNewChat,
+      onOpen: (targetThreadId) => { onOpenThread(targetThreadId); onNavigate?.() },
+      onNewChat: () => { startNewChat(); onNavigate?.() },
       onRename: async (targetThreadId, title) => await mutateWithError(async () => {
         await renameThread({ threadId: targetThreadId, title })
       }, 'Conversation renamed.'),

@@ -39,6 +39,10 @@ vi.mock('convex/react', () => ({
     useQueryCallsRef.current.push(args)
     return undefined
   },
+  usePaginatedQuery: (...args: unknown[]) => {
+    useQueryCallsRef.current.push(args)
+    return { results: [], status: 'Exhausted', loadMore: vi.fn() }
+  },
   useMutation: () => sendMessageMutationMock,
 }))
 
