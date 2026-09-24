@@ -97,23 +97,32 @@ Work the highest score first. Churn decides ties, because the ergonomics payoff 
 | 2026-09-24 | lib/money layout | 17 loose files | money/{funding,credit,earnings}/ | 2716ecda2 |
 | 2026-09-24 | dead code | 13 RPCs, 7 empty roots, 10 src files | deleted (-737 src lines; about -2,400 convex lines) | 3509f0ed9, ee831d3a3 |
 | 2026-09-24 | convex/lib layout (wave 4) | 23 folders + 21 loose files, mixed naming | 13 domain folders (adminConsole, agentAccess, authority, capabilityExecution, capabilitySupply, catalog, chat, market, money, platform, principalAccount, secrets, security), no loose files; 366 files moved move-only; dead authorityRegistrars removed | 0a3580e29 |
+| 2026-09-24 | qualifiedUse.ts | 232 lines | 12 lines, registration only | d2baca6cd |
+| 2026-09-24 | capabilityCallWorker.ts | 363 lines | 43 lines, registration only | d2baca6cd |
+| 2026-09-24 | capabilityProviderConnectionCleanup.ts | 257 lines | 21 lines, registration only | d2baca6cd |
+| 2026-09-24 | capabilitySupplyShared.ts | zero RPCs | distributed to capabilitySupply concerns; root deleted | d2baca6cd |
+| 2026-09-24 | capabilitySupplyIntegrationDrafts.ts | 310 lines | moved to capabilitySupply/integrationDrafts; root deleted | d2baca6cd |
+| 2026-09-24 | capabilityContractDocuments.ts | 345 lines | 23 lines after extraction, then 14 after dead RPC deletion | d2baca6cd |
+| 2026-09-24 | x402PaymentAttempt attempt.ts + callLifecycle/contracts.ts + providerConnections/contracts.ts | 856 + 394 + 424 lines | attempt 23 lines plus concern files; contracts 272 + 354 lines | d2baca6cd |
+| 2026-09-24 | dead code (wave 5) | 11 dead test-only RPCs (including 2 backfills), 15 unwired skeletons, 774-line publication-admit pair, 4 x402 shell roots | deleted; `x402DirectoryIndexBackfill.start` retained for category-stats rebuild | d2baca6cd |
 
-### Follow-ups recorded
-- **Connect type drift:** `payout-connect-http.ts` `accountFromPayout` fabricates a binding that lacks `requirementsDigest`, `createdAt` and `updatedAt`, and its refusal and authority envelopes differ. This needs a behaviour decision before the shapes can be unified.
-- **Layout items left over:** `capabilityExecution/callLifecycle/admissionTypes.ts` (106 lines) can't merge into its 394-line contracts.ts. `capabilitySupply/providerConnections/contracts.ts` is 424 lines. `money/x402PaymentAttempt/attempt.ts` is 856 lines and its contracts.ts 541. All four need a concern split in a later pass. Stale old-path comments remain in the `interactiveAuthority.ts` and `devSeed.ts` roots.
-- **Pure file in lib:** `convex/lib/callLifecycle/terminalProjection.ts` is pure but lives in lib. Move it to the domain in an API-changing wave.
-- **Hyphenated filenames broke the push (fixed in ee831d3a3).** Convex rejects hyphenated module paths. Wave 1's kebab-case Connect files silently stopped the local dev push and froze `_generated`. §10's camelCase rule is a hard requirement for this reason.
-- **Security decision pending:** `catalogOriginIsCurrent` checks businessId on the graph path but not in capabilitySupplyEligiblePorts.
-- **Contract home decision:** src `OwnerSupplyCommandResult` (supply-funnel/types.ts:262-291) is deeply readonly, while the Convex validator infers mutable arrays.
-- **Operator RPCs kept:** 7 were retained pending an operator decision (migration/backfill/health/installSchema/resolveLostResult/reconcileScheduledInteractiveAuthority/x402 backfill start).
-- **40 RPCs referenced only by tests remain.** The largest are the workspaceMemberships `*ForServer` handlers. Verify whether they are called through string refs (for example from the Clerk webhook) before treating them as dead.
-- **Next layout wave:** catalog/sellerCanary.ts (772 lines, loose); publication-admit pair (12 days old); 17 unwired skeletons (product decision). Layout map: `docs/reviews/2026-09-24-codebase-health/quote-standard/layout-map.md`.
-- **Typecheck:** 2199c986b made `api` collapse to `any` (marketFlowRefresh self-inference). 727b5f2bc fixed it, and b31a477a3 fixed the 4 residual test errors. The 12 remaining errors belong to the chat session. **Rule: an action or handler that calls `ctx.run*(internal.*)` must declare its return type.**
-- **Catalog authority gap:** `catalogOriginIsCurrent` in `graphPorts` checks `path.businessId === offering.businessId`, but `capabilitySupplyEligiblePorts` does not. This needs a security decision.
-- **Principal refusals:** Account and directory principal resolvers use different missing-principal refusal codes; keep them distinct.
-- **Managed-Call remedy:** Remedy transitions resemble finalize transitions but differ semantically; keep them distinct.
-- **Provider-row test location:** Move `convex/x402DirectoryIndexStoreProviderRows.test.ts` beside `lib/x402DirectoryIndex/providerRows`.
-- **Typecheck baseline:** 12 errors remain, all owned by the parallel chat session.
+### Decisions applied 2026-09-24
+- **D1, catalog origin:** eligible-ports admission now checks the business ID and fails closed, as the graph path does (`34ccfe8f7`).
+- **D2, command contract:** capability-supply owns the owner command result validator; its readonly view is derived from that contract (`fd96e01dc`).
+- **D3, Connect:** HTTP no longer fabricates a payout binding; one Connect contract home remains, but the refusal and authority envelopes differ semantically (`483a2d613`).
+- **D4, operator RPCs:** the two obsolete backfills were deleted; `x402DirectoryIndexBackfill.start` was restored as the category-stats rebuild entry (alongside its state/batch work). Kept operator entries: `moneyFormance.health`, `moneyFormance.installSchema`, `moneyManagedCallRemedyActions.resolveLostResult`, `interactiveAuthority.reconcileScheduledInteractiveAuthority`, `recoveryBreakGlass.submitRecoveryApproval`, `recoveryBreakGlass.authorizeRecoveryOperation`, and `x402DirectoryIndexBackfill.start` (`d2baca6cd`).
+- **D5, dead RPCs:** 11 further test-only RPCs deleted: `actionExecutionControl.readControlSource`, `actionExecutionControl.recordLateObservationSource`, `capabilityContractDocuments.getActiveExactInternal`, `capabilityProviderConnectionMigration.backfillFacilitatorDiscoveryAuthority`, `capabilityProviderTools.backfillAdmissionPage`, `interactiveSession.listUserWorkspaces`, `moneyDocuments.createOwnerTaxInvoice`, `moneyStripeWebhookInbox.readHealth`, `notifications.dispatchNotificationInternal`, `workspaceProfile.syncOrganizationDisplayNameForServer`, `workspaceProvisioning.claimCreatedWorkspace`. Integration-fixture RPCs remain for a test-fixture pass; five Clerk webhook string references were kept: `workspaceInvitations.recordOrganizationInvitationCreatedForServer`, `workspaceInvitations.recordOrganizationInvitationRevokedForServer`, `workspaceMemberships.recordOrganizationMembershipCreatedForServer`, `workspaceMemberships.recordOrganizationMembershipUpdatedForServer`, `workspaceMemberships.recordOrganizationMembershipDeletedForServer` (`d2baca6cd`).
+- **D6, layout:** pure terminal projection moved to `src/modules/capability-execution/terminal-projection.ts`; oversized attempt and shared contracts were split (`d2baca6cd`).
+- **D7, ingress identity:** on Vercel, rate limiting trusts only `x-vercel-forwarded-for` (`7524cb6c8`).
+- **D8, docs:** strategy documents 64→18 (`e5cc39fff`); docs overall 276→58 files and 24.7 MB→1.3 MB (`326c1b422`, `e5cc39fff`).
+
+### Open
+- Integration-fixture RPCs need a test-fixture pass before any further deletion; Clerk's five string-ref handlers are live references, not dead code.
+- Connect's differing refusal and authority envelopes are semantic; do not unify them as a type-only move.
+- `convex/lib/capabilityExecution/callLifecycle/admissionReserve.ts` (598 lines) and `convex/lib/money/x402PaymentAttempt/identity.ts` (412) remain oversized; `convex/moneyX402PaymentAttempts.ts` still has an inline reconcile handler.
+- `convex/capabilityCalls.ts` remains at 347 lines and is deferred pending the lib/callLifecycle role split.
+- Chat-session gates remain: `chatAnonymous.ts` 290 against pin 213; the `chatTools` registry entry; status vocabulary 20 against 17; and 12 chat-owned typecheck errors. Principal refusal codes and Managed-Call remedy transitions remain deliberately distinct.
+
 
 ## 9. Wave rules learned (binding from wave 2)
 - **Baseline first.** Record `npx tsc --noEmit --pretty false` and `npm run test:imports` at HEAD before dispatching the wave. Attribute errors by diffing against that baseline, not by guessing.
