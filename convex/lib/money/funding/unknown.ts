@@ -1,6 +1,6 @@
 import { v } from 'convex/values'
 
-import type { MutationCtx } from '../../_generated/server'
+import type { MutationCtx } from '../../../_generated/server'
 
 export const markFundingBookingUnknownArgs = {
   commandRef: v.string(), stripeEventId: v.string(), observedAt: v.number(),

@@ -1,9 +1,9 @@
 import { type Infer } from 'convex/values'
 import { paginationOptsValidator } from 'convex/server'
-import { internal } from '../../_generated/api'
-import type { ActionCtx } from '../../_generated/server'
-import { resolveBusinessActor } from '../../authz'
-import { creditActivityResultValue, keyUsageResultValue, type FormanceStatementPageRead, type FormancePeriodSpendRead } from './credit-contracts'
+import { internal } from '../../../_generated/api'
+import type { ActionCtx } from '../../../_generated/server'
+import { resolveBusinessActor } from '../../../authz'
+import { creditActivityResultValue, keyUsageResultValue, type FormanceStatementPageRead, type FormancePeriodSpendRead } from './contracts'
 
 /** The current UTC-month window `AeOwnerCredit`'s own copy already promises. */
 function currentUtcMonthWindow(): { periodStartAt: number; periodEndAt: number } {

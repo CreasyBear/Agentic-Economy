@@ -1,19 +1,19 @@
 import type { GenericDatabaseReader, UserIdentity } from 'convex/server'
 import { v } from 'convex/values'
 
-import type { DataModel, Doc } from '../../_generated/dataModel'
-import type { QueryCtx } from '../../_generated/server'
+import type { DataModel, Doc } from '../../../_generated/dataModel'
+import type { QueryCtx } from '../../../_generated/server'
 import {
   InteractiveAuthorityError,
   requireAccessFactForAccount,
   resolveActiveAccountRefForPrincipal,
-} from '../../interactiveAuthority'
-import { readCommercialPolicyGate } from '../../moneyCommercialPolicy'
-import { readCustomerTaxFactsForAccount } from './documents/issue'
-import { CLERK_USER_PROVIDER_NAMESPACE } from '../../workspaceProvisioning'
-import { accountRef } from '../../../src/modules/principal-account/account/public'
-import { principalRef } from '../../../src/modules/principal-account/principal/public'
-import { admitTaxInvoiceIssuance } from '../../../src/modules/money/public'
+} from '../../../interactiveAuthority'
+import { readCommercialPolicyGate } from '../../../moneyCommercialPolicy'
+import { readCustomerTaxFactsForAccount } from '../documents/issue'
+import { CLERK_USER_PROVIDER_NAMESPACE } from '../../../workspaceProvisioning'
+import { accountRef } from '../../../../src/modules/principal-account/account/public'
+import { principalRef } from '../../../../src/modules/principal-account/principal/public'
+import { admitTaxInvoiceIssuance } from '../../../../src/modules/money/public'
 
 const ownerInvoiceHistoryTaxInvoiceValue = v.union(
   v.object({ kind: v.literal('issued'), documentRef: v.string() }),

@@ -1,13 +1,13 @@
 import { v } from 'convex/values'
 
-import type { QueryCtx } from '../../_generated/server'
+import type { QueryCtx } from '../../../_generated/server'
 
 import {
   fundingCommandView,
   fundingResultValue,
   refused,
   type FundingResult,
-} from './accountFundingValidators'
+} from './contracts'
 
 export const readWebhookCommandForWorkerArgs = {
   commandRef: v.string(),

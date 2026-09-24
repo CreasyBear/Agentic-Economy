@@ -1,9 +1,9 @@
 import { v, type Infer } from 'convex/values'
-import { internal } from '../../_generated/api'
-import type { ActionCtx, QueryCtx } from '../../_generated/server'
-import { resolveBusinessActor } from '../../authz'
-import { exactAmount, identifier } from '../../moneyLedgerValues'
-import { creditAccountResultValue, type FormanceDisplayBalanceRead } from './credit-contracts'
+import { internal } from '../../../_generated/api'
+import type { ActionCtx, QueryCtx } from '../../../_generated/server'
+import { resolveBusinessActor } from '../../../authz'
+import { exactAmount, identifier } from '../../../moneyLedgerValues'
+import { creditAccountResultValue, type FormanceDisplayBalanceRead } from './contracts'
 export const creditAccountMoneyFactsArgs = { accountRef: identifier }
 
 

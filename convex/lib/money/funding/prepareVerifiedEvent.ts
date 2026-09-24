@@ -1,11 +1,11 @@
 import type { Infer } from 'convex/values'
 
-import type { MutationCtx } from '../../_generated/server'
-import { requireSourceWrite } from '../../sourceWriteAdmission'
+import type { MutationCtx } from '../../../_generated/server'
+import { requireSourceWrite } from '../../../sourceWriteAdmission'
 import {
   prepareFundingRefundEvent,
   prepareFundingSettlementEvent,
-} from './fundingStripeEventPipeline'
+} from './stripeEventPipeline'
 
 import {
   applyFundingEventArgsValue,
@@ -13,7 +13,7 @@ import {
   refused,
   trustedApplyFundingEventArgsValue,
   type ApplyFundingEventArgs,
-} from './accountFundingValidators'
+} from './contracts'
 
 export const prepareVerifiedEventArgs = applyFundingEventArgsValue
 export const prepareVerifiedEventResult = prepareFundingEventResultValue

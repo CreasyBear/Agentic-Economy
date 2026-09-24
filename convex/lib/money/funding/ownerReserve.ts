@@ -1,18 +1,18 @@
 import { resolveServiceMode, serviceModeAllowsEnvironment } from '@/lib/deployment/service-mode'
 
-import type { MutationCtx } from '../../_generated/server'
-import { env } from '../../_generated/server'
-import { resolveBusinessActor } from '../../authz'
-import { admitInteractiveOwnerConsequence } from '../ownerConsequence'
-import { readCommercialPolicyGate } from '../../moneyCommercialPolicy'
-import { resolveAndBindLegalCustomer } from '../moneyLegalCustomer'
-import { requireSourceWrite } from '../../sourceWriteAdmission'
-import { canonicalDigest } from '../../../src/modules/common/canonical-digest'
+import type { MutationCtx } from '../../../_generated/server'
+import { env } from '../../../_generated/server'
+import { resolveBusinessActor } from '../../../authz'
+import { admitInteractiveOwnerConsequence } from '../../ownerConsequence'
+import { readCommercialPolicyGate } from '../../../moneyCommercialPolicy'
+import { resolveAndBindLegalCustomer } from '../../moneyLegalCustomer'
+import { requireSourceWrite } from '../../../sourceWriteAdmission'
+import { canonicalDigest } from '../../../../src/modules/common/canonical-digest'
 import {
   AUD_EXPONENT,
   audFundingPolicyFromCommercialControls,
   quoteAudAccountFunding,
-} from '../../../src/modules/money/public'
+} from '../../../../src/modules/money/public'
 
 import {
   fundingCommandView,
@@ -24,7 +24,7 @@ import {
   SHA256,
   type FundingResult,
   type ReserveFundingArgs,
-} from './accountFundingValidators'
+} from './contracts'
 
 export const reserveArgs = reserveFundingArgsValue
 export const reserveResult = fundingResultValue

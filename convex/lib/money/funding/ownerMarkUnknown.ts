@@ -1,8 +1,8 @@
 import type { Infer } from 'convex/values'
 
-import type { MutationCtx } from '../../_generated/server'
-import { resolveBusinessActor } from '../../authz'
-import { requireSourceWrite } from '../../sourceWriteAdmission'
+import type { MutationCtx } from '../../../_generated/server'
+import { resolveBusinessActor } from '../../../authz'
+import { requireSourceWrite } from '../../../sourceWriteAdmission'
 
 import {
   fundingCommandView,
@@ -10,7 +10,7 @@ import {
   markFundingUnknownArgsValue,
   refused,
   type FundingResult,
-} from './accountFundingValidators'
+} from './contracts'
 
 export const markOutcomeUnknownArgs = markFundingUnknownArgsValue
 export const markOutcomeUnknownResult = fundingResultValue

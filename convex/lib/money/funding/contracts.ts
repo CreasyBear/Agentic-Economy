@@ -1,9 +1,9 @@
 import { v, type Infer } from 'convex/values'
 
-import type { Doc } from '../../_generated/dataModel'
-import { exactAmount, serverFunctionAuth, stripeMoneyWebhookEventArg } from '../../moneyLedgerValues'
-import { agentAccessPrincipalValue } from '../../agentAccessPrincipals'
-import { sourceWriteArgs } from '../../sourceWriteAdmission'
+import type { Doc } from '../../../_generated/dataModel'
+import { exactAmount, serverFunctionAuth, stripeMoneyWebhookEventArg } from '../../../moneyLedgerValues'
+import { agentAccessPrincipalValue } from '../../../agentAccessPrincipals'
+import { sourceWriteArgs } from '../../../sourceWriteAdmission'
 
 export const environmentValue = v.union(v.literal('sandbox'), v.literal('production'))
 export const fundingProviderStateValue = v.union(

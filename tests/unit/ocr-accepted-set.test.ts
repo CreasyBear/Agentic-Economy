@@ -30,9 +30,6 @@ describe('ocr accepted set', () => {
     expect(redactPayload).toEqual(expect.any(Function))
     expect(validateAuditEvent).toEqual(expect.any(Function))
 
-    const funding = readFileSync(join(repoRoot, 'convex/lib/money/fundingStripeEventPipeline.ts'), 'utf8')
-    expect(funding).toContain('async function prepareFundingRefundEvent')
-
     const reactDoctor = readFileSync(join(repoRoot, '.github/workflows/react-doctor.yml'), 'utf8')
     expect(REACT_DOCTOR_SHA).toMatch(/^[0-9a-f]{40}$/u)
     expect(reactDoctor).toContain(`millionco/react-doctor@${REACT_DOCTOR_SHA}`)

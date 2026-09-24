@@ -1,23 +1,23 @@
 import { resolveServiceMode, serviceModeAllowsEnvironment } from '@/lib/deployment/service-mode'
 import { v, type Infer } from 'convex/values'
 
-import type { Doc } from '../../_generated/dataModel'
-import type { MutationCtx, QueryCtx } from '../../_generated/server'
-import { env } from '../../_generated/server'
+import type { Doc } from '../../../_generated/dataModel'
+import type { MutationCtx, QueryCtx } from '../../../_generated/server'
+import { env } from '../../../_generated/server'
 import {
   verifyMarketAgentPrincipal,
   type AgentAccessPrincipalValue,
-} from '../../agentAccessPrincipals'
-import { readCommercialPolicyGate } from '../../moneyCommercialPolicy'
-import { resolveAndBindLegalCustomer } from '../moneyLegalCustomer'
-import { requireSourceRead, requireSourceWrite } from '../../sourceWriteAdmission'
-import { canonicalDigest } from '../../../src/modules/common/canonical-digest'
+} from '../../../agentAccessPrincipals'
+import { readCommercialPolicyGate } from '../../../moneyCommercialPolicy'
+import { resolveAndBindLegalCustomer } from '../../moneyLegalCustomer'
+import { requireSourceRead, requireSourceWrite } from '../../../sourceWriteAdmission'
+import { canonicalDigest } from '../../../../src/modules/common/canonical-digest'
 import {
   AUD_EXPONENT,
   audFundingPolicyFromCommercialControls,
   compareExactAmounts,
   quoteAudAccountFunding,
-} from '../../../src/modules/money/public'
+} from '../../../../src/modules/money/public'
 
 import {
   bindAgentHandoffArgsValue,
@@ -29,7 +29,7 @@ import {
   refused,
   reserveAgentHandoffArgsValue,
   type FundingResult,
-} from './accountFundingValidators'
+} from './contracts'
 
 export const reserveAgentHandoffArgs = reserveAgentHandoffArgsValue
 export const reserveAgentHandoffResult = fundingResultValue

@@ -1,7 +1,7 @@
 import type { Infer } from 'convex/values'
 
-import type { QueryCtx } from '../../_generated/server'
-import { resolveBusinessActor } from '../../authz'
+import type { QueryCtx } from '../../../_generated/server'
+import { resolveBusinessActor } from '../../../authz'
 
 import {
   fundingCommandView,
@@ -9,7 +9,7 @@ import {
   readFundingArgsValue,
   refused,
   type FundingResult,
-} from './accountFundingValidators'
+} from './contracts'
 
 export const readArgs = readFundingArgsValue
 export const readResult = fundingResultValue

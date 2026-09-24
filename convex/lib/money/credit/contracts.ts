@@ -1,6 +1,6 @@
 import { paginationOptsValidator } from 'convex/server'
 import { v } from 'convex/values'
-import { exactAmount, identifier } from '../../moneyLedgerValues'
+import { exactAmount, identifier } from '../../../moneyLedgerValues'
 
 export const creditAccountArgs = { principalId: identifier, currency: identifier }
 export const creditActivityArgs = {

@@ -1,11 +1,11 @@
 import type { Infer } from 'convex/values'
 
-import type { QueryCtx } from '../../_generated/server'
-import { env } from '../../_generated/server'
+import type { QueryCtx } from '../../../_generated/server'
+import { env } from '../../../_generated/server'
 import {
   verifyCustomerRequestServiceAssertion,
   type CustomerRequestServiceAssertion,
-} from '../../../src/modules/agent-access/service-auth-envelope'
+} from '../../../../src/modules/agent-access/service-auth-envelope'
 
 import {
   FUNDING_REFUND_LOOKUP_OPERATION,
@@ -17,7 +17,7 @@ import {
   readWebhookRefundFundingArgsValue,
   refused,
   type FundingResult,
-} from './accountFundingValidators'
+} from './contracts'
 
 export const readWebhookCommandArgs = readWebhookFundingArgsValue
 export const readWebhookCommandResult = fundingResultValue

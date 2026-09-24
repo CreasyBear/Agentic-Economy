@@ -1,8 +1,8 @@
 import { v } from 'convex/values'
-import { agentAccessPrincipalValue } from '../../agentAccessPrincipals'
-import { sourceWriteArgs } from '../../sourceWriteAdmission'
-import type { QueryCtx } from '../../_generated/server'
-import { resolveBusinessActor } from '../../authz'
+import { agentAccessPrincipalValue } from '../../../agentAccessPrincipals'
+import { sourceWriteArgs } from '../../../sourceWriteAdmission'
+import type { QueryCtx } from '../../../_generated/server'
+import { resolveBusinessActor } from '../../../authz'
 
 export const ownerProviderEarningsArgs = {}
 export const ownerProviderEarningsResultValue = v.union(

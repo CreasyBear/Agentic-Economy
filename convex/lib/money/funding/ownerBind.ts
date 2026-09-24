@@ -1,7 +1,7 @@
-import type { MutationCtx } from '../../_generated/server'
-import { resolveBusinessActor } from '../../authz'
-import { requireSourceWrite } from '../../sourceWriteAdmission'
-import { AUD_EXPONENT, compareExactAmounts } from '../../../src/modules/money/public'
+import type { MutationCtx } from '../../../_generated/server'
+import { resolveBusinessActor } from '../../../authz'
+import { requireSourceWrite } from '../../../sourceWriteAdmission'
+import { AUD_EXPONENT, compareExactAmounts } from '../../../../src/modules/money/public'
 
 import {
   bindFundingArgsValue,
@@ -10,7 +10,7 @@ import {
   refused,
   type BindFundingArgs,
   type FundingResult,
-} from './accountFundingValidators'
+} from './contracts'
 
 export const bindArgs = bindFundingArgsValue
 export const bindResult = fundingResultValue

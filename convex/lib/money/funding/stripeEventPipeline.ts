@@ -1,15 +1,15 @@
-import type { Doc } from '../../_generated/dataModel'
-import { canonicalDigest } from '../../../src/modules/common/canonical-digest'
-import type { MutationCtx } from '../../_generated/server'
-import type { StableHashValue } from '../../../src/modules/common/stable-hash'
+import type { Doc } from '../../../_generated/dataModel'
+import { canonicalDigest } from '../../../../src/modules/common/canonical-digest'
+import type { MutationCtx } from '../../../_generated/server'
+import type { StableHashValue } from '../../../../src/modules/common/stable-hash'
 import {
   AUD_EXPONENT,
   compareExactAmounts,
   type ExactAmount,
   type StripeMoneyWebhookEvent,
-} from '../../../src/modules/money/public'
-import { createAndQueueDocument } from './documents/insert'
-import { eventRowFields, eventRowMatches } from '../../moneyStripeEvents'
+} from '../../../../src/modules/money/public'
+import { createAndQueueDocument } from '../documents/insert'
+import { eventRowFields, eventRowMatches } from '../../../moneyStripeEvents'
 
 export type FundingProviderEvidence = Readonly<{
   externalRef: string

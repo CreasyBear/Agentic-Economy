@@ -1,9 +1,9 @@
 import { v } from 'convex/values'
 
-import type { QueryCtx } from '../../_generated/server'
-import { resolveBusinessActor } from '../../authz'
+import type { QueryCtx } from '../../../_generated/server'
+import { resolveBusinessActor } from '../../../authz'
 
-import { refused } from './accountFundingValidators'
+import { refused } from './contracts'
 
 export const readBalanceSubjectArgs = {}
 
