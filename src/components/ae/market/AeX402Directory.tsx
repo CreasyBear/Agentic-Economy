@@ -298,33 +298,20 @@ function DirectoryMarketplace({ page, compareEntries, search, workspace = false,
   return (
     <div className="ae-rail pb-page">
       <DirectoryHero {...(home === undefined ? {} : { home })} compact={workspace} headingLevel={workspace ? 2 : 1} {...(workspace && view === 'tools' ? { compactTitle: 'Explore capabilities.' } : {})}>
-        <form action={marketPath} method="get" role="search" className="mt-1 flex w-full max-w-2xl gap-2" onSubmit={event => {
+        <form action="/t/new" method="get" aria-label="Start a conversation" className="mt-1 flex w-full max-w-2xl gap-2" onSubmit={event => {
           event.preventDefault()
-          const query = new FormData(event.currentTarget).get('query')?.toString().trim() ?? ''
-          const { query: _query, sort: _sort, ...filters } = indexedSearch()
-          void navigate({ to: marketPath, search: carryMarketCompare(search, {
-            ...filters,
-            ...(query === '' ? {} : { query }),
-            view: 'tools',
-          }) })
+          const q = new FormData(event.currentTarget).get('q')?.toString().trim() ?? ''
+          const previous = window.sessionStorage.getItem('ae.chat.anonymous.active')
+          if (previous !== null) window.sessionStorage.removeItem(`ae.chat.anonymous.${previous}`)
+          window.sessionStorage.removeItem('ae.chat.anonymous.active')
+          void navigate({ to: '/t/new', search: q === '' ? {} : { q } })
         }}>
-          {search.compare === undefined ? null : <input type="hidden" name="compare" value={search.compare} />}
-          <input type="hidden" name="view" value="tools" />
-          {search.directoryCategory === undefined ? null : <input type="hidden" name="directoryCategory" value={search.directoryCategory} />}
-          {search.network === undefined ? null : <input type="hidden" name="network" value={search.network} />}
-          {search.provider === undefined ? null : <input type="hidden" name="provider" value={search.provider} />}
-          {search.maxUsdPrice === undefined ? null : <input type="hidden" name="maxUsdPrice" value={search.maxUsdPrice} />}
           <InputGroup className="min-h-14 rounded-full bg-card pl-3 shadow-xs">
             <InputGroupAddon><SearchIcon aria-hidden="true" /></InputGroupAddon>
-            <label htmlFor="x402-directory-search" className="sr-only">Search Tools</label>
-            <InputGroupInput ref={searchInput} id="x402-directory-search" key={search.query ?? ''} type="search" name="query" placeholder="Describe what you need done…" defaultValue={search.query ?? ''} />
+            <label htmlFor="x402-directory-search" className="sr-only">Ask about any tool or service</label>
+            <InputGroupInput ref={searchInput} id="x402-directory-search" type="search" name="q" placeholder="Ask about any tool or service…" />
             <InputGroupAddon align="inline-end">
-              {search.query === undefined ? null : <InputGroupButton type="button" size="icon-sm" variant="ghost" aria-label="Clear search" onClick={() => {
-                if (searchInput.current) searchInput.current.value = ''
-                const { query: _query, sort: _sort, ...filters } = indexedSearch()
-                void navigate({ to: marketPath, resetScroll: false, search: carryMarketCompare(search, { ...filters, view: 'tools' }) })
-              }}><XIcon aria-hidden="true" /></InputGroupButton>}
-              <Button type="submit" className="mr-1 rounded-full" aria-label="Search Tools"><SearchIcon aria-hidden="true" /><span className="hidden sm:inline">Search</span></Button>
+              <Button type="submit" className="mr-1 rounded-full" aria-label="Start conversation"><ArrowRightIcon aria-hidden="true" /><span className="hidden sm:inline">Ask</span></Button>
             </InputGroupAddon>
           </InputGroup>
         </form>

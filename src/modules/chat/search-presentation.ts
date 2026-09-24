@@ -1,3 +1,5 @@
+import type { ModelMessage } from 'ai'
+
 const CHAT_SEARCH_USES = [
   'registry.tools.search',
   'registry.tools.compare',
@@ -25,3 +27,20 @@ export function readBelowMatch(value: unknown): readonly string[] {
   return refs
 }
 
+
+export function latestUserRequest(messages: readonly ModelMessage[] | undefined): string | undefined {
+  if (messages === undefined) return undefined
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const message = messages[index]
+    if (message === undefined || message.role !== 'user') continue
+    const text = messageText(message.content).trim()
+    if (text.length > 0) return Array.from(text).slice(0, 500).join('')
+  }
+  return undefined
+}
+
+function messageText(content: ModelMessage['content']): string {
+  if (typeof content === 'string') return content
+  if (!Array.isArray(content)) return ''
+  return content.flatMap((part) => part.type === 'text' ? [part.text] : []).join('\n')
+}

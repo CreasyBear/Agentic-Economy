@@ -121,9 +121,8 @@ describe('Tool chat Agent tools', () => {
       })),
     }), { toolRef: OPERATION_REF })
     expect(() => convexToJson(output as Value)).not.toThrow()
-    expect(typeof output).toBe('string')
-    const decoded = JSON.parse(output as string)
-    expect(decoded.tool.inputJsonSchema).toEqual(inputJsonSchema)
+    const decoded: unknown = typeof output === 'string' ? JSON.parse(output) : output
+    expect(decoded).toMatchObject({ tool: { inputJsonSchema } })
     expect(projectToolCard({
       type: `tool-${CHAT_TOOL_NAME_MAP.canonicalToProvider['registry.tools.describe']}`,
       state: 'output-available', output,
@@ -352,6 +351,30 @@ describe('Tool chat Agent tools', () => {
       getFunctionName(api.capabilityToolCatalog.search),
       getFunctionName(internal.capabilityToolCatalog.presentSearch),
     ])
+  })
+
+  it('keeps testnet and degraded Tools out of an ordinary chat recommendation', async () => {
+    const testnet = { ...TOOL_TIMEZONE, payment: {
+      protocol: 'x402' as const, scheme: 'exact' as const, network: 'eip155:84532', asset: 'USDC', currency: 'USDC',
+    } }
+    const degraded = { ...TOOL_CURRENCY, availability: {
+      posture: 'routeable' as const, observedAt: 1, validUntil: 2, lastHealthyAt: 1,
+      reason: 'inspection_required' as const,
+    } }
+    const source = { ...misorderedSearchResult('weather'), items: [TOOL_CRYPTO_TX, testnet, degraded] }
+    const presented = serializeToolSearchResult({
+      ...source,
+      ranking: source.items.map((tool, index) => ({ toolRef: tool.toolRef, rank: index + 1, score: 0.9 })),
+    })
+    const runAction = vi.fn(async reference => getFunctionName(reference) === 'capabilityToolCatalog:search'
+      ? serializeToolSearchResult(source) : { result: presented, use: 'registry.tools.compare' })
+    const result = await invokeTool(
+      createChatAgent(mockModel()), 'registry.tools.search',
+      toolCtx({ runAction: runAction as ToolCtx['runAction'] }),
+      { query: 'weather' }, [{ role: 'user', content: 'Compare weather choices for Sydney' }],
+    ) as { kind: string; results: readonly { toolRef: string; network: string; verification: string }[] }
+    expect(result.kind).toBe('matched')
+    expect(result.results.map(item => item.toolRef)).toEqual([TOOL_CRYPTO_TX.toolRef])
   })
 
   it('rejects invalid canonical output and refuses oversized model results', async () => {

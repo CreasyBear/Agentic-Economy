@@ -19,6 +19,24 @@ import {
 describe('Jev x402 Tool Search Re-ranker (cookbooks/rerank_typesafe.md)', () => {
   const sampleOkResult = misorderedSearchResult('verify blockchain payment on base')
 
+  it('does not promote routeable but unverified testnet supply to a ready recommendation', () => {
+    const tool = {
+      ...TOOL_CURRENCY,
+      availability: { posture: 'routeable' as const, reason: 'inspection_required' as const },
+      payment: { protocol: 'x402' as const, scheme: 'exact' as const, network: 'eip155:84532', asset: 'USDC', currency: 'USDC' },
+    }
+    const output = projectToolSearchChoices({
+      kind: 'ok', schemaVersion: 'registry-tools:v3', query: 'weather',
+      items: [tool], ranking: [], pagination: { limit: 10, hasMore: false }, navigation: [],
+    }, undefined, { verdict: 'matched', nearMisses: [] })
+    expect(output.kind).toBe('degraded')
+    if (output.kind !== 'degraded') return
+    expect(output.results[0]).toMatchObject({
+      readiness: 'unverified', verification: 'not_verified', network: 'testnet', claimSource: 'provider',
+    })
+    expect(output).not.toHaveProperty('recommendation')
+  })
+
   it('preserves search result untouched when query is empty, whitespace, disabled, or items <= 1', async () => {
     await expect(rerankToolSearchResult(sampleOkResult, '')).resolves.toBe(sampleOkResult)
     await expect(rerankToolSearchResult(sampleOkResult, '   ')).resolves.toBe(sampleOkResult)

@@ -61,6 +61,7 @@ vi.mock('../presentation', async (importOriginal) => {
 
 import type { ChatHistoryProps } from './chat-session.contracts'
 import { useChatSession } from './useChatSession'
+import { readAnonymousSession, saveAnonymousSession } from './anonymous-session'
 
 const baseProps = {
   threadId: null as string | null,
@@ -105,6 +106,7 @@ describe('useChatSession', () => {
     sendMessageMutationMock.mockResolvedValue({ threadId: 'thread-created' })
     readUIMessageStreamMock.mockImplementation(() => threeChunkStream())
     sendMessagesMock.mockResolvedValue({ stream: 'mock' })
+    sessionStorage.clear()
   })
 
   afterEach(() => {
@@ -149,6 +151,42 @@ describe('useChatSession', () => {
     })
     const assistantMessages = result.current.transcript.messages.filter((message) => message.role === 'assistant')
     expect(assistantMessages[0]?.parts[0]).toMatchObject({ type: 'text', text: 'alpha beta gamma' })
+  })
+
+  it('restores a guest exchange after reload without resending the URL question', async () => {
+    readUIMessageStreamMock.mockImplementation(() => singleAssistantStream('The provider says weather forecasts are available. Health is not yet verified.'))
+    const props = { ...baseProps, initialPrompt: 'find Sydney weather' }
+    const first = renderHook(() => useChatSession(props))
+    await waitFor(() => expect(first.result.current.transcript.messages).toHaveLength(2))
+    expect(first.result.current.transcript.messages[1]?.parts).toMatchObject([{ type: 'text', text: expect.stringContaining('not yet verified') }])
+    expect(sendMessagesMock).toHaveBeenCalledTimes(1)
+    first.unmount()
+
+    const reloaded = renderHook(() => useChatSession(props))
+    await waitFor(() => expect(reloaded.result.current.transcript.messages).toHaveLength(2))
+    expect(reloaded.result.current.transcript.messages[0]?.parts).toMatchObject([{ type: 'text', text: 'find Sydney weather' }])
+    expect(sendMessagesMock).toHaveBeenCalledTimes(1)
+  })
+
+  it('bounds tab history and excludes raw tool output and credential text', () => {
+    const id = '12345678-1234-1234-1234-123456789012'
+    saveAnonymousSession(sessionStorage, {
+      id,
+      messages: Array.from({ length: 20 }, (_, index) => ({
+        id: `guest-${index}`,
+        role: index % 2 === 0 ? 'user' as const : 'assistant' as const,
+        parts: [
+          { type: 'text', text: `weather ${index} bearer abc123secret456 api_key=verysecretvalue` },
+          { type: 'tool-call', output: { privateKey: 'never-store-this' } },
+        ],
+      })),
+    })
+    const stored = sessionStorage.getItem(`ae.chat.anonymous.${id}`)!
+    expect(stored).not.toContain('abc123secret456')
+    expect(stored).not.toContain('verysecretvalue')
+    expect(stored).not.toContain('never-store-this')
+    expect(new TextEncoder().encode(stored).byteLength).toBeLessThanOrEqual(16 * 1024)
+    expect(readAnonymousSession(sessionStorage).messages).toHaveLength(12)
   })
 
   it('keeps optimistic messages when anonymous streaming aborts', async () => {

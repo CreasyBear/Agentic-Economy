@@ -50,6 +50,31 @@ describe('search result state', () => {
     })
   })
 
+  it('does not present unverified, degraded, or missing health as operational', () => {
+    const toolType = `tool-${CHAT_TOOL_NAME_MAP.canonicalToProvider['registry.tools.list']}`
+    const items = [
+      { toolRef: TOOL_REF, title: 'Unverified', healthStatus: 'unverified', readiness: 'ready' },
+      { toolRef: `operation:v1:${'c'.repeat(64)}`, title: 'Degraded', healthStatus: 'degraded', readiness: 'ready' },
+      { toolRef: `operation:v1:${'d'.repeat(64)}`, title: 'Unknown', readiness: 'ready' },
+      { toolRef: `operation:v1:${'e'.repeat(64)}`, title: 'Observed', healthStatus: 'operational' },
+    ]
+    const card = projectToolCard({
+      type: toolType, state: 'output-available', output: { kind: 'ok', items, count: items.length },
+    })
+    expect(card).toMatchObject({
+      kind: 'choices',
+      choices: [
+        { title: 'Unverified', readiness: 'Not yet verified' },
+        { title: 'Degraded', readiness: 'Degraded' },
+        { title: 'Unknown' },
+        { title: 'Observed', readiness: 'Operational' },
+      ],
+    })
+    if (card === null || card.kind !== 'choices') throw new Error('missing_choices')
+    expect(card.choices[2]?.readiness).toBeUndefined()
+    expect(projectToolCard(serializeToolCard(card))).toEqual(card)
+  })
+
   it('keeps a source outage distinct from a successful empty search', () => {
     expect(projectToolCard({ type: `tool-${CHAT_TOOL_NAME_MAP.canonicalToProvider['registry.tools.search']}`,
       state: 'output-available', output: { kind: 'unavailable', reason: 'source_unavailable' } }))

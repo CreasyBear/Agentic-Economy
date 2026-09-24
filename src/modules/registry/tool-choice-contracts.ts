@@ -15,10 +15,8 @@ import {
   publicToolDisplayPriceSchema,
 } from '@/modules/capability-supply/tool-schemas'
 import { exactAmountSchema, formatExactAmount, formatDisplayPrice } from '@/modules/money/public'
-import {
-  projectToolHealth,
-  type ToolHealthStatus,
-} from '@/modules/capability-supply/tool-health'
+import { projectToolHealth, type ToolHealthStatus } from '@/modules/capability-supply/tool-health'
+import { projectToolChoiceEvidence } from './tool-choice-evidence'
 import { searchNextActions } from './next-action'
 import type { ListingSearchGroups } from './tool-entry'
 
@@ -29,6 +27,7 @@ export const toolHealthStatusSchema = z.enum([
   'degraded',
   'unverified',
 ])
+const choiceEvidenceSchema = { verification: z.enum(['verified', 'not_verified']), network: z.enum(['mainnet', 'testnet', 'unknown']), claimSource: z.enum(['provider', 'listing']) }
 
 export const toolCatalogFiltersSchema = z.strictObject({
   networkId: z.string().trim().min(1).max(200).optional(),
@@ -84,17 +83,7 @@ export const registryNextActionSchema = z.discriminatedUnion('action', [
   z.strictObject({ action: z.literal('broaden'), args: z.strictObject({ query: z.string() }), authority: z.literal('public') }),
 ])
 
-export type SearchResult = Readonly<{
-  toolRef: PublicToolRef
-  title: string
-  summary: string
-  matchReason: string
-  readiness: 'ready' | 'unverified' | 'unavailable'
-  entitlement: 'public' | 'requires_auth' | 'not_entitled'
-  price: { kind: 'indicative'; label: string }
-  details?: Readonly<{ capabilityId: string; provider: { name: string; slug: string }; description: string; listingTier: 'reviewed' | 'listed' }> | undefined
-  next: readonly RegistryNextAction[]
-}>
+export type SearchResult = z.output<typeof searchResultSchema>
 export type SearchMeta = Readonly<{
   schemaVersion: typeof PublicToolRegistrySchemaVersion
   partialResults: boolean
@@ -121,6 +110,7 @@ export const compactToolCandidateSchema = z.strictObject({
   priceLabel: z.string(),
   displayPrice: publicToolDisplayPriceSchema.optional(),
   healthStatus: toolHealthStatusSchema,
+  ...choiceEvidenceSchema,
   lastCheckedAt: z.number().optional(),
   lastHealthyAt: z.number().optional(),
   listingTier: listingTierSchema,
@@ -160,6 +150,10 @@ const searchResultSchema = z.strictObject({
   summary: z.string(),
   matchReason: z.string(),
   readiness: z.enum(['ready', 'unverified', 'unavailable']),
+  healthStatus: toolHealthStatusSchema,
+  lastCheckedAt: z.number().optional(),
+  lastHealthyAt: z.number().optional(),
+  ...choiceEvidenceSchema,
   entitlement: z.enum(['public', 'requires_auth', 'not_entitled']),
   price: z.strictObject({ kind: z.literal('indicative'), label: z.string() }),
   details: z.strictObject({ capabilityId: z.string(), provider: z.strictObject({ name: z.string(), slug: z.string() }), description: z.string(), listingTier: listingTierSchema }).optional(),
@@ -231,6 +225,8 @@ const toolDescriptionSchema = z.strictObject({
   priceLabel: z.string(),
   displayPrice: publicToolDisplayPriceSchema.optional(),
   healthStatus: toolHealthStatusSchema,
+  readiness: z.enum(['ready', 'unverified', 'unavailable']),
+  ...choiceEvidenceSchema,
   lastCheckedAt: z.number().optional(),
   lastHealthyAt: z.number().optional(),
   inputJsonSchema: z.record(z.string(), jsonValueSchema),
@@ -320,7 +316,7 @@ function projectCompactTool(tool: PublicToolDescriptor) {
     provider: { name: tool.business.name, slug: tool.business.slug },
     priceLabel: priceLabel(tool),
     ...(tool.commercial.displayPrice === undefined ? {} : { displayPrice: tool.commercial.displayPrice }),
-    ...projectToolHealth(tool.availability, Date.now()),
+    ...projectToolChoiceEvidence(tool),
     listingTier: tool.listingTier,
     ...(tool.canonical === undefined ? {} : { canonicalUrl: tool.canonical.path }),
   })
@@ -387,7 +383,7 @@ export function projectToolSearchChoices(
     title: detail === 'full' ? tool.listing.label : tool.listing.label.slice(0, 64),
     summary: tool.summary.slice(0, detail === 'full' ? undefined : 40),
     matchReason: 'Text overlap',
-    readiness: tool.availability.posture === 'routeable' ? 'ready' : tool.availability.posture === 'setup_required' ? 'unverified' : 'unavailable',
+    ...projectToolChoiceEvidence(tool),
     entitlement: tool.authentication.kind === 'unknown' ? 'not_entitled' : tool.authentication.kind === 'x402' ? 'public' : 'requires_auth',
     price: { kind: 'indicative', label: priceLabel(tool) },
     next: [{ action: 'describe', args: { toolRef: tool.toolRef }, authority: 'public' }],
@@ -421,8 +417,11 @@ export function projectToolSearchChoices(
       results,
     })
   }
-  const lead = results[0]
-  if (lead === undefined) throw new Error('matched_search_without_result')
+  const lead = results.find(candidate => candidate.verification === 'verified' && candidate.network !== 'testnet')
+  if (lead === undefined) return toolChoiceSearchOutputSchema.parse({
+    ...meta, kind: 'degraded', query: result.query,
+    reason: 'No verified production Tool in these search results.', results,
+  })
   const text = `Inspect ${lead.title} before use.`
   return toolChoiceSearchOutputSchema.parse({
     ...meta, kind: 'matched', query: result.query, results,
@@ -452,7 +451,7 @@ export function projectToolDescription(result: ToolDetailResult) {
       provider: { name: tool.business.name, slug: tool.business.slug },
       priceLabel: priceLabel(tool),
     ...(tool.commercial.displayPrice === undefined ? {} : { displayPrice: tool.commercial.displayPrice }),
-      ...projectToolHealth(tool.availability, Date.now()),
+      ...projectToolChoiceEvidence(tool),
       inputJsonSchema: tool.contract.inputJsonSchema,
       outputJsonSchema: tool.contract.outputJsonSchema,
       materialTerms: tool.commercial.materialTerms,

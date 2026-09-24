@@ -95,7 +95,7 @@ export function chatStageTitle(threadId: string | null): string {
 }
 
 export function chatStageDetail(authenticated: boolean): string {
-  return authenticated ? 'Saved to your account' : 'Private to this browser session'
+  return authenticated ? 'Saved to your account' : 'Saved in this browser tab'
 }
 
 export function chatAnonymousCountLine(count: number, limitReached: boolean): string {

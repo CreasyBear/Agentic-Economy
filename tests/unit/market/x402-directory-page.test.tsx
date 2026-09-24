@@ -28,6 +28,7 @@ function show(search: Props['search'] = { offset: 20 }, items = entries, extra: 
   const root = createRootRoute()
   const router = createRouter({ routeTree: root.addChildren([
     createRoute({ getParentRoute: () => root, path: '/market' }),
+    createRoute({ getParentRoute: () => root, path: '/t/new' }),
     createRoute({ getParentRoute: () => root, path: '/owner/market' }),
     createRoute({ getParentRoute: () => root, path: '/tools/$providerHost/$slug' }),
   ]), history: createMemoryHistory({ initialEntries: [extra.marketPath ?? '/market'] }) })
@@ -166,19 +167,18 @@ it('inspects a saved Tool through the same one canonical Tool detail surface', a
   expect(toolHref(link).pathname).toBe(`/tools/${entries[0]!.provider}/${entries[0]!.slug}`)
 })
 
-it('keeps comparison choices when a new search is submitted and results refresh', async () => {
-  const { router, updateSearch } = show()
-  fireEvent.click(screen.getByRole('button', { name: 'Add Tool 0 to comparison' }))
-  fireEvent.click(screen.getByRole('button', { name: 'Add Tool 1 to comparison' }))
-  fireEvent.change(screen.getByRole('searchbox', { name: 'Search Tools' }), { target: { value: 'new research' } })
-  expect(fireEvent.submit(screen.getByRole('search'))).toBe(false)
-  await waitFor(() => expect(router.state.location.search).toMatchObject({ query: 'new research' }))
-  updateSearch({ query: 'new research' })
-  expect(screen.getByText('2 of 4 selected')).toBeTruthy()
-  fireEvent.click(screen.getByRole('button', { name: 'Compare Tools' }))
-  const comparison = screen.getByRole('dialog', { name: 'Compare Tools' })
-  expect(within(comparison).getByText('Tool 0')).toBeTruthy()
-  expect(within(comparison).getByText('Tool 1')).toBeTruthy()
+it('opens a chat from the Market hero with the trimmed question and no catalogue filters', async () => {
+  const { router } = show({ view: 'tools', network: 'eip155:8453' })
+  fireEvent.change(screen.getByRole('searchbox', { name: 'Ask about any tool or service' }), { target: { value: '  find me a weather API for Sydney  ' } })
+  fireEvent.submit(screen.getByRole('form', { name: 'Start a conversation' }))
+  await waitFor(() => expect(router.state.location.pathname).toBe('/t/new'))
+  expect(router.state.location.search).toEqual({ q: 'find me a weather API for Sydney' })
+})
+it('opens an empty new chat when the Market hero question is blank', async () => {
+  const { router } = show()
+  fireEvent.submit(screen.getByRole('form', { name: 'Start a conversation' }))
+  await waitFor(() => expect(router.state.location.pathname).toBe('/t/new'))
+  expect(router.state.location.search).toEqual({})
 })
 it('keeps a selected Tool hydrated across pages and a reload-style render', () => {
   const selected = entries[19]!
@@ -220,16 +220,14 @@ it('does not call an URL selection unavailable while its loader hydration is pen
   expect(screen.getByText('Loading selected Tool…')).toBeTruthy()
   expect(screen.queryByText('Tool no longer available')).toBeNull()
 })
-it('keeps workspace searches and pagination inside the authenticated Market route', async () => {
-  const { router } = show({ offset: 20 }, entries, { workspace: true, marketPath: '/owner/market' })
+it('opens a chat from the workspace Market without carrying Market filters', async () => {
+  const { router } = show({ offset: 20, network: 'eip155:8453' }, entries, { workspace: true, marketPath: '/owner/market' })
   expect(screen.getByRole('heading', { level: 2, name: 'Explore capabilities.' })).toBeTruthy()
   expect(screen.getByRole('link', { name: 'Next page' }).getAttribute('href')).toContain('/owner/market')
-
-  fireEvent.change(screen.getByRole('searchbox', { name: 'Search Tools' }), { target: { value: 'new research' } })
-  fireEvent.submit(screen.getByRole('search'))
-
-  await waitFor(() => expect(router.state.location.pathname).toBe('/owner/market'))
-  expect(router.state.location.search).toMatchObject({ query: 'new research', view: 'tools' })
+  fireEvent.change(screen.getByRole('searchbox', { name: 'Ask about any tool or service' }), { target: { value: '  compare weather  ' } })
+  fireEvent.submit(screen.getByRole('form', { name: 'Start a conversation' }))
+  await waitFor(() => expect(router.state.location.pathname).toBe('/t/new'))
+  expect(router.state.location.search).toEqual({ q: 'compare weather' })
 })
 it('returns focus to Compare after dismissing the comparison dialog', async () => {
   show()

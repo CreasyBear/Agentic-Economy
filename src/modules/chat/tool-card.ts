@@ -251,12 +251,12 @@ function rowFromChoiceFields(value: unknown): ToolChoiceRow | null {
     ?? stringField(value.priceLabel)
     ?? (isRecord(value.price) ? stringField(value.price.label) : undefined)
   const healthStatus = stringField(value.healthStatus)
-  const readiness = healthStatus === 'operational' || value.readiness === 'ready'
+  const readiness = healthStatus === 'operational'
     ? 'Operational'
-    : healthStatus === 'degraded' || value.readiness === 'unavailable'
+    : healthStatus === 'degraded' || (healthStatus === undefined && value.readiness === 'unavailable')
       ? 'Degraded'
-      : healthStatus === 'unverified' || value.readiness === 'unverified'
-        ? 'Unverified'
+      : healthStatus === 'unverified' || (healthStatus === undefined && value.readiness === 'unverified')
+        ? 'Not yet verified'
         : undefined
   const authentication = readAuthentication(value.authentication)
   return {

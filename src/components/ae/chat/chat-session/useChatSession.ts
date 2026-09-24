@@ -14,6 +14,10 @@ import type { ChatProps, ChatHistoryThread, ChatSessionModel } from './chat-sess
 import { projectOwnerChatCards } from './owner-chat-cards'
 import { ChatHistory } from './components/ChatHistory'
 import {
+  assistantTurnStarted, boundPrompt, clearAnonymousSession, messageId,
+  readAnonymousSession, saveAnonymousSession, toTransportMessages, unicodeLength,
+} from './anonymous-session'
+import {
   anonymousRequestSize,
   clearAnonymousChatHandoff,
   fetchAnonymousChat,
@@ -30,36 +34,6 @@ const MAX_PROMPT_CHARACTERS = 2_000
 const MAX_ANONYMOUS_MESSAGES = 12
 const MAX_ANONYMOUS_BYTES = 16 * 1024
 const PAGE_SIZE = 20
-
-function unicodeLength(value: string): number {
-  return Array.from(value).length
-}
-
-function boundPrompt(value: string): string {
-  return Array.from(value).slice(0, MAX_PROMPT_CHARACTERS).join('')
-}
-
-function toTransportMessages(messages: readonly TranscriptMessage[]): UIMessage[] {
-  return projectAnonymousTranscript(messages).map((message, index) => ({
-    id: `anonymous-transport-${index}`,
-    role: message.role,
-    parts: [{ type: 'text', text: message.content }],
-  }))
-}
-
-function messageId(prefix: string): string {
-  return `${prefix}-${globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random()}`}`
-}
-
-function assistantTurnStarted(messages: readonly TranscriptMessage[]): boolean {
-  const last = messages.at(-1)
-  if (last?.role !== 'assistant') return false
-  return last.parts.some((part) => {
-    if (typeof part !== 'object' || part === null || !('type' in part)) return false
-    const type = part.type
-    return type === 'text' || (typeof type === 'string' && type.startsWith('tool-'))
-  })
-}
 
 export function useChatSession({
   threadId,
@@ -79,6 +53,8 @@ export function useChatSession({
     }
   })
   const [anonymousMessages, setAnonymousMessages] = useState<TranscriptMessage[]>(initialHandoff.messages)
+  const [anonymousSessionLoaded, setAnonymousSessionLoaded] = useState(false)
+  const anonymousSessionIdRef = useRef<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [sending, setSending] = useState(false)
   const [error, setError] = useState('')
@@ -162,6 +138,26 @@ export function useChatSession({
     if (isAuthenticated) abortRef.current?.abort()
   }, [isAuthenticated])
 
+  useEffect(() => {
+    if (authLoading || anonymousSessionLoaded) return
+    if (!isAuthenticated && threadId === null) {
+      const session = readAnonymousSession(window.sessionStorage)
+      anonymousSessionIdRef.current = session.id
+      setAnonymousMessages(session.messages)
+      if (session.messages.some(message => message.role === 'user'
+        && projectAnonymousTranscript([message])[0]?.content === initialPrompt.trim())) {
+        initialSubmitPendingRef.current = false
+      }
+    }
+    setAnonymousSessionLoaded(true)
+  }, [authLoading, anonymousSessionLoaded, isAuthenticated, threadId, initialPrompt])
+  useEffect(() => {
+    if (!anonymousSessionLoaded || anonymousSessionIdRef.current === null || isAuthenticated) return
+    saveAnonymousSession(window.sessionStorage, {
+      id: anonymousSessionIdRef.current,
+      messages: anonymousMessages,
+    })
+  }, [anonymousSessionLoaded, anonymousMessages, isAuthenticated])
   const durableMessages: TranscriptMessage[] = durable.results.flatMap((message) =>
     message.role === 'user' || message.role === 'assistant'
       ? [{ id: message.id, role: message.role, parts: message.parts }]
@@ -292,12 +288,12 @@ export function useChatSession({
   const autoSubmit = useEffectEvent(() => void submit(true))
 
   useEffect(() => {
-    if (authLoading || !initialSubmitPendingRef.current) return
+    if (authLoading || !anonymousSessionLoaded || !initialSubmitPendingRef.current) return
     initialSubmitPendingRef.current = false
     queueMicrotask(() => {
       if (mountedRef.current) autoSubmit()
     })
-  }, [authLoading])
+  }, [authLoading, anonymousSessionLoaded])
 
   async function mutateWithError(work: () => Promise<void>, success: ChatStatus): Promise<boolean> {
     if (operationInFlightRef.current) return false
@@ -321,6 +317,10 @@ export function useChatSession({
 
   function startNewChat(): void {
     abortRef.current?.abort()
+    if (anonymousSessionIdRef.current !== null) {
+      clearAnonymousSession(window.sessionStorage, anonymousSessionIdRef.current)
+      anonymousSessionIdRef.current = crypto.randomUUID()
+    }
     setAnonymousMessages([])
     setPrompt('')
     setError('')
