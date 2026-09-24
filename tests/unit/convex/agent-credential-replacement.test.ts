@@ -22,7 +22,7 @@ import {
 } from '@/modules/agent-access/service-auth-envelope'
 import { createAgentAccessGrant, normalizeStoredAgentAccessGrant } from '@/modules/agent-access/policy'
 import { internal } from '../../../convex/_generated/api'
-import { resolveCanonicalAgentBinding } from '../../../convex/authorityBoundary'
+import { resolveCanonicalAgentBinding } from '../../../convex/lib/authority/binding'
 import { convexTestWithWorkers, publishedBusinessOwner, type ConvexFixtureBackend } from '../../helpers/convex-fixtures'
 import { issueBuyerAgent as registerIssuedBuyerAgent } from '../../helpers/issued-buyer-agent'
 

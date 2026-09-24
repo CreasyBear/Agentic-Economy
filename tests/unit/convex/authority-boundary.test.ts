@@ -7,7 +7,7 @@ import type { MutationCtx } from '../../../convex/_generated/server'
 import {
   resolveCanonicalAgentBinding,
   type CanonicalAgentBinding,
-} from '../../../convex/authorityBoundary'
+} from '../../../convex/lib/authority/binding'
 import schema from '../../../convex/schema'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { DelegationService } from '@/modules/authority/delegation/public'

@@ -18,7 +18,7 @@ import { api, internal } from './_generated/api'
 import { withSourceWriteCommand } from '../tests/helpers/source-write-admission'
 import { resolveCanonicalAgentContext, validateCanonicalAgentDelegation } from './lib/canonicalAgentAuthority'
 import { canonicalAgentDelegationScopes } from './agentAccessPrincipals'
-import { resolveCanonicalAgentBinding } from './authorityBoundary'
+import { resolveCanonicalAgentBinding } from './lib/authority/binding'
 
 const modules = import.meta.glob('./**/*.ts')
 const NOW = 10_000
