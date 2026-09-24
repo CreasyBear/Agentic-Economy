@@ -5,7 +5,7 @@ import {
   it,
 } from 'vitest'
 
-import { readCustomerTaxFactsForAccount } from '../../../convex/moneyDocuments'
+import { readCustomerTaxFactsForAccount } from '../../../convex/lib/money/documents/issue'
 import {
   admitTaxInvoiceIssuance,
   SANDBOX_COMMERCIAL_POLICY_CONTROLS,

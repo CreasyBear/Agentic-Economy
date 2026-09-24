@@ -1,14 +1,14 @@
 import type { Doc } from '../../_generated/dataModel'
-import type { MutationCtx } from '../../_generated/server'
 import { canonicalDigest } from '../../../src/modules/common/canonical-digest'
-import { stableStringify, type StableHashValue } from '../../../src/modules/common/stable-hash'
+import type { MutationCtx } from '../../_generated/server'
+import type { StableHashValue } from '../../../src/modules/common/stable-hash'
 import {
   AUD_EXPONENT,
   compareExactAmounts,
   type ExactAmount,
   type StripeMoneyWebhookEvent,
 } from '../../../src/modules/money/public'
-import { enqueueDocumentRender } from '../../moneyDocuments'
+import { createAndQueueDocument } from './documents/insert'
 import { eventRowFields, eventRowMatches } from '../../moneyStripeEvents'
 
 export type FundingProviderEvidence = Readonly<{
@@ -135,46 +135,33 @@ export async function recordFundingDocuments(
   ]
   for (const definition of definitions) {
     const documentRef = `money-document:${definition.kind}:${transactionRef}`
-    const existing = await ctx.db.query('moneyDocuments')
-      .withIndex('by_documentRef', (query) => query.eq('documentRef', documentRef))
-      .unique()
-    if (existing !== null) continue
-    const renderInput = {
-      format: 'ae.money-document-render-input:v1',
-      documentRef,
-      accountRef: command.accountRef,
-      kind: definition.kind,
-      currency: 'AUD',
-      exponent: AUD_EXPONENT,
-      amountUnits: definition.amountUnits,
-      detail: definition.detail,
-      transactionRef,
-      occurredAt,
-      policyRefs: command.commercialPolicyRefs,
-      policyDigest: command.commercialPolicyDigest,
-    } as const satisfies StableHashValue
-    const renderInputJson = stableStringify(renderInput)
-    const renderInputDigest = canonicalDigest(renderInput)
-    const documentId = await ctx.db.insert('moneyDocuments', {
-      documentRef,
-      accountRef: command.accountRef,
-      kind: definition.kind,
-      sourceTransactionRefs: [transactionRef],
-      amountUnits: definition.amountUnits,
-      residualUnits: '0',
-      policyRefs: [...command.commercialPolicyRefs],
-      policyDigest: command.commercialPolicyDigest,
-      templateVersion: 'ae.money-document:html:v1',
-      renderInputJson,
-      renderInputDigest,
-      state: 'rendering',
-      environment: command.environment,
-      sourceCount: 1,
-      snapshotDigest: renderInputDigest,
-      createdAt: occurredAt,
+    await createAndQueueDocument(ctx, documentRef, () => {
+      const renderInput = {
+        format: 'ae.money-document-render-input:v1',
+        documentRef,
+        accountRef: command.accountRef,
+        kind: definition.kind,
+        currency: 'AUD',
+        exponent: AUD_EXPONENT,
+        amountUnits: definition.amountUnits,
+        detail: definition.detail,
+        transactionRef,
+        occurredAt,
+        policyRefs: command.commercialPolicyRefs,
+        policyDigest: command.commercialPolicyDigest,
+      } as const satisfies StableHashValue
+      return {
+        renderInput,
+        accountRef: command.accountRef,
+        kind: definition.kind,
+        sourceTransactionRef: transactionRef,
+        amountUnits: definition.amountUnits,
+        policyRefs: command.commercialPolicyRefs,
+        policyDigest: command.commercialPolicyDigest,
+        environment: command.environment,
+        occurredAt,
+      }
     })
-    const workId = await enqueueDocumentRender(ctx, documentRef)
-    await ctx.db.patch(documentId, { workId })
   }
 }
 
@@ -185,52 +172,39 @@ export async function recordFundingReversalDocument(
   occurredAt: number,
 ): Promise<void> {
   const documentRef = `money-document:adjustment:${transactionRef}`
-  const existing = await ctx.db.query('moneyDocuments')
-    .withIndex('by_documentRef', (query) => query.eq('documentRef', documentRef))
-    .unique()
-  if (existing !== null) return
-  const renderInput = {
-    format: 'ae.money-document-render-input:v1',
-    documentRef,
-    accountRef: command.accountRef,
-    kind: 'adjustment',
-    currency: 'AUD',
-    exponent: AUD_EXPONENT,
-    amountUnits: command.totalUnits,
-    detail: {
-      reason: 'processor_full_refund',
-      principalUnits: command.principalUnits,
-      serviceFeeUnits: command.serviceFeeUnits,
-      taxUnits: command.taxUnits,
-      totalUnits: command.totalUnits,
-    },
-    transactionRef,
-    occurredAt,
-    policyRefs: command.commercialPolicyRefs,
-    policyDigest: command.commercialPolicyDigest,
-  } as const satisfies StableHashValue
-  const renderInputJson = stableStringify(renderInput)
-  const renderInputDigest = canonicalDigest(renderInput)
-  const documentId = await ctx.db.insert('moneyDocuments', {
-    documentRef,
-    accountRef: command.accountRef,
-    kind: 'adjustment',
-    sourceTransactionRefs: [transactionRef],
-    amountUnits: command.totalUnits,
-    residualUnits: '0',
-    policyRefs: [...command.commercialPolicyRefs],
-    policyDigest: command.commercialPolicyDigest,
-    templateVersion: 'ae.money-document:html:v1',
-    renderInputJson,
-    renderInputDigest,
-    state: 'rendering',
-    environment: command.environment,
-    sourceCount: 1,
-    snapshotDigest: renderInputDigest,
-    createdAt: occurredAt,
+  await createAndQueueDocument(ctx, documentRef, () => {
+    const renderInput = {
+      format: 'ae.money-document-render-input:v1',
+      documentRef,
+      accountRef: command.accountRef,
+      kind: 'adjustment',
+      currency: 'AUD',
+      exponent: AUD_EXPONENT,
+      amountUnits: command.totalUnits,
+      detail: {
+        reason: 'processor_full_refund',
+        principalUnits: command.principalUnits,
+        serviceFeeUnits: command.serviceFeeUnits,
+        taxUnits: command.taxUnits,
+        totalUnits: command.totalUnits,
+      },
+      transactionRef,
+      occurredAt,
+      policyRefs: command.commercialPolicyRefs,
+      policyDigest: command.commercialPolicyDigest,
+    } as const satisfies StableHashValue
+    return {
+      renderInput,
+      accountRef: command.accountRef,
+      kind: 'adjustment' as const,
+      sourceTransactionRef: transactionRef,
+      amountUnits: command.totalUnits,
+      policyRefs: command.commercialPolicyRefs,
+      policyDigest: command.commercialPolicyDigest,
+      environment: command.environment,
+      occurredAt,
+    }
   })
-  const workId = await enqueueDocumentRender(ctx, documentRef)
-  await ctx.db.patch(documentId, { workId })
 }
 
 type ConsistencyResult =

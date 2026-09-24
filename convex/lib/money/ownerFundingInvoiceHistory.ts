@@ -9,7 +9,7 @@ import {
   resolveActiveAccountRefForPrincipal,
 } from '../../interactiveAuthority'
 import { readCommercialPolicyGate } from '../../moneyCommercialPolicy'
-import { readCustomerTaxFactsForAccount } from '../../moneyDocuments'
+import { readCustomerTaxFactsForAccount } from './documents/issue'
 import { CLERK_USER_PROVIDER_NAMESPACE } from '../../workspaceProvisioning'
 import { accountRef } from '../../../src/modules/principal-account/account/public'
 import { principalRef } from '../../../src/modules/principal-account/principal/public'
