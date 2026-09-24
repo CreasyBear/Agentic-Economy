@@ -35,6 +35,7 @@ export type ChatHistoryProps = Readonly<{
 export type ChatHeaderProps = Readonly<{
   authenticated: boolean
   threadId: string | null
+  threadTitle: string | null
   busy: boolean
   shareState?: 'none' | 'active' | 'revoked'
   sharePath: string | null
@@ -74,6 +75,7 @@ export type ChatTranscriptViewProps = Readonly<{
   pending?: boolean
   handoffAfter?: number
   thinking?: boolean
+  generating?: boolean
   clarifyDisabled?: boolean
   onSuggest?: (prompt: string) => void
   onStarter?: (prompt: string) => void

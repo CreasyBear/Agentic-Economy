@@ -35,7 +35,7 @@ import type { FilterValue } from './generative/generative.contracts'
 import { ToolCard } from './ToolCard'
 import { projectGenerativeTurn, projectTranscriptTurns, type TranscriptTurn } from './presentation'
 
-const TRANSCRIPT_COLUMN = 'mx-auto grid w-full max-w-[1200px] grid-cols-12 gap-x-2 gap-y-5 px-[5px] py-6 sm:px-0 md:gap-y-7'
+const TRANSCRIPT_COLUMN = 'mx-auto grid w-full content-start max-w-[1200px] grid-cols-12 gap-x-2 gap-y-5 px-[5px] py-6 sm:px-0 md:gap-y-7'
 
 type ClarifyCard = Extract<ToolCardProjection, { kind: 'clarify' }>
 
@@ -102,6 +102,7 @@ export function ChatTranscript({
   onDenyCall,
   onFreshQuote,
   thinking = false,
+  generating = false,
   clarifyDisabled = false,
   pending = false,
 }: ChatTranscriptViewProps) {
@@ -149,6 +150,7 @@ export function ChatTranscript({
               const view = turn.role === 'assistant' ? projectGenerativeTurn({ ...turn, text: prose }) : null
               const selected = comparedByTurn[turn.id] ?? []
               const selectedId = selectedByTurn[turn.id]
+              const writing = generating && index === turns.length - 1
               const previousPrompt = turns.slice(0, index).findLast((message) => message.role === 'user')?.text
               const toggleCompare = (id: string) => setComparedByTurn((current) => {
                 const ids = current[turn.id] ?? []
@@ -165,8 +167,9 @@ export function ChatTranscript({
                         </Bubble>
                       ) : (
                         <div className="grid w-full min-w-0 gap-3">
+                          {writing ? <AnswerBlock view={{ markdown: prose, streaming: true }} /> : null}
                           <WorkDisclosure view={view.work} />
-                          <AnswerBlock view={{ markdown: prose }} />
+                          {writing ? null : <AnswerBlock view={{ markdown: prose }} />}
                           {bundle?.root ? <ChatOpenUiBundle node={bundle.root} tools={turn.tools} /> : null}
                           <SourcesInline view={view.sources} />
                           {view.options.options.length === 0 ? null : (
@@ -217,10 +220,10 @@ export function ChatTranscript({
                               ? <ToolCard key={`${turn.id}-${card.toolId}-${cardIndex}`} projection={card} />
                               : null
                           })}
-                          {onSuggest ? <FollowUps view={view.followUps} onPick={onSuggest} /> : null}
-                          <MessageActions view={{ canCopy: prose.trim().length > 0 && onCopyAnswer !== undefined, canRetry: previousPrompt !== undefined && onRetry !== undefined }}
+                          {onSuggest && !writing ? <FollowUps view={view.followUps} onPick={onSuggest} /> : null}
+                          {writing ? null : <MessageActions view={{ canCopy: prose.trim().length > 0 && onCopyAnswer !== undefined, canRetry: previousPrompt !== undefined && onRetry !== undefined }}
                             onCopy={() => onCopyAnswer?.(prose)}
-                            onRetry={() => { if (previousPrompt) onRetry?.(previousPrompt) }} />
+                            onRetry={() => { if (previousPrompt) onRetry?.(previousPrompt) }} />}
                         </div>
                       )}
                     </MessageContent>

@@ -81,8 +81,8 @@ export function chatDeleteConversation(title: string): string {
   return `Delete “${title}”?`
 }
 
-export function chatStageTitle(threadId: string | null): string {
-  return threadId === null ? 'Ask' : 'Chat'
+export function chatStageTitle(threadTitle: string | null): string {
+  return threadTitle?.trim() || 'Ask'
 }
 
 export function chatStageDetail(authenticated: boolean): string {

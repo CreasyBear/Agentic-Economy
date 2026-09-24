@@ -3,11 +3,11 @@ import { chatEmpty } from '@/lib/public/chat-ia'
 
 export function ChatGreeting() {
   return (
-    <div className="flex flex-col items-center px-4" key="overview">
-      <h2 className="text-center font-semibold text-2xl tracking-tight text-foreground md:text-3xl">
+    <div className="flex w-full flex-col items-center px-4" key="overview">
+      <h2 className="text-center font-semibold text-2xl tracking-tight text-foreground text-balance md:text-3xl">
         {chatEmpty.title}
       </h2>
-      <p className="mt-3 max-w-[42ch] text-center text-muted-foreground text-sm">
+      <p className="mt-3 w-full text-center text-muted-foreground text-sm text-balance md:text-wrap">
         {chatEmpty.description}
       </p>
     </div>

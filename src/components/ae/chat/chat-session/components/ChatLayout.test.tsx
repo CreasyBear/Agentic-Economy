@@ -22,6 +22,7 @@ function buildModel(overrides: Partial<ChatSessionModel> = {}): ChatSessionModel
     header: {
       authenticated: false,
       threadId: null,
+      threadTitle: null,
       busy: false,
       sharePath: null,
       copied: false,
@@ -59,12 +60,20 @@ describe('ChatLayout', () => {
     expect(starters.compareDocumentPosition(composer) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
   })
 
+  it('shows the saved thread title instead of a generic Chat label', () => {
+    render(<ChatLayout model={buildModel({
+      header: { ...buildModel().header, threadId: 'thread-1', threadTitle: 'Find a weather API for Sydney' },
+    })} />)
+    expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('Find a weather API for Sydney')
+  })
+
   it('opens history from one header control and has no conversation-history column', () => {
     render(<ChatLayout model={buildModel({
       showHistoryRail: true,
       header: {
         authenticated: true,
         threadId: null,
+        threadTitle: null,
         busy: false,
         sharePath: null,
         copied: false,
@@ -133,6 +142,30 @@ describe('ChatLayout', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Which of these is ready to use?' }))
     expect(onSuggest).toHaveBeenCalledWith('Which of these is ready to use?')
   })
+  it('shows answer progress above options and defers answer actions until generation settles', () => {
+    const user = { id: 'user', role: 'user' as const, parts: [{ type: 'text', text: 'Find weather in Sydney' }] }
+    const tool = { type: `tool-${providerSafeActionToolName('registry.tools.search')}`, state: 'output-available',
+      output: { kind: 'matched', results: [
+        { toolRef: `operation:v1:${'a'.repeat(64)}`, title: 'Sydney Weather', price: { kind: 'indicative', label: 'USD 0.005' } },
+      ] } }
+    const assistant = { id: 'assistant', role: 'assistant' as const, parts: [tool] }
+    const onRetry = vi.fn(), onCopyAnswer = vi.fn()
+    const { rerender } = render(<ChatLayout model={buildModel({
+      transcript: { messages: [user, assistant], generating: true, onRetry, onCopyAnswer },
+    })} />)
+    const progress = screen.getByText('Writing an answer…')
+    const options = screen.getByRole('region', { name: 'Options' })
+    expect(progress.compareDocumentPosition(options) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Retry answer' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Copy' })).toBeNull()
+    rerender(<ChatLayout model={buildModel({
+      transcript: { messages: [user, { ...assistant, parts: [tool, { type: 'text', text: '**Sydney Weather** is available. Next: Check its Tool card.' }] }], onRetry, onCopyAnswer },
+    })} />)
+    expect(screen.getByRole('region', { name: 'Answer' }).textContent).toContain('Sydney Weather')
+    expect(screen.getByRole('button', { name: 'Retry answer' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Copy' })).toBeTruthy()
+  })
+
   it('omits refinement for two options and comparison for a single option', () => {
     const ref = `operation:v1:${'a'.repeat(64)}`
     const tool = (results: unknown[]) => [

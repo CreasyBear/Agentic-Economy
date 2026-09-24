@@ -10,7 +10,7 @@ export function OptionsGrid({ view, onSelect, onCompare }: OptionsGridProps) {
         {view.options.map((option) => {
           const compared = view.comparedIds.includes(option.id)
           return (
-            <article key={option.id} className="flex w-60 shrink-0 snap-start flex-col gap-2 rounded-card bg-muted/40 p-3 transition-colors duration-fast hover:bg-muted/70 sm:w-auto sm:gap-3">
+            <article key={option.id} className="flex w-60 shrink-0 snap-start flex-col gap-2 rounded-card bg-muted p-3 transition-colors duration-fast hover:bg-muted/70 sm:w-auto sm:gap-3">
               <div className="min-w-0">
                 <h4 className="text-sm font-semibold sm:text-[0.9375rem]"><a href={option.href} className="break-words underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-ring">{option.name}</a></h4>
                 {option.outcome ? <p className="mt-1 line-clamp-2 text-xs leading-relaxed text-muted-foreground sm:text-[0.8125rem]">{option.outcome}</p> : null}
@@ -26,8 +26,8 @@ export function OptionsGrid({ view, onSelect, onCompare }: OptionsGridProps) {
                 {!option.selectable ? <p className="text-muted-foreground">View listing; not available to buy through AE</p> : null}
               </div>
               <div className="flex flex-wrap gap-1">
-                <Button type="button" size="sm" variant="ghost" className="min-h-10 px-2 text-[0.8125rem]" onClick={() => onSelect(option.id)} disabled={!option.selectable} aria-pressed={view.selectedId === option.id}>Select</Button>
-                {view.options.length < 2 ? null : <Button type="button" size="sm" variant="ghost" className="min-h-10 px-2 text-[0.8125rem]" onClick={() => onCompare(option.id)} aria-pressed={compared}>{compared ? 'Remove from compare' : 'Compare'}</Button>}
+                <Button type="button" size="sm" variant="secondary" className="min-h-10" onClick={() => onSelect(option.id)} disabled={!option.selectable} aria-pressed={view.selectedId === option.id}>Select</Button>
+                {view.options.length < 2 ? null : <Button type="button" size="sm" variant="secondary" className="min-h-10" onClick={() => onCompare(option.id)} aria-pressed={compared}>{compared ? 'Remove from compare' : 'Compare'}</Button>}
               </div>
             </article>
           )

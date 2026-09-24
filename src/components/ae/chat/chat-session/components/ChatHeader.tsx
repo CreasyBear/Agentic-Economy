@@ -13,6 +13,7 @@ import { useChatHeaderSlot } from '../useChatHeaderSlot'
 export function ChatHeader({
   authenticated,
   threadId,
+  threadTitle,
   busy,
   shareState,
   sharePath,
@@ -27,6 +28,7 @@ export function ChatHeader({
   onCopyShare,
 }: ChatHeaderProps) {
   const slot = useChatHeaderSlot()
+  const title = chatStageTitle(threadTitle)
   const controls = (
     <>
       {authenticated ? (
@@ -57,7 +59,7 @@ export function ChatHeader({
           </SheetContent>
         </Sheet>
       ) : null}
-      <h1 className="order-first min-w-0 flex-1 truncate text-sm font-medium sm:order-none" title={chatStageTitle(threadId)}>{chatStageTitle(threadId)}</h1>
+      <h1 className="order-first min-w-0 flex-1 truncate text-sm font-medium sm:order-none" title={title}>{title}</h1>
       <p className="sr-only">{chatStageDetail(authenticated)}</p>
       <Button type="button" variant="ghost" size="icon" className="min-h-touch min-w-touch max-sm:!size-8 max-sm:!min-h-8 max-sm:!min-w-8 [&_svg]:size-5" aria-label={chatHistory.newChat} onClick={onNewChat}>
         <PlusIcon aria-hidden="true" />

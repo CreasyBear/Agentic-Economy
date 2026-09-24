@@ -26,6 +26,7 @@ import {
   projectAnonymousTranscript,
   readAnonymousChatHandoff,
   rememberAnonymousChatHandoff,
+  textFromParts,
   type ChatStatus,
   type TranscriptMessage,
 } from '../presentation'
@@ -78,6 +79,10 @@ export function useChatSession({
     api.chatMessages.listMessages,
     isAuthenticated && threadId !== null ? { threadId } : 'skip',
     { initialNumItems: PAGE_SIZE, stream: true },
+  )
+  const activeThread = useQuery(
+    api.chatThreads.getThread,
+    isAuthenticated && threadId !== null ? { threadId, now } : 'skip',
   )
   const listedThreads = useQuery(
     api.chatThreads.listThreads,
@@ -174,6 +179,9 @@ export function useChatSession({
   const threadsPage = useStickyRows(threadRows)
   const historyPending = isAuthenticated && !threadsPage.everCached
   const threads = threadsPage.shown
+  const savedTitle = activeThread?.title ?? (threadId === null ? null : threads.find((thread) => thread.threadId === threadId)?.title)
+  const firstUserMessage = savedTitle ? undefined : visibleMessages.find((message) => message.role === 'user')
+  const threadTitle = savedTitle ?? (firstUserMessage === undefined ? null : textFromParts(firstUserMessage.parts).trim())
   const transcriptPending = isAuthenticated
     && threadId !== null
     && durable.status === 'LoadingFirstPage'
@@ -400,6 +408,7 @@ export function useChatSession({
     createHistoryPanel,
     header: {
       authenticated: isAuthenticated,
+      threadTitle,
       threadId,
       busy,
       ...(shareState === undefined ? {} : { shareState: shareState.state }),
@@ -476,7 +485,8 @@ export function useChatSession({
           document.getElementById('tool-chat-prompt')?.focus()
         }
       },
-      thinking: sending && !assistantTurnStarted(visibleMessages),
+      thinking: (sending || activeThread?.busy === true) && !assistantTurnStarted(visibleMessages),
+      generating: activeThread?.busy === true,
       clarifyDisabled: composerDisabled,
       onClarifyAnswer: (answer) => { void submit(false, answer) },
       ...(transcriptPending ? { pending: true } : {}),
