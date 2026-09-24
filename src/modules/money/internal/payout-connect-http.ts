@@ -28,6 +28,7 @@ import type {
   StripeAccountUpdatedWebhookEvent,
   StripeWebhookApplication,
 } from './stripe-webhook'
+import { connectWebhookCommand, connectWebhookAppliedStatus } from './connect-webhook-command'
 import {
   ownerBusiness,
   ownerBusinessQuery,
@@ -729,24 +730,7 @@ export async function applyVerifiedConnectAccountEvent(
   const operationKey = 'moneyLedger:recordConnectAccountEvent'
   const correlationId = input.event.stripeEventId
   const command = {
-    businessId: binding.businessId,
-    currency: binding.currency,
-    exponent: binding.exponent,
-    event: input.event,
-    readback: {
-      detailsSubmitted: evidence.detailsSubmitted,
-      recipientCapabilityActive: evidence.recipientCapabilityActive,
-      restricted: evidence.restricted,
-      requirementsDigest: evidence.requirementsDigest,
-      providerObjectDigest: evidence.providerObjectDigest,
-      ...(evidence.providerObjectVersion === undefined
-        ? {}
-        : { providerObjectVersion: evidence.providerObjectVersion }),
-      observedAt: evidence.observedAt,
-    },
-    ...(binding.version === undefined
-      ? {}
-      : { expectedVersion: binding.version }),
+    ...connectWebhookCommand(binding, input.event, evidence),
     operationKey,
     correlationId,
   }
@@ -767,11 +751,7 @@ export async function applyVerifiedConnectAccountEvent(
   if (isMoneyRefusal(result)) return result
   return {
     kind: 'accepted',
-    status:
-      result.kind === 'accepted' &&
-      binding.lastStripeEventId === input.event.stripeEventId
-        ? 'replayed'
-        : 'applied',
+    status: connectWebhookAppliedStatus(binding, input.event),
     appliedRef: `stripe:account:${input.event.stripeAccountId}`,
   }
 }

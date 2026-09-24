@@ -448,4 +448,5 @@ export type {
   SpendingPeriods,
   SpendingPeriodAdjustment,
 } from './internal/spending-period-values'
+export { connectWebhookCommand, connectWebhookAppliedStatus } from './internal/connect-webhook-command'
 
