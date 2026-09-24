@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { api, components, internal } from '../../convex/_generated/api'
 import { streamDurableChatResponse } from '../../convex/chatGenerate'
+import { projectToolCard } from '@/modules/chat/tool-card'
 import { convexTestWithMarketComponents, publishedBusinessOwner } from '../helpers/convex-fixtures'
 
 const SHARE_SECRET = 'chat-share-integration-secret-with-at-least-32-characters'
@@ -169,7 +170,7 @@ describe.sequential('durable Tool chat messaging and shares', () => {
           type: 'tool-call' as const, toolCallId: `lookup-${index}`, toolName: 'registry_tools_describe',
           input: JSON.stringify({ toolRef: `operation:v1:${'a'.repeat(64)}` }),
         }]) : []),
-        [{ type: 'text', text: 'One current exchange-rate Tool is available.' }],
+        [{ type: 'text', text: 'No current exchange-rate Tool was verified from that reference.' }],
       ],
     })
     const modelCalls = vi.spyOn(model, 'doStream')
@@ -180,9 +181,8 @@ describe.sequential('durable Tool chat messaging and shares', () => {
         promptMessageId,
       }, model)
     })
-    expect(modelCalls).toHaveBeenCalledTimes(extended ? 6 : 1)
-    expect(JSON.stringify(modelCalls.mock.calls[0]?.[0].prompt)).toContain('Use the returned priceLabel as an indicative price.')
-    if (extended) expect(modelCalls.mock.calls[5]?.[0].toolChoice).toEqual({ type: 'none' })
+    expect(modelCalls.mock.calls[0]?.[0].toolChoice).toEqual({ type: 'required' })
+    if (extended) expect(modelCalls.mock.lastCall?.[0].tools).toBeUndefined()
     await backend.mutation(internal.chatMessages.clearActiveGeneration, {
       threadId: created.threadId,
       promptMessageId,
@@ -199,10 +199,39 @@ describe.sequential('durable Tool chat messaging and shares', () => {
       }),
     ]))
     expect(messages.page.map((message) => message.role)).toEqual(['user', 'assistant'])
-    expect(messages.page.find((message) => message.role === 'assistant')?.text).toContain(
-      'One current exchange-rate Tool is available.',
-    )
+    expect(messages.page[1]?.text).toBe(extended
+      ? 'No current exchange-rate Tool was verified from that reference.'
+      : '**No match for that yet.** Next: try different words or browse the Market.')
     expect(activeStreams).toEqual([])
+  })
+  it('settles two empty searches as one answer without option cards', async () => {
+    const backend = convexTestWithMarketComponents()
+    const { owner, canonicalAccountRef } = await publishedBusinessOwner(backend, 'chat-no-match-owner')
+    const created = await owner.mutation(api.chatThreads.createThread, { title: 'Find an absent Tool' })
+    const { messageId } = await backend.run(ctx => saveMessage(ctx, components.agent, {
+      threadId: created.threadId, userId: canonicalAccountRef, prompt: 'Find an absent Tool',
+    }))
+    const model = mockModel({ contentSteps: [
+      [{ type: 'tool-call', toolCallId: 'search-1', toolName: 'registry_tools_search', input: JSON.stringify({ query: 'improbable missing tool alpha' }) }],
+      [{ type: 'tool-call', toolCallId: 'search-2', toolName: 'registry_tools_search', input: JSON.stringify({ query: 'improbable missing tool beta' }) }],
+    ] })
+    await backend.action(ctx => streamDurableChatResponse(ctx, {
+      threadId: created.threadId, ownerId: canonicalAccountRef, promptMessageId: messageId,
+    }, model))
+    const messages = await backend.run(ctx => listUIMessages(ctx, components.agent, {
+      threadId: created.threadId, paginationOpts: { cursor: null, numItems: 20 },
+    }))
+    const assistant = messages.page.filter(message => message.role === 'assistant')
+    expect(assistant).toHaveLength(1)
+    expect(assistant[0]?.text).toBe('**No match for that yet.** Next: try different words or browse the Market.')
+    expect(assistant[0]?.parts.filter(part => part.type.startsWith('tool-'))).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ state: 'output-available', output: expect.objectContaining({ kind: 'noMatch', results: [] }) }),
+      ]),
+    )
+    const cards = assistant[0]?.parts.map(projectToolCard).filter(card => card?.kind === 'choices') ?? []
+    expect(cards).not.toHaveLength(0)
+    expect(cards.flatMap(card => card?.kind === 'choices' ? card.choices : [])).toEqual([])
   })
   it('halts at clarification and reports an input-required stream outcome', async () => {
     const backend = convexTestWithMarketComponents()
@@ -435,6 +464,7 @@ describe.sequential('durable Tool chat messaging and shares', () => {
                       summary: 'Current Tool result.',
                       matchReason: 'Matches the query.',
                       readiness: 'ready',
+                      healthStatus: 'operational',
                       entitlement: 'public',
                       price: { kind: 'indicative', label: 'AUD 0.00' },
                       details: {

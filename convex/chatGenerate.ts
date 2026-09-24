@@ -91,13 +91,13 @@ export async function streamDurableChatResponse(
   )
   const steps = await result.steps
   if (steps.every(step => step.toolResults.length === 0) || chatNoMatchSearchCount(steps) > 0) {
-    await saveMessages(ctx, components.agent, {
-      threadId: args.threadId,
-      userId: args.ownerId,
-      promptMessageId: args.promptMessageId,
-      messages: [{ role: 'assistant', content: CHAT_NO_RESULT_ANSWER }],
-      agentName: 'Agentic Economy Tool Market',
-      failPendingSteps: true,
+    const assistant = result.savedMessages?.findLast(message => message.message.role === 'assistant')
+    if (assistant === undefined) throw new Error('chat_generation_answer_missing')
+    const content = assistant.message.content
+    const toolCalls = Array.isArray(content) ? content.filter(part => part.type === 'tool-call') : []
+    await agent.updateMessage(ctx, {
+      messageId: assistant._id,
+      patch: { message: { role: 'assistant', content: [...toolCalls, { type: 'text', text: CHAT_NO_RESULT_ANSWER }] }, status: 'success' },
     })
     return false
   }
