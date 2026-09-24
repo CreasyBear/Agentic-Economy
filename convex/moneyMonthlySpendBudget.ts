@@ -13,7 +13,7 @@ import {
   requireAccessFactForAccount,
   resolveActiveAccountRefForPrincipal,
 } from './interactiveAuthority'
-import { persistAuditEvent } from './securityShared'
+import { persistAuditEvent } from './lib/security/audit/persistence'
 import { CLERK_USER_PROVIDER_NAMESPACE } from './workspaceProvisioning'
 
 const NON_NEGATIVE_UNITS_PATTERN = /^\d+$/u

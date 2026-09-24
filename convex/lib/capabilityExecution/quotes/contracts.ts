@@ -19,7 +19,7 @@ import {
   spendingPeriodsValue,
 } from '@/modules/money/public'
 import { principalValue } from '../callLifecycle/contracts'
-import { sourceWriteArgs, sourceWriteAdmissionArg, sourceWriteRequestArg } from '../../../sourceWriteAdmission'
+import { sourceWriteArgs, sourceWriteAdmissionArg, sourceWriteRequestArg } from '../../security/sourceWrite/contracts'
 
 export const quoteRefusalCode = v.union(
   v.literal('tool_not_found'),

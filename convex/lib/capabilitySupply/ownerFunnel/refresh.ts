@@ -1,7 +1,7 @@
 import type { MutationCtx } from '../../../_generated/server'
 import { failOperation, replayOperationResult, succeedOperation } from '@/modules/capability-supply/public'
 import { publicationPorts } from '../../../capabilitySupply'
-import { requireSourceWrite } from '../../../sourceWriteAdmission'
+import { requireSourceWrite } from '../../security/sourceWrite/admission'
 import type { OwnerSupplyCommandArgs, OwnerSupplyCommandResult } from './contracts'
 import { beginOwnerMaintenanceOperation, loadOwnerSupplyPublication } from './maintenance'
 

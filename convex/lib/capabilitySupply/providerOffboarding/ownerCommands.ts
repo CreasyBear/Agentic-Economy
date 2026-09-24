@@ -12,13 +12,8 @@ import {
 import { ownsPublishedBusiness } from '../../../capabilitySupply'
 import { admitInteractiveOwnerConsequence } from '../../authority/consequence/owner'
 import { clerkConsequenceProofValue } from '../../authority/consequence/proof'
-import {
-  requireSourceRead,
-  requireSourceWrite,
-  sourceWriteAdmissionArg,
-  sourceWriteArgs,
-  sourceWriteRequestArg,
-} from '../../../sourceWriteAdmission'
+import { requireSourceRead, requireSourceWrite } from '../../security/sourceWrite/admission'
+import { sourceWriteAdmissionArg, sourceWriteArgs, sourceWriteRequestArg } from '../../security/sourceWrite/contracts'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { projectStatus, stateForStep } from './caseState'
 import type { resultValue } from './contracts'

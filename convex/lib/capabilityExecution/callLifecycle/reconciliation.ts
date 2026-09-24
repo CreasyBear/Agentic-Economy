@@ -2,14 +2,12 @@ import { v, type Infer } from 'convex/values'
 import type { Doc } from '../../../_generated/dataModel'
 import type { MutationCtx, QueryCtx } from '../../../_generated/server'
 import { callReconciliationValue } from '@/modules/capability-execution/convex'
-import {
-  cancelBeforeClaimHandler,
-  claimDispatchHandler,
-  finalizeDispatchHandler,
-} from './dispatch'
+import { cancelBeforeClaimHandler } from './dispatchCancellation'
+import { claimDispatchHandler } from './dispatchClaim'
+import { finalizeDispatchHandler } from './dispatchFinalize'
 import { completeWorkHandler } from './workComplete'
-import { projectRecoveryHandler, recordHandler } from './callActions'
-import { reconcilePersistedCallAuthority } from './authorityHandlers'
+import { projectRecoveryHandler, recordHandler } from './callRecoveryProjection'
+import { reconcilePersistedCallAuthority } from './persistedCallAuthority'
 
 const RECONCILIATION_MAX_CANDIDATES = 25
 const RECONCILIATION_LEASE_MS = 60_000
@@ -59,6 +57,16 @@ export const reconciliationFinishOutcome = v.union(
   v.literal('reconciliation_required'),
   v.literal('error'),
 )
+export const listDueAutomaticReconciliationCandidatesArgs = { now: v.number(), limit: v.number() } as const
+export const claimAutomaticReconciliationCandidateArgs = { callRef: v.string(), leaseOwner: v.string(), now: v.number() } as const
+export const finishAutomaticReconciliationArgs = {
+  callRef: v.string(),
+  leaseOwner: v.string(),
+  now: v.number(),
+  outcome: reconciliationFinishOutcome,
+  reason: v.optional(reconciliationReason),
+} as const
+export const listDueAutomaticReconciliationCandidatesResult = v.array(reconciliationCandidateValue)
 function isFiniteNonNegative(value: number): boolean {
   return Number.isFinite(value) && value >= 0
 }

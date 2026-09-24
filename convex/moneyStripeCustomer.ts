@@ -13,7 +13,7 @@ import {
   resolveActiveAccountRefForPrincipal,
 } from './interactiveAuthority'
 import { resolveAndBindLegalCustomer } from './lib/money/legalCustomer/binding'
-import { persistAuditEvent } from './securityShared'
+import { persistAuditEvent } from './lib/security/audit/persistence'
 import { CLERK_USER_PROVIDER_NAMESPACE } from './workspaceProvisioning'
 
 const STRIPE_CUSTOMER_ID_PATTERN = /^cus_[A-Za-z0-9_]+$/u

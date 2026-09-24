@@ -1,5 +1,5 @@
 import type { QueryCtx } from '../../../_generated/server'
-import { requireSourceRead } from '../../../sourceWriteAdmission'
+import { requireSourceRead } from '../../security/sourceWrite/admission'
 import { verifySupplyAgentPrincipal } from '../../../agentAccessPrincipals'
 import { listAgentSupplyCallsHandler, type supplyCallsArgs } from '../callLifecycle/supplyCallsListing'
 import type { ObjectType } from 'convex/values'

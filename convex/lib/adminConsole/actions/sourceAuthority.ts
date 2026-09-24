@@ -5,7 +5,7 @@ import { applyCapabilitySourceAuthorityReview } from '../../capabilitySupply/adm
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { brandNonEmpty } from '@/modules/common/ids'
 import { validateAuditEvent } from '@/modules/observability/public'
-import { persistAuditEvent } from '../../../securityShared'
+import { persistAuditEvent } from '../../security/audit/persistence'
 
 import { v } from 'convex/values'
 import { adminCommandArgsValue, adminCommandReceiptValue } from '../validators'

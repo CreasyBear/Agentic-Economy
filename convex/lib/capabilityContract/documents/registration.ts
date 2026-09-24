@@ -10,7 +10,7 @@ import { validateAuditEvent } from '@/modules/observability/public'
 
 import type { MutationCtx } from '../../../_generated/server'
 import { resolveAdminAuthority, resolveBusinessActor } from '../../../authz'
-import { persistAuditEvent } from '../../../securityShared'
+import { persistAuditEvent } from '../../security/audit/persistence'
 import { capabilityContractRefValue, getActiveExactCapabilityContract, toDurableRecord } from './reads'
 
 export const registerArgs = {

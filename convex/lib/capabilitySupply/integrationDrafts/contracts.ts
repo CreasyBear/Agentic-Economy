@@ -1,7 +1,7 @@
 import { v, type Infer } from 'convex/values'
 
 import { agentAccessPrincipalValue } from '../../../agentAccessPrincipals'
-import { sourceWriteArgs } from '../../../sourceWriteAdmission'
+import { sourceWriteArgs } from '../../security/sourceWrite/contracts'
 
 const sourceKindValue = v.union(
   v.literal('openapi'),

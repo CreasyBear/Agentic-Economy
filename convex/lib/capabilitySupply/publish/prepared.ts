@@ -17,7 +17,7 @@ import {
   registerCapabilityOffering,
   registerCapabilityTransportBinding,
   setCapabilitySupplyEligibility,
-} from '../../../capabilitySupplyCommands'
+} from '../commands/writes'
 import type { Id } from '../../../_generated/dataModel'
 import type { MutationCtx } from '../../../_generated/server'
 import { resolveBusinessActor } from '../../../authz'
@@ -32,7 +32,7 @@ import {
   ownsPublishedBusinessForOwnerId,
 } from './ownership'
 import { rebuildCapabilityOriginSupplyProjection } from '../projection/rebuild'
-import { requireSourceWrite } from '../../../sourceWriteAdmission'
+import { requireSourceWrite } from '../../security/sourceWrite/admission'
 import { clerkConsequenceProofValue } from '../../authority/consequence/proof'
 import {
   convexPreparedPublicationResult,

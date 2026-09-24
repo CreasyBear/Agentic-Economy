@@ -1,7 +1,7 @@
 import type { MutationCtx, QueryCtx } from './_generated/server'
 import type { Doc, Id } from './_generated/dataModel'
 import { admissionKey, assertAdmission } from './lib/platform/rateLimit'
-import { requireSourceWrite } from './sourceWriteAdmission'
+import { requireSourceWrite } from './lib/security/sourceWrite/admission'
 import { brandNonEmpty } from '../src/modules/common/ids'
 import { canonicalDigest } from '../src/modules/common/canonical-digest'
 import {
@@ -15,7 +15,7 @@ import type {
   DisputeSourceState,
   RemovalDisputeReasonCode,
 } from '../src/modules/security/public'
-import { persistAuditEvent } from './securityShared'
+import { persistAuditEvent } from './lib/security/audit/persistence'
 
 type OpenRemovalDisputeHandlerArgs = {
   businessId: string

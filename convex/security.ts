@@ -1,9 +1,9 @@
 import { mutationGeneric } from 'convex/server'
 import { v } from 'convex/values'
 
-import { sourceWriteArgs } from './sourceWriteAdmission'
+import { sourceWriteArgs } from './lib/security/sourceWrite/contracts'
 import { adminCommandArgsValue, adminCommandReceiptValue } from './lib/adminConsole/validators'
-import { openRemovalDisputeArgsValue, removalReason, visibilityTargetType } from './lib/security/adminArgs'
+import { openRemovalDisputeArgsValue, removalReason, visibilityTargetType } from './lib/security/admin/args'
 import { runAdminCommand } from './lib/adminConsole/commandEnvelope'
 import { grantAdminMembershipSpec, revokeAdminMembershipSpec } from './lib/adminConsole/actions/adminMembership'
 import { removalDisputeSpec } from './lib/adminConsole/actions/removalDispute'

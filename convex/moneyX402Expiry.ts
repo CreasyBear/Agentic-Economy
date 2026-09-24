@@ -2,7 +2,7 @@ import { v } from 'convex/values'
 import { internal } from './_generated/api'
 import { internalMutation, type QueryCtx } from './_generated/server'
 import { materializePurchaseResolutionRecord } from './lib/capabilityExecution/callLifecycle/purchaseResolutionMaterialize'
-import { upsertCallProjection } from './lib/capabilityExecution/callLifecycle/dispatch'
+import { upsertCallProjection } from './lib/capabilityExecution/callLifecycle/dispatchProjection'
 
 const owner = (nonce: string) => `expired-unused:${nonce}`
 const proof = {

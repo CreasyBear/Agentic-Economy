@@ -32,8 +32,8 @@ import {
   validX402SellerClaimTime,
   x402SellerClaimDigest,
 } from '../../../../src/modules/capability-supply/public'
-import { requireSourceWrite } from '../../../sourceWriteAdmission'
-import { persistAuditEvent } from '../../../securityShared'
+import { requireSourceWrite } from '../../security/sourceWrite/admission'
+import { persistAuditEvent } from '../../security/audit/persistence'
 import { admitAuthorityCredentialChangeRate } from '../../platform/rateLimit'
 import {
   consumeConsequenceProof,

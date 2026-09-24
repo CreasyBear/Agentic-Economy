@@ -14,9 +14,6 @@ const neutralSources = [
   'convex/lib/capabilitySupply/publish/readPublication.ts',
   'convex/lib/capabilitySupply/publish/bootstrap.ts',
   'convex/capabilitySupplyProbes.ts',
-  'convex/capabilitySupplyGraph.ts',
-  'convex/capabilitySupplyLists.ts',
-  'convex/capabilitySupplyCommands.ts',
 ] as const
 
 const deepenedFolders = [
@@ -99,7 +96,7 @@ describe('capability supply boundaries', () => {
 
   it('reads canonical Operations directly without a cutover read model', () => {
     const schema = readFileSync('src/modules/capability-supply/internal/convex-schema.ts', 'utf8')
-    const queries = readFileSync('convex/capabilitySupplyToolQueries.ts', 'utf8')
+    const queries = readFileSync('convex/lib/capabilitySupply/tool/reads.ts', 'utf8')
 
     expect(schema).not.toContain('capabilityCurrentToolReadControls')
     expect(schema).not.toContain('capabilityCurrentToolDetails')

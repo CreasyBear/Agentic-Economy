@@ -10,7 +10,7 @@ import { createPackage3AuditEvent } from '../src/modules/observability/public'
 
 import type { Doc } from './_generated/dataModel'
 import { env, mutation, type MutationCtx } from './_generated/server'
-import { persistAuditEvent } from './securityShared'
+import { persistAuditEvent } from './lib/security/audit/persistence'
 import { serviceAssertion } from './serviceAssertion'
 import { CLERK_ORGANIZATION_PROVIDER_NAMESPACE } from './workspaceProvisioning'
 

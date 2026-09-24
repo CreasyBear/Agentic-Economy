@@ -5,7 +5,7 @@ import {
   type PublishPreparedCapabilityCommandResult,
 } from '@/modules/capability-supply/public'
 import { agentAccessPrincipalValue } from '../../../agentAccessPrincipals'
-import { sourceWriteArgs } from '../../../sourceWriteAdmission'
+import { sourceWriteArgs } from '../../security/sourceWrite/contracts'
 import { clerkConsequenceProofValue } from '../../authority/consequence/proof'
 
 

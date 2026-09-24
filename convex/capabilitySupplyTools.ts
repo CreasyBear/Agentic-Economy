@@ -3,15 +3,13 @@ import { v } from 'convex/values'
 
 import {
   compareArgs,
-  compareHandler,
-  detailHandler,
   toolRefArgs,
   publicCompareReturns,
   publicDetailReturns,
   publicSearchReturns,
   searchArgs,
-  searchHandler,
-} from './capabilitySupplyToolQueries'
+} from './lib/capabilitySupply/tool/contracts'
+import { compareHandler, detailHandler, searchHandler } from './lib/capabilitySupply/tool/reads'
 import {
   offeringToolMapHandler,
   offeringToolMapReturns,

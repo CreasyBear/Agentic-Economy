@@ -1,7 +1,7 @@
 import type { Infer } from 'convex/values'
 
 import type { MutationCtx } from '../../../_generated/server'
-import { requireSourceWrite } from '../../../sourceWriteAdmission'
+import { requireSourceWrite } from '../../security/sourceWrite/admission'
 import {
   prepareFundingRefundEvent,
   prepareFundingSettlementEvent,

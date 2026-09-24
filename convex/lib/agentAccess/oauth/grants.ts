@@ -4,7 +4,7 @@ import { agentAccessConsentReservationValue } from '@/modules/agent-access/publi
 import { internal } from '../../../_generated/api'
 import type { MutationCtx, QueryCtx } from '../../../_generated/server'
 import type { DataModel, Doc } from '../../../_generated/dataModel'
-import { sourceWriteArgs } from '../../../sourceWriteAdmission'
+import { sourceWriteArgs } from '../../security/sourceWrite/contracts'
 import { parseWorkloadCronSnapshot, workloadCronSnapshotValue } from '../../platform/workloadCron/context'
 import { reconcileWorkloadCronSnapshot } from '../../platform/workloadCron/admission'
 import { requireOAuthSourceRead, requireOAuthSourceWrite, sameStringArray } from './shared'

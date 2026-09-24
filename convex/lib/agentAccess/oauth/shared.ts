@@ -1,5 +1,6 @@
 import { ConvexError, v } from 'convex/values'
-import { requireSourceRead, requireSourceWrite, type SourceWriteArgs } from '../../../sourceWriteAdmission'
+import { requireSourceRead, requireSourceWrite } from '../../security/sourceWrite/admission'
+import { type SourceWriteArgs } from '../../security/sourceWrite/contracts'
 
 // -- Primitives shared by two or more convex/lib/agentAccess/oauth/* groups. --
 // -- Kept neutral (no imports of sibling oauth group files) so none of the ---

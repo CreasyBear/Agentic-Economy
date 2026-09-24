@@ -67,9 +67,9 @@ type AgentPrincipalRow = NonNullable<
 >
 
 /** Worker-local mirror of `callIdentityMatches`
- * (`convex/lib/callLifecycle/callActions.ts`). That module registers Convex
- * actions and is not importable here without dragging the action runtime into
- * the worker bundle, so the tuple - four comparisons, no logic - is restated. */
+ * (`convex/lib/capabilityExecution/callLifecycle/callIdentity.ts`). The Convex
+ * helper's dependencies are not importable here without dragging server code
+ * into the worker bundle, so the tuple - four comparisons - is restated. */
 export function callPrincipalIdentityMatches(
   row: CallPrincipalIdentity | null,
   identity: CallPrincipalIdentity,

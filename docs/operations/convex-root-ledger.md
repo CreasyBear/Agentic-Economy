@@ -31,6 +31,19 @@
 | 2026-09-24 | capabilityContractDocuments.ts | 345 lines | 23 lines after extraction, then 14 after dead RPC deletion | d2baca6cd |
 | 2026-09-24 | x402PaymentAttempt attempt.ts + callLifecycle/contracts.ts + providerConnections/contracts.ts | 856 + 394 + 424 lines | attempt 23 lines plus concern files; contracts 272 + 354 lines | d2baca6cd |
 | 2026-09-24 | dead code (wave 5) | 11 dead test-only RPCs (including 2 backfills), 15 unwired skeletons, 774-line publication-admit pair, 4 x402 shell roots | deleted; `x402DirectoryIndexBackfill.start` retained for category-stats rebuild | d2baca6cd |
+| 2026-09-24 | capabilityProviderTools.ts | 432 lines | 30 lines; capabilitySupply/providerTools | pending |
+| 2026-09-24 | capabilitySupplyToolShared.ts + capabilitySupplyToolQueries.ts | 470 + 451 lines, zero RPCs | deleted; capabilitySupply/tool | pending |
+| 2026-09-24 | capabilitySupplyCommands.ts + capabilitySupplyGraph.ts + capabilitySupplyLists.ts | 299 + 253 + 463 lines, zero RPCs | deleted; capabilitySupply/{commands,graphPorts,lists} | pending |
+| 2026-09-24 | moneyProviderObligations.ts | 376 lines | 54 lines | pending |
+| 2026-09-24 | sourceWriteAdmission.ts | 299 lines | 12 lines | pending |
+| 2026-09-24 | securityShared.ts | zero RPCs | deleted; security/{admin,audit} | pending |
+| 2026-09-24 | securityAccountHistory.ts | 565 lines | 28 lines | pending |
+| 2026-09-24 | providerConsequenceHttp.ts | 322 lines | 15 lines | pending |
+| 2026-09-24 | catalogPublicReads.ts | 366 lines, zero RPCs | deleted; catalog/publicReads | pending |
+| 2026-09-24 | agentSpendingPolicy.ts | 542 lines | 16 lines | pending |
+| 2026-09-24 | recoveryBreakGlass.ts | 482 lines | 20 lines | pending |
+| 2026-09-24 | actionExecutionControl.ts | 317 lines | 67 lines | pending |
+| 2026-09-24 | capabilityCalls.ts | 347 lines | 155 lines; callLifecycle split by role (authorityHandlers and dispatch removed; largest file 399 lines) | pending |
 
 ### Decisions applied 2026-09-24
 - **D1, catalog origin:** eligible-ports admission now checks the business ID and fails closed, as the graph path does (`34ccfe8f7`).
@@ -45,8 +58,9 @@
 ### Open
 - Integration-fixture RPCs need a test-fixture pass before any further deletion; Clerk's five string-ref handlers are live references, not dead code.
 - Connect's differing refusal and authority envelopes are semantic; do not unify them as a type-only move.
-- `convex/lib/capabilityExecution/callLifecycle/admissionReserve.ts` (598 lines) and `convex/lib/money/x402PaymentAttempt/identity.ts` (412) remain oversized; `convex/moneyX402PaymentAttempts.ts` still has an inline reconcile handler.
-- `convex/capabilityCalls.ts` remains at 347 lines and is deferred pending the lib/callLifecycle role split.
+- `convex/lib/money/x402PaymentAttempt/identity.ts` (412 lines) remains oversized; `convex/moneyX402PaymentAttempts.ts` still has an inline reconcile handler.
+- `convex/capabilityToolCatalog.ts:100,111,152,164` uses public `api.*` targets for `ctx.runQuery`; convert to internal references in a separate behaviour-reviewed pass.
+- `convex/capabilityProviderConnections.ts` remains a 276-scanner-line registration-only exception for 29 RPCs (276 physical lines).
 - Chat-session gates remain: `chatAnonymous.ts` 290 against pin 213; the `chatTools` registry entry; status vocabulary 20 against 17; and 12 chat-owned typecheck errors. Principal refusal codes and Managed-Call remedy transitions remain deliberately distinct.
 
 ### §10 decisions for the wave 4 layout moves (orchestrator, 2026-09-24)

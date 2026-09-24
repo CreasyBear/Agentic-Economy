@@ -9,7 +9,8 @@ import {
   stripeWebhookDestinationValue,
   stripeWebhookWorkResultValue,
 } from './moneyStripeWebhookValues'
-import { requireSourceWrite, sourceWriteArgs } from './sourceWriteAdmission'
+import { requireSourceWrite } from './lib/security/sourceWrite/admission'
+import { sourceWriteArgs } from './lib/security/sourceWrite/contracts'
 import { stripeWebhookWorkpool } from './stripeWebhookWorkpool'
 
 const processStripeWebhookRef = makeFunctionReference<

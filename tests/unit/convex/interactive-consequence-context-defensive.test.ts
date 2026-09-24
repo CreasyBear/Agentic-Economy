@@ -6,7 +6,7 @@ const authorityMocks = vi.hoisted(() => ({
 }))
 
 vi.mock('../../../convex/authz', () => authorityMocks)
-vi.mock('../../../convex/sourceWriteAdmission', () => ({
+vi.mock('../../../convex/lib/security/sourceWrite/admission', () => ({
   requireSourceWrite: vi.fn(async () => ({ kind: 'accepted' as const })),
 }))
 

@@ -1,8 +1,9 @@
 import { v, type Infer } from 'convex/values'
 import type { QueryCtx } from '../../../_generated/server'
-import { requireSourceRead, sourceWriteArgs, type SourceWriteArgs } from '../../../sourceWriteAdmission'
+import { requireSourceRead } from '../../security/sourceWrite/admission'
+import { sourceWriteArgs, type SourceWriteArgs } from '../../security/sourceWrite/contracts'
 import { principalValue, type CallPrincipal } from '../callLifecycle/contracts'
-import { resolveCallAgentAuthorityHandler } from '../callLifecycle/authorityHandlers'
+import { resolveCallAgentAuthorityHandler } from '../callLifecycle/agentCallAuthority'
 
 export const quoteStatusArgs = {
   principal: principalValue,

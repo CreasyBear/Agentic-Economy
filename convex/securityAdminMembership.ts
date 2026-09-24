@@ -1,7 +1,7 @@
 import type { MutationCtx, QueryCtx } from './_generated/server'
 import type { Doc } from './_generated/dataModel'
 import { resolveBusinessActor } from './authz'
-import { requireSourceWrite } from './sourceWriteAdmission'
+import { requireSourceWrite } from './lib/security/sourceWrite/admission'
 import {
   bootstrapOwnerAdmin as bootstrapOwnerAdminModule,
 } from '../src/modules/security/public'
@@ -10,11 +10,7 @@ import type {
   AdminAuthorityMutationResult,
   AdminAuthorityState,
 } from '../src/modules/security/public'
-import {
-  persistAdminAuthorityMutation,
-  summarizeAudit,
-  summarizeMembershipAudit,
-} from './securityShared'
+import { persistAdminAuthorityMutation, summarizeAudit, summarizeMembershipAudit } from './lib/security/admin/persistence'
 
 type BootstrapOwnerAdminHandlerArgs = {
   reasonCode: string

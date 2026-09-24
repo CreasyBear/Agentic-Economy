@@ -1,9 +1,10 @@
-import type { MutationCtx } from './_generated/server'
-import type { AuditEventContract } from '../src/modules/observability/public'
-import type { AdminDecisionAudit, AdminMembership } from '../src/modules/security/public'
-import type { Doc, Id } from './_generated/dataModel'
+import type { MutationCtx } from '../../../_generated/server'
+import type { Doc } from '../../../_generated/dataModel'
+import type { AuditEventContract } from '../../../../src/modules/observability/public'
+import type { AdminDecisionAudit, AdminMembership } from '../../../../src/modules/security/public'
+import { persistAuditEvent } from '../audit/persistence'
 
-export type AdminAuthorityWriteResult = {
+type AdminAuthorityWriteResult = {
   membership?: AdminMembership
   auditEvent?: AuditEventContract
   membershipAuditEvent?: AdminDecisionAudit
@@ -120,54 +121,6 @@ function adminMembershipDocument(membership: AdminMembership) {
     ...(membership.revokedAt === undefined ? {} : { revokedAt: membership.revokedAt }),
     ...(membership.evidenceRef === undefined ? {} : { evidenceRef: membership.evidenceRef }),
   }
-}
-
-export async function persistAuditEvent(
-  db: MutationCtx['db'],
-  event: AuditEventContract,
-): Promise<void> {
-  const existing = await db
-    .query('auditEvents')
-    .withIndex('by_eventId', (builder) => builder.eq('eventId', event.eventId))
-    .unique()
-  if (existing === null) {
-    const businessId = event.businessId === undefined
-      ? undefined
-      : businessIdFromValue(db, event.businessId)
-    await db.insert('auditEvents', {
-      eventId: event.eventId,
-      eventType: event.eventType,
-      actorKind: event.actorKind,
-      actorRef: event.actorRef,
-      ...(event.activeAccountRef === undefined ? {} : { activeAccountRef: event.activeAccountRef }),
-      ...(event.sourceSystem === undefined ? {} : { sourceSystem: event.sourceSystem }),
-      ...(event.observedAt === undefined ? {} : { observedAt: event.observedAt }),
-      ...(event.authorityGeneration === undefined ? {} : { authorityGeneration: event.authorityGeneration }),
-      ...(businessId === undefined ? {} : { businessId }),
-      targetType: event.targetType,
-      targetRef: event.targetRef,
-      ...(event.beforeState === undefined ? {} : { beforeState: event.beforeState }),
-      ...(event.afterState === undefined
-        ? {}
-        : { afterState: event.afterState, outcome: event.afterState }),
-      idempotencyKey: event.idempotencyKey,
-      correlationId: event.correlationId,
-      ...(event.reasonCode === undefined ? {} : { reasonCode: event.reasonCode }),
-      evidenceRefs: [...event.evidenceRefs],
-      redactedPayloadJson: JSON.stringify(event.redactedPayload),
-      payloadHash: event.payloadHash,
-      ...(event.failureCode === undefined ? {} : { failureCode: event.failureCode }),
-      createdAt: event.createdAt,
-    })
-  }
-}
-
-function businessIdFromValue(db: MutationCtx['db'], value: string): Id<'businesses'> {
-  const id = db.normalizeId('businesses', value)
-  if (id === null) {
-    throw new Error('invalid_business_id')
-  }
-  return id
 }
 
 export function summarizeAudit(event: AuditEventContract) {

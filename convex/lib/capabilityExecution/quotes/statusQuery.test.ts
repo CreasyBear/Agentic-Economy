@@ -1,12 +1,12 @@
 import { describe, expect, it, vi } from 'vitest'
 import { readQuoteStatusQueryHandler } from './statusQuery'
-import { requireSourceRead } from '../../../sourceWriteAdmission'
-import { resolveCallAgentAuthorityHandler } from '../callLifecycle/authorityHandlers'
+import { requireSourceRead } from '../../security/sourceWrite/admission'
+import { resolveCallAgentAuthorityHandler } from '../callLifecycle/agentCallAuthority'
 
-vi.mock('../../../sourceWriteAdmission', () => ({
+vi.mock('../../security/sourceWrite/admission', () => ({
   sourceWriteArgs: {}, requireSourceRead: vi.fn(async () => ({ kind: 'accepted' })),
 }))
-vi.mock('../callLifecycle/authorityHandlers', () => ({
+vi.mock('../callLifecycle/agentCallAuthority', () => ({
   resolveCallAgentAuthorityHandler: vi.fn(async (_ctx, { principal }) => principal),
 }))
 

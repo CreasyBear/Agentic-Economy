@@ -1,7 +1,7 @@
 import { v } from 'convex/values'
 
 import { agentAccessPrincipalValue } from '../../../agentAccessPrincipals'
-import { sourceWriteArgs } from '../../../sourceWriteAdmission'
+import { sourceWriteArgs } from '../../security/sourceWrite/contracts'
 import { ownerProjection } from '../providerConnectionOwner/owner'
 
 export const authenticationValue = v.union(

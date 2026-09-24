@@ -1,7 +1,8 @@
 import { v, type Infer } from 'convex/values'
 
 import { principalValue } from '../callLifecycle/contracts'
-import { requireSourceWrite, sourceWriteArgs } from '../../../sourceWriteAdmission'
+import { requireSourceWrite } from '../../security/sourceWrite/admission'
+import { sourceWriteArgs } from '../../security/sourceWrite/contracts'
 import type { MutationCtx } from '../../../_generated/server'
 
 export const admitCallArgs = {

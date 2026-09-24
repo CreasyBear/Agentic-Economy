@@ -1,6 +1,6 @@
 import { degradeBackend } from '@/lib/observability/degrade-backend'
 import type { MutationCtx } from '../../../_generated/server'
-import { requireSourceWrite } from '../../../sourceWriteAdmission'
+import { requireSourceWrite } from '../../security/sourceWrite/admission'
 import { accountRef, principalRef } from '@/modules/principal-account/public'
 import { credentialRef } from '@/modules/principal-account/external-identity/public'
 import { DELEGATION_MAX_ANCESTRY_GRANTS, DelegationError, DelegationService, delegationGrantRef } from '@/modules/authority/delegation/public'

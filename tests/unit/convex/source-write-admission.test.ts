@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import { requireSourceWrite } from '../../../convex/sourceWriteAdmission'
+import { requireSourceWrite } from '../../../convex/lib/security/sourceWrite/admission'
 import {
   createSourceWriteAdmission,
   sourceWriteBodyDigest,

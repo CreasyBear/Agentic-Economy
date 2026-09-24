@@ -2,7 +2,7 @@ import { getFunctionName, type FunctionReference } from 'convex/server'
 import { expect, vi } from 'vitest'
 
 import { probeFromCron } from '../../../convex/capabilitySupplyReadiness'
-import { readPreClaimRefundHandler } from '../../../convex/lib/capabilityExecution/callLifecycle/dispatch'
+import { readPreClaimRefundHandler } from '../../../convex/lib/capabilityExecution/callLifecycle/dispatchRefusal'
 import {
   SYSTEM_WORKLOAD_ACCOUNT_REF,
   SYSTEM_WORKLOAD_PRINCIPAL_REF,

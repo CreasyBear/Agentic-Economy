@@ -10,7 +10,7 @@ import {
 } from '../../../agentAccessPrincipals'
 import { readCommercialPolicyGate } from '../../../moneyCommercialPolicy'
 import { resolveAndBindLegalCustomer } from '../legalCustomer/binding'
-import { requireSourceRead, requireSourceWrite } from '../../../sourceWriteAdmission'
+import { requireSourceRead, requireSourceWrite } from '../../security/sourceWrite/admission'
 import { canonicalDigest } from '../../../../src/modules/common/canonical-digest'
 import {
   AUD_EXPONENT,

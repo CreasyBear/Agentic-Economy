@@ -2,7 +2,7 @@ import { type Infer } from 'convex/values'
 
 import type { MutationCtx, QueryCtx } from '../../../_generated/server'
 import { resolveBusinessActor } from '../../../authz'
-import { requireSourceWrite } from '../../../sourceWriteAdmission'
+import { requireSourceWrite } from '../../security/sourceWrite/admission'
 import { isCanonicalDigest } from '../../../../src/modules/common/canonical-digest'
 import {
   bindOAuthOwnerArgs,

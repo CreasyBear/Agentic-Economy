@@ -30,7 +30,7 @@ import {
 } from '../providerConnections/lifecycle'
 import { resolveBusinessActor } from '../../../authz'
 import { accountRef, principalRef } from '../../../../src/modules/principal-account/public'
-import { persistAuditEvent } from '../../../securityShared'
+import { persistAuditEvent } from '../../security/audit/persistence'
 import { admitInteractiveOwnerConsequence } from '../../authority/consequence/owner'
 import {
   createConvexDelegationContextPort,

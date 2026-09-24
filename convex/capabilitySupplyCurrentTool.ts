@@ -47,7 +47,7 @@ export const readExactSellerCanaryOperationSnapshot = internalQuery({
 /**
  * Tail of `readManagedX402InspectionTarget` that only needs the publication,
  * its binding/contract docs and an already-computed qualification. Split out
- * so `capabilitySupplyToolShared.ts:toolRecordProjection` - which already
+ * so `lib/capabilitySupply/tool/projection.ts:toolRecordProjection` - which already
  * fetched all three plus qualified the same candidate a moment earlier while
  * building the search/detail projection - can reuse them instead of paying
  * for a second `qualifySuppliedCandidate` join (publication + business +

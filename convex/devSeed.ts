@@ -216,7 +216,7 @@ export async function provisionDevSeedCatalogIdentityRows(ctx: MutationCtx): Pro
  *     above), so there is no fixed local credential to pre-bind.
  * The previous fabricated `clerk_api_key:ak_local_e2e_owner` principal could
  * never be admitted anyway: `candidateMatchesCanonical`
- * (convex/lib/capabilityExecution/callLifecycle/authorityHandlers.ts) requires
+ * (convex/lib/capabilityExecution/callLifecycle/agentCallAuthority.ts) requires
  * `principalId === canonical.principalRef`, and a principalRef must match the
  * `prn_...` pattern.
  *

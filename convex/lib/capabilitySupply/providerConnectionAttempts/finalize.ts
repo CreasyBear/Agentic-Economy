@@ -2,7 +2,7 @@ import { type Infer } from 'convex/values'
 
 import type { MutationCtx } from '../../../_generated/server'
 import { resolveBusinessActor } from '../../../authz'
-import { requireSourceWrite } from '../../../sourceWriteAdmission'
+import { requireSourceWrite } from '../../security/sourceWrite/admission'
 import {
   createProviderConnection,
   createConnectionLifecycleAuditEvent,
@@ -13,7 +13,7 @@ import {
   resolveProviderConnectionProvenance,
 } from '../providerConnections/authority'
 import { invalidateActiveLeases, toDomain, toRow } from '../providerConnections/lifecycle'
-import { persistAuditEvent } from '../../../securityShared'
+import { persistAuditEvent } from '../../security/audit/persistence'
 import { providerRouteabilityIsFrozen } from '../providerOffboarding/freeze'
 import { canonicalDigest } from '../../../../src/modules/common/canonical-digest'
 import {

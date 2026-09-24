@@ -2,7 +2,7 @@ import { vStreamArgs } from '@convex-dev/agent'
 import { vStreamDelta, vStreamMessage } from '@convex-dev/agent/validators'
 import { v } from 'convex/values'
 import { internalMutation, internalQuery, mutation, query } from './_generated/server'
-import { resolveTrustedChatAuthority } from './lib/capabilityExecution/callLifecycle/authorityHandlers'
+import { resolveTrustedChatAuthority } from './lib/capabilityExecution/callLifecycle/chatCallAuthority'
 import {
   authorizeKeyTurnGeneration, ownerReadableActor, requirePrincipalTurn, reserveAndStartTurn,
   resolveTurnActor, readTurnStreams, unresolvedTurnCallRefs,
@@ -10,7 +10,7 @@ import {
 import { resolveOwnerChatActor } from './lib/chat/threadListing'
 import { publicChatTurn } from './lib/chat/publicTurnErrors'
 import { chatThreadBelongsToPrincipal } from './lib/chat/threadOwnership'
-import { sourceWriteArgs } from './sourceWriteAdmission'
+import { sourceWriteArgs } from './lib/security/sourceWrite/contracts'
 
 const workStateValue = v.union(
   v.literal('submitted'), v.literal('working'), v.literal('input-required'),

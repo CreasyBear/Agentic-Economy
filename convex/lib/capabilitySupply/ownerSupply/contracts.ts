@@ -2,7 +2,7 @@ import { v, type Infer } from 'convex/values'
 
 import { jsonObject } from '@/modules/capability-execution/convex'
 
-import { sourceWriteArgs } from '../../../sourceWriteAdmission'
+import { sourceWriteArgs } from '../../security/sourceWrite/contracts'
 
 const ownerSupplyCompletedValue = v.object({
   step: v.union(v.literal('readiness'), v.literal('test')),

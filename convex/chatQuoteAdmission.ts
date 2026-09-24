@@ -4,7 +4,7 @@ import { jsonObject } from '@/modules/capability-execution/convex'
 
 import { internalMutation } from './_generated/server'
 import { trustedChatAuthorityValue } from './chatTurns'
-import { resolveTrustedChatAuthority } from './lib/capabilityExecution/callLifecycle/authorityHandlers'
+import { resolveTrustedChatAuthority } from './lib/capabilityExecution/callLifecycle/chatCallAuthority'
 import { principalValue } from './lib/capabilityExecution/callLifecycle/contracts'
 import { prepareFinancialSubjectsCore } from './lib/capabilityExecution/quotes/prepareFinancialSubjects'
 import { financialSubjectsResult } from './lib/capabilityExecution/quotes/contracts'

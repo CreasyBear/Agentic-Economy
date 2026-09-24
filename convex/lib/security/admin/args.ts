@@ -1,8 +1,8 @@
 import { v } from 'convex/values'
 
-import { literalUnion } from '../../../src/modules/common/convex-literals'
-import { RemovalDisputeReasonCodeValues } from '../../../src/modules/security/public'
-import { sourceWriteArgs } from '../../sourceWriteAdmission'
+import { literalUnion } from '../../../../src/modules/common/convex-literals'
+import { RemovalDisputeReasonCodeValues } from '../../../../src/modules/security/public'
+import { sourceWriteArgs } from '../sourceWrite/contracts'
 
 export const visibilityTargetType = v.union(v.literal('business'), v.literal('service'), v.literal('capability'))
 export const removalReason = literalUnion(RemovalDisputeReasonCodeValues)

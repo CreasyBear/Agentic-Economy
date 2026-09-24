@@ -11,7 +11,8 @@ import { principalValue } from './lib/capabilityExecution/callLifecycle/contract
 import { requireChatOwner } from './chatThreads'
 import { resolveOwnerChatActor } from './lib/chat/threadListing'
 import { chatThreadBelongsToPrincipal } from './lib/chat/threadOwnership'
-import { canonicalAgentCallCore, resolveTrustedChatAuthority } from './lib/capabilityExecution/callLifecycle/authorityHandlers'
+import { canonicalAgentCallCore } from './lib/capabilityExecution/callLifecycle/agentCallExecution'
+import { resolveTrustedChatAuthority } from './lib/capabilityExecution/callLifecycle/chatCallAuthority'
 
 const authorizeRef = makeFunctionReference<
   'mutation', { authority: TrustedChatAuthority; quoteRef: string }, typeof principalValue.type | null

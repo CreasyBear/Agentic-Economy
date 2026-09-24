@@ -1,3 +1,4 @@
+import { v } from 'convex/values'
 import type { QueryCtx } from '../../../_generated/server'
 import {
   isCanonicalCredentiallessX402ProviderConnection,
@@ -5,6 +6,19 @@ import {
   type ProviderConnection,
 } from '@/modules/capability-supply/provider-connection'
 import { validPublicHttpsEndpoint } from '@/modules/capability-supply/public'
+import { providerLeaseAuthorityValue } from './contracts'
+
+export const readProviderLeaseAuthorityArgs = { connectionRef: v.string(), authorityGeneration: v.number() } as const
+export const readCurrentProviderConnectionAuthorityArgs = {
+  connectionRef: v.string(),
+  providerRef: v.string(),
+  adapterId: v.string(),
+  authorityGeneration: v.number(),
+  authorityDigest: v.string(),
+  resourceUrl: v.string(),
+  now: v.number(),
+} as const
+export const readProviderLeaseAuthorityResult = v.union(providerLeaseAuthorityValue, v.null())
 
 export async function readProviderLeaseAuthorityHandler(
   ctx: QueryCtx,

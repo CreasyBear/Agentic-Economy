@@ -1,13 +1,18 @@
 import { v, type Infer } from 'convex/values'
 import type { MutationCtx } from '../../../_generated/server'
-import {
-  requireSourceWrite,
-  sourceWriteAdmissionArg,
-  sourceWriteRequestArg,
-} from '../../../sourceWriteAdmission'
+import { requireSourceWrite } from '../../../lib/security/sourceWrite/admission'
+import { sourceWriteAdmissionArg, sourceWriteRequestArg } from '../../../lib/security/sourceWrite/contracts'
+import { jsonObject } from '@/modules/capability-execution/convex'
 import { isBoundedJsonValue, type JsonValue } from '@/modules/capability-contract/public'
 import { isRecord } from '@/modules/common/is-record'
 import { principalAndSourceArgs } from './contracts'
+export const admitArgs = {
+  ...principalAndSourceArgs,
+  toolRef: v.string(),
+  input: jsonObject,
+  idempotencyKey: v.string(),
+} as const
+export const admitResult = v.object({ kind: v.literal('accepted') })
 
 export type CallPrincipal = Readonly<{
   principalId: string

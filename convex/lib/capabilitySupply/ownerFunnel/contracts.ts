@@ -1,7 +1,7 @@
 import { v, type Infer } from 'convex/values'
 import { ownerSupplyCommandResultValue } from '@/modules/capability-supply/convex'
 import { agentAccessPrincipalValue } from '../../../agentAccessPrincipals'
-import { sourceWriteArgs } from '../../../sourceWriteAdmission'
+import { sourceWriteArgs } from '../../security/sourceWrite/contracts'
 import { clerkConsequenceProofValue } from '../../authority/consequence/proof'
 import {
   capabilityPublicationSourceSelectorValue,

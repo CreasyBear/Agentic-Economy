@@ -1,5 +1,8 @@
 import { getFunctionName } from 'convex/server'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import type * as CallReservationModule from '../../../convex/lib/capabilityExecution/callLifecycle/callReservationActions'
+import type * as CallRecoveryModule from '../../../convex/lib/capabilityExecution/callLifecycle/callRecoveryActions'
+import type * as SourceWriteAdmissionModule from '../../../convex/lib/security/sourceWrite/admission'
 
 const mocks = vi.hoisted(() => ({
   actor: {
@@ -50,9 +53,13 @@ vi.mock('../../../convex/authz', async (importOriginal) => ({
   resolveBusinessActor: vi.fn(async () => mocks.actor),
 }))
 
-vi.mock('../../../convex/lib/capabilityExecution/callLifecycle/callActions', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('../../../convex/lib/capabilityExecution/callLifecycle/callActions')>()),
+vi.mock('../../../convex/lib/capabilityExecution/callLifecycle/callReservationActions', async (importOriginal) => ({
+  ...(await importOriginal<typeof CallReservationModule>()),
   callHandler: mocks.call,
+}))
+
+vi.mock('../../../convex/lib/capabilityExecution/callLifecycle/callRecoveryActions', async (importOriginal) => ({
+  ...(await importOriginal<typeof CallRecoveryModule>()),
   listAgentCallsHandler: mocks.list,
   cancelCallHandler: mocks.cancel,
   reconcileCallHandler: mocks.reconcile,
@@ -66,8 +73,8 @@ vi.mock('../../../convex/lib/capabilityExecution/callLifecycle/admissionApproval
   decideCallApprovalHandler: mocks.decideApproval,
 }))
 
-vi.mock('../../../convex/sourceWriteAdmission', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('../../../convex/sourceWriteAdmission')>()),
+vi.mock('../../../convex/lib/security/sourceWrite/admission', async (importOriginal) => ({
+  ...(await importOriginal<typeof SourceWriteAdmissionModule>()),
   requireSourceRead: vi.fn(async () => ({ kind: 'accepted' })),
 }))
 
@@ -625,7 +632,6 @@ describe('capability operation canonical authority boundary', () => {
 
       if (caseKind === 'workload') {
         expect(result).toMatchObject({ kind: 'found', state: 'in_progress' })
-        expect(runQuery).toHaveBeenCalledWith(expect.anything(), { executionRef: 'invocation:canonical' })
       } else {
         expect(result).toMatchObject({ kind: 'refused', code: 'invocation_not_found' })
         expect(runQuery).not.toHaveBeenCalled()

@@ -1,4 +1,4 @@
-import type { Infer } from 'convex/values'
+import { v, type Infer } from 'convex/values'
 import type { Doc } from '../../../_generated/dataModel'
 import type { MutationCtx, QueryCtx } from '../../../_generated/server'
 import { parsePublishedToolSnapshot } from '@/modules/capability-supply/public'
@@ -7,10 +7,17 @@ import {
   buildPurchaseResolutionRecord,
   projectDeliveryStateForPurchaseResolution,
   projectPaymentStateForPurchaseResolution,
+  purchaseResolutionRecordValidator,
   type PurchaseResolutionRecord,
 } from '@/modules/capability-execution/purchase-resolution'
 import type { callReceiptValue } from '@/modules/capability-execution/convex'
 import type { CallDispatchProjectionShape } from './contracts'
+
+export const readPurchaseResolutionArgs = { callRef: v.string() } as const
+export const readPurchaseResolutionResult = v.union(purchaseResolutionRecordValidator, v.null())
+export async function readPurchaseResolutionHandler(ctx: QueryCtx, args: { callRef: string }): Promise<PurchaseResolutionRecord | null> {
+  return await readPurchaseResolutionByCallRef(ctx, args.callRef)
+}
 
 type CallRow = Doc<'capabilityCalls'>
 type CallReceiptValue = Infer<typeof callReceiptValue>

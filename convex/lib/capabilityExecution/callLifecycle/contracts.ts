@@ -2,8 +2,8 @@ import type { Doc } from '../../../_generated/dataModel'
 import { paginationResultValidator } from 'convex/server'
 import { v, type Infer } from 'convex/values'
 import { vOnCompleteArgs } from '@convex-dev/workpool'
-import { sourceWriteArgs } from '../../../sourceWriteAdmission'
-import { actionExecutionTransactArgs } from '../../../actionExecutionControl'
+import { sourceWriteArgs } from '../../../lib/security/sourceWrite/contracts'
+import { actionExecutionTransactArgs } from '../../../lib/actionExecution/control/contracts'
 import {
   callAuthorityValue,
   callResultValue,
@@ -82,6 +82,7 @@ export const callDispatchMutationResult = v.union(
   v.object({ kind: v.literal('reconciliation_required'), attemptRef: v.string(), effectGeneration: v.number() }),
   v.object({ kind: v.literal('refused'), code: v.string() }),
 )
+export type CallDispatchMutationResult = Infer<typeof callDispatchMutationResult>
 export const dispatchArgs = {
   callRef: v.string(),
   principalId: v.string(),
@@ -270,3 +271,4 @@ export const reconciledCallAuthorityResult = v.union(
   v.object({ kind: v.literal('authorized'), authority: reconciledCallAuthorityValue }),
   v.object({ kind: v.literal('refused') }),
 )
+export const recordResult = v.object({ kind: v.literal('recorded') })

@@ -4,7 +4,7 @@ import { republishPreparedCapabilityCommand } from '@/modules/capability-supply/
 import { publicationPorts, rebuildCapabilityOriginSupplyProjection } from '../../../capabilitySupply'
 import { upsertProviderDirectoryRows } from '../../market/directoryIndex/providerRows'
 import { verifySupplyAgentPrincipal } from '../../../agentAccessPrincipals'
-import { requireSourceWrite } from '../../../sourceWriteAdmission'
+import { requireSourceWrite } from '../../security/sourceWrite/admission'
 import { resolveBusinessActor } from '../../../authz'
 import { admitAgentPublicationConsequence } from '../../authority/consequence/publication'
 import { admitInteractiveOwnerConsequence } from '../../authority/consequence/owner'

@@ -23,7 +23,7 @@ import {
   resolveCanonicalAgentContext,
   validateCanonicalAgentDelegation,
 } from '../../authority/canonicalAgent/authority'
-import { persistAuditEvent } from '../../../securityShared'
+import { persistAuditEvent } from '../../security/audit/persistence'
 import { environment, authorityMode, lifecycle } from './verification'
 
 export const agentPrincipalArgs = {

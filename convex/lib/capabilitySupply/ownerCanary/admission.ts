@@ -18,14 +18,14 @@ import {
 } from '../../../capabilitySupplyCanaryFunding'
 import { readExactSellerCanaryOperationSnapshotHandler } from '../../../capabilitySupplyCurrentTool'
 import type { MutationCtx } from '../../../_generated/server'
-import { requireSourceWrite } from '../../../sourceWriteAdmission'
+import { requireSourceWrite } from '../../security/sourceWrite/admission'
 import { reserveHandler } from '../../capabilityExecution/callLifecycle/admissionReserve'
+import { enqueueCallDispatch } from '../../capabilityExecution/callLifecycle/dispatchEnqueue'
 import {
-  enqueueCallDispatch,
   enqueueKnownUnpaidSellerCanaryRearm,
   enqueueRecoveredSellerCanaryReplay,
   enqueueSafeBeforeReleaseSellerCanaryResume,
-} from '../../capabilityExecution/callLifecycle/dispatch'
+} from '../../capabilityExecution/callLifecycle/sellerCanaryRearm'
 import {
   existingCanaryForPublication,
   exactCatalogIdentity,

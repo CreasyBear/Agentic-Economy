@@ -61,7 +61,7 @@ export async function deriveBusinessOfferingSupportFromCapabilitySupply(
     const readinessObservedAt = publication.readinessObservedAt
     const expiry = publication.readinessValidUntil
     // Same directory quality bar applied to the admitted registry's Tool
-    // reads (capabilitySupplyToolShared.ts:directoryListingEligible):
+    // reads (capabilitySupplyDirectoryEligibility.ts:directoryListingEligible):
     // reviewed-tier (provider_owned/ae_curated_external) is exempt; a
     // listed-tier publication (third_party_gateway/observed_external) must
     // still clear the directory's eligibility bar to count as routeable

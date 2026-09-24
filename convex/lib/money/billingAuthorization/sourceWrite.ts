@@ -1,5 +1,5 @@
 import type { MutationCtx } from '../../../_generated/server'
-import { requireSourceWrite } from '../../../sourceWriteAdmission'
+import { requireSourceWrite } from '../../security/sourceWrite/admission'
 
 export type BillingSourceWriteArgs = {
   operationKey: string

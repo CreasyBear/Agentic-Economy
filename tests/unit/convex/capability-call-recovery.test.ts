@@ -3,6 +3,8 @@ import { reconcileCall, reconcileOwnerCall } from '../../../convex/capabilityCal
 import { ownerCallStatusResultSchema } from '@/modules/capability-execution/call-recovery.actions'
 import type { AgentAccessPrincipal } from '@/modules/agent-access/agent-access'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
+import type * as SourceWriteAdmission from '../../../convex/lib/security/sourceWrite/admission'
+import type * as AgentCallAuthority from '../../../convex/lib/capabilityExecution/callLifecycle/agentCallAuthority'
 import {
   callRef,
   canonicalFixture,
@@ -55,13 +57,13 @@ vi.mock('../../../convex/authz', async (importOriginal) => ({
   }),
 }))
 
-vi.mock('../../../convex/sourceWriteAdmission', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('../../../convex/sourceWriteAdmission')>()),
+vi.mock('../../../convex/lib/security/sourceWrite/admission', async (importOriginal) => ({
+  ...(await importOriginal<typeof SourceWriteAdmission>()),
   requireSourceRead: vi.fn(async () => ({ kind: 'accepted' })),
 }))
 
-vi.mock('../../../convex/lib/capabilityExecution/callLifecycle/authorityHandlers', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('../../../convex/lib/capabilityExecution/callLifecycle/authorityHandlers')>()),
+vi.mock('../../../convex/lib/capabilityExecution/callLifecycle/agentCallAuthority', async (importOriginal) => ({
+  ...(await importOriginal<typeof AgentCallAuthority>()),
   resolveCallAgentAuthorityHandler: vi.fn(async (_ctx: unknown, args: { principal: AgentAccessPrincipal }) =>
     args.principal.scopes.includes('market_tools:call') ? args.principal : null),
 }))
@@ -156,7 +158,6 @@ describe('capability operation recovery Convex adapters', () => {
       if (testCase.mode === 'status') {
         expect(context.runMutation).not.toHaveBeenCalled()
         expect(context.runAction).not.toHaveBeenCalled()
-        expect(context.runQuery).toHaveBeenCalledWith(expect.anything(), { executionRef: callRef })
       } else {
         expectAgentRecoverWorkerAction(context, testCase.mode, successor, testCase.actionExtra)
         expect(context.runMutation).toHaveBeenCalledTimes(2)

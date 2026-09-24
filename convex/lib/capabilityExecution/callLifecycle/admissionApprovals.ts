@@ -1,7 +1,7 @@
 import { degradeBackend } from '../../../../src/lib/observability/degrade-backend'
 import type { MutationCtx, QueryCtx } from '../../../_generated/server'
 import { readCurrentPublishedTool } from '../../../capabilitySupplyTools'
-import { enqueueCallDispatch } from './dispatch'
+import { enqueueCallDispatch } from './dispatchEnqueue'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { exactAmountSchema, pricingConfigDecisionAmount } from '@/modules/money/public'
 import { isBoundedJsonValue } from '@/modules/capability-contract/public'

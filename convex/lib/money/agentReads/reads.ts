@@ -7,7 +7,8 @@ import {
   verifyMarketAgentPrincipal,
 } from '../../../agentAccessPrincipals'
 import { exactAmount } from '../../../moneyLedgerValues'
-import { requireSourceRead, requireSourceWrite, sourceWriteArgs } from '../../../sourceWriteAdmission'
+import { requireSourceRead, requireSourceWrite } from '../../security/sourceWrite/admission'
+import { sourceWriteArgs } from '../../security/sourceWrite/contracts'
 
 const agentMoneyRequestFields = {
   agentPrincipal: agentAccessPrincipalValue,

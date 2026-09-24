@@ -8,7 +8,7 @@ import {
 import type { JsonValue } from '@/modules/capability-contract/public'
 
 import type { Doc, Id } from '../../../_generated/dataModel'
-import { sourceWriteArgs } from '../../../sourceWriteAdmission'
+import { sourceWriteArgs } from '../../security/sourceWrite/contracts'
 
 export const requestSellerOnboardingCanaryArgs = {
   businessId: v.id('businesses'),

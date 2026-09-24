@@ -19,7 +19,7 @@ import { CLERK_USER_PROVIDER_NAMESPACE } from '../src/modules/principal-account/
 import type { Doc } from './_generated/dataModel'
 import { env, mutation, query, type DatabaseReader, type MutationCtx } from './_generated/server'
 import { InteractiveAuthorityError } from './interactiveAuthority'
-import { persistAuditEvent } from './securityShared'
+import { persistAuditEvent } from './lib/security/audit/persistence'
 import { serviceAssertion } from './serviceAssertion'
 
 export const RETIRED_PERSONAL_DISPLAY_NAME = 'Deleted User'

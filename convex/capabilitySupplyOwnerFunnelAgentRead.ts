@@ -5,12 +5,12 @@ import type { QueryCtx } from './_generated/server'
 import { agentAccessPrincipalValue, verifySupplyAgentPrincipal } from './agentAccessPrincipals'
 import { readOwnerSupplyFunnelProjection } from './lib/capabilitySupply/ownerFunnel/reads'
 import type { OwnerSupplyFunnelResult } from './lib/capabilitySupply/ownerFunnel/contracts'
+import { requireSourceRead } from './lib/security/sourceWrite/admission'
 import {
-  requireSourceRead,
   sourceWriteAdmissionArg,
   sourceWriteArgs,
   sourceWriteRequestArg,
-} from './sourceWriteAdmission'
+} from './lib/security/sourceWrite/contracts'
 
 export const agentOwnerSupplyFunnelReadArgs = {
   businessId: v.id('businesses'),

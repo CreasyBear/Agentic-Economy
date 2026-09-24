@@ -12,11 +12,9 @@ import {
 
 import type { Id } from './_generated/dataModel'
 import type { QueryCtx } from './_generated/server'
-import {
-  toolRecord,
-  publicAuthentication,
-  publicAuthenticationFor,
-} from './capabilitySupplyToolShared'
+import { publicAuthentication } from './lib/capabilitySupply/tool/contracts'
+import { toolRecord } from './lib/capabilitySupply/tool/projection'
+import { publicAuthenticationFor } from './lib/capabilitySupply/tool/transport'
 
 /**
  * W1 origin seam: one exact admitted capability-Tool entry per catalog

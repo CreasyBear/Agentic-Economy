@@ -7,7 +7,7 @@ import {
 
 import type { MutationCtx } from '../../../_generated/server'
 import { resolveBusinessActor } from '../../../authz'
-import { requireSourceWrite } from '../../../sourceWriteAdmission'
+import { requireSourceWrite } from '../../security/sourceWrite/admission'
 import {
   boundedSellerClaim,
   convexStagingResult,

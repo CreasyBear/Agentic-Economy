@@ -2,7 +2,7 @@ import { v } from 'convex/values'
 import type { Id } from '../../../_generated/dataModel'
 import type { BusinessActor } from '../../../../src/modules/business/public'
 import { serviceAssertion } from '../../../serviceAssertion'
-import { sourceWriteArgs } from '../../../sourceWriteAdmission'
+import { sourceWriteArgs } from '../../security/sourceWrite/contracts'
 import { lifecycle } from '../providerConnections/contracts'
 
 export const ownerProjection = v.object({

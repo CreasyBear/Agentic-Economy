@@ -1,7 +1,7 @@
 import type { MutationCtx, QueryCtx } from '../../../_generated/server'
 import type { Id } from '../../../_generated/dataModel'
 import { resolveBusinessActor } from '../../../authz'
-import { requireSourceWrite } from '../../../sourceWriteAdmission'
+import { requireSourceWrite } from '../../security/sourceWrite/admission'
 import { canonicalDigest } from '../../../../src/modules/common/canonical-digest'
 import { normalizeSlug } from '../../../../src/modules/common/normalize-slug'
 import { canonicalProviderIdentifier, canonicalProviderWebsite } from '../../../../src/modules/business/public'

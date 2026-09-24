@@ -20,7 +20,7 @@ import {
 import { canonicalDigest } from '../../../../src/modules/common/canonical-digest'
 import { brandNonEmpty } from '../../../../src/modules/common/ids'
 import { createPackage3AuditEvent } from '../../../../src/modules/observability/public'
-import { persistAuditEvent } from '../../../securityShared'
+import { persistAuditEvent } from '../../security/audit/persistence'
 
 export type OwnerConsequenceRefusal =
   | 'authority_mismatch'

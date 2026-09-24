@@ -1,10 +1,7 @@
-import { degradeBackend } from '../../../../src/lib/observability/degrade-backend'
 import type { Doc } from '../../../_generated/dataModel'
 import type { MutationCtx } from '../../../_generated/server'
-import { assertAgentAccessRateAdmission } from '../../platform/rateLimit'
 import { activeChatTurnForMoney } from '../../chat/threadOwnership'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
-import { evaluateOrganizationMonthlySpendFence } from '@/modules/money/public'
 import {
   parsePublishedToolSnapshot,
   publishedToolMaterialMatches,
@@ -13,15 +10,15 @@ import {
 import type { CallIdempotencyReservation } from '@/modules/capability-execution/call-authority'
 import { recordMarketEvidenceFact } from '../../../marketEvidence'
 import {
-  normalizeStoredAgentAccessGrant,
-  normalizeStoredAgentAccessGrantForTool,
-  projectAgentAccessGrant,
-  type NormalizedStoredAgentAccessGrant,
-} from '@/modules/agent-access/policy'
+  loadReservationGrant,
+  missingGrant,
+  organizationMonthlySpendReserveRefusal,
+  rateAndConcurrencyRefusal,
+  spendingPeriodAdmissionRefusal,
+} from './admissionRefusal'
 import { toolProviderRouteabilityIsFrozen } from '../../capabilitySupply/providerOffboarding/freeze'
-import { spendingPeriodsAreCurrent } from '../../money/spendingPeriods/periods'
-import type { AbandonArgs, AbandonResult, ReserveArgs, ReserveResult } from './admissionReservation'
-import type { CallRow, GrantRow } from './contracts'
+import type { ReserveArgs, ReserveResult } from './admissionReservation'
+import type { CallRow } from './contracts'
 
 function reservationFromArgs(args: ReserveArgs): CallIdempotencyReservation {
   return {
@@ -99,7 +96,7 @@ function existingReservationMatches(existing: CallRow, args: ReserveArgs): boole
   ].every(Boolean)
 }
 
-function canonicalOptionalCanary(
+export function canonicalOptionalCanary(
   value: SellerOnboardingCanaryExecutionEnvelope | undefined,
 ): string | undefined {
   return value === undefined ? undefined : canonicalDigest(value as never)
@@ -148,91 +145,6 @@ async function replayExistingReservation(
   return { kind: 'replayed', reservation }
 }
 
-type GrantRefusal = Extract<ReserveResult, { kind: 'refused' }>
-
-function missingGrant(): GrantRefusal {
-  return {
-    kind: 'refused',
-    code: 'grant_not_found',
-    retryable: false,
-    nextAction: 'Refresh the agent grant and retry.',
-  }
-}
-
-function grantIdentityMatches(grant: NormalizedStoredAgentAccessGrant, args: ReserveArgs): boolean {
-  return [
-    grant.principalId === args.principalId,
-    grant.ownerId === args.ownerId,
-    grant.credentialId === args.credentialId,
-    grant.applicationRef === args.applicationRef,
-  ].every(Boolean)
-}
-
-function grantAdmissionRefusal(grant: GrantRow | null, args: ReserveArgs): GrantRefusal | null {
-  if (grant === null) return missingGrant()
-  let normalized: NormalizedStoredAgentAccessGrant
-  try {
-    normalized = normalizeStoredAgentAccessGrant(grant)
-  } catch (cause) {
-    return degradeBackend(cause, missingGrant(), { site: 'grantAdmissionRefusal', reason: 'invalid_response' })
-  }
-  if (normalized.environment !== args.environment) {
-    return { kind: 'refused', code: 'environment_mismatch', retryable: false, nextAction: 'Use a grant for the requested environment.' }
-  }
-  if (!grantIdentityMatches(normalized, args)) return missingGrant()
-  if (normalized.lifecycle === 'revoked') {
-    return { kind: 'refused', code: 'grant_revoked', retryable: false, nextAction: 'Issue a new agent grant before retrying.' }
-  }
-  if (normalized.lifecycle === 'expired' || normalized.expiresAt <= args.now) {
-    return { kind: 'refused', code: 'grant_expired', retryable: false, nextAction: 'Issue a new agent grant before retrying.' }
-  }
-  const generationMatches = [
-    normalized.generation === args.grantGeneration,
-    normalized.spendingPolicyDigest === args.policyDigest,
-    normalized.expiresAt === args.grantExpiresAt,
-  ].every(Boolean)
-  return generationMatches
-    ? null
-    : { kind: 'refused', code: 'grant_generation_stale', retryable: false, nextAction: 'Refresh the agent grant and retry.' }
-}
-
-async function loadReservationGrant(
-  ctx: MutationCtx,
-  args: ReserveArgs,
-): Promise<GrantRefusal | { kind: 'granted'; grant: NormalizedStoredAgentAccessGrant }> {
-  const storedGrant = await ctx.db.query('agentAccessGrants')
-    .withIndex('by_grantRef', (query) => query.eq('grantRef', args.grantRef))
-    .unique()
-  const refusal = grantAdmissionRefusal(storedGrant, args)
-  if (refusal !== null) return refusal
-  if (storedGrant === null) return missingGrant()
-  const grant = normalizeStoredAgentAccessGrantForTool(storedGrant, args.toolRef)
-  return grant === undefined ? missingGrant() : { kind: 'granted', grant }
-}
-
-async function concurrencyAdmissionRefusal(
-  ctx: MutationCtx,
-  args: ReserveArgs,
-  concurrentLimit: number,
-): Promise<GrantRefusal | null> {
-  // A pending or uncertain Call remains an active Agent commitment until its
-  // lifecycle resolves. Credential rotation and grant expiry do not free it.
-  const pendingRows = await ctx.db.query('capabilityCalls')
-    .withIndex('by_principalId_and_state', (query) => (
-      query.eq('principalId', args.principalId).eq('state', 'pending')
-    ))
-    .take(concurrentLimit)
-  if (pendingRows.length >= concurrentLimit) {
-    return { kind: 'refused', code: 'concurrency_limited', retryable: true, nextAction: 'Retry after an active invocation completes.' }
-  }
-  const reconciliationRows = await ctx.db.query('capabilityCalls')
-    .withIndex('by_principalId_and_state', (query) => query.eq('principalId', args.principalId).eq('state', 'reconciliation_required'))
-    .take(concurrentLimit - pendingRows.length)
-  return pendingRows.length + reconciliationRows.length >= concurrentLimit
-    ? { kind: 'refused', code: 'concurrency_limited', retryable: true, nextAction: 'Resolve an active invocation before retrying.' }
-    : null
-}
-
 type CommitmentRow = Doc<'capabilityQuotes'>
 
 async function loadReservationCommitment(
@@ -264,151 +176,6 @@ function commitmentMatchesReservation(commitment: CommitmentRow | null, args: Re
     args.toolJson === undefined || commitment.toolJson === args.toolJson,
     args.inputJson === undefined || commitment.normalizedInputJson === args.inputJson,
   ].every(Boolean)
-}
-
-async function rateAndConcurrencyRefusal(
-  ctx: MutationCtx,
-  args: ReserveArgs,
-  grant: NormalizedStoredAgentAccessGrant,
-): Promise<GrantRefusal | null> {
-  const rate = await assertAgentAccessRateAdmission(ctx, {
-    principalRef: args.principalId,
-    maximumCallsPerMinute: grant.spendingPolicy.rate.maximumCallsPerMinute,
-    maximumCallsPerHour: grant.spendingPolicy.rate.maximumCallsPerHour,
-  })
-  if (!rate.ok) {
-    return {
-      kind: 'refused',
-      code: 'rate_limited',
-      retryable: true,
-      nextAction: 'Retry after the current rate window advances.',
-    }
-  }
-  return await concurrencyAdmissionRefusal(
-    ctx,
-    args,
-    'maximumConcurrentCalls' in grant.spendingPolicy.budget
-      ? grant.spendingPolicy.budget.maximumConcurrentCalls
-      : grant.spendingPolicy.budget.maximumConcurrentInvocations,
-  )
-}
-
-/**
- * Paid period-aware Quotes must prove that both acknowledged control rows are
- * still current immediately before the Call/Quote transaction. This runs only
- * after the existing current-grant resolution; exact idempotent replay has
- * already returned above and therefore retains its original booking.
- */
-async function spendingPeriodAdmissionRefusal(
-  ctx: MutationCtx,
-  args: ReserveArgs,
-  commitment: CommitmentRow | null,
-  grant: NormalizedStoredAgentAccessGrant,
-): Promise<GrantRefusal | null> {
-  if (commitment === null || args.sellerOnboardingCanary !== undefined
-    || commitment.decisionAudUnits === '0') return null
-  const periods = commitment.spendingPeriods
-  if (commitment.formanceSchemaVersion !== 'v1.4.0' || periods === undefined) {
-    return {
-      kind: 'refused',
-      code: 'budget_exceeded',
-      retryable: false,
-      nextAction: 'Request a fresh Quote to refresh current spending limits.',
-    }
-  }
-  const projected = projectAgentAccessGrant(grant)
-  const daily = projected.budget.maximumDailySpend
-  const monthly = projected.budget.maximumMonthlySpend
-  if (daily.currency !== 'AUD' || daily.exponent !== 6
-    || monthly.currency !== 'AUD' || monthly.exponent !== 6) {
-    return {
-      kind: 'refused',
-      code: 'budget_exceeded',
-      retryable: false,
-      nextAction: 'Request a fresh Quote to refresh current spending limits.',
-    }
-  }
-  if (!await spendingPeriodsAreCurrent(ctx, {
-    principalRef: args.principalId,
-    dailyLimitUnits: daily.units,
-    monthlyLimitUnits: monthly.units,
-    now: args.now,
-    spendingPeriods: periods,
-  })) {
-    return {
-      kind: 'refused',
-      code: 'budget_exceeded',
-      retryable: true,
-      nextAction: 'Request a fresh Quote to refresh current spending limits.',
-    }
-  }
-  const amount = BigInt(commitment.decisionAudUnits)
-  if (BigInt(daily.units) < amount) {
-    return {
-      kind: 'refused',
-      code: 'budget_exceeded',
-      retryable: false,
-      nextAction: 'Request a fresh Quote after the daily spending limit changes.',
-    }
-  }
-  if (BigInt(monthly.units) < amount) {
-    return {
-      kind: 'refused',
-      code: 'budget_exceeded',
-      retryable: false,
-      nextAction: 'Request a fresh Quote after the monthly spending limit changes.',
-    }
-  }
-  return null
-}
-
-async function organizationMonthlySpendReserveRefusal(
-  ctx: MutationCtx,
-  args: ReserveArgs,
-  commitment: CommitmentRow | null,
-): Promise<GrantRefusal | null> {
-  if (commitment === null || commitment.decisionAudUnits === '0') return null
-  let snapshot: { enabled: boolean; ceilingUnits?: string; monthSpendUnits?: string } | undefined = args.organizationMonthlySpend
-  if (snapshot === undefined || !snapshot.enabled) {
-    const budgetRow = await ctx.db
-      .query('moneyMonthlySpendBudgets')
-      .withIndex('by_accountRef', (query) => query.eq('accountRef', args.ownerId))
-      .unique()
-    if (budgetRow === null || !budgetRow.enabled) return null
-    snapshot = {
-      enabled: true,
-      ceilingUnits: budgetRow.ceilingUnits,
-    }
-  }
-  const fence = evaluateOrganizationMonthlySpendFence({
-    enabled: true,
-    ...(snapshot.ceilingUnits === undefined ? {} : { ceilingUnits: snapshot.ceilingUnits }),
-    ...(snapshot.monthSpendUnits === undefined ? {} : { monthSpendUnits: snapshot.monthSpendUnits }),
-    requestUnits: commitment.decisionAudUnits,
-  })
-  switch (fence.kind) {
-    case 'not_applicable':
-    case 'admitted':
-      return null
-    case 'refused':
-      return {
-        kind: 'refused',
-        code: 'budget_exceeded',
-        retryable: false,
-        nextAction: 'Request a fresh Quote after the organization monthly spending cap changes.',
-      }
-    case 'unavailable':
-      return {
-        kind: 'refused',
-        code: 'budget_exceeded',
-        retryable: false,
-        nextAction: 'Request a fresh Quote once organization spend can be inspected again.',
-      }
-    default: {
-      const exhaustive: never = fence
-      return exhaustive
-    }
-  }
 }
 
 async function persistReservedCall(
@@ -522,77 +289,3 @@ export async function reserveHandler(
   return { kind: 'reserved', reservation }
 }
 
-export async function abandonHandler(
-  ctx: MutationCtx,
-  args: AbandonArgs,
-): Promise<AbandonResult> {
-  const row = await ctx.db.query('capabilityCalls')
-    .withIndex('by_callRef', (query) => query.eq('callRef', args.callRef))
-    .unique()
-  if (row === null || !abandonmentIdentityMatches(row, args)) return { kind: 'not_found' as const }
-  if (dispatchHasStarted(row)) return { kind: 'dispatch_started' as const }
-  const commitment = await ctx.db.query('capabilityQuotes')
-    .withIndex('by_quoteRef', (query) => query.eq('quoteRef', args.quoteRef))
-    .unique()
-  await ctx.db.delete(row._id)
-  const turnRef = args.turnRef
-  if (turnRef !== undefined) {
-    const turn = await ctx.db.query('chatTurns')
-      .withIndex('by_turnRef', (query) => query.eq('turnRef', turnRef))
-      .unique()
-    if (turn !== null
-      && turn.principalKind === 'agent_key'
-      && turn.principalRef === row.principalId
-      && turn.accountRef === row.ownerId
-      && turn.credentialLocator === row.credentialId
-      && turn.grantRef === row.grantRef
-      && turn.inFlightCallRefs?.includes(row.callRef)) {
-      await ctx.db.patch(turn._id, {
-        inFlightCallRefs: turn.inFlightCallRefs.filter(ref => ref !== row.callRef),
-        updatedAt: Date.now(),
-      })
-    }
-  }
-  if (commitment !== null
-    && commitment.state === 'consumed'
-    && commitment.consumedCallRef === row.callRef
-    && commitment.expiresAt > Date.now()) {
-    await ctx.db.patch(commitment._id, {
-      state: 'issued',
-      consumedCallRef: undefined,
-      updatedAt: Date.now(),
-    })
-  }
-  return { kind: 'abandoned' as const }
-}
-
-function abandonmentIdentityMatches(row: CallRow, args: AbandonArgs): boolean {
-  return [
-    row.quoteRef === args.quoteRef,
-    row.principalId === args.principalId,
-    row.ownerId === args.ownerId,
-    row.credentialId === args.credentialId,
-    row.applicationRef === args.applicationRef,
-    row.grantRef === args.grantRef,
-    row.grantGeneration === args.grantGeneration,
-    row.policyDigest === args.policyDigest,
-    row.grantExpiresAt === args.grantExpiresAt,
-    row.environment === args.environment,
-    row.toolRef === args.toolRef,
-    row.idempotencyKey === args.idempotencyKey,
-    row.inputDigest === args.inputDigest,
-    row.requestDigest === args.requestDigest,
-    row.callRef === args.callRef,
-    canonicalOptionalCanary(row.sellerOnboardingCanary) === canonicalOptionalCanary(args.sellerOnboardingCanary),
-  ].every(Boolean)
-}
-
-function dispatchHasStarted(row: CallRow): boolean {
-  return [
-    row.state !== 'pending',
-    row.result !== undefined,
-    row.workId !== undefined,
-    row.authority !== undefined,
-    row.dispatchState !== undefined,
-  ].some(Boolean)
-}

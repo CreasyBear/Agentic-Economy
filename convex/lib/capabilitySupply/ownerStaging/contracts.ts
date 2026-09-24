@@ -6,7 +6,7 @@ import {
   preparedPublicationResultValue,
 } from '../../../capabilitySupplyPublish'
 import { contextFields } from '../publish/contracts'
-import { sourceWriteArgs } from '../../../sourceWriteAdmission'
+import { sourceWriteArgs } from '../../security/sourceWrite/contracts'
 
 export const sellerClaimValue = v.object({
   businessId: v.string(),

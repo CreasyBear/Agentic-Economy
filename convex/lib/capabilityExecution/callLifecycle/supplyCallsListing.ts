@@ -2,7 +2,7 @@ import { v, type Infer } from 'convex/values'
 import { callResultValue, exactAmountValue } from '@/modules/capability-execution/convex'
 import { callState } from './contracts'
 import { agentAccessPrincipalValue } from '../../../agentAccessPrincipals'
-import { sourceWriteArgs } from '../../../sourceWriteAdmission'
+import { sourceWriteArgs } from '../../security/sourceWrite/contracts'
 import type { QueryCtx } from '../../../_generated/server'
 
 // -----------------------------------------------------------------------
@@ -109,7 +109,7 @@ function projectSupplyCallSummary(row: SupplyCallRow) {
 /**
  * Pure listing logic behind `listAgentSupplyCalls`, factored out so it can be
  * exercised without fabricating a signed source-write admission (see
- * `listAgentCallSummariesHandler` in `convex/lib/callLifecycle/callActions.ts`
+ * `listAgentCallSummariesHandler` in `convex/lib/capabilityExecution/callLifecycle/callRecoveryReads.ts`
  * for the same split on the buyer side). `ownerId` must already be verified
  * by the caller (`verifySupplyAgentPrincipal`) — this function never accepts
  * a business id from the caller; it discovers the owner's businesses and

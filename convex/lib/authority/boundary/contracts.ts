@@ -1,7 +1,7 @@
 import { v } from 'convex/values'
 import { AGENT_ACCESS_ENVIRONMENT_VALUES, type AgentAccessEnvironment } from '@/modules/agent-access/agent-access'
 import { AGENT_ACCESS_AUTHORITY_MODE_VALUES, type AgentAccessAuthorityMode } from '@/modules/agent-access/contract'
-import { sourceWriteAdmissionArg, sourceWriteRequestArg } from '../../../sourceWriteAdmission'
+import { sourceWriteAdmissionArg, sourceWriteRequestArg } from '../../security/sourceWrite/contracts'
 
 export const AUTHORITY_VALUE_PATTERN = /^[A-Za-z0-9*][A-Za-z0-9._:/*-]{0,199}$/u
 export const PRINCIPAL_REF_PATTERN = /^prn_[0-9a-f]{32}$/u

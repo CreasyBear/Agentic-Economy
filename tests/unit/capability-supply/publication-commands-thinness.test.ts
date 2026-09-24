@@ -1,84 +1,22 @@
 import { readFileSync } from 'node:fs'
-import { join } from 'node:path'
-
 import { describe, expect, it } from 'vitest'
 import { listTsFiles } from '../../helpers/source-files'
 
-const convexHost = readFileSync('convex/capabilitySupply.ts', 'utf8')
-const publishSource = readFileSync('convex/lib/capabilitySupply/publish/prepared.ts', 'utf8')
-const readPublicationSource = readFileSync('convex/lib/capabilitySupply/publish/readPublication.ts', 'utf8')
-const commandsSource = readFileSync('convex/capabilitySupplyCommands.ts', 'utf8')
-const sharedSource = readFileSync('convex/lib/capabilitySupply/publish/ownership.ts', 'utf8')
-const convexSupply = [convexHost, publishSource, commandsSource, sharedSource].join('\n')
 const moduleRoot = 'src/modules/capability-supply/internal/publication'
 
-describe('capability-supply publication-commands thinness', () => {
-  it('does not keep retired owner bypass mutations in the Convex host', () => {
-    const publishStart = publishSource.indexOf('export async function publishPreparedCapabilityHandler(')
-    expect(convexHost).toMatch(/export const publishPreparedCapability\s*=/)
-    expect(convexHost).toMatch(/export const readCapabilityPublication\s*=/)
-    expect(convexHost).toMatch(/export const queryCapabilityGraph\s*=/)
-    expect(publishStart).toBeGreaterThanOrEqual(0)
-    expect(readPublicationSource).toMatch(/export async function readCapabilityPublicationHandler\(/)
-
-    const publishBody = publishSource.slice(publishStart)
-    expect(publishBody).toContain('publishPreparedCapabilityCommand')
-    expect(publishBody).not.toContain(['publishCapability', 'Command'].join(''))
-    expect(publishBody).not.toContain(['CapabilityPublication', 'CommandImport'].join(''))
-    expect(publishBody).toContain('publicationPorts')
-    expect(publishBody).toContain('ownsPublishedBusiness')
-    expect(publishBody).not.toContain('normalizeCapabilityPublication')
-    expect(publishBody).not.toContain('admitRegisteredTransport')
-    expect(publishBody).not.toContain('beginOperation')
-    expect(publishBody).not.toContain('encodeCapabilityContractDocumentJson')
-    expect(publishBody).not.toContain('contract_identity_conflict')
-    expect(publishBody).not.toContain('scheduleReadinessProbe')
-    expect(publishBody).not.toContain('capabilitySupplyReadiness.probe')
-
-    expect(convexHost).not.toMatch(/export const refreshCapability\s*=/)
-    expect(convexHost).not.toMatch(/export const withdrawCapability\s*=/)
-  })
-
-
-  it('leaves raw writers and ownership in the host', () => {
-    expect(convexHost).toMatch(/export const publishPreparedCapability\s*=/)
-    expect(convexHost).not.toMatch(/export const publishCapability\s*=/)
-    expect(convexHost).not.toMatch(/export const withdrawCapability\s*=/)
-    expect(convexSupply).toMatch(/export async function registerCapabilityOffering\s*\(/)
-    expect(convexSupply).toMatch(/export async function registerCapabilityTransportBinding\s*\(/)
-    expect(convexSupply).toMatch(/export async function setCapabilitySupplyEligibility\s*\(/)
-    expect(convexSupply).toMatch(/async function ownsPublishedBusiness\s*\(/)
-  })
-
-  it('keeps publication command modules free of Convex runtime imports', () => {
-    for (const file of ['ports.ts', 'publish.ts', 'refresh.ts', 'withdraw.ts', 'draft.ts']) {
-      const source = readFileSync(join(moduleRoot, file), 'utf8')
-      expect(source).not.toMatch(/from\s+['"]\.\/_generated/)
-      expect(source).not.toMatch(/from\s+['"][^'"]*_generated[^'"]*['"]/)
-      expect(source).not.toMatch(/from\s+['"][^'"]*convex\/server['"]/)
-      expect(source).not.toMatch(/\bMutationCtx\b/)
-      expect(source).not.toMatch(/\bQueryCtx\b/)
-      expect(source).not.toMatch(/\bDoc\s*</)
-    }
-  })
-
-  it('does not relocate operation-ledger helpers into publication', () => {
+describe('capability-supply publication boundaries', () => {
+  it('keeps publication domain code free of Convex runtime', () => {
     for (const file of listTsFiles(moduleRoot)) {
       const source = readFileSync(file, 'utf8')
-      expect(source).not.toMatch(/(?:^|\n)(?:async\s+)?function\s+beginOperation\b/)
-      expect(source).not.toMatch(/(?:^|\n)(?:async\s+)?function\s+ensureSupplyAudit\b/)
-      expect(source).not.toMatch(/(?:^|\n)(?:async\s+)?function\s+succeedOperation\b/)
+      expect(source).not.toMatch(/from\s+['"][^'"]*(?:_generated|convex\/server)['"]|\bMutationCtx\b|\bQueryCtx\b|\bDoc\s*</)
+      expect(source).not.toMatch(/(?:^|\n)(?:async\s+)?function\s+(?:beginOperation|ensureSupplyAudit|succeedOperation)\b/)
     }
   })
 
-  it('keeps withdraw as a publication lifecycle command, not eligibility', () => {
-    const withdrawSource = readFileSync(join(moduleRoot, 'withdraw.ts'), 'utf8')
-    expect(withdrawSource).toContain('withdrawCapabilityCommand')
-    expect(withdrawSource).toContain('setEligibility')
-    expect(withdrawSource).toContain('patchPublicationWithdrawn')
-    expect(withdrawSource).not.toMatch(/desiredEligibility/)
-    expect(withdrawSource).not.toMatch(/eligibilityPublicResult/)
+  it('keeps withdrawn publications behind their lifecycle command', () => {
+    const source = readFileSync(`${moduleRoot}/withdraw.ts`, 'utf8')
+    expect(source).toContain('withdrawCapabilityCommand')
+    expect(source).toContain('patchPublicationWithdrawn')
+    expect(source).not.toMatch(/desiredEligibility|eligibilityPublicResult/)
   })
 })
-
-

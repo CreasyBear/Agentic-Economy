@@ -5,7 +5,7 @@ import type { MutationCtx } from '../../../_generated/server'
 import { verifySupplyAgentPrincipal } from '../../../agentAccessPrincipals'
 import { resolveBusinessActor } from '../../../authz'
 import { ownsPublishedBusinessForOwnerId } from '../../../capabilitySupply'
-import { requireSourceWrite } from '../../../sourceWriteAdmission'
+import { requireSourceWrite } from '../../security/sourceWrite/admission'
 import { canonicalDigest, isCanonicalDigest } from '../../../../src/modules/common/canonical-digest'
 import { normalizeSupplySourceSelectionDraft } from '../../../../src/modules/capability-supply/source-selection-draft'
 import {

@@ -8,7 +8,7 @@ import { resolveBusinessActor } from '../../../authz'
 import { publicationPorts } from '../../../capabilitySupply'
 import { nativeSubmissionBusiness } from '../../../capabilitySupplyNativeAdmission'
 import { loadExactOfferingSourceState, persistOfferingSourceState } from '../../catalog/offerings/persistence'
-import { requireSourceWrite } from '../../../sourceWriteAdmission'
+import { requireSourceWrite } from '../../security/sourceWrite/admission'
 import { upsertProviderToolIdentity } from '../../../capabilityProviderToolProjection'
 import type {
   SaveAgentSupplyIntegrationDraftArgs,

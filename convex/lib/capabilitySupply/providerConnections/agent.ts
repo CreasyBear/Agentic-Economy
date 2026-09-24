@@ -2,7 +2,8 @@ import { v, type Infer } from 'convex/values'
 
 import type { MutationCtx, QueryCtx } from '../../../_generated/server'
 import { agentAccessPrincipalValue, verifySupplyAgentPrincipal } from '../../../agentAccessPrincipals'
-import { requireSourceRead, requireSourceWrite, sourceWriteArgs } from '../../../sourceWriteAdmission'
+import { requireSourceRead, requireSourceWrite } from '../../security/sourceWrite/admission'
+import { sourceWriteArgs } from '../../security/sourceWrite/contracts'
 import {
   connectX402ProviderConnectionForActor,
   listProviderConnectionsForActor,

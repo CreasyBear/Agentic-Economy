@@ -21,8 +21,9 @@ import {
   consumeConsequenceProof,
   deriveStrictConsequenceProof,
 } from '../authority/consequence/proof'
-import { persistAdminAuthorityMutation, persistAuditEvent } from '../../securityShared'
-import { requireSourceRead, requireSourceWrite } from '../../sourceWriteAdmission'
+import { persistAdminAuthorityMutation } from '../security/admin/persistence'
+import { persistAuditEvent } from '../security/audit/persistence'
+import { requireSourceRead, requireSourceWrite } from '../security/sourceWrite/admission'
 import { resolveApprovalIntent } from './approvals'
 import { parseAdminOperationReceipt, readAdminOperationKey } from './idempotency'
 import {

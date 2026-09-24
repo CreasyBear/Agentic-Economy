@@ -6,7 +6,7 @@ import {
 } from '@/modules/agent-access/policy'
 
 import { principalValue } from '../callLifecycle/contracts'
-import { resolveCurrentAgentAuthority } from '../callLifecycle/authorityHandlers'
+import { resolveCurrentAgentAuthority } from '../callLifecycle/agentCallAuthority'
 import { prepareAgentSpendingPeriods } from '../../money/spendingPeriods/periods'
 import { spendingPeriodPreparationResult } from './contracts'
 import type { Infer } from 'convex/values'

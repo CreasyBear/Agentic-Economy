@@ -12,8 +12,8 @@ import { agentAccessPolicyValue, agentAuditOpaqueRef } from '@/modules/agent-acc
 import { createPackage3AuditEvent } from '@/modules/observability/public'
 import type { MutationCtx } from '../../../_generated/server'
 import type { Doc } from '../../../_generated/dataModel'
-import { persistAuditEvent } from '../../../securityShared'
-import { sourceWriteArgs } from '../../../sourceWriteAdmission'
+import { persistAuditEvent } from '../../security/audit/persistence'
+import { sourceWriteArgs } from '../../security/sourceWrite/contracts'
 import {
   prepareCredentialReplacementCore,
   transitionCredentialReplacementCore,

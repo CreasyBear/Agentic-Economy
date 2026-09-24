@@ -1,15 +1,16 @@
 import type { Infer } from 'convex/values'
 import type { QueryCtx } from '../../../_generated/server'
-import { internal } from '../../../_generated/api'
-import { requireSourceRead, type SourceWriteArgs } from '../../../sourceWriteAdmission'
+import { requireSourceRead } from '../../../lib/security/sourceWrite/admission'
+import type { SourceWriteArgs } from '../../../lib/security/sourceWrite/contracts'
 import { readPublicExecutionStatus } from '@/modules/action-execution/runtime'
 import { statusResultValue, projectPersistedRecovery, projectPureCallStatus } from '@/modules/capability-execution/convex'
 import { callIdentity, callIdentityMatches } from './callIdentity'
-import { resolveCallAgentAuthorityHandler } from './authorityHandlers'
+import { resolveCallAgentAuthorityHandler } from './agentCallAuthority'
 import { recoveryControlMatchesCall, recoveryControlUsesPersistedResult } from './statusControl'
-import { readRecoveryHandler } from './callRecoveryActions'
+import { readRecoveryHandler } from './callRecoveryReads'
 import { readPurchaseResolutionByCallRef } from './purchaseResolutionMaterialize'
 import type { CallPrincipal } from './contracts'
+import { readControlHandler, readAttemptsHandler, readHistoryHandler } from '../../actionExecution/control/reads'
 
 type StatusArgs = SourceWriteArgs & Readonly<{
   operationKey: string
@@ -34,7 +35,7 @@ export async function readCallStatusQueryHandler(ctx: QueryCtx, args: StatusArgs
   const row = await readRecoveryHandler(ctx, { callRef: args.callRef, principalId: principal.principalId })
   if (row === null || !callIdentityMatches(row, callIdentity(principal))) return notFound(args.callRef)
 
-  const control = await ctx.runQuery(internal.actionExecutionControl.readControl, { executionRef: args.callRef })
+  const control = await readControlHandler(ctx, { executionRef: args.callRef })
   if (control !== null && !recoveryControlMatchesCall(row, control)) return notFound(args.callRef)
 
   const persisted = recoveryControlUsesPersistedResult(row, control ?? undefined)
@@ -43,8 +44,8 @@ export async function readCallStatusQueryHandler(ctx: QueryCtx, args: StatusArgs
     const status = await readPublicExecutionStatus({
       port: {
         readControl: async () => control ?? undefined,
-        readAttempts: async (executionRef, limit) => await ctx.runQuery(internal.actionExecutionControl.readAttempts, { executionRef, limit }),
-        readHistory: async (executionRef, afterVersion, limit) => await ctx.runQuery(internal.actionExecutionControl.readHistory, { executionRef, afterVersion, limit }),
+        readAttempts: async (executionRef, limit) => await readAttemptsHandler(ctx, { executionRef, limit }),
+        readHistory: async (executionRef, afterVersion, limit) => await readHistoryHandler(ctx, { executionRef, afterVersion, limit }),
       },
       executionRef: row.callRef,
       actor: { callerRef: row.credentialId, principalRef: row.principalId },

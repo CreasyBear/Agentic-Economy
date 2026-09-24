@@ -6,7 +6,7 @@ import { resolveBusinessActor } from '../../../authz'
 import { admitInteractiveOwnerConsequence } from '../../authority/consequence/owner'
 import { readCommercialPolicyGate } from '../../../moneyCommercialPolicy'
 import { resolveAndBindLegalCustomer } from '../legalCustomer/binding'
-import { requireSourceWrite } from '../../../sourceWriteAdmission'
+import { requireSourceWrite } from '../../security/sourceWrite/admission'
 import { canonicalDigest } from '../../../../src/modules/common/canonical-digest'
 import {
   AUD_EXPONENT,

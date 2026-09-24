@@ -7,7 +7,7 @@ import type { AuditEventContract, RedactedPayload } from '../src/modules/observa
 import type { Doc, Id } from './_generated/dataModel'
 import type { MutationCtx } from './_generated/server'
 import { toCapabilityBindingRow, toCapabilityOfferingRow } from './capabilitySupplyRowMappers'
-import { persistAuditEvent } from './securityShared'
+import { persistAuditEvent } from './lib/security/audit/persistence'
 
 export function capabilitySupplyToolPorts(
   db: MutationCtx['db'],

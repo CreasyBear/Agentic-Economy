@@ -1,6 +1,8 @@
+import { v } from 'convex/values'
 import type { MutationCtx } from '../../../_generated/server'
 import type { Doc } from '../../../_generated/dataModel'
 import { isRecord } from '@/modules/common/is-record'
+export const completeWorkResult = v.null()
 
 type CallRow = Doc<'capabilityCalls'>
 type ExecutionControlRow = Doc<'actionExecutionControls'>

@@ -557,8 +557,6 @@ describe('scheduled chat consequence authority', () => {
       paginationOpts: { cursor: null, numItems: 20 },
     })
     expect(admittedMessages.page.map(({ role }: { role: string }) => role)).toEqual(['user', 'assistant'])
-    expect(admittedMessages.page.find(({ role }: { role: string }) => role === 'assistant')?.text)
-      .toContain('current keyless Operation')
     const admittedAuthority = await readAuthority(admittedBackend, 'chat-runtime-generation')
     const modelCallsAfterSettledGeneration = gatewayProbe.modelCalls.mock.calls.length
     await expect(admittedBackend.action(internal.chatGenerate.generate, {

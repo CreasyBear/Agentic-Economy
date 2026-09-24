@@ -1,21 +1,12 @@
-import { v } from 'convex/values'
-
 import { degradeBackend } from '@/lib/observability/degrade-backend'
 import {
   capabilityToolId,
   createPublicToolRef,
   defineCapabilityTransportBindingRegistration,
   offeringRegistrationFromRow,
-  parseHttpJsonTransportConfiguration,
-  parseMcpJsonRpcTransportConfiguration,
   parseAdmittedX402CatalogPayment,
-  parseX402FetchTransportConfiguration,
   qualifySuppliedCandidate,
-  type CapabilityBindingRow,
   type CapabilityToolSourceRecord,
-  type CatalogOfferingToolMapEntry,
-  type PublicToolParameterMapping,
-  type PublicToolTransport,
 } from '@/modules/capability-supply/public'
 import {
   compareExactAmounts,
@@ -26,44 +17,17 @@ import {
   pricingConfigDigest,
 } from '@/modules/money/public'
 
-import type { Doc } from './_generated/dataModel'
-import type { QueryCtx } from './_generated/server'
-import { getExactRegisteredCapabilityContract } from './lib/capabilityContract/documents/reads'
-import { capabilitySupplyGraphPorts } from './lib/capabilitySupply/graphPorts/ports'
-import { readManagedX402InspectionTargetForQualifiedCandidate } from './capabilitySupplyCurrentTool'
-import { toolProviderRouteabilityIsFrozen } from './lib/capabilitySupply/providerOffboarding/freeze'
-import { toCapabilityBindingRow, toCapabilityOfferingRow } from './capabilitySupplyRowMappers'
-import { directoryListingEntry } from './capabilitySupplyDirectoryEligibility'
+import type { Doc } from '../../../_generated/dataModel'
+import type { QueryCtx } from '../../../_generated/server'
+import { getExactRegisteredCapabilityContract } from '../../capabilityContract/documents/reads'
+import { capabilitySupplyGraphPorts } from '../graphPorts/ports'
+import { readManagedX402InspectionTargetForQualifiedCandidate } from '../../../capabilitySupplyCurrentTool'
+import { toolProviderRouteabilityIsFrozen } from '../providerOffboarding/freeze'
+import { toCapabilityBindingRow, toCapabilityOfferingRow } from '../../../capabilitySupplyRowMappers'
+import { directoryListingEntry } from '../../../capabilitySupplyDirectoryEligibility'
+import { publicAuthenticationFor, publicToolParameterMappingsFor, publicToolTransportFor } from './transport'
 
-export const exactAmount = v.object({ currency: v.string(), units: v.string(), exponent: v.number() })
-export const publicPrice = v.union(
-  v.object({ kind: v.literal('fixed'), amount: exactAmount }),
-  v.object({ kind: v.literal('range'), minimum: exactAmount, maximum: exactAmount }),
-  v.object({ kind: v.literal('on_request') }),
-)
-export const publicPriceBreakdown = v.object({
-  providerQuotedAmount: exactAmount,
-  agenticEconomyFee: exactAmount,
-  totalBuyerAuthorization: exactAmount,
-  network: v.literal('eip155:8453'),
-  asset: v.literal('0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913'),
-})
-export const publicAuthentication = v.union(
-  v.object({ kind: v.literal('ae_api_key') }),
-  v.object({ kind: v.literal('platform_credential'), scheme: v.literal('api_key'), in: v.union(v.literal('query'), v.literal('header')), name: v.string() }),
-  v.object({ kind: v.literal('platform_credential'), scheme: v.literal('bearer') }),
-  v.object({ kind: v.literal('x402') }),
-  v.object({ kind: v.literal('unknown') }),
-)
-export const publicPayment = v.object({
-  protocol: v.literal('x402'),
-  scheme: v.literal('exact'),
-  network: v.string(),
-  asset: v.string(),
-  currency: v.string(),
-})
-
-export const CURRENT_TOOL_PROJECTION_DROP_REASONS = [
+const CURRENT_TOOL_PROJECTION_DROP_REASONS = [
   'identity_drift',
   'missing_offering',
   'missing_binding',
@@ -77,8 +41,8 @@ export const CURRENT_TOOL_PROJECTION_DROP_REASONS = [
   'directory_ineligible',
 ] as const
 
-export type CurrentToolProjectionDropReason = typeof CURRENT_TOOL_PROJECTION_DROP_REASONS[number]
-export type CurrentToolProjectionResult =
+type CurrentToolProjectionDropReason = typeof CURRENT_TOOL_PROJECTION_DROP_REASONS[number]
+type CurrentToolProjectionResult =
   | Readonly<{ kind: 'projected'; record: CapabilityToolSourceRecord }>
   | Readonly<{ kind: 'dropped'; reason: CurrentToolProjectionDropReason }>
 
@@ -333,34 +297,6 @@ function priceBreakdownFor(
     : null
 }
 
-export function publicAuthenticationFor(
-  authority: CapabilityBindingRow['authority'],
-  sourceKind: CatalogOfferingToolMapEntry['sourceKind'],
-  adapterId: string,
-  configJson: string,
-): CatalogOfferingToolMapEntry['authentication'] {
-  if (sourceKind === 'x402' || adapterId === 'x402-fetch:v2') return { kind: 'x402' }
-  const config = parseTransportConfig(configJson)
-  if (adapterId === 'http-json:v1') {
-    const parsed = parseHttpJsonTransportConfiguration(config)
-    if (parsed?.credential?.kind === 'api_key') {
-      return { kind: 'platform_credential', scheme: 'api_key', in: parsed.credential.location, name: parsed.credential.name }
-    }
-    if (parsed?.credential?.kind === 'bearer') return { kind: 'platform_credential', scheme: 'bearer' }
-    if (parsed?.credential?.kind === 'none') return authority.kind === 'public_upstream' ? { kind: 'ae_api_key' } : { kind: 'unknown' }
-    if (parsed?.credential === undefined && authority.kind === 'public_upstream') return { kind: 'ae_api_key' }
-  }
-  if (adapterId === 'mcp-jsonrpc:v1') {
-    const parsed = parseMcpJsonRpcTransportConfiguration(config)
-    if (parsed?.credential?.kind === 'api_key') {
-      return { kind: 'platform_credential', scheme: 'api_key', in: parsed.credential.location, name: parsed.credential.name }
-    }
-    if (parsed?.credential?.kind === 'bearer') return { kind: 'platform_credential', scheme: 'bearer' }
-    if (parsed?.credential === undefined && authority.kind === 'public_upstream') return { kind: 'ae_api_key' }
-  }
-  return { kind: 'unknown' }
-}
-
 function publicUnavailableReason(
   publication: Doc<'capabilityPublications'>,
   qualification: Awaited<ReturnType<typeof qualifySuppliedCandidate>>,
@@ -373,97 +309,4 @@ function publicUnavailableReason(
   if (publication.disposition === 'withdrawn') return 'publisher_withdrew'
   if (qualification.reasons.length > 0) return 'setup_required'
   return 'not_supported_by_ae'
-}
-
-function publicPathTemplate(endpointUrl: string): string | undefined {
-  try {
-    const pathname = new URL(endpointUrl).pathname
-    if (pathname === '/') return undefined
-    return pathname.replace(/%7B/gi, '{').replace(/%7D/gi, '}')
-  } catch (cause) {
-    return degradeBackend(cause, undefined, { site: 'publicPathTemplate', reason: 'invalid_response' })
-  }
-}
-
-function parseTransportConfig(configJson: string): unknown {
-  try {
-    return JSON.parse(configJson) as unknown
-  } catch (cause) {
-    return degradeBackend(cause, undefined, { site: 'parseTransportConfig', reason: 'invalid_response' })
-  }
-}
-
-function publicToolTransportFor(
-  endpointUrl: string,
-  adapterId: string,
-  configJson: string,
-): PublicToolTransport | undefined {
-  const config = parseTransportConfig(configJson)
-  const pathTemplate = publicPathTemplate(endpointUrl)
-  if (adapterId === 'http-json:v1') {
-    const parsed = parseHttpJsonTransportConfiguration(config)
-    return parsed === undefined ? undefined : {
-      method: parsed.method,
-      ...(pathTemplate === undefined ? {} : { pathTemplate }),
-      ...(parsed.responseStatus === undefined ? {} : { responseStatus: parsed.responseStatus }),
-      ...(parsed.responseContentType === undefined ? {} : { responseContentType: parsed.responseContentType }),
-      requestTimeoutMs: parsed.requestTimeoutMs,
-    }
-  }
-  if (adapterId === 'x402-fetch:v2') {
-    const parsed = parseX402FetchTransportConfiguration(config)
-    return parsed === undefined ? undefined : {
-      method: parsed.method,
-      ...(pathTemplate === undefined ? {} : { pathTemplate }),
-      requestTimeoutMs: parsed.requestTimeoutMs,
-    }
-  }
-  if (adapterId === 'mcp-jsonrpc:v1') {
-    const parsed = parseMcpJsonRpcTransportConfiguration(config)
-    return parsed === undefined ? undefined : { method: 'POST', requestTimeoutMs: parsed.requestTimeoutMs }
-  }
-  return undefined
-}
-
-function publicToolParameterMappingsFor(
-  adapterId: string,
-  configJson: string,
-): readonly PublicToolParameterMapping[] | undefined {
-  const config = parseTransportConfig(configJson)
-  const mappings: PublicToolParameterMapping[] = []
-  if (adapterId === 'http-json:v1') {
-    const parsed = parseHttpJsonTransportConfiguration(config)
-    if (parsed === undefined) return undefined
-    for (const parameter of parsed.path ?? []) mappings.push({
-      inputPointer: parameter.inputPointer, group: 'path', name: parameter.parameter,
-      ...(parameter.required === undefined ? {} : { required: parameter.required }),
-      ...(parameter.style === undefined ? {} : { style: parameter.style }),
-      ...(parameter.explode === undefined ? {} : { explode: parameter.explode }),
-    })
-    for (const parameter of parsed.query ?? []) mappings.push({
-      inputPointer: parameter.inputPointer, group: 'query', name: parameter.parameter,
-      ...(parameter.required === undefined ? {} : { required: parameter.required }),
-      ...(parameter.style === undefined ? {} : { style: parameter.style }),
-      ...(parameter.explode === undefined ? {} : { explode: parameter.explode }),
-    })
-    for (const parameter of parsed.headers ?? []) mappings.push({
-      inputPointer: parameter.inputPointer, group: 'header', name: parameter.parameter,
-      ...(parameter.required === undefined ? {} : { required: parameter.required }),
-      ...(parameter.style === undefined ? {} : { style: parameter.style }),
-      ...(parameter.explode === undefined ? {} : { explode: parameter.explode }),
-    })
-    return mappings.length === 0 ? undefined : mappings
-  }
-  if (adapterId === 'x402-fetch:v2') {
-    const parsed = parseX402FetchTransportConfiguration(config)
-    if (parsed === undefined) return undefined
-    for (const parameter of parsed.query ?? []) mappings.push({
-      inputPointer: parameter.inputPointer, group: 'query', name: parameter.parameter,
-      ...(parameter.required === undefined ? {} : { required: parameter.required }),
-      ...(parameter.style === undefined ? {} : { style: parameter.style }),
-      ...(parameter.explode === undefined ? {} : { explode: parameter.explode }),
-    })
-    return mappings.length === 0 ? undefined : mappings
-  }
-  return undefined
 }

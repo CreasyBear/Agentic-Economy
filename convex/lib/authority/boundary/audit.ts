@@ -2,7 +2,7 @@ import type { Doc } from '../../../_generated/dataModel'
 import type { MutationCtx } from '../../../_generated/server'
 import { createAgentAuditEnvelope } from '@/modules/agent-access/public'
 import { createPackage3AuditEvent } from '@/modules/observability/public'
-import { persistAuditEvent } from '../../../securityShared'
+import { persistAuditEvent } from '../../security/audit/persistence'
 
 export const LAST_AUTHENTICATED_WRITE_INTERVAL_MS = 15 * 60 * 1_000
 const KNOWN_CREDENTIAL_DENIAL_BUCKET_MS = 5 * 60 * 1_000

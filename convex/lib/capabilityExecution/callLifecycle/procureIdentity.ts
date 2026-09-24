@@ -1,8 +1,9 @@
 import { v, type Infer } from 'convex/values'
 import type { MutationCtx } from '../../../_generated/server'
-import { sourceWriteArgs, requireSourceRead, requireSourceWrite } from '../../../sourceWriteAdmission'
+import { sourceWriteArgs } from '../../security/sourceWrite/contracts'
+import { requireSourceRead, requireSourceWrite } from '../../security/sourceWrite/admission'
 import { principalValue } from './contracts'
-import { resolveCurrentAgentAuthority } from './authorityHandlers'
+import { resolveCurrentAgentAuthority } from './agentCallAuthority'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { toolProcureInputSchema, toolProcureResultSchema } from '@/modules/capability-execution/procure'
 
