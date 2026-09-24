@@ -22,6 +22,8 @@ import {
   type SecretMaterialLease,
   type SecretPointerStore,
 } from '@/modules/secrets/public'
+import { providerConsequenceTicketClaimsDigest } from '../provider-consequence-digest'
+export { providerConsequenceTicketClaimsDigest } from '../provider-consequence-digest'
 
 const OPAQUE_REF = /^[A-Za-z0-9][A-Za-z0-9._:/-]{0,199}$/u
 const DIGEST = /^sha256:[0-9a-f]{64}$/u
@@ -621,25 +623,6 @@ export function providerConsequenceInvocationDigest(
   } as StableHashValue)
 }
 
-export function providerConsequenceTicketClaimsDigest(
-  ticket: CanonicalProviderConsequenceTicket,
-): string {
-  const { callRef, toolRef, ...historicalTicket } = ticket
-  return canonicalDigest({
-    kind: 'provider-consequence-ticket-claims:v1',
-    ticket: {
-      ...historicalTicket,
-      invocationRef: callRef,
-      operationRef: toolRef,
-      grantedScopes: [...historicalTicket.grantedScopes],
-      grantedResources: [...historicalTicket.grantedResources],
-      secret: { ...historicalTicket.secret },
-      ...(historicalTicket.paymentSecret === undefined
-        ? {}
-        : { paymentSecret: { ...historicalTicket.paymentSecret } }),
-    },
-  } as StableHashValue)
-}
 
 function sameStrings(left: readonly string[], right: readonly string[]): boolean {
   return left.length === right.length && left.every((value, index) => value === right[index])
