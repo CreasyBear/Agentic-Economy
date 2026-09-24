@@ -7,7 +7,7 @@ import {
 
 import type { ClerkFactorEvidence } from '../../../convex/lib/authority/consequence/proof'
 import { InteractiveAuthorityError } from '../../../convex/interactiveAuthority'
-import { assertStepUpForSensitiveAction } from '../../../convex/workspaceSecurity'
+import { assertStepUpForSensitiveAction } from '../../../convex/lib/principalAccount/workspaceSecurity/stepUp'
 import { samIdentity } from '../../helpers/interactive-authority-provisioning'
 import {
   createInteractiveAuthorityBackend as createBackend,
