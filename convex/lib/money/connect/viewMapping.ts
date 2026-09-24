@@ -1,4 +1,5 @@
 import type { Doc } from '../../../_generated/dataModel'
+import type { ConnectAccountView, ConnectAccountCommandView } from '../../../../src/modules/money/public'
 
 export function refusedConnect(code: string, retryable: boolean, correlationRef?: string) {
   return {
@@ -9,7 +10,7 @@ export function refusedConnect(code: string, retryable: boolean, correlationRef?
   }
 }
 
-export function payoutAccountView(row: Doc<'moneyPayoutAccounts'>) {
+export function payoutAccountView(row: Doc<'moneyPayoutAccounts'>): ConnectAccountView {
   return {
     businessId: row.businessId,
     currency: row.currency,
@@ -40,7 +41,7 @@ export function payoutAccountView(row: Doc<'moneyPayoutAccounts'>) {
   }
 }
 
-export function connectAccountCommandView(row: Doc<'moneyConnectAccountCommands'>) {
+export function connectAccountCommandView(row: Doc<'moneyConnectAccountCommands'>): ConnectAccountCommandView {
   return {
     commandRef: row.commandRef,
     businessId: row.businessId,

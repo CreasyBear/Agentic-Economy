@@ -1,6 +1,6 @@
 import { v } from 'convex/values'
 import { identifier, serverFunctionAuth } from '../../../moneyLedgerValues'
-import { connectAccountViewValue } from './contracts'
+import { connectAccountViewValue } from '../../../../src/modules/money/public'
 import type { CustomerRequestServiceAssertion } from '../../../../src/modules/agent-access/service-auth-envelope'
 import { env, type QueryCtx } from '../../../_generated/server'
 import { resolveBusinessActor } from '../../../authz'

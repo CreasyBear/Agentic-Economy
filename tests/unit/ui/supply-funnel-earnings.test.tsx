@@ -12,6 +12,11 @@ vi.mock("@/lib/ui/toast", () => ({
 }));
 
 const TACTILE_CLASS_FRAGMENT = "active:scale-[0.96]";
+const persistedBindingFields = {
+  requirementsDigest: "sha256:requirements",
+  createdAt: 1,
+  updatedAt: 2,
+};
 
 function readyExpressConnect(
   stripeAccountId: string,
@@ -32,6 +37,7 @@ function readyExpressConnect(
           state: "ready" as const,
           detailsSubmitted: true,
           recipientCapabilityActive: true,
+          ...persistedBindingFields,
           version: 5,
         },
         payout: {
@@ -218,6 +224,7 @@ describe("current supply funnel", () => {
                 state: "ready",
                 detailsSubmitted: true,
                 recipientCapabilityActive: true,
+                ...persistedBindingFields,
                 version: 7,
               },
               payout: {
@@ -631,6 +638,7 @@ describe("current supply funnel", () => {
               state: "onboarding_started",
               detailsSubmitted: false,
               recipientCapabilityActive: false,
+              ...persistedBindingFields,
               version: 4,
             },
             payout: {
@@ -769,6 +777,7 @@ describe("current supply funnel", () => {
               state: "onboarding_started",
               detailsSubmitted: false,
               recipientCapabilityActive: false,
+              ...persistedBindingFields,
               version: 4,
             },
             payout: {
@@ -843,6 +852,7 @@ describe("current supply funnel", () => {
               state: "restricted",
               detailsSubmitted: true,
               recipientCapabilityActive: false,
+              ...persistedBindingFields,
               version: 3,
             },
             payout: {

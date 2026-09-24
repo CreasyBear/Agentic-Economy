@@ -136,6 +136,8 @@ export type {
   RakeSplit,
 } from './internal/money-types'
 export { isMoneyRefusal } from './internal/money-types'
+export { connectAccountViewValue, connectAccountCommandValue, connectAccountFinalizeOutcomeArg } from './internal/connect-contracts'
+export type { ConnectAccountView, ConnectAccountCommandView, ConnectAccountOutcome } from './internal/connect-contracts'
 
 export type CreditAccountQuery = Readonly<{
   principalId: string;

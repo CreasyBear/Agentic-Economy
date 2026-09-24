@@ -2,7 +2,6 @@ import {
   callSourceQuery,
   sourceQuery,
 } from '@/lib/server/convex-source'
-import { isRecord } from '@/modules/common/is-record'
 import { sourceWriteAdmissionFromContext } from '@/lib/server/source-write-admission'
 import { degradeBackend } from '@/lib/observability/degrade-backend'
 import {
@@ -171,30 +170,3 @@ export function ownerCurrency(
   return owner.accounts.find((account) => account.currency === currency)
 }
 
-export function readOptionalString(value: unknown, key: string): string | undefined {
-  if (
-    !isRecord(value) ||
-    typeof value[key] !== 'string' ||
-    value[key].trim().length === 0
-  )
-    return undefined
-  return value[key]
-}
-export function readOptionalNumber(value: unknown, key: string): number | undefined {
-  return !isRecord(value) ||
-    typeof value[key] !== 'number' ||
-    !Number.isFinite(value[key])
-    ? undefined
-    : value[key]
-}
-export function readOptionalBoolean(value: unknown, key: string): boolean | undefined {
-  return !isRecord(value) || typeof value[key] !== 'boolean'
-    ? undefined
-    : value[key]
-}
-export function optionalProperty<T>(
-  key: string,
-  value: T | undefined,
-): Readonly<Record<string, T>> {
-  return value === undefined ? {} : { [key]: value }
-}

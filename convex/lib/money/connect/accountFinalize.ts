@@ -3,7 +3,7 @@ import { billingSourceArgs, identifier } from '../../../moneyLedgerValues'
 import type { BillingSourceWriteArgs } from '../billingAuthorization/sourceWrite'
 import type { MutationCtx } from '../../../_generated/server'
 import { requireBillingSourceWrite } from '../billingAuthorization/sourceWrite'
-import { transitionPayoutAccount } from '../../../../src/modules/money/public'
+import { connectAccountFinalizeOutcomeArg, transitionPayoutAccount, type ConnectAccountOutcome } from '../../../../src/modules/money/public'
 import { connectAccountCommandView, payoutAccountView, refusedConnect } from './viewMapping'
 
 export type FinalizeConnectAccountArgs = BillingSourceWriteArgs & {
@@ -16,23 +16,9 @@ export type FinalizeConnectAccountArgs = BillingSourceWriteArgs & {
   providerRequestDigest: string
   recoveryLeaseOwner: string
   recoveryLeaseGeneration: number
-  outcome:
-    | Readonly<{ state: 'succeeded'; stripeAccountId: string; providerEvidenceRef: string }>
-    | Readonly<{ state: 'failed' | 'outcome_unknown'; failureCode: string; failureRetryable: boolean }>
+  outcome: ConnectAccountOutcome
 }
 
-export const connectAccountFinalizeOutcomeArg = v.union(
-  v.object({
-    state: v.literal('succeeded'),
-    stripeAccountId: identifier,
-    providerEvidenceRef: identifier,
-  }),
-  v.object({
-    state: v.union(v.literal('failed'), v.literal('outcome_unknown')),
-    failureCode: identifier,
-    failureRetryable: v.boolean(),
-  }),
-)
 
 export const finalizeConnectAccountArgs = {
   businessId: identifier,

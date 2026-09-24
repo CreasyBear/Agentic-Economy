@@ -9,6 +9,8 @@ import { describe, expect, it, vi } from 'vitest'
 import { SourceWriteAdmissionError } from '@/modules/security/source-write-admission'
 import {
   createOwnerConnectAccountThroughSource,
+  createOwnerExpressLoginLinkThroughSource,
+  readOwnerConnectReadinessThroughSource,
   updateOwnerPayoutAuthorityThroughSource,
 } from '@/modules/money/server'
 
@@ -79,6 +81,50 @@ describe('owner Connect account reservation', () => {
       proof,
     })
     expect(createOnboardingLink).toHaveBeenCalledOnce()
+  })
+
+  it('refuses a missing Connect binding without hiding a persisted one', async () => {
+    sourceMocks.callSourceQuery
+      .mockResolvedValueOnce(ownerProjection)
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(ownerProjection)
+      .mockResolvedValueOnce(null)
+    const createExpressLoginLink = vi.fn<NonNullable<Provider['createExpressLoginLink']>>()
+    const runtime = connectRuntime(async () => ({
+      kind: 'refused',
+      code: 'payout_outcome_unknown',
+      retryable: false,
+    }))
+
+    expect(await readOwnerConnectReadinessThroughSource()).toEqual({
+      kind: 'refused',
+      code: 'payout_not_ready',
+      retryable: false,
+    })
+    expect(await createOwnerExpressLoginLinkThroughSource(
+      { businessId: 'business-1', currency: 'USD' },
+      {},
+      { ...runtime, provider: { ...runtime.provider!, createExpressLoginLink } },
+    )).toEqual({
+      kind: 'refused',
+      code: 'payout_not_ready',
+      retryable: false,
+    })
+    expect(createExpressLoginLink).not.toHaveBeenCalled()
+    expect(sourceMocks.callSourceQuery).toHaveBeenCalledTimes(4)
+    const persistedBinding = {
+      ...payoutAccount,
+      requirementsDigest: 'sha256:requirements',
+      createdAt: 1,
+      updatedAt: 2,
+    }
+    sourceMocks.callSourceQuery
+      .mockResolvedValueOnce(ownerProjection)
+      .mockResolvedValueOnce(persistedBinding)
+    expect(await readOwnerConnectReadinessThroughSource()).toMatchObject({
+      kind: 'available',
+      accounts: [{ account: persistedBinding }],
+    })
   })
 
   it('does not create an onboarding link without strict proof', async () => {
