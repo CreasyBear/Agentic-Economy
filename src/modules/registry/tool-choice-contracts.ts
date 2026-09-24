@@ -308,6 +308,7 @@ function priceLabel(tool: PublicToolDescriptor): string {
 }
 
 function projectCompactTool(tool: PublicToolDescriptor) {
+  const { readiness: _readiness, ...evidence } = projectToolChoiceEvidence(tool)
   return compactToolCandidateSchema.parse({
     toolRef: tool.toolRef,
     capabilityId: tool.contract.capabilityId,
@@ -316,7 +317,7 @@ function projectCompactTool(tool: PublicToolDescriptor) {
     provider: { name: tool.business.name, slug: tool.business.slug },
     priceLabel: priceLabel(tool),
     ...(tool.commercial.displayPrice === undefined ? {} : { displayPrice: tool.commercial.displayPrice }),
-    ...projectToolChoiceEvidence(tool),
+    ...evidence,
     listingTier: tool.listingTier,
     ...(tool.canonical === undefined ? {} : { canonicalUrl: tool.canonical.path }),
   })
@@ -326,7 +327,7 @@ function admittedHealth(filters: unknown): Set<ToolHealthStatus> {
   const parsed = toolCatalogFiltersSchema.safeParse(filters)
   return new Set(parsed.success && parsed.data.healthStatus !== undefined
     ? parsed.data.healthStatus
-    : ['operational'])
+    : ['operational', 'unverified'])
 }
 
 function visibleTools(tools: readonly PublicToolDescriptor[], filters: unknown) {

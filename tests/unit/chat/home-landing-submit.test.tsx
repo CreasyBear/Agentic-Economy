@@ -37,6 +37,7 @@ vi.mock('@tanstack/react-router', () => ({
 
 vi.mock('@tanstack/react-start', () => ({
   createServerFn: () => ({ handler: (fn: unknown) => fn, validator: () => ({ handler: (fn: unknown) => fn }) }),
+  createIsomorphicFn: () => ({ client: () => ({ server: () => () => undefined }) }),
 }))
 
 import { AeHomeLanding } from '@/components/ae/home/AeHomeLanding'

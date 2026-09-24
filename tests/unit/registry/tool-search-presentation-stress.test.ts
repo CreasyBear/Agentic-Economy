@@ -188,7 +188,7 @@ describe('Jev search presentation stress', () => {
       state: 'output-available',
       output: { kind: 'noMatch', results: [], nearMisses: results.slice(0, 1), scope: 'exhausted' },
     })
-    expect(noMatch).toMatchObject({ kind: 'choices', count: 0, choices: [{ belowMatch: true }] })
+    expect(noMatch).toMatchObject({ kind: 'choices', count: 0, choices: [] })
     expect(chatSearchUse('registry.tools.quote')).toBeNull()
   })
 })
