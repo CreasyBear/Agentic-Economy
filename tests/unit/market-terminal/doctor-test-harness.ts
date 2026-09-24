@@ -498,6 +498,7 @@ export function sandboxListResult() {
       title: 'AEcon sandbox reference Tool', description: 'Deterministic sandbox Tool.',
       provider: { name: 'AEcon sandbox reference provider', slug: SANDBOX_TOOL_SLUG },
       priceLabel: 'AUD 1.00', healthStatus: 'operational', listingTier: 'reviewed',
+      verification: 'verified', network: 'unknown', claimSource: 'provider',
     }],
     pagination: { limit: 100, hasMore: false },
   }
@@ -624,6 +625,10 @@ export function currentTool(toolRef: string) {
     provider: { slug: 'reference', name: 'Reference Services' },
     priceLabel: 'USD 0.00',
     healthStatus: 'operational',
+    readiness: 'ready',
+    verification: 'verified',
+    network: 'unknown',
+    claimSource: 'provider',
     inputJsonSchema: { type: 'object' },
     outputJsonSchema: { type: 'object' },
     materialTerms: [],

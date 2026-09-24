@@ -149,6 +149,7 @@ function successfulFetch(requests: Request[]): typeof globalThis.fetch {
         results: [{
           toolRef: ref, title: String(body.query), summary: 'fixture', matchReason: 'Text overlap',
           readiness: 'ready', entitlement: 'requires_auth', price: { kind: 'indicative', label: 'Free' },
+          healthStatus: 'operational', verification: 'verified', network: 'unknown', claimSource: 'provider',
           details: { capabilityId: `fixture.${sourceKinds[index]}`, provider: { name: 'Fixture', slug: 'fixture' }, description: 'fixture', listingTier: 'reviewed' },
           next: [{ action: 'describe', args: { toolRef: ref }, authority: 'public' }],
         }],
@@ -161,6 +162,7 @@ function successfulFetch(requests: Request[]): typeof globalThis.fetch {
         kind: 'found', schemaVersion: 'registry-tools:v3', tool: {
           toolRef: body.toolRef, capabilityId: 'fixture.execute', title: 'Fixture', description: 'fixture', provider: { name: 'Fixture', slug: 'fixture' },
           priceLabel: 'Free', healthStatus: 'operational', inputJsonSchema: { type: 'object' }, outputJsonSchema: { type: 'object' }, materialTerms: [], dataUse: [], effects: [], evidence: [], authentication: { kind: 'ae_api_key' }, listingTier: 'reviewed',
+          readiness: 'ready', verification: 'verified', network: 'unknown', claimSource: 'provider',
         },
       })
     }

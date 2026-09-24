@@ -22,7 +22,6 @@ import {
   installAeShim,
   LOCAL_DEV_COMMAND,
   SANDBOX_TOOL_REF,
-  SANDBOX_TOOL_SLUG,
   localConnectCommand,
   LOOPBACK_DOCTOR_COMMAND,
   LOOPBACK_NO_SANDBOX_TOOL_REASON,
@@ -268,6 +267,7 @@ describe('ae doctor', () => {
             toolRef, capabilityId: 'document.translate', title: 'Document translation',
             description: 'Translate one document.', provider: { name: 'Reference Services', slug: 'reference' },
             priceLabel: 'USD 0.50', healthStatus: 'operational', listingTier: 'reviewed',
+            verification: 'verified', network: 'unknown', claimSource: 'provider',
           }],
         }
       },

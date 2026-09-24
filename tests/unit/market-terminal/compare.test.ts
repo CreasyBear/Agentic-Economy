@@ -27,6 +27,9 @@ function tool(toolRef: string, providerName = 'Reference Services') {
     provider: { name: providerName, slug: providerName.toLowerCase().replaceAll(' ', '-') },
     priceLabel: 'USD 1.25',
     healthStatus: 'operational' as const,
+    verification: 'verified' as const,
+    network: 'unknown' as const,
+    claimSource: 'provider' as const,
     listingTier: 'reviewed' as const,
   }
 }
