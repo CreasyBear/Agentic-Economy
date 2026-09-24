@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { CallStatusPageResult } from '@/lib/call-recovery/call-status-page-types'
 const mocks = vi.hoisted(() => ({ read: vi.fn(), cancel: vi.fn(), reconcile: vi.fn(), invalidate: vi.fn() }))
 vi.mock('@/lib/observability/capture-client-exception', () => ({ captureClientExceptionOnClient: vi.fn() }))
-vi.mock('@tanstack/react-start', () => ({ useServerFn: (fn: unknown) => fn }))
+vi.mock('@tanstack/react-start', async (importOriginal) => ({ ...await importOriginal(), useServerFn: (fn: unknown) => fn }))
 vi.mock('@tanstack/react-router', () => ({ useRouter: () => ({ invalidate: mocks.invalidate }) }))
 vi.mock('@/modules/capability-execution/call-recovery.functions', () => ({ readOwnerCallStatusServer: mocks.read, cancelOwnerCallServer: mocks.cancel, reconcileOwnerCallServer: mocks.reconcile }))
 import { useCallStatusRecovery } from '@/hooks/useCallStatusRecovery'

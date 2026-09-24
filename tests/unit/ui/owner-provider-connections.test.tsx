@@ -19,7 +19,8 @@ vi.mock('@tanstack/react-router', () => ({
   useNavigate: () => mocks.navigate,
 }))
 
-vi.mock('@tanstack/react-start', () => ({
+vi.mock('@tanstack/react-start', async (importOriginal) => ({
+  ...await importOriginal(),
   createClientOnlyFn: (fn: unknown) => fn,
   useServerFn: (serverFn: unknown) => serverFn,
 }))

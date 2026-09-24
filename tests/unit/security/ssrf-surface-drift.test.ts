@@ -15,6 +15,9 @@ const KNOWN_PROVIDER_CLIENT_FILES: Record<string, true> = {
   // Web Bot Auth directory lookup at the caller-declared signature agent origin, used
   // only to verify inbound request signatures, never to import owner content.
   'src/modules/routing-kernel/caller-identity.ts': true,
+  // CDP Data Query uses the in-module Coinbase HOST/PATH constants and
+  // locally built SQL; neither request URL component comes from a caller.
+  'convex/marketFlowRefresh.ts': true,
 }
 
 // A "non-literal" fetch(...) call is one whose first argument is not a single plain
