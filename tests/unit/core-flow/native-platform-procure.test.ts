@@ -53,8 +53,10 @@ function identityPort(): ProcureIdentityPort {
     },
     async complete(request, actor, result) {
       const row = rows.get(`${actor.principalId}:${request.idempotencyKey}`)!
-      row.resultJson = JSON.stringify(result)
-      return { kind: 'replay', quoteRef: row.quoteRef, resultJson: row.resultJson }
+      if (result.status !== 'pending' && result.status !== 'outcome_unknown') {
+        row.resultJson = JSON.stringify(result)
+      }
+      return { kind: 'replay', quoteRef: row.quoteRef, resultJson: JSON.stringify(result) }
     },
   }
 }
@@ -194,6 +196,27 @@ describe('native procurement replay and recovery', () => {
     expect(persistedCalls.size).toBe(1)
   })
 
+  it('advances a pending and then reconciliation-required purchase using its original Quote and Call identity', async () => {
+    const callService = service({ kind: 'completed', callRef: 'call:one', toolRef, output: { answer: 42 },
+      usage: { chargeState: 'paid', amount: { currency: 'AUD', units: '2000', exponent: 6 } } })
+    const callTool = vi.mocked(callService.callTool)
+    callTool.mockResolvedValueOnce({ kind: 'pending', callRef: 'call:one', toolRef, retryAfterMs: 1000 })
+    callTool.mockResolvedValueOnce({ kind: 'reconciliation_required', callRef: 'call:one', toolRef, evidence: {
+      attemptRef: 'attempt:one', effectGeneration: 1, requiredAt: '2026-09-24T00:00:00Z',
+      retry: 'reconcile_before_retry', evidenceSource: 'provider',
+    } })
+    const procure = engine(callService)
+    expect((await procure.procure(input)).status).toBe('pending')
+    expect((await procure.procure(input)).status).toBe('outcome_unknown')
+    expect(await procure.procure(input)).toMatchObject({
+      status: 'delivered', quoteRef: 'quote:one', callRef: 'call:one',
+      output: { answer: 42 },
+    })
+    expect(callService.quoteTool).toHaveBeenCalledTimes(1)
+    expect(callTool).toHaveBeenCalledTimes(3)
+    expect(new Set(callTool.mock.calls.map(([request]) => request.input.idempotencyKey)).size).toBe(1)
+  })
+
   it('rejects changed material on the same principal/key before another Quote', async () => {
     const callService = service({ kind: 'pending', callRef: 'call:one', toolRef, retryAfterMs: 1000 })
     const procure = engine(callService)
@@ -201,6 +224,47 @@ describe('native procurement replay and recovery', () => {
     await expect(procure.procure({ ...input, input: { query: 'New Zealand' } })).rejects.toBeInstanceOf(ProcureConflictError)
     expect(callService.quoteTool).toHaveBeenCalledTimes(1)
     expect(callService.callTool).toHaveBeenCalledTimes(1)
+  })
+
+  it('preserves a Quote admission refusal rather than reporting no matching Tool', async () => {
+    const callService = service(undefined)
+    vi.mocked(callService.quoteTool!).mockResolvedValue({
+      kind: 'refused', toolRef, code: 'pricing_setup_required',
+      retryable: false, reason: 'Pricing needs setup', correlationRef: 'quote-correlation',
+    })
+    const result = await engine(callService).procure(input)
+    expect(result).toMatchObject({
+      status: 'refused', code: 'pricing_setup_required',
+      retryable: false, detail: 'Pricing needs setup',
+    })
+    expect(callService.callTool).not.toHaveBeenCalled()
+  })
+
+  it('does not invent paid Call arguments missing from a natural-language need', async () => {
+    vi.mocked(executeDecisionGateway).mockResolvedValueOnce({
+      tier: 'jev_system_one', model: 'test-selector',
+      answers: { selectedTool: { type: 'choice', choice: toolRef, confidence: 1, probabilities: { [toolRef]: 1 } } },
+      usage: { inputTokens: 0, outputTokens: 0, estimatedCostAud: null },
+      durationMs: 0, attemptedTiers: ['jev_system_one'],
+    })
+    const callService = service({
+      kind: 'completed', callRef: 'call:one', toolRef, output: { converted: 'wrong' },
+      usage: { chargeState: 'paid', amount: { currency: 'AUD', units: '2000', exponent: 6 } },
+    })
+    const result = await engine(callService, identityPort(), async () => [{
+      toolRef, name: 'Timezone converter', description: 'Converts a time between zones',
+      endpoint: 'https://example.test/convert', priceAud: '0.0020',
+      inputSchema: { properties: { from: { type: 'string' }, to: { type: 'string' }, time: { type: 'string' } } },
+    }]).procure({
+      kind: 'need', need: 'Convert a time from Sydney to Kathmandu',
+      maxSpendAud: '0.01', idempotencyKey: 'paid-input-invention',
+    })
+    expect(result).toMatchObject({
+      status: 'refused', code: 'input_invalid',
+      detail: expect.stringContaining('from, to, time'),
+    })
+    expect(callService.quoteTool).not.toHaveBeenCalled()
+    expect(callService.callTool).not.toHaveBeenCalled()
   })
 
   it.each([

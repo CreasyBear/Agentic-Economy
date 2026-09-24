@@ -3,6 +3,7 @@ import { jsonValueSchema } from '@/modules/capability-contract/public'
 import { isPublicToolRef, type PublicToolRef } from '@/modules/common/tool-ref'
 import { z } from 'zod'
 import { callRefusalCodeSchema } from './call-contracts'
+import { toolQuoteRefusalCodeSchema } from './quote'
 
 export const TOOL_PROCURE_ACTION_ID = 'tool.procure' as const
 export const TOOL_PROCURE_PATH = '/api/v1/tools/procure' as const
@@ -87,7 +88,7 @@ export const toolProcureResultSchema = z.discriminatedUnion('status', [
     kind: z.literal('refused'),
     status: z.literal('refused'),
     quoteRef: z.string().min(1).optional(),
-    code: z.union([z.enum(['budget_exceeded', 'no_matching_tool', 'ambiguous_intent']), callRefusalCodeSchema]),
+    code: z.union([z.enum(['no_matching_tool', 'ambiguous_intent']), toolQuoteRefusalCodeSchema, callRefusalCodeSchema]),
     retryable: z.boolean(),
     detail: z.string(),
   }),

@@ -101,16 +101,28 @@ export async function completeProcureHandler(ctx: MutationCtx, args: Command & {
   const row = await rowFor(ctx, args)
   if (row === null || row.requestHash !== material(args) || row.scope !== 'capability_execution') return { kind: 'conflict' as const }
   const result = toolProcureResultSchema.parse(JSON.parse(args.resultJson))
+  if ('callRef' in result && row.effectRefs[1] !== undefined && row.effectRefs[1] !== result.callRef) {
+    return { kind: 'conflict' as const }
+  }
   if (result.idempotencyKey !== args.idempotencyKey) return { kind: 'conflict' as const }
   if ('quoteRef' in result && row.effectRefs[0] !== result.quoteRef) return { kind: 'conflict' as const }
   if (row.status !== 'in_progress') {
     return { kind: 'replay' as const, resultJson: row.resultJson ?? null, quoteRef: row.effectRefs[0] ?? null }
   }
   const resultJson = JSON.stringify(result)
+  if (result.status === 'pending' || result.status === 'outcome_unknown') {
+    // Keep the original Quote snapshot for the next replay; the Call's derived
+    // key recovers the same invocation, while this response reports progress.
+    await ctx.db.patch(row._id, {
+      effectRefs: 'callRef' in result ? [row.effectRefs[0]!, result.callRef] : row.effectRefs,
+      updatedAt: Date.now(),
+    })
+    return { kind: 'replay' as const, resultJson, quoteRef: row.effectRefs[0] ?? null }
+  }
   await ctx.db.patch(row._id, {
     status: result.status === 'refused' || result.status === 'refused_after_dispatch' ? 'failed_terminal' : 'succeeded',
     resultJson, resultHash: canonicalDigest(result),
-    effectRefs: 'callRef' in result ? [...row.effectRefs, result.callRef] : row.effectRefs,
+    effectRefs: 'callRef' in result ? [row.effectRefs[0]!, result.callRef] : row.effectRefs,
     updatedAt: Date.now(),
   })
   return { kind: 'replay' as const, resultJson, quoteRef: row.effectRefs[0] ?? null }

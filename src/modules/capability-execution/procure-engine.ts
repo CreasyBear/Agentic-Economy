@@ -150,7 +150,9 @@ export const defaultProductionCatalogSearcher: ToolCatalogSearcher = async (
       name: tool.contract.capabilityId,
       description: tool.summary,
       endpoint: tool.callVia,
-      priceAud: tool.catalogPrice?.amount ?? tool.catalogPrice?.minAmount ?? '0.00',
+      priceAud: tool.catalogPrice?.currency === 'AUD'
+        ? tool.catalogPrice.amount ?? tool.catalogPrice.maxAmount ?? ''
+        : '',
       ...(tool.contract.inputJsonSchema !== undefined ? { inputSchema: tool.contract.inputJsonSchema as Record<string, unknown> } : {}),
     }))
   } catch (cause) {
@@ -177,7 +179,7 @@ export class CapabilityProcurementEngine {
     const reserved = acceptedIdentity(await identity.reserve(input, principal))
     if (reserved.kind === 'replay' && reserved.resultJson !== null) {
       const completed = toolProcureResultSchema.safeParse(JSON.parse(reserved.resultJson))
-      if (completed.success) return completed.data
+      if (completed.success && completed.data.status !== 'pending' && completed.data.status !== 'outcome_unknown') return completed.data
     }
     if (reserved.kind === 'replay' && reserved.quoteRef === null) {
       // A concurrent request may still be obtaining its Quote. The caller must
@@ -213,6 +215,22 @@ export class CapabilityProcurementEngine {
       }
       matchedTool = routing.tool
     }
+    if (input.kind === 'need' && matchedTool !== undefined) {
+      const listedPrice = parseDecimalExactAmount('AUD', matchedTool.priceAud, 6)
+      if (listedPrice === undefined || listedPrice.units !== '0') {
+        const schema = matchedTool.inputSchema
+        const fields = Array.isArray(schema?.required)
+          ? schema.required.filter((field): field is string => typeof field === 'string')
+          : schema?.properties && typeof schema.properties === 'object'
+            ? Object.keys(schema.properties)
+            : []
+        return await finish({
+          ...common, kind: 'refused', status: 'refused',
+          code: 'input_invalid', retryable: false,
+          detail: `Paid Tools require exact caller-supplied arguments. Retry with kind: exact, toolRef: ${matchedTool.toolRef}, and input fields: ${fields.join(', ') || 'the Tool’s required fields'}.`,
+        })
+      }
+    }
 
     const toolRef = input.kind === 'exact' ? input.toolRef : matchedTool?.toolRef
     const synthesizedParams = input.kind === 'exact'
@@ -233,7 +251,7 @@ export class CapabilityProcurementEngine {
       if (quoteRes.kind === 'refused') {
         return await finish({
           ...common, kind: 'refused', status: 'refused',
-          code: quoteRes.code === 'budget_exceeded' ? 'budget_exceeded' : 'no_matching_tool',
+          code: quoteRes.code,
           retryable: quoteRes.retryable,
           detail: quoteRes.reason ?? 'Quote request refused by capability engine.',
         })
@@ -250,8 +268,15 @@ export class CapabilityProcurementEngine {
       }
       if (checkpoint.resultJson !== null) {
         const completed = toolProcureResultSchema.safeParse(JSON.parse(checkpoint.resultJson))
-        if (completed.success) return completed.data
+        if (completed.success && completed.data.status !== 'pending' && completed.data.status !== 'outcome_unknown') return completed.data
       }
+    }
+    if (input.kind === 'need' && quote.price.units !== '0') {
+      return await finish({
+        ...common, kind: 'refused', status: 'refused', quoteRef: quote.quoteRef,
+        code: 'input_invalid', retryable: false,
+        detail: 'The Quote is paid; retry with kind: exact and caller-supplied Tool arguments.',
+      })
     }
     const { quoteRef, price: quotePrice } = quote
     const budgetExact = input.maxSpendAud === undefined
