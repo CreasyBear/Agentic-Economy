@@ -80,7 +80,7 @@ export function AeSiteAuthPanel({
   }, [])
 
   return (
-    <div data-slot="ae-site-auth-panel" className="grid gap-section bg-container py-related">
+    <div data-slot="ae-site-auth-panel" className="grid gap-section bg-container px-5 py-6 sm:px-6">
       <div className="grid gap-related">
         <AeSiteEyebrow>{eyebrow}</AeSiteEyebrow>
         <AeSiteHeading as={titleAs} size="md" id={titleId}>

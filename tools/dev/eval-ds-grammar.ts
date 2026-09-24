@@ -560,7 +560,6 @@ export function ds17StatusCheckListRoundedLgViolations(): readonly string[] {
 export function ds17StatusHarvestRoundedLgViolations(): readonly string[] {
   const violations: string[] = []
   for (const relative of [
-    'src/components/ae/status/system-status/AeSystemStatusSkeleton.tsx',
     'src/components/ae/status/system-status/components/StatusCheckList.tsx',
     'src/components/ae/status/system-status/components/StatusRecoveryPanel.tsx',
   ] as const) {
