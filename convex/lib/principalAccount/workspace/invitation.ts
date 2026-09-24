@@ -4,7 +4,7 @@ import type { QueryCtx } from '../../../_generated/server'
 import { accountRef } from '../../../../src/modules/principal-account/account/public'
 import { principalRef } from '../../../../src/modules/principal-account/principal/public'
 import { InteractiveAuthorityError, requireAccessFactForAccount, resolveActiveAccountRefForPrincipal } from '../../../interactiveAuthority'
-import { CLERK_ORGANIZATION_PROVIDER_NAMESPACE } from '../../../workspaceProvisioning'
+import { CLERK_ORGANIZATION_PROVIDER_NAMESPACE } from '../interactiveAuthority/constants'
 import { requireDirectoryInteractiveHumanPrincipal } from './identity'
 
 export const invitationContextArgs = v.object({})

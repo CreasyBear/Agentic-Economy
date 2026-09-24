@@ -5,7 +5,7 @@ import { accountRef } from '../../../../src/modules/principal-account/account/pu
 import { principalRef } from '../../../../src/modules/principal-account/principal/public'
 import { checkWorkspaceFences } from './decommissionFences'
 import { InteractiveAuthorityError, requireAccessFactForAccount, resolveActiveAccountRefForPrincipal } from '../../../interactiveAuthority'
-import { assertStepUpForSensitiveAction } from '../../../workspaceSecurity'
+import { assertStepUpForSensitiveAction } from '../workspaceSecurity/stepUp'
 import { requireCurrentOwnership, resolveClosedWorkspaceActorAccountRef, type AccountActionContext } from './accountContext'
 import { recordWorkspaceAuditEvent } from './audit'
 import { mfaReverificationRefusalValue } from './contracts'
