@@ -1,6 +1,6 @@
 import type { ObjectType } from 'convex/values'
 import type { ActionCtx } from '../../../../../convex/_generated/server'
-import { recoveryNotFound } from '../../../../../convex/capabilityCallProjection'
+import { recoveryNotFound } from '@/modules/capability-execution/call-projection/recovery'
 import { cancelRecovery } from './cancellation'
 import { expireAuthorizationRecovery } from './expiry'
 import { readRecoveryStatus } from './status'

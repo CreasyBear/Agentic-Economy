@@ -1,10 +1,7 @@
 import { degradeBackend } from '@/lib/observability/degrade-backend'
 import type { ActionCtx } from '../../../../../convex/_generated/server'
 import { internal } from '../../../../../convex/_generated/api'
-import {
-  projectPersistedRecovery,
-  recoveryNotFound,
-} from '../../../../../convex/capabilityCallProjection'
+import { projectPersistedRecovery, recoveryNotFound } from '@/modules/capability-execution/call-projection/recovery'
 import {
   loadReadyRecoveryWork,
   type RecoveryControlRow,

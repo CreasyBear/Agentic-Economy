@@ -7,12 +7,8 @@ import {
 } from '@/modules/action-execution/runtime'
 import type { ActionCtx } from '../../../../../convex/_generated/server'
 import { internal } from '../../../../../convex/_generated/api'
-import {
-  projectPersistedRecovery,
-  projectRecoveryOuter,
-  recoveryNotFound,
-  retryableRecoveryResult,
-} from '../../../../../convex/capabilityCallProjection'
+import { projectPersistedRecovery, recoveryNotFound, retryableRecoveryResult } from '@/modules/capability-execution/call-projection/recovery'
+import { projectRecoveryOuter } from '../../../../../convex/lib/callProjection/recovery'
 import {
   loadReadyRecoveryWork,
   type RecoveryWorkContext,

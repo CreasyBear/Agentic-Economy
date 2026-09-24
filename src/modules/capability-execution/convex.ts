@@ -27,3 +27,25 @@ export type {
   DurableActionExecutionPort,
   PublicExecutionStatus,
 } from '@/modules/action-execution/runtime'
+export {
+  recoveryNotFound,
+  projectPureCallStatus,
+  cancelledRecoveryResult,
+  retryableRecoveryResult,
+  projectPersistedRecovery,
+  reconciliationResult,
+  recoveryOuterState,
+} from './call-projection/recovery'
+export { parseContractOutput } from './call-projection/contract-output'
+export type {
+  OpenDispatch,
+  ContractOutputValidation,
+  ChargeSettlementResult,
+  WorkerAcceptedCharge,
+  CanonicalPort,
+  RecoveryRow,
+  RecoveryOuterProjectionOptions,
+  WorkerRecoveryResult,
+} from './call-projection/contracts'
+export { providerConsequenceTicketClaimsDigest } from './provider-consequence-digest'
+export { toCallDispatchCommand } from './call-projection/dispatch-command'

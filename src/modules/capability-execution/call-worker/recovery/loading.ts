@@ -22,9 +22,7 @@ import type { CallReceipt } from '@/modules/capability-execution/call-contracts'
 import { pricingConfigDecisionAmount, type ExactAmount } from '@/modules/money/public'
 import type { ActionCtx } from '../../../../../convex/_generated/server'
 import { internal } from '../../../../../convex/_generated/api'
-import {
-  canonicalPort,
-} from '../../../../../convex/capabilityCallProjection'
+import { canonicalPort } from '../../../../../convex/lib/callProjection/port'
 import { recoveryControlMatchesCall, recoveryControlUsesPersistedResult } from '../../../../../convex/lib/callLifecycle/statusControl'
 import { buildBrokeredX402Receipt } from '../brokeredX402'
 import { buildSellerOnboardingCanaryReceipt } from '../sellerCanaryReceipt'

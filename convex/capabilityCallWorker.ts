@@ -29,10 +29,8 @@ export {
   callAttemptIdentityMaterial,
   validateCallAuthority,
 } from './capabilityCallIdentity'
-export {
-  projectOuterResult,
-  projectPureCallStatus,
-} from './capabilityCallProjection'
+export { projectOuterResult } from './lib/callProjection/outerResult'
+export { projectPureCallStatus } from '@/modules/capability-execution/convex'
 
 const workerResult = v.union(
   v.object({ kind: v.literal('recorded') }),

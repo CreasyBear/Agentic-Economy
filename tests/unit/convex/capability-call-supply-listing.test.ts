@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { listAgentSupplyCallsHandler } from '../../../convex/capabilityCallProjection'
+import { listAgentSupplyCallsHandler } from '../../../convex/lib/callLifecycle/supplyCallsListing'
 
 type Row = Record<string, unknown>
 

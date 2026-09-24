@@ -29,7 +29,7 @@ import {
 } from '@/modules/capability-execution/call-contracts'
 import { env, type ActionCtx } from '../../../../convex/_generated/server'
 import { internal } from '../../../../convex/_generated/api'
-import type { OpenDispatch } from '../../../../convex/capabilityCallProjection'
+import type { OpenDispatch } from '@/modules/capability-execution/call-projection/contracts'
 import { convergePreRelease, refuseBeforeClaim, type WorkerResult } from './charge'
 
 export const acceptedCallGrantAfterLimitUpdateRef = makeFunctionReference<

@@ -1,4 +1,4 @@
-import type { RecoveryRow } from '../../capabilityCallProjection'
+import type { RecoveryRow } from '@/modules/capability-execution/convex'
 import type { DurableControlRow } from '@/modules/action-execution/runtime'
 import type { CallResult } from '@/modules/capability-execution/call-contracts'
 

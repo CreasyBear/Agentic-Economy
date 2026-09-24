@@ -203,6 +203,7 @@ export const finalizeDispatchArgs = {
 } as const
 export type CallDispatchCommand = Infer<typeof callDispatchMutationArgs.command>
 export type CallDispatchProjection = Infer<typeof callDispatchProjectionValue>
+export type CallDispatchProjectionShape = CallDispatchProjection
 export const recordArgs = {
   callRef: v.string(), principalId: v.string(), state: v.union(v.literal('pending'), v.literal('completed'), v.literal('refused'), v.literal('reconciliation_required'), v.literal('cancelled')),
   result: v.optional(callResultValue), usage: v.optional(usageValue), evidenceHash: v.optional(v.string()), attemptRef: v.optional(v.string()),

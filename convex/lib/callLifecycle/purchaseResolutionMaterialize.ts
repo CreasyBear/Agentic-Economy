@@ -9,21 +9,11 @@ import {
   projectPaymentStateForPurchaseResolution,
   type PurchaseResolutionRecord,
 } from '@/modules/capability-execution/purchase-resolution'
-import type { callReceiptValue, callResultValue, usageValue } from '@/modules/capability-execution/convex'
+import type { callReceiptValue } from '@/modules/capability-execution/convex'
+import type { CallDispatchProjectionShape } from './contracts'
 
 type CallRow = Doc<'capabilityCalls'>
 type CallReceiptValue = Infer<typeof callReceiptValue>
-type CallResultValue = Infer<typeof callResultValue>
-type Usage = Infer<typeof usageValue>
-
-export type CallDispatchProjectionShape = Readonly<{
-  state: 'completed' | 'refused' | 'reconciliation_required'
-  result?: CallResultValue
-  usage?: Usage
-  evidenceHash?: string
-  attemptRef?: string
-  dispatchState: 'completed' | 'failed' | 'reconciliation_required'
-}>
 
 export async function readPurchaseResolutionByCallRef(
   ctx: QueryCtx,

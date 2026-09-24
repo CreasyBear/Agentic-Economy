@@ -21,14 +21,11 @@ import {
 } from '@/modules/capability-execution/call-contracts'
 import type { ActionCtx } from '../../../../convex/_generated/server'
 import { internal } from '../../../../convex/_generated/api'
-import {
-  canonicalTerminalOutcome,
-  canonicalPort,
-  readCanonicalSnapshot,
-  finalizeCallDispatch,
-  type OpenDispatch,
-  parseContractOutput,
-} from '../../../../convex/capabilityCallProjection'
+import { canonicalTerminalOutcome } from '../../../../convex/lib/callLifecycle/terminalProjection'
+import { canonicalPort, readCanonicalSnapshot } from '../../../../convex/lib/callProjection/port'
+import { finalizeCallDispatch } from '../../../../convex/lib/callProjection/dispatch'
+import type { OpenDispatch } from '@/modules/capability-execution/call-projection/contracts'
+import { parseContractOutput } from '@/modules/capability-execution/call-projection/contract-output'
 import { recordX402TransportObservation } from './x402Route'
 
 export function buildBrokeredX402Receipt(input: Readonly<{

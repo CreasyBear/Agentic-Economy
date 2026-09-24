@@ -8,11 +8,7 @@ import {
   type CallReceipt,
 } from '@/modules/capability-execution/call-contracts'
 import { buildBrokeredX402Receipt } from '@/modules/capability-execution/call-runtime'
-import {
-  projectPureCallStatus,
-  reconciliationResult,
-} from '../../../convex/capabilityCallProjection'
-import type { RecoveryRow } from '../../../convex/capabilityCallProjection'
+import { projectPureCallStatus, reconciliationResult, type RecoveryRow } from '@/modules/capability-execution/convex'
 import { buildDevelopmentPublishedToolEvidence } from '../../../tools/dev/fixtures/capability-supply/development-published-tool-evidence'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import type { StableHashValue } from '@/modules/common/stable-hash'

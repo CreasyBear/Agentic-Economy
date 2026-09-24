@@ -8,7 +8,8 @@ import type { StableHashValue } from '@/modules/common/stable-hash'
 import { degradeBackend } from '@/lib/observability/degrade-backend'
 import { loadReadyRecoveryWork, reconcileRecovery, type RecoveryWorkContext } from '@/modules/capability-execution/call-runtime'
 import { readPublicExecutionStatus } from '@/modules/action-execution/runtime'
-import { parseContractOutput, projectRecoveryOuter, reconciliationResult } from './capabilityCallProjection'
+import { parseContractOutput, reconciliationResult } from '@/modules/capability-execution/convex'
+import { projectRecoveryOuter } from './lib/callProjection/recovery'
 
 /** Recover the already-paid response; never call the Provider or create a payment. */
 export const recover = internalAction({
@@ -79,11 +80,11 @@ async function retainedResponseEvidence(ctx: ActionCtx, work: RecoveryWorkContex
   const attempt = work.x402Attempt
   if (attempt === null || attempt.quarantinedResponseDigest === undefined) return undefined
   const txPrefix = `chain:${attempt.network}:`
-  const transactionHash = attempt.evidenceRefs.find(ref => ref.startsWith(txPrefix))?.slice(txPrefix.length)
+  const transactionHash = attempt.evidenceRefs.find((ref: string) => ref.startsWith(txPrefix))?.slice(txPrefix.length)
   const requestDigest = attempt.transportRequestDigest
-    ?? attempt.evidenceRefs.find(ref => ref.startsWith('response-request:'))?.slice('response-request:'.length)
+    ?? attempt.evidenceRefs.find((ref: string) => ref.startsWith('response-request:'))?.slice('response-request:'.length)
   const paymentResponseDigest = attempt.paymentResponseDigest
-    ?? attempt.evidenceRefs.find(ref => ref.startsWith('response-payment:'))?.slice('response-payment:'.length)
+    ?? attempt.evidenceRefs.find((ref: string) => ref.startsWith('response-payment:'))?.slice('response-payment:'.length)
   if (transactionHash === undefined || !/^0x[0-9a-fA-F]{64}$/.test(transactionHash)
     || requestDigest === undefined || paymentResponseDigest === undefined || attempt.reservationRef === undefined
     || work.operation.binding.authority.kind !== 'provider_connection') return undefined

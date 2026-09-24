@@ -15,7 +15,7 @@ import type {
 import type { PublishedTool } from '@/modules/capability-supply/public'
 import { env, type ActionCtx } from '../../../../convex/_generated/server'
 import { internal } from '../../../../convex/_generated/api'
-import type { OpenDispatch } from '../../../../convex/capabilityCallProjection'
+import type { OpenDispatch } from '@/modules/capability-execution/call-projection/contracts'
 
 type X402SettlementStatus = ReturnType<typeof x402SettlementStatusForObservation>
 

@@ -7,11 +7,7 @@ import { marketDispatchWorkpool } from '../../marketDispatchWorkpool'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { isRecord } from '@/modules/common/is-record'
 import { parsePublishedToolSnapshot } from '@/modules/capability-supply/public'
-import {
-  callAuthorityValue,
-  callResultValue,
-  usageValue,
-} from '@/modules/capability-execution/convex'
+import { callAuthorityValue, callResultValue } from '@/modules/capability-execution/convex'
 import { recordMarketEvidenceFact } from '../../marketEvidence'
 import { materializePurchaseResolutionRecord } from './purchaseResolutionMaterialize'
 import {
@@ -25,6 +21,7 @@ import {
   type DispatchResult,
   type OpenDispatchValue,
 } from './callIdentity'
+import type { CallDispatchProjectionShape } from './contracts'
 export type { DispatchResult, OpenDispatchValue } from './callIdentity'
 export {
   SELLER_CANARY_ROUTE_SIGNING_UNAVAILABLE_NEXT_ACTION,
@@ -42,16 +39,7 @@ type CallRow = Doc<'capabilityCalls'>
 type PersistedOperationAuthority = Infer<typeof callAuthorityValue>
 type DispatchCommand = ObjectType<typeof actionExecutionTransactArgs>
 type CallResultValue = Infer<typeof callResultValue>
-type Usage = Infer<typeof usageValue>
 
-export type CallDispatchProjectionShape = Readonly<{
-  state: 'completed' | 'refused' | 'reconciliation_required'
-  result?: CallResultValue
-  usage?: Usage
-  evidenceHash?: string
-  attemptRef?: string
-  dispatchState: 'completed' | 'failed' | 'reconciliation_required'
-}>
 
 /**
  * Refuse a Call only while its dispatch work is still unclaimed. The mutation
