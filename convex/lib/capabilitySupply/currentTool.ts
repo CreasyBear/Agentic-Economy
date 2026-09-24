@@ -31,7 +31,7 @@ import { normalizePricingConfig, pricingConfigDigest, type PricingConfig } from 
 import type { Doc, Id } from '../../_generated/dataModel'
 import type { QueryCtx } from '../../_generated/server'
 import { getExactRegisteredCapabilityContract } from '../../capabilityContractDocuments'
-import { capabilitySupplyGraphPorts } from '../../capabilitySupplyGraphPorts'
+import { capabilitySupplyGraphPorts } from './graphPorts/ports'
 import { toCapabilityOfferingRow } from '../../capabilitySupplyRowMappers'
 
 export const publishedOperationSnapshotReturns = v.union(

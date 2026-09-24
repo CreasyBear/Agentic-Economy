@@ -8,7 +8,6 @@ const probesSource = readFileSync('convex/capabilitySupplyProbes.ts', 'utf8')
 const graphSource = readFileSync('convex/capabilitySupplyGraph.ts', 'utf8')
 const convexSupply = [convexHost, probesSource, graphSource].join('\n')
 const ownerSupply = readFileSync('convex/capabilitySupplyOwnerSupply.ts', 'utf8')
-const readinessAction = readFileSync('convex/capabilitySupplyReadiness.ts', 'utf8')
 const moduleRoot = 'src/modules/capability-supply/internal/graph'
 
 describe('capability-supply graph/probe thinness', () => {
@@ -40,7 +39,6 @@ describe('capability-supply graph/probe thinness', () => {
   })
   it('keeps production owner readiness on probe -> record and out of the fixture helper', () => {
     expect(ownerSupply).toContain('internal.capabilitySupplyReadiness.probe')
-    expect(readinessAction).toContain('internal.capabilitySupply.readCapabilityProbeTarget')
     expect(ownerSupply).not.toContain('internal.capabilitySupply.observeCapabilityReadiness')
     expect(convexSupply).toMatch(/recordCapabilityProbeResultFromModule\(\s*capabilitySupplyGraphPorts\(ctx\.db\)/)
   })

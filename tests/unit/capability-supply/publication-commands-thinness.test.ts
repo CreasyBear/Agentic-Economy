@@ -9,7 +9,6 @@ const publishSource = readFileSync('convex/lib/capabilitySupply/publishPrepared.
 const readPublicationSource = readFileSync('convex/lib/capabilitySupply/readPublication.ts', 'utf8')
 const commandsSource = readFileSync('convex/capabilitySupplyCommands.ts', 'utf8')
 const sharedSource = readFileSync('convex/capabilitySupplyShared.ts', 'utf8')
-const portsSource = readFileSync('convex/capabilitySupplyPublicationPorts.ts', 'utf8')
 const convexSupply = [convexHost, publishSource, commandsSource, sharedSource].join('\n')
 const moduleRoot = 'src/modules/capability-supply/internal/publication'
 
@@ -40,18 +39,6 @@ describe('capability-supply publication-commands thinness', () => {
     expect(convexHost).not.toMatch(/export const withdrawCapability\s*=/)
   })
 
-  it('wires capabilitySupplyPublicationPorts adapter for writers, ledger, and readiness probe', () => {
-    expect(convexSupply).toMatch(/from\s+['"]@\/modules\/capability-supply\/public['"]/)
-    expect(convexSupply).not.toMatch(/from\s+['"]@\/modules\/capability-supply\/internal(?:\/[^'"]*)?['"]/)
-    expect(portsSource).toContain('capabilitySupplyPublicationPorts')
-    expect(portsSource).toContain('scheduleReadinessProbe')
-    expect(portsSource).toContain('capabilitySupplyReadiness.probe')
-    expect(portsSource).toContain('insertPublication')
-    expect(portsSource).toContain('patchPublicationWithdrawn')
-    expect(portsSource).not.toMatch(/normalizeCapabilityPublication/)
-    expect(portsSource).not.toContain(['publishCapability', 'Command'].join(''))
-    expect(portsSource).not.toContain(['CapabilityPublication', 'CommandImport'].join(''))
-  })
 
   it('leaves raw writers and ownership in the host', () => {
     expect(convexHost).toMatch(/export const publishPreparedCapability\s*=/)

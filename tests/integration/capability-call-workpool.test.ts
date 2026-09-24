@@ -52,7 +52,7 @@ import {
 } from '@/modules/money/public'
 import { PRODUCTION_COMMERCIAL_POLICY_CONTROLS } from '../helpers/commercial-policy-fixtures'
 import { defaultDnsResolver } from '@/modules/network-guard/public'
-import { capabilitySupplyGraphPorts } from '../../convex/capabilitySupplyGraphPorts'
+import { capabilitySupplyGraphPorts } from '../../convex/lib/capabilitySupply/graphPorts/ports'
 import { qualifySuppliedCandidate } from '@/modules/capability-supply/public'
 import {
   setPublicSourceTransportForTests,

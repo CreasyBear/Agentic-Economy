@@ -1,14 +1,15 @@
 import { convexTest } from 'convex-test'
 import { describe, expect, it, vi } from 'vitest'
+import type * as CronAdmission from '../../convex/lib/workloadCron/admission'
 
-vi.mock('../../convex/workloadCron', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('../../convex/workloadCron')>()),
+vi.mock('../../convex/lib/workloadCron/admission', async (importOriginal) => ({
+  ...(await importOriginal<typeof CronAdmission>()),
   reconcileWorkloadCronSnapshot: vi.fn(async (_ctx, _name, snapshot) => snapshot),
 }))
 
 import { api, internal } from '../../convex/_generated/api'
 import { scheduleDueCapabilityProbesHandler } from '../../convex/capabilitySupplyProbes'
-import { probeHandler } from '../../convex/capabilitySupplyReadiness'
+import { probeHandler } from '../../convex/lib/capabilitySupply/readiness/probe'
 import schema from '../../convex/schema'
 import { defineCapabilityContract } from '@/modules/capability-contract/public'
 import { canonicalDigest } from '@/modules/common/canonical-digest'

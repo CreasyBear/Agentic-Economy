@@ -25,7 +25,7 @@ import {
   buildAgentAccessPolicy,
 } from '@/modules/agent-access/policy'
 import { defaultDnsResolver } from '@/modules/network-guard/public'
-import { capabilitySupplyGraphPorts } from '../../convex/capabilitySupplyGraphPorts'
+import { capabilitySupplyGraphPorts } from '../../convex/lib/capabilitySupply/graphPorts/ports'
 import { qualifySuppliedCandidate, x402SellerClaimDigest } from '@/modules/capability-supply/public'
 import { createX402ProviderConnection } from '@/modules/capability-supply/provider-connection'
 import { toRow as providerConnectionRow } from '../../convex/lib/providerConnections/codecs'

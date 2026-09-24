@@ -7,7 +7,7 @@ import {
 import { changeOfferingStatusInState, upsertAccessPathInState } from '@/modules/catalog/public'
 import type { Doc, Id } from './_generated/dataModel'
 import type { MutationCtx, QueryCtx } from './_generated/server'
-import { capabilitySupplyPublicationPorts } from './capabilitySupplyPublicationPorts'
+import { capabilitySupplyPublicationPorts } from './lib/capabilitySupply/publicationPorts/ports'
 import { capabilitySupplyWriterPorts } from './capabilitySupplyWriterPorts'
 import { loadExactOfferingSourceState, persistOfferingSourceState } from './catalogOfferingMutations'
 

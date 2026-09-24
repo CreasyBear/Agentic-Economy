@@ -5,7 +5,7 @@ import {
   readCapabilityProbeTarget,
 } from '@/modules/capability-supply/public'
 import { ownerSupplyLiteral, ownerSupplyOptionalNumber, ownerSupplyStringArray } from '@/modules/capability-supply/owner-supply-validators'
-import { capabilitySupplyGraphPorts } from './capabilitySupplyGraphPorts'
+import { capabilitySupplyGraphPorts } from './lib/capabilitySupply/graphPorts/ports'
 import type { MutationCtx, QueryCtx } from './_generated/server'
 import type { Doc, Id } from './_generated/dataModel'
 import { reconstructOwnerSourceMaterial } from './capabilitySupplyOwnerSourceMaterial'

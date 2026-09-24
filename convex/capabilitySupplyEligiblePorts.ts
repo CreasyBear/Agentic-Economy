@@ -12,7 +12,7 @@ import { normalizePricingConfig, pricingConfigDigest } from '@/modules/money/pub
 
 import type { Doc, Id } from './_generated/dataModel'
 import type { QueryCtx } from './_generated/server'
-import { capabilitySupplyGraphPorts } from './capabilitySupplyGraphPorts'
+import { capabilitySupplyGraphPorts } from './lib/capabilitySupply/graphPorts/ports'
 import { getActiveExactCapabilityContract } from './capabilityContractDocuments'
 import { toCapabilityBindingRow, toCapabilityOfferingRow } from './capabilitySupplyRowMappers'
 import { toDomain as providerConnectionDomain } from './lib/providerConnections/codecs'

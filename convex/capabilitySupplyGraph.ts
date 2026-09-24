@@ -5,7 +5,7 @@ import {
 } from '@/modules/capability-supply/public'
 
 import { resolveAdminAuthority } from './authz'
-import { capabilitySupplyGraphPorts } from './capabilitySupplyGraphPorts'
+import { capabilitySupplyGraphPorts } from './lib/capabilitySupply/graphPorts/ports'
 import type { QueryCtx } from './_generated/server'
 import {
   commercialRelationshipValue,

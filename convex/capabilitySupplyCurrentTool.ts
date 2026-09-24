@@ -13,7 +13,7 @@ import {
 import type { Doc } from './_generated/dataModel'
 import { internalQuery, internalMutation, type QueryCtx } from './_generated/server'
 import { getExactRegisteredCapabilityContract } from './capabilityContractDocuments'
-import { capabilitySupplyGraphPorts } from './capabilitySupplyGraphPorts'
+import { capabilitySupplyGraphPorts } from './lib/capabilitySupply/graphPorts/ports'
 import { toolProviderRouteabilityIsFrozen } from './lib/providerOffboardingFreeze'
 import { observeCapabilityReadinessHandler } from './capabilitySupplyProbes'
 import {

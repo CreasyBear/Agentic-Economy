@@ -11,7 +11,7 @@ import {
   agentAccessPrincipalValue,
   verifySupplyAgentPrincipal,
 } from '../../agentAccessPrincipals'
-import { capabilitySupplyPublicationPorts } from '../../capabilitySupplyPublicationPorts'
+import { capabilitySupplyPublicationPorts } from './publicationPorts/ports'
 import { capabilitySupplyWriterPorts } from '../../capabilitySupplyWriterPorts'
 import {
   registerCapabilityOffering,
@@ -26,7 +26,7 @@ import { admitInteractiveOwnerConsequence } from '../ownerConsequence'
 import { providerRouteabilityIsFrozen } from '../providerOffboardingFreeze'
 import { isNativeSupplySource, nativeSubmissionBusiness, nativeSubmissionPorts } from '../../capabilitySupplyNativeAdmission'
 import { upsertProviderToolIdentity } from '../../capabilityProviderToolProjection'
-import { upsertProviderDirectoryRows } from '../../x402DirectoryIndexStore'
+import { upsertProviderDirectoryRows } from '../x402DirectoryIndex/providerRows'
 import {
   ownsPublishedBusiness,
   ownsPublishedBusinessForOwnerId,

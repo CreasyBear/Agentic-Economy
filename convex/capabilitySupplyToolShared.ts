@@ -29,7 +29,7 @@ import {
 import type { Doc } from './_generated/dataModel'
 import type { QueryCtx } from './_generated/server'
 import { getExactRegisteredCapabilityContract } from './capabilityContractDocuments'
-import { capabilitySupplyGraphPorts } from './capabilitySupplyGraphPorts'
+import { capabilitySupplyGraphPorts } from './lib/capabilitySupply/graphPorts/ports'
 import { readManagedX402InspectionTargetForQualifiedCandidate } from './capabilitySupplyCurrentTool'
 import { toolProviderRouteabilityIsFrozen } from './lib/providerOffboardingFreeze'
 import { toCapabilityBindingRow, toCapabilityOfferingRow } from './capabilitySupplyRowMappers'

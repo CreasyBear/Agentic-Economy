@@ -27,7 +27,7 @@ import {
 
 import type { Doc, Id } from '../../_generated/dataModel'
 import type { MutationCtx } from '../../_generated/server'
-import { capabilitySupplyPublicationPorts } from '../../capabilitySupplyPublicationPorts'
+import { capabilitySupplyPublicationPorts } from './publicationPorts/ports'
 import { capabilitySupplyWriterPorts } from '../../capabilitySupplyWriterPorts'
 import { toCapabilityBindingRow, toCapabilityOfferingRow } from '../../capabilitySupplyRowMappers'
 import { preparedPublicationMaterialValue } from '../../capabilitySupplyPublish'

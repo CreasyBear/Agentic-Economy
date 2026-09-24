@@ -35,7 +35,7 @@ import {
   projectBusinessSupplyToPublicApi,
 } from '../src/modules/registry/public'
 import { qualifySuppliedCandidate } from '../src/modules/capability-supply/public'
-import { capabilitySupplyGraphPorts } from './capabilitySupplyGraphPorts'
+import { capabilitySupplyGraphPorts } from './lib/capabilitySupply/graphPorts/ports'
 import { directoryListingEligible } from './capabilitySupplyDirectoryEligibility'
 
 const MAX_BUSINESS_CATALOG_OFFERINGS_PER_REBUILD = 100
