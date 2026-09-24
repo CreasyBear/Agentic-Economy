@@ -2,7 +2,7 @@ import { listUIMessages, mockModel, saveMessage, saveMessages } from '@convex-de
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { api, components, internal } from '../../convex/_generated/api'
-import { streamDurableChatResponse } from '../../convex/chatGenerate'
+import { streamDurableChatResponse } from '../../convex/lib/chat/generate/stream'
 import { projectToolCard } from '@/modules/chat/tool-card'
 import { convexTestWithMarketComponents, publishedBusinessOwner } from '../helpers/convex-fixtures'
 
@@ -566,11 +566,7 @@ describe.sequential('durable Tool chat messaging and shares', () => {
     expect(JSON.stringify(shared)).not.toMatch(
       /SECRET|rawOutput|metadata|reasoning|model|usage|errorText|input|arbitrary_internal_tool/u,
     )
-    type SharedPart =
-      | { type: 'text'; text: string }
-      | { type: 'tool-card'; kind: 'status'; summary: string }
-      | { type: 'tool-card'; kind: 'choices' }
-    const publicParts: SharedPart[] = shared.page.flatMap((message: { parts: SharedPart[] }) => message.parts)
+    const publicParts = shared.page.flatMap((message) => message.parts)
     const boundedText = publicParts.find((part) => part.type === 'text' && part.text.startsWith('😀'))
     expect(boundedText?.type).toBe('text')
     expect(Array.from(boundedText?.type === 'text' ? boundedText.text : '')).toHaveLength(8_000)
