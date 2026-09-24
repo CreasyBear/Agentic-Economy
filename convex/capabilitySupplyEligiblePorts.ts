@@ -13,9 +13,10 @@ import type { Doc, Id } from './_generated/dataModel'
 import type { QueryCtx } from './_generated/server'
 import { capabilitySupplyGraphPorts } from './lib/capabilitySupply/graphPorts/ports'
 import { loadProviderConnection } from './lib/capabilitySupply/graphPorts/providerConnection'
-import { getActiveExactCapabilityContract } from './capabilityContractDocuments'
+import { getActiveExactCapabilityContract } from './lib/capabilityContract/documents/reads'
 import { toCapabilityBindingRow, toCapabilityOfferingRow } from './capabilitySupplyRowMappers'
 export function eligibleSupplyPorts(db: QueryCtx['db']): EligibleSupplyPorts {
+  const graphPorts = capabilitySupplyGraphPorts(db)
   return {
     listAdmittedConformantBindingsByNetwork: async (networkId, take) => {
       const rows = await db.query('capabilityTransportBindings')
@@ -44,29 +45,11 @@ export function eligibleSupplyPorts(db: QueryCtx['db']): EligibleSupplyPorts {
         : null
     },
     loadProviderConnection: (connectionRef) => loadProviderConnection(db, connectionRef),
-    catalogOriginIsCurrent: async (origin, businessId) => {
-      const offering = await db.query('businessOfferings')
-        .withIndex('by_offeringRef', (query) => query.eq('offeringRef', origin.offeringRef)).unique()
-      if (offering === null || String(offering.businessId) !== String(businessId)
-        || offering.status !== 'published' || offering.currentRevision !== origin.offeringRevision) return false
-      const revision = await db.query('businessOfferingRevisions')
-        .withIndex('by_offeringRef_and_revision', (query) => (
-          query.eq('offeringRef', origin.offeringRef).eq('revision', origin.offeringRevision)
-        )).unique()
-      if (revision === null || revision.sourceHash !== origin.offeringSourceHash) return false
-      if (origin.declaredAccessPathRef === undefined) return true
-      const declaredAccessPathRef = origin.declaredAccessPathRef
-      const path = await db.query('offeringAccessPaths')
-        .withIndex('by_accessPathRef', (query) => query.eq('accessPathRef', declaredAccessPathRef)).unique()
-      return path !== null && path.status === 'published'
-        && path.offeringRef === origin.offeringRef
-        && path.offeringRevision === origin.offeringRevision
-        && path.offeringSourceHash === origin.offeringSourceHash
-        && path.sourceHash === origin.accessPathSourceHash
-    },
+    catalogOriginIsCurrent: async (origin, businessId) =>
+      await graphPorts.catalogOriginIsCurrent?.(origin, businessId) ?? false,
     getActiveExactCapabilityContract: (ref) => getActiveExactCapabilityContract(db, ref),
     qualifySuppliedCandidate: (candidate, now) => qualifySuppliedCandidate(
-      capabilitySupplyGraphPorts(db),
+      graphPorts,
       { candidate, now },
     ),
     loadCurrentPublicationByBindingId: async (bindingId) => {
