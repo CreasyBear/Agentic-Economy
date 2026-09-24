@@ -22,7 +22,7 @@ import { nativeSubmissionBusiness } from './capabilitySupplyNativeAdmission'
 import {
   loadExactOfferingSourceState,
   persistOfferingSourceState,
-} from './catalogOfferingMutations'
+} from './lib/catalog/offerings/persistence'
 import { requireSourceWrite, sourceWriteArgs } from './sourceWriteAdmission'
 import { upsertProviderToolIdentity } from './capabilityProviderToolProjection'
 

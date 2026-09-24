@@ -1,11 +1,11 @@
 import { convexTest } from 'convex-test'
 import { describe, expect, it } from 'vitest'
-import { persistOfferingSourceState } from '../../../convex/catalog'
+import { persistOfferingSourceState } from './persistence'
 import type { OfferingSourceState } from '@/modules/catalog/public'
 import { brandNonEmpty } from '@/modules/common/ids'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
-import schema from '../../../convex/schema'
-import { convexModules as modules, publishedBusinessOwner } from '../../helpers/convex-fixtures'
+import schema from '../../../schema'
+import { convexModules as modules, publishedBusinessOwner } from '../../../../tests/helpers/convex-fixtures'
 
 const empty: OfferingSourceState = { offerings: [], revisions: [], accessPaths: [], operations: [] }
 

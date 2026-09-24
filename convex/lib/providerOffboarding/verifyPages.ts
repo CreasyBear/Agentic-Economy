@@ -2,7 +2,7 @@ import type { MutationCtx } from '../../_generated/server'
 import {
   loadExactOfferingSourceState,
   persistOfferingSourceState,
-} from '../../catalogOfferingMutations'
+} from '../catalog/offerings/persistence'
 import {
   changeOfferingStatusInState,
   withdrawAccessPathInState,

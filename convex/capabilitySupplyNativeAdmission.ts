@@ -9,7 +9,7 @@ import type { Doc, Id } from './_generated/dataModel'
 import type { MutationCtx, QueryCtx } from './_generated/server'
 import { capabilitySupplyPublicationPorts } from './lib/capabilitySupply/publicationPorts/ports'
 import { capabilitySupplyWriterPorts } from './capabilitySupplyWriterPorts'
-import { loadExactOfferingSourceState, persistOfferingSourceState } from './catalogOfferingMutations'
+import { loadExactOfferingSourceState, persistOfferingSourceState } from './lib/catalog/offerings/persistence'
 
 type ReadContext = Pick<QueryCtx, 'db'>
 type CatalogOrigin = Extract<CapabilityPublicationOfferingDraft['origin'], { kind: 'catalog_offering' }>

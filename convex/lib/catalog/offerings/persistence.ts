@@ -1,7 +1,7 @@
 import type { GenericDatabaseReader, GenericDatabaseWriter } from 'convex/server'
-import type { DataModel, Doc, Id } from '../../_generated/dataModel'
-import { brandNonEmpty } from '../../../src/modules/common/ids'
-import { compareExactAmounts, exactAmountSchema, rescaleExactAmount } from '../../../src/modules/money/public'
+import type { DataModel, Doc, Id } from '../../../_generated/dataModel'
+import { brandNonEmpty } from '../../../../src/modules/common/ids'
+import { compareExactAmounts, exactAmountSchema, rescaleExactAmount } from '../../../../src/modules/money/public'
 import {
   BusinessOfferingStatusValues,
   OfferingAccessPathStatusValues,
@@ -16,7 +16,7 @@ import {
   type OfferingAccessPathStatus,
   type OfferingPrice,
   type OfferingSourceState,
-} from '../../../src/modules/catalog/public'
+} from '../../../../src/modules/catalog/public'
 
 export type OfferingCommandTarget = Readonly<{
   offeringRef?: string

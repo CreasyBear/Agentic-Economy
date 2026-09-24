@@ -7,12 +7,10 @@ import type { DataModel, Id } from './_generated/dataModel'
 
 import { literalUnion } from '../src/modules/common/convex-literals'
 import { resolveBusinessActor } from './authz'
-import { loadOfferingSourceState } from './catalogOfferingMutations'
+import { loadOfferingSourceState } from './lib/catalog/offerings/persistence'
 import { readBusinessSupplyProjectionSnapshot } from './businessSupplyProjectionSnapshot'
-import {
-  deriveBusinessOfferingSupportFromCapabilitySupply,
-  readLiveBusinessSupplyProjection,
-} from './capabilitySupplyProjection'
+import { deriveBusinessOfferingSupportFromCapabilitySupply } from './lib/capabilitySupply/projection/support'
+import { readLiveBusinessSupplyProjection } from './lib/capabilitySupply/projection/reads'
 import { normalizeSlug } from '../src/modules/common/normalize-slug'
 import {
   OfferingPriceTaxTreatmentValues,

@@ -1,7 +1,7 @@
 import type { Doc, Id } from '../../_generated/dataModel'
 import type { MutationCtx } from '../../_generated/server'
 import { upsertProviderToolIdentity } from '../../capabilityProviderToolProjection'
-import { upsertOfferingAccessPathCommand } from '../../catalogOfferingMutations'
+import { upsertOfferingAccessPathCommand } from './offerings/commands'
 
 type Input = Readonly<{
   businessId: Id<'businesses'>

@@ -10,7 +10,7 @@ vi.mock('../../../convex/sourceWriteAdmission', () => ({
   requireSourceWrite: vi.fn(async () => ({ kind: 'accepted' as const })),
 }))
 
-import { createBusinessOfferingHandler } from '../../../convex/catalogOfferingMutations'
+import { createBusinessOfferingHandler } from '../../../convex/lib/catalog/offerings/commands'
 
 const actor = {
   kind: 'authenticated_owner' as const,

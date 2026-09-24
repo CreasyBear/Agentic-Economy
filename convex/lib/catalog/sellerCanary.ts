@@ -3,12 +3,8 @@ import { v } from 'convex/values'
 
 import type { MutationCtx } from '../../_generated/server'
 import type { Doc, Id } from '../../_generated/dataModel'
-import { resolveBusinessActor } from '../../authz'
-import { requireSourceWrite } from '../../sourceWriteAdmission'
-import {
-  deriveBusinessOfferingSupportFromCapabilitySupply,
-  rebuildBusinessSupplyProjectionSnapshotCommand,
-} from '../../capabilitySupplyProjection'
+import { deriveBusinessOfferingSupportFromCapabilitySupply } from '../capabilitySupply/projection/support'
+import { rebuildBusinessSupplyProjectionSnapshotCommand } from '../capabilitySupply/projection/snapshot'
 import {
   SELLER_ONBOARDING_CANARY_PLATFORM_APPLICATION_REF,
   SELLER_ONBOARDING_CANARY_PLATFORM_GRANT_REF,
@@ -37,16 +33,7 @@ import {
 } from '../capabilitySupply/currentTool'
 import { providerRouteabilityIsFrozen } from '../providerOffboardingFreeze'
 
-type OfferingSourceMutationArgs = {
-  businessId: Id<'businesses'>
-  operationKey: string
-  correlationId: string
-  sourceWrite?: unknown
-}
-
-export type PromoteX402SellerCanaryArgs = OfferingSourceMutationArgs & { canaryRef: string }
-
-export type PromoteX402SellerCanaryResult =
+type PromoteX402SellerCanaryResult =
   | {
       kind: 'promoted' | 'replayed'
       canaryRef: string
@@ -435,20 +422,6 @@ async function admitExactSellerCanaryPublication(
   return true
 }
 
-export async function promoteX402SellerCanaryHandler(
-  ctx: MutationCtx,
-  args: PromoteX402SellerCanaryArgs,
-): Promise<PromoteX402SellerCanaryResult> {
-  const actor = await resolveBusinessActor(ctx)
-  if (actor.kind !== 'authenticated_owner') return { kind: 'refused', code: 'unauthenticated' }
-  const sourceWrite = await requireSourceWrite(ctx, args, 'catalog_publish')
-  if (sourceWrite.kind === 'rejected') return { kind: 'refused', code: 'source_write_refused' }
-  return await promoteX402SellerCanaryForOwner(ctx, {
-    ownerId: actor.canonicalAccountRef,
-    businessId: args.businessId,
-    canaryRef: args.canaryRef,
-  })
-}
 
 export async function promoteAdmittedSellerCanaryHandler(
   ctx: MutationCtx,
@@ -471,7 +444,7 @@ export async function promoteAdmittedSellerCanaryHandler(
   })
 }
 
-export async function promoteX402SellerCanaryForOwner(
+async function promoteX402SellerCanaryForOwner(
   ctx: MutationCtx,
   args: Readonly<{ ownerId: string; businessId: Id<'businesses'>; canaryRef: string }>,
 ): Promise<PromoteX402SellerCanaryResult> {
@@ -730,7 +703,9 @@ async function markSellerCanaryAdmissionPublished(
   })
 }
 
-export const promoteX402SellerCanaryResultValue = v.union(
+export const promoteAdmittedSellerCanaryArgs = { canaryRef: v.string() }
+
+export const promoteAdmittedSellerCanaryResult = v.union(
   v.object({
     kind: v.union(v.literal('promoted'), v.literal('replayed')),
     canaryRef: v.string(),

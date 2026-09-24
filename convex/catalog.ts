@@ -6,7 +6,7 @@ import {
   authorizeProviderBusinessHandler,
   ensureProviderBusinessHandler,
   renameProviderBusinessHandler,
-} from './catalogOfferingMutations'
+} from './lib/catalog/offerings/providerBusiness'
 import {
   currentOwnerProviderIdentityResult,
   getCurrentOwnerProviderIdentityHandler,
@@ -14,17 +14,6 @@ import {
   getPublicBusinessCatalogBySlugHandler,
   publicCatalogReadbackResult,
 } from './catalogPublicReads'
-export {
-  deriveBusinessOfferingSupportFromCapabilitySupply,
-  rebuildBusinessSupplyProjectionSnapshotCommand,
-} from './capabilitySupplyProjection'
-export {
-  persistOfferingSourceState,
-  readCatalogDescriptor,
-  reviseBusinessOfferingCommand,
-  upsertOfferingAccessPathCommand,
-  withdrawOfferingAccessPathCommand,
-} from './catalogOfferingMutations'
 
 const ensureProviderBusinessResult = v.union(
   v.object({

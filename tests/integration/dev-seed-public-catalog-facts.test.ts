@@ -11,7 +11,7 @@ import { listRouteableCapabilitySupply } from '../../src/modules/capability-supp
 import {
   DEV_SEED_CATALOG_ACCOUNT_REF,
   DEV_SEED_CATALOG_PRINCIPAL_REF,
-} from '../../convex/catalogOfferingMutations'
+} from '../../convex/lib/catalog/devSeedAuthority'
 import { AGENT_ACCESS_DEFAULT_APPLICATION_REF } from '../../src/modules/agent-access/agent-access'
 import { MARKET_TOOLS_CALL_SCOPE, agentAuthorityScopeForMode } from '../../src/modules/agent-access/contract'
 import { issuedAgentGrantRef } from '../../src/modules/agent-access/issued-agent-binding'
