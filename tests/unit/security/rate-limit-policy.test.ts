@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest'
 
-import { rateLimitedResponse, requestAdmissionKey, setHttpRateLimitAdmissionForTests, withHttpRateLimit } from '@/lib/server/rate-limit'
+import { anonymousChatAdmissionKey, rateLimitedResponse, requestAdmissionKey, setHttpRateLimitAdmissionForTests, withHttpRateLimit } from '@/lib/server/rate-limit'
 // The Convex limiter owns quota state. HTTP admission exposes only success and
 // retry delay, so HTTP must not invent a remaining balance from policy capacity.
 describe('HTTP admission quota headers', () => {
@@ -57,5 +57,29 @@ describe('HTTP admission quota headers', () => {
     }))
     expect(fromBearer).toBe(fromIp)
     expect(fromApiKey).toBe(fromIp)
+  })
+
+  it('ignores forged ingress IP headers on Vercel for generic and anonymous-chat buckets', () => {
+    const previousVercel = process.env.VERCEL
+    process.env.VERCEL = '1'
+    const request = (headers: Record<string, string>) => new Request('https://ae.test/x', { headers })
+    try {
+      const vercelOnly = request({ 'x-vercel-forwarded-for': '198.51.100.7' })
+      const forged = request({
+        'x-vercel-forwarded-for': '198.51.100.7',
+        'cf-connecting-ip': '203.0.113.9',
+        'x-real-ip': '203.0.113.10',
+      })
+      const withoutVercel = request({})
+      for (const key of [requestAdmissionKey, anonymousChatAdmissionKey]) {
+        expect(key(forged)).toBe(key(vercelOnly))
+        expect(key(request({ 'cf-connecting-ip': '203.0.113.9' }))).toBe(key(withoutVercel))
+        expect(key(request({ 'x-real-ip': '203.0.113.10' }))).toBe(key(withoutVercel))
+        expect(key(forged)).not.toBe(key(withoutVercel))
+      }
+    } finally {
+      if (previousVercel === undefined) delete process.env.VERCEL
+      else process.env.VERCEL = previousVercel
+    }
   })
 })

@@ -135,11 +135,10 @@ export function anonymousChatAdmissionKey(request: Request): string {
 }
 
 function trustedIngressIp(request: Request): string {
-  return firstNonEmptyHeader(request, [
-    'x-vercel-forwarded-for',
-    'cf-connecting-ip',
-    'x-real-ip',
-  ])?.split(',')[0]?.trim() || 'unknown'
+  const ingress = process.env.VERCEL === undefined
+    ? firstNonEmptyHeader(request, ['x-vercel-forwarded-for', 'cf-connecting-ip', 'x-real-ip'])
+    : request.headers.get('x-vercel-forwarded-for')
+  return ingress?.split(',')[0]?.trim() || 'unknown'
 }
 
 function firstNonEmptyHeader(request: Request, names: readonly string[]): string | undefined {
