@@ -125,15 +125,10 @@ describe('ChatTranscript first-page gate', () => {
     expect(resolved.container.querySelector('[aria-busy="true"]')).toBeNull()
   })
 
-  it('uses the Ask stage body sentence without a second title', () => {
+  it('shows the greeting heading in a resolved-empty transcript', () => {
     render(<ChatTranscript messages={[]} />)
 
-    expect(screen.queryByRole('heading')).toBeNull()
-    expect(document.querySelector('[data-slot="empty-title"]')?.textContent).toBe('Find Tools for an Agent.')
-    expect(screen.getByText('Find Tools for an Agent.')).toBeTruthy()
-    expect(screen.getByText(
-      'Compare and inspect. Then use one with your Agent. Price is on the card.',
-    )).toBeTruthy()
+    expect(screen.getByRole('heading', { name: 'What can I find for you?' })).toBeTruthy()
   })
 
   it('renders assistant markdown and leaves the user bubble plain', () => {
@@ -168,12 +163,12 @@ describe('ChatTranscript first-page gate', () => {
       }]}
     />)
 
-    expect(screen.getByText('Search tools…')).toBeTruthy()
+    expect(document.querySelector('article[aria-label="Assistant"] details:not([open]) > summary')).not.toBeNull()
     expect(document.querySelector('[data-tool-card="registry.tools.search"]')).toBeNull()
     expect(screen.queryByText('Thinking…')).toBeNull()
   })
 
-  it('places prose on either side of a tool and copies a fenced block', async () => {
+  it('groups answer prose after the work disclosure and copies a fenced block', async () => {
     const writeText = vi.fn(async () => undefined)
     Object.defineProperty(navigator, 'clipboard', {
       configurable: true,
@@ -194,10 +189,11 @@ describe('ChatTranscript first-page gate', () => {
     }]} />)
 
     const before = screen.getByText('Before the search.')
-    const tool = screen.getByText('Search tools…')
+    const tool = document.querySelector('article[aria-label="Assistant"] details > summary')
     const after = screen.getByText('After the search.')
-    expect(before.compareDocumentPosition(tool) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
-    expect(tool.compareDocumentPosition(after) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    if (tool === null) throw new Error('Work disclosure missing')
+    expect(tool.compareDocumentPosition(before) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(before.compareDocumentPosition(after) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
     expect(screen.queryByText('   ')).toBeNull()
 
     fireEvent.click(screen.getByRole('button', { name: 'Copy code' }))
@@ -231,7 +227,7 @@ describe('ChatTranscript first-page gate', () => {
     expect(screen.queryByRole('button', { name: 'Singapore' })).toBeNull()
   })
 
-  it('places a search result inside one openui stack and compares Tools in a table', () => {
+  it('keeps openui prose without exposing empty search cards and compares Tools in a table', () => {
     const toolRef = `operation:v1:${'a'.repeat(64)}`
     render(<ChatTranscript messages={[{
       id: 'assistant-1',
@@ -254,7 +250,7 @@ describe('ChatTranscript first-page gate', () => {
     }]} />)
 
     expect(screen.getByText('Two lookups match the request.')).toBeTruthy()
-    expect(document.querySelectorAll('[data-tool-card="registry.tools.search"]')).toHaveLength(1)
+    expect(document.querySelectorAll('[data-tool-card="registry.tools.search"]')).toHaveLength(0)
     expect(screen.queryByText('```openui')).toBeNull()
 
     cleanup()

@@ -26,11 +26,20 @@ describe('generative chat leaves', () => {
     expect(screen.getByRole('region', { name: 'Answer' })).toHaveAttribute('aria-busy', 'true')
     expect(screen.getByText('Live answer')).toHaveTextContent('Live answer')
   })
+  it('preserves structured markdown in an answer', () => {
+    render(<AnswerBlock view={{ markdown: '## Current weather\n\n**Sydney** has `22°C`.\n\n- Sunny\n- Breezy\n\n| Day | High |\n| --- | --- |\n| Today | 22°C |' }} />)
+    const answer = screen.getByRole('region', { name: 'Answer' })
+    expect(answer.querySelector('h2')?.textContent).toBe('Current weather')
+    expect(answer.querySelectorAll('li')).toHaveLength(2)
+    expect(answer.querySelector('strong')?.textContent).toBe('Sydney')
+    expect(answer.querySelector('code')?.textContent).toBe('22°C')
+    expect(answer.querySelector('table')?.textContent).toContain('Today')
+  })
   it('keeps real work collapsed until expanded', () => {
     render(<WorkDisclosure view={{ summary: 'Searched 12 tools · compared 2', steps: [{ id: 'search', label: 'Searched tools', status: 'complete' }] }} />)
     expect(screen.getByText(/Searched 12 tools/)).toBeInTheDocument()
     expect(screen.getByText('Searched tools').closest('details')).not.toHaveAttribute('open')
-    fireEvent.click(screen.getByText('How I got this'))
+    fireEvent.click(screen.getByText(/Searched 12 tools/))
     expect(screen.getByText('Searched tools').closest('details')).toHaveAttribute('open')
   })
   it('links numbered sources to exact Tool pages', () => {
@@ -85,6 +94,10 @@ describe('generative chat leaves', () => {
     expect(option).toMatchObject({ price: 'Price to be confirmed', readiness: 'unverified', selectable: true })
     expect(option.seller).toBeUndefined()
     expect(projectSourcesFromCards([card]).sources).toHaveLength(1)
-    expect(projectWorkFromCards([card]).summary).toBe('Found 12 tools')
+    expect(projectWorkFromCards([card]).summary).toBe('Found 1 tool')
+  })
+  it('counts a Tool once when repeated searches return the same result', () => {
+    const result = { kind: 'choices', toolId: 'registry.tools.search', title: 'Search', state: 'complete', toolRefs: ['tool:weather'], count: 1, choices: [{ toolRef: 'tool:weather', title: 'Weather Current' }] } as const
+    expect(projectWorkFromCards([result, result]).summary).toBe('Found 1 tool')
   })
 })

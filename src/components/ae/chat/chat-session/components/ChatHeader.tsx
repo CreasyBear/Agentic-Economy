@@ -33,7 +33,7 @@ export function ChatHeader({
         <Sheet>
           <SheetTrigger
             render={
-              <Button type="button" variant="ghost" size="icon" className="min-h-touch min-w-touch" aria-label={chatHistory.openHistory}>
+              <Button type="button" variant="ghost" size="icon" className="min-h-touch min-w-touch max-sm:!size-8 max-sm:!min-h-8 max-sm:!min-w-8 [&_svg]:size-5" aria-label={chatHistory.openHistory}>
                 <MenuIcon aria-hidden="true" />
               </Button>
             }
@@ -43,26 +43,27 @@ export function ChatHeader({
               <SheetTitle>{chatHistory.sheetTitle}</SheetTitle>
               <SheetDescription>{chatHistory.sheetDescription}</SheetDescription>
             </SheetHeader>
+            {authenticated && onEnableSpending !== undefined && !ownerChatEnabled ? (
+              <Button type="button" variant="ghost" className="mx-3 h-auto justify-start rounded-md px-3 py-3 text-left text-sm whitespace-normal" disabled={busy}
+                onClick={onEnableSpending}>Enable approval-only chat spending</Button>
+            ) : null}
+            {authenticated && threadId !== null ? (
+              <div className="grid px-3">
+                <Button type="button" variant="ghost" className="justify-start" disabled={busy} onClick={onIssueShare}>{shareState === 'active' ? chatHistory.shareGet : chatHistory.shareCreate}</Button>
+                {shareState === 'active' ? <Button type="button" variant="ghost" className="justify-start" disabled={busy} onClick={onRevokeShare}>{chatHistory.shareRevoke}</Button> : null}
+              </div>
+            ) : null}
             {mobileHistory}
           </SheetContent>
         </Sheet>
       ) : null}
-      {slot === null ? (
-        <div className="min-w-0 flex-1">
-          <h1 className="truncate text-sm font-medium">{chatStageTitle(threadId)}</h1>
-          <p className="text-xs text-muted-foreground">{chatStageDetail(authenticated)}</p>
-        </div>
-      ) : (
-        <>
-          <h1 className="sr-only">{chatStageTitle(threadId)}</h1>
-          <p className="sr-only">{chatStageDetail(authenticated)}</p>
-        </>
-      )}
-      <Button type="button" variant="ghost" size="icon" className="min-h-touch min-w-touch" aria-label={chatHistory.newChat} onClick={onNewChat}>
+      <h1 className="order-first min-w-0 flex-1 truncate text-sm font-medium sm:order-none" title={chatStageTitle(threadId)}>{chatStageTitle(threadId)}</h1>
+      <p className="sr-only">{chatStageDetail(authenticated)}</p>
+      <Button type="button" variant="ghost" size="icon" className="min-h-touch min-w-touch max-sm:!size-8 max-sm:!min-h-8 max-sm:!min-w-8 [&_svg]:size-5" aria-label={chatHistory.newChat} onClick={onNewChat}>
         <PlusIcon aria-hidden="true" />
       </Button>
       {authenticated && threadId !== null ? (
-        <div className="flex items-center gap-intra">
+        <div className="hidden items-center gap-intra sm:flex">
           <Button type="button" variant="ghost" size="icon" className="min-h-touch min-w-touch" aria-label={shareState === 'active' ? chatHistory.shareGet : chatHistory.shareCreate} disabled={busy} onClick={onIssueShare}>
             <Share2Icon aria-hidden="true" />
           </Button>
@@ -78,24 +79,18 @@ export function ChatHeader({
   return (
     <>
       {slot === null ? (
-        <header className="flex min-h-14 shrink-0 items-center gap-related border-b border-border px-gutter">
+        <header className="flex min-h-11 shrink-0 items-center gap-1 px-4 sm:min-h-14 sm:gap-2 sm:px-6">
           {controls}
         </header>
       ) : createPortal(controls, slot)}
-      {authenticated && onEnableSpending !== undefined && !ownerChatEnabled ? (
-        <div className="min-w-0 border-b border-border px-gutter py-intra">
-          <Button type="button" variant="outline" className="min-h-touch h-auto max-w-full whitespace-normal break-words py-intra text-left" disabled={busy}
-            onClick={onEnableSpending}>Enable approval-only chat spending</Button>
-        </div>
-      ) : null}
       {enableProblem ? (
-        <p className="border-b border-border px-gutter py-intra text-sm text-destructive" role="alert">
+        <p className="bg-card/50 px-gutter py-intra text-sm text-destructive" role="alert">
           {enableProblem}{' '}
           <a href="/owner/settings/account/security" className="underline underline-offset-4 focus-visible:outline-2">Verify it is you</a>
         </p>
       ) : null}
       {sharePath === null ? null : (
-        <Field className="border-b border-border bg-muted px-gutter py-intra" role="status">
+        <Field className="bg-card/50 px-gutter py-intra" role="status">
           <FieldLabel htmlFor="tool-chat-share-link">{chatHistory.shareLabel}</FieldLabel>
           <InputGroup>
             <InputGroupInput id="tool-chat-share-link" value={sharePath} readOnly className="min-h-touch font-mono" />

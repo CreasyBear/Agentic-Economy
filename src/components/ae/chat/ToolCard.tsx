@@ -67,7 +67,7 @@ function ChoiceRow({ choice }: { choice: ToolChoiceRow }) {
             <ItemHeader>
               <ItemTitle>{choice.title}</ItemTitle>
               {choice.readiness === undefined || badgeVariant === undefined ? null : (
-                <Badge variant={badgeVariant}>{choice.readiness}</Badge>
+                <span className="flex items-center gap-1.5 text-xs text-muted-foreground"><span aria-hidden="true" className={choice.readiness === 'Ready now' ? 'size-1.5 rounded-full bg-success' : 'size-1.5 rounded-full bg-warning'} />{choice.readiness}</span>
               )}
             </ItemHeader>
             {choice.provider === undefined ? null : (
@@ -110,7 +110,7 @@ function CompareTable({ choices }: { choices: readonly ToolChoiceRow[] }) {
                   {choice.belowMatch === true ? <p className="text-sm text-muted-foreground">{chatBelowMatch}</p> : null}
                 </TableCell>
                 <TableCell>{choice.provider ?? ''}</TableCell>
-                <TableCell>{choice.price ?? ''}</TableCell>
+                <TableCell className="tabular-nums">{choice.price ?? ''}</TableCell>
                 <TableCell>{choice.readiness ?? ''}</TableCell>
               </TableRow>
             ))}
@@ -237,7 +237,7 @@ export function ToolCard({ projection }: { projection: ToolCardProjection }) {
   if (projection.kind === 'clarify') return null
   const state = toolCardState(projection)
   return (
-      <Card data-tool-card={projection.toolId}>
+      <Card data-tool-card={projection.toolId} className="min-w-0 rounded-card border-0 bg-muted/40 shadow-none">
       <CardHeader>
         <CardTitle>
           <h3 className="m-0">{projection.title}</h3>

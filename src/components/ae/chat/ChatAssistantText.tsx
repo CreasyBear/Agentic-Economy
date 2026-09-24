@@ -28,7 +28,7 @@ function safeHttpUrl(value: string | undefined): string | undefined {
 
 export function ChatAssistantText({ text }: ChatAssistantTextProps) {
   return (
-    <div className="grid gap-related text-sm [&_ol]:list-decimal [&_ol]:ps-5 [&_pre]:overflow-x-auto [&_pre]:rounded-card [&_pre]:bg-muted [&_pre]:p-related [&_pre]:font-mono [&_ul]:list-disc [&_ul]:ps-5 [&_code]:font-mono [&_a]:underline">
+    <div className="ae-chat-prose min-w-0 max-w-[68ch] text-foreground">
       <Markdown
         remarkPlugins={[remarkGfm]}
         skipHtml

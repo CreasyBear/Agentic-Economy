@@ -76,7 +76,8 @@ export function projectWorkFromCards(cards: readonly ToolCardProjection[]): Work
   const searched = cards.filter((card) => card.kind === 'choices' && (card.toolId === 'registry.tools.search' || card.toolId === 'registry.tools.list'))
   const compared = cards.filter((card) => card.kind === 'choices' && card.toolId === 'registry.tools.compare')
   const latestComparison = compared.at(-1)
-  const summary = [searched.length ? `Found ${searched.reduce((total, card) => total + (card.kind === 'choices' ? card.count ?? card.choices.length : 0), 0)} tools` : '', latestComparison?.kind === 'choices' ? `Compared ${latestComparison.choices.length}` : ''].filter(Boolean).join(' · ') || `${cards.length} step${cards.length === 1 ? '' : 's'}`
+  const found = new Set(searched.flatMap((card) => card.kind === 'choices' ? card.choices.filter((choice) => !choice.belowMatch).map((choice) => choice.toolRef) : []))
+  const summary = [searched.length ? `Found ${found.size} tool${found.size === 1 ? '' : 's'}` : '', latestComparison?.kind === 'choices' ? `Compared ${latestComparison.choices.length}` : ''].filter(Boolean).join(' · ') || `${cards.length} step${cards.length === 1 ? '' : 's'}`
   return {
     summary,
     steps: cards.map((card, index) => ({

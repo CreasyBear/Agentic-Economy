@@ -76,6 +76,11 @@ export type ChatTranscriptViewProps = Readonly<{
   thinking?: boolean
   clarifyDisabled?: boolean
   onSuggest?: (prompt: string) => void
+  onStarter?: (prompt: string) => void
+  onRefine?: (prompt: string) => void
+  onCompareRequest?: (prompt: string) => void
+  onCopyAnswer?: (answer: string) => void
+  onRetry?: (prompt: string) => void
   onClarifyAnswer?: (answer: string) => void
   approvalProblem?: string
   ownerChatCards?: readonly OwnerChatCard[]

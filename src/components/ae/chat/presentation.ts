@@ -6,6 +6,8 @@ import {
   type ToolCardProjection,
 } from '@/modules/chat/tool-card'
 import { captureRouteException } from '@/lib/observability/capture-route-exception'
+import { projectComparison, projectOptionsFromCard, projectSourcesFromCards, projectWorkFromCards } from './generative/generative.view-model'
+import type { ComparisonTableView, FollowUpsView, OptionsGridView, SourcesInlineView, WorkDisclosureView } from './generative/generative.contracts'
 
 export {
   CHAT_TOOL_IDS,
@@ -26,6 +28,7 @@ export type ChatStatus =
   | 'Conversation deleted.'
   | 'Read-only share link ready.'
   | 'Share link revoked.'
+  | 'Answer copied.'
   | 'New chat ready.'
   | 'Share link copied.'
   | 'Call approved. Checking its result.'
@@ -172,6 +175,34 @@ export function projectTranscriptTurns(messages: readonly TranscriptMessage[]): 
       blocks: content.blocks,
     }
   })
+}
+
+/** Project one assistant turn without promoting a search card into an answer. */
+export function projectGenerativeTurn(turn: TranscriptTurn): Readonly<{
+  work: WorkDisclosureView
+  sources: SourcesInlineView
+  options: OptionsGridView
+  comparison: ComparisonTableView | null
+  followUps: FollowUpsView
+}> {
+  const search = turn.tools.filter((card) => card.kind === 'choices' && (card.toolId === 'registry.tools.search' || card.toolId === 'registry.tools.list')).at(-1)
+  const compared = turn.tools.findLast((card): card is Extract<ToolCardProjection, { kind: 'choices' }> => card.kind === 'choices' && card.toolId === 'registry.tools.compare')
+  const options = search === undefined ? { options: [], comparedIds: [] } : projectOptionsFromCard(search)
+  const comparedOptions = compared === undefined ? [] : projectOptionsFromCard(compared).options.map((option) => {
+    const row = compared.choices.find((choice) => choice.toolRef === option.id)
+    return row?.price === undefined || (row.priceValidUntil !== undefined && row.priceValidUntil <= Date.now())
+      ? option
+      : { ...option, facts: { Price: { value: row.price, source: 'Registry listing' } } }
+  })
+  return {
+    work: projectWorkFromCards(turn.tools.filter((card) => card.kind !== 'clarify' && card.toolId !== 'tool.quote' && card.toolId !== 'tool.call')),
+    sources: projectSourcesFromCards(turn.tools),
+    options,
+    comparison: comparedOptions.length > 1 ? projectComparison(comparedOptions) : null,
+    followUps: { suggestions: turn.text.trim().length === 0 ? [] : options.options.length > 0 || comparedOptions.length > 0
+      ? ['Which of these is ready to use?', 'What will each one cost?', 'Which fits my use case best?']
+      : ['Can you show me the options?', 'What should I consider next?'] },
+  }
 }
 
 function clarifyQuestion(parts: readonly unknown[]): string | undefined {

@@ -483,15 +483,17 @@ export function useChatSession({
       ...(isAuthenticated && anonymousMessages.length > 0
         ? { handoffAfter: anonymousMessages.length }
         : {}),
-      ...(composerDisabled
-        ? {}
-        : {
-            onSuggest: (nextPrompt) => {
-              const bounded = boundPrompt(nextPrompt)
-              setPrompt(bounded)
-              void submit(false, bounded)
-            },
-          }),
+      onCopyAnswer: (answer) => {
+        void navigator.clipboard.writeText(answer)
+          .then(() => setStatus('Answer copied.'), () => setError('Copy failed. Select the answer and copy it manually.'))
+      },
+      ...(composerDisabled ? {} : {
+        onSuggest: (nextPrompt) => { setPrompt(boundPrompt(nextPrompt)); document.getElementById('tool-chat-prompt')?.focus() },
+        onStarter: (nextPrompt) => { void submit(false, nextPrompt) },
+        onRefine: (nextPrompt) => { void submit(false, nextPrompt) },
+        onCompareRequest: (nextPrompt) => { void submit(false, nextPrompt) },
+        onRetry: (previousPrompt) => { void submit(false, previousPrompt) },
+      }),
     },
     pageBusy: busy,
   }

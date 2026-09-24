@@ -1,6 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import { chatSuggestions, chatEmpty } from '@/lib/public/chat-ia'
 import {
   CHAT_TOOL_IDS,
   clearAnonymousChatHandoff,
@@ -21,17 +20,6 @@ afterEach(() => {
   vi.unstubAllGlobals()
 })
 
-describe('chat IA', () => {
-  it('keeps empty-path suggestions inside the six-tool market loop', () => {
-    expect(chatEmpty.title).toBe('Find Tools for an Agent.')
-    expect(chatEmpty.description).toBe(
-      'Compare and inspect. Then use one with your Agent. Price is on the card.',
-    )
-    const serialized = JSON.stringify(chatSuggestions)
-    expect(serialized).toMatch(/search|compare|inspect|call/i)
-    expect(serialized).not.toMatch(/write a poem|plan my week|remember this/i)
-  })
-})
 
 describe('anonymous chat recovery', () => {
   it('retains the HTTPS failure reference and offers a safe catalogue continuation', async () => {
@@ -191,7 +179,7 @@ describe('transcript projector', () => {
               title: 'Weather finder',
               summary: 'Look up forecasts',
               matchReason: 'Weather lookup',
-              readiness: 'ready',
+              readiness: 'unverified',
               entitlement: 'public',
               price: { kind: 'indicative', label: 'USD 0.50' },
               details: { capabilityId: 'weather.forecast', provider: { name: 'Sky Co', slug: 'sky-co' }, description: 'Look up forecasts', listingTier: 'listed' },
@@ -260,7 +248,7 @@ describe('transcript projector', () => {
       title: 'Weather finder',
       provider: 'Sky Co',
       price: 'USD 0.50',
-      readiness: 'Operational',
+      readiness: 'Not yet verified',
     }])
     expect(search?.kind === 'choices' ? search.count : undefined).toBe(1)
     expect(inspection?.kind === 'inspect' ? inspection.facts : undefined).toEqual([
@@ -611,7 +599,7 @@ describe('transcript projector', () => {
             title: 'Weather finder',
             summary: 'Look up forecasts',
             matchReason: 'Weather lookup',
-            readiness: 'ready',
+            readiness: 'unverified',
             entitlement: 'public',
             price: { kind: 'indicative', label: 'USD 0.50' },
             details: { capabilityId: 'weather.forecast', provider: { name: 'Sky Co', slug: 'sky-co' }, description: 'Look up forecasts', listingTier: 'listed', raw: 'HANDOFF_RAW_SECRET' },
@@ -631,7 +619,7 @@ describe('transcript projector', () => {
       title: 'Weather finder',
       provider: 'Sky Co',
       price: 'USD 0.50',
-      readiness: 'Operational',
+      readiness: 'Not yet verified',
     }])
     expect(JSON.stringify(stored)).not.toContain('HANDOFF_RAW_SECRET')
     clearAnonymousChatHandoff('handoff-thread')

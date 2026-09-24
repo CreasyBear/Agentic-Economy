@@ -6,7 +6,7 @@ import { chatClarify } from '@/lib/public/chat-ia'
 
 export type ChatClarifyPromptProps = Readonly<{
   question: string
-  choices: readonly [string, string, string]
+  choices: readonly string[]
   disabled?: boolean
   onAnswer: (answer: string) => void
 }>

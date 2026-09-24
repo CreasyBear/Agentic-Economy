@@ -35,7 +35,7 @@ export function ChatApprovalCards({ cards, problem, onApprove, onDeny, onFreshQu
   }, [cards])
   if (cards.length === 0) return null
   return (
-    <section id="owner-chat-pending" tabIndex={-1} aria-label="Call confirmations and results" className="grid min-w-0 gap-section" aria-live="polite">
+    <section id="owner-chat-pending" tabIndex={-1} aria-label="Call confirmations and results" className="ae-chat-approvals grid min-w-0 gap-section" aria-live="polite">
       {problem ? <p role="alert" className="text-destructive">{problem}</p> : null}
       {cards.map(card => {
         const callRef = card.kind === 'unavailable' ? card.callRef : card.view.callRef

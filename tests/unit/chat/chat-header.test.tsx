@@ -56,6 +56,6 @@ describe('ChatHeader', () => {
     expect(document.querySelectorAll('header')).toHaveLength(1)
     const slot = document.getElementById(chatHeaderActionsId)
     expect(slot?.querySelector('button')?.getAttribute('aria-label')).toBe(chatHistory.newChat)
-    expect(screen.getByRole('heading', { name: 'Ask' }).className).toContain('sr-only')
+    expect(screen.getByRole('heading', { name: 'Ask' }).className).not.toContain('sr-only')
   })
 })

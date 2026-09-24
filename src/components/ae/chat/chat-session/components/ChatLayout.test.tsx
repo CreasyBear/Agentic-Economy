@@ -1,17 +1,19 @@
 // @vitest-environment jsdom
 
-import { render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import type { ReactNode } from 'react'
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
 vi.mock('@clerk/tanstack-react-start', () => ({
   SignInButton: ({ children }: { children: ReactNode }) => children,
 }))
 
-import { chatComposer, chatHistory } from '@/lib/public/chat-ia'
+import { chatComposer, chatHistory, chatSuggestions } from '@/lib/public/chat-ia'
+import { providerSafeActionToolName } from '@/modules/actions/tool-contract'
 
 import type { ChatSessionModel } from '../chat-session.contracts'
 import { ChatLayout } from './ChatLayout'
+afterEach(cleanup)
 
 function buildModel(overrides: Partial<ChatSessionModel> = {}): ChatSessionModel {
   return {
@@ -48,10 +50,13 @@ function buildModel(overrides: Partial<ChatSessionModel> = {}): ChatSessionModel
 }
 
 describe('ChatLayout', () => {
-  it('renders the composer dock from the session model', () => {
-    render(<ChatLayout model={buildModel()} />)
-
-    expect(screen.getByRole('textbox', { name: chatComposer.promptLabel })).toBeTruthy()
+  it('keeps the greeting in the message area and suggestions immediately above the docked composer', () => {
+    render(<ChatLayout model={buildModel({ transcript: { messages: [], onStarter: vi.fn() } })} />)
+    const greeting = screen.getByText('What can I find for you?')
+    const starters = screen.getByTestId('suggested-actions')
+    const composer = screen.getByRole('textbox', { name: chatComposer.promptLabel })
+    expect(greeting.compareDocumentPosition(starters) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(starters.compareDocumentPosition(composer) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
   })
 
   it('opens history from one header control and has no conversation-history column', () => {
@@ -73,5 +78,98 @@ describe('ChatLayout', () => {
 
     expect(screen.getAllByRole('button', { name: chatHistory.openHistory })).toHaveLength(1)
     expect(screen.queryByRole('complementary', { name: 'Conversation history' })).toBeNull()
+  })
+
+  it('sends the full prompt from an empty-state starter', () => {
+    const onStarter = vi.fn()
+    const { container } = render(<ChatLayout model={buildModel({
+      transcript: { messages: [], onStarter },
+    })} />)
+    fireEvent.click(within(container).getByRole('button', { name: chatSuggestions[0].prompt }))
+    expect(onStarter).toHaveBeenCalledWith(chatSuggestions[0].prompt)
+  })
+
+  it('shows one collapsed work line, answer, choices and compare actions without repeated search cards', () => {
+    const onSuggest = vi.fn()
+    const onRefine = vi.fn()
+    const onCompareRequest = vi.fn()
+    const onCopyAnswer = vi.fn()
+    const onRetry = vi.fn()
+    const messages = [
+      { id: 'user', role: 'user' as const, parts: [{ type: 'text', text: 'Find weather in Sydney' }] },
+      { id: 'assistant', role: 'assistant' as const, parts: [
+        { type: `tool-${providerSafeActionToolName('registry.tools.search')}`, state: 'output-available',
+          output: { kind: 'matched', results: [
+            { toolRef: `operation:v1:${'a'.repeat(64)}`, title: 'Sydney Weather', price: { kind: 'indicative', label: 'USD 0.005' } },
+            { toolRef: `operation:v1:${'b'.repeat(64)}`, title: 'Forecast API', price: { kind: 'indicative', label: 'USD 0.008' } },
+            { toolRef: `operation:v1:${'c'.repeat(64)}`, title: 'Climate Data', price: { kind: 'indicative', label: 'USD 0.009' } },
+          ] } },
+        { type: 'text', text: 'Here are two weather APIs for Sydney.' },
+      ] },
+    ]
+    render(<ChatLayout model={buildModel({
+      transcript: { messages, onSuggest, onRefine, onCompareRequest, onCopyAnswer, onRetry },
+    })} />)
+    expect(document.querySelector('details')?.open).toBe(false)
+    expect(screen.getByRole('region', { name: 'Answer' }).textContent).toContain('Here are two weather APIs')
+    expect(screen.getByRole('region', { name: 'Options' }).textContent).toContain('Sydney Weather')
+    expect(screen.queryByText('Search tools', { selector: 'h3' })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Ready only' }))
+    expect(screen.getByRole('button', { name: 'Ready only' }).getAttribute('aria-pressed')).toBe('true')
+    expect(screen.getByRole('button', { name: 'Reset' }).hasAttribute('disabled')).toBe(false)
+    expect(onRefine).toHaveBeenCalledWith(expect.stringContaining('only ready-to-use tools'))
+    fireEvent.click(screen.getByRole('button', { name: 'Price: under 1¢' }))
+    expect(onRefine).toHaveBeenLastCalledWith('Refine the previous options: only ready-to-use tools, under 1¢ per call.')
+    fireEvent.click(screen.getAllByRole('button', { name: 'Select' })[0]!)
+    expect(screen.getAllByRole('button', { name: 'Select' })[0]!.getAttribute('aria-pressed')).toBe('true')
+    expect(onSuggest).toHaveBeenCalledWith('Tell me more about Sydney Weather')
+    for (const button of screen.getAllByRole('button', { name: /^Compare$/ }).slice(0, 2)) fireEvent.click(button)
+    fireEvent.click(screen.getByRole('button', { name: 'Compare 2 selected' }))
+    expect(onCompareRequest).toHaveBeenCalledWith(expect.stringContaining('Sydney Weather and Forecast API'))
+    fireEvent.click(screen.getByRole('button', { name: 'Copy' }))
+    expect(onCopyAnswer).toHaveBeenCalledWith('Here are two weather APIs for Sydney.')
+    fireEvent.click(screen.getByRole('button', { name: 'Retry answer' }))
+    expect(onRetry).toHaveBeenCalledWith('Find weather in Sydney')
+    fireEvent.click(screen.getByRole('button', { name: 'Which of these is ready to use?' }))
+    expect(onSuggest).toHaveBeenCalledWith('Which of these is ready to use?')
+  })
+  it('omits refinement for two options and comparison for a single option', () => {
+    const ref = `operation:v1:${'a'.repeat(64)}`
+    const tool = (results: unknown[]) => [
+      { id: 'user', role: 'user' as const, parts: [{ type: 'text', text: 'Find weather' }] },
+      { id: 'assistant', role: 'assistant' as const, parts: [
+        { type: `tool-${providerSafeActionToolName('registry.tools.search')}`, state: 'output-available', output: { kind: 'matched', results } },
+        { type: 'text', text: 'Weather tools.' },
+      ] },
+    ]
+    const one = { toolRef: ref, title: 'Weather', price: { kind: 'indicative', label: 'USD 0.005' } }
+    const two = { toolRef: `operation:v1:${'b'.repeat(64)}`, title: 'Forecast', price: { kind: 'indicative', label: 'USD 0.008' } }
+    const rendered = render(<ChatLayout model={buildModel({ transcript: { messages: tool([one]), onRefine: vi.fn() } })} />)
+    expect(screen.queryByRole('button', { name: 'Ready only' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Compare' })).toBeNull()
+    rendered.rerender(<ChatLayout model={buildModel({ transcript: { messages: tool([one, two]), onRefine: vi.fn() } })} />)
+    expect(screen.queryByRole('button', { name: 'Ready only' })).toBeNull()
+    expect(screen.getAllByRole('button', { name: 'Compare' })).toHaveLength(2)
+  })
+  it('renders a returned comparison as an actual comparison table', () => {
+    const firstRef = `operation:v1:${'a'.repeat(64)}`
+    const secondRef = `operation:v1:${'b'.repeat(64)}`
+    render(<ChatLayout model={buildModel({
+      transcript: { messages: [
+        { id: 'user', role: 'user', parts: [{ type: 'text', text: 'Compare Sydney Weather and Forecast API' }] },
+        { id: 'assistant', role: 'assistant', parts: [
+          { type: `tool-${providerSafeActionToolName('registry.tools.compare')}`, state: 'output-available',
+            output: { kind: 'ok', tools: [
+              { toolRef: firstRef, listing: { label: 'Sydney Weather' }, commercial: { price: { kind: 'fixed', amount: { currency: 'USD', units: '5', exponent: 3 } } } },
+              { toolRef: secondRef, listing: { label: 'Forecast API' }, commercial: { price: { kind: 'fixed', amount: { currency: 'USD', units: '8', exponent: 3 } } } },
+            ], facts: [] } },
+          { type: 'text', text: 'Here is the comparison.' },
+        ] },
+      ] },
+    })} />)
+    const comparison = screen.getByRole('region', { name: 'Compare details' })
+    expect(comparison.textContent).toContain('Sydney Weather')
+    expect(comparison.textContent).toContain('Forecast API')
+    expect(comparison.textContent).toContain('Price')
   })
 })

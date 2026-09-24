@@ -113,6 +113,25 @@ describe('useChatSession', () => {
     vi.useRealTimers()
   })
 
+  it('fills and focuses suggestions without a request; retries the prior question when explicitly asked', async () => {
+    const input = document.createElement('textarea')
+    input.id = 'tool-chat-prompt'
+    document.body.append(input)
+    try {
+      const { result } = renderHook(() => useChatSession(baseProps))
+      act(() => result.current.transcript.onSuggest?.('Compare weather tools'))
+      expect(result.current.composer.prompt).toBe('Compare weather tools')
+      expect(document.activeElement).toBe(input)
+      expect(sendMessagesMock).not.toHaveBeenCalled()
+      readUIMessageStreamMock.mockImplementation(() => singleAssistantStream('done'))
+      await act(async () => result.current.transcript.onRetry?.('Find Sydney weather'))
+      await waitFor(() => expect(sendMessagesMock).toHaveBeenCalledTimes(1))
+      expect(result.current.transcript.messages[0]?.parts).toMatchObject([{ text: 'Find Sydney weather' }])
+    } finally {
+      input.remove()
+    }
+  })
+
   it('admits one anonymous transport call when submit repeats before busy settles', async () => {
     let resolveSend: (() => void) | undefined
     sendMessagesMock.mockImplementation(async () => {
