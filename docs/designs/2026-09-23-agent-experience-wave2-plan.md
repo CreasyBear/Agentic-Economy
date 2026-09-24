@@ -1,6 +1,6 @@
 # Agent experience Wave 2 plan, 23 September 2026
 
-The [audit outcome](2026-09-23-agent-experience-audit.md#15-outcome) closes Wave 1 except npm publishing (D9) and the pre-existing sandbox probe-authority defect (D18). Sizes are relative delivery estimates, not dates. Items below are in priority order.
+Wave 1 closes except npm publishing (D9) and the pre-existing sandbox probe-authority defect (D18). Sizes are relative delivery estimates, not dates. Items below are in priority order.
 
 | Item | Why (evidence) | Size | Depends |
 |---|---|:---:|---|

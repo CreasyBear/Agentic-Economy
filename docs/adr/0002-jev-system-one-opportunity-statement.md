@@ -12,7 +12,7 @@ This document no longer authorises an architecture, rollout wave, model threshol
 latency promise, automated remedy, or completion claim.
 
 The exact working-copy contents, including uncommitted revisions, are preserved
-in [the historical snapshot](../archive/jev/2026-09-20-adr-0002-original.md).
+in the documentation backup tarball in the repository's parent directory.
 SHA-256: `1d2ace341b9c016956dcf08f5bd2a6fcd4decee02099d148d6c870963e5f8971`.
 
 Start with the [literature review](../../research/JEV-LITERATURE-REVIEW-2026-09-20.md)

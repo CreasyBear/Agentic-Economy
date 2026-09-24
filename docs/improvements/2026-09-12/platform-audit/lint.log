@@ -1,4 +1,0 @@
-
-> agentic-economy@0.1.0 lint
-> oxlint src convex tests tools --deny-warnings
-

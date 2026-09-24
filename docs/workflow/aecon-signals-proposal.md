@@ -1,6 +1,6 @@
 # AEcon Signals: from directory analytics to an x402 data house
 
-Drafted 2026-09-09 against market analytics v2 (`market-analytics-v2-design.md`). Proposal only; nothing here is implemented or approved.
+Drafted 2026-09-09 against market analytics v2. Proposal only; nothing here is implemented or approved.
 
 ## Where v2 leaves us
 

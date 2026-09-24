@@ -96,9 +96,11 @@ Work the highest score first. Churn decides ties, because the ergonomics payoff 
 | 2026-09-24 | catalogOfferingMutations.ts | 490 lines | 13 lines, lib/catalog/offerings | bad64ce45 |
 | 2026-09-24 | lib/money layout | 17 loose files | money/{funding,credit,earnings}/ | 2716ecda2 |
 | 2026-09-24 | dead code | 13 RPCs, 7 empty roots, 10 src files | deleted (-737 src lines; about -2,400 convex lines) | 3509f0ed9, ee831d3a3 |
+| 2026-09-24 | convex/lib layout (wave 4) | 23 folders + 21 loose files, mixed naming | 13 domain folders (adminConsole, agentAccess, authority, capabilityExecution, capabilitySupply, catalog, chat, market, money, platform, principalAccount, secrets, security), no loose files; 366 files moved move-only; dead authorityRegistrars removed | 0a3580e29 |
 
 ### Follow-ups recorded
 - **Connect type drift:** `payout-connect-http.ts` `accountFromPayout` fabricates a binding that lacks `requirementsDigest`, `createdAt` and `updatedAt`, and its refusal and authority envelopes differ. This needs a behaviour decision before the shapes can be unified.
+- **Layout items left over:** `capabilityExecution/callLifecycle/admissionTypes.ts` (106 lines) can't merge into its 394-line contracts.ts. `capabilitySupply/providerConnections/contracts.ts` is 424 lines. `money/x402PaymentAttempt/attempt.ts` is 856 lines and its contracts.ts 541. All four need a concern split in a later pass. Stale old-path comments remain in the `interactiveAuthority.ts` and `devSeed.ts` roots.
 - **Pure file in lib:** `convex/lib/callLifecycle/terminalProjection.ts` is pure but lives in lib. Move it to the domain in an API-changing wave.
 - **Hyphenated filenames broke the push (fixed in ee831d3a3).** Convex rejects hyphenated module paths. Wave 1's kebab-case Connect files silently stopped the local dev push and froze `_generated`. §10's camelCase rule is a hard requirement for this reason.
 - **Security decision pending:** `catalogOriginIsCurrent` checks businessId on the graph path but not in capabilitySupplyEligiblePorts.

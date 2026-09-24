@@ -65,7 +65,6 @@ behaviour.
 
 Source-tree code-quality campaigns 1–3 are closed (21 September 2026). That is
 not hosted GitHub `main`, npm publication, or a production sale.
-See [Campaign 3 programme re-audit](./docs/operations/code-quality-campaign-3-register.md).
 
 ## Current source entrances
 
@@ -106,12 +105,6 @@ admits and publishes it.
 Dated research, comparison papers, gauntlets and working ledgers inform the
 product but do not override these documents.
 
-Package build plans are filed under `docs/designs/`: [Package 4](./docs/designs/package-4-atomic-feature-build-plan.md),
-[Package 5](./docs/designs/package-5-atomic-feature-build-plan.md) and
-[Package 6](./docs/designs/package-6-atomic-feature-build-plan.md).
-The [Package 6 review and companion evidence](docs/archive/README.md#package-6-reviews)
-are under `docs/reviews/`; the [Twenty component quality record](./docs/designs/twenty-component-gauntlet.md)
-is under `docs/designs/`.
 
 The [manifesto](./docs/strategy/agentic-economy-manifesto.md) and
 [investment thesis](./docs/strategy/investment-thesis.md) are supporting strategy.
@@ -125,8 +118,7 @@ E2e/a11y Playwright specs are shell and accessibility checks, not product proof.
 ## Publish an x402 Tool
 
 Start at `/for-providers` and follow the source preview and returned status for
-the selected endpoint. The earlier standalone onboarding runbook is now
-[historical evidence](docs/archive/README.md#onboarding-runbook).
+the selected endpoint.
 
 An x402 payee is a payment recipient. The wallet address does not, by itself,
 establish the commercial Seller or Provider.
@@ -227,10 +219,9 @@ Do not treat an origin, archive, `/mcp`, `/llms.txt` or `/SKILL.md` read as host
 Use [PRODUCT.md](PRODUCT.md) for product direction, [CONTEXT.md](CONTEXT.md) for
 language and [IMPLEMENTATION_ROADMAP.md](IMPLEMENTATION_ROADMAP.md) for delivery.
 [TODOS.md](TODOS.md) is the concise admin/follow-up queue. Dated studies are in
-[research](research/README.md). The [documentation index](docs/README.md) identifies
-the retained plans, release records and archive for the next baseline. Completed
-Wayfinder/refactor records and earlier planning snapshots have been archived;
-they do not define a parallel active roadmap.
+[research](research/README.md). The [documentation index](docs/README.md) lists
+the retained records. Earlier planning snapshots do not define a parallel
+active roadmap.
 
 Share a Git checkout or an export of a reviewed commit, rather than a copy of the
 working directory. Ignored environment files, local databases, credentials and

@@ -87,9 +87,7 @@ consequence information at the decision where it matters. Shared components,
 backend capability and passing tests do not establish a coherent customer
 journey. First demonstrate find → inspect/compare → choose → use → result →
 return, with setup only when needed. Broader infrastructure and roadmap audits
-must not displace this basic experience review. The current page requirements
-are in the [buyer experience baseline](docs/designs/2026-09-21-platform-experience-audit.md)
-and [page checklist](docs/operations/platform-experience-register.md).
+must not displace this basic experience review.
 
 - **Locus:** the reference for connecting agents, prepaid tool access, spending
   controls, usage and everyday account management.

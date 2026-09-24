@@ -27,7 +27,7 @@ its importance does not make it the principal customer benefit.
 
 ## Implementation authority
 
-The [Jev platform integration register](../operations/jev-platform-integration-register.md) owns the authorized bounded assignments, contracts, acceptance evidence and working protocol. This ADR remains a proposed design input: D01–D06 are resolved in their owning assignments, and no proposal here independently approves a public/storage contract, financial consequence or hosted activation. The alpha launch register retains its release and exposure controls.
+This ADR remains a proposed design input: D01–D06 are resolved in their owning assignments, and no proposal here independently approves a public/storage contract, financial consequence or hosted activation. The alpha launch register retains its release and exposure controls.
 
 ## Assessment and proposed direction
 

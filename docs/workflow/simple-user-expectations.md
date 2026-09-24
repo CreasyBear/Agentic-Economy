@@ -1,6 +1,6 @@
 # Simple user expectations — scoreboard
 
-Well 7 (2026-09-10). One row per thing a simple user expects, in persona order and roughly by frequency of use. Status is `done`, `partial` or `absent`; a row flips to `done` only when a persona journey completes against a preview (agents over HTTP/CLI/MCP for contracts, a browser spec for shell and settings). Corpus ids (E-nnn) point to the grouped papercut corpus from the Well 7 research. Package 7 (`docs/designs/package-7-trust-and-lifecycle.md`) owns terms, export, deletion, suspension and the hosted support inbox; those rows are intentionally absent here.
+Well 7 (2026-09-10). One row per thing a simple user expects, in persona order and roughly by frequency of use. Status is `done`, `partial` or `absent`; a row flips to `done` only when a persona journey completes against a preview (agents over HTTP/CLI/MCP for contracts, a browser spec for shell and settings). Corpus ids (E-nnn) point to the grouped papercut corpus from the Well 7 research. Terms, export, deletion, suspension and the hosted support inbox are intentionally absent here.
 
 Modules that move rows: M1 one app shell · M2 settings that act · M3 events rail · M4 events surface · M5 money visibility · M6 refunds and support · M7 API reference and SDK · M8 trust and onboarding.
 
