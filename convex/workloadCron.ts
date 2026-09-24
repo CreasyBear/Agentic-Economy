@@ -1,10 +1,10 @@
 import { v } from 'convex/values'
 import { internalAction, internalMutation, internalQuery } from './_generated/server'
-import { admitWorkloadCronHandler, reconcileWorkloadCronSnapshotHandler } from './lib/workloadCron/admission'
-import { ensurePlatformWorkloadIdentitiesHandler } from './lib/workloadCron/identities'
-import { dispatchWorkloadCronConsequenceHandler } from './lib/workloadCron/consequence'
-import { consequenceJsonValue, consequenceOperationValue, consequencePayloadValue } from './lib/workloadCron/consequenceContracts'
-import { workloadCronNameValue, workloadCronSnapshotValue } from './lib/workloadCron/context'
+import { admitWorkloadCronHandler, reconcileWorkloadCronSnapshotHandler } from './lib/platform/workloadCron/admission'
+import { ensurePlatformWorkloadIdentitiesHandler } from './lib/platform/workloadCron/identities'
+import { dispatchWorkloadCronConsequenceHandler } from './lib/platform/workloadCron/consequence'
+import { consequenceJsonValue, consequenceOperationValue, consequencePayloadValue } from './lib/platform/workloadCron/contracts'
+import { workloadCronNameValue, workloadCronSnapshotValue } from './lib/platform/workloadCron/context'
 import {
   cleanupExpiredAgentAccessOAuthGrantsHandler, cleanupExpiredSourceWriteNoncesHandler,
   observeX402TreasuryHandler, reconcileBusinessSupplyProjectionsHandler,
@@ -12,7 +12,7 @@ import {
   refreshCapabilitySupplyReadinessHandler, refreshCurrentMarketPresenceHandler,
   refreshFacilitatorDiscoveryHandler, refreshMarketFlowHandler,
   snapshotMarketplaceMetricsDayHandler,
-} from './lib/workloadCron/scheduled'
+} from './lib/platform/workloadCron/scheduled'
 
 export const admit = internalQuery({
   args: { name: workloadCronNameValue },

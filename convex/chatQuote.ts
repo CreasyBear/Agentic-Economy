@@ -3,9 +3,9 @@ import type { Infer } from 'convex/values'
 
 import { internalAction } from './_generated/server'
 import { chatQuoteAdmissionArgs, chatQuoteAdmissionResult } from './chatQuoteAdmission'
-import { quoteActionCore } from './lib/capabilityQuotes/quoteAction'
-import { refuse } from './lib/capabilityQuotes/refusalHelpers'
-import { quoteResult } from './lib/capabilityQuotes/validators'
+import { quoteActionCore } from './lib/capabilityExecution/quotes/quoteAction'
+import { refuse } from './lib/capabilityExecution/quotes/refusalHelpers'
+import { quoteResult } from './lib/capabilityExecution/quotes/contracts'
 
 type AdmissionArgs = {
   [K in keyof typeof chatQuoteAdmissionArgs]: Infer<(typeof chatQuoteAdmissionArgs)[K]>

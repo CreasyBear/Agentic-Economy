@@ -8,7 +8,7 @@ import {
   acknowledgeAgentSpendingPeriod,
   prepareAgentSpendingPeriods,
   spendingPeriodsAreCurrent,
-} from '../../convex/lib/agentSpendingPeriods'
+} from '../../convex/lib/money/spendingPeriods/periods'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { spendingPeriodAdjustmentReference, type SpendingPeriodAdjustment } from '@/modules/money/public'
 

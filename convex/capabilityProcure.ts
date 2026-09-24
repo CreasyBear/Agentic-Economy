@@ -7,7 +7,7 @@ import {
   procureIdentityResult,
   reserveProcureArgs,
   reserveProcureHandler,
-} from './lib/callLifecycle/procureIdentity'
+} from './lib/capabilityExecution/callLifecycle/procureIdentity'
 
 export const reserve = mutation({
   args: reserveProcureArgs,

@@ -1,6 +1,6 @@
 import type { ProviderConnection } from '@/modules/capability-supply/provider-connection'
 import type { MutationCtx, QueryCtx } from '../../../_generated/server'
-import { toDomain as providerConnectionDomain } from '../../providerConnections/codecs'
+import { toDomain as providerConnectionDomain } from '../providerConnections/codecs'
 
 export async function loadProviderConnection(
   db: QueryCtx['db'] | MutationCtx['db'],

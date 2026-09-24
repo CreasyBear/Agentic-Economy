@@ -1,10 +1,10 @@
 import { mutation, query } from './_generated/server'
 
-import { readWorkspaceDecommissionEligibilityArgs, readWorkspaceDecommissionEligibilityResult, readWorkspaceDecommissionEligibilityHandler } from './lib/workspace/decommissionRead'
-import { readWorkspaceOrganizationBindingArgs, readWorkspaceOrganizationBindingResult, readWorkspaceOrganizationBindingHandler } from './lib/workspace/organizationBinding'
-import { renameUnboundWorkspaceArgs, renameUnboundWorkspaceResult, renameUnboundWorkspaceHandler } from './lib/workspace/rename'
-import { closeWorkspaceArgs, closeWorkspaceResult, closeWorkspaceHandler } from './lib/workspace/close'
-import { transferWorkspaceOwnershipArgs, transferWorkspaceOwnershipResult, transferWorkspaceOwnershipHandler } from './lib/workspace/ownershipTransfer'
+import { readWorkspaceDecommissionEligibilityArgs, readWorkspaceDecommissionEligibilityResult, readWorkspaceDecommissionEligibilityHandler } from './lib/principalAccount/workspace/decommissionRead'
+import { readWorkspaceOrganizationBindingArgs, readWorkspaceOrganizationBindingResult, readWorkspaceOrganizationBindingHandler } from './lib/principalAccount/workspace/organizationBinding'
+import { renameUnboundWorkspaceArgs, renameUnboundWorkspaceResult, renameUnboundWorkspaceHandler } from './lib/principalAccount/workspace/rename'
+import { closeWorkspaceArgs, closeWorkspaceResult, closeWorkspaceHandler } from './lib/principalAccount/workspace/close'
+import { transferWorkspaceOwnershipArgs, transferWorkspaceOwnershipResult, transferWorkspaceOwnershipHandler } from './lib/principalAccount/workspace/ownershipTransfer'
 
 export const readWorkspaceDecommissionEligibility = query({
   args: readWorkspaceDecommissionEligibilityArgs.fields,

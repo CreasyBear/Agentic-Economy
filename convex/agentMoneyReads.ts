@@ -9,7 +9,7 @@ import {
   agentBalanceResult,
   listAgentActivityHandler,
   prepareAgentBalanceHandler,
-} from './lib/agentMoneyReads'
+} from './lib/money/agentReads/reads'
 import { internal } from './_generated/api'
 
 export const prepareBalance = internalMutationGeneric({

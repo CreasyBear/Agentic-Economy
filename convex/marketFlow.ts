@@ -3,7 +3,7 @@ import { v } from 'convex/values'
 import { internalMutation, internalQuery, query } from './_generated/server'
 import {
   advanceFlowCheckpoint, applyAddedChunk, expireDayChunk, noteFlowWindowStart, readCachedPayeeVolumes, readFlowCheckpoint, readFlowRank, readVisiblePayeeVolumes, recordFlowFailure, writeCachedPayeeVolumes,
-} from './lib/marketFlow/store'
+} from './lib/market/flow/store'
 
 const rowValue = v.object({
   recipient: v.string(), facilitator: v.string(), day: v.string(), amountAtomic: v.string(),

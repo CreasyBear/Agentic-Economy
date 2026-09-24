@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
-import { listingIdentityDigest } from '../../../convex/lib/x402DirectoryIndex/listingDigest'
-import type { DirectoryEntry } from '../../../convex/lib/x402DirectoryIndex/contracts'
+import { listingIdentityDigest } from '../../../convex/lib/market/directoryIndex/listingDigest'
+import type { DirectoryEntry } from '../../../convex/lib/market/directoryIndex/contracts'
 
 const PAYEE_A = '0x1111111111111111111111111111111111111111'
 const PAYEE_B = '0x2222222222222222222222222222222222222222'

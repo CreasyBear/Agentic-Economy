@@ -1,8 +1,8 @@
 import { convexTest } from 'convex-test'
 import { describe, expect, it, vi } from 'vitest'
-import type * as CronAdmission from '../../convex/lib/workloadCron/admission'
+import type * as CronAdmission from '../../convex/lib/platform/workloadCron/admission'
 
-vi.mock('../../convex/lib/workloadCron/admission', async (importOriginal) => ({
+vi.mock('../../convex/lib/platform/workloadCron/admission', async (importOriginal) => ({
   ...(await importOriginal<typeof CronAdmission>()),
   reconcileWorkloadCronSnapshot: vi.fn(async (_ctx, _name, snapshot) => snapshot),
 }))

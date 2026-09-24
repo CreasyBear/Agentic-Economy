@@ -16,9 +16,9 @@ import type { CanonicalAgentDirectoryRecord } from '../src/modules/agent-access/
 import schema from './schema'
 import { api, internal } from './_generated/api'
 import { withSourceWriteCommand } from '../tests/helpers/source-write-admission'
-import { resolveCanonicalAgentContext, validateCanonicalAgentDelegation } from './lib/canonicalAgentAuthority'
+import { resolveCanonicalAgentContext, validateCanonicalAgentDelegation } from './lib/authority/canonicalAgent/authority'
 import { canonicalAgentDelegationScopes } from './agentAccessPrincipals'
-import { resolveCanonicalAgentBinding } from './lib/authority/binding'
+import { resolveCanonicalAgentBinding } from './lib/authority/boundary/binding'
 
 const modules = import.meta.glob('./**/*.ts')
 const NOW = 10_000

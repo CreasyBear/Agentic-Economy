@@ -1,8 +1,8 @@
 import { query, internalQuery } from './_generated/server'
-import { browseArgs, browseReturns, browseHandler } from './lib/x402DirectoryIndex/browse'
-import { resourceArgs, resourceReturns, resourceHandler, bySlugArgs, bySlugReturns, bySlugHandler, canonicalUrlForToolArgs, canonicalUrlForToolReturns, canonicalUrlForToolHandler, firstEligiblePageArgs, firstEligiblePageReturns, firstEligiblePageHandler, selectedSourceArgs, selectedSourceReturns, selectedSourceHandler } from './lib/x402DirectoryIndex/lookup'
-import { facetsArgs, facetsReturns, facetsHandler, overviewArgs, overviewReturns, overviewHandler, statusArgs, statusReturns, statusHandler } from './lib/x402DirectoryIndex/facetReads'
-import { analyticsArgs, analyticsReturns, analyticsHandler } from './lib/x402DirectoryIndex/reporting'
+import { browseArgs, browseReturns, browseHandler } from './lib/market/directoryIndex/browse'
+import { resourceArgs, resourceReturns, resourceHandler, bySlugArgs, bySlugReturns, bySlugHandler, canonicalUrlForToolArgs, canonicalUrlForToolReturns, canonicalUrlForToolHandler, firstEligiblePageArgs, firstEligiblePageReturns, firstEligiblePageHandler, selectedSourceArgs, selectedSourceReturns, selectedSourceHandler } from './lib/market/directoryIndex/lookup'
+import { facetsArgs, facetsReturns, facetsHandler, overviewArgs, overviewReturns, overviewHandler, statusArgs, statusReturns, statusHandler } from './lib/market/directoryIndex/facetReads'
+import { analyticsArgs, analyticsReturns, analyticsHandler } from './lib/market/directoryIndex/reporting'
 
 export const browse = query({ args: browseArgs, returns: browseReturns, handler: browseHandler })
 export const resource = query({ args: resourceArgs, returns: resourceReturns, handler: resourceHandler })

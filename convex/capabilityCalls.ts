@@ -32,9 +32,9 @@ import {
   reserveArgs,
   reserveResult,
   workCompletionArgs,
-} from './lib/callLifecycle/contracts'
+} from './lib/capabilityExecution/callLifecycle/contracts'
 import { purchaseResolutionRecordValidator } from '@/modules/capability-execution/purchase-resolution'
-import { readPurchaseResolutionByCallRef } from './lib/callLifecycle/purchaseResolutionMaterialize'
+import { readPurchaseResolutionByCallRef } from './lib/capabilityExecution/callLifecycle/purchaseResolutionMaterialize'
 import {
   reconciliationCandidateValue,
   reconciliationClaimResult,
@@ -50,7 +50,7 @@ import {
   listDueAutomaticReconciliationCandidatesHandler,
   projectRecoveryWithReconciliationInitialization,
   recordWithReconciliationInitialization,
-} from './lib/callLifecycle/reconciliation'
+} from './lib/capabilityExecution/callLifecycle/reconciliation'
 import {
   canonicalAgentCancelHandler,
   canonicalAgentCallHandler,
@@ -64,12 +64,12 @@ import {
   reconcileCallWorkloadAuthorityHandler,
   readAcceptedCallGrantAfterLimitUpdateHandler,
   resolveCallAgentAuthorityHandler,
-} from './lib/callLifecycle/authorityHandlers'
+} from './lib/capabilityExecution/callLifecycle/authorityHandlers'
 import {
   abandonHandler,
   admitHandler,
   reserveHandler,
-} from './lib/callLifecycle/admission'
+} from './lib/capabilityExecution/callLifecycle/admission'
 import {
   dispatchHandler,
   openDispatchHandler,
@@ -78,7 +78,7 @@ import {
   refuseUnclaimedArgs,
   refuseUnclaimedHandler,
   refuseUnclaimedResult,
-} from './lib/callLifecycle/dispatch'
+} from './lib/capabilityExecution/callLifecycle/dispatch'
 import {
   readOwnerRecoveryHandler,
   readOwnerReceiptContextHandler,
@@ -87,7 +87,7 @@ import {
   readProviderLeaseAuthorityHandler,
   readRecoveryHandler,
   readReplayHandler,
-} from './lib/callLifecycle/callActions'
+} from './lib/capabilityExecution/callLifecycle/callActions'
 import {
   jsonObject,
   callResultValue,

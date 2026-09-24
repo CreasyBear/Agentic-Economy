@@ -19,7 +19,7 @@ import {
   recordCleanupResultHandler,
   resolveCredentialRefHandler,
   validateAuthorityHandler,
-} from './lib/providerConnections/lifecycle'
+} from './lib/capabilitySupply/providerConnections/lifecycle'
 import {
   advanceLeaseDrainArgs,
   beginRevocationArgs,
@@ -38,7 +38,7 @@ import {
   recordCleanupResultArgs,
   resolveCredentialRefArgs,
   validateAuthorityArgs,
-} from './lib/providerConnections/contracts'
+} from './lib/capabilitySupply/providerConnections/contracts'
 import {
   beginLeaseEffectArgs,
   beginLeaseEffectHandler,
@@ -63,7 +63,7 @@ import {
   resolveLeaseCredentialRefHandler,
   validateLeaseAuthorityArgs,
   validateLeaseAuthorityHandler,
-} from './lib/providerConnections/leases'
+} from './lib/capabilitySupply/providerConnections/leases'
 import {
   connectX402OwnerArgs,
   connectX402OwnerHandler,
@@ -87,7 +87,7 @@ import {
   retryOwnerCleanupHandler,
   revokeOwnerArgs,
   revokeOwnerHandler,
-} from './lib/providerConnections/owner'
+} from './lib/capabilitySupply/providerConnectionOwner/owner'
 
 export const advanceLeaseDrain = internalMutationGeneric({
   args: advanceLeaseDrainArgs,

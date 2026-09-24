@@ -53,7 +53,7 @@ import {
 import { defaultSandboxAgentAccessPolicy } from './sandbox-policy'
 import { exactAmountSchema } from '@/modules/money/public'
 import { issuedAgentGrantRef } from './issued-agent-binding'
-import { hasFreshMfaFactorVerification } from '../../../convex/lib/workspaceSecurity/factorVerification'
+import { hasFreshMfaFactorVerification } from '../../../convex/lib/principalAccount/workspaceSecurity/factorVerification'
 import type { OwnerConnectionLifecycleResult } from './agent-connection'
 import {
   agentSpendingLimitsUpdateSchema,

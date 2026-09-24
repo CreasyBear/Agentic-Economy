@@ -13,8 +13,8 @@ import {
   QUALIFIED_USE_EXCLUSIONS,
   type QualifiedUseReceipt,
 } from '../src/modules/money/public'
-import { resolveCanonicalCallAuthority } from './lib/qualifiedUsePayout/authority'
-import type { CanonicalQualifiedUseAuthority } from './lib/qualifiedUsePayout/contracts'
+import { resolveCanonicalCallAuthority } from './lib/money/qualifiedUsePayout/authority'
+import type { CanonicalQualifiedUseAuthority } from './lib/money/qualifiedUsePayout/contracts'
 import type { Id } from './_generated/dataModel'
 import { recordMarketEvidenceFact } from './marketEvidence'
 

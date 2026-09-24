@@ -1,8 +1,8 @@
 import { v } from 'convex/values'
 import { internal } from './_generated/api'
 import { internalMutation } from './_generated/server'
-import { refreshProviderLead } from './lib/x402DirectoryIndex/providerLead'
-import { directoryState } from './lib/x402DirectoryIndex/rows'
+import { refreshProviderLead } from './lib/market/directoryIndex/providerLead'
+import { directoryState } from './lib/market/directoryIndex/rows'
 
 const PAGE_SIZE = 20
 

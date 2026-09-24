@@ -1,10 +1,10 @@
 import { v } from 'convex/values'
 import { internal } from './_generated/api'
 import { internalAction, internalMutation, internalQuery } from './_generated/server'
-import { activeDirectoryGeneration, directoryGeneration, storedDirectoryEntry } from './lib/x402DirectoryIndex/rows'
-import { ANALYTICS_VERSION, searchAnalytics, writeAnalytics } from './lib/x402DirectoryIndex/analytics'
-import { parseWorkloadCronSnapshot, workloadCronSnapshotValue } from './lib/workloadCron/context'
-import { reconcileWorkloadCronSnapshot } from './lib/workloadCron/admission'
+import { activeDirectoryGeneration, directoryGeneration, storedDirectoryEntry } from './lib/market/directoryIndex/rows'
+import { ANALYTICS_VERSION, searchAnalytics, writeAnalytics } from './lib/market/directoryIndex/analytics'
+import { parseWorkloadCronSnapshot, workloadCronSnapshotValue } from './lib/platform/workloadCron/context'
+import { reconcileWorkloadCronSnapshot } from './lib/platform/workloadCron/admission'
 
 /**
  * Rebuild only derived search/aggregate data from retained observations, and

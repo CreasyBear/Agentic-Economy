@@ -20,7 +20,7 @@ import { readCurrentActiveAdminMembership, resolveAdminAuthority } from '../../a
 import {
   consumeConsequenceProof,
   deriveStrictConsequenceProof,
-} from '../consequenceProof'
+} from '../authority/consequence/proof'
 import { persistAdminAuthorityMutation, persistAuditEvent } from '../../securityShared'
 import { requireSourceRead, requireSourceWrite } from '../../sourceWriteAdmission'
 import { resolveApprovalIntent } from './approvals'

@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest'
 
 import schema from '../../convex/schema'
 import { internal } from '../../convex/_generated/api'
-import { DEV_SEED_CATALOG_ACCOUNT_REF, DEV_SEED_CATALOG_PRINCIPAL_REF } from '../../convex/lib/catalog/devSeedAuthority'
+import { DEV_SEED_CATALOG_ACCOUNT_REF, DEV_SEED_CATALOG_PRINCIPAL_REF } from '../../convex/lib/catalog/devSeed/authority'
 import {
   reviseBusinessOfferingCommand,
   withdrawOfferingAccessPathCommand,

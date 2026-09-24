@@ -2,8 +2,8 @@ import { paginationOptsValidator, paginationResultValidator } from 'convex/serve
 import { v } from 'convex/values'
 import { internalMutation, internalQuery, query } from './_generated/server'
 import { resolveBusinessActor } from './authz'
-import { upsertCallProjection } from './lib/callLifecycle/dispatch'
-import type { CallDispatchProjectionShape } from './lib/callLifecycle/contracts'
+import { upsertCallProjection } from './lib/capabilityExecution/callLifecycle/dispatch'
+import type { CallDispatchProjectionShape } from './lib/capabilityExecution/callLifecycle/contracts'
 const callValue = v.object({
   callRef: v.string(),
   accountRef: v.string(),

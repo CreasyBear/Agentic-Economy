@@ -2,7 +2,7 @@ import { vStreamArgs } from '@convex-dev/agent'
 import { vStreamDelta, vStreamMessage } from '@convex-dev/agent/validators'
 import { v } from 'convex/values'
 import { internalMutation, internalQuery, mutation, query } from './_generated/server'
-import { resolveTrustedChatAuthority } from './lib/callLifecycle/authorityHandlers'
+import { resolveTrustedChatAuthority } from './lib/capabilityExecution/callLifecycle/authorityHandlers'
 import {
   authorizeKeyTurnGeneration, ownerReadableActor, requirePrincipalTurn, reserveAndStartTurn,
   resolveTurnActor, readTurnStreams, unresolvedTurnCallRefs,

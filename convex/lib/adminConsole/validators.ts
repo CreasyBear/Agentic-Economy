@@ -4,7 +4,7 @@ import type {
   AdminCommandAction,
   AdminCommandArgs,
 } from '@/lib/operator/admin-console/contracts'
-import { clerkConsequenceProofValue } from '../consequenceProof'
+import { clerkConsequenceProofValue } from '../authority/consequence/proof'
 import { sourceWriteArgs } from '../../sourceWriteAdmission'
 export const ADMIN_OPAQUE_REF_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/u
 

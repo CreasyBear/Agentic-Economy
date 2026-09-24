@@ -7,11 +7,11 @@ import { callResultValue } from '@/modules/capability-execution/convex'
 import { internal } from './_generated/api'
 import { internalAction, internalMutation, internalQuery, query } from './_generated/server'
 import { trustedChatAuthorityValue } from './chatTurns'
-import { principalValue } from './lib/callLifecycle/contracts'
+import { principalValue } from './lib/capabilityExecution/callLifecycle/contracts'
 import { requireChatOwner } from './chatThreads'
 import { resolveOwnerChatActor } from './lib/chat/threadListing'
 import { chatThreadBelongsToPrincipal } from './lib/chat/threadOwnership'
-import { canonicalAgentCallCore, resolveTrustedChatAuthority } from './lib/callLifecycle/authorityHandlers'
+import { canonicalAgentCallCore, resolveTrustedChatAuthority } from './lib/capabilityExecution/callLifecycle/authorityHandlers'
 
 const authorizeRef = makeFunctionReference<
   'mutation', { authority: TrustedChatAuthority; quoteRef: string }, typeof principalValue.type | null

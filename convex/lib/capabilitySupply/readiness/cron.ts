@@ -2,8 +2,8 @@
 
 import { internal } from '../../../_generated/api'
 import type { ActionCtx } from '../../../_generated/server'
-import { bindWorkloadCronActionContext } from '../../workloadCron/consequence'
-import { parseWorkloadCronSnapshot, type WorkloadCronSnapshot } from '../../workloadCron/context'
+import { bindWorkloadCronActionContext } from '../../platform/workloadCron/consequence'
+import { parseWorkloadCronSnapshot, type WorkloadCronSnapshot } from '../../platform/workloadCron/context'
 import { probeHandler } from './probe'
 import type { ProbeArgs, ProbeResult } from './contracts'
 

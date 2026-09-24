@@ -6,7 +6,7 @@ import {
 } from '@/modules/agent-access/service-auth-envelope'
 
 import { env, mutation } from './_generated/server'
-import { assertAdmission } from './lib/rateLimit'
+import { assertAdmission } from './lib/platform/rateLimit'
 import { serviceAssertion } from './serviceAssertion'
 
 const OPERATION = 'chatAdmission.admitAnonymousEdge'

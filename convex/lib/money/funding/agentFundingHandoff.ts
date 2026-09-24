@@ -9,7 +9,7 @@ import {
   type AgentAccessPrincipalValue,
 } from '../../../agentAccessPrincipals'
 import { readCommercialPolicyGate } from '../../../moneyCommercialPolicy'
-import { resolveAndBindLegalCustomer } from '../../moneyLegalCustomer'
+import { resolveAndBindLegalCustomer } from '../legalCustomer/binding'
 import { requireSourceRead, requireSourceWrite } from '../../../sourceWriteAdmission'
 import { canonicalDigest } from '../../../../src/modules/common/canonical-digest'
 import {

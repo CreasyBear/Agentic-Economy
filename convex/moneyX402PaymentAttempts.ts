@@ -41,11 +41,11 @@ import {
   recordX402PaymentSigningIntentArgs,
   recordX402PaymentSigningIntentHandler,
   recordX402PaymentSigningIntentReturns,
-} from './lib/x402PaymentAttempt'
-import { prepareSellerOnboardingCanaryPaymentAuthorizationHandler } from './lib/x402PaymentAttemptCanary'
-import { beginResponseRecoveryHandler, responseRecoveryIsCurrentHandler } from './lib/x402ResponseRecovery'
+} from './lib/money/x402PaymentAttempt/attempt'
+import { prepareSellerOnboardingCanaryPaymentAuthorizationHandler } from './lib/money/x402PaymentAttempt/canary'
+import { beginResponseRecoveryHandler, responseRecoveryIsCurrentHandler } from './lib/money/x402PaymentAttempt/responseRecovery'
 import { persistedCallAuthorityIsCurrent } from './lib/money/billingAuthorization/persistedCall'
-import { persistedPaidCallConsequenceIsAdmitted } from './lib/callLifecycle/paidConsequenceAdmission'
+import { persistedPaidCallConsequenceIsAdmitted } from './lib/capabilityExecution/callLifecycle/paidConsequenceAdmission'
 
 /** Platform validation uses the same durable signing attempt, without a buyer reservation. */
 export const prepareSellerOnboardingCanaryPaymentAuthorization = internalMutation({

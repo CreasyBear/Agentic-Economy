@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { internal } from '../../convex/_generated/api'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
-import type { IndexedSource } from '../../convex/lib/x402DirectoryIndex/contracts'
+import type { IndexedSource } from '../../convex/lib/market/directoryIndex/contracts'
 import { convexTestWithMarketComponents, type ConvexFixtureBackend } from '../helpers/convex-fixtures'
 import { setPublicSourceTransportForTests, type ConvexSourceTransport } from '@/lib/server/convex-source'
 import { setHttpRateLimitAdmissionForTests } from '@/lib/server/rate-limit'

@@ -4,7 +4,7 @@ import type { ActionCtx } from '../../../../../convex/_generated/server'
 import { internal } from '../../../../../convex/_generated/api'
 import { marketDispatchWorkpool } from '../../../../../convex/marketDispatchWorkpool'
 import { cancelledRecoveryResult, projectPersistedRecovery, projectPureCallStatus, reconciliationResult, recoveryNotFound } from '@/modules/capability-execution/call-projection/recovery'
-import { projectRecoveryOuter } from '../../../../../convex/lib/callProjection/recovery'
+import { projectRecoveryOuter } from '../../../../../convex/lib/capabilityExecution/callProjection/recovery'
 import {
   loadRecoveredCall,
   loadRecoveryControl,

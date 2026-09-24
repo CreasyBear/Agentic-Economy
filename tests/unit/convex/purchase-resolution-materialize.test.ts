@@ -3,7 +3,7 @@ import { convexTest } from 'convex-test'
 import { describe, expect, it } from 'vitest'
 
 import schema from '../../../convex/schema'
-import { materializePurchaseResolutionRecord } from '../../../convex/lib/callLifecycle/purchaseResolutionMaterialize'
+import { materializePurchaseResolutionRecord } from '../../../convex/lib/capabilityExecution/callLifecycle/purchaseResolutionMaterialize'
 import { buildDevelopmentPublishedToolEvidence } from '../../../tools/dev/fixtures/capability-supply/development-published-tool-evidence'
 
 const convexModules = Object.fromEntries(

@@ -17,12 +17,12 @@ import {
   createX402ProviderConnection,
   isCanonicalCredentiallessX402ProviderConnection,
 } from '@/modules/capability-supply/provider-connection'
-import { toDomain, toRow } from './lib/providerConnections/lifecycle'
+import { toDomain, toRow } from './lib/capabilitySupply/providerConnections/lifecycle'
 import { publicationPorts, publishCapabilityForSeed } from './capabilitySupplyPublish'
 import { ensureOwnerIdentityForAuthenticatedIdentity } from './interactiveAuthority'
-import { resolveAndBindLegalCustomer } from './lib/moneyLegalCustomer'
+import { resolveAndBindLegalCustomer } from './lib/money/legalCustomer/binding'
 import { persistDevSeedCatalogState } from './devSeedStore'
-import { upsertProviderDirectoryRows } from './lib/x402DirectoryIndex/providerRows'
+import { upsertProviderDirectoryRows } from './lib/market/directoryIndex/providerRows'
 import { canonicalDigest } from '../src/modules/common/canonical-digest'
 import { refreshCapabilityCommand } from '@/modules/capability-supply/public'
 import {
@@ -41,8 +41,8 @@ import {
   DEV_SEED_CATALOG_RESOURCE,
   DEV_SEED_CATALOG_SCOPE,
   resolveDevSeedOwningAccountRef,
-} from './lib/catalog/devSeedAuthority'
-import { upsertDevSeedSandboxAccessPath, upsertDevSeedSandboxProviderToolProjection } from './lib/catalog/devSeedAccessPath'
+} from './lib/catalog/devSeed/authority'
+import { upsertDevSeedSandboxAccessPath, upsertDevSeedSandboxProviderToolProjection } from './lib/catalog/devSeed/accessPath'
 import { reviseBusinessOfferingCommand, upsertOfferingAccessPathCommand } from './lib/catalog/offerings/commands'
 import {
   DEV_SEED_PRICE_BY_SLUG,

@@ -4,32 +4,32 @@ import {
   admitCallArgs,
   admitCallHandler,
   admitCallResult,
-} from './lib/capabilityQuotes/admitCall'
+} from './lib/capabilityExecution/quotes/admitCall'
 import {
   issueQuoteArgs,
   issueQuoteHandler,
   issueQuoteResult,
-} from './lib/capabilityQuotes/issueQuote'
+} from './lib/capabilityExecution/quotes/issueQuote'
 import {
   prepareFinancialSubjectsArgs,
   prepareFinancialSubjectsHandler,
   prepareFinancialSubjectsResult,
-} from './lib/capabilityQuotes/prepareFinancialSubjects'
+} from './lib/capabilityExecution/quotes/prepareFinancialSubjects'
 import {
   prepareSpendingPeriodsArgs,
   prepareSpendingPeriodsHandler,
   prepareSpendingPeriodsResult,
-} from './lib/capabilityQuotes/prepareSpendingPeriods'
+} from './lib/capabilityExecution/quotes/prepareSpendingPeriods'
 import {
   quoteActionHandler,
   quoteActionResult,
   quoteArgs,
-} from './lib/capabilityQuotes/quoteAction'
+} from './lib/capabilityExecution/quotes/quoteAction'
 import {
   readForCallArgs,
   readForCallHandler,
   readForCallResult,
-} from './lib/capabilityQuotes/readForCall'
+} from './lib/capabilityExecution/quotes/readForCall'
 
 // -- Registrations only. Validators, handler bodies, and DB logic live under --
 // -- convex/lib/capabilityQuotes/*, grouped by concern. ----------------------

@@ -6,15 +6,15 @@ export {
   capabilityPublicationValue,
   publishPreparedCapabilityArgs,
   readCapabilityPublicationArgs,
-} from './lib/capabilitySupply/publicationValues'
+} from './lib/capabilitySupply/publish/contracts'
 export {
   publicationPorts,
   publishPreparedCapabilityHandler,
-} from './lib/capabilitySupply/publishPrepared'
-export { readCapabilityPublicationHandler } from './lib/capabilitySupply/readPublication'
+} from './lib/capabilitySupply/publish/prepared'
+export { readCapabilityPublicationHandler } from './lib/capabilitySupply/publish/readPublication'
 export {
   publishBootstrapCapability,
   publishCapabilityForSeed,
   publishCuratedCapability,
   withdrawCuratedCapability,
-} from './lib/capabilitySupply/publishBootstrap'
+} from './lib/capabilitySupply/publish/bootstrap'

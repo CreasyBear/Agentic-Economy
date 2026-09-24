@@ -1,6 +1,6 @@
 import { mutation } from './_generated/server'
-import { resolveAgentBindingArgs, resolveAgentBindingResult } from './lib/authority/validators'
-import { resolveAgentBindingHandler } from './lib/authority/binding'
+import { resolveAgentBindingArgs, resolveAgentBindingResult } from './lib/authority/boundary/contracts'
+import { resolveAgentBindingHandler } from './lib/authority/boundary/binding'
 
 export const resolveAgentBinding = mutation({
   args: resolveAgentBindingArgs,

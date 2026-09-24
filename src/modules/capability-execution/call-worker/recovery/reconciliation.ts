@@ -7,7 +7,7 @@ import type { CallReceipt } from '@/modules/capability-execution/call-contracts'
 import type { ActionCtx } from '../../../../../convex/_generated/server'
 import { internal } from '../../../../../convex/_generated/api'
 import { projectPersistedRecovery, projectPureCallStatus, reconciliationResult, recoveryNotFound, retryableRecoveryResult } from '@/modules/capability-execution/call-projection/recovery'
-import { projectRecoveryOuter } from '../../../../../convex/lib/callProjection/recovery'
+import { projectRecoveryOuter } from '../../../../../convex/lib/capabilityExecution/callProjection/recovery'
 import { parseContractOutput } from '@/modules/capability-execution/call-projection/contract-output'
 import { prepareX402RecoveryEvidence } from './x402'
 import {

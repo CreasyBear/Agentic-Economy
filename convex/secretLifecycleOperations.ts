@@ -11,8 +11,8 @@ import {
   secretPointerAuthorityValue,
 } from '../src/modules/secrets/convex'
 import { internalMutation, type MutationCtx } from './_generated/server'
-import { createConvexSecretLifecyclePersistence } from './lib/secretLifecyclePersistence'
-import type { SecretPointerAuthority } from './lib/secretPointerPersistence'
+import { createConvexSecretLifecyclePersistence } from './lib/secrets/lifecycle/persistence'
+import type { SecretPointerAuthority } from './lib/secrets/pointer/persistence'
 
 const pointerValue = v.object({
   secretRef: v.string(),

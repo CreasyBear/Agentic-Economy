@@ -15,21 +15,21 @@ import {
 } from '@/modules/capability-execution/call-runtime'
 import { internal } from './_generated/api'
 import { internalAction, type ActionCtx } from './_generated/server'
-import { principalValue } from './lib/callLifecycle/contracts'
+import { principalValue } from './lib/capabilityExecution/callLifecycle/contracts'
 import { resolveBusinessActor } from './authz'
-import { bindWorkloadCronActionContext } from './lib/workloadCron/consequence'
+import { bindWorkloadCronActionContext } from './lib/platform/workloadCron/consequence'
 import {
   parseWorkloadCronSnapshot,
   workloadCronSnapshotValue,
   type WorkloadCronSnapshot,
-} from './lib/workloadCron/context'
+} from './lib/platform/workloadCron/context'
 
 export {
   callAttemptIdentityDigest,
   callAttemptIdentityMaterial,
   validateCallAuthority,
 } from './capabilityCallIdentity'
-export { projectOuterResult } from './lib/callProjection/outerResult'
+export { projectOuterResult } from './lib/capabilityExecution/callProjection/outerResult'
 export { projectPureCallStatus } from '@/modules/capability-execution/convex'
 
 const workerResult = v.union(

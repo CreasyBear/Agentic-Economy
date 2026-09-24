@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { categoryConcentration } from './lib/x402DirectoryIndex/categoryStats'
+import { categoryConcentration } from './lib/market/directoryIndex/categoryStats'
 
 describe('category concentration', () => {
   const row = (category: string, payersOrder: number | undefined, popularOrder: number) => ({

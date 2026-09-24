@@ -11,7 +11,7 @@ import type { Id } from './_generated/dataModel'
 import type { MutationCtx } from './_generated/server'
 import { getActiveExactCapabilityContract } from './capabilityContractDocuments'
 import { toCapabilityBindingRow, toCapabilityOfferingRow } from './capabilitySupplyRowMappers'
-import { toDomain as providerConnectionDomain } from './lib/providerConnections/codecs'
+import { toDomain as providerConnectionDomain } from './lib/capabilitySupply/providerConnections/codecs'
 
 export type CapabilitySupplyWriterPorts =
   OfferingWritePorts & BindingWritePorts & EligibilityWritePorts

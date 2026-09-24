@@ -50,8 +50,8 @@ vi.mock('../../../convex/authz', async (importOriginal) => ({
   resolveBusinessActor: vi.fn(async () => mocks.actor),
 }))
 
-vi.mock('../../../convex/lib/callLifecycle/callActions', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('../../../convex/lib/callLifecycle/callActions')>()),
+vi.mock('../../../convex/lib/capabilityExecution/callLifecycle/callActions', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../../convex/lib/capabilityExecution/callLifecycle/callActions')>()),
   callHandler: mocks.call,
   listAgentCallsHandler: mocks.list,
   cancelCallHandler: mocks.cancel,
@@ -61,8 +61,8 @@ vi.mock('../../../convex/lib/callLifecycle/callActions', async (importOriginal) 
   reconcileOwnerCallHandler: mocks.reconcileOwner,
 }))
 
-vi.mock('../../../convex/lib/callLifecycle/admission', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('../../../convex/lib/callLifecycle/admission')>()),
+vi.mock('../../../convex/lib/capabilityExecution/callLifecycle/admission', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../../convex/lib/capabilityExecution/callLifecycle/admission')>()),
   listPendingCallApprovalsHandler: mocks.listApprovals,
   decideCallApprovalHandler: mocks.decideApproval,
 }))
@@ -88,7 +88,7 @@ import {
 import { readCallStatus } from '../../../convex/capabilityCallsStatus'
 import { registerAgentPrincipal } from '../../../convex/agentAccessPrincipals'
 import { registerGrantForServer } from '../../../convex/agentAccessPolicy'
-import { validateCanonicalAgentDelegation } from '../../../convex/lib/canonicalAgentAuthority'
+import { validateCanonicalAgentDelegation } from '../../../convex/lib/authority/canonicalAgent/authority'
 import { MARKET_TOOLS_CALL_SCOPE } from '@/modules/agent-access/contract'
 import { createCustomerRequestServiceAssertion } from '@/modules/agent-access/service-auth-envelope'
 import { agentAccessPolicyDigest } from '@/modules/agent-access/policy'

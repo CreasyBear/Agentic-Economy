@@ -14,20 +14,20 @@ import {
   readCurrentCapabilityProbeAuthority,
   ownerStagedProbeBusinessIsAllowed,
   type CapabilityProbeAuthority,
-} from './lib/capabilitySupply/probeAuthority'
-import { applyObservedCapabilityProbeSideEffects } from './lib/capabilitySupply/probeObserve'
+} from './lib/capabilitySupply/probes/authority'
+import { applyObservedCapabilityProbeSideEffects } from './lib/capabilitySupply/probes/observe'
 import {
   capabilityProbeTargetAllowUnpublishedBusiness,
   presentCapabilityProbeTargetAfterModuleRead,
   refuseCapabilityProbeTargetIfSelectedRequest,
-} from './lib/capabilitySupply/probeTarget'
+} from './lib/capabilitySupply/probes/target'
 
 export {
   capabilityProbeAuthorityValue,
   readCurrentCapabilityProbeAuthority,
   capabilityProbeAuthorityMatches,
   type CapabilityProbeAuthority,
-} from './lib/capabilitySupply/probeAuthority'
+} from './lib/capabilitySupply/probes/authority'
 export {
   observeCapabilityReadinessArgs,
   observeCapabilityReadinessReturns,
@@ -35,13 +35,13 @@ export {
   recordCapabilityProbeResultArgs,
   recordCapabilityProbeResultReturns,
   recordOwnerStagedCapabilityProbeResultArgs,
-} from './lib/capabilitySupply/probeObserve'
+} from './lib/capabilitySupply/probes/observe'
 export {
   readCapabilityProbeTargetArgs,
   readCapabilityProbeTargetReturns,
   readOwnerStagedCapabilityProbeTargetArgs,
-} from './lib/capabilitySupply/probeTarget'
-export { scheduleDueCapabilityProbesHandler } from './lib/capabilitySupply/probeSchedule'
+} from './lib/capabilitySupply/probes/target'
+export { scheduleDueCapabilityProbesHandler } from './lib/capabilitySupply/probes/schedule'
 
 export async function readCapabilityProbeTargetHandler(
   ctx: QueryCtx,

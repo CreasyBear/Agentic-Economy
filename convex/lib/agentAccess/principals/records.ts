@@ -22,7 +22,7 @@ import { createPackage3AuditEvent } from '@/modules/observability/public'
 import {
   resolveCanonicalAgentContext,
   validateCanonicalAgentDelegation,
-} from '../../canonicalAgentAuthority'
+} from '../../authority/canonicalAgent/authority'
 import { persistAuditEvent } from '../../../securityShared'
 import { environment, authorityMode, lifecycle } from './verification'
 

@@ -31,7 +31,7 @@ import type { QueryCtx } from './_generated/server'
 import { getExactRegisteredCapabilityContract } from './capabilityContractDocuments'
 import { capabilitySupplyGraphPorts } from './lib/capabilitySupply/graphPorts/ports'
 import { readManagedX402InspectionTargetForQualifiedCandidate } from './capabilitySupplyCurrentTool'
-import { toolProviderRouteabilityIsFrozen } from './lib/providerOffboardingFreeze'
+import { toolProviderRouteabilityIsFrozen } from './lib/capabilitySupply/providerOffboarding/freeze'
 import { toCapabilityBindingRow, toCapabilityOfferingRow } from './capabilitySupplyRowMappers'
 import { directoryListingEntry } from './capabilitySupplyDirectoryEligibility'
 

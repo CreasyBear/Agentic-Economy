@@ -9,7 +9,7 @@ import { degradeBackend } from '@/lib/observability/degrade-backend'
 import { loadReadyRecoveryWork, reconcileRecovery, type RecoveryWorkContext } from '@/modules/capability-execution/call-runtime'
 import { readPublicExecutionStatus } from '@/modules/action-execution/runtime'
 import { parseContractOutput, reconciliationResult } from '@/modules/capability-execution/convex'
-import { projectRecoveryOuter } from './lib/callProjection/recovery'
+import { projectRecoveryOuter } from './lib/capabilityExecution/callProjection/recovery'
 
 /** Recover the already-paid response; never call the Provider or create a payment. */
 export const recover = internalAction({

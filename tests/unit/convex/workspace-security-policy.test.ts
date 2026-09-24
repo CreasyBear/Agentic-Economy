@@ -5,7 +5,7 @@ import {
   it,
 } from 'vitest'
 
-import type { ClerkFactorEvidence } from '../../../convex/lib/consequenceProof'
+import type { ClerkFactorEvidence } from '../../../convex/lib/authority/consequence/proof'
 import { InteractiveAuthorityError } from '../../../convex/interactiveAuthority'
 import { assertStepUpForSensitiveAction } from '../../../convex/workspaceSecurity'
 import { samIdentity } from '../../helpers/interactive-authority-provisioning'

@@ -11,7 +11,7 @@ import {
   requireAccessFactForAccount,
   resolveActiveAccountRefForPrincipal,
 } from './interactiveAuthority'
-import { resolveAndBindLegalCustomer } from './lib/moneyLegalCustomer'
+import { resolveAndBindLegalCustomer } from './lib/money/legalCustomer/binding'
 import { CLERK_USER_PROVIDER_NAMESPACE } from './workspaceProvisioning'
 
 const AU_POSTCODE_PATTERN = /^\d{4}$/u

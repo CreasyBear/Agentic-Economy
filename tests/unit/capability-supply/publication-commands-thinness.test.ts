@@ -5,8 +5,8 @@ import { describe, expect, it } from 'vitest'
 import { listTsFiles } from '../../helpers/source-files'
 
 const convexHost = readFileSync('convex/capabilitySupply.ts', 'utf8')
-const publishSource = readFileSync('convex/lib/capabilitySupply/publishPrepared.ts', 'utf8')
-const readPublicationSource = readFileSync('convex/lib/capabilitySupply/readPublication.ts', 'utf8')
+const publishSource = readFileSync('convex/lib/capabilitySupply/publish/prepared.ts', 'utf8')
+const readPublicationSource = readFileSync('convex/lib/capabilitySupply/publish/readPublication.ts', 'utf8')
 const commandsSource = readFileSync('convex/capabilitySupplyCommands.ts', 'utf8')
 const sharedSource = readFileSync('convex/capabilitySupplyShared.ts', 'utf8')
 const convexSupply = [convexHost, publishSource, commandsSource, sharedSource].join('\n')

@@ -4,8 +4,8 @@ import { v } from 'convex/values'
 import { components, internal } from './_generated/api'
 import type { DataModel, Id } from './_generated/dataModel'
 import { internalMutation, type MutationCtx, type QueryCtx } from './_generated/server'
-import { parseWorkloadCronSnapshot, workloadCronSnapshotValue } from './lib/workloadCron/context'
-import { reconcileWorkloadCronSnapshot } from './lib/workloadCron/admission'
+import { parseWorkloadCronSnapshot, workloadCronSnapshotValue } from './lib/platform/workloadCron/context'
+import { reconcileWorkloadCronSnapshot } from './lib/platform/workloadCron/admission'
 
 const PRESENCE_REFRESH_PAGE_SIZE = 20
 

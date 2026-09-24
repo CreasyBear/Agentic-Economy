@@ -2,7 +2,7 @@ import { listingTier } from '@/modules/capability-supply/public'
 
 import type { Doc } from './_generated/dataModel'
 import type { QueryCtx } from './_generated/server'
-import { activeDirectoryGeneration } from './lib/x402DirectoryIndex/rows'
+import { activeDirectoryGeneration } from './lib/market/directoryIndex/rows'
 
 /**
  * The admitted registry (`capabilitySupplyTools.search/detail/compare`, and

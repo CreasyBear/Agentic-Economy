@@ -11,7 +11,7 @@ import {
   queryGeneric,
 } from 'convex/server'
 import { v } from 'convex/values'
-import { workloadCronSnapshotValue } from './lib/workloadCron/context'
+import { workloadCronSnapshotValue } from './lib/platform/workloadCron/context'
 
 import {
   publishPreparedCapabilityArgs,

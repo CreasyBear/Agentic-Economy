@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import { evaluateOrganizationMonthlySpendFence } from '../../../src/modules/money/internal/organization-monthly-spend-fence'
-import { quoteOrganizationMonthlySpendAdmission } from '../../../convex/lib/capabilityQuotes/quoteValuation'
+import { quoteOrganizationMonthlySpendAdmission } from '../../../convex/lib/capabilityExecution/quotes/quoteValuation'
 
 describe('evaluateOrganizationMonthlySpendFence (W-23)', () => {
   it('F1: disabled ceiling is not applicable even when spend exceeds ceiling', () => {

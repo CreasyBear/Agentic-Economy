@@ -1,11 +1,11 @@
 import { internalMutationGeneric, internalQueryGeneric } from 'convex/server'
 
-import { abortProviderConsequenceArgs, abortProviderConsequenceHandler, abortProviderConsequenceResult } from './lib/providerConsequence/abort'
-import { attestProviderConsequenceTicketArgs, attestProviderConsequenceTicketHandler, attestProviderConsequenceTicketResult } from './lib/providerConsequence/attest'
-import { claimProviderConsequenceArgs, claimProviderConsequenceHandler, claimProviderConsequenceResult } from './lib/providerConsequence/claim'
-import { completeProviderConsequenceArgs, completeProviderConsequenceHandler, completeProviderConsequenceResult } from './lib/providerConsequence/complete'
-import { issueProviderConsequenceTicketArgs, issueProviderConsequenceTicketHandler, issueProviderConsequenceTicketResult } from './lib/providerConsequence/issue'
-import { authorizeProviderConsequenceX402RpcArgs, authorizeProviderConsequenceX402RpcHandler, authorizeProviderConsequenceX402RpcResult } from './lib/providerConsequence/x402'
+import { abortProviderConsequenceArgs, abortProviderConsequenceHandler, abortProviderConsequenceResult } from './lib/capabilityExecution/providerConsequence/abort'
+import { attestProviderConsequenceTicketArgs, attestProviderConsequenceTicketHandler, attestProviderConsequenceTicketResult } from './lib/capabilityExecution/providerConsequence/attest'
+import { claimProviderConsequenceArgs, claimProviderConsequenceHandler, claimProviderConsequenceResult } from './lib/capabilityExecution/providerConsequence/claim'
+import { completeProviderConsequenceArgs, completeProviderConsequenceHandler, completeProviderConsequenceResult } from './lib/capabilityExecution/providerConsequence/complete'
+import { issueProviderConsequenceTicketArgs, issueProviderConsequenceTicketHandler, issueProviderConsequenceTicketResult } from './lib/capabilityExecution/providerConsequence/issue'
+import { authorizeProviderConsequenceX402RpcArgs, authorizeProviderConsequenceX402RpcHandler, authorizeProviderConsequenceX402RpcResult } from './lib/capabilityExecution/providerConsequence/x402'
 
 export const issueProviderConsequenceTicket = internalMutationGeneric({
   args: issueProviderConsequenceTicketArgs,

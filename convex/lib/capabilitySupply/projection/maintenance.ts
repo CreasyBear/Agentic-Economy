@@ -1,7 +1,7 @@
 import { v, type Infer } from 'convex/values'
 import { internal } from '../../../_generated/api'
 import type { MutationCtx } from '../../../_generated/server'
-import { providerRouteabilityIsFrozen } from '../../providerOffboardingFreeze'
+import { providerRouteabilityIsFrozen } from '../providerOffboarding/freeze'
 import { deriveBusinessOfferingSupportFromCapabilitySupply } from './support'
 import { readLiveBusinessSupplyProjection } from './reads'
 import { rebuildBusinessSupplyProjectionSnapshotCommand } from './snapshot'

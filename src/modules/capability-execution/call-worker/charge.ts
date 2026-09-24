@@ -2,9 +2,9 @@ import type { CanonicalClaimSnapshot } from '@/modules/action-execution/runtime'
 import type { RouteTransportObservation } from '@/modules/capability-supply/route-transport-runtime'
 import type { ActionCtx } from '../../../../convex/_generated/server'
 import { internal } from '../../../../convex/_generated/api'
-import { canonicalPort } from '../../../../convex/lib/callProjection/port'
-import { canonicalTerminalOutcome } from '../../../../convex/lib/callLifecycle/terminalProjection'
-import { finalizeCallDispatch } from '../../../../convex/lib/callProjection/dispatch'
+import { canonicalPort } from '../../../../convex/lib/capabilityExecution/callProjection/port'
+import { canonicalTerminalOutcome } from '../../../../convex/lib/capabilityExecution/callLifecycle/terminalProjection'
+import { finalizeCallDispatch } from '../../../../convex/lib/capabilityExecution/callProjection/dispatch'
 import type { ChargeSettlementResult, OpenDispatch } from '@/modules/capability-execution/call-projection/contracts'
 
 export type WorkerResult =

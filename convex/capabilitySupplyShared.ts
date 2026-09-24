@@ -7,7 +7,7 @@ import { rebuildBusinessSupplyProjectionSnapshotCommand } from './lib/capability
 import type { Id } from './_generated/dataModel'
 import type { MutationCtx, QueryCtx } from './_generated/server'
 import { resolveBusinessActor } from './authz'
-import { providerRouteabilityIsFrozen } from './lib/providerOffboardingFreeze'
+import { providerRouteabilityIsFrozen } from './lib/capabilitySupply/providerOffboarding/freeze'
 
 export const contractRefValue = v.object({
   capabilityId: v.string(),

@@ -2,8 +2,8 @@ import { v } from 'convex/values'
 
 import { internal } from './_generated/api'
 import { internalMutation } from './_generated/server'
-import { parseWorkloadCronSnapshot, workloadCronSnapshotValue } from './lib/workloadCron/context'
-import { reconcileWorkloadCronSnapshot } from './lib/workloadCron/admission'
+import { parseWorkloadCronSnapshot, workloadCronSnapshotValue } from './lib/platform/workloadCron/context'
+import { reconcileWorkloadCronSnapshot } from './lib/platform/workloadCron/admission'
 import { literalUnion } from '../src/modules/common/convex-literals'
 import {
   isSourceWriteBodyDigest,

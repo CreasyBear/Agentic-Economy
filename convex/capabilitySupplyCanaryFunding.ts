@@ -6,7 +6,7 @@ import {
   SELLER_ONBOARDING_CANARY_MAXIMUM_DAILY_ATOMIC,
   SELLER_ONBOARDING_CANARY_MAXIMUM_MONTHLY_ATOMIC,
   SELLER_ONBOARDING_CANARY_MAXIMUM_PER_CALL_ATOMIC,
-} from './lib/capabilitySupply/canaryFundingConstants'
+} from './lib/capabilitySupply/canaryFunding/constants'
 import {
   PRODUCTION_SELLER_ONBOARDING_CANARY_BUDGET_POLICY_REF,
   PRODUCTION_SELLER_ONBOARDING_CANARY_PLATFORM_APPLICATION_REF,
@@ -24,16 +24,16 @@ import {
   SELLER_ONBOARDING_CANARY_RATE_POLICY_REF,
   sellerOnboardingCanaryPlatformGrantExpectation,
   type SellerOnboardingCanaryPlatformGrantExpectation,
-} from './lib/capabilitySupply/canaryFundingIdentity'
+} from './lib/capabilitySupply/canaryFunding/identity'
 import {
   provisionProductionSellerOnboardingCanaryFundingHandler,
   provisionSellerOnboardingCanaryFundingHandler,
-} from './lib/capabilitySupply/canaryFundingProvision'
+} from './lib/capabilitySupply/canaryFunding/provision'
 import {
   readExactSellerOnboardingCanaryPlatformGrantHandler,
   readProductionSellerOnboardingCanaryFundingReadinessHandler,
   readSellerOnboardingCanaryFundingReadinessHandler,
-} from './lib/capabilitySupply/canaryFundingReads'
+} from './lib/capabilitySupply/canaryFunding/reads'
 import {
   exactPlatformGrantArgs,
   exactPlatformGrantResult,
@@ -45,7 +45,7 @@ import {
   readinessResult,
   sandboxProvisionArgs,
   sandboxReadinessArgs,
-} from './lib/capabilitySupply/canaryFundingValues'
+} from './lib/capabilitySupply/canaryFunding/contracts'
 
 export type {
   SellerOnboardingCanaryCdpPreflightCode,

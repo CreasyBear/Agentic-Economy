@@ -1,7 +1,7 @@
 import { v, type Infer } from 'convex/values'
 import { agentAccessPrincipalValue } from '../../../agentAccessPrincipals'
 import { sourceWriteArgs } from '../../../sourceWriteAdmission'
-import { clerkConsequenceProofValue } from '../../consequenceProof'
+import { clerkConsequenceProofValue } from '../../authority/consequence/proof'
 import {
   capabilityPublicationSourceSelectorValue,
   pricingConfigValue,

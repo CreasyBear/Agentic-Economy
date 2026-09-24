@@ -4,7 +4,7 @@ const mocks = vi.hoisted(() => ({
   assertAgentAccessRateAdmission: vi.fn(async (): Promise<{ ok: boolean }> => ({ ok: true })),
 }))
 
-vi.mock('../../../convex/lib/rateLimit', () => ({
+vi.mock('../../../convex/lib/platform/rateLimit', () => ({
   assertAgentAccessRateAdmission: mocks.assertAgentAccessRateAdmission,
 }))
 
@@ -14,7 +14,7 @@ beforeEach(() => {
 })
 
 import { abandon, reserve } from '../../../convex/capabilityCalls'
-import { callArgs } from '../../../convex/lib/callLifecycle/contracts'
+import { callArgs } from '../../../convex/lib/capabilityExecution/callLifecycle/contracts'
 import { buildDevelopmentPublishedToolEvidence } from '../../../tools/dev/fixtures/capability-supply/development-published-tool-evidence'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { convexTestWithMarketComponents } from '../../helpers/convex-fixtures'
@@ -661,8 +661,8 @@ describe('capability operation reservation admission', () => {
 
 describe('registered Agent access rate limiter', () => {
   it('keeps one token bucket across credential rotation while isolating another Agent', async () => {
-    const { assertAgentAccessRateAdmission } = await vi.importActual<typeof import('../../../convex/lib/rateLimit')>(
-      '../../../convex/lib/rateLimit',
+    const { assertAgentAccessRateAdmission } = await vi.importActual<typeof import('../../../convex/lib/platform/rateLimit')>(
+      '../../../convex/lib/platform/rateLimit',
     )
     const backend = convexTestWithMarketComponents()
     const limits = { maximumCallsPerMinute: 1, maximumCallsPerHour: 1 }

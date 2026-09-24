@@ -11,7 +11,7 @@ import {
   readCdpUsdcBalance,
   type CdpUsdcBalanceReader,
   type CdpUsdcNetwork,
-} from './lib/capabilitySupply/canaryFundingPreflightBalance'
+} from './lib/capabilitySupply/canaryFunding/preflightBalance'
 import {
   inspectSellerOnboardingCanaryCdpReadinessCore,
   notReady,
@@ -20,7 +20,7 @@ import {
   type SellerOnboardingCanaryCdpPreflightCode,
   type SellerOnboardingCanaryCdpPreflightDependencies,
   type SellerOnboardingCanaryCdpPreflightResult,
-} from './lib/capabilitySupply/canaryFundingPreflightInspect'
+} from './lib/capabilitySupply/canaryFunding/preflightInspect'
 
 export type { CdpUsdcNetwork, CdpUsdcBalanceReader }
 export type {

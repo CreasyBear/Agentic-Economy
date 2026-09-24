@@ -20,7 +20,7 @@ import { TOOL_SEARCH_USE } from '@/modules/registry/tool-reranker'
 import { api, internal } from './_generated/api'
 import { action, internalAction, type ActionCtx } from './_generated/server'
 import { publicSearchReturns, searchArgs, publicDetailReturns, publicCompareReturns, toolRefArgs, compareArgs } from './capabilitySupplyToolQueries'
-import { presentSearch as presentSearchDecision } from './lib/capabilityToolCatalogPresentation'
+import { presentSearch as presentSearchDecision } from './lib/capabilitySupply/toolCatalog/presentation'
 import { facilitatorDiscoverySnapshotCandidates } from '@/modules/capability-supply/server'
 
 const PAGE_LIMIT = 20

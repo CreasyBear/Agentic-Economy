@@ -2,7 +2,7 @@ import { v, type Infer } from 'convex/values'
 import type { CapabilityProbeTargetUnavailableReason, ReadCapabilityProbeTargetResult } from '@/modules/capability-supply/public'
 import type { Id } from '../../../_generated/dataModel'
 import { publicationLifecycleValue } from '../../../capabilitySupplyShared'
-import { workloadCronSnapshotValue } from '../../workloadCron/context'
+import { workloadCronSnapshotValue } from '../../platform/workloadCron/context'
 
 export const probeArgs = { publicationRef: v.string(), expectedRevision: v.number() }
 export const probeOwnerStagedArgs = { ...probeArgs, businessId: v.id('businesses') }

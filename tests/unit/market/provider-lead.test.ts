@@ -1,6 +1,6 @@
 import { expect, it } from 'vitest'
 
-import { providerLeadPatch } from '../../../convex/lib/x402DirectoryIndex/providerLead'
+import { providerLeadPatch } from '../../../convex/lib/market/directoryIndex/providerLead'
 
 it('keeps a quiet host sortable and records the busiest Tool without summing the host', () => {
   expect(providerLeadPatch(null)).toEqual({ leadCalls: -1 })

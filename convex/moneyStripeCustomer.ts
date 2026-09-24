@@ -12,7 +12,7 @@ import {
   requireAccessFactForAccount,
   resolveActiveAccountRefForPrincipal,
 } from './interactiveAuthority'
-import { resolveAndBindLegalCustomer } from './lib/moneyLegalCustomer'
+import { resolveAndBindLegalCustomer } from './lib/money/legalCustomer/binding'
 import { persistAuditEvent } from './securityShared'
 import { CLERK_USER_PROVIDER_NAMESPACE } from './workspaceProvisioning'
 

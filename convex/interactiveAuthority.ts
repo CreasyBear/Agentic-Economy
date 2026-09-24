@@ -1,41 +1,41 @@
 import { internalAction, internalQuery, mutation } from './_generated/server'
 
-import type { InteractiveAccountSelectionState } from './lib/interactiveAuthority/clerk'
-import { clerkActiveOrganizationId } from './lib/interactiveAuthority/clerk'
-import type { InteractiveAuthorityErrorCode } from './lib/interactiveAuthority/errors'
-import { InteractiveAuthorityError } from './lib/interactiveAuthority/errors'
+import type { InteractiveAccountSelectionState } from './lib/principalAccount/interactiveAuthority/clerk'
+import { clerkActiveOrganizationId } from './lib/principalAccount/interactiveAuthority/clerk'
+import type { InteractiveAuthorityErrorCode } from './lib/principalAccount/interactiveAuthority/errors'
+import { InteractiveAuthorityError } from './lib/principalAccount/interactiveAuthority/errors'
 import {
   resolveInteractiveAuthorityContext,
   resolveMaterializedInteractiveAuthorityContext,
-} from './lib/interactiveAuthority/factResolution'
+} from './lib/principalAccount/interactiveAuthority/factResolution'
 import {
   materializeCurrentInteractiveAuthorityArgs,
   materializeCurrentInteractiveAuthorityHandler,
   materializeCurrentInteractiveAuthorityResult,
-} from './lib/interactiveAuthority/materializeMutation'
+} from './lib/principalAccount/interactiveAuthority/materializeMutation'
 import {
   ensureOwnerIdentityForAuthenticatedIdentity,
   type OwnerIdentityProvisioningRefs,
-} from './lib/interactiveAuthority/provisioning'
-import { requireAccessFactForAccount } from './lib/interactiveAuthority/accessFacts'
-import { resolveActiveAccountRefForPrincipal } from './lib/interactiveAuthority/accountResolution'
+} from './lib/principalAccount/interactiveAuthority/provisioning'
+import { requireAccessFactForAccount } from './lib/principalAccount/interactiveAuthority/accessFacts'
+import { resolveActiveAccountRefForPrincipal } from './lib/principalAccount/interactiveAuthority/accountResolution'
 import {
   readCurrentInteractiveAuthorityFactsArgs,
   readCurrentInteractiveAuthorityFactsHandler,
   readCurrentInteractiveAuthorityFactsResult,
-} from './lib/interactiveAuthority/readFacts'
+} from './lib/principalAccount/interactiveAuthority/readFacts'
 import {
   resolveCurrentInteractiveAuthorityArgs,
   resolveCurrentInteractiveAuthorityHandler,
   resolveCurrentInteractiveAuthorityResult,
-} from './lib/interactiveAuthority/resolveCurrent'
+} from './lib/principalAccount/interactiveAuthority/resolveCurrent'
 import {
   reconcileScheduledInteractiveAuthorityArgs,
   reconcileScheduledInteractiveAuthorityHandler,
   reconcileScheduledInteractiveAuthorityResult,
   resolveScheduledInteractiveAuthorityContext,
-} from './lib/interactiveAuthority/scheduledReconcile'
-import { interactiveAuthorityContextValue } from './lib/interactiveAuthority/validators'
+} from './lib/principalAccount/interactiveAuthority/scheduledReconcile'
+import { interactiveAuthorityContextValue } from './lib/principalAccount/interactiveAuthority/contracts'
 
 // -- Registrations only. Validators, handler bodies, and DB logic live under --
 // -- convex/lib/interactiveAuthority/*, grouped by concern. Re-exports below --

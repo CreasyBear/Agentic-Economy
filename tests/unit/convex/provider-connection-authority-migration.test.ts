@@ -14,7 +14,7 @@ import {
 import {
   toDomain,
   type ProviderConnectionAuthorityCompatibilityRow,
-} from '../../../convex/lib/providerConnections/codecs'
+} from '../../../convex/lib/capabilitySupply/providerConnections/codecs'
 
 const RESOURCE_URL = 'https://api.example.test/x402'
 const BUSINESS_ID = 'business_facilitator_discovery'

@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 
-import { completeWorkHandler } from '../../../convex/lib/callLifecycle/workComplete'
+import { completeWorkHandler } from '../../../convex/lib/capabilityExecution/callLifecycle/workComplete'
 
 describe('capability operation work completion generation', () => {
   it('ignores a late callback from the work generation replaced by recovery', async () => {

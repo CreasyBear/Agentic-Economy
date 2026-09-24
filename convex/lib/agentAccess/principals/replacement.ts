@@ -32,7 +32,7 @@ import { uniqueSorted } from '@/modules/common/unique-sorted'
 import { DelegationService, delegationGrantRef } from '@/modules/authority/delegation/public'
 import { principalRef } from '@/modules/principal-account/public'
 import { resolveInteractiveAuthorityContext } from '../../../interactiveAuthority'
-import { createConvexDelegationContextPort, createConvexDelegationStore } from '../../delegationPersistence'
+import { createConvexDelegationContextPort, createConvexDelegationStore } from '../../authority/delegation/persistence'
 import { environment, authorityMode } from './verification'
 import {
   persistAgentAudit,

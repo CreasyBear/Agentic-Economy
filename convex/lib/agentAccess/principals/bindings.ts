@@ -38,7 +38,7 @@ import {
   type Principal,
 } from '@/modules/principal-account/public'
 import { resolveInteractiveAuthorityContext } from '../../../interactiveAuthority'
-import { createConvexDelegationContextPort, createConvexDelegationStore } from '../../delegationPersistence'
+import { createConvexDelegationContextPort, createConvexDelegationStore } from '../../authority/delegation/persistence'
 import { authorityMode, environment, lifecycle } from './verification'
 import { canonicalAgentDelegationScopes, persistAgentAudit, writeAgentPrincipal } from './records'
 

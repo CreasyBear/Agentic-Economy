@@ -3,9 +3,9 @@ import { resolveServiceMode, serviceModeAllowsEnvironment } from '@/lib/deployme
 import type { MutationCtx } from '../../../_generated/server'
 import { env } from '../../../_generated/server'
 import { resolveBusinessActor } from '../../../authz'
-import { admitInteractiveOwnerConsequence } from '../../ownerConsequence'
+import { admitInteractiveOwnerConsequence } from '../../authority/consequence/owner'
 import { readCommercialPolicyGate } from '../../../moneyCommercialPolicy'
-import { resolveAndBindLegalCustomer } from '../../moneyLegalCustomer'
+import { resolveAndBindLegalCustomer } from '../legalCustomer/binding'
 import { requireSourceWrite } from '../../../sourceWriteAdmission'
 import { canonicalDigest } from '../../../../src/modules/common/canonical-digest'
 import {

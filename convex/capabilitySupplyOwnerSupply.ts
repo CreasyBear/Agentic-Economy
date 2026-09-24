@@ -6,12 +6,12 @@ import {
   runOwnerSupplyReadinessHandler,
   runOwnerSupplyTestHandler,
   type OwnerSupplyProbePorts,
-} from './lib/capabilitySupply/ownerSupplyActions'
+} from './lib/capabilitySupply/ownerSupply/actions'
 import {
   ownerSupplyActionResultValue,
   ownerSupplyInput,
   type OwnerSupplyActionResult,
-} from './lib/capabilitySupply/ownerSupplyValues'
+} from './lib/capabilitySupply/ownerSupply/contracts'
 
 function ownerSupplyProbePorts(ctx: ActionCtx): OwnerSupplyProbePorts {
   return {

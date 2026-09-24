@@ -40,7 +40,7 @@ import {
   listPendingCallApprovals,
   reserve,
 } from '../../../convex/capabilityCalls'
-import { canonicalOwnerApprovalDecisionHandler } from '../../../convex/lib/callLifecycle/authorityHandlers'
+import { canonicalOwnerApprovalDecisionHandler } from '../../../convex/lib/capabilityExecution/callLifecycle/authorityHandlers'
 import { buildDevelopmentPublishedToolEvidence } from '../../../tools/dev/fixtures/capability-supply/development-published-tool-evidence'
 import {
   createPublicToolRef,

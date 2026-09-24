@@ -11,7 +11,7 @@ import { openCapabilityDecisionModel } from '@/modules/capability-contract/publi
 import { parsePublishedToolSnapshot } from '@/modules/capability-supply/public'
 import type { CapabilityContract } from '@/modules/capability-contract/public'
 import type { LiveX402InspectionTarget } from '@/modules/capability-execution/live-x402-requirement'
-import { principalValue } from './lib/callLifecycle/contracts'
+import { principalValue } from './lib/capabilityExecution/callLifecycle/contracts'
 
 const liveRequirementResult = v.union(
   v.object({ kind: v.literal('operation_not_found') }),

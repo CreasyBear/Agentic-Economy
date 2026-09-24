@@ -26,13 +26,13 @@ import type { Doc } from '../../../_generated/dataModel'
 import { resolveInteractiveAuthorityContext } from '../../../interactiveAuthority'
 import { persistAuditEvent } from '../../../securityShared'
 import { sourceWriteArgs } from '../../../sourceWriteAdmission'
-import { admitAuthorityCredentialChangeRate } from '../../rateLimit'
+import { admitAuthorityCredentialChangeRate } from '../../platform/rateLimit'
 import {
   consumeConsequenceProof,
   deriveStrictConsequenceProof,
   isValidClerkFactorEvidence,
   type StrictConsequenceProof,
-} from '../../consequenceProof'
+} from '../../authority/consequence/proof'
 import { revokeReplacementMaterial } from '../principals/replacement'
 import { invalidateOAuthRefreshFamilies } from '../principals/revocation'
 import { authorityMode, requireOAuthSourceWrite } from './shared'

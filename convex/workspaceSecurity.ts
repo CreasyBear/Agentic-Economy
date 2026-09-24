@@ -3,7 +3,7 @@ import { v } from 'convex/values'
 
 import { accountRef } from '../src/modules/principal-account/account/public'
 import { principalRef } from '../src/modules/principal-account/principal/public'
-import type { ClerkFactorEvidence } from './lib/consequenceProof'
+import type { ClerkFactorEvidence } from './lib/authority/consequence/proof'
 import type { DataModel, Doc } from './_generated/dataModel'
 import { mutation, query } from './_generated/server'
 import {
@@ -14,7 +14,7 @@ import {
 import {
   hasFreshMfaFactorVerification,
   MFA_REVERIFICATION_REQUIRED,
-} from './lib/workspaceSecurity/factorVerification'
+} from './lib/principalAccount/workspaceSecurity/factorVerification'
 
 const CLERK_USER_PROVIDER_NAMESPACE = 'clerk/user' as const
 const CORRELATION_REF_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/u

@@ -35,7 +35,7 @@ import {
   delegationSnapshotRef,
   type DelegationContextPort,
 } from '../src/modules/authority/delegation/public'
-import { createConvexDelegationStore } from './lib/delegationPersistence'
+import { createConvexDelegationStore } from './lib/authority/delegation/persistence'
 
 const submitRecoveryApprovalArgs = {
   approvalRef: v.string(),

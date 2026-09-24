@@ -1,8 +1,8 @@
 import { type RegisteredMutation } from 'convex/server'
 import { internalMutation, internalQuery, mutation, query } from './_generated/server'
-import { listOwnerGrantReadbacksArgs, listOwnerGrantReadbacksResult, listOwnerGrantReadbacksHandler, readGrantArgs, readGrantHandler, readActiveGrantArgs, readActiveGrantHandler, grantReadResult } from './lib/agentAccess/grantReads'
-import { registerGrantForServerArgs, grantWriteForServerResult, registerGrantForServerHandler, type RegisterGrantForServerArgs, type RegisterGrantForServerResult } from './lib/agentAccess/grantRegistration'
-import { upsertGrantArgs, grantWriteResult, upsertGrantHandler, revokeGrantArgs, grantRevocationResult, revokeGrantHandler } from './lib/agentAccess/grantWrites'
+import { listOwnerGrantReadbacksArgs, listOwnerGrantReadbacksResult, listOwnerGrantReadbacksHandler, readGrantArgs, readGrantHandler, readActiveGrantArgs, readActiveGrantHandler, grantReadResult } from './lib/agentAccess/policy/reads'
+import { registerGrantForServerArgs, grantWriteForServerResult, registerGrantForServerHandler, type RegisterGrantForServerArgs, type RegisterGrantForServerResult } from './lib/agentAccess/policy/registration'
+import { upsertGrantArgs, grantWriteResult, upsertGrantHandler, revokeGrantArgs, grantRevocationResult, revokeGrantHandler } from './lib/agentAccess/policy/writes'
 
 export const listOwnerGrantReadbacks = query({
   args: listOwnerGrantReadbacksArgs,

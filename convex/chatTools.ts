@@ -32,7 +32,7 @@ import {
   chatClarifyOutputSchema,
 } from '@/modules/chat/agent-turn.contracts'
 import type { TrustedChatAuthority } from '@/modules/chat/agent-turn.contracts'
-import type { QuoteResult } from './lib/capabilityQuotes/validators'
+import type { QuoteResult } from './lib/capabilityExecution/quotes/contracts'
 import type { CallResult } from '@/modules/capability-execution/call-contracts'
 import { chatSearchUse, latestUserRequest, readBelowMatch } from '@/modules/chat/search-presentation'
 import {

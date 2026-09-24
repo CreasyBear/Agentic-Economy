@@ -1,7 +1,7 @@
 import type { MutationCtx } from '../../../_generated/server'
 import type { AdminCommandSpec } from '../commandEnvelope'
 import type { AdminCommandWireArgs } from '../validators'
-import { applyCapabilitySourceAuthorityReview } from '../../capabilitySupply/sourceAuthority'
+import { applyCapabilitySourceAuthorityReview } from '../../capabilitySupply/admission/sourceAuthority'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { brandNonEmpty } from '@/modules/common/ids'
 import { validateAuditEvent } from '@/modules/observability/public'

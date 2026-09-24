@@ -1,7 +1,7 @@
 import { query } from './_generated/server'
 
-import { listDirectoryArgs, listDirectoryResult, listDirectoryHandler } from './lib/workspace/directory'
-import { invitationContextArgs, invitationContextResult, invitationContextHandler } from './lib/workspace/invitation'
+import { listDirectoryArgs, listDirectoryResult, listDirectoryHandler } from './lib/principalAccount/workspace/directory'
+import { invitationContextArgs, invitationContextResult, invitationContextHandler } from './lib/principalAccount/workspace/invitation'
 
 export const listDirectory = query({
   args: listDirectoryArgs.fields,

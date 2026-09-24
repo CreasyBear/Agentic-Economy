@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { listAgentCallSummariesHandler } from '../../../convex/lib/callLifecycle/callActions'
+import { listAgentCallSummariesHandler } from '../../../convex/lib/capabilityExecution/callLifecycle/callActions'
 
 function row(overrides: Record<string, unknown> = {}) {
   return {

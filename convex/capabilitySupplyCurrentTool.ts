@@ -14,7 +14,7 @@ import type { Doc } from './_generated/dataModel'
 import { internalQuery, internalMutation, type QueryCtx } from './_generated/server'
 import { getExactRegisteredCapabilityContract } from './capabilityContractDocuments'
 import { capabilitySupplyGraphPorts } from './lib/capabilitySupply/graphPorts/ports'
-import { toolProviderRouteabilityIsFrozen } from './lib/providerOffboardingFreeze'
+import { toolProviderRouteabilityIsFrozen } from './lib/capabilitySupply/providerOffboarding/freeze'
 import { observeCapabilityReadinessHandler } from './capabilitySupplyProbes'
 import {
   canonicalPublicationPricing,
@@ -24,7 +24,7 @@ import {
   readExactSellerCanaryOperationSnapshotHandler,
   sellerCanaryOperationSnapshotReturns,
   type SellerCanaryOperationSnapshot,
-} from './lib/capabilitySupply/currentTool'
+} from './lib/capabilitySupply/currentTool/reads'
 
 export {
   publishedOperationSnapshotReturns,

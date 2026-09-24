@@ -14,8 +14,8 @@ import type { StableHashValue } from '@/modules/common/stable-hash'
 import { DelegationService, delegationGrantRef } from '@/modules/authority/delegation/public'
 import { principalRef } from '@/modules/principal-account/public'
 import { resolveInteractiveAuthorityContext } from '../../../interactiveAuthority'
-import { createConvexDelegationContextPort, createConvexDelegationStore } from '../../delegationPersistence'
-import { admitInteractiveOwnerConsequence } from '../../ownerConsequence'
+import { createConvexDelegationContextPort, createConvexDelegationStore } from '../../authority/delegation/persistence'
+import { admitInteractiveOwnerConsequence } from '../../authority/consequence/owner'
 import {
   persistAgentAudit,
   validReplacementAssertion,

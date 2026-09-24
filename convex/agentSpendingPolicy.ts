@@ -22,8 +22,8 @@ import { resolveInteractiveAuthorityContext } from './interactiveAuthority'
 import {
   resolveCanonicalAgentContext,
   validateCanonicalAgentDelegation,
-} from './lib/canonicalAgentAuthority'
-import { createConvexDelegationContextPort, createConvexDelegationStore } from './lib/delegationPersistence'
+} from './lib/authority/canonicalAgent/authority'
+import { createConvexDelegationContextPort, createConvexDelegationStore } from './lib/authority/delegation/persistence'
 import { DelegationService, parsePersistedDelegationGrant } from '@/modules/authority/delegation/public'
 import { principalRef } from '@/modules/principal-account/public'
 import { issuedAgentGrantRef } from '@/modules/agent-access/issued-agent-binding'

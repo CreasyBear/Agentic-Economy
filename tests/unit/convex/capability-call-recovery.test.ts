@@ -60,8 +60,8 @@ vi.mock('../../../convex/sourceWriteAdmission', async (importOriginal) => ({
   requireSourceRead: vi.fn(async () => ({ kind: 'accepted' })),
 }))
 
-vi.mock('../../../convex/lib/callLifecycle/authorityHandlers', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('../../../convex/lib/callLifecycle/authorityHandlers')>()),
+vi.mock('../../../convex/lib/capabilityExecution/callLifecycle/authorityHandlers', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../../convex/lib/capabilityExecution/callLifecycle/authorityHandlers')>()),
   resolveCallAgentAuthorityHandler: vi.fn(async (_ctx: unknown, args: { principal: AgentAccessPrincipal }) =>
     args.principal.scopes.includes('market_tools:call') ? args.principal : null),
 }))

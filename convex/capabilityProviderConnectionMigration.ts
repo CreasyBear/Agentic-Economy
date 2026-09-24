@@ -13,7 +13,7 @@ import type { Doc } from './_generated/dataModel'
 import {
   hasProviderConnectionAuthorityFields,
   type ProviderConnectionAuthorityCompatibilityRow,
-} from './lib/providerConnections/codecs'
+} from './lib/capabilitySupply/providerConnections/codecs'
 
 const SOURCE_EVIDENCE = 'source:facilitator-discovery'
 const ADAPTER_ID = 'x402-fetch:v2'
