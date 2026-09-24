@@ -1,10 +1,10 @@
 import { v } from 'convex/values'
 import { billingSourceArgs, identifier } from '../../../moneyLedgerValues'
-import type { BillingSourceWriteArgs } from '../../../moneyBillingAuthorization'
+import type { BillingSourceWriteArgs } from '../billingAuthorization/sourceWrite'
 import type { MutationCtx } from '../../../_generated/server'
-import { requireBillingSourceWrite } from '../../../moneyBillingAuthorization'
+import { requireBillingSourceWrite } from '../billingAuthorization/sourceWrite'
 import { transitionPayoutAccount } from '../../../../src/modules/money/public'
-import { connectAccountCommandView, payoutAccountView, refusedConnect } from './view-mapping'
+import { connectAccountCommandView, payoutAccountView, refusedConnect } from './viewMapping'
 
 export type FinalizeConnectAccountArgs = BillingSourceWriteArgs & {
   businessId: string

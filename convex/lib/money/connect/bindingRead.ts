@@ -5,7 +5,7 @@ import type { CustomerRequestServiceAssertion } from '../../../../src/modules/ag
 import { env, type QueryCtx } from '../../../_generated/server'
 import { resolveBusinessActor } from '../../../authz'
 import { verifyCustomerRequestServiceAssertion } from '../../../../src/modules/agent-access/service-auth-envelope'
-import { payoutAccountView } from './view-mapping'
+import { payoutAccountView } from './viewMapping'
 
 export type ReadPayoutAccountByStripeIdArgs = {
   stripeAccountId: string

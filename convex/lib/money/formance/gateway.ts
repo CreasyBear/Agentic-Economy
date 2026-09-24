@@ -8,18 +8,15 @@ import {
   type FormanceContext,
 } from '../../../../src/modules/money/formance'
 export {
-  readFormanceAccount,
   readFormanceAccountHistory,
   readFormancePeriodSpend,
   readFormanceStatementPage,
-  readFormanceTransactionByReference,
 } from '../../../../src/modules/money/formance'
 export {
   adjustFormanceSpendingPeriod,
   bookFormanceFundingReversal,
   bookFormanceFundingSettlement,
   bookFormanceBuyerAdjustment,
-  canRebindFormanceLegalCustomer,
   formanceAccountMetadataDigest,
   readFormanceDisplayBalance,
   readFormanceSpendingPeriod,

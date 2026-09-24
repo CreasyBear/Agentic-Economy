@@ -20,7 +20,7 @@ import { TOOL_SEARCH_USE } from '@/modules/registry/tool-reranker'
 import { api, internal } from './_generated/api'
 import { action, internalAction, type ActionCtx } from './_generated/server'
 import { publicSearchReturns, searchArgs, publicDetailReturns, publicCompareReturns, toolRefArgs, compareArgs } from './capabilitySupplyToolQueries'
-import { presentSearch as presentSearchDecision, rerankSearch } from './lib/capabilityToolCatalogPresentation'
+import { presentSearch as presentSearchDecision } from './lib/capabilityToolCatalogPresentation'
 import { facilitatorDiscoverySnapshotCandidates } from '@/modules/capability-supply/server'
 
 const PAGE_LIMIT = 20
@@ -117,20 +117,6 @@ export const search = action({
   },
 })
 
-/**
- * Node-only bridge for chat's default Convex runtime. The chat Tool keeps its
- * catalogue read in the default runtime and sends the bounded wire page here
- * so the TypeSafe SDK and server observability dependencies never leak into
- * that runtime. A failed or incomplete Jev decision returns the original page.
- */
-export const rerank = internalAction({
-  args: {
-    result: publicSearchReturns,
-    query: v.string(),
-  },
-  returns: publicSearchReturns,
-  handler: (_ctx, args) => rerankSearch({ result: args.result as ToolSearchWireResult, query: args.query }),
-})
 
 const presentSearchReturns = v.object({
   result: publicSearchReturns,

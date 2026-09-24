@@ -1,13 +1,13 @@
 import { v } from 'convex/values'
 import { accountUpdatedEventArg, billingSourceArgs, identifier } from '../../../moneyLedgerValues'
-import type { BillingSourceWriteArgs } from '../../../moneyBillingAuthorization'
+import type { BillingSourceWriteArgs } from '../billingAuthorization/sourceWrite'
 import type { StripeAccountUpdatedWebhookEvent } from '../../../../src/modules/money/public'
 import type { MutationCtx } from '../../../_generated/server'
-import { requireBillingSourceWrite } from '../../../moneyBillingAuthorization'
+import { requireBillingSourceWrite } from '../billingAuthorization/sourceWrite'
 import { eventRowFields, eventRowMatches } from '../../../moneyStripeEvents'
 import { canonicalDigest } from '../../../../src/modules/common/canonical-digest'
 import { transitionPayoutAccount } from '../../../../src/modules/money/public'
-import { payoutAccountView, refusedConnect } from './view-mapping'
+import { payoutAccountView, refusedConnect } from './viewMapping'
 
 export type RecordConnectAccountEventArgs = BillingSourceWriteArgs & {
   businessId: string

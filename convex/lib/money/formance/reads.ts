@@ -1,38 +1,14 @@
 "use node"
 
 import {
-  canRebindFormanceLegalCustomer,
   configuredContext,
   formanceAccountMetadataDigest,
-  readFormanceAccount,
   readFormanceAccountHistory,
   readFormanceDisplayBalance,
   readFormancePeriodSpend,
   readFormanceSpendingPeriod,
   readFormanceStatementPage,
-  readFormanceTransactionByReference,
 } from './gateway'
-export async function readAccountHandler(_ctx: unknown, args: { address: string }) {
-  const context = configuredContext()
-  return context.kind === 'setup_required'
-    ? context
-    : await readFormanceAccount(context.context, args.address)
-}
-
-export async function readTransactionByReferenceHandler(_ctx: unknown, args: { reference: string }) {
-  const context = configuredContext()
-  const result = context.kind === 'setup_required'
-    ? context
-    : await readFormanceTransactionByReference(context.context, args.reference)
-  return result.kind !== 'found'
-    ? result
-    : {
-        ...result,
-        metadata: { ...result.metadata },
-        postings: result.postings.map((posting) => ({ ...posting })),
-      }
-}
-
 export async function readPeriodSpendHandler(_ctx: unknown, args: {
   accountRef: string
   periodStartAt: number
@@ -113,15 +89,4 @@ export async function readDisplayBalanceHandler(_ctx: unknown, args: {
   return context.kind === 'setup_required'
     ? context
     : await readFormanceDisplayBalance(context.context, args)
-}
-
-export async function canRebindLegalCustomerHandler(_ctx: unknown, args: {
-  legalCustomerRef: string
-  generation: number
-  pendingCallCount: number
-}) {
-  const context = configuredContext()
-  return context.kind === 'setup_required'
-    ? context
-    : await canRebindFormanceLegalCustomer(context.context, args)
 }

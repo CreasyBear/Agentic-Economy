@@ -3,65 +3,16 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const sdk = vi.hoisted(() => ({ list: vi.fn(), search: vi.fn() }))
 vi.mock('@coinbase/cdp-sdk', async (original) => ({ ...await original<typeof import('@coinbase/cdp-sdk')>(), listX402DiscoveryResources: sdk.list, searchX402Resources: sdk.search }))
-import { fetchCatalogPage, rerank, search } from '../../../convex/capabilityToolCatalog'
+import { fetchCatalogPage, search } from '../../../convex/capabilityToolCatalog'
 
-import { serializeToolSearchResult, type ToolSearchWireResult } from '@/modules/capability-supply/public'
-import { ERC20_QUERY, jevSystemOneResponse, misorderedSearchResult } from '../../helpers/tool-search-rerank-fixtures'
+import type { ToolSearchWireResult } from '@/modules/capability-supply/public'
 import { timezonePaymentRequired20260819Fixture } from '@/modules/capability-supply/public'
 
-const rerankHandler = (rerank as unknown as { _handler: (ctx: unknown, args: { result: ToolSearchWireResult; query: string }) => Promise<ToolSearchWireResult> })._handler
 const searchHandler = (search as unknown as { _handler: (ctx: unknown, args: { source: 'coinbase'; query: string }) => Promise<ToolSearchWireResult> })._handler
 
 describe('SDK-backed catalogue discovery', () => {
   beforeEach(() => { vi.clearAllMocks() })
   afterEach(() => { vi.unstubAllGlobals(); vi.unstubAllEnvs() })
-
-  it('returns the original wire page without inference when discovery is disabled', async () => {
-    vi.stubEnv('AE_JEV_DISCOVERY_ENABLED', 'false')
-    vi.stubEnv('OPENROUTER_API_KEY', 'sk-or-test')
-    const fetcher = vi.fn<typeof fetch>()
-    vi.stubGlobal('fetch', fetcher)
-    const result = serializeToolSearchResult(misorderedSearchResult(ERC20_QUERY))
-    await expect(rerankHandler(null, { result, query: ERC20_QUERY })).resolves.toEqual(result)
-    expect(fetcher).not.toHaveBeenCalled()
-  })
-
-  it('bounds a remote Node inference attempt even without a caller signal', async () => {
-    vi.stubEnv('OPENROUTER_API_KEY', 'sk-or-test')
-    let signal: AbortSignal | null | undefined
-    const fetcher = vi.fn<typeof fetch>().mockImplementation(async (_url, init) => {
-      signal = init?.signal
-      return new Promise((_resolve, reject) => signal?.addEventListener('abort', () => reject(signal?.reason), { once: true }))
-    })
-    vi.stubGlobal('fetch', fetcher)
-    const result = serializeToolSearchResult(misorderedSearchResult(ERC20_QUERY))
-    const startedAt = Date.now()
-    await expect(rerankHandler(null, { result, query: ERC20_QUERY })).resolves.toEqual(result)
-    expect(Date.now() - startedAt).toBeLessThan(2000)
-    expect(signal?.aborted).toBe(true)
-    expect(fetcher).toHaveBeenCalledTimes(1)
-  })
-
-  it('keeps the twenty-first Tool unassessed across the Node wire boundary', async () => {
-    vi.stubEnv('OPENROUTER_API_KEY', 'sk-or-test')
-    const source = misorderedSearchResult(ERC20_QUERY)
-    const items = Array.from({ length: 21 }, (_, index) => ({
-      ...source.items[0]!, toolRef: `operation:v1:${index.toString(16).padStart(64, '0')}` as typeof source.items[number]['toolRef'],
-    }))
-    const answers = Object.fromEntries(Array.from({ length: 20 }, (_, index) => [`match_${index}`, { type: 'noul', noul: 0 }]))
-    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(jevSystemOneResponse(answers))
-    vi.stubGlobal('fetch', fetcher)
-    const result = serializeToolSearchResult({ ...source, items, pagination: { limit: 21, hasMore: true, nextCursor: 'opaque-next-page' } })
-    const reranked = await rerankHandler(null, { result, query: ERC20_QUERY })
-    expect(reranked.kind).toBe('ok')
-    if (reranked.kind !== 'ok' || result.kind !== 'ok') throw new Error('expected_search_page')
-    expect(reranked.items).toEqual(result.items)
-    expect(reranked.pagination).toEqual(result.pagination)
-    expect(reranked.ranking).toHaveLength(20)
-    expect(reranked.ranking.every(entry => entry.score === 0)).toBe(true)
-    expect(reranked.ranking.some(entry => entry.toolRef === items[20]!.toolRef)).toBe(false)
-    expect(fetcher).toHaveBeenCalledTimes(1)
-  })
 
   it('reads source results from the ingested snapshot without a reconciliation mutation', async () => {
     sdk.list.mockResolvedValue({

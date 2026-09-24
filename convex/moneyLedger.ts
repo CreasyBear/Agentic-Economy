@@ -6,14 +6,14 @@ import {
   creditActivityResultValue,
   keyUsageArgs,
   keyUsageResultValue,
-} from './lib/money/credit-contracts'
+} from './lib/money/credit/contracts'
 import {
   creditAccountMoneyFactsArgs,
   creditAccountMoneyFactsValue,
   readCreditAccountMoneyFactsHandler,
   readCreditAccountHandler,
-} from './lib/money/credit-balance'
-import { listCreditActivityHandler, readKeyUsageHandler } from './lib/money/credit-activity'
+} from './lib/money/credit/balance'
+import { listCreditActivityHandler, readKeyUsageHandler } from './lib/money/credit/activity'
 import {
   ownerProviderEarningsArgs,
   ownerProviderEarningsResultValue,
@@ -21,11 +21,11 @@ import {
   agentProviderEarningsResultValue,
   readOwnerProviderEarningsHandler,
   readAgentProviderEarningsHandler,
-} from './lib/money/provider-earnings'
+} from './lib/money/earnings/providerEarnings'
 import { connectAccountResultValue, connectAccountReservationResultValue } from './lib/money/connect/contracts'
-import { reserveConnectAccountArgs, reserveConnectAccountHandler } from './lib/money/connect/account-reserve'
-import { authorizeConnectOnboardingArgs, authorizeConnectOnboardingHandler } from './lib/money/connect/account-authorize'
-import { finalizeConnectAccountArgs, finalizeConnectAccountHandler } from './lib/money/connect/account-finalize'
+import { reserveConnectAccountArgs, reserveConnectAccountHandler } from './lib/money/connect/accountReserve'
+import { authorizeConnectOnboardingArgs, authorizeConnectOnboardingHandler } from './lib/money/connect/accountAuthorize'
+import { finalizeConnectAccountArgs, finalizeConnectAccountHandler } from './lib/money/connect/accountFinalize'
 import {
   readPayoutAccountByStripeIdArgs,
   readPayoutAccountByStripeIdForWorkerArgs,
@@ -35,13 +35,13 @@ import {
   readPayoutAccountByStripeIdHandler,
   readPayoutAccountByStripeIdForWorkerHandler,
   readOwnerPayoutAccountHandler,
-} from './lib/money/connect/binding-read'
+} from './lib/money/connect/bindingRead'
 import {
   recordConnectAccountEventArgs,
   recordConnectAccountEventFromInboxArgs,
   recordConnectAccountEventHandler,
   recordConnectAccountEventFromInboxHandler,
-} from './lib/money/connect/stripe-event'
+} from './lib/money/connect/stripeEvent'
 
 // Stripe Connect account custody is domain identity, not ledger authority, so
 // these maintained handlers remain while all monetary reads and writes move to

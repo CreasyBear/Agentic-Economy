@@ -99,12 +99,6 @@ export const expireInteractiveCredential = internalMutation({
   handler: expireInteractiveCredentialHandler,
 })
 
-export const reconcileInteractiveCredentialExpiry = internalMutation({
-  args: lifecycleArgs,
-  returns: lifecycleResultValue,
-  handler: reconcileInteractiveCredentialExpiryHandler,
-})
-
 export async function armInteractiveCredentialExpiryHandler(
   ctx: MutationCtx,
   args: LifecycleArgs,
@@ -171,27 +165,6 @@ export async function expireInteractiveCredentialHandler(
   const now = Date.now()
   if (now < credential.expiresAt) return { kind: 'not_due' }
   return await expireCredential(ctx, credential, args, now)
-}
-
-export async function reconcileInteractiveCredentialExpiryHandler(
-  ctx: MutationCtx,
-  args: LifecycleArgs,
-): Promise<LifecycleResult> {
-  const existing = await credentialByRef(ctx, args.credentialRef)
-  if (existing !== null
-    && existing.bindingRef === args.bindingRef
-    && existing.generation === args.expectedGeneration
-    && existing.lifecycle !== 'active'
-    && existing.expiryMaterialization?.state === 'expired') {
-    return { kind: 'duplicate_expired' }
-  }
-  const loaded = await loadExactCredential(ctx, args)
-  if (loaded.kind === 'refused') return loaded
-  const now = Date.now()
-  if (now >= loaded.credential.expiresAt) {
-    return await expireCredential(ctx, loaded.credential, args, now)
-  }
-  return await armInteractiveCredentialExpiryHandler(ctx, args)
 }
 
 async function loadExactCredential(

@@ -2,21 +2,20 @@
 
 import { internalAction } from './_generated/server'
 import {
-  accountHistoryResultValue, accountResult, buyerAdjustmentArgs,
+  accountHistoryResultValue, buyerAdjustmentArgs,
   capacitySyncArgs, displayBalanceArgs, displayBalanceResult, finalizeManagedCallArgs,
-  fundingBookingArgs, healthResult, installationResult, legalCustomerRebindResult,
-  managedCallBookingArgs, moneyResult, periodSpendResult, readAccountArgs,
+  fundingBookingArgs, healthResult, installationResult,
+  managedCallBookingArgs, moneyResult, periodSpendResult,
   readAccountHistoryArgs, readPeriodSpendArgs, readStatementPageArgs,
-  readTransactionByReferenceArgs, rebindLegalCustomerArgs, referenceResult,
   releaseExpiredUnusedCallArgs, releaseManagedCallArgs, reverseProviderSettlementArgs,
   spendingPeriodAdjustmentValue, spendingPeriodArgs, spendingPeriodResult,
   statementPageResult,
 } from './lib/money/formance/contracts'
 import { healthHandler, installSchemaHandler } from './lib/money/formance/gateway'
 import {
-  canRebindLegalCustomerHandler, readAccountHandler, readAccountHistoryHandler,
+  readAccountHistoryHandler,
   readDisplayBalanceHandler, readPeriodSpendHandler, readSpendingPeriodHandler,
-  readStatementPageHandler, readTransactionByReferenceHandler,
+  readStatementPageHandler,
 } from './lib/money/formance/reads'
 import {
   adjustSpendingPeriodHandler, bookBuyerAdjustmentHandler, bookFundingReversalHandler,
@@ -27,10 +26,6 @@ import {
 
 export const health = internalAction({ args: {}, returns: healthResult, handler: healthHandler })
 export const installSchema = internalAction({ args: {}, returns: installationResult, handler: installSchemaHandler })
-export const readAccount = internalAction({ args: readAccountArgs, returns: accountResult, handler: readAccountHandler })
-export const readTransactionByReference = internalAction({
-  args: readTransactionByReferenceArgs, returns: referenceResult, handler: readTransactionByReferenceHandler,
-})
 export const readPeriodSpend = internalAction({
   args: readPeriodSpendArgs, returns: periodSpendResult, handler: readPeriodSpendHandler,
 })
@@ -60,9 +55,6 @@ export const readSpendingPeriod = internalAction({
 })
 export const readDisplayBalance = internalAction({
   args: displayBalanceArgs, returns: displayBalanceResult, handler: readDisplayBalanceHandler,
-})
-export const canRebindLegalCustomer = internalAction({
-  args: rebindLegalCustomerArgs, returns: legalCustomerRebindResult, handler: canRebindLegalCustomerHandler,
 })
 export const reserveManagedCall = internalAction({
   args: managedCallBookingArgs, returns: moneyResult, handler: reserveManagedCallHandler,

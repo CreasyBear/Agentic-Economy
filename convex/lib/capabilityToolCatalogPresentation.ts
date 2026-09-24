@@ -1,5 +1,5 @@
 import { deserializeToolSearchResult, serializeToolSearchResult, type ToolSearchWireResult } from '@/modules/capability-supply/public'
-import { presentToolSearch, rerankToolSearchResult } from '@/modules/registry/tool-reranker'
+import { presentToolSearch } from '@/modules/registry/tool-reranker'
 import { env } from '../_generated/server'
 
 function decisionOptions() {
@@ -10,11 +10,6 @@ function decisionOptions() {
     disableJev: env.AE_JEV_DISCOVERY_ENABLED === 'false',
     ...(env.OPENROUTER_API_KEY === undefined ? {} : { openrouterApiKey: env.OPENROUTER_API_KEY }),
   }
-}
-
-export async function rerankSearch(args: { result: ToolSearchWireResult; query: string }): Promise<ToolSearchWireResult> {
-  const source = deserializeToolSearchResult(args.result)
-  return serializeToolSearchResult(await rerankToolSearchResult(source, args.query, decisionOptions()))
 }
 
 export async function presentSearch(args: { result: ToolSearchWireResult; query: string; request?: string }) {

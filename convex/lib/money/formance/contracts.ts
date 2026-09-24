@@ -77,38 +77,6 @@ export const installationResult = v.union(
   setupRequired,
   unavailable,
 )
-export const accountResult = v.union(
-  v.object({
-    kind: v.literal('completed'),
-    address: v.string(),
-    volumes: v.record(v.string(), v.object({
-      inputUnits: v.string(),
-      outputUnits: v.string(),
-      balanceUnits: v.string(),
-    })),
-  }),
-  v.object({ kind: v.literal('not_found') }),
-  setupRequired,
-  unavailable,
-)
-export const referenceResult = v.union(
-  v.object({
-    kind: v.literal('found'),
-    reference: v.string(),
-    transactionId: v.string(),
-    template: v.optional(v.string()),
-    metadata: v.record(v.string(), v.string()),
-    postings: v.array(v.object({
-      source: v.string(),
-      destination: v.string(),
-      asset: v.string(),
-      amountUnits: v.string(),
-    })),
-  }),
-  v.object({ kind: v.literal('absent'), reference: v.string() }),
-  setupRequired,
-  unavailable,
-)
 export const periodSpendResult = v.union(
   v.object({
     kind: v.literal('available'),
@@ -153,21 +121,7 @@ export const displayBalanceResult = v.union(
   setupRequired,
   unavailable,
 )
-export const legalCustomerRebindResult = v.union(
-  v.object({ kind: v.literal('allowed') }),
-  v.object({
-    kind: v.literal('refused'),
-    code: v.union(
-      v.literal('legal_customer_capacity_reserved'),
-      v.literal('legal_customer_calls_pending'),
-    ),
-  }),
-  setupRequired,
-  unavailable,
-)
 
-export const readAccountArgs = { address: v.string() }
-export const readTransactionByReferenceArgs = { reference: v.string() }
 export const readPeriodSpendArgs = {
   accountRef: v.string(), periodStartAt: v.number(), periodEndAt: v.number(),
 }
@@ -204,9 +158,6 @@ export const spendingPeriodArgs = {
 }
 export const displayBalanceArgs = {
   balanceKind, subjectRef: v.string(), generation: v.optional(v.number()),
-}
-export const rebindLegalCustomerArgs = {
-  legalCustomerRef: v.string(), generation: v.number(), pendingCallCount: v.number(),
 }
 export const releaseManagedCallArgs = {
   booking: v.object(managedCallBookingArgs),

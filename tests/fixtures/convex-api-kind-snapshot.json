@@ -690,30 +690,6 @@
     "kind": "mutation"
   },
   {
-    "visibility": "internal",
-    "module": "capabilityProviderApprovals",
-    "method": "issue",
-    "kind": "mutation"
-  },
-  {
-    "visibility": "internal",
-    "module": "capabilityProviderApprovals",
-    "method": "project",
-    "kind": "query"
-  },
-  {
-    "visibility": "internal",
-    "module": "capabilityProviderApprovals",
-    "method": "read",
-    "kind": "query"
-  },
-  {
-    "visibility": "internal",
-    "module": "capabilityProviderApprovals",
-    "method": "readAtGeneration",
-    "kind": "query"
-  },
-  {
     "visibility": "public",
     "module": "capabilityProviderConnectionAgents",
     "method": "connectX402",
@@ -1578,12 +1554,6 @@
     "kind": "action"
   },
   {
-    "visibility": "internal",
-    "module": "capabilityToolCatalog",
-    "method": "rerank",
-    "kind": "action"
-  },
-  {
     "visibility": "public",
     "module": "capabilityToolCatalog",
     "method": "search",
@@ -1838,12 +1808,6 @@
   {
     "visibility": "internal",
     "module": "devSeed",
-    "method": "provisionDevSeedCatalogIdentity",
-    "kind": "mutation"
-  },
-  {
-    "visibility": "internal",
-    "module": "devSeed",
     "method": "publishSandboxTool",
     "kind": "mutation"
   },
@@ -1923,12 +1887,6 @@
     "visibility": "internal",
     "module": "interactiveCredentialLifecycle",
     "method": "expireInteractiveCredential",
-    "kind": "mutation"
-  },
-  {
-    "visibility": "internal",
-    "module": "interactiveCredentialLifecycle",
-    "method": "reconcileInteractiveCredentialExpiry",
     "kind": "mutation"
   },
   {
@@ -2402,12 +2360,6 @@
   {
     "visibility": "internal",
     "module": "moneyFormance",
-    "method": "canRebindLegalCustomer",
-    "kind": "action"
-  },
-  {
-    "visibility": "internal",
-    "module": "moneyFormance",
     "method": "health",
     "kind": "action"
   },
@@ -2415,12 +2367,6 @@
     "visibility": "internal",
     "module": "moneyFormance",
     "method": "installSchema",
-    "kind": "action"
-  },
-  {
-    "visibility": "internal",
-    "module": "moneyFormance",
-    "method": "readAccount",
     "kind": "action"
   },
   {
@@ -2451,12 +2397,6 @@
     "visibility": "internal",
     "module": "moneyFormance",
     "method": "readStatementPage",
-    "kind": "action"
-  },
-  {
-    "visibility": "internal",
-    "module": "moneyFormance",
-    "method": "readTransactionByReference",
     "kind": "action"
   },
   {
@@ -2738,12 +2678,6 @@
   {
     "visibility": "internal",
     "module": "moneyProviderObligations",
-    "method": "markDisputed",
-    "kind": "mutation"
-  },
-  {
-    "visibility": "internal",
-    "module": "moneyProviderObligations",
     "method": "markOwnerReversalUnknown",
     "kind": "mutation"
   },
@@ -2751,12 +2685,6 @@
     "visibility": "internal",
     "module": "moneyProviderObligations",
     "method": "prepareOwnerReversal",
-    "kind": "mutation"
-  },
-  {
-    "visibility": "internal",
-    "module": "moneyProviderObligations",
-    "method": "resolveDispute",
     "kind": "mutation"
   },
   {
@@ -3016,12 +2944,6 @@
     "module": "personalAccount",
     "method": "retirePersonalAccountForServer",
     "kind": "mutation"
-  },
-  {
-    "visibility": "internal",
-    "module": "qualifiedUse",
-    "method": "readQualifiedUseByCall",
-    "kind": "query"
   },
   {
     "visibility": "internal",

@@ -230,18 +230,3 @@ export const recordQualifiedUse = internalMutation({
     }
   },
 })
-
-export const readQualifiedUseByCall = internalQuery({
-  args: { callRef: identifier },
-  returns: v.union(qualifiedUseReceiptValue, v.null()),
-  handler: async (ctx, args) => {
-    const row = await ctx.db
-      .query('qualifiedUseReceipts')
-      .withIndex('by_callRef', (q) =>
-        q.eq('callRef', args.callRef),
-      )
-      .first()
-    return row === null ? null : toWire(toReceipt(row))
-  },
-})
-

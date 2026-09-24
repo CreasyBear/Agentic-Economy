@@ -29,13 +29,9 @@ import {
   MAX_ACCESS_PATHS_PER_OFFERING,
   type OfferingPrice,
 } from '@/modules/catalog/public'
-import {
-  deriveBusinessOfferingSupportFromCapabilitySupply,
-  readCatalogDescriptor,
-  rebuildBusinessSupplyProjectionSnapshotCommand,
-} from './catalog'
-import { resolveDevSeedOwningAccountRef } from './lib/catalog/devSeedAuthority'
-import { upsertDevSeedSandboxAccessPath, upsertDevSeedSandboxProviderToolProjection } from './lib/catalog/devSeedAccessPath'
+import { deriveBusinessOfferingSupportFromCapabilitySupply } from './lib/capabilitySupply/projection/support'
+import { rebuildBusinessSupplyProjectionSnapshotCommand } from './lib/capabilitySupply/projection/snapshot'
+import { readCatalogDescriptor } from './lib/catalog/offerings/persistence'
 import {
   admitDevSeedCatalogAuthority,
   DEV_SEED_CATALOG_ACCOUNT_NAME,
@@ -44,9 +40,10 @@ import {
   DEV_SEED_CATALOG_PRINCIPAL_REF,
   DEV_SEED_CATALOG_RESOURCE,
   DEV_SEED_CATALOG_SCOPE,
-  reviseBusinessOfferingCommand,
-  upsertOfferingAccessPathCommand,
-} from './catalogOfferingMutations'
+  resolveDevSeedOwningAccountRef,
+} from './lib/catalog/devSeedAuthority'
+import { upsertDevSeedSandboxAccessPath, upsertDevSeedSandboxProviderToolProjection } from './lib/catalog/devSeedAccessPath'
+import { reviseBusinessOfferingCommand, upsertOfferingAccessPathCommand } from './lib/catalog/offerings/commands'
 import {
   DEV_SEED_PRICE_BY_SLUG,
   DEV_SEED_PRICING_BY_SLUG,
@@ -196,18 +193,6 @@ export async function provisionDevSeedCatalogIdentityRows(ctx: MutationCtx): Pro
   }
   return created
 }
-
-export const provisionDevSeedCatalogIdentity = internalMutation({
-  args: {},
-  returns: v.object({
-    kind: v.literal('ensured'),
-    created: v.array(v.string()),
-  }),
-  handler: async (ctx) => {
-    const created = await provisionDevSeedCatalogIdentityRows(ctx)
-    return { kind: 'ensured' as const, created }
-  },
-})
 
 /*
  * Local-E2E owner identity.

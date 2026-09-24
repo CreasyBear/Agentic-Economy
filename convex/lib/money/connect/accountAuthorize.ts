@@ -1,12 +1,12 @@
 import { v } from 'convex/values'
 import { billingSourceArgs, identifier } from '../../../moneyLedgerValues'
 import { clerkConsequenceProofValue, type ClerkConsequenceProofInput } from '../../consequenceProof'
-import type { BillingSourceWriteArgs } from '../../../moneyBillingAuthorization'
+import type { BillingSourceWriteArgs } from '../billingAuthorization/sourceWrite'
 import type { MutationCtx } from '../../../_generated/server'
 import { resolveBusinessActor } from '../../../authz'
-import { requireBillingSourceWrite } from '../../../moneyBillingAuthorization'
+import { requireBillingSourceWrite } from '../billingAuthorization/sourceWrite'
 import { admitInteractiveOwnerConsequence } from '../../ownerConsequence'
-import { payoutAccountView, refusedConnect } from './view-mapping'
+import { payoutAccountView, refusedConnect } from './viewMapping'
 
 export type AuthorizeConnectOnboardingArgs = BillingSourceWriteArgs & {
   businessId: string
