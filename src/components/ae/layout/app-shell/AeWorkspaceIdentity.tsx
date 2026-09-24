@@ -29,6 +29,6 @@ export function AeWorkspaceIdentity({ inMenu = false }: AeWorkspaceIdentityProps
   const name = workspace === null ? 'Workspace' : workspace.clerkOrgId
     ? safeName ?? 'Workspace'
     : ownerName ? `${ownerName}’s workspace` : 'Personal workspace'
-  return <span aria-label={`Workspace: ${name}`} title={name} className={inMenu ? 'block max-w-48 truncate px-2 text-xs font-medium text-foreground lg:hidden' : 'hidden max-w-40 truncate text-xs font-medium text-foreground lg:block xl:max-w-64'}>{name}</span>
+  return <span aria-label={`Workspace: ${name}`} title={name} className={inMenu ? 'block max-w-48 truncate px-2 text-xs font-medium text-foreground lg:hidden' : 'hidden min-w-0 max-w-28 truncate text-xs font-medium text-foreground lg:block xl:max-w-48'}>{name}</span>
 
 }

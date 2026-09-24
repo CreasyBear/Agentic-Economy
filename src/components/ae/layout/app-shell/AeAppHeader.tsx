@@ -33,7 +33,7 @@ export type AeAppHeaderProps = Readonly<{
 
 function chatActionSlot(chatFrame: boolean) {
   if (!chatFrame) return null
-  return <div id={chatHeaderActionsId} className="flex shrink-0 items-center gap-intra" />
+  return <div id={chatHeaderActionsId} className="flex min-w-0 flex-1 items-center gap-1" />
 }
 
 function BrandLink() {
@@ -43,8 +43,8 @@ function BrandLink() {
       aria-label="Agentic Economy home"
       className="flex shrink-0 min-h-touch min-w-touch items-center gap-related no-underline active:scale-[0.98] transition-transform duration-100 ease-out motion-reduce:transition-none motion-reduce:active:scale-100"
     >
-      <img src={AECON_MARK_SRC} alt="" aria-hidden="true" className={cn(aeconMarkClassName.light, 'hidden max-[359px]:block sm:block')} />
-      <img src={AECON_MOBILE_LOCKUP_SRC} alt="" aria-hidden="true" className="h-5 w-auto max-w-24 max-[359px]:hidden sm:hidden" />
+      <img src={AECON_MARK_SRC} alt="" aria-hidden="true" className={cn(aeconMarkClassName.light, 'max-sm:block')} />
+      <img src={AECON_MOBILE_LOCKUP_SRC} alt="" aria-hidden="true" className="hidden h-5 w-auto max-w-24" />
     </Link>
   )
 }
@@ -70,9 +70,9 @@ export function AeAppHeader({
       className="sticky top-0 z-30 shrink-0 border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/85"
     >
       {minimal ? (
-        <div className="flex h-(--header-height) min-h-touch items-center justify-between px-gutter">
-          <div className="flex items-center gap-intra">
-            <BrandLink />
+        <div className={cn("flex h-(--header-height) min-h-touch items-center justify-between px-gutter", chatFrame && "max-sm:!h-11 max-sm:!min-h-11 max-sm:!px-4")}>
+          <div className="flex min-w-0 flex-1 items-center gap-intra">
+            <div className={chatFrame ? 'hidden sm:block' : ''}><BrandLink /></div>
             {chatActionSlot(chatFrame)}
           </div>
           <div className="flex items-center gap-intra">
@@ -90,45 +90,44 @@ export function AeAppHeader({
       ) : signedIn ? (
         <div
           data-elevated={elevated ? '' : undefined}
-          className="ae-nav flex min-h-(--header-height) flex-wrap items-center gap-1 px-1 py-1 shadow-none transition-shadow duration-200 ease-out data-[elevated]:shadow-soft motion-reduce:transition-none sm:gap-related sm:px-2"
+          className={cn("ae-nav flex h-(--header-height) min-h-(--header-height) min-w-0 items-center gap-1 overflow-hidden px-1 shadow-none transition-shadow duration-200 ease-out data-[elevated]:shadow-soft motion-reduce:transition-none sm:gap-related sm:px-2", chatFrame && "max-sm:!h-11 max-sm:!min-h-11 max-sm:!px-4")}
         >
-          <BrandLink />
+          <div className={chatFrame ? 'hidden sm:block' : ''}><BrandLink /></div>
           {chatActionSlot(chatFrame)}
-          {pageTitle === null ? null : (
+          {pageTitle === null || chatFrame ? null : (
             <h1 className={cn('min-w-0 flex-1 truncate text-title', pageTitle === 'Settings' && 'max-[359px]:sr-only')} title={pageTitle} aria-label={pageTitle}>
               {pageTitle}
             </h1>
           )}
-          <div className="ms-auto flex min-w-0 max-w-full flex-wrap items-center justify-end gap-1 sm:gap-intra">
+          <div className="ms-auto flex min-w-0 shrink-0 items-center justify-end gap-0.5 sm:gap-intra">
             <div className="hidden sm:block"><AeNetworkHealthIndicator /></div>
-            <AeCommandPanel />
-            <AeWorkspaceIdentity />
-            <WorkspaceMenu operatorRole={operatorRole} canAccessAdmin={canAccessAdmin} />
-            <ThemeToggle />
+            <div className={chatFrame ? 'hidden sm:block' : 'block'}><AeCommandPanel /></div>
+            <div className={chatFrame ? 'hidden sm:block' : ''}><AeWorkspaceIdentity /></div>
+            <div className={chatFrame ? 'hidden sm:block' : ''}><WorkspaceMenu operatorRole={operatorRole} canAccessAdmin={canAccessAdmin} /></div>
+            <div className={chatFrame ? 'hidden sm:block' : 'block'}><ThemeToggle /></div>
             <UserButton userProfileMode="navigation" userProfileUrl="/owner/settings/account" />
           </div>
         </div>
       ) : (
         <Sheet open={mobileNavOpen} onOpenChange={setMobileNavOpen}>
           <div
-            data-elevated={elevated ? '' : undefined}
-            className="ae-nav flex h-(--header-height) min-h-(--header-height) items-center gap-1 px-1 shadow-none sm:gap-related transition-shadow duration-200 ease-out data-[elevated]:shadow-soft motion-reduce:transition-none sm:px-2"
+            className={cn("ae-nav flex h-(--header-height) min-h-(--header-height) items-center gap-1 px-1 shadow-none sm:gap-related transition-shadow duration-200 ease-out data-[elevated]:shadow-soft motion-reduce:transition-none sm:px-2", chatFrame && "max-sm:!h-11 max-sm:!min-h-11 max-sm:!px-4")}
           >
-            <BrandLink />
+            <div className={chatFrame ? 'hidden sm:block' : ''}><BrandLink /></div>
             {chatActionSlot(chatFrame)}
-            <AeSitePrimaryNav />
+            <div className={chatFrame ? 'hidden sm:block' : ''}><AeSitePrimaryNav /></div>
             <div className="ms-auto flex items-center gap-1 sm:gap-intra">
               <div className="hidden sm:block"><AeNetworkHealthIndicator /></div>
-              <AeCommandPanel />
-              <ThemeToggle />
+              <div className={chatFrame ? 'hidden sm:block' : ''}><AeCommandPanel /></div>
+              <div className={chatFrame ? 'hidden sm:block' : ''}><ThemeToggle /></div>
               <Link to="/sign-in/$" params={{ _splat: '' }} className={cn(buttonVariants({ variant: 'ghost' }), 'hidden md:inline-flex')}>Sign in</Link>
-              <SheetTrigger
+              {!chatFrame ? <SheetTrigger
                 render={
                   <AeSiteIconButton ariaLabel={mobileNavOpen ? 'Close public menu' : 'Open public menu'} className="md:hidden">
                     <MenuIcon aria-hidden="true" />
                   </AeSiteIconButton>
                 }
-              />
+              /> : null}
             </div>
           </div>
           <SheetContent side="left" className="w-80 max-w-[calc(100vw-2rem)] p-0" showCloseButton={false}>
