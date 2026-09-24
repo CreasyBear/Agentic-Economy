@@ -12,9 +12,7 @@ import { generatePrincipalRef } from '../../../../src/modules/principal-account/
 import { canonicalDigest } from '../../../../src/modules/common/canonical-digest'
 import type { Doc } from '../../../_generated/dataModel'
 import type { MutationCtx } from '../../../_generated/server'
-import {
-  armInteractiveCredentialExpiryHandler,
-} from '../../../interactiveCredentialLifecycle'
+import { armInteractiveCredentialExpiryHandler } from '../interactiveCredential/arm'
 import {
   CLERK_USER_PROVIDER_NAMESPACE,
   INTERACTIVE_OWNER_SESSION_WINDOW_MS,

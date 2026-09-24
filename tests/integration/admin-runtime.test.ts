@@ -6,7 +6,7 @@ import {
   bootstrapOwnerAdmin,
   grantAdminMembership,
 } from '../../convex/security'
-import { interactiveCredentialExpiryNonce } from '../../convex/interactiveCredentialLifecycle'
+import { interactiveCredentialExpiryNonce } from '../../convex/lib/principalAccount/interactiveCredential/nonce'
 import { withSourceWrite } from '../helpers/source-write-admission'
 import type { SourceWriteAdmission, SourceWriteAdmissionRequest } from '@/modules/security/source-write-admission'
 import { canonicalDigest } from '@/modules/common/canonical-digest'

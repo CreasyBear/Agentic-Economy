@@ -4,10 +4,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import schema from '../../../convex/schema'
 import { canonicalDigest } from '../../../src/modules/common/canonical-digest'
-import {
-  armInteractiveCredentialExpiryHandler,
-  expireInteractiveCredentialHandler,
-} from '../../../convex/interactiveCredentialLifecycle'
+import { armInteractiveCredentialExpiryHandler } from '../../../convex/lib/principalAccount/interactiveCredential/arm'
+import { expireInteractiveCredentialHandler } from '../../../convex/lib/principalAccount/interactiveCredential/expire'
 import { convexModules as modules } from '../../helpers/convex-fixtures'
 
 const NOW = 10_000

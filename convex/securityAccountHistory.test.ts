@@ -13,7 +13,7 @@ import { createAgentAccessGrant } from '../src/modules/agent-access/policy'
 import { defaultSandboxAgentAccessPolicy } from '../src/modules/agent-access/sandbox-policy'
 import { api, internal } from './_generated/api'
 import schema from './schema'
-import { interactiveCredentialExpiryNonce } from './interactiveCredentialLifecycle'
+import { interactiveCredentialExpiryNonce } from './lib/principalAccount/interactiveCredential/nonce'
 import { ACCOUNT_SECURITY_HISTORY_ACTIVATED_AT } from './lib/security/accountHistory/history'
 
 const modules = import.meta.glob('./**/*.ts')

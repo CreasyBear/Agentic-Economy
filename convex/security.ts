@@ -7,8 +7,8 @@ import { openRemovalDisputeArgsValue, removalReason, visibilityTargetType } from
 import { runAdminCommand } from './lib/adminConsole/commandEnvelope'
 import { grantAdminMembershipSpec, revokeAdminMembershipSpec } from './lib/adminConsole/actions/adminMembership'
 import { removalDisputeSpec } from './lib/adminConsole/actions/removalDispute'
-import { bootstrapOwnerAdminHandler } from './securityAdminMembership'
-import { openRemovalDisputeHandler } from './securityRemovalDisputes'
+import { bootstrapOwnerAdminHandler } from './lib/security/adminMembership/bootstrap'
+import { openRemovalDisputeHandler } from './lib/security/removalDisputes/open'
 const adminRole = v.union(v.literal('owner_admin'), v.literal('support'), v.literal('reviewer'))
 const adminMembershipState = v.union(v.literal('active'), v.literal('revoked'), v.literal('suspended'))
 const disputeStatus = v.union(v.literal('opened'), v.literal('updated'), v.literal('closed'), v.literal('contested'))

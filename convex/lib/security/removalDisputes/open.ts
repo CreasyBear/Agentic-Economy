@@ -1,23 +1,23 @@
-import type { MutationCtx, QueryCtx } from './_generated/server'
-import type { Doc, Id } from './_generated/dataModel'
-import { admissionKey, assertAdmission } from './lib/platform/rateLimit'
-import { requireSourceWrite } from './lib/security/sourceWrite/admission'
-import { brandNonEmpty } from '../src/modules/common/ids'
-import { canonicalDigest } from '../src/modules/common/canonical-digest'
+import type { MutationCtx, QueryCtx } from '../../../_generated/server'
+import type { Doc, Id } from '../../../_generated/dataModel'
+import { admissionKey, assertAdmission } from '../../platform/rateLimit'
+import { requireSourceWrite } from '../sourceWrite/admission'
+import { brandNonEmpty } from '../../../../src/modules/common/ids'
+import { canonicalDigest } from '../../../../src/modules/common/canonical-digest'
 import {
   RemovalDisputeReasonCodeValues,
   openRemovalDispute as openRemovalDisputeModule,
-} from '../src/modules/security/public'
+} from '../../../../src/modules/security/public'
 import type {
   DisputeEvidenceInput,
   DisputeOpenResult,
   DisputeRecord,
   DisputeSourceState,
   RemovalDisputeReasonCode,
-} from '../src/modules/security/public'
-import { persistAuditEvent } from './lib/security/audit/persistence'
+} from '../../../../src/modules/security/public'
+import { persistAuditEvent } from '../audit/persistence'
 
-type OpenRemovalDisputeHandlerArgs = {
+type OpenRemovalDisputeArgs = {
   businessId: string
   targetType: 'business' | 'service' | 'capability'
   targetRef: string
@@ -37,7 +37,7 @@ type OpenRemovalDisputeHandlerArgs = {
 }
 
 
-export async function openRemovalDisputeHandler(ctx: MutationCtx, args: OpenRemovalDisputeHandlerArgs) {
+export async function openRemovalDisputeHandler(ctx: MutationCtx, args: OpenRemovalDisputeArgs) {
   const admission = await assertAdmission(ctx, {
     name: 'dispute-open',
     key: await admissionKey(ctx, disputeRateLimitKey({

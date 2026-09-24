@@ -2,7 +2,7 @@ import { convexTest } from 'convex-test'
 import { describe, expect, it } from 'vitest'
 
 import { api } from '../../../convex/_generated/api'
-import { interactiveCredentialExpiryNonce } from '../../../convex/interactiveCredentialLifecycle'
+import { interactiveCredentialExpiryNonce } from '../../../convex/lib/principalAccount/interactiveCredential/nonce'
 import schema from '../../../convex/schema'
 import { encodeCapabilityContractDocument } from '@/modules/capability-contract-registry/public'
 import { canonicalDigest } from '@/modules/common/canonical-digest'

@@ -8,7 +8,7 @@ import {
   runOwnerSupplyReadiness,
   runOwnerSupplyTest,
 } from '../../../convex/capabilitySupplyOwnerSupply'
-import { interactiveCredentialExpiryNonce } from '../../../convex/interactiveCredentialLifecycle'
+import { interactiveCredentialExpiryNonce } from '../../../convex/lib/principalAccount/interactiveCredential/nonce'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { stableStringify } from '@/modules/common/stable-hash'
 import { convexModules as modules, publishedBusinessOwner } from '../../helpers/convex-fixtures'

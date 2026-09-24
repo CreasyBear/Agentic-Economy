@@ -6,7 +6,7 @@ import {
   ownershipRef,
 } from '../../../../src/modules/principal-account/account/public'
 import type { InteractiveBusinessAuthorityContext } from '../../../../src/modules/business/public'
-import { interactiveCredentialExpiryNonce } from '../../../interactiveCredentialLifecycle'
+import { interactiveCredentialExpiryNonce } from '../interactiveCredential/nonce'
 import { requireAccessFactForAccount } from './accessFacts'
 import { resolveActiveAccountRefForPrincipal } from './accountResolution'
 import { CLERK_USER_PROVIDER_NAMESPACE } from './constants'

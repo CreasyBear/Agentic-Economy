@@ -1,9 +1,7 @@
 import type { UserIdentity } from 'convex/server'
 
 import type { MutationCtx } from '../../../_generated/server'
-import {
-  armInteractiveCredentialExpiryHandler,
-} from '../../../interactiveCredentialLifecycle'
+import { armInteractiveCredentialExpiryHandler } from '../interactiveCredential/arm'
 import { CLERK_USER_PROVIDER_NAMESPACE } from './constants'
 import { InteractiveAuthorityError } from './errors'
 
