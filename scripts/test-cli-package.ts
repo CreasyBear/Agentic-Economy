@@ -16,6 +16,7 @@ const expectedCommands = [
   "account",
   "call",
   "cancel",
+  "chat",
   "compare",
   "config",
   "connect",
