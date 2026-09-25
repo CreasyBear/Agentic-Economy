@@ -600,12 +600,13 @@ export async function readOwnerConnectReadinessThroughSource(): Promise<OwnerCon
           : { currency: item.currency, account, payout: item.payout }
       }),
     )
-    if (accounts.includes(null))
+    const boundAccounts = accounts.filter((account) => account !== null)
+    if (boundAccounts.length === 0)
       return { kind: 'refused', code: 'payout_not_ready', retryable: false }
     return {
       kind: 'available',
       businessId: result.businessId,
-      accounts: accounts.filter((account) => account !== null),
+      accounts: boundAccounts,
       accountsTruncated: result.accounts.length >= 10,
     }
   } catch (cause) {

@@ -127,6 +127,35 @@ describe('owner Connect account reservation', () => {
     })
   })
 
+  it('reports persisted Connect bindings when another payout currency has none', async () => {
+    const eurPayout = {
+      ...ownerProjection.accounts[0]!.payout,
+      providerNet: { currency: 'EUR', units: '5000', exponent: 2 },
+    }
+    const projection = {
+      ...ownerProjection,
+      accounts: [
+        ownerProjection.accounts[0],
+        { ...ownerProjection.accounts[0], currency: 'EUR', payout: eurPayout },
+      ],
+    }
+    sourceMocks.callSourceQuery
+      .mockResolvedValueOnce(projection)
+      .mockResolvedValueOnce(payoutAccount)
+      .mockResolvedValueOnce(null)
+
+    expect(await readOwnerConnectReadinessThroughSource()).toEqual({
+      kind: 'available',
+      businessId: 'business-1',
+      accounts: [{
+        currency: 'USD',
+        account: payoutAccount,
+        payout: ownerProjection.accounts[0]!.payout,
+      }],
+      accountsTruncated: false,
+    })
+  })
+
   it('does not create an onboarding link without strict proof', async () => {
     const createOnboardingLink = vi.fn<Provider['createOnboardingLink']>()
     const result = await updateOwnerPayoutAuthorityThroughSource(
