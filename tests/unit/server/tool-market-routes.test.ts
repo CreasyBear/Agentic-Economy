@@ -42,6 +42,23 @@ vi.mock('@/modules/capability-supply/tool-source', () => ({
   readCapabilityToolCompare: vi.fn(async () => compareResult),
 }))
 
+// The route test isolates the listing read-model: directory/catalogue requests
+// are separate network reads, whose availability cannot be inferred from the
+// mocked admitted-Tool search.
+vi.mock('@/modules/registry/internal/listing-search', () => ({
+  readListingSearchGroups: vi.fn(async () => ({
+    groups: {
+      buyThroughAe: { items: [], count: 0 },
+      listedElsewhere: { items: [], count: 0 },
+      total: 0,
+      displayed: 0,
+      scope: 'page',
+      hasMore: false,
+    },
+    partialResults: false,
+  })),
+}))
+
 describe('public market Tool routes', () => {
   afterEach(() => {
     setHttpRateLimitAdmissionForTests(undefined)

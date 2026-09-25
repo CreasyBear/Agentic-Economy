@@ -414,6 +414,7 @@ describe('Account AUD funding through Formance', () => {
       kind: 'accepted', status: 'replayed', appliedRef: formanceTransactionRef,
     })
     await backend.finishAllScheduledFunctions(() => vi.advanceTimersByTime(1))
+    await backend.finishInProgressScheduledFunctions()
     const rows = await fundingRows(backend, commandRef)
     expect(rows).toMatchObject({
       command: { state: 'succeeded', appliedTransactionRef: formanceTransactionRef },
@@ -956,6 +957,7 @@ describe('Account AUD funding through Formance', () => {
       ...actionArgs, formanceTransactionRef,
     })).resolves.toEqual({ kind: 'accepted', status: 'applied', appliedRef: formanceTransactionRef })
     await backend.finishAllScheduledFunctions(() => vi.advanceTimersByTime(1))
+    await backend.finishInProgressScheduledFunctions()
     const rows = await fundingRows(backend, bound.commandRef)
     expect(rows.command).toMatchObject({
       state: 'succeeded',

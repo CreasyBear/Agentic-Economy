@@ -189,7 +189,7 @@ jobs:
 
       - name: Doctor
         run: |
-          npm run --silent ae -- doctor --json --base-url http://127.0.0.1:3024 > output/fresh-checkout/doctor.json
+          npm run --silent ae -- doctor --json --base-url http://127.0.0.1:3024 > output/fresh-checkout/doctor.json || [ "$?" -eq 1 ]
           node -e '
             const fs = require("fs");
             const result = JSON.parse(fs.readFileSync("output/fresh-checkout/doctor.json", "utf8"));
