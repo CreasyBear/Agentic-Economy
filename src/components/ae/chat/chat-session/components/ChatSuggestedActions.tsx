@@ -13,7 +13,7 @@ export function ChatSuggestedActions({ onPick }: ChatSuggestedActionsProps) {
           aria-label={suggestion.prompt}
           type="button"
           variant="ghost"
-          className="h-auto min-h-12 min-w-[200px] shrink-0 justify-start gap-1 whitespace-nowrap rounded-xl border border-border/50 bg-card/30 px-4 py-3 text-left text-sm leading-relaxed transition-[background-color,border-color,transform,box-shadow] duration-200 hover:-translate-y-0.5 hover:bg-card/60 hover:shadow-[var(--shadow-float)] focus-visible:ring-2 focus-visible:ring-ring sm:min-h-20 sm:min-w-0 sm:shrink sm:flex-col sm:items-start sm:justify-center sm:gap-0.5 sm:whitespace-normal sm:p-4"
+          className="h-auto min-h-12 min-w-50 shrink-0 justify-start gap-1 whitespace-nowrap rounded-xl border border-border/50 bg-card/30 px-4 py-3 text-left text-sm leading-relaxed transition-[background-color,border-color,transform,box-shadow] duration-200 hover:-translate-y-0.5 hover:bg-card/60 hover:shadow-float focus-visible:ring-2 focus-visible:ring-ring sm:min-h-20 sm:min-w-0 sm:shrink sm:flex-col sm:items-start sm:justify-center sm:gap-0.5 sm:whitespace-normal sm:p-4"
           onClick={() => onPick(suggestion.prompt)}
         >
           <span className="font-semibold text-foreground">{suggestion.title}</span>{' '}

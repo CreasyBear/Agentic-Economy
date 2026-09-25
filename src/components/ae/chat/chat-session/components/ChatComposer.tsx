@@ -44,7 +44,7 @@ export function ChatComposer({
         <FieldLabel htmlFor="tool-chat-prompt" className="sr-only">
             {chatComposer.promptLabel}
           </FieldLabel>
-          <InputGroup className="min-h-0 items-stretch rounded-2xl border border-border/50 bg-card/70 shadow-sm transition-[box-shadow] duration-300 focus-within:ring-2 focus-within:ring-ring/40">
+          <InputGroup className="min-h-0 items-stretch rounded-2xl border border-border/50 bg-card/70 shadow-soft transition-[box-shadow] duration-300 focus-within:ring-2 focus-within:ring-ring/40">
             <InputGroupTextarea
               id="tool-chat-prompt"
               value={prompt}
