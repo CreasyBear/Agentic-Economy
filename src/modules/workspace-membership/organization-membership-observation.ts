@@ -51,7 +51,7 @@ type RecordOrganizationMembershipCreatedArgs = OrganizationMembershipCreatedObse
 const recordOrganizationMembershipCreatedMutation = sourceMutation<
   RecordOrganizationMembershipCreatedArgs,
   OrganizationMembershipCreatedObservationResult
->(ORGANIZATION_MEMBERSHIP_CREATED_OPERATION)
+>('workspaceMemberships:recordOrganizationMembershipCreatedForServer')
 
 export async function recordOrganizationMembershipCreatedThroughSource(
   command: OrganizationMembershipCreatedObservation,
@@ -74,7 +74,7 @@ type RecordOrganizationMembershipUpdatedArgs = OrganizationMembershipUpdatedObse
 const recordOrganizationMembershipUpdatedMutation = sourceMutation<
   RecordOrganizationMembershipUpdatedArgs,
   OrganizationMembershipUpdatedObservationResult
->(ORGANIZATION_MEMBERSHIP_UPDATED_OPERATION)
+>('workspaceMemberships:recordOrganizationMembershipUpdatedForServer')
 
 export async function recordOrganizationMembershipUpdatedThroughSource(
   command: OrganizationMembershipUpdatedObservation,
@@ -97,7 +97,7 @@ type RecordOrganizationMembershipDeletedArgs = OrganizationMembershipDeletedObse
 const recordOrganizationMembershipDeletedMutation = sourceMutation<
   RecordOrganizationMembershipDeletedArgs,
   OrganizationMembershipDeletedObservationResult
->(ORGANIZATION_MEMBERSHIP_DELETED_OPERATION)
+>('workspaceMemberships:recordOrganizationMembershipDeletedForServer')
 
 export async function recordOrganizationMembershipDeletedThroughSource(
   command: OrganizationMembershipDeletedObservation,
