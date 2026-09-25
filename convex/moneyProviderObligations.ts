@@ -22,6 +22,11 @@ import {
   markOwnerReversalUnknownResult,
   markOwnerReversalUnknownHandler,
 } from './lib/money/providerObligations/finalize'
+import {
+  resolveDisputeArgs,
+  resolveDisputeResult,
+  resolveDisputeHandler,
+} from './lib/money/providerObligations/resolveDispute'
 
 export const listOwnerObligations = query({
   args: listOwnerObligationsArgs,
@@ -51,4 +56,10 @@ export const markOwnerReversalUnknown = internalMutation({
   args: markOwnerReversalUnknownArgs,
   returns: markOwnerReversalUnknownResult,
   handler: markOwnerReversalUnknownHandler,
+})
+
+export const resolveDispute = internalMutation({
+  args: resolveDisputeArgs,
+  returns: resolveDisputeResult,
+  handler: resolveDisputeHandler,
 })
