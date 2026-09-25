@@ -1,6 +1,8 @@
 import { describe, expect, it, vi } from 'vitest'
 
 import * as decisionEngine from '@/modules/decision-engine/public'
+import { projectToolCard, CHAT_TOOL_NAME_MAP, serializeToolCard } from '@/modules/chat/tool-card'
+import { chatSearchUse } from '@/modules/chat/search-presentation'
 import { presentToolSearch, TOOL_SEARCH_USE } from '@/modules/registry/tool-reranker'
 import type { ToolSearchResult } from '@/modules/capability-supply/public'
 import {
@@ -162,6 +164,27 @@ describe('Jev search presentation stress', () => {
       'operation:v1:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
       'operation:v1:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc',
     ])
+  })
+
+  it('keeps the full match count and four choices across stored search cards', () => {
+    const results = Array.from({ length: 6 }, (_, index) => ({
+      toolRef: `operation:v1:${index.toString(16).padStart(64, 'a')}`,
+      title: `Lookup ${index}`,
+      price: { kind: 'indicative', label: 'A$0.01' },
+    }))
+    const card = projectToolCard({
+      type: `tool-${CHAT_TOOL_NAME_MAP.canonicalToProvider['registry.tools.search']}`,
+      state: 'output-available',
+      output: { kind: 'matched', results },
+    })
+
+    expect(card).toMatchObject({ kind: 'choices', count: 6 })
+    if (card?.kind !== 'choices') throw new Error('Expected search choices')
+    expect(card.choices.map(({ toolRef }) => toolRef)).toEqual(results.slice(0, 4).map(({ toolRef }) => toolRef))
+
+    const restored = projectToolCard(serializeToolCard(card))
+    expect(restored).toMatchObject({ kind: 'choices', count: 6, choices: card.choices })
+    expect(chatSearchUse('registry.tools.quote')).toBeNull()
   })
 
 })
