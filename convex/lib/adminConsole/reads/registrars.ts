@@ -2,9 +2,9 @@ import type { AdminAction } from '@/modules/security/public'
 import type { AllowedAdminAuthority } from '@/lib/operator/admin-console/contracts'
 import { v, type Infer, type ObjectType, type PropertyValidators, type Validator } from 'convex/values'
 
-import { query, type QueryCtx } from '../../_generated/server'
-import { resolveAdminAuthority } from '../../authz'
-import { adminRefusalValue } from './validators'
+import { query, type QueryCtx } from '../../../_generated/server'
+import { resolveAdminAuthority } from '../../../authz'
+import { adminRefusalValue } from '../commands/contracts'
 
 type AdminQueryDefinition<
   Args extends PropertyValidators,

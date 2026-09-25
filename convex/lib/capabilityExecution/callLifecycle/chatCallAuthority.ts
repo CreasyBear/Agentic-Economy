@@ -4,7 +4,7 @@ import type { TrustedChatAuthority } from '@/modules/chat/agent-turn.contracts'
 import { isPublicToolRef } from '@/modules/capability-supply/public'
 import { uniqueSorted } from '@/modules/common/unique-sorted'
 import { resolveCanonicalAgentContext } from '../../authority/canonicalAgent/authority'
-import { chatThreadBelongsToPrincipal } from '../../chat/threadOwnership'
+import { chatThreadBelongsToPrincipal } from '../../chat/threads/ownership'
 import { resolveCurrentAgentAuthority } from './agentCallAuthority'
 import type { CallPrincipal } from './contracts'
 

@@ -1,9 +1,9 @@
 import type { MutationCtx } from '../../../_generated/server'
-import type { AdminCommandSpec } from '../commandEnvelope'
+import type { AdminCommandSpec } from '../commands/commandEnvelope'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { deriveBusinessOfferingSupportFromCapabilitySupply } from '../../../lib/capabilitySupply/projection/support'
 import { rebuildBusinessSupplyProjectionSnapshotCommand } from '../../../lib/capabilitySupply/projection/snapshot'
-import type { AdminCommandWireArgs } from '../validators'
+import type { AdminCommandWireArgs } from '../commands/contracts'
 
 export function businessSuppressionSpec(
   ctx: MutationCtx,

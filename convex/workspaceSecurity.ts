@@ -1,4 +1,4 @@
-import { mutation, query } from './_generated/server'
+import { internalMutation, internalQuery } from './_generated/server'
 import {
   readPolicyArgs,
   readPolicyHandler,
@@ -8,13 +8,13 @@ import {
   updatePolicyResult,
 } from './lib/principalAccount/workspaceSecurity/policy'
 
-export const readPolicy = query({
+export const readPolicy = internalQuery({
   args: readPolicyArgs,
   returns: readPolicyResult,
   handler: readPolicyHandler,
 })
 
-export const updatePolicy = mutation({
+export const updatePolicy = internalMutation({
   args: updatePolicyArgs.fields,
   returns: updatePolicyResult,
   handler: updatePolicyHandler,

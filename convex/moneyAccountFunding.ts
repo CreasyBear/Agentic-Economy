@@ -1,5 +1,6 @@
 import { internalMutation, internalQuery, mutation, query } from './_generated/server'
-import { finalizeFundingEventHandler, finalizeFundingRefundHandler } from './lib/money/funding/stripeEventPipeline'
+import { finalizeFundingEventHandler } from './lib/money/funding/stripeEventPipeline'
+import { finalizeFundingRefundHandler } from './lib/money/funding/stripeRefundPipeline'
 import {
   markFundingBookingUnknownArgs, markFundingBookingUnknownHandler,
   markFundingReversalUnknownArgs, markFundingReversalUnknownHandler, markFundingUnknownResult,

@@ -13,15 +13,14 @@ import { splitInclusiveAudTax } from '@/modules/money/public'
 import { materializeRuntimePublishedTool } from '@/modules/capability-supply/public'
 import { jsonObject } from '@/modules/capability-execution/convex'
 
-import { readCurrentPublishedTool } from '../../../capabilitySupplyCurrentTool'
+import { readCurrentPublishedTool } from '../../capabilitySupply/currentTool/reads'
 import { readCommercialPolicyGate } from '../../../moneyCommercialPolicy'
 import { principalValue } from '../callLifecycle/contracts'
 import { resolveCurrentAgentAuthority } from '../callLifecycle/agentCallAuthority'
 import { sourceWriteArgs } from '../../security/sourceWrite/contracts'
 import { toolProviderRouteabilityIsFrozen } from '../../capabilitySupply/providerOffboarding/freeze'
-import { activeChatTurnForMoney } from '../../chat/threadOwnership'
+import { activeChatTurnForMoney } from '../../chat/threads/ownership'
 import {
-  quoteEvidenceMaterial,
   quoteExpiresAt,
   quoteFormanceSnapshotIsCurrent,
   quoteFundingContinuation,
@@ -31,6 +30,7 @@ import {
   quotePartiesFromPublishedTool,
   toolPricing,
 } from './quoteValuation'
+import { quoteEvidenceMaterial } from './quoteEvidence'
 import { refuse, quoteRefusal } from './refusalHelpers'
 import {
   formanceFinancialSnapshot,

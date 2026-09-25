@@ -2,8 +2,8 @@ import { mutationGeneric } from 'convex/server'
 import { v } from 'convex/values'
 
 import { businessSuppressionSpec } from './lib/adminConsole/actions/businessSuppression'
-import { runAdminCommand } from './lib/adminConsole/commandEnvelope'
-import { adminCommandArgsValue, adminCommandReceiptValue } from './lib/adminConsole/validators'
+import { runAdminCommand } from './lib/adminConsole/commands/commandEnvelope'
+import { adminCommandArgsValue, adminCommandReceiptValue } from './lib/adminConsole/commands/contracts'
 
 const action = v.literal('set_business_suppression')
 export const setBusinessSuppression = mutationGeneric({

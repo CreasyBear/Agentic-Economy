@@ -21,14 +21,11 @@ import {
   type RecordCleanupResultArgs,
 } from './contracts'
 import {
-  cleanupResourceAuthorityMatches,
-  readCurrentCleanupResourceAuthority,
   resolveCanonicalBusinessOwner,
   resolveProviderConnectionProvenance,
 } from './authority'
+import { cleanupResourceAuthorityMatches, readCurrentCleanupResourceAuthority } from './cleanupAuthority'
 export {
-  cleanupResourceAuthorityMatches,
-  readCurrentCleanupResourceAuthority,
   resolveCanonicalBusinessOwner,
   resolveProviderConnectionProvenance,
   resolveExpectedProviderConnectionGrant,

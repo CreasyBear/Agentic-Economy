@@ -242,3 +242,12 @@ export type ProviderConnectionActor = Readonly<{
   authorityProvenance?: AuthenticatedBusinessActor['authorityProvenance']
   authorityGrantRef?: string
 }>
+
+export type VerifiedConnectionSellerClaim = Readonly<{
+  businessId: string
+  endpointUrl: string
+  method: 'GET' | 'POST'
+  observationDigest: string
+  payTo: `0x${string}`
+  expiresAt: number
+}>

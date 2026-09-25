@@ -648,7 +648,7 @@
     "kind": "mutation"
   },
   {
-    "visibility": "public",
+    "visibility": "internal",
     "module": "capabilityContractDocuments",
     "method": "register",
     "kind": "mutation"
@@ -669,6 +669,12 @@
     "visibility": "public",
     "module": "capabilityProcure",
     "method": "reserve",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "capabilityProviderApprovals",
+    "method": "issue",
     "kind": "mutation"
   },
   {
@@ -1428,13 +1434,13 @@
     "kind": "mutation"
   },
   {
-    "visibility": "public",
+    "visibility": "internal",
     "module": "capabilitySupplyOwnerSupply",
     "method": "runOwnerSupplyReadiness",
     "kind": "action"
   },
   {
-    "visibility": "public",
+    "visibility": "internal",
     "module": "capabilitySupplyOwnerSupply",
     "method": "runOwnerSupplyTest",
     "kind": "action"
@@ -1530,9 +1536,21 @@
     "kind": "action"
   },
   {
+    "visibility": "internal",
+    "module": "capabilityToolCatalog",
+    "method": "compareInternal",
+    "kind": "action"
+  },
+  {
     "visibility": "public",
     "module": "capabilityToolCatalog",
     "method": "detail",
+    "kind": "action"
+  },
+  {
+    "visibility": "internal",
+    "module": "capabilityToolCatalog",
+    "method": "detailInternal",
     "kind": "action"
   },
   {
@@ -1545,6 +1563,12 @@
     "visibility": "public",
     "module": "capabilityToolCatalog",
     "method": "search",
+    "kind": "action"
+  },
+  {
+    "visibility": "internal",
+    "module": "capabilityToolCatalog",
+    "method": "searchInternal",
     "kind": "action"
   },
   {
@@ -1662,7 +1686,7 @@
     "kind": "query"
   },
   {
-    "visibility": "public",
+    "visibility": "internal",
     "module": "chatMessages",
     "method": "sendMessage",
     "kind": "mutation"
@@ -1704,7 +1728,7 @@
     "kind": "mutation"
   },
   {
-    "visibility": "public",
+    "visibility": "internal",
     "module": "chatThreads",
     "method": "createThread",
     "kind": "mutation"
@@ -1890,7 +1914,7 @@
     "kind": "query"
   },
   {
-    "visibility": "public",
+    "visibility": "internal",
     "module": "interactiveSession",
     "method": "setActiveWorkspace",
     "kind": "mutation"
@@ -2664,6 +2688,12 @@
     "kind": "mutation"
   },
   {
+    "visibility": "internal",
+    "module": "moneyProviderObligations",
+    "method": "resolveDispute",
+    "kind": "mutation"
+  },
+  {
     "visibility": "public",
     "module": "moneyProviderObligations",
     "method": "reverseOwnerSettlement",
@@ -2898,7 +2928,7 @@
     "kind": "query"
   },
   {
-    "visibility": "public",
+    "visibility": "internal",
     "module": "personalAccount",
     "method": "readDeletionEligibility",
     "kind": "query"
@@ -2928,13 +2958,13 @@
     "kind": "mutation"
   },
   {
-    "visibility": "public",
+    "visibility": "internal",
     "module": "recoveryBreakGlass",
     "method": "authorizeRecoveryOperation",
     "kind": "mutation"
   },
   {
-    "visibility": "public",
+    "visibility": "internal",
     "module": "recoveryBreakGlass",
     "method": "submitRecoveryApproval",
     "kind": "mutation"
@@ -3204,19 +3234,19 @@
     "kind": "mutation"
   },
   {
-    "visibility": "public",
+    "visibility": "internal",
     "module": "workspaceProvisioning",
     "method": "provisionOrganizationWorkspaceForServer",
     "kind": "mutation"
   },
   {
-    "visibility": "public",
+    "visibility": "internal",
     "module": "workspaceSecurity",
     "method": "readPolicy",
     "kind": "query"
   },
   {
-    "visibility": "public",
+    "visibility": "internal",
     "module": "workspaceSecurity",
     "method": "updatePolicy",
     "kind": "mutation"

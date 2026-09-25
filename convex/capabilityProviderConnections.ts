@@ -40,8 +40,6 @@ import {
   validateAuthorityArgs,
 } from './lib/capabilitySupply/providerConnections/contracts'
 import {
-  beginLeaseEffectArgs,
-  beginLeaseEffectHandler,
   consumeLeaseArgs,
   consumeLeaseHandler,
   expireLeaseArgs,
@@ -49,9 +47,7 @@ import {
   invalidateLeaseArgs,
   invalidateLeaseHandler,
   issueLeaseArgs,
-  issueLeaseHandler,
   leaseAuthorityValidation,
-  leaseEffectAdmission,
   leaseCredentialResolution,
   leaseResult,
   leaseValue,
@@ -64,11 +60,12 @@ import {
   validateLeaseAuthorityArgs,
   validateLeaseAuthorityHandler,
 } from './lib/capabilitySupply/providerConnections/leases'
+import { beginLeaseEffectArgs, beginLeaseEffectHandler, leaseEffectAdmission } from './lib/capabilitySupply/providerConnections/leaseEffect'
+import { issueLeaseHandler } from './lib/capabilitySupply/providerConnections/leaseIssue'
 import {
   connectX402OwnerArgs,
   connectX402OwnerHandler,
   checkX402OwnerArgs,
-  checkX402OwnerHandler,
   listOwnerArgs,
   listOwnerHandler,
   ownerMcpRuntimeResult,
@@ -76,18 +73,18 @@ import {
   ownerCommandResult,
   ownerProjection,
   prepareOwnerMcpRuntimeArgs,
-  prepareOwnerMcpRuntimeHandler,
   prepareOwnerHttpRuntimeArgs,
-  prepareOwnerHttpRuntimeHandler,
   readOwnerArgs,
   readOwnerHandler,
   reauthorizeOwnerArgs,
   reauthorizeOwnerHandler,
   retryOwnerCleanupArgs,
-  retryOwnerCleanupHandler,
   revokeOwnerArgs,
   revokeOwnerHandler,
 } from './lib/capabilitySupply/providerConnectionOwner/owner'
+import { prepareOwnerMcpRuntimeHandler, prepareOwnerHttpRuntimeHandler } from './lib/capabilitySupply/providerConnectionOwner/runtime'
+import { retryOwnerCleanupHandler } from './lib/capabilitySupply/providerConnectionOwner/revokeCleanup'
+import { checkX402OwnerHandler } from './lib/capabilitySupply/providerConnectionOwner/x402Health'
 
 export const advanceLeaseDrain = internalMutationGeneric({
   args: advanceLeaseDrainArgs,

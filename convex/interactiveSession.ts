@@ -4,7 +4,7 @@ import { v } from 'convex/values'
 import { accountRef } from '../src/modules/principal-account/account/public'
 import { principalRef } from '../src/modules/principal-account/principal/public'
 import type { DataModel, Doc } from './_generated/dataModel'
-import { mutation } from './_generated/server'
+import { internalMutation } from './_generated/server'
 import { InteractiveAuthorityError, requireAccessFactForAccount } from './interactiveAuthority'
 
 const CLERK_USER_PROVIDER_NAMESPACE = 'clerk/user' as const
@@ -59,7 +59,7 @@ async function requireInteractiveHumanPrincipal(
 
 
 
-export const setActiveWorkspace = mutation({
+export const setActiveWorkspace = internalMutation({
   args: {
     accountRef: v.string(),
     correlationRef: v.string(),

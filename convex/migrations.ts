@@ -52,8 +52,8 @@ export const backfillDirectoryEligibility = migrations.define({
 
 /**
  * Well-7 Lane 1 follow-up: the eligible-only facet counts read by
- * `x402DirectoryIndex:facets`/`overview` (convex/lib/x402DirectoryIndex/
- * facets.ts, eligibleFacetsNamespace) are normally maintained by
+ * `x402DirectoryIndex:facets`/`overview` (convex/lib/market/directoryIndex/
+ * facetReads.ts; eligibleFacetsNamespace in analytics.ts) are maintained by
  * writeFacetMembership at write time. Existing rows backfilled by
  * `backfillDirectoryEligibility` above never went through that write path
  * with `eligible` set, so their facet membership is missing from the

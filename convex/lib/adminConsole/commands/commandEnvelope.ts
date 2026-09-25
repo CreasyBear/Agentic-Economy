@@ -1,4 +1,4 @@
-import type { MutationCtx } from '../../_generated/server'
+import type { MutationCtx } from '../../../_generated/server'
 import type {
   AdminActionRefusalCodes,
   AdminCommandAction,
@@ -16,20 +16,20 @@ import {
   validateReasonAndEvidence,
 } from '@/modules/security/public'
 
-import { readCurrentActiveAdminMembership, resolveAdminAuthority } from '../../authz'
+import { readCurrentActiveAdminMembership, resolveAdminAuthority } from '../../../authz'
 import {
   consumeConsequenceProof,
   deriveStrictConsequenceProof,
-} from '../authority/consequence/proof'
-import { persistAdminAuthorityMutation } from '../security/admin/persistence'
-import { persistAuditEvent } from '../security/audit/persistence'
-import { requireSourceRead, requireSourceWrite } from '../security/sourceWrite/admission'
-import { resolveApprovalIntent } from './approvals'
+} from '../../authority/consequence/proof'
+import { persistAdminAuthorityMutation } from '../../security/admin/persistence'
+import { persistAuditEvent } from '../../security/audit/persistence'
+import { requireSourceRead, requireSourceWrite } from '../../security/sourceWrite/admission'
+import { resolveApprovalIntent } from '../approvals/approvals'
 import { parseAdminOperationReceipt, readAdminOperationKey } from './idempotency'
 import {
   persistReceipt, persistTerminalRefusal, proofFailure, refused, requireAuditTargetType,
 } from './commandEnvelopeSteps'
-import { ADMIN_OPAQUE_REF_PATTERN, type AdminCommandWireArgs } from './validators'
+import { ADMIN_OPAQUE_REF_PATTERN, type AdminCommandWireArgs } from './contracts'
 export type AdminCommandSpec<A extends AdminCommandAction> = Readonly<{
   targetType: string
   targetRef: string

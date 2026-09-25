@@ -1,4 +1,4 @@
-import type { MutationCtx, QueryCtx } from '../../_generated/server'
+import type { MutationCtx, QueryCtx } from '../../../_generated/server'
 import type {
   AdminActionInput,
   AdminApprovalIntent,
@@ -11,7 +11,7 @@ import type {
 } from '@/lib/operator/admin-console/contracts'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { brandNonEmpty } from '@/modules/common/ids'
-import { persistAuditEvent } from '../security/audit/persistence'
+import { persistAuditEvent } from '../../security/audit/persistence'
 
 const APPROVAL_TTL_MS = 24 * 60 * 60 * 1_000
 const PROPOSABLE_BY_ACTION = {

@@ -1,5 +1,6 @@
 import { getFunctionName } from 'convex/server'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import type * as CurrentToolReads from '../../../convex/lib/capabilitySupply/currentTool/reads'
 
 const mocks = vi.hoisted(() => ({
   enqueueAction: vi.fn(async () => 'workpool:approval'),
@@ -30,7 +31,8 @@ vi.mock('../../../convex/marketDispatchWorkpool', () => ({
   marketDispatchWorkpool: { enqueueAction: mocks.enqueueAction },
 }))
 
-vi.mock('../../../convex/capabilitySupplyTools', () => ({
+vi.mock('../../../convex/lib/capabilitySupply/currentTool/reads', async (importOriginal) => ({
+  ...await importOriginal<typeof CurrentToolReads>(),
   readCurrentPublishedTool: mocks.readCurrentPublishedTool,
 }))
 

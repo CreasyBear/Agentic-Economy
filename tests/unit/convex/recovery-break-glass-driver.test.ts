@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import { api } from '../../../convex/_generated/api'
+import { internal } from '../../../convex/_generated/api'
 import { authorizeRecoveryHandler } from '../../../convex/lib/authority/breakGlass/authorization'
 import { createConvexRecoveryPersistence } from '../../../convex/lib/authority/breakGlass/persistence'
 import { accountRef } from '../../../src/modules/principal-account/public'
@@ -115,10 +115,10 @@ describe('recovery break-glass Convex driver', () => {
     const backend = createRecoveryDriverBackend()
     await seed(backend)
 
-    await expect(backend.withIdentity(identity('41')).mutation(api.recoveryBreakGlass.submitRecoveryApproval, {
+    await expect(backend.withIdentity(identity('41')).mutation(internal.recoveryBreakGlass.submitRecoveryApproval, {
       approvalRef: 'approval:one', accountRef: ACCOUNT, action: 'isolate',
     })).resolves.toMatchObject({ lifecycle: 'verified' })
-    await expect(backend.withIdentity(identity('42')).mutation(api.recoveryBreakGlass.submitRecoveryApproval, {
+    await expect(backend.withIdentity(identity('42')).mutation(internal.recoveryBreakGlass.submitRecoveryApproval, {
       approvalRef: 'approval:two', accountRef: ACCOUNT, action: 'isolate',
     })).resolves.toMatchObject({ lifecycle: 'verified' })
 
@@ -173,7 +173,7 @@ describe('recovery break-glass Convex driver', () => {
       await seedTrustedApprovals(backend)
       const before = await queryConsequenceState(backend, 'isolation-matrix')
       const client = presentedIdentity === null ? backend : backend.withIdentity(presentedIdentity)
-      const consequence = client.mutation(api.recoveryBreakGlass.authorizeRecoveryOperation, {
+      const consequence = client.mutation(internal.recoveryBreakGlass.authorizeRecoveryOperation, {
         action: 'isolate',
         accountRef: selectedAccount,
         grantRef: GRANT,
@@ -230,20 +230,20 @@ describe('recovery break-glass Convex driver', () => {
     await seed(backend)
 
     const intent = { approvalRef: 'approval:missing-operator', accountRef: ACCOUNT, action: 'isolate' as const }
-    await expect(backend.mutation(api.recoveryBreakGlass.submitRecoveryApproval, intent))
+    await expect(backend.mutation(internal.recoveryBreakGlass.submitRecoveryApproval, intent))
       .rejects.toMatchObject({ code: 'recovery_approval_unavailable' })
     await expect(backend.withIdentity({
       subject: 'unknown',
       issuer: 'https://recovery.test',
       tokenIdentifier: 'recovery|operator:unknown',
-    }).mutation(api.recoveryBreakGlass.submitRecoveryApproval, {
+    }).mutation(internal.recoveryBreakGlass.submitRecoveryApproval, {
       ...intent,
       approvalRef: 'approval:unknown-operator',
     })).rejects.toMatchObject({ code: 'recovery_approval_unavailable' })
 
     await expireOperatorOneCredential(backend)
     await expect(backend.withIdentity(identity('41')).mutation(
-      api.recoveryBreakGlass.submitRecoveryApproval,
+      internal.recoveryBreakGlass.submitRecoveryApproval,
       { ...intent, approvalRef: 'approval:expired-operator' },
     )).rejects.toMatchObject({ code: 'recovery_approval_unavailable' })
 
@@ -460,7 +460,7 @@ describe('recovery break-glass Convex driver', () => {
     })
     const beforeMissingPrincipal = await queryConsequenceState(missingPrincipalBackend, 'production')
     await expect(missingPrincipalBackend.withIdentity(identity('41')).mutation(
-      api.recoveryBreakGlass.submitRecoveryApproval,
+      internal.recoveryBreakGlass.submitRecoveryApproval,
       { approvalRef: 'approval:missing-principal', accountRef: ACCOUNT, action: 'isolate' },
     )).rejects.toMatchObject({ code: 'recovery_approval_unavailable' })
     await expect(queryConsequenceState(missingPrincipalBackend, 'production')).resolves.toEqual(beforeMissingPrincipal)
@@ -474,7 +474,7 @@ describe('recovery break-glass Convex driver', () => {
     })
     const beforeMissingAccount = await queryConsequenceState(missingAccountBackend, 'production')
     await expect(missingAccountBackend.withIdentity(identity('41')).mutation(
-      api.recoveryBreakGlass.authorizeRecoveryOperation,
+      internal.recoveryBreakGlass.authorizeRecoveryOperation,
       registeredAuthorizePayload('isolate', 'missing-account', {
         correlationRef: 'recovery:missing-account',
         idempotencyRef: 'recovery:missing-account',

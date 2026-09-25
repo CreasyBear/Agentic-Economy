@@ -1,0 +1,83 @@
+import { vStreamArgs } from '@convex-dev/agent'
+import { vStreamDelta, vStreamMessage } from '@convex-dev/agent/validators'
+import { v } from 'convex/values'
+import { sourceWriteArgs } from '../../security/sourceWrite/contracts'
+
+const workStateValue = v.union(
+  v.literal('submitted'), v.literal('working'), v.literal('input-required'),
+  v.literal('auth-required'), v.literal('completed'), v.literal('failed'),
+  v.literal('canceled'), v.literal('rejected'),
+)
+const keyPrincipalValue = v.object({
+  kind: v.literal('agent_key'), principalId: v.string(), ownerId: v.string(),
+  credentialId: v.string(), applicationRef: v.string(),
+  environment: v.union(v.literal('sandbox'), v.literal('production')),
+  scopes: v.array(v.string()),
+  authorityMode: v.union(
+    v.literal('read_only'), v.literal('approval_required'),
+    v.literal('spending_policy'), v.literal('unrestricted_test_only'),
+  ),
+})
+const turnPrincipalValue = v.union(v.object({ kind: v.literal('clerk') }), keyPrincipalValue)
+const proofArgs = {
+  operationKey: v.optional(v.string()), correlationId: v.optional(v.string()), ...sourceWriteArgs,
+}
+const turnReadArgs = { principal: turnPrincipalValue, turnRef: v.string(), ...proofArgs }
+const turnSnapshotValue = v.object({
+  threadId: v.string(), turnRef: v.string(), promptMessageId: v.string(),
+  state: workStateValue, sequence: v.number(), cancelRequestedAt: v.optional(v.number()),
+  callRefs: v.array(v.string()), inFlightCallRefs: v.array(v.string()),
+})
+const startValue = v.object({
+  threadId: v.string(), turnRef: v.string(), promptMessageId: v.string(),
+  state: workStateValue, sequence: v.number(),
+})
+export const trustedChatAuthorityValue = v.object({
+  kind: v.literal('agent_key'), turnRef: v.string(), credentialLocator: v.string(),
+  applicationRef: v.string(), environment: v.union(v.literal('sandbox'), v.literal('production')),
+  scopes: v.array(v.string()), grantRef: v.string(),
+})
+
+export const ownerChatGrantStatusArgs = {}
+export const ownerChatGrantStatusResult = v.object({ enabled: v.boolean() })
+
+export const startTurnArgs = {
+    principal: turnPrincipalValue, threadId: v.optional(v.string()),
+    prompt: v.string(), clientTurnId: v.string(), ...proofArgs,
+  }
+export const startTurnResult = startValue
+
+export const cancelTurnArgs = turnReadArgs
+export const cancelTurnResult = v.union(
+    v.object({ kind: v.literal('stopped'), turnRef: v.string(),
+      inFlightEffects: v.array(v.object({ callRef: v.string() })) }),
+    v.object({ kind: v.literal('in_flight'), turnRef: v.string(),
+      inFlightEffects: v.array(v.object({ callRef: v.string() })) }),
+  )
+
+export const readTurnArgs = turnReadArgs
+export const readTurnResult = turnSnapshotValue
+
+export const readDeltasArgs = { ...turnReadArgs, streamArgs: vStreamArgs }
+export const readDeltasResult = v.object({
+    turnRef: v.string(), sequence: v.number(), state: workStateValue,
+    streams: v.union(
+      v.object({ kind: v.literal('list'), messages: v.array(vStreamMessage) }),
+      v.object({ kind: v.literal('deltas'), deltas: v.array(vStreamDelta) }),
+    ),
+  })
+
+export const authorizeKeyGenerationArgs = { turnRef: v.string(), threadId: v.string(), promptMessageId: v.string() }
+export const authorizeKeyGenerationResult = v.union(v.object({ ownerId: v.string(), authority: trustedChatAuthorityValue }), v.null())
+
+export const recordOwnerChatCallArgs = { authority: trustedChatAuthorityValue, quoteRef: v.string(), callRef: v.string() }
+export const recordOwnerChatCallResult = v.boolean()
+
+export const authorizePayableToolArgs = { authority: trustedChatAuthorityValue, toolRef: v.string() }
+export const authorizePayableToolResult = v.boolean()
+
+export const finishTurnArgs = { turnRef: v.string(), promptMessageId: v.string(),
+    state: v.union(v.literal('working'), v.literal('input-required'), v.literal('auth-required'),
+      v.literal('completed'), v.literal('failed'), v.literal('rejected')) }
+export const finishTurnResult = v.boolean()
+

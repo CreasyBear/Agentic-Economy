@@ -1,6 +1,6 @@
 import { degradeBackend } from '../../../../src/lib/observability/degrade-backend'
 import type { MutationCtx, QueryCtx } from '../../../_generated/server'
-import { readCurrentPublishedTool } from '../../../capabilitySupplyTools'
+import { readCurrentPublishedTool } from '../../capabilitySupply/currentTool/reads'
 import { enqueueCallDispatch } from './dispatchEnqueue'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { exactAmountSchema, pricingConfigDecisionAmount } from '@/modules/money/public'

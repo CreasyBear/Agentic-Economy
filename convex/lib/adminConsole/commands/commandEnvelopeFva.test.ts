@@ -2,12 +2,12 @@
 import { convexTest } from 'convex-test'
 import { describe, expect, it } from 'vitest'
 
-import schema from '../../../convex/schema'
-import type { MutationCtx } from '../../../convex/_generated/server'
+import schema from '../../../schema'
+import type { MutationCtx } from '../../../_generated/server'
 import {
   runAdminCommand,
   type AdminCommandSpec,
-} from '../../../convex/lib/adminConsole/commandEnvelope'
+} from './commandEnvelope'
 import type { AdminCommandArgs } from '@/lib/operator/admin-console/contracts'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import {
@@ -17,8 +17,8 @@ import {
   reviewerAdmin,
   testConsequenceProof,
   type ConvexFixtureBackend,
-} from '../../helpers/convex-fixtures'
-import { withSourceWrite } from '../../helpers/source-write-admission'
+} from '../../../../tests/helpers/convex-fixtures'
+import { withSourceWrite } from '../../../../tests/helpers/source-write-admission'
 
 type SuppressionArgs = AdminCommandArgs<'set_business_suppression'>
 type SuppressionArgsWithoutProof = Omit<SuppressionArgs, 'proof'>

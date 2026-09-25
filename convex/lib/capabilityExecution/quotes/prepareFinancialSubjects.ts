@@ -21,7 +21,8 @@ import {
 } from '@/modules/capability-supply/convex'
 import { jsonObject } from '@/modules/capability-execution/convex'
 
-import { readCurrentPublishedTool, readManagedX402InspectionTarget } from '../../../capabilitySupplyCurrentTool'
+import { readCurrentPublishedTool } from '../../capabilitySupply/currentTool/reads'
+import { readManagedX402InspectionTarget } from '../../capabilitySupply/currentTool/inspection'
 import { readCommercialPolicyGate } from '../../../moneyCommercialPolicy'
 import { principalValue } from '../callLifecycle/contracts'
 import { resolveCurrentAgentAuthority } from '../callLifecycle/agentCallAuthority'

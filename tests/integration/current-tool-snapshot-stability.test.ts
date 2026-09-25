@@ -3,7 +3,7 @@ import { expect, it } from 'vitest'
 import { createCurrentToolQuote } from '@/modules/capability-supply/current-tool'
 
 import { api, internal } from '../../convex/_generated/api'
-import { readCurrentPublishedTool } from '../../convex/capabilitySupplyCurrentTool'
+import { readCurrentPublishedTool } from '../../convex/lib/capabilitySupply/currentTool/reads'
 import {
   convexTestWithMarketComponents,
   publishedBusinessOwner,

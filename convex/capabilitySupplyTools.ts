@@ -17,12 +17,13 @@ import {
 } from './lib/capabilitySupply/tool/originMap'
 import {
   publishedOperationSnapshotReturns,
-  sellerCanaryOperationSnapshotReturns,
-  readExactSellerCanaryOperationSnapshotHandler,
   readCurrentPublishedToolSnapshotHandler,
-} from './capabilitySupplyCurrentTool'
-
-export { readCurrentPublishedTool } from './capabilitySupplyCurrentTool'
+} from './lib/capabilitySupply/currentTool/reads'
+import {
+  readExactSellerCanaryOperationSnapshotArgs,
+  readExactSellerCanaryOperationSnapshotResult,
+  readExactSellerCanaryOperationSnapshotHandler,
+} from './lib/capabilitySupply/currentTool/sellerCanary'
 
 export const search = queryGeneric({
   args: searchArgs,
@@ -69,7 +70,7 @@ export const readCurrentPublishedToolSnapshot = internalQueryGeneric({
 })
 
 export const readExactSellerCanaryOperationSnapshot = internalQueryGeneric({
-  args: { publicationRef: v.string(), revision: v.number() },
-  returns: sellerCanaryOperationSnapshotReturns,
+  args: readExactSellerCanaryOperationSnapshotArgs,
+  returns: readExactSellerCanaryOperationSnapshotResult,
   handler: readExactSellerCanaryOperationSnapshotHandler,
 })

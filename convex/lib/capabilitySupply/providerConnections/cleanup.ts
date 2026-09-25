@@ -13,7 +13,7 @@ import { canonicalDigest } from '../../../../src/modules/common/canonical-digest
 import {
   cleanupResourceAuthorityMatches,
   readCurrentCleanupResourceAuthority,
-} from './authority'
+} from './cleanupAuthority'
 import {
   type AdvanceLeaseDrainArgs,
   type CleanupResourceAuthority,

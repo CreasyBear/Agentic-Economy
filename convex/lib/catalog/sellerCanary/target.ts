@@ -1,7 +1,7 @@
 import type { MutationCtx } from '../../../_generated/server'
 import type { Id } from '../../../_generated/dataModel'
 import { X402_SELLER_CANARY_ADMISSION_REQUIRED_REF, x402SellerCanaryAdmissionEvidenceRef, parsePublishedToolSnapshot, type X402SellerPromotionAnchor } from '../../../../src/modules/capability-supply/public'
-import { readExactSellerCanaryOperationSnapshotHandler } from '../../capabilitySupply/currentTool/reads'
+import { readExactSellerCanaryOperationSnapshotHandler } from '../../capabilitySupply/currentTool/sellerCanary'
 
 export async function exactCatalogPromotionTarget(
   ctx: MutationCtx,

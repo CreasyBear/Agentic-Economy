@@ -1,7 +1,7 @@
 "use node"
 
 import { internal } from './_generated/api'
-import { action, type ActionCtx } from './_generated/server'
+import { internalAction, type ActionCtx } from './_generated/server'
 import {
   runOwnerSupplyReadinessHandler,
   runOwnerSupplyTestHandler,
@@ -20,14 +20,14 @@ function ownerSupplyProbePorts(ctx: ActionCtx): OwnerSupplyProbePorts {
   }
 }
 
-export const runOwnerSupplyReadiness = action({
+export const runOwnerSupplyReadiness = internalAction({
   args: ownerSupplyInput,
   returns: ownerSupplyActionResultValue,
   handler: async (ctx, args): Promise<OwnerSupplyActionResult> =>
     runOwnerSupplyReadinessHandler(ctx, args, ownerSupplyProbePorts(ctx)),
 })
 
-export const runOwnerSupplyTest = action({
+export const runOwnerSupplyTest = internalAction({
   args: ownerSupplyInput,
   returns: ownerSupplyActionResultValue,
   handler: async (ctx, args): Promise<OwnerSupplyActionResult> =>

@@ -41,7 +41,7 @@ export function createSearchTools(reserve: ReserveChatTool, reserveSearch: Reser
         const deniedSearch = reserveSearch('registry.tools.list', 'list', data.cursor, latestUserRequest(options.messages))
         if (deniedSearch !== null) return deniedSearch
         const filters = operationSourceFilters(data.filters)
-        const result = await ctx.runAction(api.capabilityToolCatalog.search, {
+        const result = await ctx.runAction(internal.capabilityToolCatalog.searchInternal, {
           query: '',
           limit: data.limit,
           ...(data.source === undefined ? {} : { source: data.source }),
@@ -69,7 +69,7 @@ export function createSearchTools(reserve: ReserveChatTool, reserveSearch: Reser
         if (deniedSearch !== null) return deniedSearch
         const filters = operationSourceFilters(data.filters)
         const result = await ctx.runAction(
-          api.capabilityToolCatalog.search,
+          internal.capabilityToolCatalog.searchInternal,
           {
             query: data.query,
             limit: data.limit,

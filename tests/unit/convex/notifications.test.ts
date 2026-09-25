@@ -5,6 +5,7 @@ import {
   it,
 } from 'vitest'
 
+import { internal } from '../../../convex/_generated/api'
 import { samIdentity } from '../../helpers/interactive-authority-provisioning'
 import {
   createInteractiveAuthorityBackend as createBackend,
@@ -79,11 +80,7 @@ const updatePreferencesRef = makeFunctionReference<
 >('notifications:updatePreferences')
 
 
-const setActiveWorkspaceRef = makeFunctionReference<
-  'mutation',
-  { accountRef: string; correlationRef: string },
-  { principalRef: string; activeAccountRef: string; revision: number; selectedAt: number }
->('interactiveSession:setActiveWorkspace')
+const setActiveWorkspaceRef = internal.interactiveSession.setActiveWorkspace
 
 const VIRTUAL_DEFAULTS: Omit<PreferencesView, 'accountRef' | 'principalRef'> = {
   lowCreditBalance: true,

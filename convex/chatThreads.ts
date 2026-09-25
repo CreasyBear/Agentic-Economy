@@ -10,16 +10,16 @@ import { v } from 'convex/values'
 
 import { components } from './_generated/api'
 import type { Doc } from './_generated/dataModel'
-import { mutation, query } from './_generated/server'
+import { internalMutation, mutation, query } from './_generated/server'
 import type { QueryCtx } from './_generated/server'
-import { requireChatOwner } from './lib/chat/threadListing'
+import { requireChatOwner } from './lib/chat/threads/listing'
 import { deleteChatThreadShares } from '../src/modules/chat-sharing/convex'
-import { chatThreadBelongsToPrincipal } from './lib/chat/threadOwnership'
+import { chatThreadBelongsToPrincipal } from './lib/chat/threads/ownership'
 import {
   isChatThreadBusy, listChatThreads, normalizeChatThreadTitle,
   resolveOwnerChatActor, projectThread, searchChatThreads,
   ACTIVE_CHAT_GENERATION_MS, MAX_CHAT_THREAD_TITLE_LENGTH,
-} from './lib/chat/threadListing'
+} from './lib/chat/threads/listing'
 export {
   isChatThreadBusy, normalizeChatThreadTitle, ACTIVE_CHAT_GENERATION_MS, MAX_CHAT_THREAD_TITLE_LENGTH,
 }
@@ -34,7 +34,7 @@ const threadSummary = v.object({
 
 type ThreadContext = Pick<QueryCtx, 'auth' | 'db'>
 
-export { requireChatOwner } from './lib/chat/threadListing'
+export { requireChatOwner } from './lib/chat/threads/listing'
 
 export async function requireOwnedChatThread(
   ctx: ThreadContext,
@@ -66,7 +66,7 @@ function renameTitle(title: string): string {
   return normalized
 }
 
-export const createThread = mutation({
+export const createThread = internalMutation({
   args: { title: v.optional(v.string()) },
   returns: threadSummary,
   handler: async (ctx, args) => {

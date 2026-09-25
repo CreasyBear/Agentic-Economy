@@ -304,7 +304,7 @@ describe.sequential('durable chat Turns', () => {
   it('keeps the old sendMessage result while persisting its Turn', async () => {
     const backend = convexTestWithMarketComponents()
     const { owner } = await publishedBusinessOwner(backend, 'legacy-turn')
-    const sent = await owner.mutation(api.chatMessages.sendMessage, { prompt: 'Legacy chat prompt' })
+    const sent = await owner.mutation(internal.chatMessages.sendMessage, { prompt: 'Legacy chat prompt' })
     expect(sent).toEqual({ threadId: expect.any(String), promptMessageId: expect.any(String) })
     const rows = await backend.run(ctx => ctx.db.query('chatTurns')
       .withIndex('by_threadId_and_sequence', q => q.eq('threadId', sent.threadId)).collect())

@@ -5,7 +5,7 @@ import { isCanonicalDigest } from '../../../../src/modules/common/canonical-dige
 import { isRecord } from '../../../../src/modules/common/is-record'
 import { internal } from '../../../_generated/api'
 import type { ActionCtx, MutationCtx } from '../../../_generated/server'
-import { cleanupResourceAuthorityMatches } from './authority'
+import { cleanupResourceAuthorityMatches } from './cleanupAuthority'
 import { cleanupResourceAuthorityValue, type CleanupResourceAuthority } from './contracts'
 
 const cleanupOutcome = v.union(

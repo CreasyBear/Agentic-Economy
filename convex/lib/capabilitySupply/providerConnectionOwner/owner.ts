@@ -17,8 +17,6 @@ export type { ProviderConnectionActor } from './contracts'
 export {
   listOwnerHandler,
   listProviderConnectionsForActor,
-  prepareOwnerHttpRuntimeHandler,
-  prepareOwnerMcpRuntimeHandler,
   projectOwnerProjection,
   projectOwnerResult,
   readOwnerHandler,
@@ -28,13 +26,10 @@ export {
   reauthorizeProviderConnectionForActor,
 } from './reads'
 export {
-  retryOwnerCleanupHandler,
-  retryProviderConnectionCleanupForActor,
   revokeOwnerHandler,
   revokeProviderConnectionForActor,
 } from './revoke'
 export {
-  checkX402OwnerHandler,
   connectX402OwnerHandler,
   connectX402ProviderConnectionForActor,
 } from './x402'

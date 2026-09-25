@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { directoryDepthBand, directoryRecencyBand, DIRECTORY_DAY_MS } from './lib/market/directoryIndex/analytics'
-import { searchAnalytics } from './lib/market/directoryIndex/analytics'
+import { directoryDepthBand, directoryRecencyBand, DIRECTORY_DAY_MS } from './analytics'
+import { searchAnalytics } from './analytics'
 import type { X402DirectoryEntry } from '@/modules/market/x402-directory'
 
 const DAY = DIRECTORY_DAY_MS

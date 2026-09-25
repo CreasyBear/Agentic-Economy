@@ -1,6 +1,6 @@
 import type { MutationCtx } from '../../../_generated/server'
-import type { AdminCommandSpec } from '../commandEnvelope'
-import type { AdminCommandWireArgs } from '../validators'
+import type { AdminCommandSpec } from '../commands/commandEnvelope'
+import type { AdminCommandWireArgs } from '../commands/contracts'
 import { applyCapabilitySourceAuthorityReview } from '../../capabilitySupply/admission/sourceAuthority'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { brandNonEmpty } from '@/modules/common/ids'
@@ -8,7 +8,7 @@ import { validateAuditEvent } from '@/modules/observability/public'
 import { persistAuditEvent } from '../../security/audit/persistence'
 
 import { v } from 'convex/values'
-import { adminCommandArgsValue, adminCommandReceiptValue } from '../validators'
+import { adminCommandArgsValue, adminCommandReceiptValue } from '../commands/contracts'
 
 export const sourceAuthorityArgs = adminCommandArgsValue(
   v.literal('verify_capability_source_authority'),

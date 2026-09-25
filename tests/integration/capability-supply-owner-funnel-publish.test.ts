@@ -182,7 +182,7 @@ describe('owner capability publication admission', () => {
         return
       }
       const readiness = await fixture.owner.action(
-        api.capabilitySupplyOwnerSupply.runOwnerSupplyReadiness,
+        internal.capabilitySupplyOwnerSupply.runOwnerSupplyReadiness,
         command,
       )
       if (readiness.state === 'refused') {
@@ -199,7 +199,7 @@ describe('owner capability publication admission', () => {
         toolRef: fixture.published.toolRef,
       })
       const requested = await fixture.owner.action(
-        api.capabilitySupplyOwnerSupply.runOwnerSupplyTest,
+        internal.capabilitySupplyOwnerSupply.runOwnerSupplyTest,
         command,
       )
       if (requested.state === 'refused') {
@@ -220,7 +220,7 @@ describe('owner capability publication admission', () => {
 
       await expect(
         fixture.owner.action(
-          api.capabilitySupplyOwnerSupply.runOwnerSupplyTest,
+          internal.capabilitySupplyOwnerSupply.runOwnerSupplyTest,
           await withSourceWrite('catalog_publish', {
             businessId: fixture.businessId,
             offeringRef: fixture.offeringRef,
@@ -434,9 +434,9 @@ describe('owner capability publication admission', () => {
       operationKey: 'owner-production-canary',
       correlationId: 'owner-production-canary',
     })
-    expect(await fixture.owner.action(api.capabilitySupplyOwnerSupply.runOwnerSupplyReadiness, command))
+    expect(await fixture.owner.action(internal.capabilitySupplyOwnerSupply.runOwnerSupplyReadiness, command))
       .toMatchObject({ step: 'readiness', state: 'completed' })
-    const requested = await fixture.owner.action(api.capabilitySupplyOwnerSupply.runOwnerSupplyTest, command)
+    const requested = await fixture.owner.action(internal.capabilitySupplyOwnerSupply.runOwnerSupplyTest, command)
     if (requested.state !== 'completed' || requested.canaryRef === undefined || requested.callRef === undefined) {
       throw new Error(`production_canary_request_failed:${JSON.stringify(requested)}`)
     }

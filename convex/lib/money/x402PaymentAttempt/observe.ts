@@ -4,7 +4,8 @@ import { internal } from '../../../_generated/api'
 import { recordMarketEvidenceFact } from '../../../marketEvidence'
 import { loadByAttempt, loadByCustody } from './attempt'
 import { type EventArgs, type RecordObservationArgs, x402PaymentEventArgs, x402PaymentSettlementStatusValue } from './contracts'
-import { eventAttributionValid, quarantinedOutputFromArgs, quarantinedOutputFromRow, sameQuarantinedOutput } from './identity'
+import { eventAttributionValid } from './identity'
+import { quarantinedOutputFromArgs, quarantinedOutputFromRow, sameQuarantinedOutput } from './quarantinedOutput'
 
 export const markX402PaymentPossiblySubmittedArgs = { ...x402PaymentEventArgs }
 export const markX402PaymentPossiblySubmittedReturns = v.null()

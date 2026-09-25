@@ -1,6 +1,6 @@
 import type { Doc } from '../../../_generated/dataModel'
 import type { MutationCtx } from '../../../_generated/server'
-import { activeChatTurnForMoney } from '../../chat/threadOwnership'
+import { activeChatTurnForMoney } from '../../chat/threads/ownership'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import {
   parsePublishedToolSnapshot,

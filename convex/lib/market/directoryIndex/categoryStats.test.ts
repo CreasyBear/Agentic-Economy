@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { categoryConcentration } from './lib/market/directoryIndex/categoryStats'
+import { categoryConcentration } from './categoryStats'
 
 describe('category concentration', () => {
   const row = (category: string, payersOrder: number | undefined, popularOrder: number) => ({

@@ -1,6 +1,6 @@
 import { v } from 'convex/values'
 import { providerConsequenceTicketClaimsDigest } from '@/modules/capability-execution/convex'
-import { beginLeaseEffectHandler } from '../../capabilitySupply/providerConnections/leases'
+import { beginLeaseEffectHandler } from '../../capabilitySupply/providerConnections/leaseEffect'
 import type { MutationCtx } from '../../../_generated/server'
 import { canonicalIssueInput, exactStrings, matchesExistingEffect, matchesIssueIdentity, ticketFromRow, unavailable, SECRET_GENERATION, type CanonicalTicket, type IssueArgs } from './identity'
 

@@ -8,6 +8,7 @@ import {
   vi,
 } from 'vitest'
 
+import { internal } from '../../../convex/_generated/api'
 import {
   InteractiveAuthorityError,
   requireAccessFactForAccount,
@@ -109,22 +110,7 @@ const listDirectoryRef = makeFunctionReference<
   }>
 >('workspaceTeam:listDirectory')
 
-const provisionOrganizationWorkspaceForServerRef = makeFunctionReference<
-  'mutation',
-  Readonly<{
-    clerkOrgId: string
-    displayName: string
-    creatorTokenIdentifier: string
-    correlationRef: string
-    serviceAuth: Awaited<ReturnType<typeof createConvexServerFunctionAssertion>>
-  }>,
-  Readonly<{
-    kind: 'created' | 'replayed'
-    accountRef: string
-    ownershipRef: string
-    bindingRef: string
-  }>
->('workspaceProvisioning:provisionOrganizationWorkspaceForServer')
+const provisionOrganizationWorkspaceForServerRef = internal.workspaceProvisioning.provisionOrganizationWorkspaceForServer
 
 const correlationRef = (label: string) => `test:workspace-membership:${label}`
 
@@ -337,7 +323,7 @@ async function provisionBoundOrgWorkspace(
     displayName,
     creatorTokenIdentifier: TOKEN_IDENTIFIER,
     correlationRef: correlationRef(`provision:${clerkOrgId}`),
-    serviceAuth,
+    serviceAuth: { ...serviceAuth, scopes: [...serviceAuth.scopes] },
   })
   return result.accountRef
 }

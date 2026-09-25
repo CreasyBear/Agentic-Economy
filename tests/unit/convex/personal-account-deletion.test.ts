@@ -2,6 +2,7 @@
 import { makeFunctionReference, type UserIdentity } from 'convex/server'
 import { afterEach, describe, expect, it } from 'vitest'
 
+import { internal } from '../../../convex/_generated/api'
 import { createCustomerRequestServiceAssertion } from '@/modules/agent-access/service-auth-envelope'
 import { createAgentAccessGrant } from '@/modules/agent-access/policy'
 import { defaultSandboxAgentAccessPolicy } from '@/modules/agent-access/sandbox-policy'
@@ -71,11 +72,7 @@ const retirePersonalAccountForServerRef = makeFunctionReference<
   RetirePersonalAccountResult
 >('personalAccount:retirePersonalAccountForServer')
 
-const readDeletionEligibilityRef = makeFunctionReference<
-  'query',
-  Record<string, never>,
-  DeletionEligibility
->('personalAccount:readDeletionEligibility')
+const readDeletionEligibilityRef = internal.personalAccount.readDeletionEligibility
 
 const exportUserDataRef = makeFunctionReference<
   'query',

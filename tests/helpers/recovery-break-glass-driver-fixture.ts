@@ -1,7 +1,7 @@
 import { convexTest } from 'convex-test'
 import { vi } from 'vitest'
 
-import { api } from '../../convex/_generated/api'
+import { internal } from '../../convex/_generated/api'
 import schema from '../../convex/schema'
 import { authorizeRecoveryHandler } from '../../convex/lib/authority/breakGlass/authorization'
 import { createConvexRecoveryPersistence } from '../../convex/lib/authority/breakGlass/persistence'
@@ -357,7 +357,7 @@ export async function submitRecoveryDriverRegisteredApprovals(
 ) {
   for (const [suffix, approvalRef] of [['41', 'approval:one'], ['42', 'approval:two']] as const) {
     await backend.withIdentity(recoveryDriverIdentity(suffix)).mutation(
-      api.recoveryBreakGlass.submitRecoveryApproval,
+      internal.recoveryBreakGlass.submitRecoveryApproval,
       { approvalRef, accountRef: RECOVERY_DRIVER_ACCOUNT, action },
     )
   }
@@ -396,7 +396,7 @@ export async function runRecoveryDriverRegisteredRecovery(
   overrides: Record<string, unknown> = {},
 ) {
   return await backend.withIdentity(recoveryDriverIdentity('41')).mutation(
-    api.recoveryBreakGlass.authorizeRecoveryOperation,
+    internal.recoveryBreakGlass.authorizeRecoveryOperation,
     recoveryDriverRegisteredAuthorizePayload(action, suffix, overrides),
   )
 }

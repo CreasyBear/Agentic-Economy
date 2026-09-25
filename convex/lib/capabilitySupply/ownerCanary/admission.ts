@@ -16,7 +16,7 @@ import {
   readExactSellerOnboardingCanaryPlatformGrantHandler,
   sellerOnboardingCanaryPlatformGrantExpectation,
 } from '../../../capabilitySupplyCanaryFunding'
-import { readExactSellerCanaryOperationSnapshotHandler } from '../../../capabilitySupplyCurrentTool'
+import { readExactSellerCanaryOperationSnapshotHandler } from '../currentTool/sellerCanary'
 import type { MutationCtx } from '../../../_generated/server'
 import { requireSourceWrite } from '../../security/sourceWrite/admission'
 import { reserveHandler } from '../../capabilityExecution/callLifecycle/admissionReserve'

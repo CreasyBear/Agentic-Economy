@@ -1,4 +1,4 @@
-import type { MutationCtx } from '../../_generated/server'
+import type { MutationCtx } from '../../../_generated/server'
 import type {
   AdminCommandAction,
   AdminCommandReceipt,
@@ -7,7 +7,7 @@ import type {
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { AuditTargetTypeValues, type AuditTargetType } from '@/modules/observability/public'
 import { writeAdminOperationKey } from './idempotency'
-import type { AdminCommandWireArgs } from './validators'
+import type { AdminCommandWireArgs } from './contracts'
 
 export function refused<A extends AdminCommandAction>(
   args: Pick<AdminCommandWireArgs<A>, 'action' | 'correlationId'>,

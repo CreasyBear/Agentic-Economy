@@ -5,6 +5,7 @@ import {
   it,
 } from 'vitest'
 
+import { internal } from '../../../convex/_generated/api'
 import { samIdentity } from '../../helpers/interactive-authority-provisioning'
 import {
   createInteractiveAuthorityBackend as createBackend,
@@ -94,11 +95,7 @@ const upsertCustomerTaxFactsRef = makeFunctionReference<
   UpsertCustomerTaxFactsReceipt
 >('moneyCustomerTaxFacts:upsertCustomerTaxFacts')
 
-const setActiveWorkspaceRef = makeFunctionReference<
-  'mutation',
-  { accountRef: string; correlationRef: string },
-  { principalRef: string; activeAccountRef: string; revision: number; selectedAt: number }
->('interactiveSession:setActiveWorkspace')
+const setActiveWorkspaceRef = internal.interactiveSession.setActiveWorkspace
 
 const identity = (overrides: Partial<UserIdentity> = {}) =>
   samIdentity(TOKEN_IDENTIFIER, overrides)

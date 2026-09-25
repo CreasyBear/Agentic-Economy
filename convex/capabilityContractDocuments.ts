@@ -1,11 +1,11 @@
-import { mutation } from './_generated/server'
+import { internalMutation } from './_generated/server'
 import {
   registerArgs,
   registerHandler,
   registerResult,
 } from './lib/capabilityContract/documents/registration'
 
-export const register = mutation({
+export const register = internalMutation({
   args: registerArgs,
   returns: registerResult,
   handler: registerHandler,

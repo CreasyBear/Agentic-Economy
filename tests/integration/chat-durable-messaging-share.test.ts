@@ -43,7 +43,7 @@ describe.sequential('durable Tool chat messaging and shares', () => {
     const { owner, canonicalAccountRef } = await publishedBusinessOwner(backend, 'chat-owner')
     const { owner: other } = await publishedBusinessOwner(backend, 'chat-other')
 
-    const sent = await owner.mutation(api.chatMessages.sendMessage, {
+    const sent = await owner.mutation(internal.chatMessages.sendMessage, {
       prompt: '  Find\n\t the best   weather Tools  ',
     })
     const [row, componentThread, messages] = await backend.run(async (ctx) => Promise.all([
@@ -84,13 +84,13 @@ describe.sequential('durable Tool chat messaging and shares', () => {
       paginationOpts: { cursor: null, numItems: 0 },
       streamArgs: { kind: 'list' },
     })).resolves.toMatchObject({ page: [], streams: { kind: 'list' } })
-    await expect(backend.mutation(api.chatMessages.sendMessage, {
+    await expect(backend.mutation(internal.chatMessages.sendMessage, {
       prompt: 'anonymous prompt',
     })).rejects.toThrow('unauthenticated')
-    await expect(owner.mutation(api.chatMessages.sendMessage, {
+    await expect(owner.mutation(internal.chatMessages.sendMessage, {
       prompt: '   ',
     })).rejects.toThrow('invalid_input')
-    await expect(owner.mutation(api.chatMessages.sendMessage, {
+    await expect(owner.mutation(internal.chatMessages.sendMessage, {
       prompt: 'x'.repeat(2_001),
     })).rejects.toThrow('invalid_input')
     await expect(owner.query(api.chatMessages.listMessages, {
@@ -103,11 +103,11 @@ describe.sequential('durable Tool chat messaging and shares', () => {
   it('rejects active concurrency, admits stale state, and only matching cleanup clears it', async () => {
     const backend = convexTestWithMarketComponents()
     const { owner } = await publishedBusinessOwner(backend, 'chat-busy-owner')
-    const first = await owner.mutation(api.chatMessages.sendMessage, {
+    const first = await owner.mutation(internal.chatMessages.sendMessage, {
       prompt: 'First prompt',
     })
 
-    await expect(owner.mutation(api.chatMessages.sendMessage, {
+    await expect(owner.mutation(internal.chatMessages.sendMessage, {
       threadId: first.threadId,
       prompt: 'Concurrent prompt',
     })).rejects.toThrow('thread_busy')
@@ -119,7 +119,7 @@ describe.sequential('durable Tool chat messaging and shares', () => {
       if (row === null) throw new Error('test_thread_missing')
       await ctx.db.patch(row._id, { activeStartedAt: Date.now() - 10 * 60 * 1_000 - 1 })
     })
-    const second = await owner.mutation(api.chatMessages.sendMessage, {
+    const second = await owner.mutation(internal.chatMessages.sendMessage, {
       threadId: first.threadId,
       prompt: 'Replacement after stale state',
     })
@@ -144,7 +144,7 @@ describe.sequential('durable Tool chat messaging and shares', () => {
   it.each([false, true])('persists a final response and settles stream deltas (extended lookup=%s)', async extended => {
     const backend = convexTestWithMarketComponents()
     const { owner, canonicalAccountRef } = await publishedBusinessOwner(backend, 'chat-model-owner')
-    const created = await owner.mutation(api.chatThreads.createThread, {
+    const created = await owner.mutation(internal.chatThreads.createThread, {
       title: 'Find an exchange-rate Tool',
     })
     const promptMessageId = await backend.run(async (ctx) => {
@@ -207,7 +207,7 @@ describe.sequential('durable Tool chat messaging and shares', () => {
   it('settles two empty searches as one answer without option cards', async () => {
     const backend = convexTestWithMarketComponents()
     const { owner, canonicalAccountRef } = await publishedBusinessOwner(backend, 'chat-no-match-owner')
-    const created = await owner.mutation(api.chatThreads.createThread, { title: 'Find an absent Tool' })
+    const created = await owner.mutation(internal.chatThreads.createThread, { title: 'Find an absent Tool' })
     const { messageId } = await backend.run(ctx => saveMessage(ctx, components.agent, {
       threadId: created.threadId, userId: canonicalAccountRef, prompt: 'Find an absent Tool',
     }))
@@ -236,7 +236,7 @@ describe.sequential('durable Tool chat messaging and shares', () => {
   it('halts at clarification and reports an input-required stream outcome', async () => {
     const backend = convexTestWithMarketComponents()
     const { owner, canonicalAccountRef } = await publishedBusinessOwner(backend, 'chat-clarify-owner')
-    const created = await owner.mutation(api.chatThreads.createThread, { title: 'Clarification' })
+    const created = await owner.mutation(internal.chatThreads.createThread, { title: 'Clarification' })
     const { messageId } = await backend.run(ctx => saveMessage(ctx, components.agent, {
       threadId: created.threadId, userId: canonicalAccountRef, prompt: 'Find something suitable',
     }))
@@ -262,7 +262,7 @@ describe.sequential('durable Tool chat messaging and shares', () => {
     const backend = convexTestWithMarketComponents()
     const { owner } = await publishedBusinessOwner(backend, 'chat-unavailable-owner')
     try {
-      const sent = await owner.mutation(api.chatMessages.sendMessage, {
+      const sent = await owner.mutation(internal.chatMessages.sendMessage, {
         prompt: 'Find a current weather Operation',
       })
       await drainExpectedUnavailableGenerations(backend)
@@ -288,10 +288,10 @@ describe.sequential('durable Tool chat messaging and shares', () => {
   it('enforces thirty durable submissions per identity each hour', async () => {
     const backend = convexTestWithMarketComponents()
     const { owner } = await publishedBusinessOwner(backend, 'chat-rate-owner')
-    const created = await owner.mutation(api.chatThreads.createThread, { title: 'Rate thread' })
+    const created = await owner.mutation(internal.chatThreads.createThread, { title: 'Rate thread' })
 
     for (let index = 0; index < 30; index += 1) {
-      const sent = await owner.mutation(api.chatMessages.sendMessage, {
+      const sent = await owner.mutation(internal.chatMessages.sendMessage, {
         threadId: created.threadId,
         prompt: `Prompt ${index}`,
       })
@@ -300,7 +300,7 @@ describe.sequential('durable Tool chat messaging and shares', () => {
         promptMessageId: sent.promptMessageId,
       })
     }
-    await expect(owner.mutation(api.chatMessages.sendMessage, {
+    await expect(owner.mutation(internal.chatMessages.sendMessage, {
       threadId: created.threadId,
       prompt: 'Prompt over limit',
     })).rejects.toThrow('rate_limited')
@@ -317,7 +317,7 @@ describe.sequential('durable Tool chat messaging and shares', () => {
     const backend = convexTestWithMarketComponents()
     const { owner } = await publishedBusinessOwner(backend, 'chat-share-owner')
     const { owner: other } = await publishedBusinessOwner(backend, 'chat-share-other')
-    const sent = await owner.mutation(api.chatMessages.sendMessage, {
+    const sent = await owner.mutation(internal.chatMessages.sendMessage, {
       prompt: 'Compare current weather Tools',
     })
     await drainExpectedUnavailableGenerations(backend)
@@ -394,7 +394,7 @@ describe.sequential('durable Tool chat messaging and shares', () => {
   it('projects settled shared messages into allowlisted text and Tool cards only', async () => {
     const backend = convexTestWithMarketComponents()
     const { owner, canonicalAccountRef } = await publishedBusinessOwner(backend, 'chat-projection-owner')
-    const created = await owner.mutation(api.chatThreads.createThread, {
+    const created = await owner.mutation(internal.chatThreads.createThread, {
       title: 'Public projection',
     })
     const toolRefs = ['a', 'b', 'c', 'd', 'e']

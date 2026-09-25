@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { api, components } from '../../convex/_generated/api'
+import { api, components, internal } from '../../convex/_generated/api'
 import { convexTestWithMarketComponents, publishedBusinessOwner } from '../helpers/convex-fixtures'
 
 describe('durable chat thread metadata', () => {
@@ -8,7 +8,7 @@ describe('durable chat thread metadata', () => {
     const backend = convexTestWithMarketComponents()
     const { owner, canonicalAccountRef } = await publishedBusinessOwner(backend, 'chat-owner')
 
-    const created = await owner.mutation(api.chatThreads.createThread, {
+    const created = await owner.mutation(internal.chatThreads.createThread, {
       title: '  Find\n\t useful   operations  ',
     })
     expect(created).toMatchObject({
@@ -26,7 +26,7 @@ describe('durable chat thread metadata', () => {
       title: 'Find useful operations',
     })
 
-    const defaultTitle = await owner.mutation(api.chatThreads.createThread, {
+    const defaultTitle = await owner.mutation(internal.chatThreads.createThread, {
       title: '   ',
     })
     expect(defaultTitle.title).toBe('New conversation')
@@ -36,7 +36,7 @@ describe('durable chat thread metadata', () => {
     const backend = convexTestWithMarketComponents()
     const { owner } = await publishedBusinessOwner(backend, 'chat-owner')
     const { owner: other } = await publishedBusinessOwner(backend, 'chat-other')
-    const created = await owner.mutation(api.chatThreads.createThread, {
+    const created = await owner.mutation(internal.chatThreads.createThread, {
       title: 'Private thread',
     })
 
@@ -67,7 +67,7 @@ describe('durable chat thread metadata', () => {
   it('does not list an agent-key thread under another principal on the same account', async () => {
     const backend = convexTestWithMarketComponents()
     const { owner, canonicalAccountRef } = await publishedBusinessOwner(backend, 'chat-shared-account')
-    const own = await owner.mutation(api.chatThreads.createThread, { title: 'Private market search' })
+    const own = await owner.mutation(internal.chatThreads.createThread, { title: 'Private market search' })
     const keyThreadId = 'thread:key-on-shared-account'
     await backend.run(async (ctx) => {
       await ctx.db.insert('chatThreads', {
@@ -99,7 +99,7 @@ describe('durable chat thread metadata', () => {
     async (mode) => {
       const backend = convexTestWithMarketComponents()
       const { owner, canonicalPrincipalRef } = await publishedBusinessOwner(backend, `chat-${mode.replace(' ', '-')}`)
-      const created = await owner.mutation(api.chatThreads.createThread, { title: 'Current authority only' })
+      const created = await owner.mutation(internal.chatThreads.createThread, { title: 'Current authority only' })
 
       await backend.run(async (ctx) => {
         const binding = (await ctx.db.query('externalIdentityBindings').collect())
@@ -132,10 +132,10 @@ describe('durable chat thread metadata', () => {
     const backend = convexTestWithMarketComponents()
     const { owner } = await publishedBusinessOwner(backend, 'chat-owner')
     const { owner: other } = await publishedBusinessOwner(backend, 'chat-other')
-    const first = await owner.mutation(api.chatThreads.createThread, { title: 'First' })
-    const second = await owner.mutation(api.chatThreads.createThread, { title: 'Second' })
-    const third = await owner.mutation(api.chatThreads.createThread, { title: 'Third' })
-    await other.mutation(api.chatThreads.createThread, { title: 'Other owner' })
+    const first = await owner.mutation(internal.chatThreads.createThread, { title: 'First' })
+    const second = await owner.mutation(internal.chatThreads.createThread, { title: 'Second' })
+    const third = await owner.mutation(internal.chatThreads.createThread, { title: 'Third' })
+    await other.mutation(internal.chatThreads.createThread, { title: 'Other owner' })
 
     await backend.run(async (ctx) => {
       for (const [threadId, updatedAt] of [
@@ -168,7 +168,7 @@ describe('durable chat thread metadata', () => {
     })).rejects.toThrow('chat_thread_page_size_invalid')
 
     for (let index = 0; index < 18; index += 1) {
-      await owner.mutation(api.chatThreads.createThread, { title: `Extra ${index}` })
+      await owner.mutation(internal.chatThreads.createThread, { title: `Extra ${index}` })
     }
     const defaultPage = await owner.query(api.chatThreads.listThreads, { now: 1_000, paginationOpts: { cursor: null, numItems: 20 } })
     expect(defaultPage.page).toHaveLength(20)
@@ -178,9 +178,9 @@ describe('durable chat thread metadata', () => {
     const backend = convexTestWithMarketComponents()
     const { owner } = await publishedBusinessOwner(backend, 'chat-owner')
     const { owner: other } = await publishedBusinessOwner(backend, 'chat-other')
-    await owner.mutation(api.chatThreads.createThread, { title: 'Alpha accounting helper' })
-    await owner.mutation(api.chatThreads.createThread, { title: 'Travel planning' })
-    await other.mutation(api.chatThreads.createThread, { title: 'Alpha private record' })
+    await owner.mutation(internal.chatThreads.createThread, { title: 'Alpha accounting helper' })
+    await owner.mutation(internal.chatThreads.createThread, { title: 'Travel planning' })
+    await other.mutation(internal.chatThreads.createThread, { title: 'Alpha private record' })
 
     const result = await owner.query(api.chatThreads.searchThreads, {
       query: '  Alpha  ',
@@ -193,7 +193,7 @@ describe('durable chat thread metadata', () => {
   it('renames app and component metadata together and rejects an empty title', async () => {
     const backend = convexTestWithMarketComponents()
     const { owner } = await publishedBusinessOwner(backend, 'chat-owner')
-    const created = await owner.mutation(api.chatThreads.createThread, { title: 'Old title' })
+    const created = await owner.mutation(internal.chatThreads.createThread, { title: 'Old title' })
 
     const renamed = await owner.mutation(api.chatThreads.renameThread, {
       threadId: created.threadId,
@@ -215,7 +215,7 @@ describe('durable chat thread metadata', () => {
   it('rejects active deletion, permits stale deletion, cleans shares, and deletes the component thread', async () => {
     const backend = convexTestWithMarketComponents()
     const { owner } = await publishedBusinessOwner(backend, 'chat-owner')
-    const created = await owner.mutation(api.chatThreads.createThread, { title: 'Delete me' })
+    const created = await owner.mutation(internal.chatThreads.createThread, { title: 'Delete me' })
     const now = Date.now()
 
     await backend.run(async (ctx) => {

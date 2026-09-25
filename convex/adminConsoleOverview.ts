@@ -1,4 +1,4 @@
-import { defineAdminQuery } from './lib/adminConsole/registrars'
+import { defineAdminQuery } from './lib/adminConsole/reads/registrars'
 import {
   adminOverviewValue,
   readAdminOverviewView,

@@ -5,7 +5,7 @@ import { deserializeToolCompareResult, deserializeToolDetailResult, type ToolCom
 import { CHAT_TOOL_NAME_MAP } from '@/modules/chat/tool-card'
 import { projectToolCompareChoices, projectToolDescription } from '@/modules/registry/tool-choice-contracts'
 import { registryToolsCompareContract, registryToolsDescribeContract } from '@/modules/registry/tool-action-contracts'
-import { api } from '../../../_generated/api'
+import { internal } from '../../../_generated/api'
 import { descriptionFor, type ReserveChatTool } from './contracts'
 import { projectedModelFacingOutput } from './output'
 
@@ -19,7 +19,7 @@ export function createReadTools(reserve: ReserveChatTool) {
       execute: async (ctx: ToolCtx, input: ToolDetailInput) => {
         const denied = reserve('registry.tools.describe')
         if (denied !== null) return denied
-        const result = await ctx.runAction(api.capabilityToolCatalog.detail, input)
+        const result = await ctx.runAction(internal.capabilityToolCatalog.detailInternal, input)
         return projectedModelFacingOutput(
           'registry.tools.describe',
           describeContract.outputSchema,
@@ -34,8 +34,8 @@ export function createReadTools(reserve: ReserveChatTool) {
         const denied = reserve('registry.tools.compare')
         if (denied !== null) return denied
         const result = await ctx.runAction(
-          api.capabilityToolCatalog.compare,
-          structuredClone(input) as FunctionArgs<typeof api.capabilityToolCatalog.compare>,
+          internal.capabilityToolCatalog.compareInternal,
+          structuredClone(input) as FunctionArgs<typeof internal.capabilityToolCatalog.compareInternal>,
         )
         return projectedModelFacingOutput(
           'registry.tools.compare',

@@ -160,14 +160,14 @@ async function promotePaidBuyerFixtureAfterSellerCanary(input: Readonly<{
     correlationId: 'buyer-journey:seller-canary',
   })
   const readiness = await input.owner.action(
-    api.capabilitySupplyOwnerSupply.runOwnerSupplyReadiness,
+    internal.capabilitySupplyOwnerSupply.runOwnerSupplyReadiness,
     command,
   )
   expect(readiness).toMatchObject({
     step: 'readiness', state: 'completed', publicationRef: input.publicationRef, toolRef: input.toolRef,
   })
   const requested = await input.owner.action(
-    api.capabilitySupplyOwnerSupply.runOwnerSupplyTest,
+    internal.capabilitySupplyOwnerSupply.runOwnerSupplyTest,
     command,
   )
   if (requested.state !== 'completed'

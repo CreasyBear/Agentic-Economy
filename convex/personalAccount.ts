@@ -1,4 +1,4 @@
-import { mutation, query } from './_generated/server'
+import { internalQuery, mutation, query } from './_generated/server'
 import {
   retirePersonalAccountForServerArgs,
   retirePersonalAccountForServerHandler,
@@ -21,7 +21,7 @@ export const retirePersonalAccountForServer = mutation({
   handler: retirePersonalAccountForServerHandler,
 })
 
-export const readDeletionEligibility = query({
+export const readDeletionEligibility = internalQuery({
   args: readDeletionEligibilityArgs,
   returns: readDeletionEligibilityResult,
   handler: readDeletionEligibilityHandler,

@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest'
 
-import { resolveAdminAuthority } from '../../../convex/authz'
+import { resolveAdminAuthority } from '../../../authz'
 import {
   listOpenApprovalProposals,
   resolveApprovalIntent,
   type ApprovalResolution,
-} from '../../../convex/lib/adminConsole/approvals'
+} from './approvals'
 import { parseAdminProposalCommand } from '@/components/ae/admin/actions/actions.contracts'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import type { AdminActionInput, AdminApprovalIntent, AdminReasonCodeByAction } from '@/lib/operator/admin-console/contracts'
@@ -14,7 +14,7 @@ import {
   ownerAdmin,
   supportAdmin,
   type ConvexFixtureBackend,
-} from '../../helpers/convex-fixtures'
+} from '../../../../tests/helpers/convex-fixtures'
 
 const ACTION = 'set_business_suppression'
 const COMMAND_DIGEST = canonicalDigest({

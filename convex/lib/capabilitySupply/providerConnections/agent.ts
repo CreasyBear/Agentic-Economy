@@ -12,10 +12,10 @@ import {
   projectOwnerProjection,
   readProviderConnectionForActor,
   reauthorizeProviderConnectionForActor,
-  retryProviderConnectionCleanupForActor,
   revokeProviderConnectionForActor,
   type ProviderConnectionActor,
 } from '../providerConnectionOwner/owner'
+import { retryProviderConnectionCleanupForActor } from '../providerConnectionOwner/revokeCleanup'
 import { lifecycle } from './contracts'
 import { toDomain } from './lifecycle'
 

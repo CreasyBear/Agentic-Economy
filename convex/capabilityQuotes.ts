@@ -32,7 +32,7 @@ import {
 } from './lib/capabilityExecution/quotes/readForCall'
 
 // -- Registrations only. Validators, handler bodies, and DB logic live under --
-// -- convex/lib/capabilityQuotes/*, grouped by concern. ----------------------
+// -- convex/lib/capabilityExecution/quotes/*, grouped by concern. ------------
 
 export const issueQuote = internalMutation({
   args: issueQuoteArgs,

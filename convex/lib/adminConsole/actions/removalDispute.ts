@@ -1,7 +1,7 @@
 import type { MutationCtx } from '../../../_generated/server'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
-import type { AdminCommandSpec } from '../commandEnvelope'
-import type { AdminCommandWireArgs } from '../validators'
+import type { AdminCommandSpec } from '../commands/commandEnvelope'
+import type { AdminCommandWireArgs } from '../commands/contracts'
 
 export function removalDisputeSpec(
   ctx: MutationCtx,

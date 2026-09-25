@@ -5,7 +5,7 @@ import * as networkPublic from '@/modules/network-guard/public'
 
 import { admitDiscoveredToolFixture } from '../../helpers/discovered-tool-fixture'
 import { inspectLiveX402Requirement } from '@/modules/capability-execution/live-x402-requirement'
-import { readManagedX402InspectionTarget } from '../../../convex/capabilitySupplyCurrentTool'
+import { readManagedX402InspectionTarget } from '../../../convex/lib/capabilitySupply/currentTool/inspection'
 import { quote } from '../../../convex/capabilityQuotes'
 import { projectToolQuoteRefusal } from '@/modules/capability-execution/quote'
 import { api, internal } from '../../../convex/_generated/api'

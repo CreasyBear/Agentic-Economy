@@ -15,7 +15,7 @@ import { readAdminQuoteView } from './lib/adminConsole/reads/quote'
 import { readAdminToolVersionView } from './lib/adminConsole/reads/toolVersion'
 import { readAdminProviderView } from './lib/adminConsole/reads/provider'
 import { readAdminWorkspaceView } from './lib/adminConsole/reads/workspace'
-import { defineAdminQuery } from './lib/adminConsole/registrars'
+import { defineAdminQuery } from './lib/adminConsole/reads/registrars'
 
 const objectNotFoundValue = v.object({ kind: v.literal('object_not_found') })
 

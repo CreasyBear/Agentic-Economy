@@ -4,7 +4,8 @@ import { canonicalDigest } from '../../../../src/modules/common/canonical-digest
 import type { MutationCtx } from '../../../_generated/server'
 import { loadByCustody } from './attempt'
 import { X402_PAYMENT_SIGNING_CLAIM_LEASE_MS } from './contracts'
-import { canonicalUnsignedMaterialJson, expectedCustodyGenerationMatches, isPaymentSigningIdempotencyKey, paymentAuthorizationExpiryFromMaterial, paymentAuthorizationExpiryValid, storedAuthorization } from './identity'
+import { canonicalUnsignedMaterialJson, isPaymentSigningIdempotencyKey, paymentAuthorizationExpiryFromMaterial, paymentAuthorizationExpiryValid, storedAuthorization } from './authorizationMaterial'
+import { expectedCustodyGenerationMatches } from './identity'
 
 export const claimX402PaymentAuthorizationReturns = v.union(
   v.object({ kind: v.literal('claimed') }),

@@ -39,7 +39,7 @@ export const analyticsReturns = v.union(unavailableValue, v.object({
     rising: v.array(indexedEntryValue), falling: v.array(indexedEntryValue),
     price: v.object({
       // Price facet memberships are only ever written for the aggregate '*'
-      // row (see memberships() in lib/x402DirectoryIndex/analytics.ts) - no
+      // row (see memberships() in ./analytics.ts) - no
       // caller reads a per-network price breakdown, so this section always
       // reports the whole-generation aggregate regardless of args.network.
       scope: v.literal('whole_generation'),

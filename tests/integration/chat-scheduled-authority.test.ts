@@ -190,7 +190,7 @@ describe('scheduled chat consequence authority', () => {
       } else {
         authority = await readAuthority(backend, slug)
       }
-      const sent = await sender.mutation(api.chatMessages.sendMessage, {
+      const sent = await sender.mutation(internal.chatMessages.sendMessage, {
         prompt: `Scheduled isolation ${caseKind}`,
       })
 
@@ -504,7 +504,7 @@ describe('scheduled chat consequence authority', () => {
     const crossAccountBackend = convexTestWithMarketComponents()
     const { owner } = await publishedBusinessOwner(crossAccountBackend, 'chat-account-a')
     const { owner: stranger } = await publishedBusinessOwner(crossAccountBackend, 'chat-account-b')
-    const sent = await owner.mutation(api.chatMessages.sendMessage, { prompt: 'Account A only' })
+    const sent = await owner.mutation(internal.chatMessages.sendMessage, { prompt: 'Account A only' })
     await expect(stranger.query(api.chatMessages.listMessages, {
       threadId: sent.threadId,
       paginationOpts: { cursor: null, numItems: 20 },
@@ -515,7 +515,7 @@ describe('scheduled chat consequence authority', () => {
   it('re-derives the exact current Principal and Account before generation', async () => {
     const backend = convexTestWithMarketComponents()
     const { owner } = await publishedBusinessOwner(backend, 'chat-scheduled-authority')
-    const sent = await owner.mutation(api.chatMessages.sendMessage, { prompt: 'Bound chat request' })
+    const sent = await owner.mutation(internal.chatMessages.sendMessage, { prompt: 'Bound chat request' })
     const authority = await readAuthority(backend, 'chat-scheduled-authority')
 
     await expect(backend.query(internal.chatMessages.authorizeScheduledGeneration, {
@@ -548,7 +548,7 @@ describe('scheduled chat consequence authority', () => {
     process.env.AE_SITE_URL = 'https://agentic-economy.example.test'
     const admittedBackend = convexTestWithMarketComponents()
     const { owner } = await publishedBusinessOwner(admittedBackend, 'chat-runtime-generation')
-    const sent = await owner.mutation(api.chatMessages.sendMessage, {
+    const sent = await owner.mutation(internal.chatMessages.sendMessage, {
       prompt: 'Keep the existing keyless chat outcome',
     })
 
@@ -575,7 +575,7 @@ describe('scheduled chat consequence authority', () => {
 
     const deniedBackend = convexTestWithMarketComponents()
     const { owner: deniedOwner } = await publishedBusinessOwner(deniedBackend, 'chat-runtime-denied')
-    const denied = await deniedOwner.mutation(api.chatMessages.sendMessage, {
+    const denied = await deniedOwner.mutation(internal.chatMessages.sendMessage, {
       prompt: 'Do not reach provider work after authority drift',
     })
     const deniedAuthority = await readAuthority(deniedBackend, 'chat-runtime-denied')
@@ -637,7 +637,7 @@ describe('scheduled chat consequence authority', () => {
     const backend = convexTestWithMarketComponents()
     const slug = `chat-scheduled-${kind}`
     const { owner } = await publishedBusinessOwner(backend, slug)
-    const sent = await owner.mutation(api.chatMessages.sendMessage, { prompt: 'Current authority only' })
+    const sent = await owner.mutation(internal.chatMessages.sendMessage, { prompt: 'Current authority only' })
     const authority = await readAuthority(backend, slug)
     await backend.run(async (ctx) => {
       const credential = await ctx.db.query('credentials')
@@ -670,16 +670,16 @@ describe('scheduled chat consequence authority', () => {
     await drainExpectedUnavailableGeneration(backend)
   })
 
-  it('preserves the complete account-scoped thread lifecycle through public handlers', async () => {
+  it('preserves the complete account-scoped thread lifecycle through internal and public handlers', async () => {
     process.env.AE_CHAT_SHARE_SECRET = 'chat-thread-lifecycle-share-secret-32-bytes'
     const backend = convexTestWithMarketComponents()
     const { owner } = await publishedBusinessOwner(backend, 'chat-thread-lifecycle')
 
-    const defaultThread = await owner.mutation(api.chatThreads.createThread, {})
+    const defaultThread = await owner.mutation(internal.chatThreads.createThread, {})
     expect(defaultThread).toMatchObject({ title: 'New conversation', busy: false })
-    const emptyThread = await owner.mutation(api.chatThreads.createThread, { title: '   ' })
+    const emptyThread = await owner.mutation(internal.chatThreads.createThread, { title: '   ' })
     expect(emptyThread.title).toBe('New conversation')
-    const titledThread = await owner.mutation(api.chatThreads.createThread, {
+    const titledThread = await owner.mutation(internal.chatThreads.createThread, {
       title: `  ${'a'.repeat(100)}  `,
     })
     expect(Array.from(titledThread.title)).toHaveLength(80)
@@ -726,7 +726,7 @@ describe('scheduled chat consequence authority', () => {
       title: '  Renamed   account thread  ',
     })).resolves.toMatchObject({ title: 'Renamed account thread', busy: false })
 
-    const busy = await owner.mutation(api.chatMessages.sendMessage, {
+    const busy = await owner.mutation(internal.chatMessages.sendMessage, {
       threadId: titledThread.threadId,
       prompt: 'Keep this account thread busy',
     })

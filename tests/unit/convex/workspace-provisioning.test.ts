@@ -1,4 +1,4 @@
-import { makeFunctionReference, type UserIdentity } from 'convex/server'
+import type { UserIdentity } from 'convex/server'
 import {
   afterEach,
   beforeEach,
@@ -8,6 +8,7 @@ import {
   vi,
 } from 'vitest'
 
+import { internal } from '../../../convex/_generated/api'
 import { createConvexServerFunctionAssertion } from '../../../src/lib/server/convex-source'
 import { principalRef } from '../../../src/modules/principal-account/principal/public'
 import type { Doc } from '../../../convex/_generated/dataModel'
@@ -45,17 +46,7 @@ type WorkspaceProvisionErrorCode =
   | 'display_name_invalid'
   | 'clerk_org_id_invalid'
 
-const provisionOrganizationWorkspaceForServerRef = makeFunctionReference<
-  'mutation',
-  Readonly<{
-    clerkOrgId: string
-    displayName: string
-    creatorTokenIdentifier: string
-    correlationRef: string
-    serviceAuth: Awaited<ReturnType<typeof createConvexServerFunctionAssertion>>
-  }>,
-  WorkspaceProvisionSuccess
->('workspaceProvisioning:provisionOrganizationWorkspaceForServer')
+const provisionOrganizationWorkspaceForServerRef = internal.workspaceProvisioning.provisionOrganizationWorkspaceForServer
 
 
 const correlationRef = (label: string) => `test:workspace-provision:${label}`
@@ -117,7 +108,7 @@ async function provisionOrganizationWorkspaceForServer(
   const serviceAuth = await buildProvisionServiceAuth(input)
   return await backend.mutation(provisionOrganizationWorkspaceForServerRef, {
     ...input,
-    serviceAuth,
+    serviceAuth: { ...serviceAuth, scopes: [...serviceAuth.scopes] },
   })
 }
 

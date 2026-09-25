@@ -4,8 +4,8 @@ import type {
   AdminCommandAction,
   AdminCommandArgs,
 } from '@/lib/operator/admin-console/contracts'
-import { clerkConsequenceProofValue } from '../authority/consequence/proof'
-import { sourceWriteArgs } from '../security/sourceWrite/contracts'
+import { clerkConsequenceProofValue } from '../../authority/consequence/proof'
+import { sourceWriteArgs } from '../../security/sourceWrite/contracts'
 export const ADMIN_OPAQUE_REF_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/u
 
 export const adminRefusalValue = v.object({

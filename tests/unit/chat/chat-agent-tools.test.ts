@@ -15,7 +15,7 @@ import {
   MAX_CHAT_TOOL_RESULT_BYTES,
   prepareChatToolStep,
 } from '../../../convex/lib/chat/tools/step'
-import { api, internal } from '../../../convex/_generated/api'
+import { internal } from '../../../convex/_generated/api'
 import type { TrustedChatAuthority } from '@/modules/chat/agent-turn.contracts'
 import { serializeToolSearchResult, serializeToolDetailResult } from '@/modules/capability-supply/public'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
@@ -95,11 +95,11 @@ async function invokeTool(
 
 function nativeReadResult(functionName: string): unknown {
   switch (functionName) {
-    case 'capabilityToolCatalog:search':
+    case 'capabilityToolCatalog:searchInternal':
       return noCandidates
-    case 'capabilityToolCatalog:detail':
+    case 'capabilityToolCatalog:detailInternal':
       return notFound
-    case 'capabilityToolCatalog:compare':
+    case 'capabilityToolCatalog:compareInternal':
       return compareUnavailable
     default:
       throw new Error(`Unexpected catalogue action: ${functionName}`)
@@ -315,7 +315,7 @@ describe('Tool chat Agent tools', () => {
     expect(runAction).not.toHaveBeenCalled()
   })
 
-  it('dispatches all reads through their shared Convex catalogue actions', async () => {
+  it('dispatches all reads through internal Convex catalogue actions', async () => {
     const runAction = vi.fn(async (reference) => nativeReadResult(getFunctionName(reference)))
     const agent = createChatAgent(mockModel(), AUTHORITY)
     const ctx = toolCtx({ runAction: runAction as ToolCtx['runAction'] })
@@ -326,10 +326,10 @@ describe('Tool chat Agent tools', () => {
     await invokeTool(agent, 'registry.tools.compare', ctx, { toolRefs: [OPERATION_REF] })
 
     expect(runAction.mock.calls.map(([reference]) => getFunctionName(reference))).toEqual([
-      getFunctionName(api.capabilityToolCatalog.search),
-      getFunctionName(api.capabilityToolCatalog.search),
-      getFunctionName(api.capabilityToolCatalog.detail),
-      getFunctionName(api.capabilityToolCatalog.compare),
+      getFunctionName(internal.capabilityToolCatalog.searchInternal),
+      getFunctionName(internal.capabilityToolCatalog.searchInternal),
+      getFunctionName(internal.capabilityToolCatalog.detailInternal),
+      getFunctionName(internal.capabilityToolCatalog.compareInternal),
     ])
   })
 
@@ -346,7 +346,7 @@ describe('Tool chat Agent tools', () => {
     })
     const runAction = vi.fn(async (reference, _args?: unknown) => {
       const name = getFunctionName(reference)
-      if (name === getFunctionName(api.capabilityToolCatalog.search)) {
+      if (name === getFunctionName(internal.capabilityToolCatalog.searchInternal)) {
         return serializeToolSearchResult(source)
       }
       if (name === getFunctionName(internal.capabilityToolCatalog.presentSearch)) {
@@ -372,7 +372,7 @@ describe('Tool chat Agent tools', () => {
       request: 'Compare two company-lookup tools',
     })
     expect(runAction.mock.calls.map(([reference]) => getFunctionName(reference))).toEqual([
-      getFunctionName(api.capabilityToolCatalog.search),
+      getFunctionName(internal.capabilityToolCatalog.searchInternal),
       getFunctionName(internal.capabilityToolCatalog.presentSearch),
     ])
   })
@@ -390,7 +390,7 @@ describe('Tool chat Agent tools', () => {
       ...source,
       ranking: source.items.map((tool, index) => ({ toolRef: tool.toolRef, rank: index + 1, score: 0.9 })),
     })
-    const runAction = vi.fn(async reference => getFunctionName(reference) === 'capabilityToolCatalog:search'
+    const runAction = vi.fn(async reference => getFunctionName(reference) === 'capabilityToolCatalog:searchInternal'
       ? serializeToolSearchResult(source) : { result: presented, use: 'registry.tools.compare' })
     const result = await invokeTool(
       createChatAgent(mockModel()), 'registry.tools.search',
@@ -480,7 +480,7 @@ describe('Tool chat Agent tools', () => {
     const result = await invokeTool(agent, 'registry.tools.compare', ctx, { toolRefs: [OPERATION_REF] })
     expect(result).toMatchObject({ kind: 'unavailable' })
     expect(runAction).toHaveBeenCalledTimes(6)
-    expect(getFunctionName(runAction.mock.calls[5]![0])).toBe('capabilityToolCatalog:compare')
+    expect(getFunctionName(runAction.mock.calls[5]![0])).toBe('capabilityToolCatalog:compareInternal')
   })
 
   it('reserves the single execute slot before parallel work awaits', async () => {

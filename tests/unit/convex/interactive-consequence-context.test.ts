@@ -2,7 +2,7 @@ import { convexTest } from 'convex-test'
 import { getFunctionName } from 'convex/server'
 import { describe, expect, it, vi } from 'vitest'
 
-import { api } from '../../../convex/_generated/api'
+import { api, internal } from '../../../convex/_generated/api'
 import schema from '../../../convex/schema'
 import {
   runOwnerSupplyReadiness,
@@ -93,7 +93,7 @@ describe('interactive consequence authority', () => {
     })])
 
     await expect(accountBOwner.action(
-      api.capabilitySupplyOwnerSupply.runOwnerSupplyReadiness,
+      internal.capabilitySupplyOwnerSupply.runOwnerSupplyReadiness,
       {
         businessId,
         offeringRef: 'offering:request-substitution',

@@ -9,10 +9,10 @@ import { paginationOptsValidator } from 'convex/server'
 import { v } from 'convex/values'
 
 import { components } from './_generated/api'
-import { internalMutation, internalQuery, mutation, query } from './_generated/server'
-import { normalizedTurnPrompt, reserveAndStartTurn } from './lib/chat/turnHandlers'
+import { internalMutation, internalQuery, query } from './_generated/server'
+import { normalizedTurnPrompt, reserveAndStartTurn } from './lib/chat/turns/handlers'
 import { requireChatOwner, requireOwnedChatThread } from './chatThreads'
-import { chatThreadBelongsToPrincipal } from './lib/chat/threadOwnership'
+import { chatThreadBelongsToPrincipal } from './lib/chat/threads/ownership'
 import {
   interactiveAuthorityContextValue,
   resolveScheduledInteractiveAuthorityContext,
@@ -34,7 +34,7 @@ function validatePaginationOpts(
 }
 
 
-export const sendMessage = mutation({
+export const sendMessage = internalMutation({
   args: {
     threadId: v.optional(v.string()),
     prompt: v.string(),

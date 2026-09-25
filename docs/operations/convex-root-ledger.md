@@ -67,13 +67,13 @@
 | 2026-09-24 | chatShares.ts | 402 lines | 41 lines; `lib/chat/shares/` | pending (wave 8) |
 | 2026-09-24 | registry.ts | 442 lines | 33 lines; `lib/registry/` | pending (wave 8) |
 
-Wave 8 fixed the known 12 typecheck diagnostics, 3 import-gate failures and 33 unit failures. Closeout: typecheck, import, unit, integration and build gates pass; the API snapshot retains every RPC triple. Lint remains red on 14 diagnostics outside campaign-changed files after six touched-file warnings were fixed. Dependency cycles: 13 now versus 6 at `3d4ba6672^` (7 newly introduced, not a passing gate). Campaign complete: **1** depth-one non-test Convex root exceeds 200 scanner lines, registration-only `capabilityProviderConnections.ts` (277, 29 RPCs, pinned).
+Wave 8 fixed the known 12 typecheck diagnostics, 3 import-gate failures and 33 unit failures. Its interim closeout had passing typecheck, imports, unit, integration and build gates, but lint still had 14 diagnostics and dependency cycles stood at 13. Wave 9 below supersedes that interim status.
 
 ### Decisions applied 2026-09-24
 - **D1, catalog origin:** eligible-ports admission now checks the business ID and fails closed, as the graph path does (`34ccfe8f7`).
 - **D2, command contract:** capability-supply owns the owner command result validator; its readonly view is derived from that contract (`fd96e01dc`).
 - **D3, Connect:** HTTP no longer fabricates a payout binding; one Connect contract home remains, but the refusal and authority envelopes differ semantically (`483a2d613`).
-- **D4, operator RPCs:** the two obsolete backfills were deleted; `x402DirectoryIndexBackfill.start` was restored as the category-stats rebuild entry (alongside its state/batch work). Kept operator entries: `moneyFormance.health`, `moneyFormance.installSchema`, `moneyManagedCallRemedyActions.resolveLostResult`, `interactiveAuthority.reconcileScheduledInteractiveAuthority`, `recoveryBreakGlass.submitRecoveryApproval`, `recoveryBreakGlass.authorizeRecoveryOperation`, and `x402DirectoryIndexBackfill.start` (`d2baca6cd`).
+- **D4, operator RPCs:** the two obsolete backfills were deleted; `x402DirectoryIndexBackfill.start` was restored as the category-stats rebuild entry. Kept operator entries: `moneyFormance.health`, `moneyFormance.installSchema`, `moneyManagedCallRemedyActions.resolveLostResult`, `interactiveAuthority.reconcileScheduledInteractiveAuthority`, `x402DirectoryIndexBackfill.start`, and the **internal** operator mutations `recoveryBreakGlass.submitRecoveryApproval`, `recoveryBreakGlass.authorizeRecoveryOperation`, `capabilityProviderApprovals.issue`, and `moneyProviderObligations.resolveDispute`. The recovery entries remain callable only through internal Convex authority; no public registration is required.
 - **D5, dead RPCs:** 11 further test-only RPCs deleted: `actionExecutionControl.readControlSource`, `actionExecutionControl.recordLateObservationSource`, `capabilityContractDocuments.getActiveExactInternal`, `capabilityProviderConnectionMigration.backfillFacilitatorDiscoveryAuthority`, `capabilityProviderTools.backfillAdmissionPage`, `interactiveSession.listUserWorkspaces`, `moneyDocuments.createOwnerTaxInvoice`, `moneyStripeWebhookInbox.readHealth`, `notifications.dispatchNotificationInternal`, `workspaceProfile.syncOrganizationDisplayNameForServer`, `workspaceProvisioning.claimCreatedWorkspace`. Integration-fixture RPCs remain for a test-fixture pass; five Clerk webhook string references were kept: `workspaceInvitations.recordOrganizationInvitationCreatedForServer`, `workspaceInvitations.recordOrganizationInvitationRevokedForServer`, `workspaceMemberships.recordOrganizationMembershipCreatedForServer`, `workspaceMemberships.recordOrganizationMembershipUpdatedForServer`, `workspaceMemberships.recordOrganizationMembershipDeletedForServer` (`d2baca6cd`).
 - **D6, layout:** pure terminal projection moved to `src/modules/capability-execution/terminal-projection.ts`; oversized attempt and shared contracts were split (`d2baca6cd`).
 - **D7, ingress identity:** on Vercel, rate limiting trusts only `x-vercel-forwarded-for` (`7524cb6c8`).
@@ -83,8 +83,7 @@ Wave 8 fixed the known 12 typecheck diagnostics, 3 import-gate failures and 33 u
 - Integration-fixture RPCs need a test-fixture pass before any further deletion; Clerk's five string-ref handlers are live references, not dead code.
 - Connect's differing refusal and authority envelopes are semantic; do not unify them as a type-only move.
 - `convex/lib/money/x402PaymentAttempt/identity.ts` (412 lines) remains oversized; `convex/moneyX402PaymentAttempts.ts` still has an inline reconcile handler.
-- `convex/capabilityToolCatalog.ts:100,111,152,164` uses public `api.*` targets for `ctx.runQuery`; convert to internal references in a separate behaviour-reviewed pass.
-- `convex/capabilityProviderConnections.ts` remains a 277-scanner-line registration-only exception for 29 RPCs (276 physical lines).
+- `convex/capabilityProviderConnections.ts` remains a 274-scanner-line registration-only exception for 29 RPCs.
 - The chat-session typecheck, import and unit failures were fixed in wave 8; its empty `chatTools.ts` root is deleted. Principal refusal codes and Managed-Call remedy transitions remain deliberately distinct.
 
 ### §10 decisions for the wave 4 layout moves (orchestrator, 2026-09-24)
@@ -98,3 +97,13 @@ Wave 8 fixed the known 12 typecheck diagnostics, 3 import-gate failures and 33 u
 - **`secrets/`:** pointer, lifecycle.
 - **`catalog/`:** sellerCanary (split by concern), devSeed.
 - **Exception:** `adminConsole/` stays a top-level folder. It is the operator console across domains, and nesting it would exceed depth 2. Only its naming gets fixed.
+
+### Wave 9: re-audit and polish — 2026-09-25
+
+- **AB-01/02:** Restored the sole approval writer `capabilityProviderApprovals.issue` and disputed-obligation exit `moneyProviderObligations.resolveDispute` as internal operator mutations.
+- **AB-03:** Connect readiness now returns only persisted currency bindings when at least one exists, rather than rejecting the whole account for one missing currency; regression coverage exercises the mixed case.
+- **AB-04/05:** Off-Vercel rate-limit header trust is explicitly dev-only in `rate-limit.ts`; removed the obsolete ledger claim that catalog actions use public source reads.
+- **AB-06/07:** Moved 12 test-only public RPCs to their corresponding internal kinds after checking for product callers. Clerk observation refs now use Convex `module:function` form instead of dotted function names, with a regression test.
+- Restored behavioral coverage for toaster placement, exact-contract reads, tool-catalog presentation, persisted tax admission, Stripe inbox failed completion, six-result search cap, and invalid `chatSearchUse`. Four move-fidelity audits across execution, money, supply/market, and identity/chat found no unintended behavior drift.
+- Split 12 agent-access/supply files and four additional files plus three roots by concern; grouped loose chat/adminConsole code and made `chatTurns`, `adminConsoleAudit`, and `agentDirectory` registration-only. `capabilityToolCatalog.{searchInternal,detailInternal,compareInternal}` are internal action twins sharing the public handlers.
+- Final closeout: typecheck 0 errors; lint 0 warnings; dependency cycles 0; imports 30 files/89 tests; unit 644 passed files/6,479 passed tests (one skipped); integration 185 passed files/1,994 passed tests (31 skipped, three todo); build passes. The API kind snapshot changed by exactly 12 visibility flips and five added registrations (three catalog twins and two restored operator RPCs). File-size ceilings are 207 over 300 and 65 over 500; the sole façade exception is 274 scanner lines.

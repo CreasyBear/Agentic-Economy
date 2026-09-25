@@ -135,6 +135,7 @@ export function anonymousChatAdmissionKey(request: Request): string {
 }
 
 function trustedIngressIp(request: Request): string {
+  // Client-IP trust assumes the Vercel deploy host (vercel.json); off-Vercel header trust is dev-only.
   const ingress = process.env.VERCEL === undefined
     ? firstNonEmptyHeader(request, ['x-vercel-forwarded-for', 'cf-connecting-ip', 'x-real-ip'])
     : request.headers.get('x-vercel-forwarded-for')

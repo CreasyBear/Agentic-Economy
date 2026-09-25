@@ -1,4 +1,4 @@
-import { makeFunctionReference, type UserIdentity } from 'convex/server'
+import type { UserIdentity } from 'convex/server'
 import {
   afterEach,
   beforeEach,
@@ -8,6 +8,7 @@ import {
   vi,
 } from 'vitest'
 
+import { internal } from '../../../convex/_generated/api'
 import { accountRef } from '../../../src/modules/principal-account/account/public'
 import { principalRef } from '../../../src/modules/principal-account/principal/public'
 import type { Doc } from '../../../convex/_generated/dataModel'
@@ -44,11 +45,7 @@ const CLERK_ORG_A = 'org_test_workspace_a'
 const CLERK_ORG_B = 'org_test_workspace_b'
 const CLERK_ORG_INACCESSIBLE = 'org_test_inaccessible'
 
-const setActiveWorkspaceRef = makeFunctionReference<
-  'mutation',
-  { accountRef: string; correlationRef: string },
-  { principalRef: string; activeAccountRef: string; revision: number; selectedAt: number }
->('interactiveSession:setActiveWorkspace')
+const setActiveWorkspaceRef = internal.interactiveSession.setActiveWorkspace
 
 
 type RunCtx = Parameters<Parameters<InteractiveAuthorityBackend['run']>[0]>[0]

@@ -1,4 +1,4 @@
-import { runAdminCommand } from './lib/adminConsole/commandEnvelope'
+import { runAdminCommand } from './lib/adminConsole/commands/commandEnvelope'
 import {
   sourceAuthorityArgs,
   sourceAuthorityReceiptValue,

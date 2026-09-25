@@ -1,5 +1,5 @@
 import type { Doc } from '../../../_generated/dataModel'
-import { beginLeaseEffectHandler } from '../../capabilitySupply/providerConnections/leases'
+import { beginLeaseEffectHandler } from '../../capabilitySupply/providerConnections/leaseEffect'
 
 const OPAQUE_REF = /^[A-Za-z0-9][A-Za-z0-9._:/-]{0,199}$/u
 const DIGEST = /^sha256:[0-9a-f]{64}$/u

@@ -1,8 +1,8 @@
 import type { MutationCtx } from '../../../_generated/server'
 import type { Doc } from '../../../_generated/dataModel'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
-import type { AdminCommandSpec } from '../commandEnvelope'
-import type { AdminCommandWireArgs } from '../validators'
+import type { AdminCommandSpec } from '../commands/commandEnvelope'
+import type { AdminCommandWireArgs } from '../commands/contracts'
 
 type Membership = Doc<'adminMemberships'>
 

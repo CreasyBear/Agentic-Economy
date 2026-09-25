@@ -3,23 +3,15 @@ import {
   consumeProviderConnectionLease,
   expireProviderConnectionLease,
   invalidateProviderConnectionLease,
-  issueProviderConnectionLease,
   providerConnectionAuthorityProvenanceIsValid,
   type ProviderConnectionLeaseCommandResult,
 } from '../../../../src/modules/capability-supply/provider-connection'
-import { canonicalDigest } from '../../../../src/modules/common/canonical-digest'
-import {
-  isProviderApprovalDecisionIntegrityValid,
-  type ProviderApprovalDecision,
-} from '../../../../src/modules/capability-supply/provider-approval'
 import type { MutationCtx, QueryCtx } from '../../../_generated/server'
-import type { Doc } from '../../../_generated/dataModel'
 import {
   toDomain,
   toLeaseDomain,
   toLeaseRow,
 } from './lifecycle'
-import { validateCanonicalAgentDelegation } from '../../authority/canonicalAgent/authority'
 
 const leaseState = v.union(
   v.literal('active'),
@@ -201,29 +193,6 @@ export const invalidateLeaseArgs = {
   now: v.number(),
 } as const
 
-type IssueLeaseArgs = {
-  commandId: string
-  leaseRef: string
-  callRef: string
-  toolRef: string
-  connectionRef: string
-  providerRef: string
-  providerAccountRef: string
-  adapterId: string
-  expectedAuthorityGeneration: number
-  expectedAuthorityDigest: string
-  requestedScopes: string[]
-  grantedScopes: string[]
-  requestedResources: string[]
-  grantedResources: string[]
-  approvalDecisionRef: string
-  readinessValidUntil: number
-  readinessDigest?: string
-  leaseMs: number
-  evidenceRefs: string[]
-  now: number
-}
-
 type ResolveLeaseCredentialRefArgs = {
   leaseRef: string
   connectionRef: string
@@ -283,59 +252,12 @@ type InvalidateLeaseArgs = {
   now: number
 }
 
-function projectLeaseResult(result: ProviderConnectionLeaseCommandResult) {
+export function projectLeaseResult(result: ProviderConnectionLeaseCommandResult) {
   if (result.kind === 'refused') return result
   const lease = toLeaseRow(result.lease, result.lease.lastCommandId ?? '', result.commandDigest)
   return result.kind === 'applied'
     ? { kind: 'applied' as const, lease, commandDigest: result.commandDigest }
     : { kind: 'duplicate' as const, lease, commandDigest: result.commandDigest }
-}
-
-function existingLease(
-  row: Parameters<typeof toLeaseDomain>[0] | null,
-): ReturnType<typeof toLeaseDomain> | undefined {
-  return row === null ? undefined : toLeaseDomain(row)
-}
-
-async function resolveInvocationLeaseAuthority(
-  ctx: MutationCtx,
-  args: IssueLeaseArgs,
-  connection: ReturnType<typeof toDomain>,
-) {
-  const invocation = await ctx.db.query('capabilityCalls')
-    .withIndex('by_callRef', (query) => query.eq('callRef', args.callRef))
-    .unique()
-  if (invocation === null) return null
-  if (invocation.toolRef !== args.toolRef) return null
-  const now = Date.now()
-  const snapshot = await validateCanonicalAgentDelegation(ctx, {
-    evidenceKind: 'provider-connection-lease',
-    evidenceRef: args.leaseRef,
-    principalRef: invocation.principalId,
-    accountRef: connection.owningAccountRef,
-    grantRef: invocation.grantRef,
-    grantGeneration: invocation.grantGeneration,
-    requiredScopes: ['connection:lease'],
-    resourceRefs: [invocation.toolRef, `connection:${args.connectionRef}`],
-    now,
-  })
-  const leaf = snapshot?.ancestry.at(-1)
-  if (snapshot === null || leaf === undefined || ![
-    snapshot.accountRef === connection.owningAccountRef,
-    snapshot.actorPrincipalRef === invocation.principalId,
-    snapshot.grantRef === invocation.grantRef,
-    snapshot.generation === invocation.grantGeneration,
-    leaf.expiresAt === invocation.grantExpiresAt,
-  ].every(Boolean)) return null
-  const expiresAt = Math.min(now + args.leaseMs, args.readinessValidUntil, snapshot.expiresAt)
-  if (!Number.isSafeInteger(expiresAt) || expiresAt <= now) return null
-  return {
-    activeAccountRef: snapshot.accountRef,
-    actorPrincipalRef: snapshot.actorPrincipalRef,
-    grantRef: snapshot.grantRef,
-    grantGeneration: snapshot.generation,
-    leaseMs: expiresAt - now,
-  }
 }
 
 async function leaseRowForConnection(ctx: Pick<QueryCtx, 'db'>, leaseRef: string) {
@@ -346,7 +268,7 @@ async function leaseRowForConnection(ctx: Pick<QueryCtx, 'db'>, leaseRef: string
     .withIndex('by_connectionRef', (index) => index.eq('connectionRef', lease.connectionRef)).unique()
 }
 
-function providerLeaseIsCurrent(
+export function providerLeaseIsCurrent(
   leaseRow: ReturnType<typeof toLeaseDomain> | undefined,
   connectionRow: ReturnType<typeof toDomain> | undefined,
   now = Date.now(),
@@ -370,85 +292,6 @@ function providerLeaseIsCurrent(
     leaseRow.authorityDigest === connectionRow.authorityDigest,
   ].every(Boolean)
   return connectionAcceptsLease && leaseIsLive && authorityMatches
-}
-
-async function persistLeaseIssueResult(
-  ctx: MutationCtx,
-  result: Exclude<ProviderConnectionLeaseCommandResult, { kind: 'refused' }>,
-  existingLeaseRow: Parameters<typeof toLeaseDomain>[0] | null,
-  currentConnection: ReturnType<typeof toDomain>,
-  args: IssueLeaseArgs,
-  now: number,
-): Promise<boolean> {
-  if (result.kind === 'applied') {
-    await ctx.db.insert(
-      'capabilityProviderConnectionLeases',
-      toLeaseRow(result.lease, args.commandId, result.commandDigest),
-    )
-    return true
-  }
-  return existingLeaseRow !== null
-    && providerLeaseIsCurrent(toLeaseDomain(existingLeaseRow), currentConnection, now)
-}
-
-export async function issueLeaseHandler(ctx: MutationCtx, args: IssueLeaseArgs) {
-  const [connectionRow, approvalRow, existingLeaseRow] = await Promise.all([
-    ctx.db.query('capabilityProviderConnections')
-      .withIndex('by_connectionRef', (index) => index.eq('connectionRef', args.connectionRef)).unique(),
-    ctx.db.query('capabilityProviderApprovals')
-      .withIndex('by_decisionRef', (index) => index.eq('decisionRef', args.approvalDecisionRef)).unique(),
-    ctx.db.query('capabilityProviderConnectionLeases')
-      .withIndex('by_leaseRef', (index) => index.eq('leaseRef', args.leaseRef)).unique(),
-  ])
-  if (approvalRow === null || !isProviderApprovalDecisionIntegrityValid(approvalRow as ProviderApprovalDecision)) {
-    return { kind: 'refused' as const, code: 'approval_missing' as const }
-  }
-  if (connectionRow === null) return { kind: 'refused' as const, code: 'connection_not_found' as const }
-  const currentConnection = toDomain(connectionRow)
-  if (!providerConnectionAuthorityProvenanceIsValid(currentConnection)
-    || currentConnection.lifecycle !== 'active') {
-    return { kind: 'refused' as const, code: 'connection_not_active' as const }
-  }
-  const invocationAuthority = await resolveInvocationLeaseAuthority(ctx, args, currentConnection)
-  if (invocationAuthority === null) return { kind: 'refused' as const, code: 'invalid_lease' as const }
-  const now = Date.now()
-  const result = issueProviderConnectionLease(
-    currentConnection,
-    {
-      commandId: args.commandId,
-      leaseRef: args.leaseRef,
-      callRef: args.callRef,
-      toolRef: args.toolRef,
-      connectionRef: args.connectionRef,
-      providerRef: args.providerRef,
-      providerAccountRef: args.providerAccountRef,
-      adapterId: args.adapterId,
-      expectedAuthorityGeneration: args.expectedAuthorityGeneration,
-      expectedAuthorityDigest: args.expectedAuthorityDigest,
-      requestedScopes: args.requestedScopes,
-      grantedScopes: args.grantedScopes,
-      requestedResources: args.requestedResources,
-      grantedResources: args.grantedResources,
-      approval: approvalRow,
-      readinessValidUntil: args.readinessValidUntil,
-      ...Object.fromEntries(Object.entries({
-        readinessDigest: args.readinessDigest,
-      }).filter(([, value]) => value !== undefined)),
-      leaseMs: invocationAuthority.leaseMs,
-      evidenceRefs: args.evidenceRefs,
-      activeAccountRef: invocationAuthority.activeAccountRef,
-      actorPrincipalRef: invocationAuthority.actorPrincipalRef,
-      grantRef: invocationAuthority.grantRef,
-      grantGeneration: invocationAuthority.grantGeneration,
-    },
-    now,
-    existingLease(existingLeaseRow),
-  )
-  if (result.kind === 'refused') return result
-  if (!await persistLeaseIssueResult(ctx, result, existingLeaseRow, currentConnection, args, now)) {
-    return { kind: 'refused' as const, code: 'invalid_lease' as const }
-  }
-  return projectLeaseResult(result)
 }
 
 export async function readLeaseHandler(ctx: QueryCtx, args: { leaseRef: string }) {
@@ -484,130 +327,6 @@ export async function validateLeaseAuthorityHandler(ctx: QueryCtx, args: Validat
   void ctx
   void args
   return { kind: 'unavailable' as const, reason: 'lease_inactive' as const }
-}
-
-export const beginLeaseEffectArgs = {
-  leaseRef: v.string(),
-  callRef: v.string(),
-  toolRef: v.string(),
-  commandId: v.string(),
-} as const
-
-export const leaseEffectAdmission = v.union(
-  v.object({
-    kind: v.literal('admitted'),
-    effectRef: v.string(),
-    leaseRef: v.string(),
-    connectionRef: v.string(),
-    authorityGeneration: v.number(),
-    owningAccountRef: v.string(),
-    activeAccountRef: v.string(),
-    actorPrincipalRef: v.string(),
-    grantRef: v.string(),
-    grantGeneration: v.number(),
-    secretRef: v.string(),
-  }),
-  v.object({ kind: v.literal('unavailable'), reason: v.string() }),
-)
-
-function leaseMatchesEffectRequest(
-  lease: ReturnType<typeof toLeaseDomain>,
-  args: Readonly<{ callRef: string; toolRef: string }>,
-): boolean {
-  return [
-    lease.callRef === args.callRef,
-    lease.toolRef === args.toolRef,
-    lease.state === 'active',
-  ].every(Boolean)
-}
-
-async function invocationAuthorityMatchesLease(
-  ctx: MutationCtx,
-  invocation: Doc<'capabilityCalls'> | null,
-  lease: ReturnType<typeof toLeaseDomain>,
-  connection: ReturnType<typeof toDomain>,
-  toolRef: string,
-  now: number,
-): Promise<boolean> {
-  if (invocation === null || ![
-    invocation.toolRef === toolRef,
-    invocation.grantRef === lease.grantRef,
-    invocation.grantGeneration === lease.grantGeneration,
-    invocation.principalId === lease.actorPrincipalRef,
-    lease.owningAccountRef === connection.owningAccountRef,
-    lease.activeAccountRef === connection.owningAccountRef,
-  ].every(Boolean)) return false
-  const snapshot = await validateCanonicalAgentDelegation(ctx, {
-    evidenceKind: 'provider-connection-effect',
-    evidenceRef: lease.leaseRef,
-    principalRef: lease.actorPrincipalRef,
-    accountRef: connection.owningAccountRef,
-    grantRef: lease.grantRef,
-    grantGeneration: lease.grantGeneration,
-    requiredScopes: ['connection:begin_effect', 'connection:lease'],
-    resourceRefs: [toolRef, `connection:${lease.connectionRef}`],
-    now,
-  })
-  const leaf = snapshot?.ancestry.at(-1)
-  return snapshot !== null && leaf !== undefined && [
-    snapshot.accountRef === connection.owningAccountRef,
-    snapshot.actorPrincipalRef === lease.actorPrincipalRef,
-    snapshot.grantRef === lease.grantRef,
-    snapshot.generation === lease.grantGeneration,
-    leaf.expiresAt === invocation.grantExpiresAt,
-  ].every(Boolean)
-}
-
-export async function beginLeaseEffectHandler(
-  ctx: MutationCtx,
-  args: Readonly<{ leaseRef: string; callRef: string; toolRef: string; commandId: string }>,
-) {
-  const leaseRow = await ctx.db.query('capabilityProviderConnectionLeases')
-    .withIndex('by_leaseRef', (query) => query.eq('leaseRef', args.leaseRef))
-    .unique()
-  if (leaseRow === null) {
-    return { kind: 'unavailable' as const, reason: 'lease_inactive' }
-  }
-  const lease = toLeaseDomain(leaseRow)
-  if (!leaseMatchesEffectRequest(lease, args)) {
-    return { kind: 'unavailable' as const, reason: 'lease_inactive' }
-  }
-  const connectionRow = await ctx.db.query('capabilityProviderConnections')
-    .withIndex('by_connectionRef', (query) => query.eq('connectionRef', leaseRow.connectionRef))
-    .unique()
-  if (connectionRow === null) return { kind: 'unavailable' as const, reason: 'connection_not_found' }
-  const connection = toDomain(connectionRow)
-  if (!providerLeaseIsCurrent(lease, connection)) {
-    return { kind: 'unavailable' as const, reason: 'lease_inactive' }
-  }
-  if (connection.secretRef === undefined) {
-    return { kind: 'unavailable' as const, reason: 'credential_unavailable' }
-  }
-  const invocation = await ctx.db.query('capabilityCalls')
-    .withIndex('by_callRef', (query) => query.eq('callRef', args.callRef))
-    .unique()
-  const now = Date.now()
-  if (!await invocationAuthorityMatchesLease(ctx, invocation, lease, connection, args.toolRef, now)) return {
-    kind: 'unavailable' as const, reason: 'invocation_authority_mismatch',
-  }
-  return {
-    kind: 'admitted' as const,
-    effectRef: `effect:${canonicalDigest({
-      kind: 'provider-lease-effect:v1',
-      leaseRef: lease.leaseRef,
-      connectionRef: lease.connectionRef,
-      authorityGeneration: lease.authorityGeneration,
-    })}`,
-    leaseRef: lease.leaseRef,
-    connectionRef: lease.connectionRef,
-    authorityGeneration: lease.authorityGeneration,
-    owningAccountRef: lease.owningAccountRef,
-    activeAccountRef: lease.activeAccountRef,
-    actorPrincipalRef: lease.actorPrincipalRef,
-    grantRef: lease.grantRef,
-    grantGeneration: lease.grantGeneration,
-    secretRef: connection.secretRef,
-  }
 }
 
 export async function consumeLeaseHandler(ctx: MutationCtx, args: ConsumeLeaseArgs) {

@@ -1,7 +1,7 @@
 import { convexTest } from 'convex-test'
 import { describe, expect, it } from 'vitest'
 
-import { api } from '../../convex/_generated/api'
+import { internal } from '../../convex/_generated/api'
 import schema from '../../convex/schema'
 import { capabilityContractV2 } from '../fixtures/capability-contract-v2'
 import { convexModules as modules, ownerAdmin } from '../helpers/convex-fixtures'
@@ -13,8 +13,8 @@ describe('durable V2 capability contract registry', () => {
     const documentJson = JSON.stringify(capabilityContractV2())
     const args = registrationArgs(documentJson)
 
-    const first = await admin.mutation(api.capabilityContractDocuments.register, args)
-    const replay = await admin.mutation(api.capabilityContractDocuments.register, args)
+    const first = await admin.mutation(internal.capabilityContractDocuments.register, args)
+    const replay = await admin.mutation(internal.capabilityContractDocuments.register, args)
 
     expect(first).toMatchObject({
       kind: 'registered',
@@ -35,7 +35,7 @@ describe('durable V2 capability contract registry', () => {
     const backend = convexTest(schema, modules)
     const admin = await ownerAdmin(backend, 'user_capability_admin')
     await admin.mutation(
-      api.capabilityContractDocuments.register,
+      internal.capabilityContractDocuments.register,
       registrationArgs(JSON.stringify(capabilityContractV2())),
     )
 
@@ -43,9 +43,9 @@ describe('durable V2 capability contract registry', () => {
       ...registrationArgs(JSON.stringify(capabilityContractV2({ description: 'Changed after registration.' }))),
       operationKey: 'op:capability-contract:register:changed',
     }
-    await expect(admin.mutation(api.capabilityContractDocuments.register, changedArgs))
+    await expect(admin.mutation(internal.capabilityContractDocuments.register, changedArgs))
       .resolves.toEqual({ kind: 'refused', reason: 'contract_identity_conflict' })
-    await expect(admin.mutation(api.capabilityContractDocuments.register, changedArgs))
+    await expect(admin.mutation(internal.capabilityContractDocuments.register, changedArgs))
       .resolves.toEqual({ kind: 'refused', reason: 'contract_identity_conflict' })
   })
 
@@ -54,7 +54,7 @@ describe('durable V2 capability contract registry', () => {
     const admin = await ownerAdmin(backend, 'user_capability_admin')
 
     const registered = await admin.mutation(
-      api.capabilityContractDocuments.register,
+      internal.capabilityContractDocuments.register,
       registrationArgs(JSON.stringify(capabilityContractV2())),
     )
     expect(registered).toMatchObject({

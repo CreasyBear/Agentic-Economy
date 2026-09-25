@@ -2,10 +2,8 @@ import type { Infer } from 'convex/values'
 
 import type { MutationCtx } from '../../../_generated/server'
 import { requireSourceWrite } from '../../security/sourceWrite/admission'
-import {
-  prepareFundingRefundEvent,
-  prepareFundingSettlementEvent,
-} from './stripeEventPipeline'
+import { prepareFundingRefundEvent } from './stripeRefundPipeline'
+import { prepareFundingSettlementEvent } from './stripeEventPipeline'
 
 import {
   applyFundingEventArgsValue,
