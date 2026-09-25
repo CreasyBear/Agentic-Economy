@@ -19,7 +19,7 @@ function failureMessage(cause: unknown): string {
   return 'cdp_query_failed'
 }
 
-async function runSql(sql: string): Promise<unknown> {
+async function runSql<T>(sql: string, parse: (result: unknown) => T): Promise<T> {
   const keyId = process.env.CDP_API_KEY_ID?.trim()
   const secret = process.env.CDP_API_KEY_SECRET?.trim()
   if (keyId === undefined || keyId.length === 0 || secret === undefined || secret.length === 0) throw new Error('cdp_credentials_missing')
@@ -36,7 +36,7 @@ async function runSql(sql: string): Promise<unknown> {
   if (!response.ok) throw new Error(`cdp_http_${response.status}`)
   const body: unknown = await response.json()
   if (typeof body !== 'object' || body === null || !('result' in body)) throw new Error('cdp_result_missing')
-  return body.result
+  return parse(body.result)
 }
 
 async function ingest(ctx: ActionCtx) {
@@ -61,7 +61,7 @@ async function ingest(ctx: ActionCtx) {
       await ctx.runMutation(internal.marketFlow.noteWindow, { windowStart })
     }
     try {
-      const parsed = parseFlowSqlResult(await runSql(buildFlowDaySql(day)), day)
+      const parsed = await runSql(buildFlowDaySql(day), result => parseFlowSqlResult(result, day))
       if (!parsed.ok) {
         await ctx.runMutation(internal.marketFlow.fail, { message: parsed.reason })
         return
@@ -92,7 +92,7 @@ export const lookupVolumes = action({
     const missing = payTos.filter(payTo => !hit.has(payTo))
     if (missing.length === 0) return positiveVolumes(cached)
     try {
-      const parsed = parseFlowPayeeWindow(await runSql(buildFlowPayeeWindowSql(missing, Date.now())), new Set(missing))
+      const parsed = await runSql(buildFlowPayeeWindowSql(missing, Date.now()), result => parseFlowPayeeWindow(result, new Set(missing)))
       if (!parsed.ok) {
         console.error('[market] payee volume lookup rejected', { reason: parsed.reason })
         return positiveVolumes(cached)

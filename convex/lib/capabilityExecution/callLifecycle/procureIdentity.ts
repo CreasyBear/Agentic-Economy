@@ -107,6 +107,11 @@ export async function completeProcureHandler(ctx: MutationCtx, args: Command & {
   }
   if (result.idempotencyKey !== args.idempotencyKey) return { kind: 'conflict' as const }
   if ('quoteRef' in result && row.effectRefs[0] !== result.quoteRef) return { kind: 'conflict' as const }
+  const [quoteRef] = row.effectRefs
+  const effectRefs = 'callRef' in result
+    ? quoteRef === undefined ? null : [quoteRef, result.callRef]
+    : row.effectRefs
+  if (effectRefs === null) return { kind: 'conflict' as const }
   if (row.status !== 'in_progress') {
     return { kind: 'replay' as const, resultJson: row.resultJson ?? null, quoteRef: row.effectRefs[0] ?? null }
   }
@@ -115,7 +120,7 @@ export async function completeProcureHandler(ctx: MutationCtx, args: Command & {
     // Keep the original Quote snapshot for the next replay; the Call's derived
     // key recovers the same invocation, while this response reports progress.
     await ctx.db.patch(row._id, {
-      effectRefs: 'callRef' in result ? [row.effectRefs[0]!, result.callRef] : row.effectRefs,
+      effectRefs,
       updatedAt: Date.now(),
     })
     return { kind: 'replay' as const, resultJson, quoteRef: row.effectRefs[0] ?? null }
@@ -123,7 +128,7 @@ export async function completeProcureHandler(ctx: MutationCtx, args: Command & {
   await ctx.db.patch(row._id, {
     status: result.status === 'refused' || result.status === 'refused_after_dispatch' ? 'failed_terminal' : 'succeeded',
     resultJson, resultHash: canonicalDigest(result),
-    effectRefs: 'callRef' in result ? [row.effectRefs[0]!, result.callRef] : row.effectRefs,
+    effectRefs,
     updatedAt: Date.now(),
   })
   return { kind: 'replay' as const, resultJson, quoteRef: row.effectRefs[0] ?? null }

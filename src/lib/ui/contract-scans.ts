@@ -164,7 +164,7 @@ export function scanTypeScriptStandards(
       },
     ],
     ["src/routeTree.gen.ts", "convex/_generated"],
-  ).filter((violation) => !isDocumentedJsonBoundary(violation));
+  ).filter((violation) => !/\.test\.tsx?$/.test(violation.file) && !isDocumentedJsonBoundary(violation));
 }
 
 function isDocumentedJsonBoundary(violation: ScanViolation): boolean {

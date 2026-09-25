@@ -75,7 +75,8 @@ export type MarketFlowRankFacts = Readonly<{
 export function shiftUtcDay(day: string, delta: number): string {
   if (!DAY.test(day) || !Number.isSafeInteger(delta)) throw new Error('day_invalid')
   const [year, month, date] = day.split('-').map(Number)
-  const utc = Date.UTC(year!, (month ?? 1) - 1, date)
+  if (year === undefined || month === undefined || date === undefined) throw new Error('day_invalid')
+  const utc = Date.UTC(year, month - 1, date)
   if (new Date(utc).toISOString().slice(0, 10) !== day) throw new Error('day_invalid')
   return new Date(utc + delta * 86_400_000).toISOString().slice(0, 10)
 }
