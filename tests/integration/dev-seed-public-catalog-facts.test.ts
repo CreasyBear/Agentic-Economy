@@ -11,7 +11,7 @@ import { listRouteableCapabilitySupply } from '../../src/modules/capability-supp
 import {
   DEV_SEED_CATALOG_ACCOUNT_REF,
   DEV_SEED_CATALOG_PRINCIPAL_REF,
-} from '../../convex/catalogOfferingMutations'
+} from '../../convex/lib/dev/seed/authority'
 import { AGENT_ACCESS_DEFAULT_APPLICATION_REF } from '../../src/modules/agent-access/agent-access'
 import { MARKET_TOOLS_CALL_SCOPE, agentAuthorityScopeForMode } from '../../src/modules/agent-access/contract'
 import { issuedAgentGrantRef } from '../../src/modules/agent-access/issued-agent-binding'
@@ -26,11 +26,9 @@ import { displayPriceFromPricingConfig, normalizePricingConfig } from '@/modules
 import { validateJsonSchema } from '@/modules/capability-contract/public'
 import { encodeCapabilityContractDocumentJson } from '@/modules/capability-contract-registry/public'
 import { capabilityToolId, createPublicToolRef } from '@/modules/capability-supply/public'
-import {
-  sandboxTestnetToolSpec,
-  sandboxToolContractDocumentJson,
-} from '../../convex/devSeedFixtures'
-import { publicationPorts } from '../../convex/lib/capabilitySupply/publishPrepared'
+import { sandboxTestnetToolSpec } from '../../convex/lib/dev/seed/sandboxTestnet'
+import { sandboxToolContractDocumentJson } from '../../convex/lib/dev/seed/sandboxFixture'
+import { publicationPorts } from '../../convex/lib/capabilitySupply/publish/prepared'
 
 type SeedBackend = TestConvex<typeof schema>
 

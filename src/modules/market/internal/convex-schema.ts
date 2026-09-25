@@ -176,6 +176,9 @@ export const marketTables = {
     payerDelta: v.optional(v.number()),
     momentumOrder: v.optional(v.number()),
     momentumBand: v.optional(v.string()),
+    // Lowest exact Base USDC payTo, stored on the '*' row only. Optional until
+    // the next directory refresh writes it. Volume joins on this address.
+    basePayTo: v.optional(v.string()),
   })
     .index('by_generation_and_resource', ['generation', 'resource'])
     .index('by_generation_and_network_and_payersOrder', ['generation', 'network', 'payersOrder'])
@@ -219,6 +222,7 @@ export const marketTables = {
     // Reverse lookup for the `/tools/$toolRef` redirect: an admitted
     // publication's sourceRouteRef back to its directory entry's slug.
     .index('by_generation_and_sourceRouteRef', ['generation', 'sourceRouteRef'])
+    .index('by_generation_and_basePayTo', ['generation', 'basePayTo'])
     .searchIndex('search_text_by_generation_network_category_provider', {
       searchField: 'searchText',
       filterFields: ['generation', 'network', 'category', 'provider', 'eligible'],
@@ -229,7 +233,15 @@ export const marketTables = {
     key: v.string(),
     label: v.string(),
     iconUrl: v.optional(v.string()),
-  }).index('by_generation_and_kind_and_key', ['generation', 'kind', 'key']),
+    // Provider rows only. The busiest Tool on that host, so the Providers
+    // list can sort without reading every Tool. -1 means no reported calls.
+    leadCalls: v.optional(v.number()),
+    leadPayers: v.optional(v.number()),
+    leadTitle: v.optional(v.string()),
+    leadPrice: v.optional(v.string()),
+    leadSlug: v.optional(v.string()),
+  }).index('by_generation_and_kind_and_key', ['generation', 'kind', 'key'])
+    .index('by_generation_and_kind_and_leadCalls', ['generation', 'kind', 'leadCalls']),
   // Derived category concentration over the completed generation's '*' search
   // projections. Replaced wholesale by finalizeCategoryStats after backfill.
   marketDirectoryCategoryStats: defineTable({
@@ -286,4 +298,48 @@ export const marketTables = {
     businessId: v.id('businesses'),
     activatedAt: v.number(),
   }).index('by_businessId', ['businessId']),
+  // One grouped Base USDC print per recipient, facilitator, and closed UTC day.
+  // Summing Tool rows is not this total: several Tools can pay one recipient.
+  marketFlowDaily: defineTable({
+    recipient: v.string(),
+    chain: v.literal('eip155:8453'),
+    asset: v.string(),
+    facilitator: v.string(),
+    day: v.string(),
+    amountAtomic: v.string(),
+    transferCount: v.number(),
+    uniqueBuyers: v.number(),
+    latestAt: v.number(),
+  })
+    .index('by_recipient_facilitator_and_day', ['recipient', 'facilitator', 'day'])
+    .index('by_day', ['day']),
+  marketFlowCheckpoint: defineTable({
+    key: v.string(),
+    lastClosedDay: v.optional(v.string()),
+    windowStart: v.optional(v.string()),
+    facilitatorSetDigest: v.string(),
+    lastError: v.optional(v.string()),
+    updatedAt: v.number(),
+  }).index('by_key', ['key']),
+  // Maintained 30-day sum of marketFlowDaily, so the Tools page does not scan every print.
+  // uniqueBuyers is summed across facilitators and overcounts a buyer who used two of them.
+  marketFlowRecipient: defineTable({
+    recipient: v.string(),
+    chain: v.literal('eip155:8453'),
+    asset: v.string(),
+    amountAtomic: v.string(),
+    transferCount: v.number(),
+    uniqueBuyers: v.number(),
+    rankKey: v.string(),
+  })
+    .index('by_recipient', ['recipient'])
+    .index('by_rankKey', ['rankKey']),
+  // On-demand 30-day amount for the payees on the tools currently shown.
+  // Kept apart from marketFlowRecipient so a page lookup cannot double a daily print.
+  marketFlowPayeeVolume: defineTable({
+    recipient: v.string(),
+    windowEnd: v.string(),
+    amountAtomic: v.string(),
+    fetchedAt: v.number(),
+  }).index('by_recipient', ['recipient']),
 } as const

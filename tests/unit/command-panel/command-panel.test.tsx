@@ -718,12 +718,17 @@ describe('operator command panel', () => {
   })
 
   it('turns a no-match result into clear and browse continuations', async () => {
+    const { recommendation: _recommendation, ...search } = operationSearchPayload()
     vi.stubGlobal('fetch', vi.fn(async () => jsonResponse({
-      ...operationSearchPayload(),
-      kind: 'no_candidates',
-      items: [],
-      count: 0,
-      note: 'No operational Tools matched this search.',
+      ...search,
+      kind: 'noMatch',
+      query: 'teleport a sandwich',
+      scope: 'exhausted',
+      results: [],
+      nearMisses: [],
+      reason: 'No suitable Tool found in the searched supply.',
+      suggestions: [],
+      next: [],
     })))
 
     const readDetail = vi.fn(async (): Promise<PublicToolDetailRouteResult> => ({
@@ -737,7 +742,8 @@ describe('operator command panel', () => {
     fireEvent.keyDown(input, { key: 'ArrowDown' })
     fireEvent.keyDown(input, { key: 'Enter' })
 
-    expect(await screen.findByText(/No Tools matched/)).toBeTruthy()
+    await screen.findByRole('button', { name: 'Clear search' })
+    expect(screen.queryByRole('option', { name: /Weather forecast/ })).toBeNull()
     expect(readDetail).not.toHaveBeenCalled()
     const browse = screen.getByRole('link', { name: 'Browse current Tools' })
     expect(browse.getAttribute('href')).toBe('/market')
@@ -776,44 +782,59 @@ const RECENT_TEST_OPERATION_REF = `operation:v1:${'c'.repeat(64)}`
 
 function operationSearchPayload(authentication?: unknown) {
   return {
-    kind: 'ok',
+    kind: 'matched',
     schemaVersion: 'registry-tools:v3',
     query: 'weather forecast',
-    items: [
+    partialResults: false,
+    results: [
       {
         toolRef: TEST_OPERATION_REF,
-        capabilityId: 'get.open-meteo.forecast',
         title: 'Weather forecast',
-        description: 'Forecast by coordinates.',
-        provider: { name: 'Open-Meteo', slug: 'open-meteo' },
-        priceLabel: 'Price confirmed at inspection',
+        summary: 'Forecast by coordinates.',
+        matchReason: 'Capability text overlap.',
+        readiness: 'ready',
         healthStatus: 'operational',
-        listingTier: 'reviewed',
+        verification: 'verified',
+        network: 'mainnet',
+        claimSource: 'provider',
+        entitlement: 'requires_auth',
+        price: { kind: 'indicative', label: 'Price confirmed at inspection' },
+        details: {
+          capabilityId: 'get.open-meteo.forecast',
+          provider: { name: 'Open-Meteo', slug: 'open-meteo' },
+          description: 'Forecast by coordinates.',
+          listingTier: 'reviewed',
+        },
+        next: [{ action: 'describe', args: { toolRef: TEST_OPERATION_REF }, authority: 'public' }],
         ...(authentication === undefined ? {} : { authentication }),
       },
     ],
-    count: 1,
+    recommendation: { mode: 'fast', engine: 'jev_system_one', text: 'Inspect Weather forecast before use.', citations: [] },
+    next: [],
     pagination: { limit: 12, hasMore: false },
   }
 }
 
 function twoOperationSearchPayload() {
   const first = operationSearchPayload()
-  const firstItem = first.items[0]
+  const firstItem = first.results[0]
   if (firstItem === undefined) throw new Error('operation_search_fixture_missing')
   return {
     ...first,
-    items: [
+    results: [
       firstItem,
       {
         ...firstItem,
         toolRef: SECOND_TEST_OPERATION_REF,
-        capabilityId: 'convert.currency.exchange-rate',
         title: 'Currency exchange rate',
-        description: 'Current exchange rate for a currency pair.',
+        details: {
+          ...firstItem.details,
+          capabilityId: 'convert.currency.exchange-rate',
+          description: 'Current exchange rate for a currency pair.',
+        },
+        next: [{ action: 'describe', args: { toolRef: SECOND_TEST_OPERATION_REF }, authority: 'public' }],
       },
     ],
-    count: 2,
   }
 }
 

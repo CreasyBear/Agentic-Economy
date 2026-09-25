@@ -53,6 +53,7 @@ import {
 import { defaultSandboxAgentAccessPolicy } from './sandbox-policy'
 import { exactAmountSchema } from '@/modules/money/public'
 import { issuedAgentGrantRef } from './issued-agent-binding'
+import { hasFreshMfaFactorVerification } from '../../../convex/lib/principalAccount/workspaceSecurity/factorVerification'
 import type { OwnerConnectionLifecycleResult } from './agent-connection'
 import {
   agentSpendingLimitsUpdateSchema,
@@ -396,6 +397,9 @@ export async function cancelAgentCredentialReplacement(
 export const issueAgentAccessKeyServer = createServerFn({ method: 'POST' })
   .validator((data) => issueInputSchema.parse(data))
   .handler(async ({ data }) => {
+    if (data.applicationRef === 'ae-owner-chat') {
+      return { kind: 'error' as const, code: 'invalid_input' as const, retryable: false }
+    }
     const scopes = issueScopes(data)
     const environment = data.environment ?? 'sandbox'
     const authorityMode = scopes === undefined ? undefined : agentAuthorityModeForScopes(scopes)
@@ -453,6 +457,37 @@ export const issueAgentAccessKeyServer = createServerFn({ method: 'POST' })
       api,
       registerBinding: registerIssuedAgentBinding,
     })
+  })
+
+/** A dedicated owner-chat grant never delivers its bearer secret to the browser. */
+export const enableOwnerChatSpendingServer = createServerFn({ method: 'POST' })
+  .handler(async () => {
+    const session = await auth()
+    if (!session.isAuthenticated || session.userId === null) {
+      return { kind: 'refused' as const, code: 'authentication_required' as const }
+    }
+    if (!hasFreshMfaFactorVerification(session.sessionClaims?.fva)) {
+      return { kind: 'refused' as const, code: 'mfa_reverification_required' as const }
+    }
+    await requireCanonicalOwnerAuthorityServer()
+    const idempotencyKey = `owner-chat-${session.userId}`
+    const result = await issueAgentAccessKey({
+      principal: { userId: session.userId },
+      input: {
+        name: 'Owner chat',
+        idempotencyKey,
+        grantRef: issuedAgentGrantRef(session.userId, idempotencyKey),
+        applicationRef: 'ae-owner-chat',
+        environment: 'sandbox',
+        scopes: [MARKET_TOOLS_CALL_SCOPE, agentAuthorityScopeForMode('approval_required')],
+      },
+      spendingPolicy: defaultSandboxAgentAccessPolicy({ currency: 'AUD', exponent: 6 }),
+      api: createClerkAgentAccessKeyApi(clerkClient().apiKeys),
+      registerBinding: registerIssuedAgentBinding,
+      returnSecret: false,
+    })
+    if (result.kind === 'error') return { kind: 'refused' as const, code: result.code }
+    return { kind: 'enabled' as const }
   })
 
 export const listAgentAccessKeysServer = createServerFn({ method: 'GET' })

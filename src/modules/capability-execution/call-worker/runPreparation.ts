@@ -31,13 +31,10 @@ import {
 import type { SellerOnboardingCanaryExecutionEnvelope } from '@/modules/capability-supply/public'
 import { type ActionCtx } from '../../../../convex/_generated/server'
 import { internal } from '../../../../convex/_generated/api'
-import {
-  canonicalPort,
-  projectReconciliationRequired,
-  readCanonicalSnapshot,
-  toCallDispatchCommand,
-  type OpenDispatch,
-} from '../../../../convex/capabilityCallProjection'
+import { canonicalPort, readCanonicalSnapshot } from '../../../../convex/lib/capabilityExecution/callProjection/port'
+import { projectReconciliationRequired } from '../../../../convex/lib/capabilityExecution/callProjection/recovery'
+import { toCallDispatchCommand } from '../call-projection/dispatch-command'
+import type { OpenDispatch } from '@/modules/capability-execution/call-projection/contracts'
 import { callAttemptIdentityDigest, validateCallAuthority } from '../../../../convex/capabilityCallIdentity'
 import {
   convergePreRelease,

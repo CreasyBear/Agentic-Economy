@@ -1,30 +1,15 @@
 import { mutationGeneric, queryGeneric } from 'convex/server'
 import { v } from 'convex/values'
 
-import { sourceWriteArgs } from './sourceWriteAdmission'
+import { sourceWriteArgs } from './lib/security/sourceWrite/contracts'
 import {
   authorizeProviderBusinessHandler,
   ensureProviderBusinessHandler,
   renameProviderBusinessHandler,
-} from './catalogOfferingMutations'
-import {
-  currentOwnerProviderIdentityResult,
-  getCurrentOwnerProviderIdentityHandler,
-  getCurrentOwnerPublicCatalogHandler,
-  getPublicBusinessCatalogBySlugHandler,
-  publicCatalogReadbackResult,
-} from './catalogPublicReads'
-export {
-  deriveBusinessOfferingSupportFromCapabilitySupply,
-  rebuildBusinessSupplyProjectionSnapshotCommand,
-} from './capabilitySupplyProjection'
-export {
-  persistOfferingSourceState,
-  readCatalogDescriptor,
-  reviseBusinessOfferingCommand,
-  upsertOfferingAccessPathCommand,
-  withdrawOfferingAccessPathCommand,
-} from './catalogOfferingMutations'
+} from './lib/catalog/offerings/providerBusiness'
+import { getCurrentOwnerPublicCatalogHandler, getPublicBusinessCatalogBySlugHandler } from './lib/catalog/publicReads/catalog'
+import { publicCatalogReadbackResult } from './lib/catalog/publicReads/contracts'
+import { currentOwnerProviderIdentityResult, getCurrentOwnerProviderIdentityHandler } from './lib/catalog/publicReads/providerIdentity'
 
 const ensureProviderBusinessResult = v.union(
   v.object({

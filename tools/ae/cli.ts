@@ -19,7 +19,7 @@ import {
   type CliOptions,
   type ParsedArgs,
 } from './lib/args'
-import { CliFailure, printJson, sourceErrorToCliFailure } from './lib/output'
+import { CliFailure, cliFailureToProblem, printJson, sourceErrorToCliFailure } from './lib/output'
 import { continuationCommand } from './lib/continuation-command'
 import {
   CLI_ENTRYPOINT,
@@ -28,6 +28,7 @@ import {
   rootCommandHelpGroups,
 } from './lib/help'
 import { MARKET_TOOLS_CALL_SCOPE, MARKET_SUPPLY_MANAGE_SCOPE } from '@/modules/agent-access/contract'
+import { projectCliJourneyProblem } from '@/modules/actions/contract'
 import type { ProblemKind } from '@/lib/errors'
 import cliPackage from '../../packages/cli/package.json'
 import { fileURLToPath } from 'node:url'
@@ -47,7 +48,9 @@ const JSON_HELP_FLAGS = {
   '--input': { type: 'string', description: 'Schema-valid JSON object for call, quote, or provider lifecycle write; call and quote alone accept - to read it from standard input.' },
   '--environment': { type: 'string', description: 'Agent connection environment: sandbox or production. Owner approval is required.' },
   '--provider': { type: 'boolean', description: 'Request a separate owner-approved provider credential with market_supply:manage.' },
-  '--json': { type: 'boolean', description: 'Emit exactly one machine-readable JSON value on stdout.' },
+  '--json': { type: 'boolean', description: 'Machine-readable JSON; ae chat emits NDJSON events.' },
+  '--thread-id': { type: 'string', description: 'Use an exact existing chat thread ID.' },
+  '--continue': { type: 'boolean', description: 'Resume the last chat thread saved for this origin.' },
   '--help': { type: 'boolean', description: 'Show help without performing command work.' },
   '--version': { type: 'boolean', description: 'Show CLI version, executable, runtime, and build revision without contacting a server.' },
   '--technical': { type: 'boolean', description: 'Include per-Tool navigation in JSON search results or describe results, or identity and evidence metadata in human compare output.' },
@@ -66,6 +69,7 @@ const COMMAND_OPTIONS: Readonly<Record<string, readonly string[]>> = {
   compare: ['technical'],
   connect: ['provider', 'environment'],
   doctor: ['provider'],
+  chat: ['thread-id', 'continue'],
   account: [],
   'account activity': ['limit', 'cursor'],
   request: [],
@@ -391,6 +395,7 @@ async function main(argv: readonly string[] = process.argv.slice(2)): Promise<nu
     cancelCommands,
     configCommands,
     marketToolCommands,
+    chatCommands,
     connectCommands,
     doctorCommands,
     fundCommands,
@@ -408,6 +413,7 @@ async function main(argv: readonly string[] = process.argv.slice(2)): Promise<nu
     import('./commands/cancel'),
     import('./commands/config'),
     import('./commands/market-tools'),
+    import('./commands/chat'),
     import('./commands/connect'),
     import('./commands/doctor'),
     import('./commands/fund'),
@@ -430,6 +436,7 @@ async function main(argv: readonly string[] = process.argv.slice(2)): Promise<nu
     ...marketToolRunners,
     connect: connectCommands.runConnectCommand,
     doctor: doctorCommands.runDoctorCommand,
+    chat: chatCommands.runChatCommand,
     account: accountCommands.runAccountCommand,
     supply: supplyCommands.runSupplyCommand,
     fund: fundCommands.runFundCommand,
@@ -452,11 +459,15 @@ async function main(argv: readonly string[] = process.argv.slice(2)): Promise<nu
     const message = error instanceof Error ? error.message : String(error)
     const wantsJson = rawArgv.some((arg) => arg === '--json' || arg.startsWith('--json='))
     if (wantsJson) {
-      printJson({
-        kind: 'INVALID_ARGUMENT', code: 'invalid-arguments', message, exitCode: 1,
+      const problem = cliFailureToProblem(new CliFailure(message, {
+        kind: 'INVALID_ARGUMENT', code: 'invalid-arguments',
         suggestion: 'Review the command arguments and try again.',
         nextCommand: 'ae help',
-      })
+      }))
+      if (rawArgv[0] === 'chat') process.stdout.write(`${JSON.stringify({ type: 'error', problem: projectCliJourneyProblem(problem, {
+        origin: HOSTED_DEFAULT_BASE_URL, source: 'local', exitCode: 1,
+      }) })}\n`)
+      else printJson(problem)
     } else {
       process.stderr.write(`${message}\n`)
       process.stderr.write('Review the command arguments and try again.\n')
@@ -478,14 +489,11 @@ async function main(argv: readonly string[] = process.argv.slice(2)): Promise<nu
     const helpPath = resolveHelpPath(parsed.command, parsed.positionals, commands)
     if (helpPath.error !== undefined) {
       if (parsed.options.json) {
-        printJson({
-          kind: 'INVALID_ARGUMENT',
-          code: helpPath.error.code,
-          message: helpPath.error.message,
-          exitCode: 1,
+        printJson(cliFailureToProblem(new CliFailure(helpPath.error.message, {
+          kind: 'INVALID_ARGUMENT', code: helpPath.error.code,
           suggestion: 'Review the available commands and try again.',
           nextCommand: 'ae help',
-        })
+        })))
       } else {
         process.stderr.write(`${helpPath.error.message}\n`)
         process.stderr.write('Review the available commands and try again.\n')
@@ -502,11 +510,11 @@ async function main(argv: readonly string[] = process.argv.slice(2)): Promise<nu
   }
   if (parsed.command === undefined) {
     if (parsed.options.json) {
-      printJson({
-        kind: 'INVALID_ARGUMENT', code: 'no-command', message: 'No command provided.', exitCode: 1,
+      printJson(cliFailureToProblem(new CliFailure('No command provided.', {
+        kind: 'INVALID_ARGUMENT', code: 'no-command',
         suggestion: 'Choose one command from the CLI help.',
         nextCommand: 'ae help',
-      })
+      })))
       return 1
     }
     printUsage()
@@ -516,11 +524,11 @@ async function main(argv: readonly string[] = process.argv.slice(2)): Promise<nu
   const run = commands[parsed.command]
   if (run === undefined) {
     if (parsed.options.json) {
-      printJson({
-        kind: 'INVALID_ARGUMENT', code: 'unknown-command', message: 'Unknown command', exitCode: 1,
+      printJson(cliFailureToProblem(new CliFailure('Unknown command', {
+        kind: 'INVALID_ARGUMENT', code: 'unknown-command',
         suggestion: 'Review the available commands and try again.',
         nextCommand: 'ae help',
-      })
+      })))
       return 1
     }
     process.stderr.write('Unknown command\n')
@@ -538,9 +546,6 @@ async function main(argv: readonly string[] = process.argv.slice(2)): Promise<nu
     let message: string
     let kind: ProblemKind = 'INTERNAL'
     let code: string | undefined
-    let detail: unknown
-    let retryable: boolean | undefined
-    let retryAfter: string | undefined
     let suggestion: string | undefined
     let nextCommand: string | undefined
     const mappedFailure = error instanceof CliFailure ? error : sourceErrorToCliFailure(error)
@@ -549,9 +554,6 @@ async function main(argv: readonly string[] = process.argv.slice(2)): Promise<nu
       message = mappedFailure.message
       kind = mappedFailure.kind
       code = mappedFailure.code
-      detail = mappedFailure.detail
-      retryable = mappedFailure.retryable
-      retryAfter = mappedFailure.retryAfter
       suggestion = mappedFailure.suggestion
       nextCommand = mappedFailure.nextCommand
       const publicReadContinuation = suggestion === undefined && nextCommand === undefined
@@ -563,6 +565,8 @@ async function main(argv: readonly string[] = process.argv.slice(2)): Promise<nu
         suggestion ??= 'Review the command arguments and try again.'
         nextCommand ??= `ae help ${parsed.command}`
       }
+      if (kind === 'UNAUTHENTICATED') nextCommand ??= 'ae connect'
+      else if (mappedFailure.next?.length) nextCommand = undefined
     } else if (isConnectionRefused(error)) {
       exitCode = 1
       kind = 'UNAVAILABLE'
@@ -583,18 +587,23 @@ async function main(argv: readonly string[] = process.argv.slice(2)): Promise<nu
       message = 'Command failed.'
     }
 
+    if (parsed.command === 'chat' && parsed.options.json) {
+      const problem = cliFailureToProblem(
+        mappedFailure ?? new CliFailure(message, { exitCode, kind, ...(code === undefined ? {} : { code }) }),
+        { origin: parsed.options.baseUrl },
+      )
+      process.stdout.write(`${JSON.stringify({ type: 'error', problem: projectCliJourneyProblem(problem, {
+        origin: parsed.options.baseUrl, source: 'local', exitCode,
+      }) })}\n`)
+      return exitCode
+    }
     if (parsed.options.json) {
-      printJson({
-        kind,
-        code,
-        message,
-        detail,
-        exitCode,
-        ...(retryable === undefined ? {} : { retryable }),
-        ...(retryAfter === undefined ? {} : { retryAfter }),
-        ...(suggestion === undefined ? {} : { suggestion }),
-        ...(nextCommand === undefined ? {} : { nextCommand }),
-      })
+      printJson(cliFailureToProblem(
+        mappedFailure ?? new CliFailure(message, {
+          exitCode, kind, ...(code === undefined ? {} : { code }),
+        }),
+        { ...(suggestion === undefined ? {} : { suggestion }), ...(nextCommand === undefined ? {} : { nextCommand }), origin: parsed.options.baseUrl },
+      ))
     } else {
       process.stderr.write(`${message}\n`)
       if (suggestion !== undefined) process.stderr.write(`${suggestion}\n`)

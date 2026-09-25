@@ -19,7 +19,7 @@ import {
   SYSTEM_WORKLOAD_ACCOUNT_REF,
   SYSTEM_WORKLOAD_PRINCIPAL_REF,
   type WorkloadCronSnapshot,
-} from './workloadCron'
+} from './lib/platform/workloadCron/context'
 
 const modules = import.meta.glob('./**/*.ts')
 const SOURCE_WRITE_SECRET = 'oauth-local-source-write-secret-material-32'

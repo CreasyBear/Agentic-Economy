@@ -1,5 +1,8 @@
 import { getFunctionName } from 'convex/server'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import type * as CallReservationModule from '../../../convex/lib/capabilityExecution/callLifecycle/callReservationActions'
+import type * as CallRecoveryModule from '../../../convex/lib/capabilityExecution/callLifecycle/callRecoveryActions'
+import type * as SourceWriteAdmissionModule from '../../../convex/lib/security/sourceWrite/admission'
 
 const mocks = vi.hoisted(() => ({
   actor: {
@@ -16,9 +19,6 @@ const mocks = vi.hoisted(() => ({
     isDone: true,
     continueCursor: '',
     principal: args.principal,
-  })),
-  readStatus: vi.fn(async (_ctx: unknown, args: Record<string, unknown>) => ({
-    kind: 'found', callRef: args.callRef, toolRef: 'operation:test', state: 'pending',
   })),
   cancel: vi.fn(async (_ctx: unknown, args: Record<string, unknown>) => ({
     kind: 'found', callRef: args.callRef, toolRef: 'operation:test', state: 'cancelled',
@@ -53,11 +53,14 @@ vi.mock('../../../convex/authz', async (importOriginal) => ({
   resolveBusinessActor: vi.fn(async () => mocks.actor),
 }))
 
-vi.mock('../../../convex/lib/callLifecycle/callActions', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('../../../convex/lib/callLifecycle/callActions')>()),
+vi.mock('../../../convex/lib/capabilityExecution/callLifecycle/callReservationActions', async (importOriginal) => ({
+  ...(await importOriginal<typeof CallReservationModule>()),
   callHandler: mocks.call,
+}))
+
+vi.mock('../../../convex/lib/capabilityExecution/callLifecycle/callRecoveryActions', async (importOriginal) => ({
+  ...(await importOriginal<typeof CallRecoveryModule>()),
   listAgentCallsHandler: mocks.list,
-  readCallStatusHandler: mocks.readStatus,
   cancelCallHandler: mocks.cancel,
   reconcileCallHandler: mocks.reconcile,
   readOwnerCallStatusHandler: mocks.readOwner,
@@ -65,10 +68,14 @@ vi.mock('../../../convex/lib/callLifecycle/callActions', async (importOriginal) 
   reconcileOwnerCallHandler: mocks.reconcileOwner,
 }))
 
-vi.mock('../../../convex/lib/callLifecycle/admission', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('../../../convex/lib/callLifecycle/admission')>()),
+vi.mock('../../../convex/lib/capabilityExecution/callLifecycle/admissionApprovals', () => ({
   listPendingCallApprovalsHandler: mocks.listApprovals,
   decideCallApprovalHandler: mocks.decideApproval,
+}))
+
+vi.mock('../../../convex/lib/security/sourceWrite/admission', async (importOriginal) => ({
+  ...(await importOriginal<typeof SourceWriteAdmissionModule>()),
+  requireSourceRead: vi.fn(async () => ({ kind: 'accepted' })),
 }))
 
 import {
@@ -78,16 +85,16 @@ import {
   call,
   listCalls,
   listPendingCallApprovals,
-  readCallStatus,
   readOwnerCallStatus,
   reconcileCall,
   reconcileOwnerCall,
   reconcileCallWorkloadAuthority,
   resolveCallAgentAuthority,
 } from '../../../convex/capabilityCalls'
+import { readCallStatus } from '../../../convex/capabilityCallsStatus'
 import { registerAgentPrincipal } from '../../../convex/agentAccessPrincipals'
 import { registerGrantForServer } from '../../../convex/agentAccessPolicy'
-import { validateCanonicalAgentDelegation } from '../../../convex/lib/canonicalAgentAuthority'
+import { validateCanonicalAgentDelegation } from '../../../convex/lib/authority/canonicalAgent/authority'
 import { MARKET_TOOLS_CALL_SCOPE } from '@/modules/agent-access/contract'
 import { createCustomerRequestServiceAssertion } from '@/modules/agent-access/service-auth-envelope'
 import { agentAccessPolicyDigest } from '@/modules/agent-access/policy'
@@ -115,9 +122,9 @@ const ISOLATION_CASES = [
 const ISOLATION_MATRIX = ISOLATION_CASES.map((caseKind) => ({ caseKind, label: caseKind }))
 const callBoundary = (call as unknown as { _handler: Handler })._handler
 const listBoundary = (listCalls as unknown as { _handler: Handler })._handler
-const statusBoundary = (readCallStatus as unknown as { _handler: Handler })._handler
 const cancelBoundary = (cancelCall as unknown as { _handler: Handler })._handler
 const reconcileBoundary = (reconcileCall as unknown as { _handler: Handler })._handler
+const statusBoundary = (readCallStatus as unknown as { _handler: Handler })._handler
 const ownerStatusBoundary = (readOwnerCallStatus as unknown as { _handler: Handler })._handler
 const ownerCancelBoundary = (cancelOwnerCall as unknown as { _handler: Handler })._handler
 const ownerReconcileBoundary = (reconcileOwnerCall as unknown as { _handler: Handler })._handler
@@ -600,6 +607,39 @@ describe('capability operation canonical authority boundary', () => {
       expect(ctx.runAction).not.toHaveBeenCalled()
     })
   })
+
+  it.each(ISOLATION_MATRIX)(
+    'reads $label status through current agent authority without consuming a mutation',
+    async ({ caseKind }) => {
+      const rows = authorityRows(caseKind === 'stale_generation'
+        ? { accessGrant: { generation: 3 } }
+        : {})
+      Object.assign(rows.capabilityCalls[0]!, {
+        inputDigest: 'sha256:input', requestDigest: 'sha256:request',
+        toolJson: '{}', inputJson: '{}', state: 'pending', updatedAt: NOW,
+      })
+      const db = new AuthorityMemoryDb(rows)
+      const runQuery = vi.fn(async (reference: unknown) => {
+        if (path(reference) === 'actionExecutionControl:readControl') return null
+        throw new Error(`unexpected_query:${path(reference)}`)
+      })
+      const result = await statusBoundary({ db, runQuery }, {
+        operationKey: 'surface:http:agent-operation-status',
+        correlationId: `correlation:operation:status:${caseKind}`,
+        principal: isolationPrincipal(caseKind),
+        callRef: 'invocation:canonical',
+      })
+
+      if (caseKind === 'workload') {
+        expect(result).toMatchObject({ kind: 'found', state: 'in_progress' })
+      } else {
+        expect(result).toMatchObject({ kind: 'refused', code: 'invocation_not_found' })
+        expect(runQuery).not.toHaveBeenCalled()
+      }
+      expect(db.patches).toHaveLength(0)
+      expect(db.insertions).toHaveLength(0)
+    },
+  )
 
   it.each(ISOLATION_MATRIX)(
     'drives the $label isolation case through the registered cancel action and its real current-agent sink',
@@ -1100,25 +1140,20 @@ describe('capability operation canonical authority boundary', () => {
     )).resolves.toEqual({ kind: 'refused' })
   })
 
-  it('requires canonical agent expectations and exact authority targets on every public agent action', async () => {
+  it('requires canonical agent expectations and exact authority targets on command actions', async () => {
     const ctx = agentContext()
     await expect(callBoundary(ctx, agentArgs())).resolves.toEqual(canonicalPrincipal)
-    await expect(statusBoundary(ctx, { ...agentArgs(), callRef: 'invocation:1' })).resolves.toMatchObject({ kind: 'found' })
     await expect(cancelBoundary(ctx, { ...agentArgs(), callRef: 'invocation:1' })).resolves.toMatchObject({ kind: 'found' })
     await expect(reconcileBoundary(ctx, { ...agentArgs(), callRef: 'invocation:1', evidence: {
       attemptRef: 'attempt:1', effectGeneration: 1, requiredAt: new Date(0).toISOString(),
       retry: 'reconcile_before_retry', evidenceSource: 'test',
     } })).resolves.toMatchObject({ kind: 'found' })
 
-    expect(mocks.call).toHaveBeenCalledWith(
-      expect.anything(),
-      expect.objectContaining({ principal: canonicalPrincipal }),
-      true,
-    )
-    for (const call of [mocks.readStatus, mocks.cancel, mocks.reconcile]) {
+    expect(mocks.call.mock.calls[0]?.[1]).toMatchObject({ principal: canonicalPrincipal })
+    for (const call of [mocks.cancel, mocks.reconcile]) {
       expect(call).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ principal: canonicalPrincipal }))
     }
-    expect(ctx.runMutation).toHaveBeenCalledTimes(5)
+    expect(ctx.runMutation).toHaveBeenCalledTimes(4)
     expect(ctx.runMutation).toHaveBeenNthCalledWith(1, expect.anything(), {
       ...agentArgs(),
     })
@@ -1134,11 +1169,9 @@ describe('capability operation canonical authority boundary', () => {
   it('fails closed before any operation handler when the canonical agent binding is absent', async () => {
     const ctx = agentContext(null)
     await expect(callBoundary(ctx, agentArgs())).resolves.toMatchObject({ kind: 'refused', code: 'grant_not_found' })
-    await expect(statusBoundary(ctx, { ...agentArgs(), callRef: 'invocation:1' })).resolves.toMatchObject({ kind: 'refused', code: 'invocation_not_found' })
     await expect(cancelBoundary(ctx, { ...agentArgs(), callRef: 'invocation:1' })).resolves.toMatchObject({ kind: 'refused', code: 'invocation_not_found' })
     await expect(reconcileBoundary(ctx, { ...agentArgs(), callRef: 'invocation:1', evidence: {} })).resolves.toMatchObject({ kind: 'refused', code: 'invocation_not_found' })
     expect(mocks.call).not.toHaveBeenCalled()
-    expect(mocks.readStatus).not.toHaveBeenCalled()
     expect(mocks.cancel).not.toHaveBeenCalled()
     expect(mocks.reconcile).not.toHaveBeenCalled()
   })

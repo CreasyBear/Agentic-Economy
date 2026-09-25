@@ -25,10 +25,10 @@ import {
   buildAgentAccessPolicy,
 } from '@/modules/agent-access/policy'
 import { defaultDnsResolver } from '@/modules/network-guard/public'
-import { capabilitySupplyGraphPorts } from '../../convex/capabilitySupplyGraphPorts'
+import { capabilitySupplyGraphPorts } from '../../convex/lib/capabilitySupply/graphPorts/ports'
 import { qualifySuppliedCandidate, x402SellerClaimDigest } from '@/modules/capability-supply/public'
 import { createX402ProviderConnection } from '@/modules/capability-supply/provider-connection'
-import { toRow as providerConnectionRow } from '../../convex/lib/providerConnections/codecs'
+import { toRow as providerConnectionRow } from '../../convex/lib/capabilitySupply/providerConnections/codecs'
 import { issuedAgentGrantRef } from '@/modules/agent-access/issued-agent-binding'
 import { createCustomerRequestServiceAssertion, toStableHashValue } from '@/modules/agent-access/service-auth-envelope'
 import { createFormanceContext, installPackage4FormanceSchema } from '@/modules/money/formance'
@@ -160,14 +160,14 @@ async function promotePaidBuyerFixtureAfterSellerCanary(input: Readonly<{
     correlationId: 'buyer-journey:seller-canary',
   })
   const readiness = await input.owner.action(
-    api.capabilitySupplyOwnerSupply.runOwnerSupplyReadiness,
+    internal.capabilitySupplyOwnerSupply.runOwnerSupplyReadiness,
     command,
   )
   expect(readiness).toMatchObject({
     step: 'readiness', state: 'completed', publicationRef: input.publicationRef, toolRef: input.toolRef,
   })
   const requested = await input.owner.action(
-    api.capabilitySupplyOwnerSupply.runOwnerSupplyTest,
+    internal.capabilitySupplyOwnerSupply.runOwnerSupplyTest,
     command,
   )
   if (requested.state !== 'completed'

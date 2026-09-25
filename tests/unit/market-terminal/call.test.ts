@@ -8,7 +8,7 @@ import { runCallCommand } from '../../../tools/ae/commands/call'
 import type { CliOptions } from '../../../tools/ae/lib/args'
 import { TOOL_MARKET_DESCRIBE_PATH } from '@/modules/common/market-tool-paths'
 import { FUNDING_HANDOFF_CREATE_PATH } from '@/modules/money/funding-handoff.actions'
-import { CliFailure } from '../../../tools/ae/lib/output'
+import { CliFailure, cliFailureToProblem } from '../../../tools/ae/lib/output'
 
 const options: CliOptions = {
   baseUrl: 'https://market.example',
@@ -110,9 +110,18 @@ describe('market-terminal authenticated Tool Call', () => {
     setApiKey('ae-expired-key')
     const send = vi.fn<typeof fetch>().mockResolvedValue(Response.json({ kind: 'UNAUTHENTICATED' }, { status: 401 }))
     vi.stubGlobal('fetch', send)
-    await expect(runCallCommand([toolRef], { ...options, input: '{}' })).rejects.toMatchObject({
+    let failure: unknown
+    try {
+      await runCallCommand([toolRef], { ...options, input: '{}' })
+    } catch (error) {
+      failure = error
+    }
+    expect(failure).toMatchObject({
       code: 'agent_access_key_invalid', nextCommand: 'ae connect --base-url https://market.example --json',
     })
+    if (!(failure instanceof CliFailure)) throw new Error('expected_cli_failure')
+    expect(cliFailureToProblem(failure, { origin: options.baseUrl }).nextCommand)
+      .toBe('ae connect --base-url https://market.example --json')
     expect(send).toHaveBeenCalledOnce()
   })
 

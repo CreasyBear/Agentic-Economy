@@ -3,6 +3,8 @@ import type { JSONSchema } from '@tanstack/ai'
 import { trimTrailingSlashes } from '@/modules/common/trim-trailing-slashes'
 
 import {
+  agentApiOperations,
+  HEAD_ROUTE_PATHS,
   callRouteOperations,
   fundingOperations,
   marketToolOperations,
@@ -45,11 +47,18 @@ function securitySchemeFor(canonicalBaseUrl: string): Readonly<{ type: 'http'; s
  * referenced by every operation).
  */
 export function buildOpenApiDocumentWithMetrics(input: Readonly<{ canonicalBaseUrl: string }>): OpenApiBuildResult {
+  const supplemental = supplementalOperations()
+  const funding = fundingOperations()
   const operations: readonly NormalizedOperation[] = [
     ...callRouteOperations(),
     ...marketToolOperations(),
-    ...fundingOperations(),
-    ...supplementalOperations(),
+    ...funding,
+    ...supplemental,
+    ...agentApiOperations(),
+    ...[...funding, ...supplemental].filter((operation) => HEAD_ROUTE_PATHS[operation.path]).map((operation) => ({
+      ...operation, operationId: `${operation.operationId}.head`, method: 'HEAD' as const,
+      summary: `Check ${operation.summary.toLowerCase()}`,
+    })),
   ]
   const schemas = new Map<string, JSONSchema>()
   schemas.set('Problem', hoistLocalDefs(PROBLEM_JSON_SCHEMA, schemas, 'Problem'))

@@ -137,7 +137,7 @@ describe("Package 5 owner connection rollout", () => {
       requiredAction: {
         action: "supply.source.preview",
         blockedCapabilities: ["supply.publish"],
-        cta: "/owner/operations?connect=x402",
+        cta: "/owner/settings/integrations?connect=x402",
         ctaLabel: "Connect service",
         description: "Inspect the exact x402 lane.",
         iconUrl: null,

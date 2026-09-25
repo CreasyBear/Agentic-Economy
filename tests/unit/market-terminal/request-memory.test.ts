@@ -140,6 +140,9 @@ describe('private market request CLI', () => {
         provider: { name: 'Reference Services', slug: 'reference' },
         priceLabel: 'USD 0.50',
         healthStatus: 'operational',
+        verification: 'verified',
+        network: 'unknown',
+        claimSource: 'provider',
         listingTier: 'reviewed',
       }],
     })))

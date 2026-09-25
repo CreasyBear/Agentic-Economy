@@ -6,7 +6,7 @@ import type { MutationCtx, QueryCtx } from '../../../_generated/server'
 import type { Doc } from '../../../_generated/dataModel'
 import { resolveBusinessActor } from '../../../authz'
 import { authorityMode, environment, refreshFamilyLifecycle } from './shared'
-import { revokeRefreshFamilyCore } from './refreshFamilies'
+import { revokeRefreshFamilyCore } from './refreshRevocation'
 
 const ownerReconnectCandidate = v.object({
   principalRef: v.string(),

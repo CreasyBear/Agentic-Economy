@@ -16,7 +16,7 @@ import {
   retryCleanupAgentHandler,
   revokeAgentArgs,
   revokeAgentHandler,
-} from './lib/providerConnections/agent'
+} from './lib/capabilitySupply/providerConnections/agent'
 
 export const list = queryGeneric({
   args: listAgentArgs,

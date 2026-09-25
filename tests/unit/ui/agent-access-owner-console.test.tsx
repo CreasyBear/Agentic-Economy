@@ -113,7 +113,6 @@ function consoleProps() {
   return {
     directory,
     loading: false,
-    onRevokeCredential: vi.fn(),
     onDisconnectAgent: vi.fn(),
     approvals: [],
     approvalsLoading: false,
@@ -176,7 +175,6 @@ describe('assistant access owner continuation anchors', () => {
       <AeAgentOperatorConsole
         directory={emptyDirectory}
         loading={false}
-        onRevokeCredential={() => undefined}
         onDisconnectAgent={() => undefined}
         approvals={[]}
         approvalsLoading={false}
@@ -214,10 +212,8 @@ describe('assistant access owner continuation anchors', () => {
     expect(dialog.textContent).toContain('•••• 12345678')
     expect(dialog.textContent).not.toContain(KEY_ID_CANARY)
     expect(dialog.textContent).not.toContain(PRINCIPAL_ID)
-    expect(dialog.textContent).toContain('Credential history')
+    expect(dialog.textContent).toContain('Manage Agent keys and credential history')
     expect(dialog.textContent).toContain('All admitted Tools')
-    expect(dialog.textContent).toContain('Issued')
-    expect(dialog.textContent).toContain('expires')
     expect(dialog.textContent).toContain('Last authenticated')
     expect(dialog.textContent).toContain('Not recorded')
     expect(within(dialog).getByText('Last authenticated', { selector: 'dt' }).getAttribute('aria-description'))
@@ -376,15 +372,10 @@ describe('assistant access owner continuation anchors', () => {
     expect(document.body.textContent).not.toContain(PRINCIPAL_ID)
   })
 
-  it('revokes once after confirmation and locks dismissal while the exact callback is pending', async () => {
-    let resolveRevoke: (() => void) | undefined
-    const onRevoke = vi.fn(() => new Promise<void>((resolve) => {
-      resolveRevoke = resolve
-    }))
+  it('links credential history to Agent keys settings without another revoke control', () => {
     render(
       <AeAgentOperatorConsole
         {...consoleProps()}
-        onRevokeCredential={onRevoke}
         selectedPrincipalId={PRINCIPAL_ID}
         getAgentHref={(principalId) => `/agent-access?caller=${principalId}`}
         onClearSelectedPrincipal={() => undefined}
@@ -392,33 +383,9 @@ describe('assistant access owner continuation anchors', () => {
     )
 
     fireEvent.click(screen.getByRole('button', { name: 'Technical details' }))
-    const trigger = screen.getByRole('button', { name: 'Revoke' })
-    fireEvent.click(trigger)
-    const confirm = within(screen.getByRole('alertdialog')).getByRole('button', {
-      name: 'Drain then revoke',
-    })
-    fireEvent.click(confirm)
-    await waitFor(() => expect(onRevoke).toHaveBeenCalledOnce())
-    expect(onRevoke).toHaveBeenCalledWith(`credential:${KEY_ID_CANARY}`)
-    expect(onRevoke).not.toHaveBeenCalledWith(PRINCIPAL_ID)
-
-    const pendingDialog = screen.getByRole('alertdialog')
-    const working = within(pendingDialog).getByRole<HTMLButtonElement>('button', {
-      name: 'Working…',
-    })
-    expect(working.disabled).toBe(true)
-    fireEvent.click(working)
-    fireEvent.click(within(pendingDialog).getByRole('button', { name: 'Cancel' }))
-    fireEvent.keyDown(document, { key: 'Escape', code: 'Escape' })
-    expect(screen.getByRole('alertdialog')).toBeDefined()
-    expect(onRevoke).toHaveBeenCalledOnce()
-
-    const finishRevoke = resolveRevoke
-    if (finishRevoke === undefined) throw new Error('revoke_not_started')
-    finishRevoke()
-    await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull())
-    expect(onRevoke).toHaveBeenCalledOnce()
-    expect(document.activeElement).toBe(trigger)
+    expect(screen.getByRole('link', { name: 'Manage Agent keys and credential history' }).getAttribute('href'))
+      .toBe('/owner/settings/agent-keys')
+    expect(screen.queryByRole('button', { name: 'Revoke' })).toBeNull()
   })
 
   it('renders a clearable not-found state when the route locator is stale', () => {

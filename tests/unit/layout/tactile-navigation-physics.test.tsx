@@ -17,10 +17,7 @@ import '../../setup/jsdom-platform'
 
 import { AeAppShell } from '@/components/ae/layout/AeAppShell'
 import { AeOwnerMobileNavigation } from '@/components/ae/layout/AeOwnerMobileNavigation'
-import { AeAppSidebar } from '@/components/ae/layout/app-shell/AeAppSidebar'
-import { OperatorChromeProvider } from '@/components/ae/layout/AeOperatorPage'
 import { AeSitePrimaryNav } from '@/components/ae/website/AeSiteNav'
-import { SidebarProvider } from '@/components/ui/sidebar'
 
 vi.mock('@/lib/observability/funnel-client', () => ({
   emitFunnelEventOnce: vi.fn(),
@@ -90,14 +87,6 @@ describe('tactile navigation physics (S-09)', () => {
     expect(brand.className).not.toContain('transition-all')
   })
 
-  it('AeAppSidebar nav buttons include active scale and motion-reduction classes', () => {
-    renderOperatorSidebar('/owner/operations')
-
-    const sidebarNav = screen.getByRole('navigation', { name: 'App navigation' })
-    const toolsLink = within(sidebarNav).getByRole('link', { name: 'Tools' })
-    expectTactileNavLink(toolsLink.className)
-    expect(toolsLink.className).not.toContain('transition-all')
-  })
 
   it('PublicNavLink renders with active scale and motion-reduction classes', () => {
     renderPublicPrimaryNav()
@@ -195,45 +184,6 @@ function renderPublicPrimaryNav(): void {
   )
 }
 
-function renderOperatorSidebar(pathname: string): void {
-  const rootRoute = createRootRoute()
-  const routeTree = rootRoute.addChildren([
-    createRoute({
-      getParentRoute: () => rootRoute,
-      path: '/owner',
-      staticData: {
-        nav: {
-          label: 'Overview',
-          operator: { roles: ['owner'], group: 'Workspace', groupOrder: -1, order: 0, icon: NavIcon, tier: 'core' },
-        },
-      },
-    }),
-    createRoute({
-      getParentRoute: () => rootRoute,
-      path: '/owner/operations',
-      staticData: {
-        nav: {
-          label: 'Tools',
-          operator: { roles: ['owner'], group: 'Supply', groupOrder: 1, order: 0, icon: NavIcon, tier: 'core' },
-        },
-      },
-    }),
-  ])
-  const router = createRouter({
-    routeTree,
-    history: createMemoryHistory({ initialEntries: [pathname] }),
-  })
-
-  render(
-    <RouterContextProvider router={router}>
-      <SidebarProvider>
-        <OperatorChromeProvider>
-          <AeAppSidebar operatorRole="owner" pathname={pathname} hash="" />
-        </OperatorChromeProvider>
-      </SidebarProvider>
-    </RouterContextProvider>,
-  )
-}
 
 function renderOwnerMobileNav(pathname: string): void {
   const rootRoute = createRootRoute()

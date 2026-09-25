@@ -57,6 +57,14 @@ export function ToolsSearchPage({
   const navChoiceValues = matchingNavItems.map((item) => `ae-nav:${item.href}`)
   const quickChoiceValues = matchingQuickActions.map((action) => `ae-action:${action.id}`)
   const toolChoiceValues = choices.map((c) => (c.kind === 'recent' ? c.toolRef : c.item.toolRef))
+  const selectListing = (refOrHref: string) => {
+    if (refOrHref.startsWith('/')) {
+      if (onNavigate === undefined) window.location.assign(refOrHref)
+      else onNavigate(refOrHref)
+      return
+    }
+    onSelectTool(refOrHref)
+  }
   const choiceValues = [...navChoiceValues, ...quickChoiceValues, ...toolChoiceValues]
   const showCommandEmpty =
     matchingNavItems.length === 0 && matchingQuickActions.length === 0 && choices.length === 0
@@ -72,7 +80,7 @@ export function ToolsSearchPage({
     choiceValuesKey: choiceValues.join('\u001f'),
     inputRef,
     status,
-    onSelectTool,
+    onSelectTool: selectListing,
     onQueryInputChange: onQueryChange,
   })
 
@@ -119,7 +127,7 @@ export function ToolsSearchPage({
           recentCount={recentToolRefs.length}
           status={status}
           choices={choices}
-          onSelectTool={onSelectTool}
+          onSelectTool={selectListing}
           onClearPendingIntent={selection.clearPendingIntent}
         />
         {showCommandEmpty ? (

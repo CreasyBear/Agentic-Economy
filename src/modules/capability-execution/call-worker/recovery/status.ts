@@ -1,10 +1,6 @@
 import { readPublicExecutionStatus } from '@/modules/action-execution/runtime'
 import type { ActionCtx } from '../../../../../convex/_generated/server'
-import {
-  projectPersistedRecovery,
-  projectPureCallStatus,
-  recoveryNotFound,
-} from '../../../../../convex/capabilityCallProjection'
+import { projectPersistedRecovery, projectPureCallStatus, recoveryNotFound } from '@/modules/capability-execution/call-projection/recovery'
 import {
   loadRecoveredCall,
   loadRecoveryControl,

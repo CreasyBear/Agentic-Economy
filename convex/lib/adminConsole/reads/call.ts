@@ -16,7 +16,7 @@ import { parseAdminObjectRef } from '@/lib/operator/admin-console/ref-parsers'
 
 import type { Doc } from '../../../_generated/dataModel'
 import type { QueryCtx } from '../../../_generated/server'
-import { readPurchaseResolutionByCallRef } from '../../callLifecycle/purchaseResolutionMaterialize'
+import { readPurchaseResolutionByCallRef } from '../../capabilityExecution/callLifecycle/purchaseResolutionMaterialize'
 
 type FoundCallStatus = Extract<CallStatusResult, { kind: 'found' }>
 type CallRow = Doc<'capabilityCalls'>

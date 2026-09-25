@@ -1,6 +1,9 @@
 import { useMemo } from 'react'
 import type { ColumnDef } from '@tanstack/react-table'
 
+import { AeFactList } from '@/components/ae/data/AeFactList'
+import { buttonVariants } from '@/components/ui/button-variants'
+import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
 import { AeTableEmptyState } from '@/components/ae/feedback/AeTableEmptyState'
 import { AeSection } from '@/components/ae/layout/AeSection'
 import {
@@ -139,6 +142,33 @@ export function ActivityCallQueue({
             getHref: (item) => item.receiptHref,
             getAccessibleLabel: (item) => item.receiptAccessibleLabel,
           }}
+          compactContent={(
+            <div className="grid min-w-0 gap-related">
+              {rows.map((row) => (
+                <Card key={row.callRef} className="min-w-0">
+                  <CardHeader className="min-w-0">
+                    <CardTitle><h3 className="break-words text-base">{row.toolLabel}</h3></CardTitle>
+                    <ActivityBadge badge={row.purchaseBadge} />
+                  </CardHeader>
+                  <CardContent className="min-w-0">
+                    <AeFactList density="compact" facts={[
+                      { label: 'Call reference', value: <span className="break-all font-mono text-xs">{row.callRef}</span> },
+                      { label: 'Caller Agent', value: row.agentTitle ?? 'Not available' },
+                      { label: 'Time to outcome', value: row.durationLabel },
+                      { label: 'Amount', value: <span className="font-mono tabular-nums">{row.amountLabel}</span> },
+                      { label: 'Status', value: row.stateBadge.label },
+                      { label: 'Purchase status', value: row.purchaseLabel },
+                      { label: 'Payment', value: row.paymentStateLabel },
+                      { label: 'When', value: row.whenLabel },
+                    ]} />
+                  </CardContent>
+                  <CardFooter>
+                    <a href={row.receiptHref} className={buttonVariants({ variant: 'outline', className: 'min-h-touch focus-visible:outline-2 focus-visible:outline-offset-2' })}>{attention ? 'Review Call' : 'View receipt'} <span className="sr-only">for {row.toolLabel}</span></a>
+                  </CardFooter>
+                </Card>
+              ))}
+            </div>
+          )}
         />
       )}
     </AeSection>

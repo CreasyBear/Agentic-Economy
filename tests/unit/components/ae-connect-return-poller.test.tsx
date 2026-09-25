@@ -62,6 +62,9 @@ function connectReadiness(
           state: accountState,
           detailsSubmitted: details.detailsSubmitted,
           recipientCapabilityActive: details.recipientCapabilityActive,
+          requirementsDigest: 'sha256:requirements',
+          createdAt: 1,
+          updatedAt: 2,
           version: details.version,
         },
         payout: {

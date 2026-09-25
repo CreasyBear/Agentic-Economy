@@ -1,3 +1,5 @@
+import { ChevronDownIcon } from 'lucide-react'
+
 import { AeFactList } from '@/components/ae/data/AeFactList'
 import { Button } from '@/components/ui/button'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
@@ -15,6 +17,7 @@ export function AgentFactsDisclosure({
         render={
           <Button type="button" variant="ghost" className="w-fit min-h-touch">
             {label}
+            <ChevronDownIcon className="size-4" aria-hidden="true" />
           </Button>
         }
       />

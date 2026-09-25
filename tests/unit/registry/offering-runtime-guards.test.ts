@@ -3,7 +3,7 @@ import {
   readOfferingSupplyForBusiness,
   type OfferingSupplyReadPort,
   type OfferingSupplySnapshot,
-} from '../../../convex/registry'
+} from '../../../convex/lib/registry/offeringSupply/reads'
 import { brandNonEmpty } from '@/modules/common/ids'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import type { BusinessSupplyProjection } from '@/modules/catalog/public'

@@ -106,8 +106,4 @@ function RootDocument({ children }: { children: ReactNode }) {
   )
 }
 
-export function ResponsiveToaster() {
-  const isMobile = useIsMobile()
-  return <Toaster ref={responsiveToasterRef} {...responsiveToasterProps(isMobile)} />
-}
 

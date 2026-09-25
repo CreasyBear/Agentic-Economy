@@ -64,7 +64,7 @@ type ScoredCandidate = Readonly<{
   score: number
 }>
 type ScoreOutcome =
-  | { kind: 'original'; result: ToolSearchResult }
+  | { kind: 'original'; result: ToolSearchResult; reason: 'unavailable' | 'not_scored' }
   | {
       kind: 'scored'
       result: SearchPage
@@ -100,6 +100,33 @@ export async function rerankToolSearchResult(
     ...outcome.result,
     items: orderedItems(outcome),
     ranking: rankingFrom(outcome.scored),
+  }
+}
+export async function rankToolSearchForRegistry(
+  result: ToolSearchResult,
+  query: string,
+  options: ToolRerankerOptions = {},
+): Promise<Readonly<{
+  result: ToolSearchResult
+  verdict: 'matched' | 'degraded' | 'noMatch'
+  nearMisses: SearchPage['items']
+  reason?: string
+}>> {
+  if (result.kind !== 'ok' || result.items.length === 0) {
+    return { result, verdict: 'noMatch', nearMisses: [] }
+  }
+  const outcome = await scoreToolSearch(result, query, options)
+  if (outcome.kind === 'original') {
+    return { result, verdict: 'degraded', nearMisses: [], reason: outcome.reason === 'unavailable' ? 'Suitability ranking is temporarily unavailable.' : 'Suitability could not be verified.' }
+  }
+  const included = outcome.scored.filter(({ score }) => score >= MATCH_INCLUDE_SCORE)
+  if (included.length === 0) {
+    return { result: outcome.result, verdict: 'noMatch', nearMisses: orderedItems(outcome).slice(0, 3) }
+  }
+  return {
+    result: { ...outcome.result, items: included.map(({ item }) => item), ranking: rankingFrom(included) },
+    verdict: 'matched',
+    nearMisses: [],
   }
 }
 
@@ -231,18 +258,12 @@ async function scoreToolSearch(
   options: ToolRerankerOptions,
   extraQuestions: Record<string, JevQuestion> = {},
 ): Promise<ScoreOutcome> {
-  if (
-    options.disableRerank === true ||
-    result.kind !== 'ok' ||
-    result.items.length <= 1 ||
-    query.trim().length === 0
-  ) {
-    return { kind: 'original', result }
+  if (options.disableRerank === true || result.kind !== 'ok' || result.items.length === 0 || query.trim().length === 0) {
+    return { kind: 'original', result, reason: 'not_scored' }
   }
-  // Assessments are keyed by Tool identity; a duplicate page cannot support an
-  // unambiguous assessment. Preserve retrieval rather than inventing one.
+  // Assessment keys are positional; duplicate refs cannot be scored unambiguously.
   if (new Set(result.items.map(item => item.toolRef)).size !== result.items.length) {
-    return { kind: 'original', result }
+    return { kind: 'original', result, reason: 'not_scored' }
   }
 
   const cleanQuery = query.trim()
@@ -293,10 +314,11 @@ async function scoreToolSearch(
     return {
       kind: 'original',
       result: degradeBackend(cause, result, { site: 'rerankToolSearchResult', reason: 'source_unavailable' }),
+      reason: 'unavailable',
     }
   }
 
-  if (decision.tier !== 'jev_system_one') return { kind: 'original', result }
+  if (decision.tier !== 'jev_system_one') return { kind: 'original', result, reason: 'unavailable' }
   const scoredCandidates = candidatesToScore.map((item, index) => {
     const noulAns = decision.answers[`match_${index}`]
     if (
@@ -313,7 +335,7 @@ async function scoreToolSearch(
       score: Math.round(noulAns.noul * 1000) / 1000,
     }
   })
-  if (scoredCandidates.some((candidate) => candidate === undefined)) return { kind: 'original', result }
+  if (scoredCandidates.some((candidate) => candidate === undefined)) return { kind: 'original', result, reason: 'unavailable' }
   const scored = scoredCandidates.filter(
     (candidate): candidate is ScoredCandidate => candidate !== undefined,
   )

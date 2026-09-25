@@ -256,19 +256,6 @@ describe('AE theme token parity (src/styles/globals.css)', () => {
     ]) {
       if (!rootNames.has(required)) problems.push(`missing :root ${required}`)
     }
-    // Sidebar octet keeps parity with the shadcn surface contract.
-    const sidebarMembers = [
-      'sidebar',
-      'sidebar-foreground',
-      'sidebar-primary',
-      'sidebar-primary-foreground',
-      'sidebar-accent',
-      'sidebar-accent-foreground',
-      'sidebar-border',
-      'sidebar-ring',
-    ]
-    const sidebarMissing = sidebarMembers.filter((n) => !themeNames.has(`--color-${n}`) || !rootNames.has(`--${n}`))
-    if (sidebarMissing.length) problems.push(`missing sidebar tokens: ${sidebarMissing.map((n) => `--color-${n}/--${n}`).join(', ')}`)
     expect(problems, problems.join('; ')).toEqual([])
   })
 

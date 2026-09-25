@@ -6,12 +6,16 @@ import { AeMarkedDivider } from './AeSiteMarks'
 export type AeSiteHeadingLevel = 'h1' | 'h2' | 'h3' | 'h4'
 export type AeSiteHeadingSize = 'xl' | 'lg' | 'md' | 'sm' | 'xs'
 
+export const siteEnterRiseClass =
+  'animate-in fade-in-0 slide-in-from-bottom-2 duration-base ease-emphasized motion-reduce:animate-none'
+
 type AeSiteHeadingProps = {
   as?: AeSiteHeadingLevel
   size?: AeSiteHeadingSize
   children: string
   id?: string
   className?: string
+  enter?: boolean
 }
 
 /** Discover display recipes. ExtraLight; no viewport-fluid weight jumps. */
@@ -29,11 +33,12 @@ export function AeSiteHeading({
   children,
   id,
   className,
+  enter = false,
 }: AeSiteHeadingProps) {
   return (
     <Tag
       id={id}
-      className={cn('text-balance', sizeClass[size], className)}
+      className={cn('text-balance', sizeClass[size], enter && siteEnterRiseClass, className)}
     >
       {children}
     </Tag>

@@ -1,12 +1,8 @@
-import { useServerFn } from '@tanstack/react-start'
-
+import { Link } from '@tanstack/react-router'
 import { AeAgentSecurityHistory } from '@/components/ae/agent-access/AeAgentSecurityHistory'
 import { AeAgentOperatorConsole } from '@/components/ae/console/agent-operator-console/AeAgentOperatorConsole'
 import { AeAssistantInstallFunnel } from '@/components/ae/console/AeAssistantInstallFunnel'
-import { AeConnectAgentWizardDialog } from '@/components/ae/console/connect-agent-wizard/AeConnectAgentWizardDialog'
-import { AeKeyRevealDialog } from '@/components/ae/console/AeKeyRevealDialog'
 import { AeOperatorPage } from '@/components/ae/layout/AeOperatorPage'
-import { issueAgentAccessKeyServer } from '@/modules/agent-access/agent-access.functions'
 
 import type { AeAgentAccessHomeProps } from './agent-access-home.contracts'
 import { HomeAddAnotherAgent } from './components/HomeAddAnotherAgent'
@@ -19,7 +15,6 @@ import { useAeAgentAccessHome } from './useAeAgentAccessHome'
 
 export function AeAgentAccessHome(props: AeAgentAccessHomeProps) {
   const vm = useAeAgentAccessHome(props)
-  const issueAgentAccessKey = useServerFn(issueAgentAccessKeyServer)
 
   const { directory, search } = vm
 
@@ -30,6 +25,7 @@ export function AeAgentAccessHome(props: AeAgentAccessHomeProps) {
       description="Connect Agents, review requests, and control what each Agent can do."
       currentPath="/agent-access"
     >
+      <Link to="/owner/settings/agent-keys" className="mb-4 inline-flex min-h-touch items-center text-sm font-medium text-brand underline-offset-4 hover:underline focus-visible:outline-solid focus-visible:outline-2 focus-visible:outline-brand">Manage Agent keys</Link>
       {vm.directoryError === undefined ? null : (
         <HomeDirectoryRecoveryAlert
           title={vm.directoryAlertTitle}
@@ -70,7 +66,6 @@ export function AeAgentAccessHome(props: AeAgentAccessHomeProps) {
           {...(search.caller === undefined ? {} : { selectedPrincipalId: search.caller })}
           getAgentHref={vm.getAgentHref}
           onClearSelectedPrincipal={vm.clearSelectedPrincipal}
-          onRevokeCredential={vm.onRevokeCredential}
           onDisconnectAgent={vm.onDisconnectAgent}
           onDisconnectConnection={vm.onDisconnectConnection}
           onRenameAgent={vm.onRenameAgent}
@@ -115,18 +110,6 @@ export function AeAgentAccessHome(props: AeAgentAccessHomeProps) {
           )}
         />
       )}
-      <AeConnectAgentWizardDialog
-        open={vm.wizardOpen}
-        onOpenChange={vm.setWizardOpen}
-        onIssue={issueAgentAccessKey}
-        onSuccess={vm.onRevealSuccess}
-      />
-      <AeKeyRevealDialog
-        reveal={vm.reveal}
-        open={vm.reveal !== undefined}
-        onOpenChange={vm.onRevealOpenChange}
-        canonicalBaseUrl={vm.canonicalBaseUrl}
-      />
     </AeOperatorPage>
   )
 }

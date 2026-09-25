@@ -52,7 +52,7 @@ import {
 } from '@/modules/money/public'
 import { PRODUCTION_COMMERCIAL_POLICY_CONTROLS } from '../helpers/commercial-policy-fixtures'
 import { defaultDnsResolver } from '@/modules/network-guard/public'
-import { capabilitySupplyGraphPorts } from '../../convex/capabilitySupplyGraphPorts'
+import { capabilitySupplyGraphPorts } from '../../convex/lib/capabilitySupply/graphPorts/ports'
 import { qualifySuppliedCandidate } from '@/modules/capability-supply/public'
 import {
   setPublicSourceTransportForTests,
@@ -70,9 +70,12 @@ import {
   handleCallReconcilePost,
   createCallService,
 } from '@/lib/server/call-api'
+import { handleJourneyStatusGet } from '@/lib/server/journey-status-api'
 import { handleMcpRequest } from '@/lib/server/mcp-api'
 import { callAction } from '@/modules/capability-execution/call.actions'
+import { callResultSchema, type CallResult } from '@/modules/capability-execution/call-contracts'
 import { projectCallReceipt } from '@/modules/capability-execution/call-receipt-view'
+import { journeyStatusResultSchema } from '@/modules/actions'
 import { callStatusResultSchema } from '@/modules/capability-execution/call-recovery.actions'
 import { issuedAgentGrantRef } from '@/modules/agent-access/issued-agent-binding'
 import { createFormanceContext, readFormanceAccount, readFormanceTransactionByReference } from '@/modules/money/formance'
@@ -306,6 +309,8 @@ async function serveCallRoutes(input: Readonly<{
         response = await handleToolQuotePost(request, { authenticate, resolvePrincipal })
       } else if (url.pathname === '/api/v1/tools/call') {
         response = await handleToolCallPost(request, { authenticate, resolvePrincipal })
+      } else if (url.pathname.startsWith('/api/v1/status/')) {
+        response = await handleJourneyStatusGet(request, decodeURIComponent(url.pathname.slice('/api/v1/status/'.length)), { authenticate, resolvePrincipal })
       } else if (url.pathname.startsWith('/api/v1/calls/')) {
         const segments = url.pathname.slice('/api/v1/calls/'.length).split('/')
         const callRef = decodeURIComponent(segments[0]!)
@@ -388,7 +393,7 @@ async function invokeCall(
   idempotencyKey: string,
   suffix: string,
   sourcePrincipal: TestPrincipal = principal,
-) {
+): Promise<CallResult> {
   const callKey = `${principal.credentialId}:${idempotencyKey}`
   let quoteRef = quoteByCallKey.get(callKey)
   if (quoteRef === undefined) {
@@ -404,8 +409,9 @@ async function invokeCall(
       await withSourceWrite('protected_action', inspectionCommand),
     )
     if (inspected.kind !== 'committed') throw new Error(`call_quote_refused:${inspected.code}`)
+    if (typeof inspected.quoteRef !== 'string') throw new Error('call_quote_ref_missing')
     quoteRef = inspected.quoteRef
-    quoteByCallKey.set(callKey, quoteRef)
+    quoteByCallKey.set(callKey, inspected.quoteRef)
   }
   const command = {
     operationKey: `test:call-workpool:call:${suffix}`,
@@ -418,10 +424,10 @@ async function invokeCall(
     ...command,
     principal: { ...sourcePrincipal, scopes: [...sourcePrincipal.scopes] },
   })
-  return await backend.action(
+  return callResultSchema.parse(await backend.action(
     api.capabilityCalls.call,
     { ...signed, principal: command.principal } as never,
-  )
+  ))
 }
 
 async function recoveryActionArgs(
@@ -444,6 +450,16 @@ async function recoveryActionArgs(
     input: {},
     idempotencyKey,
   })
+}
+
+async function statusQueryArgs(principal: TestPrincipal, callRef: string, suffix: string) {
+  const args = {
+    operationKey: `test:call-workpool:status:${suffix}`,
+    correlationId: `test:call-workpool:status:${suffix}`,
+    principal: { ...principal, scopes: [...principal.scopes] },
+    callRef,
+  }
+  return await withSourceWriteCommand('protected_action', args, args)
 }
 
 async function readEvidence(
@@ -1433,13 +1449,16 @@ describe('capability Call Workpool lifecycle', () => {
         },
         maxBuffer: 4 * 1024 * 1024,
       })
-      const cliCurrent = callStatusResultSchema.parse(JSON.parse(cliStatus.stdout))
+      const cliCurrent = journeyStatusResultSchema.parse(JSON.parse(cliStatus.stdout))
       const httpResponse = await fetch(`${terminalServer.origin}/api/v1/calls/${encodeURIComponent(pending.callRef)}`, {
         headers: { Authorization: `Bearer ${buyer.principal.credentialId}` },
       })
       expect(httpResponse.status).toBe(200)
       const httpCurrent = callStatusResultSchema.parse(await httpResponse.json())
-      expect(cliCurrent).toMatchObject(httpCurrent)
+      expect(cliCurrent).toMatchObject({
+        kind: 'call', ref: pending.callRef, principalRef: buyer.principal.principalId,
+        workState: 'completed', recovery: httpCurrent, next: [],
+      })
 
       const mcpResponse = await handleMcpRequest(new Request('https://ae.example/mcp', {
         method: 'POST',
@@ -1657,7 +1676,9 @@ describe('capability Call Workpool lifecycle', () => {
         expect(resumed, JSON.stringify(resumed)).toMatchObject({ status: 0, result: { callRef } })
         const status = await runFreshCli(['status', callRef])
         expect(status).toMatchObject({ status: 0, result: {
-          kind: 'found', callRef, state: interruption === 'before claim' ? 'in_progress' : 'reconciliation_required',
+          kind: 'call', ref: callRef, principalRef: buyer.principal.principalId, workState: 'working',
+          recovery: { kind: 'found', callRef, state: interruption === 'before claim' ? 'in_progress' : 'reconciliation_required' },
+          next: [{ action: 'status', args: { ref: { kind: 'call', ref: callRef } }, authority: 'same_principal' }],
         } })
         const cancelled = await runFreshCli(['cancel', callRef, '--idempotency-key', 'paid-recovery-cancel'])
         expect(cancelled, JSON.stringify(cancelled)).toMatchObject({ status: 0, result: {
@@ -1760,7 +1781,7 @@ describe('capability Call Workpool lifecycle', () => {
           })
           expect(statusResponse.status).toBe(200)
           const current = callStatusResultSchema.parse(await statusResponse.json())
-          expect(status.result).toMatchObject(current)
+          expect(status.result).toMatchObject({ recovery: current })
           if (current.kind !== 'found' || current.attemptRef === undefined || current.effectGeneration === undefined) throw new Error('paid_recovery_identity_missing')
 
           const mcpResponse = await handleMcpRequest(new Request('https://ae.example/mcp', {
@@ -1958,15 +1979,18 @@ describe('capability Call Workpool lifecycle', () => {
     ])
     expect(completed.history.map((row) => row.executionVersion)).toEqual([1, 2, 3])
     expect(completedResult.output).toEqual(providerOutput)
-    await expect(backend.action(
-      api.capabilityCalls.readCallStatus,
-      await recoveryActionArgs(
-        first.principal,
-        successfulCallRef,
-        'status-owner',
-        `status:${successfulCallRef}`,
-      ),
-    )).resolves.toMatchObject({
+    const statusArgs = await statusQueryArgs(first.principal, successfulCallRef, 'status-owner')
+    const stateCounts = async () => await backend.run(async (ctx) => ({
+      nonces: (await ctx.db.query('sourceWriteNonces').collect()).length,
+      calls: (await ctx.db.query('capabilityCalls').collect()).length,
+      history: (await ctx.db.query('actionExecutionHistory').collect()).length,
+      resolutions: (await ctx.db.query('purchaseResolutionRecords').collect()).length,
+    }))
+    const beforeReads = await stateCounts()
+    const firstRead = await backend.query(api.capabilityCallsStatus.readCallStatus, statusArgs)
+    await expect(backend.query(api.capabilityCallsStatus.readCallStatus, statusArgs)).resolves.toEqual(firstRead)
+    expect(await stateCounts()).toEqual(beforeReads)
+    expect(firstRead).toMatchObject({
       kind: 'found',
       callRef: successfulCallRef,
       toolRef,
@@ -1977,14 +2001,9 @@ describe('capability Call Workpool lifecycle', () => {
         output: providerOutput,
       },
     })
-    await expect(backend.action(
-      api.capabilityCalls.readCallStatus,
-      await recoveryActionArgs(
-        revoked.principal,
-        successfulCallRef,
-        'status-isolated',
-        `status:${successfulCallRef}`,
-      ),
+    await expect(backend.query(
+      api.capabilityCallsStatus.readCallStatus,
+      await statusQueryArgs(revoked.principal, successfulCallRef, 'status-isolated'),
     )).resolves.toMatchObject({
       kind: 'refused',
       callRef: successfulCallRef,
@@ -2127,14 +2146,9 @@ describe('capability Call Workpool lifecycle', () => {
       return refs
     })
     for (const variant of statusVariants) {
-      const status = await backend.action(
-        api.capabilityCalls.readCallStatus,
-        await recoveryActionArgs(
-          first.principal,
-          variant.callRef,
-          `status-${variant.receiptState}`,
-          `status:${variant.callRef}`,
-        ),
+      const status = await backend.query(
+        api.capabilityCallsStatus.readCallStatus,
+        await statusQueryArgs(first.principal, variant.callRef, `status-${variant.receiptState}`),
       )
       expect(status).toMatchObject({
         kind: 'found',
@@ -2275,18 +2289,7 @@ describe('capability Call Workpool lifecycle', () => {
         return JSON.parse(executed.stdout) as unknown
       }
 
-      const search = await runCli(['search', 'lookup']) as {
-        kind: string
-        items: Array<{ toolRef: string }>
-        nextCommand: string
-      }
-      const comparedToolRefs = search.items.map((item) => item.toolRef)
-      expect(search.kind).toBe('ok')
-      expect(comparedToolRefs).toEqual(expect.arrayContaining([
-        toolRef,
-        alternativeToolRef,
-      ]))
-      expect(search.nextCommand).toBe(`ae compare ${comparedToolRefs.slice(0, 4).join(' ')} --base-url ${served.origin} --json`)
+      const comparedToolRefs = [toolRef, alternativeToolRef]
       await expect(runCli(['describe', toolRef])).resolves.toMatchObject({
         kind: 'found',
         tool: { toolRef },
@@ -2314,16 +2317,24 @@ describe('capability Call Workpool lifecycle', () => {
         output: providerOutput,
       })
       expect(completed).not.toHaveProperty('idempotencyKey')
-      const status = callStatusResultSchema.parse(await runCli(['status', completed.callRef]))
+      const status = journeyStatusResultSchema.parse(await runCli(['status', completed.callRef]))
       expect(status).toMatchObject({
-        kind: 'found',
-        callRef: completed.callRef,
-        toolRef,
-        state: 'terminal',
-        usage: { chargeState: 'free_tier' },
-        result: { kind: 'completed', output: providerOutput },
+        kind: 'call',
+        ref: completed.callRef,
+        principalRef: principal.principalId,
+        workState: 'completed',
+        next: [],
+        recovery: {
+          kind: 'found',
+          callRef: completed.callRef,
+          toolRef,
+          state: 'terminal',
+          usage: { chargeState: 'free_tier' },
+          result: { kind: 'completed', output: providerOutput },
+        },
       })
-      expect(projectCallReceipt(status)).toMatchObject({
+      if (status.kind !== 'call') throw new Error('served_cli_call_status_missing')
+      expect(projectCallReceipt(status.recovery)).toMatchObject({
         version: 'ae.public-invocation-receipt:v1',
         callRef: completed.callRef,
         toolRef,

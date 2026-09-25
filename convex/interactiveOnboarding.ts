@@ -12,7 +12,7 @@ import {
   requireInteractiveHumanPrincipal,
   validateCorrelationRef,
   validateWorkspaceName,
-} from './lib/onboarding/authority'
+} from './lib/principalAccount/onboarding/authority'
 
 const roleIntentValue = v.union(v.literal('buyer'), v.literal('supplier'))
 

@@ -22,7 +22,7 @@ describe('CLI distribution', () => {
     const cliPackage = JSON.parse(await readFile(resolve('packages/cli/package.json'), 'utf8')) as { name: string; version: string }
 
     expect(AE_CLI_VERSION).toBe(cliPackage.version)
-    expect(AE_CLI_ARCHIVE_FILENAME).toBe(`agentic-economy-cli-${cliPackage.version}.tgz`)
+    expect(AE_CLI_ARCHIVE_FILENAME).toBe(`aecon-cli-${cliPackage.version}.tgz`)
     expect(aeCliArchiveUrl('https://ae.example/')).toBe(`https://ae.example/downloads/${AE_CLI_ARCHIVE_FILENAME}`)
     expect(aeCliInstallCommand('https://ae.example/')).toBe(`npm install --global "https://ae.example/downloads/${AE_CLI_ARCHIVE_FILENAME}"`)
     expect(aeCliEaccesFallbackCommand('https://ae.example/')).toBe(`npm install --global --prefix "$HOME/.local" "https://ae.example/downloads/${AE_CLI_ARCHIVE_FILENAME}"`)

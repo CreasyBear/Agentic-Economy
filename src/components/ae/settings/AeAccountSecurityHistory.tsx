@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useServerFn } from '@tanstack/react-start'
 
-import { AeSection } from '@/components/ae/layout/AeSection'
+import { SettingsGroup } from '@/components/ae/settings/settings-shell/components/SettingsSections'
 import { AeSecurityHistoryTable } from '@/components/ae/settings/AeSecurityHistoryTable'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
@@ -13,20 +13,13 @@ import {
   type AccountSecurityHistoryResult,
 } from '@/modules/security/account-security'
 import { degrade } from '@/lib/observability/degrade'
-
-type AccountSecurityHistoryState = Readonly<{
-  source: AccountSecurityHistoryResult
-  result: AccountSecurityHistoryResult
-  status: 'idle' | 'loading' | 'failed'
-}>
+import type { AccountSecurityHistoryState, AeAccountSecurityHistoryProps } from './owner-settings.contracts'
 
 function initialSecurityHistoryState(source: AccountSecurityHistoryResult): AccountSecurityHistoryState {
   return { source, result: source, status: 'idle' }
 }
 
-export function AeAccountSecurityHistory({
-  initialResult,
-}: Readonly<{ initialResult: AccountSecurityHistoryResult }>) {
+export function AeAccountSecurityHistory({ initialResult }: AeAccountSecurityHistoryProps) {
   const readHistory = useServerFn(readAccountSecurityHistoryServer)
   const [state, setState] = useState(() => initialSecurityHistoryState(initialResult))
 
@@ -84,10 +77,9 @@ export function AeAccountSecurityHistory({
   const rows = result.kind === 'available' ? result.page.items : []
 
   return (
-    <AeSection
-      id="security-history"
-      title="Security history"
-      description="Evidence of session, Agent, connection, and account actions. Revoke devices in Profile. Rotate credentials in Recovery."
+    <SettingsGroup
+      title="Recorded activity"
+      description="Observed session, Agent, connection and account actions. Filter or load older events below."
     >
       {result.kind === 'unavailable' ? (
         <Alert variant="destructive">
@@ -124,6 +116,6 @@ export function AeAccountSecurityHistory({
           onLoadMore={() => void load(result.page.continueCursor)}
         />
       )}
-    </AeSection>
+    </SettingsGroup>
   )
 }

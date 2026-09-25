@@ -19,7 +19,6 @@ describe('AE UI contract', () => {
       'src/components/ui/card.tsx',
       'src/components/ui/dialog.tsx',
       'src/components/ui/sheet.tsx',
-      'src/components/ui/sidebar.tsx',
     ]
     const primitiveSource = primitiveFiles
       .map((file) => readFileSync(file, 'utf8'))

@@ -11,9 +11,32 @@
  * rely on module-eval side effects; production bundlers can tree-shake them.
  */
 
-export { CURRENT_TOOL_PROJECTION_NAVIGATION } from './contract'
+export {
+  CURRENT_TOOL_PROJECTION_NAVIGATION,
+  validateJourneyNext,
+  projectJourneyProblem,
+  projectCliJourneyProblem,
+  projectMcpJourneyProblem,
+  projectStreamJourneyProblem,
+  projectProcureNext,
+  type ThreadRef,
+  type TurnRef,
+  type JourneyRef,
+  type WorkState,
+  type TurnEvent,
+  type CallEvent,
+  type JourneyEvent,
+  type JourneyNext,
+  type JourneyStatus,
+  type JourneyProblem,
+  type JourneyProjectionOptions,
+} from './contract'
+export { projectMcpActionNext } from './mcp-journey'
+export { MCP_TOOLSETS, mcpToolsetAdmitted, mcpToolsetRole, type McpToolsetRole } from './mcp-toolsets'
+export { journeyStatusAction, journeyStatusResultSchema } from './status.actions'
 
 import { describeActionForAgent, type AgentToolDescriptor, type AnyAction } from '@/modules/common/action'
+import { mcpToolsetRole } from './mcp-toolsets'
 import { CALL_ROUTE_CONTRACT } from '@/modules/capability-execution/call-entry'
 import {
   agentAccountActivityAction,
@@ -66,6 +89,7 @@ import {
   TOOL_QUOTE_ROUTE_CONTRACT,
 } from '@/modules/capability-execution/quote.actions'
 import { callListAction } from '@/modules/capability-execution/call-history.actions'
+import { journeyStatusAction } from './status.actions'
 import {
   marketRequestCreateAction,
   marketRequestListAction,
@@ -108,6 +132,7 @@ const registeredActions: readonly AnyAction[] = [
   callAction,
   callListAction,
   callStatusAction,
+  journeyStatusAction,
   callCancelAction,
   callReconcileAction,
   supplySourcePreviewAction,
@@ -139,11 +164,9 @@ export function findAction(id: string): AnyAction | undefined {
   return registeredActions.find((action) => action.id === id)
 }
 
-/** Actions exposed on the anonymous MCP host; the adapter enforces read-only admission. */
+/** The MCP role toolsets are the only public workflow tools; Operations remain result data. */
 export function listMcpActions(): readonly AnyAction[] {
-  return actions.filter((action) =>
-    action.surfaces.includes('mcp') && action.id !== 'registry.search' && action.id !== 'registry.detail'
-  )
+  return actions.filter((action) => mcpToolsetRole(action) !== undefined)
 }
 
 /** True only for one of the registered public Tool catalogue reads. */

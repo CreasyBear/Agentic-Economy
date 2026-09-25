@@ -2,7 +2,8 @@ import { listUIMessages, mockModel, saveMessage, saveMessages } from '@convex-de
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { api, components, internal } from '../../convex/_generated/api'
-import { streamDurableChatResponse } from '../../convex/chatGenerate'
+import { streamDurableChatResponse } from '../../convex/lib/chat/generate/stream'
+import { projectToolCard } from '@/modules/chat/tool-card'
 import { convexTestWithMarketComponents, publishedBusinessOwner } from '../helpers/convex-fixtures'
 
 const SHARE_SECRET = 'chat-share-integration-secret-with-at-least-32-characters'
@@ -42,7 +43,7 @@ describe.sequential('durable Tool chat messaging and shares', () => {
     const { owner, canonicalAccountRef } = await publishedBusinessOwner(backend, 'chat-owner')
     const { owner: other } = await publishedBusinessOwner(backend, 'chat-other')
 
-    const sent = await owner.mutation(api.chatMessages.sendMessage, {
+    const sent = await owner.mutation(internal.chatMessages.sendMessage, {
       prompt: '  Find\n\t the best   weather Tools  ',
     })
     const [row, componentThread, messages] = await backend.run(async (ctx) => Promise.all([
@@ -83,13 +84,13 @@ describe.sequential('durable Tool chat messaging and shares', () => {
       paginationOpts: { cursor: null, numItems: 0 },
       streamArgs: { kind: 'list' },
     })).resolves.toMatchObject({ page: [], streams: { kind: 'list' } })
-    await expect(backend.mutation(api.chatMessages.sendMessage, {
+    await expect(backend.mutation(internal.chatMessages.sendMessage, {
       prompt: 'anonymous prompt',
     })).rejects.toThrow('unauthenticated')
-    await expect(owner.mutation(api.chatMessages.sendMessage, {
+    await expect(owner.mutation(internal.chatMessages.sendMessage, {
       prompt: '   ',
     })).rejects.toThrow('invalid_input')
-    await expect(owner.mutation(api.chatMessages.sendMessage, {
+    await expect(owner.mutation(internal.chatMessages.sendMessage, {
       prompt: 'x'.repeat(2_001),
     })).rejects.toThrow('invalid_input')
     await expect(owner.query(api.chatMessages.listMessages, {
@@ -102,11 +103,11 @@ describe.sequential('durable Tool chat messaging and shares', () => {
   it('rejects active concurrency, admits stale state, and only matching cleanup clears it', async () => {
     const backend = convexTestWithMarketComponents()
     const { owner } = await publishedBusinessOwner(backend, 'chat-busy-owner')
-    const first = await owner.mutation(api.chatMessages.sendMessage, {
+    const first = await owner.mutation(internal.chatMessages.sendMessage, {
       prompt: 'First prompt',
     })
 
-    await expect(owner.mutation(api.chatMessages.sendMessage, {
+    await expect(owner.mutation(internal.chatMessages.sendMessage, {
       threadId: first.threadId,
       prompt: 'Concurrent prompt',
     })).rejects.toThrow('thread_busy')
@@ -118,7 +119,7 @@ describe.sequential('durable Tool chat messaging and shares', () => {
       if (row === null) throw new Error('test_thread_missing')
       await ctx.db.patch(row._id, { activeStartedAt: Date.now() - 10 * 60 * 1_000 - 1 })
     })
-    const second = await owner.mutation(api.chatMessages.sendMessage, {
+    const second = await owner.mutation(internal.chatMessages.sendMessage, {
       threadId: first.threadId,
       prompt: 'Replacement after stale state',
     })
@@ -143,7 +144,7 @@ describe.sequential('durable Tool chat messaging and shares', () => {
   it.each([false, true])('persists a final response and settles stream deltas (extended lookup=%s)', async extended => {
     const backend = convexTestWithMarketComponents()
     const { owner, canonicalAccountRef } = await publishedBusinessOwner(backend, 'chat-model-owner')
-    const created = await owner.mutation(api.chatThreads.createThread, {
+    const created = await owner.mutation(internal.chatThreads.createThread, {
       title: 'Find an exchange-rate Tool',
     })
     const promptMessageId = await backend.run(async (ctx) => {
@@ -169,7 +170,7 @@ describe.sequential('durable Tool chat messaging and shares', () => {
           type: 'tool-call' as const, toolCallId: `lookup-${index}`, toolName: 'registry_tools_describe',
           input: JSON.stringify({ toolRef: `operation:v1:${'a'.repeat(64)}` }),
         }]) : []),
-        [{ type: 'text', text: 'One current exchange-rate Tool is available.' }],
+        [{ type: 'text', text: 'No current exchange-rate Tool was verified from that reference.' }],
       ],
     })
     const modelCalls = vi.spyOn(model, 'doStream')
@@ -180,9 +181,8 @@ describe.sequential('durable Tool chat messaging and shares', () => {
         promptMessageId,
       }, model)
     })
-    expect(modelCalls).toHaveBeenCalledTimes(extended ? 6 : 1)
-    expect(JSON.stringify(modelCalls.mock.calls[0]?.[0].prompt)).toContain('Use the returned priceLabel as an indicative price.')
-    if (extended) expect(modelCalls.mock.calls[5]?.[0].toolChoice).toEqual({ type: 'none' })
+    expect(modelCalls.mock.calls[0]?.[0].toolChoice).toEqual({ type: 'required' })
+    if (extended) expect(modelCalls.mock.lastCall?.[0].tools).toBeUndefined()
     await backend.mutation(internal.chatMessages.clearActiveGeneration, {
       threadId: created.threadId,
       promptMessageId,
@@ -199,10 +199,61 @@ describe.sequential('durable Tool chat messaging and shares', () => {
       }),
     ]))
     expect(messages.page.map((message) => message.role)).toEqual(['user', 'assistant'])
-    expect(messages.page.find((message) => message.role === 'assistant')?.text).toContain(
-      'One current exchange-rate Tool is available.',
-    )
+    expect(messages.page[1]?.text).toBe(extended
+      ? 'No current exchange-rate Tool was verified from that reference.'
+      : '**No match for that yet.** Next: try different words or browse the Market.')
     expect(activeStreams).toEqual([])
+  })
+  it('settles two empty searches as one answer without option cards', async () => {
+    const backend = convexTestWithMarketComponents()
+    const { owner, canonicalAccountRef } = await publishedBusinessOwner(backend, 'chat-no-match-owner')
+    const created = await owner.mutation(internal.chatThreads.createThread, { title: 'Find an absent Tool' })
+    const { messageId } = await backend.run(ctx => saveMessage(ctx, components.agent, {
+      threadId: created.threadId, userId: canonicalAccountRef, prompt: 'Find an absent Tool',
+    }))
+    const model = mockModel({ contentSteps: [
+      [{ type: 'tool-call', toolCallId: 'search-1', toolName: 'registry_tools_search', input: JSON.stringify({ query: 'improbable missing tool alpha' }) }],
+      [{ type: 'tool-call', toolCallId: 'search-2', toolName: 'registry_tools_search', input: JSON.stringify({ query: 'improbable missing tool beta' }) }],
+    ] })
+    await backend.action(ctx => streamDurableChatResponse(ctx, {
+      threadId: created.threadId, ownerId: canonicalAccountRef, promptMessageId: messageId,
+    }, model))
+    const messages = await backend.run(ctx => listUIMessages(ctx, components.agent, {
+      threadId: created.threadId, paginationOpts: { cursor: null, numItems: 20 },
+    }))
+    const assistant = messages.page.filter(message => message.role === 'assistant')
+    expect(assistant).toHaveLength(1)
+    expect(assistant[0]?.text).toBe('**No match for that yet.** Next: try different words or browse the Market.')
+    expect(assistant[0]?.parts.filter(part => part.type.startsWith('tool-'))).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ state: 'output-available', output: expect.objectContaining({ kind: 'noMatch', results: [] }) }),
+      ]),
+    )
+    const cards = assistant[0]?.parts.map(projectToolCard).filter(card => card?.kind === 'choices') ?? []
+    expect(cards).not.toHaveLength(0)
+    expect(cards.flatMap(card => card?.kind === 'choices' ? card.choices : [])).toEqual([])
+  })
+  it('halts at clarification and reports an input-required stream outcome', async () => {
+    const backend = convexTestWithMarketComponents()
+    const { owner, canonicalAccountRef } = await publishedBusinessOwner(backend, 'chat-clarify-owner')
+    const created = await owner.mutation(internal.chatThreads.createThread, { title: 'Clarification' })
+    const { messageId } = await backend.run(ctx => saveMessage(ctx, components.agent, {
+      threadId: created.threadId, userId: canonicalAccountRef, prompt: 'Find something suitable',
+    }))
+    const model = mockModel({
+      contentSteps: [[{
+        type: 'tool-call', toolCallId: 'clarify-1', toolName: 'chat_clarify',
+        input: JSON.stringify({ question: 'Which region?', choices: ['AU', 'US', 'Other'] }),
+      }]],
+    })
+    const clarificationRequested = await backend.action(ctx => streamDurableChatResponse(ctx, {
+      threadId: created.threadId, ownerId: canonicalAccountRef, promptMessageId: messageId,
+    }, model))
+    expect(clarificationRequested).toBe(true)
+    const messages = await backend.run(ctx => listUIMessages(ctx, components.agent, {
+      threadId: created.threadId, paginationOpts: { cursor: null, numItems: 20 },
+    }))
+    expect(messages.page.some(message => JSON.stringify(message.parts).includes('awaiting_answer'))).toBe(true)
   })
 
   it('records a safe recovery message when durable generation is unavailable', async () => {
@@ -211,7 +262,7 @@ describe.sequential('durable Tool chat messaging and shares', () => {
     const backend = convexTestWithMarketComponents()
     const { owner } = await publishedBusinessOwner(backend, 'chat-unavailable-owner')
     try {
-      const sent = await owner.mutation(api.chatMessages.sendMessage, {
+      const sent = await owner.mutation(internal.chatMessages.sendMessage, {
         prompt: 'Find a current weather Operation',
       })
       await drainExpectedUnavailableGenerations(backend)
@@ -220,8 +271,8 @@ describe.sequential('durable Tool chat messaging and shares', () => {
         threadId: sent.threadId,
         paginationOpts: { cursor: null, numItems: 20 },
       })
-      expect(messages.page.map((message) => message.role)).toEqual(['user', 'assistant'])
-      const recovery = messages.page.find((message) => message.role === 'assistant')?.text ?? ''
+      expect(messages.page.map((message: { role: string }) => message.role)).toEqual(['user', 'assistant'])
+      const recovery = messages.page.find((message: { role: string; text: string }) => message.role === 'assistant')?.text ?? ''
       expect(recovery).toMatch(/before a final response was recorded/i)
       expect(recovery).toMatch(/call card or receipt/i)
       expect(recovery).not.toContain('agent_unavailable')
@@ -237,10 +288,10 @@ describe.sequential('durable Tool chat messaging and shares', () => {
   it('enforces thirty durable submissions per identity each hour', async () => {
     const backend = convexTestWithMarketComponents()
     const { owner } = await publishedBusinessOwner(backend, 'chat-rate-owner')
-    const created = await owner.mutation(api.chatThreads.createThread, { title: 'Rate thread' })
+    const created = await owner.mutation(internal.chatThreads.createThread, { title: 'Rate thread' })
 
     for (let index = 0; index < 30; index += 1) {
-      const sent = await owner.mutation(api.chatMessages.sendMessage, {
+      const sent = await owner.mutation(internal.chatMessages.sendMessage, {
         threadId: created.threadId,
         prompt: `Prompt ${index}`,
       })
@@ -249,7 +300,7 @@ describe.sequential('durable Tool chat messaging and shares', () => {
         promptMessageId: sent.promptMessageId,
       })
     }
-    await expect(owner.mutation(api.chatMessages.sendMessage, {
+    await expect(owner.mutation(internal.chatMessages.sendMessage, {
       threadId: created.threadId,
       prompt: 'Prompt over limit',
     })).rejects.toThrow('rate_limited')
@@ -266,7 +317,7 @@ describe.sequential('durable Tool chat messaging and shares', () => {
     const backend = convexTestWithMarketComponents()
     const { owner } = await publishedBusinessOwner(backend, 'chat-share-owner')
     const { owner: other } = await publishedBusinessOwner(backend, 'chat-share-other')
-    const sent = await owner.mutation(api.chatMessages.sendMessage, {
+    const sent = await owner.mutation(internal.chatMessages.sendMessage, {
       prompt: 'Compare current weather Tools',
     })
     await drainExpectedUnavailableGenerations(backend)
@@ -343,7 +394,7 @@ describe.sequential('durable Tool chat messaging and shares', () => {
   it('projects settled shared messages into allowlisted text and Tool cards only', async () => {
     const backend = convexTestWithMarketComponents()
     const { owner, canonicalAccountRef } = await publishedBusinessOwner(backend, 'chat-projection-owner')
-    const created = await owner.mutation(api.chatThreads.createThread, {
+    const created = await owner.mutation(internal.chatThreads.createThread, {
       title: 'Public projection',
     })
     const toolRefs = ['a', 'b', 'c', 'd', 'e']
@@ -403,19 +454,29 @@ describe.sequential('durable Tool chat messaging and shares', () => {
                 output: {
                   type: 'json',
                   value: {
-                    kind: 'ok',
+                    kind: 'matched',
                     schemaVersion: 'registry-tools:v3',
                     query: 'current',
-                    count: toolRefs.length,
-                    items: toolRefs.map((ref, index) => ({
+                    partialResults: false,
+                    results: toolRefs.map((ref, index) => ({
                       toolRef: ref,
-                      capabilityId: `capability:tool:${index + 1}`,
                       title: `Tool ${index + 1}`,
-                      description: 'Current Tool result.',
-                      provider: { name: 'Provider', slug: 'provider' },
-                      priceLabel: 'AUD 0.00',
+                      summary: 'Current Tool result.',
+                      matchReason: 'Matches the query.',
+                      readiness: 'ready',
                       healthStatus: 'operational',
+                      entitlement: 'public',
+                      price: { kind: 'indicative', label: 'AUD 0.00' },
+                      details: {
+                        capabilityId: `capability:tool:${index + 1}`,
+                        provider: { name: 'Provider', slug: 'provider' },
+                        description: 'Current Tool result.',
+                        listingTier: 'reviewed',
+                      },
+                      next: [],
                     })),
+                    recommendation: { mode: 'fast', engine: 'test', text: 'Five matching Tools.', citations: [] },
+                    next: [],
                     pagination: { limit: 10, hasMore: false },
                     rawOutput: 'RAW_OUTPUT_SECRET',
                     metadata: { trace: 'OUTPUT_METADATA_SECRET' },
@@ -513,7 +574,7 @@ describe.sequential('durable Tool chat messaging and shares', () => {
       if (part.type !== 'tool-card') continue
       if (part.kind === 'status') expect(Array.from(part.summary).length).toBeLessThanOrEqual(240)
     }
-    expect(shared.page.every((message) => Object.keys(message).sort().join(',') === 'id,parts,role'))
+    expect(shared.page.every((message: { id: string; role: string; parts: unknown[] }) => Object.keys(message).sort().join(',') === 'id,parts,role'))
       .toBe(true)
   })
 })

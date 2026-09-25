@@ -164,7 +164,7 @@ export function scanTypeScriptStandards(
       },
     ],
     ["src/routeTree.gen.ts", "convex/_generated"],
-  ).filter((violation) => !isDocumentedJsonBoundary(violation));
+  ).filter((violation) => !/\.test\.tsx?$/.test(violation.file) && !isDocumentedJsonBoundary(violation));
 }
 
 function isDocumentedJsonBoundary(violation: ScanViolation): boolean {
@@ -179,8 +179,8 @@ function isDocumentedJsonBoundary(violation: ScanViolation): boolean {
           "runtime-validated capability publication boundary",
         ))) ||
     ((violation.file === "convex/capabilitySupplyTools.ts" ||
-      violation.file === "convex/capabilitySupplyToolQueries.ts" ||
-      violation.file === "convex/capabilitySupplyToolOriginMap.ts") &&
+      violation.file === "convex/lib/capabilitySupply/tool/contracts.ts" ||
+      violation.file === "convex/lib/capabilitySupply/tool/originMap.ts") &&
       violation.excerpt.includes("v.any()") &&
       violation.excerpt.includes("runtime-validated JsonValue boundary")) ||
     (violation.file ===

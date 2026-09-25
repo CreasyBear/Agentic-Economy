@@ -296,7 +296,7 @@ export async function runQuarantine(
 }
 
 export async function registerContract(admin: ConvexFixtureAdmin) {
-  const result = await admin.mutation(api.capabilityContractDocuments.register, {
+  const result = await admin.mutation(internal.capabilityContractDocuments.register, {
     documentJson: JSON.stringify(capabilityContractV2()),
     operationKey: 'op:contract:supply', correlationId: 'corr:contract:supply',
     reasonCode: 'source_test_registration', evidenceRefs: ['test:capability-supply'],

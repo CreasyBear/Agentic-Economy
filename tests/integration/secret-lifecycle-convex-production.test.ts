@@ -2,7 +2,7 @@ import { convexTest, type TestConvex } from 'convex-test'
 import { describe, expect, it, vi } from 'vitest'
 
 import schema from '../../convex/schema'
-import { createConvexSecretLifecyclePersistence } from '../../convex/lib/secretLifecyclePersistence'
+import { createConvexSecretLifecyclePersistence } from '../../convex/lib/secrets/lifecycle/persistence'
 import {
   InfisicalCloudSecretStore,
   ProductionSecretGenerationValidator,

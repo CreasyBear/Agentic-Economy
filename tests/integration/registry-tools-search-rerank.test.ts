@@ -40,7 +40,7 @@ describe('POST /api/v1/market-tools/search Jev re-rank', () => {
     vi.mocked(readCapabilityToolSearch).mockReset()
   })
 
-  it('returns 200 with Jev-reordered items from mocked System One answers', async () => {
+  it('returns a matched envelope with cited suitable results from System One', async () => {
     setHttpRateLimitAdmissionForTests(async () => ({ ok: true }))
     setPublicSourceTransportForTests({
       query: async () => Date.now() - 60_000,
@@ -51,7 +51,7 @@ describe('POST /api/v1/market-tools/search Jev re-rank', () => {
     vi.stubGlobal('fetch', vi.fn(async (url: string | URL) => {
       const href = url.toString()
       if (href.includes('/decisions') || href.includes('/v1/systemone')) {
-        return jevSystemOneResponse(jevAnswersForTool('operation:v1:crypto_tx_lookup', [0.05, 0.96, 0.2]))
+        return jevSystemOneResponse(jevAnswersForTool('operation:v1:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', [0.05, 0.96, 0.2]))
       }
       throw new Error(`Unexpected url: ${href}`)
     }) as unknown as typeof fetch)
@@ -63,17 +63,19 @@ describe('POST /api/v1/market-tools/search Jev re-rank', () => {
       expect(response.status).toBe(200)
       const body = await response.json() as {
         kind: string
-        items: readonly { toolRef: string }[]
+        results: readonly { toolRef: string }[]
+        recommendation: { citations: readonly { toolRef: string }[] }
       }
-      expect(body.kind).toBe('ok')
-      expect(body.items[0]?.toolRef).toBe(TOOL_CRYPTO_TX.toolRef)
+      expect(body.kind).toBe('matched')
+      expect(body.results.map(item => item.toolRef)).toEqual([TOOL_CRYPTO_TX.toolRef])
+      expect(body.recommendation.citations[0]?.toolRef).toBe(TOOL_CRYPTO_TX.toolRef)
     } finally {
       if (previousKey === undefined) delete process.env.OPENROUTER_API_KEY
       else process.env.OPENROUTER_API_KEY = previousKey
     }
   })
 
-  it('returns 200 with retriever order when Jev fails', async () => {
+  it('returns a degraded envelope with no recommendation when Jev fails', async () => {
     setHttpRateLimitAdmissionForTests(async () => ({ ok: true }))
     setPublicSourceTransportForTests({
       query: async () => Date.now() - 60_000,
@@ -94,11 +96,12 @@ describe('POST /api/v1/market-tools/search Jev re-rank', () => {
       const body = await response.json() as {
         kind: string
         query: string
-        items: readonly { toolRef: string }[]
+        results: readonly { toolRef: string }[]
       }
-      expect(body.kind).toBe('ok')
+      expect(body.kind).toBe('degraded')
       expect(body.query).toBe(TIMEZONE_QUERY)
-      expect(body.items).toHaveLength(3)
+      expect(body.results).toHaveLength(3)
+      expect(body).not.toHaveProperty('recommendation')
       expect(elapsedMs).toBeLessThan(8_000)
     } finally {
       if (previousKey === undefined) delete process.env.OPENROUTER_API_KEY
@@ -122,7 +125,7 @@ describe.runIf(liveJevEnabled)('live OpenRouter Jev re-rank (AE_LIVE_JEV=true)',
 
     expect(reranked.kind).toBe('ok')
     if (reranked.kind !== 'ok') return
-    expect(reranked.items[0]?.toolRef).toBe('operation:v1:crypto_tx_lookup')
+    expect(reranked.items[0]?.toolRef).toBe('operation:v1:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa')
     expect(reranked.ranking[0]?.rank).toBe(1)
     expect(elapsedMs).toBeLessThan(8_000)
   }, 15_000)
@@ -141,7 +144,7 @@ describe.runIf(liveJevEnabled)('live OpenRouter Jev re-rank (AE_LIVE_JEV=true)',
 
     expect(reranked.kind).toBe('ok')
     if (reranked.kind !== 'ok') return
-    expect(reranked.items[0]?.toolRef).toBe('operation:v1:timezone_converter')
+    expect(reranked.items[0]?.toolRef).toBe('operation:v1:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb')
     expect(reranked.ranking[0]?.rank).toBe(1)
     expect(elapsedMs).toBeLessThan(8_000)
   }, 15_000)

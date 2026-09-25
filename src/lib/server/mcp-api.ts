@@ -17,7 +17,6 @@ import { z } from 'zod'
 import { degrade } from '@/lib/observability/degrade'
 import { base64Codec, tryDecodeBase64Url } from '@/modules/common/base64-codec'
 import { REASON_COPY, REASON_COPY_FALLBACK } from '@/content/reason-copy'
-import { bearerChallenge, bearerModeChallenge } from '@/lib/http/oauth-challenge'
 import { buildProblem, gatewayFailureToProblem, type ProblemDetails, type ProblemKind } from '@/lib/errors'
 import { problem } from '@/lib/server/problem'
 import { package5SupplyActionRolloutDecision } from '@/lib/server/package5-rollout'
@@ -27,20 +26,17 @@ import { assertHttpAdmission, rateLimitedResponse } from '@/lib/server/rate-limi
 import { readBoundedRequestJson, readBoundedRequestText, type BoundedRequestTextResult } from '@/lib/server/bounded-request-body'
 import { ConvexSourceError } from '@/lib/server/convex-source'
 import { TOOL_READ_UNAVAILABLE_PROBLEM } from '@/modules/registry/public'
-import { toolChoiceSearchOutputSchema } from '@/modules/registry/tool-choice-contracts'
-import { nextAction as toolSearchNextAction } from '@/modules/registry/next-action'
 import {
+  authRefusalProblem,
   authenticateAgentAccess,
   resolveAgentAccessPrincipal,
   type AgentAccessPrincipalResolver,
 } from '@/lib/server/agent-access-auth'
-import { resolveCanonicalBaseUrl } from '@/lib/server/canonical-url'
 import { runWithRequestCorrelation, withRequestCorrelationHeader } from '@/lib/server/request-correlation'
 import { recordGatewayTelemetry, type GatewayTelemetryEvent } from '@/lib/server/gateway-telemetry'
 import { isRecord } from '@/modules/common/is-record'
-import { describeActionMcpMetadata, isToolMarketReadAction, listMcpActions, mcpToolName, type AnyAction } from '@/modules/actions'
+import { describeActionMcpMetadata, isToolMarketReadAction, listMcpActions, mcpToolName, mcpToolsetAdmitted, projectMcpActionNext, projectMcpJourneyProblem, type AnyAction } from '@/modules/actions'
 import {
-  agentAuthorityModeAllows,
   agentAuthorityScopeForMode,
   type AgentAccessAuthorityMode,
 } from '@/modules/agent-access/contract'
@@ -55,20 +51,16 @@ import type { FundingHandoffService } from '@/modules/money/funding-handoff.acti
 import type { ToolCatalogSearcher } from '@/modules/capability-execution/procure-engine'
 const MAX_MCP_REQUEST_BODY_BYTES = 320 * 1024
 const AE_MCP_INSTRUCTIONS = [
-  'Use Agentic Economy to acquire one bounded outside contribution when your current harness lacks a capability.',
-  'Search with `ae_registry_tools_search` and what you need.',
-  'Use `ae_registry_tools_list` to browse, `ae_registry_tools_describe` for one exact input contract, and `ae_registry_tools_compare` for up to four exact references.',
-  '`ae_tool_quote` and `ae_tool_call` are protected Tools: they appear in `tools/list` only after the agent connects. Connect through the OAuth device flow via `ae connect` (CLI), or, for MCP clients that support authorization, through the `/.well-known/oauth-protected-resource` metadata.',
-  'Call `ae_tool_quote` with the exact Tool and input. Complete its one continuation or required action, then request a fresh Quote if the input or authority changes.',
-  'Call only with the Quote returned by `ae_tool_quote`.',
-  'If Account credit is insufficient, use `ae_funding_handoff_create`, give only its Stripe checkoutUrl to the payer, persist fundingSessionId, poll `ae_funding_handoff_status`, then explicitly retry the original Tool only after ready.',
-  'If effects are uncertain, use `ae_call_status` or `ae_call_reconcile` before retrying.',
-  'Agentic Economy returns the contribution or receipt; your existing harness keeps project planning and execution.',
-  'See `/glossary.md` for the vocabulary used above, such as Tool, Quote and Call.',
+  'Search with `ae_registry_tools_search`, inspect one Tool with `ae_registry_tools_describe`, or compare exact references with `ae_registry_tools_compare`.',
+  'A connected buyer can quote, call or procure by need or exact Tool reference; use the returned next actions to recover the original Call.',
+  'Account tools show identity, balance and activity. Provider tools appear only for credentials with provider authority.',
+  'Select `/mcp?readonly=1` for discover and read-only account tools, without buying or other writes.',
+  'Operations are returned as data, not registered as individual MCP tools. See `/glossary.md` for AE vocabulary.',
 ].join(' ')
 export type McpAccessTier = Readonly<{
   tier: 'anonymous' | 'authenticated'
   authorityMode?: AgentAccessAuthorityMode
+  readOnly?: boolean
   principalId?: string
   principal?: ActionAgentAccessPrincipal
   correlationId?: string
@@ -157,27 +149,6 @@ class SafeMcpSdkServer extends Server {
   }
 }
 
-const REGISTRY_TOOLS_SEARCH_ACTION_ID = 'registry.tools.search'
-
-/**
- * Additive structured field for the search tool only: the one next step
- * (page, remember the missing job, broaden a filtered search, or stop),
- * decided by the same registry-owned rule the CLI renders into a shell
- * continuation. Never a shell string here — MCP callers are not a shell.
- */
-function toolSearchNextActionField(actionId: string, data: unknown, result: unknown): Record<string, unknown> {
-  if (actionId !== REGISTRY_TOOLS_SEARCH_ACTION_ID) return {}
-  const parsed = toolChoiceSearchOutputSchema.safeParse(result)
-  if (!parsed.success || parsed.data.kind === 'unavailable') return {}
-  return {
-    nextAction: toolSearchNextAction({
-      kind: parsed.data.kind,
-      query: parsed.data.query,
-      pagination: parsed.data.pagination,
-      hasFilters: isRecord(data) && data.filters !== undefined,
-    }),
-  }
-}
 
 type McpToolFailure = ProblemDetails
 
@@ -220,23 +191,15 @@ function safeMcpFailureDetail(kind: ProblemKind): string {
   }
 }
 
-function mcpToolError(failure: McpToolFailure): {
-  isError: true
-  content: [{ type: 'text'; text: string }]
-  structuredContent: McpToolFailure
-} {
-  return {
-    isError: true,
-    structuredContent: failure,
-    content: [{
-      type: 'text',
-      text: JSON.stringify(failure),
-    }],
-  }
+function mcpToolError(failure: McpToolFailure, origin: string) {
+  const requestId = typeof failure.correlationId === 'string' ? failure.correlationId : undefined
+  const projected = projectMcpJourneyProblem(
+    { ...failure, retryable: failure.retryable === true, ...(requestId === undefined ? {} : { requestId }) },
+    { origin, source: requestId === undefined ? 'local' : 'remote' },
+  )
+  return { ...projected, content: [...projected.content] }
 }
-
-type McpToolRefusal = Readonly<{ code: string; reason?: string; nextAction?: unknown; retryable?: boolean }>
-
+type McpToolRefusal = Readonly<{ code: string; reason?: string; retryable?: boolean }>
 /** Every result `kind` the Tool-catalogue reads (`registry.tools.*`) use to mean "did not resolve". */
 const TOOL_MARKET_READ_NEGATIVE_KINDS = new Set(['not_found', 'unavailable'])
 
@@ -247,10 +210,9 @@ const TOOL_MARKET_READ_NEGATIVE_KINDS = new Set(['not_found', 'unavailable'])
  * above). Every action that deliberately declines to proceed uses
  * `kind: 'refused'` (see `quote.ts`, `call-authority.ts`, `supply-actions.ts`,
  * `market-demand.actions.ts`, `funding-handoff.actions.ts`). The Tool-catalogue
- * reads have no separate `refused` variant; they use `not_found` /
- * `unavailable` for the same purpose. Every other kind (`no_candidates`,
- * `reconciliation_required`, `pending`, …) is a legitimate non-error outcome
- * and is returned as a normal result, unchanged.
+ * reads use `not_found` / `unavailable` instead. Search `noMatch` and
+ * `degraded`, and Call `reconciliation_required` / `pending`, are non-error
+ * outcomes returned with their validated continuations.
  */
 function mcpToolRefusal(action: AnyAction, result: unknown): McpToolRefusal | undefined {
   if (!isRecord(result) || typeof result.kind !== 'string') return undefined
@@ -260,7 +222,6 @@ function mcpToolRefusal(action: AnyAction, result: unknown): McpToolRefusal | un
   const explicitCode = typeof result.code === 'string' ? result.code : undefined
   const reasonText = typeof result.reason === 'string' ? result.reason : undefined
   const code = explicitCode ?? reasonText ?? result.kind
-  const nextAction = result.nextAction ?? result.continuation
   const retryable = typeof result.retryable === 'boolean' ? result.retryable : undefined
   return {
     code,
@@ -268,7 +229,6 @@ function mcpToolRefusal(action: AnyAction, result: unknown): McpToolRefusal | un
     // carry both a stable code and free-text detail; others only have one
     // field, already promoted to `code` above).
     ...(explicitCode !== undefined && reasonText !== undefined ? { reason: reasonText } : {}),
-    ...(nextAction === undefined ? {} : { nextAction }),
     ...(retryable === undefined ? {} : { retryable }),
   }
 }
@@ -278,16 +238,36 @@ function mcpRefusalSentence(refusal: McpToolRefusal): string {
   return REASON_COPY[refusal.code] ?? refusal.reason ?? REASON_COPY_FALLBACK
 }
 
-function mcpToolRefusalResult(refusal: McpToolRefusal): {
-  isError: true
-  content: [{ type: 'text'; text: string }]
-  structuredContent: McpToolRefusal
-} {
-  return {
-    isError: true,
-    content: [{ type: 'text', text: mcpRefusalSentence(refusal) }],
-    structuredContent: refusal,
+function mcpToolRefusalResult(action: AnyAction, result: unknown, refusal: McpToolRefusal, origin: string) {
+  const code = /^[a-z][a-z0-9_:-]{0,95}$/u.test(refusal.code) ? refusal.code : 'action_refused'
+  const kind = code === 'tool_not_found' || (isRecord(result) && result.kind === 'not_found') ? 'NOT_FOUND'
+    : code === 'capacity_exceeded' ? 'RESOURCE_EXHAUSTED'
+      : isRecord(result) && result.kind === 'unavailable' ? 'UNAVAILABLE'
+        : 'FAILED_PRECONDITION'
+  const projected = projectMcpJourneyProblem(buildProblem({
+    kind,
+    code,
+    retryable: refusal.retryable ?? (code === 'source_unavailable' || code === 'capacity_exceeded'),
+    detail: mcpRefusalSentence(refusal),
+    extras: { next: projectMcpActionNext(action.id, result, origin) },
+  }), { origin, source: 'local' })
+  return { ...projected, content: [...projected.content] }
+}
+/** One short text line for people; the complete validated payload lives only in structuredContent. */
+function mcpSuccessSummary(action: AnyAction, result: unknown): string {
+  if (!isRecord(result)) return `${action.name} completed.`
+  if (action.id === 'registry.tools.search' && result.kind === 'noMatch') return 'No suitable Tools found.'
+  const tools = action.id === 'registry.tools.search' && Array.isArray(result.results)
+    ? result.results
+    : undefined
+  if (Array.isArray(tools)) {
+    const first = tools[0]
+    const title = isRecord(first) && typeof first.title === 'string'
+      ? `; top: ${first.title.replace(/\s+/gu, ' ').slice(0, 120)}`
+      : ''
+    return `${tools.length} ${result.kind === 'degraded' ? 'potential' : 'matching'} Tools${title}.`
   }
+  return `${action.name}: ${typeof result.kind === 'string' ? result.kind : 'completed'}.`
 }
 
 function mcpGatewayEvent(
@@ -402,6 +382,22 @@ function recordMcpGatewayTelemetry(
  */
 const MCP_TOOLS_LIST_PAGE_SIZE = 50
 const EMPTY_MCP_TOOL_INPUT_SCHEMA = { type: 'object', properties: {}, additionalProperties: false } as const
+/** Success and Problem Details share `next`; both structured forms are valid MCP results. */
+const MCP_TOOL_OUTPUT_SCHEMA = z.looseObject({
+  next: z.array(z.unknown()),
+  result: z.looseObject({ kind: z.string() }).optional(),
+  type: z.string().optional(),
+  title: z.string().optional(),
+  status: z.number().optional(),
+  detail: z.string().optional(),
+  kind: z.string().optional(),
+  code: z.string().optional(),
+  retryable: z.boolean().optional(),
+})
+const MCP_TOOL_OUTPUT_JSON_SCHEMA = toJsonSchemaCompat(MCP_TOOL_OUTPUT_SCHEMA, {
+  strictUnions: true,
+  pipeStrategy: 'output',
+})
 
 function encodeMcpToolsListCursor(offset: number): string {
   return base64Codec.toBase64Url(new TextEncoder().encode(String(offset)))
@@ -435,6 +431,7 @@ function mcpToolListEntry(action: AnyAction): Record<string, unknown> {
     inputSchema: inputObjectSchema === undefined
       ? EMPTY_MCP_TOOL_INPUT_SCHEMA
       : toJsonSchemaCompat(inputObjectSchema, { strictUnions: true, pipeStrategy: 'input' }),
+    outputSchema: MCP_TOOL_OUTPUT_JSON_SCHEMA,
     annotations: {
       readOnlyHint: action.readOnly,
       destructiveHint: action.readOnly ? false : metadata.destructive,
@@ -444,30 +441,6 @@ function mcpToolListEntry(action: AnyAction): Record<string, unknown> {
   }
 }
 
-/**
- * `structuredContent`'s actual on-the-wire shape is `{ result: <action
- * output>, nextAction? }` (built in the tool handler below), not the
- * action's raw `outputSchema` directly — declaring the raw schema would fail
- * the SDK's own output validation (`validateToolOutput`) on every successful
- * call. Wrap it in that same envelope and only declare it when the SDK's
- * supported conversion path (`toJsonSchemaCompat`, the same one `tools/list`
- * already uses for input schemas; backed by `z.toJSONSchema` on zod 4) can
- * actually render it, so an unconvertible action output schema never breaks
- * tool registration — it just leaves that one tool without a declared
- * `outputSchema`, exactly as today.
- */
-function mcpToolOutputSchema(action: AnyAction): AnyObjectSchema | undefined {
-  const wrapped = z.object({ result: action.outputSchema, nextAction: z.unknown().optional() })
-  try {
-    toJsonSchemaCompat(wrapped, { strictUnions: true, pipeStrategy: 'output' })
-    return wrapped
-  } catch (cause) {
-    return degrade(cause, undefined, {
-      site: 'mcpToolOutputSchema',
-      reason: 'invalid_response',
-    })
-  }
-}
 
 function registerPaginatedToolsList(
   sdkServer: Server,
@@ -494,16 +467,14 @@ export function createAeMcpServer(
   actions: readonly AnyAction[] = listMcpActions(),
   access: McpAccessTier = { tier: 'anonymous' },
 ): McpServer {
-  const admittedActions = access.tier === 'anonymous'
-    ? actions.filter((action) => action.surfaces.includes('mcp') && action.readOnly && action.credentialAdmission === undefined)
-    : actions.filter((action) => action.surfaces.includes('mcp') && (
-      (action.credentialAdmission === undefined && action.readOnly)
-      || (action.credentialAdmission !== undefined
-        && actionCredentialAdmitted(access.principal?.scopes ?? [], action.credentialAdmission))
-      || (action.credentialAdmission === undefined
-        && access.authorityMode !== undefined
-        && agentAuthorityModeAllows(access.authorityMode, requiredModeForAction(action)))
-    ))
+  const selectedAccess = {
+    scopes: access.principal?.scopes ?? [],
+    authenticated: access.tier === 'authenticated',
+    readOnly: access.readOnly === true || new URL(request.url).searchParams.get('readonly') === '1',
+  }
+  const admittedActions = actions.filter((action) => mcpToolsetAdmitted(action, selectedAccess))
+  const admittedIds = new Set(admittedActions.map((action) => action.id))
+  const origin = new URL(request.url).origin
 
   const server = new McpServer(
     { name: 'agentic-economy', version: '1.0.0' },
@@ -512,9 +483,9 @@ export function createAeMcpServer(
   const sdkServer = new SafeMcpSdkServer()
   const serverWithSdk = server as { server: Server }
   serverWithSdk.server = sdkServer
-  for (const action of admittedActions) {
+  for (const action of actions) {
     const metadata = describeActionMcpMetadata(action)
-    const outputSchema = mcpToolOutputSchema(action)
+    const outputSchema = MCP_TOOL_OUTPUT_SCHEMA
     server.registerTool(
       mcpToolName(action),
       {
@@ -531,6 +502,13 @@ export function createAeMcpServer(
       },
       async (data: unknown) => {
         const startedAt = Date.now()
+        if (!admittedIds.has(action.id)) return mcpToolError(buildProblem({
+          kind: 'PERMISSION_DENIED',
+          code: 'mcp_toolset_required',
+          retryable: false,
+          detail: 'This action is not available in the current MCP toolset.',
+          extras: { next: [], ...(access.correlationId === undefined ? {} : { correlationId: access.correlationId }) },
+        }), origin)
         try {
           const rollout = package5SupplyActionRolloutDecision(action.id, data, access.rolloutEnvironment)
           if (!rollout.enabled) {
@@ -540,7 +518,7 @@ export function createAeMcpServer(
               retryable: false,
               detail: 'This Provider capability is not enabled for the current deployment.',
               ...(access.correlationId === undefined ? {} : { extras: { correlationId: access.correlationId } }),
-            }))
+            }), origin)
           }
           const result = await action.run({
             data,
@@ -566,21 +544,18 @@ export function createAeMcpServer(
               code: 'action_output_invalid',
               detail: 'Action returned an invalid result.',
               ...(access.correlationId === undefined ? {} : { extras: { correlationId: access.correlationId } }),
-            }))
+            }), origin)
           }
           recordMcpGatewayTelemetry(action.id, data, result, access, startedAt)
           const refusal = mcpToolRefusal(action, outputValidation.data)
-          if (refusal !== undefined) return mcpToolRefusalResult(refusal)
+          if (refusal !== undefined) return mcpToolRefusalResult(action, outputValidation.data, refusal, origin)
           return {
-            content: [{ type: 'text' as const, text: JSON.stringify(outputValidation.data) }],
-            structuredContent: {
-              result: outputValidation.data,
-              ...toolSearchNextActionField(action.id, data, outputValidation.data),
-            },
+            content: [{ type: 'text' as const, text: mcpSuccessSummary(action, outputValidation.data) }],
+            structuredContent: { result: outputValidation.data, next: projectMcpActionNext(action.id, outputValidation.data, origin) },
           }
         } catch (error) {
           recordMcpGatewayTelemetry(action.id, data, undefined, access, startedAt)
-          return mcpToolError(mcpToolFailure(action, error, access.correlationId))
+          return mcpToolError(mcpToolFailure(action, error, access.correlationId), origin)
         }
       },
     )
@@ -591,14 +566,6 @@ export function createAeMcpServer(
   return server
 }
 
-function actionCredentialAdmitted(
-  scopes: readonly string[],
-  admission: NonNullable<AnyAction['credentialAdmission']>,
-): boolean {
-  return admission.anyScopes === undefined
-    ? scopes.includes(admission.scope)
-    : admission.anyScopes.some((scope) => scopes.includes(scope))
-}
 
 type McpRequestOptions = Readonly<{
   actions?: readonly AnyAction[]
@@ -687,10 +654,11 @@ export async function handleMcpRequest(request: Request, options: McpRequestOpti
     if (protectedTarget !== undefined) {
       const protectedAction = protectedTarget.action
       const requiredMode = requiredModeForAction(protectedAction)
-      const credentialAdmission = protectedTarget.generic ? undefined : protectedAction.credentialAdmission
+      const genericAdmission = protectedTarget.generic || !isAnonymousMcpRequest(boundedRequest)
+      const credentialAdmission = genericAdmission ? undefined : protectedAction.credentialAdmission
       const requiredAnyScopes = credentialAdmission?.anyScopes ?? []
       const requiredScope = requiredAnyScopes.length > 0 ? null : credentialAdmission?.scope
-      const resolverRequiredScopes = protectedTarget.generic || requiredAnyScopes.length > 0
+      const resolverRequiredScopes = genericAdmission || requiredAnyScopes.length > 0
         ? []
         : [credentialAdmission?.scope ?? agentAuthorityScopeForMode(requiredMode)]
       const resolvePrincipal = options.resolvePrincipal
@@ -700,31 +668,21 @@ export async function handleMcpRequest(request: Request, options: McpRequestOpti
       const admitted = await authenticateAgentAccess({
         ...(options.authenticate === undefined ? {} : { authenticate: options.authenticate }),
         ...(resolvePrincipal === undefined ? {} : { resolvePrincipal }),
-        consequenceResource: protectedTarget.generic
+        consequenceResource: genericAdmission
           ? 'surface:mcp:tools-list'
           : mcpActionConsequenceResource(protectedAction),
         ...(requiredScope === undefined ? {} : { requiredScope }),
         requiredScopes: resolverRequiredScopes,
         requiredAnyScopes,
-        requiredMode,
+        requiredMode: genericAdmission ? 'read_only' : requiredMode,
       })
       if (admitted.kind === 'refused') {
-        const base = resolveCanonicalBaseUrl(request).baseUrl
-        const challenge = requiredScope !== undefined && requiredScope !== null
-          ? bearerChallenge(base, requiredScope)
-          : requiredMode === 'read_only'
-            ? bearerChallenge(base)
-            : bearerModeChallenge(base, requiredMode)
-        const failure = gatewayFailureToProblem({ kind: 'refused', code: admitted.reason, retryable: false })
-        return withRequestCorrelationHeader(problem(
-          {
-            ...failure,
-            status: admitted.status,
-            detail: admitted.reason === 'authentication_required'
-              ? 'Authentication required.'
-              : 'The provided API key does not carry the required scope.',
-          },
-          { Vary: 'Authorization', 'WWW-Authenticate': challenge },
+        return withRequestCorrelationHeader(authRefusalProblem(
+          request,
+          admitted,
+          requiredScope === null ? undefined : requiredScope,
+          requiredScope == null ? requiredMode : undefined,
+          correlationId,
         ), correlationId)
       }
       const server = createAeMcpServer(boundedRequest, actions, {

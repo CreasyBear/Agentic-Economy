@@ -1,20 +1,22 @@
 import { mockModel, type ToolCtx } from '@convex-dev/agent'
 import { generateText, type ToolSet } from 'ai'
 import { getFunctionName } from 'convex/server'
+import { z } from 'zod'
 import { convexToJson, type Value } from 'convex/values'
 import { projectToolCard } from '@/modules/chat/tool-card'
+import { chatClarifyInputSchema } from '@/modules/chat/agent-turn.contracts'
 import { describe, expect, it, vi } from 'vitest'
 
+import { CHAT_TOOL_IDS, CHAT_TOOL_NAME_MAP, type ChatToolId } from '@/modules/chat/tool-card'
+import { createChatAgent } from '../../../convex/lib/chat/tools/agent'
 import {
-  CHAT_TOOL_IDS,
-  CHAT_TOOL_NAME_MAP,
-  createChatAgent,
+  chatNoMatchSearchCount,
   MAX_CHAT_TOOL_CALLS,
   MAX_CHAT_TOOL_RESULT_BYTES,
-  type ChatToolId,
-} from '../../../convex/chatTools'
-import { api, internal } from '../../../convex/_generated/api'
-import type { InteractiveBusinessAuthorityContext } from '@/modules/business/public'
+  prepareChatToolStep,
+} from '../../../convex/lib/chat/tools/step'
+import { internal } from '../../../convex/_generated/api'
+import type { TrustedChatAuthority } from '@/modules/chat/agent-turn.contracts'
 import { serializeToolSearchResult, serializeToolDetailResult } from '@/modules/capability-supply/public'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { registryToolsSearchContract } from '@/modules/registry/tool-action-contracts'
@@ -29,23 +31,14 @@ import {
 const OPERATION_REF = `operation:v1:${'a'.repeat(64)}`
 const COMMITMENT_REF = `operation-commitment:v1:${'b'.repeat(64)}`
 const AUTHORITY = {
-  principalRef: `prn_${'1'.repeat(32)}`,
-  accountRef: `acc_${'2'.repeat(32)}`,
-  revision: {
-    binding: 1, credential: 1, principal: 1, account: 1, access: 1,
-    currentOwnership: 1, currentOwnerPrincipal: 1, compatibilityUpdatedAt: 1,
-  },
-  provenance: {
-    providerNamespace: 'clerk/user',
-    bindingRef: `eib_${'3'.repeat(32)}`,
-    credentialRef: `crd_${'4'.repeat(32)}`,
-    credentialGeneration: 1,
-    accessKind: 'ownership',
-    accessRef: `own_${'5'.repeat(32)}`,
-    currentOwnershipRef: `own_${'5'.repeat(32)}`,
-    resolvedAt: 1,
-  },
-} as unknown as InteractiveBusinessAuthorityContext
+  kind: 'agent_key',
+  turnRef: 'chat-turn:key-backed-1',
+  credentialLocator: `crd_${'4'.repeat(32)}`,
+  applicationRef: 'agent-app:market-buyer',
+  environment: 'production',
+  scopes: ['market_tools:call'],
+  grantRef: `grant_${'5'.repeat(32)}`,
+} as const satisfies TrustedChatAuthority
 
 const noCandidates = {
   kind: 'no_candidates',
@@ -76,7 +69,7 @@ function toolCtx(input: Readonly<{
   runAction?: ToolCtx['runAction']
 }> = {}): ToolCtx {
   return {
-    runQuery: input.runQuery ?? vi.fn(),
+    runQuery: input.runQuery ?? vi.fn(async () => true),
     runAction: input.runAction ?? vi.fn(),
   } as unknown as ToolCtx
 }
@@ -102,11 +95,11 @@ async function invokeTool(
 
 function nativeReadResult(functionName: string): unknown {
   switch (functionName) {
-    case 'capabilityToolCatalog:search':
+    case 'capabilityToolCatalog:searchInternal':
       return noCandidates
-    case 'capabilityToolCatalog:detail':
+    case 'capabilityToolCatalog:detailInternal':
       return notFound
-    case 'capabilityToolCatalog:compare':
+    case 'capabilityToolCatalog:compareInternal':
       return compareUnavailable
     default:
       throw new Error(`Unexpected catalogue action: ${functionName}`)
@@ -114,6 +107,28 @@ function nativeReadResult(functionName: string): unknown {
 }
 
 describe('Tool chat Agent tools', () => {
+  it('offers the clarification choices as a provider-representable three-item array', () => {
+    const schema = z.toJSONSchema(chatClarifyInputSchema, { io: 'input' })
+    expect(schema.properties?.choices).toMatchObject({
+      type: 'array',
+      items: { type: 'string' },
+      minItems: 3,
+      maxItems: 3,
+    })
+  })
+  it('uses the second search for a distinct attempt, but never erases a later match', () => {
+    const search = CHAT_TOOL_NAME_MAP.canonicalToProvider['registry.tools.search']
+    const noMatch = { toolResults: [{ toolName: search, output: { kind: 'noMatch' } }] }
+    const matched = { toolResults: [{ toolName: search, output: { kind: 'matched' } }] }
+    expect(prepareChatToolStep({ stepNumber: 0, steps: [] }).toolChoice).toBe('required')
+    expect(prepareChatToolStep({ stepNumber: 1, steps: [noMatch] })).toEqual({
+      toolChoice: 'required', activeTools: [search],
+    })
+    expect(chatNoMatchSearchCount([noMatch, noMatch])).toBe(2)
+    expect(chatNoMatchSearchCount([noMatch, matched])).toBe(0)
+    expect(prepareChatToolStep({ stepNumber: 2, steps: [noMatch, matched] }).toolChoice).toBe('auto')
+  })
+
   it('persists schema-bearing detail output losslessly and renders its completed card', async () => {
     const inputJsonSchema = {
       $schema: 'https://json-schema.org/draft/2020-12/schema',
@@ -130,9 +145,8 @@ describe('Tool chat Agent tools', () => {
       })),
     }), { toolRef: OPERATION_REF })
     expect(() => convexToJson(output as Value)).not.toThrow()
-    expect(typeof output).toBe('string')
-    const decoded = JSON.parse(output as string)
-    expect(decoded.tool.inputJsonSchema).toEqual(inputJsonSchema)
+    const decoded: unknown = typeof output === 'string' ? JSON.parse(output) : output
+    expect(decoded).toMatchObject({ tool: { inputJsonSchema } })
     expect(projectToolCard({
       type: `tool-${CHAT_TOOL_NAME_MAP.canonicalToProvider['registry.tools.describe']}`,
       state: 'output-available', output,
@@ -189,8 +203,15 @@ describe('Tool chat Agent tools', () => {
       CHAT_TOOL_NAME_MAP.canonicalToProvider['tool.quote'],
     )
   })
+  it('does not expose payable tools for a Clerk principal', () => {
+    const clerk = { kind: 'clerk' } as unknown as TrustedChatAuthority
+    const tools = createChatAgent(mockModel(), clerk).options.tools
+    expect(tools).toHaveProperty(CHAT_TOOL_NAME_MAP.canonicalToProvider['registry.tools.search'])
+    expect(tools).not.toHaveProperty(CHAT_TOOL_NAME_MAP.canonicalToProvider['tool.quote'])
+    expect(tools).not.toHaveProperty(CHAT_TOOL_NAME_MAP.canonicalToProvider['tool.call'])
+  })
 
-  it('issues a caller-bound Quote before a Call', async () => {
+  it('quotes with the trusted key turn and credential locator', async () => {
     const committed = {
       kind: 'committed' as const,
       quoteRef: COMMITMENT_REF,
@@ -200,11 +221,11 @@ describe('Tool chat Agent tools', () => {
       normalizedInput: { company: 'Acme' },
       price: { currency: 'AUD' as const, units: '1250000', exponent: 6 as const },
       account: {
-        accountRef: AUTHORITY.accountRef,
+        accountRef: `acc_${'2'.repeat(32)}`,
         available: { currency: 'AUD' as const, units: '5000000', exponent: 6 as const },
       },
       budget: {
-        principalRef: AUTHORITY.principalRef,
+        principalRef: `prn_${'1'.repeat(32)}`,
         maximumPerCall: { currency: 'AUD' as const, units: '2000000', exponent: 6 as const },
       },
       policyRefs: ['commercial-policy:sandbox:v1'],
@@ -216,31 +237,58 @@ describe('Tool chat Agent tools', () => {
         input: { quoteRef: COMMITMENT_REF, idempotencyKey: 'chat-commitment-one' },
       },
     }
-    const runAction = vi.fn(async () => committed)
+    const runQuery = vi.fn(async (_reference: Parameters<ToolCtx['runQuery']>[0], _args: unknown) => true)
+    const runAction = vi.fn(async (_reference: Parameters<ToolCtx['runAction']>[0], _args: unknown) => committed)
     const agent = createChatAgent(mockModel(), AUTHORITY)
-    const ctx = toolCtx({ runAction: runAction as ToolCtx['runAction'] })
+    const ctx = toolCtx({
+      runQuery: runQuery as ToolCtx['runQuery'],
+      runAction: runAction as ToolCtx['runAction'],
+    })
 
     await expect(invokeTool(agent, 'tool.quote', ctx, {
       toolRef: OPERATION_REF,
       input: { company: 'Acme' },
     })).resolves.toEqual(committed)
-    expect(runAction).toHaveBeenCalledWith(
-      api.capabilityQuotes.quote,
-      expect.objectContaining({
-        operationKey: canonicalDigest({
-          principalId: AUTHORITY.principalRef,
-          operationRef: OPERATION_REF,
-          input: { company: 'Acme' },
-        }),
-        correlationId: expect.stringMatching(/^chat-inspect-corr:sha256:[0-9a-f]{64}$/u),
-        toolRef: OPERATION_REF,
-        input: { company: 'Acme' },
-        principal: expect.objectContaining({
-          principalId: AUTHORITY.principalRef,
-          ownerId: AUTHORITY.accountRef,
-        }),
-      }),
-    )
+    expect(runQuery).toHaveBeenCalledTimes(1)
+    expect(getFunctionName(runQuery.mock.calls[0]![0])).toBe('chatTurns:authorizePayableTool')
+    expect(runQuery.mock.calls[0]![1]).toEqual({
+      authority: AUTHORITY,
+      toolRef: OPERATION_REF,
+    })
+    const digest = canonicalDigest({
+      turnRef: AUTHORITY.turnRef,
+      credentialId: AUTHORITY.credentialLocator,
+      operationRef: OPERATION_REF,
+      input: { company: 'Acme' },
+    })
+    expect(runAction).toHaveBeenCalledTimes(1)
+    expect(getFunctionName(runAction.mock.calls[0]![0])).toBe('chatQuote:quote')
+    expect(runAction.mock.calls[0]![1]).toEqual({
+      authority: AUTHORITY,
+      operationKey: digest,
+      correlationId: `chat-inspect-corr:${digest}`,
+      toolRef: OPERATION_REF,
+      input: { company: 'Acme' },
+    })
+    expect(runAction.mock.calls[0]![1]).not.toHaveProperty('principal')
+  })
+
+  it('refuses a canceled key turn before dispatching a Quote', async () => {
+    const runQuery = vi.fn(async (_reference: Parameters<ToolCtx['runQuery']>[0], _args: unknown) => false)
+    const runAction = vi.fn()
+    const agent = createChatAgent(mockModel(), AUTHORITY)
+    await expect(invokeTool(agent, 'tool.quote', toolCtx({
+      runQuery: runQuery as ToolCtx['runQuery'],
+      runAction: runAction as ToolCtx['runAction'],
+    }), { toolRef: OPERATION_REF, input: { company: 'Acme' } })).resolves.toEqual({
+      kind: 'chat_tool_refused',
+      toolId: 'tool.quote',
+      reason: 'turn_stopped',
+    })
+    expect(runQuery).toHaveBeenCalledTimes(1)
+    expect(getFunctionName(runQuery.mock.calls[0]![0])).toBe('chatTurns:authorizePayableTool')
+    expect(runQuery.mock.calls[0]![1]).toEqual({ authority: AUTHORITY, toolRef: OPERATION_REF })
+    expect(runAction).not.toHaveBeenCalled()
   })
 
   it('lets the AI SDK reject canonical invalid provider input before native dispatch', async () => {
@@ -267,7 +315,7 @@ describe('Tool chat Agent tools', () => {
     expect(runAction).not.toHaveBeenCalled()
   })
 
-  it('dispatches all reads through their shared Convex catalogue actions', async () => {
+  it('dispatches all reads through internal Convex catalogue actions', async () => {
     const runAction = vi.fn(async (reference) => nativeReadResult(getFunctionName(reference)))
     const agent = createChatAgent(mockModel(), AUTHORITY)
     const ctx = toolCtx({ runAction: runAction as ToolCtx['runAction'] })
@@ -278,10 +326,10 @@ describe('Tool chat Agent tools', () => {
     await invokeTool(agent, 'registry.tools.compare', ctx, { toolRefs: [OPERATION_REF] })
 
     expect(runAction.mock.calls.map(([reference]) => getFunctionName(reference))).toEqual([
-      getFunctionName(api.capabilityToolCatalog.search),
-      getFunctionName(api.capabilityToolCatalog.search),
-      getFunctionName(api.capabilityToolCatalog.detail),
-      getFunctionName(api.capabilityToolCatalog.compare),
+      getFunctionName(internal.capabilityToolCatalog.searchInternal),
+      getFunctionName(internal.capabilityToolCatalog.searchInternal),
+      getFunctionName(internal.capabilityToolCatalog.detailInternal),
+      getFunctionName(internal.capabilityToolCatalog.compareInternal),
     ])
   })
 
@@ -298,7 +346,7 @@ describe('Tool chat Agent tools', () => {
     })
     const runAction = vi.fn(async (reference, _args?: unknown) => {
       const name = getFunctionName(reference)
-      if (name === getFunctionName(api.capabilityToolCatalog.search)) {
+      if (name === getFunctionName(internal.capabilityToolCatalog.searchInternal)) {
         return serializeToolSearchResult(source)
       }
       if (name === getFunctionName(internal.capabilityToolCatalog.presentSearch)) {
@@ -315,19 +363,42 @@ describe('Tool chat Agent tools', () => {
       ctx,
       { query: ERC20_QUERY },
       [{ role: 'user', content: 'Compare two company-lookup tools' }],
-    ) as { kind: string; use?: string; items: readonly { toolRef: string }[] }
+    ) as { kind: string; results: readonly { toolRef: string }[] }
 
-    expect(result.kind).toBe('ok')
-    expect(result.use).toBe('registry.tools.compare')
-    expect(result.items[0]?.toolRef).toBe(TOOL_CRYPTO_TX.toolRef)
+    expect(result.kind).toBe('matched')
+    expect(result.results.map(({ toolRef }) => toolRef)).toEqual([TOOL_CRYPTO_TX.toolRef])
     expect(runAction.mock.calls[1]?.[1]).toMatchObject({
       query: ERC20_QUERY,
       request: 'Compare two company-lookup tools',
     })
     expect(runAction.mock.calls.map(([reference]) => getFunctionName(reference))).toEqual([
-      getFunctionName(api.capabilityToolCatalog.search),
+      getFunctionName(internal.capabilityToolCatalog.searchInternal),
       getFunctionName(internal.capabilityToolCatalog.presentSearch),
     ])
+  })
+
+  it('keeps testnet and degraded Tools out of an ordinary chat recommendation', async () => {
+    const testnet = { ...TOOL_TIMEZONE, payment: {
+      protocol: 'x402' as const, scheme: 'exact' as const, network: 'eip155:84532', asset: 'USDC', currency: 'USDC',
+    } }
+    const degraded = { ...TOOL_CURRENCY, availability: {
+      posture: 'routeable' as const, observedAt: 1, validUntil: 2, lastHealthyAt: 1,
+      reason: 'inspection_required' as const,
+    } }
+    const source = { ...misorderedSearchResult('weather'), items: [TOOL_CRYPTO_TX, testnet, degraded] }
+    const presented = serializeToolSearchResult({
+      ...source,
+      ranking: source.items.map((tool, index) => ({ toolRef: tool.toolRef, rank: index + 1, score: 0.9 })),
+    })
+    const runAction = vi.fn(async reference => getFunctionName(reference) === 'capabilityToolCatalog:searchInternal'
+      ? serializeToolSearchResult(source) : { result: presented, use: 'registry.tools.compare' })
+    const result = await invokeTool(
+      createChatAgent(mockModel()), 'registry.tools.search',
+      toolCtx({ runAction: runAction as ToolCtx['runAction'] }),
+      { query: 'weather' }, [{ role: 'user', content: 'Compare weather choices for Sydney' }],
+    ) as { kind: string; results: readonly { toolRef: string; network: string; verification: string }[] }
+    expect(result.kind).toBe('matched')
+    expect(result.results.map(item => item.toolRef)).toEqual([TOOL_CRYPTO_TX.toolRef])
   })
 
   it('rejects invalid canonical output and refuses oversized model results', async () => {
@@ -365,30 +436,35 @@ describe('Tool chat Agent tools', () => {
     })
   })
 
-  it('enforces eight total tool calls per Agent factory invocation', async () => {
+  it('deduplicates near-identical searches and caps distinct lookups at two', async () => {
     const runAction = vi.fn(async () => noCandidates)
     const agent = createChatAgent(mockModel())
     const ctx = toolCtx({ runAction: runAction as ToolCtx['runAction'] })
-
-    for (let index = 0; index < MAX_CHAT_TOOL_CALLS; index += 1) {
-      await expect(invokeTool(
-        agent,
-        'registry.tools.search',
-        ctx,
-        { query: 'weather' },
-      )).resolves.toMatchObject({ kind: 'no_candidates' })
-    }
-    await expect(invokeTool(
-      agent,
-      'registry.tools.search',
-      ctx,
-      { query: 'weather' },
-    )).resolves.toEqual({
-      kind: 'chat_tool_refused',
-      toolId: 'registry.tools.search',
-      reason: 'tool_limit',
+    expect(await invokeTool(agent, 'registry.tools.search', ctx, { query: 'Sydney weather APIs' })).toMatchObject({ kind: 'noMatch' })
+    expect(await invokeTool(agent, 'registry.tools.search', ctx, { query: 'Weather API for Sydney' })).toMatchObject({
+      kind: 'chat_tool_refused', reason: 'search_repeated',
     })
-    expect(runAction).toHaveBeenCalledTimes(MAX_CHAT_TOOL_CALLS)
+    expect(await invokeTool(agent, 'registry.tools.search', ctx, { query: 'forecast data NSW' })).toMatchObject({ kind: 'noMatch' })
+    expect(await invokeTool(agent, 'registry.tools.search', ctx, { query: 'climate history NSW' })).toMatchObject({
+      kind: 'chat_tool_refused', reason: 'search_limit',
+    })
+    expect(runAction).toHaveBeenCalledTimes(2)
+  })
+
+  it('does not crawl search pages unless the person asks for another page', async () => {
+    const runAction = vi.fn(async () => noCandidates)
+    const ctx = toolCtx({ runAction: runAction as ToolCtx['runAction'] })
+    const agent = createChatAgent(mockModel())
+    expect(await invokeTool(agent, 'registry.tools.search', ctx,
+      { query: 'weather', cursor: 'next' }, [{ role: 'user', content: 'Find weather APIs' }])).toMatchObject({
+      kind: 'chat_tool_refused', reason: 'paging_not_requested',
+    })
+    expect(runAction).not.toHaveBeenCalled()
+    expect(await invokeTool(agent, 'registry.tools.search', ctx,
+      { query: 'weather', cursor: 'next' }, [{ role: 'user', content: 'Show the next page of weather APIs' }])).toMatchObject({
+      kind: 'noMatch',
+    })
+    expect(runAction).toHaveBeenCalledTimes(1)
   })
 
   it('lets a shortlist journey reach comparison after two searches and three detail reads', async () => {
@@ -396,7 +472,7 @@ describe('Tool chat Agent tools', () => {
     const agent = createChatAgent(mockModel())
     const ctx = toolCtx({ runAction: runAction as ToolCtx['runAction'] })
     for (const query of ['OCR', 'scanned PDFs']) {
-      expect(await invokeTool(agent, 'registry.tools.search', ctx, { query })).toMatchObject({ kind: 'no_candidates' })
+      expect(await invokeTool(agent, 'registry.tools.search', ctx, { query })).toMatchObject({ kind: 'noMatch', results: [] })
     }
     for (let index = 0; index < 3; index += 1) {
       expect(await invokeTool(agent, 'registry.tools.describe', ctx, { toolRef: OPERATION_REF })).toMatchObject({ kind: 'not_found' })
@@ -404,7 +480,7 @@ describe('Tool chat Agent tools', () => {
     const result = await invokeTool(agent, 'registry.tools.compare', ctx, { toolRefs: [OPERATION_REF] })
     expect(result).toMatchObject({ kind: 'unavailable' })
     expect(runAction).toHaveBeenCalledTimes(6)
-    expect(getFunctionName(runAction.mock.calls[5]![0])).toBe('capabilityToolCatalog:compare')
+    expect(getFunctionName(runAction.mock.calls[5]![0])).toBe('capabilityToolCatalog:compareInternal')
   })
 
   it('reserves the single execute slot before parallel work awaits', async () => {
@@ -412,7 +488,7 @@ describe('Tool chat Agent tools', () => {
     const firstExecution = new Promise<unknown>((resolve) => {
       release = resolve
     })
-    const runAction = vi.fn(async () => await firstExecution)
+    const runAction = vi.fn(async (_reference: Parameters<ToolCtx['runAction']>[0], _args: unknown) => await firstExecution)
     const agent = createChatAgent(mockModel(), AUTHORITY)
     const ctx = toolCtx({ runAction: runAction as ToolCtx['runAction'] })
 
@@ -434,20 +510,20 @@ describe('Tool chat Agent tools', () => {
       kind: 'refused',
       code: 'grant_not_found',
     })
-    const commandDigest = canonicalDigest({
-      principalId: AUTHORITY.principalRef,
+    const digest = canonicalDigest({
+      turnRef: AUTHORITY.turnRef,
+      credentialId: AUTHORITY.credentialLocator,
       commitmentRef: COMMITMENT_REF,
     })
-    expect(runAction).toHaveBeenCalledWith(
-      api.capabilityCalls.call,
-      expect.objectContaining({
-        operationKey: COMMITMENT_REF,
-        correlationId: `chat-invoke-corr:${commandDigest}`,
-        idempotencyKey: `chat-invoke:${commandDigest}`,
-        quoteRef: COMMITMENT_REF,
-      }),
-    )
     expect(runAction).toHaveBeenCalledTimes(1)
+    expect(getFunctionName(runAction.mock.calls[0]![0])).toBe('chatCall:call')
+    expect(runAction.mock.calls[0]![1]).toEqual({
+      authority: AUTHORITY,
+      operationKey: COMMITMENT_REF,
+      correlationId: `chat-invoke-corr:${digest}`,
+      idempotencyKey: `chat-invoke:${digest}`,
+      quoteRef: COMMITMENT_REF,
+    })
   })
 
   it('fails composition when a canonical contract no longer declares the chat surface', () => {
@@ -539,7 +615,7 @@ describe('Tool chat Agent tools', () => {
     const agent = createChatAgent(mockModel(), AUTHORITY)
     const ctx = toolCtx({ runAction: runAction as ToolCtx['runAction'] })
     for (let index = 0; index < MAX_CHAT_TOOL_CALLS; index += 1) {
-      await invokeTool(agent, 'registry.tools.search', ctx, { query: 'weather' })
+      await invokeTool(agent, 'registry.tools.describe', ctx, { toolRef: OPERATION_REF })
     }
     for (const [toolId, input] of [
       ['registry.tools.list', {}],

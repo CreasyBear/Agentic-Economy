@@ -253,8 +253,8 @@ export function createMarketDemandService(request: Request, bodyText: string): M
         context: { caller: 'http', request },
       })
       if (current.kind === 'unavailable') return { kind: 'refused', code: 'source_unavailable' }
-      if (current.kind === 'ok') return { kind: 'refused', code: 'current_match_exists' }
-      if (current.pagination.hasMore) return { kind: 'refused', code: 'source_unavailable' }
+      if (current.kind === 'matched') return { kind: 'refused', code: 'current_match_exists' }
+      if (current.kind === 'degraded' || current.partialResults || current.pagination.hasMore) return { kind: 'refused', code: 'source_unavailable' }
       const result = await mutate<unknown>(recordMutation, {
         ...input,
         agentPrincipal: principal,
@@ -341,13 +341,14 @@ export function createMarketDemandService(request: Request, bodyText: string): M
       if (requestRecord.data.createdAt > startedAt) return { kind: 'error', code: 'source_unavailable' }
       if (startedAt >= expiresAt) return { kind: 'not_found' }
       const search = await registryToolsSearchAction.run({
-        data: registryToolsSearchAction.schema.parse({ query: requestRecord.data.query, limit: 3 }),
+        data: registryToolsSearchAction.schema.parse({ query: requestRecord.data.query, limit: 3, detail: 'full' }),
         context: { caller: 'http', request },
       })
       if (search.kind === 'unavailable') return { kind: 'error', code: 'source_unavailable' }
+      if (search.kind === 'degraded' || search.partialResults) return { kind: 'error', code: 'source_unavailable' }
       let tools: z.infer<typeof publicToolChoiceSchema>[] = []
-      if (search.kind === 'ok') {
-        const assessed = search.items.slice(0, 3)
+      if (search.kind === 'matched') {
+        const assessed = search.results.slice(0, 3)
         const currentTools = await registryToolsCompareAction.run({
           data: registryToolsCompareAction.schema.parse({ toolRefs: assessed.map(tool => tool.toolRef) }),
           context: { caller: 'http', request },
@@ -361,9 +362,11 @@ export function createMarketDemandService(request: Request, bodyText: string): M
           const current = byRef.get(prior.toolRef)
           // A changed capability invalidates the assessment; prices and health
           // can refresh independently without changing the ranked identities.
-          if (current === undefined || current.capabilityId !== prior.capabilityId
-            || current.title !== prior.title || current.description !== prior.description
-            || current.provider.name !== prior.provider.name || current.provider.slug !== prior.provider.slug) {
+          if (current === undefined || prior.details === undefined
+            || current.capabilityId !== prior.details.capabilityId
+            || current.title !== prior.title || current.description !== prior.details.description
+            || current.provider.name !== prior.details.provider.name
+            || current.provider.slug !== prior.details.provider.slug) {
             return { kind: 'error', code: 'source_unavailable' }
           }
           tools.push(current)
@@ -391,7 +394,7 @@ export function createMarketDemandService(request: Request, bodyText: string): M
         return { kind: 'error', code: 'source_unavailable' }
       }
       if (Date.now() >= expiresAt) return { kind: 'not_found' }
-      if (search.kind === 'no_candidates') {
+      if (search.kind === 'noMatch') {
         if (search.pagination.hasMore) return { kind: 'error', code: 'source_unavailable' }
         return {
           kind: 'open',
@@ -436,7 +439,7 @@ export const marketRequestCreateAction = defineAction<MarketRequestCreateInput, 
     dataClasses: ['market_demand'], spendExposure: 'none', approval: 'none',
   },
   surfaces: ['http', 'mcp', 'cli'],
-  mcp: { idempotent: true, openWorld: false, destructive: false },
+  mcp: { idempotent: true, openWorld: false, destructive: true },
   credentialAdmission: { scope: MARKET_TOOLS_CALL_SCOPE, authority: 'descriptor_classified' },
   invocationContract: {
     version: MARKET_REQUEST_ROUTE_CONTRACTS.create.contractVersion,
@@ -471,7 +474,7 @@ export const marketRequestWithdrawAction = defineAction<MarketRequestStatusInput
   readOnly: false,
   effect: { class: 'external_state_change', reversible: false, recipientKind: 'none', dataClasses: ['market_demand'], spendExposure: 'none', approval: 'none' },
   surfaces: ['http', 'mcp', 'cli'],
-  mcp: { idempotent: true, openWorld: false, destructive: true },
+  mcp: { idempotent: false, openWorld: false, destructive: true },
   credentialAdmission: { scope: MARKET_TOOLS_CALL_SCOPE, authority: 'descriptor_classified' },
   invocationContract: {
     version: MARKET_REQUEST_ROUTE_CONTRACTS.withdraw.contractVersion,

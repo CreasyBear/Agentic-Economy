@@ -1,79 +1,19 @@
-import { paginationOptsValidator, paginationResultValidator } from 'convex/server'
-import { v, type Infer } from 'convex/values'
+import { type Infer } from 'convex/values'
 
 import { mutation, query, type MutationCtx } from './_generated/server'
+import { verifyMarketAgentPrincipal } from './agentAccessPrincipals'
+import { requireSourceRead, requireSourceWrite } from './lib/security/sourceWrite/admission'
 import {
-  agentAccessPrincipalValue,
-  verifyMarketAgentPrincipal,
-} from './agentAccessPrincipals'
-import { requireSourceRead, requireSourceWrite, sourceWriteArgs } from './sourceWriteAdmission'
+  listArgsValue,
+  listResultValue,
+  readArgsValue,
+  readResultValue,
+  recordArgsValue,
+  recordResultValue,
+  withdrawResultValue,
+} from './lib/market/demandSignals/contracts'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { marketRequestRef } from '@/modules/market-demand/request-identity'
-
-const demandSignalValue = v.object({
-  requestRef: v.string(),
-  query: v.string(),
-  createdAt: v.number(),
-  updatedAt: v.number(),
-})
-
-const requestFields = {
-  agentPrincipal: agentAccessPrincipalValue,
-  operationKey: v.string(),
-  correlationId: v.string(),
-  ...sourceWriteArgs,
-} as const
-
-const recordArgsValue = v.object({
-  query: v.string(),
-  idempotencyKey: v.string(),
-  ...requestFields,
-})
-
-const recordResultValue = v.union(
-  v.object({
-    kind: v.union(v.literal('recorded'), v.literal('replayed')),
-    requestRef: v.string(),
-    query: v.string(),
-    createdAt: v.number(),
-  }),
-  v.object({
-    kind: v.literal('refused'),
-    code: v.union(
-      v.literal('unauthenticated'),
-      v.literal('invalid_request'),
-      v.literal('idempotency_conflict'),
-    ),
-  }),
-)
-
-const listArgsValue = v.object({
-  paginationOpts: paginationOptsValidator,
-  ...requestFields,
-})
-
-const listResultValue = v.union(
-  v.object({ kind: v.literal('available'), requests: paginationResultValidator(demandSignalValue) }),
-  v.object({ kind: v.literal('error'), code: v.union(v.literal('unauthenticated'), v.literal('source_unavailable')) }),
-)
-
-const readArgsValue = v.object({
-  requestRef: v.string(),
-  ...requestFields,
-})
-
-const readResultValue = v.union(
-  v.object({ kind: v.literal('found'), request: demandSignalValue }),
-  v.object({ kind: v.literal('withdrawn') }),
-  v.object({ kind: v.literal('not_found') }),
-  v.object({ kind: v.literal('error'), code: v.literal('unauthenticated') }),
-)
-
-const withdrawResultValue = v.union(
-  v.object({ kind: v.literal('withdrawn'), requestRef: v.string() }),
-  v.object({ kind: v.literal('not_found') }),
-  v.object({ kind: v.literal('error'), code: v.literal('unauthenticated') }),
-)
 
 async function admitForWrite(
   ctx: MutationCtx,

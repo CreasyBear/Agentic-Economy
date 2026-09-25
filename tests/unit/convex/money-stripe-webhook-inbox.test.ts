@@ -89,7 +89,7 @@ describe('Stripe webhook durable inbox', () => {
       .resolves.toHaveLength(0)
   })
 
-  it('keeps exhausted work visible to the deployment gate', async () => {
+  it('persists exhausted work as failed for the processing reader', async () => {
     const backend = convexTestWithWorkers({ pauseWorkpool: true })
     const command = {
       destination: 'snapshot' as const,
@@ -107,8 +107,18 @@ describe('Stripe webhook durable inbox', () => {
       result: { kind: 'failed', error: 'retry attempts exhausted' },
     })
 
-    await expect(backend.query(internal.moneyStripeWebhookInbox.readHealth, {
-      staleBefore: Date.now() + 1,
-    })).resolves.toEqual({ stalled: 0, failed: 1, reconciliationRequired: 0 })
+    const failed = await backend.run(async (ctx) => ctx.db.get(row._id))
+    expect(failed).toMatchObject({
+      state: 'failed',
+      failureCode: 'stripe_webhook_work_failed',
+    })
+    await expect(backend.query(internal.moneyStripeWebhookInbox.readForProcessing, {
+      stripeEventId: command.event.stripeEventId,
+    })).resolves.toEqual({
+      destination: command.destination,
+      event: command.event,
+      state: 'failed',
+    })
   })
+
 })

@@ -8,14 +8,14 @@ const serverMocks = vi.hoisted(() => ({
   createConvexServerFunctionAssertion: vi.fn(),
   sourceQuery: vi.fn((name: string) => ({ name })),
   sourceMutation: vi.fn((name: string) => ({ name })),
-  registerAgentAccessGrant: vi.fn(),
 }))
 
 vi.mock('@clerk/tanstack-react-start/server', () => ({
   auth: serverMocks.auth,
   clerkClient: serverMocks.clerkClient,
 }))
-vi.mock('@tanstack/react-start', () => ({
+vi.mock('@tanstack/react-start', async (importOriginal) => ({
+  ...(await importOriginal()),
   createServerFn: () => ({
     validator: () => ({ handler: (handler: unknown) => handler }),
     handler: (handler: unknown) => handler,
@@ -27,9 +27,6 @@ vi.mock('@/lib/server/convex-source', () => ({
   createConvexServerFunctionAssertion: serverMocks.createConvexServerFunctionAssertion,
   sourceQuery: serverMocks.sourceQuery,
   sourceMutation: serverMocks.sourceMutation,
-}))
-vi.mock('@/modules/agent-access/policy.functions', () => ({
-  registerAgentAccessGrant: serverMocks.registerAgentAccessGrant,
 }))
 
 import {
@@ -76,14 +73,6 @@ beforeEach(() => {
     scopes: ['market_tools:call'],
   })
   serverMocks.callSourceQuery.mockResolvedValue([])
-  serverMocks.registerAgentAccessGrant.mockResolvedValue({
-    kind: 'recorded',
-    grantRef: 'server-12345678',
-    generation: 1,
-    spendingPolicyDigest: 'sha256:policy',
-    lifecycle: 'active',
-    expiresAt: Date.now() + 60_000,
-  })
 })
 
 afterEach(() => {
@@ -160,7 +149,6 @@ describe('owner agent-access issuance policy', () => {
     })).resolves.toEqual({ kind: 'error', code: 'missing_auth', retryable: false })
 
     expect(clerkApi.create).not.toHaveBeenCalled()
-    expect(serverMocks.registerAgentAccessGrant).not.toHaveBeenCalled()
   })
 
   it('fails closed with missing auth when issuer or Clerk identity is unavailable', async () => {

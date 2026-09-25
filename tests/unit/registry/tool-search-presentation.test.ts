@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 
 import * as decisionEngine from '@/modules/decision-engine/public'
-import { presentToolSearch } from '@/modules/registry/tool-reranker'
+import { presentToolSearch, rankToolSearchForRegistry } from '@/modules/registry/tool-reranker'
 import {
   ERC20_QUERY,
   TOOL_CRYPTO_TX,
@@ -51,12 +51,25 @@ describe('Jev chat search presentation', () => {
     gateway.mockRestore()
   })
 
-  it('does not call Jev when the page cannot support a choice', async () => {
+  it('assesses a single candidate for suitability and skips an empty query', async () => {
     const gateway = vi.spyOn(decisionEngine, 'executeDecisionGateway')
     const single = { ...page, items: [TOOL_CRYPTO_TX] }
-    await expect(presentToolSearch(single, ERC20_QUERY)).resolves.toEqual({ result: single, use: null, belowMatch: [] })
+    const suitable = await presentToolSearch(single, ERC20_QUERY, {
+      openrouterApiKey: 'test-key',
+      fetchImpl: mockJevFetch({ match_0: { type: 'noul', noul: 0.9 }, use: choiceAnswer('registry.tools.compare') }),
+    })
+    expect(suitable.use).toBe('registry.tools.describe')
+    expect(suitable.result.kind === 'ok' ? suitable.result.items.map(item => item.toolRef) : []).toEqual([TOOL_CRYPTO_TX.toolRef])
+    expect(gateway).toHaveBeenCalledTimes(1)
+
+    const unsuitable = await rankToolSearchForRegistry(single, ERC20_QUERY, {
+      openrouterApiKey: 'test-key',
+      fetchImpl: mockJevFetch({ match_0: { type: 'noul', noul: 0.1 } }),
+    })
+    expect(unsuitable.verdict).toBe('noMatch')
+    expect(unsuitable.nearMisses.map(item => item.toolRef)).toEqual([TOOL_CRYPTO_TX.toolRef])
     await expect(presentToolSearch(page, '   ')).resolves.toEqual({ result: page, use: null, belowMatch: [] })
-    expect(gateway).not.toHaveBeenCalled()
+    expect(gateway).toHaveBeenCalledTimes(2)
     gateway.mockRestore()
   })
 

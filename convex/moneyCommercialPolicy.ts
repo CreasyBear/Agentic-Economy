@@ -4,8 +4,8 @@ import type { GenericDatabaseReader } from 'convex/server'
 import type { DataModel } from './_generated/dataModel'
 import { mutation, query } from './_generated/server'
 import { resolveBusinessActor } from './authz'
-import { adminCommandArgsValue, adminCommandReceiptValue } from './lib/adminConsole/validators'
-import { runAdminCommand } from './lib/adminConsole/commandEnvelope'
+import { adminCommandArgsValue, adminCommandReceiptValue } from './lib/adminConsole/commands/contracts'
+import { runAdminCommand } from './lib/adminConsole/commands/commandEnvelope'
 import {
   commercialPolicySpec,
   readCommercialPolicyGate,

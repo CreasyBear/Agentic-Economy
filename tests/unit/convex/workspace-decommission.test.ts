@@ -1,6 +1,7 @@
 import { makeFunctionReference, type UserIdentity } from 'convex/server'
 import { describe, expect, it } from 'vitest'
 
+import { internal } from '../../../convex/_generated/api'
 import { InteractiveAuthorityError } from '../../../convex/interactiveAuthority'
 import { resolveInteractiveAuthorityContext } from '../../../convex/interactiveAuthority'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
@@ -109,11 +110,7 @@ const transferWorkspaceOwnershipRef = makeFunctionReference<
   TransferWorkspaceReceipt
 >('workspaceAccounts:transferWorkspaceOwnership')
 
-const readDeletionEligibilityRef = makeFunctionReference<
-  'query',
-  Record<string, never>,
-  Readonly<{ kind: 'eligible' } | { kind: 'blocked'; reason: string }>
->('personalAccount:readDeletionEligibility')
+const readDeletionEligibilityRef = internal.personalAccount.readDeletionEligibility
 
 const identity = (overrides: Partial<UserIdentity> = {}) =>
   samIdentity(TOKEN_IDENTIFIER, { fva: freshFva, ...overrides })

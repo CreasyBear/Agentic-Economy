@@ -74,4 +74,30 @@ describe('MCP host adapter tool.call', () => {
       }),
     }))
   })
+
+  it('preserves a refused Call reference and status continuation without prose leakage', async () => {
+    const callRef = `operation-invocation:v1:${'d'.repeat(64)}`
+    const callTool = vi.fn().mockResolvedValue({
+      kind: 'refused', callRef, toolRef: currentToolRef, code: 'authority_required', retryable: false,
+    })
+    const response = await postMcp({
+      jsonrpc: '2.0', id: 'refused-call', method: 'tools/call',
+      params: { name: 'ae_tool_call', arguments: { quoteRef, idempotencyKey: 'refused-call-key' } },
+    }, {
+      authenticate: async () => ({
+        isAuthenticated: true, tokenType: 'api_key', id: 'key:test', subject: 'user_test', scopes: ['market_tools:call'],
+      }),
+      callService: { callTool, readCallStatus: vi.fn(), cancelCall: vi.fn(), reconcileCall: vi.fn() },
+    }, { authorization: 'Bearer buyer' })
+    const body = await readMcpBody(response)
+    expect(body.result).toMatchObject({
+      isError: true,
+      structuredContent: {
+        kind: 'FAILED_PRECONDITION', code: 'authority_required',
+        next: [{ action: 'status', args: { ref: { kind: 'call', ref: callRef } }, authority: 'same_principal' }],
+      },
+    })
+    expect(JSON.stringify(body.result?.content)).not.toContain(callRef)
+    expect(callTool).toHaveBeenCalledOnce()
+  })
 })

@@ -8,7 +8,7 @@ const adminFiles = findFiles([
   { root: 'convex', includeExtensions: ['.ts'] },
   { root: 'src/lib/operator/admin-console', includeExtensions: ['.ts'] },
   { root: 'src/components/ae/admin', includeExtensions: ['.ts', '.tsx'] },
-]).filter((file) => !file.startsWith('convex/') || file.startsWith('convex/lib/adminConsole/') || /^convex\/adminConsole[^/]*\.ts$/u.test(file))
+]).filter((file) => !file.endsWith('.test.ts') && (!file.startsWith('convex/') || file.startsWith('convex/lib/adminConsole/') || /^convex\/adminConsole[^/]*\.ts$/u.test(file)))
 const adminSources = adminFiles.map((file) => ({ file, source: readFileSync(file, 'utf8') }))
 
 function offenders(pattern: RegExp, files = adminSources): string[] {

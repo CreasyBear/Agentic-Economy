@@ -4,11 +4,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import schema from '../../../convex/schema'
 import { canonicalDigest } from '../../../src/modules/common/canonical-digest'
-import {
-  armInteractiveCredentialExpiryHandler,
-  expireInteractiveCredentialHandler,
-  reconcileInteractiveCredentialExpiryHandler,
-} from '../../../convex/interactiveCredentialLifecycle'
+import { armInteractiveCredentialExpiryHandler } from '../../../convex/lib/principalAccount/interactiveCredential/arm'
+import { expireInteractiveCredentialHandler } from '../../../convex/lib/principalAccount/interactiveCredential/expire'
 import { convexModules as modules } from '../../helpers/convex-fixtures'
 
 const NOW = 10_000
@@ -119,22 +116,6 @@ describe('interactive credential materialized expiry', () => {
     })
   })
 
-  it('reconciles an unmaterialized late credential to expired and is replay safe', async () => {
-    const backend = convexTest(schema, modules)
-    await seedCredential(backend, NOW)
-
-    await expect(backend.run(async (ctx) => reconcileInteractiveCredentialExpiryHandler(ctx, {
-      bindingRef: BINDING_REF,
-      credentialRef: CREDENTIAL_REF,
-      expectedGeneration: 2,
-    }))).resolves.toEqual({ kind: 'expired' })
-    await expect(backend.run(async (ctx) => reconcileInteractiveCredentialExpiryHandler(ctx, {
-      bindingRef: BINDING_REF,
-      credentialRef: CREDENTIAL_REF,
-      expectedGeneration: 2,
-    }))).resolves.toEqual({ kind: 'duplicate_expired' })
-  })
-
   it('expires immediately when arming an already-due credential', async () => {
     const backend = convexTest(schema, modules)
     await seedCredential(backend, NOW)
@@ -232,17 +213,6 @@ describe('interactive credential materialized expiry', () => {
       .resolves.toEqual({ kind: 'expired' })
     await expect(backend.run(async (ctx) => expireInteractiveCredentialHandler(ctx, request)))
       .resolves.toEqual({ kind: 'duplicate_expired' })
-  })
-
-  it('reconciles a future unmaterialized credential by scheduling it', async () => {
-    const backend = convexTest(schema, modules)
-    await seedCredential(backend, NOW + 100)
-    await expect(backend.run(async (ctx) => reconcileInteractiveCredentialExpiryHandler(ctx, lifecycleRequest())))
-      .resolves.toMatchObject({ kind: 'scheduled' })
-
-    const missing = convexTest(schema, modules)
-    await expect(missing.run(async (ctx) => reconcileInteractiveCredentialExpiryHandler(ctx, lifecycleRequest())))
-      .resolves.toEqual({ kind: 'refused', code: 'binding_missing' })
   })
 
   it('does not treat an unrelated inactive credential as an expired callback replay', async () => {

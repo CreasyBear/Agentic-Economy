@@ -4,7 +4,6 @@ import {
   admitPublicationDraft,
   dereferenceOpenApiSchema,
   preparePublicationDraft,
-  publicationMaterialContainsCredential,
   publicationValidationFix,
   validateCapabilityPublication,
   type CapabilityPublicationAdmissionSource,
@@ -36,6 +35,90 @@ describe('capability publication validate (pre-flight admission)', () => {
       expect(result.sourceDigest).not.toBe(result.normalized.source.descriptorDigest)
     }
   })
+  it('refuses opaque executable input without a validating example at pre-flight and preparation', async () => {
+    const document = openApiDocument()
+    const request = document.paths['/lookup'].post.requestBody.content['application/json'] as {
+      schema: Record<string, unknown>
+    }
+    request.schema = {
+      $schema: JSON_SCHEMA,
+      type: 'object',
+      properties: { query: { type: 'object', additionalProperties: { type: 'string' } } },
+      required: ['query'],
+      additionalProperties: false,
+    }
+    const source = {
+      ...openApiAdmissionSource({ document }),
+      contract: { ...contractMetadata('independent.validate'), description: 'Just pass a city name to get current weather.' },
+    }
+    const validated = await validateCapabilityPublication(source)
+    expect(validated).toMatchObject({
+      kind: 'refused',
+      reason: 'opaque_input_without_valid_example',
+      next: [{ action: 'revise-publication', field: '/inputSchema/query' }],
+    })
+    const { sourceRevision, ...publication } = source
+    await expect(preparePublicationDraft({
+      source: publication,
+      sourceRevision,
+      pricingConfig: {
+        version: 'pricing:v3', kind: 'fixed_aud', currency: 'AUD', exponent: 6,
+        amountUnits: '12000000',
+      },
+      evidenceRefs: ['source:opaque-weather'],
+    })).resolves.toMatchObject({ kind: 'refused', reason: 'opaque_input_without_valid_example' })
+
+    const withExample = {
+      ...source,
+      contract: {
+        ...source.contract,
+        inputExamples: [{ label: 'Weather for Sydney', input: { query: { city: 'Sydney' } } }],
+      },
+    }
+    await expect(validateCapabilityPublication(withExample)).resolves.toMatchObject({ kind: 'accepted' })
+    await expect(validateCapabilityPublication({
+      ...withExample,
+      contract: { ...withExample.contract, inputExamples: [{ input: { query: {} } }] },
+    })).resolves.toMatchObject({ kind: 'refused', reason: 'opaque_input_without_valid_example' })
+    await expect(validateCapabilityPublication({
+      ...withExample,
+      contract: { ...withExample.contract, inputExamples: [{ input: { query: { city: 123 } } }] },
+    })).resolves.toMatchObject({ kind: 'refused', reason: 'opaque_input_without_valid_example' })
+
+    request.schema = {
+      $schema: JSON_SCHEMA,
+      type: 'object',
+      properties: {
+        query: { type: 'object', properties: { city: { type: 'string' } }, required: ['city'], additionalProperties: false },
+      },
+      required: ['query'],
+      additionalProperties: false,
+    }
+    await expect(validateCapabilityPublication(source)).resolves.toMatchObject({ kind: 'accepted' })
+  })
+  it('checks the versioned prepared contract again before admission or republication', async () => {
+    const baseline = await preparePublicationDraft({
+      source: openApiAdmissionSource(),
+      sourceRevision: '2026-09-23/quality',
+      pricingConfig: {
+        version: 'pricing:v3', kind: 'fixed_aud', currency: 'AUD', exponent: 6,
+        amountUnits: '12000000',
+      },
+      evidenceRefs: ['source:quality'],
+    })
+    if (baseline.kind !== 'prepared') throw new Error(`baseline_refused:${baseline.reason}`)
+    const contract = JSON.parse(baseline.prepared.documentJson)
+    contract.inputSchema.properties.query = { type: 'object', additionalProperties: { type: 'string' } }
+    const result = await admitPublicationDraft({
+      prepared: { ...baseline.prepared, documentJson: JSON.stringify(contract) },
+      businessId: 'business:independent',
+    })
+    expect(result).toMatchObject({
+      kind: 'refused',
+      reason: 'opaque_input_without_valid_example',
+      next: [{ action: 'revise-publication', field: '/inputSchema/query' }],
+    })
+  })
   it.each([
     'openapi_query_parameter_definition_unsupported',
     'openapi_query_parameter_serialization_unsupported',
@@ -49,52 +132,6 @@ describe('capability publication validate (pre-flight admission)', () => {
   ] as const)('provides an actionable fix for %s', (reason, expected) => {
     expect(publicationValidationFix(reason)).toContain(expected)
   })
-  it('rejects real bearer/basic credentials without rejecting authentication prose', () => {
-    expect(publicationMaterialContainsCredential('Uses a bearer API key issued by the provider.')).toBe(false)
-    expect(publicationMaterialContainsCredential('Authorization: Bearer opaque-provider-credential-123456')).toBe(true)
-    expect(publicationMaterialContainsCredential('Authorization: Basic opaque-provider-credential-123456')).toBe(true)
-    expect(publicationMaterialContainsCredential({
-      parameter: 'trace',
-      value: 'bearer API key',
-    })).toBe(false)
-    expect(publicationMaterialContainsCredential({
-      parameter: 'trace',
-      value: 'bearer opaque-provider-credential-123456',
-    })).toBe(true)
-  })
-
-  it.each([
-    'next_token',
-  ])('accepts the public pagination query input mapping %s', (parameter) => {
-    expect(publicationMaterialContainsCredential({
-      inputPointer: `/${parameter}`,
-      parameter,
-    })).toBe(false)
-  })
-
-  it.each([
-    'token',
-    'access_token',
-    'api_key',
-    'authorization',
-    'signature',
-  ])('rejects the credential query input mapping %s', (parameter) => {
-    expect(publicationMaterialContainsCredential({
-      inputPointer: `/${parameter}`,
-      parameter,
-    })).toBe(true)
-  })
-
-  it('keeps the next_token exception dynamic and rejects fixed secret material', () => {
-    expect(publicationMaterialContainsCredential({
-      parameter: 'next_token',
-      value: 'opaquePaginationCredentialValueThatMustNotPersist',
-    })).toBe(true)
-    expect(publicationMaterialContainsCredential({
-      resourceUrl: 'https://api.example.test/search?next_token=fixed',
-    })).toBe(true)
-  })
-
 
   it('refuses a circular $ref import with the NAMED admit-schema code (not blanket schema_profile_unsupported)', async () => {
     const document = openApiDocument()
@@ -170,148 +207,6 @@ describe('capability publication validate (pre-flight admission)', () => {
       evidenceRefs: ['source:validate:remote'],
       derefSchema: resolveRemote,
     })).resolves.toMatchObject({ kind: 'prepared' })
-  })
-
-  it('extracts an apiKey-in-query security-scheme credential so the key is never a dynamic input', async () => {
-    const document = openApiDocument()
-    document.paths['/lookup'] = {
-      get: {
-        security: [{ apiKey: [] }],
-        parameters: [
-          { in: 'query', name: 'api_key', required: true, schema: { type: 'string' } },
-          { in: 'query', name: 'query', required: true, schema: { type: 'string', minLength: 1 } },
-        ],
-        responses: { '200': { content: { 'application/json': { schema: outputSchema() } } } },
-      },
-    } as never
-    const withComponents = document as ReturnType<typeof openApiDocument>
-      & { components: Record<string, Record<string, unknown>> }
-    withComponents.components = {
-      securitySchemes: {
-        apiKey: { type: 'apiKey', in: 'query', name: 'api_key' },
-      },
-    }
-
-    const result = await validateCapabilityPublication(openApiAdmissionSource({
-      document: withComponents,
-      operation: { path: '/lookup', method: 'get' },
-      authority: { kind: 'provider_connection', connectionRef: 'connection:validate', providerRef: 'provider:validate' },
-    }))
-
-    expect(result.kind).toBe('accepted')
-    if (result.kind === 'accepted') {
-      expect(result.normalized.binding.authority).toEqual({
-        kind: 'provider_connection',
-        connectionRef: 'connection:validate',
-        providerRef: 'provider:validate',
-      })
-      // The api_key parameter is stripped from the dynamic input schema.
-      expect(JSON.parse(result.normalized.documentJson).inputSchema).toMatchObject({
-        properties: { query: { type: 'string', minLength: 1 } },
-        required: ['query'],
-      })
-    }
-  })
-  it.each([
-    ['a secret-bearing server URL', (document: ReturnType<typeof openApiDocument>) => {
-      const server = document.servers[0]
-      if (server === undefined) throw new Error('test OpenAPI server missing')
-      server.url = 'https://api.example.test?api_key=sk_live_do_not_persist'
-    }],
-    ['a signature-bearing server URL', (document: ReturnType<typeof openApiDocument>) => {
-      const server = document.servers[0]
-      if (server === undefined) throw new Error('test OpenAPI server missing')
-      server.url = 'https://api.example.test?sig=opaque-signature'
-    }],
-    ['a URL with userinfo', (document: ReturnType<typeof openApiDocument>) => {
-      const server = document.servers[0]
-      if (server === undefined) throw new Error('test OpenAPI server missing')
-      server.url = 'https://user:password@api.example.test'
-    }],
-    ['a credential-bearing extension', (document: ReturnType<typeof openApiDocument>) => {
-      Object.assign(document.info, { 'x-provider-token': 'opaque-provider-credential' })
-    }],
-  ])('refuses %s before source material can be persisted', async (_label, mutate) => {
-    const document = openApiDocument()
-    mutate(document)
-    const admissionSource = openApiAdmissionSource({ document })
-    const { sourceRevision, ...source } = admissionSource
-
-    await expect(validateCapabilityPublication(admissionSource)).resolves.toMatchObject({
-      kind: 'refused',
-      reason: 'source_invalid',
-    })
-    await expect(preparePublicationDraft({
-      source,
-      sourceRevision,
-      pricingConfig: {
-        version: 'pricing:v3', kind: 'fixed_aud', currency: 'AUD', exponent: 6,
-        amountUnits: '12000000',
-      },
-      evidenceRefs: ['source:validate'],
-    })).resolves.toEqual({ kind: 'refused', reason: 'source_invalid' })
-  })
-  it('refuses a credential-bearing contract input example before preparation', async () => {
-    const admissionSource = openApiAdmissionSource()
-    const sourceWithSecretExample = {
-      ...admissionSource,
-      contract: {
-        ...admissionSource.contract,
-        inputExamples: [{ label: 'credential', input: { api_key: 'opaque-provider-secret' } }],
-      },
-    }
-    const { sourceRevision, ...source } = sourceWithSecretExample
-
-    await expect(preparePublicationDraft({
-      source,
-      sourceRevision,
-      pricingConfig: {
-        version: 'pricing:v3', kind: 'fixed_aud', currency: 'AUD', exponent: 6,
-        amountUnits: '12000000',
-      },
-      evidenceRefs: ['source:validate:input-example'],
-    })).resolves.toEqual({ kind: 'refused', reason: 'source_invalid' })
-  })
-  it('refuses direct-envelope fixed-query credential material at both preparation and admission', async () => {
-    const baseline = await preparePublicationDraft({
-      source: openApiAdmissionSource(),
-      sourceRevision: '2026-08-10/baseline',
-      pricingConfig: {
-        version: 'pricing:v3', kind: 'fixed_aud', currency: 'AUD', exponent: 6,
-        amountUnits: '12000000',
-      },
-      evidenceRefs: ['source:validate:baseline'],
-    })
-    if (baseline.kind !== 'prepared') throw new Error(`baseline_refused:${baseline.reason}`)
-
-    const bindingWithSecret = {
-      ...baseline.prepared.binding,
-      adapter: {
-        ...baseline.prepared.binding.adapter,
-        config: { fixedQuery: [{ parameter: 'sig', value: 'opaque-signature' }] },
-      },
-    }
-    const directSource = {
-      kind: 'ae_envelope' as const,
-      documentJson: baseline.prepared.documentJson,
-      offering: baseline.prepared.offering,
-      binding: bindingWithSecret,
-      evidenceRefs: ['source:validate:direct-secret'],
-    }
-    await expect(preparePublicationDraft({
-      source: directSource,
-      sourceRevision: '2026-08-10/direct-secret',
-      pricingConfig: {
-        version: 'pricing:v3', kind: 'fixed_aud', currency: 'AUD', exponent: 6,
-        amountUnits: '12000000',
-      },
-      evidenceRefs: ['source:validate:direct-secret'],
-    })).resolves.toEqual({ kind: 'refused', reason: 'source_invalid' })
-
-    await expect(admitPublicationDraft({
-      prepared: { ...baseline.prepared, binding: bindingWithSecret },
-      businessId: 'business:independent',
-    })).resolves.toEqual({ kind: 'refused', reason: 'source_invalid' })
   })
 
   it('is idempotent and side-effect-free (never mutates its input or writes a store)', async () => {

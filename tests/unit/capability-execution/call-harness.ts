@@ -9,7 +9,7 @@ import {
   materializeRuntimePublishedTool,
 } from '@/modules/capability-supply/public'
 import { buildDevelopmentPublishedToolEvidence } from '../../../tools/dev/fixtures/capability-supply/development-published-tool-evidence'
-import { projectOuterResult } from '../../../convex/capabilityCallWorker'
+import { projectOuterResult } from '../../../convex/lib/capabilityExecution/callProjection/outerResult'
 
 export const principal: AgentAccessPrincipal = {
   principalId: 'principal:test',

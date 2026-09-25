@@ -33,6 +33,7 @@ describe('market-terminal CLI error contracts', () => {
       'quote',
       'call',
       'history',
+      'chat',
       'status',
       'wait',
       'cancel',
@@ -67,11 +68,16 @@ describe('market-terminal CLI error contracts', () => {
       {
         id: 'call_recover',
         title: 'Call and recover',
-        commands: ['quote', 'call', 'history', 'status', 'wait', 'cancel', 'recover'],
+        commands: ['quote', 'call', 'history', 'chat', 'status', 'wait', 'cancel', 'recover'],
       },
       { id: 'supply', title: 'Supply', commands: ['supply'] },
       { id: 'reference', title: 'Reference', commands: ['manifest', 'config', 'doctor'] },
     ])
+    expect(commands.chat).toMatchObject({
+      usage: 'ae chat [prompt] [--thread-id <id> | --continue]',
+      summary: expect.stringContaining('agent-key chat turn'),
+      guidance: [expect.stringContaining('--json emits one NDJSON event per line')],
+    })
     for (const legacy of ['feeds', 'run', 'study', 'reconcile', 'action', 'business', 'demand', 'advanced']) {
       expect(commands).not.toHaveProperty(legacy)
     }

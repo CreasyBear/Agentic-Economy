@@ -1,20 +1,23 @@
-# Documentation for the next baseline
+# Documentation index
 
-[PRODUCT.md](../PRODUCT.md), [CONTEXT.md](../CONTEXT.md) and current source/tests
-remain authoritative. [IMPLEMENTATION_ROADMAP.md](../IMPLEMENTATION_ROADMAP.md)
-is the retained delivery baseline; cleanup has not approved a replacement plan.
+[PRODUCT.md](../PRODUCT.md), [CONTEXT.md](../CONTEXT.md), current source and tests define the active product. This index covers the retained `docs/` material.
 
-| Area | Retained material |
-| --- | --- |
-| Product design | [Agent operating contract](designs/agent-operating-contract.md), root [design system](../DESIGN.md), [Twenty component quality record](designs/twenty-component-gauntlet.md) |
-| Architecture | [Stable application definition](architecture/stable-application-definition.md), amending root [design system](../DESIGN.md): four-axis stability contract (source, behaviour, transitions, IA) and the lane pathway |
-| Package plans | [Package 4](designs/package-4-atomic-feature-build-plan.md), [Package 5](designs/package-5-atomic-feature-build-plan.md), [Package 6](designs/package-6-atomic-feature-build-plan.md), [Package 7 candidate](designs/package-7-trust-and-lifecycle.md) and its [pending handoff](designs/package-7-handoff.md) |
-| Release and recovery | [Deployment operations](operations/README.md), [Package 4 release evidence](guides/package-4-release-evidence.md), [Package 5 release evidence](guides/package-5-release-evidence.md), [Package 6 release guide](guides/package-6-plugin-release.md) |
-| Decisions and strategy | [Commercial topology](adr/0001-principal-reseller-commercial-topology.md), [manifesto](strategy/agentic-economy-manifesto.md), [investment thesis](strategy/investment-thesis.md) |
-| Remaining work | [Existing follow-ups and holds](../TODOS.md) |
-| Historical evidence | [Archive and recovery index](archive/README.md), [retained research summaries](../research/README.md) |
+- [glossary.md](glossary.md) — shared terminology.
+- [adr/](adr/) — architecture decision records.
+- [licenses/](licenses/) — third-party licence notices.
+- [strategy/](strategy/) — retained strategy, application material and pitch deck source.
+- [design/reference/](design/reference/) — design references.
+- [operations/convex-root-protocol.md](operations/convex-root-protocol.md) — Convex root layout protocol.
+- [operations/local-stripe-test-mode.md](operations/local-stripe-test-mode.md) — local Stripe test-mode instructions.
+- [operations/vocabulary-cutover-preflight.md](operations/vocabulary-cutover-preflight.md) — vocabulary cutover checks.
+- [operations/design-system-maturity-protocol.md](operations/design-system-maturity-protocol.md) — design-system operating protocol.
+- [reviews/2026-09-24-codebase-health/](reviews/2026-09-24-codebase-health/) — current codebase-health review.
+- [designs/2026-09-23-generative-commerce-chat-rfc.md](designs/2026-09-23-generative-commerce-chat-rfc.md) — generative-commerce chat RFC.
+- [designs/2026-09-23-platform-hostility-register.md](designs/2026-09-23-platform-hostility-register.md) — platform hostility register.
+- [designs/2026-09-23-platform-cohesion-rfc.md](designs/2026-09-23-platform-cohesion-rfc.md) — platform cohesion RFC.
+- [designs/2026-09-23-agent-experience-wave2-plan.md](designs/2026-09-23-agent-experience-wave2-plan.md) — agent-experience Wave 2 plan.
+- [designs/agent-operating-contract.md](designs/agent-operating-contract.md) — machine-facing operating contract.
+- [workflow/aecon-signals-proposal.md](workflow/aecon-signals-proposal.md) — AEcon Signals proposal.
+- [workflow/simple-user-expectations.md](workflow/simple-user-expectations.md) — user-expectation scoreboard.
 
-Completed refactor workflows, Wayfinder procedures, old review reports and
-planning snapshots have been archived. Rebaseline against current source and
-the retained release records; do not import an old task list as current work.
-The marketing work record belongs to a separate active task and remains untouched.
+Deleted documentation remains recoverable from git history and `../Agentic-Economy-docs-backup-2026-09-24.tar.gz`.

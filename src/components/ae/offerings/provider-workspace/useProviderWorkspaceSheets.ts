@@ -2,14 +2,7 @@ import { useLocation, useRouter } from '@tanstack/react-router'
 import { useServerFn } from '@tanstack/react-start'
 import { useCallback, useEffect, useState } from 'react'
 
-import {
-  readProviderWorkspaceConnectionsDetailServer,
-  readProviderWorkspaceIdentityDetailServer,
-} from '@/components/ae/offerings/provider-workspace.functions'
-import type {
-  ProviderWorkspaceConnectionsDetailResult,
-  ProviderWorkspaceIdentityDetailResult,
-} from '@/components/ae/offerings/provider-workspace.functions'
+import { readProviderWorkspaceIdentityDetailServer, type ProviderWorkspaceIdentityDetailResult } from '@/components/ae/offerings/provider-workspace.functions'
 import { focusSection } from '@/components/ae/offerings/provider-workspace-projection'
 import { renameProviderDisplayNameServer } from '@/lib/server/owner-workspace.functions'
 import { parseOwnerToolsCompatibilitySearch, parseOwnerToolsX402ConnectionSearch } from '@/lib/operator/supply-compatibility'
@@ -26,16 +19,11 @@ type UseProviderWorkspaceSheetsInput = Readonly<{
 export function useProviderWorkspaceSheets(input: UseProviderWorkspaceSheetsInput) {
   const location = useLocation()
   const router = useRouter()
-  const readConnectionsDetail = useServerFn(readProviderWorkspaceConnectionsDetailServer)
   const readIdentityDetail = useServerFn(readProviderWorkspaceIdentityDetailServer)
   const readEarnings = useServerFn(readOwnerProviderEarningsServer)
   const readConnect = useServerFn(readOwnerConnectReadinessServer)
   const renameProvider = useServerFn(renameProviderDisplayNameServer)
 
-  const [connectionsOpen, setConnectionsOpen] = useState(false)
-  const [connectionsPending, setConnectionsPending] = useState(false)
-  const [connectionsDetail, setConnectionsDetail] = useState<ProviderWorkspaceConnectionsDetailResult>()
-  const [connectionTargetMissing, setConnectionTargetMissing] = useState(false)
   const [identityOpen, setIdentityOpen] = useState(false)
   const [identityPending, setIdentityPending] = useState(false)
   const [identityDetail, setIdentityDetail] = useState<ProviderWorkspaceIdentityDetailResult>()
@@ -47,31 +35,9 @@ export function useProviderWorkspaceSheets(input: UseProviderWorkspaceSheetsInpu
   const compatibilitySearch = location.search as Record<string, unknown>
   const validatedCompatibilitySearch = parseOwnerToolsCompatibilitySearch(compatibilitySearch)
   const x402Handoff = parseOwnerToolsX402ConnectionSearch(compatibilitySearch)
-  const hasX402Handoff = x402Handoff !== undefined
   const compatibilityConnect = validatedCompatibilitySearch.connect
+  const compatibilityRebind = validatedCompatibilitySearch.rebind
   const compatibilityCursor = validatedCompatibilitySearch.cursor
-
-  const loadConnections = useCallback(() => {
-    if (!input.enabled || connectionsPending) return
-    setConnectionsPending(true)
-    void readConnectionsDetail()
-      .then(setConnectionsDetail)
-      .catch((cause) => {
-        captureClientExceptionOnClient(cause)
-        setConnectionsDetail({ kind: 'unavailable' })
-      })
-      .finally(() => setConnectionsPending(false))
-  }, [connectionsPending, input.enabled, readConnectionsDetail])
-
-  const openConnections = useCallback(() => {
-    if (!input.enabled) return
-    setConnectionsOpen(true)
-    if (connectionsDetail === undefined) loadConnections()
-  }, [connectionsDetail, input.enabled, loadConnections])
-
-  const closeConnections = useCallback(() => {
-    setConnectionsOpen(false)
-  }, [])
 
   const loadEarnings = useCallback(() => {
     if (!input.enabled || earningsPending) return
@@ -120,25 +86,9 @@ export function useProviderWorkspaceSheets(input: UseProviderWorkspaceSheetsInpu
 
   useEffect(() => {
     if (!input.enabled) return
-    if (location.hash.startsWith('provider-connection-')) openConnections()
-    if (hasX402Handoff) openConnections()
     if (location.hash === 'earnings' || compatibilityConnect === 'return' || compatibilityConnect === 'refresh') openEarnings()
     if (location.hash === 'provider-identity') openIdentity()
-  }, [compatibilityConnect, hasX402Handoff, input.enabled, location.hash, openConnections, openEarnings, openIdentity])
-
-  useEffect(() => {
-    if (!input.enabled) return
-    if (!connectionsOpen || connectionsDetail?.kind !== 'available' || !location.hash.startsWith('provider-connection-')) return
-    const target = document.getElementById(location.hash)
-    if (target !== null) {
-      target.setAttribute('tabindex', '-1')
-      target.focus()
-      setConnectionTargetMissing(false)
-      return
-    }
-    setConnectionTargetMissing(true)
-    focusSection('provider-connections')
-  }, [connectionsDetail, connectionsOpen, input.enabled, location.hash])
+  }, [compatibilityConnect, input.enabled, location.hash, openEarnings, openIdentity])
 
   useEffect(() => {
     if (!input.enabled) return
@@ -155,21 +105,15 @@ export function useProviderWorkspaceSheets(input: UseProviderWorkspaceSheetsInpu
     connectPayoutsReady,
     compatibilityConnect,
     compatibilityCursor,
+    compatibilityRebind,
     x402Handoff,
     readConnect,
-    connectionsOpen,
-    connectionsPending,
-    connectionsDetail,
-    connectionTargetMissing,
     identityOpen,
     identityPending,
     identityDetail,
     earningsOpen,
     earningsPending,
     earningsDetail,
-    openConnections,
-    closeConnections,
-    loadConnections,
     openEarnings,
     closeEarnings,
     loadEarnings,

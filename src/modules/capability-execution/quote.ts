@@ -53,6 +53,7 @@ const toolQuoteRefusalCodeValues = [
   'commercial_policy_unavailable',
   'inspection_unavailable',
 ] as const
+export const toolQuoteRefusalCodeSchema = z.enum(toolQuoteRefusalCodeValues)
 export type ToolQuoteRefusalCode = (typeof toolQuoteRefusalCodeValues)[number]
 
 const quoteContinuationSchema = z.discriminatedUnion('action', [
@@ -139,7 +140,7 @@ export const toolQuoteResultSchema = z.union([
   z.strictObject({
     kind: z.literal('refused'),
     toolRef: z.string(),
-    code: z.enum(toolQuoteRefusalCodeValues),
+    code: toolQuoteRefusalCodeSchema,
     // `commercial_policy_unavailable` forwards a `CommercialPolicyRefusalReason`
     // verbatim; other codes carry free-text operator detail.
     reason: z.string().min(1).optional(),

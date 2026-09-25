@@ -1,5 +1,5 @@
-import { AGENT_ACCESS_OAUTH_AUTHORIZATION_SCOPES, bearerChallenge, oauthProtectedResourceMetadata } from '@/lib/http/oauth-challenge'
-import { problem } from '@/lib/server/problem'
+import { AGENT_ACCESS_OAUTH_AUTHORIZATION_SCOPES, oauthProtectedResourceMetadata } from '@/lib/http/oauth-challenge'
+import { authRefusalProblem } from '@/lib/server/agent-access-auth'
 import { resolveCanonicalBaseUrl } from '@/lib/server/canonical-url'
 import { trimTrailingSlashes } from '@/modules/common/trim-trailing-slashes'
 import { isRecord } from '@/modules/common/is-record'
@@ -128,7 +128,7 @@ export async function handleOAuthRegisterPost(request: Request, options: OAuthAp
   if (payload.kind !== 'ok') return oauthError('invalid_request', 400)
   const value = payload.value
   if (value === null || typeof value !== 'object') return oauthError('invalid_request', 400)
-  if (Array.isArray(value)) return oauthError('invalid_client', 400)
+  if (Array.isArray(value)) return oauthError('invalid_client_metadata', 400, {}, 'Client metadata must be an object.')
   if (!isRecord(value)) return oauthError('invalid_request', 400)
   const limited = await oauthAdmissionResponse(request, options, 'registration')
   if (limited !== undefined) return limited
@@ -142,12 +142,20 @@ export async function handleOAuthRegisterPost(request: Request, options: OAuthAp
     ? responseTypes.length === AGENT_ACCESS_OAUTH_RESPONSE_TYPES.length && responseTypes[0] === AGENT_ACCESS_OAUTH_RESPONSE_TYPES[0]
     : responseTypes.length === 0
   const authMethod = value.token_endpoint_auth_method
-  if (clientName.length < 1 || clientName.length > 120 || redirectUris.length === 0 || redirectUris.some((uri) => !validRedirectUri(uri))
-    || !responseTypesValid
-    || (refreshRequested && !authorizationCodeRequested)
+  if (redirectUris.length === 0 || redirectUris.some((uri) => !validRedirectUri(uri))) {
+    return oauthError('invalid_redirect_uri', 400, {}, 'redirect_uris must contain at least one valid redirect URI.')
+  }
+  if (clientName.length < 1 || clientName.length > 120) {
+    return oauthError('invalid_client_metadata', 400, {}, 'client_name must be between 1 and 120 characters.')
+  }
+  if (!responseTypesValid) return oauthError('invalid_client_metadata', 400, {}, 'response_types must match the requested grant_types.')
+  if (refreshRequested && !authorizationCodeRequested
     || grantTypes.some((grant) => grant !== AUTHORIZATION_CODE_GRANT_TYPE && grant !== DEVICE_GRANT_TYPE && grant !== 'refresh_token')
-    || grantTypes.length === 0 || authMethod !== PUBLIC_CLIENT_AUTH_METHOD) {
-    return oauthError('invalid_client', 400)
+    || grantTypes.length === 0) {
+    return oauthError('invalid_client_metadata', 400, {}, 'grant_types must contain a supported grant type.')
+  }
+  if (authMethod !== PUBLIC_CLIENT_AUTH_METHOD) {
+    return oauthError('invalid_client_metadata', 400, {}, 'token_endpoint_auth_method must be none.')
   }
   const requestedScopes = normalizeRequestedScopes(typeof value.scope === 'string'
     ? value.scope
@@ -261,9 +269,5 @@ export function oauthAuthorizationServerResponse(request: Request, canonicalBase
 }
 
 export function oauthChallengeResponse(request: Request, requiredScope?: string): Response {
-  const base = resolveCanonicalBaseUrl(request).baseUrl
-  return problem(
-    { status: 401, kind: 'UNAUTHENTICATED', code: 'authentication_required', detail: 'Authentication required.' },
-    { 'WWW-Authenticate': bearerChallenge(base, requiredScope), 'Vary': 'Authorization' },
-  )
+  return authRefusalProblem(request, { kind: 'refused', status: 401, reason: 'authentication_required' }, requiredScope)
 }

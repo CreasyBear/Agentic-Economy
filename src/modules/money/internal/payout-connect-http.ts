@@ -22,21 +22,19 @@ import {
 import { createRuntimeId } from '@/modules/common/runtime-id'
 import { sourceWriteRequestFromAdmission } from '@/modules/security/source-write-admission'
 import { isMoneyRefusal, type MoneyRefusal } from './money-types'
+import type { ConnectAccountView, ConnectAccountCommandView, ConnectAccountOutcome } from './connect-contracts'
 import type { PayoutStatusView } from './money-query-views'
 import type { StripeMoneyClient, StripeMoneyMode, StripeMoneyProviderConfig } from '@/lib/server/stripe-money-provider'
 import type {
   StripeAccountUpdatedWebhookEvent,
   StripeWebhookApplication,
 } from './stripe-webhook'
+import { connectWebhookCommand, connectWebhookAppliedStatus } from './connect-webhook-command'
 import {
   ownerBusiness,
   ownerBusinessQuery,
   ownerCurrency,
-  optionalProperty,
   payoutProvider,
-  readOptionalBoolean,
-  readOptionalNumber,
-  readOptionalString,
   sourceWriteOrRefusal,
   type Environment,
   type OwnerMoneyServerRuntime,
@@ -45,24 +43,6 @@ import {
 
 type OwnerMoneyActionRefusal = MoneyRefusal
 
-type ConnectAccountCommandView = Readonly<{
-  commandRef: string
-  businessId: string
-  currency: string
-  exponent: number
-  idempotencyKey: string
-  inputDigest: string
-  providerRequestDigest: string
-  providerRecoveryDeadlineAt: number
-  recoveryLeaseGeneration: number
-  recoveryLeaseOwner?: string
-  recoveryLeaseExpiresAt?: number
-  state: 'pending' | 'succeeded' | 'failed' | 'outcome_unknown'
-  stripeAccountId?: string
-  providerEvidenceRef?: string
-  failureCode?: string
-  failureRetryable?: boolean
-}>
 type ConnectAccountReservationResult =
   | Readonly<{
       kind: 'accepted'
@@ -70,17 +50,6 @@ type ConnectAccountReservationResult =
       execute: boolean
     }>
   | MoneyRefusal
-type ConnectAccountOutcome =
-  | Readonly<{
-      state: 'succeeded'
-      stripeAccountId: string
-      providerEvidenceRef: string
-    }>
-  | Readonly<{
-      state: 'failed' | 'outcome_unknown'
-      failureCode: string
-      failureRetryable: boolean
-    }>
 type ReserveConnectAccountArgs = Readonly<{
   businessId: string
   currency: string
@@ -122,24 +91,6 @@ type AuthorizeConnectOnboardingArgs = Readonly<{
   correlationId: string
 }> & SourceWriteBoundArgs
 
-type ConnectBindingView = Readonly<{
-  businessId: string
-  currency: string
-  exponent: number
-  stripeAccountId: string
-  state:
-    'not_started' | 'onboarding_started' | 'submitted' | 'restricted' | 'ready'
-  detailsSubmitted: boolean
-  recipientCapabilityActive: boolean
-  requirementsDigest?: string
-  providerObjectDigest?: string
-  providerObjectVersion?: number
-  lastStripeEventId?: string
-  lastStripePayloadDigest?: string
-  version?: number
-  createdAt?: number
-  updatedAt?: number
-}>
 type StripePayoutBindingView = Readonly<{
   businessId: string
   currency: string
@@ -149,20 +100,20 @@ type StripePayoutBindingView = Readonly<{
   version?: number
 }>
 
-export type OwnerConnectReadinessReadback = Readonly<
-  | { kind: 'error'; code: 'unauthenticated' | 'source_unavailable' }
-  | { kind: 'not_found' }
-  | {
+export type OwnerConnectReadinessReadback =
+  | MoneyRefusal
+  | Readonly<{ kind: 'error'; code: 'unauthenticated' | 'source_unavailable' }>
+  | Readonly<{ kind: 'not_found' }>
+  | Readonly<{
       kind: 'available'
       businessId: string
       accounts: readonly Readonly<{
         currency: string
-        account: ConnectBindingView
+        account: ConnectAccountView
         payout: PayoutStatusView
       }>[]
       accountsTruncated: boolean
-    }
->
+    }>
 
 export type OwnerConnectAccountResult =
   | Readonly<{
@@ -218,7 +169,7 @@ export const readPayoutAccountByStripeIdQuery = sourceQuery<
 >('moneyLedger:readPayoutAccountByStripeId')
 export const readOwnerPayoutAccountQuery = sourceQuery<
   { businessId: string; currency: string },
-  ConnectBindingView | null
+  ConnectAccountView | null
 >('moneyLedger:readOwnerPayoutAccount')
 const reserveConnectAccountMutation = sourceMutation<
   ReserveConnectAccountArgs,
@@ -230,12 +181,12 @@ const finalizeConnectAccountMutation = sourceMutation<
 >('moneyLedger:finalizeConnectAccount')
 const authorizeConnectOnboardingMutation = sourceMutation<
   AuthorizeConnectOnboardingArgs,
-  Readonly<{ kind: 'accepted'; account: ConnectBindingView } | OwnerMoneyActionRefusal>
+  Readonly<{ kind: 'accepted'; account: ConnectAccountView } | OwnerMoneyActionRefusal>
 >('moneyLedger:authorizeConnectOnboarding')
 const recordConnectAccountEventMutation = sourceMutation<
   Record<string, unknown>,
   Readonly<
-    { kind: 'accepted'; account: ConnectBindingView } | OwnerMoneyActionRefusal
+    { kind: 'accepted'; account: ConnectAccountView } | OwnerMoneyActionRefusal
   >
 >('moneyLedger:recordConnectAccountEvent')
 
@@ -548,22 +499,14 @@ export async function createOwnerExpressLoginLinkThroughSource(
   if (currency === undefined) {
     return { kind: 'refused', code: 'payout_not_ready', retryable: false }
   }
-  const storedBinding = await callSourceQuery(readOwnerPayoutAccountQuery, {
+  const binding = await callSourceQuery(readOwnerPayoutAccountQuery, {
     businessId: input.businessId,
     currency: input.currency,
   })
-  const binding =
-    storedBinding ??
-    accountFromPayout(
-      input.businessId,
-      input.currency,
-      currency.earnings.providerNet.exponent,
-      currency.payout,
-    )
-  const stripeAccountId = binding.stripeAccountId
-  if (!stripeAccountId || binding.state !== 'ready') {
+  if (binding === null || !binding.stripeAccountId || binding.state !== 'ready') {
     return { kind: 'refused', code: 'payout_not_ready', retryable: false }
   }
+  const stripeAccountId = binding.stripeAccountId
   const providerResult = payoutProvider(runtime)
   if (isMoneyRefusal(providerResult)) return providerResult
   if (!providerResult.provider.createExpressLoginLink) {
@@ -648,28 +591,22 @@ export async function readOwnerConnectReadinessThroughSource(): Promise<OwnerCon
     if (result.kind === 'error' || result.kind === 'not_found') return result
     const accounts = await Promise.all(
       result.accounts.map(async (item) => {
-        const binding = await callSourceQuery(readOwnerPayoutAccountQuery, {
+        const account = await callSourceQuery(readOwnerPayoutAccountQuery, {
           businessId: result.businessId,
           currency: item.currency,
         })
-        return {
-          currency: item.currency,
-          account:
-            binding ??
-            accountFromPayout(
-              result.businessId,
-              item.currency,
-              item.earnings.providerNet.exponent,
-              item.payout,
-            ),
-          payout: item.payout,
-        }
+        return account === null
+          ? null
+          : { currency: item.currency, account, payout: item.payout }
       }),
     )
+    const boundAccounts = accounts.filter((account) => account !== null)
+    if (boundAccounts.length === 0)
+      return { kind: 'refused', code: 'payout_not_ready', retryable: false }
     return {
       kind: 'available',
       businessId: result.businessId,
-      accounts,
+      accounts: boundAccounts,
       accountsTruncated: result.accounts.length >= 10,
     }
   } catch (cause) {
@@ -729,24 +666,7 @@ export async function applyVerifiedConnectAccountEvent(
   const operationKey = 'moneyLedger:recordConnectAccountEvent'
   const correlationId = input.event.stripeEventId
   const command = {
-    businessId: binding.businessId,
-    currency: binding.currency,
-    exponent: binding.exponent,
-    event: input.event,
-    readback: {
-      detailsSubmitted: evidence.detailsSubmitted,
-      recipientCapabilityActive: evidence.recipientCapabilityActive,
-      restricted: evidence.restricted,
-      requirementsDigest: evidence.requirementsDigest,
-      providerObjectDigest: evidence.providerObjectDigest,
-      ...(evidence.providerObjectVersion === undefined
-        ? {}
-        : { providerObjectVersion: evidence.providerObjectVersion }),
-      observedAt: evidence.observedAt,
-    },
-    ...(binding.version === undefined
-      ? {}
-      : { expectedVersion: binding.version }),
+    ...connectWebhookCommand(binding, input.event, evidence),
     operationKey,
     correlationId,
   }
@@ -767,53 +687,8 @@ export async function applyVerifiedConnectAccountEvent(
   if (isMoneyRefusal(result)) return result
   return {
     kind: 'accepted',
-    status:
-      result.kind === 'accepted' &&
-      binding.lastStripeEventId === input.event.stripeEventId
-        ? 'replayed'
-        : 'applied',
+    status: connectWebhookAppliedStatus(binding, input.event),
     appliedRef: `stripe:account:${input.event.stripeAccountId}`,
   }
 }
 
-function accountFromPayout(
-  businessId: string,
-  currency: string,
-  exponent: number,
-  payout: PayoutStatusView,
-): ConnectBindingView {
-  return {
-    businessId,
-    currency,
-    exponent,
-    stripeAccountId: readOptionalString(payout, 'stripeAccountId') ?? '',
-    state:
-      payout.accountState === 'missing' ? 'not_started' : payout.accountState,
-    detailsSubmitted: readOptionalBoolean(payout, 'detailsSubmitted') ?? false,
-    recipientCapabilityActive:
-      readOptionalBoolean(payout, 'recipientCapabilityActive') ?? false,
-    ...optionalProperty(
-      'requirementsDigest',
-      readOptionalString(payout, 'requirementsDigest'),
-    ),
-    ...optionalProperty(
-      'providerObjectDigest',
-      readOptionalString(payout, 'providerObjectDigest'),
-    ),
-    ...optionalProperty(
-      'providerObjectVersion',
-      readOptionalNumber(payout, 'providerObjectVersion'),
-    ),
-    ...optionalProperty(
-      'lastStripeEventId',
-      readOptionalString(payout, 'lastStripeEventId'),
-    ),
-    ...optionalProperty(
-      'lastStripePayloadDigest',
-      readOptionalString(payout, 'lastStripePayloadDigest'),
-    ),
-    ...optionalProperty('version', readOptionalNumber(payout, 'version')),
-    ...optionalProperty('createdAt', readOptionalNumber(payout, 'createdAt')),
-    ...optionalProperty('updatedAt', readOptionalNumber(payout, 'updatedAt')),
-  }
-}

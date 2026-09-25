@@ -1,9 +1,10 @@
 import { v } from 'convex/values'
 import { internal } from './_generated/api'
 import { internalAction, internalMutation, internalQuery } from './_generated/server'
-import { activeDirectoryGeneration, directoryGeneration, storedDirectoryEntry } from './lib/x402DirectoryIndex/rows'
-import { ANALYTICS_VERSION, searchAnalytics, writeAnalytics } from './lib/x402DirectoryIndex/analytics'
-import { parseWorkloadCronSnapshot, reconcileWorkloadCronSnapshot, workloadCronSnapshotValue } from './workloadCron'
+import { activeDirectoryGeneration, directoryGeneration, storedDirectoryEntry } from './lib/market/directoryIndex/rows'
+import { ANALYTICS_VERSION, searchAnalytics, writeAnalytics } from './lib/market/directoryIndex/analytics'
+import { parseWorkloadCronSnapshot, workloadCronSnapshotValue } from './lib/platform/workloadCron/context'
+import { reconcileWorkloadCronSnapshot } from './lib/platform/workloadCron/admission'
 
 /**
  * Rebuild only derived search/aggregate data from retained observations, and
@@ -13,8 +14,7 @@ import { parseWorkloadCronSnapshot, reconcileWorkloadCronSnapshot, workloadCronS
  * Lane B dropped this batch's other job - comparing against the "previous
  * generation" to compute momentum - because there is no previous generation
  * anymore (one live generation, updated in place); momentumOrder/momentumBand
- * are simply no longer written (see x402DirectoryIndex.test.ts and
- * lib/x402DirectoryIndex/rows.ts).
+ * are simply no longer written (see lib/market/directoryIndex/rows.ts).
  */
 export const batch = internalMutation({
   args: { generation: v.string(), workload: workloadCronSnapshotValue },

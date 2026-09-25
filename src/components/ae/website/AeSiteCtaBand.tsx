@@ -21,7 +21,7 @@ export function AeSiteCtaBand({ title, description, primary, secondary }: AeSite
       <div className="mx-auto max-w-7xl px-6">
         <div className="flex items-center justify-center gap-6 max-lg:flex-col max-lg:text-center lg:items-end lg:justify-between">
           <div className="max-w-2xl">
-            <AeSiteHeading as="h2" size="md" id="about-cta">
+            <AeSiteHeading as="h2" size="md" id="about-cta" enter>
               {title}
             </AeSiteHeading>
             <p className="mt-4 max-w-xl leading-relaxed text-muted-foreground">{description}</p>

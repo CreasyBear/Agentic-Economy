@@ -122,7 +122,7 @@ describe('native x402 directory browsing', () => {
   it('projects named inputs, output, network and directory activity only from declared facts', async () => {
     sdk.list.mockResolvedValue({ items: [{
       resource: 'https://api.example.com/weather', type: 'http', description: 'Retrieve up-to-date weather data.',
-      accepts: [{ network: 'eip155:8453', scheme: 'exact', amount: '3000', asset: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913' }],
+      accepts: [{ network: 'eip155:8453', scheme: 'exact', amount: '3000', asset: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913', payTo: '0x1111111111111111111111111111111111111111' }],
       lastUpdated: '2026-09-08T06:00:00.000Z', tags: ['weather'],
       quality: { l30DaysTotalCalls: 12, l30DaysUniquePayers: 4 },
       extensions: { bazaar: {
@@ -137,7 +137,7 @@ describe('native x402 directory browsing', () => {
     expect(page.kind === 'ok' && page.items[0]).toMatchObject({
       title: 'Retrieve up-to-date weather data.', provider: 'api.example.com', methodLabel: 'HTTP GET',
       schemaSummary: 'Inputs: city (required), unit', outputSummary: 'A forecast with hourly temperatures.',
-      prices: [{ network: 'eip155:8453', networkLabel: 'Base', amount: '0.003000 USDC' }],
+      prices: [{ network: 'eip155:8453', networkLabel: 'Base', amount: '0.003000 USDC', payTo: '0x1111111111111111111111111111111111111111' }],
       activity: { calls30d: 12, payers30d: 4 },
       provenance: { directory: 'Coinbase Bazaar', metadata: 'provider_declared', updatedAt: '2026-09-08T06:00:00.000Z' },
     })

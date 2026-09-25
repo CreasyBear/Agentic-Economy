@@ -1,0 +1,70 @@
+import { paginationOptsValidator, paginationResultValidator } from 'convex/server'
+import { v } from 'convex/values'
+
+import { agentAccessPrincipalValue } from '../../../agentAccessPrincipals'
+import { sourceWriteArgs } from '../../security/sourceWrite/contracts'
+
+const demandSignalValue = v.object({
+  requestRef: v.string(),
+  query: v.string(),
+  createdAt: v.number(),
+  updatedAt: v.number(),
+})
+
+const requestFields = {
+  agentPrincipal: agentAccessPrincipalValue,
+  operationKey: v.string(),
+  correlationId: v.string(),
+  ...sourceWriteArgs,
+} as const
+
+export const recordArgsValue = v.object({
+  query: v.string(),
+  idempotencyKey: v.string(),
+  ...requestFields,
+})
+
+export const recordResultValue = v.union(
+  v.object({
+    kind: v.union(v.literal('recorded'), v.literal('replayed')),
+    requestRef: v.string(),
+    query: v.string(),
+    createdAt: v.number(),
+  }),
+  v.object({
+    kind: v.literal('refused'),
+    code: v.union(
+      v.literal('unauthenticated'),
+      v.literal('invalid_request'),
+      v.literal('idempotency_conflict'),
+    ),
+  }),
+)
+
+export const listArgsValue = v.object({
+  paginationOpts: paginationOptsValidator,
+  ...requestFields,
+})
+
+export const listResultValue = v.union(
+  v.object({ kind: v.literal('available'), requests: paginationResultValidator(demandSignalValue) }),
+  v.object({ kind: v.literal('error'), code: v.union(v.literal('unauthenticated'), v.literal('source_unavailable')) }),
+)
+
+export const readArgsValue = v.object({
+  requestRef: v.string(),
+  ...requestFields,
+})
+
+export const readResultValue = v.union(
+  v.object({ kind: v.literal('found'), request: demandSignalValue }),
+  v.object({ kind: v.literal('withdrawn') }),
+  v.object({ kind: v.literal('not_found') }),
+  v.object({ kind: v.literal('error'), code: v.literal('unauthenticated') }),
+)
+
+export const withdrawResultValue = v.union(
+  v.object({ kind: v.literal('withdrawn'), requestRef: v.string() }),
+  v.object({ kind: v.literal('not_found') }),
+  v.object({ kind: v.literal('error'), code: v.literal('unauthenticated') }),
+)

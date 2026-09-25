@@ -259,36 +259,7 @@ export type OwnerSupplyMaintenanceSourceInput = OwnerSupplyMaintenanceCommand &
       secondFactorAgeMinutes: number;
     }>;
   }>;
-export type OwnerSupplyCommandResult = Readonly<
-  | {
-      kind: "withdrawn";
-      publicationRef: string;
-      revision: number;
-      lifecycle: Readonly<{ state: "withdrawn"; reasons: readonly string[] }>;
-    }
-  | {
-      kind: "refreshed";
-      publicationRef: string;
-      revision: number;
-      disposition: "current" | "incompatible";
-      lifecycle: Readonly<{
-        state: "active" | "inactive" | "incompatible";
-        reasons: readonly string[];
-      }>;
-    }
-  | {
-      kind: "republished";
-      publicationRef: string;
-      revision: number;
-      toolRef: string;
-      bindingId: string;
-      lifecycle: Readonly<{
-        state: "active" | "inactive";
-        reasons: readonly string[];
-      }>;
-    }
-  | { kind: "refused"; reason: string }
->;
+export type { OwnerSupplyCommandResult } from './owner-command-result.contracts'
 
 export type OwnerSupplyReadbackSource = Readonly<{
   kind: "ae_envelope" | "openapi_http" | "mcp" | "agent_plugin_mcp" | "x402";

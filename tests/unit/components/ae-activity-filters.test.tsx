@@ -125,12 +125,12 @@ describe('ActivityPage & Filtering (W-38)', () => {
   it('shows time to outcome and no charge for a released reservation', () => {
     renderActivity()
 
-    expect(screen.getByText('Australian Tax Calculator')).toBeTruthy()
-    expect(screen.getByText('Postal Address Lookup')).toBeTruthy()
-    expect(screen.getByText('alpha')).toBeTruthy()
-    expect(screen.getByText('beta')).toBeTruthy()
-    expect(screen.getByText('142 ms')).toBeTruthy()
-    expect(screen.getByText('85 ms')).toBeTruthy()
+    expect(screen.getAllByText('Australian Tax Calculator')).toHaveLength(2)
+    expect(screen.getAllByText('Postal Address Lookup')).toHaveLength(2)
+    expect(screen.getAllByText('alpha').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('beta').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('142 ms')).toHaveLength(2)
+    expect(screen.getAllByText('85 ms')).toHaveLength(2)
     expect(screen.getByRole('button', { name: /Time to outcome/u })).toBeTruthy()
     const releasedRow = screen.getByRole('row', { name: /Postal Address Lookup/u })
     expect(within(releasedRow).getByText('No charge')).toBeTruthy()
@@ -142,7 +142,7 @@ describe('ActivityPage & Filtering (W-38)', () => {
   ])('formats a %i ms Call without exposing a raw millisecond count', (latencyMs, expected) => {
     render(<AeActivity result={{ kind: 'available', calls: { ...sampleCalls, page: [{ ...sampleCalls.page[0]!, latencyMs }] },
       usage: sampleUsage, spend: sampleSpend, periodStart: '2026-09' }} />)
-    expect(screen.getByText(expected)).toBeTruthy()
+    expect(screen.getAllByText(expected)).toHaveLength(2)
   })
 
   it('keeps a Call needing review reachable and does not imply a zero charge', () => {
@@ -151,13 +151,13 @@ describe('ActivityPage & Filtering (W-38)', () => {
     const result = { kind: 'available' as const, calls: { ...sampleCalls, page: [call] },
       usage: sampleUsage, spend: sampleSpend, periodStart: '2026-09' }
     const view = render(<AeActivity result={result} />)
-    expect(screen.getByText('Needs review')).toBeTruthy()
-    expect(screen.getByText('Not confirmed')).toBeTruthy()
+    expect(screen.getAllByText('Needs review').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('Not confirmed').length).toBeGreaterThan(0)
     expect(screen.queryByText('A$0.00')).toBeNull()
-    expect(screen.getByRole('link', { name: 'Review Australian Tax Calculator' }).getAttribute('href')).toBe('/calls/call%3A1')
+    expect(screen.getAllByRole('link', { name: 'Review Australian Tax Calculator' })[0]?.getAttribute('href')).toBe('/calls/call%3A1')
     view.rerender(<AeActivity result={{ ...result, calls: { ...sampleCalls, page: [sampleCalls.page[0]!] } }} />)
     expect(screen.queryByText('Needs review')).toBeNull()
-    expect(screen.getByRole('link', { name: 'View receipt for Australian Tax Calculator' })).toBeTruthy()
+    expect(screen.getAllByRole('link', { name: 'View receipt for Australian Tax Calculator' })).toHaveLength(2)
   })
 
   it('shows status chips with counts from loaded calls', () => {
@@ -188,13 +188,13 @@ describe('ActivityPage & Filtering (W-38)', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /Completed\s+1/u }))
 
-    expect(screen.getByText('Australian Tax Calculator')).toBeTruthy()
+    expect(screen.getAllByText('Australian Tax Calculator')).toHaveLength(2)
     expect(screen.queryByText('Postal Address Lookup')).toBeNull()
 
     fireEvent.click(screen.getByRole('button', { name: /All\s+2/u }))
     fireEvent.click(screen.getByRole('button', { name: 'Today' }))
 
-    expect(screen.getByText('Australian Tax Calculator')).toBeTruthy()
+    expect(screen.getAllByText('Australian Tax Calculator')).toHaveLength(2)
     expect(screen.queryByText('Postal Address Lookup')).toBeNull()
   })
 
@@ -205,7 +205,7 @@ describe('ActivityPage & Filtering (W-38)', () => {
     expect(screen.queryByText('Postal Address Lookup')).toBeNull()
 
     fireEvent.click(screen.getByRole('button', { name: 'Reset filters' }))
-    expect(screen.getByText('Postal Address Lookup')).toBeTruthy()
+    expect(screen.getAllByText('Postal Address Lookup')).toHaveLength(2)
   })
 
   it('renders status and purchase status badges with payment line', () => {
@@ -213,10 +213,10 @@ describe('ActivityPage & Filtering (W-38)', () => {
 
     expect(screen.getAllByText('Completed').length).toBeGreaterThanOrEqual(1)
     expect(screen.getAllByText('Refused').length).toBeGreaterThanOrEqual(1)
-    expect(screen.getByText('Resolved — delivered')).toBeTruthy()
-    expect(screen.getByText('Resolved — refunded')).toBeTruthy()
-    expect(screen.getByText('Payment: Settled')).toBeTruthy()
-    expect(screen.getByText('Payment: Released')).toBeTruthy()
+    expect(screen.getAllByText('Resolved — delivered').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('Resolved — refunded').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('Payment: Settled')).toBeTruthy()
+    expect(screen.getAllByText('Payment: Released')).toBeTruthy()
   })
 
   it('shows export preview text for loaded record count', () => {

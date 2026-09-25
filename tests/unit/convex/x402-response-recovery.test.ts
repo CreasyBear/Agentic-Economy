@@ -7,8 +7,8 @@ import type { ActionCtx } from '../../../convex/_generated/server'
 const loading = vi.hoisted(() => vi.fn())
 const reconcile = vi.hoisted(() => vi.fn())
 const parseOutput = vi.hoisted(() => vi.fn())
-vi.mock('../../../convex/capabilityCallProjection', async importOriginal => ({
-  ...(await importOriginal<typeof import('../../../convex/capabilityCallProjection')>()),
+vi.mock('@/modules/capability-execution/convex', async importOriginal => ({
+  ...(await importOriginal<Record<string, unknown>>()),
   parseContractOutput: parseOutput,
 }))
 vi.mock('@/modules/capability-execution/call-worker/recovery/loading', () => ({ loadReadyRecoveryWork: loading }))

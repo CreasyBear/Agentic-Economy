@@ -74,30 +74,9 @@ describe('useAgentLifecycleDialog', () => {
     vi.clearAllMocks()
   })
 
-  it('dispatches credential revoke with credential ref only', async () => {
-    const onRevokeCredential = vi.fn(async () => undefined)
-    const { result } = renderHook(() => useAgentLifecycleDialog({
-      onRevokeCredential,
-      onDisconnectAgent: vi.fn(),
-    }))
-    const trigger = document.createElement('button')
-
-    act(() => {
-      result.current.requestCredentialRevoke(detail, 'credential:abc', 9, trigger)
-    })
-    await act(async () => {
-      await result.current.confirmLifecycle()
-    })
-
-    expect(onRevokeCredential).toHaveBeenCalledWith('credential:abc')
-    expect(onRevokeCredential).not.toHaveBeenCalledWith('prn_lifecycle_test')
-    expect(toast.success).toHaveBeenCalledWith('Credential revoked')
-  })
-
   it('dispatches connection disconnect with revision', async () => {
     const onDisconnectConnection = vi.fn(async () => undefined)
     const { result } = renderHook(() => useAgentLifecycleDialog({
-      onRevokeCredential: vi.fn(),
       onDisconnectAgent: vi.fn(),
       onDisconnectConnection,
     }))
@@ -117,7 +96,6 @@ describe('useAgentLifecycleDialog', () => {
   it('dispatches agent disconnect with principal ref only', async () => {
     const onDisconnectAgent = vi.fn(async () => undefined)
     const { result } = renderHook(() => useAgentLifecycleDialog({
-      onRevokeCredential: vi.fn(),
       onDisconnectAgent,
     }))
     const trigger = document.createElement('button')
@@ -139,7 +117,6 @@ describe('useAgentLifecycleDialog', () => {
       resolve = r
     }))
     const { result } = renderHook(() => useAgentLifecycleDialog({
-      onRevokeCredential: vi.fn(),
       onDisconnectAgent,
     }))
     const trigger = document.createElement('button')
@@ -159,7 +136,6 @@ describe('useAgentLifecycleDialog', () => {
   it('freeze mode does not change callback arguments', async () => {
     const onDisconnectAgent = vi.fn(async () => undefined)
     const { result } = renderHook(() => useAgentLifecycleDialog({
-      onRevokeCredential: vi.fn(),
       onDisconnectAgent,
     }))
     const trigger = document.createElement('button')
@@ -180,7 +156,6 @@ describe('useAgentLifecycleDialog', () => {
       throw new Error('failed')
     })
     const { result } = renderHook(() => useAgentLifecycleDialog({
-      onRevokeCredential: vi.fn(),
       onDisconnectAgent,
     }))
     const trigger = document.createElement('button')
@@ -199,7 +174,6 @@ describe('useAgentLifecycleDialog', () => {
 
   it('resets revocation mode when dialog closes', () => {
     const { result } = renderHook(() => useAgentLifecycleDialog({
-      onRevokeCredential: vi.fn(),
       onDisconnectAgent: vi.fn(),
     }))
     const trigger = document.createElement('button')

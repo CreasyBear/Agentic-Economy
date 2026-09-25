@@ -7,17 +7,13 @@ const neutralSources = [
   'src/modules/capability-supply/public.ts',
   'src/modules/capability-supply/internal/convex-schema.ts',
   'convex/capabilitySupply.ts',
-  'convex/capabilitySupplyShared.ts',
   'convex/capabilitySupplyPublish.ts',
-  'convex/lib/capabilitySupply/publicationValues.ts',
-  'convex/lib/capabilitySupply/sourceAuthority.ts',
-  'convex/lib/capabilitySupply/publishPrepared.ts',
-  'convex/lib/capabilitySupply/readPublication.ts',
-  'convex/lib/capabilitySupply/publishBootstrap.ts',
+  'convex/lib/capabilitySupply/publish/contracts.ts',
+  'convex/lib/capabilitySupply/admission/sourceAuthority.ts',
+  'convex/lib/capabilitySupply/publish/prepared.ts',
+  'convex/lib/capabilitySupply/publish/readPublication.ts',
+  'convex/lib/capabilitySupply/publish/bootstrap.ts',
   'convex/capabilitySupplyProbes.ts',
-  'convex/capabilitySupplyGraph.ts',
-  'convex/capabilitySupplyLists.ts',
-  'convex/capabilitySupplyCommands.ts',
 ] as const
 
 const deepenedFolders = [
@@ -70,7 +66,7 @@ describe('capability supply boundaries', () => {
   })
 
   it('keeps the development seed on current catalog commands and out of retired claim paths', () => {
-    const seed = readFileSync('convex/devSeed.ts', 'utf8')
+    const seed = readFileSync('convex/lib/dev/seed/catalog.ts', 'utf8')
 
     expect(seed).toContain('persistDevSeedCatalogState')
     expect(seed).toContain('rebuildBusinessSupplyProjectionSnapshotCommand')
@@ -89,9 +85,9 @@ describe('capability supply boundaries', () => {
   })
 
   it('uses generated private Convex references and keeps each readiness probe one-shot', () => {
-    const readiness = readFileSync('convex/capabilitySupplyReadiness.ts', 'utf8')
+    const readiness = readFileSync('convex/lib/capabilitySupply/readiness/probe.ts', 'utf8')
 
-    expect(readiness).toContain("import { internal } from './_generated/api'")
+    expect(readiness).toContain("import { internal } from '../../../_generated/api'")
     expect(readiness).toContain('internal.capabilitySupply.readCapabilityProbeTarget')
     expect(readiness).toContain('internal.capabilitySupply.recordCapabilityProbeResult')
     expect(readiness).not.toMatch(/ctx\.scheduler\.runAfter[\s\S]*internal\.capabilitySupplyReadiness\.probe/)
@@ -100,7 +96,7 @@ describe('capability supply boundaries', () => {
 
   it('reads canonical Operations directly without a cutover read model', () => {
     const schema = readFileSync('src/modules/capability-supply/internal/convex-schema.ts', 'utf8')
-    const queries = readFileSync('convex/capabilitySupplyToolQueries.ts', 'utf8')
+    const queries = readFileSync('convex/lib/capabilitySupply/tool/reads.ts', 'utf8')
 
     expect(schema).not.toContain('capabilityCurrentToolReadControls')
     expect(schema).not.toContain('capabilityCurrentToolDetails')

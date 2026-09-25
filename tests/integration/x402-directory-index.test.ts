@@ -2,8 +2,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { api, internal } from '../../convex/_generated/api'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import type { Infer } from 'convex/values'
-import { pageValue } from '../../convex/lib/x402DirectoryIndex/contracts'
-import type { IndexedSource } from '../../convex/lib/x402DirectoryIndex/contracts'
+import { pageValue } from '../../convex/lib/market/directoryIndex/contracts'
+import type { IndexedSource } from '../../convex/lib/market/directoryIndex/contracts'
 import { convexTestWithMarketComponents, type ConvexFixtureBackend } from '../helpers/convex-fixtures'
 
 function source(index: number, overrides: Partial<IndexedSource['entry']> = {}): IndexedSource {

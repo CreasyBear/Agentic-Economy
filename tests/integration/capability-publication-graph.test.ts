@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
 
 import { api, internal } from '../../convex/_generated/api'
+import { eligibleSupplyPorts } from '../../convex/capabilitySupplyEligiblePorts'
+import { capabilitySupplyGraphPorts } from '../../convex/lib/capabilitySupply/graphPorts/ports'
 import {
   convexTestWithMarketComponents,
   ownerAdmin,
@@ -98,5 +100,30 @@ describe('capability publication graph', () => {
     expect(graph.nodes).toHaveLength(2)
     expect(JSON.stringify(graph)).not.toContain('credentialRef')
     expect(JSON.stringify(graph)).not.toContain('_KEY')
+  })
+
+  it('refuses a catalog access path belonging to another business on both supply reads', async () => {
+    const backend = convexTestWithMarketComponents()
+    const first = await publishedBusinessOwner(backend, 'graph-origin-first')
+    const second = await publishedBusinessOwner(backend, 'graph-origin-second')
+    await seedCatalogOffering(backend, first.businessId, 'graph-origin-first')
+    await backend.run(async (ctx) => {
+      const path = await ctx.db.query('offeringAccessPaths')
+        .withIndex('by_accessPathRef', (query) => query.eq('accessPathRef', 'access:graph-origin-first:lookup'))
+        .unique()
+      if (path === null) throw new Error('catalog_access_path_fixture_missing')
+      const origin = {
+        kind: 'catalog_offering' as const,
+        offeringRef: path.offeringRef,
+        offeringRevision: path.offeringRevision,
+        offeringSourceHash: path.offeringSourceHash,
+        declaredAccessPathRef: path.accessPathRef,
+        accessPathSourceHash: path.sourceHash,
+      }
+      expect(await eligibleSupplyPorts(ctx.db).catalogOriginIsCurrent(origin, String(first.businessId))).toBe(true)
+      await ctx.db.patch(path._id, { businessId: second.businessId })
+      expect(await capabilitySupplyGraphPorts(ctx.db).catalogOriginIsCurrent?.(origin, String(first.businessId))).toBe(false)
+      expect(await eligibleSupplyPorts(ctx.db).catalogOriginIsCurrent(origin, String(first.businessId))).toBe(false)
+    })
   })
 })

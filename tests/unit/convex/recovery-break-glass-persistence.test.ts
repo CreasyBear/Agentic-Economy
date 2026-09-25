@@ -165,7 +165,7 @@ describe('recovery break-glass private adapter defenses', () => {
   it('fails before trusting approval identity when canonical account facts are absent', async () => {
     adapterProbe.mode = 'record-unavailable'
     const backend = await seededBackend()
-    const { submitRecoveryApprovalHandler } = await import('../../../convex/recoveryBreakGlass')
+    const { submitRecoveryApprovalHandler } = await import('../../../convex/lib/authority/breakGlass/approval')
 
     await expect(backend.run(async (ctx) =>
       await submitRecoveryApprovalHandler(ctx, approvalIntent)))
@@ -180,7 +180,7 @@ describe('recovery break-glass private adapter defenses', () => {
   ] as const)('fails closed for the %s adapter probe', async (mode, expected) => {
     adapterProbe.mode = mode
     const backend = await seededBackend()
-    const { authorizeRecoveryHandler } = await import('../../../convex/recoveryBreakGlass')
+    const { authorizeRecoveryHandler } = await import('../../../convex/lib/authority/breakGlass/authorization')
 
     await expect(backend.run(async (ctx) => await authorizeRecoveryHandler(ctx, request)))
       .rejects.toThrow(expected)

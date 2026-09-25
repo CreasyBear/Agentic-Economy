@@ -1,351 +1,152 @@
+import { describe, expect, it, vi } from 'vitest'
 import {
   authenticateWithScopes,
+  handleMcpRequest,
   postMcp,
   readMcpBody,
 } from './mcp-api-harness'
-import { describe, expect, it } from 'vitest'
-import { z } from 'zod'
+import type { JsonRpcBody } from './mcp-api-harness'
+import { listMcpActions, mcpToolName, MCP_TOOLSETS } from '@/modules/actions'
 
-import {
-  defineAction,
-  listActions,
-  listMcpActions,
-  mcpToolName,
-} from '@/modules/actions'
-import { registryDetailAction } from '@/modules/registry/registry.actions'
+const listRequest = { jsonrpc: '2.0', id: 'list', method: 'tools/list', params: {} } as const
+const discoverNames = MCP_TOOLSETS.discover.slice(0, 3).map((id) => `ae_${id.replace(/\./gu, '_')}`)
+const names = (body: JsonRpcBody): string[] =>
+  ((body.result?.tools ?? []) as Array<{ name: string }>).map((tool) => tool.name)
+const bytes = (value: unknown): number => new TextEncoder().encode(JSON.stringify(value)).byteLength
 
-describe('MCP host adapter tools/list', () => {
-  it('lists exactly the registered MCP tools in deterministic order', async () => {
-    const response = await postMcp({
-      jsonrpc: '2.0',
-      id: 2,
-      method: 'tools/list',
-      params: {},
-    })
+async function listWith(scopes: readonly string[], path = '/mcp') {
+  const request = new Request(`https://ae.example${path}`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', accept: 'application/json, text/event-stream', authorization: 'Bearer role-test' },
+    body: JSON.stringify(listRequest),
+  })
+  const response = await handleMcpRequest(request, {
+    authenticate: authenticateWithScopes(scopes),
+    resolvePrincipal: async (projection) => ({
+      ...projection,
+      principalId: 'prn_00000000000040008000000000000044',
+      ownerId: 'acc_00000000000040008000000000000044',
+    }),
+  })
+  expect(response.status).toBe(200)
+  const body = await readMcpBody(response)
+  expect(body.error).toBeUndefined()
+  return body
+}
 
+describe('MCP role toolsets', () => {
+  it('lists exactly public discovery for an anonymous principal, never Operation-level tools', async () => {
+    const response = await postMcp(listRequest)
     expect(response.status).toBe(200)
     const body = await readMcpBody(response)
-    const result = body.result as Record<string, unknown>
-    const tools = result.tools as Array<Record<string, unknown>>
-    const mcpActions = listMcpActions()
-      .filter((action) => action.surfaces.includes('mcp') && action.readOnly && action.credentialAdmission === undefined)
-    const expectedToolNames = mcpActions.map(mcpToolName)
-    expect(expectedToolNames).toEqual([
-      'ae_registry_tools_list',
-      'ae_registry_tools_search',
-      'ae_registry_tools_describe',
-      'ae_registry_tools_compare',
-    ])
-    expect(expectedToolNames).not.toContain('ae_tool_call')
-    expect(expectedToolNames).not.toContain('ae_tool_quote')
-    expect(expectedToolNames).not.toContain('ae_call_status')
-    expect(tools.map((tool) => tool.name)).toEqual(expectedToolNames)
-    expect(tools).toHaveLength(expectedToolNames.length)
-    expect(new TextEncoder().encode(JSON.stringify(tools)).byteLength).toBeLessThanOrEqual(8192)
-
-    for (const tool of tools) {
-      const name = tool.name
-      const action = mcpActions.find((candidate) => mcpToolName(candidate) === name)
-      if (action === undefined) {
-        throw new Error(`No MCP action found for ${String(name)}.`)
-      }
-      expect(tool.description).toContain(action.boundaries[0])
-      expect(tool.inputSchema).toEqual(expect.objectContaining({
+    expect(names(body)).toEqual(discoverNames)
+    expect(names(body)).not.toContain('ae_registry_tools_list')
+    expect(names(body)).not.toContain('ae_tool_call')
+    expect(names(body).some((name) => name.startsWith('ae_operation_'))).toBe(false)
+    expect(bytes(body.result?.tools)).toBeLessThan(8192)
+    for (const tool of (body.result?.tools ?? []) as Array<Record<string, unknown>>) {
+      expect(tool.inputSchema).toMatchObject({ type: 'object', properties: expect.any(Object) })
+      expect(tool.outputSchema).toMatchObject({
         type: 'object',
-        properties: expect.any(Object),
-        additionalProperties: false,
-      }))
-      expect(tool.outputSchema).toBeUndefined()
-      expect(tool.annotations).toEqual({
-        readOnlyHint: true,
-        destructiveHint: false,
-        idempotentHint: true,
-        openWorldHint: false,
+        properties: {
+          result: { type: 'object' },
+          kind: { type: 'string' },
+          code: { type: 'string' },
+          next: { type: 'array' },
+        },
+        required: ['next'],
       })
+      expect(tool.annotations).toMatchObject({ readOnlyHint: true, destructiveHint: false })
     }
-
-    const list = tools.find((tool) => tool.name === 'ae_registry_tools_list')
-    const toolsSearch = tools.find((tool) => tool.name === 'ae_registry_tools_search')
-    const describeTool = tools.find((tool) => tool.name === 'ae_registry_tools_describe')
-    const compare = tools.find((tool) => tool.name === 'ae_registry_tools_compare')
-    expect(list?.inputSchema).toEqual(expect.objectContaining({
-      properties: expect.objectContaining({ limit: expect.any(Object) }),
-    }))
-    expect(toolsSearch?.inputSchema).toEqual(expect.objectContaining({
-      properties: expect.objectContaining({ query: expect.any(Object) }),
-    }))
-    expect(describeTool?.inputSchema).toEqual(expect.objectContaining({
-      required: ['toolRef'],
-      properties: expect.objectContaining({ toolRef: expect.any(Object) }),
-    }))
-    expect(compare?.inputSchema).toEqual(expect.objectContaining({
-      properties: expect.objectContaining({
-        toolRefs: expect.objectContaining({
-          type: 'array',
-          minItems: 1,
-          maxItems: 4,
-          items: expect.objectContaining({ type: 'string', pattern: expect.any(String) }),
-        }),
-      }),
-    }))
   })
 
-  it('does not expose customer request or non-MCP actions', async () => {
-    const response = await postMcp({
-      jsonrpc: '2.0',
-      id: 6,
-      method: 'tools/list',
-      params: {},
+  it('lists buyer workflows and account reads without provider authority', async () => {
+    const body = await listWith(['market_tools:call'])
+    const listed = names(body)
+    for (const actionId of [...MCP_TOOLSETS.discover, ...MCP_TOOLSETS.buy, ...MCP_TOOLSETS.account]) {
+      expect(listed).toContain(`ae_${actionId.replace(/\./gu, '_')}`)
+    }
+    expect(listed).not.toContain('ae_registry_tools_list')
+    expect(listed).not.toContain('ae_supply_publish')
+    expect(bytes(body.result?.tools)).toBeLessThan(50_000)
+    const tools = body.result?.tools as Array<Record<string, unknown>>
+    expect(tools.find((tool) => tool.name === 'ae_tool_quote')?.annotations).toMatchObject({
+      readOnlyHint: false, destructiveHint: false, idempotentHint: false,
     })
-    const body = await readMcpBody(response)
-    const result = body.result as Record<string, unknown>
-    const names = (result.tools as Array<Record<string, unknown>>).map((tool) => String(tool.name))
+    expect(tools.find((tool) => tool.name === 'ae_tool_call')?.annotations).toMatchObject({
+      readOnlyHint: false, destructiveHint: true, idempotentHint: true,
+    })
+  })
 
-    expect(names).not.toContain('customerRequest_confirm')
-    expect(names).not.toContain('customer.request.confirm')
-    expect(names).toEqual(listMcpActions()
-      .filter((action) => action.readOnly && action.credentialAdmission === undefined)
+  it('lists the complete Provider lifecycle only for provider authority, without granting buy', async () => {
+    const body = await listWith(['market_supply:manage'])
+    const listed = names(body)
+    expect(MCP_TOOLSETS.provider).toHaveLength(15)
+    for (const actionId of MCP_TOOLSETS.provider) expect(listed).toContain(`ae_${actionId.replace(/\./gu, '_')}`)
+    expect(listed).toContain('ae_agentAccess_whoami')
+    expect(listed).not.toContain('ae_tool_call')
+    expect(listed).not.toContain('ae_agentAccess_balance')
+    expect(bytes(body.result?.tools)).toBeLessThan(50_000)
+  })
+
+  it('limits an authenticated read-only connection to discover and read-only account tools', async () => {
+    const body = await listWith(['market_tools:call', 'market_supply:manage'], '/mcp?readonly=1')
+    const listed = names(body)
+    expect(listed).toEqual(listMcpActions()
+      .filter((action) => action.readOnly && (
+        (MCP_TOOLSETS.discover as readonly string[]).includes(action.id)
+        || (MCP_TOOLSETS.account as readonly string[]).includes(action.id)
+      ))
       .map(mcpToolName))
-    const workTreeNames = listActions()
-      .filter(({ id }) => id.startsWith('workTree.'))
-      .map(mcpToolName)
-    expect(workTreeNames).toEqual([])
-    expect(names.some((name) => name.startsWith('ae_workTree_'))).toBe(false)
-    const writeToolNames = listActions().filter(({ readOnly }) => !readOnly).map(mcpToolName)
-    expect(names).not.toEqual(expect.arrayContaining(writeToolNames))
-    expect(names).not.toContain('registry.list')
-    expect(names).not.toContain('registry.search')
+    expect(listed).toContain('ae_agentAccess_balance')
+    expect(listed).not.toContain('ae_tool_quote')
+    expect(listed).not.toContain('ae_call_status')
+    expect(listed).not.toContain('ae_funding_handoff_create')
+    expect(listed).not.toContain('ae_supply_status')
   })
 
-  it('hides a non-read-only MCP action from the anonymous tier', async () => {
-    const fakeAction = defineAction({
-      id: 'fake.write',
-      name: 'Fake write',
-      summary: 'A fake write action.',
-      boundaries: ['Writes nothing in this test.'],
-      schema: z.strictObject({}),
-      parameters: [],
-      readOnly: false,
-      effect: {
-        class: 'external_state_change', reversible: false, recipientKind: 'none',
-        dataClasses: [], spendExposure: 'none', approval: 'approval_required',
-      },
-      surfaces: ['mcp'],
-      outputSchema: z.strictObject({ kind: z.literal('ok') }),
-      invocationContract: {
-        version: 'fake.write:v1',
-        consequenceClass: 'external_effect',
-        materialInputPaths: [],
-        authorityRequirement: 'none',
-        retryClass: 'reconcile_before_retry',
-        expectedEvidence: [],
-        safeContinuations: [],
-        invalidationConditions: ['action_contract_version_changed'],
-      },
-      run: async () => ({ kind: 'ok' }),
-    })
-
-
-    const response = await postMcp({
-      jsonrpc: '2.0',
-      id: 8,
-      method: 'tools/list',
-      params: {},
-    }, { actions: [registryDetailAction, fakeAction] })
-    const body = await readMcpBody(response)
-    expect(body.result).toMatchObject({
-      tools: [expect.objectContaining({ name: mcpToolName(registryDetailAction) })],
-    })
-  })
-  it('hides credential-admitted Provider tools from anonymous tools/list', async () => {
-    const response = await postMcp({
-      jsonrpc: '2.0',
-      id: 'anonymous-supply-list',
-      method: 'tools/list',
-      params: {},
-    })
-    const body = await readMcpBody(response)
-    const names = ((body.result?.tools ?? []) as Array<Record<string, unknown>>).map((tool) => tool.name)
-
-    expect(names).not.toEqual(expect.arrayContaining([
-      'ae_supply_publish',
-      'ae_supply_withdraw',
-      'ae_supply_earnings',
-    ]))
-  })
-
-  it('lists Tool and Call actions without Provider tools for a buyer principal', async () => {
-    const response = await postMcp({
-      jsonrpc: '2.0',
-      id: 'buyer-list',
-      method: 'tools/list',
-      params: {},
-    }, {
+  it('refuses a direct buy call in read-only mode before invoking the service', async () => {
+    const quoteTool = vi.fn()
+    const response = await handleMcpRequest(new Request('https://ae.example/mcp?readonly=1', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', accept: 'application/json, text/event-stream', authorization: 'Bearer buyer' },
+      body: JSON.stringify({
+        jsonrpc: '2.0', id: 'readonly-buy', method: 'tools/call',
+        params: { name: 'ae_tool_quote', arguments: { toolRef: `operation:v1:${'a'.repeat(64)}`, input: {} } },
+      }),
+    }), {
       authenticate: authenticateWithScopes(['market_tools:call']),
-    }, {
-      authorization: 'Bearer buyer-only',
+      resolvePrincipal: async (projection) => ({
+        ...projection,
+        principalId: 'prn_00000000000040008000000000000044',
+        ownerId: 'acc_00000000000040008000000000000044',
+      }),
+      callService: { quoteTool, callTool: vi.fn(), readCallStatus: vi.fn(), cancelCall: vi.fn(), reconcileCall: vi.fn() },
     })
-    const body = await readMcpBody(response)
-    const names = ((body.result?.tools ?? []) as Array<Record<string, unknown>>).map((tool) => tool.name)
-    const expectedNames = listMcpActions()
-      .filter((action) => (action.readOnly && action.credentialAdmission === undefined)
-        || action.credentialAdmission?.scope === 'market_tools:call'
-        || action.credentialAdmission?.anyScopes?.includes('market_tools:call') === true)
-      .map(mcpToolName)
-
-    expect(names).toEqual(expectedNames)
-    expect(new TextEncoder().encode(JSON.stringify(body.result?.tools ?? [])).byteLength).toBeLessThanOrEqual(Math.floor(23_631 * 1.1))
-    expect(names).not.toEqual(expect.arrayContaining([
-      'ae_supply_publish',
-      'ae_supply_withdraw',
-      'ae_supply_earnings',
-    ]))
-    const quote = ((body.result?.tools ?? []) as Array<Record<string, unknown>>)
-      .find((tool) => tool.name === 'ae_tool_quote')
-    const call = ((body.result?.tools ?? []) as Array<Record<string, unknown>>)
-      .find((tool) => tool.name === 'ae_tool_call')
-    const cancel = ((body.result?.tools ?? []) as Array<Record<string, unknown>>)
-      .find((tool) => tool.name === 'ae_call_cancel')
-    expect(quote).toMatchObject({
-      annotations: {
-        readOnlyHint: false,
-        destructiveHint: false,
-        idempotentHint: false,
-        openWorldHint: false,
-      },
-    })
-    expect(call).toMatchObject({
-      annotations: {
-        readOnlyHint: false,
-        destructiveHint: true,
-        idempotentHint: true,
-        openWorldHint: true,
-      },
-    })
-    expect(cancel).toMatchObject({
-      annotations: {
-        readOnlyHint: false,
-        destructiveHint: true,
-        idempotentHint: true,
-        openWorldHint: false,
-      },
-    })
-  })
-
-  it('lists every Provider lifecycle tool plus anonymous reads for a supply-only principal', async () => {
-    const response = await postMcp({
-      jsonrpc: '2.0',
-      id: 'supply-only-list',
-      method: 'tools/list',
-      params: {},
-    }, {
-      authenticate: authenticateWithScopes(['market_supply:manage']),
-    }, {
-      authorization: 'Bearer supply-only',
-    })
-    const body = await readMcpBody(response)
-    const names = ((body.result?.tools ?? []) as Array<Record<string, unknown>>).map((tool) => tool.name)
-    const supplyActions = listMcpActions()
-      .filter((action) => action.credentialAdmission?.scope === 'market_supply:manage')
-    const expectedNames = listMcpActions()
-      .filter((action) => (action.readOnly && action.credentialAdmission === undefined)
-        || action.credentialAdmission?.scope === 'market_supply:manage'
-        || action.credentialAdmission?.anyScopes?.includes('market_supply:manage') === true)
-      .map(mcpToolName)
-    const buyerProtectedNames = listMcpActions()
-      .filter((action) => action.credentialAdmission?.scope === 'market_tools:call'
-        && action.credentialAdmission.anyScopes?.includes('market_supply:manage') !== true)
-      .map(mcpToolName)
-
-    expect(supplyActions).toHaveLength(15)
-    expect(supplyActions.map((action) => action.id).sort()).toEqual([
-      'supply.calls',
-      'supply.connection.connect',
-      'supply.connection.detail',
-      'supply.connection.list',
-      'supply.connection.reconnect',
-      'supply.connection.revoke',
-      'supply.earnings',
-      'supply.offboarding.status',
-      'supply.publish',
-      'supply.recheck',
-      'supply.republish',
-      'supply.source.preview',
-      'supply.status',
-      'supply.tools.list',
-      'supply.withdraw',
-    ])
-    expect(names).toEqual(expectedNames)
-    expect(new TextEncoder().encode(JSON.stringify(body.result?.tools ?? [])).byteLength).toBeLessThanOrEqual(Math.floor(28_506 * 1.1))
-    expect(names).not.toEqual(expect.arrayContaining(buyerProtectedNames))
-    const publish = ((body.result?.tools ?? []) as Array<Record<string, unknown>>)
-      .find((tool) => tool.name === 'ae_supply_publish')
-    const withdraw = ((body.result?.tools ?? []) as Array<Record<string, unknown>>)
-      .find((tool) => tool.name === 'ae_supply_withdraw')
-    expect(publish).toMatchObject({
-      annotations: { idempotentHint: true, openWorldHint: true, destructiveHint: false },
-    })
-    expect(withdraw).toMatchObject({
-      annotations: { idempotentHint: true, openWorldHint: true, destructiveHint: true },
-    })
-  })
-
-  it('returns a single page with no nextCursor when tools fit within the default page size', async () => {
-    const response = await postMcp({
-      jsonrpc: '2.0',
-      id: 'single-page',
-      method: 'tools/list',
-      params: {},
-    })
-    const body = await readMcpBody(response)
-    const result = body.result as Record<string, unknown>
-
-    expect(result.nextCursor).toBeUndefined()
-    expect((result.tools as unknown[]).length).toBeGreaterThan(0)
-  })
-
-  it('paginates tools/list across pages with an injected page size, terminating with no nextCursor', async () => {
-    const expectedNames = listMcpActions()
-      .filter((action) => action.surfaces.includes('mcp') && action.readOnly && action.credentialAdmission === undefined)
-      .map(mcpToolName)
-    expect(expectedNames.length).toBeGreaterThan(2)
-
-    const collectedNames: string[] = []
-    let cursor: string | undefined
-    let pages = 0
-    do {
-      const response = await postMcp({
-        jsonrpc: '2.0',
-        id: `page-${pages}`,
-        method: 'tools/list',
-        params: cursor === undefined ? {} : { cursor },
-      }, { toolsListPageSize: 2 })
-      const body = await readMcpBody(response)
-      const result = body.result as { tools: Array<Record<string, unknown>>; nextCursor?: string }
-      expect(result.tools.length).toBeLessThanOrEqual(2)
-      collectedNames.push(...result.tools.map((tool) => String(tool.name)))
-      cursor = result.nextCursor
-      pages += 1
-      expect(pages).toBeLessThanOrEqual(expectedNames.length)
-    } while (cursor !== undefined)
-
-    expect(pages).toBeGreaterThan(1)
-    expect(collectedNames).toEqual(expectedNames)
-  })
-
-  it('rejects a malformed tools/list cursor with Invalid params', async () => {
-    const response = await postMcp({
-      jsonrpc: '2.0',
-      id: 'bad-cursor',
-      method: 'tools/list',
-      params: { cursor: 'not-a-valid-cursor!!' },
-    }, { toolsListPageSize: 2 })
-
     expect(response.status).toBe(200)
-    const body = await readMcpBody(response)
-    expect(body.error).toMatchObject({
-      code: -32602,
-      message: 'Invalid MCP request parameters. cursor: does not decode to a valid tools/list page offset.',
+    expect((await readMcpBody(response)).result).toMatchObject({
+      isError: true,
+      structuredContent: { kind: 'PERMISSION_DENIED', code: 'mcp_toolset_required', next: [] },
     })
+    expect(quoteTool).not.toHaveBeenCalled()
+  })
+
+  it('paginates only admitted tools with a role-local cursor', async () => {
+    const collected: string[] = []
+    let cursor: string | undefined
+    do {
+      const response = await postMcp({ ...listRequest, params: cursor === undefined ? {} : { cursor } }, { toolsListPageSize: 2 })
+      const body = await readMcpBody(response)
+      const result = body.result as { tools: Array<{ name: string }>; nextCursor?: string }
+      expect(result.tools.length).toBeLessThanOrEqual(2)
+      collected.push(...result.tools.map((tool) => tool.name))
+      cursor = result.nextCursor
+    } while (cursor !== undefined)
+    expect(collected).toEqual(discoverNames)
+  })
+
+  it('rejects malformed tools/list cursors as protocol invalid params', async () => {
+    const body = await readMcpBody(await postMcp({ ...listRequest, params: { cursor: 'invalid!' } }, { toolsListPageSize: 2 }))
+    expect(body.error).toMatchObject({ code: -32602, message: expect.stringContaining('cursor:') })
   })
 })

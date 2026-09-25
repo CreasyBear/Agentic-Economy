@@ -2,10 +2,11 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { SettingsGroup, SettingsRow } from '@/components/ae/settings/settings-shell/components/SettingsSections'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
 import { toast } from '@/lib/ui/toast'
+import { Switch } from '@/components/ui/switch'
 import { canonicalAudUnits } from '@/modules/money/public'
 import {
   AUTO_RECHARGE_PRESETS,
@@ -20,11 +21,6 @@ import { audInputTextFromUnits } from './credit-top-up-format'
 const MIN_RECHARGE_UNITS = 5_000_000n
 const MAX_RECHARGE_UNITS = 25_000_000_000n
 
-const PRESET_CHIP_CLASS =
-  'inline-flex min-h-touch items-center rounded-full border border-border bg-container px-3 py-1.5 text-xs font-medium text-foreground hover:bg-muted/60 enabled:active:scale-[0.98] transition-transform duration-100 ease-out motion-reduce:transition-none motion-reduce:active:scale-100'
-
-const SWITCH_PRESS_CLASS =
-  'enabled:active:scale-[0.98] transition-transform duration-100 ease-out motion-reduce:transition-none motion-reduce:active:scale-100'
 
 export type AeAutoRechargeCardProps = Readonly<{
   settings: Readonly<{
@@ -170,18 +166,13 @@ export function AeAutoRechargeCard({
     if (pendingTopup) {
       return (
         <Alert>
-          <div className="flex items-start gap-2">
-            <span
-              className="mt-1.5 size-2 shrink-0 rounded-full bg-primary animate-pulse motion-reduce:animate-none"
-              aria-hidden
-            />
-            <div className="grid gap-1">
-              <AlertTitle className="text-sm">Top-up in progress</AlertTitle>
-              <AlertDescription className="text-xs">
-                Auto-recharge is waiting for the current top-up to finish. A$0.00 will be charged for a duplicate top-up until it completes.
-              </AlertDescription>
-            </div>
-          </div>
+          <AlertTitle className="flex items-center gap-2 text-sm">
+            <span className="size-2 shrink-0 rounded-full bg-primary animate-pulse motion-reduce:animate-none" aria-hidden />
+            Top-up in progress
+          </AlertTitle>
+          <AlertDescription className="text-xs">
+            Auto-recharge is waiting for the current top-up to finish. A$0.00 will be charged for a duplicate top-up until it completes.
+          </AlertDescription>
         </Alert>
       )
     }
@@ -189,10 +180,8 @@ export function AeAutoRechargeCard({
       return (
         <Alert>
           <AlertDescription>
-            <a href="/owner/credit" className="font-medium underline">
-              Add payment method
-            </a>
-            {' '}in Payment methods above before enabling auto-recharge.
+            <a href="/owner/settings/payment-methods" className="font-medium underline">Add a payment method</a>
+            {' '}before enabling auto-recharge.
           </AlertDescription>
         </Alert>
       )
@@ -202,7 +191,7 @@ export function AeAutoRechargeCard({
         <Alert variant="destructive">
           <AlertTitle className="text-sm">Saved card unavailable</AlertTitle>
           <AlertDescription className="text-xs">
-            The default card could not be used for off-session top-ups. Update or replace it in Payment methods, then try again.
+            The default card could not be used for off-session top-ups. <a href="/owner/settings/payment-methods" className="underline">Update or replace it</a>, then try again.
           </AlertDescription>
         </Alert>
       )
@@ -212,7 +201,7 @@ export function AeAutoRechargeCard({
         <Alert>
           <AlertTitle className="text-sm">Bank authentication required</AlertTitle>
           <AlertDescription className="text-xs">
-            Your bank needs another check before auto-recharge can charge the saved card. Finish authentication via Payment methods, then enable auto-recharge.
+            Your bank needs another check. <a href="/owner/settings/payment-methods" className="underline">Authenticate the saved card</a>, then enable auto-recharge.
           </AlertDescription>
         </Alert>
       )
@@ -220,112 +209,29 @@ export function AeAutoRechargeCard({
     return null
   }
 
-  return (
-    <div className="grid gap-3 border-t border-border pt-4">
-      <div>
-        <h3 className="text-sm font-medium">Auto-recharge</h3>
-        <p className="text-sm text-muted-foreground">
-          When balance falls below the threshold, automatically add credit using the default payment method.
-        </p>
+  return <SettingsGroup title="Auto-recharge" description="Automatically add credit using your default card when your balance falls below a threshold.">
+    <SettingsRow label="Status" description="Enable automatic top-ups for this workspace.">
+      <div className="flex flex-wrap items-center gap-3 sm:justify-end">
+        <span role="status" aria-live="polite" className="max-w-xs text-muted-foreground">{triggerStatement}</span>
+        <Switch checked={enabled} onCheckedChange={(checked) => { setEnabled(checked); clearDiagnostic() }} disabled={switchDisabled} aria-label="Auto-recharge" />
       </div>
-
-      <p
-        className="min-h-[2.75rem] font-mono text-sm tabular-nums text-muted-foreground"
-        role="status"
-        aria-live="polite"
-      >
-        {triggerStatement}
-      </p>
-
-      <fieldset className="grid gap-2" disabled={mandateBlocksEnable}>
-        <legend className="text-sm font-medium">Quick setup</legend>
-        <div className="flex flex-wrap gap-2">
-          {AUTO_RECHARGE_PRESETS.map((preset) => {
-            const selected = selectedPresetId === preset.id
-            return (
-              <button
-                key={preset.id}
-                type="button"
-                aria-pressed={selected}
-                disabled={mandateBlocksEnable}
-                onClick={() => applyPreset(preset.id)}
-                className={`${PRESET_CHIP_CLASS}${selected ? ' border-foreground bg-muted' : ''}`}
-              >
-                {preset.label}
-              </button>
-            )
-          })}
-        </div>
-      </fieldset>
-
-      <button
-        type="button"
-        role="switch"
-        aria-checked={enabled}
-        aria-label="Auto-recharge"
-        disabled={switchDisabled}
-        className={`flex min-h-touch w-full items-center justify-between gap-4 rounded-md text-left disabled:cursor-not-allowed disabled:opacity-50 ${SWITCH_PRESS_CLASS}`}
-        data-state={enabled ? 'on' : 'off'}
-        onClick={() => {
-          if (switchDisabled) return
-          setEnabled((current) => !current)
-          clearDiagnostic()
-        }}
-      >
-        <span className="text-sm">Auto-recharge</span>
-        <span
-          className="relative inline-flex h-6 w-11 shrink-0 rounded-full border border-input bg-muted transition-colors data-[state=on]:bg-primary"
-          data-state={enabled ? 'on' : 'off'}
-          aria-hidden="true"
-        >
-          <span
-            className="pointer-events-none block size-5 translate-x-0.5 rounded-full border border-border bg-background shadow-none transition-transform data-[state=on]:translate-x-[1.375rem]"
-            data-state={enabled ? 'on' : 'off'}
-          />
-        </span>
-      </button>
-
-      <div className="grid gap-2">
-        <Label htmlFor="auto-recharge-threshold">Low balance threshold (AUD)</Label>
-        <Input
-          ref={thresholdInputRef}
-          id="auto-recharge-threshold"
-          inputMode="decimal"
-          value={thresholdText}
-          aria-invalid={thresholdInvalid || undefined}
-          onChange={(event) => {
-            setThresholdText(event.target.value)
-            clearDiagnostic()
-          }}
-          className="font-mono tabular-nums"
-        />
+    </SettingsRow>
+    <SettingsRow label="Quick setup" description="Choose a preset or enter your own amounts.">
+      <div className="flex flex-wrap gap-2 sm:justify-end">
+        {AUTO_RECHARGE_PRESETS.map((preset) => <Button key={preset.id} type="button" variant={selectedPresetId === preset.id ? 'secondary' : 'outline'} size="sm" aria-pressed={selectedPresetId === preset.id} disabled={mandateBlocksEnable} onClick={() => applyPreset(preset.id)}>{preset.label}</Button>)}
       </div>
-
-      <div className="grid gap-2">
-        <Label htmlFor="auto-recharge-amount">Recharge amount (AUD)</Label>
-        <Input
-          ref={rechargeInputRef}
-          id="auto-recharge-amount"
-          inputMode="decimal"
-          value={rechargeText}
-          aria-invalid={rechargeInvalid || undefined}
-          onChange={(event) => {
-            setRechargeText(event.target.value)
-            clearDiagnostic()
-          }}
-          className="font-mono tabular-nums"
-        />
-        <p className="text-xs text-muted-foreground">
-          Add A$5.00 to A$25,000.00 in A$0.01 increments.
-        </p>
-        <div className="min-h-[1.25rem]" aria-live="polite" />
+    </SettingsRow>
+    <SettingsRow label="Low balance threshold" description="Start a recharge when available credit falls below this amount (AUD).">
+      <Input ref={thresholdInputRef} id="auto-recharge-threshold" aria-label="Low balance threshold (AUD)" inputMode="decimal" value={thresholdText} aria-invalid={thresholdInvalid || undefined} onChange={(event) => { setThresholdText(event.target.value); clearDiagnostic() }} className="w-full font-mono tabular-nums sm:w-48" />
+    </SettingsRow>
+    <SettingsRow label="Recharge amount" description="Add A$5.00 to A$25,000.00 in A$0.01 increments.">
+      <Input ref={rechargeInputRef} id="auto-recharge-amount" aria-label="Recharge amount (AUD)" inputMode="decimal" value={rechargeText} aria-invalid={rechargeInvalid || undefined} onChange={(event) => { setRechargeText(event.target.value); clearDiagnostic() }} className="w-full font-mono tabular-nums sm:w-48" />
+    </SettingsRow>
+    <SettingsRow label="Save auto-recharge" description="Changes only take effect after saving.">
+      <div className="grid gap-3 sm:justify-items-end">
+        {renderStatusSlot()}
+        <Button type="button" disabled={saving} onClick={() => { void handleSave() }}>{saving ? 'Saving…' : 'Save changes'}</Button>
       </div>
-
-      <div className="min-h-[5.5rem]">{renderStatusSlot()}</div>
-
-      <Button type="button" variant="secondary" disabled={saving} onClick={() => { void handleSave() }}>
-        {saving ? 'Saving…' : 'Save'}
-      </Button>
-    </div>
-  )
+    </SettingsRow>
+  </SettingsGroup>
 }

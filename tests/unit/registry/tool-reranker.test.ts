@@ -19,6 +19,24 @@ import {
 describe('Jev x402 Tool Search Re-ranker (cookbooks/rerank_typesafe.md)', () => {
   const sampleOkResult = misorderedSearchResult('verify blockchain payment on base')
 
+  it('does not promote routeable but unverified testnet supply to a ready recommendation', () => {
+    const tool = {
+      ...TOOL_CURRENCY,
+      availability: { posture: 'routeable' as const, reason: 'inspection_required' as const },
+      payment: { protocol: 'x402' as const, scheme: 'exact' as const, network: 'eip155:84532', asset: 'USDC', currency: 'USDC' },
+    }
+    const output = projectToolSearchChoices({
+      kind: 'ok', schemaVersion: 'registry-tools:v3', query: 'weather',
+      items: [tool], ranking: [], pagination: { limit: 10, hasMore: false }, navigation: [],
+    }, undefined, { verdict: 'matched', nearMisses: [] })
+    expect(output.kind).toBe('degraded')
+    if (output.kind !== 'degraded') return
+    expect(output.results[0]).toMatchObject({
+      readiness: 'unverified', verification: 'not_verified', network: 'testnet', claimSource: 'provider',
+    })
+    expect(output).not.toHaveProperty('recommendation')
+  })
+
   it('preserves search result untouched when query is empty, whitespace, disabled, or items <= 1', async () => {
     await expect(rerankToolSearchResult(sampleOkResult, '')).resolves.toBe(sampleOkResult)
     await expect(rerankToolSearchResult(sampleOkResult, '   ')).resolves.toBe(sampleOkResult)
@@ -65,22 +83,22 @@ describe('Jev x402 Tool Search Re-ranker (cookbooks/rerank_typesafe.md)', () => 
       'verify blockchain payment on base',
       {
         openrouterApiKey: 'test-key',
-        fetchImpl: mockJevFetch(jevAnswersForTool('operation:v1:crypto_tx_lookup', [0.05, 0.96, 0.25])),
+        fetchImpl: mockJevFetch(jevAnswersForTool('operation:v1:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', [0.05, 0.96, 0.25])),
       },
     )
 
     expect(reranked.kind).toBe('ok')
     if (reranked.kind !== 'ok') return
 
-    expect(reranked.items[0]?.toolRef).toBe('operation:v1:crypto_tx_lookup')
+    expect(reranked.items[0]?.toolRef).toBe('operation:v1:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa')
     expect(reranked.ranking).toHaveLength(3)
     expect(reranked.ranking[0]).toEqual({
-      toolRef: 'operation:v1:crypto_tx_lookup',
+      toolRef: 'operation:v1:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
       rank: 1,
       score: 0.96,
     })
-    expect(reranked.ranking[1]?.toolRef).toBe('operation:v1:currency_exchange')
-    expect(reranked.ranking[2]?.toolRef).toBe('operation:v1:timezone_converter')
+    expect(reranked.ranking[1]?.toolRef).toBe('operation:v1:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc')
+    expect(reranked.ranking[2]?.toolRef).toBe('operation:v1:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb')
   })
 
   it('sorts the ERC-20 transfer tool to rank 1 for a transfer-lookup query', async () => {
@@ -89,19 +107,19 @@ describe('Jev x402 Tool Search Re-ranker (cookbooks/rerank_typesafe.md)', () => 
       ERC20_QUERY,
       {
         openrouterApiKey: 'test-key',
-        fetchImpl: mockJevFetch(jevAnswersForTool('operation:v1:crypto_tx_lookup', [0.08, 0.94, 0.11])),
+        fetchImpl: mockJevFetch(jevAnswersForTool('operation:v1:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', [0.08, 0.94, 0.11])),
       },
     )
 
     expect(reranked.kind).toBe('ok')
     if (reranked.kind !== 'ok') return
     expect(reranked.items.map((item) => item.toolRef)).toEqual([
-      'operation:v1:crypto_tx_lookup',
-      'operation:v1:currency_exchange',
-      'operation:v1:timezone_converter',
+      'operation:v1:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+      'operation:v1:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc',
+      'operation:v1:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
     ])
     expect(reranked.ranking[0]).toEqual({
-      toolRef: 'operation:v1:crypto_tx_lookup',
+      toolRef: 'operation:v1:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
       rank: 1,
       score: 0.94,
     })
@@ -113,15 +131,15 @@ describe('Jev x402 Tool Search Re-ranker (cookbooks/rerank_typesafe.md)', () => 
       TIMEZONE_QUERY,
       {
         openrouterApiKey: 'test-key',
-        fetchImpl: mockJevFetch(jevAnswersForTool('operation:v1:timezone_converter', [0.97, 0.04, 0.06])),
+        fetchImpl: mockJevFetch(jevAnswersForTool('operation:v1:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb', [0.97, 0.04, 0.06])),
       },
     )
 
     expect(reranked.kind).toBe('ok')
     if (reranked.kind !== 'ok') return
-    expect(reranked.items[0]?.toolRef).toBe('operation:v1:timezone_converter')
+    expect(reranked.items[0]?.toolRef).toBe('operation:v1:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb')
     expect(reranked.ranking[0]).toEqual({
-      toolRef: 'operation:v1:timezone_converter',
+      toolRef: 'operation:v1:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
       rank: 1,
       score: 0.97,
     })
@@ -162,9 +180,9 @@ describe('Jev x402 Tool Search Re-ranker (cookbooks/rerank_typesafe.md)', () => 
         match_2: { type: 'noul', noul: 0.2 },
         best_match: {
           type: 'choice',
-          choice: 'operation:v1:crypto_tx_lookup',
+          choice: 'operation:v1:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
           confidence: 0.9,
-          probabilities: { 'operation:v1:crypto_tx_lookup': 0.9 },
+          probabilities: { 'operation:v1:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa': 0.9 },
         },
       },
       usage: { inputTokens: 10, outputTokens: 0, estimatedCostAud: 'A$0.000000' },
@@ -199,8 +217,8 @@ describe('Jev x402 Tool Search Re-ranker (cookbooks/rerank_typesafe.md)', () => 
       query: sampleOkResult.query,
       items: [TOOL_TIMEZONE, TOOL_CRYPTO_TX, TOOL_CURRENCY, {
         ...TOOL_CURRENCY,
-        toolRef: 'operation:v1:currency_exchange_overflow' as typeof TOOL_CURRENCY.toolRef,
-        toolId: 'operation:v1:currency_exchange_overflow',
+        toolRef: 'operation:v1:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd' as typeof TOOL_CURRENCY.toolRef,
+        toolId: 'operation:v1:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd',
       }],
       ranking: [],
       pagination: { limit: 10, hasMore: false },
@@ -215,9 +233,9 @@ describe('Jev x402 Tool Search Re-ranker (cookbooks/rerank_typesafe.md)', () => 
         match_1: { type: 'noul', noul: 0.9 },
         best_match: {
           type: 'choice',
-          choice: 'operation:v1:crypto_tx_lookup',
+          choice: 'operation:v1:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
           confidence: 0.9,
-          probabilities: { 'operation:v1:crypto_tx_lookup': 0.9 },
+          probabilities: { 'operation:v1:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa': 0.9 },
         },
       }),
     })
@@ -225,10 +243,10 @@ describe('Jev x402 Tool Search Re-ranker (cookbooks/rerank_typesafe.md)', () => 
     expect(reranked.kind).toBe('ok')
     if (reranked.kind !== 'ok') return
     expect(reranked.items.map((item) => item.toolRef)).toEqual([
-      'operation:v1:crypto_tx_lookup',
-      'operation:v1:timezone_converter',
-      'operation:v1:currency_exchange',
-      'operation:v1:currency_exchange_overflow',
+      'operation:v1:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+      'operation:v1:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
+      'operation:v1:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc',
+      'operation:v1:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd',
     ])
     expect(reranked.ranking).toEqual([
       { toolRef: TOOL_CRYPTO_TX.toolRef, rank: 1, score: 0.9 },
@@ -237,10 +255,10 @@ describe('Jev x402 Tool Search Re-ranker (cookbooks/rerank_typesafe.md)', () => 
     const roundTrip = deserializeToolSearchResult(serializeToolSearchResult(reranked))
     expect(roundTrip).toEqual(reranked)
     const publicResult = toolChoiceSearchOutputSchema.parse(projectToolSearchChoices(roundTrip))
-    expect(publicResult.kind).toBe('ok')
-    if (publicResult.kind !== 'ok') return
-    expect(publicResult.items.map(item => item.toolRef)).toEqual(reranked.items.map(item => item.toolRef))
-    expect(publicResult).not.toHaveProperty('ranking')
+    expect(publicResult.kind).toBe('degraded')
+    if (publicResult.kind !== 'degraded') return
+    expect(publicResult.results.map(item => item.toolRef)).toEqual(reranked.items.map(item => item.toolRef))
+    expect(publicResult).not.toHaveProperty('recommendation')
   })
 
   it('does not assess ambiguous duplicate Tool identities', async () => {

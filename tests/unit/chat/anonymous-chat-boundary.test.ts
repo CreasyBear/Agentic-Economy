@@ -1,12 +1,12 @@
 import { describe, expect, it, vi } from 'vitest'
 
+import { handleAnonymousChatRequest } from '../../../convex/lib/chat/anonymous/request'
 import {
-  handleAnonymousChatRequest,
   MAX_ANONYMOUS_CHAT_MESSAGES,
   MAX_ANONYMOUS_CHAT_PROMPT_CHARACTERS,
   MAX_ANONYMOUS_CHAT_TRANSCRIPT_BYTES,
   validateAnonymousChatBody,
-} from '../../../convex/chatAnonymous'
+} from '../../../convex/lib/chat/anonymous/contracts'
 
 const PROXY_SECRET = 'anonymous-chat-proxy-secret-at-least-32-characters'
 const ADMISSION_KEY = `ip:sha256:${'a'.repeat(64)}:sha256:${'b'.repeat(64)}`

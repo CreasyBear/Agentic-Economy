@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest'
 
 import { api, internal } from '../../convex/_generated/api'
 import schema from '../../convex/schema'
-import { toRow as providerConnectionRow } from '../../convex/lib/providerConnections/codecs'
+import { toRow as providerConnectionRow } from '../../convex/lib/capabilitySupply/providerConnections/codecs'
 import {
   createX402ProviderConnection,
   reauthorizeProviderConnection,

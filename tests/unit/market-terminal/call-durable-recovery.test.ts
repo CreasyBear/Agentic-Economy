@@ -99,10 +99,10 @@ describe('durable CLI Call recovery across processes', () => {
     expect(first.status).toBe(1)
     const failure = JSON.parse(first.stdout)
     expect(failure.code).toBe('call-transport-unknown')
-    const recoveryRef = failure.detail.recoveryRef
+    const recoveryRef = failure.refs.recoveryRef
     expect(failure.nextCommand).toBe(`ae call resume ${recoveryRef} --base-url ${origin} --json`)
     const repeated = await run(['call', toolRef, '--input', JSON.stringify({ order: input.order, privateValue: input.privateValue })])
-    expect(JSON.parse(repeated.stdout)).toMatchObject({ code: 'call-recovery-required', detail: { recoveryRef } })
+    expect(JSON.parse(repeated.stdout)).toMatchObject({ code: 'call-recovery-required', refs: { recoveryRef } })
     expect(quotes).toBe(1)
     expect(calls).toHaveLength(1)
 
@@ -135,7 +135,7 @@ describe('durable CLI Call recovery across processes', () => {
   it('rejects origin, Account and Agent changes before any replay while allowing credential rotation', async () => {
     onCall = (response) => response.destroy()
     const first = await startCall()
-    const { recoveryRef } = JSON.parse(first.stdout).detail
+    const { recoveryRef } = JSON.parse(first.stdout).refs
     const otherOrigin = await run(['call', 'resume', recoveryRef], 'OTHER_ORIGIN_KEY', 'http://127.0.0.1:1')
     expect(JSON.parse(otherOrigin.stdout).code).toBe('call-recovery-origin-mismatch')
     account = 'account:other'
@@ -152,8 +152,8 @@ describe('durable CLI Call recovery across processes', () => {
     const first = await startCall()
     const failure = JSON.parse(first.stdout)
     expect(failure.code).toBe('call-result-invalid')
-    expect(failure.nextCommand).toContain(`call resume ${failure.detail.recoveryRef}`)
-    writeFileSync(join(configDirectory, 'calls', `call-${failure.detail.recoveryRef}.json`), '{corrupted', 'utf8')
+    expect(failure.nextCommand).toContain(`call resume ${failure.refs.recoveryRef}`)
+    writeFileSync(join(configDirectory, 'calls', `call-${failure.refs.recoveryRef}.json`), '{corrupted', 'utf8')
     const repeat = await startCall()
     expect(JSON.parse(repeat.stdout).code).toBe('call-recovery-storage-unavailable')
     expect(quotes).toBe(1)
@@ -179,14 +179,14 @@ describe('durable CLI Call recovery across processes', () => {
   it('does not obtain a new Quote when an uncertain replay encounters an expired Quote', async () => {
     onCall = (response) => response.destroy()
     const first = await startCall()
-    const { recoveryRef } = JSON.parse(first.stdout).detail
+    const { recoveryRef } = JSON.parse(first.stdout).refs
     onCall = (response) => {
       response.writeHead(410, { 'content-type': 'application/problem+json' })
       response.end(JSON.stringify({ type: 'about:blank', title: 'Quote expired', status: 410, kind: 'FAILED_PRECONDITION', code: 'quote_expired' }))
     }
     const resumed = await run(['call', 'resume', recoveryRef])
     expect(resumed.status).toBe(1)
-    expect(JSON.parse(resumed.stdout)).toMatchObject({ code: 'quote_expired', detail: { recoveryRef, identityPreserved: true } })
+    expect(JSON.parse(resumed.stdout)).toMatchObject({ code: 'quote_expired', refs: { recoveryRef, identityPreserved: true } })
     const repeated = await startCall()
     expect(JSON.parse(repeated.stdout).code).toBe('call-recovery-required')
     expect(quotes).toBe(1)

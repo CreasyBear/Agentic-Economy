@@ -2,7 +2,7 @@
 
 **Date:** 21 September 2026
 **Status:** Approved operating manual for `DS-01`–`DS-39`. Read this file first after compaction.
-**Authority:** `PRODUCT.md`, `CONTEXT.md`, `DESIGN.md`, `AGENTS.md`, `docs/designs/2026-09-21-design-system-iceinvein.md`, `docs/operations/design-system-maturity-register.md`
+**Authority:** `PRODUCT.md`, `CONTEXT.md`, `DESIGN.md`, `AGENTS.md`
 
 This is a **design-system campaign**. It harvests the whole app onto the frozen `/market?view=discover` grammar. It is not a two-page restyle.
 

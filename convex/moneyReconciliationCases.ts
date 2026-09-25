@@ -3,7 +3,8 @@ import { v } from 'convex/values'
 
 import { mutation, query } from './_generated/server'
 import { resolveBusinessActor } from './authz'
-import { requireSourceWrite, sourceWriteArgs } from './sourceWriteAdmission'
+import { requireSourceWrite } from './lib/security/sourceWrite/admission'
+import { sourceWriteArgs } from './lib/security/sourceWrite/contracts'
 
 const caseKind = v.union(
   v.literal('projection_mismatch'),

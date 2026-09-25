@@ -2,7 +2,7 @@ import { listingTier } from '@/modules/capability-supply/public'
 
 import type { Doc } from './_generated/dataModel'
 import type { QueryCtx } from './_generated/server'
-import { activeDirectoryGeneration } from './lib/x402DirectoryIndex/rows'
+import { activeDirectoryGeneration } from './lib/market/directoryIndex/rows'
 
 /**
  * The admitted registry (`capabilitySupplyTools.search/detail/compare`, and
@@ -44,7 +44,7 @@ export async function directoryListingEligible(
 /**
  * Same join as `directoryListingEligible`, additionally returning the
  * directory row (when one was found) so a single caller - today only
- * `capabilitySupplyToolShared.ts:toolRecordProjection` - can also read
+ * `lib/capabilitySupply/tool/projection.ts:toolRecordProjection` - can also read
  * `providerKey`/`slug` for the canonical Tool URL without a second query
  * against `marketDirectorySearchEntries` for the same publication.
  */

@@ -17,6 +17,7 @@ const HANDLERS: Record<ScheduledWorkloadName, FunctionReference<'mutation' | 'ac
   'cleanup expired agent access oauth grants': internal.workloadCron.cleanupExpiredAgentAccessOAuthGrants,
   'observe x402 treasury': internal.workloadCron.observeX402Treasury,
   'snapshot marketplace metrics day': internal.workloadCron.snapshotMarketplaceMetricsDay,
+  'refresh market flow': internal.workloadCron.refreshMarketFlow,
 }
 
 const crons = cronJobs()
@@ -29,8 +30,8 @@ if (scheduledWorkloadsEnabled !== undefined
 
 // Pre-launch cadence: keep recovery and freshness without burning included
 // Convex usage. Tighten these only when the market is actually live.
-// Bazaar pages are admitted on demand through capabilityToolCatalog, so
-// 'refresh facilitator discovery' declares no interval.
+// Facilitator discovery is ingested every six hours; source-filtered search
+// reads the reconciled publication snapshot without admitting on demand.
 // Environment changes affect these registrations on the next deploy. This
 // gates recurring crons only; manual calls and durable Call recovery remain available.
 // https://docs.convex.dev/production/environment-variables

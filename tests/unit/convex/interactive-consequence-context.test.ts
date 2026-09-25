@@ -2,13 +2,13 @@ import { convexTest } from 'convex-test'
 import { getFunctionName } from 'convex/server'
 import { describe, expect, it, vi } from 'vitest'
 
-import { api } from '../../../convex/_generated/api'
+import { api, internal } from '../../../convex/_generated/api'
 import schema from '../../../convex/schema'
 import {
   runOwnerSupplyReadiness,
   runOwnerSupplyTest,
 } from '../../../convex/capabilitySupplyOwnerSupply'
-import { interactiveCredentialExpiryNonce } from '../../../convex/interactiveCredentialLifecycle'
+import { interactiveCredentialExpiryNonce } from '../../../convex/lib/principalAccount/interactiveCredential/nonce'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { stableStringify } from '@/modules/common/stable-hash'
 import { convexModules as modules, publishedBusinessOwner } from '../../helpers/convex-fixtures'
@@ -93,7 +93,7 @@ describe('interactive consequence authority', () => {
     })])
 
     await expect(accountBOwner.action(
-      api.capabilitySupplyOwnerSupply.runOwnerSupplyReadiness,
+      internal.capabilitySupplyOwnerSupply.runOwnerSupplyReadiness,
       {
         businessId,
         offeringRef: 'offering:request-substitution',

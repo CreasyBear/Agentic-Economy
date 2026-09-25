@@ -8,6 +8,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { z } from 'zod'
 
 import { defineAction, mcpToolName } from '@/modules/actions'
+import { agentAccountSelfAction } from '@/modules/agent-access/account.actions'
+import { authenticateWithScopes } from './mcp-api-harness'
 import { setHttpRateLimitAdmissionForTests } from '@/lib/server/rate-limit'
 
 afterEach(() => {
@@ -34,38 +36,13 @@ describe('MCP host adapter protocol', () => {
       capabilities: { tools: expect.any(Object) },
     })
     const instructions = body.result?.instructions
-    expect(instructions).toBe(
-      'Use Agentic Economy to acquire one bounded outside contribution when your current harness lacks a capability. '
-      + 'Search with `ae_registry_tools_search` and what you need. '
-      + 'Use `ae_registry_tools_list` to browse, `ae_registry_tools_describe` for one exact input contract, and `ae_registry_tools_compare` for up to four exact references. '
-      + '`ae_tool_quote` and `ae_tool_call` are protected Tools: they appear in `tools/list` only after the agent connects. Connect through the OAuth device flow via `ae connect` (CLI), or, for MCP clients that support authorization, through the `/.well-known/oauth-protected-resource` metadata. '
-      + 'Call `ae_tool_quote` with the exact Tool and input. Complete its one continuation or required action, then request a fresh Quote if the input or authority changes. '
-      + 'Call only with the Quote returned by `ae_tool_quote`. '
-      + 'If Account credit is insufficient, use `ae_funding_handoff_create`, give only its Stripe checkoutUrl to the payer, persist fundingSessionId, poll `ae_funding_handoff_status`, then explicitly retry the original Tool only after ready. '
-      + 'If effects are uncertain, use `ae_call_status` or `ae_call_reconcile` before retrying. '
-      + 'Agentic Economy returns the contribution or receipt; your existing harness keeps project planning and execution. '
-      + 'See `/glossary.md` for the vocabulary used above, such as Tool, Quote and Call.',
-    )
     expect(typeof instructions).toBe('string')
-    expect([...String(instructions).matchAll(/`(ae_[^`]+)`/g)].map((match) => match[1])).toEqual([
-      'ae_registry_tools_search',
-      'ae_registry_tools_list',
-      'ae_registry_tools_describe',
-      'ae_registry_tools_compare',
-      'ae_tool_quote',
-      'ae_tool_call',
-      'ae_tool_quote',
-      'ae_tool_quote',
-      'ae_funding_handoff_create',
-      'ae_funding_handoff_status',
-      'ae_call_status',
-      'ae_call_reconcile',
-    ])
-    expect(instructions).toContain('one bounded outside contribution')
-    expect(instructions).toContain('your existing harness keeps project planning and execution')
-    expect(instructions).not.toMatch(/Agentic Economy (?:owns|plans|executes|orchestrates)/i)
-    expect(instructions).not.toMatch(/api[_ -]?key|bearer|credential|password|secret|private origin|https?:\/\/|localhost/i)
-    expect(instructions).not.toMatch(/\bevidence\b|idempotenc/i)
+    expect(instructions).toContain('ae_registry_tools_search')
+    expect(instructions).toContain('ae_registry_tools_describe')
+    expect(instructions).toContain('ae_registry_tools_compare')
+    expect(instructions).toContain('/mcp?readonly=1')
+    expect(instructions).not.toContain('ae_registry_tools_list')
+    expect(instructions).not.toMatch(/api[_ -]?key|bearer|password|secret|private origin|https?:|localhost/i)
   })
   it('maps top-level MCP request schema failures to Invalid params', async () => {
     const malformedInitialize = await postMcp({
@@ -220,51 +197,19 @@ describe('MCP host adapter protocol', () => {
   it('sanitizes thrown MCP action errors', async () => {
     const secret = 'secret_internal_exception_detail recovery:v1:private'
     const correlationId = 'corr_mcp_safe_42'
-    const throwingAction = defineAction({
-      id: 'test.throwing',
-      name: 'Throwing test action',
-      summary: 'Throws a private error for MCP sanitization coverage.',
-      boundaries: ['Used only by this test.'],
-      schema: z.strictObject({}),
-      parameters: [],
-      readOnly: true,
-      effect: {
-        class: 'observation',
-        reversible: true,
-        recipientKind: 'none',
-        dataClasses: [],
-        spendExposure: 'none',
-        approval: 'none',
-      },
-      surfaces: ['mcp'],
-      outputSchema: z.strictObject({ kind: z.literal('ok') }),
-      invocationContract: {
-        version: 'test.throwing:v1',
-        consequenceClass: 'read_only',
-        materialInputPaths: [],
-        authorityRequirement: 'none',
-        retryClass: 'replayable',
-        expectedEvidence: [],
-        safeContinuations: [],
-        invalidationConditions: ['action_contract_version_changed'],
-      },
-      run: async () => {
-        throw new Error(secret)
-      },
-    })
-
+    const run = vi.spyOn(agentAccountSelfAction, 'run').mockRejectedValue(new Error(secret))
     const response = await postMcp(
       {
         jsonrpc: '2.0',
         id: 9,
         method: 'tools/call',
         params: {
-          name: mcpToolName(throwingAction),
+          name: mcpToolName(agentAccountSelfAction),
           arguments: {},
         },
       },
-      { actions: [throwingAction] },
-      { 'x-ae-request-id': correlationId },
+      { authenticate: authenticateWithScopes(['market_tools:call']) },
+      { 'x-ae-request-id': correlationId, authorization: 'Bearer test' },
     )
 
     expect(response.status).toBe(200)
@@ -278,9 +223,8 @@ describe('MCP host adapter protocol', () => {
     expect(result.isError).toBe(true)
     const text = result.content?.[0]?.text
     expect(typeof text).toBe('string')
-    const textFallback = JSON.parse(text ?? 'null') as Record<string, unknown>
-    expect(result.structuredContent).toEqual(textFallback)
-    expect(textFallback).toEqual({
+    expect(text).not.toContain('{')
+    expect(result.structuredContent).toMatchObject({
       type: 'about:blank',
       title: 'Internal error',
       status: 500,
@@ -288,8 +232,10 @@ describe('MCP host adapter protocol', () => {
       kind: 'INTERNAL',
       code: 'action_execution_failed',
       retryable: false,
-      correlationId,
+      requestId: correlationId,
+      next: [],
     })
+    run.mockRestore()
     expect(JSON.stringify(result)).not.toContain(secret)
     expect(JSON.stringify(result)).not.toContain('recovery:v1:private')
   })
@@ -369,6 +315,16 @@ describe('MCP host adapter protocol', () => {
     expect(response.headers.get('WWW-Authenticate')).toBe(
       'Bearer resource_metadata="https://canonical.example/.well-known/oauth-protected-resource", scope="market_tools:call customer_requests:approval_required offline_access"',
     )
+    await expect(response.json()).resolves.toMatchObject({
+      status: 401,
+      kind: 'UNAUTHENTICATED',
+      code: 'authentication_required',
+      next: expect.arrayContaining([
+        { action: 'connect', args: { via: 'cli', command: 'ae connect' }, authority: 'human_owner' },
+        { action: 'connect', args: { via: 'oauth_device', url: 'https://canonical.example/.well-known/oauth-protected-resource' }, authority: 'human_owner' },
+        { action: 'connect', args: { via: 'oauth_device', url: 'https://canonical.example/oauth/device_authorization' }, authority: 'human_owner' },
+      ]),
+    })
   })
 
   it('rejects an over-limit POST body as a truthful 413 transport response', async () => {

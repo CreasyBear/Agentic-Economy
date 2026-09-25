@@ -17,6 +17,7 @@ import {
 type JsonRecord = Record<string, unknown>
 const HTTP_METHODS: Readonly<Record<string, true>> = {
   delete: true,
+  head: true,
   get: true,
   patch: true,
   post: true,
@@ -28,6 +29,9 @@ const OPERATION_GROUP_TAG_SET: Readonly<Record<DevelopersApiOperationGroupTag, t
   Funding: true,
   Businesses: true,
   Platform: true,
+  Account: true,
+  'Market demand': true,
+  Provider: true,
 }
 
 export function createDevelopersApiViewModel(document: OpenApiDocument): DevelopersApiViewModel {
@@ -46,6 +50,9 @@ export function createDevelopersApiViewModel(document: OpenApiDocument): Develop
     Funding: [],
     Businesses: [],
     Platform: [],
+    Account: [],
+    'Market demand': [],
+    Provider: [],
   }
   for (const [path, pathValue] of Object.entries(paths)) {
     const methods = record(pathValue, `document.paths.${path}`)
@@ -58,12 +65,21 @@ export function createDevelopersApiViewModel(document: OpenApiDocument): Develop
       const tag = operationGroupTagAt(operation, site)
       const requestExample = readRequestExample(operation)
       const hasRequestBody = operation.requestBody !== undefined
+      const headerNames = Array.isArray(operation.parameters)
+        ? operation.parameters.flatMap((parameter) => {
+            const value = optionalRecord(parameter)
+            return value?.in === 'header' && typeof value.name === 'string' ? [value.name] : []
+          })
+        : []
       buckets[tag].push({
         operationId,
         method: method.toUpperCase(),
         path,
         summary,
-        curl: curlFor({ serverUrl, method: method.toUpperCase(), path, hasRequestBody, requestExample }),
+        curl: curlFor({
+          serverUrl, method: method.toUpperCase(), path, hasRequestBody, requestExample,
+          authenticated: Array.isArray(operation.security) && operation.security.length > 0, headerNames,
+        }),
       })
     }
   }
@@ -136,18 +152,20 @@ function curlFor(input: Readonly<{
   path: string
   hasRequestBody: boolean
   requestExample: unknown
+  authenticated: boolean
+  headerNames: readonly string[]
 }>): string {
   const lines = [
-    `curl --request ${input.method} \\`,
-    `  '${input.serverUrl.replace(/\/+$/u, '')}${input.path}' \\`,
-    `  --header 'Authorization: Bearer <your key>'`,
+    `curl --request ${input.method}`,
+    `'${input.serverUrl.replace(/\/+$/u, '')}${input.path}'`,
+    ...(input.authenticated ? [`--header 'Authorization: Bearer <your key>'`] : []),
+    ...input.headerNames.map((name) => `--header '${name}: <stable-key>'`),
   ]
-  if (!input.hasRequestBody) return lines.join('\n')
-  const body = JSON.stringify(input.requestExample === undefined ? {} : input.requestExample) ?? '{}'
-  lines[2] = `${lines[2]} \\`
-  lines.push(`  --header 'Content-Type: application/json' \\`)
-  lines.push(`  --data '${body.replaceAll("'", `'"'"'`)}'`)
-  return lines.join('\n')
+  if (input.hasRequestBody) {
+    const body = JSON.stringify(input.requestExample === undefined ? {} : input.requestExample) ?? '{}'
+    lines.push(`--header 'Content-Type: application/json'`, `--data '${body.replaceAll("'", `'"'"'`)}'`)
+  }
+  return lines.join(' \\\n  ')
 }
 
 function resolveProblemSchema(root: JsonRecord, components: JsonRecord, paths: JsonRecord): JsonRecord {

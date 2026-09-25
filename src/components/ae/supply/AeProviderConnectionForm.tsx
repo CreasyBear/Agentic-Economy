@@ -1,8 +1,7 @@
 import { Link } from '@tanstack/react-router'
 import type { FormEvent, RefObject } from 'react'
 
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
-import { AeEmptyState } from '@/components/ae/feedback/AeEmptyState'
+import { SettingsEmptyState, SettingsRow } from '@/components/ae/settings/settings-shell/components/SettingsSections'
 import { Button } from '@/components/ui/button'
 import { buttonVariants } from '@/components/ui/button-variants'
 import { Input } from '@/components/ui/input'
@@ -90,17 +89,18 @@ export function AeProviderConnectionForm({
               <option value="GET">GET</option>
             </select>
           </div>
-          <p className="text-sm text-muted-foreground">Environment: {environment}</p>
+          <SettingsRow label="Environment" description="The environment used to inspect and verify this payment lane.">
+            {environment}
+          </SettingsRow>
           {inspection === undefined ? null : (
-            <Alert>
-              <AlertTitle>Exact payment lane observed</AlertTitle>
-              <AlertDescription className="grid gap-1">
+            <SettingsRow label="Observed payment lane" description="The exact challenge returned by this endpoint.">
+              <div className="grid min-w-0 gap-1 text-left sm:text-right">
                 <span>Amount: {inspection.amount}</span>
                 <span>Network: {inspection.network}</span>
                 <span className="break-all">Asset: {inspection.asset}</span>
                 <span className="break-all">Payee: {inspection.payTo}</span>
-              </AlertDescription>
-            </Alert>
+              </div>
+            </SettingsRow>
           )}
           <div className="flex flex-wrap gap-2">
             <Button
@@ -140,7 +140,7 @@ export function AeProviderConnectionForm({
           </div>
         </form>
       ) : readOnly ? null : (
-        <AeEmptyState
+        <SettingsEmptyState
           title="Provider identity is required to connect"
           description="Create an unpublished provider workspace, then return here to inspect and claim the x402 endpoint."
           action={

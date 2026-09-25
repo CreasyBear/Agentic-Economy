@@ -361,8 +361,9 @@ export function oauthError(
   error: AgentAccessOAuthErrorCode,
   status: 400 | 401 | 403 | 413 | 429 | 503,
   headers: Readonly<Record<string, string>> = {},
+  description?: string,
 ): Response {
-  const body: OAuthErrorBody = { error, error_description: OAUTH_ERROR_DESCRIPTIONS[error] }
+  const body: OAuthErrorBody = { error, error_description: description ?? OAUTH_ERROR_DESCRIPTIONS[error] }
   const retryAfter = error === 'authorization_pending'
     ? '5'
     : error === 'slow_down'

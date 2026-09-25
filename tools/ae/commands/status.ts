@@ -1,25 +1,19 @@
 import { isRecord } from '@/modules/common/is-record'
+import { statusRefSchema, validateJourneyNext } from '@/modules/actions/contract'
+import { journeyStatusResultSchema } from '@/modules/actions/status.actions'
 import { MARKET_SUPPLY_MANAGE_SCOPE } from '@/modules/agent-access/contract'
 import { CALL_ROUTE_CONTRACT } from '@/modules/capability-execution/call-entry'
-import {
-  callStatusResultSchema,
-  callStatusInputSchema,
-} from '@/modules/capability-execution/call-recovery.actions'
-import {
-  callStatusStateSchema,
-  type CallStatusResult,
-} from '@/modules/capability-execution/call-recovery-contracts'
+import { callStatusResultSchema } from '@/modules/capability-execution/call-recovery.actions'
+import type { CallStatusResult } from '@/modules/capability-execution/call-recovery-contracts'
 import type { CliOptions } from '../lib/args'
 import { resolveAgentAccessCredential } from '../lib/config'
-import { CliFailure, callJson, heading, line, printJson, requireOk, table } from '../lib/output'
+import { CliFailure, callJson, heading, line, printJson, requireOk } from '../lib/output'
 import { usageFailure } from '../lib/help'
-import { cliContinuation, continuationCommand, continuationFlags } from '../lib/continuation-command'
+import { journeyNextCommand } from '../lib/journey-next-command'
 import { CALL_REF_FORMAT_EXAMPLE } from '../lib/tool-ref-format'
-import {
-  connectionContinuationForCli,
-  creditContinuationForCli,
-  callNextActionForCli,
-} from '../lib/suggested-continuation-adapter'
+import { connectionContinuationForCli } from '../lib/suggested-continuation-adapter'
+import { cliContinuation } from '../lib/continuation-command'
+export { renderStatusResult, STATUS_REFUSED_EXIT_CODE } from './status-render'
 
 export const MAX_STATUS_WAIT_MS = 60_000
 export const MIN_STATUS_DELAY_MS = 100
@@ -206,63 +200,6 @@ export function recoveryTransportFailure(
   )
 }
 
-type StatusContinuation = Readonly<{ command?: string; warning?: string }>
-
-/** A refused status is a failure like every other refusal, so it must not exit 0. */
-export const STATUS_REFUSED_EXIT_CODE = 1
-
-export function renderStatusResult(
-  title: string,
-  callRef: string,
-  body: unknown,
-  options: CliOptions,
-): number {
-  const record = asRecord(body)
-  let continuation: StatusContinuation | undefined
-  if (record?.kind === 'found' || record?.kind === 'refused') {
-    const parsedState = callStatusStateSchema.safeParse(record.state)
-    const usage = asRecord(record.usage)
-    continuation = record.code === 'invocation_not_found'
-      // An unknown Call cannot become known by asking again for it.
-      ? { command: 'ae history' }
-      : usage?.chargeState === 'insufficient_credit'
-        ? creditContinuationForCli()
-        : callNextActionForCli({
-            kind: record.kind,
-            callRef,
-            ...(parsedState.success ? { state: parsedState.data } : {}),
-            ...(typeof record.retryable === 'boolean' ? { retryable: record.retryable } : {}),
-          })
-  }
-  const continuationSuffix = continuationCommand(continuationFlags(options))
-  const nextCommand = continuation?.command === undefined
-    ? undefined
-    : continuationSuffix.length === 0
-      ? continuation.command
-      : `${continuation.command} ${continuationSuffix}`
-  const warning = continuation?.warning
-  const exitCode = record?.kind === 'refused' ? STATUS_REFUSED_EXIT_CODE : 0
-  if (options.json) {
-    printJson(record === undefined || nextCommand === undefined
-      ? body
-      : {
-          ...record,
-          nextCommand,
-          ...(warning === undefined ? {} : { warning }),
-        })
-    return exitCode
-  }
-  heading(`${title} ${callRef}`)
-  table([
-    ['status', typeof record?.state === 'string' ? record.state : typeof record?.kind === 'string' ? record.kind : 'unknown'],
-    ['tool', typeof record?.toolRef === 'string' ? record.toolRef : 'unknown'],
-  ])
-  if (nextCommand !== undefined) line(`  next: ${nextCommand}`)
-  if (continuation?.warning !== undefined) line(`  warning: ${continuation.warning}`)
-  line(JSON.stringify(body, undefined, 2))
-  return exitCode
-}
-
 export async function readCallStatus(
   options: CliOptions,
   callRef: string,
@@ -277,10 +214,10 @@ export async function readCallStatus(
   return parseStatusResult(requireOk(outcome, 'Call status'))
 }
 
-/** A missing or malformed call ref cannot be guessed, so name its exact shape and point at ae history to find one. */
+/** Status accepts the original canonical ref without guessing its kind. */
 function statusCallRefUsageFailure(options: CliOptions): CliFailure {
   return new CliFailure(
-    `Usage: ae status <call-ref>. A call ref looks like ${CALL_REF_FORMAT_EXAMPLE}, returned by ae call or ae history.`,
+    `Usage: ae status <ref>. Supply a Tool, Quote, Call or Turn ref; a Call ref looks like ${CALL_REF_FORMAT_EXAMPLE}.`,
     {
       kind: 'INVALID_ARGUMENT',
       code: 'status-usage',
@@ -291,21 +228,50 @@ function statusCallRefUsageFailure(options: CliOptions): CliFailure {
 }
 
 export async function runStatusCommand(args: readonly string[], options: CliOptions): Promise<number> {
-  const callRef = args[0]?.trim()
-  const parsedRef = callStatusInputSchema.safeParse({ callRef })
-  if (args.length > 1) {
-    throw usageFailure('status', 'status-usage')
-  }
-  if (!parsedRef.success) {
-    throw statusCallRefUsageFailure(options)
-  }
-
-  let body: CallStatusResult
+  const ref = args[0]?.trim()
+  if (args.length !== 1 || !ref) throw usageFailure('status', 'status-usage')
+  const kind = ref.startsWith('operation:v1:') ? 'tool'
+    : ref.startsWith('operation-commitment:v1:') ? 'quote'
+    : ref.startsWith('operation-invocation:v1:') ? 'call'
+    : ref.startsWith('turn_') ? 'turn' : undefined
+  const parsedRef = kind === undefined ? undefined : statusRefSchema.safeParse({ kind, ref })
+  if (!parsedRef?.success) throw statusCallRefUsageFailure(options)
+  let apiKey: string
   try {
-    body = await readCallStatus(options, parsedRef.data.callRef)
+    apiKey = requireAgentAccessKey('status', options)
   } catch (error) {
-    if (error instanceof CliFailure && error.kind !== 'UNAVAILABLE') throw error
-    throw statusTransportFailure(parsedRef.data.callRef)
+    if (parsedRef.data.kind !== 'tool' || !(error instanceof CliFailure) || error.kind !== 'UNAUTHENTICATED') throw error
+    throw new CliFailure('Journey status requires buyer authentication.', {
+      kind: 'UNAUTHENTICATED', code: 'agent_access_key_required',
+      suggestion: `Anonymous Tool information is available via ${cliContinuation(options, ['ae', 'describe', ref])}.`,
+      next: [{ action: 'describe', args: { toolRef: parsedRef.data.ref }, authority: 'public' }],
+    })
   }
-  return renderStatusResult('Call status', parsedRef.data.callRef, body, options)
+  const outcome = await callJson(options.baseUrl, `/api/v1/status/${encodeURIComponent(ref)}`, {
+    method: 'GET', headers: { Authorization: `Bearer ${apiKey}` },
+  })
+  const result = requireOk(outcome, 'Journey status')
+  if (!isRecord(result)) {
+    throw new CliFailure('Journey status response is malformed.', { kind: 'UNAVAILABLE', code: 'invalid_journey_status' })
+  }
+  const parsed = journeyStatusResultSchema.safeParse({ ...result, next: validateJourneyNext(result.next, { origin: options.baseUrl }) })
+  if (!parsed.success) {
+    throw new CliFailure(`Journey status response is malformed at ${parsed.error.issues[0]?.path.join('.') || 'response'}.`, { kind: 'UNAVAILABLE', code: 'invalid_journey_status' })
+  }
+  if (parsed.data.kind !== kind || parsed.data.ref !== ref) {
+    throw new CliFailure('Journey status response does not match the requested ref.', { kind: 'UNAVAILABLE', code: 'invalid_journey_status' })
+  }
+  const body = parsed.data
+  if (options.json) printJson(body)
+  else {
+    heading(`${kind[0]!.toUpperCase()}${kind.slice(1)} status`)
+    line(`Ref: ${ref}`)
+    if (body.kind === 'tool') line(`Readiness: ${body.readiness}`)
+    if (body.kind === 'quote') line(`Commitment: ${body.commitment}`)
+    if (body.kind === 'call' || body.kind === 'turn') line(`State: ${body.workState}`)
+    if (body.kind === 'call') line(`Recovery: ${JSON.stringify(body.recovery)}`)
+    for (const next of body.next) line(`Next: ${journeyNextCommand(next, options) ?? `${next.action} ${JSON.stringify(next.args)}`}`)
+  }
+  return body.workState === 'failed' || body.workState === 'rejected' ||
+    body.kind === 'quote' && body.commitment === 'refused' ? 1 : 0
 }

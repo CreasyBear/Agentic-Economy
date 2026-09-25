@@ -1,8 +1,8 @@
 import { convexTest } from 'convex-test'
 import { describe, expect, it } from 'vitest'
 
-import { api, internal } from '../../../convex/_generated/api'
-import { interactiveCredentialExpiryNonce } from '../../../convex/interactiveCredentialLifecycle'
+import { internal } from '../../../convex/_generated/api'
+import { interactiveCredentialExpiryNonce } from '../../../convex/lib/principalAccount/interactiveCredential/nonce'
 import schema from '../../../convex/schema'
 import { encodeCapabilityContractDocument } from '@/modules/capability-contract-registry/public'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
@@ -15,8 +15,8 @@ describe('V2 capability contract Convex registry', () => {
     const owner = await ownerAdmin(backend, 'user_capability_admin')
     const documentJson = JSON.stringify(capabilityContractV2())
     const args = publicArgs(documentJson)
-    const first = await owner.mutation(api.capabilityContractDocuments.register, args)
-    const replay = await owner.mutation(api.capabilityContractDocuments.register, args)
+    const first = await owner.mutation(internal.capabilityContractDocuments.register, args)
+    const replay = await owner.mutation(internal.capabilityContractDocuments.register, args)
 
     expect(first).toMatchObject({
       kind: 'registered',
@@ -96,11 +96,11 @@ describe('V2 capability contract Convex registry', () => {
     const backend = convexTest(schema, modules)
     const owner = await ownerAdmin(backend, 'user_capability_admin')
     await owner.mutation(
-      api.capabilityContractDocuments.register,
+      internal.capabilityContractDocuments.register,
       publicArgs(JSON.stringify(capabilityContractV2())),
     )
 
-    await expect(owner.mutation(api.capabilityContractDocuments.register, {
+    await expect(owner.mutation(internal.capabilityContractDocuments.register, {
       ...publicArgs(JSON.stringify(capabilityContractV2({ name: 'Changed semantics' }))),
       operationKey: 'op:capability-contract:register:changed',
     })).resolves.toEqual({ kind: 'refused', reason: 'contract_identity_conflict' })
@@ -110,42 +110,6 @@ describe('V2 capability contract Convex registry', () => {
     expect(contracts).toHaveLength(1)
   })
 
-  it('resolves only an active, intact exact reference', async () => {
-    const backend = convexTest(schema, modules)
-    const owner = await ownerAdmin(backend, 'user_capability_admin')
-    const registered = await owner.mutation(
-      api.capabilityContractDocuments.register,
-      publicArgs(JSON.stringify(capabilityContractV2())),
-    )
-    if (registered.kind !== 'registered') throw new Error('capability contract registration failed')
-
-    await expect(backend.query(internal.capabilityContractDocuments.getActiveExactInternal, registered.ref))
-      .resolves.toMatchObject({
-        kind: 'found', ref: registered.ref, registeredAt: expect.any(Number),
-      })
-    await expect(backend.query(internal.capabilityContractDocuments.getActiveExactInternal, {
-      ...registered.ref, version: 2,
-    })).resolves.toEqual({
-      kind: 'unavailable', reason: 'not_found',
-    })
-    await expect(backend.query(internal.capabilityContractDocuments.getActiveExactInternal, {
-      ...registered.ref, contractDigest: `sha256:${'0'.repeat(64)}`,
-    })).resolves.toEqual({ kind: 'unavailable', reason: 'not_found' })
-
-    await backend.run(async (ctx) => {
-      const row = await ctx.db.query('capabilityContractDocuments')
-        .withIndex('by_capabilityId_and_version', (query) => (
-          query.eq('capabilityId', registered.ref.capabilityId).eq('version', registered.ref.version)
-        ))
-        .unique()
-      if (row === null) throw new Error('capability contract row missing')
-      await ctx.db.patch(row._id, { documentJson: '{' })
-    })
-    await expect(backend.query(internal.capabilityContractDocuments.getActiveExactInternal, registered.ref))
-      .resolves.toEqual({
-        kind: 'unavailable', reason: 'integrity_failure',
-      })
-  })
 
   it('stores the canonical document, not caller formatting or a derived ref', async () => {
     const backend = convexTest(schema, modules)
@@ -153,7 +117,7 @@ describe('V2 capability contract Convex registry', () => {
     const input = capabilityContractV2()
     const expected = encodeCapabilityContractDocument(input)
     await owner.mutation(
-      api.capabilityContractDocuments.register,
+      internal.capabilityContractDocuments.register,
       publicArgs(JSON.stringify(input, null, 2)),
     )
 
@@ -173,7 +137,7 @@ describe('V2 capability contract Convex registry', () => {
   it('requires the dedicated owner-admin authority on the public writer', async () => {
     const anonymousBackend = convexTest(schema, modules)
     await expect(anonymousBackend.mutation(
-      api.capabilityContractDocuments.register,
+      internal.capabilityContractDocuments.register,
       publicArgs(JSON.stringify(capabilityContractV2())),
     )).resolves.toEqual({
       kind: 'refused', reason: 'authorization_denied',
@@ -186,7 +150,7 @@ describe('V2 capability contract Convex registry', () => {
     const ownerBackend = convexTest(schema, modules)
     const owner = await ownerAdmin(ownerBackend, 'user_owner')
     await expect(owner.mutation(
-      api.capabilityContractDocuments.register,
+      internal.capabilityContractDocuments.register,
       publicArgs(JSON.stringify(capabilityContractV2())),
     )).resolves.toMatchObject({
       kind: 'registered', ref: { capabilityId: 'reference.lookup', version: 1 },
@@ -208,7 +172,7 @@ describe('V2 capability contract Convex registry', () => {
     })
 
     await expect(owner.mutation(
-      api.capabilityContractDocuments.register,
+      internal.capabilityContractDocuments.register,
       publicArgs(JSON.stringify(capabilityContractV2())),
     )).resolves.toMatchObject({ kind: 'registered' })
     const replayRows = await ownerBackend.run(async (ctx) => ({
@@ -221,13 +185,13 @@ describe('V2 capability contract Convex registry', () => {
     expect(replayRows.operations).toHaveLength(1)
     expect(replayRows.operations[0]?.effectRefs).toHaveLength(1)
 
-    await expect(owner.mutation(api.capabilityContractDocuments.register, {
+    await expect(owner.mutation(internal.capabilityContractDocuments.register, {
       ...publicArgs(JSON.stringify(capabilityContractV2())),
       reasonCode: 'changed_reason_under_same_key',
     })).resolves.toEqual({ kind: 'refused', reason: 'operation_key_conflict' })
 
     await expect(owner.mutation(
-      api.capabilityContractDocuments.register,
+      internal.capabilityContractDocuments.register,
       publicArgs(JSON.stringify(capabilityContractV2({ capabilityId: 'reference.other' }))),
     )).resolves.toEqual({ kind: 'refused', reason: 'operation_key_conflict' })
     const finalContracts = await ownerBackend.run(async (ctx) => (
@@ -279,7 +243,7 @@ describe('V2 capability contract Convex registry', () => {
     })
 
     await expect(owner.mutation(
-      api.capabilityContractDocuments.register,
+      internal.capabilityContractDocuments.register,
       publicArgs(JSON.stringify(capabilityContractV2()), scenario),
     )).resolves.toEqual({ kind: 'refused', reason: 'authorization_denied' })
     await expect(backend.run(async (ctx) => ({
@@ -293,7 +257,7 @@ describe('V2 capability contract Convex registry', () => {
     const backend = convexTest(schema, modules)
     const owner = await ownerAdmin(backend, 'user_capability_admin')
     await expect(owner.mutation(
-      api.capabilityContractDocuments.register,
+      internal.capabilityContractDocuments.register,
       publicArgs(`${' '.repeat(300_001)}{}`),
     )).resolves.toEqual({ kind: 'refused', reason: 'contract_too_large' })
     const rows = await backend.run(async (ctx) => ({
@@ -307,7 +271,7 @@ describe('V2 capability contract Convex registry', () => {
   it('refuses incomplete audit and idempotency context before any write', async () => {
     const backend = convexTest(schema, modules)
     const owner = await ownerAdmin(backend, 'user_capability_admin')
-    await expect(owner.mutation(api.capabilityContractDocuments.register, {
+    await expect(owner.mutation(internal.capabilityContractDocuments.register, {
       ...publicArgs(JSON.stringify(capabilityContractV2())), evidenceRefs: [],
     })).resolves.toEqual({
       kind: 'refused', reason: 'registration_context_invalid',

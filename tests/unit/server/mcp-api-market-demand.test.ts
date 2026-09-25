@@ -11,9 +11,16 @@ describe('MCP private request withdrawal', () => {
       authenticate: authenticateWithScopes(authorized ? ['market_tools:call'] : ['market_supply:manage']),
       marketDemandService: { create: vi.fn(), list: vi.fn(), status: vi.fn(), withdraw },
     }, { authorization: 'Bearer test-only' })
-    expect(response.status).toBe(authorized ? 200 : 403)
-    if (!authorized) { expect(withdraw).not.toHaveBeenCalled(); return }
+    expect(response.status).toBe(200)
     const body = await readMcpBody(response)
+    if (!authorized) {
+      expect(body.result).toMatchObject({
+        isError: true,
+        structuredContent: { kind: 'PERMISSION_DENIED', code: 'mcp_toolset_required', next: [] },
+      })
+      expect(withdraw).not.toHaveBeenCalled()
+      return
+    }
     expect((body.result?.structuredContent as { result?: unknown } | undefined)?.result)
       .toEqual({ kind: 'withdrawn', requestRef: 'market-request:one' })
     expect(withdraw).toHaveBeenCalledWith(expect.objectContaining({

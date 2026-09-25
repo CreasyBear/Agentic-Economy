@@ -22,48 +22,57 @@ const EXPIRES_AT = 1_700_000_060_000
 describe('search result state', () => {
   it('shows a successful empty search as complete and preserves it in shared history', () => {
     const card = projectToolCard({ type: `tool-${CHAT_TOOL_NAME_MAP.canonicalToProvider['registry.tools.search']}`,
-      state: 'output-available', output: { kind: 'no_candidates', items: [], count: 0 } })
+      state: 'output-available', output: { kind: 'noMatch', results: [], nearMisses: [], scope: 'exhausted' } })
     expect(card).toMatchObject({ kind: 'choices', state: 'complete', count: 0, choices: [], toolRefs: [] })
     if (card === null) throw new Error('missing_card')
     expect(projectToolCard(serializeToolCard(card))).toEqual(card)
   })
 
-  it('follows the tool Jev chose for the same search rows', () => {
+  it('shows suitable results but no option cards or source refs for a no-match envelope', () => {
     const toolType = `tool-${CHAT_TOOL_NAME_MAP.canonicalToProvider['registry.tools.search']}`
     const nearRef = `operation:v1:${'c'.repeat(64)}`
     const items = [
-      { toolRef: TOOL_REF, title: 'Lookup A', provider: 'Acme', price: 'A$1.25', readiness: 'Ready now' },
-      { toolRef: nearRef, title: 'Lookup B', provider: 'Acme', price: 'A$1.25', readiness: 'Ready now' },
+      { toolRef: TOOL_REF, title: 'Lookup A', price: { kind: 'indicative', label: 'A$1.25' }, readiness: 'ready' },
+      { toolRef: nearRef, title: 'Lookup B', price: { kind: 'indicative', label: 'A$1.25' }, readiness: 'ready' },
     ]
-    const compared = projectToolCard({
-      type: toolType,
-      state: 'output-available',
-      output: { kind: 'ok', items, count: 2, use: 'registry.tools.compare', belowMatch: [nearRef] },
+    const matched = projectToolCard({
+      type: toolType, state: 'output-available', output: { kind: 'matched', results: items.slice(0, 1) },
     })
-    expect(compared).toMatchObject({
+    expect(matched).toMatchObject({ kind: 'choices', state: 'complete', count: 1, choices: [{ title: 'Lookup A' }] })
+    if (matched === null) throw new Error('missing_card')
+    expect(projectToolCard(serializeToolCard(matched))).toEqual(matched)
+
+    const noMatch = projectToolCard({
+      type: toolType, state: 'output-available', output: { kind: 'noMatch', results: [], nearMisses: [items[1]] },
+    })
+    expect(noMatch).toMatchObject({
+      kind: 'choices', state: 'complete', count: 0, choices: [], toolRefs: [],
+    })
+  })
+
+  it('does not present unverified, degraded, or missing health as operational', () => {
+    const toolType = `tool-${CHAT_TOOL_NAME_MAP.canonicalToProvider['registry.tools.list']}`
+    const items = [
+      { toolRef: TOOL_REF, title: 'Unverified', healthStatus: 'unverified', readiness: 'ready' },
+      { toolRef: `operation:v1:${'c'.repeat(64)}`, title: 'Degraded', healthStatus: 'degraded', readiness: 'ready' },
+      { toolRef: `operation:v1:${'d'.repeat(64)}`, title: 'Unknown', readiness: 'ready' },
+      { toolRef: `operation:v1:${'e'.repeat(64)}`, title: 'Observed', healthStatus: 'operational' },
+    ]
+    const card = projectToolCard({
+      type: toolType, state: 'output-available', output: { kind: 'ok', items, count: items.length },
+    })
+    expect(card).toMatchObject({
       kind: 'choices',
-      surface: 'compare',
-      title: 'Compare tools',
-      choices: [{ title: 'Lookup A' }, { title: 'Lookup B', belowMatch: true }],
+      choices: [
+        { title: 'Unverified', readiness: 'Not yet verified' },
+        { title: 'Degraded', readiness: 'Degraded' },
+        { title: 'Unknown' },
+        { title: 'Observed', readiness: 'Operational' },
+      ],
     })
-    if (compared === null) throw new Error('missing_card')
-    expect(projectToolCard(serializeToolCard(compared))).toEqual(compared)
-
-    expect(projectToolCard({
-      type: toolType,
-      state: 'output-available',
-      output: { kind: 'ok', items: items.slice(0, 1), count: 1, use: 'registry.tools.describe' },
-    })).toMatchObject({ kind: 'choices', surface: 'describe', title: 'Tool details' })
-
-    expect(projectToolCard({
-      type: toolType,
-      state: 'output-available',
-      output: { kind: 'ok', items, count: 1, use: 'chat.clarify' },
-    })).toMatchObject({
-      kind: 'status',
-      state: 'attention',
-      summary: 'These Tools do not separate on this request.',
-    })
+    if (card === null || card.kind !== 'choices') throw new Error('missing_choices')
+    expect(card.choices[2]?.readiness).toBeUndefined()
+    expect(projectToolCard(serializeToolCard(card))).toEqual(card)
   })
 
   it('keeps a source outage distinct from a successful empty search', () => {

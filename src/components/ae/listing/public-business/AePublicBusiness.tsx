@@ -23,6 +23,7 @@ export function AePublicBusiness({ routeData, backFrom, backThreadId }: AePublic
       <AeProviderListingPage
         catalog={catalog}
         agentJsonUrl={agentJsonUrl}
+        {...(routeData.service === undefined ? {} : { service: routeData.service })}
         {...(supply === undefined ? {} : { supply })}
         {...(backFrom === undefined ? {} : { backFrom })}
         {...(backThreadId === undefined ? {} : { backThreadId })}

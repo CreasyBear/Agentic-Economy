@@ -17,6 +17,7 @@ import { CALL_ROUTE_CONTRACT } from "../../../src/modules/capability-execution/c
 import {
   projectToolDescription,
   projectToolSearchChoices,
+  type ToolChoiceSearchOutput,
 } from "../../../src/modules/registry/tool-choice-contracts";
 import { registryDetailAction } from "../../../src/modules/registry/registry.actions";
 import type { GatewayToolQuote } from "../../../tools/release/tool-gateway-production-smoke-call";
@@ -140,7 +141,7 @@ function currentProjectionTool(): PublicToolDescriptor {
 
 export function publicToolSearchResponse(
   query = "paid",
-): Extract<ReturnType<typeof projectToolSearchChoices>, { kind: "ok" }> {
+): Extract<ToolChoiceSearchOutput, { kind: "matched" }> {
   const source: ToolSearchResult = {
     kind: "ok",
     schemaVersion: "registry-tools:v3",
@@ -151,8 +152,8 @@ export function publicToolSearchResponse(
     pagination: { limit: 20, hasMore: false },
     navigation: [],
   };
-  const projected = projectToolSearchChoices(source);
-  if (projected.kind !== "ok")
+  const projected = projectToolSearchChoices(source, undefined, { verdict: "matched", nearMisses: [] }, undefined, "full");
+  if (projected.kind !== "matched")
     throw new Error("test_public_tool_search_projection_unexpected");
   return projected;
 }

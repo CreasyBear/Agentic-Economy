@@ -1,13 +1,14 @@
-import { makeFunctionReference, type UserIdentity } from 'convex/server'
+import type { UserIdentity } from 'convex/server'
 import {
   describe,
   expect,
   it,
 } from 'vitest'
 
-import type { ClerkFactorEvidence } from '../../../convex/lib/consequenceProof'
+import { internal } from '../../../convex/_generated/api'
+import type { ClerkFactorEvidence } from '../../../convex/lib/authority/consequence/proof'
 import { InteractiveAuthorityError } from '../../../convex/interactiveAuthority'
-import { assertStepUpForSensitiveAction } from '../../../convex/workspaceSecurity'
+import { assertStepUpForSensitiveAction } from '../../../convex/lib/principalAccount/workspaceSecurity/stepUp'
 import { samIdentity } from '../../helpers/interactive-authority-provisioning'
 import {
   createInteractiveAuthorityBackend as createBackend,
@@ -61,17 +62,8 @@ type StepUpAdmission =
     code: 'mfa_reverification_required'
   }>
 
-const readPolicyRef = makeFunctionReference<
-  'query',
-  Record<string, never>,
-  PolicyView
->('workspaceSecurity:readPolicy')
-
-const updatePolicyRef = makeFunctionReference<
-  'mutation',
-  UpdatePolicyInput,
-  PolicyUpdateReceipt
->('workspaceSecurity:updatePolicy')
+const readPolicyRef = internal.workspaceSecurity.readPolicy
+const updatePolicyRef = internal.workspaceSecurity.updatePolicy
 
 const identity = (overrides: Partial<UserIdentity> = {}) =>
   samIdentity(TOKEN_IDENTIFIER, overrides)

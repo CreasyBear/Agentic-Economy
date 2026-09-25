@@ -134,8 +134,9 @@ describe('search health-filter continuation', () => {
       expect(first.stderr).toBe('')
       const firstResult = JSON.parse(first.stdout) as Readonly<{
         kind: string
-        note: string
-        nextCommand?: string
+        scope: string
+        results: readonly unknown[]
+        next: readonly { action: string; args: { cursor?: string } }[]
         nextPageCommand?: string
         pagination: Readonly<{ hasMore: boolean; nextCursor?: string }>
       }>
@@ -145,12 +146,12 @@ describe('search health-filter continuation', () => {
         pagination: { hasMore: true, nextCursor: expect.any(String) },
       })
       expect(firstResult).toMatchObject({
-        kind: 'no_candidates',
-        note: 'No Tools match this search on this page.',
+        kind: 'noMatch', scope: 'page', results: [],
+        next: [{ action: 'next-page', args: { cursor: expect.any(String) } }],
         pagination: { hasMore: true, nextCursor: expect.any(String) },
       })
       expect(firstResult.nextPageCommand).toBeTypeOf('string')
-      expect(firstResult.nextCommand).toBe(firstResult.nextPageCommand)
+      expect(firstResult.next[0]?.args.cursor).toBe(firstResult.pagination.nextCursor)
       expect(first.stdout).not.toContain('request create')
       const nextPageCommand = firstResult.nextPageCommand
       const nextCursor = firstResult.pagination.nextCursor
@@ -171,9 +172,8 @@ describe('search health-filter continuation', () => {
       expect(continued.status).toBe(0)
       expect(continued.stderr).toBe('')
       expect(JSON.parse(continued.stdout)).toMatchObject({
-        kind: 'ok',
-        count: 1,
-        items: [{ healthStatus: 'operational' }],
+        kind: 'degraded',
+        results: [{ readiness: 'ready' }],
         pagination: { hasMore: false },
       })
       expect(rawResults[1]).toMatchObject({
@@ -207,11 +207,18 @@ describe('search origin continuations', () => {
         requests.push(input)
         response.writeHead(200, { 'content-type': 'application/json' })
         response.end(JSON.stringify({
-          kind: 'ok',
+          kind: 'noMatch',
           schemaVersion: 'registry-tools:v3',
           query: input.query,
-          count: 0,
-          items: [],
+          scope: input.cursor === undefined ? 'page' : 'exhausted',
+          results: [],
+          nearMisses: [],
+          reason: 'No suitable tools were found.',
+          suggestions: [],
+          partialResults: false,
+          next: input.cursor === undefined
+            ? [{ action: 'next-page', authority: 'public', args: { query: input.query, cursor: nextCursor } }]
+            : [{ action: 'broaden', authority: 'public', args: { query: input.query } }],
           pagination: input.cursor === undefined
             ? { limit: 1, hasMore: true, nextCursor }
             : { limit: 1, hasMore: false },
@@ -244,7 +251,7 @@ describe('search origin continuations', () => {
     expect(continued.status).toBe(0)
     expect(continued.stderr).toBe('')
     expect(JSON.parse(continued.stdout)).toMatchObject({
-      kind: 'ok',
+      kind: 'noMatch',
       query,
       pagination: { hasMore: false },
     })
@@ -256,18 +263,23 @@ describe('search origin continuations', () => {
     expect(existsSync(resolve('query-was-executed'))).toBe(false)
   })
 
-  it('pins browse and private request recovery to the selected origin without adding the query to browse', async () => {
+  it('does not invent a private request for a public no-match result', async () => {
     const origin = 'http://[::1]:3024'
     const query = "supplier's private lookup"
-    vi.stubGlobal('fetch', vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({
-      kind: 'no_candidates',
+    const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({
+      kind: 'noMatch',
       schemaVersion: 'registry-tools:v3',
       query,
-      count: 0,
-      items: [],
-      note: 'No operational Tools matched this search.',
+      scope: 'exhausted',
+      results: [],
+      nearMisses: [],
+      reason: 'No suitable tools were found.',
+      suggestions: [],
+      partialResults: false,
+      next: [{ action: 'broaden', authority: 'public', args: { query } }],
       pagination: { limit: 10, hasMore: false },
-    }), { status: 200, headers: { 'content-type': 'application/json' } })))
+    }), { status: 200, headers: { 'content-type': 'application/json' } }))
+    vi.stubGlobal('fetch', fetchMock)
     const output = captureStdout()
     const options: CliOptions = {
       baseUrl: origin,
@@ -284,22 +296,27 @@ describe('search origin continuations', () => {
       output.restore()
     }
 
-    const result = JSON.parse(output.read()) as { browseCommand: string; nextCommand: string }
-    expect(result.nextCommand).toBe(`ae request create 'supplier'\"'\"'s private lookup' --base-url '${origin}' --json`)
-    expect(result.browseCommand).toBe(`ae list --base-url '${origin}' --json`)
-    expect(result.browseCommand).not.toContain(query)
-    expect(result.nextCommand).not.toMatch(/AE_API_KEY|AE_SUPPLIER_API_KEY|credential|password/iu)
+    const result = JSON.parse(output.read()) as { kind: string; nextCommand?: string; browseCommand?: string }
+    expect(result.kind).toBe('noMatch')
+    expect(result.nextCommand).toBeUndefined()
+    expect(result.browseCommand).toBeUndefined()
+    expect(JSON.stringify(result)).not.toMatch(/AE_API_KEY|AE_SUPPLIER_API_KEY|credential|password/iu)
+    expect(fetchMock.mock.calls[0]?.[0]).toContain(origin)
   })
 
   it('does not add JSON mode to continuations from a human invocation', async () => {
     const origin = 'http://[::1]:3024'
     vi.stubGlobal('fetch', vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({
-      kind: 'no_candidates',
+      kind: 'noMatch',
       schemaVersion: 'registry-tools:v3',
       query: 'private lookup',
-      count: 0,
-      items: [],
-      note: 'No operational Tools matched this search.',
+      scope: 'exhausted',
+      results: [],
+      nearMisses: [],
+      reason: 'No suitable tools were found.',
+      suggestions: [],
+      partialResults: false,
+      next: [{ action: 'broaden', authority: 'public', args: { query: 'private lookup' } }],
       pagination: { limit: 10, hasMore: false },
     }), { status: 200, headers: { 'content-type': 'application/json' } })))
     const output = captureStdout()
@@ -317,8 +334,8 @@ describe('search origin continuations', () => {
       output.restore()
     }
 
-    expect(output.read()).toContain(`Remember this missing job: ae request create 'private lookup' --base-url '${origin}'`)
-    expect(output.read()).toContain(`Browse all: ae list --base-url '${origin}'`)
+    expect(output.read()).not.toContain('request create')
+    expect(output.read()).not.toContain('Browse all')
     expect(output.read()).not.toContain('--json')
   })
 })

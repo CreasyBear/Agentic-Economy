@@ -17,7 +17,7 @@ import { Agent } from 'undici'
 import type { Infer } from 'convex/values'
 
 import type { ActionCtx } from '../../../../../convex/_generated/server'
-import { parseContractOutput } from '../../../../../convex/capabilityCallProjection'
+import { parseContractOutput } from '@/modules/capability-execution/call-projection/contract-output'
 import { internal } from '../../../../../convex/_generated/api'
 import { readX402EvmReceipt } from '../x402Route'
 import type { RecoveryWorkContext } from './loading'

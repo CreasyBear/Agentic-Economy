@@ -65,9 +65,9 @@ describe('registryToolsSearchAction Jev re-rank wiring', () => {
     stubJevFetch(fetcher)
     if (timing === 'before') controller.abort()
     const result = await runSearch(ERC20_QUERY, new Request('https://ae.test/api/v1/market-tools/search', { signal: controller.signal }))
-    expect(result.kind).toBe('ok')
-    if (result.kind !== 'ok') return
-    expect(result.items.map(item => item.toolRef)).toEqual(source.items.map(item => item.toolRef))
+    expect(result.kind).toBe('degraded')
+    if (result.kind !== 'degraded') return
+    expect(result.results.map(item => item.toolRef)).toEqual(source.items.map(item => item.toolRef))
     expect(fetcher).toHaveBeenCalledTimes(timing === 'before' ? 0 : 1)
     if (timing === 'during') expect(fetcher.mock.calls[0]?.[1]?.signal?.aborted).toBe(true)
   })
@@ -78,7 +78,7 @@ describe('registryToolsSearchAction Jev re-rank wiring', () => {
     const gateway = vi.spyOn(decisionEngine, 'executeDecisionGateway').mockResolvedValue({
       tier: 'jev_system_one',
       model: '~typesafe/jev-latest',
-      answers: jevAnswersForTool('operation:v1:crypto_tx_lookup', [0.07, 0.93, 0.12]) as never,
+      answers: jevAnswersForTool('operation:v1:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', [0.07, 0.93, 0.12]) as never,
       usage: { inputTokens: 160, outputTokens: 0, estimatedCostAud: 'A$0.000007' },
       durationMs: 48,
       attemptedTiers: ['jev_system_one'],
@@ -99,14 +99,12 @@ describe('registryToolsSearchAction Jev re-rank wiring', () => {
         match_2: { type: 'noul' },
       },
     })
-    expect(result.kind).toBe('ok')
-    if (result.kind !== 'ok') return
-    expect(result.items.map((item) => item.toolRef)).toEqual([
-      'operation:v1:crypto_tx_lookup',
-      'operation:v1:currency_exchange',
-      'operation:v1:timezone_converter',
-    ])
-    expect(result.items[0]?.title).toBe(TOOL_CRYPTO_TX.listing.label)
+    expect(result.kind).toBe('matched')
+    if (result.kind !== 'matched') return
+    expect(result.results.map((item) => item.toolRef)).toEqual([TOOL_CRYPTO_TX.toolRef])
+    expect(result.recommendation.engine).toBe('jev_system_one')
+    expect(result.recommendation.citations[0]?.toolRef).toBe(TOOL_CRYPTO_TX.toolRef)
+    expect(result.results[0]?.title).toBe(TOOL_CRYPTO_TX.listing.label)
   })
 
   it('places the timezone converter first for a London-to-Sydney query', async () => {
@@ -114,7 +112,7 @@ describe('registryToolsSearchAction Jev re-rank wiring', () => {
     vi.spyOn(decisionEngine, 'executeDecisionGateway').mockResolvedValue({
       tier: 'jev_system_one',
       model: '~typesafe/jev-latest',
-      answers: jevAnswersForTool('operation:v1:timezone_converter', [0.95, 0.05, 0.04]) as never,
+      answers: jevAnswersForTool('operation:v1:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb', [0.95, 0.05, 0.04]) as never,
       usage: { inputTokens: 140, outputTokens: 0, estimatedCostAud: 'A$0.000006' },
       durationMs: 41,
       attemptedTiers: ['jev_system_one'],
@@ -122,10 +120,9 @@ describe('registryToolsSearchAction Jev re-rank wiring', () => {
 
     const result = await runSearch(TIMEZONE_QUERY)
 
-    expect(result.kind).toBe('ok')
-    if (result.kind !== 'ok') return
-    expect(result.items[0]?.toolRef).toBe('operation:v1:timezone_converter')
-    expect(result.items[0]?.title).toBe(TOOL_TIMEZONE.listing.label)
+    expect(result.kind).toBe('matched')
+    if (result.kind !== 'matched') return
+    expect(result.results.map(item => item.toolRef)).toEqual([TOOL_TIMEZONE.toolRef])
   })
 
   it('keeps search successful when Jev and the secondary LLM both return 500', async () => {
@@ -142,14 +139,14 @@ describe('registryToolsSearchAction Jev re-rank wiring', () => {
     process.env.OPENROUTER_API_KEY = 'sk-or-v1-test-not-a-live-credential'
     try {
       const result = await runSearch(ERC20_QUERY)
-      expect(result.kind).toBe('ok')
-      if (result.kind !== 'ok') return
-      expect(result.items).toHaveLength(3)
-      expect(result.items.map((item) => item.toolRef)).toEqual(expect.arrayContaining([
+      expect(result.kind).toBe('degraded')
+      if (result.kind !== 'degraded') return
+      expect(result.results.map((item) => item.toolRef)).toEqual(expect.arrayContaining([
         TOOL_CRYPTO_TX.toolRef,
         TOOL_TIMEZONE.toolRef,
         TOOL_CURRENCY.toolRef,
       ]))
+      expect(result).not.toHaveProperty('recommendation')
     } finally {
       if (previousKey === undefined) delete process.env.OPENROUTER_API_KEY
       else process.env.OPENROUTER_API_KEY = previousKey
@@ -163,11 +160,10 @@ describe('registryToolsSearchAction Jev re-rank wiring', () => {
     const previousKey = process.env.OPENROUTER_API_KEY
     process.env.OPENROUTER_API_KEY = 'sk-or-v1-test-not-a-live-credential'
     try {
-      await expect(runSearch(TIMEZONE_QUERY)).resolves.toMatchObject({
-        kind: 'ok',
-        query: TIMEZONE_QUERY,
-        count: 3,
-      })
+      const result = await runSearch(TIMEZONE_QUERY)
+      expect(result.kind).toBe('degraded')
+      expect(result).not.toHaveProperty('recommendation')
+      if (result.kind === 'degraded') expect(result.results).toHaveLength(3)
     } finally {
       if (previousKey === undefined) delete process.env.OPENROUTER_API_KEY
       else process.env.OPENROUTER_API_KEY = previousKey
@@ -179,7 +175,7 @@ describe('registryToolsSearchAction Jev re-rank wiring', () => {
     const fetchImpl = vi.fn(async (url: string | URL) => {
       const href = url.toString()
       if (href.includes('/decisions') || href.includes('/v1/systemone')) {
-        return jevSystemOneResponse(jevAnswersForTool('operation:v1:crypto_tx_lookup', [0.06, 0.91, 0.14]))
+        return jevSystemOneResponse(jevAnswersForTool('operation:v1:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', [0.06, 0.91, 0.14]))
       }
       throw new Error(`Unexpected url: ${href}`)
     })
@@ -190,12 +186,29 @@ describe('registryToolsSearchAction Jev re-rank wiring', () => {
     try {
       const result = await runSearch(ERC20_QUERY)
       expect(fetchImpl).toHaveBeenCalled()
-      expect(result.kind).toBe('ok')
-      if (result.kind !== 'ok') return
-      expect(result.items[0]?.toolRef).toBe('operation:v1:crypto_tx_lookup')
+      expect(result.kind).toBe('matched')
+      if (result.kind !== 'matched') return
+      expect(result.results[0]?.toolRef).toBe(TOOL_CRYPTO_TX.toolRef)
     } finally {
       if (previousKey === undefined) delete process.env.OPENROUTER_API_KEY
       else process.env.OPENROUTER_API_KEY = previousKey
+    }
+  })
+  it('returns near misses rather than a recommendation when Jev rejects every candidate', async () => {
+    vi.mocked(readCapabilityToolSearch).mockResolvedValue(misorderedSearchResult('AUD USD exchange rate'))
+    vi.spyOn(decisionEngine, 'executeDecisionGateway').mockResolvedValue({
+      tier: 'jev_system_one', model: '~typesafe/jev-latest',
+      answers: jevAnswersForTool(TOOL_CURRENCY.toolRef, [0.12, 0.19, 0.32]) as never,
+      usage: { inputTokens: 160, outputTokens: 0, estimatedCostAud: null },
+      durationMs: 40, attemptedTiers: ['jev_system_one'],
+    })
+    const result = await runSearch('AUD USD exchange rate')
+    expect(result.kind).toBe('noMatch')
+    expect(result.results).toEqual([])
+    expect(result).not.toHaveProperty('recommendation')
+    if (result.kind === 'noMatch') {
+      expect(result.scope).toBe('exhausted')
+      expect(result.nearMisses.map(item => item.toolRef)).toContain(TOOL_CURRENCY.toolRef)
     }
   })
 })

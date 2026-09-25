@@ -12,21 +12,18 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { APP_NAVIGATION, resolveAppDestination, type AppNavGroup } from '@/lib/navigation/app-navigation'
+import { APP_NAV_GROUPS, APP_NAVIGATION, resolveAppDestination } from '@/lib/navigation/app-navigation'
 import type { OperatorRole } from '@/lib/operator/roles'
 
 import { activeRoleNavigationHref, ADMIN_NAVIGATION, APP_NAVIGATION_ICONS, DEVELOPER_NAVIGATION, roleNavigation } from './app-shell.contracts'
+import { AeWorkspaceIdentity } from './AeWorkspaceIdentity'
 
 export type WorkspaceMenuProps = Readonly<{
   operatorRole: OperatorRole
   canAccessAdmin: boolean
 }>
 
-const MENU_GROUPS: readonly { group: AppNavGroup; label: string }[] = [
-  { group: 'primary', label: 'Main' },
-  { group: 'provider', label: 'Provider' },
-  { group: 'utility', label: 'Resources' },
-]
+const MENU_ITEM_CLASS = 'min-h-touch aria-[current=page]:bg-accent aria-[current=page]:font-semibold'
 
 export function WorkspaceMenu({ operatorRole, canAccessAdmin }: WorkspaceMenuProps) {
   const { pathname, hash } = useLocation()
@@ -51,27 +48,29 @@ export function WorkspaceMenu({ operatorRole, canAccessAdmin }: WorkspaceMenuPro
       >
         <SettingsIcon aria-hidden="true" className="size-4" />
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="min-w-52">
-        {MENU_GROUPS.map(({ group, label }, index) => (
-          <DropdownMenuGroup key={group}>
+      <DropdownMenuContent align="end" className="min-w-52 max-w-[calc(100vw-1rem)]">
+        {APP_NAV_GROUPS.map(({ id, destination }, index) => (
+          <DropdownMenuGroup key={id}>
             {index === 0 ? null : <DropdownMenuSeparator />}
-            <DropdownMenuLabel>{label}</DropdownMenuLabel>
-            {APP_NAVIGATION.filter((destination) => destination.group === group).map((destination) => {
-              const Icon = APP_NAVIGATION_ICONS[destination.id]
-              const current = destination.id === activeDestinationId
+            <DropdownMenuLabel>{id === 'workspace' ? 'Workspace' : destination.label}</DropdownMenuLabel>
+            {id === 'workspace' ? <AeWorkspaceIdentity inMenu /> : null}
+            {APP_NAVIGATION.filter((item) => item.group === id).map((item) => {
+              const Icon = APP_NAVIGATION_ICONS[item.id]
+              const current = item.id === activeDestinationId
               return (
                 <DropdownMenuItem
-                  key={destination.id}
+                  key={item.id}
+                  className={MENU_ITEM_CLASS}
                   render={
                     <Link
-                      to={destination.to}
-                      {...(destination.hash === undefined ? {} : { hash: destination.hash.slice(1) })}
+                      to={item.to}
+                      {...(item.hash === undefined ? {} : { hash: item.hash.slice(1) })}
                       aria-current={current ? 'page' : undefined}
                     />
                   }
                 >
                   <Icon aria-hidden="true" />
-                  {destination.label}
+                  {item.label}
                 </DropdownMenuItem>
               )
             })}

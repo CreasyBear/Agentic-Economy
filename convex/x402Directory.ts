@@ -10,8 +10,8 @@ import { directoryEntryMatchesFilters, isDirectoryEntryEligible } from '@/module
 import { directoryMetadataFlags } from '@/modules/market/x402-directory-metadata'
 import { api, internal } from './_generated/api'
 import { action } from './_generated/server'
-import { reconcileReadyItems } from './capabilitySupplyShared'
-import { bindWorkloadCronActionContext } from './workloadCron'
+import { reconcileReadyItems } from './lib/capabilitySupply/facilitatorDiscovery/readyItems'
+import { bindWorkloadCronActionContext } from './lib/platform/workloadCron/consequence'
 
 /**
  * Ineligible resources refuse the same way a filter mismatch would:

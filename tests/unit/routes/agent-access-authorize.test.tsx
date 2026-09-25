@@ -209,7 +209,8 @@ describe('/agent-access/authorize consent loading', () => {
     ) => Promise<unknown>)({ deps: { grantRef: 'grant-temporary-failure' } })).rejects.toThrow('authorization_unavailable')
 
     renderComponent(ErrorComponent)
-    expect(screen.getAllByText('Nothing was charged. Try again, or check system status.').length).toBeGreaterThan(0)
+    expect(screen.getByRole('button', { name: 'Try again' })).toBeTruthy()
+    expect(screen.getByRole('link', { name: 'Check system status' }).getAttribute('href')).toBe('/status')
   })
 
   it('shows terminal recovery copy when the consent request is unavailable', async () => {
@@ -220,7 +221,8 @@ describe('/agent-access/authorize consent loading', () => {
     renderComponent(ErrorComponent)
 
     expect(screen.queryByLabelText('Loading workspace')).toBeNull()
-    expect(screen.getAllByText('Nothing was charged. Try again, or check system status.').length).toBeGreaterThan(0)
+    expect(screen.getByRole('button', { name: 'Try again' })).toBeTruthy()
+    expect(screen.getByRole('link', { name: 'Check system status' }).getAttribute('href')).toBe('/status')
   })
 
   it('renders an issuing request as read-only recovery without approval or generic retry', async () => {

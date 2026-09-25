@@ -1,6 +1,6 @@
 import { v } from 'convex/values'
 
-import { sourceWriteArgs } from './sourceWriteAdmission'
+import { sourceWriteArgs } from './lib/security/sourceWrite/contracts'
 import { spendingPeriodsValue } from '@/modules/money/public'
 
 export const identifier = v.string()

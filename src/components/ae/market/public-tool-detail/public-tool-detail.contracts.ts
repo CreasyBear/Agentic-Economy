@@ -1,16 +1,7 @@
-import type { PublicToolDescriptor } from '@/modules/capability-supply/public'
-import type { MarketListingEvidenceProjection } from '@/modules/market/listing-evidence'
-import type {
-  ToolDetailPresentation,
-  ToolDetailPresentationResult,
-} from '@/modules/market/tool-detail-presentation'
-import type {
-  X402DirectoryEntry,
-  X402DirectoryResolutionReason,
-} from '@/modules/market/x402-directory'
-import type { X402DirectoryCatalogueResource } from '@/modules/market/x402-directory-catalogue'
+import type { PublicToolDetailRouteResult } from '@/modules/market/tool-detail-route.functions'
+import type { X402DirectoryResolutionReason } from '@/modules/market/x402-directory'
 
-export type PublicToolDetailProps = ToolDetailPresentation
+export type PublicToolDetailProps = Readonly<{ result: PublicToolDetailRouteResult | Readonly<{ kind: 'invalid_ref'; toolRef: string }> }>
 
 export type MarketBackButtonProps = Readonly<{
   label: string
@@ -18,13 +9,8 @@ export type MarketBackButtonProps = Readonly<{
   variant?: 'ghost'
 }>
 
-export type CurrentToolDetailProps = Readonly<{
-  tool: PublicToolDescriptor
-  evidence?: MarketListingEvidenceProjection
-}>
-
 export type ToolUnavailableProps = Readonly<{
-  result: Exclude<ToolDetailPresentationResult, { kind: 'found' }>
+  result: Exclude<PublicToolDetailProps['result'], { kind: 'found' }>
 }>
 
 export type ToolUnavailableCopy = Readonly<{
@@ -36,6 +22,15 @@ export type ToolUnavailableCopy = Readonly<{
     to: '/market' | '/status'
   }>
 }>
+
+function notReady(cause: string): ToolUnavailableCopy {
+  return {
+    title: 'Not available to call here yet',
+    cause,
+    nextStep: 'Compare another service, or come back after the Provider updates the listing.',
+    action: { label: 'Browse Market', to: '/market' },
+  }
+}
 
 export const TOOL_UNAVAILABLE_COPY = {
   query_invalid: {
@@ -74,72 +69,17 @@ export const TOOL_UNAVAILABLE_COPY = {
     nextStep: 'Browse Market.',
     action: { label: 'Browse Market', to: '/market' },
   },
-  bazaar_missing: {
-    title: 'This Tool is not ready for calls',
-    cause: "This Tool cannot be called through Agentic Economy yet: the Provider's listing is missing required discovery details.",
-    nextStep: 'The Provider must update the listing.',
-    action: { label: 'Browse Market', to: '/market' },
-  },
-  bazaar_discovery_invalid: {
-    title: 'This Tool is not ready for calls',
-    cause: "This Tool cannot be called through Agentic Economy yet: the Provider's listing has invalid discovery details.",
-    nextStep: 'The Provider must update the listing.',
-    action: { label: 'Browse Market', to: '/market' },
-  },
-  schema_missing: {
-    title: 'This Tool is not ready for calls',
-    cause: "This Tool cannot be called through Agentic Economy yet: the Provider's listing does not include the required schema.",
-    nextStep: 'The Provider must update the listing.',
-    action: { label: 'Browse Market', to: '/market' },
-  },
-  transport_unsupported: {
-    title: 'This Tool is not ready for calls',
-    cause: "This Tool cannot be called through Agentic Economy yet: the Provider's listing uses an unsupported transport.",
-    nextStep: 'The Provider must update the listing.',
-    action: { label: 'Browse Market', to: '/market' },
-  },
-  scheme_unsupported: {
-    title: 'This Tool is not ready for calls',
-    cause: "This Tool cannot be called through Agentic Economy yet: the Provider's listing uses an unsupported payment scheme.",
-    nextStep: 'The Provider must update the listing.',
-    action: { label: 'Browse Market', to: '/market' },
-  },
-  chain_unsupported: {
-    title: 'This Tool is not ready for calls',
-    cause: "This Tool cannot be called through Agentic Economy yet: the Provider's listing uses an unsupported payment network.",
-    nextStep: 'The Provider must update the listing.',
-    action: { label: 'Browse Market', to: '/market' },
-  },
-  asset_unsupported: {
-    title: 'This Tool is not ready for calls',
-    cause: "This Tool cannot be called through Agentic Economy yet: the Provider's listing uses an unsupported payment asset.",
-    nextStep: 'The Provider must update the listing.',
-    action: { label: 'Browse Market', to: '/market' },
-  },
-  amount_invalid: {
-    title: 'This Tool is not ready for calls',
-    cause: "This Tool cannot be called through Agentic Economy yet: the Provider's listing has an invalid amount.",
-    nextStep: 'The Provider must update the listing.',
-    action: { label: 'Browse Market', to: '/market' },
-  },
-  payment_terms_invalid: {
-    title: 'This Tool is not ready for calls',
-    cause: "This Tool cannot be called through Agentic Economy yet: the Provider's listing has invalid payment terms.",
-    nextStep: 'The Provider must update the listing.',
-    action: { label: 'Browse Market', to: '/market' },
-  },
-  resource_invalid: {
-    title: 'This Tool is not ready for calls',
-    cause: "This Tool cannot be called through Agentic Economy yet: the Provider's listing has an invalid Tool address.",
-    nextStep: 'The Provider must update the listing.',
-    action: { label: 'Browse Market', to: '/market' },
-  },
-  source_invalid: {
-    title: 'This Tool is not ready for calls',
-    cause: "This Tool cannot be called through Agentic Economy yet: the Provider's listing source is invalid.",
-    nextStep: 'The Provider must update the listing.',
-    action: { label: 'Browse Market', to: '/market' },
-  },
+  bazaar_missing: notReady('The Provider has not published enough for an agent to call this service.'),
+  bazaar_discovery_invalid: notReady("The Provider's listing cannot be read as a service an agent can call."),
+  schema_missing: notReady('The Provider has not published the input an agent would send.'),
+  transport_unsupported: notReady('The connection the Provider published is one an agent cannot use here.'),
+  scheme_unsupported: notReady('The payment method the Provider published is one Agentic Economy cannot settle.'),
+  chain_unsupported: notReady('The payment network the Provider published is one Agentic Economy cannot settle.'),
+  asset_unsupported: notReady('The asset the Provider asks to be paid in is one Agentic Economy cannot settle.'),
+  amount_invalid: notReady("The Provider's price cannot be read."),
+  payment_terms_invalid: notReady("The Provider's payment terms cannot be read."),
+  resource_invalid: notReady("The Provider's service address cannot be read."),
+  source_invalid: notReady("The Provider's listing source cannot be read."),
 } satisfies Record<X402DirectoryResolutionReason, ToolUnavailableCopy>
 
 export type ToolUnavailablePresentation = Readonly<{
@@ -147,23 +87,4 @@ export type ToolUnavailablePresentation = Readonly<{
   title: string
   description: string
   action: ToolUnavailableCopy['action']
-}>
-
-export type DirectoryEntrySummaryPageProps = Readonly<{
-  entry: X402DirectoryEntry
-  upstream: boolean
-  readiness?: ToolUnavailablePresentation
-}>
-
-export type DirectoryEntryUnavailableProps = Readonly<{
-  metadata: Exclude<X402DirectoryCatalogueResource, { kind: 'found' } | { kind: 'found_upstream' }>
-}>
-
-export type DirectoryToolCanonicalLoaderData = Readonly<{
-  metadata: X402DirectoryCatalogueResource
-  admission?: Promise<ToolDetailPresentation> | undefined
-}>
-
-export type AeDirectoryToolCanonicalPageProps = Readonly<{
-  data: DirectoryToolCanonicalLoaderData
 }>

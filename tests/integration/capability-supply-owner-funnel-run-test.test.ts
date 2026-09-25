@@ -139,7 +139,7 @@ describe('owner supply test', () => {
     }
     await expect(readTestState()).resolves.not.toBe(undefined)
     await expect(
-      owner.action(api.capabilitySupplyOwnerSupply.runOwnerSupplyTest, {
+      owner.action(internal.capabilitySupplyOwnerSupply.runOwnerSupplyTest, {
         businessId,
         offeringRef,
         offeringRevision: 1,

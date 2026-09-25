@@ -1,35 +1,20 @@
-import { v } from 'convex/values'
-
 import { internalMutation, internalQuery, mutation, query } from './_generated/server'
+import { finalizeFundingEventHandler } from './lib/money/funding/stripeEventPipeline'
+import { finalizeFundingRefundHandler } from './lib/money/funding/stripeRefundPipeline'
 import {
-  finalizeFundingEventHandler,
-  finalizeFundingRefundHandler,
-  markFundingBookingUnknownHandler,
-  markFundingReversalUnknownHandler,
-} from './lib/money/fundingStripeEventPipeline'
+  markFundingBookingUnknownArgs, markFundingBookingUnknownHandler,
+  markFundingReversalUnknownArgs, markFundingReversalUnknownHandler, markFundingUnknownResult,
+} from './lib/money/funding/unknown'
 import {
-  applyFundingEventArgsValue,
-  applyFundingEventResultValue,
-  trustedApplyFundingEventArgsValue,
-} from './lib/money/accountFundingValidators'
+  applyFundingEventResultValue, finalizeFundingEventArgsValue, trustedFinalizeFundingEventArgsValue,
+} from './lib/money/funding/contracts'
 import {
-  bindAgentHandoffArgs,
-  bindAgentHandoffHandler,
-  bindAgentHandoffResult,
-  readAgentHandoffArgs,
-  readAgentHandoffHandler,
-  readAgentHandoffResult,
-  readPayerSafeHandoffHandler,
-  readPayerSafeHandoffResult,
-  reserveAgentHandoffArgs,
-  reserveAgentHandoffHandler,
-  reserveAgentHandoffResult,
-} from './lib/money/agentFundingHandoff'
-import {
-  readBalanceSubjectArgs,
-  readBalanceSubjectHandler,
-  readBalanceSubjectResult,
-} from './lib/money/fundingBalanceSubject'
+  bindAgentHandoffArgs, bindAgentHandoffHandler, bindAgentHandoffResult,
+  readAgentHandoffArgs, readAgentHandoffHandler, readAgentHandoffResult,
+  readPayerSafeHandoffArgs, readPayerSafeHandoffHandler, readPayerSafeHandoffResult,
+  reserveAgentHandoffArgs, reserveAgentHandoffHandler, reserveAgentHandoffResult,
+} from './lib/money/funding/agentFundingHandoff'
+import { readBalanceSubjectArgs, readBalanceSubjectHandler, readBalanceSubjectResult } from './lib/money/funding/balanceSubject'
 import {
   prepareVerifiedEventArgs,
   prepareVerifiedEventFromInboxArgs,
@@ -37,7 +22,7 @@ import {
   prepareVerifiedEventFromInboxResult,
   prepareVerifiedEventHandler,
   prepareVerifiedEventResult,
-} from './lib/money/fundingPrepareVerifiedEvent'
+} from './lib/money/funding/prepareVerifiedEvent'
 import {
   readWebhookCommandArgs,
   readWebhookCommandHandler,
@@ -45,7 +30,7 @@ import {
   readWebhookRefundCommandArgs,
   readWebhookRefundCommandHandler,
   readWebhookRefundCommandResult,
-} from './lib/money/fundingWebhookLookup'
+} from './lib/money/funding/webhookLookup'
 import {
   readWebhookCommandForWorkerArgs,
   readWebhookCommandForWorkerHandler,
@@ -53,7 +38,7 @@ import {
   readWebhookRefundCommandForWorkerArgs,
   readWebhookRefundCommandForWorkerHandler,
   readWebhookRefundCommandForWorkerResult,
-} from './lib/money/fundingWebhookWorkerReads'
+} from './lib/money/funding/webhookWorkerReads'
 import {
   listOwnerInvoiceHistoryArgs,
   listOwnerInvoiceHistoryHandler,
@@ -61,18 +46,15 @@ import {
   readOwnerFundingCommandForReceiptArgs,
   readOwnerFundingCommandForReceiptHandler,
   readOwnerFundingCommandForReceiptResult,
-} from './lib/money/ownerFundingInvoiceHistory'
-import { bindArgs, bindHandler, bindResult } from './lib/money/ownerFundingBind'
+} from './lib/money/funding/ownerInvoiceHistory'
+import { bindArgs, bindHandler, bindResult } from './lib/money/funding/ownerBind'
 import {
   markOutcomeUnknownArgs,
   markOutcomeUnknownHandler,
   markOutcomeUnknownResult,
-} from './lib/money/ownerFundingMarkUnknown'
-import { readArgs, readHandler, readResult } from './lib/money/ownerFundingRead'
-import { reserveArgs, reserveHandler, reserveResult } from './lib/money/ownerFundingReserve'
-
-// -- Registrations only. Validators, handler bodies, and DB logic live under --
-// -- convex/lib/money/*, grouped by concern. -----------------------------------
+} from './lib/money/funding/ownerMarkUnknown'
+import { readArgs, readHandler, readResult } from './lib/money/funding/ownerRead'
+import { reserveArgs, reserveHandler, reserveResult } from './lib/money/funding/ownerReserve'
 
 export const reserve = mutation({
   args: reserveArgs.fields,
@@ -111,7 +93,7 @@ export const readAgentHandoff = query({
 })
 
 export const readPayerSafeHandoff = query({
-  args: { externalRef: v.string() },
+  args: readPayerSafeHandoffArgs,
   returns: readPayerSafeHandoffResult,
   handler: readPayerSafeHandoffHandler,
 })
@@ -177,46 +159,37 @@ export const prepareVerifiedEventFromInbox = internalMutation({
 })
 
 export const finalizeVerifiedEvent = internalMutation({
-  args: { ...applyFundingEventArgsValue.fields, formanceTransactionRef: v.string() },
+  args: finalizeFundingEventArgsValue.fields,
   returns: applyFundingEventResultValue,
   handler: finalizeFundingEventHandler,
 })
 
 export const finalizeVerifiedEventFromInbox = internalMutation({
-  args: { ...trustedApplyFundingEventArgsValue.fields, formanceTransactionRef: v.string() },
+  args: trustedFinalizeFundingEventArgsValue.fields,
   returns: applyFundingEventResultValue,
   handler: finalizeFundingEventHandler,
 })
 
 export const finalizeVerifiedRefund = internalMutation({
-  args: { ...applyFundingEventArgsValue.fields, formanceTransactionRef: v.string() },
+  args: finalizeFundingEventArgsValue.fields,
   returns: applyFundingEventResultValue,
   handler: finalizeFundingRefundHandler,
 })
 
 export const finalizeVerifiedRefundFromInbox = internalMutation({
-  args: { ...trustedApplyFundingEventArgsValue.fields, formanceTransactionRef: v.string() },
+  args: trustedFinalizeFundingEventArgsValue.fields,
   returns: applyFundingEventResultValue,
   handler: finalizeFundingRefundHandler,
 })
 
 export const markFundingBookingUnknown = internalMutation({
-  args: { commandRef: v.string(), stripeEventId: v.string(), observedAt: v.number() },
-  returns: v.null(),
-  handler: async (ctx, args) => {
-    await markFundingBookingUnknownHandler(ctx, args)
-    return null
-  },
+  args: markFundingBookingUnknownArgs,
+  returns: markFundingUnknownResult,
+  handler: markFundingBookingUnknownHandler,
 })
 
 export const markFundingReversalUnknown = internalMutation({
-  args: {
-    paymentId: v.string(), refundId: v.string(), stripeEventId: v.string(),
-    statusRef: v.string(), observedAt: v.number(),
-  },
-  returns: v.null(),
-  handler: async (ctx, args) => {
-    await markFundingReversalUnknownHandler(ctx, args)
-    return null
-  },
+  args: markFundingReversalUnknownArgs,
+  returns: markFundingUnknownResult,
+  handler: markFundingReversalUnknownHandler,
 })

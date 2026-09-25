@@ -320,7 +320,7 @@ export const COMMANDS: Readonly<Record<string, RootCommandManifestEntry>> = {
   },
   // callAction.parameters are quoteRef and idempotencyKey (the internal purchase step); the CLI's `call` wraps tool.quote and tool.call together and takes tool-ref/--input/--wait, so summary and args stay hand-specified here.
   call: {
-    summary: 'Call one capability: anonymous MCP for eligible free keyless reads, otherwise the connected AE gateway.',
+    summary: 'Call one capability through the connected AE gateway. An Agent access credential is required.',
     args: "<tool-ref> --input '<json>' [--wait]",
     json: true,
     group: 'call_recover',
@@ -341,10 +341,20 @@ export const COMMANDS: Readonly<Record<string, RootCommandManifestEntry>> = {
     rootOrder: 2,
     guidance: ['Use the returned callRef with status for one snapshot or wait for a bounded recorded outcome.'],
   },
+  chat: {
+    summary: 'Run a durable agent-key chat turn and stream the answer or AE events.',
+    args: '[prompt] [--thread-id <id> | --continue]',
+    json: true,
+    group: 'call_recover',
+    rootOrder: 2,
+    authentication: 'buyer',
+    guidance: ['--json emits one NDJSON event per line. Without a prompt, non-TTY stdin supplies the prompt. Ctrl-C requests turn cancellation without reversing in-flight Calls.'],
+  },
   status: {
-    ...deriveCliCommand(CALL_ROUTE_CONTRACT.status.actionId),
-    // callStatusAction also accepts afterVersion, but the CLI has no flag for it (COMMAND_OPTIONS['status'] is empty in cli.ts); args keeps the CLI-observed shape.
-    args: '<call-ref>',
+    summary: 'Read one Tool, Quote, Call or Turn snapshot and its typed continuation.',
+    json: true,
+    authentication: 'buyer',
+    args: '<ref>',
     group: 'call_recover',
     rootOrder: 3,
   },
@@ -551,7 +561,7 @@ export async function runManifestCommand(_args: readonly string[], options: CliO
           originEnvironmentVariable: 'AE_API_KEY_ORIGIN',
           originBinding: 'AE_API_KEY_ORIGIN must equal new URL(--base-url).origin; credentialed calls require HTTPS except loopback HTTP development.',
           result: 'OAuth token.access_token',
-          usage: 'The CLI sends the stored origin-bound key for call, status, wait, cancel, and recover. AE_API_KEY remains an explicit automation override.',
+          usage: 'The CLI sends the stored origin-bound key for call, chat, status, wait, cancel, and recover. AE_API_KEY remains an explicit automation override.',
         },
         revocation: 'Root revoke emits the owner-browser continuation /agent-access#revoke; it does not revoke through an agent credential or an API route.',
         oneTimeSecretDelivery: false,
@@ -581,7 +591,7 @@ export async function runManifestCommand(_args: readonly string[], options: CliO
     jsonOutput: {
       stdout: 'exactly_one_json_value',
       stderr: 'progress_and_errors',
-      strict: true,
+      chat: 'ae chat --json emits one AE event per NDJSON line; start precedes deltas and finish/error terminates the turn.',
     },
     evidence: {
       status: 'Durable status may return exact usage and evidence projections admitted by the Call runtime.',
@@ -609,6 +619,7 @@ export async function runManifestCommand(_args: readonly string[], options: CliO
       anonymous: 'List, search, describe, and compare current Tools without connecting.',
       connected: 'Run ae connect once; authenticated Calls cover free and paid Tools, and consequential Tools require approval.',
     },
+    chat: 'ae chat [prompt] [--thread-id <id> | --continue] [--json]',
     account: {
       command: 'ae account status [market|provider]',
       balance: 'ae account balance [currency]',

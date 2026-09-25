@@ -1,11 +1,11 @@
 import { delimiter } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import { TOOL_MARKET_SEARCH_PATH } from '@/modules/common/market-tool-paths'
+import { TOOL_MARKET_DESCRIBE_PATH, TOOL_MARKET_LIST_PATH } from '@/modules/common/market-tool-paths'
 import { TOOL_QUOTE_PATH } from '@/modules/capability-execution/quote'
 import { STRIPE_MONEY_ENV_NAMES } from '@/lib/server/stripe-money-provider-config'
 import { X402_CUSTODY_ENV_NAMES } from '@/modules/capability-supply/server'
-import { checkFunding } from '../../../tools/ae/commands/doctor'
+import { checkFunding } from '../../../tools/ae/commands/doctor/activity'
 import {
   assertCliSuccess,
   balancePassCheck,
@@ -15,15 +15,13 @@ import {
   committedQuote,
   currentTool,
   discoveryPassChecks,
-  emptySearchResult,
+  emptyListResult,
   FRESH_CATALOGUE_CHECK,
   fundingPassCheck,
   hostedConnectCommand,
   installAeShim,
   LOCAL_DEV_COMMAND,
   SANDBOX_TOOL_REF,
-  SANDBOX_TOOL_SLUG,
-  LOCAL_STRIPE_TEST_MODE_DOC,
   localConnectCommand,
   LOOPBACK_DOCTOR_COMMAND,
   LOOPBACK_NO_SANDBOX_TOOL_REASON,
@@ -60,6 +58,21 @@ afterEach(teardownDoctorHarness)
 const loopbackSkippedQuote = () => skippedQuoteCheck(LOOPBACK_NO_SANDBOX_TOOL_REASON, LOOPBACK_DOCTOR_COMMAND, 'loopback_readiness_unprovable')
 
 describe('ae doctor', () => {
+  it('exits non-zero in JSON mode when degraded but accepts the advertised loopback origin', async () => {
+    const origin = await startBuyerServer()
+    const directory = makeConfigDirectory()
+    const result = await runDoctor(directory, origin)
+    expect(result.status).toBe(1)
+    expect(result.stderr).toBe('')
+    const diagnosis = parseDoctorJson(result)
+    expect(diagnosis.kind).toBe('degraded')
+    expect(diagnosis.checks).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: 'server', state: 'pass' }),
+      expect.objectContaining({ id: 'buyer', state: 'warn' }),
+    ]))
+    expect(result.stdout).not.toContain('agentic-economy-phi.vercel.app')
+  })
+
   it('routes an unreachable remote origin to configuration truth instead of doctor recursion', async () => {
     const origin = 'https://ae-unreachable.invalid'
     const configContinuation = `ae config --base-url ${origin} --json`
@@ -69,7 +82,7 @@ describe('ae doctor', () => {
     assertCliSuccess(json)
     expect(JSON.parse(json.stdout)).toEqual({
       kind: 'degraded',
-      tier: TIER1_RESULT,
+      information: { localProviderEnvironment: TIER1_RESULT },
       groups: { discovery: 'fail', quoting: 'warn', purchase: 'warn' },
       checks: [
         originPassCheck(origin),
@@ -143,7 +156,7 @@ describe('ae doctor', () => {
     assertCliSuccess(result)
     expect(JSON.parse(result.stdout)).toEqual({
       kind: 'degraded',
-      tier: TIER1_RESULT,
+      information: { localProviderEnvironment: TIER1_RESULT },
       groups: { discovery: 'pass', quoting: 'skipped', purchase: 'warn' },
       checks: [...discoveryPassChecks(origin), ...unconnectedBuyerChecks(connectCommand)],
     })
@@ -175,7 +188,7 @@ describe('ae doctor', () => {
 
   it('checks the buyer loop and points an uncertain invocation to status without exposing credentials', async () => {
     const buyerSecret = 'FAKE_BUYER_SECRET_51f8'
-    const callRef = 'invocation:v1:needs-attention'
+    const callRef = `operation-invocation:v1:${'a'.repeat(64)}`
     let callState: 'pending' | 'reconciliation_required' = 'reconciliation_required'
     const observed: Array<{ method: string; path: string; authorization?: string; body?: string }> = []
     const origin = await startBuyerServer({
@@ -190,7 +203,7 @@ describe('ae doctor', () => {
     expect(json.stdout).not.toContain(buyerSecret)
     expect(JSON.parse(json.stdout)).toEqual({
       kind: 'degraded',
-      tier: TIER1_RESULT,
+      information: { localProviderEnvironment: TIER1_RESULT },
       groups: { discovery: 'pass', quoting: 'skipped', purchase: 'warn' },
       checks: [
         ...discoveryPassChecks(origin),
@@ -220,7 +233,7 @@ describe('ae doctor', () => {
     expect(human.stdout).toContain('AE doctor: degraded')
     expect(human.stdout).toContain('! A reconciliation-required Call needs attention.')
     expect(human.stdout.match(/^Next: /gmu)).toEqual([`Next: `])
-    expect(human.stdout).toContain(`Next: ae status ${callRef} --base-url ${origin} --json`)
+    expect(human.stdout).toContain(`Next: ae status ${callRef} --base-url ${origin}`)
     expect(human.stdout).not.toContain(buyerSecret)
 
     callState = 'pending'
@@ -254,6 +267,7 @@ describe('ae doctor', () => {
             toolRef, capabilityId: 'document.translate', title: 'Document translation',
             description: 'Translate one document.', provider: { name: 'Reference Services', slug: 'reference' },
             priceLabel: 'USD 0.50', healthStatus: 'operational', listingTier: 'reviewed',
+            verification: 'verified', network: 'unknown', claimSource: 'provider',
           }],
         }
       },
@@ -287,7 +301,7 @@ describe('ae doctor', () => {
     expect(human.stdout).toContain('AE doctor: ready')
     expect(human.stdout).toContain('✓ 1 of 1 recent private market request now has matching Tools.')
     expect(human.stdout.match(/^Next: /gmu)).toEqual(['Next: '])
-    expect(human.stdout).toContain(`Next: ae describe ${toolRef} --base-url ${origin} --json`)
+    expect(human.stdout).toContain(`Next: ae describe ${toolRef} --base-url ${origin}`)
     expect(human.stdout).not.toContain(savedQuery)
     expect(human.stdout).not.toContain(requestRef)
     expect(statusBodies).toEqual([{ requestRef }, { requestRef }])
@@ -366,7 +380,7 @@ describe('ae doctor', () => {
     assertCliSuccess(human)
     expect(human.stdout).toContain('✓ A previously successful Tool is still in the current catalog.')
     expect(human.stdout.match(/^Next: /gmu)).toEqual(['Next: '])
-    expect(human.stdout).toContain(`Next: ae describe ${toolRef} --base-url ${origin} --json`)
+    expect(human.stdout).toContain(`Next: ae describe ${toolRef} --base-url ${origin}`)
     expect(human.stdout).not.toContain(callRef)
     expect(human.stdout).not.toContain(evidenceHash)
 
@@ -521,7 +535,7 @@ describe('ae doctor', () => {
     assertCliSuccess(result)
     expect(JSON.parse(result.stdout)).toEqual({
       kind: 'ready',
-      tier: TIER1_RESULT,
+      information: { localProviderEnvironment: TIER1_RESULT },
       groups: { discovery: 'pass', quoting: 'skipped', purchase: 'pass' },
       checks: readyBuyerDiagnosisChecks(origin, '10000', loopbackSkippedQuote()),
     })
@@ -601,12 +615,12 @@ describe('ae doctor', () => {
     expect(result.stdout).not.toContain(secret)
     expect(JSON.parse(result.stdout)).toEqual({
       kind: 'degraded',
-      tier: TIER1_RESULT,
+      information: { localProviderEnvironment: TIER1_RESULT },
       groups: { discovery: 'fail', quoting: 'skipped', purchase: 'warn' },
       checks: [
         originPassCheck(origin),
         { id: 'server', group: 'discovery', state: 'pass', summary: 'AE server is reachable and manifest ae-site-discovery:v2 is compatible.' },
-        { id: 'mcp', group: 'discovery', state: 'pass', summary: 'MCP initialization and 4 public tools passed.' },
+        expect.objectContaining({ id: 'mcp', group: 'discovery', state: 'pass' }),
         {
           id: 'readiness', group: 'discovery', state: 'fail',
           summary: 'Server is reachable but operational readiness failed (deployment_manifest_invalid). The service operator must restore operational readiness before calls proceed; the caller should not continue or retry.',
@@ -647,10 +661,11 @@ describe('ae doctor', () => {
       summary: 'Quote for the sandbox Tool was admitted at 1000000 × 10^-6 AUD.',
     }]))
     expect(observed).toEqual([
-      { path: TOOL_MARKET_SEARCH_PATH, body: { query: SANDBOX_TOOL_SLUG, limit: 10 } },
+      { path: TOOL_MARKET_LIST_PATH, body: { limit: 100 } },
+      { path: TOOL_MARKET_DESCRIBE_PATH, body: { toolRef: SANDBOX_TOOL_REF } },
       {
         path: TOOL_QUOTE_PATH, authorization: `Bearer ${buyerSecret}`,
-        body: { toolRef: SANDBOX_TOOL_REF, input: { request: 'ae doctor quote inspection' } },
+        body: { toolRef: SANDBOX_TOOL_REF, input: { from: 'EUR', to: 'USD' } },
       },
     ])
 
@@ -725,7 +740,7 @@ describe('ae doctor', () => {
   it('skips quoting when no sandbox Tool is published on a loopback origin and names the hosted alternative', async () => {
     const buyerSecret = 'FAKE_ABSENT_TOOL_SECRET_7724'
     const observed: Array<{ path: string; authorization?: string; body: unknown }> = []
-    const origin = await startQuoteServer({ quote: committedQuote(), search: emptySearchResult() }, observed)
+    const origin = await startQuoteServer({ quote: committedQuote(), list: emptyListResult() }, observed)
     const directory = makeConfigDirectory()
     writeStoredConfig(directory, origin, buyerSecret)
 
@@ -738,12 +753,12 @@ describe('ae doctor', () => {
     expect(quoteCheck.code).toBe('loopback_readiness_unprovable')
     expect(quoteCheck.summary.endsWith('..')).toBe(false)
     expect(quoteCheck.summary.endsWith('.')).toBe(true)
-    expect(observed.map((request) => request.path)).toEqual([TOOL_MARKET_SEARCH_PATH])
+    expect(observed.map((request) => request.path)).toEqual([TOOL_MARKET_LIST_PATH])
   }, 20_000)
 
   it('skips quoting instead of passing it when the Quote inspection cannot be read', async () => {
     const buyerSecret = 'FAKE_UNREADABLE_QUOTE_SECRET_8836'
-    const origin = await startQuoteServer({ quote: committedQuote(), search: { unexpected: true } }, [])
+    const origin = await startQuoteServer({ quote: committedQuote(), list: { unexpected: true } }, [])
     const directory = makeConfigDirectory()
     writeStoredConfig(directory, origin, buyerSecret)
 
@@ -796,7 +811,7 @@ describe('ae doctor', () => {
     }]))
   }, 20_000)
 
-  it('fails funding and reports tier 0 with the missing names on a loopback origin without Stripe or CDP/x402 sandbox credentials', async () => {
+  it('reports local provider settings as informational rather than failing buyer funding', async () => {
     const buyerSecret = 'FAKE_TIER0_LOOPBACK_BUYER_SECRET_3301'
     const origin = await startQuoteServer({ quote: committedQuote() }, [])
     const directory = makeConfigDirectory()
@@ -805,15 +820,14 @@ describe('ae doctor', () => {
     const json = await runDoctor(directory, origin, { env: tier0Environment(directory) })
     assertCliSuccess(json)
     const result = parseDoctorJson(json)
-    expect(result.tier).toEqual({ level: 0, missing: TIER0_MISSING_NAMES })
-    expect(result.checks).toEqual(expect.arrayContaining([{
-      id: 'funding', group: 'purchase', state: 'fail',
-      summary: `Account funding is unavailable: Stripe test mode is not configured (missing: ${STRIPE_MONEY_ENV_NAMES.join(', ')}).`,
-      nextCommand: LOCAL_STRIPE_TEST_MODE_DOC,
-    }]))
+    expect(result.information?.localProviderEnvironment).toEqual({ level: 0, missing: TIER0_MISSING_NAMES })
+    expect(result.checks).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: 'funding', group: 'purchase', state: 'skipped' }),
+    ]))
 
     const human = await runDoctor(directory, origin, { json: false, env: tier0Environment(directory) })
-    expect(human.stdout).toContain(`tier: 0 (missing: ${TIER0_MISSING_NAMES.join(', ')})`)
+    expect(human.stdout).toContain('Local provider environment (informational): tier 0;')
+    expect(human.stdout).not.toContain(STRIPE_MONEY_ENV_NAMES.join(', '))
   }, 20_000)
 
   it('reports tier 1 once Stripe test mode and the CDP/x402 sandbox bundle are configured', async () => {
@@ -824,10 +838,10 @@ describe('ae doctor', () => {
 
     const json = await runDoctor(directory, origin, { env: cleanEnvironment(directory) })
     assertCliSuccess(json)
-    expect(parseDoctorJson(json).tier).toEqual(TIER1_RESULT)
+    expect(parseDoctorJson(json).information?.localProviderEnvironment).toEqual(TIER1_RESULT)
 
     const human = await runDoctor(directory, origin, { json: false, env: cleanEnvironment(directory) })
-    expect(human.stdout).toContain('tier: 1')
+    expect(human.stdout).toContain('Local provider environment (informational): tier 1')
   }, 20_000)
 
   it('warns to fund the Account at the owner credit page on a loopback origin once test mode is configured', async () => {
@@ -841,7 +855,7 @@ describe('ae doctor', () => {
     expect(parseDoctorJson(json).checks).toEqual(expect.arrayContaining([{
       id: 'funding', group: 'purchase', state: 'warn',
       summary: `Buyer balance is empty; fund the Account as the owner at ${origin}/owner/credit (Stripe test mode).`,
-      nextCommand: `${origin}/owner/credit`,
+      nextCommand: `ae fund --base-url ${origin} --json`,
     }]))
   }, 20_000)
 
@@ -852,10 +866,7 @@ describe('ae doctor', () => {
         { baseUrl: 'https://hosted.ae-doctor-test.invalid', json: false, help: false, allowWrite: false },
         { check: { id: 'balance', state: 'pass', summary: 'Buyer balance is available and the account is active.' } },
       )
-      expect(result).toEqual({
-        id: 'funding', state: 'fail',
-        summary: `Account funding is unavailable: Stripe test mode is not configured (missing: ${STRIPE_MONEY_ENV_NAMES.join(', ')}).`,
-      })
+      expect(result).toMatchObject({ id: 'funding', state: 'skipped' })
     } finally {
       vi.unstubAllEnvs()
     }

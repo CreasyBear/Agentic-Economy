@@ -9,7 +9,7 @@ import {
 import {
   toolChoiceDescribeOutputSchema,
   toolChoiceSearchOutputSchema,
-  type PublicToolChoice,
+  type SearchResult,
 } from "../../src/modules/registry/tool-choice-contracts";
 import { registryDetailAction } from "../../src/modules/registry/registry.actions";
 import { PublicServicesApiSchemaVersion } from "../../src/modules/registry/public";
@@ -73,7 +73,7 @@ export type GatewayDiscoveredTool = Readonly<{
   toolRef: string;
   businessId: string;
   offeringRef: string;
-  search: PublicToolChoice;
+  search: SearchResult;
   description: GatewayToolDescription;
   quote: GatewayToolQuote;
   authorityMode:
@@ -212,7 +212,7 @@ export async function discoverTool(
         accept: "application/json",
         "content-type": "application/json",
       },
-      body: JSON.stringify({ query, limit: 20 }),
+      body: JSON.stringify({ query, limit: 20, detail: "full" }),
     },
     "",
   );
@@ -221,10 +221,10 @@ export async function discoverTool(
     response.status < 200 ||
     response.status >= 300 ||
     !search.success ||
-    search.data.kind !== "ok"
+    search.data.kind !== "matched"
   )
     throw new GatewaySmokeError("gateway_smoke_search_result_malformed");
-  for (const candidate of search.data.items) {
+  for (const candidate of search.data.results) {
     const linked = discovery.tools.get(candidate.toolRef);
     if (linked === undefined || linked.authorityMode !== "provider_owned")
       continue;
@@ -287,11 +287,12 @@ export async function discoverTool(
 
 async function readPublicBusinessIdentity(
   config: GatewaySmokeDiscoveryConfig,
-  candidate: PublicToolChoice,
+  candidate: SearchResult,
   offeringRef: string,
   role: "owner" | "control",
 ): Promise<string> {
-  const providerSlug = candidate.provider.slug.trim();
+  const provider = candidate.details?.provider;
+  const providerSlug = provider?.slug.trim() ?? "";
   if (providerSlug.length === 0)
     throw new GatewaySmokeError(
       `gateway_smoke_${role}_business_identity_unavailable`,
@@ -316,8 +317,8 @@ async function readPublicBusinessIdentity(
   const businessId = boundedRefSchema.safeParse(business.businessId);
   if (
     !businessId.success ||
-    business.slug !== candidate.provider.slug ||
-    business.name !== candidate.provider.name ||
+    business.slug !== provider?.slug ||
+    business.name !== provider?.name ||
     !business.offerings.some(
       (offering) => offering.offeringRef === offeringRef,
     )
@@ -329,18 +330,19 @@ async function readPublicBusinessIdentity(
 }
 
 function publicChoiceIdentity(
-  candidate: PublicToolChoice,
+  candidate: SearchResult,
   description: GatewayToolDescription,
 ): boolean {
+  if (candidate.details === undefined) return false;
   return (
     canonicalDigest({
       toolRef: candidate.toolRef,
-      capabilityId: candidate.capabilityId,
+      capabilityId: candidate.details.capabilityId,
       title: candidate.title,
-      description: candidate.description,
-      provider: candidate.provider,
-      priceLabel: candidate.priceLabel,
-      healthStatus: candidate.healthStatus,
+      description: candidate.details.description,
+      provider: candidate.details.provider,
+      priceLabel: candidate.price.label,
+      readiness: candidate.readiness,
     }) ===
     canonicalDigest({
       toolRef: description.toolRef,
@@ -349,7 +351,7 @@ function publicChoiceIdentity(
       description: description.description,
       provider: description.provider,
       priceLabel: description.priceLabel,
-      healthStatus: description.healthStatus,
+      readiness: description.healthStatus === "operational" ? "ready" : description.healthStatus === "degraded" ? "unavailable" : "unverified",
     })
   );
 }

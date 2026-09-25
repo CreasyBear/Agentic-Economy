@@ -20,7 +20,7 @@ vi.mock('@/components/ae/layout/AeNetworkHealthIndicator', () => ({
   AeNetworkHealthBanner: () => null,
   AeNetworkHealthIndicator: () => null,
 }))
-vi.mock('@/components/ae/layout/AeOrganizationSwitcher', () => ({ AeOrganizationSwitcher: () => null }))
+vi.mock('@/components/ae/layout/app-shell/AeWorkspaceIdentity', () => ({ AeWorkspaceIdentity: () => null }))
 vi.mock('@/components/ae/layout/ThemeToggle', () => ({ ThemeToggle: () => null }))
 vi.mock('@/components/ae/layout/app-shell/WorkspaceMenu', () => ({ WorkspaceMenu: () => null }))
 vi.mock('@/components/ae/website/AeSiteNav', () => ({

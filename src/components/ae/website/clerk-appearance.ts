@@ -94,23 +94,6 @@ export const clerkAuthSurfaceAppearance = {
   },
 }
 
-/** Sign-in keeps Clerk's single account-switch action on the site panel. */
-export const clerkOrganizationSwitcherAppearance = {
-  elements: {
-    organizationSwitcherPopoverCard:
-      'border border-border bg-popover text-popover-foreground shadow-overlay rounded-md p-1 min-w-[14rem]',
-    organizationSwitcherPopoverActions: 'border-t border-border mt-1 pt-1',
-    organizationPreviewMainIdentifier: 'text-xs font-semibold text-foreground',
-    organizationPreviewSecondaryIdentifier: 'text-[11px] font-mono text-muted-foreground',
-    organizationSwitcherPreviewButton:
-      'w-full rounded-sm px-2 py-1.5 text-xs hover:bg-accent hover:text-accent-foreground transition-colors duration-100 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
-    organizationSwitcherActiveOrganizationPill:
-      'bg-brand-muted text-info-foreground border border-border text-[10px] font-mono px-1.5 py-0.5 rounded',
-    organizationSwitcherPopoverActionButton:
-      'w-full justify-start rounded-sm border border-border px-2 py-1.5 text-xs text-foreground hover:bg-accent hover:text-accent-foreground active:scale-[0.98] transition-transform duration-100 ease-out motion-reduce:transition-none motion-reduce:active:scale-100',
-  },
-}
-
 export const clerkSignInSurfaceAppearance = {
   variables: {
     colorBackground: 'transparent',

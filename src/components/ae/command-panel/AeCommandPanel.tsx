@@ -88,7 +88,8 @@ export function AeCommandPanel({
       <DialogContent
         id={PANEL_CONTENT_ID}
         showCloseButton={panel.pageCount === 1}
-        className="flex h-[calc(100dvh-1rem)] w-[calc(100%-1rem)] max-w-none flex-col gap-0 overflow-hidden rounded-lg p-0 duration-150 ease-standard motion-reduce:animate-none motion-reduce:duration-0 sm:h-[min(42rem,calc(100dvh-3rem))] sm:w-full sm:max-w-3xl"
+        instant
+        className="flex h-[calc(100dvh-1rem)] w-[calc(100%-1rem)] max-w-none flex-col gap-0 overflow-hidden rounded-lg p-0 sm:h-[min(42rem,calc(100dvh-3rem))] sm:w-full sm:max-w-3xl"
         onKeyDown={(event) => {
           if (
             event.key === '/' &&

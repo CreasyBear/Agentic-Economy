@@ -25,6 +25,8 @@ function RouteErrorState({ error, operator }: { error: unknown; operator: boolea
   const [retryPending, setRetryPending] = useState(false)
   const parentShell = useOperatorShellChrome()
   const correlationRef = errorCorrelationRef(error)
+  const moneyRoute = /\/(?:calls?|credit|quotes?|receipts?|activity)(?:\/|$)/.test(pathname)
+  const recoveryCopy = `${moneyRoute ? 'Nothing was charged. ' : ''}Try again, or check system status.`
 
   if (isOperatorSurfaceForbidden(error)) {
     const surface = error instanceof OperatorSurfaceForbiddenError
@@ -76,7 +78,7 @@ function RouteErrorState({ error, operator }: { error: unknown; operator: boolea
       <AePageState
         state="unavailable"
         title="Couldn’t load this page"
-        description="The page could not be loaded. Nothing was charged."
+        description={`The page could not be loaded. ${recoveryCopy}`}
         action={actions}
       />
     )
@@ -87,7 +89,7 @@ function RouteErrorState({ error, operator }: { error: unknown; operator: boolea
     <Alert variant="destructive">
       {parentShell === null ? null : <AlertTitle>Couldn’t load this page</AlertTitle>}
       <AlertDescription>
-        <p>Nothing was charged. Try again, or check system status.</p>
+        <p>{recoveryCopy}</p>
         {correlationRef === undefined
           ? null
           : <AeCopyReference label="support reference" value={correlationRef} />}
@@ -124,7 +126,7 @@ function RouteErrorState({ error, operator }: { error: unknown; operator: boolea
     <AeOperatorPage
       operatorRole={operatorRole}
       title="Couldn’t load this page"
-      description="Nothing was charged. Try again, or check system status."
+      description={recoveryCopy}
       currentPath={pathname}
     >
       {body}

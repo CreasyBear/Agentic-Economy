@@ -3,27 +3,27 @@ import { v } from 'convex/values'
 
 import {
   compareArgs,
-  compareHandler,
-  detailHandler,
   toolRefArgs,
   publicCompareReturns,
   publicDetailReturns,
   publicSearchReturns,
   searchArgs,
-  searchHandler,
-} from './capabilitySupplyToolQueries'
+} from './lib/capabilitySupply/tool/contracts'
+import { compareHandler, detailHandler, searchHandler } from './lib/capabilitySupply/tool/reads'
 import {
+  offeringToolMapArgs,
   offeringToolMapHandler,
-  offeringToolMapReturns,
-} from './capabilitySupplyToolOriginMap'
+  offeringToolMapResult,
+} from './lib/capabilitySupply/tool/originMap'
 import {
   publishedOperationSnapshotReturns,
-  sellerCanaryOperationSnapshotReturns,
-  readExactSellerCanaryOperationSnapshotHandler,
   readCurrentPublishedToolSnapshotHandler,
-} from './capabilitySupplyCurrentTool'
-
-export { readCurrentPublishedTool } from './capabilitySupplyCurrentTool'
+} from './lib/capabilitySupply/currentTool/reads'
+import {
+  readExactSellerCanaryOperationSnapshotArgs,
+  readExactSellerCanaryOperationSnapshotResult,
+  readExactSellerCanaryOperationSnapshotHandler,
+} from './lib/capabilitySupply/currentTool/sellerCanary'
 
 export const search = queryGeneric({
   args: searchArgs,
@@ -40,9 +40,26 @@ export const compare = queryGeneric({
   returns: publicCompareReturns,
   handler: compareHandler,
 })
+
+// The catalog action must call the same read model via an internal target.
+export const searchInternal = internalQueryGeneric({
+  args: searchArgs,
+  returns: publicSearchReturns,
+  handler: searchHandler,
+})
+export const detailInternal = internalQueryGeneric({
+  args: toolRefArgs,
+  returns: publicDetailReturns,
+  handler: detailHandler,
+})
+export const compareInternal = internalQueryGeneric({
+  args: compareArgs,
+  returns: publicCompareReturns,
+  handler: compareHandler,
+})
 export const offeringToolMap = queryGeneric({
-  args: { businessIds: v.array(v.string()) },
-  returns: offeringToolMapReturns,
+  args: offeringToolMapArgs,
+  returns: offeringToolMapResult,
   handler: offeringToolMapHandler,
 })
 
@@ -53,7 +70,7 @@ export const readCurrentPublishedToolSnapshot = internalQueryGeneric({
 })
 
 export const readExactSellerCanaryOperationSnapshot = internalQueryGeneric({
-  args: { publicationRef: v.string(), revision: v.number() },
-  returns: sellerCanaryOperationSnapshotReturns,
+  args: readExactSellerCanaryOperationSnapshotArgs,
+  returns: readExactSellerCanaryOperationSnapshotResult,
   handler: readExactSellerCanaryOperationSnapshotHandler,
 })

@@ -37,7 +37,6 @@ describe('Supply landing public exemption', () => {
     }
     expect(result.tools.map(({ id }) => id)).toEqual(registeredToolIds)
     expect(registeredToolIds).toEqual([
-      'registry.tools.list',
       'registry.tools.search',
       'registry.tools.describe',
       'registry.tools.compare',

@@ -54,7 +54,8 @@ import { describe, expect, it } from 'vitest'
  * degradeBackend() is not an option here. These 4 bare catches are
  * intentional and must NOT be "fixed" by re-adding degradeBackend calls.
  * Re-pinned from 17 to 19 on 2026-09-21 after the gate was wired.
- * Added offenders since the prior snapshot: convex/chatTools.ts:199,
+ * Added offenders since the prior snapshot included the former
+ * convex/chatTools.ts (now convex/lib/chat/tools/) and
  * convex/lib/capabilitySupply/publishBootstrap.ts:166,
  * src/lib/server/procure-api.ts:77,
  * src/modules/capability-execution/procure-engine.ts:107,

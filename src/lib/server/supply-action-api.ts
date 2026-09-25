@@ -1,14 +1,13 @@
 import { gatewayFailureToProblem } from '@/lib/errors'
-import { bearerChallenge } from '@/lib/http/oauth-challenge'
 import { degrade } from '@/lib/observability/degrade'
 import { readBoundedRequestText } from '@/lib/server/bounded-request-body'
 import {
+  authRefusalProblem,
   authenticateAgentAccess,
   resolveAgentAccessPrincipal,
   type AgentAccessAuthenticationOptions,
   type AgentAccessPrincipalResolver,
 } from '@/lib/server/agent-access-auth'
-import { resolveCanonicalBaseUrl } from '@/lib/server/canonical-url'
 import { response } from '@/lib/server/no-store-response'
 import { problem } from '@/lib/server/problem'
 import { withHttpRateLimit } from '@/lib/server/rate-limit'
@@ -74,20 +73,6 @@ export type SupplyActionHandlerOptions = Readonly<{
   rolloutEnvironment?: StringEnvironment
 }>
 
-function authenticationFailure(request: Request, reason: string, status: number, correlationId: string): Response {
-  const scope = SUPPLY_ACTION_ROUTE_CONTRACTS.status.scope
-  const failure = gatewayFailureToProblem({ code: reason, kind: 'refused', retryable: false })
-  return withRequestCorrelationHeader(problem({
-    ...failure,
-    status,
-    detail: reason === 'scope_required'
-      ? `The current agent credential does not grant ${scope}.`
-      : 'Connect an owner-issued provider credential before managing Provider Tools.',
-  }, {
-    Vary: 'Authorization',
-    'WWW-Authenticate': bearerChallenge(resolveCanonicalBaseUrl(request).baseUrl, scope),
-  }), correlationId)
-}
 
 /** Canonical authenticated HTTP adapter for every provider action contract. */
 export async function handleSupplyActionPost(
@@ -118,7 +103,7 @@ export async function handleSupplyActionPost(
       consequenceResource: supplyActionConsequenceResource(actionName),
     })
     if (admitted.kind !== 'authenticated') {
-      return authenticationFailure(request, admitted.reason, admitted.status, correlationId)
+      return authRefusalProblem(request, admitted, SUPPLY_ACTION_ROUTE_CONTRACTS[actionName].scope, undefined, correlationId)
     }
 
     let rawBody: unknown

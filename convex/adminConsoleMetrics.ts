@@ -1,7 +1,7 @@
 import { paginationOptsValidator, paginationResultValidator } from 'convex/server'
 import { v } from 'convex/values'
 
-import { defineAdminQuery } from './lib/adminConsole/registrars'
+import { defineAdminQuery } from './lib/adminConsole/reads/registrars'
 import {
   metricCallRowValue,
   metricQuoteRowValue,

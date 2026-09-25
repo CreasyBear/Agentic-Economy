@@ -268,6 +268,8 @@ export async function issueAgentAccessKey(input: IssueInput): Promise<AgentAcces
     || authorityMode === undefined || scopes === undefined
     || !validExpiry(expiresInSeconds)
     || !policyMatchesRequestedControls(input.spendingPolicy, input.input)
+    || (applicationRef === 'ae-owner-chat'
+      && (authorityMode !== 'approval_required' || input.returnSecret !== false))
     || (environment === 'production' && authorityMode === 'unrestricted_test_only')) {
     return { kind: 'error', code: 'invalid_input', retryable: false }
   }

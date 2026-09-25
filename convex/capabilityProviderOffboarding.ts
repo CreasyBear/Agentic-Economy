@@ -7,7 +7,7 @@ import {
   completeCallDrainHandler,
   drainCallsPageHandler,
   settleObligationsHandler,
-} from './lib/providerOffboarding/drainAndSettle'
+} from './lib/capabilitySupply/providerOffboarding/drainAndSettle'
 import {
   completeFreezeHandler,
   freezeRouteabilityHandler,
@@ -15,7 +15,7 @@ import {
   snapshotOfferingTargetsPageHandler,
   withdrawCatalogDocumentsPageHandler,
   withdrawToolTargetsPageHandler,
-} from './lib/providerOffboarding/freezePages'
+} from './lib/capabilitySupply/providerOffboarding/freezePages'
 import {
   cancelCaseArgs,
   cancelCaseHandler,
@@ -27,18 +27,18 @@ import {
   resumeCaseHandler,
   startCaseArgs,
   startCaseHandler,
-} from './lib/providerOffboarding/ownerCommands'
+} from './lib/capabilitySupply/providerOffboarding/ownerCommands'
 import {
   completeConnectionRevocationHandler,
   revokeConnectionsPageHandler,
-} from './lib/providerOffboarding/revokePages'
-import { runProviderOffboardingWorkflow } from './lib/providerOffboarding/runWorkflow'
-import { resultValue } from './lib/providerOffboarding/validators'
+} from './lib/capabilitySupply/providerOffboarding/revokePages'
+import { runProviderOffboardingWorkflow } from './lib/capabilitySupply/providerOffboarding/runWorkflow'
+import { resultValue } from './lib/capabilitySupply/providerOffboarding/contracts'
 import {
   retireOfferingTargetsPageHandler,
   verifyCallsPageHandler,
   verifyCompletionHandler,
-} from './lib/providerOffboarding/verifyPages'
+} from './lib/capabilitySupply/providerOffboarding/verifyPages'
 
 const manager = new WorkflowManager(components.workflow)
 

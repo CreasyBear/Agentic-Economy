@@ -45,6 +45,14 @@ export function utilizationBand(percent: number): UtilizationBand {
   return 'exceeded'
 }
 
+export function utilizationPercent(spendUnits: bigint, ceilingUnits: bigint): number {
+  if (ceilingUnits <= 0n) return spendUnits > 0n ? 100 : 0
+  const basisPoints = (spendUnits * 10_000n) / ceilingUnits
+  const wholePercent = Number(basisPoints / 100n)
+  const fraction = Number(basisPoints % 100n)
+  return fraction >= 50 ? Math.min(100, wholePercent + 1) : Math.min(100, wholePercent)
+}
+
 const KNOWN_MONTHLY_SPEND_CEILING_ERROR_CODES = [
   'invalid_amount',
   'monthly_spend_budget_revision_conflict',

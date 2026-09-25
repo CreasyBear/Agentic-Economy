@@ -8,7 +8,7 @@ vi.mock('../../../convex/marketDispatchWorkpool', () => ({
   marketDispatchWorkpool: { enqueueAction: mocks.enqueueAction },
 }))
 
-import { enqueueCleanupWork } from '../../../convex/lib/providerConnections/lifecycle'
+import { enqueueCleanupWork } from '../../../convex/lib/capabilitySupply/providerConnections/lifecycle'
 import {
   beginProviderConnectionRevocation,
   createProviderConnection,

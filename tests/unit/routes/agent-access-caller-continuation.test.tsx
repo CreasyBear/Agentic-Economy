@@ -18,11 +18,9 @@ const routeHarness = vi.hoisted(() => ({
   serverFns: new Map<unknown, (...args: never[]) => Promise<unknown>>(),
   readDirectory: vi.fn(),
   readCanonicalBaseUrl: vi.fn(),
-  revokeRef: Symbol('revoke'),
   disconnectRef: Symbol('disconnect'),
   disconnectConnectionRef: Symbol('disconnect-connection'),
   renameRef: Symbol('rename'),
-  issueRef: Symbol('issue'),
   updateSpendingLimitsRef: Symbol('update-spending-limits'),
   readSpendingLimitsRef: Symbol('read-spending-limits'),
   readApprovalsRef: Symbol('read-approvals'),
@@ -46,7 +44,8 @@ vi.mock('@tanstack/react-router', () => ({
   useNavigate: () => routeHarness.navigate,
 }))
 
-vi.mock('@tanstack/react-start', () => ({
+vi.mock('@tanstack/react-start', async (importOriginal) => ({
+  ...await importOriginal(),
   createClientOnlyFn: (fn: (...args: never[]) => unknown) => fn,
   useServerFn: (reference: unknown) => routeHarness.serverFns.get(reference) ?? (async () => undefined),
 }))
@@ -86,10 +85,8 @@ vi.mock('@/lib/server/agent-access-console.functions', () => ({
 
 vi.mock('@/modules/agent-access/agent-access.functions', () => ({
   disconnectAgentServer: routeHarness.disconnectRef,
-  issueAgentAccessKeyServer: routeHarness.issueRef,
   revokeOwnerConnectionServer: routeHarness.disconnectConnectionRef,
   renameAgentServer: routeHarness.renameRef,
-  revokeAgentCredentialServer: routeHarness.revokeRef,
   updateAgentSpendingLimitsServer: routeHarness.updateSpendingLimitsRef,
   readAgentSpendingLimitsServer: routeHarness.readSpendingLimitsRef,
 }))
@@ -151,7 +148,6 @@ function renderRoute() {
 }
 
 function installServerFns(readDirectory: () => Promise<AgentDirectoryProjection> = async () => directory) {
-  const revoke = vi.fn(async () => ({ kind: 'revoked' as const, keyId: KEY_ID }))
   const rename = vi.fn(async () => ({
     kind: 'completed' as const,
     principalRef: PRINCIPAL_ID,
@@ -160,11 +156,10 @@ function installServerFns(readDirectory: () => Promise<AgentDirectoryProjection>
     correlationRef: 'agent:rename-safe',
   }))
   routeHarness.serverFns.set(routeHarness.readDirectory, readDirectory)
-  routeHarness.serverFns.set(routeHarness.revokeRef, revoke)
   routeHarness.serverFns.set(routeHarness.renameRef, rename)
   routeHarness.serverFns.set(routeHarness.readApprovalsRef, async () => [])
   routeHarness.serverFns.set(routeHarness.decideApprovalRef, async () => ({ kind: 'denied' }))
-  return { revoke, rename }
+  return { rename }
 }
 
 beforeEach(() => {
@@ -365,12 +360,14 @@ describe('agent-access caller route continuation', () => {
     expect(screen.queryByTestId('agent-install')).toBeNull()
   })
 
-  it('clears selection with replace and revokes only the selected key id', async () => {
+  it('links key management to settings without exposing a second revoke control', async () => {
     routeHarness.search = { caller: PRINCIPAL_ID }
-    const { revoke } = installServerFns()
+    installServerFns()
     renderRoute()
 
     await waitFor(() => expect(routeHarness.consoleProps?.directory).toEqual(directory))
+    expect(screen.getByRole('link', { name: 'Manage Agent keys' }).getAttribute('href')).toBe('/owner/settings/agent-keys')
+    expect(routeHarness.consoleProps?.onRevokeCredential).toBeUndefined()
     const clearSelection = routeHarness.consoleProps?.onClearSelectedPrincipal as (() => void) | undefined
     clearSelection?.()
     expect(routeHarness.navigate).toHaveBeenCalledWith({
@@ -378,48 +375,5 @@ describe('agent-access caller route continuation', () => {
       search: {},
       replace: true,
     })
-
-    const onRevoke = routeHarness.consoleProps?.onRevokeCredential as ((credentialRef: string) => Promise<void>) | undefined
-    const revokePromise = onRevoke?.(`credential:${KEY_ID}`)
-    expect(revokePromise).toBeInstanceOf(Promise)
-    await act(async () => revokePromise)
-    await waitFor(() => expect(revoke).toHaveBeenCalledWith({ data: { credentialRef: `credential:${KEY_ID}` } }))
-    expect(JSON.stringify(revoke.mock.calls)).not.toContain(PRINCIPAL_ID)
-    expect(JSON.stringify(revoke.mock.calls)).not.toContain(FOREIGN_PRINCIPAL_ID)
-  })
-
-  it('keeps the directory visible and retries the exact cleanup after a partial provider failure', async () => {
-    const revoke = vi.fn()
-      .mockResolvedValueOnce({
-        kind: 'partial' as const,
-        principalRef: PRINCIPAL_ID,
-        correlationRef: 'corr-provider-cleanup',
-        retryable: true as const,
-      })
-      .mockResolvedValueOnce({
-        kind: 'completed' as const,
-        principalRef: PRINCIPAL_ID,
-        correlationRef: 'corr-provider-cleanup-retry',
-      })
-    installServerFns()
-    routeHarness.serverFns.set(routeHarness.revokeRef, revoke)
-    renderRoute()
-
-    await waitFor(() => expect(routeHarness.consoleProps?.directory).toEqual(directory))
-    const onRevoke = routeHarness.consoleProps?.onRevokeCredential as ((credentialRef: string) => Promise<void>) | undefined
-    await act(async () => onRevoke?.(`credential:${KEY_ID}`))
-
-    expect(screen.getByText('Provider cleanup incomplete')).toBeTruthy()
-    expect(screen.getByText('corr-provider-cleanup')).toBeTruthy()
-    expect(routeHarness.consoleProps?.accessUnavailable).toBe(false)
-    expect(routeHarness.consoleProps?.directory).toEqual(directory)
-
-    fireEvent.click(screen.getByRole('button', { name: 'Retry cleanup' }))
-    await waitFor(() => expect(revoke).toHaveBeenCalledTimes(2))
-    expect(revoke.mock.calls).toEqual([
-      [{ data: { credentialRef: `credential:${KEY_ID}` } }],
-      [{ data: { credentialRef: `credential:${KEY_ID}` } }],
-    ])
-    await waitFor(() => expect(screen.queryByText('Provider cleanup incomplete')).toBeNull())
   })
 })

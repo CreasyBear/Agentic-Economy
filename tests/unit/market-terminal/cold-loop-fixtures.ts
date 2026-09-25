@@ -55,7 +55,7 @@ export function operationDescriptor(toolRef: string, summary = 'Current referenc
 }
 
 export function operationSearchResult(query: string, operations: readonly ToolDescriptorFixture[]) {
-  return projectToolSearchChoices(toolSearchOutputSchema.parse({
+  const result = toolSearchOutputSchema.parse({
     kind: 'ok' as const,
     schemaVersion: 'registry-tools:v3' as const,
     query,
@@ -64,11 +64,12 @@ export function operationSearchResult(query: string, operations: readonly ToolDe
     ranking: operations.map((operation, index) => ({
       toolRef: operation.toolRef,
       rank: index + 1,
-      score: operations.length - index,
+      score: 0.9,
     })),
     pagination: { limit: 20, hasMore: false },
     navigation: [],
-  }))
+  })
+  return projectToolSearchChoices(result, undefined, { verdict: 'matched', nearMisses: [] })
 }
 
 export function operationDetailResult(operation: ToolDescriptorFixture) {

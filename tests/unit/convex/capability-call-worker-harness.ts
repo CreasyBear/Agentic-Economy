@@ -144,7 +144,8 @@ vi.mock('undici', () => ({
   fetch: mocks.guardedFetch,
 }))
 
-import { callAttemptIdentityDigest, run } from '../../../convex/capabilityCallWorker'
+import { run } from '../../../convex/capabilityCallWorker'
+import { callAttemptIdentityDigest } from '../../../convex/capabilityCallIdentity'
 import { buildDevelopmentPublishedToolEvidence } from '../../../tools/dev/fixtures/capability-supply/development-published-tool-evidence'
 import { isBoundedJsonValue } from '@/modules/capability-contract/public'
 import {

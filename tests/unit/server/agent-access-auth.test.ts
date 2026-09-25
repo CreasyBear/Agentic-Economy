@@ -111,7 +111,7 @@ describe('agent access authentication', () => {
       projection,
       [MARKET_TOOLS_CALL_SCOPE],
       'surface:http:operations-call',
-    )).resolves.toBeNull()
+    )).rejects.toThrow('source unavailable')
 
     for (const invalidResource of [undefined, ' surface:http:operations-call', 'credential:ak_source_resolver']) {
       await expect(resolver(
@@ -302,7 +302,7 @@ describe('agent access authentication', () => {
       authenticate,
       requiredScope: MARKET_TOOLS_CALL_SCOPE,
       resolvePrincipal: async () => { throw new Error('resolver unavailable') },
-    })).resolves.toEqual({ kind: 'refused', status: 401, reason: 'authentication_required' })
+    })).resolves.toEqual({ kind: 'refused', status: 503, reason: 'source_unavailable', retryable: true })
   })
 
   it('honors an explicit required-scope set and canonicalizes supported claim projections', async () => {
@@ -467,7 +467,7 @@ describe('agent access authentication', () => {
         .resolves.toEqual({ kind: 'refused', status: 401, reason: 'authentication_required' })
     }
     await expect(authenticateCanonically({ requiredScope: MARKET_TOOLS_CALL_SCOPE, authenticate, verifyKeyState: async () => { throw new Error('unavailable') } }))
-      .resolves.toEqual({ kind: 'refused', status: 401, reason: 'authentication_required' })
+      .resolves.toEqual({ kind: 'refused', status: 503, reason: 'source_unavailable', retryable: true })
     await expect(authenticateCanonically({
       requiredScope: MARKET_TOOLS_CALL_SCOPE,
       authenticate,
@@ -484,8 +484,9 @@ describe('agent access authentication', () => {
       },
     })).resolves.toEqual({
       kind: 'refused',
-      status: 401,
-      reason: 'authentication_required',
+      status: 503,
+      reason: 'source_unavailable',
+      retryable: true,
     })
   })
 

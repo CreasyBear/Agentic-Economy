@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
+import { cleanup, render, screen, within } from '@testing-library/react'
 import {
   RouterContextProvider,
   createMemoryHistory,
@@ -41,36 +41,29 @@ function renderNavigation(pathname: string) {
 
 describe('owner primary navigation', () => {
 
-  it('renders the canonical primary destinations without route metadata', () => {
+  it('renders exactly the dropdown group destinations, with no More sheet', () => {
     renderNavigation('/activity')
 
-    const { primary } = mobileNavigation()
+    const primary = mobileNavigation()
     const navigation = screen.getByRole('navigation', { name: 'Owner primary navigation' })
     const links = within(navigation).getAllByRole('link')
 
     expect(links.map(link => link.textContent)).toEqual(primary.map(destination => destination.label))
     expect(links.map(link => link.getAttribute('href'))).toEqual(primary.map(destination => destination.to))
-    expect(links.filter(link => link.getAttribute('aria-current') === 'page').map(link => link.textContent)).toEqual(['Calls'])
-    expect(navigation.querySelectorAll('svg[aria-hidden="true"]')).toHaveLength(5)
+    expect(links.filter(link => link.getAttribute('aria-current') === 'page').map(link => link.textContent)).toEqual(['Activity'])
+    expect(within(navigation).queryByRole('button', { name: 'More' })).toBeNull()
   })
 
-  it('lists the remaining canonical destinations under Provider and Utilities', () => {
+  it('marks a child route within its group without falsely identifying a different page', () => {
     renderNavigation('/owner/operations')
-
-    const moreButton = screen.getByRole('button', { name: 'More' })
-    expect(moreButton.getAttribute('aria-current')).toBe('page')
-    fireEvent.click(moreButton)
-
-    const { more } = mobileNavigation()
-    const sheet = screen.getByRole('dialog', { name: 'More' })
-    expect(within(sheet).getByRole('heading', { name: 'Provider' })).toBeTruthy()
-    expect(within(sheet).getByRole('heading', { name: 'Utilities' })).toBeTruthy()
-
-    const links = within(sheet).getAllByRole('link')
-    expect(links.map(link => link.textContent)).toEqual(more.map(destination => destination.label))
-    expect(links.map(link => link.getAttribute('href'))).toEqual(
-      more.map(destination => `${destination.to}${destination.hash ?? ''}`),
-    )
-    expect(within(sheet).getByRole('link', { name: 'Tools' }).getAttribute('aria-current')).toBe('page')
+    const navigation = screen.getByRole('navigation', { name: 'Owner primary navigation' })
+    expect(within(navigation).getByRole('link', { name: 'Settings' }).getAttribute('aria-current')).toBe('location')
+    expect(within(navigation).queryByRole('link', { current: 'page' })).toBeNull()
+  })
+  it('marks Settings as the current mobile destination on settings pages', () => {
+    renderNavigation('/owner/settings')
+    const settings = within(screen.getByRole('navigation', { name: 'Owner primary navigation' })).getByRole('link', { name: 'Settings' })
+    expect(settings.getAttribute('href')).toBe('/owner/settings')
+    expect(settings.getAttribute('aria-current')).toBe('page')
   })
 })

@@ -8,7 +8,11 @@ import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { verifyExactEvmX402Settlement } from '@/modules/capability-supply/server'
 import { createGuardedLookup, defaultDnsResolver } from '@/modules/network-guard/public'
 import { readX402EvmReceipt } from '@/modules/capability-execution/call-runtime'
-import type { MoneyFormanceResult } from './moneyFormance'
+import type { FormanceMoneyResult as MoneyFormanceResult } from '@/modules/money/public'
+const resolvePaidResultFailureResult = v.union(
+  v.object({ kind: v.literal('completed') }),
+  v.object({ kind: v.literal('refused'), code: v.string() }),
+)
 
 /**
  * Requires: an existing stopped Call whose response was lost, and the original
@@ -20,12 +24,14 @@ import type { MoneyFormanceResult } from './moneyFormance'
  */
 export const resolveLostResult = internalAction({
   args: { callRef: v.string(), transactionHash: v.string() },
+  returns: resolvePaidResultFailureResult,
   handler: async (ctx, args) => await resolvePaidResultFailure(ctx, args),
 })
 
 /** Forward remedy for a verified-paid response that fails the original Tool contract. */
 export const resolveInvalidResult = internalAction({
   args: { callRef: v.string(), transactionHash: v.string() },
+  returns: resolvePaidResultFailureResult,
   handler: async (ctx, args) => await resolvePaidResultFailure(ctx, args, 'invalid_output'),
 })
 

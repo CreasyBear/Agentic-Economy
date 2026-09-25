@@ -1,14 +1,14 @@
 import { mutationGeneric } from 'convex/server'
 import { v } from 'convex/values'
 
-import { sourceWriteArgs } from './sourceWriteAdmission'
-import { adminCommandArgsValue, adminCommandReceiptValue } from './lib/adminConsole/validators'
-import { openRemovalDisputeArgsValue, removalReason, visibilityTargetType } from './lib/security/adminArgs'
-import { runAdminCommand } from './lib/adminConsole/commandEnvelope'
+import { sourceWriteArgs } from './lib/security/sourceWrite/contracts'
+import { adminCommandArgsValue, adminCommandReceiptValue } from './lib/adminConsole/commands/contracts'
+import { openRemovalDisputeArgsValue, removalReason, visibilityTargetType } from './lib/security/admin/args'
+import { runAdminCommand } from './lib/adminConsole/commands/commandEnvelope'
 import { grantAdminMembershipSpec, revokeAdminMembershipSpec } from './lib/adminConsole/actions/adminMembership'
 import { removalDisputeSpec } from './lib/adminConsole/actions/removalDispute'
-import { bootstrapOwnerAdminHandler } from './securityAdminMembership'
-import { openRemovalDisputeHandler } from './securityRemovalDisputes'
+import { bootstrapOwnerAdminHandler } from './lib/security/adminMembership/bootstrap'
+import { openRemovalDisputeHandler } from './lib/security/removalDisputes/open'
 const adminRole = v.union(v.literal('owner_admin'), v.literal('support'), v.literal('reviewer'))
 const adminMembershipState = v.union(v.literal('active'), v.literal('revoked'), v.literal('suspended'))
 const disputeStatus = v.union(v.literal('opened'), v.literal('updated'), v.literal('closed'), v.literal('contested'))

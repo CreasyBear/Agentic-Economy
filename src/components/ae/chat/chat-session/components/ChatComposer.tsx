@@ -1,3 +1,4 @@
+// Adapted from vercel/ai-chatbot, c2f8235e1f3ea903ad8b7f61447c4f74164b5c58, components/chat/multimodal-input.tsx (Apache-2.0). Attachments and model controls omitted.
 import { SendIcon, SquareIcon } from 'lucide-react'
 
 import { AeCopyReference } from '@/components/ae/data/AeCopyReference'
@@ -35,15 +36,15 @@ export function ChatComposer({
   const invalid = error.length > 0
   return (
     <form
-      className="shrink-0 bg-background px-gutter pb-[max(var(--spacing-related),env(safe-area-inset-bottom))] pt-intra"
+      className="w-full shrink-0 bg-background"
       action={onSubmit}
     >
-      <FieldGroup className="mx-auto w-full max-w-3xl gap-intra">
+      <FieldGroup className="w-full gap-2">
         <Field data-invalid={invalid || undefined}>
         <FieldLabel htmlFor="tool-chat-prompt" className="sr-only">
             {chatComposer.promptLabel}
           </FieldLabel>
-          <InputGroup className="items-end bg-container">
+          <InputGroup className="min-h-0 items-stretch rounded-2xl border border-border/50 bg-card/70 shadow-soft transition-[box-shadow] duration-300 focus-within:ring-2 focus-within:ring-ring/40">
             <InputGroupTextarea
               id="tool-chat-prompt"
               value={prompt}
@@ -56,38 +57,38 @@ export function ChatComposer({
               }}
               placeholder={chatComposer.placeholder}
               disabled={disabled}
-              aria-describedby="tool-chat-newline tool-chat-limit tool-chat-error"
+              aria-describedby="tool-chat-limit tool-chat-error"
               aria-invalid={invalid}
-              className="max-h-40 min-h-touch"
+              className="max-h-40 min-h-11 px-4 pt-3.5 pb-1.5 text-base leading-relaxed placeholder:text-muted-foreground"
               rows={1}
             />
-            <InputGroupAddon align="inline-end">
+            <InputGroupAddon align="block-end" className="!justify-end !px-3 !pb-3 !pt-0">
               {busy && onStop !== undefined ? (
                 <Button
                   type="button"
-                  className="min-h-touch min-w-touch"
+                  className="size-9 min-h-9 min-w-9 rounded-xl bg-foreground !p-0 text-background focus-visible:ring-2 focus-visible:ring-ring/40"
                   aria-label={chatComposer.stopAria}
                   onClick={onStop}
                 >
                   <SquareIcon data-icon="inline-start" aria-hidden="true" />
-                  <span className="hidden sm:inline">{chatComposer.stop}</span>
+                  <span className="sr-only">{chatComposer.stop}</span>
                 </Button>
               ) : (
                 <Button
                   type="submit"
-                  className="min-h-touch min-w-touch"
+                  className="size-9 min-h-9 min-w-9 rounded-xl bg-foreground !p-0 text-background transition-opacity duration-fast disabled:opacity-30 focus-visible:ring-2 focus-visible:ring-ring/40"
                   disabled={disabled || prompt.trim().length === 0}
                   aria-label={busy ? chatComposer.sendingAria : chatComposer.sendAria}
                 >
                   {busy
                     ? <Spinner data-icon="inline-start" aria-hidden="true" />
                     : <SendIcon data-icon="inline-start" aria-hidden="true" />}
-                  <span className="hidden sm:inline">{busy ? chatComposer.sending : chatComposer.send}</span>
+                  <span className="sr-only">{busy ? chatComposer.sending : chatComposer.send}</span>
                 </Button>
               )}
             </InputGroupAddon>
           </InputGroup>
-          <div className="flex items-start justify-between gap-related">
+          <div className={cn('flex items-start justify-between gap-related', !invalid && anonymousMessageCount === undefined && promptLength < 1_800 && 'max-sm:hidden')}>
             <div className="min-w-0 flex-1">
               {invalid
                 ? (
@@ -115,9 +116,6 @@ export function ChatComposer({
                   {chatAnonymousCountLine(anonymousMessageCount, anonymousMessageLimitReached)}
                 </FieldDescription>
               )}
-              <FieldDescription id="tool-chat-newline">
-                {chatComposer.newline}
-              </FieldDescription>
             </div>
             <FieldDescription id="tool-chat-limit" className="shrink-0 tabular-nums">
               {promptLength >= 1_800 ? `${promptLength} / 2,000` : ''}

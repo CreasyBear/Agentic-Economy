@@ -3,7 +3,6 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 
 import { CreditAccountingPanel } from './components/CreditAccountingPanel'
 import { CreditFundPanel } from './components/CreditFundPanel'
-import { CreditInvoicesPanel } from './components/CreditInvoicesPanel'
 import { CreditLedgerPanel } from './components/CreditLedgerPanel'
 import {
   ownerCreditSectionNavigation,
@@ -44,9 +43,6 @@ export function AeOwnerCredit(props: AeOwnerCreditProps) {
         </TabsList>
         <TabsContent value="fund">
           <CreditFundPanel {...props} />
-        </TabsContent>
-        <TabsContent value="invoices">
-          <CreditInvoicesPanel {...props} />
         </TabsContent>
         <TabsContent value="ledger">
           <CreditLedgerPanel {...props} />

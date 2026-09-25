@@ -4,8 +4,8 @@ import { describe, expect, it } from 'vitest'
 import schema from '../../../convex/schema'
 import {
   createConvexSecretLifecyclePersistence,
-} from '../../../convex/lib/secretLifecyclePersistence'
-import type { SecretPointerAuthority } from '../../../convex/lib/secretPointerPersistence'
+} from '../../../convex/lib/secrets/lifecycle/persistence'
+import type { SecretPointerAuthority } from '../../../convex/lib/secrets/pointer/persistence'
 import {
   secretGeneration,
   secretRef,

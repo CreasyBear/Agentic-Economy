@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 
 import { createX402ProviderConnection } from '@/modules/capability-supply/provider-connection'
-import { readCurrentProviderConnectionAuthorityHandler } from '../../../convex/lib/callLifecycle/callActions'
+import { readCurrentProviderConnectionAuthorityHandler } from '../../../convex/lib/capabilityExecution/callLifecycle/callProviderAuthority'
 
 type Row = Record<string, unknown> & { _id: string }
 

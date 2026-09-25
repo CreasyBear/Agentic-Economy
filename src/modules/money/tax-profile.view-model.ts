@@ -7,6 +7,7 @@ export type TaxProfileInitialData =
   | Readonly<{
       kind: 'available'
       abn: string
+      gstRegistered?: boolean
       legalName: string
       addressLine1: string
       addressLine2?: string
@@ -21,6 +22,7 @@ export type TaxProfileInvalidField = 'legalName' | 'abn' | 'address'
 
 export type TaxProfileSubmitPayload = Readonly<{
   abn: string
+  gstRegistered: boolean
   legalName: string
   addressLine1: string
   addressLine2?: string
@@ -86,6 +88,7 @@ export function toTaxProfileInitialData(facts: CustomerTaxFactsRead): TaxProfile
   return {
     kind: 'available',
     abn: facts.abn,
+    gstRegistered: facts.gstRegistered,
     legalName: facts.legalName,
     addressLine1: facts.addressLine1,
     ...(facts.addressLine2 !== undefined ? { addressLine2: facts.addressLine2 } : {}),

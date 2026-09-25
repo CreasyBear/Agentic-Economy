@@ -68,7 +68,14 @@ describe('OperatorRouteError router recovery', () => {
     expect(statusLink.classList.contains('min-h-touch')).toBe(true)
     expect(alert.textContent).not.toContain('private upstream credential')
     expect(document.querySelectorAll('h1, [data-slot="alert-title"]')).toHaveLength(1)
-    expect(alert.textContent).toContain('Nothing was charged. Try again, or check system status.')
+    expect(alert.textContent).toContain('Try again, or check system status.')
+    expect(alert.textContent).not.toContain('Nothing was charged')
+  })
+
+  it('uses charge reassurance only on money routes', () => {
+    routeStateMocks.pathname = '/owner/credit'
+    render(<OperatorRouteError error={new Error('route failed')} />)
+    expect(screen.getByRole('alert').textContent).toContain('Nothing was charged.')
   })
 
   it('retains nested parent chrome with one Settings heading', () => {

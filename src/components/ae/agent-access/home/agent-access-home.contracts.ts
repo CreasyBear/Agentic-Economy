@@ -2,7 +2,6 @@ import type { ReactNode } from 'react'
 
 import type { AgentDirectoryProjection } from '@/modules/agent-access/agent-operator-view-model'
 import type { AgentAccessSearch, LifecycleCommand, LifecycleIssue } from '@/modules/agent-access/agent-lifecycle.view-model'
-import type { IssuedAgentAccessReveal } from '@/modules/agent-access/issue-key.contracts'
 import type {
   AgentSpendingLimitsReadResult,
   AgentSpendingLimitsResult,
@@ -24,11 +23,6 @@ export type AeAgentAccessHomeView = Readonly<{
   directory: AgentDirectoryProjection
   loading: boolean
   loadingMore: boolean
-  wizardOpen: boolean
-  setWizardOpen: (open: boolean) => void
-  reveal: IssuedAgentAccessReveal | undefined
-  onRevealSuccess: (issued: IssuedAgentAccessReveal) => void
-  onRevealOpenChange: (next: boolean) => void
   directoryError: string | undefined
   directoryAlertTitle: string
   onDirectoryRetry: () => void
@@ -44,7 +38,6 @@ export type AeAgentAccessHomeView = Readonly<{
   resumeSectionDescription: string
   getAgentHref: (principalId: string) => string
   clearSelectedPrincipal: () => void
-  onRevokeCredential: (credentialRef: string) => void | Promise<void>
   onDisconnectAgent: (principalRef: string) => void | Promise<void>
   onDisconnectConnection: (connectionRef: string, expectedRevision: number) => void | Promise<void>
   onRenameAgent: (principalRef: string, expectedRevision: number, displayName: string) => Promise<boolean>

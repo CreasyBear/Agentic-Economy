@@ -2,21 +2,22 @@ import { getFunctionName, type FunctionReference } from 'convex/server'
 import { expect, vi } from 'vitest'
 
 import { probeFromCron } from '../../../convex/capabilitySupplyReadiness'
-import { readPreClaimRefundHandler } from '../../../convex/lib/callLifecycle/dispatch'
+import { readPreClaimRefundHandler } from '../../../convex/lib/capabilityExecution/callLifecycle/dispatchRefusal'
 import {
   SYSTEM_WORKLOAD_ACCOUNT_REF,
   SYSTEM_WORKLOAD_PRINCIPAL_REF,
-  admitWorkloadCron,
-  dispatchWorkloadCronConsequenceHandler,
   parseWorkloadCronSnapshot,
-  reconcile,
-  reconcileWorkloadCronResourceAccount,
-  reconcileWorkloadCronSnapshot,
-  refreshCapabilitySupplyReadiness,
   type WorkloadCronActionContext,
   type WorkloadCronMutationContext,
   type WorkloadCronSnapshot,
-} from '../../../convex/workloadCron'
+} from '../../../convex/lib/platform/workloadCron/context'
+import {
+  admitWorkloadCron,
+  reconcileWorkloadCronResourceAccount,
+  reconcileWorkloadCronSnapshot,
+} from '../../../convex/lib/platform/workloadCron/admission'
+import { dispatchWorkloadCronConsequenceHandler } from '../../../convex/lib/platform/workloadCron/consequence'
+import { reconcile, refreshCapabilitySupplyReadiness } from '../../../convex/workloadCron'
 
 export type RegisteredRuntimeHandler = (ctx: unknown, args: Record<string, unknown>) => Promise<unknown>
 

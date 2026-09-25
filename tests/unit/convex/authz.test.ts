@@ -7,7 +7,7 @@ import {
   resolveAdminAuthority,
   resolveBusinessActor,
 } from '../../../convex/authz'
-import { interactiveCredentialExpiryNonce } from '../../../convex/interactiveCredentialLifecycle'
+import { interactiveCredentialExpiryNonce } from '../../../convex/lib/principalAccount/interactiveCredential/nonce'
 
 type Row = Record<string, unknown> & { _id: string; _creationTime: number }
 type EqFilter = { field: string; value: unknown }

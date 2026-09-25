@@ -137,8 +137,8 @@ describe('design-system grammar eval harness', () => {
 
   it('DS-35/36: lists frame ownership and keeps chat free of app chrome', () => {
     const inventory = ds35FrameOwnershipInventory()
-    expect(inventory.appShell.brandMark).toBeGreaterThan(0)
-    expect(inventory.appShell.userButton).toBeGreaterThan(0)
+    expect(inventory.appHeader.brandMark).toBeGreaterThan(0)
+    expect(inventory.appHeader.userButton).toBeGreaterThan(0)
     expect(inventory.chatHeader.brandMark).toBe(0)
     expect(inventory.chatHeader.signInButton).toBe(0)
     expect(ds36ChatShellViolations()).toEqual([])

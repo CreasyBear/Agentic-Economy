@@ -3,8 +3,8 @@
  * Destinations stay the five market tools; do not add harness prompts.
  */
 export const chatEmpty = {
-  title: 'Find Tools for an Agent.',
-  description: 'Compare and inspect. Then use one with your Agent. Price is on the card.',
+  title: 'What can I find for you?',
+  description: 'Search, compare and buy AI tools. You approve every purchase.',
 } as const
 
 export const chatLoading = 'Loading conversation…'
@@ -18,30 +18,21 @@ export const chatClarify = {
 } as const
 
 export const chatSuggestions = [
-  {
-    label: 'Find a weather API',
-    prompt: 'Find a weather API my agent can call',
-  },
-  {
-    label: 'Compare lookups',
-    prompt: 'Compare two company-lookup tools',
-  },
-  {
-    label: 'Inspect before a call',
-    prompt: 'Inspect a tool before calling it',
-  },
+  { title: 'Convert a time zone', label: '3:30pm New York to Tokyo', prompt: 'Convert a time zone 3:30pm New York to Tokyo' },
+  { title: 'Look up an Ethereum transaction', label: 'from its hash', prompt: 'Look up an Ethereum transaction from its hash' },
+  { title: 'Track token transfers', label: 'for a wallet address', prompt: 'Track token transfers for a wallet address' },
+  { title: 'Check a transaction fee', label: 'gas paid, from its hash', prompt: 'Check a transaction fee: gas paid, from its hash' },
 ] as const
 
 export const chatComposer = {
   promptLabel: 'Message',
-  placeholder: 'Find a weather API my agent can call',
+  placeholder: 'Ask about any tool…',
   send: 'Send',
   sending: 'Sending…',
   sendAria: 'Send message',
   sendingAria: 'Sending message',
   stop: 'Stop',
   stopAria: 'Stop generating',
-  newline: 'Enter sends. Shift+Enter inserts a newline.',
 } as const
 
 export const chatRecovery = {
@@ -90,12 +81,12 @@ export function chatDeleteConversation(title: string): string {
   return `Delete “${title}”?`
 }
 
-export function chatStageTitle(threadId: string | null): string {
-  return threadId === null ? 'Ask' : 'Chat'
+export function chatStageTitle(threadTitle: string | null): string {
+  return threadTitle?.trim() || 'Ask'
 }
 
 export function chatStageDetail(authenticated: boolean): string {
-  return authenticated ? 'Saved to your account' : 'Private to this browser session'
+  return authenticated ? 'Saved to your account' : 'Saved in this browser tab'
 }
 
 export function chatAnonymousCountLine(count: number, limitReached: boolean): string {

@@ -1,13 +1,12 @@
-import { bearerChallenge } from '@/lib/http/oauth-challenge'
 import { gatewayFailureToProblem } from '@/lib/errors'
 import { degrade } from '@/lib/observability/degrade'
 import {
+  authRefusalProblem,
   authenticateAgentAccess,
   resolveAgentAccessPrincipal,
   type AgentAccessAuthenticationOptions,
   type AgentAccessPrincipalResolver,
 } from '@/lib/server/agent-access-auth'
-import { resolveCanonicalBaseUrl } from '@/lib/server/canonical-url'
 import { readBoundedRequestText } from '@/lib/server/bounded-request-body'
 import { response } from '@/lib/server/no-store-response'
 import { problem } from '@/lib/server/problem'
@@ -60,22 +59,7 @@ export async function handleAgentAccountGet(
       consequenceResource: 'surface:http:account-self',
     })
     if (admitted.kind !== 'authenticated') {
-      const failure = gatewayFailureToProblem({
-        code: admitted.reason,
-        kind: 'refused',
-        retryable: false,
-      })
-      const challenge = bearerChallenge(resolveCanonicalBaseUrl(request).baseUrl)
-      return withRequestCorrelationHeader(problem({
-        ...failure,
-        status: admitted.status,
-        detail: admitted.reason === 'scope_required'
-          ? 'The current agent credential is not an AE buyer or supplier profile.'
-          : 'Connect an agent credential before inspecting the current account.',
-      }, {
-        Vary: 'Authorization',
-        'WWW-Authenticate': challenge,
-      }), correlationId)
+      return authRefusalProblem(request, admitted, undefined, undefined, correlationId)
     }
 
     const result = await agentAccountSelfAction.run({
@@ -122,17 +106,7 @@ export async function handleAgentAccountActionPost(
       consequenceResource: `surface:http:account-${actionName}`,
     })
     if (admitted.kind !== 'authenticated') {
-      const failure = gatewayFailureToProblem({ code: admitted.reason, kind: 'refused', retryable: false })
-      return withRequestCorrelationHeader(problem({
-        ...failure,
-        status: admitted.status,
-        detail: admitted.reason === 'scope_required'
-          ? 'The current agent credential does not grant buyer account reads.'
-          : 'Connect a buyer agent credential before reading account money state.',
-      }, {
-        Vary: 'Authorization',
-        'WWW-Authenticate': bearerChallenge(resolveCanonicalBaseUrl(request).baseUrl, contract.scope),
-      }), correlationId)
+      return authRefusalProblem(request, admitted, contract.scope, undefined, correlationId)
     }
     let rawBody: unknown
     try {

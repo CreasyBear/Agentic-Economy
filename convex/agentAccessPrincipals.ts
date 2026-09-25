@@ -20,37 +20,31 @@ import {
 import {
   issuedBindingArgs,
   issuedBindingResult,
-  renameAgentArgs,
-  renameAgentResult,
   registerIssuedAgentBindingForServerHandler,
-  renameAgentForServerHandler,
   type RegisterIssuedBindingArgs,
   type RegisterIssuedBindingResult,
 } from './lib/agentAccess/principals/bindings'
+import { renameAgentArgs, renameAgentResult, renameAgentForServerHandler } from './lib/agentAccess/principals/rename'
 import {
   replacementRegistrationArgs,
   replacementRegistrationResult,
-  replacementTransitionArgs,
-  replacementTransitionResult,
   prepareCredentialReplacementForServerHandler,
-  promoteCredentialReplacementForServerHandler,
-  cancelCredentialReplacementForServerHandler,
-  prepareCredentialReplacementCore,
-  transitionCredentialReplacementCore,
-  revokeReplacementMaterial,
 } from './lib/agentAccess/principals/replacement'
 import {
+  replacementTransitionArgs,
+  replacementTransitionResult,
+  promoteCredentialReplacementForServerHandler,
+  cancelCredentialReplacementForServerHandler,
+} from './lib/agentAccess/principals/replacementTransition'
+import {
   revokeCredentialArgs,
-  disconnectAgentArgs,
   recordProviderRevocationArgs,
   lifecycleCommandResult,
   providerRevocationResult,
   revokeCredentialForServerHandler,
-  disconnectAgentForServerHandler,
   recordProviderRevocationForServerHandler,
-  revokeCanonicalCredentialForService,
-  invalidateOAuthRefreshFamilies,
 } from './lib/agentAccess/principals/revocation'
+import { disconnectAgentArgs, disconnectAgentForServerHandler } from './lib/agentAccess/principals/disconnect'
 
 // -- Validators / plain helpers re-exported at their original module path so ----
 // -- existing importers (convex/agentAccessOAuth.ts, tests, src/modules/*) -----
@@ -60,8 +54,6 @@ export { agentAccessPrincipalValue, verifySupplyAgentPrincipal, verifyMarketAgen
 export type { AgentAccessPrincipalValue, AgentPrincipalAdmission, AgentSupplyPrincipalAdmission } from './lib/agentAccess/principals/verification'
 export { canonicalAgentDelegationScopes }
 export type { CanonicalCredentialOwner } from './lib/agentAccess/principals/records'
-export { prepareCredentialReplacementCore, transitionCredentialReplacementCore, revokeReplacementMaterial }
-export { revokeCanonicalCredentialForService, invalidateOAuthRefreshFamilies }
 
 export const registerIssuedAgentBindingForServer: RegisteredMutation<'public', RegisterIssuedBindingArgs, RegisterIssuedBindingResult> = mutation({
   args: { ...issuedBindingArgs, serviceAuth: serviceAssertion },

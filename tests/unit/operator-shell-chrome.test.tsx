@@ -66,11 +66,7 @@ vi.mock('@/components/ae/layout/app-shell/useOperatorEntitlement', () => ({
 
 import { AeAppShell } from '@/components/ae/layout/AeAppShell'
 import { AeOperatorPage, OperatorChromeProvider } from '@/components/ae/layout/AeOperatorPage'
-import { AeAppSidebar } from '@/components/ae/layout/app-shell/AeAppSidebar'
-import { SidebarProvider } from '@/components/ui/sidebar'
 import { OperatorRouteError, OperatorRouteNotFound, OperatorRoutePending } from '@/components/ae/layout/AeRouteStates'
-import { AECON_MARK_SRC } from '@/content/brand-assets'
-import { ownerSettingsChrome } from '@/lib/operator/settings-navigation'
 import {
   OPERATOR_SURFACE_FORBIDDEN_MESSAGE,
   OperatorSurfaceForbiddenError,
@@ -118,13 +114,12 @@ describe('operator shell nested chrome', () => {
     expect(document.activeElement).toBe(earnings)
   })
 
-  it('replaces actions, breadcrumbs, and badges when nested route chrome changes', async () => {
+  it('updates operator actions when nested route chrome changes', async () => {
     renderAt(<OperatorShellHarness />, '/admin')
 
     expect(await screen.findByText('Action one')).toBeTruthy()
     expect(screen.queryByRole('navigation', { name: 'Breadcrumb' })).toBeNull()
     expect(screen.queryByText('First crumb')).toBeNull()
-    expect(screen.getAllByText('2').length).toBeGreaterThan(0)
 
     fireEvent.click(screen.getByRole('button', { name: 'Update chrome' }))
 
@@ -132,7 +127,6 @@ describe('operator shell nested chrome', () => {
     expect(screen.queryByText('Action one')).toBeNull()
     expect(screen.queryByRole('navigation', { name: 'Breadcrumb' })).toBeNull()
     expect(screen.queryByText('Second crumb')).toBeNull()
-    expect(screen.getAllByText('5').length).toBeGreaterThan(0)
   })
 
   it('uses the existing operator shell for unmatched assistant descendants', async () => {
@@ -165,48 +159,6 @@ describe('operator shell nested chrome', () => {
     expect(recovery.getAttribute('href')).toBe('/agent-access')
   })
 
-  it('uses slim records rail for admin without duplicating app-header chrome', async () => {
-    renderAt(
-      <SidebarProvider>
-        <OperatorChromeProvider>
-          <AeAppSidebar operatorRole="admin" canAccessAdmin pathname="/admin" hash="" />
-          <AeOperatorPage
-            operatorRole="admin"
-            title="Administration"
-            description="Catalog and audit records."
-            currentPath="/admin"
-          >
-            <div>Admin body</div>
-          </AeOperatorPage>
-        </OperatorChromeProvider>
-      </SidebarProvider>,
-      '/admin',
-    )
-
-    const nav = await screen.findByRole('navigation', { name: 'App navigation' })
-    expect(within(nav).getByText('Admin')).toBeTruthy()
-    expect(within(nav).getByRole('link', { name: 'Providers' })).toBeTruthy()
-    expect(within(nav).getByRole('link', { name: 'Audit' })).toBeTruthy()
-    expect(document.querySelectorAll(`img[src="${AECON_MARK_SRC}"]`).length).toBe(0)
-  })
-
-  it('drops the nested settings record icon on owner account pages', async () => {
-    renderAt(
-      <AeOperatorPage
-        operatorRole="owner"
-        title={ownerSettingsChrome.title}
-        description={ownerSettingsChrome.description}
-        currentPath="/owner/settings"
-      >
-        <div>Settings body</div>
-      </AeOperatorPage>,
-      '/owner/settings',
-    )
-
-    const stack = await screen.findByTestId('operator-page-stack')
-    expect(within(stack).getByText(ownerSettingsChrome.description)).toBeTruthy()
-    expect(within(stack).queryByRole('heading', { level: 1 })).toBeNull()
-  })
 
   it('drops the record-header icon on operator lists', async () => {
     renderAt(
@@ -352,39 +304,22 @@ describe('owner mobile navigation', () => {
     renderOperatorShell('owner', '/owner/operations')
 
     const mobileNav = await screen.findByRole('navigation', { name: 'Owner primary navigation' })
-    const calls = within(mobileNav).getByRole('link', { name: 'Calls' })
+    const calls = within(mobileNav).getByRole('link', { name: 'Activity' })
     fireEvent.click(calls)
 
     await waitFor(() => expect(calls.getAttribute('data-status')).toBe('active'))
   })
 
-  it('renders the canonical primary destinations and More disclosure in order', async () => {
+  it('renders four matching top-level destinations without a More sheet', async () => {
     renderOperatorShell('owner', '/owner/operations')
-
     const mobileNav = await screen.findByRole('navigation', { name: 'Owner primary navigation' })
     const links = within(mobileNav).getAllByRole('link')
-
-    expect(links.map((link) => link.textContent)).toEqual(['Market', 'Agents', 'Calls', 'Credit'])
-    expect(links.map((link) => link.getAttribute('href'))).toEqual([
-      '/market',
-      '/agent-access',
-      '/activity',
-      '/owner/credit',
-    ])
-    expect(within(mobileNav).getByRole('button', { name: 'More' }).getAttribute('aria-current')).toBe('page')
-    expect(mobileNav.querySelectorAll('svg[aria-hidden="true"]')).toHaveLength(5)
+    expect(links.map((link) => link.textContent)).toEqual(['Market', 'Ask', 'Activity', 'Settings'])
+    expect(links.map((link) => link.getAttribute('href'))).toEqual(['/market', '/t/new', '/activity', '/owner/settings'])
+    expect(within(mobileNav).getByRole('link', { name: 'Settings' }).getAttribute('aria-current')).toBe('location')
+    expect(within(mobileNav).queryByRole('button', { name: 'More' })).toBeNull()
   })
 
-  it('keeps resource routes owned by the More disclosure', async () => {
-    const descendant = renderOperatorShell('owner', '/owner/operations/new')
-    const descendantNav = await screen.findByRole('navigation', { name: 'Owner primary navigation' })
-    expect(within(descendantNav).getByRole('button', { name: 'More' }).getAttribute('aria-current')).toBe('page')
-
-    descendant.unmount()
-    renderOperatorShell('owner', '/owner/settings')
-    const settingsNav = await screen.findByRole('navigation', { name: 'Owner primary navigation' })
-    expect(within(settingsNav).getByRole('button', { name: 'More' }).getAttribute('aria-current')).toBe('page')
-  })
 
   it('keeps one workspace menu across owner resources, receipts, and admin pages', async () => {
     const owner = renderOperatorShell('owner', '/owner/operations')
@@ -394,7 +329,7 @@ describe('owner mobile navigation', () => {
     owner.unmount()
     const receipt = renderOperatorShell('owner', '/calls/call_test_123')
     fireEvent.click(await screen.findByRole('button', { name: 'Workspace menu' }))
-    expect(within(screen.getByRole('menu')).getByRole('menuitem', { name: 'Calls' }).getAttribute('aria-current')).toBe('page')
+    expect(within(screen.getByRole('menu')).getByRole('menuitem', { name: 'Activity' }).getAttribute('aria-current')).toBe('page')
     receipt.unmount()
 
     shellMocks.canAccessAdmin = true
@@ -403,16 +338,14 @@ describe('owner mobile navigation', () => {
     expect(within(screen.getByRole('menu')).getByText('Admin')).toBeTruthy()
   })
 
-  it('keeps mobile safe-area padding on the root inset', async () => {
+  it('keeps the mobile safe-area inset on the root frame', async () => {
     renderOperatorShell('owner', '/owner/operations')
 
     const mobileNav = await screen.findByRole('navigation', { name: 'Owner primary navigation' })
-    const inset = document.querySelector('[data-slot="sidebar-inset"]')
-
+    const content = document.querySelector('[data-shell="app-content"]')
     expect(mobileNav.classList.contains('md:hidden')).toBe(true)
     expect(mobileNav.classList.contains('pb-[env(safe-area-inset-bottom,0px)]')).toBe(true)
-    expect(mobileNav.classList.contains('h-[calc(var(--ae-mobile-nav-height)+env(safe-area-inset-bottom,0px))]')).toBe(true)
-    expect(inset?.classList.contains('pb-[calc(var(--ae-mobile-nav-height)+env(safe-area-inset-bottom,0px))]')).toBe(true)
+    expect(content?.classList.contains('pb-[calc(var(--ae-mobile-nav-height)+env(safe-area-inset-bottom,0px))]')).toBe(true)
     expect(screen.getByTestId('operator-content').classList.contains('ae-rail')).toBe(true)
     const pageStack = screen.getByTestId('operator-page-stack')
     expect(pageStack.classList.contains('gap-section')).toBe(true)
@@ -444,26 +377,12 @@ describe('owner account identity', () => {
     expect(await screen.findByRole('button', { name: 'Account menu' })).toBeTruthy()
     expect(shellMocks.userButton).toHaveBeenCalled()
     expect(shellMocks.userButton.mock.calls[0]?.[0]).toMatchObject({
-      userProfileMode: 'modal',
+      userProfileMode: 'navigation',
+      userProfileUrl: '/owner/settings/account',
     })
     expect(screen.queryByRole('group', { name: /Signed in as/ })).toBeNull()
     expect(document.body.textContent).not.toContain('user_private_ada')
     expect(document.body.textContent).not.toContain('session_private_ada')
-  })
-
-  it('keeps account controls out of the navigation sidebar', async () => {
-    renderAt(
-      <SidebarProvider>
-        <OperatorChromeProvider>
-          <AeAppSidebar operatorRole="owner" pathname="/owner/operations" hash="" />
-        </OperatorChromeProvider>
-      </SidebarProvider>,
-      '/owner/operations',
-    )
-
-    expect(await screen.findByRole('navigation', { name: 'App navigation' })).toBeTruthy()
-    expect(screen.queryByRole('button', { name: 'Account menu' })).toBeNull()
-    expect(screen.queryByRole('group', { name: /Signed in as/ })).toBeNull()
   })
 
 })
@@ -474,12 +393,8 @@ function OperatorShellHarness() {
   const breadcrumbs = useMemo(() => [
     { label: version === 'one' ? 'First crumb' : 'Second crumb', href: `/admin/${version}` },
   ], [version])
-  const navBadges = useMemo(() => ({ '/admin/audit-events': version === 'one' ? 2 : 5 }), [version])
 
   return (
-    <SidebarProvider>
-      <OperatorChromeProvider>
-        <AeAppSidebar operatorRole="admin" canAccessAdmin pathname="/admin/audit-events" hash="" />
         <AeOperatorPage
           operatorRole="admin"
           title="Outer shell"
@@ -494,13 +409,10 @@ function OperatorShellHarness() {
             currentPath="/admin/audit-events"
             actions={actions}
             breadcrumbs={breadcrumbs}
-            navBadges={navBadges}
           >
             <div>Nested content</div>
           </AeOperatorPage>
         </AeOperatorPage>
-      </OperatorChromeProvider>
-    </SidebarProvider>
   )
 }
 

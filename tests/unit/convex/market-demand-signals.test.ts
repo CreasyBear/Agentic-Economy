@@ -152,8 +152,10 @@ describe('private market demand signals', () => {
     })
     const input = { query: 'retained missing OCR need', idempotencyKey: 'lost-response' }
     const search = vi.spyOn(registryToolsSearchAction, 'run').mockResolvedValue({
-      kind: 'no_candidates', schemaVersion: 'registry-tools:v3', query: input.query, count: 0, items: [],
-      note: 'No match.', pagination: { limit: 1, hasMore: false },
+      kind: 'noMatch', schemaVersion: 'registry-tools:v3', query: input.query,
+      scope: 'exhausted', results: [], nearMisses: [], reason: 'No suitable Tool found.',
+      suggestions: [], partialResults: false, pagination: { limit: 1, hasMore: false },
+      next: [{ action: 'broaden', authority: 'public', args: { query: input.query } }],
     })
     const service = createMarketDemandService(new Request('https://ae.example/api/v1/market-requests', {
       method: 'POST', body: JSON.stringify(input),
@@ -183,8 +185,10 @@ describe('private market demand signals', () => {
     boundary.mutation.mockImplementation((reference, args) => backend.mutation(reference, JSON.parse(JSON.stringify(args))))
     const input = { query: 'missing concurrent need', idempotencyKey: 'concurrent-request' }
     vi.spyOn(registryToolsSearchAction, 'run').mockResolvedValue({
-      kind: 'no_candidates', schemaVersion: 'registry-tools:v3', query: input.query, count: 0, items: [],
-      note: 'No match.', pagination: { limit: 1, hasMore: false },
+      kind: 'noMatch', schemaVersion: 'registry-tools:v3', query: input.query,
+      scope: 'exhausted', results: [], nearMisses: [], reason: 'No suitable Tool found.',
+      suggestions: [], partialResults: false, pagination: { limit: 1, hasMore: false },
+      next: [{ action: 'broaden', authority: 'public', args: { query: input.query } }],
     })
     const service = createMarketDemandService(new Request('https://ae.example/api/v1/market-requests', {
       method: 'POST', body: JSON.stringify(input),

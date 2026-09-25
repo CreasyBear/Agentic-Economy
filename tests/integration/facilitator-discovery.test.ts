@@ -4,15 +4,15 @@ import { describe, expect, it, vi } from 'vitest'
 import { admitFacilitatorDiscoveryItems } from '../../convex/facilitatorDiscoveryAction'
 import { api, internal } from '../../convex/_generated/api'
 import schema from '../../convex/schema'
-import { toolRecordProjection } from '../../convex/capabilitySupplyToolShared'
-import { reconcileReadyItems } from '../../convex/capabilitySupplyShared'
+import { toolRecordProjection } from '../../convex/lib/capabilitySupply/tool/projection'
+import { reconcileReadyItems } from '../../convex/lib/capabilitySupply/facilitatorDiscovery/readyItems'
 import { timezonePaymentRequired20260819Fixture as timezoneFixture } from '@/modules/capability-supply/public'
 import { convexModules } from '../helpers/convex-fixtures'
 import {
   SYSTEM_WORKLOAD_ACCOUNT_REF,
   SYSTEM_WORKLOAD_PRINCIPAL_REF,
   type WorkloadCronSnapshot,
-} from '../../convex/workloadCron'
+} from '../../convex/lib/platform/workloadCron/context'
 
 async function seedFacilitatorDiscoveryWorkload(backend: ReturnType<typeof convexTest>): Promise<WorkloadCronSnapshot> {
   const admittedAt = Date.now()

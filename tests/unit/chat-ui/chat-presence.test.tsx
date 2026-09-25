@@ -14,6 +14,7 @@ vi.mock('@convex-dev/agent/react', () => ({
 
 vi.mock('convex/react', () => ({
   useQuery: vi.fn(() => undefined),
+  usePaginatedQuery: () => ({ results: [], status: 'Exhausted', loadMore: vi.fn() }),
   useMutation: () => vi.fn(async () => ({})),
   useConvex: () => ({ query: vi.fn() }),
   useConvexAuth: () => ({ isAuthenticated: false, isLoading: false }),
@@ -38,8 +39,8 @@ afterEach(() => {
   vi.unstubAllGlobals()
 })
 
-const threads: readonly { threadId: string; title: string; busy: boolean }[] = [
-  { threadId: 'thread-1', title: 'Weather operations', busy: false },
+const threads: readonly { threadId: string; title: string; createdAt: number; busy: boolean }[] = [
+  { threadId: 'thread-1', title: 'Weather operations', createdAt: Date.now(), busy: false },
 ]
 
 describe('ChatHistory first-load gate', () => {
@@ -60,7 +61,7 @@ describe('ChatHistory first-load gate', () => {
       />,
     )
 
-    expect(screen.getByLabelText('Conversations')).toBeTruthy()
+    expect(document.querySelector('[aria-busy="true"][aria-label="Conversations"]')).not.toBeNull()
     expect(document.querySelectorAll('[data-slot="skeleton"]').length).toBeGreaterThan(0)
   })
 
@@ -81,7 +82,7 @@ describe('ChatHistory first-load gate', () => {
     )
 
     expect(document.querySelector('[data-slot="skeleton"]')).toBeNull()
-    expect(screen.getByText(chatHistory.empty)).toBeTruthy()
+    expect(screen.getByText('Your chats will appear here.')).toBeTruthy()
   })
 
   it('renders resolved conversations without pending or empty-state UI', () => {
@@ -102,7 +103,22 @@ describe('ChatHistory first-load gate', () => {
 
     expect(screen.getByText('Weather operations')).toBeTruthy()
     expect(document.querySelector('[data-slot="skeleton"]')).toBeNull()
+    expect(screen.getByText('Today')).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Weather operations' }).getAttribute('aria-current')).toBe('page')
     expect(screen.queryByText(chatHistory.empty)).toBeNull()
+  })
+
+  it('groups saved chats by local calendar day and the older date ranges', () => {
+    const today = new Date()
+    const midnight = new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime()
+    const day = 86_400_000
+    render(<ChatHistory idPrefix="groups" activeThreadId={null} search="" busy={false}
+      threads={[midnight + 1, midnight - day / 2, midnight - 4 * day, midnight - 20 * day, midnight - 40 * day]
+        .map((createdAt, index) => ({ threadId: `thread-${index}`, title: `Chat ${index}`, createdAt, busy: false }))}
+      onSearch={() => undefined} onOpen={() => undefined} onRename={async () => true}
+      onDelete={async () => true} onNewChat={() => undefined} />)
+    expect(screen.getAllByRole('listitem').map(section => section.textContent))
+      .toEqual(['TodayChat 0', 'YesterdayChat 1', 'Previous 7 daysChat 2', 'Previous 30 daysChat 3', 'OlderChat 4'])
   })
 })
 
@@ -125,15 +141,10 @@ describe('ChatTranscript first-page gate', () => {
     expect(resolved.container.querySelector('[aria-busy="true"]')).toBeNull()
   })
 
-  it('uses the Ask stage body sentence without a second title', () => {
+  it('shows the greeting heading in a resolved-empty transcript', () => {
     render(<ChatTranscript messages={[]} />)
 
-    expect(screen.queryByRole('heading')).toBeNull()
-    expect(document.querySelector('[data-slot="empty-title"]')?.textContent).toBe('Find Tools for an Agent.')
-    expect(screen.getByText('Find Tools for an Agent.')).toBeTruthy()
-    expect(screen.getByText(
-      'Compare and inspect. Then use one with your Agent. Price is on the card.',
-    )).toBeTruthy()
+    expect(screen.getByRole('heading', { name: 'What can I find for you?' })).toBeTruthy()
   })
 
   it('renders assistant markdown and leaves the user bubble plain', () => {
@@ -168,12 +179,12 @@ describe('ChatTranscript first-page gate', () => {
       }]}
     />)
 
-    expect(screen.getByText('Search tools…')).toBeTruthy()
+    expect(document.querySelector('article[aria-label="Assistant"] details:not([open]) > summary')).not.toBeNull()
     expect(document.querySelector('[data-tool-card="registry.tools.search"]')).toBeNull()
     expect(screen.queryByText('Thinking…')).toBeNull()
   })
 
-  it('places prose on either side of a tool and copies a fenced block', async () => {
+  it('groups answer prose after the work disclosure and copies a fenced block', async () => {
     const writeText = vi.fn(async () => undefined)
     Object.defineProperty(navigator, 'clipboard', {
       configurable: true,
@@ -194,10 +205,11 @@ describe('ChatTranscript first-page gate', () => {
     }]} />)
 
     const before = screen.getByText('Before the search.')
-    const tool = screen.getByText('Search tools…')
+    const tool = document.querySelector('article[aria-label="Assistant"] details > summary')
     const after = screen.getByText('After the search.')
-    expect(before.compareDocumentPosition(tool) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
-    expect(tool.compareDocumentPosition(after) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    if (tool === null) throw new Error('Work disclosure missing')
+    expect(tool.compareDocumentPosition(before) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(before.compareDocumentPosition(after) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
     expect(screen.queryByText('   ')).toBeNull()
 
     fireEvent.click(screen.getByRole('button', { name: 'Copy code' }))
@@ -231,7 +243,7 @@ describe('ChatTranscript first-page gate', () => {
     expect(screen.queryByRole('button', { name: 'Singapore' })).toBeNull()
   })
 
-  it('places a search result inside one openui stack and compares Tools in a table', () => {
+  it('keeps openui prose without exposing empty search cards and compares Tools in a table', () => {
     const toolRef = `operation:v1:${'a'.repeat(64)}`
     render(<ChatTranscript messages={[{
       id: 'assistant-1',
@@ -254,7 +266,7 @@ describe('ChatTranscript first-page gate', () => {
     }]} />)
 
     expect(screen.getByText('Two lookups match the request.')).toBeTruthy()
-    expect(document.querySelectorAll('[data-tool-card="registry.tools.search"]')).toHaveLength(1)
+    expect(document.querySelectorAll('[data-tool-card="registry.tools.search"]')).toHaveLength(0)
     expect(screen.queryByText('```openui')).toBeNull()
 
     cleanup()

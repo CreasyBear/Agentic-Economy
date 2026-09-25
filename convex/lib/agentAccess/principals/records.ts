@@ -22,8 +22,8 @@ import { createPackage3AuditEvent } from '@/modules/observability/public'
 import {
   resolveCanonicalAgentContext,
   validateCanonicalAgentDelegation,
-} from '../../canonicalAgentAuthority'
-import { persistAuditEvent } from '../../../securityShared'
+} from '../../authority/canonicalAgent/authority'
+import { persistAuditEvent } from '../../security/audit/persistence'
 import { environment, authorityMode, lifecycle } from './verification'
 
 export const agentPrincipalArgs = {

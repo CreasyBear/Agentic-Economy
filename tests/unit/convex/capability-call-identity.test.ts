@@ -58,7 +58,7 @@ vi.mock('undici', () => ({ Agent: mocks.FakeAgent, fetch: mocks.guardedFetch }))
 import {
   callAttemptIdentityDigest,
   callAttemptIdentityMaterial,
-} from '../../../convex/capabilityCallWorker'
+} from '../../../convex/capabilityCallIdentity'
 import { admitCall, canonicalCallRef } from '@/modules/capability-execution/call-authority'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 

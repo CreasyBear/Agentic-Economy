@@ -1031,7 +1031,6 @@ describe('assistant access components', () => {
       <AeAgentOperatorConsole
         directory={keyDirectory}
         loading={false}
-        onRevokeCredential={() => undefined}
         onDisconnectAgent={() => undefined}
         approvals={[]}
         approvalsLoading={false}
@@ -1082,7 +1081,6 @@ describe('assistant access components', () => {
       <AeAgentOperatorConsole
         directory={emptyPeriodDirectory}
         loading={false}
-        onRevokeCredential={() => undefined}
         onDisconnectAgent={() => undefined}
         approvals={[]}
         approvalsLoading={false}
@@ -1122,7 +1120,6 @@ describe('assistant access components', () => {
       <AeAgentOperatorConsole
         directory={emptyDirectory}
         loading={false}
-        onRevokeCredential={() => undefined}
         onDisconnectAgent={() => undefined}
         approvals={[{
           callRef: 'call:approval:one',
@@ -1202,7 +1199,6 @@ describe('assistant access components', () => {
       <AeAgentOperatorConsole
         directory={emptyDirectory}
         loading={false}
-        onRevokeCredential={() => undefined}
         onDisconnectAgent={() => undefined}
         approvals={[{
           callRef: 'call:approval:legacy',

@@ -1,9 +1,9 @@
 import { convertSchemaToJsonSchema, type JSONSchema } from '@tanstack/ai'
 import { z } from 'zod'
 
-import { defaultTitle, PROBLEM_KINDS, type ProblemKind } from '@/lib/errors'
+import { defaultTitle, DEFAULT_STATUS, PROBLEM_KINDS, type ProblemKind } from '@/lib/errors'
 
-import type { NormalizedOperation } from './openapi-document-types'
+import type { NormalizedOperation, NormalizedResponse } from './openapi-document-types'
 
 export const AGENT_ACCESS_SECURITY_SCHEME = 'agentAccessKey' as const
 
@@ -76,6 +76,12 @@ export function hoistLocalDefs(schema: JSONSchema, schemas: Map<string, JSONSche
 }
 
 export const PROBLEM_JSON_SCHEMA = jsonSchemaOf(problemDetailsSchema)
+export function problemResponses(kinds: readonly ProblemKind[]): readonly NormalizedResponse[] {
+  const statuses = new Set(kinds.map((kind) => DEFAULT_STATUS[kind]))
+  return [...statuses].sort((a, b) => a - b).map((status) => ({
+    status, schema: PROBLEM_JSON_SCHEMA, mediaType: 'application/problem+json', description: 'Problem Details (RFC 9457).',
+  }))
+}
 
 function operationIdToComponentName(operationId: string): string {
   return operationId
@@ -100,6 +106,10 @@ export function buildPaths(
         name: param.name, in: 'query', required: param.required, description: param.description,
         schema: hoistLocalDefs(param.schema, schemas, `${componentBase}${operationIdToComponentName(param.name)}`),
       })),
+      ...(operation.headerParams ?? []).map((param) => ({
+        name: param.name, in: 'header', required: param.required, description: param.description,
+        schema: hoistLocalDefs(param.schema, schemas, `${componentBase}${operationIdToComponentName(param.name)}`),
+      })),
     ]
     let requestBody: Record<string, unknown> | undefined
     if (operation.requestBodySchema !== undefined) {
@@ -114,23 +124,28 @@ export function buildPaths(
     for (const response of operation.responses) {
       const isProblem = response.mediaType === 'application/problem+json'
       const schemaName = isProblem ? 'Problem' : `${componentBase}Response`
-      if (!isProblem) schemas.set(schemaName, hoistLocalDefs(response.schema, schemas, schemaName))
+      if (!isProblem && operation.method !== 'HEAD') schemas.set(schemaName, hoistLocalDefs(response.schema, schemas, schemaName))
       const existing = responses[String(response.status)] as Record<string, unknown> | undefined
       const content = (existing?.content as Record<string, unknown> | undefined) ?? {}
-      responses[String(response.status)] = {
-        description: response.description,
-        content: { ...content, [response.mediaType]: { schema: { $ref: `#/components/schemas/${schemaName}` } } },
-      }
+      responses[String(response.status)] = operation.method === 'HEAD' && !isProblem
+        ? { description: response.description }
+        : {
+            description: response.description,
+            content: { ...content, [response.mediaType]: { schema: { $ref: `#/components/schemas/${schemaName}` } } },
+          }
     }
     const operationObject: Record<string, unknown> = {
       operationId: operation.operationId,
       summary: operation.summary,
+      ...(operation.security === 'none'
+        ? (operation.description === undefined ? {} : { description: operation.description })
+        : { description: `${operation.description ?? ''} Requires ${operation.security.scope} scope.`.trim() }),
       tags: operation.tags,
       ...(parameters.length === 0 ? {} : { parameters }),
       ...(requestBody === undefined ? {} : { requestBody }),
       responses,
       ...(operation.security === 'none' ? { security: [] } : {
-        security: [{ [AGENT_ACCESS_SECURITY_SCHEME]: [operation.security.scope] }],
+        security: [{ [AGENT_ACCESS_SECURITY_SCHEME]: [] }],
       }),
     }
     const pathItem = paths[operation.path] ?? {}

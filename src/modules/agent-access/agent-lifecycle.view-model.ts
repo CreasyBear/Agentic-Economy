@@ -13,7 +13,7 @@ export type AgentAccessSearch = Readonly<{
 }>
 
 export type LifecycleCommand =
-  | Readonly<{ kind: 'credential' | 'agent'; ref: string }>
+  | Readonly<{ kind: 'agent'; ref: string }>
   | Readonly<{ kind: 'connection'; ref: string; expectedRevision: number }>
 
 export type LifecycleIssue = Readonly<{

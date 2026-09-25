@@ -17,6 +17,9 @@ export type DevelopersApiOperationGroupTag =
   | 'Funding'
   | 'Businesses'
   | 'Platform'
+  | 'Account'
+  | 'Market demand'
+  | 'Provider'
 
 export type DevelopersApiOperationGroup = Readonly<{
   tag: DevelopersApiOperationGroupTag
@@ -49,6 +52,9 @@ export const DEVELOPERS_API_OPERATION_GROUP_TAGS = Object.freeze([
   'Funding',
   'Businesses',
   'Platform',
+  'Account',
+  'Market demand',
+  'Provider',
 ] as const satisfies readonly DevelopersApiOperationGroupTag[])
 
 export const DEVELOPERS_API_COPY = Object.freeze({

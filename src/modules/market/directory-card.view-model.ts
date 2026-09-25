@@ -1,6 +1,7 @@
 import Decimal from 'decimal.js'
 import { captureRouteException } from '@/lib/observability/capture-route-exception'
-import { directoryProviderKey, directorySlugBase } from '@/modules/market/x402-directory-index'
+import type { X402DirectoryFacet } from '@/modules/market/x402-directory-catalogue'
+import { directoryBasePayTo, directoryProviderKey, directorySlugBase } from '@/modules/market/x402-directory-index'
 import type { X402DirectoryEntry } from '@/modules/market/x402-directory'
 import { x402DirectoryFunctionalTitle } from '@/modules/market/x402-directory-title'
 
@@ -8,10 +9,45 @@ import { x402DirectoryFunctionalTitle } from '@/modules/market/x402-directory-ti
 export function directoryPrice(entry: X402DirectoryEntry): string {
   const price = entry.prices[0]
   if (price === undefined) return 'Price on request'
-  if (price.decimalAmount !== undefined && price.symbol !== undefined) {
-    try { return `${new Decimal(price.decimalAmount).toFixed()} ${price.symbol}` } catch (cause) { captureRouteException(cause, { site: 'directoryPrice' }, 'warning') /* Retain the source label. */ }
-  }
+  const listed = listedPriceAmount(price)
+  if (listed !== undefined) return listed
   return price.symbol === undefined || price.decimalAmount === undefined ? 'See payment details' : price.amount
+}
+
+/** A published price a person can read. Amounts of 1 or more keep two decimals. Smaller amounts keep significant digits. */
+function listedPriceAmount(price: X402DirectoryEntry['prices'][number]): string | undefined {
+  if (price.decimalAmount !== undefined && price.symbol !== undefined) {
+    const formatted = formatListedAmount(price.decimalAmount)
+    if (formatted !== undefined) return `${formatted} ${price.symbol}`
+  }
+  return tidyPublishedAmount(price.amount)
+}
+
+function tidyPublishedAmount(amount: string): string | undefined {
+  const match = /^(\d+(?:\.\d+)?) ([A-Za-z][A-Za-z0-9]{1,11})$/u.exec(amount.trim())
+  if (match === null) return undefined
+  const formatted = formatListedAmount(match[1] ?? '')
+  return formatted === undefined ? undefined : `${formatted} ${match[2]}`
+}
+
+function formatListedAmount(raw: string): string | undefined {
+  let amount: Decimal
+  try { amount = new Decimal(raw) } catch (cause) {
+    captureRouteException(cause, { site: 'formatListedAmount' }, 'warning')
+    return undefined
+  }
+  if (!amount.isFinite() || amount.isNegative()) return undefined
+  if (amount.gte(1)) {
+    const [whole, fraction] = amount.toFixed(2).split('.')
+    return `${groupDigits(whole ?? '0')}.${fraction}`
+  }
+  const trimmed = amount.toFixed(6).replace(/(\.\d*?)0+$/u, '$1').replace(/\.$/u, '')
+  const [whole, fraction] = trimmed.split('.')
+  return fraction === undefined ? groupDigits(whole ?? '0') : `${groupDigits(whole ?? '0')}.${fraction}`
+}
+
+function groupDigits(whole: string): string {
+  return whole.replace(/\B(?=(\d{3})+(?!\d))/g, ',')
 }
 
 /** Buyer-facing provenance for a directory price before AE admission and Quote. */
@@ -92,6 +128,105 @@ function countPhrase(count: number, singular: string, plural: string): string {
   return count === 1 ? `1 ${singular}` : `${count} ${plural}`
 }
 
+function countLabel(value: number | undefined): string | undefined {
+  if (value === undefined || !Number.isSafeInteger(value) || value < 0) return undefined
+  return value.toLocaleString('en-AU')
+}
+
+/** A listed USDC amount from the directory. An em dash means the figure is absent. */
+export function directoryUsdLabel(decimalAmount: string | undefined): string {
+  if (decimalAmount === undefined) return '—'
+  const formatted = formatListedAmount(decimalAmount)
+  return formatted === undefined ? '—' : `${formatted} USDC`
+}
+
+export type DirectoryProviderRowModel = Readonly<{
+  key: string
+  initials: string
+  iconUrl?: string
+  toolLabel: string
+  callsLabel: string
+  payersLabel: string
+  priceLabel: string
+  leadTitle?: string
+  leadSlug?: string
+}>
+
+/** One comparable host. Calls, payers, and price are the busiest Tool, not a sum across the host. */
+export function toDirectoryProviderRow(provider: X402DirectoryFacet): DirectoryProviderRowModel {
+  const calls = provider.leadCalls !== undefined && Number.isSafeInteger(provider.leadCalls) && provider.leadCalls >= 0 ? countLabel(provider.leadCalls) : undefined
+  const payers = calls === undefined || provider.leadPayers === undefined || !Number.isSafeInteger(provider.leadPayers) || provider.leadPayers < 0 ? undefined : countLabel(provider.leadPayers)
+  const title = calls === undefined ? undefined : provider.leadTitle?.trim()
+  const slug = calls === undefined ? undefined : provider.leadSlug?.trim()
+  return {
+    key: provider.key,
+    initials: directoryInitials(provider.key),
+    ...(provider.iconUrl === undefined ? {} : { iconUrl: provider.iconUrl }),
+    toolLabel: provider.count.toLocaleString('en-AU'),
+    callsLabel: calls ?? '—',
+    payersLabel: payers ?? '—',
+    priceLabel: calls === undefined ? '—' : directoryUsdLabel(provider.leadPrice),
+    ...(title === undefined || title.length === 0 ? {} : { leadTitle: title }),
+    ...(slug === undefined || slug.length === 0 ? {} : { leadSlug: slug }),
+  }
+}
+
+/** Hosts in the order the sorted Tool list first mentions them. The first Tool in each group is the one the sort put first. */
+export function groupDirectoryProviders(entries: readonly X402DirectoryEntry[]): readonly { provider: string; tools: readonly X402DirectoryEntry[] }[] {
+  const groups: { provider: string; tools: X402DirectoryEntry[] }[] = []
+  const byProvider = new Map<string, { provider: string; tools: X402DirectoryEntry[] }>()
+  for (const entry of entries) {
+    const existing = byProvider.get(entry.provider)
+    if (existing === undefined) {
+      const group = { provider: entry.provider, tools: [entry] }
+      byProvider.set(entry.provider, group)
+      groups.push(group)
+    } else existing.tools.push(entry)
+  }
+  return groups
+}
+
+/** A Tools page and a Providers page both show this many rows. The last page may be shorter. */
+export const DIRECTORY_LIST_PAGE_SIZE = 12
+
+/**
+ * Walk a sorted Tool stream until `size` new hosts are collected.
+ * A host already in `seen` (an earlier page) is skipped.
+ * Further Tools for a host on this page stay on this page.
+ * The first Tool of the next new host, and everything after it, stays in `rest`.
+ */
+export function absorbProviderEntries(
+  entries: readonly X402DirectoryEntry[],
+  carried: readonly { provider: string; tools: readonly X402DirectoryEntry[] }[],
+  seen: ReadonlySet<string>,
+  size = DIRECTORY_LIST_PAGE_SIZE,
+): { groups: { provider: string; tools: X402DirectoryEntry[] }[]; rest: X402DirectoryEntry[] } {
+  const groups = carried.map(group => ({ provider: group.provider, tools: [...group.tools] }))
+  const byProvider = new Map(groups.map(group => [group.provider, group]))
+  for (let index = 0; index < entries.length; index += 1) {
+    const entry = entries[index]
+    if (entry === undefined) continue
+    const existing = byProvider.get(entry.provider)
+    if (existing !== undefined) {
+      existing.tools.push(entry)
+      continue
+    }
+    if (seen.has(entry.provider)) continue
+    if (groups.length >= size) return { groups, rest: entries.slice(index) }
+    const group = { provider: entry.provider, tools: [entry] }
+    byProvider.set(entry.provider, group)
+    groups.push(group)
+  }
+  return { groups, rest: [] }
+}
+
+/** Preformatted 30-day recipient USDC for this Tool's Base payee. An em dash means the figure is absent. */
+export function directoryVolumeLabel(entry: X402DirectoryEntry, volumeByPayTo: Readonly<Record<string, string>>): string {
+  const payTo = directoryBasePayTo(entry)
+  if (payTo === undefined) return '—'
+  return volumeByPayTo[payTo] ?? '—'
+}
+
 /** Older indexed snapshots retain the same description and service identity. */
 export function directoryTitle(entry: X402DirectoryEntry): string {
   if (entry.title !== entry.serviceName && entry.title.length <= 100) return entry.title
@@ -112,6 +247,8 @@ export type DirectoryToolCardModel = Readonly<{
   glance?: string
   activityLabel?: string
   activityTitle?: string
+  callsLabel?: string
+  payersLabel?: string
   initials: string
   iconUrl?: string
 }>
@@ -126,6 +263,8 @@ export function toDirectoryToolCardModel(entry: X402DirectoryEntry): DirectoryTo
   const providerLine = directoryProviderLine(entry)
   const calls30d = entry.activity?.calls30d
   const payers30d = entry.activity?.payers30d
+  const callsLabel = countLabel(calls30d)
+  const payersLabel = countLabel(payers30d)
   const lastReported = entry.activity?.lastCalledAt === undefined ? undefined : directoryDate(entry.activity.lastCalledAt)
   const bazaarTitle = lastReported === undefined
     ? 'Coinbase Bazaar volume, not an Agentic Economy Call.'
@@ -157,6 +296,201 @@ export function toDirectoryToolCardModel(entry: X402DirectoryEntry): DirectoryTo
     ...(outputLabel === undefined ? {} : { outputLabel }),
     ...(glance === undefined ? {} : { glance }),
     ...activity,
+    ...(callsLabel === undefined ? {} : { callsLabel }),
+    ...(payersLabel === undefined ? {} : { payersLabel }),
     ...(entry.iconUrl === undefined ? {} : { iconUrl: entry.iconUrl }),
+  }
+}
+
+export type DirectoryToolFieldNote = Readonly<{ label: string; detail?: string }>
+
+export type DirectoryToolPageModel = Readonly<{
+  description: string
+  providerLine: string
+  providerHost: string
+  initials: string
+  iconUrl?: string
+  serviceName?: string
+  category?: string
+  useLine?: string
+  asks: readonly DirectoryToolFieldNote[]
+  returns: readonly DirectoryToolFieldNote[]
+  priceLabel: string
+  priceContext: string
+  callsLabel: string
+  payersLabel: string
+  lastCalledLabel: string
+  returnsLabel: string
+  methodLabel: string
+  payments: readonly Readonly<{ network: string; amount: string }>[]
+}>
+
+function directoryActivityLine(calls: string, payers: string, lastCalled: string): string | undefined {
+  const parts = [
+    ...(calls === '—' ? [] : [`${calls} ${calls === '1' ? 'call' : 'calls'} in 30 days`]),
+    ...(payers === '—' ? [] : [`${payers} ${payers === '1' ? 'payer' : 'payers'}`]),
+    ...(lastCalled === '—' ? [] : [`last used ${lastCalled}`]),
+  ]
+  return parts.length === 0 ? undefined : parts.join(' · ')
+}
+
+function fieldLabel(name: string): string {
+  const words = directoryFieldWords(name) ?? name.replace(/[_./-]+/g, ' ').trim().toLowerCase()
+  if (words.length === 0) return name
+  return words.charAt(0).toUpperCase() + words.slice(1)
+}
+
+function publishedNotes(entry: X402DirectoryEntry, kind: 'input' | 'output'): readonly DirectoryToolFieldNote[] {
+  const fields = (kind === 'input' ? entry.input : entry.output)?.fields ?? []
+  const eligible = fields.filter(field => kind === 'output' ? field.location === 'output' : field.location !== 'headers' && field.location !== 'output')
+  const ranked = [...eligible].sort((left, right) => Number(right.required === true) - Number(left.required === true))
+  const notes: DirectoryToolFieldNote[] = []
+  const seen = new Set<string>()
+  for (const field of ranked) {
+    const label = fieldLabel(field.name)
+    const key = label.toLowerCase()
+    if (seen.has(key) || GLANCE_NOISE.has(key)) continue
+    const detail = field.description?.trim()
+    if (kind === 'input' && detail === undefined && field.required !== true) continue
+    seen.add(key)
+    notes.push(detail === undefined || detail.toLowerCase() === key ? { label } : { label, detail })
+    if (notes.length >= (kind === 'input' ? 6 : 4)) break
+  }
+  return notes
+}
+
+function serviceDescription(entry: X402DirectoryEntry, title: string): string {
+  const description = entry.description.trim()
+  if (description.length > 0 && description !== 'The provider has not supplied a description.' && !repeatsTitle(title, description)) {
+    return description
+  }
+  const provider = directoryProviderLine(entry)
+  const service = entry.serviceName?.trim()
+  if (service !== undefined && service.length > 0 && service !== title && service !== provider) {
+    return `${provider} lists this under ${service}.`
+  }
+  return `${provider} lists this service.`
+}
+
+/** Facts for deciding whether a listed service fits, before any Agentic Economy Call. */
+export function toDirectoryToolPageModel(entry: X402DirectoryEntry): DirectoryToolPageModel {
+  const title = directoryTitle(entry)
+  const returns = directoryOutputLabel(entry) ?? entry.outputSummary?.trim()
+  const lastCalled = entry.activity?.lastCalledAt === undefined ? undefined : directoryDate(entry.activity.lastCalledAt)
+  const providerLine = directoryProviderLine(entry)
+  const providerHost = directoryProviderKey(entry.provider)
+  const service = entry.serviceName?.trim()
+  const callsLabel = countLabel(entry.activity?.calls30d) ?? '—'
+  const payersLabel = countLabel(entry.activity?.payers30d) ?? '—'
+  const lastCalledLabel = lastCalled ?? '—'
+  const line = directoryActivityLine(callsLabel, payersLabel, lastCalledLabel)
+  return {
+    description: serviceDescription(entry, title),
+    providerLine,
+    providerHost,
+    initials: directoryInitials(providerLine),
+    ...(entry.iconUrl === undefined ? {} : { iconUrl: entry.iconUrl }),
+    ...(service === undefined || service === title || service === providerLine ? {} : { serviceName: service }),
+    ...(entry.category === undefined ? {} : { category: entry.category }),
+    ...(line === undefined ? {} : { useLine: line }),
+    asks: publishedNotes(entry, 'input'),
+    returns: publishedNotes(entry, 'output'),
+    priceLabel: directoryPrice(entry),
+    priceContext: directoryPriceContext(entry),
+    callsLabel,
+    payersLabel,
+    lastCalledLabel,
+    returnsLabel: returns !== undefined && returns.length > 0 ? returns : 'The provider has not described the response.',
+    methodLabel: entry.methodLabel ?? entry.protocol,
+    payments: entry.prices.slice(0, 6).map(price => ({
+      network: price.networkLabel ?? price.network,
+      amount: listedPriceAmount(price) ?? price.amount,
+    })),
+  }
+}
+
+export type DirectoryServiceEndpoint = Readonly<{
+  title: string
+  path: string
+  price: string
+  calls: string
+  payers: string
+  activity: string
+  providerHost: string
+  slug: string
+  current: boolean
+}>
+
+export type DirectoryServiceSurface = Readonly<{
+  title: string
+  host: string
+  category?: string
+  networks: string
+  priceRange: string
+  endpointCount: string
+  endpoints: readonly DirectoryServiceEndpoint[]
+}>
+
+/** One Provider's indexed Tools, as the routes of a single service. */
+export function toDirectoryServiceSurface(
+  current: X402DirectoryEntry,
+  siblings: readonly X402DirectoryEntry[],
+  truncated: boolean,
+): DirectoryServiceSurface {
+  const seen = new Set<string>()
+  const entries = [current, ...siblings].filter(entry => {
+    if (seen.has(entry.resource)) return false
+    seen.add(entry.resource)
+    return true
+  })
+  const providerLine = directoryProviderLine(current)
+  const priced = entries.flatMap(entry => {
+    const price = entry.prices[0]
+    if (price?.decimalAmount === undefined || price.symbol === undefined) return []
+    let amount: Decimal
+    try { amount = new Decimal(price.decimalAmount) } catch { return [] }
+    if (!amount.isFinite() || amount.isNegative()) return []
+    const formatted = formatListedAmount(price.decimalAmount)
+    return formatted === undefined ? [] : [{ amount, symbol: price.symbol, label: `${formatted} ${price.symbol}` }]
+  })
+  const sameSymbol = priced.length > 0 && priced.every(price => price.symbol === priced[0]?.symbol)
+  const lowest = sameSymbol ? priced.reduce((min, price) => price.amount.lt(min.amount) ? price : min) : undefined
+  const highest = sameSymbol ? priced.reduce((max, price) => price.amount.gt(max.amount) ? price : max) : undefined
+  const networks = [...new Set(entries.flatMap(entry => entry.prices.map(price => price.networkLabel ?? price.network)))].slice(0, 4)
+  const count = truncated ? `${entries.length}+` : String(entries.length)
+  return {
+    title: providerLine,
+    host: directoryProviderKey(current.provider),
+    ...(current.category === undefined ? {} : { category: current.category }),
+    networks: networks.length === 0 ? 'Not published' : networks.join(', '),
+    priceRange: lowest === undefined || highest === undefined
+      ? directoryPrice(current)
+      : lowest.label === highest.label ? lowest.label : `${lowest.label} – ${highest.label}`,
+    endpointCount: count === '1' ? '1 endpoint' : `${count} endpoints`,
+    endpoints: entries.map(entry => {
+      const calls = countLabel(entry.activity?.calls30d) ?? '—'
+      const payers = countLabel(entry.activity?.payers30d) ?? '—'
+      return {
+        title: directoryTitle(entry),
+        path: endpointPath(entry.resource),
+        price: directoryPrice(entry),
+        calls,
+        payers,
+        activity: calls === '—' && payers === '—' ? 'Calls not reported' : `${calls} calls · ${payers} payers · last 30 days`,
+        providerHost: directoryProviderKey(entry.provider),
+        slug: entry.slug ?? directorySlugBase(entry.resource),
+        current: entry.resource === current.resource,
+      }
+    }),
+  }
+}
+
+function endpointPath(resource: string): string {
+  try {
+    const url = new URL(resource)
+    const path = `${url.pathname}${url.search}`
+    return path.length > 1 ? path : url.hostname
+  } catch {
+    return resource
   }
 }

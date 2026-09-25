@@ -1,12 +1,10 @@
+import { getFunctionName } from 'convex/server'
 import { generateText, stepCountIs, type ToolSet } from 'ai'
 import { describe, expect, it, vi } from 'vitest'
 import type { ToolCtx } from '@convex-dev/agent'
 
-import {
-  CHAT_TOOL_IDS,
-  CHAT_TOOL_NAME_MAP,
-  createChatAgent,
-} from '../../../convex/chatTools'
+import { CHAT_TOOL_IDS, CHAT_TOOL_NAME_MAP } from '@/modules/chat/tool-card'
+import { createChatAgent } from '../../../convex/lib/chat/tools/agent'
 import {
   openRouterGatewayConfig,
   openRouterModel,
@@ -16,28 +14,19 @@ import {
   openRouterToolCallResponse,
   startOpenRouterContractServer,
 } from '../../helpers/openrouter-contract-server'
-import type { InteractiveBusinessAuthorityContext } from '@/modules/business/public'
+import type { TrustedChatAuthority } from '@/modules/chat/agent-turn.contracts'
 
 const TOOL_REF = `operation:v1:${'a'.repeat(64)}`
 
 const AUTHORITY = {
-  principalRef: `prn_${'1'.repeat(32)}`,
-  accountRef: `acc_${'2'.repeat(32)}`,
-  revision: {
-    binding: 1, credential: 1, principal: 1, account: 1, access: 1,
-    currentOwnership: 1, currentOwnerPrincipal: 1, compatibilityUpdatedAt: 1,
-  },
-  provenance: {
-    providerNamespace: 'clerk/user',
-    bindingRef: `eib_${'3'.repeat(32)}`,
-    credentialRef: `crd_${'4'.repeat(32)}`,
-    credentialGeneration: 1,
-    accessKind: 'ownership',
-    accessRef: `own_${'5'.repeat(32)}`,
-    currentOwnershipRef: `own_${'5'.repeat(32)}`,
-    resolvedAt: 1,
-  },
-} as unknown as InteractiveBusinessAuthorityContext
+  kind: 'agent_key',
+  turnRef: 'chat-turn:provider-contract',
+  credentialLocator: `crd_${'4'.repeat(32)}`,
+  applicationRef: 'agent-app:contract-test',
+  environment: 'production',
+  scopes: ['market_tools:call'],
+  grantRef: `grant_${'5'.repeat(32)}`,
+} as const satisfies TrustedChatAuthority
 
 describe('Tool chat OpenRouter contract', () => {
   it('sends the registered provider-safe names that round-trip to canonical IDs', async () => {
@@ -114,7 +103,7 @@ describe('Tool chat OpenRouter contract', () => {
       const config = openRouterGatewayConfig()
       const model = openRouterModel(config, config.model)
       const agent = createChatAgent(model, AUTHORITY)
-      const runAction = vi.fn(async () => completed)
+      const runAction = vi.fn(async (_reference: Parameters<ToolCtx['runAction']>[0], _args: unknown) => completed)
       const ctx = { runAction, runQuery: vi.fn() } as unknown as ToolCtx
       const tools = Object.fromEntries(Object.entries(agent.options.tools ?? {}).map(
         ([name, tool]) => [name, { ...tool, ctx }],
@@ -128,6 +117,12 @@ describe('Tool chat OpenRouter contract', () => {
       })
 
       expect(runAction).toHaveBeenCalledTimes(1)
+      expect(getFunctionName(runAction.mock.calls[0]![0])).toBe('chatCall:call')
+      expect(runAction.mock.calls[0]![1]).toMatchObject({
+        authority: AUTHORITY,
+        quoteRef: `operation-commitment:v1:${'b'.repeat(64)}`,
+      })
+      expect(runAction.mock.calls[0]![1]).not.toHaveProperty('principal')
       expect(server.requests).toHaveLength(2)
       expect(JSON.stringify(server.requests[1]?.messages)).toContain(freshValue)
       expect(result.text).toContain(freshValue)

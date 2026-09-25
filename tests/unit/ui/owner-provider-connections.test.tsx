@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, fireEvent, render, renderHook, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => ({
@@ -19,7 +19,8 @@ vi.mock('@tanstack/react-router', () => ({
   useNavigate: () => mocks.navigate,
 }))
 
-vi.mock('@tanstack/react-start', () => ({
+vi.mock('@tanstack/react-start', async (importOriginal) => ({
+  ...await importOriginal(),
   createClientOnlyFn: (fn: unknown) => fn,
   useServerFn: (serverFn: unknown) => serverFn,
 }))
@@ -35,6 +36,7 @@ vi.mock('@/modules/capability-supply/supply-funnel.functions', () => ({
 }))
 
 import { AeOwnerProviderConnections } from '@/components/ae/supply/AeOwnerProviderConnections'
+import { useOwnerProviderConnectionsState } from '@/components/ae/supply/useOwnerProviderConnectionsState'
 
 const connection = {
   connectionRef: 'connection:x402:one',
@@ -60,7 +62,10 @@ const connection = {
 }
 
 describe('owner x402 connection controls', () => {
-  afterEach(cleanup)
+  afterEach(() => {
+    cleanup()
+    window.history.replaceState({}, '', '/')
+  })
 
   beforeEach(() => {
     vi.clearAllMocks()
@@ -392,4 +397,17 @@ describe('owner x402 connection controls', () => {
     expect((screen.getByLabelText('x402 resource URL') as HTMLInputElement).value).toBe(handoff.resourceUrl)
     expect(walletRequest).toHaveBeenCalledTimes(1)
   })
+  it('honours only validated rebind references from the connection URL', async () => {
+    window.history.replaceState({}, '', '/owner/settings/integrations?rebind=offering%3Aone#provider-connection-connection%3Ax402%3Aone')
+    const valid = renderHook(() => useOwnerProviderConnectionsState({ businessId: 'business:one', connections: [connection] }))
+    await waitFor(() => expect(valid.result.current.rebindOfferingRef).toBe('offering:one'))
+    expect(valid.result.current.rebindConnectionRef).toBe(connection.connectionRef)
+    valid.unmount()
+
+    window.history.replaceState({}, '', '/owner/settings/integrations?rebind=%3Cscript%3E#provider-connection-connection%3Ax402%3Aone')
+    const invalid = renderHook(() => useOwnerProviderConnectionsState({ businessId: 'business:one', connections: [connection] }))
+    expect(invalid.result.current.rebindOfferingRef).toBeUndefined()
+    expect(invalid.result.current.rebindConnectionRef).toBeUndefined()
+  })
+
 })

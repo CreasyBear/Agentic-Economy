@@ -17,6 +17,7 @@ type AeSiteSectionProps = {
   connectsUp?: boolean
   clip?: boolean
   className?: string
+  enter?: boolean
 }
 
 export function AeSiteSection({
@@ -31,6 +32,7 @@ export function AeSiteSection({
   connectsUp = false,
   clip = true,
   className,
+  enter = false,
 }: AeSiteSectionProps) {
   return (
     <section
@@ -46,6 +48,7 @@ export function AeSiteSection({
         clip ? 'overflow-clip' : 'overflow-visible',
         schemeClass(scheme),
         rhythmClass(rhythm),
+        enter && 'animate-in fade-in-0 duration-base ease-emphasized motion-reduce:animate-none',
         className,
       )}
     >

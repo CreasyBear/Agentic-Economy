@@ -26,7 +26,7 @@ import type {
 import type { PublishedTool } from '@/modules/capability-supply/public'
 import { type ActionCtx } from '../../../../convex/_generated/server'
 import { internal } from '../../../../convex/_generated/api'
-import type { OpenDispatch } from '../../../../convex/capabilityCallProjection'
+import type { OpenDispatch } from '@/modules/capability-execution/call-projection/contracts'
 import type { ConnectionAuthority, ProviderLeaseAuthority } from './lease'
 import {
   readX402EvmReceipt,

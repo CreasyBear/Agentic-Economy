@@ -10,7 +10,7 @@ import {
 import type { ExactAmount } from '@/modules/money/public'
 import { brandNonEmpty } from '@/modules/common/ids'
 import { DEV_SEED_BUSINESS_FIXTURES } from '@/modules/dev/public'
-import { DEV_SEED_PRICE_BY_SLUG } from '../../../convex/devSeed'
+import { DEV_SEED_PRICE_BY_SLUG } from '../../../convex/lib/dev/seed/pricing'
 
 const businessId = brandNonEmpty('business:meridian', 'BusinessId')
 const offeringRef = brandNonEmpty('offering:burst-pipe', 'OfferingRef')

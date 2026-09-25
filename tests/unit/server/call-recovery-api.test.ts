@@ -220,7 +220,7 @@ describe('operation recovery HTTP adapters', () => {
     expect(executor.reconcileCall).toHaveBeenCalledOnce()
   })
 
-  it('signs only the neutral internal admission command for status, cancel, and reconcile', async () => {
+  it('signs read-only status and neutral internal commands for cancel and reconcile', async () => {
     installTestSourceWriteSecret()
     const calls: Array<{ path: string; args: [Record<string, unknown>] }> = []
     const results = [
@@ -261,26 +261,27 @@ describe('operation recovery HTTP adapters', () => {
     }
 
     expect(calls.map(({ path }) => path)).toEqual([
-      'capabilityCalls:readCallStatus',
+      'capabilityCallsStatus:readCallStatus',
       'capabilityCalls:cancelCall',
       'capabilityCalls:reconcileCall',
     ])
     const expectedIdempotencyKeys = [
-      `status:${callRef}`,
       'cancel:cancel:source-write',
       'reconcile:reconcile:source-write',
     ]
     for (const [index, call] of calls.entries()) {
       const outbound = call.args[0]
       const sourceWrite = outbound.sourceWrite as { commandDigest: string }
-      expect(sourceWrite.commandDigest).toBe(sourceWriteCommandDigest({
-        toolRef: '',
-        input: {},
-        idempotencyKey: expectedIdempotencyKeys[index],
-        correlationId,
-        operationKey: outbound.operationKey,
-        principal,
-      }))
+      expect(sourceWrite.commandDigest).toBe(sourceWriteCommandDigest(index === 0
+        ? { callRef, correlationId, operationKey: outbound.operationKey, principal }
+        : {
+            toolRef: '',
+            input: {},
+            idempotencyKey: expectedIdempotencyKeys[index - 1],
+            correlationId,
+            operationKey: outbound.operationKey,
+            principal,
+          }))
       expect(outbound.callRef).toBe(callRef)
     }
     expect(calls[2]?.args[0]?.evidence).toEqual(evidence)
@@ -342,7 +343,7 @@ describe('operation recovery HTTP adapters', () => {
         isDone: true,
         continueCursor: '',
       },
-      'capabilityCalls:readCallStatus': { kind: 'found', callRef, version: 1, toolRef, state: 'in_progress' },
+      'capabilityCallsStatus:readCallStatus': { kind: 'found', callRef, version: 1, toolRef, state: 'in_progress' },
       'capabilityCalls:cancelCall': { kind: 'found', callRef, version: 2, toolRef, state: 'cancelled' },
       'capabilityCalls:reconcileCall': { kind: 'found', callRef, version: 3, toolRef, state: 'terminal' },
     }
@@ -379,7 +380,7 @@ describe('operation recovery HTTP adapters', () => {
       'capabilityCalls:call',
       'capabilityQuotes:quote',
       'capabilityCalls:listCalls',
-      'capabilityCalls:readCallStatus',
+      'capabilityCallsStatus:readCallStatus',
       'capabilityCalls:cancelCall',
       'capabilityCalls:reconcileCall',
     ])

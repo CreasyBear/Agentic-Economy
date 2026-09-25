@@ -1105,6 +1105,10 @@ describe('Customer Request OAuth HTTP adapter', () => {
 
       expect(response.status).toBe(400)
       expect(store.clients.size).toBe(0)
+      await expect(response.json()).resolves.toMatchObject({
+        error: field === 'redirect_uris' ? 'invalid_redirect_uri' : 'invalid_client_metadata',
+        error_description: expect.stringContaining(field),
+      })
     }
   })
 
@@ -1116,6 +1120,10 @@ describe('Customer Request OAuth HTTP adapter', () => {
     }), { store })
     expect(rejected.status).toBe(400)
     expect(store.clients.size).toBe(0)
+    await expect(rejected.json()).resolves.toMatchObject({
+      error: 'invalid_redirect_uri',
+      error_description: expect.stringContaining('redirect_uris'),
+    })
 
     await store.insertClient({ clientId: 'client-auth', clientName: 'MCP local', redirectUris: ['http://localhost/callback'], grantTypes: ['authorization_code'], tokenEndpointAuthMethod: 'none', createdAt: 1_000 })
     const consentStart = await handleOAuthAuthorizeGet(new Request('http://localhost/oauth/authorize?client_id=client-auth&redirect_uri=http%3A%2F%2Flocalhost%2Fcallback&response_type=code&state=s&scope=market_tools%3Acall%20customer_requests%3Aapproval_required&code_challenge=abc&code_challenge_method=S256'), { store, now: () => 1_000, authenticateOwner: async () => ({ isAuthenticated: true, userId: 'user_local' }) })

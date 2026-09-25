@@ -1,7 +1,7 @@
 import { v, type ObjectType } from 'convex/values'
 import type { MutationCtx, QueryCtx } from '../../../_generated/server'
 import type { Doc } from '../../../_generated/dataModel'
-import { sourceWriteArgs } from '../../../sourceWriteAdmission'
+import { sourceWriteArgs } from '../../security/sourceWrite/contracts'
 import { requireOAuthSourceWrite, sameStringArray } from './shared'
 
 const client = v.object({

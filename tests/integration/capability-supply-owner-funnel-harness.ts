@@ -3,7 +3,7 @@ import { validatePaymentRequired } from '@x402/core/schemas'
 import { expect } from 'vitest'
 
 import { api, internal } from '../../convex/_generated/api'
-import { toRow as providerConnectionRow } from '../../convex/lib/providerConnections/codecs'
+import { toRow as providerConnectionRow } from '../../convex/lib/capabilitySupply/providerConnections/codecs'
 import { createX402ProviderConnection } from '@/modules/capability-supply/provider-connection'
 import {
   BASE_MAINNET_NETWORK,

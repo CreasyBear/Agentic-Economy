@@ -3,23 +3,17 @@ import type { Rule4Diagnostic } from '@/lib/ui/diagnostic'
 import type { LifecycleTarget, RevocationMode } from './agent-operator-console.contracts'
 
 export function lifecycleConfirmLabel(
-  kind: 'credential' | 'connection' | 'agent',
+  kind: LifecycleTarget['kind'],
   mode: RevocationMode,
 ): string {
   if (kind === 'agent') {
     return mode === 'drain' ? 'Drain then remove' : 'Remove immediately'
-  }
-  if (kind === 'credential') {
-    return mode === 'drain' ? 'Drain then revoke' : 'Revoke immediately'
   }
   return mode === 'drain' ? 'Drain then disconnect' : 'Disconnect immediately'
 }
 
 export function lifecycleDialogTitle(target: LifecycleTarget | undefined): string {
   if (target === undefined) return 'Change agent access?'
-  if (target.kind === 'credential') {
-    return `Revoke generation ${target.generation} for ${target.name}?`
-  }
   if (target.kind === 'connection') {
     return `Disconnect ${target.connectorName} from ${target.name}?`
   }
@@ -28,9 +22,6 @@ export function lifecycleDialogTitle(target: LifecycleTarget | undefined): strin
 
 export function lifecycleDialogDescription(target: LifecycleTarget | undefined): string {
   if (target === undefined) return ''
-  if (target.kind === 'credential') {
-    return `Only this credential stops. Any other active credential for ${target.name} remains usable, and history stays attached to the agent.`
-  }
   if (target.kind === 'connection') {
     return `Only this ${target.connectorName} connection stops. Other connections for ${target.name} remain usable.`
   }
@@ -38,19 +29,11 @@ export function lifecycleDialogDescription(target: LifecycleTarget | undefined):
 }
 
 export function lifecycleSuccessToast(kind: LifecycleTarget['kind']): string {
-  if (kind === 'credential') return 'Credential revoked'
   if (kind === 'connection') return 'Connection disconnected'
   return 'Agent access revoked'
 }
 
 export function lifecycleFailureTriplet(kind: LifecycleTarget['kind']): Rule4Diagnostic {
-  if (kind === 'credential') {
-    return {
-      whatHappened: 'Could not revoke this credential.',
-      financialImpact: 'A$0.00 affected — agent remains active',
-      nextStep: 'Try again. If this persists, refresh the directory and retry.',
-    }
-  }
   if (kind === 'connection') {
     return {
       whatHappened: 'Could not disconnect this connection.',

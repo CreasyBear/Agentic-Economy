@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react'
 
 import type { ChatStatus, TranscriptMessage } from '../presentation'
+import type { QuoteConfirmationView, CallOutcomeView } from '@/components/ae/shared/object-family.contracts'
 
 export type ChatProps = Readonly<{
   threadId: string | null
@@ -13,6 +14,7 @@ export type ChatProps = Readonly<{
 export type ChatHistoryThread = Readonly<{
   threadId: string
   title: string
+  createdAt: number
   busy: boolean
 }>
 
@@ -22,6 +24,9 @@ export type ChatHistoryProps = Readonly<{
   threads: readonly ChatHistoryThread[]
   search: string
   busy: boolean
+  hasMore?: boolean
+  loadingMore?: boolean
+  onLoadMore?(): void
   /** True while the thread list's first page loads with nothing cached yet. */
   historyPending?: boolean
   onSearch(value: string): void
@@ -34,11 +39,18 @@ export type ChatHistoryProps = Readonly<{
 export type ChatHeaderProps = Readonly<{
   authenticated: boolean
   threadId: string | null
+  threadTitle: string | null
   busy: boolean
   shareState?: 'none' | 'active' | 'revoked'
   sharePath: string | null
   copied: boolean
+  ownerChatEnabled?: boolean
+  enableProblem?: string
+  onEnableSpending?: () => void
   mobileHistory: ReactNode
+  mobileOpen: boolean
+  onMobileOpenChange(open: boolean): void
+  onToggleHistory(): void
   onNewChat(): void
   onIssueShare(): void
   onRevokeShare(): void
@@ -60,21 +72,36 @@ export type ChatComposerProps = Readonly<{
   onStop?: () => void
 }>
 
+export type OwnerChatCard =
+  | Readonly<{ kind: 'pending'; turnRef: string; view: QuoteConfirmationView }>
+  | Readonly<{ kind: 'result'; turnRef: string; view: CallOutcomeView }>
+  | Readonly<{ kind: 'unavailable'; turnRef: string; callRef: string; toolName: string; inputSummary: string; quoteLabel: string; reason: string }>
+
 export type ChatTranscriptViewProps = Readonly<{
   messages: readonly TranscriptMessage[]
   pending?: boolean
   handoffAfter?: number
   thinking?: boolean
+  generating?: boolean
   clarifyDisabled?: boolean
   onSuggest?: (prompt: string) => void
+  onStarter?: (prompt: string) => void
+  onRefine?: (prompt: string) => void
+  onCompareRequest?: (prompt: string) => void
+  onCopyAnswer?: (answer: string) => void
+  onRetry?: (prompt: string) => void
   onClarifyAnswer?: (answer: string) => void
+  approvalProblem?: string
+  ownerChatCards?: readonly OwnerChatCard[]
+  onApproveCall?: (callRef: string) => void
+  onDenyCall?: (callRef: string) => void
+  onFreshQuote?: (callRef: string) => void
 }>
 
-export type ChatHeaderViewProps = Omit<ChatHeaderProps, 'mobileHistory'>
-
+export type ChatHeaderViewProps = Omit<ChatHeaderProps, 'mobileHistory' | 'mobileOpen' | 'onMobileOpenChange' | 'onToggleHistory'>
 export type ChatSessionModel = Readonly<{
   showHistoryRail: boolean
-  createHistoryPanel(idPrefix: string): ReactNode
+  createHistoryPanel(idPrefix: string, onNavigate?: () => void): ReactNode
   header: ChatHeaderViewProps
   composer: ChatComposerProps
   transcript: ChatTranscriptViewProps

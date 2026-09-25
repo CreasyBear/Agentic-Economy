@@ -28,6 +28,7 @@ import {
 } from './source-preview'
 import type { X402SellerEndpointInspection } from './internal/x402-seller-endpoint-inspector'
 import type { ProviderConnectionOwnerProjection } from './provider-connection'
+import type { CapabilityPublicationQualityNext } from './internal/publication/input-quality'
 
 const effectSchema = z.strictObject({
   class: z.enum(['data_release', 'financial_exposure', 'external_state_change']),
@@ -102,6 +103,7 @@ export type SupplyPublicationV2Preparation =
   | Readonly<{
       kind: 'refused'
       reason: string
+      next?: readonly CapabilityPublicationQualityNext[]
       requiredAction?: Readonly<{
         title: string
         description: string
@@ -232,7 +234,7 @@ export async function prepareSupplyPublicationV2(
     offering,
     derefSchema: (await import('./internal/schema-deref')).dereferenceOpenApiSchema,
   })
-  if (prepared.kind === 'refused') return refused(prepared.reason)
+  if (prepared.kind === 'refused') return prepared
   return {
     kind: 'prepared',
     prepared,

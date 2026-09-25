@@ -8,8 +8,8 @@ description: Find and acquire a bounded outside service through Agentic Economy 
 ## Find a suitable Tool
 
 Use the installed server's tools/list before calling a tool. Public discovery has
-four tools: `ae_registry_tools_search`, `ae_registry_tools_list`,
-`ae_registry_tools_describe` and `ae_registry_tools_compare`.
+three tools: `ae_registry_tools_search`, `ae_registry_tools_describe` and
+`ae_registry_tools_compare`.
 
 Search with a short capability phrase. Describe a returned Tool to understand
 its required input and public terms; compare only actual returned references.
@@ -90,7 +90,9 @@ prompt, MCP input or CLI argument.
 - Account and setup help: https://app.aecon.ai/support
 - Private support: support@aecon.ai
 
-Include only safe request or Call references in support requests. Do not include
-credentials, private inputs or private results in public issues.
+Include only safe request or Call references in support requests. Keep the
+`x-ae-request-id` response header and include it when contacting support or
+reconciling a Call. Do not include credentials, private inputs or private
+results in public issues.
 If the documented server or help page is unavailable, report that limitation.
 Do not guess another server address or send credentials to an alternate host.

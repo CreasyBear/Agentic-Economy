@@ -48,3 +48,6 @@ export {
 export { usesSelectedRequestReadiness } from './internal/graph/selected-request-readiness'
 
 export { sourceRouteRef } from './internal/source-route-identity'
+
+export { ownerSupplyCommandResultValue } from './internal/supply-funnel/owner-command-result.contracts'
+export type { OwnerSupplyCommandWireResult } from './internal/supply-funnel/owner-command-result.contracts'

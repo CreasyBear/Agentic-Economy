@@ -53,13 +53,15 @@ import {
   commitRefreshFamilyRotationArgs,
   commitRefreshFamilyRotationResult,
   commitRefreshFamilyRotationHandler,
+} from './lib/agentAccess/oauth/refreshFamilies'
+import {
   revokeRefreshFamilyArgs,
   revokeRefreshFamilyResult,
   revokeRefreshFamilyHandler,
   revokeRefreshFamilyByAccessTokenArgs,
   revokeRefreshFamilyByAccessTokenResult,
   revokeRefreshFamilyByAccessTokenHandler,
-} from './lib/agentAccess/oauth/refreshFamilies'
+} from './lib/agentAccess/oauth/refreshRevocation'
 
 // -- Registrations only. Handler bodies and DB logic live under -------------
 // -- convex/lib/agentAccess/oauth/*, grouped by concern: grants, clients, ---

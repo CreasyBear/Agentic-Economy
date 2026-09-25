@@ -16,7 +16,7 @@ vi.mock('@/lib/observability/sentry.server', () => ({
   Sentry: { withIsolationScope: vi.fn() },
 }))
 
-import { observabilityRequestMiddleware } from '@/start'
+import { observabilityRequestMiddleware, securityHeadersRequestMiddleware } from '@/start'
 
 describe('operational probe observability bypass', () => {
   beforeEach(() => {
@@ -52,5 +52,33 @@ describe('operational probe observability bypass', () => {
     expect(mocks.readConfig).not.toHaveBeenCalled()
     expect(mocks.initSentryServer).not.toHaveBeenCalled()
     expect(mocks.flushPostHogServer).not.toHaveBeenCalled()
+  })
+})
+
+describe('root machine discovery', () => {
+  it('advertises discovery on the root response without adding it to other pages', async () => {
+    const server = securityHeadersRequestMiddleware.options.server
+    if (typeof server !== 'function') throw new Error('security headers middleware missing')
+    for (const path of ['/', '/about']) {
+      const request = new Request(`https://ae.example${path}`)
+      const next: RequestServerNextFn<Record<string, never>, undefined> = vi.fn().mockResolvedValue({
+        request,
+        pathname: path,
+        context: undefined,
+        response: new Response('<html></html>', { headers: { 'content-type': 'text/html' } }),
+      })
+      const options: RequestServerOptions<Record<string, never>, undefined> = {
+        request,
+        pathname: path,
+        context: undefined,
+        handlerType: 'router',
+        next,
+      }
+      const result = await server(options)
+      if (result instanceof Response) throw new Error('security headers middleware returned a bare response')
+      expect(result.response.headers.get('Link')).toBe(path === '/'
+        ? '</llms.txt>; rel="describedby"; type="text/plain", </.well-known/api-catalog>; rel="api-catalog"'
+        : null)
+    }
   })
 })

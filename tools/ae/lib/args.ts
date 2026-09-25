@@ -10,6 +10,7 @@ export type CliOptions = {
   allowWrite: boolean
   technical?: boolean
   threadId?: string
+  continueThread?: boolean
   toolRef?: string
   candidateDigest?: string
   apply?: boolean
@@ -137,6 +138,7 @@ export function parseArgs(argv: readonly string[]): ParsedArgs {
       'allow-write': { type: 'boolean' },
       apply: { type: 'boolean' },
       'thread-id': { type: 'string' },
+      continue: { type: 'boolean' },
       'tool-ref': { type: 'string' },
       'candidate-digest': { type: 'string' },
       'idempotency-key': { type: 'string' },
@@ -179,6 +181,7 @@ export function parseArgs(argv: readonly string[]): ParsedArgs {
     technical: parsed.values.technical ?? false,
     apply: parsed.values.apply ?? false,
     ...(parsed.values['thread-id'] === undefined ? {} : { threadId: parsed.values['thread-id'] }),
+    continueThread: parsed.values.continue ?? false,
     ...(parsed.values['tool-ref'] === undefined ? {} : { toolRef: parsed.values['tool-ref'] }),
     ...(parsed.values['candidate-digest'] === undefined ? {} : { candidateDigest: parsed.values['candidate-digest'] }),
     wait: parsed.values.wait ?? false,

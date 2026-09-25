@@ -54,21 +54,21 @@ export function mockSearchTool(
 }
 
 export const TOOL_CRYPTO_TX = mockSearchTool(
-  'operation:v1:crypto_tx_lookup',
+  'operation:v1:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
   'crypto.tx.lookup',
   'Ethereum Tx Receipt Lookup',
   'Query ERC-20 token transfers and verify Ethereum transaction receipts and execution status on Base and Ethereum mainnet.',
 )
 
 export const TOOL_TIMEZONE = mockSearchTool(
-  'operation:v1:timezone_converter',
+  'operation:v1:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
   'timezone.convert',
   'Timezone Converter',
   'Convert dates and times between worldwide IANA timezones including London and Sydney with daylight savings calculations.',
 )
 
 export const TOOL_CURRENCY = mockSearchTool(
-  'operation:v1:currency_exchange',
+  'operation:v1:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc',
   'currency.fx.rates',
   'FX Currency Rates',
   'Live foreign exchange market currency rates and conversions for AUD, USD, EUR, and GBP.',

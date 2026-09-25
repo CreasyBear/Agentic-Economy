@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { internal } from '../../convex/_generated/api'
-import type { IndexedSource } from '../../convex/lib/x402DirectoryIndex/contracts'
+import type { IndexedSource } from '../../convex/lib/market/directoryIndex/contracts'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { setPublicSourceTransportForTests, type ConvexSourceTransport } from '@/lib/server/convex-source'
 import { handleApiRegistryRequest, Route as RegistryRoute } from '@/routes/api.v1.registry'

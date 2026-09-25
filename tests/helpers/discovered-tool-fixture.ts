@@ -1,6 +1,6 @@
 import type { ConvexFixtureBackend } from './convex-fixtures'
 import { internal } from '../../convex/_generated/api'
-import { reconcileReadyItems } from '../../convex/capabilitySupplyShared'
+import { reconcileReadyItems } from '../../convex/lib/capabilitySupply/facilitatorDiscovery/readyItems'
 import { admitFacilitatorDiscoveryItems } from '@/modules/capability-supply/server'
 import { timezonePaymentRequired20260819Fixture as timezoneFixture } from '@/modules/capability-supply/public'
 

@@ -72,7 +72,7 @@ export type PublicExecutionCommandResult = Readonly<
  * before any status/history projection is returned.
  */
 export async function readPublicExecutionStatus<Result extends ActionResult>(input: Readonly<{
-  port: DurableActionExecutionPort<Result>
+  port: Pick<DurableActionExecutionPort<Result>, 'readControl' | 'readAttempts' | 'readHistory'>
   executionRef: string
   actor: ExecutionActor
   attemptLimit?: number

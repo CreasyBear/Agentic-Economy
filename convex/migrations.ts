@@ -3,10 +3,10 @@ import { Migrations } from '@convex-dev/migrations'
 import { directoryProviderKey, directorySlugBase, directorySlugWithMethod, isDirectoryEntryEligible } from '@/modules/market/x402-directory-index'
 import { sourceRouteRef } from '@/modules/capability-supply/public'
 import { components } from './_generated/api'
-import { eligibleFacetsNamespace } from './lib/x402DirectoryIndex/analytics'
-import { directoryFacets } from './lib/x402DirectoryIndex/facets'
-import { listingIdentityDigest } from './lib/x402DirectoryIndex/listingDigest'
-import { directoryState, storedDirectoryEntry } from './lib/x402DirectoryIndex/rows'
+import { eligibleFacetsNamespace } from './lib/market/directoryIndex/analytics'
+import { directoryFacets } from './lib/market/directoryIndex/facets'
+import { listingIdentityDigest } from './lib/market/directoryIndex/listingDigest'
+import { directoryState, storedDirectoryEntry } from './lib/market/directoryIndex/rows'
 import schema from './schema'
 
 export const migrations = new Migrations(components.migrations, { schema })
@@ -52,8 +52,8 @@ export const backfillDirectoryEligibility = migrations.define({
 
 /**
  * Well-7 Lane 1 follow-up: the eligible-only facet counts read by
- * `x402DirectoryIndex:facets`/`overview` (convex/lib/x402DirectoryIndex/
- * facets.ts, eligibleFacetsNamespace) are normally maintained by
+ * `x402DirectoryIndex:facets`/`overview` (convex/lib/market/directoryIndex/
+ * facetReads.ts; eligibleFacetsNamespace in analytics.ts) are maintained by
  * writeFacetMembership at write time. Existing rows backfilled by
  * `backfillDirectoryEligibility` above never went through that write path
  * with `eligible` set, so their facet membership is missing from the

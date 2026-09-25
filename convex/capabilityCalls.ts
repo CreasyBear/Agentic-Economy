@@ -1,362 +1,155 @@
-import { v } from 'convex/values'
-import { normalizedAgentAccessGrantValue } from '@/modules/agent-access/public'
-import { paginationOptsValidator } from 'convex/server'
 import { action, internalMutation, internalQuery, mutation, query } from './_generated/server'
 import {
-  approvalDecision,
-  approvalDecisionResult,
-  abandonArgs,
-  abandonResult,
-  cancelBeforeClaimArgs,
-  dispatchArgs,
-  dispatchResult,
-  finalizeDispatchArgs,
-  callArgs,
-  openDispatchValue,
-  callDispatchMutationArgs,
-  callDispatchMutationResult,
-  pendingApprovalView,
-  ownerCallContextValue,
-  ownerCallStatusResultValue,
-  callState,
-  callSummaryPageValue,
-  principalAndSourceArgs,
-  principalValue,
-  currentProviderConnectionAuthorityValue,
-  projectRecoveryArgs,
-  providerLeaseAuthorityValue,
-  reconciledCallAuthorityResult,
-  recordArgs,
-  recoveryValue,
-  replayValue,
-  reserveArgs,
-  reserveResult,
-  workCompletionArgs,
-} from './lib/callLifecycle/contracts'
-import { purchaseResolutionRecordValidator } from '@/modules/capability-execution/purchase-resolution'
-import { readPurchaseResolutionByCallRef } from './lib/callLifecycle/purchaseResolutionMaterialize'
+  cancelBeforeClaimArgs, dispatchArgs, dispatchResult, finalizeDispatchArgs,
+  callDispatchMutationArgs, callDispatchMutationResult, ownerCallStatusResultValue,
+  callSummaryPageValue, currentProviderConnectionAuthorityValue, projectRecoveryArgs,
+  reconciledCallAuthorityResult, recordArgs, recordResult, workCompletionArgs,
+} from './lib/capabilityExecution/callLifecycle/contracts'
+import { approvalDecisionResult } from './lib/capabilityExecution/callLifecycle/admissionApproval'
+import { abandonArgs, abandonResult, reserveArgs, reserveResult } from './lib/capabilityExecution/callLifecycle/admissionReservation'
+import { callArgs, admitArgs, admitResult, admitHandler } from './lib/capabilityExecution/callLifecycle/admission'
+import { reserveHandler } from './lib/capabilityExecution/callLifecycle/admissionReserve'
+import { abandonHandler } from './lib/capabilityExecution/callLifecycle/admissionHold'
 import {
-  reconciliationCandidateValue,
-  reconciliationClaimResult,
-  reconciliationFinishOutcome,
-  reconciliationFinishResult,
-  reconciliationReason,
-  claimAutomaticReconciliationCandidateHandler,
-  claimDispatchWithReconciliationInitialization,
-  completeWorkWithReconciliationInitialization,
-  finishAutomaticReconciliationHandler,
-  finalizeDispatchWithReconciliationInitialization,
-  cancelBeforeClaimWithReconciliationInitialization,
-  listDueAutomaticReconciliationCandidatesHandler,
-  projectRecoveryWithReconciliationInitialization,
+  readPurchaseResolutionArgs, readPurchaseResolutionResult, readPurchaseResolutionHandler,
+} from './lib/capabilityExecution/callLifecycle/purchaseResolutionMaterialize'
+import {
+  reconciliationClaimResult, reconciliationFinishResult,
+  listDueAutomaticReconciliationCandidatesArgs, listDueAutomaticReconciliationCandidatesResult,
+  claimAutomaticReconciliationCandidateArgs, finishAutomaticReconciliationArgs,
+  claimAutomaticReconciliationCandidateHandler, claimDispatchWithReconciliationInitialization,
+  completeWorkWithReconciliationInitialization, finishAutomaticReconciliationHandler,
+  finalizeDispatchWithReconciliationInitialization, cancelBeforeClaimWithReconciliationInitialization,
+  listDueAutomaticReconciliationCandidatesHandler, projectRecoveryWithReconciliationInitialization,
   recordWithReconciliationInitialization,
-} from './lib/callLifecycle/reconciliation'
+} from './lib/capabilityExecution/callLifecycle/reconciliation'
 import {
-  canonicalAgentCancelHandler,
-  canonicalAgentCallHandler,
-  canonicalAgentListHandler,
-  canonicalAgentReconcileHandler,
-  canonicalAgentStatusHandler,
-  canonicalOwnerApprovalDecisionHandler,
-  canonicalOwnerApprovalListHandler,
-  canonicalOwnerCancelHandler,
-  canonicalOwnerReconcileHandler,
-  canonicalOwnerStatusHandler,
-  reconcileCallWorkloadAuthorityHandler,
-  readAcceptedCallGrantAfterLimitUpdateHandler,
-  resolveCallAgentAuthorityHandler,
-} from './lib/callLifecycle/authorityHandlers'
+  resolveCallAgentAuthorityArgs, resolveCallAgentAuthorityResult, resolveCallAgentAuthorityHandler,
+  reconcileCallWorkloadAuthorityArgs, readAcceptedCallGrantAfterLimitUpdateArgs,
+  readAcceptedCallGrantAfterLimitUpdateResult,
+} from './lib/capabilityExecution/callLifecycle/agentCallAuthority'
 import {
-  abandonHandler,
-  admitHandler,
-  reserveHandler,
-} from './lib/callLifecycle/admission'
+  canonicalAgentCancelHandler, canonicalAgentCallHandler,
+  canonicalAgentListHandler, canonicalAgentReconcileHandler,
+} from './lib/capabilityExecution/callLifecycle/agentCallExecution'
 import {
-  dispatchHandler,
-  openDispatchHandler,
-  readPreClaimRefundHandler,
-  readPreClaimRefundArgs,
-  refuseUnclaimedArgs,
-  refuseUnclaimedHandler,
-  refuseUnclaimedResult,
-} from './lib/callLifecycle/dispatch'
+  canonicalOwnerApprovalDecisionHandler, canonicalOwnerApprovalListHandler,
+  canonicalOwnerCancelHandler, canonicalOwnerReconcileHandler, canonicalOwnerStatusHandler,
+  listPendingCallApprovalsArgs, listPendingCallApprovalsResult, decideCallApprovalArgs,
+} from './lib/capabilityExecution/callLifecycle/ownerCallAuthority'
+import { reconcileCallWorkloadAuthorityHandler } from './lib/capabilityExecution/callLifecycle/supplyCanaryAuthority'
+import { readAcceptedCallGrantAfterLimitUpdateHandler } from './lib/capabilityExecution/callLifecycle/persistedCallAuthority'
+import { dispatchHandler } from './lib/capabilityExecution/callLifecycle/dispatchEnqueue'
+import { openDispatchHandler, openDispatchArgs, openDispatchResult } from './lib/capabilityExecution/callLifecycle/dispatchOpen'
 import {
-  readOwnerRecoveryHandler,
-  readOwnerReceiptContextHandler,
-  listAgentCallSummariesHandler,
-  readCurrentProviderConnectionAuthorityHandler,
-  readProviderLeaseAuthorityHandler,
-  readRecoveryHandler,
-  readReplayHandler,
-} from './lib/callLifecycle/callActions'
+  readPreClaimRefundHandler, readPreClaimRefundArgs, readPreClaimRefundResult,
+  refuseUnclaimedArgs, refuseUnclaimedHandler, refuseUnclaimedResult,
+} from './lib/capabilityExecution/callLifecycle/dispatchRefusal'
 import {
-  jsonObject,
-  callResultValue,
-  reconciliationEvidenceValue,
-  recoveryResultValue,
-  statusResultValue,
-  x402PaymentReconciliationEvidenceValue,
-} from '@/modules/capability-execution/convex'
+  readOwnerRecoveryHandler, readOwnerReceiptContextHandler, listAgentCallSummariesHandler,
+  readRecoveryHandler, readRecoveryArgs, readOwnerRecoveryArgs, readOwnerReceiptContextArgs,
+  listAgentCallSummariesArgs, readRecoveryResult, readOwnerReceiptContextResult,
+} from './lib/capabilityExecution/callLifecycle/callRecoveryReads'
+import {
+  listCallsArgs, cancelCallArgs, reconcileCallArgs, readOwnerCallStatusArgs,
+  cancelOwnerCallArgs, reconcileOwnerCallArgs,
+} from './lib/capabilityExecution/callLifecycle/callRecoveryActions'
+import {
+  readCurrentProviderConnectionAuthorityHandler, readProviderLeaseAuthorityHandler,
+  readProviderLeaseAuthorityArgs, readProviderLeaseAuthorityResult,
+  readCurrentProviderConnectionAuthorityArgs,
+} from './lib/capabilityExecution/callLifecycle/callProviderAuthority'
+import { readReplayHandler, readReplayArgs, readReplayResult } from './lib/capabilityExecution/callLifecycle/callReservationActions'
+import { completeWorkResult } from './lib/capabilityExecution/callLifecycle/workComplete'
+import { callResultValue, recoveryResultValue } from '@/modules/capability-execution/convex'
 
-const callReconciliationEvidenceValue = v.union(
-  reconciliationEvidenceValue,
-  x402PaymentReconciliationEvidenceValue,
-)
 export const resolveCallAgentAuthority = internalMutation({
-  args: {
-    principal: principalValue,
-    toolRef: v.optional(v.string()),
-    callRef: v.optional(v.string()),
-    receiptList: v.optional(v.literal(true)),
-  },
-  returns: v.union(principalValue, v.null()),
-  handler: resolveCallAgentAuthorityHandler,
+  args: resolveCallAgentAuthorityArgs, returns: resolveCallAgentAuthorityResult, handler: resolveCallAgentAuthorityHandler,
 })
-
 export const reconcileCallWorkloadAuthority = internalMutation({
-  args: { callRef: v.string() },
-  returns: reconciledCallAuthorityResult,
-  handler: reconcileCallWorkloadAuthorityHandler,
+  args: reconcileCallWorkloadAuthorityArgs, returns: reconciledCallAuthorityResult, handler: reconcileCallWorkloadAuthorityHandler,
 })
-
 export const readAcceptedCallGrantAfterLimitUpdate = internalMutation({
-  args: { callRef: v.string() },
-  returns: v.union(normalizedAgentAccessGrantValue, v.null()),
-  handler: readAcceptedCallGrantAfterLimitUpdateHandler,
+  args: readAcceptedCallGrantAfterLimitUpdateArgs, returns: readAcceptedCallGrantAfterLimitUpdateResult, handler: readAcceptedCallGrantAfterLimitUpdateHandler,
 })
-
-export const admit = internalMutation({
-  args: { ...principalAndSourceArgs, toolRef: v.string(), input: jsonObject, idempotencyKey: v.string() },
-  returns: v.object({ kind: v.literal('accepted') }),
-  handler: admitHandler,
-})
-
-export const reserve = internalMutation({
-  args: reserveArgs,
-  returns: reserveResult,
-  handler: reserveHandler,
-})
-
-export const abandon = internalMutation({
-  args: abandonArgs,
-  returns: abandonResult,
-  handler: abandonHandler,
-})
-
-export const dispatch = internalMutation({
-  args: dispatchArgs,
-  returns: dispatchResult,
-  handler: dispatchHandler,
-})
-
+export const admit = internalMutation({ args: admitArgs, returns: admitResult, handler: admitHandler })
+export const reserve = internalMutation({ args: reserveArgs, returns: reserveResult, handler: reserveHandler })
+export const abandon = internalMutation({ args: abandonArgs, returns: abandonResult, handler: abandonHandler })
+export const dispatch = internalMutation({ args: dispatchArgs, returns: dispatchResult, handler: dispatchHandler })
 export const claimDispatch = internalMutation({
-  args: callDispatchMutationArgs,
-  returns: callDispatchMutationResult,
-  handler: claimDispatchWithReconciliationInitialization,
+  args: callDispatchMutationArgs, returns: callDispatchMutationResult, handler: claimDispatchWithReconciliationInitialization,
 })
-
 export const finalizeDispatch = internalMutation({
-  args: finalizeDispatchArgs,
-  returns: callDispatchMutationResult,
-  handler: finalizeDispatchWithReconciliationInitialization,
+  args: finalizeDispatchArgs, returns: callDispatchMutationResult, handler: finalizeDispatchWithReconciliationInitialization,
 })
-
 export const cancelBeforeClaim = internalMutation({
-  args: cancelBeforeClaimArgs,
-  returns: callDispatchMutationResult,
-  handler: cancelBeforeClaimWithReconciliationInitialization,
+  args: cancelBeforeClaimArgs, returns: callDispatchMutationResult, handler: cancelBeforeClaimWithReconciliationInitialization,
 })
-
 export const refuseUnclaimed = internalMutation({
-  args: refuseUnclaimedArgs,
-  returns: refuseUnclaimedResult,
-  handler: refuseUnclaimedHandler,
+  args: refuseUnclaimedArgs, returns: refuseUnclaimedResult, handler: refuseUnclaimedHandler,
 })
-
 export const listPendingCallApprovals = query({
-  args: {},
-  returns: v.array(pendingApprovalView),
-  handler: canonicalOwnerApprovalListHandler,
+  args: listPendingCallApprovalsArgs, returns: listPendingCallApprovalsResult, handler: canonicalOwnerApprovalListHandler,
 })
-
 export const decideCallApproval = mutation({
-  args: { callRef: v.string(), decision: approvalDecision },
-  returns: approvalDecisionResult,
-  handler: canonicalOwnerApprovalDecisionHandler,
+  args: decideCallApprovalArgs, returns: approvalDecisionResult, handler: canonicalOwnerApprovalDecisionHandler,
 })
-
-export const openDispatch = internalQuery({
-  args: { callRef: v.string() },
-  returns: v.union(openDispatchValue, v.null()),
-  handler: openDispatchHandler,
-})
-
+export const openDispatch = internalQuery({ args: openDispatchArgs, returns: openDispatchResult, handler: openDispatchHandler })
 export const readPreClaimRefund = internalQuery({
-  args: readPreClaimRefundArgs,
-  returns: v.boolean(),
-  handler: readPreClaimRefundHandler,
+  args: readPreClaimRefundArgs, returns: readPreClaimRefundResult, handler: readPreClaimRefundHandler,
 })
-
-export const readReplay = internalQuery({
-  args: {
-    callRef: v.string(),
-    principalId: v.string(),
-    ownerId: v.string(),
-    applicationRef: v.string(),
-    environment: v.union(v.literal('sandbox'), v.literal('production')),
-  },
-  returns: v.union(replayValue, v.null()),
-  handler: readReplayHandler,
-})
-
-export const readRecovery = internalQuery({
-  args: { callRef: v.string(), principalId: v.string() },
-  returns: v.union(recoveryValue, v.null()),
-  handler: readRecoveryHandler,
-})
-
+export const readReplay = internalQuery({ args: readReplayArgs, returns: readReplayResult, handler: readReplayHandler })
+export const readRecovery = internalQuery({ args: readRecoveryArgs, returns: readRecoveryResult, handler: readRecoveryHandler })
 export const readOwnerRecovery = internalQuery({
-  args: { callRef: v.string() },
-  returns: v.union(recoveryValue, v.null()),
-  handler: readOwnerRecoveryHandler,
+  args: readOwnerRecoveryArgs, returns: readRecoveryResult, handler: readOwnerRecoveryHandler,
 })
-
 export const readOwnerReceiptContext = internalQuery({
-  args: { callRef: v.string(), ownerId: v.string(), toolRef: v.string() },
-  returns: v.union(ownerCallContextValue, v.null()),
-  handler: readOwnerReceiptContextHandler,
+  args: readOwnerReceiptContextArgs, returns: readOwnerReceiptContextResult, handler: readOwnerReceiptContextHandler,
 })
-
 export const readPurchaseResolution = internalQuery({
-  args: { callRef: v.string() },
-  returns: v.union(purchaseResolutionRecordValidator, v.null()),
-  handler: async (ctx, args) => await readPurchaseResolutionByCallRef(ctx, args.callRef),
+  args: readPurchaseResolutionArgs, returns: readPurchaseResolutionResult, handler: readPurchaseResolutionHandler,
 })
-
-export const record = internalMutation({
-  args: recordArgs,
-  returns: v.object({ kind: v.literal('recorded') }),
-  handler: recordWithReconciliationInitialization,
-})
-
+export const record = internalMutation({ args: recordArgs, returns: recordResult, handler: recordWithReconciliationInitialization })
 export const projectRecovery = internalMutation({
-  args: projectRecoveryArgs,
-  returns: v.object({ kind: v.literal('recorded') }),
-  handler: projectRecoveryWithReconciliationInitialization,
+  args: projectRecoveryArgs, returns: recordResult, handler: projectRecoveryWithReconciliationInitialization,
 })
-
 export const listDueAutomaticReconciliationCandidates = internalQuery({
-  args: { now: v.number(), limit: v.number() },
-  returns: v.array(reconciliationCandidateValue),
+  args: listDueAutomaticReconciliationCandidatesArgs,
+  returns: listDueAutomaticReconciliationCandidatesResult,
   handler: listDueAutomaticReconciliationCandidatesHandler,
 })
-
 export const claimAutomaticReconciliationCandidate = internalMutation({
-  args: { callRef: v.string(), leaseOwner: v.string(), now: v.number() },
-  returns: reconciliationClaimResult,
+  args: claimAutomaticReconciliationCandidateArgs, returns: reconciliationClaimResult,
   handler: claimAutomaticReconciliationCandidateHandler,
 })
-
 export const finishAutomaticReconciliation = internalMutation({
-  args: {
-    callRef: v.string(),
-    leaseOwner: v.string(),
-    now: v.number(),
-    outcome: reconciliationFinishOutcome,
-    reason: v.optional(reconciliationReason),
-  },
-  returns: reconciliationFinishResult,
-  handler: finishAutomaticReconciliationHandler,
+  args: finishAutomaticReconciliationArgs, returns: reconciliationFinishResult, handler: finishAutomaticReconciliationHandler,
 })
-
 export const readProviderLeaseAuthority = internalQuery({
-  args: { connectionRef: v.string(), authorityGeneration: v.number() },
-  returns: v.union(providerLeaseAuthorityValue, v.null()),
-  handler: readProviderLeaseAuthorityHandler,
+  args: readProviderLeaseAuthorityArgs, returns: readProviderLeaseAuthorityResult, handler: readProviderLeaseAuthorityHandler,
 })
-
 export const readCurrentProviderConnectionAuthority = internalQuery({
-  args: {
-    connectionRef: v.string(),
-    providerRef: v.string(),
-    adapterId: v.string(),
-    authorityGeneration: v.number(),
-    authorityDigest: v.string(),
-    resourceUrl: v.string(),
-    now: v.number(),
-  },
-  returns: currentProviderConnectionAuthorityValue,
+  args: readCurrentProviderConnectionAuthorityArgs, returns: currentProviderConnectionAuthorityValue,
   handler: readCurrentProviderConnectionAuthorityHandler,
 })
-
 export const completeWork = internalMutation({
-  args: workCompletionArgs,
-  returns: v.null(),
-  handler: completeWorkWithReconciliationInitialization,
+  args: workCompletionArgs, returns: completeWorkResult, handler: completeWorkWithReconciliationInitialization,
 })
-
-export const call = action({
-  args: callArgs,
-  returns: callResultValue,
-  handler: canonicalAgentCallHandler,
-})
-
-export const readCallStatus = action({
-  args: { ...principalAndSourceArgs, callRef: v.string(), afterVersion: v.optional(v.number()) },
-  returns: statusResultValue,
-  handler: canonicalAgentStatusHandler,
-})
-
+export const call = action({ args: callArgs, returns: callResultValue, handler: canonicalAgentCallHandler })
 export const listAgentCallSummaries = internalQuery({
-  args: {
-    principalId: v.string(),
-    ownerId: v.string(),
-    credentialId: v.string(),
-    applicationRef: v.string(),
-    environment: v.union(v.literal('sandbox'), v.literal('production')),
-    state: v.optional(callState),
-    paginationOpts: paginationOptsValidator,
-  },
-  returns: callSummaryPageValue,
-  handler: listAgentCallSummariesHandler,
+  args: listAgentCallSummariesArgs, returns: callSummaryPageValue, handler: listAgentCallSummariesHandler,
 })
-
-export const listCalls = action({
-  args: {
-    ...principalAndSourceArgs,
-    state: v.optional(callState),
-    paginationOpts: paginationOptsValidator,
-  },
-  returns: callSummaryPageValue,
-  handler: canonicalAgentListHandler,
-})
-
-export const cancelCall = action({
-  args: { ...principalAndSourceArgs, callRef: v.string(), idempotencyKey: v.string() },
-  returns: recoveryResultValue,
-  handler: canonicalAgentCancelHandler,
-})
-
+export const listCalls = action({ args: listCallsArgs, returns: callSummaryPageValue, handler: canonicalAgentListHandler })
+export const cancelCall = action({ args: cancelCallArgs, returns: recoveryResultValue, handler: canonicalAgentCancelHandler })
 export const reconcileCall = action({
-  args: { ...principalAndSourceArgs, callRef: v.string(), idempotencyKey: v.string(), evidence: callReconciliationEvidenceValue },
-  returns: recoveryResultValue,
-  handler: canonicalAgentReconcileHandler,
+  args: reconcileCallArgs, returns: recoveryResultValue, handler: canonicalAgentReconcileHandler,
 })
-
 export const readOwnerCallStatus = action({
-  args: { callRef: v.string() },
-  returns: ownerCallStatusResultValue,
-  handler: canonicalOwnerStatusHandler,
+  args: readOwnerCallStatusArgs, returns: ownerCallStatusResultValue, handler: canonicalOwnerStatusHandler,
 })
-
 export const cancelOwnerCall = action({
-  args: { callRef: v.string(), idempotencyKey: v.string() },
-  returns: recoveryResultValue,
-  handler: canonicalOwnerCancelHandler,
+  args: cancelOwnerCallArgs, returns: recoveryResultValue, handler: canonicalOwnerCancelHandler,
 })
-
 export const reconcileOwnerCall = action({
-  args: { callRef: v.string(), idempotencyKey: v.string(), evidence: callReconciliationEvidenceValue },
-  returns: recoveryResultValue,
-  handler: canonicalOwnerReconcileHandler,
+  args: reconcileOwnerCallArgs, returns: recoveryResultValue, handler: canonicalOwnerReconcileHandler,
 })

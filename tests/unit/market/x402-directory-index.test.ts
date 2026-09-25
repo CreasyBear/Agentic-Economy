@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { directoryAdoptionBand, directoryEntryMatchesFilters, directoryNetwork, directoryPriceBand, directorySlugBase, minimumDirectoryUsdPrice } from '@/modules/market/x402-directory-index'
+import { directoryAdoptionBand, directoryBasePayTo, directoryEntryMatchesFilters, directoryNetwork, directoryPriceBand, directorySlugBase, minimumDirectoryUsdPrice } from '@/modules/market/x402-directory-index'
 import type { X402DirectoryEntry } from '@/modules/market/x402-directory'
 const { query, upstream } = vi.hoisted(() => ({ query: vi.fn(), upstream: vi.fn() }))
 vi.mock('@/lib/server/convex-source', () => ({ sourceQuery: (name: string) => name, callPublicSourceQuery: query }))
@@ -13,6 +13,19 @@ const entry: X402DirectoryEntry = {
     { network: 'base', scheme: 'exact', amount: '1', decimalAmount: '0.0000001', symbol: 'UNKNOWN' },
   ],
 }
+describe('directory Base payee', () => {
+  it('reads the payee from provider metadata when the stored price omitted it', () => {
+    const payTo = '0xabababababababababababababababababababab'
+    const listed = {
+      ...entry,
+      prices: [{ network: 'eip155:8453', scheme: 'exact', amount: '1 USDC', decimalAmount: '1', symbol: 'USDC', asset: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913' }],
+      metadataJson: JSON.stringify({ accepts: [{ network: 'eip155:8453', scheme: 'exact', asset: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913', amount: '1000000', payTo: `0x${'AB'.repeat(20)}` }] }),
+    }
+    expect(directoryBasePayTo(listed)).toBe(payTo)
+    expect(directoryBasePayTo({ ...listed, prices: [{ ...listed.prices[0]!, payTo: '0x1111111111111111111111111111111111111111' }] })).toBe('0x1111111111111111111111111111111111111111')
+    expect(directoryBasePayTo({ ...listed, metadataJson: '{' })).toBeUndefined()
+  })
+})
 describe('directory hard filters', () => {
   it('normalizes supported upstream network aliases without changing unknown identifiers', () => {
     expect(directoryNetwork('base')).toBe('eip155:8453')

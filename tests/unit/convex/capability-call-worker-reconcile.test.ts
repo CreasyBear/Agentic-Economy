@@ -21,7 +21,7 @@ import {
   SYSTEM_WORKLOAD_ACCOUNT_REF,
   SYSTEM_WORKLOAD_PRINCIPAL_REF,
   type WorkloadCronSnapshot,
-} from '../../../convex/workloadCron'
+} from '../../../convex/lib/platform/workloadCron/context'
 
 const WORKLOAD: WorkloadCronSnapshot = {
   name: 'reconcile due facilitator invocations',

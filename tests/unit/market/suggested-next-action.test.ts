@@ -100,7 +100,7 @@ describe('shared suggested next-action projection', () => {
       {
         label: 'Connect provider',
         kind: 'navigate',
-        href: '/owner/operations#provider-connections',
+        href: '/owner/settings/integrations#provider-connections',
       },
     ],
     [

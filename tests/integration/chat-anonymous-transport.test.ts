@@ -1,11 +1,12 @@
 import type { LanguageModelV4 } from '@ai-sdk/provider'
+import { readUIMessageStream, type UIMessageChunk } from 'ai'
 import { mockModel } from '@convex-dev/agent'
 import { getFunctionName, makeFunctionReference } from 'convex/server'
 import { describe, expect, it, vi } from 'vitest'
 
 import { components, internal } from '../../convex/_generated/api'
 import type { ActionCtx } from '../../convex/_generated/server'
-import { streamAnonymousChatResponse } from '../../convex/chatAnonymous'
+import { streamAnonymousChatResponse } from '../../convex/lib/chat/anonymous/stream'
 import { createConvexServerFunctionAssertion } from '../../src/lib/server/convex-source'
 import type { CustomerRequestServiceAssertion } from '../../src/modules/agent-access/service-auth-envelope'
 import type * as ModelGatewayPublic from '@/modules/model-gateway/public'
@@ -82,7 +83,7 @@ const admitHttp = makeFunctionReference<'mutation', {
 }, Readonly<{ ok: boolean; retryAfter?: number }>>('rateLimit:admitHttp')
 
 describe('anonymous operation chat transport', () => {
-  it('reserves the final step for an answer after repeated lookups', async () => {
+  it('does not turn unsupported lookup results into a verified Tool recommendation', async () => {
     const backend = convexTestWithMarketComponents()
     const model = mockModel({ contentSteps: [
       ...Array.from({ length: 5 }, (_, index) => [{
@@ -96,12 +97,87 @@ describe('anonymous operation chat transport', () => {
       const response = await streamAnonymousChatResponse(ctx, [{ role: 'user', content: 'Find a verified OCR Tool.' }], model)
       return await response.text()
     })
-    expect(calls).toHaveBeenCalledTimes(6)
-    expect(JSON.stringify(calls.mock.calls[0]?.[0].prompt)).toContain('Use the returned priceLabel as an indicative price.')
-    expect(JSON.stringify(calls.mock.calls[5]?.[0].prompt)).toContain('Write concise Markdown:')
-    expect(calls.mock.calls[5]?.[0].toolChoice).toEqual({ type: 'none' })
-    expect(body).toContain('"delta":"No"')
-    expect(body).toContain('"delta":" fit"')
+    expect(calls.mock.calls[0]?.[0].toolChoice).toEqual({ type: 'required' })
+    expect(calls.mock.lastCall?.[0].tools).toBeUndefined()
+    expect(body).toContain('**No match for that yet.**')
+  })
+  it('streams a single fallback message when the required lookup yields no answer', async () => {
+    const backend = convexTestWithMarketComponents()
+    const model = mockModel({ contentSteps: [
+      [{ type: 'tool-call', toolCallId: 'lookup-1', toolName: 'registry_tools_describe',
+        input: JSON.stringify({ toolRef: `operation:v1:${'a'.repeat(64)}` }) }],
+      [{ type: 'text', text: 'The Tool reference could not be verified. Next: browse the Market.' }],
+    ] })
+    const calls = vi.spyOn(model, 'doStream')
+    const body = await backend.action(async ctx => {
+      const response = await streamAnonymousChatResponse(ctx,
+        [{ role: 'user', content: 'Find me a weather API for Sydney and compare options' }], model)
+      return await response.text()
+    })
+    expect(calls.mock.calls[0]?.[0].toolChoice).toEqual({ type: 'required' })
+    expect(calls.mock.lastCall?.[0].tools).toBeUndefined()
+    expect(body.match(/"type":"start"/gu)).toHaveLength(1)
+    expect(body.match(/"type":"finish"/gu)).toHaveLength(1)
+    const chunks = new ReadableStream<UIMessageChunk>({
+      start(controller) {
+        for (const line of body.split('\n')) {
+          if (line.startsWith('data: {')) controller.enqueue(JSON.parse(line.slice(6)) as UIMessageChunk)
+        }
+        controller.close()
+      },
+    })
+    const received = []
+    for await (const message of readUIMessageStream({ stream: chunks, terminateOnError: true })) {
+      received.push(message)
+    }
+    expect(received.at(-1)?.parts.filter(part => part.type === 'text').map(part => part.text).join(' ')).toContain(
+      '**No match for that yet.**',
+    )
+  })
+  it('does not present exploratory planning as the guest answer', async () => {
+    const backend = convexTestWithMarketComponents()
+    const model = mockModel({ contentSteps: [
+      [
+        { type: 'text', text: 'Let me search another page.' },
+        { type: 'tool-call', toolCallId: 'lookup-1', toolName: 'registry_tools_describe',
+          input: JSON.stringify({ toolRef: `operation:v1:${'a'.repeat(64)}` }) },
+      ],
+      [{ type: 'text', text: 'Only Weather Current was found for Sydney; its health is unverified. Check its terms before using it.' }],
+      [{ type: 'text', text: 'Weather Current is the sole Sydney weather listing. Its live health remains unverified; inspect details before use.' }],
+    ] })
+    const calls = vi.spyOn(model, 'doStream')
+    const body = await backend.action(async ctx => {
+      const response = await streamAnonymousChatResponse(ctx,
+        [{ role: 'user', content: 'Find a Sydney weather API and compare options' }], model)
+      return await response.text()
+    })
+    const text = body.split('\n').filter(line => line.startsWith('data: {'))
+      .map(line => JSON.parse(line.slice(6)) as UIMessageChunk)
+      .filter((chunk): chunk is Extract<UIMessageChunk, { type: 'text-delta' }> => chunk.type === 'text-delta')
+      .map(chunk => chunk.delta).join('')
+    expect(calls).toHaveBeenCalledTimes(3)
+    expect(text).not.toContain('Let me search another page.')
+    expect(text).toContain('Weather Current')
+    expect(text).toContain('health')
+    expect(body.match(/"type":"start"/gu)).toHaveLength(1)
+  })
+  it('answers honestly when the tool-free model emits non-answer control tokens', async () => {
+    const backend = convexTestWithMarketComponents()
+    const model = mockModel({ contentSteps: [
+      ...Array.from({ length: 5 }, (_, index) => [{
+        type: 'tool-call' as const, toolCallId: `lookup-${index}`, toolName: 'registry_tools_describe',
+        input: JSON.stringify({ toolRef: `operation:v1:${'a'.repeat(64)}` }),
+      }]),
+      [{ type: 'text', text: '<｜begin▁of▁sentence｜>import{ }from\"lodash\"' }],
+    ] })
+    const body = await backend.action(async ctx => {
+      const response = await streamAnonymousChatResponse(ctx,
+        [{ role: 'user', content: 'Find me a weather API for Sydney and compare options' }], model)
+      return await response.text()
+    })
+    expect(body).not.toContain('lodash')
+    expect(body).toContain('**No match for that yet.**')
+    expect(body).toContain('Next: try different words or browse the Market.')
   })
   it('streams from a fake model without creating Agent threads or messages', async () => {
     const backend = convexTestWithMarketComponents()
@@ -144,8 +220,8 @@ describe('anonymous operation chat transport', () => {
       }),
     ]))
 
-    expect(streamed.body).toContain('"delta":" Operation"')
-    expect(streamed.body).toContain('"delta":" available."')
+    expect(streamed.body).toContain('**No match for that yet.**')
+    expect(streamed.body).not.toContain('A weather Operation is available.')
     expect(streamed.queries).toEqual([])
     expect(streamed.mutations).toEqual([])
     expect(anonymousThreads.page).toEqual([])
@@ -286,8 +362,8 @@ describe('anonymous operation chat transport', () => {
       const response = await backend.fetch('/chat/anonymous', anonymousChatRequest('e'))
       expect(response.status).toBe(200)
       const body = await response.text()
-      expect(body).toContain('"delta":" Operation"')
-      expect(body).toContain('"delta":" available."')
+      expect(body).toContain('**No match for that yet.**')
+      expect(body).not.toContain('A weather Operation is available.')
     } finally {
       modelInjection.overrideModel = undefined
       restoreEnv()

@@ -1,13 +1,25 @@
 import { v } from 'convex/values'
 import { degradeBackend } from '@/lib/observability/degrade-backend'
 import { internalMutation } from './_generated/server'
-import { materializePurchaseResolutionRecord } from './lib/callLifecycle/purchaseResolutionMaterialize'
-import { upsertCallProjection } from './lib/callLifecycle/dispatch'
+import { materializePurchaseResolutionRecord } from './lib/capabilityExecution/callLifecycle/purchaseResolutionMaterialize'
+import { upsertCallProjection } from './lib/capabilityExecution/callLifecycle/dispatchProjection'
 import { createPublicToolRef, materializeRuntimePublishedTool, parsePublishedToolSnapshot } from '@/modules/capability-supply/public'
 import { isBoundedJsonValue } from '@/modules/capability-contract/public'
 import type { Doc } from './_generated/dataModel'
+import { capabilityCallTables } from '@/modules/capability-execution/schema'
+import { moneyTables } from '@/modules/money/schema'
 
 const identity = { callRef: v.string(), transactionHash: v.string(), failureKind: v.optional(v.literal('invalid_output')) }
+const remedyClaimResult = v.union(
+  v.null(),
+  v.object({ kind: v.literal('completed') }),
+  v.object({
+    kind: v.literal('claimed'),
+    call: v.object({ ...capabilityCallTables.capabilityCalls.validator.fields, _id: v.id('capabilityCalls'), _creationTime: v.number() }),
+    attempt: v.object({ ...moneyTables.moneyX402PaymentAttempts.validator.fields, _id: v.id('moneyX402PaymentAttempts'), _creationTime: v.number() }),
+  }),
+)
+const remedyFinishResult = v.object({ kind: v.union(v.literal('completed'), v.literal('refused')) })
 const remedyOwner = (transactionHash: string, failureKind?: 'invalid_output') =>
   `paid-result-loss:${failureKind === 'invalid_output' ? 'invalid-output:' : ''}${transactionHash.toLowerCase()}`
 
@@ -43,6 +55,7 @@ function responseEligibleForRemedy(call: Doc<'capabilityCalls'>, attempt: Doc<'m
  */
 export const claim = internalMutation({
   args: identity,
+  returns: remedyClaimResult,
   handler: async (ctx, args) => {
     if (!/^0x[0-9a-fA-F]{64}$/.test(args.transactionHash)) return null
     const call = await ctx.db.query('capabilityCalls')
@@ -87,6 +100,7 @@ export const claim = internalMutation({
 
 export const finish = internalMutation({
   args: { ...identity, evidenceDigest: v.string(), transactionRefs: v.array(v.string()) },
+  returns: remedyFinishResult,
   handler: async (ctx, args) => {
     if (!/^sha256:[a-f0-9]{64}$/.test(args.evidenceDigest)) return { kind: 'refused' as const }
     const call = await ctx.db.query('capabilityCalls')

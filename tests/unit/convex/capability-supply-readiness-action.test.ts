@@ -7,7 +7,7 @@ vi.mock('@/modules/capability-supply/server', async (importOriginal) => {
 
 import { runCapabilityReadinessProbe } from '@/modules/capability-supply/server'
 import type { Id } from '../../../convex/_generated/dataModel'
-import { probeHandler } from '../../../convex/capabilitySupplyReadiness'
+import { probeHandler } from '../../../convex/lib/capabilitySupply/readiness/probe'
 
 describe('capability supply readiness action authority', () => {
   it('carries the exact read-time publisher authority into the record consequence', async () => {

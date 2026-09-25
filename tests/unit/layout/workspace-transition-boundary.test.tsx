@@ -12,7 +12,6 @@ import {
 } from '@tanstack/react-router'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import { AeOrganizationSwitcher } from '@/components/ae/layout/AeOrganizationSwitcher'
 import { WorkspaceTransitionBoundary } from '@/components/ae/layout/WorkspaceTransitionBoundary'
 import '../../setup/jsdom-platform'
 
@@ -21,19 +20,12 @@ const authState = vi.hoisted(() => ({
   isLoaded: true,
 }))
 
-const switcherState = vi.hoisted(() => ({
-  lastProps: null as Record<string, unknown> | null,
-}))
 
 vi.mock('@clerk/tanstack-react-start', () => ({
   useAuth: () => ({
     isLoaded: authState.isLoaded,
     orgId: authState.orgId,
   }),
-  OrganizationSwitcher: (props: Record<string, unknown>) => {
-    switcherState.lastProps = props
-    return <div data-testid="organization-switcher" />
-  },
 }))
 
 afterEach(() => {
@@ -41,21 +33,8 @@ afterEach(() => {
   cleanup()
   authState.orgId = 'org_alpha'
   authState.isLoaded = true
-  switcherState.lastProps = null
 })
 
-describe('AeOrganizationSwitcher safe redirection (S-12)', () => {
-  it('opens the Clerk organization profile as a modal and stays on the current dest', () => {
-    render(<AeOrganizationSwitcher />)
-
-    expect(switcherState.lastProps?.organizationProfileMode).toBe('modal')
-    expect(switcherState.lastProps?.createOrganizationMode).toBe('modal')
-    expect(switcherState.lastProps?.organizationProfileUrl).toBeUndefined()
-    expect(switcherState.lastProps?.afterSelectOrganizationUrl).toBeUndefined()
-    expect(switcherState.lastProps?.afterCreateOrganizationUrl).toBeUndefined()
-    expect(switcherState.lastProps?.afterLeaveOrganizationUrl).toBeUndefined()
-  })
-})
 
 describe('WorkspaceTransitionBoundary (S-12)', () => {
   it('shows a transition scrim when orgId changes', async () => {

@@ -518,9 +518,6 @@ function TableSelectionHeader<TData>({
   )
 }
 
-export function AeOperatorDataTable<TData>(props: AeRecordTableProps<TData>) {
-  return <AeRecordTable {...props} />
-}
 
 export function AeOperatorSortableHeader({
   label,

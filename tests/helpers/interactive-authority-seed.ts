@@ -1,7 +1,7 @@
 import type { TestConvex } from 'convex-test'
 
 import schema from '../../convex/schema'
-import { interactiveCredentialExpiryNonce } from '../../convex/interactiveCredentialLifecycle'
+import { interactiveCredentialExpiryNonce } from '../../convex/lib/principalAccount/interactiveCredential/nonce'
 
 export const INTERACTIVE_AUTHORITY_NOW = 10_000
 export const INTERACTIVE_PRINCIPAL_REF = `prn_${'1'.repeat(32)}`

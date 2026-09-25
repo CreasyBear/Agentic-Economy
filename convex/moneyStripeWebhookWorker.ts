@@ -8,6 +8,8 @@ import { stripeWebhookWorkResultValue } from './moneyStripeWebhookValues'
 import {
   AUD_EXPONENT,
   isMoneyRefusal,
+  connectWebhookCommand,
+  connectWebhookAppliedStatus,
 } from '../src/modules/money/public'
 import {
   createStripeMoneyProvider,
@@ -59,28 +61,14 @@ export const process = internalAction({
         stripeAccountId: binding.stripeAccountId,
       })
       if (isMoneyRefusal(evidence)) return retryOrReconcile(evidence)
-      const result = await ctx.runMutation(internal.moneyLedger.recordConnectAccountEventFromInbox, {
-        businessId: binding.businessId,
-        currency: binding.currency,
-        exponent: binding.exponent,
-        event,
-        readback: {
-          detailsSubmitted: evidence.detailsSubmitted,
-          recipientCapabilityActive: evidence.recipientCapabilityActive,
-          restricted: evidence.restricted,
-          requirementsDigest: evidence.requirementsDigest,
-          providerObjectDigest: evidence.providerObjectDigest,
-          ...(evidence.providerObjectVersion === undefined ? {} : {
-            providerObjectVersion: evidence.providerObjectVersion,
-          }),
-          observedAt: evidence.observedAt,
-        },
-        ...(binding.version === undefined ? {} : { expectedVersion: binding.version }),
-      })
+      const result = await ctx.runMutation(
+        internal.moneyLedger.recordConnectAccountEventFromInbox,
+        connectWebhookCommand(binding, event, evidence),
+      )
       if (result.kind === 'refused') return retryOrReconcile(result)
       return {
         kind: 'accepted',
-        status: binding.lastStripeEventId === event.stripeEventId ? 'replayed' : 'applied',
+        status: connectWebhookAppliedStatus(binding, event),
         appliedRef: `stripe:account:${event.stripeAccountId}`,
       }
     }

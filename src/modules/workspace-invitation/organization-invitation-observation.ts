@@ -44,7 +44,7 @@ type RecordOrganizationInvitationCreatedArgs = OrganizationInvitationCreatedObse
 const recordOrganizationInvitationCreatedMutation = sourceMutation<
   RecordOrganizationInvitationCreatedArgs,
   OrganizationInvitationCreatedObservationResult
->(ORGANIZATION_INVITATION_CREATED_OPERATION)
+>('workspaceInvitations:recordOrganizationInvitationCreatedForServer')
 
 export async function recordOrganizationInvitationCreatedThroughSource(
   command: OrganizationInvitationCreatedObservation,
@@ -67,7 +67,7 @@ type RecordOrganizationInvitationRevokedArgs = OrganizationInvitationRevokedObse
 const recordOrganizationInvitationRevokedMutation = sourceMutation<
   RecordOrganizationInvitationRevokedArgs,
   OrganizationInvitationRevokedObservationResult
->(ORGANIZATION_INVITATION_REVOKED_OPERATION)
+>('workspaceInvitations:recordOrganizationInvitationRevokedForServer')
 
 export async function recordOrganizationInvitationRevokedThroughSource(
   command: OrganizationInvitationRevokedObservation,

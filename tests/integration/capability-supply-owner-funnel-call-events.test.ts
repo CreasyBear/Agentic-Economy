@@ -4,8 +4,8 @@ import {
   assertSameCallEventAuthority,
   sameCallEventAuthority,
   validCapabilityCallEvent,
-  type RecordCapabilityCallEventArgs,
-} from '../../convex/capabilitySupplyLists'
+} from '../../convex/lib/capabilitySupply/lists/callEvent'
+import type { RecordCapabilityCallEventArgs } from '../../convex/lib/capabilitySupply/lists/contracts'
 import type { Id } from '../../convex/_generated/dataModel'
 
 const validEvent: RecordCapabilityCallEventArgs = {

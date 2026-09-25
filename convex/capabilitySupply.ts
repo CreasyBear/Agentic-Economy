@@ -1,4 +1,4 @@
-import { runAdminCommand } from './lib/adminConsole/commandEnvelope'
+import { runAdminCommand } from './lib/adminConsole/commands/commandEnvelope'
 import {
   sourceAuthorityArgs,
   sourceAuthorityReceiptValue,
@@ -11,7 +11,7 @@ import {
   queryGeneric,
 } from 'convex/server'
 import { v } from 'convex/values'
-import { workloadCronSnapshotValue } from './workloadCron'
+import { workloadCronSnapshotValue } from './lib/platform/workloadCron/context'
 
 import {
   publishPreparedCapabilityArgs,
@@ -39,27 +39,31 @@ import {
 } from './capabilitySupplyProbes'
 import {
   queryCapabilityGraphArgs,
-  queryCapabilityGraphHandler,
   capabilityGraphResultValue,
   inspectBindingControlStateArgs,
-  inspectBindingControlStateHandler,
   bindingControlStateValue,
-} from './capabilitySupplyGraph'
+} from './lib/capabilitySupply/graphPorts/contracts'
+import {
+  queryCapabilityGraphHandler,
+  inspectBindingControlStateHandler,
+} from './lib/capabilitySupply/graphPorts/reads'
 import {
   listIntegratedArgs,
-  listIntegratedHandler,
   listRouteableArgs,
-  listRouteableHandler,
   listMappingsArgs,
-  listMappingsHandler,
   listMappingsReturns,
   eligibleSupplyResultValue,
   authorizeOwnerSupplyActionArgs,
-  authorizeOwnerSupplyActionHandler,
   recordCapabilityCallEventArgs,
-  recordCapabilityCallEventHandler,
   recordCapabilityCallEventReturns,
-} from './capabilitySupplyLists'
+} from './lib/capabilitySupply/lists/contracts'
+import {
+  listIntegratedHandler,
+  listRouteableHandler,
+  listMappingsHandler,
+  authorizeOwnerSupplyActionHandler,
+} from './lib/capabilitySupply/lists/reads'
+import { recordCapabilityCallEventHandler } from './lib/capabilitySupply/lists/callEvent'
 import {
   stageOwnerX402CapabilityArgs,
   stageOwnerX402CapabilityHandler,
@@ -72,13 +76,9 @@ export {
   publishCuratedCapability,
   withdrawCuratedCapability,
 } from './capabilitySupplyPublish'
+export { ownsPublishedBusiness, ownsPublishedBusinessForOwnerId } from './lib/capabilitySupply/publish/ownership'
+export { rebuildCapabilityOriginSupplyProjection } from './lib/capabilitySupply/projection/rebuild'
 export {
-  ownsPublishedBusiness,
-  ownsPublishedBusinessForOwnerId,
-  rebuildCapabilityOriginSupplyProjection,
-} from './capabilitySupplyShared'
-export {
-  registerCuratedMapping,
   registerCapabilityOffering,
   registerCapabilityTransportBinding,
   setCapabilitySupplyEligibility,
@@ -86,12 +86,12 @@ export {
   registerCapabilityBindingCommand,
   setCapabilitySupplyEligibilityCommand,
   quarantineCapabilityBindingCommand,
-} from './capabilitySupplyCommands'
+} from './lib/capabilitySupply/commands/writes'
 export {
   listIntegratedCapabilitySupply,
   listRouteableCapabilitySupply,
   getEligibleExactCapabilitySupply,
-} from './capabilitySupplyLists'
+} from './lib/capabilitySupply/lists/reads'
 
 export const publishPreparedCapability = mutationGeneric({
   args: publishPreparedCapabilityArgs,

@@ -2,7 +2,7 @@ import { paginationOptsValidator, queryGeneric } from 'convex/server'
 import { v, type Infer } from 'convex/values'
 
 import { buildOfferingLlmsTxt } from '../src/modules/discovery/convex'
-import { readOfferingSupplyPage } from './registry'
+import { readOfferingSupplyPage } from './lib/registry/offeringSupply/reads'
 
 const discoveryFileResult = v.object({
   body: v.string(),

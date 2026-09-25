@@ -1,3 +1,4 @@
+import { Link } from '@tanstack/react-router'
 import type { ReactNode } from 'react'
 
 import type { AgentDetail } from '@/modules/agent-access/agent-operator-view-model'
@@ -7,7 +8,6 @@ import type { ExactAmount } from '@/modules/money/public'
 import { AeAgentAuthorizedTools } from '../AeAgentAuthorizedTools'
 import { AeAgentCallHistoryTable } from '../AeAgentCallHistoryTable'
 import { AeAgentConnectionReceipts } from '../AeAgentConnectionReceipts'
-import { AeAgentCredentialHistory } from '../AeAgentCredentialHistory'
 import { AeAgentSpendingLimitsForm } from '../spending-limits-form/AeAgentSpendingLimitsForm'
 import {
   agentAccessFacts,
@@ -82,11 +82,9 @@ export function buildAgentRecordSheetProps({
     ),
     technicalFacts: selected === undefined ? [] : technicalAgentFacts(selected),
     credentialHistory: selected === undefined ? null : (
-      <AeAgentCredentialHistory
-        detail={selected}
-        {...(lifecyclePending === undefined ? {} : { lifecyclePending })}
-        onRequestRevoke={(credentialRef, generation, trigger) => lifecycle.requestCredentialRevoke(selected, credentialRef, generation, trigger)}
-      />
+      <Link to="/owner/settings/agent-keys" className="inline-flex min-h-touch items-center text-sm font-medium text-brand underline-offset-4 hover:underline focus-visible:outline-solid focus-visible:outline-2 focus-visible:outline-brand">
+        Manage Agent keys and credential history
+      </Link>
     ),
     ...(agentHistory === undefined ? {} : { agentHistory }),
     removeAgentDisabled,

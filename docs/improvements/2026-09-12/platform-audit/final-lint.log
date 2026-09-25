@@ -1,5 +1,0 @@
-
-> agentic-economy@0.1.0 lint
-> oxlint src convex tests tools --deny-warnings
-
-convex/capabilitySupplyOwnerCanary.ts:4:43: error eslint(no-unused-vars): Identifier 'query' is imported but never used. help: Consider removing this import.

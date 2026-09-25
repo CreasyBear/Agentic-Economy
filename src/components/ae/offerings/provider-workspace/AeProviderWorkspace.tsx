@@ -113,14 +113,9 @@ function AvailableWorkspaceBody({
       <ProviderWorkspaceReadinessSection
         {...(connections === undefined ? {} : { connections })}
         {...(publicStatus === undefined ? {} : { publicStatus })}
-        connectionsOpen={sheets.connectionsOpen}
-        connectionsPending={sheets.connectionsPending}
-        {...(sheets.connectionsDetail === undefined ? {} : { connectionsDetail: sheets.connectionsDetail })}
-        connectionTargetMissing={sheets.connectionTargetMissing}
         {...(sheets.x402Handoff === undefined ? {} : { x402Handoff: sheets.x402Handoff })}
-        onOpenConnections={sheets.openConnections}
-        onCloseConnections={sheets.closeConnections}
-        onRetryConnections={sheets.loadConnections}
+        {...(sheets.compatibilityRebind === undefined ? {} : { rebindOfferingRef: sheets.compatibilityRebind })}
+        {...(location.hash.startsWith('provider-connection-') ? { connectionHash: `#${location.hash}` } : {})}
       />
       <ProviderWorkspaceEarningsSection
         payoutConnection={inventoryHook.payoutConnection}

@@ -1,300 +1,67 @@
-import { ArrowLeftIcon, ArrowUpRightIcon, BracesIcon, Globe2Icon, PhoneIcon } from 'lucide-react'
+import { ArrowLeftIcon, ArrowUpRightIcon, BracesIcon } from 'lucide-react'
 import { Link } from '@tanstack/react-router'
 
 import { AeAgentJsonAffordance } from '@/components/ae/landing/AeAgentJsonAffordance'
 import { AeFactList } from '@/components/ae/data/AeFactList'
-import { AePageHeader } from '@/components/ae/layout/AePageHeader'
-import { Badge } from '@/components/ui/badge'
+import { ProviderIdentity } from '@/components/ae/shared/ProviderIdentity'
+import { ProviderPortfolio } from '@/components/ae/shared/ProviderPortfolio'
 import { buttonVariants } from '@/components/ui/button-variants'
 import { cn } from '@/lib/utils'
-import { formatTimestamp, timestampIso } from '@/lib/ui/format-time'
-import { getStatusPresentation } from '@/lib/ui/status-presentation'
 import { telUri } from '@/lib/ui/tel-uri'
-import { formatOfferingPrice, isPublicHttpsUrl } from '@/modules/catalog/public'
-import type { PublicBusinessCatalogApiV2Dto, PublicListingDto } from '@/modules/registry/public'
+import { formatTimestamp, timestampIso } from '@/lib/ui/format-time'
+import { isPublicHttpsUrl } from '@/modules/catalog/public'
+import { projectCatalogueEndpointListing, type PublicBusinessCatalogApiV2Dto, type ServiceDto } from '@/modules/registry/public'
+import { projectToolObject } from '@/components/ae/shared/listing-family.view-model'
 import type { PublicOfferingSupplyView } from '@/components/ae/offerings/offering-presentation'
 
-export type AeProviderListingPageProps = {
+export type AeProviderListingPageProps = Readonly<{
   catalog: PublicBusinessCatalogApiV2Dto
   agentJsonUrl: string
+  service?: ServiceDto
   supply?: PublicOfferingSupplyView
   backFrom?: 'thread'
   backThreadId?: string
-}
-
-export function AeProviderListingPage({
-  catalog,
-  agentJsonUrl,
-  supply,
-  backFrom,
-  backThreadId,
-}: AeProviderListingPageProps) {
-  const offerings = supply === undefined ? catalog.offerings : supply.offerings.map(supplyOfferingToDto)
-  const readyCount = offerings.filter((offering) => offering.support.aeSupportedAction).length
-  const websiteHref = catalog.businessContext.kind === 'programmable_provider'
-    ? publicHttpsHref(catalog.businessContext.website)
-    : undefined
-
-  return (
-    <div className="grid gap-section pb-page">
-      <AePageHeader
-        eyebrow="Provider"
-        title={catalog.name}
-        description="Compare this provider’s listed offerings, exact prices, and access paths."
-        actions={
-          <nav aria-label="Breadcrumb">
-            <ListingBackLink
-              {...(backFrom === undefined ? {} : { from: backFrom })}
-              {...(backThreadId === undefined ? {} : { threadId: backThreadId })}
-            />
-          </nav>
-        }
-        meta={`${offerings.length} listed · ${readyCount} ready now`}
-      />
-      <article className="ae-rail grid gap-section">
-        <ListingFirstScreen catalog={catalog} />
-
-        <div className="grid gap-section lg:grid-cols-[minmax(0,1fr)_18rem] lg:items-start">
-          <section aria-labelledby="provider-tools-title" className="min-w-0 grid gap-related">
-            <div className="grid gap-intra">
-              <h2 id="provider-tools-title" className="text-lg font-medium text-foreground">Offerings</h2>
-              <p className="text-sm text-muted-foreground">Inspect the price, access path, and current readiness before you open one.</p>
-            </div>
-
-          {offerings.length === 0 ? (
-            <div className="grid gap-intra border-y border-border py-section">
-              <p className="font-medium text-foreground">No offerings listed.</p>
-              <p className="text-sm text-muted-foreground">This provider profile remains visible while its catalogue is prepared.</p>
-            </div>
-          ) : (
-            <ul className="m-0 divide-y divide-border border-y border-border p-0" aria-label={`${catalog.name} offerings`}>
-              {offerings.map((offering) => (
-                <OperationRow key={offering.offeringRef} offering={offering} catalog={catalog} />
-              ))}
-            </ul>
-          )}
+}>
+export function AeProviderListingPage({ catalog, agentJsonUrl, service, supply, backFrom, backThreadId }: AeProviderListingPageProps) {
+  const websiteHref = catalog.businessContext.kind === 'programmable_provider' && isPublicHttpsUrl(catalog.businessContext.website) ? catalog.businessContext.website : undefined
+  const offerings = service?.endpoints.map(endpoint => {
+    const listing = projectCatalogueEndpointListing(service, endpoint)
+    const href = listing.canonicalToolRef.kind === 'present' ? `/tools/${encodeURIComponent(listing.canonicalToolRef.value)}` : ''
+    return projectToolObject(listing, href)
+  }) ?? []
+  const otherOfferings = (supply?.offerings.map(item => item.offering) ?? service?.ae.offerings ?? catalog.offerings).filter(offering => !service?.endpoints.some(endpoint => endpoint.ae.offeringRef === offering.offeringRef)).map(offering => {
+    const catalogOffering = catalog.offerings.find(item => item.offeringRef === offering.offeringRef)
+    const suppliedPaths = supply?.offerings.find(item => item.offering.offeringRef === offering.offeringRef)?.accessPaths
+    const disclosure = suppliedPaths?.find(path => path.descriptor.kind === 'human_request')?.descriptor
+    const webPath = catalogOffering?.accessPaths.find(path => path.kind === 'human_request' && path.channel === 'website' && path.url !== undefined)
+    const href = webPath?.kind === 'human_request' && webPath.url !== undefined && isPublicHttpsUrl(webPath.url) ? webPath.url : undefined
+    return { name: offering.name, summary: [offering.summary, disclosure?.kind === 'human_request' ? disclosure.disclosure : undefined].filter(Boolean).join(' '), ...(href === undefined ? {} : { href }) }
+  })
+  const name = { kind: 'present' as const, value: catalog.name, sourceRef: catalog.businessId, provenance: 'business_published' as const, scope: 'business' as const }
+  const summary = service?.description === undefined ? undefined : { ...name, value: service.description }
+  return <article className="ae-rail grid min-w-0 gap-section pb-page pt-section">
+    <nav aria-label="Breadcrumb"><ListingBackLink {...(backFrom === undefined ? {} : { from: backFrom })} {...(backThreadId === undefined ? {} : { threadId: backThreadId })} /></nav>
+    <ProviderIdentity name={name} {...(summary === undefined ? {} : { summary })} {...(websiteHref === undefined ? {} : { href: websiteHref })} />
+    <div className="grid min-w-0 gap-section lg:grid-cols-[minmax(0,1fr)_18rem] lg:items-start">
+      <ProviderPortfolio offerings={offerings} otherOfferings={otherOfferings} />
+      <aside aria-label="Provider information" className="grid min-w-0 gap-section lg:sticky lg:top-20">
+        <section className="grid gap-related"><h2 className="text-title font-medium">About this Provider</h2><p className="text-sm text-muted-foreground">Published Business portfolio. A listed endpoint is not callable through AE unless it is exactly joined to an admitted Tool.</p>
+          <AeFactList facts={[{ label: 'Category', value: catalog.category }, { label: 'Last indexed', value: <time dateTime={timestampIso(catalog.observedAt)}>{formatTimestamp(catalog.observedAt)}</time> }, ...(catalog.responseTimeMinutes === undefined ? [] : [{ label: 'Published response time', value: `${catalog.responseTimeMinutes} min` }])]} />
+          {websiteHref === undefined ? null : <a href={websiteHref} target="_blank" rel="noreferrer" aria-label="Provider website (opens in a new tab)" className={cn(buttonVariants({ variant: 'outline' }), 'min-h-touch min-w-0 justify-between whitespace-normal text-left')}>Provider website<ArrowUpRightIcon className="shrink-0" aria-hidden="true" /></a>}
+          {catalog.businessContext.kind !== 'local_human' || catalog.businessContext.publishedPhone === undefined ? null : <a href={telUri(catalog.businessContext.publishedPhone)} className={cn(buttonVariants({ variant: 'outline' }), 'min-h-touch')}>Phone provider</a>}
         </section>
-
-        <aside className="grid gap-section lg:sticky lg:top-20" aria-label="Provider information">
-          <section aria-labelledby="provider-details-title" className="grid gap-related">
-            <div className="grid gap-intra">
-              <h2 id="provider-details-title" className="text-base font-medium text-foreground">Provider details</h2>
-              <p className="text-sm text-muted-foreground">Facts published with this catalogue entry.</p>
-            </div>
-            <AeFactList
-              facts={[
-                {
-                  label: 'Provider type',
-                  value: catalog.businessContext.kind === 'programmable_provider' ? 'Programmable provider' : 'Human-operated provider',
-                },
-                { label: 'Catalogue status', value: catalog.disposition === 'current' ? getStatusPresentation('current').label : catalog.disposition },
-                {
-                  label: 'Observed',
-                  value: <time dateTime={timestampIso(catalog.observedAt)}>{formatTimestamp(catalog.observedAt)}</time>,
-                },
-                ...(catalog.responseTimeMinutes === undefined
-                  ? []
-                  : [{ label: 'Published response time', value: `${catalog.responseTimeMinutes} min` }]),
-                ...(catalog.businessContext.kind === 'programmable_provider'
-                  ? [{ label: 'Provider ID', value: catalog.businessContext.providerIdentifier, mono: true }]
-                  : [{ label: 'Location', value: `${catalog.businessContext.suburb}, ${catalog.businessContext.stateTerritory}` }]),
-              ]}
-            />
-            {websiteHref === undefined ? null : (
-              <a
-                href={websiteHref}
-                target="_blank"
-                rel="noreferrer"
-                className={cn(buttonVariants({ variant: 'outline' }), 'min-h-touch w-full justify-between')}
-              >
-                Provider website (opens in a new tab) <ArrowUpRightIcon aria-hidden="true" />
-              </a>
-            )}
-          </section>
-
-          <details className="rounded-card border border-border bg-card">
-            <summary className="flex min-h-touch cursor-pointer items-center gap-intra px-gutter py-related text-sm font-medium text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
-              <BracesIcon className="size-4" aria-hidden="true" /> Agent-readable catalogue
-            </summary>
-            <div className="grid gap-intra border-t border-border px-gutter py-related">
-              <p className="text-sm text-muted-foreground">Use the public JSON projection to inspect this provider without parsing the page.</p>
-              <AeAgentJsonAffordance agentJsonUrl={agentJsonUrl} query={catalog.name} />
-            </div>
-          </details>
-
-          <Link
-            to="/privacy/remove-business"
-            className="inline-flex min-h-touch items-center text-sm text-muted-foreground underline-offset-4 hover:text-foreground hover:underline focus-visible:outline-2 focus-visible:outline-offset-2"
-          >
-            Correct or remove this provider
-          </Link>
-        </aside>
-      </div>
-    </article>
+        <details className="rounded-card border border-border bg-card"><summary className="flex min-h-touch cursor-pointer items-center gap-intra px-gutter py-related text-sm font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"><BracesIcon className="size-4" aria-hidden="true" />Agent-readable catalogue</summary><div className="grid gap-intra border-t border-border px-gutter py-related"><p className="text-sm text-muted-foreground">Inspect the public JSON projection without parsing this page.</p><AeAgentJsonAffordance agentJsonUrl={agentJsonUrl} query={catalog.name} /></div></details>
+        <Link to="/privacy/remove-business" className="min-h-touch content-center text-sm underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2">Correct or remove this Provider</Link>
+      </aside>
     </div>
-  )
+  </article>
 }
 
-export function ListingFirstScreen({
-  catalog,
-}: {
-  catalog: PublicBusinessCatalogApiV2Dto
-}) {
-  return (
-    <header className="grid gap-4" aria-label="Provider facts">
-      <p className="text-sm text-muted-foreground">{catalog.category}</p>
-      <AeFactList
-        facts={[
-          {
-            label: 'Last indexed',
-            value: <time dateTime={timestampIso(catalog.observedAt)}>{formatTimestamp(catalog.observedAt)}</time>,
-          },
-        ]}
-      />
-    </header>
-  )
+export function ListingFirstScreen({ catalog }: Readonly<{ catalog: PublicBusinessCatalogApiV2Dto }>) {
+  return <AeFactList facts={[{ label: 'Category', value: catalog.category }, { label: 'Last indexed', value: <time dateTime={timestampIso(catalog.observedAt)}>{formatTimestamp(catalog.observedAt)}</time> }]} />
 }
 
-function OperationRow({ offering, catalog }: { offering: PublicListingDto; catalog: PublicBusinessCatalogApiV2Dto }) {
-  const operationPath = offering.accessPaths.find((path) => path.kind === 'external_operation')
-  const webPath = offering.accessPaths.find((path) => path.kind === 'human_request' && path.channel === 'website' && path.url !== undefined)
-  const operationHref = operationPath === undefined
-    ? undefined
-    : publicHttpsHref(operationPath.documentationUrl) ?? publicHttpsHref(operationPath.url)
-  const webHref = operationHref === undefined ? publicHttpsHref(webPath?.url) : undefined
-  const phone = catalog.businessContext.kind === 'local_human' ? catalog.businessContext.publishedPhone : undefined
-  const phoneHref = phone === undefined ? undefined : telUri(phone)
-  const accessNote = offering.accessPaths.find((path) => path.kind === 'human_request')?.disclosure
-  const price = offering.price === undefined
-    ? offering.pricingSummary ?? 'Price unknown'
-    : formatOfferingPrice(offering.price)
-
-  return (
-    <li className="grid gap-related px-gutter py-gutter sm:grid-cols-[minmax(0,1fr)_13rem] sm:items-start sm:gap-section">
-      <div className="grid min-w-0 gap-related">
-        <div className="grid gap-intra">
-          <div className="flex flex-wrap items-center gap-intra">
-            <h3 className="text-base font-semibold text-foreground">{offering.name}</h3>
-            <Badge variant={offering.support.aeSupportedAction ? 'success' : offering.support.integrated ? 'warning' : 'secondary'}>
-              {offering.support.aeSupportedAction
-                ? getStatusPresentation('ready_now').label
-                : offering.support.integrated
-                  ? getStatusPresentation('setup_required').label
-                  : 'Inspect only'}
-            </Badge>
-          </div>
-          <p className="text-sm text-muted-foreground">{offering.summary}</p>
-        </div>
-        <AeFactList
-          className="gap-related sm:grid-cols-3"
-          facts={[
-            { label: 'Category', value: offering.category },
-            { label: 'Price', value: price, mono: true },
-            { label: 'Availability', value: offering.availabilitySummary ?? 'Not published', muted: offering.availabilitySummary === undefined },
-          ]}
-        />
-        {accessNote === undefined ? null : <p className="text-xs text-muted-foreground">{accessNote}</p>}
-      </div>
-      <div className="grid content-start gap-intra sm:self-center">
-        {operationHref === undefined ? null : (
-          <a
-            href={operationHref}
-            target="_blank"
-            rel="noreferrer"
-            className={cn(buttonVariants({ variant: 'outline', size: 'sm' }), 'min-h-touch justify-between')}
-          >
-            Open provider route for {offering.name} (opens in a new tab) <ArrowUpRightIcon aria-hidden="true" />
-          </a>
-        )}
-        {operationHref !== undefined || webHref === undefined ? null : (
-          <a
-            href={webHref}
-            target="_blank"
-            rel="noreferrer"
-            className={cn(buttonVariants({ variant: 'outline', size: 'sm' }), 'min-h-touch justify-between')}
-          >
-            Open website for {offering.name} (opens in a new tab) <Globe2Icon aria-hidden="true" />
-          </a>
-        )}
-        {operationHref !== undefined || webHref !== undefined || phoneHref === undefined ? null : (
-          <a href={phoneHref} className={cn(buttonVariants({ variant: 'outline', size: 'sm' }), 'min-h-touch justify-between')}>
-            Phone provider <PhoneIcon aria-hidden="true" />
-          </a>
-        )}
-        {operationHref !== undefined || webHref !== undefined || phoneHref !== undefined ? null : (
-          <p className="text-sm text-muted-foreground">No public call path</p>
-        )}
-      </div>
-    </li>
-  )
-}
-
-function publicHttpsHref(value: string | undefined): string | undefined {
-  return value !== undefined && isPublicHttpsUrl(value) ? value : undefined
-}
-
-function supplyOfferingToDto(item: PublicOfferingSupplyView['offerings'][number]): PublicListingDto {
-  return {
-    offeringRef: item.offering.offeringRef,
-    revision: item.offering.revision,
-    name: item.offering.name,
-    category: item.offering.category,
-    summary: item.offering.summary,
-    ...(item.offering.serviceAreaSummary === undefined ? {} : { serviceAreaSummary: item.offering.serviceAreaSummary }),
-    ...(item.offering.availabilitySummary === undefined ? {} : { availabilitySummary: item.offering.availabilitySummary }),
-    ...(item.offering.pricingSummary === undefined ? {} : { pricingSummary: item.offering.pricingSummary }),
-    ...(item.offering.price === undefined ? {} : { price: item.offering.price }),
-    accessPaths: item.accessPaths.map((path) => path.descriptor.kind === 'human_request'
-      ? {
-          accessPathRef: path.accessPathRef,
-          offeringRevision: path.offeringRevision,
-          kind: 'human_request' as const,
-          channel: path.descriptor.channel,
-          disclosure: path.descriptor.disclosure,
-          ...(path.descriptor.url === undefined ? {} : { url: path.descriptor.url }),
-        }
-      : {
-          accessPathRef: path.accessPathRef,
-          offeringRevision: path.offeringRevision,
-          kind: 'external_operation' as const,
-          name: path.descriptor.name,
-          summary: path.descriptor.summary,
-          url: path.descriptor.url,
-          ...(path.descriptor.method === undefined ? {} : { method: path.descriptor.method }),
-          ...(path.descriptor.documentationUrl === undefined ? {} : { documentationUrl: path.descriptor.documentationUrl }),
-          ...(path.descriptor.interfaceDescription === undefined ? {} : { interfaceDescription: path.descriptor.interfaceDescription }),
-          ...(path.descriptor.authenticationSummary === undefined ? {} : { authenticationSummary: path.descriptor.authenticationSummary }),
-          ...(path.descriptor.pricingSummary === undefined ? {} : { pricingSummary: path.descriptor.pricingSummary }),
-          provenance: path.descriptor.provenance,
-        }),
-    support: {
-      integrated: item.support.integrated,
-      aeSupportedAction: item.support.routeable,
-      ...(item.support.observedAt === undefined ? {} : { observedAt: item.support.observedAt }),
-      ...(item.support.validUntil === undefined ? {} : { validUntil: item.support.validUntil }),
-    },
-  }
-}
-
-function ListingBackLink({ from, threadId }: { from?: 'thread'; threadId?: string }) {
-  if (from === 'thread' && threadId !== undefined) {
-    return (
-      <Link
-        to="/t/$threadId"
-        params={{ threadId }}
-        className={cn(buttonVariants({ variant: 'ghost', size: 'sm' }), 'min-h-touch px-2')}
-      >
-        <ArrowLeftIcon aria-hidden="true" /> Back to result
-      </Link>
-    )
-  }
-
-  return (
-    <Link
-      to="/market"
-      className={cn(buttonVariants({ variant: 'ghost', size: 'sm' }), 'min-h-touch px-2')}
-    >
-      <ArrowLeftIcon aria-hidden="true" /> Browse Market
-    </Link>
-  )
+function ListingBackLink({ from, threadId }: Readonly<{ from?: 'thread'; threadId?: string }>) {
+  if (from === 'thread' && threadId !== undefined) return <Link to="/t/$threadId" params={{ threadId }} className={cn(buttonVariants({ variant: 'ghost', size: 'sm' }), 'min-h-touch px-2')}><ArrowLeftIcon aria-hidden="true" />Back to result</Link>
+  return <Link to="/market" className={cn(buttonVariants({ variant: 'ghost', size: 'sm' }), 'min-h-touch px-2')}><ArrowLeftIcon aria-hidden="true" />Browse Market</Link>
 }

@@ -21,6 +21,9 @@ export function AeToolDecision({
           <h2 className="text-pretty text-lg font-semibold leading-7 tracking-tight text-foreground sm:text-xl sm:leading-8">
             {model.summary}
           </h2>
+          <p className="mt-2 text-sm leading-6 text-muted-foreground">
+            An agent gets a Quote for the real input, then makes one Call. You do not pay on this page.
+          </p>
         </div>
         <AeToolPrice
           price={model.totalPrice}

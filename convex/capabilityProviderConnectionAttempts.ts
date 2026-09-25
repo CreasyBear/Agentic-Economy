@@ -8,17 +8,17 @@ import {
   prepareOAuthOwnerResult,
   prepareOwnerArgs,
   prepareOwnerResult,
-} from './lib/providerConnections/attemptValidators'
+} from './lib/capabilitySupply/providerConnectionAttempts/contracts'
 import {
   bindOAuthOwnerHandler,
   readOAuthCallbackOwnerArgs,
   readOAuthCallbackOwnerHandler,
   readOAuthCallbackOwnerResult,
-} from './lib/providerConnections/bindAttemptOAuthOwner'
-import { cancelOwnerHandler } from './lib/providerConnections/cancelAttemptOwner'
-import { finalizeOwnerArgs, finalizeOwnerHandler, finalizeOwnerResult } from './lib/providerConnections/finalizeAttemptOwner'
-import { prepareOAuthOwnerHandler } from './lib/providerConnections/prepareAttemptOAuthOwner'
-import { prepareOwnerHandler } from './lib/providerConnections/prepareAttemptOwner'
+} from './lib/capabilitySupply/providerConnectionAttempts/bindOAuth'
+import { cancelOwnerHandler } from './lib/capabilitySupply/providerConnectionAttempts/cancel'
+import { finalizeOwnerArgs, finalizeOwnerHandler, finalizeOwnerResult } from './lib/capabilitySupply/providerConnectionAttempts/finalize'
+import { prepareOAuthOwnerHandler } from './lib/capabilitySupply/providerConnectionAttempts/prepareOAuth'
+import { prepareOwnerHandler } from './lib/capabilitySupply/providerConnectionAttempts/prepare'
 import {
   readOwnerArgs,
   readOwnerHandler,
@@ -26,7 +26,7 @@ import {
   readOwnerSourceDraftArgs,
   readOwnerSourceDraftHandler,
   readOwnerSourceDraftResult,
-} from './lib/providerConnections/readAttemptOwner'
+} from './lib/capabilitySupply/providerConnectionAttempts/read'
 import {
   reserveAgentArgs,
   reserveAgentHandler,
@@ -34,7 +34,7 @@ import {
   reserveOwnerArgs,
   reserveOwnerHandler,
   reserveOwnerResult,
-} from './lib/providerConnections/reserveAttempt'
+} from './lib/capabilitySupply/providerConnectionAttempts/reserve'
 
 // -- Registrations only. Validators, handler bodies, and DB logic live under --
 // -- convex/lib/providerConnections/* attempt modules. ------------------------

@@ -5,10 +5,11 @@ import * as networkPublic from '@/modules/network-guard/public'
 
 import { admitDiscoveredToolFixture } from '../../helpers/discovered-tool-fixture'
 import { inspectLiveX402Requirement } from '@/modules/capability-execution/live-x402-requirement'
-import { readManagedX402InspectionTarget } from '../../../convex/capabilitySupplyCurrentTool'
+import { readManagedX402InspectionTarget } from '../../../convex/lib/capabilitySupply/currentTool/inspection'
 import { quote } from '../../../convex/capabilityQuotes'
 import { projectToolQuoteRefusal } from '@/modules/capability-execution/quote'
 import { api, internal } from '../../../convex/_generated/api'
+import { ACTIVE_CHAT_GENERATION_MS } from '../../../convex/chatThreads'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { splitInclusiveAudTax, PACKAGE4_FORMANCE_REQUIREMENTS } from '@/modules/money/public'
 import {
@@ -31,6 +32,7 @@ import {
   seedCommercialPolicies,
   seedAgent,
   prepareSubjects,
+  type QuotePrincipal,
   formanceSnapshot,
 } from '../../helpers/quote-fixtures'
 
@@ -84,6 +86,178 @@ describe('legal customer binding refusals', () => {
         : {}),
     })
     expect(projected.continuation?.action).toBe('funding.handoff.config')
+  })
+})
+
+describe('trusted chat Quote cancellation fence', () => {
+  it.each(['cancel-first', 'issue-first'] as const)('%s serializes Quote issuance and cancellation', async (order) => {
+    const backend = convexTestWithMarketComponents()
+    const suffix = `quote-turn-${order}`
+    const fixture = await publishCurrentTool(backend, suffix)
+    await seedCommercialPolicies(backend, suffix, Date.now())
+    const agent = await seedAgent(backend, { canonicalAccountRef: fixture.accountRef }, fixture.toolRef, suffix, '20000000')
+    await backend.run(async ctx => {
+      const grant = await ctx.db.query('authorityDelegationGrants')
+        .withIndex('by_grantRef', q => q.eq('grantRef', agent.grant.grantRef)).unique()
+      if (grant === null) throw new Error('quote_turn_delegation_missing')
+      await ctx.db.patch(grant._id, { resourceRefs: ['*', fixture.toolRef] })
+    })
+    await backend.finishAllScheduledFunctions(() => undefined)
+    await observeHealthyReadiness(backend, fixture, suffix)
+    const input = { request: 'Perth' }
+    const subjects = await prepareSubjects(backend, agent, fixture.toolRef, input, suffix)
+    const principal = { kind: 'agent_key' as const, ...agent.principal }
+    const turn = await backend.mutation(api.chatTurns.startTurn, await withSourceWrite('protected_action', {
+      principal, clientTurnId: suffix, prompt: 'Quote a Tool',
+      operationKey: `turn:start:${suffix}`, correlationId: `turn:start:${suffix}`,
+    }))
+    expect(await backend.mutation(internal.chatTurns.finishTurn, {
+      turnRef: turn.turnRef, promptMessageId: turn.promptMessageId, state: 'working',
+    })).toBe(true)
+    const issueArgs = {
+      operationKey: `quote:issue:${suffix}`, correlationId: `quote:issue:${suffix}`,
+      principal: agent.principal, toolRef: fixture.toolRef, input,
+      formance: formanceSnapshot(subjects), turnRef: turn.turnRef,
+    }
+    const cancelArgs = {
+      principal, turnRef: turn.turnRef, operationKey: `turn:cancel:${suffix}`,
+      correlationId: `turn:cancel:${suffix}`,
+    }
+    if (order === 'cancel-first') {
+      expect(await backend.mutation(api.chatTurns.cancelTurn,
+        await withSourceWrite('protected_action', cancelArgs)))
+        .toEqual({ kind: 'stopped', turnRef: turn.turnRef, inFlightEffects: [] })
+      expect(await backend.mutation(internal.capabilityQuotes.issueQuote, issueArgs))
+        .toMatchObject({ kind: 'refused', code: 'grant_not_found', retryable: false })
+      expect(await backend.run(ctx => ctx.db.query('capabilityQuotes').take(1))).toEqual([])
+    } else {
+      const result = await backend.mutation(internal.capabilityQuotes.issueQuote, issueArgs)
+      expect(result.kind).toBe('committed')
+      if (result.kind !== 'committed') throw new Error(`quote_issue_refused:${result.code}`)
+      expect(await backend.mutation(api.chatTurns.cancelTurn,
+        await withSourceWrite('protected_action', cancelArgs)))
+        .toEqual({ kind: 'stopped', turnRef: turn.turnRef, inFlightEffects: [] })
+      expect(await backend.run(ctx => ctx.db.query('capabilityQuotes')
+        .withIndex('by_quoteRef', q => q.eq('quoteRef', result.quoteRef)).unique()))
+        .toMatchObject({ quoteRef: result.quoteRef, state: 'issued' })
+    }
+    expect(await backend.run(ctx => ctx.db.query('chatTurns')
+      .withIndex('by_turnRef', q => q.eq('turnRef', turn.turnRef)).unique()))
+      .toMatchObject({ state: 'canceled' })
+  })
+
+  it.each(['supersede-first', 'issue-first'] as const)(
+    'a superseded Turn cannot issue a Quote (%s)',
+    async order => {
+      const backend = convexTestWithMarketComponents()
+      const suffix = `quote-stale-${order}`
+      const fixture = await publishCurrentTool(backend, suffix)
+      await seedCommercialPolicies(backend, suffix, Date.now())
+      const agent = await seedAgent(backend, { canonicalAccountRef: fixture.accountRef },
+        fixture.toolRef, suffix, '20000000')
+      await backend.run(async ctx => {
+        const grant = await ctx.db.query('authorityDelegationGrants')
+          .withIndex('by_grantRef', q => q.eq('grantRef', agent.grant.grantRef)).unique()
+        if (grant === null) throw new Error('quote_turn_delegation_missing')
+        await ctx.db.patch(grant._id, { resourceRefs: ['*', fixture.toolRef] })
+      })
+      await backend.finishAllScheduledFunctions(() => undefined)
+      await observeHealthyReadiness(backend, fixture, suffix)
+      const input = { request: 'Perth' }
+      const subjects = await prepareSubjects(backend, agent, fixture.toolRef, input, suffix)
+      const principal = { kind: 'agent_key' as const, ...agent.principal }
+      const turn = await backend.mutation(api.chatTurns.startTurn, await withSourceWrite('protected_action', {
+        principal, clientTurnId: suffix, prompt: 'Quote a Tool',
+        operationKey: `turn:start:${suffix}`, correlationId: `turn:start:${suffix}`,
+      }))
+      expect(await backend.mutation(internal.chatTurns.finishTurn, {
+        turnRef: turn.turnRef, promptMessageId: turn.promptMessageId, state: 'working',
+      })).toBe(true)
+      const issueArgs = {
+        operationKey: `quote:issue:${suffix}`, correlationId: `quote:issue:${suffix}`,
+        principal: agent.principal, toolRef: fixture.toolRef, input,
+        formance: formanceSnapshot(subjects), turnRef: turn.turnRef,
+      }
+      const issued = order === 'issue-first'
+        ? await backend.mutation(internal.capabilityQuotes.issueQuote, issueArgs) : null
+      if (issued !== null) expect(issued.kind).toBe('committed')
+      await backend.run(async ctx => {
+        const thread = await ctx.db.query('chatThreads')
+          .withIndex('by_threadId', q => q.eq('threadId', turn.threadId)).unique()
+        if (thread === null) throw new Error('thread_missing')
+        await ctx.db.patch(thread._id, { activeStartedAt: Date.now() - ACTIVE_CHAT_GENERATION_MS - 1 })
+      })
+      const next = await backend.mutation(api.chatTurns.startTurn, await withSourceWrite('protected_action', {
+        principal, threadId: turn.threadId, clientTurnId: `next-${suffix}`, prompt: 'New Quote intent',
+        operationKey: `turn:next:${suffix}`, correlationId: `turn:next:${suffix}`,
+      }))
+      expect(next.promptMessageId).not.toBe(turn.promptMessageId)
+      expect(await backend.run(ctx => ctx.db.query('chatTurns')
+        .withIndex('by_turnRef', q => q.eq('turnRef', turn.turnRef)).unique()))
+        .toMatchObject({ state: 'canceled', cancelRequestedAt: expect.any(Number) })
+      expect(await backend.mutation(internal.capabilityQuotes.issueQuote, issueArgs))
+        .toMatchObject({ kind: 'refused', code: 'grant_not_found', retryable: false })
+      await backend.run(async ctx => {
+        const old = await ctx.db.query('chatTurns')
+          .withIndex('by_turnRef', q => q.eq('turnRef', turn.turnRef)).unique()
+        if (old === null) throw new Error('turn_missing')
+        await ctx.db.patch(old._id, { state: 'working', cancelRequestedAt: undefined })
+      })
+      expect(await backend.mutation(internal.capabilityQuotes.issueQuote, issueArgs))
+        .toMatchObject({ kind: 'refused', code: 'grant_not_found', retryable: false })
+      const quotes = await backend.run(ctx => ctx.db.query('capabilityQuotes').collect())
+      expect(quotes).toHaveLength(order === 'issue-first' ? 1 : 0)
+      if (issued?.kind === 'committed') expect(quotes[0]?.quoteRef).toBe(issued.quoteRef)
+    },
+  )
+
+  it('refuses mismatched and terminal Turns without writing Quote material', async () => {
+    const backend = convexTestWithMarketComponents()
+    const suffix = 'quote-turn-invalid'
+    const fixture = await publishCurrentTool(backend, suffix)
+    await seedCommercialPolicies(backend, suffix, Date.now())
+    const agent = await seedAgent(backend, { canonicalAccountRef: fixture.accountRef }, fixture.toolRef, suffix, '20000000')
+    await backend.run(async ctx => {
+      const grant = await ctx.db.query('authorityDelegationGrants')
+        .withIndex('by_grantRef', q => q.eq('grantRef', agent.grant.grantRef)).unique()
+      if (grant === null) throw new Error('quote_turn_delegation_missing')
+      await ctx.db.patch(grant._id, { resourceRefs: ['*', fixture.toolRef] })
+    })
+    await backend.finishAllScheduledFunctions(() => undefined)
+    await observeHealthyReadiness(backend, fixture, suffix)
+    const input = { request: 'Perth' }
+    const subjects = await prepareSubjects(backend, agent, fixture.toolRef, input, suffix)
+    const principal: QuotePrincipal & { kind: 'agent_key' } = { kind: 'agent_key', ...agent.principal }
+    const turn = await backend.mutation(api.chatTurns.startTurn, await withSourceWrite('protected_action', {
+      principal, clientTurnId: suffix, prompt: 'Quote a Tool',
+      operationKey: `turn:start:${suffix}`, correlationId: `turn:start:${suffix}`,
+    }))
+    expect(await backend.mutation(internal.chatTurns.finishTurn, {
+      turnRef: turn.turnRef, promptMessageId: turn.promptMessageId, state: 'working',
+    })).toBe(true)
+    const stored = await backend.run(ctx => ctx.db.query('chatTurns')
+      .withIndex('by_turnRef', q => q.eq('turnRef', turn.turnRef)).unique())
+    if (stored === null) throw new Error('quote_turn_missing')
+    for (const patch of [
+      { principalRef: 'wrong-principal' }, { accountRef: 'wrong-account' },
+      { credentialLocator: 'wrong-credential' }, { grantRef: 'wrong-grant' },
+      { state: 'submitted' as const }, { state: 'input-required' as const },
+      { state: 'auth-required' as const }, { state: 'completed' as const },
+      { state: 'failed' as const }, { state: 'rejected' as const },
+    ]) {
+      await backend.run(ctx => ctx.db.patch(stored._id, patch))
+      expect(await backend.mutation(internal.capabilityQuotes.issueQuote, {
+        operationKey: `quote:issue:${suffix}`, correlationId: `quote:issue:${suffix}`,
+        principal: agent.principal, toolRef: fixture.toolRef, input,
+        formance: formanceSnapshot(subjects), turnRef: turn.turnRef,
+      })).toMatchObject({ kind: 'refused', code: 'grant_not_found', retryable: false })
+      expect(await backend.run(ctx => ctx.db.query('capabilityQuotes').take(1))).toEqual([])
+      await backend.run(ctx => ctx.db.patch(stored._id, {
+        principalRef: stored.principalRef, accountRef: stored.accountRef,
+        credentialLocator: stored.credentialLocator, grantRef: stored.grantRef,
+        state: stored.state,
+      }))
+    }
   })
 })
 

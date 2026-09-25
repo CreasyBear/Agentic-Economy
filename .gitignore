@@ -93,3 +93,6 @@ public/downloads/*.tgz
 !/docs/glossary.md
 !/docs/architecture/
 !/docs/architecture/*.md
+
+# local deepsec scanner workspace (contains secrets, ~750MB)
+/.deepsec/

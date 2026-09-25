@@ -20,6 +20,7 @@ import {
   type CapabilityPublicationSourceSelector,
   type CanonicalCapabilityPublicationDraft,
 } from '../publication-importer-types'
+import { publicationInputQuality, type CapabilityPublicationQualityNext } from './input-quality'
 import {
   compareExactAmounts,
   displayPriceFromPricingConfig,
@@ -135,7 +136,7 @@ export async function preparePublicationDraft(input: Readonly<{
   derefSchema?: SchemaDereferencer | undefined
 }>): Promise<
   | Readonly<{ kind: 'prepared'; draft: CanonicalCapabilityPublicationDraft; encoded: EncodedCapabilityContractDocument; prepared: PreparedPublicationMaterial } & PreparedPublicationDraft>
-  | Readonly<{ kind: 'refused'; reason: PreparePublicationDraftRefusal }>
+  | Readonly<{ kind: 'refused'; reason: PreparePublicationDraftRefusal; next?: readonly CapabilityPublicationQualityNext[] }>
 > {
   if (!validCapabilityPublicationSourceRevision(input.sourceRevision)) {
     return { kind: 'refused', reason: 'source_revision_invalid' }
@@ -150,7 +151,7 @@ export async function preparePublicationDraft(input: Readonly<{
   } catch (cause) {
     return degradeBackend(cause, { kind: 'refused' as const, reason: 'source_invalid' as const }, { site: 'preparePublicationDraft', reason: 'invalid_response' })
   }
-  if (normalized.kind === 'refused') return { kind: 'refused', reason: normalized.reason }
+  if (normalized.kind === 'refused') return normalized
 
   const offering = input.origin === undefined && input.offering === undefined
     ? normalized.draft.offering
@@ -256,7 +257,7 @@ export async function admitPublicationDraft(input: Readonly<{
   origin?: CapabilityOfferingOrigin | undefined
 }>): Promise<
   | Readonly<{ kind: 'admitted' } & AdmittedPublicationDraft>
-  | Readonly<{ kind: 'refused'; reason: AdmitPublicationDraftRefusal }>
+  | Readonly<{ kind: 'refused'; reason: AdmitPublicationDraftRefusal; next?: readonly CapabilityPublicationQualityNext[] }>
 > {
   let encoded: EncodedCapabilityContractDocument
   try {
@@ -269,6 +270,8 @@ export async function admitPublicationDraft(input: Readonly<{
         : 'contract_invalid',
     }
   }
+  const quality = publicationInputQuality(encoded.contract)
+  if (quality !== undefined) return quality
   const prepared = input.prepared
   if (!isCanonicalDigest(prepared.sourceDigest) || !isCanonicalDigest(prepared.priceDigest)) {
     return { kind: 'refused', reason: 'source_invalid' }

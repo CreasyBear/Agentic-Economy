@@ -1,6 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import { chatSuggestions, chatEmpty } from '@/lib/public/chat-ia'
 import {
   CHAT_TOOL_IDS,
   clearAnonymousChatHandoff,
@@ -21,17 +20,6 @@ afterEach(() => {
   vi.unstubAllGlobals()
 })
 
-describe('chat IA', () => {
-  it('keeps empty-path suggestions inside the six-tool market loop', () => {
-    expect(chatEmpty.title).toBe('Find Tools for an Agent.')
-    expect(chatEmpty.description).toBe(
-      'Compare and inspect. Then use one with your Agent. Price is on the card.',
-    )
-    const serialized = JSON.stringify(chatSuggestions)
-    expect(serialized).toMatch(/search|compare|inspect|call/i)
-    expect(serialized).not.toMatch(/write a poem|plan my week|remember this/i)
-  })
-})
 
 describe('anonymous chat recovery', () => {
   it('retains the HTTPS failure reference and offers a safe catalogue continuation', async () => {
@@ -182,20 +170,24 @@ describe('transcript projector', () => {
           type: `tool-${providerSafeActionToolName('registry.tools.search')}`,
           state: 'output-available',
           output: {
-            kind: 'ok',
+            kind: 'matched',
             schemaVersion: 'registry-tools:v3',
             query: 'weather',
-            count: 12,
-            items: [{
+            partialResults: false,
+            results: [{
               toolRef: searchRef,
-              capabilityId: 'weather.forecast',
               title: 'Weather finder',
-              description: 'Look up forecasts',
-              provider: { name: 'Sky Co', slug: 'sky-co' },
-              priceLabel: 'USD 0.50',
-              healthStatus: 'operational',
+              summary: 'Look up forecasts',
+              matchReason: 'Weather lookup',
+              readiness: 'unverified',
+              entitlement: 'public',
+              price: { kind: 'indicative', label: 'USD 0.50' },
+              details: { capabilityId: 'weather.forecast', provider: { name: 'Sky Co', slug: 'sky-co' }, description: 'Look up forecasts', listingTier: 'listed' },
+              next: [{ action: 'describe', args: { toolRef: searchRef }, authority: 'public' }],
             }],
+            recommendation: { mode: 'fast', engine: 'jev_system_one', text: 'Inspect Weather finder before use.', citations: [{ toolRef: searchRef, span: { start: 8, end: 22 } }] },
             pagination: { limit: 10, hasMore: true, nextCursor: 'next' },
+            next: [{ action: 'next-page', args: { query: 'weather', cursor: 'next' }, authority: 'public' }],
           },
         },
         {
@@ -256,9 +248,9 @@ describe('transcript projector', () => {
       title: 'Weather finder',
       provider: 'Sky Co',
       price: 'USD 0.50',
-      readiness: 'Operational',
+      readiness: 'Not yet verified',
     }])
-    expect(search?.kind === 'choices' ? search.count : undefined).toBe(12)
+    expect(search?.kind === 'choices' ? search.count : undefined).toBe(1)
     expect(inspection?.kind === 'inspect' ? inspection.facts : undefined).toEqual([
       { label: 'Decision price', value: 'USD 1.99' },
       { label: 'Account available', value: 'USD 5.00' },
@@ -598,21 +590,24 @@ describe('transcript projector', () => {
         type: `tool-${providerSafeActionToolName('registry.tools.search')}`,
         state: 'output-available',
         output: {
-          kind: 'ok',
+          kind: 'matched',
           schemaVersion: 'registry-tools:v3',
           query: 'weather',
-          count: 1,
-          items: [{
+          partialResults: false,
+          results: [{
             toolRef: searchRef,
-            capabilityId: 'weather.forecast',
             title: 'Weather finder',
-            description: 'Look up forecasts',
-            provider: { name: 'Sky Co', slug: 'sky-co' },
-            priceLabel: 'USD 0.50',
-            healthStatus: 'operational',
-            raw: 'HANDOFF_RAW_SECRET',
+            summary: 'Look up forecasts',
+            matchReason: 'Weather lookup',
+            readiness: 'unverified',
+            entitlement: 'public',
+            price: { kind: 'indicative', label: 'USD 0.50' },
+            details: { capabilityId: 'weather.forecast', provider: { name: 'Sky Co', slug: 'sky-co' }, description: 'Look up forecasts', listingTier: 'listed', raw: 'HANDOFF_RAW_SECRET' },
+            next: [{ action: 'describe', args: { toolRef: searchRef }, authority: 'public' }],
           }],
+          recommendation: { mode: 'fast', engine: 'jev_system_one', text: 'Inspect Weather finder before use.', citations: [{ toolRef: searchRef, span: { start: 8, end: 22 } }] },
           pagination: { limit: 10, hasMore: false },
+          next: [{ action: 'broaden', args: { query: 'weather' }, authority: 'public' }],
         },
       }],
     }])
@@ -624,7 +619,7 @@ describe('transcript projector', () => {
       title: 'Weather finder',
       provider: 'Sky Co',
       price: 'USD 0.50',
-      readiness: 'Operational',
+      readiness: 'Not yet verified',
     }])
     expect(JSON.stringify(stored)).not.toContain('HANDOFF_RAW_SECRET')
     clearAnonymousChatHandoff('handoff-thread')

@@ -66,6 +66,7 @@ export function toolMarketLines(canonicalBaseUrl: string): readonly string[] {
     'Never infer fulfilment, payment, deployment, or a receipt from discovery, a caller key, or a pending Call.',
     '',
     'Retry only when retryable=true; unknown outcomes require status then reconcile.',
+    'Keep the `x-ae-request-id` response header and include it when contacting support or reconciling a Call; never include a credential.',
   ]
 }
 

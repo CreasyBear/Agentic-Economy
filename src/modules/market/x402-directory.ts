@@ -50,7 +50,7 @@ export type X402DirectoryEntry = Readonly<{
   provenance?: Readonly<{ directory: 'Coinbase Bazaar'; metadata: 'provider_declared'; updatedAt?: string }>
   activity?: Readonly<{ calls30d?: number; payers30d?: number; lastCalledAt?: string }>
   provider: string
-  prices: readonly Readonly<{ network: string; networkLabel?: string; scheme: string; amount: string; asset?: string; symbol?: string; decimalAmount?: string }>[]
+  prices: readonly Readonly<{ network: string; networkLabel?: string; scheme: string; amount: string; asset?: string; symbol?: string; decimalAmount?: string; payTo?: string }>[]
   metadataJson: string
 }>
 

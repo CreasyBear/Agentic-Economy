@@ -46,8 +46,8 @@ type PublicationFixtureInput = Parameters<
  * (`exactOptionalPropertyTypes`). Passing the presentation through
  * untouched fails that stricter type whenever `price` is absent, so drop
  * the key entirely instead of carrying it as an explicit `undefined` -
- * the same pattern `capabilitySupplyShared.ts` uses in
- * `reconcileReadyItems`/`insertOffering`.
+ * the same pattern `facilitatorDiscovery/readyItems.ts` uses in
+ * `reconcileReadyItems`.
  */
 export function withDefinedPrice<T extends { price?: unknown }>(presentation: T) {
   const { price, ...rest } = presentation

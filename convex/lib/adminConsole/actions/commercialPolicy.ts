@@ -3,8 +3,8 @@ import type { DataModel } from '../../../_generated/dataModel'
 import type { MutationCtx } from '../../../_generated/server'
 import { env } from '../../../_generated/server'
 import { resolveBusinessActor } from '../../../authz'
-import type { AdminCommandSpec } from '../commandEnvelope'
-import { ADMIN_OPAQUE_REF_PATTERN, type AdminCommandWireArgs } from '../validators'
+import type { AdminCommandSpec } from '../commands/commandEnvelope'
+import { ADMIN_OPAQUE_REF_PATTERN, type AdminCommandWireArgs } from '../commands/contracts'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import {
   COMMERCIAL_POLICY_FAMILIES,

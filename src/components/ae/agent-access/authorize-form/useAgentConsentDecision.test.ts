@@ -301,11 +301,16 @@ describe('useAgentConsentDecision', () => {
 
   it('calls searchMarketTools with trimmed query and limit', async () => {
     vi.mocked(searchMarketTools).mockResolvedValue({
-      kind: 'ok',
+      kind: 'noMatch',
       schemaVersion: 'registry-tools:v3',
       query: 'weather',
-      count: 0,
-      items: [],
+      scope: 'exhausted',
+      results: [],
+      nearMisses: [],
+      reason: 'No suitable Tool found.',
+      suggestions: [],
+      partialResults: false,
+      next: [{ action: 'broaden', authority: 'public', args: { query: 'weather' } }],
       pagination: { limit: 8, hasMore: false },
     })
     const { result } = renderHook(() => useAgentConsentDecision({

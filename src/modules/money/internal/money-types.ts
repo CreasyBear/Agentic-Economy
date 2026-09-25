@@ -1,4 +1,5 @@
 import type { ExactAmount } from './exact-amount'
+import type { ConnectAccountView } from './connect-contracts'
 
 export type PricingResolution =
   | Readonly<{
@@ -76,12 +77,7 @@ export type ChargeState =
   | 'outcome_unknown'
   | 'refunded'
 
-export type PayoutAccountState =
-  | 'not_started'
-  | 'onboarding_started'
-  | 'submitted'
-  | 'restricted'
-  | 'ready'
+export type PayoutAccountState = ConnectAccountView['state']
 
 export type PayoutState =
   | 'review'
@@ -114,23 +110,7 @@ export type MoneyStripeEvent = Readonly<{
   appliedAt?: number
 }>
 
-export type MoneyPayoutAccount = Readonly<{
-  businessId: string
-  currency: string
-  exponent: number
-  stripeAccountId: string
-  state: PayoutAccountState
-  detailsSubmitted: boolean
-  recipientCapabilityActive: boolean
-  requirementsDigest: string
-  providerObjectDigest?: string
-  lastStripePayloadDigest?: string
-  lastStripeObservedAt?: number
-  version?: number
-  lastStripeEventId?: string
-  createdAt: number
-  updatedAt: number
-}>
+export type MoneyPayoutAccount = ConnectAccountView
 
 export type MoneyPayout = Readonly<{
   payoutRef: string

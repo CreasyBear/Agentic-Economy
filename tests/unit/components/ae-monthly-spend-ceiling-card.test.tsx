@@ -52,10 +52,8 @@ describe('AeMonthlySpendCeilingCard (W-23)', () => {
       />,
     )
 
-    expect(screen.getByRole('heading', { name: 'Organization monthly spending cap' })).toBeInTheDocument()
-    expect(
-      screen.getByText(/monthly spending cap is disabled/i),
-    ).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Monthly spending cap' })).toBeInTheDocument()
+    expect(screen.getByRole('status')).toHaveTextContent(/off — prepaid credit/i)
     expect(screen.getByRole('button', { name: 'Set limit' })).toBeInTheDocument()
     expect(screen.queryByText(/approaching monthly limit/i)).not.toBeInTheDocument()
     expect(screen.queryByText(/monthly spending limit reached/i)).not.toBeInTheDocument()

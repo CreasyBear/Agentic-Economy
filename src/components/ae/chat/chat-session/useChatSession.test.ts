@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 
+import { getFunctionName } from 'convex/server'
 import { isValidElement } from 'react'
 import { act, renderHook, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -38,6 +39,10 @@ vi.mock('convex/react', () => ({
     useQueryCallsRef.current.push(args)
     return undefined
   },
+  usePaginatedQuery: (...args: unknown[]) => {
+    useQueryCallsRef.current.push(args)
+    return { results: [], status: 'Exhausted', loadMore: vi.fn() }
+  },
   useMutation: () => sendMessageMutationMock,
 }))
 
@@ -60,6 +65,7 @@ vi.mock('../presentation', async (importOriginal) => {
 
 import type { ChatHistoryProps } from './chat-session.contracts'
 import { useChatSession } from './useChatSession'
+import { readAnonymousSession, saveAnonymousSession } from './anonymous-session'
 
 const baseProps = {
   threadId: null as string | null,
@@ -67,12 +73,18 @@ const baseProps = {
   onNewChat: vi.fn(),
 }
 
+function latestQueryArgs(calls: unknown[][], name: string): unknown {
+  return calls.findLast(([reference]) =>
+    getFunctionName(reference as Parameters<typeof getFunctionName>[0]) === name,
+  )?.[1]
+}
+
 function latestListThreadArgs(calls: unknown[][]): unknown {
-  return calls.at(-3)?.[1]
+  return latestQueryArgs(calls, 'chatThreads:listThreads')
 }
 
 function latestSearchThreadArgs(calls: unknown[][]): unknown {
-  return calls.at(-2)?.[1]
+  return latestQueryArgs(calls, 'chatThreads:searchThreads')
 }
 
 async function* threeChunkStream() {
@@ -98,10 +110,30 @@ describe('useChatSession', () => {
     sendMessageMutationMock.mockResolvedValue({ threadId: 'thread-created' })
     readUIMessageStreamMock.mockImplementation(() => threeChunkStream())
     sendMessagesMock.mockResolvedValue({ stream: 'mock' })
+    sessionStorage.clear()
   })
 
   afterEach(() => {
     vi.useRealTimers()
+  })
+
+  it('fills and focuses suggestions without a request; retries the prior question when explicitly asked', async () => {
+    const input = document.createElement('textarea')
+    input.id = 'tool-chat-prompt'
+    document.body.append(input)
+    try {
+      const { result } = renderHook(() => useChatSession(baseProps))
+      act(() => result.current.transcript.onSuggest?.('Compare weather tools'))
+      expect(result.current.composer.prompt).toBe('Compare weather tools')
+      expect(document.activeElement).toBe(input)
+      expect(sendMessagesMock).not.toHaveBeenCalled()
+      readUIMessageStreamMock.mockImplementation(() => singleAssistantStream('done'))
+      await act(async () => result.current.transcript.onRetry?.('Find Sydney weather'))
+      await waitFor(() => expect(sendMessagesMock).toHaveBeenCalledTimes(1))
+      expect(result.current.transcript.messages[0]?.parts).toMatchObject([{ text: 'Find Sydney weather' }])
+    } finally {
+      input.remove()
+    }
   })
 
   it('admits one anonymous transport call when submit repeats before busy settles', async () => {
@@ -142,6 +174,42 @@ describe('useChatSession', () => {
     })
     const assistantMessages = result.current.transcript.messages.filter((message) => message.role === 'assistant')
     expect(assistantMessages[0]?.parts[0]).toMatchObject({ type: 'text', text: 'alpha beta gamma' })
+  })
+
+  it('restores a guest exchange after reload without resending the URL question', async () => {
+    readUIMessageStreamMock.mockImplementation(() => singleAssistantStream('The provider says weather forecasts are available. Health is not yet verified.'))
+    const props = { ...baseProps, initialPrompt: 'find Sydney weather' }
+    const first = renderHook(() => useChatSession(props))
+    await waitFor(() => expect(first.result.current.transcript.messages).toHaveLength(2))
+    expect(first.result.current.transcript.messages[1]?.parts).toMatchObject([{ type: 'text', text: expect.stringContaining('not yet verified') }])
+    expect(sendMessagesMock).toHaveBeenCalledTimes(1)
+    first.unmount()
+
+    const reloaded = renderHook(() => useChatSession(props))
+    await waitFor(() => expect(reloaded.result.current.transcript.messages).toHaveLength(2))
+    expect(reloaded.result.current.transcript.messages[0]?.parts).toMatchObject([{ type: 'text', text: 'find Sydney weather' }])
+    expect(sendMessagesMock).toHaveBeenCalledTimes(1)
+  })
+
+  it('bounds tab history and excludes raw tool output and credential text', () => {
+    const id = '12345678-1234-1234-1234-123456789012'
+    saveAnonymousSession(sessionStorage, {
+      id,
+      messages: Array.from({ length: 20 }, (_, index) => ({
+        id: `guest-${index}`,
+        role: index % 2 === 0 ? 'user' as const : 'assistant' as const,
+        parts: [
+          { type: 'text', text: `weather ${index} bearer abc123secret456 api_key=verysecretvalue` },
+          { type: 'tool-call', output: { privateKey: 'never-store-this' } },
+        ],
+      })),
+    })
+    const stored = sessionStorage.getItem(`ae.chat.anonymous.${id}`)!
+    expect(stored).not.toContain('abc123secret456')
+    expect(stored).not.toContain('verysecretvalue')
+    expect(stored).not.toContain('never-store-this')
+    expect(new TextEncoder().encode(stored).byteLength).toBeLessThanOrEqual(16 * 1024)
+    expect(readAnonymousSession(sessionStorage).messages).toHaveLength(12)
   })
 
   it('keeps optimistic messages when anonymous streaming aborts', async () => {

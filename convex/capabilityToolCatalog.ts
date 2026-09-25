@@ -1,12 +1,11 @@
 "use node"
 
 import { listX402DiscoveryResources, searchX402Resources } from '@coinbase/cdp-sdk'
-import { v } from 'convex/values'
+import { v, type Infer } from 'convex/values'
 import { degradeBackend } from '@/lib/observability/degrade-backend'
 import { readBoundedRequestJson } from '@/lib/server/bounded-request-body'
 import { CURRENT_TOOL_PROJECTION_NAVIGATION } from '@/modules/actions/contract'
 import { isRecord } from '@/modules/common/is-record'
-import { admitFacilitatorDiscoveryItems } from '@/modules/capability-supply/server'
 import {
   deserializeToolDetailResult, deserializeToolSearchResult, serializeToolSearchResult,
   deserializeToolCompareResult, serializeToolDetailResult, serializeToolCompareResult,
@@ -18,12 +17,11 @@ import { defaultDnsResolver, isPublicHttpTarget } from '@/modules/network-guard/
 import { fetchCoinbaseReferenceRate } from '@/modules/money/reference-rate'
 import { quoteManagedX402BuyerAud } from '@/modules/money/public'
 import { TOOL_SEARCH_USE } from '@/modules/registry/tool-reranker'
-import { api, internal } from './_generated/api'
+import { internal } from './_generated/api'
 import { action, internalAction, type ActionCtx } from './_generated/server'
-import { reconcileReadyItems } from './capabilitySupplyShared'
-import { publicSearchReturns, searchArgs, publicDetailReturns, publicCompareReturns, toolRefArgs, compareArgs } from './capabilitySupplyToolQueries'
-import { bindWorkloadCronActionContext } from './workloadCron'
-import { presentSearch as presentSearchDecision, rerankSearch } from './lib/capabilityToolCatalogPresentation'
+import { publicSearchReturns, searchArgs, publicDetailReturns, publicCompareReturns, toolRefArgs, compareArgs } from './lib/capabilitySupply/tool/contracts'
+import { presentSearch as presentSearchDecision } from './lib/capabilitySupply/toolCatalog/presentation'
+import { facilitatorDiscoverySnapshotCandidates } from '@/modules/capability-supply/server'
 
 const PAGE_LIMIT = 20
 const TIMEOUT_MS = 10_000
@@ -90,62 +88,35 @@ async function decorate(ctx: ActionCtx, result: ToolSearchResult): Promise<ToolS
   return result.kind === 'ok' ? { ...result, items: await decorateTools(ctx, result.items) } : result
 }
 
-export const search = action({
-  args: searchArgs,
-  returns: publicSearchReturns,
-  handler: async (ctx, args): Promise<ToolSearchWireResult> => {
-    const parsed = toolSearchInputSchema.safeParse(args)
-    const normalized = parsed.success ? normalizeToolSearchInput({ ...parsed.data, limit: parsed.data.limit ?? 20 }) : undefined
-    if (normalized === undefined) return serializeToolSearchResult(unavailable('query_invalid'))
-    const input: ToolSearchInput = { ...args, ...normalized }
-    if (input.source === undefined || input.source === 'current') {
-      const result: ToolSearchWireResult = await ctx.runQuery(api.capabilitySupplyTools.search, args)
-      return serializeToolSearchResult(await decorate(ctx, deserializeToolSearchResult(result)))
-    }
-    if ((input.source === 'payai' && input.query.trim().length > 0) || (input.query.trim().length > 0 && input.cursor !== undefined)) return serializeToolSearchResult(unavailable('query_invalid'))
-    if (input.cursor !== undefined && (!/^(0|[1-9]\d*)$/u.test(input.cursor) || !Number.isSafeInteger(Number(input.cursor)))) return serializeToolSearchResult(unavailable('query_invalid'))
-    let page: Awaited<ReturnType<typeof fetchCatalogPage>>
-    try { page = await fetchCatalogPage(input) } catch (cause) { return degradeBackend(cause, serializeToolSearchResult(unavailable('source_unavailable')), { site: 'search', reason: 'source_unavailable' }) }
-    const workload = await ctx.runQuery(internal.workloadCron.admit, { name: 'refresh facilitator discovery' })
-    const authorized = bindWorkloadCronActionContext(ctx, { name: 'refresh facilitator discovery', snapshot: workload })
-    const refs = new Set<string>()
-    // Isolate invalid candidates: one refused publication never discards its page.
-    for (const candidate of page.items.slice(0, PAGE_LIMIT)) {
-      try {
-        const admission = await admitFacilitatorDiscoveryItems([candidate])
-        if (admission.admitted.length === 0) continue
-        const result = await authorized.runMutation(internal.facilitatorDiscovery.reconcile, { items: [...structuredClone(reconcileReadyItems(admission.admitted))], complete: false, deadlineAt: Date.now() + TIMEOUT_MS, workload })
-        for (const ref of result.toolRefs) refs.add(ref)
-      } catch (cause) {
-        // Candidate failure may be isolated; revoked workload authority may not.
-        degradeBackend(cause, undefined, { site: 'search', reason: 'source_unavailable' })
-        await ctx.runQuery(internal.workloadCron.reconcile, { name: 'refresh facilitator discovery', snapshot: workload })
-      }
-    }
-    const selectedRefs = input.filters?.networkId === undefined ? [...refs] : await ctx.runQuery(internal.capabilityToolCatalogData.filterNetwork, { toolRefs: [...refs], networkId: input.filters.networkId })
-    const details = await Promise.all(selectedRefs.map((toolRef) => ctx.runQuery(api.capabilitySupplyTools.detail, { toolRef })))
-    const items = details.flatMap((wire) => {
-      const detail = deserializeToolDetailResult(wire)
-      return detail.kind === 'found' && matchesToolFilters(detail.tool, input.filters ?? {}) ? [detail.tool] : []
-    })
-    return serializeToolSearchResult(await decorate(ctx, { kind: 'ok', schemaVersion: 'registry-tools:v3', query: input.query, items, ranking: [], pagination: { limit: page.limit, hasMore: page.nextCursor !== undefined, ...(page.nextCursor === undefined ? {} : { nextCursor: page.nextCursor }) }, ...(page.partialResults === undefined ? {} : { partialResults: page.partialResults }), navigation }))
-  },
-})
+const catalogSearchArgs = v.object(searchArgs)
+const searchHandler = async (ctx: ActionCtx, args: Infer<typeof catalogSearchArgs>): Promise<ToolSearchWireResult> => {
+  const parsed = toolSearchInputSchema.safeParse(args)
+  const normalized = parsed.success ? normalizeToolSearchInput({ ...parsed.data, limit: parsed.data.limit ?? 20 }) : undefined
+  if (normalized === undefined) return serializeToolSearchResult(unavailable('query_invalid'))
+  const input: ToolSearchInput = { ...args, ...normalized }
+  if (input.source === undefined || input.source === 'current') {
+    const result: ToolSearchWireResult = await ctx.runQuery(internal.capabilitySupplyTools.searchInternal, args)
+    return serializeToolSearchResult(await decorate(ctx, deserializeToolSearchResult(result)))
+  }
+  if ((input.source === 'payai' && input.query.trim().length > 0) || (input.query.trim().length > 0 && input.cursor !== undefined)) return serializeToolSearchResult(unavailable('query_invalid'))
+  if (input.cursor !== undefined && (!/^(0|[1-9]\d*)$/u.test(input.cursor) || !Number.isSafeInteger(Number(input.cursor)))) return serializeToolSearchResult(unavailable('query_invalid'))
+  let page: Awaited<ReturnType<typeof fetchCatalogPage>>
+  try { page = await fetchCatalogPage(input) } catch (cause) { return degradeBackend(cause, serializeToolSearchResult(unavailable('source_unavailable')), { site: 'search', reason: 'source_unavailable' }) }
+  const candidates = await facilitatorDiscoverySnapshotCandidates(page.items)
+  const snapshot = await ctx.runQuery(internal.capabilityToolCatalogData.sourceSnapshot, { candidates })
+  const refs = [...new Set(snapshot.toolRefs)]
+  const selectedRefs = input.filters?.networkId === undefined ? refs : await ctx.runQuery(internal.capabilityToolCatalogData.filterNetwork, { toolRefs: refs, networkId: input.filters.networkId })
+  const details = await Promise.all(selectedRefs.map((toolRef) => ctx.runQuery(internal.capabilitySupplyTools.detailInternal, { toolRef })))
+  const items = details.flatMap((wire) => {
+    const detail = deserializeToolDetailResult(wire)
+    return detail.kind === 'found' && matchesToolFilters(detail.tool, input.filters ?? {}) ? [detail.tool] : []
+  })
+  return serializeToolSearchResult(await decorate(ctx, { kind: 'ok', schemaVersion: 'registry-tools:v3', query: input.query, items, ranking: [], pagination: { limit: page.limit, hasMore: page.nextCursor !== undefined, ...(page.nextCursor === undefined ? {} : { nextCursor: page.nextCursor }) }, ...(page.partialResults || snapshot.incomplete || candidates.length < page.items.length ? { partialResults: true } : {}), navigation }))
+}
 
-/**
- * Node-only bridge for chat's default Convex runtime. The chat Tool keeps its
- * catalogue read in the default runtime and sends the bounded wire page here
- * so the TypeSafe SDK and server observability dependencies never leak into
- * that runtime. A failed or incomplete Jev decision returns the original page.
- */
-export const rerank = internalAction({
-  args: {
-    result: publicSearchReturns,
-    query: v.string(),
-  },
-  returns: publicSearchReturns,
-  handler: (_ctx, args) => rerankSearch({ result: args.result as ToolSearchWireResult, query: args.query }),
-})
+export const search = action({ args: catalogSearchArgs, returns: publicSearchReturns, handler: searchHandler })
+export const searchInternal = internalAction({ args: catalogSearchArgs, returns: publicSearchReturns, handler: searchHandler })
+
 
 const presentSearchReturns = v.object({
   result: publicSearchReturns,
@@ -174,25 +145,23 @@ export const presentSearch = internalAction({
 })
 
 
-export const detail = action({
-  args: toolRefArgs,
-  returns: publicDetailReturns,
-  handler: async (ctx, args): Promise<ToolDetailWireResult> => {
-    const wire: ToolDetailWireResult = await ctx.runQuery(api.capabilitySupplyTools.detail, args)
-    const result = deserializeToolDetailResult(wire)
-    if (result.kind !== 'found') return wire
-    const [tool] = await decorateTools(ctx, [result.tool])
-    return tool === undefined ? wire : serializeToolDetailResult({ ...result, tool })
-  },
-})
+const detailHandler = async (ctx: ActionCtx, args: { toolRef: string }): Promise<ToolDetailWireResult> => {
+  const wire: ToolDetailWireResult = await ctx.runQuery(internal.capabilitySupplyTools.detailInternal, args)
+  const result = deserializeToolDetailResult(wire)
+  if (result.kind !== 'found') return wire
+  const [tool] = await decorateTools(ctx, [result.tool])
+  return tool === undefined ? wire : serializeToolDetailResult({ ...result, tool })
+}
 
-export const compare = action({
-  args: compareArgs,
-  returns: publicCompareReturns,
-  handler: async (ctx, args): Promise<ToolCompareWireResult> => {
-    const wire: ToolCompareWireResult = await ctx.runQuery(api.capabilitySupplyTools.compare, args)
-    const result = deserializeToolCompareResult(wire)
-    if (result.kind !== 'ok') return wire
-    return serializeToolCompareResult({ ...result, tools: await decorateTools(ctx, result.tools) })
-  },
-})
+export const detail = action({ args: toolRefArgs, returns: publicDetailReturns, handler: detailHandler })
+export const detailInternal = internalAction({ args: toolRefArgs, returns: publicDetailReturns, handler: detailHandler })
+
+const compareHandler = async (ctx: ActionCtx, args: { toolRefs: string[] }): Promise<ToolCompareWireResult> => {
+  const wire: ToolCompareWireResult = await ctx.runQuery(internal.capabilitySupplyTools.compareInternal, args)
+  const result = deserializeToolCompareResult(wire)
+  if (result.kind !== 'ok') return wire
+  return serializeToolCompareResult({ ...result, tools: await decorateTools(ctx, result.tools) })
+}
+
+export const compare = action({ args: compareArgs, returns: publicCompareReturns, handler: compareHandler })
+export const compareInternal = internalAction({ args: compareArgs, returns: publicCompareReturns, handler: compareHandler })

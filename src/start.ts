@@ -73,12 +73,13 @@ const csrfMiddleware = createCsrfMiddleware({
   filter: (ctx) => ctx.handlerType === 'serverFn',
 })
 const sourceWriteAdmissionMiddleware = createSourceWriteAdmissionMiddleware()
-const securityHeadersRequestMiddleware = createMiddleware().server(async (ctx) => {
+export const securityHeadersRequestMiddleware = createMiddleware().server(async (ctx) => {
   const result = await ctx.next()
-  return {
-    ...result,
-    response: applySecurityHeadersToResponse(result.response, { cspMode: resolveCspModeFromEnv() }),
+  const response = applySecurityHeadersToResponse(result.response, { cspMode: resolveCspModeFromEnv() })
+  if (new URL(ctx.request.url).pathname === '/') {
+    response.headers.set('Link', '</llms.txt>; rel="describedby"; type="text/plain", </.well-known/api-catalog>; rel="api-catalog"')
   }
+  return { ...result, response }
 })
 /**
  * Placed after the security-header middleware so a negotiated markdown

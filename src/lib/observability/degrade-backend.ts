@@ -1,4 +1,5 @@
-import type { DegradedReason } from '@/lib/errors'
+/** Canonical reasons a degraded (fallback-served) result can occur. */
+export type DegradedReason = 'source_unavailable' | 'timeout' | 'not_found' | 'forbidden' | 'invalid_response'
 
 /**
  * Backend (Convex) counterpart to `degrade()`. `degrade.ts` reports to Sentry
@@ -10,8 +11,7 @@ import type { DegradedReason } from '@/lib/errors'
  * does not throw is surfaced via `console.*` and picked up by Convex Log
  * Streaming (Convex's native Sentry integration only reports THROWN
  * exceptions). Hence this zero-dependency variant: no Sentry, no TanStack,
- * no Convex imports — only a type-only import of `DegradedReason`, which
- * erases at build.
+ * no Convex imports — only a local `DegradedReason` type.
  *
  * Degrading is fine, degrading silently is not. Use this instead of a bare
  * `} catch {` in Convex code whenever a caller falls back to a default

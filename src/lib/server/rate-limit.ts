@@ -4,10 +4,8 @@ import {
   sourceMutation,
   type ConvexServerFunctionAssertion,
 } from '@/lib/server/convex-source'
-import { readCookie } from '@/lib/http/cookies'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { problem } from '@/lib/server/problem'
-import { httpRateLimitCapacity, httpRateLimitWindowMs } from '@/modules/security/rate-limit-policy'
 
 export type RateLimitName =
   | 'public-read'
@@ -105,12 +103,11 @@ export async function withHttpRateLimit(
   operation: () => Promise<Response>,
 ): Promise<Response> {
   const admission = await assertHttpAdmission(request, name)
-  if (!admission.ok) return rateLimitedResponse(admission.retryAfter, name)
-  const response = await operation()
-  return withRateLimitHeaders(response, name, admission)
+  if (!admission.ok) return rateLimitedResponse(admission.retryAfter)
+  return await operation()
 }
 
-export function rateLimitedResponse(retryAfter: number, name?: HttpRateLimitName): Response {
+export function rateLimitedResponse(retryAfter: number): Response {
   const retryAfterSeconds = Math.max(1, Math.ceil(retryAfter / 1_000))
   return problem(
     {
@@ -122,73 +119,27 @@ export function rateLimitedResponse(retryAfter: number, name?: HttpRateLimitName
     },
     {
       'Retry-After': String(retryAfterSeconds),
-      ...(name === undefined ? {} : rateLimitHeaders(name, { ok: false, retryAfter })),
     },
   )
 }
 
-/**
- * IETF `draft-ietf-httpapi-ratelimit-headers` fields. `Limit`/`Reset`'s
- * window come from the shared policy in
- * `@/modules/security/rate-limit-policy` (the same capacity/window
- * `convex/lib/rateLimit.ts` hands to the `@convex-dev/rate-limiter`
- * component) plus this admission's `ok`/`retryAfter`. The limiter's public
- * admission contract (`RateLimiter.limit`, see
- * `node_modules/@convex-dev/rate-limiter/src/client/index.ts`) returns only
- * `{ ok, retryAfter? }` - it does not report the bucket's live fill level on
- * success, and getting that would need a second component round trip
- * (`RateLimiter.getValue`, a separate query) racing the mutation that just
- * ran. Not cheap enough to justify here, so `Remaining` reports the two
- * states admission actually distinguishes: 0 once a request is rejected, the
- * full window otherwise. `Reset` uses the limiter's own `retryAfter` when it
- * computed one (the 429 case: exactly when the next token is available);
- * otherwise it reports the bucket's configured window, the worst-case time
- * to a full refill.
- */
-function rateLimitHeaders(name: HttpRateLimitName, admission: RateLimitResult): Record<string, string> {
-  const limit = httpRateLimitCapacity(name)
-  const resetMs = admission.retryAfter ?? httpRateLimitWindowMs(name)
-  return {
-    'RateLimit-Limit': String(limit),
-    'RateLimit-Remaining': String(admission.ok ? limit : 0),
-    'RateLimit-Reset': String(Math.max(1, Math.ceil(resetMs / 1_000))),
-  }
-}
-
-function withRateLimitHeaders(response: Response, name: HttpRateLimitName, admission: RateLimitResult): Response {
-  const headers = new Headers(response.headers)
-  for (const [key, value] of Object.entries(rateLimitHeaders(name, admission))) headers.set(key, value)
-  return new Response(response.body, { status: response.status, statusText: response.statusText, headers })
-}
-
 export function requestAdmissionKey(request: Request, keySuffix?: string): string {
-  const identity = requestIdentity(request)
-  const base = `${identity.kind}:${canonicalDigest(identity.value)}`
+  const base = `ip:${canonicalDigest(trustedIngressIp(request))}`
   return keySuffix === undefined || keySuffix.length === 0
     ? base
     : `${base}:${canonicalDigest(keySuffix)}`
 }
 
 export function anonymousChatAdmissionKey(request: Request): string {
-  const trustedIngressIp = firstNonEmptyHeader(request, [
-    'x-vercel-forwarded-for',
-    'cf-connecting-ip',
-    'x-real-ip',
-  ])?.split(',')[0]?.trim() || 'unknown'
-  return `ip:${canonicalDigest(trustedIngressIp)}:${canonicalDigest('chat-anonymous')}`
+  return `ip:${canonicalDigest(trustedIngressIp(request))}:${canonicalDigest('chat-anonymous')}`
 }
 
-function requestIdentity(request: Request): Readonly<{ kind: 'session' | 'ip'; value: string }> {
-  const cookieHeader = request.headers.get('cookie')
-  const session = firstNonEmptyHeader(request, ['x-ae-session-id', 'x-session-id'])
-    ?? readCookie(cookieHeader, 'ae_session')
-    ?? readCookie(cookieHeader, 'pseudonymous_session_id')
-    ?? readCookie(cookieHeader, 'session_id')
-  if (session !== undefined) return { kind: 'session', value: session }
-
-  const ip = firstNonEmptyHeader(request, ['cf-connecting-ip', 'x-real-ip'])
-    ?? request.headers.get('x-forwarded-for')?.split(',')[0]?.trim()
-  return { kind: 'ip', value: ip === undefined || ip.length === 0 ? 'unknown' : ip }
+function trustedIngressIp(request: Request): string {
+  // Client-IP trust assumes the Vercel deploy host (vercel.json); off-Vercel header trust is dev-only.
+  const ingress = process.env.VERCEL === undefined
+    ? firstNonEmptyHeader(request, ['x-vercel-forwarded-for', 'cf-connecting-ip', 'x-real-ip'])
+    : request.headers.get('x-vercel-forwarded-for')
+  return ingress?.split(',')[0]?.trim() || 'unknown'
 }
 
 function firstNonEmptyHeader(request: Request, names: readonly string[]): string | undefined {

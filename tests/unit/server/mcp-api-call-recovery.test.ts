@@ -181,9 +181,10 @@ describe('MCP host adapter operation recovery', () => {
 
     expect(response.status).toBe(200)
     const body = await readMcpBody(response)
-    expect(body.result).toMatchObject({
-      structuredContent: { result: statusResult },
-    })
+    expect(body.result?.structuredContent).toMatchObject({ result: statusResult, next: [
+      { action: 'status', args: { ref: { kind: 'call', ref: callRef } }, authority: 'same_principal' },
+      { action: 'wait', args: { callRef, afterVersion: 1 }, authority: 'same_principal' },
+    ] })
     expect(callService.readCallStatus).toHaveBeenCalledOnce()
     expect(callService.readCallStatus).toHaveBeenCalledWith(expect.objectContaining({
       callRef,

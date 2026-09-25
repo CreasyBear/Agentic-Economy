@@ -5,6 +5,7 @@ import {
   it,
 } from 'vitest'
 
+import { internal } from '../../../convex/_generated/api'
 import { canonicalDigest } from '../../../src/modules/common/canonical-digest'
 import { COMMERCIAL_POLICY_FAMILIES } from '../../../src/modules/money/public'
 import { samIdentity } from '../../helpers/interactive-authority-provisioning'
@@ -60,11 +61,7 @@ const readOwnerFundingCommandForReceiptRef = makeFunctionReference<
   ReadOwnerFundingCommandForReceiptResult
 >('moneyAccountFunding:readOwnerFundingCommandForReceipt')
 
-const setActiveWorkspaceRef = makeFunctionReference<
-  'mutation',
-  { accountRef: string; correlationRef: string },
-  { principalRef: string; activeAccountRef: string; revision: number; selectedAt: number }
->('interactiveSession:setActiveWorkspace')
+const setActiveWorkspaceRef = internal.interactiveSession.setActiveWorkspace
 
 const identity = (overrides: Partial<UserIdentity> = {}) =>
   samIdentity(TOKEN_IDENTIFIER, overrides)

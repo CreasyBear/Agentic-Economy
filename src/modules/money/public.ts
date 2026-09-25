@@ -1,5 +1,7 @@
 import { z } from "zod";
 import type { PaginationOptions } from "convex/server";
+export type { FormanceMoneyResult } from './formance'
+export type { FormanceManagedCallBooking } from './formance-workflows'
 import { exactAmountSchema, type ExactAmount } from "./internal/exact-amount";
 import {
   moneyRefSchema,
@@ -134,6 +136,8 @@ export type {
   RakeSplit,
 } from './internal/money-types'
 export { isMoneyRefusal } from './internal/money-types'
+export { connectAccountViewValue, connectAccountCommandValue, connectAccountFinalizeOutcomeArg } from './internal/connect-contracts'
+export type { ConnectAccountView, ConnectAccountCommandView, ConnectAccountOutcome } from './internal/connect-contracts'
 
 export type CreditAccountQuery = Readonly<{
   principalId: string;
@@ -448,4 +452,5 @@ export type {
   SpendingPeriods,
   SpendingPeriodAdjustment,
 } from './internal/spending-period-values'
+export { connectWebhookCommand, connectWebhookAppliedStatus } from './internal/connect-webhook-command'
 
