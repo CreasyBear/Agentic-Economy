@@ -19,11 +19,14 @@ export function ExceptionEvidenceSheet({ row, onOpenChange }: ExceptionEvidenceS
           value: row.businessSlug ?? ADMIN_EXCEPTIONS_COPY.unavailable,
           mono: row.businessSlug !== null,
         },
+        ...(row.state === null ? [] : [{ label: 'Current state', value: row.state }]),
         {
           label: ADMIN_EXCEPTIONS_COPY.factLabels.since,
           value: `${row.sinceLabel} (${row.sinceRelativeLabel})`,
         },
       ]
+  const objectHref = row?.kind === 'removal_dispute' || row?.kind === 'admission_case'
+    ? row.businessHref : row?.href
   return (
     <AeRecordSheet
       open={row !== null}
@@ -37,9 +40,11 @@ export function ExceptionEvidenceSheet({ row, onOpenChange }: ExceptionEvidenceS
           {row.kind === 'source_authority_review' ? (
             <p className="text-sm text-muted-foreground">{ADMIN_EXCEPTIONS_COPY.verifySourceAuthority}</p>
           ) : null}
-          <Link to={row.href} className={buttonVariants({ variant: 'outline', className: 'w-fit' })}>
-            {ADMIN_EXCEPTIONS_COPY.openObject}
-          </Link>
+          {objectHref === null || objectHref === undefined ? null : (
+            <Link to={objectHref} className={buttonVariants({ variant: 'outline', className: 'w-fit' })}>
+              {ADMIN_EXCEPTIONS_COPY.openObject}
+            </Link>
+          )}
         </div>
       )}
     </AeRecordSheet>

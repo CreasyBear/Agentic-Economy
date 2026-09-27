@@ -30,7 +30,7 @@ const captureAdminQueueViewServer = createServerFn()
 export const Route = createFileRoute('/_operator/admin/exceptions')({
   ...operatorRouteOptions,
   validateSearch: adminExceptionsSearchSchema,
-  loaderDeps: ({ search }) => ({ kind: search.kind ?? null }),
+  loaderDeps: ({ search }) => ({ kind: search.kind ?? null, partition: search.partition ?? null }),
   loader: ({ deps }) => captureAdminQueueViewServer({ data: deps }),
   pendingComponent: AdminExceptionsPageSkeleton,
   head: () => ({

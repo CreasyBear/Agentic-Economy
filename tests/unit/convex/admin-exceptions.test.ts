@@ -4,9 +4,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { api } from '../../../convex/_generated/api'
 import type { Doc } from '../../../convex/_generated/dataModel'
 import {
-  guardedAdminExceptionSource,
-} from '../../../convex/lib/adminConsole/reads/exceptions'
-import {
   convexTestWithMarketComponents,
   nonAdmin,
   ownerAdmin,
@@ -152,122 +149,65 @@ describe('admin exception reads', () => {
     vi.useRealTimers()
     vi.restoreAllMocks()
   })
-  it('merges four exception sources oldest first and excludes fresh uncertain Calls', async () => {
-    const backend = convexTestWithMarketComponents()
-    await seedExceptions(backend)
-    const caller = await ownerAdmin(backend, 'user_admin-exceptions-owner')
-
-    const result = await caller.query(api.adminConsoleExceptions.listAdminExceptions, { kind: null })
-    if ('kind' in result) throw new Error('admin_exception_fixture_unexpected_refusal')
-
-    expect(result.unavailable).toEqual([])
-    expect(result.items.map((item) => item.kind)).toEqual([
-      'uncertain_call',
-      'removal_dispute',
-      'source_authority_review',
-      'admission_case',
-    ])
-    expect(result.total).toBe(4)
-    expect(result.truncated).toBe(false)
-    expect(result.counts).toEqual({
-      uncertain_call: 1,
-      removal_dispute: 1,
-      source_authority_review: 1,
-      admission_case: 1,
-    })
-    expect(result.items.some((item) => item.kind === 'uncertain_call' && item.callRef === FRESH_CALL_REF)).toBe(false)
-  })
-
-  it('runs only the requested exception source', async () => {
-    const backend = convexTestWithMarketComponents()
-    await seedExceptions(backend)
-    const caller = await ownerAdmin(backend, 'user_admin-exceptions-filter')
-
-    const result = await caller.query(api.adminConsoleExceptions.listAdminExceptions, {
-      kind: 'removal_dispute',
-    })
-    if ('kind' in result) throw new Error('admin_exception_fixture_unexpected_refusal')
-
-    expect(result.items).toHaveLength(1)
-    expect(result.items[0]?.kind).toBe('removal_dispute')
-  })
-
-  it('counts every review across index partitions, returns the oldest 100, and orders equal timestamps by kind then ref', async () => {
+  it('pages the selected indexed state, reaches records after 500, and does not read other kinds', async () => {
     const backend = convexTestWithMarketComponents()
     await seedExceptions(backend)
     await backend.run(async (ctx) => {
       const base = await ctx.db.query('capabilityPublications')
-        .withIndex('by_toolRef_and_disposition', (q) => q.eq('toolRef', TOOL_REF))
-        .first()
+        .withIndex('by_toolRef_and_disposition', (q) => q.eq('toolRef', TOOL_REF)).first()
       if (base === null) throw new Error('missing_publication_fixture')
-      const { _id, _creationTime, sourceAuthorityState, ...publication } = base
-      void _id
-      void _creationTime
-      void sourceAuthorityState
-      const reviewRequired: Doc<'capabilityPublications'>['sourceAuthorityState'] = 'review_required'
-      for (let index = 0; index < 103; index += 1) {
+      const { _id, _creationTime, ...publication } = base
+      for (let index = 0; index < 501; index += 1) {
         await ctx.db.insert('capabilityPublications', {
           ...publication,
           publicationRef: `publication:review:${index}`,
           toolRef: `operation:v1:${index.toString(16).padStart(64, '0')}`,
           revision: index + 2,
-          ...(index < 52 ? {} : { sourceAuthorityState: reviewRequired }),
-          updatedAt: index < 52 ? NOW - 1_000_000 + index : NOW - 2_700_000 + index,
+          updatedAt: NOW - 2_700_000 + index,
         })
       }
     })
-    const caller = await ownerAdmin(backend, 'user_admin-exceptions-complete')
-    const result = await caller.query(api.adminConsoleExceptions.listAdminExceptions, { kind: null })
-    if ('kind' in result) throw new Error('admin_exception_fixture_unexpected_refusal')
-
-    expect(result.counts.source_authority_review).toBe(104)
-    expect(result.total).toBe(107)
-    expect(result.truncated).toBe(true)
-    expect(result.items).toHaveLength(100)
-    expect(result.items[0]).toMatchObject({ kind: 'uncertain_call' })
-    expect(result.items[1]).toMatchObject({ kind: 'removal_dispute' })
-    expect(result.items[2]).toMatchObject({ kind: 'source_authority_review', publicationRef: `operation:v1:${(52).toString(16).padStart(64, '0')}` })
-    const selected = await caller.query(api.adminConsoleExceptions.listAdminExceptions, { kind: 'source_authority_review' })
-    if ('kind' in selected) throw new Error('admin_exception_fixture_unexpected_refusal')
-    expect(selected.total).toBe(104)
-    expect(selected.items).toHaveLength(100)
-    expect(selected.counts).toEqual(result.counts)
+    const admin = await ownerAdmin(backend, 'user_admin-exceptions-owner')
+    let cursor: string | null = null
+    const refs: string[] = []
+    for (;;) {
+      const result: { page: readonly { kind: string; publicationRef?: string }[]; isDone: boolean; continueCursor: string }
+        = await admin.query(api.adminConsoleExceptions.listAdminExceptionsPage, {
+        kind: 'source_authority_review', partition: 'review_required',
+        paginationOpts: { numItems: 51, cursor },
+      })
+      refs.push(...result.page.map((row) => row.publicationRef ?? ''))
+      if (result.isDone) break
+      cursor = result.continueCursor
+    }
+    expect(refs).toHaveLength(502)
+    expect(refs).toContain(`operation:v1:${(500).toString(16).padStart(64, '0')}`)
+    const disputed = await admin.query(api.adminConsoleExceptions.listAdminExceptionsPage, {
+      kind: 'removal_dispute', partition: 'contested', paginationOpts: { numItems: 10, cursor: null },
+    })
+    if ('kind' in disputed) throw new Error('admin_exception_fixture_unexpected_refusal')
+    expect(disputed.page).toHaveLength(1)
+    expect(disputed.page[0]?.kind).toBe('removal_dispute')
+    const unset = await admin.query(api.adminConsoleExceptions.listAdminExceptionsPage, {
+      kind: 'source_authority_review', partition: 'unset', paginationOpts: { numItems: 10, cursor: null },
+    })
+    if ('kind' in unset) throw new Error('admin_exception_fixture_unexpected_refusal')
+    expect(unset.page).toEqual([])
   })
 
-  it('breaks equal-time ties by kind then reference', async () => {
+  it('reports observed bounds and partition exhaustion without inventing a total', async () => {
     const backend = convexTestWithMarketComponents()
     await seedExceptions(backend)
-    await backend.run(async (ctx) => {
-      const base = await ctx.db.query('capabilitySupplyAdmissionCases')
-        .withIndex('by_caseRef', (q) => q.eq('caseRef', 'admission-case:admin-exceptions'))
-        .unique()
-      if (base === null) throw new Error('missing_case_fixture')
-      const { _id, _creationTime, ...admissionCase } = base
-      void _id
-      void _creationTime
-      await ctx.db.insert('capabilitySupplyAdmissionCases', {
-        ...admissionCase,
-        caseRef: 'admission-case:a',
-        updatedAt: admissionCase.updatedAt,
-      })
+    const admin = await ownerAdmin(backend, 'user_admin-exceptions-overview')
+    const overview = await admin.query(api.adminConsoleExceptions.readAdminExceptionOverview, {})
+    if (!Array.isArray(overview)) throw new Error('unexpected_refusal')
+    expect(overview.find((part) => part.partition === 'contested'))
+      .toMatchObject({ kind: 'removal_dispute', observed: 1, complete: true, unavailable: false })
+    const page = await admin.query(api.adminConsoleExceptions.listAdminExceptionsPage, {
+      kind: 'uncertain_call', partition: 'reconciliation_required', paginationOpts: { numItems: 10, cursor: null },
     })
-    const caller = await ownerAdmin(backend, 'user_admin-exceptions-ties')
-    const result = await caller.query(api.adminConsoleExceptions.listAdminExceptions, { kind: null })
-    if ('kind' in result) throw new Error('admin_exception_fixture_unexpected_refusal')
-    expect(result.items.slice(-2).map((item) => item.kind === 'admission_case' ? item.caseRef : '')).toEqual([
-      'admission-case:a',
-      'admission-case:admin-exceptions',
-    ])
-  })
-
-  it('marks a rejecting source unavailable without throwing', async () => {
-    const warning = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
-    const result = await guardedAdminExceptionSource('admission_case', async () => {
-      throw new Error('fixture failure')
-    })
-
-    expect(result).toEqual({ unavailable: 'admission_case' })
-    expect(warning).toHaveBeenCalledWith('admin_exception_source_unavailable', 'admission_case')
+    if ('kind' in page) throw new Error('unexpected_refusal')
+    expect(page.page).toEqual([{ kind: 'uncertain_call', callRef: CALL_REF, since: NOW - 60 * 60_000 }])
   })
 
   it('returns recent Purchase resolutions newest first', async () => {
@@ -307,11 +247,46 @@ describe('admin exception reads', () => {
     }])
   })
 
+  it('reads the exact closed dispute and completed admission without adding them to actionable pages', async () => {
+    const backend = convexTestWithMarketComponents()
+    await seedExceptions(backend)
+    const disputeRef = await backend.run(async (ctx) => {
+      const dispute = await ctx.db.query('disputes')
+        .withIndex('by_status_and_updatedAt', (q) => q.eq('status', 'contested')).first()
+      const admission = await ctx.db.query('capabilitySupplyAdmissionCases')
+        .withIndex('by_caseRef', (q) => q.eq('caseRef', 'admission-case:admin-exceptions')).unique()
+      if (dispute === null || admission === null) throw new Error('missing_exact_exception_fixture')
+      await ctx.db.patch(dispute._id, { status: 'closed' })
+      await ctx.db.patch(admission._id, { state: 'completed', terminalDecision: 'published' })
+      return String(dispute._id)
+    })
+    const admin = await ownerAdmin(backend, 'user_admin-exception-exact')
+    const closed = await admin.query(api.adminConsoleExceptions.readAdminException, {
+      kind: 'removal_dispute', ref: disputeRef,
+    })
+    const completed = await admin.query(api.adminConsoleExceptions.readAdminException, {
+      kind: 'admission_case', ref: 'admission-case:admin-exceptions',
+    })
+    expect(closed).toMatchObject({ kind: 'removal_dispute', disputeRef, state: 'closed' })
+    expect(completed).toMatchObject({ kind: 'admission_case', caseRef: 'admission-case:admin-exceptions', state: 'completed' })
+    const actionable = await admin.query(api.adminConsoleExceptions.listAdminExceptionsPage, {
+      kind: 'removal_dispute', partition: 'contested', paginationOpts: { numItems: 10, cursor: null },
+    })
+    expect(actionable.page).toEqual([])
+    const nonAdminCaller = await nonAdmin(backend, 'user_admin-exception-exact-denied')
+    await expect(nonAdminCaller.query(api.adminConsoleExceptions.readAdminException, {
+      kind: 'removal_dispute', ref: disputeRef,
+    })).resolves.toEqual({ kind: 'refused', code: 'missing_membership' })
+  })
+
   it('refuses an authenticated non-admin', async () => {
     const backend = convexTestWithMarketComponents()
     const caller = await nonAdmin(backend, 'user_admin-exceptions-non-admin')
 
-    await expect(caller.query(api.adminConsoleExceptions.listAdminExceptions, { kind: null }))
+    await expect(caller.query(api.adminConsoleExceptions.listAdminExceptionsPage, {
+      kind: 'admission_case', partition: 'submitted', paginationOpts: { numItems: 10, cursor: null },
+    })).resolves.toEqual({ page: [], isDone: true, continueCursor: '' })
+    await expect(caller.query(api.adminConsoleExceptions.readAdminExceptionOverview, {}))
       .resolves.toEqual({ kind: 'refused', code: 'missing_membership' })
   })
 })

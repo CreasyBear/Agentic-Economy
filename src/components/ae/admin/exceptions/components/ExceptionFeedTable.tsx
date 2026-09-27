@@ -1,5 +1,6 @@
 import type { ColumnDef } from '@tanstack/react-table'
 
+import { Button } from '@/components/ui/button'
 import { AeSection } from '@/components/ae/layout/AeSection'
 import { AeRecordTable } from '@/components/ae/operator/AeOperatorDataTable'
 import {
@@ -45,11 +46,11 @@ const columns: ColumnDef<AdminExceptionRowModel, unknown>[] = [
   },
 ]
 
-export function ExceptionFeedTable({ rows, filtered, total, truncated, unavailable, onOpen }: ExceptionFeedTableProps) {
+export function ExceptionFeedTable({ rows, observed, complete, unavailable, orderLabel, paginationStatus, onLoadMore, onOpen }: ExceptionFeedTableProps) {
   return (
     <AeSection
       title={ADMIN_EXCEPTIONS_COPY.exceptionsTitle}
-      description={truncated ? ADMIN_EXCEPTIONS_COPY.showingOldest(total) : ADMIN_EXCEPTIONS_COPY.exceptionsDescription}
+      description={`${orderLabel}. ${observed} loaded${complete ? ' (exhausted)' : ' (partial)'}. ${ADMIN_EXCEPTIONS_COPY.exceptionsDescription}`}
     >
       <AeRecordTable
         columns={columns}
@@ -59,8 +60,8 @@ export function ExceptionFeedTable({ rows, filtered, total, truncated, unavailab
         caption={ADMIN_EXCEPTIONS_COPY.exceptionsTitle}
         emptyMessage={unavailable && rows.length === 0
           ? ADMIN_EXCEPTIONS_COPY.exceptionsUnavailable
-          : filtered
-            ? ADMIN_EXCEPTIONS_COPY.noFilterMatches
+          : paginationStatus !== 'Exhausted'
+            ? 'No cases in this loaded page. Load more to continue.'
             : ADMIN_EXCEPTIONS_COPY.nothingNeedsAttention}
         rowAction={{
           kind: 'button',
@@ -69,6 +70,11 @@ export function ExceptionFeedTable({ rows, filtered, total, truncated, unavailab
           getAccessibleLabel: (row) => `${ADMIN_EXCEPTIONS_COPY.viewDetails}: ${row.ref}`,
         }}
       />
+      {paginationStatus === 'Exhausted' ? null : (
+        <Button type="button" variant="outline" disabled={paginationStatus === 'LoadingMore'} onClick={onLoadMore}>
+          {ADMIN_EXCEPTIONS_COPY.loadMore}
+        </Button>
+      )}
     </AeSection>
   )
 }

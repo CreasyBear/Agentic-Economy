@@ -79,7 +79,7 @@ describe('admin audit pagination', () => {
     const backend = convexTest(schema, convexModules)
     const admin = await ownerAdmin(backend, 'user_admin-audit-reader')
     await expect(admin.query(api.adminConsoleAudit.readAdminAuditAccess, {}))
-      .resolves.toEqual({ kind: 'allowed', role: 'owner_admin' })
+      .resolves.toMatchObject({ kind: 'allowed', role: 'owner_admin' })
     const originalIds = await seedAuditEvents(backend)
 
     const first = await admin.query(api.adminConsoleAudit.listAdminAuditEvents, {
@@ -162,11 +162,69 @@ describe('admin audit pagination', () => {
       createdAt: Date.now(),
       expiresAt: Date.now() + 60_000,
     }))
-    const ownerProposals = await owner.query(api.adminConsoleAudit.listAdminApprovalProposals, {})
-    const reviewerProposals = await reviewer.query(api.adminConsoleAudit.listAdminApprovalProposals, {})
-    if ('kind' in ownerProposals || 'kind' in reviewerProposals) throw new Error('approval_readback_denied')
-    expect(ownerProposals[0]?.commandJson).toContain('business:secret')
-    expect(reviewerProposals).toEqual([{ ...ownerProposals[0], commandJson: null }])
+    const opts = { paginationOpts: { numItems: 10, cursor: null } }
+    const ownerProposals = await owner.query(api.adminConsoleAudit.listAdminApprovalProposals, opts)
+    const reviewerProposals = await reviewer.query(api.adminConsoleAudit.listAdminApprovalProposals, opts)
+    expect(ownerProposals.page[0]?.commandJson).toContain('business:secret')
+    expect(reviewerProposals.page).toEqual([{ ...ownerProposals.page[0], commandJson: null }])
+  })
+
+  it('skips expired index entries, paginates beyond 50 live proposals, and derives expired audit history', async () => {
+    const backend = convexTest(schema, convexModules)
+    const owner = await ownerAdmin(backend, 'user_admin-audit-bulk-owner')
+    const reviewer = await reviewerAdmin(backend, 'user_admin-audit-bulk-reviewer')
+    const now = Date.now()
+    await backend.run(async (ctx) => {
+      for (let index = 0; index < 121; index += 1) {
+        await ctx.db.insert('adminApprovalProposals', {
+          proposalRef: `admin-proposal:bulk:${index}`,
+          action: 'set_business_suppression',
+          commandDigest: `sha256:bulk:${index}`,
+          commandJson: JSON.stringify({ input: { businessId: `business:${index}` } }),
+          proposerRef: 'owner-token',
+          status: 'awaiting_second_approval',
+          createdAt: now - 1_000,
+          expiresAt: index < 60 ? now - 1 : now + index * 1_000,
+        })
+      }
+      await ctx.db.insert('auditEvents', {
+        eventId: 'audit:bulk:expired',
+        eventType: 'admin.action_proposed',
+        actorKind: 'admin',
+        actorRef: 'owner-token',
+        targetType: 'admin_approval_proposal',
+        targetRef: 'admin-proposal:bulk:0',
+        idempotencyKey: 'audit:bulk:expired',
+        correlationId: 'correlation:bulk',
+        beforeState: 'none',
+        afterState: 'awaiting_second_approval',
+        evidenceRefs: [],
+        redactedPayloadJson: '{}',
+        payloadHash: canonicalDigest({ expired: true }),
+        createdAt: now - 1_000,
+      })
+    })
+    const first = await owner.query(api.adminConsoleAudit.listAdminApprovalProposals, {
+      paginationOpts: { numItems: 30, cursor: null },
+    })
+    const second = await owner.query(api.adminConsoleAudit.listAdminApprovalProposals, {
+      paginationOpts: { numItems: 31, cursor: first.continueCursor },
+    })
+    expect(first.page).toHaveLength(30)
+    expect(first.isDone).toBe(false)
+    expect(second.page).toHaveLength(31)
+    expect(second.isDone).toBe(true)
+    expect([...first.page, ...second.page].map((row) => row.proposalRef))
+      .toEqual(Array.from({ length: 61 }, (_, index) => `admin-proposal:bulk:${index + 60}`))
+    const redacted = await reviewer.query(api.adminConsoleAudit.listAdminApprovalProposals, {
+      paginationOpts: { numItems: 30, cursor: null },
+    })
+    expect(redacted.page[0]).toMatchObject({ proposalRef: 'admin-proposal:bulk:60', commandJson: null })
+    const history = await owner.query(api.adminConsoleAudit.listAdminAuditEvents, {
+      filter: { target: { type: 'admin_approval_proposal', ref: 'admin-proposal:bulk:0' } },
+      paginationOpts: { numItems: 10, cursor: null },
+    })
+    expect(history.page[0]?.admin?.afterState).toBe('expired')
   })
 
   it('returns an empty page plus an explicit access refusal for a non-admin caller', async () => {

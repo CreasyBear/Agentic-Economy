@@ -1,15 +1,12 @@
 import type { AdminAuditRow } from '@/lib/operator/admin-console/audit.contracts'
 import { formatPerthDate, formatPerthTimestamp, timestampIso } from '@/lib/ui/format-time'
 import {
-  ADMIN_APPROVAL_ACTION_LABELS,
   AUDIT_COPY,
   type AdminAuditFilterChip,
   type AdminAuditFilterDraft,
   type AdminAuditFilterKey,
   type AdminAuditRowModel,
   type AdminAuditSearch,
-  type AdminApprovalProposal,
-  type AdminApprovalRowModel,
 } from './audit.contracts'
 
 const PERTH_DAY_MS = 24 * 60 * 60 * 1_000
@@ -39,17 +36,6 @@ export function toAuditRowModel(row: AdminAuditRow): AdminAuditRowModel {
   }
 }
 
-export function toApprovalRowModel(proposal: AdminApprovalProposal): AdminApprovalRowModel {
-  return {
-    proposalRef: proposal.proposalRef,
-    actionLabel: ADMIN_APPROVAL_ACTION_LABELS[proposal.action],
-    proposerRef: proposal.proposerRef,
-    createdAtLabel: formatPerthTimestamp(proposal.createdAt),
-    createdAtIso: timestampIso(proposal.createdAt),
-    expiresAtLabel: formatPerthTimestamp(proposal.expiresAt),
-    expiresAtIso: timestampIso(proposal.expiresAt),
-  }
-}
 
 function auditTargetHref(targetType: string, targetRef: string): string | null {
   const ref = encodeURIComponent(targetRef)

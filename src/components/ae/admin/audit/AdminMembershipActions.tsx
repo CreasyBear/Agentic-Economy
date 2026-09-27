@@ -10,7 +10,6 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { ADMIN_ACTION_PERMISSION } from '@/lib/operator/admin-console/contracts'
 import { canAdminRolePerformAction, type AdminRole } from '@/modules/security/public'
-import { PendingApprovalsActions } from './PendingApprovalsActions'
 
 export function AdminMembershipActions() {
   const access = useQuery(api.adminConsoleAudit.readAdminAuditAccess, {})
@@ -70,7 +69,6 @@ export function AdminMembershipActions() {
           </div>
         </form>
       </AeSection>
-      <PendingApprovalsActions />
       {action === 'grant_admin_membership' ? (
         <AdminActionSheet
           action="grant_admin_membership"

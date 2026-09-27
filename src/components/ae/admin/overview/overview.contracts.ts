@@ -11,9 +11,8 @@ export type AdminOverviewConfiguration = Readonly<{
 export type AdminOverviewExceptionRow = Readonly<{
   id: string
   label: string
-  ref: string
   href: string
-  since: string
+  count: string
 }>
 export type AdminOverviewRecentRow = AdminRecentRef & Readonly<{ label: string; href: string }>
 export type AdminOverviewHeadline = Readonly<{
@@ -30,7 +29,6 @@ export type AdminOverviewDataState =
       configuration: AdminOverviewConfiguration
       exceptions: readonly AdminOverviewExceptionRow[]
       exceptionsUnavailable: boolean
-      exceptionsTotal: number
       headline: AdminOverviewHeadline
       recent: readonly AdminOverviewRecentRow[]
     }>
@@ -54,11 +52,11 @@ export const ADMIN_OVERVIEW_COPY = {
   ok: 'OK',
   searchTitle: 'Exact-reference search',
   searchDescription: 'Find a Call, Quote, Tool version, Workspace, Agent, or Provider.',
-  exceptionsTitle: 'Oldest exceptions',
-  exceptionsDescription: 'The oldest unresolved items across every exception queue.',
+  exceptionsTitle: 'Exception queues',
+  exceptionsDescription: 'Observed cases by indexed source; open a queue to page through every case.',
   nothingNeedsAttention: 'Nothing needs attention.',
   exceptionsUnavailable: 'Some exception sources are unavailable.',
-  viewAll: (total: number) => `View all (${total})`,
+  viewAll: 'Open queues',
   metricsTitle: 'Last 7 days',
   settledCallValue: 'Settled Call value',
   settledCalls: 'Settled Calls',

@@ -2,8 +2,8 @@ import { z } from 'zod'
 
 import {
   ADMIN_ACCESS_REFUSED_COPY,
-  type AdminException,
   type AdminExceptionKind,
+  type AdminExceptionPartition,
 } from '@/lib/operator/admin-console/contracts'
 import { getStatusPresentation } from '@/lib/ui/status-presentation'
 
@@ -14,10 +14,21 @@ export const adminExceptionsSearchSchema = z.object({
     'source_authority_review',
     'admission_case',
   ]).optional(),
+  partition: z.enum([
+    'reconciliation_required', 'opened', 'updated', 'contested',
+    'review_required', 'unset', 'submitted', 'under_review',
+  ]).optional(),
+  ref: z.string().trim().min(1).max(300).optional(),
 })
 
 export type AdminExceptionsSearch = z.infer<typeof adminExceptionsSearchSchema>
 
+
+export type AdminExceptionRecord =
+  | { kind: 'uncertain_call'; callRef: string; since: number }
+  | { kind: 'removal_dispute'; disputeRef: string; businessSlug: string; since: number; state: 'opened' | 'updated' | 'contested' | 'closed' }
+  | { kind: 'source_authority_review'; publicationRef: string; businessSlug: string; since: number }
+  | { kind: 'admission_case'; caseRef: string; businessSlug: string; since: number; state: 'submitted' | 'under_review' | 'completed' }
 
 export type AdminExceptionRowModel = Readonly<{
   id: string
@@ -27,10 +38,10 @@ export type AdminExceptionRowModel = Readonly<{
   href: string
   businessSlug: string | null
   businessHref: string | null
+  state: string | null
   sinceLabel: string
   sinceRelativeLabel: string
   sinceIso: string
-  exception: AdminException
 }>
 
 export type AdminResolutionRowModel = Readonly<{
@@ -43,13 +54,22 @@ export type AdminResolutionRowModel = Readonly<{
 
 export type AdminExceptionsReadyState = Readonly<{
   kind: 'ready'
-  total: number
-  truncated: boolean
-  counts: Readonly<Record<AdminExceptionKind, number>>
+  selectedKind: AdminExceptionKind
+  selectedPartition: AdminExceptionPartition
+  observed: number
+  complete: boolean
+  overview: readonly Readonly<{
+    kind: AdminExceptionKind
+    partition: AdminExceptionPartition
+    observed: number
+    complete: boolean
+    unavailable: boolean
+  }>[]
   rows: readonly AdminExceptionRowModel[]
   resolutions: readonly AdminResolutionRowModel[]
   selectedSourceUnavailable: boolean
-  unavailableLabels: readonly string[]
+  paginationStatus: 'CanLoadMore' | 'LoadingMore' | 'Exhausted'
+  loadMore: () => void
 }>
 
 export type AdminExceptionsDataState =
@@ -63,18 +83,19 @@ export type AdminExceptionsPageProps = Readonly<{
 }>
 
 export type ExceptionFilterChipsProps = Readonly<{
-  selected: AdminExceptionKind | null
-  onSelect: (kind: AdminExceptionKind | null) => void
-  counts: Readonly<Record<AdminExceptionKind, number>>
-  onClear: () => void
+  selected: AdminExceptionKind
+  onSelect: (kind: AdminExceptionKind) => void
+  overview: AdminExceptionsReadyState['overview']
 }>
 
 export type ExceptionFeedTableProps = Readonly<{
   rows: readonly AdminExceptionRowModel[]
-  total: number
-  truncated: boolean
+  observed: number
+  complete: boolean
   unavailable: boolean
-  filtered: boolean
+  orderLabel: string
+  onLoadMore: () => void
+  paginationStatus: AdminExceptionsReadyState['paginationStatus']
   onOpen: (row: AdminExceptionRowModel) => void
 }>
 
@@ -95,27 +116,44 @@ export const ADMIN_EXCEPTION_KIND_LABELS = {
 } satisfies Record<AdminExceptionKind, string>
 
 export const ADMIN_EXCEPTION_FILTERS: readonly Readonly<{
-  kind: AdminExceptionKind | null
+  kind: AdminExceptionKind
   label: string
 }>[] = [
-  { kind: null, label: 'All' },
   { kind: 'uncertain_call', label: ADMIN_EXCEPTION_KIND_LABELS.uncertain_call },
   { kind: 'removal_dispute', label: ADMIN_EXCEPTION_KIND_LABELS.removal_dispute },
   { kind: 'source_authority_review', label: ADMIN_EXCEPTION_KIND_LABELS.source_authority_review },
   { kind: 'admission_case', label: ADMIN_EXCEPTION_KIND_LABELS.admission_case },
 ]
 
+export const ADMIN_EXCEPTION_PARTITIONS: Record<AdminExceptionKind, readonly [AdminExceptionPartition, ...AdminExceptionPartition[]]> = {
+  uncertain_call: ['reconciliation_required'],
+  removal_dispute: ['opened', 'updated', 'contested'],
+  source_authority_review: ['review_required', 'unset'],
+  admission_case: ['submitted', 'under_review'],
+}
+
+export const ADMIN_EXCEPTION_PARTITION_LABELS = {
+  reconciliation_required: 'Reconciliation required',
+  opened: 'Opened',
+  updated: 'Updated',
+  contested: 'Contested',
+  review_required: 'Review required',
+  unset: 'Legacy unset',
+  submitted: 'Submitted',
+  under_review: 'Under review',
+} satisfies Record<AdminExceptionPartition, string>
+
 export const ADMIN_EXCEPTIONS_COPY = {
   title: 'Exceptions',
-  description: 'Review the oldest operational exceptions and recent Purchase resolutions.',
+  description: 'Review operational exception queues and recent Purchase resolutions.',
   breadcrumbs: { admin: 'Admin', exceptions: 'Exceptions' },
   accessDeniedTitle: 'Admin access required',
   accessDeniedDescription: ADMIN_ACCESS_REFUSED_COPY,
-  filtersTitle: 'Exception type',
-  filtersDescription: 'Narrow the queue to one exception type.',
+  filtersTitle: 'Exception queue',
+  filtersDescription: 'Choose a type and its indexed state.',
   clearAll: 'Clear all',
-  exceptionsTitle: 'Oldest exceptions',
-  exceptionsDescription: 'Oldest exceptions appear first. Times use Australia/Perth.',
+  exceptionsTitle: 'Cases',
+  exceptionsDescription: 'Times use Australia/Perth.',
   resolutionsTitle: 'Recent Purchase resolutions',
   resolutionsDescription: 'Most recently resolved Calls appear first.',
   nothingNeedsAttention: 'Nothing needs attention.',
@@ -128,7 +166,7 @@ export const ADMIN_EXCEPTIONS_COPY = {
   openObject: 'Open object record',
   verifySourceAuthority: 'Next step: Verify source authority on the Tool version record.',
   exceptionsUnavailable: 'Exception source unavailable.',
-  showingOldest: (total: number) => `Showing oldest 100 of ${total}`,
+  loadMore: 'Load more',
   unavailable: getStatusPresentation('unavailable').label,
   columnLabels: {
     kind: 'Kind',

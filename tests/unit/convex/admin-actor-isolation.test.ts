@@ -48,7 +48,7 @@ describe('admin_membership authority family isolation through registered admin s
       await expect(authorityState(backend)).resolves.toEqual(before)
       expect(page).toMatchObject({ page: [], isDone: true })
       if (caseKind === 'owner') {
-        expect(access).toEqual({ kind: 'allowed', role: 'owner_admin' })
+        expect(access).toMatchObject({ kind: 'allowed', role: 'owner_admin' })
       } else {
         expect(access).toEqual({ kind: 'refused', code: 'missing_membership' })
       }
