@@ -3,19 +3,10 @@ import {
   exactAmountSchema,
   type ExactAmount,
 } from "@/modules/money/public";
-import { canonicalDigest } from "@/modules/common/canonical-digest";
 import { SEARCH_STOP_WORDS } from "@/modules/common/normalize-search-text";
-import { isPublicToolRef, type PublicToolRef } from '@/modules/common/tool-ref'
-import {
-  noToolNavigation,
-  toolNavigation,
-  projectCapabilityTool,
-} from "./tool-project";
+import { type PublicToolRef } from '@/modules/common/tool-ref'
 import {
   PublicToolRegistrySchemaVersion,
-  type CapabilityToolSourceRecord,
-  type CapabilityToolSourcePort,
-  type ToolProjectionNavigationContract,
   type PublicCommercialTerms,
   type PublicDataUsePolicy,
   type PublicEffectPolicy,
@@ -23,7 +14,6 @@ import {
   type PublicToolDescriptor,
   type PublicToolNavigationRelation,
 } from "./tool-projection-types";
-import { degradeBackend } from "@/lib/observability/degrade-backend";
 
 const TOOL_SEARCH_INTENT_WORDS = new Set([
   "api",
@@ -46,19 +36,6 @@ export type ToolSearchTextCandidate<T> = Readonly<{
   value: T;
   toolRef: string;
   searchText: readonly string[];
-}>;
-export type CurrentToolSearchFact = Readonly<{
-  toolRef: PublicToolRef;
-  networkId: string;
-  searchText: readonly string[];
-  businessSearchText: string;
-  price: PublicCommercialTerms["price"];
-  effects: readonly PublicEffectPolicy[number]["class"][];
-  dataUse: readonly PublicDataUsePolicy[number]["classification"][];
-  integrated: boolean;
-  routeable: boolean;
-  unavailableReason?: CapabilityToolSourceRecord["unavailableReason"];
-  readiness: CapabilityToolSourceRecord["readiness"];
 }>;
 export type ToolSearchRanking = Readonly<{
   toolRef: PublicToolRef;
@@ -180,7 +157,6 @@ export type ToolSearchResult =
       navigation: readonly PublicToolNavigationRelation[];
     }>;
 
-const MAX_SOURCE = 256;
 const MAX_QUERY = 256;
 const MAX_CURSOR = 512;
 const DEFAULT_LIMIT = 3;
@@ -200,226 +176,6 @@ const SEARCH_MONTHS = new Set([
   "december",
 ]);
 
-export async function searchCapabilityTools(
-  port: CapabilityToolSourcePort,
-  input: ToolSearchInput,
-  now = Date.now(),
-): Promise<ToolSearchResult> {
-  const normalized = normalizeToolSearchInput(input);
-  if (normalized === undefined) return searchUnavailable("query_invalid", port.navigation);
-  const source = await port.listCurrent({
-    ...(normalized.filters.networkId === undefined
-      ? {}
-      : { networkId: normalized.filters.networkId }),
-    limit: MAX_SOURCE + 1,
-    now,
-  });
-  if (source.sourceCount > MAX_SOURCE)
-    return searchUnavailable("source_capacity_exceeded", port.navigation);
-  const cursor = decodeCursor(
-    normalized.cursor,
-    normalized.query,
-    normalized.filters,
-    source.snapshotKey,
-  );
-  if (normalized.cursor !== undefined && cursor === undefined)
-    return searchUnavailable("query_invalid", port.navigation);
-  const projectedMatches: Array<
-    ToolSearchTextCandidate<PublicToolDescriptor>
-  > = [];
-  for (const record of source.tools) {
-    const tool = projectCapabilityTool(record, now, port.navigation);
-    if (matchesToolFilters(tool, normalized.filters)) {
-      projectedMatches.push({
-        value: tool,
-        toolRef: tool.toolRef,
-        searchText: toolSearchText(tool, record.searchTerms),
-      });
-    }
-  }
-  const matches = rankToolSearchCandidates(
-    normalized.query,
-    projectedMatches,
-  );
-  const start =
-    cursor?.lastToolRef === undefined
-      ? 0
-      : Math.max(
-          0,
-          matches.findIndex(
-            (item) => item.toolRef === cursor.lastToolRef,
-          ) + 1,
-        );
-  const pageMatches = matches.slice(start, start + normalized.limit);
-  const items = pageMatches.map(({ value }) => value);
-  const ranking = pageMatches.map(({ toolRef, score }, index) => ({
-    toolRef: toolRef as PublicToolRef,
-    rank: start + index + 1,
-    score,
-  }));
-  const lastItem = items.at(-1);
-  if (lastItem === undefined)
-    return {
-      kind: "no_candidates",
-      schemaVersion: PublicToolRegistrySchemaVersion,
-      query: normalized.query,
-      appliedFilters: normalized.filters,
-      matchedCount: matches.length,
-      ranking: [],
-      navigation: noToolNavigation(port.navigation),
-    };
-  const hasMore = start + items.length < matches.length;
-  return {
-    kind: "ok",
-    schemaVersion: PublicToolRegistrySchemaVersion,
-    query: normalized.query,
-    items,
-    matchedCount: matches.length,
-    ranking,
-    pagination: {
-      limit: normalized.limit,
-      hasMore,
-      ...(hasMore
-        ? {
-            nextCursor: encodeCursor(
-              normalized.query,
-              normalized.filters,
-              source.snapshotKey,
-              lastItem.toolRef,
-            ),
-          }
-        : {}),
-    },
-    navigation: toolNavigation("read_only", port.navigation),
-  };
-}
-
-export function currentToolSearchFact(
-  record: CapabilityToolSourceRecord,
-  now: number,
-  navigation: ToolProjectionNavigationContract,
-): CurrentToolSearchFact {
-  const tool = projectCapabilityTool(record, now, navigation);
-  return {
-    toolRef: tool.toolRef,
-    networkId: record.networkId,
-    searchText: toolSearchText(tool, record.searchTerms),
-    businessSearchText: `${tool.business.slug} ${tool.business.name}`.toLowerCase(),
-    price: tool.commercial.price,
-    effects: tool.effects.map((effect) => effect.class),
-    dataUse: tool.dataUse.map((entry) => entry.classification),
-    integrated: record.integrated,
-    routeable: record.routeable,
-    ...(record.unavailableReason === undefined
-      ? {}
-      : { unavailableReason: record.unavailableReason }),
-    readiness: record.readiness,
-  };
-}
-
-export async function searchCurrentToolFacts(
-  input: ToolSearchInput,
-  facts: readonly CurrentToolSearchFact[],
-  snapshotKey: string,
-  load: (toolRef: PublicToolRef) => Promise<CapabilityToolSourceRecord | null>,
-  now: number,
-  navigation: ToolProjectionNavigationContract,
-  expectedCount?: number,
-  trustedCursorLastToolRef?: PublicToolRef,
-): Promise<ToolSearchResult> {
-  const normalized = normalizeToolSearchInput(input);
-  if (normalized === undefined) return searchUnavailable("query_invalid", navigation);
-  if (expectedCount !== undefined && facts.length !== expectedCount)
-    return searchUnavailable("source_unavailable", navigation);
-  if (facts.length > MAX_SOURCE) return searchUnavailable("source_capacity_exceeded", navigation);
-  const cursor = trustedCursorLastToolRef === undefined
-    ? decodeCursor(
-        normalized.cursor,
-        normalized.query,
-        normalized.filters,
-        snapshotKey,
-      )
-    : { lastToolRef: trustedCursorLastToolRef };
-  if (
-    normalized.cursor !== undefined &&
-    trustedCursorLastToolRef === undefined &&
-    cursor === undefined
-  )
-    return searchUnavailable("query_invalid", navigation);
-  const matches = rankToolSearchCandidates(
-    normalized.query,
-    facts.filter((fact) => matchesFactFilters(fact, normalized.filters, now)).map((fact) => ({
-      value: fact,
-      toolRef: fact.toolRef,
-      searchText: fact.searchText,
-    })),
-  );
-  const start = cursor?.lastToolRef === undefined
-    ? 0
-    : Math.max(0, matches.findIndex((item) => item.toolRef === cursor.lastToolRef) + 1);
-  const pageMatches = matches.slice(start, start + normalized.limit);
-  if (pageMatches.length === 0) {
-    return {
-      kind: "no_candidates",
-      schemaVersion: PublicToolRegistrySchemaVersion,
-      query: normalized.query,
-      appliedFilters: normalized.filters,
-      matchedCount: matches.length,
-      ranking: [],
-      navigation: noToolNavigation(navigation),
-    };
-  }
-  const records = await Promise.all(pageMatches.map(({ toolRef }) => load(toolRef as PublicToolRef)));
-  if (records.some((record) => record === null)) return searchUnavailable("source_unavailable", navigation);
-  const items = records.map((record) => projectCapabilityTool(
-    record as CapabilityToolSourceRecord,
-    now,
-    navigation,
-  ));
-  const ranking = pageMatches.map(({ toolRef, score }, index) => ({
-    toolRef: toolRef as PublicToolRef,
-    rank: start + index + 1,
-    score,
-  }));
-  const hasMore = start + items.length < matches.length;
-  const lastItem = items.at(-1);
-  if (lastItem === undefined) return searchUnavailable("source_unavailable", navigation);
-  return {
-    kind: "ok",
-    schemaVersion: PublicToolRegistrySchemaVersion,
-    query: normalized.query,
-    items,
-    matchedCount: matches.length,
-    ranking,
-    pagination: {
-      limit: normalized.limit,
-      hasMore,
-      ...(hasMore
-        ? {
-            nextCursor: encodeCursor(
-              normalized.query,
-              normalized.filters,
-              snapshotKey,
-              lastItem.toolRef,
-            ),
-          }
-        : {}),
-    },
-    navigation: toolNavigation("read_only", navigation),
-  };
-}
-
-function searchUnavailable(
-  reason: "query_invalid" | "source_unavailable" | "source_capacity_exceeded",
-  navigation: ToolProjectionNavigationContract,
-): ToolSearchResult {
-  return {
-    kind: "unavailable",
-    schemaVersion: PublicToolRegistrySchemaVersion,
-    reason,
-    navigation: noToolNavigation(navigation),
-  };
-}
 export function normalizeToolSearchInput(input: ToolSearchInput):
   | Readonly<{
       query: string;
@@ -545,29 +301,6 @@ export function matchesToolFilters(
     return false;
   return true;
 }
-function matchesFactFilters(
-  fact: CurrentToolSearchFact,
-  filters: ToolSearchFilters,
-  now: number,
-): boolean {
-  if (filters.networkId !== undefined && filters.networkId !== fact.networkId) return false;
-  if (filters.effects !== undefined && !filters.effects.some((effect) => fact.effects.includes(effect))) return false;
-  if (filters.dataUse !== undefined && !filters.dataUse.some((entry) => fact.dataUse.includes(entry))) return false;
-  const availability = fact.routeable
-    && fact.readiness.validUntil !== undefined
-    && fact.readiness.validUntil > now
-    ? "routeable"
-    : fact.integrated ? "setup_required" : "unavailable";
-  if (filters.availability !== undefined && !filters.availability.includes(availability)) return false;
-  if (filters.currency !== undefined) {
-    const currency = fact.price.kind === "on_request"
-      ? undefined
-      : fact.price.kind === "fixed" ? fact.price.amount.currency : fact.price.minimum.currency;
-    if (currency !== filters.currency) return false;
-  }
-  if (filters.maximumPrice !== undefined && !priceWithin(fact.price, filters.maximumPrice)) return false;
-  return filters.location === undefined || fact.businessSearchText.includes(filters.location);
-}
 function searchTokens(query: string): string[] {
   const tokens = query.toLowerCase().match(/[a-z0-9]+/g) ?? [];
   return tokens.filter((token, index) =>
@@ -585,21 +318,6 @@ function searchableText(searchText: readonly string[]): string[] {
       .toLowerCase()
       .match(/[a-z0-9]+/g) ?? []
   );
-}
-function toolSearchText(
-  tool: PublicToolDescriptor,
-  searchTerms: readonly string[],
-): readonly string[] {
-  return [
-    tool.toolId,
-    tool.contract.capabilityId,
-    tool.summary,
-    tool.business.slug,
-    tool.business.name,
-    tool.listing.label,
-    tool.listing.summary,
-    ...searchTerms.filter((term) => !/\brate[\s_-]?limit\b/i.test(term)),
-  ];
 }
 function scoreSearchText(
   searchText: readonly string[],
@@ -663,50 +381,4 @@ function priceWithin(
   const candidate = price.kind === "fixed" ? price.amount : price.minimum;
   const comparison = compareExactAmounts(candidate, maximum);
   return comparison !== undefined && comparison <= 0;
-}
-function encodeCursor(
-  query: string,
-  filters: ToolSearchFilters,
-  snapshotKey: string,
-  lastToolRef: PublicToolRef,
-): string {
-  return `cursor:v1:${canonicalDigest({ query, filters, snapshotKey, lastOperationRef: lastToolRef }).slice(7)}:${encodeURIComponent(snapshotKey)}:${encodeURIComponent(lastToolRef)}`;
-}
-type CursorPayload = Readonly<{ lastToolRef?: PublicToolRef }>;
-function decodeCursor(
-  cursor: string | undefined,
-  query: string,
-  filters: ToolSearchFilters,
-  snapshotKey: string,
-): CursorPayload | undefined {
-  if (cursor === undefined) return {};
-  const match = /^cursor:v1:([0-9a-f]{64}):([^:]*):(.+)$/.exec(cursor);
-  if (match === null) return undefined;
-  const digest = match[1];
-  const encodedSnapshot = match[2];
-  const encodedRef = match[3];
-  if (
-    digest === undefined ||
-    encodedSnapshot === undefined ||
-    encodedRef === undefined
-  )
-    return undefined;
-  let cursorSnapshot: string;
-  let lastRef: string;
-  try {
-    cursorSnapshot = decodeURIComponent(encodedSnapshot);
-    lastRef = decodeURIComponent(encodedRef);
-  } catch (cause) {
-    return degradeBackend(cause, undefined, { site: "decodeCursor", reason: "invalid_response" });
-  }
-  if (cursorSnapshot !== snapshotKey || !isPublicToolRef(lastRef))
-    return undefined;
-  return canonicalDigest({
-    query,
-    filters,
-    snapshotKey: cursorSnapshot,
-    lastOperationRef: lastRef,
-  }).slice(7) === digest
-    ? { lastToolRef: lastRef }
-    : undefined;
 }

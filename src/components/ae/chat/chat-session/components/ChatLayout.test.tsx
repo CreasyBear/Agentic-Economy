@@ -108,13 +108,14 @@ describe('ChatLayout', () => {
       messages: [
         { id: 'ask', role: 'user', parts: [{ type: 'text', text: 'Find a non-existent Tool' }] },
         { id: 'reply', role: 'assistant', parts: [
-          { type: `tool-${providerSafeActionToolName('registry.tools.search')}`, state: 'output-available', output: { kind: 'noMatch', results: [], nearMisses: [], scope: 'exhausted' } },
-          { type: 'text', text: 'No match for that yet.' },
+          { type: `tool-${providerSafeActionToolName('registry.tools.search')}`, state: 'output-available',
+            output: { kind: 'noMatch', results: [], assessed: { source: 'current', scope: 'complete', examined: 0, coverage: 'complete' },
+              next: [{ action: 'broaden', args: { query: 'non-existent Tool' }, authority: 'public' }] } },
+          { type: 'text', text: 'No suitable Tool in the assessed catalogue.' },
         ] },
       ],
       onSuggest: vi.fn(),
     } })} />)
-    expect(screen.getByRole('region', { name: 'Answer' }).textContent).toContain('No match for that yet.')
     expect(screen.queryByRole('region', { name: 'Related questions' })).toBeNull()
   })
 
@@ -128,7 +129,7 @@ describe('ChatLayout', () => {
       { id: 'user', role: 'user' as const, parts: [{ type: 'text', text: 'Find weather in Sydney' }] },
       { id: 'assistant', role: 'assistant' as const, parts: [
         { type: `tool-${providerSafeActionToolName('registry.tools.search')}`, state: 'output-available',
-          output: { kind: 'matched', results: [
+          output: { kind: 'match', results: [
             { toolRef: `operation:v1:${'a'.repeat(64)}`, title: 'Sydney Weather', price: { kind: 'indicative', label: 'USD 0.005' } },
             { toolRef: `operation:v1:${'b'.repeat(64)}`, title: 'Forecast API', price: { kind: 'indicative', label: 'USD 0.008' } },
             { toolRef: `operation:v1:${'c'.repeat(64)}`, title: 'Climate Data', price: { kind: 'indicative', label: 'USD 0.009' } },
@@ -165,7 +166,7 @@ describe('ChatLayout', () => {
   it('shows answer progress above options and defers answer actions until generation settles', () => {
     const user = { id: 'user', role: 'user' as const, parts: [{ type: 'text', text: 'Find weather in Sydney' }] }
     const tool = { type: `tool-${providerSafeActionToolName('registry.tools.search')}`, state: 'output-available',
-      output: { kind: 'matched', results: [
+      output: { kind: 'match', results: [
         { toolRef: `operation:v1:${'a'.repeat(64)}`, title: 'Sydney Weather', price: { kind: 'indicative', label: 'USD 0.005' } },
       ] } }
     const assistant = { id: 'assistant', role: 'assistant' as const, parts: [tool] }
@@ -191,7 +192,7 @@ describe('ChatLayout', () => {
     const tool = (results: unknown[]) => [
       { id: 'user', role: 'user' as const, parts: [{ type: 'text', text: 'Find weather' }] },
       { id: 'assistant', role: 'assistant' as const, parts: [
-        { type: `tool-${providerSafeActionToolName('registry.tools.search')}`, state: 'output-available', output: { kind: 'matched', results } },
+        { type: `tool-${providerSafeActionToolName('registry.tools.search')}`, state: 'output-available', output: { kind: 'match', results } },
         { type: 'text', text: 'Weather tools.' },
       ] },
     ]

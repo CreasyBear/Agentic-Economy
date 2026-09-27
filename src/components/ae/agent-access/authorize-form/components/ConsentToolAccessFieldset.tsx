@@ -19,6 +19,7 @@ export function ConsentToolAccessFieldset({
   onApprovedToolAccessChange,
   onToolQueryChange,
   onFindTools,
+  onContinueSearch,
   onAddApprovedTool,
   onRemoveApprovedTool,
 }: ConsentToolAccessFieldsetProps) {
@@ -96,6 +97,11 @@ export function ConsentToolAccessFieldset({
               </div>
               {toolSearch.error === undefined ? null : <p id="tool-search-error" role="alert" className="text-sm text-destructive">{toolSearch.error}</p>}
               {toolSearch.noMatchMessage === undefined ? null : <p role="status" className="text-sm text-muted-foreground">{toolSearch.noMatchMessage}</p>}
+              {toolSearch.continuation === undefined ? null : (
+                <Button type="button" variant="secondary" disabled={toolSearch.pending || toolQuery.trim() !== toolSearch.continuation.query} onClick={onContinueSearch}>
+                  Next page
+                </Button>
+              )}
               {toolSearch.results === undefined ? null : (
                 <ul className="grid gap-2" aria-label="Tool search results">
                   {toolSearch.results.map((item) => (

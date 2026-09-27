@@ -5,22 +5,20 @@ import {
   registryToolsDescribeAction,
   registryToolsSearchAction,
 } from '@/modules/registry/tools.actions'
-import type { RegistryNextAction } from '@/modules/registry/tool-choice-contracts'
+import { toolChoiceSearchOutputSchema, type RegistryNextAction } from '@/modules/registry/tool-choice-contracts'
 
 function noMatch(
   next: readonly RegistryNextAction[],
-  pagination: { limit: number; hasMore: boolean; nextCursor?: string } = { limit: 10, hasMore: false },
+  pagination: { limit: number; hasMore: boolean; nextCursor?: string } = { limit: 8, hasMore: false },
 ) {
   return {
-    kind: 'noMatch' as const,
+    kind: pagination.hasMore ? 'scoped' as const : 'noMatch' as const,
+    reason: pagination.hasMore ? 'More supply remains to assess.' : 'No suitable Tools found in the assessed sources.',
     schemaVersion: 'registry-tools:v3' as const,
     query: 'plumbing',
-    scope: pagination.hasMore ? 'page' as const : 'exhausted' as const,
-    reason: 'No suitable Tools found.',
+    assessed: { source: 'all' as const, scope: pagination.hasMore ? 'page' as const : 'complete' as const, examined: 2, coverage: pagination.hasMore ? 'partial' as const : 'complete' as const },
     results: [] as [],
-    nearMisses: [],
-    suggestions: [],
-    partialResults: false,
+    partialResults: pagination.hasMore,
     pagination,
     next: [...next],
   }
@@ -44,13 +42,11 @@ describe('MCP host adapter registry', () => {
     const body = await readMcpBody(response)
     const result = body.result as Record<string, unknown>
     expect(run).toHaveBeenCalledWith({
-      data: { query: 'plumbing', limit: 10 },
+      data: { query: 'plumbing', limit: 8 },
       context: expect.objectContaining({ caller: 'mcp' }),
     })
-    expect((result.structuredContent as { result?: unknown } | undefined)?.result).toMatchObject({
-      kind: 'noMatch',
-      scope: 'exhausted',
-      next: [],
+    expect(result.structuredContent).toMatchObject({
+      result: { kind: 'noMatch', assessed: { scope: 'complete' }, next: [] },
     })
     expect(JSON.stringify(result.content)).not.toContain('"results"')
     run.mockRestore()
@@ -77,13 +73,15 @@ describe('MCP host adapter registry', () => {
     expect((result.structuredContent as { result?: { next: unknown } } | undefined)?.result?.next).toEqual([
       { action: 'broaden', args: { query: 'plumbing' }, authority: 'public' },
     ])
+    expect(JSON.stringify(result.content)).toContain('ae_registry_tools_search({\\"query\\":\\"plumbing\\"})')
+    expect(JSON.stringify(result.content)).toContain('scope: all/complete')
     run.mockRestore()
   })
 
   it('carries a next_page nextAction ahead of a request or broaden decision', async () => {
     const run = vi.spyOn(registryToolsSearchAction, 'run').mockResolvedValue(noMatch([
       { action: 'next-page', args: { query: 'plumbing', cursor: 'cursor-1' }, authority: 'public' },
-    ], { limit: 10, hasMore: true, nextCursor: 'cursor-1' }))
+    ], { limit: 8, hasMore: true, nextCursor: 'cursor-1' }))
 
     const response = await postMcp({
       jsonrpc: '2.0',
@@ -101,6 +99,60 @@ describe('MCP host adapter registry', () => {
     expect((result.structuredContent as { result?: { next: unknown } } | undefined)?.result?.next).toEqual([
       { action: 'next-page', args: { query: 'plumbing', cursor: 'cursor-1' }, authority: 'public' },
     ])
+    expect(JSON.stringify(result.content)).toContain('ae_registry_tools_search({\\"query\\":\\"plumbing\\",\\"cursor\\":\\"cursor-1\\"})')
+    expect(JSON.stringify(result.content)).toContain('scope: all/page')
+    run.mockRestore()
+  })
+
+  it('exposes mixed inspection actions and unavailable retry in text and structured content', async () => {
+    const toolRef = `operation:v1:${'a'.repeat(64)}`
+    const run = vi.spyOn(registryToolsSearchAction, 'run')
+    run.mockResolvedValueOnce(toolChoiceSearchOutputSchema.parse({
+      schemaVersion: 'registry-tools:v3',
+      kind: 'match',
+      query: 'plumbing',
+      assessed: { source: 'all', scope: 'complete', examined: 2, coverage: 'complete' },
+      pagination: { limit: 8, hasMore: false },
+      partialResults: false,
+      next: [],
+      results: [
+        {
+          id: toolRef, source: 'current', access: 'ae_callable', toolRef, title: 'AE Tool',
+          summary: 'Retrieve data', provider: 'AE', actionClass: 'retrieve', objectClass: 'data',
+          readiness: 'ready', price: { kind: 'indicative', label: 'A$0.02' }, detailRef: toolRef,
+          next: [{ action: 'describe', authority: 'public', args: { toolRef } }],
+        },
+        {
+          id: 'opaque-1', source: 'coinbase', access: 'external_listing', title: 'External Tool',
+          summary: 'Retrieve data', provider: 'Outside', actionClass: 'retrieve', objectClass: 'data',
+          readiness: 'unverified', price: { kind: 'unavailable' },
+          detailRef: '/api/v1/registry/detail?id=opaque-1',
+          next: [{ action: 'describe-external', authority: 'public', args: { id: 'opaque-1' } }],
+        },
+      ],
+    }))
+    run.mockResolvedValueOnce(toolChoiceSearchOutputSchema.parse({
+      ...noMatch([{ action: 'retry', authority: 'public', args: { query: 'plumbing' } }]),
+      kind: 'unavailable',
+      reason: 'source_unavailable',
+      assessed: { source: 'all', scope: 'page', examined: 0, coverage: 'partial' },
+    }))
+
+    for (const [id, expected] of [
+      [31, ['ae_registry_tools_describe(', 'curl --fail', '/api/v1/registry/detail?id=opaque-1']],
+      [32, ['Search unavailable', 'ae_registry_tools_search(']],
+    ] as const) {
+      const response = await postMcp({
+        jsonrpc: '2.0', id, method: 'tools/call',
+        params: { name: 'ae_registry_tools_search', arguments: { query: 'plumbing' } },
+      })
+      expect(response.status).toBe(200)
+      const body = await readMcpBody(response)
+      const result = body.result as Record<string, unknown>
+      expect(result.isError).not.toBe(true)
+      for (const value of expected) expect(JSON.stringify(result.content)).toContain(value)
+      expect(result.structuredContent).toMatchObject({ result: { next: expect.any(Array) } })
+    }
     run.mockRestore()
   })
 

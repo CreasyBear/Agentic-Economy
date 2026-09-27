@@ -3296,6 +3296,12 @@
   {
     "visibility": "public",
     "module": "x402DirectoryIndex",
+    "method": "detailById",
+    "kind": "query"
+  },
+  {
+    "visibility": "public",
+    "module": "x402DirectoryIndex",
     "method": "facets",
     "kind": "query"
   },
@@ -3315,6 +3321,18 @@
     "visibility": "public",
     "module": "x402DirectoryIndex",
     "method": "resource",
+    "kind": "query"
+  },
+  {
+    "visibility": "public",
+    "module": "x402DirectoryIndex",
+    "method": "searchCompact",
+    "kind": "query"
+  },
+  {
+    "visibility": "internal",
+    "module": "x402DirectoryIndex",
+    "method": "searchCompactInternal",
     "kind": "query"
   },
   {

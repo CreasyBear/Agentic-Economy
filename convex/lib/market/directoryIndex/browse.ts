@@ -1,3 +1,4 @@
+import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { paginationOptsValidator } from 'convex/server'
 import { filter } from 'convex-helpers/server/filter'
 import { v, type Infer } from 'convex/values'
@@ -7,7 +8,7 @@ import type { Doc } from '../../../_generated/dataModel'
 import type { QueryCtx } from '../../../_generated/server'
 import { ANALYTICS_VERSION } from './analytics'
 import { filterArgs, pageValue } from './contracts'
-import { activeDirectoryGeneration, directoryCoverage, indexedDirectoryEntry } from './rows'
+import { activeDirectoryGeneration, compactDirectoryText, directoryCoverage, indexedDirectoryEntry } from './rows'
 
 type SearchRow = Doc<'marketDirectorySearchEntries'>
 
@@ -144,3 +145,118 @@ export const browseHandler = async (ctx: QueryCtx, args: Infer<typeof browseArgs
       page: withTool.map(({ row, entry, toolRef }) => ({ ...indexedDirectoryEntry(entry, row), ...(toolRef === undefined ? {} : { toolRef }) })),
     }
   }
+
+const actionClassValue = v.union(v.literal('retrieve'), v.literal('transform'), v.literal('analyze'), v.literal('create'), v.literal('mutate'), v.literal('other'), v.literal('unclassified'))
+const objectClassValue = v.union(v.literal('web'), v.literal('document'), v.literal('image'), v.literal('location'), v.literal('chain'), v.literal('data'), v.literal('other'), v.literal('unclassified'))
+
+export const searchCompactArgs = v.object({
+  query: v.string(),
+  actionClass: v.optional(actionClassValue),
+  objectClass: v.optional(objectClassValue),
+  category: v.optional(v.string()),
+  provider: v.optional(v.string()),
+  network: v.optional(v.string()),
+  priceBand: v.optional(v.string()),
+  access: v.optional(v.union(v.literal('ae_callable'), v.literal('external_listing'))),
+  paginationOpts: paginationOptsValidator,
+})
+export const searchCompactReturns = v.union(
+  v.object({ kind: v.literal('unavailable'), reason: v.string() }),
+  v.object({
+    kind: v.literal('ok'),
+    coverage: v.object({ generation: v.string(), completedAt: v.number() }),
+    page: v.array(v.object({
+      id: v.string(), source: v.union(v.literal('coinbase'), v.literal('provider')),
+      sourceRouteRef: v.optional(v.string()), toolRef: v.optional(v.string()),
+      title: v.string(), summary: v.string(), provider: v.string(),
+      actionClass: actionClassValue, objectClass: objectClassValue, category: v.optional(v.string()),
+      completedAt: v.number(), minimumUsdPrice: v.optional(v.string()),
+    })),
+    continueCursor: v.string(), isDone: v.boolean(),
+  }),
+)
+
+/** Compact indexed search; live publication joins decide access before cursor pagination. */
+export const searchCompactHandler = async (ctx: QueryCtx, args: Infer<typeof searchCompactArgs>) => {
+  const { paginationOpts, access, actionClass, objectClass, ...filters } = args
+  const parsed = x402DirectoryIndexInputSchema.safeParse(filters)
+  if (!parsed.success || paginationOpts.numItems < 1 || paginationOpts.numItems > 12 || !Number.isSafeInteger(paginationOpts.numItems)) {
+    return { kind: 'unavailable' as const, reason: 'query_invalid' }
+  }
+  const generation = await activeDirectoryGeneration(ctx)
+  if (generation === null) return { kind: 'unavailable' as const, reason: 'index_unavailable' }
+  if (filters.priceBand !== undefined && (generation.analyticsVersion !== ANALYTICS_VERSION || generation.analyticsStatus !== 'ready')) {
+    return { kind: 'unavailable' as const, reason: 'analytics_building' }
+  }
+  const scope = canonicalDigest([
+    'compact-directory:v1', generation.generation, String(generation.completedAt ?? generation.startedAt),
+    parsed.data.query ?? '', actionClass ?? '', objectClass ?? '',
+    parsed.data.category ?? '', parsed.data.provider ?? '',
+    parsed.data.network === undefined ? '*' : directoryNetwork(parsed.data.network),
+    parsed.data.priceBand ?? '', access ?? '',
+  ])
+  const requestedCursor = paginationOpts.cursor
+  const separator = requestedCursor?.indexOf('|') ?? -1
+  if (requestedCursor !== null && (requestedCursor.length > 8192 || separator < 0 || requestedCursor.slice(0, separator) !== scope)) {
+    return { kind: 'unavailable' as const, reason: 'cursor_invalid' }
+  }
+  const nativeCursor = requestedCursor === null ? null : requestedCursor.slice(separator + 1)
+  const { query, category, provider, network, priceBand } = parsed.data
+  const networkKey = network === undefined ? '*' : directoryNetwork(network)
+  const source = query
+    ? ctx.db.query('marketDirectorySearchEntries')
+      .withSearchIndex('search_text_by_generation_network_category_provider', search => {
+        let indexed = search.search('searchText', query).eq('generation', generation.generation).eq('network', networkKey)
+        if (category !== undefined) indexed = indexed.eq('category', category)
+        if (provider !== undefined) indexed = indexed.eq('provider', provider)
+        else indexed = indexed.eq('eligible', true)
+        return indexed
+      })
+    : provider === undefined
+      ? ctx.db.query('marketDirectorySearchEntries')
+        .withIndex('by_generation_and_network_and_elig_and_popularOrder', q => q.eq('generation', generation.generation).eq('network', networkKey).eq('eligible', true)).order('desc')
+      : ctx.db.query('marketDirectorySearchEntries')
+        .withIndex('by_generation_and_network_and_provider_and_popularOrder', q => q.eq('generation', generation.generation).eq('network', networkKey).eq('provider', provider)).order('desc')
+  const rows = source
+    .filter(q => q.and(
+      ...(category === undefined ? [] : [q.eq(q.field('category'), category)]),
+      ...(actionClass === undefined ? [] : [q.or(q.eq(q.field('actionClass'), actionClass), ...(actionClass === 'unclassified' ? [q.eq(q.field('actionClass'), undefined)] : [q.eq(q.field('actionClass'), 'unclassified'), q.eq(q.field('actionClass'), undefined)]))]),
+      ...(objectClass === undefined ? [] : [q.or(q.eq(q.field('objectClass'), objectClass), ...(objectClass === 'unclassified' ? [q.eq(q.field('objectClass'), undefined)] : [q.eq(q.field('objectClass'), 'unclassified'), q.eq(q.field('objectClass'), undefined)]))]),
+      ...(priceBand === undefined ? [] : [q.eq(q.field('priceBand'), priceBand)]),
+    ))
+  const page = await filter(rows, async row => {
+    if (access === undefined) return true
+    const toolRef = await admittedToolRef(ctx, row.sourceRouteRef)
+    return access === 'ae_callable' ? toolRef !== undefined : toolRef === undefined
+  }).paginate({
+    ...paginationOpts, cursor: nativeCursor, maximumRowsRead: Math.min(paginationOpts.maximumRowsRead ?? 512, 512),
+    maximumBytesRead: Math.min(paginationOpts.maximumBytesRead ?? 1024 * 1024, 1024 * 1024),
+  })
+  const compact = await Promise.all(page.page.map(async row => {
+    // Older rows are served until the ordinary unchanged-source refresh fills
+    // their slim projection; current rows never load retained source JSON.
+    const legacy = row.documentId === undefined || row.title === undefined || row.summary === undefined
+      ? await ctx.db.get(row.entryId) : null
+    const id = row.documentId ?? legacy?.documentId
+    const title = row.title ?? legacy?.name
+    const summary = row.summary ?? legacy?.summary
+    if (id === undefined || title === undefined || summary === undefined) throw new Error('directory_index_entry_missing')
+    const toolRef = await admittedToolRef(ctx, row.sourceRouteRef)
+    return {
+      id, source: row.source ?? legacy?.source ?? 'coinbase',
+      ...(row.sourceRouteRef === undefined ? {} : { sourceRouteRef: row.sourceRouteRef }),
+      ...(toolRef === undefined ? {} : { toolRef }),
+      title: compactDirectoryText(title, 72),
+      summary: compactDirectoryText(summary, 100),
+      provider: compactDirectoryText(row.provider, 48),
+      actionClass: row.actionClass ?? 'unclassified', objectClass: row.objectClass ?? 'unclassified',
+      ...(row.category === 'uncategorized' ? {} : { category: row.category }),
+      completedAt: generation.completedAt ?? generation.startedAt,
+      ...(row.minimumUsdPrice === undefined ? {} : { minimumUsdPrice: row.minimumUsdPrice }),
+    }
+  }))
+  return {
+    kind: 'ok' as const, coverage: { generation: generation.generation, completedAt: generation.completedAt ?? generation.startedAt },
+    page: compact, continueCursor: `${scope}|${page.continueCursor}`, isDone: page.isDone,
+  }
+}

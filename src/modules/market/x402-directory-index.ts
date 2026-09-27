@@ -1,5 +1,6 @@
 import Decimal from 'decimal.js'
 import { z } from 'zod'
+import { SEARCH_QUERY_MAX_LENGTH } from '@/modules/common/search-query'
 import { degradeBackend } from '@/lib/observability/degrade-backend'
 import { x402DirectoryFilterSchema, type X402DirectoryEntry, type X402DirectoryFilters } from './x402-directory'
 
@@ -15,7 +16,7 @@ export type DirectoryRecencyBand = typeof DIRECTORY_RECENCY_BANDS[number]
 export type DirectoryMomentumBand = typeof DIRECTORY_MOMENTUM_BANDS[number]
 
 export const x402DirectoryIndexInputSchema = x402DirectoryFilterSchema.extend({
-  query: z.string().trim().max(200).optional(),
+  query: z.string().trim().max(SEARCH_QUERY_MAX_LENGTH).optional(),
   category: z.string().trim().min(1).max(80).transform(value => value.toLowerCase()).optional(),
   sort: z.enum(['relevance', 'popular', 'updated', 'adoption', 'price_asc', 'momentum']).optional(),
   minUsdPrice: z.number().finite().nonnegative().optional(),

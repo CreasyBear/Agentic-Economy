@@ -2,6 +2,7 @@ import { z } from 'zod'
 
 import type { FacilitatorDiscoverySkipReason } from '@/modules/capability-supply/server'
 import { degradeBackend } from '@/lib/observability/degrade-backend'
+import { SEARCH_QUERY_MAX_LENGTH } from '@/modules/common/search-query'
 
 export type X402DirectoryField = Readonly<{
   name: string
@@ -98,7 +99,7 @@ export const x402DirectoryFilterSchema = z.strictObject({
 export type X402DirectoryFilters = z.infer<typeof x402DirectoryFilterSchema>
 
 export const x402DirectoryInputSchema = x402DirectoryFilterSchema.extend({
-  query: z.string().max(256).optional(),
+  query: z.string().max(SEARCH_QUERY_MAX_LENGTH).optional(),
   offset: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER).optional(),
 })
 export const x402DirectoryResolveInputSchema = x402DirectoryInputSchema.extend({ resource: z.string().min(1).max(8192) })

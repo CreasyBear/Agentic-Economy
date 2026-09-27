@@ -30,6 +30,7 @@ import {
   type ToolCardProjection,
   type ToolChoiceRow,
 } from '@/modules/chat/tool-card'
+import type { SearchNextProps } from './presentation'
 
 const READINESS_VARIANT = {
   'Ready now': 'success',
@@ -59,7 +60,7 @@ function ChoiceRow({ choice }: { choice: ToolChoiceRow }) {
       variant="muted"
       size="sm"
       render={
-        <a href={inspectHref(choice.toolRef)} aria-label={chatChoiceLinkName(choice.title, choice.readiness)}>
+        <a href={choice.detailHref ?? inspectHref(choice.toolRef)} aria-label={chatChoiceLinkName(choice.title, choice.readiness)}>
           <ItemMedia variant="icon" aria-hidden="true" className="font-mono text-xs font-semibold">
             {choiceInitial(choice.title)}
           </ItemMedia>
@@ -74,7 +75,7 @@ function ChoiceRow({ choice }: { choice: ToolChoiceRow }) {
               <ItemDescription>{choice.provider}</ItemDescription>
             )}
             {choice.access === undefined ? null : (
-              <ItemFooter className="text-muted-foreground">{choice.access}</ItemFooter>
+              <ItemFooter className="text-muted-foreground">{choice.access === 'external_listing' ? 'External listing · not callable through AE' : choice.access}</ItemFooter>
             )}
           </ItemContent>
           {choice.price === undefined ? null : (
@@ -106,7 +107,7 @@ function CompareTable({ choices }: { choices: readonly ToolChoiceRow[] }) {
             {choices.map((choice) => (
               <TableRow key={choice.toolRef}>
                 <TableCell>
-                  <a href={inspectHref(choice.toolRef)}>{choice.title}</a>
+                  <a href={choice.detailHref ?? inspectHref(choice.toolRef)}>{choice.title}</a>
                   {choice.belowMatch === true ? <p className="text-sm text-muted-foreground">{chatBelowMatch}</p> : null}
                 </TableCell>
                 <TableCell>{choice.provider ?? ''}</TableCell>
@@ -148,6 +149,16 @@ function ChoiceRemainder({ count, shown }: { count: number; shown: number }) {
   )
 }
 
+function SearchNext({ next }: SearchNextProps) {
+  if (next === undefined) return null
+  if (next.action === 'next-page') return (
+    <p className="break-words text-sm">Next: ask for the next page of “{next.args.query}” (cursor: <code className="break-all">{next.args.cursor}</code>).</p>
+  )
+  if (next.action === 'broaden') return <p className="text-sm">Next: broaden “{next.args.query}” or browse the Market.</p>
+  if (next.action === 'retry') return <p className="text-sm">Next: retry “{next.args.query}”.</p>
+  return null
+}
+
 function CardBody({ projection }: { projection: ToolCardProjection }) {
   switch (projection.kind) {
     case 'working':
@@ -162,6 +173,9 @@ function CardBody({ projection }: { projection: ToolCardProjection }) {
     case 'choices':
       return (
         <div className="grid gap-related">
+          {projection.verdict === 'scoped' ? (
+            <Alert><AlertDescription>Only part of the catalogue was assessed. These external listings are not an AE Tool recommendation.</AlertDescription></Alert>
+          ) : null}
           {projection.choices.length === 0 ? null : projection.toolId === 'registry.tools.compare' || projection.surface === 'compare'
             ? <CompareTable choices={projection.choices} />
             : <ChoiceList choices={projection.choices} />}
@@ -249,9 +263,11 @@ export function ToolCard({ projection }: { projection: ToolCardProjection }) {
       <CardContent>
         <CardBody projection={projection} />
       </CardContent>
-      {projection.kind === 'choices' && projection.count !== undefined ? (
-        <CardFooter>
-          <ChoiceRemainder count={projection.count} shown={projection.choices.length} />
+      {(projection.kind === 'choices' && (projection.count !== undefined || projection.next !== undefined))
+        || (projection.kind === 'status' && projection.next !== undefined) ? (
+        <CardFooter className="grid gap-intra">
+          {projection.kind === 'choices' && projection.count !== undefined ? <ChoiceRemainder count={projection.count} shown={projection.choices.length} /> : null}
+          {projection.next === undefined ? null : <SearchNext next={projection.next} />}
         </CardFooter>
       ) : projection.kind === 'execute' && projection.suggestedNextAction !== undefined ? (
         <CardFooter>

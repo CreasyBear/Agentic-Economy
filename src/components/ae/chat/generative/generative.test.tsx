@@ -2,6 +2,8 @@
 import '@testing-library/jest-dom/vitest'
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { projectToolCard, CHAT_TOOL_NAME_MAP } from '@/modules/chat/tool-card'
+import { ToolCard } from '../ToolCard'
 import { AnswerBlock } from './AnswerBlock'
 import { ComparisonTable } from './ComparisonTable'
 import { FilterChips } from './FilterChips'
@@ -95,6 +97,30 @@ describe('generative chat leaves', () => {
     expect(option.seller).toBeUndefined()
     expect(projectSourcesFromCards([card]).sources).toHaveLength(1)
     expect(projectWorkFromCards([card]).summary).toBe('Found 1 tool')
+  })
+  it('shows scoped external listing details and continuation without enabling purchase selection', () => {
+    const output = {
+      kind: 'scoped', results: [{ id: 'external-7', source: 'coinbase', access: 'external_listing',
+        title: 'External Timezone', provider: 'Another provider' }],
+      next: [{ action: 'next-page', args: { query: 'timezone', cursor: 'x402:next' }, authority: 'public' }],
+    }
+    const card = projectToolCard({
+      type: `tool-${CHAT_TOOL_NAME_MAP.canonicalToProvider['registry.tools.search']}`,
+      state: 'output-available', output,
+    })
+    expect(card?.kind).toBe('choices')
+    if (card === null) throw new Error('missing scoped search card')
+    render(<ToolCard projection={card} />)
+    expect(screen.getByRole('link', { name: /External Timezone/ })).toHaveAttribute('href',
+      '/api/v1/registry/detail?id=external-7')
+    expect(screen.getByText(/not callable through AE/)).toBeInTheDocument()
+    expect(screen.getByText('x402:next')).toBeInTheDocument()
+    const view = projectOptionsFromCard(card)
+    expect(projectWorkFromCards([card]).summary).toContain('external listing')
+    expect(projectSourcesFromCards([card]).sources[0]?.href).toBe('/api/v1/registry/detail?id=external-7')
+    expect(view.options).toMatchObject([{ selectable: false, href: '/api/v1/registry/detail?id=external-7' }])
+    render(<OptionsGrid view={view} onSelect={vi.fn()} onCompare={vi.fn()} />)
+    expect(screen.getByRole('button', { name: 'Select' })).toBeDisabled()
   })
   it('counts a Tool once when repeated searches return the same result', () => {
     const result = { kind: 'choices', toolId: 'registry.tools.search', title: 'Search', state: 'complete', toolRefs: ['tool:weather'], count: 1, choices: [{ toolRef: 'tool:weather', title: 'Weather Current' }] } as const

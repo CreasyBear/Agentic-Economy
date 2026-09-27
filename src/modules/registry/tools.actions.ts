@@ -12,19 +12,31 @@ import {
   readCapabilityToolDetail,
   readCapabilityToolSearch,
 } from '@/modules/capability-supply/tool-source'
-import type { PublicToolDescriptor, ToolSearchFilters } from '@/modules/capability-supply/public'
-import { decodeOpaqueCursor, encodeOpaqueCursor, InvalidOpaqueCursorError } from './opaque-cursor'
+import { type PublicToolDescriptor, type ToolSearchFilters, type ToolSearchResult } from '@/modules/capability-supply/public'
+import { PublicToolRegistrySchemaVersion } from '@/modules/capability-supply/tool-schemas'
+import { InvalidOpaqueCursorError } from './opaque-cursor'
 import {
   projectToolCompareChoices,
   projectToolDescription,
   projectToolListChoices,
   projectToolSearchChoices,
-  toolChoiceSearchOutputSchema,
+  type SearchResult,
   type SupplyProjectionFreshness,
   type ToolCompareResolution,
 } from './tool-choice-contracts'
-import { readListingSearchGroups } from './internal/listing-search'
-import { rankToolSearchForRegistry } from './tool-reranker'
+import { compactDirectoryRows, compactDirectoryStatus, readCompactDirectoryPage } from './internal/compact-directory-search'
+import { rankToolSearchForRegistry, TOOL_SEARCH_ASSESSMENT_LIMIT, type RegistryToolAssessment } from './tool-reranker'
+import {
+  marketToolsCursorScope,
+  decodeMarketToolsCursor,
+  opaquePagination,
+  scopedSearchCursor,
+  currentSearchContinuation,
+  readSearchCursor,
+  searchPagination,
+  searchPageBudget,
+  capacityExceededSearch,
+} from './internal/tool-search-pagination'
 
 // `market-tools/list` and `market-tools/search` read `registrySearchDocuments`,
 // kept current by the hourly "reconcile business supply projections" workload
@@ -52,32 +64,6 @@ async function readSupplyProjectionFreshness(now: number = Date.now()): Promise<
   }
 }
 
-// The market-tools opaque cursor (AIP-158 opacity, review issue Well 4/C5+C22)
-// scopes to this freshness read's completion timestamp rather than a
-// directory generation: there is no generation concept for the
-// supply-projection sweep, only "as of which completed reconcile". `'current'`
-// covers the (rare) case where no reconcile has ever completed yet.
-function marketToolsCursorScope(freshness: SupplyProjectionFreshness): string {
-  return freshness.completedAt === undefined ? 'current' : String(freshness.completedAt)
-}
-
-/** Decodes an incoming market-tools cursor, throwing when it is malformed or bound to a stale/foreign scope. */
-function decodeMarketToolsCursor(cursor: string | undefined, scope: string): string | undefined {
-  if (cursor === undefined) return undefined
-  const decoded = decodeOpaqueCursor(cursor, { kind: 'market-tools', scope })
-  if (decoded === undefined) throw new InvalidOpaqueCursorError()
-  return decoded
-}
-
-/** Wraps a raw engine `nextCursor` (when present) in the opaque, scope-bound envelope before it reaches the caller. */
-function opaquePagination<P extends Readonly<{ nextCursor?: string | undefined; limit: number; hasMore: boolean }>>(
-  pagination: P,
-  scope: string,
-): P {
-  return pagination.nextCursor === undefined
-    ? pagination
-    : { ...pagination, nextCursor: encodeOpaqueCursor({ kind: 'market-tools', scope, cursor: pagination.nextCursor }) }
-}
 
 function sourceFilters(filters: {
   networkId?: string | undefined
@@ -119,36 +105,159 @@ export const registryToolsListAction = defineAction({
   },
 })
 
+
 export const registryToolsSearchAction = defineAction({
   ...registryToolsSearchContract,
   run: async ({ data, context }) => {
     const freshness = await readSupplyProjectionFreshness()
-    const scope = marketToolsCursorScope(freshness)
-    const cursor = decodeMarketToolsCursor(data.cursor, scope)
+    const admittedWanted = data.source !== 'coinbase' && data.filters?.access !== 'external_listing'
+    const directoryWanted = data.source !== 'current' && data.filters?.access !== 'ae_callable'
+    const directoryStatus = directoryWanted ? await compactDirectoryStatus() : undefined
+    const generation = directoryStatus?.kind === 'ready' ? directoryStatus.coverage?.generation : undefined
+    const scope = scopedSearchCursor({ query: data.query, source: data.source, filters: data.filters, limit: data.limit }, freshness, generation ?? 'current')
+    const cursor = readSearchCursor(data.cursor, scope)
+    const source = directoryWanted ? admittedWanted ? 'all' : 'coinbase' : 'current'
+    const empty: ToolSearchResult = {
+      kind: 'no_candidates', schemaVersion: PublicToolRegistrySchemaVersion, query: data.query,
+      appliedFilters: {}, matchedCount: 0, ranking: [], navigation: [],
+    }
+    if (directoryWanted && generation === undefined) {
+      return projectToolSearchChoices(empty, data.filters, { verdict: 'noMatch', nearMisses: [] }, freshness,
+        data.limit, { query: data.query, source, externalAvailable: false })
+    }
     const filters = sourceFilters(data.filters)
-    const searchResult = await readCapabilityToolSearch({
-      query: data.query,
-      limit: data.limit,
-      ...(data.source === undefined ? {} : { source: data.source }),
-      ...(cursor === undefined ? {} : { cursor }),
-      ...(filters === undefined ? {} : { filters }),
-    })
-    const assessment = await rankToolSearchForRegistry(searchResult, data.query, {
-      ...(context.request === undefined ? {} : { signal: context.request.signal }),
-    })
-    const ranked = assessment.result
-    const paged = ranked.kind === 'ok'
-      ? { ...ranked, pagination: opaquePagination(ranked.pagination, scope) }
-      : ranked
-    const projected = projectToolSearchChoices(paged, data.filters, assessment, freshness, data.detail)
-    const visibleRefs = new Set(projected.results.map(item => item.toolRef))
-    const admitted = ranked.kind === 'ok' ? ranked.items.filter(item => visibleRefs.has(item.toolRef)) : []
-    const listings = await readListingSearchGroups(data.query, admitted, data.limit)
-    return toolChoiceSearchOutputSchema.parse({
-      ...projected,
-      partialResults: projected.partialResults || listings.partialResults,
-      groups: listings.groups,
-    })
+    const provider = data.filters?.provider?.toLocaleLowerCase()
+    // Admitted descriptors carry provider identity, but no Bazaar category, USD price band,
+    // action class or object class. Only their explicit "unclassified"/"unknown" facets match.
+    const unclassifiedFacet = data.filters?.category !== undefined
+      || (data.filters?.priceBand !== undefined && data.filters.priceBand !== 'unknown')
+      || (data.filters?.actionClass !== undefined && data.filters.actionClass !== 'unclassified')
+      || (data.filters?.objectClass !== undefined && data.filters.objectClass !== 'unclassified')
+    const visibleAdmitted = (result: ToolSearchResult): ToolSearchResult => result.kind === 'ok'
+      ? { ...result, items: result.items.filter(tool =>
+        !unclassifiedFacet && (provider === undefined
+          || tool.business.name.toLocaleLowerCase() === provider
+          || tool.business.slug.toLocaleLowerCase() === provider)) }
+      : result
+    let searchResult: ToolSearchResult = empty
+    let completePool = false
+    let assessment: RegistryToolAssessment = { result: empty, verdict: 'noMatch', nearMisses: [] }
+    let admittedExamined = 0
+    let pageSize = data.limit
+    let rankedPageSize = data.limit
+    let externalLimit: number | undefined
+    if (admittedWanted && cursor.phase === 'current') {
+      const pool = await readCapabilityToolSearch({ query: '', limit: TOOL_SEARCH_ASSESSMENT_LIMIT,
+        source: 'current', ...(filters === undefined ? {} : { filters }) })
+      completePool = (pool.kind === 'ok' && !pool.pagination.hasMore && pool.partialResults !== true)
+        || (pool.kind === 'no_candidates' && pool.partialResults !== true)
+      if (completePool && pool.kind !== 'unavailable') searchResult = { ...pool, query: data.query }
+      else if (pool.kind === 'unavailable') searchResult = pool
+      else searchResult = await readCapabilityToolSearch({
+        query: data.query, limit: pageSize, source: 'current',
+        ...(cursor.currentCursor === undefined ? {} : { cursor: cursor.currentCursor }),
+        ...(filters === undefined ? {} : { filters }),
+      })
+      admittedExamined = searchResult.kind === 'ok' ? searchResult.items.length : 0
+      searchResult = visibleAdmitted(searchResult)
+      assessment = await rankToolSearchForRegistry(searchResult, data.query,
+        context.request === undefined ? {} : { signal: context.request.signal })
+    }
+    if (searchResult.kind === 'unavailable' || assessment.verdict === 'degraded') {
+      return projectToolSearchChoices(searchResult, data.filters, assessment, freshness, data.limit,
+        { query: data.query, source, externalAvailable: false })
+    }
+    const directoryFilters = {
+      ...(data.filters?.actionClass === undefined ? {} : { actionClass: data.filters.actionClass }),
+      ...(data.filters?.objectClass === undefined ? {} : { objectClass: data.filters.objectClass }),
+      ...(data.filters?.category === undefined ? {} : { category: data.filters.category }),
+      ...(data.filters?.provider === undefined ? {} : { provider: data.filters.provider }),
+      ...(data.filters?.networkId === undefined ? {} : { network: data.filters.networkId }),
+      ...(data.filters?.priceBand === undefined ? {} : { priceBand: data.filters.priceBand }),
+      access: 'external_listing',
+    }
+    const directoryStart = cursor.phase === 'coinbase' ? cursor.directoryCursor ?? null : null
+    while (true) {
+      let admittedRows: SearchResult[] = []
+      let continuation = currentSearchContinuation(assessment, completePool, cursor, pageSize)
+      if (assessment.result.kind === 'ok' && assessment.verdict === 'matched') {
+        const candidates = completePool
+          ? assessment.result.items.slice(cursor.offset, cursor.offset + pageSize)
+          : assessment.result.items
+        const admitted = projectToolSearchChoices({ ...assessment.result, items: candidates },
+          data.filters, assessment, freshness, data.limit, { query: data.query, source: 'current' })
+        admittedRows = admitted.kind === 'match' ? admitted.results as SearchResult[] : []
+      }
+      let externalRows: SearchResult[] = []
+      let examined = 0
+      let completedAt: number | undefined = directoryStatus?.kind === 'ready' ? directoryStatus.coverage?.completedAt : undefined
+      if (directoryWanted && continuation === undefined && admittedRows.length < pageSize) {
+        const fetchSize = Math.min(pageSize - admittedRows.length, externalLimit ?? pageSize)
+        if (fetchSize === 0) {
+          continuation = { phase: 'coinbase', offset: 0, ...(directoryStart === null ? {} : { directoryCursor: directoryStart }) }
+        } else {
+          const page = await readCompactDirectoryPage({
+            query: data.query, cursor: directoryStart, limit: fetchSize, filters: directoryFilters,
+          })
+          if (page.kind === 'unavailable' && page.reason === 'cursor_invalid') throw new InvalidOpaqueCursorError()
+          if (page.kind !== 'ok') {
+            return projectToolSearchChoices(empty, data.filters, { verdict: 'noMatch', nearMisses: [] }, freshness,
+              data.limit, { query: data.query, source, externalAvailable: false })
+          }
+          examined = page.page.length
+          completedAt = page.coverage.completedAt
+          if (directoryStatus === undefined) throw new Error('Directory status must precede directory page')
+          externalRows = compactDirectoryRows(page, directoryStatus)
+          if (!page.isDone) continuation = { phase: 'coinbase', offset: 0, directoryCursor: page.continueCursor }
+        }
+      } else if (directoryWanted && continuation === undefined && admittedRows.length >= pageSize) {
+        continuation = { phase: 'coinbase', offset: 0 }
+      }
+      const pagination = searchPagination(data.limit, scope, continuation)
+      const result = assessment.result.kind === 'ok'
+        ? { ...assessment.result, items: assessment.result.items.filter(item => admittedRows.some(row => row.toolRef === item.toolRef)) }
+        : empty
+      const output = projectToolSearchChoices(result, data.filters, assessment, freshness, data.limit, {
+        query: data.query,
+        source,
+        complete: source === 'current' && completePool && !unclassifiedFacet,
+        external: externalRows,
+        pagination,
+        ...(generation === undefined ? {} : { generation }),
+        ...(completedAt === undefined ? {} : { completedAt }),
+        externalExamined: examined,
+        admittedExamined,
+      })
+      const budget = searchPageBudget(output, pageSize, admittedRows.length, externalRows.length, externalLimit)
+      if (budget.kind === 'fit') return output
+      if (budget.kind === 'shrink_external') {
+        externalLimit = budget.limit
+        continue
+      }
+      if (budget.kind === 'shrink_current') {
+        pageSize = budget.pageSize
+        externalLimit = undefined
+        if (!completePool && rankedPageSize !== pageSize) {
+          searchResult = await readCapabilityToolSearch({
+            query: data.query, limit: pageSize, source: 'current',
+            ...(cursor.currentCursor === undefined ? {} : { cursor: cursor.currentCursor }),
+            ...(filters === undefined ? {} : { filters }),
+          })
+          if (searchResult.kind === 'unavailable') {
+            return projectToolSearchChoices(searchResult, data.filters,
+              { verdict: 'noMatch', nearMisses: [] }, freshness, data.limit,
+              { query: data.query, source, externalAvailable: false })
+          }
+          admittedExamined = searchResult.kind === 'ok' ? searchResult.items.length : 0
+          searchResult = visibleAdmitted(searchResult)
+          assessment = await rankToolSearchForRegistry(searchResult, data.query,
+            context.request === undefined ? {} : { signal: context.request.signal })
+          rankedPageSize = pageSize
+        }
+        continue
+      }
+      return capacityExceededSearch(data.query, data.limit, output.assessed, freshness)
+    }
   },
 })
 

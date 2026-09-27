@@ -14,6 +14,9 @@ export type ToolSearchResultRowModel = Readonly<{
   priceValidUntil?: number
 }>
 
+export type ToolSearchNextPage = Readonly<{ query: string; cursor: string }>
+export type ToolSearchContinuation = ToolSearchNextPage & Readonly<{ forQuery: string }>
+
 export type MarketToolSearchStatus =
   | Readonly<{ kind: 'idle' }>
   | Readonly<{ kind: 'debouncing'; query: string }>
@@ -23,15 +26,25 @@ export type MarketToolSearchStatus =
       query: string
       items: readonly ToolSearchResultRowModel[]
       count: number
-      groups?: Readonly<{ buyThroughAe: number; listedElsewhere: number }>
+      scopeLabel?: string
+      nextPage?: ToolSearchNextPage
     }>
-  | Readonly<{ kind: 'empty'; query: string; count: number; message: string }>
+  | Readonly<{ kind: 'empty'; query: string; count: number; message: string; nextPage?: ToolSearchNextPage }>
   | Readonly<{
       kind: 'error'
       query: string
       tone: 'alert' | 'recovery'
       message: string
     }>
+
+export type SearchRecoveryProps = Readonly<{
+  message: string
+  onRetry: () => void
+  onClear: () => void
+  onContinue: (nextPage: ToolSearchNextPage) => void
+  nextPage?: ToolSearchNextPage
+  isError?: boolean
+}>
 
 /** Production debounce for catalog keystrokes. */
 export const TOOLS_SEARCH_DEBOUNCE_MS = 200
@@ -112,7 +125,9 @@ export function toolSearchGroupHeading(
 ): string {
   if (trimmedQuery === '') return `Recently inspected · ${recentCount}`
   if (status.kind === 'success' && status.query === trimmedQuery) {
-    return `${status.count} matched · showing ${status.items.length}`
+    return status.scopeLabel === undefined
+      ? `${status.count} matched · showing ${status.items.length}`
+      : `${status.items.length} assessed results · ${status.scopeLabel}`
   }
   return 'Matching Tools'
 }
@@ -129,14 +144,16 @@ export function toolSearchStatusMessage(
   if (query === '') return choiceCount > 0 ? `${choiceCount} recently inspected Tools.` : ''
   if (status.kind !== 'success' && status.kind !== 'empty') {
     if (status.kind === 'error' && status.query === query && status.tone === 'recovery') {
-      return 'No matching Tools.'
+      return 'Tool search is unavailable. Try again.'
     }
     if ('query' in status && status.query !== query) return ''
     return ''
   }
   if (status.query !== query) return ''
   if (status.kind === 'success') {
-    return `${status.count} Tools matched. Showing ${status.items.length}.`
+    return status.scopeLabel === undefined
+      ? `${status.count} Tools matched. Showing ${status.items.length}.`
+      : `${status.items.length} Tools on an assessed subset. ${status.scopeLabel}.`
   }
   return status.message
 }

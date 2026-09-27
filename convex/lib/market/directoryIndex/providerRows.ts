@@ -11,7 +11,7 @@ import { listingIdentityDigest } from './listingDigest'
 import { facetKeys, resolveDirectorySlug, writeFacetMembership } from './membership'
 import { providerDirectoryEntry, providerDocumentId, providerKeyForBusiness, providerResourceKey } from './providerProjection'
 import { refreshProviderLead } from './providerLead'
-import { activeDirectoryGeneration, storedDirectoryEntry } from './rows'
+import { activeDirectoryGeneration, classifyDirectoryEntry, compactDirectoryText, storedDirectoryEntry } from './rows'
 
 /**
  * Tie-break (Well 8 Lane C): a Coinbase-authored row sharing this
@@ -105,9 +105,11 @@ export async function upsertProviderDirectoryRows(
   const resource = providerResourceKey(routeRef)
   const entry = providerDirectoryEntry(resource, providerKey, business, offering, publication)
   const category = entry.category ?? 'uncategorized'
+  const classes = classifyDirectoryEntry(entry)
   const slug = await resolveDirectorySlug(ctx, generation.generation, providerKey, resource, undefined, binding.endpointUrl)
   await absorbCoinbaseRowAtRoute(ctx, generation.generation, routeRef)
   const documentId = providerDocumentId(routeRef)
+  const compact = { documentId, title: compactDirectoryText(entry.title, 72), summary: compactDirectoryText(entry.description, 100) }
   const existing = await ctx.db.query('marketExternalRegistryEntries')
     .withIndex('by_generation_and_documentId', q => q.eq('generation', generation.generation).eq('documentId', documentId)).unique()
   if (existing !== null && existing.source !== 'provider') throw new Error('directory_source_identity_conflict')
@@ -121,6 +123,7 @@ export async function upsertProviderDirectoryRows(
     upstreamServiceId: publication.offeringId, upstreamEndpointId: resource,
     sourceUrl: resource, endpointUrl: resource,
     name: entry.title, summary: entry.description, provider: providerKey, category,
+    ...classes,
     tags: [], networks: [publication.networkId],
     access: 'provider_account' as const, authority: 'source_metadata_only' as const,
     sourceDigest, searchText, updatedAt: now,
@@ -141,6 +144,8 @@ export async function upsertProviderDirectoryRows(
     await ctx.db.insert('marketDirectorySearchEntries', {
       generation: generation.generation, resource, entryId, network, category,
       provider: providerKey, providerKey, eligible: true, source: 'provider' as const,
+      ...classes,
+      ...compact,
       sourceRouteRef: routeRef, slug, searchText,
       popularOrder: -1, updatedOrder: -1, ...searchAnalytics(entry, network, now),
     })

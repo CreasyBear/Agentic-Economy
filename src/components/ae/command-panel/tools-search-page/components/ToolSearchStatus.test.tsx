@@ -32,6 +32,7 @@ describe('ToolSearchStatus', () => {
         recentCount={0}
         onQueryChange={onQueryChange}
         onRetry={onRetry}
+        onContinue={vi.fn()}
       />,
     )
     const alert = screen.getByRole('alert')
@@ -53,6 +54,7 @@ describe('ToolSearchStatus', () => {
         recentCount={0}
         onQueryChange={vi.fn()}
         onRetry={vi.fn()}
+        onContinue={vi.fn()}
       />,
     )
     expect(screen.queryByRole('alert')).toBeNull()

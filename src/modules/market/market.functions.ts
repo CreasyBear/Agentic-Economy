@@ -1,12 +1,13 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
+import { SEARCH_QUERY_MAX_LENGTH } from "@/modules/common/search-query";
 
 import { marketWindowSchema } from "./contracts";
 import { readMarketRouteProjection } from "./server";
 
 const inputSchema = z.object({
   window: marketWindowSchema,
-  query: z.string().max(200).optional(),
+  query: z.string().max(SEARCH_QUERY_MAX_LENGTH).optional(),
   availability: z.enum(["routeable", "setup_required", "unavailable"]).optional(),
   cursor: z.string().max(2_000).optional(),
 });

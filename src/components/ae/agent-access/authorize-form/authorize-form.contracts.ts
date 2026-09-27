@@ -53,6 +53,7 @@ export type ConsentToolSearchView = Readonly<{
   pending: boolean
   results?: readonly Readonly<{ toolRef: string; title: string }>[]
   noMatchMessage?: string
+  continuation?: Readonly<{ query: string; cursor: string }>
   error?: string
 }>
 
@@ -67,6 +68,7 @@ export type ConsentToolAccessFieldsetProps = Readonly<{
   onApprovedToolAccessChange: (value: 'all_admitted' | 'selected_tools') => void
   onToolQueryChange: (value: string) => void
   onFindTools: () => void
+  onContinueSearch: () => void
   onAddApprovedTool: (toolRef: string) => void
   onRemoveApprovedTool: (toolRef: string) => void
 }>

@@ -19,6 +19,27 @@ export const resourceHandler = async (ctx: QueryCtx, args: Infer<typeof resource
     return { kind: 'found' as const, coverage: directoryCoverage(generation), item: { ...indexedDirectoryEntry(row, selected), ...(toolRef === undefined ? {} : { toolRef }) } }
   }
 
+/** Exact opaque document ID: no title/host heuristics and no admission by description. */
+export const detailByIdArgs = v.object({ id: v.string() })
+export const detailByIdReturns = v.union(unavailableValue, v.object({ kind: v.literal('not_found') }), v.object({ kind: v.literal('found'), coverage: coverageValue, item: indexedEntryValue }))
+export const detailByIdHandler = async (ctx: QueryCtx, args: Infer<typeof detailByIdArgs>) => {
+  if (!/^registry:[0-9a-f]{64}$/u.test(args.id)) return { kind: 'not_found' as const }
+  const generation = await activeDirectoryGeneration(ctx)
+  if (generation === null) return { kind: 'unavailable' as const, reason: 'index_unavailable' }
+  const entry = await ctx.db.query('marketExternalRegistryEntries')
+    .withIndex('by_generation_and_documentId', q => q.eq('generation', generation.generation).eq('documentId', args.id))
+    .unique()
+  if (entry === null) return { kind: 'not_found' as const }
+  const row = await ctx.db.query('marketDirectorySearchEntries')
+    .withIndex('by_generation_and_network_and_resource', q => q.eq('generation', generation.generation).eq('network', '*').eq('resource', entry.endpointUrl ?? entry.sourceUrl))
+    .unique()
+  const toolRef = await admittedToolRef(ctx, row?.sourceRouteRef)
+  return {
+    kind: 'found' as const, coverage: directoryCoverage(generation),
+    item: { ...indexedDirectoryEntry(entry, row ?? undefined), ...(toolRef === undefined ? {} : { toolRef }) },
+  }
+}
+
 /**
  * Canonical `/tools/<providerKey>/<slug>` lookup: an indexed read (title,
  * Provider, price, description render synchronously from this) plus the

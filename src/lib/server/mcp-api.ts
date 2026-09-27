@@ -209,15 +209,15 @@ const TOOL_MARKET_READ_NEGATIVE_KINDS = new Set(['not_found', 'unavailable'])
  * protocol-level failures, e.g. bad params — see `ConciseMcpRequestError`
  * above). Every action that deliberately declines to proceed uses
  * `kind: 'refused'` (see `quote.ts`, `call-authority.ts`, `supply-actions.ts`,
- * `market-demand.actions.ts`, `funding-handoff.actions.ts`). The Tool-catalogue
- * reads use `not_found` / `unavailable` instead. Search `noMatch` and
- * `degraded`, and Call `reconciliation_required` / `pending`, are non-error
- * outcomes returned with their validated continuations.
+ * `market-demand.actions.ts`, `funding-handoff.actions.ts`). Non-search
+ * catalogue reads may return `not_found`/`unavailable`. Search `match`,
+ * `scoped`, `noMatch`, and `unavailable` are validated outcomes carrying
+ * their complete typed continuations.
  */
 function mcpToolRefusal(action: AnyAction, result: unknown): McpToolRefusal | undefined {
   if (!isRecord(result) || typeof result.kind !== 'string') return undefined
   const isRefusal = result.kind === 'refused'
-    || (isToolMarketReadAction(action) && TOOL_MARKET_READ_NEGATIVE_KINDS.has(result.kind))
+    || (isToolMarketReadAction(action) && action.id !== 'registry.tools.search' && TOOL_MARKET_READ_NEGATIVE_KINDS.has(result.kind))
   if (!isRefusal) return undefined
   const explicitCode = typeof result.code === 'string' ? result.code : undefined
   const reasonText = typeof result.reason === 'string' ? result.reason : undefined
@@ -253,21 +253,49 @@ function mcpToolRefusalResult(action: AnyAction, result: unknown, refusal: McpTo
   }), { origin, source: 'local' })
   return { ...projected, content: [...projected.content] }
 }
-/** One short text line for people; the complete validated payload lives only in structuredContent. */
-function mcpSuccessSummary(action: AnyAction, result: unknown): string {
+/** The search's validated actions stay legible without requiring clients to parse structuredContent. */
+function mcpSearchActionLine(next: unknown, origin: string): string | undefined {
+  if (!isRecord(next) || typeof next.action !== 'string' || !isRecord(next.args)) return undefined
+  const args = JSON.stringify(next.args)
+  const call = next.action === 'describe' ? `ae_registry_tools_describe(${args})`
+    : next.action === 'describe-external' && typeof next.args.id === 'string'
+      ? `curl --fail ${JSON.stringify(`${origin}/api/v1/registry/detail?id=${encodeURIComponent(next.args.id)}`)}`
+      : next.action === 'next-page' || next.action === 'broaden' || next.action === 'retry'
+        ? `ae_registry_tools_search(${args})`
+        : undefined
+  return `  ${JSON.stringify(next)}${call === undefined ? '' : ` · ${call}`}`
+}
+
+/** Search text exposes the same typed decisions, arguments and scope as the structured payload. */
+function mcpSuccessSummary(action: AnyAction, result: unknown, origin: string): string {
   if (!isRecord(result)) return `${action.name} completed.`
-  if (action.id === 'registry.tools.search' && result.kind === 'noMatch') return 'No suitable Tools found.'
-  const tools = action.id === 'registry.tools.search' && Array.isArray(result.results)
-    ? result.results
-    : undefined
-  if (Array.isArray(tools)) {
-    const first = tools[0]
-    const title = isRecord(first) && typeof first.title === 'string'
-      ? `; top: ${first.title.replace(/\s+/gu, ' ').slice(0, 120)}`
-      : ''
-    return `${tools.length} ${result.kind === 'degraded' ? 'potential' : 'matching'} Tools${title}.`
+  if (action.id !== 'registry.tools.search') {
+    return `${action.name}: ${typeof result.kind === 'string' ? result.kind : 'completed'}.`
   }
-  return `${action.name}: ${typeof result.kind === 'string' ? result.kind : 'completed'}.`
+  const tools = Array.isArray(result.results) ? result.results : []
+  const assessed = isRecord(result.assessed)
+    ? ` · scope: ${result.assessed.source}/${result.assessed.scope} · ${result.assessed.coverage} coverage (${result.assessed.examined} examined)`
+    : ''
+  const summary = result.kind === 'noMatch' ? 'No suitable Tools found'
+    : result.kind === 'unavailable' ? `Search unavailable: ${result.reason}`
+      : result.kind === 'scoped' ? `${tools.length} Tools in assessed supply; more may exist`
+        : `${tools.length} matching Tools`
+  const lines = [`${summary}${assessed}.`]
+  for (const tool of tools) {
+    if (!isRecord(tool)) continue
+    const itemActions = Array.isArray(tool.next) ? tool.next : []
+    for (const next of itemActions) {
+      const text = mcpSearchActionLine(next, origin)
+      if (text !== undefined) lines.push(text)
+    }
+  }
+  if (Array.isArray(result.next)) {
+    for (const next of result.next) {
+      const text = mcpSearchActionLine(next, origin)
+      if (text !== undefined) lines.push(text)
+    }
+  }
+  return lines.join('\n')
 }
 
 function mcpGatewayEvent(
@@ -550,7 +578,7 @@ export function createAeMcpServer(
           const refusal = mcpToolRefusal(action, outputValidation.data)
           if (refusal !== undefined) return mcpToolRefusalResult(action, outputValidation.data, refusal, origin)
           return {
-            content: [{ type: 'text' as const, text: mcpSuccessSummary(action, outputValidation.data) }],
+            content: [{ type: 'text' as const, text: mcpSuccessSummary(action, outputValidation.data, origin) }],
             structuredContent: { result: outputValidation.data, next: projectMcpActionNext(action.id, outputValidation.data, origin) },
           }
         } catch (error) {

@@ -40,7 +40,7 @@ type CommandRunner = (args: readonly string[], options: CliOptions) => Promise<v
 
 const JSON_HELP_FLAGS = {
   '--base-url': { type: 'string', description: 'Server to call; defaults to AE_CLI_BASE_URL, AE_CANONICAL_BASE_URL, local Vite when Convex is loopback, or the hosted origin.' },
-  '--limit': { type: 'string', description: 'Page size: search accepts 1-20; account activity, requests, and history accept 1-100.' },
+  '--limit': { type: 'string', description: 'Page size: search accepts 1-12; account activity, requests, and history accept 1-100.' },
   '--source': { type: 'string', description: 'Tool discovery source: current, coinbase, or payai (browse only).' },
   '--cursor': { type: 'string', description: 'Opaque search, account activity, request, or history continuation cursor.' },
   '--state': { type: 'string', description: 'Canonical Call state filter; history only.' },
@@ -53,7 +53,7 @@ const JSON_HELP_FLAGS = {
   '--continue': { type: 'boolean', description: 'Resume the last chat thread saved for this origin.' },
   '--help': { type: 'boolean', description: 'Show help without performing command work.' },
   '--version': { type: 'boolean', description: 'Show CLI version, executable, runtime, and build revision without contacting a server.' },
-  '--technical': { type: 'boolean', description: 'Include per-Tool navigation in JSON search results or describe results, or identity and evidence metadata in human compare output.' },
+  '--technical': { type: 'boolean', description: 'Include per-Tool navigation in describe results, or identity and evidence metadata in human compare output; not supported by compact search.' },
   '--idempotency-key': { type: 'string', description: 'Optional stable retry identity for a call, private market request, or provider lifecycle write.' },
   '--wait': { type: 'boolean', description: 'Wait for a bounded call result; timeout preserves recovery detail.' },
 } as const
@@ -64,7 +64,7 @@ const COMMAND_OPTIONS: Readonly<Record<string, readonly string[]>> = {
   manifest: ['technical'],
   config: [],
   list: ['source', 'limit', 'cursor', 'filters'],
-  search: ['source', 'limit', 'cursor', 'filters', 'technical'],
+  search: ['source', 'limit', 'cursor', 'filters'],
   describe: ['technical'],
   compare: ['technical'],
   connect: ['provider', 'environment'],
@@ -188,7 +188,9 @@ function jsonHelp(
         })),
       }
       : commandHelpProjection(requested)),
-    flags: JSON_HELP_FLAGS,
+    flags: requested === 'search'
+      ? Object.fromEntries(Object.entries(JSON_HELP_FLAGS).filter(([flag]) => flag !== '--technical'))
+      : JSON_HELP_FLAGS,
     auth: requested?.startsWith('supply') === true ? SUPPLY_AUTH_HELP : AUTH_HELP,
     ...(requested === 'connect' ? {
       auth: {
@@ -351,6 +353,13 @@ function validateCommandOptions(parsed: ParsedArgs): void {
     (option) => option !== 'help' && !allowed.has(option),
   )
   if (unsupported.length === 0) return
+  if (commandPath === 'search' && unsupported.includes('technical')) {
+    throw new CliFailure('Search returns compact results. Run ae describe <ToolRef> to inspect full Tool metadata.', {
+      kind: 'INVALID_ARGUMENT',
+      code: 'search-technical-unsupported',
+      nextCommand: 'ae help describe',
+    })
+  }
   throw new CliFailure(
     `Option --${unsupported[0]} is not valid for ${commandPath}.`,
     {

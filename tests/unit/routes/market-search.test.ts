@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { Route, parseMarketCompareRefs, validateMarketSearch } from "@/routes/market";
+import { SEARCH_QUERY_MAX_LENGTH } from "@/modules/common/search-query";
 import {
   carryMarketCompare,
   marketCompareParam,
@@ -34,7 +35,9 @@ beforeEach(() => {
   reads.resource.mockResolvedValue({ kind: "not_found" });
   reads.home.mockResolvedValue({ observedAt: "2026-09-08T00:00:00Z", rails: [] });
 });
-afterEach(() => vi.unstubAllEnvs());
+afterEach(() => {
+  vi.unstubAllEnvs();
+});
 
 describe("market entry metadata", () => {
   it.each([
@@ -64,6 +67,20 @@ describe("market search validation", () => {
       validateMarketSearch({ category: "identity-compliance", capability: "web-search", availability: "routeable", cursor: "page-2" }),
     ).toEqual({});
   });
+
+  it("accepts a 200-character query and preserves the directory filters", () => {
+    const query = "x".repeat(SEARCH_QUERY_MAX_LENGTH);
+    const filters = { sort: "relevance", provider: "PROVIDER.TEST", network: "base", maxUsdPrice: 0.25 };
+    const search = validateMarketSearch({ query, ...filters });
+
+    expect(search).toMatchObject({ query, sort: "relevance", provider: "provider.test", network: "base", maxUsdPrice: 0.25 });
+  });
+
+  it("rejects an over-limit query before loading catalogue data", () => {
+    expect(() => validateMarketSearch({ query: "x".repeat(SEARCH_QUERY_MAX_LENGTH + 1), sort: "relevance", provider: "provider.test" })).toThrow();
+    expect(reads.catalogue).not.toHaveBeenCalled();
+  });
+
 });
 
 describe("legacy compare mapping", () => {

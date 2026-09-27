@@ -1,5 +1,5 @@
 import { CALL_ROUTE_CONTRACT } from '@/modules/capability-execution/call-entry'
-import { projectToolDescription, projectToolListChoices, projectToolSearchChoices } from '@/modules/registry/tool-choice-contracts'
+import { projectToolDescription, projectToolListChoices, toolChoiceSearchOutputSchema } from '@/modules/registry/tool-choice-contracts'
 import { toolDetailOutputSchema, toolSearchOutputSchema } from '@/modules/capability-supply/public'
 
 import { commitmentRef } from './cold-loop-harness'
@@ -55,21 +55,31 @@ export function operationDescriptor(toolRef: string, summary = 'Current referenc
 }
 
 export function operationSearchResult(query: string, operations: readonly ToolDescriptorFixture[]) {
-  const result = toolSearchOutputSchema.parse({
-    kind: 'ok' as const,
-    schemaVersion: 'registry-tools:v3' as const,
+  return toolChoiceSearchOutputSchema.parse({
+    kind: operations.length === 0 ? 'noMatch' : 'match',
+    ...(operations.length === 0 ? { reason: 'No suitable Tools found in the assessed sources.' } : {}),
+    schemaVersion: 'registry-tools:v3',
     query,
-    items: operations,
-    matchedCount: operations.length,
-    ranking: operations.map((operation, index) => ({
+    partialResults: false,
+    assessed: { source: 'all', scope: 'complete', examined: operations.length, coverage: 'complete' },
+    results: operations.map((operation) => ({
+      id: operation.toolRef,
+      source: 'current',
+      access: 'ae_callable',
       toolRef: operation.toolRef,
-      rank: index + 1,
-      score: 0.9,
+      title: 'Reference lookup',
+      summary: 'Current reference lookup',
+      provider: 'Reference Services',
+      actionClass: 'retrieve',
+      objectClass: 'data',
+      readiness: 'ready',
+      price: { kind: 'indicative', label: 'A$0.01' },
+      detailRef: operation.toolRef,
+      next: [{ action: 'describe', authority: 'public', args: { toolRef: operation.toolRef } }],
     })),
-    pagination: { limit: 20, hasMore: false },
-    navigation: [],
+    pagination: { limit: 8, hasMore: false },
+    next: [{ action: 'broaden', authority: 'public', args: { query } }],
   })
-  return projectToolSearchChoices(result, undefined, { verdict: 'matched', nearMisses: [] })
 }
 
 export function operationDetailResult(operation: ToolDescriptorFixture) {

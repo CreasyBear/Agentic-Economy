@@ -27,7 +27,7 @@ async function postSearch(query: string): Promise<Response> {
   return handleMarketToolSearchRequest(new Request('https://ae.test/api/v1/market-tools/search', {
     method: 'POST',
     headers: { 'content-type': 'application/json', 'x-ae-request-id': 'rerank-route' },
-    body: JSON.stringify({ query, limit: 10 }),
+    body: JSON.stringify({ query, limit: 8, source: 'current' }),
   }))
 }
 
@@ -40,7 +40,7 @@ describe('POST /api/v1/market-tools/search Jev re-rank', () => {
     vi.mocked(readCapabilityToolSearch).mockReset()
   })
 
-  it('returns a matched envelope with cited suitable results from System One', async () => {
+  it('returns a compact assessed callable Tool with an exact describe continuation', async () => {
     setHttpRateLimitAdmissionForTests(async () => ({ ok: true }))
     setPublicSourceTransportForTests({
       query: async () => Date.now() - 60_000,
@@ -63,19 +63,19 @@ describe('POST /api/v1/market-tools/search Jev re-rank', () => {
       expect(response.status).toBe(200)
       const body = await response.json() as {
         kind: string
-        results: readonly { toolRef: string }[]
-        recommendation: { citations: readonly { toolRef: string }[] }
+        results: readonly { toolRef: string; access: string; next: readonly { action: string }[] }[]
       }
-      expect(body.kind).toBe('matched')
+      expect(body.kind).toBe('match')
       expect(body.results.map(item => item.toolRef)).toEqual([TOOL_CRYPTO_TX.toolRef])
-      expect(body.recommendation.citations[0]?.toolRef).toBe(TOOL_CRYPTO_TX.toolRef)
+      expect(body.results[0]).toMatchObject({ access: 'ae_callable', next: [{ action: 'describe' }] })
+      expect(body).not.toHaveProperty('recommendation')
     } finally {
       if (previousKey === undefined) delete process.env.OPENROUTER_API_KEY
       else process.env.OPENROUTER_API_KEY = previousKey
     }
   })
 
-  it('returns a degraded envelope with no recommendation when Jev fails', async () => {
+  it('returns unavailable without unassessed candidates when Jev fails', async () => {
     setHttpRateLimitAdmissionForTests(async () => ({ ok: true }))
     setPublicSourceTransportForTests({
       query: async () => Date.now() - 60_000,
@@ -98,9 +98,9 @@ describe('POST /api/v1/market-tools/search Jev re-rank', () => {
         query: string
         results: readonly { toolRef: string }[]
       }
-      expect(body.kind).toBe('degraded')
+      expect(body.kind).toBe('unavailable')
       expect(body.query).toBe(TIMEZONE_QUERY)
-      expect(body.results).toHaveLength(3)
+      expect(body.results).toHaveLength(0)
       expect(body).not.toHaveProperty('recommendation')
       expect(elapsedMs).toBeLessThan(8_000)
     } finally {

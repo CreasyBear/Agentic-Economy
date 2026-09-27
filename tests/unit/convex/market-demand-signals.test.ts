@@ -153,8 +153,9 @@ describe('private market demand signals', () => {
     const input = { query: 'retained missing OCR need', idempotencyKey: 'lost-response' }
     const search = vi.spyOn(registryToolsSearchAction, 'run').mockResolvedValue({
       kind: 'noMatch', schemaVersion: 'registry-tools:v3', query: input.query,
-      scope: 'exhausted', results: [], nearMisses: [], reason: 'No suitable Tool found.',
-      suggestions: [], partialResults: false, pagination: { limit: 1, hasMore: false },
+      assessed: { source: 'current', scope: 'complete', examined: 0, coverage: 'complete' },
+      results: [], reason: 'No suitable Tool found.',
+      partialResults: false, pagination: { limit: 1, hasMore: false },
       next: [{ action: 'broaden', authority: 'public', args: { query: input.query } }],
     })
     const service = createMarketDemandService(new Request('https://ae.example/api/v1/market-requests', {
@@ -163,7 +164,6 @@ describe('private market demand signals', () => {
     await expect(service.create({ input, principal, correlationId: 'attempt-one' })).rejects.toThrow('response_lost')
     const stored = await backend.run(ctx => ctx.db.query('marketDemandSignals').collect())
     expect(stored).toHaveLength(1)
-    search.mockResolvedValue({ kind: 'ok' } as never)
     expect(await service.create({ input, principal, correlationId: 'attempt-two' }))
       .toEqual({ kind: 'replayed', requestRef: stored[0]!.requestRef, query: input.query, createdAt: stored[0]!.createdAt })
     expect(search).toHaveBeenCalledTimes(1)
@@ -186,8 +186,9 @@ describe('private market demand signals', () => {
     const input = { query: 'missing concurrent need', idempotencyKey: 'concurrent-request' }
     vi.spyOn(registryToolsSearchAction, 'run').mockResolvedValue({
       kind: 'noMatch', schemaVersion: 'registry-tools:v3', query: input.query,
-      scope: 'exhausted', results: [], nearMisses: [], reason: 'No suitable Tool found.',
-      suggestions: [], partialResults: false, pagination: { limit: 1, hasMore: false },
+      assessed: { source: 'current', scope: 'complete', examined: 0, coverage: 'complete' },
+      results: [], reason: 'No suitable Tool found.',
+      partialResults: false, pagination: { limit: 1, hasMore: false },
       next: [{ action: 'broaden', authority: 'public', args: { query: input.query } }],
     })
     const service = createMarketDemandService(new Request('https://ae.example/api/v1/market-requests', {

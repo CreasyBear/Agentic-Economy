@@ -65,12 +65,8 @@ export {
   rankToolSearchText,
   matchesToolFilters,
   normalizeToolSearchInput,
-  searchCapabilityTools,
-  currentToolSearchFact,
-  searchCurrentToolFacts,
 } from "./internal/tool-search";
 export type {
-  CurrentToolSearchFact,
   ToolSearchTextCandidate,
   ToolSearchRanking,
   ToolSearchFilters,

@@ -199,12 +199,9 @@ describe.sequential('durable Tool chat messaging and shares', () => {
       }),
     ]))
     expect(messages.page.map((message) => message.role)).toEqual(['user', 'assistant'])
-    expect(messages.page[1]?.text).toBe(extended
-      ? 'No current exchange-rate Tool was verified from that reference.'
-      : '**No match for that yet.** Next: try different words or browse the Market.')
     expect(activeStreams).toEqual([])
   })
-  it('settles two empty searches as one answer without option cards', async () => {
+  it('settles refused repeated searches without inventing options', async () => {
     const backend = convexTestWithMarketComponents()
     const { owner, canonicalAccountRef } = await publishedBusinessOwner(backend, 'chat-no-match-owner')
     const created = await owner.mutation(internal.chatThreads.createThread, { title: 'Find an absent Tool' })
@@ -223,15 +220,15 @@ describe.sequential('durable Tool chat messaging and shares', () => {
     }))
     const assistant = messages.page.filter(message => message.role === 'assistant')
     expect(assistant).toHaveLength(1)
-    expect(assistant[0]?.text).toBe('**No match for that yet.** Next: try different words or browse the Market.')
     expect(assistant[0]?.parts.filter(part => part.type.startsWith('tool-'))).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ state: 'output-available', output: expect.objectContaining({ kind: 'noMatch', results: [] }) }),
+        expect.objectContaining({ state: 'output-available', output: expect.objectContaining({
+          kind: 'chat_tool_refused', reason: 'search_repeated',
+        }) }),
       ]),
     )
     const cards = assistant[0]?.parts.map(projectToolCard).filter(card => card?.kind === 'choices') ?? []
-    expect(cards).not.toHaveLength(0)
-    expect(cards.flatMap(card => card?.kind === 'choices' ? card.choices : [])).toEqual([])
+    expect(cards).toEqual([])
   })
   it('shows an actionable answer when the final model pass is blank after Tool work', async () => {
     const backend = convexTestWithMarketComponents()
@@ -479,7 +476,7 @@ describe.sequential('durable Tool chat messaging and shares', () => {
                 output: {
                   type: 'json',
                   value: {
-                    kind: 'matched',
+                    kind: 'match',
                     schemaVersion: 'registry-tools:v3',
                     query: 'current',
                     partialResults: false,

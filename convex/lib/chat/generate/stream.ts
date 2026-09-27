@@ -4,7 +4,7 @@ import { CHAT_TOOL_NAME_MAP } from '@/modules/chat/tool-card'
 import type { InteractiveBusinessAuthorityContext } from '@/modules/business/public'
 import type { TrustedChatAuthority } from '@/modules/chat/agent-turn.contracts'
 import { createChatAgent } from '../tools/agent'
-import { CHAT_NO_RESULT_ANSWER, chatNoMatchSearchCount, prepareChatToolStep } from '../tools/step'
+import { CHAT_NO_RESULT_ANSWER, chatSearchResolution, prepareChatToolStep } from '../tools/step'
 
 export async function streamDurableChatResponse(
   ctx: ActionCtx,
@@ -47,14 +47,15 @@ export async function streamDurableChatResponse(
     },
   )
   const steps = await result.steps
-  if (steps.every(step => step.toolResults.length === 0) || chatNoMatchSearchCount(steps) > 0) {
+  const resolution = chatSearchResolution(steps)
+  if (steps.every(step => step.toolResults.length === 0) || resolution !== null) {
     const assistant = result.savedMessages?.findLast(message => message.message?.role === 'assistant')
     if (assistant?.message === undefined) throw new Error('chat_generation_answer_missing')
     const content = assistant.message.content
     const toolCalls = Array.isArray(content) ? content.filter(part => part.type === 'tool-call') : []
     await agent.updateMessage(ctx, {
       messageId: assistant._id,
-      patch: { message: { role: 'assistant', content: [...toolCalls, { type: 'text', text: CHAT_NO_RESULT_ANSWER }] }, status: 'success' },
+      patch: { message: { role: 'assistant', content: [...toolCalls, { type: 'text', text: resolution ?? CHAT_NO_RESULT_ANSWER }] }, status: 'success' },
     })
     return false
   }
