@@ -7,6 +7,7 @@ import { readExactAmount, type ExactAmount } from './exact-amount'
 const SANDBOX_AUD_TO_USDC_NUMERATOR = 65
 const SANDBOX_AUD_TO_USDC_DENOMINATOR = 100
 const SANDBOX_RATE_TTL_MS = 5 * 60 * 1_000
+const ExactRateDecimal = Decimal.clone({ precision: 100 })
 
 export type ExecutableRateEnvironment = 'sandbox' | 'production'
 
@@ -190,6 +191,22 @@ export function validReferenceRate(rate: ReferenceRate): boolean {
     && Number.isSafeInteger(rate.fetchedAt + SANDBOX_RATE_TTL_MS)
 }
 
+/** Converts Coinbase USDC atomic units to AUD micro-units without display rounding. */
+export function convertUsdcToAud(
+  amount: ExactAmount,
+  rate: ReferenceRate,
+  now: number,
+): ExactAmount | undefined {
+  const source = readExactAmount(amount)
+  if (source?.currency !== 'USDC' || source.exponent !== 6
+    || !/^(?:0|[1-9]\d{0,29})$/u.test(source.units)
+    || !validReferenceRate(rate) || !validTimestamp(now)
+    || now < rate.fetchedAt || now >= rate.fetchedAt + SANDBOX_RATE_TTL_MS) return undefined
+  const units = new ExactRateDecimal(source.units).mul(rate.rate)
+    .toDecimalPlaces(0, Decimal.ROUND_CEIL).toFixed(0)
+  return { currency: 'AUD', exponent: 6, units }
+}
+
 function quoteReferenceBuyerAud(input: Readonly<{
   environment: ExecutableRateEnvironment
   requiredUsdcAtomicUnits: string
@@ -198,24 +215,21 @@ function quoteReferenceBuyerAud(input: Readonly<{
 }>): ExecutableRateQuoteResult {
   const rate = input.referenceRate
   if ((input.environment !== 'sandbox' && input.environment !== 'production')
-    || rate === undefined || !validReferenceRate(rate)
-    || !/^[1-9]\d{0,29}$/u.test(input.requiredUsdcAtomicUnits)
-    || !validTimestamp(input.observedAt)
-    || input.observedAt < rate.fetchedAt
-    || input.observedAt >= rate.fetchedAt + SANDBOX_RATE_TTL_MS) {
+    || rate === undefined
+    || !/^[1-9]\d{0,29}$/u.test(input.requiredUsdcAtomicUnits)) {
     return { kind: 'refused', code: 'pricing_source_amount_invalid', retryable: false }
   }
-  // Each operand is bounded to 60 digits; cloning avoids changing global precision.
-  const ExactDecimal = Decimal.clone({ precision: 100 })
-  const units = new ExactDecimal(input.requiredUsdcAtomicUnits).mul(rate.rate)
-    .toDecimalPlaces(0, Decimal.ROUND_CEIL).toFixed(0)
-  if (canonicalPositiveAud({ currency: 'AUD', exponent: 6, units }) === undefined) {
+  const amount = convertUsdcToAud(
+    { currency: 'USDC', exponent: 6, units: input.requiredUsdcAtomicUnits }, rate, input.observedAt,
+  )
+  const buyerAmount = amount === undefined ? undefined : canonicalPositiveAud(amount)
+  if (buyerAmount === undefined) {
     return { kind: 'refused', code: 'pricing_source_amount_invalid', retryable: false }
   }
   const material: Omit<ManagedReferenceRateEvidence, 'evidenceDigest'> = {
     version: 'ae.managed-reference-price:v1', environment: input.environment,
     source: 'coinbase', referenceRate: { ...rate },
-    sourceAmount: { currency: 'AUD', exponent: 6, units },
+    sourceAmount: buyerAmount,
     targetAmount: { currency: 'USDC', exponent: 6, units: input.requiredUsdcAtomicUnits },
     rounding: 'buyer_aud_micro_unit_up', marginBps: 0,
     observedAt: rate.fetchedAt, expiresAt: rate.fetchedAt + SANDBOX_RATE_TTL_MS,

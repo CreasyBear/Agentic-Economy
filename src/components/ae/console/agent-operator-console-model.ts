@@ -1,7 +1,7 @@
 import type { AeFact } from '@/components/ae/data/AeFactList'
 import { formatTimestamp } from '@/lib/ui/format-time'
 import { aeStatusPresentation, getStatusPresentation } from '@/lib/ui/status-presentation'
-import { formatCurrencyAmount, formatDisplayAmount, type ExactAmount } from '@/modules/money/public'
+import { formatDisplayAmount, type ExactAmount } from '@/modules/money/public'
 import type {
   AgentDetail,
   AgentDirectoryItem,
@@ -33,7 +33,7 @@ export function approvalFacts(approval: PendingCallApproval): readonly AeFact[] 
     },
     {
       label: 'Maximum AUD spend',
-      value: acceptedQuote === undefined ? 'Accepted Quote unavailable' : formatCurrencyAmount(acceptedQuote.maximumSpend),
+      value: acceptedQuote === undefined ? 'Accepted Quote unavailable' : formatDisplayAmount(acceptedQuote.maximumSpend),
       mono: acceptedQuote !== undefined,
     },
     { label: 'Action class', value: consequenceLabel(approval.authorityRequest.consequence) },
@@ -332,5 +332,5 @@ export function dataLabel(state: AgentDetail['dataState']): string {
 }
 
 export function formatAmount(amount: ExactAmount | undefined): string {
-  return amount === undefined ? '—' : formatCurrencyAmount(amount)
+  return amount === undefined ? '—' : formatDisplayAmount(amount)
 }

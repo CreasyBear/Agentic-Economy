@@ -3,7 +3,7 @@ import { AeSection } from '@/components/ae/layout/AeSection'
 import { formatUtcTimestamp, timestampIso } from '@/lib/ui/format-time'
 import type { CallReceipt, CallUsageSummary } from '@/modules/capability-execution/call-contracts'
 import type { CallReceiptView } from '@/modules/capability-execution/call-receipt-view'
-import { formatCurrencyAmount } from '@/modules/money/public'
+import { formatCurrencyAmount, formatDisplayAmount } from '@/modules/money/public'
 
 import { machineLabel } from './call-receipt-format'
 
@@ -36,14 +36,18 @@ export function CallMoneyFacts({ view }: Readonly<{ view: CallReceiptView }>) {
 function ReceiptAuthorizationFacts({ receipt }: Readonly<{ receipt: CallReceipt }>) {
   const commercialFacts = receipt.commercialModel === 'account_aud'
     ? [
-        { label: "Buyer charge", value: formatCurrencyAmount(receipt.buyerCharge) },
-        { label: "Service fee", value: formatCurrencyAmount(receipt.serviceFee) },
-        { label: "Total buyer charge", value: formatCurrencyAmount(receipt.totalBuyerCharge) },
+        { label: "Buyer charge", value: formatDisplayAmount(receipt.buyerCharge) },
+        { label: "Service fee", value: formatDisplayAmount(receipt.serviceFee) },
+        { label: "Total buyer charge", value: formatDisplayAmount(receipt.totalBuyerCharge) },
+        { label: "Exact buyer charge", value: formatCurrencyAmount(receipt.buyerCharge) },
+        { label: "Exact service fee", value: formatCurrencyAmount(receipt.serviceFee) },
+        { label: "Exact total", value: formatCurrencyAmount(receipt.totalBuyerCharge) },
       ]
     : [
-        { label: "Provider quote", value: formatCurrencyAmount(receipt.providerQuotedAmount) },
-        { label: "Agentic Economy fee", value: formatCurrencyAmount(receipt.agenticEconomyFee) },
-        { label: "Buyer authorized up to", value: formatCurrencyAmount(receipt.totalBuyerAuthorization) },
+        { label: "Provider quote (source)", value: formatCurrencyAmount(receipt.providerQuotedAmount) },
+        { label: "Agentic Economy fee", value: formatDisplayAmount(receipt.agenticEconomyFee) },
+        { label: "Buyer authorized up to", value: formatDisplayAmount(receipt.totalBuyerAuthorization) },
+        { label: "Exact authorization", value: formatCurrencyAmount(receipt.totalBuyerAuthorization) },
       ]
   return (
     <AeFactList facts={commercialFacts} />
@@ -59,6 +63,7 @@ function ReceiptSettlementFacts({
       facts={[
         ...(usage === undefined ? [] : [
           { label: "Recorded outcome", value: machineLabel(usage.chargeState) },
+          { label: "Charge", value: formatDisplayAmount(usage.amount) },
           { label: "Exact amount", value: formatCurrencyAmount(usage.amount) },
           { label: "Observed", value: <time dateTime={timestampIso(usage.observedAt)}>{formatUtcTimestamp(usage.observedAt)} UTC</time> },
           ...(usage.durationMs === undefined ? [] : [{ label: "Duration", value: `${usage.durationMs} ms` }]),

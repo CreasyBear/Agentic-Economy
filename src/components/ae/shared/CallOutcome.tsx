@@ -2,7 +2,7 @@ import { AeFactList } from '@/components/ae/data/AeFactList'
 import { Badge } from '@/components/ui/badge'
 import { buttonVariants } from '@/components/ui/button-variants'
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
-import { formatCurrencyAmount } from '@/modules/money/public'
+import { formatCurrencyAmount, formatDisplayAmount } from '@/modules/money/public'
 import type { CallOutcomeView } from './object-family.contracts'
 
 export type CallOutcomeProps = Readonly<{ view: CallOutcomeView }>
@@ -20,7 +20,10 @@ export function CallOutcome({ view }: CallOutcomeProps) {
         <AeFactList facts={[
           { label: 'Delivery', value: view.delivery },
           { label: 'Payment', value: view.payment },
-          ...(view.amount === undefined ? [] : [{ label: view.amountLabel ?? 'Amount', value: <span className="font-mono tabular-nums">{formatCurrencyAmount(view.amount)}</span> }]),
+          ...(view.amount === undefined ? [] : [
+            { label: view.amountLabel ?? 'Amount', value: <span className="font-mono tabular-nums">{formatDisplayAmount(view.amount)}</span> },
+            { label: 'Exact amount', value: formatCurrencyAmount(view.amount) },
+          ]),
           { label: 'Call reference', value: <span className="break-all font-mono text-xs">{view.callRef}</span> },
         ]} />
       </CardContent>

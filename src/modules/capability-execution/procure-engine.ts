@@ -1,4 +1,3 @@
-import Decimal from 'decimal.js'
 import { z } from 'zod'
 import { degradeBackend } from '@/lib/observability/degrade-backend'
 import type { AgentAccessPrincipal } from '@/modules/agent-access/agent-access'
@@ -100,11 +99,7 @@ function acceptedIdentity(result: IdentityResult): Extract<IdentityResult, { kin
   return result
 }
 
-/** Buyer-facing procure price strings: 4dp AUD, no IEEE float division. */
-function formatExactProcureAud(units: string): string {
-  return `A$${new Decimal(units).dividedBy(1_000_000).toFixed(4)}`
-}
-
+/** Buyer display amounts never determine Quote, budget or ledger arithmetic. */
 function procurePriceBreakdownFromUnits(totalUnits: string): Readonly<{
   totalAud: string
   netAud: string
@@ -114,9 +109,9 @@ function procurePriceBreakdownFromUnits(totalUnits: string): Readonly<{
   const netUnits = gstSplit?.netUnits ?? totalUnits
   const gstUnits = gstSplit?.gstUnits ?? '0'
   return {
-    totalAud: formatExactProcureAud(totalUnits),
-    netAud: formatExactProcureAud(netUnits),
-    gstAud: formatExactProcureAud(gstUnits),
+    totalAud: formatDisplayAmount({ currency: 'AUD', exponent: 6, units: totalUnits }),
+    netAud: formatDisplayAmount({ currency: 'AUD', exponent: 6, units: netUnits }),
+    gstAud: formatDisplayAmount({ currency: 'AUD', exponent: 6, units: gstUnits }),
   }
 }
 
@@ -286,7 +281,7 @@ export class CapabilityProcurementEngine {
       return await finish({
         ...common, kind: 'refused', status: 'refused', quoteRef,
         code: 'budget_exceeded', retryable: false,
-        detail: `Quoted price ${formatDisplayAmount(quotePrice)} exceeds maximum spend budget of A$${input.maxSpendAud} AUD.`,
+        detail: `Quoted price ${formatDisplayAmount(quotePrice)} exceeds maximum spend budget of ${formatDisplayAmount(budgetExact)}.`,
       })
     }
 

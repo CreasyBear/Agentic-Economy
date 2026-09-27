@@ -11,7 +11,6 @@ import type {
 } from '@/modules/capability-supply/public'
 import {
   formatToolAuthentication,
-  formatToolPrice,
   formatToolReadiness,
 } from '@/modules/market/tool-view-model'
 import {
@@ -27,7 +26,7 @@ import {
   suggestNextAction,
   type SuggestedNextAction,
 } from '@/modules/market/suggested-next-action'
-import { formatCurrencyAmount, readExactAmount, formatDisplayPrice } from '@/modules/money/public'
+import { formatCurrencyAmount, formatDisplayAmount, readExactAmount, formatDisplayPrice } from '@/modules/money/public'
 
 export const CHAT_TOOL_IDS = [
   'registry.tools.list',
@@ -213,6 +212,14 @@ function readPrice(value: unknown): PublicToolPrice | undefined {
   return undefined
 }
 
+function buyerPrice(price: PublicToolPrice): string {
+  if (price.kind === 'on_request') return 'Price on request'
+  if (price.kind === 'fixed') return price.amount.currency === 'AUD'
+    ? formatDisplayAmount(price.amount) : 'AUD estimate temporarily unavailable'
+  if (price.minimum.currency !== 'AUD' || price.maximum.currency !== 'AUD') return 'AUD estimate temporarily unavailable'
+  return `${formatDisplayAmount(price.minimum)}–${formatDisplayAmount(price.maximum)}`
+}
+
 function readAuthentication(value: unknown): PublicToolAuthentication | undefined {
   if (!isRecord(value) || typeof value.kind !== 'string') return undefined
   if (value.kind === 'ae_api_key') return { kind: 'ae_api_key' }
@@ -247,9 +254,7 @@ function rowFromChoiceFields(value: unknown): ToolChoiceRow | null {
       ? stringField(value.details.provider.name)
       : undefined
   const display = publicToolDisplayPriceSchema.safeParse(value.displayPrice)
-  const price = (display.success ? formatDisplayPrice(display.data) : undefined)
-    ?? stringField(value.priceLabel)
-    ?? (isRecord(value.price) ? stringField(value.price.label) : undefined)
+  const price = display.success ? formatDisplayPrice(display.data) : undefined
   const healthStatus = stringField(value.healthStatus)
   const readiness = healthStatus === 'operational'
     ? 'Operational'
@@ -284,7 +289,7 @@ function rowFromDescriptorFields(value: unknown): ToolChoiceRow | null {
       : undefined
   const price = isRecord(value.commercial) ? readPrice(value.commercial.price) : undefined
   const display = publicToolDisplayPriceSchema.safeParse(isRecord(value.commercial) ? value.commercial.displayPrice : undefined)
-  const priceLabel = (display.success ? formatDisplayPrice(display.data) : undefined) ?? (price === undefined ? undefined : formatToolPrice(price))
+  const priceLabel = display.success ? formatDisplayPrice(display.data) : price === undefined ? undefined : buyerPrice(price)
   const posture = readPosture(value.availability)
   const authentication = readAuthentication(value.authentication)
   return {
@@ -324,6 +329,9 @@ function projectStoredChoice(value: unknown): ToolChoiceRow | null {
   if (toolRef === undefined || title === undefined) return null
   const provider = stringField(value.provider)
   const price = stringField(value.price)
+  const priceValidUntil = typeof value.priceValidUntil === 'number'
+    && Number.isSafeInteger(value.priceValidUntil) && value.priceValidUntil >= 0
+    ? value.priceValidUntil : undefined
   const readiness = stringField(value.readiness)
   const access = stringField(value.access)
   return {
@@ -331,6 +339,7 @@ function projectStoredChoice(value: unknown): ToolChoiceRow | null {
     title,
     ...(provider === undefined ? {} : { provider }),
     ...(price === undefined ? {} : { price }),
+    ...(priceValidUntil === undefined ? {} : { priceValidUntil }),
     ...(readiness === undefined ? {} : { readiness }),
     ...(access === undefined ? {} : { access }),
     ...(value.belowMatch === true ? { belowMatch: true } : {}),
@@ -406,7 +415,7 @@ function merchandiseCompareValue(field: (typeof COMPARE_FIELDS)[number], value: 
   switch (field) {
     case 'price': {
       const price = readPrice(value)
-      return price === undefined ? undefined : formatToolPrice(price)
+      return price === undefined ? undefined : buyerPrice(price)
     }
     case 'effects':
       return labelsFromPolicy(value, effectLabel)
@@ -521,8 +530,9 @@ function projectCallResult(result: CallResult): ToolCardProjection {
     const facts: ToolFact[] = [
       {
         label: 'Charge',
-        value: `${formatCurrencyAmount(result.usage.amount)} · ${CHARGE_STATE_LABELS[result.usage.chargeState]}`,
+        value: `${formatDisplayAmount(result.usage.amount)} · ${CHARGE_STATE_LABELS[result.usage.chargeState]}`,
       },
+      { label: 'Exact charge', value: formatCurrencyAmount(result.usage.amount) },
       ...(result.usage.durationMs === undefined
         ? []
         : [{ label: 'Duration', value: `${result.usage.durationMs} ms` }]),
@@ -567,7 +577,7 @@ function projectCallResult(result: CallResult): ToolCardProjection {
         { label: 'Consequence', value: result.authorityRequest.consequence.replaceAll('_', ' ') },
         ...(maximumSpend === undefined
           ? []
-          : [{ label: 'Maximum spend', value: formatCurrencyAmount(maximumSpend) }]),
+          : [{ label: 'Maximum spend', value: formatDisplayAmount(maximumSpend) }]),
       ],
       summary: 'The call is paused until the required authority is granted.',
       nextAction: 'Review the pending approval in the agent console.',
@@ -613,9 +623,9 @@ export function projectInspectResult(
     state: 'complete',
     toolRefs: [result.toolRef],
     facts: [
-      { label: 'Decision price', value: formatCurrencyAmount(result.price) },
-      { label: INSPECT_ACCOUNT_AVAILABLE_LABEL, value: formatCurrencyAmount(result.account.available) },
-      { label: INSPECT_AGENT_MAXIMUM_LABEL, value: formatCurrencyAmount(result.budget.maximumPerCall) },
+      { label: 'Decision price', value: formatDisplayAmount(result.price) },
+      { label: INSPECT_ACCOUNT_AVAILABLE_LABEL, value: formatDisplayAmount(result.account.available) },
+      { label: INSPECT_AGENT_MAXIMUM_LABEL, value: formatDisplayAmount(result.budget.maximumPerCall) },
       ...(result.sourceRequirement === undefined
         ? []
         : [{ label: 'Provider requirement', value: formatCurrencyAmount(result.sourceRequirement) }]),

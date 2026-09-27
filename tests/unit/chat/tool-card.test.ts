@@ -9,7 +9,7 @@ import {
   CHAT_TOOL_NAME_MAP,
   serializeToolCard,
 } from '@/modules/chat/tool-card'
-import { formatCurrencyAmount } from '@/modules/money/public'
+import { formatCurrencyAmount, formatDisplayAmount } from '@/modules/money/public'
 
 const QUOTE_REF = `operation-commitment:v1:${'b'.repeat(64)}`
 const TOOL_REF = `operation:v1:${'a'.repeat(64)}`
@@ -155,11 +155,24 @@ describe('inspect Quote tool cards', () => {
       'Quote',
     ])
     expect(card.facts).toEqual(expect.arrayContaining([
-      { label: 'Decision price', value: formatCurrencyAmount(PRICE) },
-      { label: INSPECT_ACCOUNT_AVAILABLE_LABEL, value: formatCurrencyAmount(AVAILABLE) },
-      { label: INSPECT_AGENT_MAXIMUM_LABEL, value: formatCurrencyAmount(MAXIMUM) },
+      { label: 'Decision price', value: formatDisplayAmount(PRICE) },
+      { label: INSPECT_ACCOUNT_AVAILABLE_LABEL, value: formatDisplayAmount(AVAILABLE) },
+      { label: INSPECT_AGENT_MAXIMUM_LABEL, value: formatDisplayAmount(MAXIMUM) },
       { label: 'Quote', value: QUOTE_REF },
       { label: 'Expires', value: new Date(EXPIRES_AT).toISOString() },
+    ]))
+  })
+
+  it('keeps micro-unit source exact while presenting sub-cent AUD as a cent', () => {
+    const result = projectInspectResult({
+      ...committedQuote(), price: { currency: 'AUD', exponent: 6, units: '1' },
+      sourceRequirement: { currency: 'USDC', exponent: 6, units: '1' },
+    })
+    expect(result.kind).toBe('inspect')
+    if (result.kind !== 'inspect') return
+    expect(result.facts).toEqual(expect.arrayContaining([
+      { label: 'Decision price', value: 'A$0.01' },
+      { label: 'Provider requirement', value: 'USDC 0.000001' },
     ]))
   })
 
@@ -172,7 +185,7 @@ describe('inspect Quote tool cards', () => {
       'Quote',
     ])
     expect(facts).toEqual(expect.arrayContaining([
-      { label: 'Decision price', value: formatCurrencyAmount(PRICE) },
+      { label: 'Decision price', value: formatDisplayAmount(PRICE) },
       { label: 'Quote', value: QUOTE_REF },
       { label: 'Expires', value: new Date(EXPIRES_AT).toISOString() },
     ]))

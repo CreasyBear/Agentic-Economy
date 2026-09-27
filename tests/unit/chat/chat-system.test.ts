@@ -182,6 +182,10 @@ describe('transcript projector', () => {
               readiness: 'unverified',
               entitlement: 'public',
               price: { kind: 'indicative', label: 'USD 0.50' },
+              displayPrice: {
+                kind: 'indicative', amount: { currency: 'AUD', units: '500001', exponent: 6 },
+                rateObservedAt: 1_000, validUntil: 2_000_000_000_000,
+              },
               details: { capabilityId: 'weather.forecast', provider: { name: 'Sky Co', slug: 'sky-co' }, description: 'Look up forecasts', listingTier: 'listed' },
               next: [{ action: 'describe', args: { toolRef: searchRef }, authority: 'public' }],
             }],
@@ -200,14 +204,14 @@ describe('transcript projector', () => {
             toolVersion: 1,
             expiresAt: 60_000,
             normalizedInput: { location: 'Perth' },
-            price: { currency: 'USD', units: '199', exponent: 2 },
+            price: { currency: 'AUD', units: '199', exponent: 2 },
             account: {
               accountRef: 'account:chat:1',
-              available: { currency: 'USD', units: '500', exponent: 2 },
+              available: { currency: 'AUD', units: '500', exponent: 2 },
             },
             budget: {
               principalRef: 'principal:chat:1',
-              maximumPerCall: { currency: 'USD', units: '1000', exponent: 2 },
+              maximumPerCall: { currency: 'AUD', units: '1000', exponent: 2 },
             },
             policyRefs: ['policy:chat:1'],
             evidenceDigest: 'evidence:inspection:1',
@@ -232,7 +236,7 @@ describe('transcript projector', () => {
               usageRef: 'usage:weather:1',
               observedAt: 1,
               chargeState: 'paid',
-              amount: { currency: 'USD', units: '25', exponent: 2 },
+              amount: { currency: 'AUD', units: '25', exponent: 2 },
               priceDigest: 'price:weather:1',
               durationMs: 850,
             },
@@ -247,14 +251,15 @@ describe('transcript projector', () => {
       toolRef: searchRef,
       title: 'Weather finder',
       provider: 'Sky Co',
-      price: 'USD 0.50',
+      price: 'A$0.51',
+      priceValidUntil: 2_000_000_000_000,
       readiness: 'Not yet verified',
     }])
     expect(search?.kind === 'choices' ? search.count : undefined).toBe(1)
     expect(inspection?.kind === 'inspect' ? inspection.facts : undefined).toEqual([
-      { label: 'Decision price', value: 'USD 1.99' },
-      { label: 'Account available', value: 'USD 5.00' },
-      { label: 'Agent maximum', value: 'USD 10.00' },
+      { label: 'Decision price', value: 'A$1.99' },
+      { label: 'Account available', value: 'A$5.00' },
+      { label: 'Agent maximum', value: 'A$10.00' },
       { label: 'Expires', value: '1970-01-01T00:01:00.000Z' },
       { label: 'Quote', value: quoteRef },
     ])
@@ -263,7 +268,8 @@ describe('transcript projector', () => {
     expect(execute?.kind === 'execute' ? execute.callRef : undefined).toBe('invocation:chat:weather:1')
     expect(execute?.kind === 'execute' ? execute.outputPreview : undefined).toContain(executeSecret)
     expect(execute?.kind === 'execute' ? execute.facts : undefined).toEqual([
-      { label: 'Charge', value: 'USD 0.25 · Paid' },
+      { label: 'Charge', value: 'A$0.25 · Paid' },
+      { label: 'Exact charge', value: 'AUD 0.25' },
       { label: 'Duration', value: '850 ms' },
     ])
     expect(execute?.kind === 'execute' ? execute.suggestedNextAction : undefined).toMatchObject({
@@ -572,7 +578,7 @@ describe('transcript projector', () => {
       'Rain lookup',
     ])
     expect(compare?.kind === 'choices' ? compare.contrasts : undefined).toEqual([
-      { label: 'Price', value: 'Weather finder: USD 0.50; Rain lookup: USD 0.75' },
+      { label: 'Price', value: 'Weather finder: AUD estimate temporarily unavailable; Rain lookup: AUD estimate temporarily unavailable' },
       { label: 'Effects', value: 'Weather finder: Data release; Rain lookup: Data release, Financial exposure' },
       { label: 'Data use', value: 'Weather finder: Public; Rain lookup: Personal' },
       { label: 'Readiness', value: 'Weather finder: Ready now; Rain lookup: Setup required' },
@@ -602,6 +608,10 @@ describe('transcript projector', () => {
             readiness: 'unverified',
             entitlement: 'public',
             price: { kind: 'indicative', label: 'USD 0.50' },
+            displayPrice: {
+              kind: 'indicative', amount: { currency: 'AUD', units: '500001', exponent: 6 },
+              rateObservedAt: 1_000, validUntil: 2_000_000_000_000,
+            },
             details: { capabilityId: 'weather.forecast', provider: { name: 'Sky Co', slug: 'sky-co' }, description: 'Look up forecasts', listingTier: 'listed', raw: 'HANDOFF_RAW_SECRET' },
             next: [{ action: 'describe', args: { toolRef: searchRef }, authority: 'public' }],
           }],
@@ -618,7 +628,8 @@ describe('transcript projector', () => {
       toolRef: searchRef,
       title: 'Weather finder',
       provider: 'Sky Co',
-      price: 'USD 0.50',
+      price: 'A$0.51',
+      priceValidUntil: 2_000_000_000_000,
       readiness: 'Not yet verified',
     }])
     expect(JSON.stringify(stored)).not.toContain('HANDOFF_RAW_SECRET')

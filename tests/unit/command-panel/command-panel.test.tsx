@@ -28,7 +28,6 @@ import {
 } from '@/components/ae/command-panel/recent-tools'
 import {
   formatToolAuthentication,
-  formatToolPrice,
   formatToolReadiness,
 } from '@/modules/market/tool-view-model'
 import { toolDetailOutputSchema } from '@/modules/capability-supply/public'
@@ -238,9 +237,9 @@ describe('operator command panel', () => {
     fireEvent.keyDown(input, { key: 'Enter' })
     expect(readDetail).toHaveBeenCalledWith(TEST_OPERATION_REF)
 
-    // Inspect composes the same market formatters the catalog tiles use.
     const fixture = detailFixture()
-    expect(await screen.findByText(formatToolPrice(fixture.commercial.price))).toBeTruthy()
+    // A source USD amount without a verified AUD conversion cannot be a buyer price.
+    expect(await screen.findByText('AUD estimate temporarily unavailable')).toBeTruthy()
     expect(document.activeElement).toBe(screen.getByRole('region', { name: 'Tool details' }))
     expect(screen.getByText(formatToolAuthentication(fixture.authentication))).toBeTruthy()
     expect(screen.getByText(formatToolReadiness(fixture.availability.posture))).toBeTruthy()

@@ -6,12 +6,13 @@ import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 import { Switch } from '@/components/ui/switch'
 import { toast } from '@/lib/ui/toast'
 import { cn } from '@/lib/utils'
+import { formatDisplayAmount } from '@/modules/money/public'
 import {
+  LOW_CREDIT_THRESHOLD_CENTS,
   PREFERENCE_SWITCHES,
-  THRESHOLD_OPTIONS,
   UPDATE_FAILED_DIAGNOSTIC,
-  lowCreditThresholdStatement,
   type NotificationPreferencePatch,
+  type NotificationPreferencesView,
   type NotificationUpdateDiagnostic,
 } from '@/modules/principal-account/notification-preferences.view-model'
 
@@ -23,6 +24,21 @@ import type {
 export const TACTILE =
   'enabled:active:scale-[0.98] transition-transform duration-100 ease-out motion-reduce:transition-none motion-reduce:active:scale-100'
 
+const THRESHOLD_OPTIONS = LOW_CREDIT_THRESHOLD_CENTS.map((cents) => {
+  const displayAmount = formatDisplayAmount({ currency: 'AUD', exponent: 2, units: String(cents) })
+  return { cents, label: cents === 2500 ? `${displayAmount} (Default)` : displayAmount, displayAmount }
+})
+
+function lowCreditThresholdStatement(preferences: NotificationPreferencesView): string {
+  if (!preferences.lowCreditBalance) {
+    return 'Low-balance alerts are off. Existing spend and call alerts are unchanged.'
+  }
+  const match = THRESHOLD_OPTIONS.find((option) => option.cents === preferences.lowCreditThresholdCents)
+  const amount = match?.displayAmount ?? formatDisplayAmount({
+    currency: 'AUD', exponent: 2, units: String(preferences.lowCreditThresholdCents),
+  })
+  return `Alert sent when balance drops below ${amount}.`
+}
 
 function PreferenceSwitch({
   id,

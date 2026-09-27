@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { compareExactAmounts, exactAmountSchema, formatExactAmount, rescaleExactAmount } from '@/modules/money/public'
+import { compareExactAmounts, exactAmountSchema, formatDisplayAmount, rescaleExactAmount } from '@/modules/money/public'
 import type { ExactAmount } from '@/modules/money/public'
 
 /**
@@ -124,15 +124,12 @@ export function formatOfferingPrice(price: OfferingPrice): string {
 
   if (price.kind === 'quote_only') return `Quoted on request (${price.currency})`
 
-  const amount = formatAmount(price.kind === 'range' ? price.minimum : price.amount)
+  if ((price.kind === 'range' ? price.minimum : price.amount).currency !== 'AUD') return 'AUD price unavailable'
+  const amount = formatDisplayAmount(price.kind === 'range' ? price.minimum : price.amount)
   if (price.kind === 'range') {
-    return `${amount}–${formatAmount(price.maximum)}${unit}${tax}`
+    return `${amount}–${formatDisplayAmount(price.maximum)}${unit}${tax}`
   }
   return `${price.kind === 'from' ? 'From ' : ''}${amount}${unit}${tax}`
-}
-
-function formatAmount(amount: ExactAmount): string {
-  return `${amount.currency} ${formatExactAmount(amount) ?? '—'}`
 }
 
 function readExactAmount(value: unknown): ExactAmount | undefined {

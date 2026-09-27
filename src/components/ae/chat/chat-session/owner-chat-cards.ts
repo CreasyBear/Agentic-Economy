@@ -1,5 +1,5 @@
 import type { OwnerChatServerCard } from '../../../../../convex/chatCall'
-import { formatCurrencyAmount } from '@/modules/money/public'
+import { formatDisplayAmount } from '@/modules/money/public'
 import type { OwnerChatCard } from './chat-session.contracts'
 
 export function projectOwnerChatCards(
@@ -16,7 +16,7 @@ export function projectOwnerChatCards(
     if (card.remainingCap === undefined) return {
       kind: 'unavailable', turnRef: card.turnRef, callRef: card.callRef,
       toolName: card.toolName, inputSummary: card.inputSummary,
-      quoteLabel: `${formatCurrencyAmount(card.quoteAmount)} per Call`,
+      quoteLabel: `${formatDisplayAmount(card.quoteAmount)} per Call`,
       reason: card.blockedReason ?? 'Remaining spend cap is unavailable.',
     }
     return { kind: 'pending', turnRef: card.turnRef, view: {

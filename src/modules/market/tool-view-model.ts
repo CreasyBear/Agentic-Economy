@@ -1,6 +1,6 @@
 import {
-  formatCurrencyAmount,
   formatExactAmount,
+  formatDisplayAmount,
   formatDisplayPrice,
   type ExactAmount,
 } from "@/modules/money/public";
@@ -204,10 +204,12 @@ const marketFallbackCategory: MarketCategory = {
 export function formatToolPrice(price: PublicToolPrice): string {
   if (price.kind === "on_request") return "Price on request";
   if (price.kind === "fixed") {
-    return exactIsZero(price.amount) ? "Free" : formatCurrencyAmount(price.amount);
+    if (price.amount.currency !== "AUD") return "AUD estimate temporarily unavailable";
+    return exactIsZero(price.amount) ? "Free" : formatDisplayAmount(price.amount);
   }
+  if (price.minimum.currency !== "AUD" || price.maximum.currency !== "AUD") return "AUD estimate temporarily unavailable";
   if (exactIsZero(price.minimum) && exactIsZero(price.maximum)) return "Free";
-  return `${formatCurrencyAmount(price.minimum)}–${formatCurrencyAmount(price.maximum)}`;
+  return `${formatDisplayAmount(price.minimum)}–${formatDisplayAmount(price.maximum)}`;
 }
 
 export function formatToolReadiness(
@@ -233,9 +235,9 @@ export function toolPrice(tool: PublicToolDescriptor, now = Date.now()): string 
   const display = formatDisplayPrice(tool.commercial.displayPrice, now);
   if (display !== undefined) return display;
   if (tool.commercial.priceBreakdown !== undefined) {
-    return exactIsZero(tool.commercial.priceBreakdown.totalBuyerAuthorization)
-      ? "Free"
-      : formatCurrencyAmount(tool.commercial.priceBreakdown.totalBuyerAuthorization);
+    const amount = tool.commercial.priceBreakdown.totalBuyerAuthorization;
+    return amount.currency !== "AUD" ? "AUD estimate temporarily unavailable"
+      : exactIsZero(amount) ? "Free" : formatDisplayAmount(amount);
   }
   return formatToolPrice(tool.commercial.price);
 }
@@ -243,10 +245,14 @@ export function toolPrice(tool: PublicToolDescriptor, now = Date.now()): string 
 function toolPriceAmount(tool: PublicToolDescriptor): ExactAmount | undefined {
   const display = tool.commercial.displayPrice;
   if (display !== undefined) return display.kind === "indicative" && display.validUntil > Date.now()
-    ? display.amount : undefined;
-  if (tool.commercial.priceBreakdown !== undefined) return tool.commercial.priceBreakdown.totalBuyerAuthorization;
-  return tool.commercial.price.kind === "fixed" ? tool.commercial.price.amount
+    && display.amount.currency === "AUD" ? display.amount : undefined;
+  if (tool.commercial.priceBreakdown !== undefined) {
+    const amount = tool.commercial.priceBreakdown.totalBuyerAuthorization;
+    return amount.currency === "AUD" ? amount : undefined;
+  }
+  const amount = tool.commercial.price.kind === "fixed" ? tool.commercial.price.amount
     : tool.commercial.price.kind === "range" ? tool.commercial.price.minimum : undefined;
+  return amount?.currency === "AUD" ? amount : undefined;
 }
 
 /** Compare exact quantities, never their formatted labels. Unknown prices sort last. */
