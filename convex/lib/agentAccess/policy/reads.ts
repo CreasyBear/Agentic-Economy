@@ -1,12 +1,21 @@
 import { v } from 'convex/values'
 import type { QueryCtx } from '../../../_generated/server'
-import { resolveBusinessActor } from '../../../authz'
+import { resolveInteractiveAuthorityContext } from '../../../interactiveAuthority'
 import { projectAgentAccessGrant, normalizeStoredAgentAccessGrant } from '@/modules/agent-access/policy'
+import { agentSpendingPolicyStateValue } from '@/modules/agent-access/spending-policy-update'
+import { loadOwnedAgent, policyFromMaterial } from '../spendingPolicy/material'
 import type { AgentAccessEnvironment } from '@/modules/agent-access/agent-access'
 import { environment, grantReadResult, publicGrantReadback } from './contracts'
 
-export const listOwnerGrantReadbacksArgs = { requireAuthority: v.optional(v.boolean()) }
-export const listOwnerGrantReadbacksResult = v.array(publicGrantReadback)
+export const listOwnerGrantReadbacksArgs = {
+  requireAuthority: v.optional(v.boolean()),
+  principalRefs: v.optional(v.array(v.string())),
+}
+export const listOwnerGrantReadbacksResult = v.array(v.object({
+  principalRef: v.string(),
+  spendingPolicy: agentSpendingPolicyStateValue,
+  grant: v.optional(publicGrantReadback),
+}))
 export const readGrantArgs = { grantRef: v.string() }
 export const readActiveGrantArgs = {
   credentialId: v.string(), environment, principalId: v.string(), applicationRef: v.string(),
@@ -15,30 +24,42 @@ export const readActiveGrantArgs = {
 }
 export { grantReadResult }
 
-export async function listOwnerGrantReadbacksHandler(ctx: QueryCtx, args: { requireAuthority?: boolean }) {
-    const actor = await resolveBusinessActor(ctx)
-    if (actor.kind !== 'authenticated_owner') {
-      if (args.requireAuthority === true) {
-        throw new Error('agent_access_owner_authority_required')
-      }
-      return []
+/** Page-scoped owner authority: each requested principal uses bounded indexed joins. */
+export async function listOwnerGrantReadbacksHandler(
+  ctx: QueryCtx,
+  args: { requireAuthority?: boolean; principalRefs?: string[] },
+) {
+  const identity = await ctx.auth.getUserIdentity()
+  const owner = identity === null ? null : await resolveInteractiveAuthorityContext(ctx.db, identity)
+  if (owner?.provenance.accessKind !== 'ownership') {
+    if (args.requireAuthority === true) throw new Error('agent_access_owner_authority_required')
+    return []
+  }
+  if (args.principalRefs === undefined) return []
+  if (args.principalRefs.length > 25 || new Set(args.principalRefs).size !== args.principalRefs.length
+    || args.principalRefs.some((ref) => ref.trim().length === 0)) {
+    throw new Error('agent_access_policy_page_invalid')
+  }
+  const now = Date.now()
+  return await Promise.all(args.principalRefs.map(async (principalRef) => {
+    const loaded = await loadOwnedAgent(ctx, owner, principalRef, now)
+    if (loaded.kind === 'agent_not_found') return null
+    if (loaded.kind !== 'ok') return {
+      principalRef,
+      spendingPolicy: loaded.kind === 'expired'
+        ? { kind: 'expired' as const, expiresAt: loaded.expiresAt }
+        : { kind: 'unavailable' as const },
     }
-    const rows = await ctx.db.query('agentAccessGrants')
-      .withIndex('by_ownerId_and_updatedAt', (grantQuery) => grantQuery.eq('ownerId', actor.canonicalAccountRef))
-      .order('desc')
-      .take(64)
-    return rows.map((stored) => {
-      const row = projectAgentAccessGrant(normalizeStoredAgentAccessGrant(stored))
-      return {
-        principalId: row.principalId,
-        credentialId: row.credentialId,
-        applicationRef: row.applicationRef,
-        environment: row.environment,
-        authorityMode: row.authorityMode,
-        toolAccess: row.toolAccess,
-        toolRefs: [...row.toolRefs],
-        lifecycle: row.lifecycle,
-        expiresAt: row.expiresAt,
+    const { grant } = loaded.material
+    const row = projectAgentAccessGrant(grant)
+    return {
+      principalRef,
+      spendingPolicy: policyFromMaterial(loaded.material),
+      grant: {
+        principalId: row.principalId, credentialId: row.credentialId,
+        applicationRef: row.applicationRef, environment: row.environment,
+        authorityMode: row.authorityMode, toolAccess: row.toolAccess, toolRefs: [...row.toolRefs],
+        lifecycle: row.lifecycle, expiresAt: row.expiresAt,
         budget: {
           maximumSpendPerCall: row.budget.maximumSpendPerCall,
           maximumDailySpend: row.budget.maximumDailySpend,
@@ -49,8 +70,9 @@ export async function listOwnerGrantReadbacksHandler(ctx: QueryCtx, args: { requ
           maximumCallsPerMinute: row.rate.maximumCallsPerMinute,
           maximumCallsPerHour: row.rate.maximumCallsPerHour,
         },
-      }
-    })
+      },
+    }
+  })).then((rows) => rows.filter((row) => row !== null))
 }
 
 export async function readGrantHandler(ctx: QueryCtx, args: { grantRef: string }) {

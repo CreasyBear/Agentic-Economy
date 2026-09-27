@@ -1,8 +1,11 @@
+import { useEffect, useRef, useState } from 'react'
 import { Link } from '@tanstack/react-router'
 import { AeAgentSecurityHistory } from '@/components/ae/agent-access/AeAgentSecurityHistory'
 import { AeAgentOperatorConsole } from '@/components/ae/console/agent-operator-console/AeAgentOperatorConsole'
 import { AeAssistantInstallFunnel } from '@/components/ae/console/AeAssistantInstallFunnel'
 import { AeOperatorPage } from '@/components/ae/layout/AeOperatorPage'
+import { Button } from '@/components/ui/button'
+import { buttonVariants } from '@/components/ui/button-variants'
 
 import type { AeAgentAccessHomeProps } from './agent-access-home.contracts'
 import { HomeAddAnotherAgent } from './components/HomeAddAnotherAgent'
@@ -11,12 +14,25 @@ import { HomeDirectoryRecoveryAlert } from './components/HomeDirectoryRecoveryAl
 import { HomeEmptyInstallPanel } from './components/HomeEmptyInstallPanel'
 import { HomeLifecycleIssueAlert } from './components/HomeLifecycleIssueAlert'
 import { HomeResumeToolSection } from './components/HomeResumeToolSection'
-import { useAeAgentAccessHome } from './useAeAgentAccessHome'
+import { useAeAgentAccessHome, type AgentConnectionStep } from './useAeAgentAccessHome'
 
 export function AeAgentAccessHome(props: AeAgentAccessHomeProps) {
   const vm = useAeAgentAccessHome(props)
-
+  const [connectMode, setConnectMode] = useState<AgentConnectionStep>('closed')
+  const choiceRef = useRef<HTMLDivElement>(null)
+  const setupRef = useRef<HTMLDivElement>(null)
   const { directory, search } = vm
+
+  useEffect(() => {
+    if (connectMode === 'choose') choiceRef.current?.focus()
+    if (connectMode === 'oauth') setupRef.current?.focus()
+  }, [connectMode, vm.showSetup])
+
+  const chooseConnection = () => setConnectMode('choose')
+  const focusOauthSetup = () => {
+    vm.onConnectNewAgent()
+    setConnectMode('oauth')
+  }
 
   return (
     <AeOperatorPage
@@ -43,14 +59,27 @@ export function AeAgentAccessHome(props: AeAgentAccessHomeProps) {
           onRetry={vm.onLifecycleRetry}
         />
       )}
-      {directory.items.length === 0 && search.caller === undefined ? (
-        <HomeEmptyInstallPanel
-          canonicalBaseUrl={vm.canonicalBaseUrl}
-          checkingConnection={vm.loading}
-          {...(search.resumeTool === undefined ? {} : { resumeToolRef: search.resumeTool })}
-          onCheckConnection={vm.onDirectoryRetry}
-          onConnectNewAgent={vm.onConnectNewAgent}
-        />
+      {connectMode === 'choose' ? (
+        <div ref={choiceRef} tabIndex={-1} className="mb-4 grid gap-3 rounded-card border border-border bg-background p-4 focus-visible:outline-solid focus-visible:outline-2 focus-visible:outline-brand" aria-label="Choose how to connect an Agent">
+          <h2 className="font-semibold">Connect an Agent</h2>
+          <p className="text-sm text-muted-foreground">Choose the connection you will use. Both paths require your approval before an Agent can act.</p>
+          <div className="flex flex-wrap gap-2">
+            <Button type="button" className="min-h-touch" onClick={focusOauthSetup}>Connect with OAuth / MCP</Button>
+            <Link to="/owner/settings/agent-keys" search={{ issue: 'manual' }} className={`${buttonVariants({ variant: 'outline' })} min-h-touch`}>Issue a manual key</Link>
+            <Button type="button" variant="ghost" className="min-h-touch" onClick={() => setConnectMode('closed')}>Cancel</Button>
+          </div>
+        </div>
+      ) : null}
+      {directory.items.length === 0 && (search.caller === undefined || connectMode === 'oauth') ? (
+        <div ref={setupRef} tabIndex={-1} aria-label="OAuth and MCP connection steps">
+          <HomeEmptyInstallPanel
+            canonicalBaseUrl={vm.canonicalBaseUrl}
+            checkingConnection={vm.loading}
+            {...(search.resumeTool === undefined ? {} : { resumeToolRef: search.resumeTool })}
+            onCheckConnection={vm.onDirectoryRetry}
+            onConnectNewAgent={chooseConnection}
+          />
+        </div>
       ) : directory.items.length === 0 || search.resumeTool === undefined ? null : (
         <HomeResumeToolSection
           title={vm.resumeSectionTitle}
@@ -59,7 +88,7 @@ export function AeAgentAccessHome(props: AeAgentAccessHomeProps) {
           showReturnLink={vm.hasConnectedAgent}
         />
       )}
-      {directory.items.length === 0 && search.caller === undefined ? null : (
+      {directory.items.length === 0 && (search.caller === undefined || connectMode === 'oauth') ? null : (
         <AeAgentOperatorConsole
           directory={directory}
           loading={vm.loading}
@@ -71,7 +100,7 @@ export function AeAgentAccessHome(props: AeAgentAccessHomeProps) {
           onRenameAgent={vm.onRenameAgent}
           onUpdateSpendingLimits={vm.onUpdateSpendingLimits}
           onReadSpendingLimits={vm.onReadSpendingLimits}
-          onConnectNewAgent={vm.onConnectNewAgent}
+          onConnectNewAgent={chooseConnection}
           {...(vm.agentHistoryPrincipalRef === undefined
             ? {}
             : { agentHistory: <AeAgentSecurityHistory key={vm.agentHistoryPrincipalRef} principalRef={vm.agentHistoryPrincipalRef} /> })}
@@ -98,15 +127,17 @@ export function AeAgentAccessHome(props: AeAgentAccessHomeProps) {
         <HomeAddAnotherAgent
           showSetup={vm.showSetup}
           toggleLabel={vm.addAnotherToggleLabel}
-          onToggle={vm.onToggleShowSetup}
+          onToggle={vm.showSetup ? vm.onToggleShowSetup : chooseConnection}
           installPanel={(
-            <AeAssistantInstallFunnel
-              canonicalBaseUrl={vm.canonicalBaseUrl}
-              checkingConnection={vm.loading}
-              onCheckConnection={vm.onDirectoryRetry}
-              hideSelfLinks
-              {...(search.resumeTool === undefined ? {} : { resumeToolRef: search.resumeTool })}
-            />
+            <div ref={setupRef} tabIndex={-1} aria-label="OAuth and MCP connection steps">
+              <AeAssistantInstallFunnel
+                canonicalBaseUrl={vm.canonicalBaseUrl}
+                checkingConnection={vm.loading}
+                onCheckConnection={vm.onDirectoryRetry}
+                hideSelfLinks
+                {...(search.resumeTool === undefined ? {} : { resumeToolRef: search.resumeTool })}
+              />
+            </div>
           )}
         />
       )}

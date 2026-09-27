@@ -21,7 +21,7 @@ export const readTeamRolesServer = createServerFn({ method: 'GET' }).handler(asy
       joinedAt: person.joinedAt,
     }
   }))
-  return { members, canInvite: invitation !== null }
+  return { members, inviteAvailability: invitation.kind }
 })
 
 export const inviteTeamMemberServer = createServerFn({ method: 'POST' })
@@ -30,7 +30,7 @@ export const inviteTeamMemberServer = createServerFn({ method: 'POST' })
     const session = await auth()
     if (!session.userId) throw new Error('Sign in to invite a member.')
     const invitation = await callSourceQuery(api.workspaceTeam.invitationContext, {})
-    if (invitation === null) throw new Error('Invitations are unavailable for this workspace or role.')
+    if (invitation.kind !== 'available') throw new Error('Invitations are no longer available. Refresh Team & roles to see why.')
     await clerkClient().organizations.createOrganizationInvitation({
       organizationId: invitation.organizationId,
       inviterUserId: session.userId,

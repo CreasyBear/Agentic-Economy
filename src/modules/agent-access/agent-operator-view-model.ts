@@ -1,5 +1,6 @@
 import type { AgentAccessKeyInventoryItem } from '@/modules/agent-access/agent-access'
 import type { AgentAccessOwnerGrantReadback } from '@/modules/agent-access/policy'
+import type { AgentSpendingPolicyState } from '@/modules/agent-access/spending-policy-update'
 import type { AgentConnectionReadback } from '@/modules/agent-access/agent-connection'
 import type { ExactAmount } from '@/modules/money/public'
 import type { AccountFundingBalance } from '@/modules/money/server'
@@ -44,6 +45,12 @@ export type AgentOwnerReadback = Readonly<{
   dataState: 'source' | 'empty' | 'partial' | 'unavailable'
 }>
 
+export type AgentOwnerPolicyReadback = Readonly<{
+  principalRef: string
+  spendingPolicy: AgentSpendingPolicyState
+  grant?: AgentAccessOwnerGrantReadback
+}>
+
 /**
  * Presentation-ready readback for one agent credential.
  *
@@ -77,6 +84,7 @@ export type AgentDirectoryItem = Readonly<{
   applicationRef: string
   environment: 'sandbox' | 'production'
   status: 'connected' | 'attention' | 'expired' | 'disconnected'
+  spendingPolicy: AgentSpendingPolicyState
   currentCredentialGeneration?: number
   lastAuthenticatedAt?: number
   lastSeenAt?: number
@@ -102,6 +110,7 @@ export type AgentDetail = Readonly<{
   authorityMode: AgentAccessKeyInventoryItem['authorityMode']
   scopes: readonly string[]
   grant?: AgentAccessOwnerGrantReadback
+  spendingPolicy: AgentSpendingPolicyState
   activity: readonly AgentActivityView[]
   usage?: AgentUsageSummary
   dataState: 'source' | 'empty' | 'partial' | 'unavailable'

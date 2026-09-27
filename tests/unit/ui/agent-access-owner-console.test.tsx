@@ -268,8 +268,8 @@ describe('assistant access owner continuation anchors', () => {
       />,
     )
 
-    fireEvent.click(screen.getByRole('button', { name: 'Rename Route assistant' }))
-    const input = screen.getByRole('textbox', { name: 'Rename Route assistant' })
+    fireEvent.click(screen.getByRole('button', { name: `Rename Route assistant (Sandbox · ${PRINCIPAL_ID})` }))
+    const input = screen.getByRole('textbox', { name: `Rename Route assistant (Sandbox · ${PRINCIPAL_ID})` })
     fireEvent.change(input, { target: { value: 'Research assistant' } })
     fireEvent.click(screen.getByRole('button', { name: 'Save' }))
 
@@ -278,7 +278,7 @@ describe('assistant access owner continuation anchors', () => {
       directory.items[0]?.principalRevision,
       'Research assistant',
     ))
-    expect(document.body.textContent).not.toContain(PRINCIPAL_ID)
+    expect(screen.getByText(PRINCIPAL_ID)).toBeTruthy()
     expect(document.body.textContent).not.toContain(KEY_ID_CANARY)
   })
 
@@ -322,9 +322,8 @@ describe('assistant access owner continuation anchors', () => {
     expect(within(dialog).queryByText('Daily budget', { selector: 'dt' })).toBeNull()
 
     fireEvent.click(within(dialog).getByRole('button', { name: 'Spending policy' }))
-    expect(within(dialog).getByText('Daily budget', { selector: 'dt' })).toBeTruthy()
-    expect(within(dialog).getByText('Concurrency', { selector: 'dt' })).toBeTruthy()
-
+    expect(within(dialog).getByText('Spending policy', { selector: 'dt' }).nextElementSibling?.textContent).toBe('Unavailable')
+    expect(within(dialog).queryByText('Concurrency', { selector: 'dt' })).toBeNull()
     fireEvent.click(within(dialog).getByRole('button', { name: 'Activity' }))
     expect(within(dialog).getByText('Settled charges', { selector: 'dt' })).toBeTruthy()
     expect(within(dialog).getByText('Usage data', { selector: 'dt' })).toBeTruthy()
@@ -362,14 +361,14 @@ describe('assistant access owner continuation anchors', () => {
     const onRenameAgent = vi.fn(async () => false)
     render(<AeAgentOperatorConsole {...consoleProps()} onRenameAgent={onRenameAgent} />)
 
-    fireEvent.click(screen.getByRole('button', { name: 'Rename Route assistant' }))
-    const input = screen.getByRole('textbox', { name: 'Rename Route assistant' })
+    fireEvent.click(screen.getByRole('button', { name: `Rename Route assistant (Sandbox · ${PRINCIPAL_ID})` }))
+    const input = screen.getByRole('textbox', { name: `Rename Route assistant (Sandbox · ${PRINCIPAL_ID})` })
     fireEvent.change(input, { target: { value: 'Unconfirmed name' } })
     fireEvent.click(screen.getByRole('button', { name: 'Save' }))
 
     expect((await screen.findByRole('alert')).textContent).toContain('Current saved name has been restored')
-    expect(screen.getByRole<HTMLInputElement>('textbox', { name: 'Rename Route assistant' }).value).toBe('Route assistant')
-    expect(document.body.textContent).not.toContain(PRINCIPAL_ID)
+    expect(screen.getByRole<HTMLInputElement>('textbox', { name: `Rename Route assistant (Sandbox · ${PRINCIPAL_ID})` }).value).toBe('Route assistant')
+    expect(screen.getByText(PRINCIPAL_ID)).toBeTruthy()
   })
 
   it('links credential history to Agent keys settings without another revoke control', () => {
@@ -419,7 +418,7 @@ describe('assistant access owner continuation anchors', () => {
     const row = screen.getByText('Route assistant').closest('tr')
     if (row === null) throw new Error('caller_row_missing')
     expect(row.getAttribute('tabindex')).toBeNull()
-    const open = within(row).getByRole('link', { name: 'Open Route assistant' })
+    const open = within(row).getByRole('link', { name: `Open Route assistant (Sandbox · ${PRINCIPAL_ID})` })
     expect(open.getAttribute('href')).toBe(`/agent-access?caller=${PRINCIPAL_ID}`)
     expect(within(row).getAllByRole('link')).toHaveLength(1)
     expect(screen.queryByRole('dialog')).toBeNull()

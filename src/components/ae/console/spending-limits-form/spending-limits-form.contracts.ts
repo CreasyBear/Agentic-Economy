@@ -23,6 +23,7 @@ export type SpendingPresetSelectorProps = Readonly<{
 
 export type SpendingPauseToggleProps = Readonly<{
   isPaused: boolean
+  restoreAvailable: boolean
   disabled: boolean
   onTogglePause: () => void
 }>
@@ -39,6 +40,7 @@ export type UseAgentSpendingLimitsInput = Readonly<{
 
 export type AgentSpendingLimitsViewState = Readonly<{
   isPaused: boolean
+  restoreAvailable: boolean
   editing: boolean
   pending: boolean
   diagnostic: Rule4Diagnostic | null

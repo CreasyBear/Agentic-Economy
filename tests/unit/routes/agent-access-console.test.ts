@@ -5,9 +5,8 @@ import {
   enrichAgentDirectoryActivity,
   loadAgentDirectoryReadback,
   projectAgentDirectory,
-  readAgentCredentialSources,
 } from '@/modules/agent-access/agent-access-console'
-import type { AgentCredentialSource, AgentOwnerReadback } from '@/modules/agent-access/agent-operator-view-model'
+import type { AgentCredentialSource, AgentOwnerPolicyReadback, AgentOwnerReadback } from '@/modules/agent-access/agent-operator-view-model'
 import type { AgentAccessOwnerGrantReadback } from '@/modules/agent-access/policy'
 import { canonicalAgentRecord } from '../../helpers/agent-directory-fixture'
 
@@ -29,7 +28,7 @@ const source: AgentCredentialSource = {
 const canonical = canonicalAgentRecord([source])
 const secondSource: AgentCredentialSource = {
   ...source,
-  key: { ...source.key, keyId: 'key:second', name: 'Second assistant', createdAt: 10 },
+  key: { ...source.key, keyId: 'key:second', name: 'Assistant', createdAt: 10 },
   principalId: secondPrincipalRef,
 }
 const secondCanonical = canonicalAgentRecord([secondSource])
@@ -52,7 +51,7 @@ afterEach(() => { vi.restoreAllMocks(); vi.clearAllMocks() })
 
 describe('owner Agent projection', () => {
   it('preserves available owner activity and usage with no surviving keys or grants', async () => {
-    const credentials = await readAgentCredentialSources([], [])
+    const credentials: readonly AgentCredentialSource[] = []
     const directory = projectAgentDirectory(credentials, [canonical], [], [owner])
     expect(directory.items).toHaveLength(1)
     expect(directory.details[0]).toMatchObject({ activity: [call], usage: owner.usage, dataState: 'source', activityTruncated: true })
@@ -98,7 +97,11 @@ describe('owner Agent projection', () => {
     transport.action.mockResolvedValue(balance)
     transport.query.mockImplementation(async (ref, args) => {
       switch (getFunctionName(ref)) {
-        case 'agentAccessPolicy:listOwnerGrantReadbacks': return []
+        case 'agentAccessPolicy:listOwnerGrantReadbacks':
+          expect(args).toEqual({ principalRefs: [principalRef, secondPrincipalRef] })
+          return [{ principalRef, spendingPolicy: { kind: 'unavailable' } }, {
+            principalRef: secondPrincipalRef, spendingPolicy: { kind: 'expired', expiresAt: period.periodStartAt },
+          }]
         case 'agentDirectory:listOwnedPage':
           expect(args.paginationOpts).toEqual({ numItems: 25, cursor: null })
           return { page: [firstCanonical, secondCanonical], isDone: false, continueCursor: 'opaque:directory' }
@@ -131,11 +134,14 @@ describe('owner Agent projection', () => {
     expect(directory.items).toHaveLength(2)
     const firstAgent = directory.details.find(({ agent }) => agent.principalRef === principalRef)
     const secondAgent = directory.details.find(({ agent }) => agent.principalRef === secondPrincipalRef)
-    expect(firstAgent).toMatchObject({ activity: [call], dataState: 'source', usage: { callCount: 51, amountCoverage: 'incomplete' } })
+    expect(firstAgent).toMatchObject({ activity: [call], dataState: 'source', usage: { callCount: 51, amountCoverage: 'incomplete' },
+      spendingPolicy: { kind: 'unavailable' }, agent: { spendingPolicy: { kind: 'unavailable' } } })
     expect(firstAgent?.credentials).toHaveLength(2)
     expect(firstAgent?.activity).toHaveLength(1)
     expect(firstAgent?.usage).not.toHaveProperty('settledSpend')
-    expect(secondAgent).toMatchObject({ activity: [], dataState: 'empty' })
+    expect(secondAgent).toMatchObject({ activity: [], dataState: 'empty',
+      spendingPolicy: { kind: 'expired', expiresAt: period.periodStartAt },
+      agent: { spendingPolicy: { kind: 'expired' } } })
     expect(secondAgent?.agent.principalRef).toBe(secondPrincipalRef)
   })
 
@@ -175,10 +181,22 @@ describe('owner Agent projection', () => {
         maximumCallsPerHour: 3600,
       },
     }
+    const knownPolicy: AgentOwnerPolicyReadback = {
+      principalRef,
+      spendingPolicy: {
+        kind: 'known', principalRef, grantRef: 'grant:one', generation: 1,
+        spendingPolicyDigest: 'sha256:owner-grant',
+        maximumSpendPerCall: testGrant.budget.maximumSpendPerCall,
+        maximumDailySpend: testGrant.budget.maximumDailySpend,
+        maximumMonthlySpend: testGrant.budget.maximumMonthlySpend,
+        paused: false, expiresAt: testGrant.expiresAt,
+      },
+      grant: testGrant,
+    }
 
-    it('P1: lifts complete spend and grant limit onto list item and detail', async () => {
-      const credentials = await readAgentCredentialSources([source.key], [testGrant])
-      const directory = projectAgentDirectory(credentials, [canonical], [], [owner])
+    it('P1: lifts complete spend and authoritative policy limit onto list item and detail', async () => {
+      const credentials: readonly AgentCredentialSource[] = [{ ...source, grant: testGrant }]
+      const directory = projectAgentDirectory(credentials, [canonical], [], [owner], [knownPolicy])
 
       expect(directory.items).toHaveLength(1)
       const item = directory.items[0]
@@ -192,10 +210,13 @@ describe('owner Agent projection', () => {
         monthlyLimit: { currency: 'AUD', exponent: 6, units: '100000000' },
         monthlySpendCoverage: 'complete',
       })
+      expect(directory.details[0]?.spendingPolicy).toMatchObject({
+        kind: 'known', principalRef, maximumMonthlySpend: { currency: 'AUD', exponent: 6, units: '100000000' },
+      })
     })
 
     it('P2: empty usage projects spend 0, keeps limit', async () => {
-      const credentials = await readAgentCredentialSources([source.key], [testGrant])
+      const credentials: readonly AgentCredentialSource[] = [{ ...source, grant: testGrant }]
       const emptyOwner: AgentOwnerReadback = {
         principalRef,
         activity: [],
@@ -211,7 +232,7 @@ describe('owner Agent projection', () => {
         },
         dataState: 'empty',
       }
-      const directory = projectAgentDirectory(credentials, [canonical], [], [emptyOwner])
+      const directory = projectAgentDirectory(credentials, [canonical], [], [emptyOwner], [knownPolicy])
 
       expect(directory.items[0]).toMatchObject({
         monthlySettledSpend: { currency: 'AUD', exponent: 6, units: '0' },
@@ -221,14 +242,14 @@ describe('owner Agent projection', () => {
     })
 
     it('P3: unavailable usage does not invent spend', async () => {
-      const credentials = await readAgentCredentialSources([source.key], [testGrant])
+      const credentials: readonly AgentCredentialSource[] = [{ ...source, grant: testGrant }]
       const unavailOwner: AgentOwnerReadback = {
         principalRef,
         activity: [],
         activityIsDone: true,
         dataState: 'unavailable',
       }
-      const directory = projectAgentDirectory(credentials, [canonical], [], [unavailOwner])
+      const directory = projectAgentDirectory(credentials, [canonical], [], [unavailOwner], [knownPolicy])
 
       expect(directory.items[0]?.monthlyLimit).toEqual({ currency: 'AUD', exponent: 6, units: '100000000' })
       expect(directory.items[0]?.monthlySettledSpend).toBeUndefined()
@@ -236,7 +257,7 @@ describe('owner Agent projection', () => {
     })
 
     it('P4: incomplete coverage does not invent settled spend', async () => {
-      const credentials = await readAgentCredentialSources([source.key], [testGrant])
+      const credentials: readonly AgentCredentialSource[] = [{ ...source, grant: testGrant }]
       const incompleteOwner: AgentOwnerReadback = {
         principalRef,
         activity: [call],
@@ -251,20 +272,30 @@ describe('owner Agent projection', () => {
         },
         dataState: 'partial',
       }
-      const directory = projectAgentDirectory(credentials, [canonical], [], [incompleteOwner])
+      const directory = projectAgentDirectory(credentials, [canonical], [], [incompleteOwner], [knownPolicy])
 
       expect(directory.items[0]?.monthlyLimit).toEqual({ currency: 'AUD', exponent: 6, units: '100000000' })
       expect(directory.items[0]?.monthlySettledSpend).toBeUndefined()
       expect(directory.items[0]?.monthlySpendCoverage).toBe('incomplete')
     })
 
-    it('P5: no grant leaves monthlyLimit undefined', async () => {
-      const credentials = await readAgentCredentialSources([source.key], [])
-      const directory = projectAgentDirectory(credentials, [canonical], [], [owner])
+    it('P5: absent expected grant is unavailable despite settled spend', async () => {
+      const credentials: readonly AgentCredentialSource[] = []
+      const directory = projectAgentDirectory(credentials, [canonical], [], [owner],
+        [{ principalRef, spendingPolicy: { kind: 'unavailable' } }])
 
+      expect(directory.items[0]?.spendingPolicy).toEqual({ kind: 'unavailable' })
       expect(directory.items[0]?.monthlyLimit).toBeUndefined()
       expect(directory.items[0]?.monthlySettledSpend).toEqual({ currency: 'AUD', exponent: 6, units: '9007199254740993' })
       expect(directory.items[0]?.monthlySpendCoverage).toBe('complete')
+    })
+
+    it('does not infer a known policy from an unverified grant', async () => {
+      const credentials: readonly AgentCredentialSource[] = [{ ...source, grant: testGrant }]
+      const directory = projectAgentDirectory(credentials, [canonical], [], [owner])
+
+      expect(directory.details[0]?.spendingPolicy).toEqual({ kind: 'unavailable' })
+      expect(directory.items[0]?.monthlyLimit).toBeUndefined()
     })
   })
 })
