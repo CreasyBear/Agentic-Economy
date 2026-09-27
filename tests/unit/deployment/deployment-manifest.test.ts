@@ -449,6 +449,22 @@ describe('deployment manifest validator', () => {
       .toEqual(expect.arrayContaining(['AE_CUSTOMER_REQUEST_TOKEN', 'AE_DIRECT_AUTH_BYPASS', 'VITE_AE_TEST_SECRET']))
   })
 
+  it('admits the configured secret lifecycle RPC token without exposing its value', () => {
+    const environment = {
+      ...productionEnvironment(),
+      AE_SECRET_LIFECYCLE_RPC_TOKEN: 'secret-lifecycle-token-one',
+    }
+    const result = validateDeploymentManifest(environment, { nodeMajor: 22 })
+    const rotated = validateDeploymentManifest({
+      ...environment,
+      AE_SECRET_LIFECYCLE_RPC_TOKEN: 'secret-lifecycle-token-two',
+    }, { nodeMajor: 22 })
+
+    expect(result.findings).toEqual([])
+    expect(result.fingerprint).toBe(rotated.fingerprint)
+    expect(JSON.stringify(result)).not.toContain(environment.AE_SECRET_LIFECYCLE_RPC_TOKEN)
+  })
+
   it('rejects malformed canonical URLs and host allowlists', () => {
     const result = validateDeploymentManifest({
       ...productionEnvironment(),
