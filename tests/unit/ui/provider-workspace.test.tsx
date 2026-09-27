@@ -60,40 +60,29 @@ afterEach(() => {
 })
 
 describe('Tools management disclosure', () => {
-  it('uses one disconnected payout presentation in setup and Earnings', async () => {
+  it('makes earnings directly available without asking a Provider to connect Stripe', async () => {
     render(<AeProviderWorkspace
       inventory={inventory}
       lifecycle={unavailable}
       connections={unavailable}
-      payouts={Promise.resolve({ kind: 'available', value: { currencies: [], earningsAccounts: 0, payoutAccounts: 0, readyAccounts: 0, needsAttention: 0 } })}
       publicStatus={unavailable}
     />)
 
     await screen.findByRole('heading', { name: 'Provider setup' })
     expect(screen.queryByText('Add a source, then choose a Tool to publish.')).toBeNull()
     const addTool = screen.getAllByRole('link', { name: 'Add Tool' })
-    expect(addTool).toHaveLength(1)
-    expect(addTool[0]?.getAttribute('href')).toBe('/owner/operations/new')
-    expect(addTool[0]?.className).toContain('border')
-    expect(addTool[0]?.className).not.toContain('bg-primary')
-
+    expect(addTool.every((link) => link.getAttribute('href') === '/owner/operations/new')).toBe(true)
     const setup = screen.getByRole('heading', { name: 'Provider setup' }).parentElement?.parentElement
     const earnings = screen.getByRole('heading', { name: 'Earnings' }).closest('section')
     expect(setup).not.toBeNull()
     expect(earnings).not.toBeNull()
-    expect(within(setup as HTMLElement).getByText('Billing action required')).toBeTruthy()
-    expect(within(earnings as HTMLElement).getByText('Billing action required')).toBeTruthy()
-    expect(screen.getAllByText('Connect Stripe to receive payouts.')).toHaveLength(2)
-    expect(screen.getAllByRole('button', { name: 'Connect Stripe' })).toHaveLength(2)
-    expect(screen.queryByText(/nothing is required here/u)).toBeNull()
-    expect(screen.queryByText(/monthly settlements/u)).toBeNull()
-    const settingsLinks = screen.getAllByRole('link', { name: 'Open Settings' })
-    expect(settingsLinks).toHaveLength(2)
-    expect(settingsLinks.every(link => link.getAttribute('href') === '/owner/settings')).toBe(true)
+    expect(within(setup as HTMLElement).queryByText(/payout|stripe/i)).toBeNull()
+    expect(within(earnings as HTMLElement).getByRole('button', { name: 'View earnings' })).toBeTruthy()
+    expect(within(earnings as HTMLElement).queryByRole('button', { name: /connect stripe/i })).toBeNull()
   })
 
   it('renders a provider ownership conflict without lifecycle actions', async () => {
-    render(<AeProviderWorkspace inventory={inventory} lifecycle={Promise.resolve({ kind: 'conflict', reason: 'business_mismatch' })} connections={unavailable} payouts={unavailable} publicStatus={unavailable} />)
+    render(<AeProviderWorkspace inventory={inventory} lifecycle={Promise.resolve({ kind: 'conflict', reason: 'business_mismatch' })} connections={unavailable} publicStatus={unavailable} />)
 
     expect(await screen.findByText('Provider ownership conflict')).toBeTruthy()
     expect(screen.getByText('Lifecycle records do not belong to the current provider. No Tool action is available.')).toBeTruthy()
@@ -103,7 +92,7 @@ describe('Tools management disclosure', () => {
   it('keeps provider connection management out of Tools while earnings detail opens in place', async () => {
     calls.earnings.mockResolvedValue({ kind: 'not_found' })
     calls.connect.mockResolvedValue({ kind: 'not_found' })
-    render(<AeProviderWorkspace inventory={inventory} lifecycle={unavailable} connections={Promise.resolve({ kind: 'available', value: { total: 0, available: 0, needsAttention: 0 } })} payouts={Promise.resolve({ kind: 'available', value: { currencies: [], earningsAccounts: 0, payoutAccounts: 0, readyAccounts: 0, needsAttention: 0 } })} publicStatus={unavailable} />)
+    render(<AeProviderWorkspace inventory={inventory} lifecycle={unavailable} connections={Promise.resolve({ kind: 'available', value: { total: 0, available: 0, needsAttention: 0 } })} publicStatus={unavailable} />)
     expect(calls.earnings).not.toHaveBeenCalled()
     const earningsHeading = screen.getByRole('heading', { name: 'Earnings' })
     expect(earningsHeading.closest('details')).toBeNull()
@@ -113,14 +102,13 @@ describe('Tools management disclosure', () => {
     const manage = await screen.findByRole('link', { name: 'Manage connections' })
     expect(manage.getAttribute('href')).toBe('/owner/settings/integrations')
     expect(screen.queryByRole('dialog', { name: 'Connections' })).toBeNull()
-    fireEvent.click(within(earningsHeading.closest('section') as HTMLElement).getByRole('button', { name: 'Connect Stripe' }))
+    fireEvent.click(within(earningsHeading.closest('section') as HTMLElement).getByRole('button', { name: 'View earnings' }))
     await waitFor(() => expect(calls.earnings).toHaveBeenCalledTimes(1))
-    expect(calls.connect).toHaveBeenCalledTimes(1)
-    expect(await screen.findByText('Billing action required', { selector: '[data-slot="alert-title"]' })).toBeTruthy()
+    expect(await screen.findByText('Set up a Provider profile to view earnings.')).toBeTruthy()
   })
 
   it('links to settings even when the operational connection summary is available but no endpoint is configured', async () => {
-    render(<AeProviderWorkspace inventory={inventory} lifecycle={unavailable} connections={Promise.resolve({ kind: 'available', value: { total: 0, available: 0, needsAttention: 0 } })} payouts={unavailable} publicStatus={unavailable} />)
+    render(<AeProviderWorkspace inventory={inventory} lifecycle={unavailable} connections={Promise.resolve({ kind: 'available', value: { total: 0, available: 0, needsAttention: 0 } })} publicStatus={unavailable} />)
     expect((await screen.findByRole('link', { name: 'Manage connections' })).getAttribute('href')).toBe('/owner/settings/integrations')
     expect(screen.queryByRole('button', { name: 'Revoke' })).toBeNull()
   })
@@ -130,20 +118,18 @@ describe('Tools management disclosure', () => {
       inventory={inventory}
       lifecycle={unavailable}
       connections={Promise.resolve({ kind: 'conflict', reason: 'business_mismatch' })}
-      payouts={Promise.resolve({ kind: 'not_applicable' })}
       publicStatus={Promise.resolve({ kind: 'conflict', reason: 'multiple_providers' })}
     />)
 
     expect(await screen.findByText('Connections ownership conflict')).toBeTruthy()
     expect(screen.getAllByText('Public status ownership conflict').length).toBeGreaterThan(0)
-    expect(screen.getAllByText('Billing action required').length).toBeGreaterThan(0)
-    expect(screen.queryByText('Earnings unavailable')).toBeNull()
+    expect(screen.getByRole('button', { name: 'View earnings' })).toBeTruthy()
   })
 
 
   it('loads provider identity controls only after their section opens', async () => {
     calls.identity.mockResolvedValue({ kind: 'available', businessId: 'biz:one', name: 'Provider', slug: 'provider', publicStatus: 'published' })
-    render(<AeProviderWorkspace inventory={inventory} lifecycle={unavailable} connections={unavailable} payouts={unavailable} publicStatus={unavailable} />)
+    render(<AeProviderWorkspace inventory={inventory} lifecycle={unavailable} connections={unavailable} publicStatus={unavailable} />)
 
     expect(calls.identity).not.toHaveBeenCalled()
     fireEvent.click(screen.getByRole('button', { name: 'Manage provider identity' }))
@@ -156,7 +142,7 @@ describe('Tools management disclosure', () => {
     calls.identity
       .mockRejectedValueOnce(new Error('private identity outage'))
       .mockResolvedValueOnce({ kind: 'available', businessId: 'biz:one', name: 'Provider', slug: 'provider', publicStatus: 'published' })
-    render(<AeProviderWorkspace inventory={inventory} lifecycle={unavailable} connections={unavailable} payouts={unavailable} publicStatus={unavailable} />)
+    render(<AeProviderWorkspace inventory={inventory} lifecycle={unavailable} connections={unavailable} publicStatus={unavailable} />)
 
     fireEvent.click(screen.getByRole('button', { name: 'Manage provider identity' }))
     const unavailableTitle = await screen.findByText('Provider identity controls unavailable')
@@ -169,7 +155,7 @@ describe('Tools management disclosure', () => {
 
   it('renders one current-owner public status and capability projection', async () => {
     const readback = { catalog: { businessId: 'biz:one', offerings: [] } }
-    render(<AeProviderWorkspace inventory={inventory} lifecycle={unavailable} connections={unavailable} payouts={unavailable} publicStatus={Promise.resolve({ kind: 'available', value: readback } as never)} />)
+    render(<AeProviderWorkspace inventory={inventory} lifecycle={unavailable} connections={unavailable} publicStatus={Promise.resolve({ kind: 'available', value: readback } as never)} />)
 
     expect(await screen.findByTestId('provider-status-card')).toBeTruthy()
     expect(screen.getAllByTestId('provider-capability-list')).toHaveLength(1)
@@ -183,11 +169,10 @@ describe('Tools management disclosure', () => {
     routeState.location = { pathname: '/owner/operations', hash: 'earnings', search: { connect: 'return' } }
     calls.earnings.mockResolvedValue({ kind: 'not_found' })
     calls.connect.mockResolvedValue({ kind: 'not_found' })
-    render(<AeProviderWorkspace inventory={inventory} lifecycle={unavailable} connections={unavailable} payouts={unavailable} publicStatus={unavailable} />)
+    render(<AeProviderWorkspace inventory={inventory} lifecycle={unavailable} connections={unavailable} publicStatus={unavailable} />)
 
     await waitFor(() => expect(calls.earnings).toHaveBeenCalledTimes(1))
-    expect(calls.connect).toHaveBeenCalledTimes(1)
-    expect(await screen.findByText('Billing action required', { selector: '[data-slot="alert-title"]' })).toBeTruthy()
+    expect(await screen.findByText('Set up a Provider profile to view earnings.')).toBeTruthy()
   })
 
   it('preserves the exact validated x402 source handoff in the Settings link', async () => {
@@ -199,7 +184,7 @@ describe('Tools management disclosure', () => {
       environment: 'sandbox',
     } as const
     routeState.location = { pathname: '/owner/operations', hash: '', search: handoff }
-    render(<AeProviderWorkspace inventory={inventory} lifecycle={unavailable} connections={unavailable} payouts={unavailable} publicStatus={unavailable} />)
+    render(<AeProviderWorkspace inventory={inventory} lifecycle={unavailable} connections={unavailable} publicStatus={unavailable} />)
     const href = screen.getByRole('link', { name: 'Manage connections' }).getAttribute('href')
     const url = new URL(href ?? '', 'https://example.test')
     expect(url.pathname).toBe('/owner/settings/integrations')
@@ -211,21 +196,19 @@ describe('Tools management disclosure', () => {
       .mockRejectedValueOnce(new Error('private earnings outage'))
       .mockResolvedValueOnce({ kind: 'not_found' })
     calls.connect.mockResolvedValue({ kind: 'not_found' })
-    render(<AeProviderWorkspace inventory={inventory} lifecycle={unavailable} connections={unavailable} payouts={Promise.resolve({ kind: 'available', value: { currencies: [], earningsAccounts: 0, payoutAccounts: 0, readyAccounts: 0, needsAttention: 0 } })} publicStatus={unavailable} />)
+    render(<AeProviderWorkspace inventory={inventory} lifecycle={unavailable} connections={unavailable} publicStatus={unavailable} />)
 
     const earningsSection = screen.getByRole('heading', { name: 'Earnings' }).closest('section')
-    fireEvent.click(within(earningsSection as HTMLElement).getByRole('button', { name: 'Connect Stripe' }))
-    expect(await screen.findByText('Stripe connection state unavailable')).toBeTruthy()
-    fireEvent.click(screen.getByRole('button', { name: 'Try connection again' }))
-
-    expect(await screen.findByText('Billing action required', { selector: '[data-slot="alert-title"]' })).toBeTruthy()
+    fireEvent.click(within(earningsSection as HTMLElement).getByRole('button', { name: 'View earnings' }))
+    expect(await screen.findByText('Earnings source unavailable')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Try earnings again' }))
+    expect(await screen.findByText('Set up a Provider profile to view earnings.')).toBeTruthy()
     expect(calls.earnings).toHaveBeenCalledTimes(2)
-    expect(calls.connect).toHaveBeenCalledTimes(2)
   })
 
   it('preserves a rebind target and row hash in the Settings link', async () => {
     routeState.location = { pathname: '/owner/operations', hash: 'provider-connection-connection:missing', search: { rebind: 'offering:one' } }
-    render(<AeProviderWorkspace inventory={inventory} lifecycle={unavailable} connections={unavailable} payouts={unavailable} publicStatus={unavailable} />)
+    render(<AeProviderWorkspace inventory={inventory} lifecycle={unavailable} connections={unavailable} publicStatus={unavailable} />)
     const href = screen.getByRole('link', { name: 'Manage connections' }).getAttribute('href')
     expect(href).toBe('/owner/settings/integrations?rebind=offering%3Aone#provider-connection-connection:missing')
   })

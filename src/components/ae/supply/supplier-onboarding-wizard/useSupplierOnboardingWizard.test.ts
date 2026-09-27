@@ -33,13 +33,13 @@ describe('useSupplierOnboardingWizard', () => {
     vi.clearAllMocks()
   })
 
-  it('advances to payouts silently when onSaveProfile is omitted', async () => {
+  it('advances to first Tool without payout setup when profile is saved locally', async () => {
     const { result } = renderHook(() => useSupplierOnboardingWizard({ currentStep: 'profile' }))
 
     fillValidProfile(result)
     await submitProfile(result)
 
-    expect(result.current.view.step).toBe('payouts')
+    expect(result.current.view.step).toBe('first_tool')
     expect(toast.success).not.toHaveBeenCalled()
   })
 
@@ -94,39 +94,6 @@ describe('useSupplierOnboardingWizard', () => {
     await waitFor(() => expect(result.current.view.pending).toBe(false))
   })
 
-  it('skip advances to first_tool without calling onConnectPayouts', () => {
-    const onConnectPayouts = vi.fn()
-    const { result } = renderHook(() =>
-      useSupplierOnboardingWizard({
-        currentStep: 'payouts',
-        onConnectPayouts,
-      }),
-    )
-
-    act(() => {
-      result.current.handleSkipForNow()
-    })
-
-    expect(result.current.view.step).toBe('first_tool')
-    expect(onConnectPayouts).not.toHaveBeenCalled()
-  })
-
-  it('connect invokes onConnectPayouts without changing step', () => {
-    const onConnectPayouts = vi.fn()
-    const { result } = renderHook(() =>
-      useSupplierOnboardingWizard({
-        currentStep: 'payouts',
-        onConnectPayouts,
-      }),
-    )
-
-    act(() => {
-      result.current.handleConnectPayouts()
-    })
-
-    expect(onConnectPayouts).toHaveBeenCalled()
-    expect(result.current.view.step).toBe('payouts')
-  })
 
   it('goToStep no-ops on unvisited steps', () => {
     const { result } = renderHook(() => useSupplierOnboardingWizard({ currentStep: 'profile' }))

@@ -1,21 +1,15 @@
-import { useRouter } from '@tanstack/react-router'
+import { useLocation, useRouter } from '@tanstack/react-router'
 import { useServerFn } from '@tanstack/react-start'
 import type { SortingState } from '@tanstack/react-table'
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useState } from 'react'
 
 import { ensureProviderBusinessServer } from '@/components/ae/offerings/provider-identity.functions'
-import type { ProviderWorkspacePayoutResult } from '@/components/ae/offerings/provider-workspace.functions'
 import { captureClientExceptionOnClient } from '@/lib/observability/capture-client-exception'
-import type { AeProviderWorkspaceProps, OnboardingSaveResult } from './provider-workspace.contracts'
-import { providerWorkspacePayoutConnection } from './provider-workspace.view-model'
+import type { OnboardingSaveResult } from './provider-workspace.contracts'
 
-type UseProviderWorkspaceInventoryInput = Readonly<{
-  inventory: AeProviderWorkspaceProps['inventory']
-  payouts: AeProviderWorkspaceProps['payouts']
-}>
-
-export function useProviderWorkspaceInventory(input: UseProviderWorkspaceInventoryInput) {
+export function useProviderWorkspaceInventory() {
   const router = useRouter()
+  const resumeAddTool = useLocation().hash === 'add-tool'
   const ensureProviderBusiness = useServerFn(ensureProviderBusinessServer)
   const [refreshPending, setRefreshPending] = useState(false)
   const refresh = useCallback(() => {
@@ -47,6 +41,9 @@ export function useProviderWorkspaceInventory(input: UseProviderWorkspaceInvento
         return { kind: 'error', message }
       }
       await router.invalidate()
+      if (resumeAddTool) {
+        await router.navigate({ to: '/owner/operations/new' })
+      }
       return { kind: 'ok' }
     } catch (cause) {
       void cause
@@ -55,34 +52,16 @@ export function useProviderWorkspaceInventory(input: UseProviderWorkspaceInvento
         message: 'Could not save provider profile. Please check connection and try again.',
       }
     }
-  }, [ensureProviderBusiness, router])
+  }, [ensureProviderBusiness, resumeAddTool, router])
 
   const [inventoryFilter, setInventoryFilter] = useState('')
   const [inventorySorting, setInventorySorting] = useState<SortingState>([])
   const [activeRowActionId, setActiveRowActionId] = useState<string>()
-  const [payoutSummary, setPayoutSummary] = useState<ProviderWorkspacePayoutResult>()
-
-  useEffect(() => {
-    setPayoutSummary(undefined)
-    if (input.payouts === undefined) return
-    void input.payouts
-      .then(setPayoutSummary)
-      .catch((cause) => {
-        captureClientExceptionOnClient(cause)
-        setPayoutSummary({ kind: 'unavailable' })
-      })
-  }, [input.payouts])
-
-  const payoutConnection = providerWorkspacePayoutConnection({
-    result: payoutSummary,
-    pending: input.payouts !== undefined && payoutSummary === undefined,
-  })
 
   return {
     refresh,
     refreshPending,
     onSaveProfile,
-    payoutConnection,
     inventoryFilter,
     setInventoryFilter,
     inventorySorting,

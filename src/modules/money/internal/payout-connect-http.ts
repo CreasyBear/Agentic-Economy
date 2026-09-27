@@ -589,26 +589,7 @@ export async function readOwnerConnectReadinessThroughSource(): Promise<OwnerCon
   try {
     const result = await callSourceQuery(ownerBusinessQuery, {})
     if (result.kind === 'error' || result.kind === 'not_found') return result
-    const accounts = await Promise.all(
-      result.accounts.map(async (item) => {
-        const account = await callSourceQuery(readOwnerPayoutAccountQuery, {
-          businessId: result.businessId,
-          currency: item.currency,
-        })
-        return account === null
-          ? null
-          : { currency: item.currency, account, payout: item.payout }
-      }),
-    )
-    const boundAccounts = accounts.filter((account) => account !== null)
-    if (boundAccounts.length === 0)
-      return { kind: 'refused', code: 'payout_not_ready', retryable: false }
-    return {
-      kind: 'available',
-      businessId: result.businessId,
-      accounts: boundAccounts,
-      accountsTruncated: result.accounts.length >= 10,
-    }
+    return { kind: 'refused', code: 'payout_not_ready', retryable: false }
   } catch (cause) {
     return degradeBackend(cause, { kind: 'error', code: 'source_unavailable' } as const, { site: 'readOwnerConnectReadinessThroughSource', reason: 'source_unavailable' })
   }

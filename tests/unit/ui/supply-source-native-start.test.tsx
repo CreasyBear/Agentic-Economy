@@ -625,6 +625,29 @@ describe('source-native Provider start', () => {
     expect(onPreview).not.toHaveBeenCalled()
   })
 
+  it('labels parsed plugin JSON as top-level keys only, including empty remote declarations', async () => {
+    render(
+      <AeSupplySourceNativeStart
+        businessRef="business:one"
+        onPreview={vi.fn()}
+        onConnect={vi.fn()}
+        onSelectCandidate={vi.fn()}
+        onPublish={vi.fn()}
+      />,
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Other source types' }))
+    fireEvent.mouseDown(screen.getByRole('tab', { name: 'Agent Plugin' }))
+    fireEvent.change(screen.getByLabelText('plugin.json'), {
+      target: { files: [new File(['{"$schema":"spec","name":"sample"}'], 'plugin.json', { type: 'application/json' })] },
+    })
+    fireEvent.change(screen.getByLabelText('mcp.json'), {
+      target: { files: [new File(['{"$schema":"spec","mcpServers":{}}'], 'mcp.json', { type: 'application/json' })] },
+    })
+    expect(await screen.findByText('JSON object parsed; $schema and name present')).toBeTruthy()
+    expect(await screen.findByText('JSON object parsed; $schema and mcpServers present')).toBeTruthy()
+    expect(screen.queryByText('Valid JSON payload')).toBeNull()
+  })
+
   it('blocks Discover on malformed plugin JSON with Rule 4 diagnostic', async () => {
     const onPreview = vi.fn()
     render(

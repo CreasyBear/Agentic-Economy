@@ -91,11 +91,11 @@ describe('useProviderWorkspaceSheets', () => {
 
   it('loads earnings and identity details only once until retry', async () => {
     calls.earnings.mockResolvedValue({ kind: 'not_found' })
-    calls.connect.mockResolvedValue({ kind: 'not_found' })
     calls.identity.mockResolvedValue({ kind: 'available', businessId: 'biz:one', name: 'P', slug: 'p', publicStatus: 'published' })
     const { result } = renderHook(() => useProviderWorkspaceSheets({ enabled: true }))
     act(() => result.current.openEarnings())
     await waitFor(() => expect(calls.earnings).toHaveBeenCalledTimes(1))
+    expect(calls.connect).not.toHaveBeenCalled()
     act(() => result.current.openEarnings())
     expect(calls.earnings).toHaveBeenCalledTimes(1)
     act(() => result.current.openIdentity())
@@ -106,19 +106,19 @@ describe('useProviderWorkspaceSheets', () => {
 
   it('retries earnings readback after failure without repeated automatic fetches', async () => {
     calls.earnings.mockRejectedValueOnce(new Error('earnings down'))
-    calls.connect.mockResolvedValue({ kind: 'not_found' })
     const { result } = renderHook(() => useProviderWorkspaceSheets({ enabled: true }))
     act(() => result.current.openEarnings())
     await waitFor(() => expect(calls.earnings).toHaveBeenCalledTimes(1))
     act(() => result.current.openEarnings())
     expect(calls.earnings).toHaveBeenCalledTimes(1)
+    calls.earnings.mockResolvedValueOnce({ kind: 'available', businessId: 'biz:one', obligations: [], truncated: false, transfers: [], transfersTruncated: false })
     act(() => result.current.loadEarnings())
     await waitFor(() => expect(calls.earnings).toHaveBeenCalledTimes(2))
+    await waitFor(() => expect(result.current.earningsDetail?.kind).toBe('available'))
   })
 
   it('opens earnings and identity from their URL state', async () => {
     calls.earnings.mockResolvedValue({ kind: 'not_found' })
-    calls.connect.mockResolvedValue({ kind: 'not_found' })
     calls.identity.mockResolvedValue({ kind: 'available', businessId: 'biz:one', name: 'P', slug: 'p', publicStatus: 'published' })
     routeState.location = { pathname: '/owner/operations', hash: 'earnings', search: { connect: 'return' } }
     const { rerender } = renderHook(() => useProviderWorkspaceSheets({ enabled: true }))

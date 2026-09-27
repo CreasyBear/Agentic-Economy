@@ -820,6 +820,7 @@ export const moneyTables = {
     .index('by_periodStart_and_state', ['periodStart', 'state'])
     .index('by_stripeTransferId', ['stripeTransferId'])
     .index('by_payoutRef', ['payoutRef'])
+    .index('by_businessId_and_updatedAt', ['businessId', 'updatedAt'])
     .index('by_businessId_and_currency_and_updatedAt', ['businessId', 'currency', 'updatedAt'])
     .index('by_businessId_and_currency_and_cadence_and_updatedAt', ['businessId', 'currency', 'cadence', 'updatedAt']),
   moneyPayoutAllocations: defineTable({

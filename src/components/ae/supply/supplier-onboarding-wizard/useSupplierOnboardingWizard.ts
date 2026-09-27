@@ -3,8 +3,6 @@ import { useEffect, useState, type FormEvent } from 'react'
 import { toast } from '@/lib/ui/toast'
 import type { Rule4Diagnostic } from '@/lib/ui/diagnostic'
 import { formatAbnDisplay, normalizeAbn } from '@/modules/money/public'
-import type { SupplierOnboardingStep } from '@/modules/capability-supply/supplier-onboarding.contracts'
-import { providerWorkspacePayoutConnection } from '@/components/ae/offerings/provider-workspace/provider-workspace.view-model'
 
 import {
   type SupplierOnboardingWizardPorts,
@@ -20,49 +18,37 @@ import {
 export function useSupplierOnboardingWizard({
   currentStep = 'profile',
   providerName,
-  payoutConnection,
   onSaveProfile,
-  onConnectPayouts,
 }: SupplierOnboardingWizardPorts) {
-  const resolvedPayoutConnection = payoutConnection ?? providerWorkspacePayoutConnection({
-    result: { kind: 'not_applicable' },
-    pending: false,
-  })
-  const [step, setStep] = useState<SupplierOnboardingStep>(currentStep)
+  const [step, setStep] = useState<NonNullable<SupplierOnboardingWizardPorts['currentStep']>>(currentStep)
   const [name, setName] = useState(providerName ?? '')
   const [website, setWebsite] = useState('')
   const [abn, setAbn] = useState('')
   const [diagnostic, setDiagnostic] = useState<Rule4Diagnostic>()
   const [invalidField, setInvalidField] = useState<ProviderIdentityFieldId>()
   const [pending, setPending] = useState(false)
-  const [profileCompleted, setProfileCompleted] = useState(
-    currentStep === 'payouts' || currentStep === 'first_tool',
-  )
+  const [profileCompleted, setProfileCompleted] = useState(currentStep === 'first_tool')
   const [firstToolVisited, setFirstToolVisited] = useState(currentStep === 'first_tool')
 
   useEffect(() => {
     setStep(currentStep)
-    if (currentStep === 'payouts' || currentStep === 'first_tool') {
-      setProfileCompleted(true)
-    }
+    if (currentStep === 'first_tool') setProfileCompleted(true)
     if (currentStep === 'first_tool') {
       setFirstToolVisited(true)
     }
   }, [currentStep])
 
-  const isVisited = (stepId: SupplierOnboardingStep): boolean => {
+  const isVisited = (stepId: NonNullable<SupplierOnboardingWizardPorts['currentStep']>): boolean => {
     if (stepId === 'profile') return true
-    if (stepId === 'payouts') return profileCompleted
     return firstToolVisited
   }
 
-  const isCompleted = (stepId: SupplierOnboardingStep): boolean => {
+  const isCompleted = (stepId: NonNullable<SupplierOnboardingWizardPorts['currentStep']>): boolean => {
     if (stepId === 'profile') return profileCompleted
-    if (stepId === 'payouts') return resolvedPayoutConnection.state === 'connected'
     return false
   }
 
-  const goToStep = (stepId: SupplierOnboardingStep) => {
+  const goToStep = (stepId: NonNullable<SupplierOnboardingWizardPorts['currentStep']>) => {
     if (!isVisited(stepId)) return
     setStep(stepId)
     if (stepId === 'first_tool') setFirstToolVisited(true)
@@ -85,7 +71,8 @@ export function useSupplierOnboardingWizard({
 
     if (!onSaveProfile) {
       setProfileCompleted(true)
-      setStep('payouts')
+      setFirstToolVisited(true)
+      setStep('first_tool')
       return
     }
 
@@ -101,7 +88,8 @@ export function useSupplierOnboardingWizard({
       if (result.kind === 'ok') {
         toast.success('Provider profile saved')
         setProfileCompleted(true)
-        setStep('payouts')
+        setFirstToolVisited(true)
+        setStep('first_tool')
       } else {
         setDiagnostic({
           whatHappened: result.message,
@@ -138,14 +126,6 @@ export function useSupplierOnboardingWizard({
     setInvalidField(undefined)
   }
 
-  const handleConnectPayouts = () => {
-    void onConnectPayouts?.()
-  }
-
-  const handleSkipForNow = () => {
-    setFirstToolVisited(true)
-    setStep('first_tool')
-  }
 
   const view: SupplierOnboardingWizardViewState = {
     step,
@@ -155,7 +135,6 @@ export function useSupplierOnboardingWizard({
     diagnostic,
     invalidField,
     pending,
-    payoutConnection: resolvedPayoutConnection,
   }
 
   return {
@@ -167,7 +146,5 @@ export function useSupplierOnboardingWizard({
     handleNameChange,
     handleWebsiteChange,
     handleAbnChange,
-    handleConnectPayouts,
-    handleSkipForNow,
   }
 }

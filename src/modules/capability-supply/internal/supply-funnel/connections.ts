@@ -29,7 +29,8 @@ import { requireStrictClerkConsequenceProof } from "@/lib/server/clerk-consequen
 import type { OwnerProviderEarningsReadback } from './earnings-readback'
 
 export type {
-  OwnerProviderEarningsAccountReadback,
+  OwnerProviderEarningsObligation,
+  OwnerProviderRecordedTransfer,
   OwnerProviderEarningsReadback,
 } from './earnings-readback'
 

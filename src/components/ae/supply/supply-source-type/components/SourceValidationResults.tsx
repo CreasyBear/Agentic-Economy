@@ -79,7 +79,7 @@ export function JsonFileField({
         {discoverDiagnostic !== undefined ? (
           <PreflightRule4Alert diagnostic={discoverDiagnostic} />
         ) : (
-          <JsonPreflightBadge status={preflight} />
+          <JsonPreflightBadge status={preflight} requiredKeys={requiredKeys} />
         )}
       </PreflightSlot>
     </Field>
@@ -110,7 +110,7 @@ function HttpsUrlPreflightBadge({ status }: HttpsUrlPreflightBadgeProps) {
   )
 }
 
-function JsonPreflightBadge({ status }: JsonPreflightBadgeProps) {
+function JsonPreflightBadge({ status, requiredKeys }: JsonPreflightBadgeProps) {
   if (status === 'empty') return null
   if (status === 'invalid') {
     return <Badge variant="warning">{SUPPLY_SOURCE_TYPE_COPY.jsonPreflight.invalid}</Badge>
@@ -119,12 +119,11 @@ function JsonPreflightBadge({ status }: JsonPreflightBadgeProps) {
     return <Badge variant="warning">{SUPPLY_SOURCE_TYPE_COPY.jsonPreflight.notObject}</Badge>
   }
   if (status === 'missing_fields') {
-    return <Badge variant="warning">{SUPPLY_SOURCE_TYPE_COPY.jsonPreflight.missingFields}</Badge>
+    return <Badge variant="warning">JSON object requires {requiredKeys.join(' and ')}.</Badge>
   }
   return (
-    <Badge variant="success" className="gap-1.5">
-      <CheckCircle2Icon className="size-3" />
-      {SUPPLY_SOURCE_TYPE_COPY.jsonPreflight.valid}
+    <Badge variant="secondary">
+      JSON object parsed; {requiredKeys.join(' and ')} present
     </Badge>
   )
 }

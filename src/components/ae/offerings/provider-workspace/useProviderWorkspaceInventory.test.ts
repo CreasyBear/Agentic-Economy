@@ -6,11 +6,14 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 const mocks = vi.hoisted(() => ({
   ensureProviderBusiness: vi.fn(),
   invalidate: vi.fn(async () => undefined),
+  navigate: vi.fn(async () => undefined),
+  location: { hash: '' },
   capture: vi.fn(),
 }))
 
 vi.mock('@tanstack/react-router', () => ({
-  useRouter: () => ({ invalidate: mocks.invalidate }),
+  useRouter: () => ({ invalidate: mocks.invalidate, navigate: mocks.navigate }),
+  useLocation: () => mocks.location,
 }))
 
 vi.mock('@tanstack/react-start', async (importOriginal) => ({
@@ -28,20 +31,14 @@ vi.mock('@/lib/observability/capture-client-exception', () => ({
 
 import { useProviderWorkspaceInventory } from './useProviderWorkspaceInventory'
 
-const availableInventory = {
-  kind: 'available',
-  provider: { name: 'Provider' },
-  tools: [],
-  projection: 'current',
-  isDone: true,
-  continueCursor: '',
-} as const
 
 afterEach(() => {
   mocks.ensureProviderBusiness.mockReset()
   mocks.invalidate.mockReset()
   mocks.capture.mockReset()
   mocks.invalidate.mockResolvedValue(undefined)
+  mocks.navigate.mockReset()
+  mocks.location.hash = ''
 })
 
 describe('useProviderWorkspaceInventory', () => {
@@ -52,10 +49,7 @@ describe('useProviderWorkspaceInventory', () => {
         resolveInvalidate = () => resolve(undefined)
       }),
     )
-    const { result } = renderHook(() => useProviderWorkspaceInventory({
-      inventory: availableInventory,
-      payouts: undefined,
-    }))
+    const { result } = renderHook(() => useProviderWorkspaceInventory())
 
     act(() => {
       result.current.refresh()
@@ -73,10 +67,7 @@ describe('useProviderWorkspaceInventory', () => {
   })
 
   it('maps refused onboarding codes to the four onboarding messages', async () => {
-    const { result } = renderHook(() => useProviderWorkspaceInventory({
-      inventory: { kind: 'not_found' },
-      payouts: undefined,
-    }))
+    const { result } = renderHook(() => useProviderWorkspaceInventory())
 
     mocks.ensureProviderBusiness.mockResolvedValue({ kind: 'refused', code: 'unauthenticated' })
     await expect(result.current.onSaveProfile({ name: 'A', website: 'https://a.example' })).resolves.toEqual({
@@ -108,12 +99,23 @@ describe('useProviderWorkspaceInventory', () => {
     })
   })
 
+  it('resumes Add Tool only after successful profile creation from the scoped continuation', async () => {
+    mocks.location.hash = 'add-tool'
+    const { result } = renderHook(() => useProviderWorkspaceInventory())
+    mocks.ensureProviderBusiness.mockResolvedValueOnce({ kind: 'refused', code: 'slug_taken' })
+      .mockResolvedValueOnce({ kind: 'created', businessId: 'biz:one' })
+    await act(async () => {
+      expect((await result.current.onSaveProfile({ name: 'A', website: 'https://a.example' })).kind).toBe('error')
+    })
+    expect(mocks.navigate).not.toHaveBeenCalled()
+    await act(async () => {
+      expect((await result.current.onSaveProfile({ name: 'A', website: 'https://a.example' })).kind).toBe('ok')
+    })
+    expect(mocks.navigate).toHaveBeenCalledWith({ to: '/owner/operations/new' })
+  })
   it('returns the connection error without logging on save failure', async () => {
     mocks.ensureProviderBusiness.mockRejectedValue(new Error('network'))
-    const { result } = renderHook(() => useProviderWorkspaceInventory({
-      inventory: { kind: 'not_found' },
-      payouts: undefined,
-    }))
+    const { result } = renderHook(() => useProviderWorkspaceInventory())
 
     await expect(result.current.onSaveProfile({ name: 'A', website: 'https://a.example' })).resolves.toEqual({
       kind: 'error',
@@ -122,22 +124,4 @@ describe('useProviderWorkspaceInventory', () => {
     expect(mocks.capture).not.toHaveBeenCalled()
   })
 
-  it('records payout summary unavailable when the loader promise rejects', async () => {
-    let rejectPayouts!: (reason: Error) => void
-    const payouts = new Promise<never>((_, reject) => {
-      rejectPayouts = reject
-    })
-    const { result } = renderHook(() => useProviderWorkspaceInventory({
-      inventory: availableInventory,
-      payouts,
-    }))
-
-    await act(async () => {
-      rejectPayouts(new Error('payout outage'))
-      await Promise.resolve()
-    })
-
-    await waitFor(() => expect(mocks.capture).toHaveBeenCalled())
-    expect(result.current.payoutConnection.state).toBe('unavailable')
-  })
 })

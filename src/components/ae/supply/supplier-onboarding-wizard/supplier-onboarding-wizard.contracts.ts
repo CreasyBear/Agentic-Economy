@@ -1,12 +1,6 @@
-import {
-  Building2Icon,
-  CreditCardIcon,
-  WrenchIcon,
-} from 'lucide-react'
+import { Building2Icon, WrenchIcon } from 'lucide-react'
 import type { FormEvent } from 'react'
-
 import type { Rule4Diagnostic } from '@/lib/ui/diagnostic'
-import type { ProviderWorkspacePayoutConnectionPresentation } from '@/components/ae/offerings/provider-workspace/provider-workspace.contracts'
 import type {
   SupplierOnboardingProfile,
   SupplierOnboardingSaveResult,
@@ -16,9 +10,7 @@ import type {
 export type AeSupplierOnboardingWizardProps = Readonly<{
   currentStep?: SupplierOnboardingStep
   providerName?: string
-  payoutConnection?: ProviderWorkspacePayoutConnectionPresentation
   onSaveProfile?: (profile: SupplierOnboardingProfile) => Promise<SupplierOnboardingSaveResult>
-  onConnectPayouts?: () => void | Promise<void>
 }>
 
 export const TACTILE =
@@ -34,16 +26,13 @@ export const STEP_META: ReadonlyArray<{
   icon: typeof Building2Icon
 }> = [
   { id: 'profile', label: '1. Provider identity', duration: '~2 mins', icon: Building2Icon },
-  { id: 'payouts', label: '2. Payout account', duration: '~3 mins', icon: CreditCardIcon },
-  { id: 'first_tool', label: '3. First Tool', duration: '~1 min', icon: WrenchIcon },
+  { id: 'first_tool', label: '2. First Tool', duration: '~1 min', icon: WrenchIcon },
 ]
 
 export type SupplierOnboardingWizardPorts = Readonly<{
   currentStep?: SupplierOnboardingStep
   providerName?: string
-  payoutConnection?: ProviderWorkspacePayoutConnectionPresentation
   onSaveProfile?: (profile: SupplierOnboardingProfile) => Promise<SupplierOnboardingSaveResult>
-  onConnectPayouts?: () => void | Promise<void>
 }>
 
 export type SupplierOnboardingWizardViewState = Readonly<{
@@ -54,7 +43,6 @@ export type SupplierOnboardingWizardViewState = Readonly<{
   diagnostic: Rule4Diagnostic | undefined
   invalidField: ProviderIdentityFieldId | undefined
   pending: boolean
-  payoutConnection: ProviderWorkspacePayoutConnectionPresentation
 }>
 
 export type OnboardingStepperProps = Readonly<{
@@ -79,10 +67,5 @@ export type ProviderIdentityFieldsProps = Readonly<{
   onSubmit: (e: Pick<FormEvent, 'preventDefault'>) => void
 }>
 
-export type PayoutsStepProps = Readonly<{
-  payoutConnection: ProviderWorkspacePayoutConnectionPresentation
-  onConnectPayouts: () => void
-  onSkipForNow: () => void
-}>
 
 export type FirstToolStepProps = Readonly<Record<string, never>>
