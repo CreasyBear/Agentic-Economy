@@ -12,8 +12,8 @@ export type SourcesInlineProps = Readonly<{ view: SourcesInlineView }>
 export type FollowUpsView = Readonly<{ suggestions: readonly string[] }>
 export type FollowUpsProps = Readonly<{ view: FollowUpsView; onPick: (text: string) => void }>
 
-export type MessageActionsView = Readonly<{ canCopy: boolean; canRetry: boolean }>
-export type MessageActionsProps = Readonly<{ view: MessageActionsView; onCopy: () => void; onRetry: () => void }>
+export type MessageActionsView = Readonly<{ canCopy: boolean; canEditQuestion: boolean }>
+export type MessageActionsProps = Readonly<{ view: MessageActionsView; onCopy: () => void; onEditQuestion: () => void }>
 
 export type OptionView = Readonly<{
   id: string

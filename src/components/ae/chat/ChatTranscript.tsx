@@ -94,7 +94,7 @@ export function ChatTranscript({
   onRefine,
   onCompareRequest,
   onCopyAnswer,
-  onRetry,
+  onEditQuestion,
   onClarifyAnswer,
   ownerChatCards = [],
   approvalProblem,
@@ -221,9 +221,9 @@ export function ChatTranscript({
                               : null
                           })}
                           {onSuggest && !writing ? <FollowUps view={view.followUps} onPick={onSuggest} /> : null}
-                          {writing ? null : <MessageActions view={{ canCopy: prose.trim().length > 0 && onCopyAnswer !== undefined, canRetry: previousPrompt !== undefined && onRetry !== undefined }}
+                          {writing ? null : <MessageActions view={{ canCopy: prose.trim().length > 0 && onCopyAnswer !== undefined, canEditQuestion: previousPrompt !== undefined && onEditQuestion !== undefined }}
                             onCopy={() => onCopyAnswer?.(prose)}
-                            onRetry={() => { if (previousPrompt) onRetry?.(previousPrompt) }} />}
+                            onEditQuestion={() => { if (previousPrompt) onEditQuestion?.(previousPrompt) }} />}
                         </div>
                       )}
                     </MessageContent>

@@ -62,15 +62,24 @@ export async function streamDurableChatResponse(
   if (!clarificationRequested && (last?.text.trim().length === 0 || last?.toolCalls.length
     || !/[.!?…)"']$/u.test(last?.text.trim() ?? '')
     || /\b(?:let me|i(?:'ll| will) (?:check|search|look)|next page)\b/iu.test(last?.text ?? ''))) {
-    const final = await agent.streamText(ctx, { threadId: args.threadId, userId: args.ownerId }, {
-      promptMessageId: args.promptMessageId,
-      tools: {},
-      instructions: `${agent.options.instructions} The tools are closed. Answer directly from completed tool results, not earlier narration. Open with a bold supported answer, use bullets for one Tool and a table only for two to four distinct Tools, name a material gap once, and finish with one "Next: ..." action. Do not promise another search.`,
-    }, {
-      storageOptions: { saveMessages: 'promptAndOutput' },
-      saveStreamDeltas: { chunking: 'word', throttleMs: 100 },
-    })
-    await final.text
+    // A blank tool-free completion is not an answer. Continue the same saved
+    // prompt once, with tools closed, so no Tool or Call can execute twice.
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      const final = await agent.streamText(ctx, { threadId: args.threadId, userId: args.ownerId }, {
+        promptMessageId: args.promptMessageId,
+        tools: {},
+        instructions: `${agent.options.instructions} The tools are closed. Answer directly from completed tool results, not earlier narration. Open with a bold supported answer, use bullets for one Tool and a table only for two to four distinct Tools, name a material gap once, and finish with one "Next: ..." action. Do not promise another search.`,
+      }, {
+        storageOptions: { saveMessages: 'promptAndOutput' },
+        saveStreamDeltas: { chunking: 'word', throttleMs: 100 },
+      })
+      if ((await final.text).trim().length > 0) break
+      const reason = await final.finishReason
+      const blank = final.savedMessages?.findLast(message => message.message?.role === 'assistant')
+      if (blank !== undefined) await agent.deleteMessage(ctx, { messageId: blank._id })
+      console.warn('[chat-durable] blank final answer', { reason, attempt })
+      if (reason !== 'stop' || attempt === 1) throw new Error('chat_generation_answer_missing')
+    }
   }
   return clarificationRequested || ownerApprovalPending
 }
