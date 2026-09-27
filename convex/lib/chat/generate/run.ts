@@ -11,7 +11,7 @@ import type { GenerateArgs } from './contracts'
 import { streamDurableChatResponse } from './stream'
 
 const DURABLE_CHAT_FAILURE_MESSAGE =
-  'Chat stopped before a final response was recorded. Review any call card or receipt already shown before sending this request again.'
+  "I couldn't finish the answer. Edit your question to try again."
 const turnEffectsRef = makeFunctionReference<'query', { turnRef: string }, string[]>(
   'chatCall:readTurnEffects',
 )
@@ -87,14 +87,14 @@ export async function generateHandler(ctx: ActionCtx, args: GenerateArgs): Promi
         const effects = args.turnRef === undefined ? [] : await ctx.runQuery(turnEffectsRef, {
           turnRef: args.turnRef,
         })
-        const continuation = effects.length === 0
-          ? ''
-          : ` CallRef: ${effects.join(', ')}. Check each Call's status; payment may be outcome_unknown.`
+        const recoveryMessage = effects.length === 0
+          ? DURABLE_CHAT_FAILURE_MESSAGE
+          : `I couldn't finish the answer. A Call may already have run. CallRef: ${effects.join(', ')}. Check each Call's status before sending another request; payment may be outcome_unknown.`
         await saveMessages(ctx, components.agent, {
           threadId: args.threadId,
           userId: ownerId,
           promptMessageId: args.promptMessageId,
-          messages: [{ role: 'assistant', content: `${DURABLE_CHAT_FAILURE_MESSAGE}${continuation}` }],
+          messages: [{ role: 'assistant', content: recoveryMessage }],
           agentName: 'Agentic Economy Operation Market',
           failPendingSteps: true,
         })

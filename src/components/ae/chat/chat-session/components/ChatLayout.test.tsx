@@ -123,7 +123,7 @@ describe('ChatLayout', () => {
     const onRefine = vi.fn()
     const onCompareRequest = vi.fn()
     const onCopyAnswer = vi.fn()
-    const onRetry = vi.fn()
+    const onEditQuestion = vi.fn()
     const messages = [
       { id: 'user', role: 'user' as const, parts: [{ type: 'text', text: 'Find weather in Sydney' }] },
       { id: 'assistant', role: 'assistant' as const, parts: [
@@ -137,7 +137,7 @@ describe('ChatLayout', () => {
       ] },
     ]
     render(<ChatLayout model={buildModel({
-      transcript: { messages, onSuggest, onRefine, onCompareRequest, onCopyAnswer, onRetry },
+      transcript: { messages, onSuggest, onRefine, onCompareRequest, onCopyAnswer, onEditQuestion },
     })} />)
     expect(document.querySelector('details')?.open).toBe(false)
     expect(screen.getByRole('region', { name: 'Answer' }).textContent).toContain('Here are two weather APIs')
@@ -157,8 +157,8 @@ describe('ChatLayout', () => {
     expect(onCompareRequest).toHaveBeenCalledWith(expect.stringContaining('Sydney Weather and Forecast API'))
     fireEvent.click(screen.getByRole('button', { name: 'Copy' }))
     expect(onCopyAnswer).toHaveBeenCalledWith('Here are two weather APIs for Sydney.')
-    fireEvent.click(screen.getByRole('button', { name: 'Retry answer' }))
-    expect(onRetry).toHaveBeenCalledWith('Find weather in Sydney')
+    fireEvent.click(screen.getByRole('button', { name: 'Edit question' }))
+    expect(onEditQuestion).toHaveBeenCalledWith('Find weather in Sydney')
     fireEvent.click(screen.getByRole('button', { name: 'Which of these is ready to use?' }))
     expect(onSuggest).toHaveBeenCalledWith('Which of these is ready to use?')
   })
@@ -169,20 +169,20 @@ describe('ChatLayout', () => {
         { toolRef: `operation:v1:${'a'.repeat(64)}`, title: 'Sydney Weather', price: { kind: 'indicative', label: 'USD 0.005' } },
       ] } }
     const assistant = { id: 'assistant', role: 'assistant' as const, parts: [tool] }
-    const onRetry = vi.fn(), onCopyAnswer = vi.fn()
+    const onEditQuestion = vi.fn(), onCopyAnswer = vi.fn()
     const { rerender } = render(<ChatLayout model={buildModel({
-      transcript: { messages: [user, assistant], generating: true, onRetry, onCopyAnswer },
+      transcript: { messages: [user, assistant], generating: true, onEditQuestion, onCopyAnswer },
     })} />)
     const progress = screen.getByText('Writing an answer…')
     const options = screen.getByRole('region', { name: 'Options' })
     expect(progress.compareDocumentPosition(options) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
-    expect(screen.queryByRole('button', { name: 'Retry answer' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Edit question' })).toBeNull()
     expect(screen.queryByRole('button', { name: 'Copy' })).toBeNull()
     rerender(<ChatLayout model={buildModel({
-      transcript: { messages: [user, { ...assistant, parts: [tool, { type: 'text', text: '**Sydney Weather** is available. Next: Check its Tool card.' }] }], onRetry, onCopyAnswer },
+      transcript: { messages: [user, { ...assistant, parts: [tool, { type: 'text', text: '**Sydney Weather** is available. Next: Check its Tool card.' }] }], onEditQuestion, onCopyAnswer },
     })} />)
     expect(screen.getByRole('region', { name: 'Answer' }).textContent).toContain('Sydney Weather')
-    expect(screen.getByRole('button', { name: 'Retry answer' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Edit question' })).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Copy' })).toBeTruthy()
   })
 

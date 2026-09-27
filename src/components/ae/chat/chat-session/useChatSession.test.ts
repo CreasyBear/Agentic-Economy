@@ -117,7 +117,7 @@ describe('useChatSession', () => {
     vi.useRealTimers()
   })
 
-  it('fills and focuses suggestions without a request; retries the prior question when explicitly asked', async () => {
+  it('fills and focuses suggestions and prior questions without sending them', async () => {
     const input = document.createElement('textarea')
     input.id = 'tool-chat-prompt'
     document.body.append(input)
@@ -128,12 +128,22 @@ describe('useChatSession', () => {
       expect(document.activeElement).toBe(input)
       expect(sendMessagesMock).not.toHaveBeenCalled()
       readUIMessageStreamMock.mockImplementation(() => singleAssistantStream('done'))
-      await act(async () => result.current.transcript.onRetry?.('Find Sydney weather'))
-      await waitFor(() => expect(sendMessagesMock).toHaveBeenCalledTimes(1))
-      expect(result.current.transcript.messages[0]?.parts).toMatchObject([{ text: 'Find Sydney weather' }])
+      await act(async () => result.current.transcript.onEditQuestion?.('Find Sydney weather'))
+      expect(sendMessagesMock).not.toHaveBeenCalled()
+      expect(sendMessageMutationMock).not.toHaveBeenCalled()
+      expect(result.current.composer.prompt).toBe('Find Sydney weather')
+      expect(document.activeElement).toBe(input)
     } finally {
       input.remove()
     }
+  })
+
+  it('does not start an authenticated turn when editing a prior question', () => {
+    authStateRef.current = { isAuthenticated: true, isLoading: false }
+    const { result } = renderHook(() => useChatSession(baseProps))
+    act(() => result.current.transcript.onEditQuestion?.('Find Sydney weather'))
+    expect(result.current.composer.prompt).toBe('Find Sydney weather')
+    expect(sendMessageMutationMock).not.toHaveBeenCalled()
   })
 
   it('admits one anonymous transport call when submit repeats before busy settles', async () => {

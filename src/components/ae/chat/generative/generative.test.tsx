@@ -52,13 +52,13 @@ describe('generative chat leaves', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Compare these tools' }))
     expect(onPick).toHaveBeenCalledExactlyOnceWith('Compare these tools')
   })
-  it('emits copy and retry as distinct intents', () => {
-    const onCopy = vi.fn(), onRetry = vi.fn()
-    render(<MessageActions view={{ canCopy: true, canRetry: true }} onCopy={onCopy} onRetry={onRetry} />)
+  it('emits copy and edit as distinct intents', () => {
+    const onCopy = vi.fn(), onEditQuestion = vi.fn()
+    render(<MessageActions view={{ canCopy: true, canEditQuestion: true }} onCopy={onCopy} onEditQuestion={onEditQuestion} />)
     fireEvent.click(screen.getByRole('button', { name: 'Copy' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Retry answer' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Edit question' }))
     expect(onCopy).toHaveBeenCalledOnce()
-    expect(onRetry).toHaveBeenCalledOnce()
+    expect(onEditQuestion).toHaveBeenCalledOnce()
   })
   it('renders seller and readiness honestly; selection and comparison remain separate', () => {
     const onSelect = vi.fn(), onCompare = vi.fn()
