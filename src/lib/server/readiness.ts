@@ -320,7 +320,12 @@ function readDeploymentConfig(env: StringEnvironment, nodeMajor?: number): Deplo
         reason: 'invalid_response',
       })
     }
-    if (!deployment.ok) return { kind: 'failed', code: 'deployment_manifest_invalid' }
+    if (!deployment.ok) {
+      // Values never leave the validator. The finding identifiers give operators
+      // enough detail to repair a deployment without exposing credentials.
+      console.error('[readiness] deployment manifest invalid', deployment.findings)
+      return { kind: 'failed', code: 'deployment_manifest_invalid' }
+    }
   }
   return { kind: 'ready', convexUrl: convexUrl.href }
 }

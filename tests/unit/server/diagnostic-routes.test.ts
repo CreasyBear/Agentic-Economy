@@ -168,6 +168,36 @@ describe('operational diagnostics routes', () => {
     expect(fetchImpl).toHaveBeenCalledOnce()
   })
 
+  it('logs only finding identifiers for an invalid production manifest', async () => {
+    const log = vi.spyOn(console, 'error').mockImplementation(() => undefined)
+    const credential = 'openrouter-secret-that-must-stay-private'
+    try {
+      const response = await handleReadyRequest(new Request('https://ae.example/api/ready'), {
+        env: {
+          ...productionReadinessEnvironment(),
+          OPENROUTER_API_KEY: credential,
+          AE_FORMANCE_REQUEST_TIMEOUT_MS: '1',
+        },
+        fetch: vi.fn(),
+        nodeMajor: 22,
+      })
+
+      expect(response.status).toBe(503)
+      expect(log).toHaveBeenCalledWith(
+        '[readiness] deployment manifest invalid',
+        expect.arrayContaining([expect.objectContaining({
+          kind: 'malformed',
+          code: 'formance_timeout_invalid',
+          names: ['AE_FORMANCE_REQUEST_TIMEOUT_MS'],
+        })]),
+      )
+      expect(JSON.stringify(log.mock.calls)).not.toContain(credential)
+      expect(await response.text()).not.toContain('AE_FORMANCE_REQUEST_TIMEOUT_MS')
+    } finally {
+      log.mockRestore()
+    }
+  })
+
   it('projects public ready state without internal deployment inventory', async () => {
     const response = await handleReadyRequest(
       new Request('https://ae.example/api/ready'),
