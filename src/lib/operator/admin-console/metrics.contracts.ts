@@ -33,6 +33,7 @@ export type MarketplaceMetricDay = Readonly<{
 
 export type MarketplaceMetricsReport = Readonly<{
   days: MarketplaceMetricDay[]
+  coverageComplete: boolean
   partialDays: string[]
   latestDay: string | null
   headline: Readonly<{
@@ -41,15 +42,15 @@ export type MarketplaceMetricsReport = Readonly<{
     settledCalls: number
     successRate: number | null
     transactingWorkspaces: number
-  }>
+  }> | null
   ratios: Readonly<{
     successRate: number | null
     quoteConversion: number | null
     returningWorkspaceRate: number | null
     resolutionCoverage: number | null
-  }>
+  }> | null
   wow: Readonly<Record<
     'settledCalls' | 'attemptedCalls' | 'completedCalls' | 'transactingWorkspaces' | 'quotesCreated',
     number | null
-  >>
+  >> | null
 }>

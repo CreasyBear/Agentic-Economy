@@ -58,12 +58,7 @@ const requiredProduction: readonly RequirementGroup[] = [
   { scope: 'convex', code: 'convex_source_required', names: ['CONVEX_URL', 'VITE_CONVEX_URL'], mode: 'one-of' },
   { scope: 'convex-auth', code: 'server_function_auth_required', names: ['AE_CONVEX_SERVER_FUNCTION_TOKEN'], mode: 'all' },
   { scope: 'clerk', code: 'required_configuration_missing', names: ['VITE_CLERK_PUBLISHABLE_KEY', 'CLERK_SECRET_KEY', 'CLERK_JWT_ISSUER_DOMAIN', 'CLERK_WEBHOOK_SIGNING_SECRET'], mode: 'all' },
-  { scope: 'model-gateway', code: 'required_configuration_missing', names: ['OPENROUTER_API_KEY', 'AE_LLM_MODEL'], mode: 'all' },
-  { scope: 'chat-proxy', code: 'required_configuration_missing', names: ['AE_CHAT_PROXY_SECRET'], mode: 'all' },
   { scope: 'source-write', code: 'source_write_family_required', names: sourceWriteNames, mode: 'all' },
-  { scope: 'x402-payment', code: 'x402_payment_custody_required', names: ['CDP_API_KEY_ID', 'CDP_API_KEY_SECRET', 'CDP_WALLET_SECRET', 'AE_X402_CDP_ACCOUNT_NAME', 'AE_X402_CDP_EXPECTED_EVM_ADDRESS', 'AE_X402_CDP_ACCOUNT_POLICY_ID', 'AE_X402_CDP_PROJECT_POLICY_ID', 'AE_X402_CDP_POLICY_RULES_DIGEST', 'AE_X402_CDP_CREDENTIAL_GENERATION', 'AE_X402_CUSTODY_ENABLED', 'AE_X402_CUSTODY_MAX_ATOMIC', 'AE_X402_CUSTODY_DAILY_MAX_ATOMIC', 'AE_X402_RPC_URLS_JSON'], mode: 'all' },
-  { scope: 'stripe-money', code: 'stripe_configuration_required', names: ['STRIPE_SECRET_KEY', 'STRIPE_WEBHOOK_SECRET', 'STRIPE_V2_WEBHOOK_SECRET', 'STRIPE_AU_INCLUSIVE_GST_TAX_RATE_ID'], mode: 'all' },
-  { scope: 'formance', code: 'formance_configuration_required', names: ['AE_FORMANCE_ENVIRONMENT', 'AE_FORMANCE_GATEWAY_URL', 'AE_FORMANCE_LEDGER', 'AE_FORMANCE_REQUEST_TIMEOUT_MS', 'AE_FORMANCE_ACCESS_CLIENT_ID', 'AE_FORMANCE_ACCESS_CLIENT_SECRET'], mode: 'all' },
 ]
 
 const package5ControlledRequirements: readonly RequirementGroup[] = [
@@ -141,8 +136,8 @@ const conditional: readonly RequirementGroup[] = [
     trigger: ['AE_GATEWAY_SMOKE_CONFIRM_LIVE_SPEND', 'AE_GATEWAY_SMOKE_RUN_ID'],
   },
 ]
-
 const optionalNames = Object.freeze([
+  'OPENROUTER_API_KEY', 'AE_LLM_MODEL', 'AE_CHAT_PROXY_SECRET',
   'AE_JEV_DISCOVERY_ENABLED',
   'AE_CSP_REPORT_ONLY', 'AE_COOKIE_SECURE',
   'AE_DISABLE_OBSERVABILITY', 'VITE_AE_DISABLE_OBSERVABILITY', 'AE_ROUTING_PUBLIC_BASE_URL',
@@ -158,7 +153,6 @@ const optionalNames = Object.freeze([
 
 export const fieldRules: readonly FieldRule[] = [
   { name: 'AE_JEV_DISCOVERY_ENABLED', kind: 'boolean' },
-  { name: 'AE_SCHEDULED_WORKLOADS_ENABLED', kind: 'boolean' },
   { name: 'AE_CANONICAL_BASE_URL', kind: 'url' }, { name: 'AE_CANONICAL_HOST_ALLOWLIST', kind: 'host-list' },
   { name: 'CONVEX_URL', kind: 'url' }, { name: 'VITE_CONVEX_URL', kind: 'url' }, { name: 'CLERK_JWT_ISSUER_DOMAIN', kind: 'url' },
   { name: 'AE_GATEWAY_SMOKE_BASE_URL', kind: 'url' }, { name: 'AE_RELEASE_CONVEX_URL', kind: 'url' },
@@ -181,7 +175,7 @@ export const fieldRules: readonly FieldRule[] = [
 ]
 
 export const knownNames = Object.freeze([
-  'OPENROUTER_API_KEY', 'AE_CONVEX_SERVER_FUNCTION_TOKEN', 'VITE_CLERK_PUBLISHABLE_KEY', 'CLERK_SECRET_KEY', 'CLERK_WEBHOOK_SIGNING_SECRET',
+  'OPENROUTER_API_KEY', 'AE_LLM_MODEL', 'AE_CONVEX_SERVER_FUNCTION_TOKEN', 'VITE_CLERK_PUBLISHABLE_KEY', 'CLERK_SECRET_KEY', 'CLERK_WEBHOOK_SIGNING_SECRET',
   'AE_CHAT_PROXY_SECRET', 'AE_CHAT_SHARE_SECRET', 'AE_CHAT_SHARE_KEY_ID', 'AE_SECRET_LIFECYCLE_RPC_TOKEN',
   'AE_SOURCE_WRITE_SECRET',
   'AE_ROUTE_CALL_SIGNING_KEY_ID', 'AE_X402_PAYMENT_CREDENTIAL_REF', 'AE_X402_PAYMENT_PRIVATE_KEY',
@@ -536,7 +530,7 @@ function validateX402Custody(
   }
 }
 function validateField(environment: DeploymentEnvironmentInput, rule: FieldRule, production: boolean, add: (kind: DeploymentFindingKind, code: string, names: readonly string[], scope: string) => void): void {
-  const value = ['AE_SCHEDULED_WORKLOADS_ENABLED', 'AE_JEV_DISCOVERY_ENABLED'].includes(rule.name) ? environment[rule.name] : present(environment, rule.name)
+  const value = rule.name === 'AE_JEV_DISCOVERY_ENABLED' ? environment[rule.name] : present(environment, rule.name)
   if (value === undefined || !isMalformed(rule, value, production)) return
   const code = rule.name === 'AE_CANONICAL_BASE_URL' ? 'url_configuration_invalid' : rule.name === 'AE_CANONICAL_HOST_ALLOWLIST' ? 'canonical_host_allowlist_invalid' : `${rule.name.toLowerCase()}_invalid`
   add('malformed', code, [rule.name], rule.name.startsWith('AE_') ? 'ae-config' : 'configuration')

@@ -65,6 +65,7 @@ const durableTables = [
   'moneyLegalCustomerBindings',
   'moneyCustomerTaxFacts',
   'moneyAutoRechargeSettings',
+  'moneyReferenceRates',
   'moneyMonthlySpendBudgets',
   'moneySupplierPreferences',
   'moneyStripeCustomerBindings',
@@ -114,6 +115,7 @@ const durableTables = [
   'auditEvents',
   'registrySearchDocuments',
   'marketplaceMetricDays',
+  'marketplaceMetricBuilds',
   'marketplaceEntityDays',
   'disputes',
   'chatThreads',
@@ -437,7 +439,6 @@ describe('Convex schema', () => {
   const exported = SchemaExport.parse(JSON.parse(String(exportSchema.call(schema))))
 
   it('contains exactly the source-owned durable tables', () => {
-    expect(durableTables).toHaveLength(109)
     expect(exported.tables.map((table) => table.tableName).sort()).toEqual([...durableTables].sort())
   })
 

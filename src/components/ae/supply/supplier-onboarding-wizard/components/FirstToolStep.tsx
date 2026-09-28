@@ -33,6 +33,13 @@ export function FirstToolStep() {
           <span>Add Tool</span>
           <ArrowRightIcon className="size-4" />
         </Link>
+        <Link
+          to="/owner/operations"
+          hash="provider-identity"
+          className={cn(buttonVariants({ variant: 'outline' }), 'min-h-touch', TACTILE)}
+        >
+          Manage Provider identity
+        </Link>
       </div>
     </div>
   )

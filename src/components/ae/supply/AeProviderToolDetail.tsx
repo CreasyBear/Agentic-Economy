@@ -81,7 +81,9 @@ export function AeProviderToolDetail({
             {status.routeability.available ? 'Available to buyers' : 'Not available to buyers'}
           </Badge>
         </div>
-        <p className="max-w-[65ch] text-sm text-muted-foreground">{stateDescription(status)}</p>
+        <p className="max-w-[65ch] text-sm text-muted-foreground">{status.state === 'Draft' && resumeHref === undefined
+          ? 'This saved Tool has no resumable source. Start another Tool or contact Help with its Tool reference.'
+          : stateDescription(status)}</p>
         {firstReason === undefined ? null : (
           <Alert variant="destructive">
             <AlertTitle>{firstReason.title}</AlertTitle>
@@ -233,7 +235,7 @@ function PrimaryAction({
           href={resumeHref ?? '/owner/operations/new'}
           className={cn(buttonVariants(), 'min-h-touch w-fit')}
         >
-          Continue setup
+          {resumeHref === undefined ? 'Add another Tool' : 'Continue setup'}
         </a>
       )
     case 'supply.status':

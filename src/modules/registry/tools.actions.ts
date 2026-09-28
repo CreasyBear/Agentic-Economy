@@ -3,7 +3,8 @@ import { degradeBackend } from '@/lib/observability/degrade-backend'
 import { defineAction } from '@/modules/common/action'
 import { sourceFreshnessState } from '@/modules/common/freshness'
 import { jevDiscoveryRecipient } from '@/modules/decision-engine/public'
-import { fetchCoinbaseReferenceRate, type ReferenceRate } from '@/modules/money/public'
+import type { ReferenceRate } from '@/modules/money/public'
+import { readPersistedReferenceRate } from '@/modules/money/reference-rate.server'
 import {
   registryToolsCompareContract,
   registryToolsDescribeContract,
@@ -27,7 +28,7 @@ import {
 } from './tool-choice-contracts'
 import { compactDirectoryRows, compactDirectoryStatus, readCompactDirectoryPage } from './internal/compact-directory-search'
 import { resolveToolCompare } from './internal/tool-compare-resolution'
-import { rankToolSearchForRegistry, TOOL_SEARCH_ASSESSMENT_LIMIT, type RegistryToolAssessment } from './tool-reranker'
+import { rankCompactDirectoryRows, rankToolSearchForRegistry, TOOL_SEARCH_ASSESSMENT_LIMIT, type RegistryToolAssessment } from './tool-reranker'
 import {
   marketToolsCursorScope,
   decodeMarketToolsCursor,
@@ -123,10 +124,6 @@ export const registryToolsSearchAction = defineAction({
       kind: 'no_candidates', schemaVersion: PublicToolRegistrySchemaVersion, query: data.query,
       appliedFilters: {}, matchedCount: 0, ranking: [], navigation: [],
     }
-    if (directoryWanted && generation === undefined) {
-      return projectToolSearchChoices(empty, data.filters, { verdict: 'noMatch', nearMisses: [] }, freshness,
-        data.limit, { query: data.query, source, externalAvailable: false })
-    }
     const filters = sourceFilters(data.filters)
     const provider = data.filters?.provider?.toLocaleLowerCase()
     // Admitted descriptors carry provider identity, but no Bazaar category, USD price band,
@@ -173,9 +170,9 @@ export const registryToolsSearchAction = defineAction({
       assessment = await rankToolSearchForRegistry(searchResult, data.query,
         context.request === undefined ? {} : { signal: context.request.signal })
     }
-    if (searchResult.kind === 'unavailable' || assessment.verdict === 'degraded') {
+    if (searchResult.kind === 'unavailable') {
       return projectToolSearchChoices(searchResult, data.filters, assessment, freshness, data.limit,
-        { query: data.query, source, externalAvailable: false, ...(recipient === undefined ? {} : { recipient }) })
+        { query: data.query, source, ...(recipient === undefined ? {} : { recipient }) })
     }
     const directoryFilters = {
       ...(data.filters?.actionClass === undefined ? {} : { actionClass: data.filters.actionClass }),
@@ -201,7 +198,7 @@ export const registryToolsSearchAction = defineAction({
       let externalRows: SearchResult[] = []
       let examined = 0
       let completedAt: number | undefined = directoryStatus?.kind === 'ready' ? directoryStatus.coverage?.completedAt : undefined
-      if (directoryWanted && continuation === undefined && admittedRows.length < pageSize) {
+      if (directoryWanted && generation !== undefined && continuation === undefined && admittedRows.length < pageSize) {
         const fetchSize = Math.min(pageSize - admittedRows.length, externalLimit ?? pageSize)
         if (fetchSize === 0) {
           continuation = { phase: 'coinbase', offset: 0, ...(directoryStart === null ? {} : { directoryCursor: directoryStart }) }
@@ -211,21 +208,28 @@ export const registryToolsSearchAction = defineAction({
           })
           if (page.kind === 'unavailable' && page.reason === 'cursor_invalid') throw new InvalidOpaqueCursorError()
           if (page.kind !== 'ok') {
-            return projectToolSearchChoices(empty, data.filters, { verdict: 'noMatch', nearMisses: [] }, freshness,
-              data.limit, { query: data.query, source, externalAvailable: false, ...(recipient === undefined ? {} : { recipient }) })
+            return projectToolSearchChoices(assessment.result, data.filters, assessment, freshness, data.limit,
+              { query: data.query, source, pagination: searchPagination(data.limit, scope, continuation),
+                ...(recipient === undefined ? {} : { recipient }) })
           }
           examined = page.page.length
           completedAt = page.coverage.completedAt
           if (directoryStatus === undefined) throw new Error('Directory status must precede directory page')
           if (!rateAttempted && page.page.some(item => item.minimumUsdPrice !== undefined)) {
             rateAttempted = true
-            directoryRate = await fetchCoinbaseReferenceRate()
+            directoryRate = await readPersistedReferenceRate()
           }
           externalRows = compactDirectoryRows(page, directoryStatus, Date.now(), directoryRate)
-          externalRows = externalRows.filter(row => row.toolRef === undefined || !admittedRows.some(admitted => admitted.toolRef === row.toolRef))
+          if (externalRows.length > 0 && data.query.trim().length > 0) {
+            const resolved = jevDiscoveryRecipient()
+            if (resolved !== undefined) recipient = { ...resolved, data: 'query and candidate summaries' }
+          }
+          const externalAssessment = await rankCompactDirectoryRows(externalRows, data.query,
+            context.request === undefined ? {} : { signal: context.request.signal })
+          externalRows = externalAssessment.rows.filter(row => row.toolRef === undefined || !admittedRows.some(admitted => admitted.toolRef === row.toolRef))
           if (!page.isDone) continuation = { phase: 'coinbase', offset: 0, directoryCursor: page.continueCursor }
         }
-      } else if (directoryWanted && continuation === undefined && admittedRows.length >= pageSize) {
+      } else if (directoryWanted && generation !== undefined && continuation === undefined && admittedRows.length >= pageSize) {
         continuation = { phase: 'coinbase', offset: 0 }
       }
       const pagination = searchPagination(data.limit, scope, continuation)
@@ -262,7 +266,7 @@ export const registryToolsSearchAction = defineAction({
           if (searchResult.kind === 'unavailable') {
             return projectToolSearchChoices(searchResult, data.filters,
               { verdict: 'noMatch', nearMisses: [] }, freshness, data.limit,
-              { query: data.query, source, externalAvailable: false, ...(recipient === undefined ? {} : { recipient }) })
+              { query: data.query, source, ...(recipient === undefined ? {} : { recipient }) })
           }
           admittedExamined = searchResult.kind === 'ok' ? searchResult.items.length : 0
           searchResult = visibleAdmitted(searchResult)

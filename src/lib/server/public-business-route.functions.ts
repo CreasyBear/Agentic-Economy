@@ -17,8 +17,8 @@ import type { PublicBusinessSeoContract } from '@/modules/seo/public'
 type PublicBusinessRouteData = Readonly<{
   kind: 'available'
   page: Extract<PublicBusinessPageRouteReadbackResult, { kind: 'available' }>
-  seo: PublicBusinessSeoContract
-  supply: PublicOfferingSupplyView
+  seo?: PublicBusinessSeoContract
+  supply?: PublicOfferingSupplyView
   service?: ServiceDto
 }>
 
@@ -31,28 +31,30 @@ const publicBusinessRouteInputSchema = z.object({ slug: z.string() })
 export const readPublicBusinessRouteServer = createServerFn()
   .validator((data) => publicBusinessRouteInputSchema.parse(data))
   .handler(async ({ data }): Promise<PublicBusinessRouteDataResult> => {
+    let page: PublicBusinessPageRouteReadbackResult
     try {
-      const page = await readPublicBusinessPageServer({ data })
-      if (page.kind !== 'available') return page
-
-      const offeringDetail = await readPublicOfferingRegistryBusinessDetail({ slug: data.slug })
-      if (offeringDetail.kind === 'not_found') return { kind: 'not_found', reason: 'not_public' }
-      const seo = buildPublicBusinessRouteSeo(page.catalog, await readCanonicalBaseUrlServer())
-      const serviceResult = await registryServicesDetailAction.run({
-        data: { slug: data.slug },
-        context: { caller: 'ui' },
-      })
-      return {
-        kind: 'available',
-        page,
-        seo,
-        supply: offeringApiDtoToSupplyView(offeringDetail.business),
-        ...(serviceResult.kind === 'found' ? { service: serviceResult.service } : {}),
-      }
+      page = await readPublicBusinessPageServer({ data })
     } catch (cause) {
       return degrade(cause, { kind: 'unavailable', reason: 'source_unavailable', retryable: true } as const, {
         site: 'readPublicBusinessRouteServer',
         reason: 'source_unavailable',
       })
+    }
+    if (page.kind !== 'available') return page
+
+    const [offeringDetail, canonicalBaseUrl, serviceResult] = await Promise.all([
+      readPublicOfferingRegistryBusinessDetail({ slug: data.slug })
+        .catch(cause => degrade(cause, undefined, { site: 'businessOfferingDetail', reason: 'source_unavailable' })),
+      readCanonicalBaseUrlServer()
+        .catch(cause => degrade(cause, undefined, { site: 'businessCanonicalUrl', reason: 'source_unavailable' })),
+      registryServicesDetailAction.run({ data: { slug: data.slug }, context: { caller: 'ui' } })
+        .catch(cause => degrade(cause, undefined, { site: 'businessPublicService', reason: 'source_unavailable' })),
+    ])
+    return {
+      kind: 'available',
+      page,
+      ...(canonicalBaseUrl === undefined ? {} : { seo: buildPublicBusinessRouteSeo(page.catalog, canonicalBaseUrl) }),
+      ...(offeringDetail?.kind === 'found' ? { supply: offeringApiDtoToSupplyView(offeringDetail.business) } : {}),
+      ...(serviceResult?.kind === 'found' ? { service: serviceResult.service } : {}),
     }
   })

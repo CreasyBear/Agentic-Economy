@@ -1,9 +1,10 @@
 /** @vitest-environment jsdom */
 import '@testing-library/jest-dom/vitest'
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { projectToolCard, CHAT_TOOL_NAME_MAP } from '@/modules/chat/tool-card'
+import { projectToolCard, CHAT_TOOL_NAME_MAP, serializeToolCard } from '@/modules/chat/tool-card'
 import { ToolCard } from '../ToolCard'
+import { ChatTranscript } from '../ChatTranscript'
 import { AnswerBlock } from './AnswerBlock'
 import { ComparisonTable } from './ComparisonTable'
 import { FilterChips } from './FilterChips'
@@ -114,13 +115,132 @@ describe('generative chat leaves', () => {
     expect(screen.getByRole('link', { name: /External Timezone/ })).toHaveAttribute('href',
       '/api/v1/registry/detail?id=external-7')
     expect(screen.getByText(/not callable through AE/)).toBeInTheDocument()
-    expect(screen.getByText('x402:next')).toBeInTheDocument()
+    expect(screen.queryByText('x402:next')).not.toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Browse Tools in the Market' })).toHaveAttribute('href', '/market?query=timezone')
+    cleanup()
+    const onContinue = vi.fn()
+    render(<ToolCard projection={card} onContinueSearch={onContinue} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Next page' }))
+    expect(onContinue).toHaveBeenCalledExactlyOnceWith(output.next[0])
+    expect(screen.queryByText('x402:next')).not.toBeInTheDocument()
     const view = projectOptionsFromCard(card)
     expect(projectWorkFromCards([card]).summary).toContain('external listing')
     expect(projectSourcesFromCards([card]).sources[0]?.href).toBe('/api/v1/registry/detail?id=external-7')
     expect(view.options).toMatchObject([{ selectable: false, href: '/api/v1/registry/detail?id=external-7' }])
     render(<OptionsGrid view={view} onSelect={vi.fn()} onCompare={vi.fn()} />)
     expect(screen.getByRole('button', { name: 'Select' })).toBeDisabled()
+  })
+  it('labels a complete external page without falsely claiming partial coverage', () => {
+    const card = projectToolCard({
+      type: `tool-${CHAT_TOOL_NAME_MAP.canonicalToProvider['registry.tools.search']}`,
+      state: 'output-available', output: {
+        kind: 'scoped', assessed: { coverage: 'complete' }, results: [{
+          id: 'external-9', source: 'coinbase', access: 'external_listing', title: 'Timezone API',
+        }],
+      },
+    })
+    if (card === null) throw new Error('missing external card')
+    expect(projectToolCard(serializeToolCard(card))).toEqual(card)
+    render(<ToolCard projection={card} />)
+    expect(screen.getByText('These external listings are not callable through AE.')).toBeInTheDocument()
+    expect(screen.queryByText(/Only part of the catalogue/)).toBeNull()
+  })
+  it('keeps the opaque cursor out of prose while continuing the original thread and query', () => {
+    const next = { action: 'next-page' as const, args: { query: 'timezone', cursor: 'x402:opaque-next' }, authority: 'public' as const }
+    const card = projectToolCard({
+      type: `tool-${CHAT_TOOL_NAME_MAP.canonicalToProvider['registry.tools.search']}`,
+      state: 'output-available', output: { kind: 'scoped', results: [], next: [next] },
+    })
+    if (card === null) throw new Error('missing search card')
+    const onContinueSearch = vi.fn()
+    render(<ChatTranscript messages={[
+      { id: 'question', role: 'user', parts: [{ type: 'text', text: 'timezone' }] },
+      { id: 'answer', role: 'assistant', parts: [
+        serializeToolCard(card), { type: 'text', text: 'Next: x402:opaque-next' },
+      ] },
+    ]} onContinueSearch={onContinueSearch} />)
+    expect(screen.queryByText(/x402:opaque-next/)).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Next page' }))
+    expect(onContinueSearch).toHaveBeenCalledExactlyOnceWith(next)
+  })
+  it('restarts a legacy signed search honestly without sending its native cursor', () => {
+    const card = projectToolCard({
+      type: `tool-${CHAT_TOOL_NAME_MAP.canonicalToProvider['registry.tools.search']}`,
+      state: 'output-available', output: { kind: 'scoped', results: [],
+        next: [{ action: 'next-page', authority: 'public', args: { query: 'timezone', cursor: 'x402:old-native' } }] },
+    })
+    if (card === null) throw new Error('missing search card')
+    const onContinueSearch = vi.fn(), onRepeatSearch = vi.fn()
+    render(<ChatTranscript messages={[{ id: 'answer', role: 'assistant', parts: [
+      serializeToolCard(card), { type: 'text', text: 'Legacy x402:old-native' },
+    ] }]} ownerChatThreadId="owned-thread" onContinueSearch={onContinueSearch} onRepeatSearch={onRepeatSearch} />)
+    expect(screen.queryByText(/x402:old-native/)).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Next page' })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Search again in this chat' }))
+    expect(onRepeatSearch).toHaveBeenCalledExactlyOnceWith('timezone')
+    expect(onContinueSearch).not.toHaveBeenCalled()
+  })
+  it('continues a signed cursor in its original thread', () => {
+    const next = { action: 'next-page' as const, authority: 'public' as const,
+      args: { query: 'timezone', cursor: 'sc1.turn_123.signature' } }
+    const card = projectToolCard({
+      type: `tool-${CHAT_TOOL_NAME_MAP.canonicalToProvider['registry.tools.search']}`,
+      state: 'output-available', output: { kind: 'scoped', results: [], next: [next] },
+    })
+    if (card === null) throw new Error('missing search card')
+    const onContinueSearch = vi.fn(), onRepeatSearch = vi.fn()
+    render(<ChatTranscript messages={[{ id: 'answer', role: 'assistant', parts: [serializeToolCard(card)] }]}
+      ownerChatThreadId="owned-thread" onContinueSearch={onContinueSearch} onRepeatSearch={onRepeatSearch} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Next page' }))
+    expect(onContinueSearch).toHaveBeenCalledExactlyOnceWith(next)
+    expect(onRepeatSearch).not.toHaveBeenCalled()
+  })
+  it('shows current AUD and preserves buyer-entered JSON if a Quote request is not accepted', async () => {
+    const toolRef = `operation:v1:${'a'.repeat(64)}`
+    const card = projectToolCard({
+      type: `tool-${CHAT_TOOL_NAME_MAP.canonicalToProvider['registry.tools.search']}`,
+      state: 'output-available',
+      output: { kind: 'match', results: [{
+        toolRef, title: 'Currency exchange', access: 'ae_callable', readiness: 'ready',
+        price: { kind: 'indicative', label: 'A$0.01 per Call', validUntil: 2_000_000_000_000 },
+      }] },
+    })
+    if (card === null) throw new Error('missing search card')
+    const onQuoteTool = vi.fn().mockResolvedValueOnce(false).mockResolvedValueOnce(true)
+    render(<ChatTranscript messages={[{ id: 'answer', role: 'assistant', parts: [
+      { type: 'text', text: 'Currency exchange is available.' }, serializeToolCard(card),
+    ] }]} ownerChatThreadId="owned-thread" onQuoteTool={onQuoteTool} />)
+    expect(screen.getByText('A$0.01 per Call')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Get a Quote' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Get a Quote for this input' }))
+    expect(screen.getByRole('alert')).toHaveTextContent('exact input')
+    expect(onQuoteTool).not.toHaveBeenCalled()
+    fireEvent.change(screen.getByRole('textbox', { name: 'Exact Tool input (JSON object)' }), {
+      target: { value: '["not an object"]' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Get a Quote for this input' }))
+    expect(onQuoteTool).not.toHaveBeenCalled()
+    fireEvent.change(screen.getByRole('textbox', { name: 'Exact Tool input (JSON object)' }), {
+      target: { value: '{"base":"USD","quote":"AUD"}' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Get a Quote for this input' }))
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Get a Quote for this input' })).toBeEnabled())
+    expect(screen.getByRole('textbox', { name: 'Exact Tool input (JSON object)' })).toHaveValue('{"base":"USD","quote":"AUD"}')
+    fireEvent.click(screen.getByRole('button', { name: 'Get a Quote for this input' }))
+    await waitFor(() => expect(screen.queryByRole('textbox', { name: 'Exact Tool input (JSON object)' })).toBeNull())
+    expect(onQuoteTool).toHaveBeenCalledTimes(2)
+    expect(onQuoteTool).toHaveBeenLastCalledWith(toolRef, { base: 'USD', quote: 'AUD' })
+  })
+  it('does not retain an expired AUD estimate from chat history', () => {
+    const toolRef = `operation:v1:${'b'.repeat(64)}`
+    const card = projectToolCard({ type: `tool-${CHAT_TOOL_NAME_MAP.canonicalToProvider['registry.tools.search']}`,
+      state: 'output-available', output: { kind: 'match', results: [{
+        toolRef, title: 'Historic lookup', access: 'ae_callable', readiness: 'ready',
+        price: { kind: 'indicative', label: 'A$0.01', validUntil: 1 },
+      }] } })
+    if (card === null || card.kind !== 'choices') throw new Error('missing choices')
+    expect(card.choices[0]?.price).toBeUndefined()
+    expect(projectOptionsFromCard(card).options[0]?.price).toBe('Price to be confirmed')
   })
   it('counts a Tool once when repeated searches return the same result', () => {
     const result = { kind: 'choices', toolId: 'registry.tools.search', title: 'Search', state: 'complete', toolRefs: ['tool:weather'], count: 1, choices: [{ toolRef: 'tool:weather', title: 'Weather Current' }] } as const

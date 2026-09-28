@@ -22,12 +22,17 @@ import { receiptDisplay, receiptExportRow } from './receipts.view-model'
 export type ReceiptsSettingsProps = Readonly<{
   invoiceHistoryRows?: readonly AeInvoiceHistoryRow[] | undefined
   invoiceHistoryLoading: boolean
+  invoiceHistoryHasMore?: boolean
+  invoiceHistoryLoadingMore?: boolean
+  onLoadMore?: () => void
   onDownloadTaxInvoice: (row: AeInvoiceHistoryRow) => Promise<void>
   onViewStripeReceipt: (row: AeInvoiceHistoryRow) => Promise<void>
 }>
 
 export function ReceiptsSettings({
-  invoiceHistoryRows, invoiceHistoryLoading, onDownloadTaxInvoice, onViewStripeReceipt,
+  invoiceHistoryRows, invoiceHistoryLoading, invoiceHistoryHasMore = false,
+  invoiceHistoryLoadingMore = false, onLoadMore,
+  onDownloadTaxInvoice, onViewStripeReceipt,
 }: ReceiptsSettingsProps) {
   const [pendingAction, setPendingAction] = useState<string | null>(null)
   const rows = invoiceHistoryRows ?? []
@@ -64,8 +69,8 @@ export function ReceiptsSettings({
     title="Receipts & invoices"
     description="Receipts for account credit top-ups, with tax invoices where available."
     action={rows.length > 0 && !invoiceHistoryLoading ? <div className="flex flex-wrap items-center gap-2">
-      <Button type="button" variant="outline" onClick={() => exportHistory('CSV')}><Download aria-hidden="true" />Export CSV</Button>
-      <Button type="button" variant="outline" onClick={() => exportHistory('JSON')}><Download aria-hidden="true" />Export JSON</Button>
+      <Button type="button" variant="outline" onClick={() => exportHistory('CSV')}><Download aria-hidden="true" />{invoiceHistoryHasMore ? 'Export shown CSV' : 'Export CSV'}</Button>
+      <Button type="button" variant="outline" onClick={() => exportHistory('JSON')}><Download aria-hidden="true" />{invoiceHistoryHasMore ? 'Export shown JSON' : 'Export JSON'}</Button>
     </div> : undefined}
   >
     <SettingsGroup title="Top-up history" description="Paid and reversed account funding. Tax invoices depend on your tax profile and the payment policy.">
@@ -74,7 +79,7 @@ export function ReceiptsSettings({
         {[0, 1, 2].map(index => <div key={index} className="grid gap-2 border-b border-border pb-4 last:border-b-0">
           <Skeleton className="h-4 w-40 max-w-full" /><Skeleton className="h-4 w-28 max-w-full" />
         </div>)}
-      </div> : rows.length === 0 ? <SettingsEmptyState
+      </div> : rows.length === 0 && !invoiceHistoryHasMore && !invoiceHistoryLoadingMore ? <SettingsEmptyState
         title="No top-up receipts yet"
         description="When you add credit, your payment receipts and eligible tax invoices will appear here."
         action={<Link to="/owner/credit" className={buttonVariants({ variant: 'outline' })}>Add credit</Link>}
@@ -107,5 +112,10 @@ export function ReceiptsSettings({
         </SettingsRow>
       })}
     </SettingsGroup>
+    {(invoiceHistoryHasMore || invoiceHistoryLoadingMore) && <div className="flex justify-center pt-4">
+      <Button type="button" variant="outline" disabled={invoiceHistoryLoadingMore} onClick={onLoadMore}>
+        {invoiceHistoryLoadingMore ? 'Loading older top-ups…' : 'Load older top-ups'}
+      </Button>
+    </div>}
   </SettingsPage>
 }

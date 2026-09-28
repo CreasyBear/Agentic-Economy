@@ -20,6 +20,10 @@ vi.mock('@/lib/ui/toast', () => ({
   toast: { success: vi.fn(), error: vi.fn(), info: vi.fn() },
 }))
 
+vi.mock('@clerk/tanstack-react-start', () => ({
+  useAuth: () => ({ userId: 'user_test-owner' }),
+}))
+
 vi.mock('@tanstack/react-router', () => ({
   useRouter: () => ({ navigate: routerNavigate }),
   Link: ({ to, params, children, ...props }: { to: string; params?: Record<string, string>; children: ReactNode }) => (

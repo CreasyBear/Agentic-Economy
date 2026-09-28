@@ -28,8 +28,8 @@ const noAuthority: AdminRefusalPresentation = {
 const reverify: AdminRefusalPresentation = {
   certainty: 'not_applied',
   retry: 'same_key',
-  copy: 'Reverify before making this change.',
-  nextStep: 'Complete Clerk reverification, then resubmit.',
+  copy: 'A fresh MFA claim is required for this guarded change.',
+  nextStep: 'Complete MFA in Account security, then retry this command. No change was made.',
 }
 const correctEvidence: AdminRefusalPresentation = {
   certainty: 'not_applied',
@@ -128,7 +128,12 @@ export const ADMIN_REFUSAL_PRESENTATION = {
   approval_not_found: noLongerActionable,
   approval_same_actor: noLongerActionable,
   approval_digest_mismatch: changedTarget,
-  approval_expired: changedTarget,
+  approval_expired: {
+    certainty: 'not_applied',
+    retry: 'no',
+    copy: 'This approval expired without changing the target.',
+    nextStep: 'Review the current target and create a new proposal. The expired proposal remains in Audit.',
+  },
   approval_already_resolved: noLongerActionable,
   approval_actor_not_owner_admin: approvalActorNotOwner,
 } satisfies Record<AnyAdminRefusalCode, AdminRefusalPresentation>

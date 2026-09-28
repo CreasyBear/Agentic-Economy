@@ -6,6 +6,7 @@ import { handleDurableServiceDetailRequest } from '@/routes/api.v1.businesses.$b
 import type { PublicBusinessCatalogApiV2Page, PublicServicesApiPage } from '@/modules/registry/public'
 import { projectPublicServicesPage } from '@/modules/registry/public'
 import { registryServicesDetailAction, registryServicesListAction } from '@/modules/registry/registry.actions'
+import { setPublicRegistrySourcePortForTests } from '@/modules/registry/registry.functions'
 
 /** Action-boundary envelope: `hasMore`/`nextCursor`, not the source projection's raw `isDone`/`continueCursor`. */
 function toListResult(projected: PublicServicesApiPage) {
@@ -19,7 +20,7 @@ function toListResult(projected: PublicServicesApiPage) {
 }
 
 describe('services public route', () => {
-  beforeEach(() => vi.clearAllMocks())
+  beforeEach(() => vi.restoreAllMocks())
 
   it('lists the V2 catalog through /api/v1/businesses', async () => {
     const expected = toListResult(projectPublicServicesPage(page()))
@@ -67,6 +68,27 @@ describe('services public route', () => {
       context: { caller: 'http', request },
     })
   })
+  it('skips filtered empty source pages before issuing a usable service continuation', async () => {
+    const cursors: Array<string | null> = []
+    const read = vi.fn(async (input: { paginationOpts: { cursor: string | null } }): Promise<PublicBusinessCatalogApiV2Page> => {
+      cursors.push(input.paginationOpts.cursor)
+      if (input.paginationOpts.cursor === null) return { ...page(), page: [], isDone: false, continueCursor: 'filtered-1' }
+      if (input.paginationOpts.cursor === 'filtered-1') return { ...page(), page: [], isDone: false, continueCursor: 'filtered-2' }
+      if (input.paginationOpts.cursor === 'filtered-2') return { ...page(), isDone: false, continueCursor: 'next-service' }
+      return { ...page(), page: [], isDone: true, continueCursor: '' }
+    })
+    const restore = setPublicRegistrySourcePortForTests({ list: read, search: vi.fn(), detail: vi.fn() })
+    try {
+      const first = await registryServicesListAction.run({ data: { limit: 2 }, context: { caller: 'http' } })
+      expect(first).toMatchObject({ services: [{ id: 'acme-plumbing' }], hasMore: true, nextCursor: 'next-service' })
+      expect(cursors).toEqual([null, 'filtered-1', 'filtered-2'])
+      const second = await registryServicesListAction.run({ data: { limit: 2, cursor: first.nextCursor }, context: { caller: 'http' } })
+      expect(second).toMatchObject({ services: [], hasMore: false })
+    } finally {
+      restore()
+    }
+  })
+
   it('returns the exact canonical Service item for detail as list', async () => {
     const expected = toListResult(projectPublicServicesPage(page()))
     vi.spyOn(registryServicesListAction, 'run').mockResolvedValue(expected)

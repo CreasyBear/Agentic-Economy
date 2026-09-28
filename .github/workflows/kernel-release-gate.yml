@@ -2,10 +2,9 @@ name: Kernel release gate
 
 on:
   push:
-    branches: [main]
+    tags: ['v*']
   pull_request:
     branches: [main]
-  merge_group:
   workflow_dispatch:
     inputs:
       confirm_chat_staging_smoke:
@@ -40,10 +39,36 @@ permissions:
 
 concurrency:
   group: kernel-release-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  cancel-in-progress: true
 
 jobs:
+  check:
+    if: github.event_name == 'pull_request'
+    name: Local change check
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: '.nvmrc'
+          cache: npm
+      - name: Pin the repository package manager
+        run: npm install --global npm@11.5.1 --ignore-scripts
+      - name: Cache lockfile-pinned dependencies
+        id: dependencies
+        uses: actions/cache@v4
+        with:
+          path: node_modules
+          key: node-modules-${{ runner.os }}-${{ runner.arch }}-node22-${{ hashFiles('package-lock.json') }}
+      - name: Frozen dependency install on cache miss
+        if: steps.dependencies.outputs.cache-hit != 'true'
+        run: npm ci
+      - name: Run fast local acceptance check
+        run: npm run check
+
   source-proof:
+    if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/v')
     name: Clean source, contract, browser, and build proof
     runs-on: ubuntu-latest
     timeout-minutes: 45
@@ -61,7 +86,13 @@ jobs:
       - name: Frozen dependency install
         run: npm ci
 
-      - name: Install the source-proof Chromium browser
+      - name: Cache the release Chromium browser
+        id: playwright-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+      - name: Install Chromium system dependencies and browser on cache miss
         run: npm exec -- playwright install --with-deps chromium
 
       - name: Record exact source evidence identity
@@ -74,34 +105,18 @@ jobs:
             '{repositorySha: $repositorySha, workflowRun: $workflowRun, evidenceClass: $evidenceClass, sanitized: true}' \
           > output/release/source-metadata.json
 
-      - name: Validate the closed deployment manifest
-        run: npm run verify:deployment-manifest -- --environment development
-
-      - name: Run focused provider and recovery conformance
-        run: npm run test:conformance
-
-      - name: Run deterministic Tool chat conformance
-        run: npm run test:chat:conformance
-
-      - name: Prove committed Convex source with an isolated anonymous local backend
-        run: npm run verify:convex-generated:anonymous
-
-      - name: Prove anonymous generation did not mutate the source checkout
-        run: git diff --exit-code -- convex/_generated
-
-      - name: Verify generated source and pinned release inputs
-        run: npm run verify:release-integrity
-
       # The browser proof boots the real app, which mounts ClerkProvider and
       # clerkMiddleware unconditionally; the Clerk development instance is the
       # only credential this job receives.
-      - name: Run source release contract without deployment credentials
+      - name: Run the full local release gate
         env:
           CLERK_JWT_ISSUER_DOMAIN: https://relative-phoenix-8958.clerk.accounts.dev
           CLERK_PUBLISHABLE_KEY: ${{ secrets.AE_AUTHENTICATED_E2E_CLERK_PUBLISHABLE_KEY }}
           VITE_CLERK_PUBLISHABLE_KEY: ${{ secrets.AE_AUTHENTICATED_E2E_CLERK_PUBLISHABLE_KEY }}
           CLERK_SECRET_KEY: ${{ secrets.AE_AUTHENTICATED_E2E_CLERK_SECRET_KEY }}
-        run: npm run test:release:source:after-codegen
+        run: npm run gate
+      - name: Prove anonymous generation did not mutate the source checkout
+        run: git diff --exit-code -- convex/_generated
 
       - name: Upload sanitized source release evidence
         if: always()
@@ -112,13 +127,12 @@ jobs:
             output/release/source-metadata.json
             output/release/unit-vitest.json
             output/release/integration-vitest.json
-            output/release/chat-conformance-vitest.json
           if-no-files-found: error
           retention-days: 14
 
   fresh-checkout-proof:
+    if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/v')
     name: Fresh checkout reaches a sellable local sandbox
-    needs: []
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -160,7 +174,7 @@ jobs:
           CI: 'true'
         run: |
           mkdir -p output/fresh-checkout
-          npm run dev:local -- --skip-scan --no-doctor > output/fresh-checkout/dev-local.log 2>&1 &
+          npm run dev:local -- --no-doctor > output/fresh-checkout/dev-local.log 2>&1 &
           echo "DEV_LOCAL_PID=$!" >> "${GITHUB_ENV}"
           ready=''
           for _ in $(seq 1 180); do
@@ -179,7 +193,12 @@ jobs:
       # Agent access consent requires the owner's strict reverification in a
       # browser, so this job proves the anonymous sandbox only; doctor reports
       # the credentialed checks as warn/skipped by design.
-      - name: Install Chromium for configured-stack discovery proof
+      - name: Cache the fresh-checkout Chromium browser
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+      - name: Install Chromium system dependencies and browser on cache miss
         run: npm exec -- playwright install --with-deps chromium
 
       - name: Prove discovery artifacts through real backend admission

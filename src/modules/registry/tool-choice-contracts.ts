@@ -149,7 +149,7 @@ const searchResultSchema = z.strictObject({
   category: z.string().max(80).optional(),
   readiness: z.enum(['ready', 'unverified', 'unavailable']),
   price: z.discriminatedUnion('kind', [
-    z.strictObject({ kind: z.literal('indicative'), label: z.string() }),
+    z.strictObject({ kind: z.literal('indicative'), label: z.string(), validUntil: z.number().int().nonnegative().optional() }),
     z.strictObject({ kind: z.literal('unavailable') }),
   ]),
   detailRef: z.string(),
@@ -190,7 +190,7 @@ export const toolChoiceSearchOutputSchema = z.discriminatedUnion('kind', [
   z.strictObject({ ...searchMetaSchema, kind: z.literal('match'), results: z.array(searchResultSchema).min(1).max(12) }),
   z.strictObject({ ...searchMetaSchema, kind: z.literal('scoped'), results: z.array(searchResultSchema).max(12), reason: z.string() }),
   z.strictObject({ ...searchMetaSchema, kind: z.literal('noMatch'), results: z.tuple([]), reason: z.string(), saveNeed: saveNeedDescriptorSchema.optional() }),
-  z.strictObject({ ...searchMetaSchema, kind: z.literal('unavailable'), results: z.tuple([]), reason: z.enum(['source_unavailable', 'capacity_exceeded']) }),
+  z.strictObject({ ...searchMetaSchema, kind: z.literal('unavailable'), pagination: toolCatalogPaginationSchema.refine(page => !page.hasMore && page.nextCursor === undefined), results: z.tuple([]), reason: z.enum(['source_unavailable', 'capacity_exceeded']) }),
 ])
 export type SearchEnvelope = z.output<typeof toolChoiceSearchOutputSchema>
 export type ToolChoiceSearchOutput = SearchEnvelope
@@ -360,7 +360,7 @@ export function projectToolListChoices(result: ToolSearchResult, filters?: unkno
 export function projectToolSearchChoices(
   result: ToolSearchResult,
   filters: unknown,
-  assessment: Readonly<{ verdict: 'matched' | 'degraded' | 'noMatch'; reason?: string; nearMisses: readonly PublicToolDescriptor[] }>,
+  assessment: Readonly<{ verdict: 'matched' | 'noMatch'; nearMisses: readonly PublicToolDescriptor[] }>,
   freshness?: SupplyProjectionFreshness,
   visibleLimit = 8,
   context: Readonly<{
@@ -373,13 +373,14 @@ export function projectToolSearchChoices(
     completedAt?: number
     externalExamined?: number
     admittedExamined?: number
-    externalAvailable?: boolean
     recipient?: Readonly<{ label: string; host: string; data: 'query and candidate summaries' }>
   }> = {},
 ): ToolChoiceSearchOutput {
-  const pagination = context.pagination ?? (result.kind === 'ok' ? result.pagination : { limit: visibleLimit, hasMore: false })
+  const pagination = result.kind === 'unavailable'
+    ? { limit: visibleLimit, hasMore: false as const }
+    : context.pagination ?? (result.kind === 'ok' ? result.pagination : { limit: visibleLimit, hasMore: false })
   const query = context.query ?? (result.kind === 'unavailable' ? '' : result.query)
-  const unavailable = result.kind === 'unavailable' || assessment.verdict === 'degraded' || context.externalAvailable === false
+  const unavailable = result.kind === 'unavailable'
   const admitted = admittedHealth(filters)
   const parsedFilters = toolCatalogFiltersSchema.safeParse(filters)
   const explicitHealthFilter = parsedFilters.success && parsedFilters.data.healthStatus !== undefined
@@ -402,7 +403,8 @@ export function projectToolSearchChoices(
       actionClass: 'unclassified',
       objectClass: 'unclassified',
       readiness: projectToolChoiceEvidence(tool).readiness,
-      price: formatted === undefined || !formatted.includes('A$') ? { kind: 'unavailable' } : { kind: 'indicative', label: formatted },
+      price: formatted === undefined || !formatted.includes('A$') || display?.kind !== 'indicative'
+        ? { kind: 'unavailable' } : { kind: 'indicative', label: formatted, validUntil: display.validUntil },
       detailRef: tool.toolRef,
       next: [{ action: 'describe', args: { toolRef: tool.toolRef }, authority: 'public' }],
       ...(freshness === undefined ? {} : { freshness }),
@@ -410,7 +412,7 @@ export function projectToolSearchChoices(
   })
   const displayedRows = [...rows, ...context.external ?? []].slice(0, visibleLimit)
   const complete = context.complete === true && !pagination.hasMore && (result.kind !== 'ok' || result.partialResults !== true)
-  const kind = searchVerdict({ matches: rows.length, assessedComplete: complete && displayedRows.length === 0, available: !unavailable })
+  const kind = searchVerdict({ matches: displayedRows.length, assessedComplete: complete && displayedRows.length === 0, available: !unavailable })
   const assessed = {
     source: context.source ?? 'current',
     scope: complete ? 'complete' as const : 'page' as const,
@@ -488,12 +490,9 @@ export type ToolCompareResolution =
   | Readonly<{ kind: 'unavailable'; reason: 'query_invalid' | 'tool_not_found' | 'tool_unavailable' }>
 
 export function projectToolCompareChoices(result: ToolCompareResolution) {
-  return toolChoiceCompareOutputSchema.parse(result.kind === 'ok'
-    ? {
-        kind: 'ok',
-        schemaVersion: PublicToolRegistrySchemaVersion,
-        tools: result.tools.map(projectCompactTool),
-        ...(result.missing === undefined ? {} : { missing: result.missing }),
-      }
-    : { kind: 'unavailable', schemaVersion: PublicToolRegistrySchemaVersion, reason: result.reason })
+  return toolChoiceCompareOutputSchema.parse({
+    ...result,
+    schemaVersion: PublicToolRegistrySchemaVersion,
+    ...(result.kind === 'ok' ? { tools: result.tools.map(projectCompactTool) } : {}),
+  })
 }

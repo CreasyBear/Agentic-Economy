@@ -1,4 +1,4 @@
-import { saveMessages } from '@convex-dev/agent'
+import { listMessages, saveMessages } from '@convex-dev/agent'
 import { makeFunctionReference } from 'convex/server'
 import { sanitizeTelemetryError } from '@/lib/observability/private-route-safety'
 import { openRouterGatewayConfig, openRouterModel } from '@/modules/model-gateway/public'
@@ -54,6 +54,10 @@ export async function generateHandler(ctx: ActionCtx, args: GenerateArgs): Promi
     if (args.turnRef !== undefined && !await ctx.runMutation(internal.chatTurns.finishTurn, {
       turnRef: args.turnRef, promptMessageId: args.promptMessageId, state: 'working',
     })) return null
+    const searchTurn = args.turnRef === undefined ? undefined
+      : { turnRef: args.turnRef, threadId: args.threadId, promptMessageId: args.promptMessageId }
+    const continuation = searchTurn === undefined ? null
+      : await ctx.runQuery(internal.chatTurns.readSearchPage, searchTurn)
     const apiKey = env.OPENROUTER_API_KEY?.trim()
     if (apiKey === undefined || apiKey.length === 0) {
       throw new Error('agent_unavailable')
@@ -71,10 +75,34 @@ export async function generateHandler(ctx: ActionCtx, args: GenerateArgs): Promi
         ownerId: current.ownerId,
         ...(args.authority === undefined ? {} : { authority: interactiveAuthorityContextFromValue(args.authority) }),
         ...(current.trustedChatAuthority === undefined ? {} : { trustedChatAuthority: current.trustedChatAuthority }),
+        ...(searchTurn === undefined ? {} : { searchTurn }),
+        ...(continuation === null ? {} : { continuation }),
       },
       openRouterModel(config, config.model),
     )
     if (args.turnRef !== undefined) {
+      const effects = await ctx.runQuery(turnEffectsRef, { turnRef: args.turnRef })
+      if (effects.length > 0) {
+        const history = await listMessages(ctx, components.agent, {
+          threadId: args.threadId, paginationOpts: { cursor: null, numItems: 50 },
+        })
+        const prompt = history.page.find(row => row._id === args.promptMessageId)
+        const answer = history.page.find(row => row.order === prompt?.order
+          && row.message?.role === 'assistant' && row.status === 'success')
+        const missing = effects.filter(ref => !answer?.text?.includes(ref))
+        if (missing.length > 0) {
+          await saveMessages(ctx, components.agent, {
+            threadId: args.threadId,
+            userId: current.ownerId,
+            promptMessageId: args.promptMessageId,
+            messages: [{
+              role: 'assistant',
+              content: `A Call may already have run. CallRef: ${missing.join(', ')}. Check its status before another request; payment may be outcome_unknown.`,
+            }],
+            agentName: 'Agentic Economy Operation Market',
+          })
+        }
+      }
       await ctx.runMutation(internal.chatTurns.finishTurn, {
         turnRef: args.turnRef, promptMessageId: args.promptMessageId,
         state: clarificationRequested ? 'input-required' : 'completed',

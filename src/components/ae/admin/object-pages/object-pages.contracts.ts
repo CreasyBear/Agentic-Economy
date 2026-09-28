@@ -56,6 +56,7 @@ export const ADMIN_OBJECT_PAGE_COPY = {
     sourceAuthority: 'Source authority',
     sourceAuthorityVerified: 'Verified',
     sourceAuthorityReviewRequired: 'Review required',
+    sourceAuthorityUnset: 'Unset (legacy record)',
     admissionCase: 'Admission case',
     readiness: 'Readiness valid until',
     provider: 'Provider',

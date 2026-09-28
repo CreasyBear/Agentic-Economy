@@ -43,11 +43,30 @@ export function assistantTurnStarted(messages: readonly TranscriptMessage[]): bo
 }
 
 export type AnonymousSession = Readonly<{ id: string; messages: TranscriptMessage[] }>
+/** Browser storage is incidental to the in-memory conversation, including when its getter is denied. */
+export function anonymousSessionStorage(): Storage | null {
+  try {
+    return window.sessionStorage
+  } catch (cause) {
+    if (!(cause instanceof DOMException)) throw cause
+    return null
+  }
+}
 
-export function readAnonymousSession(storage: Storage): AnonymousSession {
-  const id = storage.getItem(ACTIVE_SESSION_KEY)
+export function readAnonymousSession(storage: Storage | null): AnonymousSession {
+  let id: string | null = null
+  try {
+    id = storage?.getItem(ACTIVE_SESSION_KEY) ?? null
+  } catch (cause) {
+    if (!(cause instanceof DOMException)) throw cause
+  }
   if (id !== null && /^[0-9a-f-]{36}$/iu.test(id)) {
-    const serialized = storage.getItem(`${SESSION_PREFIX}${id}`)
+    let serialized: string | null = null
+    try {
+      serialized = storage?.getItem(`${SESSION_PREFIX}${id}`) ?? null
+    } catch (cause) {
+      if (!(cause instanceof DOMException)) throw cause
+    }
     if (serialized !== null && encoder.encode(serialized).byteLength <= MAX_BYTES) {
       try {
         const parsed: unknown = JSON.parse(serialized)
@@ -74,7 +93,8 @@ export function readAnonymousSession(storage: Storage): AnonymousSession {
   return { id: crypto.randomUUID(), messages: [] }
 }
 
-export function saveAnonymousSession(storage: Storage, session: AnonymousSession): void {
+export function saveAnonymousSession(storage: Storage | null, session: AnonymousSession): void {
+  if (storage === null) return
   const messages = projectAnonymousTranscript(session.messages).slice(-MAX_MESSAGES).map(message => ({
     role: message.role,
     content: Array.from(message.content).slice(0, MAX_TEXT).join('').replace(SECRET, '[redacted]'),
@@ -84,11 +104,20 @@ export function saveAnonymousSession(storage: Storage, session: AnonymousSession
     messages.shift()
     serialized = JSON.stringify(messages)
   }
-  storage.setItem(`${SESSION_PREFIX}${session.id}`, serialized)
-  storage.setItem(ACTIVE_SESSION_KEY, session.id)
+  try {
+    storage.setItem(`${SESSION_PREFIX}${session.id}`, serialized)
+    storage.setItem(ACTIVE_SESSION_KEY, session.id)
+  } catch (cause) {
+    if (!(cause instanceof DOMException)) throw cause
+  }
 }
 
-export function clearAnonymousSession(storage: Storage, id: string): void {
-  storage.removeItem(`${SESSION_PREFIX}${id}`)
-  if (storage.getItem(ACTIVE_SESSION_KEY) === id) storage.removeItem(ACTIVE_SESSION_KEY)
+export function clearAnonymousSession(storage: Storage | null, id: string): void {
+  if (storage === null) return
+  try {
+    storage.removeItem(`${SESSION_PREFIX}${id}`)
+    if (storage.getItem(ACTIVE_SESSION_KEY) === id) storage.removeItem(ACTIVE_SESSION_KEY)
+  } catch (cause) {
+    if (!(cause instanceof DOMException)) throw cause
+  }
 }

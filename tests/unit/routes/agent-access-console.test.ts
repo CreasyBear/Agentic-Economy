@@ -2,7 +2,6 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { getFunctionName } from 'convex/server'
 import {
   currentUtcMonthBounds,
-  enrichAgentDirectoryActivity,
   loadAgentDirectoryReadback,
   projectAgentDirectory,
 } from '@/modules/agent-access/agent-access-console'
@@ -73,14 +72,6 @@ describe('owner Agent projection', () => {
     expect(directory.details[0]?.usage?.callCount).toBe(51)
   })
 
-  it('enriches current toolRef without replacing Call or payment evidence', async () => {
-    const compare = vi.fn(async () => ({ kind: 'ok' as const, tools: [{ toolRef: call.toolRef, listing: { label: 'Weather now' }, business: { name: 'Weather Co' } }] }))
-    const directory = await enrichAgentDirectoryActivity(projectAgentDirectory([], [canonical], [], [owner]), {
-      compare, isToolRef: (value) => value === call.toolRef,
-    })
-    expect(compare).toHaveBeenCalledWith({ toolRefs: [call.toolRef] })
-    expect(directory.details[0]?.activity[0]).toEqual({ ...call, tool: { label: 'Weather now', provider: 'Weather Co' } })
-  })
 
   it('uses UTC calendar boundaries including year rollover', () => {
     expect(currentUtcMonthBounds(Date.parse('2026-12-31T23:59:59.999Z'))).toEqual({
@@ -88,13 +79,12 @@ describe('owner Agent projection', () => {
     })
   })
 
-  it.each([false, true])('loads canonical Agents independently of keys with one shared Account balance (locked=%s)', async (locked) => {
+  it('loads canonical Agents without asking the money rail or optional catalogue to serve the directory', async () => {
     vi.spyOn(Date, 'now').mockReturnValue(Date.UTC(2026, 8, 7))
     transport.keys.mockResolvedValue([])
     const rotated: AgentCredentialSource = { ...source, key: { ...source.key, keyId: 'key:two', createdAt: 20 } }
     const firstCanonical = canonicalAgentRecord([source, rotated])
-    const balance = { kind: 'available', accountRef: 'account:owner', balance: { currency: 'AUD', exponent: 6, units: '123456789' }, locked, version: 1 }
-    transport.action.mockResolvedValue(balance)
+    transport.action.mockRejectedValue(new Error('Formance unavailable'))
     transport.query.mockImplementation(async (ref, args) => {
       switch (getFunctionName(ref)) {
         case 'agentAccessPolicy:listOwnerGrantReadbacks':
@@ -124,11 +114,8 @@ describe('owner Agent projection', () => {
         default: throw new Error('Unexpected owner read')
       }
     })
-    const directory = await loadAgentDirectoryReadback({ compare: async () => ({ kind: 'unavailable' }), isToolRef: () => false })
-    expect(directory.accountBalance).toEqual(balance)
-    expect(transport.action).toHaveBeenCalledTimes(1)
-    expect(getFunctionName(transport.action.mock.calls[0]![0])).toBe('moneyAccountFundingFormance:readBalance')
-    expect(transport.action.mock.calls[0]![1]).toEqual({})
+    const directory = await loadAgentDirectoryReadback()
+    expect(transport.action).not.toHaveBeenCalled()
     expect(directory.nextCursor).toBe('opaque:directory')
     expect(directory.activityCoverage).toBe('recent')
     expect(directory.items).toHaveLength(2)
@@ -145,19 +132,45 @@ describe('owner Agent projection', () => {
     expect(secondAgent?.agent.principalRef).toBe(secondPrincipalRef)
   })
 
-  it('preserves refused balance and unavailable activity without inventing zero values', async () => {
+  it('retains the canonical Agent and marks connections unknown when the OAuth read fails', async () => {
     transport.keys.mockResolvedValue([])
-    transport.action.mockResolvedValue({ kind: 'refused', code: 'billing_identity_missing', retryable: false })
     transport.query.mockImplementation(async (ref) => {
       if (getFunctionName(ref) === 'agentDirectory:listOwnedPage') return { page: [canonical], isDone: true, continueCursor: '' }
-      if (getFunctionName(ref) === 'capabilityCallProjections:readOwnerAgentReadback') throw new Error('unavailable')
+      if (getFunctionName(ref) === 'agentAccessOAuth:listOwnerConnectionReadbacks') throw new Error('OAuth unavailable')
+      if (getFunctionName(ref) === 'capabilityCallProjections:readOwnerAgentReadback') throw new Error('activity unavailable')
       return []
     })
-    const directory = await loadAgentDirectoryReadback({ compare: async () => ({ kind: 'unavailable' }), isToolRef: () => false })
-    expect(directory.accountBalance?.kind).toBe('refused')
-    expect(directory.details[0]).toMatchObject({ dataState: 'unavailable', activity: [] })
+    const directory = await loadAgentDirectoryReadback()
+    expect(directory.items).toMatchObject([{ principalRef, connectionsAvailable: false }])
+    expect(directory.details[0]).toMatchObject({ connectionsAvailable: false, dataState: 'unavailable', activity: [] })
     expect(directory.details[0]).not.toHaveProperty('usage')
+    expect(transport.action).not.toHaveBeenCalled()
   })
+
+  it('keeps canonical credentials visible when the optional Clerk key inventory fails', async () => {
+    transport.keys.mockRejectedValue(new Error('Clerk inventory unavailable'))
+    transport.query.mockImplementation(async (ref) => {
+      if (getFunctionName(ref) === 'agentDirectory:listOwnedPage') return { page: [canonical], isDone: true, continueCursor: '' }
+      return []
+    })
+    const directory = await loadAgentDirectoryReadback()
+    expect(directory.items).toMatchObject([{ principalRef, displayName: canonical.displayName }])
+    expect(directory.details[0]?.credentials).toHaveLength(1)
+    expect(directory.details[0]?.agent.authorityMode).toBe(canonical.authorityMode)
+  })
+
+  it('bounds a stalled OAuth connection read without presenting its absence as legacy access', async () => {
+    transport.keys.mockResolvedValue([])
+    transport.query.mockImplementation(async (ref) => {
+      if (getFunctionName(ref) === 'agentDirectory:listOwnedPage') return { page: [canonical], isDone: true, continueCursor: '' }
+      if (getFunctionName(ref) === 'agentAccessOAuth:listOwnerConnectionReadbacks') return await Promise.withResolvers<never>().promise
+      return []
+    })
+    const startedAt = performance.now()
+    const directory = await loadAgentDirectoryReadback()
+    expect(performance.now() - startedAt).toBeLessThan(4_500)
+    expect(directory.items).toMatchObject([{ principalRef, connectionsAvailable: false }])
+  }, 5_000)
 
   describe('W-25: Agent directory spend vs limit projection', () => {
     const testGrant: AgentAccessOwnerGrantReadback = {

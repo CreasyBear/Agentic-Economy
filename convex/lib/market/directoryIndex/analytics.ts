@@ -1,5 +1,5 @@
 import Decimal from 'decimal.js'
-import { directoryAdoptionBand, directoryBasePayTo, directoryPriceBand, minimumDirectoryUsdPrice, type DirectoryDepthBand, type DirectoryRecencyBand } from '@/modules/market/x402-directory-index'
+import { DIRECTORY_RECENCY_BANDS, directoryAdoptionBand, directoryBasePayTo, directoryPriceBand, minimumDirectoryUsdPrice, type DirectoryDepthBand, type DirectoryRecencyBand } from '@/modules/market/x402-directory-index'
 import { directoryMetadataFlags } from '@/modules/market/x402-directory-metadata'
 import type { X402DirectoryEntry } from '@/modules/market/x402-directory'
 import type { MutationCtx } from '../../../_generated/server'
@@ -57,8 +57,8 @@ function directoryPayerDepth(calls: number | undefined, payers: number | undefin
   if (calls === undefined || payers === undefined || !Number.isSafeInteger(calls) || !Number.isSafeInteger(payers) || payers <= 0) return undefined
   return Math.round((calls / payers) * 100) / 100
 }
-export function memberships(entry: X402DirectoryEntry, now: number): [string, string | number][] {
-  const keys: [string, string | number][] = [['adoption', directoryAdoptionBand(entry.activity?.payers30d)], ['depth', directoryDepthBand(entry.activity?.calls30d, entry.activity?.payers30d)], ['recency', directoryRecencyBand(entry.activity?.lastCalledAt, now)]]
+export function memberships(entry: X402DirectoryEntry, now: number, recencyBand = directoryRecencyBand(entry.activity?.lastCalledAt, now)): [string, string | number][] {
+  const keys: [string, string | number][] = [['adoption', directoryAdoptionBand(entry.activity?.payers30d)], ['depth', directoryDepthBand(entry.activity?.calls30d, entry.activity?.payers30d)], ['recency', recencyBand]]
   for (const tag of new Set(entry.tags ?? [])) keys.push(['tag', tag])
   for (const bundle of new Set(entry.bundleSlugs ?? [])) keys.push(['bundle', bundle])
   for (const [flag, present] of Object.entries(directoryMetadataFlags(entry))) if (present) keys.push(['metadata', flag])
@@ -76,12 +76,17 @@ export function memberships(entry: X402DirectoryEntry, now: number): [string, st
 /** Removes every analytics-namespace membership for a resource being swept out of the live generation. */
 export async function deleteAnalyticsMembership(ctx: MutationCtx, generation: string, resource: string, entry: X402DirectoryEntry, now = Date.now()) {
   const namespace = analyticsNamespace(generation)
-  for (const key of memberships(entry, now)) await directoryFacets.deleteIfExists(ctx, { namespace, key, id: resource })
+  for (const key of memberships(entry, now)) if (key[0] !== 'recency') await directoryFacets.deleteIfExists(ctx, { namespace, key, id: resource })
+  for (const band of DIRECTORY_RECENCY_BANDS) await directoryFacets.deleteIfExists(ctx, { namespace, key: ['recency', band], id: resource })
 }
 
-export async function writeAnalytics(ctx: MutationCtx, generation: string, resource: string, entry: X402DirectoryEntry, previous?: X402DirectoryEntry, now = Date.now()) {
+export async function writeAnalytics(ctx: MutationCtx, generation: string, resource: string, entry: X402DirectoryEntry, previous?: X402DirectoryEntry, now = Date.now(), previousRecencyBand?: DirectoryRecencyBand) {
   const namespace = analyticsNamespace(generation)
-  if (previous !== undefined) for (const key of memberships(previous, now)) await directoryFacets.deleteIfExists(ctx, { namespace, key, id: resource })
+  if (previous !== undefined) {
+    for (const key of memberships(previous, now, previousRecencyBand)) await directoryFacets.deleteIfExists(ctx, { namespace, key, id: resource })
+    // A previous activity-only patch may have left this target key behind in older indexes.
+    await directoryFacets.deleteIfExists(ctx, { namespace, key: ['recency', directoryRecencyBand(entry.activity?.lastCalledAt, now)], id: resource })
+  }
   for (const key of memberships(entry, now)) {
     await directoryFacets.insert(ctx, { namespace, key, id: resource })
     if ((key[0] === 'tag' || key[0] === 'bundle') && typeof key[1] === 'string') {

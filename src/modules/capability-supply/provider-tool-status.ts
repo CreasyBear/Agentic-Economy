@@ -200,6 +200,7 @@ function continuationFor(
     return { action: 'supply.offboarding.status' }
   }
   if (state === 'Needs setup') return { action: 'supply.source.preview' }
+  if (state === 'Draft') return { action: 'supply.source.preview' }
   if (state === 'Submitted' || state === 'Under review') return { action: 'supply.status' }
   if (state === 'Paused') return { action: 'supply.republish' }
   if (facts.blockerCodes.includes('source_drift')) return { action: 'supply.recheck' }

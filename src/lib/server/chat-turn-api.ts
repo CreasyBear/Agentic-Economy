@@ -84,6 +84,7 @@ async function admit(request: Request, body: string, correlationId: string, opti
     const resolvePrincipal = options.resolvePrincipal ?? (options.authenticate === undefined
       ? resolveAgentAccessPrincipal(request, body, correlationId) : undefined)
     const result = await authenticateAgentAccess({
+      request,
       ...(options.authenticate === undefined ? {} : { authenticate: options.authenticate }),
       ...(resolvePrincipal === undefined ? {} : { resolvePrincipal }),
       requiredScope: 'market_tools:call', consequenceResource: 'surface:http:chat-turns',

@@ -52,27 +52,28 @@ const ratioValue = v.union(v.number(), v.null())
 export const marketplaceMetricsReportValue = v.object({
   days: v.array(marketplaceMetricDayValue),
   partialDays: v.array(v.string()),
+  coverageComplete: v.boolean(),
   latestDay: v.union(v.string(), v.null()),
-  headline: v.object({
+  headline: v.union(v.null(), v.object({
     settledCallValue: exactAmountOrNullValue,
     money: v.union(v.literal('settled_only'), v.literal('no_settled_usage')),
     settledCalls: v.number(),
     successRate: ratioValue,
     transactingWorkspaces: v.number(),
-  }),
-  ratios: v.object({
+  })),
+  ratios: v.union(v.null(), v.object({
     successRate: ratioValue,
     quoteConversion: ratioValue,
     returningWorkspaceRate: ratioValue,
     resolutionCoverage: ratioValue,
-  }),
-  wow: v.object({
+  })),
+  wow: v.union(v.null(), v.object({
     settledCalls: ratioValue,
     attemptedCalls: ratioValue,
     completedCalls: ratioValue,
     transactingWorkspaces: ratioValue,
     quotesCreated: ratioValue,
-  }),
+  })),
 })
 
 const RANGE_DAYS: Readonly<Record<MarketplaceMetricsRange, number>> = {
@@ -180,20 +181,27 @@ export async function readMarketplaceMetricsRange(
   const partialDays = rows.filter((row) => row.day >= firstDay && row.complete === false).map((row) => row.day)
   const allDays = rows.filter((row) => row.complete !== false).map(projectDay)
   const days = allDays.filter((day) => day.day >= firstDay)
+  const coverageComplete = days.length === rangeDays && partialDays.length === 0
+  if (!coverageComplete) return {
+    days, partialDays, coverageComplete, latestDay: days.at(-1)?.day ?? null,
+    headline: null, ratios: null, wow: null,
+  }
   const headlineFirstDay = shiftPerthDay(lastDay, -6)
   const priorFirstDay = shiftPerthDay(lastDay, -13)
   if (headlineFirstDay === null || priorFirstDay === null) throw new Error('marketplace_metrics_day_invariant')
   const latest = allDays.filter((day) => day.day >= headlineFirstDay)
   const prior = allDays.filter((day) => day.day >= priorFirstDay && day.day < headlineFirstDay)
+  const publishedEntityDay = (day: MarketplaceMetricDay) => rows.find((row) => row.day === day.day)?.entityDay ?? day.day
   const [headlineWorkspaces, priorWorkspaces] = await Promise.all([
-    distinctWorkspaces(ctx, latest.map((day) => day.day)),
-    distinctWorkspaces(ctx, prior.map((day) => day.day)),
+    distinctWorkspaces(ctx, latest.map(publishedEntityDay)),
+    distinctWorkspaces(ctx, prior.map(publishedEntityDay)),
   ])
   const headlineMoney = sumMoney(latest)
   const attempted = sum(days, 'attemptedCalls')
   const completed = sum(days, 'completedCalls')
   return {
     partialDays,
+    coverageComplete,
     days,
     latestDay: days.at(-1)?.day ?? null,
     headline: {

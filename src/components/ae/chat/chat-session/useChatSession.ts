@@ -2,8 +2,8 @@ import { useAuth } from '@clerk/tanstack-react-start'
 import { useUIMessages } from '@convex-dev/agent/react'
 import { DefaultChatTransport, readUIMessageStream, type UIMessage } from 'ai'
 import { useServerFn } from '@tanstack/react-start'
-import { useConvexAuth, useMutation, usePaginatedQuery, useQuery } from 'convex/react'
-import { createElement, useEffect, useEffectEvent, useMemo, useRef, useState, type ReactNode } from 'react'
+import { useConvexAuth, useMutation, useQuery } from 'convex/react'
+import { createElement, useEffect, useEffectEvent, useRef, useState, type ReactNode } from 'react'
 
 import { api } from '../../../../../convex/_generated/api'
 import { enableOwnerChatSpendingServer } from '@/modules/agent-access/agent-access.functions'
@@ -14,15 +14,14 @@ import {
   withdrawOwnerMarketDemand,
 } from '@/modules/market-demand/market-demand.functions'
 import type { ChatNeedActions } from '@/modules/chat/tool-card'
+import type { RegistryNextAction } from '@/modules/registry/tool-choice-contracts'
 
-import { useStickyRows } from '@/components/ui/data-state'
 import { captureClientExceptionOnClient } from '@/lib/observability/capture-client-exception'
 
 import type { ChatProps, ChatSessionModel } from './chat-session.contracts'
-import { projectOwnerChatCards } from './owner-chat-cards'
-import { ChatHistory } from './components/ChatHistory'
+import { ChatHistoryPanelContainer } from './ChatHistoryPanelContainer'
 import {
-  assistantTurnStarted, boundPrompt, clearAnonymousSession, messageId,
+  anonymousSessionStorage, assistantTurnStarted, boundPrompt, clearAnonymousSession, messageId,
   readAnonymousSession, saveAnonymousSession, toTransportMessages, unicodeLength,
 } from './anonymous-session'
 import {
@@ -58,6 +57,7 @@ const MAX_PROMPT_CHARACTERS = 2_000
 const MAX_ANONYMOUS_MESSAGES = 12
 const MAX_ANONYMOUS_BYTES = 16 * 1024
 const PAGE_SIZE = 20
+type SearchContinuation = Extract<RegistryNextAction, { action: 'next-page' }>['args']
 
 export function useChatSession({
   threadId,
@@ -85,12 +85,11 @@ export function useChatSession({
   const [errorReference, setErrorReference] = useState<string | undefined>()
   const [browseMarketOnError, setBrowseMarketOnError] = useState(false)
   const [status, setStatus] = useState<ChatStatus>('')
-  const [historySearch, setHistorySearch] = useState('')
+
   const [sharePath, setSharePath] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
   const [now, setNow] = useState(() => Date.now())
-  const [approvalBusy, setApprovalBusy] = useState(false)
-  const [approvalProblem, setApprovalProblem] = useState('')
+
   const [enableProblem, setEnableProblem] = useState('')
   const abortRef = useRef<AbortController | null>(null)
   const operationInFlightRef = useRef(false)
@@ -107,44 +106,16 @@ export function useChatSession({
     api.chatThreads.getThread,
     isAuthenticated && threadId !== null ? { threadId, now } : 'skip',
   )
-  const listedThreads = usePaginatedQuery(
-    api.chatThreads.listThreads,
-    isAuthenticated && historySearch.trim().length === 0 ? { now } : 'skip',
-    { initialNumItems: PAGE_SIZE },
-  )
-  const searchedThreads = usePaginatedQuery(
-    api.chatThreads.searchThreads,
-    isAuthenticated && historySearch.trim().length > 0 ? { query: historySearch, now } : 'skip',
-    { initialNumItems: PAGE_SIZE },
-  )
-  const shareState = useQuery(
-    api.chatShares.getShareState,
-    isAuthenticated && threadId !== null ? { threadId } : 'skip',
-  )
+
   const startTurn = useMutation(api.chatTurns.startTurn)
-  const decideApproval = useMutation(api.capabilityCalls.decideCallApproval)
+
   const enableOwnerChat = useServerFn(enableOwnerChatSpendingServer)
-  const grantStatus = useQuery(api.chatTurns.ownerChatGrantStatus, isAuthenticated ? {} : 'skip')
-  const serverCards = useQuery(api.chatCall.readOwnerChatCards,
-    isAuthenticated && threadId !== null ? { threadId } : 'skip')
+
   const renameThread = useMutation(api.chatThreads.renameThread)
   const deleteThread = useMutation(api.chatThreads.deleteThread)
   const issueShare = useMutation(api.chatShares.issueShare)
   const revokeShare = useMutation(api.chatShares.revokeShare)
 
-  const transport = useMemo(() => new DefaultChatTransport<UIMessage>({
-    api: '/api/chat/anonymous',
-    fetch: fetchAnonymousChat,
-    prepareSendMessagesRequest: ({ messages }) => ({
-      body: {
-        messages: projectAnonymousTranscript(messages.map((message) => ({
-          id: message.id,
-          role: message.role === 'assistant' ? 'assistant' : 'user',
-          parts: message.parts,
-        }))),
-      },
-    }),
-  }), [])
 
   useEffect(() => {
     mountedRef.current = true
@@ -167,7 +138,7 @@ export function useChatSession({
   useEffect(() => {
     if (authLoading || anonymousSessionLoaded) return
     if (!isAuthenticated && threadId === null) {
-      const session = readAnonymousSession(window.sessionStorage)
+      const session = readAnonymousSession(anonymousSessionStorage())
       anonymousSessionIdRef.current = session.id
       setAnonymousMessages(session.messages)
       if (session.messages.some(message => message.role === 'user'
@@ -179,7 +150,7 @@ export function useChatSession({
   }, [authLoading, anonymousSessionLoaded, isAuthenticated, threadId, initialPrompt])
   useEffect(() => {
     if (!anonymousSessionLoaded || anonymousSessionIdRef.current === null || isAuthenticated) return
-    saveAnonymousSession(window.sessionStorage, {
+    saveAnonymousSession(anonymousSessionStorage(), {
       id: anonymousSessionIdRef.current,
       messages: anonymousMessages,
     })
@@ -192,11 +163,7 @@ export function useChatSession({
   const visibleMessages = isAuthenticated
     ? [...anonymousMessages, ...durableMessages]
     : anonymousMessages
-  const historyPage = historySearch.trim().length > 0 ? searchedThreads : listedThreads
-  const threadsPage = useStickyRows(historyPage.results)
-  const historyPending = isAuthenticated && !threadsPage.everCached
-  const threads = threadsPage.shown
-  const savedTitle = activeThread?.title ?? (threadId === null ? null : threads.find((thread) => thread.threadId === threadId)?.title)
+  const savedTitle = activeThread?.title
   const firstUserMessage = savedTitle ? undefined : visibleMessages.find((message) => message.role === 'user')
   const threadTitle = savedTitle ?? (firstUserMessage === undefined ? null : textFromParts(firstUserMessage.parts).trim())
   const transcriptPending = isAuthenticated
@@ -207,7 +174,7 @@ export function useChatSession({
     && anonymousMessages.length + 2 > MAX_ANONYMOUS_MESSAGES
   const composerDisabled = busy || authLoading || anonymousMessageLimitReached
 
-  async function sendAnonymous(nextPrompt: string): Promise<void> {
+  async function sendAnonymous(nextPrompt: string, continuation?: SearchContinuation): Promise<void> {
     const userMessage: TranscriptMessage = {
       id: messageId('anonymous-user'),
       role: 'user',
@@ -220,6 +187,22 @@ export function useChatSession({
     if (anonymousRequestSize(requestMessages) > MAX_ANONYMOUS_BYTES) {
       throw new Error('anonymous_size_limit')
     }
+    const transport = new DefaultChatTransport<UIMessage>({
+      api: '/api/chat/anonymous',
+      fetch: fetchAnonymousChat,
+      prepareSendMessagesRequest: ({ messages }) => ({
+        body: {
+          messages: projectAnonymousTranscript(messages.map((message) => ({
+            id: message.id,
+            role: message.role === 'assistant' ? 'assistant' : 'user',
+            parts: message.parts,
+          }))),
+          ...(continuation === undefined ? {} : {
+            continuation: { kind: 'search_next_page' as const, ...continuation },
+          }),
+        },
+      }),
+    })
     setAnonymousMessages(requestMessages)
     const controller = new AbortController()
     abortRef.current?.abort()
@@ -251,17 +234,25 @@ export function useChatSession({
     }
   }
 
-  async function submit(forceNewThread = false, rawPrompt = prompt): Promise<void> {
+  async function submit(forceNewThread = false, rawPrompt = prompt, continuation?: SearchContinuation, preserveDraft = false): Promise<boolean> {
     const nextPrompt = rawPrompt.trim()
     if (nextPrompt.length === 0) {
       setError('Enter a message before sending.')
-      return
+      return false
     }
     if (unicodeLength(nextPrompt) > MAX_PROMPT_CHARACTERS) {
       setError('Messages can be at most 2,000 characters.')
-      return
+      return false
     }
-    if (operationInFlightRef.current) return
+    if (threadId !== null && !isAuthenticated) {
+      setError('Reconnect to your account before sending to this conversation.')
+      return false
+    }
+    if (continuation !== undefined && isAuthenticated && threadId === null) {
+      setError('Open the conversation before loading more results.')
+      return false
+    }
+    if (operationInFlightRef.current) return false
     operationInFlightRef.current = true
     setBusy(true)
     setSending(true)
@@ -275,8 +266,11 @@ export function useChatSession({
           principal: { kind: 'clerk' }, prompt: nextPrompt,
           clientTurnId: globalThis.crypto.randomUUID(),
           ...(threadId === null || forceNewThread ? {} : { threadId }),
+          ...(continuation === undefined ? {} : {
+            continuation: { kind: 'search_next_page' as const, ...continuation },
+          }),
         })
-        setPrompt('')
+        if (!preserveDraft) setPrompt('')
         setStatus('Message sent.')
         if (result.threadId !== threadId) {
           if (!handoffStoredRef.current && anonymousMessages.length > 0) {
@@ -286,12 +280,13 @@ export function useChatSession({
           onThreadCreated(result.threadId)
         }
       } else {
-        await sendAnonymous(nextPrompt)
-        setPrompt('')
+        await sendAnonymous(nextPrompt, continuation)
+        if (!preserveDraft) setPrompt('')
         setStatus('Response complete.')
       }
+      return true
     } catch (caught) {
-      if (caught instanceof Error && caught.name === 'AbortError') return
+      if (caught instanceof Error && caught.name === 'AbortError') return false
       if (String(caught).includes('anonymous_message_limit')) {
         setError('This browser conversation has reached its 12-message limit. Sign in or start a new chat.')
       } else if (String(caught).includes('anonymous_size_limit')) {
@@ -303,6 +298,7 @@ export function useChatSession({
         setBrowseMarketOnError(failure.browseMarket)
       }
       setStatus('')
+      return false
     } finally {
       operationInFlightRef.current = false
       setBusy(false)
@@ -343,7 +339,7 @@ export function useChatSession({
   function startNewChat(): void {
     abortRef.current?.abort()
     if (anonymousSessionIdRef.current !== null) {
-      clearAnonymousSession(window.sessionStorage, anonymousSessionIdRef.current)
+      clearAnonymousSession(anonymousSessionStorage(), anonymousSessionIdRef.current)
       anonymousSessionIdRef.current = crypto.randomUUID()
     }
     setAnonymousMessages([])
@@ -376,52 +372,24 @@ export function useChatSession({
   }
 
   function createHistoryPanel(idPrefix: string, onNavigate?: () => void): ReactNode {
-    return createElement(ChatHistory, {
+    return createElement(ChatHistoryPanelContainer, {
       idPrefix,
       activeThreadId: threadId,
-      threads,
-      search: historySearch,
+      now,
       busy,
-      ...(historyPending ? { historyPending: true } : {}),
-      hasMore: historyPage.status === 'CanLoadMore' || historyPage.status === 'LoadingMore',
-      loadingMore: historyPage.status === 'LoadingMore',
-      onLoadMore: () => { if (historyPage.status === 'CanLoadMore') historyPage.loadMore(PAGE_SIZE) },
-      onSearch: setHistorySearch,
-      onOpen: (targetThreadId) => { onOpenThread(targetThreadId); onNavigate?.() },
+      onOpen: (targetThreadId: string) => { onOpenThread(targetThreadId); onNavigate?.() },
       onNewChat: () => { startNewChat(); onNavigate?.() },
-      onRename: async (targetThreadId, title) => await mutateWithError(async () => {
+      onRename: async (targetThreadId: string, title: string) => await mutateWithError(async () => {
         await renameThread({ threadId: targetThreadId, title })
       }, 'Conversation renamed.'),
-      onDelete: async (targetThreadId) => await mutateWithError(async () => {
+      onDelete: async (targetThreadId: string) => await mutateWithError(async () => {
         await deleteThread({ threadId: targetThreadId })
         if (targetThreadId === threadId) onNewChat()
       }, 'Conversation deleted.'),
     })
   }
 
-  const ownerChatCards = projectOwnerChatCards(serverCards, now, approvalBusy)
 
-  async function decideOwnerCall(callRef: string, decision: 'approve' | 'deny'): Promise<void> {
-    if (approvalBusy) return
-    setApprovalBusy(true)
-    setApprovalProblem('')
-    try {
-      const result = await decideApproval({ callRef, decision })
-      if (result.kind === 'refused') {
-        setApprovalProblem(result.code === 'mfa_reverification_required'
-          ? 'Verify it is you in Account security, then approve this Call again.'
-          : `Call decision refused: ${result.code}. Request a fresh Quote or check Call status.`)
-        return
-      }
-      setStatus(decision === 'approve' ? 'Call approved. Checking its result.' : 'Call declined; it was not dispatched.')
-      if (decision === 'deny') document.getElementById('tool-chat-prompt')?.focus()
-    } catch (cause) {
-      captureClientExceptionOnClient(cause)
-      setApprovalProblem('Could not decide this Call. Check its status before trying again.')
-    } finally {
-      setApprovalBusy(false)
-    }
-  }
 
   return {
     showHistoryRail: isAuthenticated,
@@ -431,8 +399,7 @@ export function useChatSession({
       threadTitle,
       threadId,
       busy,
-      ...(shareState === undefined ? {} : { shareState: shareState.state }),
-      ownerChatEnabled: grantStatus?.enabled === true,
+
       enableProblem,
       onEnableSpending: () => {
         if (busy) return
@@ -491,24 +458,23 @@ export function useChatSession({
     },
     transcript: {
       messages: visibleMessages,
-      ownerChatCards,
-      approvalProblem,
-      onApproveCall: (callRef) => { void decideOwnerCall(callRef, 'approve') },
-      onDenyCall: (callRef) => { void decideOwnerCall(callRef, 'deny') },
-      onFreshQuote: (callRef) => {
-        const card = ownerChatCards.find(value => value.kind === 'pending'
-          ? value.view.callRef === callRef : value.kind === 'unavailable' && value.callRef === callRef)
-        if (card?.kind === 'pending' || card?.kind === 'unavailable') {
-          const toolName = card.kind === 'pending' ? card.view.toolName : card.toolName
-          const inputSummary = card.kind === 'pending' ? card.view.inputSummary : card.inputSummary
-          setPrompt(boundPrompt(`Get a fresh Quote for ${toolName} with input ${inputSummary}`))
-          document.getElementById('tool-chat-prompt')?.focus()
-        }
+      ...(isAuthenticated && threadId !== null ? { ownerChatThreadId: threadId, ownerChatNow: now } : {}),
+      onFreshQuote: (toolName, inputSummary) => {
+        setPrompt(boundPrompt(`Get a fresh Quote for ${toolName} with input ${inputSummary}`))
+        document.getElementById('tool-chat-prompt')?.focus()
       },
       thinking: (sending || activeThread?.busy === true) && !assistantTurnStarted(visibleMessages),
       generating: activeThread?.busy === true,
       clarifyDisabled: composerDisabled,
       onClarifyAnswer: (answer) => { void submit(false, answer) },
+      onContinueSearch: (next) => {
+        void submit(false, `Show more results for ${next.args.query}`, next.args, true)
+      },
+      onRepeatSearch: (query) => {
+        void submit(false, `Search again for ${query}`, undefined, true)
+      },
+      onQuoteTool: (toolRef, input) =>
+        submit(false, `Get a fresh Quote for Tool ${toolRef} with this exact JSON input: ${JSON.stringify(input)}. Use tool.quote and show the terms for my approval. Do not Call the Tool.`, undefined, true),
       ...(transcriptPending ? { pending: true } : {}),
       ...(isAuthenticated && anonymousMessages.length > 0
         ? { handoffAfter: anonymousMessages.length }

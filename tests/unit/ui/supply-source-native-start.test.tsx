@@ -215,6 +215,109 @@ describe('source-native Provider start', () => {
     expect(onSelectCandidate).not.toHaveBeenCalled()
   })
 
+  it('saves owner terms before review and restores exact draft terms without restoring publication authority', async () => {
+    const onSaveTerms = vi.fn().mockResolvedValue({ kind: 'saved' })
+    const onPublish = vi.fn()
+    const view = render(<AeSupplySourceNativeStart businessRef="business:one"
+      initial={selectedOpenApiInitial} onPreview={vi.fn()} onConnect={vi.fn()}
+      onSelectCandidate={vi.fn()} onSaveTerms={onSaveTerms} onPublish={onPublish}
+    />)
+    fireEvent.change(screen.getByLabelText('Tool name'), { target: { value: 'My lookup' } })
+    fireEvent.change(screen.getByLabelText('Description'), { target: { value: 'A tailored public lookup.' } })
+    fireEvent.change(screen.getByLabelText('Category'), { target: { value: 'Data' } })
+    fireEvent.change(screen.getByLabelText('Service area (optional)'), { target: { value: 'Australia' } })
+    fireEvent.change(screen.getByLabelText('Availability (optional)'), { target: { value: 'Weekdays' } })
+    fireEvent.click(screen.getByRole('radio', { name: 'Fixed AUD price' }))
+    fireEvent.change(screen.getByLabelText('AUD price'), { target: { value: '12.50' } })
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Send input data to the Provider' }))
+    fireEvent.click(screen.getByRole('radio', { name: 'Sensitive data' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Continue to review' }))
+    await waitFor(() => expect(onSaveTerms).toHaveBeenCalledWith(expect.objectContaining({
+      businessRef: 'business:one',
+      candidate: expect.objectContaining({ candidateRef: candidate.candidateRef }),
+      terms: {
+        name: 'My lookup', description: 'A tailored public lookup.', category: 'Data',
+        serviceArea: 'Australia', availability: 'Weekdays',
+        pricingKind: 'fixed_aud', price: '12.50', externalEffect: false,
+        dataRelease: true, financialExposure: false, dataClassification: 'sensitive',
+      },
+    })))
+    expect(screen.getByRole('group', { name: 'Tool publication decision' })).toBeTruthy()
+    view.unmount()
+    render(<AeSupplySourceNativeStart businessRef="business:one"
+      initial={{ ...selectedOpenApiInitial, terms: onSaveTerms.mock.calls[0]![0].terms }}
+      onPreview={vi.fn()} onConnect={vi.fn()} onSelectCandidate={vi.fn()}
+      onSaveTerms={onSaveTerms} onPublish={onPublish}
+    />)
+    expect((screen.getByLabelText('Category') as HTMLInputElement).value).toBe('Data')
+    expect((screen.getByLabelText('AUD price') as HTMLInputElement).value).toBe('12.50')
+    expect((screen.getByLabelText('Tool name') as HTMLInputElement).value).toBe('My lookup')
+    expect((screen.getByLabelText('Service area (optional)') as HTMLInputElement).value).toBe('Australia')
+    expect(screen.getByRole('checkbox', { name: 'Send input data to the Provider' }).getAttribute('aria-checked')).toBe('true')
+    expect(screen.getByRole('radio', { name: 'Sensitive data' }).getAttribute('aria-checked')).toBe('true')
+    fireEvent.click(screen.getByRole('button', { name: 'Continue to review' }))
+    await screen.findByRole('group', { name: 'Tool publication decision' })
+    expect(screen.getByRole('checkbox', { name: 'I am authorised to publish this service' }).getAttribute('aria-checked')).toBe('false')
+    fireEvent.click(screen.getByRole('button', { name: 'Submit for validation' }))
+    expect(screen.getByText('Confirm all three publication statements before submitting.')).toBeTruthy()
+    expect(onPublish).not.toHaveBeenCalled()
+  })
+
+  it('keeps entered terms editable and does not publish when saving the review draft fails', async () => {
+    const onSaveTerms = vi.fn().mockRejectedValueOnce(new Error('injected draft write failure'))
+      .mockResolvedValueOnce({ kind: 'saved' })
+    const onPublish = vi.fn()
+    render(<AeSupplySourceNativeStart businessRef="business:one"
+      initial={selectedOpenApiInitial} onPreview={vi.fn()} onConnect={vi.fn()}
+      onSelectCandidate={vi.fn()} onSaveTerms={onSaveTerms} onPublish={onPublish}
+    />)
+    fireEvent.change(screen.getByLabelText('Category'), { target: { value: 'Data' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Continue to review' }))
+    await screen.findByText('Could not save these terms. Keep editing or try Continue to review again.')
+    expect((screen.getByLabelText('Category') as HTMLInputElement).value).toBe('Data')
+    expect(screen.queryByRole('group', { name: 'Tool publication decision' })).toBeNull()
+    expect(onPublish).not.toHaveBeenCalled()
+    fireEvent.click(screen.getByRole('button', { name: 'Continue to review' }))
+    await screen.findByRole('group', { name: 'Tool publication decision' })
+    expect(onSaveTerms).toHaveBeenCalledTimes(2)
+  })
+
+  it.each([
+    ['authorization_denied', 'Sign in again, return to this saved Tool draft, then continue.'],
+    ['candidate_changed', 'Source changed. Edit Source and find the current Tool again.'],
+  ])('keeps terms editable and gives a recoverable exit when saving refuses %s', async (reason, message) => {
+    const onSaveTerms = vi.fn().mockResolvedValue({ kind: 'refused', reason })
+    const onPublish = vi.fn()
+    render(<AeSupplySourceNativeStart businessRef="business:one"
+      initial={selectedOpenApiInitial} onPreview={vi.fn()} onConnect={vi.fn()}
+      onSelectCandidate={vi.fn()} onSaveTerms={onSaveTerms} onPublish={onPublish}
+    />)
+    fireEvent.change(screen.getByLabelText('Category'), { target: { value: 'Research' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Continue to review' }))
+    await screen.findByText(message)
+    expect((screen.getByLabelText('Category') as HTMLInputElement).value).toBe('Research')
+    expect(screen.getByRole('button', { name: 'Edit Source' })).toBeTruthy()
+    expect(screen.queryByRole('group', { name: 'Tool publication decision' })).toBeNull()
+    expect(onPublish).not.toHaveBeenCalled()
+  })
+
+  it('gives an unsupported OpenAPI candidate its source-specific correction', () => {
+    render(<AeSupplySourceNativeStart
+      businessRef="business:one"
+      initial={{
+        ...selectedOpenApiInitial,
+        candidateRef: '',
+        preview: {
+          ...selectedOpenApiInitial.preview,
+          candidates: [{ ...candidate, disposition: { kind: 'unsupported', reason: 'transport_unsupported' } }],
+        },
+      }}
+      onPreview={vi.fn()} onConnect={vi.fn()} onSelectCandidate={vi.fn()} onPublish={vi.fn()}
+    />)
+    expect(screen.getByText('Declare a single public HTTPS server URL for this operation.')).toBeTruthy()
+    expect((screen.getByRole('radio', { name: 'Select Reference lookup' }) as HTMLButtonElement).disabled).toBe(true)
+  })
+
   it('discovers a native source and submits the selected Tool without protocol reconstruction fields', async () => {
     const onPreview = vi.fn().mockResolvedValue({
       kind: 'ready',
@@ -342,6 +445,38 @@ describe('source-native Provider start', () => {
     selection.resolve({ kind: 'saved' })
     expect(await screen.findByRole('heading', { name: 'Terms' })).toBeTruthy()
     expect((screen.getByLabelText('Tool name') as HTMLInputElement).value).toBe('Reference lookup')
+  })
+
+  it('shows the validation refusal, preserves the draft fields and permits a corrected retry', async () => {
+    const onPublish = vi.fn()
+      .mockResolvedValueOnce({ kind: 'refused', reason: 'admit_output_no_guaranteed_field' })
+      .mockResolvedValueOnce({
+        kind: 'submitted', publicationRef: 'publication:lookup',
+        publicationRevision: 1, toolRef: 'tool:lookup', state: 'Submitted',
+      })
+    render(<AeSupplySourceNativeStart businessRef="business:one" initial={selectedOpenApiInitial}
+      onPreview={vi.fn()} onConnect={vi.fn()} onSelectCandidate={vi.fn()} onPublish={onPublish} />)
+
+    fireEvent.change(screen.getByLabelText('Category'), { target: { value: 'Research' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Continue to review' }))
+    for (const name of [
+      'I am authorised to publish this service',
+      'The information is accurate',
+      'Publish after validation succeeds',
+    ]) fireEvent.click(screen.getByRole('checkbox', { name }))
+    fireEvent.click(screen.getByRole('button', { name: 'Submit for validation' }))
+    expect(await screen.findByText(/always-present output field/)).toBeTruthy()
+    expect((screen.getByRole('button', { name: 'Submit for validation' }) as HTMLButtonElement).disabled).toBe(false)
+    const firstSubmission = onPublish.mock.calls[0]?.[0]
+    if (firstSubmission === undefined) throw new Error('first_publication_submission_missing')
+    const firstKey = firstSubmission.idempotencyKey
+    fireEvent.click(screen.getByRole('button', { name: 'Submit for validation' }))
+    await waitFor(() => expect(onPublish).toHaveBeenCalledTimes(2))
+    const retrySubmission = onPublish.mock.calls[1]?.[0]
+    if (retrySubmission === undefined) throw new Error('retry_publication_submission_missing')
+    expect(retrySubmission.idempotencyKey).not.toBe(firstKey)
+    expect(retrySubmission.presentation.category).toBe('Research')
+    expect(await screen.findByText(/submitted for validation/i)).toBeTruthy()
   })
 
   it('locks an uncertain publication command and keeps its attested facts immutable', async () => {

@@ -1,6 +1,7 @@
 import type { OwnerSupplySourceAssessmentInput } from '@/modules/capability-supply/source-first-owner'
+import type { SupplyIntegrationDraftTerms } from '@/modules/capability-supply/integration-draft'
 import type { SupplySourceAssessment } from '@/modules/capability-supply/source-first-owner'
-import { REASON_COPY, REASON_COPY_FALLBACK } from '@/content/reason-copy'
+import { REASON_COPY } from '@/content/reason-copy'
 import { degrade } from '@/lib/observability/degrade'
 import { isRecord } from '@/modules/common/is-record'
 import type { ProviderConnectionOwnerProjection } from '@/modules/capability-supply/provider-connection'
@@ -102,6 +103,7 @@ export type SupplyNativeStartProps = Readonly<{
     preview?: Extract<SupplySourcePreview, { kind: 'ready' }>
     candidateRef: string
     connectionRef?: string
+    terms?: SupplyIntegrationDraftTerms
   }>
   onAssess?: (input: OwnerSupplySourceAssessmentInput, signal: AbortSignal) => Promise<SupplySourceAssessment>
   onPreview: (source: SupplySourceInput, idempotencyKey: string) => Promise<SupplySourcePreview>
@@ -121,6 +123,14 @@ export type SupplyNativeStartProps = Readonly<{
   }>) => Promise<Readonly<{ kind: 'saved' | 'replayed' }> | Readonly<{ kind: 'refused'; reason: string }>>
   onDraftSaved?: (candidateRef: string, connectionRef?: string) => Promise<void> | void
   onPublish: (input: PublishSupplyToolV2Input) => Promise<SupplyPublishResult>
+  onSaveTerms?: (input: Readonly<{
+    businessRef: string
+    source: SupplySourceInput
+    sourceDigest: string
+    sourceRevision: string
+    candidate: Pick<SupplyToolCandidate, 'candidateRef' | 'sourceSelector' | 'title' | 'description'>
+    terms: SupplyIntegrationDraftTerms
+  }>) => Promise<Readonly<{ kind: 'saved' | 'replayed' }> | Readonly<{ kind: 'refused'; reason: string }>>
 }>
 
 /** The connection adapter a source of this kind requires before it can be called. */
@@ -294,7 +304,8 @@ export function publicationPriceSummary(pricing: PublishSupplyToolV2Input['prici
 }
 
 export function publicationError(reason: string): string {
-  return REASON_COPY[reason] ?? REASON_COPY_FALLBACK
+  if (reason === 'source_unavailable') return 'Could not read the source during validation. Check that the endpoint is reachable, then retry.'
+  return REASON_COPY[reason] ?? `Submission refused (${reason}). Check this Tool’s source and publication details, then retry.`
 }
 
 /** Validates the "Review and submit" fields in the exact order the form checks them, before the input is built. */
@@ -383,4 +394,17 @@ export function buildPublishInput(input: Readonly<{
       publishAfterSuccessfulValidation: true,
     },
   }
+}
+
+export function sourceSummary(source: SupplySourceInput | undefined): string {
+  if (source === undefined) return 'Source details unavailable'
+  const label = source.kind === 'openapi' ? 'OpenAPI' : source.kind === 'mcp' ? 'MCP' : source.kind === 'agent_plugin' ? 'Agent Plugin' : 'x402'
+  const location = source.kind === 'openapi'
+    ? source.definitionUrl
+    : source.kind === 'mcp'
+      ? source.serverUrl ?? source.registryName ?? 'Selected MCP source'
+      : source.kind === 'x402'
+        ? source.resourceUrl
+        : 'Uploaded manifests'
+  return `${label} · ${location} · ${source.environment === 'sandbox' ? 'Sandbox' : 'Production'}`
 }

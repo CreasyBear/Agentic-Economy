@@ -11,6 +11,7 @@ export const chatTables = {
     updatedAt: v.number(),
     activePromptMessageId: v.optional(v.string()),
     activeStartedAt: v.optional(v.number()),
+    searchCursorSigningKey: v.optional(v.string()),
   })
     .index('by_threadId', ['threadId'])
     .index('by_ownerId_and_updatedAt', ['ownerId', 'updatedAt'])
@@ -36,6 +37,8 @@ export const chatTables = {
     ),
     sequence: v.optional(v.number()),
     promptMessageId: v.optional(v.string()),
+    searchContinuation: v.optional(v.object({ query: v.string(), cursor: v.string(), inputJson: v.string() })),
+    issuedSearchContinuations: v.optional(v.array(v.object({ query: v.string(), cursor: v.string(), inputJson: v.string(), token: v.string() }))),
     cancelRequestedAt: v.optional(v.number()),
     inFlightCallRefs: v.optional(v.array(v.string())),
     callRefs: v.optional(v.array(v.string())),

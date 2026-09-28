@@ -9,14 +9,18 @@ import {
   recordOwnerChatCallArgs, recordOwnerChatCallResult,
   authorizePayableToolArgs, authorizePayableToolResult,
   finishTurnArgs, finishTurnResult,
+  issueSearchContinuationArgs, issueSearchContinuationResult,
+  readSearchContinuationArgs, readSearchContinuationResult,
 } from './lib/chat/turns/contracts'
 import {
   ownerChatGrantStatusHandler, readTurnHandler, readDeltasHandler, authorizePayableToolHandler,
 } from './lib/chat/turns/reads'
 import {
   startTurnHandler, cancelTurnHandler, recordOwnerChatCallHandler, finishTurnHandler,
+  issueSearchContinuation,
 } from './lib/chat/turns/writes'
 import { authorizeKeyTurnGeneration as authorizeKeyGenerationHandler } from './lib/chat/turns/handlers'
+import { readSearchContinuation } from './lib/chat/turns/searchContinuation'
 
 export const ownerChatGrantStatus = query({
   args: ownerChatGrantStatusArgs,
@@ -70,4 +74,16 @@ export const finishTurn = internalMutation({
   args: finishTurnArgs,
   returns: finishTurnResult,
   handler: finishTurnHandler,
+})
+
+export const issueSearchPage = internalMutation({
+  args: issueSearchContinuationArgs,
+  returns: issueSearchContinuationResult,
+  handler: issueSearchContinuation,
+})
+
+export const readSearchPage = internalQuery({
+  args: readSearchContinuationArgs,
+  returns: readSearchContinuationResult,
+  handler: readSearchContinuation,
 })

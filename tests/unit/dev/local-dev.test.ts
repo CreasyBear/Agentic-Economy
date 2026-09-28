@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
@@ -10,6 +10,7 @@ import {
   buildConvexInitArgs,
   buildConvexSelectArgs,
   buildStages,
+  configureLocalChatShareSecret,
   childExitStatus,
   convexChildEnv,
   convexDevTimeoutMs,
@@ -31,7 +32,9 @@ import {
   releaseRevision,
   resolveConvexUrl,
   resolveEffectiveConvexUrl,
+  runOptionalStages,
   runStages,
+  syncLocalChatShareSecret,
   stalePrintedUrlWarning,
   shouldSpawnConvex,
   signalProcessTree,
@@ -331,29 +334,15 @@ describe('convex dev timeout', () => {
 })
 
 describe('launcher flags', () => {
-  it('takes its own flags and forwards everything else to Vite', () => {
-    expect(parseLauncherFlags([
-      '--skip-scan',
-      '--port',
-      '4100',
-      '--no-doctor',
-      '--x',
-      '--skip-seed',
-    ])).toEqual({
-      skipScan: true,
-      skipSeed: true,
+  it('takes its doctor flag and forwards everything else to Vite', () => {
+    expect(parseLauncherFlags(['--port', '4100', '--no-doctor', '--x'])).toEqual({
       runDoctor: false,
       viteArgs: ['--port', '4100', '--x'],
     })
   })
 
-  it('defaults to a full staged start with no Vite overrides', () => {
-    expect(parseLauncherFlags([])).toEqual({
-      skipScan: false,
-      skipSeed: false,
-      runDoctor: true,
-      viteArgs: [],
-    })
+  it('defaults to doctor with no Vite overrides', () => {
+    expect(parseLauncherFlags([])).toEqual({ runDoctor: true, viteArgs: [] })
     expect(parseLauncherFlags(['--host', '0.0.0.0']).viteArgs).toEqual(['--host', '0.0.0.0'])
   })
 })
@@ -555,17 +544,13 @@ describe('startup stages', () => {
     expect(lines[1]).toMatch(/^fix: /u)
   })
 
-  it('prints the reason for both declared and runtime skips', async () => {
+  it('prints the reason when a stage is already complete', async () => {
     const { lines, log } = recorder()
     const outcome = await runStages([
-      { id: 'authority', skip: true, skipReason: '--skip-seed', run: async () => ({ ok: true }) },
       { id: 'scan', run: async () => ({ ok: true, skipped: true, reason: 'catalogue already complete' }) },
     ] satisfies Stage[], { log })
-    expect(outcome).toEqual({ ok: true, ran: [], skipped: ['authority', 'scan'] })
-    expect(lines).toEqual([
-      'stage authority skipped: --skip-seed',
-      'stage scan skipped: catalogue already complete',
-    ])
+    expect(outcome).toEqual({ ok: true, ran: [], skipped: ['scan'] })
+    expect(lines).toEqual(['stage scan skipped: catalogue already complete'])
   })
 })
 
@@ -581,17 +566,17 @@ describe('x402-era stage set', () => {
     }
   }
 
-  it('orders identities, authority, scan and the sandbox tool', () => {
+  it('defines independent post-Vite jobs including the admitted FX refresh', () => {
     const { run } = stageRun()
     expect(buildStages({ run }).map((stage) => stage.id))
-      .toEqual(['identities', 'authority', 'scan', 'sandbox-tool'])
+      .toEqual(['identities', 'authority', 'scan', 'sandbox-tool', 'fx-refresh'])
   })
 
   it('starts a refresh only when the catalogue is not already complete', async () => {
     const complete = stageRun({ 'x402DirectoryIndex:status': { ok: true, stdout: completeStatus } })
     const { lines, log } = recorder()
     expect(await runStages(buildStages({ run: complete.run }), { log }))
-      .toEqual({ ok: true, ran: ['identities', 'authority', 'sandbox-tool'], skipped: ['scan'] })
+      .toEqual({ ok: true, ran: ['identities', 'authority', 'sandbox-tool', 'fx-refresh'], skipped: ['scan'] })
     expect(complete.calls).not.toContain('x402DirectoryIndexRefresh:start')
     expect(lines).toEqual([
       'stage scan skipped: catalogue already complete',
@@ -606,6 +591,7 @@ describe('x402-era stage set', () => {
       'x402DirectoryIndex:status',
       'x402DirectoryIndexRefresh:start',
       'devSeed:publishSandboxTool',
+      'workloadCron:refreshReferenceRate',
     ])
   })
 
@@ -629,31 +615,74 @@ describe('x402-era stage set', () => {
     expect(lines).toEqual(['sandbox Tool published under owner account'])
   })
 
-  it('honours --skip-scan and --skip-seed', async () => {
-    const { calls, run } = stageRun()
-    const { lines, log } = recorder()
-    expect(await runStages(buildStages({ run, skipScan: true, skipSeed: true }), { log }))
-      .toEqual({ ok: true, ran: ['identities'], skipped: ['authority', 'scan', 'sandbox-tool'] })
-    expect(calls).toEqual([
-      'workloadCron:ensurePlatformWorkloadIdentities',
-    ])
-    expect(lines).toEqual([
-      'stage authority skipped: --skip-seed',
-      'stage scan skipped: --skip-scan',
-      'stage sandbox-tool skipped: --skip-seed',
-    ])
-  })
 
-  it('fails the seed stages by name when the mutation does not exist', async () => {
-    const { run } = stageRun({
+  it('keeps the stack usable and starts every other job when a seed fails', async () => {
+    const { calls, run } = stageRun({
       'devSeed:seedSandboxSpendingPolicy': { ok: false, stderr: 'Could not find function for "devSeed:seedSandboxSpendingPolicy"' },
     })
     const { lines, log } = recorder()
-    const outcome = await runStages(buildStages({ run }), { log })
-    expect(outcome.ok).toBe(false)
-    expect(outcome.id).toBe('authority')
-    expect(lines[0]).toContain('devSeed:seedSandboxSpendingPolicy')
-    expect(lines[1]).toContain('devSeed:seedSandboxSpendingPolicy')
+    const outcome = await runOptionalStages(buildStages({ run }), { log })
+    expect(outcome.map(({ id, ok }) => [id, ok])).toEqual([
+      ['identities', true],
+      ['authority', false],
+      ['scan', true],
+      ['sandbox-tool', true],
+      ['fx-refresh', true],
+    ])
+    expect(calls).toContain('devSeed:publishSandboxTool')
+    expect(calls).toContain('x402DirectoryIndexRefresh:start')
+    expect(calls).toContain('workloadCron:refreshReferenceRate')
+    expect(lines).toContain('stage authority failed: Could not find function for "devSeed:seedSandboxSpendingPolicy"')
+    expect(lines.some((line) => line.startsWith('fix: '))).toBe(true)
+  })
+
+  it('reports an identity outage without suppressing independent jobs', async () => {
+    const { calls, run } = stageRun({
+      'workloadCron:ensurePlatformWorkloadIdentities': { ok: false, stderr: 'identity unavailable' },
+    })
+    const { lines, log } = recorder()
+    expect((await runOptionalStages(buildStages({ run }), { log })).find(({ id }) => id === 'identities')?.ok).toBe(false)
+    expect(calls).toContain('devSeed:publishSandboxTool')
+    expect(calls).not.toContain('workloadCron:refreshReferenceRate')
+    expect(lines).toContain('stage fx-refresh skipped: identities failed')
+    expect(lines).toContain('stage identities failed: identity unavailable')
+  })
+
+  it('starts unrelated work while identity is pending, then refreshes FX after successful provisioning', async () => {
+    let finishIdentity: ((outcome: StageOutcome) => void) | undefined
+    const identity = new Promise<StageOutcome>((resolve) => { finishIdentity = resolve })
+    const calls: string[] = []
+    const stages = buildStages({
+      run: async (reference) => {
+        calls.push(reference)
+        return reference === 'workloadCron:ensurePlatformWorkloadIdentities' ? identity : { ok: true }
+      },
+    })
+    const started = runOptionalStages(stages, { log: () => {} })
+    expect(calls).toContain('devSeed:publishSandboxTool')
+    expect(calls).not.toContain('workloadCron:refreshReferenceRate')
+    finishIdentity?.({ ok: true })
+    await started
+    expect(calls).toContain('workloadCron:refreshReferenceRate')
+  })
+
+  it('does not spawn a delayed FX refresh after shutdown', async () => {
+    let finishIdentity: ((outcome: StageOutcome) => void) | undefined
+    const identity = new Promise<StageOutcome>((resolve) => { finishIdentity = resolve })
+    const calls: string[] = []
+    const { lines, log } = recorder()
+    let active = true
+    const started = runOptionalStages(buildStages({
+      run: async (reference) => {
+        calls.push(reference)
+        return reference === 'workloadCron:ensurePlatformWorkloadIdentities' ? identity : { ok: true }
+      },
+    }), { log }, () => active)
+    active = false
+    finishIdentity?.({ ok: true })
+    await started
+    expect(calls).not.toContain('workloadCron:refreshReferenceRate')
+    expect(lines).toContain('stage fx-refresh skipped: stack stopped')
   })
 
   it('reads the catalogue completeness from the status query result', () => {
@@ -662,6 +691,57 @@ describe('x402-era stage set', () => {
     expect(isCatalogueComplete(JSON.stringify({ kind: 'unavailable', refreshState: 'complete' }))).toBe(false)
     expect(isCatalogueComplete('not json at all')).toBe(false)
     expect(isCatalogueComplete('')).toBe(false)
+  })
+})
+
+describe('local chat share secret', () => {
+  let directory = ''
+  afterEach(() => {
+    if (directory !== '') rmSync(directory, { recursive: true, force: true })
+    directory = ''
+  })
+
+  it('generates once and persists privately without waiting for a Convex env push', () => {
+    directory = mkdtempSync(join(tmpdir(), 'ae-local-chat-'))
+    const env = { CONVEX_URL: 'http://127.0.0.1:3210' }
+    const first = configureLocalChatShareSecret({ cwd: directory, env })
+    const second = configureLocalChatShareSecret({ cwd: directory, env })
+    expect(first).toMatch(/^[0-9a-f]{64}$/u)
+    expect(second).toBe(first)
+    expect(readFileSync(join(directory, '.env.development.local'), 'utf8')).toBe(`AE_CHAT_SHARE_SECRET=${first}\n`)
+  })
+
+  it('syncs an existing local value to Convex and keeps a failed push diagnostic nonfatal', async () => {
+    directory = mkdtempSync(join(tmpdir(), 'ae-local-chat-'))
+    const existing = 'x'.repeat(32)
+    writeFileSync(join(directory, '.env.development.local'), `AE_CHAT_SHARE_SECRET=${existing}\n`)
+    const secret = configureLocalChatShareSecret({ cwd: directory, env: { CONVEX_URL: 'http://127.0.0.1:3210' } })
+    const values: string[] = []
+    expect(await syncLocalChatShareSecret({
+      secret,
+      cwd: directory,
+      runEnvSet: async (value) => { values.push(value) },
+      log: () => {},
+    })).toBe(true)
+    expect(values).toEqual([existing])
+    const { lines, log } = recorder()
+    expect(await syncLocalChatShareSecret({
+      secret,
+      cwd: directory,
+      runEnvSet: async () => { throw new Error(`secret ${secret} leaked in error`) },
+      log,
+    })).toBe(false)
+    expect(lines).toEqual(['stage chat-share-secret failed: Convex env set did not complete; sharing unavailable until next boot'])
+    expect(lines.join('')).not.toContain(secret)
+    expect(configureLocalChatShareSecret({ cwd: directory, env: { CONVEX_URL: 'http://127.0.0.1:3210' } })).toBe(existing)
+  })
+
+  it('rejects short configured values rather than replacing them', () => {
+    directory = mkdtempSync(join(tmpdir(), 'ae-local-chat-'))
+    expect(() => configureLocalChatShareSecret({
+      cwd: directory,
+      env: { CONVEX_URL: 'http://127.0.0.1:3210', AE_CHAT_SHARE_SECRET: 'short' },
+    })).toThrow('local_chat_share_secret_too_short')
   })
 })
 

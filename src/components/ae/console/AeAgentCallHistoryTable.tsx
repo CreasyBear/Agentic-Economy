@@ -51,12 +51,12 @@ export function AeAgentCallHistoryTable({
     () => [
       {
         id: 'task',
-        accessorFn: (item) => item.tool?.label ?? item.toolLabel,
+        accessorFn: (item) => item.toolLabel,
         header: ({ column }) => <AeOperatorSortableHeader label="Tool / Task" column={column} />,
         cell: ({ row }) => (
           <div className="flex flex-col gap-0.5">
             <span className="font-medium text-foreground text-xs">
-              {row.original.tool?.label ?? row.original.toolLabel}
+              {row.original.toolLabel}
             </span>
             <span className="font-mono text-[11px] text-muted-foreground truncate max-w-[200px]">
               {row.original.toolRef}
@@ -66,11 +66,11 @@ export function AeAgentCallHistoryTable({
       },
       {
         id: 'provider',
-        accessorFn: (item) => item.tool?.provider ?? item.providerRef,
+        accessorFn: (item) => item.providerRef,
         header: ({ column }) => <AeOperatorSortableHeader label="Provider" column={column} />,
         cell: ({ row }) => (
           <span className="text-xs text-muted-foreground">
-            {row.original.tool?.provider ?? row.original.providerRef}
+            {row.original.providerRef}
           </span>
         ),
       },

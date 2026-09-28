@@ -4,6 +4,7 @@ import { parseBusinessSlug } from '@/modules/business/public'
 import type { PublicToolRef } from '@/modules/capability-supply/public'
 import type { AdminToolVersionView } from '@/lib/operator/admin-console/views'
 import type { QueryCtx } from '../../../_generated/server'
+import { readSourceAuthorityState } from './sourceAuthority'
 
 const publicationDispositionValue = v.union(
   v.literal('current'),
@@ -14,6 +15,7 @@ const publicationDispositionValue = v.union(
 const sourceAuthorityStateValue = v.union(
   v.literal('verified'),
   v.literal('review_required'),
+  v.literal('unset'),
 )
 
 export const adminToolVersionViewValue = v.object({
@@ -64,7 +66,7 @@ export async function readAdminToolVersionView(
     revision: publication.revision,
     disposition: publication.disposition,
     businessSlug: parsedSlug.slug,
-    sourceAuthorityState: publication.sourceAuthorityState ?? 'review_required',
+    sourceAuthorityState: readSourceAuthorityState(publication),
     admissionCaseRef: admissionCase?.caseRef ?? null,
     readinessValidUntil: publication.readinessValidUntil ?? null,
   }

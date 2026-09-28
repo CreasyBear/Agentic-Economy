@@ -202,6 +202,31 @@ describe('provider consequence Convex-to-Vercel bridge', () => {
     })
     expect(fetchMock).toHaveBeenCalledTimes(2)
   })
+  it('bounds the effect bridge and retains unknown outcome after its response stalls', async () => {
+    const timeout = AbortSignal.timeout.bind(AbortSignal)
+    const deadline = vi.spyOn(AbortSignal, 'timeout').mockImplementation(() => timeout(20))
+    const fetchMock = vi.fn<typeof globalThis.fetch>(async (_url, init) => {
+      if (fetchMock.mock.calls.length === 1) return signingResponse()
+      return await new Promise<Response>((_resolve, reject) => {
+        init?.signal?.addEventListener('abort', () => reject(init.signal?.reason), { once: true })
+      })
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    try {
+      const result = await invokeProviderConsequenceViaVercel(context(issued()), {
+        invocation: createTestProviderInvocation({ now: NOW }),
+        requestDigest: DIGEST('a'),
+      })
+      expect(result).toMatchObject({
+        disposition: 'unknown', releaseStarted: true,
+        failureCode: 'provider_consequence_bridge_unknown',
+      })
+      expect(fetchMock).toHaveBeenCalledTimes(2)
+    } finally {
+      deadline.mockRestore()
+    }
+  })
+
 
   it('binds provider-direct x402 to a distinct payment pointer and fails before journal or transport when absent', async () => {
     const routeInvocation = createTestProviderInvocation({ now: NOW })

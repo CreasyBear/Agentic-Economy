@@ -1,3 +1,5 @@
+import { ErrorBoundary } from '@sentry/react'
+import { Link } from '@tanstack/react-router'
 import { AeOperatorPage } from '@/components/ae/layout/AeOperatorPage'
 import { AePageState } from '@/components/ae/layout/AePageState'
 import { AeSection } from '@/components/ae/layout/AeSection'
@@ -5,11 +7,11 @@ import { AdminObjectSearchForm } from '../object-search/components/AdminObjectSe
 import { useAdminObjectSearch } from '../object-search/useAdminObjectSearch'
 import { AdminOverviewPageSkeleton } from './AdminOverviewPageSkeleton'
 import { ConfigurationBanner } from './components/ConfigurationBanner'
-import { HeadlineStrip } from './components/HeadlineStrip'
-import { OldestExceptions } from './components/OldestExceptions'
+import { OverviewExceptionsSection } from './components/OverviewExceptionsSection'
+import { OverviewMetricsSection } from './components/OverviewMetricsSection'
 import { RecentlyViewed } from './components/RecentlyViewed'
 import { ADMIN_OVERVIEW_COPY, type AdminOverviewPageProps } from './overview.contracts'
-import { useAdminOverview } from './useAdminOverview'
+import { useAdminOverview, useOverviewExceptions, useOverviewMetrics } from './useAdminOverview'
 
 export function AdminOverviewPage({ formance }: AdminOverviewPageProps) {
   const data = useAdminOverview(formance)
@@ -36,11 +38,25 @@ export function AdminOverviewPage({ formance }: AdminOverviewPageProps) {
           <AeSection title={ADMIN_OVERVIEW_COPY.searchTitle} description={ADMIN_OVERVIEW_COPY.searchDescription}>
             <AdminObjectSearchForm state={search.state} onSubmit={(input) => void search.submit(input)} />
           </AeSection>
-          <OldestExceptions rows={data.exceptions} unavailable={data.exceptionsUnavailable} />
-          <HeadlineStrip headline={data.headline} />
+          <ErrorBoundary fallback={<AeSection title={ADMIN_OVERVIEW_COPY.exceptionsTitle}><p role="status">{ADMIN_OVERVIEW_COPY.exceptionsUnavailable}</p><Link to="/admin/exceptions">Open queues</Link></AeSection>}>
+            <OverviewExceptionsContainer />
+          </ErrorBoundary>
+          <ErrorBoundary fallback={<AeSection title={ADMIN_OVERVIEW_COPY.metricsTitle}><p role="status">{ADMIN_OVERVIEW_COPY.metricsUnavailable}</p><Link to="/admin/metrics">Open Metrics</Link></AeSection>}>
+            <OverviewMetricsContainer />
+          </ErrorBoundary>
           <RecentlyViewed rows={data.recent} />
         </div>
       )}
     </AeOperatorPage>
   )
+}
+
+function OverviewExceptionsContainer() {
+  const state = useOverviewExceptions()
+  return <OverviewExceptionsSection state={state} />
+}
+
+function OverviewMetricsContainer() {
+  const state = useOverviewMetrics()
+  return <OverviewMetricsSection state={state} />
 }

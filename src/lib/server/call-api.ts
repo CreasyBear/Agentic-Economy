@@ -339,6 +339,7 @@ export async function authenticateCallGateway(
   const resolvePrincipal = options.resolvePrincipal
     ?? (options.authenticate === undefined ? resolveAgentAccessPrincipal(request, body, correlationId) : undefined)
   const admitted = await authenticateAgentAccess({
+    request,
     ...(resolvePrincipal === undefined ? {} : { resolvePrincipal }),
     ...(options.authenticate === undefined ? {} : { authenticate: options.authenticate }),
     consequenceResource: 'surface:http:tools-call',

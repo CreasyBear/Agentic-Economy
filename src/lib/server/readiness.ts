@@ -320,7 +320,14 @@ function readDeploymentConfig(env: StringEnvironment, nodeMajor?: number): Deplo
         reason: 'invalid_response',
       })
     }
-    if (!deployment.ok) return { kind: 'failed', code: 'deployment_manifest_invalid' }
+    const sharedScopes: readonly string[] = ['canonical', 'convex', 'convex-auth', 'clerk', 'source-write', 'browser-security', 'runtime']
+    if (deployment.findings.some((finding) =>
+      sharedScopes.includes(finding.scope)
+      || finding.names.some((name) => name === 'CLERK_JWT_ISSUER_DOMAIN' || name === 'AE_CANONICAL_HOST_ALLOWLIST')
+      || finding.kind === 'forbidden'
+      || finding.code === 'service_mode_invalid'
+      || finding.code === 'convex_source_ambiguous'
+    )) return { kind: 'failed', code: 'deployment_manifest_invalid' }
   }
   return { kind: 'ready', convexUrl: convexUrl.href }
 }

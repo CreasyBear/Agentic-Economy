@@ -14,11 +14,11 @@ export async function anonymousChatHandler(ctx: ActionCtx, request: Request): Pr
       name: 'chat-anonymous',
       key,
     }),
-    stream: async (messages, signal) => {
+    stream: async (messages, signal, continuation) => {
       const config = anonymousChatGatewayConfig()
       if (config.apiKey === undefined) return jsonError(503, 'chat_model_unconfigured')
       try {
-        return await streamAnonymousChatResponse(ctx, messages, openRouterModel(config, config.model), signal)
+        return await streamAnonymousChatResponse(ctx, messages, openRouterModel(config, config.model), signal, continuation)
       } catch (error) {
         console.error('[chat-anonymous] stream failed', sanitizeTelemetryError(error))
         return jsonError(503, 'chat_stream_failed')

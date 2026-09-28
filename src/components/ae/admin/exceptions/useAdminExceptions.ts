@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { useNavigate } from '@tanstack/react-router'
 import { usePaginatedQuery, useQuery } from 'convex/react'
 
@@ -19,6 +20,7 @@ import {
 
 export function useAdminExceptions({ search, onSearchChange }: AdminExceptionsPageProps) {
   const navigate = useNavigate()
+  const [scanRequests, setScanRequests] = useState(0)
   const kind = search.kind ?? 'uncertain_call'
   const partition = search.partition !== undefined && ADMIN_EXCEPTION_PARTITIONS[kind].includes(search.partition)
     ? search.partition : ADMIN_EXCEPTION_PARTITIONS[kind][0]
@@ -53,17 +55,27 @@ export function useAdminExceptions({ search, onSearchChange }: AdminExceptionsPa
           complete: pagination.status === 'Exhausted',
           overview,
           rows,
+          scanRequests,
           resolutions: resolutions.map(toResolutionRowModel),
           selectedSourceUnavailable: selectedOverview?.unavailable ?? false,
           paginationStatus: pagination.status,
-          loadMore: () => pagination.loadMore(50),
+          loadMore: () => {
+            pagination.loadMore(50)
+            setScanRequests((count) => count + 1)
+          },
         }
 
   return {
     data,
     selectedRow,
-    onSelectKind: (nextKind: AdminExceptionKind) => onSearchChange({ kind: nextKind }),
-    onSelectPartition: (nextPartition: AdminExceptionPartition) => onSearchChange({ kind, partition: nextPartition }),
+    onSelectKind: (nextKind: AdminExceptionKind) => {
+      setScanRequests(0)
+      onSearchChange({ kind: nextKind })
+    },
+    onSelectPartition: (nextPartition: AdminExceptionPartition) => {
+      setScanRequests(0)
+      onSearchChange({ kind, partition: nextPartition })
+    },
     onOpen: (row: AdminExceptionRowModel) => {
       if (row.kind === 'uncertain_call' || row.kind === 'source_authority_review') {
         void navigate({ href: row.href })

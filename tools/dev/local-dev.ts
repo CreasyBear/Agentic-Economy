@@ -1,5 +1,6 @@
+import { randomBytes } from 'node:crypto'
 import { execFileSync, spawn } from 'node:child_process'
-import { existsSync, readFileSync } from 'node:fs'
+import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { constants as osConstants } from 'node:os'
 import { delimiter, dirname, resolve as resolvePath } from 'node:path'
 import { parseEnv } from 'node:util'
@@ -215,8 +216,6 @@ export function convexExitFix(output: string, env: EnvRecord = {}): string {
 }
 
 type LauncherFlags = {
-  skipScan: boolean
-  skipSeed: boolean
   runDoctor: boolean
   viteArgs: string[]
 }
@@ -225,26 +224,16 @@ type LauncherFlags = {
  * Launcher flags are consumed here; every other argument belongs to Vite.
  */
 export function parseLauncherFlags(argv: readonly string[] = []): LauncherFlags {
-  let skipScan = false
-  let skipSeed = false
   let runDoctor = true
   const viteArgs: string[] = []
   for (const arg of argv) {
-    if (arg === '--skip-scan') {
-      skipScan = true
-      continue
-    }
-    if (arg === '--skip-seed') {
-      skipSeed = true
-      continue
-    }
     if (arg === '--no-doctor') {
       runDoctor = false
       continue
     }
     viteArgs.push(arg)
   }
-  return { skipScan, skipSeed, runDoctor, viteArgs }
+  return { runDoctor, viteArgs }
 }
 
 type DotenvFile = { name: string, contents: string }
@@ -554,16 +543,11 @@ type StageContext = {
 
 type LaunchStage = {
   id: string
-  skip?: boolean
-  skipReason?: string
   fix?: string
   run: (ctx: StageContext) => Promise<StageOutcome | undefined>
 }
 
-/**
- * Ordered, fail-closed startup stages. A stage stops the launcher so a broken
- * local stack is never presented as a working one.
- */
+/** Run a stage fail-closed when the caller requires it. */
 export async function runStages(
   stages: readonly LaunchStage[],
   ctx: StageContext = {},
@@ -572,11 +556,6 @@ export async function runStages(
   const ran: string[] = []
   const skipped: string[] = []
   for (const stage of stages) {
-    if (stage.skip === true) {
-      skipped.push(stage.id)
-      write(`stage ${stage.id} skipped: ${stage.skipReason ?? 'no reason given'}`)
-      continue
-    }
     let outcome: StageOutcome
     try {
       outcome = (await stage.run(ctx)) ?? { ok: true }
@@ -598,11 +577,29 @@ export async function runStages(
   return { ok: true, ran, skipped }
 }
 
-const seedFix = (reference: string) => `${reference} must exist and be idempotent; add it in convex/devSeed.ts or rerun \`npm run dev:local -- --skip-seed\``
+export async function runOptionalStages(
+  stages: readonly LaunchStage[],
+  ctx: StageContext = {},
+  canRunFx: () => boolean = () => true,
+): Promise<Array<{ id: string, ok: boolean }>> {
+  const identity = stages.find((stage) => stage.id === 'identities')
+  const identityRun = identity === undefined ? undefined : runStages([identity], ctx)
+  return Promise.all(stages.map(async (stage) => {
+    if (stage.id === 'fx-refresh' && identityRun !== undefined) {
+      const result = await identityRun
+      if (!result.ok || !canRunFx()) {
+        ;(ctx.log ?? log)(`stage fx-refresh skipped: ${result.ok ? 'stack stopped' : 'identities failed'}`)
+        return { id: stage.id, ok: false }
+      }
+    }
+    const outcome = stage === identity && identityRun !== undefined ? await identityRun : await runStages([stage], ctx)
+    return { id: stage.id, ok: outcome.ok }
+  }))
+}
 
-export function buildStages({ skipScan = false, skipSeed = false, ownerAccountRef, run }: {
-  skipScan?: boolean
-  skipSeed?: boolean
+const seedFix = (reference: string) => `${reference} must exist and be idempotent; read the Convex error before retrying the seed`
+
+export function buildStages({ ownerAccountRef, run }: {
   ownerAccountRef?: string
   run: (reference: string, args?: string) => Promise<StageOutcome>
 }): LaunchStage[] {
@@ -619,8 +616,6 @@ export function buildStages({ skipScan = false, skipSeed = false, ownerAccountRe
     },
     {
       id: 'authority',
-      skip: skipSeed,
-      skipReason: '--skip-seed',
       async run() {
         const seeded = await run('devSeed:seedSandboxSpendingPolicy', '{}')
         return seeded.ok ? { ok: true } : { ...seeded, fix: seedFix('devSeed:seedSandboxSpendingPolicy') }
@@ -628,8 +623,6 @@ export function buildStages({ skipScan = false, skipSeed = false, ownerAccountRe
     },
     {
       id: 'scan',
-      skip: skipScan,
-      skipReason: '--skip-scan',
       async run() {
         const status = await run('x402DirectoryIndex:status', '{}')
         if (!status.ok) {
@@ -642,19 +635,24 @@ export function buildStages({ skipScan = false, skipSeed = false, ownerAccountRe
         const started = await run('x402DirectoryIndexRefresh:start', '{}')
         return started.ok
           ? { ok: true }
-          : { ...started, fix: 'x402DirectoryIndexRefresh:start must accept the scan request; rerun with `--skip-scan` to boot without a catalogue' }
+          : { ...started, fix: 'x402DirectoryIndexRefresh:start must accept the scan request; read the Convex error before retrying the scan' }
       },
     },
     {
       id: 'sandbox-tool',
-      skip: skipSeed,
-      skipReason: '--skip-seed',
       async run(ctx) {
         const args = ownerAccountRef === undefined ? {} : { owningAccountRef: ownerAccountRef }
         const published = await run('devSeed:publishSandboxTool', JSON.stringify(args))
         if (!published.ok) return { ...published, fix: seedFix('devSeed:publishSandboxTool') }
         ;(ctx.log ?? log)(`sandbox Tool published under ${ownerAccountRef === undefined ? 'seed' : 'owner'} account`)
         return { ok: true }
+      },
+    },
+    {
+      id: 'fx-refresh',
+      async run() {
+        const refreshed = await run('workloadCron:refreshReferenceRate', '{}')
+        return refreshed.ok ? { ok: true } : { ...refreshed, fix: 'workloadCron:refreshReferenceRate failed; check the Convex log (the last persisted rate remains in use)' }
       },
     },
   ]
@@ -910,11 +908,13 @@ type Supervisor = {
   terminateAll: (signal?: NodeJS.Signals, reason?: string, statusSignal?: NodeJS.Signals | null) => void
   waitForChildren: () => Promise<unknown[]>
   readonly parentSignal: NodeJS.Signals | null
+  readonly stopping: boolean
 }
 
 export function createSupervisor(): Supervisor {
   const children = new Set<SupervisorChild>()
   let parentSignal: NodeJS.Signals | null = null
+  let stopping = false
 
   const add = <T extends SupervisorChild>(managed: T): T => {
     children.add(managed)
@@ -929,6 +929,7 @@ export function createSupervisor(): Supervisor {
     return managed
   }
   const terminateAll = (signal: NodeJS.Signals = 'SIGTERM', reason?: string, statusSignal: NodeJS.Signals | null = signal) => {
+    stopping = true
     for (const managed of children) managed.terminate(signal, reason, statusSignal)
   }
   const waitForChildren = async () => {
@@ -951,11 +952,15 @@ export function createSupervisor(): Supervisor {
     get parentSignal() {
       return parentSignal
     },
+    get stopping() {
+      return stopping
+    },
   }
 }
 
 function convexRunner(supervisor: Supervisor, env: EnvRecord): (reference: string, args?: string) => Promise<StageOutcome> {
   return async (reference, args) => {
+    if (supervisor.stopping) return { ok: false, stderr: 'stack stopped' }
     const managed = supervisor.add(createManagedChild(
       'npx',
       ['convex', 'run', reference, ...(args === undefined ? [] : [args])],
@@ -971,10 +976,79 @@ function convexRunner(supervisor: Supervisor, env: EnvRecord): (reference: strin
   }
 }
 
-async function runVite(viteArgs: string[], supervisor: Supervisor, baseEnv: EnvRecord): Promise<ManagedChild> {
+const LOCAL_CONVEX_URL = /^https?:\/\/(?:127\.0\.0\.1|localhost):\d{1,5}\/?$/u
+
+async function setLocalChatShareSecret(secret: string, cwd: string): Promise<void> {
+  const config = JSON.parse(readFileSync(resolvePath(cwd, '.convex/local/default/config.json'), 'utf8'))
+  if (!Number.isInteger(config.ports?.cloud) || typeof config.adminKey !== 'string') {
+    throw new Error('local_convex_config_invalid')
+  }
+  await new Promise<void>((resolve, reject) => {
+    const child = spawn('npx', [
+      'convex', 'env', 'set', '--url', `http://127.0.0.1:${config.ports.cloud}`,
+      '--admin-key', config.adminKey, 'AE_CHAT_SHARE_SECRET',
+    ], { cwd, detached: true, stdio: ['pipe', 'ignore', 'ignore'] })
+    const timeout = setTimeout(() => signalProcessTree(child, 'SIGKILL'), 10_000)
+    child.once('error', (error) => {
+      clearTimeout(timeout)
+      reject(error)
+    })
+    child.once('exit', (code) => {
+      clearTimeout(timeout)
+      if (code === 0) resolve()
+      else reject(new Error('local_chat_share_convex_env_set_failed'))
+    })
+    child.stdin?.end(`${secret}\n`)
+  })
+}
+
+/** Resolve a local-only share secret without requiring Convex env sync to boot Vite. */
+export function configureLocalChatShareSecret({
+  cwd = process.cwd(),
+  env = process.env,
+}: {
+  cwd?: string
+  env?: EnvRecord
+} = {}): string {
+  if (env.NODE_ENV?.trim() === 'production' || !LOCAL_CONVEX_URL.test(env.CONVEX_URL?.trim() ?? env.VITE_CONVEX_URL?.trim() ?? '')) {
+    throw new Error('local_chat_share_local_convex_required')
+  }
+  const path = resolvePath(cwd, '.env.development.local')
+  const current = existsSync(path) ? readFileSync(path, 'utf8') : ''
+  const configured = nonEmpty(env.AE_CHAT_SHARE_SECRET ?? parseEnv(current).AE_CHAT_SHARE_SECRET)
+  if (configured !== undefined && configured.length < 32) throw new Error('local_chat_share_secret_too_short')
+  const secret = configured ?? randomBytes(32).toString('hex')
+  if (configured === undefined) {
+    writeFileSync(path, `${current}${current.length > 0 && !current.endsWith('\n') ? '\n' : ''}AE_CHAT_SHARE_SECRET=${secret}\n`, { encoding: 'utf8', mode: 0o600 })
+  }
+  return secret
+}
+
+export async function syncLocalChatShareSecret({
+  secret,
+  cwd = process.cwd(),
+  runEnvSet = setLocalChatShareSecret,
+  log: write = log,
+}: {
+  secret: string
+  cwd?: string
+  runEnvSet?: (secret: string, cwd: string) => Promise<void>
+  log?: (message: string) => void
+}): Promise<boolean> {
+  try {
+    await runEnvSet(secret, cwd)
+    return true
+  } catch {
+    write('stage chat-share-secret failed: Convex env set did not complete; sharing unavailable until next boot')
+    return false
+  }
+}
+
+async function runVite(viteArgs: string[], supervisor: Supervisor, baseEnv: EnvRecord): Promise<{ vite: ManagedChild, chatShareSync: Promise<boolean> }> {
   const env: EnvRecord = { ...baseEnv }
   log('auth: mounting the real ClerkProvider (CLERK_PUBLISHABLE_KEY/CLERK_SECRET_KEY/AE_E2E_OWNER_EMAIL present)')
   const { secret, adminKey } = await configureLocalSourceWriteSecret({ env })
+  const chatShareSecret = configureLocalChatShareSecret({ env })
   const { token: serverFunctionToken } = await configureLocalConvexServerFunctionToken({ env })
   const appArgs = viteArgs.length > 0 ? viteArgs : DEFAULT_VITE_ARGS
   const revision = releaseRevision()
@@ -982,6 +1056,7 @@ async function runVite(viteArgs: string[], supervisor: Supervisor, baseEnv: EnvR
     AE_SOURCE_WRITE_SECRET: secret,
     AE_CONVEX_SERVER_FUNCTION_TOKEN: serverFunctionToken,
     CONVEX_SELF_HOSTED_ADMIN_KEY: adminKey,
+    AE_CHAT_SHARE_SECRET: chatShareSecret,
     // An explicit revision (CI, a release rehearsal) stays authoritative.
     ...(revision === undefined || nonEmpty(env[RELEASE_REVISION_ENV]) !== undefined
       ? {}
@@ -989,7 +1064,7 @@ async function runVite(viteArgs: string[], supervisor: Supervisor, baseEnv: EnvR
   })
   delete env[VITE_ARGS_ENV]
 
-  return supervisor.add(createManagedChild(
+  const vite = supervisor.add(createManagedChild(
     'npm',
     ['run', 'dev', '--', ...appArgs],
     env,
@@ -998,6 +1073,7 @@ async function runVite(viteArgs: string[], supervisor: Supervisor, baseEnv: EnvR
       readyPattern: isViteReadyOutput,
     },
   ))
+  return { vite, chatShareSync: syncLocalChatShareSecret({ secret: chatShareSecret }) }
 }
 
 async function reportDoctor(supervisor: Supervisor, env: EnvRecord, baseUrl: string): Promise<void> {
@@ -1103,7 +1179,7 @@ function reportUnreachableConvex(convexUrl: { url: string, name: string, file: s
   log(`fix: remove the stale ${convexUrl.name} from ${convexUrl.file} or start the backend it points at`)
 }
 
-async function runLocalStack({ viteArgs, skipScan, skipSeed, runDoctor }: LauncherFlags): Promise<number> {
+async function runLocalStack({ viteArgs, runDoctor }: LauncherFlags): Promise<number> {
   let { env, sources, dropped } = launcherEnv()
   for (const name of dropped) log(`ignoring inherited ${name}; convex dev resolves the local deployment`)
   const missingClerk = missingClerkEnvNames(env)
@@ -1117,6 +1193,8 @@ async function runLocalStack({ viteArgs, skipScan, skipSeed, runDoctor }: Launch
   const onSigterm = () => supervisor.signal('SIGTERM')
   process.once('SIGINT', onSigint)
   process.once('SIGTERM', onSigterm)
+  let optionalStages: Promise<unknown> | undefined
+  let chatShareSync: Promise<boolean> | undefined
 
   try {
     const existing = resolveConvexUrl(env, sources)
@@ -1157,20 +1235,6 @@ async function runLocalStack({ viteArgs, skipScan, skipSeed, runDoctor }: Launch
       return 1
     }
     const ownerAccountRef = nonEmpty(env.AE_DEV_OWNER_ACCOUNT_REF)
-
-    const staged = await runStages(
-      buildStages({
-        skipScan,
-        skipSeed,
-        ...(ownerAccountRef === undefined ? {} : { ownerAccountRef }),
-        run: convexRunner(supervisor, env),
-      }),
-      { log },
-    )
-    if (!staged.ok) {
-      supervisor.terminateAll('SIGINT', 'peer-failure')
-      return 1
-    }
     if (supervisor.parentSignal !== null) {
       supervisor.terminateAll('SIGINT', 'signal', supervisor.parentSignal)
       return signalExitStatus(supervisor.parentSignal)
@@ -1178,7 +1242,9 @@ async function runLocalStack({ viteArgs, skipScan, skipSeed, runDoctor }: Launch
 
     let vite: ManagedChild
     try {
-      vite = await runVite(viteArgs, supervisor, env)
+      const started = await runVite(viteArgs, supervisor, env)
+      vite = started.vite
+      chatShareSync = started.chatShareSync
     } catch (error) {
       supervisor.terminateAll('SIGINT', 'peer-failure')
       if (convex !== null) await convex.done
@@ -1187,8 +1253,14 @@ async function runLocalStack({ viteArgs, skipScan, skipSeed, runDoctor }: Launch
     }
 
     const viteReadiness = await vite.ready
-    if (viteReadiness.ready && runDoctor) {
-      await reportDoctor(supervisor, env, viteLocalUrl(vite.output()) ?? DEFAULT_VITE_URL)
+    if (viteReadiness.ready) {
+      optionalStages = runOptionalStages(buildStages({
+        ...(ownerAccountRef === undefined ? {} : { ownerAccountRef }),
+        run: convexRunner(supervisor, env),
+      }), { log }, () => !supervisor.stopping)
+      if (runDoctor) {
+        await reportDoctor(supervisor, env, viteLocalUrl(vite.output()) ?? DEFAULT_VITE_URL)
+      }
     }
 
     const watched = [
@@ -1214,6 +1286,8 @@ async function runLocalStack({ viteArgs, skipScan, skipSeed, runDoctor }: Launch
     process.off('SIGINT', onSigint)
     process.off('SIGTERM', onSigterm)
     await supervisor.waitForChildren()
+    await optionalStages
+    await chatShareSync
   }
 }
 

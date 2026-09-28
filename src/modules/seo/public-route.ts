@@ -24,7 +24,7 @@ export type PublicBusinessPageHeadLoaderData =
   | Readonly<{
       kind: 'available'
       page: Readonly<{ catalog: Readonly<{ name: string }> }>
-      seo: PublicBusinessSeoContract
+      seo?: PublicBusinessSeoContract
     }>
 
 export function buildPublicBusinessPageHead(
@@ -54,6 +54,14 @@ export function buildPublicBusinessPageHead(
       meta: [
         { title: 'Page not found | Agentic Economy' },
         { name: 'robots', content: 'noindex' },
+      ],
+    }
+  }
+  if (loaderData.seo === undefined) {
+    return {
+      meta: [
+        { title: `${loaderData.page.catalog.name} Tools | Agentic Economy` },
+        { name: 'description', content: `Browse published Tools, prices, readiness, and access paths from ${loaderData.page.catalog.name}.` },
       ],
     }
   }

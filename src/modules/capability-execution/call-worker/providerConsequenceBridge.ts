@@ -15,6 +15,7 @@ import { captureBackendException, degradeBackend } from '@/lib/observability/deg
 const SECRET_REF = /^sec_[0-9a-f]{32}$/u
 const HTTPS_ORIGIN = /^https:\/\/[A-Za-z0-9.-]+(?::[0-9]{1,5})?$/u
 const MAXIMUM_BRIDGE_RESPONSE_BYTES = 512 * 1024
+const BRIDGE_REQUEST_DEADLINE_MS = 10_000
 
 type ProviderInvocation = Extract<
   RouteTransportInvocation,
@@ -214,6 +215,7 @@ export async function invokeProviderConsequenceViaVercel(
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ action: 'issue', ...envelope }),
+      signal: AbortSignal.timeout(BRIDGE_REQUEST_DEADLINE_MS),
     }), MAXIMUM_BRIDGE_RESPONSE_BYTES)
     const signingResult: unknown = await signingResponse.json()
     if (!signingResponse.ok
@@ -234,6 +236,7 @@ export async function invokeProviderConsequenceViaVercel(
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ action: 'execute', ...envelope, signedTicket, invocation }),
+      signal: AbortSignal.timeout(BRIDGE_REQUEST_DEADLINE_MS),
     }), MAXIMUM_BRIDGE_RESPONSE_BYTES)
   } catch (cause) {
     captureBackendException(cause, { site: 'executeProviderConsequenceBridge' }, 'warning')

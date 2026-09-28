@@ -6,7 +6,8 @@ import { toolChoiceDescribeOutputSchema, toolChoiceSearchOutputSchema, type Tool
 import type { ActionCtx } from '../../../_generated/server'
 import { createChatAgent } from '../tools/agent'
 import { CHAT_NO_RESULT_ANSWER, chatSearchResolution, prepareChatToolStep } from '../tools/step'
-import type { AnonymousChatMessage } from './contracts'
+import { completedChatFacts } from '../generate/completedFacts'
+import type { AnonymousChatMessage, AnonymousSearchContinuation } from './contracts'
 
 type ChatCandidate =
   | Extract<ToolChoiceSearchOutput, { kind: 'match' }>['results'][number]
@@ -17,15 +18,31 @@ export async function streamAnonymousChatResponse(
   messages: readonly AnonymousChatMessage[],
   languageModel: LanguageModelV4,
   abortSignal?: AbortSignal,
+  continuation?: AnonymousSearchContinuation,
 ): Promise<Response> {
-  const agent = createChatAgent(languageModel)
+  const agent = createChatAgent(languageModel, undefined, continuation)
   const scope = { userId: 'anonymous-ephemeral' }
   const prompt = messages.map((message) => ({ ...message })) as ModelMessage[]
   const stream = createUIMessageStream({
     execute: async ({ writer }) => {
+      const completedSteps: { toolResults: { toolName: string; output: unknown }[] }[] = []
+      let modelFailure: unknown
+      try {
       const result = await agent.streamText(ctx, scope, {
         messages: prompt,
-        prepareStep: prepareChatToolStep,
+        prepareStep: continuation === undefined ? prepareChatToolStep : ({ stepNumber }) =>
+          stepNumber === 0
+            ? { toolChoice: { type: 'tool' as const,
+              toolName: CHAT_TOOL_NAME_MAP.canonicalToProvider['registry.tools.search'] } }
+            : { toolChoice: 'none' as const },
+        timeout: { stepMs: 15_000 },
+        maxRetries: 0,
+        onStepEnd: step => {
+          completedSteps.push({ toolResults: step.toolResults.map(result => ({
+            toolName: result.toolName, output: result.output,
+          })) })
+        },
+        onError: event => { modelFailure = event.error },
         ...(abortSignal === undefined ? {} : { abortSignal }),
       })
       const initialText: UIMessageChunk[] = []
@@ -37,6 +54,15 @@ export async function streamAnonymousChatResponse(
         }
       }
       const steps = await result.steps
+      if (modelFailure !== undefined) {
+        const answer = completedChatFacts(completedSteps)
+        if (answer === null) throw modelFailure
+        writer.write({ type: 'text-start', id: 'completed-tool-facts' })
+        writer.write({ type: 'text-delta', id: 'completed-tool-facts', delta: answer })
+        writer.write({ type: 'text-end', id: 'completed-tool-facts' })
+        writer.write({ type: 'finish' })
+        return
+      }
       const resolution = chatSearchResolution(steps)
       if (steps.every(step => step.toolResults.length === 0) || resolution !== null) {
         writer.write({ type: 'text-start', id: 'no-tool-result' })
@@ -60,6 +86,8 @@ export async function streamAnonymousChatResponse(
         messages: [...prompt, ...await result.responseMessages],
         tools: {},
         stopWhen: stepCountIs(1),
+        timeout: { totalMs: 12_000 },
+        maxRetries: 0,
         instructions: `${agent.options.instructions} The tools are closed. Answer directly from completed tool results, not earlier narration. Open with a bold supported answer, use bullets for one Tool and a table only for two to four distinct Tools, name a material gap once, and finish with one "Next: ..." action. This guest cannot obtain a Quote or Call, so never suggest those actions. Do not promise another search.`,
         ...(abortSignal === undefined ? {} : { abortSignal }),
       })
@@ -99,6 +127,15 @@ export async function streamAnonymousChatResponse(
       writer.write({ type: 'text-delta', id: 'final-fallback', delta: fallback })
       writer.write({ type: 'text-end', id: 'final-fallback' })
       writer.write({ type: 'finish' })
+      } catch (error) {
+        if (abortSignal?.aborted) throw error
+        const answer = completedChatFacts(completedSteps)
+        if (answer === null) throw error
+        writer.write({ type: 'text-start', id: 'completed-tool-facts' })
+        writer.write({ type: 'text-delta', id: 'completed-tool-facts', delta: answer })
+        writer.write({ type: 'text-end', id: 'completed-tool-facts' })
+        writer.write({ type: 'finish' })
+      }
     },
   })
   return createUIMessageStreamResponse({ stream })

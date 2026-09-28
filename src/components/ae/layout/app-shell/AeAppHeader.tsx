@@ -16,13 +16,12 @@ import { chatHeaderActionsId } from '@/lib/public/chat-ia'
 import type { OperatorRole } from '@/lib/operator/roles'
 import { cn } from '@/lib/utils'
 
-import { WorkspaceMenu } from './WorkspaceMenu'
+import { OperatorWorkspaceMenu } from './OperatorWorkspaceMenu'
 import { AeWorkspaceIdentity } from './AeWorkspaceIdentity'
 
 export type AeAppHeaderProps = Readonly<{
   signedIn: boolean
   operatorRole: OperatorRole
-  canAccessAdmin: boolean
   minimal: boolean
   mobileNavOpen: boolean
   setMobileNavOpen: (open: boolean) => void
@@ -52,7 +51,6 @@ function BrandLink() {
 export function AeAppHeader({
   signedIn,
   operatorRole,
-  canAccessAdmin,
   minimal,
   mobileNavOpen,
   setMobileNavOpen,
@@ -103,7 +101,7 @@ export function AeAppHeader({
             <div className="hidden sm:block"><AeNetworkHealthIndicator /></div>
             <div className={chatFrame ? 'hidden sm:block' : 'block'}><AeCommandPanel /></div>
             <div className={chatFrame ? 'hidden sm:block' : ''}><AeWorkspaceIdentity /></div>
-            <div className={chatFrame ? 'hidden sm:block' : ''}><WorkspaceMenu operatorRole={operatorRole} canAccessAdmin={canAccessAdmin} /></div>
+            <div className={chatFrame ? 'hidden sm:block' : ''}><OperatorWorkspaceMenu operatorRole={operatorRole} /></div>
             <div className={chatFrame ? 'hidden sm:block' : 'block'}><ThemeToggle /></div>
             <UserButton userProfileMode="navigation" userProfileUrl="/owner/settings/account" />
           </div>

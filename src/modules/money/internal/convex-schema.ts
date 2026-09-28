@@ -170,6 +170,11 @@ export const x402PaymentAuthorizationFailureDetailValue = v.union(
   v.literal('authority_read_failed'),
 )
 export const moneyTables = {
+  moneyReferenceRates: defineTable({
+    pair: v.literal('USDC/AUD'),
+    rate: v.string(),
+    fetchedAt: v.number(),
+  }).index('by_pair', ['pair']),
   // Applied configuration and one durable external command; never a spend counter.
   agentSpendingPeriods: defineTable({
     principalRef: v.string(),

@@ -169,6 +169,22 @@ describe('supply source preview', () => {
     })
   })
 
+  it('distinguishes invalid OpenAPI input from an unavailable source and gives a repair', async () => {
+    const result = await previewSupplySource({
+      kind: 'openapi',
+      definitionUrl: 'https://provider.example/openapi.yaml',
+      environment: 'sandbox',
+    }, { loadOpenApi: vi.fn().mockResolvedValue({ openapi: '2.0.0', info: { title: 'Old API', version: '1' }, paths: {} }) })
+
+    expect(result).toMatchObject({
+      kind: 'action_required',
+      requiredAction: {
+        title: 'OpenAPI version unsupported',
+        description: 'Use an OpenAPI 3.0 or 3.1 document at the same URL, then preview it again.',
+      },
+    })
+  })
+
   it('derives an x402 candidate and payment facts from the live signed challenge inspection', async () => {
     const inspectX402 = vi.fn().mockResolvedValue({
       kind: 'observed',

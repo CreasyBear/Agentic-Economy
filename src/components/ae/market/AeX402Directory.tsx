@@ -133,6 +133,10 @@ function useCanonicalMarketSearch(search: MarketReturnSearch, enabled: boolean) 
     setState(previous => previous.query === key && previous.index === index ? { ...previous, status: 'loading' } : previous)
     try {
       const result = await searchMarketToolsServer({ data: { ...input, query, cursor } })
+      if (result.kind === 'unavailable') {
+        setState(previous => previous.query === key && previous.index === index ? { ...previous, status: 'failed' } : previous)
+        return
+      }
       setState(previous => previous.query === key && previous.index === index
         ? { query: key, pages: [...previous.pages, result], index: previous.pages.length, status: 'idle' } : previous)
     } catch (cause) {
@@ -438,14 +442,14 @@ function DirectoryMarketplace({ page, compareEntries, search, workspace = false,
           }) })
         }
       }}>
-        <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-related border-b border-border pb-related">
-          <TabsList variant="line" className="max-w-full shrink-0 justify-start overflow-x-auto overflow-y-hidden" aria-label="Browse the marketplace">
+        <div className="grid grid-cols-1 items-center gap-related border-b border-border pb-related sm:grid-cols-[minmax(0,1fr)_auto]">
+          <TabsList variant="line" className="grid !h-auto w-full grid-cols-2 justify-start gap-1 sm:inline-flex sm:max-w-full sm:w-auto sm:overflow-x-auto" aria-label="Browse the marketplace">
             <TabsTrigger value="discover" className="px-3 enabled:active:scale-100"><CompassIcon aria-hidden="true" />Collections</TabsTrigger>
             <TabsTrigger value="providers" className="px-3 enabled:active:scale-100"><StoreIcon aria-hidden="true" />Providers</TabsTrigger>
             <TabsTrigger value="tools" className="px-3 enabled:active:scale-100"><ListFilterIcon aria-hidden="true" />Tools</TabsTrigger>
             <TabsTrigger value="saved" className="px-3 enabled:active:scale-100"><HeartIcon aria-hidden="true" />Saved{saved.savedTools.length > 0 ? ` (${saved.savedTools.length})` : ''}</TabsTrigger>
           </TabsList>
-          <div className="flex items-center gap-related">
+          <div className="flex items-center gap-related justify-end">
             {count === undefined || view === 'saved' ? null : <p className="text-xs text-muted-foreground" role="status" aria-live="polite">{count}</p>}
             {view === 'saved' || view === 'discover' || indexed ? null : <DirectoryFilters search={search} onApply={applyFilters} />}
           </div>

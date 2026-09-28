@@ -30,13 +30,13 @@ import {
   quotePartiesFromPublishedTool,
   toolPricing,
 } from './quoteValuation'
+import { readReferenceRate } from '../../money/referenceRate/store'
 import { quoteEvidenceMaterial } from './quoteEvidence'
 import { refuse, quoteRefusal } from './refusalHelpers'
 import {
   formanceFinancialSnapshot,
   liveX402RequirementValue,
   quoteResult,
-  referenceRateValue,
   type QuoteArgs,
   type QuoteResult,
 } from './contracts'
@@ -51,7 +51,6 @@ export const issueQuoteArgs = {
   input: jsonObject,
   turnRef: v.optional(v.string()),
   liveX402Requirement: v.optional(liveX402RequirementValue),
-  referenceRate: v.optional(referenceRateValue),
   formance: formanceFinancialSnapshot,
 }
 
@@ -143,13 +142,16 @@ export async function issueQuoteHandler(
     return refuse(args, 'inspection_unavailable', true)
   }
 
-  const pricing = toolPricing(operation, now, args.liveX402Requirement, args.referenceRate)
+  const referenceRate = args.liveX402Requirement === undefined ? null : await readReferenceRate(ctx.db, now)
+  const pricing = toolPricing(operation, now, args.liveX402Requirement, referenceRate ?? undefined)
   if (pricing === undefined) return refuse(args, 'tool_unsupported', false, {
     capabilityId: operation.contract.ref.capabilityId,
   })
-  if (pricing.kind === 'refused') {
-    return refuse(args, 'pricing_setup_required', false)
-  }
+  if (pricing.kind === 'refused') return pricing.code === 'pricing_setup_required'
+    ? refuse(args, 'pricing_setup_required', true, {
+        reason: 'AUD reference rate is missing or older than 24 hours. Retry after the next rate refresh.',
+      })
+    : refuse(args, 'tool_unsupported', false, { reason: 'Invalid upstream USDC amount.' })
   const buyerSale = pricing.price.units === '0'
     ? { revenueUnits: '0', taxUnits: '0' }
     : splitInclusiveAudTax(pricing.price.units, args.formance.buyerTaxBps)

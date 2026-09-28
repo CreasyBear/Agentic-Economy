@@ -1,6 +1,7 @@
 import { auth, clerkClient } from '@clerk/tanstack-react-start/server'
 import { createServerFn } from '@tanstack/react-start'
 import { z } from 'zod'
+import { degrade } from '@/lib/observability/degrade'
 import { api } from '../../../../../convex/_generated/api'
 import { callSourceQuery } from '@/lib/server/convex-source'
 import type { TeamMemberView, TeamRolesView } from './team-roles.contracts'
@@ -10,9 +11,13 @@ export const readTeamRolesServer = createServerFn({ method: 'GET' }).handler(asy
   const invitation = await callSourceQuery(api.workspaceTeam.invitationContext, {})
   const people = [directory.owner, ...directory.members]
   const members: TeamMemberView[] = await Promise.all(people.map(async (person) => {
-    const clerk = person.clerkUserId === null ? null : await clerkClient().users.getUser(person.clerkUserId)
+    const clerkUserId = person.clerkUserId
+    const clerk = clerkUserId === null
+      ? null
+      : await Promise.resolve().then(() => clerkClient().users.getUser(clerkUserId))
+          .catch((cause) => degrade(cause, null, { site: 'readTeamRolesServer.memberName', reason: 'source_unavailable' }))
     const clerkName = clerk && [clerk.firstName, clerk.lastName].filter(Boolean).join(' ').trim()
-    const name = clerkName || (person.displayName.startsWith('user_') ? 'Unnamed member' : person.displayName)
+    const name = clerkName || person.displayName
     return {
       key: person.kind === 'owner' ? person.ownershipRef : person.membershipRef,
       name,

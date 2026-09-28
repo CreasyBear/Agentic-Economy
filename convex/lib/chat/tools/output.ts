@@ -2,6 +2,7 @@ import { convexToJson, type Value } from 'convex/values'
 import { z } from 'zod'
 import { degradeBackend } from '@/lib/observability/degrade-backend'
 import type { ChatToolId } from '@/modules/chat/tool-card'
+import { sanitizeChatToolString } from '@/modules/chat/search-presentation'
 import { failure, type ChatToolFailure } from './contracts'
 import { MAX_CHAT_TOOL_RESULT_BYTES } from './step'
 
@@ -16,11 +17,7 @@ function modelFacingOutput<Output>(
   let serialized: string
   try {
     serialized = JSON.stringify(canonical.data, (_key, value) =>
-      typeof value === 'string'
-        ? value
-          .replace(/<\s*\/?\s*(?:system|assistant|user|tool)\b[^>]*>/giu, '[data-tag]')
-          .replace(/[<>]/gu, (character) => character === '<' ? '‹' : '›')
-        : value,
+      typeof value === 'string' ? sanitizeChatToolString(value) : value,
     )
   } catch (cause) {
     return degradeBackend(cause, failure(toolId, 'source_output_invalid'), { site: 'modelFacingOutput', reason: 'invalid_response' })

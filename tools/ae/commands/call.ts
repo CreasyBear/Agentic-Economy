@@ -72,22 +72,29 @@ function parseCallResult(value: unknown): CallMachineResult {
 function resumeCommand(record: CallRecoveryRecord, options: CliOptions): string {
   return continuationCommand(['ae', 'call', 'resume', record.recoveryRef, '--base-url', record.origin, ...(options.json ? ['--json'] : [])])
 }
+function recoveryCommand(record: CallRecoveryRecord, options: CliOptions): string {
+  return record.callRef === undefined ? resumeCommand(record, options)
+    : continuationCommand(['ae', 'status', record.callRef, '--base-url', record.origin, ...(options.json ? ['--json'] : [])])
+}
+
 
 function unknownCallTransport(record: CallRecoveryRecord, options: CliOptions): CliFailure {
   const detail = {
     toolRef: record.toolRef,
     recoveryRef: record.recoveryRef,
     ...(record.callRef === undefined ? {} : { callRef: record.callRef }),
-    recovery: 'Resume the retained purchase; do not create a new Call.',
+    recovery: record.callRef === undefined
+      ? 'Resume the retained purchase; do not create a new Call.'
+      : 'Read the original Call status; do not create a new Call.',
     identityPreserved: true,
   }
   return new CliFailure(
-    `Call transport is unknown for ${record.toolRef}; resume the retained purchase.`,
+    `Call transport is unknown for ${record.toolRef}; ${record.callRef === undefined ? 'resume the retained purchase' : 'read the original Call status'}.`,
     {
       kind: 'UNAVAILABLE',
       code: 'call-transport-unknown',
       detail,
-      nextCommand: resumeCommand(record, options),
+      nextCommand: recoveryCommand(record, options),
     },
   )
 }
@@ -104,7 +111,7 @@ function waitTimeoutFailure(record: CallRecoveryRecord, options: CliOptions): Cl
     kind: 'UNAVAILABLE',
     code: 'call-wait-timeout',
     detail,
-    nextCommand: resumeCommand(record, options),
+    nextCommand: recoveryCommand(record, options),
   })
 }
 
@@ -185,22 +192,36 @@ async function waitForCallResult(
 }
 
 function pendingRecoveryFailure(record: CallRecoveryRecord, options: CliOptions): CliFailure {
-  return new CliFailure('This request already has a retained purchase. Resume it before creating another Call.', {
+  return new CliFailure('This request already has a retained purchase. Check it before creating another Call.', {
     kind: 'FAILED_PRECONDITION', code: 'call-recovery-required',
     detail: { recoveryRef: record.recoveryRef, ...(record.callRef === undefined ? {} : { callRef: record.callRef }), identityPreserved: true },
-    nextCommand: resumeCommand(record, options),
+    nextCommand: recoveryCommand(record, options),
   })
 }
 
 function attachRecovery(error: unknown, record: CallRecoveryRecord, options: CliOptions): CliFailure {
   if (!(error instanceof CliFailure)) return unknownCallTransport(record, options)
+  if (error.code === 'request-timeout') return new CliFailure(
+    record.callRef === undefined
+      ? 'Call request timed out; the outcome remains unknown. Resume the retained purchase, not a new Call.'
+      : 'Call status timed out; the original Call outcome remains unknown. Read its exact status.',
+    {
+      kind: 'UNAVAILABLE', code: 'call-transport-timeout',
+      detail: {
+        toolRef: record.toolRef, quoteRef: record.command.quoteRef,
+        recoveryRef: record.recoveryRef, ...(record.callRef === undefined ? {} : { callRef: record.callRef }),
+        identityPreserved: true,
+      },
+      nextCommand: recoveryCommand(record, options),
+    },
+  )
   return new CliFailure(error.message, {
     exitCode: error.exitCode, kind: error.kind,
     ...(error.code === undefined ? {} : { code: error.code }),
     ...(error.retryable === undefined ? {} : { retryable: error.retryable }),
     ...(error.retryAfter === undefined ? {} : { retryAfter: error.retryAfter }),
     detail: { cause: error.detail, recoveryRef: record.recoveryRef, ...(record.callRef === undefined ? {} : { callRef: record.callRef }), identityPreserved: true },
-    ...(error.suggestion === undefined ? {} : { suggestion: error.suggestion }), nextCommand: resumeCommand(record, options),
+    ...(error.suggestion === undefined ? {} : { suggestion: error.suggestion }), nextCommand: recoveryCommand(record, options),
   })
 }
 

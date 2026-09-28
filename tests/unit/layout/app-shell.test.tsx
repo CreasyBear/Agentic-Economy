@@ -17,7 +17,6 @@ import '../../setup/jsdom-dialog'
 
 import type { OperatorSurface } from '@/lib/operator/operator-context'
 import { AeAppShell } from '@/components/ae/layout/AeAppShell'
-import { OperatorEntitlementContext } from '@/components/ae/layout/AeConvexProviders'
 
 vi.mock('@/lib/observability/funnel-client', () => ({
   emitFunnelEventOnce: vi.fn(),
@@ -27,8 +26,10 @@ const clerkSignedIn = vi.hoisted(() => ({ value: false }))
 const entitlement = vi.hoisted<{
   isAuthenticated: boolean
   result: { kind: 'authorized'; allowedSurfaces: readonly OperatorSurface[] } | { kind: 'denied' } | undefined
+  throwOnRead: boolean
 }>(() => ({
   isAuthenticated: false,
+  throwOnRead: false,
   result: undefined,
 }))
 
@@ -37,6 +38,7 @@ vi.mock('convex/react', () => ({
   useQuery: (query: FunctionReference<'query'>, args: unknown) => {
     if (args === 'skip') return undefined
     if (getFunctionName(query) !== 'operatorContext:readCurrent') throw new Error('Unexpected query')
+    if (entitlement.throwOnRead) throw new Error('operator entitlement unavailable')
     return entitlement.result
   },
 }))
@@ -58,6 +60,7 @@ afterEach(() => {
   cleanup()
   entitlement.isAuthenticated = false
   entitlement.result = undefined
+  entitlement.throwOnRead = false
 })
 
 describe('AeAppShell', () => {
@@ -174,6 +177,30 @@ describe('AeAppShell', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Workspace menu' }))
     expect(within(screen.getByRole('menu')).queryByText('Admin')).toBeNull()
   })
+
+  it('does not expose Admin while Convex authentication is unresolved', () => {
+    clerkSignedIn.value = true
+    entitlement.isAuthenticated = false
+    entitlement.result = { kind: 'authorized', allowedSurfaces: ['owner', 'admin'] }
+    renderAppShell('/market')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Workspace menu' }))
+    expect(within(screen.getByRole('menu')).queryByText('Admin')).toBeNull()
+  })
+
+  it('keeps a public routed page and its workspace menu usable when the operator subscription fails', () => {
+    clerkSignedIn.value = true
+    entitlement.isAuthenticated = true
+    entitlement.result = { kind: 'authorized', allowedSurfaces: ['owner', 'admin'] }
+    entitlement.throwOnRead = true
+    renderAppShell('/market')
+
+    expect(screen.getByText('Page content')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Workspace menu' }))
+    const menu = screen.getByRole('menu')
+    expect(within(menu).getByRole('menuitem', { name: 'Market' })).toBeTruthy()
+    expect(within(menu).queryByText('Admin')).toBeNull()
+  })
 })
 
 function renderAppShell(pathname = clerkSignedIn.value ? '/market' : '/'): void {
@@ -228,9 +255,7 @@ function renderAppShell(pathname = clerkSignedIn.value ? '/market' : '/'): void 
 
   render(
     <RouterContextProvider router={router}>
-      <OperatorEntitlementContext.Provider value={entitlement.isAuthenticated && entitlement.result?.kind === 'authorized' && entitlement.result.allowedSurfaces.includes('admin')}>
-        <AeAppShell><p>Page content</p></AeAppShell>
-      </OperatorEntitlementContext.Provider>
+      <AeAppShell><p>Page content</p></AeAppShell>
     </RouterContextProvider>,
   )
 }

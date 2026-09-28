@@ -6,6 +6,7 @@ import {
   registryToolsSearchAction,
 } from '@/modules/registry/tools.actions'
 import { toolChoiceSearchOutputSchema, type RegistryNextAction } from '@/modules/registry/tool-choice-contracts'
+import { marketRequestCreateAction } from '@/modules/market-demand/market-demand.actions'
 
 function noMatch(
   next: readonly RegistryNextAction[],
@@ -242,5 +243,16 @@ describe('MCP host adapter registry', () => {
     const body = await readMcpBody(response)
     expect(body.result).toMatchObject({ isError: true })
     expect(run).not.toHaveBeenCalled()
+  })
+  it('classifies a failed demand source as a retryable service outage rather than invalid input', async () => {
+    vi.spyOn(marketRequestCreateAction, 'run').mockResolvedValue({ kind: 'refused', code: 'source_unavailable' })
+    const response = await postMcp({
+      jsonrpc: '2.0', id: 99, method: 'tools/call',
+      params: { name: 'ae_marketDemand_record', arguments: { query: 'rare service', idempotencyKey: 'demand-fault-1' } },
+    }, { authenticate: authenticateWithScopes(['market_tools:call']) }, { authorization: 'Bearer buyer' })
+    expect(response.status).toBe(200)
+    expect((await readMcpBody(response)).result?.structuredContent).toMatchObject({
+      status: 503, kind: 'UNAVAILABLE', code: 'source_unavailable', retryable: true,
+    })
   })
 })

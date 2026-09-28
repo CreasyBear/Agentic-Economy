@@ -185,12 +185,12 @@ describe('agent access authentication', () => {
     })
   })
 
-  it('uses the hosted auth and current-key providers while still requiring canonical resolution', async () => {
-    adapterMocks.auth.mockResolvedValue({
-      isAuthenticated: true,
-      tokenType: 'api_key',
+  it('verifies bearer secrets directly for both machine user agents and checks the current key', async () => {
+    const verify = vi.fn().mockResolvedValue({
       id: 'ak_hosted',
       subject: 'user_hosted',
+      revoked: false,
+      expired: false,
       scopes: liveScopes,
       claims: { aeApplicationRef: 'hosted-app', aeEnvironment: 'production' },
     })
@@ -202,29 +202,35 @@ describe('agent access authentication', () => {
       scopes: liveScopes,
       claims: { aeApplicationRef: 'hosted-app', aeEnvironment: 'production' },
     })
-    adapterMocks.clerkClient.mockReturnValue({ apiKeys: { get } })
+    adapterMocks.clerkClient.mockReturnValue({ apiKeys: { verify, get } })
+
+    for (const userAgent of ['Python-urllib/3.14', 'curl/8.0']) {
+      const request = new Request('https://ae.example/api/v1/account/self', {
+        headers: { Authorization: 'Bearer ae_test_secret', 'User-Agent': userAgent },
+      })
+      await expect(authenticateCanonically({ request })).resolves.toMatchObject({
+        kind: 'authenticated',
+        principal: { credentialId: 'ak_hosted', applicationRef: 'hosted-app', environment: 'production' },
+      })
+    }
+    expect(verify).toHaveBeenCalledTimes(2)
+    expect(verify).toHaveBeenCalledWith('ae_test_secret')
+    expect(get).toHaveBeenCalledTimes(2)
+    expect(adapterMocks.auth).not.toHaveBeenCalled()
 
     await expect(authenticateCanonically({
-      resolvePrincipal: async (projection) => ({
-        ...projection,
-        principalId: 'prn_00000000000040008000000000000046',
-        ownerId: 'acc_00000000000040008000000000000046',
-      }),
-    })).resolves.toMatchObject({
-      kind: 'authenticated',
-      principal: {
-        principalId: 'prn_00000000000040008000000000000046',
-        ownerId: 'acc_00000000000040008000000000000046',
-        applicationRef: 'hosted-app',
-        environment: 'production',
-      },
-    })
-    expect(adapterMocks.auth).toHaveBeenCalledWith({ acceptsToken: 'api_key' })
-    expect(get).toHaveBeenCalledWith('ak_hosted')
+      request: new Request('https://ae.example/api/v1/account/self'),
+    })).resolves.toEqual({ kind: 'refused', status: 401, reason: 'authentication_required' })
+    expect(verify).toHaveBeenCalledTimes(2)
 
-    await expect(authenticateAgentAccess()).resolves.toEqual({
-      kind: 'refused', status: 401, reason: 'authentication_required',
+    get.mockResolvedValueOnce({
+      id: 'ak_hosted', subject: 'user_hosted', revoked: true, expired: false, scopes: liveScopes,
     })
+    await expect(authenticateCanonically({
+      request: new Request('https://ae.example/mcp', {
+        headers: { Authorization: 'Bearer ae_test_secret', 'User-Agent': 'Python-urllib/3.14' },
+      }),
+    })).resolves.toEqual({ kind: 'refused', status: 401, reason: 'authentication_required' })
   })
 
 

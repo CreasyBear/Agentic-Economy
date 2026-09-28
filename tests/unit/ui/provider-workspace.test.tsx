@@ -72,6 +72,9 @@ describe('Tools management disclosure', () => {
     expect(screen.queryByText('Add a source, then choose a Tool to publish.')).toBeNull()
     const addTool = screen.getAllByRole('link', { name: 'Add Tool' })
     expect(addTool.every((link) => link.getAttribute('href') === '/owner/operations/new')).toBe(true)
+    expect(screen.getByRole('button', { name: /Provider identity.*Completed/u }).hasAttribute('disabled')).toBe(true)
+    expect(screen.queryByLabelText('Provider Website (HTTPS)')).toBeNull()
+    expect(screen.getByRole('link', { name: 'Manage Provider identity' }).getAttribute('href')).toBe('/owner/operations')
     const setup = screen.getByRole('heading', { name: 'Provider setup' }).parentElement?.parentElement
     const earnings = screen.getByRole('heading', { name: 'Earnings' }).closest('section')
     expect(setup).not.toBeNull()

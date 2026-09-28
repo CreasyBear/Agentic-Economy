@@ -1,4 +1,5 @@
 // Adapted from vercel/ai-chatbot, c2f8235e1f3ea903ad8b7f61447c4f74164b5c58, components/chat/messages.tsx and components/chat/message.tsx (Apache-2.0).
+import { ErrorBoundary } from '@sentry/react'
 import { useState } from 'react'
 import { Bubble, BubbleContent } from '@/components/ui/bubble'
 import { Button } from '@/components/ui/button'
@@ -13,16 +14,18 @@ import {
   MessageScrollerProvider,
   MessageScrollerViewport,
 } from '@/components/ui/message-scroller'
+import { Textarea } from '@/components/ui/textarea'
 import { Skeleton } from '@/components/ui/skeleton'
 import { chatHandoffNotice, chatLoading, chatThinking } from '@/lib/public/chat-ia'
 import { readOpenUiBundle } from '@/modules/chat/openui-bundle'
-import type { ToolCardProjection } from '@/modules/chat/tool-card'
+import { parseChatQuoteInput } from '@/modules/chat/tool-card'
 
 import { ChatOpenUiBundle } from './ChatOpenUiBundle'
 import { ChatClarifyPrompt } from './ChatClarifyPrompt'
-import type { ChatTranscriptViewProps } from './chat-session/chat-session.contracts'
+import { ChatTranscriptClarify, clarifyKey, clarifyPresentation } from './ChatTranscriptClarify'
+import type { ChatQuoteDraft, ChatTranscriptViewProps } from './chat-session/chat-session.contracts'
 import { ChatGreeting } from './chat-session/components/ChatGreeting'
-import { ChatApprovalCards } from './chat-session/components/ChatApprovalCards'
+import { ChatOwnerApprovalsContainer } from './chat-session/ChatOwnerApprovalsContainer'
 import { AnswerBlock } from './generative/AnswerBlock'
 import { ComparisonTable } from './generative/ComparisonTable'
 import { FilterChips } from './generative/FilterChips'
@@ -32,60 +35,10 @@ import { OptionsGrid } from './generative/OptionsGrid'
 import { SourcesInline } from './generative/SourcesInline'
 import { WorkDisclosure } from './generative/WorkDisclosure'
 import type { FilterValue } from './generative/generative.contracts'
-import { ToolCard } from './ToolCard'
-import { projectGenerativeTurn, projectTranscriptTurns, type TranscriptTurn } from './presentation'
+import { SearchNext, ToolCard } from './ToolCard'
+import { projectGenerativeTurn, projectTranscriptTurns } from './presentation'
 
 const TRANSCRIPT_COLUMN = 'mx-auto grid w-full content-start max-w-[1200px] grid-cols-12 gap-x-2 gap-y-5 px-[5px] py-6 sm:px-0 md:gap-y-7'
-
-type ClarifyCard = Extract<ToolCardProjection, { kind: 'clarify' }>
-
-function clarifyKey(turnId: string, cardIndex: number): string {
-  return `${turnId}:${cardIndex}`
-}
-
-function clarifyPresentation(turns: readonly TranscriptTurn[]) {
-  const answers = new Map<string, string>()
-  let pending: (ClarifyCard & { key: string }) | null = null
-  for (const turn of turns) {
-    if (turn.role === 'user' && turn.text.trim().length > 0 && pending !== null && pending.answer === undefined) {
-      answers.set(pending.key, turn.text.trim())
-      pending = null
-    }
-    if (turn.role !== 'assistant') continue
-    for (const [cardIndex, card] of turn.tools.entries()) {
-      if (card.kind !== 'clarify') continue
-      const key = clarifyKey(turn.id, cardIndex)
-      if (card.answer !== undefined) {
-        answers.set(key, card.answer)
-        pending = null
-        continue
-      }
-      pending = { ...card, key }
-    }
-  }
-  return { answers, pending }
-}
-
-function renderClarify(
-  turnId: string,
-  card: Extract<ToolCardProjection, { kind: 'clarify' }>,
-  cardIndex: number,
-  answer: string | undefined,
-  hidePending: boolean,
-) {
-  const key = clarifyKey(turnId, cardIndex)
-  if (answer === undefined) {
-    if (hidePending) return null
-    return <p key={key} className="text-sm text-muted-foreground">{card.question}</p>
-  }
-  return (
-    <p key={key} className="text-sm text-muted-foreground">
-      <span>{card.question}</span>
-      {' '}
-      <span className="font-medium text-foreground">{answer}</span>
-    </p>
-  )
-}
 
 export function ChatTranscript({
   messages,
@@ -96,10 +49,11 @@ export function ChatTranscript({
   onCopyAnswer,
   onEditQuestion,
   onClarifyAnswer,
-  ownerChatCards = [],
-  approvalProblem,
-  onApproveCall,
-  onDenyCall,
+  onContinueSearch,
+  onRepeatSearch,
+  onQuoteTool,
+  ownerChatThreadId,
+  ownerChatNow,
   onFreshQuote,
   thinking = false,
   generating = false,
@@ -109,6 +63,7 @@ export function ChatTranscript({
   const [comparedByTurn, setComparedByTurn] = useState<Record<string, readonly string[]>>({})
   const [filtersByTurn, setFiltersByTurn] = useState<Record<string, FilterValue>>({})
   const [selectedByTurn, setSelectedByTurn] = useState<Record<string, string | undefined>>({})
+  const [quoteDraft, setQuoteDraft] = useState<ChatQuoteDraft | null>(null)
   const turns = projectTranscriptTurns(messages)
   const clarify = clarifyPresentation(turns)
 
@@ -146,7 +101,13 @@ export function ChatTranscript({
           >
             {turns.map((turn, index) => {
               const bundle = turn.role === 'assistant' ? readOpenUiBundle(turn.text, turn.tools) : null
-              const prose = bundle === null ? turn.text : bundle.prose
+              const continuationIndex = turn.tools.findLastIndex((card) =>
+                card.toolId === 'registry.tools.search' && card.kind === 'choices' && card.next?.action === 'next-page')
+              const continuation = turn.tools[continuationIndex]
+              const rawProse = bundle === null ? turn.text : bundle.prose
+              const prose = continuation?.kind === 'choices' && continuation.next?.action === 'next-page'
+                ? rawProse.replaceAll(continuation.next.args.cursor, '[cursor hidden]')
+                : rawProse
               const view = turn.role === 'assistant' ? projectGenerativeTurn({ ...turn, text: prose }) : null
               const selected = comparedByTurn[turn.id] ?? []
               const selectedId = selectedByTurn[turn.id]
@@ -170,7 +131,12 @@ export function ChatTranscript({
                           {writing ? <AnswerBlock view={{ markdown: prose, streaming: true }} /> : null}
                           <WorkDisclosure view={view.work} />
                           {writing ? null : <AnswerBlock view={{ markdown: prose }} />}
-                          {bundle?.root ? <ChatOpenUiBundle node={bundle.root} tools={turn.tools} /> : null}
+                          {bundle?.root ? <ChatOpenUiBundle node={bundle.root} tools={turn.tools}
+                            {...(onContinueSearch === undefined ? {} : { onContinueSearch })}
+                            {...(onRepeatSearch === undefined ? {} : { onRepeatSearch })}
+                            signedThread={ownerChatThreadId !== undefined}
+                            {...(continuation?.kind === 'choices' && continuation.next?.action === 'next-page'
+                              ? { cursorToRedact: continuation.next.args.cursor } : {})} /> : null}
                           <SourcesInline view={view.sources} />
                           {view.options.options.length === 0 ? null : (
                             <>
@@ -191,6 +157,9 @@ export function ChatTranscript({
                               )}
                               <OptionsGrid
                                 view={{ ...view.options, comparedIds: selected, ...(selectedId === undefined ? {} : { selectedId }) }}
+                                signedIn={ownerChatThreadId !== undefined}
+                                {...(onQuoteTool === undefined ? {} : { onQuoteSelect: (toolRef: string) =>
+                                  setQuoteDraft({ turnId: turn.id, toolRef, input: '', invalid: false, submitting: false }) })}
                                 onSelect={(id) => {
                                   setSelectedByTurn((current) => ({ ...current, [turn.id]: current[turn.id] === id ? undefined : id }))
                                   const option = view.options.options.find((entry) => entry.id === id)
@@ -198,6 +167,41 @@ export function ChatTranscript({
                                 }}
                                 onCompare={toggleCompare}
                               />
+                              {quoteDraft?.turnId !== turn.id || onQuoteTool === undefined || ownerChatThreadId === undefined ? null : (
+                                <form aria-label="Quote input" className="grid gap-intra rounded-card border border-border bg-card p-4"
+                                  onSubmit={(event) => {
+                                    event.preventDefault()
+                                    if (quoteDraft.submitting) return
+                                    const input = parseChatQuoteInput(quoteDraft.toolRef, quoteDraft.input)
+                                    if (input === undefined) {
+                                      setQuoteDraft({ ...quoteDraft, invalid: true })
+                                      return
+                                    }
+                                    setQuoteDraft({ ...quoteDraft, submitting: true })
+                                    void onQuoteTool(quoteDraft.toolRef, input).then((accepted) => {
+                                      setQuoteDraft((current) => current?.turnId === quoteDraft.turnId
+                                        && current.toolRef === quoteDraft.toolRef
+                                        ? accepted ? null : { ...current, submitting: false }
+                                        : current)
+                                    })
+                                  }}>
+                                  <label htmlFor="chat-quote-input" className="text-sm font-medium">Exact Tool input (JSON object)</label>
+                                  <Textarea id="chat-quote-input" value={quoteDraft.input} rows={4} maxLength={1_500}
+                                    disabled={quoteDraft.submitting} aria-invalid={quoteDraft.invalid}
+                                    aria-describedby={quoteDraft.invalid ? 'chat-quote-input-error' : undefined}
+                                    onChange={(event) => setQuoteDraft({ ...quoteDraft, input: event.target.value, invalid: false })}
+                                    placeholder='{"field":"your value"}' className="font-mono text-sm" />
+                                  {quoteDraft.invalid ? <p id="chat-quote-input-error" role="alert" className="text-sm text-destructive">Enter the Tool’s exact input as a JSON object (up to 1,500 bytes).</p> : null}
+                                  <p className="text-sm text-muted-foreground">A fresh Quote checks your input and price. No Call is made by this step.</p>
+                                  <div className="flex flex-wrap gap-2">
+                                    <Button type="submit" className="min-h-touch" disabled={quoteDraft.submitting}>
+                                      {quoteDraft.submitting ? 'Requesting Quote…' : 'Get a Quote for this input'}
+                                    </Button>
+                                    <Button type="button" variant="ghost" className="min-h-touch" disabled={quoteDraft.submitting}
+                                      onClick={() => setQuoteDraft(null)}>Cancel</Button>
+                                  </div>
+                                </form>
+                              )}
                               {onCompareRequest === undefined || selected.length < 2 ? null : (
                                 <div className="flex flex-wrap items-center gap-2">
                                   <Button type="button" variant="secondary" className="min-h-touch" onClick={() => onCompareRequest(`Compare ${selected.map((id) => view.options.options.find((option) => option.id === id)?.name).filter(Boolean).join(' and ')} for my use case.`)}>
@@ -209,12 +213,18 @@ export function ChatTranscript({
                             </>
                           )}
                           {view.comparison ? <ComparisonTable view={view.comparison} /> : null}
+                          {continuation?.kind === 'choices' && continuation.next?.action === 'next-page'
+                            && !(bundle?.root && bundle.consumed.has(continuationIndex))
+                            ? <SearchNext next={continuation.next}
+                              {...(onContinueSearch === undefined ? {} : { onContinueSearch })}
+                              {...(onRepeatSearch === undefined ? {} : { onRepeatSearch })}
+                              signedThread={ownerChatThreadId !== undefined} /> : null}
                           {turn.tools.map((card, cardIndex) => {
                             if (bundle?.root && bundle.consumed.has(cardIndex)) return null
                             if (card.kind === 'clarify') {
                               const key = clarifyKey(turn.id, cardIndex)
-                              return renderClarify(turn.id, card, cardIndex, clarify.answers.get(key),
-                                onClarifyAnswer !== undefined && clarify.pending?.key === key)
+                              return <ChatTranscriptClarify key={key} card={card} answer={clarify.answers.get(key)}
+                                hidePending={onClarifyAnswer !== undefined && clarify.pending?.key === key} />
                             }
                             return card.toolId === 'tool.quote' || card.toolId === 'tool.call'
                               ? <ToolCard key={`${turn.id}-${card.toolId}-${cardIndex}`} projection={card} />
@@ -239,15 +249,11 @@ export function ChatTranscript({
               </MessageScrollerItem>
               )
             })}
-            {ownerChatCards.some(card => card.kind === 'pending') ? (
-              <a href="#owner-chat-pending" className="w-fit text-sm underline underline-offset-4 focus-visible:outline-2">
-                Review pending Call
-              </a>
-            ) : null}
-            {onApproveCall && onDenyCall && onFreshQuote ? (
-              <ChatApprovalCards cards={ownerChatCards}
-                {...(approvalProblem === undefined ? {} : { problem: approvalProblem })}
-                onApprove={onApproveCall} onDeny={onDenyCall} onFreshQuote={onFreshQuote} />
+            {ownerChatThreadId && ownerChatNow !== undefined && onFreshQuote ? (
+              <ErrorBoundary key={ownerChatThreadId} fallback={<></>}>
+                <ChatOwnerApprovalsContainer threadId={ownerChatThreadId} now={ownerChatNow}
+                  onFreshQuote={onFreshQuote} />
+              </ErrorBoundary>
             ) : null}
             {thinking ? (
               <MessageScrollerItem messageId="thinking" className="col-span-12 md:col-start-3 md:col-span-8">

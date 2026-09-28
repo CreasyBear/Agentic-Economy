@@ -58,16 +58,18 @@ describe('Admin action sheet', () => {
     expect(screen.getByText('Your account does not have the Admin role for this action.')).toBeTruthy()
   })
 
-  it('preserves typed evidence and shows the refusal copy and next step', async () => {
+  it('keeps evidence and the operation key through MFA recovery, without submitting a proposal', async () => {
     mocks.access.mockReturnValue({ kind: 'allowed', role: 'owner_admin' })
-    mocks.execute.mockResolvedValue({ kind: 'refused', action: props.action, code: 'mfa_reverification_required', correlationId: 'correlation:1' })
+    mocks.execute.mockResolvedValueOnce({ kind: 'refused', action: props.action, code: 'mfa_reverification_required', correlationId: 'correlation:1' })
+      .mockResolvedValueOnce({ kind: 'completed', action: props.action, code: 'source_authority_verified', effectRefs: [], auditEventRef: 'audit:1', correlationId: 'correlation:1' })
     render(<AdminActionSheet {...props} />)
     toPreview()
     fireEvent.click(screen.getByRole('button', { name: 'Submit command' }))
-    await waitFor(() => expect(screen.getByText('Reverify before making this change.')).toBeTruthy())
-    expect(screen.getByText('Complete Clerk reverification, then resubmit.')).toBeTruthy()
-    expect(screen.getByLabelText<HTMLInputElement>('Other evidence reference').value).toBe('review:ticket-123')
-    expect(mocks.execute).toHaveBeenCalledWith(expect.objectContaining({ evidenceRefs: ['review:ticket-123'] }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Retry' }))
+    await waitFor(() => expect(mocks.execute).toHaveBeenCalledTimes(2))
+    expect(mocks.execute.mock.calls[1]?.[0].operationKey).toBe(mocks.execute.mock.calls[0]?.[0].operationKey)
+    expect(mocks.execute.mock.calls[1]?.[0].evidenceRefs).toEqual(['review:ticket-123'])
+    expect(screen.queryByRole('button', { name: 'Propose instead' })).toBeNull()
   })
 
   it('warns that FVA is absent while keeping submit enabled and preserving the MFA refusal', async () => {
@@ -76,10 +78,10 @@ describe('Admin action sheet', () => {
     mocks.execute.mockResolvedValue({ kind: 'refused', action: props.action, code: 'mfa_reverification_required', correlationId: 'correlation:1' })
     render(<AdminActionSheet {...props} />)
     toPreview()
-    expect(screen.getByText('Reverification is not configured for this deployment. Guarded actions will refuse until it is.')).toBeTruthy()
+    expect(screen.getByRole('link', { name: 'Account security' }).getAttribute('href')).toBe('/owner/settings/account/security')
     expect(screen.getByRole('button', { name: 'Submit command' }).hasAttribute('disabled')).toBe(false)
     fireEvent.click(screen.getByRole('button', { name: 'Submit command' }))
-    expect(await screen.findByText('Reverify before making this change.')).toBeTruthy()
+    expect(await screen.findByRole('button', { name: 'Retry' })).toBeTruthy()
     expect(screen.queryByRole('button', { name: 'Propose instead' })).toBeNull()
     expect(screen.getByLabelText<HTMLInputElement>('Other evidence reference').value).toBe('review:ticket-123')
   })

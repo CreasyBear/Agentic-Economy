@@ -284,7 +284,6 @@ describe("hosted Tool gateway smoke discovery", () => {
         commercial: {
           ...tool.commercial,
           price: { kind: "fixed", amount: sourcePrice },
-          displayPrice: { kind: "unavailable", reason: "fx_missing" },
         },
         availability: {
           ...tool.availability,
@@ -295,7 +294,7 @@ describe("hosted Tool gateway smoke discovery", () => {
     });
     if (description.kind !== "found") throw new Error("expected_current_tool");
     expect(description.tool.commercialPrice).toEqual({ kind: "fixed", amount: sourcePrice });
-    expect(description.tool.displayPrice).toEqual({ kind: "unavailable", reason: "fx_missing" });
+    expect(description.tool.displayPrice).toBeUndefined();
     const requests: string[] = [];
     const fetch: typeof globalThis.fetch = async (input) => {
       const url = String(input);

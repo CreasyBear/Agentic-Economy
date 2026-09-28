@@ -27,6 +27,15 @@ describe('directory Base payee', () => {
     expect(directoryBasePayTo({ ...listed, prices: [{ ...listed.prices[0]!, payTo: '0x1111111111111111111111111111111111111111' }] })).toBe('0x1111111111111111111111111111111111111111')
     expect(directoryBasePayTo({ ...listed, metadataJson: '{' })).toBeUndefined()
   })
+  it('does not report deliberately omitted projected metadata as malformed provider JSON', () => {
+    const log = vi.spyOn(console, 'error').mockImplementation(() => {})
+    try {
+      expect(directoryBasePayTo({ ...entry, metadataJson: '' })).toBeUndefined()
+      expect(log).not.toHaveBeenCalled()
+    } finally {
+      log.mockRestore()
+    }
+  })
 })
 describe('directory hard filters', () => {
   it('accepts the Market query limit with its existing hard filters and rejects longer input', () => {

@@ -299,19 +299,20 @@ describe('Account AUD funding HTTP boundary', () => {
     expect(provider.readCreditPayment).not.toHaveBeenCalled()
   })
 
-  it.each([
-    ['pending', 'funding_pending'],
-    ['outcome_unknown', 'funding_outcome_unknown'],
-  ] as const)('does not expose paid provider evidence before durable %s funding settlement', async (state, refusalCode) => {
-    const durable = command({ externalRef: 'cs_paid_before_ledger' })
-    sourceMocks.callSourceQuery.mockResolvedValueOnce({ kind: 'accepted', command: durable })
-    sourceMocks.callSourceMutation.mockResolvedValueOnce({ kind: 'accepted', command: { ...durable, state } })
+  it('fulfils a paid return without a webhook, then reads the durable credited state', async () => {
+    const externalRef = 'cs_paid_before_ledger'
+    const durable = command({ externalRef })
+    sourceMocks.callSourceQuery
+      .mockResolvedValueOnce({ kind: 'accepted', command: durable })
+      .mockResolvedValueOnce({ kind: 'accepted', command: { ...durable, state: 'succeeded' } })
+    sourceMocks.callSourceMutation.mockResolvedValue({ kind: 'accepted', command: durable })
+    sourceMocks.callSourceAction.mockResolvedValue({ kind: 'accepted', status: 'applied', appliedRef: 'funding:one' })
     const payment = {
       kind: 'hosted_redirect' as const,
       expiresAt: durable.checkoutExpiresAt,
       evidence: {
         provider: 'stripe' as const,
-        externalRef: 'cs_paid_before_ledger',
+        externalRef,
         amount: { currency: 'AUD' as const, units: durable.totalUnits, exponent: 6 as const },
         status: 'succeeded' as const,
         checkoutStatus: 'complete' as const,
@@ -320,6 +321,7 @@ describe('Account AUD funding HTTP boundary', () => {
         metadataDigest: durable.metadataDigest!,
         checkoutSessionDigest: `sha256:${'b'.repeat(64)}`,
         paymentIntentDigest: `sha256:${'c'.repeat(64)}`,
+        paymentId: 'pi_paid_before_ledger',
         evidenceDigest: `sha256:${'d'.repeat(64)}`,
         evidenceRef: 'stripe:checkout:cs_paid_before_ledger',
         observedAt: 100,
@@ -330,11 +332,15 @@ describe('Account AUD funding HTTP boundary', () => {
       readCreditPayment: vi.fn().mockResolvedValue(payment),
     }
 
-    const result = await readAccountFundingThroughSource({
-      commandRef: durable.commandRef,
-      idempotencyKey: durable.idempotencyKey,
-    }, {}, { provider })
-    expect(result).toEqual({ kind: 'refused', code: refusalCode, retryable: true })
+    await expect(readAccountFundingThroughSource({
+      externalRef,
+    }, {}, { provider })).resolves.toEqual(payment)
+    expect(sourceMocks.callSourceAction).toHaveBeenCalledWith(
+      expect.anything(),
+      { externalRef },
+    )
+    expect(sourceMocks.callSourceQuery).toHaveBeenCalledTimes(2)
+    expect(provider.createOrRecoverCreditPayment).not.toHaveBeenCalled()
   })
 
   it('exposes paid provider evidence only after durable funding settlement', async () => {

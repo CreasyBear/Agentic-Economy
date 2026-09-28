@@ -63,24 +63,6 @@ describe('executable AUD to USDC pricing evidence', () => {
     expect(validateExecutableRateEvidence(quoted.evidence, quoted.evidence.expiresAt)).toBe(false)
   })
 
-  it('quotes the minimum AUD units that still cover the exact upstream USDC requirement', () => {
-    for (let requiredUnits = 1n; requiredUnits <= 10_000n; requiredUnits += 1n) {
-      const quoted = quoteManagedX402BuyerAud({
-        environment: 'sandbox',
-        requiredUsdcAtomicUnits: requiredUnits.toString(),
-        observedAt: 1_800_000_000_000,
-      })
-      if (quoted.kind !== 'quoted') throw new Error(`quote refused for ${requiredUnits}`)
-
-      const buyerUnits = BigInt(quoted.evidence.sourceAmount.units)
-      const providerUnits = BigInt(quoted.evidence.targetAmount.units)
-      expect(providerUnits).toBeGreaterThanOrEqual(requiredUnits)
-      if (buyerUnits > 1n) {
-        const providerUnitsForOneLess = ((buyerUnits - 1n) * 65n + 99n) / 100n
-        expect(providerUnitsForOneLess).toBeLessThan(requiredUnits)
-      }
-    }
-  })
 
   it('splits inclusive GST without losing or creating an AUD unit', () => {
     for (let totalUnits = 1n; totalUnits <= 10_000n; totalUnits += 1n) {

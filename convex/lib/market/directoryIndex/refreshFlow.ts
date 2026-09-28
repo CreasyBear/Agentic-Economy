@@ -76,7 +76,7 @@ export const checkpointHandler = async (ctx: QueryCtx, args: Infer<typeof checkp
 /** Each successful page advances its checkpoint atomically with all metadata/index writes. */
 export const applyPageArgs = v.object({
     generation: v.string(), offset: v.number(), reportedTotal: v.number(), items: v.array(indexedSourceValue),
-    startItem: v.optional(v.number()), totalItems: v.optional(v.number()),
+    startItem: v.optional(v.number()), totalItems: v.optional(v.number()), skippedInvalidItems: v.optional(v.number()),
     observedAt: v.number(), runStartedAt: v.number(), workload: workloadCronSnapshotValue,
   })
 export const applyPageReturns = progressValue
@@ -93,14 +93,17 @@ export const applyPageHandler = async (ctx: MutationCtx, args: Infer<typeof appl
     const totalItems = args.totalItems ?? args.items.length
     const pageItemCursor = generation.pageItemCursor ?? 0
     if (startItem < pageItemCursor) return { kind: 'advanced', generation: args.generation, nextOffset: offset, indexedTotal: generation.ingestedCount }
-    if (startItem !== pageItemCursor || !Number.isSafeInteger(totalItems) || totalItems < 0 || totalItems > DIRECTORY_INDEX_PAGE_SIZE || startItem + args.items.length > totalItems) throw new Error('directory_source_batch_invalid')
+    const skippedInvalidItems = args.skippedInvalidItems ?? 0
+    if (startItem !== pageItemCursor || !Number.isSafeInteger(totalItems) || totalItems < 0 || totalItems > DIRECTORY_INDEX_PAGE_SIZE
+      || !Number.isSafeInteger(skippedInvalidItems) || skippedInvalidItems < 0 || totalItems + skippedInvalidItems > DIRECTORY_INDEX_PAGE_SIZE
+      || startItem + args.items.length > totalItems) throw new Error('directory_source_batch_invalid')
     const pageDone = startItem + args.items.length === totalItems
-    if (totalItems === 0 && args.offset < args.reportedTotal) throw new Error('directory_source_ended_early')
+    if (totalItems === 0 && skippedInvalidItems === 0 && args.offset < args.reportedTotal) throw new Error('directory_source_ended_early')
     const counts: Record<WriteOutcome, number> = { inserted: 0, unchanged: 0, activity_patched: 0, rewritten: 0 }
     for (const item of args.items) counts[await writeSource(ctx, args.generation, item, args.observedAt, args.runStartedAt)] += 1
     const inserted = counts.inserted
     console.info(JSON.stringify({ kind: 'x402_directory_page_applied', generation: args.generation, offset: args.offset, ...counts }))
-    const complete = totalItems === 0
+    const complete = totalItems === 0 && skippedInvalidItems === 0
     // The source paginates fixed offset windows, including a short final page.
     // Advancing by its window avoids re-reading a rounded-down final offset.
     const nextOffset = complete || !pageDone ? args.offset : args.offset + DIRECTORY_INDEX_PAGE_SIZE

@@ -33,14 +33,19 @@ export function createReadTools(reserve: ReserveChatTool) {
       execute: async (ctx: ToolCtx, input: ToolCompareInput) => {
         const denied = reserve('registry.tools.compare')
         if (denied !== null) return denied
-        const result = await ctx.runAction(
+        const nativeResult = await ctx.runAction(
           internal.capabilityToolCatalog.compareInternal,
           structuredClone(input) as FunctionArgs<typeof internal.capabilityToolCatalog.compareInternal>,
         )
         return projectedModelFacingOutput(
           'registry.tools.compare',
           compareContract.outputSchema,
-          () => projectToolCompareChoices(deserializeToolCompareResult(result)),
+          () => {
+            const result = deserializeToolCompareResult(nativeResult)
+            return projectToolCompareChoices(result.kind === 'ok'
+              ? { kind: 'ok', tools: result.tools }
+              : { kind: 'unavailable', reason: result.reason })
+          },
         )
       },
     }),

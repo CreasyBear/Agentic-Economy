@@ -122,7 +122,7 @@ const priceEvidence = z.strictObject({
 })
 export const publicToolDisplayPriceSchema = z.union([
   z.strictObject({ kind: z.literal('indicative'), amount: exactAmountSchema, rateObservedAt: z.number(), validUntil: z.number() }),
-  z.strictObject({ kind: z.literal('unavailable'), reason: z.enum(['upstream_price_missing', 'fx_missing', 'fx_stale', 'unsupported_payment']) }),
+  z.strictObject({ kind: z.literal('unavailable'), reason: z.enum(['upstream_price_missing', 'unsupported_payment']) }),
 ])
 
 export const publicToolDescriptorSchema = z.strictObject({

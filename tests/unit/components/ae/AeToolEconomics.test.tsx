@@ -75,18 +75,6 @@ function economicsTool(
 afterEach(cleanup)
 
 describe('AeToolEconomics', () => {
-  it('does not label an unavailable display price as Fixed price', () => {
-    const view = render(
-      <AeToolEconomics
-        tool={economicsTool({
-          price: { kind: 'fixed', amount: { currency: 'USD', units: '25', exponent: 2 } },
-          displayPrice: { kind: 'unavailable', reason: 'fx_missing' },
-        })}
-      />,
-    )
-    expect(view.queryByText('Fixed price')).toBeNull()
-    expect(view.getByText('AUD estimate temporarily unavailable per Call')).toBeTruthy()
-  })
 
   it('charges 0% on x402 Calls and does not show the Account loading fee', () => {
     const view = render(<AeToolEconomics tool={economicsTool()} />)

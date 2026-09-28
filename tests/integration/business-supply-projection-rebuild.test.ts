@@ -1,5 +1,5 @@
 import { convexTest } from 'convex-test'
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { publishCapabilityForSeed } from '../../convex/capabilitySupply'
 import { internal } from '../../convex/_generated/api'
@@ -18,6 +18,10 @@ import {
 
 const searchableSuffix = 'rebuildcurrent'
 const legacySuffix = 'rebuildlegacy'
+afterEach(() => {
+  vi.useRealTimers()
+  vi.restoreAllMocks()
+})
 
 async function publishBusiness(
   backend: ConvexFixtureBackend,
@@ -116,9 +120,14 @@ describe('rebuildAllBusinessSupplyProjections', () => {
       internal.capabilitySupplyProjection.rebuildAllBusinessSupplyProjections,
       { dryRun: true },
     )
-    expect(dry).toMatchObject({ isDone: true, continueCursor: null })
-    expect(dry.rebuilt).toBeGreaterThanOrEqual(2)
-    expect(dry.processed).toBe(dry.rebuilt + dry.skipped)
+    expect(dry).toMatchObject({ isDone: false, processed: 1 })
+    if (dry.continueCursor === null) throw new Error('projection_rebuild_dry_run_cursor_missing')
+    const dryNext = await backend.mutation(
+      internal.capabilitySupplyProjection.rebuildAllBusinessSupplyProjections,
+      { cursor: dry.continueCursor, dryRun: true },
+    )
+    expect(dry.rebuilt + dryNext.rebuilt).toBe(2)
+    expect(dry.processed + dryNext.processed).toBe(dry.rebuilt + dryNext.rebuilt + dry.skipped + dryNext.skipped)
     // A dry run reports without writing.
     expect(await searchDocuments(backend, legacySuffix)).toHaveLength(0)
 
@@ -126,8 +135,9 @@ describe('rebuildAllBusinessSupplyProjections', () => {
       internal.capabilitySupplyProjection.rebuildAllBusinessSupplyProjections,
       {},
     )
-    expect(applied).toMatchObject({ isDone: true, continueCursor: null })
+    expect(applied).toMatchObject({ isDone: false, processed: 1 })
     expect(applied.rebuilt).toBe(dry.rebuilt)
+    await backend.finishAllScheduledFunctions(() => undefined)
 
     const restored = await searchDocuments(backend, legacySuffix)
     expect(restored).toHaveLength(1)
@@ -149,9 +159,9 @@ describe('rebuildAllBusinessSupplyProjections', () => {
       processed: applied.processed,
       rebuilt: applied.rebuilt,
       skipped: applied.skipped,
-      isDone: true,
-      continueCursor: null,
+      isDone: false,
     })
+    await backend.finishAllScheduledFunctions(() => undefined)
     expect(await searchDocuments(backend, legacySuffix)).toStrictEqual(restored)
     expect(await searchDocuments(backend, searchableSuffix)).toStrictEqual(current)
   })
@@ -190,5 +200,79 @@ describe('rebuildAllBusinessSupplyProjections', () => {
     )
     expect(applied).toMatchObject({ isDone: true, continueCursor: null })
     expect(await searchDocuments(backend, slugSuffix)).toHaveLength(0)
+  })
+
+  it('converges an oversized published fleet in bounded pages and retracts it when suppressed', async () => {
+    const suffix = 'rebuildoversized'
+    const backend = convexTest(schema, modules)
+    const businessId = await publishBusiness(backend, suffix)
+    const original = await backend.run(async (ctx) => {
+      const offering = await ctx.db.query('businessOfferings')
+        .withIndex('by_businessId_and_offeringRef', (q) => q.eq('businessId', businessId))
+        .unique()
+      if (!offering) throw new Error('fixture_offering_missing')
+      const revision = await ctx.db.query('businessOfferingRevisions')
+        .withIndex('by_offeringRef_and_revision', (q) => q.eq('offeringRef', offering.offeringRef).eq('revision', offering.currentRevision))
+        .unique()
+      if (!revision) throw new Error('fixture_revision_missing')
+      return { offering, revision }
+    })
+    for (let base = 0; base < 100; base += 10) {
+      await backend.run(async (ctx) => {
+        for (let index = base; index < base + 10; index += 1) {
+          const offeringRef = `catalog-offering:${suffix}:${index}`
+          const { _id: _offeringId, _creationTime: _offeringCreated, ...offering } = original.offering
+          const { _id: _revisionId, _creationTime: _revisionCreated, ...revision } = original.revision
+          await ctx.db.insert('businessOfferings', { ...offering, offeringRef })
+          await ctx.db.insert('businessOfferingRevisions', { ...revision, offeringRef, name: `Fleet Tool ${index}` })
+        }
+      })
+    }
+    const originalSearch = (await searchDocuments(backend, suffix))[0]
+    const canonicalPublication = await backend.run((ctx) => ctx.db.query('capabilityPublications')
+      .withIndex('by_businessId_and_disposition', (q) => q.eq('businessId', businessId).eq('disposition', 'current'))
+      .unique())
+    expect(originalSearch).toBeDefined()
+    expect(canonicalPublication?.disposition).toBe('current')
+    await backend.run(async (ctx) => {
+      const source = await ctx.db.query('registrySearchDocuments')
+        .withIndex('by_business', (q) => q.eq('businessSlug', suffix))
+        .unique()
+      if (!source) throw new Error('fixture_search_document_missing')
+      const { _id, _creationTime, ...document } = source
+      await ctx.db.insert('registrySearchDocuments', {
+        ...document, documentId: `${suffix}__orphan`,
+        offeringRef: 'catalog-offering:orphan',
+      })
+    })
+    expect(await searchDocuments(backend, suffix)).toHaveLength(2)
+    vi.useFakeTimers()
+    const providerFetch = vi.spyOn(globalThis, 'fetch')
+    const initial = await backend.mutation(internal.capabilitySupplyProjection.rebuildAllBusinessSupplyProjections, {})
+    expect(initial.skipped).toBeGreaterThanOrEqual(1)
+    await backend.finishAllScheduledFunctions(() => vi.advanceTimersByTime(1))
+    const search = await searchDocuments(backend, suffix)
+    expect(search).toHaveLength(101)
+    expect({
+      missing: Array.from({ length: 100 }, (_, index) => index)
+        .filter((index) => !search.some((row) => row.offeringRef === `catalog-offering:${suffix}:${index}`)),
+      orphan: search.some((row) => row.offeringRef === 'catalog-offering:orphan'),
+    }).toEqual({ missing: [], orphan: false })
+    expect(search.every((row) => row.publicStatus === 'published')).toBe(true)
+    expect(search.find((row) => row.offeringRef === `catalog-offering:${suffix}`)?.firstRequestMode)
+      .toBe(originalSearch?.firstRequestMode)
+    expect(await backend.run((ctx) => ctx.db.query('capabilityPublications')
+      .withIndex('by_businessId_and_disposition', (q) => q.eq('businessId', businessId).eq('disposition', 'current'))
+      .unique())).toStrictEqual(canonicalPublication)
+    const replay = await backend.mutation(internal.capabilitySupplyProjection.rebuildAllBusinessSupplyProjections, {})
+    await backend.finishAllScheduledFunctions(() => vi.advanceTimersByTime(1))
+    expect(replay.skipped).toBeGreaterThanOrEqual(1)
+    expect(await searchDocuments(backend, suffix)).toStrictEqual(search)
+
+    await backend.run(async (ctx) => ctx.db.patch(businessId, { suppressedAt: Date.now(), updatedAt: Date.now() }))
+    await backend.mutation(internal.capabilitySupplyProjection.rebuildAllBusinessSupplyProjections, {})
+    await backend.finishAllScheduledFunctions(() => vi.advanceTimersByTime(1))
+    expect(await searchDocuments(backend, suffix)).toHaveLength(0)
+    expect(providerFetch).not.toHaveBeenCalled()
   })
 })

@@ -6,7 +6,7 @@ import { setPublicSourceTransportForTests } from '@/lib/server/convex-source'
 import * as decisionEngine from '@/modules/decision-engine/public'
 import { toolCatalogSearchInputSchema, type SearchEnvelope } from '@/modules/registry/tool-choice-contracts'
 import { registryToolsSearchAction } from '@/modules/registry/tools.actions'
-import { TOOL_CRYPTO_TX, TOOL_TIMEZONE, jevAnswersForTool, misorderedSearchResult, mockSearchTool } from '../../helpers/tool-search-rerank-fixtures'
+import { TIMEZONE_QUERY, TOOL_CRYPTO_TX, TOOL_TIMEZONE, jevAnswersForTool, misorderedSearchResult, mockFailedJevFetch, mockSearchTool } from '../../helpers/tool-search-rerank-fixtures'
 
 vi.mock('@/modules/capability-supply/tool-source', () => ({
   readCapabilityToolSearch: vi.fn(), readCapabilityToolDetail: vi.fn(), readCapabilityToolCompare: vi.fn(),
@@ -52,6 +52,15 @@ async function collectSearchPages(first: SearchEnvelope, options: Record<string,
   expect(page.pagination.hasMore).toBe(false)
   return rows
 }
+function mockDirectoryAssessment(score = 0.94) {
+  vi.spyOn(decisionEngine, 'executeDecisionGateway').mockImplementation(async request => ({
+    tier: 'jev_system_one', model: '~typesafe/jev-latest',
+    answers: Object.fromEntries(Object.keys(request.questions).map(key => [key, { type: 'noul', noul: score }])) as never,
+    usage: { inputTokens: 160, outputTokens: 0, estimatedCostAud: null },
+    durationMs: 40, attemptedTiers: ['jev_system_one'],
+  }))
+}
+
 
 describe('registry.tools.search mixed assessment', () => {
   beforeEach(() => {
@@ -109,20 +118,61 @@ describe('registry.tools.search mixed assessment', () => {
     expect(new TextEncoder().encode(JSON.stringify(result)).length).toBeLessThanOrEqual(16 * 1024)
   })
 
-  it('keeps an external-only Bazaar entry navigable without representing it as an AE-callable match', async () => {
+  it('returns an assessed external-only Bazaar entry as a match without claiming AE callability', async () => {
     vi.mocked(readCapabilityToolSearch).mockResolvedValue(noCandidates(''))
     directoryRows = [directoryRow('directory-1')]
+    mockDirectoryAssessment()
     const result = await runSearch('timezone conversion')
-    expect(result).toMatchObject({ kind: 'scoped', assessed: { source: 'all', coverage: 'partial' },
+    expect(result).toMatchObject({ kind: 'match', assessed: { source: 'all', coverage: 'partial' },
       results: [{ id: 'directory-1', access: 'external_listing', price: { kind: 'unavailable' },
         next: [{ action: 'describe-external', args: { id: 'directory-1' } }] }] })
     expect(result.next).toEqual([{ action: 'broaden', args: { query: 'timezone conversion' }, authority: 'public' }])
+  })
+
+  it('never displays an unrelated Bazaar lexical hit for an impossible need', async () => {
+    vi.mocked(readCapabilityToolSearch).mockResolvedValue(noCandidates(''))
+    directoryRows = [directoryRow('unrelated-1')]
+    mockDirectoryAssessment(0.02)
+    const result = await runSearch('deliver a sandwich on Jupiter')
+    expect(result).toMatchObject({ kind: 'scoped', results: [], assessed: { examined: 1, coverage: 'partial' } })
+  })
+
+  it('falls back to indexed Bazaar candidates when semantic ranking times out', async () => {
+    vi.mocked(readCapabilityToolSearch).mockResolvedValue(noCandidates(''))
+    directoryRows = [directoryRow('unassessed-1')]
+    vi.spyOn(decisionEngine, 'executeDecisionGateway').mockRejectedValue(new decisionEngine.JevUnavailableError('timeout'))
+    const result = await runSearch('timezone conversion', { source: 'coinbase' })
+    expect(result).toMatchObject({ kind: 'match', results: [{ id: 'unassessed-1' }] })
+  })
+
+  it('keeps the indexed Bazaar search path usable when Jev responds HTTP 500', async () => {
+    vi.mocked(readCapabilityToolSearch).mockResolvedValue(noCandidates(''))
+    directoryRows = [directoryRow('indexed-timezone')]
+    vi.stubEnv('TYPESAFE_API_KEY', 'ts-local-injected-fault')
+    const jev = mockFailedJevFetch(500)
+    vi.stubGlobal('fetch', jev)
+    const result = await runSearch('timezone conversion', { source: 'coinbase' })
+    expect(jev).toHaveBeenCalledOnce()
+    expect(result).toMatchObject({ kind: 'match', results: [{ id: 'indexed-timezone' }] })
+  })
+
+  it('uses indexed Bazaar candidates if semantic classification is incomplete', async () => {
+    vi.mocked(readCapabilityToolSearch).mockResolvedValue(noCandidates(''))
+    directoryRows = [directoryRow('unassessed-1'), directoryRow('unassessed-2')]
+    vi.spyOn(decisionEngine, 'executeDecisionGateway').mockResolvedValue({
+      tier: 'jev_system_one', model: '~typesafe/jev-latest',
+      answers: { match_0: { type: 'noul', noul: 0.99 } } as never,
+      usage: { inputTokens: null, outputTokens: null, estimatedCostAud: null },
+      durationMs: 40, attemptedTiers: ['jev_system_one'],
+    })
+    expect(await runSearch('timezone conversion', { source: 'coinbase' })).toMatchObject({ kind: 'match', results: [{ id: 'unassessed-1' }, { id: 'unassessed-2' }] })
   })
 
   it('reports a failed refresh on a still-queryable directory result', async () => {
     vi.mocked(readCapabilityToolSearch).mockResolvedValue(noCandidates(''))
     directoryRows = [directoryRow('directory-1')]
     directoryRefreshState = 'failed'
+    mockDirectoryAssessment()
     const result = await runSearch('timezone conversion', { source: 'coinbase' })
     expect(result.results[0]).toMatchObject({
       id: 'directory-1', freshness: { source: 'x402_directory', state: 'failed' },
@@ -179,8 +229,9 @@ describe('registry.tools.search mixed assessment', () => {
       ...misorderedSearchResult(''), items: [TOOL_CRYPTO_TX], pagination: { limit: 20, hasMore: false },
     })
     directoryRows = [{ ...directoryRow('directory-category'), category: 'locations' }]
+    mockDirectoryAssessment()
     const result = await runSearch('timezone conversion', { filters: { category: 'locations' } })
-    expect(result).toMatchObject({ kind: 'scoped', assessed: { source: 'all', coverage: 'partial', examined: 2 },
+    expect(result).toMatchObject({ kind: 'match', assessed: { source: 'all', coverage: 'partial', examined: 2 },
       results: [{ id: 'directory-category', access: 'external_listing', category: 'locations' }] })
   })
 
@@ -217,8 +268,9 @@ describe('registry.tools.search mixed assessment', () => {
   it('shrinks an oversized external page and resumes at its first omitted index row', async () => {
     vi.mocked(readCapabilityToolSearch).mockResolvedValue(noCandidates(''))
     directoryRows = Array.from({ length: 12 }, (_, index) => directoryRow(`directory-${index}-${'x'.repeat(1600)}`))
+    mockDirectoryAssessment()
     const first = await runSearch('timezone conversion', { source: 'coinbase', limit: 12 })
-    expect(first.kind).toBe('scoped')
+    expect(first.kind).toBe('match')
     expect(new TextEncoder().encode(JSON.stringify(first)).length).toBeLessThanOrEqual(16 * 1024)
     expect(first.results.length).toBeGreaterThan(0)
     expect(first.results.length).toBeLessThan(12)
@@ -230,12 +282,7 @@ describe('registry.tools.search mixed assessment', () => {
     vi.mocked(readCapabilityToolSearch).mockResolvedValue({
       ...misorderedSearchResult(''), items: [TOOL_CRYPTO_TX], pagination: { limit: 20, hasMore: false },
     })
-    vi.spyOn(decisionEngine, 'executeDecisionGateway').mockResolvedValue({
-      tier: 'jev_system_one', model: '~typesafe/jev-latest',
-      answers: { match_0: { type: 'noul', noul: 0.94 } } as never,
-      usage: { inputTokens: 160, outputTokens: 0, estimatedCostAud: null },
-      durationMs: 40, attemptedTiers: ['jev_system_one'],
-    })
+    mockDirectoryAssessment()
     directoryRows = Array.from({ length: 11 }, (_, index) => directoryRow(`directory-${index}-${'x'.repeat(1600)}`))
     const first = await runSearch('timezone conversion', { limit: 12 })
     expect(first.kind).toBe('match')
@@ -340,15 +387,18 @@ describe('registry.tools.search mixed assessment', () => {
     expect(new TextEncoder().encode(JSON.stringify(result)).length).toBeLessThanOrEqual(16 * 1024)
   })
 
-  it('reports index or ranker outage as unavailable with an executable retry, never candidates', async () => {
-    vi.mocked(readCapabilityToolSearch).mockResolvedValue(noCandidates(''))
+  it('does not claim a partial lexical overlap answers an impossible need when the ranker times out', async () => {
+    vi.mocked(readCapabilityToolSearch).mockResolvedValue(misorderedSearchResult(''))
+    vi.spyOn(decisionEngine, 'executeDecisionGateway').mockRejectedValue(new decisionEngine.JevUnavailableError('timeout'))
+    const result = await runSearch('convert timezone to red unicorn weather', { source: 'current' })
+    expect(result.kind).toBe('noMatch')
+    expect(result.results).toEqual([])
+  })
+
+  it('keeps admitted search working without a directory generation or semantic ranker', async () => {
+    vi.mocked(readCapabilityToolSearch).mockResolvedValue(misorderedSearchResult(TIMEZONE_QUERY))
     directoryAvailable = false
-    expect(await runSearch('timezone')).toMatchObject({ kind: 'unavailable', results: [], next: [
-      { action: 'retry', args: { query: 'timezone' } },
-    ] })
-    directoryAvailable = true
-    vi.mocked(readCapabilityToolSearch).mockResolvedValue(misorderedSearchResult('weather'))
-    vi.spyOn(decisionEngine, 'executeDecisionGateway').mockRejectedValue(new Error('ranking failed'))
-    await expect(runSearch('weather')).rejects.toThrow('ranking failed')
+    vi.spyOn(decisionEngine, 'executeDecisionGateway').mockRejectedValue(new decisionEngine.JevUnavailableError('timeout'))
+    expect(await runSearch(TIMEZONE_QUERY)).toMatchObject({ kind: 'match', results: [{ toolRef: TOOL_TIMEZONE.toolRef }] })
   })
 })

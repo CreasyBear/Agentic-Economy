@@ -39,7 +39,6 @@ export function AeAppShell({ children }: { children: ReactNode }) {
     <AeAppHeader
       signedIn={shell.isSignedIn}
       operatorRole={shell.operatorRole}
-      canAccessAdmin={shell.canAccessAdmin}
       minimal={shell.isMinimalShell}
       mobileNavOpen={shell.mobileNavOpen}
       setMobileNavOpen={shell.setMobileNavOpen}

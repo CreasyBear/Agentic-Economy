@@ -15,7 +15,8 @@ import { sourceWriteAdmissionFromRequest, sourceWriteRequestFromAdmission } from
 import type { AgentAccessPrincipal } from '@/modules/agent-access/agent-access'
 import { readCapabilityToolDetail } from '@/modules/capability-supply/tool-source'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
-import { fetchCoinbaseReferenceRate, formatDisplayPrice, parseDecimalExactAmount, type ReferenceRate } from '@/modules/money/public'
+import { REFERENCE_RATE_MAX_AGE_MS, formatDisplayPrice, parseDecimalExactAmount, type ReferenceRate } from '@/modules/money/public'
+import { readPersistedReferenceRate } from '@/modules/money/reference-rate.server'
 import { minimumDirectoryUsdPrice } from '@/modules/market/x402-directory-index'
 import { readX402DirectoryCatalogueResource } from '@/modules/market/x402-directory-index.server'
 import type { X402DirectoryCatalogueResource } from '@/modules/market/x402-directory-catalogue'
@@ -41,6 +42,7 @@ export async function handleSavedToolsPost(request: Request, actionName: SavedTo
     const resolver = options.resolvePrincipal ?? (options.authenticate === undefined
       ? resolveAgentAccessPrincipal(request, bounded.text, correlationId) : undefined)
     const admitted = await authenticateAgentAccess({
+      request,
       ...(options.authenticate === undefined ? {} : { authenticate: options.authenticate }),
       ...(resolver === undefined ? {} : { resolvePrincipal: resolver }),
       requiredScope: contract.scope, consequenceResource: `surface:http:saved-tools-${actionName}`,
@@ -129,13 +131,13 @@ async function liveExternalEntry(resource: string, referenceRate: () => Promise<
   if (amount === undefined) return { kind: 'found', entry }
   const rate = await referenceRate()
   if (rate === undefined) return { kind: 'found', entry }
-  const estimate = formatDisplayPrice({ kind: 'indicative', amount, referenceRate: rate, validUntil: rate.fetchedAt + 300_000 }, Date.now())
+  const estimate = formatDisplayPrice({ kind: 'indicative', amount, referenceRate: rate, validUntil: rate.fetchedAt + REFERENCE_RATE_MAX_AGE_MS }, Date.now())
   return { kind: 'found', entry: estimate === undefined || estimate === 'AUD estimate temporarily unavailable' ? entry : { ...entry, audEstimate: estimate } }
 }
 export async function resolveSavedList(stored: StoredList): Promise<SavedToolsListResult> {
   if (stored.kind === 'error') return stored
   let ratePromise: Promise<ReferenceRate | undefined> | undefined
-  const referenceRate = () => (ratePromise ??= fetchCoinbaseReferenceRate())
+  const referenceRate = () => (ratePromise ??= readPersistedReferenceRate())
   const items = await Promise.all(stored.items.map(async ({ identity, createdAt }): Promise<SavedToolListItem> => {
     const publicRef = publicIdentity(identity)
     if (publicRef.kind === 'external_listing') {

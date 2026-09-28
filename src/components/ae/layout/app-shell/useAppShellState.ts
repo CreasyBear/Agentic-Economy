@@ -7,7 +7,6 @@ import { PUBLIC_NAVIGATION } from '@/lib/navigation/app-navigation'
 import { emitFunnelEventOnce } from '@/lib/observability/funnel-client'
 import { operatorSurfaceForPath } from '@/lib/operator/operator-context'
 import type { OperatorRole } from '@/lib/operator/roles'
-import { useOperatorEntitlement } from './useOperatorEntitlement'
 
 const subscribeNever = () => () => {}
 
@@ -33,7 +32,6 @@ export type AppShellState = Readonly<{
   pathname: string
   hash: string
   operatorRole: OperatorRole
-  canAccessAdmin: boolean
   isSignedIn: boolean
   isMinimalShell: boolean
   hidePublicFooter: boolean
@@ -52,7 +50,6 @@ export function useAppShellState(): AppShellState {
   const { pathname, hash } = useLocation()
   const matches = useMatches()
   const isSignedIn = clerkIsSignedIn === true
-  const { canAccessAdmin } = useOperatorEntitlement()
   const isMinimalShell = matches.some((match) => match.staticData?.shellMode === 'minimal')
   const [mobileNavOpen, setMobileNavOpen] = useState(false)
   const [commandOpen, setCommandOpen] = useState(false)
@@ -106,7 +103,6 @@ export function useAppShellState(): AppShellState {
     pathname,
     hash,
     operatorRole: operatorSurfaceForPath(pathname),
-    canAccessAdmin,
     isSignedIn,
     isMinimalShell,
     hidePublicFooter: isSignedIn && !isPublicMarketingPath(pathname),

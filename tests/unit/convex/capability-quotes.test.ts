@@ -694,9 +694,10 @@ describe('direct Quote handlers', () => {
       requirementDigest: live.requirement.requirementDigest, observedAt: live.requirement.observedAt,
     })).toBe(true)
     const referenceRate = { source: 'coinbase' as const, base: 'USDC' as const, quote: 'AUD' as const, rate: '1.3854', fetchedAt: Date.now() }
+    await backend.run(async ctx => { await ctx.db.insert('moneyReferenceRates', { pair: 'USDC/AUD', rate: referenceRate.rate, fetchedAt: referenceRate.fetchedAt }) })
     const issued = await backend.mutation(internal.capabilityQuotes.issueQuote, {
       operationKey: 'managed-quote:issue', correlationId: 'managed-quote:issue',
-      principal: agent.principal, toolRef: fixture.toolRef, input, liveX402Requirement: live.requirement, referenceRate,
+      principal: agent.principal, toolRef: fixture.toolRef, input, liveX402Requirement: live.requirement,
       formance: { ...formanceSnapshot(subjects), treasury: {
         custodyRef: activeCustodyRef, custodyGeneration: activeCustodyGeneration,
         network: activeCustodyNetwork, availableUnits: '10000000',

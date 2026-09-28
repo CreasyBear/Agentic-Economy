@@ -24,8 +24,20 @@ export function useAdminMetrics(range: MarketplaceMetricsRange): AdminMetricsDat
   const report = useQuery(api.adminConsoleMetrics.readMarketplaceMetrics, { range })
   if (report === undefined) return { kind: 'loading' }
   if ('kind' in report) return { kind: 'refused' }
+  const requestedDays = range === 'last_7' ? 7 : range === 'last_30' ? 30 : 90
+  if (report.headline === null || report.ratios === null || report.wow === null) return {
+    kind: 'ready',
+    coverageComplete: false,
+    coverageDescription: ADMIN_METRICS_COPY.incompleteRange(report.days.length, requestedDays),
+    cards: [],
+    ratios: [],
+    days: report.days.map(toDayRow),
+    partialDays: report.partialDays,
+  }
   return {
     kind: 'ready',
+    coverageComplete: report.coverageComplete,
+    coverageDescription: ADMIN_METRICS_COPY.incompleteRange(report.days.length, requestedDays),
     cards: [
       {
         label: ADMIN_METRICS_COPY.settledCallValue,
@@ -60,8 +72,8 @@ export function useAdminMetrics(range: MarketplaceMetricsRange): AdminMetricsDat
 }
 
 function moneyLabel(
-  money: MarketplaceMetricsReport['headline']['money'],
-  amount: MarketplaceMetricsReport['headline']['settledCallValue'],
+  money: NonNullable<MarketplaceMetricsReport['headline']>['money'],
+  amount: NonNullable<MarketplaceMetricsReport['headline']>['settledCallValue'],
 ): string {
   return money === 'no_settled_usage' || amount === null
     ? ADMIN_METRICS_COPY.noSettledUsage

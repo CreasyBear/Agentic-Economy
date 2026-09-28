@@ -11,6 +11,7 @@ import {
   reconcileDueFacilitatorInvocationsHandler, refreshAgenticEconomyApiRegistryHandler,
   refreshCapabilitySupplyReadinessHandler, refreshCurrentMarketPresenceHandler,
   refreshFacilitatorDiscoveryHandler, refreshMarketFlowHandler,
+  refreshReferenceRateHandler,
   snapshotMarketplaceMetricsDayHandler,
 } from './lib/platform/workloadCron/scheduled'
 
@@ -61,6 +62,12 @@ export const refreshFacilitatorDiscovery = internalAction({
   returns: v.null(),
   handler: refreshFacilitatorDiscoveryHandler,
 })
+export const refreshReferenceRate = internalAction({
+  args: {},
+  returns: v.null(),
+  handler: refreshReferenceRateHandler,
+})
+
 
 export const refreshAgenticEconomyApiRegistry = internalAction({
   args: {},

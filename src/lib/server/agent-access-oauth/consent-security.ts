@@ -22,8 +22,6 @@ import {
 } from '@/modules/agent-access/policy'
 import { assertCsrf } from '@/modules/security/public'
 import { loadAgentDirectoryReadback, loadOwnerReconnectCandidates } from '@/modules/agent-access/agent-access-console'
-import { readCapabilityToolCompare } from '@/modules/capability-supply/tool-source'
-import { isPublicToolRef } from '@/modules/capability-supply/public'
 import {
   reserveAgentAccessConsentForOwner,
   type AgentAccessConsentReservationResult,
@@ -423,10 +421,7 @@ async function consentAgentTargets(
   try {
     const listed = options.listAgents !== undefined
       ? await options.listAgents(cursor)
-      : await loadAgentDirectoryReadback({
-          compare: readCapabilityToolCompare,
-          isToolRef: isPublicToolRef,
-        }, cursor).then((directory) => ({
+      : await loadAgentDirectoryReadback(cursor).then((directory) => ({
           items: directory.items.map(({ principalRef, principalRevision, displayName }) => ({
             principalRef,
             principalRevision,

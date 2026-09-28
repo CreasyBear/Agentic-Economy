@@ -46,7 +46,7 @@ const columns: ColumnDef<AdminExceptionRowModel, unknown>[] = [
   },
 ]
 
-export function ExceptionFeedTable({ rows, observed, complete, unavailable, orderLabel, paginationStatus, onLoadMore, onOpen }: ExceptionFeedTableProps) {
+export function ExceptionFeedTable({ rows, observed, complete, unavailable, orderLabel, paginationStatus, scanRequests, onLoadMore, onOpen }: ExceptionFeedTableProps) {
   return (
     <AeSection
       title={ADMIN_EXCEPTIONS_COPY.exceptionsTitle}
@@ -70,6 +70,9 @@ export function ExceptionFeedTable({ rows, observed, complete, unavailable, orde
           getAccessibleLabel: (row) => `${ADMIN_EXCEPTIONS_COPY.viewDetails}: ${row.ref}`,
         }}
       />
+      {rows.length === 0 && !complete && scanRequests > 0
+        ? <p role="status" className="text-sm text-muted-foreground">{ADMIN_EXCEPTIONS_COPY.scanProgress(scanRequests)}</p>
+        : null}
       {paginationStatus === 'Exhausted' ? null : (
         <Button type="button" variant="outline" disabled={paginationStatus === 'LoadingMore'} onClick={onLoadMore}>
           {ADMIN_EXCEPTIONS_COPY.loadMore}

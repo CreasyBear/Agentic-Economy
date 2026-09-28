@@ -5,6 +5,7 @@
 import { toToolInspectorModel } from '@/components/ae/market/tool-detail/tool-inspector-model'
 import { alternativeToolSearchHref, projectToolObject } from '@/components/ae/shared/listing-family.view-model'
 import { projectAdmittedListing, projectDirectoryListing } from '@/modules/registry/public'
+import { REFERENCE_RATE_MAX_AGE_MS } from '@/modules/money/public'
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { RouterContextProvider, createMemoryHistory, createRootRoute, createRoute, createRouter } from '@tanstack/react-router'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -416,7 +417,8 @@ describe('/tools/$toolRef', () => {
     const rate = { source: 'coinbase' as const, base: 'USDC' as const, quote: 'AUD' as const, rate: '1.5', fetchedAt: 1_000 }
     expect(projectToolObject(listing, undefined, 2_000, rate).price?.label).toBe('A$0.01 per Call')
     expect(projectToolObject(listing, undefined, 2_000, rate).price?.source).toContain('directory reported')
-    expect(projectToolObject(listing, undefined, 301_001, rate).price?.label).toBe('AUD estimate temporarily unavailable')
+    expect(projectToolObject(listing, undefined, rate.fetchedAt + REFERENCE_RATE_MAX_AGE_MS, rate).price?.label)
+      .toBe('AUD estimate temporarily unavailable')
     expect(projectToolObject(listing, undefined, 2_000).price?.label).toBe('AUD estimate temporarily unavailable')
   })
 

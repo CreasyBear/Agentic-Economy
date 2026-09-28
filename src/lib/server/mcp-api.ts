@@ -247,7 +247,7 @@ function mcpToolRefusalResult(action: AnyAction, result: unknown, refusal: McpTo
   const code = /^[a-z][a-z0-9_:-]{0,95}$/u.test(refusal.code) ? refusal.code : 'action_refused'
   const kind = code === 'tool_not_found' || (isRecord(result) && result.kind === 'not_found') ? 'NOT_FOUND'
     : code === 'capacity_exceeded' ? 'RESOURCE_EXHAUSTED'
-      : isRecord(result) && result.kind === 'unavailable' ? 'UNAVAILABLE'
+      : code === 'source_unavailable' || (isRecord(result) && result.kind === 'unavailable') ? 'UNAVAILABLE'
         : 'FAILED_PRECONDITION'
   const projected = projectMcpJourneyProblem(buildProblem({
     kind,
@@ -423,7 +423,6 @@ function recordMcpGatewayTelemetry(
  * the tier filter untouched.
  */
 const MCP_TOOLS_LIST_PAGE_SIZE = 50
-const EMPTY_MCP_TOOL_INPUT_SCHEMA = { type: 'object', properties: {}, additionalProperties: false } as const
 /** Success and Problem Details share `next`; both structured forms are valid MCP results. */
 const MCP_TOOL_OUTPUT_SCHEMA = z.looseObject({
   next: z.array(z.unknown()),
@@ -463,16 +462,47 @@ function decodeMcpToolsListCursor(cursor: string, toolCount: number): number | u
   return Number.isSafeInteger(offset) && offset >= 0 && offset <= toolCount ? offset : undefined
 }
 
+function mcpInputSchema(action: AnyAction) {
+  const inputObjectSchema = normalizeObjectSchema(action.schema)
+  const schema = toJsonSchemaCompat(inputObjectSchema ?? action.schema, { strictUnions: true, pipeStrategy: 'input' })
+  if (inputObjectSchema !== undefined) return schema
+  const variants = 'anyOf' in schema ? schema.anyOf : 'oneOf' in schema ? schema.oneOf : undefined
+  if (!Array.isArray(variants)) throw new Error(`MCP input schema for ${action.id} is not an object union`)
+  const properties: Record<string, unknown> = {}
+  let commonRequired: Set<string> | undefined
+  const pending: unknown[] = [...variants]
+  while (pending.length > 0) {
+    const variant = pending.pop()
+    if (!isRecord(variant)) throw new Error(`MCP input schema for ${action.id} has a non-object variant`)
+    if (!isRecord(variant.properties)) {
+      const nested = Array.isArray(variant.anyOf) ? variant.anyOf : variant.oneOf
+      if (!Array.isArray(nested)) throw new Error(`MCP input schema for ${action.id} has a variant without fields`)
+      pending.push(...nested)
+      continue
+    }
+    const required = Array.isArray(variant.required) ? variant.required : []
+    if (commonRequired === undefined) {
+      commonRequired = new Set(required)
+    } else {
+      for (const field of commonRequired) if (!required.includes(field)) commonRequired.delete(field)
+    }
+    for (const [key, value] of Object.entries(variant.properties)) {
+      const existing = properties[key]
+      properties[key] = existing === undefined || JSON.stringify(existing) === JSON.stringify(value)
+        ? value : { anyOf: [existing, value] }
+    }
+  }
+  return { ...schema, type: 'object', properties, ...(commonRequired?.size ? { required: [...commonRequired] } : {}) }
+}
+
 function mcpToolListEntry(action: AnyAction): Record<string, unknown> {
   const metadata = describeActionMcpMetadata(action)
-  const inputObjectSchema = normalizeObjectSchema(action.schema)
+  const inputSchema = mcpInputSchema(action)
   return {
     name: mcpToolName(action),
     title: action.name,
     description: mcpToolDescription(action),
-    inputSchema: inputObjectSchema === undefined
-      ? EMPTY_MCP_TOOL_INPUT_SCHEMA
-      : toJsonSchemaCompat(inputObjectSchema, { strictUnions: true, pipeStrategy: 'input' }),
+    inputSchema,
     outputSchema: MCP_TOOL_OUTPUT_JSON_SCHEMA,
     annotations: {
       readOnlyHint: action.readOnly,
@@ -714,6 +744,7 @@ export async function handleMcpRequest(request: Request, options: McpRequestOpti
           ? resolveAgentAccessPrincipal(boundedRequest, bounded.bodyText, correlationId)
           : undefined)
       const admitted = await authenticateAgentAccess({
+        request: boundedRequest,
         ...(options.authenticate === undefined ? {} : { authenticate: options.authenticate }),
         ...(resolvePrincipal === undefined ? {} : { resolvePrincipal }),
         consequenceResource: genericAdmission

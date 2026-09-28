@@ -3,7 +3,6 @@ import type { AgentAccessOwnerGrantReadback } from '@/modules/agent-access/polic
 import type { AgentSpendingPolicyState } from '@/modules/agent-access/spending-policy-update'
 import type { AgentConnectionReadback } from '@/modules/agent-access/agent-connection'
 import type { ExactAmount } from '@/modules/money/public'
-import type { AccountFundingBalance } from '@/modules/money/server'
 
 export type AgentActivityView = Readonly<{
   callRef: string
@@ -19,10 +18,6 @@ export type AgentActivityView = Readonly<{
   recoveryRef?: string
   createdAt: number
   updatedAt: number
-  tool?: Readonly<{
-    label: string
-    provider: string
-  }>
 }>
 
 export type AgentUsageSummary = Readonly<{
@@ -90,6 +85,7 @@ export type AgentDirectoryItem = Readonly<{
   lastSeenAt?: number
   connectionCount: number
   connectorDisplayNames: readonly string[]
+  connectionsAvailable?: boolean
   authorityMode: AgentAccessKeyInventoryItem['authorityMode']
   monthlySettledSpend?: ExactAmount | undefined
   monthlyLimit?: ExactAmount | undefined
@@ -105,6 +101,7 @@ export type AgentDirectoryItem = Readonly<{
 export type AgentDetail = Readonly<{
   agent: AgentDirectoryItem
   connections: readonly AgentConnectionReadback[]
+  connectionsAvailable?: boolean
   credentials: readonly AgentCredentialSummary[]
   currentCredentialRef?: string
   authorityMode: AgentAccessKeyInventoryItem['authorityMode']
@@ -122,7 +119,5 @@ export type AgentDirectoryProjection = Readonly<{
   items: readonly AgentDirectoryItem[]
   details: readonly AgentDetail[]
   nextCursor?: string
-  /** One Account fact, read once for the owner surface; never per credential. */
-  accountBalance?: AccountFundingBalance
   activityCoverage?: 'complete' | 'recent'
 }>

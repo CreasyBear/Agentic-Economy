@@ -1,7 +1,8 @@
 import { ADMIN_ACCESS_REFUSED_COPY, type AdminException } from '@/lib/operator/admin-console/contracts'
+import { getStatusPresentation } from '@/lib/ui/status-presentation'
 import type { AdminRecentRef } from '../object-search/object-search.contracts'
 
-export type AdminConfiguredState = 'configured' | 'not_configured'
+export type AdminConfiguredState = 'configured' | 'not_configured' | 'unavailable'
 export type AdminOverviewConfiguration = Readonly<{
   formance: AdminConfiguredState
   x402Custody: AdminConfiguredState
@@ -21,15 +22,22 @@ export type AdminOverviewHeadline = Readonly<{
   successRate: string
   transactingWorkspaces: string
 }>
+export type AdminOverviewExceptionsState =
+  | Readonly<{ kind: 'loading' }>
+  | Readonly<{ kind: 'refused' }>
+  | Readonly<{ kind: 'ready'; rows: readonly AdminOverviewExceptionRow[]; unavailable: boolean }>
+export type AdminOverviewMetricsState =
+  | Readonly<{ kind: 'loading' }>
+  | Readonly<{ kind: 'refused' }>
+  | Readonly<{ kind: 'empty' }>
+  | Readonly<{ kind: 'ready'; headline: AdminOverviewHeadline }>
+
 export type AdminOverviewDataState =
   | Readonly<{ kind: 'loading' }>
   | Readonly<{ kind: 'refused' }>
   | Readonly<{
       kind: 'ready'
       configuration: AdminOverviewConfiguration
-      exceptions: readonly AdminOverviewExceptionRow[]
-      exceptionsUnavailable: boolean
-      headline: AdminOverviewHeadline
       recent: readonly AdminOverviewRecentRow[]
     }>
 
@@ -47,6 +55,9 @@ export const ADMIN_OVERVIEW_COPY = {
   convex: 'Convex',
   configured: 'Configured',
   notConfigured: 'Not configured',
+  unavailable: getStatusPresentation('unavailable').label,
+  metricsUnavailable: 'Metrics unavailable. Open Metrics to try again.',
+  noCompletedMetrics: 'A complete 7-day snapshot is not available. Daily records remain in Metrics.',
   present: 'Present',
   absent: 'Absent',
   ok: 'OK',

@@ -21,6 +21,9 @@ export function AeAgentConnectionReceipts({
   lifecyclePending?: Readonly<{ kind: 'credential' | 'connection' | 'agent'; ref: string }>
   onDisconnect: (connection: AgentConnectionReadback, trigger: HTMLButtonElement) => void
 }>) {
+  if (detail.connectionsAvailable === false) {
+    return <p className="text-sm text-muted-foreground">Connection details are unavailable. Refresh Agents to check current connections.</p>
+  }
   if (detail.connections.length === 0) {
     return (
       <div className="grid gap-1 rounded-md border border-border p-3">

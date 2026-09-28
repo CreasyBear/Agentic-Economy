@@ -235,11 +235,3 @@ export const liveX402RequirementValue = v.object({
   paymentRequiredJson: v.string(),
   observedAt: v.number(),
 })
-
-export const referenceRateValue = v.object({
-  source: v.literal('coinbase'),
-  base: v.literal('USDC'),
-  quote: v.literal('AUD'),
-  rate: v.string(),
-  fetchedAt: v.number(),
-})

@@ -25,7 +25,7 @@ type DirectoryToolCardProps = Readonly<{
 export const DirectoryToolCard = memo(function DirectoryToolCard({ model, onSave, saved, saveDisabled, onCompare, comparing, compareDisabled }: DirectoryToolCardProps) {
   return (
     <div className="group h-full">
-    <Card className="grid h-full grid-rows-[auto_1fr_auto] gap-0 overflow-hidden border border-border/70 p-0 shadow-none transition-[box-shadow,transform,border-color] duration-fast ease-standard group-hover:-translate-y-1 hover:shadow-float group-hover:shadow-float motion-reduce:transform-none motion-reduce:transition-none">
+    <Card className="relative grid h-full grid-rows-[auto_1fr_auto] gap-0 overflow-hidden border border-border/70 p-0 shadow-none transition-[box-shadow,transform,border-color] duration-fast ease-standard group-hover:-translate-y-1 hover:shadow-float group-hover:shadow-float motion-reduce:transform-none motion-reduce:transition-none">
       <div className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-x-related gap-y-intra px-gutter pt-related">
         <Avatar className="size-9 rounded-lg border border-border/70 bg-muted/40">
           {model.iconUrl === undefined ? null : <AvatarImage src={model.iconUrl} alt="" referrerPolicy="no-referrer" className="object-cover" />}
@@ -35,7 +35,7 @@ export const DirectoryToolCard = memo(function DirectoryToolCard({ model, onSave
         {onSave === undefined
           ? <ArrowUpRightIcon className="size-4 text-muted-foreground" aria-hidden="true" />
           : (
-            <Button variant="ghost" size="icon-sm" className="relative z-10 active:scale-100" onClick={onSave} disabled={saveDisabled} aria-label={`${saved ? 'Unsave' : 'Save'} ${model.title}`} aria-pressed={saved === true}>
+            <Button variant="ghost" size="icon" className="relative z-10 active:scale-100" onClick={onSave} disabled={saveDisabled} aria-label={`${saved ? 'Unsave' : 'Save'} ${model.title}`} aria-pressed={saved === true}>
               <HeartIcon className={cn(saved && 'fill-current')} />
             </Button>
           )}

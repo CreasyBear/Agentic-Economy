@@ -4,6 +4,7 @@ import { canonicalDigest } from '@/modules/common/canonical-digest'
 import type { Infer } from 'convex/values'
 import { pageValue } from '../../convex/lib/market/directoryIndex/contracts'
 import { searchCompactReturns } from '../../convex/lib/market/directoryIndex/browse'
+import { prepareIndexedDirectoryPage } from '../../convex/x402DirectoryIndexSource'
 import type { IndexedSource } from '../../convex/lib/market/directoryIndex/contracts'
 import { convexTestWithMarketComponents, type ConvexFixtureBackend } from '../helpers/convex-fixtures'
 
@@ -83,6 +84,35 @@ describe('complete external directory index', () => {
     expect(await backend.query(api.x402DirectoryIndex.resource, { resource: source(1).resource })).toMatchObject({ kind: 'found', item: { entry: { title: 'Updated research' } } })
   })
 
+  it('keeps recency membership unique when activity changes before an identity rewrite', async () => {
+    vi.setSystemTime(new Date('2026-09-28T12:00:00.000Z'))
+    const { backend, workload } = await setup()
+    const generation = 'coinbase-recency-rewrite'
+    await seedRefresh(backend, generation)
+    const fresh = new Date(Date.now() - 60_000).toISOString()
+    const stale = new Date(Date.now() - 40 * 24 * 60 * 60 * 1000).toISOString()
+    const observed = (title: string, lastCalledAt: string) => {
+      const category = title === 'Revised research' ? 'Engineering' : 'Research'
+      const item = source(1, { title, category, activity: { calls30d: 4, payers30d: 2, lastCalledAt } })
+      const raw = { resource: item.resource, title, category, lastCalledAt }
+      return { ...item, sourceJson: JSON.stringify(raw), sourceDigest: canonicalDigest(raw) }
+    }
+    const items = [observed('Research', fresh), observed('Research', stale), observed('Revised research', stale), observed('Research', fresh)]
+    for (const [index, item] of items.entries()) {
+      await backend.mutation(internal.x402DirectoryIndexStore.applyPage, {
+        generation, offset: index * 100, reportedTotal: 4, observedAt: Date.now() + index,
+        runStartedAt: 1, workload, items: [item],
+      })
+    }
+    await backend.mutation(internal.x402DirectoryIndexStore.applyPage, {
+      generation, offset: 400, reportedTotal: 4, observedAt: Date.now() + 4,
+      runStartedAt: 1, workload, items: [],
+    })
+    const report = await backend.query(api.x402DirectoryIndex.analytics, {})
+    expect(report.kind).toBe('ok')
+    if (report.kind === 'ok') expect(Object.fromEntries(report.recency.map(({ key, count }) => [key, count]))).toMatchObject({ fresh: 1, stale: 0 })
+  })
+
   it('reprojects stale display titles from retained source metadata without rewriting the snapshot or starting another scan', async () => {
     const { backend, workload } = await setup()
     const generation = 'coinbase-retained-title'
@@ -115,6 +145,26 @@ describe('complete external directory index', () => {
     expect(await backend.mutation(internal.x402DirectoryIndexStore.applyPage, first)).toMatchObject({ nextOffset: 100, indexedTotal: 2 })
     await backend.mutation(internal.x402DirectoryIndexStore.applyPage, { generation, offset: 100, reportedTotal: 2, observedAt: 3, runStartedAt: 1, workload, items: [] })
     expect(await backend.query(api.x402DirectoryIndex.status, {})).toMatchObject({ coverage: { indexedTotal: 2, duplicateObservations: 0, pagesFetched: 2 } })
+  })
+
+  it('skips malformed discovery rows without stalling later pages or advertising them as callable', async () => {
+    const { backend, workload } = await setup()
+    const generation = 'coinbase-malformed-row'
+    await seedRefresh(backend, generation)
+    const first = prepareIndexedDirectoryPage([{ resource: '', accepts: [{ scheme: 'exact', amount: '1' }] }, { resource: source(1).resource, description: 'Public research' }])
+    expect(first).toMatchObject({ skippedInvalidItems: 1, items: [{ resource: source(1).resource }] })
+    const invalidPayment = prepareIndexedDirectoryPage([{
+      resource: 'https://invalid-provider.test/tools/payment',
+      accepts: Array.from({ length: 129 }, (_, index) => ({ network: `eip155:${index + 100}`, scheme: 'exact', amount: '1' })),
+    }])
+    expect(invalidPayment).toMatchObject({ items: [], skippedInvalidItems: 1 })
+    await backend.mutation(internal.x402DirectoryIndexStore.applyPage, { generation, offset: 0, reportedTotal: 201, observedAt: 2, runStartedAt: 1, workload, ...first })
+    await backend.mutation(internal.x402DirectoryIndexStore.applyPage, { generation, offset: 100, reportedTotal: 201, observedAt: 3, runStartedAt: 1, workload, ...invalidPayment })
+    await backend.mutation(internal.x402DirectoryIndexStore.applyPage, { generation, offset: 200, reportedTotal: 201, observedAt: 4, runStartedAt: 1, workload, items: [source(2)] })
+    await backend.mutation(internal.x402DirectoryIndexStore.applyPage, { generation, offset: 300, reportedTotal: 201, observedAt: 5, runStartedAt: 1, workload, items: [] })
+    expect(await backend.query(api.x402DirectoryIndex.status, {})).toMatchObject({ kind: 'ready', coverage: { indexedTotal: 2, sourceChangedDuringScan: true } })
+    expect(await backend.query(api.x402DirectoryIndex.resource, { resource: source(2).resource })).toMatchObject({ kind: 'found' })
+    expect(await backend.query(api.x402DirectoryIndex.resource, { resource: '' })).toMatchObject({ kind: 'unavailable' })
   })
 
   it('denies a revoked workload before persisting the next source batch', async () => {
@@ -192,6 +242,8 @@ describe('complete external directory index', () => {
       return await ctx.db.query('marketExternalRegistryEntries').collect()
     })
     expect(await backend.query(api.x402DirectoryIndex.analytics, {})).toEqual({ kind: 'unavailable', reason: 'analytics_building' })
+    expect(await backend.query(api.x402DirectoryIndex.browse, { priceBand: '1_to_10', paginationOpts: { cursor: null, numItems: 12 } })).toMatchObject({ kind: 'ok', page: [{ entry: { resource: source(1).resource } }] })
+    expect(await backend.query(api.x402DirectoryIndex.searchCompact, { query: 'research', priceBand: '1_to_10', paginationOpts: { cursor: null, numItems: 12 } })).toMatchObject({ kind: 'ok', page: [{ id: expect.any(String) }] })
     expect(await backend.mutation(internal.x402DirectoryIndexBackfill.batch, { generation, workload })).toEqual({ kind: 'ready', processed: 1 })
     expect(await backend.mutation(internal.x402DirectoryIndexBackfill.batch, { generation, workload })).toEqual({ kind: 'ready', processed: 1 })
     expect(await backend.run(ctx => ctx.db.query('marketExternalRegistryEntries').collect())).toEqual(before)

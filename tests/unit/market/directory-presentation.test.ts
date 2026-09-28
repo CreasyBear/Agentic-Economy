@@ -77,7 +77,7 @@ it('skips a price-only description prefix without changing explicit titles or pr
   expect(x402DirectoryFunctionalTitle({ description: 'Extract images for $0.001/page.', fallback: 'Service' })).toBe('Extract images for $0.001/page.')
 })
 
-it('shares one fresh Coinbase observation across priced rows, retaining exact source and admitted identity', async () => {
+it('shares one persisted Coinbase observation across priced rows, retaining exact source and admitted identity', async () => {
   const ref = `operation:v1:${'a'.repeat(64)}`
   const rows = [
     { ...entry, resource: 'https://example.com/tiny', prices: [{ network: 'eip155:8453', scheme: 'exact', amount: '0.001 USDC', decimalAmount: '0.001000', symbol: 'USDC' }], choice: { access: 'ae_callable' as const, toolRef: ref, sourceRouteRef: 'coinbase:tiny' } },
@@ -88,9 +88,10 @@ it('shares one fresh Coinbase observation across priced rows, retaining exact so
       { network: 'eip155:8453', scheme: 'exact', amount: '0.001 USDC', decimalAmount: '0.001000', symbol: 'USDC' },
     ], choice: { access: 'external_listing' as const } },
   ]
-  const fetch = vi.fn(async () => new Response(JSON.stringify({ data: { currency: 'USDC', rates: { AUD: '1.239' } } }), { status: 200 }))
-  vi.stubGlobal('fetch', fetch)
   const query = vi.fn(async (reference: unknown) => {
+    if (getFunctionName(reference as never) === 'referenceRateRefresh:current') {
+      return { source: 'coinbase', base: 'USDC', quote: 'AUD', rate: '1.239', fetchedAt: Date.now() }
+    }
     expect(getFunctionName(reference as never)).toBe('x402DirectoryIndex:browse')
     return { kind: 'ok', coverage: { generation: 'g1' }, searchMethod: 'native_index', page: rows.map(entry => ({ entry, choice: entry.choice })), continueCursor: '', isDone: true }
   })
@@ -98,8 +99,8 @@ it('shares one fresh Coinbase observation across priced rows, retaining exact so
   const result = await readX402DirectoryCatalogue({})
   expect(result.kind).toBe('ok')
   if (result.kind !== 'ok' || result.page.kind !== 'ok') return
-  expect(fetch).toHaveBeenCalledTimes(1)
-  expect(query).toHaveBeenCalledTimes(1)
+  expect(query).toHaveBeenCalledTimes(2)
+  expect(query.mock.calls.map(([reference]) => getFunctionName(reference as never))).toContain('referenceRateRefresh:current')
   const [tiny, larger, zero, options] = result.page.items.map(toDirectoryToolCardModel)
   expect(tiny).toMatchObject({ priceLabel: 'A$0.01', priceContext: 'Indicative before Quote · Provider lists 0.001 USDC per Call', access: 'ae_callable', toolRef: ref, sourceRouteRef: 'coinbase:tiny' })
   expect(larger).toMatchObject({ priceLabel: 'A$1.24', priceContext: 'Provider-listed estimate · Provider lists 1 USDC per Call', access: 'external_listing' })
@@ -108,19 +109,17 @@ it('shares one fresh Coinbase observation across priced rows, retaining exact so
   expect(larger?.toolRef).toBeUndefined()
 })
 
-it('keeps AUD unavailable on Coinbase failure without replacing exact source USDC', async () => {
-  const fetch = vi.fn(async () => new Response('unavailable', { status: 503 }))
-  vi.stubGlobal('fetch', fetch)
+it('keeps AUD unavailable without a persisted rate and preserves exact source USDC', async () => {
   const priced = { ...entry, prices: [{ network: 'eip155:8453', scheme: 'exact', amount: '0.02 USDC', decimalAmount: '0.020000', symbol: 'USDC' }] }
-  setPublicSourceTransportForTests({
-    query: vi.fn(async () => ({ kind: 'ok', coverage: { generation: 'g1' }, searchMethod: 'native_index', page: [{ entry: priced }], continueCursor: '', isDone: true })),
-    mutation: vi.fn(), action: vi.fn(),
-  } as never)
+  const query = vi.fn(async (reference: unknown) => getFunctionName(reference as never) === 'referenceRateRefresh:current'
+    ? null
+    : { kind: 'ok', coverage: { generation: 'g1' }, searchMethod: 'native_index', page: [{ entry: priced }], continueCursor: '', isDone: true })
+  setPublicSourceTransportForTests({ query, mutation: vi.fn(), action: vi.fn() } as never)
   const result = await readX402DirectoryCatalogue({})
   expect(result.kind).toBe('ok')
   if (result.kind !== 'ok' || result.page.kind !== 'ok') return
   const [model] = result.page.items.map(toDirectoryToolCardModel)
-  expect(fetch).toHaveBeenCalledTimes(1)
+  expect(query).toHaveBeenCalledTimes(2)
   expect(model).toMatchObject({ priceLabel: 'AUD estimate temporarily unavailable', priceContext: 'Provider lists 0.02 USDC per Call', access: 'external_listing' })
 })
 
@@ -172,13 +171,13 @@ it('reorders bounded catalogue candidates without losing their exact joined Tool
   expect(result.page.items[1]?.choice?.access).toBe('external_listing')
 })
 
-it('returns priced admitted and external Bazaar search rows with one FX request', async () => {
+it('returns priced admitted and external Bazaar search rows from persisted FX', async () => {
   const now = Date.now()
   const toolRef = `operation:v1:${'e'.repeat(64)}`
-  const fetch = vi.fn(async () => new Response(JSON.stringify({ data: { currency: 'USDC', rates: { AUD: '1.239' } } }), { status: 200 }))
-  vi.stubGlobal('fetch', fetch)
+  const referenceRate = { source: 'coinbase', base: 'USDC', quote: 'AUD', rate: '1.239', fetchedAt: now }
   const query = vi.fn(async (ref: unknown) => {
     switch (getFunctionName(ref as never)) {
+      case 'referenceRateRefresh:current': return referenceRate
       case 'capabilitySupplyProjection:latestReconcileBusinessSupplyProjectionsCompletion': return now
       case 'x402DirectoryIndex:status': return { kind: 'ready', refreshState: 'complete', coverage: { generation: 'g1', completedAt: now } }
       case 'x402DirectoryIndex:searchCompact': return {
@@ -216,5 +215,5 @@ it('returns priced admitted and external Bazaar search rows with one FX request'
   expect(result.results[2]).toMatchObject({ toolRef, readiness: 'unverified', next: [{ action: 'describe', args: { toolRef } }] })
   expect(result.results[3]?.toolRef).toBeUndefined()
   expect(result.results[3]?.next).toMatchObject([{ action: 'describe-external' }])
-  expect(fetch).toHaveBeenCalledTimes(1)
+  expect(query.mock.calls.map(([reference]) => getFunctionName(reference as never))).toContain('referenceRateRefresh:current')
 })

@@ -2,6 +2,8 @@ import type { ReactNode } from 'react'
 
 import type { ChatStatus, TranscriptMessage } from '../presentation'
 import type { QuoteConfirmationView, CallOutcomeView } from '@/components/ae/shared/object-family.contracts'
+import type { JsonValue } from '@/modules/capability-contract/public'
+import type { RegistryNextAction } from '@/modules/registry/tool-choice-contracts'
 
 export type ChatProps = Readonly<{
   threadId: string | null
@@ -35,6 +37,31 @@ export type ChatHistoryProps = Readonly<{
   onDelete(threadId: string): Promise<boolean>
   onNewChat(): void
 }>
+export type ChatHistoryPanelProps = ChatHistoryProps
+export type ChatHistoryPanelContainerProps = Readonly<{
+  idPrefix: string
+  activeThreadId: string | null
+  now: number
+  busy: boolean
+  onOpen(threadId: string): void
+  onNewChat(): void
+  onRename(threadId: string, title: string): Promise<boolean>
+  onDelete(threadId: string): Promise<boolean>
+}>
+
+export type ChatOwnerApprovalsProps = Readonly<{
+  cards: readonly OwnerChatCard[]
+  problem: string
+  onApprove(callRef: string): void
+  onDeny(callRef: string): void
+  onFreshQuote(callRef: string): void
+}>
+export type ChatOwnerApprovalsContainerProps = Readonly<{
+  threadId: string
+  now: number
+  onFreshQuote(toolName: string, inputSummary: string): void
+}>
+
 
 export type ChatHeaderProps = Readonly<{
   authenticated: boolean
@@ -77,6 +104,8 @@ export type OwnerChatCard =
   | Readonly<{ kind: 'result'; turnRef: string; view: CallOutcomeView }>
   | Readonly<{ kind: 'unavailable'; turnRef: string; callRef: string; toolName: string; inputSummary: string; quoteLabel: string; reason: string }>
 
+export type ChatQuoteDraft = Readonly<{ turnId: string; toolRef: string; input: string; invalid: boolean; submitting: boolean }>
+
 export type ChatTranscriptViewProps = Readonly<{
   messages: readonly TranscriptMessage[]
   pending?: boolean
@@ -91,11 +120,12 @@ export type ChatTranscriptViewProps = Readonly<{
   onCopyAnswer?: (answer: string) => void
   onEditQuestion?: (prompt: string) => void
   onClarifyAnswer?: (answer: string) => void
-  approvalProblem?: string
-  ownerChatCards?: readonly OwnerChatCard[]
-  onApproveCall?: (callRef: string) => void
-  onDenyCall?: (callRef: string) => void
-  onFreshQuote?: (callRef: string) => void
+  onContinueSearch?: (next: Extract<RegistryNextAction, { action: 'next-page' }>) => void
+  onRepeatSearch?: (query: string) => void
+  onQuoteTool?: (toolRef: string, input: Record<string, JsonValue>) => Promise<boolean>
+  ownerChatThreadId?: string
+  ownerChatNow?: number
+  onFreshQuote?: (toolName: string, inputSummary: string) => void
 }>
 
 export type ChatHeaderViewProps = Omit<ChatHeaderProps, 'mobileHistory' | 'mobileOpen' | 'onMobileOpenChange' | 'onToggleHistory'>

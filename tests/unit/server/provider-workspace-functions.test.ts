@@ -1,6 +1,8 @@
 import { convexTest } from 'convex-test'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type * as TanstackReactStartModule from '@tanstack/react-start'
+import { createElement } from 'react'
+import { renderToStaticMarkup } from 'react-dom/server'
 
 import { api } from '../../../convex/_generated/api'
 import schema from '../../../convex/schema'
@@ -56,6 +58,8 @@ import {
   readProviderToolStatusServer,
   startOwnerProviderOffboardingServer,
 } from '@/components/ae/offerings/provider-workspace.functions'
+import { ProviderWorkspaceToolsSection } from '@/components/ae/offerings/ProviderWorkspaceToolsSection'
+import { projectProviderWorkspace } from '@/components/ae/offerings/provider-workspace-projection'
 
 afterEach(() => {
   mocks.identity.mockReset()
@@ -159,6 +163,47 @@ describe('narrow owner Tools inventory read', () => {
     expect(mocks.identity.mock.calls[1]?.[1]).toMatchObject({ paginationOpts: { numItems: 50, cursor: 'cursor:current' } })
     expect(JSON.stringify(result)).not.toMatch(/sourceHash|descriptor|secret/)
   })
+  it('keeps healthy Tools when one owner status row is malformed', async () => {
+    const status = {
+      schemaVersion: 'provider_tools:v1', businessRef: 'biz:one', providerRef: 'provider:one',
+      toolRef: 'operation:healthy', revision: 1, state: 'Published', reasonCodes: [],
+      observedAt: 1, source: { kind: 'openapi' }, routeability: { available: true, reasonCodes: [] },
+      authority: { kind: 'public' },
+      health: { connection: 'not_required', validation: 'passed', publication: 'published',
+        freshness: 'current', delivery: { kind: 'unobserved', provenance: 'canonical_call_receipts' },
+        usefulOutcome: { kind: 'unobserved', provenance: 'qualified_use_receipts' }, operationalConditions: [] },
+    }
+    mocks.identity
+      .mockResolvedValueOnce({ kind: 'available', businessId: 'biz:one', name: 'One', slug: 'one', publicStatus: 'published' })
+      .mockResolvedValueOnce({
+        kind: 'available', isDone: true, continueCursor: '',
+        page: [
+          { offeringRef: 'offering:bad', currentRevision: 1, status: 'published', name: 'Bad', category: 'tools', summary: 'Bad row', accessPathCount: 1, statusJson: '{broken' },
+          { offeringRef: 'offering:healthy', currentRevision: 1, status: 'published', name: 'Healthy', category: 'tools', summary: 'Healthy row', accessPathCount: 1, statusJson: JSON.stringify(status) },
+        ],
+      })
+
+    const result = await readProviderWorkspacePageThroughSource()
+    expect(result.inventory.kind).toBe('available')
+    if (result.inventory.kind !== 'available') return
+    expect(result.inventory.tools.map((row) => row.offeringRef)).toEqual(['offering:bad', 'offering:healthy'])
+    expect(result.lifecycle).toMatchObject({ kind: 'available', value: [{ offeringRef: 'offering:healthy', status: { state: 'Published' } }] })
+    expect(result.inventory).toHaveProperty('diagnostics', [{ offeringRef: 'offering:bad', reason: 'invalid_status' }])
+    if (result.lifecycle?.kind === 'available') {
+      const projected = projectProviderWorkspace(result.inventory, result.lifecycle)
+      expect(projected).toMatchObject({ kind: 'available', rows: [
+        { offeringRef: 'offering:bad', lifecycleLabel: 'Status unavailable', availability: 'unknown' },
+        { offeringRef: 'offering:healthy', lifecycleLabel: 'Published', availability: 'available' },
+      ] })
+    }
+    const html = renderToStaticMarkup(createElement(ProviderWorkspaceToolsSection, {
+      inventory: result.inventory,
+      renderList: (rows) => createElement('div', null, rows.map((row) => row.name).join(', ')),
+    }))
+    expect(html).toContain('offering:bad: lifecycle status could not be read')
+    expect(html).toContain('Bad, Healthy')
+  })
+
 
   it('returns connection counts without sending rich connection records', async () => {
     mocks.identity.mockResolvedValue({ kind: 'available', businessId: 'biz:one', name: 'One', slug: 'one', publicStatus: 'published' })

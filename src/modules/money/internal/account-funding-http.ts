@@ -242,6 +242,13 @@ const readFundingQuery = sourceQuery<AccountFundingReadInput, FundingResult>(
 const readFundingBalanceAction = sourceAction<Record<string, never>, AccountFundingBalance>(
   'moneyAccountFundingFormance:readBalance',
 )
+const fulfillReturnedFundingAction = sourceAction<
+  Readonly<{ externalRef: string }>,
+  Readonly<
+    | { kind: 'accepted'; status: 'applied' | 'replayed' | 'ignored'; appliedRef?: string }
+    | { kind: 'refused'; code: string; retryable: boolean }
+  >
+>('moneyStripeWebhookWorker:fulfillReturn')
 const readOwnerFundingConstraintsQuery = sourceQuery<
   { environment: FundingEnvironment; now: number },
   AccountFundingConstraints
@@ -425,9 +432,14 @@ export async function readAccountFundingThroughSource(
   const bound = await bindFundingEvidence(command.command.commandRef, payment.evidence, context)
   if (isMoneyRefusal(bound)) return bound
   if (payment.evidence.status !== 'succeeded') return payment
-  if (bound.command.state === 'pending') return refusal('funding_pending', true)
-  if (bound.command.state !== 'succeeded') return refusal('funding_outcome_unknown', true)
-  return payment
+  if (bound.command.state === 'succeeded') return payment
+  const fulfilled = await callSourceAction(fulfillReturnedFundingAction, {
+    externalRef: payment.evidence.externalRef,
+  })
+  if (isMoneyRefusal(fulfilled)) return fulfilled
+  const credited = await callSourceQuery(readFundingQuery, input)
+  if (isMoneyRefusal(credited)) return credited
+  return credited.command.state === 'succeeded' ? payment : refusal('funding_pending', true)
 }
 
 async function bindFundingEvidence(

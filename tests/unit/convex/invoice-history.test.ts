@@ -43,6 +43,8 @@ type OwnerInvoiceHistoryRow = Readonly<{
 
 type ListOwnerInvoiceHistoryResult = Readonly<{
   page: readonly OwnerInvoiceHistoryRow[]
+  continueCursor: string
+  isDone: boolean
 }>
 
 type ReadOwnerFundingCommandForReceiptResult = Readonly<{
@@ -51,7 +53,7 @@ type ReadOwnerFundingCommandForReceiptResult = Readonly<{
 
 const listOwnerInvoiceHistoryRef = makeFunctionReference<
   'query',
-  Record<string, never>,
+  { paginationOpts: { numItems: number; cursor: string | null } },
   ListOwnerInvoiceHistoryResult
 >('moneyAccountFunding:listOwnerInvoiceHistory')
 
@@ -69,9 +71,10 @@ const identity = (overrides: Partial<UserIdentity> = {}) =>
 async function listOwnerInvoiceHistory(
   backend: InteractiveAuthorityBackend,
   presentedIdentity: UserIdentity = identity(),
+  paginationOpts: { numItems: number; cursor: string | null } = { numItems: 20, cursor: null },
 ): Promise<ListOwnerInvoiceHistoryResult> {
   const session = backend.withIdentity(presentedIdentity)
-  return await session.query(listOwnerInvoiceHistoryRef, {})
+  return await session.query(listOwnerInvoiceHistoryRef, { paginationOpts })
 }
 
 async function readOwnerFundingCommandForReceipt(
@@ -428,6 +431,48 @@ describe('moneyAccountFunding invoice history (W-24)', () => {
       kind: 'withheld',
       reason: 'policy_disabled',
     })
+  })
+
+  it('pages funded history while many pending commands precede older receipts', async () => {
+    const backend = createBackend()
+    await seedAuthority(backend)
+    for (let index = 0; index < 34; index++) {
+      await insertFundingCommand(backend, {
+        commandRef: `funding:history:pending:${index}`,
+        accountRef: ACCOUNT_REF,
+        state: 'pending',
+        createdAt: NOW + index,
+      })
+    }
+    for (let index = 0; index < 4; index++) {
+      await insertFundingCommand(backend, {
+        commandRef: `funding:history:settled:${index}`,
+        accountRef: ACCOUNT_REF,
+        state: 'succeeded',
+        createdAt: NOW - index - 1,
+        paymentId: `pi_history_${index}`,
+      })
+    }
+    const seen: string[] = []
+    let cursor: string | null = null
+    for (let pageIndex = 0; pageIndex < 20; pageIndex++) {
+      const page = await listOwnerInvoiceHistory(backend, identity(), { numItems: 3, cursor })
+      expect(page.page.length).toBeLessThanOrEqual(3)
+      seen.push(...page.page.map(row => row.commandRef))
+      if (page.isDone) break
+      expect(page.continueCursor).not.toBe(cursor)
+      cursor = page.continueCursor
+    }
+    expect(seen).toEqual([
+      'funding:history:settled:0',
+      'funding:history:settled:1',
+      'funding:history:settled:2',
+      'funding:history:settled:3',
+    ])
+    await expectInvoiceHistoryRefusal(
+      () => listOwnerInvoiceHistory(backend, identity(), { numItems: 51, cursor: null }),
+      'payload_invalid',
+    )
   })
 
   it('H7: readOwnerFundingCommandForReceipt returns paymentId for owner terminal command and refuses cross-account or pending', async () => {

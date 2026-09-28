@@ -3,8 +3,9 @@ import { register as registerAggregate } from '@convex-dev/aggregate/test'
 import { convexTest } from 'convex-test'
 import { describe, expect, it } from 'vitest'
 
-import { api } from '../../../_generated/api'
+import { api, internal } from '../../../_generated/api'
 import { upsertProviderDirectoryRows } from './providerRows'
+import { providerDocumentId } from './providerProjection'
 import { ANALYTICS_VERSION } from './analytics'
 import { directoryFacets } from './facets'
 import schema from '../../../schema'
@@ -177,6 +178,43 @@ describe('provider directory rows (Well 8 Lane C)', () => {
       .filter((q) => q.eq(q.field('source'), 'provider'))
       .first())
     expect(remainingProviderClaim).toBeNull()
+
+    // A projection-only identity conflict cannot roll back committed publication.
+    // Removing the collision and replaying the same projection heals search.
+    if (entry === null) throw new Error('provider projection fixture missing')
+    const { _id: _entryId, _creationTime: _entryCreationTime, ...existingEntry } = entry
+    const collisionId = await backend.run(async (ctx) => ctx.db.insert('marketExternalRegistryEntries', {
+      ...existingEntry, source: 'coinbase' as const, documentId: providerDocumentId(ROUTE_REF),
+    }))
+    await expect(backend.mutation(internal.x402DirectoryIndexStore.projectProviderDirectoryRow, {
+      publicationRef: publication.publicationRef, publicationRevision: publication.revision,
+    })).rejects.toThrow('directory_source_identity_conflict')
+    const canonical = await backend.run(async (ctx) => ctx.db.query('capabilityPublications')
+      .withIndex('by_publicationRef_and_revision', q => q.eq('publicationRef', publication.publicationRef).eq('revision', publication.revision)).unique())
+    expect(canonical?.disposition).toBe('current')
+    await backend.run(async (ctx) => ctx.db.delete(collisionId))
+    await backend.mutation(internal.x402DirectoryIndexStore.projectProviderDirectoryRow, {
+      publicationRef: publication.publicationRef, publicationRevision: publication.revision,
+    })
+    const repaired = await backend.query(api.x402DirectoryIndex.searchCompact, {
+      query: 'lookup', access: 'external_listing', paginationOpts: { cursor: null, numItems: 8 },
+    })
+    expect(repaired).toMatchObject({ kind: 'ok', page: [{ source: 'provider', title: 'Provider Lookup' }] })
+
+    // A queued projection for the withdrawn revision must converge to the
+    // newer canonical revision, not remove its Market row.
+    if (canonical === null) throw new Error('publication fixture missing')
+    await backend.run(async ctx => {
+      await ctx.db.patch(canonical._id, { disposition: 'withdrawn' })
+      const { _id: _publicationId, _creationTime: _createdAt, ...next } = canonical
+      await ctx.db.insert('capabilityPublications', { ...next, revision: 2, disposition: 'current' })
+    })
+    await backend.mutation(internal.x402DirectoryIndexStore.projectProviderDirectoryRow, {
+      publicationRef: publication.publicationRef, publicationRevision: 1,
+    })
+    expect(await backend.query(api.x402DirectoryIndex.searchCompact, {
+      query: 'lookup', access: 'external_listing', paginationOpts: { cursor: null, numItems: 8 },
+    })).toMatchObject({ kind: 'ok', page: [{ source: 'provider', title: 'Provider Lookup' }] })
   })
 
   it('resolves the owner detail route by slug, scoped to the requesting owner', async () => {

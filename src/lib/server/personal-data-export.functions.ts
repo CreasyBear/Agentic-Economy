@@ -57,9 +57,9 @@ const agentDirectoryQuery = sourceQuery<Readonly<{
 const callsQuery = sourceQuery<Readonly<{
   paginationOpts: Readonly<{ numItems: number; cursor: string | null }>
 }>, SourcePage<SourceCallRecord>>('capabilityCallProjections:listOwnerCalls')
-const invoicesQuery = sourceQuery<Record<string, never>, Readonly<{
-  page: readonly PersonalDataInvoiceSummary[]
-}>>('moneyAccountFunding:listOwnerInvoiceHistory')
+const invoicesQuery = sourceQuery<Readonly<{
+  paginationOpts: Readonly<{ numItems: number; cursor: string | null }>
+}>, SourcePage<PersonalDataInvoiceSummary>>('moneyAccountFunding:listOwnerInvoiceHistory')
 
 const EXCLUDED_REASON = 'The existing per-account read was unavailable during this export.'
 
@@ -75,7 +75,7 @@ export async function readPersonalDataExportThroughSource(): Promise<PersonalDat
     }),
     readSection('personal-data-export-agent-connections', async () => (await collectAgentRows(source)).map(projectAgentConnection)),
     readSection('personal-data-export-calls', async () => (await collectCallRows(source)).map(projectCallSummary)),
-    readSection('personal-data-export-invoices', async () => (await source.query(invoicesQuery, {})).page),
+    readSection('personal-data-export-invoices', async () => await collectInvoiceRows(source)),
   ])
 
   return assemblePersonalDataExport({
@@ -150,6 +150,19 @@ async function collectCallRows(source: ConvexSourceTransport): Promise<readonly 
   let cursor: string | null = null
   while (true) {
     const page = await source.query(callsQuery, {
+      paginationOpts: { numItems: 50, cursor },
+    })
+    rows.push(...page.page)
+    if (page.isDone) return rows
+    cursor = nextCursor(cursor, page.continueCursor)
+  }
+}
+
+async function collectInvoiceRows(source: ConvexSourceTransport): Promise<readonly PersonalDataInvoiceSummary[]> {
+  const rows: PersonalDataInvoiceSummary[] = []
+  let cursor: string | null = null
+  while (true) {
+    const page = await source.query(invoicesQuery, {
       paginationOpts: { numItems: 50, cursor },
     })
     rows.push(...page.page)

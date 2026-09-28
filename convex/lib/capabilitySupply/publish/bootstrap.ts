@@ -20,10 +20,9 @@ import {
 import type { Id } from '../../../_generated/dataModel'
 import type { MutationCtx } from '../../../_generated/server'
 import { rebuildCapabilityOriginSupplyProjection } from '../projection/rebuild'
-import { upsertProviderDirectoryRows } from '../../market/directoryIndex/providerRows'
 import {
   publicationPorts,
-  syncProviderDirectoryRowsAfterPublish,
+  scheduleProviderDirectoryProjection,
 } from './prepared'
 
 type BootstrapPreparedCapabilityInput = Omit<
@@ -200,7 +199,7 @@ export async function publishBootstrapCapability(
       input.businessId as Id<'businesses'>,
       input.now,
     )
-    await syncProviderDirectoryRowsAfterPublish(ctx, result.publicationRef, result.publicationRevision)
+    await scheduleProviderDirectoryProjection(ctx, result.publicationRef, result.publicationRevision)
   }
   return result
 }
@@ -331,12 +330,7 @@ export async function withdrawCuratedCapability(
       publication.businessId as Id<'businesses'>,
       input.now,
     )
-    await upsertProviderDirectoryRows(ctx, {
-      disposition: 'withdrawn', authorityMode: publication.authorityMode,
-      ...(publication.sourceRouteRef === undefined ? {} : { sourceRouteRef: publication.sourceRouteRef }),
-      businessId: publication.businessId as Id<'businesses'>,
-      offeringId: publication.offeringId, networkId: publication.networkId, sourceKind: publication.sourceKind,
-    })
+    await scheduleProviderDirectoryProjection(ctx, result.publicationRef, result.revision)
   }
   return result
 }

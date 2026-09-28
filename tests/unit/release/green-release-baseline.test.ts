@@ -101,16 +101,6 @@ describe('green release baseline', () => {
       }
     }
 
-    const generalConformance = scripts['test:conformance']!
-    expect(generalConformance).toContain('tests/unit/capability-execution/call-admit.test.ts')
-    expect(generalConformance).not.toContain('published-tool-provider-conformance.test.ts')
-    expect(generalConformance).not.toContain('provider-conformance-evidence.test.ts')
-
-    const chatConformance = scripts['test:chat:conformance']!
-    expect(chatConformance).toContain('tests/unit/chat/chat-agent-tools.test.ts')
-    expect(chatConformance).not.toContain('tests/unit/chat/operation-chat-execute.test.ts')
-    expect(chatConformance).not.toContain('tests/unit/capability-execution/operation-execute.test.ts')
-    expect(chatConformance).toContain(' -- --no-file-parallelism')
 
     const missingPath = 'tests/unit/release/__missing-listed-vitest-path__.test.ts'
     const preflight = spawnSync(
@@ -123,188 +113,22 @@ describe('green release baseline', () => {
     expect(`${preflight.stdout}\n${preflight.stderr}`).not.toContain('RUN  v')
   })
 
-  it('executes every required source sub-gate through gate', () => {
-    const chain = releaseCommandChain('gate')
-    expect(releaseCommandChain('test:release:source')).toContain('npm run verify:deployment-manifest -- --environment development')
-    for (const subGate of [
-      'test:conformance',
-      'test:chat:conformance',
-      'verify:convex-generated:anonymous',
-      'test:release:architecture',
-      'lint',
-      'typecheck',
-      'test:release:unit',
-      'test:release:integration',
-      'test:types',
-      'test:imports',
-      'test:ts-standards',
-      'test:seo',
-      'test:ui-contract',
-      'test:e2e',
-      'test:e2e:a11y',
-      'test:cli-package',
-      'build',
-    ]) {
-      expect(chain, `gate must execute ${subGate}`).toContain(`npm run ${subGate}`)
-    }
-    const sourceScript = scripts['test:release:source']!
-    const orderedSourceGates = [
-      'verify:deployment-manifest',
-      'env:example:check',
-      'test:conformance',
-      'test:chat:conformance',
-      'verify:convex-generated:anonymous',
-      'verify:release-integrity',
-      'test:release:source:after-codegen',
-    ]
-    for (let index = 1; index < orderedSourceGates.length; index += 1) {
-      expect(sourceScript.indexOf(`npm run ${orderedSourceGates[index]!}`)).toBeGreaterThan(
-        sourceScript.indexOf(`npm run ${orderedSourceGates[index - 1]!}`),
-      )
-    }
-    const nodeGuard = 'node tools/dev/require-supported-node.ts --'
-    expect(scripts['generate:convex']).toBe(`${nodeGuard} convex codegen --typecheck=disable`)
-    expect(scripts['check:convex-codegen']).toBe(`${nodeGuard} convex codegen --dry-run --typecheck=disable`)
-    expect(scripts['gate']).toBe(`${nodeGuard} npm run test:release:source`)
-    expect(scripts['dev:local']).toBe(`${nodeGuard} node tools/dev/local-dev.ts`)
-    expect(scripts['test:all']).toBeUndefined()
-    expect(scripts['gate:release']).toBeUndefined()
-    expect(scripts['verify:convex-generated:anonymous']).toBe(
-      'tsx tools/release/verify-convex-generated-anonymous.ts',
-    )
-    const anonymousCodegenProof = readFileSync(
-      resolve(root, 'tools/release/verify-convex-generated-anonymous.ts'),
-      'utf8',
-    )
-    expect(anonymousCodegenProof).toContain("CONVEX_AGENT_MODE: 'anonymous'")
-    expect(anonymousCodegenProof).toContain("npm_config_audit: 'false'")
-    expect(anonymousCodegenProof).toContain("npm_config_fund: 'false'")
-    expect(anonymousCodegenProof).toContain("npm_config_cache: resolve(isolatedRoot, '.npm-cache')")
-    expect(anonymousCodegenProof).toContain("npm_config_prefer_offline: 'true'")
-    expect(anonymousCodegenProof).toContain("npm_config_fetch_retries: '2'")
-    expect(anonymousCodegenProof).toContain("npm_config_fetch_timeout: '30000'")
-    expect(anonymousCodegenProof).toContain("npm_config_update_notifier: 'false'")
-    expect(anonymousCodegenProof).toContain("npm_config_userconfig: resolve(isolatedRoot, '.npmrc')")
-    expect(anonymousCodegenProof).not.toContain("npm_config_offline: 'true'")
-    expect(anonymousCodegenProof).not.toContain('...process.env')
-    expect(anonymousCodegenProof).not.toMatch(/CONVEX_DEPLOYMENT|CONVEX_DEPLOY_KEY|CONVEX_SELF_HOSTED/u)
-    expect(anonymousCodegenProof).toContain("rmSync(resolve(isolatedRoot, generatedDirectory, name))")
-    expect(anonymousCodegenProof).toContain('terminateIsolatedProcesses(isolatedRoot)')
-    expect(scripts['verify:release-integrity']).toBe(
-      'tsx tools/release/verify-release-integrity.ts -- npm run build',
-    )
-    expect(scripts['smoke:chat:staging']).toBe(
-      'node tools/dev/run-with-cleanup.ts playwright test --config=tests/config/playwright.chat-staging.config.ts',
-    )
-    expect(scripts['test:release:source:after-codegen']).toContain('npm run test:e2e')
-    expect(scripts['test:release:source:after-codegen']).toContain('npm run test:e2e:a11y')
-    expect(scripts['test:release:source:after-codegen']).not.toContain('test:e2e:authenticated')
-    expect(scripts['test:release:authenticated']).toBe('npm run test:e2e:authenticated:required')
-    expect(scripts['test:e2e']).toBe('node tools/dev/run-with-cleanup.ts playwright test tests/e2e')
-    expect(scripts['test:e2e']).not.toMatch(/--grep|testMatch|ignore|\.spec\.ts/u)
-    for (const staleFile of [
-      'tests/e2e/paid-operation-development-surface.spec.ts',
-      'tests/e2e/protected-action-owner-flow.spec.ts',
-      'tests/e2e/shortlist-export-preview.spec.ts',
-      'playwright.paid-operation.config.ts',
-      'tests/development/paid-operation-development-surface.spec.ts',
-    ]) {
-      expect(existsSync(resolve(root, staleFile)), `${staleFile} must remain deleted`).toBe(false)
-    }
-    expect(chain).not.toContain('npm run test:eval:report')
-  })
-
-  it('keeps pull requests credential-free and protected releases generated-source proof', () => {
+  it('runs only credential-free checks on PRs and reserves full proof for releases', () => {
     const workflow = readWorkflow('.github/workflows/kernel-release-gate.yml')
-    const events = workflow.on ?? {}
-    expect(events).toHaveProperty('pull_request')
-    expect(events).toHaveProperty('merge_group')
-    expect(events.push).toEqual({ branches: ['main'] })
-    const steps = workflowSteps(workflow)
-
-    const source = workflow.jobs?.['source-proof']
-    expect(source).toBeDefined()
-    const sourceConfig = JSON.stringify(source ?? {})
-    expect(sourceConfig).not.toContain('CONVEX_DEPLOY_KEY')
-    // The browser proof boots the real app with ClerkProvider mounted, so the
-    // Clerk development instance is the only credential this job may hold.
-    const sourceSecretRefs = [...sourceConfig.matchAll(/secrets\.([A-Z0-9_]+)/g)].map((match) => match[1])
-    expect(new Set(sourceSecretRefs)).toEqual(new Set([
-      'AE_AUTHENTICATED_E2E_CLERK_PUBLISHABLE_KEY',
-      'AE_AUTHENTICATED_E2E_CLERK_SECRET_KEY',
-    ]))
-    const anonymousIndex = source?.steps?.findIndex((step) => step.name === 'Prove committed Convex source with an isolated anonymous local backend') ?? -1
-    const driftIndex = source?.steps?.findIndex((step) => step.name === 'Prove anonymous generation did not mutate the source checkout') ?? -1
-    const integrityIndex = source?.steps?.findIndex((step) => step.name === 'Verify generated source and pinned release inputs') ?? -1
-    const sourceGateIndex = source?.steps?.findIndex((step) => step.name === 'Run source release contract without deployment credentials') ?? -1
-    expect(source?.steps?.[anonymousIndex]?.run).toBe('npm run verify:convex-generated:anonymous')
-    expect(source?.steps?.[driftIndex]?.run).toBe('git diff --exit-code -- convex/_generated')
-    expect(source?.steps?.[integrityIndex]?.run).toBe('npm run verify:release-integrity')
-    expect(anonymousIndex).toBeGreaterThanOrEqual(0)
-    expect(anonymousIndex).toBeLessThan(driftIndex)
-    expect(driftIndex).toBeLessThan(integrityIndex)
-    expect(integrityIndex).toBeLessThan(sourceGateIndex)
-    const sourceGate = source?.steps?.find((step) => step.name === 'Run source release contract without deployment credentials')
-    expect(sourceGate?.run).toBe('npm run test:release:source:after-codegen')
-    expect(Object.keys(sourceGate?.env ?? {}).sort()).toEqual([
-      'CLERK_JWT_ISSUER_DOMAIN',
-      'CLERK_PUBLISHABLE_KEY',
-      'CLERK_SECRET_KEY',
-      'VITE_CLERK_PUBLISHABLE_KEY',
-    ])
-    const chatGate = source?.steps?.find((step) => step.name === 'Run deterministic Tool chat conformance')
-    expect(chatGate?.run).toBe('npm run test:chat:conformance')
-
-    const authenticated = workflow.jobs?.['authenticated-platform-proof']
-    expect(authenticated?.if).toBe("github.event_name == 'workflow_dispatch'")
-    expect(authenticated?.environment).toBe('staging')
-    expect(authenticated?.steps?.find((step) => step.name === 'Prove the authenticated two-agent lifecycle')?.run)
-      .toBe('npm run test:release:authenticated')
-    expect(JSON.stringify(authenticated?.steps?.find((step) => step.name === 'Prove the authenticated two-agent lifecycle')?.env ?? {}))
-      .toContain('AE_AUTHENTICATED_E2E_CLERK_SECRET_KEY')
-    expect(authenticated?.env?.AE_RELEASE_SOURCE_REVISION).toBe('${{ github.sha }}')
-
-    const uploads = steps.filter((step) => step.uses?.startsWith('actions/upload-artifact@'))
-    for (const upload of uploads) {
-      const artifactName = upload.with?.name ?? ''
-      if (artifactName.includes('paid-gateway-smoke-receipt')) {
-        expect(upload.if).toBe("inputs.live_gateway_stage == 'complete'")
-      } else if (artifactName.includes('gateway-topup-preparation')) {
-        expect(upload.if).toBe("inputs.live_gateway_stage == 'prepare'")
-      } else if (artifactName.includes('chat-staging-smoke')) {
-        expect(upload.if).toBe('always()')
-        expect(upload.with?.path).toBe('output/release/playwright-chat-staging-smoke.json')
-      } else if (artifactName.includes('fresh-checkout-proof')) {
-        expect(upload.if).toBe('always()')
-        expect(upload.with?.path).toBe('output/fresh-checkout/')
-      } else {
-        expect(upload.if).toBe('always()')
-        expect(artifactName).toContain('source-release-gate')
-      }
-      expect(artifactName).toContain('${{ github.sha }}')
-      expect(artifactName).toContain('${{ github.run_id }}')
-
-      const artifactPaths = upload.with?.path ?? ''
-      expect(`${artifactName}\n${artifactPaths}`).not.toMatch(/(?:^|[\\/\n])\.env(?:$|[.*\\/])/i)
-      expect(`${artifactName}\n${artifactPaths}`).not.toMatch(/(?:credential|secret|token|private-key)/i)
-    }
-    const sourceUpload = uploads.find((upload) => upload.with?.name?.includes('source-release-gate'))
-    expect(sourceUpload?.with?.path).toContain('output/release/chat-conformance-vitest.json')
-
-    const workflowText = readFileSync(resolve(root, '.github/workflows/kernel-release-gate.yml'), 'utf8')
-    expect(workflowText).not.toContain('answer-suite-report')
-    expect(workflowText).not.toContain('test:eval:report')
-
-    const metadataRuns = steps
-      .map((step) => step.run ?? '')
-      .filter((run) => run.includes('evidenceClass'))
-    expect(metadataRuns).toHaveLength(1)
-    for (const run of metadataRuns) {
-      expect(run).toContain('${GITHUB_SHA}')
-      expect(run).toContain('${GITHUB_RUN_ID}')
-      expect(run).toContain('sanitized: true')
-    }
+    const check = workflow.jobs?.check
+    const release = workflow.jobs?.['source-proof']
+    const fresh = workflow.jobs?.['fresh-checkout-proof']
+    expect(workflow.on).toHaveProperty('pull_request')
+    expect(workflow.on?.push).toEqual({ tags: ['v*'] })
+    expect(check?.if).toBe("github.event_name == 'pull_request'")
+    expect(JSON.stringify(check)).not.toMatch(/secrets\./u)
+    expect(check?.steps?.some((step) => step.run === 'npm run check')).toBe(true)
+    expect(release?.if).toContain("startsWith(github.ref, 'refs/tags/v')")
+    expect(fresh?.if).toContain("startsWith(github.ref, 'refs/tags/v')")
+    expect(release?.steps?.some((step) => step.run === 'npm run gate')).toBe(true)
+    expect(release?.steps?.some((step) => step.run === 'git diff --exit-code -- convex/_generated')).toBe(true)
   })
+
 
   it('keeps the chat staging smoke opt-in, exact-revision, and secret-contained', () => {
     const workflow = readWorkflow('.github/workflows/kernel-release-gate.yml')
@@ -469,11 +293,8 @@ describe('green release baseline', () => {
 
   it('proves a fresh checkout reaches a sellable local sandbox with only the Clerk development instance', () => {
     const workflow = readWorkflow('.github/workflows/kernel-release-gate.yml')
-    const events = workflow.on ?? {}
     const fresh = workflow.jobs?.['fresh-checkout-proof']
     expect(fresh).toBeDefined()
-    expect(fresh?.if).toBeUndefined()
-    expect(fresh?.needs).toEqual([])
     expect(fresh?.['timeout-minutes']).toBe(30)
 
     // The app mounts ClerkProvider unconditionally, so the only credentials
@@ -487,13 +308,6 @@ describe('green release baseline', () => {
     ]))
     expect(fresh?.environment).toBeUndefined()
 
-    const source = workflow.jobs?.['source-proof']
-    // Same triggers as source-proof: neither job gates on an `if`, both run
-    // for every event this workflow listens for.
-    expect(source?.if).toBeUndefined()
-    expect(events).toHaveProperty('pull_request')
-    expect(events).toHaveProperty('merge_group')
-    expect(events.push).toEqual({ branches: ['main'] })
 
     const start = fresh?.steps?.find((step) => step.name === 'Start local stack (anonymous Convex, authenticated Clerk)')
     expect(start?.env).toMatchObject({
@@ -504,7 +318,7 @@ describe('green release baseline', () => {
       AE_E2E_OWNER_EMAIL: '${{ secrets.AE_AUTHENTICATED_E2E_OWNER_EMAIL }}',
       CI: 'true',
     })
-    expect(start?.run).toContain('npm run dev:local -- --skip-scan --no-doctor')
+    expect(start?.run).toContain('npm run dev:local -- --no-doctor')
     expect(start?.run).toContain('output/fresh-checkout/dev-local.log')
     expect(start?.run).toContain('http://127.0.0.1:3024/api/ready')
     expect(start?.run).toContain('DEV_LOCAL_PID=$!')

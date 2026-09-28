@@ -69,6 +69,7 @@ export async function handleMarketRequestPost(
         ? resolveAgentAccessPrincipal(request, bounded.text, correlationId)
         : undefined)
     const admitted = await authenticateAgentAccess({
+      request,
       ...(options.authenticate === undefined ? {} : { authenticate: options.authenticate }),
       ...(resolvePrincipal === undefined ? {} : { resolvePrincipal }),
       requiredScope: contract.scope,

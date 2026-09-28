@@ -18,10 +18,17 @@ import {
   readMarketplaceMetricsRange,
 } from './lib/adminConsole/metrics/read'
 import {
-  marketplaceEntityValue,
   marketplaceMetricCountsValue,
   writeMarketplaceMetricsDayHandler,
 } from './lib/adminConsole/metrics/write'
+import {
+  advanceMarketplaceMetricsBuild as advanceMarketplaceMetricsBuildHandler,
+  buildPageArgs,
+  buildProgressValue,
+  buildStepValue,
+  readMarketplaceMetricsBuild as readMarketplaceMetricsBuildHandler,
+  startMarketplaceMetricsBuild as startMarketplaceMetricsBuildHandler,
+} from './lib/adminConsole/metrics/build'
 import {
   internalAction,
   internalMutation,
@@ -35,9 +42,9 @@ const windowArgs = {
 }
 
 export const snapshotMarketplaceMetricsDay = internalAction({
-  args: { day: v.optional(v.string()) },
+  args: { day: v.optional(v.string()), entityDay: v.optional(v.string()) },
   returns: v.union(
-    v.object({ kind: v.literal('written'), day: v.string() }),
+    v.object({ kind: v.union(v.literal('written'), v.literal('queued')), day: v.string() }),
     v.object({
       kind: v.literal('refused'),
       code: v.union(
@@ -71,15 +78,40 @@ export const pageResolutionsForWindow = internalQuery({
 })
 
 
+export const readMarketplaceMetricsBuild = internalQuery({
+  args: { entityDay: v.string() },
+  returns: buildProgressValue,
+  handler: async (ctx, args) => await readMarketplaceMetricsBuildHandler(ctx, args.entityDay),
+})
+
+export const startMarketplaceMetricsBuild = internalMutation({
+  args: { day: v.string(), entityDay: v.string() },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    await startMarketplaceMetricsBuildHandler(ctx, args.day, args.entityDay)
+    return null
+  },
+})
+
+export const advanceMarketplaceMetricsBuild = internalMutation({
+  args: buildPageArgs,
+  returns: buildStepValue,
+  handler: advanceMarketplaceMetricsBuildHandler,
+})
+
 export const writeMarketplaceMetricsDay = internalMutation({
   args: {
     day: v.string(),
-    entities: v.array(marketplaceEntityValue),
-    counts: v.optional(marketplaceMetricCountsValue),
-    replace: v.boolean(),
-    complete: v.boolean(),
+    entityDay: v.string(),
+    counts: v.optional(v.object({
+      ...marketplaceMetricCountsValue.fields,
+      returningWorkspaces: v.number(),
+      newTransactingWorkspaces: v.number(),
+      newTransactingProviders: v.number(),
+    })),
+    phase: v.union(v.literal('publish'), v.literal('cleanup'), v.literal('refs')),
   },
-  returns: v.boolean(),
+  returns: v.null(),
   handler: writeMarketplaceMetricsDayHandler,
 })
 

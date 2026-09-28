@@ -76,6 +76,7 @@ export function AdminExceptionsPage(props: AdminExceptionsPageProps) {
       <ExceptionFeedTable
         rows={exceptions.data.rows}
         observed={exceptions.data.observed}
+        scanRequests={exceptions.data.scanRequests}
         complete={exceptions.data.complete}
         unavailable={exceptions.data.selectedSourceUnavailable}
         orderLabel={exceptions.data.selectedKind === 'uncertain_call'

@@ -4,6 +4,7 @@ import type { Slug } from '@/modules/common/ids'
 import { isPublicToolRef } from '@/modules/capability-supply/public'
 import type { AdminProviderView } from '@/lib/operator/admin-console/views'
 import type { QueryCtx } from '../../../_generated/server'
+import { readSourceAuthorityState } from './sourceAuthority'
 
 const publicStatusValue = v.union(
   v.literal('unpublished'),
@@ -25,6 +26,7 @@ const publicationDispositionValue = v.union(
 const sourceAuthorityStateValue = v.union(
   v.literal('verified'),
   v.literal('review_required'),
+  v.literal('unset'),
 )
 const connectionLifecycleValue = v.union(
   v.literal('active'),
@@ -153,7 +155,7 @@ export async function readAdminProviderView(
         ref: publication.toolRef,
         revision: publication.revision,
         disposition: publication.disposition,
-        sourceAuthorityState: publication.sourceAuthorityState ?? 'review_required',
+        sourceAuthorityState: readSourceAuthorityState(publication),
         sourceAuthorityReview,
       }]
     }),

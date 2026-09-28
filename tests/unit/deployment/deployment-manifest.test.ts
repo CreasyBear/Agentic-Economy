@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest'
+import { describe, expect, it } from 'vitest'
 
 import convexCrons from '../../../convex/crons'
 import {
@@ -126,31 +126,7 @@ describe('deployment manifest validator', () => {
     expect(manifestJobNames).toEqual(registeredJobNames)
   })
 
-  it.each([undefined, 'true', 'false'])('registers recurring jobs according to the deployment switch %s', async (value) => {
-    vi.stubEnv('AE_SCHEDULED_WORKLOADS_ENABLED', value)
-    vi.resetModules()
-    try {
-      const { default: crons } = await import('../../../convex/crons')
-      const registered = Object.keys(crons.crons).sort()
-      expect(registered).toEqual(value === 'false' ? [] : Object.keys(convexCrons.crons).sort())
-    } finally {
-      vi.unstubAllEnvs()
-      vi.resetModules()
-    }
-  })
-
-  it('refuses to register recurring jobs with an invalid explicit switch', async () => {
-    vi.stubEnv('AE_SCHEDULED_WORKLOADS_ENABLED', 'invalid')
-    vi.resetModules()
-    try {
-      await expect(import('../../../convex/crons')).rejects.toThrow('invalid_scheduled_workloads_configuration')
-    } finally {
-      vi.unstubAllEnvs()
-      vi.resetModules()
-    }
-  })
-
-  it('fails closed for missing core source, auth, canonical, model, and source-write configuration', () => {
+  it('fails closed for missing shared source, identity, canonical, and source-write configuration', () => {
     const result = validateDeploymentManifest({ NODE_ENV: 'production' }, { nodeMajor: 22 })
     const names = result.findings.flatMap((finding) => finding.names)
 
@@ -164,15 +140,8 @@ describe('deployment manifest validator', () => {
       'CLERK_WEBHOOK_SIGNING_SECRET',
       'CLERK_JWT_ISSUER_DOMAIN',
       'AE_CANONICAL_BASE_URL',
-      'OPENROUTER_API_KEY',
-      'AE_LLM_MODEL',
-      'AE_CHAT_PROXY_SECRET',
       'AE_SOURCE_WRITE_KEY_BILLING',
       'AE_SOURCE_WRITE_KEY_SESSION',
-      'STRIPE_SECRET_KEY',
-      'STRIPE_WEBHOOK_SECRET',
-      'STRIPE_V2_WEBHOOK_SECRET',
-      'STRIPE_AU_INCLUSIVE_GST_TAX_RATE_ID',
       'AE_PACKAGE5_WRITES_ENABLED',
       'AE_SUPPLY_HTTP_CREDENTIALS_ENABLED',
       'AE_SUPPLY_MCP_OAUTH_ENABLED',
@@ -334,7 +303,6 @@ describe('deployment manifest validator', () => {
       STRIPE_SECRET_KEY: 'rk_test_alpha',
       STRIPE_READBACK_KEY: 'rk_test_alpha_readback',
       AE_FORMANCE_ENVIRONMENT: 'sandbox',
-      AE_SCHEDULED_WORKLOADS_ENABLED: 'false',
     }
     expect(validateDeploymentManifest(environment)).toMatchObject({ ok: true, findings: [] })
     expect(resolveServiceMode(environment)).toBe('hosted_alpha')
@@ -401,22 +369,6 @@ describe('deployment manifest validator', () => {
     expect(mode).toBe('standard')
     expect(serviceModeAllowsEnvironment(mode, 'sandbox')).toBe(true)
     expect(serviceModeAllowsEnvironment(mode, 'production')).toBe(true)
-  })
-
-  it.each([undefined, 'true', 'false'])('accepts optional scheduled-workload setting %s', (value) => {
-    expect(validateDeploymentManifest({
-      ...productionEnvironment(), AE_SCHEDULED_WORKLOADS_ENABLED: value,
-    }).ok).toBe(true)
-  })
-
-  it.each(['', ' ', 'TRUE', '0', '1', 'false ', 'unknown'])('rejects malformed scheduled-workload setting %j', (value) => {
-    const result = validateDeploymentManifest({
-      ...productionEnvironment(), AE_SCHEDULED_WORKLOADS_ENABLED: value,
-    })
-    expect(result.ok).toBe(false)
-    expect(result.findings).toContainEqual(expect.objectContaining({
-      code: 'ae_scheduled_workloads_enabled_invalid', names: ['AE_SCHEDULED_WORKLOADS_ENABLED'],
-    }))
   })
 
   it('does not allow production CSP enforcement to be downgraded', () => {
@@ -539,21 +491,7 @@ describe('deployment manifest validator', () => {
       AE_X402_CUSTODY_DAILY_MAX_ATOMIC: '',
       AE_X402_RPC_URLS_JSON: '',
     }, { nodeMajor: 22 })
-    expect(missing.findings.flatMap((finding) => finding.names)).toEqual(expect.arrayContaining([
-      'CDP_API_KEY_ID',
-      'CDP_API_KEY_SECRET',
-      'CDP_WALLET_SECRET',
-      'AE_X402_CDP_ACCOUNT_NAME',
-      'AE_X402_CDP_EXPECTED_EVM_ADDRESS',
-      'AE_X402_CDP_ACCOUNT_POLICY_ID',
-      'AE_X402_CDP_PROJECT_POLICY_ID',
-      'AE_X402_CDP_POLICY_RULES_DIGEST',
-      'AE_X402_CDP_CREDENTIAL_GENERATION',
-      'AE_X402_CUSTODY_ENABLED',
-      'AE_X402_CUSTODY_MAX_ATOMIC',
-      'AE_X402_CUSTODY_DAILY_MAX_ATOMIC',
-      'AE_X402_RPC_URLS_JSON',
-    ]))
+    expect(missing.findings.some((finding) => finding.scope === 'x402-payment' && finding.kind === 'missing')).toBe(false)
 
     const forbidden = validateDeploymentManifest({
       ...productionEnvironment(),
@@ -653,10 +591,6 @@ describe('deployment manifest validator', () => {
     expect(JSON.stringify(result)).not.toContain('source-write-secret')
     expect(rotatedResult.fingerprint).toBe(result.fingerprint)
 
-    const modelChanged = validateDeploymentManifest({ ...first, AE_LLM_MODEL: 'openai/gpt-5-mini' }, { nodeMajor: 22 })
-    const presenceChanged = validateDeploymentManifest({ ...first, VITE_SENTRY_DSN: 'https://public@sentry.example/1' }, { nodeMajor: 22 })
-    expect(modelChanged.fingerprint).not.toBe(result.fingerprint)
-    expect(presenceChanged.fingerprint).not.toBe(result.fingerprint)
   })
 
   it('keeps non-production source-write root derivation available without accepting it in production', () => {

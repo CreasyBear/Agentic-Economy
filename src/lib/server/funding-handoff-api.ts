@@ -246,6 +246,7 @@ export async function handleFundingHandoffAction(
     if (!body.ok) return withRequestCorrelationHeader(problem({ status: 413, kind: 'PAYLOAD_TOO_LARGE', code: body.code }), correlationId)
     const resolvePrincipal = options.resolvePrincipal ?? (options.authenticate === undefined ? resolveAgentAccessPrincipal(request, body.text, correlationId) : undefined)
     const admitted = await authenticateAgentAccess({
+      request,
       ...(options.authenticate === undefined ? {} : { authenticate: options.authenticate }),
       ...(resolvePrincipal === undefined ? {} : { resolvePrincipal }),
       requiredScope: MARKET_TOOLS_CALL_SCOPE,

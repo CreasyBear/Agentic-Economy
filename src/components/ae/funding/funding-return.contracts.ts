@@ -12,9 +12,9 @@ export type FundingReturnPageState = Readonly<{
 
 export const fundingReturnCopy = {
   cancelled: {
-    title: 'Payment cancelled',
-    description: 'No Account credit changed, and no authority changed.',
-    retryAction: 'Open Credit',
+    title: 'Check your payment',
+    description: 'This page cannot confirm whether payment completed. Open Credit to check the original attempt before starting another payment.',
+    openCreditAction: 'Open Credit',
   },
   invalid: {
     title: 'Invalid funding link',

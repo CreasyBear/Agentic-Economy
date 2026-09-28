@@ -1,4 +1,5 @@
-import { auth, clerkClient } from '@clerk/tanstack-react-start/server'
+import { clerkClient } from '@clerk/tanstack-react-start/server'
+import { isClerkAPIResponseError } from '@clerk/shared/error'
 
 import { authContinuation } from '@/lib/http/auth-continuation'
 import { bearerChallenge, bearerModeChallenge } from '@/lib/http/oauth-challenge'
@@ -146,6 +147,7 @@ export function authRefusalProblem(request: Request, refusal: AgentAccessRefusal
 }
 
 export type AgentAccessAuthenticationOptions = Readonly<{
+  request?: Request
   authenticate?: () => Promise<AgentAccessApiKeyAuth>
   verifyKeyState?: (keyId: string) => Promise<AgentAccessCurrentApiKey>
   resolvePrincipal?: AgentAccessPrincipalResolver
@@ -165,11 +167,35 @@ export async function authenticateAgentAccess(
   )].sort())
   const requiredAnyScopes = Object.freeze([...new Set(options.requiredAnyScopes ?? [])].sort())
   let candidate: AgentAccessApiKeyAuth
+  if (options.authenticate === undefined && options.request === undefined) {
+    return { kind: 'refused', status: 401, reason: 'authentication_required' }
+  }
   try {
-    candidate = options.authenticate !== undefined
-      ? await options.authenticate()
-      : await auth({ acceptsToken: 'api_key' }) as AgentAccessApiKeyAuth
+    if (options.authenticate !== undefined) {
+      candidate = await options.authenticate()
+    } else {
+      const authorization = options.request?.headers.get('authorization')
+      const bearer = authorization === null || authorization === undefined
+        ? null
+        : /^Bearer ([^\s]+)$/i.exec(authorization)
+      const secret = bearer?.[1] ?? (authorization === null ? options.request?.headers.get('x-api-key') : null)
+      if (secret === null || secret === undefined || secret.length === 0) {
+        return { kind: 'refused', status: 401, reason: 'authentication_required' }
+      }
+      const verified = await clerkClient().apiKeys.verify(secret)
+      candidate = {
+        isAuthenticated: true,
+        tokenType: 'api_key',
+        id: verified.id,
+        subject: verified.subject,
+        scopes: verified.scopes,
+        claims: verified.claims,
+      }
+    }
   } catch (cause) {
+    if (isClerkAPIResponseError(cause) && cause.status >= 400 && cause.status < 500 && cause.status !== 429) {
+      return { kind: 'refused', status: 401, reason: 'authentication_required' }
+    }
     return degrade(cause, AUTH_SOURCE_UNAVAILABLE, { site: 'authenticateAgentAccess', reason: 'source_unavailable' })
   }
   if (!candidate.isAuthenticated || candidate.tokenType !== 'api_key' || candidate.id === null || candidate.subject === null || candidate.scopes === null) {

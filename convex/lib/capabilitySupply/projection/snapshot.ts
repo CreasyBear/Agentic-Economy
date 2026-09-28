@@ -63,6 +63,72 @@ export async function rebuildBusinessSupplyProjectionSnapshotCommand(input: {
   await Promise.all(writes)
   return { kind: 'ok', sourceDigest: projection.sourceDigest }
 }
+/** Rebuild only the bounded slice selected by the maintenance cursor. */
+export async function rebuildBusinessSupplyProjectionPageCommand(input: {
+  db: CapabilityProjectionDb
+  businessId: Id<'businesses'>
+  offeringRows: readonly Doc<'businessOfferings'>[]
+  now: number
+}): Promise<number> {
+  const { db, businessId, now } = input
+  let rebuilt = 0
+  for (const offering of input.offeringRows) {
+    // This one-offering projection is only converted into a search document.
+    // Search documents carry no support/callability field; firstRequestMode
+    // comes from published access paths. Never serve this partial projection
+    // as a catalog detail or publication authority.
+    const projection = await readLiveBusinessSupplyProjection({
+      db, businessId, now, support: {}, offeringRows: [offering],
+    })
+    if (projection === null) continue
+    const [document] = buildRegistrySearchDocumentsForCatalog(projectBusinessSupplyToPublicApi(projection, now))
+    const prior = await db.query('registrySearchDocuments')
+      .withIndex('by_offering', (query) => query.eq('businessSlug', projection.business.slug).eq('offeringRef', offering.offeringRef))
+      .unique()
+    if (document === undefined) {
+      if (prior !== null) await db.delete(prior._id)
+      continue
+    }
+    const value = { ...document, placeKeys: [...document.placeKeys], keywords: [...document.keywords], sourceHash: projection.sourceDigest }
+    if (prior === null) await db.insert('registrySearchDocuments', value)
+    else if (!sameRegistrySearchDocument(prior, value)) await db.replace(prior._id, value)
+    rebuilt += 1
+  }
+  return rebuilt
+}
+
+/** Sweep stale search rows in small pages after all canonical offerings have been visited. */
+export async function removeStaleBusinessSearchDocumentsPage(input: {
+  db: CapabilityProjectionDb
+  businessId: Id<'businesses'>
+  businessSlug: string
+  cursor: string | null
+  retract?: boolean
+}): Promise<{ isDone: boolean; continueCursor: string }> {
+  const { db, businessId, businessSlug, cursor } = input
+  const page = await db.query('registrySearchDocuments')
+    .withIndex('by_business', (query) => query.eq('businessSlug', businessSlug))
+    .paginate({ numItems: 10, cursor })
+  for (const document of page.page) {
+    if (input.retract) {
+      await db.delete(document._id)
+      continue
+    }
+    const offering = await db.query('businessOfferings')
+      .withIndex('by_businessId_and_offeringRef', (query) => query.eq('businessId', businessId).eq('offeringRef', document.offeringRef))
+      .unique()
+    if (offering === null || offering.status !== 'published') {
+      await db.delete(document._id)
+      continue
+    }
+    const revision = await db.query('businessOfferingRevisions')
+      .withIndex('by_offeringRef_and_revision', (query) => query.eq('offeringRef', offering.offeringRef).eq('revision', offering.currentRevision))
+      .unique()
+    if (revision === null) await db.delete(document._id)
+  }
+  return { isDone: page.isDone, continueCursor: page.continueCursor }
+}
+
 
 function sameRegistrySearchDocument(
   prior: Doc<'registrySearchDocuments'>,

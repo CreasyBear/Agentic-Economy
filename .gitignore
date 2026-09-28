@@ -12,6 +12,7 @@ playwright-report/
 test-results/
 coverage/
 output/
+/.cache/
 outputs/
 .codex/
 .react-doctor/

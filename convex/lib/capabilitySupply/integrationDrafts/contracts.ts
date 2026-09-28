@@ -1,4 +1,5 @@
 import { v, type Infer } from 'convex/values'
+import { supplyDraftTerms } from '@/modules/catalog/schema'
 
 import { agentAccessPrincipalValue } from '../../../agentAccessPrincipals'
 import { sourceWriteArgs } from '../../security/sourceWrite/contracts'
@@ -9,6 +10,7 @@ const sourceKindValue = v.union(
   v.literal('agent_plugin'),
   v.literal('x402'),
 )
+
 const integrationDraftValue = v.object({
   sourceKind: sourceKindValue,
   sourceDescriptorJson: v.string(),
@@ -18,6 +20,7 @@ const integrationDraftValue = v.object({
   sourceSelectorJson: v.string(),
   connectionRef: v.optional(v.string()),
   validationInputJson: v.optional(v.string()),
+  terms: v.optional(supplyDraftTerms),
   updatedAt: v.number(),
 })
 
@@ -34,6 +37,7 @@ export const saveAgentSupplyIntegrationDraftArgs = v.object({
   sourceSelectorJson: v.string(),
   connectionRef: v.optional(v.string()),
   validationInputJson: v.optional(v.string()),
+  terms: v.optional(supplyDraftTerms),
   operationKey: v.string(),
   correlationId: v.string(),
   agentPrincipal: agentAccessPrincipalValue,
@@ -52,6 +56,7 @@ export const saveOwnerSupplyIntegrationDraftArgs = v.object({
   sourceSelectorJson: v.string(),
   connectionRef: v.optional(v.string()),
   validationInputJson: v.optional(v.string()),
+  terms: v.optional(supplyDraftTerms),
   operationKey: v.string(),
   correlationId: v.string(),
   ...sourceWriteArgs,

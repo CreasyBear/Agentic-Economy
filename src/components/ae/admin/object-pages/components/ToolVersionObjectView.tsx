@@ -15,7 +15,7 @@ export function ToolVersionObjectView({ view }: ToolVersionObjectViewProps) {
   const status = getStatusPresentation(view.disposition)
   const sourceAuthority = view.sourceAuthorityState === 'verified'
     ? copy.sourceAuthorityVerified
-    : copy.sourceAuthorityReviewRequired
+    : view.sourceAuthorityState === 'unset' ? copy.sourceAuthorityUnset : copy.sourceAuthorityReviewRequired
 
   return (
     <AeOperatorPage

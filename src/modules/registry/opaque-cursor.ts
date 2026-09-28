@@ -15,10 +15,8 @@ import { base64Codec, tryDecodeBase64Url } from '@/modules/common/base64-codec'
  */
 export type OpaqueCursorKind = 'registry' | 'market-tools' | 'businesses' | 'market-demand' | 'x402-directory'
 
-// Directory continuations wrap a long generation id around the engine cursor.
-// Route schemas still cap their own inputs (registry stays at 512). This
-// ceiling matches the catalogue cursor schema so a valid continuation is not
-// rejected after it has already been issued.
+// A directory continuation wraps the index cursor in its generation envelope.
+// Route input bounds must accept the same ceiling as the decoder.
 const MAX_OPAQUE_CURSOR_LENGTH = 16384
 
 const opaqueCursorPayloadSchema = z.strictObject({

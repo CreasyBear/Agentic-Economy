@@ -35,8 +35,8 @@ export function AdminMetricsPage({ range, onRangeChange }: AdminMetricsPageProps
           {data.partialDays.map((day) => (
             <p key={day} role="status" className="text-sm text-muted-foreground">{ADMIN_METRICS_COPY.snapshotIncomplete(day)}</p>
           ))}
-          <MetricsHeadline cards={data.cards} />
-          <MetricsRatios ratios={data.ratios} />
+          {data.coverageComplete ? <MetricsHeadline cards={data.cards} /> : <p role="status">{data.coverageDescription}</p>}
+          {data.coverageComplete ? <MetricsRatios ratios={data.ratios} /> : null}
           <MetricsDayTable rows={data.days} />
         </div>
       )}

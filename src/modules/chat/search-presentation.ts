@@ -1,5 +1,12 @@
 import type { ModelMessage } from 'ai'
 
+/** Apply the same display-safe projection to card actions and model-facing tool data. */
+export function sanitizeChatToolString(value: string): string {
+  return value
+    .replace(/<\s*\/?\s*(?:system|assistant|user|tool)\b[^>]*>/giu, '[data-tag]')
+    .replace(/[<>]/gu, character => character === '<' ? '‹' : '›')
+}
+
 const CHAT_SEARCH_USES = [
   'registry.tools.search',
   'registry.tools.compare',

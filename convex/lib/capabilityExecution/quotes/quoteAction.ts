@@ -1,7 +1,6 @@
 import { internal } from '../../../_generated/api'
 import type { ActionCtx } from '../../../_generated/server'
 import { inspectLiveX402RequirementRef } from '../liveX402Requirement/requirementRef'
-import { fetchCoinbaseReferenceRate } from '@/modules/money/reference-rate'
 import { PACKAGE4_FORMANCE_REQUIREMENTS } from '@/modules/money/public'
 import { spendingPeriodPreparationIsRetryable } from './quoteValuation'
 import { readOrganizationMonthlySpendSnapshotForQuote } from './environmentHelpers'
@@ -85,8 +84,6 @@ export async function quoteActionCore(
     return refuse(args, 'tool_unsupported', false)
   }
   if (live.kind === 'refused') return refuse(args, 'tool_not_ready', true)
-  const referenceRate = live.kind === 'observed' ? await fetchCoinbaseReferenceRate() : undefined
-  if (live.kind === 'observed' && referenceRate === undefined) return refuse(args, 'pricing_setup_required', true, { reason: 'AUD reference price temporarily unavailable' })
   if (subjects.financialMode === 'none') {
     const organizationMonthlySpend = await readOrganizationMonthlySpendSnapshotForQuote(ctx, subjects)
     return await ctx.runMutation(internal.capabilityQuotes.issueQuote, {
@@ -193,7 +190,6 @@ export async function quoteActionCore(
       ...args,
       ...(turnRef === undefined ? {} : { turnRef }),
       ...(live.kind === 'observed' ? { liveX402Requirement: live.requirement } : {}),
-      ...(referenceRate === undefined ? {} : { referenceRate }),
       formance: {
         policyDigest: subjects.policyDigest,
         accountRef: subjects.accountRef,

@@ -64,6 +64,9 @@ export const submitAdminCommandServer = createServerFn({ method: 'POST' })
         }
         throw cause
       }
+      if (proof.secondFactorAgeMinutes < 0) {
+        return { kind: 'refused', action: data.action, code: 'mfa_reverification_required', correlationId: data.correlationId }
+      }
       const command = { ...data, proof }
       const sourceWrite = await sourceWriteAdmissionFromContext({
         context,

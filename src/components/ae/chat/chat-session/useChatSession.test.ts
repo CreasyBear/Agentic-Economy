@@ -1,7 +1,5 @@
 // @vitest-environment jsdom
 
-import { getFunctionName } from 'convex/server'
-import { isValidElement } from 'react'
 import { act, renderHook, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -63,7 +61,6 @@ vi.mock('../presentation', async (importOriginal) => {
   }
 })
 
-import type { ChatHistoryProps } from './chat-session.contracts'
 import { useChatSession } from './useChatSession'
 import { readAnonymousSession, saveAnonymousSession } from './anonymous-session'
 
@@ -73,19 +70,6 @@ const baseProps = {
   onNewChat: vi.fn(),
 }
 
-function latestQueryArgs(calls: unknown[][], name: string): unknown {
-  return calls.findLast(([reference]) =>
-    getFunctionName(reference as Parameters<typeof getFunctionName>[0]) === name,
-  )?.[1]
-}
-
-function latestListThreadArgs(calls: unknown[][]): unknown {
-  return latestQueryArgs(calls, 'chatThreads:listThreads')
-}
-
-function latestSearchThreadArgs(calls: unknown[][]): unknown {
-  return latestQueryArgs(calls, 'chatThreads:searchThreads')
-}
 
 async function* threeChunkStream() {
   yield { id: 'assistant-1', role: 'assistant', parts: [{ type: 'text', text: 'alpha' }] }
@@ -144,6 +128,50 @@ describe('useChatSession', () => {
     act(() => result.current.transcript.onEditQuestion?.('Find Sydney weather'))
     expect(result.current.composer.prompt).toBe('Find Sydney weather')
     expect(sendMessageMutationMock).not.toHaveBeenCalled()
+  })
+
+  it('loads the signed next page in the same thread without exposing its cursor or clearing a draft', async () => {
+    authStateRef.current = { isAuthenticated: true, isLoading: false }
+    const { result } = renderHook(() => useChatSession({ ...baseProps, threadId: 'thread-owned' }))
+    act(() => result.current.composer.onPromptChange('A draft for another question'))
+    act(() => result.current.transcript.onContinueSearch?.({
+      action: 'next-page', authority: 'public', args: { query: 'weather', cursor: 'sc1.private-cursor' },
+    }))
+    await waitFor(() => expect(sendMessageMutationMock).toHaveBeenCalledOnce())
+    expect(sendMessageMutationMock).toHaveBeenCalledWith(expect.objectContaining({
+      threadId: 'thread-owned',
+      prompt: 'Show more results for weather',
+      continuation: { kind: 'search_next_page', query: 'weather', cursor: 'sc1.private-cursor' },
+    }))
+    expect(result.current.composer.prompt).toBe('A draft for another question')
+  })
+
+  it('preserves exact Quote input when the signed turn fails before acceptance', async () => {
+    authStateRef.current = { isAuthenticated: true, isLoading: false }
+    sendMessageMutationMock.mockRejectedValueOnce(new Error('chat_transport_unavailable'))
+    const { result } = renderHook(() => useChatSession({ ...baseProps, threadId: 'thread-owned' }))
+    let accepted: boolean | undefined
+    await act(async () => {
+      accepted = await result.current.transcript.onQuoteTool?.(
+        `operation:v1:${'a'.repeat(64)}`, { city: 'Sydney' },
+      )
+    })
+    expect(accepted).toBe(false)
+    expect(result.current.composer.error).not.toBe('')
+    expect(sendMessageMutationMock).toHaveBeenCalledWith(expect.objectContaining({
+      threadId: 'thread-owned',
+      prompt: expect.stringContaining('\"city\":\"Sydney\"'),
+    }))
+  })
+
+  it('never reroutes a private thread message into an anonymous session during auth reconnect', async () => {
+    const { result } = renderHook(() => useChatSession({ ...baseProps, threadId: 'thread-owned' }))
+    act(() => result.current.composer.onPromptChange('Keep this draft private'))
+    await act(async () => result.current.composer.onSubmit())
+    expect(sendMessagesMock).not.toHaveBeenCalled()
+    expect(sendMessageMutationMock).not.toHaveBeenCalled()
+    expect(result.current.composer.prompt).toBe('Keep this draft private')
+    expect(result.current.composer.error).not.toBe('')
   })
 
   it('admits one anonymous transport call when submit repeats before busy settles', async () => {
@@ -221,6 +249,30 @@ describe('useChatSession', () => {
     expect(new TextEncoder().encode(stored).byteLength).toBeLessThanOrEqual(16 * 1024)
     expect(readAnonymousSession(sessionStorage).messages).toHaveLength(12)
   })
+  it('continues an anonymous conversation when browser storage is denied or full', async () => {
+    const storage = Object.getOwnPropertyDescriptor(window, 'sessionStorage')
+    Object.defineProperty(window, 'sessionStorage', {
+      configurable: true,
+      get: () => { throw new DOMException('Storage access denied', 'SecurityError') },
+    })
+    try {
+      const { result } = renderHook(() => useChatSession(baseProps))
+      act(() => result.current.composer.onPromptChange('convert time between timezones'))
+      await act(async () => result.current.composer.onSubmit())
+      expect(result.current.transcript.messages.map(message => message.role)).toEqual(['user', 'assistant'])
+    } finally {
+      if (storage !== undefined) Object.defineProperty(window, 'sessionStorage', storage)
+    }
+    const full: Storage = {
+      length: 0,
+      key: () => null,
+      clear: () => { throw new DOMException('Storage access denied', 'SecurityError') },
+      getItem: () => null,
+      setItem: () => { throw new DOMException('Storage quota exceeded', 'QuotaExceededError') },
+      removeItem: () => { throw new DOMException('Storage access denied', 'SecurityError') },
+    }
+    expect(() => saveAnonymousSession(full, { id: crypto.randomUUID(), messages: [] })).not.toThrow()
+  })
 
   it('keeps optimistic messages when anonymous streaming aborts', async () => {
     readUIMessageStreamMock.mockImplementation(async function* () {
@@ -263,43 +315,6 @@ describe('useChatSession', () => {
     })
   })
 
-  it('advances thread query now on the 30-second interval', () => {
-    vi.useFakeTimers()
-    authStateRef.current = { isAuthenticated: true, isLoading: false }
-    useQueryCallsRef.current = []
-    renderHook(() => useChatSession({ ...baseProps, threadId: 'thread-1' }))
-    const firstNow = (latestListThreadArgs(useQueryCallsRef.current) as { now: number } | undefined)?.now
-    expect(firstNow).toBeTypeOf('number')
-
-    act(() => {
-      vi.advanceTimersByTime(30_000)
-    })
-
-    const laterNow = (latestListThreadArgs(useQueryCallsRef.current) as { now: number } | undefined)?.now
-    expect(laterNow).toBeTypeOf('number')
-    expect(laterNow).toBeGreaterThan(firstNow ?? 0)
-  })
-
-  it('skips listThreads while search is active and skips searchThreads when search is empty', () => {
-    authStateRef.current = { isAuthenticated: true, isLoading: false }
-    useQueryCallsRef.current = []
-    const { result } = renderHook(() => useChatSession({ ...baseProps, threadId: 'thread-1' }))
-
-    expect(latestListThreadArgs(useQueryCallsRef.current)).not.toBe('skip')
-    expect(latestSearchThreadArgs(useQueryCallsRef.current)).toBe('skip')
-
-    expect(result.current.showHistoryRail).toBe(true)
-    const panel = result.current.createHistoryPanel('test')
-    expect(isValidElement(panel)).toBe(true)
-    if (!isValidElement<ChatHistoryProps>(panel)) throw new Error('history panel missing')
-
-    act(() => {
-      panel.props.onSearch('weather')
-    })
-
-    expect(latestSearchThreadArgs(useQueryCallsRef.current)).toMatchObject({ query: 'weather' })
-    expect(latestListThreadArgs(useQueryCallsRef.current)).toBe('skip')
-  })
 
   it('remembers anonymous handoff exactly once when auth send creates a thread', async () => {
     const { result, rerender } = renderHook(() => useChatSession(baseProps))

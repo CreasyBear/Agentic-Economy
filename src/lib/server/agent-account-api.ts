@@ -52,6 +52,7 @@ export async function handleAgentAccountGet(
         ? resolveAgentAccessPrincipal(request, '', correlationId)
         : undefined)
     const admitted = await authenticateAgentAccess({
+      request,
       ...(options.authenticate === undefined ? {} : { authenticate: options.authenticate }),
       ...(resolvePrincipal === undefined ? {} : { resolvePrincipal }),
       requiredScope: null,
@@ -100,6 +101,7 @@ export async function handleAgentAccountActionPost(
         : undefined)
     const contract = AGENT_ACCOUNT_MONEY_ROUTE_CONTRACTS[actionName]
     const admitted = await authenticateAgentAccess({
+      request,
       ...(options.authenticate === undefined ? {} : { authenticate: options.authenticate }),
       ...(resolvePrincipal === undefined ? {} : { resolvePrincipal }),
       requiredScope: contract.scope,

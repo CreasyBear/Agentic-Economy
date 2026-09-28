@@ -174,7 +174,8 @@ export function projectProviderWorkspace(
       ? lifecycle.value.map((row) => [row.offeringRef, row] as const)
       : [],
   )
-  const rows = inventory.tools.map((row) => projectRow(row, statusByOffering.get(row.offeringRef), lifecycle.kind))
+  const invalidStatusRefs = new Set(inventory.diagnostics?.map((item) => item.offeringRef))
+  const rows = inventory.tools.map((row) => projectRow(row, statusByOffering.get(row.offeringRef), lifecycle.kind, invalidStatusRefs.has(row.offeringRef)))
   const blockers = rows.flatMap((row) => row.blocker === undefined ? [] : [row.blocker])
   return {
     kind: 'available',
@@ -189,6 +190,7 @@ function projectRow(
   definition: ProviderWorkspaceInventoryRow,
   lifecycle: ProviderWorkspaceLifecycleRow | undefined,
   lifecycleKind: ProviderWorkspaceLifecycleResult['kind'],
+  invalidStatus: boolean,
 ): ProviderWorkspaceProjectionRow {
   // Well 8 Lane C: a live reviewed-tier Tool resolves by its canonical slug;
   // one with no current publication yet (draft/unready/incompatible) has
@@ -200,6 +202,15 @@ function projectRow(
     href: `/owner/operations/${encodeURIComponent(definition.slug ?? definition.offeringRef)}`,
   }
   if (lifecycle === undefined) {
+    if (invalidStatus) {
+      return {
+        ...definition,
+        lifecycleLabel: 'Status unavailable',
+        availability: 'unknown',
+        blocker: 'Lifecycle status for this Tool could not be read.',
+        continuation: detail,
+      }
+    }
     return {
       ...definition,
       lifecycleLabel: lifecycleKind === 'unavailable' ? 'Status unavailable' : 'Updating',

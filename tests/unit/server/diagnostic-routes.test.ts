@@ -168,6 +168,41 @@ describe('operational diagnostics routes', () => {
     expect(fetchImpl).toHaveBeenCalledOnce()
   })
 
+  it('keeps production ready when operation-only settings are absent or malformed', async () => {
+    const env = productionReadinessEnvironment()
+    for (const name of [
+      'OPENROUTER_API_KEY', 'AE_LLM_MODEL', 'AE_CHAT_PROXY_SECRET',
+      'STRIPE_SECRET_KEY', 'STRIPE_WEBHOOK_SECRET', 'STRIPE_V2_WEBHOOK_SECRET',
+      'STRIPE_AU_INCLUSIVE_GST_TAX_RATE_ID', 'AE_FORMANCE_ENVIRONMENT',
+      'AE_FORMANCE_GATEWAY_URL', 'AE_FORMANCE_LEDGER', 'AE_FORMANCE_REQUEST_TIMEOUT_MS',
+      'AE_FORMANCE_ACCESS_CLIENT_ID', 'AE_FORMANCE_ACCESS_CLIENT_SECRET',
+      'AE_INFISICAL_BASE_URL',
+      'AE_PACKAGE5_WRITES_ENABLED', 'AE_SUPPLY_HTTP_CREDENTIALS_ENABLED',
+      'AE_SUPPLY_MCP_OAUTH_ENABLED', 'AE_PROVIDER_OFFBOARDING_ENABLED',
+      'AE_X402_CUSTODY_ENABLED', 'AE_X402_RPC_URLS_JSON',
+    ]) delete env[name]
+    env.AE_INFISICAL_BASE_URL = 'invalid-url'
+    const result = await readServerReadiness({
+      env,
+      fetch: vi.fn(async () => new Response(null, { status: 200 })),
+      nodeMajor: 22,
+    })
+    expect(result).toMatchObject({ status: 'ready', checks: { config: { status: 'ready' }, convex: { status: 'ready' } } })
+    expect(result.commercial.funding).toBe('missing')
+  })
+
+  it('retains the shared identity readiness fence for malformed issuer', async () => {
+    const env = productionReadinessEnvironment()
+    env.CLERK_JWT_ISSUER_DOMAIN = 'not-a-url'
+    const fetchImpl = vi.fn(async () => new Response(null, { status: 200 }))
+    const result = await readServerReadiness({ env, fetch: fetchImpl, nodeMajor: 22 })
+    expect(result).toMatchObject({
+      status: 'not_ready',
+      checks: { config: { status: 'failed', code: 'deployment_manifest_invalid' } },
+    })
+    expect(fetchImpl).not.toHaveBeenCalled()
+  })
+
   it('projects public ready state without internal deployment inventory', async () => {
     const response = await handleReadyRequest(
       new Request('https://ae.example/api/ready'),
