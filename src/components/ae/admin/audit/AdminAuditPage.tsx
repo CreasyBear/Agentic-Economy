@@ -13,7 +13,7 @@ import {
 } from './audit.contracts'
 import { AuditEventsTable } from './components/AuditEventsTable'
 import { AuditFilterChips } from './components/AuditFilterChips'
-import { PendingApprovalsPanel } from './components/PendingApprovalsPanel'
+import { PendingApprovalsActions } from './PendingApprovalsActions'
 import { useAdminAudit } from './useAdminAudit'
 
 export function AdminAuditPage(props: AdminAuditPageProps) {
@@ -66,7 +66,9 @@ export function AdminAuditPage(props: AdminAuditPageProps) {
           onClear={audit.onClear}
         />
       </AeSection>
-      <PendingApprovalsPanel rows={audit.data.proposals} />
+      <PendingApprovalsActions proposals={audit.data.proposals} now={audit.data.now} role={audit.data.role}
+        actorRef={audit.data.actorRef} paginationStatus={audit.data.approvalPaginationStatus}
+        onLoadMore={audit.data.loadMoreApprovals} />
       <AdminMembershipActions />
       <AuditEventsTable
         rows={audit.data.events}

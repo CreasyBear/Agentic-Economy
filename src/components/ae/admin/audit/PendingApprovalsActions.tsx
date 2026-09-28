@@ -1,66 +1,59 @@
 import { useState } from 'react'
-import { useQuery } from 'convex/react'
-
-import { api } from '../../../../../convex/_generated/api'
 import { AdminActionSheet } from '@/components/ae/admin/actions/AdminActionSheet'
 import {
-  ADMIN_ACTION_COPY,
-  ADMIN_ACTION_SHEET_COPY,
-  ADMIN_AUDIT_ACTION_COPY,
-  parseAdminProposalCommand,
-  type AdminCommandRequest,
+  ADMIN_ACTION_COPY, ADMIN_ACTION_SHEET_COPY, ADMIN_AUDIT_ACTION_COPY,
+  parseAdminProposalCommand, type AdminCommandRequest,
 } from '@/components/ae/admin/actions/actions.contracts'
 import { AeCopyReference } from '@/components/ae/data/AeCopyReference'
 import { AeSection } from '@/components/ae/layout/AeSection'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
-import { AUDIT_COPY } from './audit.contracts'
+import { AUDIT_COPY, type PendingApprovalsActionsProps } from './audit.contracts'
 
-export function PendingApprovalsActions() {
-  const access = useQuery(api.adminConsoleAudit.readAdminAuditAccess, {})
-  const allowed = access?.kind === 'allowed'
-  const canApprove = allowed && access.role === 'owner_admin'
-  const proposals = useQuery(api.adminConsoleAudit.listAdminApprovalProposals, allowed ? {} : 'skip')
+export function PendingApprovalsActions({ proposals, now, role, actorRef, paginationStatus, onLoadMore }: PendingApprovalsActionsProps) {
   const [selectedRef, setSelectedRef] = useState<string | null>(null)
-
-  if (!allowed) return null
-  const selected = Array.isArray(proposals) ? proposals.find((row) => row.proposalRef === selectedRef) : undefined
+  const selected = proposals.find((row) => row.proposalRef === selectedRef && row.expiresAt > now)
   const command = selected?.commandJson === null || selected === undefined
-    ? null
-    : parseAdminProposalCommand(selected.action, selected.commandJson)
+    ? null : parseAdminProposalCommand(selected.action, selected.commandJson)
   const onOpenChange = (open: boolean) => { if (!open) setSelectedRef(null) }
 
   return (
     <AeSection title={ADMIN_AUDIT_ACTION_COPY.approvalActionsTitle} description={ADMIN_AUDIT_ACTION_COPY.approvalActionsDescription}>
-      {proposals === undefined ? <p role="status">{ADMIN_AUDIT_ACTION_COPY.approvalLoading}</p>
-        : !Array.isArray(proposals) ? (
-          <Alert role="alert" variant="destructive"><AlertDescription>{ADMIN_AUDIT_ACTION_COPY.approvalUnavailable}</AlertDescription></Alert>
-        ) : proposals.length === 0 ? <p>{AUDIT_COPY.noPendingApprovals}</p> : (
-          <ul className="grid gap-intra">
-            {proposals.map((proposal) => {
-              const material = proposal.commandJson === null
-                ? null
-                : parseAdminProposalCommand(proposal.action, proposal.commandJson)
-              return (
-                <li key={proposal.proposalRef} className="flex flex-wrap items-center justify-between gap-intra rounded-lg border border-border p-gutter">
-                  <div className="grid gap-1">
-                    <span className="font-medium">{ADMIN_ACTION_COPY[proposal.action]}</span>
-                    <AeCopyReference label={ADMIN_AUDIT_ACTION_COPY.proposal} value={proposal.proposalRef} />
-                    <AeCopyReference label={AUDIT_COPY.columnLabels.proposer} value={proposal.proposerRef} />
-                  </div>
-                  {canApprove && material === null ? (
-                    <Alert role="alert" variant="destructive"><AlertDescription>{ADMIN_ACTION_SHEET_COPY.proposalUnavailable}</AlertDescription></Alert>
-                  ) : canApprove && material !== null ? (
-                    <Button type="button" variant="outline" className="min-h-touch" onClick={() => setSelectedRef(proposal.proposalRef)}>
-                      {ADMIN_AUDIT_ACTION_COPY.approve}
-                    </Button>
-                  ) : null}
-                </li>
-              )
-            })}
-          </ul>
-        )}
-      {canApprove && selected !== undefined && command !== null ? approvalSheet(command, selected.proposalRef, onOpenChange) : null}
+      {proposals.length === 0 ? <p>{AUDIT_COPY.noPendingApprovals}</p> : (
+        <ul className="grid gap-intra">
+          {proposals.map((proposal) => {
+            const material = proposal.commandJson === null
+              ? null : parseAdminProposalCommand(proposal.action, proposal.commandJson)
+            const canApprove = role === 'owner_admin' && proposal.proposerRef !== actorRef
+              && proposal.expiresAt > now
+            return (
+              <li key={proposal.proposalRef} className="flex flex-wrap items-center justify-between gap-intra rounded-lg border border-border p-gutter">
+                <div className="grid gap-1">
+                  <span className="font-medium">{ADMIN_ACTION_COPY[proposal.action]}</span>
+                  <AeCopyReference label={ADMIN_AUDIT_ACTION_COPY.proposal} value={proposal.proposalRef} />
+                  <AeCopyReference label={AUDIT_COPY.columnLabels.proposer} value={proposal.proposerRef} />
+                  <time dateTime={new Date(proposal.expiresAt).toISOString()}>
+                    {AUDIT_COPY.columnLabels.expires}: {new Date(proposal.expiresAt).toLocaleString('en-AU', { timeZone: 'Australia/Perth' })}
+                  </time>
+                </div>
+                {canApprove && material === null ? (
+                  <Alert role="alert" variant="destructive"><AlertDescription>{ADMIN_ACTION_SHEET_COPY.proposalUnavailable}</AlertDescription></Alert>
+                ) : canApprove && material !== null ? (
+                  <Button type="button" variant="outline" className="min-h-touch" onClick={() => setSelectedRef(proposal.proposalRef)}>
+                    {ADMIN_AUDIT_ACTION_COPY.approve}
+                  </Button>
+                ) : null}
+              </li>
+            )
+          })}
+        </ul>
+      )}
+      {paginationStatus === 'Exhausted' ? null : (
+        <Button type="button" variant="outline" disabled={paginationStatus === 'LoadingMore'} onClick={onLoadMore}>{AUDIT_COPY.loadMore}</Button>
+      )}
+      {role === 'owner_admin' && selected !== undefined && selected.proposerRef !== actorRef
+        && command !== null && selected.expiresAt > now
+        ? approvalSheet(command, selected.proposalRef, onOpenChange) : null}
     </AeSection>
   )
 }

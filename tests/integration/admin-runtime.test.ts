@@ -79,7 +79,7 @@ describe('admin Convex runtime controls', () => {
     const repeatedAccess = await readAuditAccessHandler(authCtx(db, ownerAdmin()), {})
 
     expect(JSON.stringify(repeatedAccess)).toBe(JSON.stringify(access))
-    expect(access).toEqual({ kind: 'allowed', role: 'owner_admin' })
+    expect(access).toMatchObject({ kind: 'allowed', role: 'owner_admin' })
   })
 
   it('bootstraps only a preauthorized first owner_admin and stores audit rows', async () => {

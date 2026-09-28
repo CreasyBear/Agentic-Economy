@@ -1,13 +1,13 @@
 /** @vitest-environment jsdom */
 import type { ReactNode } from 'react'
 import { getFunctionName, type FunctionReference } from 'convex/server'
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from 'vitest'
 import '../../setup/jsdom-platform'
 
 const mocks = vi.hoisted((): {
   requireOperatorBeforeLoad: Mock
-  auditAccess: { kind: string; code?: string; role?: string }
+  auditAccess: { kind: string; code?: string; role?: string; actorRef?: string }
   proposals: unknown[]
   events: unknown[]
   paginationStatus: string
@@ -15,7 +15,7 @@ const mocks = vi.hoisted((): {
   onSearchChange: Mock
 } => ({
   requireOperatorBeforeLoad: vi.fn(),
-  auditAccess: { kind: 'allowed', role: 'owner_admin' },
+  auditAccess: { kind: 'allowed', role: 'owner_admin', actorRef: 'token_owner' },
   proposals: [],
   events: [],
   paginationStatus: 'Exhausted',
@@ -30,9 +30,10 @@ vi.mock('convex/react', () => ({
       ? mocks.auditAccess
       : mocks.proposals
   },
-  usePaginatedQuery: (_query: unknown, args: unknown) => args === 'skip'
+  usePaginatedQuery: (query: FunctionReference<'query'>, args: unknown) => args === 'skip'
     ? { results: [], status: 'LoadingFirstPage', loadMore: mocks.loadMore }
-    : { results: mocks.events, status: mocks.paginationStatus, loadMore: mocks.loadMore },
+    : { results: getFunctionName(query) === 'adminConsoleAudit:listAdminApprovalProposals'
+      ? mocks.proposals : mocks.events, status: mocks.paginationStatus, loadMore: mocks.loadMore },
 }))
 vi.mock('@clerk/tanstack-react-start', () => ({
   SignOutButton: ({ children }: { children: ReactNode }) => children,
@@ -60,7 +61,7 @@ import { OperatorSurfaceForbiddenError } from '@/lib/operator/operator-context'
 import { operatorLayoutRouteOptions } from '@/lib/operator/route-options'
 
 beforeEach(() => {
-  mocks.auditAccess = { kind: 'allowed', role: 'owner_admin' }
+  mocks.auditAccess = { kind: 'allowed', role: 'owner_admin', actorRef: 'token_owner' }
   mocks.proposals = []
   mocks.events = []
   mocks.paginationStatus = 'Exhausted'
@@ -71,6 +72,7 @@ afterEach(() => {
   mocks.requireOperatorBeforeLoad.mockReset()
   mocks.loadMore.mockReset()
   mocks.onSearchChange.mockReset()
+  vi.useRealTimers()
 })
 
 describe('admin role gate', () => {
@@ -146,4 +148,27 @@ describe('admin audit page', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Clear all' }))
     expect(mocks.onSearchChange).toHaveBeenCalledWith({})
   })
+  it('removes an expiring approval from the actionable panel without a database write', async () => {
+    vi.useFakeTimers()
+    const now = Date.UTC(2026, 8, 27, 12)
+    vi.setSystemTime(now)
+    mocks.proposals = [{
+      proposalRef: 'admin-proposal:clock',
+      action: 'set_business_suppression',
+      proposerRef: 'token_other',
+      commandJson: JSON.stringify({
+        input: { businessId: 'business:clock', intent: 'suppress' },
+        reasonCode: 'policy_violation',
+        evidenceRefs: ['evidence:clock'],
+      }),
+      createdAt: now - 1000,
+      expiresAt: now + 1000,
+    }]
+    render(<AdminAuditPage search={{}} onSearchChange={mocks.onSearchChange} />)
+    expect(screen.getByRole('button', { name: 'Approve' })).toBeTruthy()
+    await act(async () => { vi.advanceTimersByTime(1000) })
+    expect(screen.queryByRole('button', { name: 'Approve' })).toBeNull()
+    expect(screen.queryByText('admin-proposal:clock')).toBeNull()
+  })
+
 })

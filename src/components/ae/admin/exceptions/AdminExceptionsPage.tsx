@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react'
 
+import { Button } from '@/components/ui/button'
 import { AeOperatorPage } from '@/components/ae/layout/AeOperatorPage'
 import { AePageState } from '@/components/ae/layout/AePageState'
 import { AeSection } from '@/components/ae/layout/AeSection'
@@ -9,7 +10,9 @@ import { ExceptionFeedTable } from './components/ExceptionFeedTable'
 import { ExceptionFilterChips } from './components/ExceptionFilterChips'
 import { PurchaseResolutionTable } from './components/PurchaseResolutionTable'
 import {
+  ADMIN_EXCEPTION_PARTITIONS,
   ADMIN_EXCEPTIONS_COPY,
+  ADMIN_EXCEPTION_PARTITION_LABELS,
   type AdminExceptionsPageProps,
 } from './exceptions.contracts'
 import { useAdminExceptions } from './useAdminExceptions'
@@ -44,6 +47,7 @@ export function AdminExceptionsPage(props: AdminExceptionsPageProps) {
     )
   }
 
+  const selectedPartition = exceptions.data.selectedPartition
   return page(
     <div className="grid gap-section">
       <AeSection
@@ -51,24 +55,34 @@ export function AdminExceptionsPage(props: AdminExceptionsPageProps) {
         description={ADMIN_EXCEPTIONS_COPY.filtersDescription}
       >
         <ExceptionFilterChips
-          selected={props.search.kind ?? null}
-          counts={exceptions.data.counts}
+          selected={exceptions.data.selectedKind}
+          overview={exceptions.data.overview}
           onSelect={exceptions.onSelectKind}
-          onClear={exceptions.onClear}
         />
+        <div className="mt-3 flex flex-wrap gap-intra">
+          {ADMIN_EXCEPTION_PARTITIONS[exceptions.data.selectedKind].map((partition) => (
+            <Button key={partition} type="button" size="sm"
+              variant={selectedPartition === partition ? 'default' : 'outline'}
+              aria-pressed={selectedPartition === partition}
+              onClick={() => exceptions.onSelectPartition(partition)}>
+              {ADMIN_EXCEPTION_PARTITION_LABELS[partition]}
+            </Button>
+          ))}
+        </div>
       </AeSection>
-      {exceptions.data.unavailableLabels.length === 0 ? null : (
-        <p role="status" className="text-sm text-warning">
-          {ADMIN_EXCEPTIONS_COPY.someUnavailable}{' '}
-          {exceptions.data.unavailableLabels.join(', ')}.
-        </p>
-      )}
+      {exceptions.data.selectedSourceUnavailable ? (
+        <p role="status" className="text-sm text-warning">{ADMIN_EXCEPTIONS_COPY.exceptionsUnavailable}</p>
+      ) : null}
       <ExceptionFeedTable
         rows={exceptions.data.rows}
-        total={exceptions.data.total}
-        truncated={exceptions.data.truncated}
+        observed={exceptions.data.observed}
+        complete={exceptions.data.complete}
         unavailable={exceptions.data.selectedSourceUnavailable}
-        filtered={exceptions.filtered}
+        orderLabel={exceptions.data.selectedKind === 'uncertain_call'
+          ? 'Reconciliation next-attempt order'
+          : 'Updated-at index order'}
+        paginationStatus={exceptions.data.paginationStatus}
+        onLoadMore={exceptions.data.loadMore}
         onOpen={exceptions.onOpen}
       />
       <PurchaseResolutionTable rows={exceptions.data.resolutions} />
