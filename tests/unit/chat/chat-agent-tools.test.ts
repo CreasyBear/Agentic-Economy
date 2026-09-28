@@ -3,7 +3,7 @@ import { generateText, type ToolSet } from 'ai'
 import { getFunctionName } from 'convex/server'
 import { z } from 'zod'
 import { convexToJson, type Value } from 'convex/values'
-import { projectToolCard } from '@/modules/chat/tool-card'
+import { projectToolCard, serializeToolCard } from '@/modules/chat/tool-card'
 import { chatClarifyInputSchema } from '@/modules/chat/agent-turn.contracts'
 import { describe, expect, it, vi } from 'vitest'
 
@@ -11,8 +11,8 @@ import { CHAT_TOOL_IDS, CHAT_TOOL_NAME_MAP, type ChatToolId } from '@/modules/ch
 import { createChatAgent } from '../../../convex/lib/chat/tools/agent'
 import {
   chatNoMatchSearchCount,
+  chatSearchResolution,
   MAX_CHAT_TOOL_CALLS,
-  MAX_CHAT_TOOL_RESULT_BYTES,
   prepareChatToolStep,
 } from '../../../convex/lib/chat/tools/step'
 import { internal } from '../../../convex/_generated/api'
@@ -69,7 +69,9 @@ function toolCtx(input: Readonly<{
   runAction?: ToolCtx['runAction']
 }> = {}): ToolCtx {
   return {
-    runQuery: input.runQuery ?? vi.fn(async () => true),
+    runQuery: input.runQuery ?? vi.fn(async (reference) => getFunctionName(reference) === 'x402DirectoryIndex:searchCompactInternal'
+      ? { kind: 'ok', page: [], isDone: true, continueCursor: '', coverage: { generation: 'test', completedAt: 1 } }
+      : true),
     runAction: input.runAction ?? vi.fn(),
   } as unknown as ToolCtx
 }
@@ -119,7 +121,7 @@ describe('Tool chat Agent tools', () => {
   it('uses the second search for a distinct attempt, but never erases a later match', () => {
     const search = CHAT_TOOL_NAME_MAP.canonicalToProvider['registry.tools.search']
     const noMatch = { toolResults: [{ toolName: search, output: { kind: 'noMatch' } }] }
-    const matched = { toolResults: [{ toolName: search, output: { kind: 'matched' } }] }
+    const matched = { toolResults: [{ toolName: search, output: { kind: 'match' } }] }
     expect(prepareChatToolStep({ stepNumber: 0, steps: [] }).toolChoice).toBe('required')
     expect(prepareChatToolStep({ stepNumber: 1, steps: [noMatch] })).toEqual({
       toolChoice: 'required', activeTools: [search],
@@ -127,6 +129,18 @@ describe('Tool chat Agent tools', () => {
     expect(chatNoMatchSearchCount([noMatch, noMatch])).toBe(2)
     expect(chatNoMatchSearchCount([noMatch, matched])).toBe(0)
     expect(prepareChatToolStep({ stepNumber: 2, steps: [noMatch, matched] }).toolChoice).toBe('auto')
+  })
+
+  it('keeps incomplete and unavailable search answers actionable without claiming no match', () => {
+    const search = CHAT_TOOL_NAME_MAP.canonicalToProvider['registry.tools.search']
+    const step = (output: unknown) => [{ toolResults: [{ toolName: search, output }] }]
+    const scoped = { kind: 'scoped', next: [{ action: 'next-page', args: { query: 'timezone', cursor: 'x402:cursor-2' } }] }
+    expect(chatNoMatchSearchCount(step(scoped))).toBe(0)
+    expect(prepareChatToolStep({ stepNumber: 1, steps: step(scoped) }).toolChoice).toBe('auto')
+    expect(chatSearchResolution(step(scoped))).toContain('cursor: x402:cursor-2')
+    expect(chatSearchResolution(step({ kind: 'unavailable', next: [{ action: 'retry', args: { query: 'timezone' } }] }))).toContain('retry “timezone”')
+    expect(chatSearchResolution(step({ kind: 'noMatch', next: [{ action: 'broaden', args: { query: 'timezone' } }] }))).toContain('No suitable Tool')
+    expect(chatSearchResolution([...step(scoped), ...step({ kind: 'match' })])).toBeNull()
   })
 
   it('persists schema-bearing detail output losslessly and renders its completed card', async () => {
@@ -365,7 +379,7 @@ describe('Tool chat Agent tools', () => {
       [{ role: 'user', content: 'Compare two company-lookup tools' }],
     ) as { kind: string; results: readonly { toolRef: string }[] }
 
-    expect(result.kind).toBe('matched')
+    expect(result.kind).toBe('match')
     expect(result.results.map(({ toolRef }) => toolRef)).toEqual([TOOL_CRYPTO_TX.toolRef])
     expect(runAction.mock.calls[1]?.[1]).toMatchObject({
       query: ERC20_QUERY,
@@ -397,11 +411,350 @@ describe('Tool chat Agent tools', () => {
       toolCtx({ runAction: runAction as ToolCtx['runAction'] }),
       { query: 'weather' }, [{ role: 'user', content: 'Compare weather choices for Sydney' }],
     ) as { kind: string; results: readonly { toolRef: string; network: string; verification: string }[] }
-    expect(result.kind).toBe('matched')
+    expect(result.kind).toBe('match')
     expect(result.results.map(item => item.toolRef)).toEqual([TOOL_CRYPTO_TX.toolRef])
   })
 
-  it('rejects invalid canonical output and refuses oversized model results', async () => {
+  it('shows compact Bazaar rows as scoped external leads with an exact next page, never an AE Call', async () => {
+    const runAction = vi.fn()
+    const runQuery = vi.fn(async (reference) => {
+      expect(getFunctionName(reference)).toBe('x402DirectoryIndex:searchCompactInternal')
+      return {
+        kind: 'ok', coverage: { generation: 'bazaar-7', completedAt: 100 },
+        page: [{ id: 'directory-entry-7', source: 'coinbase', title: 'Timezone API', summary: 'Convert timezones',
+          provider: 'External provider', actionClass: 'transform', objectClass: 'location', completedAt: 100 }],
+        continueCursor: 'native-page-2', isDone: false,
+      }
+    })
+    const result = await invokeTool(createChatAgent(mockModel()), 'registry.tools.search', toolCtx({
+      runQuery: runQuery as ToolCtx['runQuery'], runAction: runAction as ToolCtx['runAction'],
+    }), { query: 'convert timezone', source: 'coinbase' })
+    expect(result).toMatchObject({
+      kind: 'scoped', assessed: { source: 'coinbase', coverage: 'partial', generation: 'bazaar-7' },
+      results: [{ id: 'directory-entry-7', access: 'external_listing', price: { kind: 'unavailable' },
+        next: [{ action: 'describe-external', args: { id: 'directory-entry-7' } }] }],
+      next: [{ action: 'next-page', args: { query: 'convert timezone', cursor: 'x402:native-page-2' } }],
+    })
+    expect(runAction).not.toHaveBeenCalled()
+    const card = projectToolCard({
+      type: `tool-${CHAT_TOOL_NAME_MAP.canonicalToProvider['registry.tools.search']}`,
+      state: 'output-available', output: result,
+    })
+    expect(card).toMatchObject({ kind: 'choices', verdict: 'scoped',
+      choices: [{ access: 'external_listing', detailHref: '/api/v1/registry/detail?id=directory-entry-7' }] })
+    expect(projectToolCard(serializeToolCard(card!))).toMatchObject({ kind: 'choices',
+      choices: [{ access: 'external_listing', detailHref: '/api/v1/registry/detail?id=directory-entry-7' }] })
+  })
+
+  it('pages every admitted match before Bazaar and preserves external continuation and price filters', async () => {
+    const query = 'timezone conversion'
+    const tools = Array.from({ length: 10 }, (_, index) => ({
+      ...TOOL_TIMEZONE,
+      toolRef: `operation:v1:${(index + 1).toString(16).padStart(64, '0')}` as typeof TOOL_TIMEZONE.toolRef,
+      toolId: `operation:v1:${(index + 1).toString(16).padStart(64, '0')}`,
+      listing: { ...TOOL_TIMEZONE.listing, label: `Timezone ${index + 1}` },
+    }))
+    const admitted = serializeToolSearchResult({
+      ...misorderedSearchResult(query), items: tools, pagination: { limit: 20, hasMore: false },
+    })
+    const runAction = vi.fn(async (reference, args: { query?: string }) => {
+      const name = getFunctionName(reference)
+      if (name === 'capabilityToolCatalog:searchInternal') {
+        expect(args.query).toBe('')
+        return admitted
+      }
+      if (name === 'capabilityToolCatalog:presentSearch') {
+        return { result: serializeToolSearchResult({
+          ...misorderedSearchResult(query), items: tools,
+          ranking: tools.map((tool, index) => ({ toolRef: tool.toolRef, rank: index + 1, score: 0.9 })),
+          pagination: { limit: 20, hasMore: false },
+        }), use: 'registry.tools.search' }
+      }
+      throw new Error(`Unexpected action: ${name}`)
+    })
+    const externalRow = (id: string) => ({
+      id, source: 'coinbase', title: id, summary: 'Convert timezones', provider: 'External provider',
+      actionClass: 'transform', objectClass: 'location', completedAt: 100,
+    })
+    const runQuery = vi.fn(async (_reference, args: { paginationOpts: { cursor: string | null; numItems: number }; priceBand?: string }) => {
+      expect(args.priceBand).toBe('lt_0_01')
+      if (args.paginationOpts.cursor === null) {
+        expect(args.paginationOpts.numItems).toBe(6)
+        return { kind: 'ok', page: [externalRow('bazaar-1'), externalRow('bazaar-2')],
+          continueCursor: 'native-2', isDone: false, coverage: { generation: 'bazaar-7', completedAt: 100 } }
+      }
+      expect(args.paginationOpts.cursor).toBe('native-2')
+      return { kind: 'ok', page: [externalRow('bazaar-3')], continueCursor: '',
+        isDone: true, coverage: { generation: 'bazaar-7', completedAt: 100 } }
+    })
+    const ctx = toolCtx({ runAction: runAction as ToolCtx['runAction'], runQuery: runQuery as ToolCtx['runQuery'] })
+    const input = { query, filters: { priceBand: 'lt_0_01' as const } }
+    const firstPage = registryToolsSearchContract.outputSchema.parse(
+      await invokeTool(createChatAgent(mockModel()), 'registry.tools.search', ctx, input))
+    expect(firstPage.kind).toBe('match')
+    if (firstPage.kind !== 'match' || firstPage.pagination.nextCursor === undefined) throw new Error('Missing admitted continuation')
+    expect(firstPage.results.map(row => row.id)).toEqual(tools.slice(0, 8).map(tool => tool.toolRef))
+    expect(runQuery).not.toHaveBeenCalled()
+    const secondPage = registryToolsSearchContract.outputSchema.parse(
+      await invokeTool(createChatAgent(mockModel()), 'registry.tools.search', ctx,
+        { ...input, cursor: firstPage.pagination.nextCursor }, [{ role: 'user', content: 'Show the next page of timezone conversion APIs' }]))
+    expect(secondPage.kind).toBe('match')
+    if (secondPage.kind !== 'match' || secondPage.pagination.nextCursor === undefined) throw new Error('Missing Bazaar continuation')
+    expect(secondPage.results.map(row => row.id)).toEqual([
+      ...tools.slice(8).map(tool => tool.toolRef), 'bazaar-1', 'bazaar-2',
+    ])
+    expect(secondPage.results.slice(2).every(row => row.access === 'external_listing'
+      && row.next[0]?.action === 'describe-external')).toBe(true)
+    const third = await invokeTool(createChatAgent(mockModel()), 'registry.tools.search', ctx,
+      { ...input, cursor: secondPage.pagination.nextCursor }, [{ role: 'user', content: 'Show the next page of timezone conversion APIs' }])
+    expect(third).toMatchObject({ kind: 'scoped', results: [{ id: 'bazaar-3', access: 'external_listing' }] })
+    expect(runQuery).toHaveBeenCalledTimes(2)
+    expect(runAction).toHaveBeenCalledTimes(4)
+  })
+
+  it('continues into Bazaar after exactly one full final admitted page', async () => {
+    const query = 'timezone conversion'
+    const tools = Array.from({ length: 8 }, (_, index) => ({
+      ...TOOL_TIMEZONE,
+      toolRef: `operation:v1:${(index + 1).toString(16).padStart(64, '0')}` as typeof TOOL_TIMEZONE.toolRef,
+      toolId: `operation:v1:${(index + 1).toString(16).padStart(64, '0')}`,
+    }))
+    const source = serializeToolSearchResult({
+      ...misorderedSearchResult(query), items: tools, pagination: { limit: 20, hasMore: false },
+    })
+    const runAction = vi.fn(async reference => {
+      if (getFunctionName(reference) === 'capabilityToolCatalog:searchInternal') return source
+      if (getFunctionName(reference) === 'capabilityToolCatalog:presentSearch') return {
+        result: serializeToolSearchResult({
+          ...misorderedSearchResult(query), items: tools,
+          ranking: tools.map((tool, index) => ({ toolRef: tool.toolRef, rank: index + 1, score: 0.9 })),
+          pagination: { limit: 20, hasMore: false },
+        }), use: 'registry.tools.search',
+      }
+      throw new Error('Unexpected action')
+    })
+    const runQuery = vi.fn(async (_reference, args: { paginationOpts: { cursor: string | null } }) => {
+      expect(args.paginationOpts.cursor).toBeNull()
+      return { kind: 'ok', page: [{ id: 'bazaar-tail', source: 'coinbase', title: 'External timezone',
+        summary: 'Convert timezones', provider: 'External provider', actionClass: 'transform',
+        objectClass: 'location', completedAt: 100 }], isDone: true, continueCursor: '',
+        coverage: { generation: 'bazaar-7', completedAt: 100 } }
+    })
+    const ctx = toolCtx({ runAction: runAction as ToolCtx['runAction'], runQuery: runQuery as ToolCtx['runQuery'] })
+    const firstPage = registryToolsSearchContract.outputSchema.parse(
+      await invokeTool(createChatAgent(mockModel()), 'registry.tools.search', ctx, { query }))
+    expect(firstPage).toMatchObject({ kind: 'match', results: tools.map(tool => ({ id: tool.toolRef })),
+      pagination: { hasMore: true, nextCursor: 'x402:' } })
+    expect(runQuery).not.toHaveBeenCalled()
+    const secondPage = await invokeTool(createChatAgent(mockModel()), 'registry.tools.search', ctx,
+      { query, cursor: 'x402:' }, [{ role: 'user', content: 'Show the next page of timezone conversion APIs' }])
+    expect(secondPage).toMatchObject({ kind: 'scoped', results: [{ id: 'bazaar-tail', access: 'external_listing' }] })
+    expect(runAction).toHaveBeenCalledTimes(2)
+    expect(runQuery).toHaveBeenCalledTimes(1)
+    const current = await invokeTool(createChatAgent(mockModel()), 'registry.tools.search', ctx, { query, source: 'current' })
+    expect(current).toMatchObject({ kind: 'match', pagination: { hasMore: false } })
+    expect(runQuery).toHaveBeenCalledTimes(1)
+  })
+
+  it('shrinks oversized chat search pages with a cursor that preserves every external listing', async () => {
+    const query = 'timezone conversion'
+    const ids = Array.from({ length: 4 }, (_, index) => `entry-${index}-${'x'.repeat(4800)}`)
+    const runQuery = vi.fn(async (_reference, args: { paginationOpts: { cursor: string | null; numItems: number } }) => {
+      const start = args.paginationOpts.cursor === null ? 0 : Number(args.paginationOpts.cursor.slice('native-'.length))
+      const selected = ids.slice(start, start + args.paginationOpts.numItems)
+      return {
+        kind: 'ok', page: selected.map(id => ({ id, source: 'coinbase', title: 'Timezone',
+          summary: 'Convert timezones', provider: 'External provider',
+          actionClass: 'transform', objectClass: 'location', completedAt: 100 })),
+        isDone: start + selected.length === ids.length, continueCursor: `native-${start + selected.length}`,
+        coverage: { generation: 'bazaar-7', completedAt: 100 },
+      }
+    })
+    const ctx = toolCtx({ runQuery: runQuery as ToolCtx['runQuery'],
+      runAction: vi.fn(async () => { throw new Error('Explicit Bazaar source must not read admitted Tools') }) as ToolCtx['runAction'] })
+    const observed: string[] = []
+    let cursor: string | undefined
+    for (let page = 0; page < ids.length; page += 1) {
+      const output = registryToolsSearchContract.outputSchema.parse(
+        await invokeTool(createChatAgent(mockModel()), 'registry.tools.search', ctx,
+          { query, source: 'coinbase', ...(cursor === undefined ? {} : { cursor }) },
+          cursor === undefined ? [] : [{ role: 'user', content: 'Show the next page of timezone conversion APIs' }]))
+      expect(output.kind).toBe('scoped')
+      if (output.kind !== 'scoped') throw new Error('Lost scoped Bazaar page')
+      expect(new TextEncoder().encode(JSON.stringify(output)).byteLength).toBeLessThanOrEqual(16 * 1024)
+      observed.push(...output.results.map(row => row.id))
+      cursor = output.pagination.nextCursor
+    }
+    expect(observed).toEqual(ids)
+    expect(cursor).toBeUndefined()
+  })
+
+  it('reports capacity instead of returning an oversized single external listing', async () => {
+    const result = await invokeTool(createChatAgent(mockModel()), 'registry.tools.search', toolCtx({
+      runAction: vi.fn(async () => { throw new Error('Explicit Bazaar source must not read admitted Tools') }) as ToolCtx['runAction'],
+      runQuery: vi.fn(async () => ({
+        kind: 'ok', page: [{ id: `entry-${'x'.repeat(7000)}`, source: 'coinbase', title: 'Timezone',
+          summary: 'Convert timezones', provider: 'External provider', actionClass: 'transform',
+          objectClass: 'location', completedAt: 100 }], isDone: true, continueCursor: '',
+        coverage: { generation: 'bazaar-7', completedAt: 100 },
+      })) as ToolCtx['runQuery'],
+    }), { query: 'timezone conversion', source: 'coinbase' })
+    expect(result).toMatchObject({ kind: 'unavailable', reason: 'capacity_exceeded', results: [] })
+  })
+
+  it('re-reads oversized admitted pages at a smaller limit without skipping candidates', async () => {
+    const query = 'timezone conversion'
+    const tools = Array.from({ length: 14 }, (_, index) => ({
+      ...TOOL_TIMEZONE,
+      toolRef: `operation:v1:${(index + 1).toString(16).padStart(64, '0')}` as typeof TOOL_TIMEZONE.toolRef,
+      toolId: `operation:v1:${(index + 1).toString(16).padStart(64, '0')}`,
+      listing: { ...TOOL_TIMEZONE.listing, label: '漢'.repeat(72) },
+      summary: '漢'.repeat(100), business: { ...TOOL_TIMEZONE.business, name: '漢'.repeat(48) },
+    }))
+    let selected = tools.slice(0, 12)
+    let selectedStart = 0
+    const runAction = vi.fn(async (reference, args: { query?: string; cursor?: string; limit?: number }) => {
+      const name = getFunctionName(reference)
+      if (name === 'capabilityToolCatalog:searchInternal') {
+        if (args.query === '') return serializeToolSearchResult({
+          ...misorderedSearchResult(query), items: tools,
+          pagination: { limit: 20, hasMore: true, nextCursor: '14' }, partialResults: true,
+        })
+        const start = Number(args.cursor ?? '0')
+        selectedStart = start
+        selected = tools.slice(start, start + (args.limit ?? 12))
+        const next = start + selected.length
+        return serializeToolSearchResult({
+          ...misorderedSearchResult(query), items: selected,
+          pagination: { limit: args.limit ?? 12, hasMore: next < tools.length,
+            ...(next < tools.length ? { nextCursor: String(next) } : {}) },
+        })
+      }
+      if (name === 'capabilityToolCatalog:presentSearch') return {
+        result: serializeToolSearchResult({
+          ...misorderedSearchResult(query), items: selected,
+          ranking: selected.map((tool, index) => ({ toolRef: tool.toolRef, rank: index + 1, score: 0.9 })),
+          pagination: { limit: selected.length, hasMore: selectedStart + selected.length < tools.length,
+            ...(selectedStart + selected.length >= tools.length ? {} : { nextCursor: String(selectedStart + selected.length) }) },
+        }), use: 'registry.tools.search',
+      }
+      throw new Error(`Unexpected action: ${name}`)
+    })
+    const ctx = toolCtx({ runAction: runAction as ToolCtx['runAction'],
+      runQuery: vi.fn(async () => { throw new Error('Current-only search must not read Bazaar') }) as ToolCtx['runQuery'] })
+    const observed: string[] = []
+    let cursor: string | undefined
+    for (let page = 0; page < tools.length && observed.length < tools.length; page += 1) {
+      const raw = await invokeTool(createChatAgent(mockModel()), 'registry.tools.search', ctx,
+        { query, source: 'current', ...(cursor === undefined ? {} : { cursor }) },
+        cursor === undefined ? [] : [{ role: 'user', content: 'Show the next page of timezone conversion APIs' }])
+      expect(raw).toMatchObject({ kind: 'match' })
+      const output = registryToolsSearchContract.outputSchema.parse(raw)
+      expect(output.kind).toBe('match')
+      if (output.kind !== 'match') throw new Error('Lost admitted page')
+      expect(new TextEncoder().encode(JSON.stringify(output)).byteLength).toBeLessThanOrEqual(16 * 1024)
+      observed.push(...output.results.map(row => row.id))
+      cursor = output.pagination.nextCursor
+    }
+    expect(runAction.mock.calls.some(([reference, args]) =>
+      getFunctionName(reference) === 'capabilityToolCatalog:searchInternal' && args.query === query && (args.limit ?? 12) < 12)).toBe(true)
+    expect(observed).toEqual(tools.map(tool => tool.toolRef))
+    expect(cursor).toBeUndefined()
+  })
+
+  it('continues admitted search after an unsuitable page instead of skipping to Bazaar', async () => {
+    const query = 'currency conversion'
+    const first = serializeToolSearchResult({
+      ...misorderedSearchResult(query), items: [TOOL_TIMEZONE],
+      pagination: { limit: 8, hasMore: true, nextCursor: 'admitted-tail' }, partialResults: true,
+    })
+    const tail = serializeToolSearchResult({
+      ...misorderedSearchResult(query), items: [TOOL_CURRENCY],
+      pagination: { limit: 8, hasMore: false },
+    })
+    let onTail = false
+    const runAction = vi.fn(async (reference, args: { query?: string; cursor?: string }) => {
+      if (getFunctionName(reference) === 'capabilityToolCatalog:searchInternal') {
+        if (args.query === '') return first
+        onTail = args.cursor === 'admitted-tail'
+        return onTail ? tail : first
+      }
+      if (getFunctionName(reference) === 'capabilityToolCatalog:presentSearch') {
+        const tool = onTail ? TOOL_CURRENCY : TOOL_TIMEZONE
+        return { result: serializeToolSearchResult({
+          ...misorderedSearchResult(query), items: [tool],
+          ranking: [{ toolRef: tool.toolRef, rank: 1, score: onTail ? 0.9 : 0.1 }],
+          pagination: onTail ? { limit: 8, hasMore: false } : { limit: 8, hasMore: true, nextCursor: 'admitted-tail' },
+          ...(onTail ? {} : { partialResults: true }),
+        }), use: 'registry.tools.search' }
+      }
+      throw new Error('Unexpected action')
+    })
+    const runQuery = vi.fn(async () => ({
+      kind: 'ok', page: [], isDone: true, continueCursor: '',
+      coverage: { generation: 'bazaar-7', completedAt: 100 },
+    }))
+    const ctx = toolCtx({ runAction: runAction as ToolCtx['runAction'], runQuery: runQuery as ToolCtx['runQuery'] })
+    const firstPage = registryToolsSearchContract.outputSchema.parse(
+      await invokeTool(createChatAgent(mockModel()), 'registry.tools.search', ctx, { query }))
+    expect(firstPage).toMatchObject({ kind: 'scoped', results: [], pagination: { nextCursor: 'admitted-tail' } })
+    expect(runQuery).not.toHaveBeenCalled()
+    const secondPage = await invokeTool(createChatAgent(mockModel()), 'registry.tools.search', ctx,
+      { query, cursor: 'admitted-tail' }, [{ role: 'user', content: 'Show the next page of currency APIs' }])
+    expect(secondPage).toMatchObject({ kind: 'match', results: [{ id: TOOL_CURRENCY.toolRef }] })
+  })
+
+  it('only says no-match for a complete admitted inventory, and keeps an unassessed tail scoped', async () => {
+    const query = 'unusual document task'
+    const current = await invokeTool(createChatAgent(mockModel()), 'registry.tools.search', toolCtx({
+      runAction: vi.fn(async () => noCandidates) as ToolCtx['runAction'],
+      runQuery: vi.fn(async () => { throw new Error('Current-only search must not read Bazaar') }) as ToolCtx['runQuery'],
+    }), { query, source: 'current' })
+    expect(current).toMatchObject({ kind: 'noMatch', assessed: { source: 'current', coverage: 'complete' },
+      next: [{ action: 'broaden', args: { query } }] })
+
+    const all = await invokeTool(createChatAgent(mockModel()), 'registry.tools.search', toolCtx({
+      runAction: vi.fn(async () => noCandidates) as ToolCtx['runAction'],
+      runQuery: vi.fn(async () => ({
+        kind: 'ok', page: [], continueCursor: '', isDone: true,
+        coverage: { generation: 'bazaar-7', completedAt: 100 },
+      })) as ToolCtx['runQuery'],
+    }), { query })
+    expect(all).toMatchObject({ kind: 'noMatch', assessed: { source: 'all', coverage: 'complete' },
+      next: [{ action: 'broaden', args: { query } }] })
+
+    const seen: string[] = []
+    const runAction = vi.fn(async (reference, args: { query: string }) => {
+      expect(getFunctionName(reference)).toBe('capabilityToolCatalog:searchInternal')
+      seen.push(args.query)
+      return args.query === '' ? serializeToolSearchResult({
+        ...misorderedSearchResult(query), pagination: { limit: 20, hasMore: true, nextCursor: 'admitted-next' },
+      }) : noCandidates
+    })
+    const scoped = await invokeTool(createChatAgent(mockModel()), 'registry.tools.search',
+      toolCtx({ runAction: runAction as ToolCtx['runAction'] }), { query })
+    expect(seen).toEqual(['', query])
+    expect(scoped).toMatchObject({ kind: 'scoped', assessed: { coverage: 'partial' }, results: [] })
+  })
+
+  it('returns unavailable with retry instead of recommending unranked or index-absent candidates', async () => {
+    const source = misorderedSearchResult('token transfer')
+    const unavailableRanker = await invokeTool(createChatAgent(mockModel()), 'registry.tools.search',
+      toolCtx({ runAction: vi.fn(async reference => {
+        if (getFunctionName(reference) === 'capabilityToolCatalog:presentSearch') throw new Error('ranker offline')
+        return serializeToolSearchResult(source)
+      }) as ToolCtx['runAction'] }), { query: 'token transfer' })
+    expect(unavailableRanker).toMatchObject({ kind: 'unavailable', results: [],
+      next: [{ action: 'retry', args: { query: 'token transfer' } }] })
+    const unavailableIndex = await invokeTool(createChatAgent(mockModel()), 'registry.tools.search',
+      toolCtx({ runAction: vi.fn(async () => noCandidates) as ToolCtx['runAction'],
+        runQuery: vi.fn(async () => ({ kind: 'unavailable', reason: 'index_unavailable' })) as ToolCtx['runQuery'] }),
+      { query: 'token transfer' })
+    expect(unavailableIndex).toMatchObject({ kind: 'unavailable', results: [],
+      next: [{ action: 'retry', args: { query: 'token transfer' } }] })
+  })
+
+  it('refuses invalid catalogue responses rather than presenting a recommendation', async () => {
     const invalidAgent = createChatAgent(mockModel())
     const invalidCtx = toolCtx({
       runAction: vi.fn(async () => ({ kind: 'forged' })) as ToolCtx['runAction'],
@@ -415,24 +768,6 @@ describe('Tool chat Agent tools', () => {
       kind: 'chat_tool_refused',
       toolId: 'registry.tools.search',
       reason: 'source_output_invalid',
-    })
-
-    const largeAgent = createChatAgent(mockModel())
-    const largeCtx = toolCtx({
-      runAction: vi.fn(async () => ({
-        ...noCandidates,
-        query: 'x'.repeat(MAX_CHAT_TOOL_RESULT_BYTES),
-      })) as ToolCtx['runAction'],
-    })
-    await expect(invokeTool(
-      largeAgent,
-      'registry.tools.search',
-      largeCtx,
-      { query: 'weather' },
-    )).resolves.toEqual({
-      kind: 'chat_tool_refused',
-      toolId: 'registry.tools.search',
-      reason: 'result_too_large',
     })
   })
 
@@ -462,7 +797,7 @@ describe('Tool chat Agent tools', () => {
     expect(runAction).not.toHaveBeenCalled()
     expect(await invokeTool(agent, 'registry.tools.search', ctx,
       { query: 'weather', cursor: 'next' }, [{ role: 'user', content: 'Show the next page of weather APIs' }])).toMatchObject({
-      kind: 'noMatch',
+      kind: 'scoped',
     })
     expect(runAction).toHaveBeenCalledTimes(1)
   })
@@ -540,7 +875,7 @@ describe('Tool chat Agent tools', () => {
     }
   })
 
-  it('sanitizes accepted strings and fails closed at both serialization boundaries', async () => {
+  it('fails closed when validation or serialization rejects a Tool result', async () => {
     const schemaAgent = createChatAgent(mockModel())
     const safeParse = vi.spyOn(registryToolsSearchContract.outputSchema, 'safeParse')
       .mockReturnValueOnce({ success: false } as never)
@@ -559,19 +894,6 @@ describe('Tool chat Agent tools', () => {
       safeParse.mockRestore()
     }
 
-    const sanitizedAgent = createChatAgent(mockModel())
-    const sanitizedCtx = toolCtx({
-      runAction: vi.fn(async () => ({
-        ...noCandidates,
-        query: '<user>quoted</user><>',
-      })) as ToolCtx['runAction'],
-    })
-    await expect(invokeTool(
-      sanitizedAgent,
-      'registry.tools.search',
-      sanitizedCtx,
-      { query: 'weather' },
-    )).resolves.toMatchObject({ query: '[data-tag]quoted[data-tag]‹›' })
 
     const stringifyAgent = createChatAgent(mockModel())
     const stringify = vi.spyOn(JSON, 'stringify').mockImplementationOnce(() => {

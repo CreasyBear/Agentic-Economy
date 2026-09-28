@@ -362,7 +362,7 @@ async function proveProviderDirectory(
   throw new Error('package5_supply_list_page_limit')
 }
 
-function exactTool(items: readonly { toolRef: string }[], toolRef: string, code: string): void {
+function exactTool(items: readonly { toolRef?: string | undefined }[], toolRef: string, code: string): void {
   if (items.filter((item) => item.toolRef === toolRef).length !== 1) throw new Error(code)
 }
 
@@ -415,13 +415,13 @@ async function proveFixture(
 
   const searchResponse = await post(config, TOOL_MARKET_SEARCH_PATH, {
     query: fixture.presentation.name,
-    limit: 20, detail: 'full',
+    limit: 12,
   })
   const search = toolChoiceSearchOutputSchema.safeParse(requireSuccess(searchResponse, `package5_${fixture.kind}_search_failed`))
   if (!search.success) throw new Error(`package5_${fixture.kind}_search_invalid`)
   if (search.data.kind === 'noMatch') throw new Error(`package5_${fixture.kind}_search_no_match`)
-  if (search.data.kind !== 'matched') throw new Error(`package5_${fixture.kind}_search_invalid`)
-  exactTool(search.data.results, published.data.toolRef, `package5_${fixture.kind}_search_identity_mismatch`)
+  if (search.data.kind !== 'match' && search.data.kind !== 'scoped') throw new Error(`package5_${fixture.kind}_search_invalid`)
+  exactTool(search.data.results.filter((item) => item.source === 'current' && item.access === 'ae_callable'), published.data.toolRef, `package5_${fixture.kind}_search_identity_mismatch`)
 
   const describeResponse = await post(config, TOOL_MARKET_DESCRIBE_PATH, {
     toolRef: published.data.toolRef,

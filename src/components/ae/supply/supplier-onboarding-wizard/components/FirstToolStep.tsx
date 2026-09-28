@@ -12,7 +12,7 @@ export function FirstToolStep() {
     <div className="grid gap-4">
       <Alert className="border-border bg-muted/40 py-2.5">
         <WrenchIcon className="size-4 text-primary" />
-        <AlertTitle className="text-xs font-semibold">Step 3: Add Your First Tool</AlertTitle>
+        <AlertTitle className="text-xs font-semibold">Step 2: Add Your First Tool</AlertTitle>
         <AlertDescription className="text-xs text-muted-foreground">
           Import an OpenAPI specification, MCP server definition, or x402 payment contract to publish your first callable tool.
         </AlertDescription>
@@ -23,7 +23,7 @@ export function FirstToolStep() {
         <div>
           <h3 className="text-sm font-medium text-foreground">Ready to connect supply</h3>
           <p className="text-xs text-muted-foreground max-w-sm">
-            AE provides instant schema validation, pricing config, and a zero-cost test console.
+            Preview checks the source on the server before publication.
           </p>
         </div>
         <Link

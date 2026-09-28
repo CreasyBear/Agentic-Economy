@@ -23,8 +23,6 @@ export type {
   ListingPrice,
   ListingSource,
   ListingProjection,
-  ListingSearchItem,
-  ListingSearchGroups,
   DirectoryListingInput,
 } from './internal/listing-projection'
 

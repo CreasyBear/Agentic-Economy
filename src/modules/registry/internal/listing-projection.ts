@@ -174,17 +174,3 @@ export function projectCatalogueEndpointListing(service: ServiceDto, endpoint: S
     technical: { operationId: absent(source), endpoint: fact(source, endpoint.url) },
   }
 }
-
-export type ListingSearchItem = Readonly<{
-  listing: ListingProjection
-  href: string
-}>
-export type ListingSearchGroups = Readonly<{
-  buyThroughAe: Readonly<{ items: readonly ListingSearchItem[]; count: number }>
-  listedElsewhere: Readonly<{ items: readonly ListingSearchItem[]; count: number }>
-  total: number
-  displayed: number
-  /** Counts are for the searched source pages, not an invented all-corpus total. */
-  scope: 'page'
-  hasMore: boolean
-}>

@@ -13,16 +13,15 @@ import { z } from 'zod'
 
 import { TOOL_MARKET_SEARCH_PATH } from '@/modules/registry/tool-paths'
 import { toolChoiceSearchOutputSchema } from '@/modules/registry/tool-choice-contracts'
-import type { ListingSearchGroups } from '@/modules/registry/public'
-
-export type ToolChoiceSearchResult = z.infer<typeof toolChoiceSearchOutputSchema> & Readonly<{ groups?: ListingSearchGroups }>
+export type ToolChoiceSearchResult = z.infer<typeof toolChoiceSearchOutputSchema>
 
 export type MarketToolSearchInput = Readonly<{
   query: string
   limit?: number
+  cursor?: string
 }>
 
-export const TOOL_SEARCH_RESULT_LIMIT = 12
+export const TOOL_SEARCH_RESULT_LIMIT = 8
 
 export async function searchMarketTools(
   input: MarketToolSearchInput,
@@ -33,11 +32,12 @@ export async function searchMarketTools(
     body: JSON.stringify({
       query: input.query,
       ...(input.limit === undefined ? {} : { limit: input.limit }),
+      ...(input.cursor === undefined ? {} : { cursor: input.cursor }),
     }),
   })
   if (!response.ok) throw new Error('catalog_search_unavailable')
 
   const parsed = toolChoiceSearchOutputSchema.safeParse(await response.json())
   if (!parsed.success) throw new Error('catalog_search_result_invalid')
-  return parsed.data as ToolChoiceSearchResult
+  return parsed.data
 }

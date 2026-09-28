@@ -1,3 +1,4 @@
+import type { PaginationOptions, PaginationResult } from 'convex/server'
 import type { MutationCtx, QueryCtx } from '../../../_generated/server'
 import type {
   AdminActionInput,
@@ -132,8 +133,7 @@ export async function resolveApprovalIntent<A extends AdminCommandAction>(
   if (proposal.status !== 'awaiting_second_approval') {
     return { kind: 'refused', code: 'approval_already_resolved' }
   }
-  if (proposal.expiresAt < now) {
-    if (!preflight) await ctx.db.patch(proposal._id, { status: 'expired', resolvedAt: now })
+  if (proposal.expiresAt <= now) {
     return { kind: 'refused', code: 'approval_expired' }
   }
   if (proposal.commandDigest !== commandDigest) {
@@ -175,28 +175,28 @@ export async function resolveApprovalIntent<A extends AdminCommandAction>(
 export async function listOpenApprovalProposals(
   ctx: QueryCtx,
   includeCommand: boolean,
-): Promise<readonly {
+  paginationOpts: PaginationOptions,
+): Promise<PaginationResult<{
   proposalRef: string
   action: AdminProposableAction
   commandJson: string | null
   proposerRef: string
   createdAt: number
   expiresAt: number
-}[]> {
-  const proposals = await ctx.db
-    .query('adminApprovalProposals')
+}>> {
+  const now = Date.now()
+  const result = await ctx.db.query('adminApprovalProposals')
     .withIndex('by_status_and_expiresAt', (query) =>
-      query.eq('status', 'awaiting_second_approval'))
+      query.eq('status', 'awaiting_second_approval').gt('expiresAt', now))
     .order('asc')
-    .take(50)
-  return proposals.map(({ proposalRef, action, commandJson, proposerRef, createdAt, expiresAt }) => ({
-    proposalRef,
-    action,
-    commandJson: includeCommand ? commandJson : null,
-    proposerRef,
-    createdAt,
-    expiresAt,
-  }))
+    .paginate(paginationOpts)
+  return {
+    ...result,
+    page: result.page.map(({ proposalRef, action, commandJson, proposerRef, createdAt, expiresAt }) => ({
+      proposalRef, action, commandJson: includeCommand ? commandJson : null,
+      proposerRef, createdAt, expiresAt,
+    })),
+  }
 }
 
 async function needsSecondApproval(

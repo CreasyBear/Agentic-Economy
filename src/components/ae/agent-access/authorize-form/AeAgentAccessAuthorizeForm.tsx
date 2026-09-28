@@ -116,6 +116,7 @@ export function AeAgentAccessAuthorizeForm({ locator, oauthState, details }: AeA
                     onApprovedToolAccessChange={vm.setApprovedToolAccess}
                     onToolQueryChange={vm.setToolQuery}
                     onFindTools={vm.findTools}
+                    onContinueSearch={vm.continueSearch}
                     onAddApprovedTool={vm.addApprovedTool}
                     onRemoveApprovedTool={vm.removeApprovedTool}
                   />

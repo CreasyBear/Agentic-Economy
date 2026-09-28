@@ -222,17 +222,30 @@ export function useAgentConsentDecision({
 
   const showConnectionFieldset = !(agentTargets.length === 0 && agentTargetsError === undefined && agentTargetsNextCursor === undefined)
 
-  async function findTools() {
-    const query = toolQuery.trim()
+  async function findTools(continuation?: Readonly<{ query: string; cursor: string }>) {
+    const query = continuation?.query ?? toolQuery.trim()
     if (query.length === 0 || toolSearch.pending) return
     setToolSearch({ pending: true })
     try {
-      const result = await searchMarketTools({ query, limit: 8 })
-      if (result.kind === 'matched' || result.kind === 'degraded') {
-        setToolSearch({ pending: false, results: result.results.map(({ toolRef, title }) => ({ toolRef, title })) })
+      const result = await searchMarketTools({ query, limit: 8, ...(continuation === undefined ? {} : { cursor: continuation.cursor }) })
+      if (result.kind === 'match' || result.kind === 'scoped') {
+        const results = result.results.flatMap(row => row.access === 'ae_callable' && row.toolRef !== undefined
+          ? [{ toolRef: row.toolRef, title: row.title }] : [])
+        const nextPage = result.next.find(action => action.action === 'next-page')
+        setToolSearch({
+          pending: false,
+          results,
+          ...(nextPage === undefined ? {} : { continuation: nextPage.args }),
+          ...(result.kind === 'scoped'
+            ? {
+                noMatchMessage: nextPage === undefined
+                  ? 'This search covers only part of the catalogue. Refine your search to continue.'
+                  : 'More Tools may be on another page.',
+              }
+            : results.length === 0 ? { noMatchMessage: 'These listings are not admitted Tools and cannot be authorized.' } : {}),
+        })
       } else if (result.kind === 'noMatch') {
-        const nearMisses = result.nearMisses.map(({ title }) => title).join(', ')
-        setToolSearch({ pending: false, noMatchMessage: `No suitable Tools found.${nearMisses.length === 0 ? '' : ` Near misses (not matches): ${nearMisses}.`}` })
+        setToolSearch({ pending: false, noMatchMessage: 'No suitable admitted Tools found in the assessed supply.' })
       } else {
         setToolSearch({ pending: false, error: 'Tool search is temporarily unavailable. Try again.' })
       }
@@ -377,6 +390,7 @@ export function useAgentConsentDecision({
     approveButtonRef,
     dispatch,
     findTools,
+    continueSearch: () => { if (toolSearch.continuation !== undefined) void findTools(toolSearch.continuation) },
     addApprovedTool,
     removeApprovedTool,
     loadAgentTargets,

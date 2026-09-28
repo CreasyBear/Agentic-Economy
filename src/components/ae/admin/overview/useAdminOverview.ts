@@ -2,9 +2,8 @@ import { useQuery } from 'convex/react'
 import { useState } from 'react'
 
 import { api } from '../../../../../convex/_generated/api'
-import { adminObjectHref, isAdminExceptionFeed, type AdminException } from '@/lib/operator/admin-console/contracts'
-import { exceptionHref, exceptionRef } from '@/lib/operator/admin-console/exception-projection'
-import { formatCount, formatPercent, formatPerthTimestamp } from '@/lib/ui/format-time'
+import { adminObjectHref } from '@/lib/operator/admin-console/contracts'
+import { formatCount, formatPercent } from '@/lib/ui/format-time'
 import { formatCurrencyAmount } from '@/modules/money/public'
 import { parseAdminObjectRef } from '@/lib/operator/admin-console/ref-parsers'
 import {
@@ -12,6 +11,7 @@ import {
   ADMIN_RECENT_REFS_STORAGE_KEY,
   adminRecentRefsSchema,
 } from '../object-search/object-search.contracts'
+import { ADMIN_EXCEPTION_PARTITION_LABELS, ADMIN_EXCEPTIONS_COPY } from '../exceptions/exceptions.contracts'
 import { ADMIN_METRICS_COPY } from '../metrics/metrics.contracts'
 import {
   ADMIN_OVERVIEW_COPY,
@@ -25,22 +25,29 @@ import {
 
 export function useAdminOverview(formance: AdminConfiguredState): AdminOverviewDataState {
   const overview = useQuery(api.adminConsoleOverview.readAdminOverview, {})
-  const exceptions = useQuery(api.adminConsoleExceptions.listAdminExceptions, { kind: null })
+  const exceptions = useQuery(api.adminConsoleExceptions.readAdminExceptionOverview, {})
   const metrics = useQuery(api.adminConsoleMetrics.readMarketplaceMetrics, { range: 'last_7' })
   const [recent] = useState(readRecentAdminRefs)
 
   if (overview === undefined || exceptions === undefined || metrics === undefined) {
     return { kind: 'loading' }
   }
-  if ('kind' in overview || !isAdminExceptionFeed(exceptions) || 'kind' in metrics) {
+  if ('kind' in overview || !Array.isArray(exceptions) || 'kind' in metrics) {
     return { kind: 'refused' }
   }
   return {
     kind: 'ready',
     configuration: { formance, ...overview },
-    exceptions: exceptions.items.map(toExceptionRow).slice(0, 8),
-    exceptionsUnavailable: exceptions.unavailable.length > 0,
-    exceptionsTotal: exceptions.total,
+    exceptions: exceptions
+      .filter((entry) => entry.observed > 0 || !entry.complete || entry.unavailable)
+      .map((entry): AdminOverviewExceptionRow => ({
+        id: `${entry.kind}:${entry.partition}`,
+        label: `${exceptionKindLabel(entry.kind)} · ${ADMIN_EXCEPTION_PARTITION_LABELS[entry.partition]}`,
+        href: `/admin/exceptions?kind=${entry.kind}&partition=${entry.partition}`,
+        count: entry.unavailable ? ADMIN_EXCEPTIONS_COPY.unavailable
+          : `${entry.complete ? '' : '≥'}${entry.observed} observed`,
+      })),
+    exceptionsUnavailable: exceptions.some((entry) => entry.unavailable),
     headline: {
       settledCallValue: metrics.headline.money === 'no_settled_usage'
         || metrics.headline.settledCallValue === null
@@ -72,16 +79,5 @@ function readRecentAdminRefs(): readonly AdminOverviewRecentRow[] {
   } catch (cause) {
     void cause
     return []
-  }
-}
-
-function toExceptionRow(exception: AdminException): AdminOverviewExceptionRow {
-  const ref = exceptionRef(exception)
-  return {
-    id: `${exception.kind}:${ref}`,
-    label: exceptionKindLabel(exception.kind),
-    ref,
-    href: exceptionHref(exception),
-    since: formatPerthTimestamp(exception.since),
   }
 }

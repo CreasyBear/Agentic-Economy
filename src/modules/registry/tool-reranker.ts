@@ -10,6 +10,7 @@ import type {
   ToolSearchResult,
   ToolSearchRanking,
 } from '@/modules/capability-supply/public'
+import { SEARCH_ASSESSMENT_LIMIT, SEARCH_MATCH_SCORE } from './search-verdict'
 
 export type ToolRerankerOptions = Readonly<
   DecisionGatewayOptions & {
@@ -20,8 +21,7 @@ export type ToolRerankerOptions = Readonly<
   }
 >
 
-const DEFAULT_MAX_CANDIDATES = 20
-const MATCH_INCLUDE_SCORE = 0.5
+export const TOOL_SEARCH_ASSESSMENT_LIMIT = SEARCH_ASSESSMENT_LIMIT
 const USE_CONFIDENCE = 0.5
 const COMPARE_LIMIT = 4
 
@@ -102,16 +102,18 @@ export async function rerankToolSearchResult(
     ranking: rankingFrom(outcome.scored),
   }
 }
-export async function rankToolSearchForRegistry(
-  result: ToolSearchResult,
-  query: string,
-  options: ToolRerankerOptions = {},
-): Promise<Readonly<{
+export type RegistryToolAssessment = Readonly<{
   result: ToolSearchResult
   verdict: 'matched' | 'degraded' | 'noMatch'
   nearMisses: SearchPage['items']
   reason?: string
-}>> {
+}>
+
+export async function rankToolSearchForRegistry(
+  result: ToolSearchResult,
+  query: string,
+  options: ToolRerankerOptions = {},
+): Promise<RegistryToolAssessment> {
   if (result.kind !== 'ok' || result.items.length === 0) {
     return { result, verdict: 'noMatch', nearMisses: [] }
   }
@@ -119,7 +121,7 @@ export async function rankToolSearchForRegistry(
   if (outcome.kind === 'original') {
     return { result, verdict: 'degraded', nearMisses: [], reason: outcome.reason === 'unavailable' ? 'Suitability ranking is temporarily unavailable.' : 'Suitability could not be verified.' }
   }
-  const included = outcome.scored.filter(({ score }) => score >= MATCH_INCLUDE_SCORE)
+  const included = outcome.scored.filter(({ score }) => score >= SEARCH_MATCH_SCORE)
   if (included.length === 0) {
     return { result: outcome.result, verdict: 'noMatch', nearMisses: orderedItems(outcome).slice(0, 3) }
   }
@@ -159,7 +161,7 @@ export async function presentToolSearch(
     { use: presentationQuestion(request) },
   )
   if (outcome.kind === 'original') return { result: outcome.result, use: null, belowMatch: [] }
-  const included = outcome.scored.filter((candidate) => candidate.score >= MATCH_INCLUDE_SCORE)
+  const included = outcome.scored.filter(({ score }) => score >= SEARCH_MATCH_SCORE)
   const requested = adoptedUse(outcome.answers.use)
   const use = requested === null ? deriveUse(included.length) : fitUse(requested, included.length, outcome.scored.length)
   const filled = fillPresentation(use, included, outcome)
@@ -271,8 +273,8 @@ async function scoreToolSearch(
   const requestedCandidateLimit = options.maxCandidatesToScore
   const maxCandidates =
     requestedCandidateLimit === undefined || !Number.isInteger(requestedCandidateLimit)
-      ? DEFAULT_MAX_CANDIDATES
-      : Math.min(DEFAULT_MAX_CANDIDATES, Math.max(1, requestedCandidateLimit))
+      ? TOOL_SEARCH_ASSESSMENT_LIMIT
+      : Math.min(TOOL_SEARCH_ASSESSMENT_LIMIT, Math.max(1, requestedCandidateLimit))
   const candidatesToScore = result.items.slice(0, maxCandidates)
   const remaining = result.items.slice(maxCandidates)
   const questions: Record<string, JevQuestion> = { ...extraQuestions }
@@ -287,11 +289,11 @@ async function scoreToolSearch(
     questions[`match_${index}`] = {
       type: 'noul',
       instructions: request === undefined
-        ? `Does \`candidates[${index}]\` directly satisfy the capability request in \`query\`?`
-        : `Does \`candidates[${index}]\` directly satisfy the capability request in \`request\`?`,
+        ? `Does \`candidates[${index}]\` directly perform the bounded contribution sought in \`query\`?`
+        : `Does \`candidates[${index}]\` directly perform the bounded contribution sought in \`request\`? Questions asking what a Tool costs, what input it takes, or whether it is purchasable ask for facts to report; they are not capabilities the Tool must perform. Still enforce explicit task constraints and explicit price or availability limits.`,
       criteria: {
-        true: 'The Tool directly performs the requested bounded contribution and satisfies every explicit capability constraint supported by the supplied facts.',
-        false: 'The Tool is unrelated, only shares generic terms, or the supplied facts do not establish one or more explicit capability constraints.',
+        true: 'The Tool directly performs the requested bounded contribution and the supplied facts establish every explicit task constraint.',
+        false: 'The Tool is unrelated, only shares generic terms, or the supplied facts do not establish an explicit task constraint. A request to report price, input, or purchase readiness is not by itself such a constraint.',
       },
     }
   })

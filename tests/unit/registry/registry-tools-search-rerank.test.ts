@@ -1,214 +1,354 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { getFunctionName } from 'convex/server'
 
 import { readCapabilityToolSearch } from '@/modules/capability-supply/tool-source'
 import { setPublicSourceTransportForTests } from '@/lib/server/convex-source'
 import * as decisionEngine from '@/modules/decision-engine/public'
-import { toolCatalogSearchInputSchema } from '@/modules/registry/tool-choice-contracts'
+import { toolCatalogSearchInputSchema, type SearchEnvelope } from '@/modules/registry/tool-choice-contracts'
 import { registryToolsSearchAction } from '@/modules/registry/tools.actions'
-import {
-  ERC20_QUERY,
-  TIMEZONE_QUERY,
-  TOOL_CRYPTO_TX,
-  TOOL_CURRENCY,
-  TOOL_TIMEZONE,
-  jevAnswersForTool,
-  jevSystemOneResponse,
-  misorderedSearchResult,
-} from '../../helpers/tool-search-rerank-fixtures'
+import { TOOL_CRYPTO_TX, TOOL_TIMEZONE, jevAnswersForTool, misorderedSearchResult, mockSearchTool } from '../../helpers/tool-search-rerank-fixtures'
 
 vi.mock('@/modules/capability-supply/tool-source', () => ({
-  readCapabilityToolSearch: vi.fn(),
-  readCapabilityToolDetail: vi.fn(),
-  readCapabilityToolCompare: vi.fn(),
+  readCapabilityToolSearch: vi.fn(), readCapabilityToolDetail: vi.fn(), readCapabilityToolCompare: vi.fn(),
 }))
 
-async function runSearch(query: string, request?: Request) {
-  const data = toolCatalogSearchInputSchema.parse({ query, limit: 10 })
-  return registryToolsSearchAction.run({
-    data,
-    context: { caller: 'http', ...(request === undefined ? {} : { request }) },
-  })
+const noCandidates = (query: string) => ({
+  kind: 'no_candidates' as const, schemaVersion: 'registry-tools:v3' as const,
+  query, appliedFilters: {}, matchedCount: 0, ranking: [], navigation: [],
+})
+type DirectoryRow = {
+  id: string
+  source: string
+  title: string
+  summary: string
+  provider: string
+  actionClass: string
+  objectClass: string
+  completedAt: number
+  category?: string
+}
+const directoryRow = (id: string): DirectoryRow => ({
+  id, source: 'coinbase', title: 'Timezone conversion', summary: 'Convert a time between cities', provider: 'Open source',
+  actionClass: 'transform', objectClass: 'location', completedAt: Date.now(),
+})
+let directoryRows: DirectoryRow[] = []
+let directoryAvailable = true
+let directoryRefreshState: 'complete' | 'failed' = 'complete'
+
+async function runSearch(query: string, options: Record<string, unknown> = {}, request?: Request) {
+  const data = toolCatalogSearchInputSchema.parse({ query, ...options })
+  return registryToolsSearchAction.run({ data, context: { caller: 'http', ...(request === undefined ? {} : { request }) } })
 }
 
-function stubJevFetch(implementation: typeof fetch) {
-  vi.stubGlobal('fetch', implementation)
+async function collectSearchPages(first: SearchEnvelope, options: Record<string, unknown>) {
+  const rows = [...first.results]
+  let page = first
+  for (let count = 0; page.pagination.hasMore && count < 12; count++) {
+    expect(page.next[0]).toMatchObject({ action: 'next-page', args: { query: 'timezone conversion', cursor: page.pagination.nextCursor } })
+    page = await runSearch('timezone conversion', { ...options, cursor: page.pagination.nextCursor })
+    expect(new TextEncoder().encode(JSON.stringify(page)).length).toBeLessThanOrEqual(16 * 1024)
+    rows.push(...page.results)
+  }
+  expect(page.pagination.hasMore).toBe(false)
+  return rows
 }
 
-describe('registryToolsSearchAction Jev re-rank wiring', () => {
-  afterEach(() => {
-    setPublicSourceTransportForTests(undefined)
-    vi.unstubAllGlobals()
-    vi.unstubAllEnvs()
-    vi.restoreAllMocks()
-    vi.mocked(readCapabilityToolSearch).mockReset()
-  })
-
+describe('registry.tools.search mixed assessment', () => {
   beforeEach(() => {
+    directoryRows = []
+    directoryAvailable = true
+    directoryRefreshState = 'complete'
+    const completedAt = Date.now() - 60_000
     setPublicSourceTransportForTests({
-      query: async () => Date.now() - 60_000,
-      mutation: async () => undefined,
-      action: async () => undefined,
+      query: vi.fn(async (ref: unknown, args: { paginationOpts?: { cursor: string | null; numItems: number } }) => {
+        const name = getFunctionName(ref as never)
+        if (name === 'capabilitySupplyProjection:latestReconcileBusinessSupplyProjectionsCompletion') return completedAt
+        if (name === 'x402DirectoryIndex:status') return directoryAvailable
+          ? { kind: 'ready', refreshState: directoryRefreshState, coverage: { generation: 'g1', completedAt } }
+          : { kind: 'unavailable', refreshState: 'failed' }
+        if (name === 'x402DirectoryIndex:searchCompact') {
+          if (!directoryAvailable) return { kind: 'unavailable', reason: 'index_unavailable' }
+          const start = Number(args.paginationOpts?.cursor ?? 0)
+          const end = Math.min(start + (args.paginationOpts?.numItems ?? 0), directoryRows.length)
+          return { kind: 'ok', coverage: { generation: 'g1', completedAt },
+            page: directoryRows.slice(start, end), continueCursor: String(end), isDone: end === directoryRows.length }
+        }
+        throw new Error(`Unexpected source query ${name}`)
+      }),
+      mutation: vi.fn(), action: vi.fn(),
     } as never)
   })
-
-  it.each(['before', 'during'])('preserves discovery when the HTTP request is cancelled %s inference', async timing => {
-    const source = misorderedSearchResult(ERC20_QUERY)
-    vi.mocked(readCapabilityToolSearch).mockResolvedValue(source)
-    vi.stubEnv('OPENROUTER_API_KEY', 'sk-or-test')
-    const controller = new AbortController()
-    const fetcher = vi.fn<typeof fetch>().mockImplementation(async (_url, init) => {
-      return new Promise((_resolve, reject) => {
-        init?.signal?.addEventListener('abort', () => reject(init.signal?.reason), { once: true })
-        controller.abort()
-      })
-    })
-    stubJevFetch(fetcher)
-    if (timing === 'before') controller.abort()
-    const result = await runSearch(ERC20_QUERY, new Request('https://ae.test/api/v1/market-tools/search', { signal: controller.signal }))
-    expect(result.kind).toBe('degraded')
-    if (result.kind !== 'degraded') return
-    expect(result.results.map(item => item.toolRef)).toEqual(source.items.map(item => item.toolRef))
-    expect(fetcher).toHaveBeenCalledTimes(timing === 'before' ? 0 : 1)
-    if (timing === 'during') expect(fetcher.mock.calls[0]?.[1]?.signal?.aborted).toBe(true)
+  afterEach(() => {
+    setPublicSourceTransportForTests(undefined)
+    vi.mocked(readCapabilityToolSearch).mockReset()
+    vi.restoreAllMocks()
+    vi.unstubAllGlobals()
+    vi.unstubAllEnvs()
   })
 
-  it('reads candidates, scores them through the Decision Gateway, and returns Jev order', async () => {
-    const searchResult = misorderedSearchResult(ERC20_QUERY)
-    vi.mocked(readCapabilityToolSearch).mockResolvedValue(searchResult)
-    const gateway = vi.spyOn(decisionEngine, 'executeDecisionGateway').mockResolvedValue({
-      tier: 'jev_system_one',
-      model: '~typesafe/jev-latest',
-      answers: jevAnswersForTool('operation:v1:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', [0.07, 0.93, 0.12]) as never,
-      usage: { inputTokens: 160, outputTokens: 0, estimatedCostAud: 'A$0.000007' },
-      durationMs: 48,
-      attemptedTiers: ['jev_system_one'],
-    })
-
-    const result = await runSearch(ERC20_QUERY)
-
-    expect(readCapabilityToolSearch).toHaveBeenCalledWith({
-      query: ERC20_QUERY,
-      limit: 10,
-    })
-    expect(gateway).toHaveBeenCalledOnce()
-    expect(gateway.mock.calls[0]?.[0]).toMatchObject({
-      state: { query: ERC20_QUERY },
-      questions: {
-        match_0: { type: 'noul' },
-        match_1: { type: 'noul' },
-        match_2: { type: 'noul' },
-      },
-    })
-    expect(result.kind).toBe('matched')
-    if (result.kind !== 'matched') return
-    expect(result.results.map((item) => item.toolRef)).toEqual([TOOL_CRYPTO_TX.toolRef])
-    expect(result.recommendation.engine).toBe('jev_system_one')
-    expect(result.recommendation.citations[0]?.toolRef).toBe(TOOL_CRYPTO_TX.toolRef)
-    expect(result.results[0]?.title).toBe(TOOL_CRYPTO_TX.listing.label)
+  it('shares the proven 200-character Market and Agent search bound', () => {
+    expect(toolCatalogSearchInputSchema.safeParse({ query: 'x'.repeat(200) }).success).toBe(true)
+    expect(toolCatalogSearchInputSchema.safeParse({ query: 'x'.repeat(201) }).success).toBe(false)
   })
 
-  it('places the timezone converter first for a London-to-Sydney query', async () => {
-    vi.mocked(readCapabilityToolSearch).mockResolvedValue(misorderedSearchResult(TIMEZONE_QUERY))
-    vi.spyOn(decisionEngine, 'executeDecisionGateway').mockResolvedValue({
-      tier: 'jev_system_one',
-      model: '~typesafe/jev-latest',
-      answers: jevAnswersForTool('operation:v1:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb', [0.95, 0.05, 0.04]) as never,
-      usage: { inputTokens: 140, outputTokens: 0, estimatedCostAud: 'A$0.000006' },
-      durationMs: 41,
-      attemptedTiers: ['jev_system_one'],
-    })
-
-    const result = await runSearch(TIMEZONE_QUERY)
-
-    expect(result.kind).toBe('matched')
-    if (result.kind !== 'matched') return
-    expect(result.results.map(item => item.toolRef)).toEqual([TOOL_TIMEZONE.toolRef])
-  })
-
-  it('keeps search successful when Jev and the secondary LLM both return 500', async () => {
-    vi.mocked(readCapabilityToolSearch).mockResolvedValue(misorderedSearchResult(ERC20_QUERY))
-    stubJevFetch(vi.fn(async (url: string | URL) => {
-      const href = url.toString()
-      if (href.includes('/decisions') || href.includes('/v1/systemone') || href.includes('/api/v1/chat/completions')) {
-        return new Response('Internal Server Error', { status: 500 })
-      }
-      throw new Error(`Unexpected url: ${href}`)
-    }) as unknown as typeof fetch)
-
-    const previousKey = process.env.OPENROUTER_API_KEY
-    process.env.OPENROUTER_API_KEY = 'sk-or-v1-test-not-a-live-credential'
-    try {
-      const result = await runSearch(ERC20_QUERY)
-      expect(result.kind).toBe('degraded')
-      if (result.kind !== 'degraded') return
-      expect(result.results.map((item) => item.toolRef)).toEqual(expect.arrayContaining([
-        TOOL_CRYPTO_TX.toolRef,
-        TOOL_TIMEZONE.toolRef,
-        TOOL_CURRENCY.toolRef,
-      ]))
-      expect(result).not.toHaveProperty('recommendation')
-    } finally {
-      if (previousKey === undefined) delete process.env.OPENROUTER_API_KEY
-      else process.env.OPENROUTER_API_KEY = previousKey
-    }
-  })
-
-  it('keeps search successful when Jev times out with 504', async () => {
-    vi.mocked(readCapabilityToolSearch).mockResolvedValue(misorderedSearchResult(TIMEZONE_QUERY))
-    stubJevFetch(vi.fn(async () => new Response('Gateway Timeout', { status: 504 })) as unknown as typeof fetch)
-
-    const previousKey = process.env.OPENROUTER_API_KEY
-    process.env.OPENROUTER_API_KEY = 'sk-or-v1-test-not-a-live-credential'
-    try {
-      const result = await runSearch(TIMEZONE_QUERY)
-      expect(result.kind).toBe('degraded')
-      expect(result).not.toHaveProperty('recommendation')
-      if (result.kind === 'degraded') expect(result.results).toHaveLength(3)
-    } finally {
-      if (previousKey === undefined) delete process.env.OPENROUTER_API_KEY
-      else process.env.OPENROUTER_API_KEY = previousKey
-    }
-  })
-
-  it('re-ranks through a mocked Jev fetch without calling the live network', async () => {
-    vi.mocked(readCapabilityToolSearch).mockResolvedValue(misorderedSearchResult(ERC20_QUERY))
-    const fetchImpl = vi.fn(async (url: string | URL) => {
-      const href = url.toString()
-      if (href.includes('/decisions') || href.includes('/v1/systemone')) {
-        return jevSystemOneResponse(jevAnswersForTool('operation:v1:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', [0.06, 0.91, 0.14]))
-      }
-      throw new Error(`Unexpected url: ${href}`)
-    })
-    stubJevFetch(fetchImpl as unknown as typeof fetch)
-
-    const previousKey = process.env.OPENROUTER_API_KEY
-    process.env.OPENROUTER_API_KEY = 'sk-or-v1-test-not-a-live-credential'
-    try {
-      const result = await runSearch(ERC20_QUERY)
-      expect(fetchImpl).toHaveBeenCalled()
-      expect(result.kind).toBe('matched')
-      if (result.kind !== 'matched') return
-      expect(result.results[0]?.toolRef).toBe(TOOL_CRYPTO_TX.toolRef)
-    } finally {
-      if (previousKey === undefined) delete process.env.OPENROUTER_API_KEY
-      else process.env.OPENROUTER_API_KEY = previousKey
-    }
-  })
-  it('returns near misses rather than a recommendation when Jev rejects every candidate', async () => {
-    vi.mocked(readCapabilityToolSearch).mockResolvedValue(misorderedSearchResult('AUD USD exchange rate'))
+  it('scores the entire bounded admitted inventory so a synonymous Tool is not discarded by lexical retrieval', async () => {
+    vi.mocked(readCapabilityToolSearch).mockResolvedValue({ ...misorderedSearchResult(''), query: '', pagination: { limit: 20, hasMore: false } })
     vi.spyOn(decisionEngine, 'executeDecisionGateway').mockResolvedValue({
       tier: 'jev_system_one', model: '~typesafe/jev-latest',
-      answers: jevAnswersForTool(TOOL_CURRENCY.toolRef, [0.12, 0.19, 0.32]) as never,
+      answers: jevAnswersForTool(TOOL_CRYPTO_TX.toolRef, [0.04, 0.94, 0.02]) as never,
       usage: { inputTokens: 160, outputTokens: 0, estimatedCostAud: null },
       durationMs: 40, attemptedTiers: ['jev_system_one'],
     })
-    const result = await runSearch('AUD USD exchange rate')
-    expect(result.kind).toBe('noMatch')
-    expect(result.results).toEqual([])
-    expect(result).not.toHaveProperty('recommendation')
-    if (result.kind === 'noMatch') {
-      expect(result.scope).toBe('exhausted')
-      expect(result.nearMisses.map(item => item.toolRef)).toContain(TOOL_CURRENCY.toolRef)
+    const result = await runSearch('find wallet token movements')
+    expect(readCapabilityToolSearch).toHaveBeenCalledWith({ query: '', limit: 20, source: 'current' })
+    expect(result.kind).toBe('match')
+    if (result.kind !== 'match') return
+    expect(result.results[0]).toMatchObject({ id: TOOL_CRYPTO_TX.toolRef, toolRef: TOOL_CRYPTO_TX.toolRef, access: 'ae_callable' })
+    expect(result.results[0]?.next).toEqual([{ action: 'describe', args: { toolRef: TOOL_CRYPTO_TX.toolRef }, authority: 'public' }])
+    expect(result).not.toHaveProperty('groups')
+    expect(new TextEncoder().encode(JSON.stringify(result)).length).toBeLessThanOrEqual(16 * 1024)
+  })
+
+  it('keeps an external-only Bazaar entry navigable without representing it as an AE-callable match', async () => {
+    vi.mocked(readCapabilityToolSearch).mockResolvedValue(noCandidates(''))
+    directoryRows = [directoryRow('directory-1')]
+    const result = await runSearch('timezone conversion')
+    expect(result).toMatchObject({ kind: 'scoped', assessed: { source: 'all', coverage: 'partial' },
+      results: [{ id: 'directory-1', access: 'external_listing', price: { kind: 'unavailable' },
+        next: [{ action: 'describe-external', args: { id: 'directory-1' } }] }] })
+    expect(result.next).toEqual([{ action: 'broaden', args: { query: 'timezone conversion' }, authority: 'public' }])
+  })
+
+  it('reports a failed refresh on a still-queryable directory result', async () => {
+    vi.mocked(readCapabilityToolSearch).mockResolvedValue(noCandidates(''))
+    directoryRows = [directoryRow('directory-1')]
+    directoryRefreshState = 'failed'
+    const result = await runSearch('timezone conversion', { source: 'coinbase' })
+    expect(result.results[0]).toMatchObject({
+      id: 'directory-1', freshness: { source: 'x402_directory', state: 'failed' },
+    })
+  })
+
+  it('returns exhaustive no-match only for an explicitly selected fully assessed current inventory', async () => {
+    vi.mocked(readCapabilityToolSearch).mockResolvedValue(noCandidates(''))
+    const result = await runSearch('impossible request', { source: 'current' })
+    expect(result).toMatchObject({ kind: 'noMatch', assessed: { source: 'current', scope: 'complete', coverage: 'complete' }, results: [] })
+    const all = await runSearch('impossible request')
+    expect(all.kind).toBe('scoped')
+  })
+
+  it('never turns an unassessed lexical tail into an exhausted no-match', async () => {
+    vi.mocked(readCapabilityToolSearch)
+      .mockResolvedValueOnce({ ...misorderedSearchResult(''), query: '', pagination: { limit: 20, hasMore: true } })
+      .mockResolvedValueOnce(noCandidates('missing synonym'))
+    const result = await runSearch('missing synonym')
+    expect(result).toMatchObject({ kind: 'scoped', partialResults: true, results: [] })
+  })
+
+  it('uses admitted provider facts and explicit unclassified facets without inventing a category or price band', async () => {
+    vi.mocked(readCapabilityToolSearch).mockResolvedValue({
+      ...misorderedSearchResult(''), items: [TOOL_CRYPTO_TX], pagination: { limit: 20, hasMore: false },
+    })
+    vi.spyOn(decisionEngine, 'executeDecisionGateway').mockResolvedValue({
+      tier: 'jev_system_one', model: '~typesafe/jev-latest',
+      answers: { match_0: { type: 'noul', noul: 0.94 } } as never,
+      usage: { inputTokens: 160, outputTokens: 0, estimatedCostAud: null },
+      durationMs: 40, attemptedTiers: ['jev_system_one'],
+    })
+    const known = await runSearch('wallet transfers', { source: 'current',
+      filters: { provider: 'Provider Corp', actionClass: 'unclassified', objectClass: 'unclassified', priceBand: 'unknown' } })
+    expect(known).toMatchObject({ kind: 'match', results: [{ toolRef: TOOL_CRYPTO_TX.toolRef,
+      actionClass: 'unclassified', objectClass: 'unclassified' }] })
+    const wrongProvider = await runSearch('wallet transfers', { source: 'current', filters: { provider: 'Other Corp' } })
+    expect(wrongProvider).toMatchObject({ kind: 'noMatch', results: [] })
+  })
+
+  it.each([
+    { actionClass: 'retrieve' }, { objectClass: 'chain' }, { category: 'crypto' }, { priceBand: 'lt_0_01' },
+  ])('does not claim exhaustive no-match for an unclassified admitted facet: %j', async filters => {
+    vi.mocked(readCapabilityToolSearch).mockResolvedValue({
+      ...misorderedSearchResult(''), items: [TOOL_CRYPTO_TX], pagination: { limit: 20, hasMore: false },
+    })
+    const result = await runSearch('wallet transfers', { source: 'current', filters })
+    expect(result).toMatchObject({ kind: 'scoped', partialResults: true,
+      assessed: { source: 'current', scope: 'page', coverage: 'partial', examined: 1 }, results: [] })
+  })
+
+  it('keeps Bazaar facet results navigable when admitted category is unclassified', async () => {
+    vi.mocked(readCapabilityToolSearch).mockResolvedValue({
+      ...misorderedSearchResult(''), items: [TOOL_CRYPTO_TX], pagination: { limit: 20, hasMore: false },
+    })
+    directoryRows = [{ ...directoryRow('directory-category'), category: 'locations' }]
+    const result = await runSearch('timezone conversion', { filters: { category: 'locations' } })
+    expect(result).toMatchObject({ kind: 'scoped', assessed: { source: 'all', coverage: 'partial', examined: 2 },
+      results: [{ id: 'directory-category', access: 'external_listing', category: 'locations' }] })
+  })
+
+  it('continues a partial admitted search past a provider-filtered page instead of declaring no-match', async () => {
+    vi.mocked(readCapabilityToolSearch).mockImplementation(async input => {
+      if (input.limit === undefined) throw new Error('Expected an explicit search limit')
+      if (input.query === '') return { ...misorderedSearchResult(''), items: [],
+        pagination: { limit: 20, hasMore: true, nextCursor: 'pool' } }
+      const item = input.cursor === undefined
+        ? { ...TOOL_TIMEZONE, business: { ...TOOL_TIMEZONE.business, name: 'Other Corp', slug: 'other' } }
+        : TOOL_CRYPTO_TX
+      return { ...misorderedSearchResult(input.query), items: [item],
+        pagination: { limit: input.limit, hasMore: input.cursor === undefined,
+          ...(input.cursor === undefined ? { nextCursor: 'second' } : {}) } }
+    })
+    vi.spyOn(decisionEngine, 'executeDecisionGateway').mockResolvedValue({
+      tier: 'jev_system_one', model: '~typesafe/jev-latest',
+      answers: { match_0: { type: 'noul', noul: 0.94 } } as never,
+      usage: { inputTokens: 160, outputTokens: 0, estimatedCostAud: null },
+      durationMs: 40, attemptedTiers: ['jev_system_one'],
+    })
+    const options = { source: 'current', filters: { provider: 'Provider Corp' } }
+    const first = await runSearch('timezone conversion', options)
+    expect(first).toMatchObject({ kind: 'scoped', results: [], assessed: { examined: 1 },
+      pagination: { hasMore: true } })
+    const second = await runSearch('timezone conversion', { ...options, cursor: first.pagination.nextCursor })
+    expect(second).toMatchObject({ kind: 'match', results: [{ toolRef: TOOL_CRYPTO_TX.toolRef }],
+      pagination: { hasMore: false } })
+    expect(readCapabilityToolSearch).toHaveBeenCalledWith({
+      query: 'timezone conversion', source: 'current', limit: 8, cursor: 'second', filters: {},
+    })
+  })
+
+  it('shrinks an oversized external page and resumes at its first omitted index row', async () => {
+    vi.mocked(readCapabilityToolSearch).mockResolvedValue(noCandidates(''))
+    directoryRows = Array.from({ length: 12 }, (_, index) => directoryRow(`directory-${index}-${'x'.repeat(1600)}`))
+    const first = await runSearch('timezone conversion', { source: 'coinbase', limit: 12 })
+    expect(first.kind).toBe('scoped')
+    expect(new TextEncoder().encode(JSON.stringify(first)).length).toBeLessThanOrEqual(16 * 1024)
+    expect(first.results.length).toBeGreaterThan(0)
+    expect(first.results.length).toBeLessThan(12)
+    expect(first.pagination).toMatchObject({ limit: 12, hasMore: true })
+    expect((await collectSearchPages(first, { source: 'coinbase', limit: 12 })).map(row => row.id)).toEqual(directoryRows.map(row => row.id))
+  })
+
+  it('preserves admitted-to-external continuation when the mixed page must shrink', async () => {
+    vi.mocked(readCapabilityToolSearch).mockResolvedValue({
+      ...misorderedSearchResult(''), items: [TOOL_CRYPTO_TX], pagination: { limit: 20, hasMore: false },
+    })
+    vi.spyOn(decisionEngine, 'executeDecisionGateway').mockResolvedValue({
+      tier: 'jev_system_one', model: '~typesafe/jev-latest',
+      answers: { match_0: { type: 'noul', noul: 0.94 } } as never,
+      usage: { inputTokens: 160, outputTokens: 0, estimatedCostAud: null },
+      durationMs: 40, attemptedTiers: ['jev_system_one'],
+    })
+    directoryRows = Array.from({ length: 11 }, (_, index) => directoryRow(`directory-${index}-${'x'.repeat(1600)}`))
+    const first = await runSearch('timezone conversion', { limit: 12 })
+    expect(first.kind).toBe('match')
+    expect(first.results[0]?.id).toBe(TOOL_CRYPTO_TX.toolRef)
+    expect(new TextEncoder().encode(JSON.stringify(first)).length).toBeLessThanOrEqual(16 * 1024)
+    expect(first.pagination).toMatchObject({ limit: 12, hasMore: true })
+    expect((await collectSearchPages(first, { limit: 12 })).map(row => row.id)).toEqual([
+      TOOL_CRYPTO_TX.toolRef, ...directoryRows.map(row => row.id),
+    ])
+  })
+
+  it('shrinks the complete admitted pool without scoring it again for the same request', async () => {
+    const items = Array.from({ length: 12 }, (_, index) => ({
+      ...mockSearchTool(
+        `operation:v1:${index.toString(16).padStart(64, '0')}`, `time.${index}`, 'Timezone conversion', 'Convert time zones',
+      ),
+      commercial: { ...TOOL_CRYPTO_TX.commercial, displayPrice: {
+        kind: 'indicative' as const, amount: { currency: 'AUD', units: '9'.repeat(1600), exponent: 2 },
+        rateObservedAt: Date.now(), validUntil: Date.now() + 60_000,
+      } },
+    }))
+    vi.mocked(readCapabilityToolSearch).mockResolvedValue({
+      ...misorderedSearchResult(''), items, pagination: { limit: 20, hasMore: false },
+    })
+    const ranker = vi.spyOn(decisionEngine, 'executeDecisionGateway').mockResolvedValue({
+      tier: 'jev_system_one', model: '~typesafe/jev-latest',
+      answers: Object.fromEntries(items.map((_, index) => [`match_${index}`, { type: 'noul', noul: 0.94 }])) as never,
+      usage: { inputTokens: 160, outputTokens: 0, estimatedCostAud: null },
+      durationMs: 40, attemptedTiers: ['jev_system_one'],
+    })
+    const first = await runSearch('timezone conversion', { source: 'current', limit: 12 })
+    expect(first.kind).toBe('match')
+    expect(new TextEncoder().encode(JSON.stringify(first)).length).toBeLessThanOrEqual(16 * 1024)
+    expect(first.results.length).toBeLessThan(12)
+    expect(first.pagination).toMatchObject({ limit: 12, hasMore: true })
+    expect(ranker).toHaveBeenCalledTimes(1)
+    expect(readCapabilityToolSearch).toHaveBeenCalledTimes(1)
+    const second = await runSearch('timezone conversion', { source: 'current', limit: 12, cursor: first.pagination.nextCursor })
+    expect([...first.results, ...second.results].map(row => row.id)).toEqual(items.map(item => item.toolRef))
+    expect(second.pagination.hasMore).toBe(false)
+  })
+
+  it('re-queries a partial admitted page at its reduced fetch size before issuing its cursor', async () => {
+    const items = Array.from({ length: 12 }, (_, index) => ({
+      ...mockSearchTool(
+        `operation:v1:${index.toString(16).padStart(64, '0')}`, `time.${index}`, 'Timezone conversion', 'Convert time zones',
+      ),
+      commercial: { ...TOOL_CRYPTO_TX.commercial, displayPrice: {
+        kind: 'indicative' as const, amount: { currency: 'AUD', units: '9'.repeat(1600), exponent: 2 },
+        rateObservedAt: Date.now(), validUntil: Date.now() + 60_000,
+      } },
+    }))
+    vi.mocked(readCapabilityToolSearch).mockImplementation(async input => {
+      if (input.limit === undefined) throw new Error('Expected an explicit search limit')
+      if (input.query === '') return { ...misorderedSearchResult(''), items: [],
+        pagination: { limit: 20, hasMore: true, nextCursor: 'pool' } }
+      const start = Number(input.cursor ?? 0)
+      const end = Math.min(start + input.limit, items.length)
+      return { ...misorderedSearchResult(input.query), items: items.slice(start, end),
+        pagination: { limit: input.limit, hasMore: end < items.length, ...(end < items.length ? { nextCursor: String(end) } : {}) } }
+    })
+    vi.spyOn(decisionEngine, 'executeDecisionGateway').mockResolvedValue({
+      tier: 'jev_system_one', model: '~typesafe/jev-latest',
+      answers: Object.fromEntries(items.map((_, index) => [`match_${index}`, { type: 'noul', noul: 0.94 }])) as never,
+      usage: { inputTokens: 160, outputTokens: 0, estimatedCostAud: null },
+      durationMs: 40, attemptedTiers: ['jev_system_one'],
+    })
+    const first = await runSearch('timezone conversion', { source: 'current', limit: 12 })
+    expect(first.kind).toBe('match')
+    expect(first.results.length).toBeLessThan(12)
+    expect(first.pagination).toMatchObject({ limit: 12, hasMore: true })
+    expect(readCapabilityToolSearch).toHaveBeenCalledWith({ query: 'timezone conversion',
+      limit: first.results.length, source: 'current' })
+    expect((await collectSearchPages(first, { source: 'current', limit: 12 })).map(row => row.id))
+      .toEqual(items.map(item => item.toolRef))
+  })
+
+  it('returns capacity_exceeded without a continuation when one admitted result cannot fit the byte budget', async () => {
+    const oversized = {
+      ...mockSearchTool(`operation:v1:${'a'.repeat(64)}`, 'huge.time', 'Timezone conversion', 'Convert time zones'),
+      commercial: { ...TOOL_CRYPTO_TX.commercial, displayPrice: {
+        kind: 'indicative' as const, amount: { currency: 'AUD', units: '9'.repeat(20_000), exponent: 2 },
+        rateObservedAt: Date.now(), validUntil: Date.now() + 60_000,
+      } },
     }
+    vi.mocked(readCapabilityToolSearch).mockResolvedValue({
+      ...misorderedSearchResult(''), items: [oversized], pagination: { limit: 20, hasMore: false },
+    })
+    vi.spyOn(decisionEngine, 'executeDecisionGateway').mockResolvedValue({
+      tier: 'jev_system_one', model: '~typesafe/jev-latest',
+      answers: { match_0: { type: 'noul', noul: 0.94 } } as never,
+      usage: { inputTokens: 160, outputTokens: 0, estimatedCostAud: null },
+      durationMs: 40, attemptedTiers: ['jev_system_one'],
+    })
+    const result = await runSearch('timezone conversion', { source: 'current', limit: 1 })
+    expect(result).toMatchObject({
+      kind: 'unavailable', reason: 'capacity_exceeded', results: [], partialResults: true,
+      pagination: { limit: 1, hasMore: false },
+      next: [{ action: 'retry', args: { query: 'timezone conversion' } }],
+    })
+    expect(result.pagination).not.toHaveProperty('nextCursor')
+    expect(new TextEncoder().encode(JSON.stringify(result)).length).toBeLessThanOrEqual(16 * 1024)
+  })
+
+  it('reports index or ranker outage as unavailable with an executable retry, never candidates', async () => {
+    vi.mocked(readCapabilityToolSearch).mockResolvedValue(noCandidates(''))
+    directoryAvailable = false
+    expect(await runSearch('timezone')).toMatchObject({ kind: 'unavailable', results: [], next: [
+      { action: 'retry', args: { query: 'timezone' } },
+    ] })
+    directoryAvailable = true
+    vi.mocked(readCapabilityToolSearch).mockResolvedValue(misorderedSearchResult('weather'))
+    vi.spyOn(decisionEngine, 'executeDecisionGateway').mockRejectedValue(new Error('ranking failed'))
+    await expect(runSearch('weather')).rejects.toThrow('ranking failed')
   })
 })

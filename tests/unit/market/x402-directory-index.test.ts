@@ -1,5 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
-import { directoryAdoptionBand, directoryBasePayTo, directoryEntryMatchesFilters, directoryNetwork, directoryPriceBand, directorySlugBase, minimumDirectoryUsdPrice } from '@/modules/market/x402-directory-index'
+import { SEARCH_QUERY_MAX_LENGTH } from '@/modules/common/search-query'
+import { x402DirectoryInputSchema } from '@/modules/market/x402-directory'
+import { directoryAdoptionBand, directoryBasePayTo, directoryEntryMatchesFilters, directoryNetwork, directoryPriceBand, directorySlugBase, minimumDirectoryUsdPrice, x402DirectoryIndexInputSchema } from '@/modules/market/x402-directory-index'
 import type { X402DirectoryEntry } from '@/modules/market/x402-directory'
 const { query, upstream } = vi.hoisted(() => ({ query: vi.fn(), upstream: vi.fn() }))
 vi.mock('@/lib/server/convex-source', () => ({ sourceQuery: (name: string) => name, callPublicSourceQuery: query }))
@@ -27,6 +29,21 @@ describe('directory Base payee', () => {
   })
 })
 describe('directory hard filters', () => {
+  it('accepts the Market query limit with its existing hard filters and rejects longer input', () => {
+    const query = 'x'.repeat(SEARCH_QUERY_MAX_LENGTH)
+    const filters = { provider: 'Provider.Test', network: 'base', maxUsdPrice: 0.25 }
+
+    expect(x402DirectoryIndexInputSchema.parse({ query, ...filters })).toMatchObject({
+      query,
+      provider: 'provider.test',
+      network: 'base',
+      maxUsdPrice: 0.25,
+    })
+    expect(x402DirectoryIndexInputSchema.safeParse({ query: `${query}x`, ...filters }).success).toBe(false)
+    expect(x402DirectoryInputSchema.safeParse({ query }).success).toBe(true)
+    expect(x402DirectoryInputSchema.safeParse({ query: `${query}x` }).success).toBe(false)
+  })
+
   it('normalizes supported upstream network aliases without changing unknown identifiers', () => {
     expect(directoryNetwork('base')).toBe('eip155:8453')
     expect(directoryNetwork('eip155:8453')).toBe('eip155:8453')

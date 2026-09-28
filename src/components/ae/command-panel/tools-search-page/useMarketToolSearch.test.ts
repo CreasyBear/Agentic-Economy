@@ -13,28 +13,28 @@ const alphaRef = `operation:v1:${'a'.repeat(64)}`
 if (!isPublicToolRef(alphaRef)) throw new Error('test_tool_ref_invalid')
 
 const okPayload = (): ToolChoiceSearchResult => ({
-  kind: 'matched',
+  kind: 'match',
   schemaVersion: 'registry-tools:v3',
   query: 'alpha',
   partialResults: false,
+  assessed: { source: 'all', scope: 'complete', examined: 1, coverage: 'complete' },
   results: [{
+    id: alphaRef,
+    source: 'current',
+    access: 'ae_callable',
     toolRef: alphaRef,
     title: 'Alpha Tool',
     summary: 'desc',
-    matchReason: 'Capability text overlap.',
+    provider: 'Prov',
+    actionClass: 'retrieve',
+    objectClass: 'data',
     readiness: 'ready',
-    healthStatus: 'operational',
-    verification: 'verified',
-    network: 'mainnet',
-    claimSource: 'provider',
-    entitlement: 'requires_auth',
-    price: { kind: 'indicative', label: '$1.00' },
+    price: { kind: 'indicative', label: 'A$1.00' },
+    detailRef: alphaRef,
     next: [{ action: 'describe', args: { toolRef: alphaRef }, authority: 'public' }],
-    details: { capabilityId: 'cap.one', provider: { name: 'Prov', slug: 'prov' }, description: 'desc', listingTier: 'reviewed' },
   }],
-  recommendation: { mode: 'fast', engine: 'jev_system_one', text: 'Inspect Alpha Tool before use.', citations: [] },
   next: [{ action: 'broaden', authority: 'public', args: { query: 'alpha' } }],
-  pagination: { limit: 12, hasMore: false },
+  pagination: { limit: 8, hasMore: false },
 })
 
 afterEach(() => {
@@ -92,7 +92,7 @@ describe('useMarketToolSearch', () => {
       vi.advanceTimersByTime(TOOLS_SEARCH_DEBOUNCE_MS)
     })
     expect(searchTools).toHaveBeenCalledTimes(1)
-    expect(searchTools).toHaveBeenCalledWith({ query: 'alpha', limit: 12 })
+    expect(searchTools).toHaveBeenCalledWith({ query: 'alpha', limit: 8 })
   })
 
   it('ignores stale responses when a newer query wins the race', async () => {
@@ -125,8 +125,9 @@ describe('useMarketToolSearch', () => {
     })
     expect(result.current.status.kind).toBe('success')
     const stalePayload = okPayload()
-    if (stalePayload.kind !== 'matched') throw new Error('fixture_expected_match')
+    if (stalePayload.kind !== 'match') throw new Error('fixture_expected_match')
     const staleItem = stalePayload.results[0]
+    if (staleItem === undefined) throw new Error('fixture_expected_result')
     await act(async () => {
       resolveFirst?.({
         ...stalePayload,
@@ -143,8 +144,9 @@ describe('useMarketToolSearch', () => {
   it('maps unavailable results to recovery errors', async () => {
     vi.useFakeTimers()
     const searchTools = vi.fn(async (): Promise<ToolChoiceSearchResult> => ({
-      kind: 'unavailable', schemaVersion: 'registry-tools:v3', reason: 'source_unavailable',
-      results: [], partialResults: false, pagination: { limit: 12, hasMore: false }, next: [],
+      kind: 'unavailable', schemaVersion: 'registry-tools:v3', query: 'alpha', reason: 'source_unavailable',
+      results: [], partialResults: false, assessed: { source: 'all', scope: 'page', examined: 0, coverage: 'partial' },
+      pagination: { limit: 8, hasMore: false }, next: [{ action: 'retry', authority: 'public', args: { query: 'alpha' } }],
     }))
     const { result } = renderHook(() =>
       useMarketToolSearch({ query: 'alpha', searchAttempt: 0, searchTools }),
@@ -159,14 +161,14 @@ describe('useMarketToolSearch', () => {
     })
   })
 
-  it('keeps below-threshold near misses out of selectable results', async () => {
+  it('renders exhausted no-match without selectable results', async () => {
     vi.useFakeTimers()
     const matched = okPayload()
-    if (matched.kind !== 'matched') throw new Error('fixture_expected_match')
+    if (matched.kind !== 'match') throw new Error('fixture_expected_match')
     const searchTools = vi.fn(async (): Promise<ToolChoiceSearchResult> => ({
       kind: 'noMatch', schemaVersion: matched.schemaVersion, query: 'AUD USD exchange rate',
-      scope: 'exhausted', results: [], nearMisses: [...matched.results],
-      reason: 'No suitable Tool found in the searched supply.', suggestions: [],
+      reason: 'No suitable Tools found in the assessed sources.',
+      results: [], assessed: { source: 'all', scope: 'complete', examined: 1, coverage: 'complete' },
       partialResults: false, pagination: matched.pagination, next: matched.next,
     }))
     const { result } = renderHook(() => useMarketToolSearch({ query: 'AUD USD exchange rate', searchAttempt: 0, searchTools }))
@@ -175,7 +177,75 @@ describe('useMarketToolSearch', () => {
       await Promise.resolve()
     })
     expect(result.current.status).toMatchObject({
-      kind: 'empty', count: 0, message: expect.stringContaining('Near misses (not matches): Alpha Tool'),
+      kind: 'empty', count: 0, message: expect.stringContaining('No suitable Tools found in the assessed sources'),
+    })
+  })
+
+  it('keeps scoped supply distinct from no-match and routes external listings to exact detail', async () => {
+    vi.useFakeTimers()
+    const matched = okPayload()
+    if (matched.kind !== 'match') throw new Error('fixture_expected_match')
+    const first = matched.results[0]
+    if (first === undefined) throw new Error('fixture_expected_result')
+    const searchTools = vi.fn(async (): Promise<ToolChoiceSearchResult> => ({
+      ...matched,
+      kind: 'scoped',
+      reason: 'Unassessed supply remains.',
+      assessed: { source: 'all', scope: 'page', examined: 2, coverage: 'partial' },
+      results: [
+        first,
+        {
+          id: 'opaque-1', source: 'coinbase', access: 'external_listing',
+          title: 'External Tool', summary: 'External lookup', provider: 'Outside',
+          actionClass: 'retrieve', objectClass: 'data', readiness: 'unverified',
+          price: { kind: 'indicative', label: 'USDC 0.000001' }, detailRef: '/api/v1/registry/detail?id=opaque-1',
+          next: [{ action: 'describe-external', authority: 'public', args: { id: 'opaque-1' } }],
+        },
+      ],
+    }))
+    const { result } = renderHook(() =>
+      useMarketToolSearch({ query: 'alpha', searchAttempt: 0, searchTools }),
+    )
+    await act(async () => {
+      vi.advanceTimersByTime(TOOLS_SEARCH_DEBOUNCE_MS)
+      await Promise.resolve()
+    })
+    expect(result.current.status).toMatchObject({
+      kind: 'success',
+      scopeLabel: expect.stringContaining('other supply may exist'),
+      items: [
+        { toolRef: alphaRef, sourceKind: 'admitted', priceLabel: 'A$1.00' },
+        {
+          toolRef: '/api/v1/registry/detail?id=opaque-1',
+          sourceKind: 'directory',
+          healthLabel: 'External listing, not callable through AE',
+          priceLabel: 'AUD estimate temporarily unavailable',
+        },
+      ],
+    })
+  })
+
+  it('shows an unassessed empty page as scoped rather than exhausted', async () => {
+    vi.useFakeTimers()
+    const matched = okPayload()
+    if (matched.kind !== 'match') throw new Error('fixture_expected_match')
+    const searchTools = vi.fn(async (): Promise<ToolChoiceSearchResult> => ({
+      ...matched,
+      kind: 'scoped',
+      reason: 'Unassessed supply remains.',
+      results: [],
+      assessed: { source: 'coinbase', scope: 'page', examined: 8, coverage: 'partial' },
+    }))
+    const { result } = renderHook(() =>
+      useMarketToolSearch({ query: 'alpha', searchAttempt: 0, searchTools }),
+    )
+    await act(async () => {
+      vi.advanceTimersByTime(TOOLS_SEARCH_DEBOUNCE_MS)
+      await Promise.resolve()
+    })
+    expect(result.current.status).toMatchObject({
+      kind: 'empty',
+      message: expect.stringContaining('more supply may exist'),
     })
   })
 

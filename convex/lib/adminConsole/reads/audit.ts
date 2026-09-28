@@ -64,7 +64,21 @@ export async function listAdminAuditEventsPage(
     .filter((builder) => builder.and(...remainingAuditFilters(builder, filter, indexedBy)))
     .order('desc')
     .paginate(paginationOpts)
-  return { ...result, page: result.page.map(toAdminAuditRow) }
+  const now = Date.now()
+  return {
+    ...result,
+    page: await Promise.all(result.page.map(async (event) => {
+      const audit = toAdminAuditRow(event)
+      const proposalRef = event.targetRef
+      if (event.eventType !== 'admin.action_proposed' || proposalRef === null
+        || audit.admin?.afterState !== 'awaiting_second_approval') return audit
+      const proposal = await ctx.db.query('adminApprovalProposals')
+        .withIndex('by_proposalRef', (q) => q.eq('proposalRef', proposalRef)).unique()
+      return proposal !== null && proposal.status === 'awaiting_second_approval' && proposal.expiresAt <= now
+        ? { ...audit, admin: { ...audit.admin, afterState: 'expired' } }
+        : audit
+    })),
+  }
 }
 
 function selectAuditIndex(filter: AdminAuditFilter): AuditIndex {
@@ -175,6 +189,7 @@ function toAdminAuditRow(row: Doc<'auditEvents'>): AdminAuditRow {
 function adminDetails(row: Doc<'auditEvents'>): AdminAuditRow['admin'] {
   const payload: unknown = JSON.parse(row.redactedPayloadJson)
   const permission = readString(payload, 'permission')
+    ?? (row.eventType === 'admin.action_proposed' ? 'read_admin_readbacks' : undefined)
   if (permission === undefined) return null
   return {
     permission,

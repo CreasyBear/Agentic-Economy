@@ -1141,7 +1141,7 @@ describe('capability Call Workpool lifecycle', () => {
       correlationRef: `policy-update:${key}`,
     })
     expect(await owner.query(api.agentSpendingPolicy.readCurrent, { principalRef: buyer.principal.principalId }))
-      .toMatchObject({ kind: 'current', generation: 1, maximumDailySpend: amount('36000') })
+      .toMatchObject({ kind: 'known', generation: 1, maximumDailySpend: amount('36000') })
     const lowered = await update(1, '12000', 'lower')
     expect(lowered).toMatchObject({ kind: 'completed', generation: 2 })
     expect(await update(1, '12000', 'lower')).toMatchObject({ kind: 'replayed', generation: 2 })
@@ -1179,7 +1179,7 @@ describe('capability Call Workpool lifecycle', () => {
         transactionRefs: submitted.kind === 'completed' ? submitted.transactionRefs : [] })
     expect(await update(1, '12000', 'lower')).toMatchObject({ kind: 'replayed', generation: 2 })
     expect(await owner.query(api.agentSpendingPolicy.readCurrent, { principalRef: buyer.principal.principalId }))
-      .toMatchObject({ kind: 'current', generation: 4, maximumDailySpend: amount('36000') })
+      .toMatchObject({ kind: 'known', generation: 4, maximumDailySpend: amount('36000') })
     expect(await readBalance()).toMatchObject({ kind: 'available', units: '9988000' })
     const second = await invokeCall(backend, buyer.principal, published.toolRef, 'policy-second', 'policy-second')
     if (second.kind !== 'pending') throw new Error('new_policy_call_missing')

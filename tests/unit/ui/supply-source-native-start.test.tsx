@@ -396,7 +396,7 @@ describe('source-native Provider start', () => {
     fireEvent.click(screen.getByRole('radio', { name: 'Fixed AUD price' }))
     fireEvent.change(screen.getByLabelText('AUD price'), { target: { value: '12.30' } })
     fireEvent.click(screen.getByRole('button', { name: 'Continue to review' }))
-    expect(screen.getAllByText('AUD 12.30').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('A$12.30').length).toBeGreaterThan(0)
     for (const name of [
       'I am authorised to publish this service',
       'The information is accurate',
@@ -623,6 +623,29 @@ describe('source-native Provider start', () => {
     expect(screen.getByText('A$0.00 affected. Tool discovery was blocked.')).toBeTruthy()
     expect(screen.getByText('Replace http:// with https:// and try again.')).toBeTruthy()
     expect(onPreview).not.toHaveBeenCalled()
+  })
+
+  it('labels parsed plugin JSON as top-level keys only, including empty remote declarations', async () => {
+    render(
+      <AeSupplySourceNativeStart
+        businessRef="business:one"
+        onPreview={vi.fn()}
+        onConnect={vi.fn()}
+        onSelectCandidate={vi.fn()}
+        onPublish={vi.fn()}
+      />,
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Other source types' }))
+    fireEvent.mouseDown(screen.getByRole('tab', { name: 'Agent Plugin' }))
+    fireEvent.change(screen.getByLabelText('plugin.json'), {
+      target: { files: [new File(['{"$schema":"spec","name":"sample"}'], 'plugin.json', { type: 'application/json' })] },
+    })
+    fireEvent.change(screen.getByLabelText('mcp.json'), {
+      target: { files: [new File(['{"$schema":"spec","mcpServers":{}}'], 'mcp.json', { type: 'application/json' })] },
+    })
+    expect(await screen.findByText('JSON object parsed; $schema and name present')).toBeTruthy()
+    expect(await screen.findByText('JSON object parsed; $schema and mcpServers present')).toBeTruthy()
+    expect(screen.queryByText('Valid JSON payload')).toBeNull()
   })
 
   it('blocks Discover on malformed plugin JSON with Rule 4 diagnostic', async () => {

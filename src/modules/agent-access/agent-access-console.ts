@@ -2,7 +2,6 @@ import { createAuthenticatedSourceTransport, sourceAction, sourceQuery } from '@
 import { degrade } from '@/lib/observability/degrade'
 import { listAgentAccessKeysServer } from '@/modules/agent-access/agent-access.functions'
 import type { AgentAccessKeyInventoryItem } from '@/modules/agent-access/agent-access'
-import type { AgentAccessOwnerGrantReadback } from '@/modules/agent-access/policy'
 import type { AgentConnectionReadback } from '@/modules/agent-access/agent-connection'
 import { currentUtcMonthBounds } from '@/modules/common/freshness'
 import type { AccountFundingBalance } from '@/modules/money/server'
@@ -12,12 +11,17 @@ import type {
   AgentCredentialSource,
   AgentDetail,
   AgentDirectoryItem,
+  AgentOwnerPolicyReadback,
   AgentDirectoryProjection,
   AgentOwnerReadback,
   AgentUsageSummary,
 } from '@/modules/agent-access/agent-operator-view-model'
 
-const listOwnerGrantReadbacksQuery = sourceQuery<Record<string, never>, readonly AgentAccessOwnerGrantReadback[]>(
+import { readAgentCredentialSources } from './internal/agent-credential-sources'
+
+const listOwnerGrantReadbacksQuery = sourceQuery<Readonly<{
+  principalRefs: readonly string[]
+}>, readonly AgentOwnerPolicyReadback[]>(
   'agentAccessPolicy:listOwnerGrantReadbacks',
 )
 export type CanonicalAgentDirectoryRecord = Readonly<{
@@ -151,8 +155,7 @@ export async function loadAgentDirectoryReadback(
     listAgentAccessKeysServer(),
     createAuthenticatedSourceTransport(),
   ])
-  const [grants, canonicalAgents, accountBalance] = await Promise.all([
-    source.query(listOwnerGrantReadbacksQuery, {}),
+  const [canonicalAgents, accountBalance] = await Promise.all([
     source.query(listOwnedAgentDirectoryQuery, {
       now,
       paginationOpts: { numItems: 25, cursor },
@@ -160,7 +163,13 @@ export async function loadAgentDirectoryReadback(
     source.action(readOwnerAccountBalanceAction, {}),
   ])
   const principalRefs = canonicalAgents.page.map(({ principalRef }) => principalRef)
-  const [ownerAgentReadbacks, connections] = await Promise.all([
+  const [policyReadbacks, ownerAgentReadbacks, connections] = await Promise.all([
+    principalRefs.length === 0
+      ? Promise.resolve([] as readonly AgentOwnerPolicyReadback[])
+      : source.query(listOwnerGrantReadbacksQuery, { principalRefs }).catch((cause) => degrade(
+          cause, [] as readonly AgentOwnerPolicyReadback[],
+          { site: 'loadAgentDirectoryReadback.policy', reason: 'source_unavailable' },
+        )),
     Promise.all(canonicalAgents.page.map(async ({ principalRef }) => {
       try {
         const readback = await source.query(readOwnerAgentReadbackQuery, {
@@ -189,8 +198,10 @@ export async function loadAgentDirectoryReadback(
           now,
         }),
   ])
+  const grants = policyReadbacks.flatMap(({ grant }) => grant === undefined ? [] : [grant])
   const sources = readAgentCredentialSources(keys, grants)
-  const projection = projectAgentDirectory(sources, canonicalAgents.page, connections, ownerAgentReadbacks.map(({ readback }) => readback))
+  const projection = projectAgentDirectory(sources, canonicalAgents.page, connections,
+    ownerAgentReadbacks.map(({ readback }) => readback), policyReadbacks)
   const enriched = await enrichAgentDirectoryActivity(projection, tools)
   const withAccount = {
     ...enriched,
@@ -285,6 +296,7 @@ export function projectAgentDirectory(
   canonicalAgents: readonly CanonicalAgentDirectoryRecord[],
   connections: readonly AgentConnectionReadback[] = [],
   ownerReadbacks: readonly AgentOwnerReadback[] = [],
+  policyReadbacks: readonly AgentOwnerPolicyReadback[] = [],
 ): AgentDirectoryProjection {
   const byPrincipal = new Map<string, AgentCredentialSource[]>()
   for (const readback of readbacks) {
@@ -300,6 +312,7 @@ export function projectAgentDirectory(
       sources,
       connections.filter(({ principalRef }) => principalRef === canonical.principalRef),
       ownerReadbacks.find(({ principalRef }) => principalRef === canonical.principalRef),
+      policyReadbacks.find(({ principalRef }) => principalRef === canonical.principalRef),
     )]
   }).toSorted((left, right) => (
     right.agent.lastSeenAt === left.agent.lastSeenAt
@@ -318,12 +331,14 @@ function projectAgentDetail(
   readbacks: readonly AgentCredentialSource[],
   connections: readonly AgentConnectionReadback[],
   ownerReadback?: AgentOwnerReadback,
+  policyReadback?: AgentOwnerPolicyReadback,
 ): AgentDetail {
   const ordered = [...readbacks].toSorted((left, right) => (
     (left.key.createdAt ?? 0) - (right.key.createdAt ?? 0)
       || left.key.keyId.localeCompare(right.key.keyId)
   ))
   const current = ordered.find(({ key }) => key.keyId === canonical.currentProviderCredentialId)
+  const spendingPolicy = policyReadback?.spendingPolicy ?? { kind: 'unavailable' as const }
 
   const currentCanonicalCredential = canonical.credentials.find(({ providerCredentialId }) => (
     providerCredentialId === canonical.currentProviderCredentialId
@@ -372,6 +387,7 @@ function projectAgentDetail(
     applicationRef: canonical.applicationRef,
     environment: canonical.environment,
     status,
+    spendingPolicy,
     ...(canonical.admissionLifecycle !== 'active' ? {} : { currentCredentialGeneration: currentCanonicalCredential.generation }),
     ...(currentCanonicalCredential.lastAuthenticatedAt === undefined
       ? {}
@@ -381,7 +397,7 @@ function projectAgentDetail(
     connectorDisplayNames: [...new Set(connections.map(({ connectorDisplayName }) => connectorDisplayName))],
     authorityMode: current?.key.authorityMode ?? canonical.authorityMode,
     ...(usage?.settledSpend !== undefined ? { monthlySettledSpend: usage.settledSpend } : {}),
-    ...(current?.grant !== undefined ? { monthlyLimit: current.grant.budget.maximumMonthlySpend } : {}),
+    ...(spendingPolicy.kind === 'known' ? { monthlyLimit: spendingPolicy.maximumMonthlySpend } : {}),
     ...(usage?.amountCoverage !== undefined ? { monthlySpendCoverage: usage.amountCoverage } : {}),
   }
   const dataState = ownerReadback === undefined
@@ -401,6 +417,7 @@ function projectAgentDetail(
     authorityMode: current?.key.authorityMode ?? canonical.authorityMode,
     scopes: current?.key.scopes ?? canonical.scopes,
     ...(current?.grant === undefined ? {} : { grant: current.grant }),
+    spendingPolicy,
     activity,
     ...(usage === undefined ? {} : { usage }),
     dataState,
@@ -473,25 +490,4 @@ export async function enrichAgentDirectoryActivity(
       }),
     })),
   }
-}
-
-export function readAgentCredentialSources(
-  keys: readonly AgentAccessKeyInventoryItem[],
-  grants: readonly AgentAccessOwnerGrantReadback[] = [],
-): readonly AgentCredentialSource[] {
-  const grantsByCredential = new Map(grants.map((grant) => [grant.credentialId, grant]))
-  const boundKeys = keys.flatMap((key) => {
-    const grant = grantsByCredential.get(key.keyId)
-    return grant === undefined ? [] : [{ key, grant }]
-  })
-  return boundKeys.map(({ key, grant }) => {
-    const { principalId } = grant
-    return {
-      key,
-      grant,
-      principalId,
-      activity: [],
-      dataState: 'source' as const,
-    }
-  })
 }

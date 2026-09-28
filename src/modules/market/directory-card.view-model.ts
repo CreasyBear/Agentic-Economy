@@ -1,20 +1,21 @@
 import Decimal from 'decimal.js'
 import { captureRouteException } from '@/lib/observability/capture-route-exception'
+import { formatDisplayPrice } from '@/modules/money/public'
 import type { X402DirectoryFacet } from '@/modules/market/x402-directory-catalogue'
 import { directoryBasePayTo, directoryProviderKey, directorySlugBase } from '@/modules/market/x402-directory-index'
 import type { X402DirectoryEntry } from '@/modules/market/x402-directory'
 import { x402DirectoryFunctionalTitle } from '@/modules/market/x402-directory-title'
 
-/** Formatting a published token amount does not turn it into an AE Quote. */
+/** A directory listing has no fresh FX observation, so its published token amount is source detail, not an AUD estimate. */
 export function directoryPrice(entry: X402DirectoryEntry): string {
   const price = entry.prices[0]
   if (price === undefined) return 'Price on request'
-  const listed = listedPriceAmount(price)
-  if (listed !== undefined) return listed
-  return price.symbol === undefined || price.decimalAmount === undefined ? 'See payment details' : price.amount
+  return listedPriceAmount(price) === undefined ? 'See payment details' : audEstimateUnavailable
 }
 
-/** A published price a person can read. Amounts of 1 or more keep two decimals. Smaller amounts keep significant digits. */
+const audEstimateUnavailable = formatDisplayPrice({ kind: 'unavailable' }) ?? 'AUD estimate temporarily unavailable'
+
+/** Format the published source amount without rounding away settlement precision. */
 function listedPriceAmount(price: X402DirectoryEntry['prices'][number]): string | undefined {
   if (price.decimalAmount !== undefined && price.symbol !== undefined) {
     const formatted = formatListedAmount(price.decimalAmount)
@@ -37,12 +38,7 @@ function formatListedAmount(raw: string): string | undefined {
     return undefined
   }
   if (!amount.isFinite() || amount.isNegative()) return undefined
-  if (amount.gte(1)) {
-    const [whole, fraction] = amount.toFixed(2).split('.')
-    return `${groupDigits(whole ?? '0')}.${fraction}`
-  }
-  const trimmed = amount.toFixed(6).replace(/(\.\d*?)0+$/u, '$1').replace(/\.$/u, '')
-  const [whole, fraction] = trimmed.split('.')
+  const [whole, fraction] = amount.toFixed().split('.')
   return fraction === undefined ? groupDigits(whole ?? '0') : `${groupDigits(whole ?? '0')}.${fraction}`
 }
 
@@ -52,9 +48,11 @@ function groupDigits(whole: string): string {
 
 /** Buyer-facing provenance for a directory price before AE admission and Quote. */
 export function directoryPriceContext(entry: X402DirectoryEntry): string {
-  if (entry.prices.length === 0) return 'No Provider price published'
-  if (entry.prices.length > 1) return `${entry.prices.length} Provider payment options`
-  return 'Provider price per Call'
+  const price = entry.prices[0]
+  if (price === undefined) return 'No Provider price published'
+  const listed = listedPriceAmount(price)
+  if (entry.prices.length > 1) return `${entry.prices.length} Provider payment options${listed === undefined ? '' : ` · source ${listed}`}`
+  return listed === undefined ? 'Provider price per Call' : `Provider lists ${listed} per Call`
 }
 
 export function directoryDate(value: string): string {
@@ -133,7 +131,7 @@ function countLabel(value: number | undefined): string | undefined {
   return value.toLocaleString('en-AU')
 }
 
-/** A listed USDC amount from the directory. An em dash means the figure is absent. */
+/** A listed source USDC amount from the directory. An em dash means the figure is absent. */
 export function directoryUsdLabel(decimalAmount: string | undefined): string {
   if (decimalAmount === undefined) return '—'
   const formatted = formatListedAmount(decimalAmount)
@@ -148,6 +146,7 @@ export type DirectoryProviderRowModel = Readonly<{
   callsLabel: string
   payersLabel: string
   priceLabel: string
+  priceSourceLabel?: string
   leadTitle?: string
   leadSlug?: string
 }>
@@ -158,6 +157,7 @@ export function toDirectoryProviderRow(provider: X402DirectoryFacet): DirectoryP
   const payers = calls === undefined || provider.leadPayers === undefined || !Number.isSafeInteger(provider.leadPayers) || provider.leadPayers < 0 ? undefined : countLabel(provider.leadPayers)
   const title = calls === undefined ? undefined : provider.leadTitle?.trim()
   const slug = calls === undefined ? undefined : provider.leadSlug?.trim()
+  const sourcePrice = calls === undefined ? '—' : directoryUsdLabel(provider.leadPrice)
   return {
     key: provider.key,
     initials: directoryInitials(provider.key),
@@ -165,7 +165,8 @@ export function toDirectoryProviderRow(provider: X402DirectoryFacet): DirectoryP
     toolLabel: provider.count.toLocaleString('en-AU'),
     callsLabel: calls ?? '—',
     payersLabel: payers ?? '—',
-    priceLabel: calls === undefined ? '—' : directoryUsdLabel(provider.leadPrice),
+    priceLabel: sourcePrice === '—' ? '—' : audEstimateUnavailable,
+    ...(sourcePrice === '—' ? {} : { priceSourceLabel: `Provider lists ${sourcePrice} per Call` }),
     ...(title === undefined || title.length === 0 ? {} : { leadTitle: title }),
     ...(slug === undefined || slug.length === 0 ? {} : { leadSlug: slug }),
   }
@@ -444,18 +445,7 @@ export function toDirectoryServiceSurface(
     return true
   })
   const providerLine = directoryProviderLine(current)
-  const priced = entries.flatMap(entry => {
-    const price = entry.prices[0]
-    if (price?.decimalAmount === undefined || price.symbol === undefined) return []
-    let amount: Decimal
-    try { amount = new Decimal(price.decimalAmount) } catch { return [] }
-    if (!amount.isFinite() || amount.isNegative()) return []
-    const formatted = formatListedAmount(price.decimalAmount)
-    return formatted === undefined ? [] : [{ amount, symbol: price.symbol, label: `${formatted} ${price.symbol}` }]
-  })
-  const sameSymbol = priced.length > 0 && priced.every(price => price.symbol === priced[0]?.symbol)
-  const lowest = sameSymbol ? priced.reduce((min, price) => price.amount.lt(min.amount) ? price : min) : undefined
-  const highest = sameSymbol ? priced.reduce((max, price) => price.amount.gt(max.amount) ? price : max) : undefined
+  const hasListedPrice = entries.some(entry => entry.prices.length > 0)
   const networks = [...new Set(entries.flatMap(entry => entry.prices.map(price => price.networkLabel ?? price.network)))].slice(0, 4)
   const count = truncated ? `${entries.length}+` : String(entries.length)
   return {
@@ -463,9 +453,7 @@ export function toDirectoryServiceSurface(
     host: directoryProviderKey(current.provider),
     ...(current.category === undefined ? {} : { category: current.category }),
     networks: networks.length === 0 ? 'Not published' : networks.join(', '),
-    priceRange: lowest === undefined || highest === undefined
-      ? directoryPrice(current)
-      : lowest.label === highest.label ? lowest.label : `${lowest.label} – ${highest.label}`,
+    priceRange: hasListedPrice ? audEstimateUnavailable : 'Price on request',
     endpointCount: count === '1' ? '1 endpoint' : `${count} endpoints`,
     endpoints: entries.map(entry => {
       const calls = countLabel(entry.activity?.calls30d) ?? '—'

@@ -39,13 +39,14 @@ export function projectOptionsFromCard(
       return {
         id: choice.toolRef,
         name: object?.title ?? choice.title,
-        href: object?.href ?? `/tools/${encodeURIComponent(choice.toolRef)}`,
+        href: choice.detailHref ?? object?.href ?? `/tools/${encodeURIComponent(choice.toolRef)}`,
         ...(object?.outcome === undefined ? {} : { outcome: object.outcome }),
         price: displayedPrice ?? 'Price to be confirmed',
         ...(usage?.kind === 'present' ? { usage: `Used ${usage.value.count.toLocaleString()}× ${usage.value.window}` } : {}),
         readiness: ready ? 'ready' : unavailable ? 'unavailable' : 'unverified',
         ...(seller === undefined ? {} : { seller }),
-        selectable: !choice.belowMatch && (listing === undefined || listing.canonicalToolRef.kind === 'present'),
+        selectable: choice.access !== 'external_listing' && !choice.belowMatch
+          && (listing === undefined || listing.canonicalToolRef.kind === 'present'),
         ...(listing === undefined ? {} : { facts }),
       }
     }),
@@ -67,7 +68,10 @@ export function projectSourcesFromCards(cards: readonly ToolCardProjection[]): S
   for (const card of cards) {
     if (card.kind !== 'choices' && card.kind !== 'inspect') continue
     if (card.kind === 'choices') {
-      for (const choice of card.choices) if (!choice.belowMatch && !sources.has(choice.toolRef)) sources.set(choice.toolRef, { toolRef: choice.toolRef, title: choice.title, href: `/tools/${encodeURIComponent(choice.toolRef)}` })
+      for (const choice of card.choices) if (!choice.belowMatch && !sources.has(choice.toolRef)) sources.set(choice.toolRef, {
+        toolRef: choice.toolRef, title: choice.title,
+        href: choice.detailHref ?? `/tools/${encodeURIComponent(choice.toolRef)}`,
+      })
     }
   }
   return { sources: [...sources.values()] }
@@ -77,8 +81,16 @@ export function projectWorkFromCards(cards: readonly ToolCardProjection[]): Work
   const searched = cards.filter((card) => card.kind === 'choices' && (card.toolId === 'registry.tools.search' || card.toolId === 'registry.tools.list'))
   const compared = cards.filter((card) => card.kind === 'choices' && card.toolId === 'registry.tools.compare')
   const latestComparison = compared.at(-1)
-  const found = new Set(searched.flatMap((card) => card.kind === 'choices' ? card.choices.filter((choice) => !choice.belowMatch).map((choice) => choice.toolRef) : []))
-  const summary = [searched.length ? `Found ${found.size} tool${found.size === 1 ? '' : 's'}` : '', latestComparison?.kind === 'choices' ? `Compared ${latestComparison.choices.length}` : ''].filter(Boolean).join(' · ') || `${cards.length} step${cards.length === 1 ? '' : 's'}`
+  const found = new Set(searched.flatMap((card) => card.kind === 'choices' ? card.choices
+    .filter((choice) => !choice.belowMatch && choice.access !== 'external_listing').map((choice) => choice.toolRef) : []))
+  const external = new Set(searched.flatMap((card) => card.kind === 'choices' ? card.choices
+    .filter((choice) => choice.access === 'external_listing').map((choice) => choice.toolRef) : []))
+  const summary = [
+    found.size > 0 ? `Found ${found.size} tool${found.size === 1 ? '' : 's'}` : '',
+    external.size > 0 ? `${external.size} external listing${external.size === 1 ? '' : 's'} to inspect` : '',
+    searched.length > 0 && found.size === 0 && external.size === 0 ? 'No Tool established' : '',
+    latestComparison?.kind === 'choices' ? `Compared ${latestComparison.choices.length}` : '',
+  ].filter(Boolean).join(' · ') || `${cards.length} step${cards.length === 1 ? '' : 's'}`
   return {
     summary,
     steps: cards.map((card, index) => ({

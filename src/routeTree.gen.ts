@@ -107,6 +107,7 @@ import { Route as ApiV1SupplyPublishRouteImport } from './routes/api.v1.supply.p
 import { Route as ApiV1SupplyEarningsRouteImport } from './routes/api.v1.supply.earnings'
 import { Route as ApiV1SupplyCallsRouteImport } from './routes/api.v1.supply.calls'
 import { Route as ApiV1StatusRefRouteImport } from './routes/api.v1.status.$ref'
+import { Route as ApiV1RegistryDetailRouteImport } from './routes/api.v1.registry.detail'
 import { Route as ApiV1MarketToolsSearchRouteImport } from './routes/api.v1.market-tools.search'
 import { Route as ApiV1MarketToolsListRouteImport } from './routes/api.v1.market-tools.list'
 import { Route as ApiV1MarketToolsDescribeRouteImport } from './routes/api.v1.market-tools.describe'
@@ -661,6 +662,11 @@ const ApiV1StatusRefRoute = ApiV1StatusRefRouteImport.update({
   path: '/api/v1/status/$ref',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiV1RegistryDetailRoute = ApiV1RegistryDetailRouteImport.update({
+  id: '/detail',
+  path: '/detail',
+  getParentRoute: () => ApiV1RegistryRoute,
+} as any)
 const ApiV1MarketToolsSearchRoute = ApiV1MarketToolsSearchRouteImport.update({
   id: '/api/v1/market-tools/search',
   path: '/api/v1/market-tools/search',
@@ -1046,7 +1052,7 @@ export interface FileRoutesByFullPath {
   '/api/v1/catalogue-status': typeof ApiV1CatalogueStatusRoute
   '/api/v1/market-metrics': typeof ApiV1MarketMetricsRoute
   '/api/v1/market-requests': typeof ApiV1MarketRequestsRouteWithChildren
-  '/api/v1/registry': typeof ApiV1RegistryRoute
+  '/api/v1/registry': typeof ApiV1RegistryRouteWithChildren
   '/api/v1/release': typeof ApiV1ReleaseRoute
   '/api/v1/sandbox-reference': typeof ApiV1SandboxReferenceRoute
   '/tools/$providerHost/$slug': typeof ToolsProviderHostSlugRoute
@@ -1088,6 +1094,7 @@ export interface FileRoutesByFullPath {
   '/api/v1/market-tools/describe': typeof ApiV1MarketToolsDescribeRoute
   '/api/v1/market-tools/list': typeof ApiV1MarketToolsListRoute
   '/api/v1/market-tools/search': typeof ApiV1MarketToolsSearchRoute
+  '/api/v1/registry/detail': typeof ApiV1RegistryDetailRoute
   '/api/v1/status/$ref': typeof ApiV1StatusRefRoute
   '/api/v1/supply/calls': typeof ApiV1SupplyCallsRoute
   '/api/v1/supply/earnings': typeof ApiV1SupplyEarningsRoute
@@ -1198,7 +1205,7 @@ export interface FileRoutesByTo {
   '/api/v1/catalogue-status': typeof ApiV1CatalogueStatusRoute
   '/api/v1/market-metrics': typeof ApiV1MarketMetricsRoute
   '/api/v1/market-requests': typeof ApiV1MarketRequestsRouteWithChildren
-  '/api/v1/registry': typeof ApiV1RegistryRoute
+  '/api/v1/registry': typeof ApiV1RegistryRouteWithChildren
   '/api/v1/release': typeof ApiV1ReleaseRoute
   '/api/v1/sandbox-reference': typeof ApiV1SandboxReferenceRoute
   '/tools/$providerHost/$slug': typeof ToolsProviderHostSlugRoute
@@ -1240,6 +1247,7 @@ export interface FileRoutesByTo {
   '/api/v1/market-tools/describe': typeof ApiV1MarketToolsDescribeRoute
   '/api/v1/market-tools/list': typeof ApiV1MarketToolsListRoute
   '/api/v1/market-tools/search': typeof ApiV1MarketToolsSearchRoute
+  '/api/v1/registry/detail': typeof ApiV1RegistryDetailRoute
   '/api/v1/status/$ref': typeof ApiV1StatusRefRoute
   '/api/v1/supply/calls': typeof ApiV1SupplyCallsRoute
   '/api/v1/supply/earnings': typeof ApiV1SupplyEarningsRoute
@@ -1352,7 +1360,7 @@ export interface FileRoutesById {
   '/api/v1/catalogue-status': typeof ApiV1CatalogueStatusRoute
   '/api/v1/market-metrics': typeof ApiV1MarketMetricsRoute
   '/api/v1/market-requests': typeof ApiV1MarketRequestsRouteWithChildren
-  '/api/v1/registry': typeof ApiV1RegistryRoute
+  '/api/v1/registry': typeof ApiV1RegistryRouteWithChildren
   '/api/v1/release': typeof ApiV1ReleaseRoute
   '/api/v1/sandbox-reference': typeof ApiV1SandboxReferenceRoute
   '/tools/$providerHost/$slug': typeof ToolsProviderHostSlugRoute
@@ -1394,6 +1402,7 @@ export interface FileRoutesById {
   '/api/v1/market-tools/describe': typeof ApiV1MarketToolsDescribeRoute
   '/api/v1/market-tools/list': typeof ApiV1MarketToolsListRoute
   '/api/v1/market-tools/search': typeof ApiV1MarketToolsSearchRoute
+  '/api/v1/registry/detail': typeof ApiV1RegistryDetailRoute
   '/api/v1/status/$ref': typeof ApiV1StatusRefRoute
   '/api/v1/supply/calls': typeof ApiV1SupplyCallsRoute
   '/api/v1/supply/earnings': typeof ApiV1SupplyEarningsRoute
@@ -1548,6 +1557,7 @@ export interface FileRouteTypes {
     | '/api/v1/market-tools/describe'
     | '/api/v1/market-tools/list'
     | '/api/v1/market-tools/search'
+    | '/api/v1/registry/detail'
     | '/api/v1/status/$ref'
     | '/api/v1/supply/calls'
     | '/api/v1/supply/earnings'
@@ -1700,6 +1710,7 @@ export interface FileRouteTypes {
     | '/api/v1/market-tools/describe'
     | '/api/v1/market-tools/list'
     | '/api/v1/market-tools/search'
+    | '/api/v1/registry/detail'
     | '/api/v1/status/$ref'
     | '/api/v1/supply/calls'
     | '/api/v1/supply/earnings'
@@ -1853,6 +1864,7 @@ export interface FileRouteTypes {
     | '/api/v1/market-tools/describe'
     | '/api/v1/market-tools/list'
     | '/api/v1/market-tools/search'
+    | '/api/v1/registry/detail'
     | '/api/v1/status/$ref'
     | '/api/v1/supply/calls'
     | '/api/v1/supply/earnings'
@@ -1947,7 +1959,7 @@ export interface RootRouteChildren {
   ApiV1CatalogueStatusRoute: typeof ApiV1CatalogueStatusRoute
   ApiV1MarketMetricsRoute: typeof ApiV1MarketMetricsRoute
   ApiV1MarketRequestsRoute: typeof ApiV1MarketRequestsRouteWithChildren
-  ApiV1RegistryRoute: typeof ApiV1RegistryRoute
+  ApiV1RegistryRoute: typeof ApiV1RegistryRouteWithChildren
   ApiV1ReleaseRoute: typeof ApiV1ReleaseRoute
   ApiV1SandboxReferenceRoute: typeof ApiV1SandboxReferenceRoute
   ToolsProviderHostSlugRoute: typeof ToolsProviderHostSlugRoute
@@ -2667,6 +2679,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiV1StatusRefRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/v1/registry/detail': {
+      id: '/api/v1/registry/detail'
+      path: '/detail'
+      fullPath: '/api/v1/registry/detail'
+      preLoaderRoute: typeof ApiV1RegistryDetailRouteImport
+      parentRoute: typeof ApiV1RegistryRoute
+    }
     '/api/v1/market-tools/search': {
       id: '/api/v1/market-tools/search'
       path: '/api/v1/market-tools/search'
@@ -3306,6 +3325,18 @@ const ApiV1MarketRequestsRouteChildren: ApiV1MarketRequestsRouteChildren = {
 const ApiV1MarketRequestsRouteWithChildren =
   ApiV1MarketRequestsRoute._addFileChildren(ApiV1MarketRequestsRouteChildren)
 
+interface ApiV1RegistryRouteChildren {
+  ApiV1RegistryDetailRoute: typeof ApiV1RegistryDetailRoute
+}
+
+const ApiV1RegistryRouteChildren: ApiV1RegistryRouteChildren = {
+  ApiV1RegistryDetailRoute: ApiV1RegistryDetailRoute,
+}
+
+const ApiV1RegistryRouteWithChildren = ApiV1RegistryRoute._addFileChildren(
+  ApiV1RegistryRouteChildren,
+)
+
 interface ApiV1ChatTurnsRouteChildren {
   ApiV1ChatTurnsTurnRefRoute: typeof ApiV1ChatTurnsTurnRefRoute
 }
@@ -3385,7 +3416,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiV1CatalogueStatusRoute: ApiV1CatalogueStatusRoute,
   ApiV1MarketMetricsRoute: ApiV1MarketMetricsRoute,
   ApiV1MarketRequestsRoute: ApiV1MarketRequestsRouteWithChildren,
-  ApiV1RegistryRoute: ApiV1RegistryRoute,
+  ApiV1RegistryRoute: ApiV1RegistryRouteWithChildren,
   ApiV1ReleaseRoute: ApiV1ReleaseRoute,
   ApiV1SandboxReferenceRoute: ApiV1SandboxReferenceRoute,
   ToolsProviderHostSlugRoute: ToolsProviderHostSlugRoute,

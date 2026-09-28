@@ -27,8 +27,7 @@ import { withPendingConnect } from '../../../tools/ae/lib/pending-connect'
 import { readStoredConnection, storeConnection } from '../../../tools/ae/lib/config'
 import { CALL_ROUTE_CONTRACT } from '@/modules/capability-execution/call-entry'
 import { TOOL_QUOTE_PATH } from '@/modules/capability-execution/quote'
-import { projectToolSearchChoices } from '@/modules/registry/tool-choice-contracts'
-import { toolSearchOutputSchema } from '@/modules/capability-supply/public'
+import { toolChoiceSearchOutputSchema } from '@/modules/registry/tool-choice-contracts'
 import { CLI_BUNDLE_PATH } from './cli-errors-harness'
 import {
   connectedAccount,
@@ -137,44 +136,44 @@ describe('external-agent Market Tool cold loop', () => {
       operationSearchResult('extract invoices', [operationDescriptor(toolRef)]),
     )
     await runSearchCommand(['extract invoices'], options)
-    expectAnonymousPost(fetchMock, options.baseUrl, '/api/v1/market-tools/search', { query: 'extract invoices', limit: 10 })
+    expectAnonymousPost(fetchMock, options.baseUrl, '/api/v1/market-tools/search', { query: 'extract invoices', limit: 8 })
   })
   it('returns a noMatch envelope without inventing a purchase or demand continuation', async () => {
-    const result = projectToolSearchChoices(toolSearchOutputSchema.parse({
-      kind: 'no_candidates', schemaVersion: 'registry-tools:v3',
-      query: 'invoice extraction', appliedFilters: {}, matchedCount: 0,
-      ranking: [], navigation: [],
-    }))
+    const result = operationSearchResult('invoice extraction', [])
     stubFetchResolved(result)
     const output = parseJson(await withStdout(() => runSearchCommand(['invoice extraction'], options)))
-    expect(output).toMatchObject({ kind: 'noMatch', scope: 'exhausted', results: [], nearMisses: [],
+    expect(output).toMatchObject({ kind: 'noMatch', results: [], assessed: { scope: 'complete' },
       next: [{ action: 'broaden', authority: 'public', args: { query: 'invoice extraction' } }] })
     expect(output).not.toHaveProperty('nextCommand')
     const human = await withStdout(() => runSearchCommand(['invoice extraction'], { ...options, json: false }))
-    expect(human).toContain('No suitable Tools')
+    expect(human).toContain('No suitable Tools found')
+    expect(human).toContain('Next: broaden {"query":"invoice extraction"} · ae search')
     expect(human).not.toContain('request create')
   })
-  it('keeps page and exhausted noMatch distinct when a health filter hides a candidate', async () => {
-    const toolRef = operationRef('c')
-    const rawPage = toolSearchOutputSchema.parse({
-      kind: 'ok', schemaVersion: 'registry-tools:v3', query: 'reference lookup',
-      items: [operationDescriptor(toolRef)], matchedCount: 2,
-      ranking: [{ toolRef, rank: 1, score: 1 }],
-      pagination: { limit: 1, nextCursor: 'opaque-page-cursor', hasMore: true }, navigation: [],
+  it('keeps scoped page and exhausted no-match distinct when supply is not assessed', async () => {
+    const query = 'reference lookup'
+    const page = toolChoiceSearchOutputSchema.parse({
+      ...operationSearchResult(query, []),
+      kind: 'scoped',
+      assessed: { source: 'current', scope: 'page', examined: 1, coverage: 'partial' },
+      pagination: { limit: 1, nextCursor: 'opaque-page-cursor', hasMore: true },
+      next: [{ action: 'next-page', authority: 'public', args: { query, cursor: 'opaque-page-cursor' } }],
     })
-    if (rawPage.kind !== 'ok') throw new Error('search_page_fixture_invalid')
-    const page = projectToolSearchChoices(rawPage, { healthStatus: ['degraded'] })
-    const exhausted = projectToolSearchChoices(
-      { ...rawPage, pagination: { limit: 1, hasMore: false } }, { healthStatus: ['degraded'] })
-    expect(page).toMatchObject({ kind: 'noMatch', scope: 'page', results: [], next: [
+    expect(page).toMatchObject({ kind: 'scoped', results: [], next: [
       { action: 'next-page', args: { cursor: 'opaque-page-cursor' } },
     ] })
-    expect(exhausted).toMatchObject({ kind: 'noMatch', scope: 'exhausted', results: [] })
+    const exhausted = operationSearchResult(query, [])
+    expect(exhausted).toMatchObject({ kind: 'noMatch', assessed: { scope: 'complete' }, results: [] })
     stubFetchResolved(page)
     const output = parseJson(await withStdout(() => runSearchCommand(['reference lookup'], {
       ...options, filters: JSON.stringify({ healthStatus: ['degraded'] }),
     })))
     expect(output.nextPageCommand).toContain('--cursor opaque-page-cursor')
+    const human = await withStdout(() => runSearchCommand(['reference lookup'], {
+      ...options, json: false, filters: JSON.stringify({ healthStatus: ['degraded'] }),
+    }))
+    expect(human).toContain('Next: next-page {"query":"reference lookup","cursor":"opaque-page-cursor"}')
+    expect(human).toContain('--cursor opaque-page-cursor')
   })
 
   it('browses all current Tools when no job is supplied', async () => {
@@ -207,7 +206,7 @@ describe('external-agent Market Tool cold loop', () => {
     )
   })
 
-  it('sends full-detail and pagination inputs, then derives a page command from validated next[]', async () => {
+  it('sends pagination inputs, then derives a page command from validated next[]', async () => {
     const toolRef = operationRef('d')
     const result = {
       ...operationSearchResult('reference lookup', [operationDescriptor(toolRef)]),
@@ -216,29 +215,82 @@ describe('external-agent Market Tool cold loop', () => {
     }
     const fetchMock = stubFetchJsonResponse(result)
     const output = parseJson(await withStdout(() => runSearchCommand(['reference lookup'], {
-      ...options, technical: true, source: 'current', limit: '3', cursor: 'opaque-prior-cursor',
+      ...options, source: 'current', limit: '3', cursor: 'opaque-prior-cursor',
       filters: JSON.stringify({ healthStatus: ['operational'] }),
     })))
     expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).toEqual({
-      query: 'reference lookup', detail: 'full', source: 'current', limit: 3,
+      query: 'reference lookup', source: 'current', limit: 3,
       cursor: 'opaque-prior-cursor', filters: { healthStatus: ['operational'] },
     })
-    expect(output).toMatchObject({ kind: 'matched', results: [{ toolRef }],
-      nextPageCommand: `ae search 'reference lookup' --limit 3 --source current --filters '{"healthStatus":["operational"]}' --cursor opaque-next-cursor --json --technical` })
+    expect(output).toMatchObject({ kind: 'match', results: [{ toolRef }],
+      nextPageCommand: `ae search 'reference lookup' --limit 3 --source current --filters '{"healthStatus":["operational"]}' --cursor opaque-next-cursor --json` })
     expect(output).not.toHaveProperty('nextCommand')
   })
 
-  it('returns a concise matched envelope with typed describe next[]', async () => {
+  it('rejects --technical on compact search before requesting full metadata', async () => {
+    const fetchMock = vi.fn<typeof fetch>()
+    vi.stubGlobal('fetch', fetchMock)
+    await expectCliFailure(
+      () => runSearchCommand(['reference lookup'], { ...options, technical: true }),
+      { kind: 'INVALID_ARGUMENT', code: 'search-technical-unsupported',
+        message: 'Search returns compact results. Run ae describe <ToolRef> to inspect full Tool metadata.' },
+      fetchMock,
+    )
+  })
+
+  it('returns a concise match envelope with typed describe next[]', async () => {
     const refs = [operationRef('e'), operationRef('f')]
     const result = operationSearchResult('reference lookup', refs.map((ref) => operationDescriptor(ref)))
     stubFetchJsonResponse(result)
     const output = parseJson(await withStdout(() => runSearchCommand(['reference lookup'], options)))
-    expect(output).toMatchObject({ kind: 'matched', results: [
+    expect(output).toMatchObject({ kind: 'match', results: [
       { toolRef: refs[0], next: [{ action: 'describe', args: { toolRef: refs[0] } }] },
       { toolRef: refs[1], next: [{ action: 'describe', args: { toolRef: refs[1] } }] },
     ] })
     expect(output).not.toHaveProperty('nextCommand')
   })
+  it('renders every mixed inspection action and assessed scope in plain output', async () => {
+    const toolRef = operationRef('e')
+    const matched = operationSearchResult('lookup', [operationDescriptor(toolRef)])
+    if (matched.kind !== 'match') throw new Error('fixture_expected_match')
+    const result = toolChoiceSearchOutputSchema.parse({
+      ...matched,
+      results: [...matched.results, {
+        id: 'opaque-1', source: 'coinbase', access: 'external_listing',
+        title: 'External lookup', summary: 'Unadmitted search', provider: 'Outside',
+        actionClass: 'retrieve', objectClass: 'data', readiness: 'unverified',
+        price: { kind: 'unavailable' }, detailRef: '/api/v1/registry/detail?id=opaque-1',
+        next: [{ action: 'describe-external', authority: 'public', args: { id: 'opaque-1' } }],
+      }],
+    })
+    stubFetchJsonResponse(result)
+    const human = await withStdout(() => runSearchCommand(['lookup'], { ...options, json: false }))
+    expect(human).toContain('scope: all/complete')
+    expect(human).toContain(`describe {"toolRef":"${toolRef}"} · ae describe ${toolRef}`)
+    expect(human).toContain('describe-external {"id":"opaque-1"} · curl --fail')
+    expect(human).toContain('detail?id=opaque-1')
+    expect(human).toContain('External listing (not AE callable)')
+    expect(human).toContain('Next: broaden {"query":"lookup"} · ae search lookup')
+  })
+
+  it('returns unavailable as a retryable classified outcome, not a thrown CLI failure', async () => {
+    const result = toolChoiceSearchOutputSchema.parse({
+      ...operationSearchResult('lookup', []),
+      kind: 'unavailable',
+      reason: 'source_unavailable',
+      assessed: { source: 'all', scope: 'page', examined: 0, coverage: 'partial' },
+      next: [{ action: 'retry', authority: 'public', args: { query: 'lookup' } }],
+    })
+    stubFetchJsonResponse(result)
+    const json = parseJson(await withStdout(() => runSearchCommand(['lookup'], options)))
+    expect(json).toMatchObject({ kind: 'unavailable', next: [
+      { action: 'retry', args: { query: 'lookup' } },
+    ] })
+    const human = await withStdout(() => runSearchCommand(['lookup'], { ...options, json: false }))
+    expect(human).toContain('scope: all/page')
+    expect(human).toContain('Next: retry {"query":"lookup"} · ae search lookup')
+  })
+
   it('rejects an out-of-range search limit before network work', async () => {
     const fetchMock = vi.fn<typeof fetch>()
     vi.stubGlobal('fetch', fetchMock)
@@ -248,7 +300,7 @@ describe('external-agent Market Tool cold loop', () => {
       fetchMock,
     )
   })
-  it.each([['x'.repeat(257)], ['']])('rejects an out-of-bounds search query before network work', async (query) => {
+  it.each([['x'.repeat(201)], ['']])('rejects an out-of-bounds search query before network work', async (query) => {
     const fetchMock = vi.fn<typeof fetch>()
     vi.stubGlobal('fetch', fetchMock)
     await expectCliFailure(
@@ -256,7 +308,7 @@ describe('external-agent Market Tool cold loop', () => {
       {
         kind: 'INVALID_ARGUMENT',
         code: 'query_invalid',
-        message: 'Search requires a capability phrase from 1 to 256 characters.',
+        message: 'Search requires a capability phrase from 1 to 200 characters.',
       },
       fetchMock,
     )
@@ -298,7 +350,6 @@ describe('external-agent Market Tool cold loop', () => {
         capabilityId: 'reference.lookup',
         description: 'Extract invoices',
         provider: { name: 'Reference Services', slug: 'reference' },
-        priceLabel: 'USD 0.00',
         healthStatus: 'operational',
       },
     })
@@ -595,7 +646,7 @@ describe('external-agent Market Tool cold loop', () => {
       'Bearer ae-test-caller-key',
     ])
     expect(requests.map(({ body }) => body)).toEqual([
-      { query: 'bitcoin price', limit: 10 },
+      { query: 'bitcoin price', limit: 8 },
       { toolRef },
       { toolRefs: [toolRef, comparisonToolRef] },
       { toolRef, input: initialInput },
@@ -1371,7 +1422,7 @@ describe('external-agent Market Tool cold loop', () => {
       const search = await runFreshShell(searchCommand, childEnvironment)
       expect(search).toMatchObject({ exitCode: 0, signal: null, stderr: '' })
       const searched = JSON.parse(search.stdout) as { kind: string; query: string; results: Array<{ toolRef: string }> }
-      expect(searched).toMatchObject({ kind: 'matched', query: 'what you need' })
+      expect(searched).toMatchObject({ kind: 'match', query: 'what you need' })
       expect(searched.results).toHaveLength(1)
       const selectedToolRef = searched.results[0]?.toolRef
       expect(selectedToolRef).toBe(toolRef)
@@ -1389,7 +1440,7 @@ describe('external-agent Market Tool cold loop', () => {
       })
 
       const searchRequest = requests.find(({ url }) => url === '/api/v1/market-tools/search')
-      expect(JSON.parse(searchRequest?.body ?? 'null')).toEqual({ query: 'what you need', limit: 10 })
+      expect(JSON.parse(searchRequest?.body ?? 'null')).toEqual({ query: 'what you need', limit: 8 })
       const quoteRequest = requests.find(({ url }) => url === TOOL_QUOTE_PATH)
       expect(quoteRequest).toMatchObject({
         method: 'POST',

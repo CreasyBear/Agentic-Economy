@@ -3,6 +3,8 @@ import type { X402DirectoryCatalogueInput } from './x402-directory-catalogue'
 export type DirectoryExplorerFilterValues = Readonly<
   Pick<
     X402DirectoryCatalogueInput,
+    | 'query'
+    | 'sort'
     | 'directoryCategory'
     | 'network'
     | 'provider'

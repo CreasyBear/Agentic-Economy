@@ -3,6 +3,7 @@ import { AeFactList } from '@/components/ae/data/AeFactList'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
+import { formatUtcTimestamp } from '@/lib/ui/format-time'
 import { formatCurrencyAmount, formatDisplayAmount } from '@/modules/money/public'
 import type { QuoteConfirmationView } from './object-family.contracts'
 
@@ -31,7 +32,7 @@ export function QuoteConfirmation({ view, onApprove, onDeny, onFreshQuote }: Quo
             ? <a className="underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2" href={view.provider.href}>{view.provider.name}</a>
             : view.provider.name },
           { label: 'Quote', value: <span className="font-mono tabular-nums">{view.quoteAmount.units === '0' ? 'Free · ' : ''}{formatDisplayAmount(view.quoteAmount)} per Call</span> },
-          { label: 'Expires', value: <time dateTime={new Date(view.expiresAt).toISOString()}>{new Date(view.expiresAt).toLocaleString()}</time> },
+          { label: 'Expires', value: <time dateTime={new Date(view.expiresAt).toISOString()}>{formatUtcTimestamp(view.expiresAt)} UTC</time> },
           { label: 'Remaining cap after Call', value: <span className="font-mono tabular-nums">{formatDisplayAmount(view.remainingCap.amount)} · {view.remainingCap.window}</span> },
           { label: 'Input', value: view.inputSummary },
           { label: 'Call reference', value: <span className="break-all font-mono text-xs">{view.callRef}</span> },

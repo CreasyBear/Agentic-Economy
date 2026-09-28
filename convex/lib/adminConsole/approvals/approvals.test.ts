@@ -85,7 +85,7 @@ describe('admin command second approval', () => {
     expect(result.receipt.proposalRef).toMatch(/^admin-proposal:/u)
 
     const stored = await backend.run(async (ctx) => ({
-      proposals: await listOpenApprovalProposals(ctx, true),
+      proposals: (await listOpenApprovalProposals(ctx, true, { numItems: 50, cursor: null })).page,
       rows: await ctx.db.query('adminApprovalProposals').collect(),
       audits: await ctx.db
         .query('auditEvents')
@@ -169,24 +169,20 @@ describe('admin command second approval', () => {
     )).resolves.toEqual({ kind: 'refused', code: 'approval_digest_mismatch' })
   })
 
-  it('expires an approval after its 24 hour window', async () => {
+  it('expires exactly at the 24 hour deadline without mutating audit history and allows a new proposal', async () => {
     const backend = convexTestWithMarketComponents()
     await seedOwner(backend, 'user_proposer')
     await seedOwner(backend, 'user_approver')
     const proposalRef = proposalRefFrom(await createProposal(backend, 'user_proposer'))
-
     await expect(runResolution(
-      backend,
-      'user_approver',
-      { kind: 'approve', proposalRef },
-      COMMAND_DIGEST,
-      NOW + DAY_MS + 1,
+      backend, 'user_approver', { kind: 'approve', proposalRef },
+      COMMAND_DIGEST, NOW + DAY_MS,
     )).resolves.toEqual({ kind: 'refused', code: 'approval_expired' })
-    const row = await backend.run(async (ctx) =>
-      await ctx.db.query('adminApprovalProposals')
-        .withIndex('by_proposalRef', (query) => query.eq('proposalRef', proposalRef))
-        .unique())
-    expect(row).toMatchObject({ status: 'expired', resolvedAt: NOW + DAY_MS + 1 })
+    const row = await backend.run(async (ctx) => await ctx.db.query('adminApprovalProposals')
+      .withIndex('by_proposalRef', (query) => query.eq('proposalRef', proposalRef)).unique())
+    expect(row).toMatchObject({ status: 'awaiting_second_approval', expiresAt: NOW + DAY_MS })
+    const renewed = await runResolution(backend, 'user_proposer', { kind: 'propose' }, COMMAND_DIGEST, NOW + DAY_MS + 1)
+    expect(proposalRefFrom(renewed)).not.toBe(proposalRef)
   })
 
   it('atomically consumes an approval once', async () => {

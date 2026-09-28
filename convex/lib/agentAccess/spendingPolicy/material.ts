@@ -1,6 +1,7 @@
 import type { QueryCtx } from '../../../_generated/server'
 import type { Doc } from '../../../_generated/dataModel'
-import { normalizeStoredAgentAccessGrant, normalizeAgentAccessToolSelection, type AgentSpendingLimitsResult, type AgentSpendingLimitsReadResult } from '@/modules/agent-access/policy'
+import { normalizeStoredAgentAccessGrant, normalizeAgentAccessToolSelection, projectAgentAccessGrant, type AgentSpendingLimitsResult, type AgentSpendingLimitsReadResult } from '@/modules/agent-access/policy'
+import type { AgentSpendingPolicyState } from '@/modules/agent-access/spending-policy-update'
 import { canonicalAgentDelegationScopes } from '../principals/records'
 import { resolveInteractiveAuthorityContext } from '../../../interactiveAuthority'
 import { resolveCanonicalAgentContext } from '../../authority/canonicalAgent/authority'
@@ -25,6 +26,7 @@ type OwnedAgentLoad =
   | Readonly<{ kind: 'agent_not_found' }>
   | Readonly<{ kind: 'authority_unavailable' }>
   | Readonly<{ kind: 'policy_invalid' }>
+  | Readonly<{ kind: 'expired'; expiresAt: number }>
 
 
 function isCurrentSupportedDelegation(
@@ -33,6 +35,7 @@ function isCurrentSupportedDelegation(
   admission: AccessAdmission,
   grant: ReturnType<typeof normalizeStoredAgentAccessGrant>,
   now: number,
+  checkExpiry = true,
 ): boolean {
   const expectedScopes = canonicalAgentDelegationScopes(admission.scopes)
   const expectedResources = grant.toolAccess === 'all_admitted' ? ['*'] : grant.toolRefs
@@ -44,7 +47,7 @@ function isCurrentSupportedDelegation(
     && delegation.parentGrantRef === undefined
     && delegation.parentGeneration === undefined
     && delegation.lifecycle === 'active'
-    && delegation.expiresAt > now
+    && (!checkExpiry || delegation.expiresAt > now)
     && expectedScopes.every((scope) => delegation.scopes.includes(scope))
     && hasResources
 }
@@ -69,15 +72,49 @@ export async function loadOwnedAgent(
     .take(2)
   if (admissionRows.length > 1) return { kind: 'authority_unavailable' }
   const admission = readRows(admissionRows)
-  if (admission === undefined || admission.lifecycle !== 'active' || admission.ownerId !== owner.accountRef) {
+  if (admission === undefined || admission.ownerId !== owner.accountRef) {
     return { kind: 'agent_not_found' }
   }
+  const admissionExpired = admission.expiresAt !== undefined && admission.expiresAt <= now
+    && (admission.lifecycle === 'active' || admission.lifecycle === 'expired')
+  if (admission.lifecycle !== 'active' && !admissionExpired) return { kind: 'agent_not_found' }
 
   // This resolver is the canonical source for the Agent Principal, Account,
   // binding, and current credential. The admission row only selects the
   // provider credential locator and carries the policy projection.
-  const canonical = await resolveCanonicalAgentContext(ctx, admission.credentialId, now)
-  if (canonical === null) return { kind: 'authority_unavailable' }
+  let canonical = await resolveCanonicalAgentContext(ctx, admission.credentialId, now)
+  if (canonical === null) {
+    // The resolver intentionally rejects expired credentials. Recover only a
+    // source-confirmed deadline; any broken/ambiguous binding remains unavailable.
+    const bindings = await ctx.db.query('externalIdentityBindings')
+      .withIndex('by_providerNamespace_and_providerIdentifier', (q) => q
+        .eq('providerNamespace', 'clerk/api-key').eq('providerIdentifier', admission.credentialId))
+      .take(2)
+    const binding = readRows(bindings)
+    if (binding?.lifecycle !== 'active'
+      || binding.providerState.kind !== 'known'
+      || binding.providerState.value !== 'active'
+      || binding.principalRef !== admission.principalId) return { kind: 'authority_unavailable' }
+    const credentials = await ctx.db.query('credentials')
+      .withIndex('by_bindingRef_and_generation_and_lifecycle', (q) => q
+        .eq('bindingRef', binding.bindingRef)
+        .eq('generation', binding.credentialGeneration)
+        .eq('lifecycle', 'active'))
+      .take(2)
+    const credential = readRows(credentials)
+    if (credential?.principalRef !== admission.principalId
+      || credential.type !== 'api_key'
+      || credential.generation !== binding.credentialGeneration
+      || !Number.isSafeInteger(credential.issuedAt)
+      || !Number.isSafeInteger(credential.expiresAt)
+      || credential.issuedAt < 0
+      || credential.expiresAt <= credential.issuedAt
+      || credential.expiresAt > now) return { kind: 'authority_unavailable' }
+    // Check the identity and Account chain at the last valid credential instant.
+    // An expired credential cannot make a missing mandatory grant look healthy.
+    canonical = await resolveCanonicalAgentContext(ctx, admission.credentialId, credential.expiresAt - 1)
+    if (canonical === null) return { kind: 'authority_unavailable' }
+  }
   if (canonical.accountRef !== owner.accountRef) return { kind: 'agent_not_found' }
   if (canonical.principalRef !== admission.principalId
     || canonical.credentialLocator !== admission.credentialId) {
@@ -96,18 +133,27 @@ export async function loadOwnedAgent(
     || credential.expiresAt !== canonical.credentialExpiresAt
     || !Number.isSafeInteger(credential.issuedAt)
     || !Number.isSafeInteger(credential.expiresAt)
-    || credential.expiresAt <= credential.issuedAt
-    || credential.expiresAt <= now) {
+    || credential.expiresAt <= credential.issuedAt) {
     return { kind: 'authority_unavailable' }
   }
 
   const grantRows = await ctx.db.query('agentAccessGrants')
+    .withIndex('by_credentialId_and_environment_and_generation', (q) => q
+      .eq('credentialId', admission.credentialId)
+      .eq('environment', admission.environment)
+      .eq('generation', admission.grantGeneration))
+    .take(2)
+  if (grantRows.length !== 1) return { kind: 'authority_unavailable' }
+  const activeGrants = await ctx.db.query('agentAccessGrants')
     .withIndex('by_credentialId_and_environment_and_lifecycle', (q) => q
       .eq('credentialId', admission.credentialId)
       .eq('environment', admission.environment)
       .eq('lifecycle', 'active'))
     .take(2)
-  if (grantRows.length !== 1) return { kind: 'authority_unavailable' }
+  if (activeGrants.length > 1
+    || (activeGrants.length === 1 && activeGrants[0]?._id !== grantRows[0]?._id)) {
+    return { kind: 'authority_unavailable' }
+  }
   const storedGrant = grantRows[0]
   if (storedGrant === undefined) return { kind: 'authority_unavailable' }
   let grant: ReturnType<typeof normalizeStoredAgentAccessGrant>
@@ -126,11 +172,10 @@ export async function loadOwnedAgent(
     || grant.credentialId !== admission.credentialId
     || grant.environment !== admission.environment
     || grant.authorityMode !== admission.authorityMode
-    || grant.lifecycle !== 'active'
+    || (grant.lifecycle !== 'active' && grant.lifecycle !== 'expired')
     || grant.generation !== admission.grantGeneration
     || grant.spendingPolicyDigest !== admission.spendingPolicyDigest
-    || grant.expiresAt <= now
-    || grant.expiresAt > credential.expiresAt
+    || (grant.expiresAt > credential.expiresAt && credential.expiresAt > now)
     || scopes.length !== admission.scopes.length
     || !scopes.includes(MARKET_TOOLS_CALL_SCOPE)) {
     return { kind: 'authority_unavailable' }
@@ -140,6 +185,7 @@ export async function loadOwnedAgent(
     || grant.spendingPolicy.budget.exponent !== 6) {
     return { kind: 'policy_invalid' }
   }
+  if (grant.lifecycle === 'expired' && grant.expiresAt > now) return { kind: 'authority_unavailable' }
 
   const delegationRows = await ctx.db.query('authorityDelegationGrants')
     .withIndex('by_grantRef', (q) => q.eq('grantRef', grant.grantRef))
@@ -154,16 +200,42 @@ export async function loadOwnedAgent(
     void cause;
     return { kind: 'authority_unavailable' }
   }
-  if (!isCurrentSupportedDelegation(delegation, owner, admission, grant, now)) {
+  if (!isCurrentSupportedDelegation(delegation, owner, admission, grant, now, false)) {
     return { kind: 'authority_unavailable' }
   }
+  const expiresAt = Math.min(grant.expiresAt, credential.expiresAt, delegation.expiresAt,
+    admission.expiresAt ?? Infinity)
+  if (expiresAt <= now) return { kind: 'expired', expiresAt }
   return { kind: 'ok', material: { admission, credential, grant, delegation: storedDelegation } }
+}
+
+/** A verified grant, not an admission projection, is the only known-policy source. */
+export function policyFromMaterial(material: OwnedAgentMaterial): Extract<AgentSpendingPolicyState, { kind: 'known' }> {
+  const { admission, credential, grant, delegation } = material
+  const budget = projectAgentAccessGrant(grant).budget
+  return {
+    kind: 'known', principalRef: admission.principalId, grantRef: grant.grantRef,
+    generation: grant.generation, spendingPolicyDigest: grant.spendingPolicyDigest,
+    maximumSpendPerCall: budget.maximumSpendPerCall,
+    maximumDailySpend: budget.maximumDailySpend,
+    maximumMonthlySpend: budget.maximumMonthlySpend,
+    paused: budget.maximumSpendPerCall.units === '0'
+      && budget.maximumDailySpend.units === '0'
+      && budget.maximumMonthlySpend.units === '0',
+    expiresAt: Math.min(grant.expiresAt, credential.expiresAt, delegation.expiresAt,
+      admission.expiresAt ?? Infinity),
+  }
 }
 
 export function mapLoadFailure(
   result: Exclude<OwnedAgentLoad, { kind: 'ok' }>,
   correlationRef?: string,
 ): AgentSpendingLimitsResult | AgentSpendingLimitsReadResult {
+  if (result.kind === 'expired') {
+    return correlationRef === undefined
+      ? { kind: 'expired', expiresAt: result.expiresAt }
+      : { kind: 'conflict', code: 'authority_unavailable', correlationRef }
+  }
   if (result.kind === 'agent_not_found') {
     return correlationRef === undefined
       ? { kind: 'refused', code: 'agent_not_found' as const }
@@ -171,10 +243,10 @@ export function mapLoadFailure(
   }
   if (result.kind === 'policy_invalid') {
     return correlationRef === undefined
-      ? { kind: 'refused', code: 'authority_unavailable' as const }
+      ? { kind: 'unavailable' }
       : { kind: 'conflict', code: 'policy_invalid' as const, correlationRef }
   }
   return correlationRef === undefined
-    ? { kind: 'refused', code: 'authority_unavailable' as const }
+    ? { kind: 'unavailable' }
     : { kind: 'conflict', code: 'authority_unavailable' as const, correlationRef }
 }

@@ -1042,7 +1042,7 @@ describe('assistant access components', () => {
     expect(screen.queryByRole('link', { name: 'Open Credit' })).toBeNull()
     expect(screen.queryByText('Rotate, replace, or recover a key')).toBeNull()
     expect(screen.queryByText('Provider reauthorization required')).toBeNull()
-    fireEvent.click(screen.getByRole('button', { name: 'View UI assistant' }))
+    fireEvent.click(screen.getByRole('button', { name: `View UI assistant (Sandbox · ${keyReadback.principalId})` }))
     expect(screen.queryByText(/USD 12\.5/u)).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: 'Activity' }))
     expect(screen.getByText('A$5.01')).toBeTruthy()
@@ -1050,9 +1050,8 @@ describe('assistant access components', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Spending policy' }))
     expect(screen.getAllByText('Browse only').length).toBeGreaterThan(0)
     expect(screen.getAllByText('Sandbox').length).toBeGreaterThan(0)
-    expect(screen.getByText('30/min · 300/hour')).toBeTruthy()
-    expect(screen.getAllByText('A$25.00').length).toBeGreaterThan(0)
-    expect(screen.queryByText(/scope:|data:|principal|clerk_api_key/u)).toBeNull()
+    expect(screen.queryByText('30/min · 300/hour')).toBeNull()
+    expect(screen.queryByText('USD 25.00')).toBeNull()
   })
 
   it('shows a known empty UTC period as zero Calls instead of an unavailable read', () => {
@@ -1088,7 +1087,7 @@ describe('assistant access components', () => {
         onDecideApproval={() => undefined}
       />,
     )
-    fireEvent.click(screen.getByRole('button', { name: 'View UI assistant' }))
+    fireEvent.click(screen.getByRole('button', { name: `View UI assistant (Sandbox · ${keyReadback.principalId})` }))
     fireEvent.click(screen.getByRole('button', { name: 'Activity' }))
     expect(screen.getByText('Calls this month').nextElementSibling?.textContent).toBe('0')
     expect(screen.getAllByText('A$0.00').length).toBeGreaterThan(0)

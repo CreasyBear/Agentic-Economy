@@ -9,7 +9,6 @@ import { parseOwnerToolsCompatibilitySearch, parseOwnerToolsX402ConnectionSearch
 import { readOwnerProviderEarningsServer } from '@/modules/capability-supply/supply-funnel.functions'
 import type { OwnerProviderEarningsReadback } from '@/modules/capability-supply/supply-funnel.functions'
 import { readOwnerConnectReadinessServer } from '@/modules/money/money.functions'
-import type { OwnerConnectReadinessReadback } from '@/modules/money/server'
 import { captureClientExceptionOnClient } from '@/lib/observability/capture-client-exception'
 
 type UseProviderWorkspaceSheetsInput = Readonly<{
@@ -30,7 +29,7 @@ export function useProviderWorkspaceSheets(input: UseProviderWorkspaceSheetsInpu
   const [earningsOpen, setEarningsOpen] = useState(false)
   const [earningsPending, setEarningsPending] = useState(false)
   const [earningsUnavailable, setEarningsUnavailable] = useState(false)
-  const [earningsDetail, setEarningsDetail] = useState<Readonly<{ earnings: OwnerProviderEarningsReadback; connect: OwnerConnectReadinessReadback }>>()
+  const [earningsDetail, setEarningsDetail] = useState<OwnerProviderEarningsReadback>()
 
   const compatibilitySearch = location.search as Record<string, unknown>
   const validatedCompatibilitySearch = parseOwnerToolsCompatibilitySearch(compatibilitySearch)
@@ -43,14 +42,14 @@ export function useProviderWorkspaceSheets(input: UseProviderWorkspaceSheetsInpu
     if (!input.enabled || earningsPending) return
     setEarningsPending(true)
     setEarningsUnavailable(false)
-    void Promise.all([readEarnings(), readConnect()])
-      .then(([earnings, connect]) => setEarningsDetail({ earnings, connect }))
+    void readEarnings()
+      .then(setEarningsDetail)
       .catch((cause) => {
         captureClientExceptionOnClient(cause)
         setEarningsUnavailable(true)
       })
       .finally(() => setEarningsPending(false))
-  }, [earningsPending, input.enabled, readConnect, readEarnings])
+  }, [earningsPending, input.enabled, readEarnings])
 
   const openEarnings = useCallback(() => {
     if (!input.enabled) return
@@ -80,10 +79,6 @@ export function useProviderWorkspaceSheets(input: UseProviderWorkspaceSheetsInpu
     if (identityDetail === undefined) loadIdentity()
   }, [identityDetail, input.enabled, loadIdentity])
 
-  const connectPayoutsReady =
-    earningsDetail?.connect?.kind === 'available'
-    && earningsDetail.connect.accounts.some((account) => account.account.state === 'ready')
-
   useEffect(() => {
     if (!input.enabled) return
     if (location.hash === 'earnings' || compatibilityConnect === 'return' || compatibilityConnect === 'refresh') openEarnings()
@@ -102,7 +97,6 @@ export function useProviderWorkspaceSheets(input: UseProviderWorkspaceSheetsInpu
   }, [renameProvider, router])
 
   return {
-    connectPayoutsReady,
     compatibilityConnect,
     compatibilityCursor,
     compatibilityRebind,
@@ -113,6 +107,7 @@ export function useProviderWorkspaceSheets(input: UseProviderWorkspaceSheetsInpu
     identityDetail,
     earningsOpen,
     earningsPending,
+    earningsUnavailable,
     earningsDetail,
     openEarnings,
     closeEarnings,

@@ -2,10 +2,7 @@ import { z } from "zod";
 
 import type { JsonValue } from "../../src/modules/capability-contract/public";
 import { canonicalDigest } from "../../src/modules/common/canonical-digest";
-import {
-  formatExactAmount,
-  rescaleExactAmount,
-} from "../../src/modules/money/public";
+import { rescaleExactAmount } from "../../src/modules/money/public";
 import {
   toolChoiceDescribeOutputSchema,
   toolChoiceSearchOutputSchema,
@@ -212,7 +209,7 @@ export async function discoverTool(
         accept: "application/json",
         "content-type": "application/json",
       },
-      body: JSON.stringify({ query, limit: 20, detail: "full" }),
+      body: JSON.stringify({ query, limit: 12 }),
     },
     "",
   );
@@ -221,10 +218,11 @@ export async function discoverTool(
     response.status < 200 ||
     response.status >= 300 ||
     !search.success ||
-    search.data.kind !== "matched"
+    (search.data.kind !== "match" && search.data.kind !== "scoped")
   )
     throw new GatewaySmokeError("gateway_smoke_search_result_malformed");
   for (const candidate of search.data.results) {
+    if (candidate.source !== "current" || candidate.access !== "ae_callable" || candidate.toolRef === undefined) continue;
     const linked = discovery.tools.get(candidate.toolRef);
     if (linked === undefined || linked.authorityMode !== "provider_owned")
       continue;
@@ -259,11 +257,11 @@ export async function discoverTool(
         continue;
       const businessId = await readPublicBusinessIdentity(
         config,
-        candidate,
+        found.data.tool,
         linked.offeringRef,
         role,
       );
-      const quote = await requestGatewayToolQuote(config, candidate);
+      const quote = await requestGatewayToolQuote(config, { toolRef: candidate.toolRef });
       if (quote.kind !== "committed") continue;
       const selected: GatewayDiscoveredTool = {
         toolRef: candidate.toolRef,
@@ -287,12 +285,12 @@ export async function discoverTool(
 
 async function readPublicBusinessIdentity(
   config: GatewaySmokeDiscoveryConfig,
-  candidate: SearchResult,
+  description: GatewayToolDescription,
   offeringRef: string,
   role: "owner" | "control",
 ): Promise<string> {
-  const provider = candidate.details?.provider;
-  const providerSlug = provider?.slug.trim() ?? "";
+  const provider = description.provider;
+  const providerSlug = provider.slug.trim();
   if (providerSlug.length === 0)
     throw new GatewaySmokeError(
       `gateway_smoke_${role}_business_identity_unavailable`,
@@ -317,8 +315,8 @@ async function readPublicBusinessIdentity(
   const businessId = boundedRefSchema.safeParse(business.businessId);
   if (
     !businessId.success ||
-    business.slug !== provider?.slug ||
-    business.name !== provider?.name ||
+    business.slug !== provider.slug ||
+    business.name !== provider.name ||
     !business.offerings.some(
       (offering) => offering.offeringRef === offeringRef,
     )
@@ -333,26 +331,15 @@ function publicChoiceIdentity(
   candidate: SearchResult,
   description: GatewayToolDescription,
 ): boolean {
-  if (candidate.details === undefined) return false;
   return (
-    canonicalDigest({
-      toolRef: candidate.toolRef,
-      capabilityId: candidate.details.capabilityId,
-      title: candidate.title,
-      description: candidate.details.description,
-      provider: candidate.details.provider,
-      priceLabel: candidate.price.label,
-      readiness: candidate.readiness,
-    }) ===
-    canonicalDigest({
-      toolRef: description.toolRef,
-      capabilityId: description.capabilityId,
-      title: description.title,
-      description: description.description,
-      provider: description.provider,
-      priceLabel: description.priceLabel,
-      readiness: description.healthStatus === "operational" ? "ready" : description.healthStatus === "degraded" ? "unavailable" : "unverified",
-    })
+    candidate.source === "current" &&
+    candidate.access === "ae_callable" &&
+    candidate.toolRef === description.toolRef &&
+    candidate.detailRef === description.toolRef &&
+    candidate.title === Array.from(description.title).slice(0, 72).join("") &&
+    candidate.summary === Array.from(description.description).slice(0, 100).join("") &&
+    candidate.provider === Array.from(description.provider.name).slice(0, 48).join("") &&
+    candidate.readiness === description.readiness
   );
 }
 
@@ -366,14 +353,13 @@ export function gatewayToolRejectionReason(
     return "gateway_smoke_candidate_stale";
   if (tool.authorityMode !== "provider_owned")
     return "gateway_smoke_candidate_not_provider_owned_or_observed";
-  if (tool.quote.price.units === "0")
-    return "gateway_smoke_candidate_free";
-  const exactPrice = formatExactAmount(tool.quote.price);
   if (
-    exactPrice === undefined ||
-    tool.description.priceLabel !==
-      `${tool.quote.price.currency} ${exactPrice}`
+    tool.quote.price.units === "0" ||
+    (tool.description.commercialPrice.kind === "fixed" &&
+      tool.description.commercialPrice.amount.units === "0")
   )
+    return "gateway_smoke_candidate_free";
+  if (tool.description.commercialPrice.kind !== "fixed")
     return "gateway_smoke_candidate_price_not_fixed";
   if (rescaleExactAmount(tool.quote.price, 2) === undefined)
     return "gateway_smoke_candidate_price_not_cent_exact";

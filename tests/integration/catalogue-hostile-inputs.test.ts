@@ -170,7 +170,7 @@ describe('GET /api/v1/registry hostile inputs', () => {
   it('rejects a cursor issued by a previous directory generation as 400 invalid_cursor', async () => {
     const backend = await setup()
     await seedCompletedGeneration(backend, 'gen-cross-a', 13)
-    const first = await handleApiRegistryRequest(registryRequest({ limit: '24' }))
+    const first = await handleApiRegistryRequest(registryRequest({ limit: '12' }))
     expect(first.status).toBe(200)
     const firstBody = await first.json()
     const staleCursor = firstBody.pagination.nextCursor as string
@@ -293,7 +293,7 @@ describe('POST /api/v1/market-tools/list and /search hostile inputs', () => {
           error.data = { paginationError: 'InvalidCursor' }
           throw error
         })
-        const response = await route.handler(jsonRequest(route.path, { ...route.base, cursor: MALFORMED_CURSOR }))
+        const response = await route.handler(jsonRequest(route.path, { ...route.base, ...(route.name === 'search' ? { source: 'current' } : {}), cursor: MALFORMED_CURSOR }))
         expect(response.status).not.toBe(503)
         await expectProblemJson(response, { status: 400, kind: 'INVALID_ARGUMENT', code: 'invalid_cursor' })
       })

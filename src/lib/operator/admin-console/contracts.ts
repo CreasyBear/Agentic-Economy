@@ -223,23 +223,21 @@ export type AdminCommandReceipt<A extends AdminCommandAction> =
 
 export type AdminException =
   | { kind: 'uncertain_call'; callRef: CallRef; since: number }
-  | { kind: 'removal_dispute'; disputeRef: string; businessSlug: Slug; since: number }
+  | { kind: 'removal_dispute'; disputeRef: string; businessSlug: Slug; since: number; state: 'opened' | 'updated' | 'contested' | 'closed' }
   | {
       kind: 'source_authority_review'
       publicationRef: PublicToolRef
       businessSlug: Slug
       since: number
     }
-  | { kind: 'admission_case'; caseRef: string; businessSlug: Slug; since: number }
+  | { kind: 'admission_case'; caseRef: string; businessSlug: Slug; since: number; state: 'submitted' | 'under_review' | 'completed' }
 
 export type AdminExceptionKind = AdminException['kind']
-export type AdminExceptionFeed = {
-  readonly items: readonly AdminException[]
-  readonly total: number
-  readonly truncated: boolean
-  readonly counts: Readonly<Record<AdminExceptionKind, number>>
-  readonly unavailable: readonly AdminExceptionKind[]
-}
+export type AdminExceptionPartition =
+  | 'reconciliation_required'
+  | 'opened' | 'updated' | 'contested'
+  | 'review_required' | 'unset'
+  | 'submitted' | 'under_review'
 
 export type AdminResolutionRow = Readonly<{
   callRef: string
@@ -248,9 +246,3 @@ export type AdminResolutionRow = Readonly<{
 }>
 
 export const ADMIN_ACCESS_REFUSED_COPY = 'Your account does not have the Admin role for this action.'
-
-export function isAdminExceptionFeed(value: unknown): value is AdminExceptionFeed {
-  return typeof value === 'object' && value !== null
-    && 'items' in value && 'unavailable' in value
-    && 'total' in value && 'truncated' in value && 'counts' in value
-}

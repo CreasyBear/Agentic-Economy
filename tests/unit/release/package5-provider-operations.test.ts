@@ -145,23 +145,30 @@ function successfulFetch(requests: Request[]): typeof globalThis.fetch {
       const index = sourceKinds.findIndex((sourceKind) => String(body.query).includes(sourceKind))
       const ref = toolRef(index + 1)
       return json({
-        kind: 'matched', schemaVersion: 'registry-tools:v3', query: body.query,
+        kind: 'match', schemaVersion: 'registry-tools:v3', query: body.query,
         results: [{
-          toolRef: ref, title: String(body.query), summary: 'fixture', matchReason: 'Text overlap',
-          readiness: 'ready', entitlement: 'requires_auth', price: { kind: 'indicative', label: 'Free' },
-          healthStatus: 'operational', verification: 'verified', network: 'unknown', claimSource: 'provider',
-          details: { capabilityId: `fixture.${sourceKinds[index]}`, provider: { name: 'Fixture', slug: 'fixture' }, description: 'fixture', listingTier: 'reviewed' },
+          id: ref, source: 'current', access: 'ae_callable', toolRef: ref,
+          title: String(body.query), summary: 'fixture', provider: 'Fixture',
+          actionClass: 'unclassified', objectClass: 'unclassified',
+          readiness: 'ready', price: { kind: 'indicative', label: 'Free' },
+          detailRef: ref,
           next: [{ action: 'describe', args: { toolRef: ref }, authority: 'public' }],
         }],
-        recommendation: { mode: 'fast', engine: 'jev_system_one', text: `Inspect ${String(body.query)} before use.`, citations: [{ toolRef: ref, span: { start: 8, end: 8 + String(body.query).length } }] },
-        partialResults: false, pagination: { limit: 20, hasMore: false }, next: [],
+        partialResults: false,
+        assessed: { source: 'current', scope: 'complete', examined: 1, coverage: 'complete' },
+        pagination: { limit: 12, hasMore: false }, next: [],
       })
     }
     if (path.endsWith('/market-tools/describe')) {
+      const isX402 = body.toolRef === toolRef(sourceKinds.indexOf('x402') + 1)
       return json({
         kind: 'found', schemaVersion: 'registry-tools:v3', tool: {
           toolRef: body.toolRef, capabilityId: 'fixture.execute', title: 'Fixture', description: 'fixture', provider: { name: 'Fixture', slug: 'fixture' },
-          priceLabel: 'Free', healthStatus: 'operational', inputJsonSchema: { type: 'object' }, outputJsonSchema: { type: 'object' }, materialTerms: [], dataUse: [], effects: [], evidence: [], authentication: { kind: 'ae_api_key' }, listingTier: 'reviewed',
+          priceLabel: isX402 ? 'Price on request' : 'Free',
+          commercialPrice: isX402
+            ? { kind: 'on_request' }
+            : { kind: 'fixed', amount: { currency: 'AUD', units: '0', exponent: 6 } },
+          healthStatus: 'operational', inputJsonSchema: { type: 'object' }, outputJsonSchema: { type: 'object' }, materialTerms: [], dataUse: [], effects: [], evidence: [], authentication: { kind: 'ae_api_key' }, listingTier: 'reviewed',
           readiness: 'ready', verification: 'verified', network: 'unknown', claimSource: 'provider',
         },
       })
@@ -226,6 +233,12 @@ describe('Package 5 Provider Operations release harness', () => {
       ]),
     ])
 
+    const searchBodies = await Promise.all(requests
+      .filter((request) => new URL(request.url).pathname === '/api/v1/market-tools/search')
+      .map(async (request) => JSON.parse(await request.clone().text())))
+    expect(searchBodies).toEqual(sourceKinds.map((kind, index) => ({
+      query: `Package 5 ${kind} ${index}`, limit: 12,
+    })))
     for (const request of requests.filter((candidate) => new URL(candidate.url).pathname.includes('/supply/'))) {
       expect(request.headers.get('authorization')).toBe('Bearer provider-secret')
     }
@@ -239,6 +252,43 @@ describe('Package 5 Provider Operations release harness', () => {
     expect(invokeBodies.filter((body) => 'quoteRef' in body).every((body) => Object.keys(body).sort().join(',') === 'idempotencyKey,quoteRef')).toBe(true)
   })
 
+  it('accepts a scoped page containing exactly the published Tool', async () => {
+    const requests: Request[] = []
+    const baseFetch = successfulFetch(requests)
+    const fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const request = new Request(input, init)
+      if (new URL(request.url).pathname === '/api/v1/market-tools/search') {
+        const response = await baseFetch(input, init)
+        const page = await response.json() as Record<string, unknown>
+        return json({ ...page, kind: 'scoped', reason: 'More of the selected catalogue remains to assess.' })
+      }
+      return await baseFetch(input, init)
+    }) as typeof globalThis.fetch
+
+    await expect(runPackage5ProviderOperationsRelease(config(fetch)))
+      .resolves.toMatchObject({ schemaVersion: 'package5-provider-operations-release:v1' })
+  })
+
+  it('does not treat an external listing as proof of a published AE Tool', async () => {
+    const requests: Request[] = []
+    const baseFetch = successfulFetch(requests)
+    const fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const request = new Request(input, init)
+      if (new URL(request.url).pathname === '/api/v1/market-tools/search') {
+        const response = await baseFetch(input, init)
+        const page = await response.json() as { results: Record<string, unknown>[] }
+        return json({ ...page, results: page.results.map((row) => ({
+          ...row, source: 'coinbase', access: 'external_listing',
+        })) })
+      }
+      return await baseFetch(input, init)
+    }) as typeof globalThis.fetch
+
+    await expect(runPackage5ProviderOperationsRelease(config(fetch)))
+      .rejects.toThrow('package5_openapi_search_identity_mismatch')
+    expect(requests.some((request) => new URL(request.url).pathname === '/api/v1/tools/quote')).toBe(false)
+  })
+
   it('rejects a valid noMatch search before buyer invocation', async () => {
     const requests: Request[] = []
     const baseFetch = successfulFetch(requests)
@@ -248,10 +298,11 @@ describe('Package 5 Provider Operations release harness', () => {
         requests.push(request)
         const { query } = JSON.parse(await request.clone().text()) as { query: string }
         return json({
-          kind: 'noMatch', schemaVersion: 'registry-tools:v3', query, scope: 'exhausted',
-          results: [], nearMisses: [], reason: 'No suitable Tool found in the searched supply.',
-          suggestions: ['Broaden the capability request or try the next page.'],
-          partialResults: false, pagination: { limit: 20, hasMore: false }, next: [],
+          kind: 'noMatch', schemaVersion: 'registry-tools:v3', query,
+          results: [], reason: 'No suitable Tool in the assessed supply.',
+          partialResults: false,
+          assessed: { source: 'current', scope: 'complete', examined: 0, coverage: 'complete' },
+          pagination: { limit: 12, hasMore: false }, next: [],
         })
       }
       return await baseFetch(input, init)

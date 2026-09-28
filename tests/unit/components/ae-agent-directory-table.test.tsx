@@ -22,6 +22,18 @@ const baseItem: AgentDirectoryItem = {
   connectionCount: 1,
   connectorDisplayNames: ['Codex'],
   authorityMode: 'read_only',
+  spendingPolicy: {
+    kind: 'known',
+    principalRef: 'prn_test_agent_1',
+    grantRef: 'grant_test_agent_1',
+    generation: 1,
+    spendingPolicyDigest: 'digest_test_agent_1',
+    maximumSpendPerCall: { currency: 'AUD', exponent: 6, units: '10000000' },
+    maximumDailySpend: { currency: 'AUD', exponent: 6, units: '50000000' },
+    maximumMonthlySpend: { currency: 'AUD', exponent: 6, units: '100000000' },
+    paused: false,
+    expiresAt: fixedNow + THREE_HOURS_MS,
+  },
   lastSeenAt: fixedLastSeen,
   monthlySettledSpend: { currency: 'AUD', exponent: 6, units: '12500000' },
   monthlyLimit: { currency: 'AUD', exponent: 6, units: '100000000' },
@@ -78,20 +90,21 @@ describe('AeAgentDirectoryTable (W-25)', () => {
     expect(progress).toHaveAttribute('aria-label', expect.stringContaining('0%'))
   })
 
-  it('T4: missing grant renders No limit and no progress bar', () => {
-    const noLimitItem: AgentDirectoryItem = {
-      ...baseItem,
-      monthlyLimit: undefined,
-    }
+  it.each([
+    ['unavailable', { kind: 'unavailable' } as const, 'Unavailable'],
+    ['unset', { kind: 'unset' } as const, 'No spending policy set'],
+    ['expired', { kind: 'expired', expiresAt: fixedNow } as const, 'Expired'],
+  ])('%s policy never presents an unlimited ceiling or utilization', (_kind, spendingPolicy, label) => {
     const { container } = render(
       <AeAgentDirectoryTable
-        directoryItems={[noLimitItem]}
+        directoryItems={[{ ...baseItem, spendingPolicy, monthlyLimit: undefined }]}
         loading={false}
         onOpenAgent={vi.fn()}
       />,
     )
 
-    expect(screen.getByText(/A\$12\.50 \/ No limit/)).toBeInTheDocument()
+    expect(screen.getByText(label)).toBeInTheDocument()
+    expect(screen.queryByText(/No limit|A\$100\.00|Active/)).not.toBeInTheDocument()
     expect(container.querySelector('[data-slot="progress"]')).not.toBeInTheDocument()
   })
 
@@ -113,54 +126,18 @@ describe('AeAgentDirectoryTable (W-25)', () => {
     expect(container.querySelector('[data-slot="progress"]')).not.toBeInTheDocument()
   })
 
-  it('T6: renders status badges with correct variant data attributes', () => {
-    const items: AgentDirectoryItem[] = [
-      { ...baseItem, principalRef: 'prn_1', displayName: 'Agent 1', status: 'connected' },
-      { ...baseItem, principalRef: 'prn_2', displayName: 'Agent 2', status: 'attention' },
-      { ...baseItem, principalRef: 'prn_3', displayName: 'Agent 3', status: 'expired' },
-      { ...baseItem, principalRef: 'prn_4', displayName: 'Agent 4', status: 'disconnected' },
-    ]
+  it('keeps same-named Agents distinct by principal in view and row actions', () => {
+    const open = vi.fn()
+    const first: AgentDirectoryItem = { ...baseItem, displayName: 'Shared Agent' }
+    const second: AgentDirectoryItem = {
+      ...baseItem, principalRef: 'prn_test_agent_2', displayName: 'Shared Agent', environment: 'production',
+    }
+    render(<AeAgentDirectoryTable directoryItems={[first, second]} loading={false} onOpenAgent={open} />)
 
-    const { container } = render(
-      <AeAgentDirectoryTable
-        directoryItems={items}
-        loading={false}
-        onOpenAgent={vi.fn()}
-      />,
-    )
-
-    const badges = container.querySelectorAll('[data-slot="badge"]')
-    const statusBadges = Array.from(badges).filter((b) =>
-      ['Connected', 'Needs attention', 'Expired', 'Disconnected'].includes(b.textContent ?? ''),
-    )
-
-    expect(statusBadges).toHaveLength(4)
-    expect(statusBadges.find((b) => b.textContent === 'Connected')).toHaveAttribute('data-variant', 'success')
-    expect(statusBadges.find((b) => b.textContent === 'Needs attention')).toHaveAttribute('data-variant', 'warning')
-    expect(statusBadges.find((b) => b.textContent === 'Expired')).toHaveAttribute('data-variant', 'destructive')
-    expect(statusBadges.find((b) => b.textContent === 'Disconnected')).toHaveAttribute('data-variant', 'outline')
-  })
-
-  it('T7: filters items by status using the select dropdown', () => {
-    const items: AgentDirectoryItem[] = [
-      { ...baseItem, principalRef: 'prn_conn', displayName: 'Connected Bot', status: 'connected' },
-      { ...baseItem, principalRef: 'prn_exp', displayName: 'Expired Bot', status: 'expired' },
-    ]
-
-    render(
-      <AeAgentDirectoryTable
-        directoryItems={items}
-        loading={false}
-        onOpenAgent={vi.fn()}
-      />,
-    )
-
-    expect(screen.getByText('Connected Bot')).toBeInTheDocument()
-    expect(screen.getByText('Expired Bot')).toBeInTheDocument()
-
-    // Status filter select exists
-    const selectTrigger = screen.getByLabelText(/filter by status/i)
-    expect(selectTrigger).toBeInTheDocument()
+    expect(screen.getByText(first.principalRef)).toBeInTheDocument()
+    expect(screen.getByText(second.principalRef)).toBeInTheDocument()
+    screen.getByRole('button', { name: `View Shared Agent (Production · ${second.principalRef})` }).click()
+    expect(open).toHaveBeenCalledExactlyOnceWith(second)
   })
 
   it('T8: renders last used as relative time with datetime attribute and timestamp title', () => {

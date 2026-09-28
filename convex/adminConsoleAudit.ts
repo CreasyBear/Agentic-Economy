@@ -19,8 +19,7 @@ export const readAdminAuditAccess = defineAdminQuery({
   handler: readAdminAuditAccessHandler,
 })
 
-export const listAdminApprovalProposals = defineAdminQuery({
-  action: 'read_admin_readbacks',
+export const listAdminApprovalProposals = query({
   args: listAdminApprovalProposalsArgs,
   returns: listAdminApprovalProposalsResult,
   handler: listAdminApprovalProposalsHandler,

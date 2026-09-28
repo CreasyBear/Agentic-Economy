@@ -56,16 +56,8 @@ export type OwnerBusinessCurrencyProjection = Readonly<{
 type OwnerProviderEarningsReadback = Readonly<
   | { kind: 'error'; code: 'unauthenticated' | 'source_unavailable' }
   | { kind: 'not_found' }
-  | {
-      kind: 'available'
-      businessId: string
-      accounts: readonly Readonly<{
-        currency: string
-        earnings: Readonly<{ kind: 'ok' } & ProviderEarningsView>
-        payout: Readonly<{ kind: 'ok' } & PayoutStatusView>
-      }>[]
-      accountsTruncated: boolean
-    }
+  | { kind: 'conflict'; code: 'multiple_businesses' | 'payout_owner_mismatch' }
+  | { kind: 'available'; businessId: string; obligations: readonly unknown[]; truncated: boolean; transfers: readonly unknown[]; transfersTruncated: boolean }
 >
 
 export const ownerBusinessQuery = sourceQuery<
@@ -146,18 +138,8 @@ export async function ownerBusiness(
       }
     if (result.kind !== 'available' || result.businessId !== businessId)
       return { kind: 'refused', code: 'payout_not_ready', retryable: false }
-    return {
-      kind: 'accepted',
-      value: {
-        kind: 'available',
-        businessId: result.businessId,
-        accounts: result.accounts.map(({ currency, earnings, payout }) => ({
-          currency,
-          earnings,
-          payout,
-        })),
-      },
-    }
+    // Managed x402 obligations do not establish a Stripe transfer or bank-payout account.
+    return { kind: 'refused', code: 'payout_not_ready', retryable: false }
   } catch (cause) {
     return degradeBackend(cause, { kind: 'refused', code: 'payout_not_ready', retryable: true } as const, { site: 'ownerBusiness', reason: 'source_unavailable' })
   }

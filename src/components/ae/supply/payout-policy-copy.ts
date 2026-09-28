@@ -1,5 +1,5 @@
 import type { Rule4Diagnostic } from '@/lib/ui/diagnostic'
-import { parseDecimalExactAmount } from '@/modules/money/public'
+import { formatDisplayAmount, formatExactAmount, parseDecimalExactAmount } from '@/modules/money/public'
 
 export type PayoutScheduleType = 'monthly' | 'weekly' | 'manual'
 
@@ -43,7 +43,9 @@ export function buildThresholdSummary(thresholdDollars: string): string {
   if (!exactAmount) {
     return 'Enter a valid threshold to preview this policy.'
   }
-  const formatted = `A$${(Number(exactAmount.units) / 1_000_000).toFixed(2)}`
+  const formatted = BigInt(exactAmount.units) % 10_000n === 0n
+    ? formatDisplayAmount(exactAmount)
+    : `A$${formatExactAmount(exactAmount)}`
   return `Transfers will trigger when accumulated balance reaches ${formatted}.`
 }
 

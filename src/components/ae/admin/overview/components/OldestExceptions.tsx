@@ -1,6 +1,5 @@
 import { Link } from '@tanstack/react-router'
 
-import { AeCopyReference } from '@/components/ae/data/AeCopyReference'
 import { AeSection } from '@/components/ae/layout/AeSection'
 import { buttonVariants } from '@/components/ui/button-variants'
 import {
@@ -11,10 +10,9 @@ import {
 export type OldestExceptionsProps = Readonly<{
   rows: readonly AdminOverviewExceptionRow[]
   unavailable: boolean
-  total: number
 }>
 
-export function OldestExceptions({ rows, unavailable, total }: OldestExceptionsProps) {
+export function OldestExceptions({ rows, unavailable }: OldestExceptionsProps) {
   return (
     <AeSection title={ADMIN_OVERVIEW_COPY.exceptionsTitle} description={ADMIN_OVERVIEW_COPY.exceptionsDescription}>
       <div className="grid gap-related">
@@ -29,15 +27,14 @@ export function OldestExceptions({ rows, unavailable, total }: OldestExceptionsP
                   <Link to={row.href} className="font-medium text-foreground underline-offset-4 hover:underline">
                     {row.label}
                   </Link>
-                  <p className="text-xs text-muted-foreground">{row.since}</p>
+                  <p className="text-xs text-muted-foreground">{row.count}</p>
                 </div>
-                <AeCopyReference label={row.label} value={row.ref} />
               </li>
             ))}
           </ul>
         ) : null}
         <Link to="/admin/exceptions" className={buttonVariants({ variant: 'outline', className: 'w-fit' })}>
-          {ADMIN_OVERVIEW_COPY.viewAll(total)}
+          {ADMIN_OVERVIEW_COPY.viewAll}
         </Link>
       </div>
     </AeSection>

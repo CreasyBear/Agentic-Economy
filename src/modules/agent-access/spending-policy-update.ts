@@ -50,9 +50,17 @@ export const agentSpendingLimitsResultValue = v.union(
     correlationRef: v.string() }),
 )
 export type AgentSpendingLimitsResult = Infer<typeof agentSpendingLimitsResultValue>
+/** A policy is known only after the current owner, credential, grant and delegation join. */
+export const agentSpendingPolicyStateValue = v.union(
+  v.object({ kind: v.literal('known'), principalRef: v.string(), grantRef: v.string(), generation: v.number(),
+    spendingPolicyDigest: v.string(), ...amounts, paused: v.boolean(), expiresAt: v.number() }),
+  v.object({ kind: v.literal('unset') }),
+  v.object({ kind: v.literal('unavailable') }),
+  v.object({ kind: v.literal('expired'), expiresAt: v.number() }),
+)
+export type AgentSpendingPolicyState = Infer<typeof agentSpendingPolicyStateValue>
 export const agentSpendingLimitsReadResultValue = v.union(
-  v.object({ kind: v.literal('current'), principalRef: v.string(), grantRef: v.string(), generation: v.number(),
-    spendingPolicyDigest: v.string(), ...amounts }),
+  agentSpendingPolicyStateValue,
   v.object({ kind: v.literal('refused'), code: v.union(v.literal('authentication_required'),
     v.literal('account_ownership_required'), v.literal('agent_not_found'), v.literal('authority_unavailable'),
     v.literal('source_unavailable')) }),

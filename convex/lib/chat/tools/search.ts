@@ -3,11 +3,11 @@ import type { ModelMessage } from 'ai'
 import type { FunctionArgs } from 'convex/server'
 import { z } from 'zod'
 import { degradeBackend } from '@/lib/observability/degrade-backend'
-import { deserializeToolSearchResult, type PublicToolDescriptor } from '@/modules/capability-supply/public'
-import { chatSearchUse, latestUserRequest, readBelowMatch } from '@/modules/chat/search-presentation'
+import { deserializeToolSearchResult, serializeToolSearchResult, PublicToolRegistrySchemaVersion, type PublicToolDescriptor, type ToolSearchResult } from '@/modules/capability-supply/public'
+import { latestUserRequest } from '@/modules/chat/search-presentation'
 import { CHAT_TOOL_NAME_MAP } from '@/modules/chat/tool-card'
-import { projectToolListChoices, projectToolSearchChoices } from '@/modules/registry/tool-choice-contracts'
-import { isProductionToolChoice } from '@/modules/registry/public'
+import { projectToolListChoices, projectToolSearchChoices, type SearchResult } from '@/modules/registry/tool-choice-contracts'
+import { isProductionToolChoice, SEARCH_ASSESSMENT_LIMIT, suitableRankedToolRefs } from '@/modules/registry/public'
 import { registryToolsListContract, registryToolsSearchContract } from '@/modules/registry/tool-action-contracts'
 import { api, internal } from '../../../_generated/api'
 import { descriptionFor, failure, type ReserveChatSearch, type ReserveChatTool } from './contracts'
@@ -24,6 +24,97 @@ function operationSourceFilters(filters: z.infer<typeof registryToolsSearchContr
     ...(filters.dataUse === undefined ? {} : { dataUse: [...filters.dataUse] }),
     ...(filters.currency === undefined ? {} : { currency: filters.currency }),
     ...(filters.maximumPrice === undefined ? {} : { maximumPrice: filters.maximumPrice }),
+  }
+}
+
+type SearchInput = z.infer<typeof registryToolsSearchContract.schema>
+/** Offset into an entirely assessed admitted pool; malformed cursors stay with the catalogue validator. */
+function admittedPoolOffset(cursor: string | undefined): number | undefined {
+  if (cursor === undefined) return undefined
+  const match = /^chat-current:([1-9]\d*)$/u.exec(cursor)
+  if (match === null) return undefined
+  const offset = Number(match[1])
+  return Number.isSafeInteger(offset) && offset < SEARCH_ASSESSMENT_LIMIT ? offset : undefined
+}
+
+/** Assess the bounded admitted inventory instead of declaring a lexical first-page miss. */
+async function admittedCandidates(ctx: ToolCtx, data: SearchInput, filters: CapabilitySearchFilters | undefined): Promise<{
+  result: ToolSearchResult
+  complete: boolean
+}> {
+  if (data.source === 'coinbase') {
+    return {
+      result: { kind: 'no_candidates', schemaVersion: PublicToolRegistrySchemaVersion, query: data.query,
+        appliedFilters: filters ?? {}, ranking: [], navigation: [] },
+      complete: false,
+    }
+  }
+  const base = { ...(filters === undefined ? {} : { filters }), source: 'current' as const }
+  const pooledOffset = admittedPoolOffset(data.cursor)
+  if (data.cursor === undefined || pooledOffset !== undefined) {
+    const pool = deserializeToolSearchResult(await ctx.runAction(internal.capabilityToolCatalog.searchInternal, {
+      ...base, query: '', limit: SEARCH_ASSESSMENT_LIMIT,
+    }))
+    if (pool.kind === 'ok' && !pool.pagination.hasMore && pool.partialResults !== true) {
+      return { result: { ...pool, query: data.query, ranking: [] }, complete: true }
+    }
+    if (pool.kind === 'no_candidates' && pool.partialResults !== true) {
+      return { result: { ...pool, query: data.query }, complete: true }
+    }
+    if (pool.kind === 'unavailable') return { result: pool, complete: false }
+  }
+  return {
+    result: deserializeToolSearchResult(await ctx.runAction(internal.capabilityToolCatalog.searchInternal, {
+      ...base, query: data.query, limit: data.limit,
+      ...(data.cursor === undefined ? {} : { cursor: data.cursor }),
+    })),
+    complete: false,
+  }
+}
+
+/** Compact external listings are discovery leads, never unverified recommendations or AE Call targets. */
+async function compactBazaarPage(ctx: ToolCtx, data: SearchInput): Promise<{
+  rows: SearchResult[]
+  examined: number
+  available: boolean
+  hasMore: boolean
+  nextCursor?: string
+  generation?: string
+  completedAt?: number
+}> {
+  if (data.source === 'current' || data.filters?.access === 'ae_callable') {
+    return { rows: [], examined: 0, available: true, hasMore: false }
+  }
+  const page = await ctx.runQuery(internal.x402DirectoryIndex.searchCompactInternal, {
+      query: data.query,
+      paginationOpts: { cursor: data.cursor?.startsWith('x402:') ? data.cursor.slice(5) || null : null, numItems: data.limit },
+      ...(data.filters?.priceBand === undefined ? {} : { priceBand: data.filters.priceBand }),
+      ...(data.filters?.actionClass === undefined ? {} : { actionClass: data.filters.actionClass }),
+      ...(data.filters?.objectClass === undefined ? {} : { objectClass: data.filters.objectClass }),
+      ...(data.filters?.category === undefined ? {} : { category: data.filters.category }),
+      ...(data.filters?.provider === undefined ? {} : { provider: data.filters.provider }),
+      ...(data.filters?.networkId === undefined ? {} : { network: data.filters.networkId }),
+      access: data.filters?.access ?? 'external_listing',
+    }).catch(cause => degradeBackend(cause, { kind: 'unavailable' as const, reason: 'source_unavailable' }, {
+      site: 'chatCompactBazaarSearch', reason: 'source_unavailable',
+    }))
+  if (page.kind === 'unavailable') return { rows: [], examined: 0, available: false, hasMore: false }
+  const rows: SearchResult[] = page.page.flatMap(row => {
+    if (row.source !== 'coinbase' || row.toolRef !== undefined) return []
+    return [{
+      id: row.id, source: 'coinbase', access: 'external_listing',
+      title: row.title, summary: row.summary, provider: row.provider,
+      actionClass: row.actionClass, objectClass: row.objectClass,
+      ...(row.category === undefined ? {} : { category: row.category }),
+      readiness: 'unverified', price: { kind: 'unavailable' },
+      detailRef: row.id,
+      next: [{ action: 'describe-external', args: { id: row.id }, authority: 'public' }],
+    }]
+  })
+  return {
+    rows, examined: page.page.length, available: true, hasMore: !page.isDone,
+    ...(page.isDone ? {} : { nextCursor: `x402:${page.continueCursor}` }),
+    generation: page.coverage.generation, completedAt: page.coverage.completedAt,
   }
 }
 
@@ -68,51 +159,109 @@ export function createSearchTools(reserve: ReserveChatTool, reserveSearch: Reser
         const deniedSearch = reserveSearch('registry.tools.search', key, data.cursor, request)
         if (deniedSearch !== null) return deniedSearch
         const filters = operationSourceFilters(data.filters)
-        const result = await ctx.runAction(
-          internal.capabilityToolCatalog.searchInternal,
-          {
-            query: data.query,
-            limit: data.limit,
-            ...(data.source === undefined ? {} : { source: data.source }),
-            ...(data.cursor === undefined ? {} : { cursor: data.cursor }),
-            ...(filters === undefined ? {} : { filters }),
-          },
-        )
         try {
-          const source = deserializeToolSearchResult(result)
-          const presented = source.kind === 'ok' && source.items.length > 0
-            ? await ctx.runAction(internal.capabilityToolCatalog.presentSearch, {
-                result,
+          const externalCursor = data.cursor?.startsWith('x402:') === true
+          const pooledOffset = admittedPoolOffset(data.cursor) ?? 0
+          let pageSize = data.limit
+          let externalLimit: number | undefined
+          let admitted = await admittedCandidates(ctx, externalCursor ? { ...data, source: 'coinbase' } : data, filters)
+          let assessedSource: ToolSearchResult | undefined
+          let assessedPresentation: ToolSearchResult | null = null
+          const encoder = new TextEncoder()
+          while (true) {
+            const source = admitted.result
+            const presented: ToolSearchResult | null = assessedSource === source ? assessedPresentation
+              : source.kind === 'ok' && source.items.length > 0
+                ? await ctx.runAction(internal.capabilityToolCatalog.presentSearch, {
+                    result: serializeToolSearchResult(source), query: data.query,
+                    ...(request === undefined ? {} : { request }),
+                  }).then(value => deserializeToolSearchResult(value.result)).catch(cause => {
+                    degradeBackend(cause, null, { site: 'chatToolSearchRerank', reason: 'source_unavailable' })
+                    return null
+                  })
+                : source
+            assessedSource = source
+            assessedPresentation = presented
+            const scored = presented !== null && source.kind !== 'ok'
+              || presented !== null && source.kind === 'ok' && (source.items.length === 0
+                || presented.kind === 'ok' && source.items.every(tool =>
+                  presented.ranking.some(({ toolRef }) => toolRef === tool.toolRef)))
+            const explicitNonProduction = /\b(?:testnet|sepolia|degraded|demo|sandbox)\b/iu.test(request ?? '')
+            const eligible = (tool: PublicToolDescriptor) =>
+              explicitNonProduction || isProductionToolChoice(tool)
+            const suitable = new Set(presented?.kind === 'ok' ? suitableRankedToolRefs(presented.ranking) : [])
+            const narrowed = presented?.kind === 'ok'
+              ? { ...presented, items: presented.items.filter(tool => eligible(tool) && suitable.has(tool.toolRef)) }
+              : presented
+            const assessment = { verdict: !scored || source.kind === 'unavailable' ? 'degraded' as const
+              : narrowed?.kind === 'ok' && narrowed.items.length > 0 ? 'matched' as const : 'noMatch' as const,
+            nearMisses: [] }
+            const admittedPage = narrowed?.kind === 'ok' && admitted.complete
+              ? { ...narrowed, items: narrowed.items.slice(pooledOffset, pooledOffset + pageSize) } : narrowed
+            const admittedCount = admittedPage?.kind === 'ok' ? admittedPage.items.length : 0
+            const admittedNext = narrowed?.kind === 'ok' && admitted.complete && narrowed.items.length > pooledOffset + pageSize
+              ? `chat-current:${pooledOffset + pageSize}`
+              : narrowed?.kind === 'ok' && !admitted.complete && narrowed.pagination.hasMore
+                ? narrowed.pagination.nextCursor : undefined
+            const directoryWanted = data.source !== 'current' && data.filters?.access !== 'ae_callable'
+            const room = pageSize - admittedCount
+            // Re-read a smaller Bazaar page rather than truncating an already-fetched cursor.
+            const external = assessment.verdict !== 'degraded' && source.kind !== 'unavailable'
+              && admittedNext === undefined && room > 0
+              && (externalLimit === undefined || externalLimit > 0)
+              ? await compactBazaarPage(ctx, { ...data, limit: Math.min(room, externalLimit ?? room) })
+              : { rows: [] as SearchResult[], examined: 0, available: true, hasMore: false }
+            const externalStartsNext = admittedNext === undefined && admittedCount > 0
+              && directoryWanted && !externalCursor && (room === 0 || externalLimit === 0)
+            const pagination = admittedNext !== undefined
+              ? { limit: data.limit, nextCursor: admittedNext, hasMore: true }
+              : externalStartsNext
+                ? { limit: data.limit, nextCursor: 'x402:', hasMore: true }
+                : external.hasMore && external.nextCursor !== undefined
+                  ? { limit: data.limit, nextCursor: external.nextCursor, hasMore: true }
+                  : { limit: data.limit, hasMore: false }
+            const empty: ToolSearchResult = {
+              kind: 'no_candidates', schemaVersion: PublicToolRegistrySchemaVersion,
+              query: data.query, appliedFilters: filters ?? {}, ranking: [], navigation: [],
+            }
+            const choices = projectToolSearchChoices(admittedPage?.kind === 'unavailable' ? empty : admittedPage ?? empty,
+              data.filters, assessment, undefined, data.limit, {
                 query: data.query,
-                ...(request === undefined ? {} : { request }),
-              }).then((value) => ({
-                result: deserializeToolSearchResult(value.result),
-                use: chatSearchUse(value.use),
-                belowMatch: readBelowMatch(value.belowMatch),
-              })).catch((cause) => ({
-                result: degradeBackend(cause, source, {
-                  site: 'chatToolSearchRerank',
-                  reason: 'source_unavailable',
-                }),
-                use: null,
-                belowMatch: [] as const,
-              }))
-            : { result: source, use: null, belowMatch: [] as const }
-          const explicitNonProduction = /\b(?:testnet|sepolia|degraded|demo|sandbox)\b/iu.test(request ?? '')
-          const eligible = (tool: PublicToolDescriptor) =>
-            explicitNonProduction || isProductionToolChoice(tool)
-          const scores = presented.result.kind === 'ok' ? presented.result.ranking : []
-          const suitable = new Set(scores.filter(({ score }) => score >= 0.5).map(({ toolRef }) => toolRef))
-          const assessment = scores.length === 0 ? { verdict: 'degraded' as const, nearMisses: [] }
-            : suitable.size === 0 ? { verdict: 'noMatch' as const, nearMisses: [] }
-              : { verdict: 'matched' as const, nearMisses: [] }
-          const narrowed = presented.result.kind === 'ok'
-            ? { ...presented.result, items: presented.result.items.filter(tool => eligible(tool) && suitable.has(tool.toolRef)) } : presented.result
-          return projectedModelFacingOutput(
-            'registry.tools.search',
-            searchContract.outputSchema,
-            () => projectToolSearchChoices(narrowed, data.filters, assessment),
-          )
+                source: data.source === 'current' ? 'current' : data.source === 'coinbase' ? 'coinbase' : 'all',
+                complete: (data.source === 'coinbase' || admitted.complete)
+                  && (data.source === 'current' || data.filters?.access === 'ae_callable' || !external.hasMore),
+                external: external.rows,
+                externalExamined: external.examined,
+                externalAvailable: external.available,
+                pagination,
+                ...(external.generation === undefined ? {} : { generation: external.generation }),
+                ...(external.completedAt === undefined ? {} : { completedAt: external.completedAt }),
+              })
+            // The model-facing sanitizer expands angle brackets to UTF-8 glyphs.
+            if (encoder.encode(JSON.stringify(choices).replace(/[<>]/gu, '‹')).byteLength <= 16 * 1024) {
+              return projectedModelFacingOutput('registry.tools.search', searchContract.outputSchema, () => choices)
+            }
+            if (external.rows.length > 0) {
+              externalLimit = Math.min(room, externalLimit ?? room) - 1
+              if (externalLimit > 0 || admittedCount > 0) continue
+            } else if (admittedCount > 1) {
+              pageSize -= 1
+              externalLimit = undefined
+              if (!admitted.complete) {
+                admitted = { result: deserializeToolSearchResult(await ctx.runAction(internal.capabilityToolCatalog.searchInternal, {
+                  source: 'current', query: data.query, limit: pageSize,
+                  ...(filters === undefined ? {} : { filters }),
+                  ...(data.cursor === undefined ? {} : { cursor: data.cursor }),
+                })), complete: false }
+              }
+              continue
+            }
+            return projectedModelFacingOutput('registry.tools.search', searchContract.outputSchema, () => ({
+              ...choices, kind: 'unavailable', reason: 'capacity_exceeded', results: [], partialResults: true,
+              pagination: { limit: data.limit, hasMore: false },
+              next: [{ action: 'retry', args: { query: data.query }, authority: 'public' }],
+            }))
+          }
         } catch (cause) {
           return degradeBackend(cause, failure('registry.tools.search', 'source_output_invalid'), {
             site: 'chatToolSearch', reason: 'invalid_response',

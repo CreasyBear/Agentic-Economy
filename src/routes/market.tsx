@@ -62,7 +62,7 @@ function MarketError({ reset, error }: ErrorComponentProps) {
     <AePageState
       tone="danger"
       title="The market view didn’t load"
-        description={error.name === "SearchParamError" || error.name === "ZodError" ? "A directory filter is invalid. Check the provider hostname, network and non-negative USD price in the address, then try again. No broader search was run." : "Try again to fetch the current catalog and comparison. No Tool was called."}
+        description={error.name === "SearchParamError" || error.name === "ZodError" ? "A directory search or filter is invalid. Check the address and try again. No broader search was run." : "Try again to fetch the current catalog and comparison. No Tool was called."}
       action={
         <Button type="button" className="min-h-touch" onClick={reset}>
           Try again

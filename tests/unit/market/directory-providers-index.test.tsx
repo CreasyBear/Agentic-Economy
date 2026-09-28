@@ -21,8 +21,11 @@ it('shows complete indexed Provider counts and links to exact storefronts and se
   expect(screen.getByText('142').getAttribute('title')).toBe('142 Tools in the indexed catalogue')
   expect(screen.getByText('1').getAttribute('title')).toBe('1 Tool in the indexed catalogue')
   expect(screen.getByText('5,900')).toBeTruthy()
-  expect(screen.getByText('0.001 USDC')).toBeTruthy()
-  expect(screen.getByText('Sorted by the busiest Tool. Calls, payers, and price belong to that Tool. The count is the whole host.')).toBeTruthy()
+  const priceCell = screen.getByRole('link', { name: 'View Tools from example.com' }).closest('tr')?.querySelectorAll('td')[1]
+  const [buyerPrice, sourcePrice] = priceCell?.querySelectorAll('p') ?? []
+  expect(buyerPrice?.textContent).toMatch(/AUD.*unavailable/i)
+  expect(buyerPrice?.textContent).not.toContain('USDC')
+  expect(sourcePrice?.textContent).toMatch(/Provider.*0\.001 USDC/)
   const store = new URL(screen.getByRole('link', { name: 'View Tools from example.com' }).getAttribute('href')!, 'https://aecon.ai')
   expect(Object.fromEntries(store.searchParams)).toEqual({ view: 'tools', provider: 'example.com' })
   const lead = screen.getByRole('link', { name: 'Search' }).getAttribute('href')

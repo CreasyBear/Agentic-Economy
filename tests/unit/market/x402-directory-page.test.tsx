@@ -7,10 +7,20 @@ import { AeX402Directory } from '@/components/ae/market/AeX402Directory'
 import { DIRECTORY_SAVED_TOOLS_STORAGE_KEY } from '@/modules/market/saved-tools.contracts'
 import type { ComponentProps } from 'react'
 import type { X402DirectoryEntry } from '@/modules/market/x402-directory'
+import type { SearchResult, ToolChoiceSearchOutput } from '@/modules/registry/tool-choice-contracts'
+import { PublicToolRegistrySchemaVersion, type PublicToolRef } from '@/modules/capability-supply/public'
 
 const readX402DirectoryCatalogueServer = vi.fn()
 vi.mock('@/modules/market/x402-directory-index.functions', () => ({
   readX402DirectoryCatalogueServer: (...args: unknown[]) => readX402DirectoryCatalogueServer(...args),
+}))
+const searchMarketToolsServer = vi.fn()
+vi.mock('@/modules/market/market-tool-search.functions', () => ({
+  searchMarketToolsServer: (...args: unknown[]) => searchMarketToolsServer(...args),
+}))
+const captureRouteException = vi.fn()
+vi.mock('@/lib/observability/capture-route-exception', () => ({
+  captureRouteException: (...args: unknown[]) => captureRouteException(...args),
 }))
 
 const entries: X402DirectoryEntry[] = Array.from({ length: 20 }, (_, i) => ({
@@ -53,7 +63,7 @@ function toolOpener(title: string) {
   return screen.getByRole('link', { name: title })
 }
 function toolHref(link: HTMLElement) { return new URL(link.getAttribute('href')!, 'https://aecon.ai') }
-afterEach(() => { cleanup(); localStorage.clear(); readX402DirectoryCatalogueServer.mockReset() })
+afterEach(() => { cleanup(); localStorage.clear(); readX402DirectoryCatalogueServer.mockReset(); searchMarketToolsServer.mockReset(); captureRouteException.mockReset() })
 describe('native x402 catalogue', () => {
   it('shows the complete upstream page and pagination, linking every Tool to its canonical detail page', () => {
     show()
@@ -67,7 +77,7 @@ describe('native x402 catalogue', () => {
     expect(screen.getByRole('link', { name: 'Previous page' }).getAttribute('href')).toContain('offset=0')
   })
   it('opens the selected Tool at the one canonical Tool detail surface, tagging the navigation so Back can use browser history', async () => {
-    const search = { query: 'research', network: 'eip155:8453', provider: 'example.com', maxUsdPrice: 0.005 }
+    const search = { network: 'eip155:8453', provider: 'example.com', maxUsdPrice: 0.005 }
     const { router } = show(search)
     const href = toolHref(toolOpener('Tool 0'))
     expect(href.pathname).toBe(`/tools/${entries[0]!.provider}/${entries[0]!.slug}`)
@@ -94,7 +104,6 @@ it('compares published facts and links straight to the one canonical Tool detail
   expect(within(comparison).getByText('2 USDC')).toBeTruthy()
   expect(within(comparison).getByText('Output 0')).toBeTruthy()
   expect(within(comparison).getByText('Category')).toBeTruthy()
-  expect(within(comparison).getByText('Provider-listed price')).toBeTruthy()
   expect(within(comparison).queryByText('Base')).toBeNull()
   const inspect = within(comparison).getAllByRole('link', { name: 'Inspect Tool' })[0]!
   expect(toolHref(inspect).pathname).toBe(`/tools/${priced[0]!.provider}/${priced[0]!.slug}`)
@@ -118,14 +127,16 @@ it('keeps Provider price evidence secondary and settlement networks off Tool car
   const priced = entries.map((entry, index) => ({ ...entry, prices: [{ network: 'eip155:8453', networkLabel: 'Base', scheme: 'exact', amount: `${index + 1} USDC`, decimalAmount: String(index + 1), symbol: 'USDC' }] }))
   show(undefined, priced)
 
-  expect(screen.queryByText('Provider-listed price')).toBeNull()
   expect(screen.getByRole('columnheader', { name: 'Price' })).toBeTruthy()
   expect(screen.getByRole('columnheader', { name: 'Calls' })).toBeTruthy()
   expect(screen.getByRole('columnheader', { name: 'Payers' })).toBeTruthy()
   expect(screen.getByRole('columnheader', { name: 'Volume' })).toBeTruthy()
   expect(screen.queryByRole('columnheader', { name: 'Reported use' })).toBeNull()
-  expect(screen.getAllByText('Provider price per Call')).toHaveLength(priced.length)
-  expect(screen.getByText('1.00 USDC')).toBeTruthy()
+  const priceCell = screen.getByRole('link', { name: 'Tool 0' }).closest('tr')?.querySelectorAll('td')[1]
+  const [buyerPrice, sourcePrice] = priceCell?.querySelectorAll('p') ?? []
+  expect(buyerPrice?.textContent).toMatch(/AUD.*unavailable/i)
+  expect(buyerPrice?.textContent).not.toContain('USDC')
+  expect(sourcePrice?.textContent).toMatch(/Provider.*1 USDC/)
   expect(screen.queryByText('Base')).toBeNull()
 })
 it('repeats one recipient amount on every Tool that pays that address', () => {
@@ -153,11 +164,11 @@ it('repeats one recipient amount on every Tool that pays that address', () => {
   expect(screen.getByText(/Facilitator set sha256:abc/)).toBeTruthy()
 })
 it('groups the provider view by exact hostname and opens that provider filter', async () => {
-  const { router } = show({ view: 'providers', query: 'research', network: 'eip155:8453', maxUsdPrice: 0.01 }, entries.map((entry, index) => ({ ...entry, provider: index === 19 ? 'other.example.com' : entry.provider })))
+  const { router } = show({ view: 'providers', network: 'eip155:8453', maxUsdPrice: 0.01 }, entries.map((entry, index) => ({ ...entry, provider: index === 19 ? 'other.example.com' : entry.provider })))
   expect(screen.getByTitle('19 Tools in these results')).toBeTruthy()
   expect(screen.getByTitle('1 Tool in these results')).toBeTruthy()
   fireEvent.click(screen.getByRole('button', { name: 'View Tools from example.com' }))
-  await waitFor(() => expect(router.state.location.search).toMatchObject({ provider: 'example.com', query: 'research', network: 'eip155:8453', maxUsdPrice: 0.01 }))
+  await waitFor(() => expect(router.state.location.search).toMatchObject({ provider: 'example.com', network: 'eip155:8453', maxUsdPrice: 0.01 }))
 })
 it('inspects a saved Tool through the same one canonical Tool detail surface', async () => {
   const savedSearch = { query: 'original search', network: 'eip155:8453', provider: 'example.com', maxUsdPrice: 0.02 }
@@ -195,7 +206,7 @@ it('keeps a selected Tool hydrated across pages and a reload-style render', () =
 })
 it('keeps comparison refs when clearing filters and using offset pagination', () => {
   const compare = entries[19]!.resource
-  show({ query: 'weather', offset: 20, provider: 'example.com', compare }, entries, {
+  show({ offset: 20, provider: 'example.com', compare }, entries, {
     compareEntries: [{ resource: compare, entry: entries[19]! }],
   })
 
@@ -287,7 +298,7 @@ describe('indexed x402 catalogue controls', () => {
   })
 
   it('never puts the Convex page cursor in the market URL and offers a next page instead', () => {
-    show({ ...nativeFilters, sort: 'relevance', query: 'weather' }, undefined, { page: indexedPage, catalogue: indexedCatalogue, overview })
+    show({ ...nativeFilters, sort: 'relevance' }, undefined, { page: indexedPage, catalogue: indexedCatalogue, overview })
     expect(screen.queryByRole('link', { name: 'Next page' })).toBeNull()
     expect(screen.queryByRole('link', { name: 'First page' })).toBeNull()
     for (const link of screen.getAllByRole('link')) expect(new URL(link.getAttribute('href')!, 'https://aecon.ai').searchParams.has('indexCursor')).toBe(false)
@@ -307,11 +318,11 @@ describe('indexed x402 catalogue controls', () => {
       kind: 'ok', source: 'index', coverage, searchMethod: 'native_index',
       page: { kind: 'ok', items: nextItems, offset: 0, limit: 20 }, indexCursor: 'generation-1:page-3', isDone: false,
     })
-    show({ ...nativeFilters, sort: 'relevance', query: 'weather' }, undefined, { page: indexedPage, catalogue: indexedCatalogue, overview })
+    show({ ...nativeFilters, sort: 'relevance' }, undefined, { page: indexedPage, catalogue: indexedCatalogue, overview })
     expect(screen.getByText(/2 Tools on this page/)).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Next page' }))
     const { view: _view, ...filtersWithoutView } = nativeFilters
-    expect(readX402DirectoryCatalogueServer).toHaveBeenCalledWith({ data: { ...filtersWithoutView, sort: 'relevance', query: 'weather', indexCursor: indexedCatalogue.indexCursor } })
+    expect(readX402DirectoryCatalogueServer).toHaveBeenCalledWith({ data: { ...filtersWithoutView, sort: 'relevance', indexCursor: indexedCatalogue.indexCursor } })
     await waitFor(() => expect(screen.getByRole('link', { name: nextItems[0]!.title })).toBeTruthy())
     expect(screen.queryByRole('link', { name: 'Tool 0' })).toBeNull()
     expect(screen.getByText(/2 Tools on this page/)).toBeTruthy()
@@ -359,7 +370,7 @@ describe('indexed x402 catalogue controls', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Next page' }))
     const replacementPage = { ...indexedPage, items: entries.slice(4, 6) }
     const replacementCatalogue = { ...indexedCatalogue, page: replacementPage, indexCursor: 'generation-1:new-search-cursor' }
-    updateCatalogue({ view: 'tools', query: 'replacement' }, replacementPage, replacementCatalogue)
+    updateCatalogue({ view: 'tools', directoryCategory: 'media' }, replacementPage, replacementCatalogue)
     expect(await screen.findByRole('link', { name: 'Tool 4' })).toBeTruthy()
 
     resolveContinuation({
@@ -370,6 +381,7 @@ describe('indexed x402 catalogue controls', () => {
     expect(screen.getByRole('link', { name: 'Tool 4' })).toBeTruthy()
   })
   it('changes category through its control while preserving filters, without ever adding a cursor', async () => {
+    searchMarketToolsServer.mockResolvedValue({ ...searchMeta, kind: 'scoped', results: [], reason: 'More pages remain.' })
     const { router } = show({ ...nativeFilters, query: 'weather', sort: 'relevance' }, undefined, { page: indexedPage, catalogue: indexedCatalogue, overview })
     fireEvent.click(screen.getByRole('button', { name: /Filters \d+/u }))
     fireEvent.click(screen.getByRole('button', { name: 'Media 405' }))
@@ -419,13 +431,11 @@ describe('indexed x402 catalogue controls', () => {
     expect(screen.getAllByRole('button', { name: /View Tools from host-/ })).toHaveLength(12)
     expect(readX402DirectoryCatalogueServer).toHaveBeenCalledTimes(1)
   })
-  it('separates the catalogue total from the number of Tools loaded so far', () => {
-    show({ ...nativeFilters, query: 'weather', sort: 'relevance' }, undefined, { page: { ...indexedPage, total: coverage.indexedTotal }, catalogue: indexedCatalogue, overview })
+  it('separates the catalogue total from the number of Tools on a browse page', () => {
+    show(nativeFilters, undefined, { page: { ...indexedPage, total: coverage.indexedTotal }, catalogue: indexedCatalogue, overview })
     expect(screen.getByText('14,455 Tools in the catalogue')).toBeTruthy()
     expect(screen.getByText(/2 Tools on this page/)).toBeTruthy()
     expect(screen.queryByText('14,455 matching Tools')).toBeNull()
-    expect(screen.queryByText('2 matching Tools')).toBeNull()
-    expect(screen.getByText(/Keyword search across the catalogue/)).toBeTruthy()
   })
   it('keeps the next page available for an empty portion when the index has more entries', () => {
     const empty = { ...indexedPage, items: [] }
@@ -435,13 +445,127 @@ describe('indexed x402 catalogue controls', () => {
     expect(screen.getByRole('button', { name: 'Next page' })).toBeTruthy()
     expect(screen.queryByRole('heading', { name: 'No matching Tools' })).toBeNull()
   })
-  it('shows a plain Try again when the initial indexed load is unavailable - there is no cursor to carry, since the URL never held one', () => {
-    show({ ...nativeFilters, query: 'weather', sort: 'relevance' }, [], { page: { kind: 'unavailable', reason: 'source_unavailable' }, catalogue: { kind: 'unavailable', reason: 'source_unavailable' } })
+  it('shows a plain Try again when the initial indexed browse is unavailable', () => {
+    show(nativeFilters, [], { page: { kind: 'unavailable', reason: 'source_unavailable' }, catalogue: { kind: 'unavailable', reason: 'source_unavailable' } })
     const tryAgain = pageLinkSearch('Try again')
     expectNativeFilters(tryAgain)
-    expect(tryAgain.get('query')).toBe('weather')
-    expect(tryAgain.get('sort')).toBe('relevance')
     expect(tryAgain.has('indexCursor')).toBe(false)
     expect(screen.getByText('The discovery service could not be reached. Try again.')).toBeTruthy()
+  })
+})
+
+const admittedRef = `operation:v1:${'a'.repeat(64)}` as PublicToolRef
+const directoryId = `registry:${'b'.repeat(64)}`
+const searchRows = [
+  {
+    id: admittedRef, source: 'current', access: 'ae_callable', toolRef: admittedRef,
+    title: 'Weather Forecast', summary: 'Forecast for a city', provider: 'Weather Co',
+    actionClass: 'retrieve', objectClass: 'data', readiness: 'ready',
+    price: { kind: 'indicative', label: 'A$0.01' }, detailRef: admittedRef,
+    next: [{ action: 'describe', args: { toolRef: admittedRef }, authority: 'public' }],
+    freshness: { source: 'supply_projection', state: 'fresh', completedAt: Date.UTC(2026, 8, 27), staleAfterMs: 10800000 },
+  },
+  {
+    id: directoryId, source: 'coinbase', access: 'external_listing',
+    title: 'External Forecast', summary: 'Published weather endpoint', provider: 'example.com',
+    actionClass: 'retrieve', objectClass: 'data', readiness: 'unverified',
+    price: { kind: 'unavailable' }, detailRef: `/api/v1/registry/detail?id=${directoryId}`,
+    next: [{ action: 'describe-external', args: { id: directoryId }, authority: 'public' }],
+    freshness: { source: 'x402_directory', state: 'stale', completedAt: Date.UTC(2026, 8, 26), staleAfterMs: 10800000 },
+  },
+] satisfies SearchResult[]
+const searchMeta = {
+  schemaVersion: PublicToolRegistrySchemaVersion,
+  query: 'weather', partialResults: true,
+  assessed: { source: 'all', scope: 'page', examined: 8, coverage: 'partial', generation: 'generation-1', completedAt: Date.UTC(2026, 8, 26) },
+  pagination: { limit: 8, nextCursor: 'opaque-next', hasMore: true },
+  next: [{ action: 'next-page', args: { query: 'weather', cursor: 'opaque-next' }, authority: 'public' }],
+} satisfies Pick<Extract<ToolChoiceSearchOutput, { kind: 'match' }>, 'schemaVersion' | 'query' | 'partialResults' | 'assessed' | 'pagination' | 'next'>
+
+describe('canonical Market search', () => {
+  it('replaces directory results with one mixed page, uses exact detail links, row-source freshness and an executable filtered cursor', async () => {
+    const first = { ...searchMeta, kind: 'match', results: searchRows } satisfies ToolChoiceSearchOutput
+    const second = { ...searchMeta, kind: 'scoped', results: [searchRows[1]!], reason: 'More catalogue entries remain.', pagination: { limit: 8, hasMore: false }, next: [{ action: 'broaden', args: { query: 'weather' }, authority: 'public' }] } satisfies ToolChoiceSearchOutput
+    searchMarketToolsServer.mockResolvedValueOnce(first).mockResolvedValueOnce(second)
+    show({ view: 'tools', query: 'weather', directoryCategory: 'research', provider: 'example.com', network: 'eip155:8453', priceBand: 'lt_0_01', maxUsdPrice: 0.05 },
+      entries.slice(0, 2), { page: indexedPage, catalogue: indexedCatalogue, overview })
+    expect(await screen.findByRole('link', { name: 'Weather Forecast' })).toBeTruthy()
+    expect(screen.queryByRole('link', { name: 'Tool 0' })).toBeNull()
+    expect(toolHref(screen.getByRole('link', { name: 'Weather Forecast' })).pathname).toBe(`/tools/${encodeURIComponent(admittedRef)}`)
+    expect(toolHref(screen.getByRole('link', { name: 'External Forecast' })).pathname).toBe('/api/v1/registry/detail')
+    expect(screen.getByText('AE-callable · ready')).toBeTruthy()
+    expect(screen.getByText('External listing · not AE-callable')).toBeTruthy()
+    expect(screen.getByText('A$0.01')).toBeTruthy()
+    expect(screen.getByText('Price unavailable')).toBeTruthy()
+    expect(screen.getByText(/AE supply projection · fresh/)).toBeTruthy()
+    expect(screen.getByText(/Coinbase Bazaar index · stale/)).toBeTruthy()
+    expect(screen.getByText(/not applied to this search/)).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Next page' }))
+    expect(searchMarketToolsServer).toHaveBeenNthCalledWith(2, { data: { query: 'weather', limit: 8, filters: { category: 'research', provider: 'example.com', networkId: 'eip155:8453', priceBand: 'lt_0_01' }, cursor: 'opaque-next' } })
+    expect(await screen.findByText('Search assessed a limited scope', { exact: false })).toBeTruthy()
+    expect(screen.getByText('More catalogue entries remain.')).toBeTruthy()
+    expect(screen.queryByRole('link', { name: 'Weather Forecast' })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Previous page' }))
+    expect(screen.getByRole('link', { name: 'Weather Forecast' })).toBeTruthy()
+    expect(searchMarketToolsServer).toHaveBeenCalledTimes(2)
+  })
+
+  it('shows scoped continuation with no candidates instead of claiming no match, then a genuine no-match can broaden', async () => {
+    searchMarketToolsServer.mockResolvedValueOnce({ ...searchMeta, kind: 'scoped', results: [], reason: 'Unassessed pages remain.' })
+    const { updateSearch, router } = show({ view: 'tools', query: 'weather' }, [], { page: indexedPage, catalogue: indexedCatalogue, overview })
+    expect(await screen.findByText('Unassessed pages remain.')).toBeTruthy()
+    expect(screen.queryByText('No matching Tool in the assessed catalogue')).toBeNull()
+    searchMarketToolsServer.mockResolvedValueOnce({
+      ...searchMeta, kind: 'noMatch', results: [], reason: 'No eligible Tools matched.',
+      assessed: { source: 'current', scope: 'complete', examined: 12, coverage: 'complete' },
+      pagination: { limit: 8, hasMore: false }, next: [{ action: 'broaden', args: { query: 'impossible' }, authority: 'public' }],
+      query: 'impossible',
+    })
+    updateSearch({ view: 'tools', query: 'impossible' })
+    expect(await screen.findByText('No eligible Tools matched.')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Browse all Tools' }))
+    await waitFor(() => expect(router.state.location.search.query).toBeUndefined())
+  })
+
+  it('renders unavailable without stale recommendations and retries the same query', async () => {
+    searchMarketToolsServer.mockResolvedValueOnce({ ...searchMeta, kind: 'unavailable', results: [], reason: 'source_unavailable', pagination: { limit: 8, hasMore: false }, next: [{ action: 'retry', args: { query: 'weather' }, authority: 'public' }] })
+      .mockResolvedValueOnce({ ...searchMeta, kind: 'match', results: searchRows })
+    show({ view: 'tools', query: 'weather' }, entries.slice(0, 2), { page: indexedPage, catalogue: indexedCatalogue, overview })
+    expect(await screen.findByText('No recommendation was made.', { exact: false })).toBeTruthy()
+    expect(screen.queryByRole('link', { name: 'Tool 0' })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Retry search' }))
+    expect(await screen.findByRole('link', { name: 'Weather Forecast' })).toBeTruthy()
+    expect(searchMarketToolsServer).toHaveBeenNthCalledWith(2, { data: { query: 'weather', limit: 8 } })
+  })
+
+  it('reports failed search and retry with their causes while preserving the query and unavailable state', async () => {
+    const initialFailure = new Error('initial search failed')
+    const retryFailure = new Error('retry search failed')
+    searchMarketToolsServer.mockRejectedValueOnce(initialFailure).mockRejectedValueOnce(retryFailure)
+      .mockResolvedValueOnce({ ...searchMeta, kind: 'match', results: searchRows })
+    show({ view: 'tools', query: 'weather' }, entries.slice(0, 2), { page: indexedPage, catalogue: indexedCatalogue, overview })
+    expect(await screen.findByText('Search is unavailable')).toBeTruthy()
+    expect(captureRouteException).toHaveBeenCalledWith(initialFailure, { degraded: 'useCanonicalMarketSearch.initial', reason: 'source_unavailable' }, 'warning')
+    fireEvent.click(screen.getByRole('button', { name: 'Retry search' }))
+    await waitFor(() => expect(captureRouteException).toHaveBeenCalledWith(retryFailure, { degraded: 'useCanonicalMarketSearch.retry', reason: 'source_unavailable' }, 'warning'))
+    expect(screen.getByText('Search is unavailable')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Retry search' }))
+    expect(await screen.findByRole('link', { name: 'Weather Forecast' })).toBeTruthy()
+    expect(searchMarketToolsServer).toHaveBeenNthCalledWith(3, { data: { query: 'weather', limit: 8 } })
+  })
+
+  it('reports next-page failure without replacing the current result and permits the same cursor to retry', async () => {
+    const nextPageFailure = new Error('next page failed')
+    const first = { ...searchMeta, kind: 'match', results: searchRows } satisfies ToolChoiceSearchOutput
+    searchMarketToolsServer.mockResolvedValueOnce(first).mockRejectedValueOnce(nextPageFailure).mockResolvedValueOnce(first)
+    show({ view: 'tools', query: 'weather' }, entries.slice(0, 2), { page: indexedPage, catalogue: indexedCatalogue, overview })
+    expect(await screen.findByRole('link', { name: 'Weather Forecast' })).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Next page' }))
+    expect(await screen.findByRole('alert')).toHaveProperty('textContent', 'The next page could not load; this page is unchanged. Try Next page again.')
+    expect(screen.getByRole('link', { name: 'Weather Forecast' })).toBeTruthy()
+    expect(captureRouteException).toHaveBeenCalledWith(nextPageFailure, { degraded: 'useCanonicalMarketSearch.nextPage', reason: 'source_unavailable' }, 'warning')
+    fireEvent.click(screen.getByRole('button', { name: 'Next page. Retry' }))
+    await waitFor(() => expect(screen.getByText('Page 2')).toBeTruthy())
+    expect(searchMarketToolsServer).toHaveBeenNthCalledWith(3, { data: { query: 'weather', limit: 8, cursor: 'opaque-next' } })
   })
 })

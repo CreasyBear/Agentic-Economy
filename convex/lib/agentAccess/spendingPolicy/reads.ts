@@ -1,16 +1,15 @@
 import { v, type ObjectType } from 'convex/values'
 import type { QueryCtx } from '../../../_generated/server'
-import { agentSpendingLimitsReadResultValue, type AgentSpendingLimitsReadResult, projectAgentAccessGrant } from '@/modules/agent-access/policy'
+import { agentSpendingLimitsReadResultValue, type AgentSpendingLimitsReadResult } from '@/modules/agent-access/policy'
 import { resolveInteractiveAuthorityContext } from '../../../interactiveAuthority'
-import { loadOwnedAgent, mapLoadFailure, type OwnerAuthority } from './material'
+import { loadOwnedAgent, mapLoadFailure, policyFromMaterial, type OwnerAuthority } from './material'
 
 export const readCurrentArgs = { principalRef: v.string() }
 export const readCurrentResult = agentSpendingLimitsReadResultValue
 
 /**
- * Owner-authenticated current readback. The query returns only the three
- * editable amounts plus the immutable grant revision/digest needed to issue a
- * fenced update; all other policy material remains server-owned.
+ * Owner-authenticated current policy, including the source-confirmed deadline.
+ * Missing mandatory authority never becomes an editable or unlimited policy.
  */
 export async function readCurrentHandler(
   ctx: QueryCtx, args: ObjectType<typeof readCurrentArgs>,
@@ -31,16 +30,5 @@ export async function readCurrentHandler(
   if (requestedPrincipalRef.length === 0) return { kind: 'refused', code: 'agent_not_found' }
   const loaded = await loadOwnedAgent(ctx, owner, requestedPrincipalRef, Date.now())
   if (loaded.kind !== 'ok') return mapLoadFailure(loaded) as AgentSpendingLimitsReadResult
-  const { admission, grant } = loaded.material
-  const budget = projectAgentAccessGrant(grant).budget
-  return {
-    kind: 'current',
-    principalRef: admission.principalId,
-    grantRef: grant.grantRef,
-    generation: grant.generation,
-    spendingPolicyDigest: grant.spendingPolicyDigest,
-    maximumSpendPerCall: budget.maximumSpendPerCall,
-    maximumDailySpend: budget.maximumDailySpend,
-    maximumMonthlySpend: budget.maximumMonthlySpend,
-  }
+  return policyFromMaterial(loaded.material)
 }

@@ -8,6 +8,9 @@ import {
 import { captureRouteException } from '@/lib/observability/capture-route-exception'
 import { projectComparison, projectOptionsFromCard, projectSourcesFromCards, projectWorkFromCards } from './generative/generative.view-model'
 import type { ComparisonTableView, FollowUpsView, OptionsGridView, SourcesInlineView, WorkDisclosureView } from './generative/generative.contracts'
+import type { RegistryNextAction } from '@/modules/registry/tool-choice-contracts'
+
+export type SearchNextProps = Readonly<{ next?: RegistryNextAction }>
 
 export {
   CHAT_TOOL_IDS,
@@ -199,7 +202,8 @@ export function projectGenerativeTurn(turn: TranscriptTurn): Readonly<{
     sources: projectSourcesFromCards(turn.tools),
     options,
     comparison: comparedOptions.length > 1 ? projectComparison(comparedOptions) : null,
-    followUps: { suggestions: turn.text.trim().length === 0 || (options.options.length === 0 && comparedOptions.length === 0)
+    followUps: { suggestions: turn.text.trim().length === 0
+      || (!options.options.some(option => option.selectable) && comparedOptions.length === 0)
       ? []
       : ['Which of these is ready to use?', 'What will each one cost?', 'Which fits my use case best?'] },
   }

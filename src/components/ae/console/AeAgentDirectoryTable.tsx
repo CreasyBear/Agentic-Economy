@@ -32,19 +32,21 @@ import {
   scopeLabel,
 } from './agent-operator-console-model'
 
+export type AeAgentDirectoryTableProps = Readonly<{
+  directoryItems: readonly AgentDirectoryItem[]
+  loading: boolean
+  onRenameAgent?: (principalRef: string, expectedRevision: number, displayName: string) => Promise<boolean>
+  getAgentHref?: (principalId: string) => string
+  onOpenAgent: (item: AgentDirectoryItem) => void
+}>
+
 export function AeAgentDirectoryTable({
   directoryItems,
   loading,
   onRenameAgent,
   getAgentHref,
   onOpenAgent,
-}: Readonly<{
-  directoryItems: readonly AgentDirectoryItem[]
-  loading: boolean
-  onRenameAgent?: (principalRef: string, expectedRevision: number, displayName: string) => Promise<boolean>
-  getAgentHref?: (principalId: string) => string
-  onOpenAgent: (item: AgentDirectoryItem) => void
-}>) {
+}: AeAgentDirectoryTableProps) {
   const [statusFilter, setStatusFilter] = useState<'all' | AgentDirectoryItem['status']>('all')
   const firstLoadPending = useFirstLoadPending(loading)
   const agentsPhase = stagedListPhase({ firstLoadPending, rows: directoryItems })
@@ -69,7 +71,7 @@ export function AeAgentDirectoryTable({
           <div className="grid gap-1">
             <InlineEditField
               value={row.original.displayName}
-              label={`Rename ${row.original.displayName}`}
+              label={`Rename ${row.original.displayName} (${environmentLabel(row.original.environment)} · ${row.original.principalRef})`}
               readOnly={onRenameAgent === undefined}
               errorMessage="Could not rename this Agent. Current saved name has been restored."
               onSave={async (displayName) => onRenameAgent?.(
@@ -79,6 +81,9 @@ export function AeAgentDirectoryTable({
               ) ?? false}
             />
             <Badge variant="outline" className="w-fit">{environmentLabel(row.original.environment)}</Badge>
+            <span className="break-all font-mono text-xs text-muted-foreground" title={row.original.principalRef}>
+              {row.original.principalRef}
+            </span>
           </div>
         ),
       },
@@ -217,7 +222,7 @@ export function AeAgentDirectoryTable({
               label: 'View',
               onOpen: onOpenAgent,
               getAccessibleLabel: (item: AgentDirectoryItem) =>
-                `View ${item.displayName}`,
+                `View ${item.displayName} (${environmentLabel(item.environment)} · ${item.principalRef})`,
             },
           }
         : {
@@ -227,7 +232,7 @@ export function AeAgentDirectoryTable({
               getHref: (item: AgentDirectoryItem) =>
                 getAgentHref(item.principalRef),
               getAccessibleLabel: (item: AgentDirectoryItem) =>
-                `Open ${item.displayName}`,
+                `Open ${item.displayName} (${environmentLabel(item.environment)} · ${item.principalRef})`,
             },
           })}
     />

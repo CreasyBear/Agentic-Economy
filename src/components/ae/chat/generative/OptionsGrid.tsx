@@ -28,7 +28,7 @@ export function OptionsGrid({ view, onSelect, onCompare }: OptionsGridProps) {
               </div>
               <div className="flex flex-wrap gap-1">
                 <Button type="button" size="sm" variant="secondary" className="min-h-10" onClick={() => onSelect(option.id)} disabled={!option.selectable} aria-pressed={view.selectedId === option.id}>Select</Button>
-                {view.options.length < 2 ? null : <Button type="button" size="sm" variant="secondary" className="min-h-10" onClick={() => onCompare(option.id)} aria-pressed={compared}>{compared ? 'Remove from compare' : 'Compare'}</Button>}
+                {view.options.length < 2 || !option.selectable ? null : <Button type="button" size="sm" variant="secondary" className="min-h-10" onClick={() => onCompare(option.id)} aria-pressed={compared}>{compared ? 'Remove from compare' : 'Compare'}</Button>}
               </div>
             </article>
           )

@@ -44,7 +44,19 @@
   {
     "visibility": "public",
     "module": "adminConsoleAudit",
+    "method": "listAdminApprovalProposals",
+    "kind": "query"
+  },
+  {
+    "visibility": "public",
+    "module": "adminConsoleAudit",
     "method": "listAdminAuditEvents",
+    "kind": "query"
+  },
+  {
+    "visibility": "public",
+    "module": "adminConsoleExceptions",
+    "method": "listAdminExceptionsPage",
     "kind": "query"
   },
   {
@@ -3296,6 +3308,12 @@
   {
     "visibility": "public",
     "module": "x402DirectoryIndex",
+    "method": "detailById",
+    "kind": "query"
+  },
+  {
+    "visibility": "public",
+    "module": "x402DirectoryIndex",
     "method": "facets",
     "kind": "query"
   },
@@ -3315,6 +3333,18 @@
     "visibility": "public",
     "module": "x402DirectoryIndex",
     "method": "resource",
+    "kind": "query"
+  },
+  {
+    "visibility": "public",
+    "module": "x402DirectoryIndex",
+    "method": "searchCompact",
+    "kind": "query"
+  },
+  {
+    "visibility": "internal",
+    "module": "x402DirectoryIndex",
+    "method": "searchCompactInternal",
     "kind": "query"
   },
   {

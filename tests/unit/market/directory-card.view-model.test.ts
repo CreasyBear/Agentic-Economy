@@ -30,11 +30,11 @@ it('carries the decision facts a listing page can show without a Call', () => {
   expect(toDirectoryToolPageModel({
     ...entry,
     prices: [{ network: 'eip155:8453', networkLabel: 'Base', scheme: 'exact', amount: '0.002000 USDC', decimalAmount: '0.002000', symbol: 'USDC' }],
-  }).priceLabel).toBe('0.002 USDC')
+  })).toMatchObject({ priceLabel: 'AUD estimate temporarily unavailable', priceContext: 'Provider lists 0.002 USDC per Call' })
   expect(toDirectoryToolPageModel({
     ...entry,
     prices: [{ network: 'eip155:8453', networkLabel: 'Base', scheme: 'exact', amount: '5680.941049 USDC', decimalAmount: '5680.941049', symbol: 'USDC' }],
-  }).payments[0]?.amount).toBe('5,680.94 USDC')
+  }).payments[0]?.amount).toBe('5,680.941049 USDC')
   expect(model.methodLabel).toBe('HTTP POST')
   expect(model.providerLine).toBe('StableEnrich')
   expect(model.providerHost).toBe('example.com')
@@ -61,7 +61,7 @@ it('carries the decision facts a listing page can show without a Call', () => {
   ])
 })
 
-it('groups a Provider into a listed price range and its endpoints', () => {
+it('groups a Provider and keeps USDC endpoint prices out of AUD price slots', () => {
   const search = {
     ...entry,
     resource: 'https://api.exa.ai/search',
@@ -84,11 +84,12 @@ it('groups a Provider into a listed price range and its endpoints', () => {
   const surface = toDirectoryServiceSurface(search, [search, contents], false)
   expect(surface.title).toBe('Exa')
   expect(surface.networks).toBe('Base, Solana')
-  expect(surface.priceRange).toBe('0.001 USDC – 0.007 USDC')
+  expect(surface.priceRange).toBe('AUD estimate temporarily unavailable')
   expect(surface.endpointCount).toBe('2 endpoints')
   expect(surface.endpoints.map(endpoint => endpoint.path)).toEqual(['/search', '/contents'])
   expect(surface.endpoints[0]?.current).toBe(true)
   expect(surface.endpoints[0]?.activity).toBe('5,900 calls · 87 payers · last 30 days')
+  expect(surface.endpoints.map(endpoint => endpoint.price)).toEqual(['AUD estimate temporarily unavailable', 'AUD estimate temporarily unavailable'])
   expect(toDirectoryServiceSurface(search, [], true).endpointCount).toBe('1+ endpoints')
 })
 
@@ -98,13 +99,22 @@ it('labels empty prices as on-request with no Provider price published', () => {
   expect(model.priceContext).toBe('No Provider price published')
 })
 
-it('formats decimalAmount and symbol as a listed denomination', () => {
+it('shows the listed denomination as source detail, not the buyer price', () => {
   const model = toDirectoryToolCardModel({
     ...entry,
     prices: [{ network: 'eip155:8453', scheme: 'exact', amount: '0.02 USDC', decimalAmount: '0.020000', symbol: 'USDC' }],
   })
-  expect(model.priceLabel).toBe('0.02 USDC')
-  expect(model.priceContext).toBe('Provider price per Call')
+  expect(model.priceLabel).toBe('AUD estimate temporarily unavailable')
+  expect(model.priceContext).toBe('Provider lists 0.02 USDC per Call')
+})
+
+it('keeps a sub-cent published source exact while refusing to invent an AUD rate', () => {
+  const model = toDirectoryToolCardModel({
+    ...entry,
+    prices: [{ network: 'eip155:8453', scheme: 'exact', amount: '0.0000001 USDC', decimalAmount: '0.0000001', symbol: 'USDC' }],
+  })
+  expect(model.priceLabel).toBe('AUD estimate temporarily unavailable')
+  expect(model.priceContext).toBe('Provider lists 0.0000001 USDC per Call')
 })
 
 it('defers unknown atomic amounts to payment details', () => {
@@ -123,7 +133,7 @@ it('counts multiple payment options', () => {
       { network: 'solana:mainnet', scheme: 'exact', amount: '0.02 USDC' },
     ],
   })
-  expect(model.priceContext).toBe('2 Provider payment options')
+  expect(model.priceContext).toBe('2 Provider payment options · source 0.02 USDC')
 })
 
 it('surfaces Bazaar volume without treating it as an Agentic Economy Call', () => {
@@ -202,7 +212,7 @@ it('reads a Provider from its busiest Tool and leaves a quiet host blank', () =>
     key: 'blockrun.ai', label: 'blockrun.ai', count: 48,
     leadCalls: 334244, leadPayers: 183, leadPrice: '0.002', leadTitle: 'AI chat completions', leadSlug: 'api-v1-chat-completions',
   })).toMatchObject({
-    callsLabel: '334,244', payersLabel: '183', priceLabel: '0.002 USDC', toolLabel: '48',
+    callsLabel: '334,244', payersLabel: '183', priceLabel: 'AUD estimate temporarily unavailable', priceSourceLabel: 'Provider lists 0.002 USDC per Call', toolLabel: '48',
     leadTitle: 'AI chat completions', leadSlug: 'api-v1-chat-completions',
   })
   const quiet = toDirectoryProviderRow({ key: 'quiet.example', label: 'quiet.example', count: 1, leadCalls: -1, leadTitle: 'Ghost' })

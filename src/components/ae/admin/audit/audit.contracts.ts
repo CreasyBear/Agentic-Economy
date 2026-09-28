@@ -1,6 +1,7 @@
 import { z } from 'zod'
 
 import type { AdminProposableAction } from '@/lib/operator/admin-console/contracts'
+import type { AdminRole } from '@/modules/security/public'
 import type { AdminAuditFilter, AdminAuditRow } from '@/lib/operator/admin-console/audit.contracts'
 import { AuditEventTypeValues } from '@/modules/observability/public'
 import { getStatusPresentation } from '@/lib/ui/status-presentation'
@@ -43,16 +44,7 @@ export type AdminApprovalProposal = Readonly<{
   proposerRef: string
   createdAt: number
   expiresAt: number
-}>
-
-export type AdminApprovalRowModel = Readonly<{
-  proposalRef: string
-  actionLabel: string
-  proposerRef: string
-  createdAtLabel: string
-  createdAtIso: string
-  expiresAtLabel: string
-  expiresAtIso: string
+  commandJson: string | null
 }>
 
 export type AdminAuditRowModel = Readonly<{
@@ -72,8 +64,13 @@ export type AdminAuditRowModel = Readonly<{
 
 export type AdminAuditReadyState = Readonly<{
   kind: 'ready'
+  role: AdminRole
+  actorRef: string
+  now: number
   events: readonly AdminAuditRowModel[]
-  proposals: readonly AdminApprovalRowModel[]
+  proposals: readonly AdminApprovalProposal[]
+  approvalPaginationStatus: 'CanLoadMore' | 'LoadingMore' | 'Exhausted'
+  loadMoreApprovals: () => void
   paginationStatus: 'CanLoadMore' | 'LoadingMore' | 'Exhausted'
   loadMore: () => void
 }>
@@ -104,8 +101,13 @@ export type AuditEventsTableProps = Readonly<{
   onLoadMore: () => void
 }>
 
-export type PendingApprovalsPanelProps = Readonly<{
-  rows: readonly AdminApprovalRowModel[]
+export type PendingApprovalsActionsProps = Readonly<{
+  proposals: readonly AdminApprovalProposal[]
+  now: number
+  role: AdminRole
+  actorRef: string
+  paginationStatus: AdminAuditReadyState['approvalPaginationStatus']
+  onLoadMore: () => void
 }>
 
 export const AUDIT_EVENT_TYPES = AuditEventTypeValues

@@ -6,6 +6,7 @@ import type { SpendingPauseToggleProps } from '../spending-limits-form.contracts
 
 export function SpendingPauseToggle({
   isPaused,
+  restoreAvailable,
   disabled,
   onTogglePause,
 }: SpendingPauseToggleProps) {
@@ -21,7 +22,7 @@ export function SpendingPauseToggle({
       {isPaused ? (
         <>
           <PlayIcon className="size-3.5" />
-          Resume Agent
+          {restoreAvailable ? 'Resume Agent' : 'Set limits to resume'}
         </>
       ) : (
         <>

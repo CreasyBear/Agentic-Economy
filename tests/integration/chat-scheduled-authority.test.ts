@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 
 const gatewayProbe = vi.hoisted(() => ({
   modelCalls: vi.fn(),
+  blankFinalAfterTool: false,
 }))
 
 vi.mock('@/modules/model-gateway/public', async (importOriginal) => {
@@ -11,6 +12,13 @@ vi.mock('@/modules/model-gateway/public', async (importOriginal) => {
     ...actual,
     openRouterModel: vi.fn((...args: unknown[]) => {
       gatewayProbe.modelCalls(...args)
+      if (gatewayProbe.blankFinalAfterTool) return mockModel({ contentSteps: [
+        [{ type: 'tool-call', toolCallId: 'blank-lookup', toolName: 'registry_tools_describe',
+          input: JSON.stringify({ toolRef: `operation:v1:${'a'.repeat(64)}` }) }],
+        [{ type: 'text', text: ' ' }],
+        [{ type: 'text', text: ' ' }],
+        [{ type: 'text', text: ' ' }],
+      ] })
       return mockModel({
         content: [{ type: 'text', text: 'The current keyless Operation remains available.' }],
       })
@@ -42,6 +50,7 @@ describe('scheduled chat consequence authority', () => {
   afterEach(() => {
     vi.useRealTimers()
     gatewayProbe.modelCalls.mockClear()
+    gatewayProbe.blankFinalAfterTool = false
     delete process.env.OPENROUTER_API_KEY
     delete process.env.AE_CHAT_SHARE_SECRET
     delete process.env.AE_LLM_MODEL
@@ -599,6 +608,27 @@ describe('scheduled chat consequence authority', () => {
     await expect(deniedOwner.query(api.chatThreads.getThread, {
       threadId: denied.threadId,
       now: Date.now(),
+    })).resolves.toMatchObject({ busy: false })
+  })
+
+  it('keeps a persistently blank Tool turn visible, failed, and free of duplicate prompts', async () => {
+    process.env.OPENROUTER_API_KEY = 'runtime-authority-regression-key'
+    gatewayProbe.blankFinalAfterTool = true
+    const backend = convexTestWithMarketComponents()
+    const { owner } = await publishedBusinessOwner(backend, 'chat-blank-final')
+    const sent = await owner.mutation(internal.chatMessages.sendMessage, {
+      prompt: 'Find a current Tool for this job',
+    })
+    await drainExpectedUnavailableGeneration(backend)
+    const messages = await owner.query(api.chatMessages.listMessages, {
+      threadId: sent.threadId,
+      paginationOpts: { cursor: null, numItems: 20 },
+    })
+    expect(messages.page.filter(message => message.role === 'user')).toHaveLength(1)
+    expect(messages.page.some(message => message.role === 'assistant' && message.text.includes("I couldn't finish the answer. Edit your question to try again."))).toBe(true)
+    expect(messages.page.filter(message => message.role === 'assistant' && message.text.trim().length === 0)).toHaveLength(1)
+    await expect(owner.query(api.chatThreads.getThread, {
+      threadId: sent.threadId, now: Date.now(),
     })).resolves.toMatchObject({ busy: false })
   })
 

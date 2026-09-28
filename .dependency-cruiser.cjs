@@ -46,31 +46,16 @@ module.exports = {
         },
       },
     },
-    // dependency-cruiser rules-reference on `viaOnly` (same excerpt as
-    // above): matches cycles where EVERY module in the cycle satisfies the
-    // regular expression. Here `from.path` + `to.viaOnly.pathNot` together
-    // select cycles that (a) start inside the capability-supply module and
-    // (b) do not pass exclusively through a barrel file - i.e. the same
-    // "real" (non-barrel) cycles `no-circular` used to flag, restricted to
-    // this one module. Decision D3 excludes breaking these cycles (they
-    // require capability-supply/internal module reshaping) for this
-    // stabilisation pass, so they are downgraded to a tracked warning
-    // instead of failing the build. Scoped to the whole
-    // `capability-supply/` tree, not just `internal/`, because several of
-    // the 48 baseline cycles loop through the module's own top-level
-    // support files (e.g. tool-projection.ts, route-transport-runtime.ts)
-    // that sit next to, not inside, `internal/`.
+    // Report cycles confined to capability-supply separately. Warning severity
+    // controls presentation only: `deps:check` applies the zero-cycle ratchet
+    // to this rule and rejects any matching cycle.
     {
       name: "no-circular-capability-supply-internal",
       severity: "warn",
       comment:
-        "This dependency is part of a circular relationship confined to " +
-        "the capability-supply module that does NOT pass exclusively " +
-        "through a module barrel (public.ts/index.ts). Breaking it requires " +
-        "capability-supply/internal module reshaping, which decision D3 " +
-        "excludes from this stabilisation pass. Tracked as a warning so the " +
-        "count stays visible for the Well 5 ratchet, but it does not fail " +
-        "the build.",
+        "Circular relationship inside capability-supply that is not exclusively " +
+        "through module barrels. Reported as a warning; deps:check enforces " +
+        "a zero-cycle ceiling for this rule.",
       from: {
         path: "^src/modules/capability-supply/",
       },

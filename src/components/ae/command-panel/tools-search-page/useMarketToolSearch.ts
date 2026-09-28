@@ -15,9 +15,8 @@ import {
   type LucideIcon,
 } from 'lucide-react'
 import { APP_NAVIGATION, type AppDestinationId } from '@/lib/navigation/app-navigation'
-import type { ListingSearchItem } from '@/modules/registry/public'
-
 import { getStatusPresentation } from '@/lib/ui/status-presentation'
+import { formatDisplayPrice } from '@/modules/money/public'
 import {
   TOOL_SEARCH_RESULT_LIMIT,
   searchMarketTools,
@@ -30,9 +29,10 @@ import {
   TOOLS_SEARCH_DEBOUNCE_MS,
   type MarketToolSearchStatus,
   type ToolSearchResultRowModel,
+  type ToolSearchContinuation,
 } from './tools-search-page.contracts'
 
-type CatalogSearchItem = Extract<ToolChoiceSearchResult, { kind: 'matched' }>['results'][number]
+type CatalogSearchItem = Extract<ToolChoiceSearchResult, { kind: 'match' }>['results'][number]
 const navigationIcons: Readonly<Record<AppDestinationId, LucideIcon>> = {
   market: Compass,
   chat: MessageSquare,
@@ -54,47 +54,21 @@ const navigationItems: readonly CommandNavigationItem[] = APP_NAVIGATION.map((de
 }))
 
 function mapCatalogSearchItemToRowModel(item: CatalogSearchItem): ToolSearchResultRowModel {
-  const healthLabel =
-    item.readiness === 'ready'
+  const healthLabel = item.access === 'external_listing'
+    ? 'External listing, not callable through AE'
+    : item.readiness === 'ready'
       ? getStatusPresentation('operational').label
       : item.readiness === 'unavailable'
         ? getStatusPresentation('degraded').label
         : 'Unverified'
   return {
-    toolRef: item.toolRef,
+    toolRef: item.access === 'ae_callable' ? item.toolRef ?? item.detailRef : item.detailRef,
     title: item.title,
-    providerLine: item.details === undefined
-      ? item.summary : `${item.details.provider.name} · ${item.details.capabilityId}`,
+    providerLine: `${item.provider} · ${item.summary}`,
     healthLabel,
-    priceLabel: item.price.label,
-  }
-}
-function mapListingToRow(item: ListingSearchItem): ToolSearchResultRowModel {
-  const { listing } = item
-  const sourceKind = listing.sources[0].kind
-  const identity = listing.identity
-  const price = listing.facts.price
-  const priceLabel = price.kind === 'absent' ? 'Price not provided'
-    : price.value.kind === 'quote_required' ? 'Quote required'
-      : price.value.kind === 'range' ? `${price.value.currency} ${price.value.minimum}–${price.value.maximum} / Call`
-        : `${price.value.currency} ${price.value.amount} / Call`
-  const host = identity.hostName.kind === 'present' ? identity.hostName.value : 'Unattributed host'
-  const provider = identity.providerName.kind === 'present' ? identity.providerName.value : 'Unattributed Provider'
-  return {
-    toolRef: listing.canonicalToolRef.kind === 'present' ? listing.canonicalToolRef.value : item.href,
-    title: identity.title.kind === 'present' ? identity.title.value : 'Untitled listing',
-    providerLine: sourceKind === 'directory' ? `Host: ${host} · Coinbase Bazaar`
-      : sourceKind === 'business_catalogue' ? `Provider: ${provider} · Business catalogue`
-        : `${listing.providerPage.kind === 'present' ? 'Provider' : 'Publisher'}: ${provider} · AE admitted`,
-    healthLabel: sourceKind === 'admitted'
-      ? listing.facts.readiness.kind === 'present' && listing.facts.readiness.value.posture === 'routeable'
-        ? getStatusPresentation('operational').label
-        : 'Readiness unknown'
-      : sourceKind === 'directory'
-        ? 'Directory listing, not callable through AE'
-        : 'Catalogue endpoint, not callable through AE',
-    sourceKind,
-    priceLabel,
+    sourceKind: item.access === 'ae_callable' ? 'admitted' : 'directory',
+    priceLabel: item.price.kind === 'indicative' && item.price.label.startsWith('A$')
+      ? item.price.label : formatDisplayPrice({ kind: 'unavailable' }) ?? 'AUD estimate temporarily unavailable',
   }
 }
 
@@ -102,6 +76,7 @@ function mapListingToRow(item: ListingSearchItem): ToolSearchResultRowModel {
 type UseMarketToolSearchOptions = Readonly<{
   query: string
   searchAttempt: number
+  continuation?: ToolSearchContinuation
   searchTools?: (
     input: MarketToolSearchInput,
   ) => Promise<ToolChoiceSearchResult>
@@ -110,6 +85,7 @@ type UseMarketToolSearchOptions = Readonly<{
 export function useMarketToolSearch({
   query,
   searchAttempt,
+  continuation,
   searchTools = searchMarketTools,
 }: UseMarketToolSearchOptions): Readonly<{
   status: MarketToolSearchStatus
@@ -123,6 +99,7 @@ export function useMarketToolSearch({
       setStatus({ kind: 'idle' })
       return
     }
+    const activePage = continuation?.forQuery === trimmed ? continuation : undefined
 
     let current = true
     setStatus({ kind: 'loading', query: trimmed })
@@ -131,39 +108,40 @@ export function useMarketToolSearch({
         setStatus({ kind: 'loading', query: trimmed })
         try {
           const result = await searchTools({
-            query: trimmed,
+            query: activePage?.query ?? trimmed,
             limit: TOOL_SEARCH_RESULT_LIMIT,
+            ...(activePage === undefined ? {} : { cursor: activePage.cursor }),
           })
           if (!current) return
-          if (result.groups !== undefined) {
-            const groups = result.groups
-            const items = [...groups.buyThroughAe.items, ...groups.listedElsewhere.items].map(mapListingToRow)
-            setStatus(groups.total === 0 ? {
-              kind: 'empty', query: trimmed, count: 0,
-              message: 'No matching listings in the searched source pages. Try different wording.',
-            } : {
-              kind: 'success', query: trimmed, count: groups.total, items,
-              groups: { buyThroughAe: groups.buyThroughAe.count, listedElsewhere: groups.listedElsewhere.count },
-            })
-            return
-          }
+          const next = result.next.find((action) => action.action === 'next-page')
+          const nextPage = next?.action === 'next-page'
+            ? { query: next.args.query, cursor: next.args.cursor }
+            : undefined
           if (result.kind === 'unavailable') {
             setStatus({
               kind: 'error',
               query: trimmed,
               tone: 'recovery',
-              message:
-                'This search could not run. Try different wording or browse the current catalogue.',
+              message: 'Tool search is unavailable. Try again.',
             })
             return
           }
           if (result.kind === 'noMatch') {
-            const nearMisses = result.nearMisses.map((item) => item.title).join(', ')
             setStatus({
               kind: 'empty',
               query: trimmed,
               count: 0,
-              message: `${result.scope === 'page' ? 'No suitable Tools on this page' : 'No suitable Tools found'}.${nearMisses.length === 0 ? '' : ` Near misses (not matches): ${nearMisses}.`}`,
+              message: 'No suitable Tools found in the assessed sources. Try different wording.',
+            })
+            return
+          }
+          if (result.kind === 'scoped' && result.results.length === 0) {
+            setStatus({
+              kind: 'empty',
+              query: trimmed,
+              count: 0,
+              message: `No suitable Tools in the assessed ${result.assessed.source} ${result.assessed.scope}; more supply may exist. Try different wording or browse the catalogue.`,
+              ...(nextPage === undefined ? {} : { nextPage }),
             })
             return
           }
@@ -172,6 +150,8 @@ export function useMarketToolSearch({
             query: trimmed,
             count: result.results.length,
             items: result.results.map(mapCatalogSearchItemToRowModel),
+            ...(result.kind === 'scoped' ? { scopeLabel: `Assessed ${result.assessed.source} ${result.assessed.scope}; other supply may exist` } : {}),
+            ...(nextPage === undefined ? {} : { nextPage }),
           })
         } catch (error) {
           if (!current) return
@@ -192,7 +172,7 @@ export function useMarketToolSearch({
       current = false
       clearTimeout(timer)
     }
-  }, [query, searchAttempt, searchTools])
+  }, [query, searchAttempt, searchTools, continuation])
 
   return { status, navigationItems }
 }

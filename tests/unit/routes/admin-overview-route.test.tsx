@@ -11,10 +11,7 @@ const mocks = vi.hoisted(() => ({
     clerkFva: 'absent' as const,
     convex: 'ok' as const,
   } as Record<string, unknown>,
-  exceptions: {
-    items: [], unavailable: [], total: 0, truncated: false,
-    counts: { uncertain_call: 0, removal_dispute: 0, source_authority_review: 0, admission_case: 0 },
-  } as Record<string, unknown>,
+  exceptions: [] as Array<{ kind: string; partition: string; observed: number; complete: boolean; unavailable: boolean }>,
   metrics: {
     days: [], latestDay: null,
     headline: { settledCallValue: null, money: 'no_settled_usage', settledCalls: 0, successRate: null, transactingWorkspaces: 0 },
@@ -27,12 +24,12 @@ vi.mock('convex/react', () => ({
   useQuery: (query: FunctionReference<'query'>) => {
     const name = getFunctionName(query)
     if (name === 'adminConsoleOverview:readAdminOverview') return mocks.overview
-    if (name === 'adminConsoleExceptions:listAdminExceptions') return mocks.exceptions
+    if (name === 'adminConsoleExceptions:readAdminExceptionOverview') return mocks.exceptions
     return mocks.metrics
   },
 }))
 vi.mock('@tanstack/react-router', () => ({
-  Link: ({ children }: { children: ReactNode }) => <a>{children}</a>,
+  Link: ({ children, to }: { children: ReactNode; to: string }) => <a href={to}>{children}</a>,
   useLocation: () => ({ pathname: '/admin', hash: '' }),
 }))
 vi.mock('@/components/ae/admin/object-search/useAdminObjectSearch', () => ({
@@ -46,37 +43,26 @@ import { AdminOverviewPage } from '@/components/ae/admin/overview/AdminOverviewP
 
 beforeEach(() => {
   mocks.overview = { x402Custody: 'not_configured', clerkFva: 'absent', convex: 'ok' }
-  mocks.exceptions = {
-    items: [], unavailable: [], total: 0, truncated: false,
-    counts: { uncertain_call: 0, removal_dispute: 0, source_authority_review: 0, admission_case: 0 },
-  }
+  mocks.exceptions = []
 })
 afterEach(() => cleanup())
 
 describe('admin overview route', () => {
-  it('renders configuration truth, headline cards, and the empty exception state', () => {
+  it('links each observed partition to its own queue rather than the default partition', () => {
+    mocks.exceptions = [
+      { kind: 'removal_dispute', partition: 'opened', observed: 0, complete: true, unavailable: false },
+      { kind: 'removal_dispute', partition: 'contested', observed: 20, complete: false, unavailable: false },
+      { kind: 'admission_case', partition: 'submitted', observed: 0, complete: false, unavailable: true },
+    ]
     render(<AdminOverviewPage formance="not_configured" />)
-    expect(screen.getByText('Formance: Not configured')).toBeTruthy()
-    expect(screen.getByText('Clerk MFA claim: Absent')).toBeTruthy()
-    expect(screen.getByText('Settled Call value')).toBeTruthy()
-    expect(screen.getByText('No settled usage')).toBeTruthy()
-    expect(screen.getByText('Settled Calls')).toBeTruthy()
-    expect(screen.getByText('Success rate')).toBeTruthy()
-    expect(screen.getByText('Transacting Workspaces')).toBeTruthy()
-    expect(screen.getByText('Nothing needs attention.')).toBeTruthy()
-    expect(screen.getByText('View all (0)')).toBeTruthy()
+    expect(screen.getByRole('link', { name: 'Removal dispute · Contested' }).getAttribute('href'))
+      .toBe('/admin/exceptions?kind=removal_dispute&partition=contested')
+    expect(screen.queryByRole('link', { name: 'Removal dispute · Opened' })).toBeNull()
+    expect(screen.getByRole('link', { name: 'Admission case · Submitted' }).getAttribute('href'))
+      .toBe('/admin/exceptions?kind=admission_case&partition=submitted')
+    expect(screen.getByText('Unavailable')).toBeTruthy()
   })
 
-  it('shows only unavailable warning when an exception source failed', () => {
-    mocks.exceptions = {
-      items: [], unavailable: ['source_authority_review'], total: 0, truncated: false,
-      counts: { uncertain_call: 0, removal_dispute: 0, source_authority_review: 0, admission_case: 0 },
-    }
-    render(<AdminOverviewPage formance="not_configured" />)
-    expect(screen.getByText('Some exception sources are unavailable.')).toBeTruthy()
-    expect(screen.queryByText('Nothing needs attention.')).toBeNull()
-    expect(screen.getByText('View all (0)')).toBeTruthy()
-  })
 
   it('renders refusal copy once when overview access is refused', () => {
     mocks.overview = { kind: 'refused', code: 'missing_membership' }

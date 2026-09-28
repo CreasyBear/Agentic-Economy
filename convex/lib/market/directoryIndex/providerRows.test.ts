@@ -140,6 +140,16 @@ describe('provider directory rows (Well 8 Lane C)', () => {
     const entry = await backend.run(async (ctx) => await ctx.db.get(starRow.entryId))
     expect(entry?.source).toBe('provider')
     expect(entry?.name).toBe('Provider Lookup')
+    const callable = await backend.query(api.x402DirectoryIndex.searchCompact, {
+      query: 'lookup', access: 'ae_callable', paginationOpts: { cursor: null, numItems: 8 },
+    })
+    expect(callable).toMatchObject({ kind: 'ok', page: [{
+      id: entry?.documentId, source: 'provider', toolRef: publication.toolRef,
+      sourceRouteRef: ROUTE_REF, title: 'Provider Lookup',
+    }] })
+    expect(await backend.query(api.x402DirectoryIndex.searchCompact, {
+      query: 'lookup', access: 'external_listing', paginationOpts: { cursor: null, numItems: 8 },
+    })).toMatchObject({ kind: 'ok', page: [] })
 
     // The old Coinbase registry entry (and its facet memberships) are gone -
     // absorbed, not merely shadowed.

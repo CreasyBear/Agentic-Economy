@@ -16,16 +16,20 @@ export const adminRoleValue = v.union(
 export const listAdminAuditEventsArgs = {
   filter: adminAuditFilterValue,
   paginationOpts: paginationOptsValidator,
+  refreshAt: v.optional(v.number()),
 }
 export const listAdminAuditEventsResult = paginationResultValidator(adminAuditRowValue)
 export const readAdminAuditAccessArgs = {}
-export const readAdminAuditAccessResult = v.object({ kind: v.literal('allowed'), role: adminRoleValue })
-export const listAdminApprovalProposalsArgs = {}
-export const listAdminApprovalProposalsResult = v.array(adminApprovalProposalValue)
+export const readAdminAuditAccessResult = v.object({ kind: v.literal('allowed'), role: adminRoleValue, actorRef: v.string() })
+export const listAdminApprovalProposalsArgs = {
+  paginationOpts: paginationOptsValidator,
+  refreshAt: v.optional(v.number()),
+}
+export const listAdminApprovalProposalsResult = paginationResultValidator(adminApprovalProposalValue)
 
 export async function listAdminAuditEventsHandler(
   ctx: QueryCtx,
-  args: { filter: AdminAuditFilter; paginationOpts: PaginationOptions },
+  args: { filter: AdminAuditFilter; paginationOpts: PaginationOptions; refreshAt?: number },
 ) {
   const authority = await resolveAdminAuthority(ctx, 'read_admin_readbacks')
   if (authority.kind === 'denied') {
@@ -45,10 +49,15 @@ export async function listAdminAuditEventsHandler(
 
 export async function readAdminAuditAccessHandler(
   ctx: QueryCtx & { admin: AllowedAdminAuthority },
-): Promise<{ kind: 'allowed'; role: AdminRole }> {
-  return { kind: 'allowed', role: ctx.admin.membership.role }
+): Promise<{ kind: 'allowed'; role: AdminRole; actorRef: string }> {
+  return { kind: 'allowed', role: ctx.admin.membership.role, actorRef: ctx.admin.membership.tokenIdentifier }
 }
 
-export async function listAdminApprovalProposalsHandler(ctx: QueryCtx & { admin: AllowedAdminAuthority }) {
-  return [...await listOpenApprovalProposals(ctx, ctx.admin.membership.role === 'owner_admin')]
+export async function listAdminApprovalProposalsHandler(
+  ctx: QueryCtx,
+  { paginationOpts }: { paginationOpts: PaginationOptions; refreshAt?: number },
+) {
+  const authority = await resolveAdminAuthority(ctx, 'read_admin_readbacks')
+  if (authority.kind === 'denied') return { page: [], isDone: true, continueCursor: '' }
+  return await listOpenApprovalProposals(ctx, authority.membership.role === 'owner_admin', paginationOpts)
 }

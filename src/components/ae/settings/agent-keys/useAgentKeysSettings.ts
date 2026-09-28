@@ -6,6 +6,15 @@ import { captureClientExceptionOnClient } from '@/lib/observability/capture-clie
 import { revokeAgentCredentialServer } from '@/modules/agent-access/agent-access.functions'
 import type { AgentDirectoryProjection } from '@/modules/agent-access/agent-operator-view-model'
 
+type RevokeTarget = Readonly<{
+  credentialRef: string
+  generation: number
+  principalRef: string
+  name: string
+  environment: 'sandbox' | 'production'
+  current: boolean
+}>
+
 export function useAgentKeysSettings(initialDirectory: AgentDirectoryProjection) {
   const readDirectory = useServerFn(readAgentDirectoryServer)
   const readPage = useServerFn(readAgentDirectoryPageServer)
@@ -15,7 +24,7 @@ export function useAgentKeysSettings(initialDirectory: AgentDirectoryProjection)
   const [loadingMore, setLoadingMore] = useState(false)
   const [error, setError] = useState<string>()
   const [refreshRequired, setRefreshRequired] = useState(false)
-  const [revokeTarget, setRevokeTarget] = useState<{ ref: string; name: string }>()
+  const [revokeTarget, setRevokeTarget] = useState<RevokeTarget>()
   const [revoking, setRevoking] = useState(false)
   const revokeTriggerRef = useRef<HTMLButtonElement>(null)
 
@@ -59,18 +68,18 @@ export function useAgentKeysSettings(initialDirectory: AgentDirectoryProjection)
     }
   }, [directory.nextCursor, loadingMore, readPage, refreshRequired])
 
-  function requestRevoke(ref: string, name: string, trigger: HTMLButtonElement) {
-    if (refreshRequired) return
+  function requestRevoke(target: RevokeTarget, trigger: HTMLButtonElement) {
+    if (refreshRequired || revoking) return
     revokeTriggerRef.current = trigger
     setError(undefined)
-    setRevokeTarget({ ref, name })
+    setRevokeTarget(target)
   }
 
   async function confirmRevoke() {
     if (revokeTarget === undefined || revoking || refreshRequired) return
     setRevoking(true)
     try {
-      const result = await revokeKey({ data: { credentialRef: revokeTarget.ref } })
+      const result = await revokeKey({ data: { credentialRef: revokeTarget.credentialRef } })
       if (result.kind !== 'completed' && result.kind !== 'replayed') {
         setError(result.kind === 'refused' && result.code === 'authentication_required'
           ? 'Sign in as the access owner before revoking this key.'

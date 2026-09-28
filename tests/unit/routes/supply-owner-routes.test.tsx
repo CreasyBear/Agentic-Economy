@@ -44,8 +44,10 @@ vi.mock('@tanstack/react-router', async (importOriginal) => {
   }
 })
 
+import { readProviderWorkspaceIdentityDetailServer } from '@/components/ae/offerings/provider-workspace.functions'
 import { Route as OwnerSupplyDetailRoute } from '@/routes/_operator/owner.operations.$toolRef'
 import { Route as OwnerSupplyIndexRoute } from '@/routes/_operator/owner.operations'
+import { Route as OwnerSupplyNewRoute } from '@/routes/_operator/owner.operations.new'
 
 afterEach(() => {
   cleanup()
@@ -76,6 +78,14 @@ describe('owner supply routes', () => {
     expect(OwnerSupplyDetailRoute).toBeDefined()
   })
 
+  it('sends only missing provider identity to setup before reading source connections', async () => {
+    vi.mocked(readProviderWorkspaceIdentityDetailServer).mockResolvedValueOnce({ kind: 'not_applicable' })
+    const loader = OwnerSupplyNewRoute.options.loader
+    if (typeof loader !== 'function') throw new Error('add_tool_loader_missing')
+    await expect(loader({ deps: {} } as never)).rejects.toMatchObject({
+      options: { to: '/owner/operations', hash: 'add-tool' },
+    })
+  })
   it('renders an available Tool only for the matching owner readback', () => {
     const Component = OwnerSupplyDetailRoute.options.component
     if (Component === undefined) throw new Error('owner_supply_detail_component_missing')

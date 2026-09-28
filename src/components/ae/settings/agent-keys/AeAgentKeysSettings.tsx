@@ -21,12 +21,13 @@ import { useAgentKeysSettings } from './useAgentKeysSettings'
 export type AeAgentKeysSettingsProps = Readonly<{
   initialDirectory: AgentDirectoryProjection
   canonicalBaseUrl: string
+  openIssueDialog?: boolean
 }>
 
-export function AeAgentKeysSettings({ initialDirectory, canonicalBaseUrl }: AeAgentKeysSettingsProps) {
+export function AeAgentKeysSettings({ initialDirectory, canonicalBaseUrl, openIssueDialog = false }: AeAgentKeysSettingsProps) {
   const vm = useAgentKeysSettings(initialDirectory)
   const issueKey = useServerFn(issueAgentAccessKeyServer)
-  const [wizardOpen, setWizardOpen] = useState(false)
+  const [wizardOpen, setWizardOpen] = useState(openIssueDialog)
   const [reveal, setReveal] = useState<IssuedAgentAccessReveal>()
   const keys = vm.directory.details.flatMap((detail) => detail.credentials.map((credential) => ({ detail, credential })))
   const activeKeys = keys.filter(({ credential }) => credential.lifecycle === 'active')
@@ -54,12 +55,14 @@ export function AeAgentKeysSettings({ initialDirectory, canonicalBaseUrl }: AeAg
       {keys.length === 0 ? <SettingsEmptyState title="No Agent keys yet" description="Issue a key to connect your first Agent." action={<Button type="button" disabled={vm.refreshRequired} onClick={() => setWizardOpen(true)}>Issue Agent key</Button>} /> : keys.map(({ detail, credential }) => (
         <SettingsRow
           key={credential.credentialRef}
-          label={`${detail.agent.displayName} · generation ${credential.generation}`}
-          description={`Issued ${formatTimestamp(credential.issuedAt)} · expires ${formatTimestamp(credential.expiresAt)}`}
+          label={`${detail.agent.displayName} · generation ${credential.generation} · ${detail.agent.environment}`}
+          description={`Agent ${detail.agent.principalRef} · Issued ${formatTimestamp(credential.issuedAt)} · expires ${formatTimestamp(credential.expiresAt)}`}
         >
           <div className="flex min-w-0 flex-wrap items-center gap-2 sm:justify-end">
             <Badge variant={credential.lifecycle === 'active' ? 'default' : 'outline'}>
-              {credential.lifecycle === 'active' && credential.credentialRef === detail.currentCredentialRef ? getStatusPresentation('current').label : credential.lifecycle}
+              {credential.lifecycle === 'active'
+                ? credential.credentialRef === detail.currentCredentialRef ? getStatusPresentation('current').label : 'Other active'
+                : credential.lifecycle}
             </Badge>
             <Link to="/agent-access" search={{ caller: detail.agent.principalRef }} className="text-sm font-medium text-brand underline-offset-4 hover:underline focus-visible:outline-solid focus-visible:outline-2 focus-visible:outline-brand">View Agent</Link>
           </div>
@@ -71,10 +74,17 @@ export function AeAgentKeysSettings({ initialDirectory, canonicalBaseUrl }: AeAg
     {activeKeys.length > 0 && <SettingsDangerZone description="Revoking a key stops new requests made with it. This does not remove the Agent's activity history.">
       {activeKeys.map(({ detail, credential }) => <SettingsRow
         key={credential.credentialRef}
-        label={`${detail.agent.displayName} · generation ${credential.generation}`}
-        description="Stops new requests made with this credential."
+        label={`${detail.agent.displayName} · generation ${credential.generation} · ${detail.agent.environment}`}
+        description={`Agent ${detail.agent.principalRef} · ${credential.credentialRef} · ${credential.credentialRef === detail.currentCredentialRef ? 'current' : 'other active'} key`}
       >
-        <Button type="button" variant="destructive" className="min-h-touch" disabled={vm.revoking || vm.refreshRequired} onClick={(event) => vm.requestRevoke(credential.credentialRef, detail.agent.displayName, event.currentTarget)}>Revoke key</Button>
+        <Button type="button" variant="destructive" className="min-h-touch" disabled={vm.revoking || vm.refreshRequired} aria-label={`Revoke ${credential.credentialRef}, generation ${credential.generation}, ${credential.credentialRef === detail.currentCredentialRef ? 'current' : 'other active'} key for ${detail.agent.displayName}, Agent ${detail.agent.principalRef}, ${detail.agent.environment}`} onClick={(event) => vm.requestRevoke({
+          credentialRef: credential.credentialRef,
+          generation: credential.generation,
+          name: detail.agent.displayName,
+          principalRef: detail.agent.principalRef,
+          environment: detail.agent.environment,
+          current: credential.credentialRef === detail.currentCredentialRef,
+        }, event.currentTarget)}>Revoke key</Button>
       </SettingsRow>)}
     </SettingsDangerZone>}
     <AeConnectAgentWizardDialog open={wizardOpen} onOpenChange={setWizardOpen} onIssue={issueKey} onSuccess={(issued) => { setReveal(issued); void vm.refresh() }} />
@@ -82,9 +92,9 @@ export function AeAgentKeysSettings({ initialDirectory, canonicalBaseUrl }: AeAg
     <AeConfirmDialog
       open={vm.revokeTarget !== undefined}
       onOpenChange={vm.closeRevoke}
-      title="Revoke Agent key?"
-      description={`New requests using ${vm.revokeTarget?.name ?? 'this Agent'}'s selected key will stop. Existing activity remains available.`}
-      confirmLabel="Revoke key"
+      title={`Revoke ${vm.revokeTarget?.current ? 'current' : 'other active'} Agent key?`}
+      description={vm.revokeTarget === undefined ? '' : `Revoke credential ${vm.revokeTarget.credentialRef}, generation ${vm.revokeTarget.generation} (${vm.revokeTarget.current ? 'current' : 'other active'}) for ${vm.revokeTarget.name}, Agent ${vm.revokeTarget.principalRef}, ${vm.revokeTarget.environment}? This key stops authorizing new requests. The Agent and its activity history remain. ${vm.revokeTarget.current ? 'Another eligible active key can become current; otherwise the Agent loses authorization until reconnected. ' : ''}Refresh to see the outcome.`}
+      confirmLabel="Revoke this key"
       confirmVariant="destructive"
       pending={vm.revoking}
       onConfirm={() => void vm.confirmRevoke()}

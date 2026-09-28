@@ -5,7 +5,6 @@ import { AeProviderWorkspaceSkeleton } from '@/components/ae/offerings/provider-
 import {
   readProviderWorkspaceConnectionsSummaryServer,
   readProviderWorkspacePageServer,
-  readProviderWorkspacePayoutSummaryServer,
   readProviderWorkspacePublicStatusServer,
   readOwnerProviderOffboardingServer,
 } from '@/components/ae/offerings/provider-workspace.functions'
@@ -25,7 +24,6 @@ export const Route = createFileRoute('/_operator/owner/operations')({
       inventory,
       lifecycle: Promise.resolve(page.lifecycle ?? { kind: 'unavailable' as const }),
       connections: readProviderWorkspaceConnectionsSummaryServer().catch(() => ({ kind: 'unavailable' as const })),
-      payouts: readProviderWorkspacePayoutSummaryServer().catch(() => ({ kind: 'unavailable' as const })),
       publicStatus: readProviderWorkspacePublicStatusServer().catch(() => ({ kind: 'unavailable' as const })),
       offboarding: readOwnerProviderOffboardingServer().catch(() => ({ kind: 'unavailable' as const })),
     }

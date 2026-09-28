@@ -220,14 +220,14 @@ describe('operator command panel', () => {
       const firstCall = searchCalls[0]
       if (firstCall === undefined) throw new Error('search_call_missing')
       expect(firstCall.url.endsWith('/api/v1/market-tools/search')).toBe(true)
-      expect(firstCall.body).toMatchObject({ query: 'weather forecast', limit: 12 })
+      expect(firstCall.body).toMatchObject({ query: 'weather forecast', limit: 8 })
     })
 
     const option = await screen.findByRole('option', { name: /Weather forecast/ })
     expect(option.getAttribute('data-slot')).toBe('command-item')
     expect(option.closest('[data-slot="command-group"]')).toBeTruthy()
     expect(option.getAttribute('aria-selected')).toBe('true')
-    expect(option.textContent).toContain('Price confirmed at inspection')
+    expect(option.textContent).toMatch(/AUD\b.*unavailable/i)
     expect(option.textContent).toContain('Operational')
     const listbox = screen.getByRole('listbox', { name: 'Matching Tools' })
     expect(listbox.getAttribute('data-slot')).toBe('command-list')
@@ -716,17 +716,52 @@ describe('operator command panel', () => {
     expect(fetchSearch).toHaveBeenCalledTimes(2)
   })
 
+  it.each([false, true])('follows a scoped %s page via exact search cursor', async (withResult) => {
+    const query = 'weather forecast'
+    const continuationQuery = 'weather forecast API'
+    const cursor = 'opaque-next-page'
+    const requests: unknown[] = []
+    vi.stubGlobal('fetch', vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
+      const input = JSON.parse(String(init?.body)) as { query: string; cursor?: string }
+      requests.push(input)
+      const initial = operationSearchPayload()
+      if (input.cursor === undefined) return jsonResponse({
+        ...initial,
+        kind: 'scoped',
+        reason: 'More source pages remain unassessed.',
+        assessed: { source: 'all', scope: 'page', examined: 1, coverage: 'partial' },
+        partialResults: true,
+        results: withResult ? initial.results : [],
+        next: [{ action: 'next-page', authority: 'public', args: { query: continuationQuery, cursor } }],
+        pagination: { limit: 8, hasMore: true, nextCursor: cursor },
+      })
+      const second = twoOperationSearchPayload().results[1]
+      if (second === undefined) throw new Error('second_fixture_missing')
+      return jsonResponse({ ...initial, results: [second] })
+    }))
+
+    renderPanel({ openImmediately: true })
+    const input = await screen.findByRole('combobox', { name: 'Search Tools' })
+    fireEvent.change(input, { target: { value: query } })
+    const continueButton = await screen.findByRole('button', { name: 'Next page' })
+    if (withResult) expect(screen.getByRole('option', { name: /Weather forecast/ })).toBeTruthy()
+    else expect(screen.queryByRole('option', { name: /Weather forecast/ })).toBeNull()
+    fireEvent.click(continueButton)
+    expect(await screen.findByRole('option', { name: /Currency exchange rate/ })).toBeTruthy()
+    expect(requests).toEqual([
+      { query, limit: 8 },
+      { query: continuationQuery, limit: 8, cursor },
+    ])
+  })
+
   it('turns a no-match result into clear and browse continuations', async () => {
-    const { recommendation: _recommendation, ...search } = operationSearchPayload()
+    const search = operationSearchPayload()
     vi.stubGlobal('fetch', vi.fn(async () => jsonResponse({
       ...search,
       kind: 'noMatch',
       query: 'teleport a sandwich',
-      scope: 'exhausted',
       results: [],
-      nearMisses: [],
-      reason: 'No suitable Tool found in the searched supply.',
-      suggestions: [],
+      reason: 'No suitable Tools found in the assessed sources.',
       next: [],
     })))
 
@@ -781,36 +816,31 @@ const RECENT_TEST_OPERATION_REF = `operation:v1:${'c'.repeat(64)}`
 
 function operationSearchPayload(authentication?: unknown) {
   return {
-    kind: 'matched',
+    kind: 'match',
     schemaVersion: 'registry-tools:v3',
     query: 'weather forecast',
     partialResults: false,
+    assessed: { source: 'all', scope: 'complete', examined: 1, coverage: 'complete' },
     results: [
       {
+        id: TEST_OPERATION_REF,
+        source: 'current',
+        access: 'ae_callable',
         toolRef: TEST_OPERATION_REF,
         title: 'Weather forecast',
         summary: 'Forecast by coordinates.',
-        matchReason: 'Capability text overlap.',
+        provider: 'Open-Meteo',
+        actionClass: 'retrieve',
+        objectClass: 'data',
         readiness: 'ready',
-        healthStatus: 'operational',
-        verification: 'verified',
-        network: 'mainnet',
-        claimSource: 'provider',
-        entitlement: 'requires_auth',
         price: { kind: 'indicative', label: 'Price confirmed at inspection' },
-        details: {
-          capabilityId: 'get.open-meteo.forecast',
-          provider: { name: 'Open-Meteo', slug: 'open-meteo' },
-          description: 'Forecast by coordinates.',
-          listingTier: 'reviewed',
-        },
+        detailRef: TEST_OPERATION_REF,
         next: [{ action: 'describe', args: { toolRef: TEST_OPERATION_REF }, authority: 'public' }],
         ...(authentication === undefined ? {} : { authentication }),
       },
     ],
-    recommendation: { mode: 'fast', engine: 'jev_system_one', text: 'Inspect Weather forecast before use.', citations: [] },
     next: [],
-    pagination: { limit: 12, hasMore: false },
+    pagination: { limit: 8, hasMore: false },
   }
 }
 
@@ -820,17 +850,16 @@ function twoOperationSearchPayload() {
   if (firstItem === undefined) throw new Error('operation_search_fixture_missing')
   return {
     ...first,
+    assessed: { source: 'all', scope: 'complete', examined: 2, coverage: 'complete' },
     results: [
       firstItem,
       {
         ...firstItem,
+        id: SECOND_TEST_OPERATION_REF,
         toolRef: SECOND_TEST_OPERATION_REF,
         title: 'Currency exchange rate',
-        details: {
-          ...firstItem.details,
-          capabilityId: 'convert.currency.exchange-rate',
-          description: 'Current exchange rate for a currency pair.',
-        },
+        summary: 'Current exchange rate for a currency pair.',
+        detailRef: SECOND_TEST_OPERATION_REF,
         next: [{ action: 'describe', args: { toolRef: SECOND_TEST_OPERATION_REF }, authority: 'public' }],
       },
     ],

@@ -1,46 +1,27 @@
 import type { SortingState } from '@tanstack/react-table'
 import type { ReactNode } from 'react'
-import type { AeTone } from '@/lib/ui/status-presentation'
 
 import type {
   ProviderWorkspaceInventoryResult,
   ProviderWorkspaceLifecycleResult,
   ProviderWorkspaceConnectionsResult,
-  ProviderWorkspacePayoutResult,
   ProviderWorkspacePublicStatusResult,
   OwnerProviderOffboardingResult,
 } from '@/components/ae/offerings/provider-workspace.functions'
 import type { ProviderWorkspaceProjectionRow } from '@/components/ae/offerings/provider-workspace-projection'
+import type { OwnerProviderEarningsReadback } from '@/modules/capability-supply/supply-funnel.functions'
 
 export const PROVIDER_WORKSPACE_EARNINGS_COPY = {
-  connectionTitle: 'Provider earnings and payout readiness.',
-  connectAction: 'Connect Stripe',
-  connectedSentence: 'Stripe is connected for payouts.',
-  disconnectedSentence: 'Connect Stripe to receive payouts.',
-  unavailableSentence: 'Stripe connection status could not be loaded.',
-  retryAction: 'Try connection again',
-  unavailable: 'Stripe connection state unavailable',
+  unavailable: 'Earnings source unavailable',
+  retryAction: 'Try earnings again',
 } as const
 
-export type ProviderWorkspacePayoutConnectionState =
-  | 'not_connected'
-  | 'pending'
-  | 'connected'
-  | 'unavailable'
-
-export type ProviderWorkspacePayoutConnectionPresentation = Readonly<{
-  state: ProviderWorkspacePayoutConnectionState
-  label: string
-  sentence: string
-  tone: AeTone
-  action?: string
-}>
 
 export type ProviderWorkspaceEarningsSectionProps = Readonly<{
-  payoutConnection: ProviderWorkspacePayoutConnectionPresentation
+  earningsDetail?: OwnerProviderEarningsReadback
   earningsOpen: boolean
   earningsPending: boolean
-  earningsDetailAvailable: boolean
+  earningsUnavailable: boolean
   onOpenEarnings: () => void
   onCloseEarnings: () => void
   onRetryEarnings: () => void
@@ -50,7 +31,6 @@ export type AeProviderWorkspaceProps = Readonly<{
   inventory: ProviderWorkspaceInventoryResult
   lifecycle?: Promise<ProviderWorkspaceLifecycleResult>
   connections?: Promise<ProviderWorkspaceConnectionsResult>
-  payouts?: Promise<ProviderWorkspacePayoutResult>
   publicStatus?: Promise<ProviderWorkspacePublicStatusResult>
   offboarding?: Promise<OwnerProviderOffboardingResult>
 }>
