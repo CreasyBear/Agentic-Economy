@@ -10,7 +10,7 @@ export type TeamMemberView = Readonly<{
 }>
 export type TeamRolesView = Readonly<{
   members: readonly TeamMemberView[]
-  canInvite: boolean
+  inviteAvailability: 'available' | 'role_restricted' | 'organization_unset' | 'binding_unavailable'
 }>
 export type TeamRolesPageProps = TeamRolesView
 

@@ -1,4 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router'
+import { z } from 'zod'
 
 import { AeAgentKeysSettings } from '@/components/ae/settings/agent-keys/AeAgentKeysSettings'
 import { readAgentDirectoryServer } from '@/lib/server/agent-access-console.functions'
@@ -7,6 +8,7 @@ import { operatorRouteOptions } from '@/lib/operator/route-options'
 
 export const Route = createFileRoute('/_operator/owner/settings/agent-keys')({
   ...operatorRouteOptions,
+  validateSearch: z.object({ issue: z.literal('manual').optional() }),
   loader: async () => {
     const [directory, canonicalBaseUrl] = await Promise.all([
       readAgentDirectoryServer(),
@@ -23,5 +25,6 @@ export const Route = createFileRoute('/_operator/owner/settings/agent-keys')({
 
 function AgentKeysRoute() {
   const { directory, canonicalBaseUrl } = Route.useLoaderData()
-  return <AeAgentKeysSettings initialDirectory={directory} canonicalBaseUrl={canonicalBaseUrl} />
+  const { issue } = Route.useSearch()
+  return <AeAgentKeysSettings initialDirectory={directory} canonicalBaseUrl={canonicalBaseUrl} openIssueDialog={issue === 'manual'} />
 }

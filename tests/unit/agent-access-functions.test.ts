@@ -33,7 +33,6 @@ import {
   buildOwnerAgentAccessPolicy,
   disconnectAgentServer,
   issueAgentAccessKeyServer,
-  readAgentSpendingLimitsServer,
   renameAgentServer,
   revokeAgentCredentialServer,
   updateAgentSpendingLimitsServer,
@@ -370,27 +369,5 @@ describe('owner spending policy limits', () => {
       { name: 'agentSpendingPolicy:updateForServer' },
       expect.objectContaining({ idempotencyKey: update.idempotencyKey, correlationRef: expect.any(String) }),
     )
-  })
-
-  it('reads current limits through the owner check and canonical policy query', async () => {
-    const current = {
-      kind: 'current' as const,
-      principalRef: update.principalRef,
-      grantRef: 'agt_grant_a',
-      generation: update.expectedGeneration,
-      spendingPolicyDigest: 'sha256:spending-policy',
-      maximumSpendPerCall: update.maximumSpendPerCall,
-      maximumDailySpend: update.maximumDailySpend,
-      maximumMonthlySpend: update.maximumMonthlySpend,
-    }
-    serverMocks.callSourceQuery.mockImplementation(async (reference: { name: string }, input: Record<string, unknown>) => {
-      if (reference.name === 'agentAccessPolicy:listOwnerGrantReadbacks') return []
-      expect(reference).toEqual({ name: 'agentSpendingPolicy:readCurrent' })
-      expect(input).toEqual({ principalRef: update.principalRef })
-      return current
-    })
-
-    await expect(readAgentSpendingLimitsServer({ data: { principalRef: update.principalRef } }))
-      .resolves.toEqual(current)
   })
 })

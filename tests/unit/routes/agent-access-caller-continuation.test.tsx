@@ -327,6 +327,7 @@ describe('agent-access caller route continuation', () => {
     expect(consoleView.compareDocumentPosition(addAgent) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
 
     fireEvent.click(screen.getByRole('button', { name: 'Connect an Agent' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Connect with OAuth / MCP' }))
     const checkConnection = routeHarness.installProps?.onCheckConnection as (() => void) | undefined
     act(() => checkConnection?.())
 

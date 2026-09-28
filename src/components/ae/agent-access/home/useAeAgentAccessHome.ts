@@ -34,6 +34,8 @@ import {
 
 import type { AeAgentAccessHomeProps, AeAgentAccessHomeView, ApprovalDecision } from './agent-access-home.contracts'
 
+export type AgentConnectionStep = 'closed' | 'choose' | 'oauth'
+
 function operationApprovalErrorCopy(
   code: Extract<CallApprovalDecisionResult, { kind: 'refused' }>['code'],
 ): string {
@@ -367,7 +369,7 @@ export function useAeAgentAccessHome({
     onRenameAgent: rename,
     onUpdateSpendingLimits: updateSpendingLimitsHandler,
     onReadSpendingLimits: readSpendingLimitsHandler,
-    onConnectNewAgent: () => void navigate({ to: '/owner/settings/agent-keys' }),
+    onConnectNewAgent: () => setShowSetup(true),
     accessUnavailable: directoryError !== undefined && directory.items.length === 0,
     approvals,
     approvalsLoading,

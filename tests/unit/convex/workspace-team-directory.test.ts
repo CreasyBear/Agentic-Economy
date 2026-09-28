@@ -694,3 +694,146 @@ describe('workspaceTeam:listDirectory (W-15)', () => {
     )
   })
 })
+
+describe('workspaceTeam:invitationContext', () => {
+  const invitationRef = makeFunctionReference<
+    'query',
+    Record<string, never>,
+    | { kind: 'available'; organizationId: string }
+    | { kind: 'role_restricted' | 'organization_unset' | 'binding_unavailable' }
+  >('workspaceTeam:invitationContext')
+  const memberToken = 'https://clerk.example.test|user_team_invitee'
+
+  beforeEach(() => {
+    vi.useFakeTimers()
+    vi.setSystemTime(NOW)
+  })
+  afterEach(() => vi.useRealTimers())
+
+  async function bindOrganization(
+    backend: InteractiveAuthorityBackend,
+    bindingRef: string,
+    organizationId: string,
+    lifecycle: 'active' | 'revoked' = 'active',
+  ) {
+    await backend.run(async (ctx) => {
+      await ctx.db.insert('accountExternalOrganizationBindings', {
+        bindingRef,
+        accountRef: ACCOUNT_REF,
+        providerNamespace: 'clerk/organization',
+        providerIdentifier: organizationId,
+        lifecycle,
+        revision: 1,
+        createdAt: NOW,
+        updatedAt: NOW,
+      })
+    })
+  }
+
+  async function bindMember(backend: InteractiveAuthorityBackend, role: 'org:admin' | 'org:member') {
+    await seedHumanMember(backend, {
+      principalRef: MEMBER_PRINCIPAL,
+      membershipRef: MEMBER_MEMBERSHIP,
+      displayName: 'Team member',
+      membershipRole: role,
+    })
+    await backend.run(async (ctx) => {
+      const bindingRef = `eib_${'m'.repeat(32)}`
+      await ctx.db.insert('externalIdentityBindings', {
+        bindingRef,
+        principalRef: MEMBER_PRINCIPAL,
+        providerNamespace: 'clerk/user',
+        providerIdentifier: memberToken,
+        providerState: { kind: 'known', value: 'active' },
+        lifecycle: 'active',
+        credentialGeneration: 1,
+        bindIdempotencyRef: 'bind:team-member',
+        revision: 1,
+        createdAt: NOW,
+        updatedAt: NOW,
+      })
+      await ctx.db.insert('credentials', {
+        credentialRef: `crd_${'m'.repeat(32)}`,
+        bindingRef,
+        principalRef: MEMBER_PRINCIPAL,
+        type: 'provider_token',
+        lifecycle: 'active',
+        generation: 1,
+        issueIdempotencyRef: 'credential:team-member',
+        revision: 1,
+        issuedAt: 1,
+        expiresAt: 20_000,
+        updatedAt: NOW,
+      })
+    })
+  }
+
+  async function invitation(backend: InteractiveAuthorityBackend, actor: UserIdentity = identity()) {
+    return backend.withIdentity(actor).query(invitationRef, {})
+  }
+
+  it('owner is eligible only with exactly one active Clerk organization binding', async () => {
+    const backend = createBackend()
+    await seedAuthority(backend)
+    await insertSessionSelection(backend, ACCOUNT_REF)
+    expect(await invitation(backend)).toEqual({ kind: 'organization_unset' })
+
+    await bindOrganization(backend, 'aob_revoked', 'org_old', 'revoked')
+    expect(await invitation(backend)).toEqual({ kind: 'organization_unset' })
+
+    await bindOrganization(backend, 'aob_active', 'org_current')
+    expect(await invitation(backend)).toEqual({ kind: 'available', organizationId: 'org_current' })
+
+    await bindOrganization(backend, 'aob_second', 'org_other')
+    expect(await invitation(backend)).toEqual({ kind: 'binding_unavailable' })
+  })
+
+  it('admin can invite; member receives only a role reason even with a linked organization', async () => {
+    const adminBackend = createBackend()
+    await seedAuthority(adminBackend)
+    await insertSessionSelection(adminBackend, ACCOUNT_REF)
+    await bindOrganization(adminBackend, 'aob_active', 'org_current')
+    await bindMember(adminBackend, 'org:admin')
+    expect(await invitation(adminBackend, samIdentity(memberToken))).toEqual({
+      kind: 'available', organizationId: 'org_current',
+    })
+
+    const memberBackend = createBackend()
+    await seedAuthority(memberBackend)
+    await insertSessionSelection(memberBackend, ACCOUNT_REF)
+    await bindOrganization(memberBackend, 'aob_active', 'org_secret')
+    await bindMember(memberBackend, 'org:member')
+    const memberResult = await invitation(memberBackend, samIdentity(memberToken))
+    expect(memberResult).toEqual({ kind: 'role_restricted' })
+    expect(JSON.stringify(memberResult)).not.toContain('org_secret')
+  })
+
+  it('rechecks eligibility after an allowed view when the binding or admin role changes', async () => {
+    const backend = createBackend()
+    await seedAuthority(backend)
+    await insertSessionSelection(backend, ACCOUNT_REF)
+    await bindOrganization(backend, 'aob_active', 'org_current')
+    await bindMember(backend, 'org:admin')
+    const admin = samIdentity(memberToken)
+    expect(await invitation(backend, admin)).toEqual({ kind: 'available', organizationId: 'org_current' })
+
+    await backend.run(async (ctx) => {
+      const binding = await ctx.db.query('accountExternalOrganizationBindings')
+        .withIndex('by_accountRef_and_lifecycle', (q) => q.eq('accountRef', ACCOUNT_REF).eq('lifecycle', 'active'))
+        .unique()
+      if (binding === null) throw new Error('Missing bound organization')
+      await ctx.db.patch(binding._id, { lifecycle: 'revoked' })
+    })
+    expect(await invitation(backend, admin)).toEqual({ kind: 'organization_unset' })
+
+    await bindOrganization(backend, 'aob_relinked', 'org_new')
+    await backend.run(async (ctx) => {
+      const membership = await ctx.db.query('memberships')
+        .withIndex('by_membershipRef', (q) => q.eq('membershipRef', MEMBER_MEMBERSHIP))
+        .unique()
+      if (membership === null) throw new Error('Missing admin membership')
+      await ctx.db.patch(membership._id, { role: 'org:member' })
+    })
+    expect(await invitation(backend, admin)).toEqual({ kind: 'role_restricted' })
+  })
+})

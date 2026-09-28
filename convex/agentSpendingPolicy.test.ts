@@ -16,7 +16,9 @@ import {
   normalizeStoredAgentAccessGrant,
   type AgentSpendingLimitsResult,
   type AgentSpendingLimitsUpdate,
+  type AgentSpendingLimitsReadResult,
 } from '../src/modules/agent-access/policy'
+import type { AgentOwnerPolicyReadback } from '../src/modules/agent-access/agent-operator-view-model'
 import { issuedAgentGrantRef } from '../src/modules/agent-access/issued-agent-binding'
 import { defaultSandboxAgentAccessPolicy } from '../src/modules/agent-access/sandbox-policy'
 import schema from './schema'
@@ -36,8 +38,13 @@ const updatePolicy = makeFunctionReference<
 const readPolicy = makeFunctionReference<
   'query',
   Readonly<{ principalRef: string }>,
-  Record<string, unknown>
+  AgentSpendingLimitsReadResult
 >('agentSpendingPolicy:readCurrent')
+const listOwnerPolicies = makeFunctionReference<
+  'query',
+  Readonly<{ principalRefs: readonly string[] }>,
+  readonly AgentOwnerPolicyReadback[]
+>('agentAccessPolicy:listOwnerGrantReadbacks')
 const registerIssuedBinding = makeFunctionReference<
   'mutation',
   IssuedAgentBindingRegistration & Readonly<{ serviceAuth: CustomerRequestServiceAssertion }>,
@@ -173,7 +180,7 @@ describe('owner Agent spending policy mutation', () => {
     }
 
     await expect(owner.query(readPolicy, { principalRef })).resolves.toMatchObject({
-      kind: 'current',
+      kind: 'known',
       principalRef,
       grantRef: input.grantRef,
       generation: 1,
@@ -262,7 +269,7 @@ describe('owner Agent spending policy mutation', () => {
     expect(afterFirst.events.filter(({ eventType }) => eventType === 'agent.policy_updated')).toHaveLength(1)
 
     await expect(owner.query(readPolicy, { principalRef })).resolves.toMatchObject({
-      kind: 'current',
+      kind: 'known',
       generation: 2,
       grantRef: afterFirst.activeGrants[0]?.grantRef,
       spendingPolicyDigest: afterFirst.admission.spendingPolicyDigest,
@@ -311,6 +318,128 @@ describe('owner Agent spending policy mutation', () => {
         .eq('targetRef', principalRef))
       .collect())
     expect(finalEvents.filter(({ eventType }) => eventType === 'agent.policy_updated')).toHaveLength(2)
+  })
+
+  it('does not invent a policy when the mandatory current grant is missing and isolates other owners', async () => {
+    const backend = convexTest(schema, modules)
+    const { owner, principalRef, input } = await provisionAgent(backend)
+    const sibling = backend.withIdentity(identity('user_sibling'))
+    await sibling.mutation(api.interactiveAuthority.materializeCurrentInteractiveAuthority, {})
+    await expect(sibling.query(readPolicy, { principalRef })).resolves.toEqual({
+      kind: 'refused', code: 'agent_not_found',
+    })
+    await backend.run(async (ctx) => {
+      const grant = await ctx.db.query('agentAccessGrants')
+        .withIndex('by_grantRef', (q) => q.eq('grantRef', input.grantRef)).unique()
+      if (grant === null) throw new Error('spending_policy_grant_missing')
+      await ctx.db.delete(grant._id)
+    })
+    await expect(owner.query(readPolicy, { principalRef })).resolves.toEqual({ kind: 'unavailable' })
+    await expect(owner.query(listOwnerPolicies, { principalRefs: [principalRef] })).resolves.toEqual([{
+      principalRef, spendingPolicy: { kind: 'unavailable' },
+    }])
+    await expect(sibling.query(listOwnerPolicies, { principalRefs: [principalRef] })).resolves.toEqual([])
+    await expect(owner.mutation(updatePolicy, command(principalRef))).resolves.toMatchObject({
+      kind: 'conflict', code: 'authority_unavailable',
+    })
+  })
+
+  it('expires at the source deadline, never because a newer unrelated grant hides the current one', async () => {
+    const backend = convexTest(schema, modules)
+    const { owner, principalRef, input } = await provisionAgent(backend)
+    await backend.run(async (ctx) => {
+      const grant = await ctx.db.query('agentAccessGrants')
+        .withIndex('by_grantRef', (q) => q.eq('grantRef', input.grantRef)).unique()
+      if (grant === null) throw new Error('spending_policy_grant_missing')
+      const { _id: _unusedId, _creationTime: _unusedTime, ...fields } = grant
+      for (let index = 0; index < 65; index += 1) {
+        await ctx.db.insert('agentAccessGrants', {
+          ...fields,
+          grantRef: `unrelated_grant_${index}`,
+          principalId: `unrelated_principal_${index}`,
+          credentialId: `unrelated_credential_${index}`,
+          updatedAt: grant.updatedAt + index + 1,
+          lifecycle: 'revoked',
+        })
+      }
+    })
+    await expect(owner.query(readPolicy, { principalRef })).resolves.toMatchObject({
+      kind: 'known', grantRef: input.grantRef,
+    })
+    await expect(owner.query(listOwnerPolicies, { principalRefs: [principalRef] })).resolves.toMatchObject([{
+      principalRef, spendingPolicy: { kind: 'known', grantRef: input.grantRef },
+    }])
+    await backend.run(async (ctx) => {
+      const grant = await ctx.db.query('agentAccessGrants')
+        .withIndex('by_grantRef', (q) => q.eq('grantRef', input.grantRef)).unique()
+      if (grant === null) throw new Error('spending_policy_grant_missing')
+      await ctx.db.patch(grant._id, { expiresAt: NOW })
+    })
+    await expect(owner.query(readPolicy, { principalRef })).resolves.toEqual({
+      kind: 'expired', expiresAt: NOW,
+    })
+    await expect(owner.mutation(updatePolicy, command(principalRef))).resolves.toMatchObject({
+      kind: 'conflict', code: 'authority_unavailable',
+    })
+  })
+
+  it('keeps an explicitly zero policy known and paused rather than unset', async () => {
+    const backend = convexTest(schema, modules)
+    const { owner, principalRef } = await provisionAgent(backend)
+    await expect(owner.mutation(updatePolicy, command(principalRef, {
+      maximumSpendPerCall: amount('0'),
+      maximumDailySpend: amount('0'),
+      maximumMonthlySpend: amount('0'),
+    }))).resolves.toMatchObject({ kind: 'completed' })
+    await expect(owner.query(readPolicy, { principalRef })).resolves.toMatchObject({
+      kind: 'known', paused: true,
+      maximumSpendPerCall: amount('0'),
+      maximumDailySpend: amount('0'),
+      maximumMonthlySpend: amount('0'),
+    })
+  })
+
+  it('confirms an expired current credential without treating a broken identity as expiry', async () => {
+    const backend = convexTest(schema, modules)
+    const { owner, principalRef } = await provisionAgent(backend)
+    await backend.run(async (ctx) => {
+      const credentials = await ctx.db.query('credentials')
+        .withIndex('by_principalRef_and_lifecycle', (q) => q
+          .eq('principalRef', principalRef).eq('lifecycle', 'active')).take(2)
+      if (credentials.length !== 1 || credentials[0] === undefined) throw new Error('spending_policy_credential_missing')
+      await ctx.db.patch(credentials[0]._id, { issuedAt: NOW - 1, expiresAt: NOW })
+    })
+    await expect(owner.query(readPolicy, { principalRef })).resolves.toEqual({
+      kind: 'expired', expiresAt: NOW,
+    })
+    await backend.run(async (ctx) => {
+      const admission = await ctx.db.query('agentAccessPrincipals')
+        .withIndex('by_principalId', (q) => q.eq('principalId', principalRef)).unique()
+      if (admission === null) throw new Error('spending_policy_admission_missing')
+      await ctx.db.patch(admission._id, { credentialId: 'unbound_credential' })
+    })
+    await expect(owner.query(readPolicy, { principalRef })).resolves.toEqual({ kind: 'unavailable' })
+  })
+
+  it('does not mask a missing mandatory grant behind an expired credential', async () => {
+    const backend = convexTest(schema, modules)
+    const { owner, principalRef, input } = await provisionAgent(backend)
+    await backend.run(async (ctx) => {
+      const credentials = await ctx.db.query('credentials')
+        .withIndex('by_principalRef_and_lifecycle', (q) => q
+          .eq('principalRef', principalRef).eq('lifecycle', 'active')).take(2)
+      const grant = await ctx.db.query('agentAccessGrants')
+        .withIndex('by_grantRef', (q) => q.eq('grantRef', input.grantRef)).unique()
+      if (credentials.length !== 1 || credentials[0] === undefined || grant === null) {
+        throw new Error('spending_policy_authority_fixture_missing')
+      }
+      await ctx.db.patch(credentials[0]._id, { issuedAt: NOW - 1, expiresAt: NOW })
+      await ctx.db.delete(grant._id)
+    })
+    await expect(owner.query(readPolicy, { principalRef })).resolves.toEqual({ kind: 'unavailable' })
+    await expect(owner.mutation(updatePolicy, command(principalRef))).resolves.toMatchObject({
+      kind: 'conflict', code: 'authority_unavailable',
+    })
   })
 
   it('refuses wrong-owner, anonymous, malformed, out-of-order, and oversized updates without authority writes', async () => {

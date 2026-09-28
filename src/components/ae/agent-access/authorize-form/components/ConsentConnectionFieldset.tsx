@@ -46,13 +46,16 @@ export function ConsentConnectionFieldset({
           <Select
             value={replacementPrincipalRef ?? ''}
             onValueChange={(value) => { if (value != null) onSelectReplacement(value) }}
-            items={agentTargets.map((agent) => ({ value: agent.principalRef, label: agent.displayName }))}
+            items={agentTargets.map((agent) => ({ value: agent.principalRef, label: `${agent.displayName} · ${agent.principalRef}` }))}
           >
             <SelectTrigger id="replacement-agent"><SelectValue placeholder="Choose an agent" /></SelectTrigger>
             <SelectContent>
-              {agentTargets.map((agent) => <SelectItem key={agent.principalRef} value={agent.principalRef}>{agent.displayName}</SelectItem>)}
+              {agentTargets.map((agent) => <SelectItem key={agent.principalRef} value={agent.principalRef}>{agent.displayName} · {agent.principalRef}</SelectItem>)}
             </SelectContent>
           </Select>
+          {replacementPrincipalRef === undefined ? null : (
+            <p className="break-all font-mono text-xs text-muted-foreground">Selected Agent: {replacementPrincipalRef}</p>
+          )}
           <fieldset className="grid gap-2">
             <legend className="text-sm font-medium text-foreground">Replacement reason</legend>
             <RadioGroup

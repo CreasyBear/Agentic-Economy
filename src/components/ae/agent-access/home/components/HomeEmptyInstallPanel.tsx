@@ -14,7 +14,7 @@ export function HomeEmptyInstallPanel({
     <div className="grid gap-4">
       <div className="flex justify-end">
         <Button type="button" onClick={onConnectNewAgent} className="w-fit min-h-touch">
-          Connect an Agent
+          Choose how to connect
         </Button>
       </div>
       <AeAssistantInstallFunnel

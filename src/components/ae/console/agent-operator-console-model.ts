@@ -116,7 +116,7 @@ export function agentFacts(detail: AgentDetail): readonly AeFact[] {
       : `${usage.outcomeUnknownCallCount} ${usage.outcomeUnknownCallCount === 1 ? 'needs' : 'need'} checking`}`
   return [
     { label: 'Authority', value: scopeLabel(detail.authorityMode) },
-    { label: 'Monthly limit', value: formatAmount(detail.grant?.budget.maximumMonthlySpend), mono: true },
+    { label: 'Monthly limit', value: detail.spendingPolicy.kind === 'known' ? formatCurrencyAmount(detail.spendingPolicy.maximumMonthlySpend) : spendingPolicyStateLabel(detail.spendingPolicy.kind), mono: detail.spendingPolicy.kind === 'known' },
     { label: 'Recent Calls', value: calls },
     { label: 'Last used', value: detail.agent.lastSeenAt === undefined
       ? 'No activity recorded'
@@ -126,13 +126,25 @@ export function agentFacts(detail: AgentDetail): readonly AeFact[] {
 }
 
 export function agentSpendingPolicyFacts(detail: AgentDetail): readonly AeFact[] {
+  const policy = detail.spendingPolicy
+  if (policy.kind !== 'known') {
+    return [{ label: 'Spending policy', value: spendingPolicyStateLabel(policy.kind) }]
+  }
   return [
-    { label: 'Per Call', value: formatAmount(detail.grant?.budget.maximumSpendPerCall), mono: true },
-    { label: 'Daily budget', value: formatAmount(detail.grant?.budget.maximumDailySpend), mono: true },
-    { label: 'Monthly budget', value: formatAmount(detail.grant?.budget.maximumMonthlySpend), mono: true },
+    { label: 'Status', value: policy.paused ? 'Paused' : 'Active' },
+    { label: 'Per Call', value: formatCurrencyAmount(policy.maximumSpendPerCall), mono: true },
+    { label: 'Daily budget', value: formatCurrencyAmount(policy.maximumDailySpend), mono: true },
+    { label: 'Monthly budget', value: formatCurrencyAmount(policy.maximumMonthlySpend), mono: true },
     { label: 'Rate', value: detail.grant === undefined ? 'Unavailable' : `${detail.grant.rate.maximumCallsPerMinute}/min · ${detail.grant.rate.maximumCallsPerHour}/hour`, mono: true },
     { label: 'Concurrency', value: detail.grant === undefined ? 'Unavailable' : String(detail.grant.budget.maximumConcurrentCalls), mono: true },
   ]
+}
+
+function spendingPolicyStateLabel(kind: AgentDetail['spendingPolicy']['kind']): string {
+  if (kind === 'unset') return 'No spending policy set'
+  if (kind === 'expired') return 'Expired'
+  if (kind === 'unavailable') return 'Unavailable'
+  return 'Current'
 }
 
 export function agentActivityFacts(detail: AgentDetail): readonly AeFact[] {
@@ -207,25 +219,22 @@ export function agentStatusBadgeVariant(
 }
 
 export function monthlySpendLabel(item: AgentDirectoryItem): string {
-  if (item.monthlyLimit !== undefined) {
-    if (item.monthlySpendCoverage === 'incomplete' || item.monthlySettledSpend === undefined) {
-      return `Unavailable / ${formatDisplayAmount(item.monthlyLimit)}`
-    }
-    return `${formatDisplayAmount(item.monthlySettledSpend)} / ${formatDisplayAmount(item.monthlyLimit)}`
+  const policy = item.spendingPolicy
+  if (policy.kind !== 'known') return spendingPolicyStateLabel(policy.kind)
+  const ceiling = policy.maximumMonthlySpend
+  if (item.monthlySpendCoverage === 'incomplete' || item.monthlySettledSpend === undefined) {
+    return `Unavailable / ${formatDisplayAmount(ceiling)}`
   }
-  if (item.monthlySettledSpend !== undefined) {
-    return `${formatDisplayAmount(item.monthlySettledSpend)} / No limit`
-  }
-  return '—'
+  return `${formatDisplayAmount(item.monthlySettledSpend)} / ${formatDisplayAmount(ceiling)}`
 }
 
 export function monthlyUtilizationPercent(item: AgentDirectoryItem): number | undefined {
-  if (item.monthlyLimit === undefined || item.monthlySpendCoverage === 'incomplete') return undefined
+  if (item.spendingPolicy.kind !== 'known' || item.monthlySpendCoverage === 'incomplete') return undefined
   if (item.monthlySettledSpend === undefined) return undefined
-  if (item.monthlyLimit.currency !== item.monthlySettledSpend.currency) return undefined
-
+  const ceiling = item.spendingPolicy.maximumMonthlySpend
+  if (ceiling.currency !== item.monthlySettledSpend.currency) return undefined
   const spendUnits = BigInt(item.monthlySettledSpend.units)
-  const ceilingUnits = BigInt(item.monthlyLimit.units)
+  const ceilingUnits = BigInt(ceiling.units)
   if (ceilingUnits <= 0n) return spendUnits > 0n ? 100 : 0
   const basisPoints = (spendUnits * 10_000n) / ceilingUnits
   const wholePercent = Number(basisPoints / 100n)
