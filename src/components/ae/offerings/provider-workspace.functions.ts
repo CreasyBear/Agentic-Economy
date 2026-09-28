@@ -5,7 +5,6 @@ import { z } from 'zod'
 import { callSourceMutation, callSourceQuery, sourceMutation, sourceQuery } from '@/lib/server/convex-source'
 import { requireStrictClerkConsequenceProof } from '@/lib/server/clerk-consequence-proof'
 import { sourceWriteAdmissionFromContext } from '@/lib/server/source-write-admission'
-import { sanitizeTelemetryError } from '@/lib/observability/private-route-safety'
 import { degrade } from '@/lib/observability/degrade'
 import {
   readOwnerProviderConnections,
@@ -44,6 +43,7 @@ export type ProviderWorkspaceInventoryResult =
       provider: Readonly<{ name: string }>
       tools: readonly ProviderWorkspaceInventoryRow[]
       projection: 'current' | 'pending'
+      diagnostics?: readonly Readonly<{ offeringRef: string; reason: 'invalid_status' }>[]
       isDone: boolean
       continueCursor: string
     }>
@@ -191,10 +191,20 @@ export async function readProviderWorkspacePageThroughSource(
     })
     if (result.kind === 'not_found') return { inventory: { kind: 'not_found' } }
     const lifecycle: ProviderWorkspaceLifecycleRow[] = []
+    const diagnostics: { offeringRef: string; reason: 'invalid_status' }[] = []
     for (const row of result.page) {
-      const parsed = providerToolStatusSchema.safeParse(JSON.parse(row.statusJson) as unknown)
+      let value: unknown
+      try {
+        value = JSON.parse(row.statusJson) as unknown
+      } catch (cause) {
+        degrade(cause, undefined, { site: 'readProviderWorkspacePageThroughSource.statusJson', reason: 'invalid_response' })
+        diagnostics.push({ offeringRef: row.offeringRef, reason: 'invalid_status' })
+        continue
+      }
+      const parsed = providerToolStatusSchema.safeParse(value)
       if (!parsed.success || parsed.data.businessRef !== identity.businessId) {
-        return { inventory: { kind: 'unavailable' } }
+        diagnostics.push({ offeringRef: row.offeringRef, reason: 'invalid_status' })
+        continue
       }
       lifecycle.push({ offeringRef: row.offeringRef, status: parsed.data })
     }
@@ -203,6 +213,7 @@ export async function readProviderWorkspacePageThroughSource(
         kind: 'available',
         provider: { name: identity.name },
         tools: result.page.map(({ statusJson: _statusJson, ...row }) => row),
+        ...(diagnostics.length === 0 ? {} : { diagnostics }),
         projection: 'current',
         isDone: result.isDone,
         continueCursor: result.continueCursor,
@@ -471,8 +482,7 @@ async function readCurrentOwnerIdentity(): Promise<CurrentOwnerIdentityResult> {
   try {
     return await callSourceQuery(readCurrentOwnerIdentityQuery, {})
   } catch (error) {
-    console.error('[provider-workspace] owner scope read failed', sanitizeTelemetryError(error))
-    return { kind: 'error', code: 'source_unavailable' }
+    return degrade(error, { kind: 'error', code: 'source_unavailable' } as const, { site: 'readCurrentOwnerIdentity', reason: 'source_unavailable' })
   }
 }
 

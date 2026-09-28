@@ -503,7 +503,6 @@ describe('CLI Call recovery projections', () => {
       code: 'call-transport-unknown',
       detail: {
         toolRef: OPERATION_REF,
-        recovery: 'Resume the retained purchase; do not create a new Call.',
         identityPreserved: true,
       },
     } satisfies Partial<CliFailure>)

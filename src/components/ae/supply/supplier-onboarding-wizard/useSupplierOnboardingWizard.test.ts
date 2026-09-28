@@ -113,6 +113,9 @@ describe('useSupplierOnboardingWizard', () => {
     )
 
     expect(result.current.isCompleted('profile')).toBe(true)
+    expect(result.current.isVisited('profile')).toBe(false)
+    act(() => result.current.goToStep('profile'))
+    expect(result.current.view.step).toBe('first_tool')
     expect(result.current.isVisited('first_tool')).toBe(true)
 
     rerender({ currentStep: 'profile' })

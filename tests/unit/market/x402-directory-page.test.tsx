@@ -621,6 +621,24 @@ describe('canonical Market search', () => {
     await waitFor(() => expect(screen.getByText('Page 2')).toBeTruthy())
     expect(searchMarketToolsServer).toHaveBeenNthCalledWith(3, { data: { query: 'weather', limit: 8, cursor: 'opaque-next' } })
   })
+  it('retains the current Market page when a continuation resolves unavailable and lets Next page retry', async () => {
+    const first = { ...searchMeta, kind: 'match', results: searchRows } satisfies ToolChoiceSearchOutput
+    const unavailable = { ...searchMeta, kind: 'unavailable', results: [], reason: 'source_unavailable',
+      pagination: { limit: 8, hasMore: false }, next: [{ action: 'retry', args: { query: 'weather' }, authority: 'public' }] } satisfies ToolChoiceSearchOutput
+    searchMarketToolsServer.mockResolvedValueOnce(first).mockResolvedValueOnce(unavailable).mockResolvedValueOnce({
+      ...searchMeta, kind: 'match', results: [searchRows[1]!], pagination: { limit: 8, hasMore: false },
+      next: [{ action: 'broaden', args: { query: 'weather' }, authority: 'public' }],
+    } satisfies ToolChoiceSearchOutput)
+    show({ view: 'tools', query: 'weather' }, [], { page: indexedPage, catalogue: indexedCatalogue, overview })
+    expect(await screen.findByRole('link', { name: 'Weather Forecast' })).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Next page' }))
+    expect(await screen.findByRole('alert')).toHaveProperty('textContent', 'The next page could not load; this page is unchanged. Try Next page again.')
+    expect(screen.getByRole('link', { name: 'Weather Forecast' })).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Next page. Retry' }))
+    expect(await screen.findByText('Page 2')).toBeTruthy()
+    expect(screen.getByRole('link', { name: 'External Forecast' })).toBeTruthy()
+  })
+
   it('distinguishes admitted setup from an external listing and names the exact source price and ranking recipient', async () => {
     const setup = {
       ...searchRows[0]!,

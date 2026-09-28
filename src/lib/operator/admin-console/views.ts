@@ -71,7 +71,7 @@ export type AdminToolVersionView = {
   revision: number | null
   disposition: 'current' | 'withdrawn' | 'incompatible' | 'superseded'
   businessSlug: Slug
-  sourceAuthorityState: 'verified' | 'review_required'
+  sourceAuthorityState: 'verified' | 'review_required' | 'unset'
   admissionCaseRef: string | null
   readinessValidUntil: number | null
 }
@@ -87,7 +87,7 @@ export type AdminProviderView = {
     ref: PublicToolRef
     revision: number | null
     disposition: 'current' | 'withdrawn' | 'incompatible' | 'superseded'
-    sourceAuthorityState: 'verified' | 'review_required'
+    sourceAuthorityState: 'verified' | 'review_required' | 'unset'
     sourceAuthorityReview: {
       publicationRef: string
       expectedRevision: number

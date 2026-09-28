@@ -3,7 +3,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { api, internal } from '../../../convex/_generated/api'
 import { perthDayWindow } from '../../../convex/lib/adminConsole/metrics/dayWindow'
-import type { MarketplaceMetricCounts } from '../../../convex/lib/adminConsole/metrics/write'
 import { recordMarketEvidenceFact } from '../../../convex/marketEvidence'
 import {
   convexTestWithMarketComponents,
@@ -163,7 +162,10 @@ async function snapshot(backend: ConvexFixtureBackend, day: string) {
 }
 
 describe('admin marketplace metrics', () => {
-  beforeEach(() => vi.setSystemTime(new Date('2026-09-22T04:00:00.000Z')))
+  beforeEach(() => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-09-22T04:00:00.000Z'))
+  })
   afterEach(() => vi.useRealTimers())
 
   it('assigns Calls on either side of Perth midnight to their respective days', async () => {
@@ -191,6 +193,8 @@ describe('admin marketplace metrics', () => {
 
     await expect(snapshot(backend, FIRST_DAY)).resolves.toEqual({ kind: 'written', day: FIRST_DAY })
     await expect(snapshot(backend, FIRST_DAY)).resolves.toEqual({ kind: 'written', day: FIRST_DAY })
+    await backend.finishAllScheduledFunctions(() => vi.advanceTimersByTime(1))
+    await backend.finishInProgressScheduledFunctions()
 
     const state = await backend.run(async (ctx) => ({
       days: await ctx.db.query('marketplaceMetricDays').collect(),
@@ -270,26 +274,96 @@ describe('admin marketplace metrics', () => {
     expect(row).toMatchObject({ returningWorkspaces: 1, newTransactingWorkspaces: 0 })
   })
 
-  it('hides incomplete snapshots, then reveals them only after the final write', async () => {
+  it('keeps a completed snapshot authoritative when a new generation stops after a partial entity batch', async () => {
     const backend = convexTestWithMarketComponents()
+    await seedDay(backend, FIRST_DAY, ['workspace:one'], true)
+    await snapshot(backend, FIRST_DAY)
     const admin = await ownerAdmin(backend, 'user_admin-metrics-partial')
-    const counts: MarketplaceMetricCounts = {
-      settledCallValue: null, money: 'no_settled_usage',
-      settledCalls: 0, attemptedCalls: 0, completedCalls: 0, uncertainCalls: 0,
-      uncertainCallsOpenAtClose: 0, quotesCreated: 0, quotesConvertedAtClose: 0,
-      transactingWorkspaces: 0, transactingAgents: 0, transactingProviders: 0,
-      transactingTools: 0, terminalCalls: 0, terminalCallsWithResolution: 0,
+    const before = await admin.query(api.adminConsoleMetrics.readMarketplaceMetrics, { range: 'last_7' })
+    if ('kind' in before) throw new Error('unexpected_refusal')
+    expect(before.headline).toBeNull()
+    expect(before.coverageComplete).toBe(false)
+    const entityDay = `${FIRST_DAY}#interrupted`
+    await backend.mutation(internal.adminConsoleMetrics.startMarketplaceMetricsBuild, { day: FIRST_DAY, entityDay })
+    await backend.mutation(internal.adminConsoleMetrics.advanceMarketplaceMetricsBuild, {
+      day: FIRST_DAY, entityDay, phase: 'calls', expectedCursor: null,
+      nextCursor: 'pending-next-page', done: false,
+      calls: [{
+        callRef: 'call:interrupted', state: 'completed', openAtSnapshot: false,
+        paidAmount: null, workspaceRef: 'workspace:phantom',
+        agentRef: 'principal:phantom', providerRef: null, toolRef: 'tool:phantom',
+      }],
+    })
+    const during = await admin.query(api.adminConsoleMetrics.readMarketplaceMetrics, { range: 'last_7' })
+    if ('kind' in during) throw new Error('unexpected_refusal')
+    expect(during.days).toEqual(before.days)
+    expect(during.days).toEqual([expect.objectContaining({ day: FIRST_DAY, settledCalls: 1 })])
+    expect(during.headline).toEqual(before.headline)
+    expect(during.partialDays).toEqual([])
+    await backend.finishAllScheduledFunctions(() => vi.advanceTimersByTime(60 * 60 * 1_000))
+    await backend.finishInProgressScheduledFunctions()
+    const orphan = await backend.run(async (ctx) => await ctx.db.query('marketplaceEntityDays')
+      .withIndex('by_day_and_entityKind', (query) => query.eq('day', `${FIRST_DAY}#interrupted`).eq('entityKind', 'workspace'))
+      .first())
+    expect(orphan).toBeNull()
+    await snapshot(backend, FIRST_DAY)
+    const after = await admin.query(api.adminConsoleMetrics.readMarketplaceMetrics, { range: 'last_7' })
+    if ('kind' in after) throw new Error('unexpected_refusal')
+    expect(after.headline).toEqual(before.headline)
+  })
+
+  it('continues a day past its action page budget without losing the previous exact snapshot', async () => {
+    const backend = convexTestWithMarketComponents()
+    await seedDay(backend, FIRST_DAY, ['workspace:one'], true)
+    await snapshot(backend, FIRST_DAY)
+    for (let offset = 0; offset < 205; offset += 25) {
+      await backend.run(async (ctx) => {
+        for (let index = offset; index < Math.min(offset + 25, 205); index += 1) {
+          await ctx.db.insert('capabilityCalls', {
+            callRef: `call:bulk:${index}`,
+            principalId: `principal:bulk:${index % 2}`,
+            ownerId: `workspace:bulk:${index % 3}`,
+            credentialId: 'credential:bulk',
+            applicationRef: 'application:bulk',
+            toolRef: `tool:bulk:${index % 4}`,
+            idempotencyKey: `idempotency:bulk:${index}`,
+            environment: 'sandbox',
+            grantRef: 'grant:bulk',
+            grantGeneration: 1,
+            policyDigest: 'digest:bulk',
+            grantExpiresAt: FIRST_DAY_UTC_START + 120_000,
+            inputDigest: 'digest:input',
+            requestDigest: `digest:request:${index}`,
+            state: 'completed',
+            usage: {
+              usageRef: `usage:bulk:${index}`,
+              observedAt: FIRST_DAY_UTC_START + 60_000 + index,
+              chargeState: 'paid',
+              amount: { units: '1', exponent: 2, currency: 'AUD' },
+              priceDigest: 'digest:price',
+            },
+            createdAt: FIRST_DAY_UTC_START + 60_000 + index,
+            updatedAt: FIRST_DAY_UTC_START + 60_000 + index,
+          })
+        }
+      })
     }
-    await backend.mutation(internal.adminConsoleMetrics.writeMarketplaceMetricsDay, {
-      day: FIRST_DAY, counts, entities: [], replace: true, complete: false,
-    })
-    const partial = await admin.query(api.adminConsoleMetrics.readMarketplaceMetrics, { range: 'last_7' })
-    expect(partial).toMatchObject({ days: [], partialDays: [FIRST_DAY], latestDay: null })
-    await backend.mutation(internal.adminConsoleMetrics.writeMarketplaceMetricsDay, {
-      day: FIRST_DAY, entities: [], replace: false, complete: true,
-    })
-    const complete = await admin.query(api.adminConsoleMetrics.readMarketplaceMetrics, { range: 'last_7' })
-    expect(complete).toMatchObject({ days: [{ complete: true, day: FIRST_DAY }], partialDays: [] })
+    expect(await snapshot(backend, FIRST_DAY)).toEqual({ kind: 'queued', day: FIRST_DAY })
+    const admin = await ownerAdmin(backend, 'user_admin-metrics-bulk')
+    const pending = await admin.query(api.adminConsoleMetrics.readMarketplaceMetrics, { range: 'last_7' })
+    if ('kind' in pending) throw new Error('unexpected_refusal')
+    expect(pending.days).toEqual([expect.objectContaining({
+      day: FIRST_DAY, attemptedCalls: 1, settledCallValue: { units: '1500', exponent: 2, currency: 'AUD' },
+    })])
+    await backend.finishAllScheduledFunctions(() => vi.advanceTimersByTime(1))
+    await backend.finishInProgressScheduledFunctions()
+    const finished = await admin.query(api.adminConsoleMetrics.readMarketplaceMetrics, { range: 'last_7' })
+    if ('kind' in finished) throw new Error('unexpected_refusal')
+    expect(finished.days).toEqual([expect.objectContaining({
+      day: FIRST_DAY, attemptedCalls: 206, completedCalls: 206, settledCalls: 206,
+      transactingWorkspaces: 4, transactingAgents: 3, transactingTools: 5,
+      settledCallValue: { units: '1705', exponent: 2, currency: 'AUD' },
+    })])
   })
 
   it('clears more than 1000 stale entity rows in bounded batches on resnapshot', async () => {
@@ -302,6 +376,8 @@ describe('admin marketplace metrics', () => {
       }
     })
     await expect(snapshot(backend, FIRST_DAY)).resolves.toEqual({ kind: 'written', day: FIRST_DAY })
+    await backend.finishAllScheduledFunctions(() => vi.advanceTimersByTime(1))
+    await backend.finishInProgressScheduledFunctions()
     const state = await backend.run(async (ctx) => ({
       rows: await ctx.db.query('marketplaceEntityDays').collect(),
       metric: await ctx.db.query('marketplaceMetricDays').first(),
@@ -314,10 +390,13 @@ describe('admin marketplace metrics', () => {
     const backend = convexTestWithMarketComponents()
     await seedDay(backend, FIRST_DAY, ['workspace:one', 'workspace:two'], true)
     await snapshot(backend, FIRST_DAY)
+    for (const day of ['2026-09-15', '2026-09-16', '2026-09-17', '2026-09-18', '2026-09-19', SECOND_DAY]) {
+      await snapshot(backend, day)
+    }
     const admin = await ownerAdmin(backend, 'user_admin-metrics-owner')
     const outsider = await nonAdmin(backend, 'user_admin-metrics-outsider')
     const report = await admin.query(api.adminConsoleMetrics.readMarketplaceMetrics, { range: 'last_7' })
-    expect(report).toMatchObject({ headline: { settledCalls: 2 }, ratios: { successRate: 2 / 3 }, partialDays: [] })
+    expect(report).toMatchObject({ coverageComplete: true, headline: { settledCalls: 2 }, ratios: { successRate: 2 / 3 }, partialDays: [] })
     await expect(outsider.query(api.adminConsoleMetrics.readMarketplaceMetrics, { range: 'last_7' }))
       .resolves.toEqual({ kind: 'refused', code: 'missing_membership' })
   })

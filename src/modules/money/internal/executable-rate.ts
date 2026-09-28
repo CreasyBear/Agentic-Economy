@@ -7,6 +7,8 @@ import { readExactAmount, type ExactAmount } from './exact-amount'
 const SANDBOX_AUD_TO_USDC_NUMERATOR = 65
 const SANDBOX_AUD_TO_USDC_DENOMINATOR = 100
 const SANDBOX_RATE_TTL_MS = 5 * 60 * 1_000
+// Four missed six-hour refreshes are tolerable; beyond 24 hours a new buyer price is not.
+export const REFERENCE_RATE_MAX_AGE_MS = 24 * 60 * 60 * 1_000
 const ExactRateDecimal = Decimal.clone({ precision: 100 })
 
 export type ExecutableRateEnvironment = 'sandbox' | 'production'
@@ -126,32 +128,17 @@ export function quoteExecutableAudToUsdc(input: Readonly<{
   }
 }
 
-/**
- * Prices an exact upstream USDC requirement in Account AUD using the supplied
- * reference observation. Omitting it preserves the historical sandbox fixture
- * and its capacity-based arithmetic for existing callers and evidence.
- */
+/** New managed Quotes require a bounded-age Coinbase observation; no synthetic sandbox price. */
 export function quoteManagedX402BuyerAud(input: Readonly<{
   environment: ExecutableRateEnvironment
   requiredUsdcAtomicUnits: string
   observedAt: number
   referenceRate?: ReferenceRate
 }>): ExecutableRateQuoteResult {
-  if (input.referenceRate !== undefined) return quoteReferenceBuyerAud(input)
-  if (!/^[1-9]\d*$/u.test(input.requiredUsdcAtomicUnits)) {
-    return { kind: 'refused', code: 'pricing_source_amount_invalid', retryable: false }
+  if (input.referenceRate === undefined) {
+    return { kind: 'refused', code: 'pricing_setup_required', retryable: false }
   }
-  const requiredUnits = BigInt(input.requiredUsdcAtomicUnits)
-  const audUnits = (
-    ((requiredUnits - 1n) * BigInt(SANDBOX_AUD_TO_USDC_DENOMINATOR))
-    / BigInt(SANDBOX_AUD_TO_USDC_NUMERATOR)
-    + 1n
-  ).toString()
-  return quoteExecutableAudToUsdc({
-    environment: input.environment,
-    sourceAmount: { currency: 'AUD', exponent: 6, units: audUnits },
-    observedAt: input.observedAt,
-  })
+  return quoteReferenceBuyerAud(input)
 }
 
 /**
@@ -187,8 +174,7 @@ export function validReferenceRate(rate: ReferenceRate): boolean {
     && typeof rate.rate === 'string'
     && /^(?:0|[1-9]\d{0,29})(?:\.\d{1,30})?$/u.test(rate.rate)
     && new Decimal(rate.rate).gt(0)
-    && validTimestamp(rate.fetchedAt)
-    && Number.isSafeInteger(rate.fetchedAt + SANDBOX_RATE_TTL_MS)
+    && Number.isSafeInteger(rate.fetchedAt + REFERENCE_RATE_MAX_AGE_MS)
 }
 
 /** Converts Coinbase USDC atomic units to AUD micro-units without display rounding. */
@@ -201,7 +187,7 @@ export function convertUsdcToAud(
   if (source?.currency !== 'USDC' || source.exponent !== 6
     || !/^(?:0|[1-9]\d{0,29})$/u.test(source.units)
     || !validReferenceRate(rate) || !validTimestamp(now)
-    || now < rate.fetchedAt || now >= rate.fetchedAt + SANDBOX_RATE_TTL_MS) return undefined
+    || now < rate.fetchedAt || now >= rate.fetchedAt + REFERENCE_RATE_MAX_AGE_MS) return undefined
   const units = new ExactRateDecimal(source.units).mul(rate.rate)
     .toDecimalPlaces(0, Decimal.ROUND_CEIL).toFixed(0)
   return { currency: 'AUD', exponent: 6, units }
@@ -232,7 +218,7 @@ function quoteReferenceBuyerAud(input: Readonly<{
     sourceAmount: buyerAmount,
     targetAmount: { currency: 'USDC', exponent: 6, units: input.requiredUsdcAtomicUnits },
     rounding: 'buyer_aud_micro_unit_up', marginBps: 0,
-    observedAt: rate.fetchedAt, expiresAt: rate.fetchedAt + SANDBOX_RATE_TTL_MS,
+    observedAt: rate.fetchedAt, expiresAt: rate.fetchedAt + REFERENCE_RATE_MAX_AGE_MS,
   }
   return { kind: 'quoted', evidence: { ...material, evidenceDigest: canonicalDigest(material) } }
 }

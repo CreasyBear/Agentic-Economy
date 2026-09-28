@@ -8,7 +8,14 @@ import { operatorRouteOptions } from '@/lib/operator/route-options'
 
 export const Route = createFileRoute('/_operator/admin/')({
   ...operatorRouteOptions,
-  loader: () => readAdminFormanceConfigurationServer(),
+  loader: async () => {
+    try {
+      return await readAdminFormanceConfigurationServer()
+    } catch (cause) {
+      console.warn('admin_formance_presence_unavailable', cause)
+      return 'unavailable' as const
+    }
+  },
   pendingComponent: AdminOverviewPageSkeleton,
   head: () => ({
     meta: [

@@ -51,5 +51,5 @@ export async function handleAnonymousChatRequest(
   if (!admission.ok) {
     return jsonError(429, 'rate_limited', { 'Retry-After': String(Math.max(1, Math.ceil(admission.retryAfter / 1_000))) })
   }
-  return await dependencies.stream(parsed.body.messages, request.signal)
+  return await dependencies.stream(parsed.body.messages, request.signal, parsed.body.continuation)
 }

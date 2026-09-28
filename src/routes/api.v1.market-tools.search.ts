@@ -30,6 +30,7 @@ export async function handleMarketToolSearchRequest(request: Request): Promise<R
       if (suppliedCredential) {
         const correlationId = currentRequestCorrelationId() ?? readRequestCorrelationId(request)
         const admitted = await authenticateAgentAccess({
+          request,
           resolvePrincipal: resolveAgentAccessPrincipal(request, JSON.stringify(parsedData), correlationId),
           requiredScope: MARKET_TOOLS_CALL_SCOPE,
           consequenceResource: 'surface:http:market-tools-search',

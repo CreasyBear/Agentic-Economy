@@ -103,9 +103,6 @@ export function useAeAgentAccessHome({
         ? {
             items: [...current.items, ...next.items],
             details: [...current.details, ...next.details],
-            ...(next.accountBalance === undefined && current.accountBalance === undefined
-              ? {}
-              : { accountBalance: next.accountBalance ?? current.accountBalance }),
             activityCoverage: current.activityCoverage === 'recent' || next.activityCoverage === 'recent'
               ? 'recent'
               : 'complete',

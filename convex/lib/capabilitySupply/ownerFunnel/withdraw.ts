@@ -1,9 +1,8 @@
 import type { MutationCtx } from '../../../_generated/server'
-import type { Id } from '../../../_generated/dataModel'
 import type { StableHashValue } from '@/modules/common/stable-hash'
 import { failOperation, replayOperationResult, succeedOperation, withdrawCapabilityCommand } from '@/modules/capability-supply/public'
 import { publicationPorts, rebuildCapabilityOriginSupplyProjection } from '../../../capabilitySupply'
-import { upsertProviderDirectoryRows } from '../../market/directoryIndex/providerRows'
+import { scheduleProviderDirectoryProjection } from '../publish/prepared'
 import { verifySupplyAgentPrincipal } from '../../../agentAccessPrincipals'
 import { requireSourceWrite } from '../../security/sourceWrite/admission'
 import { resolveBusinessActor } from '../../../authz'
@@ -133,17 +132,8 @@ export async function withdrawOwnerCapabilityHandler(
       return result
     }
     await rebuildCapabilityOriginSupplyProjection(ctx, args.businessId, now)
-    // Well 8 Lane C: remove this publication's provider directory row
-    // immediately, alongside the projection rebuild above (same
-    // transaction). loaded.publication was fetched before the withdraw
-    // command ran, so its disposition is stamped 'withdrawn' explicitly
-    // rather than read stale off that object.
-    await upsertProviderDirectoryRows(ctx, {
-      disposition: 'withdrawn', authorityMode: loaded.publication.authorityMode,
-      ...(loaded.publication.sourceRouteRef === undefined ? {} : { sourceRouteRef: loaded.publication.sourceRouteRef }),
-      businessId: loaded.publication.businessId as Id<'businesses'>,
-      offeringId: loaded.publication.offeringId, networkId: loaded.publication.networkId, sourceKind: loaded.publication.sourceKind,
-    })
+    // Canonical withdrawal takes effect now; directory removal is repairable background work.
+    await scheduleProviderDirectoryProjection(ctx, result.publicationRef, result.revision)
     const stableResult: StableHashValue = {
       kind: result.kind,
       publicationRef: result.publicationRef,

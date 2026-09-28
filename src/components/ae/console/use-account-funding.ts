@@ -1,3 +1,4 @@
+import { useAuth } from '@clerk/tanstack-react-start'
 import { useCallback, useEffect, useMemo, useReducer, useRef } from 'react'
 
 import {
@@ -26,12 +27,16 @@ import {
   type RecoveryLocator,
 } from './credit-top-up-format'
 import {
+  clearStoredRecovery,
   defaultCheckoutRedirect,
+  persistFundingAttempt,
+  persistFundingDraft,
   persistRecovery,
   randomId,
   readReturnedExternalRef,
+  readStoredFundingAttempt,
+  readStoredFundingDraft,
   readStoredRecovery,
-  recoveryStorageKey,
 } from './credit-top-up-storage'
 
 export type FundingUiState = Readonly<{
@@ -139,6 +144,7 @@ export function useAccountFunding({
   onRefresh?: (() => void | Promise<void>) | undefined
   redirectToCheckout?: ((url: string) => void) | undefined
 }) {
+  const { userId } = useAuth()
   const [state, dispatch] = useReducer(fundingUiReducer, initialFundingUiState)
   const {
     amountText,
@@ -150,7 +156,19 @@ export function useAccountFunding({
   const pending = state.operation === 'starting'
   const checking = state.operation === 'checking'
   const idempotencyKey = useRef<string | undefined>(undefined)
+  const previousUserId = useRef<string | null | undefined>(undefined)
   const recoveryAttempted = useRef(false)
+  useEffect(() => {
+    if (previousUserId.current === userId) return
+    previousUserId.current = userId
+    idempotencyKey.current = undefined
+    recoveryAttempted.current = false
+    dispatch({ type: 'reset' })
+    if (userId === null || userId === undefined) return
+    idempotencyKey.current = readStoredFundingAttempt(userId)
+    const draft = readStoredFundingDraft(userId)
+    if (draft !== undefined) dispatch({ type: 'amount_changed', amountText: draft, valid: false })
+  }, [userId])
   const quoteRefreshInFlight = useRef(false)
   const policy = useMemo(() => constraints?.kind === 'available'
     ? {
@@ -213,7 +231,7 @@ export function useAccountFunding({
         return
       }
       dispatch({ type: 'payment_read', session: result, recovery: locator })
-      persistRecovery(locator)
+      if (userId !== null && userId !== undefined) persistRecovery(userId, locator)
       try {
         await onRefresh?.()
       } catch (cause) {
@@ -226,21 +244,21 @@ export function useAccountFunding({
     } finally {
       dispatch({ type: 'operation_finished' })
     }
-  }, [onRefresh, port])
+  }, [onRefresh, port, userId])
 
   useEffect(() => {
-    if (port === undefined || recoveryAttempted.current) return
-    const stored = readStoredRecovery()
+    if (port === undefined || recoveryAttempted.current || userId === null || userId === undefined) return
+    const stored = readStoredRecovery(userId)
     const returnedExternalRef = readReturnedExternalRef()
     const locator = returnedExternalRef === undefined
       ? stored
       : { externalRef: returnedExternalRef }
     if (locator === undefined) return
     recoveryAttempted.current = true
-    idempotencyKey.current = locator.idempotencyKey
+    if (locator.idempotencyKey !== undefined) idempotencyKey.current = locator.idempotencyKey
     dispatch({ type: 'recovery_found', recovery: locator })
     void readCanonicalPayment(locator)
-  }, [port, readCanonicalPayment])
+  }, [port, readCanonicalPayment, userId])
 
   async function beginTopUp() {
     if (pending || quoteRefreshRequired || port === undefined) return
@@ -250,6 +268,7 @@ export function useAccountFunding({
       return
     }
     const nextIdempotencyKey = idempotencyKey.current ?? `account-funding:${randomId()}`
+    if (userId !== null && userId !== undefined) persistFundingAttempt(userId, nextIdempotencyKey)
     idempotencyKey.current = nextIdempotencyKey
     dispatch({ type: 'operation_started', operation: 'starting' })
     try {
@@ -261,7 +280,7 @@ export function useAccountFunding({
       if (result.kind === 'outcome_unknown') {
         const locator = { commandRef: result.commandRef, idempotencyKey: nextIdempotencyKey }
         dispatch({ type: 'payment_outcome_unknown', recovery: locator })
-        persistRecovery(locator)
+        if (userId !== null && userId !== undefined) persistRecovery(userId, locator)
         return
       }
       if (result.kind === 'refused') {
@@ -280,7 +299,7 @@ export function useAccountFunding({
       }
       const locator = { externalRef: result.session.evidence.externalRef, idempotencyKey: nextIdempotencyKey }
       dispatch({ type: 'payment_started', session: result.session, recovery: locator })
-      persistRecovery(locator)
+      if (userId !== null && userId !== undefined) persistRecovery(userId, locator)
       if (result.session.kind === 'hosted_redirect' && result.session.checkoutUrl !== undefined) {
         try {
           redirectToCheckout(result.session.checkoutUrl)
@@ -304,8 +323,12 @@ export function useAccountFunding({
     if (pending || checking || !canStartAnotherPayment(paymentStatus, session)) return
     idempotencyKey.current = undefined
     dispatch({ type: 'reset' })
+    if (userId !== null && userId !== undefined) {
+      persistFundingAttempt(userId)
+      persistFundingDraft(userId, '')
+      clearStoredRecovery(userId)
+    }
     try {
-      window.sessionStorage.removeItem(recoveryStorageKey)
       const url = new URL(window.location.href)
       for (const key of ['funding', 'checkout_session_id', 'session_id']) url.searchParams.delete(key)
       window.history.replaceState(window.history.state, '', url)
@@ -337,6 +360,7 @@ export function useAccountFunding({
 
   function handleAmountChange(nextValue: string) {
     const units = canonicalAudUnits(nextValue)
+    if (userId !== null && userId !== undefined) persistFundingDraft(userId, nextValue)
     dispatch({
       type: 'amount_changed',
       amountText: nextValue,

@@ -26,6 +26,7 @@ import {
   refreshCapabilitySupplyReadinessHandler,
   refreshCurrentMarketPresenceHandler,
   refreshFacilitatorDiscoveryHandler,
+  refreshReferenceRateHandler,
   observeX402TreasuryHandler,
   refreshMarketFlowHandler,
   snapshotMarketplaceMetricsDayHandler,
@@ -69,6 +70,7 @@ const EXPECTED_BINDINGS = {
   'reconcile business supply projections': 'workloadCron:reconcileBusinessSupplyProjections',
   'refresh current market presence': 'workloadCron:refreshCurrentMarketPresence',
   'refresh facilitator discovery': 'workloadCron:refreshFacilitatorDiscovery',
+  'refresh USDC/AUD reference rate': 'workloadCron:refreshReferenceRate',
   'observe x402 treasury': 'workloadCron:observeX402Treasury',
   'refresh market flow': 'workloadCron:refreshMarketFlow',
   'snapshot marketplace metrics day': 'workloadCron:snapshotMarketplaceMetricsDay',
@@ -77,6 +79,7 @@ const EXPECTED_BINDINGS = {
 const ACTION_HANDLERS = [
   reconcileDueFacilitatorInvocationsHandler,
   refreshFacilitatorDiscoveryHandler,
+  refreshReferenceRateHandler,
   refreshAgenticEconomyApiRegistryHandler,
   observeX402TreasuryHandler,
   refreshMarketFlowHandler,
@@ -86,6 +89,7 @@ const ACTION_HANDLERS = [
 const ACTION_HANDLER_WORKLOAD_NAMES = [
   'reconcile due facilitator invocations',
   'refresh facilitator discovery',
+  'refresh USDC/AUD reference rate',
   'refresh Agentic Economy API registry',
   'observe x402 treasury',
   'refresh market flow',
@@ -138,7 +142,6 @@ describe('System workload cron boundary', () => {
   })
 
   it('declares every cron as one canonical workload Principal and Account with no exemption', () => {
-    expect(WORKLOAD_CRON_DECLARATIONS).toHaveLength(11)
     expect(WORKLOAD_CRON_DECLARATIONS.map(({ name }) => name).sort()).toEqual(Object.keys(EXPECTED_BINDINGS).sort())
     expect(WORKLOAD_CRON_DECLARATIONS.every((declaration) => (
       declaration.authority === 'canonical_workload'
@@ -388,10 +391,9 @@ describe('System workload cron boundary', () => {
     for (const handler of MUTATION_HANDLERS) await expect(handler(context.mutation())).resolves.toBeNull()
 
     expect(context.admissions).toEqual([...ACTION_HANDLER_WORKLOAD_NAMES])
-    // 12 dispatches: eleven scheduled wrappers, with business projection
-    // reconciliation dispatching two mutations under one admission.
-    expect(context.dispatches).toHaveLength(12)
-    expect([...context.db.queries].sort()).toEqual(Array.from({ length: 11 }, () => [...WORKLOAD_AUTHORITY_QUERY_CHAIN]).flat().sort())
+    // Business projection reconciliation dispatches two mutations under one admission.
+    expect(context.dispatches).toHaveLength(13)
+    expect([...context.db.queries].sort()).toEqual(Array.from({ length: 12 }, () => [...WORKLOAD_AUTHORITY_QUERY_CHAIN]).flat().sort())
     expect(context.trace.every(([admission, dispatch]) => admission < dispatch)).toBe(true)
   })
 

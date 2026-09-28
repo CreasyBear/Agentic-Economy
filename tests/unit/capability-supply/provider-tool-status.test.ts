@@ -33,6 +33,16 @@ describe('Provider Tool status', () => {
     expect(projectProviderToolStatus({ ...base, ...override }).state).toBe(state)
   })
 
+  it('returns to the saved source when the selected Tool remains a private draft', () => {
+    const status = projectProviderToolStatus({
+      ...base, submitted: false, routeable: false,
+    })
+    expect(status).toMatchObject({
+      state: 'Draft',
+      continuation: { action: 'supply.source.preview' },
+    })
+  })
+
   it('fails closed when retirement is requested but child authorities are not complete', () => {
     const status = projectProviderToolStatus({
       ...base,

@@ -36,24 +36,35 @@ export function chatSearchResolution(steps: readonly ChatStepEvidence[]): string
       return null
     }
     if (typeof result.output !== 'object' || result.output === null || !('kind' in result.output)) return null
-    if (result.output.kind === 'match') return null
-    if (result.output.kind === 'noMatch' || result.output.kind === 'scoped' || result.output.kind === 'unavailable') {
+    if (result.output.kind === 'match' || result.output.kind === 'noMatch'
+      || result.output.kind === 'scoped' || result.output.kind === 'unavailable') {
       verdict = result.output as Record<string, unknown>
     } else if (result.output.kind !== 'chat_tool_refused') return null
   }
   if (verdict === null) return null
+  if (verdict.kind === 'match' && Array.isArray(verdict.results)) {
+    const rows = verdict.results.filter((row): row is { title: string; summary: string } =>
+      typeof row === 'object' && row !== null && 'title' in row && typeof row.title === 'string'
+        && 'summary' in row && typeof row.summary === 'string')
+    if (rows.length > 0) {
+      return `**${rows.map(row => row.title).join(', ')} ${rows.length === 1 ? 'is a Tool to inspect' : 'are Tools to inspect'}.**\n\n${rows.slice(0, 3).map(row => `- ${row.title}: ${row.summary}`).join('\n')}\n\nNext: Open a Tool card to check its inputs and current terms.`
+    }
+    return null
+  }
   const next = Array.isArray(verdict.next) ? verdict.next[0] as unknown : undefined
-  const action = typeof next === 'object' && next !== null && 'action' in next ? next.action : undefined
   const args = typeof next === 'object' && next !== null && 'args' in next ? next.args : undefined
   const query = typeof args === 'object' && args !== null && 'query' in args && typeof args.query === 'string'
     ? args.query : null
   if (verdict.kind === 'unavailable') return `**Search is temporarily unavailable.** Next: retry${query === null ? ' the search.' : ` “${query}”.`}`
   if (verdict.kind === 'scoped') {
-    if (action === 'next-page' && typeof args === 'object' && args !== null
-      && 'cursor' in args && typeof args.cursor === 'string' && query !== null) {
-      return `**Only part of the catalogue was assessed; no suitable Tool is established yet.** Next: ask for the next page of “${query}” (cursor: ${args.cursor}).`
-    }
-    return `**Only part of the catalogue was assessed; no suitable Tool is established yet.** Next: ${query === null ? 'broaden your search or browse the Market.' : `broaden “${query}” or browse the Market.`}`
+    const complete = typeof verdict.assessed === 'object' && verdict.assessed !== null
+      && 'coverage' in verdict.assessed && verdict.assessed.coverage === 'complete'
+    const hasNextPage = typeof next === 'object' && next !== null
+      && 'action' in next && next.action === 'next-page'
+    const followUp = hasNextPage ? ' Use Next page below to continue this search.' : ''
+    return complete
+      ? `**These are external listings to inspect, not AE-callable Tools.**${followUp}`
+      : `**Only part of the catalogue was assessed; no suitable Tool is established yet.**${followUp}`
   }
   return `**No suitable Tool in the assessed catalogue.** Next: ${query === null ? 'try a broader search.' : `broaden “${query}”.`}`
 }

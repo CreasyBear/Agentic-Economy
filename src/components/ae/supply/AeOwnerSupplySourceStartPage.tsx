@@ -79,6 +79,7 @@ export function AeOwnerSupplySourceStartPage({ data, search, navigate }: AeOwner
           onPreview={(source, idempotencyKey) => preview({ data: { businessId: identity.businessId, source, idempotencyKey } })}
           onConnect={(input) => connect({ data: input })}
           onSelectCandidate={(input) => saveDraft({ data: input })}
+          onSaveTerms={(input) => saveDraft({ data: input })}
           onDraftSaved={async (candidateRef, connectionRef) => {
             await navigate({
               search: {

@@ -1,6 +1,8 @@
 import type { z } from 'zod'
-import { degradeBackend } from '@/lib/observability/degrade-backend'
+import { boundaryCauseKind, captureBackendException, degradeBackend } from '@/lib/observability/degrade-backend'
 import { providerSafeActionToolName } from '@/modules/actions/tool-contract'
+import { isBoundedJsonValue, type JsonValue } from '@/modules/common/bounded-json'
+import { getStatusPresentation } from '@/lib/ui/status-presentation'
 import { chatClarifyInputSchema, storedClarifyAnswer } from '@/modules/chat/agent-turn.contracts'
 import { addRef, collectToolRefs, matchedCount } from '@/modules/chat/tool-card-search'
 import { isRecord } from '@/modules/common/is-record'
@@ -14,6 +16,7 @@ import {
   type CallResult,
 } from '@/modules/capability-execution/call-contracts'
 import {
+  toolQuoteInputSchema,
   toolQuoteResultSchema,
   type ToolQuoteResult,
 } from '@/modules/capability-execution/quote'
@@ -74,6 +77,7 @@ export type ToolChoiceRow = Readonly<{
   priceValidUntil?: number
   readiness?: string
   access?: string
+  callable?: boolean
   belowMatch?: boolean
 }>
 
@@ -104,6 +108,21 @@ export type ChatNeedActions = Readonly<{
   onWithdraw(requestRef: string): Promise<OwnerMarketDemandWithdrawResult>
 }>
 
+/** A Quote takes only an explicit, bounded JSON object; `{}` must also be typed by the buyer. */
+export function parseChatQuoteInput(toolRef: string, draft: string): Record<string, JsonValue> | undefined {
+  if (draft.length === 0 || new TextEncoder().encode(draft).byteLength > 1_500) return undefined
+  let input: unknown
+  try {
+    input = JSON.parse(draft)
+  } catch (cause) {
+    captureBackendException(boundaryCauseKind(cause), { site: 'parseChatQuoteInput', reason: 'invalid_input' })
+    return undefined
+  }
+  if (input === null || typeof input !== 'object' || Array.isArray(input) || !isBoundedJsonValue(input)) return undefined
+  const parsed = toolQuoteInputSchema.safeParse({ toolRef, input })
+  return parsed.success ? parsed.data.input : undefined
+}
+
 
 export type ToolCardProjection =
   | (CardChrome & { kind: 'working' })
@@ -117,6 +136,7 @@ export type ToolCardProjection =
       contrasts?: readonly ToolFact[]
       surface?: 'compare' | 'describe'
       verdict?: 'match' | 'scoped'
+      coverage?: 'complete' | 'partial'
       next?: RegistryNextAction
     })
   | (CardChrome & {
@@ -151,7 +171,7 @@ export type ToolCardProjection =
 const REFUSAL_SUMMARIES: Readonly<Record<string, string>> = {
   source_unavailable: 'Source unavailable',
   source_capacity_exceeded: 'Source capacity exceeded',
-  setup_required: 'Setup required',
+  setup_required: getStatusPresentation('setup_required').label,
   temporarily_unavailable: 'Temporarily unavailable',
   readiness_expired: 'Readiness expired',
   publisher_withdrew: 'Publisher withdrew the listing',
@@ -159,7 +179,7 @@ const REFUSAL_SUMMARIES: Readonly<Record<string, string>> = {
   updated_terms_require_review: 'Updated terms require review',
   not_supported_by_ae: 'Not supported',
   tool_not_found: 'Not found',
-  tool_unavailable: 'Unavailable',
+  tool_unavailable: getStatusPresentation('unavailable').label,
   mapping_unavailable: 'Mapping unavailable',
   mapping_incompatible: 'Mapping incompatible',
   mapping_cycle: 'Mapping cycle detected',
@@ -241,12 +261,18 @@ function rowFromChoiceFields(value: unknown): ToolChoiceRow | null {
         ? stringField(value.details.provider.name)
         : undefined
   const display = publicToolDisplayPriceSchema.safeParse(value.displayPrice)
-  const price = display.success ? formatDisplayPrice(display.data) : undefined
+  const formatted = display.success && display.data.kind === 'indicative'
+    && display.data.validUntil > Date.now() ? formatDisplayPrice(display.data) : undefined
+  const price = formatted?.startsWith('A$') ? formatted
+    : isRecord(value.price) && value.price.kind === 'indicative'
+      && typeof value.price.label === 'string' && value.price.label.startsWith('A$')
+      && typeof value.price.validUntil === 'number' && Number.isSafeInteger(value.price.validUntil)
+      && value.price.validUntil > Date.now() ? stringField(value.price.label) : undefined
   const healthStatus = stringField(value.healthStatus)
   const readiness = healthStatus === 'operational'
-    ? 'Operational'
+    ? getStatusPresentation('operational').label
     : healthStatus === 'degraded' || (healthStatus === undefined && value.readiness === 'unavailable')
-      ? 'Degraded'
+      ? getStatusPresentation('degraded').label
       : healthStatus === 'unverified' || (healthStatus === undefined && value.readiness === 'unverified')
         ? 'Not yet verified'
         : undefined
@@ -256,7 +282,10 @@ function rowFromChoiceFields(value: unknown): ToolChoiceRow | null {
     title,
     ...(provider === undefined ? {} : { provider }),
     ...(price === undefined ? {} : { price }),
-    ...(display.success && display.data.kind === 'indicative' ? { priceValidUntil: display.data.validUntil } : {}),
+    ...(price !== undefined && display.success && display.data.kind === 'indicative' ? { priceValidUntil: display.data.validUntil }
+      : price !== undefined && isRecord(value.price) && typeof value.price.validUntil === 'number'
+        ? { priceValidUntil: value.price.validUntil } : {}),
+    ...(value.access === 'ae_callable' && value.readiness === 'ready' ? { callable: true } : {}),
     ...(readiness === undefined ? {} : { readiness }),
     ...(authentication === undefined ? {} : { access: formatToolAuthentication(authentication) }),
   }
@@ -276,7 +305,9 @@ function rowFromDescriptorFields(value: unknown): ToolChoiceRow | null {
       : undefined
   const price = isRecord(value.commercial) ? readPrice(value.commercial.price) : undefined
   const display = publicToolDisplayPriceSchema.safeParse(isRecord(value.commercial) ? value.commercial.displayPrice : undefined)
-  const priceLabel = display.success ? formatDisplayPrice(display.data) : price === undefined ? undefined : buyerPrice(price)
+  const formatted = display.success && display.data.kind === 'indicative'
+    && display.data.validUntil > Date.now() ? formatDisplayPrice(display.data) : undefined
+  const priceLabel = formatted?.startsWith('A$') ? formatted : price?.kind === 'on_request' ? 'Price on request' : undefined
   const posture = readPosture(value.availability)
   const authentication = readAuthentication(value.authentication)
   return {
@@ -284,8 +315,11 @@ function rowFromDescriptorFields(value: unknown): ToolChoiceRow | null {
     title,
     ...(provider === undefined ? {} : { provider }),
     ...(priceLabel === undefined ? {} : { price: priceLabel }),
-    ...(display.success && display.data.kind === 'indicative' ? { priceValidUntil: display.data.validUntil } : {}),
+    ...(priceLabel !== undefined && display.success && display.data.kind === 'indicative' ? { priceValidUntil: display.data.validUntil } : {}),
     ...(posture === undefined ? {} : { readiness: isRecord(value.availability) && value.availability.reason === 'inspection_required' ? 'Checked when quoting' : formatToolReadiness(posture) }),
+    ...(posture === 'routeable' && Array.isArray(value.navigation)
+      && value.navigation.some((item) => isRecord(item) && item.relation === 'call')
+      ? { callable: true } : {}),
     ...(authentication === undefined ? {} : { access: formatToolAuthentication(authentication) }),
   }
 }
@@ -315,10 +349,12 @@ function projectStoredChoice(value: unknown): ToolChoiceRow | null {
   const title = stringField(value.title)
   if (toolRef === undefined || title === undefined) return null
   const provider = stringField(value.provider)
-  const price = stringField(value.price)
+  const storedPrice = stringField(value.price)
   const priceValidUntil = typeof value.priceValidUntil === 'number'
     && Number.isSafeInteger(value.priceValidUntil) && value.priceValidUntil >= 0
     ? value.priceValidUntil : undefined
+  const price = storedPrice?.startsWith('A$') && (priceValidUntil === undefined || priceValidUntil <= Date.now())
+    ? undefined : storedPrice
   const readiness = stringField(value.readiness)
   const access = stringField(value.access)
   return {
@@ -328,9 +364,10 @@ function projectStoredChoice(value: unknown): ToolChoiceRow | null {
     title,
     ...(provider === undefined ? {} : { provider }),
     ...(price === undefined ? {} : { price }),
-    ...(priceValidUntil === undefined ? {} : { priceValidUntil }),
+    ...(price === undefined || priceValidUntil === undefined ? {} : { priceValidUntil }),
     ...(readiness === undefined ? {} : { readiness }),
     ...(access === undefined ? {} : { access }),
+    ...(value.callable === true ? { callable: true } : {}),
     ...(value.belowMatch === true ? { belowMatch: true } : {}),
   }
 }
@@ -584,7 +621,9 @@ function liveChoices(
     ...(count === undefined ? {} : { count }),
     ...(contrasts === undefined || contrasts.length === 0 ? {} : { contrasts }),
     ...(toolId === 'registry.tools.search' && (output.kind === 'match' || output.kind === 'scoped')
-      ? { verdict: output.kind, ...(next === undefined ? {} : { next }) }
+      ? { verdict: output.kind, ...(next === undefined ? {} : { next }),
+        ...(isRecord(output.assessed) && (output.assessed.coverage === 'complete' || output.assessed.coverage === 'partial')
+          ? { coverage: output.assessed.coverage } : {}) }
       : {}),
   }
 }
@@ -720,6 +759,7 @@ function projectStoredCard(part: Record<string, unknown>): ToolCardProjection | 
     ...(surface === undefined ? {} : { surface }),
     ...(contrasts.length === 0 ? {} : { contrasts }),
     ...(part.verdict === 'match' || part.verdict === 'scoped' ? { verdict: part.verdict } : {}),
+    ...(part.coverage === 'complete' || part.coverage === 'partial' ? { coverage: part.coverage } : {}),
     ...(next === undefined ? {} : { next }),
   }
 }
@@ -861,6 +901,7 @@ export function serializeToolCard(card: ToolCardProjection): Record<string, unkn
         ...(card.count === undefined ? {} : { count: card.count }),
         ...(card.surface === undefined ? {} : { surface: card.surface }),
         ...(card.verdict === undefined ? {} : { verdict: card.verdict }),
+        ...(card.coverage === undefined ? {} : { coverage: card.coverage }),
         ...(card.next === undefined ? {} : { next: card.next }),
         ...(card.contrasts === undefined || card.contrasts.length === 0
           ? {}

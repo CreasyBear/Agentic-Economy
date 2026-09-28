@@ -27,10 +27,6 @@ describe('AeAgentCallHistoryTable (W-29)', () => {
       receiptRef: 'rec_test_123',
       createdAt: 1700000000000,
       updatedAt: 1700000001000,
-      tool: {
-        label: 'Web Search Tool',
-        provider: 'Brave Software',
-      },
     },
     {
       callRef: 'call_test_456',
@@ -43,10 +39,6 @@ describe('AeAgentCallHistoryTable (W-29)', () => {
       paymentState: 'not_applicable',
       createdAt: 1700003600000,
       updatedAt: 1700003601000,
-      tool: {
-        label: 'Code Execution Sandbox',
-        provider: 'E2B Systems',
-      },
     },
   ]
 
@@ -68,15 +60,15 @@ describe('AeAgentCallHistoryTable (W-29)', () => {
     expect(screen.getByText(/when this agent executes tools/i)).toBeInTheDocument()
   })
 
-  it('T2: renders table with tool name, provider, amount, status, and time', () => {
+  it('T2: renders canonical tool and provider refs, amount, status, and time', () => {
     render(<AeAgentCallHistoryTable activity={sampleActivity} />)
 
     expect(screen.getByText('Web Search Tool')).toBeInTheDocument()
-    expect(screen.getByText('Brave Software')).toBeInTheDocument()
+    expect(screen.getByText('prov_brave')).toBeInTheDocument()
     expect(screen.getByText('A$0.25')).toBeInTheDocument()
 
-    expect(screen.getByText('Code Execution Sandbox')).toBeInTheDocument()
-    expect(screen.getByText('E2B Systems')).toBeInTheDocument()
+    expect(screen.getByText('Code Execution')).toBeInTheDocument()
+    expect(screen.getByText('prov_e2b')).toBeInTheDocument()
   })
 
   it('T3: links each row or action to /calls/$callRef', () => {

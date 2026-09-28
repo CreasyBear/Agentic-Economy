@@ -1,4 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
+import { degrade } from '@/lib/observability/degrade'
+import { readCanonicalBaseUrlServer } from '@/lib/server/canonical-url.functions'
 import { z } from "zod";
 import {
   savedToolRemoveInputSchema, savedToolSaveInputSchema,
@@ -9,6 +11,7 @@ import { jevDiscoveryRecipient } from "@/modules/decision-engine/public";
 import { callPublicSourceQuery, sourceQuery } from '@/lib/server/convex-source'
 
 import { marketWindowSchema } from "./contracts";
+import { loadMarketRouteData, type MarketSearch } from './market-route-data'
 import { readMarketRouteProjection } from "./server";
 
 const inputSchema = z.object({
@@ -38,6 +41,17 @@ export const readMarketChatRecipientServer = createServerFn({ method: 'GET' })
     if (!process.env.CONVEX_URL?.trim() && !process.env.VITE_CONVEX_URL?.trim()) return null
     return await callPublicSourceQuery(chatRecipientQuery, {})
   })
+
+/** Catalogue stays authoritative; disclosure and head metadata are independent. */
+export async function loadMarketPageRouteData(deps: MarketSearch) {
+  const [data, canonicalBaseUrl, jevRecipient, chatRecipient] = await Promise.all([
+    loadMarketRouteData(deps),
+    readCanonicalBaseUrlServer().catch(cause => degrade(cause, undefined, { site: 'marketCanonicalUrl', reason: 'source_unavailable' })),
+    readMarketDiscoveryRecipientServer().catch(cause => degrade(cause, null, { site: 'marketDiscoveryRecipient', reason: 'source_unavailable' })),
+    readMarketChatRecipientServer().catch(cause => degrade(cause, null, { site: 'marketChatRecipient', reason: 'source_unavailable' })),
+  ])
+  return { ...data, canonicalBaseUrl, jevRecipient, chatRecipient }
+}
 
 /** Convex derives the account from the signed-in session and rechecks current authority. */
 export const listSavedToolsForOwner = createServerFn({ method: 'GET' })

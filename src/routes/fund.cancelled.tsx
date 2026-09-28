@@ -8,7 +8,7 @@ import { cn } from '@/lib/utils'
 
 export const Route = createFileRoute('/fund/cancelled')({
   head: () => ({ meta: [
-    { title: 'Payment cancelled | Agentic Economy' },
+    { title: 'Check your payment | Agentic Economy' },
     { name: 'robots', content: 'noindex, noarchive' },
     { name: 'referrer', content: 'no-referrer' },
   ] }),
@@ -23,7 +23,7 @@ export const Route = createFileRoute('/fund/cancelled')({
       action={(
         <div className="flex flex-wrap gap-3">
           <Link to="/owner/credit" className={cn(buttonVariants(), 'min-h-touch')}>
-            {fundingReturnCopy.cancelled.retryAction}
+            {fundingReturnCopy.cancelled.openCreditAction}
           </Link>
           <Link to="/agent-access" className={cn(buttonVariants({ variant: 'secondary' }), 'min-h-touch')}>
             {fundingReturnCopy.openAgentsAction}

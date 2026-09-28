@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { setPublicSourceTransportForTests } from '@/lib/server/convex-source'
+import { getFunctionName } from 'convex/server'
 import { setHttpRateLimitAdmissionForTests } from '@/lib/server/rate-limit'
 import { handleApiRegistryRequest } from '@/routes/api.v1.registry'
 
@@ -35,6 +36,28 @@ describe('GET /api/v1/registry cursor handling', () => {
       code: 'invalid_cursor',
       detail: 'The supplied pagination cursor is invalid or expired.',
     })
+  })
+
+  it('accepts an opaque cursor this route just issued even when it exceeds 512 characters', async () => {
+    setHttpRateLimitAdmissionForTests(async () => ({ ok: true }))
+    const inner = 'c'.repeat(550)
+    const query = vi.fn(async (ref: unknown, args: { paginationOpts?: { cursor: string | null } }) => {
+      if (getFunctionName(ref as never) === 'x402DirectoryIndex:status') return { kind: 'ready', coverage: { generation: 'g1', completedAt: 1 } }
+      if (getFunctionName(ref as never) === 'x402DirectoryIndex:searchCompact') {
+        return { kind: 'ok', coverage: { generation: 'g1', completedAt: 1 }, page: [],
+          isDone: args.paginationOpts?.cursor === inner, continueCursor: inner }
+      }
+      throw new Error('Unexpected registry query')
+    })
+    setPublicSourceTransportForTests({ query, mutation: vi.fn(), action: vi.fn() } as never)
+    const first = await handleApiRegistryRequest(new Request('http://ae.test/api/v1/registry?limit=2'))
+    expect(first.status).toBe(200)
+    const cursor = (await first.json()).pagination.nextCursor as string
+    expect(cursor.length).toBeGreaterThan(512)
+    const second = await handleApiRegistryRequest(new Request(`http://ae.test/api/v1/registry?limit=2&cursor=${encodeURIComponent(cursor)}`))
+    expect(second.status).toBe(200)
+    expect((await second.json()).pagination.hasMore).toBe(false)
+    expect(query).toHaveBeenCalledWith(expect.anything(), { query: '', paginationOpts: { cursor: inner, numItems: 2 } })
   })
 
   it('still returns 503 registry_unavailable for a genuine backend failure', async () => {

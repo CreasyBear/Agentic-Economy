@@ -89,11 +89,13 @@ export function AeAgentDirectoryTable({
       },
       {
         id: 'connection',
-        accessorFn: (item) => item.connectorDisplayNames.join(', '),
+        accessorFn: (item) => item.connectionsAvailable === false ? '' : item.connectorDisplayNames.join(', '),
         header: ({ column }) => <AeOperatorSortableHeader label="Connection" column={column} />,
-        cell: ({ row }) => row.original.connectionCount === 0
-          ? 'Legacy credential'
-          : row.original.connectorDisplayNames.join(', '),
+        cell: ({ row }) => row.original.connectionsAvailable === false
+          ? 'Connection details unavailable'
+          : row.original.connectionCount === 0
+            ? 'Legacy credential'
+            : row.original.connectorDisplayNames.join(', '),
       },
       {
         id: 'authority',

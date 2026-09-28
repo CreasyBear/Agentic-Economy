@@ -2,6 +2,7 @@ import { ConvexError } from 'convex/values'
 
 const turnErrors: Readonly<Record<string, string>> = {
   invalid_input: 'turn_invalid',
+  invalid_search_continuation: 'turn_invalid',
   turn_idempotency_conflict: 'turn_conflict',
   thread_busy: 'turn_fenced',
   turn_not_found: 'turn_not_found',

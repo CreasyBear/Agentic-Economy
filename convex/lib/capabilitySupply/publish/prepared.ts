@@ -18,6 +18,7 @@ import {
   registerCapabilityTransportBinding,
   setCapabilitySupplyEligibility,
 } from '../commands/writes'
+import { internal } from '../../../_generated/api'
 import type { Id } from '../../../_generated/dataModel'
 import type { MutationCtx } from '../../../_generated/server'
 import { resolveBusinessActor } from '../../../authz'
@@ -26,7 +27,6 @@ import { admitInteractiveOwnerConsequence } from '../../authority/consequence/ow
 import { providerRouteabilityIsFrozen } from '../providerOffboarding/freeze'
 import { isNativeSupplySource, nativeSubmissionBusiness, nativeSubmissionPorts } from '../../../capabilitySupplyNativeAdmission'
 import { upsertProviderToolIdentity } from '../../../capabilityProviderToolProjection'
-import { upsertProviderDirectoryRows } from '../../market/directoryIndex/providerRows'
 import {
   ownsPublishedBusiness,
   ownsPublishedBusinessForOwnerId,
@@ -40,21 +40,16 @@ import {
   preparedPublicationResultValue,
 } from './contracts'
 
-/**
- * Well 8 Lane C: keeps a publication's market directory rows in step with a
- * publish/withdraw immediately, alongside rebuildCapabilityOriginSupplyProjection
- * above (same transaction, no ctx.runMutation hop - upsertProviderDirectoryRows
- * is a plain helper, not a Convex function reference). The hourly
- * reconcileProviderDirectoryRows sweep (workloadCron.ts) is the safety net for
- * any disposition change that bypasses these call sites.
+/** Canonical publication is committed before the directory projection runs.
+ * The hourly reconciliation also repairs any failed scheduled projection.
  */
-export async function syncProviderDirectoryRowsAfterPublish(
+export async function scheduleProviderDirectoryProjection(
   ctx: MutationCtx, publicationRef: string, publicationRevision: number,
 ): Promise<void> {
-  const publication = await ctx.db.query('capabilityPublications')
-    .withIndex('by_publicationRef_and_revision', (query) => query.eq('publicationRef', publicationRef).eq('revision', publicationRevision))
-    .unique()
-  if (publication !== null) await upsertProviderDirectoryRows(ctx, publication)
+  await ctx.scheduler.runAfter(0, internal.x402DirectoryIndexStore.projectProviderDirectoryRow, {
+    publicationRef,
+    publicationRevision,
+  })
 }
 
 export function publicationPorts(ctx: MutationCtx) {
@@ -390,6 +385,6 @@ export async function publishPreparedCapabilityHandler(
     args.businessId,
     Date.now(),
   )
-  await syncProviderDirectoryRowsAfterPublish(ctx, result.publicationRef, result.publicationRevision)
+  await scheduleProviderDirectoryProjection(ctx, result.publicationRef, result.publicationRevision)
   return convexPreparedPublicationResult(result)
 }

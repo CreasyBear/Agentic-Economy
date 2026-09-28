@@ -10,7 +10,19 @@ import { projectComparison, projectOptionsFromCard, projectSourcesFromCards, pro
 import type { ComparisonTableView, FollowUpsView, OptionsGridView, SourcesInlineView, WorkDisclosureView } from './generative/generative.contracts'
 import type { RegistryNextAction } from '@/modules/registry/tool-choice-contracts'
 
-export type SearchNextProps = Readonly<{ next?: RegistryNextAction }>
+export type SearchNextProps = Readonly<{
+  next?: RegistryNextAction
+  onContinueSearch?: (next: Extract<RegistryNextAction, { action: 'next-page' }>) => void
+  signedThread?: boolean
+  onRepeatSearch?: (query: string) => void
+}>
+export type ToolCardProps = Readonly<{
+  projection: ToolCardProjection
+  onContinueSearch?: SearchNextProps['onContinueSearch']
+  signedThread?: boolean
+  onRepeatSearch?: SearchNextProps['onRepeatSearch']
+}>
+
 
 export {
   CHAT_TOOL_IDS,
@@ -188,9 +200,19 @@ export function projectGenerativeTurn(turn: TranscriptTurn): Readonly<{
   comparison: ComparisonTableView | null
   followUps: FollowUpsView
 }> {
-  const search = turn.tools.filter((card) => card.kind === 'choices' && (card.toolId === 'registry.tools.search' || card.toolId === 'registry.tools.list')).at(-1)
-  const compared = turn.tools.findLast((card): card is Extract<ToolCardProjection, { kind: 'choices' }> => card.kind === 'choices' && card.toolId === 'registry.tools.compare')
-  const options = search === undefined ? { options: [], comparedIds: [] } : projectOptionsFromCard(search)
+  const searched = turn.tools.filter((card) => card.kind === 'choices'
+    && (card.toolId === 'registry.tools.search' || card.toolId === 'registry.tools.list'))
+  const compared = turn.tools.findLast((card): card is Extract<ToolCardProjection, { kind: 'choices' }> =>
+    card.kind === 'choices' && card.toolId === 'registry.tools.compare')
+  const named = new Set<string>()
+  const options = {
+    comparedIds: [],
+    options: searched.flatMap(card => projectOptionsFromCard(card).options).filter(option => {
+      if (named.has(option.id)) return false
+      named.add(option.id)
+      return true
+    }),
+  }
   const comparedOptions = compared === undefined ? [] : projectOptionsFromCard(compared).options.map((option) => {
     const row = compared.choices.find((choice) => choice.toolRef === option.id)
     return row?.price === undefined || (row.priceValidUntil !== undefined && row.priceValidUntil <= Date.now())

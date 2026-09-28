@@ -22,7 +22,7 @@ import { readDirectoryFreshnessField } from '@/modules/market/x402-directory-ind
 const requestQuery = z.strictObject({
   query: z.string().max(200).default(''),
   limit: z.coerce.number().int().min(1).max(12).default(8),
-  cursor: z.string().max(512).optional(),
+  cursor: z.string().max(16384).optional(),
 })
 
 const REGISTRY_RETRY_AFTER_SECONDS = 30

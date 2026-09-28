@@ -296,6 +296,17 @@ describe('ChatTranscript first-page gate', () => {
     expect(screen.getByText('Below a match')).toBeTruthy()
     expect(document.querySelector('[data-tool-card="registry.tools.search"]')).toBeTruthy()
   })
+  it('keeps the conversation visible when its approval query fails', () => {
+    mockedUseQuery.mockImplementation(() => { throw new Error('owner approvals query failed') })
+    render(<ChatTranscript
+      messages={[{ id: 'user-1', role: 'user', parts: [{ type: 'text', text: 'Keep this question visible' }] }]}
+      ownerChatThreadId="thread-1" ownerChatNow={Date.now()} onFreshQuote={() => undefined}
+    />)
+
+    expect(screen.getByText('Keep this question visible')).toBeTruthy()
+    expect(screen.queryByText('Review pending Call')).toBeNull()
+  })
+
 })
 
 describe('ChatComposer recovery evidence', () => {

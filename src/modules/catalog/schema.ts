@@ -1,1 +1,1 @@
-export { catalogTables } from './internal/schema'
+export { catalogTables, supplyDraftTerms } from './internal/schema'

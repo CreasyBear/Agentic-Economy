@@ -1,7 +1,8 @@
 import { degrade } from '@/lib/observability/degrade'
 import { callPublicSourceQuery, sourceQuery } from '@/lib/server/convex-source'
 import { CATALOGUE_STALE_AFTER_MS, sourceFreshnessState, type SourceFreshnessState } from '@/modules/common/freshness'
-import { fetchCoinbaseReferenceRate, formatDisplayPrice, parseDecimalExactAmount } from '@/modules/money/public'
+import { REFERENCE_RATE_MAX_AGE_MS, formatDisplayPrice, parseDecimalExactAmount } from '@/modules/money/public'
+import { readPersistedReferenceRate } from '@/modules/money/reference-rate.server'
 import { readX402Directory } from './x402-directory.server'
 import type { X402DirectoryEntry } from './x402-directory'
 import { rerankX402DirectoryPage } from './x402-directory-reranker'
@@ -36,14 +37,14 @@ const status = sourceQuery<Record<string, never>, DirectoryStatus>('x402Director
 /** One Coinbase observation is shared across the bounded page; no row-level HTTP calls. */
 async function withAudEstimates(entries: readonly X402DirectoryEntry[]): Promise<X402DirectoryEntry[]> {
   const rate = entries.some(entry => entry.prices.some(price => price.scheme === 'exact' && price.symbol === 'USDC' && price.decimalAmount !== undefined))
-    ? await fetchCoinbaseReferenceRate() : undefined
+    ? await readPersistedReferenceRate() : undefined
   const now = Date.now()
   return entries.map(entry => {
     const source = minimumDirectoryUsdPrice(entry)
     if (source === undefined || rate === undefined) return entry
     const amount = parseDecimalExactAmount('USDC', source, 6)
     if (amount === undefined) return entry
-    const audEstimate = formatDisplayPrice({ kind: 'indicative', amount, referenceRate: rate, validUntil: rate.fetchedAt + 300_000 }, now)
+    const audEstimate = formatDisplayPrice({ kind: 'indicative', amount, referenceRate: rate, validUntil: rate.fetchedAt + REFERENCE_RATE_MAX_AGE_MS }, now)
     return audEstimate === undefined || audEstimate === 'AUD estimate temporarily unavailable' ? entry : { ...entry, audEstimate }
   })
 }

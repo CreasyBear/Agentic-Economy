@@ -42,11 +42,14 @@ export function projectOptionsFromCard(
         href: choice.detailHref ?? object?.href ?? `/tools/${encodeURIComponent(choice.toolRef)}`,
         ...(object?.outcome === undefined ? {} : { outcome: object.outcome }),
         price: displayedPrice ?? 'Price to be confirmed',
+        ...(displayedPrice === undefined || (currentPrice ? price?.validUntil : choice.priceValidUntil) === undefined
+          ? {} : { priceValidUntil: currentPrice ? price?.validUntil : choice.priceValidUntil }),
         ...(usage?.kind === 'present' ? { usage: `Used ${usage.value.count.toLocaleString()}× ${usage.value.window}` } : {}),
         readiness: ready ? 'ready' : unavailable ? 'unavailable' : 'unverified',
         ...(seller === undefined ? {} : { seller }),
         selectable: choice.access !== 'external_listing' && !choice.belowMatch
           && (listing === undefined || listing.canonicalToolRef.kind === 'present'),
+        ...(choice.callable === true && !choice.belowMatch ? { quoteable: true } : {}),
         ...(listing === undefined ? {} : { facts }),
       }
     }),

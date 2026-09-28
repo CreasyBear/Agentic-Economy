@@ -46,7 +46,7 @@ export type PublicToolPriceBreakdown = Readonly<{
 }>;
 export type PublicToolDisplayPrice =
   | Readonly<{ kind: "indicative"; amount: ExactAmount; rateObservedAt: number; validUntil: number }>
-  | Readonly<{ kind: "unavailable"; reason: "upstream_price_missing" | "fx_missing" | "fx_stale" | "unsupported_payment" }>;
+  | Readonly<{ kind: "unavailable"; reason: "upstream_price_missing" | "unsupported_payment" }>;
 export type PublicCommercialTerms = Readonly<{
   price: PublicToolPrice;
   displayPrice?: PublicToolDisplayPrice;

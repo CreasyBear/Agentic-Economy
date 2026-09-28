@@ -50,6 +50,17 @@ describe('Jev x402 Tool Search Re-ranker (cookbooks/rerank_typesafe.md)', () => 
     if (list.kind === 'ok') expect(list.items[0]?.priceLabel).toBe('AUD estimate temporarily unavailable')
   })
 
+  it('never advertises a cursor on an unavailable result even when a preceding page had one', () => {
+    const result = projectToolSearchChoices({
+      kind: 'unavailable', schemaVersion: 'registry-tools:v3', reason: 'source_unavailable', navigation: [],
+    }, undefined, { verdict: 'noMatch', nearMisses: [] }, undefined, 2, {
+      query: 'weather', source: 'current',
+      pagination: { limit: 2, hasMore: true, nextCursor: 'no-longer-usable' },
+    })
+    expect(result).toMatchObject({ kind: 'unavailable', pagination: { limit: 2, hasMore: false }, next: [{ action: 'retry' }] })
+    expect(result.pagination).not.toHaveProperty('nextCursor')
+  })
+
 
 
   it('finds a one-word Tool need during a ranker outage without accepting an unrelated multi-word need', () => {

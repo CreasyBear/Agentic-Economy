@@ -3,7 +3,8 @@ import { degradeBackend } from '@/lib/observability/degrade-backend'
 import { defineAction } from '@/modules/common/action'
 import { sourceFreshnessState } from '@/modules/common/freshness'
 import { jevDiscoveryRecipient } from '@/modules/decision-engine/public'
-import { fetchCoinbaseReferenceRate, type ReferenceRate } from '@/modules/money/public'
+import type { ReferenceRate } from '@/modules/money/public'
+import { readPersistedReferenceRate } from '@/modules/money/reference-rate.server'
 import {
   registryToolsCompareContract,
   registryToolsDescribeContract,
@@ -216,7 +217,7 @@ export const registryToolsSearchAction = defineAction({
           if (directoryStatus === undefined) throw new Error('Directory status must precede directory page')
           if (!rateAttempted && page.page.some(item => item.minimumUsdPrice !== undefined)) {
             rateAttempted = true
-            directoryRate = await fetchCoinbaseReferenceRate()
+            directoryRate = await readPersistedReferenceRate()
           }
           externalRows = compactDirectoryRows(page, directoryStatus, Date.now(), directoryRate)
           if (externalRows.length > 0 && data.query.trim().length > 0) {

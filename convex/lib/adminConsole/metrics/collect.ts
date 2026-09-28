@@ -2,11 +2,9 @@ import type { PaginationOptions, PaginationResult } from 'convex/server'
 import { v, type Infer } from 'convex/values'
 import type { MarketplaceMetricsSnapshotRefusalCode } from '@/lib/operator/admin-console/metrics.contracts'
 
-import { addExactAmounts, amountFromParts, type ExactAmount } from '@/modules/money/public'
 import { internal } from '../../../_generated/api'
 import type { ActionCtx, QueryCtx } from '../../../_generated/server'
 import { perthDayWindow, previousPerthDay } from './dayWindow'
-import type { MarketplaceEntity, MarketplaceMetricCounts } from './write'
 
 export const metricCallRowValue = v.object({
   callRef: v.string(),
@@ -74,101 +72,49 @@ export async function pageResolutionsForWindowHandler(
   return { ...result, page: result.page.map((row) => ({ callRef: row.callRef })) }
 }
 
-function addEntity(target: Map<string, MarketplaceEntity>, entityKind: MarketplaceEntity['entityKind'], entityRef: string | null) {
-  if (entityRef !== null) target.set(`${entityKind}:${entityRef}`, { entityKind, entityRef })
-}
-
-function sumPaidUsage(rows: readonly MetricCallRow[]): ExactAmount | 'multiple_currencies' | 'unsupported_currency' | null {
-  const paid = rows.flatMap((row) => row.paidAmount === null ? [] : [row.paidAmount])
-  if (paid.length === 0) return null
-  if (paid.some((amount) => amount.currency !== 'AUD')) return 'unsupported_currency'
-  if (new Set(paid.map((amount) => `${amount.currency}:${amount.exponent}`)).size !== 1) return 'multiple_currencies'
-  let total = amountFromParts(paid[0]?.currency, '0', paid[0]?.exponent)
-  if (total === undefined) throw new Error('marketplace_metrics_money_invalid')
-  for (const row of paid) {
-    const next = addExactAmounts(total, amountFromParts(row.currency, row.units, row.exponent))
-    if (next === undefined) throw new Error('marketplace_metrics_money_invalid')
-    total = next
-  }
-  return total
-}
-
-async function collectPages<T>(
-  load: (paginationOpts: PaginationOptions) => Promise<PaginationResult<T>>,
-): Promise<T[]> {
-  const rows: T[] = []
-  let cursor: string | null = null
-  let done = false
-  while (!done) {
-    const result = await load({ cursor, numItems: 500 })
-    rows.push(...result.page)
-    cursor = result.continueCursor
-    done = result.isDone
-  }
-  return rows
-}
+// One invocation reads at most eight source pages; a continuation owns the
+// next cursor. Source rows never accumulate across pages or action invocations.
+const PAGE_SIZE = 25
+const PAGES_PER_ACTION = 8
 
 export async function snapshotMarketplaceMetricsDayHandler(
   ctx: ActionCtx,
-  args: Readonly<{ day?: string }>,
-): Promise<Readonly<{ kind: 'written'; day: string }> | Readonly<{ kind: 'refused'; code: MarketplaceMetricsSnapshotRefusalCode }>> {
+  args: Readonly<{ day?: string; entityDay?: string }>,
+): Promise<
+  Readonly<{ kind: 'written' | 'queued'; day: string }>
+  | Readonly<{ kind: 'refused'; code: MarketplaceMetricsSnapshotRefusalCode }>
+> {
   const day = args.day ?? previousPerthDay(Date.now())
   const window = perthDayWindow(day)
   if (window.kind === 'refused') return window
+  const entityDay = args.entityDay ?? `${day}#${crypto.randomUUID()}`
+  if (args.entityDay === undefined) {
+    await ctx.runMutation(internal.adminConsoleMetrics.startMarketplaceMetricsBuild, { day, entityDay })
+  }
   const range = { from: window.from, toExclusive: window.toExclusive }
-  const [callRows, quotes, resolutions] = await Promise.all([
-    collectPages(async (paginationOpts) => await ctx.runQuery(internal.adminConsoleMetrics.pageCallsForWindow, { ...range, paginationOpts })),
-    collectPages(async (paginationOpts) => await ctx.runQuery(internal.adminConsoleMetrics.pageQuotesForWindow, { ...range, paginationOpts })),
-    collectPages(async (paginationOpts) => await ctx.runQuery(internal.adminConsoleMetrics.pageResolutionsForWindow, { ...range, paginationOpts })),
-  ])
-  const calls = [...new Map(callRows.map((call) => [call.callRef, call])).values()]
-  const settledCallValue = sumPaidUsage(calls)
-  if (settledCallValue === 'multiple_currencies' || settledCallValue === 'unsupported_currency') {
-    return { kind: 'refused', code: settledCallValue }
+  for (let index = 0; index < PAGES_PER_ACTION; index += 1) {
+    const build = await ctx.runQuery(internal.adminConsoleMetrics.readMarketplaceMetricsBuild, { entityDay })
+    if (build === null || build.day !== day) throw new Error('marketplace_metrics_build_missing')
+    const paginationOpts = { cursor: build.cursor, numItems: PAGE_SIZE }
+    const common = { day, entityDay, phase: build.phase, expectedCursor: build.cursor }
+    const staged = build.phase === 'calls'
+      ? await ctx.runQuery(internal.adminConsoleMetrics.pageCallsForWindow, { ...range, paginationOpts })
+        .then((page) => ctx.runMutation(internal.adminConsoleMetrics.advanceMarketplaceMetricsBuild, {
+          ...common, nextCursor: page.continueCursor, done: page.isDone, calls: page.page,
+        }))
+      : build.phase === 'quotes'
+        ? await ctx.runQuery(internal.adminConsoleMetrics.pageQuotesForWindow, { ...range, paginationOpts })
+          .then((page) => ctx.runMutation(internal.adminConsoleMetrics.advanceMarketplaceMetricsBuild, {
+            ...common, nextCursor: page.continueCursor, done: page.isDone, quotes: page.page,
+          }))
+        : await ctx.runQuery(internal.adminConsoleMetrics.pageResolutionsForWindow, { ...range, paginationOpts })
+          .then((page) => ctx.runMutation(internal.adminConsoleMetrics.advanceMarketplaceMetricsBuild, {
+            ...common, nextCursor: page.continueCursor, done: page.isDone, resolutions: page.page,
+          }))
+    if (staged.kind === 'refused') return staged
+    if (staged.kind === 'missing') throw new Error('marketplace_metrics_build_missing')
+    if (staged.kind === 'written') return { kind: 'written', day }
   }
-  const entities = new Map<string, MarketplaceEntity>()
-  const terminalCallRefs = new Set<string>()
-  for (const call of calls) {
-    if (call.state === 'completed' || call.state === 'refused' || call.state === 'outcome_unknown') terminalCallRefs.add(call.callRef)
-    if (call.state !== 'completed') continue
-    addEntity(entities, 'workspace', call.workspaceRef)
-    addEntity(entities, 'agent', call.agentRef)
-    addEntity(entities, 'provider', call.providerRef)
-    addEntity(entities, 'tool', call.toolRef)
-  }
-  const entityRows = [...entities.values()]
-  const counts: MarketplaceMetricCounts = {
-    settledCallValue,
-    money: settledCallValue === null ? 'no_settled_usage' : 'settled_only',
-    settledCalls: calls.filter((call) => call.paidAmount !== null).length,
-    attemptedCalls: calls.length,
-    completedCalls: calls.filter((call) => call.state === 'completed').length,
-    uncertainCalls: calls.filter((call) => call.state === 'outcome_unknown').length,
-    // This is open at snapshot, not historical open-at-day-close.
-    uncertainCallsOpenAtClose: calls.filter((call) => call.openAtSnapshot).length,
-    quotesCreated: quotes.length,
-    quotesConvertedAtClose: quotes.filter((quote) => quote.consumed).length,
-    transactingWorkspaces: entityRows.filter((entity) => entity.entityKind === 'workspace').length,
-    transactingAgents: entityRows.filter((entity) => entity.entityKind === 'agent').length,
-    transactingProviders: entityRows.filter((entity) => entity.entityKind === 'provider').length,
-    transactingTools: entityRows.filter((entity) => entity.entityKind === 'tool').length,
-    terminalCalls: terminalCallRefs.size,
-    terminalCallsWithResolution: new Set(resolutions.filter((row) => terminalCallRefs.has(row.callRef)).map((row) => row.callRef)).size,
-  }
-  const pendingClear = await ctx.runMutation(internal.adminConsoleMetrics.writeMarketplaceMetricsDay, {
-    day, entities: [], counts, replace: true, complete: false,
-  })
-  let remaining = pendingClear
-  while (remaining) {
-    remaining = await ctx.runMutation(internal.adminConsoleMetrics.writeMarketplaceMetricsDay, {
-      day, entities: [], replace: true, complete: false,
-    })
-  }
-  const batches = entityRows.length === 0 ? [[]] : Array.from({ length: Math.ceil(entityRows.length / 500) }, (_, index) => entityRows.slice(index * 500, (index + 1) * 500))
-  for (const [index, batch] of batches.entries()) {
-    await ctx.runMutation(internal.adminConsoleMetrics.writeMarketplaceMetricsDay, {
-      day, entities: batch, replace: false, complete: index === batches.length - 1,
-    })
-  }
-  return { kind: 'written', day }
+  await ctx.scheduler.runAfter(0, internal.adminConsoleMetrics.snapshotMarketplaceMetricsDay, { day, entityDay })
+  return { kind: 'queued', day }
 }

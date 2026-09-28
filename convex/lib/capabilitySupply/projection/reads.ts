@@ -1,5 +1,5 @@
 import type { GenericDatabaseReader } from 'convex/server'
-import type { DataModel, Id } from '../../../_generated/dataModel'
+import type { DataModel, Doc, Id } from '../../../_generated/dataModel'
 import { buildBusinessSupplyProjection, MAX_ACCESS_PATHS_PER_OFFERING, type BusinessSupplyProjection, type OfferingSupportProjection } from '../../../../src/modules/catalog/public'
 import { normalizeTrustTier } from '../../../../src/modules/business/public'
 import { brandNonEmpty } from '../../../../src/modules/common/ids'
@@ -14,6 +14,7 @@ export async function readLiveBusinessSupplyProjection(input: {
   businessId: Id<'businesses'>
   support: Readonly<Record<string, OfferingSupportProjection>>
   now: number
+  offeringRows?: readonly Doc<'businessOfferings'>[]
 }): Promise<BusinessSupplyProjection | null> {
   const { db, businessId, support, now } = input
   const businessRow = await db.get(businessId)
@@ -25,7 +26,7 @@ export async function readLiveBusinessSupplyProjection(input: {
     || business.publicStatus !== 'published'
     || business.suppressedAt !== undefined
   ) return null
-  const offeringRows = await db.query('businessOfferings')
+  const offeringRows = input.offeringRows ?? await db.query('businessOfferings')
     .withIndex('by_businessId_and_status', (q) => q.eq('businessId', businessId))
     .take(MAX_BUSINESS_CATALOG_OFFERINGS_PER_REBUILD + 1)
   if (offeringRows.length > MAX_BUSINESS_CATALOG_OFFERINGS_PER_REBUILD) throw new Error('business_catalog_rebuild_requires_pagination')

@@ -34,6 +34,8 @@ export type AdminMetricsDataState =
       kind: 'ready'
       cards: readonly AdminMetricCard[]
       ratios: readonly AdminMetricRatio[]
+      coverageComplete: boolean
+      coverageDescription: string
       partialDays: readonly string[]
       days: readonly AdminMetricDayRow[]
     }>
@@ -72,6 +74,7 @@ export const ADMIN_METRICS_COPY = {
   noSettledUsage: 'No settled usage',
   notAvailable: 'Not available',
   settledOnly: 'Settled only',
+  incompleteRange: (complete: number, requested: number) => `${complete} of ${requested} days have completed snapshots. Range totals are withheld.`,
   snapshotIncomplete: (day: string) => `Snapshot incomplete for ${day}`,
   accessDeniedTitle: 'Admin access required',
   accessDeniedDescription: ADMIN_ACCESS_REFUSED_COPY,

@@ -57,6 +57,7 @@ export type AdminExceptionsReadyState = Readonly<{
   selectedKind: AdminExceptionKind
   selectedPartition: AdminExceptionPartition
   observed: number
+  scanRequests: number
   complete: boolean
   overview: readonly Readonly<{
     kind: AdminExceptionKind
@@ -90,6 +91,7 @@ export type ExceptionFilterChipsProps = Readonly<{
 
 export type ExceptionFeedTableProps = Readonly<{
   rows: readonly AdminExceptionRowModel[]
+  scanRequests: number
   observed: number
   complete: boolean
   unavailable: boolean
@@ -166,6 +168,7 @@ export const ADMIN_EXCEPTIONS_COPY = {
   openObject: 'Open object record',
   verifySourceAuthority: 'Next step: Verify source authority on the Tool version record.',
   exceptionsUnavailable: 'Exception source unavailable.',
+  scanProgress: (count: number) => `${count} further indexed window${count === 1 ? '' : 's'} requested; no displayable cases yet.`,
   loadMore: 'Load more',
   unavailable: getStatusPresentation('unavailable').label,
   columnLabels: {

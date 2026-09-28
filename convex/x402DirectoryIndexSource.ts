@@ -6,6 +6,7 @@ import { canonicalDigest } from '@/modules/common/canonical-digest'
 import type { StableHashValue } from '@/modules/common/stable-hash'
 import { isRecord } from '@/modules/common/is-record'
 import { projectX402DirectoryEntry } from '@/modules/market/x402-directory.server'
+import { directoryNetwork } from '@/modules/market/x402-directory-index'
 import { internal } from './_generated/api'
 import { internalAction } from './_generated/server'
 import { parseWorkloadCronSnapshot, workloadCronSnapshotValue } from './lib/platform/workloadCron/context'
@@ -13,6 +14,7 @@ import { progressValue, type IndexedSource, type IndexProgress } from './lib/mar
 
 const PAGE_SIZE = 100
 const MAX_RAW_METADATA_BYTES = 256 * 1024
+const MAX_ENTRY_BYTES = 768 * 1024
 const encoder = new TextEncoder()
 
 /** Keep every endpoint visible even when optional source metadata exceeds a document budget. */
@@ -33,11 +35,28 @@ export function prepareIndexedDirectorySource(resource: Readonly<Record<string, 
     if (encoder.encode(sourceJson).byteLength > MAX_RAW_METADATA_BYTES) throw new Error('directory_payment_metadata_too_large')
   }
   const projected = projectX402DirectoryEntry(resource)
-  return {
+  if (new Set(projected.prices.map(price => directoryNetwork(price.network))).size > 128) throw new Error('directory_network_metadata_invalid')
+  const item: IndexedSource = {
     resource: resource.resource,
     entry: JSON.parse(JSON.stringify({ ...projected, metadataJson: '' })) as IndexedSource['entry'],
     sourceJson, sourceDigest: canonicalDigest(JSON.parse(raw) as StableHashValue),
   }
+  if (encoder.encode(JSON.stringify(item)).byteLength > MAX_ENTRY_BYTES) throw new Error('directory_source_entry_invalid')
+  return item
+}
+
+/** Reject only malformed external observations; never promote invalid payment metadata. */
+export function prepareIndexedDirectoryPage(sourceItems: readonly unknown[]) {
+  const items: IndexedSource[] = []
+  for (const item of sourceItems) {
+    try {
+      if (!isRecord(item)) throw new Error('directory_source_item_invalid')
+      items.push(prepareIndexedDirectorySource(item))
+    } catch (cause) {
+      console.error('[directory] skipping invalid discovery resource', { cause })
+    }
+  }
+  return { items, skippedInvalidItems: sourceItems.length - items.length }
 }
 
 /** Read-only SDK discovery plus one transactional metadata commit; no Provider endpoint is called. */
@@ -56,10 +75,7 @@ export const page = internalAction({
     if (response.pagination.offset !== args.offset || response.pagination.limit !== PAGE_SIZE
       || reportedTotal === undefined || !Number.isSafeInteger(reportedTotal) || reportedTotal < 0
       || !Array.isArray(response.items) || response.items.length > PAGE_SIZE) throw new Error('directory_source_page_invalid')
-    const items = response.items.map(item => {
-      if (!isRecord(item)) throw new Error('directory_source_page_invalid')
-      return prepareIndexedDirectorySource(item)
-    })
+    const { items, skippedInvalidItems } = prepareIndexedDirectoryPage(response.items)
     let progress: IndexProgress = { kind: 'advanced', generation: args.generation, nextOffset: args.offset, indexedTotal: checkpoint.indexedTotal }
     // Aggregate maintains its native tree transactionally; bounded sub-batches
     // keep its read budget independent of upstream page size and catalog depth.
@@ -67,6 +83,7 @@ export const page = internalAction({
       progress = await ctx.runMutation(internal.x402DirectoryIndexStore.applyPage, {
         generation: args.generation, offset: args.offset, reportedTotal,
         items: items.slice(startItem, startItem + 5), startItem, totalItems: items.length,
+        ...(skippedInvalidItems === 0 ? {} : { skippedInvalidItems }),
         observedAt: Date.now(), runStartedAt: args.runStartedAt, workload: args.workload,
       })
       if (progress.kind !== 'advanced') break

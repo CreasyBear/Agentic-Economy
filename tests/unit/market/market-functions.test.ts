@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import type * as MarketRouteData from '@/modules/market/market-route-data'
 
-const projection = vi.hoisted(() => ({ read: vi.fn() }))
+const projection = vi.hoisted(() => ({ read: vi.fn(), catalogue: vi.fn(), canonical: vi.fn(), discovery: vi.fn(), chat: vi.fn() }))
 
 vi.mock('@tanstack/react-start', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@tanstack/react-start')>()),
@@ -18,11 +19,20 @@ vi.mock('@tanstack/react-start', async (importOriginal) => ({
 }))
 
 vi.mock('@/modules/market/server', () => ({ readMarketRouteProjection: projection.read }))
+vi.mock('@/modules/market/market-route-data', async importOriginal => ({
+  ...(await importOriginal<typeof MarketRouteData>()),
+  loadMarketRouteData: projection.catalogue,
+}))
+vi.mock('@/lib/server/canonical-url.functions', () => ({ readCanonicalBaseUrlServer: projection.canonical }))
+vi.mock('@/modules/decision-engine/public', () => ({ jevDiscoveryRecipient: projection.discovery }))
+vi.mock('@/lib/server/convex-source', () => ({ sourceQuery: () => 'chatAnonymous:recipient', callPublicSourceQuery: projection.chat }))
 
-import { readMarketRouteServer } from '@/modules/market/market.functions'
+import { loadMarketPageRouteData, readMarketRouteServer } from '@/modules/market/market.functions'
 import { SEARCH_QUERY_MAX_LENGTH } from '@/modules/common/search-query'
 
-afterEach(() => projection.read.mockReset())
+afterEach(() => {
+  for (const mock of Object.values(projection)) mock.mockReset()
+})
 
 describe('Market route server boundary', () => {
   it('accepts a 200-character query and preserves existing route filters', async () => {
@@ -44,5 +54,22 @@ describe('Market route server boundary', () => {
     } })).rejects.toThrow()
 
     expect(projection.read).not.toHaveBeenCalled()
+  })
+
+  it('keeps catalogue and comparison available when canonical and recipient reads reject', async () => {
+    projection.catalogue.mockResolvedValue({ page: { kind: 'ok', items: [{ resource: 'tool:1' }] }, compareEntries: [{ resource: 'tool:1' }] })
+    projection.canonical.mockRejectedValue(new Error('canonical origin unavailable'))
+    projection.discovery.mockImplementation(() => { throw new Error('ranking recipient unavailable') })
+    projection.chat.mockRejectedValue(new Error('chat recipient unavailable'))
+    const previousUrl = process.env.CONVEX_URL
+    process.env.CONVEX_URL = 'http://127.0.0.1:3210'
+    try {
+      const result = await loadMarketPageRouteData({ view: 'tools' })
+      expect(result).toMatchObject({ page: { kind: 'ok', items: [{ resource: 'tool:1' }] }, compareEntries: [{ resource: 'tool:1' }], chatRecipient: null, jevRecipient: null })
+      expect(result.canonicalBaseUrl).toBeUndefined()
+    } finally {
+      if (previousUrl === undefined) delete process.env.CONVEX_URL
+      else process.env.CONVEX_URL = previousUrl
+    }
   })
 })

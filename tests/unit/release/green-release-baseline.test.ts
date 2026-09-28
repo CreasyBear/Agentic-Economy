@@ -318,7 +318,7 @@ describe('green release baseline', () => {
       AE_E2E_OWNER_EMAIL: '${{ secrets.AE_AUTHENTICATED_E2E_OWNER_EMAIL }}',
       CI: 'true',
     })
-    expect(start?.run).toContain('npm run dev:local -- --skip-scan --no-doctor')
+    expect(start?.run).toContain('npm run dev:local -- --no-doctor')
     expect(start?.run).toContain('output/fresh-checkout/dev-local.log')
     expect(start?.run).toContain('http://127.0.0.1:3024/api/ready')
     expect(start?.run).toContain('DEV_LOCAL_PID=$!')

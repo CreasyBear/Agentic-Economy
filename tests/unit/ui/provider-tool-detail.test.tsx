@@ -151,3 +151,22 @@ it('sends connection repair to the hosted owner handoff', () => {
   expect(screen.getByRole('link', { name: 'Reconnect source' }).getAttribute('href')).toBe('/owner/supply/connections')
   expect(screen.queryByRole('button')).toBeNull()
 })
+
+it('resumes only the saved draft and never labels a fresh form as continuation', () => {
+  const draft = {
+    ...status,
+    state: 'Draft' as const,
+    routeability: { available: false, reasonCodes: [] },
+    continuation: { action: 'supply.source.preview' as const },
+  }
+  const { rerender } = render(
+    <AeProviderToolDetail name="Reference lookup" status={draft} resumeHref="/owner/operations/new?draft=sha256%3Aabc" />,
+  )
+  expect(screen.getByRole('link', { name: 'Continue setup' }).getAttribute('href'))
+    .toBe('/owner/operations/new?draft=sha256%3Aabc')
+
+  rerender(<AeProviderToolDetail name="Reference lookup" status={draft} />)
+  expect(screen.queryByRole('link', { name: 'Continue setup' })).toBeNull()
+  expect(screen.getByRole('link', { name: 'Add another Tool' }).getAttribute('href'))
+    .toBe('/owner/operations/new')
+})

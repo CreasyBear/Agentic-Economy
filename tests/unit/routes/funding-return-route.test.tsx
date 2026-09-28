@@ -138,8 +138,8 @@ describe('public funding return', () => {
   })
 })
 
-describe('AM-09 lost Checkout session cancel page', () => {
-  it('states that credit and authority are unchanged', () => {
+describe('Checkout return without a confirmed outcome', () => {
+  it('directs the buyer to Credit without offering a new payment', () => {
     const Component = CancelledRoute.options.component
     if (Component === undefined) throw new Error('funding_cancelled_component_missing')
     const rootRoute = createRootRoute()
@@ -150,8 +150,6 @@ describe('AM-09 lost Checkout session cancel page', () => {
     ])
     const router = createRouter({ routeTree, history: createMemoryHistory({ initialEntries: ['/'] }) })
     render(<RouterContextProvider router={router}>{createElement(Component)}</RouterContextProvider>)
-    expect(screen.getByRole('heading', { name: 'Payment cancelled' })).toBeTruthy()
-    expect(screen.getByText('No Account credit changed, and no authority changed.')).toBeTruthy()
     expect(screen.getByRole('link', { name: 'Open Credit' }).getAttribute('href')).toBe('/owner/credit')
     expect(screen.getByRole('link', { name: 'Open Agents' }).getAttribute('href')).toBe('/agent-access')
     expect(screen.queryByRole('link', { name: 'Try again' })).toBeNull()

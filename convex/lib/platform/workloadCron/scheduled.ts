@@ -43,6 +43,10 @@ export async function refreshFacilitatorDiscoveryHandler(ctx: WorkloadCronAction
     {},
   )
 }
+export async function refreshReferenceRateHandler(ctx: WorkloadCronActionContext): Promise<null> {
+  return await runAdmittedAction(ctx, 'refresh USDC/AUD reference rate', internal.referenceRateRefresh.run, {})
+}
+
 
 export async function refreshAgenticEconomyApiRegistryHandler(ctx: WorkloadCronActionContext): Promise<null> {
   await runAdmittedAction(ctx, 'refresh Agentic Economy API registry', internal.x402DirectoryIndexRefresh.start, {})

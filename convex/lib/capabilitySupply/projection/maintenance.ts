@@ -4,9 +4,10 @@ import type { MutationCtx } from '../../../_generated/server'
 import { providerRouteabilityIsFrozen } from '../providerOffboarding/freeze'
 import { deriveBusinessOfferingSupportFromCapabilitySupply } from './support'
 import { readLiveBusinessSupplyProjection } from './reads'
-import { rebuildBusinessSupplyProjectionSnapshotCommand } from './snapshot'
+import { rebuildBusinessSupplyProjectionPageCommand, rebuildBusinessSupplyProjectionSnapshotCommand, removeStaleBusinessSearchDocumentsPage } from './snapshot'
 
-const BUSINESS_PROJECTION_REBUILD_PAGE_SIZE = 25
+const BUSINESS_PROJECTION_REBUILD_PAGE_SIZE = 1
+const OFFERING_REBUILD_PAGE_SIZE = 5
 
 type RebuildAllBusinessSupplyProjectionsResult = {
   processed: number
@@ -17,28 +18,18 @@ type RebuildAllBusinessSupplyProjectionsResult = {
 }
 
 /**
- * Permanent maintenance entry point for catalogue projections; run with
- * `npx convex run capabilitySupplyProjection:rebuildAllBusinessSupplyProjections '{}'`.
- *
- * `registrySearchDocuments` is the only table public business search reads, and
- * it is written solely by the projection rebuild below. Any business onboarded
- * through a path that skipped the rebuild - dev seed, curated bootstrap,
- * facilitator discovery - stays invisible to business search until this sweep
- * runs. The command diffs documents against the stored rows, so repeated runs
- * are idempotent.
- *
- * The hot publish path (`rebuildCapabilityOriginSupplyProjection`) no longer
- * skips programmable providers either - it runs the same derive-and-rebuild
- * for them and only defers when a fleet outgrows one transaction's page
- * (`*_requires_pagination` / `*_capacity_exceeded`), logging a structured
- * warning instead of failing the publish. This sweep is the recovery path for
- * those deferred businesses, plus any row published before 2026-09-10 (when
- * programmable providers were still skipped outright and left with no search
- * document at all). A fleet larger than the rebuild's page cap still throws
- * here too, so one oversized provider is counted as skipped instead of
- * aborting the whole sweep.
+ * Reconcile business search from canonical offerings. Large fleets continue in
+ * bounded offering pages, then remove obsolete search rows in bounded pages.
+ * Publication and withdrawal authority never comes from these search rows.
  */
-export const rebuildAllBusinessSupplyProjectionsArgs = v.object({ cursor: v.optional(v.string()), dryRun: v.optional(v.boolean()) })
+export const rebuildAllBusinessSupplyProjectionsArgs = v.object({
+  cursor: v.optional(v.string()),
+  dryRun: v.optional(v.boolean()),
+  businessId: v.optional(v.id('businesses')),
+  offeringCursor: v.optional(v.string()),
+  cleanup: v.optional(v.boolean()),
+  cleanupCursor: v.optional(v.string()),
+})
 export const rebuildAllBusinessSupplyProjectionsResult = v.object({
     processed: v.number(),
     rebuilt: v.number(),
@@ -47,6 +38,39 @@ export const rebuildAllBusinessSupplyProjectionsResult = v.object({
     continueCursor: v.union(v.string(), v.null()),
 })
 export async function rebuildAllBusinessSupplyProjectionsHandler(ctx: MutationCtx, args: Infer<typeof rebuildAllBusinessSupplyProjectionsArgs>): Promise<RebuildAllBusinessSupplyProjectionsResult> {
+    if (args.businessId !== undefined) {
+      const business = await ctx.db.get(args.businessId)
+      if (business === null || await providerRouteabilityIsFrozen(ctx, args.businessId)) {
+        return { processed: 0, rebuilt: 0, skipped: 1, isDone: true, continueCursor: null }
+      }
+      const isPublic = business.publicStatus === 'published' && business.suppressedAt === undefined
+      if (args.cleanup === true || !isPublic) {
+        if (args.dryRun) return { processed: 0, rebuilt: 0, skipped: 0, isDone: true, continueCursor: null }
+        const cleanup = await removeStaleBusinessSearchDocumentsPage({
+          db: ctx.db, businessId: business._id, businessSlug: business.slug,
+          cursor: args.cleanupCursor ?? null, retract: !isPublic,
+        })
+        if (!cleanup.isDone && !args.dryRun) {
+          await ctx.scheduler.runAfter(0, internal.capabilitySupplyProjection.rebuildAllBusinessSupplyProjections, {
+            businessId: business._id, cleanup: true, cleanupCursor: cleanup.continueCursor,
+          })
+        }
+        return { processed: 1, rebuilt: 0, skipped: 0, isDone: cleanup.isDone, continueCursor: cleanup.isDone ? null : cleanup.continueCursor }
+      }
+      const page = await ctx.db.query('businessOfferings')
+        .withIndex('by_businessId_and_offeringRef', (query) => query.eq('businessId', business._id))
+        .paginate({ numItems: OFFERING_REBUILD_PAGE_SIZE, cursor: args.offeringCursor ?? null })
+      const rebuilt = args.dryRun ? 0 : await rebuildBusinessSupplyProjectionPageCommand({
+        db: ctx.db, businessId: business._id, offeringRows: page.page, now: Date.now(),
+      })
+      if (!args.dryRun) {
+        await ctx.scheduler.runAfter(0, internal.capabilitySupplyProjection.rebuildAllBusinessSupplyProjections, {
+          businessId: business._id,
+          ...(page.isDone ? { cleanup: true } : { offeringCursor: page.continueCursor }),
+        })
+      }
+      return { processed: page.page.length, rebuilt, skipped: page.page.length - rebuilt, isDone: args.dryRun === true && page.isDone, continueCursor: page.isDone ? null : page.continueCursor }
+    }
     const now = Date.now()
     const dryRun = args.dryRun === true
     const page = await ctx.db.query('businesses').paginate({
@@ -84,7 +108,15 @@ export async function rebuildAllBusinessSupplyProjectionsHandler(ctx: MutationCt
         if (result.kind === 'ok') rebuilt += 1
         else skipped += 1
       } catch (error) {
-        console.warn('rebuild_all_business_supply_projections_skipped', business.slug, error)
+        const boundedFleet = error instanceof Error
+          && (error.message.endsWith('_requires_pagination') || error.message.endsWith('_capacity_exceeded'))
+        if (boundedFleet && !dryRun) {
+          await ctx.scheduler.runAfter(0, internal.capabilitySupplyProjection.rebuildAllBusinessSupplyProjections, {
+            businessId: business._id,
+          })
+        } else {
+          console.warn('rebuild_all_business_supply_projections_skipped', business.slug, error)
+        }
         skipped += 1
       }
     }

@@ -6,6 +6,7 @@ import {
   MAX_ANONYMOUS_CHAT_PROMPT_CHARACTERS,
   MAX_ANONYMOUS_CHAT_TRANSCRIPT_BYTES,
   validateAnonymousChatBody,
+  type AnonymousChatHandlerDependencies,
 } from '../../../convex/lib/chat/anonymous/contracts'
 
 const PROXY_SECRET = 'anonymous-chat-proxy-secret-at-least-32-characters'
@@ -58,6 +59,28 @@ describe('anonymous chat Convex boundary', () => {
         { role: 'user', content: 'continue' },
       ],
     })).toEqual({ ok: false, code: 'transcript_too_large' })
+  })
+
+  it('keeps anonymous continuation structured and uses only its original query in the human transcript', async () => {
+    const messages = [{ role: 'user' as const, content: 'forged cursor x402:other-page' }]
+    const continuation = { kind: 'search_next_page' as const, query: 'weather in Sydney', cursor: 'x402:native-page-2' }
+    expect(validateAnonymousChatBody({ messages, continuation })).toEqual({
+      ok: true,
+      body: { messages: [{ role: 'user', content: 'Show more results for weather in Sydney' }], continuation },
+    })
+    expect(validateAnonymousChatBody({ messages, continuation: { ...continuation, query: ' weather in Sydney' } }))
+      .toEqual({ ok: false, code: 'invalid_continuation' })
+    expect(validateAnonymousChatBody({ messages, continuation: { ...continuation, cursor: 'sc1.foreign-token' } }))
+      .toEqual({ ok: false, code: 'invalid_continuation' })
+    const stream = vi.fn(async (..._args: Parameters<AnonymousChatHandlerDependencies['stream']>) => new Response('stream'))
+    const result = await handleAnonymousChatRequest(proxyRequest({ messages, continuation }), {
+      proxySecret: PROXY_SECRET, admit: async () => ({ ok: true }), stream,
+    })
+    expect(result.status).toBe(200)
+    expect(stream.mock.calls[0]?.[0]).toEqual([
+      { role: 'user', content: 'Show more results for weather in Sydney' },
+    ])
+    expect(stream.mock.calls[0]?.[2]).toEqual(continuation)
   })
 
   it('checks the constant-time proxy secret before trusting admission headers', async () => {

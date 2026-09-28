@@ -97,6 +97,7 @@ export async function handleSupplyActionPost(
         ? resolveAgentAccessPrincipal(request, bounded.text, correlationId)
         : undefined)
     const admitted = await authenticateAgentAccess({
+      request,
       ...(options.authenticate === undefined ? {} : { authenticate: options.authenticate }),
       ...(resolvePrincipal === undefined ? {} : { resolvePrincipal }),
       requiredScope: SUPPLY_ACTION_ROUTE_CONTRACTS[actionName].scope,

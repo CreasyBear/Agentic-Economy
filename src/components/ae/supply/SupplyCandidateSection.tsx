@@ -3,7 +3,7 @@ import { AeSection } from '@/components/ae/layout/AeSection'
 import { Label } from '@/components/ui/label'
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 import { cn } from '@/lib/utils'
-import { REASON_COPY, REASON_COPY_FALLBACK } from '@/content/reason-copy'
+import { REASON_COPY } from '@/content/reason-copy'
 import type { SupplyToolCandidate } from '@/modules/capability-supply/source-preview'
 import {
   SUPPLY_PUBLICATION_ERROR_ID,
@@ -72,7 +72,7 @@ function CandidateRow({ candidate }: Readonly<{ candidate: SupplyToolCandidate }
         <p className="font-medium text-foreground">{candidate.title}</p>
         <p className="text-sm text-muted-foreground">{candidate.description}</p>
         <p className="text-sm text-muted-foreground">{candidate.authentication.kind === 'public' ? 'Public' : 'Connection required'} · {candidate.validationExampleAvailable ? 'Validation input available' : 'Validation input required'}</p>
-        {supported ? null : <p className="text-sm text-destructive">Action required: update this Tool at its source. {REASON_COPY[candidate.disposition.reason] ?? REASON_COPY_FALLBACK}</p>}
+        {supported ? null : <p className="text-sm text-destructive">{REASON_COPY[candidate.disposition.reason] ?? `This operation cannot be imported (${candidate.disposition.reason}). Correct its source definition, then find Tools again.`}</p>}
       </div>
     </Label>
   )

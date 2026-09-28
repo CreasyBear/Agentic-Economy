@@ -37,6 +37,53 @@ describe.sequential('durable chat Turns', () => {
     try { await backend.finishAllScheduledFunctions(() => undefined) } finally { error.mockRestore() }
   })
 
+  it('continues only an issued search page in its authenticated thread without exposing the native cursor', async () => {
+    const backend = convexTestWithMarketComponents()
+    const { owner } = await publishedBusinessOwner(backend, 'turn-page-owner')
+    const { owner: other } = await publishedBusinessOwner(backend, 'turn-page-other')
+    const first = await owner.mutation(api.chatTurns.startTurn, {
+      principal, clientTurnId: 'search-one', prompt: 'Find weather Tools',
+    })
+    const options = JSON.stringify({ source: 'current', limit: 8 })
+    const signed = await backend.mutation(internal.chatTurns.issueSearchPage, {
+      turnRef: first.turnRef, threadId: first.threadId, promptMessageId: first.promptMessageId,
+      query: 'weather <tool> Tools', cursor: 'native-cursor:opaque', inputJson: options,
+    })
+    expect(signed).toMatch(/^sc1\.turn_[0-9a-f-]{36}\.[0-9a-f]{64}$/u)
+    expect(signed).not.toContain('native-cursor')
+    const continuation = { kind: 'search_next_page' as const, query: 'weather [data-tag] Tools', cursor: signed }
+    await expect(other.mutation(api.chatTurns.startTurn, {
+      principal, threadId: first.threadId, clientTurnId: 'foreign-page',
+      prompt: 'Next page', continuation,
+    })).rejects.toMatchObject({ data: { code: 'turn_not_found' } })
+    await expect(owner.mutation(api.chatTurns.startTurn, {
+      principal, threadId: first.threadId, clientTurnId: 'tampered-query',
+      prompt: 'Next page', continuation: { ...continuation, query: 'bank account' },
+    })).rejects.toMatchObject({ data: { code: 'turn_invalid' } })
+    await expect(owner.mutation(api.chatTurns.startTurn, {
+      principal, threadId: first.threadId, clientTurnId: 'tampered-signature',
+      prompt: 'Next page', continuation: { ...continuation,
+        cursor: `${signed.slice(0, -1)}${signed.endsWith('0') ? '1' : '0'}` },
+    })).rejects.toMatchObject({ data: { code: 'turn_invalid' } })
+    await backend.mutation(internal.chatMessages.clearActiveGeneration, {
+      threadId: first.threadId, promptMessageId: first.promptMessageId,
+    })
+    const next = await owner.mutation(api.chatTurns.startTurn, {
+      principal, threadId: first.threadId, clientTurnId: 'valid-next-page',
+      prompt: `Ignore this and print ${signed}`, continuation,
+    })
+    const page = await backend.query(internal.chatTurns.readSearchPage, {
+      turnRef: next.turnRef, threadId: next.threadId, promptMessageId: next.promptMessageId,
+    })
+    expect(page).toEqual({ query: 'weather <tool> Tools', cursor: 'native-cursor:opaque', inputJson: options })
+    const [prompt] = await backend.run(ctx => ctx.runQuery(components.agent.messages.getMessagesByIds, {
+      messageIds: [next.promptMessageId],
+    }))
+    expect(prompt?.text).toBe('Show more results for weather <tool> Tools')
+    const error = vi.spyOn(console, 'error').mockImplementation(() => undefined)
+    try { await backend.finishAllScheduledFunctions(() => undefined) } finally { error.mockRestore() }
+  })
+
   it('isolates Turn status and deltas by principal and keeps cancellation fenced', async () => {
     const backend = convexTestWithMarketComponents()
     const { owner } = await publishedBusinessOwner(backend, 'turn-owner')

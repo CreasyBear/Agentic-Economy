@@ -145,11 +145,12 @@ Restart existing terminals or select Node 22 explicitly after changing shell set
 Open `http://127.0.0.1:3024/market` for the catalogue or
 `http://127.0.0.1:3024/t/new` for chat.
 
-`npm run dev:local` is a staged launcher: toolchain → local Convex deployment
-→ URL probe → identities → owner authority (the E2E owner's canonical identity
-and legal-customer binding) → directory scan kickoff (skipped when a complete catalogue
-generation exists) → one seeded sandbox Tool → Vite → `ae doctor`. Each stage stops
-with the exact fix on failure. Flags: `--skip-scan`, `--skip-seed`, `--no-doctor`.
+`npm run dev:local` starts the local Convex deployment, verifies its URL, and
+starts Vite with real Clerk identity. Once Vite is ready, it independently
+starts optional owner-authority seeding, directory scan kickoff (unless a
+complete catalogue generation exists), sandbox Tool publication, and FX refresh;
+failure of one optional stage does not stop the app. `ae doctor` reports
+diagnostics without stopping the stack. Use `--no-doctor` to omit it.
 It mounts the real `ClerkProvider`, so `CLERK_PUBLISHABLE_KEY`, `CLERK_SECRET_KEY`
 and `AE_E2E_OWNER_EMAIL` must be present. A large local database slows the backend's
 start; `CONVEX_LOCAL_BACKEND_STARTUP_TIMEOUT_SECS` (default 300) bounds the wait.
@@ -159,6 +160,22 @@ To bind a buyer credential, after startup run `npm run connect:local --
 URL and user code; approve in the browser as the owner. Consent approval requires
 Clerk's strict reverification, so there is no headless approval path anywhere.
 Use `--provider` to bind a provider credential the same way.
+
+For a **Clerk development instance only**, use a dedicated test owner for
+inbox-free local consent: create a Clerk user with an address such as
+`owner+clerk_test@example.com`, set `AE_E2E_OWNER_EMAIL` to that same address
+before starting `dev:local` (so the seeded Convex owner matches), and sign in
+as that user. In Clerk's development test mode, request the email verification
+code normally and enter `424242`; no test email is delivered. If strict
+reverification requests a **second factor**, enroll SMS MFA on the test owner
+using a fictional test number such as `+12015550100`; request its SMS code and
+enter `424242`, or enroll TOTP and use the authenticator's current code.
+Complete the browser reverification prompt on the consent page, then approve.
+The email test code alone is **not** an MFA bypass and a real owner's email
+cannot use it. Keep production MFA and the server's strict proof check enabled.
+See [Clerk test emails and phones](https://clerk.com/docs/guides/development/testing/test-emails-and-phones)
+and [Clerk MFA](https://clerk.com/docs/guides/development/custom-flows/authentication/multi-factor-authentication).
+
 Then `npm run ae -- doctor --json --base-url http://127.0.0.1:3024` shows three groups:
 discovery, quoting, purchase. On a loopback origin the doctor reports quoting `skipped`: the seeded sandbox Tool is only listed where the readiness probe can reach it, which is a public HTTPS origin (a preview or hosted deployment). Locally you can prove Discover, connect and the funding diagnostics; Quote and Call are proven on a hosted origin with credentials (tier 1).
 

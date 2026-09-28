@@ -70,6 +70,20 @@ const externalOperationAccessPath = v.object({
   provenance: literalUnion(ExternalOperationProvenanceValues),
 })
 
+export const supplyDraftTerms = v.object({
+  name: v.string(),
+  description: v.string(),
+  category: v.string(),
+  serviceArea: v.string(),
+  availability: v.string(),
+  pricingKind: v.union(v.literal('free'), v.literal('fixed_aud'), v.literal('source_x402')),
+  price: v.string(),
+  externalEffect: v.boolean(),
+  dataRelease: v.boolean(),
+  financialExposure: v.boolean(),
+  dataClassification: v.union(v.literal('public'), v.literal('personal'), v.literal('sensitive')),
+})
+
 const supplyIntegrationDraft = v.object({
   sourceKind: v.union(
     v.literal('openapi'),
@@ -84,6 +98,7 @@ const supplyIntegrationDraft = v.object({
   sourceSelectorJson: v.string(),
   connectionRef: v.optional(v.string()),
   validationInputJson: v.optional(v.string()),
+  terms: v.optional(supplyDraftTerms),
   updatedAt: v.number(),
 })
 const publicAccessPath = v.object({

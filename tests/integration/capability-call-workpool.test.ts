@@ -88,13 +88,10 @@ import {
 } from '@/modules/capability-supply/server'
 
 const providerFetch = vi.hoisted(() => vi.fn<typeof UndiciFetch>())
-const external = vi.hoisted(() => ({ cdpClient: vi.fn(), receipt: vi.fn(), rate: vi.fn() }))
+const external = vi.hoisted(() => ({ cdpClient: vi.fn(), receipt: vi.fn() }))
 vi.mock('@coinbase/cdp-sdk', async (importOriginal) => ({
   ...await importOriginal<Record<string, unknown>>(),
   CdpClient: class { constructor() { return external.cdpClient() } },
-}))
-vi.mock('@/modules/money/reference-rate', async (importOriginal) => ({
-  ...await importOriginal<Record<string, unknown>>(), fetchCoinbaseReferenceRate: external.rate,
 }))
 vi.mock('@/modules/capability-supply/server', async (importOriginal) => ({
   ...await importOriginal<Record<string, unknown>>(), readGuardedX402EvmReceipt: external.receipt,
@@ -505,7 +502,6 @@ afterEach(() => {
   vi.restoreAllMocks()
   vi.unstubAllEnvs()
   external.cdpClient.mockReset()
-  external.rate.mockReset()
   external.receipt.mockReset()
 })
 

@@ -136,15 +136,10 @@ describe('GET /api/v1/registry hostile inputs', () => {
     await expectProblemJson(response, { status: 400, kind: 'INVALID_ARGUMENT', code: 'invalid_cursor' })
   })
 
-  it('rejects a 513-char cursor before it ever reaches the index (schema bound, not invalid_cursor)', async () => {
+  it('rejects a cursor over the advertised route bound before it reaches the index', async () => {
     const backend = await setup()
     await seedCompletedGeneration(backend, 'gen-oversized-cursor', 2)
-    const response = await handleApiRegistryRequest(registryRequest({ cursor: OVERSIZED_CURSOR }))
-    // The 512-char zod bound on `cursor` fires first, so an oversized cursor
-    // is reported as `invalid_query_parameter` (unified code), not
-    // `invalid_cursor`. Still 400 problem+json, never 503/200.
-    expect(response.status).not.toBe(503)
-    expect(response.status).not.toBe(200)
+    const response = await handleApiRegistryRequest(registryRequest({ cursor: 'x'.repeat(16_385) }))
     await expectProblemJson(response, { status: 400, kind: 'INVALID_ARGUMENT', code: 'invalid_query_parameter' })
   })
 

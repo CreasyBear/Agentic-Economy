@@ -152,7 +152,7 @@ const publicDescriptor = v.object({
   business: v.object({ businessId: v.string(), slug: v.string(), name: v.string() }),
   listing: v.object({ listingRef: v.string(), revision: v.number(), label: v.string(), summary: v.string() }),
   summary: v.string(),
-  commercial: v.object({ displayPrice: v.optional(v.union(v.object({ kind: v.literal('indicative'), amount: exactAmount, rateObservedAt: v.number(), validUntil: v.number() }), v.object({ kind: v.literal('unavailable'), reason: v.union(v.literal('upstream_price_missing'), v.literal('fx_missing'), v.literal('fx_stale'), v.literal('unsupported_payment')) }))), price: publicPrice, priceEvidence: v.optional(publicPriceEvidence), priceBreakdown: v.optional(publicPriceBreakdown), materialTerms: v.array(publicMaterialTerm), relationship: publicRelationship }),
+  commercial: v.object({ displayPrice: v.optional(v.union(v.object({ kind: v.literal('indicative'), amount: exactAmount, rateObservedAt: v.number(), validUntil: v.number() }), v.object({ kind: v.literal('unavailable'), reason: v.union(v.literal('upstream_price_missing'), v.literal('unsupported_payment')) }))), price: publicPrice, priceEvidence: v.optional(publicPriceEvidence), priceBreakdown: v.optional(publicPriceBreakdown), materialTerms: v.array(publicMaterialTerm), relationship: publicRelationship }),
   dataUse: v.array(publicDataUse),
   effects: v.array(publicEffect),
   evidence: v.array(publicEvidence),

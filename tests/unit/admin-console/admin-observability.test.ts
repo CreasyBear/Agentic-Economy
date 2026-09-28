@@ -135,6 +135,19 @@ describe('admin observability boundary', () => {
     expect(sentry.captureServerException).not.toHaveBeenCalled()
   })
 
+  it('refuses a first-factor-only claim before source-write admission or mutation', async () => {
+    server.operator.mockResolvedValue({
+      kind: 'authorized', principalRef: actor, allowedSurfaces: ['admin'],
+    })
+    server.proof.mockResolvedValue({
+      reverificationId: 'reverify:first-only', firstFactorAgeMinutes: 0, secondFactorAgeMinutes: -1,
+    })
+    const receipt = await server.handler(commandRequest)
+    expect(receipt).toMatchObject({ kind: 'refused', code: 'mfa_reverification_required' })
+    expect(server.mint).not.toHaveBeenCalled()
+    expect(server.mutate).not.toHaveBeenCalled()
+  })
+
   it('refuses non-admin sessions before proof or mutation', async () => {
     server.operator.mockResolvedValue({ kind: 'authorized', principalRef: actor, allowedSurfaces: ['owner'] })
     const receipt = await server.handler(commandRequest)

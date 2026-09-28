@@ -20,6 +20,7 @@ export type ScheduledWorkload = Readonly<{
 export const SCHEDULED_WORKLOADS = [
   { name: 'reconcile due facilitator invocations', workloadKind: 'reconciliation', handler: 'reconcileDueFacilitatorInvocations', interval: { minutes: 15 } },
   { name: 'refresh facilitator discovery', workloadKind: 'cron', handler: 'refreshFacilitatorDiscovery', interval: { hours: 6 } },
+  { name: 'refresh USDC/AUD reference rate', workloadKind: 'cron', handler: 'refreshReferenceRate', interval: { hours: 6 } },
   // 7 days (168h), not 24h: refreshAgenticEconomyApiRegistry rewrites ~14,541
   // resources when it actually runs (~225,000 function calls - see cost
   // comment in convex/x402DirectoryIndexRefresh.ts:start). Daily was
@@ -50,6 +51,7 @@ export const SCHEDULED_WORKLOAD_JOB_NAMES = [
   'refresh capability supply readiness',
   'refresh current market presence',
   'refresh facilitator discovery',
+  'refresh USDC/AUD reference rate',
   'refresh market flow',
   'snapshot marketplace metrics day',
 ] as const satisfies readonly ScheduledWorkloadName[]

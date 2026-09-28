@@ -724,6 +724,45 @@ describe('Account AUD funding through Formance', () => {
     })
   })
 
+  it('credits a returned Checkout once and replays a late duplicate paid webhook', async () => {
+    const backend = convexTestWithWorkers({ pauseWorkpool: true })
+    const fixture = await publishedBusinessOwner(backend, 'funding-return-then-webhook')
+    const bound = await reserveBoundAm10Funding(fixture, 'return-then-webhook')
+    const returnEvent = am10PaidCheckoutEvent({
+      stripeEventId: `checkout-return:${bound.evidence.externalRef}`,
+      eventType: 'checkout.session.completed',
+      commandRef: bound.commandRef,
+      evidence: bound.evidence,
+      payloadDigest: sha256('f'),
+    })
+    const args = {
+      event: returnEvent,
+      readback: bound.evidence,
+      operationKey: 'moneyStripeWebhookWorker:fulfillReturn',
+      correlationId: returnEvent.stripeEventId,
+    }
+    await expect(fixture.owner.mutation(
+      internal.moneyAccountFunding.prepareVerifiedEventFromInbox, args,
+    )).resolves.toMatchObject({ kind: 'prepared', booking: am10SettlementBooking(bound) })
+    await expect(fixture.owner.mutation(
+      internal.moneyAccountFunding.finalizeVerifiedEventFromInbox,
+      { ...args, formanceTransactionRef: 'formance:return:one' },
+    )).resolves.toEqual({
+      kind: 'accepted', status: 'applied', appliedRef: 'formance:return:one',
+    })
+    const lateWebhook = { ...returnEvent, stripeEventId: 'evt_late_return_payment', payloadDigest: sha256('0') }
+    await expect(fixture.owner.mutation(
+      internal.moneyAccountFunding.prepareVerifiedEventFromInbox,
+      { ...args, event: lateWebhook, correlationId: lateWebhook.stripeEventId },
+    )).resolves.toEqual({
+      kind: 'accepted', status: 'replayed', appliedRef: 'formance:return:one',
+    })
+    const rows = await fundingRows(backend, bound.commandRef)
+    expect(rows.command).toMatchObject({ state: 'succeeded', appliedTransactionRef: 'formance:return:one' })
+    expect(rows.stripeEvents).toHaveLength(1)
+    expect(rows.documents).toHaveLength(2)
+  })
+
   it('replays a second paid checkout on an already-succeeded funding command', async () => {
     const backend = convexTestWithMarketComponents()
     const fixture = await publishedBusinessOwner(backend, 'formance-funding-second-paid')

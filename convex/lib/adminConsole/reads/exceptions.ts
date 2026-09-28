@@ -7,6 +7,7 @@ import { isPublicToolRef } from '@/modules/capability-supply/public'
 import type { AdminException, AdminExceptionKind, AdminExceptionPartition, AdminResolutionRow } from '@/lib/operator/admin-console/contracts'
 import type { Doc } from '../../../_generated/dataModel'
 import type { QueryCtx } from '../../../_generated/server'
+import { readSourceAuthorityState } from './sourceAuthority'
 
 const UNCERTAIN_AGE_MS = 15 * 60 * 1_000
 
@@ -86,7 +87,7 @@ export async function listAdminExceptionsPage(
     case 'source_authority_review': {
       const result = await ctx.db.query('capabilityPublications')
         .withIndex('by_sourceAuthorityState_and_updatedAt', (q) => q.eq('sourceAuthorityState', partition === 'unset' ? undefined : 'review_required'))
-        .order('asc').paginate(paginationOpts)
+        .order('asc').paginate({ ...paginationOpts, numItems: Math.min(200, paginationOpts.numItems * 4) })
       return { ...result, page: await projectBusinessRows(ctx, result.page, 'source_authority_review') }
     }
     case 'admission_case': {
@@ -111,7 +112,8 @@ async function projectBusinessRows(
     switch (kind) {
       case 'removal_dispute': return 'status' in row
         ? { kind, disputeRef: String(row._id), businessSlug: slug.slug, since: row.createdAt, state: row.status } : null
-      case 'source_authority_review': return 'sourceAuthorityState' in row && isPublicToolRef(row.toolRef)
+      case 'source_authority_review': return 'toolRef' in row && isPublicToolRef(row.toolRef)
+        && readSourceAuthorityState(row) !== 'verified'
         ? { kind, publicationRef: row.toolRef, businessSlug: slug.slug, since: row.updatedAt } : null
       case 'admission_case': return 'caseRef' in row
         ? { kind, caseRef: row.caseRef, businessSlug: slug.slug, since: row.updatedAt, state: row.state } : null

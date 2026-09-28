@@ -123,7 +123,6 @@ export type FundedSandboxBuyerMocks = {
   external: {
     cdpClient: { mockReturnValue: (val: any) => void }
     receipt: any
-    rate: { mockImplementation: (fn: any) => void }
   }
 }
 
@@ -329,11 +328,13 @@ async function prepareFundedBuyer(options: PrepareBuyerOptions & {
       },
     },
   })
-  external.rate.mockImplementation(async () => ({ source: 'coinbase', base: 'USDC', quote: 'AUD', rate: '1.2', fetchedAt: Date.now() }))
 
   vi.useFakeTimers()
   if (options.initialTime !== undefined) vi.setSystemTime(options.initialTime)
   const backend = convexTestWithWorkers()
+  await backend.run(async (ctx) => {
+    await ctx.db.insert('moneyReferenceRates', { pair: 'USDC/AUD', rate: '1.2', fetchedAt: Date.now() })
+  })
   if (environment === 'production') {
     const discovered = await admitDiscoveredToolFixture(backend)
     const paymentRequired = structuredClone(discovered.paymentRequired) as PaymentRequired

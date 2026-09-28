@@ -14,7 +14,6 @@ import {
   type PublicToolDescriptor, type ToolDetailWireResult, type ToolCompareWireResult,
 } from '@/modules/capability-supply/public'
 import { defaultDnsResolver, isPublicHttpTarget } from '@/modules/network-guard/public'
-import { fetchCoinbaseReferenceRate } from '@/modules/money/reference-rate'
 import { quoteManagedX402BuyerAud } from '@/modules/money/public'
 import { TOOL_SEARCH_USE } from '@/modules/registry/tool-reranker'
 import { internal } from './_generated/api'
@@ -71,16 +70,16 @@ export async function fetchCatalogPage(input: ToolSearchInput): Promise<Readonly
 async function decorateTools(ctx: ActionCtx, items: readonly PublicToolDescriptor[]): Promise<readonly PublicToolDescriptor[]> {
   if (!items.some((item) => item.payment?.protocol === 'x402')) return items
   const sources = await ctx.runQuery(internal.capabilityToolCatalogData.priceSources, { toolRefs: items.map((item) => item.toolRef) })
-  const referenceRate = await fetchCoinbaseReferenceRate()
+  const referenceRate = await ctx.runQuery(internal.referenceRateRefresh.currentInternal, {})
   const observedAt = Date.now()
   return items.map((item) => {
     if (item.payment?.protocol !== 'x402') return item
     const source = sources.find((candidate) => candidate.toolRef === item.toolRef)
-    const quotation = source === undefined || referenceRate === undefined ? undefined : quoteManagedX402BuyerAud({ environment: source.environment, requiredUsdcAtomicUnits: source.atomicUnits, observedAt, referenceRate })
+    const quotation = source === undefined || referenceRate === null ? undefined : quoteManagedX402BuyerAud({ environment: source.environment, requiredUsdcAtomicUnits: source.atomicUnits, observedAt, referenceRate })
     const displayPrice = quotation?.kind === 'quoted'
       ? { kind: 'indicative' as const, amount: quotation.evidence.sourceAmount, rateObservedAt: quotation.evidence.observedAt, validUntil: quotation.evidence.expiresAt }
-      : { kind: 'unavailable' as const, reason: source === undefined ? 'upstream_price_missing' as const : 'fx_missing' as const }
-    return { ...item, commercial: { ...item.commercial, displayPrice } }
+      : source === undefined ? { kind: 'unavailable' as const, reason: 'upstream_price_missing' as const } : undefined
+    return { ...item, commercial: { ...item.commercial, ...(displayPrice === undefined ? {} : { displayPrice }) } }
   })
 }
 

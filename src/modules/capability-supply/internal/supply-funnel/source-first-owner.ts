@@ -10,6 +10,7 @@ import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { sourceWriteRequestFromAdmission } from '@/modules/security/source-write-admission'
 import { stableStringify } from '@/modules/common/stable-hash'
 
+import type { SupplyIntegrationDraftTerms } from '../../integration-draft'
 import type { PreparedPublicationMaterial } from '../publication'
 import type { ProviderConnectionOwnerProjection } from '../../provider-connection'
 import {
@@ -124,6 +125,7 @@ type CandidateDraftResult =
       draft: Readonly<{
         sourceDescriptorJson: string
         sourceDigest: string
+        terms?: SupplyIntegrationDraftTerms
         candidateRef: string
       }>
     }>
@@ -158,6 +160,20 @@ export {
   publishSupplyToolV2InputSchema as ownerSourcePublishInputSchema,
 }
 
+const ownerDraftTermsSchema = z.strictObject({
+  name: z.string().trim().min(1),
+  description: z.string().trim().min(1),
+  category: z.string().trim().min(1),
+  serviceArea: z.string(),
+  availability: z.string(),
+  pricingKind: z.enum(['free', 'fixed_aud', 'source_x402']),
+  price: z.string(),
+  externalEffect: z.boolean(),
+  dataRelease: z.boolean(),
+  financialExposure: z.boolean(),
+  dataClassification: z.enum(['public', 'personal', 'sensitive']),
+})
+
 const ownerSourceDraftInputSchema = z.strictObject({
   businessRef: z.string().trim().min(1),
   source: supplySourceInputSchema,
@@ -169,6 +185,7 @@ const ownerSourceDraftInputSchema = z.strictObject({
     title: z.string().trim().min(1),
     description: z.string().trim().min(1),
   }),
+  terms: ownerDraftTermsSchema.optional(),
 })
 export { ownerSourceDraftInputSchema }
 
@@ -184,18 +201,20 @@ export async function saveOwnerSupplySourceDraft({
     businessRef: data.businessRef,
     sourceDigest: data.sourceDigest,
     candidateRef: data.candidate.candidateRef,
+    ...(data.terms === undefined ? {} : { terms: data.terms }),
   })
   const command = {
     businessId: data.businessRef,
-    title: data.candidate.title,
-    description: data.candidate.description,
-    category: 'Uncategorised',
+    title: data.terms?.name ?? data.candidate.title,
+    description: data.terms?.description ?? data.candidate.description,
+    category: data.terms?.category ?? 'Uncategorised',
     sourceKind: data.source.kind,
     sourceDescriptorJson: stableStringify(data.source as never),
     sourceDigest: data.sourceDigest,
     sourceRevision: data.sourceRevision,
     candidateRef: data.candidate.candidateRef,
     sourceSelectorJson: stableStringify(data.candidate.sourceSelector as never),
+    ...(data.terms === undefined ? {} : { terms: data.terms }),
     operationKey,
     correlationId: operationKey,
   }
@@ -432,6 +451,7 @@ export type OwnerSupplySourceResumeResult =
       source: SupplySourceInput
       preview?: Extract<SupplySourcePreview, { kind: 'ready' }>
       candidateRef: string
+      terms?: SupplyIntegrationDraftTerms
       connectionRef?: string
     }>
   | Readonly<{ kind: 'not_found' | 'source_changed' }>
@@ -554,6 +574,7 @@ export async function resumeOwnerSupplySourceDraft({
     kind: 'available',
     source: parsed.data,
     preview,
+    ...(saved.draft.terms === undefined ? {} : { terms: saved.draft.terms }),
     candidateRef: saved.draft.candidateRef,
     ...(data.connectionRef === undefined ? {} : { connectionRef: data.connectionRef }),
   }

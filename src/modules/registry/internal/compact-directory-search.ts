@@ -1,7 +1,7 @@
 import { callPublicSourceQuery, sourceQuery } from '@/lib/server/convex-source'
 import { isPublicToolRef } from '@/modules/capability-supply/public'
 import { CATALOGUE_STALE_AFTER_MS, sourceFreshnessState } from '@/modules/common/freshness'
-import { formatDisplayPrice, parseDecimalExactAmount, type ReferenceRate } from '@/modules/money/public'
+import { REFERENCE_RATE_MAX_AGE_MS, formatDisplayPrice, parseDecimalExactAmount, type ReferenceRate } from '@/modules/money/public'
 import type { SearchResult } from '../tool-choice-contracts'
 
 export type CompactDirectoryPage =
@@ -87,7 +87,7 @@ export function compactDirectoryRows(page: Extract<CompactDirectoryPage, { kind:
       ? 'unavailable' : item.choice?.access ?? 'external_listing'
     const amount = item.minimumUsdPrice === undefined ? undefined : parseDecimalExactAmount('USDC', item.minimumUsdPrice, 6)
     const aud = amount === undefined || rate === undefined ? undefined
-      : formatDisplayPrice({ kind: 'indicative', amount, referenceRate: rate, validUntil: rate.fetchedAt + 300_000 }, now)
+      : formatDisplayPrice({ kind: 'indicative', amount, referenceRate: rate, validUntil: rate.fetchedAt + REFERENCE_RATE_MAX_AGE_MS }, now)
     return {
       id: item.id,
       source: 'coinbase' as const,

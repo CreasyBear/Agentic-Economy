@@ -315,7 +315,7 @@ export async function previewSupplySource(
   if (input.kind === 'mcp') return await previewMcpSource(input, dependencies)
   if (input.kind === 'x402') return await previewX402Source(input, dependencies)
   const definitionUrl = validHttpsUrl(input.definitionUrl)
-  if (definitionUrl === undefined) return openApiCorrection('OpenAPI source unavailable')
+  if (definitionUrl === undefined) return sourceCorrection('OpenAPI URL invalid', 'Enter the public HTTPS URL of an OpenAPI 3.0 or 3.1 document, then preview it again.')
 
   let loaded: unknown
   try {
@@ -327,9 +327,9 @@ export async function previewSupplySource(
     })
   }
   const bounded = inspectSource(loaded)
-  if (bounded.kind === 'refused') return openApiCorrection('OpenAPI source invalid')
+  if (bounded.kind === 'refused') return openApiInputCorrection(bounded.reason)
   const validated = await validateOpenApiDocument(loaded)
-  if (validated.kind === 'refused') return openApiCorrection('OpenAPI source invalid')
+  if (validated.kind === 'refused') return openApiInputCorrection(validated.reason)
 
   const candidates = await openApiCandidates(validated.document, bounded.digest, definitionUrl)
   const authentication = uniqueAuthentication(candidates)
@@ -756,6 +756,21 @@ function boundedText(value: unknown): string | undefined {
   if (typeof value !== 'string') return undefined
   const trimmed = value.trim()
   return trimmed.length > 0 ? trimmed.slice(0, 1_000) : undefined
+}
+
+function openApiInputCorrection(reason: 'source_invalid' | 'source_too_large' | 'source_too_deep' | 'source_version_unsupported' | 'schema_missing'): SupplySourcePreview {
+  switch (reason) {
+    case 'source_version_unsupported':
+      return sourceCorrection('OpenAPI version unsupported', 'Use an OpenAPI 3.0 or 3.1 document at the same URL, then preview it again.')
+    case 'source_too_large':
+      return sourceCorrection('OpenAPI document too large', 'Remove unused definitions from the document, then preview it again.')
+    case 'source_too_deep':
+      return sourceCorrection('OpenAPI document too deep', 'Simplify nested definitions in the document, then preview it again.')
+    case 'schema_missing':
+      return sourceCorrection('OpenAPI paths missing', 'Declare at least one operation under paths in the OpenAPI document, then preview it again.')
+    case 'source_invalid':
+      return sourceCorrection('OpenAPI document invalid', 'Correct the OpenAPI document at this URL, then preview it again.')
+  }
 }
 
 function openApiCorrection(title: string): SupplySourcePreview {

@@ -5,6 +5,8 @@ import { chatThreadBelongsToPrincipal } from '../threads/ownership'
 import { publicChatTurn } from './errors'
 import { ownerReadableActor, requirePrincipalTurn, reserveAndStartTurn, resolveTurnActor, unresolvedTurnCallRefs } from './handlers'
 import type { startTurnArgs, cancelTurnArgs, recordOwnerChatCallArgs, finishTurnArgs } from './contracts'
+import { issueSearchContinuation, resolveSearchContinuation } from './searchContinuation'
+
 
 export const startTurnHandler = async (ctx: MutationCtx, args: ObjectType<typeof startTurnArgs>) => publicChatTurn(async () => {
     const actor = args.principal.kind === 'clerk'
@@ -19,8 +21,12 @@ export const startTurnHandler = async (ctx: MutationCtx, args: ObjectType<typeof
         selectedThread = undefined
       }
     }
+    const searchContinuation = args.continuation === undefined ? undefined
+      : await resolveSearchContinuation(ctx, { actor, threadId: selectedThread, ...args.continuation })
     return await reserveAndStartTurn(ctx, { actor, threadId: selectedThread,
-      prompt: args.prompt, clientTurnId: args.clientTurnId })
+      prompt: searchContinuation === undefined ? args.prompt : `Show more results for ${searchContinuation.query}`,
+      clientTurnId: args.clientTurnId,
+      ...(searchContinuation === undefined ? {} : { searchContinuation }) })
   })
 
 export const cancelTurnHandler = async (ctx: MutationCtx, args: ObjectType<typeof cancelTurnArgs>) => publicChatTurn(async () => {
@@ -69,4 +75,6 @@ export const finishTurnHandler = async (ctx: MutationCtx, args: ObjectType<typeo
     if (turn.state !== args.state) await ctx.db.patch(turn._id, { state: args.state, updatedAt: Date.now() })
     return true
   }
+
+export { issueSearchContinuation }
 

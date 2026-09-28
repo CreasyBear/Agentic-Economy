@@ -2,8 +2,7 @@ import { createFileRoute, type ErrorComponentProps } from "@tanstack/react-route
 import { AePageSkeleton, AePageState } from "@/components/ae/layout/AePageState";
 import { AeMarketPage } from "@/components/ae/market/AeMarketPage";
 import { Button } from "@/components/ui/button";
-import { readCanonicalBaseUrlServer } from "@/lib/server/canonical-url.functions";
-import { loadMarketRouteData, marketDocumentTitle, marketLoaderDeps, readMarketChatRecipientServer, readMarketDiscoveryRecipientServer, validateMarketSearch } from '@/modules/market/market.functions';
+import { loadMarketPageRouteData, marketDocumentTitle, marketLoaderDeps, validateMarketSearch } from '@/modules/market/market.functions';
 import { buildPublicPageHead, buildSiteJsonLd } from "@/modules/seo/public";
 
 export { parseMarketCompareRefs, validateMarketSearch } from '@/modules/market/market.functions'
@@ -20,15 +19,7 @@ export const Route = createFileRoute("/market")({
   },
   validateSearch: validateMarketSearch,
   loaderDeps: ({ search }) => marketLoaderDeps(search),
-  loader: async ({ deps }) => {
-    const [data, canonicalBaseUrl, jevRecipient, chatRecipient] = await Promise.all([
-      loadMarketRouteData(deps),
-      readCanonicalBaseUrlServer(),
-      readMarketDiscoveryRecipientServer(),
-      readMarketChatRecipientServer(),
-    ])
-    return { ...data, canonicalBaseUrl, jevRecipient, chatRecipient }
-  },
+  loader: ({ deps }) => loadMarketPageRouteData(deps),
   staleTime: 30_000,
   preloadStaleTime: 30_000,
   // Keep current results visible during filter reloads; the router's 150ms

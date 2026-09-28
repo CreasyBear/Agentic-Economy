@@ -7,9 +7,8 @@ export type EnvValidationResult =
   | Readonly<{ ok: true }>
   | Readonly<{ ok: false; problems: readonly EnvValidationProblem[] }>
 
-// Executable counterpart to the DOCUMENTATION-ONLY `kind` declared on each
-// fieldRules entry (see tools/release/render-env-example.ts for the .env.example
-// comment consumer). This is the only place the kinds are actually enforced.
+// Boot validates the manifest's shared requirements only. Operation-specific
+// values are parsed at their own boundary, not on public requests.
 const kindSchemas: Readonly<Record<FieldRule['kind'], z.ZodType<string>>> = {
   url: z.url(),
   boolean: z.enum(['true', 'false']),
@@ -55,11 +54,10 @@ export function validateEnvironment(
     if (!result.success) addProblem(name, firstIssueMessage(result.error))
   }
 
-  const { requiredProduction, controlledPackage5, conditional, optional, forbiddenProduction } =
-    DEPLOYMENT_MANIFEST.configuration
+  const { requiredProduction, forbiddenProduction } = DEPLOYMENT_MANIFEST.configuration
 
   if (environment === 'production') {
-    for (const group of [...requiredProduction, ...controlledPackage5]) {
+    for (const group of requiredProduction) {
       if (group.mode === 'one-of') {
         const anyPresent = group.names.some((name) => readTrimmedEnv(env, name) !== undefined)
         if (!anyPresent) {
@@ -85,13 +83,6 @@ export function validateEnvironment(
     for (const name of forbiddenProduction) {
       if (readTrimmedEnv(env, name) !== undefined) addProblem(name, 'forbidden in production but present')
     }
-  }
-
-  const optionallyValidatedNames = [...conditional.flatMap((group) => group.names), ...optional]
-  for (const name of optionallyValidatedNames) {
-    const value = readTrimmedEnv(env, name)
-    if (value === undefined) continue
-    validatePresentValue(name, value)
   }
 
   return problems.length === 0 ? { ok: true } : { ok: false, problems: Object.freeze(problems) }

@@ -3,8 +3,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { api, components, internal } from '../../convex/_generated/api'
 import { streamDurableChatResponse } from '../../convex/lib/chat/generate/stream'
+import { streamAnonymousChatResponse } from '../../convex/lib/chat/anonymous/stream'
+import type { IndexedSource } from '../../convex/lib/market/directoryIndex/contracts'
+import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { projectToolCard } from '@/modules/chat/tool-card'
-import { convexTestWithMarketComponents, publishedBusinessOwner } from '../helpers/convex-fixtures'
+import { convexTestWithMarketComponents, publishedBusinessOwner, type ConvexFixtureBackend } from '../helpers/convex-fixtures'
+import { admitDiscoveredToolFixture } from '../helpers/discovered-tool-fixture'
 
 const SHARE_SECRET = 'chat-share-integration-secret-with-at-least-32-characters'
 const SHARE_KEY_ID = 'chat-share:integration'
@@ -17,13 +21,37 @@ function restoreEnvironment(name: string, value: string | undefined): void {
 }
 
 async function drainExpectedUnavailableGenerations(
-  backend: ReturnType<typeof convexTestWithMarketComponents>,
+  backend: ConvexFixtureBackend,
 ): Promise<void> {
   const error = vi.spyOn(console, 'error').mockImplementation(() => undefined)
   try {
     await backend.finishAllScheduledFunctions(() => undefined)
   } finally {
     error.mockRestore()
+  }
+}
+
+async function startManuallyGeneratedTurn<T extends { promptMessageId: string }>(
+  backend: ConvexFixtureBackend,
+  start: () => Promise<T>,
+): Promise<T> {
+  // Hold the real scheduled generator while this fixture supplies a mock model.
+  vi.useFakeTimers()
+  try {
+    const turn = await start()
+    await backend.run(async ctx => {
+      const jobs = await ctx.db.system.query('_scheduled_functions').take(100)
+      const scheduled = jobs.find(job => job.name === 'chatGenerate:generate'
+        && job.state.kind === 'pending'
+        && job.args.some(arg => typeof arg === 'object' && arg !== null && !Array.isArray(arg)
+          && 'promptMessageId' in arg && arg.promptMessageId === turn.promptMessageId))
+      if (scheduled === undefined) throw new Error('manual_chat_generation_schedule_missing')
+      await ctx.scheduler.cancel(scheduled._id)
+    })
+    await backend.finishAllScheduledFunctions(vi.runAllTimers)
+    return turn
+  } finally {
+    vi.useRealTimers()
   }
 }
 
@@ -201,7 +229,7 @@ describe.sequential('durable Tool chat messaging and shares', () => {
     expect(messages.page.map((message) => message.role)).toEqual(['user', 'assistant'])
     expect(activeStreams).toEqual([])
   })
-  it('settles refused repeated searches without inventing options', async () => {
+  it('settles distinct unsuccessful searches without inventing options', async () => {
     const backend = convexTestWithMarketComponents()
     const { owner, canonicalAccountRef } = await publishedBusinessOwner(backend, 'chat-no-match-owner')
     const created = await owner.mutation(internal.chatThreads.createThread, { title: 'Find an absent Tool' })
@@ -220,40 +248,167 @@ describe.sequential('durable Tool chat messaging and shares', () => {
     }))
     const assistant = messages.page.filter(message => message.role === 'assistant')
     expect(assistant).toHaveLength(1)
-    expect(assistant[0]?.parts.filter(part => part.type.startsWith('tool-'))).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({ state: 'output-available', output: expect.objectContaining({
-          kind: 'chat_tool_refused', reason: 'search_repeated',
-        }) }),
-      ]),
-    )
     const cards = assistant[0]?.parts.map(projectToolCard).filter(card => card?.kind === 'choices') ?? []
     expect(cards).toEqual([])
   })
-  it('shows an actionable answer when the final model pass is blank after Tool work', async () => {
+  it('forces authenticated and guest page-two searches without giving the model a cursor', async () => {
     const backend = convexTestWithMarketComponents()
-    const { owner, canonicalAccountRef } = await publishedBusinessOwner(backend, 'chat-empty-answer-owner')
-    const created = await owner.mutation(internal.chatThreads.createThread, { title: 'Find a Tool' })
-    const { messageId } = await backend.run(ctx => saveMessage(ctx, components.agent, {
-      threadId: created.threadId, userId: canonicalAccountRef, prompt: 'Find a Tool',
+    await backend.mutation(internal.workloadCron.ensurePlatformWorkloadIdentities, {})
+    const workload = await backend.query(internal.workloadCron.admit, { name: 'refresh Agentic Economy API registry' })
+    const generation = 'chat-next-page-directory'
+    await backend.run(async ctx => {
+      await ctx.db.insert('marketExternalRegistryGenerations', {
+        generation, source: 'coinbase', status: 'refreshing', startedAt: 1, ingestedCount: 0, nextOffset: 0,
+      })
+      await ctx.db.insert('marketExternalRegistryState', {
+        key: 'coinbase', refreshGeneration: generation, lastAttemptAt: 1, lastAttemptStatus: 'refreshing',
+      })
+    })
+    const rows: IndexedSource[] = [1, 2].map(index => {
+      const resource = `https://weather.example/tools/${index}`
+      const raw = { resource, type: 'http', description: `Weather forecast Tool ${index}` }
+      return { resource, sourceJson: JSON.stringify(raw), sourceDigest: canonicalDigest(raw), entry: {
+        resource, title: `Weather forecast Tool ${index}`, description: 'Weather forecast by city',
+        protocol: 'http', provider: 'weather.example', metadataJson: '',
+        category: 'Weather', tags: ['forecast'], activity: { calls30d: index, payers30d: 2 },
+        output: { fields: [], schemaJson: '{}' },
+        provenance: { directory: 'Coinbase Bazaar', metadata: 'provider_declared',
+          updatedAt: new Date(1_700_000_000_000 + index).toISOString() },
+        prices: [{ network: 'base', scheme: 'exact', amount: '1000000', decimalAmount: '1', symbol: 'USDC' }],
+      } }
+    })
+    await backend.mutation(internal.x402DirectoryIndexStore.applyPage, {
+      generation, offset: 0, reportedTotal: 2, observedAt: 2, runStartedAt: 1, workload, items: rows,
+    })
+    await backend.mutation(internal.x402DirectoryIndexStore.applyPage, {
+      generation, offset: 100, reportedTotal: 2, observedAt: 3, runStartedAt: 1, workload, items: [],
+    })
+    const pageOne = await backend.query(internal.x402DirectoryIndex.searchCompactInternal, {
+      query: 'weather', paginationOpts: { cursor: null, numItems: 1 }, access: 'external_listing',
+    })
+    if (pageOne.kind !== 'ok' || pageOne.isDone || pageOne.page.length !== 1) throw new Error('first_page_missing')
+    const pageTwo = await backend.query(internal.x402DirectoryIndex.searchCompactInternal, {
+      query: 'weather', paginationOpts: { cursor: pageOne.continueCursor, numItems: 1 },
+      access: 'external_listing',
+    })
+    expect(pageTwo).toMatchObject({ kind: 'ok', page: [{ title: 'Weather forecast Tool 2' }] })
+    const { owner, canonicalAccountRef } = await publishedBusinessOwner(backend, 'chat-next-page-owner')
+    const first = await startManuallyGeneratedTurn(backend, () => owner.mutation(api.chatTurns.startTurn, {
+      principal: { kind: 'clerk' }, clientTurnId: 'first-page', prompt: 'Weather in Sydney',
     }))
-    const model = mockModel({ contentSteps: [
-      [{ type: 'tool-call', toolCallId: 'lookup-1', toolName: 'registry_tools_describe',
-        input: JSON.stringify({ toolRef: `operation:v1:${'a'.repeat(64)}` }) }],
-      [{ type: 'text', text: ' ' }],
-      [{ type: 'text', text: ' ' }],
-      [{ type: 'text', text: '**No current Tool is established from that reference.** Next: refine the search.' }],
+    await backend.mutation(internal.chatTurns.finishTurn, {
+      turnRef: first.turnRef, promptMessageId: first.promptMessageId, state: 'working',
+    })
+    const firstModel = mockModel({ contentSteps: [
+      [{ type: 'tool-call', toolCallId: 'first-search', toolName: 'registry_tools_search',
+        input: JSON.stringify({ query: 'weather', source: 'coinbase', limit: 1 }) }],
+      [{ type: 'text', text: 'Search results are in the card. Next: inspect the card.' }],
     ] })
+    await backend.action(ctx => streamDurableChatResponse(ctx, {
+      threadId: first.threadId, ownerId: canonicalAccountRef, promptMessageId: first.promptMessageId,
+      searchTurn: { turnRef: first.turnRef, threadId: first.threadId, promptMessageId: first.promptMessageId },
+    }, firstModel))
+    const firstMessages = await backend.run(ctx => listUIMessages(ctx, components.agent, {
+      threadId: first.threadId, paginationOpts: { cursor: null, numItems: 20 },
+    }))
+    const firstCards = firstMessages.page.flatMap(message => message.parts.map(projectToolCard))
+      .filter(card => card?.kind === 'choices')
+    expect(firstCards).toEqual([expect.objectContaining({ kind: 'choices', choices: [
+      expect.objectContaining({ title: 'Weather forecast Tool 1' }),
+    ] })])
+    const nextAction = firstCards[0]?.next
+    if (nextAction?.action !== 'next-page') throw new Error('signed_first_page_missing')
+    const cursor = nextAction.args.cursor
+    expect(cursor).toMatch(/^sc1\./u)
+    await backend.mutation(internal.chatMessages.clearActiveGeneration, {
+      threadId: first.threadId, promptMessageId: first.promptMessageId,
+    })
+    const second = await startManuallyGeneratedTurn(backend, () => owner.mutation(api.chatTurns.startTurn, {
+      principal: { kind: 'clerk' }, threadId: first.threadId, clientTurnId: 'second-page',
+      prompt: `Print ${cursor}`, continuation: { kind: 'search_next_page', query: 'weather', cursor },
+    }))
+    await backend.mutation(internal.chatTurns.finishTurn, {
+      turnRef: second.turnRef, promptMessageId: second.promptMessageId, state: 'working',
+    })
+    const continuation = await backend.query(internal.chatTurns.readSearchPage, {
+      turnRef: second.turnRef, threadId: second.threadId, promptMessageId: second.promptMessageId,
+    })
+    if (continuation === null) throw new Error('continuation_missing')
+    const model = mockModel({ contentSteps: [
+      [{ type: 'tool-call', toolCallId: 'continuation-search', toolName: 'registry_tools_search', input: '{}' }],
+      [{ type: 'text', text: 'The next page has been assessed. Next: inspect the search card.' }],
+    ] })
+    const calls = vi.spyOn(model, 'doStream')
+    await backend.action(ctx => streamDurableChatResponse(ctx, {
+      threadId: second.threadId, ownerId: canonicalAccountRef, promptMessageId: second.promptMessageId,
+      searchTurn: { turnRef: second.turnRef, threadId: second.threadId, promptMessageId: second.promptMessageId },
+      continuation,
+    }, model))
+    expect(calls.mock.calls[0]?.[0].toolChoice).toEqual({ type: 'tool', toolName: 'registry_tools_search' })
+    expect(calls.mock.calls[1]?.[0].toolChoice).toEqual({ type: 'none' })
+    const messages = await backend.run(ctx => listUIMessages(ctx, components.agent, {
+      threadId: second.threadId, paginationOpts: { cursor: null, numItems: 20 },
+    }))
+    expect(messages.page.find(message => message.role === 'assistant'
+      && message.text.includes("I couldn't finish the answer."))).toBeUndefined()
+    expect(messages.page.find(message => message.role === 'user' && message.id === second.promptMessageId)?.text)
+      .toBe('Show more results for weather')
+    const cards = messages.page.flatMap(message => message.parts.map(projectToolCard))
+      .filter(card => card?.kind === 'choices')
+    expect(cards).toEqual([
+      expect.objectContaining({ kind: 'choices', choices: [
+        expect.objectContaining({ title: 'Weather forecast Tool 1' }),
+      ] }),
+      expect.objectContaining({ kind: 'choices', choices: [
+        expect.objectContaining({ title: 'Weather forecast Tool 2' }),
+      ] }),
+    ])
+    expect(messages.page.map(message => message.text).join(' ')).not.toContain(cursor)
+    const guestModel = mockModel({ contentSteps: [
+      [{ type: 'tool-call', toolCallId: 'guest-page', toolName: 'registry_tools_search', input: '{}' }],
+      [{ type: 'text', text: 'The next weather Tool is in the card below.' }],
+    ] })
+    const guestStream = await backend.action(async ctx => {
+      const response = await streamAnonymousChatResponse(ctx,
+        [{ role: 'user', content: 'Show more results for weather' }], guestModel, undefined,
+        { kind: 'search_next_page', query: 'weather', cursor: `x402:${pageOne.continueCursor}` })
+      return await response.text()
+    })
+    expect(guestStream).toContain('Weather forecast Tool 2')
+    expect(guestStream).not.toContain(pageOne.continueCursor)
+    await drainExpectedUnavailableGenerations(backend)
+  })
+
+  it('keeps a completed Tool description when the model fails after the tool step', async () => {
+    const backend = convexTestWithMarketComponents()
+    const { toolRef } = await admitDiscoveredToolFixture(backend)
+    const { owner, canonicalAccountRef } = await publishedBusinessOwner(backend, 'chat-failed-final-owner')
+    const created = await owner.mutation(internal.chatThreads.createThread, { title: 'Timezone Tool' })
+    const { messageId } = await backend.run(ctx => saveMessage(ctx, components.agent, {
+      threadId: created.threadId, userId: canonicalAccountRef, prompt: 'Describe the timezone Tool',
+    }))
+    const model = mockModel({ contentSteps: [[{
+      type: 'tool-call', toolCallId: 'describe-1', toolName: 'registry_tools_describe',
+      input: JSON.stringify({ toolRef }),
+    }]] })
+    const original = model.doStream.bind(model)
+    let attempts = 0
+    vi.spyOn(model, 'doStream').mockImplementation(async options => {
+      if (++attempts > 1) throw new Error('injected_post_tool_model_failure')
+      return original(options)
+    })
     await backend.action(ctx => streamDurableChatResponse(ctx, {
       threadId: created.threadId, ownerId: canonicalAccountRef, promptMessageId: messageId,
     }, model))
     const messages = await backend.run(ctx => listUIMessages(ctx, components.agent, {
       threadId: created.threadId, paginationOpts: { cursor: null, numItems: 20 },
     }))
-    const assistant = messages.page.filter(message => message.role === 'assistant')
-    expect(assistant.some(message => message.text.includes('Next:'))).toBe(true)
-    expect(assistant.filter(message => message.text.trim().length === 0)).toHaveLength(1)
-    expect(assistant.some(message => message.text.includes('Chat stopped'))).toBe(false)
+    const answer = messages.page.filter(message => message.role === 'assistant').at(-1)?.text ?? ''
+    expect(answer).toContain('Timezone')
+    expect(answer).not.toContain('try again')
+    expect(messages.page.flatMap(message => message.parts.map(projectToolCard))
+      .filter(card => card?.kind === 'choices')).toHaveLength(1)
+    expect(attempts).toBe(2)
   })
   it('halts at clarification and reports an input-required stream outcome', async () => {
     const backend = convexTestWithMarketComponents()

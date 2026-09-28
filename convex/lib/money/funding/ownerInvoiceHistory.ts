@@ -1,5 +1,5 @@
-import type { GenericDatabaseReader, UserIdentity } from 'convex/server'
-import { v } from 'convex/values'
+import { paginationOptsValidator, paginationResultValidator, type GenericDatabaseReader, type UserIdentity } from 'convex/server'
+import { v, type Infer } from 'convex/values'
 
 import type { DataModel, Doc } from '../../../_generated/dataModel'
 import type { QueryCtx } from '../../../_generated/server'
@@ -35,10 +35,8 @@ const ownerInvoiceHistoryRowValue = v.object({
   hasPaymentReceipt: v.boolean(),
   taxInvoice: ownerInvoiceHistoryTaxInvoiceValue,
 })
-export const listOwnerInvoiceHistoryArgs = {}
-export const listOwnerInvoiceHistoryResult = v.object({
-  page: v.array(ownerInvoiceHistoryRowValue),
-})
+export const listOwnerInvoiceHistoryArgs = { paginationOpts: paginationOptsValidator }
+export const listOwnerInvoiceHistoryResult = paginationResultValidator(ownerInvoiceHistoryRowValue)
 export const readOwnerFundingCommandForReceiptArgs = { commandRef: v.string() }
 export const readOwnerFundingCommandForReceiptResult = v.object({
   paymentId: v.string(),
@@ -172,19 +170,26 @@ async function resolveFundingCommandTaxInvoice(
   return { kind: 'withheld', reason: 'tax_invoice_not_generated' }
 }
 
-export async function listOwnerInvoiceHistoryHandler(ctx: QueryCtx) {
+export async function listOwnerInvoiceHistoryHandler(
+  ctx: QueryCtx,
+  args: { paginationOpts: Infer<typeof paginationOptsValidator> },
+): Promise<Infer<typeof listOwnerInvoiceHistoryResult>> {
   const identity = await ctx.auth.getUserIdentity()
   if (identity === null) throw new InteractiveAuthorityError('identity_invalid')
   const { canonicalAccountRef } = await requireOwnerAccountContextForInvoiceHistory(ctx.db, identity)
+  if (!Number.isSafeInteger(args.paginationOpts.numItems)
+    || args.paginationOpts.numItems < 1 || args.paginationOpts.numItems > 50) {
+    throw new InteractiveAuthorityError('payload_invalid')
+  }
 
   const commands = await ctx.db
     .query('moneyFundingCommands')
     .withIndex('by_accountRef_and_createdAt', (index) => index.eq('accountRef', canonicalAccountRef))
     .order('desc')
-    .collect()
+    .paginate(args.paginationOpts)
 
   const page = []
-  for (const command of commands) {
+  for (const command of commands.page) {
     if (!isTerminalFundingState(command.state)) continue
     const taxInvoice = await resolveFundingCommandTaxInvoice(ctx, {
       accountRef: canonicalAccountRef,
@@ -203,7 +208,7 @@ export async function listOwnerInvoiceHistoryHandler(ctx: QueryCtx) {
     })
   }
 
-  return { page }
+  return { ...commands, page }
 }
 
 export async function readOwnerFundingCommandForReceiptHandler(

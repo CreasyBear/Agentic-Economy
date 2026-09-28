@@ -162,12 +162,14 @@ export async function requirePrincipalTurn(
 
 export async function reserveAndStartTurn(
   ctx: MutationCtx,
-  input: Readonly<{ actor: TurnActor; threadId: string | undefined; prompt: string; clientTurnId: string }>,
+  input: Readonly<{ actor: TurnActor; threadId: string | undefined; prompt: string; clientTurnId: string;
+    searchContinuation?: { query: string; cursor: string; inputJson: string } }>,
 ): Promise<{ threadId: string; turnRef: string; promptMessageId: string; state: Doc<'chatTurns'>['state']; sequence: number }> {
   const prompt = normalizedTurnPrompt(input.prompt)
   if (input.clientTurnId.trim().length === 0 || input.clientTurnId.length > 200) throw new Error('invalid_input')
   const materialDigest = canonicalDigest({
     format: 'chat-turn-material:v1', prompt, threadId: input.threadId ?? null,
+    searchContinuation: input.searchContinuation ?? null,
     principalKind: input.actor.kind, accountRef: input.actor.accountRef,
     credentialLocator: input.actor.credentialLocator ?? null,
   })
@@ -205,6 +207,7 @@ export async function reserveAndStartTurn(
     ...(input.actor.credentialLocator === undefined ? {} : { credentialLocator: input.actor.credentialLocator }),
     ...(input.actor.origin === undefined ? {} : { origin: input.actor.origin }),
     ...(input.actor.grantRef === undefined ? {} : { grantRef: input.actor.grantRef }),
+    ...(input.searchContinuation === undefined ? {} : { searchContinuation: input.searchContinuation }),
     clientTurnId: input.clientTurnId, materialDigest,
     state: 'submitted', createdAt: now, updatedAt: now,
   })

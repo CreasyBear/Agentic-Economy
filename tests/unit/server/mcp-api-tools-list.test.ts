@@ -78,6 +78,68 @@ describe('MCP role toolsets', () => {
     })
   })
 
+  it('advertises strict, complete variants for procure and saved Tool writes', async () => {
+    const body = await listWith(['market_tools:call'])
+    type InputSchema = {
+      type: string
+      properties: Record<string, unknown>
+      anyOf?: InputSchema[]
+      oneOf?: InputSchema[]
+      required?: string[]
+      additionalProperties?: boolean
+    }
+    const tools = body.result?.tools as Array<{ name: string; inputSchema: InputSchema }>
+    const variants = (schema: InputSchema): InputSchema[] => {
+      const children = schema.anyOf ?? schema.oneOf
+      return children === undefined ? [schema] : children.flatMap(variants)
+    }
+    for (const [name, expected] of [
+      ['ae_tool_procure', [['kind', 'need'], ['kind', 'toolRef', 'input', 'maxSpendAud', 'idempotencyKey']]],
+      ['ae_market_savedTools_save', [['kind', 'toolRef'], ['kind', 'resource'], ['kind', 'id']]],
+      ['ae_market_savedTools_remove', [['kind', 'toolRef'], ['kind', 'resource']]],
+    ] as const) {
+      const schema = tools.find(tool => tool.name === name)?.inputSchema
+      if (schema === undefined) throw new Error(`${name} was not listed`)
+      expect(schema.type).toBe('object')
+      expect(schema.required).toEqual(['kind'])
+      const branches = variants(schema)
+      expect(branches.map(branch => branch.required?.join(',')).sort()).toEqual([...expected].map(fields => fields.join(',')).sort())
+      for (const branch of branches) {
+        expect(branch.type).toBe('object')
+        expect(branch.additionalProperties).toBe(false)
+        for (const field of branch.required ?? []) {
+          expect(branch.properties).toHaveProperty(field)
+          expect(schema.properties).toHaveProperty(field)
+        }
+      }
+      expect(schema.properties).toHaveProperty('kind')
+    }
+  })
+
+  it('validates the advertised required fields before executing a protected tool', async () => {
+    const quoteTool = vi.fn()
+    const save = vi.fn()
+    const remove = vi.fn()
+    for (const [name, args] of [
+      ['ae_tool_procure', { kind: 'exact', toolRef: `operation:v1:${'a'.repeat(64)}`, input: {}, maxSpendAud: '1.00' }],
+      ['ae_market_savedTools_save', { kind: 'external_listing' }],
+      ['ae_market_savedTools_remove', { kind: 'external_listing' }],
+    ] as const) {
+      const response = await postMcp({
+        jsonrpc: '2.0', id: name, method: 'tools/call',
+        params: { name, arguments: args },
+      }, {
+        authenticate: authenticateWithScopes(['market_tools:call']),
+        callService: { quoteTool, callTool: vi.fn(), readCallStatus: vi.fn(), cancelCall: vi.fn(), reconcileCall: vi.fn() },
+        savedToolsService: { list: vi.fn(), save, remove },
+      }, { authorization: 'Bearer buyer' })
+      expect((await readMcpBody(response)).result?.isError).toBe(true)
+    }
+    expect(quoteTool).not.toHaveBeenCalled()
+    expect(save).not.toHaveBeenCalled()
+    expect(remove).not.toHaveBeenCalled()
+  })
+
   it('lists the complete Provider lifecycle only for provider authority, without granting buy', async () => {
     const body = await listWith(['market_supply:manage'])
     const listed = names(body)

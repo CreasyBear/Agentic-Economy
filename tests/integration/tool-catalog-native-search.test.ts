@@ -9,8 +9,6 @@ import { admitDiscoveredToolFixture } from '../helpers/discovered-tool-fixture'
 const sdk = vi.hoisted(() => ({ list: vi.fn(), search: vi.fn() }))
 vi.mock('@coinbase/cdp-sdk', async (original) => ({ ...await original<typeof import('@coinbase/cdp-sdk')>(), listX402DiscoveryResources: sdk.list, searchX402Resources: sdk.search }))
 
-const referenceRate = vi.hoisted(() => vi.fn(async () => ({ source: 'coinbase' as const, base: 'USDC' as const, quote: 'AUD' as const, rate: '1.5', fetchedAt: Date.now() })))
-vi.mock('@/modules/money/reference-rate', () => ({ fetchCoinbaseReferenceRate: referenceRate }))
 
 describe('native admitted Tool catalogue', () => {
   it('does not recommend unrelated Tools merely because a request contains filler words', async () => {
@@ -66,11 +64,12 @@ describe('native admitted Tool catalogue', () => {
   it('uses one rate per response and the same AUD estimate in search, detail and comparison', async () => {
     const backend = convexTest(schema, convexModules)
     const fixture = await admitDiscoveredToolFixture(backend)
-    referenceRate.mockClear()
+    await backend.run(async (ctx) => {
+      await ctx.db.insert('moneyReferenceRates', { pair: 'USDC/AUD', rate: '1.5', fetchedAt: Date.now() })
+    })
     const search = await backend.action(api.capabilityToolCatalog.search, { source: 'current', query: 'timezone', limit: 20 })
     const detail = await backend.action(api.capabilityToolCatalog.detail, { toolRef: fixture.toolRef })
     const compare = await backend.action(api.capabilityToolCatalog.compare, { toolRefs: [fixture.toolRef] })
-    expect(referenceRate).toHaveBeenCalledTimes(3)
     if (search.kind !== 'ok' || detail.kind !== 'found' || compare.kind !== 'ok') throw new Error('expected public Tool results')
     for (const tool of [search.items[0], detail.tool, compare.tools[0]]) {
       expect(tool?.commercial.displayPrice).toMatchObject({ kind: 'indicative', amount: { currency: 'AUD', units: '1500', exponent: 6 } })

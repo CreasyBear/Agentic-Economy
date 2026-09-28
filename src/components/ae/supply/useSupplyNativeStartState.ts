@@ -36,6 +36,7 @@ export function useSupplyNativeStartState({
   onPreview,
   onConnect,
   onSelectCandidate,
+  onSaveTerms,
   onDraftSaved,
   onPublish,
 }: SupplyNativeStartProps) {
@@ -54,24 +55,24 @@ export function useSupplyNativeStartState({
   const [preview, setPreview] = useState<Extract<SupplySourcePreview, { kind: 'ready' }> | undefined>(initial?.preview)
   const [remoteSelection, setRemoteSelection] = useState<Extract<SupplySourcePreview, { kind: 'remote_selection_required' }>>()
   const [selectedRef, setSelectedRef] = useState(initial?.candidateRef ?? '')
-  const [name, setName] = useState(initialCandidate?.title ?? '')
-  const [description, setDescription] = useState(initialCandidate?.description ?? '')
-  const [category, setCategory] = useState('')
-  const [serviceArea, setServiceArea] = useState('')
-  const [availability, setAvailability] = useState('')
-  const [pricingKind, setPricingKind] = useState<'free' | 'fixed_aud' | 'source_x402'>(initialCandidate?.x402 === undefined ? 'free' : 'source_x402')
-  const [price, setPrice] = useState('')
+  const [name, setName] = useState(initial?.terms?.name ?? initialCandidate?.title ?? '')
+  const [description, setDescription] = useState(initial?.terms?.description ?? initialCandidate?.description ?? '')
+  const [category, setCategory] = useState(initial?.terms?.category ?? '')
+  const [serviceArea, setServiceArea] = useState(initial?.terms?.serviceArea ?? '')
+  const [availability, setAvailability] = useState(initial?.terms?.availability ?? '')
+  const [pricingKind, setPricingKind] = useState<'free' | 'fixed_aud' | 'source_x402'>(initial?.terms?.pricingKind ?? (initialCandidate?.x402 === undefined ? 'free' : 'source_x402'))
+  const [price, setPrice] = useState(initial?.terms?.price ?? '')
   const [connectionRef, setConnectionRef] = useState(initial?.connectionRef ?? '')
-  const [externalEffect, setExternalEffect] = useState(false)
-  const [dataRelease, setDataRelease] = useState(false)
-  const [financialExposure, setFinancialExposure] = useState(false)
-  const [dataClassification, setDataClassification] = useState<'public' | 'personal' | 'sensitive'>('public')
+  const [externalEffect, setExternalEffect] = useState(initial?.terms?.externalEffect ?? false)
+  const [dataRelease, setDataRelease] = useState(initial?.terms?.dataRelease ?? false)
+  const [financialExposure, setFinancialExposure] = useState(initial?.terms?.financialExposure ?? false)
+  const [dataClassification, setDataClassification] = useState<'public' | 'personal' | 'sensitive'>(initial?.terms?.dataClassification ?? 'public')
   const [attestation, setAttestation] = useState<Record<AttestationKey, boolean>>({
     authorisedToPublish: false,
     informationAccurate: false,
     publishAfterSuccessfulValidation: false,
   })
-  const [pending, setPending] = useState<'preview' | 'select' | 'connect' | 'publish'>()
+  const [pending, setPending] = useState<'preview' | 'select' | 'connect' | 'terms' | 'publish'>()
   const [error, setError] = useState<string>()
   const [invalidField, setInvalidField] = useState<SupplyPublicationInvalidField>()
   const [requiredAction, setRequiredAction] = useState<Extract<SupplySourcePreview, { kind: 'action_required' }>['requiredAction']>()
@@ -271,8 +272,9 @@ export function useSupplyNativeStartState({
     }
   }
 
-  function continueToReview() {
-    if (selected === undefined || operationInFlight.current || publicationCommandLocked.current) return
+  async function continueToReview() {
+    if (selected === undefined || preview === undefined || source === undefined
+      || operationInFlight.current || publicationCommandLocked.current) return
     const validationMessage = publicationTermsValidationMessage({
       category,
       pricing: pricingInput(pricingKind, price),
@@ -283,8 +285,45 @@ export function useSupplyNativeStartState({
       setFieldError(validationMessage)
       return
     }
+    if (onSaveTerms === undefined) {
+      clearFieldError()
+      setReviewing(true)
+      return
+    }
+    if (!beginOperation('terms')) return
     clearFieldError()
-    setReviewing(true)
+    try {
+      const saved = await onSaveTerms({
+        businessRef,
+        source,
+        sourceDigest: preview.sourceDigest,
+        sourceRevision: preview.sourceRevision,
+        candidate: {
+          candidateRef: selected.candidateRef,
+          sourceSelector: selected.sourceSelector,
+          title: selected.title,
+          description: selected.description,
+        },
+        terms: {
+          name, description, category, serviceArea, availability, pricingKind, price,
+          externalEffect, dataRelease, financialExposure, dataClassification,
+        },
+      })
+      if (saved?.kind === 'refused') {
+        setError(saved.reason === 'authorization_denied'
+          ? 'Sign in again, return to this saved Tool draft, then continue.'
+          : saved.reason === 'candidate_changed'
+            ? 'Source changed. Edit Source and find the current Tool again.'
+            : 'Could not save these terms. Keep editing or try Continue to review again.')
+        return
+      }
+      setReviewing(true)
+    } catch (cause) {
+      captureClientExceptionOnClient(cause)
+      setError('Could not save these terms. Keep editing or try Continue to review again.')
+    } finally {
+      endOperation()
+    }
   }
 
   async function submit() {
@@ -330,7 +369,10 @@ export function useSupplyNativeStartState({
     try {
       const result = await onPublish(input)
       if (result.kind === 'refused') {
-        setError(`${publicationError(result.reason)} Open Tools to confirm the current status before starting a new publication command.`)
+        publicationCommandLocked.current = false
+        setPublicationLocked(false)
+        idempotencyKey.current = `owner-supply:${crypto.randomUUID()}`
+        setError(publicationError(result.reason))
         return
       }
       setSuccess('Tool submitted for validation. Agentic Economy will publish it after the required checks pass.')

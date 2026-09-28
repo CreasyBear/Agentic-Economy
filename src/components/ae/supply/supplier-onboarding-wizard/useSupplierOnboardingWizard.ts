@@ -39,7 +39,7 @@ export function useSupplierOnboardingWizard({
   }, [currentStep])
 
   const isVisited = (stepId: NonNullable<SupplierOnboardingWizardPorts['currentStep']>): boolean => {
-    if (stepId === 'profile') return true
+    if (stepId === 'profile') return currentStep !== 'first_tool' || onSaveProfile !== undefined
     return firstToolVisited
   }
 

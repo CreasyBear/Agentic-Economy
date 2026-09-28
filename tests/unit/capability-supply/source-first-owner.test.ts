@@ -270,6 +270,12 @@ describe('owner source-first resumption', () => {
     }
     const sourceDigest = `sha256:${'7'.repeat(64)}`
     const candidateRef = `sha256:${'8'.repeat(64)}`
+    const terms = {
+      name: 'Owner paid operation', description: 'Verified lookup', category: 'Research',
+      serviceArea: 'Australia', availability: 'Weekdays', pricingKind: 'source_x402' as const,
+      price: '', externalEffect: false, dataRelease: true, financialExposure: false,
+      dataClassification: 'personal' as const,
+    }
     mocks.callSourceQuery.mockImplementation(async (reference) => reference.name === 'capabilitySupplyOwnerFunnel:readOwnerSupplyIntegrationDraft'
       ? {
           kind: 'available',
@@ -277,6 +283,7 @@ describe('owner source-first resumption', () => {
             sourceDescriptorJson: stableStringify(source),
             sourceDigest,
             candidateRef,
+            terms,
           },
         }
       : { kind: 'not_found' })
@@ -303,7 +310,7 @@ describe('owner source-first resumption', () => {
         draftRef: candidateRef,
         environment: source.environment,
       },
-    })).resolves.toMatchObject({ kind: 'available', source, candidateRef, preview: { sourceDigest } })
+    })).resolves.toMatchObject({ kind: 'available', source, candidateRef, terms, preview: { sourceDigest } })
   })
 
   it.each([

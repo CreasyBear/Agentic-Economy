@@ -163,27 +163,45 @@ export type HttpOutcome = {
   bodyText: string
 }
 
+export const CLI_REQUEST_TIMEOUT_MS = 15_000
+
 export async function callJson(
   baseUrl: string,
   path: string,
   init: RequestInit = {},
 ): Promise<HttpOutcome> {
   const startedAt = Date.now()
-  const response = await fetch(`${baseUrl}${path}`, {
-    ...init,
-    redirect: 'manual',
-    headers: {
-      Accept: 'application/json',
-      ...(init.body === undefined ? {} : { 'Content-Type': 'application/json' }),
-      ...init.headers,
-    },
-  })
-  return { ...await readHttpOutcome(response, startedAt), baseUrl }
+  const deadline = new AbortController()
+  const timer = setTimeout(() => deadline.abort(), CLI_REQUEST_TIMEOUT_MS)
+  try {
+    const response = await fetch(`${baseUrl}${path}`, {
+      ...init,
+      signal: init.signal === undefined || init.signal === null
+        ? deadline.signal : AbortSignal.any([init.signal, deadline.signal]),
+      redirect: 'manual',
+      headers: {
+        Accept: 'application/json',
+        ...(init.body === undefined ? {} : { 'Content-Type': 'application/json' }),
+        ...init.headers,
+      },
+    })
+    // Keep the same deadline active until the entire response has been consumed.
+    return { ...await readHttpOutcome(response, startedAt), baseUrl }
+  } catch (error) {
+    if (deadline.signal.aborted) {
+      throw new CliFailure(`The request timed out after ${CLI_REQUEST_TIMEOUT_MS}ms.`, {
+        kind: 'UNAVAILABLE', code: 'request-timeout',
+      })
+    }
+    throw error
+  } finally {
+    clearTimeout(timer)
+  }
 }
 
 export async function readHttpOutcome(response: Response, startedAt: number): Promise<HttpOutcome> {
-  const durationMs = Date.now() - startedAt
   const bodyText = await response.text()
+  const durationMs = Date.now() - startedAt
 
   let body: unknown
   try {

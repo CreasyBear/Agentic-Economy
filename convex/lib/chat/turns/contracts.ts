@@ -41,9 +41,14 @@ export const trustedChatAuthorityValue = v.object({
 export const ownerChatGrantStatusArgs = {}
 export const ownerChatGrantStatusResult = v.object({ enabled: v.boolean() })
 
+export const searchContinuationValue = v.object({
+  kind: v.literal('search_next_page'), query: v.string(), cursor: v.string(),
+})
+
 export const startTurnArgs = {
     principal: turnPrincipalValue, threadId: v.optional(v.string()),
-    prompt: v.string(), clientTurnId: v.string(), ...proofArgs,
+    prompt: v.string(), clientTurnId: v.string(),
+    continuation: v.optional(searchContinuationValue), ...proofArgs,
   }
 export const startTurnResult = startValue
 
@@ -80,4 +85,16 @@ export const finishTurnArgs = { turnRef: v.string(), promptMessageId: v.string()
     state: v.union(v.literal('working'), v.literal('input-required'), v.literal('auth-required'),
       v.literal('completed'), v.literal('failed'), v.literal('rejected')) }
 export const finishTurnResult = v.boolean()
+
+export const issueSearchContinuationArgs = {
+  turnRef: v.string(), threadId: v.string(), promptMessageId: v.string(),
+  query: v.string(), cursor: v.string(), inputJson: v.string(),
+}
+export const issueSearchContinuationResult = v.string()
+export const readSearchContinuationArgs = {
+  turnRef: v.string(), threadId: v.string(), promptMessageId: v.string(),
+}
+export const readSearchContinuationResult = v.union(
+  v.object({ query: v.string(), cursor: v.string(), inputJson: v.string() }), v.null(),
+)
 

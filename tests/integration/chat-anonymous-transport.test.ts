@@ -11,6 +11,7 @@ import { createConvexServerFunctionAssertion } from '../../src/lib/server/convex
 import type { CustomerRequestServiceAssertion } from '../../src/modules/agent-access/service-auth-envelope'
 import type * as ModelGatewayPublic from '@/modules/model-gateway/public'
 import { convexTestWithMarketComponents } from '../helpers/convex-fixtures'
+import { admitDiscoveredToolFixture } from '../helpers/discovered-tool-fixture'
 
 const modelInjection = vi.hoisted(() => ({
   failModelConstruction: false,
@@ -100,6 +101,27 @@ describe('anonymous operation chat transport', () => {
     expect(calls.mock.calls[0]?.[0].toolChoice).toEqual({ type: 'required' })
     expect(calls.mock.lastCall?.[0].tools).toBeUndefined()
   })
+  it('forces a guest next-page search with no model-supplied query or cursor', async () => {
+    const backend = convexTestWithMarketComponents()
+    const model = mockModel({ contentSteps: [
+      [{ type: 'tool-call', toolCallId: 'next-page', toolName: 'registry_tools_search', input: '{}' }],
+      [{ type: 'text', text: 'The page is partially assessed. Next: inspect the Tool card.' }],
+    ] })
+    const calls = vi.spyOn(model, 'doStream')
+    const body = await backend.action(async ctx => {
+      const response = await streamAnonymousChatResponse(ctx,
+        [{ role: 'user', content: 'Show more results for weather in Sydney' }],
+        model, undefined, { kind: 'search_next_page', query: 'weather in Sydney', cursor: 'x402:' })
+      return await response.text()
+    })
+    expect(calls.mock.calls[0]?.[0].toolChoice).toEqual({
+      type: 'tool', toolName: 'registry_tools_search',
+    })
+    expect(body).toContain('registry_tools_search')
+    expect(body).not.toContain('chat_tool_refused')
+    expect(body).not.toContain('x402:')
+  })
+
   it('streams a single fallback message when the required lookup yields no answer', async () => {
     const backend = convexTestWithMarketComponents()
     const model = mockModel({ contentSteps: [
@@ -160,6 +182,29 @@ describe('anonymous operation chat transport', () => {
       return await response.text()
     })
     expect(body).not.toContain('lodash')
+  })
+  it('returns completed Tool facts when the post-tool model step fails', async () => {
+    const backend = convexTestWithMarketComponents()
+    const { toolRef } = await admitDiscoveredToolFixture(backend)
+    const model = mockModel({ contentSteps: [[{
+      type: 'tool-call', toolCallId: 'describe-1', toolName: 'registry_tools_describe',
+      input: JSON.stringify({ toolRef }),
+    }]] })
+    const original = model.doStream.bind(model)
+    let attempts = 0
+    vi.spyOn(model, 'doStream').mockImplementation(async options => {
+      if (++attempts > 1) throw new Error('injected_post_tool_model_failure')
+      return original(options)
+    })
+    const body = await backend.action(async ctx => {
+      const response = await streamAnonymousChatResponse(ctx,
+        [{ role: 'user', content: 'Describe the timezone Tool' }], model)
+      return await response.text()
+    })
+    expect(body).toContain('Timezone')
+    expect(body).not.toContain('chat_stream_failed')
+    expect(body).not.toContain('injected_post_tool_model_failure')
+    expect(attempts).toBe(2)
   })
   it('streams from a fake model without creating Agent threads or messages', async () => {
     const backend = convexTestWithMarketComponents()

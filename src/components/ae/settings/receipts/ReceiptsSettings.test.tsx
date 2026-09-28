@@ -80,3 +80,21 @@ it('distinguishes reversed funding and withheld invoices without exposing unavai
   expect(screen.queryByRole('button', { name: 'Tax invoice' })).not.toBeInTheDocument()
   expect(screen.queryByRole('button', { name: 'Stripe receipt' })).not.toBeInTheDocument()
 })
+
+it('offers older receipts even when the first bounded page has only unsettled commands', () => {
+  const onLoadMore = vi.fn()
+  const callbacks = {
+    onLoadMore,
+    onDownloadTaxInvoice: vi.fn(async () => {}),
+    onViewStripeReceipt: vi.fn(async () => {}),
+  }
+  const view = render(<ReceiptsSettings invoiceHistoryRows={[]} invoiceHistoryLoading={false}
+    invoiceHistoryHasMore {...callbacks} />)
+  expect(screen.queryByText('No top-up receipts yet')).not.toBeInTheDocument()
+  fireEvent.click(screen.getByRole('button', { name: 'Load older top-ups' }))
+  expect(onLoadMore).toHaveBeenCalledOnce()
+  view.rerender(<ReceiptsSettings invoiceHistoryRows={[topUp]} invoiceHistoryLoading={false}
+    invoiceHistoryHasMore {...callbacks} />)
+  expect(screen.getByText('Account top-up')).toBeInTheDocument()
+  expect(screen.getByRole('button', { name: 'Export shown CSV' })).toBeInTheDocument()
+})

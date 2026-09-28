@@ -2,7 +2,7 @@ import { formatUtcTimestamp } from '@/lib/ui/format-time'
 import { getStatusPresentation } from '@/lib/ui/status-presentation'
 import type { PublicToolDescriptor } from '@/modules/capability-supply/public'
 import type { ListingProjection, ListingPrice } from '@/modules/registry/public'
-import { formatDisplayAmount, formatDisplayPrice, parseDecimalExactAmount, type ReferenceRate } from '@/modules/money/public'
+import { REFERENCE_RATE_MAX_AGE_MS, formatDisplayAmount, formatDisplayPrice, parseDecimalExactAmount, type ReferenceRate } from '@/modules/money/public'
 import type { ToolObjectView } from './object-family.contracts'
 
 function priceLabel(price: ListingPrice, referenceRate: ReferenceRate | undefined, nowMs: number, admittedDisplayPrice?: PublicToolDescriptor['commercial']['displayPrice']): string {
@@ -18,7 +18,7 @@ function priceLabel(price: ListingPrice, referenceRate: ReferenceRate | undefine
     if (price.currency !== 'USDC') return 'AUD estimate temporarily unavailable'
     return formatDisplayPrice(referenceRate === undefined
       ? { kind: 'unavailable' }
-      : { kind: 'indicative', amount: exact, validUntil: referenceRate.fetchedAt + 5 * 60_000, referenceRate }, nowMs) ?? 'AUD estimate temporarily unavailable'
+      : { kind: 'indicative', amount: exact, validUntil: referenceRate.fetchedAt + REFERENCE_RATE_MAX_AGE_MS, referenceRate }, nowMs) ?? 'AUD estimate temporarily unavailable'
   }
   const minimum = display(price.kind === 'range' ? price.minimum : price.amount)
   if (price.kind !== 'range') return `${minimum}${minimum.startsWith('A$') ? ' per Call' : ''}`

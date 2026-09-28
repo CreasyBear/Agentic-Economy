@@ -18,6 +18,10 @@ import { AeOwnerCredit } from '@/components/ae/console/owner-credit/AeOwnerCredi
 import type { AccountHistoryResult, CreditPaymentSession } from '@/modules/money/public'
 import type { AccountFundingBalance, AccountFundingBeginInput, AccountFundingConstraints } from '@/modules/money/server'
 
+const clerkIdentity = vi.hoisted(() => ({ userId: 'user_owner' }))
+vi.mock('@clerk/tanstack-react-start', () => ({
+  useAuth: () => ({ userId: clerkIdentity.userId }),
+}))
 vi.mock('@tanstack/react-router', () => ({
   Link: ({ to, params, children, ...props }: { to: string; params?: Record<string, string>; children: ReactNode }) => (
     <a href={params?.toolRef === undefined ? to : to.replace('$toolRef', encodeURIComponent(params.toolRef))} {...props}>{children}</a>
@@ -143,6 +147,7 @@ const emptyAccountHistory: AccountHistoryResult = {
 
 afterEach(() => {
   cleanup()
+  clerkIdentity.userId = 'user_owner'
   vi.clearAllMocks()
   window.sessionStorage.clear()
   window.history.replaceState(null, '', '/')
@@ -809,6 +814,30 @@ describe('assistant access components', () => {
     expect(begin).toHaveBeenCalledOnce()
   })
 
+  it('restores an owner draft and reuses the original command after session loss without exposing it to another owner', async () => {
+    const begin = vi.fn<AccountFundingPort['begin']>(async () => { throw new Error('response lost') })
+    const port: AccountFundingPort = { begin, read: vi.fn() }
+    render(<AeAccountFundingPanel port={port} constraints={fundingConstraints} />)
+    fireEvent.change(screen.getByLabelText(/other amount/i), { target: { value: '10.00' } })
+    fireEvent.click(screen.getByRole('button', { name: /pay A\$10\.55 and add A\$10\.00/i }))
+    await waitFor(() => expect(begin).toHaveBeenCalledTimes(1))
+    const firstKey = begin.mock.calls[0]?.[0].idempotencyKey
+    expect(window.sessionStorage.getItem('ae.account-funding.attempt.user_owner')).toBe(firstKey)
+    cleanup()
+
+    render(<AeAccountFundingPanel port={port} constraints={fundingConstraints} />)
+    expect((screen.getByLabelText(/other amount/i) as HTMLInputElement).value).toBe('10.00')
+    fireEvent.click(screen.getByRole('button', { name: /pay A\$10\.55 and add A\$10\.00/i }))
+    await waitFor(() => expect(begin).toHaveBeenCalledTimes(2))
+    expect(begin.mock.calls[1]?.[0].idempotencyKey).toBe(firstKey)
+    cleanup()
+
+    clerkIdentity.userId = 'user_other'
+    render(<AeAccountFundingPanel port={port} constraints={fundingConstraints} />)
+    expect((screen.getByLabelText(/other amount/i) as HTMLInputElement).value).toBe('')
+    expect(window.sessionStorage.getItem('ae.account-funding.attempt.user_other')).toBeNull()
+  })
+
   it('starts a bound hosted Checkout Session and redirects without persisting payment material', async () => {
     const session: CreditPaymentSession = {
       kind: 'hosted_redirect',
@@ -863,7 +892,7 @@ describe('assistant access components', () => {
       expectedPolicyDigest: fundingConstraints.policyDigest,
       idempotencyKey: expect.any(String),
     })
-    expect(window.sessionStorage.getItem('ae.account-funding.recovery.v1')).not.toContain('checkout.stripe.com')
+    expect(window.sessionStorage.getItem('ae.account-funding.recovery.user_owner')).not.toContain('checkout.stripe.com')
     expect(read).not.toHaveBeenCalled()
     const continueButton = await screen.findByRole('button', { name: 'Continue secure payment' })
     expect(screen.getByRole('button', { name: 'Refresh payment status' })).toBeTruthy()
@@ -875,7 +904,7 @@ describe('assistant access components', () => {
     read.mockResolvedValue({ ...session, evidence: { ...session.evidence, status: 'succeeded' } })
     render(<AeAccountFundingPanel port={{ begin, read }} constraints={fundingConstraints} redirectToCheckout={redirectToCheckout} />)
     fireEvent.click(await screen.findByRole('button', { name: 'Add more credit' }))
-    expect(window.sessionStorage.getItem('ae.account-funding.recovery.v1')).toBeNull()
+    expect(window.sessionStorage.getItem('ae.account-funding.recovery.user_owner')).toBeNull()
     fireEvent.change(screen.getByLabelText(/other amount/i), { target: { value: '5.00' } })
     fireEvent.click(screen.getByRole('button', { name: /pay A\$5\.28 and add A\$5\.00/i }))
     await waitFor(() => expect(begin).toHaveBeenCalledTimes(2))
@@ -910,7 +939,7 @@ describe('assistant access components', () => {
 
   it.each(['refused', 'transport failure'] as const)('resumes confirmed checkout, then requires status refresh after %s', async (failure) => {
     const locator = { externalRef: 'cs_readback', idempotencyKey: 'funding:readback' }
-    window.sessionStorage.setItem('ae.account-funding.recovery.v1', JSON.stringify(locator))
+    window.sessionStorage.setItem('ae.account-funding.recovery.user_owner', JSON.stringify(locator))
     const session: CreditPaymentSession = {
       kind: 'hosted_redirect',
       evidence: {
@@ -946,7 +975,7 @@ describe('assistant access components', () => {
 
   it('keeps an unreadable stored attempt recoverable through the same locator', async () => {
     const locator = { commandRef: 'sha256:stored-attempt', idempotencyKey: 'funding:stored-attempt' }
-    window.sessionStorage.setItem('ae.account-funding.recovery.v1', JSON.stringify(locator))
+    window.sessionStorage.setItem('ae.account-funding.recovery.user_owner', JSON.stringify(locator))
     const read = vi.fn<AccountFundingPort['read']>(async () => ({ kind: 'refused', code: 'stripe_setup_required', retryable: false }))
     const begin = vi.fn()
     render(<AeAccountFundingPanel port={{ begin, read }} constraints={fundingConstraints} />)
@@ -986,7 +1015,7 @@ describe('assistant access components', () => {
     fireEvent.click(screen.getByRole('button', { name: /pay A\$10\.55 and add A\$10\.00/i }))
 
     expect(await screen.findByText(/do not start another payment/i)).toBeTruthy()
-    const raw = window.sessionStorage.getItem('ae.account-funding.recovery.v1')
+    const raw = window.sessionStorage.getItem('ae.account-funding.recovery.user_owner')
     const locator = raw === null ? undefined : JSON.parse(raw) as { commandRef: string; idempotencyKey: string }
     expect(locator).toMatchObject({ commandRef: 'sha256:topup-command-unknown' })
     expect(locator?.idempotencyKey).toBe(begin.mock.calls[0]?.[0]?.idempotencyKey)
@@ -1014,7 +1043,7 @@ describe('assistant access components', () => {
     expect(screen.queryByRole('button', { name: 'Continue secure payment' })).toBeNull()
     expect(begin).not.toHaveBeenCalled()
     fireEvent.click(await screen.findByRole('button', { name: 'Add more credit' }))
-    expect(window.sessionStorage.getItem('ae.account-funding.recovery.v1')).toBeNull()
+    expect(window.sessionStorage.getItem('ae.account-funding.recovery.user_owner')).toBeNull()
     expect(new URL(window.location.href).searchParams.get('funding')).toBeNull()
     fireEvent.change(screen.getByLabelText(/other amount/i), { target: { value: '5.00' } })
     fireEvent.click(screen.getByRole('button', { name: /pay A\$5\.28 and add A\$5\.00/i }))
@@ -1039,7 +1068,7 @@ describe('assistant access components', () => {
     expect(screen.queryByRole('button', { name: 'Continue secure payment' })).toBeNull()
     expect(begin).not.toHaveBeenCalled()
     fireEvent.click(await screen.findByRole('button', { name: 'Add more credit' }))
-    expect(window.sessionStorage.getItem('ae.account-funding.recovery.v1')).toBeNull()
+    expect(window.sessionStorage.getItem('ae.account-funding.recovery.user_owner')).toBeNull()
     expect(new URL(window.location.href).searchParams.get('funding')).toBeNull()
     fireEvent.change(screen.getByLabelText(/other amount/i), { target: { value: '5.00' } })
     fireEvent.click(screen.getByRole('button', { name: /pay A\$5\.28 and add A\$5\.00/i }))

@@ -61,7 +61,7 @@ vi.mock('@/components/ae/command-panel', () => ({
   AeCommandPanel: () => null,
 }))
 vi.mock('@/components/ae/layout/app-shell/useOperatorEntitlement', () => ({
-  useOperatorEntitlement: () => ({ canAccessAdmin: shellMocks.canAccessAdmin }),
+  useOperatorEntitlement: () => shellMocks.canAccessAdmin,
 }))
 
 import { AeAppShell } from '@/components/ae/layout/AeAppShell'

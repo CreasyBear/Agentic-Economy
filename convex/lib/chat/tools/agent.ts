@@ -14,6 +14,9 @@ import { chatNoMatchSearchCount, MAX_CHAT_SEARCHES, MAX_CHAT_STEPS, MAX_CHAT_TOO
 export function createChatAgent(
   languageModel: LanguageModelV4,
   authority?: TrustedChatAuthority,
+  continuation?: Readonly<{ query: string; cursor: string; inputJson?: string }>,
+  searchTurn?: Readonly<{ turnRef: string; threadId: string; promptMessageId: string }>,
+  onSearchOutput?: (toolCallId: string, output: unknown) => void,
 ) {
   let toolCalls = 0
   let executeCalls = 0
@@ -43,7 +46,7 @@ export function createChatAgent(
 
 
   const tools = {
-    ...createSearchTools(reserve, reserveSearch),
+    ...createSearchTools(reserve, reserveSearch, continuation, searchTurn, onSearchOutput),
     ...createReadTools(reserve),
     ...(authority?.kind !== 'agent_key' ? {} : createPurchaseTools(authority, reserve)),
     ...createClarifyTools(reserve),
@@ -72,7 +75,7 @@ export function createChatAgent(
     ].join(' '),
     languageModel,
     tools,
-    contextOptions: { recentMessages: 20 },
+    contextOptions: { recentMessages: 20, excludeToolMessages: true },
     stopWhen: options => stepCountIs(MAX_CHAT_STEPS)(options)
       || chatNoMatchSearchCount(options.steps) >= MAX_CHAT_SEARCHES
       || hasToolCall(CHAT_TOOL_NAME_MAP.canonicalToProvider['chat.clarify'])(options)

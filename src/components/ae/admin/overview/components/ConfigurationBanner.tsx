@@ -9,7 +9,8 @@ export type ConfigurationBannerProps = Readonly<{ configuration: AdminOverviewCo
 export function ConfigurationBanner({ configuration }: ConfigurationBannerProps) {
   const rows = [
     [ADMIN_OVERVIEW_COPY.formance, configuration.formance === 'configured'
-      ? ADMIN_OVERVIEW_COPY.configured : ADMIN_OVERVIEW_COPY.notConfigured],
+      ? ADMIN_OVERVIEW_COPY.configured : configuration.formance === 'unavailable'
+        ? ADMIN_OVERVIEW_COPY.unavailable : ADMIN_OVERVIEW_COPY.notConfigured],
     [ADMIN_OVERVIEW_COPY.x402Custody, configuration.x402Custody === 'configured'
       ? ADMIN_OVERVIEW_COPY.configured : ADMIN_OVERVIEW_COPY.notConfigured],
     [ADMIN_OVERVIEW_COPY.clerkFva, configuration.clerkFva === 'present'

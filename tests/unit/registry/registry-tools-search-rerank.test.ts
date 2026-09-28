@@ -6,7 +6,7 @@ import { setPublicSourceTransportForTests } from '@/lib/server/convex-source'
 import * as decisionEngine from '@/modules/decision-engine/public'
 import { toolCatalogSearchInputSchema, type SearchEnvelope } from '@/modules/registry/tool-choice-contracts'
 import { registryToolsSearchAction } from '@/modules/registry/tools.actions'
-import { TIMEZONE_QUERY, TOOL_CRYPTO_TX, TOOL_TIMEZONE, jevAnswersForTool, misorderedSearchResult, mockSearchTool } from '../../helpers/tool-search-rerank-fixtures'
+import { TIMEZONE_QUERY, TOOL_CRYPTO_TX, TOOL_TIMEZONE, jevAnswersForTool, misorderedSearchResult, mockFailedJevFetch, mockSearchTool } from '../../helpers/tool-search-rerank-fixtures'
 
 vi.mock('@/modules/capability-supply/tool-source', () => ({
   readCapabilityToolSearch: vi.fn(), readCapabilityToolDetail: vi.fn(), readCapabilityToolCompare: vi.fn(),
@@ -143,6 +143,17 @@ describe('registry.tools.search mixed assessment', () => {
     vi.spyOn(decisionEngine, 'executeDecisionGateway').mockRejectedValue(new decisionEngine.JevUnavailableError('timeout'))
     const result = await runSearch('timezone conversion', { source: 'coinbase' })
     expect(result).toMatchObject({ kind: 'match', results: [{ id: 'unassessed-1' }] })
+  })
+
+  it('keeps the indexed Bazaar search path usable when Jev responds HTTP 500', async () => {
+    vi.mocked(readCapabilityToolSearch).mockResolvedValue(noCandidates(''))
+    directoryRows = [directoryRow('indexed-timezone')]
+    vi.stubEnv('TYPESAFE_API_KEY', 'ts-local-injected-fault')
+    const jev = mockFailedJevFetch(500)
+    vi.stubGlobal('fetch', jev)
+    const result = await runSearch('timezone conversion', { source: 'coinbase' })
+    expect(jev).toHaveBeenCalledOnce()
+    expect(result).toMatchObject({ kind: 'match', results: [{ id: 'indexed-timezone' }] })
   })
 
   it('uses indexed Bazaar candidates if semantic classification is incomplete', async () => {

@@ -15,6 +15,21 @@ const SOURCE_REVISION_PREFIX: Record<SupplySourceInput['kind'], string> = {
   x402: 'x402:',
 }
 
+/** Private owner-entered draft material. Publication attestations are intentionally excluded. */
+export type SupplyIntegrationDraftTerms = Readonly<{
+  name: string
+  description: string
+  category: string
+  serviceArea: string
+  availability: string
+  pricingKind: 'free' | 'fixed_aud' | 'source_x402'
+  price: string
+  externalEffect: boolean
+  dataRelease: boolean
+  financialExposure: boolean
+  dataClassification: 'public' | 'personal' | 'sensitive'
+}>
+
 export type SupplyIntegrationDraft = Readonly<{
   sourceKind: SupplySourceInput['kind']
   sourceDescriptorJson: string
@@ -24,6 +39,7 @@ export type SupplyIntegrationDraft = Readonly<{
   sourceSelectorJson: string
   connectionRef?: string
   validationInputJson?: string
+  terms?: SupplyIntegrationDraftTerms
   updatedAt: number
 }>
 
@@ -36,6 +52,7 @@ export type NormalizeSupplyIntegrationDraftInput = Readonly<{
   sourceSelectorJson: string
   connectionRef?: string | undefined
   validationInputJson?: string | undefined
+  terms?: SupplyIntegrationDraftTerms | undefined
   updatedAt: number
 }>
 
@@ -120,6 +137,7 @@ export function normalizeSupplyIntegrationDraft(
       candidateRef: input.candidateRef,
       sourceSelectorJson: normalizedSelectorJson,
       ...(input.connectionRef === undefined ? {} : { connectionRef: input.connectionRef }),
+      ...(input.terms === undefined ? {} : { terms: input.terms }),
       ...(normalizedValidationJson === undefined ? {} : { validationInputJson: normalizedValidationJson }),
       updatedAt: input.updatedAt,
     },

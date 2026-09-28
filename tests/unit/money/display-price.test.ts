@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  REFERENCE_RATE_MAX_AGE_MS,
   convertUsdcToAud,
   formatDisplayAmount,
   formatDisplayPrice,
@@ -14,6 +15,7 @@ const observation: ReferenceRate = {
 const aud = (units: string) => ({ currency: 'AUD', exponent: 6, units } as const)
 const usdc = (units: string) => ({ currency: 'USDC', exponent: 6, units } as const)
 
+// The persisted observation stays eligible across missed six-hour refreshes, not forever.
 describe('buyer AUD presentation', () => {
   it('rounds known amounts upward only at the display boundary', () => {
     for (const [units, label] of [
@@ -67,11 +69,11 @@ describe('buyer AUD presentation', () => {
     const unavailable = 'AUD estimate temporarily unavailable'
     expect(formatDisplayPrice({ kind: 'indicative', amount: aud('1'), validUntil: 2000 }, 2000)).toBe(unavailable)
     expect(formatDisplayPrice({ kind: 'indicative', amount: usdc('1'), validUntil: 2000 }, 1000)).toBe(unavailable)
-    expect(formatDisplayPrice({ kind: 'indicative', amount: usdc('1'), referenceRate: observation, validUntil: 999999 }, 301000)).toBe(unavailable)
+    expect(formatDisplayPrice({ kind: 'indicative', amount: usdc('1'), referenceRate: observation, validUntil: REFERENCE_RATE_MAX_AGE_MS + 2000 }, REFERENCE_RATE_MAX_AGE_MS + 1000)).toBe(unavailable)
     expect(formatDisplayPrice({ kind: 'indicative', amount: { ...aud('1'), currency: 'USD' }, validUntil: 2000 }, 1000)).toBe(unavailable)
     expect(formatDisplayPrice({ kind: 'unavailable' })).toBe(unavailable)
     expect(formatDisplayPrice(undefined)).toBeUndefined()
-    expect(convertUsdcToAud(usdc('1'), observation, 301000)).toBeUndefined()
+    expect(convertUsdcToAud(usdc('1'), observation, REFERENCE_RATE_MAX_AGE_MS + 1000)).toBeUndefined()
     expect(convertUsdcToAud(usdc('1'), { ...observation, rate: '0' }, 1000)).toBeUndefined()
     expect(convertUsdcToAud(usdc('1'), observation, 999)).toBeUndefined()
   })

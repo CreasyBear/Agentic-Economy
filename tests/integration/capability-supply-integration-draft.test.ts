@@ -61,6 +61,53 @@ describe('Provider source integration draft', () => {
     )).resolves.toEqual({ kind: 'refused', reason: 'authorization_denied' })
   })
 
+  it('persists private terms by exact candidate with material-scoped retries and no saved attestation', async () => {
+    const backend = convexTest(schema, modules)
+    const { businessId, owner } = await createPublishedBusinessOwner(backend, 'draft-terms-owner')
+    const { owner: foreignOwner } = await createPublishedBusinessOwner(backend, 'draft-terms-foreign')
+    const source = { kind: 'openapi' as const, definitionUrl: 'https://provider.example/openapi.json', environment: 'production' as const }
+    const selector = { serverUrl: 'https://provider.example/', path: '/lookup', method: 'post' }
+    const sourceDigest = canonicalDigest({ source: 'terms-v1' })
+    const candidateRef = canonicalDigest({ sourceDigest, selector })
+    const terms = {
+      name: 'My lookup', description: 'Owner-entered description', category: 'Data',
+      serviceArea: 'Australia', availability: 'Weekdays',
+      pricingKind: 'fixed_aud' as const, price: '12.50',
+      externalEffect: true, dataRelease: true, financialExposure: false,
+      dataClassification: 'personal' as const,
+    }
+    const command = {
+      businessId, title: terms.name, description: terms.description, category: terms.category,
+      sourceKind: source.kind, sourceDescriptorJson: stableStringify(source), sourceDigest,
+      sourceRevision: `openapi:${sourceDigest}`, candidateRef, sourceSelectorJson: stableStringify(selector),
+      terms, operationKey: canonicalDigest({ candidateRef, terms }), correlationId: 'owner-terms',
+    }
+    await expect(owner.mutation(api.capabilitySupplyOwnerFunnel.saveOwnerSupplyIntegrationDraft,
+      await withSourceWrite('catalog_publish', command))).resolves.toMatchObject({ kind: 'saved' })
+    await expect(owner.mutation(api.capabilitySupplyOwnerFunnel.saveOwnerSupplyIntegrationDraft,
+      await withSourceWrite('catalog_publish', command))).resolves.toMatchObject({ kind: 'replayed' })
+    const saved = await owner.query(api.capabilitySupplyOwnerFunnel.readOwnerSupplyIntegrationDraft, { businessId, candidateRef })
+    expect(saved).toMatchObject({ kind: 'available', draft: { candidateRef, terms } })
+    expect(JSON.stringify(saved)).not.toContain('attestation')
+    const ownerFunnel = await owner.query(api.capabilitySupplyOwnerFunnel.readOwnerSupplyFunnel, { businessId })
+    expect(JSON.stringify(ownerFunnel)).not.toContain('"terms"')
+    expect(JSON.stringify(ownerFunnel)).not.toContain('"price":"12.50"')
+    await expect(foreignOwner.query(api.capabilitySupplyOwnerFunnel.readOwnerSupplyIntegrationDraft,
+      { businessId, candidateRef })).resolves.toEqual({ kind: 'not_found' })
+    await expect(backend.query(api.capabilitySupplyOwnerFunnel.readOwnerSupplyIntegrationDraft,
+      { businessId, candidateRef })).resolves.toEqual({ kind: 'not_found' })
+    const updatedTerms = { ...terms, category: 'Research', price: '21.00' }
+    await expect(owner.mutation(api.capabilitySupplyOwnerFunnel.saveOwnerSupplyIntegrationDraft,
+      await withSourceWrite('catalog_publish', {
+        ...command, category: updatedTerms.category, terms: updatedTerms,
+        operationKey: canonicalDigest({ candidateRef, terms: updatedTerms }),
+      }))).resolves.toMatchObject({ kind: 'saved' })
+    await expect(owner.query(api.capabilitySupplyOwnerFunnel.readOwnerSupplyIntegrationDraft,
+      { businessId, candidateRef })).resolves.toMatchObject({
+      kind: 'available', draft: { terms: updatedTerms },
+    })
+  })
+
   it('persists the existing owner-bound x402 draft with its source digest and candidate reference', async () => {
     const backend = convexTest(schema, modules)
     const { businessId, owner } = await createPublishedBusinessOwner(

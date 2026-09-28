@@ -155,6 +155,26 @@ export async function upsertProviderDirectoryRows(
   await writeAnalytics(ctx, generation.generation, resource, entry, existing === null ? undefined : storedDirectoryEntry(existing))
   await refreshProviderLead(ctx, generation.generation, providerKey)
 }
+
+export const projectProviderDirectoryRowArgs = v.object({
+  publicationRef: v.string(),
+  publicationRevision: v.number(),
+})
+export const projectProviderDirectoryRowReturns = v.null()
+export async function projectProviderDirectoryRowHandler(
+  ctx: MutationCtx,
+  args: Infer<typeof projectProviderDirectoryRowArgs>,
+): Promise<null> {
+  // A delayed withdraw must not delete a newer republished revision's row.
+  const publication = await ctx.db.query('capabilityPublications')
+    .withIndex('by_publicationRef_and_revision', q => q.eq('publicationRef', args.publicationRef))
+    .order('desc')
+    .first()
+  if (publication !== null && publication.revision >= args.publicationRevision) {
+    await upsertProviderDirectoryRows(ctx, publication)
+  }
+  return null
+}
 const PROVIDER_DIRECTORY_RECONCILE_PAGE_SIZE = 50
 
 /**

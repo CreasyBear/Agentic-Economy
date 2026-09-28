@@ -6,7 +6,6 @@ import Decimal from 'decimal.js'
 import { directoryNetwork, directoryIndexRangesValid, x402DirectoryIndexInputSchema, type X402DirectoryIndexInput } from '@/modules/market/x402-directory-index'
 import type { Doc } from '../../../_generated/dataModel'
 import type { QueryCtx } from '../../../_generated/server'
-import { ANALYTICS_VERSION } from './analytics'
 import { filterArgs, pageValue } from './contracts'
 import { choiceForDirectoryPage } from './choices'
 import { activeDirectoryGeneration, compactDirectoryText, directoryCoverage, indexedDirectoryEntry } from './rows'
@@ -107,8 +106,6 @@ export const browseHandler = async (ctx: QueryCtx, args: Infer<typeof browseArgs
     const generation = await activeDirectoryGeneration(ctx)
     if (generation === null) return { kind: 'unavailable' as const, reason: 'index_unavailable' }
     const input = parsed.data
-    const needsAnalytics = input.sort === 'adoption' || input.sort === 'price_asc' || input.sort === 'momentum' || ['minUsdPrice', 'minPayers30d', 'maxPayers30d', 'priceBand', 'adoptionBand', 'curatedOnly', 'tags', 'bundleSlugs', 'hasInputFields', 'hasOutputFields', 'hasInputSchema', 'hasOutputSchema', 'hasOutputExample'].some(key => filters[key as keyof typeof filters] !== undefined)
-    if (needsAnalytics && (generation.analyticsVersion !== ANALYTICS_VERSION || generation.analyticsStatus !== 'ready')) return { kind: 'unavailable' as const, reason: 'analytics_building' }
     const source = orderedDirectoryRows(ctx, generation.generation, input).filter(q => q.and(
       ...(input.category === undefined ? [] : [q.eq(q.field('category'), input.category)]),
       ...(input.provider === undefined ? [] : [q.eq(q.field('provider'), input.provider)]),
@@ -192,9 +189,6 @@ export const searchCompactHandler = async (ctx: QueryCtx, args: Infer<typeof sea
   }
   const generation = await activeDirectoryGeneration(ctx)
   if (generation === null) return { kind: 'unavailable' as const, reason: 'index_unavailable' }
-  if (filters.priceBand !== undefined && (generation.analyticsVersion !== ANALYTICS_VERSION || generation.analyticsStatus !== 'ready')) {
-    return { kind: 'unavailable' as const, reason: 'analytics_building' }
-  }
   const scope = canonicalDigest([
     'compact-directory:v1', generation.generation, String(generation.completedAt ?? generation.startedAt),
     parsed.data.query ?? '', actionClass ?? '', objectClass ?? '',

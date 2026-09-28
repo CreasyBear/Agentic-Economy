@@ -9,6 +9,7 @@ import { internal } from './_generated/api'
 const HANDLERS: Record<ScheduledWorkloadName, FunctionReference<'mutation' | 'action', 'internal'>> = {
   'reconcile due facilitator invocations': internal.workloadCron.reconcileDueFacilitatorInvocations,
   'refresh facilitator discovery': internal.workloadCron.refreshFacilitatorDiscovery,
+  'refresh USDC/AUD reference rate': internal.workloadCron.refreshReferenceRate,
   'refresh Agentic Economy API registry': internal.workloadCron.refreshAgenticEconomyApiRegistry,
   'refresh current market presence': internal.workloadCron.refreshCurrentMarketPresence,
   'refresh capability supply readiness': internal.workloadCron.refreshCapabilitySupplyReadiness,
@@ -21,29 +22,13 @@ const HANDLERS: Record<ScheduledWorkloadName, FunctionReference<'mutation' | 'ac
 }
 
 const crons = cronJobs()
-const scheduledWorkloadsEnabled = process.env.AE_SCHEDULED_WORKLOADS_ENABLED
-if (scheduledWorkloadsEnabled !== undefined
-  && scheduledWorkloadsEnabled !== 'true'
-  && scheduledWorkloadsEnabled !== 'false') {
-  throw new Error('invalid_scheduled_workloads_configuration: AE_SCHEDULED_WORKLOADS_ENABLED must be true or false')
-}
-
-// Pre-launch cadence: keep recovery and freshness without burning included
-// Convex usage. Tighten these only when the market is actually live.
-// Facilitator discovery is ingested every six hours; source-filtered search
-// reads the reconciled publication snapshot without admitting on demand.
-// Environment changes affect these registrations on the next deploy. This
-// gates recurring crons only; manual calls and durable Call recovery remain available.
-// https://docs.convex.dev/production/environment-variables
-if (scheduledWorkloadsEnabled !== 'false') {
-  for (const workload of SCHEDULED_WORKLOADS) {
-    if ('daily' in workload && workload.daily !== undefined) {
-      crons.cron(workload.name, `${workload.daily.minuteUTC} ${workload.daily.hourUTC} * * *`, HANDLERS[workload.name], {})
-      continue
-    }
-    if (!('interval' in workload) || workload.interval === undefined) continue
-    crons.interval(workload.name, workload.interval, HANDLERS[workload.name], {})
+for (const workload of SCHEDULED_WORKLOADS) {
+  if ('daily' in workload && workload.daily !== undefined) {
+    crons.cron(workload.name, `${workload.daily.minuteUTC} ${workload.daily.hourUTC} * * *`, HANDLERS[workload.name], {})
+    continue
   }
+  if (!('interval' in workload) || workload.interval === undefined) continue
+  crons.interval(workload.name, workload.interval, HANDLERS[workload.name], {})
 }
 
 export default crons

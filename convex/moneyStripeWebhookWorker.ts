@@ -3,7 +3,9 @@
 import { v, type Infer } from 'convex/values'
 
 import { internal } from './_generated/api'
-import { internalAction } from './_generated/server'
+import { action, internalAction } from './_generated/server'
+import { applyVerifiedEventFromInboxResult } from './lib/money/funding/formanceEvent'
+import { fulfillReturnHandler } from './lib/money/funding/returnFulfillment'
 import { stripeWebhookWorkResultValue } from './moneyStripeWebhookValues'
 import {
   AUD_EXPONENT,
@@ -26,6 +28,12 @@ function retryOrReconcile(refusal: Readonly<{ code: string; retryable: boolean }
   }
   return { kind: 'reconciliation_required', code: refusal.code }
 }
+
+export const fulfillReturn = action({
+  args: { externalRef: v.string() },
+  returns: applyVerifiedEventFromInboxResult,
+  handler: fulfillReturnHandler,
+})
 
 export const process = internalAction({
   args: { stripeEventId: v.string() },

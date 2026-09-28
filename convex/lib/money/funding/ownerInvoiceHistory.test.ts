@@ -94,7 +94,9 @@ describe('owner invoice history tax admission', () => {
       })
     })
 
-    const history = await owner.query(api.moneyAccountFunding.listOwnerInvoiceHistory, {})
+    const history = await owner.query(api.moneyAccountFunding.listOwnerInvoiceHistory, {
+      paginationOpts: { numItems: 20, cursor: null },
+    })
     expect(history.page).toEqual([
       expect.objectContaining({
         commandRef,

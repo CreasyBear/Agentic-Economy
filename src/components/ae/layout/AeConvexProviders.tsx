@@ -1,9 +1,9 @@
 import { useAuth } from '@clerk/tanstack-react-start'
 import { ConvexHttpClient } from 'convex/browser'
-import { ConvexReactClient, useConvexAuth, useQuery } from 'convex/react'
+import { ConvexReactClient } from 'convex/react'
 import { ConvexProviderWithClerk } from 'convex/react-clerk'
 import { Link } from '@tanstack/react-router'
-import { createContext, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 
 import { AePageState } from '@/components/ae/layout/AePageState'
 import { buttonVariants } from '@/components/ui/button-variants'
@@ -11,14 +11,8 @@ import { captureClientExceptionOnClient } from '@/lib/observability/capture-clie
 import { cn } from '@/lib/utils'
 import { api } from '../../../../convex/_generated/api'
 
-export const OperatorEntitlementContext = createContext(false)
-
-function OperatorEntitlementBridge({ children }: { children: ReactNode }) {
-  const { isAuthenticated } = useConvexAuth()
-  const result = useQuery(api.operatorContext.readCurrent, isAuthenticated ? {} : 'skip')
-  const canAccessAdmin = isAuthenticated && result?.kind === 'authorized' && result.allowedSurfaces.includes('admin')
-  return <OperatorEntitlementContext.Provider value={canAccessAdmin}>{children}</OperatorEntitlementContext.Provider>
-}
+const CHAT_VISIBLE_STYLE = { display: 'contents' } as const
+const CHAT_HIDDEN_STYLE = { display: 'none' } as const
 
 /**
  * Signed-in pages get a live Convex client without chat's identity gate: server-rendered content
@@ -50,7 +44,7 @@ export function SignedInConvexProvider({ children }: { children: ReactNode }) {
   // Keep this wrapper mounted while Clerk resolves auth; changing its depth remounts the shell and resets navigation state.
   return (
     <ConvexProviderWithClerk client={client} useAuth={useAuthWithFactorVerificationRefresh}>
-      <OperatorEntitlementBridge>{children}</OperatorEntitlementBridge>
+      {children}
     </ConvexProviderWithClerk>
   )
 }
@@ -82,6 +76,7 @@ function ConfiguredChatConvexProvider({ convexUrl, children }: { convexUrl: stri
   const [initialization, setInitialization] = useState<{ identity: string; attempt: number; ready: boolean } | null>(null)
   const generation = useRef(0)
   const installedSession = useRef<{ client: ConvexHttpClient; generation: number } | null>(null)
+  const mountedIdentity = useRef<string | null>(null)
   // Requires a verified Clerk token. Initialize that exact token before the
   // maintained Convex integration installs it for reactive reads, including
   // every refresh. While rotating authority, descendants cannot read the old
@@ -91,7 +86,7 @@ function ConfiguredChatConvexProvider({ convexUrl, children }: { convexUrl: stri
     const clerkGetToken = clerk.getToken
     const getToken = useCallback(async (options: Parameters<typeof clerkGetToken>[0]) => {
       const requestGeneration = ++generation.current
-      setInitialization(null)
+      setInitialization(previous => previous?.identity === identity && previous.ready ? previous : null)
       try {
         const token = await clerkGetToken(options)
         if (token === null) {
@@ -100,14 +95,21 @@ function ConfiguredChatConvexProvider({ convexUrl, children }: { convexUrl: stri
         }
         const bootstrap = new ConvexHttpClient(convexUrl)
         bootstrap.setAuth(token)
-        const ready = await bootstrap.mutation(api.interactiveAuthority.materializeCurrentInteractiveAuthority, {})
+        let timer: number | undefined
+        const ready = await Promise.race([
+          bootstrap.mutation(api.interactiveAuthority.materializeCurrentInteractiveAuthority, {}),
+          new Promise<never>((_, reject) => {
+            timer = window.setTimeout(() => reject(new Error('chat_authority_connection_timeout')), 8_000)
+          }),
+        ]).finally(() => window.clearTimeout(timer))
         if (requestGeneration !== generation.current) return null
         installedSession.current = ready ? { client: bootstrap, generation: requestGeneration } : null
         setInitialization({ identity, attempt, ready })
         return ready ? token : null
       } catch (cause) {
         captureClientExceptionOnClient(cause)
-        if (requestGeneration === generation.current) setInitialization({ identity, attempt, ready: false })
+        if (requestGeneration === generation.current) setInitialization(previous =>
+          previous?.identity === identity && previous.ready ? previous : { identity, attempt, ready: false })
         return null
       }
     // The memo factory changes on identity and retry. The nested hook must
@@ -115,8 +117,23 @@ function ConfiguredChatConvexProvider({ convexUrl, children }: { convexUrl: stri
     // are outside the nested hook's own render scope.
     // oxlint-disable-next-line react-hooks/exhaustive-deps
     }, [clerkGetToken, convexUrl, identity, attempt])
-    return { ...clerk, getToken }
+    return {
+      ...clerk,
+      getToken,
+      // Convex's Clerk adapter intentionally tracks sessionId, not getToken, to
+      // decide when to install a new auth fetcher. An online epoch forces one
+      // fresh token + authority check after an offline fetch returned null.
+      sessionId: clerk.sessionId && attempt > 0 ? `${clerk.sessionId}:chat:${attempt}` : clerk.sessionId,
+    }
   }, [convexUrl, identity, attempt])
+  useEffect(() => {
+    if (!auth.isLoaded || !auth.isSignedIn) return
+    const reconnect = () => {
+      if (mountedIdentity.current === identity) setAttempt((value) => value + 1)
+    }
+    window.addEventListener('online', reconnect)
+    return () => window.removeEventListener('online', reconnect)
+  }, [auth.isLoaded, auth.isSignedIn, identity])
   useEffect(() => {
     if (!auth.isSignedIn) return
     // Convex does not always expose JWT exp in UserIdentity. Maintain its short
@@ -130,34 +147,49 @@ function ConfiguredChatConvexProvider({ convexUrl, children }: { convexUrl: stri
         (ready) => {
           if (!ready && session.generation === generation.current) setInitialization({ identity, attempt, ready: false })
         },
-        () => {
-          if (session.generation === generation.current) setInitialization({ identity, attempt, ready: false })
+        (cause) => {
+          captureClientExceptionOnClient(cause)
+          // Transport loss cannot revoke the last verified identity; protected writes
+          // still require current authority on the server after Convex reconnects.
         },
       )
     }, 20_000)
     return () => window.clearInterval(interval)
   }, [auth.isSignedIn, identity, attempt])
-  const current = initialization?.identity === identity && initialization.attempt === attempt
+  const current = initialization?.identity === identity
+    && (initialization.attempt === attempt || initialization.ready)
     ? initialization
     : null
+  const showChat = auth.isLoaded && (!auth.isSignedIn || current?.ready === true)
+  // A temporary Clerk/Convex handshake can clear the current identity. Keep the
+  // same session mounted but hidden until it is verified again; a real identity
+  // change replaces the keyed subtree, and an explicit refusal still removes it.
+  const keepChatMounted = !showChat && current?.ready !== false && mountedIdentity.current !== null
+  if (showChat) mountedIdentity.current = identity
   return (
     <ConvexProviderWithClerk client={client} useAuth={useInitializedAuth}>
-      {(auth.isLoaded && !auth.isSignedIn) || current?.ready ? (
-        <OperatorEntitlementBridge>{children}</OperatorEntitlementBridge>
-      ) : current === null ? (
+      {(showChat || keepChatMounted) && (
+        <div key={mountedIdentity.current} hidden={!showChat} style={showChat ? CHAT_VISIBLE_STYLE : CHAT_HIDDEN_STYLE}>
+          {children}
+        </div>
+      )}
+      {!showChat && (current === null ? (
         <AePageState title="Opening chat" description="Connecting to your account…" />
       ) : (
         <AePageState
           title="Couldn’t open chat"
-          description="Your account connection could not be completed. Try again."
+          description="Your account connection could not be completed. Try again or browse Tools."
           tone="warning"
           action={(
-            <button type="button" className={buttonVariants()} onClick={() => setAttempt((value) => value + 1)}>
-              Try again
-            </button>
+            <div className="flex flex-wrap gap-2">
+              <button type="button" className={buttonVariants()} onClick={() => setAttempt((value) => value + 1)}>
+                Try again
+              </button>
+              <Link to="/market" className={buttonVariants({ variant: 'outline' })}>Browse Tools</Link>
+            </div>
           )}
         />
-      )}
+      ))}
     </ConvexProviderWithClerk>
   )
 }

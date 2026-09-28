@@ -1,10 +1,9 @@
-import { createAuthenticatedSourceTransport, sourceAction, sourceQuery } from '@/lib/server/convex-source'
+import { createAuthenticatedSourceTransport, sourceQuery } from '@/lib/server/convex-source'
 import { degrade } from '@/lib/observability/degrade'
 import { listAgentAccessKeysServer } from '@/modules/agent-access/agent-access.functions'
 import type { AgentAccessKeyInventoryItem } from '@/modules/agent-access/agent-access'
 import type { AgentConnectionReadback } from '@/modules/agent-access/agent-connection'
 import { currentUtcMonthBounds } from '@/modules/common/freshness'
-import type { AccountFundingBalance } from '@/modules/money/server'
 import type {
   AgentActivityView,
   AgentCredentialSummary,
@@ -71,9 +70,6 @@ const listOwnerReconnectCandidatesQuery = sourceQuery<Readonly<{
   now: number
 }>, readonly Readonly<{ principalRef: string; principalRevision: number }>[]>(
   'agentAccessOAuth:listOwnerReconnectCandidates',
-)
-const readOwnerAccountBalanceAction = sourceAction<Record<string, never>, AccountFundingBalance>(
-  'moneyAccountFundingFormance:readBalance',
 )
 type OwnerAgentCallReadback = Readonly<{
   callRef: string
@@ -145,25 +141,34 @@ export async function loadOwnerReconnectCandidates(
 }
 
 
+async function boundedDirectoryEnrichment<T, U>(read: Promise<T>, unavailable: U, site: string): Promise<T | U> {
+  const { promise, reject } = Promise.withResolvers<never>()
+  const timer = setTimeout(() => reject(new Error('agent_directory_enrichment_timeout')), 3_000)
+  try {
+    return await Promise.race([read, promise])
+  } catch (cause) {
+    return degrade(cause, unavailable, { site, reason: 'source_unavailable' })
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
 export async function loadAgentDirectoryReadback(
-  tools: AgentAccessToolActivityPort,
   cursor: string | null = null,
 ): Promise<AgentDirectoryProjection> {
   const now = Date.now()
   const { periodStartAt, periodEndAt } = currentUtcMonthBounds(now)
-  const [keys, source] = await Promise.all([
-    listAgentAccessKeysServer(),
-    createAuthenticatedSourceTransport(),
-  ])
-  const [canonicalAgents, accountBalance] = await Promise.all([
-    source.query(listOwnedAgentDirectoryQuery, {
-      now,
-      paginationOpts: { numItems: 25, cursor },
-    }),
-    source.action(readOwnerAccountBalanceAction, {}),
-  ])
+  const keysRead = boundedDirectoryEnrichment(
+    listAgentAccessKeysServer(), [] as readonly AgentAccessKeyInventoryItem[],
+    'loadAgentDirectoryReadback.keys',
+  )
+  const source = await createAuthenticatedSourceTransport()
+  const canonicalAgents = await source.query(listOwnedAgentDirectoryQuery, {
+    now,
+    paginationOpts: { numItems: 25, cursor },
+  })
   const principalRefs = canonicalAgents.page.map(({ principalRef }) => principalRef)
-  const [policyReadbacks, ownerAgentReadbacks, connections] = await Promise.all([
+  const [policyReadbacks, ownerAgentReadbacks, connectionResult] = await Promise.all([
     principalRefs.length === 0
       ? Promise.resolve([] as readonly AgentOwnerPolicyReadback[])
       : source.query(listOwnerGrantReadbacksQuery, { principalRefs }).catch((cause) => degrade(
@@ -192,27 +197,29 @@ export async function loadAgentDirectoryReadback(
       }
     })),
     principalRefs.length === 0
-      ? Promise.resolve([] as readonly AgentConnectionReadback[])
-      : source.query(listOwnerConnectionReadbacksQuery, {
-          principalRefs,
-          now,
-        }),
+      ? Promise.resolve({ kind: 'available' as const, connections: [] as readonly AgentConnectionReadback[] })
+      : boundedDirectoryEnrichment(
+          source.query(listOwnerConnectionReadbacksQuery, { principalRefs, now })
+            .then((connections) => ({ kind: 'available' as const, connections })),
+          { kind: 'unavailable' as const },
+          'loadAgentDirectoryReadback.connections',
+        ),
   ])
   const grants = policyReadbacks.flatMap(({ grant }) => grant === undefined ? [] : [grant])
-  const sources = readAgentCredentialSources(keys, grants)
-  const projection = projectAgentDirectory(sources, canonicalAgents.page, connections,
-    ownerAgentReadbacks.map(({ readback }) => readback), policyReadbacks)
-  const enriched = await enrichAgentDirectoryActivity(projection, tools)
-  const withAccount = {
-    ...enriched,
-    accountBalance,
-    activityCoverage: enriched.details.some(({ activityTruncated }) => activityTruncated)
+  const sources = readAgentCredentialSources(await keysRead, grants)
+  const projection = projectAgentDirectory(sources, canonicalAgents.page,
+    connectionResult.kind === 'available' ? connectionResult.connections : [],
+    ownerAgentReadbacks.map(({ readback }) => readback), policyReadbacks,
+    connectionResult.kind === 'available')
+  const directory = {
+    ...projection,
+    activityCoverage: projection.details.some(({ activityTruncated }) => activityTruncated)
       ? 'recent' as const
       : 'complete' as const,
   }
   return canonicalAgents.isDone
-    ? withAccount
-    : { ...withAccount, nextCursor: canonicalAgents.continueCursor }
+    ? directory
+    : { ...directory, nextCursor: canonicalAgents.continueCursor }
 }
 
 function mapOwnerAgentReadback(
@@ -297,6 +304,7 @@ export function projectAgentDirectory(
   connections: readonly AgentConnectionReadback[] = [],
   ownerReadbacks: readonly AgentOwnerReadback[] = [],
   policyReadbacks: readonly AgentOwnerPolicyReadback[] = [],
+  connectionsAvailable = true,
 ): AgentDirectoryProjection {
   const byPrincipal = new Map<string, AgentCredentialSource[]>()
   for (const readback of readbacks) {
@@ -313,6 +321,7 @@ export function projectAgentDirectory(
       connections.filter(({ principalRef }) => principalRef === canonical.principalRef),
       ownerReadbacks.find(({ principalRef }) => principalRef === canonical.principalRef),
       policyReadbacks.find(({ principalRef }) => principalRef === canonical.principalRef),
+      connectionsAvailable,
     )]
   }).toSorted((left, right) => (
     right.agent.lastSeenAt === left.agent.lastSeenAt
@@ -332,6 +341,7 @@ function projectAgentDetail(
   connections: readonly AgentConnectionReadback[],
   ownerReadback?: AgentOwnerReadback,
   policyReadback?: AgentOwnerPolicyReadback,
+  connectionsAvailable = true,
 ): AgentDetail {
   const ordered = [...readbacks].toSorted((left, right) => (
     (left.key.createdAt ?? 0) - (right.key.createdAt ?? 0)
@@ -395,6 +405,7 @@ function projectAgentDetail(
     lastSeenAt: Math.max(lastSeenAt, canonical.lastSeenAt),
     connectionCount: connections.length,
     connectorDisplayNames: [...new Set(connections.map(({ connectorDisplayName }) => connectorDisplayName))],
+    ...(!connectionsAvailable ? { connectionsAvailable: false } : {}),
     authorityMode: current?.key.authorityMode ?? canonical.authorityMode,
     ...(usage?.settledSpend !== undefined ? { monthlySettledSpend: usage.settledSpend } : {}),
     ...(spendingPolicy.kind === 'known' ? { monthlyLimit: spendingPolicy.maximumMonthlySpend } : {}),
@@ -412,6 +423,7 @@ function projectAgentDetail(
   return {
     agent,
     connections,
+    ...(!connectionsAvailable ? { connectionsAvailable: false } : {}),
     credentials,
     ...(canonical.admissionLifecycle !== 'active' ? {} : { currentCredentialRef: currentCanonicalCredential.credentialRef }),
     authorityMode: current?.key.authorityMode ?? canonical.authorityMode,
@@ -423,71 +435,5 @@ function projectAgentDetail(
     dataState,
     ...(canonical.credentialHistoryTruncated ? { credentialHistoryTruncated: true } : {}),
     ...(ownerReadback?.activityIsDone === false ? { activityTruncated: true } : {}),
-  }
-}
-
-type AgentAccessToolCompareResult =
-  | Readonly<{
-      kind: 'ok'
-      tools: readonly Readonly<{
-        toolRef: string
-        listing: Readonly<{ label: string }>
-        business: Readonly<{ name: string }>
-      }>[]
-    }>
-  | Readonly<{ kind: 'unavailable' }>
-
-export type CompareTools = (
-  input: Readonly<{ toolRefs: readonly string[] }>,
-) => Promise<AgentAccessToolCompareResult>
-
-export type AgentAccessToolActivityPort = Readonly<{
-  compare: CompareTools
-  isToolRef: (value: string) => boolean
-}>
-
-export async function enrichAgentDirectoryActivity(
-  directory: AgentDirectoryProjection,
-  tools: AgentAccessToolActivityPort,
-): Promise<AgentDirectoryProjection> {
-  const recentActivity = directory.details
-    .flatMap(({ activity }) => activity)
-    .toSorted((left, right) => right.updatedAt - left.updatedAt)
-  const toolRefs = [...new Set(recentActivity.reduce<string[]>((refs, { toolRef }) => {
-    if (tools.isToolRef(toolRef)) refs.push(toolRef)
-    return refs
-  }, []))]
-    .slice(0, 40)
-  if (toolRefs.length === 0) return directory
-
-  const batches = Array.from({ length: Math.ceil(toolRefs.length / 4) }, (_, index) => (
-    toolRefs.slice(index * 4, index * 4 + 4)
-  ))
-  const comparisons = await Promise.all(batches.map(async (toolRefs) => {
-    try {
-      return await tools.compare({ toolRefs })
-    } catch (cause) {
-      return degrade(cause, undefined, { site: 'enrichAgentDirectoryActivity', reason: 'source_unavailable' })
-    }
-  }))
-  const labels = new Map<string, Readonly<{ label: string; provider: string }>>(comparisons.flatMap((comparison) => (
-    comparison?.kind === 'ok'
-      ? comparison.tools.map((tool) => [tool.toolRef, {
-        label: tool.listing.label,
-        provider: tool.business.name,
-      }] as const)
-      : []
-  )))
-  return {
-    ...directory,
-    details: directory.details.map((detail) => ({
-      ...detail,
-      activity: detail.activity.map((entry) => {
-        const tool = tools.isToolRef(entry.toolRef)
-          ? labels.get(entry.toolRef)
-          : undefined
-        return tool === undefined ? entry : { ...entry, tool }
-      }),
-    })),
   }
 }

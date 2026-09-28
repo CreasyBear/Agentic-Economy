@@ -3,6 +3,7 @@ import { AeFactList } from '@/components/ae/data/AeFactList'
 import { AeCopyCommand } from '@/components/ae/data/AeCopyCommand'
 import { AeToolPrice } from '@/components/ae/market/AeToolPrice'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { buttonVariants } from '@/components/ui/button-variants'
 import { Card, CardAction, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
@@ -26,6 +27,7 @@ import {
   chatShowingTools,
   chatToolStatus,
 } from '@/lib/public/chat-ia'
+import { getStatusPresentation } from '@/lib/ui/status-presentation'
 import {
   toolCardState,
   type ChatNeedActions,
@@ -33,15 +35,13 @@ import {
   type ToolChoiceRow,
 } from '@/modules/chat/tool-card'
 import { NeedSaveAction } from './need-save-action/NeedSaveAction'
-import type { SearchNextProps } from './presentation'
+import type { SearchNextProps, ToolCardProps } from './presentation'
 
 export const ChatNeedActionsContext = createContext<ChatNeedActions | null>(null)
 
-const READINESS_VARIANT = {
-  'Ready now': 'success',
-  'Setup required': 'warning',
-  Unavailable: 'outline',
-} as const
+const READY_NOW_LABEL = getStatusPresentation('ready_now').label
+const SETUP_REQUIRED_LABEL = getStatusPresentation('setup_required').label
+const UNAVAILABLE_LABEL = getStatusPresentation('unavailable').label
 
 function inspectHref(toolRef: string): string {
   return `/tools/${encodeURIComponent(toolRef)}`
@@ -51,15 +51,10 @@ function choiceInitial(title: string): string {
   return title.trim().charAt(0).toUpperCase() || 'T'
 }
 
-function readinessVariant(readiness: string | undefined): 'success' | 'warning' | 'outline' | undefined {
-  if (readiness === 'Ready now') return READINESS_VARIANT['Ready now']
-  if (readiness === 'Setup required') return READINESS_VARIANT['Setup required']
-  if (readiness === 'Unavailable') return READINESS_VARIANT.Unavailable
-  return undefined
-}
 
 function ChoiceRow({ choice }: { choice: ToolChoiceRow }) {
-  const badgeVariant = readinessVariant(choice.readiness)
+  const highlightedReadiness = choice.readiness === READY_NOW_LABEL
+    || choice.readiness === SETUP_REQUIRED_LABEL || choice.readiness === UNAVAILABLE_LABEL
   return (
     <Item
       variant="muted"
@@ -72,8 +67,8 @@ function ChoiceRow({ choice }: { choice: ToolChoiceRow }) {
           <ItemContent>
             <ItemHeader>
               <ItemTitle>{choice.title}</ItemTitle>
-              {choice.readiness === undefined || badgeVariant === undefined ? null : (
-                <span className="flex items-center gap-1.5 text-xs text-muted-foreground"><span aria-hidden="true" className={choice.readiness === 'Ready now' ? 'size-1.5 rounded-full bg-success' : 'size-1.5 rounded-full bg-warning'} />{choice.readiness}</span>
+              {choice.readiness === undefined || !highlightedReadiness ? null : (
+                <span className="flex items-center gap-1.5 text-xs text-muted-foreground"><span aria-hidden="true" className={choice.readiness === READY_NOW_LABEL ? 'size-1.5 rounded-full bg-success' : 'size-1.5 rounded-full bg-warning'} />{choice.readiness}</span>
               )}
             </ItemHeader>
             {choice.provider === undefined ? null : (
@@ -154,11 +149,20 @@ function ChoiceRemainder({ count, shown }: { count: number; shown: number }) {
   )
 }
 
-function SearchNext({ next }: SearchNextProps) {
+export function SearchNext({ next, onContinueSearch, onRepeatSearch, signedThread }: SearchNextProps) {
   if (next === undefined) return null
-  if (next.action === 'next-page') return (
-    <p className="break-words text-sm">Next: ask for the next page of “{next.args.query}” (cursor: <code className="break-all">{next.args.cursor}</code>).</p>
-  )
+  if (next.action === 'next-page') {
+    if (signedThread && !next.args.cursor.startsWith('sc1.') && onRepeatSearch !== undefined) {
+      return <Button type="button" variant="outline" size="sm" className="min-h-touch"
+        onClick={() => onRepeatSearch(next.args.query)}>Search again in this chat</Button>
+    }
+    if (onContinueSearch !== undefined && (!signedThread || next.args.cursor.startsWith('sc1.'))) {
+      return <Button type="button" variant="outline" size="sm" className="min-h-touch"
+        onClick={() => onContinueSearch(next)}>Next page</Button>
+    }
+    return <a href={`/market?query=${encodeURIComponent(next.args.query)}`}
+      className={buttonVariants({ variant: 'outline', size: 'sm' })}>Browse Tools in the Market</a>
+  }
   if (next.action === 'broaden') return <p className="text-sm">Next: broaden “{next.args.query}” or browse the Market.</p>
   if (next.action === 'retry') return <p className="text-sm">Next: retry “{next.args.query}”.</p>
   return null
@@ -179,7 +183,9 @@ function CardBody({ projection }: { projection: ToolCardProjection }) {
       return (
         <div className="grid gap-related">
           {projection.verdict === 'scoped' ? (
-            <Alert><AlertDescription>Only part of the catalogue was assessed. These external listings are not an AE Tool recommendation.</AlertDescription></Alert>
+            <Alert><AlertDescription>{projection.coverage === 'complete'
+              ? 'These external listings are not callable through AE.'
+              : 'Only part of the catalogue was assessed. These external listings are not an AE Tool recommendation.'}</AlertDescription></Alert>
           ) : null}
           {projection.choices.length === 0 ? null : projection.toolId === 'registry.tools.compare' || projection.surface === 'compare'
             ? <CompareTable choices={projection.choices} />
@@ -244,7 +250,7 @@ const STATUS_VARIANT = {
   error: 'destructive',
 } as const
 
-export function ToolCard({ projection }: { projection: ToolCardProjection }) {
+export function ToolCard({ projection, onContinueSearch, onRepeatSearch, signedThread }: ToolCardProps) {
   const needActions = useContext(ChatNeedActionsContext)
   if (projection.kind === 'working') {
     return (
@@ -273,7 +279,10 @@ export function ToolCard({ projection }: { projection: ToolCardProjection }) {
         || (projection.kind === 'status' && (projection.next !== undefined || projection.saveNeed !== undefined)) ? (
         <CardFooter className="grid gap-intra">
           {projection.kind === 'choices' && projection.count !== undefined ? <ChoiceRemainder count={projection.count} shown={projection.choices.length} /> : null}
-          {projection.next === undefined ? null : <SearchNext next={projection.next} />}
+          {projection.next === undefined ? null : <SearchNext next={projection.next}
+            {...(onContinueSearch === undefined ? {} : { onContinueSearch })}
+            {...(onRepeatSearch === undefined ? {} : { onRepeatSearch })}
+            {...(signedThread === undefined ? {} : { signedThread })} />}
           {projection.kind === 'status' && projection.saveNeed !== undefined ? <NeedSaveAction input={projection.saveNeed} actions={needActions} /> : null}
         </CardFooter>
       ) : projection.kind === 'execute' && projection.suggestedNextAction !== undefined ? (

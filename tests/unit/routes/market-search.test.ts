@@ -66,6 +66,15 @@ describe("market entry metadata", () => {
   });
 });
 
+it('keeps catalogue results visible when optional directory overview rejects', async () => {
+  reads.overview.mockRejectedValue(new Error('derived facet read failed'))
+  const loader = Route.options.loader
+  if (typeof loader !== 'function') throw new Error('loader_missing')
+  const result = await loader({ deps: { view: 'tools' } } as never)
+  expect(result.page).toMatchObject({ kind: 'ok', items: [] })
+  expect(result.overview).toEqual({ kind: 'unavailable', reason: 'source_unavailable' })
+})
+
 describe("market search validation", () => {
   it("drops the retired capability-catalog parameters instead of erroring", () => {
     expect(

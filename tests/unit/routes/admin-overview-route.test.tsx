@@ -11,20 +11,24 @@ const mocks = vi.hoisted(() => ({
     clerkFva: 'absent' as const,
     convex: 'ok' as const,
   } as Record<string, unknown>,
-  exceptions: [] as Array<{ kind: string; partition: string; observed: number; complete: boolean; unavailable: boolean }>,
+  exceptions: [] as Array<{ kind: string; partition: string; observed: number; complete: boolean; unavailable: boolean }> | Error,
   metrics: {
     days: [], latestDay: null,
     headline: { settledCallValue: null, money: 'no_settled_usage', settledCalls: 0, successRate: null, transactingWorkspaces: 0 },
     ratios: { successRate: null, quoteConversion: null, returningWorkspaceRate: null, resolutionCoverage: null, takeRate: null },
     wow: { settledCalls: null, attemptedCalls: null, completedCalls: null, transactingWorkspaces: null, quotesCreated: null },
-  } as Record<string, unknown>,
+  } as Record<string, unknown> | Error,
 }))
 
 vi.mock('convex/react', () => ({
   useQuery: (query: FunctionReference<'query'>) => {
     const name = getFunctionName(query)
     if (name === 'adminConsoleOverview:readAdminOverview') return mocks.overview
-    if (name === 'adminConsoleExceptions:readAdminExceptionOverview') return mocks.exceptions
+    if (name === 'adminConsoleExceptions:readAdminExceptionOverview') {
+      if (mocks.exceptions instanceof Error) throw mocks.exceptions
+      return mocks.exceptions
+    }
+    if (mocks.metrics instanceof Error) throw mocks.metrics
     return mocks.metrics
   },
 }))
@@ -44,6 +48,12 @@ import { AdminOverviewPage } from '@/components/ae/admin/overview/AdminOverviewP
 beforeEach(() => {
   mocks.overview = { x402Custody: 'not_configured', clerkFva: 'absent', convex: 'ok' }
   mocks.exceptions = []
+  mocks.metrics = {
+    days: [], latestDay: null,
+    headline: { settledCallValue: null, money: 'no_settled_usage', settledCalls: 0, successRate: null, transactingWorkspaces: 0 },
+    ratios: { successRate: null, quoteConversion: null, returningWorkspaceRate: null, resolutionCoverage: null },
+    wow: { settledCalls: null, attemptedCalls: null, completedCalls: null, transactingWorkspaces: null, quotesCreated: null },
+  }
 })
 afterEach(() => cleanup())
 
@@ -61,6 +71,30 @@ describe('admin overview route', () => {
     expect(screen.getByRole('link', { name: 'Admission case · Submitted' }).getAttribute('href'))
       .toBe('/admin/exceptions?kind=admission_case&partition=submitted')
     expect(screen.getByText('Unavailable')).toBeTruthy()
+  })
+
+
+  it('contains a failed metrics read to its shelf while exception navigation and Formance truth remain visible', () => {
+    mocks.metrics = new Error('injected_metrics_read_rejection')
+    mocks.exceptions = [
+      { kind: 'removal_dispute', partition: 'contested', observed: 1, complete: true, unavailable: false },
+    ]
+    render(<AdminOverviewPage formance="unavailable" />)
+    expect(screen.getByText('Formance: Unavailable')).toBeTruthy()
+    expect(screen.getByRole('link', { name: 'Removal dispute · Contested' })).toBeTruthy()
+    expect(screen.getByText('Metrics unavailable. Open Metrics to try again.')).toBeTruthy()
+  })
+  it('contains a failed exception read to its shelf while metrics remain usable', () => {
+    mocks.exceptions = new Error('injected_exceptions_read_rejection')
+    mocks.metrics = {
+      days: [], latestDay: null,
+      headline: { settledCallValue: null, money: 'no_settled_usage', settledCalls: 4, successRate: 0.75, transactingWorkspaces: 2 },
+    }
+    render(<AdminOverviewPage formance="configured" />)
+    expect(screen.getByText('Some exception sources are unavailable.')).toBeTruthy()
+    expect(screen.getByText('4')).toBeTruthy()
+    expect(screen.getByText('75%')).toBeTruthy()
+    expect(screen.getByRole('link', { name: 'Open queues' })).toBeTruthy()
   })
 
 

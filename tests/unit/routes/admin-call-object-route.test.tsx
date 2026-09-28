@@ -90,7 +90,6 @@ function renderCallPage() {
         <AeAppHeader
           signedIn
           operatorRole="admin"
-          canAccessAdmin={false}
           minimal={false}
           mobileNavOpen={false}
           setMobileNavOpen={() => undefined}

@@ -78,6 +78,8 @@ export const observabilityTables = {
     day: v.string(),
     computedAt: v.number(),
     version: v.literal(1),
+    // Published entity generation; legacy completed days use the calendar day itself.
+    entityDay: v.optional(v.string()),
     // Legacy snapshots lack this field; every new snapshot writes it.
     complete: v.optional(v.boolean()),
     settledCallValue: v.union(
@@ -108,13 +110,36 @@ export const observabilityTables = {
     terminalCallsWithResolution: v.number(),
   }).index('by_day', ['day']),
 
+  marketplaceMetricBuilds: defineTable({
+    day: v.string(),
+    entityDay: v.string(),
+    phase: v.union(v.literal('calls'), v.literal('quotes'), v.literal('resolutions')),
+    cursor: v.union(v.string(), v.null()),
+    settledCallValue: v.union(v.null(), v.object({
+      units: v.string(), exponent: v.number(), currency: v.string(),
+    })),
+    settledCalls: v.number(),
+    attemptedCalls: v.number(),
+    completedCalls: v.number(),
+    uncertainCalls: v.number(),
+    uncertainCallsOpenAtClose: v.number(),
+    quotesCreated: v.number(),
+    quotesConvertedAtClose: v.number(),
+    transactingWorkspaces: v.number(),
+    transactingAgents: v.number(),
+    transactingProviders: v.number(),
+    transactingTools: v.number(),
+    returningWorkspaces: v.number(),
+    newTransactingProviders: v.number(),
+    terminalCalls: v.number(),
+    terminalCallsWithResolution: v.number(),
+  }).index('by_entityDay', ['entityDay']),
+
   marketplaceEntityDays: defineTable({
     day: v.string(),
     entityKind: v.union(
-      v.literal('workspace'),
-      v.literal('agent'),
-      v.literal('provider'),
-      v.literal('tool'),
+      v.literal('workspace'), v.literal('agent'), v.literal('provider'),
+      v.literal('tool'), v.literal('call'), v.literal('terminal'), v.literal('resolved'),
     ),
     entityRef: v.string(),
   })

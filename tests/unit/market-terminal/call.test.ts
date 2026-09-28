@@ -8,7 +8,7 @@ import { runCallCommand, runProcureCommand } from '../../../tools/ae/commands/ca
 import type { CliOptions } from '../../../tools/ae/lib/args'
 import { TOOL_MARKET_DESCRIBE_PATH } from '@/modules/common/market-tool-paths'
 import { FUNDING_HANDOFF_CREATE_PATH } from '@/modules/money/funding-handoff.actions'
-import { CliFailure, cliFailureToProblem } from '../../../tools/ae/lib/output'
+import { CliFailure, callJson, cliFailureToProblem, CLI_REQUEST_TIMEOUT_MS } from '../../../tools/ae/lib/output'
 
 const options: CliOptions = {
   baseUrl: 'https://market.example',
@@ -92,6 +92,68 @@ function setApiKey(value: string, origin = options.baseUrl): void {
   process.env.AE_API_KEY = value
   process.env.AE_API_KEY_ORIGIN = new URL(origin).origin
 }
+
+function stalledBody(signal: AbortSignal): Response {
+  return new Response(new ReadableStream({
+    start(controller) {
+      signal.addEventListener('abort', () => controller.error(signal.reason), { once: true })
+    },
+  }), { headers: { 'content-type': 'application/json' } })
+}
+function controlRequestDeadline(): { expire: () => void; restore: () => void } {
+  const originalSetTimeout = globalThis.setTimeout
+  let expire: (() => void) | undefined
+  const spy = vi.spyOn(globalThis, 'setTimeout').mockImplementation((callback, delay, ...args) => {
+    if (delay !== CLI_REQUEST_TIMEOUT_MS) return originalSetTimeout(callback, delay, ...args)
+    expire = () => callback(...args)
+    return originalSetTimeout(() => {}, CLI_REQUEST_TIMEOUT_MS)
+  })
+  return {
+    expire: () => {
+      if (expire === undefined) throw new Error('request_deadline_not_scheduled')
+      expire()
+    },
+    restore: () => spy.mockRestore(),
+  }
+}
+
+
+describe('CLI request deadline', () => {
+  it('bounds a server that never sends headers', async () => {
+    vi.useFakeTimers()
+    try {
+      vi.stubGlobal('fetch', vi.fn<typeof fetch>().mockImplementation((_url, init) => {
+        const { promise, reject } = Promise.withResolvers<Response>()
+        init?.signal?.addEventListener('abort', () => reject(init.signal?.reason), { once: true })
+        return promise
+      }))
+      const pending = callJson(options.baseUrl, '/api/v1/tools', { method: 'GET' })
+      const failure = expect(pending).rejects.toMatchObject({ kind: 'UNAVAILABLE', code: 'request-timeout' })
+      await vi.advanceTimersByTimeAsync(CLI_REQUEST_TIMEOUT_MS)
+      await failure
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('keeps the same deadline after headers while the response body stalls', async () => {
+    vi.useFakeTimers()
+    try {
+      vi.stubGlobal('fetch', vi.fn<typeof fetch>().mockImplementation((_url, init) => {
+        const { promise, resolve } = Promise.withResolvers<Response>()
+        setTimeout(() => resolve(stalledBody(init!.signal!)), CLI_REQUEST_TIMEOUT_MS / 2)
+        return promise
+      }))
+      const pending = callJson(options.baseUrl, '/api/v1/tools', { method: 'GET' })
+      const failure = expect(pending).rejects.toMatchObject({ kind: 'UNAVAILABLE', code: 'request-timeout' })
+      await vi.advanceTimersByTimeAsync(CLI_REQUEST_TIMEOUT_MS / 2)
+      await vi.advanceTimersByTimeAsync(CLI_REQUEST_TIMEOUT_MS / 2)
+      await failure
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+})
 
 describe('market-terminal authenticated Tool Call', () => {
   it('routes need selection through procure and renders the typed exact continuation', async () => {
@@ -461,5 +523,76 @@ describe('market-terminal authenticated Tool Call', () => {
       kind: 'completed',
       nextCommand: 'ae account balance --json',
     })
+  })
+
+  it('retains the prepared Call on a stalled acknowledgement and refuses a fresh purchase', async () => {
+    setApiKey('ae-test-caller-key')
+    const deadline = controlRequestDeadline()
+    const reachedCall = Promise.withResolvers<void>()
+    try {
+      const fetchMock = vi.fn<typeof fetch>()
+        .mockResolvedValueOnce(jsonResponse(toolQuote()))
+        .mockImplementationOnce((_url, init) => {
+          const response = stalledBody(init!.signal!)
+          reachedCall.resolve()
+          return Promise.resolve(response)
+        })
+      vi.stubGlobal('fetch', fetchMock)
+      const pending = runCallCommand([toolRef], { ...options, input: '{}', idempotencyKey: 'idem-timeout' })
+      await Promise.race([
+        reachedCall.promise,
+        pending.then(() => { throw new Error('Call completed without reaching the stalled response') }),
+      ])
+      deadline.expire()
+      const failure = await pending.catch((error: unknown) => error)
+      if (!(failure instanceof CliFailure)) throw failure
+      expect(failure).toMatchObject({ code: 'call-transport-timeout', detail: { identityPreserved: true } })
+      const detail = failure.detail
+      if (typeof detail !== 'object' || detail === null || !('recoveryRef' in detail) || typeof detail.recoveryRef !== 'string') {
+        throw new Error('prepared Call must retain a recovery reference')
+      }
+      const recoveryRef = detail.recoveryRef
+      expect(recoveryRef).toEqual(expect.any(String))
+      expect(failure.nextCommand).toBe(`ae call resume ${recoveryRef} --base-url ${options.baseUrl} --json`)
+      await expect(runCallCommand([toolRef], { ...options, input: '{}' })).rejects.toMatchObject({
+        code: 'call-recovery-required', detail: { recoveryRef },
+      })
+      expect(fetchMock).toHaveBeenCalledTimes(2)
+    } finally {
+      deadline.restore()
+    }
+  })
+
+  it('offers exact Call status after an acknowledged Call stalls while polling', async () => {
+    setApiKey('ae-test-caller-key')
+    const deadline = controlRequestDeadline()
+    const reachedStatus = Promise.withResolvers<void>()
+    try {
+      const callRef = `operation-invocation:v1:${'c'.repeat(64)}`
+      const fetchMock = vi.fn<typeof fetch>()
+        .mockResolvedValueOnce(jsonResponse(toolQuote()))
+        .mockResolvedValueOnce(jsonResponse({ kind: 'pending', toolRef, callRef, retryAfterMs: 100 }))
+        .mockImplementationOnce((_url, init) => {
+          const response = stalledBody(init!.signal!)
+          reachedStatus.resolve()
+          return Promise.resolve(response)
+        })
+      vi.stubGlobal('fetch', fetchMock)
+      const pending = runCallCommand([toolRef], { ...options, input: '{}', wait: true })
+      await Promise.race([
+        reachedStatus.promise,
+        pending.then(() => { throw new Error('Call completed without reaching the stalled status') }),
+      ])
+      deadline.expire()
+      const failure = await pending.catch((error: unknown) => error)
+      expect(failure).toMatchObject({
+        code: 'call-transport-timeout', detail: { callRef, identityPreserved: true },
+        nextCommand: `ae status ${callRef} --base-url ${options.baseUrl} --json`,
+      })
+      expect(fetchMock).toHaveBeenCalledTimes(3)
+      expect(fetchMock.mock.calls[2]?.[0]).toBe(`${options.baseUrl}/api/v1/calls/${encodeURIComponent(callRef)}`)
+    } finally {
+      deadline.restore()
+    }
   })
 })

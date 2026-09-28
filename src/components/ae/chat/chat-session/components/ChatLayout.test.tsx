@@ -208,14 +208,21 @@ describe('ChatLayout', () => {
   it('renders a returned comparison as an actual comparison table', () => {
     const firstRef = `operation:v1:${'a'.repeat(64)}`
     const secondRef = `operation:v1:${'b'.repeat(64)}`
+    const now = Date.now()
     render(<ChatLayout model={buildModel({
       transcript: { messages: [
         { id: 'user', role: 'user', parts: [{ type: 'text', text: 'Compare Sydney Weather and Forecast API' }] },
         { id: 'assistant', role: 'assistant', parts: [
           { type: `tool-${providerSafeActionToolName('registry.tools.compare')}`, state: 'output-available',
             output: { kind: 'ok', tools: [
-              { toolRef: firstRef, listing: { label: 'Sydney Weather' }, commercial: { price: { kind: 'fixed', amount: { currency: 'USD', units: '5', exponent: 3 } } } },
-              { toolRef: secondRef, listing: { label: 'Forecast API' }, commercial: { price: { kind: 'fixed', amount: { currency: 'USD', units: '8', exponent: 3 } } } },
+              { toolRef: firstRef, listing: { label: 'Sydney Weather' }, commercial: {
+                displayPrice: { kind: 'indicative', amount: { currency: 'AUD', units: '1', exponent: 2 },
+                  rateObservedAt: now, validUntil: now + 60_000 },
+              } },
+              { toolRef: secondRef, listing: { label: 'Forecast API' }, commercial: {
+                displayPrice: { kind: 'indicative', amount: { currency: 'AUD', units: '2', exponent: 2 },
+                  rateObservedAt: now, validUntil: now + 60_000 },
+              } },
             ], facts: [] } },
           { type: 'text', text: 'Here is the comparison.' },
         ] },

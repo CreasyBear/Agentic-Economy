@@ -58,13 +58,6 @@ export function captureServerEvent(
   }
 }
 
-export async function flushPostHogServer(): Promise<void> {
-  if (client === undefined) {
-    return
-  }
-
-  await client.flush()
-}
 
 export async function shutdownPostHogServer(): Promise<void> {
   if (client === undefined) {

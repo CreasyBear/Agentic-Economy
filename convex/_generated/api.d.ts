@@ -109,6 +109,7 @@ import type * as lib_adminConsole_commands_commandEnvelope from "../lib/adminCon
 import type * as lib_adminConsole_commands_commandEnvelopeSteps from "../lib/adminConsole/commands/commandEnvelopeSteps.js";
 import type * as lib_adminConsole_commands_contracts from "../lib/adminConsole/commands/contracts.js";
 import type * as lib_adminConsole_commands_idempotency from "../lib/adminConsole/commands/idempotency.js";
+import type * as lib_adminConsole_metrics_build from "../lib/adminConsole/metrics/build.js";
 import type * as lib_adminConsole_metrics_collect from "../lib/adminConsole/metrics/collect.js";
 import type * as lib_adminConsole_metrics_dayWindow from "../lib/adminConsole/metrics/dayWindow.js";
 import type * as lib_adminConsole_metrics_read from "../lib/adminConsole/metrics/read.js";
@@ -123,6 +124,7 @@ import type * as lib_adminConsole_reads_overview from "../lib/adminConsole/reads
 import type * as lib_adminConsole_reads_provider from "../lib/adminConsole/reads/provider.js";
 import type * as lib_adminConsole_reads_quote from "../lib/adminConsole/reads/quote.js";
 import type * as lib_adminConsole_reads_registrars from "../lib/adminConsole/reads/registrars.js";
+import type * as lib_adminConsole_reads_sourceAuthority from "../lib/adminConsole/reads/sourceAuthority.js";
 import type * as lib_adminConsole_reads_toolVersion from "../lib/adminConsole/reads/toolVersion.js";
 import type * as lib_adminConsole_reads_workspace from "../lib/adminConsole/reads/workspace.js";
 import type * as lib_agentAccess_directory_contracts from "../lib/agentAccess/directory/contracts.js";
@@ -405,6 +407,7 @@ import type * as lib_chat_anonymous_http from "../lib/chat/anonymous/http.js";
 import type * as lib_chat_anonymous_recipient from "../lib/chat/anonymous/recipient.js";
 import type * as lib_chat_anonymous_request from "../lib/chat/anonymous/request.js";
 import type * as lib_chat_anonymous_stream from "../lib/chat/anonymous/stream.js";
+import type * as lib_chat_generate_completedFacts from "../lib/chat/generate/completedFacts.js";
 import type * as lib_chat_generate_contracts from "../lib/chat/generate/contracts.js";
 import type * as lib_chat_generate_run from "../lib/chat/generate/run.js";
 import type * as lib_chat_generate_stream from "../lib/chat/generate/stream.js";
@@ -426,6 +429,7 @@ import type * as lib_chat_turns_contracts from "../lib/chat/turns/contracts.js";
 import type * as lib_chat_turns_errors from "../lib/chat/turns/errors.js";
 import type * as lib_chat_turns_handlers from "../lib/chat/turns/handlers.js";
 import type * as lib_chat_turns_reads from "../lib/chat/turns/reads.js";
+import type * as lib_chat_turns_searchContinuation from "../lib/chat/turns/searchContinuation.js";
 import type * as lib_chat_turns_writes from "../lib/chat/turns/writes.js";
 import type * as lib_dev_seed_accessPath from "../lib/dev/seed/accessPath.js";
 import type * as lib_dev_seed_authority from "../lib/dev/seed/authority.js";
@@ -516,6 +520,7 @@ import type * as lib_money_funding_ownerMarkUnknown from "../lib/money/funding/o
 import type * as lib_money_funding_ownerRead from "../lib/money/funding/ownerRead.js";
 import type * as lib_money_funding_ownerReserve from "../lib/money/funding/ownerReserve.js";
 import type * as lib_money_funding_prepareVerifiedEvent from "../lib/money/funding/prepareVerifiedEvent.js";
+import type * as lib_money_funding_returnFulfillment from "../lib/money/funding/returnFulfillment.js";
 import type * as lib_money_funding_stripeEventDocuments from "../lib/money/funding/stripeEventDocuments.js";
 import type * as lib_money_funding_stripeEventPipeline from "../lib/money/funding/stripeEventPipeline.js";
 import type * as lib_money_funding_stripeRefundPipeline from "../lib/money/funding/stripeRefundPipeline.js";
@@ -543,6 +548,7 @@ import type * as lib_money_providerObligations_state from "../lib/money/provider
 import type * as lib_money_qualifiedUse_authority from "../lib/money/qualifiedUse/authority.js";
 import type * as lib_money_qualifiedUse_contracts from "../lib/money/qualifiedUse/contracts.js";
 import type * as lib_money_qualifiedUse_record from "../lib/money/qualifiedUse/record.js";
+import type * as lib_money_referenceRate_store from "../lib/money/referenceRate/store.js";
 import type * as lib_money_spendingPeriods_periods from "../lib/money/spendingPeriods/periods.js";
 import type * as lib_money_x402PaymentAttempt_attempt from "../lib/money/x402PaymentAttempt/attempt.js";
 import type * as lib_money_x402PaymentAttempt_authorizationMaterial from "../lib/money/x402PaymentAttempt/authorizationMaterial.js";
@@ -694,6 +700,7 @@ import type * as providerConsequenceHttp from "../providerConsequenceHttp.js";
 import type * as qualifiedUse from "../qualifiedUse.js";
 import type * as rateLimit from "../rateLimit.js";
 import type * as recoveryBreakGlass from "../recoveryBreakGlass.js";
+import type * as referenceRateRefresh from "../referenceRateRefresh.js";
 import type * as registry from "../registry.js";
 import type * as scheduledFunctionRetirement from "../scheduledFunctionRetirement.js";
 import type * as secretLifecycleHttp from "../secretLifecycleHttp.js";
@@ -827,6 +834,7 @@ declare const fullApi: ApiFromModules<{
   "lib/adminConsole/commands/commandEnvelopeSteps": typeof lib_adminConsole_commands_commandEnvelopeSteps;
   "lib/adminConsole/commands/contracts": typeof lib_adminConsole_commands_contracts;
   "lib/adminConsole/commands/idempotency": typeof lib_adminConsole_commands_idempotency;
+  "lib/adminConsole/metrics/build": typeof lib_adminConsole_metrics_build;
   "lib/adminConsole/metrics/collect": typeof lib_adminConsole_metrics_collect;
   "lib/adminConsole/metrics/dayWindow": typeof lib_adminConsole_metrics_dayWindow;
   "lib/adminConsole/metrics/read": typeof lib_adminConsole_metrics_read;
@@ -841,6 +849,7 @@ declare const fullApi: ApiFromModules<{
   "lib/adminConsole/reads/provider": typeof lib_adminConsole_reads_provider;
   "lib/adminConsole/reads/quote": typeof lib_adminConsole_reads_quote;
   "lib/adminConsole/reads/registrars": typeof lib_adminConsole_reads_registrars;
+  "lib/adminConsole/reads/sourceAuthority": typeof lib_adminConsole_reads_sourceAuthority;
   "lib/adminConsole/reads/toolVersion": typeof lib_adminConsole_reads_toolVersion;
   "lib/adminConsole/reads/workspace": typeof lib_adminConsole_reads_workspace;
   "lib/agentAccess/directory/contracts": typeof lib_agentAccess_directory_contracts;
@@ -1123,6 +1132,7 @@ declare const fullApi: ApiFromModules<{
   "lib/chat/anonymous/recipient": typeof lib_chat_anonymous_recipient;
   "lib/chat/anonymous/request": typeof lib_chat_anonymous_request;
   "lib/chat/anonymous/stream": typeof lib_chat_anonymous_stream;
+  "lib/chat/generate/completedFacts": typeof lib_chat_generate_completedFacts;
   "lib/chat/generate/contracts": typeof lib_chat_generate_contracts;
   "lib/chat/generate/run": typeof lib_chat_generate_run;
   "lib/chat/generate/stream": typeof lib_chat_generate_stream;
@@ -1144,6 +1154,7 @@ declare const fullApi: ApiFromModules<{
   "lib/chat/turns/errors": typeof lib_chat_turns_errors;
   "lib/chat/turns/handlers": typeof lib_chat_turns_handlers;
   "lib/chat/turns/reads": typeof lib_chat_turns_reads;
+  "lib/chat/turns/searchContinuation": typeof lib_chat_turns_searchContinuation;
   "lib/chat/turns/writes": typeof lib_chat_turns_writes;
   "lib/dev/seed/accessPath": typeof lib_dev_seed_accessPath;
   "lib/dev/seed/authority": typeof lib_dev_seed_authority;
@@ -1234,6 +1245,7 @@ declare const fullApi: ApiFromModules<{
   "lib/money/funding/ownerRead": typeof lib_money_funding_ownerRead;
   "lib/money/funding/ownerReserve": typeof lib_money_funding_ownerReserve;
   "lib/money/funding/prepareVerifiedEvent": typeof lib_money_funding_prepareVerifiedEvent;
+  "lib/money/funding/returnFulfillment": typeof lib_money_funding_returnFulfillment;
   "lib/money/funding/stripeEventDocuments": typeof lib_money_funding_stripeEventDocuments;
   "lib/money/funding/stripeEventPipeline": typeof lib_money_funding_stripeEventPipeline;
   "lib/money/funding/stripeRefundPipeline": typeof lib_money_funding_stripeRefundPipeline;
@@ -1261,6 +1273,7 @@ declare const fullApi: ApiFromModules<{
   "lib/money/qualifiedUse/authority": typeof lib_money_qualifiedUse_authority;
   "lib/money/qualifiedUse/contracts": typeof lib_money_qualifiedUse_contracts;
   "lib/money/qualifiedUse/record": typeof lib_money_qualifiedUse_record;
+  "lib/money/referenceRate/store": typeof lib_money_referenceRate_store;
   "lib/money/spendingPeriods/periods": typeof lib_money_spendingPeriods_periods;
   "lib/money/x402PaymentAttempt/attempt": typeof lib_money_x402PaymentAttempt_attempt;
   "lib/money/x402PaymentAttempt/authorizationMaterial": typeof lib_money_x402PaymentAttempt_authorizationMaterial;
@@ -1412,6 +1425,7 @@ declare const fullApi: ApiFromModules<{
   qualifiedUse: typeof qualifiedUse;
   rateLimit: typeof rateLimit;
   recoveryBreakGlass: typeof recoveryBreakGlass;
+  referenceRateRefresh: typeof referenceRateRefresh;
   registry: typeof registry;
   scheduledFunctionRetirement: typeof scheduledFunctionRetirement;
   secretLifecycleHttp: typeof secretLifecycleHttp;

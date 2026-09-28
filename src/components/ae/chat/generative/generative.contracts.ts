@@ -22,9 +22,11 @@ export type OptionView = Readonly<{
   outcome?: string
   price: string
   usage?: string
+  priceValidUntil?: number
   readiness: 'ready' | 'unverified' | 'unavailable'
   seller?: Readonly<{ kind: 'provider' | 'host'; name: string }>
   selectable: boolean
+  quoteable?: boolean
   source?: string
   facts?: Readonly<Record<string, Readonly<{ value: string; source?: string }>>>
 }>
@@ -33,6 +35,8 @@ export type OptionsGridProps = Readonly<{
   view: OptionsGridView
   onSelect: (id: string) => void
   onCompare: (id: string) => void
+  onQuoteSelect?: (id: string) => void
+  signedIn?: boolean
 }>
 
 export type FilterValue = Readonly<{ price?: string | undefined; readyOnly: boolean; network?: string | undefined; category?: string | undefined }>

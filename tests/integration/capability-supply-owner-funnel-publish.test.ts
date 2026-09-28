@@ -36,9 +36,10 @@ import {
 } from '@/modules/capability-supply/server'
 import { createFormanceContext, installPackage4FormanceSchema } from '@/modules/money/formance'
 import { bookFormanceFundingSettlement } from '@/modules/money/formance-workflows'
+import { ANALYTICS_VERSION } from '../../convex/lib/market/directoryIndex/analytics'
 
 const readinessFetch = vi.hoisted(() => vi.fn<typeof UndiciFetch>())
-const productionExternal = vi.hoisted(() => ({ cdpClient: vi.fn(), receipt: vi.fn(), rate: vi.fn() }))
+const productionExternal = vi.hoisted(() => ({ cdpClient: vi.fn(), receipt: vi.fn() }))
 vi.mock('@coinbase/cdp-sdk', async (importOriginal) => ({
   ...await importOriginal<Record<string, unknown>>(),
   CdpClient: class { constructor() { return productionExternal.cdpClient() } },
@@ -46,10 +47,6 @@ vi.mock('@coinbase/cdp-sdk', async (importOriginal) => ({
 vi.mock('@/modules/capability-supply/server', async (importOriginal) => ({
   ...await importOriginal<Record<string, unknown>>(),
   readGuardedX402EvmReceipt: productionExternal.receipt,
-}))
-vi.mock('@/modules/money/reference-rate', async (importOriginal) => ({
-  ...await importOriginal<Record<string, unknown>>(),
-  fetchCoinbaseReferenceRate: productionExternal.rate,
 }))
 vi.mock('undici', async (importOriginal) => ({
   ...await importOriginal<Record<string, unknown>>(),
@@ -63,7 +60,30 @@ describe('owner capability publication admission', () => {
     readinessFetch.mockReset()
     productionExternal.cdpClient.mockReset()
     productionExternal.receipt.mockReset()
-    productionExternal.rate.mockReset()
+  })
+
+  it('indexes a canonical Provider publication for Market search after the independent projection runs', async () => {
+    const backend = convexTestWithWorkers({ pauseWorkpool: true })
+    await backend.run(async (ctx) => {
+      await ctx.db.insert('marketExternalRegistryGenerations', {
+        generation: 'provider-publication-test', source: 'coinbase', status: 'complete',
+        startedAt: 1, completedAt: 1, ingestedCount: 0, pagesFetched: 0,
+        observations: 0, duplicateObservations: 0, terminalObserved: true,
+        analyticsVersion: ANALYTICS_VERSION, analyticsStatus: 'ready',
+      })
+      await ctx.db.insert('marketExternalRegistryState', {
+        key: 'coinbase', activeGeneration: 'provider-publication-test',
+        lastAttemptAt: 1, lastAttemptStatus: 'complete',
+      })
+    })
+    const fixture = await seedPaidX402Publication(backend, 'published-search-proof', { publisher: 'agent' })
+    const canonical = await backend.run(async ctx => ctx.db.query('capabilityPublications')
+      .withIndex('by_publicationRef_and_revision', q => q.eq('publicationRef', fixture.published.publicationRef).eq('revision', fixture.published.publicationRevision)).unique())
+    expect(canonical?.disposition).toBe('current')
+    const result = await backend.query(api.x402DirectoryIndex.searchCompact, {
+      query: 'Paid lookup', access: 'external_listing', paginationOpts: { cursor: null, numItems: 8 },
+    })
+    expect(result).toMatchObject({ kind: 'ok', page: [{ source: 'provider', title: 'Owner lookup' }] })
   })
 
   it.each(['owner', 'agent'] as const)(
@@ -398,8 +418,8 @@ describe('owner capability publication admission', () => {
         },
       },
     })
-    productionExternal.rate.mockResolvedValue({
-      source: 'coinbase', base: 'USDC', quote: 'AUD', rate: '1.2', fetchedAt: Date.now(),
+    await backend.run(async (ctx) => {
+      await ctx.db.insert('moneyReferenceRates', { pair: 'USDC/AUD', rate: '1.2', fetchedAt: Date.now() })
     })
 
     let challenge: Parameters<typeof encodePaymentRequiredHeader>[0] | undefined

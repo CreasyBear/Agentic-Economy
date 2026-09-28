@@ -1,8 +1,9 @@
 import { Button } from '@/components/ui/button'
+import { ToolPriceText } from '@/components/ae/market/AeToolPrice'
 import { getStatusPresentation } from '@/lib/ui/status-presentation'
 import type { OptionsGridProps } from './generative.contracts'
 
-export function OptionsGrid({ view, onSelect, onCompare }: OptionsGridProps) {
+export function OptionsGrid({ view, onSelect, onCompare, onQuoteSelect, signedIn }: OptionsGridProps) {
   if (view.options.length === 0) return null
   return (
     <section aria-label="Options" className="grid min-w-0 gap-3">
@@ -17,7 +18,8 @@ export function OptionsGrid({ view, onSelect, onCompare }: OptionsGridProps) {
                 {option.outcome ? <p className="mt-1 line-clamp-2 text-xs leading-relaxed text-muted-foreground sm:text-[0.8125rem]">{option.outcome}</p> : null}
               </div>
               <div className="mt-auto grid gap-1 text-xs sm:text-[0.8125rem]">
-                <p className="tabular-nums">{option.price}</p>
+                <p className="tabular-nums"><ToolPriceText price={option.price}
+                  {...(option.priceValidUntil === undefined ? {} : { validUntil: option.priceValidUntil })} /></p>
                 <p className="flex items-center gap-1.5 text-muted-foreground">
                   <span aria-hidden="true" className={option.readiness === 'ready' ? 'size-1.5 rounded-full bg-success' : 'size-1.5 rounded-full bg-warning'} />
                   {option.readiness === 'ready' ? 'Ready to use' : option.readiness === 'unavailable' ? getStatusPresentation('unavailable').label : 'Not yet verified'}
@@ -29,6 +31,11 @@ export function OptionsGrid({ view, onSelect, onCompare }: OptionsGridProps) {
               <div className="flex flex-wrap gap-1">
                 <Button type="button" size="sm" variant="secondary" className="min-h-10" onClick={() => onSelect(option.id)} disabled={!option.selectable} aria-pressed={view.selectedId === option.id}>Select</Button>
                 {view.options.length < 2 || !option.selectable ? null : <Button type="button" size="sm" variant="secondary" className="min-h-10" onClick={() => onCompare(option.id)} aria-pressed={compared}>{compared ? 'Remove from compare' : 'Compare'}</Button>}
+                {option.quoteable && onQuoteSelect && signedIn
+                  ? <Button type="button" size="sm" variant="outline" className="min-h-10" onClick={() => onQuoteSelect(option.id)}>Get a Quote</Button>
+                  : option.quoteable && !signedIn
+                    ? <a href="/sign-in" className="inline-flex min-h-10 items-center rounded-md px-2 text-sm underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-ring">Sign in to get a Quote</a>
+                    : null}
               </div>
             </article>
           )

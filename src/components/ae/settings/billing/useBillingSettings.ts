@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useServerFn } from '@tanstack/react-start'
-import { useConvexAuth, useMutation, useQuery } from 'convex/react'
+import { useConvexAuth, useMutation, usePaginatedQuery, useQuery } from 'convex/react'
 
 import { api } from '../../../../../convex/_generated/api'
 import { captureClientExceptionOnClient } from '@/lib/observability/capture-client-exception'
@@ -67,15 +67,19 @@ export function useBillingPaymentMethods() {
 
 export function useBillingReceipts() {
   const authenticated = useBillingAuthenticated()
-  const invoiceHistoryRead = useQuery(
+  const invoiceHistoryRead = usePaginatedQuery(
     api.moneyAccountFunding.listOwnerInvoiceHistory,
     authenticated ? {} : 'skip',
+    { initialNumItems: 20 },
   )
   const renderDocument = useServerFn(renderOwnerMoneyDocumentServer)
   const readStripeReceiptUrl = useServerFn(readStripeReceiptUrlServer)
   return {
-    invoiceHistoryRows: invoiceHistoryRead?.page as readonly AeInvoiceHistoryRow[] | undefined,
-    invoiceHistoryLoading: invoiceHistoryRead === undefined,
+    invoiceHistoryRows: invoiceHistoryRead.results as readonly AeInvoiceHistoryRow[],
+    invoiceHistoryLoading: invoiceHistoryRead.status === 'LoadingFirstPage',
+    invoiceHistoryHasMore: invoiceHistoryRead.status === 'CanLoadMore',
+    invoiceHistoryLoadingMore: invoiceHistoryRead.status === 'LoadingMore',
+    onLoadMore: () => invoiceHistoryRead.loadMore(20),
     onDownloadTaxInvoice: async (row: AeInvoiceHistoryRow) => {
       const documentRef = row.taxInvoice?.kind === 'issued' ? row.taxInvoice.documentRef : undefined
       if (documentRef === undefined) return

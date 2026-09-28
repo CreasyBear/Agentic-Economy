@@ -187,16 +187,20 @@ export const registryServicesListAction = defineAction({
     invalidationConditions: ['action_contract_version_changed', 'cursor_changed', 'limit_changed'],
   },
   run: async ({ data }) => {
-    const page = await readPublicOfferingRegistryPage(
-      normalizeRegistryListInput(data),
-    )
-    const projected = projectPublicServicesPage(page, await offeringToolMapFor(page.page.map((item) => item.businessId)))
-    return {
-      kind: projected.kind,
-      schemaVersion: projected.schemaVersion,
-      services: projected.services,
-      hasMore: !projected.isDone,
-      ...(projected.isDone ? {} : { nextCursor: projected.continueCursor }),
+    const input = normalizeRegistryListInput(data)
+    for (;;) {
+      const page = await readPublicOfferingRegistryPage(input)
+      const projected = projectPublicServicesPage(page, await offeringToolMapFor(page.page.map((item) => item.businessId)))
+      if (projected.services.length > 0 || projected.isDone) {
+        return {
+          kind: projected.kind,
+          schemaVersion: projected.schemaVersion,
+          services: projected.services,
+          hasMore: !projected.isDone,
+          ...(projected.isDone ? {} : { nextCursor: projected.continueCursor }),
+        }
+      }
+      input.paginationOpts.cursor = projected.continueCursor
     }
   },
 })

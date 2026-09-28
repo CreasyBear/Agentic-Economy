@@ -34,6 +34,12 @@ export function ProviderWorkspaceToolsSection({ inventory, lifecycle, compatibil
 
   return (
     <AeSection title="Tools" description={`Tools supplied by ${inventory.provider.name}.`}>
+      {inventory.diagnostics?.map((diagnostic) => (
+        <Alert key={diagnostic.offeringRef}>
+          <AlertTitle>Tool status needs repair</AlertTitle>
+          <AlertDescription>{diagnostic.offeringRef}: lifecycle status could not be read. Other Tools remain available.</AlertDescription>
+        </Alert>
+      ))}
       {lifecycle === undefined ? renderList(pendingRows) : (
         <Suspense fallback={renderList(pendingRows)}>
           <Await promise={lifecycle}>{(result) => {

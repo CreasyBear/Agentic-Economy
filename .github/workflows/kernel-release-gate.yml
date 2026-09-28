@@ -174,7 +174,7 @@ jobs:
           CI: 'true'
         run: |
           mkdir -p output/fresh-checkout
-          npm run dev:local -- --skip-scan --no-doctor > output/fresh-checkout/dev-local.log 2>&1 &
+          npm run dev:local -- --no-doctor > output/fresh-checkout/dev-local.log 2>&1 &
           echo "DEV_LOCAL_PID=$!" >> "${GITHUB_ENV}"
           ready=''
           for _ in $(seq 1 180); do

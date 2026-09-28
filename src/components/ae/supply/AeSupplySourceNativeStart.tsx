@@ -6,7 +6,6 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { buttonVariants } from '@/components/ui/button-variants'
 import { cn } from '@/lib/utils'
-import type { SupplySourceInput } from '@/modules/capability-supply/source-preview'
 import { SupplyCandidateSection } from './SupplyCandidateSection'
 import { SupplySourceSuggestion } from './SupplySourceSuggestion'
 import { SupplyPublicationFlow } from './SupplyPublicationFlow'
@@ -16,6 +15,7 @@ import {
   SUPPLY_PUBLICATION_ERROR_ID,
   pricingInput,
   publicationPriceSummary,
+  sourceSummary,
 } from './supply-source-native-start-presentation'
 import type { SupplyJourneyContinuation } from './supply-source-native-start-presentation'
 import { useSupplyNativeStartState, type SupplyNativeStartProps } from './useSupplyNativeStartState'
@@ -136,6 +136,11 @@ export function AeSupplySourceNativeStart(props: SupplyNativeStartProps) {
             <CompletedStageSummary step="Tool" detail={vm.selected.title} disabled={vm.pending !== undefined || vm.publicationLocked} onEdit={vm.editTool} />
             {stage === 'review' ? <CompletedStageSummary step="Terms" detail={termsSummary(vm)} disabled={vm.pending !== undefined || vm.publicationLocked} onEdit={vm.editTerms} /> : null}
           </div>
+          {props.initial !== undefined && stage === 'terms' ? (
+            <p className="text-sm text-muted-foreground">
+              Review the restored terms and confirm publication authority before submitting.
+            </p>
+          ) : null}
           <SupplyPublicationFlow
             reviewing={stage === 'review'}
             name={vm.name}
@@ -278,19 +283,6 @@ function SupplyFlowFeedback({ error, requiredAction, success, continuation, publ
       )}
     </>
   )
-}
-
-function sourceSummary(source: SupplySourceInput | undefined): string {
-  if (source === undefined) return 'Source details unavailable'
-  const label = source.kind === 'openapi' ? 'OpenAPI' : source.kind === 'mcp' ? 'MCP' : source.kind === 'agent_plugin' ? 'Agent Plugin' : 'x402'
-  const location = source.kind === 'openapi'
-    ? source.definitionUrl
-    : source.kind === 'mcp'
-      ? source.serverUrl ?? source.registryName ?? 'Selected MCP source'
-      : source.kind === 'x402'
-        ? source.resourceUrl
-        : 'Uploaded manifests'
-  return `${label} · ${location} · ${source.environment === 'sandbox' ? 'Sandbox' : 'Production'}`
 }
 
 function termsSummary(vm: ReturnType<typeof useSupplyNativeStartState>): string {

@@ -166,7 +166,10 @@ export async function loadMarketRouteData(deps: MarketSearch) {
       ? readX402DirectoryCatalogueServer({ data: { ...catalogueInput, ...(catalogueInput.sort || catalogueInput.query ? {} : { sort: view === 'tools' || view === 'providers' ? 'popular' as const : 'adoption' as const }) } })
       : Promise.resolve({ kind: 'unavailable', reason: 'canonical_search' } as const satisfies X402DirectoryCatalogue),
     showHome ? readX402MarketplaceHomeServer().catch(() => undefined) : Promise.resolve(undefined),
-    readX402DirectoryCatalogueOverviewServer(),
+    readX402DirectoryCatalogueOverviewServer().catch(cause => {
+      console.error('[market] directory overview unavailable', { cause })
+      return { kind: 'unavailable' as const, reason: 'source_unavailable' as const }
+    }),
     Promise.all(compareRefs.map(resolveMarketCompareEntry)),
   ])
   const page = catalogue?.kind === 'ok'

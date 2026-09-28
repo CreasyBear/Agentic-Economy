@@ -195,6 +195,57 @@ describe('admin exception reads', () => {
     expect(unset.page).toEqual([])
   })
 
+  it('advances a bounded cursor past unprojectable legacy records and keeps queue/detail authority aligned', async () => {
+    const backend = convexTestWithMarketComponents()
+    await seedExceptions(backend)
+    await backend.run(async (ctx) => {
+      const base = await ctx.db.query('capabilityPublications')
+        .withIndex('by_toolRef_and_disposition', (q) => q.eq('toolRef', TOOL_REF)).first()
+      if (base === null) throw new Error('missing_publication_fixture')
+      const { _id, _creationTime, sourceAuthorityState: _sourceAuthorityState, ...publication } = base
+      for (let index = 0; index < 210; index += 1) {
+        await ctx.db.insert('capabilityPublications', {
+          ...publication,
+          publicationRef: `publication:unset:invalid:${index}`,
+          toolRef: `legacy-invalid-${index}`,
+          updatedAt: NOW - 70 * 60_000 + index,
+        })
+      }
+      await ctx.db.insert('capabilityPublications', {
+        ...publication,
+        publicationRef: 'publication:unset:valid',
+        toolRef: `operation:v1:${'f'.repeat(64)}`,
+        updatedAt: NOW - 50 * 60_000,
+      })
+    })
+    const admin = await ownerAdmin(backend, 'user_admin-exceptions-unset')
+    const first = await admin.query(api.adminConsoleExceptions.listAdminExceptionsPage, {
+      kind: 'source_authority_review', partition: 'unset',
+      paginationOpts: { numItems: 50, cursor: null },
+    })
+    if ('kind' in first) throw new Error('unexpected_refusal')
+    expect(first.page).toEqual([])
+    expect(first.isDone).toBe(false)
+    let cursor = first.continueCursor
+    let found = false
+    for (let scan = 0; scan < 10 && !found; scan += 1) {
+      const next = await admin.query(api.adminConsoleExceptions.listAdminExceptionsPage, {
+        kind: 'source_authority_review', partition: 'unset',
+        paginationOpts: { numItems: 50, cursor },
+      })
+      if ('kind' in next) throw new Error('unexpected_refusal')
+      expect(next.continueCursor).not.toBe(cursor)
+      found = next.page.some((entry) => entry.kind === 'source_authority_review'
+        && entry.publicationRef === `operation:v1:${'f'.repeat(64)}`)
+      cursor = next.continueCursor
+    }
+    expect(found).toBe(true)
+    const detail = await admin.query(api.adminConsoleObjects.readAdminObject, {
+      ref: { kind: 'tool_version', ref: `operation:v1:${'f'.repeat(64)}` },
+    })
+    expect(detail).toMatchObject({ kind: 'tool_version', sourceAuthorityState: 'unset' })
+  })
+
   it('reports observed bounds and partition exhaustion without inventing a total', async () => {
     const backend = convexTestWithMarketComponents()
     await seedExceptions(backend)

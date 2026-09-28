@@ -9,12 +9,15 @@ import {
   INSPECT_ACCOUNT_AVAILABLE_LABEL,
   INSPECT_AGENT_MAXIMUM_LABEL,
   projectInspectResult,
+  parseChatQuoteInput,
   projectToolCard,
   CHAT_TOOL_NAME_MAP,
   serializeToolCard,
 } from '@/modules/chat/tool-card'
 import { formatCurrencyAmount, formatDisplayAmount } from '@/modules/money/public'
 import { PublicToolRegistrySchemaVersion } from '@/modules/capability-supply/public'
+import { projectToolSearchChoices } from '@/modules/registry/tool-choice-contracts'
+import { mockSearchTool, misorderedSearchResult } from '../../helpers/tool-search-rerank-fixtures'
 import { ChatNeedActionsContext, ToolCard } from '@/components/ae/chat/ToolCard'
 import type { ChatNeedActions, ChatSaveNeed, ToolCardProjection } from '@/modules/chat/tool-card'
 
@@ -27,6 +30,23 @@ const SOURCE_REQUIREMENT = { currency: 'AUD', units: '250000', exponent: 6 } as 
 const EXPIRES_AT = 1_700_000_060_000
 
 afterEach(cleanup)
+describe('quote input boundary', () => {
+  it('preserves a bounded JSON object and rejects malformed or non-object drafts without exposing their contents', () => {
+    const valid = '{"region":"au","parameters":{"window":[1,null,true]}}'
+    expect(parseChatQuoteInput(TOOL_REF, valid)).toEqual({
+      region: 'au', parameters: { window: [1, null, true] },
+    })
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {})
+    try {
+      expect(parseChatQuoteInput(TOOL_REF, '{"secret":"not-closed"')).toBeUndefined()
+      expect(consoleError).toHaveBeenCalledWith('[ae.exception]', expect.stringContaining('SyntaxError'))
+      expect(consoleError.mock.calls.flat().join(' ')).not.toContain('not-closed')
+    } finally {
+      consoleError.mockRestore()
+    }
+    expect(parseChatQuoteInput(TOOL_REF, '[]')).toBeUndefined()
+  })
+})
 
 describe('search result state', () => {
   it('preserves an exhausted no-match card with a broaden action in shared history', () => {
@@ -121,15 +141,34 @@ describe('search result state', () => {
 
   it('projects an assessed match as a selectable choice and preserves it on sharing', () => {
     const toolType = `tool-${CHAT_TOOL_NAME_MAP.canonicalToProvider['registry.tools.search']}`
-    const item = { toolRef: TOOL_REF, title: 'Lookup A', price: { kind: 'indicative', label: 'A$1.25' }, readiness: 'ready' }
+    const item = { toolRef: TOOL_REF, title: 'Lookup A',
+      displayPrice: { kind: 'indicative', amount: { currency: 'AUD', units: '1', exponent: 6 },
+        rateObservedAt: 1_900_000_000_000, validUntil: 2_000_000_000_000 },
+      price: { kind: 'indicative', label: 'USDC 0.000001' }, readiness: 'ready' }
     const matched = projectToolCard({
       type: toolType, state: 'output-available', output: { kind: 'match', results: [item] },
     })
-    expect(matched).toMatchObject({ kind: 'choices', state: 'complete', count: 1, choices: [{ title: 'Lookup A' }] })
+    expect(matched).toMatchObject({ kind: 'choices', state: 'complete', count: 1,
+      choices: [{ title: 'Lookup A', price: 'A$0.01', priceValidUntil: 2_000_000_000_000 }] })
     if (matched === null) throw new Error('missing_card')
     expect(projectToolCard(serializeToolCard(matched))).toEqual(matched)
   })
 
+  it('carries the live estimate expiry from indexed search to chat instead of retaining an old price', () => {
+    const descriptor = mockSearchTool(TOOL_REF, 'lookup.a', 'Lookup A', 'Lookup')
+    const result = { ...misorderedSearchResult('lookup'),
+      items: [{ ...descriptor, commercial: { ...descriptor.commercial,
+        displayPrice: { kind: 'indicative' as const,
+          amount: { currency: 'AUD', units: '1', exponent: 6 },
+          rateObservedAt: 1_900_000_000_000, validUntil: 2_000_000_000_000 } } }] }
+    const output = projectToolSearchChoices(result, undefined, { verdict: 'matched', nearMisses: [] })
+    expect(output.results[0]?.price).toEqual({
+      kind: 'indicative', label: 'A$0.01', validUntil: 2_000_000_000_000,
+    })
+    const card = projectToolCard({ type: `tool-${CHAT_TOOL_NAME_MAP.canonicalToProvider['registry.tools.search']}`,
+      state: 'output-available', output })
+    expect(card).toMatchObject({ kind: 'choices', choices: [{ price: 'A$0.01', priceValidUntil: 2_000_000_000_000 }] })
+  })
   it('does not present unverified, degraded, or missing health as operational', () => {
     const toolType = `tool-${CHAT_TOOL_NAME_MAP.canonicalToProvider['registry.tools.list']}`
     const items = [

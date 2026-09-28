@@ -67,6 +67,7 @@ async function saveSupplyIntegrationDraft(
     sourceSelectorJson: args.sourceSelectorJson,
     ...(args.connectionRef === undefined ? {} : { connectionRef: args.connectionRef }),
     ...(args.validationInputJson === undefined ? {} : { validationInputJson: args.validationInputJson }),
+    ...(args.terms === undefined ? {} : { terms: args.terms }),
     updatedAt: now,
   })
   if (normalized.kind === 'refused') return normalized
@@ -172,7 +173,12 @@ async function saveSupplyIntegrationDraft(
     return { kind: 'refused', reason: 'draft_unavailable' }
   }
   await ctx.db.patch(path._id, {
-    integrationDraft: normalized.draft,
+    integrationDraft: {
+      ...normalized.draft,
+      ...(normalized.draft.terms === undefined && path.integrationDraft?.terms !== undefined
+        ? { terms: path.integrationDraft.terms }
+        : {}),
+    },
     integrationDraftUpdatedAt: normalized.draft.updatedAt,
   })
   await upsertProviderToolIdentity(ctx, {
