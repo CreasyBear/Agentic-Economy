@@ -70,6 +70,8 @@ export const marketTables = {
     category: v.string(),
     method: v.optional(v.string()),
     tags: v.array(v.string()),
+    actionClass: v.optional(v.union(v.literal('retrieve'), v.literal('transform'), v.literal('analyze'), v.literal('create'), v.literal('mutate'), v.literal('other'), v.literal('unclassified'))),
+    objectClass: v.optional(v.union(v.literal('web'), v.literal('document'), v.literal('image'), v.literal('location'), v.literal('chain'), v.literal('data'), v.literal('other'), v.literal('unclassified'))),
     networks: v.array(v.string()),
     access: v.union(
       v.literal('x402'),
@@ -123,7 +125,12 @@ export const marketTables = {
     entryId: v.id('marketExternalRegistryEntries'),
     network: v.string(),
     category: v.string(),
+    documentId: v.optional(v.string()),
+    title: v.optional(v.string()),
+    summary: v.optional(v.string()),
     provider: v.string(),
+    actionClass: v.optional(v.union(v.literal('retrieve'), v.literal('transform'), v.literal('analyze'), v.literal('create'), v.literal('mutate'), v.literal('other'), v.literal('unclassified'))),
+    objectClass: v.optional(v.union(v.literal('web'), v.literal('document'), v.literal('image'), v.literal('location'), v.literal('chain'), v.literal('data'), v.literal('other'), v.literal('unclassified'))),
     // Normalised host (lowercase, no port, no trailing dot). Optional until the
     // backfill migration (convex/migrations.ts:backfillDirectoryEligibility)
     // completes on every existing generation, then tightened to required.

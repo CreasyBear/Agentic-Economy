@@ -206,6 +206,21 @@ describe('discovery route parity', () => {
       throw new Error('Expected current llms Tool search and describe URLs to be present.')
     }
     const restoreMarketToolSource = installMarketToolSource()
+    const toolSearchResponse = await routeHandler(MarketToolSearchRoute, 'POST')({
+      request: new Request(searchRoute.url, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ query: 'reference lookup', limit: 1 }),
+      }),
+      params: {},
+    })
+    expect(toolSearchResponse.status).toBe(200)
+    expect(await toolSearchResponse.json()).toMatchObject({
+      kind: 'scoped',
+      results: [],
+      partialResults: true,
+      assessed: { source: 'all', coverage: 'partial' },
+    })
     const toolDetailResponse = await routeHandler(MarketToolDescribeRoute, 'POST')({
       request: new Request(`${origin}${TOOL_MARKET_DESCRIBE_PATH}`, {
         method: 'POST',
@@ -469,6 +484,24 @@ function installMarketToolSource(): () => void {
       switch (payload.path) {
         case 'rateLimit:admitHttp':
           return Response.json({ status: 'success', value: { ok: true } })
+        case 'capabilitySupplyProjection:latestReconcileBusinessSupplyProjectionsCompletion':
+          return Response.json({ status: 'success', value: null })
+        case 'x402DirectoryIndex:status':
+          return Response.json({
+            status: 'success',
+            value: { kind: 'ready', refreshState: 'complete', coverage: { generation: 'empty-index', completedAt: 10_000 } },
+          })
+        case 'x402DirectoryIndex:searchCompact':
+          return Response.json({
+            status: 'success',
+            value: {
+              kind: 'ok',
+              page: [],
+              continueCursor: '',
+              isDone: true,
+              coverage: { generation: 'empty-index', completedAt: 10_000 },
+            },
+          })
         case 'capabilityToolCatalog:search':
           return Response.json({
             status: 'success',

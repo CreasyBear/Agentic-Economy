@@ -5,11 +5,45 @@ import {
   readX402DirectoryCatalogueResourceServer,
   readX402DirectoryCatalogueServer,
 } from '@/modules/market/x402-directory-index.functions'
-import { x402DirectoryCatalogueInputSchema } from '@/modules/market/x402-directory-catalogue'
+import { x402DirectoryCatalogueInputSchema, type X402DirectoryCatalogue } from '@/modules/market/x402-directory-catalogue'
 import { directoryCatalogueSearchValues } from '@/modules/market/x402-directory-navigation'
 import { readX402MarketplaceHomeServer } from '@/modules/market/x402-marketplace-home.functions'
 import { readMarketFlowRankServer } from '@/modules/market/market-flow.functions'
 import { directoryBasePayTo } from '@/modules/market/x402-directory-index'
+import type { ToolChoiceSearchOutput } from '@/modules/registry/tool-choice-contracts'
+
+export type MarketToolSearchState = Readonly<{
+  query: string
+  pages: readonly ToolChoiceSearchOutput[]
+  index: number
+  status: 'loading' | 'idle' | 'failed'
+}>
+
+/** Only pass refinements that the canonical mixed search applies before pagination. */
+export function marketToolSearchInput(search: MarketSearch, cursor?: string) {
+  const filters = {
+    ...(search.directoryCategory === undefined ? {} : { category: search.directoryCategory }),
+    ...(search.provider === undefined ? {} : { provider: search.provider }),
+    ...(search.network === undefined ? {} : { networkId: search.network }),
+    ...(search.priceBand === undefined ? {} : { priceBand: search.priceBand }),
+  }
+  return {
+    query: search.query ?? '',
+    limit: 8,
+    ...(Object.keys(filters).length === 0 ? {} : { filters }),
+    ...(cursor === undefined ? {} : { cursor }),
+  }
+}
+
+export function marketHasBrowseOnlyFilters(search: MarketSearch): boolean {
+  return search.minUsdPrice !== undefined || search.maxUsdPrice !== undefined
+    || search.minPayers30d !== undefined || search.maxPayers30d !== undefined
+    || search.adoptionBand !== undefined || search.curatedOnly === true
+    || search.hasInputFields === true || search.hasOutputFields === true
+    || search.hasInputSchema === true || search.hasOutputSchema === true
+    || search.hasOutputExample === true || (search.tags?.length ?? 0) > 0
+    || (search.bundleSlugs?.length ?? 0) > 0
+}
 
 export type MarketSearch = MarketReturnSearch
 export type MarketView = NonNullable<MarketSearch['view']>
@@ -130,7 +164,9 @@ export async function loadMarketRouteData(deps: MarketSearch) {
   const showHome = view === 'discover'
   const compareRefs = parseMarketCompareRefs(deps.compare) ?? []
   const [catalogue, home, overview, compareEntries] = await Promise.all([
-    readX402DirectoryCatalogueServer({ data: { ...catalogueInput, ...(catalogueInput.query || catalogueInput.sort ? {} : { sort: view === 'tools' || view === 'providers' ? 'popular' as const : 'adoption' as const }) } }),
+    catalogueInput.query === undefined
+      ? readX402DirectoryCatalogueServer({ data: { ...catalogueInput, ...(catalogueInput.sort ? {} : { sort: view === 'tools' || view === 'providers' ? 'popular' as const : 'adoption' as const }) } })
+      : Promise.resolve({ kind: 'unavailable', reason: 'canonical_search' } as const satisfies X402DirectoryCatalogue),
     showHome ? readX402MarketplaceHomeServer().catch(() => undefined) : Promise.resolve(undefined),
     readX402DirectoryCatalogueOverviewServer(),
     Promise.all(compareRefs.map(resolveMarketCompareEntry)),

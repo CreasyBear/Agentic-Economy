@@ -37,8 +37,8 @@ describe('action registry', () => {
     expect(list?.schema.safeParse({ limit: 100 }).success).toBe(true)
     expect(list?.schema.safeParse({ limit: 101 }).success).toBe(false)
     expect(search?.schema.safeParse({ query: '  ' }).success).toBe(false)
-    expect(search?.schema.safeParse({ query: 'x'.repeat(256), limit: 20 }).success).toBe(true)
-    expect(search?.schema.safeParse({ query: 'x'.repeat(257) }).success).toBe(false)
+    expect(search?.schema.safeParse({ query: 'x'.repeat(200), limit: 12 }).success).toBe(true)
+    expect(search?.schema.safeParse({ query: 'x'.repeat(201) }).success).toBe(false)
     expect(search?.schema.safeParse({ query: 'lookup', limit: 21 }).success).toBe(false)
   })
   it('does not list deleted public inquiry or customer-request actions', () => {

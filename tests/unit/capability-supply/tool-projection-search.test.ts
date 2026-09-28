@@ -8,7 +8,6 @@ import {
   toolDetailOutputSchema,
   projectCapabilityTool as projectCapabilityToolWithNavigation,
   rankToolSearchText,
-  searchCapabilityTools,
   serializeToolDescriptor,
   type CapabilityToolSourceRecord,
 } from '@/modules/capability-supply/public'
@@ -61,14 +60,6 @@ const sourceRecord = (operationId: string, summary: string, searchTerms: readonl
   endpointUrl: 'https://provider.example/quote/{asset}?fixedQuery=secret-token',
 } as unknown as CapabilityToolSourceRecord)
 
-const sourcePort = (
-  tools: readonly CapabilityToolSourceRecord[],
-  snapshotKey = 'snapshot:search',
-) => ({
-  navigation: CURRENT_TOOL_PROJECTION_NAVIGATION,
-  listCurrent: async () => ({ tools, sourceCount: tools.length, snapshotKey }),
-  loadCurrent: async () => null,
-})
 const projectCapabilityTool = (
   record: CapabilityToolSourceRecord,
   now: number,
@@ -79,31 +70,6 @@ const projectCapabilityTool = (
 )
 
 describe('capability Tool search ranking', () => {
-  it('projects and searches the current Provider display name without changing Tool identity', async () => {
-    const baseline = sourceRecord('capability:supplier-name', 'Stable bounded result', ['bounded'])
-    const renamed = { ...baseline, business: { ...baseline.business, name: 'Example Intelligence' } }
-    const projected = projectCapabilityTool(renamed, 2_000)
-    const result = await searchCapabilityTools(sourcePort([renamed]), { query: 'Example Intelligence' }, 2_000)
-
-    expect(result.kind).toBe('ok')
-    if (result.kind !== 'ok') return
-    expect(result.items[0]?.business).toEqual({
-      businessId: baseline.business.businessId,
-      slug: baseline.business.slug,
-      name: 'Example Intelligence',
-    })
-    expect(result.items[0]?.toolRef).toBe(projected.toolRef)
-  })
-
-  it('refuses capacity overflow based on raw source rows even when malformed rows were dropped', async () => {
-    const result = await searchCapabilityTools({
-      ...sourcePort([]),
-      listCurrent: async () => ({ tools: [], sourceCount: 257, snapshotKey: 'snapshot:overflow' }),
-    }, { query: 'lookup' }, 2_000)
-
-    expect(result).toMatchObject({ kind: 'unavailable', reason: 'source_capacity_exceeded' })
-  })
-
   it('does not select geocoding or cat tools from generic web-search words', () => {
     const ranked = rankToolSearchText('Search the web for the latest on electric cars', [
       {
@@ -145,61 +111,6 @@ describe('capability Tool search ranking', () => {
     ])
 
     expect(ranked).toEqual(['both'])
-  })
-
-  it('falls back to partial matches for conversational queries with runtime values', async () => {
-    const result = await searchCapabilityTools(sourcePort([
-      sourceRecord('capability:bitcoin.price', 'Bitcoin price', ['bitcoin', 'price']),
-      sourceRecord('capability:weather.forecast', 'Weather forecast', ['weather', 'forecast']),
-    ]), { query: 'What is the current Bitcoin price in US dollars?' }, 2_000)
-
-    expect(result.kind).toBe('ok')
-    if (result.kind !== 'ok') return
-    expect(result.items.map(({ toolId }) => toolId)).toEqual(['capability:bitcoin.price'])
-  })
-
-  it('treats an unmatched place as call input rather than a second capability requirement', async () => {
-    const result = await searchCapabilityTools(sourcePort([
-      sourceRecord('capability:weather.current', 'Current weather conditions', ['weather', 'temperature', 'forecast']),
-      sourceRecord('capability:bitcoin.price', 'Bitcoin price', ['bitcoin', 'price']),
-      sourceRecord('capability:timezone.convert', 'Pay per call timezone conversion', ['timezone', 'convert']),
-    ]), { query: 'current weather in Perth' }, 2_000)
-
-    expect(result.kind).toBe('ok')
-    if (result.kind !== 'ok') return
-    expect(result.items.map(({ toolId }) => toolId)).toEqual([
-      'capability:weather.current',
-    ])
-    expect(result.ranking[0]?.score).toBeGreaterThan(0)
-  })
-
-  it.each([
-    'business-class award availability from PER to JFK, 10–20 Nov 2026',
-    'plese chek busines clas awrad availabilty from PER to JFK in Nov 2026',
-  ])('finds award availability from task-shaped constraints and light typos: %s', async (query) => {
-    const result = await searchCapabilityTools(sourcePort([
-      sourceRecord(
-        'capability:flight.award-availability',
-        'Business class flight award availability',
-        ['airline', 'flight', 'award', 'availability', 'business class', 'points', 'miles'],
-      ),
-      sourceRecord(
-        'capability:business.registry',
-        'Business registration lookup',
-        ['business', 'company', 'registry'],
-      ),
-      sourceRecord(
-        'capability:weather.forecast',
-        'Weather forecast',
-        ['weather', 'forecast'],
-      ),
-    ]), { query }, 2_000)
-
-    expect(result.kind).toBe('ok')
-    if (result.kind !== 'ok') return
-    expect(result.items.map(({ toolId }) => toolId)).toEqual([
-      'capability:flight.award-availability',
-    ])
   })
 
   it.each([
@@ -273,60 +184,6 @@ describe('capability Tool search ranking', () => {
     expect(ranked).toEqual([])
   })
 
-  it('rejects concrete email and SSN material without reflecting it in a search result', async () => {
-    const sensitiveQuery = 'run a background check for SSN 123-45-6789 and email victim@example.com'
-    const result = await searchCapabilityTools(sourcePort([
-      sourceRecord('capability:public.ip', 'Public IP address', ['public', 'ip']),
-    ]), { query: sensitiveQuery }, 2_000)
-
-    expect(result).toMatchObject({ kind: 'unavailable', reason: 'query_invalid' })
-    expect(JSON.stringify(result)).not.toContain('123-45-6789')
-    expect(JSON.stringify(result)).not.toContain('victim@example.com')
-  })
-
-  it.each([
-    ['networkId', { networkId: 'n'.repeat(201) }],
-    ['location', { location: 'l'.repeat(201) }],
-    ['effects', { effects: ['data_release', 'financial_exposure', 'external_state_change', 'data_release'] }],
-    ['dataUse', { dataUse: ['public', 'personal', 'sensitive', 'credential', 'public'] }],
-    ['availability', { availability: ['setup_required', 'routeable', 'unavailable', 'setup_required'] }],
-  ] as const)('rejects overbound %s filters before reading the source', async (_field, filters) => {
-    let sourceReads = 0
-    const port = {
-      ...sourcePort([]),
-      listCurrent: async () => {
-        sourceReads += 1
-        return { tools: [], sourceCount: 0, snapshotKey: 'snapshot:invalid-filter' }
-      },
-    }
-
-    await expect(searchCapabilityTools(port, { query: 'lookup', filters }, 2_000))
-      .resolves.toMatchObject({ kind: 'unavailable', reason: 'query_invalid' })
-    expect(sourceReads).toBe(0)
-  })
-
-  it.each([
-    ['networkId', { networkId: 'n'.repeat(200) }],
-    ['location', { location: 'l'.repeat(200) }],
-    ['effects', { effects: ['data_release', 'financial_exposure', 'external_state_change'] }],
-    ['dataUse', { dataUse: ['public', 'personal', 'sensitive', 'credential'] }],
-    ['availability', { availability: ['setup_required', 'routeable', 'unavailable'] }],
-  ] as const)('accepts the canonical boundary for %s filters', async (_field, filters) => {
-    const record = sourceRecord('capability:boundary', 'Boundary tool', ['other'])
-    let sourceReads = 0
-    const port = {
-      ...sourcePort([record]),
-      listCurrent: async () => {
-        sourceReads += 1
-        return { tools: [record], sourceCount: 1, snapshotKey: 'snapshot:boundary-filter' }
-      },
-    }
-
-    await expect(searchCapabilityTools(port, { query: 'zzzzzz', filters }, 2_000))
-      .resolves.toMatchObject({ kind: 'no_candidates', query: 'zzzzzz' })
-    expect(sourceReads).toBe(1)
-  })
-
   it('returns no candidates when no capability token overlaps', () => {
     expect(rankToolSearchText('tell me a joke', [
       { value: 'bitcoin', toolRef: 'operation:v1:' + 'a'.repeat(64), searchText: ['CoinGecko bitcoin price'] },
@@ -336,7 +193,7 @@ describe('capability Tool search ranking', () => {
 
   it.each(['lookup', 'search', 'find current results'])(
     'does not turn a non-empty zero-signal query into a catalogue browse: %s',
-    async (query) => {
+    (query) => {
       const records = [
         sourceRecord('capability:bitcoin.price', 'Bitcoin price', ['bitcoin', 'price']),
         sourceRecord('capability:weather.forecast', 'Weather forecast', ['weather', 'forecast']),
@@ -347,66 +204,8 @@ describe('capability Tool search ranking', () => {
         toolRef: projectCapabilityTool(record, 2_000).toolRef,
         searchText: record.searchTerms,
       })))).toEqual([])
-
-      await expect(searchCapabilityTools(
-        sourcePort(records),
-        { query },
-        2_000,
-      )).resolves.toMatchObject({
-        kind: 'no_candidates',
-        query,
-        matchedCount: 0,
-        ranking: [],
-      })
     },
   )
-
-  it('makes empty query behavior explicit and carries stable bounded ranks/counts across pages', async () => {
-    const records = [
-      sourceRecord('capability:bitcoin.price', 'Bitcoin price', ['bitcoin', 'price']),
-      sourceRecord('capability:weather.forecast', 'Weather forecast', ['weather', 'forecast']),
-    ]
-    const first = await searchCapabilityTools(sourcePort(records), { query: '', limit: 1 }, 2_000)
-    expect(first.kind).toBe('ok')
-    if (first.kind !== 'ok') return
-    expect(first.query).toBe('')
-    expect(first.matchedCount).toBe(2)
-    expect(first.ranking).toEqual([{ toolRef: first.items[0]?.toolRef, rank: 1, score: 0 }])
-    expect(first.pagination.hasMore).toBe(true)
-    const nextCursor = first.pagination.nextCursor
-    expect(nextCursor).toBeTypeOf('string')
-    if (nextCursor === undefined) return
-
-    const second = await searchCapabilityTools(sourcePort(records), {
-      query: '', limit: 1, cursor: nextCursor,
-    }, 2_000)
-    expect(second.kind).toBe('ok')
-    if (second.kind !== 'ok') return
-    expect(second.matchedCount).toBe(2)
-    expect(second.ranking[0]?.rank).toBe(2)
-    expect(second.ranking[0]?.toolRef).toBe(second.items[0]?.toolRef)
-  })
-  it('rejects a cursor when the bounded current source changes within the same minute', async () => {
-    const records = [
-      sourceRecord('capability:bitcoin.price', 'Bitcoin price', ['bitcoin', 'price']),
-      sourceRecord('capability:weather.forecast', 'Weather forecast', ['weather', 'forecast']),
-    ]
-    const first = await searchCapabilityTools(sourcePort(records, 'snapshot:current:a'), { query: '', limit: 1 }, 120_000)
-    expect(first.kind).toBe('ok')
-    if (first.kind !== 'ok') return
-    const nextCursor = first.pagination.nextCursor
-    expect(nextCursor).toBeTypeOf('string')
-    if (nextCursor === undefined) return
-
-    await expect(searchCapabilityTools(sourcePort(records, 'snapshot:current:b'), {
-      query: '',
-      limit: 1,
-      cursor: nextCursor,
-    }, 120_001)).resolves.toMatchObject({
-      kind: 'unavailable',
-      reason: 'query_invalid',
-    })
-  })
 
   it('serializes public auth, transport, parameter and price evidence without endpoint secrets', () => {
     const tool = projectCapabilityTool(
@@ -493,7 +292,7 @@ describe('capability Tool search ranking', () => {
     expect(withoutExamplesWire.contract).not.toHaveProperty('inputExamples')
     expect(deserializeToolDescriptor(withoutExamplesWire).contract).not.toHaveProperty('inputExamples')
   })
-  it('keeps canonical call metadata coherent across search, detail, and compare', async () => {
+  it('keeps canonical call metadata coherent across detail and compare', async () => {
     const record = sourceRecord('capability:bitcoin.coherent', 'Bitcoin price', ['bitcoin', 'price'])
     const projected = projectCapabilityTool(record, 2_000)
     const port = {
@@ -502,9 +301,6 @@ describe('capability Tool search ranking', () => {
       loadCurrent: async (toolRef: string) => toolRef === projected.toolRef ? record : null,
     }
 
-    const search = await searchCapabilityTools(port, { query: 'bitcoin price' }, 2_000)
-    expect(search.kind).toBe('ok')
-    if (search.kind !== 'ok') return
     const detail = await detailCapabilityTool(port, { toolRef: projected.toolRef }, 2_000)
     expect(detail.kind).toBe('found')
     if (detail.kind !== 'found') return
@@ -512,20 +308,10 @@ describe('capability Tool search ranking', () => {
     expect(compare.kind).toBe('ok')
     if (compare.kind !== 'ok') return
 
-    expect([
-      search.items[0]?.callVia,
-      detail.tool.callVia,
-      compare.tools[0]?.callVia,
-    ]).toEqual([
-      CALL_ROUTE_CONTRACT.call.path,
-      CALL_ROUTE_CONTRACT.call.path,
-      CALL_ROUTE_CONTRACT.call.path,
-    ])
-    expect([
-      search.items[0]?.paymentLane,
-      detail.tool.paymentLane,
-      compare.tools[0]?.paymentLane,
-    ]).toEqual(['brokered', 'brokered', 'brokered'])
+    expect(detail.tool.callVia).toBe(CALL_ROUTE_CONTRACT.call.path)
+    expect(compare.tools[0]?.callVia).toBe(CALL_ROUTE_CONTRACT.call.path)
+    expect(detail.tool.paymentLane).toBe('brokered')
+    expect(compare.tools[0]?.paymentLane).toBe('brokered')
   })
   it('keeps contract input names when transport mappings rename query fields', () => {
     const record = sourceRecord('capability:frankfurter.single-rate', 'Frankfurter rate', ['fx', 'rate'])

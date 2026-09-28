@@ -253,8 +253,14 @@ export function createMarketDemandService(request: Request, bodyText: string): M
         context: { caller: 'http', request },
       })
       if (current.kind === 'unavailable') return { kind: 'refused', code: 'source_unavailable' }
-      if (current.kind === 'matched') return { kind: 'refused', code: 'current_match_exists' }
-      if (current.kind === 'degraded' || current.partialResults || current.pagination.hasMore) return { kind: 'refused', code: 'source_unavailable' }
+      if (current.results.some(row => row.access === 'ae_callable' && row.toolRef !== undefined)) {
+        return { kind: 'refused', code: 'current_match_exists' }
+      }
+      if (current.kind !== 'noMatch' && current.kind !== 'match') return { kind: 'refused', code: 'source_unavailable' }
+      if (current.assessed.coverage !== 'complete' || current.assessed.scope !== 'complete'
+        || current.assessed.source === 'coinbase' || current.partialResults || current.pagination.hasMore) {
+        return { kind: 'refused', code: 'source_unavailable' }
+      }
       const result = await mutate<unknown>(recordMutation, {
         ...input,
         agentPrincipal: principal,
@@ -341,14 +347,14 @@ export function createMarketDemandService(request: Request, bodyText: string): M
       if (requestRecord.data.createdAt > startedAt) return { kind: 'error', code: 'source_unavailable' }
       if (startedAt >= expiresAt) return { kind: 'not_found' }
       const search = await registryToolsSearchAction.run({
-        data: registryToolsSearchAction.schema.parse({ query: requestRecord.data.query, limit: 3, detail: 'full' }),
+        data: registryToolsSearchAction.schema.parse({ query: requestRecord.data.query, limit: 3 }),
         context: { caller: 'http', request },
       })
       if (search.kind === 'unavailable') return { kind: 'error', code: 'source_unavailable' }
-      if (search.kind === 'degraded' || search.partialResults) return { kind: 'error', code: 'source_unavailable' }
+      const assessed = search.results.flatMap(row => row.access === 'ae_callable' && row.toolRef !== undefined
+        ? [{ ...row, toolRef: row.toolRef }] : []).slice(0, 3)
       let tools: z.infer<typeof publicToolChoiceSchema>[] = []
-      if (search.kind === 'matched') {
-        const assessed = search.results.slice(0, 3)
+      if (assessed.length > 0) {
         const currentTools = await registryToolsCompareAction.run({
           data: registryToolsCompareAction.schema.parse({ toolRefs: assessed.map(tool => tool.toolRef) }),
           context: { caller: 'http', request },
@@ -360,13 +366,11 @@ export function createMarketDemandService(request: Request, bodyText: string): M
         }
         for (const prior of assessed) {
           const current = byRef.get(prior.toolRef)
-          // A changed capability invalidates the assessment; prices and health
-          // can refresh independently without changing the ranked identities.
-          if (current === undefined || prior.details === undefined
-            || current.capabilityId !== prior.details.capabilityId
-            || current.title !== prior.title || current.description !== prior.details.description
-            || current.provider.name !== prior.details.provider.name
-            || current.provider.slug !== prior.details.provider.slug) {
+          // Search is compact: compare the stable public identity available at
+          // search time, then use the live Tool projection for the suggestion.
+          if (current === undefined || Array.from(current.title).slice(0, 72).join('') !== prior.title
+            || Array.from(current.provider.name).slice(0, 48).join('') !== prior.provider
+            || Array.from(current.description).slice(0, 100).join('') !== prior.summary) {
             return { kind: 'error', code: 'source_unavailable' }
           }
           tools.push(current)
@@ -394,8 +398,12 @@ export function createMarketDemandService(request: Request, bodyText: string): M
         return { kind: 'error', code: 'source_unavailable' }
       }
       if (Date.now() >= expiresAt) return { kind: 'not_found' }
-      if (search.kind === 'noMatch') {
-        if (search.pagination.hasMore) return { kind: 'error', code: 'source_unavailable' }
+      if (tools.length === 0) {
+        if (search.kind !== 'noMatch' && search.kind !== 'match') return { kind: 'error', code: 'source_unavailable' }
+        if (search.assessed.coverage !== 'complete' || search.assessed.scope !== 'complete'
+          || search.assessed.source === 'coinbase' || search.partialResults || search.pagination.hasMore) {
+          return { kind: 'error', code: 'source_unavailable' }
+        }
         return {
           kind: 'open',
           requestRef: requestRecord.data.requestRef,

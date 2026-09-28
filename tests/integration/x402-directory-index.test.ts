@@ -3,6 +3,7 @@ import { api, internal } from '../../convex/_generated/api'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import type { Infer } from 'convex/values'
 import { pageValue } from '../../convex/lib/market/directoryIndex/contracts'
+import { searchCompactReturns } from '../../convex/lib/market/directoryIndex/browse'
 import type { IndexedSource } from '../../convex/lib/market/directoryIndex/contracts'
 import { convexTestWithMarketComponents, type ConvexFixtureBackend } from '../helpers/convex-fixtures'
 
@@ -195,6 +196,105 @@ describe('complete external directory index', () => {
     expect(await backend.mutation(internal.x402DirectoryIndexBackfill.batch, { generation, workload })).toEqual({ kind: 'ready', processed: 1 })
     expect(await backend.run(ctx => ctx.db.query('marketExternalRegistryEntries').collect())).toEqual(before)
     expect(await backend.query(api.x402DirectoryIndex.analytics, {})).toMatchObject({ kind: 'ok', totalTools: 1, adoption: expect.arrayContaining([{ key: '10_49', label: '10–49 payers', count: 1 }]) })
+  })
+
+  it('returns compact class-filtered cursor pages while keeping source JSON behind exact document ID detail', async () => {
+    const { backend, workload } = await setup()
+    const generation = 'coinbase-compact'
+    await seedRefresh(backend, generation)
+    const unknown = source(26, { tags: [] })
+    delete unknown.entry.category
+    const retained = { resource: unknown.resource, description: 'Research tool 26', fullSchema: 'x'.repeat(8000) }
+    const geo = source(27, { tags: [], method: 'GET', input: {
+      fields: [{ name: 'latitude', path: 'latitude', location: 'queryParams', source: 'schema' }],
+    } })
+    delete geo.entry.category
+    const items = [...Array.from({ length: 26 }, (_, index) => source(index, {
+      category: index === 25 ? 'image generation' : 'web search',
+      tags: index === 25 ? ['generate', 'image'] : ['search', 'web'],
+    })), { ...unknown, sourceJson: JSON.stringify(retained), sourceDigest: canonicalDigest(retained) }, geo]
+    await backend.mutation(internal.x402DirectoryIndexStore.applyPage, { generation, offset: 0, reportedTotal: 28, observedAt: 2, runStartedAt: 1, workload, items })
+    await backend.mutation(internal.x402DirectoryIndexStore.applyPage, { generation, offset: 100, reportedTotal: 28, observedAt: 3, runStartedAt: 1, workload, items: [] })
+    let cursor: string | null = null
+    let firstCursor: string | undefined
+    const ids = new Set<string>()
+    let unclassifiedId: string | undefined
+    for (let pageIndex = 0; pageIndex < 3; pageIndex += 1) {
+      const result: Infer<typeof searchCompactReturns> = await backend.query(api.x402DirectoryIndex.searchCompact, { query: 'research', actionClass: 'retrieve', objectClass: 'web', paginationOpts: { cursor, numItems: 12 } })
+      if (result.kind !== 'ok') throw new Error('compact index unavailable')
+      for (const row of result.page) {
+        expect(row).toMatchObject({ source: 'coinbase', completedAt: 3 })
+        if (row.actionClass === 'unclassified' && row.objectClass === 'unclassified') unclassifiedId = row.id
+        expect(JSON.stringify(row)).not.toContain('sourceJson')
+        expect(JSON.stringify(row)).not.toContain('metadataJson')
+        expect(JSON.stringify(row)).not.toContain('resource')
+        expect(JSON.stringify(row)).not.toContain('fullSchema')
+        ids.add(row.id)
+      }
+      expect(result.coverage).toMatchObject({ generation, completedAt: 3 })
+      expect(new TextEncoder().encode(JSON.stringify(result)).byteLength).toBeLessThan(16 * 1024)
+      if (pageIndex === 0) firstCursor = result.continueCursor
+      if (result.isDone) break
+      cursor = result.continueCursor
+    }
+    expect(ids.size).toBe(26)
+    const classified = await backend.query(api.x402DirectoryIndex.searchCompact, { query: 'research', actionClass: 'create', objectClass: 'image', paginationOpts: { cursor: null, numItems: 8 } })
+    expect(unclassifiedId).toBeDefined()
+    expect(await backend.query(api.x402DirectoryIndex.searchCompact, { query: '', paginationOpts: { cursor: null, numItems: 12 } }))
+      .toMatchObject({ kind: 'ok', isDone: false, page: expect.arrayContaining([expect.objectContaining({ id: expect.stringMatching(/^registry:/u) })]) })
+    expect(classified).toMatchObject({ kind: 'ok', page: expect.arrayContaining([
+      expect.objectContaining({ actionClass: 'create', objectClass: 'image' }),
+      expect.objectContaining({ actionClass: 'unclassified', objectClass: 'unclassified' }),
+    ]) })
+    expect(await backend.query(api.x402DirectoryIndex.searchCompact, { query: 'research', actionClass: 'retrieve', objectClass: 'location', paginationOpts: { cursor: null, numItems: 8 } }))
+      .toMatchObject({ kind: 'ok', page: expect.arrayContaining([expect.objectContaining({ actionClass: 'retrieve', objectClass: 'location' })]) })
+    const rawId = ids.values().next().value
+    if (rawId === undefined) throw new Error('missing compact ID')
+    const detail = await backend.query(api.x402DirectoryIndex.detailById, { id: rawId })
+    expect(detail).toMatchObject({ kind: 'found', item: { entry: { metadataJson: expect.stringContaining('resource') } } })
+    if (unclassifiedId === undefined) throw new Error('missing unclassified listing')
+    expect(await backend.query(api.x402DirectoryIndex.detailById, { id: unclassifiedId }))
+      .toMatchObject({ kind: 'found', item: { entry: { metadataJson: JSON.stringify(retained) } } })
+    expect(await backend.query(api.x402DirectoryIndex.detailById, { id: 'registry:missing' })).toEqual({ kind: 'not_found' })
+    expect(await backend.query(api.x402DirectoryIndex.searchCompact, { query: 'x'.repeat(201), paginationOpts: { cursor: null, numItems: 8 } })).toEqual({ kind: 'unavailable', reason: 'query_invalid' })
+    if (firstCursor === undefined) throw new Error('missing pagination cursor')
+    expect(await backend.query(api.x402DirectoryIndex.searchCompact, { query: 'research', objectClass: 'image', paginationOpts: { cursor: firstCursor, numItems: 8 } }))
+      .toEqual({ kind: 'unavailable', reason: 'cursor_invalid' })
+    await backend.run(async ctx => {
+      const record = await ctx.db.query('marketExternalRegistryGenerations').withIndex('by_generation', q => q.eq('generation', generation)).unique()
+      if (record === null) throw new Error('missing directory generation')
+      await ctx.db.patch(record._id, { completedAt: 4 })
+    })
+    expect(await backend.query(api.x402DirectoryIndex.searchCompact, { query: 'research', actionClass: 'retrieve', objectClass: 'web', paginationOpts: { cursor: firstCursor, numItems: 12 } }))
+      .toEqual({ kind: 'unavailable', reason: 'cursor_invalid' })
+  })
+
+  it('classifies previously indexed unchanged rows during the existing refresh', async () => {
+    const { backend, workload } = await setup()
+    const generation = 'coinbase-reclassify'
+    await seedRefresh(backend, generation)
+    const item = source(1, { category: 'document parsing', tags: ['parse', 'pdf'] })
+    await backend.mutation(internal.x402DirectoryIndexStore.applyPage, { generation, offset: 0, reportedTotal: 1, observedAt: 2, runStartedAt: 1, workload, items: [item] })
+    await backend.mutation(internal.x402DirectoryIndexStore.applyPage, { generation, offset: 100, reportedTotal: 1, observedAt: 3, runStartedAt: 1, workload, items: [] })
+    await backend.run(async ctx => {
+      const row = await ctx.db.query('marketDirectorySearchEntries').withIndex('by_generation_and_network_and_resource', q => q.eq('generation', generation).eq('network', '*').eq('resource', item.resource)).unique()
+      if (row === null) throw new Error('missing projected row')
+      await ctx.db.patch(row._id, { actionClass: undefined, objectClass: undefined })
+      const entry = await ctx.db.get(row.entryId)
+      if (entry === null) throw new Error('missing source row')
+      await ctx.db.patch(entry._id, { actionClass: undefined, objectClass: undefined })
+    })
+    await backend.run(async ctx => {
+      const state = await ctx.db.query('marketExternalRegistryState').withIndex('by_key', q => q.eq('key', 'coinbase')).unique()
+      const active = await ctx.db.query('marketExternalRegistryGenerations').withIndex('by_generation', q => q.eq('generation', generation)).unique()
+      if (state === null || active === null) throw new Error('missing index state')
+      await ctx.db.patch(state._id, { refreshGeneration: generation, lastAttemptStatus: 'refreshing', runStartedAt: 4 })
+      await ctx.db.patch(active._id, { status: 'refreshing', nextOffset: 0, pageItemCursor: undefined })
+    })
+    await backend.mutation(internal.x402DirectoryIndexStore.applyPage, { generation, offset: 0, reportedTotal: 1, observedAt: 4, runStartedAt: 4, workload, items: [item] })
+    await backend.mutation(internal.x402DirectoryIndexStore.applyPage, { generation, offset: 100, reportedTotal: 1, observedAt: 5, runStartedAt: 4, workload, items: [] })
+    expect(await backend.query(api.x402DirectoryIndex.searchCompact, { query: 'research', actionClass: 'transform', objectClass: 'document', paginationOpts: { cursor: null, numItems: 8 } }))
+      .toMatchObject({ kind: 'ok', page: [{ actionClass: 'transform', objectClass: 'document' }] })
   })
 
 })

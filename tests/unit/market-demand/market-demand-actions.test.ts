@@ -2,9 +2,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import type * as ConvexSourceModule from '@/lib/server/convex-source'
 
-const { query } = vi.hoisted(() => ({ query: vi.fn() }))
+const { query, mutation } = vi.hoisted(() => ({ query: vi.fn(), mutation: vi.fn() }))
 vi.mock('@/lib/server/convex-source', async (importOriginal) => ({
-  ...(await importOriginal<typeof ConvexSourceModule>()), callPublicSourceQuery: query,
+  ...(await importOriginal<typeof ConvexSourceModule>()), callPublicSourceQuery: query, callPublicSourceMutation: mutation,
 }))
 vi.mock('@/lib/server/source-write-admission', () => ({
   sourceWriteAdmissionFromRequest: vi.fn(async () => ({ kind: 'admitted' })),
@@ -34,13 +34,24 @@ const principal = {
 const source = misorderedSearchResult('convert timezones')
 const matchingTools = projectToolListChoices(source)
 if (matchingTools.kind !== 'ok') throw new Error('matching_tools_fixture_invalid')
-const matchingSearch = projectToolSearchChoices(source, undefined, { verdict: 'matched', nearMisses: [] }, undefined, 'full')
+const matchingSearch = projectToolSearchChoices(source, undefined, { verdict: 'matched', nearMisses: [] }, undefined, 8, { complete: true })
+const emptySearch = projectToolSearchChoices({ ...source, items: [] }, undefined, { verdict: 'noMatch', nearMisses: [] }, undefined, 8, { complete: true })
+const externalSearch = {
+  ...matchingSearch,
+  kind: 'match' as const,
+  results: matchingSearch.results.slice(0, 1).map(({ toolRef: _toolRef, ...row }) => ({
+    ...row, id: 'external:timezone', source: 'coinbase' as const, access: 'external_listing' as const,
+    detailRef: 'external:timezone',
+    next: [{ action: 'describe-external' as const, authority: 'public' as const, args: { id: 'external:timezone' } }],
+  })),
+}
 afterEach(() => {
   vi.restoreAllMocks()
 })
 beforeEach(() => {
   vi.spyOn(Date, 'now').mockReturnValue(2_000)
   query.mockReset().mockResolvedValue({ kind: 'not_found' })
+  mutation.mockReset().mockResolvedValue({ kind: 'recorded', requestRef: 'market-request:recorded', query: 'convert timezones', createdAt: 2_000 })
   vi.spyOn(registryToolsCompareAction, 'run').mockResolvedValue({
     kind: 'ok', schemaVersion: 'registry-tools:v3', tools: matchingTools.items,
   })
@@ -60,6 +71,25 @@ describe('market demand action contract', () => {
       principal,
       correlationId: 'correlation:one',
     })).resolves.toEqual({ kind: 'refused', code: 'current_match_exists' })
+  })
+
+  it('records a complete external-only match because it is not AE-callable', async () => {
+    vi.spyOn(registryToolsSearchAction, 'run').mockResolvedValue(externalSearch)
+    const service = createMarketDemandService(new Request('https://ae.example/api/v1/market-requests'), '{}')
+    expect(await service.create({ input: { query: 'convert timezones', idempotencyKey: 'external' }, principal, correlationId: 'external' }))
+      .toMatchObject({ kind: 'recorded' })
+    expect(mutation).toHaveBeenCalledOnce()
+  })
+
+  it('records only after an exhaustive no-match, not a scoped or unavailable search', async () => {
+    const search = vi.spyOn(registryToolsSearchAction, 'run').mockResolvedValue(emptySearch)
+    const service = createMarketDemandService(new Request('https://ae.example/api/v1/market-requests'), '{}')
+    expect(await service.create({ input: { query: 'convert timezones', idempotencyKey: 'empty' }, principal, correlationId: 'empty' }))
+      .toMatchObject({ kind: 'recorded' })
+    search.mockResolvedValue({ ...emptySearch, kind: 'scoped', assessed: { ...emptySearch.assessed, scope: 'page', coverage: 'partial' }, reason: 'More supply remains.' })
+    expect(await service.create({ input: { query: 'convert timezones', idempotencyKey: 'scoped' }, principal, correlationId: 'scoped' }))
+      .toEqual({ kind: 'refused', code: 'source_unavailable' })
+    expect(mutation).toHaveBeenCalledOnce()
   })
 
   it.each(['new_supply', 'outage', 'expired'])('replays a retained request before checking %s', async (state) => {
@@ -205,12 +235,19 @@ describe('market demand action contract', () => {
     expect(query.mock.invocationCallOrder[1]).toBeGreaterThan(vi.mocked(registryToolsCompareAction.run).mock.invocationCallOrder[0]!)
   })
 
+  it('keeps an external-only match open without suggesting or comparing an external listing', async () => {
+    query.mockResolvedValue(found)
+    vi.spyOn(registryToolsSearchAction, 'run').mockResolvedValue(externalSearch)
+    expect(await status()).toEqual({ kind: 'open', requestRef: retained.requestRef, query: retained.query, createdAt: retained.createdAt, matchedCount: 0 })
+    expect(registryToolsCompareAction.run).not.toHaveBeenCalled()
+  })
+
   it('does not infer a missing capability from an incomplete empty search page', async () => {
     query.mockResolvedValue(found)
     vi.spyOn(registryToolsSearchAction, 'run').mockResolvedValue({
-      kind: 'noMatch', schemaVersion: 'registry-tools:v3', query: retained.query,
-      scope: 'page', results: [], nearMisses: [], reason: 'No match on this page.',
-      suggestions: [], partialResults: false, next: [{ action: 'next-page', authority: 'public', args: { query: retained.query, cursor: 'next-page' } }],
+      ...emptySearch, kind: 'scoped', query: retained.query, reason: 'More supply remains.',
+      assessed: { ...emptySearch.assessed, scope: 'page', coverage: 'partial' },
+      next: [{ action: 'next-page', authority: 'public', args: { query: retained.query, cursor: 'next-page' } }],
       pagination: { limit: 3, hasMore: true, nextCursor: 'next-page' },
     })
     expect(await status()).toEqual({ kind: 'error', code: 'source_unavailable' })

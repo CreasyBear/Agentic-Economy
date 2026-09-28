@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button'
 import { buttonVariants } from '@/components/ui/button-variants'
 import { cn } from '@/lib/utils'
 
-import type { MarketToolSearchStatus } from '../tools-search-page.contracts'
+import type { MarketToolSearchStatus, SearchRecoveryProps, ToolSearchNextPage } from '../tools-search-page.contracts'
 
 export type ToolSearchStatusProps = Readonly<{
   status: MarketToolSearchStatus
@@ -14,6 +14,7 @@ export type ToolSearchStatusProps = Readonly<{
   recentCount: number
   onQueryChange: (query: string) => void
   onRetry: () => void
+  onContinue: (nextPage: ToolSearchNextPage) => void
 }>
 
 export function ToolSearchStatus({
@@ -22,6 +23,7 @@ export function ToolSearchStatus({
   recentCount,
   onQueryChange,
   onRetry,
+  onContinue,
 }: ToolSearchStatusProps) {
   if (status.kind === 'idle') {
     return (
@@ -45,6 +47,7 @@ export function ToolSearchStatus({
         message={status.message}
         onRetry={onRetry}
         onClear={() => onQueryChange('')}
+        onContinue={onContinue}
         isError
       />
     )
@@ -55,6 +58,7 @@ export function ToolSearchStatus({
         message={status.message}
         onRetry={onRetry}
         onClear={() => onQueryChange('')}
+        onContinue={onContinue}
       />
     )
   }
@@ -64,26 +68,23 @@ export function ToolSearchStatus({
         message={status.message}
         onRetry={onRetry}
         onClear={() => onQueryChange('')}
+        onContinue={onContinue}
+        {...(status.nextPage === undefined ? {} : { nextPage: status.nextPage })}
       />
     )
   }
   return null
 }
 
-type SearchRecoveryProps = Readonly<{
-  message: string
-  onRetry: () => void
-  onClear: () => void
-  isError?: boolean
-}>
 
-function SearchRecovery({ message, onRetry, onClear, isError = false }: SearchRecoveryProps) {
+function SearchRecovery({ message, onRetry, onClear, onContinue, nextPage, isError = false }: SearchRecoveryProps) {
   return (
     <div className="grid gap-intra px-gutter py-section">
       <p role={isError ? 'alert' : undefined} className="text-sm text-muted-foreground">{message}</p>
       <div className="flex flex-wrap gap-intra">
-        <Button type="button" size="sm" className="min-h-touch" onClick={onRetry}>
-          Try again
+        <Button type="button" size="sm" className="min-h-touch"
+          onClick={nextPage === undefined ? onRetry : () => onContinue(nextPage)}>
+          {nextPage === undefined ? 'Try again' : 'Next page'}
         </Button>
         <Button
           type="button"

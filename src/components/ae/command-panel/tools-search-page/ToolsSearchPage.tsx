@@ -3,6 +3,7 @@
 import { useRef, useState } from 'react'
 
 import { Command, CommandEmpty, CommandList } from '@/components/ui/command'
+import { Button } from '@/components/ui/button'
 import {
   searchMarketTools,
   type MarketToolSearchInput,
@@ -19,6 +20,7 @@ import {
   deriveToolsSearchChoices,
   filterCommandPaletteEntries,
   toolSearchStatusMessage,
+  type ToolSearchContinuation,
 } from './tools-search-page.contracts'
 import { useCommandPaletteSelection } from './useCommandPaletteSelection'
 import { useMarketToolSearch } from './useMarketToolSearch'
@@ -48,7 +50,10 @@ export function ToolsSearchPage({
 }: ToolsSearchPageProps) {
   const trimmedQuery = query.trim()
   const [searchAttempt, setSearchAttempt] = useState(0)
-  const { status, navigationItems } = useMarketToolSearch({ query, searchAttempt, searchTools })
+  const [continuation, setContinuation] = useState<ToolSearchContinuation>()
+  const { status, navigationItems } = useMarketToolSearch({
+    query, searchAttempt, searchTools, ...(continuation === undefined ? {} : { continuation }),
+  })
   const recentToolRefs = useRecentToolRefs()
   const inputRef = useRef<HTMLInputElement>(null)
   const matchingNavItems = filterCommandPaletteEntries(navigationItems, trimmedQuery)
@@ -68,6 +73,9 @@ export function ToolsSearchPage({
   const choiceValues = [...navChoiceValues, ...quickChoiceValues, ...toolChoiceValues]
   const showCommandEmpty =
     matchingNavItems.length === 0 && matchingQuickActions.length === 0 && choices.length === 0
+  const nextPage = status.kind === 'success' && status.query === trimmedQuery
+    ? status.nextPage
+    : undefined
   const selection = useCommandPaletteSelection({
     isActive,
     trimmedQuery,
@@ -81,7 +89,10 @@ export function ToolsSearchPage({
     inputRef,
     status,
     onSelectTool: selectListing,
-    onQueryInputChange: onQueryChange,
+    onQueryInputChange: (value) => {
+      setContinuation(undefined)
+      onQueryChange(value)
+    },
   })
 
   return (
@@ -130,6 +141,14 @@ export function ToolsSearchPage({
           onSelectTool={selectListing}
           onClearPendingIntent={selection.clearPendingIntent}
         />
+        {nextPage !== undefined ? (
+          <div className="px-gutter py-intra">
+            <Button type="button" size="sm" className="min-h-touch"
+              onClick={() => setContinuation({ ...nextPage, forQuery: trimmedQuery })}>
+              Next page
+            </Button>
+          </div>
+        ) : null}
         {showCommandEmpty ? (
           <CommandEmpty>
             <ToolSearchStatus
@@ -137,7 +156,11 @@ export function ToolsSearchPage({
               query={query}
               recentCount={recentToolRefs.length}
               onQueryChange={selection.handleQueryInputChange}
-              onRetry={() => setSearchAttempt((attempt) => attempt + 1)}
+              onRetry={() => {
+                setContinuation(undefined)
+                setSearchAttempt((attempt) => attempt + 1)
+              }}
+              onContinue={(nextPage) => setContinuation({ ...nextPage, forQuery: trimmedQuery })}
             />
           </CommandEmpty>
         ) : null}

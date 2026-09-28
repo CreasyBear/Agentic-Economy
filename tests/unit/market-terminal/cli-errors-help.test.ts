@@ -245,24 +245,21 @@ describe('market-terminal CLI error contracts', () => {
     expect(parsed.positionals).toEqual(['operation:v1:first', 'operation:v1:second'])
   })
 
-  it('keeps search compact while still accepting the global technical flag', async () => {
+  it('directs compact search callers to exact describe instead of accepting --technical', async () => {
     const help = await runCliInProcess(['help', 'search', '--json'])
     expect(help.status).toBe(0)
     expect(help.stderr).toBe('')
     expect(JSON.parse(help.stdout)).toMatchObject({
       command: 'search',
-      usage: 'ae search "<what you need>" [--limit <1-20>] [--cursor <cursor>] [--filters \'<json>\']',
+      usage: 'ae search "<what you need>" [--limit <1-12>] [--cursor <cursor>] [--filters \'<json>\']',
       guidance: [
         expect.any(String),
         expect.any(String),
         expect.stringContaining('compact catalog facts'),
       ],
-      flags: {
-        '--technical': {
-          description: expect.stringContaining('JSON search results'),
-        },
-      },
+      flags: { '--limit': { description: expect.stringContaining('1-12') } },
     })
+    expect(JSON.parse(help.stdout).flags).not.toHaveProperty('--technical')
 
     const parsed = parseArgs(['search', 'reference lookup', '--technical', '--json'])
     expect(parsed.options).toMatchObject({ technical: true, json: true })
@@ -278,8 +275,9 @@ describe('market-terminal CLI error contracts', () => {
     expect(command.status).toBe(1)
     expect(command.stderr).toBe('')
     expect(JSON.parse(command.stdout)).toMatchObject({
-      kind: 'UNAVAILABLE',
-      code: 'connection_refused',
+      kind: 'INVALID_ARGUMENT',
+      code: 'search-technical-unsupported',
+      message: 'Search returns compact results. Run ae describe <ToolRef> to inspect full Tool metadata.',
     })
   }, 15_000)
 

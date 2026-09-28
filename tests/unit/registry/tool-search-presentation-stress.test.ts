@@ -167,15 +167,22 @@ describe('Jev search presentation stress', () => {
   })
 
   it('keeps the full match count and four choices across stored search cards', () => {
-    const results = Array.from({ length: 6 }, (_, index) => ({
-      toolRef: `operation:v1:${index.toString(16).padStart(64, 'a')}`,
-      title: `Lookup ${index}`,
-      price: { kind: 'indicative', label: 'A$0.01' },
-    }))
+    const results = Array.from({ length: 6 }, (_, index) => {
+      const toolRef = `operation:v1:${index.toString(16).padStart(64, 'a')}`
+      return {
+        id: toolRef, source: 'current', access: 'ae_callable', toolRef,
+        title: `Lookup ${index}`, summary: 'Lookup current data', provider: 'Provider',
+        actionClass: 'retrieve', objectClass: 'data', readiness: 'ready',
+        price: { kind: 'indicative', label: 'A$0.01' },
+        detailRef: toolRef, next: [{ action: 'describe', args: { toolRef }, authority: 'public' }],
+      }
+    })
     const card = projectToolCard({
       type: `tool-${CHAT_TOOL_NAME_MAP.canonicalToProvider['registry.tools.search']}`,
       state: 'output-available',
-      output: { kind: 'matched', results },
+      output: { kind: 'match', query: 'lookup', results,
+        assessed: { source: 'current', scope: 'complete', examined: 6, coverage: 'complete' },
+        next: [{ action: 'broaden', args: { query: 'lookup' }, authority: 'public' }] },
     })
 
     expect(card).toMatchObject({ kind: 'choices', count: 6 })

@@ -185,7 +185,7 @@ export const COMMANDS: Readonly<Record<string, RootCommandManifestEntry>> = {
   },
   search: {
     summary: 'Search current public Tools for what you need.',
-    args: '"<what you need>" [--limit <1-20>] [--cursor <cursor>] [--filters \'<json>\']',
+    args: '"<what you need>" [--limit <1-12>] [--cursor <cursor>] [--filters \'<json>\']',
     json: true,
     group: 'discover_compare',
     rootOrder: 1,

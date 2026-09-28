@@ -141,7 +141,7 @@ function currentProjectionTool(): PublicToolDescriptor {
 
 export function publicToolSearchResponse(
   query = "paid",
-): Extract<ToolChoiceSearchOutput, { kind: "matched" }> {
+): Extract<ToolChoiceSearchOutput, { kind: "match" }> {
   const source: ToolSearchResult = {
     kind: "ok",
     schemaVersion: "registry-tools:v3",
@@ -149,11 +149,11 @@ export function publicToolSearchResponse(
     items: [currentProjectionTool()],
     matchedCount: 1,
     ranking: [{ toolRef, rank: 1, score: 1 }],
-    pagination: { limit: 20, hasMore: false },
+    pagination: { limit: 12, hasMore: false },
     navigation: [],
   };
-  const projected = projectToolSearchChoices(source, undefined, { verdict: "matched", nearMisses: [] }, undefined, "full");
-  if (projected.kind !== "matched")
+  const projected = projectToolSearchChoices(source, undefined, { verdict: "matched", nearMisses: [] });
+  if (projected.kind !== "match")
     throw new Error("test_public_tool_search_projection_unexpected");
   return projected;
 }

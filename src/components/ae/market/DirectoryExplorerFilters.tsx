@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Sheet, SheetClose, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet'
 import { cn } from '@/lib/utils'
+import { SEARCH_QUERY_MAX_LENGTH } from '@/modules/common/search-query'
 import { x402DirectoryFilterSchema } from '@/modules/market/x402-directory'
 import type { X402DirectoryCatalogueOverview, X402DirectoryFacet } from '@/modules/market/x402-directory-catalogue'
 import type { DirectoryExplorerFilterPatch, DirectoryExplorerFilterValues } from '@/modules/market/directory-filters.contracts'
@@ -33,6 +34,31 @@ function activeAdvancedFilterCount(search: DirectoryExplorerFilterValues) {
     const value = search[key]
     return Array.isArray(value) ? value.length > 0 : value !== undefined && value !== false
   }).length
+}
+
+function DirectoryQueryFilter({ search, onChange }: Pick<DirectoryExplorerFiltersProps, 'search' | 'onChange'>) {
+  const id = useId()
+  const [query, setQuery] = useState(search.query ?? '')
+  const [queryError, setQueryError] = useState<string>()
+  const inputRef = useRef<HTMLInputElement>(null)
+  return <form className="flex flex-col gap-2" onSubmit={event => {
+    event.preventDefault()
+    const trimmed = query.trim()
+    if (trimmed.length > SEARCH_QUERY_MAX_LENGTH) {
+      setQueryError(`Use ${SEARCH_QUERY_MAX_LENGTH} characters or fewer. Shorten your search and try again.`)
+      inputRef.current?.focus()
+      return
+    }
+    setQueryError(undefined)
+    onChange({ query: trimmed || undefined, sort: trimmed ? 'relevance' : undefined })
+  }}>
+    <Field>
+      <FieldLabel htmlFor={`${id}-query`}>Search Tools</FieldLabel>
+      <Input ref={inputRef} id={`${id}-query`} type="search" value={query} onChange={event => { setQuery(event.target.value); setQueryError(undefined) }} placeholder="Weather forecasts, document analysis…" aria-invalid={queryError !== undefined} aria-describedby={queryError === undefined ? undefined : `${id}-query-error`} />
+      <FieldError id={`${id}-query-error`} className="text-xs">{queryError}</FieldError>
+    </Field>
+    <Button type="submit" variant="outline" size="sm" className="w-full">Search Tools</Button>
+  </form>
 }
 
 function MultipleFacets({ label, values, selected = [], onChange }: Readonly<{ label: string; values: readonly X402DirectoryFacet[]; selected?: readonly string[] | undefined; onChange: (values: string[] | undefined) => void }>) {
@@ -148,6 +174,7 @@ function AdvancedFilters({ search, overview, onChange }: Pick<DirectoryExplorerF
 function FilterBody({ search, overview, onChange, onReset, showHeading = true }: DirectoryExplorerFiltersProps & Readonly<{ showHeading?: boolean }>) {
   const facets = overview?.kind === 'ok' ? overview : undefined
   return <div className="flex flex-col gap-6">
+    <DirectoryQueryFilter search={search} onChange={onChange} />
     {showHeading ? <div className="flex items-center justify-between"><p className="text-sm font-semibold">Filters</p><Button type="button" variant="ghost" size="sm" className="min-h-touch" onClick={onReset}>Clear all</Button></div> : null}
     {facets === undefined ? <p className="text-xs text-muted-foreground">Category and network counts are unavailable.</p> : <><p className="text-xs leading-relaxed text-muted-foreground">Counts cover the full indexed catalogue.</p><Facets label="Provider category" allLabel="All categories" values={facets.categories} selected={search.directoryCategory} onChange={directoryCategory => onChange({ directoryCategory })} searchable /><Facets label="Provider" allLabel="All providers" values={facets.providers} selected={search.provider} onChange={provider => onChange({ provider })} searchable /></>}
     <Facets label="Listed price" allLabel="Any listed price" showCount={false} values={DIRECTORY_PRICE_BANDS.map(key => ({ key, label: priceBandLabels[key], count: 0 }))} selected={search.priceBand} onChange={value => {
@@ -162,6 +189,6 @@ function FilterBody({ search, overview, onChange, onReset, showHeading = true }:
 /** Values are passed to the route; the current page is never filtered in the browser. */
 export function DirectoryExplorerFilters(props: DirectoryExplorerFiltersProps) {
   const count = explorerFilterKeys.filter(key => props.search[key] !== undefined && props.search[key] !== false).length
-  const key = JSON.stringify(props.search)
-  return <Sheet><SheetTrigger render={<Button variant="outline" className="h-11 w-32 justify-between px-3 active:scale-100" aria-label={count > 0 ? `Filters ${count}` : 'Filters'}><span className="inline-flex items-center gap-2"><SlidersHorizontalIcon />Filters</span><span className={cn('min-w-5 rounded px-1 text-center text-xs tabular-nums', count > 0 ? 'bg-muted' : 'invisible')} aria-hidden="true">{count > 0 ? count : 1}</span></Button>} /><SheetContent side="left" className="w-full gap-0 sm:max-w-md"><SheetHeader className="border-b p-5 pr-12"><SheetTitle>Refine Tools</SheetTitle><SheetDescription>Filter the catalogue by price, Provider and published details.</SheetDescription></SheetHeader><div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-5"><FilterBody key={key} {...props} showHeading={false} /></div><SheetFooter className="flex flex-row items-stretch gap-3 border-t p-5"><Button type="button" variant="outline" className="min-h-touch flex-1 active:scale-100" onClick={props.onReset}>Clear filters</Button><SheetClose render={<Button className="min-h-touch flex-1 active:scale-100">Show results</Button>} /></SheetFooter></SheetContent></Sheet>
+  const [clearCount, setClearCount] = useState(0)
+  return <Sheet><SheetTrigger render={<Button variant="outline" className="h-11 w-32 justify-between px-3 active:scale-100" aria-label={count > 0 ? `Filters ${count}` : 'Filters'}><span className="inline-flex items-center gap-2"><SlidersHorizontalIcon />Filters</span><span className={cn('min-w-5 rounded px-1 text-center text-xs tabular-nums', count > 0 ? 'bg-muted' : 'invisible')} aria-hidden="true">{count > 0 ? count : 1}</span></Button>} /><SheetContent side="left" className="w-full gap-0 sm:max-w-md"><SheetHeader className="border-b p-5 pr-12"><SheetTitle>Refine Tools</SheetTitle><SheetDescription>Filter the catalogue by price, Provider and published details.</SheetDescription></SheetHeader><div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-5"><FilterBody key={clearCount} {...props} onReset={() => { setClearCount(value => value + 1); props.onReset() }} showHeading={false} /></div><SheetFooter className="flex flex-row items-stretch gap-3 border-t p-5"><Button type="button" variant="outline" className="min-h-touch flex-1 active:scale-100" onClick={() => { setClearCount(value => value + 1); props.onReset() }}>Clear filters</Button><SheetClose render={<Button className="min-h-touch flex-1 active:scale-100">Show results</Button>} /></SheetFooter></SheetContent></Sheet>
 }

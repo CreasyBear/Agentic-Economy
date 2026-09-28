@@ -5,11 +5,11 @@ import { CHAT_TOOL_NAME_MAP } from '@/modules/chat/tool-card'
 import { toolChoiceDescribeOutputSchema, toolChoiceSearchOutputSchema, type ToolChoiceSearchOutput } from '@/modules/registry/tool-choice-contracts'
 import type { ActionCtx } from '../../../_generated/server'
 import { createChatAgent } from '../tools/agent'
-import { CHAT_NO_RESULT_ANSWER, chatNoMatchSearchCount, prepareChatToolStep } from '../tools/step'
+import { CHAT_NO_RESULT_ANSWER, chatSearchResolution, prepareChatToolStep } from '../tools/step'
 import type { AnonymousChatMessage } from './contracts'
 
 type ChatCandidate =
-  | Extract<ToolChoiceSearchOutput, { kind: 'matched' }>['results'][number]
+  | Extract<ToolChoiceSearchOutput, { kind: 'match' }>['results'][number]
   | Extract<z.output<typeof toolChoiceDescribeOutputSchema>, { kind: 'found' }>['tool']
 
 export async function streamAnonymousChatResponse(
@@ -37,9 +37,10 @@ export async function streamAnonymousChatResponse(
         }
       }
       const steps = await result.steps
-      if (steps.every(step => step.toolResults.length === 0) || chatNoMatchSearchCount(steps) > 0) {
+      const resolution = chatSearchResolution(steps)
+      if (steps.every(step => step.toolResults.length === 0) || resolution !== null) {
         writer.write({ type: 'text-start', id: 'no-tool-result' })
-        writer.write({ type: 'text-delta', id: 'no-tool-result', delta: CHAT_NO_RESULT_ANSWER })
+        writer.write({ type: 'text-delta', id: 'no-tool-result', delta: resolution ?? CHAT_NO_RESULT_ANSWER })
         writer.write({ type: 'text-end', id: 'no-tool-result' })
         writer.write({ type: 'finish' })
         return
@@ -78,7 +79,7 @@ export async function streamAnonymousChatResponse(
       const candidates: ChatCandidate[] = []
       for (const step of steps) for (const result of step.toolResults) {
         const search = toolChoiceSearchOutputSchema.safeParse(result.output)
-        if (search.success && (search.data.kind === 'matched' || search.data.kind === 'degraded')) {
+        if (search.success && search.data.kind === 'match') {
           candidates.push(...search.data.results)
           continue
         }
@@ -87,13 +88,13 @@ export async function streamAnonymousChatResponse(
       }
       const first = candidates[0]
       const second = candidates.find(candidate => candidate.toolRef !== first?.toolRef)
-      const status = (health: 'operational' | 'degraded' | 'unverified') =>
-        health === 'operational' ? 'Operational' : health === 'degraded' ? 'Degraded' : 'Not yet verified by AE'
+      const source = (candidate: ChatCandidate) => 'access' in candidate && candidate.access === 'external_listing'
+        ? 'External listing; not callable through AE' : 'Admitted Tool; check current terms before use'
       const fallback = first === undefined
         ? CHAT_NO_RESULT_ANSWER
         : second === undefined
-          ? `**${first.title}: ${'summary' in first ? first.summary : first.description}**\n\n- Price: ${'price' in first ? first.price.label : first.priceLabel}.\n- Status: ${status(first.healthStatus)}.\n\nNext: Open the Tool card to check its inputs and current terms.`
-          : `**${first.title} and ${second.title} can both help with this request.**\n\n| Tool | Price | Status | Best for |\n| --- | --- | --- | --- |\n| **${first.title}** | ${'price' in first ? first.price.label : first.priceLabel} | ${status(first.healthStatus)} | ${'summary' in first ? first.summary : first.description} |\n| **${second.title}** | ${'price' in second ? second.price.label : second.priceLabel} | ${status(second.healthStatus)} | ${'summary' in second ? second.summary : second.description} |\n\nNext: Compare their inputs and current terms before choosing.`
+          ? `**${first.title} may fit this request.**\n\n${'summary' in first ? first.summary : first.description}\n\n${source(first)}.\n\nNext: Open its details to check the exact inputs and current terms.`
+          : `**${first.title} and ${second.title} are worth inspecting.**\n\n| Tool | Source | What it does |\n| --- | --- | --- |\n| ${first.title} | ${source(first)} | ${'summary' in first ? first.summary : first.description} |\n| ${second.title} | ${source(second)} | ${'summary' in second ? second.summary : second.description} |\n\nNext: Compare their exact inputs and current terms.`
       writer.write({ type: 'text-start', id: 'final-fallback' })
       writer.write({ type: 'text-delta', id: 'final-fallback', delta: fallback })
       writer.write({ type: 'text-end', id: 'final-fallback' })

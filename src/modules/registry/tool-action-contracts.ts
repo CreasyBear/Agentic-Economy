@@ -54,10 +54,9 @@ const listParameters = [
   parameter(toolListInputSchema, 'filters', 'Allowlisted Tool filters; Operational supply and admitted Tools checked when quoting are shown by default.'),
 ] as const
 const searchParameters = [
-  parameter(toolCatalogSearchInputSchema, 'source', 'Current AE inventory by default. Coinbase supports intent search up to 20 results; refine partial results. PayAI supports browsing only.'),
-  parameter(toolCatalogSearchInputSchema, 'query', 'Capability phrase from 1 to 256 characters.'),
-  parameter(toolCatalogSearchInputSchema, 'limit', 'Maximum 20 compact Tools; defaults to 10.'),
-  parameter(toolCatalogSearchInputSchema, 'detail', 'Concise cards by default; full includes provider and capability detail.'),
+  parameter(toolCatalogSearchInputSchema, 'source', 'Search AE-admitted Tools and Coinbase Bazaar together by default; select current or coinbase to narrow.'),
+  parameter(toolCatalogSearchInputSchema, 'query', 'Capability phrase from 1 to 200 characters.'),
+  parameter(toolCatalogSearchInputSchema, 'limit', 'Maximum 12 compact Tools; defaults to 8.'),
   parameter(toolCatalogSearchInputSchema, 'cursor', 'Opaque cursor from the previous page.'),
   parameter(toolCatalogSearchInputSchema, 'filters', 'Allowlisted Tool filters; Operational supply and admitted Tools checked when quoting are shown by default.'),
 ] as const
@@ -82,10 +81,10 @@ export const registryToolsListContract = {
 
 export const registryToolsSearchContract = {
   id: 'registry.tools.search', schema: toolCatalogSearchInputSchema, surfaces: toolMarketActionSurfaces(),
-  name: 'Search Tools', summary: 'Search compact current Tool supply with what you need.',
+  name: 'Search Tools', summary: 'Search admitted and Coinbase Bazaar Tools in one compact, paginated list.',
   boundaries, outputSchema: toolChoiceSearchOutputSchema, parameters: searchParameters, readOnly: true, effect: readOnlyEffect,
   invocationContract: {
-    version: 'registry.tools.search:v4', consequenceClass: 'read_only', materialInputPaths: ['source', 'query', 'limit', 'cursor', 'filters', 'detail'],
+    version: 'registry.tools.search:v5', consequenceClass: 'read_only', materialInputPaths: ['source', 'query', 'limit', 'cursor', 'filters'],
     authorityRequirement: 'none', retryClass: 'replayable', expectedEvidence: ['public_tool_search_result'],
     safeContinuations: ['registry.tools.describe'],
     invalidationConditions: ['action_contract_version_changed', 'query_changed', 'filters_changed', 'cursor_changed'],

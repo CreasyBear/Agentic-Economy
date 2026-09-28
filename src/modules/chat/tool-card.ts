@@ -4,16 +4,9 @@ import { chatClarifyInputSchema, storedClarifyAnswer } from '@/modules/chat/agen
 import { addRef, collectToolRefs, matchedCount } from '@/modules/chat/tool-card-search'
 import { isRecord } from '@/modules/common/is-record'
 import { publicToolDisplayPriceSchema } from '@/modules/capability-supply/tool-schemas'
-import type {
-  PublicToolAuthentication,
-  PublicToolAvailability,
-  PublicToolPrice,
-} from '@/modules/capability-supply/public'
-import {
-  formatToolAuthentication,
-  formatToolPrice,
-  formatToolReadiness,
-} from '@/modules/market/tool-view-model'
+import type { PublicToolAuthentication } from '@/modules/capability-supply/public'
+import { projectCompareContrasts, readPosture, readPrice } from './internal/tool-card-compare'
+import { formatToolAuthentication, formatToolPrice, formatToolReadiness } from '@/modules/market/tool-view-model'
 import {
   callResultKindValues,
   callResultSchema,
@@ -27,7 +20,8 @@ import {
   suggestNextAction,
   type SuggestedNextAction,
 } from '@/modules/market/suggested-next-action'
-import { formatCurrencyAmount, readExactAmount, formatDisplayPrice } from '@/modules/money/public'
+import { formatCurrencyAmount, formatDisplayPrice } from '@/modules/money/public'
+import { registryNextActionSchema, type RegistryNextAction } from '@/modules/registry/tool-choice-contracts'
 
 export const CHAT_TOOL_IDS = [
   'registry.tools.list',
@@ -66,6 +60,7 @@ export const CHAT_TOOL_TITLES: Readonly<Record<ChatToolId, string>> = {
 
 export type ToolChoiceRow = Readonly<{
   toolRef: string
+  detailHref?: string
   title: string
   provider?: string
   price?: string
@@ -95,7 +90,7 @@ type CardChrome = Readonly<{
 
 export type ToolCardProjection =
   | (CardChrome & { kind: 'working' })
-  | (CardChrome & { kind: 'status'; state: 'refused' | 'error' | 'attention'; summary: string })
+  | (CardChrome & { kind: 'status'; state: 'refused' | 'error' | 'attention'; summary: string; next?: RegistryNextAction })
   | (CardChrome & {
       kind: 'choices'
       state: 'complete'
@@ -104,6 +99,8 @@ export type ToolCardProjection =
       count?: number
       contrasts?: readonly ToolFact[]
       surface?: 'compare' | 'describe'
+      verdict?: 'match' | 'scoped'
+      next?: RegistryNextAction
     })
   | (CardChrome & {
       kind: 'inspect'
@@ -160,30 +157,6 @@ const REFUSAL_SUMMARIES: Readonly<Record<string, string>> = {
   turn_stopped: 'Turn stopped',
 }
 
-const FACT = {
-  maxCost: 'Maximum cost',
-  effects: 'Effects',
-  dataUse: 'Data use',
-  requiresPreparation: 'Requires preparation',
-  price: 'Price',
-  readiness: 'Readiness',
-} as const
-
-const EFFECT_LABEL = {
-  data_release: 'Data release',
-  financial_exposure: 'Financial exposure',
-  external_state_change: 'External state change',
-} as const
-
-const DATA_USE_LABEL = {
-  public: 'Public',
-  personal: 'Personal',
-  sensitive: 'Sensitive',
-  credential: 'Credential',
-} as const
-
-const COMPARE_FIELDS = ['price', 'effects', 'dataUse', 'availability'] as const
-
 function stringField(value: unknown): string | undefined {
   return typeof value === 'string' && value.trim().length > 0
     ? Array.from(value.trim()).slice(0, 120).join('')
@@ -193,24 +166,6 @@ function stringField(value: unknown): string | undefined {
 function boundedString(value: unknown, maximum: number): string | undefined {
   if (typeof value !== 'string' || value.trim().length === 0) return undefined
   return Array.from(value.trim()).slice(0, maximum).join('')
-}
-
-
-function readPrice(value: unknown): PublicToolPrice | undefined {
-  if (!isRecord(value) || typeof value.kind !== 'string') return undefined
-  if (value.kind === 'on_request') return { kind: 'on_request' }
-  if (value.kind === 'fixed') {
-    const amount = readExactAmount(value.amount)
-    return amount === undefined ? undefined : { kind: 'fixed', amount }
-  }
-  if (value.kind === 'range') {
-    const minimum = readExactAmount(value.minimum)
-    const maximum = readExactAmount(value.maximum)
-    return minimum === undefined || maximum === undefined
-      ? undefined
-      : { kind: 'range', minimum, maximum }
-  }
-  return undefined
 }
 
 function readAuthentication(value: unknown): PublicToolAuthentication | undefined {
@@ -226,26 +181,40 @@ function readAuthentication(value: unknown): PublicToolAuthentication | undefine
   return undefined
 }
 
-function readPosture(value: unknown): PublicToolAvailability['posture'] | undefined {
-  if (!isRecord(value) || typeof value.posture !== 'string') return undefined
-  if (value.posture === 'routeable' || value.posture === 'setup_required' || value.posture === 'unavailable') {
-    return value.posture
+function firstSearchNext(output: Record<string, unknown>): RegistryNextAction | undefined {
+  const actions = Array.isArray(output.next) ? output.next : output.next === undefined ? [] : [output.next]
+  for (const action of actions) {
+    const parsed = registryNextActionSchema.safeParse(action)
+    if (parsed.success) return parsed.data
   }
   return undefined
 }
 
 function rowFromChoiceFields(value: unknown): ToolChoiceRow | null {
   if (!isRecord(value)) return null
+  if (value.access === 'external_listing' && typeof value.id === 'string'
+    && value.source === 'coinbase' && typeof value.title === 'string') {
+    const provider = stringField(value.provider)
+    return {
+      toolRef: value.id,
+      detailHref: `/api/v1/registry/detail?id=${encodeURIComponent(value.id)}`,
+      title: stringField(value.title) ?? 'External listing',
+      ...(provider === undefined ? {} : { provider }),
+      access: 'external_listing',
+    }
+  }
   const refs: string[] = []
   addRef(refs, value.toolRef)
   const toolRef = refs[0]
   const title = stringField(value.title)
   if (toolRef === undefined || title === undefined) return null
-  const provider = isRecord(value.provider)
-    ? stringField(value.provider.name)
-    : isRecord(value.details) && isRecord(value.details.provider)
-      ? stringField(value.details.provider.name)
-      : undefined
+  const provider = typeof value.provider === 'string'
+    ? stringField(value.provider)
+    : isRecord(value.provider)
+      ? stringField(value.provider.name)
+      : isRecord(value.details) && isRecord(value.details.provider)
+        ? stringField(value.details.provider.name)
+        : undefined
   const display = publicToolDisplayPriceSchema.safeParse(value.displayPrice)
   const price = (display.success ? formatDisplayPrice(display.data) : undefined)
     ?? stringField(value.priceLabel)
@@ -319,7 +288,7 @@ function projectStoredChoice(value: unknown): ToolChoiceRow | null {
   if (!isRecord(value)) return null
   const refs: string[] = []
   addRef(refs, value.toolRef)
-  const toolRef = refs[0]
+  const toolRef = refs[0] ?? (value.access === 'external_listing' && typeof value.toolRef === 'string' ? value.toolRef : undefined)
   const title = stringField(value.title)
   if (toolRef === undefined || title === undefined) return null
   const provider = stringField(value.provider)
@@ -328,6 +297,8 @@ function projectStoredChoice(value: unknown): ToolChoiceRow | null {
   const access = stringField(value.access)
   return {
     toolRef,
+    ...(value.access === 'external_listing'
+      ? { detailHref: `/api/v1/registry/detail?id=${encodeURIComponent(toolRef)}` } : {}),
     title,
     ...(provider === undefined ? {} : { provider }),
     ...(price === undefined ? {} : { price }),
@@ -360,113 +331,6 @@ function projectStoredFacts(values: unknown): ToolFact[] {
     if (label === undefined || factValue === undefined) continue
     facts.push({ label, value: factValue })
     if (facts.length >= 6) break
-  }
-  return facts
-}
-
-
-function uniqueLabels(values: readonly string[]): string | undefined {
-  const labels: string[] = []
-  for (const value of values) {
-    if (labels.includes(value)) continue
-    labels.push(value)
-  }
-  return labels.length === 0 ? undefined : labels.join(', ')
-}
-
-function effectLabel(value: unknown): string | undefined {
-  if (!isRecord(value) || typeof value.class !== 'string') return undefined
-  if (value.class === 'data_release') return EFFECT_LABEL.data_release
-  if (value.class === 'financial_exposure') return EFFECT_LABEL.financial_exposure
-  if (value.class === 'external_state_change') return EFFECT_LABEL.external_state_change
-  return undefined
-}
-
-function dataUseLabel(value: unknown): string | undefined {
-  if (!isRecord(value) || typeof value.classification !== 'string') return undefined
-  if (value.classification === 'public') return DATA_USE_LABEL.public
-  if (value.classification === 'personal') return DATA_USE_LABEL.personal
-  if (value.classification === 'sensitive') return DATA_USE_LABEL.sensitive
-  if (value.classification === 'credential') return DATA_USE_LABEL.credential
-  return undefined
-}
-
-function labelsFromPolicy(
-  values: unknown,
-  labelOf: (value: unknown) => string | undefined,
-): string | undefined {
-  if (!Array.isArray(values)) return undefined
-  return uniqueLabels(values.flatMap((value) => {
-    const label = labelOf(value)
-    return label === undefined ? [] : [label]
-  }))
-}
-
-function merchandiseCompareValue(field: (typeof COMPARE_FIELDS)[number], value: unknown): string | undefined {
-  switch (field) {
-    case 'price': {
-      const price = readPrice(value)
-      return price === undefined ? undefined : formatToolPrice(price)
-    }
-    case 'effects':
-      return labelsFromPolicy(value, effectLabel)
-    case 'dataUse':
-      return labelsFromPolicy(value, dataUseLabel)
-    case 'availability': {
-      const posture = readPosture(value)
-      return posture === undefined ? undefined : formatToolReadiness(posture)
-    }
-    default: {
-      const exhaustive: never = field
-      return exhaustive
-    }
-  }
-}
-
-function compareFieldLabel(field: (typeof COMPARE_FIELDS)[number]): string {
-  switch (field) {
-    case 'price':
-      return FACT.price
-    case 'effects':
-      return FACT.effects
-    case 'dataUse':
-      return FACT.dataUse
-    case 'availability':
-      return FACT.readiness
-    default: {
-      const exhaustive: never = field
-      return exhaustive
-    }
-  }
-}
-
-function isCompareField(value: string): value is (typeof COMPARE_FIELDS)[number] {
-  return (COMPARE_FIELDS as readonly string[]).includes(value)
-}
-
-function projectCompareContrasts(
-  output: Record<string, unknown>,
-  choices: readonly ToolChoiceRow[],
-): ToolFact[] {
-  if (!Array.isArray(output.facts)) return []
-  const facts: ToolFact[] = []
-  for (const entry of output.facts) {
-    if (!isRecord(entry) || typeof entry.field !== 'string' || !isCompareField(entry.field)) continue
-    if (!Array.isArray(entry.values)) continue
-    const parts: string[] = []
-    for (const cell of entry.values) {
-      if (!isRecord(cell)) continue
-      const merchandised = merchandiseCompareValue(entry.field, cell.value)
-      if (merchandised === undefined) continue
-      const title = typeof cell.toolRef === 'string'
-        ? choices.find((choice) => choice.toolRef === cell.toolRef)?.title
-        : undefined
-      parts.push(title === undefined ? merchandised : `${title}: ${merchandised}`)
-      if (parts.length >= 4) break
-    }
-    if (parts.length === 0) continue
-    facts.push({ label: compareFieldLabel(entry.field), value: parts.join('; ') })
-    if (facts.length >= 4) break
   }
   return facts
 }
@@ -649,7 +513,7 @@ function outputRecord(part: Record<string, unknown>): Record<string, unknown> | 
   return isRecord(output) ? output : undefined
 }
 
-function statusCard(toolId: ChatToolId, state: 'refused' | 'error' | 'attention', summary: string): ToolCardProjection {
+function statusCard(toolId: ChatToolId, state: 'refused' | 'error' | 'attention', summary: string): Extract<ToolCardProjection, { kind: 'status' }> {
   return { ...chrome(toolId), kind: 'status', state, summary }
 }
 
@@ -658,8 +522,9 @@ function liveChoices(
   output: Record<string, unknown>,
   choices: readonly ToolChoiceRow[],
   contrasts?: readonly ToolFact[],
-): ToolCardProjection {
+): Extract<ToolCardProjection, { kind: 'choices' }> {
   const count = toolId === 'registry.tools.describe' ? undefined : matchedCount(output)
+  const next = toolId === 'registry.tools.search' ? firstSearchNext(output) : undefined
   return {
     ...chrome(toolId),
     kind: 'choices',
@@ -668,6 +533,9 @@ function liveChoices(
     toolRefs: collectToolRefs(output, choices),
     ...(count === undefined ? {} : { count }),
     ...(contrasts === undefined || contrasts.length === 0 ? {} : { contrasts }),
+    ...(toolId === 'registry.tools.search' && (output.kind === 'match' || output.kind === 'scoped')
+      ? { verdict: output.kind, ...(next === undefined ? {} : { next }) }
+      : {}),
   }
 }
 
@@ -676,7 +544,14 @@ function projectLiveBody(toolId: ChatToolId, output: Record<string, unknown>): T
     case 'registry.tools.list':
     case 'registry.tools.search': {
       if (toolId === 'registry.tools.search') {
-        if (output.kind === 'noMatch') return liveChoices(toolId, { count: 0 }, [])
+        if (output.kind === 'unavailable' || output.kind === 'noMatch') {
+          const next = firstSearchNext(output)
+          return {
+            ...statusCard(toolId, output.kind === 'unavailable' ? 'error' : 'attention',
+              output.kind === 'unavailable' ? 'Search is temporarily unavailable.' : 'No suitable Tool in the assessed catalogue.'),
+            ...(next === undefined ? {} : { next }),
+          }
+        }
         return liveChoices(toolId, output, projectLiveChoices(output.results))
       }
       return liveChoices(toolId, output, projectLiveChoices(output.items))
@@ -711,7 +586,11 @@ function projectStoredCard(part: Record<string, unknown>): ToolCardProjection | 
   if (part.kind === 'clarify' && toolId === 'chat.clarify') return projectStoredClarify(part)
   if (part.kind === 'status' || part.state === 'refused' || part.state === 'error') {
     const state = part.state === 'refused' || part.state === 'error' || part.state === 'attention' ? part.state : 'error'
-    return statusCard(toolId, state, stringField(part.summary) ?? (state === 'refused' ? 'Request refused' : 'Tool unavailable'))
+    const next = firstSearchNext(part)
+    return {
+      ...statusCard(toolId, state, stringField(part.summary) ?? (state === 'refused' ? 'Request refused' : 'Tool unavailable')),
+      ...(next === undefined ? {} : { next }),
+    }
   }
   const refs: string[] = []
   if (Array.isArray(part.toolRefs)) for (const value of part.toolRefs) addRef(refs, value)
@@ -762,6 +641,7 @@ function projectStoredCard(part: Record<string, unknown>): ToolCardProjection | 
   const contrasts = projectStoredFacts(part.contrasts)
   const title = stringField(part.title)
   const surface = part.surface === 'compare' || part.surface === 'describe' ? part.surface : undefined
+  const next = firstSearchNext(part)
   return {
     ...chrome(toolId),
     ...(title === undefined ? {} : { title }),
@@ -772,6 +652,8 @@ function projectStoredCard(part: Record<string, unknown>): ToolCardProjection | 
     ...(count === undefined ? {} : { count }),
     ...(surface === undefined ? {} : { surface }),
     ...(contrasts.length === 0 ? {} : { contrasts }),
+    ...(part.verdict === 'match' || part.verdict === 'scoped' ? { verdict: part.verdict } : {}),
+    ...(next === undefined ? {} : { next }),
   }
 }
 
@@ -825,7 +707,7 @@ export function projectToolCard(part: unknown): ToolCardProjection | null {
   const output = outputRecord(part)
   const kind = output?.kind
   if (kind === 'error') return statusCard(toolId, 'error', 'Tool unavailable')
-  if (kind === 'unavailable') return statusCard(toolId, 'error', 'Tool unavailable')
+  if (kind === 'unavailable' && toolId !== 'registry.tools.search') return statusCard(toolId, 'error', 'Tool unavailable')
   if (toolId === 'tool.call') {
     if (kind === 'chat_tool_refused') {
       const reason = typeof output?.reason === 'string' ? REFUSAL_SUMMARIES[output.reason] : undefined
@@ -864,7 +746,10 @@ export function projectToolCard(part: unknown): ToolCardProjection | null {
     return statusCard(toolId, 'refused', summary)
   }
   if (output === undefined) return statusCard(toolId, 'error', 'Tool unavailable')
-  if (kind !== 'ok' && kind !== 'found' && !(toolId === 'registry.tools.search' && (kind === 'matched' || kind === 'degraded' || kind === 'noMatch'))) return statusCard(toolId, 'error', 'Tool unavailable')
+  if (kind !== 'ok' && kind !== 'found' && !(toolId === 'registry.tools.search'
+    && (kind === 'match' || kind === 'scoped' || kind === 'noMatch' || kind === 'unavailable'))) {
+    return statusCard(toolId, 'error', 'Tool unavailable')
+  }
   return projectLiveBody(toolId, output)
 }
 
@@ -894,6 +779,7 @@ export function serializeToolCard(card: ToolCardProjection): Record<string, unkn
         title: card.title,
         state: card.state,
         summary: card.summary,
+        ...(card.next === undefined ? {} : { next: card.next }),
       }
     case 'choices':
       return {
@@ -906,6 +792,8 @@ export function serializeToolCard(card: ToolCardProjection): Record<string, unkn
         choices: card.choices.map((choice) => ({ ...choice })),
         ...(card.count === undefined ? {} : { count: card.count }),
         ...(card.surface === undefined ? {} : { surface: card.surface }),
+        ...(card.verdict === undefined ? {} : { verdict: card.verdict }),
+        ...(card.next === undefined ? {} : { next: card.next }),
         ...(card.contrasts === undefined || card.contrasts.length === 0
           ? {}
           : { contrasts: card.contrasts.map((fact) => ({ ...fact })) }),

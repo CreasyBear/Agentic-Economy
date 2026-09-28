@@ -24,13 +24,10 @@ export type {
   ListingPrice,
   ListingSource,
   ListingProjection,
-  ListingSearchItem,
-  ListingSearchGroups,
   DirectoryListingInput,
 } from './tool-entry'
 export {
   PublicToolRegistrySchemaVersion,
-  searchCapabilityTools,
   detailCapabilityTool,
   compareCapabilityTools,
   projectCapabilityTool,
@@ -99,6 +96,7 @@ export {
 } from './internal/services-api-projection'
 export { registrySearchTokens } from './internal/search-documents'
 export { isProductionToolChoice } from './tool-choice-evidence'
+export { SEARCH_ASSESSMENT_LIMIT, suitableRankedToolRefs } from './search-verdict'
 export type {
   PublicServicesApiPage,
   PublicServicesSearchPage,

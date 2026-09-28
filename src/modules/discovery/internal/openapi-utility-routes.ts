@@ -92,13 +92,44 @@ const sandboxReferenceResponseSchema = z.strictObject({
 })
 
 const registryBrowseSchema = z.strictObject({
-  schemaVersion: z.literal('api-registry:v3'),
+  schemaVersion: z.literal('api-registry:v4'),
   query: z.string(),
-  kind: z.string(),
-  coverage: z.record(z.string(), z.unknown()),
-  searchMethod: z.enum(['native_full_text', 'native_index']),
-  page: z.array(z.unknown()),
-  pagination: z.record(z.string(), z.unknown()),
+  kind: z.literal('ok'),
+  coverage: z.strictObject({ generation: z.string(), completedAt: z.number() }),
+  page: z.array(z.strictObject({
+    id: z.string().regex(/^registry:[a-f0-9]{64}$/u),
+    source: z.enum(['coinbase', 'provider']),
+    access: z.enum(['ae_callable', 'external_listing']),
+    sourceRouteRef: z.string().optional(),
+    toolRef: z.string().optional(),
+    title: z.string(),
+    summary: z.string(),
+    provider: z.string(),
+    actionClass: z.enum(['retrieve', 'transform', 'analyze', 'create', 'mutate', 'other', 'unclassified']),
+    objectClass: z.enum(['web', 'document', 'image', 'location', 'chain', 'data', 'other', 'unclassified']),
+    category: z.string().optional(),
+    completedAt: z.number(),
+    detailRef: z.string(),
+  })).max(12),
+  pagination: z.strictObject({ limit: z.number().int().min(1).max(12), nextCursor: z.string().optional(), hasMore: z.boolean() }),
+  freshness: z.record(z.string(), z.unknown()),
+})
+
+const registryDetailSchema = z.strictObject({
+  schemaVersion: z.literal('api-registry-detail:v1'),
+  kind: z.literal('found'),
+  id: z.string().regex(/^registry:[a-f0-9]{64}$/u),
+  access: z.enum(['ae_callable', 'external_listing']),
+  warning: z.string().optional(),
+  coverage: z.strictObject({ generation: z.string(), completedAt: z.number() }),
+  item: z.looseObject({
+    entry: z.looseObject({
+      metadataJson: z.string().describe('Full retained source JSON; returned only on exact detail.'),
+      input: z.looseObject({ schemaJson: z.string().optional() }).optional(),
+      output: z.looseObject({ schemaJson: z.string().optional() }).optional(),
+    }),
+    toolRef: z.string().optional(),
+  }),
   freshness: z.record(z.string(), z.unknown()),
 })
 
@@ -155,13 +186,19 @@ export const OPENAPI_SUPPLEMENTAL_ROUTES: readonly OpenApiSupplementalRoute[] = 
     problemKinds: ['UNSUPPORTED_MEDIA_TYPE', 'INVALID_ARGUMENT', 'PAYLOAD_TOO_LARGE', 'RESOURCE_EXHAUSTED'],
   },
   {
-    operationId: 'platform.registryBrowse', summary: 'Browse the x402 directory index', method: 'GET', path: '/api/v1/registry',
+    operationId: 'platform.registryBrowse', summary: 'Search the compact x402 directory index', method: 'GET', path: '/api/v1/registry',
     tags: ['Platform'],
     queryParams: [
       { name: 'query', description: 'Free-text query; empty browses without a search term.', required: false, schema: z.string().max(200) },
-      { name: 'limit', description: 'Maximum page size (1-50); native pages cap at 12 regardless.', required: false, schema: z.coerce.number().int().min(1).max(50) },
+      { name: 'limit', description: 'Maximum page size (1-12, default 8); each response stays under 16 KiB UTF-8.', required: false, schema: z.coerce.number().int().min(1).max(12) },
       cursorParam,
     ],
     outputSchema: registryBrowseSchema, problemKinds: ['INVALID_ARGUMENT', 'UNAVAILABLE', 'RESOURCE_EXHAUSTED'],
+  },
+  {
+    operationId: 'platform.registryExternalDetail', summary: 'Inspect one indexed x402 directory entry', method: 'GET', path: '/api/v1/registry/detail',
+    tags: ['Platform'],
+    queryParams: [{ name: 'id', description: 'Opaque ID returned by the compact registry search.', required: true, schema: z.string().regex(/^registry:[a-f0-9]{64}$/u) }],
+    outputSchema: registryDetailSchema, problemKinds: ['INVALID_ARGUMENT', 'NOT_FOUND', 'UNAVAILABLE', 'RESOURCE_EXHAUSTED'],
   },
 ])

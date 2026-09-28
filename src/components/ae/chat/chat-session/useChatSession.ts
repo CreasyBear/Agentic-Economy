@@ -499,7 +499,10 @@ export function useChatSession({
         onStarter: (nextPrompt) => { void submit(false, nextPrompt) },
         onRefine: (nextPrompt) => { void submit(false, nextPrompt) },
         onCompareRequest: (nextPrompt) => { void submit(false, nextPrompt) },
-        onRetry: (previousPrompt) => { void submit(false, previousPrompt) },
+        onEditQuestion: (previousPrompt) => {
+          setPrompt(boundPrompt(previousPrompt))
+          document.getElementById('tool-chat-prompt')?.focus()
+        },
       }),
     },
     pageBusy: busy,

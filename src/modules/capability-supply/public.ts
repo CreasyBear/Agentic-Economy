@@ -112,7 +112,6 @@ export {
   toolSearchOutputSchema,
   publicToolAuthenticationSchema,
   publicToolParameterSchema,
-  searchCapabilityTools,
   detailCapabilityTool,
   compareCapabilityTools,
   projectCapabilityTool,

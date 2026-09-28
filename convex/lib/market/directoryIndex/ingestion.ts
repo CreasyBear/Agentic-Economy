@@ -8,7 +8,7 @@ import type { IndexedSource } from './contracts'
 import { listingIdentityDigest } from './listingDigest'
 import { resolveDirectorySlug, toggleEligibleFacetMembership, writeFacetMembership } from './membership'
 import { refreshProviderLead } from './providerLead'
-import { storedDirectoryEntry } from './rows'
+import { classifyDirectoryEntry, compactDirectoryText, storedDirectoryEntry } from './rows'
 
 export const DIRECTORY_INDEX_PAGE_SIZE = 100
 const MAX_ENTRY_BYTES = 768 * 1024
@@ -49,10 +49,22 @@ export async function writeSource(ctx: MutationCtx, generation: string, item: In
   if (networks.length > 128) throw new Error('directory_network_metadata_invalid')
   const category = entry.category?.trim().toLowerCase() || 'uncategorized'
   const digest = listingIdentityDigest(entry, category)
+  const classes = classifyDirectoryEntry(entry)
+  const compact = { documentId: id, title: compactDirectoryText(entry.title, 72), summary: compactDirectoryText(entry.description, 100) }
 
   // Tier 2: nothing changed at all upstream.
   if (previous !== null && previous.sourceDigest === item.sourceDigest) {
-    await ctx.db.patch(previous._id, { lastSeenRunAt: runStartedAt })
+    const classChanged = previous.actionClass !== classes.actionClass || previous.objectClass !== classes.objectClass
+    await ctx.db.patch(previous._id, { lastSeenRunAt: runStartedAt, ...(classChanged ? classes : {}) })
+    if (classChanged) {
+      const searchRows = await ctx.db.query('marketDirectorySearchEntries')
+        .withIndex('by_generation_and_resource', q => q.eq('generation', generation).eq('resource', item.resource)).take(130)
+      for (const row of searchRows) {
+        if (row.actionClass !== classes.actionClass || row.objectClass !== classes.objectClass || row.documentId !== id || row.title !== compact.title || row.summary !== compact.summary) {
+          await ctx.db.patch(row._id, { ...classes, ...compact })
+        }
+      }
+    }
     return 'unchanged'
   }
 
@@ -68,6 +80,7 @@ export async function writeSource(ctx: MutationCtx, generation: string, item: In
       directorySourceUpdatedAt: updatedOrder === -1 ? undefined : updatedOrder,
       directoryCalls30d: popularOrder === -1 ? undefined : popularOrder,
       listingDigest: digest, lastSeenRunAt: runStartedAt,
+      ...classes,
     })
     const searchRows = await ctx.db.query('marketDirectorySearchEntries')
       .withIndex('by_generation_and_resource', q => q.eq('generation', generation).eq('resource', item.resource)).take(130)
@@ -79,11 +92,15 @@ export async function writeSource(ctx: MutationCtx, generation: string, item: In
       const changed = row.popularOrder !== popularOrder || row.updatedOrder !== updatedOrder || row.eligible !== eligible
         || row.payersOrder !== next.payersOrder || row.adoptionBand !== next.adoptionBand || row.depthBand !== next.depthBand
         || row.lastCalledBand !== next.lastCalledBand || row.payerDepth !== next.payerDepth || row.lastActivatedAt !== next.lastActivatedAt
+        || row.actionClass !== classes.actionClass || row.objectClass !== classes.objectClass
+        || row.documentId !== id || row.title !== compact.title || row.summary !== compact.summary
       if (changed) {
         await ctx.db.patch(row._id, {
           popularOrder, updatedOrder, eligible,
           payersOrder: next.payersOrder, adoptionBand: next.adoptionBand, depthBand: next.depthBand, lastCalledBand: next.lastCalledBand,
           payerDepth: next.payerDepth, lastActivatedAt: next.lastActivatedAt,
+          ...classes,
+          ...compact,
         })
       }
     }
@@ -134,6 +151,7 @@ export async function writeSource(ctx: MutationCtx, generation: string, item: In
     sourceUrl: 'https://api.cdp.coinbase.com/platform/v2/x402/discovery/resources', endpointUrl: item.resource,
     name: entry.title, summary: entry.description, provider: entry.provider, category,
     ...(entry.method === undefined ? {} : { method: entry.method }), tags: entry.tags ?? [], networks,
+    ...classes,
     access: 'x402' as const, authority: 'source_metadata_only' as const,
     sourceDigest: item.sourceDigest, searchText, updatedAt: observedAt,
     directoryEntryJson: JSON.stringify({ ...entry, metadataJson: '' }), directorySourceJson: item.sourceJson,
@@ -152,6 +170,8 @@ export async function writeSource(ctx: MutationCtx, generation: string, item: In
     await ctx.db.insert('marketDirectorySearchEntries', {
       generation, resource: item.resource, entryId, network, category, provider: entry.provider.toLowerCase(), providerKey, eligible, searchText,
       slug, ...(routeRef === undefined ? {} : { sourceRouteRef: routeRef }),
+      ...classes,
+      ...compact,
       popularOrder, updatedOrder, ...searchAnalytics(entry, network, observedAt),
 
     })

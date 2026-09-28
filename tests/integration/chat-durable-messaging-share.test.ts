@@ -199,12 +199,9 @@ describe.sequential('durable Tool chat messaging and shares', () => {
       }),
     ]))
     expect(messages.page.map((message) => message.role)).toEqual(['user', 'assistant'])
-    expect(messages.page[1]?.text).toBe(extended
-      ? 'No current exchange-rate Tool was verified from that reference.'
-      : '**No match for that yet.** Next: try different words or browse the Market.')
     expect(activeStreams).toEqual([])
   })
-  it('settles two empty searches as one answer without option cards', async () => {
+  it('settles refused repeated searches without inventing options', async () => {
     const backend = convexTestWithMarketComponents()
     const { owner, canonicalAccountRef } = await publishedBusinessOwner(backend, 'chat-no-match-owner')
     const created = await owner.mutation(internal.chatThreads.createThread, { title: 'Find an absent Tool' })
@@ -223,15 +220,40 @@ describe.sequential('durable Tool chat messaging and shares', () => {
     }))
     const assistant = messages.page.filter(message => message.role === 'assistant')
     expect(assistant).toHaveLength(1)
-    expect(assistant[0]?.text).toBe('**No match for that yet.** Next: try different words or browse the Market.')
     expect(assistant[0]?.parts.filter(part => part.type.startsWith('tool-'))).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ state: 'output-available', output: expect.objectContaining({ kind: 'noMatch', results: [] }) }),
+        expect.objectContaining({ state: 'output-available', output: expect.objectContaining({
+          kind: 'chat_tool_refused', reason: 'search_repeated',
+        }) }),
       ]),
     )
     const cards = assistant[0]?.parts.map(projectToolCard).filter(card => card?.kind === 'choices') ?? []
-    expect(cards).not.toHaveLength(0)
-    expect(cards.flatMap(card => card?.kind === 'choices' ? card.choices : [])).toEqual([])
+    expect(cards).toEqual([])
+  })
+  it('shows an actionable answer when the final model pass is blank after Tool work', async () => {
+    const backend = convexTestWithMarketComponents()
+    const { owner, canonicalAccountRef } = await publishedBusinessOwner(backend, 'chat-empty-answer-owner')
+    const created = await owner.mutation(internal.chatThreads.createThread, { title: 'Find a Tool' })
+    const { messageId } = await backend.run(ctx => saveMessage(ctx, components.agent, {
+      threadId: created.threadId, userId: canonicalAccountRef, prompt: 'Find a Tool',
+    }))
+    const model = mockModel({ contentSteps: [
+      [{ type: 'tool-call', toolCallId: 'lookup-1', toolName: 'registry_tools_describe',
+        input: JSON.stringify({ toolRef: `operation:v1:${'a'.repeat(64)}` }) }],
+      [{ type: 'text', text: ' ' }],
+      [{ type: 'text', text: ' ' }],
+      [{ type: 'text', text: '**No current Tool is established from that reference.** Next: refine the search.' }],
+    ] })
+    await backend.action(ctx => streamDurableChatResponse(ctx, {
+      threadId: created.threadId, ownerId: canonicalAccountRef, promptMessageId: messageId,
+    }, model))
+    const messages = await backend.run(ctx => listUIMessages(ctx, components.agent, {
+      threadId: created.threadId, paginationOpts: { cursor: null, numItems: 20 },
+    }))
+    const assistant = messages.page.filter(message => message.role === 'assistant')
+    expect(assistant.some(message => message.text.includes('Next:'))).toBe(true)
+    expect(assistant.filter(message => message.text.trim().length === 0)).toHaveLength(1)
+    expect(assistant.some(message => message.text.includes('Chat stopped'))).toBe(false)
   })
   it('halts at clarification and reports an input-required stream outcome', async () => {
     const backend = convexTestWithMarketComponents()
@@ -273,8 +295,8 @@ describe.sequential('durable Tool chat messaging and shares', () => {
       })
       expect(messages.page.map((message: { role: string }) => message.role)).toEqual(['user', 'assistant'])
       const recovery = messages.page.find((message: { role: string; text: string }) => message.role === 'assistant')?.text ?? ''
-      expect(recovery).toMatch(/before a final response was recorded/i)
-      expect(recovery).toMatch(/call card or receipt/i)
+      expect(recovery).toMatch(/couldn't finish the answer/i)
+      expect(recovery).toMatch(/edit your question to try again/i)
       expect(recovery).not.toContain('agent_unavailable')
       await expect(owner.query(api.chatThreads.getThread, {
         threadId: sent.threadId,
@@ -347,7 +369,7 @@ describe.sequential('durable Tool chat messaging and shares', () => {
       role: 'assistant',
       parts: [{
         type: 'text',
-        text: expect.stringMatching(/before a final response was recorded/i),
+        text: expect.stringMatching(/couldn't finish the answer/i),
       }],
     })
     expect(shared).not.toHaveProperty('streams')
@@ -454,7 +476,7 @@ describe.sequential('durable Tool chat messaging and shares', () => {
                 output: {
                   type: 'json',
                   value: {
-                    kind: 'matched',
+                    kind: 'match',
                     schemaVersion: 'registry-tools:v3',
                     query: 'current',
                     partialResults: false,

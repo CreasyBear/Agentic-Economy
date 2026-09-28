@@ -1,19 +1,15 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { internal } from '../../convex/_generated/api'
+import { api, internal } from '../../convex/_generated/api'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import type { IndexedSource } from '../../convex/lib/market/directoryIndex/contracts'
 import { convexTestWithMarketComponents, type ConvexFixtureBackend } from '../helpers/convex-fixtures'
 import { setPublicSourceTransportForTests, type ConvexSourceTransport } from '@/lib/server/convex-source'
 import { setHttpRateLimitAdmissionForTests } from '@/lib/server/rate-limit'
 import { handleApiRegistryRequest } from '@/routes/api.v1.registry'
+import { handleApiRegistryDetailRequest } from '@/routes/api.v1.registry.detail'
 
-// This suite used to exercise `marketExternalRegistry:search` directly. C2+C3
-// repoints the public `/api/v1/registry` route at `x402DirectoryIndex:browse`
-// instead (decision D2, the shared opaque-cursor contract), so these cases now
-// drive the route itself against a real Convex test backend. The unrelated
-// `tests/integration/registry-api.test.ts` file covers a different "registry"
-// (the durable business/offering catalog, not this external tool directory),
-// so it does not already cover any of this behaviour.
+// Drive compact list and exact detail against the real indexed generation.
+// The durable business/offering registry is a separate API.
 
 function source(index: number, overrides: Partial<IndexedSource['entry']> = {}): IndexedSource {
   const resource = `https://provider.test/tools/${index}`
@@ -64,7 +60,7 @@ async function getRegistry(params: Readonly<{ query?: string; limit?: number; cu
   return handleApiRegistryRequest(new Request(registryUrl(params)))
 }
 
-describe('GET /api/v1/registry backed by the x402 directory browse index', () => {
+describe('GET /api/v1/registry backed by the compact x402 directory index', () => {
   beforeEach(() => {
     vi.useFakeTimers()
     setHttpRateLimitAdmissionForTests(async () => ({ ok: true }))
@@ -93,7 +89,7 @@ describe('GET /api/v1/registry backed by the x402 directory browse index', () =>
     await expect(response.json()).resolves.toMatchObject({ kind: 'UNAVAILABLE', code: 'registry_unavailable' })
   })
 
-  it('[REGRESSION] browses and searches the complete Coinbase generation through the route', async () => {
+  it('[REGRESSION] searches compact Coinbase rows and inspects source schema only by exact ID', async () => {
     const { backend, workload } = await setup()
     const generation = 'coinbase-search-complete'
     await seedRefresh(backend, generation)
@@ -103,11 +99,17 @@ describe('GET /api/v1/registry backed by the x402 directory browse index', () =>
     const browseResponse = await getRegistry()
     expect(browseResponse.status).toBe(200)
     const browseBody = await browseResponse.json()
-    expect(browseBody.schemaVersion).toBe('api-registry:v3')
+    expect(browseBody.schemaVersion).toBe('api-registry:v4')
     expect(browseBody.kind).toBe('ok')
     expect(browseBody.page).toHaveLength(2)
-    for (const row of browseBody.page) expect(row.entry.resource).toMatch(/^https:\/\/provider\.test\/tools\//)
-    expect(browseBody.pagination).toEqual({ limit: 24, hasMore: false })
+    for (const row of browseBody.page) {
+      expect(row.id).toMatch(/^registry:[a-f0-9]{64}$/u)
+      expect(row.access).toBe('external_listing')
+      expect(row.detailRef).toBe(`/api/v1/registry/detail?id=${encodeURIComponent(row.id)}`)
+      expect(row).not.toHaveProperty('entry')
+      expect(row).not.toHaveProperty('toolRef')
+    }
+    expect(browseBody.pagination).toEqual({ limit: 8, hasMore: false })
     // Freshness reports the x402 directory source (review issue 4A / C16); the
     // fixture's tiny `observedAt` reads as ancient next to real wall-clock time,
     // so the derived state is 'stale' rather than 'fresh' - the source and the
@@ -118,19 +120,32 @@ describe('GET /api/v1/registry backed by the x402 directory browse index', () =>
       completedAt: 3,
       staleAfterMs: 36 * 60 * 60 * 1000,
     })
-    // Verify response does not contain internal fields
-    expect(browseBody).not.toHaveProperty('access')
+    expect(JSON.stringify(browseBody)).not.toMatch(/metadataJson|schemaJson|sourceJson/u)
     expect(browseBody).not.toHaveProperty('isDone')
     expect(browseBody).not.toHaveProperty('continueCursor')
-    expect(browseBody).not.toHaveProperty('splitCursor')
-    expect(browseBody).not.toHaveProperty('pageStatus')
-
+    const rich = await backend.query(api.x402DirectoryIndex.browse, { query: '', paginationOpts: { cursor: null, numItems: 8 } })
+    if (rich.kind !== 'ok') throw new Error('Rich fixture unavailable')
+    const richBytes = new TextEncoder().encode(JSON.stringify({
+      schemaVersion: 'api-registry:v3', query: '', kind: rich.kind, coverage: rich.coverage,
+      searchMethod: rich.searchMethod, page: rich.page,
+      pagination: { limit: 8, hasMore: false }, freshness: browseBody.freshness,
+    })).byteLength
+    const compactBytes = new TextEncoder().encode(JSON.stringify(browseBody)).byteLength
+    expect(compactBytes).toBeLessThan(richBytes)
+    expect(compactBytes).toBeLessThanOrEqual(16 * 1024)
+    const detail = await handleApiRegistryDetailRequest(new Request(`https://ae.test${browseBody.page[0].detailRef}`))
+    expect(detail.status).toBe(200)
+    const inspected = await detail.json()
+    expect(inspected.access).toBe('external_listing')
+    expect(inspected.warning).toContain('cannot Quote or Call')
+    expect(inspected.item.entry.metadataJson).toContain('provider.test/tools/')
+    expect(inspected.item.entry.output.schemaJson).toBe('{}')
     const searchResponse = await getRegistry({ query: 'Research tool 2' })
     expect(searchResponse.status).toBe(200)
     const searchBody = await searchResponse.json()
     expect(searchBody.kind).toBe('ok')
     expect(searchBody.page.length).toBeGreaterThanOrEqual(1)
-    expect(searchBody.page.some((row: { entry: { resource: string } }) => row.entry.resource === 'https://provider.test/tools/2')).toBe(true)
+    expect(searchBody.page.some((row: { id: string }) => row.id === browseBody.page.find((row: { title: string }) => row.title === 'Research tool 2')?.id)).toBe(true)
   })
 
   it('rejects invalid limits and over-long queries before reaching the index', async () => {
@@ -155,7 +170,7 @@ describe('GET /api/v1/registry backed by the x402 directory browse index', () =>
     await expect(response.json()).resolves.toMatchObject({ kind: 'INVALID_ARGUMENT', code: 'invalid_query_parameter' })
   })
 
-  it('caps a limit=24 request to at most 12 native rows and reports hasMore until exhausted', async () => {
+  it('caps limit at 12 and keeps page continuations generation-bound until exhausted', async () => {
     const { backend, workload } = await setup()
     const generation = 'coinbase-search-paged'
     await seedRefresh(backend, generation)
@@ -163,15 +178,15 @@ describe('GET /api/v1/registry backed by the x402 directory browse index', () =>
     await backend.mutation(internal.x402DirectoryIndexStore.applyPage, { generation, offset: 0, reportedTotal: 13, observedAt: 2, runStartedAt: 1, workload, items })
     await backend.mutation(internal.x402DirectoryIndexStore.applyPage, { generation, offset: 100, reportedTotal: 13, observedAt: 3, runStartedAt: 1, workload, items: [] })
 
-    const first = await getRegistry({ limit: 24 })
+    const first = await getRegistry({ limit: 12 })
     expect(first.status).toBe(200)
     const firstBody = await first.json()
     expect(firstBody.page.length).toBeLessThanOrEqual(12)
-    expect(firstBody.pagination.limit).toBe(24)
+    expect(firstBody.pagination.limit).toBe(12)
     expect(firstBody.pagination.hasMore).toBe(true)
     expect(typeof firstBody.pagination.nextCursor).toBe('string')
 
-    const second = await getRegistry({ limit: 24, cursor: firstBody.pagination.nextCursor })
+    const second = await getRegistry({ limit: 12, cursor: firstBody.pagination.nextCursor })
     expect(second.status).toBe(200)
     const secondBody = await second.json()
     expect(firstBody.page.length + secondBody.page.length).toBe(13)

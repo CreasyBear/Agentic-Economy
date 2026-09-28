@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 
 import { deserializeToolSearchResult, serializeToolSearchResult, type ToolSearchResult } from '@/modules/capability-supply/public'
-import { projectToolSearchChoices, toolChoiceSearchOutputSchema } from '@/modules/registry/tool-choice-contracts'
+import { projectToolSearchChoices } from '@/modules/registry/tool-choice-contracts'
 import * as decisionEngine from '@/modules/decision-engine/public'
 import { rerankToolSearchResult } from '@/modules/registry/tool-reranker'
 import {
@@ -19,7 +19,7 @@ import {
 describe('Jev x402 Tool Search Re-ranker (cookbooks/rerank_typesafe.md)', () => {
   const sampleOkResult = misorderedSearchResult('verify blockchain payment on base')
 
-  it('does not promote routeable but unverified testnet supply to a ready recommendation', () => {
+  it('keeps an unverified testnet Tool inspectable without offering a Quote from search', () => {
     const tool = {
       ...TOOL_CURRENCY,
       availability: { posture: 'routeable' as const, reason: 'inspection_required' as const },
@@ -29,11 +29,20 @@ describe('Jev x402 Tool Search Re-ranker (cookbooks/rerank_typesafe.md)', () => 
       kind: 'ok', schemaVersion: 'registry-tools:v3', query: 'weather',
       items: [tool], ranking: [], pagination: { limit: 10, hasMore: false }, navigation: [],
     }, undefined, { verdict: 'matched', nearMisses: [] })
-    expect(output.kind).toBe('degraded')
-    if (output.kind !== 'degraded') return
+    expect(output.kind).toBe('match')
+    if (output.kind !== 'match') return
     expect(output.results[0]).toMatchObject({
-      readiness: 'unverified', verification: 'not_verified', network: 'testnet', claimSource: 'provider',
+      readiness: 'unverified',
+      next: [{ action: 'describe', args: { toolRef: tool.toolRef } }],
     })
+    expect(output).not.toHaveProperty('recommendation')
+  })
+
+  it('does not present lexical candidates when suitability assessment is unavailable', () => {
+    const output = projectToolSearchChoices(sampleOkResult, undefined, {
+      verdict: 'degraded', nearMisses: [], reason: 'Suitability ranking is temporarily unavailable.',
+    })
+    expect(output).toMatchObject({ kind: 'unavailable', reason: 'source_unavailable', results: [] })
     expect(output).not.toHaveProperty('recommendation')
   })
 
@@ -210,7 +219,7 @@ describe('Jev x402 Tool Search Re-ranker (cookbooks/rerank_typesafe.md)', () => 
     gateway.mockRestore()
   })
 
-  it('keeps unassessed tail candidates distinct from an observed zero through serialization and public projection', async () => {
+  it('keeps unassessed tail candidates distinct from an observed zero through serialization', async () => {
     const fourItemResult: ToolSearchResult = {
       kind: 'ok',
       schemaVersion: 'registry-tools:v3',
@@ -254,11 +263,6 @@ describe('Jev x402 Tool Search Re-ranker (cookbooks/rerank_typesafe.md)', () => 
     ])
     const roundTrip = deserializeToolSearchResult(serializeToolSearchResult(reranked))
     expect(roundTrip).toEqual(reranked)
-    const publicResult = toolChoiceSearchOutputSchema.parse(projectToolSearchChoices(roundTrip))
-    expect(publicResult.kind).toBe('degraded')
-    if (publicResult.kind !== 'degraded') return
-    expect(publicResult.results.map(item => item.toolRef)).toEqual(reranked.items.map(item => item.toolRef))
-    expect(publicResult).not.toHaveProperty('recommendation')
   })
 
   it('does not assess ambiguous duplicate Tool identities', async () => {

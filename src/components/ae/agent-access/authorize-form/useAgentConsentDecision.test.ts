@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
-import { act, renderHook, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, renderHook, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { createElement } from 'react'
 
 const clerkMocks = vi.hoisted(() => ({
   reverifyMode: 'pass' as 'pass' | 'cancel',
@@ -29,6 +30,7 @@ import type {
   AgentAccessAuthorizeFormDetails,
   ConsentActionResult,
 } from '@/modules/agent-access/consent.contracts'
+import type { PublicToolRef } from '@/modules/capability-supply/public'
 
 import {
   buildAgentTargetsPageUrl,
@@ -38,6 +40,7 @@ import {
   useAgentConsentDecision,
 } from './useAgentConsentDecision'
 
+import { ConsentToolAccessFieldset } from './components/ConsentToolAccessFieldset'
 const baseDetails: AgentAccessAuthorizeFormDetails = {
   state: 'ready',
   grantRef: 'grant-hook',
@@ -52,6 +55,27 @@ const baseDetails: AgentAccessAuthorizeFormDetails = {
   accessSummary: 'Limits',
   agentTargets: [],
   agentTargetsUnavailable: false,
+}
+const callableRef = `operation:v1:${'a'.repeat(64)}` as PublicToolRef
+const callableRow = {
+  id: callableRef, source: 'current' as const, access: 'ae_callable' as const, toolRef: callableRef,
+  title: 'Weather Tool', summary: 'Get weather.', provider: 'Provider',
+  actionClass: 'retrieve' as const, objectClass: 'data' as const, readiness: 'ready' as const,
+  price: { kind: 'unavailable' as const }, detailRef: callableRef,
+  next: [{ action: 'describe' as const, authority: 'public' as const, args: { toolRef: callableRef } }],
+}
+const externalRow = {
+  id: 'external:weather', source: 'coinbase' as const, access: 'external_listing' as const,
+  title: 'External Weather', summary: 'Weather source.', provider: 'External',
+  actionClass: 'retrieve' as const, objectClass: 'data' as const, readiness: 'unverified' as const,
+  price: { kind: 'unavailable' as const }, detailRef: 'external:weather',
+  next: [{ action: 'describe-external' as const, authority: 'public' as const, args: { id: 'external:weather' } }],
+}
+const searchMeta = {
+  schemaVersion: 'registry-tools:v3' as const, query: 'weather', partialResults: false,
+  assessed: { source: 'all' as const, scope: 'complete' as const, examined: 2, coverage: 'complete' as const },
+  pagination: { limit: 8, hasMore: false },
+  next: [{ action: 'broaden' as const, authority: 'public' as const, args: { query: 'weather' } }],
 }
 
 afterEach(() => {
@@ -299,19 +323,24 @@ describe('useAgentConsentDecision', () => {
     await act(async () => { resolveApproval?.({ kind: 'approved', grantRef: 'grant-hook' }) })
   })
 
+  it('renders executable scoped next-page action without offering an external ToolRef', () => {
+    const onContinueSearch = vi.fn()
+    render(createElement(ConsentToolAccessFieldset, {
+      pending: false, toolAccess: 'all_admitted', approvedToolAccess: 'selected_tools',
+      approvedToolRefs: [], approvedToolRefSet: new Set<string>(), toolQuery: 'weather',
+      toolSearch: { pending: false, results: [], noMatchMessage: 'More Tools may be on another page.', continuation: { query: 'weather', cursor: 'opaque' } },
+      onApprovedToolAccessChange: vi.fn(), onToolQueryChange: vi.fn(), onFindTools: vi.fn(),
+      onContinueSearch, onAddApprovedTool: vi.fn(), onRemoveApprovedTool: vi.fn(),
+    }))
+    expect(screen.getByText('More Tools may be on another page.')).not.toBeNull()
+    expect(screen.queryByRole('button', { name: 'Add' })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Next page' }))
+    expect(onContinueSearch).toHaveBeenCalledOnce()
+  })
+
   it('calls searchMarketTools with trimmed query and limit', async () => {
     vi.mocked(searchMarketTools).mockResolvedValue({
-      kind: 'noMatch',
-      schemaVersion: 'registry-tools:v3',
-      query: 'weather',
-      scope: 'exhausted',
-      results: [],
-      nearMisses: [],
-      reason: 'No suitable Tool found.',
-      suggestions: [],
-      partialResults: false,
-      next: [{ action: 'broaden', authority: 'public', args: { query: 'weather' } }],
-      pagination: { limit: 8, hasMore: false },
+      ...searchMeta, kind: 'noMatch', results: [], reason: 'No matching Tools.',
     })
     const { result } = renderHook(() => useAgentConsentDecision({
       locator: { kind: 'user_code', value: 'CODE' },
@@ -322,6 +351,98 @@ describe('useAgentConsentDecision', () => {
     act(() => result.current.setToolQuery('  weather  '))
     await act(async () => { await result.current.findTools() })
     expect(searchMarketTools).toHaveBeenCalledWith({ query: 'weather', limit: 8 })
+  })
+
+  it('offers only admitted callable ToolRefs, never external-only listings', async () => {
+    vi.mocked(searchMarketTools).mockResolvedValue({
+      ...searchMeta, kind: 'match', results: [externalRow, callableRow],
+    })
+    const { result } = renderHook(() => useAgentConsentDecision({
+      locator: { kind: 'user_code', value: 'CODE' }, details: baseDetails,
+    }))
+    act(() => result.current.setToolQuery('weather'))
+    await act(async () => { await result.current.findTools() })
+    expect(result.current.toolSearch.results).toEqual([{ toolRef: callableRef, title: callableRow.title }])
+    expect(result.current.toolSearch.results).not.toContainEqual(expect.objectContaining({ title: externalRow.title }))
+  })
+
+  it('shows a matched Tool and Next page together, then selects the Tool and follows the cursor', async () => {
+    const cursor = 'match:next-page'
+    vi.mocked(searchMarketTools).mockResolvedValueOnce({
+      ...searchMeta, kind: 'match', results: [callableRow],
+      pagination: { limit: 8, hasMore: true, nextCursor: cursor },
+      next: [{ action: 'next-page', authority: 'public', args: { query: 'weather', cursor } }],
+    }).mockResolvedValueOnce({ ...searchMeta, kind: 'noMatch', results: [], reason: 'No matching Tools.' })
+    const { result } = renderHook(() => useAgentConsentDecision({
+      locator: { kind: 'user_code', value: 'CODE' }, details: baseDetails,
+    }))
+    act(() => { result.current.setApprovedToolAccess('selected_tools'); result.current.setToolQuery('weather') })
+    await act(async () => { await result.current.findTools() })
+
+    const { container } = render(createElement(ConsentToolAccessFieldset, {
+      pending: false, toolAccess: result.current.toolAccess,
+      approvedToolAccess: result.current.approvedToolAccess,
+      approvedToolRefs: result.current.approvedToolRefs,
+      approvedToolRefSet: result.current.approvedToolRefSet,
+      toolQuery: result.current.toolQuery,
+      toolSearch: result.current.toolSearch,
+      onApprovedToolAccessChange: result.current.setApprovedToolAccess,
+      onToolQueryChange: result.current.setToolQuery,
+      onFindTools: result.current.findTools,
+      onContinueSearch: result.current.continueSearch,
+      onAddApprovedTool: result.current.addApprovedTool,
+      onRemoveApprovedTool: result.current.removeApprovedTool,
+    }))
+    expect(within(container).getByText('Weather Tool')).not.toBeNull()
+    expect(within(container).queryByRole('status')).toBeNull()
+    fireEvent.click(within(container).getByRole('button', { name: 'Add' }))
+    expect(result.current.approvedToolRefs).toEqual([callableRef])
+    fireEvent.click(within(container).getByRole('button', { name: 'Next page' }))
+    await waitFor(() => expect(searchMarketTools).toHaveBeenLastCalledWith({ query: 'weather', limit: 8, cursor }))
+    expect(result.current.toolSearch.continuation).toBeUndefined()
+  })
+
+  it('explains why a matching external-only listing cannot be authorized', async () => {
+    vi.mocked(searchMarketTools).mockResolvedValue({ ...searchMeta, kind: 'match', results: [externalRow] })
+    const { result } = renderHook(() => useAgentConsentDecision({
+      locator: { kind: 'user_code', value: 'CODE' }, details: baseDetails,
+    }))
+    act(() => result.current.setToolQuery('weather'))
+    await act(async () => { await result.current.findTools() })
+    expect(result.current.toolSearch).toMatchObject({ results: [], noMatchMessage: expect.stringMatching(/cannot be authorized/) })
+  })
+
+  it('shows scoped continuation and executes the exact cursor without admitting external listings', async () => {
+    const cursor = 'next-page:opaque'
+    vi.mocked(searchMarketTools).mockResolvedValueOnce({
+      ...searchMeta, kind: 'scoped', reason: 'More supply remains.', results: [externalRow],
+      partialResults: true, assessed: { source: 'all', scope: 'page', examined: 2, coverage: 'partial' },
+      pagination: { limit: 8, hasMore: true, nextCursor: cursor },
+      next: [{ action: 'next-page', authority: 'public', args: { query: 'weather', cursor } }],
+    }).mockResolvedValueOnce({ ...searchMeta, kind: 'match', results: [callableRow] })
+    const { result } = renderHook(() => useAgentConsentDecision({
+      locator: { kind: 'user_code', value: 'CODE' }, details: baseDetails,
+    }))
+    act(() => result.current.setToolQuery('weather'))
+    await act(async () => { await result.current.findTools() })
+    expect(result.current.toolSearch.results).toEqual([])
+    expect(result.current.toolSearch.continuation).toEqual({ query: 'weather', cursor })
+    await act(async () => { result.current.continueSearch(); await waitFor(() => expect(searchMarketTools).toHaveBeenCalledTimes(2)) })
+    expect(searchMarketTools).toHaveBeenLastCalledWith({ query: 'weather', limit: 8, cursor })
+    expect(result.current.toolSearch.results).toEqual([{ toolRef: callableRef, title: callableRow.title }])
+  })
+
+  it('offers retry instead of a Tool when search is unavailable', async () => {
+    vi.mocked(searchMarketTools).mockResolvedValue({
+      ...searchMeta, kind: 'unavailable', results: [], reason: 'source_unavailable',
+      next: [{ action: 'retry', authority: 'public', args: { query: 'weather' } }],
+    })
+    const { result } = renderHook(() => useAgentConsentDecision({
+      locator: { kind: 'user_code', value: 'CODE' }, details: baseDetails,
+    }))
+    act(() => result.current.setToolQuery('weather'))
+    await act(async () => { await result.current.findTools() })
+    expect(result.current.toolSearch).toEqual({ pending: false, error: expect.stringMatching(/Try again/) })
   })
 
   it('maps approve JSON error body to source_unavailable via error phase', async () => {

@@ -7,6 +7,45 @@ import type { DirectoryDepthBand, DirectoryMomentumBand, DirectoryRecencyBand } 
 import type { DirectoryEntry, IndexedEntry } from './contracts'
 import type { X402DirectoryIndexCoverage } from '@/modules/market/x402-directory-index'
 
+export type DirectoryActionClass = 'retrieve' | 'transform' | 'analyze' | 'create' | 'mutate' | 'other' | 'unclassified'
+export type DirectoryObjectClass = 'web' | 'document' | 'image' | 'location' | 'chain' | 'data' | 'other' | 'unclassified'
+/** Retain Unicode code points for compact search rows without copying source JSON. */
+export function compactDirectoryText(value: string, limit: number): string {
+  let text = ''
+  let length = 0
+  for (const point of value.trim()) {
+    if (length === limit) break
+    text += point
+    length += 1
+  }
+  return text
+}
+
+
+/** Only declared category/tags/schema/method classify a listing; descriptions are never evidence. */
+export function classifyDirectoryEntry(entry: DirectoryEntry): { actionClass: DirectoryActionClass; objectClass: DirectoryObjectClass } {
+  const labels = [entry.category, ...(entry.tags ?? [])].filter(Boolean).join(' ').toLowerCase()
+  const fields = [...(entry.input?.fields ?? []), ...(entry.output?.fields ?? [])]
+    .map(field => `${field.name} ${field.path}`.toLowerCase()).join(' ')
+  const has = (pattern: RegExp) => pattern.test(labels)
+  const objectClass: DirectoryObjectClass =
+    has(/\b(?:pdf|document|documents|file|files|text extraction)\b/u) || /\b(?:pdf|document)\b/u.test(fields) ? 'document'
+      : has(/\b(?:image|images|photo|photos|picture|pictures|vision)\b/u) || /\b(?:image|imageurl|image_url)\b/u.test(fields) ? 'image'
+        : has(/\b(?:geocode|geocoding|geolocation|location|locations|map|maps|address|addresses|weather)\b/u) || /\b(?:latitude|longitude|coordinates)\b/u.test(fields) ? 'location'
+          : has(/\b(?:blockchain|onchain|on-chain|chain|token|tokens|wallet|wallets|erc20|transaction|transactions)\b/u) ? 'chain'
+            : has(/\b(?:web|website|webpage|search engine|browser|scraping|crawl|crawler)\b/u) ? 'web'
+              : has(/\b(?:dataset|database|data|table|tables|csv|json)\b/u) ? 'data'
+                : has(/\bother\b/u) ? 'other' : 'unclassified'
+  const actionClass: DirectoryActionClass =
+    has(/\b(?:create|generate|generation|write|publish|mint)\b/u) ? 'create'
+      : has(/\b(?:delete|update|modify|edit|transfer|send|execute|submit)\b/u) ? 'mutate'
+        : has(/\b(?:analyze|analyse|analysis|classify|score|evaluate|detect)\b/u) ? 'analyze'
+          : has(/\b(?:convert|transform|translate|parse|extract|format|resize)\b/u) ? 'transform'
+            : has(/\b(?:search|lookup|retrieve|read|fetch|browse|list|query|scrape|crawl|get)\b/u) || entry.method?.toUpperCase() === 'GET' ? 'retrieve'
+              : has(/\bother\b/u) ? 'other' : 'unclassified'
+  return { actionClass, objectClass }
+}
+
 export async function directoryState(ctx: Pick<QueryCtx, 'db'> | Pick<MutationCtx, 'db'>) {
   return await ctx.db.query('marketExternalRegistryState')
     .withIndex('by_key', q => q.eq('key', 'coinbase')).unique()

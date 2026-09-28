@@ -72,14 +72,14 @@ describe("hosted Tool gateway smoke discovery", () => {
     ]);
   });
 
-  it("searches and describes the current Tool routes before selecting a candidate", async () => {
+  it("searches and describes a scoped current Tool result before selecting a candidate", async () => {
     const requests: Array<{ url: string; body: unknown }> = [];
     const fetch: typeof globalThis.fetch = async (input, init) => {
       const url = String(input);
       const body = init?.body === undefined ? undefined : JSON.parse(String(init.body));
       requests.push({ url, body });
       if (url.endsWith("/api/v1/market-tools/search")) {
-        return Response.json(publicToolSearchResponse("paid"));
+        return Response.json({ ...publicToolSearchResponse("paid"), kind: "scoped", reason: "More of the selected catalogue remains to assess." });
       }
       if (url.endsWith("/api/v1/market-tools/describe"))
         return Response.json(publicToolDescribeResponse());
@@ -124,7 +124,7 @@ describe("hosted Tool gateway smoke discovery", () => {
     expect(requests).toEqual([
       {
         url: "https://gateway.example/api/v1/market-tools/search",
-        body: { query: "paid", limit: 20, detail: "full" },
+        body: { query: "paid", limit: 12 },
       },
       {
         url: "https://gateway.example/api/v1/market-tools/describe",
