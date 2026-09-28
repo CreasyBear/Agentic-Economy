@@ -446,6 +446,7 @@ import type * as lib_market_demandSignals_contracts from "../lib/market/demandSi
 import type * as lib_market_directoryIndex_analytics from "../lib/market/directoryIndex/analytics.js";
 import type * as lib_market_directoryIndex_browse from "../lib/market/directoryIndex/browse.js";
 import type * as lib_market_directoryIndex_categoryStats from "../lib/market/directoryIndex/categoryStats.js";
+import type * as lib_market_directoryIndex_choices from "../lib/market/directoryIndex/choices.js";
 import type * as lib_market_directoryIndex_cleanup from "../lib/market/directoryIndex/cleanup.js";
 import type * as lib_market_directoryIndex_contracts from "../lib/market/directoryIndex/contracts.js";
 import type * as lib_market_directoryIndex_facetReads from "../lib/market/directoryIndex/facetReads.js";
@@ -1157,6 +1158,7 @@ declare const fullApi: ApiFromModules<{
   "lib/market/directoryIndex/analytics": typeof lib_market_directoryIndex_analytics;
   "lib/market/directoryIndex/browse": typeof lib_market_directoryIndex_browse;
   "lib/market/directoryIndex/categoryStats": typeof lib_market_directoryIndex_categoryStats;
+  "lib/market/directoryIndex/choices": typeof lib_market_directoryIndex_choices;
   "lib/market/directoryIndex/cleanup": typeof lib_market_directoryIndex_cleanup;
   "lib/market/directoryIndex/contracts": typeof lib_market_directoryIndex_contracts;
   "lib/market/directoryIndex/facetReads": typeof lib_market_directoryIndex_facetReads;
