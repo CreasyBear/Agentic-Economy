@@ -372,7 +372,7 @@ function DirectoryMarketplace({ page, compareEntries, search, workspace = false,
             </InputGroupAddon>
           </InputGroup>
         </form>
-        <p className="mt-2 text-xs text-muted-foreground">Your question goes to {chatRecipient ?? 'the chat gateway'} to find a Tool. Do not include private data in the question.</p>
+        <p className="mt-2 text-xs text-muted-foreground">{chatRecipient === undefined ? 'Chat recipient unavailable here. Check before sending.' : `Your question goes to ${chatRecipient} to find a Tool.`} Do not include private data in the question.</p>
       </DirectoryHero>
       <Tabs value={view} onValueChange={value => {
         if (value === 'discover' || value === 'tools' || value === 'providers' || value === 'saved') {
