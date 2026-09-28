@@ -346,6 +346,18 @@ describe('Formance managed Call evidence', () => {
       transactionRefs: settlementRefs,
       now: now + 5,
     })).resolves.toEqual({ kind: 'accepted', state: 'settled', replayed: true })
+    // A settled historical Call can be replayed without issuing another Formance sale.
+    await backend.run(async (ctx) => {
+      const legacy = await ctx.db.query('capabilityCalls').withIndex('by_callRef', (query) => query.eq('callRef', callRef)).unique()
+      if (legacy === null) throw new Error('managed_call_fixture_missing')
+      await ctx.db.patch(legacy._id, { buyerSaleTransactionRef: undefined })
+    })
+    await expect(backend.action(internal.moneyManagedCallLifecycle.settle, {
+      callRef, evidenceDigest: 'sha256:historical-replay', now: now + 6,
+    })).resolves.toEqual({ kind: 'accepted', state: 'settled', replayed: true })
+    const replayed = await backend.run(async (ctx) => ctx.db.query('capabilityCalls')
+      .withIndex('by_callRef', (query) => query.eq('callRef', callRef)).unique())
+    expect(replayed?.buyerSaleTransactionRef).toBe(settlementRefs[0])
 
     const settlementBooking = await backend.query(internal.moneyManagedCall.readBooking, { callRef })
     expect(settlementBooking).toMatchObject({ kind: 'available', financialState: 'settled' })

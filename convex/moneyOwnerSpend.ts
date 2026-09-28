@@ -3,6 +3,7 @@ import { v, type Infer } from 'convex/values'
 import { internal } from './_generated/api'
 import { action } from './_generated/server'
 import { accountHistoryResultValue } from './moneyLedgerValues'
+import { readOwnerHistoryHandler } from './lib/money/managedCall/historySources'
 
 const spendResult = v.union(
   v.object({
@@ -27,16 +28,7 @@ const spendResult = v.union(
 export const readOwnerHistory = action({
   args: { cursor: v.optional(v.string()) },
   returns: accountHistoryResultValue,
-  handler: async (ctx, args): Promise<Infer<typeof accountHistoryResultValue>> => {
-    const subject: Readonly<
-      | { kind: 'resolved'; accountRef: string; locked: boolean }
-      | { kind: 'refused'; code: string; retryable: boolean }
-    > = await ctx.runQuery(internal.moneyAccountFunding.readBalanceSubject, {})
-    if (subject.kind === 'refused') return { kind: 'refused', code: subject.code }
-    return await ctx.runAction(internal.moneyFormance.readAccountHistory, {
-      accountRef: subject.accountRef, ...(args.cursor === undefined ? {} : { cursor: args.cursor }),
-    })
-  },
+  handler: readOwnerHistoryHandler,
 })
 
 export const readOwnerSpend = action({

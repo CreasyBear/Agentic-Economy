@@ -436,6 +436,7 @@ export const capabilityCallTables = {
     formanceReservationDigest: v.optional(v.string()),
     formanceReleaseRefs: v.optional(v.array(v.string())),
     formanceSettlementRefs: v.optional(v.array(v.string())),
+    buyerSaleTransactionRef: v.optional(v.string()),
     formanceUnknownReference: v.optional(v.string()),
     formanceUnknownStatusRef: v.optional(v.string()),
     authority: v.optional(callAuthorityValue),
@@ -457,6 +458,7 @@ export const capabilityCallTables = {
     createdAt: v.number(),
   })
     .index('by_callRef', ['callRef'])
+    .index('by_ownerId_and_buyerSaleTransactionRef', ['ownerId', 'buyerSaleTransactionRef'])
     .index('by_sellerOnboardingCanary_canaryRef', ['sellerOnboardingCanary.canaryRef'])
     .index('by_sellerOnboardingCanary_target', [
       'sellerOnboardingCanary.businessId',

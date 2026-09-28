@@ -32,6 +32,7 @@ export const toolQuoteAction = defineAction<ToolQuoteInput, ToolQuoteResult>({
     'Requires an AE-issued Agent key and resolves Account, Agent Principal, Grant, Tool, pricing, and policy facts server-side.',
     'Creates no Call, reservation, signature, payment, or Provider effect.',
     'A Quote is exact, caller-bound, current-version-bound, and expires; changed material requires another quote.',
+    'For a multi-Tool task, obtain one committed current Quote per concrete input; add exact price units only at the same currency/exponent, compare with the task ceiling before any Call, and retain each QuoteRef/expiry/Account/Principal separately. AE does not sell an aggregate bundle.',
   ],
   schema: toolQuoteInputSchema,
   outputSchema: toolQuoteResultSchema,

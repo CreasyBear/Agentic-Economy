@@ -92,8 +92,8 @@ export const finalizeSettlementHandler = async (ctx: MutationCtx, args: Infer<ty
     const row = await ctx.db.query('capabilityCalls')
       .withIndex('by_callRef', (query) => query.eq('callRef', args.callRef))
       .unique()
-    const [, settlementTransactionRef] = args.transactionRefs
-    if (row === null || args.transactionRefs.length !== 2 || settlementTransactionRef === undefined) {
+    const [buyerSaleTransactionRef, settlementTransactionRef] = args.transactionRefs
+    if (row === null || args.transactionRefs.length !== 2 || !buyerSaleTransactionRef || !settlementTransactionRef) {
       return { kind: 'refused' as const, code: 'managed_call_settlement_invalid' }
     }
     if (row.reconciliation?.leaseOwner?.startsWith('paid-result-loss:')
@@ -101,9 +101,14 @@ export const finalizeSettlementHandler = async (ctx: MutationCtx, args: Infer<ty
       return { kind: 'refused' as const, code: 'managed_call_remedy_in_progress' }
     }
     if (row.formanceFinancialState === 'settled') {
-      return JSON.stringify(row.formanceSettlementRefs) === JSON.stringify(args.transactionRefs)
-        ? { kind: 'accepted' as const, state: 'settled', replayed: true }
-        : { kind: 'refused' as const, code: 'managed_call_settlement_conflict' }
+      if (JSON.stringify(row.formanceSettlementRefs) !== JSON.stringify(args.transactionRefs)
+        || (row.buyerSaleTransactionRef !== undefined && row.buyerSaleTransactionRef !== buyerSaleTransactionRef)) {
+        return { kind: 'refused' as const, code: 'managed_call_settlement_conflict' }
+      }
+      if (row.buyerSaleTransactionRef === undefined) {
+        await ctx.db.patch(row._id, { buyerSaleTransactionRef, updatedAt: args.now })
+      }
+      return { kind: 'accepted' as const, state: 'settled', replayed: true }
     }
     if (row.formanceFinancialState !== 'possibly_submitted'
       && row.formanceFinancialState !== 'outcome_unknown') {
@@ -112,6 +117,7 @@ export const finalizeSettlementHandler = async (ctx: MutationCtx, args: Infer<ty
     await ctx.db.patch(row._id, {
       formanceFinancialState: 'settled',
       formanceSettlementRefs: [...args.transactionRefs],
+      buyerSaleTransactionRef,
       updatedAt: args.now,
     })
     const obligation = await ctx.db.query('moneyProviderObligations')

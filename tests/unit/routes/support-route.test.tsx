@@ -11,7 +11,7 @@ const validCallRef = `operation-invocation:v1:${'b'.repeat(64)}`
 
 const routeState = vi.hoisted(() => ({
   component: undefined as ComponentType | undefined,
-  search: { callRef: { kind: 'absent' } } as SupportSearch,
+  search: {} as SupportSearch,
   validateSearch: undefined as ((search: Record<string, unknown>) => SupportSearch) | undefined,
 }))
 
@@ -91,7 +91,7 @@ describe('/support', () => {
 
   it('keeps private support primary and labels public escalation', () => {
     renderRoute()
-    expect(screen.getByRole('link', { name: 'Email support' }).getAttribute('href')).toBe('mailto:support@aecon.ai')
+    expect(screen.getByRole('link', { name: /Email support \(opens email app\)/ }).getAttribute('href')).toBe('mailto:support@aecon.ai')
     expect(screen.getByRole('link', { name: /Open a public developer issue/ }).getAttribute('href')).toBe(
       'https://github.com/CreasyBear/Agentic-Economy/issues/new/choose',
     )
@@ -110,19 +110,19 @@ describe('/support', () => {
   it('renders an absent Call reference with the general Calls handoff', () => {
     renderRoute()
     expect(screen.getByRole('link', { name: 'Open Calls' }).getAttribute('href')).toBe('/activity')
-    expect(screen.getByRole('link', { name: 'Email support' }).getAttribute('href')).toBe('mailto:support@aecon.ai')
+    expect(screen.getByRole('link', { name: /Email support \(opens email app\)/ }).getAttribute('href')).toBe('mailto:support@aecon.ai')
     expect(screen.queryByText(/Referenced Call:/)).toBeNull()
     expect(screen.queryByText(/Call reference in this link is not valid/)).toBeNull()
   })
 
   it('renders a valid Call reference in the exact Call handoff and support email', () => {
-    renderRoute({ callRef: { kind: 'valid', value: validCallRef } })
+    renderRoute({ callRef: validCallRef })
     expect(screen.getByText(`Referenced Call: ${validCallRef}`)).toBeTruthy()
     expect(screen.queryByText(/Call reference in this link is not valid/)).toBeNull()
     expect(screen.getByRole('link', { name: 'Open this Call' }).getAttribute('href')).toBe(
       `/calls/${encodeURIComponent(validCallRef)}`,
     )
-    const href = screen.getByRole('link', { name: 'Email support' }).getAttribute('href')
+    const href = screen.getByRole('link', { name: /Email support \(opens email app\)/ }).getAttribute('href')
     expect(href).toContain('mailto:support@aecon.ai?')
     expect(href).toContain(`subject=Help%20with%20Call%20${encodeURIComponent(validCallRef)}`)
     expect(href).toContain(
@@ -131,27 +131,38 @@ describe('/support', () => {
   })
 
   it('names a malformed Call reference without rendering or mailing it', () => {
-    renderRoute({ callRef: { kind: 'malformed' } })
+    renderRoute({ callRef: 'not-a-call' })
     expect(screen.getByText('The Call reference in this link is not valid. Open Calls to find the right Call.')).toBeTruthy()
     expect(screen.getByRole('link', { name: 'Open Calls' }).getAttribute('href')).toBe('/activity')
-    expect(screen.getByRole('link', { name: 'Email support' }).getAttribute('href')).toBe('mailto:support@aecon.ai')
+    expect(screen.getByRole('link', { name: /Email support \(opens email app\)/ }).getAttribute('href')).toBe('mailto:support@aecon.ai')
     expect(screen.queryByText(/Referenced Call:/)).toBeNull()
   })
 
-  it('round-trips the Call reference through URL search validation', () => {
+  it('keeps the search wire serializable and the email draft tied to the same Call', () => {
     const validateSearch = routeState.validateSearch
     if (validateSearch === undefined) throw new Error('Support route search validator was not captured.')
-    const query = new URLSearchParams({ callRef: validCallRef })
+    const receiptSearch = validateSearch({ callRef: validCallRef })
+    expect(receiptSearch).toEqual({ callRef: validCallRef })
+    const query = new URLSearchParams(receiptSearch)
+    expect(query.get('callRef')).toBe(validCallRef)
+    renderRoute(validateSearch(Object.fromEntries(query)))
+    expect(screen.getByRole('link', { name: /Email support \(opens email app\)/ }).getAttribute('href')).toContain(encodeURIComponent(validCallRef))
+    expect(validateSearch({})).toEqual({})
+    expect(validateSearch({ callRef: 'not-a-call' })).toEqual({ callRef: 'not-a-call' })
+  })
 
-    expect(validateSearch(Object.fromEntries(query))).toEqual({
-      callRef: { kind: 'valid', value: validCallRef },
-    })
-    expect(validateSearch({ callRef: '   ' })).toEqual({ callRef: { kind: 'absent' } })
-    expect(validateSearch({ callRef: 'not-a-call' })).toEqual({ callRef: { kind: 'malformed' } })
+  it('does not treat a supplied non-string Call reference as generic Help or a valid Call', () => {
+    const validateSearch = routeState.validateSearch
+    if (validateSearch === undefined) throw new Error('Support route search validator was not captured.')
+    const search = validateSearch({ callRef: [validCallRef, validCallRef] })
+    renderRoute(search)
+    expect(screen.getByText(/Call reference in this link is not valid/)).toBeTruthy()
+    expect(screen.queryByText(/Referenced Call:/)).toBeNull()
+    expect(screen.getByRole('link', { name: /Email support \(opens email app\)/ }).getAttribute('href')).toBe('mailto:support@aecon.ai')
   })
 })
 
-function renderRoute(search: SupportSearch = { callRef: { kind: 'absent' } }) {
+function renderRoute(search: SupportSearch = {}) {
   routeState.search = search
   const Component = routeState.component
   if (Component === undefined) throw new Error('Support route component was not captured.')

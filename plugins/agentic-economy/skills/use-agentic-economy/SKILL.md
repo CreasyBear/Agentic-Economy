@@ -57,6 +57,30 @@ reference and use `funding.handoff.status`. After confirmed funding, quote
 again before explicitly resubmitting the intended Tool. Funding is not
 authority or a purchase.
 
+## Price a task with more than one Tool
+
+Keep each selected `toolRef` and concrete input. Request a fresh `ae_tool_quote`
+for **every** contribution before the first paid Call. Only committed Quotes
+are prices: record each `quoteRef`, `normalizedInput`, exact `price`
+(`currency`, integer `units`, `exponent`), `expiresAt`, `account.accountRef`
+and `budget.principalRef`/`maximumPerCall`. Check that the Quotes belong to
+the intended Account and Agent Principal, share currency and exponent, and
+remain current. Add integer price units, not rounded screen amounts; compare
+the sum with the task ceiling. A refused or expired Quote does not contribute
+a known task total. Re-quote changed inputs, prices or authority before
+spending. This is a planning sum of separate purchases, not an AE bundle,
+reserved task budget or guarantee that a later Call will be authorized.
+
+For each contribution, retain its own `quoteRef` and stable
+`idempotencyKey` **before** `ae_tool_call`. Keep the returned `callRef`
+and inspect `ae_call_status` after interruption, pending delivery or unknown
+outcome. Resume that Call with its original identity or the offered
+reconciliation action; never buy it again with a fresh key. A completed Call
+remains spent even when a later contribution fails. The CLI `ae quote --json`
+exposes the exact Quote, while one-command `ae call` obtains a fresh Quote
+before dispatch; use the explicit Quote and Call actions when the task needs
+the previously inspected QuoteRef.
+
 ## Read the result and recover safely
 
 Return the actual result or explain its current state. Delivery, settlement and

@@ -79,6 +79,16 @@ export function accountHistoryLabel(kind: AccountHistoryEntry['kind']): string {
   }
 }
 
+export function accountHistorySourceLabel(entry: AccountHistoryEntry): string {
+  switch (entry.kind) {
+    case 'call_spend': return entry.sourceRef ?? 'Call reference not recorded'
+    case 'funding': return 'Funding'
+    case 'funding_reversal': return 'Funding reversal'
+    case 'document_adjustment': return 'Accounting document'
+    case 'unmapped': return 'Not attributed'
+  }
+}
+
 export function formatSignedAmount(amount: ExactAmount): string {
   const units = BigInt(amount.units)
   const formatted = formatDisplayAmount({ ...amount, units: (units < 0n ? -units : units).toString() })

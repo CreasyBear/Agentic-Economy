@@ -120,6 +120,7 @@ describe('ActivityPage & Filtering (W-38)', () => {
     vi.mocked(downloadCsv).mockClear()
     vi.mocked(downloadJson).mockClear()
     vi.mocked(toast.success).mockClear()
+    vi.mocked(toast.error).mockClear()
   })
 
   it('shows time to outcome and no charge for a released reservation', () => {
@@ -279,6 +280,49 @@ describe('ActivityPage & Filtering (W-38)', () => {
       records: readonly { costAud: string; gstAud: string; netAud: string }[]
     }
     expect(document.records[0]).toMatchObject({ costAud: '0.000006', gstAud: '0.000001', netAud: '0.000005' })
+  })
+
+  it('exports only booked AUD amounts; refunded and unknown Calls do not become charges', () => {
+    const calls = {
+      ...sampleCalls,
+      page: [
+        { ...sampleCalls.page[0]!, audAmountUnits: '9007199254740993' },
+        { ...sampleCalls.page[1]!, paymentState: 'released' as const, audAmountUnits: '50000' },
+        { ...sampleCalls.page[1]!, callRef: 'call:unknown', paymentState: 'unknown' as const,
+          state: 'outcome_unknown' as const, audAmountUnits: '80000' },
+        { ...sampleCalls.page[0]!, callRef: 'call:pending', paymentState: 'not_applicable' as const,
+          state: 'outcome_unknown' as const, deliveryState: 'unknown' as const, audAmountUnits: '80000' },
+      ],
+    }
+    render(<AeActivity result={{ kind: 'available', calls, usage: sampleUsage,
+      spend: sampleSpend, periodStart: '2026-09' }} />)
+    fireEvent.click(screen.getByRole('button', { name: /^JSON$/u }))
+    const document = vi.mocked(downloadJson).mock.calls[0]?.[1] as {
+      records: readonly { callRef: string; costAud: string; gstAud: string; netAud: string }[]
+    }
+    expect(document.records[0]?.costAud).toBe('9007199254.740993')
+    expect(document.records[1]).toMatchObject({ costAud: '0.000000', gstAud: '0.000000', netAud: '0.000000' })
+    expect(document.records[2]).toMatchObject({ costAud: 'Not confirmed', gstAud: '', netAud: '' })
+    expect(document.records[3]).toMatchObject({ costAud: 'Not confirmed', gstAud: '', netAud: '' })
+    const booked = document.records[0]!
+    expect(BigInt(booked.netAud.replace('.', '')) + BigInt(booked.gstAud.replace('.', '')))
+      .toBe(9007199254740993n)
+    fireEvent.click(screen.getByRole('button', { name: /^CSV$/u }))
+    const csv = vi.mocked(downloadCsv).mock.calls[0]?.[1]
+    expect(csv).toContain('9007199254.740993')
+    expect(csv).toContain('call:unknown,Postal Address Lookup,Agentic Economy Seller,agent:beta,Not confirmed,,,')
+    expect(csv).toContain('call:pending,Australian Tax Calculator,Agentic Economy Seller,agent:alpha,Not confirmed,,,')
+  })
+
+  it('refuses to export an invalid booked amount instead of substituting a display placeholder', () => {
+    const calls = { ...sampleCalls, page: [{ ...sampleCalls.page[0]!, audAmountUnits: 'not-a-number' }] }
+    render(<AeActivity result={{ kind: 'available', calls, usage: sampleUsage,
+      spend: sampleSpend, periodStart: '2026-09' }} />)
+    fireEvent.click(screen.getByRole('button', { name: /^CSV$/u }))
+    fireEvent.click(screen.getByRole('button', { name: /^JSON$/u }))
+    expect(downloadCsv).not.toHaveBeenCalled()
+    expect(downloadJson).not.toHaveBeenCalled()
+    expect(toast.error).toHaveBeenCalledTimes(2)
   })
 
   it('disables CSV and JSON export when no calls match filters', () => {
