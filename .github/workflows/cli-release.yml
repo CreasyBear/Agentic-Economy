@@ -1,0 +1,110 @@
+name: Public CLI release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: cli-release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Require a tag matching the CLI package version
+        id: tag
+        shell: bash
+        run: |
+          version=$(node -p "require('./packages/cli/package.json').version")
+          if [[ "$GITHUB_REF" != "refs/tags/v$version" ]]; then
+            echo "Release requires refs/tags/v$version; received $GITHUB_REF" >&2
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: '.nvmrc'
+          cache: npm
+
+      - name: Pin the repository package manager
+        run: npm install --global npm@11.5.1 --ignore-scripts
+
+      - name: Frozen dependency install
+        run: npm ci
+
+      - name: Install the source-proof Chromium browser
+        run: npm exec -- playwright install --with-deps chromium
+
+      - name: Pass source release gate before packing
+        env:
+          CLERK_JWT_ISSUER_DOMAIN: https://relative-phoenix-8958.clerk.accounts.dev
+          CLERK_PUBLISHABLE_KEY: ${{ secrets.AE_AUTHENTICATED_E2E_CLERK_PUBLISHABLE_KEY }}
+          VITE_CLERK_PUBLISHABLE_KEY: ${{ secrets.AE_AUTHENTICATED_E2E_CLERK_PUBLISHABLE_KEY }}
+          CLERK_SECRET_KEY: ${{ secrets.AE_AUTHENTICATED_E2E_CLERK_SECRET_KEY }}
+        run: npm run gate
+
+      - name: Pack and verify the one release archive
+        env:
+          VERSION: ${{ steps.tag.outputs.version }}
+        shell: bash
+        run: |
+          mkdir -p "$RUNNER_TEMP/cli-pack" "$RUNNER_TEMP/cli-release"
+          npm pack --workspace @aecon/cli --json --pack-destination "$RUNNER_TEMP/cli-pack" > "$RUNNER_TEMP/cli-pack.json"
+          jq -e --arg version "$VERSION" \
+            'length == 1 and .[0].name == "@aecon/cli" and .[0].version == $version and .[0].filename == "aecon-cli-\($version).tgz"' \
+            "$RUNNER_TEMP/cli-pack.json"
+          mv "$RUNNER_TEMP/cli-pack/aecon-cli-$VERSION.tgz" "$RUNNER_TEMP/cli-release/aecon-cli-$VERSION.tgz"
+          cd "$RUNNER_TEMP/cli-release"
+          sha256sum "aecon-cli-$VERSION.tgz" > SHA256SUMS
+          AE_CLI_PACKAGE_TARBALL="$PWD/aecon-cli-$VERSION.tgz" \
+            AE_CLI_PACKAGE_EXPECTED_SHA256="$(sha256sum "aecon-cli-$VERSION.tgz" | cut -d ' ' -f1)" \
+            npm --prefix "$GITHUB_WORKSPACE" run test:cli-package
+          sha256sum --check SHA256SUMS
+
+      - name: Install Cosign
+        uses: sigstore/cosign-installer@v4.0.0
+
+      - name: Sign and verify the exact release archive
+        env:
+          VERSION: ${{ steps.tag.outputs.version }}
+          SIGNING_IDENTITY: ${{ github.server_url }}/${{ github.repository }}/.github/workflows/cli-release.yml@${{ github.ref }}
+        working-directory: ${{ runner.temp }}/cli-release
+        run: |
+          cosign sign-blob --yes --bundle "aecon-cli-$VERSION.tgz.sigstore.json" "aecon-cli-$VERSION.tgz"
+          cosign verify-blob "aecon-cli-$VERSION.tgz" \
+            --bundle "aecon-cli-$VERSION.tgz.sigstore.json" \
+            --certificate-identity "$SIGNING_IDENTITY" \
+            --certificate-oidc-issuer https://token.actions.githubusercontent.com
+
+      - name: Create the public release without replacing existing assets
+        env:
+          GH_TOKEN: ${{ secrets.AECON_CLI_RELEASE_TOKEN }}
+          VERSION: ${{ steps.tag.outputs.version }}
+        shell: bash
+        run: |
+          if tag_lookup=$(gh api -i "repos/CreasyBear/aecon-cli/git/ref/tags/v$VERSION" 2>&1); then
+            echo "Public tag v$VERSION already exists; refusing to attach assets to an existing tag." >&2
+            exit 1
+          fi
+          if [[ "$tag_lookup" != *"HTTP 404"* ]]; then
+            echo "Cannot establish that the public tag is absent; refusing release." >&2
+            exit 1
+          fi
+          gh release create "v$VERSION" \
+            "$RUNNER_TEMP/cli-release/aecon-cli-$VERSION.tgz" \
+            "$RUNNER_TEMP/cli-release/SHA256SUMS" \
+            "$RUNNER_TEMP/cli-release/aecon-cli-$VERSION.tgz.sigstore.json" \
+            --repo CreasyBear/aecon-cli \
+            --target main \
+            --title "aecon CLI v$VERSION" \
+            --notes "Signed CLI archive for v$VERSION. Verify SHA256SUMS and the Sigstore bundle before installing."
