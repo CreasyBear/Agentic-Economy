@@ -524,6 +524,7 @@ import type * as lib_money_funding_webhookLookup from "../lib/money/funding/webh
 import type * as lib_money_funding_webhookWorkerReads from "../lib/money/funding/webhookWorkerReads.js";
 import type * as lib_money_legalCustomer_binding from "../lib/money/legalCustomer/binding.js";
 import type * as lib_money_managedCall_booking from "../lib/money/managedCall/booking.js";
+import type * as lib_money_managedCall_historySources from "../lib/money/managedCall/historySources.js";
 import type * as lib_money_managedCall_lifecycleActions from "../lib/money/managedCall/lifecycleActions.js";
 import type * as lib_money_managedCall_reservation from "../lib/money/managedCall/reservation.js";
 import type * as lib_money_managedCall_reservationRead from "../lib/money/managedCall/reservationRead.js";
@@ -1241,6 +1242,7 @@ declare const fullApi: ApiFromModules<{
   "lib/money/funding/webhookWorkerReads": typeof lib_money_funding_webhookWorkerReads;
   "lib/money/legalCustomer/binding": typeof lib_money_legalCustomer_binding;
   "lib/money/managedCall/booking": typeof lib_money_managedCall_booking;
+  "lib/money/managedCall/historySources": typeof lib_money_managedCall_historySources;
   "lib/money/managedCall/lifecycleActions": typeof lib_money_managedCall_lifecycleActions;
   "lib/money/managedCall/reservation": typeof lib_money_managedCall_reservation;
   "lib/money/managedCall/reservationRead": typeof lib_money_managedCall_reservationRead;

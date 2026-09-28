@@ -45,7 +45,7 @@ test('native setup copy and alternatives work by pointer and keyboard', async ({
 
 test('support keeps private contact and current records keyboard reachable', async ({ page }) => {
   await page.goto('/support')
-  const support = page.getByRole('link', { name: 'Email support', exact: true })
+  const support = page.getByRole('link', { name: 'Email support (opens email app)', exact: true })
   await expect(support).toHaveAttribute('href', 'mailto:support@aecon.ai')
   await support.focus()
   await expect(support).toBeFocused()
@@ -58,4 +58,17 @@ test('support keeps private contact and current records keyboard reachable', asy
   }).toPass()
   await expect(page.getByRole('button', { name: 'Copy diagnostic command' })).toBeVisible()
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true)
+})
+
+test('receipt Help preserves a raw Call reference in the email draft', async ({ page }) => {
+  const callRef = `operation-invocation:v1:${'b'.repeat(64)}`
+  await page.goto(`/support?callRef=${encodeURIComponent(callRef)}`)
+  await expect(page.getByText(`Referenced Call: ${callRef}`)).toBeVisible()
+  await expect(page.getByRole('link', { name: 'Open this Call' })).toHaveAttribute(
+    'href',
+    `/calls/${encodeURIComponent(callRef)}`,
+  )
+  const email = page.getByRole('link', { name: 'Email support (opens email app)' })
+  await expect(email).toHaveAttribute('href', new RegExp(`subject=Help%20with%20Call%20${encodeURIComponent(callRef)}`))
+  await expect(email).toHaveAttribute('href', new RegExp(`body=I%20need%20help%20with%20Call%20reference%3A%20${encodeURIComponent(callRef)}`))
 })

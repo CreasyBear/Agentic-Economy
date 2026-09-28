@@ -62,7 +62,12 @@ export const settleHandler = async (ctx: ActionCtx, args: Infer<typeof settleArg
     }
     if (material.remedyInProgress) return { kind: 'refused' as const, code: 'managed_call_remedy_in_progress' }
     if (material.financialState === 'settled') {
-      return { kind: 'accepted' as const, state: 'settled', replayed: true }
+      if (material.settlementRefs === undefined) return { kind: 'refused', code: 'managed_call_settlement_invalid' }
+      return await ctx.runMutation(internal.moneyManagedCallLifecycle.finalizeSettlement, {
+        callRef: args.callRef,
+        transactionRefs: [...material.settlementRefs],
+        now: args.now,
+      })
     }
     if (material.financialState !== 'possibly_submitted'
       && material.financialState !== 'outcome_unknown') {

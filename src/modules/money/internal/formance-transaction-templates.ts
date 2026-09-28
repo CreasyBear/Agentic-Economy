@@ -1,4 +1,4 @@
-import { canonicalDigest } from '@/modules/common/canonical-digest'
+import { digestReference, digestValue, stripDigest } from './formance-digest'
 import { currentUtcDayBounds, currentUtcMonthBounds } from '@/modules/common/freshness'
 
 import {
@@ -740,20 +740,8 @@ export function formanceReference(commandIdentity: unknown, suffix: string): str
   return `ae-p4:${digestValue('transaction-reference', commandIdentity)}:${suffix}`
 }
 
-export function digestReference(kind: string, reference: unknown): string {
-  return digestValue('account-segment', { kind, reference })
-}
-
 export function formanceAccountMetadataDigest(accountRef: string): string | undefined {
   return boundedReference(accountRef) ? digestReference('account', accountRef) : undefined
-}
-
-export function digestValue(kind: string, value: unknown): string {
-  return stripDigest(canonicalDigest({ format: `ae.formance-${kind}:v1`, value }))
-}
-
-export function stripDigest(value: string): string {
-  return value.slice('sha256:'.length)
 }
 
 export function boundedReference(value: unknown): value is string {

@@ -286,4 +286,3 @@ export const registryToolsCompareAction = defineAction({
   ...registryToolsCompareContract,
   run: async ({ data }) => projectToolCompareChoices(await resolveToolCompare(data.toolRefs)),
 })
-

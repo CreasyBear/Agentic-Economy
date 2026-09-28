@@ -445,6 +445,7 @@ export { formatDisplayPrice, formatDisplayAmount } from './internal/display-pric
 export { fetchCoinbaseReferenceRate } from './internal/reference-rate-fetch'
 export { accountHistoryResultSchema } from './internal/account-history'
 export type { AccountHistoryEntry, AccountHistoryResult } from './internal/account-history'
+export { digestReference } from './internal/formance-digest'
 export {
   spendingPeriodsValue,
   spendingPeriodAdjustmentValue,

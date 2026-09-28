@@ -2678,6 +2678,12 @@
   {
     "visibility": "internal",
     "module": "moneyManagedCallLifecycle",
+    "method": "resolveBuyerSaleSources",
+    "kind": "query"
+  },
+  {
+    "visibility": "internal",
+    "module": "moneyManagedCallLifecycle",
     "method": "settle",
     "kind": "action"
   },

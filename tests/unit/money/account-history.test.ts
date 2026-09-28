@@ -52,7 +52,9 @@ describe('booked Account history', () => {
     expect(result.entries.map((entry) => [entry.transactionId, entry.kind, entry.accountEffect.units, entry.documentEffectUnits]))
       .toEqual([['7', 'funding', '100', '0'], ['5', 'call_spend', '-60', '0'],
         ['3', 'funding_reversal', '-100', '0'], ['2', 'document_adjustment', '0', '-5']])
-    expect(result.entries.every((entry) => entry.sourceRef === null)).toBe(true)
+    expect(result.entries[1]).toMatchObject({
+      transactionRef: 'transaction:5', sourceDigest: callDigest, sourceRef: null,
+    })
   })
 
   it('uses the official cursor once per identity, including equal and backdated timestamps', async () => {

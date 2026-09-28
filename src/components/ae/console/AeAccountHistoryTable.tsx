@@ -17,11 +17,7 @@ import type {
   AccountHistoryResult,
 } from '@/modules/money/public'
 import type { AccountHistoryPort } from '@/modules/money/account-history.contracts'
-import {
-  accountHistoryLabel,
-  deduplicateHistory,
-  formatSignedAmount,
-} from './owner-credit-format'
+import { accountHistoryLabel, accountHistorySourceLabel, deduplicateHistory, formatSignedAmount } from './owner-credit-format'
 
 type AvailableAccountHistory = Extract<AccountHistoryResult, { kind: 'available' }>
 
@@ -164,13 +160,21 @@ function AvailableAccountHistoryView({
       cell: ({ row }) => (
         <div className="grid gap-1">
           <span className="font-medium text-foreground">{accountHistoryLabel(row.original.kind)}</span>
+          {row.original.kind === 'call_spend' && row.original.sourceRef !== null ? (
+            <a href={`/calls/${encodeURIComponent(row.original.sourceRef)}`} className="w-fit text-xs font-medium text-primary hover:underline"
+              aria-label={`View Call receipt ${row.original.sourceRef}`}>
+              View Call receipt
+            </a>
+          ) : null}
           <details className="text-xs text-muted-foreground">
             <summary className="cursor-pointer">Transaction details</summary>
             <dl className="mt-2 grid gap-1">
               <div><dt className="inline">Transaction ID: </dt><dd className="inline font-mono">{row.original.transactionId}</dd></div>
               <div><dt className="inline">Reference: </dt><dd className="inline font-mono">{row.original.transactionRef ?? 'Not recorded'}</dd></div>
               <div><dt className="inline">Occurred: </dt><dd className="inline font-mono">{formatTimestamp(row.original.occurredAt)}</dd></div>
-              <div><dt className="inline">Source link: </dt><dd className="inline">Unavailable from Account history</dd></div>
+              <div><dt className="inline">Source: </dt>
+                <dd className={row.original.kind === 'call_spend' && row.original.sourceRef !== null ? 'inline break-all font-mono' : 'inline'}>
+                  {accountHistorySourceLabel(row.original)}</dd></div>
               {row.original.sourceDigest === null ? null : (
                 <div><dt className="inline">Evidence digest: </dt><dd className="inline break-all font-mono">{row.original.sourceDigest}</dd></div>
               )}
@@ -260,7 +264,7 @@ function AvailableAccountHistoryView({
         </Alert>
       ) : null}
       <p className="text-sm text-muted-foreground">
-        Ordered by recorded transaction sequence, not effective date. Receipts and Call links are not available from this history yet.
+        Ordered by recorded transaction sequence, not effective date.
       </p>
       {state.entries.length === 0 ? (
         <CreditSectionEmptyState title="No booked Account transactions yet" description="Confirmed funding, Call spend, reversals, and document adjustments will appear here." />

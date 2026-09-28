@@ -8,19 +8,9 @@ import { parseCallRef } from '@/modules/capability-execution/call-contracts'
 import { buildPublicPageHead } from '@/modules/seo/public'
 
 export const Route = createFileRoute('/support')({
-  validateSearch: (
-    search: { callRef?: string } & SearchSchemaInput,
-  ): SupportSearch => {
-    const raw: unknown = search.callRef
-    if (raw === undefined || (typeof raw === 'string' && raw.trim().length === 0)) {
-      return { callRef: { kind: 'absent' } }
-    }
-    if (typeof raw !== 'string') return { callRef: { kind: 'malformed' } }
-    const parsed = parseCallRef(raw)
-    return parsed.kind === 'valid'
-      ? { callRef: { kind: 'valid', value: parsed.ref } }
-      : { callRef: { kind: 'malformed' } }
-  },
+  validateSearch: (search: { callRef?: string } & SearchSchemaInput): SupportSearch => (
+    search.callRef === undefined ? {} : { callRef: typeof search.callRef === 'string' ? search.callRef : '' }
+  ),
   staticData: {
     nav: {
       label: 'Help',
@@ -39,6 +29,12 @@ export const Route = createFileRoute('/support')({
 
 function SupportRoute() {
   const canonicalBaseUrl = Route.useLoaderData()
-  const search = Route.useSearch()
-  return <AeSupportHelpPage canonicalBaseUrl={canonicalBaseUrl} callRef={search.callRef} />
+  const { callRef } = Route.useSearch()
+  const parsed = callRef === undefined ? undefined : parseCallRef(callRef)
+  const reference = parsed === undefined
+    ? { kind: 'absent' } as const
+    : parsed.kind === 'valid'
+      ? { kind: 'valid', value: parsed.ref } as const
+      : { kind: 'malformed' } as const
+  return <AeSupportHelpPage canonicalBaseUrl={canonicalBaseUrl} callRef={reference} />
 }

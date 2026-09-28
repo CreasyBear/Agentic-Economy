@@ -117,7 +117,10 @@ export function buildPaths(
       schemas.set(name, hoistLocalDefs(operation.requestBodySchema, schemas, name))
       requestBody = {
         required: true,
-        content: { 'application/json': { schema: { $ref: `#/components/schemas/${name}` } } },
+        content: { 'application/json': {
+          schema: { $ref: `#/components/schemas/${name}` },
+          ...(operation.requestBodyExample === undefined ? {} : { example: operation.requestBodyExample }),
+        } },
       }
     }
     const responses: Record<string, unknown> = {}
@@ -137,6 +140,7 @@ export function buildPaths(
     const operationObject: Record<string, unknown> = {
       operationId: operation.operationId,
       summary: operation.summary,
+      ...(operation.readOnly === undefined ? {} : { 'x-ae-read-only': operation.readOnly }),
       ...(operation.security === 'none'
         ? (operation.description === undefined ? {} : { description: operation.description })
         : { description: `${operation.description ?? ''} Requires ${operation.security.scope} scope.`.trim() }),

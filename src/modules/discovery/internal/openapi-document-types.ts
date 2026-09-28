@@ -31,5 +31,7 @@ export type NormalizedOperation = Readonly<{
   queryParams: readonly NormalizedParam[]
   headerParams?: readonly NormalizedParam[]
   requestBodySchema?: JSONSchema
+  requestBodyExample?: unknown
+  readOnly?: boolean
   responses: readonly NormalizedResponse[]
 }>

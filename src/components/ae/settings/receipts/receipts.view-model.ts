@@ -3,7 +3,7 @@ import type { InvoiceExportRow } from '@/lib/export/csv-export'
 import { formatTimestamp } from '@/lib/ui/format-time'
 import { getStatusPresentation } from '@/lib/ui/status-presentation'
 import type { AeInvoiceHistoryRow } from '@/modules/money/invoice-history.view-model'
-import { calculateAudGstSplit } from '@/modules/money/public'
+import { calculateAudGstSplit, formatExactAmount } from '@/modules/money/public'
 
 const AUD_INCLUSIVE_GST_BPS = 1_000
 
@@ -21,14 +21,19 @@ export function receiptDisplay(row: AeInvoiceHistoryRow) {
 
 export function receiptExportRow(row: AeInvoiceHistoryRow): InvoiceExportRow {
   const split = calculateAudGstSplit(row.totalUnits, AUD_INCLUSIVE_GST_BPS)
-  const dollars = (units: string) => (Number(units) / 1_000_000).toFixed(2)
+  const amountAud = formatExactAmount({ currency: 'AUD', exponent: 6, units: row.totalUnits })
+  const gstAud = split && formatExactAmount({ currency: 'AUD', exponent: 6, units: split.gstUnits })
+  const netAud = split && formatExactAmount({ currency: 'AUD', exponent: 6, units: split.netUnits })
+  if (amountAud === undefined || gstAud === undefined || netAud === undefined) {
+    throw new RangeError('Invalid AUD invoice amount')
+  }
   return {
     date: row.createdAt ? new Date(row.createdAt).toISOString() : '',
     commandRef: row.commandRef,
     description: row.description,
-    amountAud: dollars(row.totalUnits),
-    gstAud: split === undefined ? '' : dollars(split.gstUnits),
-    netAud: split === undefined ? '' : dollars(split.netUnits),
+    amountAud,
+    gstAud,
+    netAud,
     status: receiptDisplay(row).status,
     taxInvoice: row.taxInvoice?.kind === 'issued' ? 'issued'
       : row.taxInvoice?.kind === 'withheld' ? `withheld:${row.taxInvoice.reason}` : 'unavailable',

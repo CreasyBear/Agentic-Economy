@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { convexTestWithMarketComponents, ownerAdmin, publishedBusinessOwner } from '../../helpers/convex-fixtures'
 import { formanceAccountMetadataDigest } from '@/modules/money/formance-workflows'
-import type { AccountHistoryResult } from '@/modules/money/public'
+import { digestReference, type AccountHistoryResult } from '@/modules/money/public'
 
 const ledger = vi.hoisted(() => ({ listTransactions: vi.fn() }))
 vi.mock('@/modules/money/formance', async (importOriginal) => ({
@@ -85,5 +85,102 @@ describe('authenticated Account history', () => {
     await expect(fixture.owner.action(readHistory, {}))
       .resolves.toEqual({ kind: 'setup_required', code: 'formance_history_configuration_invalid' })
     expect(ledger.listTransactions).not.toHaveBeenCalled()
+  })
+
+  it('links only the settled buyer sale with the same Account, transaction ref and canonical Call digest', async () => {
+    vi.stubEnv('AE_CONVEX_SERVER_FUNCTION_TOKEN', 'account-history-test-cursor-key-32-bytes')
+    const backend = convexTestWithMarketComponents()
+    const first = await publishedBusinessOwner(backend, 'history-sale-first')
+    const second = await publishedBusinessOwner(backend, 'history-sale-second')
+    const callRef = `operation-invocation:v1:${'b'.repeat(64)}`
+    const buyerRef = 'formance:history-buyer-sale'
+    const callDigest = digestReference('call', callRef)
+    await backend.run(async (ctx) => {
+      await ctx.db.insert('capabilityCalls', {
+        callRef, principalId: first.canonicalPrincipalRef, ownerId: first.canonicalAccountRef,
+        credentialId: 'credential:history-sale', applicationRef: 'application:history-sale',
+        toolRef: 'operation:history-sale', idempotencyKey: 'idempotency:history-sale',
+        environment: 'sandbox', grantRef: 'grant:history-sale', grantGeneration: 1,
+        policyDigest: 'sha256:history-sale', grantExpiresAt: 5000,
+        inputDigest: 'sha256:history-input', requestDigest: 'sha256:history-request',
+        formanceFinancialState: 'possibly_submitted', formanceReservationRefs: ['reserve:one'],
+        state: 'completed', createdAt: 1000, updatedAt: 1000,
+      })
+    })
+    const finalize = makeFunctionReference<'mutation',
+      { callRef: string; transactionRefs: string[]; now: number },
+      { kind: 'accepted'; state: string; replayed: boolean } | { kind: 'refused'; code: string }>(
+      'moneyManagedCallLifecycle:finalizeSettlement')
+    await expect(backend.mutation(finalize, { callRef, transactionRefs: [buyerRef, 'formance:history-provider'], now: 1100 }))
+      .resolves.toMatchObject({ kind: 'accepted', state: 'settled' })
+    // A pre-attribution settled Call has both proven settlement refs but no scalar index.
+    await backend.run(async (ctx) => {
+      const legacy = await ctx.db.query('capabilityCalls').withIndex('by_callRef', (q) => q.eq('callRef', callRef)).unique()
+      if (legacy === null) throw new Error('history_sale_call_missing')
+      await ctx.db.patch(legacy._id, { buyerSaleTransactionRef: undefined })
+    })
+    await expect(backend.mutation(finalize, { callRef, transactionRefs: [buyerRef, 'formance:history-provider'], now: 1200 }))
+      .resolves.toMatchObject({ kind: 'accepted', replayed: true })
+    const replayed = await backend.run(async (ctx) => ctx.db.query('capabilityCalls')
+      .withIndex('by_callRef', (q) => q.eq('callRef', callRef)).unique())
+    expect(replayed?.buyerSaleTransactionRef).toBe(buyerRef)
+    await backend.run(async (ctx) => {
+      if (replayed === null) throw new Error('history_sale_call_missing')
+      await ctx.db.patch(replayed._id, { buyerSaleTransactionRef: 'formance:wrong-scalar' })
+    })
+    await expect(backend.mutation(finalize, { callRef, transactionRefs: [buyerRef, 'formance:history-provider'], now: 1250 }))
+      .resolves.toEqual({ kind: 'refused', code: 'managed_call_settlement_conflict' })
+    await backend.run(async (ctx) => {
+      if (replayed === null) throw new Error('history_sale_call_missing')
+      await ctx.db.patch(replayed._id, { buyerSaleTransactionRef: buyerRef })
+    })
+    await expect(backend.mutation(finalize, { callRef, transactionRefs: ['formance:different-buyer', 'formance:history-provider'], now: 1300 }))
+      .resolves.toEqual({ kind: 'refused', code: 'managed_call_settlement_conflict' })
+    const booked = await backend.run(async (ctx) => ctx.db.query('capabilityCalls')
+      .withIndex('by_callRef', (q) => q.eq('callRef', callRef)).unique())
+    expect(booked?.buyerSaleTransactionRef).toBe(buyerRef)
+    const row = (id: bigint, reference: string, digest: string, account: string) => ({
+      id, reference, template: 'BUYER_SALE_SETTLED', reverted: false,
+      timestamp: new Date(1000), insertedAt: new Date(2000),
+      metadata: { account_digest: formanceAccountMetadataDigest(account), call_digest: digest },
+      postings: [{ source: `calls:${digest}:buyer_reserved`, destination: 'platform:revenue:sales', asset: 'AUD/6', amount: 10n }],
+    })
+    ledger.listTransactions.mockResolvedValueOnce({ v2TransactionsCursorResponse: { cursor: {
+      data: [
+        row(5n, buyerRef, callDigest, first.canonicalAccountRef),
+        row(4n, buyerRef, 'b'.repeat(64), first.canonicalAccountRef),
+        row(3n, 'formance:wrong-ref', callDigest, first.canonicalAccountRef),
+        row(2n, 'formance:history-provider', callDigest, first.canonicalAccountRef),
+      ], hasMore: false, pageSize: 15,
+    } } })
+    const result = await first.owner.action(readHistory, {})
+    expect(result.kind).toBe('available')
+    if (result.kind !== 'available') throw new Error(result.code)
+    expect(result.entries.map((entry) => entry.sourceRef)).toEqual([callRef, null, null, null])
+    expect(result.sourceLinkCoverage).toBe('partial')
+    ledger.listTransactions.mockResolvedValueOnce({ v2TransactionsCursorResponse: { cursor: {
+      data: [row(1n, buyerRef, callDigest, first.canonicalAccountRef)], hasMore: false, pageSize: 15,
+    } } })
+    await expect(first.owner.action(readHistory, {})).resolves.toMatchObject({
+      kind: 'available', entries: [{ sourceRef: callRef }], sourceLinkCoverage: 'complete',
+    })
+    ledger.listTransactions.mockResolvedValueOnce({ v2TransactionsCursorResponse: { cursor: {
+      data: [row(1n, buyerRef, callDigest, second.canonicalAccountRef)], hasMore: false, pageSize: 15,
+    } } })
+    const other = await second.owner.action(readHistory, {})
+    expect(other).toMatchObject({ kind: 'available', entries: [{ sourceRef: null }] })
+    const malformedCallRef = 'invocation:unrouteable-history-sale'
+    await backend.run(async (ctx) => {
+      const call = await ctx.db.query('capabilityCalls').withIndex('by_callRef', (q) => q.eq('callRef', callRef)).unique()
+      if (call === null) throw new Error('history_sale_call_missing')
+      await ctx.db.patch(call._id, { callRef: malformedCallRef })
+    })
+    ledger.listTransactions.mockResolvedValueOnce({ v2TransactionsCursorResponse: { cursor: {
+      data: [row(1n, buyerRef, digestReference('call', malformedCallRef), first.canonicalAccountRef)],
+      hasMore: false, pageSize: 15,
+    } } })
+    await expect(first.owner.action(readHistory, {})).resolves.toMatchObject({
+      kind: 'available', entries: [{ sourceRef: null }], sourceLinkCoverage: 'unavailable',
+    })
   })
 })
