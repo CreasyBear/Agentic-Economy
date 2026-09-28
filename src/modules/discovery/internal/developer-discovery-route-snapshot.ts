@@ -140,7 +140,7 @@ async function executeJsonRoute<Body>(input: {
 }): Promise<DeveloperDiscoveryRouteSnapshotResponse<Body>> {
   try {
     const response = await input.run()
-    const body = (await response.json().catch(() => undefined)) as Body | undefined
+    const body = (await response.json()) as Body
     const schemaVersion = readRouteSchemaVersion(body)
     const errorCode = routeErrorCode(response, schemaVersion, input.expectedSchemaVersion)
     const cacheControl = response.headers.get('Cache-Control') ?? undefined
@@ -173,7 +173,7 @@ async function executeTextRoute(input: {
 }): Promise<DeveloperDiscoveryRouteExecution> {
   try {
     const response = await input.run()
-    await response.text().catch(() => '')
+    await response.text()
     const cacheControl = response.headers.get('Cache-Control') ?? undefined
     return {
       route: input.route,

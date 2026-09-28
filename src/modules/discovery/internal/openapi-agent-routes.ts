@@ -6,7 +6,7 @@ import { describeActionForAgent, findAction, journeyStatusResultSchema } from '@
 import { statusRefSchema } from '@/modules/actions/contract'
 import { SUPPLY_ACTION_ROUTE_CONTRACTS } from '@/modules/capability-supply/supply-actions'
 import { MARKET_REQUEST_ROUTE_CONTRACTS } from '@/modules/market-demand/market-demand.actions'
-import { SAVED_TOOLS_ROUTE_CONTRACTS } from '@/modules/market/saved-tools.actions'
+import { SAVED_TOOLS_ROUTE_CONTRACTS } from '@/modules/market/saved-tools.contracts'
 import {
   createFundingHandoffInputSchema,
   FUNDING_HANDOFF_CONFIG_ACTION_ID,

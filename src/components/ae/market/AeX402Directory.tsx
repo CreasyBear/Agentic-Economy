@@ -256,7 +256,8 @@ function DirectoryMarketplace({ page, compareEntries, search, workspace = false,
       } else {
         setNeedSave({ key: noMatchKey, idempotencyKey, status: 'saved' })
       }
-    } catch {
+    } catch (cause) {
+      degrade(cause, undefined, { site: 'DirectoryMarketplace.saveMissingNeed', reason: 'source_unavailable' })
       setNeedSave({ key: noMatchKey, idempotencyKey, status: 'idle', error: 'This need could not be saved. Try again.' })
     }
   }

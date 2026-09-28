@@ -3,7 +3,7 @@ import {
   savedToolsListAction,
   savedToolsRemoveAction,
   savedToolsSaveAction,
-} from '@/modules/market/saved-tools.actions'
+} from '@/modules/market/saved-tools.contracts'
 import { directoryPrice } from '@/modules/market/directory-card.view-model'
 import { formatDisplayPrice } from '@/modules/money/public'
 import type { SavedToolIdentity } from '@/modules/market/saved-tools.contracts'
@@ -12,6 +12,11 @@ import type { CliOptions } from '../lib/args'
 import { usageFailure } from '../lib/help'
 import { CliFailure, callJson, heading, line, printJson, requireOk, table } from '../lib/output'
 import { requireAgentAccessKey } from './status'
+export const SAVED_COMMAND_DESCRIPTORS = Object.freeze({
+  list: { actionId: savedToolsListAction.id, command: 'saved', subcommand: 'list', route: SAVED_TOOLS_ROUTE_CONTRACTS.list },
+  save: { actionId: savedToolsSaveAction.id, command: 'saved', subcommand: 'save', route: SAVED_TOOLS_ROUTE_CONTRACTS.save },
+  remove: { actionId: savedToolsRemoveAction.id, command: 'saved', subcommand: 'remove', route: SAVED_TOOLS_ROUTE_CONTRACTS.remove },
+} as const)
 
 function identity(value: string | undefined, allowCompact: boolean) {
   if (value === undefined) return undefined
@@ -49,7 +54,7 @@ export async function runSavedCommand(args: readonly string[], options: CliOptio
   if (operation === 'list' && args.length === 1) {
     const input = savedToolsListAction.schema.safeParse({})
     if (!input.success) throw usageFailure('saved list', 'saved-list-input-invalid')
-    const route = SAVED_TOOLS_ROUTE_CONTRACTS.list
+    const route = SAVED_COMMAND_DESCRIPTORS.list.route
     const response = savedToolsListAction.outputSchema.safeParse(await savedAction(route.path, route.method, input.data, options))
     if (!response.success) throw new CliFailure('The server returned an invalid Saved Tools list.', { kind: 'UNAVAILABLE', code: 'saved-list-result-invalid' })
     const result = response.data
@@ -81,7 +86,7 @@ export async function runSavedCommand(args: readonly string[], options: CliOptio
     const parsedIdentity = identity(value, true)
     const input = parsedIdentity === undefined ? undefined : savedToolsSaveAction.schema.safeParse(parsedIdentity)
     if (input === undefined || !input.success) throw usageFailure('saved save', 'saved-save-input-invalid')
-    const route = SAVED_TOOLS_ROUTE_CONTRACTS.save
+    const route = SAVED_COMMAND_DESCRIPTORS.save.route
     const response = savedToolsSaveAction.outputSchema.safeParse(await savedAction(route.path, route.method, input.data, options))
     if (!response.success) throw new CliFailure('The server returned an invalid Saved Tool result.', { kind: 'UNAVAILABLE', code: 'saved-save-result-invalid' })
     const result = response.data
@@ -95,7 +100,7 @@ export async function runSavedCommand(args: readonly string[], options: CliOptio
     const parsedIdentity = identity(value, false)
     const input = parsedIdentity === undefined ? undefined : savedToolsRemoveAction.schema.safeParse(parsedIdentity)
     if (input === undefined || !input.success) throw usageFailure('saved remove', 'saved-remove-input-invalid')
-    const route = SAVED_TOOLS_ROUTE_CONTRACTS.remove
+    const route = SAVED_COMMAND_DESCRIPTORS.remove.route
     const response = savedToolsRemoveAction.outputSchema.safeParse(await savedAction(route.path, route.method, input.data, options))
     if (!response.success) throw new CliFailure('The server returned an invalid Saved Tool removal.', { kind: 'UNAVAILABLE', code: 'saved-remove-result-invalid' })
     const result = response.data

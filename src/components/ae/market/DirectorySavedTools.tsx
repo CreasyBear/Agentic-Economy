@@ -3,10 +3,11 @@
 import { useAuth } from '@clerk/tanstack-react-start'
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 
+import { degrade } from '@/lib/observability/degrade'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import type { SavedToolsContextValue, SavedToolsLoadState, SavedToolsWriteError } from '@/modules/market/directory-card.view-model'
 import type { SavedDirectoryTool, SavedToolIdentity, SavedToolListItem, SavedToolSaveInput } from '@/modules/market/saved-tools.contracts'
-import { listSavedToolsForOwner, removeToolForOwner, saveToolForOwner } from '@/modules/market/saved-tools.functions'
+import { listSavedToolsForOwner, removeToolForOwner, saveToolForOwner } from '@/modules/market/market.functions'
 
 const DirectorySavedToolsContext = createContext<SavedToolsContextValue | undefined>(undefined)
 const EMPTY_SAVED_TOOLS: readonly SavedToolListItem[] = []
@@ -51,8 +52,11 @@ export function DirectorySavedToolsProvider({ children }: Readonly<{ children: R
       setLoaded(result.kind === 'available'
         ? { owner, items: result.items, status: 'ready' }
         : { owner, items: [], status: 'failed', error: result.code === 'unauthenticated' ? 'Sign in to see Saved Tools.' : 'Saved Tools could not be loaded. Try again.' })
-    }).catch(() => {
-      if (id === generation.current && currentOwner.current === owner) setLoaded({ owner, items: [], status: 'failed', error: 'Saved Tools could not be loaded. Try again.' })
+    }).catch(cause => {
+      if (id === generation.current && currentOwner.current === owner) {
+        degrade(cause, undefined, { site: 'DirectorySavedToolsProvider.refresh', reason: 'source_unavailable' })
+        setLoaded({ owner, items: [], status: 'failed', error: 'Saved Tools could not be loaded. Try again.' })
+      }
     })
   }, [owner])
 
@@ -85,7 +89,10 @@ export function DirectorySavedToolsProvider({ children }: Readonly<{ children: R
         return
       }
       if (currentOwner.current === owner) refresh()
-    }).catch(() => setSaveError({ owner, message: 'Saved Tools could not be changed. Try again.' }))
+    }).catch(cause => {
+      degrade(cause, undefined, { site: 'DirectorySavedToolsProvider.toggleIdentity', reason: 'source_unavailable' })
+      setSaveError({ owner, message: 'Saved Tools could not be changed. Try again.' })
+    })
       .finally(() => {
         inFlight.current.delete(key)
         setPendingKeys(previous => { const next = new Set(previous); next.delete(key); return next })

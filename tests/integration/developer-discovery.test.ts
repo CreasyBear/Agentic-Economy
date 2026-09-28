@@ -15,7 +15,7 @@ import {
 } from '@/modules/registry/public'
 import { handleDeveloperDiscoveryExamplesRequest } from '@/routes/api.discovery.examples'
 import { handleDeveloperDiscoverySchemaRequest } from '@/routes/api.discovery.schema'
-import { loadDeveloperDiscoveryRoute } from '@/modules/discovery/developer-discovery-route.server'
+import { loadDeveloperDiscoveryRoute } from '@/modules/discovery/developer-discovery-route'
 
 const privateOrAuthorityPattern =
   /inquiryBody|ownerReply|claimantContact|ownerNotes|notificationPayload|providerPayload|adminEvidence|sourceHash|rawContact(?!Excluded)|private:evidence|ownerId|clerk|callable":true|paymentRequired":true|providerTool":true|requestMarket":true|mutation":true|payment":true|protectedAction":true/iu

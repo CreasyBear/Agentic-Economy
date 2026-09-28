@@ -1,7 +1,9 @@
 import { type Infer } from 'convex/values'
 
 import { canonicalDigest } from '@/modules/common/canonical-digest'
-import { marketRequestCreateInputSchema, marketRequestRef } from '@/modules/market-demand/request-identity'
+import {
+  marketRequestCreateInputSchema, marketRequestRef, toConvexToolCatalogFilters,
+} from '@/modules/market-demand/request-identity'
 import type { MutationCtx, QueryCtx } from '../../../_generated/server'
 import { verifyMarketAgentPrincipal } from '../../../agentAccessPrincipals'
 import type { AgentPrincipalAdmission } from '../../agentAccess/principals/verification'
@@ -54,7 +56,8 @@ export async function recordHandler(ctx: MutationCtx, args: Infer<typeof recordA
     ownerId: principal.ownerId, credentialId: args.agentPrincipal.credentialId,
     applicationRef: args.agentPrincipal.applicationRef, environment: args.agentPrincipal.environment,
     query, queryDigest, idempotencyKey,
-    ...(source === undefined ? {} : { source }), ...(filters === undefined ? {} : { filters }),
+    ...(source === undefined ? {} : { source }),
+    ...(filters === undefined ? {} : { filters: toConvexToolCatalogFilters(filters) }),
     createdAt, updatedAt: createdAt,
   })
   return { kind: 'recorded', requestRef, query, createdAt }

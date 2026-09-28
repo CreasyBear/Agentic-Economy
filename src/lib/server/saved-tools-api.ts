@@ -9,7 +9,7 @@ import { withHttpRateLimit } from '@/lib/server/rate-limit'
 import { runWithRequestCorrelation, withRequestCorrelationHeader } from '@/lib/server/request-correlation'
 import { SAVED_TOOLS_ROUTE_CONTRACTS,
   savedToolsListAction, savedToolsSaveAction, savedToolsRemoveAction,
-  type SavedToolsService } from '@/modules/market/saved-tools.actions'
+  type SavedToolsService } from '@/modules/market/saved-tools.contracts'
 import { callPublicSourceMutation, callPublicSourceQuery, callSourceMutation, callSourceQuery, sourceMutation, sourceQuery } from '@/lib/server/convex-source'
 import { sourceWriteAdmissionFromRequest, sourceWriteRequestFromAdmission } from '@/lib/server/source-write-admission'
 import type { AgentAccessPrincipal } from '@/modules/agent-access/agent-access'
@@ -140,14 +140,18 @@ export async function resolveSavedList(stored: StoredList): Promise<SavedToolsLi
     const publicRef = publicIdentity(identity)
     if (publicRef.kind === 'external_listing') {
       try { return { identity: publicRef, createdAt, detail: await liveExternalEntry(publicRef.resource, referenceRate) } }
-      catch { return { identity: publicRef, createdAt, detail: { kind: 'unavailable' } } }
+      catch (cause) {
+        return degrade<SavedToolListItem>(cause, { identity: publicRef, createdAt, detail: { kind: 'unavailable' } }, { site: 'resolveSavedList.externalListing', reason: 'source_unavailable' })
+      }
     }
     try {
       const detail = await readCapabilityToolDetail({ toolRef: publicRef.toolRef })
       return { identity: publicRef, createdAt, detail: detail.kind === 'found'
         ? { kind: 'found', tool: detail.tool }
         : { kind: detail.kind === 'not_found' ? 'not_found' : 'unavailable' } }
-    } catch { return { identity: publicRef, createdAt, detail: { kind: 'unavailable' } } }
+    } catch (cause) {
+      return degrade<SavedToolListItem>(cause, { identity: publicRef, createdAt, detail: { kind: 'unavailable' } }, { site: 'resolveSavedList.aeCallable', reason: 'source_unavailable' })
+    }
   }))
   return { kind: 'available', items }
 }

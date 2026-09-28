@@ -2,6 +2,7 @@ import { z } from 'zod'
 import { idempotencyKeySchema } from '@/modules/common/action'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { toolCatalogFiltersSchema } from '@/modules/registry/tool-choice-contracts'
+export { toolCatalogFiltersValidator, toConvexToolCatalogFilters } from './internal/tool-catalog-filters-validator'
 
 export const MARKET_REQUEST_ACTIVE_WINDOW_MS = 30 * 24 * 60 * 60 * 1000
 

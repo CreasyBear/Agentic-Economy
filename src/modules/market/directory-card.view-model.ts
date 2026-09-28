@@ -6,6 +6,9 @@ import { directoryProviderKey, directorySlugBase, minimumDirectoryUsdPrice } fro
 import type { X402DirectoryEntry } from '@/modules/market/x402-directory'
 import { x402DirectoryFunctionalTitle } from '@/modules/market/x402-directory-title'
 import type { SavedDirectoryTool, SavedToolListItem, SavedToolSaveInput } from '@/modules/market/saved-tools.contracts'
+import { degrade } from '@/lib/observability/degrade'
+
+export { absorbProviderEntries, DIRECTORY_LIST_PAGE_SIZE, groupDirectoryProviders } from './internal/directory-provider-pagination'
 
 /** AUD is the primary estimate; published USDC remains a source detail below it. */
 export function directoryPrice(entry: X402DirectoryEntry): string {
@@ -177,55 +180,6 @@ export function toDirectoryProviderRow(provider: X402DirectoryFacet): DirectoryP
     ...(title === undefined || title.length === 0 ? {} : { leadTitle: title }),
     ...(slug === undefined || slug.length === 0 ? {} : { leadSlug: slug }),
   }
-}
-
-/** Hosts in the order the sorted Tool list first mentions them. The first Tool in each group is the one the sort put first. */
-export function groupDirectoryProviders(entries: readonly X402DirectoryEntry[]): readonly { provider: string; tools: readonly X402DirectoryEntry[] }[] {
-  const groups: { provider: string; tools: X402DirectoryEntry[] }[] = []
-  const byProvider = new Map<string, { provider: string; tools: X402DirectoryEntry[] }>()
-  for (const entry of entries) {
-    const existing = byProvider.get(entry.provider)
-    if (existing === undefined) {
-      const group = { provider: entry.provider, tools: [entry] }
-      byProvider.set(entry.provider, group)
-      groups.push(group)
-    } else existing.tools.push(entry)
-  }
-  return groups
-}
-
-/** A Tools page and a Providers page both show this many rows. The last page may be shorter. */
-export const DIRECTORY_LIST_PAGE_SIZE = 12
-
-/**
- * Walk a sorted Tool stream until `size` new hosts are collected.
- * A host already in `seen` (an earlier page) is skipped.
- * Further Tools for a host on this page stay on this page.
- * The first Tool of the next new host, and everything after it, stays in `rest`.
- */
-export function absorbProviderEntries(
-  entries: readonly X402DirectoryEntry[],
-  carried: readonly { provider: string; tools: readonly X402DirectoryEntry[] }[],
-  seen: ReadonlySet<string>,
-  size = DIRECTORY_LIST_PAGE_SIZE,
-): { groups: { provider: string; tools: X402DirectoryEntry[] }[]; rest: X402DirectoryEntry[] } {
-  const groups = carried.map(group => ({ provider: group.provider, tools: [...group.tools] }))
-  const byProvider = new Map(groups.map(group => [group.provider, group]))
-  for (let index = 0; index < entries.length; index += 1) {
-    const entry = entries[index]
-    if (entry === undefined) continue
-    const existing = byProvider.get(entry.provider)
-    if (existing !== undefined) {
-      existing.tools.push(entry)
-      continue
-    }
-    if (seen.has(entry.provider)) continue
-    if (groups.length >= size) return { groups, rest: entries.slice(index) }
-    const group = { provider: entry.provider, tools: [entry] }
-    byProvider.set(entry.provider, group)
-    groups.push(group)
-  }
-  return { groups, rest: [] }
 }
 
 /** Older indexed snapshots retain the same description and service identity. */
@@ -539,7 +493,7 @@ function endpointPath(resource: string): string {
     const url = new URL(resource)
     const path = `${url.pathname}${url.search}`
     return path.length > 1 ? path : url.hostname
-  } catch {
-    return resource
+  } catch (cause) {
+    return degrade(cause, resource, { site: 'directoryService.endpointPath', reason: 'invalid_response' })
   }
 }

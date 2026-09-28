@@ -1,12 +1,13 @@
 import { paginationOptsValidator, paginationResultValidator } from 'convex/server'
 import { v } from 'convex/values'
+import { toolCatalogFiltersValidator } from '@/modules/market-demand/request-identity'
 
 import { agentAccessPrincipalValue } from '../../../agentAccessPrincipals'
 import { sourceWriteArgs } from '../../security/sourceWrite/contracts'
 
 const scopeFields = {
   source: v.optional(v.union(v.literal('current'), v.literal('coinbase'))),
-  filters: v.optional(v.any()),
+  filters: v.optional(toolCatalogFiltersValidator),
 } as const
 
 const demandSignalValue = v.object({

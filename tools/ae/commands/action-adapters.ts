@@ -9,6 +9,7 @@ import { historyCommandDescriptor } from './history'
 import { MARKET_TOOL_COMMAND_DESCRIPTORS } from './market-tools'
 import { SUPPLY_COMMAND_DESCRIPTORS } from './supply'
 import { MARKET_REQUEST_COMMAND_DESCRIPTORS } from './request'
+import { SAVED_COMMAND_DESCRIPTORS } from './saved'
 
 export type CliActionAdapterDescriptor = Readonly<{
   actionId: string
@@ -49,6 +50,13 @@ export const CLI_ACTION_ADAPTERS: readonly CliActionAdapterDescriptor[] = Object
     subcommand,
     method,
     path,
+  })),
+  ...Object.values(SAVED_COMMAND_DESCRIPTORS).map(({ actionId, command, subcommand, route }) => ({
+    actionId,
+    command,
+    subcommand,
+    method: route.method,
+    path: route.path,
   })),
   {
     actionId: TOOL_QUOTE_ROUTE_CONTRACT.actionId,

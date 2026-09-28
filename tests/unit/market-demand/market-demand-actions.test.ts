@@ -360,14 +360,20 @@ describe('owner demand isolation', () => {
       })) })), insert },
     })
     const phrase = 'x'.repeat(200)
-    const filters = { provider: 'Chosen provider' }
+    const filters = {
+      provider: 'Chosen provider',
+      location: ' AU ',
+      maximumPrice: { currency: 'USD', units: '100', exponent: 2 },
+    }
     expect(await ownerRecordHandler(ctx, {
       query: phrase, source: 'current', filters, idempotencyKey: 'owner-intent',
       operationKey: 'record', correlationId: 'owner',
     })).toMatchObject({ kind: 'recorded', query: phrase })
     expect(insert).toHaveBeenCalledWith('marketDemandSignals', expect.objectContaining({
       schemaVersion: 'market-demand-owner-signal:v1', ownerId: 'account:B',
-      query: phrase, source: 'current', filters,
+      query: phrase, source: 'current',
+      filters: { ...filters, location: 'AU' },
+      queryDigest: canonicalDigest({ query: phrase, source: 'current', filters: { ...filters, location: 'AU' } }),
     }))
   })
 

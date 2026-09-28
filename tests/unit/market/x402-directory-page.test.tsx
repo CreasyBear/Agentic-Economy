@@ -19,7 +19,7 @@ vi.mock('@/modules/market-demand/market-demand.functions', async importOriginal 
   recordOwnerMarketDemand,
 }))
 vi.mock('@clerk/tanstack-react-start', () => ({ useAuth: () => ({ isLoaded: true, isSignedIn: owner.userId !== null, userId: owner.userId }) }))
-vi.mock('@/modules/market/saved-tools.functions', () => ({
+vi.mock('@/modules/market/market.functions', () => ({
   listSavedToolsForOwner,
   saveToolForOwner,
   removeToolForOwner: vi.fn(),
@@ -686,8 +686,9 @@ describe('canonical Market search', () => {
       pagination: { limit: 8, hasMore: false }, next: [{ action: 'broaden', args: { query: 'unserved' }, authority: 'public' }],
     } satisfies ToolChoiceSearchOutput
     searchMarketToolsServer.mockResolvedValue(verdict)
+    const failure = new Error('temporary failure')
     recordOwnerMarketDemand.mockResolvedValueOnce({ kind: 'recorded', requestRef: 'need-a', query: 'unserved', createdAt: 1 })
-      .mockRejectedValueOnce(new Error('temporary failure'))
+      .mockRejectedValueOnce(failure)
       .mockResolvedValueOnce({ kind: 'recorded', requestRef: 'need-b', query: 'unserved', createdAt: 2 })
     const { updateSearch } = show({ view: 'tools', query: 'unserved', provider: 'first.example.com' }, [], { page: indexedPage, catalogue: indexedCatalogue, overview })
     const firstButton = await screen.findByRole('button', { name: 'Save this need' })
@@ -701,6 +702,7 @@ describe('canonical Market search', () => {
     await waitFor(() => expect(secondButton).toHaveProperty('disabled', false))
     fireEvent.click(secondButton)
     await screen.findByRole('alert')
+    expect(captureRouteException).toHaveBeenCalledWith(failure, { degraded: 'DirectoryMarketplace.saveMissingNeed', reason: 'source_unavailable' }, 'warning')
     fireEvent.click(screen.getByRole('button', { name: 'Save this need' }))
     await waitFor(() => expect(screen.getByRole('button', { name: 'Need saved' })).toHaveProperty('disabled', true))
     expect(recordOwnerMarketDemand).toHaveBeenCalledTimes(3)

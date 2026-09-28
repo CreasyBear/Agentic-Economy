@@ -36,7 +36,7 @@ import {
   TOOL_MARKET_ACTION_ENTRIES,
 } from '@/modules/registry/tool-entry'
 import { MARKET_REQUEST_ROUTE_CONTRACTS } from '@/modules/market-demand/market-demand.actions'
-import { SAVED_TOOLS_ROUTE_CONTRACTS } from '@/modules/market/saved-tools.actions'
+import { SAVED_TOOLS_ROUTE_CONTRACTS } from '@/modules/market/saved-tools.contracts'
 
 import { TOOL_QUOTE_ACTION_ID } from '@/modules/capability-execution/quote'
 import { TOOL_PROCURE_ACTION_ID } from '@/modules/capability-execution/procure'

@@ -1,5 +1,6 @@
 import { defineTable } from 'convex/server'
 import { v } from 'convex/values'
+import { toolCatalogFiltersValidator } from './tool-catalog-filters-validator'
 
 const commonFields = {
   requestRef: v.string(),
@@ -19,7 +20,7 @@ const credentialFields = {
 
 const scopeFields = {
   source: v.optional(v.union(v.literal('current'), v.literal('coinbase'))),
-  filters: v.optional(v.any()),
+  filters: v.optional(toolCatalogFiltersValidator),
 } as const
 
 export const marketDemandTables = {

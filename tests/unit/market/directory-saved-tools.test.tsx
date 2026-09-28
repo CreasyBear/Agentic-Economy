@@ -12,7 +12,7 @@ const list = vi.hoisted(() => vi.fn())
 const save = vi.hoisted(() => vi.fn())
 const remove = vi.hoisted(() => vi.fn())
 vi.mock('@clerk/tanstack-react-start', () => ({ useAuth: () => ({ isLoaded: true, isSignedIn: auth.userId !== null, userId: auth.userId }) }))
-vi.mock('@/modules/market/saved-tools.functions', () => ({ listSavedToolsForOwner: list, saveToolForOwner: save, removeToolForOwner: remove }))
+vi.mock('@/modules/market/market.functions', () => ({ listSavedToolsForOwner: list, saveToolForOwner: save, removeToolForOwner: remove }))
 
 const ref = `operation:v1:${'a'.repeat(64)}`
 const resource = 'https://example.com/weather'

@@ -59,10 +59,9 @@ async function list(ctx: AccessCtx, ownerId: string): Promise<Infer<typeof saved
 function validIdentity(identity: SavedIdentityValue): boolean {
   if (identity.kind === 'ae_callable') return /^operation:v1:[0-9a-f]{64}$/u.test(identity.identityRef)
   if (identity.identityRef.length > 8192) return false
-  try {
-    const url = new URL(identity.identityRef)
-    return url.protocol === 'https:' && url.username === '' && url.password === ''
-  } catch { return false }
+  if (!URL.canParse(identity.identityRef)) return false
+  const url = new URL(identity.identityRef)
+  return url.protocol === 'https:' && url.username === '' && url.password === ''
 }
 /** Final transactional freshness check: no public mutation may trust a server-function preflight. */
 async function currentIdentity(ctx: MutationCtx, identity: SavedIdentityValue): Promise<'current' | 'not_found' | 'source_unavailable'> {

@@ -3,7 +3,7 @@ import { createFileRoute } from '@tanstack/react-router'
 import { methodNotAllowed } from '@/lib/server/method-guard'
 import { withHttpRateLimit } from '@/lib/server/rate-limit'
 import { resolveCanonicalBaseUrl } from '@/lib/server/canonical-url'
-import { buildDeveloperDiscoveryRouteSnapshot } from '@/modules/discovery/developer-discovery-route.server'
+import { buildDeveloperDiscoveryRouteSnapshot } from '@/modules/discovery/developer-discovery-route'
 import { readDirectoryFreshnessField, type X402DirectoryFreshnessField } from '@/modules/market/x402-directory-index.server'
 import {
   generateDeveloperDiscoverySchema,

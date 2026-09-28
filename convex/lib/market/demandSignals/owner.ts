@@ -2,7 +2,8 @@ import { type Infer } from 'convex/values'
 
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import {
-  MARKET_REQUEST_ACTIVE_WINDOW_MS, marketRequestCreateInputSchema, marketRequestScopeSchema, ownerMarketRequestRef,
+  MARKET_REQUEST_ACTIVE_WINDOW_MS, marketRequestCreateInputSchema, marketRequestScopeSchema,
+  ownerMarketRequestRef, toConvexToolCatalogFilters,
 } from '@/modules/market-demand/request-identity'
 import type { MutationCtx, QueryCtx } from '../../../_generated/server'
 import { resolveBusinessActor } from '../../../authz'
@@ -92,7 +93,7 @@ export async function ownerRecordHandler(
     schemaVersion: 'market-demand-owner-signal:v1', requestRef, ownerId, idempotencyKey,
     query, queryDigest,
     ...(selectedSource === undefined ? {} : { source: selectedSource }),
-    ...(filters === undefined ? {} : { filters }),
+    ...(filters === undefined ? {} : { filters: toConvexToolCatalogFilters(filters) }),
     createdAt, updatedAt: createdAt,
   })
   return { kind: 'recorded', requestRef, query, createdAt }

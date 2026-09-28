@@ -1,5 +1,9 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
+import {
+  savedToolRemoveInputSchema, savedToolSaveInputSchema,
+  type SavedToolRemoveResult, type SavedToolSaveResult, type SavedToolsListResult,
+} from './saved-tools.contracts'
 import { SEARCH_QUERY_MAX_LENGTH } from "@/modules/common/search-query";
 import { jevDiscoveryRecipient } from "@/modules/decision-engine/public";
 import { callPublicSourceQuery, sourceQuery } from '@/lib/server/convex-source'
@@ -33,6 +37,27 @@ export const readMarketChatRecipientServer = createServerFn({ method: 'GET' })
   .handler(async () => {
     if (!process.env.CONVEX_URL?.trim() && !process.env.VITE_CONVEX_URL?.trim()) return null
     return await callPublicSourceQuery(chatRecipientQuery, {})
+  })
+
+/** Convex derives the account from the signed-in session and rechecks current authority. */
+export const listSavedToolsForOwner = createServerFn({ method: 'GET' })
+  .handler(async (): Promise<SavedToolsListResult> => {
+    const { listSavedToolsOwner } = await import('@/lib/server/saved-tools-api')
+    return await listSavedToolsOwner()
+  })
+
+export const saveToolForOwner = createServerFn({ method: 'POST' })
+  .validator(data => savedToolSaveInputSchema.parse(data))
+  .handler(async ({ data }): Promise<SavedToolSaveResult> => {
+    const { saveSavedToolOwner } = await import('@/lib/server/saved-tools-api')
+    return await saveSavedToolOwner(data)
+  })
+
+export const removeToolForOwner = createServerFn({ method: 'POST' })
+  .validator(data => savedToolRemoveInputSchema.parse(data))
+  .handler(async ({ data }): Promise<SavedToolRemoveResult> => {
+    const { removeSavedToolOwner } = await import('@/lib/server/saved-tools-api')
+    return await removeSavedToolOwner(data)
   })
 
 export {

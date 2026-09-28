@@ -1,9 +1,8 @@
-import { createContext, useContext, useEffect, useRef, useState } from 'react'
+import { createContext, useContext } from 'react'
 import { AeFactList } from '@/components/ae/data/AeFactList'
 import { AeCopyCommand } from '@/components/ae/data/AeCopyCommand'
 import { AeToolPrice } from '@/components/ae/market/AeToolPrice'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
-import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { buttonVariants } from '@/components/ui/button-variants'
 import { Card, CardAction, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
@@ -30,10 +29,10 @@ import {
 import {
   toolCardState,
   type ChatNeedActions,
-  type ChatSaveNeed,
   type ToolCardProjection,
   type ToolChoiceRow,
 } from '@/modules/chat/tool-card'
+import { NeedSaveAction } from './need-save-action/NeedSaveAction'
 import type { SearchNextProps } from './presentation'
 
 export const ChatNeedActionsContext = createContext<ChatNeedActions | null>(null)
@@ -236,150 +235,6 @@ function ExecuteNextAction({ projection }: Readonly<{
     : <AeCopyCommand compact label={suggestedNextAction.label} code={suggestedNextAction.command} />
 }
 
-function NeedSaveAction({ input }: { input: ChatSaveNeed }) {
-  const actions = useContext(ChatNeedActionsContext)
-  const key = useRef<string | null>(null)
-  const inFlight = useRef(false)
-  const [busy, setBusy] = useState(false)
-  const [requestRef, setRequestRef] = useState<string | null>(null)
-  const [withdrawn, setWithdrawn] = useState(false)
-  const [message, setMessage] = useState('')
-  const [lookupState, setLookupState] = useState<'checking' | 'ready' | 'error'>('checking')
-  const latestActions = useRef(actions)
-  useEffect(() => { latestActions.current = actions }, [actions])
-  const latestInput = useRef(input)
-  useEffect(() => { latestInput.current = input }, [input])
-  const scopeKey = JSON.stringify(input)
-  useEffect(() => {
-    if (!actions?.authenticated) {
-      setRequestRef(null)
-      setLookupState('checking')
-      return
-    }
-    let active = true
-    setLookupState('checking')
-    const current = latestActions.current
-    if (current === null) return
-    void current.onFind(latestInput.current).then(result => {
-      if (!active) return
-      if (result.kind === 'found') {
-        setRequestRef(result.request.requestRef)
-        setWithdrawn(false)
-      }
-      setLookupState(result.kind === 'error' ? 'error' : 'ready')
-    }).catch(() => { if (active) setLookupState('error') })
-    return () => { active = false }
-  }, [actions?.authenticated, scopeKey])
-  if (actions === null) return null
-  if (!actions.authenticated) {
-    return <a href="/sign-in" className={buttonVariants({ variant: 'outline' })}>Sign in to save this need</a>
-  }
-  async function save() {
-    if (actions === null || lookupState !== 'ready' || inFlight.current
-      || (requestRef !== null && !withdrawn)) return
-    inFlight.current = true
-    setBusy(true)
-    setMessage('')
-    try {
-      const existing = await actions.onFind(input)
-      if (existing.kind === 'found') {
-        setRequestRef(existing.request.requestRef)
-        setWithdrawn(false)
-        setMessage('Need already saved.')
-        return
-      }
-      if (existing.kind !== 'not_found') {
-        setLookupState('error')
-        setMessage('Could not check saved needs. Try again.')
-        return
-      }
-      key.current ??= crypto.randomUUID()
-      const result = await actions.onSave({ ...input, idempotencyKey: key.current })
-      if (result.kind === 'refused') {
-        setMessage(result.code === 'current_match_exists'
-          ? 'A Tool now matches this search. Search again.'
-          : 'Could not save this need. Retry or search again.')
-      } else {
-        setRequestRef(result.requestRef)
-        setWithdrawn(false)
-        setMessage('Need saved. Matching runs for 30 days.')
-      }
-    } catch {
-      setMessage('Could not save this need. Retry or search again.')
-    } finally {
-      inFlight.current = false
-      setBusy(false)
-    }
-  }
-  async function checkStatus() {
-    if (actions === null || requestRef === null || inFlight.current) return
-    inFlight.current = true
-    setBusy(true)
-    try {
-      const result = await actions.onStatus(requestRef)
-      if (result.kind === 'open') setMessage('Need is open for matching.')
-      else if (result.kind === 'matched') setMessage(`${result.matchedCount} matching Tools are available. Search the Market to inspect them.`)
-      else setMessage('Could not check status. Try again.')
-    } catch {
-      setMessage('Could not check status. Try again.')
-    } finally {
-      inFlight.current = false
-      setBusy(false)
-    }
-  }
-  async function withdraw() {
-    if (actions === null || requestRef === null || inFlight.current) return
-    inFlight.current = true
-    setBusy(true)
-    try {
-      const result = await actions.onWithdraw(requestRef)
-      if (result.kind === 'withdrawn') {
-        key.current = null
-        setWithdrawn(true)
-        setMessage('Need withdrawn.')
-      }
-      else setMessage('Could not withdraw this need. Try again.')
-    } catch {
-      setMessage('Could not withdraw this need. Try again.')
-    } finally {
-      inFlight.current = false
-      setBusy(false)
-    }
-  }
-  return (
-    <div className="grid gap-intra">
-      {lookupState === 'checking' ? <p className="text-sm" role="status">Checking saved needs…</p> : null}
-      {lookupState === 'error' ? (
-        <Button type="button" variant="outline" size="sm" disabled={busy} onClick={() => {
-          if (actions === null) return
-          setLookupState('checking')
-          void actions.onFind(input).then(result => {
-            if (result.kind === 'found') { setRequestRef(result.request.requestRef); setWithdrawn(false) }
-            setLookupState(result.kind === 'error' ? 'error' : 'ready')
-          }).catch(() => setLookupState('error'))
-        }}>Retry saved needs</Button>
-      ) : null}
-      {lookupState === 'ready' && (requestRef === null || withdrawn) ? (
-        <Button type="button" size="sm" disabled={busy} onClick={() => void save()}>
-          {busy ? 'Saving…' : 'Save this need'}
-        </Button>
-      ) : null}
-      {requestRef !== null ? (
-        <div className="grid gap-intra">
-          <p className="break-all text-sm">Request reference: <code>{requestRef}</code></p>
-          {!withdrawn ? (
-            <div className="flex flex-wrap gap-intra">
-              <Button type="button" variant="outline" size="sm" disabled={busy} onClick={() => void checkStatus()}>Check status</Button>
-              <Button type="button" variant="outline" size="sm" disabled={busy} onClick={() => void withdraw()}>Withdraw</Button>
-            </div>
-          ) : null}
-        </div>
-      ) : null}
-      {message ? <p className="text-sm" role="status">{message}</p> : null}
-    </div>
-  )
-}
-
 const STATUS_VARIANT = {
   complete: 'success',
   working: 'info',
@@ -390,6 +245,7 @@ const STATUS_VARIANT = {
 } as const
 
 export function ToolCard({ projection }: { projection: ToolCardProjection }) {
+  const needActions = useContext(ChatNeedActionsContext)
   if (projection.kind === 'working') {
     return (
       <p className="flex items-center gap-related text-sm text-muted-foreground" role="status">
@@ -418,7 +274,7 @@ export function ToolCard({ projection }: { projection: ToolCardProjection }) {
         <CardFooter className="grid gap-intra">
           {projection.kind === 'choices' && projection.count !== undefined ? <ChoiceRemainder count={projection.count} shown={projection.choices.length} /> : null}
           {projection.next === undefined ? null : <SearchNext next={projection.next} />}
-          {projection.kind === 'status' && projection.saveNeed !== undefined ? <NeedSaveAction input={projection.saveNeed} /> : null}
+          {projection.kind === 'status' && projection.saveNeed !== undefined ? <NeedSaveAction input={projection.saveNeed} actions={needActions} /> : null}
         </CardFooter>
       ) : projection.kind === 'execute' && projection.suggestedNextAction !== undefined ? (
         <CardFooter>

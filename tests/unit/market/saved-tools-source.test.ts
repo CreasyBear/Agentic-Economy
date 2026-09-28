@@ -68,6 +68,8 @@ describe('account Saved Tools source', () => {
     const alice = await publishedBusinessOwner(backend, 'saved-unlisted')
     expect(await alice.owner.mutation(saveOwner, { identity: { kind: 'external_listing', identityRef: 'https://example.com/missing' } }))
       .toEqual({ kind: 'refused', code: 'not_found' })
+    expect(await alice.owner.mutation(saveOwner, { identity: { kind: 'external_listing', identityRef: 'not-a-url' } }))
+      .toEqual({ kind: 'refused', code: 'invalid_identity' })
     expect(await alice.owner.mutation(saveOwner, { identity: { kind: 'ae_callable', identityRef: ref(77) } }))
       .toEqual({ kind: 'refused', code: 'not_found' })
     expect((await alice.owner.query(listOwner, {})).items).toEqual([])

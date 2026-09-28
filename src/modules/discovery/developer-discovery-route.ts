@@ -1,10 +1,16 @@
 import { createServerFn } from '@tanstack/react-start'
 import { getRequest } from '@tanstack/react-start/server'
+import {
+  buildDeveloperDiscoveryRouteSnapshot,
+  loadDeveloperDiscoveryRoute,
+} from './internal/developer-discovery-route-snapshot'
 
 import type {
   DeveloperDiscoveryArtifactMetadata,
   DeveloperDiscoveryRouteReadback,
 } from '@/modules/discovery/developer-discovery'
+
+export { buildDeveloperDiscoveryRouteSnapshot, loadDeveloperDiscoveryRoute }
 
 export type DeveloperDiscoveryRoutePageReadback = Omit<DeveloperDiscoveryRouteReadback, 'artifacts'> & {
   artifacts: readonly (DeveloperDiscoveryArtifactMetadata & Readonly<{ checkedAt: number }>)[]
@@ -12,7 +18,6 @@ export type DeveloperDiscoveryRoutePageReadback = Omit<DeveloperDiscoveryRouteRe
 
 export const loadDeveloperDiscoveryRouteServer = createServerFn({ method: 'GET' })
   .handler(async (): Promise<DeveloperDiscoveryRoutePageReadback> => {
-    // Keep route-handler dependencies outside the browser's server-function stub.
-    const { loadDeveloperDiscoveryRoute } = await import('./developer-discovery-route.server')
+    // TanStack Start strips this server handler and its route dependencies from the client stub.
     return loadDeveloperDiscoveryRoute(getRequest(), Date.now())
   })
