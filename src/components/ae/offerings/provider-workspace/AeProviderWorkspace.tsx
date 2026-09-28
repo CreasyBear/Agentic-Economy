@@ -18,10 +18,7 @@ import { useProviderWorkspaceSheets } from './useProviderWorkspaceSheets'
 
 export function AeProviderWorkspace(props: AeProviderWorkspaceProps) {
   const inventoryAvailable = props.inventory.kind === 'available'
-  const inventory = useProviderWorkspaceInventory({
-    inventory: props.inventory,
-    payouts: props.payouts,
-  })
+  const inventory = useProviderWorkspaceInventory()
   const sheets = useProviderWorkspaceSheets({ enabled: inventoryAvailable })
 
   const toolCount =
@@ -88,21 +85,13 @@ function AvailableWorkspaceBody({
     <div className="grid gap-section">
       {(sheets.compatibilityConnect === 'return' || sheets.compatibilityConnect === 'refresh') && (
         <AeConnectReturnPoller
-          {...(sheets.earningsDetail?.connect === undefined ? {} : { initialReadiness: sheets.earningsDetail.connect })}
           onPollReadiness={sheets.readConnect}
           onReadinessAchieved={sheets.onReadinessAchieved}
           onResumeVerification={sheets.onResumeVerification}
         />
       )}
       {inventory.tools.length === 0 && (
-        <AeSupplierOnboardingWizard
-          currentStep={inventoryHook.payoutConnection.state === 'connected' ? 'first_tool' : 'payouts'}
-          providerName={inventory.provider.name}
-          payoutConnection={inventoryHook.payoutConnection}
-          onConnectPayouts={() => {
-            sheets.openEarnings()
-          }}
-        />
+        <AeSupplierOnboardingWizard currentStep="first_tool" providerName={inventory.provider.name} />
       )}
       <ProviderWorkspaceToolsSection
         inventory={inventory}
@@ -118,10 +107,10 @@ function AvailableWorkspaceBody({
         {...(location.hash.startsWith('provider-connection-') ? { connectionHash: `#${location.hash}` } : {})}
       />
       <ProviderWorkspaceEarningsSection
-        payoutConnection={inventoryHook.payoutConnection}
         earningsOpen={sheets.earningsOpen}
         earningsPending={sheets.earningsPending}
-        earningsDetailAvailable={sheets.earningsDetail !== undefined}
+        earningsUnavailable={sheets.earningsUnavailable}
+        {...(sheets.earningsDetail === undefined ? {} : { earningsDetail: sheets.earningsDetail })}
         onOpenEarnings={sheets.openEarnings}
         onCloseEarnings={sheets.closeEarnings}
         onRetryEarnings={sheets.loadEarnings}

@@ -1,4 +1,4 @@
-import { createFileRoute } from '@tanstack/react-router'
+import { createFileRoute, redirect } from '@tanstack/react-router'
 import { z } from 'zod'
 import {
   AeOwnerSupplySourceStartPage,
@@ -22,6 +22,9 @@ export const Route = createFileRoute('/_operator/owner/operations/new')({
   loaderDeps: ({ search }) => ({ connectionRef: search.connection, environment: search.environment, draftRef: search.draft }),
   loader: async ({ deps }) => {
     const identity = await readProviderWorkspaceIdentityDetailServer()
+    if (identity.kind === 'not_applicable') {
+      throw redirect({ to: '/owner/operations', hash: 'add-tool' })
+    }
     let sourceUnavailable = false
     let connections: Awaited<ReturnType<typeof readOwnerProviderConnectionsServer>> = []
     if (identity.kind === 'available') {

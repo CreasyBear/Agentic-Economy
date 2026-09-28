@@ -36,8 +36,8 @@ export const SUPPLY_SOURCE_TYPE_COPY = {
   jsonPreflight: {
     invalid: 'JSON syntax is invalid.',
     notObject: 'JSON must contain one object.',
-    missingFields: 'JSON is missing required schema fields.',
-    valid: 'Valid JSON payload',
+    missingFields: 'JSON object is missing required top-level keys.',
+    valid: 'JSON object parsed; expected top-level keys present',
   },
 } as const
 
@@ -194,7 +194,7 @@ export type X402SourceFieldsProps = Readonly<{
 
 export type PreflightSlotProps = Readonly<{ children: ReactNode }>
 export type HttpsUrlPreflightBadgeProps = Readonly<{ status: HttpsUrlPreflight }>
-export type JsonPreflightBadgeProps = Readonly<{ status: JsonPreflight }>
+export type JsonPreflightBadgeProps = Readonly<{ status: JsonPreflight; requiredKeys: readonly string[] }>
 export type PreflightRule4AlertProps = Readonly<{
   diagnostic: UrlDiscoverDiagnostic | JsonDiscoverDiagnostic
 }>

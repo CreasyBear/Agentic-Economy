@@ -1,4 +1,4 @@
-export type SupplierOnboardingStep = 'profile' | 'payouts' | 'first_tool'
+export type SupplierOnboardingStep = 'profile' | 'first_tool'
 
 export type SupplierOnboardingProfile = Readonly<{
   name: string

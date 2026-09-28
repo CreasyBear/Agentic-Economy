@@ -15,8 +15,6 @@ import {
 const mocks = vi.hoisted(() => ({
   identity: vi.fn(),
   connections: vi.fn(),
-  earnings: vi.fn(),
-  payoutReadiness: vi.fn(),
   ownerStatus: vi.fn(),
   setResponseHeader: vi.fn(),
   mutation: vi.fn(),
@@ -40,11 +38,6 @@ vi.mock('@/lib/server/convex-source', async (importOriginal) => ({
 vi.mock('@/modules/capability-supply/supply-funnel.functions', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/modules/capability-supply/supply-funnel.functions')>()),
   readOwnerProviderConnections: mocks.connections,
-  readOwnerProviderEarnings: mocks.earnings,
-}))
-vi.mock('@/modules/money/money.functions', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('@/modules/money/money.functions')>()),
-  readOwnerConnectReadinessThroughSource: mocks.payoutReadiness,
 }))
 vi.mock('@/lib/server/owner-status.functions', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/server/owner-status.functions')>()),
@@ -58,8 +51,6 @@ import {
   readProviderWorkspaceIdentityDetailServer,
   readProviderWorkspacePageServer,
   readProviderWorkspacePageThroughSource,
-  readProviderWorkspacePayoutSummaryServer,
-  readProviderWorkspacePayoutSummaryThroughSource,
   readProviderWorkspacePublicStatusServer,
   readProviderWorkspacePublicStatusThroughSource,
   readProviderToolStatusServer,
@@ -69,8 +60,6 @@ import {
 afterEach(() => {
   mocks.identity.mockReset()
   mocks.connections.mockReset()
-  mocks.earnings.mockReset()
-  mocks.payoutReadiness.mockReset()
   mocks.ownerStatus.mockReset()
   mocks.setResponseHeader.mockReset()
   mocks.mutation.mockReset()
@@ -194,29 +183,6 @@ describe('narrow owner Tools inventory read', () => {
     await expect(readProviderWorkspacePublicStatusThroughSource()).resolves.toEqual({ kind: 'conflict', reason: 'business_mismatch' })
   })
 
-  it('returns payout counts without Stripe or payout account identifiers', async () => {
-    mocks.identity.mockResolvedValue({ kind: 'available', businessId: 'biz:one', name: 'One', slug: 'one', publicStatus: 'published' })
-    mocks.earnings.mockResolvedValue({
-      kind: 'available',
-      businessId: 'biz:one',
-      accounts: [{ currency: 'USD', earnings: { kind: 'ok', evidenceRef: 'evidence:private' }, payout: { kind: 'ok', payoutRef: 'payout:private' } }],
-      accountsTruncated: false,
-    })
-    mocks.payoutReadiness.mockResolvedValue({
-      kind: 'available',
-      businessId: 'biz:one',
-      accounts: [{ currency: 'USD', account: { state: 'ready', stripeAccountId: 'acct_private' }, payout: { payoutRef: 'payout:private' } }],
-      accountsTruncated: false,
-    })
-
-    const result = await readProviderWorkspacePayoutSummaryThroughSource()
-
-    expect(result).toEqual({
-      kind: 'available',
-      value: { currencies: ['USD'], earningsAccounts: 1, payoutAccounts: 1, readyAccounts: 1, needsAttention: 0 },
-    })
-    expect(JSON.stringify(result)).not.toMatch(/stripeAccountId|acct_private|payoutRef|evidence|private/)
-  })
 
   it('marks every Tools read as private and non-cacheable', async () => {
     mocks.identity.mockResolvedValue({ kind: 'not_found' })
@@ -225,14 +191,13 @@ describe('narrow owner Tools inventory read', () => {
       readProviderWorkspacePageServer({ data: {} }),
       readProviderWorkspaceConnectionsSummaryServer(),
       readProviderWorkspaceConnectionsDetailServer(),
-      readProviderWorkspacePayoutSummaryServer(),
       readProviderWorkspacePublicStatusServer(),
       readProviderWorkspaceIdentityDetailServer(),
     ])
 
-    expect(mocks.setResponseHeader).toHaveBeenCalledTimes(6)
+    expect(mocks.setResponseHeader).toHaveBeenCalledTimes(5)
     expect(mocks.setResponseHeader.mock.calls).toEqual(
-      Array.from({ length: 6 }, () => ['cache-control', 'private, no-store']),
+      Array.from({ length: 5 }, () => ['cache-control', 'private, no-store']),
     )
   })
 

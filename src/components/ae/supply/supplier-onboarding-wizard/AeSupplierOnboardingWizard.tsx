@@ -6,7 +6,6 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 
 import { FirstToolStep } from './components/FirstToolStep'
 import { OnboardingStepper } from './components/OnboardingStepper'
-import { PayoutsStep } from './components/PayoutsStep'
 import { ProviderIdentityFields, SUPPLIER_IDENTITY_ERROR_ID } from './components/ProviderIdentityFields'
 import type { AeSupplierOnboardingWizardProps } from './supplier-onboarding-wizard.contracts'
 import { SHELL, SLOT } from './supplier-onboarding-wizard.contracts'
@@ -17,16 +16,12 @@ export type { AeSupplierOnboardingWizardProps } from './supplier-onboarding-wiza
 export function AeSupplierOnboardingWizard({
   currentStep = 'profile',
   providerName,
-  payoutConnection,
   onSaveProfile,
-  onConnectPayouts,
 }: AeSupplierOnboardingWizardProps) {
   const wizard = useSupplierOnboardingWizard({
     currentStep,
-    ...(payoutConnection !== undefined ? { payoutConnection } : {}),
     ...(providerName !== undefined ? { providerName } : {}),
     ...(onSaveProfile !== undefined ? { onSaveProfile } : {}),
-    ...(onConnectPayouts !== undefined ? { onConnectPayouts } : {}),
   })
   const { view } = wizard
 
@@ -52,7 +47,7 @@ export function AeSupplierOnboardingWizard({
           Provider setup
         </h2>
         <p className="text-xs text-muted-foreground">
-          Complete three steps to publish Tools and receive AUD payouts.
+          Set up your Provider profile, then add your first Tool.
         </p>
       </div>
 
@@ -80,13 +75,6 @@ export function AeSupplierOnboardingWizard({
         />
       )}
 
-      {view.step === 'payouts' && (
-        <PayoutsStep
-          payoutConnection={view.payoutConnection}
-          onConnectPayouts={wizard.handleConnectPayouts}
-          onSkipForNow={wizard.handleSkipForNow}
-        />
-      )}
 
       {view.step === 'first_tool' && <FirstToolStep />}
     </div>

@@ -117,7 +117,7 @@ export function ProviderIdentityFields({
           disabled={pending}
           className={`gap-2 min-h-touch ${TACTILE}`}
         >
-          <span>{pending ? 'Saving profile...' : 'Continue to Payouts'}</span>
+          <span>{pending ? 'Saving profile...' : 'Continue to Add Tool'}</span>
           <ArrowRightIcon className="size-4" />
         </Button>
       </div>

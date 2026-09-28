@@ -9,10 +9,8 @@ import { sanitizeTelemetryError } from '@/lib/observability/private-route-safety
 import { degrade } from '@/lib/observability/degrade'
 import {
   readOwnerProviderConnections,
-  readOwnerProviderEarnings,
   type OwnerProviderConnection,
 } from '@/modules/capability-supply/supply-funnel.functions'
-import { readOwnerConnectReadinessThroughSource } from '@/modules/money/money.functions'
 import { readOwnerStatusThroughSource, type PublicOwnerStatusRouteReadbackResult } from '@/lib/server/owner-status.functions'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import type { ProviderOffboardingStatus } from '@/modules/capability-supply/provider-offboarding'
@@ -96,19 +94,6 @@ export type ProviderWorkspaceConnectionsDetailResult =
   | Readonly<{ kind: 'unavailable' | 'not_applicable' }>
   | Readonly<{ kind: 'conflict'; reason: 'multiple_providers' | 'business_mismatch' }>
 
-export type ProviderWorkspacePayoutResult =
-  | Readonly<{
-      kind: 'available'
-      value: Readonly<{
-        currencies: readonly string[]
-        earningsAccounts: number
-        payoutAccounts: number
-        readyAccounts: number
-        needsAttention: number
-      }>
-    }>
-  | Readonly<{ kind: 'unavailable' | 'not_applicable' }>
-  | Readonly<{ kind: 'conflict'; reason: 'multiple_providers' | 'business_mismatch' }>
 
 export type ProviderWorkspacePublicStatusResult =
   | Readonly<{
@@ -348,52 +333,6 @@ export const readProviderWorkspaceConnectionsDetailServer = createServerFn().han
   }
 })
 
-export const readProviderWorkspacePayoutSummaryServer = createServerFn().handler(async (): Promise<ProviderWorkspacePayoutResult> => {
-  privateOwnerResponse()
-  return readProviderWorkspacePayoutSummaryThroughSource()
-})
-
-export async function readProviderWorkspacePayoutSummaryThroughSource(): Promise<ProviderWorkspacePayoutResult> {
-  const identity = await readCurrentOwnerIdentity()
-  if (identity.kind !== 'available') return secondaryFromIdentity(identity)
-  let reads: readonly [
-    Awaited<ReturnType<typeof readOwnerProviderEarnings>>,
-    Awaited<ReturnType<typeof readOwnerConnectReadinessThroughSource>>,
-  ]
-  try {
-    reads = await Promise.all([
-      readOwnerProviderEarnings(),
-      readOwnerConnectReadinessThroughSource(),
-    ])
-  } catch (cause) {
-    return degrade(cause, { kind: 'unavailable' } as const, {
-      site: 'readProviderWorkspacePayoutSummaryThroughSource',
-      reason: 'source_unavailable',
-    })
-  }
-  const [earnings, connect] = reads
-  if (earnings.kind === 'not_found' && connect.kind === 'not_found') return { kind: 'not_applicable' }
-  if (earnings.kind === 'error' || connect.kind === 'error') return { kind: 'unavailable' }
-  if (earnings.kind === 'available' && earnings.businessId !== identity.businessId) return { kind: 'conflict', reason: 'business_mismatch' }
-  if (connect.kind === 'available' && connect.businessId !== identity.businessId) return { kind: 'conflict', reason: 'business_mismatch' }
-  const earningsAccounts = earnings.kind === 'available' ? earnings.accounts : []
-  const payoutAccounts = connect.kind === 'available' ? connect.accounts : []
-  const currencies = [...new Set([
-    ...earningsAccounts.map((account) => account.currency),
-    ...payoutAccounts.map((account) => account.currency),
-  ])].sort()
-  const readyAccounts = payoutAccounts.filter((account) => account.account.state === 'ready').length
-  return {
-    kind: 'available',
-    value: {
-      currencies,
-      earningsAccounts: earningsAccounts.length,
-      payoutAccounts: payoutAccounts.length,
-      readyAccounts,
-      needsAttention: Math.max(0, currencies.length - readyAccounts),
-    },
-  }
-}
 
 export const readProviderWorkspacePublicStatusServer = createServerFn().handler(async (): Promise<ProviderWorkspacePublicStatusResult> => {
   privateOwnerResponse()

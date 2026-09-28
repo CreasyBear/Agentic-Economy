@@ -50,7 +50,8 @@ export type {
   OwnerProviderConnectionCommandResult,
 } from './internal/supply-funnel/connections'
 export type {
-  OwnerProviderEarningsAccountReadback,
+  OwnerProviderEarningsObligation,
+  OwnerProviderRecordedTransfer,
   OwnerProviderEarningsReadback,
 } from './internal/supply-funnel/earnings-readback'
 export type { SupplyLandingPorts, SupplyLandingReadback, SupplyLandingTool } from './internal/supply-funnel/landing'

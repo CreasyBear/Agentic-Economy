@@ -13,8 +13,6 @@ import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { base64Codec, tryDecodeBase64Url } from '@/modules/common/base64-codec'
 import { isRecord } from '@/modules/common/is-record'
 import { z } from 'zod'
-import { exactAmountSchema, ProviderEarningsViewSchema } from '@/modules/money/public'
-import type { OwnerProviderEarningsReadback } from './internal/supply-funnel/earnings-readback'
 import type {
   OwnerSupplyCommandResult,
 } from './internal/supply-funnel/types'
@@ -92,25 +90,6 @@ export type SupplyManagementService = Readonly<{
 
 import { providerToolStatusSchema } from './provider-tool-status'
 
-const earningsSchema = ProviderEarningsViewSchema
-const payoutSchema = z.strictObject({
-  businessId: z.string(),
-  accountState: z.enum(['missing', 'not_started', 'onboarding_started', 'submitted', 'restricted', 'ready']),
-  payoutState: z.enum(['review', 'held_kyc', 'held_threshold', 'transfer_pending', 'paid', 'reversed', 'failed', 'outcome_unknown']).optional(),
-  providerNet: exactAmountSchema,
-  minimumPayout: exactAmountSchema,
-  transferStatus: z.enum(['pending', 'succeeded', 'failed', 'reversed', 'outcome_unknown']).optional(),
-  providerRecoveryDeadlineAt: z.number().optional(),
-  recoveryState: z.enum(['provider_id', 'idempotency_key', 'admin_intervention']).optional(),
-  evidenceDigest: z.string().optional(),
-  reversalEvidenceDigest: z.string().optional(),
-  providerHeldBefore: exactAmountSchema.optional(),
-  providerHeldAfter: exactAmountSchema.optional(),
-  providerPaidBefore: exactAmountSchema.optional(),
-  providerPaidAfter: exactAmountSchema.optional(),
-  evidence: z.enum(['source', 'labelled_local_dev']),
-})
-const payoutProjectionSchema = z.object(payoutSchema.shape).pipe(payoutSchema)
 
 const SUPPLY_CALLS_CURSOR_KIND = 'supply-calls'
 const MAX_SUPPLY_CALLS_CURSOR_LENGTH = 512
@@ -158,7 +137,7 @@ const providerToolListQuery = sourceQuery<Record<string, unknown>, ProviderToolA
 const withdrawMutation = sourceMutation<Record<string, unknown>, OwnerSupplyCommandResult>('capabilitySupplyOwnerFunnel:withdrawOwnerCapability')
 const recheckMutation = sourceMutation<Record<string, unknown>, OwnerSupplyCommandResult>('capabilitySupplyOwnerFunnel:refreshOwnerCapability')
 const republishMutation = sourceMutation<Record<string, unknown>, OwnerSupplyCommandResult>('capabilitySupplyOwnerFunnel:republishOwnerCapability')
-const earningsReadMutation = sourceMutation<Record<string, unknown>, OwnerProviderEarningsReadback>('moneyLedger:readAgentProviderEarnings')
+const earningsReadMutation = sourceMutation<Record<string, unknown>, Readonly<{ kind: 'error'; code: 'source_unavailable' }>>('moneyLedger:readAgentProviderEarnings')
 type SupplyCallsCursor = Readonly<{ createdAt: number; callRef: string }>
 type SupplyCallsBackendResult =
   | Readonly<{
@@ -330,21 +309,13 @@ export function createSupplyManagementService(request: Request, bodyText: string
       correlationId,
       currency: input.currency,
     })
-    const result = await mutate(earningsReadMutation, {
+    await mutate(earningsReadMutation, {
       currency: input.currency,
       agentPrincipal: principal,
       operationKey,
       correlationId,
     }, operationKey, correlationId)
-    if (result.kind === 'not_found') return { kind: 'not_found' }
-    if (result.kind === 'error') return { kind: 'error', code: result.code === 'unauthenticated' ? 'unauthenticated' : 'source_unavailable' }
-    const account = result.accounts.find((candidate) => candidate.currency === input.currency)
-    if (account === undefined) return { kind: 'not_found' }
-    const { kind: _earningsKind, ...earnings } = account.earnings
-    const parsedEarnings = earningsSchema.safeParse(earnings)
-    const parsedPayout = payoutProjectionSchema.safeParse(account.payout)
-    if (!parsedEarnings.success || !parsedPayout.success) return { kind: 'error', code: 'source_unavailable' }
-    return { kind: 'available', businessId: result.businessId, currency: account.currency, earnings: parsedEarnings.data, payout: parsedPayout.data }
+    return { kind: 'error', code: 'source_unavailable' }
   }
   const connectionList = async ({ input, principal, correlationId }: { input: SupplyConnectionListInput; principal: AgentAccessPrincipal; correlationId: string }): Promise<SupplyConnectionListResult> => {
     const operationKey = canonicalDigest({

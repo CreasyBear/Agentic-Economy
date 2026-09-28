@@ -18,29 +18,11 @@ vi.mock('@/lib/ui/toast', () => ({
 }))
 
 import { AeSupplierOnboardingWizard } from '@/components/ae/supply/supplier-onboarding-wizard/AeSupplierOnboardingWizard'
-import { providerWorkspacePayoutConnection } from '@/components/ae/offerings/provider-workspace/provider-workspace.view-model'
 import { formatAbnDisplay } from '@/modules/money/public'
 import { toast } from '@/lib/ui/toast'
 
 const TACTILE =
   'enabled:active:scale-[0.98] transition-transform duration-100 ease-out motion-reduce:transition-none motion-reduce:active:scale-100'
-const disconnectedPayoutConnection = providerWorkspacePayoutConnection({
-  result: { kind: 'not_applicable' },
-  pending: false,
-})
-const connectedPayoutConnection = providerWorkspacePayoutConnection({
-  result: {
-    kind: 'available',
-    value: {
-      currencies: ['AUD'],
-      earningsAccounts: 0,
-      payoutAccounts: 1,
-      readyAccounts: 1,
-      needsAttention: 0,
-    },
-  },
-  pending: false,
-})
 
 describe('AeSupplierOnboardingWizard (W-30)', () => {
   afterEach(() => {
@@ -48,7 +30,7 @@ describe('AeSupplierOnboardingWizard (W-30)', () => {
     vi.clearAllMocks()
   })
 
-  it('T1: renders 3 activation steps in order with duration chips', () => {
+  it('shows identity and first Tool setup without unsupported payout steps', () => {
     const { container } = render(
       <AeSupplierOnboardingWizard
         currentStep="profile"
@@ -58,10 +40,8 @@ describe('AeSupplierOnboardingWizard (W-30)', () => {
 
     expect(screen.getByRole('navigation', { name: /provider setup/i })).toBeInTheDocument()
     expect(screen.getByText(/1\. Provider identity/i)).toBeInTheDocument()
-    expect(screen.getByText(/2\. Payout account/i)).toBeInTheDocument()
-    expect(screen.getByText(/3\. First Tool/i)).toBeInTheDocument()
+    expect(screen.getByText(/2\. First Tool/i)).toBeInTheDocument()
     expect(screen.getByText('~2 mins')).toBeInTheDocument()
-    expect(screen.getByText('~3 mins')).toBeInTheDocument()
     expect(screen.getByText('~1 min')).toBeInTheDocument()
 
     const shell = container.firstChild as HTMLElement
@@ -85,7 +65,7 @@ describe('AeSupplierOnboardingWizard (W-30)', () => {
     const nameInput = screen.getByLabelText(/provider or brand name/i)
     const websiteInput = screen.getByLabelText(/provider website/i)
     const abnInput = screen.getByLabelText(/australian business number/i)
-    const continueBtn = screen.getByRole('button', { name: /continue to payouts/i })
+    const continueBtn = screen.getByRole('button', { name: /continue to add tool/i })
 
     expect(continueBtn.className).toContain(TACTILE)
 
@@ -120,7 +100,7 @@ describe('AeSupplierOnboardingWizard (W-30)', () => {
   it('shows Rule 4 triplet for empty name and bad URL', async () => {
     render(<AeSupplierOnboardingWizard currentStep="profile" onSaveProfile={vi.fn()} />)
 
-    const continueBtn = screen.getByRole('button', { name: /continue to payouts/i })
+    const continueBtn = screen.getByRole('button', { name: /continue to add tool/i })
 
     fireEvent.change(screen.getByLabelText(/provider or brand name/i), { target: { value: '   ' } })
     fireEvent.change(screen.getByLabelText(/provider website/i), { target: { value: 'https://acme.example.com' } })
@@ -143,7 +123,7 @@ describe('AeSupplierOnboardingWizard (W-30)', () => {
     })
   })
 
-  it('allows stepper back navigation from payouts to profile', async () => {
+  it('allows stepper navigation back to profile after saving it', async () => {
     const onSaveProfileMock = vi.fn().mockResolvedValue({ kind: 'ok' })
 
     render(
@@ -156,10 +136,10 @@ describe('AeSupplierOnboardingWizard (W-30)', () => {
     fireEvent.change(screen.getByLabelText(/provider or brand name/i), { target: { value: 'Acme AI Systems' } })
     fireEvent.change(screen.getByLabelText(/provider website/i), { target: { value: 'https://acme.example.com' } })
     fireEvent.change(screen.getByLabelText(/australian business number/i), { target: { value: '51824753556' } })
-    fireEvent.click(screen.getByRole('button', { name: /continue to payouts/i }))
+    fireEvent.click(screen.getByRole('button', { name: /continue to add tool/i }))
 
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: /connect stripe/i })).toBeInTheDocument()
+      expect(screen.getByRole('link', { name: 'Add Tool' })).toBeInTheDocument()
     })
 
     const nav = screen.getByRole('navigation', { name: /provider setup/i })
@@ -170,51 +150,14 @@ describe('AeSupplierOnboardingWizard (W-30)', () => {
     expect(screen.getByLabelText(/provider or brand name/i)).toBeInTheDocument()
   })
 
-  it('T3: Step 2 renders Stripe Express reassurance and payout badges', () => {
-    const onConnectPayoutsMock = vi.fn()
-
-    const { rerender } = render(
-      <AeSupplierOnboardingWizard
-        currentStep="payouts"
-        providerName="Acme AI Systems"
-        payoutConnection={disconnectedPayoutConnection}
-        onConnectPayouts={onConnectPayoutsMock}
-      />,
-    )
-
-    expect(screen.getByText(/stripe express securely hosts kyc and identity verification/i)).toBeInTheDocument()
-    expect(screen.getByText(/bsb \+ account number/i)).toBeInTheDocument()
-    expect(screen.getByText(/never stores account numbers/i)).toBeInTheDocument()
-    expect(screen.getByText('Billing action required')).toBeInTheDocument()
-
-    const setupBtn = screen.getByRole('button', { name: 'Connect Stripe' })
-    expect(setupBtn.className).toContain(TACTILE)
-    fireEvent.click(setupBtn)
-    expect(onConnectPayoutsMock).toHaveBeenCalled()
-
-    rerender(
-      <AeSupplierOnboardingWizard
-        currentStep="payouts"
-        providerName="Acme AI Systems"
-        payoutConnection={connectedPayoutConnection}
-        onConnectPayouts={onConnectPayoutsMock}
-      />,
-    )
-    expect(screen.getByText('Available')).toBeInTheDocument()
-    expect(screen.getByText('Stripe is connected for payouts.')).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Connect Stripe' })).toBeNull()
-  })
-
-  it('T4: Step 3 renders First Tool import options linking to /owner/operations/new', () => {
+  it('shows the first Tool action without payout prerequisite', () => {
     render(
       <AeSupplierOnboardingWizard
         currentStep="first_tool"
         providerName="Acme AI Systems"
-        payoutConnection={connectedPayoutConnection}
       />,
     )
 
-    expect(screen.getByText(/add your first tool/i)).toBeInTheDocument()
     const importLink = screen.getByRole('link', { name: /^Add Tool$/i })
     expect(importLink).toHaveAttribute('href', '/owner/operations/new')
     expect(importLink.className).toContain(TACTILE)

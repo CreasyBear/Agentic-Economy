@@ -1,139 +1,64 @@
-import type { OwnerProviderEarningsReadback } from '@/modules/capability-supply/supply-funnel.functions'
-import type { OwnerConnectReadinessReadback } from '@/modules/money/money.functions'
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { formatCurrencyAmount } from '@/modules/money/public'
+import type { AeSupplyEarningsCardProps } from './earnings-card.contracts'
 
-import { DurableTransferEvidence } from './components/DurableTransferEvidence'
-import { EarningsFactsList } from './components/EarningsFactsList'
-import {
-  EarningsAccountStatus,
-  PayoutConfirmDialog,
-} from './components/PayoutConfirmDialog'
-import { PayoutActionBar } from './components/PayoutActionBar'
-import { EarningsEmptyState } from './components/EarningsEmptyState'
-import type { EarningsEmptyStateProps } from './earnings-card.contracts'
-import { projectEarningsList } from './earnings-projection'
-import { useAeSupplyEarningsCard, type UseAeSupplyEarningsCardInput } from './useAeSupplyEarningsCard'
-
-export type AeSupplyEarningsCardProps = Readonly<{
-  readback: OwnerProviderEarningsReadback
-  connect?: OwnerConnectReadinessReadback
-  onStatusRefreshed?: () => void | Promise<void>
-}>
-
-export function AeSupplyEarningsCard({
-  readback,
-  connect,
-  onStatusRefreshed,
-}: AeSupplyEarningsCardProps) {
-  const list = projectEarningsList(readback)
-
-  if (list.kind !== 'accounts') {
-    let variant: EarningsEmptyStateProps['variant']
-    if (list.kind === 'error') {
-      variant = list.code === 'unauthenticated' ? 'error_unauthenticated' : 'error_source'
-    } else if (list.kind === 'not_found') {
-      variant = 'not_found'
-    } else {
-      variant = 'empty_accounts'
-    }
+export function AeSupplyEarningsCard({ readback }: AeSupplyEarningsCardProps) {
+  if (readback.kind === 'error' || readback.kind === 'conflict') {
     return (
-      <div className="grid gap-4">
-        <EarningsEmptyState variant={variant} />
-      </div>
+      <Alert variant="destructive">
+        <AlertTitle>Earnings unavailable</AlertTitle>
+        <AlertDescription>{readback.kind === 'conflict' ? 'Provider ownership requires resolution before earnings can be shown.' : 'The earnings source could not be read. Try again.'}</AlertDescription>
+      </Alert>
     )
   }
-
-  const accounts =
-    readback.kind === 'available' ? readback.accounts : []
-
+  if (readback.kind === 'not_found') {
+    return <p className="text-sm text-muted-foreground">Set up a Provider profile to view earnings.</p>
+  }
+  if (readback.obligations.length === 0 && readback.transfers.length === 0) {
+    return <p className="text-sm text-muted-foreground">No Provider obligations have been recorded.</p>
+  }
   return (
     <div className="grid gap-4">
-      <div className="grid gap-4">
-        {accounts.map((account) => (
-          <EarningsAccountCard
-            key={account.currency}
-            account={account}
-            businessId={list.businessId}
-            {...(connect === undefined ? {} : { connect })}
-            {...(onStatusRefreshed === undefined ? {} : { onStatusRefreshed })}
-          />
+      <p className="text-sm text-muted-foreground">Provider obligations from recorded Calls. Call settlement is not a Stripe transfer or bank payout.</p>
+      <ul className="grid gap-3">
+        {readback.obligations.map((obligation) => (
+          <li key={obligation.obligationRef} className="grid gap-1 rounded-card border border-border p-4 text-sm">
+            <strong>{formatCurrencyAmount({ currency: obligation.currency, units: obligation.amountUnits, exponent: obligation.exponent })}</strong>
+            <span>Obligation: {obligation.state}</span>
+            <span className="break-all">Call: {obligation.callRef}</span>
+            <span className="break-all">Obligation reference: {obligation.obligationRef}</span>
+            <span>Recorded: {new Date(obligation.createdAt).toLocaleString()}</span>
+            {obligation.settlementTransactionRef === undefined ? null : (
+              <span className="break-all">Settlement transaction: {obligation.settlementTransactionRef}</span>
+            )}
+            {obligation.settledAt === undefined ? null : <span>Settled: {new Date(obligation.settledAt).toLocaleString()}</span>}
+            {obligation.reversedAt === undefined ? null : <span>Reversed: {new Date(obligation.reversedAt).toLocaleString()}</span>}
+            {obligation.state === 'settled' ? <span>Payout not yet observed</span> : null}
+          </li>
         ))}
-        {list.accountsTruncated ? (
-          <p className="text-sm text-muted-foreground">
-            Only the first 10 provider earnings currencies are shown.
-          </p>
-        ) : null}
-        <p className="text-sm text-muted-foreground">
-          Setup or test calls do not create earnings. Earnings appear only
-          when source money records provider accruals.
-        </p>
-      </div>
+      </ul>
+      {readback.truncated ? <p className="text-sm text-muted-foreground">Showing the latest 100 obligations. Older records are not included.</p> : null}
+      {readback.transfers.length === 0 ? null : (
+        <section className="grid gap-3">
+          <h3 className="font-medium">Recorded payout entries</h3>
+          <p className="text-sm text-muted-foreground">These records are separate from managed x402 obligations. A recorded Stripe transfer is not a bank payout.</p>
+          <ul className="grid gap-3">
+            {readback.transfers.map((transfer) => (
+              <li key={transfer.payoutRef} className="grid gap-1 rounded-card border border-border p-4 text-sm">
+                <strong>{formatCurrencyAmount({ currency: transfer.currency, units: transfer.amountUnits, exponent: transfer.exponent })}</strong>
+                <span>Record state: {transfer.state}</span>
+                {transfer.transferStatus === undefined ? null : <span>Stripe transfer status: {transfer.transferStatus}</span>}
+                <span className="break-all">Payout reference: {transfer.payoutRef}</span>
+                {transfer.stripeTransferId === undefined ? null : <span className="break-all">Stripe transfer: {transfer.stripeTransferId}</span>}
+                {transfer.transferEvidenceDigest === undefined ? null : <span className="break-all">Transfer evidence: {transfer.transferEvidenceDigest}</span>}
+                {transfer.transferObservedAt === undefined ? null : <span>Observed: {new Date(transfer.transferObservedAt).toLocaleString()}</span>}
+                <span>Payout not yet observed</span>
+              </li>
+            ))}
+          </ul>
+          {readback.transfersTruncated ? <p className="text-sm text-muted-foreground">Showing 100 transfer records. Other records are not included.</p> : null}
+        </section>
+      )}
     </div>
-  )
-}
-
-function EarningsAccountCard(props: UseAeSupplyEarningsCardInput) {
-  const hook = useAeSupplyEarningsCard(props)
-  const { display } = hook
-  const actionsDisabled = hook.busy !== undefined
-
-  return (
-    <section className="grid gap-4">
-      <EarningsFactsList currency={display.currency} facts={display.earningsFacts} />
-      {display.hasPersistedPayout ? (
-        <DurableTransferEvidence
-          facts={display.durableFacts}
-          {...(display.recoveryGuidance === undefined
-            ? {}
-            : { recoveryGuidance: display.recoveryGuidance })}
-          canReadRecordedTransfer={display.canReadRecordedTransfer}
-          refreshBusy={hook.busy === 'refresh'}
-          actionsDisabled={actionsDisabled}
-          onRefresh={() => void hook.refreshRecordedStatus()}
-        />
-      ) : null}
-      <PayoutActionBar
-        accountState={display.accountState}
-        {...(display.stripeMaskLabel === undefined
-          ? {}
-          : { stripeMaskLabel: display.stripeMaskLabel })}
-        {...(display.stripeMaskAriaLabel === undefined
-          ? {}
-          : { stripeMaskAriaLabel: display.stripeMaskAriaLabel })}
-        showStripeUnbound={display.showStripeUnbound}
-        expressStatusExplanation={display.expressStatusExplanation}
-        payoutGuidanceText={display.payoutGuidanceText}
-        showReviewPayout={display.showReviewPayout}
-        showExpressDashboard={display.showExpressDashboard}
-        showSetupPayouts={display.showSetupPayouts}
-        showContinueOnboarding={display.showContinueOnboarding}
-        expressOnboardingLabel={display.expressOnboardingLabel}
-        expressButtonVariant={display.expressButtonVariant}
-        {...(hook.busy === undefined ? {} : { busyKind: hook.busy })}
-        actionsDisabled={actionsDisabled}
-        expressActionRef={hook.expressActionRef}
-        payoutActionRef={hook.payoutActionRef}
-        onReviewPayout={() => hook.setConfirmAction('transfer')}
-        onExpressDashboard={() => void hook.openExpressDashboard()}
-        onSetupPayouts={() => hook.setConfirmAction('connect')}
-        onContinueOnboarding={() => hook.setConfirmAction('onboarding')}
-      />
-      <PayoutConfirmDialog
-        {...(hook.confirmAction === undefined ? {} : { confirmAction: hook.confirmAction })}
-        connectConfirmDescription={display.connectConfirmDescription}
-        onboardingConfirmDescription={display.onboardingConfirmDescription}
-        transferConfirmDescription={display.transferConfirmDescription}
-        pending={actionsDisabled}
-        returnFocusRef={hook.payoutActionRef}
-        onOpenChange={hook.handleConfirmOpenChange}
-        onConfirm={() => void hook.confirmPayoutAuthority()}
-      />
-      <EarningsAccountStatus {...hook.status} />
-      {display.earningsTruncated ? (
-        <p className="text-sm text-muted-foreground">
-          The source ledger read was capped at the latest 100 entries for this
-          currency; totals may be incomplete.
-        </p>
-      ) : null}
-    </section>
   )
 }
