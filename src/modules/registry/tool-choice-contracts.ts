@@ -137,8 +137,10 @@ const publicToolRefSchema = z.string().regex(/^operation:v1:[0-9a-f]{64}$/).tran
 const searchResultSchema = z.strictObject({
   id: z.string(),
   source: z.enum(['current', 'coinbase']),
-  access: z.enum(['ae_callable', 'external_listing']),
+  access: z.enum(['ae_callable', 'external_listing', 'setup_required', 'unavailable']),
   toolRef: publicToolRefSchema.optional(),
+  sourceRouteRef: z.string().max(8192).optional(),
+  sourcePrice: z.string().max(80).optional(),
   title: z.string().max(72),
   summary: z.string().max(100),
   provider: z.string().max(48),
@@ -161,6 +163,7 @@ const searchMetaSchema = {
   schemaVersion: z.literal(PublicToolRegistrySchemaVersion),
   query: z.string(),
   partialResults: z.boolean(),
+  recipient: z.strictObject({ label: z.string(), host: z.string(), data: z.literal('query and candidate summaries') }).optional(),
   freshness: supplyProjectionFreshnessSchema.optional(),
   assessed: z.strictObject({
     source: z.enum(['current', 'coinbase', 'all']),
@@ -337,6 +340,7 @@ export function projectToolSearchChoices(
     externalExamined?: number
     admittedExamined?: number
     externalAvailable?: boolean
+    recipient?: Readonly<{ label: string; host: string; data: 'query and candidate summaries' }>
   }> = {},
 ): ToolChoiceSearchOutput {
   const pagination = context.pagination ?? (result.kind === 'ok' ? result.pagination : { limit: visibleLimit, hasMore: false })
@@ -356,7 +360,7 @@ export function projectToolSearchChoices(
     return {
       id: tool.toolRef,
       source: 'current',
-      access: 'ae_callable',
+      access: tool.availability.posture === 'routeable' ? 'ae_callable' : tool.availability.posture,
       toolRef: tool.toolRef,
       title: Array.from(tool.listing.label).slice(0, 72).join(''),
       summary: Array.from(tool.summary).slice(0, 100).join(''),
@@ -385,6 +389,7 @@ export function projectToolSearchChoices(
     schemaVersion: PublicToolRegistrySchemaVersion,
     query, partialResults: !complete,
     ...(freshness === undefined ? {} : { freshness }),
+    ...(context.recipient === undefined ? {} : { recipient: context.recipient }),
     assessed, pagination,
     next: kind === 'unavailable'
       ? [{ action: 'retry' as const, args: { query }, authority: 'public' as const }]

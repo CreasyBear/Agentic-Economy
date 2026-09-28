@@ -94,12 +94,19 @@ export async function runSearchCommand(args: readonly string[], options: CliOpti
     return
   }
   heading(`Market Tools for "${result.query}" (${outcome.durationMs}ms)`)
+  if (result.recipient !== undefined) line(`  Ranking: ${result.recipient.label} (${result.recipient.host}) receives ${result.recipient.data}.`)
   line(`  ${result.kind} · scope: ${result.assessed.source}/${result.assessed.scope} · ${result.assessed.coverage} coverage (${result.assessed.examined} examined)`)
   if (result.kind === 'noMatch') line('  No suitable Tools found in the assessed sources.')
   if (result.kind === 'scoped') line('  Only assessed supply is shown; more Tools may exist.')
   if (result.kind === 'unavailable') line(`  Search unavailable: ${result.reason}`)
   for (const [index, tool] of result.results.entries()) {
-    line(`  ${index + 1}. ${tool.title} · ${tool.access === 'ae_callable' ? 'AE callable' : 'External listing (not AE callable)'}`)
+    const accessLabel = {
+      ae_callable: 'AE callable',
+      setup_required: 'Connect to call',
+      unavailable: 'Unavailable',
+      external_listing: 'External listing (not AE callable)',
+    }[tool.access]
+    line(`  ${index + 1}. ${tool.title} · ${accessLabel}`)
     line(`     ref: ${tool.toolRef ?? tool.detailRef}`)
     line(`     ${tool.readiness} · ${tool.price.kind === 'indicative' ? tool.price.label : 'Price unavailable'}`)
     for (const action of tool.next) {

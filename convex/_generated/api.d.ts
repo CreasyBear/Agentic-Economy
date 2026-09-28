@@ -402,6 +402,7 @@ import type * as lib_catalog_sellerCanary_promote from "../lib/catalog/sellerCan
 import type * as lib_catalog_sellerCanary_target from "../lib/catalog/sellerCanary/target.js";
 import type * as lib_chat_anonymous_contracts from "../lib/chat/anonymous/contracts.js";
 import type * as lib_chat_anonymous_http from "../lib/chat/anonymous/http.js";
+import type * as lib_chat_anonymous_recipient from "../lib/chat/anonymous/recipient.js";
 import type * as lib_chat_anonymous_request from "../lib/chat/anonymous/request.js";
 import type * as lib_chat_anonymous_stream from "../lib/chat/anonymous/stream.js";
 import type * as lib_chat_generate_contracts from "../lib/chat/generate/contracts.js";
@@ -1112,6 +1113,7 @@ declare const fullApi: ApiFromModules<{
   "lib/catalog/sellerCanary/target": typeof lib_catalog_sellerCanary_target;
   "lib/chat/anonymous/contracts": typeof lib_chat_anonymous_contracts;
   "lib/chat/anonymous/http": typeof lib_chat_anonymous_http;
+  "lib/chat/anonymous/recipient": typeof lib_chat_anonymous_recipient;
   "lib/chat/anonymous/request": typeof lib_chat_anonymous_request;
   "lib/chat/anonymous/stream": typeof lib_chat_anonymous_stream;
   "lib/chat/generate/contracts": typeof lib_chat_generate_contracts;

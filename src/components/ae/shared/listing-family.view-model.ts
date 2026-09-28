@@ -1,22 +1,45 @@
 import { formatUtcTimestamp } from '@/lib/ui/format-time'
 import { getStatusPresentation } from '@/lib/ui/status-presentation'
+import type { PublicToolDescriptor } from '@/modules/capability-supply/public'
 import type { ListingProjection, ListingPrice } from '@/modules/registry/public'
-import { formatDisplayAmount, parseDecimalExactAmount } from '@/modules/money/public'
+import { formatDisplayAmount, formatDisplayPrice, parseDecimalExactAmount, type ReferenceRate } from '@/modules/money/public'
 import type { ToolObjectView } from './object-family.contracts'
 
-function priceLabel(price: ListingPrice): string {
+function priceLabel(price: ListingPrice, referenceRate: ReferenceRate | undefined, nowMs: number, admittedDisplayPrice?: PublicToolDescriptor['commercial']['displayPrice']): string {
   if (price.kind === 'quote_required') return 'Quote required'
-  if (price.currency !== 'AUD' || price.kind === 'indicative') return 'AUD estimate temporarily unavailable'
-  const minimum = parseDecimalExactAmount('AUD', price.kind === 'range' ? price.minimum : price.amount, 6)
-  if (minimum === undefined) return 'AUD estimate temporarily unavailable'
-  if (price.kind !== 'range') return `${formatDisplayAmount(minimum)} per Call`
-  const maximum = parseDecimalExactAmount('AUD', price.maximum, 6)
-  return maximum === undefined
-    ? 'AUD estimate temporarily unavailable'
-    : `${formatDisplayAmount(minimum)}–${formatDisplayAmount(maximum)} per Call`
+  if (admittedDisplayPrice !== undefined) {
+    const label = formatDisplayPrice(admittedDisplayPrice, nowMs) ?? 'AUD estimate temporarily unavailable'
+    return label.startsWith('A$') ? `${label} per Call` : label
+  }
+  const display = (value: string) => {
+    const exact = parseDecimalExactAmount(price.currency, value, 6)
+    if (exact === undefined) return 'AUD estimate temporarily unavailable'
+    if (price.currency === 'AUD') return formatDisplayAmount(exact)
+    if (price.currency !== 'USDC') return 'AUD estimate temporarily unavailable'
+    return formatDisplayPrice(referenceRate === undefined
+      ? { kind: 'unavailable' }
+      : { kind: 'indicative', amount: exact, validUntil: referenceRate.fetchedAt + 5 * 60_000, referenceRate }, nowMs) ?? 'AUD estimate temporarily unavailable'
+  }
+  const minimum = display(price.kind === 'range' ? price.minimum : price.amount)
+  if (price.kind !== 'range') return `${minimum}${minimum.startsWith('A$') ? ' per Call' : ''}`
+  const maximum = display(price.maximum)
+  return minimum.startsWith('A$') && maximum.startsWith('A$')
+    ? `${minimum}–${maximum} per Call`
+    : 'AUD estimate temporarily unavailable'
 }
 
-export function projectToolObject(listing: ListingProjection, href?: string, nowMs = Date.now()): ToolObjectView {
+/** Market excludes only an exact ToolRef or indexed sourceRouteRef, never a similar title or URL. */
+export function alternativeToolSearchHref(listing: ListingProjection, capability: string, indexedSourceRouteRef?: string): string {
+  const source = listing.sources[0]
+  const alternativeTo = source.kind === 'admitted' ? source.toolRef : indexedSourceRouteRef
+  if (alternativeTo === undefined) return '/market?view=tools'
+  const query = capability.replace(/\s+/gu, ' ').trim().slice(0, 200).trimEnd()
+  if (query.length === 0) return '/market?view=tools'
+  const params = new URLSearchParams({ view: 'tools', query, alternativeTo })
+  return `/market?${params.toString()}`
+}
+
+export function projectToolObject(listing: ListingProjection, href?: string, nowMs = Date.now(), referenceRate?: ReferenceRate, admittedDisplayPrice?: PublicToolDescriptor['commercial']['displayPrice']): ToolObjectView {
   const { identity, facts } = listing
   const source = (fact: { sourceRef: string; provenance: string }) => `${fact.provenance.replaceAll('_', ' ')} · ${fact.sourceRef}`
   const readiness = facts.readiness.kind === 'present' && facts.readiness.value.validUntil !== undefined && facts.readiness.value.validUntil <= nowMs
@@ -36,7 +59,7 @@ export function projectToolObject(listing: ListingProjection, href?: string, now
     ...(href === undefined || href.length === 0 ? {} : { href }),
     title: identity.title.kind === 'present' ? identity.title.value : 'Unnamed Tool',
     ...(identity.summary.kind === 'present' ? { outcome: identity.summary.value } : {}),
-    ...(facts.price.kind === 'present' ? { price: { label: priceLabel(facts.price.value), source: source(facts.price) } } : {}),
+    ...(facts.price.kind === 'present' ? { price: { label: priceLabel(facts.price.value, referenceRate, nowMs, admittedDisplayPrice), source: source(facts.price) } } : {}),
     readiness,
     ...(identityLink === undefined ? {} : { identity: identityLink }),
   }

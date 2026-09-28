@@ -28,6 +28,12 @@ export type X402DirectoryContract = Readonly<{
   fieldsTruncated?: true
 }>
 
+export type DirectoryChoice = Readonly<{
+  access: 'external_listing' | 'ae_callable' | 'setup_required' | 'unavailable'
+  toolRef?: string
+  sourceRouteRef?: string
+}>
+
 export type X402DirectoryEntry = Readonly<{
   resource: string
   title: string
@@ -53,6 +59,10 @@ export type X402DirectoryEntry = Readonly<{
   provider: string
   prices: readonly Readonly<{ network: string; networkLabel?: string; scheme: string; amount: string; asset?: string; symbol?: string; decimalAmount?: string; payTo?: string }>[]
   metadataJson: string
+  /** Live same-page admission/readiness, never the external index's eligibility flag. */
+  choice?: DirectoryChoice
+  /** Provider-listed estimate based on one fresh Coinbase observation for this read. */
+  audEstimate?: string
 }>
 
 export type X402DirectoryPage =

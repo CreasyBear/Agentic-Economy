@@ -88,7 +88,7 @@ const CALL_ROUTE_FACTS: Readonly<Record<string, Readonly<{ summary: string; prob
     problemKinds: ['UNAUTHENTICATED', 'PERMISSION_DENIED', 'INVALID_ARGUMENT', 'FAILED_PRECONDITION', 'RESOURCE_EXHAUSTED', 'UNAVAILABLE'],
   },
   [TOOL_PROCURE_ACTION_ID]: {
-    summary: 'Procure the exact published Tool within an authorised budget.',
+    summary: 'Select a Tool by need without a purchase, or Quote and Call an exact Tool with caller-supplied input.',
     problemKinds: ['UNAUTHENTICATED', 'PERMISSION_DENIED', 'INVALID_ARGUMENT', 'FAILED_PRECONDITION', 'ALREADY_EXISTS', 'RESOURCE_EXHAUSTED', 'UNAVAILABLE', 'INTERNAL'],
   },
   [CALL_ROUTE_CONTRACT.call.actionId]: {
@@ -124,9 +124,11 @@ export function callRouteOperations(): readonly NormalizedOperation[] {
       operationId: descriptor.actionId,
       summary: facts.summary,
       tags: ['Call gateway'],
-      ...(method === 'POST' && (descriptor.actionId === TOOL_PROCURE_ACTION_ID || descriptor.inputJsonSchema?.properties?.idempotencyKey !== undefined)
-        ? { description: 'Retry the same logical operation with the same idempotencyKey in the JSON body; a changed payload conflicts.' }
-        : {}),
+      ...(method === 'POST' && descriptor.actionId === TOOL_PROCURE_ACTION_ID
+        ? { description: 'Need selection returns the Tool input schema without a Quote, Call or reservation. Submit kind: exact with caller-supplied input, maximum AUD spend and a fresh idempotencyKey. Retry only that exact request unchanged after uncertainty.' }
+        : method === 'POST' && descriptor.inputJsonSchema?.properties?.idempotencyKey !== undefined
+          ? { description: 'Retry the same logical operation with the same idempotencyKey in the JSON body; a changed payload conflicts.' }
+          : {}),
       method,
       path: descriptor.path,
       security: { scope: CALL_ROUTE_CONTRACT.scope },

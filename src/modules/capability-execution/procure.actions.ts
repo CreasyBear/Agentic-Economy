@@ -28,13 +28,13 @@ const parameters: readonly ActionParameter[] = [
     name: 'kind',
     type: 'enum',
     enum: ['need', 'exact'],
-    description: 'Search from a need or procure the exact published Tool reference.',
+    description: 'Select a Tool from a need without purchasing, or Quote and Call one exact Tool with caller-supplied input.',
     required: true,
   },
   {
     name: 'need',
     type: 'string',
-    description: 'Natural language capability need or goal to resolve and procure in one turn.',
+    description: 'Natural-language capability need; selection returns the required input schema, without a Quote or Call.',
     required: false,
   },
   {
@@ -52,21 +52,21 @@ const parameters: readonly ActionParameter[] = [
   {
     name: 'maxSpendAud',
     type: 'string',
-    description: 'Required maximum total spending budget in decimal AUD for this capability call.',
-    required: true,
+    description: 'Maximum AUD total for kind: exact; not used for need selection.',
+    required: false,
   },
   {
     name: 'idempotencyKey',
     type: 'string',
-    description: 'Caller-owned durable key; reuse unchanged after an uncertain response.',
-    required: true,
+    description: 'Fresh caller-owned purchase key for kind: exact; reuse only when retrying that exact request.',
+    required: false,
   },
 ]
 
 export const toolProcureAction = defineAction<ToolProcureInput, ToolProcureResult>({
   id: TOOL_PROCURE_ACTION_ID,
   name: 'Procure a Tool capability',
-  summary: 'Find or select a published Tool, obtain a Quote, enforce the spending ceiling, and make a native Call using a caller-owned replay key.',
+  summary: 'Select a published Tool by need and return typed input requirements, or Quote and Call an exact Tool with caller-supplied input and a new purchase key.',
   boundaries: [
     'Enforces caller-specific authority and exact Australian GST itemization.',
     'Provider failure is not proof of a refund; inspect the original Call for its authoritative outcome.',

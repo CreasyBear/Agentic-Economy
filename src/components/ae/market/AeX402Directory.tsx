@@ -12,7 +12,7 @@ import { cn } from '@/lib/utils'
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger } from '@/components/ui/select'
 import { InputGroup, InputGroupAddon, InputGroupInput } from '@/components/ui/input-group'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import type { MarketReturnSearch } from './market-return-context'
+import type { IndexedPaginationState, MarketReturnSearch } from './market-return-context'
 import { MarketNavigationProvider, type MarketPath, useMarketPath } from './market-navigation-context'
 import { DirectoryExplorerFilters } from './DirectoryExplorerFilters'
 import type { DirectoryExplorerFilterPatch } from '@/modules/market/directory-filters.contracts'
@@ -33,10 +33,6 @@ import { DirectorySavedToolsProvider, useDirectorySavedTools } from './Directory
 import { toDirectoryToolCardModel } from '@/modules/market/directory-card.view-model'
 import type { SavedDirectoryTool } from '@/modules/market/saved-tools.contracts'
 import { DirectoryToolCard } from './DirectoryToolCard'
-import { DirectoryRecipientRank } from './DirectoryRecipientRank'
-import { formatUsdcAtomic, type MarketFlowView } from '@/modules/market/flow-tape'
-import { readMarketFlowCachedVolumesServer, readMarketFlowVolumesServer } from '@/modules/market/market-flow.functions'
-import { directoryVolumePayTos } from '@/modules/market/x402-directory-index'
 import { DirectoryToolList } from './DirectoryToolList'
 import type { X402DirectoryEntry, X402DirectoryFilters, X402DirectoryInput, X402DirectoryPage } from '@/modules/market/x402-directory'
 import { MARKET_COMPARE_MISSING_LABEL, MARKET_COMPARE_PENDING_LABEL } from './compare/compare.contracts'
@@ -44,16 +40,8 @@ import { useMarketCompare } from './compare/useMarketCompare'
 import { searchMarketToolsServer } from '@/modules/market/market-tool-search.functions'
 import type { ToolChoiceSearchOutput } from '@/modules/registry/tool-choice-contracts'
 
-type DirectorySearch = MarketReturnSearch
 
-type AeX402DirectoryProps = Readonly<{ page: X402DirectoryPage; compareEntries: readonly MarketCompareEntry[]; search: DirectorySearch; marketPath?: MarketPath; workspace?: boolean; activeView?: NonNullable<DirectorySearch['view']>; home?: X402MarketplaceHome; catalogue?: X402DirectoryCatalogue; overview?: X402DirectoryCatalogueOverview; providers?: X402DirectoryProvidersPage; flow?: MarketFlowView }>
-type IndexedPage = Readonly<{ items: readonly X402DirectoryEntry[]; cursor: string | undefined; isDone: boolean }>
-type IndexedPaginationState = Readonly<{
-  source: X402DirectoryCatalogue | undefined
-  pages: readonly IndexedPage[]
-  index: number
-  status: 'idle' | 'loading' | 'failed'
-}>
+type AeX402DirectoryProps = Readonly<{ page: X402DirectoryPage; compareEntries: readonly MarketCompareEntry[]; search: MarketReturnSearch; marketPath?: MarketPath; workspace?: boolean; activeView?: NonNullable<MarketReturnSearch['view']>; home?: X402MarketplaceHome; catalogue?: X402DirectoryCatalogue; overview?: X402DirectoryCatalogueOverview; providers?: X402DirectoryProvidersPage; jevRecipient?: string; chatRecipient?: string }>
 
 function indexedPaginationState(indexed: boolean, catalogue: X402DirectoryCatalogue | undefined): IndexedPaginationState {
   return indexed && catalogue?.kind === 'ok'
@@ -61,53 +49,6 @@ function indexedPaginationState(indexed: boolean, catalogue: X402DirectoryCatalo
     : { source: catalogue, pages: [], index: 0, status: 'idle' }
 }
 
-const EMPTY_VOLUMES: Readonly<Record<string, string>> = {}
-
-function useOnDemandDirectoryVolume(
-  enabled: boolean,
-  entries: readonly X402DirectoryEntry[],
-  seeded: Readonly<Record<string, string>>,
-) {
-  const [loaded, setLoaded] = useState<Readonly<Record<string, string>>>(EMPTY_VOLUMES)
-  const requested = useRef(new Set<string>())
-  const firstPageKey = entries.slice(0, 12).map(entry => entry.resource).join('\n')
-  useEffect(() => {
-    requested.current = new Set()
-    setLoaded(EMPTY_VOLUMES)
-  }, [firstPageKey])
-  function paintVolumes(rows: readonly Readonly<{ payTo: string; amountAtomic: string }>[]) {
-    const next: Record<string, string> = {}
-    for (const row of rows) {
-      const label = formatUsdcAtomic(row.amountAtomic)
-      if (label !== undefined) next[row.payTo] = label
-    }
-    if (Object.keys(next).length === 0) return
-    setLoaded(current => ({ ...current, ...next }))
-  }
-  useEffect(() => {
-    if (!enabled) return
-    const payTos = directoryVolumePayTos(entries, seeded).filter(payTo => !requested.current.has(payTo))
-    if (payTos.length === 0) return
-    for (const payTo of payTos) requested.current.add(payTo)
-    let cancelled = false
-    void readMarketFlowCachedVolumesServer({ data: { payTos } }).then(async cached => {
-      if (cancelled) return
-      paintVolumes(cached)
-      const found = new Set(cached.map(row => row.payTo))
-      const missing = payTos.filter(payTo => !found.has(payTo))
-      if (missing.length === 0) return
-      const filled = await readMarketFlowVolumesServer({ data: { payTos: missing } })
-      if (!cancelled) paintVolumes(filled)
-    }).catch(() => {
-      for (const payTo of payTos) requested.current.delete(payTo)
-    })
-    return () => {
-      cancelled = true
-      for (const payTo of payTos) requested.current.delete(payTo)
-    }
-  }, [enabled, entries, seeded])
-  return loaded
-}
 
 function useIndexedPagination(indexed: boolean, catalogue: X402DirectoryCatalogue | undefined, filters: X402DirectoryCatalogueInput) {
   const [state, setState] = useState(() => indexedPaginationState(indexed, catalogue))
@@ -160,7 +101,7 @@ function useIndexedPagination(indexed: boolean, catalogue: X402DirectoryCatalogu
   }
 }
 
-function useCanonicalMarketSearch(search: DirectorySearch, enabled: boolean) {
+function useCanonicalMarketSearch(search: MarketReturnSearch, enabled: boolean) {
   const { query, directoryCategory, provider, network, priceBand } = search
   const input = useMemo(() => marketToolSearchInput({ query, directoryCategory, provider, network, priceBand }), [query, directoryCategory, provider, network, priceBand])
   const key = JSON.stringify(input)
@@ -234,14 +175,14 @@ export function AeX402Directory(props: AeX402DirectoryProps) {
 }
 
 const CATALOGUE_SORT_LABELS = {
-  popular: 'Calls · 30 days',
-  adoption: 'Payers · 30 days',
+  popular: 'Coinbase Bazaar reported calls · 30 days',
+  adoption: 'Coinbase Bazaar reported payers · 30 days',
   price_asc: 'Lowest listed price',
   updated: 'Recently updated',
   relevance: 'Search relevance',
 } as const
 
-function catalogueSortLabel(_tab: 'tools' | 'providers', search: DirectorySearch): string {
+function catalogueSortLabel(_tab: 'tools' | 'providers', search: MarketReturnSearch): string {
   if (search.query !== undefined) return CATALOGUE_SORT_LABELS.relevance
   const sort = search.sort ?? 'popular'
   switch (sort) {
@@ -270,16 +211,15 @@ function directoryInput(search: X402DirectoryInput) {
   }
 }
 
-function DirectoryMarketplace({ page, compareEntries, search, workspace = false, activeView, home, catalogue, overview, flow }: AeX402DirectoryProps) {
+function DirectoryMarketplace({ page, compareEntries, search, workspace = false, activeView, home, catalogue, overview, jevRecipient, chatRecipient }: AeX402DirectoryProps) {
   const navigate = useNavigate()
   const marketPath = useMarketPath()
   const [compareOpen, setCompareOpen] = useState(false)
-  const searchInput = useRef<HTMLInputElement>(null)
   const compareTrigger = useRef<HTMLButtonElement>(null)
   const saved = useDirectorySavedTools()
   const view = activeView ?? search.view ?? (home === undefined ? 'tools' : 'discover')
   const { query, offset, network, provider, maxUsdPrice } = search
-  const canonicalSearch = useCanonicalMarketSearch(search, view === 'tools' || view === 'providers')
+  const canonicalSearch = useCanonicalMarketSearch(search, search.alternativeTo === undefined && (view === 'tools' || view === 'providers'))
   const sourceInput = useMemo(() => directoryInput({ query, offset, network, provider, maxUsdPrice }), [query, offset, network, provider, maxUsdPrice])
   const coverage = catalogue?.kind === 'ok' ? catalogue.coverage : overview?.kind === 'ok' ? overview.coverage : undefined
   const indexed = catalogue?.kind === 'ok' && catalogue.source === 'index'
@@ -291,10 +231,6 @@ function DirectoryMarketplace({ page, compareEntries, search, workspace = false,
   // from the loader (filter, sort, or query) drops the stack.
   const { state: loadMore, loadNextPage, showPreviousPage } = useIndexedPagination(indexed, catalogue, filterValues)
   const providerPages = useProviderCataloguePages(indexed && view === 'providers', catalogue, filterValues)
-  const seededVolumes = flow?.volumeByPayTo ?? EMPTY_VOLUMES
-  const listedEntries = view === 'providers' ? providerPages.items : loadMore.items
-  const onDemandVolumes = useOnDemandDirectoryVolume(indexed && (view === 'tools' || view === 'providers'), listedEntries, seededVolumes)
-  const volumeByPayTo = { ...onDemandVolumes, ...seededVolumes }
   const comparisonPool = useMemo(() => [
     ...loadMore.items,
     ...(page.kind === 'ok' ? page.items : []),
@@ -381,6 +317,7 @@ function DirectoryMarketplace({ page, compareEntries, search, workspace = false,
         {result.kind === 'match' ? 'Matching Tools' : result.kind === 'scoped' ? 'Search assessed a limited scope' : result.kind === 'noMatch' ? 'No matching Tool in the assessed catalogue' : 'Search unavailable'}
         {' · '}{result.assessed.examined.toLocaleString()} assessed · {result.assessed.source === 'all' ? 'AE + Coinbase Bazaar' : result.assessed.source === 'current' ? 'AE Tools' : 'Coinbase Bazaar'} · {result.assessed.coverage} coverage
       </p>
+      {result.recipient === undefined ? null : <p className="text-xs text-muted-foreground">Search query and candidate Tool text went to {result.recipient.label} ({result.recipient.host}).</p>}
       {result.kind === 'scoped' || result.kind === 'noMatch' ? <p className="text-sm text-muted-foreground">{result.reason}</p> : null}
       {result.kind === 'unavailable' ? <p className="text-sm text-muted-foreground">The search could not complete. No recommendation was made.</p> : null}
       {marketHasBrowseOnlyFilters(search) ? <p className="text-sm text-muted-foreground">Price caps, adoption, curation and published-detail filters apply in catalogue browse only; they are not applied to this search.</p> : null}
@@ -388,15 +325,16 @@ function DirectoryMarketplace({ page, compareEntries, search, workspace = false,
         {result.results.map(item => <li key={item.id} className="flex flex-col gap-2 px-4 py-4">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div className="min-w-0">
-              {item.access === 'ae_callable'
-                ? <Link to="/tools/$toolRef" params={{ toolRef: item.toolRef ?? item.detailRef }} state={{ fromMarket: true }} className="font-medium underline-offset-4 hover:underline focus-visible:rounded focus-visible:ring-2 focus-visible:ring-ring">{item.title}</Link>
+              {item.toolRef !== undefined && item.access !== 'external_listing'
+                ? <Link to="/tools/$toolRef" params={{ toolRef: item.toolRef }} state={{ fromMarket: true }} className="font-medium underline-offset-4 hover:underline focus-visible:rounded focus-visible:ring-2 focus-visible:ring-ring">{item.title}</Link>
                 : <a href={item.detailRef} className="font-medium underline-offset-4 hover:underline focus-visible:rounded focus-visible:ring-2 focus-visible:ring-ring">{item.title}</a>}
               <p className="text-sm text-muted-foreground">{item.provider} · {item.summary}</p>
             </div>
-            <Badge variant="outline">{item.access === 'ae_callable' ? `AE-callable · ${item.readiness}` : 'External listing · not AE-callable'}</Badge>
+            <Badge variant="outline">{item.access === 'ae_callable' ? `AE-callable · ${item.readiness}` : item.access === 'setup_required' ? 'Connect to call' : item.access === 'unavailable' ? 'Currently unavailable · inspect' : 'External listing · not AE-callable'}</Badge>
           </div>
           <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
-            <span>{item.price.kind === 'indicative' ? item.price.label : 'Price unavailable'}</span>
+            <span>{item.price.kind === 'indicative' ? `Indicative AUD · ${item.price.label}` : 'AUD estimate unavailable'}</span>
+            {item.sourcePrice === undefined ? null : <span>Provider-listed source · {item.sourcePrice}</span>}
             <span>{marketSearchFreshness(item)}</span>
           </div>
         </li>)}
@@ -416,7 +354,7 @@ function DirectoryMarketplace({ page, compareEntries, search, workspace = false,
 
   return (
     <div className="ae-rail pb-page">
-      <DirectoryHero {...(home === undefined ? {} : { home })} compact={workspace} headingLevel={workspace ? 2 : 1} {...(workspace && view === 'tools' ? { compactTitle: 'Explore capabilities.' } : {})}>
+      <DirectoryHero {...(home === undefined ? {} : { home })} compact={workspace || view !== 'discover'} headingLevel={workspace ? 2 : 1} {...(workspace && view === 'tools' ? { compactTitle: 'Explore capabilities.' } : {})}>
         <form action="/t/new" method="get" aria-label="Start a conversation" className="mt-1 flex w-full max-w-2xl gap-2" onSubmit={event => {
           event.preventDefault()
           const q = new FormData(event.currentTarget).get('q')?.toString().trim() ?? ''
@@ -428,12 +366,13 @@ function DirectoryMarketplace({ page, compareEntries, search, workspace = false,
           <InputGroup className="min-h-14 rounded-full bg-card pl-3 shadow-xs">
             <InputGroupAddon><SearchIcon aria-hidden="true" /></InputGroupAddon>
             <label htmlFor="x402-directory-search" className="sr-only">Ask about any tool or service</label>
-            <InputGroupInput ref={searchInput} id="x402-directory-search" type="search" name="q" placeholder="Ask about any tool or service…" />
+            <InputGroupInput id="x402-directory-search" type="search" name="q" placeholder="Ask about any tool or service…" />
             <InputGroupAddon align="inline-end">
               <Button type="submit" className="mr-1 rounded-full" aria-label="Start conversation"><ArrowRightIcon aria-hidden="true" /><span className="hidden sm:inline">Ask</span></Button>
             </InputGroupAddon>
           </InputGroup>
         </form>
+        <p className="mt-2 text-xs text-muted-foreground">Your question goes to {chatRecipient ?? 'the chat gateway'} to find a Tool. Do not include private data in the question.</p>
       </DirectoryHero>
       <Tabs value={view} onValueChange={value => {
         if (value === 'discover' || value === 'tools' || value === 'providers' || value === 'saved') {
@@ -480,7 +419,7 @@ function DirectoryMarketplace({ page, compareEntries, search, workspace = false,
         // `tabItems`; the `[]` fallback here only satisfies the type.)
         const activePages = tab === 'providers' ? providerPages : loadMore
         const tabItems: readonly X402DirectoryEntry[] = (tab === 'tools' || tab === 'providers') && indexed ? activePages.items : page.kind === 'ok' ? page.items : []
-        const railDeck = search.query !== undefined ? 'AE-admitted Tools and Coinbase Bazaar listings' : [
+        const railDeck = search.alternativeTo !== undefined ? 'Currently callable AE Tools other than the selected Tool' : search.query !== undefined ? 'AE-admitted Tools and Coinbase Bazaar listings' : [
           page.kind === 'ok' && tabItems.length > 0
             ? tab === 'providers'
               ? `${new Set(tabItems.map(entry => entry.provider)).size.toLocaleString()} Providers on this page`
@@ -496,9 +435,9 @@ function DirectoryMarketplace({ page, compareEntries, search, workspace = false,
           <section className="min-w-0" aria-label="Tool results">
           {indexed || search.query !== undefined ? <div className="sticky top-(--header-height) z-10 mb-related grid h-14 grid-cols-[minmax(0,1fr)_auto] items-center gap-related bg-background" role="group" aria-label="Catalogue ordering and display">
             {search.query !== undefined ? <p className="text-sm text-muted-foreground">Search relevance</p> : <Select value={search.sort ?? 'popular'} onValueChange={value => { if (value === 'popular' || value === 'updated' || value === 'relevance' || value === 'adoption' || value === 'price_asc') void navigate({ to: marketPath, search: carryMarketCompare(search, { ...indexedSearch(), view: tab, sort: value }) }) }}>
-              <SelectTrigger className="h-11! w-full max-w-64 bg-card transition-[background-color,border-color,box-shadow] duration-fast ease-standard enabled:active:scale-100" aria-label={tab === 'providers' ? 'Sort Providers' : 'Sort Tools'}><span className="line-clamp-1">{catalogueSortLabel(tab, search)}</span></SelectTrigger><SelectContent><SelectGroup><SelectItem value="popular">Calls · 30 days</SelectItem><SelectItem value="adoption">Payers · 30 days</SelectItem><SelectItem value="price_asc">Lowest listed price</SelectItem><SelectItem value="updated">Recently updated</SelectItem></SelectGroup></SelectContent>
+              <SelectTrigger className="h-11! w-full max-w-64 bg-card transition-[background-color,border-color,box-shadow] duration-fast ease-standard enabled:active:scale-100" aria-label={tab === 'providers' ? 'Sort Providers' : 'Sort Tools'}><span className="line-clamp-1">{catalogueSortLabel(tab, search)}</span></SelectTrigger><SelectContent><SelectGroup><SelectItem value="popular">Coinbase Bazaar reported calls · 30 days</SelectItem><SelectItem value="adoption">Coinbase Bazaar reported payers · 30 days</SelectItem><SelectItem value="price_asc">Lowest listed price</SelectItem><SelectItem value="updated">Recently updated</SelectItem></SelectGroup></SelectContent>
             </Select>}
-            <DirectoryExplorerFilters search={search} {...(overview === undefined ? {} : { overview })} onChange={applyExplorerFilters} onReset={() => explore({})} />
+            <DirectoryExplorerFilters search={search} {...(overview === undefined ? {} : { overview })} {...(jevRecipient === undefined || search.alternativeTo !== undefined ? {} : { jevRecipient })} onChange={applyExplorerFilters} onReset={() => explore({})} />
           </div> : null}
           {search.query === undefined && search.provider !== undefined && page.kind === 'ok' ? <div className="mb-8"><DirectoryProviderHeader provider={search.provider} entries={page.items} /></div> : null}
           <AeCollectionRail
@@ -514,8 +453,10 @@ function DirectoryMarketplace({ page, compareEntries, search, workspace = false,
                       : 'Category'
             }
             title={
-              search.query !== undefined
-                ? `Results for “${search.query}”`
+              search.alternativeTo !== undefined
+                ? `Callable alternatives for “${search.query}”`
+                : search.query !== undefined
+                  ? `Results for “${search.query}”`
                 : search.provider !== undefined
                   ? 'Tools from this Provider'
                   : tab === 'providers'
@@ -532,15 +473,15 @@ function DirectoryMarketplace({ page, compareEntries, search, workspace = false,
             ) })}
             className="mb-5"
           />
-          {search.query === undefined && (search.network !== undefined || search.maxUsdPrice !== undefined) ? <div className="mb-4 flex flex-wrap gap-2">{search.network === undefined ? null : <Badge variant="outline">Network: {overview?.kind === 'ok' ? overview.networks.find(item => item.key === search.network)?.label ?? search.network : search.network}</Badge>}{search.maxUsdPrice === undefined ? null : <Badge variant="outline">Up to {search.maxUsdPrice} USDC</Badge>}</div> : null}
-          {search.query !== undefined ? canonicalResults() : page.kind === 'unavailable' ? <AeEmptyState icon={<SearchIcon />} title={page.reason === 'query_invalid' ? 'Check your search' : 'Catalogue temporarily unavailable'}
+          {search.query === undefined && (search.network !== undefined || search.maxUsdPrice !== undefined) ? <div className="mb-4 flex flex-wrap gap-2">{search.network === undefined ? null : <Badge variant="outline">Network: {overview?.kind === 'ok' ? overview.networks.find(item => item.key === search.network)?.label ?? search.network : search.network}</Badge>}{search.maxUsdPrice === undefined ? null : <Badge variant="outline">Provider-listed price: up to {search.maxUsdPrice} USDC</Badge>}</div> : null}
+          {search.query !== undefined && search.alternativeTo === undefined ? canonicalResults() : page.kind === 'unavailable' ? <AeEmptyState icon={<SearchIcon />} title={page.reason === 'query_invalid' ? 'Check your search' : 'Catalogue temporarily unavailable'}
             description={page.reason === 'query_invalid' ? 'Use a service description without personal identifiers.' : search.indexCursor !== undefined ? 'This catalogue page could not be loaded. Refresh results to start again with the same search and filters.' : 'The discovery service could not be reached. Try again.'}
             action={<Link to={marketPath} reloadDocument search={carryMarketCompare(search, search.indexCursor === undefined ? search : { ...indexedSearch(), view: tab })} className={cn(buttonVariants({ variant: 'outline' }))}>{search.indexCursor === undefined ? "Try again" : "Refresh results"}</Link>} /> : <>
+            {search.alternativeTo !== undefined && catalogue?.kind === 'ok' ? <p role="status" className="mb-4 text-sm text-muted-foreground">{activePages.isDone ? 'Current callable alternatives assessed.' : 'Callable alternatives assessed on this page; more results remain to check.'}</p> : null}
             {page.partialResults === true ? <p role="status" className="mb-4 text-sm text-muted-foreground">Coinbase returned its top matches. Refine your search to find more Tools.</p> : null}
-            {tab === 'tools' && flow?.ready === true ? <DirectoryRecipientRank digest={flow.facilitatorSetDigest} recipients={flow.recipients} /> : null}
-            {tabItems.length === 0 ? <AeEmptyState title={indexed && catalogue.kind === 'ok' && !catalogue.isDone ? 'More of the catalogue remains' : 'No matching Tools'} description={indexed && catalogue.kind === 'ok' && !catalogue.isDone ? 'No matches in this portion. Continue to the next page to check the remaining Tools.' : 'Try a different description or broaden your filters.'} /> : tab === 'providers'
-              ? <DirectoryProviderList entries={tabItems} {...(Object.keys(volumeByPayTo).length === 0 ? {} : { volumeByPayTo })} onSelect={provider => { void navigate({ to: marketPath, search: carryMarketCompare(search, { ...indexedSearch(), view: 'tools', provider }) }) }} />
-              : <DirectoryToolList items={tabItems.map(entry => ({ entry, search: sourceInput }))} {...(Object.keys(volumeByPayTo).length === 0 ? {} : { volumeByPayTo })} onSave={saved.toggleSavedTool} isSaved={saved.isSaved} onCompare={toggleComparison} isComparing={resource => compareRefs.includes(resource)} compareDisabled={resource => compareRefs.length >= 4 && !compareRefs.includes(resource)} />}
+            {tabItems.length === 0 ? <AeEmptyState title={search.alternativeTo !== undefined ? activePages.isDone ? 'No other callable Tool in the assessed catalogue' : 'No callable alternative on this page' : indexed && catalogue.kind === 'ok' && !catalogue.isDone ? 'More of the catalogue remains' : 'No matching Tools'} description={search.alternativeTo !== undefined ? activePages.isDone ? 'Try a different capability or broaden the search.' : 'Continue to the next page to assess more Tools.' : indexed && catalogue.kind === 'ok' && !catalogue.isDone ? 'No matches in this portion. Continue to the next page to check the remaining Tools.' : 'Try a different description or broaden your filters.'} /> : tab === 'providers'
+              ? <DirectoryProviderList entries={tabItems} onSelect={provider => { void navigate({ to: marketPath, search: carryMarketCompare(search, { ...indexedSearch(), view: 'tools', provider }) }) }} />
+              : <DirectoryToolList items={tabItems.map(entry => ({ entry, search: sourceInput }))} onSave={saved.toggleSavedTool} isSaved={saved.isSaved} onCompare={toggleComparison} isComparing={resource => compareRefs.includes(resource)} compareDisabled={resource => compareRefs.length >= 4 && !compareRefs.includes(resource)} />}
             {tab === 'tools' && view === 'tools' ? comparisonTray : null}
             {activePages.status === 'failed' && (tab === 'tools' || tab === 'providers') && indexed ? <p role="alert" className="mt-section text-right text-sm text-muted-foreground">The next page could not be loaded. This page is unchanged.</p> : null}
             <nav aria-label="Catalogue pages" className="mt-section grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-related border-t border-border pt-related">

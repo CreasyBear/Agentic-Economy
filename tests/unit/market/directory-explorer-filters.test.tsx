@@ -70,7 +70,7 @@ it('picks a Provider from the catalogue index instead of typing a hostname', () 
 })
 it('picks a listed-price band from the published index', () => {
   const { filters, change } = show()
-  fireEvent.click(filters.getByRole('button', { name: '0.01–<0.03 USDC' }))
+  fireEvent.click(within(filters.getByRole('group', { name: 'Provider-listed price · USDC' })).getByRole('button', { name: /0\.01.*0\.03/ }))
   expect(change).toHaveBeenCalledWith({ priceBand: '0_01_to_0_03', minUsdPrice: undefined, maxUsdPrice: undefined })
 })
 it('keeps typed price bounds in Advanced and rejects inverted bounds', () => {
@@ -121,7 +121,7 @@ it('closes the filter Sheet after Show results', async () => {
 })
 it('makes chart bands visible and replaces them when a price range or payer threshold is chosen', () => {
   const { filters, change } = show({ priceBand: '0_01_to_0_03', adoptionBand: '2_4', maxPayers30d: 4 })
-  expect(filters.getByRole('button', { name: '0.01–<0.03 USDC' }).getAttribute('aria-pressed')).toBe('true')
+  expect(within(filters.getByRole('group', { name: 'Provider-listed price · USDC' })).getByRole('button', { name: /0\.01.*0\.03/ }).getAttribute('aria-pressed')).toBe('true')
   expect(filters.getByRole('button', { name: 'Remove payer band: 2–4 paying addresses' })).toBeTruthy()
   expect(filters.getByRole('button', { name: 'Any payer count' }).getAttribute('aria-pressed')).toBe('false')
   fireEvent.change(filters.getByLabelText('Max USDC'), { target: { value: '0.1' } })

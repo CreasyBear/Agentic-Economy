@@ -26,6 +26,7 @@ const expectedCommands = [
   "history",
   "list",
   "manifest",
+  "procure",
   "quote",
   "recover",
   "request",

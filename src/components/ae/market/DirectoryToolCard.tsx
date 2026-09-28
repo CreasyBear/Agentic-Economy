@@ -43,17 +43,18 @@ export const DirectoryToolCard = memo(function DirectoryToolCard({ model, onSave
         </h3>
       </div>
       <div className="grid content-start gap-intra px-gutter py-related">
+        <p className="text-xs font-medium text-foreground">{model.accessLabel}</p>
         {model.glance === undefined ? null : <p className="line-clamp-2 text-sm leading-relaxed text-muted-foreground">{model.glance}</p>}
-        {model.activityLabel === undefined ? null : <p className="text-xs text-muted-foreground" {...(model.activityTitle === undefined ? {} : { title: model.activityTitle })}>{model.activityLabel}</p>}
+        {model.activityLabel === undefined ? null : <p className="text-xs text-muted-foreground" {...(model.activityTitle === undefined ? {} : { title: model.activityTitle })}>Coinbase Bazaar · {model.activityLabel}</p>}
       </div>
-      <CardFooter className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-related border-t border-border px-gutter py-related">
-        <div className="min-w-0">
-          <p className="truncate text-sm font-medium tabular-nums">{model.priceLabel}</p>
-          <p className="truncate text-xs text-muted-foreground">{model.priceContext}</p>
+      <CardFooter className="flex min-w-0 flex-wrap items-center justify-between gap-related border-t border-border px-gutter py-related">
+        <div className="min-w-0 basis-full">
+          <p className="break-words text-sm font-medium tabular-nums">{model.priceLabel}</p>
+          <p className="break-words text-xs text-muted-foreground">{model.priceContext}</p>
         </div>
-        {onCompare === undefined ? null : <Button variant={comparing ? 'secondary' : 'ghost'} size="sm" className="relative z-10 active:scale-100" onClick={onCompare} disabled={compareDisabled === true} aria-label={`${comparing ? 'Remove' : 'Add'} ${model.title} ${comparing ? 'from' : 'to'} comparison`} aria-pressed={comparing === true}>
-          {comparing ? <CheckIcon aria-hidden="true" /> : null}
-          Compare
+        <Link to="/tools/$providerHost/$slug" params={{ providerHost: model.providerHost, slug: model.slug }} state={MARKET_LINK_STATE} className="relative z-10 inline-flex min-h-10 items-center rounded-md px-2 text-sm font-medium underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">Inspect Tool</Link>
+        {onCompare === undefined ? null : <Button variant={comparing ? 'secondary' : 'ghost'} size="sm" className="relative z-10 min-h-10 active:scale-100" onClick={onCompare} disabled={compareDisabled === true} aria-label={`${comparing ? 'Remove' : 'Add'} ${model.title} ${comparing ? 'from' : 'to'} comparison`} aria-pressed={comparing === true}>
+          {comparing ? <CheckIcon aria-hidden="true" /> : null}Compare
         </Button>}
       </CardFooter>
     </Card>

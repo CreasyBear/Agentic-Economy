@@ -442,6 +442,7 @@ export {
   type OrganizationMonthlySpendFenceResult,
 } from './internal/organization-monthly-spend-fence'
 export { formatDisplayPrice, formatDisplayAmount } from './internal/display-price'
+export { fetchCoinbaseReferenceRate } from './internal/reference-rate-fetch'
 export { accountHistoryResultSchema } from './internal/account-history'
 export type { AccountHistoryEntry, AccountHistoryResult } from './internal/account-history'
 export {

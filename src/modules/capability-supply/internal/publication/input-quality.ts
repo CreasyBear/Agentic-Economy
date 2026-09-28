@@ -18,7 +18,7 @@ export type CapabilityPublicationQualityRefusal = Readonly<{
   next: readonly [CapabilityPublicationQualityNext]
 }>
 
-/** Require a concrete, schema-valid instance for each unnamed object argument. */
+/** Examples clarify open maps, but cannot define the callable children of a required object. */
 export function publicationInputQuality(
   contract: CapabilityContractDocument,
 ): CapabilityPublicationQualityRefusal | undefined {
@@ -32,7 +32,7 @@ export function publicationInputQuality(
     next: [{
       action: 'revise-publication',
       field: `/inputSchema${pointer}`,
-      instruction: 'Publish a source-verified, non-empty inputExamples instance valid for this versioned input schema, or constrain the schema to name its accepted fields; then re-validate and republish.',
+      instruction: 'Name the accepted fields of a required object in the source schema; for an optional opaque object, publish a source-verified, non-empty schema-valid inputExamples instance or constrain its schema. Then re-validate and republish.',
     }],
   }
 }
@@ -41,10 +41,15 @@ function findOpaqueInput(
   schema: Readonly<Record<string, JsonValue>>,
   examples: readonly CapabilityInputExample[],
   segments: readonly string[] = [],
+  required = false,
 ): readonly string[] | undefined {
   if (schema.type !== 'object') return undefined
   const properties = isRecord(schema.properties) ? schema.properties : {}
   if (Object.keys(properties).length === 0 && schema.const === undefined && schema.enum === undefined) {
+    const hasDeclaredChildren = isRecord(schema.additionalProperties)
+      || (isRecord(schema.patternProperties) && Object.keys(schema.patternProperties).length > 0)
+      || ['allOf', 'anyOf', 'oneOf'].some((key) => Array.isArray(schema[key]) && schema[key].length > 0)
+    if (required && !hasDeclaredChildren) return segments
     const hasExample = examples.some(({ input }) => {
       let value: unknown = input
       for (const segment of segments) {
@@ -57,7 +62,7 @@ function findOpaqueInput(
   }
   for (const [key, child] of Object.entries(properties)) {
     if (!isRecord(child)) continue
-    const missing = findOpaqueInput(child, examples, [...segments, key])
+    const missing = findOpaqueInput(child, examples, [...segments, key], Array.isArray(schema.required) && schema.required.includes(key))
     if (missing !== undefined) return missing
   }
   return undefined

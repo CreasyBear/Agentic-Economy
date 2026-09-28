@@ -5,6 +5,13 @@ import type { AgentAccessPrincipal } from '@/modules/agent-access/agent-access'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import type { CallService } from '@/modules/capability-execution/call-authority'
 import type { ProcureIdentityPort } from '@/modules/capability-execution/procure-engine'
+import { executeDecisionGateway } from '@/modules/decision-engine/public'
+import type { ToolCatalogSearcher } from '@/modules/capability-execution/procure-engine'
+
+vi.mock('@/modules/decision-engine/public', async (importOriginal) => ({
+  ...await importOriginal<Record<string, unknown>>(),
+  executeDecisionGateway: vi.fn(),
+}))
 
 const toolRef = `operation:v1:${'a'.repeat(64)}`
 const quoteRef = `operation-commitment:v1:${'b'.repeat(64)}`
@@ -20,7 +27,7 @@ const exactRequest = {
   maxSpendAud: '0.50', idempotencyKey: 'caller-key-0001',
 } as const
 
-function testEngine() {
+function testEngine(catalogSearcher: ToolCatalogSearcher = vi.fn(async () => [])) {
   const rows = new Map<string, { hash: string; quoteRef: string | null; resultJson: string | null }>()
   const identity: ProcureIdentityPort = {
     async reserve(input, actor) {
@@ -71,8 +78,8 @@ function testEngine() {
   }
   return {
     engine: createProcurementEngine({
-      principal, callService: service, identity, catalogSearcher: vi.fn(async () => []),
-    }), service,
+      principal, callService: service, identity, catalogSearcher,
+    }), service, identity,
   }
 }
 
@@ -158,14 +165,37 @@ describe('POST /api/v1/tools/procure route', () => {
     expect(callTool.mock.calls[0]?.[0].input.idempotencyKey).toBe(callTool.mock.calls[1]?.[0].input.idempotencyKey)
   })
 
-  it('refuses need-mode procurement without a maximum spend before Quote or Call', async () => {
+  it('accepts need selection without purchase inputs and makes no Quote or Call', async () => {
     setHttpRateLimitAdmissionForTests(async () => ({ ok: true }))
     const { engine, service } = testEngine()
     const response = await handleToolProcurePost(postProcureRequest({
-      kind: 'need', need: 'Find a timezone converter', idempotencyKey: 'missing-budget-1',
+      kind: 'need', need: 'Find a timezone converter',
     }), engine)
-    expect(response.status).toBe(400)
-    await expect(response.json()).resolves.toMatchObject({ kind: 'INVALID_ARGUMENT', code: 'invalid_request' })
+    expect(response.status).toBe(200)
+    await expect(response.json()).resolves.toMatchObject({ kind: 'refused', code: 'no_matching_tool' })
+    expect(service.quoteTool).not.toHaveBeenCalled()
+    expect(service.callTool).not.toHaveBeenCalled()
+  })
+  it('returns a typed exact continuation over HTTP without reserving, quoting or calling', async () => {
+    setHttpRateLimitAdmissionForTests(async () => ({ ok: true }))
+    vi.mocked(executeDecisionGateway).mockResolvedValueOnce({
+      tier: 'jev_system_one', model: 'test-selector',
+      answers: { selectedTool: { type: 'choice', choice: toolRef, confidence: 1, probabilities: { [toolRef]: 1 } } },
+      usage: { inputTokens: 0, outputTokens: 0, estimatedCostAud: null },
+      durationMs: 0, attemptedTiers: ['jev_system_one'],
+    })
+    const inputJsonSchema = { type: 'object', required: ['query'], properties: { query: { type: 'string' } } }
+    const { engine, service, identity } = testEngine(async () => [{
+      toolRef, name: 'Search', description: 'Searches data', endpoint: 'https://provider.example/search',
+      priceAud: '0.05', inputSchema: inputJsonSchema,
+    }])
+    const reserve = vi.spyOn(identity, 'reserve')
+    const response = await handleToolProcurePost(postProcureRequest({ kind: 'need', need: 'Search for a dataset' }), engine)
+    expect(response.status).toBe(200)
+    await expect(response.json()).resolves.toMatchObject({
+      status: 'needs_input', toolRef, inputJsonSchema, requiredFields: ['query'], next: { kind: 'exact', toolRef },
+    })
+    expect(reserve).not.toHaveBeenCalled()
     expect(service.quoteTool).not.toHaveBeenCalled()
     expect(service.callTool).not.toHaveBeenCalled()
   })

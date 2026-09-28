@@ -6,6 +6,7 @@ import {
   offeringRegistrationFromRow,
   parseAdmittedX402CatalogPayment,
   qualifySuppliedCandidate,
+  publicationInputQuality,
   type CapabilityToolSourceRecord,
 } from '@/modules/capability-supply/public'
 import {
@@ -33,6 +34,7 @@ const CURRENT_TOOL_PROJECTION_DROP_REASONS = [
   'missing_binding',
   'missing_business',
   'missing_contract',
+  'opaque_input_schema',
   'business_unpublished',
   'invalid_transport',
   'malformed_offering',
@@ -94,6 +96,9 @@ export async function toolRecordProjection(
   if (bindingDoc === null) return { kind: 'dropped', reason: 'missing_binding' }
   if (business === null) return { kind: 'dropped', reason: 'missing_business' }
   if (contractResult.kind !== 'found') return { kind: 'dropped', reason: 'missing_contract' }
+  if (publicationInputQuality(contractResult.contract) !== undefined) {
+    return { kind: 'dropped', reason: 'opaque_input_schema' }
+  }
   const directoryEntry = await directoryListingEntry(ctx, publication.authorityMode, publication.sourceRouteRef)
   if (!directoryEntry.eligible) {
     return { kind: 'dropped', reason: 'directory_ineligible' }

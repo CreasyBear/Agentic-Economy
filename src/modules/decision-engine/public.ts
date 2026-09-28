@@ -1,6 +1,6 @@
 export * from './contracts'
 export { choice, noul, score, TypeSafeClient } from '@typesafe-ai/sdk'
-export { callJevSystemOne } from './jev-client'
+export { callJevSystemOne, jevDiscoveryRecipient } from './jev-client'
 export { callSecondaryLlmAdapter } from './secondary-llm-adapter'
 export { callDeterministicRuleEngine } from './deterministic-fallback'
 export { executeDecisionGateway } from './decision-gateway'

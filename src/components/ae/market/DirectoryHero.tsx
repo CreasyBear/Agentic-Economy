@@ -6,13 +6,15 @@ import { DirectoryToolIdentity } from './DirectoryToolIdentity'
 import type { X402MarketplaceHome } from '@/modules/market/x402-marketplace-home'
 import { useMarketPath } from './market-navigation-context'
 
-export function DirectoryHero({ home, children, compact = false, compactTitle = "Find your next capability.", headingLevel = 1 }: Readonly<{
+export type DirectoryHeroProps = Readonly<{
   home?: X402MarketplaceHome
   children: ReactNode
   compact?: boolean
   compactTitle?: string
   headingLevel?: 1 | 2
-}>) {
+}>
+
+export function DirectoryHero({ home, children, compact = false, compactTitle = "Find your next capability.", headingLevel = 1 }: DirectoryHeroProps) {
   const marketPath = useMarketPath()
   const creative = home?.rails.find(rail => rail.id === 'creative')
   const Heading = headingLevel === 2 ? 'h2' : 'h1'

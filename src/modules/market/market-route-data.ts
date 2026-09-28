@@ -8,8 +8,6 @@ import {
 import { x402DirectoryCatalogueInputSchema, type X402DirectoryCatalogue } from '@/modules/market/x402-directory-catalogue'
 import { directoryCatalogueSearchValues } from '@/modules/market/x402-directory-navigation'
 import { readX402MarketplaceHomeServer } from '@/modules/market/x402-marketplace-home.functions'
-import { readMarketFlowRankServer } from '@/modules/market/market-flow.functions'
-import { directoryBasePayTo } from '@/modules/market/x402-directory-index'
 import type { ToolChoiceSearchOutput } from '@/modules/registry/tool-choice-contracts'
 
 export type MarketToolSearchState = Readonly<{
@@ -164,8 +162,8 @@ export async function loadMarketRouteData(deps: MarketSearch) {
   const showHome = view === 'discover'
   const compareRefs = parseMarketCompareRefs(deps.compare) ?? []
   const [catalogue, home, overview, compareEntries] = await Promise.all([
-    catalogueInput.query === undefined
-      ? readX402DirectoryCatalogueServer({ data: { ...catalogueInput, ...(catalogueInput.sort ? {} : { sort: view === 'tools' || view === 'providers' ? 'popular' as const : 'adoption' as const }) } })
+    catalogueInput.query === undefined || catalogueInput.alternativeTo !== undefined
+      ? readX402DirectoryCatalogueServer({ data: { ...catalogueInput, ...(catalogueInput.sort || catalogueInput.query ? {} : { sort: view === 'tools' || view === 'providers' ? 'popular' as const : 'adoption' as const }) } })
       : Promise.resolve({ kind: 'unavailable', reason: 'canonical_search' } as const satisfies X402DirectoryCatalogue),
     showHome ? readX402MarketplaceHomeServer().catch(() => undefined) : Promise.resolve(undefined),
     readX402DirectoryCatalogueOverviewServer(),
@@ -174,12 +172,5 @@ export async function loadMarketRouteData(deps: MarketSearch) {
   const page = catalogue?.kind === 'ok'
     ? catalogue.page
     : { kind: 'unavailable' as const, reason: catalogue?.reason === 'query_invalid' ? 'query_invalid' as const : 'source_unavailable' as const }
-  const payTos = view === 'tools' && page.kind === 'ok'
-    ? [...new Set(page.items.flatMap(entry => {
-      const payTo = directoryBasePayTo(entry)
-      return payTo === undefined ? [] : [payTo]
-    }))]
-    : []
-  const flow = view === 'tools' ? await readMarketFlowRankServer({ data: { payTos } }).catch(() => undefined) : undefined
-  return { page, catalogue, overview, home, providers: undefined, compareEntries, view, ...(flow === undefined ? {} : { flow }) }
+  return { page, catalogue, overview, home, providers: undefined, compareEntries, view }
 }

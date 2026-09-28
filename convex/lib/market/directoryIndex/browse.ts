@@ -8,6 +8,7 @@ import type { Doc } from '../../../_generated/dataModel'
 import type { QueryCtx } from '../../../_generated/server'
 import { ANALYTICS_VERSION } from './analytics'
 import { filterArgs, pageValue } from './contracts'
+import { choiceForDirectoryPage } from './choices'
 import { activeDirectoryGeneration, compactDirectoryText, directoryCoverage, indexedDirectoryEntry } from './rows'
 
 type SearchRow = Doc<'marketDirectorySearchEntries'>
@@ -24,15 +25,6 @@ export async function admittedToolRef(ctx: QueryCtx, sourceRouteRef: string | un
     .withIndex('by_sourceRouteRef_and_disposition', q => q.eq('sourceRouteRef', sourceRouteRef).eq('disposition', 'current'))
     .unique()
   return publication?.toolRef
-}
-
-export async function withAdmittedToolRefs<Row extends { row: SearchRow; entry: Doc<'marketExternalRegistryEntries'> }>(
-  ctx: QueryCtx, entries: readonly Row[],
-): Promise<{ row: SearchRow; entry: Doc<'marketExternalRegistryEntries'>; toolRef?: string }[]> {
-  return Promise.all(entries.map(async ({ row, entry }) => {
-    const toolRef = await admittedToolRef(ctx, row.sourceRouteRef)
-    return { row, entry, ...(toolRef === undefined ? {} : { toolRef }) }
-  }))
 }
 
 /**
@@ -104,12 +96,13 @@ function matchesRemainingConstraints(row: SearchRow, input: X402DirectoryIndexIn
 }
 
 /** Keyword search is Convex full text; semantic discovery is a separate upstream operation. */
-export const browseArgs = v.object({ ...filterArgs, paginationOpts: paginationOptsValidator })
+export const browseArgs = v.object({ ...filterArgs, alternativeTo: v.optional(v.string()), paginationOpts: paginationOptsValidator })
 export const browseReturns = pageValue
 export const browseHandler = async (ctx: QueryCtx, args: Infer<typeof browseArgs>) => {
-    const { paginationOpts, ...filters } = args
+    const { paginationOpts, alternativeTo, ...filters } = args
     const parsed = x402DirectoryIndexInputSchema.safeParse(filters)
-    if (!parsed.success || !directoryIndexRangesValid(parsed.data) || paginationOpts.numItems < 1 || paginationOpts.numItems > 50 || !Number.isSafeInteger(paginationOpts.numItems)) return { kind: 'unavailable' as const, reason: 'query_invalid' }
+    if (!parsed.success || !directoryIndexRangesValid(parsed.data) || paginationOpts.numItems < 1 || paginationOpts.numItems > 50 || !Number.isSafeInteger(paginationOpts.numItems)
+      || (alternativeTo !== undefined && (alternativeTo.length < 1 || alternativeTo.length > 8192 || !parsed.data.query))) return { kind: 'unavailable' as const, reason: 'query_invalid' }
     if (parsed.data.query && parsed.data.sort !== undefined && parsed.data.sort !== 'relevance') return { kind: 'unavailable' as const, reason: 'query_sort_unsupported' }
     const generation = await activeDirectoryGeneration(ctx)
     if (generation === null) return { kind: 'unavailable' as const, reason: 'index_unavailable' }
@@ -130,19 +123,29 @@ export const browseHandler = async (ctx: QueryCtx, args: Infer<typeof browseArgs
     ))
     // Rich source documents have a separate bounded budget from slim search rows.
     // A shorter native page still preserves its cursor and complete traversal.
-    const page = await filter(source, row => matchesRemainingConstraints(row, parsed.data)).paginate({
+    const choiceFor = choiceForDirectoryPage(ctx, Date.now())
+    const page = await filter(source, async row => {
+      if (!matchesRemainingConstraints(row, parsed.data)) return false
+      if (alternativeTo === undefined) return true
+      const choice = await choiceFor(row)
+      return choice.access === 'ae_callable' && choice.toolRef !== alternativeTo && row.sourceRouteRef !== alternativeTo
+    }).paginate({
       ...paginationOpts, numItems: Math.min(paginationOpts.numItems, 12),
-      maximumRowsRead: Math.min(paginationOpts.maximumRowsRead ?? 512, 512),
+      maximumRowsRead: Math.min(paginationOpts.maximumRowsRead ?? 512, alternativeTo === undefined ? 512 : 48),
       maximumBytesRead: Math.min(paginationOpts.maximumBytesRead ?? 1024 * 1024, 1024 * 1024),
     })
     const rawEntries = await Promise.all(page.page.map(async row => ({ row, entry: await ctx.db.get(row.entryId) })))
     const found = rawEntries.flatMap(({ row, entry }) => entry === null ? [] : [{ row, entry }])
-    const withTool = await withAdmittedToolRefs(ctx, found)
+    const withTool = await Promise.all(found.map(async item => ({ ...item, choice: await choiceFor(item.row) })))
     return {
       kind: 'ok' as const, coverage: directoryCoverage(generation),
       searchMethod: parsed.data.query ? 'native_full_text' as const : 'native_index' as const,
       ...page,
-      page: withTool.map(({ row, entry, toolRef }) => ({ ...indexedDirectoryEntry(entry, row), ...(toolRef === undefined ? {} : { toolRef }) })),
+      page: withTool.map(({ row, entry, choice }) => ({
+        ...indexedDirectoryEntry(entry, row), choice,
+        ...(choice.sourceRouteRef === undefined ? {} : { sourceRouteRef: choice.sourceRouteRef }),
+        ...(choice.toolRef === undefined ? {} : { toolRef: choice.toolRef }),
+      })),
     }
   }
 
@@ -168,6 +171,10 @@ export const searchCompactReturns = v.union(
     page: v.array(v.object({
       id: v.string(), source: v.union(v.literal('coinbase'), v.literal('provider')),
       sourceRouteRef: v.optional(v.string()), toolRef: v.optional(v.string()),
+      choice: v.optional(v.object({
+        access: v.union(v.literal('external_listing'), v.literal('ae_callable'), v.literal('setup_required'), v.literal('unavailable')),
+        sourceRouteRef: v.optional(v.string()), toolRef: v.optional(v.string()),
+      })),
       title: v.string(), summary: v.string(), provider: v.string(),
       actionClass: actionClassValue, objectClass: objectClassValue, category: v.optional(v.string()),
       completedAt: v.number(), minimumUsdPrice: v.optional(v.string()),
@@ -224,12 +231,13 @@ export const searchCompactHandler = async (ctx: QueryCtx, args: Infer<typeof sea
       ...(objectClass === undefined ? [] : [q.or(q.eq(q.field('objectClass'), objectClass), ...(objectClass === 'unclassified' ? [q.eq(q.field('objectClass'), undefined)] : [q.eq(q.field('objectClass'), 'unclassified'), q.eq(q.field('objectClass'), undefined)]))]),
       ...(priceBand === undefined ? [] : [q.eq(q.field('priceBand'), priceBand)]),
     ))
+  const choiceFor = choiceForDirectoryPage(ctx, Date.now())
   const page = await filter(rows, async row => {
     if (access === undefined) return true
-    const toolRef = await admittedToolRef(ctx, row.sourceRouteRef)
-    return access === 'ae_callable' ? toolRef !== undefined : toolRef === undefined
+    const choice = await choiceFor(row)
+    return access === 'ae_callable' ? choice.access === 'ae_callable' : choice.access !== 'ae_callable'
   }).paginate({
-    ...paginationOpts, cursor: nativeCursor, maximumRowsRead: Math.min(paginationOpts.maximumRowsRead ?? 512, 512),
+    ...paginationOpts, cursor: nativeCursor, maximumRowsRead: Math.min(paginationOpts.maximumRowsRead ?? 512, access === undefined ? 512 : 48),
     maximumBytesRead: Math.min(paginationOpts.maximumBytesRead ?? 1024 * 1024, 1024 * 1024),
   })
   const compact = await Promise.all(page.page.map(async row => {
@@ -241,11 +249,12 @@ export const searchCompactHandler = async (ctx: QueryCtx, args: Infer<typeof sea
     const title = row.title ?? legacy?.name
     const summary = row.summary ?? legacy?.summary
     if (id === undefined || title === undefined || summary === undefined) throw new Error('directory_index_entry_missing')
-    const toolRef = await admittedToolRef(ctx, row.sourceRouteRef)
+    const choice = await choiceFor(row)
     return {
       id, source: row.source ?? legacy?.source ?? 'coinbase',
       ...(row.sourceRouteRef === undefined ? {} : { sourceRouteRef: row.sourceRouteRef }),
-      ...(toolRef === undefined ? {} : { toolRef }),
+      choice,
+      ...(choice.access !== 'ae_callable' || choice.toolRef === undefined ? {} : { toolRef: choice.toolRef }),
       title: compactDirectoryText(title, 72),
       summary: compactDirectoryText(summary, 100),
       provider: compactDirectoryText(row.provider, 48),

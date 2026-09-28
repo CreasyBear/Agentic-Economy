@@ -389,6 +389,7 @@ export {
   type OperationLedgerPorts,
   type OperationBeginResult,
 } from './internal/tool-ledger'
+export { publicationInputQuality } from './internal/publication/input-quality'
 export {
   INITIAL_PUBLICATION_LIFECYCLE,
   decodeConvexPublicationSource,

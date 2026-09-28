@@ -4,7 +4,7 @@ import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
-import { runCallCommand } from '../../../tools/ae/commands/call'
+import { runCallCommand, runProcureCommand } from '../../../tools/ae/commands/call'
 import type { CliOptions } from '../../../tools/ae/lib/args'
 import { TOOL_MARKET_DESCRIBE_PATH } from '@/modules/common/market-tool-paths'
 import { FUNDING_HANDOFF_CREATE_PATH } from '@/modules/money/funding-handoff.actions'
@@ -94,6 +94,23 @@ function setApiKey(value: string, origin = options.baseUrl): void {
 }
 
 describe('market-terminal authenticated Tool Call', () => {
+  it('routes need selection through procure and renders the typed exact continuation', async () => {
+    setApiKey('ae-test-key')
+    const inputSchema = { type: 'object', required: ['query'], properties: { query: { type: 'string' } } }
+    const send = vi.fn<typeof fetch>().mockResolvedValue(jsonResponse({
+      schemaVersion: 'tool.procure:v1', kind: 'needs_input', status: 'needs_input',
+      toolRef, toolName: 'Search', inputJsonSchema: inputSchema, requiredFields: ['query'],
+      next: { kind: 'exact', toolRef },
+    }))
+    vi.stubGlobal('fetch', send)
+    const output = vi.spyOn(process.stdout, 'write').mockImplementation(() => true)
+    await runProcureCommand([], { ...options, json: false, input: JSON.stringify({ kind: 'need', need: 'Search for a dataset' }) })
+    const request = send.mock.calls[0]?.[1]
+    expect(request?.body).toBe(JSON.stringify({ kind: 'need', need: 'Search for a dataset' }))
+    expect(output.mock.calls.map(([part]) => String(part)).join('')).toContain(`\"toolRef\":\"${toolRef}\"`)
+    expect(output.mock.calls.map(([part]) => String(part)).join('')).toContain('query')
+  })
+
   it('requires the native buyer connection before quoting', async () => {
     const fetchMock = vi.fn<typeof fetch>()
     vi.stubGlobal('fetch', fetchMock)

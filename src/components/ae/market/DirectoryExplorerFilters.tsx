@@ -20,8 +20,9 @@ export type DirectoryExplorerFiltersProps = Readonly<{
   overview?: X402DirectoryCatalogueOverview
   onChange: (patch: DirectoryExplorerFilterPatch) => void
   onReset: () => void
+  jevRecipient?: string
 }>
-const priceBandLabels = { lt_0_01: 'Under 0.01 USDC', '0_01_to_0_03': '0.01–<0.03 USDC', '0_03_to_0_10': '0.03–<0.10 USDC', '0_10_to_1': '0.10–<1 USDC', '1_to_10': '1–<10 USDC', '10_plus': '10+ USDC', unknown: 'Price not comparable' }
+const priceBandLabels = { lt_0_01: 'Under 0.01 Provider-listed USDC', '0_01_to_0_03': '0.01–<0.03 Provider-listed USDC', '0_03_to_0_10': '0.03–<0.10 Provider-listed USDC', '0_10_to_1': '0.10–<1 Provider-listed USDC', '1_to_10': '1–<10 Provider-listed USDC', '10_plus': '10+ Provider-listed USDC', unknown: 'Price not comparable' }
 const adoptionBandLabels = { missing: 'Payers not reported', '0': '0 paying addresses', '1': '1 paying address', '2_4': '2–4 paying addresses', '5_9': '5–9 paying addresses', '10_49': '10–49 paying addresses', '50_plus': '50+ paying addresses' }
 const advancedFilterKeys = ['network', 'minUsdPrice', 'maxUsdPrice', 'minPayers30d', 'maxPayers30d', 'adoptionBand', 'curatedOnly', 'hasInputFields', 'hasOutputExample', 'hasInputSchema', 'hasOutputFields', 'hasOutputSchema', 'tags', 'bundleSlugs'] as const
 const explorerFilterKeys = ['directoryCategory', 'network', 'provider', 'minUsdPrice', 'maxUsdPrice', 'minPayers30d', 'maxPayers30d', 'priceBand', 'adoptionBand', 'curatedOnly', 'hasInputFields', 'hasOutputExample', 'hasInputSchema', 'hasOutputFields', 'hasOutputSchema', 'tags', 'bundleSlugs'] as const
@@ -36,7 +37,7 @@ function activeAdvancedFilterCount(search: DirectoryExplorerFilterValues) {
   }).length
 }
 
-function DirectoryQueryFilter({ search, onChange }: Pick<DirectoryExplorerFiltersProps, 'search' | 'onChange'>) {
+function DirectoryQueryFilter({ search, onChange, jevRecipient }: Pick<DirectoryExplorerFiltersProps, 'search' | 'onChange' | 'jevRecipient'>) {
   const id = useId()
   const [query, setQuery] = useState(search.query ?? '')
   const [queryError, setQueryError] = useState<string>()
@@ -56,6 +57,7 @@ function DirectoryQueryFilter({ search, onChange }: Pick<DirectoryExplorerFilter
       <FieldLabel htmlFor={`${id}-query`}>Search Tools</FieldLabel>
       <Input ref={inputRef} id={`${id}-query`} type="search" value={query} onChange={event => { setQuery(event.target.value); setQueryError(undefined) }} placeholder="Weather forecasts, document analysis…" aria-invalid={queryError !== undefined} aria-describedby={queryError === undefined ? undefined : `${id}-query-error`} />
       <FieldError id={`${id}-query-error`} className="text-xs">{queryError}</FieldError>
+      {jevRecipient === undefined ? <p className="text-xs text-muted-foreground">Search assesses Market Tool listings and published candidate descriptions.</p> : <p className="text-xs text-muted-foreground">Search query and candidate Tool text go to {jevRecipient}.</p>}
     </Field>
     <Button type="submit" variant="outline" size="sm" className="w-full">Search Tools</Button>
   </form>
@@ -111,10 +113,10 @@ function ListedPriceFilter({ search, onChange }: Pick<DirectoryExplorerFiltersPr
     if ((min !== undefined && (!Number.isFinite(min) || min < 0)) || (max !== undefined && (!Number.isFinite(max) || max < 0)) || (min !== undefined && max !== undefined && min > max)) { setPriceError('Enter a valid price range with the minimum no greater than the maximum.'); minimumRef.current?.focus(); return }
     setPriceError(undefined); onChange({ minUsdPrice: min, maxUsdPrice: max, priceBand: undefined })
   }}>
-    <p className="text-sm font-semibold">Custom listed price</p>
+    <p className="text-sm font-semibold">Custom Provider-listed price · USDC</p>
     <FieldGroup className="grid grid-cols-2 gap-2"><Field className="gap-2"><FieldLabel className="text-xs font-normal" htmlFor={`${id}-minimum`}>Min USDC</FieldLabel><Input ref={minimumRef} id={`${id}-minimum`} type="number" min="0" step="any" inputMode="decimal" placeholder="0" value={minimum} aria-invalid={priceError !== undefined} aria-describedby={priceError === undefined ? undefined : `${id}-price-error`} onChange={event => setMinimum(event.target.value)} /></Field><Field className="gap-2"><FieldLabel className="text-xs font-normal" htmlFor={`${id}-maximum`}>Max USDC</FieldLabel><Input id={`${id}-maximum`} type="number" min="0" step="any" inputMode="decimal" placeholder="Any" value={maximum} aria-invalid={priceError !== undefined} aria-describedby={priceError === undefined ? undefined : `${id}-price-error`} onChange={event => setMaximum(event.target.value)} /></Field></FieldGroup>
     <FieldError id={`${id}-price-error`} className="text-xs">{priceError}</FieldError>
-    <p className="text-xs leading-relaxed text-muted-foreground">A custom USDC range. Applying it clears the listed-price band.</p><Button type="submit" variant="outline" size="sm" className="w-full">Apply price range</Button>
+    <p className="text-xs leading-relaxed text-muted-foreground">A Provider-listed USDC range, not your AUD budget. Applying it clears the listed-price band.</p><Button type="submit" variant="outline" size="sm" className="w-full">Apply price range</Button>
   </form>
 }
 
@@ -171,13 +173,13 @@ function AdvancedFilters({ search, overview, onChange }: Pick<DirectoryExplorerF
     </Collapsible>
 }
 
-function FilterBody({ search, overview, onChange, onReset, showHeading = true }: DirectoryExplorerFiltersProps & Readonly<{ showHeading?: boolean }>) {
+function FilterBody({ search, overview, onChange, onReset, showHeading = true, jevRecipient }: DirectoryExplorerFiltersProps & Readonly<{ showHeading?: boolean }>) {
   const facets = overview?.kind === 'ok' ? overview : undefined
   return <div className="flex flex-col gap-6">
-    <DirectoryQueryFilter search={search} onChange={onChange} />
+    <DirectoryQueryFilter search={search} onChange={onChange} {...(jevRecipient === undefined ? {} : { jevRecipient })} />
     {showHeading ? <div className="flex items-center justify-between"><p className="text-sm font-semibold">Filters</p><Button type="button" variant="ghost" size="sm" className="min-h-touch" onClick={onReset}>Clear all</Button></div> : null}
     {facets === undefined ? <p className="text-xs text-muted-foreground">Category and network counts are unavailable.</p> : <><p className="text-xs leading-relaxed text-muted-foreground">Counts cover the full indexed catalogue.</p><Facets label="Provider category" allLabel="All categories" values={facets.categories} selected={search.directoryCategory} onChange={directoryCategory => onChange({ directoryCategory })} searchable /><Facets label="Provider" allLabel="All providers" values={facets.providers} selected={search.provider} onChange={provider => onChange({ provider })} searchable /></>}
-    <Facets label="Listed price" allLabel="Any listed price" showCount={false} values={DIRECTORY_PRICE_BANDS.map(key => ({ key, label: priceBandLabels[key], count: 0 }))} selected={search.priceBand} onChange={value => {
+    <Facets label="Provider-listed price · USDC" allLabel="Any Provider-listed price" showCount={false} values={DIRECTORY_PRICE_BANDS.map(key => ({ key, label: priceBandLabels[key], count: 0 }))} selected={search.priceBand} onChange={value => {
       const priceBand = value === undefined ? undefined : DIRECTORY_PRICE_BANDS.find((band): band is DirectoryPriceBand => band === value)
       if (value !== undefined && priceBand === undefined) return
       onChange({ priceBand, minUsdPrice: undefined, maxUsdPrice: undefined })

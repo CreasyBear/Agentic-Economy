@@ -38,6 +38,7 @@ import {
 import { MARKET_REQUEST_ROUTE_CONTRACTS } from '@/modules/market-demand/market-demand.actions'
 
 import { TOOL_QUOTE_ACTION_ID } from '@/modules/capability-execution/quote'
+import { TOOL_PROCURE_ACTION_ID } from '@/modules/capability-execution/procure'
 
 import type { CliOptions } from '../lib/args'
 import { printJson } from '../lib/output'
@@ -316,6 +317,17 @@ export const COMMANDS: Readonly<Record<string, RootCommandManifestEntry>> = {
     rootOrder: 0,
     guidance: [
       `${toolCallCommand()} performs quote and call together; run quote alone first to inspect price, budget, and readiness without calling.`,
+    ],
+  },
+  procure: {
+    ...deriveCliCommand(TOOL_PROCURE_ACTION_ID),
+    args: "--input '<json-request>'",
+    group: 'call_recover',
+    rootOrder: 1,
+    guidance: [
+      'Need: --input \'{"kind":"need","need":"<capability>"}\' selects without a Quote, Call or purchase key.',
+      'Exact: supply the returned ToolRef, complete caller-owned input, maxSpendAud and a fresh idempotencyKey in --input JSON.',
+      'Pass --input - to read one bounded JSON request from standard input.',
     ],
   },
   // callAction.parameters are quoteRef and idempotencyKey (the internal purchase step); the CLI's `call` wraps tool.quote and tool.call together and takes tool-ref/--input/--wait, so summary and args stay hand-specified here.

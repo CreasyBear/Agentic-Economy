@@ -3,7 +3,7 @@ import { AePageSkeleton, AePageState } from "@/components/ae/layout/AePageState"
 import { AeMarketPage } from "@/components/ae/market/AeMarketPage";
 import { Button } from "@/components/ui/button";
 import { readCanonicalBaseUrlServer } from "@/lib/server/canonical-url.functions";
-import { loadMarketRouteData, marketDocumentTitle, marketLoaderDeps, validateMarketSearch } from '@/modules/market/market.functions';
+import { loadMarketRouteData, marketDocumentTitle, marketLoaderDeps, readMarketChatRecipientServer, readMarketDiscoveryRecipientServer, validateMarketSearch } from '@/modules/market/market.functions';
 import { buildPublicPageHead, buildSiteJsonLd } from "@/modules/seo/public";
 
 export { parseMarketCompareRefs, validateMarketSearch } from '@/modules/market/market.functions'
@@ -21,20 +21,18 @@ export const Route = createFileRoute("/market")({
   validateSearch: validateMarketSearch,
   loaderDeps: ({ search }) => marketLoaderDeps(search),
   loader: async ({ deps }) => {
-    const [data, canonicalBaseUrl] = await Promise.all([
+    const [data, canonicalBaseUrl, jevRecipient, chatRecipient] = await Promise.all([
       loadMarketRouteData(deps),
       readCanonicalBaseUrlServer(),
+      readMarketDiscoveryRecipientServer(),
+      readMarketChatRecipientServer(),
     ])
-    return { ...data, canonicalBaseUrl }
+    return { ...data, canonicalBaseUrl, jevRecipient, chatRecipient }
   },
   staleTime: 30_000,
   preloadStaleTime: 30_000,
-  // The router default (150ms) is tuned for slow, rare navigations; a filter
-  // click on this page re-runs the same route's loader and, past that
-  // default, would unmount the whole directory for MarketPending's full-page
-  // skeleton even though the previous results are still valid to look at.
-  // Raising the threshold lets a typical catalogue round trip finish without
-  // ever swapping the visible list out from under the user.
+  // Keep current results visible during filter reloads; the router's 150ms
+  // default otherwise replaces the list with the full-page pending skeleton.
   pendingMs: 1_000,
   pendingMinMs: 500,
   pendingComponent: MarketPending,

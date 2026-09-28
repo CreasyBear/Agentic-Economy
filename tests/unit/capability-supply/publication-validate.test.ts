@@ -96,6 +96,105 @@ describe('capability publication validate (pre-flight admission)', () => {
     }
     await expect(validateCapabilityPublication(source)).resolves.toMatchObject({ kind: 'accepted' })
   })
+  it('refuses the first-party OCR request file object even with a valid example, without weakening complete nested inputs', async () => {
+    // Relaystation POST /v1/pdf/ocr OpenAPI: the file source is required but its children are prose only.
+    // The /lookup response here is an existing test fixture, NOT an asserted OCR output schema.
+    const document = openApiDocument()
+    const request = document.paths['/lookup'].post.requestBody.content['application/json'] as {
+      schema: Record<string, unknown>
+    }
+    request.schema = {
+      type: 'object',
+      required: ['file'],
+      properties: {
+        file: {
+          type: 'object',
+          description: 'cputools input-source: { inline: <base64 ≤ 4 MiB> } or { inputKey: <scratch key from /v1/cputools/upload-url, ≤ 50 MB> }.',
+        },
+        pages: { type: 'string', description: '1-based pages/ranges, e.g. "1-3,5" (default all).' },
+        lang: { type: 'string', enum: ['eng', 'spa', 'fra', 'deu', 'ita', 'por', 'nld', 'pol', 'rus', 'chi_sim'] },
+      },
+    }
+    const sourceRequestSchema = request.schema
+    const metadata = contractMetadata('independent.validate')
+    const requestAnnotation = metadata.customerAnnotations[0]
+    const resultAnnotation = metadata.customerAnnotations[1]
+    const disclosure = metadata.dataUse[0]
+    const effect = metadata.effects[0]
+    if (requestAnnotation === undefined || resultAnnotation === undefined || disclosure === undefined || effect === undefined) {
+      throw new Error('reference_contract_metadata_missing')
+    }
+    const source = {
+      ...openApiAdmissionSource({ document }),
+      contract: {
+        ...metadata,
+        customerAnnotations: [
+          { ...requestAnnotation, pointer: '/file' },
+          resultAnnotation,
+        ],
+        dataUse: [
+          { ...disclosure, inputPointer: '/file' },
+          { ...disclosure, effectId: 'release-pages', inputPointer: '/pages' },
+          { ...disclosure, effectId: 'release-lang', inputPointer: '/lang' },
+        ],
+        effects: [
+          effect,
+          { ...effect, effectId: 'release-pages' },
+          { ...effect, effectId: 'release-lang' },
+        ],
+        inputExamples: [{ label: 'Inline PDF source', input: { file: { inline: 'JVBERi0xLjQ=' } } }],
+      },
+    }
+    const rejected = await validateCapabilityPublication(source)
+    expect(rejected).toMatchObject({
+      kind: 'refused',
+      reason: 'opaque_input_without_valid_example',
+      next: [{ field: '/inputSchema/file' }],
+    })
+    expect(rejected).not.toHaveProperty('normalized')
+    const { sourceRevision, ...publication } = source
+    await expect(preparePublicationDraft({
+      source: publication,
+      sourceRevision,
+      pricingConfig: { version: 'pricing:v3', kind: 'fixed_aud', currency: 'AUD', exponent: 6, amountUnits: '12000000' },
+      evidenceRefs: ['source:relaystation-ocr-openapi'],
+    })).resolves.toMatchObject({ kind: 'refused', reason: 'opaque_input_without_valid_example' })
+
+    request.schema = {
+      ...request.schema,
+      properties: {
+        ...request.schema.properties as object,
+        file: {
+          type: 'object',
+          properties: { inline: { type: 'string' } },
+          required: ['inline'],
+          additionalProperties: false,
+        },
+      },
+    }
+    // This complete child schema is test-only; the current OCR OpenAPI does not publish it.
+    await expect(validateCapabilityPublication(source)).resolves.toMatchObject({ kind: 'accepted' })
+    const currentOcrSource = {
+      ...source,
+      document: {
+        openapi: '3.1.0',
+        info: { title: 'Relaystation', version: 'v1' },
+        servers: [{ url: 'https://api.relaystation.ai' }],
+        paths: {
+          '/v1/pdf/ocr': {
+            post: {
+              requestBody: { required: true, content: { 'application/json': { schema: sourceRequestSchema } } },
+              responses: { '200': { description: 'Per-page + merged OCR text.' } },
+            },
+          },
+        },
+      },
+      operation: { path: '/v1/pdf/ocr', method: 'post' as const },
+    }
+    const current = await validateCapabilityPublication(currentOcrSource)
+    expect(current).toMatchObject({ kind: 'refused', reason: 'schema_missing' })
+    expect(current).not.toHaveProperty('normalized')
+  })
   it('checks the versioned prepared contract again before admission or republication', async () => {
     const baseline = await preparePublicationDraft({
       source: openApiAdmissionSource(),

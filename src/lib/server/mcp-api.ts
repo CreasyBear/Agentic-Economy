@@ -52,7 +52,7 @@ import type { ToolCatalogSearcher } from '@/modules/capability-execution/procure
 const MAX_MCP_REQUEST_BODY_BYTES = 320 * 1024
 const AE_MCP_INSTRUCTIONS = [
   'Search with `ae_registry_tools_search`, inspect one Tool with `ae_registry_tools_describe`, or compare exact references with `ae_registry_tools_compare`.',
-  'A connected buyer can quote, call or procure by need or exact Tool reference; use the returned next actions to recover the original Call.',
+  'A connected buyer may select a Tool by need without payment, then supply exact Tool input and a fresh purchase key to Quote and Call. Follow returned recovery actions after a Call.',
   'Account tools show identity, balance and activity. Provider tools appear only for credentials with provider authority.',
   'Select `/mcp?readonly=1` for discover and read-only account tools, without buying or other writes.',
   'Operations are returned as data, not registered as individual MCP tools. See `/glossary.md` for AE vocabulary.',
@@ -269,6 +269,9 @@ function mcpSearchActionLine(next: unknown, origin: string): string | undefined 
 /** Search text exposes the same typed decisions, arguments and scope as the structured payload. */
 function mcpSuccessSummary(action: AnyAction, result: unknown, origin: string): string {
   if (!isRecord(result)) return `${action.name} completed.`
+  if (action.id === 'tool.procure' && result.status === 'needs_input') {
+    return `Selected ${result.toolName} (${result.toolRef}). Required input: ${JSON.stringify(result.requiredFields)}. Input JSON Schema: ${JSON.stringify(result.inputJsonSchema)}. Next: ${JSON.stringify(result.next)}; supply caller-owned input, maxSpendAud and a new idempotencyKey. No Quote or Call has occurred.`
+  }
   if (action.id !== 'registry.tools.search') {
     return `${action.name}: ${typeof result.kind === 'string' ? result.kind : 'completed'}.`
   }
@@ -280,7 +283,10 @@ function mcpSuccessSummary(action: AnyAction, result: unknown, origin: string): 
     : result.kind === 'unavailable' ? `Search unavailable: ${result.reason}`
       : result.kind === 'scoped' ? `${tools.length} Tools in assessed supply; more may exist`
         : `${tools.length} matching Tools`
-  const lines = [`${summary}${assessed}.`]
+  const recipient = isRecord(result.recipient) && typeof result.recipient.label === 'string' && typeof result.recipient.host === 'string'
+    ? ` Ranking: ${result.recipient.label} (${result.recipient.host}) receives query and candidate summaries.`
+    : ''
+  const lines = [`${summary}${assessed}.${recipient}`]
   for (const tool of tools) {
     if (!isRecord(tool)) continue
     const itemActions = Array.isArray(tool.next) ? tool.next : []
@@ -579,7 +585,7 @@ export function createAeMcpServer(
           if (refusal !== undefined) return mcpToolRefusalResult(action, outputValidation.data, refusal, origin)
           return {
             content: [{ type: 'text' as const, text: mcpSuccessSummary(action, outputValidation.data, origin) }],
-            structuredContent: { result: outputValidation.data, next: projectMcpActionNext(action.id, outputValidation.data, origin) },
+            structuredContent: { result: outputValidation.data, next: action.id === 'tool.procure' && isRecord(outputValidation.data) && outputValidation.data.status === 'needs_input' ? [outputValidation.data.next] : projectMcpActionNext(action.id, outputValidation.data, origin) },
           }
         } catch (error) {
           recordMcpGatewayTelemetry(action.id, data, undefined, access, startedAt)

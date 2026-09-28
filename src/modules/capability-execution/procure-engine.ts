@@ -1,5 +1,4 @@
 import { z } from 'zod'
-import { degradeBackend } from '@/lib/observability/degrade-backend'
 import type { AgentAccessPrincipal } from '@/modules/agent-access/agent-access'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { sanitizeText } from '@/modules/common/sanitize-text'
@@ -62,14 +61,16 @@ type IdentityResult = z.infer<typeof identityResultSchema>
 export class ProcureConflictError extends Error {}
 export class ProcureInProgressError extends Error {}
 export class ProcureAuthorityError extends Error {}
+export class ProcureSelectionUnavailableError extends Error {}
+type ExactProcureInput = Extract<ToolProcureInput, { kind: 'exact' }>
 export type ProcureIdentityPort = Readonly<{
-  reserve(input: ToolProcureInput, principal: AgentAccessPrincipal): Promise<IdentityResult>
-  checkpoint(input: ToolProcureInput, principal: AgentAccessPrincipal, quote: z.infer<typeof quoteSnapshotSchema>): Promise<IdentityResult>
-  complete(input: ToolProcureInput, principal: AgentAccessPrincipal, result: ToolProcureResult): Promise<IdentityResult>
+  reserve(input: ExactProcureInput, principal: AgentAccessPrincipal): Promise<IdentityResult>
+  checkpoint(input: ExactProcureInput, principal: AgentAccessPrincipal, quote: z.infer<typeof quoteSnapshotSchema>): Promise<IdentityResult>
+  complete(input: ExactProcureInput, principal: AgentAccessPrincipal, result: ToolProcureResult): Promise<IdentityResult>
 }>
 
 export function createProcureIdentityPort(request: Request, bodyText: string, correlationId: string): ProcureIdentityPort {
-  async function invoke(phase: keyof typeof identityMutation, input: ToolProcureInput, principal: AgentAccessPrincipal, extra: Record<string, unknown> = {}) {
+  async function invoke(phase: keyof typeof identityMutation, input: ExactProcureInput, principal: AgentAccessPrincipal, extra: Record<string, unknown> = {}) {
     const operationKey = canonicalDigest({ phase, principalId: principal.principalId, key: input.idempotencyKey })
     const command = {
       principal, idempotencyKey: input.idempotencyKey,
@@ -139,7 +140,8 @@ export const defaultProductionCatalogSearcher: ToolCatalogSearcher = async (
   try {
     const raw = await callPublicSourceQuery(searchToolsQuery, { query, limit })
     const deserialized = deserializeToolSearchResult(raw as Parameters<typeof deserializeToolSearchResult>[0])
-    if (deserialized.kind !== 'ok') return []
+    if (deserialized.kind === 'no_candidates' && deserialized.partialResults !== true) return []
+    if (deserialized.kind !== 'ok' || deserialized.partialResults === true) throw new ProcureSelectionUnavailableError('The Tool catalog is unavailable.')
     return deserialized.items.map((tool) => ({
       toolRef: tool.toolRef,
       name: tool.contract.capabilityId,
@@ -151,7 +153,7 @@ export const defaultProductionCatalogSearcher: ToolCatalogSearcher = async (
       ...(tool.contract.inputJsonSchema !== undefined ? { inputSchema: tool.contract.inputJsonSchema as Record<string, unknown> } : {}),
     }))
   } catch (cause) {
-    return degradeBackend(cause, [], { site: 'defaultProductionCatalogSearcher', reason: 'source_unavailable' })
+    throw new ProcureSelectionUnavailableError('The Tool catalog is unavailable.', { cause })
   }
 }
 
@@ -167,7 +169,57 @@ export type ProcurementEngineDependencies = Readonly<{
 export class CapabilityProcurementEngine {
   constructor(private readonly dependencies: ProcurementEngineDependencies) {}
 
+  private async select(input: Extract<ToolProcureInput, { kind: 'need' }>): Promise<ToolProcureResult> {
+    const common = { schemaVersion: 'tool.procure:v1' as const }
+    let candidates: readonly CatalogToolCandidate[]
+    try {
+      candidates = await this.dependencies.catalogSearcher(input.need, 10)
+    } catch (cause) {
+      if (!(cause instanceof ProcureSelectionUnavailableError)) throw cause
+      return { ...common, kind: 'refused', status: 'refused', code: 'selection_unavailable', retryable: true, detail: 'Tool selection is unavailable; retry the need.' }
+    }
+    if (candidates.length === 0) {
+      return { ...common, kind: 'refused', status: 'refused', code: 'no_matching_tool', retryable: false, detail: 'No matching published Tool was found.' }
+    }
+    const routing = await this.routeAndSelect(input.need, candidates)
+    if (routing.unavailable) {
+      return { ...common, kind: 'refused', status: 'refused', code: 'selection_unavailable', retryable: true, detail: 'Tool selection is unavailable; retry the need.' }
+    }
+    if (routing.tool === null || routing.confidence < 0.60) {
+      return { ...common, kind: 'refused', status: 'refused', code: 'no_matching_tool', retryable: false, detail: 'No matching published Tool was found.' }
+    }
+    const schema = routing.tool.inputSchema
+    if (schema?.type !== 'object' || typeof schema.properties !== 'object' || schema.properties === null || Array.isArray(schema.properties)) {
+      return { ...common, kind: 'refused', status: 'refused', code: 'input_invalid', retryable: false, detail: 'The selected Tool has no complete input contract.' }
+    }
+    const requiredFields: string[] = []
+    const visit = (object: Record<string, unknown>, prefix = ''): boolean => {
+      if (object.type === 'object' && (typeof object.properties !== 'object' || object.properties === null || Array.isArray(object.properties))) return false
+      if (!Array.isArray(object.required)) return true
+      const properties = object.properties as Record<string, unknown>
+      for (const name of object.required) {
+        if (typeof name !== 'string' || !Object.hasOwn(properties, name)) return false
+        const path = prefix ? `${prefix}.${name}` : name
+        requiredFields.push(path)
+        const child = properties[name]
+        if (typeof child !== 'object' || child === null || Array.isArray(child) || !visit(child as Record<string, unknown>, path)) return false
+      }
+      return true
+    }
+    if (!visit(schema)) {
+      return { ...common, kind: 'refused', status: 'refused', code: 'input_invalid', retryable: false, detail: 'The selected Tool has no complete input contract.' }
+    }
+    const selected = {
+      ...common, kind: 'needs_input' as const, status: 'needs_input' as const,
+      toolRef: routing.tool.toolRef, toolName: routing.tool.name,
+      inputJsonSchema: schema, requiredFields,
+      next: { kind: 'exact' as const, toolRef: routing.tool.toolRef },
+    }
+    return toolProcureResultSchema.parse(selected)
+  }
+
   async procure(input: ToolProcureInput): Promise<ToolProcureResult> {
+    if (input.kind === 'need') return await this.select(input)
     const startedAt = Date.now()
     const { principal, callService, identity } = this.dependencies
     const correlationId = this.dependencies.correlationId ?? globalThis.crypto.randomUUID()
@@ -188,59 +240,15 @@ export class CapabilityProcurementEngine {
       return toolProcureResultSchema.parse(JSON.parse(saved.resultJson))
     }
 
-    let matchedTool: CatalogToolCandidate | undefined
-    let routingLatencyMs = 0
-    if (input.kind === 'need' && reserved.kind === 'reserved') {
-      const candidates = await this.dependencies.catalogSearcher(input.need, 10)
-      if (candidates.length === 0) {
-        return await finish({
-          ...common, kind: 'refused', status: 'refused',
-          code: 'no_matching_tool', retryable: false, detail: 'No catalog tools match the capability gap.',
-        })
-      }
-      const routingStart = Date.now()
-      const routing = await this.routeAndSelect(input.need, candidates)
-      routingLatencyMs = Date.now() - routingStart
-      if (routing.tool === null || routing.confidence < 0.60) {
-        return await finish({
-          ...common, kind: 'refused', status: 'refused',
-          code: 'no_matching_tool', retryable: false,
-          detail: `No matching tool found with sufficient confidence (scored ${routing.confidence.toFixed(2)}).`,
-        })
-      }
-      matchedTool = routing.tool
-    }
-    if (input.kind === 'need' && matchedTool !== undefined) {
-      const listedPrice = parseDecimalExactAmount('AUD', matchedTool.priceAud, 6)
-      if (listedPrice === undefined || listedPrice.units !== '0') {
-        const schema = matchedTool.inputSchema
-        const fields = Array.isArray(schema?.required)
-          ? schema.required.filter((field): field is string => typeof field === 'string')
-          : schema?.properties && typeof schema.properties === 'object'
-            ? Object.keys(schema.properties)
-            : []
-        return await finish({
-          ...common, kind: 'refused', status: 'refused',
-          code: 'input_invalid', retryable: false,
-          detail: `Paid Tools require exact caller-supplied arguments. Retry with kind: exact, toolRef: ${matchedTool.toolRef}, and input fields: ${fields.join(', ') || 'the Tool’s required fields'}.`,
-        })
-      }
-    }
-
-    const toolRef = input.kind === 'exact' ? input.toolRef : matchedTool?.toolRef
-    const synthesizedParams = input.kind === 'exact'
-      ? input.input
-      : matchedTool === undefined ? undefined : this.synthesizeParameters(input.need, matchedTool)
+    const toolRef = input.toolRef
+    const suppliedInput = input.input
     let quote = reserved.kind === 'replay' && reserved.resultJson !== null
       ? quoteSnapshotSchema.safeParse(JSON.parse(reserved.resultJson)).data
       : undefined
     if (quote === undefined) {
-      if (toolRef === undefined || synthesizedParams === undefined) {
-        throw new Error('procurement_quote_snapshot_missing')
-      }
       if (callService.quoteTool === undefined) throw new Error('call_service_quote_unavailable')
       const quoteRes = await callService.quoteTool({
-        input: { toolRef, input: synthesizedParams as Record<string, JsonValue> },
+        input: { toolRef, input: suppliedInput },
         principal, correlationId,
       })
       if (quoteRes.kind === 'refused') {
@@ -253,9 +261,8 @@ export class CapabilityProcurementEngine {
       }
       quote = quoteSnapshotSchema.parse({
         quoteRef: quoteRes.quoteRef, price: quoteRes.price,
-        toolRef, input: synthesizedParams,
-        ...(matchedTool === undefined ? {} : { toolName: matchedTool.name, endpoint: matchedTool.endpoint }),
-        routingLatencyMs,
+        toolRef, input: suppliedInput,
+        routingLatencyMs: 0,
       })
       const checkpoint = acceptedIdentity(await identity.checkpoint(input, principal, quote))
       if (checkpoint.kind !== 'replay' || checkpoint.quoteRef !== quote.quoteRef) {
@@ -265,13 +272,6 @@ export class CapabilityProcurementEngine {
         const completed = toolProcureResultSchema.safeParse(JSON.parse(checkpoint.resultJson))
         if (completed.success && completed.data.status !== 'pending' && completed.data.status !== 'outcome_unknown') return completed.data
       }
-    }
-    if (input.kind === 'need' && quote.price.units !== '0') {
-      return await finish({
-        ...common, kind: 'refused', status: 'refused', quoteRef: quote.quoteRef,
-        code: 'input_invalid', retryable: false,
-        detail: 'The Quote is paid; retry with kind: exact and caller-supplied Tool arguments.',
-      })
     }
     const { quoteRef, price: quotePrice } = quote
     const budgetExact = input.maxSpendAud === undefined
@@ -341,7 +341,7 @@ export class CapabilityProcurementEngine {
       ...(quote.toolName === undefined ? {} : { toolName: quote.toolName }),
       ...(quote.endpoint === undefined ? {} : { endpoint: quote.endpoint }),
       price: procurePriceBreakdownFromQuote(quotePrice),
-      synthesizedParams: quote.input,
+      input: quote.input as Record<string, JsonValue>,
       output: callRes.output,
       audit: {
         routingLatencyMs: quote.routingLatencyMs, executionLatencyMs, totalLatencyMs: Date.now() - startedAt,
@@ -356,6 +356,7 @@ export class CapabilityProcurementEngine {
   ): Promise<{
     tool: CatalogToolCandidate | null
     confidence: number
+    unavailable: boolean
   }> {
     // The SDK accepts structured state. Provider-owned prose stays data, never
     // part of selector instructions or choice criteria.
@@ -383,68 +384,25 @@ export class CapabilityProcurementEngine {
     // The generic deterministic fallback token-matches the entire candidate
     // list and can select the first Tool without evaluating its relevance.
     if (response.tier === 'deterministic_rule_engine' || response.tier === 'safe_refusal') {
-      return { tool: null, confidence: 0 }
+      return { tool: null, confidence: 0, unavailable: true }
     }
 
     const answer = response.answers.selectedTool
     if (!answer || answer.type !== 'choice' || answer.choice === 'unsupported') {
-      return { tool: null, confidence: 0 }
+      return { tool: null, confidence: 0, unavailable: false }
     }
 
     const tool = candidates.find((t) => t.toolRef === answer.choice) ?? null
     if (tool === null) {
-      return { tool: null, confidence: 0 }
+      return { tool: null, confidence: 0, unavailable: true }
     }
 
     return {
       tool,
       confidence: answer.confidence,
+      unavailable: false,
     }
   }
 
-  /**
-   * Generic schema-driven parameter extraction.
-   * If tool defines properties in inputSchema, extract matching fields;
-   * otherwise pass natural input.
-   */
-  private synthesizeParameters(
-    need: string,
-    tool: CatalogToolCandidate,
-  ): Record<string, unknown> {
-    const params: Record<string, unknown> = {}
-    const schema = tool.inputSchema
-    const properties = (schema && typeof schema === 'object' && 'properties' in schema && typeof schema.properties === 'object' && schema.properties !== null)
-      ? (schema.properties as Record<string, { type?: string; description?: string }>)
-      : undefined
-
-    if (properties) {
-      for (const [propKey, propVal] of Object.entries(properties)) {
-        if (propKey === 'from' || propKey === 'source') {
-          params[propKey] = /new york|ny|edt|est/i.test(need) ? 'America/New_York' : 'UTC'
-        } else if (propKey === 'to' || propKey === 'target' || propKey === 'destination') {
-          params[propKey] = /tokyo|japan/i.test(need) ? 'Asia/Tokyo' : 'Europe/London'
-        } else if (propKey === 'time') {
-          const timeMatch = need.match(/\b\d{1,2}(?::\d{2})?\s*(?:am|pm)?\b/i)
-          params[propKey] = timeMatch ? timeMatch[0] : '12:00'
-        } else if (propKey === 'hash' || propKey === 'txHash') {
-          const hashMatch = need.match(/\b0x[a-fA-F0-9]{64}\b/)
-          if (hashMatch) params[propKey] = hashMatch[0]
-        } else if (propKey === 'address') {
-          const addrMatch = need.match(/\b0x[a-fA-F0-9]{40}\b/)
-          if (addrMatch) params[propKey] = addrMatch[0]
-        } else if (propKey === 'request' || propKey === 'query' || propKey === 'prompt') {
-          params[propKey] = need
-        } else {
-          void propVal
-        }
-      }
-    }
-
-    if (Object.keys(params).length === 0) {
-      params.request = need
-    }
-
-    return params
-  }
 
 }

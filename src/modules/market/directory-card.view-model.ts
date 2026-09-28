@@ -2,12 +2,13 @@ import Decimal from 'decimal.js'
 import { captureRouteException } from '@/lib/observability/capture-route-exception'
 import { formatDisplayPrice } from '@/modules/money/public'
 import type { X402DirectoryFacet } from '@/modules/market/x402-directory-catalogue'
-import { directoryBasePayTo, directoryProviderKey, directorySlugBase } from '@/modules/market/x402-directory-index'
+import { directoryProviderKey, directorySlugBase, minimumDirectoryUsdPrice } from '@/modules/market/x402-directory-index'
 import type { X402DirectoryEntry } from '@/modules/market/x402-directory'
 import { x402DirectoryFunctionalTitle } from '@/modules/market/x402-directory-title'
 
-/** A directory listing has no fresh FX observation, so its published token amount is source detail, not an AUD estimate. */
+/** AUD is the primary estimate; published USDC remains a source detail below it. */
 export function directoryPrice(entry: X402DirectoryEntry): string {
+  if (entry.audEstimate !== undefined) return entry.audEstimate
   const price = entry.prices[0]
   if (price === undefined) return 'Price on request'
   return listedPriceAmount(price) === undefined ? 'See payment details' : audEstimateUnavailable
@@ -50,9 +51,14 @@ function groupDigits(whole: string): string {
 export function directoryPriceContext(entry: X402DirectoryEntry): string {
   const price = entry.prices[0]
   if (price === undefined) return 'No Provider price published'
-  const listed = listedPriceAmount(price)
-  if (entry.prices.length > 1) return `${entry.prices.length} Provider payment options${listed === undefined ? '' : ` · source ${listed}`}`
-  return listed === undefined ? 'Provider price per Call' : `Provider lists ${listed} per Call`
+  const quotedSource = entry.audEstimate === undefined ? undefined : minimumDirectoryUsdPrice(entry)
+  const formattedSource = quotedSource === undefined ? undefined : formatListedAmount(quotedSource)
+  const listed = formattedSource === undefined ? listedPriceAmount(price) : `${formattedSource} USDC`
+  const source = entry.prices.length > 1
+    ? `${entry.prices.length} Provider payment options${listed === undefined ? '' : ` · source ${listed}`}`
+    : listed === undefined ? 'Provider price per Call' : `Provider lists ${listed} per Call`
+  if (entry.audEstimate === undefined) return source
+  return `${entry.choice?.access === 'external_listing' || entry.choice === undefined ? 'Provider-listed estimate' : 'Indicative before Quote'} · ${source}`
 }
 
 export function directoryDate(value: string): string {
@@ -221,13 +227,6 @@ export function absorbProviderEntries(
   return { groups, rest: [] }
 }
 
-/** Preformatted 30-day recipient USDC for this Tool's Base payee. An em dash means the figure is absent. */
-export function directoryVolumeLabel(entry: X402DirectoryEntry, volumeByPayTo: Readonly<Record<string, string>>): string {
-  const payTo = directoryBasePayTo(entry)
-  if (payTo === undefined) return '—'
-  return volumeByPayTo[payTo] ?? '—'
-}
-
 /** Older indexed snapshots retain the same description and service identity. */
 export function directoryTitle(entry: X402DirectoryEntry): string {
   if (entry.title !== entry.serviceName && entry.title.length <= 100) return entry.title
@@ -242,6 +241,10 @@ export type DirectoryToolCardModel = Readonly<{
   providerLine: string
   priceLabel: string
   priceContext: string
+  access: 'external_listing' | 'ae_callable' | 'setup_required' | 'unavailable'
+  accessLabel: string
+  toolRef?: string
+  sourceRouteRef?: string
   tags: readonly string[]
   description?: string
   outputLabel?: string
@@ -288,6 +291,13 @@ export function toDirectoryToolCardModel(entry: X402DirectoryEntry): DirectoryTo
     title,
     providerHost,
     slug,
+    access: entry.choice?.access ?? 'external_listing',
+    accessLabel: entry.choice?.access === 'ae_callable' ? 'AE callable'
+      : entry.choice?.access === 'setup_required' ? 'Connect to call'
+      : entry.choice?.access === 'unavailable' ? 'Currently unavailable'
+      : 'External listing · inspect',
+    ...(entry.choice?.toolRef === undefined ? {} : { toolRef: entry.choice.toolRef }),
+    ...(entry.choice?.sourceRouteRef === undefined ? {} : { sourceRouteRef: entry.choice.sourceRouteRef }),
     providerLine,
     initials: directoryInitials(providerLine),
     priceLabel: directoryPrice(entry),

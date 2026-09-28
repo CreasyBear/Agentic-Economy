@@ -1,6 +1,8 @@
 import { useHydrated, useRouter } from '@tanstack/react-router'
 
 import type { X402DirectoryCatalogueInput } from '@/modules/market/x402-directory-catalogue'
+import type { X402DirectoryCatalogue } from '@/modules/market/x402-directory-catalogue'
+import type { X402DirectoryEntry } from '@/modules/market/x402-directory'
 
 export type MarketReturnSearch = Readonly<X402DirectoryCatalogueInput & {
   compare?: string
@@ -8,6 +10,13 @@ export type MarketReturnSearch = Readonly<X402DirectoryCatalogueInput & {
   layout?: 'table' | 'grid'
   resource?: string
   providerCursor?: string
+}>
+export type IndexedDirectoryPage = Readonly<{ items: readonly X402DirectoryEntry[]; cursor: string | undefined; isDone: boolean }>
+export type IndexedPaginationState = Readonly<{
+  source: X402DirectoryCatalogue | undefined
+  pages: readonly IndexedDirectoryPage[]
+  index: number
+  status: 'idle' | 'loading' | 'failed'
 }>
 
 declare module '@tanstack/history' {

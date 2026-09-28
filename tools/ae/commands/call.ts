@@ -17,6 +17,7 @@ import {
   type ToolQuoteInput,
   type ToolQuoteResult,
 } from '@/modules/capability-execution/quote'
+import { TOOL_PROCURE_PATH, toolProcureInputSchema, toolProcureResultSchema } from '@/modules/capability-execution/procure'
 import type { CallStatusResult } from '@/modules/capability-execution/call-recovery-contracts'
 import { AGENT_ACCOUNT_SELF_ROUTE_CONTRACT, agentAccountSelfResultSchema } from '@/modules/agent-access/account.actions'
 import type { CliOptions } from '../lib/args'
@@ -458,6 +459,48 @@ export async function runCallCommand(
   if (!options.json) process.stderr.write(`Call prepared: toolRef=${toolRef}. Recovery: ${resumeCommand(retained.record, options)}\n`)
   await submitOrReadCall(retained.record, options)
 }
+/** Select without effects, or purchase only the caller's complete exact-input request. */
+export async function runProcureCommand(args: readonly string[], options: CliOptions, stdin: Readable = process.stdin): Promise<void> {
+  if (args.length !== 0 || options.input === undefined) throw usageFailure('procure', 'procure-usage')
+  const raw = options.input.trim() === '-' ? await readBoundedStdin(stdin) : options.input
+  let input: unknown
+  try {
+    input = JSON.parse(raw)
+  } catch {
+    throw new CliFailure('Procurement input must be valid JSON.', { kind: 'INVALID_ARGUMENT', code: 'procure-input' })
+  }
+  const parsed = toolProcureInputSchema.safeParse(input)
+  if (!parsed.success) throw new CliFailure('Procurement input must contain a need or an exact ToolRef, input, AUD ceiling and purchase key.', {
+    kind: 'INVALID_ARGUMENT', code: 'procure-input',
+  })
+  const apiKey = requireAgentAccessKey('procure', options)
+  const outcome = await callJson(options.baseUrl, TOOL_PROCURE_PATH, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${apiKey}` },
+    body: JSON.stringify(parsed.data),
+  })
+  const body = requireOk(outcome, TOOL_PROCURE_PATH)
+  if (!isRecord(body)) throw new CliFailure('The gateway returned an invalid procurement result.', {
+    kind: 'UNAVAILABLE', code: 'procure-result-invalid',
+  })
+  const { next, ...result } = body
+  const validated = toolProcureResultSchema.safeParse(body.status === 'needs_input' ? body : result)
+  if (!validated.success) throw new CliFailure('The gateway returned an invalid procurement result.', {
+    kind: 'UNAVAILABLE', code: 'procure-result-invalid',
+  })
+  if (options.json) { printJson(body); return }
+  if (validated.data.status === 'needs_input') {
+    heading(`Selected ${validated.data.toolName}`)
+    table([['ToolRef', validated.data.toolRef], ['required input', validated.data.requiredFields.join(', ') || 'none']])
+    line(`Input JSON Schema: ${JSON.stringify(validated.data.inputJsonSchema)}`)
+    line(`Next: ${JSON.stringify(validated.data.next)}. Supply exact input, maxSpendAud and a fresh idempotencyKey with ae procure --input '<json>'.`)
+    return
+  }
+  heading(`Procurement ${validated.data.status}`)
+  line(JSON.stringify(result, undefined, 2))
+  if (next !== undefined) line(`Next: ${JSON.stringify(next)}`)
+}
+
 export const callCommandDescriptor = {
   command: 'call',
   actionId: CALL_ROUTE_CONTRACT.call.actionId,

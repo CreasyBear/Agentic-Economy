@@ -11,6 +11,33 @@ import type {
 const DEFAULT_JEV_MODEL = '~typesafe/jev-latest'
 const DEFAULT_JEV_TIMEOUT_MS = 1500
 
+function jevRoute(options: DecisionGatewayOptions) {
+  const apiKey =
+    options.typesafeApiKey ||
+    options.openrouterApiKey ||
+    process.env.TYPESAFE_API_KEY ||
+    process.env.OPENROUTER_API_KEY ||
+    ''
+  if (apiKey.length === 0) return undefined
+  const isOpenRouter = apiKey.startsWith('sk-or-') || !apiKey.startsWith('ts-')
+  return {
+    apiKey,
+    baseURL: options.baseURL ?? process.env.TYPESAFE_BASE_URL ?? (isOpenRouter ? 'https://openrouter.ai/api/alpha' : 'https://api.typesafe.ai'),
+    defaultModel: options.jevModel ?? (isOpenRouter ? DEFAULT_JEV_MODEL : 'jev-latest'),
+  }
+}
+
+/** Public-safe route identity; never serialize a credential or configured URL path/query. */
+export function jevDiscoveryRecipient(options: DecisionGatewayOptions = {}): Readonly<{ label: string; host: string }> | undefined {
+  if (options.disableJev === true || process.env.AE_JEV_DISCOVERY_ENABLED === 'false') return undefined
+  const route = jevRoute(options)
+  if (route === undefined || !URL.canParse(route.baseURL)) return undefined
+  const url = new URL(route.baseURL)
+  if (url.protocol !== 'https:' && url.protocol !== 'http:') return undefined
+  const host = url.hostname.toLowerCase()
+  return { label: host === 'openrouter.ai' ? 'OpenRouter' : host === 'api.typesafe.ai' ? 'TypeSafe AI' : host, host }
+}
+
 /**
  * Requires valid SDK questions and positive timing/retry configuration.
  * Ensures consumed answers are validated, or a classified operational failure.
@@ -41,23 +68,9 @@ export async function callJevSystemOne(
   )
   const timeout = Math.min(configuredTimeout, deadlineAt - Date.now())
   if (timeout <= 0) throw new JevUnavailableError('timeout')
-  const apiKey =
-    options.typesafeApiKey ||
-    options.openrouterApiKey ||
-    process.env.TYPESAFE_API_KEY ||
-    process.env.OPENROUTER_API_KEY ||
-    ''
-
-  if (apiKey.length === 0) {
-    throw new JevUnavailableError('missing_key')
-  }
-
-  const isOpenRouter = apiKey.startsWith('sk-or-') || !apiKey.startsWith('ts-')
-  const defaultBaseURL = isOpenRouter
-    ? 'https://openrouter.ai/api/alpha'
-    : 'https://api.typesafe.ai'
-  const baseURL = options.baseURL ?? process.env.TYPESAFE_BASE_URL ?? defaultBaseURL
-  const defaultModel = options.jevModel ?? (isOpenRouter ? DEFAULT_JEV_MODEL : 'jev-latest')
+  const route = jevRoute(options)
+  if (route === undefined) throw new JevUnavailableError('missing_key')
+  const { apiKey, baseURL, defaultModel } = route
   if (!URL.canParse(baseURL)) throw new TypeError('Invalid Jev base URL')
   const baseFetch = options.fetchImpl ?? fetch
 

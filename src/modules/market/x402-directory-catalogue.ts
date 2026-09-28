@@ -4,10 +4,13 @@ import type { X402DirectoryEntry, X402DirectoryPage } from './x402-directory'
 
 export const x402DirectoryCatalogueInputSchema = x402DirectoryIndexInputSchema.omit({ category: true }).extend({
   directoryCategory: z.string().trim().min(1).max(80).transform(value => value.toLowerCase()).optional(),
+  /** Exact current ToolRef or sourceRouteRef to exclude from admitted alternatives. */
+  alternativeTo: z.string().trim().min(1).max(8192).optional(),
   indexCursor: z.string().min(1).max(16384).optional(),
   offset: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER).optional(),
 }).refine(input => !input.query || input.sort === undefined || input.sort === 'relevance', 'Keyword search requires relevance sorting.')
   .refine(input => input.indexCursor === undefined || !input.offset, 'Index and source pagination cannot be combined.')
+  .refine(input => input.alternativeTo === undefined || !!input.query, 'Alternatives require a capability query.')
   .refine(directoryIndexRangesValid, 'The minimum cannot exceed the maximum.')
 export type X402DirectoryCatalogueInput = z.infer<typeof x402DirectoryCatalogueInputSchema>
 export type X402DirectoryCatalogueUnavailable = Readonly<{ kind: 'unavailable'; reason: string }>
