@@ -1,4 +1,4 @@
-import { postMcp, readMcpBody } from './mcp-api-harness'
+import { authenticateWithScopes, handleMcpRequest, postMcp, readMcpBody } from './mcp-api-harness'
 import { describe, expect, it, vi } from 'vitest'
 
 import {
@@ -51,6 +51,76 @@ describe('MCP host adapter registry', () => {
     expect(JSON.stringify(result.content)).not.toContain('"results"')
     run.mockRestore()
   })
+  it('projects Save this need only for an exhaustive no-match with a current call-scoped Agent', async () => {
+    const run = vi.spyOn(registryToolsSearchAction, 'run').mockResolvedValue(noMatch([]))
+    const argumentsData = { query: 'plumbing', source: 'current', filters: { provider: 'local' } }
+    const request = { jsonrpc: '2.0', id: 41, method: 'tools/call', params: { name: 'ae_registry_tools_search', arguments: argumentsData } }
+    const anonymous = await readMcpBody(await postMcp(request))
+    expect(anonymous.result?.structuredContent).not.toHaveProperty('result.saveNeed')
+
+    const authenticated = await readMcpBody(await postMcp(request, {
+      authenticate: authenticateWithScopes(['market_tools:call']),
+    }, { authorization: 'Bearer valid-test-agent' }))
+    expect(authenticated.result?.structuredContent).toMatchObject({
+      result: {
+        saveNeed: {
+          action: 'marketDemand.record',
+          authority: 'owner_or_connected_agent',
+          args: { query: 'plumbing', source: 'current', filters: { provider: 'local' } },
+        },
+        next: [],
+      },
+    })
+    expect(JSON.stringify(authenticated.result?.content)).toContain('ae_marketDemand_record')
+    expect(JSON.stringify(authenticated.result?.content)).toContain('idempotencyKey')
+    expect(run).toHaveBeenCalledTimes(2)
+  })
+
+  it('never offers Save for scoped results or credentials lacking call scope; invalid supplied credentials refuse the read', async () => {
+    const run = vi.spyOn(registryToolsSearchAction, 'run').mockResolvedValue(noMatch([], { limit: 8, hasMore: true, nextCursor: 'next' }))
+    const request = { jsonrpc: '2.0', id: 42, method: 'tools/call', params: { name: 'ae_registry_tools_search', arguments: { query: 'plumbing' } } }
+    const scoped = await readMcpBody(await postMcp(request, {
+      authenticate: authenticateWithScopes(['market_tools:call']),
+    }, { authorization: 'Bearer valid-test-agent' }))
+    expect(scoped.result?.structuredContent).not.toHaveProperty('result.saveNeed')
+
+    run.mockResolvedValue(noMatch([]))
+    const wrongScope = await readMcpBody(await postMcp(request, {
+      authenticate: authenticateWithScopes(['market_supply:manage']),
+    }, { authorization: 'Bearer valid-test-agent' }))
+    expect(wrongScope.result?.structuredContent).not.toHaveProperty('result.saveNeed')
+
+    const invalid = await postMcp(request, {
+      authenticate: async () => ({ isAuthenticated: false, tokenType: null, id: null, subject: null, scopes: null }),
+    }, { authorization: 'Bearer invalid-test-agent' })
+    expect(invalid.status).toBe(401)
+    const malformed = await postMcp(request, {
+      authenticate: async () => ({ isAuthenticated: false, tokenType: null, id: null, subject: null, scopes: null }),
+    }, { authorization: 'not-a-bearer' })
+    expect(malformed.status).toBe(401)
+    expect(run).toHaveBeenCalledTimes(2)
+  })
+
+  it('keeps readonly MCP search available but never offers a demand write', async () => {
+    const run = vi.spyOn(registryToolsSearchAction, 'run').mockResolvedValue(noMatch([]))
+    const response = await handleMcpRequest(new Request('https://ae.example/mcp?readonly=1', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', accept: 'application/json, text/event-stream', authorization: 'Bearer valid-test-agent' },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        id: 43,
+        method: 'tools/call',
+        params: { name: 'ae_registry_tools_search', arguments: { query: 'plumbing' } },
+      }),
+    }), { authenticate: authenticateWithScopes(['market_tools:call']), resolvePrincipal: async (projection) => ({
+      ...projection, principalId: 'prn_00000000000040008000000000000044', ownerId: 'acc_00000000000040008000000000000044',
+    }) })
+    expect(response.status).toBe(200)
+    const body = await readMcpBody(response)
+    expect(body.result?.structuredContent).not.toHaveProperty('result.saveNeed')
+    expect(run).toHaveBeenCalledTimes(1)
+  })
+
 
   it('carries a broaden nextAction when a filtered search is exhausted', async () => {
     const run = vi.spyOn(registryToolsSearchAction, 'run').mockResolvedValue(noMatch([

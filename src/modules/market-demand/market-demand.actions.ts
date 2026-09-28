@@ -4,18 +4,20 @@ import { callPublicSourceMutation, callPublicSourceQuery, sourceMutation, source
 import { sourceWriteAdmissionFromRequest, sourceWriteRequestFromAdmission } from '@/lib/server/source-write-admission'
 import { MARKET_TOOLS_CALL_SCOPE } from '@/modules/agent-access/contract'
 import type { AgentAccessPrincipal } from '@/modules/agent-access/agent-access'
-import { defineAction, idempotencyKeySchema } from '@/modules/common/action'
+import { defineAction } from '@/modules/common/action'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
-import { publicToolChoiceSchema } from '@/modules/registry/tool-choice-contracts'
+import { publicToolChoiceSchema, toolCatalogFiltersSchema } from '@/modules/registry/tool-choice-contracts'
 import { registryToolsCompareAction, registryToolsSearchAction } from '@/modules/registry/tools.actions'
 import { decodeOpaqueCursor, encodeOpaqueCursor } from '@/modules/registry/opaque-cursor'
-import { marketRequestRef } from './request-identity'
+import {
+  MARKET_REQUEST_ACTIVE_WINDOW_MS, marketRequestCreateInputSchema, marketRequestRef, type MarketRequestScope,
+} from './request-identity'
+export { MARKET_REQUEST_ACTIVE_WINDOW_MS, marketRequestCreateInputSchema, marketRequestScopeSchema } from './request-identity'
 
 export const MARKET_REQUEST_CREATE_ACTION_ID = 'marketDemand.record' as const
 export const MARKET_REQUEST_LIST_ACTION_ID = 'marketDemand.list' as const
 export const MARKET_REQUEST_STATUS_ACTION_ID = 'marketDemand.status' as const
 export const MARKET_REQUEST_WITHDRAW_ACTION_ID = 'marketDemand.withdraw' as const
-export const MARKET_REQUEST_ACTIVE_WINDOW_MS = 30 * 24 * 60 * 60 * 1000
 
 export const MARKET_REQUEST_ROUTE_CONTRACTS = Object.freeze({
   withdraw: Object.freeze({
@@ -52,10 +54,6 @@ export const MARKET_REQUEST_ROUTE_CONTRACTS = Object.freeze({
   }),
 })
 
-export const marketRequestCreateInputSchema = z.strictObject({
-  query: z.string().trim().min(1).max(200),
-  idempotencyKey: idempotencyKeySchema,
-})
 
 export const marketRequestCreateResultSchema = z.discriminatedUnion('kind', [
   z.strictObject({
@@ -79,6 +77,8 @@ export const marketRequestCreateResultSchema = z.discriminatedUnion('kind', [
 export const marketRequestSummarySchema = z.strictObject({
   requestRef: z.string().min(1).max(300),
   query: z.string().min(1).max(200),
+  source: z.enum(['current', 'coinbase']).optional(),
+  filters: toolCatalogFiltersSchema.optional(),
   createdAt: z.number().int().nonnegative(),
   updatedAt: z.number().int().nonnegative(),
 })
@@ -135,6 +135,30 @@ export type MarketRequestListInput = z.infer<typeof marketRequestListInputSchema
 export type MarketRequestListResult = z.infer<typeof marketRequestListResultSchema>
 export type MarketRequestStatusInput = z.infer<typeof marketRequestStatusInputSchema>
 export type MarketRequestStatusResult = z.infer<typeof marketRequestStatusResultSchema>
+
+export async function recheckMarketDemandNoMatch(
+  request: Request,
+  input: MarketRequestScope,
+): Promise<'no_match' | 'current_match_exists' | 'source_unavailable'> {
+  const current = await registryToolsSearchAction.run({
+    data: registryToolsSearchAction.schema.parse({
+      query: input.query,
+      ...(input.source === undefined ? {} : { source: input.source }),
+      ...(input.filters === undefined ? {} : { filters: input.filters }),
+      limit: 12,
+    }),
+    context: { caller: 'http', request },
+  })
+  if (current.kind === 'match') return 'current_match_exists'
+  if (current.kind !== 'noMatch' || current.assessed.coverage !== 'complete'
+    || current.assessed.scope !== 'complete' || current.partialResults
+    || current.pagination.hasMore
+    || (input.source === 'current' && current.assessed.source !== 'current')
+    || (input.source === 'coinbase' && current.assessed.source !== 'coinbase')) {
+    return 'source_unavailable'
+  }
+  return 'no_match'
+}
 
 type PrincipalRequest<Input> = Readonly<{
   input: Input
@@ -225,6 +249,8 @@ export function createMarketDemandService(request: Request, bodyText: string): M
         credentialId: principal.credentialId,
         query: input.query,
         idempotencyKey: input.idempotencyKey,
+        source: input.source ?? null,
+        filters: input.filters ?? null,
       })
       const requestRef = marketRequestRef({
         principalId: principal.principalId, credentialId: principal.credentialId, idempotencyKey: input.idempotencyKey,
@@ -244,23 +270,16 @@ export function createMarketDemandService(request: Request, bodyText: string): M
         if (!retained.success || retained.data.requestRef !== requestRef) {
           return { kind: 'refused', code: 'source_unavailable' }
         }
-        if (retained.data.query !== input.query.trim()) return { kind: 'refused', code: 'idempotency_conflict' }
+        if (retained.data.query !== input.query.trim()
+          || canonicalDigest({ source: retained.data.source ?? null, filters: retained.data.filters ?? null })
+            !== canonicalDigest({ source: input.source ?? null, filters: input.filters ?? null })) {
+          return { kind: 'refused', code: 'idempotency_conflict' }
+        }
         return { kind: 'replayed', requestRef, query: retained.data.query, createdAt: retained.data.createdAt }
       }
       if (existing.kind !== 'not_found') return { kind: 'refused', code: 'source_unavailable' }
-      const current = await registryToolsSearchAction.run({
-        data: registryToolsSearchAction.schema.parse({ query: input.query, limit: 1 }),
-        context: { caller: 'http', request },
-      })
-      if (current.kind === 'unavailable') return { kind: 'refused', code: 'source_unavailable' }
-      if (current.results.some(row => row.access === 'ae_callable' && row.toolRef !== undefined)) {
-        return { kind: 'refused', code: 'current_match_exists' }
-      }
-      if (current.kind !== 'noMatch' && current.kind !== 'match') return { kind: 'refused', code: 'source_unavailable' }
-      if (current.assessed.coverage !== 'complete' || current.assessed.scope !== 'complete'
-        || current.assessed.source === 'coinbase' || current.partialResults || current.pagination.hasMore) {
-        return { kind: 'refused', code: 'source_unavailable' }
-      }
+      const recheck = await recheckMarketDemandNoMatch(request, input)
+      if (recheck !== 'no_match') return { kind: 'refused', code: recheck }
       const result = await mutate<unknown>(recordMutation, {
         ...input,
         agentPrincipal: principal,
@@ -347,7 +366,12 @@ export function createMarketDemandService(request: Request, bodyText: string): M
       if (requestRecord.data.createdAt > startedAt) return { kind: 'error', code: 'source_unavailable' }
       if (startedAt >= expiresAt) return { kind: 'not_found' }
       const search = await registryToolsSearchAction.run({
-        data: registryToolsSearchAction.schema.parse({ query: requestRecord.data.query, limit: 3 }),
+        data: registryToolsSearchAction.schema.parse({
+          query: requestRecord.data.query,
+          ...(requestRecord.data.source === undefined ? {} : { source: requestRecord.data.source }),
+          ...(requestRecord.data.filters === undefined ? {} : { filters: requestRecord.data.filters }),
+          limit: 12,
+        }),
         context: { caller: 'http', request },
       })
       if (search.kind === 'unavailable') return { kind: 'error', code: 'source_unavailable' }
@@ -394,14 +418,16 @@ export function createMarketDemandService(request: Request, bodyText: string): M
         || currentRequest.data.requestRef !== requestRecord.data.requestRef
         || currentRequest.data.query !== requestRecord.data.query
         || currentRequest.data.createdAt !== requestRecord.data.createdAt
-        || currentRequest.data.updatedAt !== requestRecord.data.updatedAt) {
+        || currentRequest.data.updatedAt !== requestRecord.data.updatedAt
+        || canonicalDigest({ source: currentRequest.data.source ?? null, filters: currentRequest.data.filters ?? null })
+          !== canonicalDigest({ source: requestRecord.data.source ?? null, filters: requestRecord.data.filters ?? null })) {
         return { kind: 'error', code: 'source_unavailable' }
       }
       if (Date.now() >= expiresAt) return { kind: 'not_found' }
       if (tools.length === 0) {
-        if (search.kind !== 'noMatch' && search.kind !== 'match') return { kind: 'error', code: 'source_unavailable' }
-        if (search.assessed.coverage !== 'complete' || search.assessed.scope !== 'complete'
-          || search.assessed.source === 'coinbase' || search.partialResults || search.pagination.hasMore) {
+        if ((search.kind !== 'noMatch' && search.kind !== 'match')
+          || search.assessed.coverage !== 'complete'
+          || search.assessed.scope !== 'complete' || search.partialResults || search.pagination.hasMore) {
           return { kind: 'error', code: 'source_unavailable' }
         }
         return {
@@ -440,6 +466,8 @@ export const marketRequestCreateAction = defineAction<MarketRequestCreateInput, 
   parameters: [
     { name: 'query', type: 'string', description: 'Missing job phrase from a no-result market search.', required: true },
     { name: 'idempotencyKey', type: 'string', description: 'Stable identity for safe retries.', required: true },
+    { name: 'source', type: 'string', description: 'Original selected catalogue, if specified.', required: false },
+    { name: 'filters', type: 'object', description: 'Original search filters, if specified.', required: false },
   ],
   readOnly: false,
   effect: {
@@ -451,7 +479,7 @@ export const marketRequestCreateAction = defineAction<MarketRequestCreateInput, 
   credentialAdmission: { scope: MARKET_TOOLS_CALL_SCOPE, authority: 'descriptor_classified' },
   invocationContract: {
     version: MARKET_REQUEST_ROUTE_CONTRACTS.create.contractVersion,
-    consequenceClass: 'external_effect', materialInputPaths: ['query', 'idempotencyKey'],
+    consequenceClass: 'external_effect', materialInputPaths: ['query', 'source', 'filters', 'idempotencyKey'],
     authorityRequirement: 'principal', retryClass: 'replayable',
     expectedEvidence: ['market_request_identity'], safeContinuations: ['marketDemand.status'],
     invalidationConditions: ['query_changed', 'idempotency_key_changed', 'credential_profile_changed'],

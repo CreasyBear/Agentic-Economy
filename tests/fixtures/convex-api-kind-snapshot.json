@@ -1946,6 +1946,42 @@
   {
     "visibility": "public",
     "module": "marketDemandSignals",
+    "method": "ownerFindActive",
+    "kind": "query"
+  },
+  {
+    "visibility": "public",
+    "module": "marketDemandSignals",
+    "method": "ownerList",
+    "kind": "query"
+  },
+  {
+    "visibility": "public",
+    "module": "marketDemandSignals",
+    "method": "ownerRead",
+    "kind": "query"
+  },
+  {
+    "visibility": "public",
+    "module": "marketDemandSignals",
+    "method": "ownerRecord",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "public",
+    "module": "marketDemandSignals",
+    "method": "ownerReplay",
+    "kind": "query"
+  },
+  {
+    "visibility": "public",
+    "module": "marketDemandSignals",
+    "method": "ownerWithdraw",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "public",
+    "module": "marketDemandSignals",
     "method": "read",
     "kind": "query"
   },
@@ -2061,6 +2097,42 @@
     "visibility": "internal",
     "module": "marketPresence",
     "method": "refresh",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "public",
+    "module": "marketSavedTools",
+    "method": "listAgent",
+    "kind": "query"
+  },
+  {
+    "visibility": "public",
+    "module": "marketSavedTools",
+    "method": "listOwner",
+    "kind": "query"
+  },
+  {
+    "visibility": "public",
+    "module": "marketSavedTools",
+    "method": "removeAgent",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "public",
+    "module": "marketSavedTools",
+    "method": "removeOwner",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "public",
+    "module": "marketSavedTools",
+    "method": "saveAgent",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "public",
+    "module": "marketSavedTools",
+    "method": "saveOwner",
     "kind": "mutation"
   },
   {

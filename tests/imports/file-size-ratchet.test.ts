@@ -9,7 +9,7 @@ import { fixtureTargets, isFixtureMode } from './scan-targets'
 
 // pinned 2026-09-21 from first run; may only decrease
 const FILE_SIZE_CEILINGS = {
-  over300: 207,
+  over300: 206,
   over500: 64,
   over1000: 0,
 } as const

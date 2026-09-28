@@ -1,11 +1,15 @@
+import { randomUUID } from 'node:crypto'
+
 import { toolCatalogSearchInputSchema, toolChoiceSearchOutputSchema, type RegistryNextAction } from '@/modules/registry/tool-choice-contracts'
 import { TOOL_MARKET_SEARCH_PATH } from '@/modules/registry/tool-entry'
 import { SEARCH_QUERY_MAX_LENGTH } from '@/modules/common/search-query'
 
 import type { CliOptions } from '../lib/args'
 import { CliFailure, callJson, heading, line, printJson, requireOk } from '../lib/output'
+import { resolveAgentAccessCredential } from '../lib/config'
+import { requireAgentAccessKey } from './status'
 import { continuationCommand } from '../lib/continuation-command'
-/** Search current public Market Tools without a caller credential. */
+/** Search remains public; a selected exact-origin Agent connection adds a save affordance. */
 export async function runSearchCommand(args: readonly string[], options: CliOptions): Promise<void> {
   const query = args.join(' ').trim()
   if (!searchCommandDescriptor.inputSchema.safeParse({ query }).success) {
@@ -40,8 +44,11 @@ export async function runSearchCommand(args: readonly string[], options: CliOpti
   }
 
   const path = searchCommandDescriptor.path
+  const selectedCredential = resolveAgentAccessCredential(options.baseUrl)
+  const apiKey = selectedCredential === undefined ? undefined : requireAgentAccessKey('search', options)
   const outcome = await callJson(options.baseUrl, path, {
     method: 'POST',
+    ...(apiKey === undefined ? {} : { headers: { Authorization: `Bearer ${apiKey}` } }),
     body: JSON.stringify(parsedInput.data),
   })
   const parsedResult = searchCommandDescriptor.outputSchema.safeParse(requireOk(outcome, path))
@@ -89,8 +96,16 @@ export async function runSearchCommand(args: readonly string[], options: CliOpti
   }
   const nextPage = result.next.find(action => action.action === 'next-page')
   const nextPageCommand = nextPage === undefined ? undefined : commandFor(nextPage)
+  const saveNeedCommand = result.kind === 'noMatch' && result.saveNeed !== undefined
+    ? continuationCommand([
+        'ae', 'request', 'create', result.saveNeed.args.query,
+        ...(result.saveNeed.args.source === undefined ? [] : ['--source', result.saveNeed.args.source]),
+        ...(result.saveNeed.args.filters === undefined ? [] : ['--filters', JSON.stringify(result.saveNeed.args.filters)]),
+        '--idempotency-key', options.idempotencyKey ?? randomUUID(), ...commonFlags,
+      ])
+    : undefined
   if (options.json) {
-    printJson({ ...result, ...(nextPageCommand === undefined ? {} : { nextPageCommand }) })
+    printJson({ ...result, ...(nextPageCommand === undefined ? {} : { nextPageCommand }), ...(saveNeedCommand === undefined ? {} : { saveNeedCommand }) })
     return
   }
   heading(`Market Tools for "${result.query}" (${outcome.durationMs}ms)`)
@@ -116,6 +131,7 @@ export async function runSearchCommand(args: readonly string[], options: CliOpti
   for (const action of result.next) {
     line(`  Next: ${action.action} ${JSON.stringify(action.args)} · ${commandFor(action)}`)
   }
+  if (saveNeedCommand !== undefined) line(`  Save this need: ${saveNeedCommand}`)
 }
 
 function parseSearchLimit(value: string | number): number {
@@ -129,7 +145,7 @@ function parseSearchLimit(value: string | number): number {
   return parsed
 }
 
-function parseSearchFilters(value: string | Record<string, unknown>): unknown {
+export function parseSearchFilters(value: string | Record<string, unknown>): unknown {
   if (typeof value !== 'string') return value
   try {
     return JSON.parse(value) as unknown

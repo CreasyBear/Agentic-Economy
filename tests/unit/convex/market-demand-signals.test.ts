@@ -2,6 +2,7 @@ import { makeFunctionReference } from 'convex/server'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type * as ConvexSourceModule from '@/lib/server/convex-source'
+import { canonicalDigest } from '@/modules/common/canonical-digest'
 const boundary = vi.hoisted(() => ({ query: vi.fn(), mutation: vi.fn() }))
 vi.mock('@/lib/server/convex-source', async (importOriginal) => ({
   ...(await importOriginal<typeof ConvexSourceModule>()),
@@ -84,6 +85,44 @@ describe('private market demand signals', () => {
     else process.env.AE_CONVEX_SERVER_FUNCTION_TOKEN = previousServiceKey
   })
 
+  it('accepts structured catalogue filters and rejects unknown filter shapes at persistence', async () => {
+    const backend = convexTestWithWorkers({ pauseWorkpool: true })
+    const row = {
+      schemaVersion: 'market-demand-owner-signal:v1' as const,
+      requestRef: 'market-request:filters',
+      ownerId: 'account:filters',
+      idempotencyKey: 'filters',
+      createdAt: 1,
+      updatedAt: 1,
+      query: 'find a public weather tool',
+      queryDigest: 'digest:filters',
+    }
+    const filters = {
+      actionClass: 'retrieve' as const,
+      objectClass: 'data' as const,
+      category: 'Weather',
+      provider: 'Forecast provider',
+      access: 'ae_callable' as const,
+      priceBand: '0_01_to_0_03' as const,
+      networkId: 'mainnet',
+      location: 'AU',
+      effects: ['data_release' as const],
+      dataUse: ['public' as const],
+      healthStatus: ['operational' as const],
+      currency: 'USD',
+      maximumPrice: { currency: 'USD', units: '100', exponent: 2 },
+    }
+
+    await expect(backend.run(async (ctx) => ctx.db.insert('marketDemandSignals', {
+      ...row, filters,
+    }))).resolves.toBeDefined()
+    for (const invalid of [false, 42, 'retrieve', ['retrieve'], { unfamiliar: 'retrieve' }, { maximumPrice: { currency: 'USD', units: 100, exponent: 2 } }]) {
+      await expect(backend.run(async (ctx) => ctx.db.insert('marketDemandSignals', {
+        ...row, requestRef: `market-request:invalid:${typeof invalid}`, filters: invalid as never,
+      }))).rejects.toThrow()
+    }
+  })
+
   it('records idempotently, rejects changed replay material, and isolates request ownership', async () => {
     const backend = convexTestWithWorkers({ pauseWorkpool: true })
     const firstFixture = await publishedBusinessOwner(backend, 'market-demand-first')
@@ -94,6 +133,7 @@ describe('private market demand signals', () => {
       query: 'translate a handwritten invoice',
       idempotencyKey: 'missing-job:one',
       agentPrincipal: first,
+      filters: { location: ' AU ', maximumPrice: { currency: 'USD', units: '100', exponent: 2 } },
     }
 
     const recorded = await invoke(backend, recordDemand, {
@@ -107,6 +147,16 @@ describe('private market demand signals', () => {
       requestRef: expect.stringMatching(/^market-request:v1:/u),
     })
     if (typeof recorded.requestRef !== 'string') throw new Error('request_ref_missing')
+    const storedRequestRef = recorded.requestRef
+    const stored = await backend.run(async (ctx) => ctx.db.query('marketDemandSignals')
+      .withIndex('by_requestRef', index => index.eq('requestRef', storedRequestRef)).unique())
+    expect(stored).toMatchObject({
+      filters: { location: 'AU', maximumPrice: { currency: 'USD', units: '100', exponent: 2 } },
+      queryDigest: canonicalDigest({
+        query: base.query, source: null,
+        filters: { location: 'AU', maximumPrice: base.filters.maximumPrice },
+      }),
+    })
 
     await expect(invoke(backend, recordDemand, {
       ...base,

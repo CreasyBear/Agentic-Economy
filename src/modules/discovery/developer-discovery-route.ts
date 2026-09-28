@@ -1,37 +1,23 @@
 import { createServerFn } from '@tanstack/react-start'
 import { getRequest } from '@tanstack/react-start/server'
+import {
+  buildDeveloperDiscoveryRouteSnapshot,
+  loadDeveloperDiscoveryRoute,
+} from './internal/developer-discovery-route-snapshot'
 
-import { resolveCanonicalBaseUrl } from '@/lib/server/canonical-url'
 import type {
   DeveloperDiscoveryArtifactMetadata,
   DeveloperDiscoveryRouteReadback,
 } from '@/modules/discovery/developer-discovery'
 
+export { buildDeveloperDiscoveryRouteSnapshot, loadDeveloperDiscoveryRoute }
+
 export type DeveloperDiscoveryRoutePageReadback = Omit<DeveloperDiscoveryRouteReadback, 'artifacts'> & {
   artifacts: readonly (DeveloperDiscoveryArtifactMetadata & Readonly<{ checkedAt: number }>)[]
 }
 
-export async function loadDeveloperDiscoveryRoute(
-  request: Request,
-  now = 0,
-): Promise<DeveloperDiscoveryRoutePageReadback> {
-  const [{ readDeveloperDiscoveryRoute }, { buildDeveloperDiscoveryRouteSnapshot }] = await Promise.all([
-    import('@/modules/discovery/developer-discovery'),
-    import('@/routes/api.discovery.schema'),
-  ])
-  const canonicalBaseUrl = resolveCanonicalBaseUrl(request).baseUrl
-  const routeSnapshot = await buildDeveloperDiscoveryRouteSnapshot(request, { canonicalBaseUrl, now })
-  const readback = readDeveloperDiscoveryRoute(undefined, { canonicalBaseUrl, now, routeSnapshot })
-
-  return {
-    ...readback,
-    artifacts: readback.artifacts.map((artifact) => ({ ...artifact, checkedAt: readback.generatedAt })),
-    copy: {
-      ...readback.copy,
-      title: 'Discovery status',
-    },
-  }
-}
-
 export const loadDeveloperDiscoveryRouteServer = createServerFn({ method: 'GET' })
-  .handler(() => loadDeveloperDiscoveryRoute(getRequest(), Date.now()))
+  .handler(async (): Promise<DeveloperDiscoveryRoutePageReadback> => {
+    // TanStack Start strips this server handler and its route dependencies from the client stub.
+    return loadDeveloperDiscoveryRoute(getRequest(), Date.now())
+  })

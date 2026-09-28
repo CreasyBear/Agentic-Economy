@@ -107,6 +107,9 @@ import { Route as ApiV1SupplyPublishRouteImport } from './routes/api.v1.supply.p
 import { Route as ApiV1SupplyEarningsRouteImport } from './routes/api.v1.supply.earnings'
 import { Route as ApiV1SupplyCallsRouteImport } from './routes/api.v1.supply.calls'
 import { Route as ApiV1StatusRefRouteImport } from './routes/api.v1.status.$ref'
+import { Route as ApiV1SavedToolsSaveRouteImport } from './routes/api.v1.saved-tools.save'
+import { Route as ApiV1SavedToolsRemoveRouteImport } from './routes/api.v1.saved-tools.remove'
+import { Route as ApiV1SavedToolsListRouteImport } from './routes/api.v1.saved-tools.list'
 import { Route as ApiV1RegistryDetailRouteImport } from './routes/api.v1.registry.detail'
 import { Route as ApiV1MarketToolsSearchRouteImport } from './routes/api.v1.market-tools.search'
 import { Route as ApiV1MarketToolsListRouteImport } from './routes/api.v1.market-tools.list'
@@ -662,6 +665,21 @@ const ApiV1StatusRefRoute = ApiV1StatusRefRouteImport.update({
   path: '/api/v1/status/$ref',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiV1SavedToolsSaveRoute = ApiV1SavedToolsSaveRouteImport.update({
+  id: '/api/v1/saved-tools/save',
+  path: '/api/v1/saved-tools/save',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiV1SavedToolsRemoveRoute = ApiV1SavedToolsRemoveRouteImport.update({
+  id: '/api/v1/saved-tools/remove',
+  path: '/api/v1/saved-tools/remove',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiV1SavedToolsListRoute = ApiV1SavedToolsListRouteImport.update({
+  id: '/api/v1/saved-tools/list',
+  path: '/api/v1/saved-tools/list',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiV1RegistryDetailRoute = ApiV1RegistryDetailRouteImport.update({
   id: '/detail',
   path: '/detail',
@@ -1095,6 +1113,9 @@ export interface FileRoutesByFullPath {
   '/api/v1/market-tools/list': typeof ApiV1MarketToolsListRoute
   '/api/v1/market-tools/search': typeof ApiV1MarketToolsSearchRoute
   '/api/v1/registry/detail': typeof ApiV1RegistryDetailRoute
+  '/api/v1/saved-tools/list': typeof ApiV1SavedToolsListRoute
+  '/api/v1/saved-tools/remove': typeof ApiV1SavedToolsRemoveRoute
+  '/api/v1/saved-tools/save': typeof ApiV1SavedToolsSaveRoute
   '/api/v1/status/$ref': typeof ApiV1StatusRefRoute
   '/api/v1/supply/calls': typeof ApiV1SupplyCallsRoute
   '/api/v1/supply/earnings': typeof ApiV1SupplyEarningsRoute
@@ -1248,6 +1269,9 @@ export interface FileRoutesByTo {
   '/api/v1/market-tools/list': typeof ApiV1MarketToolsListRoute
   '/api/v1/market-tools/search': typeof ApiV1MarketToolsSearchRoute
   '/api/v1/registry/detail': typeof ApiV1RegistryDetailRoute
+  '/api/v1/saved-tools/list': typeof ApiV1SavedToolsListRoute
+  '/api/v1/saved-tools/remove': typeof ApiV1SavedToolsRemoveRoute
+  '/api/v1/saved-tools/save': typeof ApiV1SavedToolsSaveRoute
   '/api/v1/status/$ref': typeof ApiV1StatusRefRoute
   '/api/v1/supply/calls': typeof ApiV1SupplyCallsRoute
   '/api/v1/supply/earnings': typeof ApiV1SupplyEarningsRoute
@@ -1403,6 +1427,9 @@ export interface FileRoutesById {
   '/api/v1/market-tools/list': typeof ApiV1MarketToolsListRoute
   '/api/v1/market-tools/search': typeof ApiV1MarketToolsSearchRoute
   '/api/v1/registry/detail': typeof ApiV1RegistryDetailRoute
+  '/api/v1/saved-tools/list': typeof ApiV1SavedToolsListRoute
+  '/api/v1/saved-tools/remove': typeof ApiV1SavedToolsRemoveRoute
+  '/api/v1/saved-tools/save': typeof ApiV1SavedToolsSaveRoute
   '/api/v1/status/$ref': typeof ApiV1StatusRefRoute
   '/api/v1/supply/calls': typeof ApiV1SupplyCallsRoute
   '/api/v1/supply/earnings': typeof ApiV1SupplyEarningsRoute
@@ -1558,6 +1585,9 @@ export interface FileRouteTypes {
     | '/api/v1/market-tools/list'
     | '/api/v1/market-tools/search'
     | '/api/v1/registry/detail'
+    | '/api/v1/saved-tools/list'
+    | '/api/v1/saved-tools/remove'
+    | '/api/v1/saved-tools/save'
     | '/api/v1/status/$ref'
     | '/api/v1/supply/calls'
     | '/api/v1/supply/earnings'
@@ -1711,6 +1741,9 @@ export interface FileRouteTypes {
     | '/api/v1/market-tools/list'
     | '/api/v1/market-tools/search'
     | '/api/v1/registry/detail'
+    | '/api/v1/saved-tools/list'
+    | '/api/v1/saved-tools/remove'
+    | '/api/v1/saved-tools/save'
     | '/api/v1/status/$ref'
     | '/api/v1/supply/calls'
     | '/api/v1/supply/earnings'
@@ -1865,6 +1898,9 @@ export interface FileRouteTypes {
     | '/api/v1/market-tools/list'
     | '/api/v1/market-tools/search'
     | '/api/v1/registry/detail'
+    | '/api/v1/saved-tools/list'
+    | '/api/v1/saved-tools/remove'
+    | '/api/v1/saved-tools/save'
     | '/api/v1/status/$ref'
     | '/api/v1/supply/calls'
     | '/api/v1/supply/earnings'
@@ -1970,6 +2006,9 @@ export interface RootRouteChildren {
   ApiV1MarketToolsDescribeRoute: typeof ApiV1MarketToolsDescribeRoute
   ApiV1MarketToolsListRoute: typeof ApiV1MarketToolsListRoute
   ApiV1MarketToolsSearchRoute: typeof ApiV1MarketToolsSearchRoute
+  ApiV1SavedToolsListRoute: typeof ApiV1SavedToolsListRoute
+  ApiV1SavedToolsRemoveRoute: typeof ApiV1SavedToolsRemoveRoute
+  ApiV1SavedToolsSaveRoute: typeof ApiV1SavedToolsSaveRoute
   ApiV1StatusRefRoute: typeof ApiV1StatusRefRoute
   ApiV1SupplyCallsRoute: typeof ApiV1SupplyCallsRoute
   ApiV1SupplyEarningsRoute: typeof ApiV1SupplyEarningsRoute
@@ -2677,6 +2716,27 @@ declare module '@tanstack/react-router' {
       path: '/api/v1/status/$ref'
       fullPath: '/api/v1/status/$ref'
       preLoaderRoute: typeof ApiV1StatusRefRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/v1/saved-tools/save': {
+      id: '/api/v1/saved-tools/save'
+      path: '/api/v1/saved-tools/save'
+      fullPath: '/api/v1/saved-tools/save'
+      preLoaderRoute: typeof ApiV1SavedToolsSaveRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/v1/saved-tools/remove': {
+      id: '/api/v1/saved-tools/remove'
+      path: '/api/v1/saved-tools/remove'
+      fullPath: '/api/v1/saved-tools/remove'
+      preLoaderRoute: typeof ApiV1SavedToolsRemoveRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/v1/saved-tools/list': {
+      id: '/api/v1/saved-tools/list'
+      path: '/api/v1/saved-tools/list'
+      fullPath: '/api/v1/saved-tools/list'
+      preLoaderRoute: typeof ApiV1SavedToolsListRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/v1/registry/detail': {
@@ -3427,6 +3487,9 @@ const rootRouteChildren: RootRouteChildren = {
   ApiV1MarketToolsDescribeRoute: ApiV1MarketToolsDescribeRoute,
   ApiV1MarketToolsListRoute: ApiV1MarketToolsListRoute,
   ApiV1MarketToolsSearchRoute: ApiV1MarketToolsSearchRoute,
+  ApiV1SavedToolsListRoute: ApiV1SavedToolsListRoute,
+  ApiV1SavedToolsRemoveRoute: ApiV1SavedToolsRemoveRoute,
+  ApiV1SavedToolsSaveRoute: ApiV1SavedToolsSaveRoute,
   ApiV1StatusRefRoute: ApiV1StatusRefRoute,
   ApiV1SupplyCallsRoute: ApiV1SupplyCallsRoute,
   ApiV1SupplyEarningsRoute: ApiV1SupplyEarningsRoute,

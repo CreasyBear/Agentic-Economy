@@ -134,6 +134,7 @@ const durableTables = [
   'marketToolCategories',
   'marketToolRatings',
   'marketDemandSignals',
+  'marketSavedTools',
   'marketDirectoryFacets',
   'marketDirectorySearchEntries',
   'marketDirectoryCategoryStats',
@@ -425,6 +426,7 @@ const requiredIndexes = {
     'by_credentialId_and_idempotencyKey',
     'by_principalId_and_credentialId_and_createdAt',
   ],
+  marketSavedTools: ['by_owner_kind_ref', 'by_owner_created'],
 } satisfies Record<string, readonly string[]>
 
 describe('Convex schema', () => {
@@ -435,7 +437,7 @@ describe('Convex schema', () => {
   const exported = SchemaExport.parse(JSON.parse(String(exportSchema.call(schema))))
 
   it('contains exactly the source-owned durable tables', () => {
-    expect(durableTables).toHaveLength(108)
+    expect(durableTables).toHaveLength(109)
     expect(exported.tables.map((table) => table.tableName).sort()).toEqual([...durableTables].sort())
   })
 

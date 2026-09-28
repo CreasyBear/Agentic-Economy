@@ -31,6 +31,7 @@ const expectedCommands = [
   "recover",
   "request",
   "revoke",
+  "saved",
   "search",
   "status",
   "supply",

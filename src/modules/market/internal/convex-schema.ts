@@ -2,6 +2,14 @@ import { defineTable } from 'convex/server'
 import { v } from 'convex/values'
 
 export const marketTables = {
+  marketSavedTools: defineTable({
+    ownerId: v.string(),
+    kind: v.union(v.literal('ae_callable'), v.literal('external_listing')),
+    identityRef: v.string(),
+    createdAt: v.number(),
+  })
+    .index('by_owner_kind_ref', ['ownerId', 'kind', 'identityRef'])
+    .index('by_owner_created', ['ownerId', 'createdAt']),
   marketExternalRegistryState: defineTable({
     key: v.literal('coinbase'),
     activeGeneration: v.optional(v.string()),

@@ -1,6 +1,7 @@
 'use client'
 
 import { useRef, useState } from 'react'
+import { useAuth } from '@clerk/tanstack-react-start'
 
 import { Command, CommandEmpty, CommandList } from '@/components/ui/command'
 import { Button } from '@/components/ui/button'
@@ -24,6 +25,7 @@ import {
 } from './tools-search-page.contracts'
 import { useCommandPaletteSelection } from './useCommandPaletteSelection'
 import { useMarketToolSearch } from './useMarketToolSearch'
+import { useSavedMarketNeed } from './useSavedMarketNeed'
 
 type ToolsSearchPageProps = Readonly<{
   isActive?: boolean
@@ -51,9 +53,14 @@ export function ToolsSearchPage({
   const trimmedQuery = query.trim()
   const [searchAttempt, setSearchAttempt] = useState(0)
   const [continuation, setContinuation] = useState<ToolSearchContinuation>()
-  const { status, navigationItems } = useMarketToolSearch({
+  const { status, navigationItems, saveNeed } = useMarketToolSearch({
     query, searchAttempt, searchTools, ...(continuation === undefined ? {} : { continuation }),
   })
+  const statusQuery = status.kind === 'idle' ? undefined : status.query
+  const { isSignedIn } = useAuth()
+  const {
+    savedNeed, checkedNeedQuery, saveBusy, saveError, saveCurrentNeed, withdrawCurrentNeed, clearSaveIntent,
+  } = useSavedMarketNeed({ isSignedIn, saveNeed, statusKind: status.kind, statusQuery })
   const recentToolRefs = useRecentToolRefs()
   const inputRef = useRef<HTMLInputElement>(null)
   const matchingNavItems = filterCommandPaletteEntries(navigationItems, trimmedQuery)
@@ -90,6 +97,7 @@ export function ToolsSearchPage({
     status,
     onSelectTool: selectListing,
     onQueryInputChange: (value) => {
+      if (value.trim() !== trimmedQuery) clearSaveIntent()
       setContinuation(undefined)
       onQueryChange(value)
     },
@@ -163,6 +171,37 @@ export function ToolsSearchPage({
               onContinue={(nextPage) => setContinuation({ ...nextPage, forQuery: trimmedQuery })}
             />
           </CommandEmpty>
+        ) : null}
+        {saveNeed !== undefined && status.kind === 'empty' && status.query === saveNeed.query ? (
+          <div className="grid gap-intra px-gutter pb-section">
+            {!showCommandEmpty ? <p className="text-sm text-muted-foreground">{status.message}</p> : null}
+            {isSignedIn ? (
+              savedNeed === undefined ? (
+                <Button type="button" size="sm" className="min-h-touch w-fit"
+                  disabled={saveBusy || checkedNeedQuery !== saveNeed.query}
+                  onClick={() => { void saveCurrentNeed() }}>
+                  {saveBusy ? 'Saving…' : checkedNeedQuery === saveNeed.query ? 'Save this need' : 'Checking saved needs…'}
+                </Button>
+              ) : (
+                <div className="flex flex-wrap items-center gap-intra text-sm">
+                  <span>Saved need · {savedNeed.requestRef}{savedNeed.kind === 'matched' ? ` · ${savedNeed.matchedCount} matching Tools` : ''}</span>
+                  <Button type="button" variant="outline" size="sm" className="min-h-touch"
+                    disabled={saveBusy} onClick={() => { void withdrawCurrentNeed() }}>
+                    {saveBusy ? 'Withdrawing…' : 'Withdraw'}
+                  </Button>
+                </div>
+              )
+            ) : isSignedIn === false ? (
+              <a href="/sign-in" className="inline-flex min-h-touch w-fit items-center rounded-md px-3 text-sm font-medium text-foreground underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-ring">
+                Sign in to save this need
+              </a>
+            ) : null}
+            {saveError !== undefined ? <p role="alert" className="text-sm text-destructive">{saveError}</p> : null}
+            {saveError !== undefined && checkedNeedQuery !== saveNeed.query && !showCommandEmpty ? (
+              <Button type="button" variant="outline" size="sm" className="min-h-touch w-fit"
+                onClick={() => setSearchAttempt((attempt) => attempt + 1)}>Try again</Button>
+            ) : null}
+          </div>
         ) : null}
       </CommandList>
     </Command>

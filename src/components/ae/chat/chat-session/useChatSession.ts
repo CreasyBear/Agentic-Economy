@@ -1,3 +1,4 @@
+import { useAuth } from '@clerk/tanstack-react-start'
 import { useUIMessages } from '@convex-dev/agent/react'
 import { DefaultChatTransport, readUIMessageStream, type UIMessage } from 'ai'
 import { useServerFn } from '@tanstack/react-start'
@@ -6,6 +7,13 @@ import { createElement, useEffect, useEffectEvent, useMemo, useRef, useState, ty
 
 import { api } from '../../../../../convex/_generated/api'
 import { enableOwnerChatSpendingServer } from '@/modules/agent-access/agent-access.functions'
+import {
+  findOwnerActiveMarketDemand,
+  getOwnerMarketDemandStatus,
+  recordOwnerMarketDemand,
+  withdrawOwnerMarketDemand,
+} from '@/modules/market-demand/market-demand.functions'
+import type { ChatNeedActions } from '@/modules/chat/tool-card'
 
 import { useStickyRows } from '@/components/ui/data-state'
 import { captureClientExceptionOnClient } from '@/lib/observability/capture-client-exception'
@@ -30,6 +38,21 @@ import {
   type ChatStatus,
   type TranscriptMessage,
 } from '../presentation'
+
+export function useChatNeedActions(): ChatNeedActions {
+  const { isSignedIn } = useAuth()
+  const find = useServerFn(findOwnerActiveMarketDemand)
+  const record = useServerFn(recordOwnerMarketDemand)
+  const status = useServerFn(getOwnerMarketDemandStatus)
+  const withdraw = useServerFn(withdrawOwnerMarketDemand)
+  return {
+    authenticated: isSignedIn === true,
+    onFind: async (input) => await find({ data: input }),
+    onSave: async (input) => await record({ data: input }),
+    onStatus: async (requestRef) => await status({ data: { requestRef } }),
+    onWithdraw: async (requestRef) => await withdraw({ data: { requestRef } }),
+  }
+}
 
 const MAX_PROMPT_CHARACTERS = 2_000
 const MAX_ANONYMOUS_MESSAGES = 12

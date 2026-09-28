@@ -96,6 +96,7 @@ import {
   marketRequestStatusAction,
   marketRequestWithdrawAction,
 } from '@/modules/market-demand/market-demand.actions'
+import { savedToolsListAction, savedToolsSaveAction, savedToolsRemoveAction } from '@/modules/market/saved-tools.contracts'
 import {
   fundingHandoffConfigAction,
   fundingHandoffCreateAction,
@@ -127,6 +128,9 @@ const registeredActions: readonly AnyAction[] = [
   marketRequestListAction,
   marketRequestStatusAction,
   marketRequestWithdrawAction,
+  savedToolsListAction,
+  savedToolsSaveAction,
+  savedToolsRemoveAction,
   toolQuoteAction,
   toolProcureAction,
   callAction,

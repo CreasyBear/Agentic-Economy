@@ -36,6 +36,8 @@ import { runWithRequestCorrelation, withRequestCorrelationHeader } from '@/lib/s
 import { recordGatewayTelemetry, type GatewayTelemetryEvent } from '@/lib/server/gateway-telemetry'
 import { isRecord } from '@/modules/common/is-record'
 import { describeActionMcpMetadata, isToolMarketReadAction, listMcpActions, mcpToolName, mcpToolsetAdmitted, projectMcpActionNext, projectMcpJourneyProblem, type AnyAction } from '@/modules/actions'
+import { MARKET_TOOLS_CALL_SCOPE } from '@/modules/agent-access/contract'
+import { toolCatalogSearchInputSchema, toolChoiceSearchOutputSchema, withAuthorizedSaveNeed } from '@/modules/registry/tool-choice-contracts'
 import {
   agentAuthorityScopeForMode,
   type AgentAccessAuthorityMode,
@@ -45,7 +47,9 @@ import type { CallService } from '@/modules/capability-execution/call-authority'
 import { createCallService } from '@/lib/server/call-api'
 import { createSupplyManagementService, type SupplyManagementService } from '@/modules/capability-supply/supply-actions'
 import { createAccountManagementService, type AccountManagementService } from '@/modules/agent-access/account.actions'
-import { createMarketDemandService, type MarketDemandService } from '@/modules/market-demand/market-demand.actions'
+import { createMarketDemandService, marketRequestCreateAction, type MarketDemandService } from '@/modules/market-demand/market-demand.actions'
+import type { SavedToolsService } from '@/modules/market/saved-tools.contracts'
+import { createSavedToolsService } from '@/lib/server/saved-tools-api'
 import { createFundingHandoffService } from '@/lib/server/funding-handoff-api'
 import type { FundingHandoffService } from '@/modules/money/funding-handoff.actions'
 import type { ToolCatalogSearcher } from '@/modules/capability-execution/procure-engine'
@@ -69,6 +73,7 @@ export type McpAccessTier = Readonly<{
   supplyManagementService?: SupplyManagementService
   accountManagementService?: AccountManagementService
   marketDemandService?: MarketDemandService
+  savedToolsService?: SavedToolsService
   fundingHandoffService?: FundingHandoffService
   catalogSearcher?: ToolCatalogSearcher
   rolloutEnvironment?: StringEnvironment
@@ -300,6 +305,9 @@ function mcpSuccessSummary(action: AnyAction, result: unknown, origin: string): 
       const text = mcpSearchActionLine(next, origin)
       if (text !== undefined) lines.push(text)
     }
+  }
+  if (isRecord(result.saveNeed)) {
+    lines.push(`  Save this need: ${mcpToolName(marketRequestCreateAction)}(${JSON.stringify(result.saveNeed.args)}); generate and reuse one idempotencyKey for this Save intent.`)
   }
   return lines.join('\n')
 }
@@ -565,6 +573,7 @@ export function createAeMcpServer(
               ...(access.supplyManagementService === undefined ? {} : { supplyManagementService: access.supplyManagementService }),
               ...(access.accountManagementService === undefined ? {} : { accountManagementService: access.accountManagementService }),
               ...(access.marketDemandService === undefined ? {} : { marketDemandService: access.marketDemandService }),
+              ...(access.savedToolsService === undefined ? {} : { savedToolsService: access.savedToolsService }),
               ...(access.fundingHandoffService === undefined ? {} : { fundingHandoffService: access.fundingHandoffService }),
               ...(access.callService === undefined ? {} : { callService: access.callService }),
               ...(access.catalogSearcher === undefined ? {} : { catalogSearcher: access.catalogSearcher }),
@@ -580,12 +589,18 @@ export function createAeMcpServer(
               ...(access.correlationId === undefined ? {} : { extras: { correlationId: access.correlationId } }),
             }), origin)
           }
+          const searchInput = action.id === 'registry.tools.search' ? toolCatalogSearchInputSchema.safeParse(data) : undefined
+          const searchResult = action.id === 'registry.tools.search' ? toolChoiceSearchOutputSchema.safeParse(outputValidation.data) : undefined
+          const output = searchInput?.success && searchResult?.success
+            ? withAuthorizedSaveNeed(searchResult.data, searchInput.data,
+                selectedAccess.authenticated && !selectedAccess.readOnly && access.principal?.scopes.includes(MARKET_TOOLS_CALL_SCOPE) === true)
+            : outputValidation.data
           recordMcpGatewayTelemetry(action.id, data, result, access, startedAt)
-          const refusal = mcpToolRefusal(action, outputValidation.data)
-          if (refusal !== undefined) return mcpToolRefusalResult(action, outputValidation.data, refusal, origin)
+          const refusal = mcpToolRefusal(action, output)
+          if (refusal !== undefined) return mcpToolRefusalResult(action, output, refusal, origin)
           return {
-            content: [{ type: 'text' as const, text: mcpSuccessSummary(action, outputValidation.data, origin) }],
-            structuredContent: { result: outputValidation.data, next: action.id === 'tool.procure' && isRecord(outputValidation.data) && outputValidation.data.status === 'needs_input' ? [outputValidation.data.next] : projectMcpActionNext(action.id, outputValidation.data, origin) },
+            content: [{ type: 'text' as const, text: mcpSuccessSummary(action, output, origin) }],
+            structuredContent: { result: output, next: action.id === 'tool.procure' && isRecord(outputValidation.data) && outputValidation.data.status === 'needs_input' ? [outputValidation.data.next] : projectMcpActionNext(action.id, output, origin) },
           }
         } catch (error) {
           recordMcpGatewayTelemetry(action.id, data, undefined, access, startedAt)
@@ -609,6 +624,7 @@ type McpRequestOptions = Readonly<{
   accountManagementService?: AccountManagementService
   marketDemandService?: MarketDemandService
   fundingHandoffService?: FundingHandoffService
+  savedToolsService?: SavedToolsService
   timing?: ActionTimingSink
   callService?: CallService
   catalogSearcher?: ToolCatalogSearcher
@@ -629,9 +645,7 @@ type McpRequestOptions = Readonly<{
  * `public-read` capacity shared with authenticated agents.
  */
 function isAnonymousMcpRequest(request: Request): boolean {
-  const hasApiKey = (request.headers.get('x-api-key')?.trim().length ?? 0) > 0
-  const hasBearer = /^Bearer\s+\S+/iu.test(request.headers.get('authorization')?.trim() ?? '')
-  return !hasApiKey && !hasBearer
+  return !request.headers.has('x-api-key') && !request.headers.has('authorization')
 }
 
 export async function handleMcpRouteRequest(
@@ -734,6 +748,8 @@ export async function handleMcpRequest(request: Request, options: McpRequestOpti
           ?? createAccountManagementService(boundedRequest, bounded.bodyText),
         marketDemandService: options.marketDemandService
           ?? createMarketDemandService(boundedRequest, bounded.bodyText),
+        savedToolsService: options.savedToolsService
+          ?? createSavedToolsService(boundedRequest, bounded.bodyText),
         fundingHandoffService: options.fundingHandoffService
           ?? createFundingHandoffService(boundedRequest, bounded.bodyText),
         ...(options.rolloutEnvironment === undefined ? {} : { rolloutEnvironment: options.rolloutEnvironment }),
@@ -792,7 +808,8 @@ async function actionRequiringAuthenticationForRequest(
     const params = isRecord(body.params) ? body.params : undefined
     if (typeof params?.name === 'string') {
       const action = actions.find((candidate) => mcpToolName(candidate) === params.name)
-      if (action !== undefined && (action.credentialAdmission !== undefined || !action.readOnly)) {
+      if (action !== undefined && (action.credentialAdmission !== undefined || !action.readOnly
+        || (action.id === 'registry.tools.search' && !isAnonymousMcpRequest(request)))) {
         return { action, generic: false }
       }
     }

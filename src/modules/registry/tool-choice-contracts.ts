@@ -176,14 +176,48 @@ const searchMetaSchema = {
   pagination: toolCatalogPaginationSchema,
   next: z.array(registryNextActionSchema),
 }
+export const saveNeedDescriptorSchema = z.strictObject({
+  action: z.literal('marketDemand.record'),
+  args: z.strictObject({
+    query: z.string().trim().min(1).max(SEARCH_QUERY_MAX_LENGTH),
+    source: toolCatalogSearchInputSchema.shape.source,
+    filters: toolCatalogFiltersSchema.optional(),
+  }),
+  authority: z.literal('owner_or_connected_agent'),
+})
+
 export const toolChoiceSearchOutputSchema = z.discriminatedUnion('kind', [
   z.strictObject({ ...searchMetaSchema, kind: z.literal('match'), results: z.array(searchResultSchema).min(1).max(12) }),
   z.strictObject({ ...searchMetaSchema, kind: z.literal('scoped'), results: z.array(searchResultSchema).max(12), reason: z.string() }),
-  z.strictObject({ ...searchMetaSchema, kind: z.literal('noMatch'), results: z.tuple([]), reason: z.string() }),
+  z.strictObject({ ...searchMetaSchema, kind: z.literal('noMatch'), results: z.tuple([]), reason: z.string(), saveNeed: saveNeedDescriptorSchema.optional() }),
   z.strictObject({ ...searchMetaSchema, kind: z.literal('unavailable'), results: z.tuple([]), reason: z.enum(['source_unavailable', 'capacity_exceeded']) }),
 ])
 export type SearchEnvelope = z.output<typeof toolChoiceSearchOutputSchema>
 export type ToolChoiceSearchOutput = SearchEnvelope
+/** Search is always read-only; only an admitted caller sees a separate write affordance. */
+export function withAuthorizedSaveNeed(
+  result: SearchEnvelope,
+  input: z.output<typeof toolCatalogSearchInputSchema>,
+  authorized: boolean,
+): SearchEnvelope {
+  if (result.kind !== 'noMatch') return result
+  const { saveNeed: _saveNeed, ...publicResult } = result
+  if (!authorized || result.assessed.scope !== 'complete'
+    || result.assessed.coverage !== 'complete' || result.partialResults || result.pagination.hasMore) return publicResult
+  return {
+    ...publicResult,
+    saveNeed: {
+      action: 'marketDemand.record',
+      args: {
+        query: result.query,
+        ...(input.source === undefined ? {} : { source: input.source }),
+        ...(input.filters === undefined ? {} : { filters: input.filters }),
+      },
+      authority: 'owner_or_connected_agent',
+    },
+  }
+}
+
 
 const toolDescriptionSchema = z.strictObject({
   toolRef: z.string(),

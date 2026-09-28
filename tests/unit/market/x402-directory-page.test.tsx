@@ -1,15 +1,29 @@
 /** @vitest-environment jsdom */
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { RouterContextProvider, createMemoryHistory, createRootRoute, createRoute, createRouter, useRouterState } from '@tanstack/react-router'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import '../../setup/jsdom-platform'
 import { AeX402Directory } from '@/components/ae/market/AeX402Directory'
-import { DIRECTORY_SAVED_TOOLS_STORAGE_KEY } from '@/modules/market/saved-tools.contracts'
 import type { ComponentProps } from 'react'
 import type { X402DirectoryEntry } from '@/modules/market/x402-directory'
 import type { SearchResult, ToolChoiceSearchOutput } from '@/modules/registry/tool-choice-contracts'
 import { PublicToolRegistrySchemaVersion, type PublicToolRef } from '@/modules/capability-supply/public'
 import { marketLoaderDeps, validateMarketSearch } from '@/modules/market/market-route-data'
+import type * as DemandFunctions from '@/modules/market-demand/market-demand.functions'
+const owner = vi.hoisted(() => ({ userId: 'alice' as string | null }))
+const listSavedToolsForOwner = vi.hoisted(() => vi.fn())
+const saveToolForOwner = vi.hoisted(() => vi.fn())
+const recordOwnerMarketDemand = vi.hoisted(() => vi.fn())
+vi.mock('@/modules/market-demand/market-demand.functions', async importOriginal => ({
+  ...(await importOriginal<typeof DemandFunctions>()),
+  recordOwnerMarketDemand,
+}))
+vi.mock('@clerk/tanstack-react-start', () => ({ useAuth: () => ({ isLoaded: true, isSignedIn: owner.userId !== null, userId: owner.userId }) }))
+vi.mock('@/modules/market/market.functions', () => ({
+  listSavedToolsForOwner,
+  saveToolForOwner,
+  removeToolForOwner: vi.fn(),
+}))
 
 const readX402DirectoryCatalogueServer = vi.fn()
 vi.mock('@/modules/market/x402-directory-index.functions', () => ({
@@ -64,7 +78,8 @@ function toolOpener(title: string) {
   return screen.getByRole('link', { name: title })
 }
 function toolHref(link: HTMLElement) { return new URL(link.getAttribute('href')!, 'https://aecon.ai') }
-afterEach(() => { cleanup(); localStorage.clear(); readX402DirectoryCatalogueServer.mockReset(); searchMarketToolsServer.mockReset(); captureRouteException.mockReset() })
+beforeEach(() => { listSavedToolsForOwner.mockResolvedValue({ kind: 'available', items: [] }) })
+afterEach(() => { cleanup(); owner.userId = 'alice'; listSavedToolsForOwner.mockReset(); saveToolForOwner.mockReset(); recordOwnerMarketDemand.mockReset(); readX402DirectoryCatalogueServer.mockReset(); searchMarketToolsServer.mockReset(); captureRouteException.mockReset() })
 describe('native x402 catalogue', () => {
   it('shows the complete upstream page and pagination, linking every Tool to its canonical detail page', () => {
     show()
@@ -162,9 +177,8 @@ it('groups the provider view by exact hostname and opens that provider filter', 
   fireEvent.click(screen.getByRole('button', { name: 'View Tools from example.com' }))
   await waitFor(() => expect(router.state.location.search).toMatchObject({ provider: 'example.com', network: 'eip155:8453', maxUsdPrice: 0.01 }))
 })
-it('inspects a saved Tool through the same one canonical Tool detail surface', async () => {
-  const savedSearch = { query: 'original search', network: 'eip155:8453', provider: 'example.com', maxUsdPrice: 0.02 }
-  localStorage.setItem(DIRECTORY_SAVED_TOOLS_STORAGE_KEY, JSON.stringify({ version: 1, items: [{ entry: entries[0], search: savedSearch }] }))
+it('opens an account-saved Bazaar Tool through the current canonical Tool detail surface', async () => {
+  listSavedToolsForOwner.mockResolvedValue({ kind: 'available', items: [{ identity: { kind: 'external_listing', resource: entries[0]!.resource }, createdAt: 1, detail: { kind: 'found', entry: entries[0]! } }] })
   show({ view: 'saved', query: 'different search' }, [])
   const link = await screen.findByRole('link', { name: 'Tool 0' })
   expect(toolHref(link).pathname).toBe(`/tools/${entries[0]!.provider}/${entries[0]!.slug}`)
@@ -627,4 +641,81 @@ describe('canonical Market search', () => {
     expect(screen.getByText(/Search query and candidate Tool text went to TypeSafe \(custom-gateway.example\)/)).toBeTruthy()
     expect(screen.getByText('External listing · not AE-callable')).toBeTruthy()
   })
+  it('saves exact admitted and Bazaar search identities without retaining listed prices', async () => {
+    searchMarketToolsServer.mockResolvedValueOnce({ ...searchMeta, kind: 'match', results: searchRows } satisfies ToolChoiceSearchOutput)
+    saveToolForOwner.mockImplementation(async ({ data }: { data: { kind: string; toolRef?: string; id?: string } }) => ({
+      kind: 'saved', identity: data.toolRef ? data : { kind: 'external_listing', resource: 'https://example.com/weather' }, createdAt: 1,
+    }))
+    show({ view: 'tools', query: 'weather' }, [], { page: indexedPage, catalogue: indexedCatalogue, overview })
+    const admitted = (await screen.findByRole('link', { name: 'Weather Forecast' })).closest('li')
+    const external = screen.getByRole('link', { name: 'External Forecast' }).closest('li')
+    if (!admitted || !external) throw new Error('Missing canonical search result row')
+    await waitFor(() => expect(within(admitted).getByRole('button', { name: 'Save Tool' })).toHaveProperty('disabled', false))
+    fireEvent.click(within(admitted).getByRole('button', { name: 'Save Tool' }))
+    await waitFor(() => expect(saveToolForOwner).toHaveBeenCalledWith({ data: { kind: 'ae_callable', toolRef: admittedRef } }))
+    fireEvent.click(within(external).getByRole('button', { name: 'Save Tool' }))
+    await waitFor(() => expect(saveToolForOwner).toHaveBeenCalledWith({ data: { kind: 'external_listing', id: directoryId } }))
+  })
+
+  it('saves only an exhaustive no-match with its original search filters, never a scoped assessment', async () => {
+    const filters = { view: 'tools' as const, query: 'missing-need', directoryCategory: 'weather' }
+    searchMarketToolsServer.mockResolvedValueOnce({ ...searchMeta, query: 'missing-need', kind: 'scoped', results: [], reason: 'More catalogue remains.' })
+      .mockResolvedValueOnce({
+        ...searchMeta, kind: 'noMatch', query: 'missing-need', results: [], reason: 'No matching Tool.',
+        partialResults: false, assessed: { source: 'all', scope: 'complete', examined: 30, coverage: 'complete' },
+        pagination: { limit: 8, hasMore: false }, next: [{ action: 'broaden', args: { query: 'missing-need' }, authority: 'public' }],
+      } satisfies ToolChoiceSearchOutput)
+    recordOwnerMarketDemand.mockResolvedValue({ kind: 'recorded', requestRef: 'request-1', query: 'missing-need', createdAt: 1 })
+    const { updateSearch } = show(filters, [], { page: indexedPage, catalogue: indexedCatalogue, overview })
+    await screen.findByText('More catalogue remains.')
+    expect(screen.queryByRole('button', { name: 'Save this need' })).toBeNull()
+    updateSearch({ ...filters, provider: 'example.com' })
+    await screen.findByText('No matching Tool.')
+    fireEvent.click(screen.getByRole('button', { name: 'Save this need' }))
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Need saved' })).toHaveProperty('disabled', true))
+    expect(recordOwnerMarketDemand).toHaveBeenCalledOnce()
+    expect(recordOwnerMarketDemand).toHaveBeenCalledWith({ data: {
+      query: 'missing-need', filters: { category: 'weather', provider: 'example.com' }, idempotencyKey: expect.any(String),
+    } })
+  })
+
+  it('keys unmet need saves by canonical source and filters, reusing a retry key without disabling a different scope', async () => {
+    const verdict = {
+      ...searchMeta, kind: 'noMatch', query: 'unserved', results: [], reason: 'No matching Tool.',
+      partialResults: false, assessed: { source: 'all', scope: 'complete', examined: 30, coverage: 'complete' },
+      pagination: { limit: 8, hasMore: false }, next: [{ action: 'broaden', args: { query: 'unserved' }, authority: 'public' }],
+    } satisfies ToolChoiceSearchOutput
+    searchMarketToolsServer.mockResolvedValue(verdict)
+    const failure = new Error('temporary failure')
+    recordOwnerMarketDemand.mockResolvedValueOnce({ kind: 'recorded', requestRef: 'need-a', query: 'unserved', createdAt: 1 })
+      .mockRejectedValueOnce(failure)
+      .mockResolvedValueOnce({ kind: 'recorded', requestRef: 'need-b', query: 'unserved', createdAt: 2 })
+    const { updateSearch } = show({ view: 'tools', query: 'unserved', provider: 'first.example.com' }, [], { page: indexedPage, catalogue: indexedCatalogue, overview })
+    const firstButton = await screen.findByRole('button', { name: 'Save this need' })
+    fireEvent.click(firstButton)
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Need saved' })).toHaveProperty('disabled', true))
+    const firstCall = recordOwnerMarketDemand.mock.calls[0]
+    if (firstCall === undefined) throw new Error('First need Save did not run')
+    const firstKey = firstCall[0].data.idempotencyKey
+    updateSearch({ view: 'tools', query: 'unserved', provider: 'second.example.com' })
+    const secondButton = await screen.findByRole('button', { name: 'Save this need' })
+    await waitFor(() => expect(secondButton).toHaveProperty('disabled', false))
+    fireEvent.click(secondButton)
+    await screen.findByRole('alert')
+    expect(captureRouteException).toHaveBeenCalledWith(failure, { degraded: 'DirectoryMarketplace.saveMissingNeed', reason: 'source_unavailable' }, 'warning')
+    fireEvent.click(screen.getByRole('button', { name: 'Save this need' }))
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Need saved' })).toHaveProperty('disabled', true))
+    expect(recordOwnerMarketDemand).toHaveBeenCalledTimes(3)
+    const secondCall = recordOwnerMarketDemand.mock.calls[1]
+    const retryCall = recordOwnerMarketDemand.mock.calls[2]
+    if (secondCall === undefined || retryCall === undefined) throw new Error('Second need Save or retry did not run')
+    const secondKey = secondCall[0].data.idempotencyKey
+    expect(secondKey).not.toBe(firstKey)
+    expect(retryCall[0].data).toEqual({
+      query: 'unserved', filters: { provider: 'second.example.com' }, idempotencyKey: secondKey,
+    })
+    updateSearch({ view: 'tools', query: 'unserved', provider: 'second.example.com', maxUsdPrice: 0.01 })
+    expect(screen.getByRole('button', { name: 'Need saved' })).toHaveProperty('disabled', true)
+  })
+
 })

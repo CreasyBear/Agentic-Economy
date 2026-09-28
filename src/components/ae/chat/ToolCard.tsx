@@ -1,3 +1,4 @@
+import { createContext, useContext } from 'react'
 import { AeFactList } from '@/components/ae/data/AeFactList'
 import { AeCopyCommand } from '@/components/ae/data/AeCopyCommand'
 import { AeToolPrice } from '@/components/ae/market/AeToolPrice'
@@ -27,10 +28,14 @@ import {
 } from '@/lib/public/chat-ia'
 import {
   toolCardState,
+  type ChatNeedActions,
   type ToolCardProjection,
   type ToolChoiceRow,
 } from '@/modules/chat/tool-card'
+import { NeedSaveAction } from './need-save-action/NeedSaveAction'
 import type { SearchNextProps } from './presentation'
+
+export const ChatNeedActionsContext = createContext<ChatNeedActions | null>(null)
 
 const READINESS_VARIANT = {
   'Ready now': 'success',
@@ -240,6 +245,7 @@ const STATUS_VARIANT = {
 } as const
 
 export function ToolCard({ projection }: { projection: ToolCardProjection }) {
+  const needActions = useContext(ChatNeedActionsContext)
   if (projection.kind === 'working') {
     return (
       <p className="flex items-center gap-related text-sm text-muted-foreground" role="status">
@@ -264,10 +270,11 @@ export function ToolCard({ projection }: { projection: ToolCardProjection }) {
         <CardBody projection={projection} />
       </CardContent>
       {(projection.kind === 'choices' && (projection.count !== undefined || projection.next !== undefined))
-        || (projection.kind === 'status' && projection.next !== undefined) ? (
+        || (projection.kind === 'status' && (projection.next !== undefined || projection.saveNeed !== undefined)) ? (
         <CardFooter className="grid gap-intra">
           {projection.kind === 'choices' && projection.count !== undefined ? <ChoiceRemainder count={projection.count} shown={projection.choices.length} /> : null}
           {projection.next === undefined ? null : <SearchNext next={projection.next} />}
+          {projection.kind === 'status' && projection.saveNeed !== undefined ? <NeedSaveAction input={projection.saveNeed} actions={needActions} /> : null}
         </CardFooter>
       ) : projection.kind === 'execute' && projection.suggestedNextAction !== undefined ? (
         <CardFooter>

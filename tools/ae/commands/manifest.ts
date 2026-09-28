@@ -36,6 +36,7 @@ import {
   TOOL_MARKET_ACTION_ENTRIES,
 } from '@/modules/registry/tool-entry'
 import { MARKET_REQUEST_ROUTE_CONTRACTS } from '@/modules/market-demand/market-demand.actions'
+import { SAVED_TOOLS_ROUTE_CONTRACTS } from '@/modules/market/saved-tools.contracts'
 
 import { TOOL_QUOTE_ACTION_ID } from '@/modules/capability-execution/quote'
 import { TOOL_PROCURE_ACTION_ID } from '@/modules/capability-execution/procure'
@@ -216,10 +217,27 @@ export const COMMANDS: Readonly<Record<string, RootCommandManifestEntry>> = {
     ],
     commands: {
       // marketRequestCreateAction.parameters marks idempotencyKey required, but the CLI generates one when --idempotency-key is omitted; args keeps the CLI-observed shape.
-      create: { ...deriveCliCommand(MARKET_REQUEST_ROUTE_CONTRACTS.create.actionId), args: '"<job>" [--idempotency-key <key>]' },
+      create: { ...deriveCliCommand(MARKET_REQUEST_ROUTE_CONTRACTS.create.actionId), args: '"<job>" [--source current|coinbase] [--filters \'<json>\'] [--idempotency-key <key>]' },
       list: { ...deriveCliCommand(MARKET_REQUEST_ROUTE_CONTRACTS.list.actionId) },
       status: { ...deriveCliCommand(MARKET_REQUEST_ROUTE_CONTRACTS.status.actionId) },
       withdraw: { ...deriveCliCommand(MARKET_REQUEST_ROUTE_CONTRACTS.withdraw.actionId) },
+    },
+  },
+  saved: {
+    summary: 'Revisit account-bound Tools with current details, or save and remove exact Tool identities.',
+    args: '<list|save|remove>',
+    json: true,
+    group: 'discover_compare',
+    rootOrder: 4,
+    authentication: 'buyer',
+    guidance: [
+      'Saved entries travel with your account across the browser and connected Agent. A saved identity never authorizes a Quote or Call.',
+      'Save an admitted operation:v1:<digest> reference, a Bazaar resource URL, or a compact registry:<digest> search ID. Remove by operation reference or the resolved resource URL shown by list.',
+    ],
+    commands: {
+      list: { ...deriveCliCommand(SAVED_TOOLS_ROUTE_CONTRACTS.list.actionId), args: '' },
+      save: { ...deriveCliCommand(SAVED_TOOLS_ROUTE_CONTRACTS.save.actionId), args: '<tool-ref|resource-url|listing-id>' },
+      remove: { ...deriveCliCommand(SAVED_TOOLS_ROUTE_CONTRACTS.remove.actionId), args: '<tool-ref|resource-url>' },
     },
   },
   describe: {

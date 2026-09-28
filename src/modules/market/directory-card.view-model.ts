@@ -5,6 +5,10 @@ import type { X402DirectoryFacet } from '@/modules/market/x402-directory-catalog
 import { directoryProviderKey, directorySlugBase, minimumDirectoryUsdPrice } from '@/modules/market/x402-directory-index'
 import type { X402DirectoryEntry } from '@/modules/market/x402-directory'
 import { x402DirectoryFunctionalTitle } from '@/modules/market/x402-directory-title'
+import type { SavedDirectoryTool, SavedToolListItem, SavedToolSaveInput } from '@/modules/market/saved-tools.contracts'
+import { degrade } from '@/lib/observability/degrade'
+
+export { absorbProviderEntries, DIRECTORY_LIST_PAGE_SIZE, groupDirectoryProviders } from './internal/directory-provider-pagination'
 
 /** AUD is the primary estimate; published USDC remains a source detail below it. */
 export function directoryPrice(entry: X402DirectoryEntry): string {
@@ -178,55 +182,6 @@ export function toDirectoryProviderRow(provider: X402DirectoryFacet): DirectoryP
   }
 }
 
-/** Hosts in the order the sorted Tool list first mentions them. The first Tool in each group is the one the sort put first. */
-export function groupDirectoryProviders(entries: readonly X402DirectoryEntry[]): readonly { provider: string; tools: readonly X402DirectoryEntry[] }[] {
-  const groups: { provider: string; tools: X402DirectoryEntry[] }[] = []
-  const byProvider = new Map<string, { provider: string; tools: X402DirectoryEntry[] }>()
-  for (const entry of entries) {
-    const existing = byProvider.get(entry.provider)
-    if (existing === undefined) {
-      const group = { provider: entry.provider, tools: [entry] }
-      byProvider.set(entry.provider, group)
-      groups.push(group)
-    } else existing.tools.push(entry)
-  }
-  return groups
-}
-
-/** A Tools page and a Providers page both show this many rows. The last page may be shorter. */
-export const DIRECTORY_LIST_PAGE_SIZE = 12
-
-/**
- * Walk a sorted Tool stream until `size` new hosts are collected.
- * A host already in `seen` (an earlier page) is skipped.
- * Further Tools for a host on this page stay on this page.
- * The first Tool of the next new host, and everything after it, stays in `rest`.
- */
-export function absorbProviderEntries(
-  entries: readonly X402DirectoryEntry[],
-  carried: readonly { provider: string; tools: readonly X402DirectoryEntry[] }[],
-  seen: ReadonlySet<string>,
-  size = DIRECTORY_LIST_PAGE_SIZE,
-): { groups: { provider: string; tools: X402DirectoryEntry[] }[]; rest: X402DirectoryEntry[] } {
-  const groups = carried.map(group => ({ provider: group.provider, tools: [...group.tools] }))
-  const byProvider = new Map(groups.map(group => [group.provider, group]))
-  for (let index = 0; index < entries.length; index += 1) {
-    const entry = entries[index]
-    if (entry === undefined) continue
-    const existing = byProvider.get(entry.provider)
-    if (existing !== undefined) {
-      existing.tools.push(entry)
-      continue
-    }
-    if (seen.has(entry.provider)) continue
-    if (groups.length >= size) return { groups, rest: entries.slice(index) }
-    const group = { provider: entry.provider, tools: [entry] }
-    byProvider.set(entry.provider, group)
-    groups.push(group)
-  }
-  return { groups, rest: [] }
-}
-
 /** Older indexed snapshots retain the same description and service identity. */
 export function directoryTitle(entry: X402DirectoryEntry): string {
   if (entry.title !== entry.serviceName && entry.title.length <= 100) return entry.title
@@ -311,6 +266,56 @@ export function toDirectoryToolCardModel(entry: X402DirectoryEntry): DirectoryTo
     ...(payersLabel === undefined ? {} : { payersLabel }),
     ...(entry.iconUrl === undefined ? {} : { iconUrl: entry.iconUrl }),
   }
+}
+
+export type MarketNeedSaveState = Readonly<{ key: string; idempotencyKey: string; status: 'idle' | 'saving' | 'saved'; error?: string }>
+
+export type SavedToolsWriteError = Readonly<{ owner: string; message: string }>
+
+export type SavedToolsLoadState = Readonly<{ owner: string; items: readonly SavedToolListItem[]; status: 'ready' | 'failed'; error?: string }>
+
+export type SavedToolsContextValue = Readonly<{
+  savedTools: readonly SavedToolListItem[]
+  toggleSavedTool: (tool: SavedDirectoryTool) => void
+  toggleIdentity: (identity: SavedToolSaveInput) => void
+  isSavedIdentity: (identity: SavedToolSaveInput) => boolean
+  isSavedTool: (tool: SavedDirectoryTool) => boolean
+  pending: (identity: SavedToolSaveInput) => boolean
+  status: 'loading' | 'ready' | 'failed' | 'signed_out'
+  saveError?: string
+  refresh: () => void
+}>
+
+export type SavedDirectoryRowModel = Readonly<{
+  title: string
+  provider: string
+  price: string
+  access: string
+  toolRef?: string
+  providerHost?: string
+  slug?: string
+}>
+
+/** Saved identities never carry prices; these details come from the current owner-scoped read. */
+export function toSavedDirectoryRowModel(item: SavedToolListItem): SavedDirectoryRowModel {
+  if (item.detail.kind !== 'found') return {
+    title: 'Tool no longer available',
+    provider: item.identity.kind === 'ae_callable' ? item.identity.toolRef : item.identity.resource,
+    price: 'Current price unavailable',
+    access: 'Unavailable · removable',
+  }
+  if ('tool' in item.detail) {
+    const { tool } = item.detail
+    return {
+      title: tool.listing.label,
+      provider: tool.business.name,
+      price: formatDisplayPrice(tool.commercial.displayPrice ?? { kind: 'unavailable' }) ?? audEstimateUnavailable,
+      access: 'AE-callable',
+      toolRef: tool.toolRef,
+    }
+  }
+  const model = toDirectoryToolCardModel(item.detail.entry)
+  return { title: model.title, provider: model.providerLine, price: model.priceLabel, access: model.accessLabel, providerHost: model.providerHost, slug: model.slug }
 }
 
 export type DirectoryToolFieldNote = Readonly<{ label: string; detail?: string }>
@@ -488,7 +493,7 @@ function endpointPath(resource: string): string {
     const url = new URL(resource)
     const path = `${url.pathname}${url.search}`
     return path.length > 1 ? path : url.hostname
-  } catch {
-    return resource
+  } catch (cause) {
+    return degrade(cause, resource, { site: 'directoryService.endpointPath', reason: 'invalid_response' })
   }
 }
