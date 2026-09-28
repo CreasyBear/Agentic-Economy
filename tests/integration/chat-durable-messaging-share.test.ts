@@ -488,7 +488,13 @@ describe.sequential('durable Tool chat messaging and shares', () => {
                       readiness: 'ready',
                       healthStatus: 'operational',
                       entitlement: 'public',
-                      price: { kind: 'indicative', label: 'AUD 0.00' },
+                      price: { kind: 'indicative', label: 'USDC 0.000001' },
+                      displayPrice: {
+                        kind: 'indicative',
+                        amount: { currency: 'AUD', exponent: 6, units: '1' },
+                        rateObservedAt: 1_000,
+                        validUntil: 2_000_000_000_000,
+                      },
                       details: {
                         capabilityId: `capability:tool:${index + 1}`,
                         provider: { name: 'Provider', slug: 'provider' },
@@ -569,7 +575,7 @@ describe.sequential('durable Tool chat messaging and shares', () => {
               toolRef: ref,
               title: `Tool ${index + 1}`,
               provider: 'Provider',
-              price: 'AUD 0.00',
+              price: 'A$0.01',
               readiness: 'Operational',
             })),
             count: 5,

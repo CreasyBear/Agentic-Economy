@@ -8,7 +8,16 @@ import {
   compareToolPrices,
   capabilityFromPrice,
   type ToolCardViewModel,
+  formatToolPrice,
 } from "@/modules/market/tool-view-model";
+
+describe("Tool buyer price", () => {
+  it("uses the shared AUD display rule and does not present source currency as buyer price", () => {
+    expect(formatToolPrice({ kind: "fixed", amount: { currency: "AUD", exponent: 6, units: "1" } })).toBe("A$0.01");
+    expect(formatToolPrice({ kind: "fixed", amount: { currency: "USDC", exponent: 6, units: "1" } }))
+      .toBe("AUD estimate temporarily unavailable");
+  });
+});
 
 const category = {
   id: "commerce" as const,

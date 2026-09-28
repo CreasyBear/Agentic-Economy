@@ -16,6 +16,7 @@ import {
 } from 'lucide-react'
 import { APP_NAVIGATION, type AppDestinationId } from '@/lib/navigation/app-navigation'
 import { getStatusPresentation } from '@/lib/ui/status-presentation'
+import { formatDisplayPrice } from '@/modules/money/public'
 import {
   TOOL_SEARCH_RESULT_LIMIT,
   searchMarketTools,
@@ -66,7 +67,8 @@ function mapCatalogSearchItemToRowModel(item: CatalogSearchItem): ToolSearchResu
     providerLine: `${item.provider} · ${item.summary}`,
     healthLabel,
     sourceKind: item.access === 'ae_callable' ? 'admitted' : 'directory',
-    priceLabel: item.price.kind === 'indicative' ? item.price.label : 'Price unavailable',
+    priceLabel: item.price.kind === 'indicative' && item.price.label.startsWith('A$')
+      ? item.price.label : formatDisplayPrice({ kind: 'unavailable' }) ?? 'AUD estimate temporarily unavailable',
   }
 }
 

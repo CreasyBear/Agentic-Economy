@@ -350,7 +350,6 @@ describe('external-agent Market Tool cold loop', () => {
         capabilityId: 'reference.lookup',
         description: 'Extract invoices',
         provider: { name: 'Reference Services', slug: 'reference' },
-        priceLabel: 'USD 0.00',
         healthStatus: 'operational',
       },
     })

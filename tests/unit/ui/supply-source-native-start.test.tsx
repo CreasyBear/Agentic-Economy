@@ -396,7 +396,7 @@ describe('source-native Provider start', () => {
     fireEvent.click(screen.getByRole('radio', { name: 'Fixed AUD price' }))
     fireEvent.change(screen.getByLabelText('AUD price'), { target: { value: '12.30' } })
     fireEvent.click(screen.getByRole('button', { name: 'Continue to review' }))
-    expect(screen.getAllByText('AUD 12.30').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('A$12.30').length).toBeGreaterThan(0)
     for (const name of [
       'I am authorised to publish this service',
       'The information is accurate',

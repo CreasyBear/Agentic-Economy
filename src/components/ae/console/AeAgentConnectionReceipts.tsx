@@ -2,7 +2,7 @@ import { AeFactList } from '@/components/ae/data/AeFactList'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { formatTimestamp } from '@/lib/ui/format-time'
-import { formatCurrencyAmount } from '@/modules/money/public'
+import { formatDisplayAmount } from '@/modules/money/public'
 import type { AgentDetail } from '@/modules/agent-access/agent-operator-view-model'
 import type { AgentConnectionReadback } from '@/modules/agent-access/public'
 import {
@@ -42,7 +42,7 @@ export function AeAgentConnectionReceipts({
             <AeFactList density="compact" facts={[
               { label: 'Environment', value: environmentLabel(connection.environment) },
               { label: 'Authority', value: scopeLabel(connection.authorityMode) },
-              { label: 'Budget', value: formatCurrencyAmount(connection.spendingPolicy.budget.maximumMonthlySpend), mono: true },
+              { label: 'Budget', value: formatDisplayAmount(connection.spendingPolicy.budget.maximumMonthlySpend), mono: true },
               { label: 'Connected', value: formatTimestamp(connection.connectedAt), mono: true },
               { label: 'Last refresh', value: formatTimestamp(connection.lastRotatedAt), mono: true },
               { label: 'Connection expires', value: formatTimestamp(connection.connectionExpiresAt), mono: true },

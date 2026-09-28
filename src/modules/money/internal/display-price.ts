@@ -1,41 +1,42 @@
-import Decimal from 'decimal.js'
-import { formatExactAmount, type ExactAmount } from './exact-amount'
+import { readExactAmount, type ExactAmount } from './exact-amount'
+import { convertUsdcToAud, type ReferenceRate } from './executable-rate'
 
-const TINY_VALUE_THRESHOLD = new Decimal('0.01')
-
-function currencySymbol(currency: string): string {
-  return currency === 'AUD' ? 'A$' : `${currency} `
+/** Presentation only: exact micro-units stay unchanged for Quotes, records and exports. */
+function formatAudCents(amount: ExactAmount): string | undefined {
+  const exact = readExactAmount(amount)
+  if (exact?.currency !== 'AUD') return undefined
+  const units = BigInt(exact.units)
+  const scale = 10n ** BigInt(Math.abs(exact.exponent - 2))
+  const cents = exact.exponent <= 2 ? units * scale : (units + scale - 1n) / scale
+  return `A$${cents / 100n}.${(cents % 100n).toString().padStart(2, '0')}`
 }
 
-/** Shared 2dp cap + tiny-value marker. The one numeric rule for every buyer-facing money display. */
-function formatCapped(amount: ExactAmount): string | undefined {
-  const formatted = formatExactAmount(amount)
-  if (formatted === undefined) return undefined
-  const value = new Decimal(formatted)
-  const symbol = currencySymbol(amount.currency)
-  if (!value.isZero() && value.lt(TINY_VALUE_THRESHOLD)) return `<${symbol}0.01`
-  return `${symbol}${value.toFixed(2)}`
-}
-
-/** Presentation only. Spending always uses the separately issued Quote. */
+/** An indicative AUD amount or exact USDC source plus a fresh Coinbase observation. */
 export function formatDisplayPrice(
-  display: Readonly<{ kind: 'indicative'; amount: ExactAmount; validUntil: number }>
-    | Readonly<{ kind: 'unavailable' }> | undefined,
+  display: Readonly<{
+    kind: 'indicative'
+    amount: ExactAmount
+    validUntil: number
+    referenceRate?: ReferenceRate
+  }> | Readonly<{ kind: 'unavailable' }> | undefined,
   now = Date.now(),
 ): string | undefined {
   if (display === undefined) return undefined
-  if (display.kind === 'unavailable' || display.validUntil <= now) {
+  if (display.kind === 'unavailable' || !Number.isSafeInteger(now)
+    || !Number.isSafeInteger(display.validUntil) || display.validUntil <= now) {
     return 'AUD estimate temporarily unavailable'
   }
-  if (display.amount.currency !== 'AUD') return 'AUD estimate temporarily unavailable'
-  const formatted = formatCapped(display.amount)
-  if (formatted === undefined) return 'AUD estimate temporarily unavailable'
-  // A tiny-value marker ("<A$0.01") is already a bound, not a rounded estimate.
-  return formatted.startsWith('<') ? formatted : `About ${formatted}`
+  const amount = display.amount.currency === 'USDC'
+    ? display.referenceRate === undefined
+      ? undefined
+      : convertUsdcToAud(display.amount, display.referenceRate, now)
+    : display.amount
+  const formatted = amount === undefined ? undefined : formatAudCents(amount)
+  return formatted ?? 'AUD estimate temporarily unavailable'
 }
 
-/** A settled/known amount (balance, ledger row) — not an estimate, so no validity window or "About" prefix. */
+/** A known AUD amount (balance or ledger row), without an estimate window. */
 export function formatDisplayAmount(amount: ExactAmount | undefined): string {
   if (amount === undefined) return 'Amount unknown'
-  return formatCapped(amount) ?? 'Amount unknown'
+  return formatAudCents(amount) ?? 'Amount unknown'
 }

@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 
 import { deserializeToolSearchResult, serializeToolSearchResult, type ToolSearchResult } from '@/modules/capability-supply/public'
-import { projectToolSearchChoices } from '@/modules/registry/tool-choice-contracts'
+import { projectToolListChoices, projectToolSearchChoices } from '@/modules/registry/tool-choice-contracts'
 import * as decisionEngine from '@/modules/decision-engine/public'
 import { rerankToolSearchResult } from '@/modules/registry/tool-reranker'
 import {
@@ -37,6 +37,19 @@ describe('Jev x402 Tool Search Re-ranker (cookbooks/rerank_typesafe.md)', () => 
     })
     expect(output).not.toHaveProperty('recommendation')
   })
+  it('never presents an exact USDC source amount as the buyer price', () => {
+    const tool = {
+      ...TOOL_CURRENCY,
+      commercial: { ...TOOL_CURRENCY.commercial, price: { kind: 'fixed' as const, amount: { currency: 'USDC' as const, units: '1', exponent: 6 } } },
+    }
+    const source = { kind: 'ok' as const, schemaVersion: 'registry-tools:v3' as const, query: 'fx', items: [tool], ranking: [], pagination: { limit: 10, hasMore: false }, navigation: [] }
+    const result = projectToolSearchChoices(source, undefined, { verdict: 'matched', nearMisses: [] })
+    expect(result.kind).toBe('match')
+    if (result.kind === 'match') expect(result.results[0]?.price).toEqual({ kind: 'unavailable' })
+    const list = projectToolListChoices(source)
+    if (list.kind === 'ok') expect(list.items[0]?.priceLabel).toBe('AUD estimate temporarily unavailable')
+  })
+
 
   it('does not present lexical candidates when suitability assessment is unavailable', () => {
     const output = projectToolSearchChoices(sampleOkResult, undefined, {

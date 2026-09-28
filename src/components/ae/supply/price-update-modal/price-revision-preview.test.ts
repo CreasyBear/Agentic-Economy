@@ -27,16 +27,15 @@ describe('price-revision-preview', () => {
   })
 
   describe('parseDisplayAudPrice', () => {
-    it('extracts first numeric token from display strings', () => {
-      const lessThan = parseDisplayAudPrice('<A$0.01')
-      expect(lessThan?.units).toBe('1')
-
-      const comma = parseDisplayAudPrice('A$1,234.56')
-      expect(comma?.units).toBe('100')
+    it('parses cent-ceiled AUD catalog prices including grouped thousands', () => {
+      expect(parseDisplayAudPrice('A$0.01')?.units).toBe('1')
+      expect(parseDisplayAudPrice('A$1,234.56')?.units).toBe('123456')
+      expect(parseDisplayAudPrice('A$ 0.10')?.units).toBe('10')
     })
 
-    it('parses spaced catalog price like A$ 0.10', () => {
-      expect(parseDisplayAudPrice('A$ 0.10')?.units).toBe('10')
+    it('does not mislabel an exact USD or USDC source price as AUD', () => {
+      expect(parseDisplayAudPrice('USD 0.10')).toBeUndefined()
+      expect(parseDisplayAudPrice('USDC 0.10')).toBeUndefined()
     })
   })
 

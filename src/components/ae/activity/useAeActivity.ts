@@ -6,7 +6,7 @@ import {
   type BuyerCallSummaryFacts,
 } from '@/modules/capability-execution/call-receipt-view'
 import { readOwnerCallsServer } from '@/lib/server/call-history.functions'
-import { calculateAudGstSplit, formatDisplayAmount } from '@/modules/money/public'
+import { calculateAudGstSplit, formatDisplayAmount, formatExactAmount } from '@/modules/money/public'
 import { toast } from '@/lib/ui/toast'
 import { captureClientExceptionOnClient } from '@/lib/observability/capture-client-exception'
 import { formatUtcTimestamp } from '@/lib/ui/format-time'
@@ -35,9 +35,8 @@ import type {
 
 const AUD_INCLUSIVE_GST_BPS = 1_000
 
-function unitsToAudDollarsFixed(units: string): string {
-  if (!units) return '0.00'
-  return (Number(units) / 1_000_000).toFixed(2)
+function formatAudExportUnits(units: string): string {
+  return formatExactAmount({ currency: 'AUD', exponent: 6, units }) ?? '—'
 }
 
 function formatPaymentStateLabel(
@@ -144,9 +143,9 @@ function buildActivityExportRows(items: readonly CallRow[]) {
       toolName: item.toolLabel,
       provider: 'Agentic Economy Seller',
       agentName: item.principalRef ?? 'Unspecified Agent',
-      costAud: unitsToAudDollarsFixed(grossUnits),
-      gstAud: split === undefined ? '0.00' : unitsToAudDollarsFixed(split.gstUnits),
-      netAud: split === undefined ? '0.00' : unitsToAudDollarsFixed(split.netUnits),
+      costAud: formatAudExportUnits(grossUnits),
+      gstAud: formatAudExportUnits(split?.gstUnits ?? '0'),
+      netAud: formatAudExportUnits(split?.netUnits ?? '0'),
       status: projectCallSummaryPurchaseStatus(item).label,
     }
   })

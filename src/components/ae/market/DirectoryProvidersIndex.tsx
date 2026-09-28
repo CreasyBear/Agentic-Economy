@@ -70,7 +70,10 @@ export function DirectoryProvidersIndex({ result }: DirectoryProvidersIndexProps
                 </div>
               </div>
             </TableCell>
-            {ranked ? <TableCell className="text-right text-sm tabular-nums">{model.priceLabel}</TableCell> : null}
+            {ranked ? <TableCell className="text-right tabular-nums">
+              <p className="text-sm">{model.priceLabel}</p>
+              {model.priceSourceLabel === undefined ? null : <p className="text-xs text-muted-foreground">{model.priceSourceLabel}</p>}
+            </TableCell> : null}
             {ranked ? <TableCell className="text-right text-sm tabular-nums" title="Busiest Tool on this host, last 30 days. Coinbase Bazaar.">{model.callsLabel}</TableCell> : null}
             {ranked ? <TableCell className="text-right text-sm tabular-nums">{model.payersLabel}</TableCell> : null}
             <TableCell className="text-right text-sm tabular-nums" title={`${model.toolLabel} ${provider.count === 1 ? 'Tool' : 'Tools'} in the indexed catalogue`}>{model.toolLabel}</TableCell>

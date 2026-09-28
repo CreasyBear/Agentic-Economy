@@ -47,12 +47,12 @@ function detailWithPolicy(policy: AgentSpendingPolicyState): AgentDetail {
 afterEach(() => { cleanup(); vi.clearAllMocks() })
 
 describe('owner spending authority', () => {
-  it('renders exact source grant limits rather than stale grant and opens edit from refreshed values', async () => {
+  it('rounds up the displayed source grant limit, not the stale grant, while keeping the exact amount editable', async () => {
     const read = vi.fn().mockResolvedValue(known)
     render(<AeAgentSpendingLimitsForm detail={baseDetail} onReadSpendingLimits={read} onUpdateSpendingLimits={vi.fn()} />)
     await waitFor(() => expect(screen.getByRole('button', { name: /edit limits/i })).toBeInTheDocument())
-    expect(screen.getByText('AUD 7.123456')).toBeInTheDocument()
-    expect(screen.queryByText('AUD 1.000000')).not.toBeInTheDocument()
+    expect(screen.getByText('A$7.13')).toBeInTheDocument()
+    expect(screen.queryByText('A$1.00')).not.toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: /edit limits/i }))
     await waitFor(() => expect(screen.getByLabelText(/max spend per call/i)).toHaveValue('7.123456'))
     expect(read).toHaveBeenCalledWith(known.principalRef)
@@ -64,7 +64,7 @@ describe('owner spending authority', () => {
     render(<AeAgentSpendingLimitsForm detail={baseDetail} onReadSpendingLimits={read} onUpdateSpendingLimits={update} />)
     await waitFor(() => expect(screen.getByText(/Spending policy unavailable/)).toBeInTheDocument())
     expect(screen.queryByRole('button', { name: /edit limits/i })).not.toBeInTheDocument()
-    expect(screen.queryByText('AUD 7.123456')).not.toBeInTheDocument()
+    expect(screen.queryByText('A$7.13')).not.toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Refresh' }))
     await waitFor(() => expect(screen.getByRole('button', { name: /edit limits/i })).toBeInTheDocument())
     expect(update).not.toHaveBeenCalled()

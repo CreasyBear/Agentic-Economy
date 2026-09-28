@@ -18,7 +18,7 @@ import type {
   AgentSpendingLimitsResult,
   AgentSpendingPolicyState,
 } from '@/modules/agent-access/spending-policy-update'
-import { formatCurrencyAmount, type ExactAmount } from '@/modules/money/public'
+import { formatDisplayAmount, type ExactAmount } from '@/modules/money/public'
 
 import type { AgentSpendingLimitsViewState } from './spending-limits-form.contracts'
 import {
@@ -331,9 +331,9 @@ export function useAgentSpendingLimits({
     selectedPresetId,
     quota: { label: quotaRaw.label, toneClass: quotaRaw.toneClass, progressValue: quotaRaw.progressValue, progressAriaLabel: quotaRaw.progressAriaLabel, ...(quotaRaw.approachingCopy !== undefined ? { approachingCopy: quotaRaw.approachingCopy } : {}) },
     readout: {
-      perCallDisplay: known === undefined ? '—' : formatCurrencyAmount(known.maximumSpendPerCall),
-      dailyDisplay: known === undefined ? '—' : formatCurrencyAmount(known.maximumDailySpend),
-      monthlyDisplay: known === undefined ? '—' : formatCurrencyAmount(known.maximumMonthlySpend),
+      perCallDisplay: known === undefined ? '—' : formatDisplayAmount(known.maximumSpendPerCall),
+      dailyDisplay: known === undefined ? '—' : formatDisplayAmount(known.maximumDailySpend),
+      monthlyDisplay: known === undefined ? '—' : formatDisplayAmount(known.maximumMonthlySpend),
     },
     presetOptions,
     showHeaderActions: !editing && !refreshing && known !== undefined && onUpdateSpendingLimits !== undefined && onReadSpendingLimits !== undefined,

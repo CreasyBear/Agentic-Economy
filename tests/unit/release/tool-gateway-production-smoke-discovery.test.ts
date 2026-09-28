@@ -15,6 +15,8 @@ import {
 } from "./tool-gateway-production-smoke-harness";
 import { describe, expect, it } from "vitest";
 import { canonicalDigest } from "../../../src/modules/common/canonical-digest";
+import type { PublicToolDescriptor } from "../../../src/modules/capability-supply/public";
+import { projectToolDescription } from "../../../src/modules/registry/tool-choice-contracts";
 
 import { GatewayProductionSmokeReceiptSchema } from "../../../tools/release/tool-gateway-production-smoke";
 import {
@@ -269,5 +271,86 @@ describe("hosted Tool gateway smoke discovery", () => {
     expect(
       gatewayToolRejectionReason(selected, observedAt),
     ).toBeUndefined();
+  });
+
+  it("selects a paid fixed-price control Tool when the AUD display estimate is unavailable", async () => {
+    const sourcePrice = { currency: "USDC", units: "750000", exponent: 6 };
+    const search = publicToolSearchResponse();
+    const description = projectToolDescription({
+      kind: "found",
+      schemaVersion: "registry-tools:v3",
+      tool: {
+        ...tool,
+        commercial: {
+          ...tool.commercial,
+          price: { kind: "fixed", amount: sourcePrice },
+          displayPrice: { kind: "unavailable", reason: "fx_missing" },
+        },
+        availability: {
+          ...tool.availability,
+          observedAt: Date.now(),
+          validUntil: Date.now() + 60_000,
+        },
+      } satisfies PublicToolDescriptor,
+    });
+    if (description.kind !== "found") throw new Error("expected_current_tool");
+    expect(description.tool.commercialPrice).toEqual({ kind: "fixed", amount: sourcePrice });
+    expect(description.tool.displayPrice).toEqual({ kind: "unavailable", reason: "fx_missing" });
+    const requests: string[] = [];
+    const fetch: typeof globalThis.fetch = async (input) => {
+      const url = String(input);
+      requests.push(url);
+      if (url.endsWith("/api/v1/market-tools/search"))
+        return Response.json({ ...search, results: [{ ...search.results[0], price: { kind: "unavailable" } }] });
+      if (url.endsWith("/api/v1/market-tools/describe"))
+        return Response.json({
+          ...description,
+          tool: {
+            ...description.tool,
+            authentication: { kind: "platform_credential", scheme: "bearer" },
+          },
+        });
+      if (url.endsWith("/api/businesses/provider"))
+        return Response.json(publicBusinessDetailResponse());
+      return Response.json(committedQuote());
+    };
+    const services = {
+      tools: new Map([[toolRef, {
+        serviceId: "service:control",
+        offeringRef: tool.listing.listingRef,
+        authentication: { kind: "platform_credential" as const, scheme: "bearer" as const },
+        authorityMode: "provider_owned" as const,
+      }]]),
+      serviceCount: 1,
+      endpointCount: 1,
+    };
+    const selected = await discoverTool(
+      { baseUrl: "https://gateway.example", apiKey: "run-key", input: { city: "Perth" }, fetch },
+      "paid", observedAt, "control", services,
+    );
+    expect(selected.description.commercialPrice).toEqual({ kind: "fixed", amount: sourcePrice });
+    expect(selected.quote.price).toEqual(amount);
+    expect(requests).toHaveLength(4);
+    expect(gatewayToolRejectionReason(selected, observedAt)).toBeUndefined();
+  });
+
+  it("rejects free, on-request and variable-priced candidates without using their display labels", () => {
+    const selected = selectedTool();
+    const description = { ...selected.description, priceLabel: "A$0.75" };
+    expect(gatewayToolRejectionReason({
+      ...selected,
+      description: { ...description, commercialPrice: { kind: "on_request" } },
+    }, observedAt)).toBe("gateway_smoke_candidate_price_not_fixed");
+    expect(gatewayToolRejectionReason({
+      ...selected,
+      description: {
+        ...description,
+        commercialPrice: { kind: "range", minimum: amount, maximum: { ...amount, units: "900000" } },
+      },
+    }, observedAt)).toBe("gateway_smoke_candidate_price_not_fixed");
+    expect(gatewayToolRejectionReason({
+      ...selected,
+      description: { ...description, commercialPrice: { kind: "fixed", amount: { ...amount, units: "0" } } },
+    }, observedAt)).toBe("gateway_smoke_candidate_free");
   });
 });

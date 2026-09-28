@@ -19,9 +19,7 @@ export function AeToolEconomics({
       : tool.commercial.price.kind === 'range'
         ? 'Price range'
         : 'Price on request'
-    : breakdown === undefined
-      ? `${audEstimate} per Call`
-      : `${formatCurrencyAmount(breakdown.providerQuotedAmount)} · ${audEstimate} per Call`
+    : `${audEstimate} per Call`
   const evidenceFields = tool.evidence.length
   const settlementNetwork = breakdown?.network ?? tool.payment?.network
   const facts: AeFact[] = [

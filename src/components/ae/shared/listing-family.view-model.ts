@@ -1,12 +1,19 @@
 import { formatUtcTimestamp } from '@/lib/ui/format-time'
 import { getStatusPresentation } from '@/lib/ui/status-presentation'
 import type { ListingProjection, ListingPrice } from '@/modules/registry/public'
+import { formatDisplayAmount, parseDecimalExactAmount } from '@/modules/money/public'
 import type { ToolObjectView } from './object-family.contracts'
 
 function priceLabel(price: ListingPrice): string {
   if (price.kind === 'quote_required') return 'Quote required'
-  if (price.kind === 'range') return `${price.currency} ${price.minimum}–${price.maximum} per Call`
-  return `${price.currency} ${price.amount} per Call${price.kind === 'indicative' ? ' · indicative' : ''}`
+  if (price.currency !== 'AUD' || price.kind === 'indicative') return 'AUD estimate temporarily unavailable'
+  const minimum = parseDecimalExactAmount('AUD', price.kind === 'range' ? price.minimum : price.amount, 6)
+  if (minimum === undefined) return 'AUD estimate temporarily unavailable'
+  if (price.kind !== 'range') return `${formatDisplayAmount(minimum)} per Call`
+  const maximum = parseDecimalExactAmount('AUD', price.maximum, 6)
+  return maximum === undefined
+    ? 'AUD estimate temporarily unavailable'
+    : `${formatDisplayAmount(minimum)}–${formatDisplayAmount(maximum)} per Call`
 }
 
 export function projectToolObject(listing: ListingProjection, href?: string, nowMs = Date.now()): ToolObjectView {

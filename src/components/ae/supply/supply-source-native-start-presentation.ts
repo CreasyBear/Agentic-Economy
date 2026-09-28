@@ -10,7 +10,7 @@ import type { SupplyPublishResult } from '@/modules/capability-supply/supply-act
 import {
   displayPriceFromPricingConfig,
   fixedAudPricingConfig,
-  formatCurrencyAmount,
+  formatDisplayAmount,
   parseDecimalExactAmount,
   rescaleExactAmount,
 } from '@/modules/money/public'
@@ -290,8 +290,7 @@ export function publicationPriceSummary(pricing: PublishSupplyToolV2Input['prici
   if (config === undefined) return 'Price needed'
   const display = displayPriceFromPricingConfig(config)
   if (display.kind !== 'fixed') return 'Price confirmed at inspection'
-  const amount = rescaleExactAmount(display.amount, 2) ?? display.amount
-  return formatCurrencyAmount(amount)
+  return formatDisplayAmount(display.amount)
 }
 
 export function publicationError(reason: string): string {

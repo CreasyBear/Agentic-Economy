@@ -104,7 +104,6 @@ it('compares published facts and links straight to the one canonical Tool detail
   expect(within(comparison).getByText('2 USDC')).toBeTruthy()
   expect(within(comparison).getByText('Output 0')).toBeTruthy()
   expect(within(comparison).getByText('Category')).toBeTruthy()
-  expect(within(comparison).getByText('Provider-listed price')).toBeTruthy()
   expect(within(comparison).queryByText('Base')).toBeNull()
   const inspect = within(comparison).getAllByRole('link', { name: 'Inspect Tool' })[0]!
   expect(toolHref(inspect).pathname).toBe(`/tools/${priced[0]!.provider}/${priced[0]!.slug}`)
@@ -128,14 +127,16 @@ it('keeps Provider price evidence secondary and settlement networks off Tool car
   const priced = entries.map((entry, index) => ({ ...entry, prices: [{ network: 'eip155:8453', networkLabel: 'Base', scheme: 'exact', amount: `${index + 1} USDC`, decimalAmount: String(index + 1), symbol: 'USDC' }] }))
   show(undefined, priced)
 
-  expect(screen.queryByText('Provider-listed price')).toBeNull()
   expect(screen.getByRole('columnheader', { name: 'Price' })).toBeTruthy()
   expect(screen.getByRole('columnheader', { name: 'Calls' })).toBeTruthy()
   expect(screen.getByRole('columnheader', { name: 'Payers' })).toBeTruthy()
   expect(screen.getByRole('columnheader', { name: 'Volume' })).toBeTruthy()
   expect(screen.queryByRole('columnheader', { name: 'Reported use' })).toBeNull()
-  expect(screen.getAllByText('Provider price per Call')).toHaveLength(priced.length)
-  expect(screen.getByText('1.00 USDC')).toBeTruthy()
+  const priceCell = screen.getByRole('link', { name: 'Tool 0' }).closest('tr')?.querySelectorAll('td')[1]
+  const [buyerPrice, sourcePrice] = priceCell?.querySelectorAll('p') ?? []
+  expect(buyerPrice?.textContent).toMatch(/AUD.*unavailable/i)
+  expect(buyerPrice?.textContent).not.toContain('USDC')
+  expect(sourcePrice?.textContent).toMatch(/Provider.*1 USDC/)
   expect(screen.queryByText('Base')).toBeNull()
 })
 it('repeats one recipient amount on every Tool that pays that address', () => {

@@ -257,6 +257,30 @@ describe('ActivityPage & Filtering (W-38)', () => {
     expect(payload.recordCount).toBe(2)
   })
 
+  it('rounds buyer display up only after exact spend aggregation while exports retain six-place amounts', () => {
+    const calls = {
+      ...sampleCalls,
+      page: [
+        { ...sampleCalls.page[0]!, audAmountUnits: '6' },
+        { ...sampleCalls.page[1]!, paymentState: 'settled' as const, audAmountUnits: '6' },
+      ],
+    }
+    render(<AeActivity result={{ kind: 'available', calls, usage: sampleUsage,
+      spend: { ...sampleSpend, spendUnits: '12' }, periodStart: '2026-09' }} />)
+
+    expect(screen.getByText('Account spend').parentElement?.textContent).toContain('A$0.01')
+    expect(screen.getAllByText('A$0.01').length).toBeGreaterThan(1)
+    fireEvent.click(screen.getByRole('button', { name: /^CSV$/u }))
+    const csv = vi.mocked(downloadCsv).mock.calls[0]?.[1]
+    expect(csv).toContain('call:1,Australian Tax Calculator,Agentic Economy Seller,agent:alpha,0.000006,0.000001,0.000005,')
+
+    fireEvent.click(screen.getByRole('button', { name: /^JSON$/u }))
+    const document = vi.mocked(downloadJson).mock.calls[0]?.[1] as {
+      records: readonly { costAud: string; gstAud: string; netAud: string }[]
+    }
+    expect(document.records[0]).toMatchObject({ costAud: '0.000006', gstAud: '0.000001', netAud: '0.000005' })
+  })
+
   it('disables CSV and JSON export when no calls match filters', () => {
     renderActivity()
 

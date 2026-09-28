@@ -15,7 +15,8 @@ describe('shared Tool view model', () => {
     expect(view.href).toBeUndefined()
     expect(view.identity).toEqual({ kind: 'directory_host', name: 'api.example', href: '/providers/api.example' })
     expect(view.listing.canonicalToolRef.kind).toBe('absent')
-    expect(view.price?.label).toBe('USDC 0.10 per Call')
+    expect(view.price?.label).not.toContain('USDC')
+    expect(view.listing.facts.price.kind === 'present' && view.listing.facts.price.value.currency).toBe('USDC')
     expect(view.readiness.label).toBe('Readiness unknown')
   })
 

@@ -57,6 +57,7 @@ export {
   roundAudUnitsToCent,
 } from './internal/aud-funding'
 export {
+  convertUsdcToAud,
   createExecutableRatePort,
   quoteExecutableAudToUsdc,
   quoteManagedX402BuyerAud,

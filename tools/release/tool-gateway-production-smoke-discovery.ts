@@ -2,10 +2,7 @@ import { z } from "zod";
 
 import type { JsonValue } from "../../src/modules/capability-contract/public";
 import { canonicalDigest } from "../../src/modules/common/canonical-digest";
-import {
-  formatExactAmount,
-  rescaleExactAmount,
-} from "../../src/modules/money/public";
+import { rescaleExactAmount } from "../../src/modules/money/public";
 import {
   toolChoiceDescribeOutputSchema,
   toolChoiceSearchOutputSchema,
@@ -356,14 +353,13 @@ export function gatewayToolRejectionReason(
     return "gateway_smoke_candidate_stale";
   if (tool.authorityMode !== "provider_owned")
     return "gateway_smoke_candidate_not_provider_owned_or_observed";
-  if (tool.quote.price.units === "0")
-    return "gateway_smoke_candidate_free";
-  const exactPrice = formatExactAmount(tool.quote.price);
   if (
-    exactPrice === undefined ||
-    tool.description.priceLabel !==
-      `${tool.quote.price.currency} ${exactPrice}`
+    tool.quote.price.units === "0" ||
+    (tool.description.commercialPrice.kind === "fixed" &&
+      tool.description.commercialPrice.amount.units === "0")
   )
+    return "gateway_smoke_candidate_free";
+  if (tool.description.commercialPrice.kind !== "fixed")
     return "gateway_smoke_candidate_price_not_fixed";
   if (rescaleExactAmount(tool.quote.price, 2) === undefined)
     return "gateway_smoke_candidate_price_not_cent_exact";

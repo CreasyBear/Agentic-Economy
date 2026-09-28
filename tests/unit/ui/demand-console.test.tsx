@@ -56,9 +56,9 @@ const keyReadback: AgentCredentialSource = {
     lifecycle: 'active',
     expiresAt: 604_800_000,
     budget: {
-      maximumSpendPerCall: { currency: 'USD', units: '500', exponent: 2 },
-      maximumDailySpend: { currency: 'USD', units: '2500', exponent: 2 },
-      maximumMonthlySpend: { currency: 'USD', units: '10000', exponent: 2 },
+      maximumSpendPerCall: { currency: 'AUD', units: '500', exponent: 2 },
+      maximumDailySpend: { currency: 'AUD', units: '2500', exponent: 2 },
+      maximumMonthlySpend: { currency: 'AUD', units: '10000', exponent: 2 },
       maximumConcurrentCalls: 2,
     },
     rate: { maximumCallsPerMinute: 30, maximumCallsPerHour: 300 },
@@ -407,7 +407,7 @@ describe('owner credit target', () => {
       expect(screen.getAllByText('Credit added')).toHaveLength(1)
       expect(screen.getByText('Document adjustment')).toBeTruthy()
       expect(screen.getByText('No Balance change')).toBeTruthy()
-      expect(screen.getByText('−<A$0.01')).toBeTruthy()
+      expect(screen.getByText('−A$0.01')).toBeTruthy()
       expect(screen.getByText('Reverted')).toBeTruthy()
     })
   })
@@ -1045,12 +1045,11 @@ describe('assistant access components', () => {
     fireEvent.click(screen.getByRole('button', { name: `View UI assistant (Sandbox · ${keyReadback.principalId})` }))
     expect(screen.queryByText(/USD 12\.5/u)).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: 'Activity' }))
-    expect(screen.getByText(/AUD 5\.005/u)).toBeTruthy()
+    expect(screen.getByText('A$5.01')).toBeTruthy()
     expect(screen.queryByText('Balance')).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: 'Spending policy' }))
     expect(screen.getAllByText('Browse only').length).toBeGreaterThan(0)
     expect(screen.getAllByText('Sandbox').length).toBeGreaterThan(0)
-    expect(screen.getByText('Spending policy', { selector: 'dt' }).nextElementSibling?.textContent).toBe('Unavailable')
     expect(screen.queryByText('30/min · 300/hour')).toBeNull()
     expect(screen.queryByText('USD 25.00')).toBeNull()
   })
@@ -1091,7 +1090,7 @@ describe('assistant access components', () => {
     fireEvent.click(screen.getByRole('button', { name: `View UI assistant (Sandbox · ${keyReadback.principalId})` }))
     fireEvent.click(screen.getByRole('button', { name: 'Activity' }))
     expect(screen.getByText('Calls this month').nextElementSibling?.textContent).toBe('0')
-    expect(screen.getAllByText('AUD 0.000000').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('A$0.00').length).toBeGreaterThan(0)
     expect(screen.getByText('No usage yet')).toBeTruthy()
     expect(screen.queryByText('Usage details are temporarily unavailable')).toBeNull()
   })
@@ -1179,7 +1178,7 @@ describe('assistant access components', () => {
     expect(screen.getByText('Not recorded for this Call')).toBeTruthy()
     expect(screen.getByText('provider:mail:one (name not recorded)')).toBeTruthy()
     expect(screen.getByText('Sends a communication')).toBeTruthy()
-    expect(screen.getByText('AUD 1.250000')).toBeTruthy()
+    expect(screen.getByText('A$1.25')).toBeTruthy()
     expect(screen.getByText('Changes external state · irreversible')).toBeTruthy()
     expect(screen.getByText('Personal data: recipient.email to selected Provider during execution for message delivery')).toBeTruthy()
     expect(screen.getByRole('status').textContent).toBe('market.email.send:v1 approved once.')

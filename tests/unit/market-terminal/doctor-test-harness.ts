@@ -357,6 +357,8 @@ export async function startQuoteServer(scenario: QuoteScenario, observed: Observ
           : { kind: 'found', schemaVersion: 'registry-tools:v3', tool: {
               ...currentTool(SANDBOX_TOOL_REF),
               capabilityId: 'sandbox.frankfurter-fx',
+              priceLabel: 'AUD 1.00',
+              commercialPrice: { kind: 'fixed', amount: { currency: 'AUD', units: '1000000', exponent: 6 } },
               provider: { name: 'AEcon sandbox reference provider', slug: SANDBOX_TOOL_SLUG },
             } })
       })
@@ -624,6 +626,7 @@ export function currentTool(toolRef: string) {
     description: 'Current reference lookup',
     provider: { slug: 'reference', name: 'Reference Services' },
     priceLabel: 'USD 0.00',
+    commercialPrice: { kind: 'fixed', amount: { currency: 'USD', units: '0', exponent: 6 } },
     healthStatus: 'operational',
     readiness: 'ready',
     verification: 'verified',

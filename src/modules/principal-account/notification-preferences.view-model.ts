@@ -1,7 +1,6 @@
 import type { Rule4Diagnostic } from '@/lib/ui/diagnostic'
 
 export const LOW_CREDIT_THRESHOLD_CENTS = [1000, 2500, 5000] as const
-export type LowCreditThresholdCents = (typeof LOW_CREDIT_THRESHOLD_CENTS)[number]
 
 export type NotificationPreferencesView = Readonly<{
   lowCreditBalance: boolean
@@ -59,22 +58,3 @@ export const PREFERENCE_SWITCHES: ReadonlyArray<{
   { key: 'invoiceReady', label: 'Email when a tax invoice or statement is ready', description: 'Receive a notice when a new billing document is available.' },
   { key: 'teamMembershipChanged', label: 'Email when team membership changes', description: 'Keep track of invitations and role changes.' },
 ]
-
-export const THRESHOLD_OPTIONS: ReadonlyArray<{
-  cents: LowCreditThresholdCents
-  label: string
-  displayAmount: string
-}> = [
-  { cents: 1000, label: 'A$10.00', displayAmount: 'A$10.00' },
-  { cents: 2500, label: 'A$25.00 (Default)', displayAmount: 'A$25.00' },
-  { cents: 5000, label: 'A$50.00', displayAmount: 'A$50.00' },
-]
-
-export function lowCreditThresholdStatement(preferences: NotificationPreferencesView): string {
-  if (!preferences.lowCreditBalance) {
-    return 'Low-balance alerts are off. Existing spend and call alerts are unchanged.'
-  }
-  const match = THRESHOLD_OPTIONS.find((option) => option.cents === preferences.lowCreditThresholdCents)
-  const amount = match?.displayAmount ?? `A$${(preferences.lowCreditThresholdCents / 100).toFixed(2)}`
-  return `Alert sent when balance drops below ${amount}.`
-}

@@ -29,7 +29,7 @@ const okPayload = (): ToolChoiceSearchResult => ({
     actionClass: 'retrieve',
     objectClass: 'data',
     readiness: 'ready',
-    price: { kind: 'indicative', label: '$1.00' },
+    price: { kind: 'indicative', label: 'A$1.00' },
     detailRef: alphaRef,
     next: [{ action: 'describe', args: { toolRef: alphaRef }, authority: 'public' }],
   }],
@@ -198,7 +198,7 @@ describe('useMarketToolSearch', () => {
           id: 'opaque-1', source: 'coinbase', access: 'external_listing',
           title: 'External Tool', summary: 'External lookup', provider: 'Outside',
           actionClass: 'retrieve', objectClass: 'data', readiness: 'unverified',
-          price: { kind: 'unavailable' }, detailRef: '/api/v1/registry/detail?id=opaque-1',
+          price: { kind: 'indicative', label: 'USDC 0.000001' }, detailRef: '/api/v1/registry/detail?id=opaque-1',
           next: [{ action: 'describe-external', authority: 'public', args: { id: 'opaque-1' } }],
         },
       ],
@@ -214,11 +214,12 @@ describe('useMarketToolSearch', () => {
       kind: 'success',
       scopeLabel: expect.stringContaining('other supply may exist'),
       items: [
-        { toolRef: alphaRef, sourceKind: 'admitted' },
+        { toolRef: alphaRef, sourceKind: 'admitted', priceLabel: 'A$1.00' },
         {
           toolRef: '/api/v1/registry/detail?id=opaque-1',
           sourceKind: 'directory',
           healthLabel: 'External listing, not callable through AE',
+          priceLabel: 'AUD estimate temporarily unavailable',
         },
       ],
     })

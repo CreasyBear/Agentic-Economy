@@ -11,7 +11,6 @@ export type QuoteConfirmationView = Readonly<{
   expiresAt: number
   inputSummary: string
   remainingCap: Readonly<{ amount: ExactAmount; window: string }>
-  indicativeAud?: ExactAmount
   expired: boolean
   pending: boolean
 }>

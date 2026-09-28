@@ -7,6 +7,7 @@ vi.mock('@/lib/ui/toast', () => ({ toast: { success: vi.fn(), error: vi.fn(), in
 
 import type { AgentDetail } from '@/modules/agent-access/agent-operator-view-model'
 import type { AgentSpendingPolicyState } from '@/modules/agent-access/spending-policy-update'
+import { agentFacts, agentSpendingPolicyFacts } from '../agent-operator-console-model'
 import { useAgentSpendingLimits } from './useAgentSpendingLimits'
 
 const known: Extract<AgentSpendingPolicyState, { kind: 'known' }> = {
@@ -104,6 +105,27 @@ describe('useAgentSpendingLimits', () => {
     await waitFor(() => expect(result.current.view.editing).toBe(true))
     expect(result.current.view.perCallStr).toBe('')
     expect(update).not.toHaveBeenCalled()
+  })
+
+  it('shows buyer limits rounded up to cents without changing the exact policy', () => {
+    const subcentPolicy: Extract<AgentSpendingPolicyState, { kind: 'known' }> = {
+      ...known,
+      maximumSpendPerCall: { currency: 'AUD', units: '1', exponent: 6 },
+      maximumDailySpend: { currency: 'AUD', units: '10001', exponent: 6 },
+      maximumMonthlySpend: { currency: 'AUD', units: '1234567', exponent: 6 },
+    }
+    const subcentDetail: AgentDetail = {
+      ...detail, spendingPolicy: subcentPolicy, agent: { ...detail.agent, spendingPolicy: subcentPolicy },
+    }
+    const { result } = renderHook(() => useAgentSpendingLimits({ detail: subcentDetail }))
+
+    expect(result.current.view.readout).toEqual({
+      perCallDisplay: 'A$0.01', dailyDisplay: 'A$0.02', monthlyDisplay: 'A$1.24',
+    })
+    expect(agentFacts(subcentDetail).find((fact) => fact.label === 'Monthly limit')?.value).toBe('A$1.24')
+    expect(agentSpendingPolicyFacts(subcentDetail).slice(1, 4).map((fact) => fact.value))
+      .toEqual(['A$0.01', 'A$0.02', 'A$1.24'])
+    expect(result.current.policy).toBe(subcentPolicy)
   })
 
 })

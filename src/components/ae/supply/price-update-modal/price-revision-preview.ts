@@ -10,9 +10,10 @@ import {
 
 export function parseDisplayAudPrice(display?: string): ExactAmount | undefined {
   if (display === undefined || display.trim() === '') return undefined
-  const match = display.match(/(\d+(?:\.\d+)?)/u)
-  if (match === null) return undefined
-  const parsed = parseDecimalExactAmount('AUD', match[1], 2)
+  const match = display.match(/^\s*(?:A\$|AUD)\s*((?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?)\s*$/u)
+  const price = match?.[1]
+  if (price === undefined) return undefined
+  const parsed = parseDecimalExactAmount('AUD', price.replaceAll(',', ''), 2)
   if (parsed === undefined || BigInt(parsed.units) <= 0n) return undefined
   return parsed
 }

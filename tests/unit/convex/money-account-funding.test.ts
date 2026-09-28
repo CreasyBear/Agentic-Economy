@@ -180,16 +180,6 @@ async function publishedOwnerFixture(slug: string) {
   return { backend, fixture }
 }
 
-async function workpoolFixture(slug: string, maxParallelism = 1) {
-  vi.useFakeTimers()
-  const backend = convexTestWithWorkers()
-  await backend.run(async (ctx) => {
-    await ctx.runMutation(components.workpool.config.update, { maxParallelism })
-  })
-  const fixture = await publishedBusinessOwner(backend, slug)
-  return { backend, fixture }
-}
-
 describe('Account AUD funding through Formance', () => {
   const previousServiceKey = process.env.AE_CONVEX_SERVER_FUNCTION_TOKEN
   beforeEach(() => { process.env.AE_CONVEX_SERVER_FUNCTION_TOKEN = SERVICE_KEY })
@@ -366,7 +356,8 @@ describe('Account AUD funding through Formance', () => {
 
   it('prepares one exact booking and finalizes only the returned Formance reference', async () => {
     const commandRef = 'account-funding:formance-one'
-    const { backend, fixture } = await workpoolFixture('formance-account-funding')
+    const backend = convexTestWithWorkers()
+    const fixture = await publishedBusinessOwner(backend, 'formance-account-funding')
     const reserved = await ownerReserve(fixture, commandRef, { inputDigest: sha256('a') })
     expect(reserved).toMatchObject({ kind: 'accepted', command: {
       accountRef: fixture.canonicalAccountRef, principalUnits: '5000000', serviceFeeUnits: '250000',
@@ -413,8 +404,7 @@ describe('Account AUD funding through Formance', () => {
     )).resolves.toEqual({
       kind: 'accepted', status: 'replayed', appliedRef: formanceTransactionRef,
     })
-    await backend.finishAllScheduledFunctions(() => vi.advanceTimersByTime(1))
-    await backend.finishInProgressScheduledFunctions()
+    await backend.finishAllScheduledFunctions(() => undefined)
     const rows = await fundingRows(backend, commandRef)
     expect(rows).toMatchObject({
       command: { state: 'succeeded', appliedTransactionRef: formanceTransactionRef },

@@ -13,8 +13,9 @@ import {
   publicToolParameterSchema,
   publicToolPaymentSchema,
   publicToolDisplayPriceSchema,
+  publicToolPriceSchema,
 } from '@/modules/capability-supply/tool-schemas'
-import { exactAmountSchema, formatExactAmount, formatDisplayPrice } from '@/modules/money/public'
+import { exactAmountSchema, formatDisplayAmount, formatDisplayPrice } from '@/modules/money/public'
 import { projectToolHealth, type ToolHealthStatus } from '@/modules/capability-supply/tool-health'
 import { SEARCH_QUERY_MAX_LENGTH } from '@/modules/common/search-query'
 import { projectToolChoiceEvidence } from './tool-choice-evidence'
@@ -189,6 +190,7 @@ const toolDescriptionSchema = z.strictObject({
   provider: z.strictObject({ name: z.string(), slug: z.string() }),
   priceLabel: z.string(),
   displayPrice: publicToolDisplayPriceSchema.optional(),
+  commercialPrice: publicToolPriceSchema,
   healthStatus: toolHealthStatusSchema,
   readiness: z.enum(['ready', 'unverified', 'unavailable']),
   ...choiceEvidenceSchema,
@@ -261,15 +263,11 @@ function priceLabel(tool: PublicToolDescriptor): string {
   if (display !== undefined) return display
   const price = tool.commercial.price
   if (price.kind === 'on_request') return 'Price confirmed at inspection'
-  if (price.kind === 'fixed') {
-    const amount = formatExactAmount(price.amount)
-    return amount === undefined ? 'Price confirmed at inspection' : `${price.amount.currency} ${amount}`
-  }
-  const minimum = formatExactAmount(price.minimum)
-  const maximum = formatExactAmount(price.maximum)
-  return minimum === undefined || maximum === undefined || price.minimum.currency !== price.maximum.currency
-    ? 'Price confirmed at inspection'
-    : `${price.minimum.currency} ${minimum}\u2013${maximum}`
+  if (price.kind === 'fixed') return price.amount.currency === 'AUD'
+    ? formatDisplayAmount(price.amount) : formatDisplayPrice({ kind: 'unavailable' }) ?? 'AUD estimate temporarily unavailable'
+  return price.minimum.currency === 'AUD' && price.maximum.currency === 'AUD'
+    ? `${formatDisplayAmount(price.minimum)}–${formatDisplayAmount(price.maximum)}`
+    : formatDisplayPrice({ kind: 'unavailable' }) ?? 'AUD estimate temporarily unavailable'
 }
 
 function projectCompactTool(tool: PublicToolDescriptor) {
@@ -422,7 +420,8 @@ export function projectToolDescription(result: ToolDetailResult) {
       description: tool.summary,
       provider: { name: tool.business.name, slug: tool.business.slug },
       priceLabel: priceLabel(tool),
-    ...(tool.commercial.displayPrice === undefined ? {} : { displayPrice: tool.commercial.displayPrice }),
+      ...(tool.commercial.displayPrice === undefined ? {} : { displayPrice: tool.commercial.displayPrice }),
+      commercialPrice: tool.commercial.price,
       ...projectToolChoiceEvidence(tool),
       inputJsonSchema: tool.contract.inputJsonSchema,
       outputJsonSchema: tool.contract.outputJsonSchema,

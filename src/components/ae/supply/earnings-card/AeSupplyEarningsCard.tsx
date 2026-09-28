@@ -1,5 +1,5 @@
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
-import { formatCurrencyAmount } from '@/modules/money/public'
+import { formatCurrencyAmount, formatDisplayAmount } from '@/modules/money/public'
 import type { AeSupplyEarningsCardProps } from './earnings-card.contracts'
 
 export function AeSupplyEarningsCard({ readback }: AeSupplyEarningsCardProps) {
@@ -43,18 +43,22 @@ export function AeSupplyEarningsCard({ readback }: AeSupplyEarningsCardProps) {
           <h3 className="font-medium">Recorded payout entries</h3>
           <p className="text-sm text-muted-foreground">These records are separate from managed x402 obligations. A recorded Stripe transfer is not a bank payout.</p>
           <ul className="grid gap-3">
-            {readback.transfers.map((transfer) => (
-              <li key={transfer.payoutRef} className="grid gap-1 rounded-card border border-border p-4 text-sm">
-                <strong>{formatCurrencyAmount({ currency: transfer.currency, units: transfer.amountUnits, exponent: transfer.exponent })}</strong>
-                <span>Record state: {transfer.state}</span>
-                {transfer.transferStatus === undefined ? null : <span>Stripe transfer status: {transfer.transferStatus}</span>}
-                <span className="break-all">Payout reference: {transfer.payoutRef}</span>
-                {transfer.stripeTransferId === undefined ? null : <span className="break-all">Stripe transfer: {transfer.stripeTransferId}</span>}
-                {transfer.transferEvidenceDigest === undefined ? null : <span className="break-all">Transfer evidence: {transfer.transferEvidenceDigest}</span>}
-                {transfer.transferObservedAt === undefined ? null : <span>Observed: {new Date(transfer.transferObservedAt).toLocaleString()}</span>}
-                <span>Payout not yet observed</span>
-              </li>
-            ))}
+            {readback.transfers.map((transfer) => {
+              const amount = { currency: transfer.currency, units: transfer.amountUnits, exponent: transfer.exponent }
+              return (
+                <li key={transfer.payoutRef} className="grid gap-1 rounded-card border border-border p-4 text-sm">
+                  <strong>{transfer.currency === 'AUD' ? formatDisplayAmount(amount) : formatCurrencyAmount(amount)}</strong>
+                  {transfer.currency === 'AUD' ? <span>Exact amount: {formatCurrencyAmount(amount)}</span> : null}
+                  <span>Record state: {transfer.state}</span>
+                  {transfer.transferStatus === undefined ? null : <span>Stripe transfer status: {transfer.transferStatus}</span>}
+                  <span className="break-all">Payout reference: {transfer.payoutRef}</span>
+                  {transfer.stripeTransferId === undefined ? null : <span className="break-all">Stripe transfer: {transfer.stripeTransferId}</span>}
+                  {transfer.transferEvidenceDigest === undefined ? null : <span className="break-all">Transfer evidence: {transfer.transferEvidenceDigest}</span>}
+                  {transfer.transferObservedAt === undefined ? null : <span>Observed: {new Date(transfer.transferObservedAt).toLocaleString()}</span>}
+                  <span>Payout not yet observed</span>
+                </li>
+              )
+            })}
           </ul>
           {readback.transfersTruncated ? <p className="text-sm text-muted-foreground">Showing 100 transfer records. Other records are not included.</p> : null}
         </section>

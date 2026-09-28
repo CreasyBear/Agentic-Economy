@@ -142,7 +142,7 @@ describe('catalog markdown', () => {
     const lines = body.split('\n')
 
     expect(lines.find((line) => line.startsWith('| Business |'))).toContain('| Price |')
-    expect(lines.find((line) => line.includes('Meridian Drains'))).toContain('| From AUD 180.00 per visit incl. tax |')
+    expect(lines.find((line) => line.includes('Meridian Drains'))).toContain('| From A$180.00 per visit incl. tax |')
     // An offering without a published price stays without one; the row says so.
     expect(lines.find((line) => line.includes('Silent Pipeworks'))).toContain('| — |')
   })
@@ -161,7 +161,7 @@ describe('business markdown', () => {
   it('publishes the comparable price above the note the business wrote', () => {
     const body = buildBusinessMarkdown(business({ offerings: [pricedOffering] }), options)
 
-    expect(body).toContain('- Price: From AUD 180.00 per visit incl. tax')
+    expect(body).toContain('- Price: From A$180.00 per visit incl. tax')
     expect(body).toContain('- Published price note: From $180 — quoted before work starts')
     expect(body.indexOf('- Price:')).toBeLessThan(body.indexOf('- Published price note:'))
   })

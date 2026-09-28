@@ -1,7 +1,7 @@
 import type { AeFact } from '@/components/ae/data/AeFactList'
 import { formatTimestamp } from '@/lib/ui/format-time'
 import { aeStatusPresentation, getStatusPresentation } from '@/lib/ui/status-presentation'
-import { formatCurrencyAmount, formatDisplayAmount, type ExactAmount } from '@/modules/money/public'
+import { formatDisplayAmount, type ExactAmount } from '@/modules/money/public'
 import type {
   AgentDetail,
   AgentDirectoryItem,
@@ -33,7 +33,7 @@ export function approvalFacts(approval: PendingCallApproval): readonly AeFact[] 
     },
     {
       label: 'Maximum AUD spend',
-      value: acceptedQuote === undefined ? 'Accepted Quote unavailable' : formatCurrencyAmount(acceptedQuote.maximumSpend),
+      value: acceptedQuote === undefined ? 'Accepted Quote unavailable' : formatDisplayAmount(acceptedQuote.maximumSpend),
       mono: acceptedQuote !== undefined,
     },
     { label: 'Action class', value: consequenceLabel(approval.authorityRequest.consequence) },
@@ -116,7 +116,7 @@ export function agentFacts(detail: AgentDetail): readonly AeFact[] {
       : `${usage.outcomeUnknownCallCount} ${usage.outcomeUnknownCallCount === 1 ? 'needs' : 'need'} checking`}`
   return [
     { label: 'Authority', value: scopeLabel(detail.authorityMode) },
-    { label: 'Monthly limit', value: detail.spendingPolicy.kind === 'known' ? formatCurrencyAmount(detail.spendingPolicy.maximumMonthlySpend) : spendingPolicyStateLabel(detail.spendingPolicy.kind), mono: detail.spendingPolicy.kind === 'known' },
+    { label: 'Monthly limit', value: detail.spendingPolicy.kind === 'known' ? formatDisplayAmount(detail.spendingPolicy.maximumMonthlySpend) : spendingPolicyStateLabel(detail.spendingPolicy.kind), mono: detail.spendingPolicy.kind === 'known' },
     { label: 'Recent Calls', value: calls },
     { label: 'Last used', value: detail.agent.lastSeenAt === undefined
       ? 'No activity recorded'
@@ -132,9 +132,9 @@ export function agentSpendingPolicyFacts(detail: AgentDetail): readonly AeFact[]
   }
   return [
     { label: 'Status', value: policy.paused ? 'Paused' : 'Active' },
-    { label: 'Per Call', value: formatCurrencyAmount(policy.maximumSpendPerCall), mono: true },
-    { label: 'Daily budget', value: formatCurrencyAmount(policy.maximumDailySpend), mono: true },
-    { label: 'Monthly budget', value: formatCurrencyAmount(policy.maximumMonthlySpend), mono: true },
+    { label: 'Per Call', value: formatDisplayAmount(policy.maximumSpendPerCall), mono: true },
+    { label: 'Daily budget', value: formatDisplayAmount(policy.maximumDailySpend), mono: true },
+    { label: 'Monthly budget', value: formatDisplayAmount(policy.maximumMonthlySpend), mono: true },
     { label: 'Rate', value: detail.grant === undefined ? 'Unavailable' : `${detail.grant.rate.maximumCallsPerMinute}/min · ${detail.grant.rate.maximumCallsPerHour}/hour`, mono: true },
     { label: 'Concurrency', value: detail.grant === undefined ? 'Unavailable' : String(detail.grant.budget.maximumConcurrentCalls), mono: true },
   ]
@@ -341,5 +341,5 @@ export function dataLabel(state: AgentDetail['dataState']): string {
 }
 
 export function formatAmount(amount: ExactAmount | undefined): string {
-  return amount === undefined ? '—' : formatCurrencyAmount(amount)
+  return amount === undefined ? '—' : formatDisplayAmount(amount)
 }

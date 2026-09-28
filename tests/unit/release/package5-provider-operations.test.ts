@@ -160,10 +160,15 @@ function successfulFetch(requests: Request[]): typeof globalThis.fetch {
       })
     }
     if (path.endsWith('/market-tools/describe')) {
+      const isX402 = body.toolRef === toolRef(sourceKinds.indexOf('x402') + 1)
       return json({
         kind: 'found', schemaVersion: 'registry-tools:v3', tool: {
           toolRef: body.toolRef, capabilityId: 'fixture.execute', title: 'Fixture', description: 'fixture', provider: { name: 'Fixture', slug: 'fixture' },
-          priceLabel: 'Free', healthStatus: 'operational', inputJsonSchema: { type: 'object' }, outputJsonSchema: { type: 'object' }, materialTerms: [], dataUse: [], effects: [], evidence: [], authentication: { kind: 'ae_api_key' }, listingTier: 'reviewed',
+          priceLabel: isX402 ? 'Price on request' : 'Free',
+          commercialPrice: isX402
+            ? { kind: 'on_request' }
+            : { kind: 'fixed', amount: { currency: 'AUD', units: '0', exponent: 6 } },
+          healthStatus: 'operational', inputJsonSchema: { type: 'object' }, outputJsonSchema: { type: 'object' }, materialTerms: [], dataUse: [], effects: [], evidence: [], authentication: { kind: 'ae_api_key' }, listingTier: 'reviewed',
           readiness: 'ready', verification: 'verified', network: 'unknown', claimSource: 'provider',
         },
       })

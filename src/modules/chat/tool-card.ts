@@ -4,9 +4,9 @@ import { chatClarifyInputSchema, storedClarifyAnswer } from '@/modules/chat/agen
 import { addRef, collectToolRefs, matchedCount } from '@/modules/chat/tool-card-search'
 import { isRecord } from '@/modules/common/is-record'
 import { publicToolDisplayPriceSchema } from '@/modules/capability-supply/tool-schemas'
-import type { PublicToolAuthentication } from '@/modules/capability-supply/public'
+import type { PublicToolAuthentication, PublicToolPrice } from '@/modules/capability-supply/public'
 import { projectCompareContrasts, readPosture, readPrice } from './internal/tool-card-compare'
-import { formatToolAuthentication, formatToolPrice, formatToolReadiness } from '@/modules/market/tool-view-model'
+import { formatToolAuthentication, formatToolReadiness } from '@/modules/market/tool-view-model'
 import {
   callResultKindValues,
   callResultSchema,
@@ -20,7 +20,7 @@ import {
   suggestNextAction,
   type SuggestedNextAction,
 } from '@/modules/market/suggested-next-action'
-import { formatCurrencyAmount, formatDisplayPrice } from '@/modules/money/public'
+import { formatCurrencyAmount, formatDisplayAmount, formatDisplayPrice } from '@/modules/money/public'
 import { registryNextActionSchema, type RegistryNextAction } from '@/modules/registry/tool-choice-contracts'
 
 export const CHAT_TOOL_IDS = [
@@ -168,6 +168,14 @@ function boundedString(value: unknown, maximum: number): string | undefined {
   return Array.from(value.trim()).slice(0, maximum).join('')
 }
 
+function buyerPrice(price: PublicToolPrice): string {
+  if (price.kind === 'on_request') return 'Price on request'
+  if (price.kind === 'fixed') return price.amount.currency === 'AUD'
+    ? formatDisplayAmount(price.amount) : 'AUD estimate temporarily unavailable'
+  if (price.minimum.currency !== 'AUD' || price.maximum.currency !== 'AUD') return 'AUD estimate temporarily unavailable'
+  return `${formatDisplayAmount(price.minimum)}–${formatDisplayAmount(price.maximum)}`
+}
+
 function readAuthentication(value: unknown): PublicToolAuthentication | undefined {
   if (!isRecord(value) || typeof value.kind !== 'string') return undefined
   if (value.kind === 'ae_api_key') return { kind: 'ae_api_key' }
@@ -216,9 +224,7 @@ function rowFromChoiceFields(value: unknown): ToolChoiceRow | null {
         ? stringField(value.details.provider.name)
         : undefined
   const display = publicToolDisplayPriceSchema.safeParse(value.displayPrice)
-  const price = (display.success ? formatDisplayPrice(display.data) : undefined)
-    ?? stringField(value.priceLabel)
-    ?? (isRecord(value.price) ? stringField(value.price.label) : undefined)
+  const price = display.success ? formatDisplayPrice(display.data) : undefined
   const healthStatus = stringField(value.healthStatus)
   const readiness = healthStatus === 'operational'
     ? 'Operational'
@@ -253,7 +259,7 @@ function rowFromDescriptorFields(value: unknown): ToolChoiceRow | null {
       : undefined
   const price = isRecord(value.commercial) ? readPrice(value.commercial.price) : undefined
   const display = publicToolDisplayPriceSchema.safeParse(isRecord(value.commercial) ? value.commercial.displayPrice : undefined)
-  const priceLabel = (display.success ? formatDisplayPrice(display.data) : undefined) ?? (price === undefined ? undefined : formatToolPrice(price))
+  const priceLabel = display.success ? formatDisplayPrice(display.data) : price === undefined ? undefined : buyerPrice(price)
   const posture = readPosture(value.availability)
   const authentication = readAuthentication(value.authentication)
   return {
@@ -293,6 +299,9 @@ function projectStoredChoice(value: unknown): ToolChoiceRow | null {
   if (toolRef === undefined || title === undefined) return null
   const provider = stringField(value.provider)
   const price = stringField(value.price)
+  const priceValidUntil = typeof value.priceValidUntil === 'number'
+    && Number.isSafeInteger(value.priceValidUntil) && value.priceValidUntil >= 0
+    ? value.priceValidUntil : undefined
   const readiness = stringField(value.readiness)
   const access = stringField(value.access)
   return {
@@ -302,6 +311,7 @@ function projectStoredChoice(value: unknown): ToolChoiceRow | null {
     title,
     ...(provider === undefined ? {} : { provider }),
     ...(price === undefined ? {} : { price }),
+    ...(priceValidUntil === undefined ? {} : { priceValidUntil }),
     ...(readiness === undefined ? {} : { readiness }),
     ...(access === undefined ? {} : { access }),
     ...(value.belowMatch === true ? { belowMatch: true } : {}),
@@ -333,6 +343,28 @@ function projectStoredFacts(values: unknown): ToolFact[] {
     if (facts.length >= 6) break
   }
   return facts
+}
+
+function buyerCompareContrasts(output: Record<string, unknown>, choices: readonly ToolChoiceRow[]): readonly ToolFact[] {
+  const contrasts = projectCompareContrasts(output, choices)
+  if (!Array.isArray(output.facts)) return contrasts
+  const priceFact = output.facts.find((fact) => isRecord(fact) && fact.field === 'price')
+  if (!isRecord(priceFact) || !Array.isArray(priceFact.values)) return contrasts
+  const prices: string[] = []
+  for (const cell of priceFact.values) {
+    if (!isRecord(cell)) continue
+    const price = readPrice(cell.value)
+    if (price === undefined) continue
+    const title = typeof cell.toolRef === 'string'
+      ? choices.find((choice) => choice.toolRef === cell.toolRef)?.title
+      : undefined
+    const label = buyerPrice(price)
+    prices.push(title === undefined ? label : `${title}: ${label}`)
+    if (prices.length >= 4) break
+  }
+  return contrasts.map((fact) => fact.label === 'Price' && prices.length > 0
+    ? { ...fact, value: prices.join('; ') }
+    : fact)
 }
 
 const MAX_EXECUTE_OUTPUT_PREVIEW_CHARS = 8_000
@@ -385,8 +417,9 @@ function projectCallResult(result: CallResult): ToolCardProjection {
     const facts: ToolFact[] = [
       {
         label: 'Charge',
-        value: `${formatCurrencyAmount(result.usage.amount)} · ${CHARGE_STATE_LABELS[result.usage.chargeState]}`,
+        value: `${formatDisplayAmount(result.usage.amount)} · ${CHARGE_STATE_LABELS[result.usage.chargeState]}`,
       },
+      { label: 'Exact charge', value: formatCurrencyAmount(result.usage.amount) },
       ...(result.usage.durationMs === undefined
         ? []
         : [{ label: 'Duration', value: `${result.usage.durationMs} ms` }]),
@@ -431,7 +464,7 @@ function projectCallResult(result: CallResult): ToolCardProjection {
         { label: 'Consequence', value: result.authorityRequest.consequence.replaceAll('_', ' ') },
         ...(maximumSpend === undefined
           ? []
-          : [{ label: 'Maximum spend', value: formatCurrencyAmount(maximumSpend) }]),
+          : [{ label: 'Maximum spend', value: formatDisplayAmount(maximumSpend) }]),
       ],
       summary: 'The call is paused until the required authority is granted.',
       nextAction: 'Review the pending approval in the agent console.',
@@ -477,9 +510,9 @@ export function projectInspectResult(
     state: 'complete',
     toolRefs: [result.toolRef],
     facts: [
-      { label: 'Decision price', value: formatCurrencyAmount(result.price) },
-      { label: INSPECT_ACCOUNT_AVAILABLE_LABEL, value: formatCurrencyAmount(result.account.available) },
-      { label: INSPECT_AGENT_MAXIMUM_LABEL, value: formatCurrencyAmount(result.budget.maximumPerCall) },
+      { label: 'Decision price', value: formatDisplayAmount(result.price) },
+      { label: INSPECT_ACCOUNT_AVAILABLE_LABEL, value: formatDisplayAmount(result.account.available) },
+      { label: INSPECT_AGENT_MAXIMUM_LABEL, value: formatDisplayAmount(result.budget.maximumPerCall) },
       ...(result.sourceRequirement === undefined
         ? []
         : [{ label: 'Provider requirement', value: formatCurrencyAmount(result.sourceRequirement) }]),
@@ -558,7 +591,7 @@ function projectLiveBody(toolId: ChatToolId, output: Record<string, unknown>): T
     }
     case 'registry.tools.compare': {
       const choices = projectLiveChoices(output.tools)
-      return liveChoices(toolId, output, choices, projectCompareContrasts(output, choices))
+      return liveChoices(toolId, output, choices, buyerCompareContrasts(output, choices))
     }
     case 'registry.tools.describe': {
       const choice = projectLiveChoice(output.tool ?? output)
