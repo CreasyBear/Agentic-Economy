@@ -11,6 +11,7 @@ import { fileURLToPath } from 'node:url'
  */
 export default async function setup(): Promise<void> {
   const repositoryRoot = fileURLToPath(new URL('../..', import.meta.url))
+  if (process.env.AE_CLI_PREBUILT === '1') return
   execFileSync(process.execPath, ['scripts/build-cli.ts'], {
     cwd: repositoryRoot,
     stdio: 'inherit',
