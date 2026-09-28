@@ -8,8 +8,7 @@ export type DevelopersApiOperation = Readonly<{
   method: string
   path: string
   summary: string
-  curl: string
-}>
+} & ({ curl: string; template?: never; authority?: never } | { curl?: never; template: string; authority: string })>
 
 export type DevelopersApiOperationGroupTag =
   | 'Call gateway'
@@ -68,7 +67,7 @@ export const DEVELOPERS_API_COPY = Object.freeze({
   authenticationLabel: 'Authentication',
   priceShapeLabel: 'Price shape',
   operationsHeading: 'Requests',
-  operationsDescription: 'Copy a request and replace any placeholder values for the job.',
+  operationsDescription: 'Copy complete read requests where available. Other requests show required fields and authority, not a runnable command.',
   errorsHeading: 'Errors',
   errorsDescription: 'Error responses use RFC 9457 Problem Details. Match kind before deciding whether to retry.',
   nextStepLabel: 'Next step',
