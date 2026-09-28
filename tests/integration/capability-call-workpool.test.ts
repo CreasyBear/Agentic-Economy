@@ -361,10 +361,13 @@ async function installPackagedCli(root: string): Promise<string> {
   const consumerDirectory = join(root, 'consumer')
   await mkdir(packageDirectory, { recursive: true })
   await mkdir(consumerDirectory, { recursive: true })
-  await execFileAsync('npm', ['run', 'build:cli'], { cwd: resolve('.') })
+  if (process.env.AE_CLI_PREBUILT !== '1') {
+    await execFileAsync('npm', ['run', 'build:cli'], { cwd: resolve('.') })
+  }
   const packed = await execFileAsync('npm', [
     'pack',
     './packages/cli',
+    ...(process.env.AE_CLI_PREBUILT === '1' ? ['--ignore-scripts'] : []),
     '--json',
     '--pack-destination',
     packageDirectory,

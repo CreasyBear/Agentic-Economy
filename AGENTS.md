@@ -156,13 +156,16 @@ route's hostile-input cases to `tests/helpers/catalogue-hostile-inputs.ts`.
 
 ## Branches and merges
 
-`main` is protected: both Kernel release gate jobs must pass before a merge. Each
-stabilisation well lands as its own branch `well-N/<slug>` cut from `main`, one
-pull request per well, merged with a merge commit once `npm run gate` and CI are
-green. Never push directly to `main`; never stage the whitepaper, `docs/strategy/*`,
-`docs/workflow/aecon-signals-proposal.md` or `output/*`. `npm run gate` runs
-`npm run deps:check` (dependency-cruiser, `.dependency-cruiser.cjs`) next to
-`lint` to fail the build on import cycles across `src`, `convex` and `tools`.
+During alpha, push-triggered GitHub Actions remain disabled: run `npm run check`
+after each change (lint, dependency ratchet, incremental types and source/UI
+contracts), run affected tests for changed behavior, and run the full
+`npm run gate` before merging to `main` or cutting an alpha release. `gate`
+includes source/integrity, clean typechecking, unit and integration suites,
+browser accessibility, CLI package and public build proofs. Do not treat
+`check` as a substitute for `gate`. Each stabilisation well lands as its own
+branch `well-N/<slug>` and pull request with a merge commit; never push directly
+to `main` or stage the whitepaper, `docs/strategy/*`,
+`docs/workflow/aecon-signals-proposal.md` or `output/*`.
 `deps:check` runs `tools/dev/deps-ratchet.ts`, a ratchet that caps each
 dependency-cruiser rule's violation count at a ceiling in its `RATCHET`
 block - lower a ceiling there as matching cycles are fixed, never raise one.
