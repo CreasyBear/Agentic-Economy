@@ -7,6 +7,7 @@ import { describe, expect, it } from 'vitest'
 import { CALL_ROUTE_CONTRACT } from '@/modules/capability-execution/call-entry'
 import { AGENT_ACCOUNT_SELF_ROUTE_CONTRACT } from '@/modules/agent-access/account.actions'
 import { createDevelopersApiViewModel } from '@/components/ae/developers/api-reference/developers-api.view-model'
+import { toolCatalogSearchInputSchema } from '@/modules/registry/tool-choice-contracts'
 
 import { buildOpenApiDocumentWithMetrics } from '@/modules/discovery/public'
 
@@ -117,7 +118,7 @@ describe('openapi document', () => {
     expect(again.document).toEqual(result.document)
   })
 
-  it('projects one runnable request per endpoint with canonical auth, errors, price, and version copy', () => {
+  it('projects OpenAPI metadata, errors, price, and version copy', () => {
     const page = createDevelopersApiViewModel(result.document)
     const rawDocument = result.document as {
       info: { version: string }
@@ -136,18 +137,6 @@ describe('openapi document', () => {
 
     const pageOperations = page.operationGroups.flatMap((group) => group.operations)
     expect(pageOperations).toHaveLength(collectOperationIds().length)
-    for (const operation of pageOperations) {
-      expect(operation.curl).toContain(`curl --request ${operation.method}`)
-      expect(operation.curl).toContain(`${origin}${operation.path}`)
-      const wire = document.paths[operation.path]?.[operation.method.toLowerCase()] as { security?: unknown[] }
-      if (wire.security?.length) expect(operation.curl).toContain('Authorization: Bearer <your key>')
-      else expect(operation.curl).not.toContain('Authorization: Bearer')
-      if (operation.method === 'POST') {
-        expect(operation.curl).toContain('Content-Type: application/json')
-        expect(operation.curl).toContain('--data ')
-      }
-    }
-    expect(pageOperations.find((operation) => operation.path === '/api/v1/account/funding-sessions')?.curl).toContain('Idempotency-Key: <stable-key>')
     expect(page.authDescription).toBe(rawDocument.components.securitySchemes.agentAccessKey.description)
     expect(page.problems.map((problem) => problem.kind)).toEqual(
       rawDocument.components.schemas.Problem.properties.kind.enum,
@@ -167,23 +156,38 @@ describe('openapi document', () => {
       formatted: 'A$1.25',
     })
 
-    const withExample = structuredClone(result.document) as {
-      paths: Record<string, Record<string, {
-        operationId: string
-        requestBody?: { content?: { 'application/json'?: { example?: unknown } } }
-      }>>
+  })
+  it('copies a schema-valid POST Search but only displays required schema and authority for consequential requests', () => {
+    const page = createDevelopersApiViewModel(result.document)
+    const operations = page.operationGroups.flatMap((group) => group.operations)
+    const search = operations.find((operation) => operation.operationId === 'registry.tools.search')
+    expect(search?.curl).toContain('curl --request POST')
+    expect(search?.curl).toContain(`${origin}/api/v1/market-tools/search`)
+    const body = /--data '([^']+)'/u.exec(search?.curl ?? '')?.[1]
+    const searchDocument = result.document as {
+      paths: Record<string, { post?: { requestBody?: { content?: { 'application/json'?: { schema?: unknown; example?: unknown } } } } }>
     }
-    const exampleOperation = Object.values(withExample.paths)
-      .flatMap((methods) => Object.values(methods))
-      .find((operation) => operation.requestBody?.content?.['application/json'] !== undefined)
-    expect(exampleOperation).toBeDefined()
-    if (exampleOperation?.requestBody?.content?.['application/json'] !== undefined) {
-      exampleOperation.requestBody.content['application/json'].example = { need: 'weather' }
+    const media = searchDocument.paths['/api/v1/market-tools/search']?.post?.requestBody?.content?.['application/json']
+    expect(media?.schema).toBeDefined()
+    expect(media?.example).toEqual(JSON.parse(body ?? 'null'))
+    expect(toolCatalogSearchInputSchema.parse(JSON.parse(body ?? 'null')).query).toBe('convert a time between time zones')
+
+    const call = operations.find((operation) => operation.path === '/api/v1/tools/call')
+    expect(call?.curl).toBeUndefined()
+    expect(call?.template).toContain('idempotencyKey')
+    expect(call?.authority).toContain('market_tools:call')
+    const withWriteExample = structuredClone(result.document) as {
+      paths: Record<string, { post?: { requestBody?: { content?: { 'application/json'?: { example?: unknown } } } } }>
     }
-    expect(
-      createDevelopersApiViewModel(withExample).operationGroups
-        .flatMap((group) => group.operations)
-        .find((operation) => operation.operationId === exampleOperation?.operationId)?.curl,
-    ).toContain(`--data '{"need":"weather"}'`)
+    const callMedia = withWriteExample.paths['/api/v1/tools/call']?.post?.requestBody?.content?.['application/json']
+    if (callMedia === undefined) throw new Error('Missing Call request body')
+    callMedia.example = { idempotencyKey: 'example' }
+    expect(createDevelopersApiViewModel(withWriteExample).operationGroups
+      .flatMap((group) => group.operations)
+      .find((operation) => operation.path === '/api/v1/tools/call')?.curl).toBeUndefined()
+    const funding = operations.find((operation) => operation.path === '/api/v1/account/funding-sessions')
+    expect(funding?.curl).toBeUndefined()
+    expect(funding?.template).toContain('principalAmount')
+    expect(funding?.authority).toContain('Agent access key')
   })
 })

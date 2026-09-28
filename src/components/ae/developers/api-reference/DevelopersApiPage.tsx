@@ -41,12 +41,20 @@ export function DevelopersApiPage({ page }: DevelopersApiPageProps) {
                         <AeSiteHeading as="h4" size="xs">{operation.summary}</AeSiteHeading>
                         <code className="text-xs text-muted-foreground">{operation.operationId}</code>
                       </div>
-                      <AeCopyCommand
-                        comfortable
-                        prompt={false}
-                        label={`${operation.method} ${operation.path} cURL`}
-                        code={operation.curl}
-                      />
+                      {operation.curl === undefined ? (
+                        <div className="grid min-w-0 gap-2">
+                          <p className="text-sm font-medium">Request template · not runnable</p>
+                          <p className="text-xs text-muted-foreground">{operation.authority}</p>
+                          <pre className="min-w-0 overflow-x-auto rounded-md bg-muted p-3 text-xs"><code>{operation.template}</code></pre>
+                        </div>
+                      ) : (
+                        <AeCopyCommand
+                          comfortable
+                          prompt={false}
+                          label={`${operation.method} ${operation.path} cURL`}
+                          code={operation.curl}
+                        />
+                      )}
                     </CardContent>
                   </Card>
                 ))}

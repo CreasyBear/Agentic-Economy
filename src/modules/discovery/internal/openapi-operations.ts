@@ -123,6 +123,7 @@ export function callRouteOperations(): readonly NormalizedOperation[] {
     return {
       operationId: descriptor.actionId,
       summary: facts.summary,
+      readOnly: requireAction(descriptor.actionId).readOnly,
       tags: ['Call gateway'],
       ...(method === 'POST' && (descriptor.actionId === TOOL_PROCURE_ACTION_ID || descriptor.inputJsonSchema?.properties?.idempotencyKey !== undefined)
         ? { description: 'Retry the same logical operation with the same idempotencyKey in the JSON body; a changed payload conflicts.' }
@@ -153,6 +154,7 @@ export function marketToolOperations(): readonly NormalizedOperation[] {
     return {
       operationId: entry.actionId,
       summary: `${descriptor.name}.`,
+      readOnly: descriptor.readOnly,
       tags: ['Tool market'],
       method: 'POST',
       path: entry.pathTemplate,
@@ -160,6 +162,7 @@ export function marketToolOperations(): readonly NormalizedOperation[] {
       pathParams: [],
       queryParams: [],
       ...(requestBodySchema === undefined ? {} : { requestBodySchema }),
+      ...(entry.relation === 'search' ? { requestBodyExample: { query: 'convert a time between time zones' } } : {}),
       responses: [
         { status: 200, schema: successSchema, mediaType: 'application/json', description: 'Success.' },
         ...problemResponses(MARKET_TOOL_PROBLEM_KINDS),

@@ -64,22 +64,35 @@ export function createDevelopersApiViewModel(document: OpenApiDocument): Develop
       const summary = stringAt(operation, 'summary', site)
       const tag = operationGroupTagAt(operation, site)
       const requestExample = readRequestExample(operation)
-      const hasRequestBody = operation.requestBody !== undefined
-      const headerNames = Array.isArray(operation.parameters)
-        ? operation.parameters.flatMap((parameter) => {
-            const value = optionalRecord(parameter)
-            return value?.in === 'header' && typeof value.name === 'string' ? [value.name] : []
-          })
-        : []
+      const requestBody = optionalRecord(operation.requestBody)
+      const authenticated = Array.isArray(operation.security) && operation.security.length > 0
+      const parameters = Array.isArray(operation.parameters) ? operation.parameters.flatMap((value) => {
+        const parameter = optionalRecord(value)
+        return parameter === undefined ? [] : [parameter]
+      }) : []
+      const headerNames = parameters
+        .filter((parameter) => parameter.in === 'header' && typeof parameter.name === 'string')
+        .map((parameter) => parameter.name as string)
+      const readOnly = operation['x-ae-read-only'] === true ||
+        (operation['x-ae-read-only'] !== false && (method === 'get' || method === 'head'))
+      const complete = !path.includes('{') && !parameters.some((parameter) => parameter.required === true && parameter.in === 'query')
+        && (requestBody === undefined || requestExample !== undefined)
       buckets[tag].push({
         operationId,
         method: method.toUpperCase(),
         path,
         summary,
-        curl: curlFor({
-          serverUrl, method: method.toUpperCase(), path, hasRequestBody, requestExample,
-          authenticated: Array.isArray(operation.security) && operation.security.length > 0, headerNames,
-        }),
+        ...(readOnly && complete
+          ? { curl: curlFor({
+              serverUrl, method: method.toUpperCase(), path, requestExample,
+              authenticated, headerNames,
+            }) }
+          : {
+              template: requestTemplate(requestBody, components, parameters),
+              authority: authenticated
+                ? `Agent access key${typeof operation.description === 'string' ? ` — ${operation.description}` : ''}`
+                : 'Public; check the operation contract before sending.',
+            }),
       })
     }
   }
@@ -146,11 +159,43 @@ function readRequestExample(operation: JsonRecord): unknown {
   return undefined
 }
 
+function requestTemplate(requestBody: JsonRecord | undefined, components: JsonRecord, parameters: readonly JsonRecord[]): string {
+  const media = optionalRecord(optionalRecord(requestBody?.content)?.['application/json'])
+  const schema = optionalRecord(media?.schema)
+  const schemas = optionalRecord(components.schemas) ?? {}
+  const body = schema === undefined ? 'No JSON request body.' : JSON.stringify(requiredShape(schema, schemas), null, 2)
+  const requiredParameters = parameters
+    .filter((parameter) => parameter.required === true && typeof parameter.name === 'string' && typeof parameter.in === 'string')
+    .map((parameter) => `${parameter.in}: ${parameter.name}`)
+  return requiredParameters.length > 0 ? `${body}\nRequired parameters: ${requiredParameters.join(', ')}` : body
+}
+
+function requiredShape(value: unknown, schemas: JsonRecord, visited: ReadonlySet<string> = new Set()): unknown {
+  const schema = optionalRecord(value)
+  if (schema === undefined) return '<required value>'
+  if (typeof schema.$ref === 'string' && schema.$ref.startsWith('#/components/schemas/')) {
+    const name = schema.$ref.slice('#/components/schemas/'.length)
+    if (visited.has(name)) return '<recursive schema>'
+    return requiredShape(schemas[name], schemas, new Set([...visited, name]))
+  }
+  const alternatives = Array.isArray(schema.oneOf) ? schema.oneOf : Array.isArray(schema.anyOf) ? schema.anyOf : undefined
+  if (alternatives !== undefined) return { alternatives: alternatives.map((option) => requiredShape(option, schemas, visited)) }
+  const properties = optionalRecord(schema.properties)
+  if (properties !== undefined) {
+    const required = Array.isArray(schema.required) ? schema.required : []
+    return Object.fromEntries(required
+      .filter((name): name is string => typeof name === 'string')
+      .map((name) => [name, requiredShape(properties[name], schemas, visited)]))
+  }
+  if (schema.type === 'array') return [requiredShape(schema.items, schemas, visited)]
+  if (Array.isArray(schema.enum)) return `<${schema.enum.join(' | ')}>`
+  return `<${typeof schema.type === 'string' ? schema.type : 'required value'}>`
+}
+
 function curlFor(input: Readonly<{
   serverUrl: string
   method: string
   path: string
-  hasRequestBody: boolean
   requestExample: unknown
   authenticated: boolean
   headerNames: readonly string[]
@@ -161,8 +206,8 @@ function curlFor(input: Readonly<{
     ...(input.authenticated ? [`--header 'Authorization: Bearer <your key>'`] : []),
     ...input.headerNames.map((name) => `--header '${name}: <stable-key>'`),
   ]
-  if (input.hasRequestBody) {
-    const body = JSON.stringify(input.requestExample === undefined ? {} : input.requestExample) ?? '{}'
+  if (input.requestExample !== undefined) {
+    const body = JSON.stringify(input.requestExample)
     lines.push(`--header 'Content-Type: application/json'`, `--data '${body.replaceAll("'", `'"'"'`)}'`)
   }
   return lines.join(' \\\n  ')

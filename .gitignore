@@ -49,7 +49,6 @@ graphify-out/
 !/docs/improvements/
 !/docs/improvements/**
 /convex/README.md
-/tools/ae/README.md
 /eval/**/*.md
 
 # Agent skill vendor trees
