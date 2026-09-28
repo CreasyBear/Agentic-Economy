@@ -18,7 +18,7 @@ import { useMarketPath } from './market-navigation-context'
 type Props = Readonly<{
   overview: Extract<X402DirectoryCatalogueOverview, { kind: 'ok' }>
   onSave: (item: SavedDirectoryTool) => void
-  isSaved: (resource: string) => boolean
+  isSaved: (item: SavedDirectoryTool) => boolean
   onCompare: (item: SavedDirectoryTool) => void
   isComparing: (resource: string) => boolean
   compareDisabled: (resource: string) => boolean
@@ -52,7 +52,7 @@ export function DirectoryIndexDiscovery({ overview, onSave, isSaved, onCompare, 
             const item: SavedDirectoryTool = { entry, search: {} }
             return <CarouselItem key={entry.resource} className="basis-[85%] pl-4 sm:basis-1/2 lg:basis-1/3 xl:basis-1/4">
               <div className="flex h-full flex-col gap-2.5">
-                <DirectoryToolCard model={toDirectoryToolCardModel(entry)} onSave={() => onSave(item)} saved={isSaved(entry.resource)}
+                <DirectoryToolCard model={toDirectoryToolCardModel(entry)} onSave={() => onSave(item)} saved={isSaved(item)}
                   onCompare={() => onCompare(item)} comparing={isComparing(entry.resource)} compareDisabled={compareDisabled(entry.resource)} />
                 {shelf.key === 'updated' && entry.provenance?.updatedAt !== undefined ? <p className="px-1 text-xs text-muted-foreground">Updated {directoryDate(entry.provenance.updatedAt)}</p> : null}
               </div>

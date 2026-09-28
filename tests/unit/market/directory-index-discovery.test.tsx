@@ -26,7 +26,7 @@ function show(data = overview) {
   const root = createRootRoute()
   const router = createRouter({ routeTree: root.addChildren([createRoute({ getParentRoute: () => root, path: '/market' }), createRoute({ getParentRoute: () => root, path: '/tools/$providerHost/$slug' })]), history: createMemoryHistory({ initialEntries: ['/market'] }) })
   const save = vi.fn(), compare = vi.fn()
-  render(<RouterContextProvider router={router}><DirectoryIndexDiscovery overview={data} onSave={save} onCompare={compare} isSaved={resource => resource === popular[1]!.entry.resource} isComparing={resource => resource === popular[1]!.entry.resource} compareDisabled={resource => resource === popular[2]!.entry.resource} /></RouterContextProvider>)
+  render(<RouterContextProvider router={router}><DirectoryIndexDiscovery overview={data} onSave={save} onCompare={compare} isSaved={item => item.entry.resource === popular[1]!.entry.resource} isComparing={resource => resource === popular[1]!.entry.resource} compareDisabled={resource => resource === popular[2]!.entry.resource} /></RouterContextProvider>)
   return { save, compare }
 }
 function linkSearch(name: string) { return new URL(screen.getByRole('link', { name }).getAttribute('href')!, 'https://aecon.ai').searchParams }

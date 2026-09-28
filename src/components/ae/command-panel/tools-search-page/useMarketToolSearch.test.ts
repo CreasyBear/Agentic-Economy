@@ -1,13 +1,33 @@
 // @vitest-environment jsdom
 
-import { act, renderHook } from '@testing-library/react'
+import { createElement } from 'react'
+import { act, cleanup, fireEvent, render, renderHook, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import type { ToolChoiceSearchResult } from '../market-tools-client'
 import { isPublicToolRef } from '@/modules/capability-supply/public'
+import type * as MarketDemandFns from '@/modules/market-demand/market-demand.functions'
 
 import { TOOLS_SEARCH_DEBOUNCE_MS } from './tools-search-page.contracts'
 import { useMarketToolSearch } from './useMarketToolSearch'
+import { ToolsSearchPage } from './ToolsSearchPage'
+
+const owner = vi.hoisted(() => ({
+  signedIn: true,
+  record: vi.fn(),
+  find: vi.fn(),
+  status: vi.fn(),
+  withdraw: vi.fn(),
+}))
+vi.mock('@clerk/tanstack-react-start', () => ({ useAuth: () => ({ isSignedIn: owner.signedIn }) }))
+vi.mock('@/modules/market-demand/market-demand.functions', async (loadOriginal) => ({
+  ...await loadOriginal<typeof MarketDemandFns>(),
+  recordOwnerMarketDemand: owner.record,
+  findOwnerActiveMarketDemand: owner.find,
+  getOwnerMarketDemandStatus: owner.status,
+  withdrawOwnerMarketDemand: owner.withdraw,
+}))
+vi.mock('./components/ToolSearchStatus', () => ({ ToolSearchStatus: () => null }))
 
 const alphaRef = `operation:v1:${'a'.repeat(64)}`
 if (!isPublicToolRef(alphaRef)) throw new Error('test_tool_ref_invalid')
@@ -38,8 +58,10 @@ const okPayload = (): ToolChoiceSearchResult => ({
 })
 
 afterEach(() => {
+  cleanup()
   vi.useRealTimers()
   vi.clearAllMocks()
+  owner.signedIn = true
 })
 
 describe('useMarketToolSearch', () => {
@@ -181,6 +203,71 @@ describe('useMarketToolSearch', () => {
     })
   })
 
+  it('offers the original search phrase for saving only after an exhaustive no-match', async () => {
+    vi.useFakeTimers()
+    const base = okPayload()
+    if (base.kind !== 'match') throw new Error('fixture_expected_match')
+    const searchTools = vi.fn(async (): Promise<ToolChoiceSearchResult> => ({
+      ...base, kind: 'noMatch', query: 'find reliable FX', results: [],
+      reason: 'No suitable Tools found.', next: [],
+    }))
+    const { result, rerender } = renderHook(
+      ({ query }) => useMarketToolSearch({ query, searchAttempt: 0, searchTools }),
+      { initialProps: { query: 'find reliable FX' } },
+    )
+    await act(async () => {
+      vi.advanceTimersByTime(TOOLS_SEARCH_DEBOUNCE_MS)
+      await Promise.resolve()
+    })
+    expect(searchTools).toHaveBeenCalledWith({ query: 'find reliable FX', limit: 8 })
+    expect(result.current.saveNeed).toEqual({ query: 'find reliable FX' })
+
+    rerender({ query: 'another need' })
+    expect(result.current.saveNeed).toBeUndefined()
+    await act(async () => {
+      vi.advanceTimersByTime(TOOLS_SEARCH_DEBOUNCE_MS)
+      await Promise.resolve()
+    })
+    expect(result.current.saveNeed).toBeUndefined()
+  })
+
+  it.each([
+    { assessed: { source: 'all' as const, scope: 'page' as const, examined: 1, coverage: 'partial' as const } },
+    { partialResults: true },
+    { pagination: { limit: 8, hasMore: true } },
+  ])('does not offer Save on incomplete no-match %#', async (override) => {
+    vi.useFakeTimers()
+    const base = okPayload()
+    if (base.kind !== 'match') throw new Error('fixture_expected_match')
+    const searchTools = vi.fn(async (): Promise<ToolChoiceSearchResult> => ({
+      ...base, kind: 'noMatch', query: 'alpha', results: [], reason: 'Supply unassessed.', next: [],
+      ...override,
+    }))
+    const { result } = renderHook(() => useMarketToolSearch({ query: 'alpha', searchAttempt: 0, searchTools }))
+    await act(async () => {
+      vi.advanceTimersByTime(TOOLS_SEARCH_DEBOUNCE_MS)
+      await Promise.resolve()
+    })
+    expect(result.current.status).toMatchObject({ kind: 'empty', message: expect.stringContaining('not assessed every source') })
+    expect(result.current.saveNeed).toBeUndefined()
+  })
+
+  it('preserves a valid 200-character search phrase without truncation', async () => {
+    vi.useFakeTimers()
+    const query = 'x'.repeat(200)
+    const base = okPayload()
+    if (base.kind !== 'match') throw new Error('fixture_expected_match')
+    const searchTools = vi.fn(async (): Promise<ToolChoiceSearchResult> => ({
+      ...base, kind: 'noMatch', query, results: [], reason: 'No suitable Tools found.', next: [],
+    }))
+    const { result } = renderHook(() => useMarketToolSearch({ query, searchAttempt: 0, searchTools }))
+    await act(async () => {
+      vi.advanceTimersByTime(TOOLS_SEARCH_DEBOUNCE_MS)
+      await Promise.resolve()
+    })
+    expect(result.current.saveNeed).toEqual({ query })
+  })
+
   it('keeps scoped supply distinct from no-match and routes external listings to exact detail', async () => {
     vi.useFakeTimers()
     const matched = okPayload()
@@ -307,5 +394,102 @@ describe('useMarketToolSearch', () => {
       await Promise.resolve()
     })
     expect(searchTools).toHaveBeenCalledTimes(2)
+  })
+})
+
+describe('ToolsSearchPage saved need', () => {
+  const noMatchSearch = vi.fn(async (): Promise<ToolChoiceSearchResult> => ({
+    ...okPayload(), kind: 'noMatch', query: 'alpha', results: [],
+    reason: 'No suitable Tools found.', next: [],
+  }))
+
+  it('offers sign-in instead of an anonymous demand write', async () => {
+    owner.signedIn = false
+    render(createElement(ToolsSearchPage, {
+      query: 'alpha', onQueryChange: vi.fn(), onSelectTool: vi.fn(), searchTools: noMatchSearch,
+    }))
+    expect((await screen.findByRole('link', { name: 'Sign in to save this need' })).getAttribute('href')).toBe('/sign-in')
+    expect(screen.queryByRole('button', { name: 'Save this need' })).toBeNull()
+    expect(owner.record).not.toHaveBeenCalled()
+    expect(owner.find).not.toHaveBeenCalled()
+  })
+
+  it('reuses one key across retry and exposes owner status and withdrawal', async () => {
+    owner.find.mockResolvedValue({ kind: 'not_found' })
+    owner.record.mockResolvedValueOnce({ kind: 'refused', code: 'source_unavailable' })
+      .mockResolvedValueOnce({ kind: 'recorded', requestRef: 'need-a', query: 'alpha', createdAt: 1 })
+    owner.status.mockResolvedValue({
+      kind: 'open', requestRef: 'need-a', query: 'alpha', createdAt: 1, matchedCount: 0,
+    })
+    owner.withdraw.mockResolvedValue({ kind: 'withdrawn', requestRef: 'need-a' })
+    render(createElement(ToolsSearchPage, {
+      query: 'alpha', onQueryChange: vi.fn(), onSelectTool: vi.fn(), searchTools: noMatchSearch,
+    }))
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Save this need' }))
+    expect((await screen.findByRole('alert')).textContent).toContain('could not be saved')
+    fireEvent.click(screen.getByRole('button', { name: 'Save this need' }))
+    expect(await screen.findByText('Saved need · need-a')).toBeTruthy()
+    expect(owner.record).toHaveBeenCalledTimes(2)
+    const first = owner.record.mock.calls[0]?.[0]
+    const second = owner.record.mock.calls[1]?.[0]
+    expect(first.data).toEqual({ query: 'alpha', idempotencyKey: second.data.idempotencyKey })
+    expect(first.data.idempotencyKey).toMatch(/^[0-9a-f-]{36}$/)
+    expect(owner.status).toHaveBeenCalledWith({ data: { requestRef: 'need-a' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Withdraw' }))
+    expect(await screen.findByRole('button', { name: 'Save this need' })).toBeTruthy()
+    expect(owner.withdraw).toHaveBeenCalledWith({ data: { requestRef: 'need-a' } })
+  })
+
+  it('reopens exact owner-scoped saved demand and checks live status after reload', async () => {
+    owner.find.mockResolvedValue({
+      kind: 'found',
+      request: { requestRef: 'need-existing', query: 'alpha', createdAt: 1, updatedAt: 1 },
+    })
+    owner.status.mockResolvedValue({
+      kind: 'open', requestRef: 'need-existing', query: 'alpha', createdAt: 1, matchedCount: 0,
+    })
+    render(createElement(ToolsSearchPage, {
+      query: 'alpha', onQueryChange: vi.fn(), onSelectTool: vi.fn(), searchTools: noMatchSearch,
+    }))
+    expect(await screen.findByText('Saved need · need-existing')).toBeTruthy()
+    expect(owner.find).toHaveBeenCalledWith({ data: { query: 'alpha' } })
+    expect(owner.status).toHaveBeenCalledWith({ data: { requestRef: 'need-existing' } })
+    expect(owner.record).not.toHaveBeenCalled()
+    expect(screen.queryByRole('button', { name: 'Save this need' })).toBeNull()
+  })
+
+  it('does not write another need before checking whether the owner already saved it', async () => {
+    let resolveFind: ((value: unknown) => void) | undefined
+    owner.find.mockImplementationOnce(() => new Promise<unknown>((resolve) => { resolveFind = resolve }))
+    render(createElement(ToolsSearchPage, {
+      query: 'alpha', onQueryChange: vi.fn(), onSelectTool: vi.fn(), searchTools: noMatchSearch,
+    }))
+    const checking = await screen.findByRole('button', { name: 'Checking saved needs…' })
+    expect(checking.hasAttribute('disabled')).toBe(true)
+    fireEvent.click(checking)
+    expect(owner.record).not.toHaveBeenCalled()
+    await act(async () => {
+      resolveFind?.({ kind: 'not_found' })
+      await Promise.resolve()
+    })
+    expect(await screen.findByRole('button', { name: 'Save this need' })).toBeTruthy()
+  })
+
+  it('uses a fresh intent after an expired replay without extending the old window', async () => {
+    owner.find.mockResolvedValue({ kind: 'not_found' })
+    owner.record.mockResolvedValueOnce({ kind: 'replayed', requestRef: 'expired', query: 'alpha', createdAt: 1 })
+      .mockResolvedValueOnce({ kind: 'recorded', requestRef: 'new-need', query: 'alpha', createdAt: 2 })
+    owner.status.mockResolvedValueOnce({ kind: 'not_found' })
+      .mockResolvedValueOnce({ kind: 'open', requestRef: 'new-need', query: 'alpha', createdAt: 2, matchedCount: 0 })
+    render(createElement(ToolsSearchPage, {
+      query: 'alpha', onQueryChange: vi.fn(), onSelectTool: vi.fn(), searchTools: noMatchSearch,
+    }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Save this need' }))
+    expect((await screen.findByRole('alert')).textContent).toContain('expired')
+    fireEvent.click(screen.getByRole('button', { name: 'Save this need' }))
+    expect(await screen.findByText('Saved need · new-need')).toBeTruthy()
+    expect(owner.record.mock.calls[0]?.[0].data.idempotencyKey)
+      .not.toBe(owner.record.mock.calls[1]?.[0].data.idempotencyKey)
   })
 })

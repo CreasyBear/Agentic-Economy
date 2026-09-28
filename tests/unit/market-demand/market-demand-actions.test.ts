@@ -10,8 +10,16 @@ vi.mock('@/lib/server/source-write-admission', () => ({
   sourceWriteAdmissionFromRequest: vi.fn(async () => ({ kind: 'admitted' })),
   sourceWriteRequestFromAdmission: (admission: unknown) => admission,
 }))
+vi.mock('../../../convex/authz', () => ({
+  resolveBusinessActor: vi.fn(),
+}))
+vi.mock('../../../convex/lib/security/sourceWrite/admission', () => ({
+  requireSourceWrite: vi.fn(async () => ({ kind: 'accepted' })),
+  requireSourceRead: vi.fn(async () => ({ kind: 'accepted' })),
+}))
 
 import {
+  MARKET_REQUEST_ACTIVE_WINDOW_MS,
   createMarketDemandService,
   marketRequestCreateAction,
   marketRequestListAction,
@@ -20,6 +28,11 @@ import {
 import { registryToolsCompareAction, registryToolsSearchAction } from '@/modules/registry/tools.actions'
 import { projectToolListChoices, projectToolSearchChoices } from '@/modules/registry/tool-choice-contracts'
 import { misorderedSearchResult } from '../../helpers/tool-search-rerank-fixtures'
+import { resolveBusinessActor } from '../../../convex/authz'
+import {
+  ownerFindActiveHandler, ownerListHandler, ownerReadHandler, ownerRecordHandler,
+  ownerReplayHandler, ownerWithdrawHandler,
+} from '../../../convex/lib/market/demandSignals/owner'
 
 const principal = {
   principalId: 'prn_00000000000040008000000000000072',
@@ -73,12 +86,12 @@ describe('market demand action contract', () => {
     })).resolves.toEqual({ kind: 'refused', code: 'current_match_exists' })
   })
 
-  it('records a complete external-only match because it is not AE-callable', async () => {
+  it('refuses an external-only match rather than treating Bazaar supply as absence', async () => {
     vi.spyOn(registryToolsSearchAction, 'run').mockResolvedValue(externalSearch)
     const service = createMarketDemandService(new Request('https://ae.example/api/v1/market-requests'), '{}')
     expect(await service.create({ input: { query: 'convert timezones', idempotencyKey: 'external' }, principal, correlationId: 'external' }))
-      .toMatchObject({ kind: 'recorded' })
-    expect(mutation).toHaveBeenCalledOnce()
+      .toEqual({ kind: 'refused', code: 'current_match_exists' })
+    expect(mutation).not.toHaveBeenCalled()
   })
 
   it('records only after an exhaustive no-match, not a scoped or unavailable search', async () => {
@@ -90,6 +103,40 @@ describe('market demand action contract', () => {
     expect(await service.create({ input: { query: 'convert timezones', idempotencyKey: 'scoped' }, principal, correlationId: 'scoped' }))
       .toEqual({ kind: 'refused', code: 'source_unavailable' })
     expect(mutation).toHaveBeenCalledOnce()
+  })
+
+  it('rechecks the exact filtered scope and preserves a 200-character phrase without truncation', async () => {
+    const phrase = 'x'.repeat(200)
+    const filters = { provider: 'Chosen provider', access: 'ae_callable' as const }
+    const search = vi.spyOn(registryToolsSearchAction, 'run').mockResolvedValue(emptySearch)
+    mutation.mockImplementation(async (_reference, args) => ({
+      kind: 'recorded', requestRef: 'market-request:filtered', query: args.query, createdAt: 2_000,
+    }))
+    const service = createMarketDemandService(new Request('https://ae.example/api/v1/market-requests'), '{}')
+    expect(await service.create({
+      input: { query: phrase, source: 'current', filters, idempotencyKey: 'filtered-intent' },
+      principal, correlationId: 'filtered',
+    })).toEqual({ kind: 'recorded', requestRef: 'market-request:filtered', query: phrase, createdAt: 2_000 })
+    expect(search).toHaveBeenCalledWith({
+      data: { query: phrase, source: 'current', filters, limit: 12 },
+      context: expect.objectContaining({ caller: 'http' }),
+    })
+    expect(mutation).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ query: phrase, source: 'current', filters }))
+  })
+
+  it('refuses a stale filtered match without changing the search scope', async () => {
+    const filters = { provider: 'Chosen provider' }
+    const search = vi.spyOn(registryToolsSearchAction, 'run').mockResolvedValue(matchingSearch)
+    const service = createMarketDemandService(new Request('https://ae.example/api/v1/market-requests'), '{}')
+    expect(await service.create({
+      input: { query: 'convert timezones', source: 'current', filters, idempotencyKey: 'stale-intent' },
+      principal, correlationId: 'stale',
+    })).toEqual({ kind: 'refused', code: 'current_match_exists' })
+    expect(search).toHaveBeenCalledWith({
+      data: { query: 'convert timezones', source: 'current', filters, limit: 12 },
+      context: expect.objectContaining({ caller: 'http' }),
+    })
+    expect(mutation).not.toHaveBeenCalled()
   })
 
   it.each(['new_supply', 'outage', 'expired'])('replays a retained request before checking %s', async (state) => {
@@ -202,6 +249,14 @@ describe('market demand action contract', () => {
     expect(query).toHaveBeenCalledTimes(2)
   })
 
+  it('withholds a delayed match if its retained provider scope changes during assessment', async () => {
+    const initial = { ...retained, source: 'current', filters: { provider: 'Original provider' } }
+    query.mockResolvedValueOnce({ kind: 'found', request: initial })
+      .mockResolvedValueOnce({ kind: 'found', request: { ...initial, filters: { provider: 'Another provider' } } })
+    vi.spyOn(registryToolsSearchAction, 'run').mockResolvedValue(matchingSearch)
+    expect(await status()).toEqual({ kind: 'error', code: 'source_unavailable' })
+  })
+
   it('returns matches only after confirming the same private request is still current', async () => {
     query.mockResolvedValue(found)
     const search = vi.spyOn(registryToolsSearchAction, 'run').mockResolvedValue(matchingSearch)
@@ -209,6 +264,20 @@ describe('market demand action contract', () => {
     expect(query).toHaveBeenCalledTimes(2)
     expect(search).toHaveBeenCalledOnce()
     expect(query.mock.invocationCallOrder[1]).toBeGreaterThan(search.mock.invocationCallOrder[0]!)
+  })
+
+  it('checks saved provider filters and source rather than widening a filtered request', async () => {
+    const filters = { provider: 'Chosen provider', access: 'ae_callable' as const }
+    query.mockResolvedValue({ kind: 'found', request: { ...retained, source: 'current', filters } })
+    const search = vi.spyOn(registryToolsSearchAction, 'run').mockResolvedValue(emptySearch)
+    expect(await status()).toEqual({
+      kind: 'open', requestRef: retained.requestRef, query: retained.query,
+      createdAt: retained.createdAt, matchedCount: 0,
+    })
+    expect(search).toHaveBeenCalledWith({
+      data: { query: retained.query, source: 'current', filters, limit: 12 },
+      context: expect.objectContaining({ caller: 'http' }),
+    })
   })
 
   it.each(['withdrawn', 'unavailable', 'changed'] as const)('withholds a delayed match when its Tool is %s', async (state) => {
@@ -254,5 +323,181 @@ describe('market demand action contract', () => {
     const service = createMarketDemandService(new Request('https://ae.example/api/v1/market-requests'), '{}')
     expect(await service.create({ input: { query: retained.query, idempotencyKey: 'one' }, principal, correlationId: 'create:one' }))
       .toEqual({ kind: 'refused', code: 'source_unavailable' })
+  })
+})
+
+describe('owner demand isolation', () => {
+  const requestRef = 'market-request:private'
+  const row = {
+    schemaVersion: 'market-demand-owner-signal:v1', ownerId: 'account:B', requestRef,
+    query: 'private need', idempotencyKey: 'save-intent', createdAt: 1_000, updatedAt: 1_000,
+    queryDigest: 'digest', _id: 'demand-row',
+  }
+
+  it('does not reveal or withdraw another account’s phrase or an Agent-owned row', async () => {
+    vi.mocked(resolveBusinessActor).mockResolvedValue({ kind: 'authenticated_owner', canonicalAccountRef: 'account:A', authorityProvenance: { accessKind: 'ownership' } } as never)
+    const replace = vi.fn()
+    const take = vi.fn(async () => [row])
+    const ctx = Object.assign({} as Parameters<typeof ownerWithdrawHandler>[0], {
+      db: { query: vi.fn(() => ({ withIndex: vi.fn(() => ({ take })) })), replace },
+    })
+    const args = { requestRef, operationKey: 'withdraw', correlationId: 'isolated' }
+    expect(await ownerReadHandler(ctx, { requestRef })).toEqual({ kind: 'not_found' })
+    expect(await ownerWithdrawHandler(ctx, args)).toEqual({ kind: 'not_found' })
+    const agentOwned = { ...row, ownerId: 'account:A', schemaVersion: 'market-demand-signal:v1', credentialId: 'agent:key' }
+    take.mockResolvedValue([agentOwned])
+    expect(await ownerReadHandler(ctx, { requestRef })).toEqual({ kind: 'not_found' })
+    expect(await ownerWithdrawHandler(ctx, args)).toEqual({ kind: 'not_found' })
+    expect(replace).not.toHaveBeenCalled()
+  })
+  it('records the full 200-character filtered need under the authenticated account', async () => {
+    vi.mocked(resolveBusinessActor).mockResolvedValue({ kind: 'authenticated_owner', canonicalAccountRef: 'account:B', authorityProvenance: { accessKind: 'ownership' } } as never)
+    const insert = vi.fn()
+    const ctx = Object.assign({} as Parameters<typeof ownerRecordHandler>[0], {
+      db: { query: vi.fn(() => ({ withIndex: vi.fn(() => ({
+        take: vi.fn(async () => []),
+        order: vi.fn(() => ({ take: vi.fn(async () => []) })),
+      })) })), insert },
+    })
+    const phrase = 'x'.repeat(200)
+    const filters = { provider: 'Chosen provider' }
+    expect(await ownerRecordHandler(ctx, {
+      query: phrase, source: 'current', filters, idempotencyKey: 'owner-intent',
+      operationKey: 'record', correlationId: 'owner',
+    })).toMatchObject({ kind: 'recorded', query: phrase })
+    expect(insert).toHaveBeenCalledWith('marketDemandSignals', expect.objectContaining({
+      schemaVersion: 'market-demand-owner-signal:v1', ownerId: 'account:B',
+      query: phrase, source: 'current', filters,
+    }))
+  })
+
+  it('returns only the owner’s live phrase with its original status-check scope', async () => {
+    vi.mocked(resolveBusinessActor).mockResolvedValue({ kind: 'authenticated_owner', canonicalAccountRef: 'account:B', authorityProvenance: { accessKind: 'ownership' } } as never)
+    const scoped = { ...row, source: 'current' as const, filters: { provider: 'Chosen provider' } }
+    const ctx = Object.assign({} as Parameters<typeof ownerReadHandler>[0], {
+      db: { query: vi.fn(() => ({ withIndex: vi.fn(() => ({ take: vi.fn(async () => [scoped]) })) })) },
+    })
+    expect(await ownerReadHandler(ctx, { requestRef })).toEqual({
+      kind: 'found',
+      request: {
+        requestRef, query: scoped.query, source: scoped.source, filters: scoped.filters,
+        createdAt: scoped.createdAt, updatedAt: scoped.updatedAt,
+      },
+    })
+  })
+
+  it('finds the exact active owner need but excludes another owner and the 30-day cutoff', async () => {
+    vi.mocked(resolveBusinessActor).mockResolvedValue({ kind: 'authenticated_owner', canonicalAccountRef: 'account:B', authorityProvenance: { accessKind: 'ownership' } } as never)
+    const filters = { provider: 'Chosen provider' }
+    const scoped = {
+      ...row, source: 'current' as const, filters,
+      queryDigest: canonicalDigest({ query: row.query, source: 'current', filters }),
+    }
+    const take = vi.fn(async () => [scoped])
+    const ctx = Object.assign({} as Parameters<typeof ownerFindActiveHandler>[0], {
+      db: { query: vi.fn(() => ({ withIndex: vi.fn(() => ({ order: vi.fn(() => ({ take })) })) })) },
+    })
+    const input = { query: row.query, source: 'current' as const, filters }
+    expect(await ownerFindActiveHandler(ctx, input)).toEqual({
+      kind: 'found',
+      request: {
+        requestRef, query: row.query, source: 'current', filters,
+        createdAt: row.createdAt, updatedAt: row.updatedAt,
+      },
+    })
+    take.mockResolvedValue([{ ...scoped, ownerId: 'account:A' }])
+    expect(await ownerFindActiveHandler(ctx, input)).toEqual({ kind: 'not_found' })
+    take.mockResolvedValue([scoped])
+    vi.mocked(Date.now).mockReturnValue(row.createdAt + MARKET_REQUEST_ACTIVE_WINDOW_MS)
+    expect(await ownerFindActiveHandler(ctx, input)).toEqual({ kind: 'not_found' })
+  })
+
+  it('atomically reuses an active scoped request without allowing an alternate key to resurrect it', async () => {
+    vi.mocked(resolveBusinessActor).mockResolvedValue({ kind: 'authenticated_owner', canonicalAccountRef: 'account:B', authorityProvenance: { accessKind: 'ownership' } } as never)
+    const scope = { query: row.query, source: 'current' as const, filters: { provider: 'Chosen provider' } }
+    const scoped = { ...row, ...scope, queryDigest: canonicalDigest({
+      query: scope.query, source: scope.source, filters: scope.filters,
+    }) }
+    const take = vi.fn().mockResolvedValueOnce([]).mockResolvedValueOnce([scoped])
+    const insert = vi.fn()
+    const ctx = Object.assign({} as Parameters<typeof ownerRecordHandler>[0], {
+      db: { query: vi.fn(() => ({ withIndex: vi.fn(() => ({ order: vi.fn(() => ({ take })), take })) })), insert },
+    })
+    const input = { ...scope, idempotencyKey: 'second-intent', operationKey: 'record', correlationId: 'owner' }
+    expect(await ownerRecordHandler(ctx, input)).toEqual({
+      kind: 'replayed', requestRef, query: row.query, createdAt: row.createdAt,
+    })
+    expect(insert).toHaveBeenCalledWith('marketDemandSignals', expect.objectContaining({
+      schemaVersion: 'market-demand-owner-alias:v1', targetRef: requestRef,
+      idempotencyKey: 'second-intent',
+    }))
+    expect(insert.mock.calls[0]?.[1]).not.toHaveProperty('query')
+    const alias = insert.mock.calls[0]?.[1]
+    const replayTake = vi.fn().mockResolvedValueOnce([alias]).mockResolvedValueOnce([{
+      ...row, schemaVersion: 'market-demand-owner-withdrawn:v1',
+    }])
+    const replayCtx = Object.assign({} as Parameters<typeof ownerReplayHandler>[0], {
+      db: { query: vi.fn(() => ({ withIndex: vi.fn(() => ({ take: replayTake })) })) },
+    })
+    expect(await ownerReplayHandler(replayCtx, {
+      ...scope, idempotencyKey: 'second-intent',
+    })).toEqual({ kind: 'refused', code: 'invalid_request' })
+  })
+
+  it('starts a new intent after the matching window instead of aliasing expired demand', async () => {
+    vi.mocked(resolveBusinessActor).mockResolvedValue({ kind: 'authenticated_owner', canonicalAccountRef: 'account:B', authorityProvenance: { accessKind: 'ownership' } } as never)
+    vi.mocked(Date.now).mockReturnValue(row.createdAt + MARKET_REQUEST_ACTIVE_WINDOW_MS)
+    const scoped = { ...row, queryDigest: canonicalDigest({ query: row.query, source: null, filters: null }) }
+    const take = vi.fn().mockResolvedValueOnce([]).mockResolvedValueOnce([scoped])
+    const insert = vi.fn()
+    const ctx = Object.assign({} as Parameters<typeof ownerRecordHandler>[0], {
+      db: { query: vi.fn(() => ({ withIndex: vi.fn(() => ({ order: vi.fn(() => ({ take })), take })) })), insert },
+    })
+    expect(await ownerRecordHandler(ctx, {
+      query: row.query, idempotencyKey: 'new-intent', operationKey: 'record', correlationId: 'owner',
+    })).toMatchObject({ kind: 'recorded', query: row.query })
+    expect(insert).toHaveBeenCalledWith('marketDemandSignals', expect.objectContaining({
+      schemaVersion: 'market-demand-owner-signal:v1', query: row.query,
+    }))
+  })
+
+  it('erases the owner’s phrase on withdrawal while retaining only the retry receipt', async () => {
+    vi.mocked(resolveBusinessActor).mockResolvedValue({ kind: 'authenticated_owner', canonicalAccountRef: 'account:B', authorityProvenance: { accessKind: 'ownership' } } as never)
+    const replace = vi.fn()
+    const ctx = Object.assign({} as Parameters<typeof ownerWithdrawHandler>[0], {
+      db: { query: vi.fn(() => ({ withIndex: vi.fn(() => ({ take: vi.fn(async () => [row]) })) })), replace },
+    })
+    expect(await ownerWithdrawHandler(ctx, { requestRef, operationKey: 'withdraw', correlationId: 'owner' }))
+      .toEqual({ kind: 'withdrawn', requestRef })
+    expect(replace).toHaveBeenCalledWith(row._id, {
+      schemaVersion: 'market-demand-owner-withdrawn:v1', requestRef,
+      ownerId: row.ownerId, idempotencyKey: row.idempotencyKey,
+      createdAt: row.createdAt, updatedAt: 2_000,
+    })
+  })
+  it('refuses same-account membership across every owner demand RPC without touching private rows', async () => {
+    vi.mocked(resolveBusinessActor).mockResolvedValue({
+      kind: 'authenticated_owner',
+      canonicalAccountRef: 'account:B',
+      authorityProvenance: { accessKind: 'membership' },
+    } as never)
+    const dbQuery = vi.fn(() => { throw new Error('member_reached_private_demand') })
+    const ctx = Object.assign({} as Parameters<typeof ownerWithdrawHandler>[0], {
+      db: { query: dbQuery, insert: vi.fn(), replace: vi.fn() },
+    })
+    const scope = { query: row.query }
+    const intent = { ...scope, idempotencyKey: 'member-intent' }
+    expect(await ownerRecordHandler(ctx, { ...intent, operationKey: 'record', correlationId: 'member' }))
+      .toEqual({ kind: 'refused', code: 'unauthenticated' })
+    expect(await ownerReplayHandler(ctx, intent)).toEqual({ kind: 'refused', code: 'unauthenticated' })
+    expect(await ownerFindActiveHandler(ctx, scope)).toEqual({ kind: 'error', code: 'unauthenticated' })
+    expect(await ownerListHandler(ctx, { paginationOpts: { numItems: 10, cursor: null } }))
+      .toEqual({ kind: 'error', code: 'unauthenticated' })
+    expect(await ownerReadHandler(ctx, { requestRef })).toEqual({ kind: 'error', code: 'unauthenticated' })
+    expect(await ownerWithdrawHandler(ctx, { requestRef, operationKey: 'withdraw', correlationId: 'member' }))
+      .toEqual({ kind: 'error', code: 'unauthenticated' })
+    expect(dbQuery).not.toHaveBeenCalled()
+    expect(ctx.db.insert).not.toHaveBeenCalled()
+    expect(ctx.db.replace).not.toHaveBeenCalled()
   })
 })

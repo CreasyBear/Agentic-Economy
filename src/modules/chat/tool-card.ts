@@ -1,3 +1,4 @@
+import type { z } from 'zod'
 import { degradeBackend } from '@/lib/observability/degrade-backend'
 import { providerSafeActionToolName } from '@/modules/actions/tool-contract'
 import { chatClarifyInputSchema, storedClarifyAnswer } from '@/modules/chat/agent-turn.contracts'
@@ -21,7 +22,13 @@ import {
   type SuggestedNextAction,
 } from '@/modules/market/suggested-next-action'
 import { formatCurrencyAmount, formatDisplayAmount, formatDisplayPrice } from '@/modules/money/public'
-import { registryNextActionSchema, type RegistryNextAction } from '@/modules/registry/tool-choice-contracts'
+import { toolCatalogSearchInputSchema, toolChoiceSearchOutputSchema, registryNextActionSchema, type RegistryNextAction } from '@/modules/registry/tool-choice-contracts'
+import type {
+  OwnerMarketDemandFindResult,
+  OwnerMarketDemandRecordResult,
+  OwnerMarketDemandStatusResult,
+  OwnerMarketDemandWithdrawResult,
+} from '@/modules/market-demand/market-demand.functions'
 
 export const CHAT_TOOL_IDS = [
   'registry.tools.list',
@@ -87,10 +94,20 @@ type CardChrome = Readonly<{
   toolId: ChatToolId
   title: string
 }>
+export type ChatSaveNeed = Readonly<Pick<z.output<typeof toolCatalogSearchInputSchema>, 'query' | 'source' | 'filters'>>
+const storedSaveNeedSchema = toolCatalogSearchInputSchema.pick({ query: true, source: true, filters: true })
+export type ChatNeedActions = Readonly<{
+  authenticated: boolean
+  onFind(input: ChatSaveNeed): Promise<OwnerMarketDemandFindResult>
+  onSave(input: ChatSaveNeed & { idempotencyKey: string }): Promise<OwnerMarketDemandRecordResult>
+  onStatus(requestRef: string): Promise<OwnerMarketDemandStatusResult>
+  onWithdraw(requestRef: string): Promise<OwnerMarketDemandWithdrawResult>
+}>
+
 
 export type ToolCardProjection =
   | (CardChrome & { kind: 'working' })
-  | (CardChrome & { kind: 'status'; state: 'refused' | 'error' | 'attention'; summary: string; next?: RegistryNextAction })
+  | (CardChrome & { kind: 'status'; state: 'refused' | 'error' | 'attention'; summary: string; next?: RegistryNextAction; saveNeed?: ChatSaveNeed })
   | (CardChrome & {
       kind: 'choices'
       state: 'complete'
@@ -572,17 +589,30 @@ function liveChoices(
   }
 }
 
-function projectLiveBody(toolId: ChatToolId, output: Record<string, unknown>): ToolCardProjection {
+function eligibleChatSaveNeed(input: unknown, output: Record<string, unknown>): ChatSaveNeed | undefined {
+  const assessed = toolChoiceSearchOutputSchema.safeParse(output)
+  if (!assessed.success || assessed.data.kind !== 'noMatch'
+    || assessed.data.assessed.scope !== 'complete' || assessed.data.assessed.coverage !== 'complete'
+    || assessed.data.partialResults || assessed.data.pagination.hasMore) return undefined
+  const searched = toolCatalogSearchInputSchema.safeParse(input)
+  if (!searched.success || searched.data.query !== assessed.data.query) return undefined
+  const { query, source, filters } = searched.data
+  return { query, ...(source === undefined ? {} : { source }), ...(filters === undefined ? {} : { filters }) }
+}
+
+function projectLiveBody(toolId: ChatToolId, output: Record<string, unknown>, input?: unknown): ToolCardProjection {
   switch (toolId) {
     case 'registry.tools.list':
     case 'registry.tools.search': {
       if (toolId === 'registry.tools.search') {
         if (output.kind === 'unavailable' || output.kind === 'noMatch') {
           const next = firstSearchNext(output)
+          const saveNeed = output.kind === 'noMatch' ? eligibleChatSaveNeed(input, output) : undefined
           return {
             ...statusCard(toolId, output.kind === 'unavailable' ? 'error' : 'attention',
               output.kind === 'unavailable' ? 'Search is temporarily unavailable.' : 'No suitable Tool in the assessed catalogue.'),
             ...(next === undefined ? {} : { next }),
+            ...(saveNeed === undefined ? {} : { saveNeed }),
           }
         }
         return liveChoices(toolId, output, projectLiveChoices(output.results))
@@ -620,9 +650,13 @@ function projectStoredCard(part: Record<string, unknown>): ToolCardProjection | 
   if (part.kind === 'status' || part.state === 'refused' || part.state === 'error') {
     const state = part.state === 'refused' || part.state === 'error' || part.state === 'attention' ? part.state : 'error'
     const next = firstSearchNext(part)
+    const saveNeed = toolId === 'registry.tools.search' && state === 'attention'
+      ? storedSaveNeedSchema.safeParse(part.saveNeed)
+      : undefined
     return {
       ...statusCard(toolId, state, stringField(part.summary) ?? (state === 'refused' ? 'Request refused' : 'Tool unavailable')),
       ...(next === undefined ? {} : { next }),
+      ...(saveNeed?.success ? { saveNeed: saveNeed.data } : {}),
     }
   }
   const refs: string[] = []
@@ -783,7 +817,7 @@ export function projectToolCard(part: unknown): ToolCardProjection | null {
     && (kind === 'match' || kind === 'scoped' || kind === 'noMatch' || kind === 'unavailable'))) {
     return statusCard(toolId, 'error', 'Tool unavailable')
   }
-  return projectLiveBody(toolId, output)
+  return projectLiveBody(toolId, output, part.input)
 }
 
 function shareableInspectFacts(facts: readonly ToolFact[]): readonly ToolFact[] {
@@ -813,6 +847,7 @@ export function serializeToolCard(card: ToolCardProjection): Record<string, unkn
         state: card.state,
         summary: card.summary,
         ...(card.next === undefined ? {} : { next: card.next }),
+        ...(card.saveNeed === undefined ? {} : { saveNeed: card.saveNeed }),
       }
     case 'choices':
       return {

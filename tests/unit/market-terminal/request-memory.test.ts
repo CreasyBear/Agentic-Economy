@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { runRequestCommand } from '../../../tools/ae/commands/request'
 import type { CliOptions } from '../../../tools/ae/lib/args'
+import { CliFailure } from '../../../tools/ae/lib/output'
 
 const options: CliOptions = {
   baseUrl: 'https://market.example',
@@ -175,18 +176,53 @@ describe('private market request CLI', () => {
     })
   })
 
-  it('uses a shell-safe idempotency replacement command with selected origin and JSON mode', async () => {
+  it('offers a shell-safe new Save intent after an idempotency conflict, preserving exact scope and origin', async () => {
     vi.stubGlobal('fetch', vi.fn<typeof fetch>().mockResolvedValue(responseJson({
       kind: 'refused',
       code: 'idempotency_conflict',
     })))
-
-    await expect(runRequestCommand(['create', 'missing', 'job'], {
+    const query = 'missing job; touch request-conflict-marker; #'
+    const failure: unknown = await runRequestCommand(['create', query], {
       ...options,
+      source: 'current',
+      filters: '{"provider":"local"}',
       baseUrlSource: 'flag',
-    })).rejects.toMatchObject({
-      code: 'idempotency_conflict',
-      nextCommand: "ae request create '<job>' --idempotency-key '<new-key>' --base-url https://market.example --json",
+    }).then(() => undefined, (error: unknown) => error)
+
+    expect(failure).toBeInstanceOf(CliFailure)
+    if (!(failure instanceof CliFailure)) return
+    expect(failure.code).toBe('idempotency_conflict')
+    const command = failure.nextCommand
+    expect(command).toContain(`ae request create '${query}'`)
+    expect(command).toContain('--source current')
+    expect(command).toContain(`--filters '{"provider":"local"}'`)
+    expect(command).toContain('--base-url https://market.example --json')
+    const newKey = command?.match(/--idempotency-key ([0-9a-f-]{36})/u)?.[1]
+    expect(newKey).toMatch(/^[0-9a-f-]{36}$/u)
+    expect(newKey).not.toBe(options.idempotencyKey)
+  })
+
+  it('preserves the exact Save intent key and scope when the network outcome is ambiguous', async () => {
+    const fetchMock = vi.fn<typeof fetch>().mockRejectedValue(new TypeError('fetch failed'))
+    vi.stubGlobal('fetch', fetchMock)
+    const failure: unknown = await runRequestCommand(['create', 'missing', 'job'], {
+      ...options,
+      source: 'current',
+      filters: '{"provider":"local"}',
+      baseUrlSource: 'flag',
+    }).then(() => undefined, (error: unknown) => error)
+
+    expect(failure).toBeInstanceOf(CliFailure)
+    if (!(failure instanceof CliFailure)) return
+    expect(failure).toMatchObject({
+      kind: 'UNAVAILABLE',
+      code: 'market-request-network-unavailable',
+      retryable: true,
     })
+    const request = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))
+    expect(request).toMatchObject({ query: 'missing job', idempotencyKey: options.idempotencyKey, source: 'current', filters: { provider: 'local' } })
+    expect(failure.nextCommand).toContain(`--idempotency-key ${request.idempotencyKey}`)
+    expect(failure.nextCommand).toContain(`--filters '{"provider":"local"}'`)
+    expect(failure.nextCommand).toContain('--base-url https://market.example --json')
   })
 })

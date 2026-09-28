@@ -28,6 +28,7 @@ vi.mock('convex/react', () => ({
 }))
 
 vi.mock('@clerk/tanstack-react-start', () => ({
+  useAuth: () => ({ isSignedIn: false }),
   UserProfile: () => null,
   SignOutButton: ({ children }: { children: React.ReactNode }) => children,
   OrganizationProfile: Object.assign(() => null, { Page: () => null }),

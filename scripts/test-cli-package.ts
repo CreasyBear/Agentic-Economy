@@ -32,6 +32,7 @@ const expectedCommands = [
   "request",
   "revoke",
   "search",
+  "saved",
   "status",
   "supply",
   "wait",

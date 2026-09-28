@@ -1,3 +1,4 @@
+import { useAuth } from '@clerk/tanstack-react-start'
 import { Link, useNavigate } from '@tanstack/react-router'
 import { ArrowLeftIcon, ArrowRightIcon, CompassIcon, HeartIcon, ListFilterIcon, Loader2Icon, SearchIcon, StoreIcon, XIcon } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
@@ -12,7 +13,7 @@ import { cn } from '@/lib/utils'
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger } from '@/components/ui/select'
 import { InputGroup, InputGroupAddon, InputGroupInput } from '@/components/ui/input-group'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import type { IndexedPaginationState, MarketReturnSearch } from './market-return-context'
+import { MARKET_LINK_STATE, type IndexedPaginationState, type MarketReturnSearch } from './market-return-context'
 import { MarketNavigationProvider, type MarketPath, useMarketPath } from './market-navigation-context'
 import { DirectoryExplorerFilters } from './DirectoryExplorerFilters'
 import type { DirectoryExplorerFilterPatch } from '@/modules/market/directory-filters.contracts'
@@ -30,8 +31,9 @@ import { DirectoryFilters } from './DirectoryFilters'
 import { DirectoryProviderList } from './DirectoryProviderList'
 import { useProviderCataloguePages } from './useProviderCataloguePages'
 import { DirectorySavedToolsProvider, useDirectorySavedTools } from './DirectorySavedTools'
-import { toDirectoryToolCardModel } from '@/modules/market/directory-card.view-model'
-import type { SavedDirectoryTool } from '@/modules/market/saved-tools.contracts'
+import { toDirectoryToolCardModel, toSavedDirectoryRowModel, type MarketNeedSaveState } from '@/modules/market/directory-card.view-model'
+import { isExhaustiveMarketNoMatch, recordOwnerMarketDemand } from '@/modules/market-demand/market-demand.functions'
+import type { SavedDirectoryTool, SavedToolListItem } from '@/modules/market/saved-tools.contracts'
 import { DirectoryToolCard } from './DirectoryToolCard'
 import { DirectoryToolList } from './DirectoryToolList'
 import type { X402DirectoryEntry, X402DirectoryFilters, X402DirectoryInput, X402DirectoryPage } from '@/modules/market/x402-directory'
@@ -217,6 +219,8 @@ function DirectoryMarketplace({ page, compareEntries, search, workspace = false,
   const [compareOpen, setCompareOpen] = useState(false)
   const compareTrigger = useRef<HTMLButtonElement>(null)
   const saved = useDirectorySavedTools()
+  const { isLoaded: authLoaded, isSignedIn } = useAuth()
+  const [needSave, setNeedSave] = useState<MarketNeedSaveState>()
   const view = activeView ?? search.view ?? (home === undefined ? 'tools' : 'discover')
   const { query, offset, network, provider, maxUsdPrice } = search
   const canonicalSearch = useCanonicalMarketSearch(search, search.alternativeTo === undefined && (view === 'tools' || view === 'providers'))
@@ -237,6 +241,25 @@ function DirectoryMarketplace({ page, compareEntries, search, workspace = false,
     ...(overview?.kind === 'ok' ? [...overview.popular, ...overview.recentlyUpdated].map(item => item.entry) : []),
   ], [loadMore.items, overview, page])
   const { refs: compareRefs, selections: comparison, availableEntries: comparisonEntries } = useMarketCompare({ compare: search.compare, resolvedEntries: compareEntries, loadedEntries: comparisonPool })
+  const inputForNeed = marketToolSearchInput(search)
+  const noMatchKey = canonicalSearch.result?.kind === 'noMatch'
+    ? JSON.stringify({ query: canonicalSearch.result.query, source: 'all', filters: inputForNeed.filters ?? null })
+    : undefined
+  async function saveMissingNeed() {
+    if (!authLoaded || !isSignedIn || !canonicalSearch.result || !isExhaustiveMarketNoMatch(canonicalSearch.result) || noMatchKey === undefined || (needSave?.key === noMatchKey && (needSave.status === 'saving' || needSave.status === 'saved'))) return
+    const idempotencyKey = needSave?.key === noMatchKey ? needSave.idempotencyKey : globalThis.crypto.randomUUID()
+    setNeedSave({ key: noMatchKey, idempotencyKey, status: 'saving' })
+    try {
+      const result = await recordOwnerMarketDemand({ data: { query: canonicalSearch.result.query, ...(inputForNeed.filters === undefined ? {} : { filters: inputForNeed.filters }), idempotencyKey } })
+      if (result.kind === 'refused') {
+        setNeedSave({ key: noMatchKey, idempotencyKey, status: 'idle', error: result.code === 'current_match_exists' ? 'A Tool now matches this need. Search again to see it.' : 'This need could not be saved. Try again.' })
+      } else {
+        setNeedSave({ key: noMatchKey, idempotencyKey, status: 'saved' })
+      }
+    } catch {
+      setNeedSave({ key: noMatchKey, idempotencyKey, status: 'idle', error: 'This need could not be saved. Try again.' })
+    }
+  }
   function go(next: Record<string, unknown>) {
     void navigate({ to: marketPath, resetScroll: false, search: carryMarketCompare(search, next) })
   }
@@ -284,12 +307,32 @@ function DirectoryMarketplace({ page, compareEntries, search, workspace = false,
   function toggleComparison(item: SavedDirectoryTool) {
     go({ ...search, compare: marketCompareParam(toggleMarketCompareRef(compareRefs, item.entry.resource)) })
   }
-  function toolGrid(items: readonly SavedDirectoryTool[]) {
+  function saveDirectoryTool(item: SavedDirectoryTool) {
+    if (!authLoaded || !isSignedIn) { void navigate({ to: '/sign-in/$', params: { _splat: '' } }); return }
+    saved.toggleSavedTool(item)
+  }
+  function toolGrid(items: readonly SavedToolListItem[]) {
     return <ul className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-      {items.map(item => <li key={item.entry.resource} className="h-full min-w-0">
-        <DirectoryToolCard model={toDirectoryToolCardModel(item.entry)} onSave={() => saved.toggleSavedTool(item)} saved={saved.isSaved(item.entry.resource)}
-          onCompare={() => toggleComparison(item)} comparing={comparison.some(other => other.resource === item.entry.resource)} compareDisabled={comparison.length >= 4 && !comparison.some(other => other.resource === item.entry.resource)} />
-      </li>)}
+      {items.map(item => {
+        const model = toSavedDirectoryRowModel(item)
+        const key = item.identity.kind === 'ae_callable' ? item.identity.toolRef : item.identity.resource
+        const externalEntry = item.detail.kind === 'found' && 'entry' in item.detail ? item.detail.entry : undefined
+        return <li key={key} className="flex min-w-0 flex-col gap-3 rounded-card border border-border bg-card p-gutter">
+          <p className="text-xs text-muted-foreground">{model.provider}</p>
+          {model.toolRef !== undefined
+            ? <Link to="/tools/$toolRef" params={{ toolRef: model.toolRef }} className="break-words font-medium underline-offset-4 hover:underline focus-visible:ring-2 focus-visible:ring-ring">{model.title}</Link>
+            : model.providerHost !== undefined && model.slug !== undefined
+              ? <Link to="/tools/$providerHost/$slug" params={{ providerHost: model.providerHost, slug: model.slug }} state={MARKET_LINK_STATE} className="break-words font-medium underline-offset-4 hover:underline focus-visible:ring-2 focus-visible:ring-ring">{model.title}</Link>
+              : <p className="break-words font-medium">{model.title}</p>}
+          <p className="text-xs text-muted-foreground">{model.access}</p>
+          <p className="mt-auto text-sm font-medium tabular-nums">{model.price}</p>
+          <div className="flex flex-wrap gap-2">
+            <Button variant="outline" size="sm" disabled={saved.pending(item.identity)} aria-busy={saved.pending(item.identity)} onClick={() => saved.toggleIdentity(item.identity)}>Remove saved Tool</Button>
+            {externalEntry === undefined ? null
+              : <Button variant="ghost" size="sm" onClick={() => toggleComparison({ entry: externalEntry, search: {} })} disabled={comparison.length >= 4 && !comparison.some(other => other.resource === externalEntry.resource)}>{comparison.some(other => other.resource === externalEntry.resource) ? 'Remove comparison' : 'Compare'}</Button>}
+          </div>
+        </li>
+      })}
     </ul>
   }
 
@@ -319,10 +362,20 @@ function DirectoryMarketplace({ page, compareEntries, search, workspace = false,
       </p>
       {result.recipient === undefined ? null : <p className="text-xs text-muted-foreground">Search query and candidate Tool text went to {result.recipient.label} ({result.recipient.host}).</p>}
       {result.kind === 'scoped' || result.kind === 'noMatch' ? <p className="text-sm text-muted-foreground">{result.reason}</p> : null}
+      {isExhaustiveMarketNoMatch(result) ? <div className="flex flex-wrap items-center gap-3">
+        {authLoaded && isSignedIn
+          ? <Button variant="outline" disabled={needSave !== undefined && needSave.key === noMatchKey && (needSave.status === 'saving' || needSave.status === 'saved')} aria-busy={needSave !== undefined && needSave.key === noMatchKey && needSave.status === 'saving'} onClick={() => void saveMissingNeed()}>{needSave !== undefined && needSave.key === noMatchKey && needSave.status === 'saved' ? 'Need saved' : 'Save this need'}</Button>
+          : <Link to="/sign-in/$" params={{ _splat: '' }} className={buttonVariants({ variant: 'outline' })}>Sign in to save this need</Link>}
+        {needSave !== undefined && needSave.key === noMatchKey && needSave.error ? <p role="alert" className="text-sm text-destructive">{needSave.error}</p> : null}
+      </div> : null}
       {result.kind === 'unavailable' ? <p className="text-sm text-muted-foreground">The search could not complete. No recommendation was made.</p> : null}
       {marketHasBrowseOnlyFilters(search) ? <p className="text-sm text-muted-foreground">Price caps, adoption, curation and published-detail filters apply in catalogue browse only; they are not applied to this search.</p> : null}
       {result.results.length === 0 ? null : <ul className="divide-y divide-border rounded-card border border-border bg-card">
-        {result.results.map(item => <li key={item.id} className="flex flex-col gap-2 px-4 py-4">
+        {result.results.map(item => {
+          const identity = item.toolRef !== undefined && item.access !== 'external_listing'
+            ? { kind: 'ae_callable' as const, toolRef: item.toolRef }
+            : { kind: 'external_listing' as const, id: item.id }
+          return <li key={item.id} className="flex flex-col gap-2 px-4 py-4">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div className="min-w-0">
               {item.toolRef !== undefined && item.access !== 'external_listing'
@@ -331,13 +384,16 @@ function DirectoryMarketplace({ page, compareEntries, search, workspace = false,
               <p className="text-sm text-muted-foreground">{item.provider} · {item.summary}</p>
             </div>
             <Badge variant="outline">{item.access === 'ae_callable' ? `AE-callable · ${item.readiness}` : item.access === 'setup_required' ? 'Connect to call' : item.access === 'unavailable' ? 'Currently unavailable · inspect' : 'External listing · not AE-callable'}</Badge>
+            {authLoaded && isSignedIn
+              ? <Button variant="outline" size="sm" disabled={saved.status !== 'ready' || saved.pending(identity)} aria-busy={saved.pending(identity)} aria-pressed={saved.isSavedIdentity(identity)} onClick={() => saved.toggleIdentity(identity)}>{saved.isSavedIdentity(identity) ? 'Remove saved Tool' : 'Save Tool'}</Button>
+              : <Link to="/sign-in/$" params={{ _splat: '' }} className={buttonVariants({ variant: 'outline', size: 'sm' })}>Sign in to save</Link>}
           </div>
           <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
             <span>{item.price.kind === 'indicative' ? `Indicative AUD · ${item.price.label}` : 'AUD estimate unavailable'}</span>
             {item.sourcePrice === undefined ? null : <span>Provider-listed source · {item.sourcePrice}</span>}
             <span>{marketSearchFreshness(item)}</span>
           </div>
-        </li>)}
+        </li>})}
       </ul>}
       <nav aria-label="Search pages" className="flex items-center justify-between gap-3 border-t border-border pt-4">
         {canonicalSearch.hasPrevious ? <Button variant="outline" onClick={canonicalSearch.previous} disabled={canonicalSearch.loading}><ArrowLeftIcon />Previous page</Button> : <span />}
@@ -372,7 +428,7 @@ function DirectoryMarketplace({ page, compareEntries, search, workspace = false,
             </InputGroupAddon>
           </InputGroup>
         </form>
-        <p className="mt-2 text-xs text-muted-foreground">Your question goes to {chatRecipient ?? 'the chat gateway'} to find a Tool. Do not include private data in the question.</p>
+        <p className="mt-2 text-xs text-muted-foreground">{chatRecipient === undefined ? 'Chat recipient unavailable here. Check before sending.' : `Your question goes to ${chatRecipient} to find a Tool.`} Do not include private data in the question.</p>
       </DirectoryHero>
       <Tabs value={view} onValueChange={value => {
         if (value === 'discover' || value === 'tools' || value === 'providers' || value === 'saved') {
@@ -395,7 +451,7 @@ function DirectoryMarketplace({ page, compareEntries, search, workspace = false,
         </div>
         {saved.saveError === undefined ? null : <p role="alert" className="py-3 text-sm text-destructive">{saved.saveError}</p>}
         <TabsContent value="discover" className="pt-7">
-          {home === undefined ? <AeEmptyState title="Explore Tools" description="Browse the current directory, or search for a service above." action={<Link to={marketPath} search={carryMarketCompare(search, { view: 'tools' })} className={cn(buttonVariants({ variant: 'outline' }))}>See all Tools</Link>} /> : <DirectoryHomeDiscovery home={home} onSave={saved.toggleSavedTool} isSaved={saved.isSaved} onCompare={toggleComparison}
+          {home === undefined ? <AeEmptyState title="Explore Tools" description="Browse the current directory, or search for a service above." action={<Link to={marketPath} search={carryMarketCompare(search, { view: 'tools' })} className={cn(buttonVariants({ variant: 'outline' }))}>See all Tools</Link>} /> : <DirectoryHomeDiscovery home={home} onSave={saveDirectoryTool} isSaved={saved.isSavedTool} saveDisabled={authLoaded && isSignedIn && saved.status !== 'ready'} onCompare={toggleComparison}
             isComparing={resource => compareRefs.includes(resource)} compareDisabled={resource => compareRefs.length >= 4 && !compareRefs.includes(resource)} />}
           {view === 'discover' ? comparisonTray : null}
         </TabsContent>
@@ -403,14 +459,14 @@ function DirectoryMarketplace({ page, compareEntries, search, workspace = false,
           <AeCollectionRail
             kicker="Saved"
             title="Your saved Tools"
-            action={
-              <p className="max-w-xs text-right text-xs text-muted-foreground">
-                {saved.storageState === 'session' ? 'Saved for this session only' : 'Saved on this browser'} · Prices may have changed
-              </p>
-            }
+            action={<p className="max-w-xs text-right text-xs text-muted-foreground">Saved to your account · Current details and AUD estimates on each visit</p>}
             className="mb-5"
           />
-          {!saved.hydrated ? <p role="status">Loading saved Tools…</p> : saved.savedTools.length === 0 ? <AeEmptyState icon={<HeartIcon />} title="Keep a few possibilities close" description="Save a Tool from its card, then come back when your agent needs it." action={<Link to={marketPath} search={carryMarketCompare(search, { view: 'tools' })} className={cn(buttonVariants({ variant: 'outline' }))}>Browse Tools</Link>} /> : toolGrid(saved.savedTools)}
+          {saved.status === 'signed_out'
+            ? <AeEmptyState icon={<HeartIcon />} title="Save Tools to your account" description="Sign in to keep Tools across browsers and connected Agents." action={<Link to="/sign-in/$" params={{ _splat: '' }} className={cn(buttonVariants({ variant: 'outline' }))}>Sign in</Link>} />
+            : saved.status === 'loading' ? <div role="status" aria-label="Loading saved Tools" className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">{[0, 1, 2].map(index => <div key={index} className="h-40 rounded-card border border-border bg-card" />)}</div>
+              : saved.status === 'failed' ? <AeEmptyState icon={<HeartIcon />} title="Saved Tools could not be loaded" description="Your saved identities are unchanged." action={<Button variant="outline" onClick={saved.refresh}>Try again</Button>} />
+                : saved.savedTools.length === 0 ? <AeEmptyState icon={<HeartIcon />} title="Keep a few possibilities close" description="Save a Tool from its card, then come back from any connected device." action={<Link to={marketPath} search={carryMarketCompare(search, { view: 'tools' })} className={cn(buttonVariants({ variant: 'outline' }))}>Browse Tools</Link>} /> : toolGrid(saved.savedTools)}
           {view === 'saved' ? comparisonTray : null}
         </TabsContent>
         {(['tools', 'providers'] as const).map(tab => {
@@ -481,7 +537,7 @@ function DirectoryMarketplace({ page, compareEntries, search, workspace = false,
             {page.partialResults === true ? <p role="status" className="mb-4 text-sm text-muted-foreground">Coinbase returned its top matches. Refine your search to find more Tools.</p> : null}
             {tabItems.length === 0 ? <AeEmptyState title={search.alternativeTo !== undefined ? activePages.isDone ? 'No other callable Tool in the assessed catalogue' : 'No callable alternative on this page' : indexed && catalogue.kind === 'ok' && !catalogue.isDone ? 'More of the catalogue remains' : 'No matching Tools'} description={search.alternativeTo !== undefined ? activePages.isDone ? 'Try a different capability or broaden the search.' : 'Continue to the next page to assess more Tools.' : indexed && catalogue.kind === 'ok' && !catalogue.isDone ? 'No matches in this portion. Continue to the next page to check the remaining Tools.' : 'Try a different description or broaden your filters.'} /> : tab === 'providers'
               ? <DirectoryProviderList entries={tabItems} onSelect={provider => { void navigate({ to: marketPath, search: carryMarketCompare(search, { ...indexedSearch(), view: 'tools', provider }) }) }} />
-              : <DirectoryToolList items={tabItems.map(entry => ({ entry, search: sourceInput }))} onSave={saved.toggleSavedTool} isSaved={saved.isSaved} onCompare={toggleComparison} isComparing={resource => compareRefs.includes(resource)} compareDisabled={resource => compareRefs.length >= 4 && !compareRefs.includes(resource)} />}
+              : <DirectoryToolList items={tabItems.map(entry => ({ entry, search: sourceInput }))} onSave={saveDirectoryTool} isSaved={saved.isSavedTool} saveDisabled={authLoaded && isSignedIn && saved.status !== 'ready'} onCompare={toggleComparison} isComparing={resource => compareRefs.includes(resource)} compareDisabled={resource => compareRefs.length >= 4 && !compareRefs.includes(resource)} />}
             {tab === 'tools' && view === 'tools' ? comparisonTray : null}
             {activePages.status === 'failed' && (tab === 'tools' || tab === 'providers') && indexed ? <p role="alert" className="mt-section text-right text-sm text-muted-foreground">The next page could not be loaded. This page is unchanged.</p> : null}
             <nav aria-label="Catalogue pages" className="mt-section grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-related border-t border-border pt-related">

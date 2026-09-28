@@ -6,6 +6,7 @@ import { describeActionForAgent, findAction, journeyStatusResultSchema } from '@
 import { statusRefSchema } from '@/modules/actions/contract'
 import { SUPPLY_ACTION_ROUTE_CONTRACTS } from '@/modules/capability-supply/supply-actions'
 import { MARKET_REQUEST_ROUTE_CONTRACTS } from '@/modules/market-demand/market-demand.actions'
+import { SAVED_TOOLS_ROUTE_CONTRACTS } from '@/modules/market/saved-tools.actions'
 import {
   createFundingHandoffInputSchema,
   FUNDING_HANDOFF_CONFIG_ACTION_ID,
@@ -27,6 +28,7 @@ const actionRoutes = [
   AGENT_ACCOUNT_SELF_ROUTE_CONTRACT,
   ...Object.values(AGENT_ACCOUNT_MONEY_ROUTE_CONTRACTS),
   ...Object.values(MARKET_REQUEST_ROUTE_CONTRACTS),
+  ...Object.values(SAVED_TOOLS_ROUTE_CONTRACTS),
   ...Object.values(SUPPLY_ACTION_ROUTE_CONTRACTS),
 ] as const
 

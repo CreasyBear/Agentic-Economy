@@ -1,3 +1,5 @@
+import { randomUUID } from 'node:crypto'
+
 import {
   MARKET_REQUEST_ROUTE_CONTRACTS,
   MARKET_REQUEST_ACTIVE_WINDOW_MS,
@@ -13,6 +15,7 @@ import { usageFailure } from '../lib/help'
 import { CliFailure, callJson, heading, line, printJson, requireOk, table } from '../lib/output'
 import { toolLabel } from '../lib/tool-format'
 import { requireAgentAccessKey } from './status'
+import { parseSearchFilters } from './search'
 
 export const MARKET_REQUEST_COMMAND_DESCRIPTORS = Object.freeze([
   {
@@ -69,19 +72,55 @@ function requestContinuation(
 
 async function createRequest(args: readonly string[], options: CliOptions): Promise<void> {
   const query = args.slice(1).join(' ').trim()
+  const idempotencyKey = options.idempotencyKey ?? randomUUID()
   const input = marketRequestCreateAction.schema.safeParse({
     query,
-    idempotencyKey: options.idempotencyKey ?? globalThis.crypto.randomUUID(),
+    idempotencyKey,
+    ...(options.source === undefined ? {} : { source: options.source }),
+    ...(options.filters === undefined ? {} : { filters: parseSearchFilters(options.filters) }),
   })
   if (!input.success) throw usageFailure('request create', 'request-create-input-invalid')
+  const replayCommand = requestContinuation(options, [
+    'ae', 'request', 'create', query,
+    ...(input.data.source === undefined ? [] : ['--source', input.data.source]),
+    ...(input.data.filters === undefined ? [] : ['--filters', JSON.stringify(input.data.filters)]),
+    '--idempotency-key', idempotencyKey,
+  ])
   const apiKey = requireAgentAccessKey('request create', options)
   const route = descriptor('create')
-  const outcome = await callJson(options.baseUrl, route.path, {
-    method: route.method,
-    headers: { Authorization: `Bearer ${apiKey}` },
-    body: JSON.stringify(input.data),
-  })
-  const parsed = marketRequestCreateAction.outputSchema.safeParse(requireOk(outcome, route.path))
+  let outcome
+  try {
+    outcome = await callJson(options.baseUrl, route.path, {
+      method: route.method,
+      headers: { Authorization: `Bearer ${apiKey}` },
+      body: JSON.stringify(input.data),
+    })
+  } catch (error) {
+    if (!(error instanceof TypeError)) throw error
+    throw new CliFailure('Market request network unavailable; retry with the same idempotency key.', {
+      kind: 'UNAVAILABLE', code: 'market-request-network-unavailable', retryable: true, nextCommand: replayCommand,
+    })
+  }
+  let remote: unknown
+  try {
+    remote = requireOk(outcome, route.path)
+  } catch (error) {
+    if (!(error instanceof CliFailure) || error.kind !== 'UNAVAILABLE') throw error
+    throw new CliFailure(error.message, {
+      exitCode: error.exitCode, kind: error.kind,
+      ...(error.code === undefined ? {} : { code: error.code }),
+      ...(error.status === undefined ? {} : { status: error.status }),
+      ...(error.instance === undefined ? {} : { instance: error.instance }),
+      ...(error.requestId === undefined ? {} : { requestId: error.requestId }),
+      ...(error.next === undefined ? {} : { next: error.next }),
+      ...(error.detail === undefined ? {} : { detail: error.detail }),
+      ...(error.retryable === undefined ? {} : { retryable: error.retryable }),
+      ...(error.retryAfter === undefined ? {} : { retryAfter: error.retryAfter }),
+      ...(error.suggestion === undefined ? {} : { suggestion: error.suggestion }),
+      nextCommand: replayCommand,
+    })
+  }
+  const parsed = marketRequestCreateAction.outputSchema.safeParse(remote)
   if (!parsed.success) {
     throw new CliFailure('The server returned an invalid market request result.', {
       kind: 'UNAVAILABLE', code: 'market-request-result-invalid',
@@ -91,8 +130,13 @@ async function createRequest(args: readonly string[], options: CliOptions): Prom
     const nextCommand = parsed.data.code === 'current_match_exists'
       ? requestContinuation(options, ['ae', 'search', query])
       : parsed.data.code === 'idempotency_conflict'
-        ? requestContinuation(options, ['ae', 'request', 'create', '<job>', '--idempotency-key', '<new-key>'])
-        : undefined
+        ? requestContinuation(options, [
+            'ae', 'request', 'create', query,
+            ...(input.data.source === undefined ? [] : ['--source', input.data.source]),
+            ...(input.data.filters === undefined ? [] : ['--filters', JSON.stringify(input.data.filters)]),
+            '--idempotency-key', randomUUID(),
+          ])
+        : parsed.data.code === 'source_unavailable' ? replayCommand : undefined
     throw new CliFailure(
       parsed.data.code === 'current_match_exists'
         ? 'Current Market Tools already match this job; nothing was recorded.'

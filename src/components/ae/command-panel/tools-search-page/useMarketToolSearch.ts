@@ -23,6 +23,7 @@ import {
   type MarketToolSearchInput,
   type ToolChoiceSearchResult,
 } from '../market-tools-client'
+import { isExhaustiveMarketNoMatch } from '@/modules/market-demand/market-demand.functions'
 
 import {
   type CommandNavigationItem,
@@ -90,28 +91,33 @@ export function useMarketToolSearch({
 }: UseMarketToolSearchOptions): Readonly<{
   status: MarketToolSearchStatus
   navigationItems: readonly CommandNavigationItem[]
+  saveNeed?: Readonly<{ query: string }>
 }> {
   const [status, setStatus] = useState<MarketToolSearchStatus>({ kind: 'idle' })
+  const [saveNeed, setSaveNeed] = useState<Readonly<{ query: string }>>()
 
   useEffect(() => {
     const trimmed = query.trim()
     if (trimmed === '') {
+      setSaveNeed(undefined)
       setStatus({ kind: 'idle' })
       return
     }
     const activePage = continuation?.forQuery === trimmed ? continuation : undefined
 
     let current = true
+    setSaveNeed(undefined)
     setStatus({ kind: 'loading', query: trimmed })
     const timer = setTimeout(() => {
       void (async () => {
         setStatus({ kind: 'loading', query: trimmed })
         try {
-          const result = await searchTools({
+          const searchInput: MarketToolSearchInput = {
             query: activePage?.query ?? trimmed,
             limit: TOOL_SEARCH_RESULT_LIMIT,
             ...(activePage === undefined ? {} : { cursor: activePage.cursor }),
-          })
+          }
+          const result = await searchTools(searchInput)
           if (!current) return
           const next = result.next.find((action) => action.action === 'next-page')
           const nextPage = next?.action === 'next-page'
@@ -126,12 +132,19 @@ export function useMarketToolSearch({
             })
             return
           }
+          setSaveNeed(
+            activePage === undefined && result.query === searchInput.query && isExhaustiveMarketNoMatch(result)
+              ? { query: searchInput.query }
+              : undefined,
+          )
           if (result.kind === 'noMatch') {
             setStatus({
               kind: 'empty',
               query: trimmed,
               count: 0,
-              message: 'No suitable Tools found in the assessed sources. Try different wording.',
+              message: isExhaustiveMarketNoMatch(result)
+                ? 'No suitable Tools found in the assessed sources. Try different wording.'
+                : 'This search has not assessed every source yet. Try different wording or browse the catalogue.',
             })
             return
           }
@@ -174,7 +187,7 @@ export function useMarketToolSearch({
     }
   }, [query, searchAttempt, searchTools, continuation])
 
-  return { status, navigationItems }
+  return { status, navigationItems, ...(saveNeed === undefined ? {} : { saveNeed }) }
 }
 
 export type { MarketToolSearchStatus } from './tools-search-page.contracts'

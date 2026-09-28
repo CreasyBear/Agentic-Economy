@@ -30,7 +30,10 @@ export const readMarketRouteServer = createServerFn({ method: "GET" })
 export const readMarketDiscoveryRecipientServer = createServerFn({ method: "GET" })
   .handler(() => jevDiscoveryRecipient() ?? null);
 export const readMarketChatRecipientServer = createServerFn({ method: 'GET' })
-  .handler(async () => await callPublicSourceQuery(chatRecipientQuery, {}))
+  .handler(async () => {
+    if (!process.env.CONVEX_URL?.trim() && !process.env.VITE_CONVEX_URL?.trim()) return null
+    return await callPublicSourceQuery(chatRecipientQuery, {})
+  })
 
 export {
   loadMarketRouteData,

@@ -11,9 +11,15 @@ import {
 import { useState } from 'react'
 import type { ReactElement } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import type * as ClerkReact from '@clerk/tanstack-react-start'
 import '../../setup/resize-observer'
 import '../../setup/jsdom-platform'
 import '../../setup/jsdom-dialog'
+
+vi.mock('@clerk/tanstack-react-start', async (loadOriginal) => ({
+  ...await loadOriginal<typeof ClerkReact>(),
+  useAuth: () => ({ isSignedIn: false }),
+}))
 
 import { AeCommandPanel, CommandPanelProvider } from '@/components/ae/command-panel'
 import {

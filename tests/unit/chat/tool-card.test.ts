@@ -1,4 +1,8 @@
-import { describe, expect, it } from 'vitest'
+/** @vitest-environment jsdom */
+import '@testing-library/jest-dom/vitest'
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { createElement } from 'react'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { projectToolQuoteRefusal, type ToolQuoteResult } from '@/modules/capability-execution/quote'
 import {
@@ -10,6 +14,9 @@ import {
   serializeToolCard,
 } from '@/modules/chat/tool-card'
 import { formatCurrencyAmount, formatDisplayAmount } from '@/modules/money/public'
+import { PublicToolRegistrySchemaVersion } from '@/modules/capability-supply/public'
+import { ChatNeedActionsContext, ToolCard } from '@/components/ae/chat/ToolCard'
+import type { ChatNeedActions, ChatSaveNeed, ToolCardProjection } from '@/modules/chat/tool-card'
 
 const QUOTE_REF = `operation-commitment:v1:${'b'.repeat(64)}`
 const TOOL_REF = `operation:v1:${'a'.repeat(64)}`
@@ -18,6 +25,8 @@ const AVAILABLE = { currency: 'AUD', units: '5000000', exponent: 6 } as const
 const MAXIMUM = { currency: 'AUD', units: '2000000', exponent: 6 } as const
 const SOURCE_REQUIREMENT = { currency: 'AUD', units: '250000', exponent: 6 } as const
 const EXPIRES_AT = 1_700_000_060_000
+
+afterEach(cleanup)
 
 describe('search result state', () => {
   it('preserves an exhausted no-match card with a broaden action in shared history', () => {
@@ -28,6 +37,86 @@ describe('search result state', () => {
       next: { action: 'broaden', args: { query: 'missing capability' } } })
     if (card === null) throw new Error('missing_card')
     expect(projectToolCard(serializeToolCard(card))).toEqual(card)
+  })
+
+  it('saves only the actual exhausted search input, preserving selected source and filters in history', () => {
+    const input = { query: 'Regional grid capacity forecast', source: 'coinbase' as const,
+      filters: { category: 'energy', access: 'external_listing' as const }, limit: 8 }
+    const output = {
+      kind: 'noMatch', schemaVersion: PublicToolRegistrySchemaVersion,
+      query: input.query, results: [], reason: 'No suitable Tool in the assessed supply.',
+      partialResults: false,
+      assessed: { source: 'coinbase', scope: 'complete', coverage: 'complete', examined: 20 },
+      pagination: { limit: 8, hasMore: false },
+      next: [{ action: 'broaden', args: { query: input.query }, authority: 'public' }],
+    }
+    const part = { type: `tool-${CHAT_TOOL_NAME_MAP.canonicalToProvider['registry.tools.search']}`,
+      state: 'output-available', input, output }
+    const card = projectToolCard(part)
+    expect(card).toMatchObject({ kind: 'status', saveNeed: {
+      query: input.query, source: input.source, filters: input.filters,
+    } })
+    if (card === null) throw new Error('missing_card')
+    expect(projectToolCard(serializeToolCard(card))).toEqual(card)
+    expect(projectToolCard({ ...part, input: { ...input, query: 'model paraphrase' } }))
+      .not.toHaveProperty('saveNeed')
+    expect(projectToolCard({ ...part, output: { ...output, partialResults: true } }))
+      .not.toHaveProperty('saveNeed')
+    expect(projectToolCard({ ...part, output: { ...output, kind: 'scoped' } }))
+      .not.toHaveProperty('saveNeed')
+    expect(projectToolCard({ ...part, output: { ...output, kind: 'unavailable' } }))
+      .not.toHaveProperty('saveNeed')
+    expect(projectToolCard({ ...part, input: undefined })).not.toHaveProperty('saveNeed')
+  })
+
+  it('offers only signed-in chat an explicit Save and keeps the same scoped intent on repeat clicks', async () => {
+    const saveNeed = { query: 'Regional grid capacity forecast',
+      source: 'coinbase' as const, filters: { category: 'energy', access: 'external_listing' as const } }
+    const projection: ToolCardProjection = {
+      toolId: 'registry.tools.search', title: 'Search tools', kind: 'status', state: 'attention',
+      summary: 'No suitable Tool', saveNeed,
+    }
+    const onSave = vi.fn(async (input: ChatSaveNeed & { idempotencyKey: string }) => ({
+      kind: 'recorded' as const, requestRef: 'need:123', query: input.query, createdAt: 1,
+    }))
+    const actions: ChatNeedActions = {
+      authenticated: true,
+      onFind: async () => ({ kind: 'not_found' }),
+      onSave,
+      onStatus: async () => ({ kind: 'open', requestRef: 'need:123',
+        query: saveNeed.query, createdAt: 1, matchedCount: 0 }),
+      onWithdraw: async () => ({ kind: 'withdrawn', requestRef: 'need:123' }),
+    }
+    const card = (value: ChatNeedActions) => createElement(ChatNeedActionsContext.Provider,
+      { value }, createElement(ToolCard, { projection }))
+    render(card(actions))
+    const save = await screen.findByRole('button', { name: 'Save this need' })
+    fireEvent.click(save)
+    fireEvent.click(save)
+    await waitFor(() => expect(screen.getByText('need:123')).toBeInTheDocument())
+    expect(onSave).toHaveBeenCalledTimes(1)
+    expect(onSave).toHaveBeenCalledWith({ ...saveNeed, idempotencyKey: expect.any(String) })
+    expect(screen.queryByRole('button', { name: 'Save this need' })).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Check status' }))
+    await waitFor(() => expect(screen.getByText('Need is open for matching.')).toBeInTheDocument())
+    fireEvent.click(screen.getByRole('button', { name: 'Withdraw' }))
+    await waitFor(() => expect(screen.getByText('Need withdrawn.')).toBeInTheDocument())
+    fireEvent.click(screen.getByRole('button', { name: 'Save this need' }))
+    await waitFor(() => expect(onSave).toHaveBeenCalledTimes(2))
+    expect(onSave.mock.calls[1]?.[0].idempotencyKey).not.toBe(onSave.mock.calls[0]?.[0].idempotencyKey)
+    cleanup()
+    render(card({ ...actions, onFind: async () => ({ kind: 'found', request: {
+      requestRef: 'need:123', query: saveNeed.query, source: saveNeed.source,
+      filters: saveNeed.filters, createdAt: 1, updatedAt: 1,
+    } }) }))
+    await waitFor(() => expect(screen.getByText('need:123')).toBeInTheDocument())
+    expect(screen.queryByRole('button', { name: 'Save this need' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Check status' })).toBeInTheDocument()
+    expect(onSave).toHaveBeenCalledTimes(2)
+    cleanup()
+    render(card({ ...actions, authenticated: false }))
+    expect(screen.getByRole('link', { name: 'Sign in to save this need' })).toHaveAttribute('href', '/sign-in')
+    expect(screen.queryByRole('button', { name: 'Save this need' })).not.toBeInTheDocument()
   })
 
   it('projects an assessed match as a selectable choice and preserves it on sharing', () => {

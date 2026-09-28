@@ -5,6 +5,7 @@ import type { X402DirectoryFacet } from '@/modules/market/x402-directory-catalog
 import { directoryProviderKey, directorySlugBase, minimumDirectoryUsdPrice } from '@/modules/market/x402-directory-index'
 import type { X402DirectoryEntry } from '@/modules/market/x402-directory'
 import { x402DirectoryFunctionalTitle } from '@/modules/market/x402-directory-title'
+import type { SavedDirectoryTool, SavedToolListItem, SavedToolSaveInput } from '@/modules/market/saved-tools.contracts'
 
 /** AUD is the primary estimate; published USDC remains a source detail below it. */
 export function directoryPrice(entry: X402DirectoryEntry): string {
@@ -311,6 +312,56 @@ export function toDirectoryToolCardModel(entry: X402DirectoryEntry): DirectoryTo
     ...(payersLabel === undefined ? {} : { payersLabel }),
     ...(entry.iconUrl === undefined ? {} : { iconUrl: entry.iconUrl }),
   }
+}
+
+export type MarketNeedSaveState = Readonly<{ key: string; idempotencyKey: string; status: 'idle' | 'saving' | 'saved'; error?: string }>
+
+export type SavedToolsWriteError = Readonly<{ owner: string; message: string }>
+
+export type SavedToolsLoadState = Readonly<{ owner: string; items: readonly SavedToolListItem[]; status: 'ready' | 'failed'; error?: string }>
+
+export type SavedToolsContextValue = Readonly<{
+  savedTools: readonly SavedToolListItem[]
+  toggleSavedTool: (tool: SavedDirectoryTool) => void
+  toggleIdentity: (identity: SavedToolSaveInput) => void
+  isSavedIdentity: (identity: SavedToolSaveInput) => boolean
+  isSavedTool: (tool: SavedDirectoryTool) => boolean
+  pending: (identity: SavedToolSaveInput) => boolean
+  status: 'loading' | 'ready' | 'failed' | 'signed_out'
+  saveError?: string
+  refresh: () => void
+}>
+
+export type SavedDirectoryRowModel = Readonly<{
+  title: string
+  provider: string
+  price: string
+  access: string
+  toolRef?: string
+  providerHost?: string
+  slug?: string
+}>
+
+/** Saved identities never carry prices; these details come from the current owner-scoped read. */
+export function toSavedDirectoryRowModel(item: SavedToolListItem): SavedDirectoryRowModel {
+  if (item.detail.kind !== 'found') return {
+    title: 'Tool no longer available',
+    provider: item.identity.kind === 'ae_callable' ? item.identity.toolRef : item.identity.resource,
+    price: 'Current price unavailable',
+    access: 'Unavailable · removable',
+  }
+  if ('tool' in item.detail) {
+    const { tool } = item.detail
+    return {
+      title: tool.listing.label,
+      provider: tool.business.name,
+      price: formatDisplayPrice(tool.commercial.displayPrice ?? { kind: 'unavailable' }) ?? audEstimateUnavailable,
+      access: 'AE-callable',
+      toolRef: tool.toolRef,
+    }
+  }
+  const model = toDirectoryToolCardModel(item.detail.entry)
+  return { title: model.title, provider: model.providerLine, price: model.priceLabel, access: model.accessLabel, providerHost: model.providerHost, slug: model.slug }
 }
 
 export type DirectoryToolFieldNote = Readonly<{ label: string; detail?: string }>

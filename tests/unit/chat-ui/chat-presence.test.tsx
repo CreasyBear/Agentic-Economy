@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 
 vi.mock('@clerk/tanstack-react-start', () => ({
   SignInButton: ({ children }: { children: ReactNode }) => children,
+  useAuth: () => ({ isSignedIn: false }),
 }))
 
 vi.mock('@convex-dev/agent/react', () => ({
