@@ -360,7 +360,7 @@ export function projectToolListChoices(result: ToolSearchResult, filters?: unkno
 export function projectToolSearchChoices(
   result: ToolSearchResult,
   filters: unknown,
-  assessment: Readonly<{ verdict: 'matched' | 'degraded' | 'noMatch'; reason?: string; nearMisses: readonly PublicToolDescriptor[] }>,
+  assessment: Readonly<{ verdict: 'matched' | 'noMatch'; nearMisses: readonly PublicToolDescriptor[] }>,
   freshness?: SupplyProjectionFreshness,
   visibleLimit = 8,
   context: Readonly<{
@@ -373,13 +373,12 @@ export function projectToolSearchChoices(
     completedAt?: number
     externalExamined?: number
     admittedExamined?: number
-    externalAvailable?: boolean
     recipient?: Readonly<{ label: string; host: string; data: 'query and candidate summaries' }>
   }> = {},
 ): ToolChoiceSearchOutput {
   const pagination = context.pagination ?? (result.kind === 'ok' ? result.pagination : { limit: visibleLimit, hasMore: false })
   const query = context.query ?? (result.kind === 'unavailable' ? '' : result.query)
-  const unavailable = result.kind === 'unavailable' || assessment.verdict === 'degraded' || context.externalAvailable === false
+  const unavailable = result.kind === 'unavailable'
   const admitted = admittedHealth(filters)
   const parsedFilters = toolCatalogFiltersSchema.safeParse(filters)
   const explicitHealthFilter = parsedFilters.success && parsedFilters.data.healthStatus !== undefined
@@ -410,7 +409,7 @@ export function projectToolSearchChoices(
   })
   const displayedRows = [...rows, ...context.external ?? []].slice(0, visibleLimit)
   const complete = context.complete === true && !pagination.hasMore && (result.kind !== 'ok' || result.partialResults !== true)
-  const kind = searchVerdict({ matches: rows.length, assessedComplete: complete && displayedRows.length === 0, available: !unavailable })
+  const kind = searchVerdict({ matches: displayedRows.length, assessedComplete: complete && displayedRows.length === 0, available: !unavailable })
   const assessed = {
     source: context.source ?? 'current',
     scope: complete ? 'complete' as const : 'page' as const,

@@ -9,6 +9,7 @@ import {
   ERC20_QUERY,
   TIMEZONE_QUERY,
   TOOL_CRYPTO_TX,
+  TOOL_TIMEZONE,
   jevAnswersForTool,
   jevSystemOneResponse,
   misorderedSearchResult,
@@ -75,7 +76,7 @@ describe('POST /api/v1/market-tools/search Jev re-rank', () => {
     }
   })
 
-  it('returns unavailable without unassessed candidates when Jev fails', async () => {
+  it('returns indexed candidates when Jev fails', async () => {
     setHttpRateLimitAdmissionForTests(async () => ({ ok: true }))
     setPublicSourceTransportForTests({
       query: async () => Date.now() - 60_000,
@@ -98,9 +99,9 @@ describe('POST /api/v1/market-tools/search Jev re-rank', () => {
         query: string
         results: readonly { toolRef: string }[]
       }
-      expect(body.kind).toBe('unavailable')
+      expect(body.kind).toBe('match')
       expect(body.query).toBe(TIMEZONE_QUERY)
-      expect(body.results).toHaveLength(0)
+      expect(body.results.map(item => item.toolRef)).toContain(TOOL_TIMEZONE.toolRef)
       expect(body).not.toHaveProperty('recommendation')
       expect(elapsedMs).toBeLessThan(8_000)
     } finally {

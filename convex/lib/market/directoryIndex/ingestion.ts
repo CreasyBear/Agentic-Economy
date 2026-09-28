@@ -84,6 +84,7 @@ export async function writeSource(ctx: MutationCtx, generation: string, item: In
     })
     const searchRows = await ctx.db.query('marketDirectorySearchEntries')
       .withIndex('by_generation_and_resource', q => q.eq('generation', generation).eq('resource', item.resource)).take(130)
+    await writeAnalytics(ctx, generation, item.resource, entry, storedDirectoryEntry(previous), observedAt, searchRows.find(row => row.network === '*')?.lastCalledBand)
     const universalAnalytics = searchAnalytics(entry, '*', observedAt)
     const eligible = isDirectoryEntryEligible(universalAnalytics)
     const previousEligible = searchRows.find(row => row.network === '*')?.eligible === true
@@ -177,7 +178,7 @@ export async function writeSource(ctx: MutationCtx, generation: string, item: In
     })
   }
   await writeFacetMembership(ctx, generation, item.resource, item, category, networks, eligible, previous, previousEligible)
-  await writeAnalytics(ctx, generation, item.resource, entry, previous === null ? undefined : storedDirectoryEntry(previous))
+  await writeAnalytics(ctx, generation, item.resource, entry, previous === null ? undefined : storedDirectoryEntry(previous), observedAt, oldSearch.find(row => row.network === '*')?.lastCalledBand)
   await refreshProviderLead(ctx, generation, entry.provider)
   return previous === null ? 'inserted' : 'rewritten'
 }

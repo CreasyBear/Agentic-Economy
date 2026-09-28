@@ -10,6 +10,7 @@ import type {
 
 const DEFAULT_JEV_MODEL = '~typesafe/jev-latest'
 const DEFAULT_JEV_TIMEOUT_MS = 1500
+const DISCOVERY_JEV_TIMEOUT_MS = 5000
 
 function jevRoute(options: DecisionGatewayOptions) {
   const apiKey =
@@ -41,7 +42,8 @@ export function jevDiscoveryRecipient(options: DecisionGatewayOptions = {}): Rea
 /**
  * Requires valid SDK questions and positive timing/retry configuration.
  * Ensures consumed answers are validated, or a classified operational failure.
- * Interactive discovery/Provider review has one attempt and a total <= 1,500 ms budget, including body delivery.
+ * Discovery has one attempt and a 10s budget for multi-candidate assessment;
+ * interactive Provider review retains the 1.5s budget.
  * Invariant: SDK owns I/O; no payload/credentials escape in operational errors.
  * On programmer/configuration defects: throw; never manufacture fallback answers.
  */
@@ -50,7 +52,8 @@ export async function callJevSystemOne(
   options: DecisionGatewayOptions = {},
 ): Promise<DecisionGatewayResponse> {
   const startedAt = Date.now()
-  const configuredTimeout = options.timeoutMs ?? DEFAULT_JEV_TIMEOUT_MS
+  const discovery = options.purpose === 'discovery'
+  const configuredTimeout = options.timeoutMs ?? (discovery ? DISCOVERY_JEV_TIMEOUT_MS : DEFAULT_JEV_TIMEOUT_MS)
   if (!Number.isFinite(configuredTimeout) || configuredTimeout <= 0
     || (options.deadlineAt !== undefined && !Number.isFinite(options.deadlineAt))
     || (options.maxRetries !== undefined && (!Number.isInteger(options.maxRetries) || options.maxRetries < 0))) {
@@ -58,13 +61,12 @@ export async function callJevSystemOne(
   }
   if (options.signal?.aborted) throw new JevUnavailableError('cancelled')
   if (options.disableJev === true) throw new JevUnavailableError('disabled')
-  const discovery = options.purpose === 'discovery'
   const interactive = discovery || options.purpose === 'provider_source'
   if (discovery && process.env.AE_JEV_DISCOVERY_ENABLED === 'false') throw new JevUnavailableError('disabled')
   if (interactive && JSON.stringify(request.state).length > 32_000) throw new JevUnavailableError('evidence_too_large')
   const deadlineAt = Math.min(
     options.deadlineAt ?? Infinity,
-    interactive ? startedAt + Math.min(configuredTimeout, DEFAULT_JEV_TIMEOUT_MS) : Infinity,
+    interactive ? startedAt + Math.min(configuredTimeout, discovery ? DISCOVERY_JEV_TIMEOUT_MS : DEFAULT_JEV_TIMEOUT_MS) : Infinity,
   )
   const timeout = Math.min(configuredTimeout, deadlineAt - Date.now())
   if (timeout <= 0) throw new JevUnavailableError('timeout')

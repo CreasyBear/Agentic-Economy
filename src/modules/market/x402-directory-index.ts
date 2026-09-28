@@ -96,6 +96,7 @@ export function minimumDirectoryUsdPrice(entry: X402DirectoryEntry, network?: st
 const BASE_USDC_ASSET = '0x833589fcd6edb6e08f4c7c32d4f71b54bda02913'
 
 function metadataPayToAt(metadataJson: string, index: number): string | undefined {
+  if (metadataJson.length === 0) return undefined // Indexed projections omit raw provider metadata by design.
   try {
     const parsed: unknown = JSON.parse(metadataJson)
     if (typeof parsed !== 'object' || parsed === null || !('accepts' in parsed) || !Array.isArray(parsed.accepts)) return undefined
@@ -111,10 +112,11 @@ function metadataPayToAt(metadataJson: string, index: number): string | undefine
 export function directoryBasePayTo(entry: X402DirectoryEntry): string | undefined {
   let best: { amount: Decimal; payTo: string } | undefined
   entry.prices.forEach((price, index) => {
-    const payTo = price.payTo ?? metadataPayToAt(entry.metadataJson, index)
-    if (price.scheme !== 'exact' || payTo === undefined || price.decimalAmount === undefined) return
+    if (price.scheme !== 'exact' || price.decimalAmount === undefined) return
     if (directoryNetwork(price.network) !== 'eip155:8453') return
     if (price.symbol !== 'USDC' && price.asset?.toLowerCase() !== BASE_USDC_ASSET) return
+    const payTo = price.payTo ?? metadataPayToAt(entry.metadataJson, index)
+    if (payTo === undefined) return
     if (!/^0x[a-f0-9]{40}$/u.test(payTo)) return
     try {
       const amount = new Decimal(price.decimalAmount)

@@ -83,6 +83,35 @@ describe('complete external directory index', () => {
     expect(await backend.query(api.x402DirectoryIndex.resource, { resource: source(1).resource })).toMatchObject({ kind: 'found', item: { entry: { title: 'Updated research' } } })
   })
 
+  it('keeps recency membership unique when activity changes before an identity rewrite', async () => {
+    vi.setSystemTime(new Date('2026-09-28T12:00:00.000Z'))
+    const { backend, workload } = await setup()
+    const generation = 'coinbase-recency-rewrite'
+    await seedRefresh(backend, generation)
+    const fresh = new Date(Date.now() - 60_000).toISOString()
+    const stale = new Date(Date.now() - 40 * 24 * 60 * 60 * 1000).toISOString()
+    const observed = (title: string, lastCalledAt: string) => {
+      const category = title === 'Revised research' ? 'Engineering' : 'Research'
+      const item = source(1, { title, category, activity: { calls30d: 4, payers30d: 2, lastCalledAt } })
+      const raw = { resource: item.resource, title, category, lastCalledAt }
+      return { ...item, sourceJson: JSON.stringify(raw), sourceDigest: canonicalDigest(raw) }
+    }
+    const items = [observed('Research', fresh), observed('Research', stale), observed('Revised research', stale), observed('Research', fresh)]
+    for (const [index, item] of items.entries()) {
+      await backend.mutation(internal.x402DirectoryIndexStore.applyPage, {
+        generation, offset: index * 100, reportedTotal: 4, observedAt: Date.now() + index,
+        runStartedAt: 1, workload, items: [item],
+      })
+    }
+    await backend.mutation(internal.x402DirectoryIndexStore.applyPage, {
+      generation, offset: 400, reportedTotal: 4, observedAt: Date.now() + 4,
+      runStartedAt: 1, workload, items: [],
+    })
+    const report = await backend.query(api.x402DirectoryIndex.analytics, {})
+    expect(report.kind).toBe('ok')
+    if (report.kind === 'ok') expect(Object.fromEntries(report.recency.map(({ key, count }) => [key, count]))).toMatchObject({ fresh: 1, stale: 0 })
+  })
+
   it('reprojects stale display titles from retained source metadata without rewriting the snapshot or starting another scan', async () => {
     const { backend, workload } = await setup()
     const generation = 'coinbase-retained-title'

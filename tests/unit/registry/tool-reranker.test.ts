@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { deserializeToolSearchResult, serializeToolSearchResult, type ToolSearchResult } from '@/modules/capability-supply/public'
 import { projectToolListChoices, projectToolSearchChoices } from '@/modules/registry/tool-choice-contracts'
 import * as decisionEngine from '@/modules/decision-engine/public'
-import { rerankToolSearchResult } from '@/modules/registry/tool-reranker'
+import { lexicalToolMatch, rerankToolSearchResult } from '@/modules/registry/tool-reranker'
 import {
   ERC20_QUERY,
   TIMEZONE_QUERY,
@@ -51,12 +51,10 @@ describe('Jev x402 Tool Search Re-ranker (cookbooks/rerank_typesafe.md)', () => 
   })
 
 
-  it('does not present lexical candidates when suitability assessment is unavailable', () => {
-    const output = projectToolSearchChoices(sampleOkResult, undefined, {
-      verdict: 'degraded', nearMisses: [], reason: 'Suitability ranking is temporarily unavailable.',
-    })
-    expect(output).toMatchObject({ kind: 'unavailable', reason: 'source_unavailable', results: [] })
-    expect(output).not.toHaveProperty('recommendation')
+
+  it('finds a one-word Tool need during a ranker outage without accepting an unrelated multi-word need', () => {
+    expect(lexicalToolMatch('timezone', 'Timezone Converter', 'Convert between IANA time zones')).toBe(true)
+    expect(lexicalToolMatch('convert timezone to red unicorn weather', 'Timezone Converter', 'Convert between IANA time zones')).toBe(false)
   })
 
   it('preserves search result untouched when query is empty, whitespace, disabled, or items <= 1', async () => {

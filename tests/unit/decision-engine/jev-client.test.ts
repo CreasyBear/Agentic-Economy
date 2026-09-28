@@ -134,13 +134,24 @@ describe('Jev SDK lifecycle', () => {
     expect(fetchImpl).toHaveBeenCalledOnce()
   })
 
-  it('caps discovery at 1,500 ms even when a caller supplies a larger timeout', async () => {
-    const fetchImpl = vi.fn<typeof fetch>().mockImplementation(async (_url, init) => new Promise((_resolve, reject) => {
-      init?.signal?.addEventListener('abort', () => reject(init.signal?.reason), { once: true })
-    }))
+  it('accepts a decision delivered 1,700 ms into the discovery window', async () => {
     const started = Date.now()
-    await expect(callJevSystemOne(request, { ...options, fetchImpl, timeoutMs: 10_000 })).rejects.toMatchObject({ reason: 'timeout' })
-    expect(Date.now() - started).toBeLessThan(1800)
+    const clock = vi.spyOn(Date, 'now').mockReturnValue(started)
+    const fetchImpl = vi.fn<typeof fetch>().mockImplementation(async () => {
+      clock.mockReturnValue(started + 1_700)
+      return response()
+    })
+    await expect(callJevSystemOne(request, { ...options, fetchImpl })).resolves.toMatchObject({ answers: { fits: { noul: 0.8 } } })
+  })
+
+  it('caps discovery at 5,000 ms even when a caller supplies a larger timeout', async () => {
+    const started = Date.now()
+    const clock = vi.spyOn(Date, 'now').mockReturnValue(started)
+    const fetchImpl = vi.fn<typeof fetch>().mockImplementation(async () => {
+      clock.mockReturnValue(started + 5_001)
+      return response()
+    })
+    await expect(callJevSystemOne(request, { ...options, fetchImpl, timeoutMs: 20_000 })).rejects.toMatchObject({ reason: 'timeout' })
     expect(fetchImpl).toHaveBeenCalledOnce()
   })
 
