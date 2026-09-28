@@ -36,7 +36,9 @@ import type {
 const AUD_INCLUSIVE_GST_BPS = 1_000
 
 function formatAudExportUnits(units: string): string {
-  return formatExactAmount({ currency: 'AUD', exponent: 6, units }) ?? '—'
+  const exact = formatExactAmount({ currency: 'AUD', exponent: 6, units })
+  if (exact === undefined) throw new RangeError('Activity export requires valid exact AUD units')
+  return exact
 }
 
 function formatPaymentStateLabel(
@@ -135,18 +137,25 @@ function useCallPagination(initial: CallPage, principalRef?: string) {
 
 function buildActivityExportRows(items: readonly CallRow[]) {
   return items.map((item) => {
-    const grossUnits = item.audAmountUnits ?? '0'
-    const split = calculateAudGstSplit(grossUnits, AUD_INCLUSIVE_GST_BPS)
+    const purchase = projectCallSummaryPurchaseStatus(item)
+    const charged = item.paymentState === 'settled' && item.audAmountUnits !== undefined
+    const notCharged = item.paymentState === 'released'
+      || (item.paymentState === 'not_applicable' && purchase.kind !== 'uncertain')
+    const grossUnits = charged ? item.audAmountUnits : notCharged ? '0' : undefined
+    const split = grossUnits === undefined ? undefined : calculateAudGstSplit(grossUnits, AUD_INCLUSIVE_GST_BPS)
+    if (grossUnits !== undefined && split === undefined) throw new RangeError('Activity export requires valid booked AUD units')
     return {
       date: item.createdAt ? new Date(item.createdAt).toISOString() : '',
       callRef: item.callRef,
       toolName: item.toolLabel,
       provider: 'Agentic Economy Seller',
       agentName: item.principalRef ?? 'Unspecified Agent',
-      costAud: formatAudExportUnits(grossUnits),
-      gstAud: formatAudExportUnits(split?.gstUnits ?? '0'),
-      netAud: formatAudExportUnits(split?.netUnits ?? '0'),
-      status: projectCallSummaryPurchaseStatus(item).label,
+      costAud: grossUnits === undefined
+        ? item.paymentState === 'settled' ? 'Amount unknown' : 'Not confirmed'
+        : formatAudExportUnits(grossUnits),
+      gstAud: split === undefined ? '' : formatAudExportUnits(split.gstUnits),
+      netAud: split === undefined ? '' : formatAudExportUnits(split.netUnits),
+      status: purchase.label,
     }
   })
 }
@@ -167,10 +176,11 @@ function projectCallRow(item: CallRow, reviewMode: boolean): ActivityCallRowView
     agentShortId: item.principalRef ? item.principalRef.split(':').pop() ?? '—' : '—',
     agentTitle: item.principalRef,
     durationLabel: activityDuration(item.latencyMs),
-    amountLabel: item.paymentState === 'released' ? 'No charge'
-      : item.paymentState === 'unknown' ? 'Not confirmed' : item.audAmountUnits === undefined
-      ? '—'
-      : formatDisplayAmount({ currency: 'AUD', exponent: 6, units: item.audAmountUnits }),
+    amountLabel: item.paymentState === 'released'
+      || (item.paymentState === 'not_applicable' && purchase.kind !== 'uncertain') ? 'No charge'
+      : item.paymentState !== 'settled' ? 'Not confirmed' : item.audAmountUnits === undefined
+        ? 'Amount unknown'
+        : formatDisplayAmount({ currency: 'AUD', exponent: 6, units: item.audAmountUnits }),
     stateBadge: callStateStatusBadge(item.state),
     purchaseBadge: purchaseStatusBadge(purchase),
     purchaseLabel: purchase.label,

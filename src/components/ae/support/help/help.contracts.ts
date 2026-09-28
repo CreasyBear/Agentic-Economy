@@ -31,7 +31,7 @@ export type SupportCallRef =
   | Readonly<{ kind: 'malformed' }>
 
 export type SupportSearch = Readonly<{
-  callRef: SupportCallRef
+  callRef?: string
 }>
 
 export type AeSupportHelpPageProps = Readonly<{

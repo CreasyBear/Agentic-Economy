@@ -13,7 +13,8 @@ export const accountHistoryEntrySchema = z.strictObject({
   documentEffectUnits: signedUnits,
   reverted: z.boolean(),
   revertedAt: z.number().int().nonnegative().nullable(),
-  sourceRef: z.null(),
+  /** Raw owner-authorized CallRef only when a settled buyer-sale join is proven. */
+  sourceRef: z.string().nullable(),
   sourceDigest: z.string().nullable(),
 })
 export const accountHistoryResultSchema = z.discriminatedUnion('kind', [
@@ -21,7 +22,9 @@ export const accountHistoryResultSchema = z.discriminatedUnion('kind', [
     kind: z.literal('available'), entries: z.array(accountHistoryEntrySchema),
     snapshotAt: z.number().int().nonnegative(), continueCursor: z.string(), isDone: z.boolean(),
     /** Cumulative attribution/netting coverage; isDone separately describes traversal. */
-    coverage: z.enum(['complete', 'partial']), sourceLinkCoverage: z.literal('unavailable'),
+    coverage: z.enum(['complete', 'partial']),
+    /** Per-page buyer-sale Call attribution; other transaction kinds have no implied Call. */
+    sourceLinkCoverage: z.enum(['complete', 'partial', 'unavailable']),
     source: z.literal('formance_transaction_cursor'),
     ordering: z.literal('recorded_transaction_sequence_desc'),
   }),

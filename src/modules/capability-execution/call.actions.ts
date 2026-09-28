@@ -28,6 +28,7 @@ const callBoundaries = [
   'Requires an AE-issued bearer key with market_tools:call; the key identifies the caller but never grants provider authority or consequential approval.',
   'AE resolves the current Tool, Provider, endpoint, credentials, price, authority, and evidence server-side. The caller cannot supply or override transport, Provider, credential, payment, or approval details.',
   'Every Call is bound to the caller principal, current Tool version, policy generation, connection generation, input, and idempotency identity; replaying a changed command is refused.',
+  'For separate Tool contributions, retain each QuoteRef and a stable per-Call idempotency key before dispatch. On interruption or unknown outcome, read the original Call status or reconcile; never repurchase with a fresh key.',
   'Provider credentials and internal connection references remain server-side and are never returned in action output, MCP content, HTTP problems, usage, or evidence.',
 ] as const
 

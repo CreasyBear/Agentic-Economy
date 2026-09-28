@@ -164,7 +164,7 @@ describe('owner credit target', () => {
     expect(screen.getByText('No booked Account transactions yet')).toBeTruthy()
   })
 
-  it('keeps transaction identity and unavailable source links explicit', () => {
+  it('keeps the native transaction identity without inventing a Call for unattributed spend', () => {
     render(<AeOwnerCredit
       accountBalance={accountBalance}
       accountHistory={{
@@ -175,7 +175,7 @@ describe('owner credit target', () => {
           occurredAt: 1_788_119_000_000,
           recordedAt: 1_788_120_000_000,
           kind: 'call_spend',
-          accountEffect: { currency: 'AUD', units: '-500000', exponent: 6 },
+          accountEffect: { currency: 'AUD', units: '-1', exponent: 6 },
           documentEffectUnits: '0',
           reverted: false,
           revertedAt: null,
@@ -187,10 +187,46 @@ describe('owner credit target', () => {
     openLedger()
 
     expect(screen.getByText('Call purchase')).toBeTruthy()
-    expect(screen.getByText('−A$0.50')).toBeTruthy()
+    expect(screen.getByText('−A$0.01')).toBeTruthy()
     fireEvent.click(screen.getByText('Transaction details'))
     expect(screen.getByText(/Transaction ID:/).parentElement?.textContent).toContain('42')
-    expect(screen.getByText(/Source link:/).parentElement?.textContent).toContain('Unavailable from Account history')
+    expect(screen.getByText(/Reference:/).parentElement?.textContent).toContain('transaction:42')
+    expect(screen.queryByRole('link', { name: /Call receipt/u })).toBeNull()
+  })
+
+  it('links only an attributed Call purchase to its receipt, not other Account movements', () => {
+    const entry = {
+      transactionId: '43', transactionRef: 'transaction:43',
+      occurredAt: 1_788_119_000_000, recordedAt: 1_788_120_000_000,
+      accountEffect: { currency: 'AUD' as const, units: '-6', exponent: 6 as const },
+      documentEffectUnits: '0', reverted: false, revertedAt: null,
+      sourceRef: 'call:known', sourceDigest: `sha256:${'b'.repeat(64)}`,
+    }
+    render(<AeOwnerCredit
+      accountBalance={accountBalance}
+      accountHistory={{ ...emptyAccountHistory, entries: [
+        { ...entry, kind: 'call_spend', transactionId: '43' },
+        { ...entry, kind: 'funding', transactionId: '44', transactionRef: 'transaction:44', accountEffect: { ...entry.accountEffect, units: '6' } },
+        { ...entry, kind: 'funding_reversal', transactionId: '45', transactionRef: 'transaction:45' },
+        { ...entry, kind: 'document_adjustment', transactionId: '46', transactionRef: 'transaction:46' },
+        { ...entry, kind: 'unmapped', transactionId: '47', transactionRef: 'transaction:47' },
+      ] }}
+    />)
+    openLedger()
+    const receiptLinks = screen.getAllByRole('link', { name: /View Call receipt/u })
+    expect(receiptLinks).toHaveLength(1)
+    expect(receiptLinks[0]?.getAttribute('href')).toBe('/calls/call%3Aknown')
+    for (const details of screen.getAllByText('Transaction details')) fireEvent.click(details)
+    expect(screen.getAllByRole('link', { name: /View Call receipt/u })).toHaveLength(1)
+    expect(screen.getByText('call:known').closest('a')).toBeNull()
+    expect(screen.getByText('Funding')).toBeTruthy()
+    expect(screen.getByText('Funding reversal')).toBeTruthy()
+    expect(screen.getByText('Accounting document')).toBeTruthy()
+    expect(screen.getByText('Not attributed')).toBeTruthy()
+    expect(screen.getByText('Credit added')).toBeTruthy()
+    expect(screen.getByText('Credit reversed')).toBeTruthy()
+    expect(screen.getByText('Document adjustment')).toBeTruthy()
+    expect(screen.getByText('Account movement')).toBeTruthy()
   })
 
   it('keeps financial documents and owned reconciliation evidence on the Account surface', async () => {

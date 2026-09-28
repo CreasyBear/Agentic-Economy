@@ -29,7 +29,7 @@ export function AeSupportHelpPage({ canonicalBaseUrl, callRef }: AeSupportHelpPa
       description="Keep the Call reference shown with the problem. It helps us find the right record without asking you to share private inputs."
       actions={
         <a href={supportEmailHref} className={cn(buttonVariants(), 'min-h-touch')}>
-          Email support
+          Email support (opens email app)
         </a>
       }
     >
