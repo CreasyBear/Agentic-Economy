@@ -1,6 +1,6 @@
 /** URL-facing catalogue filters shared by navigation and return links. */
 export const directoryCatalogueSearchKeys = [
-  'query', 'offset', 'directoryCategory', 'indexCursor', 'sort',
+  'query', 'alternativeTo', 'offset', 'directoryCategory', 'indexCursor', 'sort',
   'network', 'provider', 'minUsdPrice', 'maxUsdPrice', 'priceBand', 'adoptionBand', 'minPayers30d', 'maxPayers30d',
   'curatedOnly', 'tags', 'bundleSlugs', 'hasInputFields', 'hasOutputFields',
   'hasInputSchema', 'hasOutputSchema', 'hasOutputExample',

@@ -2,6 +2,8 @@ import { callPublicSourceQuery, sourceQuery } from '@/lib/server/convex-source'
 import { degradeBackend } from '@/lib/observability/degrade-backend'
 import { defineAction } from '@/modules/common/action'
 import { sourceFreshnessState } from '@/modules/common/freshness'
+import { jevDiscoveryRecipient } from '@/modules/decision-engine/public'
+import { fetchCoinbaseReferenceRate, type ReferenceRate } from '@/modules/money/public'
 import {
   registryToolsCompareContract,
   registryToolsDescribeContract,
@@ -12,7 +14,7 @@ import {
   readCapabilityToolDetail,
   readCapabilityToolSearch,
 } from '@/modules/capability-supply/tool-source'
-import { type PublicToolDescriptor, type ToolSearchFilters, type ToolSearchResult } from '@/modules/capability-supply/public'
+import { type ToolSearchFilters, type ToolSearchResult } from '@/modules/capability-supply/public'
 import { PublicToolRegistrySchemaVersion } from '@/modules/capability-supply/tool-schemas'
 import { InvalidOpaqueCursorError } from './opaque-cursor'
 import {
@@ -22,9 +24,9 @@ import {
   projectToolSearchChoices,
   type SearchResult,
   type SupplyProjectionFreshness,
-  type ToolCompareResolution,
 } from './tool-choice-contracts'
 import { compactDirectoryRows, compactDirectoryStatus, readCompactDirectoryPage } from './internal/compact-directory-search'
+import { resolveToolCompare } from './internal/tool-compare-resolution'
 import { rankToolSearchForRegistry, TOOL_SEARCH_ASSESSMENT_LIMIT, type RegistryToolAssessment } from './tool-reranker'
 import {
   marketToolsCursorScope,
@@ -111,7 +113,7 @@ export const registryToolsSearchAction = defineAction({
   run: async ({ data, context }) => {
     const freshness = await readSupplyProjectionFreshness()
     const admittedWanted = data.source !== 'coinbase' && data.filters?.access !== 'external_listing'
-    const directoryWanted = data.source !== 'current' && data.filters?.access !== 'ae_callable'
+    const directoryWanted = data.source !== 'current'
     const directoryStatus = directoryWanted ? await compactDirectoryStatus() : undefined
     const generation = directoryStatus?.kind === 'ready' ? directoryStatus.coverage?.generation : undefined
     const scope = scopedSearchCursor({ query: data.query, source: data.source, filters: data.filters, limit: data.limit }, freshness, generation ?? 'current')
@@ -142,6 +144,9 @@ export const registryToolsSearchAction = defineAction({
     let searchResult: ToolSearchResult = empty
     let completePool = false
     let assessment: RegistryToolAssessment = { result: empty, verdict: 'noMatch', nearMisses: [] }
+    let recipient: Readonly<{ label: string; host: string; data: 'query and candidate summaries' }> | undefined
+    let directoryRate: ReferenceRate | undefined
+    let rateAttempted = false
     let admittedExamined = 0
     let pageSize = data.limit
     let rankedPageSize = data.limit
@@ -160,12 +165,17 @@ export const registryToolsSearchAction = defineAction({
       })
       admittedExamined = searchResult.kind === 'ok' ? searchResult.items.length : 0
       searchResult = visibleAdmitted(searchResult)
+      if (searchResult.kind === 'ok' && searchResult.items.length > 0 && data.query.trim().length > 0
+        && new Set(searchResult.items.map(item => item.toolRef)).size === searchResult.items.length) {
+        const resolved = jevDiscoveryRecipient()
+        if (resolved !== undefined) recipient = { ...resolved, data: 'query and candidate summaries' }
+      }
       assessment = await rankToolSearchForRegistry(searchResult, data.query,
         context.request === undefined ? {} : { signal: context.request.signal })
     }
     if (searchResult.kind === 'unavailable' || assessment.verdict === 'degraded') {
       return projectToolSearchChoices(searchResult, data.filters, assessment, freshness, data.limit,
-        { query: data.query, source, externalAvailable: false })
+        { query: data.query, source, externalAvailable: false, ...(recipient === undefined ? {} : { recipient }) })
     }
     const directoryFilters = {
       ...(data.filters?.actionClass === undefined ? {} : { actionClass: data.filters.actionClass }),
@@ -174,7 +184,7 @@ export const registryToolsSearchAction = defineAction({
       ...(data.filters?.provider === undefined ? {} : { provider: data.filters.provider }),
       ...(data.filters?.networkId === undefined ? {} : { network: data.filters.networkId }),
       ...(data.filters?.priceBand === undefined ? {} : { priceBand: data.filters.priceBand }),
-      access: 'external_listing',
+      ...(data.filters?.access === undefined ? {} : { access: data.filters.access }),
     }
     const directoryStart = cursor.phase === 'coinbase' ? cursor.directoryCursor ?? null : null
     while (true) {
@@ -202,12 +212,17 @@ export const registryToolsSearchAction = defineAction({
           if (page.kind === 'unavailable' && page.reason === 'cursor_invalid') throw new InvalidOpaqueCursorError()
           if (page.kind !== 'ok') {
             return projectToolSearchChoices(empty, data.filters, { verdict: 'noMatch', nearMisses: [] }, freshness,
-              data.limit, { query: data.query, source, externalAvailable: false })
+              data.limit, { query: data.query, source, externalAvailable: false, ...(recipient === undefined ? {} : { recipient }) })
           }
           examined = page.page.length
           completedAt = page.coverage.completedAt
           if (directoryStatus === undefined) throw new Error('Directory status must precede directory page')
-          externalRows = compactDirectoryRows(page, directoryStatus)
+          if (!rateAttempted && page.page.some(item => item.minimumUsdPrice !== undefined)) {
+            rateAttempted = true
+            directoryRate = await fetchCoinbaseReferenceRate()
+          }
+          externalRows = compactDirectoryRows(page, directoryStatus, Date.now(), directoryRate)
+          externalRows = externalRows.filter(row => row.toolRef === undefined || !admittedRows.some(admitted => admitted.toolRef === row.toolRef))
           if (!page.isDone) continuation = { phase: 'coinbase', offset: 0, directoryCursor: page.continueCursor }
         }
       } else if (directoryWanted && continuation === undefined && admittedRows.length >= pageSize) {
@@ -225,8 +240,9 @@ export const registryToolsSearchAction = defineAction({
         pagination,
         ...(generation === undefined ? {} : { generation }),
         ...(completedAt === undefined ? {} : { completedAt }),
-        externalExamined: examined,
         admittedExamined,
+        externalExamined: examined,
+        ...(recipient === undefined ? {} : { recipient }),
       })
       const budget = searchPageBudget(output, pageSize, admittedRows.length, externalRows.length, externalLimit)
       if (budget.kind === 'fit') return output
@@ -246,7 +262,7 @@ export const registryToolsSearchAction = defineAction({
           if (searchResult.kind === 'unavailable') {
             return projectToolSearchChoices(searchResult, data.filters,
               { verdict: 'noMatch', nearMisses: [] }, freshness, data.limit,
-              { query: data.query, source, externalAvailable: false })
+              { query: data.query, source, externalAvailable: false, ...(recipient === undefined ? {} : { recipient }) })
           }
           admittedExamined = searchResult.kind === 'ok' ? searchResult.items.length : 0
           searchResult = visibleAdmitted(searchResult)
@@ -256,7 +272,7 @@ export const registryToolsSearchAction = defineAction({
         }
         continue
       }
-      return capacityExceededSearch(data.query, data.limit, output.assessed, freshness)
+      return { ...capacityExceededSearch(data.query, data.limit, output.assessed, freshness), ...(recipient === undefined ? {} : { recipient }) }
     }
   },
 })
@@ -270,29 +286,3 @@ export const registryToolsCompareAction = defineAction({
   ...registryToolsCompareContract,
   run: async ({ data }) => projectToolCompareChoices(await resolveToolCompare(data.toolRefs)),
 })
-
-/**
- * Resolves each requested ref independently (one `registry.tools.describe`
- * read per ref) instead of aborting the whole comparison when one ref is
- * unknown. Only refuses the whole call when zero refs resolve to a current,
- * available Tool.
- */
-async function resolveToolCompare(toolRefs: readonly string[]): Promise<ToolCompareResolution> {
-  if (new Set(toolRefs).size !== toolRefs.length) {
-    return { kind: 'unavailable', reason: 'query_invalid' }
-  }
-  const details = await Promise.all(toolRefs.map((toolRef) => readCapabilityToolDetail({ toolRef })))
-  const tools: PublicToolDescriptor[] = []
-  const missing: string[] = []
-  for (const detail of details) {
-    if (detail.kind === 'found') tools.push(detail.tool)
-    else missing.push(detail.toolRef)
-  }
-  if (tools.length === 0) {
-    return {
-      kind: 'unavailable',
-      reason: details.every((detail) => detail.kind === 'unavailable') ? 'tool_unavailable' : 'tool_not_found',
-    }
-  }
-  return missing.length === 0 ? { kind: 'ok', tools } : { kind: 'ok', tools, missing }
-}

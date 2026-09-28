@@ -6,6 +6,7 @@ import {
   createPublicToolRef,
   parsePublishedToolSnapshot,
 } from '@/modules/capability-supply/public'
+import { encodeCapabilityContractDocumentJson } from '@/modules/capability-contract-registry/public'
 import { api, internal } from '../../convex/_generated/api'
 import type { Id } from '../../convex/_generated/dataModel'
 import {
@@ -13,6 +14,7 @@ import {
   publishedBusinessOwner,
   type ConvexFixtureBackend,
 } from '../helpers/convex-fixtures'
+import { toolRecordProjection } from '../../convex/lib/capabilitySupply/tool/projection'
 import {
   admitPublication,
   capabilityPublicationInput,
@@ -306,6 +308,66 @@ describe('canonical Tool reads', () => {
       internal.capabilitySupplyTools.readCurrentPublishedToolSnapshot,
       { toolRef: fixture.toolRef },
     )).resolves.toBeNull()
+  })
+  it('drops a legacy required opaque object despite a valid example without hiding healthy Tools', async () => {
+    const backend = convexTestWithMarketComponents()
+    const opaque = await publishCurrentTool(backend, 'legacy-opaque-input')
+    const healthy = await publishCurrentTool(backend, 'legacy-healthy-input')
+    const opaqueToolRef = await backend.run(async (ctx) => {
+      const publication = await ctx.db.query('capabilityPublications')
+        .withIndex('by_publicationRef_and_revision', (query) => (
+          query.eq('publicationRef', opaque.publicationRef).eq('revision', opaque.publicationRevision)
+        )).unique()
+      if (publication === null) throw new Error('legacy_publication_missing')
+      const stored = await ctx.db.query('capabilityContractDocuments')
+        .withIndex('by_capabilityId_and_version', (query) => (
+          query.eq('capabilityId', publication.capabilityId).eq('version', publication.version)
+        )).unique()
+      if (stored === null) throw new Error('legacy_contract_missing')
+      const document = JSON.parse(stored.documentJson) as Record<string, unknown>
+      const encoded = encodeCapabilityContractDocumentJson(JSON.stringify({
+        ...document,
+        inputSchema: {
+          $schema: 'https://json-schema.org/draft/2020-12/schema',
+          type: 'object',
+          properties: { request: { type: 'object' } },
+          required: ['request'],
+          additionalProperties: false,
+        },
+        inputExamples: [{ label: 'Legacy source example', input: { request: { inline: 'JVBERi0xLjQ=' } } }],
+      }))
+      await ctx.db.patch(stored._id, {
+        documentJson: encoded.documentJson,
+        contractDigest: encoded.contract.ref.contractDigest,
+      })
+      const toolRef = createPublicToolRef({
+        operationId: capabilityToolId(publication.capabilityId),
+        publicationRef: publication.publicationRef,
+        publicationRevision: publication.revision,
+        contractRef: encoded.contract.ref,
+      })
+      await ctx.db.patch(publication._id, {
+        contractDigest: encoded.contract.ref.contractDigest,
+        toolRef,
+      })
+      return toolRef
+    })
+    const projection = await backend.run(async (ctx) => {
+      const publication = await ctx.db.query('capabilityPublications')
+        .withIndex('by_publicationRef_and_revision', (query) => (
+          query.eq('publicationRef', opaque.publicationRef).eq('revision', opaque.publicationRevision)
+        )).unique()
+      if (publication === null) throw new Error('legacy_publication_missing')
+      const result = await toolRecordProjection(ctx, publication, Date.now())
+      return result.kind === 'dropped' ? result : { kind: result.kind }
+    })
+    expect(projection).toEqual({ kind: 'dropped', reason: 'opaque_input_schema' })
+    const search = await backend.query(api.capabilitySupplyTools.search, { query: 'lookup', limit: 10 })
+    expect(search.kind).toBe('ok')
+    if (search.kind !== 'ok') throw new Error('healthy_tool_missing')
+    expect(search.items.map(({ toolRef }) => toolRef)).toEqual([healthy.toolRef])
+    await expect(backend.query(api.capabilitySupplyTools.detail, { toolRef: opaqueToolRef }))
+      .resolves.toMatchObject({ kind: 'not_found' })
   })
 
   it('returns null instead of throwing when an offering is structurally malformed', async () => {

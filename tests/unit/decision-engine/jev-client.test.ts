@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { callJevSystemOne, executeDecisionGateway, JevUnavailableError } from '@/modules/decision-engine/public'
+import { callJevSystemOne, executeDecisionGateway, JevUnavailableError, jevDiscoveryRecipient } from '@/modules/decision-engine/public'
 
 const request = { state: { query: 'private buyer need' }, questions: { fits: { type: 'noul' as const } } }
 const options = { typesafeApiKey: 'ts-test-secret', purpose: 'discovery' as const }
@@ -150,6 +150,38 @@ describe('Jev SDK lifecycle', () => {
     await expect(callJevSystemOne(request, { typesafeApiKey: 'ts-test', fetchImpl, deadlineAt: started + 30 })).rejects.toMatchObject({ reason: 'timeout' })
     expect(Date.now() - started).toBeLessThan(500)
     expect(fetchImpl).toHaveBeenCalledOnce()
+  })
+
+})
+
+describe('query recipient disclosure', () => {
+  it('follows the effective Jev route, not the credential vendor, and exposes no secret', async () => {
+    vi.stubEnv('TYPESAFE_API_KEY', 'ts-private-key')
+    vi.stubEnv('OPENROUTER_API_KEY', 'sk-or-private-key')
+    vi.stubEnv('TYPESAFE_BASE_URL', 'https://partner.example.test/decisions?token=private-query-secret')
+    const fetchImpl = vi.fn<typeof fetch>().mockImplementation(async () => response())
+    await callJevSystemOne(request, { purpose: 'discovery', fetchImpl })
+    const actualHost = new URL(String(fetchImpl.mock.calls[0]?.[0])).hostname
+    expect(jevDiscoveryRecipient()?.host).toBe(actualHost)
+    expect(JSON.stringify(jevDiscoveryRecipient())).not.toMatch(/private-key|private-query-secret|decisions/)
+    expect(jevDiscoveryRecipient()).toEqual({ label: 'partner.example.test', host: 'partner.example.test' })
+    expect(jevDiscoveryRecipient({ typesafeApiKey: 'ts-override', baseURL: 'https://openrouter.ai/api/alpha' }))
+      .toEqual({ label: 'OpenRouter', host: 'openrouter.ai' })
+    vi.stubEnv('TYPESAFE_BASE_URL', undefined)
+    expect(jevDiscoveryRecipient()).toEqual({ label: 'TypeSafe AI', host: 'api.typesafe.ai' })
+    vi.stubEnv('TYPESAFE_API_KEY', '')
+    expect(jevDiscoveryRecipient()).toEqual({ label: 'OpenRouter', host: 'openrouter.ai' })
+  })
+
+  it('does not claim a remote ranker when discovery is disabled, unconfigured or misconfigured', () => {
+    vi.stubEnv('TYPESAFE_API_KEY', '')
+    vi.stubEnv('OPENROUTER_API_KEY', '')
+    expect(jevDiscoveryRecipient()).toBeUndefined()
+    expect(jevDiscoveryRecipient({ typesafeApiKey: 'ts-key', disableJev: true })).toBeUndefined()
+    vi.stubEnv('AE_JEV_DISCOVERY_ENABLED', 'false')
+    expect(jevDiscoveryRecipient({ typesafeApiKey: 'ts-key' })).toBeUndefined()
+    vi.stubEnv('AE_JEV_DISCOVERY_ENABLED', 'true')
+    expect(jevDiscoveryRecipient({ typesafeApiKey: 'ts-key', baseURL: 'not a URL' })).toBeUndefined()
   })
 
 })

@@ -7,7 +7,7 @@ import { toDirectoryToolCardModel } from '@/modules/market/directory-card.view-m
 import type { SavedDirectoryTool } from '@/modules/market/saved-tools.contracts'
 import { DirectoryToolCard } from './DirectoryToolCard'
 
-type Props = Readonly<{
+type DirectoryHomeDiscoveryProps = Readonly<{
   home: X402MarketplaceHome
   onSave: (item: SavedDirectoryTool) => void
   isSaved: (resource: string) => boolean
@@ -24,9 +24,9 @@ const navigation = {
 } as const
 
 /** Editorial collections of live directory matches, using the installed Embla carousel. */
-export function DirectoryHomeDiscovery({ home, onSave, isSaved, onCompare, isComparing, compareDisabled }: Props) {
+export function DirectoryHomeDiscovery({ home, onSave, isSaved, onCompare, isComparing, compareDisabled }: DirectoryHomeDiscoveryProps) {
   const rails = editorialOrder.flatMap(id => home.rails.filter(rail => rail.id === id))
-  return <div className="pb-8">
+  return <div className="pb-[calc(var(--ae-mobile-nav-height)+env(safe-area-inset-bottom,0px)+2rem)] md:pb-8">
     <nav aria-label="Discover Tools by job" className="mb-10 flex gap-2 overflow-x-auto border-b border-border pb-5 sm:justify-center sm:gap-3">
       {rails.map(rail => {
         const item = navigation[rail.id]
@@ -35,7 +35,7 @@ export function DirectoryHomeDiscovery({ home, onSave, isSaved, onCompare, isCom
       })}
     </nav>
     <div className="grid gap-12 sm:gap-16">
-      {rails.map(rail => <section key={rail.id} className="min-w-0" aria-labelledby={`directory-collection-${rail.id}`}>
+      {rails.map(rail => <section key={rail.id} className="min-w-0 scroll-mt-[calc(var(--header-height)+1rem)] scroll-mb-[calc(var(--ae-mobile-nav-height)+env(safe-area-inset-bottom,0px)+1rem)]" aria-labelledby={`directory-collection-${rail.id}`}>
         <Carousel opts={{ align: 'start', loop: false }} aria-label={`${rail.category} Tools`}>
           <div className="mb-5 flex flex-wrap items-end justify-between gap-4">
             <div className="max-w-2xl">

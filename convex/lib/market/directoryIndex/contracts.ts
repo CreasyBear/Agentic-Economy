@@ -29,6 +29,11 @@ export const directoryEntryValue = v.object({
   })),
 })
 export type DirectoryEntry = Infer<typeof directoryEntryValue>
+const directoryChoiceValue = v.object({
+  access: v.union(v.literal('external_listing'), v.literal('ae_callable'), v.literal('setup_required'), v.literal('unavailable')),
+  toolRef: v.optional(v.string()), sourceRouteRef: v.optional(v.string()),
+})
+
 export const indexedEntryValue = v.object({
   entry: directoryEntryValue, category: v.string(),
   categorySource: v.union(v.literal('provider_declared'), v.literal('unclassified')),
@@ -38,6 +43,8 @@ export const indexedEntryValue = v.object({
   // stored on the directory row itself, so it always reflects the current
   // disposition even after a publication is withdrawn or superseded.
   toolRef: v.optional(v.string()),
+  sourceRouteRef: v.optional(v.string()),
+  choice: v.optional(directoryChoiceValue),
   analytics: v.optional(v.object({
     payerDepth: v.optional(v.number()),
     depthBand: v.string(),

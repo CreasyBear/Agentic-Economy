@@ -13,6 +13,11 @@ import { resolveCanonicalBaseUrl } from "@/lib/server/canonical-url";
 vi.mock("@/lib/server/canonical-url.functions", () => ({
   readCanonicalBaseUrlServer: async () => resolveCanonicalBaseUrl(new Request("https://untrusted.example/market")).baseUrl,
 }));
+vi.mock("@/modules/market/market.functions", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/modules/market/market.functions")>()),
+  readMarketDiscoveryRecipientServer: async () => null,
+  readMarketChatRecipientServer: async () => null,
+}));
 const reads = vi.hoisted(() => ({ catalogue: vi.fn(), providers: vi.fn(), overview: vi.fn(), resource: vi.fn(), home: vi.fn() }));
 vi.mock("@/modules/market/x402-directory-index.functions", () => ({
   readX402DirectoryCatalogueServer: reads.catalogue,

@@ -59,6 +59,7 @@ async function rowFor(ctx: MutationCtx, args: Command) {
 
 function material(args: Command) {
   const input = toolProcureInputSchema.parse(JSON.parse(args.inputJson))
+  if (input.kind !== 'exact') throw new Error('procure_need_selection_is_read_only')
   if (input.idempotencyKey !== args.idempotencyKey) throw new Error('procure_key_mismatch')
   return canonicalDigest(input)
 }
@@ -102,6 +103,7 @@ export async function completeProcureHandler(ctx: MutationCtx, args: Command & {
   const row = await rowFor(ctx, args)
   if (row === null || row.requestHash !== material(args) || row.scope !== 'capability_execution') return { kind: 'conflict' as const }
   const result = toolProcureResultSchema.parse(JSON.parse(args.resultJson))
+  if (result.status === 'needs_input') return { kind: 'conflict' as const }
   if ('callRef' in result && row.effectRefs[1] !== undefined && row.effectRefs[1] !== result.callRef) {
     return { kind: 'conflict' as const }
   }

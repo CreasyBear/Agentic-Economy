@@ -1650,6 +1650,12 @@
     "kind": "mutation"
   },
   {
+    "visibility": "public",
+    "module": "chatAnonymous",
+    "method": "recipient",
+    "kind": "query"
+  },
+  {
     "visibility": "internal",
     "module": "chatCall",
     "method": "authorize",

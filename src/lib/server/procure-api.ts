@@ -117,7 +117,7 @@ export async function handleToolProcurePost(
 
         const result = await procurementEngine.procure(parsed.data)
         const projected = toolProcureAction.outputSchema.parse(result)
-        const next = projectProcureNext(projected)
+        const next = projected.status === 'needs_input' ? projected.next : projectProcureNext(projected)
         if (projected.status === 'refused' && projected.code === 'budget_exceeded') {
           return withRequestCorrelationHeader(
             problem({

@@ -2,7 +2,7 @@ import Decimal from 'decimal.js'
 import { z } from 'zod'
 import { SEARCH_QUERY_MAX_LENGTH } from '@/modules/common/search-query'
 import { degradeBackend } from '@/lib/observability/degrade-backend'
-import { x402DirectoryFilterSchema, type X402DirectoryEntry, type X402DirectoryFilters } from './x402-directory'
+import { x402DirectoryFilterSchema, type DirectoryChoice, type X402DirectoryEntry, type X402DirectoryFilters } from './x402-directory'
 
 export const DIRECTORY_PRICE_BANDS = ['lt_0_01', '0_01_to_0_03', '0_03_to_0_10', '0_10_to_1', '1_to_10', '10_plus', 'unknown'] as const
 export const DIRECTORY_ADOPTION_BANDS = ['missing', '0', '1', '2_4', '5_9', '10_49', '50_plus'] as const
@@ -53,8 +53,10 @@ export type X402IndexedDirectoryEntry = Readonly<{
   categorySource: 'provider_declared' | 'unclassified'
   observedAt: number
   sourceDigest: string
-  /** Joined live from capabilityPublications - see convex/x402DirectoryIndex.ts:admittedToolRef. */
+  /** Joined current publication identity; access is qualified separately. */
   toolRef?: string
+  sourceRouteRef?: string
+  choice?: DirectoryChoice
   analytics?: Readonly<{
     payerDepth?: number
     depthBand: DirectoryDepthBand

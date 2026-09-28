@@ -1,10 +1,11 @@
 import { degrade } from '@/lib/observability/degrade'
 import { callPublicSourceQuery, sourceQuery } from '@/lib/server/convex-source'
 import { CATALOGUE_STALE_AFTER_MS, sourceFreshnessState, type SourceFreshnessState } from '@/modules/common/freshness'
+import { fetchCoinbaseReferenceRate, formatDisplayPrice, parseDecimalExactAmount } from '@/modules/money/public'
 import { readX402Directory } from './x402-directory.server'
 import type { X402DirectoryEntry } from './x402-directory'
 import { rerankX402DirectoryPage } from './x402-directory-reranker'
-import { directorySlugBase, directorySlugWithMethod, type X402DirectoryIndexCoverage, type X402DirectoryIndexInput, type X402IndexedDirectoryEntry } from './x402-directory-index'
+import { directorySlugBase, directorySlugWithMethod, minimumDirectoryUsdPrice, type X402DirectoryIndexCoverage, type X402DirectoryIndexInput, type X402IndexedDirectoryEntry } from './x402-directory-index'
 import { decodeOpaqueCursor, encodeOpaqueCursor } from '@/modules/registry/opaque-cursor'
 import {
   x402DirectoryProvidersInputSchema, type X402DirectoryProvidersInput, type X402DirectoryProvidersPage,
@@ -18,7 +19,7 @@ type BrowseResult = X402DirectoryCatalogueUnavailable | {
   page: X402IndexedDirectoryEntry[]; continueCursor: string; isDone: boolean
   pageStatus?: 'SplitRecommended' | 'SplitRequired' | null; splitCursor?: string | null
 }
-const browse = sourceQuery<X402DirectoryIndexInput & { paginationOpts: { numItems: number; cursor: string | null; maximumRowsRead: number } }, BrowseResult>('x402DirectoryIndex:browse')
+const browse = sourceQuery<X402DirectoryIndexInput & { alternativeTo?: string; paginationOpts: { numItems: number; cursor: string | null; maximumRowsRead: number } }, BrowseResult>('x402DirectoryIndex:browse')
 const overview = sourceQuery<Record<string, never>, X402DirectoryCatalogueOverview>('x402DirectoryIndex:overview')
 const resource = sourceQuery<{ resource: string }, X402DirectoryCatalogueResource>('x402DirectoryIndex:resource')
 const analytics = sourceQuery<{ network?: string }, X402DirectoryAnalytics>('x402DirectoryIndex:analytics')
@@ -32,6 +33,20 @@ type DirectoryStatus = {
   lastError?: string
 }
 const status = sourceQuery<Record<string, never>, DirectoryStatus>('x402DirectoryIndex:status')
+/** One Coinbase observation is shared across the bounded page; no row-level HTTP calls. */
+async function withAudEstimates(entries: readonly X402DirectoryEntry[]): Promise<X402DirectoryEntry[]> {
+  const rate = entries.some(entry => entry.prices.some(price => price.scheme === 'exact' && price.symbol === 'USDC' && price.decimalAmount !== undefined))
+    ? await fetchCoinbaseReferenceRate() : undefined
+  const now = Date.now()
+  return entries.map(entry => {
+    const source = minimumDirectoryUsdPrice(entry)
+    if (source === undefined || rate === undefined) return entry
+    const amount = parseDecimalExactAmount('USDC', source, 6)
+    if (amount === undefined) return entry
+    const audEstimate = formatDisplayPrice({ kind: 'indicative', amount, referenceRate: rate, validUntil: rate.fetchedAt + 300_000 }, now)
+    return audEstimate === undefined || audEstimate === 'AUD estimate temporarily unavailable' ? entry : { ...entry, audEstimate }
+  })
+}
 
 // Re-exported so existing consumers of this module (e.g. the catalogue status
 // route/tests) keep resolving the constant from here after the shared
@@ -100,7 +115,7 @@ export async function readDirectoryFreshnessField(now: number = Date.now()): Pro
 export async function readX402DirectoryCatalogue(input: X402DirectoryCatalogueInput): Promise<X402DirectoryCatalogue> {
   const parsed = x402DirectoryCatalogueInputSchema.safeParse(input)
   if (!parsed.success) return { kind: 'unavailable', reason: 'query_invalid' }
-  const { directoryCategory, indexCursor, offset, ...filters } = parsed.data
+  const { directoryCategory, indexCursor, offset, alternativeTo, ...filters } = parsed.data
   try {
     let engineCursor: string | null = null
     let cursorScope = 'current'
@@ -113,7 +128,8 @@ export async function readX402DirectoryCatalogue(input: X402DirectoryCatalogueIn
       engineCursor = decoded
     }
     const result = await callPublicSourceQuery(browse, {
-      ...filters, ...(directoryCategory === undefined ? {} : { category: directoryCategory }),
+      ...filters, ...(alternativeTo === undefined ? {} : { alternativeTo }),
+      ...(directoryCategory === undefined ? {} : { category: directoryCategory }),
       paginationOpts: { numItems: 24, cursor: engineCursor, maximumRowsRead: 512 },
     })
     if (result.kind === 'unavailable') {
@@ -121,18 +137,22 @@ export async function readX402DirectoryCatalogue(input: X402DirectoryCatalogueIn
       // Do not silently reinterpret index category or cursor as SDK search. Sort always falls
       // back to upstream relevance ordering here since the SDK cannot honour index-only sorts
       // (e.g. adoption) - the /market default view must still render during index refreshes.
-      if (directoryCategory !== undefined || indexCursor !== undefined || Object.keys(filters).some(key => !['query', 'network', 'provider', 'maxUsdPrice', 'sort'].includes(key))) return result
+      if (alternativeTo !== undefined || directoryCategory !== undefined || indexCursor !== undefined || Object.keys(filters).some(key => !['query', 'network', 'provider', 'maxUsdPrice', 'sort'].includes(key))) return result
       console.error('[market] x402 directory index unavailable, using upstream fallback', { reason: result.reason })
       const { sort: _sort, ...sourceFilters } = filters
       const page = await readX402Directory({ ...sourceFilters, ...(offset === undefined ? {} : { offset }) })
       if (page.kind === 'unavailable') return page
-      return { kind: 'ok', source: 'upstream_limited', searchMethod: 'upstream', page, isDone: page.nextOffset === undefined }
+      return { kind: 'ok', source: 'upstream_limited', searchMethod: 'upstream', page: { ...page, items: await withAudEstimates(page.items) }, isDone: page.nextOffset === undefined }
     }
     if (offset) return { kind: 'unavailable', reason: 'index_cursor_required' }
     const { network, provider, maxUsdPrice } = filters
+    const items = await withAudEstimates(result.page.map(item => ({
+      ...item.entry,
+      choice: item.choice ?? { access: 'external_listing' as const },
+    })))
     return {
       kind: 'ok', source: 'index', coverage: result.coverage, searchMethod: result.searchMethod,
-      page: await rerankX402DirectoryPage({ kind: 'ok', items: result.page.map(item => item.entry), offset: 0, limit: 24,
+      page: await rerankX402DirectoryPage({ kind: 'ok', items, offset: 0, limit: 24,
         mode: filters.query ? 'search' : 'browse',
         appliedFilters: { ...(network === undefined ? {} : { network }), ...(provider === undefined ? {} : { provider }), ...(maxUsdPrice === undefined ? {} : { maxUsdPrice }) },
       }, filters.query),

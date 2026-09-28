@@ -223,6 +223,7 @@ export function projectJourneyProblem(input: unknown, options: JourneyProjection
 
 /** Recovery and remedial actions are derived only from validated refs and refusal facts. */
 export function projectProcureNext(result: ToolProcureResult): readonly JourneyNext[] {
+  if (result.status === 'needs_input') return []
   if (result.status === 'refused') {
     const next: JourneyNext[] = result.code === 'budget_exceeded'
       ? [{ action: 'fund', args: {}, authority: 'agent_key' }]

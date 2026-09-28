@@ -9,6 +9,7 @@ import type { ComponentProps } from 'react'
 import type { X402DirectoryEntry } from '@/modules/market/x402-directory'
 import type { SearchResult, ToolChoiceSearchOutput } from '@/modules/registry/tool-choice-contracts'
 import { PublicToolRegistrySchemaVersion, type PublicToolRef } from '@/modules/capability-supply/public'
+import { marketLoaderDeps, validateMarketSearch } from '@/modules/market/market-route-data'
 
 const readX402DirectoryCatalogueServer = vi.fn()
 vi.mock('@/modules/market/x402-directory-index.functions', () => ({
@@ -91,25 +92,27 @@ describe('native x402 catalogue', () => {
   })
 })
 
-it('compares published facts and links straight to the one canonical Tool detail surface from the comparison table', () => {
-  const priced = entries.map((entry, index) => ({ ...entry, prices: [{ network: 'eip155:8453', networkLabel: 'Base', scheme: 'exact', amount: `${index + 1} USDC` }], outputSummary: `Output ${index}` }))
+it('compares Provider-listed source prices and Coinbase activity without a sideways mobile table', () => {
+  const priced = entries.map((entry, index) => ({ ...entry, prices: [{ network: 'eip155:8453', networkLabel: 'Base', scheme: 'exact', amount: `${index + 1} USDC` }], outputSummary: `Output ${index}`, ...(index === 0 ? { activity: { calls30d: 66 } } : {}) }))
   show(undefined, priced)
   fireEvent.click(screen.getByRole('button', { name: 'Add Tool 0 to comparison' }))
   expect((screen.getByRole('button', { name: 'Compare Tools' }) as HTMLButtonElement).disabled).toBe(true)
   fireEvent.click(screen.getByRole('button', { name: 'Add Tool 1 to comparison' }))
   fireEvent.click(screen.getByRole('button', { name: 'Compare Tools' }))
   const comparison = screen.getByRole('dialog', { name: 'Compare Tools' })
-  expect(within(comparison).getByText('Preliminary comparison.')).toBeTruthy()
-  expect(within(comparison).getByText('1 USDC')).toBeTruthy()
-  expect(within(comparison).getByText('2 USDC')).toBeTruthy()
+  const cards = within(comparison).getAllByRole('article')
+  expect(within(cards[0]!).getByText(/Provider lists 1 USDC/)).toBeTruthy()
+  expect(within(cards[1]!).getByText(/Provider lists 2 USDC/)).toBeTruthy()
+  expect(within(cards[0]!).getByText('Coinbase Bazaar reported calls · 30 days')).toBeTruthy()
+  expect(within(cards[0]!).getByText('66')).toBeTruthy()
   expect(within(comparison).getByText('Output 0')).toBeTruthy()
-  expect(within(comparison).getByText('Category')).toBeTruthy()
+  expect(within(cards[0]!).getByText('Category')).toBeTruthy()
   expect(within(comparison).queryByText('Base')).toBeNull()
   const inspect = within(comparison).getAllByRole('link', { name: 'Inspect Tool' })[0]!
   expect(toolHref(inspect).pathname).toBe(`/tools/${priced[0]!.provider}/${priced[0]!.slug}`)
-  expect(inspect.closest('th')).not.toBeNull()
-  expect(within(comparison).getByRole('columnheader', { name: 'Fact' }).className).toContain('left-0')
-  expect(within(comparison).getAllByRole('row')).toHaveLength(8)
+  expect(inspect.closest('article')).not.toBeNull()
+  expect(within(comparison).queryByRole('table')).toBeNull()
+  expect(cards).toHaveLength(2)
 })
 it('labels the card comparison control visibly and preserves its pressed state', () => {
   show(undefined, entries)
@@ -128,40 +131,29 @@ it('keeps Provider price evidence secondary and settlement networks off Tool car
   show(undefined, priced)
 
   expect(screen.getByRole('columnheader', { name: 'Price' })).toBeTruthy()
-  expect(screen.getByRole('columnheader', { name: 'Calls' })).toBeTruthy()
-  expect(screen.getByRole('columnheader', { name: 'Payers' })).toBeTruthy()
-  expect(screen.getByRole('columnheader', { name: 'Volume' })).toBeTruthy()
-  expect(screen.queryByRole('columnheader', { name: 'Reported use' })).toBeNull()
-  const priceCell = screen.getByRole('link', { name: 'Tool 0' }).closest('tr')?.querySelectorAll('td')[1]
+  expect(screen.getByRole('columnheader', { name: 'Coinbase Bazaar calls · 30 days' })).toBeTruthy()
+  expect(screen.getByRole('columnheader', { name: 'Access' })).toBeTruthy()
+  expect(screen.queryByRole('columnheader', { name: 'Volume' })).toBeNull()
+  const row = screen.getByRole('link', { name: 'Tool 0' }).closest('tr')
+  expect(row?.textContent).toContain('External listing · inspect')
+  const priceCell = row?.querySelectorAll('td')[2]
   const [buyerPrice, sourcePrice] = priceCell?.querySelectorAll('p') ?? []
   expect(buyerPrice?.textContent).toMatch(/AUD.*unavailable/i)
   expect(buyerPrice?.textContent).not.toContain('USDC')
   expect(sourcePrice?.textContent).toMatch(/Provider.*1 USDC/)
   expect(screen.queryByText('Base')).toBeNull()
 })
-it('repeats one recipient amount on every Tool that pays that address', () => {
+it('never promotes recipient transfer totals into the Tool-choice hierarchy', () => {
   const payTo = '0xabababababababababababababababababababab'
   const priced = [0, 1].map(index => ({
     ...entries[index]!,
     activity: { calls30d: index === 0 ? 66 : 3, payers30d: 2 },
     prices: [{ network: 'eip155:8453', networkLabel: 'Base', scheme: 'exact', amount: '1 USDC', decimalAmount: '1', symbol: 'USDC', payTo }],
   }))
-  show(undefined, priced, {
-    flow: {
-      ready: true,
-      facilitatorSetDigest: 'sha256:abc',
-      volumeByPayTo: { [payTo]: '1.5 USDC' },
-      recipients: [{ recipient: payTo, amountLabel: '1.5 USDC', transferCountLabel: '4', uniqueBuyersLabel: '2', toolCountLabel: '2 Tools' }],
-    },
-  })
-  const tools = screen.getByRole('table', { name: 'Tools' })
-  expect(within(tools).getAllByText('1.5 USDC')).toHaveLength(2)
-  expect(within(tools).getByText('66')).toBeTruthy()
-  expect(within(tools).getByText('3')).toBeTruthy()
-  expect(within(tools).getAllByText('2')).toHaveLength(2)
-  expect(screen.getByRole('table', { name: 'Settled USDC recipients' })).toBeTruthy()
-  expect(screen.getByText('2 Tools')).toBeTruthy()
-  expect(screen.getByText(/Facilitator set sha256:abc/)).toBeTruthy()
+  show(undefined, priced)
+  expect(screen.getByRole('table', { name: 'Tools' })).toBeTruthy()
+  expect(screen.queryByRole('table', { name: 'Settled USDC recipients' })).toBeNull()
+  expect(screen.queryByRole('columnheader', { name: 'Volume' })).toBeNull()
 })
 it('groups the provider view by exact hostname and opens that provider filter', async () => {
   const { router } = show({ view: 'providers', network: 'eip155:8453', maxUsdPrice: 0.01 }, entries.map((entry, index) => ({ ...entry, provider: index === 19 ? 'other.example.com' : entry.provider })))
@@ -272,13 +264,60 @@ function expectNativeFilters(search: URLSearchParams) {
   for (const [key, value] of Object.entries(nativeFilters)) expect(search.get(key)).toBe(String(value))
 }
 
+it('validates alternative identity and preserves it in Market loader dependencies', () => {
+  const search = validateMarketSearch({ view: 'tools', query: 'weather forecast', alternativeTo: ' source-route:current ' })
+  expect(search.alternativeTo).toBe('source-route:current')
+  expect(marketLoaderDeps(search).alternativeTo).toBe('source-route:current')
+  expect(() => validateMarketSearch({ view: 'tools', alternativeTo: 'source-route:current' })).toThrow()
+  expect(() => validateMarketSearch({ view: 'tools', query: 'weather', alternativeTo: '   ' })).toThrow()
+})
+
+it('keeps alternative search in the admitted catalogue instead of sending it to mixed canonical search', () => {
+  const other = {
+    ...entries[1]!,
+    choice: { access: 'ae_callable' as const, toolRef: `operation:v1:${'c'.repeat(64)}`, sourceRouteRef: 'source-route:other' },
+    audEstimate: 'A$0.01',
+    prices: [{ network: 'eip155:8453', scheme: 'exact', amount: '0.000001 USDC', decimalAmount: '0.000001', symbol: 'USDC' }],
+  }
+  const page = { ...indexedPage, items: [other] }
+  show({ view: 'tools', query: 'weather forecast', alternativeTo: 'source-route:current' }, [], {
+    page, catalogue: { ...indexedCatalogue, page, indexCursor: 'more-alternatives', isDone: false }, overview,
+  })
+  expect(searchMarketToolsServer).not.toHaveBeenCalled()
+  expect(screen.getByText('Callable alternatives for “weather forecast”')).toBeTruthy()
+  const row = screen.getByRole('link', { name: 'Tool 1' }).closest('tr')
+  expect(row?.textContent).toContain('AE callable')
+  expect(row?.textContent).toContain('A$0.01')
+  expect(row?.textContent).toContain('0.000001 USDC')
+  expect(screen.getByText(/more results remain to check/)).toBeTruthy()
+  expect(screen.queryByText(/No other callable Tool/)).toBeNull()
+  expect(screen.getByRole('button', { name: 'Next page' })).toBeTruthy()
+})
+
+it('shows no callable alternative only after the indexed assessment is complete', () => {
+  const page = { ...indexedPage, items: [] }
+  show({ view: 'tools', query: 'weather forecast', alternativeTo: 'source-route:current' }, [], {
+    page, catalogue: { ...indexedCatalogue, page, isDone: true }, overview,
+  })
+  expect(searchMarketToolsServer).not.toHaveBeenCalled()
+  expect(screen.getByText('No other callable Tool in the assessed catalogue')).toBeTruthy()
+  expect(screen.queryByRole('button', { name: 'Next page' })).toBeNull()
+})
+
+it('discloses verified recipients beside chat and Market search', () => {
+  show({ view: 'tools' }, [], { page: indexedPage, catalogue: indexedCatalogue, overview, chatRecipient: 'OpenRouter', jevRecipient: 'TypeSafe (api.typesafe.ai)' })
+  expect(screen.getByRole('form', { name: 'Start a conversation' }).nextElementSibling?.textContent).toContain('OpenRouter')
+  fireEvent.click(screen.getByRole('button', { name: 'Filters' }))
+  expect(screen.getByRole('searchbox', { name: 'Search Tools' }).closest('form')?.textContent).toContain('TypeSafe (api.typesafe.ai)')
+})
+
 describe('indexed x402 catalogue controls', () => {
   it('keeps the buyer-facing refinements visible and places provider metadata behind Advanced filters', () => {
     show({ view: 'tools' }, undefined, { page: indexedPage, catalogue: indexedCatalogue, overview })
     fireEvent.click(screen.getByRole('button', { name: 'Filters' }))
 
     expect(screen.getByRole('group', { name: 'Provider category' })).toBeTruthy()
-    expect(screen.getByText('Listed price')).toBeTruthy()
+    expect(screen.getByText('Provider-listed price · USDC')).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Advanced filters' }).getAttribute('aria-expanded')).toBe('false')
     expect(screen.queryByRole('group', { name: 'Network' })).toBeNull()
     expect(screen.queryByLabelText('Provider')).toBeNull()
@@ -495,8 +534,8 @@ describe('canonical Market search', () => {
     expect(toolHref(screen.getByRole('link', { name: 'External Forecast' })).pathname).toBe('/api/v1/registry/detail')
     expect(screen.getByText('AE-callable · ready')).toBeTruthy()
     expect(screen.getByText('External listing · not AE-callable')).toBeTruthy()
-    expect(screen.getByText('A$0.01')).toBeTruthy()
-    expect(screen.getByText('Price unavailable')).toBeTruthy()
+    expect(screen.getByText('Indicative AUD · A$0.01')).toBeTruthy()
+    expect(screen.getByText('AUD estimate unavailable')).toBeTruthy()
     expect(screen.getByText(/AE supply projection · fresh/)).toBeTruthy()
     expect(screen.getByText(/Coinbase Bazaar index · stale/)).toBeTruthy()
     expect(screen.getByText(/not applied to this search/)).toBeTruthy()
@@ -567,5 +606,25 @@ describe('canonical Market search', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Next page. Retry' }))
     await waitFor(() => expect(screen.getByText('Page 2')).toBeTruthy())
     expect(searchMarketToolsServer).toHaveBeenNthCalledWith(3, { data: { query: 'weather', limit: 8, cursor: 'opaque-next' } })
+  })
+  it('distinguishes admitted setup from an external listing and names the exact source price and ranking recipient', async () => {
+    const setup = {
+      ...searchRows[0]!,
+      id: `registry:${'e'.repeat(64)}`, source: 'coinbase' as const, access: 'setup_required' as const,
+      title: 'Connect Weather', readiness: 'unverified' as const,
+      sourcePrice: '0.000001 USDC', price: { kind: 'indicative' as const, label: 'A$0.01' },
+    }
+    searchMarketToolsServer.mockResolvedValueOnce({
+      ...searchMeta, kind: 'match', results: [setup, searchRows[1]!],
+      recipient: { label: 'TypeSafe', host: 'custom-gateway.example', data: 'query and candidate summaries' },
+    } satisfies ToolChoiceSearchOutput)
+    show({ view: 'tools', query: 'weather' }, [], { page: indexedPage, catalogue: indexedCatalogue, overview })
+    const inspect = await screen.findByRole('link', { name: 'Connect Weather' })
+    expect(toolHref(inspect).pathname).toBe(`/tools/${encodeURIComponent(admittedRef)}`)
+    expect(screen.getByText('Connect to call')).toBeTruthy()
+    expect(screen.getByText('Indicative AUD · A$0.01')).toBeTruthy()
+    expect(screen.getByText('Provider-listed source · 0.000001 USDC')).toBeTruthy()
+    expect(screen.getByText(/Search query and candidate Tool text went to TypeSafe \(custom-gateway.example\)/)).toBeTruthy()
+    expect(screen.getByText('External listing · not AE-callable')).toBeTruthy()
   })
 })

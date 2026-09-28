@@ -42,7 +42,8 @@ describe('indexed catalogue server boundary', () => {
     expect(query).not.toHaveBeenCalled()
   })
   it('preserves native pagination and keeps unfiltered coverage distinct from result counts', async () => {
-    const entry = { resource: 'https://example.com/tool', title: 'Tool' }
+    const entry = { resource: 'https://example.com/tool', title: 'Tool', provider: 'example.com',
+      description: 'A published tool', protocol: 'http', prices: [], metadataJson: '{}' }
     const coverage = { indexedTotal: 4000, generation: 'gen-1' }
     query.mockImplementation(async (name: string) => {
       if (name === 'x402DirectoryIndex:status') return { kind: 'ready', coverage: { generation: 'gen-1', completedAt: 1 } }

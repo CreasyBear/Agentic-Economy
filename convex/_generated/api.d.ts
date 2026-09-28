@@ -402,6 +402,7 @@ import type * as lib_catalog_sellerCanary_promote from "../lib/catalog/sellerCan
 import type * as lib_catalog_sellerCanary_target from "../lib/catalog/sellerCanary/target.js";
 import type * as lib_chat_anonymous_contracts from "../lib/chat/anonymous/contracts.js";
 import type * as lib_chat_anonymous_http from "../lib/chat/anonymous/http.js";
+import type * as lib_chat_anonymous_recipient from "../lib/chat/anonymous/recipient.js";
 import type * as lib_chat_anonymous_request from "../lib/chat/anonymous/request.js";
 import type * as lib_chat_anonymous_stream from "../lib/chat/anonymous/stream.js";
 import type * as lib_chat_generate_contracts from "../lib/chat/generate/contracts.js";
@@ -445,6 +446,7 @@ import type * as lib_market_demandSignals_contracts from "../lib/market/demandSi
 import type * as lib_market_directoryIndex_analytics from "../lib/market/directoryIndex/analytics.js";
 import type * as lib_market_directoryIndex_browse from "../lib/market/directoryIndex/browse.js";
 import type * as lib_market_directoryIndex_categoryStats from "../lib/market/directoryIndex/categoryStats.js";
+import type * as lib_market_directoryIndex_choices from "../lib/market/directoryIndex/choices.js";
 import type * as lib_market_directoryIndex_cleanup from "../lib/market/directoryIndex/cleanup.js";
 import type * as lib_market_directoryIndex_contracts from "../lib/market/directoryIndex/contracts.js";
 import type * as lib_market_directoryIndex_facetReads from "../lib/market/directoryIndex/facetReads.js";
@@ -1113,6 +1115,7 @@ declare const fullApi: ApiFromModules<{
   "lib/catalog/sellerCanary/target": typeof lib_catalog_sellerCanary_target;
   "lib/chat/anonymous/contracts": typeof lib_chat_anonymous_contracts;
   "lib/chat/anonymous/http": typeof lib_chat_anonymous_http;
+  "lib/chat/anonymous/recipient": typeof lib_chat_anonymous_recipient;
   "lib/chat/anonymous/request": typeof lib_chat_anonymous_request;
   "lib/chat/anonymous/stream": typeof lib_chat_anonymous_stream;
   "lib/chat/generate/contracts": typeof lib_chat_generate_contracts;
@@ -1156,6 +1159,7 @@ declare const fullApi: ApiFromModules<{
   "lib/market/directoryIndex/analytics": typeof lib_market_directoryIndex_analytics;
   "lib/market/directoryIndex/browse": typeof lib_market_directoryIndex_browse;
   "lib/market/directoryIndex/categoryStats": typeof lib_market_directoryIndex_categoryStats;
+  "lib/market/directoryIndex/choices": typeof lib_market_directoryIndex_choices;
   "lib/market/directoryIndex/cleanup": typeof lib_market_directoryIndex_cleanup;
   "lib/market/directoryIndex/contracts": typeof lib_market_directoryIndex_contracts;
   "lib/market/directoryIndex/facetReads": typeof lib_market_directoryIndex_facetReads;

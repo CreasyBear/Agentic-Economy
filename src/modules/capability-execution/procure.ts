@@ -12,8 +12,6 @@ export const toolProcureInputSchema = z.discriminatedUnion('kind', [
   z.strictObject({
     kind: z.literal('need'),
     need: z.string().trim().min(3).max(4096),
-    maxSpendAud: z.string().trim().regex(/^\d+(?:\.\d{1,6})?$/),
-    idempotencyKey: idempotencyKeySchema,
   }),
   z.strictObject({
     kind: z.literal('exact'),
@@ -56,13 +54,26 @@ export const toolProcureResultSchema = z.discriminatedUnion('status', [
       netAud: z.string(),
       gstAud: z.string(),
     }),
-    synthesizedParams: z.record(z.string(), z.unknown()),
+    input: z.record(z.string(), jsonValueSchema),
     output: z.unknown(),
     audit: z.strictObject({
       routingLatencyMs: z.number(),
       executionLatencyMs: z.number(),
       totalLatencyMs: z.number(),
       jevDecisionsCostAud: z.string(),
+    }),
+  }),
+  z.strictObject({
+    schemaVersion: z.literal('tool.procure:v1'),
+    kind: z.literal('needs_input'),
+    status: z.literal('needs_input'),
+    toolRef: z.string().refine(isPublicToolRef).transform((ref): PublicToolRef => ref as PublicToolRef),
+    toolName: z.string(),
+    inputJsonSchema: z.record(z.string(), jsonValueSchema),
+    requiredFields: z.array(z.string()),
+    next: z.strictObject({
+      kind: z.literal('exact'),
+      toolRef: z.string().refine(isPublicToolRef).transform((ref): PublicToolRef => ref as PublicToolRef),
     }),
   }),
   z.strictObject({
@@ -87,8 +98,9 @@ export const toolProcureResultSchema = z.discriminatedUnion('status', [
     ...commonResult,
     kind: z.literal('refused'),
     status: z.literal('refused'),
+    idempotencyKey: idempotencyKeySchema.optional(),
     quoteRef: z.string().min(1).optional(),
-    code: z.union([z.enum(['no_matching_tool', 'ambiguous_intent']), toolQuoteRefusalCodeSchema, callRefusalCodeSchema]),
+    code: z.union([z.enum(['no_matching_tool', 'ambiguous_intent', 'selection_unavailable']), toolQuoteRefusalCodeSchema, callRefusalCodeSchema]),
     retryable: z.boolean(),
     detail: z.string(),
   }),

@@ -4,6 +4,12 @@ import {
   readMcpBody,
 } from './mcp-api-harness'
 import { describe, expect, it, vi } from 'vitest'
+import { executeDecisionGateway } from '@/modules/decision-engine/public'
+
+vi.mock('@/modules/decision-engine/public', async (importOriginal) => ({
+  ...await importOriginal<Record<string, unknown>>(),
+  executeDecisionGateway: vi.fn(),
+}))
 
 const quoteRef = `operation-commitment:v1:${'b'.repeat(64)}`
 
@@ -73,6 +79,41 @@ describe('MCP host adapter tool.call', () => {
         ownerId: 'acc_00000000000040008000000000000044',
       }),
     }))
+  })
+
+  it('shows the selected Tool input schema and typed next in MCP text and structured output without buying', async () => {
+    vi.mocked(executeDecisionGateway).mockResolvedValueOnce({
+      tier: 'jev_system_one', model: 'test-selector',
+      answers: { selectedTool: { type: 'choice', choice: currentToolRef, confidence: 1, probabilities: { [currentToolRef]: 1 } } },
+      usage: { inputTokens: 0, outputTokens: 0, estimatedCostAud: null },
+      durationMs: 0, attemptedTiers: ['jev_system_one'],
+    })
+    const inputJsonSchema = { type: 'object', required: ['query'], properties: { query: { type: 'string' } } }
+    const callTool = vi.fn()
+    const quoteTool = vi.fn()
+    const response = await postMcp({
+      jsonrpc: '2.0', id: 'need', method: 'tools/call',
+      params: { name: 'ae_tool_procure', arguments: { kind: 'need', need: 'Find this dataset' } },
+    }, {
+      authenticate: async () => ({
+        isAuthenticated: true, tokenType: 'api_key', id: 'key:test', subject: 'user_test', scopes: ['market_tools:call'],
+      }),
+      catalogSearcher: async () => [{
+        toolRef: currentToolRef, name: 'Dataset search', description: 'Searches datasets',
+        endpoint: 'https://provider.example/search', priceAud: '0.25', inputSchema: inputJsonSchema,
+      }],
+      callService: { callTool, quoteTool, readCallStatus: vi.fn(), cancelCall: vi.fn(), reconcileCall: vi.fn() },
+    }, { authorization: 'Bearer buyer' })
+    expect(response.status).toBe(200)
+    const body = await readMcpBody(response)
+    expect(body.result?.structuredContent).toMatchObject({
+      result: { status: 'needs_input', toolRef: currentToolRef, inputJsonSchema, requiredFields: ['query'], next: { kind: 'exact', toolRef: currentToolRef } },
+      next: [{ kind: 'exact', toolRef: currentToolRef }],
+    })
+    expect(JSON.stringify(body.result?.content)).toContain('query')
+    expect(JSON.stringify(body.result?.content)).toContain(currentToolRef)
+    expect(quoteTool).not.toHaveBeenCalled()
+    expect(callTool).not.toHaveBeenCalled()
   })
 
   it('preserves a refused Call reference and status continuation without prose leakage', async () => {

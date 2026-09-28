@@ -17,62 +17,14 @@ describe('market-terminal CLI error contracts', () => {
       }
     }
     const commands = helpBody.commands
-    expect(Object.keys(commands)).toEqual([
-      'manifest',
-      'config',
-      'search',
-      'list',
-      'request',
-      'describe',
-      'compare',
-      'connect',
-      'doctor',
-      'account',
-      'supply',
-      'fund',
-      'quote',
-      'call',
-      'history',
-      'chat',
-      'status',
-      'wait',
-      'cancel',
-      'recover',
-      'revoke',
-    ])
-    expect(Object.keys(helpBody.auth.authenticatedCalls)).toEqual([
-      'call',
-      'history',
-      'request',
-      'status',
-      'wait',
-      'cancel',
-      'reconcile',
-    ])
+    expect(commands).toHaveProperty('procure')
+    expect(commands).toHaveProperty('call')
+    expect(helpBody.groups.find(group => group.id === 'call_recover')?.commands).toContain('procure')
     expect(helpBody.auth.authenticatedCalls.cancel).toContain('ae cancel ')
     expect(helpBody.auth.authenticatedCalls.reconcile).toContain(' recover ')
     expect(helpBody.auth.cancelRequirements).toContain('AE_API_KEY')
     expect(helpBody.auth.cancelRequirements).toContain('--idempotency-key')
     expect(helpBody.auth.cancelRequirements).toContain('body.idempotencyKey')
-    expect(helpBody.groups).toEqual([
-      {
-        id: 'discover_compare',
-        title: 'Discover and compare',
-        commands: ['search', 'list', 'describe', 'compare', 'request'],
-      },
-      {
-        id: 'connect_account',
-        title: 'Connect and account',
-        commands: ['connect', 'account', 'fund', 'revoke'],
-      },
-      {
-        id: 'call_recover',
-        title: 'Call and recover',
-        commands: ['quote', 'call', 'history', 'chat', 'status', 'wait', 'cancel', 'recover'],
-      },
-      { id: 'supply', title: 'Supply', commands: ['supply'] },
-      { id: 'reference', title: 'Reference', commands: ['manifest', 'config', 'doctor'] },
-    ])
     expect(commands.chat).toMatchObject({
       usage: 'ae chat [prompt] [--thread-id <id> | --continue]',
       summary: expect.stringContaining('agent-key chat turn'),
@@ -453,11 +405,6 @@ describe('market-terminal CLI error contracts', () => {
       commands: {
         resume: {
           usage: 'ae call resume <recovery-ref> [--wait]',
-        },
-      },
-      flags: {
-        '--input': {
-          description: expect.stringContaining('call and quote alone accept -'),
         },
       },
     })

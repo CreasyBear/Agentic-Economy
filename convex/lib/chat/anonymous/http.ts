@@ -1,9 +1,10 @@
 import { sanitizeTelemetryError } from '@/lib/observability/private-route-safety'
-import { openRouterGatewayConfig, openRouterModel } from '@/modules/model-gateway/public'
+import { openRouterModel } from '@/modules/model-gateway/public'
 import { internal } from '../../../_generated/api'
 import { env } from '../../../_generated/server'
 import type { ActionCtx } from '../../../_generated/server'
 import { handleAnonymousChatRequest, jsonError } from './request'
+import { anonymousChatGatewayConfig } from './recipient'
 import { streamAnonymousChatResponse } from './stream'
 
 export async function anonymousChatHandler(ctx: ActionCtx, request: Request): Promise<Response> {
@@ -14,15 +15,8 @@ export async function anonymousChatHandler(ctx: ActionCtx, request: Request): Pr
       key,
     }),
     stream: async (messages, signal) => {
-      const apiKey = env.OPENROUTER_API_KEY?.trim()
-      if (apiKey === undefined || apiKey.length === 0) {
-        return jsonError(503, 'chat_model_unconfigured')
-      }
-      const config = openRouterGatewayConfig({
-        OPENROUTER_API_KEY: apiKey,
-        ...(env.AE_LLM_MODEL === undefined ? {} : { AE_LLM_MODEL: env.AE_LLM_MODEL }),
-        ...(env.AE_SITE_URL === undefined ? {} : { SITE_URL: env.AE_SITE_URL }),
-      })
+      const config = anonymousChatGatewayConfig()
+      if (config.apiKey === undefined) return jsonError(503, 'chat_model_unconfigured')
       try {
         return await streamAnonymousChatResponse(ctx, messages, openRouterModel(config, config.model), signal)
       } catch (error) {

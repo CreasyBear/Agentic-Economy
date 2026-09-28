@@ -4,7 +4,7 @@ import { AePageSkeleton, AePageState } from '@/components/ae/layout/AePageState'
 import { DirectoryToolPage } from '@/components/ae/market/public-tool-detail/DirectoryToolPage'
 import { MarketBackButton } from '@/components/ae/market/public-tool-detail/MarketBackButton'
 import { directoryTitle } from '@/modules/market/directory-card.view-model'
-import { readX402DirectoryCatalogueBySlugServer } from '@/modules/market/x402-directory-index.functions'
+import { readDirectoryToolDetailRouteServer } from '@/modules/market/tool-detail-route.functions'
 import { buildPublicPageHead } from '@/modules/seo/public'
 
 const providerHostPattern = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)*$/u
@@ -14,11 +14,11 @@ export const Route = createFileRoute('/tools/$providerHost/$slug')({
     if (!providerHostPattern.test(params.providerHost) || params.slug.length === 0 || params.slug.length > 200) {
       return { metadata: { kind: 'unavailable' as const, reason: 'query_invalid' } }
     }
-    const metadata = await readX402DirectoryCatalogueBySlugServer({ data: { providerKey: params.providerHost, slug: params.slug } })
+    const { metadata, referenceRate } = await readDirectoryToolDetailRouteServer({ data: { providerKey: params.providerHost, slug: params.slug } })
     if (metadata.kind === 'found' && metadata.item.toolRef !== undefined) {
       throw redirect({ to: '/tools/$toolRef', params: { toolRef: metadata.item.toolRef }, replace: true })
     }
-    return { metadata }
+    return { metadata, referenceRate }
   },
   head: ({ params, loaderData }) => {
     if (loaderData?.metadata.kind !== 'found' && loaderData?.metadata.kind !== 'found_upstream') {
@@ -34,6 +34,6 @@ export const Route = createFileRoute('/tools/$providerHost/$slug')({
 
 function DirectoryToolRoute() {
   const { providerHost, slug } = Route.useParams()
-  const { metadata } = Route.useLoaderData()
-  return <DirectoryToolPage metadata={metadata} providerHost={providerHost} slug={slug} />
+  const { metadata, referenceRate } = Route.useLoaderData()
+  return <DirectoryToolPage metadata={metadata} providerHost={providerHost} slug={slug} {...(referenceRate === undefined ? {} : { referenceRate })} />
 }

@@ -3,6 +3,8 @@
  */
 
 import { toToolInspectorModel } from '@/components/ae/market/tool-detail/tool-inspector-model'
+import { alternativeToolSearchHref, projectToolObject } from '@/components/ae/shared/listing-family.view-model'
+import { projectAdmittedListing, projectDirectoryListing } from '@/modules/registry/public'
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { RouterContextProvider, createMemoryHistory, createRootRoute, createRoute, createRouter } from '@tanstack/react-router'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -26,12 +28,17 @@ import {
 } from '@/modules/market/suggested-next-action'
 
 const readDetailMock = vi.hoisted(() => vi.fn())
+const readDirectoryDetailMock = vi.hoisted(() => vi.fn())
 vi.mock('@/modules/market/tool-detail-route.functions', () => ({
   readPublicToolDetailRouteServer: readDetailMock,
+  readDirectoryToolDetailRouteServer: readDirectoryDetailMock,
 }))
 
 import { PublicToolDetail, Route } from '@/routes/tools.$toolRef'
 import type { PublicToolDetailProps } from '@/components/ae/market/public-tool-detail/PublicToolDetail'
+import { DirectoryToolPage } from '@/components/ae/market/public-tool-detail/DirectoryToolPage'
+import { Route as DirectoryRoute } from '@/routes/tools.$providerHost.$slug'
+import type { X402DirectoryEntry } from '@/modules/market/x402-directory'
 
 const sourceRecord = {
   operationId: 'operation:invoice.extract',
@@ -205,6 +212,7 @@ function expectRenderedHrefToMatchProducer(renderedHref: string | null, producer
 afterEach(() => {
   cleanup()
   readDetailMock.mockReset()
+  readDirectoryDetailMock.mockReset()
 })
 
 describe('/tools/$toolRef', () => {
@@ -369,14 +377,88 @@ describe('/tools/$toolRef', () => {
     expect(screen.getAllByText('AUD estimate temporarily unavailable').length).toBeGreaterThan(0)
     expect(screen.getByRole('heading', { name: 'Example' })).toBeTruthy()
     expect(screen.getByText(/No published output example/)).toBeTruthy()
-    expect(screen.getByRole('button', { name: 'Find an alternative' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Search callable alternatives' })).toBeTruthy()
     expect(screen.queryByRole('button', { name: 'Get a Quote' })).toBeNull()
     expect(screen.getByText(/Readiness stale/)).toBeTruthy()
   })
 
+  it('searches for another eligible Tool by capability and exact current identity, not its title', () => {
+    const admitted = projectAdmittedListing(tool)
+    const href = alternativeToolSearchHref(admitted, `${tool.contract.capabilityId} ${tool.summary}`)
+    const url = new URL(href, 'https://market.example')
+    expect(url.pathname).toBe('/market')
+    expect(url.searchParams.get('view')).toBe('tools')
+    expect(url.searchParams.get('query')).toBe(`${tool.contract.capabilityId} ${tool.summary}`)
+    expect(url.searchParams.get('alternativeTo')).toBe(tool.toolRef)
+
+    const directory = projectDirectoryListing({
+      resource: 'https://example.test/x402/extract?kind=invoice',
+      title: 'Unrelated directory title',
+      description: 'Extract invoice line items',
+      provider: 'example.test',
+      prices: [],
+    })
+    const sourceRouteRef = `source-route:v1:${'a'.repeat(64)}`
+    const external = new URL(alternativeToolSearchHref(directory, 'Extract invoice line items', sourceRouteRef), 'https://market.example')
+    expect(external.searchParams.get('query')).toBe('Extract invoice line items')
+    expect(external.searchParams.get('alternativeTo')).toBe(sourceRouteRef)
+    expect(alternativeToolSearchHref(directory, 'Extract invoice line items')).toBe('/market?view=tools')
+  })
+
+  it('shows source USDC only as a secondary fact after a fresh AUD estimate', () => {
+    const listing = projectDirectoryListing({
+      resource: 'https://example.test/x402/extract',
+      title: 'Extract invoice',
+      description: 'Extract invoice line items',
+      provider: 'example.test',
+      prices: [{ scheme: 'exact', decimalAmount: '0.000001', symbol: 'USDC' }],
+    })
+    const rate = { source: 'coinbase' as const, base: 'USDC' as const, quote: 'AUD' as const, rate: '1.5', fetchedAt: 1_000 }
+    expect(projectToolObject(listing, undefined, 2_000, rate).price?.label).toBe('A$0.01 per Call')
+    expect(projectToolObject(listing, undefined, 2_000, rate).price?.source).toContain('directory reported')
+    expect(projectToolObject(listing, undefined, 301_001, rate).price?.label).toBe('AUD estimate temporarily unavailable')
+    expect(projectToolObject(listing, undefined, 2_000).price?.label).toBe('AUD estimate temporarily unavailable')
+  })
+
+  it('uses a fresh admitted AUD indication ahead of non-AUD source price without rounding the source record', () => {
+    const source = projectAdmittedListing(tool)
+    const displayed = { kind: 'indicative' as const, amount: { currency: 'AUD', units: '1239000', exponent: 6 }, rateObservedAt: 1_000, validUntil: 300_000 }
+    expect(projectToolObject(source, undefined, 2_000, undefined, displayed).price?.label).toBe('A$1.24 per Call')
+    expect(projectToolObject(source, undefined, 300_001, undefined, displayed).price?.label).toBe('AUD estimate temporarily unavailable')
+    expect(source.facts.price.kind === 'present' && source.facts.price.value.kind === 'fixed' ? source.facts.price.value.amount : undefined).toBe('1.25')
+  })
+
+  it('discloses provider and release classes before the admitted Tool chat action', () => {
+    renderWithRouter({ kind: 'found', schemaVersion: PublicToolRegistrySchemaVersion, tool, verifiedBusinessSlug: tool.business.slug })
+    const disclosure = screen.getByRole('region', { name: 'Input and recipient before Quote' })
+    expect(within(disclosure).getByText('Ledger Labs')).toBeTruthy()
+    const release = within(disclosure).getByText('/documentUrl').closest('li')
+    expect(release?.textContent).toContain('public input')
+    expect(release?.textContent).toContain('invoice extraction')
+    expect(release?.textContent).toContain('execution, after Quote approval')
+    expect(release?.textContent).toContain('Ledger Labs (selected Provider)')
+    expect(disclosure.compareDocumentPosition(screen.getByRole('link', { name: /Try in chat/ })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(within(disclosure).queryByText(/named recipient/i)).toBeNull()
+  })
+
+  it('does not offer a Quote or chat input path when a named recipient has no published identity', () => {
+    const unnamedRecipient = {
+      ...tool,
+      dataUse: tool.dataUse.map(effect => ({ ...effect, recipient: 'named_recipient' as const })),
+      availability: { ...tool.availability, posture: 'routeable' as const, observedAt: Date.now(), validUntil: Date.now() + 60_000 },
+    }
+    renderWithRouter({ kind: 'found', schemaVersion: PublicToolRegistrySchemaVersion, tool: unnamedRecipient })
+    expect(within(screen.getByRole('region', { name: 'Input and recipient before Quote' })).getByText('/documentUrl').closest('li')?.textContent).toContain('recipient identity not published; do not send this input')
+    expect(screen.queryByRole('link', { name: /Try in chat/ })).toBeNull()
+    expect(screen.getByRole('button', { name: 'Search callable alternatives' })).toBeTruthy()
+    expect(screen.getByText('Input recipient not identified')).toBeTruthy()
+    expect(screen.queryByText(/^Routeable · observed/)).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Set up to get a Quote' })).toBeNull()
+  })
+
   it('does not link an unverified publisher to an unpublished Business page', () => {
     renderWithRouter({ kind: 'found', schemaVersion: PublicToolRegistrySchemaVersion, tool })
-    expect(screen.getByText('Ledger Labs')).toBeTruthy()
+    expect(screen.getAllByText('Ledger Labs').length).toBeGreaterThan(0)
     expect(screen.queryByRole('link', { name: 'Ledger Labs' })).toBeNull()
   })
 
@@ -408,6 +490,56 @@ describe('/tools/$toolRef', () => {
     expect(screen.queryByText(/USD 1.25/)).toBeNull()
   })
 
+})
+
+describe('/tools/$providerHost/$slug', () => {
+  const entry: X402DirectoryEntry = {
+    resource: 'https://example.test/x402/invoices',
+    title: 'Invoice extraction',
+    description: 'Extract line items from invoices',
+    protocol: 'x402',
+    provider: 'example.test',
+    prices: [{ network: 'eip155:8453', scheme: 'exact', amount: '0.000001 USDC', decimalAmount: '0.000001', symbol: 'USDC' }],
+    metadataJson: '{}',
+  }
+
+  it('passes fresh source rate to a directory-only detail and never claims an AE input recipient', async () => {
+    const metadata = { kind: 'found_upstream' as const, item: { entry } }
+    const referenceRate = { source: 'coinbase' as const, base: 'USDC' as const, quote: 'AUD' as const, rate: '1.5', fetchedAt: Date.now() }
+    readDirectoryDetailMock.mockResolvedValue({ metadata, referenceRate })
+    const loader = DirectoryRoute.options.loader as (input: { params: { providerHost: string; slug: string } }) => Promise<unknown>
+    await expect(loader({ params: { providerHost: 'example.test', slug: 'invoices' } })).resolves.toMatchObject({ metadata, referenceRate })
+    expect(readDirectoryDetailMock).toHaveBeenCalledWith({ data: { providerKey: 'example.test', slug: 'invoices' } })
+
+    const root = createRootRoute()
+    const routeTree = root.addChildren([
+      createRoute({ getParentRoute: () => root, path: '/' }),
+      createRoute({ getParentRoute: () => root, path: '/market' }),
+    ])
+    const router = createRouter({ routeTree, history: createMemoryHistory({ initialEntries: ['/'] }) })
+    render(<RouterContextProvider router={router}><DirectoryToolPage metadata={metadata} providerHost="example.test" slug="invoices" referenceRate={referenceRate} /></RouterContextProvider>)
+    expect(screen.getByText('A$0.01 per Call')).toBeTruthy()
+    expect(screen.getByText(/Provider-listed source price: 0.000001 USDC/)).toBeTruthy()
+    expect(screen.getByText(/No admitted AE Tool or verified execution Provider/)).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Browse Market' })).toBeTruthy()
+    expect(screen.queryByRole('link', { name: /Try in chat/ })).toBeNull()
+
+    cleanup()
+    render(<RouterContextProvider router={router}><DirectoryToolPage metadata={{
+      kind: 'found',
+      coverage: {
+        source: 'coinbase', generation: 'active', indexedTotal: 1, reportedTotal: 1,
+        reportedTotalAtStart: 1, sourceChangedDuringScan: false,
+        duplicateObservations: 0, pagesFetched: 1, startedAt: 1_000,
+        completedAt: 2_000, completeness: 'completed_observed_scan',
+      },
+      item: {
+        entry, category: 'documents', categorySource: 'provider_declared',
+        observedAt: 2_000, sourceDigest: 'digest', sourceRouteRef: `source-route:v1:${'b'.repeat(64)}`,
+      },
+    }} providerHost="example.test" slug="invoices" referenceRate={referenceRate} /></RouterContextProvider>)
+    expect(screen.getByRole('button', { name: 'Search callable alternatives' })).toBeTruthy()
+  })
 })
 
 
