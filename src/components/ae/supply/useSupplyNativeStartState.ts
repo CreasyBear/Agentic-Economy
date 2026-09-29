@@ -122,6 +122,12 @@ export function useSupplyNativeStartState({
     })
   }
 
+  function changeResourceUrl(next: string) {
+    setResourceUrl(next)
+    setX402Method(undefined)
+    setEnvironment(undefined)
+  }
+
   function editSource() {
     if (operationInFlight.current || publicationCommandLocked.current) return
     setPreview(undefined)
@@ -399,7 +405,7 @@ export function useSupplyNativeStartState({
     pricingKind, price, connectionRef, externalEffect, dataRelease, financialExposure, dataClassification, attestation,
     pending, error, invalidField, requiredAction, success, continuation, reviewing, publicationLocked,
     source, selected, eligibleConnections,
-    setResourceUrl, setX402Method,
+    setResourceUrl: changeResourceUrl, setX402Method,
     setName, setDescription, setCategory, setServiceArea, setAvailability,
     setPricingKind, setPrice, setConnectionRef, setExternalEffect, setDataRelease, setFinancialExposure, setDataClassification,
     setAttestation, setError,

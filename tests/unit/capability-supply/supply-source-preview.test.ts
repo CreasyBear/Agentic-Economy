@@ -75,7 +75,7 @@ describe('previewSupplySource', () => {
       kind: 'x402',
       resourceUrl: 'https://provider.example/paid',
       method: 'POST',
-    }, { inspectX402: inspectX402 as SupplySourcePreviewDependencies["inspectX402"] })
+    }, { inspectX402: inspectX402 as NonNullable<SupplySourcePreviewDependencies['inspectX402']> })
 
     expect(result).toMatchObject({
       kind: 'ready',
@@ -102,7 +102,7 @@ describe('previewSupplySource', () => {
     const result = await previewSupplySource({
       kind: 'x402',
       resourceUrl: 'https://provider.example/paid',
-    }, { inspectX402: inspectX402 as SupplySourcePreviewDependencies["inspectX402"] })
+    }, { inspectX402: inspectX402 as NonNullable<SupplySourcePreviewDependencies['inspectX402']> })
     expect(inspectX402.mock.calls.map((call) => call[0].method)).toEqual(['GET', 'POST'])
     expect(result).toMatchObject({
       kind: 'action_required',
@@ -119,7 +119,7 @@ describe('previewSupplySource', () => {
     const result = await previewSupplySource({
       kind: 'x402',
       resourceUrl: 'https://provider.example/paid',
-    }, { inspectX402: inspectX402 as SupplySourcePreviewDependencies["inspectX402"] })
+    }, { inspectX402: inspectX402 as NonNullable<SupplySourcePreviewDependencies['inspectX402']> })
     expect(result).toMatchObject({
       kind: 'ready',
       candidates: [{ sourceSelector: { method: 'POST' }, x402: { environment: 'production' } }],
@@ -137,7 +137,7 @@ describe('previewSupplySource', () => {
       kind: 'x402',
       resourceUrl: 'https://provider.example/paid',
       method: 'GET',
-    }, { inspectX402: inspectX402 as SupplySourcePreviewDependencies["inspectX402"] })
+    }, { inspectX402: inspectX402 as NonNullable<SupplySourcePreviewDependencies['inspectX402']> })
     expect(result).toMatchObject({
       kind: 'action_required',
       requiredAction: {

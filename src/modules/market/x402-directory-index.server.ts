@@ -291,8 +291,11 @@ export async function readX402DirectoryCatalogueResource(input: { resource: stri
   try {
     const result = await callPublicSourceQuery(resource, parsed.data)
     if (result.kind !== 'found' && result.kind !== 'found_upstream') return result
-    const [entry] = await withAudEstimates([result.item.entry])
-    return { ...result, item: { ...result.item, entry: entry ?? result.item.entry } }
+    const [estimated] = await withAudEstimates([result.item.entry])
+    const entry = estimated ?? result.item.entry
+    // A union spread keeps only shared properties, dropping coverage and indexed item fields.
+    if (result.kind === 'found') return { ...result, item: { ...result.item, entry } }
+    return { kind: 'found_upstream', item: { entry } }
   }
   catch (cause) {
     return degrade(cause, { kind: 'unavailable', reason: 'source_unavailable' } as const, {

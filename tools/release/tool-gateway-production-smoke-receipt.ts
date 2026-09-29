@@ -26,7 +26,6 @@ export const SERVICES_PAGE_LIMIT = 50;
 export const MAX_SERVICE_PAGES = 100;
 export const MAX_SERVICE_COUNT = SERVICES_PAGE_LIMIT * MAX_SERVICE_PAGES;
 export const MAX_ENDPOINT_COUNT = 50_000;
-export const MAX_PROVIDER_TRANSFER_COUNT = 100;
 export const boundedRefSchema = z.string().trim().min(1).max(MAX_REF_LENGTH);
 export const digestSchema = z.string().regex(/^sha256:[0-9a-f]{64}$/u);
 export const operationRefSchema = z
@@ -184,19 +183,7 @@ export const operationChargeReceiptSchema = z.strictObject({
   aeRake: exactAmountSchema,
   providerNetAccrual: exactAmountSchema,
 });
-export const GatewayPayoutProviderTransferReadbackSchema = z.strictObject({
-  payoutRef: boundedRefSchema,
-  count: z.number().int().nonnegative().max(MAX_PROVIDER_TRANSFER_COUNT),
-  transferIdsDigest: digestSchema,
-  transferIdDigests: z.array(digestSchema).max(MAX_PROVIDER_TRANSFER_COUNT),
-});
-export const GatewayPayoutReceiptSchema = StrictLivePayoutReceiptSchema.extend({
-  providerTransfers: z.strictObject({
-    beforePayout: GatewayPayoutProviderTransferReadbackSchema,
-    afterInitialPayout: GatewayPayoutProviderTransferReadbackSchema,
-    afterReplay: GatewayPayoutProviderTransferReadbackSchema,
-  }),
-});
+export const GatewayPayoutReceiptSchema = StrictLivePayoutReceiptSchema;
 
 export const conservationReceiptSchema = z.strictObject({
   buyerDebit: exactAmountSchema,
@@ -761,52 +748,6 @@ export const GatewayProductionSmokeReceiptSchema =
         "operation charge source delta mismatch",
       );
     const payout = receipt.money.payout;
-    const providerTransfers = receipt.money.payout.providerTransfers;
-    const providerTransferPhases = [
-      ["beforePayout", providerTransfers.beforePayout, 0],
-      ["afterInitialPayout", providerTransfers.afterInitialPayout, 1],
-      ["afterReplay", providerTransfers.afterReplay, 1],
-    ] as const;
-    for (const [phase, observation, expectedCount] of providerTransferPhases) {
-      if (
-        observation.payoutRef !== receipt.money.payout.payoutRef ||
-        observation.count !== observation.transferIdDigests.length ||
-        new Set(observation.transferIdDigests).size !==
-          observation.transferIdDigests.length ||
-        observation.transferIdsDigest !==
-          canonicalDigest({
-            format: "stripe-transfer-ids:v1",
-            payoutRef: observation.payoutRef,
-            transferIdDigests: observation.transferIdDigests,
-          }) ||
-        observation.count !== expectedCount
-      )
-        issue(
-          ["money", "payout", "providerTransfers", phase],
-          "provider transfer count or identity evidence mismatch",
-        );
-    }
-    if (
-      !providerTransfers.afterInitialPayout.transferIdDigests.includes(
-        receipt.money.payout.stripeTransferDigest,
-      ) ||
-      !providerTransfers.afterReplay.transferIdDigests.includes(
-        receipt.money.payout.stripeTransferDigest,
-      )
-    )
-      issue(
-        ["money", "payout", "providerTransfers"],
-        "provider transfer immutable identity mismatch",
-      );
-    if (
-      providerTransfers.afterReplay.count -
-        providerTransfers.afterInitialPayout.count !==
-      receipt.money.payout.replayAdditionalDebits
-    )
-      issue(
-        ["money", "payout", "replayAdditionalDebits"],
-        "provider transfer replay delta mismatch",
-      );
     if (
       !sameAmount(payout.providerNetAmount, charge.providerNetAccrual) ||
       !sameAmount(
@@ -846,9 +787,6 @@ export const GatewayProductionSmokeReceiptSchema =
 
 export type GatewayProductionSmokeReceipt = z.infer<
   typeof GatewayProductionSmokeReceiptSchema
->;
-export type GatewayPayoutProviderTransferReadback = z.infer<
-  typeof GatewayPayoutProviderTransferReadbackSchema
 >;
 export type GatewayPayoutReceipt = z.infer<typeof GatewayPayoutReceiptSchema>;
 

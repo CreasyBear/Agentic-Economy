@@ -44,7 +44,7 @@ export type UrlDiscoverDiagnostic = Readonly<{
 
 export type SupplySourceTypeSectionProps = Readonly<{
   resourceUrl: string
-  x402Method?: 'GET' | 'POST'
+  x402Method?: 'GET' | 'POST' | undefined
   disabled: boolean
   discovering: boolean
   onResourceUrlChange: (value: string) => void
@@ -57,7 +57,7 @@ export type SupplySourceFieldsProps = Pick<
   'resourceUrl' | 'x402Method' | 'disabled' | 'onResourceUrlChange' | 'onX402MethodChange'
 > & Readonly<{
   askMethod?: boolean
-  discoverDiagnostic?: UrlDiscoverDiagnostic
+  discoverDiagnostic?: UrlDiscoverDiagnostic | undefined
 }>
 
 export type UrlFieldWithPreflightProps = Readonly<{
@@ -67,7 +67,7 @@ export type UrlFieldWithPreflightProps = Readonly<{
   description: string
   placeholder: string
   disabled: boolean
-  discoverDiagnostic?: UrlDiscoverDiagnostic
+  discoverDiagnostic?: UrlDiscoverDiagnostic | undefined
   example: string
   onChange: (value: string) => void
 }>

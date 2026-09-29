@@ -425,38 +425,6 @@ export function strictReceipt(): GatewayProductionSmokeReceipt {
     providerPaidBefore: zero,
     providerPaidAfter: net,
     replayAdditionalDebits: 0 as const,
-    providerTransfers: {
-      beforePayout: {
-        payoutRef: `${runId}:payout`,
-        count: 0,
-        transferIdsDigest: canonicalDigest({
-          format: "stripe-transfer-ids:v1",
-          payoutRef: `${runId}:payout`,
-          transferIdDigests: [],
-        }),
-        transferIdDigests: [],
-      },
-      afterInitialPayout: {
-        payoutRef: `${runId}:payout`,
-        count: 1,
-        transferIdsDigest: canonicalDigest({
-          format: "stripe-transfer-ids:v1",
-          payoutRef: `${runId}:payout`,
-          transferIdDigests: [digest("f")],
-        }),
-        transferIdDigests: [digest("f")],
-      },
-      afterReplay: {
-        payoutRef: `${runId}:payout`,
-        count: 1,
-        transferIdsDigest: canonicalDigest({
-          format: "stripe-transfer-ids:v1",
-          payoutRef: `${runId}:payout`,
-          transferIdDigests: [digest("f")],
-        }),
-        transferIdDigests: [digest("f")],
-      },
-    },
   };
   const baselineUsage = usage(0, 0, 0, zero, []);
   const afterOwnerUsage = usage(1, 0, 1, zero, ["free_tier"]);

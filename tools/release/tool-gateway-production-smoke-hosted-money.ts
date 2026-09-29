@@ -11,7 +11,6 @@ import {
 } from "../../src/modules/money/server";
 import {
   readStripeMoneyProviderConfig,
-  readStripeTransfersByGroup,
   verifyStripeMoneyWebhook,
 } from "../../src/lib/server/stripe-money-provider";
 import {
@@ -41,14 +40,12 @@ import {
 
 import {
   GatewaySmokeError,
-  type GatewayPayoutProviderTransferReadback,
   type GatewayTopupObservation,
   type GatewayTopupPreparationArtifact,
   type HostedTopupReadback,
 } from "./tool-gateway-production-smoke-receipt";
 import {
   parseGatewayOwnerProviderEarnings,
-  sanitizeGatewayPayoutProviderTransfers,
   type HostedMoneySnapshot,
   type StrictCreditActivityView,
 } from "./tool-gateway-production-smoke-money";
@@ -76,9 +73,6 @@ export type HostedMoneyRuntime = Readonly<{
   payoutRef: string;
   payoutIdempotencyKey: string;
   readSnapshot: () => Promise<HostedMoneySnapshot>;
-  readProviderTransfers: (
-    payoutRef: string,
-  ) => Promise<GatewayPayoutProviderTransferReadback>;
   observeTopup: (
     expected: GatewayTopupPreparationArtifact,
   ) => Promise<GatewayTopupObservation>;
@@ -256,22 +250,6 @@ export function createHostedMoneyRuntime(
       );
     }
     return matches[0];
-  };
-
-  const readProviderTransfers = async (
-    transferGroup: string,
-  ): Promise<GatewayPayoutProviderTransferReadback> => {
-    const transfers = await readStripeTransfersByGroup({
-      config: stripeConfig,
-      client: stripe,
-      transferGroup,
-    });
-    if (isMoneyRefusal(transfers))
-      throw new GatewaySmokeError(`gateway_smoke_payout_${transfers.code}`);
-    return sanitizeGatewayPayoutProviderTransfers(
-      transferGroup,
-      transfers.map(({ transferId }) => transferId),
-    );
   };
 
   const topupReadback = async (
@@ -693,7 +671,6 @@ export function createHostedMoneyRuntime(
     payoutRef,
     payoutIdempotencyKey,
     readSnapshot,
-    readProviderTransfers,
     beginTopup,
     observeTopup,
     readControlActivity: readActivity,

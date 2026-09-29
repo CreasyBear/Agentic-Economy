@@ -115,6 +115,57 @@ describe('Add Tool', () => {
     })
   })
 
+  it('drops the derived method and environment when the resource URL changes', async () => {
+    const ready = {
+      kind: 'ready' as const,
+      sourceDigest: digest,
+      sourceRevision: `x402:${digest}`,
+      provenance: { sourceKind: 'x402' as const, sourceUrl: 'https://api.onesource.io/api/chain/block-number', authority: 'observed_external' as const },
+      authentication: [{ kind: 'x402_wallet' as const }],
+      candidates: [{
+        candidateRef: digest,
+        sourceSelector: { resourceUrl: 'https://api.onesource.io/api/chain/block-number', method: 'GET' as const },
+        title: 'Block number',
+        description: 'Current block',
+        authentication: { kind: 'x402_wallet' as const },
+        validationExampleAvailable: true,
+        x402: {
+          scheme: 'exact',
+          network: 'eip155:8453',
+          amount: '1000',
+          asset: '0x833589fcd6edb6e08f4c7c32d4f71b54bda02913',
+          payTo: '0x52e29e0d2aa49bfbfc548c0a9f2196f4aa51f3ea',
+          environment: 'production' as const,
+        },
+        disposition: { kind: 'supported' as const },
+      }],
+    }
+    const onPreview = vi.fn()
+      .mockResolvedValueOnce(ready)
+      .mockResolvedValueOnce({
+        kind: 'action_required',
+        requiredAction: {
+          action: 'supply.source.preview',
+          blockedCapabilities: ['supply.publish'],
+          cta: null,
+          ctaLabel: 'Check source',
+          description: 'Both GET and POST returned an x402 payment challenge. Choose one method, then preview again.',
+          iconUrl: null,
+          status: 'required',
+          title: 'Choose the request method',
+        },
+      })
+    render(<AeSupplySourceNativeStart businessRef="business:one" onPreview={onPreview} onConnect={vi.fn()} onSelectCandidate={vi.fn()} onPublish={vi.fn()} />)
+    fireEvent.change(screen.getByLabelText('x402 resource URL'), { target: { value: 'https://api.onesource.io/api/chain/block-number' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Read endpoint' }))
+    expect(await screen.findByText(/0x52e29e0d2aa49bfbfc548c0a9f2196f4aa51f3ea/)).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Edit Source' }))
+    fireEvent.change(screen.getByLabelText('x402 resource URL'), { target: { value: 'https://pay.example/resource' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Read endpoint' }))
+    expect(await screen.findByText('Choose the request method')).toBeTruthy()
+    expect(onPreview.mock.calls[1]?.[0]).toEqual({ kind: 'x402', resourceUrl: 'https://pay.example/resource' })
+  })
+
   it('shows one named preview correction', async () => {
     const onPreview = vi.fn().mockResolvedValue({
       kind: 'action_required',

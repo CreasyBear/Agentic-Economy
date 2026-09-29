@@ -1,5 +1,50 @@
-import { sourceMocks, stripeMocks } from './owner-payout-server-harness'
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+import type * as ConvexSourceModule from '@/lib/server/convex-source'
+import type * as SourceWriteAdmissionModule from '@/lib/server/source-write-admission'
+import type * as StripeMoneyProviderModule from '@/lib/server/stripe-money-provider'
+import type * as TanstackReactStartModule from '@tanstack/react-start'
+
+const sourceMocks = vi.hoisted(() => ({
+  callPublicSourceAction: vi.fn(),
+  callSourceAction: vi.fn(),
+  callPublicSourceQuery: vi.fn(),
+  callPublicSourceMutation: vi.fn(),
+  callSourceQuery: vi.fn(),
+  callSourceMutation: vi.fn(),
+  createConvexServerFunctionAssertion: vi.fn(),
+  sourceWriteAdmissionFromContext: vi.fn(),
+  sourceWriteAdmissionFromRequest: vi.fn(),
+}))
+const stripeMocks = vi.hoisted(() => ({
+  createStripeMoneyProvider: vi.fn(),
+}))
+
+vi.mock('@tanstack/react-start', async (importOriginal) => ({
+  ...(await importOriginal<typeof TanstackReactStartModule>()),
+  createServerFn: () => ({
+    validator: () => ({ handler: (handler: unknown) => handler }),
+    handler: (handler: unknown) => handler,
+  }),
+}))
+vi.mock('@/lib/server/convex-source', async (importOriginal) => ({
+  ...(await importOriginal<typeof ConvexSourceModule>()),
+  callPublicSourceAction: sourceMocks.callPublicSourceAction,
+  callSourceAction: sourceMocks.callSourceAction,
+  callPublicSourceQuery: sourceMocks.callPublicSourceQuery,
+  callPublicSourceMutation: sourceMocks.callPublicSourceMutation,
+  callSourceQuery: sourceMocks.callSourceQuery,
+  callSourceMutation: sourceMocks.callSourceMutation,
+  createConvexServerFunctionAssertion: sourceMocks.createConvexServerFunctionAssertion,
+}))
+vi.mock('@/lib/server/stripe-money-provider', async (importOriginal) => ({
+  ...(await importOriginal<typeof StripeMoneyProviderModule>()),
+  createStripeMoneyProvider: stripeMocks.createStripeMoneyProvider,
+}))
+vi.mock('@/lib/server/source-write-admission', async (importOriginal) => ({
+  ...(await importOriginal<typeof SourceWriteAdmissionModule>()),
+  sourceWriteAdmissionFromContext: sourceMocks.sourceWriteAdmissionFromContext,
+  sourceWriteAdmissionFromRequest: sourceMocks.sourceWriteAdmissionFromRequest,
+}))
 
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import {
@@ -55,6 +100,26 @@ function command(overrides: Record<string, unknown> = {}) {
 }
 
 describe('Account AUD funding HTTP boundary', () => {
+  beforeEach(() => {
+    vi.resetAllMocks()
+    sourceMocks.sourceWriteAdmissionFromContext.mockResolvedValue({
+      keyId: 'test',
+      scope: 'billing',
+      operationKey: 'test',
+      correlationId: 'test',
+      commandDigest: 'sha256:test',
+      nonce: 'test',
+      issuedAt: 1,
+      method: 'POST',
+      initiatorOrigin: 'https://ae.test',
+      targetOrigin: 'https://ae.test',
+      targetPath: '/test',
+      targetQuery: '',
+      bodyDigest: 'sha256:body',
+      signature: 'test',
+    })
+  })
+
   it('refuses live Stripe configuration when deployment is hosted_alpha', async () => {
     await expect(readAccountFundingConstraintsThroughSource({
       env: {

@@ -98,7 +98,10 @@ describe('first native Tool admission', () => {
       authorityGrantRef: `grt_${'3'.repeat(32)}`,
       authorityGrantGeneration: 1,
     }, 1_700_000_000_000)
-    if (createdConnection.kind !== 'applied') throw new Error(createdConnection.code)
+    if (createdConnection.kind !== 'applied') {
+      if (createdConnection.kind === 'refused') throw new Error(createdConnection.code)
+      throw new Error(createdConnection.kind)
+    }
     await backend.run((ctx) => ctx.db.insert('capabilityProviderConnections', toRow(
       createdConnection.connection,
       createdConnection.connection.lastCommandId ?? createdConnection.commandDigest,

@@ -101,7 +101,10 @@ describe('Provider source owner adapter with real Convex mutations', () => {
       authorityGrantRef: `grt_${'3'.repeat(32)}`,
       authorityGrantGeneration: 1,
     }, 1_700_000_000_000)
-    if (createdConnection.kind !== 'applied') throw new Error(createdConnection.code)
+    if (createdConnection.kind !== 'applied') {
+      if (createdConnection.kind === 'refused') throw new Error(createdConnection.code)
+      throw new Error(createdConnection.kind)
+    }
     await backend.run((ctx) => ctx.db.insert('capabilityProviderConnections', toRow(
       createdConnection.connection,
       createdConnection.connection.lastCommandId ?? createdConnection.commandDigest,
@@ -117,7 +120,7 @@ describe('Provider source owner adapter with real Convex mutations', () => {
     const queryFor = (actor: typeof owner) => (reference: { name?: string }, args: unknown) => {
       const name = typeof reference.name === 'string' ? reference.name : getFunctionName(reference as never)
       if (name === 'capabilityProviderConnections:listOwner') return connections
-      return actor.query(reference as never, args as never)
+      return (actor.query as (ref: unknown, args: unknown) => Promise<unknown>)(reference, args)
     }
     boundary.query.mockImplementation(queryFor(owner))
     // Convex's HTTP transport serializes away optional undefined properties.

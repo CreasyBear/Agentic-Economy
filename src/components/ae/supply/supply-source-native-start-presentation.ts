@@ -133,7 +133,7 @@ export function eligibleSupplyConnections(input: Readonly<{
 export type SourceFieldState = Readonly<{
   environment?: 'sandbox' | 'production'
   resourceUrl: string
-  x402Method?: 'GET' | 'POST'
+  x402Method?: 'GET' | 'POST' | undefined
 }>
 
 export function sourceInput(value: Pick<SourceFieldState, 'resourceUrl' | 'x402Method' | 'environment'>): SupplySourceInput | undefined {
